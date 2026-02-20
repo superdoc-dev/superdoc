@@ -1,7 +1,7 @@
 #!/usr/bin/env node
 
 import { execFile } from 'node:child_process';
-import { mkdir, rm, cp, unlink, symlink, lstat } from 'node:fs/promises';
+import { mkdir, rm, cp, symlink, lstat } from 'node:fs/promises';
 import path from 'node:path';
 import { promisify } from 'node:util';
 import { fileURLToPath } from 'node:url';
@@ -112,6 +112,7 @@ async function main() {
 
   // --- Python SDK ---
   // TODO: Remove this guard when PyPI publishing is ready.
+  // eslint-disable-next-line no-constant-condition
   if (true) {
     console.log('\n--- Python SDK (skipped — not yet published to PyPI) ---');
   } else {

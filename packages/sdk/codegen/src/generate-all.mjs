@@ -1,6 +1,6 @@
 import path from 'node:path';
 import { mkdir, writeFile } from 'node:fs/promises';
-import { loadContract, REPO_ROOT, writeGeneratedFile } from './shared.mjs';
+import { loadContract, REPO_ROOT } from './shared.mjs';
 import { generateNodeSdk } from './generate-node.mjs';
 import { generatePythonSdk } from './generate-python.mjs';
 import { generateToolCatalogs } from './generate-tool-catalogs.mjs';

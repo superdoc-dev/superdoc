@@ -1,4 +1,5 @@
 import type { TextAddress, TextMutationReceipt } from '../types/index.js';
+import type { BlockRelativeLocator } from './locator.js';
 
 export type ChangeMode = 'direct' | 'tracked';
 
@@ -25,7 +26,7 @@ export type InsertWriteRequest = {
    */
   target?: TextAddress;
   text: string;
-};
+} & Partial<BlockRelativeLocator>;
 
 export type ReplaceWriteRequest = {
   kind: 'replace';

@@ -618,6 +618,22 @@ const capabilitiesOutputSchema = objectSchema(
 );
 
 const strictEmptyObjectSchema = objectSchema({});
+const insertInputSchema: JsonSchema = {
+  ...objectSchema(
+    {
+      target: textAddressSchema,
+      text: { type: 'string' },
+      blockId: { type: 'string', description: 'Block ID for block-relative targeting.' },
+      offset: { type: 'integer', minimum: 0, description: 'Character offset within the block identified by blockId.' },
+    },
+    ['text'],
+  ),
+  allOf: [
+    { not: { required: ['target', 'blockId'] } },
+    { not: { required: ['target', 'offset'] } },
+    { if: { required: ['offset'] }, then: { required: ['blockId'] } },
+  ],
+};
 
 const operationSchemas: Record<OperationId, OperationSchemaSet> = {
   find: {
@@ -647,13 +663,7 @@ const operationSchemas: Record<OperationId, OperationSchemaSet> = {
     output: documentInfoSchema,
   },
   insert: {
-    input: objectSchema(
-      {
-        target: textAddressSchema,
-        text: { type: 'string' },
-      },
-      ['text'],
-    ),
+    input: insertInputSchema,
     output: textMutationResultSchemaFor('insert'),
     success: textMutationSuccessSchema,
     failure: textMutationFailureSchemaFor('insert'),

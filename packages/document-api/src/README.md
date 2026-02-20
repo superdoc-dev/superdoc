@@ -5,9 +5,11 @@
 - Manual source of truth:
   - `packages/document-api/src/**` (this folder)
   - `packages/document-api/scripts/**`
-- Generated and committed:
+- Generated (not in git — run `pnpm run generate:all`):
   - `packages/document-api/generated/**`
+- Generated (committed — Mintlify deploys from git):
   - `apps/docs/document-api/reference/**`
+- Committed mixed-content file:
   - marker block in `apps/docs/document-api/overview.mdx`
 
 Do not hand-edit generated files; regenerate via script.

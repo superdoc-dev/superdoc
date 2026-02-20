@@ -83,7 +83,7 @@ async function main() {
 
   // Shared steps
   await run('node', [path.join(REPO_ROOT, 'packages/sdk/scripts/sync-sdk-version.mjs')]);
-  await run('node', [path.join(REPO_ROOT, 'packages/sdk/scripts/sdk-generate.mjs')]);
+  await run('node', [path.join(REPO_ROOT, 'scripts/generate-all.mjs')]);
   await run('node', [path.join(REPO_ROOT, 'packages/sdk/scripts/sdk-validate.mjs')]);
 
   // --- Node SDK ---

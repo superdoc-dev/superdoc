@@ -9,7 +9,7 @@
  *
  * Check mode (--check):
  *   1. Run cli:export-sdk-contract --check
- *   2. Re-generate to a temp directory and byte-compare with checked-in artifacts
+ *   2. Re-generate to a temp directory and byte-compare with on-disk artifacts
  *   3. Exit 0 only if all artifacts are current
  */
 
@@ -142,7 +142,7 @@ async function main() {
 
       const drifted = await diffGeneratedArtifacts(tempDir);
       if (drifted.length > 0) {
-        throw new Error(`Generated artifacts are stale:\n    ${drifted.join('\n    ')}\n\n  Run 'pnpm sdk:generate' to update.`);
+        throw new Error(`Generated artifacts are stale:\n    ${drifted.join('\n    ')}\n\n  Run 'pnpm run generate:all' to update.`);
       }
     } finally {
       await rm(tempDir, { recursive: true, force: true });

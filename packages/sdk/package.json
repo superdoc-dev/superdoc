@@ -9,7 +9,7 @@
     "generate": "node scripts/sdk-generate.mjs",
     "validate": "node scripts/sdk-validate.mjs",
     "build:node": "pnpm --prefix langs/node run build",
-    "prepare": "pnpm run version:sync && pnpm run generate && pnpm run validate && pnpm run build:node",
+    "prepare": "pnpm run version:sync && pnpm -w run generate:all && pnpm run validate && pnpm run build:node",
     "release": "node scripts/sdk-release.mjs",
     "release:dry": "node scripts/sdk-release.mjs --dry-run"
   }

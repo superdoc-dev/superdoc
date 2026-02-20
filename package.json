@@ -64,6 +64,7 @@
     "update-preset-geometry": "ROOT=$(pwd) && cd ../superdoc-devtools/preset-geometry && pnpm run build && cp ./dist/index.js ./dist/index.js.map ./dist/index.d.ts \"$ROOT/packages/preset-geometry/\"",
     "manual-tag": "bash scripts/manual-tag.sh",
     "manual-clean-tag": "bash scripts/manual-clean-tag.sh",
+    "generate:all": "node scripts/generate-all.mjs",
     "docapi:sync": "pnpm exec tsx packages/document-api/scripts/generate-contract-outputs.ts",
     "docapi:check": "pnpm exec tsx packages/document-api/scripts/check-contract-parity.ts && pnpm exec tsx packages/document-api/scripts/check-contract-outputs.ts",
     "docapi:sync:check": "pnpm run docapi:sync && pnpm run docapi:check",

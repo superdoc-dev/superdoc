@@ -4,21 +4,21 @@ Contract-first Document API package (internal workspace package).
 
 ## Generated vs manual files
 
-This package intentionally checks generated artifacts into git. Use this boundary when editing:
+Most generated artifacts are **not** committed to git — run `pnpm run generate:all` to produce them. The exception is `apps/docs/document-api/reference/**`, which stays committed because Mintlify deploys directly from git.
 
 | Path | Source of truth | Edit directly? |
 | --- | --- | --- |
 | `packages/document-api/src/contract/*` | Hand-authored contract source | Yes |
 | `packages/document-api/src/index.ts` and other `src/**` runtime/types | Hand-authored source | Yes |
 | `packages/document-api/scripts/**` | Hand-authored generation/check tooling | Yes |
-| `packages/document-api/generated/**` | Generated from contract + scripts | No (regenerate) |
-| `apps/docs/document-api/reference/**` | Generated docs from contract + scripts | No (regenerate) |
+| `packages/document-api/generated/**` | Generated (gitignored) | No (regenerate) |
+| `apps/docs/document-api/reference/**` | Generated (committed — Mintlify deploys from git) | No (regenerate) |
 | `apps/docs/document-api/overview.mdx` | Mixed: manual page + generated section between markers | Yes, but do not hand-edit inside generated marker block |
 
 Generated marker block in overview:
 
-- `/* DOC_API_GENERATED_API_SURFACE_START */`
-- `/* DOC_API_GENERATED_API_SURFACE_END */`
+- `{/* DOC_API_OPERATIONS_START */}`
+- `{/* DOC_API_OPERATIONS_END */}`
 
 ## Regeneration commands
 
@@ -31,8 +31,8 @@ pnpm run docapi:sync:check    # sync then check in one step
 ```
 
 These are also enforced automatically:
-- **Pre-commit hook** runs `docapi:sync` when document-api sources change and restages generated files.
-- **CI workflow** (`ci-document-api.yml`) runs `docapi:check` on every PR touching relevant paths.
+- **Pre-commit hook** runs `docapi:sync` when contract or script sources change and restages `reference/` and `overview.mdx`.
+- **CI workflow** (`ci-document-api.yml`) generates outputs, checks overview freshness, then runs `docapi:check` on every PR touching relevant paths.
 
 ## Adding a new operation
 

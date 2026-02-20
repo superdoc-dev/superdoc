@@ -474,6 +474,68 @@ describe('PresentationEditor', () => {
       }
     });
 
+    it('uses effective virtualization default gap when pre-scrolling to unmounted pages', async () => {
+      mockIncrementalLayout.mockResolvedValueOnce(buildMixedPageLayout());
+
+      editor = new PresentationEditor({
+        element: container,
+        documentId: 'test-scroll-to-page-default-virtual-gap',
+        content: { type: 'doc', content: [{ type: 'paragraph' }] },
+        mode: 'docx',
+        layoutEngineOptions: {
+          // Intentionally omit `gap` so editor must rely on the effective default.
+          virtualization: { enabled: true, window: 1, overscan: 0 },
+        },
+      });
+
+      await vi.waitFor(() => expect(mockIncrementalLayout).toHaveBeenCalled());
+
+      const pagesHost = container.querySelector('.presentation-editor__pages') as HTMLElement;
+      const layoutGap = editor.getLayoutSnapshot().layout?.pageGap ?? 0;
+      const expectedPageTop = 600 + layoutGap + 1200 + layoutGap;
+      let mountedPageEl: HTMLElement | null = null;
+      let scrollTopValue = 0;
+      Object.defineProperty(container, 'scrollTop', {
+        get: () => scrollTopValue,
+        set: (next) => {
+          scrollTopValue = Number(next);
+          if (!mountedPageEl && Math.abs(scrollTopValue - expectedPageTop) < 0.5) {
+            mountedPageEl = document.createElement('div');
+            mountedPageEl.setAttribute('data-page-index', '2');
+            Object.defineProperty(mountedPageEl, 'scrollIntoView', {
+              value: vi.fn(),
+              configurable: true,
+            });
+            pagesHost.appendChild(mountedPageEl);
+          }
+        },
+        configurable: true,
+      });
+
+      let now = 0;
+      const performanceNowSpy = vi.spyOn(performance, 'now').mockImplementation(() => now);
+      const rafSpy = vi.spyOn(window, 'requestAnimationFrame').mockImplementation((cb: FrameRequestCallback) => {
+        now += 100;
+        cb(now);
+        return 1;
+      });
+
+      try {
+        const didScroll = await editor.scrollToPage(3, 'auto');
+
+        expect(didScroll).toBe(true);
+        expect(mountedPageEl).not.toBeNull();
+        expect(mountedPageEl!.scrollIntoView).toHaveBeenCalledWith({
+          block: 'start',
+          inline: 'nearest',
+          behavior: 'auto',
+        });
+      } finally {
+        rafSpy.mockRestore();
+        performanceNowSpy.mockRestore();
+      }
+    });
+
     it.each([Number.NaN, 1.5])(
       'rejects invalid pageNumber %p before attempting pre-scroll or mount polling',
       async (invalidPageNumber) => {

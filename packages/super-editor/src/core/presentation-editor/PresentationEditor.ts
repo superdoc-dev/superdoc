@@ -4456,7 +4456,7 @@ export class PresentationEditor extends EventEmitter {
     if (!layout) return;
 
     const defaultHeight = layout.pageSize?.h ?? DEFAULT_PAGE_SIZE.h;
-    const virtualGap = this.#layoutOptions.virtualization?.gap ?? 0;
+    const virtualGap = this.#getEffectivePageGap();
 
     // Use cumulative per-page heights so mixed-size documents scroll to the
     // correct position. The renderer's virtualizer uses the same prefix-sum

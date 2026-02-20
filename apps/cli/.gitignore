@@ -12,3 +12,12 @@ dist
 
 # Finder (MacOS) folder config
 .DS_Store
+
+# local debug fixture captures
+src/__tests__/fixtures-cli-debug*/
+
+# native build artifacts
+artifacts/
+
+# staged platform binaries
+platforms/*/bin/

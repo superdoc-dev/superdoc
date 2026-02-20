@@ -1,5 +1,5 @@
 /**
- * Run both visual and interaction comparisons.
+ * Run visual comparisons.
  *
  * Usage:
  *   pnpm compare
@@ -232,48 +232,16 @@ async function runGenerateVisualResultsForDocs(
   await runCommand(args);
 }
 
-async function runGenerateInteractionsResults(
-  outputFolder: string,
-  filters: string[],
-  matches: string[],
-  excludes: string[],
-  browser: BrowserName,
-  scaleFactor: number,
-  storageArgs: string[],
-): Promise<void> {
-  const args = ['exec', 'tsx', 'scripts/generate-interactions.ts', '--output', outputFolder];
-  for (const filter of filters) {
-    args.push('--filter', filter);
-  }
-  for (const match of matches) {
-    args.push('--match', match);
-  }
-  for (const exclude of excludes) {
-    args.push('--exclude', exclude);
-  }
-  if (scaleFactor !== 1) {
-    args.push('--scale-factor', String(scaleFactor));
-  }
-  args.push('--browser', browser);
-  if (storageArgs.length > 0) {
-    args.push(...storageArgs);
-  }
-  await runCommand(args);
-}
-
-async function runBaselineLocal(
-  script: 'scripts/baseline-visual.ts' | 'scripts/baseline-interactions.ts',
-  options: {
-    versionSpec?: string;
-    filters: string[];
-    matches: string[];
-    excludes: string[];
-    browserArg?: string;
-    scaleFactor: number;
-    storageArgs: string[];
-  },
-): Promise<void> {
-  const args = ['exec', 'tsx', script];
+async function runBaselineLocal(options: {
+  versionSpec?: string;
+  filters: string[];
+  matches: string[];
+  excludes: string[];
+  browserArg?: string;
+  scaleFactor: number;
+  storageArgs: string[];
+}): Promise<void> {
+  const args = ['exec', 'tsx', 'scripts/baseline-visual.ts'];
   if (options.versionSpec) {
     args.push(options.versionSpec);
   }
@@ -369,42 +337,6 @@ async function runCompareVisual(
   await runCommand(args);
 }
 
-async function runCompareInteractions(
-  resultsFolder: string,
-  baselineVersion: string,
-  threshold?: number,
-  filters: string[] = [],
-  matches: string[] = [],
-  excludes: string[] = [],
-  browser?: BrowserName,
-  baselineRoot?: string,
-  storageArgs: string[] = [],
-): Promise<void> {
-  const args = ['exec', 'tsx', 'scripts/compare-interactions.ts', baselineVersion, '--folder', resultsFolder];
-  if (baselineRoot) {
-    args.push('--baseline-root', baselineRoot);
-  }
-  for (const filter of filters) {
-    args.push('--filter', filter);
-  }
-  for (const match of matches) {
-    args.push('--match', match);
-  }
-  for (const exclude of excludes) {
-    args.push('--exclude', exclude);
-  }
-  if (typeof threshold === 'number' && !Number.isNaN(threshold) && threshold > 0) {
-    args.push('--threshold', String(threshold));
-  }
-  if (browser) {
-    args.push('--browser', browser);
-  }
-  if (storageArgs.length > 0) {
-    args.push(...storageArgs);
-  }
-  await runCommand(args);
-}
-
 async function runCompareBaselineToBaselineVisual(
   baselineVersion: string,
   targetVersion: string,
@@ -446,57 +378,11 @@ async function runCompareBaselineToBaselineVisual(
   await runCommand(args);
 }
 
-async function runCompareBaselineToBaselineInteractions(
-  baselineVersion: string,
-  targetVersion: string,
-  threshold?: number,
-  filters: string[] = [],
-  matches: string[] = [],
-  excludes: string[] = [],
-  browser?: BrowserName,
-  baselineRoot?: string,
-  storageArgs: string[] = [],
-): Promise<void> {
-  const args = ['exec', 'tsx', 'scripts/compare.ts', baselineVersion, '--folder', targetVersion];
-  if (baselineRoot) {
-    args.push('--baseline-root', baselineRoot);
-    args.push('--results-root', baselineRoot);
-  }
-  args.push('--report', 'interactions-report.html');
-  args.push('--report-mode', 'interactions');
-  args.push('--report-all');
-  for (const filter of filters) {
-    args.push('--filter', filter);
-  }
-  for (const match of matches) {
-    args.push('--match', match);
-  }
-  for (const exclude of excludes) {
-    args.push('--exclude', exclude);
-  }
-  if (typeof threshold === 'number' && !Number.isNaN(threshold) && threshold > 0) {
-    args.push('--threshold', String(threshold));
-  }
-  if (browser) {
-    args.push('--browser', browser);
-  }
-  if (storageArgs.length > 0) {
-    args.push(...storageArgs);
-  }
-  await runCommand(args);
-}
-
 async function main(): Promise<void> {
   const passThrough = process.argv.slice(2);
   const hasTarget = passThrough.includes('--target');
   if (!hasTarget) {
-    console.log('');
-    console.log(colors.header('━━━ 🖼️  VISUAL DIFF ━━━'));
     await runCommand(['exec', 'tsx', 'scripts/compare.ts', ...passThrough]);
-
-    console.log('');
-    console.log(colors.header('━━━ 🎬 INTERACTIONS ━━━'));
-    await runCommand(['exec', 'tsx', 'scripts/compare-interactions.ts', ...passThrough]);
     return;
   }
 
@@ -536,7 +422,6 @@ async function main(): Promise<void> {
   }
 
   const baselineDir = getBaselineLocalRootForMode(mode, BASELINES_DIR);
-  const interactionsBaselineDir = getBaselineLocalRootForMode(mode, 'baselines-interactions');
   let baselineSelection = await resolveBaselineSelection(mode, baselineDir, baselineVersion);
   if (!baselineSelection && mode === 'local') {
     const current = getSuperdocVersion();
@@ -564,7 +449,7 @@ async function main(): Promise<void> {
       if (!fs.existsSync(baselinePath)) {
         console.log(colors.info(`📸 Visual baseline ${version} not found locally. Generating...`));
         const browserArg = browsers.length > 0 ? browsers.join(',') : undefined;
-        await runBaselineLocal('scripts/baseline-visual.ts', {
+        await runBaselineLocal({
           versionSpec,
           filters,
           matches,
@@ -621,83 +506,12 @@ async function main(): Promise<void> {
     }
   };
 
-  const ensureInteractionBaseline = async (
-    version: string,
-    versionSpec?: string,
-    force: boolean = false,
-  ): Promise<void> => {
-    if (mode === 'local') {
-      const baselinePath = path.join(interactionsBaselineDir, version);
-      if (!fs.existsSync(baselinePath)) {
-        console.log(colors.info(`📸 Interaction baseline ${version} not found locally. Generating...`));
-        const browserArg = browsers.length > 0 ? browsers.join(',') : undefined;
-        await runBaselineLocal('scripts/baseline-interactions.ts', {
-          versionSpec,
-          filters,
-          matches,
-          excludes,
-          browserArg,
-          scaleFactor,
-          storageArgs,
-        });
-      }
-      if (!fs.existsSync(baselinePath)) {
-        throw new Error(`No baseline found for version ${version} in ${interactionsBaselineDir}.`);
-      }
-      console.log(colors.success(`✓ Interaction baselines: ${version} ${colors.muted('(local)')}`));
-      return;
-    }
-    const hasFilters = filters.length > 0 || matches.length > 0 || excludes.length > 0;
-    const browserFilters = browserArg ? browsers : undefined;
-    if (refreshBaselines) {
-      if (hasFilters || browserFilters) {
-        const refreshed = await refreshBaselineSubset({
-          prefix: 'baselines-interactions',
-          version,
-          localRoot: interactionsBaselineDir,
-          filters,
-          matches,
-          excludes,
-          browsers: browserFilters,
-        });
-        if (refreshed.matched === 0) {
-          console.warn(colors.warning('No interaction baseline files matched the filters to refresh.'));
-        } else {
-          console.log(
-            colors.success(
-              `↻ Refreshed ${refreshed.downloaded} interaction baseline file(s) for ${version} ${colors.muted('(R2)')}`,
-            ),
-          );
-        }
-        return;
-      }
-      force = true;
-    }
-    const result = await ensureBaselineDownloaded({
-      prefix: 'baselines-interactions',
-      version,
-      localRoot: interactionsBaselineDir,
-      force,
-    });
-    if (!result.fromCache) {
-      console.log(
-        colors.success(
-          `✓ Interaction baselines: ${version} ${colors.muted(`(downloaded ${result.downloaded} files)`)}`,
-        ),
-      );
-    } else {
-      console.log(colors.success(`✓ Interaction baselines: ${version} ${colors.muted('(cached)')}`));
-    }
-  };
-
   if (compareBaselines) {
     const targetInfo = parseVersionInput(targetVersion);
     const targetLabel = targetInfo.label;
 
     await ensureVisualBaseline(baselineToUse, baselineVersion ? baselineSelection?.spec : undefined);
     await ensureVisualBaseline(targetLabel, normalizeVersionSpecifier(targetLabel));
-    await ensureInteractionBaseline(baselineToUse, baselineVersion ? baselineSelection?.spec : undefined);
-    await ensureInteractionBaseline(targetLabel, normalizeVersionSpecifier(targetLabel));
 
     console.log('');
     console.log(colors.header('━━━ 📊 BASELINE COMPARISON ━━━'));
@@ -718,20 +532,6 @@ async function main(): Promise<void> {
         includeWord,
         browser,
         baselineDir,
-        storageArgs,
-      );
-
-      console.log('');
-      console.log(colors.header('━━━ 🎬 INTERACTIONS ━━━'));
-      await runCompareBaselineToBaselineInteractions(
-        baselineToUse,
-        targetLabel,
-        threshold,
-        filters,
-        matches,
-        excludes,
-        browser,
-        interactionsBaselineDir,
         storageArgs,
       );
       console.log('');
@@ -769,11 +569,6 @@ async function main(): Promise<void> {
       storageArgs,
     );
   }
-  console.log(colors.muted(`Generating interactions: ${targetLabel}`));
-  for (const browser of browsers) {
-    await runGenerateInteractionsResults(targetLabel, filters, matches, excludes, browser, scaleFactor, storageArgs);
-  }
-  await ensureInteractionBaseline(baselineToUse, baselineVersion ? baselineSelection?.spec : undefined);
 
   console.log('');
   console.log(colors.header('━━━ 🖼️  VISUAL DIFF ━━━'));
@@ -789,23 +584,6 @@ async function main(): Promise<void> {
       includeWord,
       browser,
       baselineDir,
-      storageArgs,
-    );
-  }
-
-  console.log('');
-  console.log(colors.header('━━━ 🎬 INTERACTIONS ━━━'));
-  for (const browser of browsers) {
-    if (browsers.length > 1) console.log(colors.muted(`Browser: ${browser}`));
-    await runCompareInteractions(
-      targetLabel,
-      baselineToUse,
-      threshold,
-      filters,
-      matches,
-      excludes,
-      browser,
-      interactionsBaselineDir,
       storageArgs,
     );
   }

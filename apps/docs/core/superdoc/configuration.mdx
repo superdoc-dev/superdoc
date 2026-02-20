@@ -36,15 +36,21 @@ new SuperDoc({
     ```json
     {
       id: 'doc-123', // string
-      type: 'docx', // string, can be 'docx' or 'pdf'
-      data: File // File or Blob
+      type: 'pdf', // string, can be 'docx' or 'pdf'
+      data: File, // local File or Blob source
+      // OR
+      url: 'https://example.com/report.pdf' // remote URL source
     }
     ```
     - `string` - URL to fetch
     - `File` - From file input
   </Expandable>
   
-  <Note>Use `documents` array for multiple documents instead</Note>
+  <Note>
+    For a `Document` object, use `data` for local files and `url` for remote files.
+    Provide one source field (`data` or `url`) per document object.
+    Use `documents` array for multiple documents instead.
+  </Note>
 </ParamField>
 
 <ParamField path="documents" type="Document[]">
@@ -224,6 +230,10 @@ new SuperDoc({
   </Expandable>
 </ParamField>
 
+<ParamField path="modules.slashMenu" type="Object" deprecated>
+  <Warning>**Deprecated** — Use `modules.contextMenu` instead. See the [Context Menu module](/modules/context-menu) for configuration options.</Warning>
+</ParamField>
+
 ## Appearance
 
 <ParamField path="title" type="string" default="'SuperDoc'">
@@ -312,6 +322,22 @@ new SuperDoc({
 
 <ParamField path="disableContextMenu" type="boolean" default="false">
   Disable custom context menus
+</ParamField>
+
+<ParamField path="onUnsupportedContent" type="function">
+  Callback invoked with HTML elements that were dropped during import because they have no schema representation. Receives an array of `{ tagName, outerHTML, count }` items. When provided, `console.warn` is suppressed.
+
+  ```javascript
+  onUnsupportedContent: (items) => {
+    items.forEach(({ tagName, count }) => {
+      console.log(`Dropped ${count}x <${tagName}>`);
+    });
+  }
+  ```
+</ParamField>
+
+<ParamField path="warnOnUnsupportedContent" type="boolean" default="false">
+  Log a `console.warn` listing HTML elements dropped during import. Ignored when `onUnsupportedContent` is provided.
 </ParamField>
 
 <ParamField path="cspNonce" type="string">

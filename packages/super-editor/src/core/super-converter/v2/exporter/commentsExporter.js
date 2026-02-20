@@ -2,6 +2,7 @@ import { translator as wPTranslator } from '@converter/v3/handlers/w/p';
 import { carbonCopy } from '../../../utilities/carbonCopy.js';
 import { COMMENT_REF, COMMENTS_XML_DEFINITIONS } from '../../exporter-docx-defs.js';
 import { generateRandom32BitHex } from '../../../helpers/generateDocxRandomId.js';
+import { COMMENT_FILE_BASENAMES } from '../../constants.js';
 
 /**
  * Insert w15:paraId into the comments
@@ -148,7 +149,7 @@ export const updateCommentsXml = (commentDefs = [], commentsXml) => {
 
 /**
  * Determine export strategy based on comment origins
- * @param {Array[Object]} comments The comments list
+ * @param {Object[]} comments The comments list
  * @returns {'word' | 'google-docs' | 'unknown'} The export strategy to use
  */
 export const determineExportStrategy = (comments) => {
@@ -175,7 +176,7 @@ const resolveThreadingStyle = (comment, threadingProfile) => {
 /**
  * This function updates the commentsExtended.xml structure with the comments list.
  *
- * @param {Array[Object]} comments The comments list
+ * @param {Object[]} comments The comments list
  * @param {Object} commentsExtendedXml The commentsExtended.xml structure as JSON
  * @param {import('@superdoc/common').CommentThreadingProfile | 'word' | 'google-docs' | 'unknown'} threadingProfile
  * @returns {Object | null} The updated commentsExtended structure, or null if it shouldn't be generated
@@ -240,56 +241,52 @@ export const updateCommentsExtendedXml = (comments = [], commentsExtendedXml, th
 };
 
 /**
- * Update commentsIds.xml and commentsExtensible.xml together since they have to
- * share the same durableId for each comment.
+ * Update commentsIds.xml and/or commentsExtensible.xml.
+ * Either part may be null — only the provided parts are populated.
+ * Both share the same durable IDs when both are present.
  *
- * @param {Array[Object]} comments The comments list
- * @param {Object} commentsIds The commentsIds.xml structure as JSON
- * @param {Object} extensible The commentsExtensible.xml structure as JSON
- * @returns {Object} The updated commentsIds and commentsExtensible structures
+ * @param {Object[]} comments The comments list
+ * @param {Object | null} commentsIds The commentsIds.xml structure as JSON (null to skip)
+ * @param {Object | null} extensible The commentsExtensible.xml structure as JSON (null to skip)
+ * @returns {Object} The updated commentsIds and commentsExtensible structures (null for skipped parts)
  */
 export const updateCommentsIdsAndExtensible = (comments = [], commentsIds, extensible) => {
-  const documentIdsUpdated = carbonCopy(commentsIds);
-  const extensibleUpdated = carbonCopy(extensible);
+  const documentIdsUpdated = commentsIds ? carbonCopy(commentsIds) : null;
+  const extensibleUpdated = extensible ? carbonCopy(extensible) : null;
 
-  documentIdsUpdated.elements[0].elements = [];
-  extensibleUpdated.elements[0].elements = [];
+  if (documentIdsUpdated) documentIdsUpdated.elements[0].elements = [];
+  if (extensibleUpdated) extensibleUpdated.elements[0].elements = [];
+
   comments.forEach((comment) => {
     const newDurableId = generateRandom32BitHex();
-    const newCommentIdDef = {
-      type: 'element',
-      name: 'w16cid:commentId',
-      attributes: {
-        'w16cid:paraId': comment.commentParaId,
-        'w16cid:durableId': newDurableId,
-      },
-    };
-    documentIdsUpdated.elements[0].elements.push(newCommentIdDef);
 
-    const newExtensible = {
-      type: 'element',
-      name: 'w16cex:commentExtensible',
-      attributes: {
-        'w16cex:durableId': newDurableId,
-        'w16cex:dateUtc': toIsoNoFractional(comment.createdTime),
-      },
-    };
-    extensibleUpdated.elements[0].elements.push(newExtensible);
+    if (documentIdsUpdated) {
+      documentIdsUpdated.elements[0].elements.push({
+        type: 'element',
+        name: 'w16cid:commentId',
+        attributes: {
+          'w16cid:paraId': comment.commentParaId,
+          'w16cid:durableId': newDurableId,
+        },
+      });
+    }
+
+    if (extensibleUpdated) {
+      extensibleUpdated.elements[0].elements.push({
+        type: 'element',
+        name: 'w16cex:commentExtensible',
+        attributes: {
+          'w16cex:durableId': newDurableId,
+          'w16cex:dateUtc': toIsoNoFractional(comment.createdTime),
+        },
+      });
+    }
   });
 
   return {
     documentIdsUpdated,
     extensibleUpdated,
   };
-};
-
-/**
- * Generate the ocument.xml.rels definition
- *
- * @returns {Object} The updated document rels XML structure
- */
-export const updateDocumentRels = () => {
-  return COMMENTS_XML_DEFINITIONS.DOCUMENT_RELS_XML_DEF;
 };
 
 /**
@@ -312,31 +309,10 @@ export const generateConvertedXmlWithCommentFiles = (convertedXml, fileSet = nul
   if (includeExtended) newXml['word/commentsExtended.xml'] = COMMENTS_XML_DEFINITIONS.COMMENTS_EXTENDED_XML_DEF;
   if (includeExtensible) newXml['word/commentsExtensible.xml'] = COMMENTS_XML_DEFINITIONS.COMMENTS_EXTENSIBLE_XML_DEF;
   if (includeIds) newXml['word/commentsIds.xml'] = COMMENTS_XML_DEFINITIONS.COMMENTS_IDS_XML_DEF;
-  newXml['[Content_Types].xml'] = COMMENTS_XML_DEFINITIONS.CONTENT_TYPES;
+  // Do NOT overwrite [Content_Types].xml here — DocxZipper.updateContentTypes() is the
+  // authoritative source that builds content types at zip-assembly time based on which
+  // files actually exist in updatedDocs.
   return newXml;
-};
-
-/**
- * Get the comments files converted to XML
- *
- * @param {Object} converter The converter instance
- * @returns {Object} The comments files converted to XML
- */
-export const getCommentsFilesConverted = (converter, convertedXml) => {
-  const commentsXml = convertedXml['word/comments.xml'];
-  const commentsExtendedXml = convertedXml['word/commentsExtended.xml'];
-  const commentsIdsXml = convertedXml['word/commentsExtensible.xml'];
-  const commentsExtensibleXml = convertedXml['word/commentsIds.xml'];
-  const contentTypes = convertedXml['[Content_Types].xml'];
-
-  return {
-    ...convertedXml,
-    'word/comments.xml': converter.schemaToXml(commentsXml.elements[0]),
-    'word/commentsExtended.xml': converter.schemaToXml(commentsExtendedXml.elements[0]),
-    'word/commentsIds.xml': converter.schemaToXml(commentsIdsXml.elements[0]),
-    'word/commentsExtensible.xml': converter.schemaToXml(commentsExtensibleXml.elements[0]),
-    '[Content_Types].xml': converter.schemaToXml(contentTypes.elements[0]),
-  };
 };
 
 /**
@@ -368,11 +344,19 @@ export const generateRelationship = (target) => {
   return { ...rel };
 };
 
+/** @type {readonly string[]} All possible comment support file targets */
+const ALL_COMMENT_TARGETS = COMMENT_FILE_BASENAMES;
+
 /**
  * Generate comments files into convertedXml
  *
- * @param {Object} param0
- * @returns
+ * @param {Object} params
+ * @param {Object} params.convertedXml Current converted XML map
+ * @param {Object[]} params.defs Export-ready `w:comment` definitions
+ * @param {Object[]} params.commentsWithParaIds Comments enriched with generated `commentParaId`
+ * @param {'clean' | string} params.exportType Export mode
+ * @param {import('@superdoc/common').CommentThreadingProfile | null} params.threadingProfile
+ * @returns {{ documentXml: Object, relationships: Object[], removedTargets: string[], warnings: string[] }}
  */
 export const prepareCommentsXmlFilesForExport = ({
   convertedXml,
@@ -382,17 +366,34 @@ export const prepareCommentsXmlFilesForExport = ({
   threadingProfile,
 }) => {
   const relationships = [];
+  const warnings = [];
 
   if (exportType === 'clean') {
     const documentXml = removeCommentsFilesFromConvertedXml(convertedXml);
-    return { documentXml, relationships };
+    // Clean export: all comment parts are intentionally removed — no warnings
+    return { documentXml, relationships, removedTargets: ALL_COMMENT_TARGETS, warnings };
   }
+
+  const hasComments = commentsWithParaIds && commentsWithParaIds.length > 0;
+
+  // When all comments have been removed, clean up all comment parts
+  if (!hasComments) {
+    const documentXml = removeCommentsFilesFromConvertedXml(convertedXml);
+    const removedTargets = [...ALL_COMMENT_TARGETS];
+    if (threadingProfile?.fileSet) {
+      warnings.push('All comments removed — cleaning up imported comment support files');
+    }
+    return { documentXml, relationships, removedTargets, warnings };
+  }
+
+  const emittedTargets = new Set();
 
   const exportStrategy = determineExportStrategy(commentsWithParaIds);
   const updatedXml = generateConvertedXmlWithCommentFiles(convertedXml, threadingProfile?.fileSet);
 
   updatedXml['word/comments.xml'] = updateCommentsXml(defs, updatedXml['word/comments.xml']);
   relationships.push(generateRelationship('comments.xml'));
+  emittedTargets.add('comments.xml');
 
   const commentsExtendedXml = updateCommentsExtendedXml(
     commentsWithParaIds,
@@ -405,27 +406,54 @@ export const prepareCommentsXmlFilesForExport = ({
   if (commentsExtendedXml !== null) {
     updatedXml['word/commentsExtended.xml'] = commentsExtendedXml;
     relationships.push(generateRelationship('commentsExtended.xml'));
+    emittedTargets.add('commentsExtended.xml');
   } else {
-    // Remove the file from the XML structure so the importer uses range-based threading
     delete updatedXml['word/commentsExtended.xml'];
+    if (threadingProfile?.fileSet?.hasCommentsExtended) {
+      warnings.push('commentsExtended.xml removed — export strategy does not require it');
+    }
   }
 
-  // Generate updates for documentIds.xml and commentsExtensible.xml here
-  // We do them at the same time as we need them to generate and share durable IDs between them
-  if (updatedXml['word/commentsIds.xml'] && updatedXml['word/commentsExtensible.xml']) {
+  // Generate updates for commentsIds.xml and/or commentsExtensible.xml independently.
+  // They share durable IDs when both are present, but either can exist without the other.
+  const hasIds = !!updatedXml['word/commentsIds.xml'];
+  const hasExtensible = !!updatedXml['word/commentsExtensible.xml'];
+
+  if (hasIds !== hasExtensible) {
+    const present = hasIds ? 'commentsIds.xml' : 'commentsExtensible.xml';
+    const absent = hasIds ? 'commentsExtensible.xml' : 'commentsIds.xml';
+    warnings.push(`Partial comment file-set: ${present} present without ${absent}`);
+  }
+
+  if (hasIds || hasExtensible) {
     const { documentIdsUpdated, extensibleUpdated } = updateCommentsIdsAndExtensible(
       commentsWithParaIds,
-      updatedXml['word/commentsIds.xml'],
-      updatedXml['word/commentsExtensible.xml'],
+      hasIds ? updatedXml['word/commentsIds.xml'] : null,
+      hasExtensible ? updatedXml['word/commentsExtensible.xml'] : null,
     );
-    updatedXml['word/commentsIds.xml'] = documentIdsUpdated;
-    updatedXml['word/commentsExtensible.xml'] = extensibleUpdated;
-    relationships.push(generateRelationship('commentsIds.xml'));
-    relationships.push(generateRelationship('commentsExtensible.xml'));
+    if (documentIdsUpdated) {
+      updatedXml['word/commentsIds.xml'] = documentIdsUpdated;
+      relationships.push(generateRelationship('commentsIds.xml'));
+      emittedTargets.add('commentsIds.xml');
+    }
+    if (extensibleUpdated) {
+      updatedXml['word/commentsExtensible.xml'] = extensibleUpdated;
+      relationships.push(generateRelationship('commentsExtensible.xml'));
+      emittedTargets.add('commentsExtensible.xml');
+    }
   }
+
+  if (!threadingProfile && hasComments) {
+    warnings.push('Comments exist but no threading profile detected — using default export shape');
+  }
+
+  // Compute comment targets that are not emitted in this export cycle
+  const removedTargets = ALL_COMMENT_TARGETS.filter((target) => !emittedTargets.has(target));
 
   return {
     relationships,
     documentXml: updatedXml,
+    removedTargets,
+    warnings,
   };
 };

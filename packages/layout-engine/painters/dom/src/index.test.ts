@@ -2545,6 +2545,70 @@ describe('DomPainter', () => {
     expect(fragmentAfter.style.left).toBe('70px');
   });
 
+  it('exposes a paint snapshot after rendering', () => {
+    const painter = createDomPainter({ blocks: [block], measures: [measure] });
+
+    painter.paint(layout, mount);
+
+    const snapshot = painter.getPaintSnapshot?.();
+    expect(snapshot).toBeTruthy();
+    expect(snapshot?.formatVersion).toBe(1);
+    expect(snapshot?.pageCount).toBe(1);
+    expect(snapshot?.lineCount).toBeGreaterThan(0);
+  });
+
+  it('uses actual page indices when collecting virtualized paint snapshots', () => {
+    const painter = createDomPainter({
+      blocks: [block],
+      measures: [measure],
+      virtualization: { enabled: true, window: 2 },
+    });
+    const virtualMount = document.createElement('div');
+    virtualMount.getBoundingClientRect = () =>
+      ({
+        width: 0,
+        height: 0,
+        top: 0,
+        left: 0,
+        right: 0,
+        bottom: 0,
+        x: 0,
+        y: 0,
+        toJSON() {
+          return {};
+        },
+      }) as DOMRect;
+
+    const multiPageLayout: Layout = {
+      ...layout,
+      pages: Array.from({ length: 10 }, (_, pageIndex) => ({
+        number: pageIndex + 1,
+        fragments: [
+          {
+            kind: 'para',
+            blockId: 'block-1',
+            fromLine: 0,
+            toLine: 1,
+            x: 30,
+            y: 40,
+            width: 300,
+            pmStart: 1,
+            pmEnd: 12,
+          },
+        ],
+      })),
+    };
+
+    painter.setVirtualizationPins?.([8]);
+    painter.paint(multiPageLayout, virtualMount);
+
+    const snapshot = painter.getPaintSnapshot?.();
+    expect(snapshot).toBeTruthy();
+    const pageIndices = snapshot?.pages.map((page) => page.index) ?? [];
+    expect(pageIndices).toContain(8);
+    expect(snapshot?.pages.find((page) => page.index === 8)?.pageNumber).toBe(9);
+  });
+
   it('renders header decorations with tokens resolved', () => {
     const headerBlock: FlowBlock = {
       kind: 'paragraph',
@@ -3178,6 +3242,109 @@ describe('DomPainter', () => {
       expect(fragEl).toBeTruthy();
       expect(footerEl.style.top).toBe(`${footerOffset}px`);
       expect(fragEl.style.top).toBe(`${footerHeight - contentHeight + footerFragment.y}px`);
+    });
+
+    it('renders page-relative behindDoc header media at absolute page Y', () => {
+      const headerImageBlock: FlowBlock = {
+        kind: 'image',
+        id: 'header-page-relative-img',
+        src: 'data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNk+M9QDwADhgGAWjR9awAAAABJRU5ErkJggg==',
+        anchor: {
+          isAnchored: true,
+          hRelativeFrom: 'page',
+          vRelativeFrom: 'page',
+          behindDoc: true,
+        },
+      };
+      const headerImageMeasure: Measure = {
+        kind: 'image',
+        width: 24,
+        height: 14,
+      };
+      const headerFragment: Fragment = {
+        kind: 'image',
+        blockId: 'header-page-relative-img',
+        x: 12,
+        y: 40,
+        width: 24,
+        height: 14,
+        isAnchored: true,
+        behindDoc: true,
+      };
+
+      const painter = createDomPainter({
+        blocks: [block, headerImageBlock],
+        measures: [measure, headerImageMeasure],
+        headerProvider: () => ({
+          fragments: [headerFragment],
+          height: 20,
+          offset: 60,
+          marginLeft: 30,
+        }),
+      });
+
+      painter.paint({ ...layout, pages: [{ ...layout.pages[0], number: 1 }] }, mount);
+
+      const pageEl = mount.querySelector('.superdoc-page') as HTMLElement;
+      const behindDocEl = pageEl.querySelector(
+        '[data-behind-doc-section="header"][data-block-id="header-page-relative-img"]',
+      ) as HTMLElement;
+
+      expect(behindDocEl).toBeTruthy();
+      expect(behindDocEl.style.top).toBe('40px');
+      expect(behindDocEl.style.left).toBe('42px');
+    });
+
+    it('does not apply footer bottom-alignment offset to page-relative media', () => {
+      const footerImageBlock: FlowBlock = {
+        kind: 'image',
+        id: 'footer-page-relative-img',
+        src: 'data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNk+M9QDwADhgGAWjR9awAAAABJRU5ErkJggg==',
+        anchor: {
+          isAnchored: true,
+          hRelativeFrom: 'page',
+          vRelativeFrom: 'page',
+        },
+      };
+      const footerImageMeasure: Measure = {
+        kind: 'image',
+        width: 20,
+        height: 20,
+      };
+      const footerFragment: Fragment = {
+        kind: 'image',
+        blockId: 'footer-page-relative-img',
+        x: 8,
+        y: 25,
+        width: 20,
+        height: 20,
+        isAnchored: true,
+      };
+
+      const footerOffset = 350;
+      const footerHeight = 80;
+      const footerContentHeight = 30;
+
+      const painter = createDomPainter({
+        blocks: [block, footerImageBlock],
+        measures: [measure, footerImageMeasure],
+        footerProvider: () => ({
+          fragments: [footerFragment],
+          height: footerHeight,
+          contentHeight: footerContentHeight,
+          offset: footerOffset,
+        }),
+      });
+
+      painter.paint({ ...layout, pages: [{ ...layout.pages[0], number: 1 }] }, mount);
+
+      const footerEl = mount.querySelector('.superdoc-page-footer') as HTMLElement;
+      const footerFragmentEl = footerEl.querySelector('[data-block-id="footer-page-relative-img"]') as HTMLElement;
+
+      expect(footerFragmentEl).toBeTruthy();
+      expect(footerFragmentEl.style.top).toBe(`${footerFragment.y - footerOffset}px`);
+      const renderedPageTop = parseFloat(footerEl.style.top || '0') + parseFloat(footerFragmentEl.style.top || '0');
+      expect(renderedPageTop).toBe(footerFragment.y);
     });
 
     it('preserves bold styling on page number tokens in DOM', () => {

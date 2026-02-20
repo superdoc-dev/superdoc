@@ -5,7 +5,10 @@
     "moduleResolution": "bundler",
     "strict": true,
     "skipLibCheck": true,
-    "types": ["bun"]
+    "types": ["bun"],
+    "paths": {
+      "@superdoc/super-editor/document-api-adapters": ["../../packages/super-editor/src/document-api-adapters/index.ts"]
+    }
   },
   "include": ["src"]
 }

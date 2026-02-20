@@ -54,6 +54,12 @@ type TableRowRenderDependencies = {
     lineIndex: number,
     isLastLine: boolean,
   ) => HTMLElement;
+  /** Optional callback invoked after a table line's final styles/markers are applied. */
+  captureLineSnapshot?: (
+    lineEl: HTMLElement,
+    context: FragmentRenderContext,
+    options?: { inTableParagraph?: boolean; wrapperEl?: HTMLElement },
+  ) => void;
   /** Function to render drawing content (images, shapes, shape groups) */
   renderDrawingContent?: (block: DrawingBlock) => HTMLElement;
   /** Function to apply SDT metadata as data attributes */
@@ -129,6 +135,7 @@ export const renderTableRow = (deps: TableRowRenderDependencies): void => {
     tableIndent,
     context,
     renderLine,
+    captureLineSnapshot,
     renderDrawingContent,
     applySdtDataset,
     tableSdt,
@@ -323,6 +330,16 @@ export const renderTableRow = (deps: TableRowRenderDependencies): void => {
     const fromLine = partialRow?.fromLineByCell?.[cellIndex];
     const toLine = partialRow?.toLineByCell?.[cellIndex];
 
+    // Compute cell width from rescaled columnWidths (SD-1859: mixed-orientation docs
+    // where cellMeasure.width may reflect landscape measurement but the fragment renders
+    // in portrait). The columnWidths array is already rescaled by the layout engine.
+    const colSpan = cellMeasure.colSpan ?? 1;
+    const gridStart = cellMeasure.gridColumnStart ?? cellIndex;
+    let computedCellWidth = 0;
+    for (let i = gridStart; i < gridStart + colSpan && i < columnWidths.length; i++) {
+      computedCellWidth += columnWidths[i];
+    }
+
     // Never use default borders - cells are either explicitly styled or borderless
     // This prevents gray borders on cells with borders={} (intentionally borderless)
     const { cellElement } = renderTableCell({
@@ -335,6 +352,7 @@ export const renderTableRow = (deps: TableRowRenderDependencies): void => {
       borders: resolvedBorders,
       useDefaultBorder: false,
       renderLine,
+      captureLineSnapshot,
       renderDrawingContent,
       context,
       applySdtDataset,
@@ -342,6 +360,7 @@ export const renderTableRow = (deps: TableRowRenderDependencies): void => {
       fromLine,
       toLine,
       tableIndent,
+      cellWidth: computedCellWidth > 0 ? computedCellWidth : undefined,
     });
 
     container.appendChild(cellElement);

@@ -25,6 +25,7 @@ const DEFAULT_PIPELINE = 'headless';
 const HEADER_FOOTER_VARIANTS = ['default', 'first', 'even', 'odd'];
 const MAX_LOG_LINE_CHARS = 120;
 const TELEMETRY_DISABLED_LOG_FRAGMENT = '[super-editor] Telemetry: disabled';
+const MAX_RECOMMENDED_JOBS = 8;
 
 const DEFAULT_PAGE_SIZE = { w: 612, h: 792 };
 const DEFAULT_MARGINS = { top: 72, right: 72, bottom: 72, left: 72 };
@@ -33,16 +34,47 @@ const DEFAULT_HORIZONTAL_PAGE_GAP = 20;
 
 const require = createRequire(import.meta.url);
 
+function getRecommendedJobs() {
+  const cpuCount =
+    typeof os.availableParallelism === 'function'
+      ? os.availableParallelism()
+      : Array.isArray(os.cpus())
+        ? os.cpus().length
+        : 1;
+  return Math.max(1, Math.min(MAX_RECOMMENDED_JOBS, cpuCount));
+}
+
+const DEFAULT_JOBS = getRecommendedJobs();
+
+function pathToPosix(value) {
+  return String(value ?? '').split(path.sep).join('/');
+}
+
+function normalizeMatchPattern(value) {
+  const text = String(value ?? '').trim();
+  if (!text) {
+    throw new Error('Invalid --match value: expected non-empty text.');
+  }
+  return text.toLowerCase();
+}
+
+function matchesAnyPattern(value, patterns) {
+  if (!Array.isArray(patterns) || patterns.length === 0) return true;
+  const normalizedValue = String(value ?? '').toLowerCase();
+  return patterns.some((pattern) => normalizedValue.includes(pattern));
+}
+
 function parseArgs(argv) {
   const args = {
     inputRoot: DEFAULT_INPUT_ROOT,
     outputRoot: DEFAULT_OUTPUT_ROOT,
     module: DEFAULT_SUPER_EDITOR_MODULE,
     limit: undefined,
+    matches: [],
     timeoutMs: 30_000,
     failFast: false,
     telemetryEnabled: false,
-    jobs: 1,
+    jobs: DEFAULT_JOBS,
     pipeline: DEFAULT_PIPELINE,
 
     isWorker: false,
@@ -54,43 +86,68 @@ function parseArgs(argv) {
     cleanOutput: true,
   };
 
+  const requireValue = (optionName, optionValue) => {
+    if (typeof optionValue !== 'string' || optionValue.length === 0 || optionValue.startsWith('-')) {
+      throw new Error(`Missing value for ${optionName}.`);
+    }
+    return optionValue;
+  };
+
   for (let i = 0; i < argv.length; i += 1) {
     const arg = argv[i];
     const next = argv[i + 1];
 
-    if ((arg === '--input-root' || arg === '-i') && next) {
-      args.inputRoot = next;
+    if (arg === '--help' || arg === '-h') {
+      printHelp();
+      process.exit(0);
+    }
+
+    if (arg === '--match') {
+      args.matches.push(normalizeMatchPattern(requireValue(arg, next)));
       i += 1;
       continue;
     }
-    if ((arg === '--output-root' || arg === '-o') && next) {
-      args.outputRoot = next;
+    if (arg.startsWith('--match=')) {
+      args.matches.push(normalizeMatchPattern(arg.slice('--match='.length)));
+      continue;
+    }
+    if (arg === '--input-root' || arg === '-i') {
+      args.inputRoot = requireValue(arg, next);
       i += 1;
       continue;
     }
-    if ((arg === '--module' || arg === '-m') && next) {
-      args.module = next;
+    if (arg === '--output-root' || arg === '-o') {
+      args.outputRoot = requireValue(arg, next);
       i += 1;
       continue;
     }
-    if (arg === '--limit' && next) {
-      const parsed = Number(next);
+    if (arg === '--module' || arg === '-m') {
+      args.module = requireValue(arg, next);
+      i += 1;
+      continue;
+    }
+    if (arg === '--limit') {
+      const parsed = Number(requireValue(arg, next));
       if (Number.isFinite(parsed) && parsed > 0) {
         args.limit = Math.floor(parsed);
+      } else {
+        throw new Error(`Invalid value for --limit: "${next}". Expected integer > 0.`);
       }
       i += 1;
       continue;
     }
-    if (arg === '--timeout-ms' && next) {
-      const parsed = Number(next);
+    if (arg === '--timeout-ms') {
+      const parsed = Number(requireValue(arg, next));
       if (Number.isFinite(parsed) && parsed > 0) {
         args.timeoutMs = Math.floor(parsed);
+      } else {
+        throw new Error(`Invalid value for --timeout-ms: "${next}". Expected integer > 0.`);
       }
       i += 1;
       continue;
     }
-    if (arg === '--jobs' && next) {
-      const parsed = Number(next);
+    if (arg === '--jobs') {
+      const parsed = Number(requireValue(arg, next));
       if (Number.isFinite(parsed) && parsed >= 1) {
         args.jobs = Math.floor(parsed);
       } else {
@@ -99,8 +156,8 @@ function parseArgs(argv) {
       i += 1;
       continue;
     }
-    if (arg === '--pipeline' && next) {
-      const normalized = String(next).toLowerCase();
+    if (arg === '--pipeline') {
+      const normalized = String(requireValue(arg, next)).toLowerCase();
       if (normalized === 'headless' || normalized === 'presentation') {
         args.pipeline = normalized;
       } else {
@@ -129,8 +186,8 @@ function parseArgs(argv) {
       args.telemetryEnabled = false;
       continue;
     }
-    if (arg === '--telemetry' && next) {
-      const normalized = String(next).toLowerCase();
+    if (arg === '--telemetry') {
+      const normalized = String(requireValue(arg, next)).toLowerCase();
       if (['1', 'true', 'on', 'enabled'].includes(normalized)) {
         args.telemetryEnabled = true;
       } else if (['0', 'false', 'off', 'disabled'].includes(normalized)) {
@@ -148,23 +205,23 @@ function parseArgs(argv) {
       args.isWorker = true;
       continue;
     }
-    if (arg === '--worker-id' && next) {
-      args.workerId = Number(next);
+    if (arg === '--worker-id') {
+      args.workerId = Number(requireValue(arg, next));
       i += 1;
       continue;
     }
-    if (arg === '--worker-manifest' && next) {
-      args.workerManifestPath = next;
+    if (arg === '--worker-manifest') {
+      args.workerManifestPath = requireValue(arg, next);
       i += 1;
       continue;
     }
-    if (arg === '--total-docs' && next) {
-      args.totalDocs = Number(next);
+    if (arg === '--total-docs') {
+      args.totalDocs = Number(requireValue(arg, next));
       i += 1;
       continue;
     }
-    if (arg === '--summary-file' && next) {
-      args.summaryFile = next;
+    if (arg === '--summary-file') {
+      args.summaryFile = requireValue(arg, next);
       i += 1;
       continue;
     }
@@ -177,15 +234,17 @@ function parseArgs(argv) {
       continue;
     }
 
-    if (arg === '--help' || arg === '-h') {
-      printHelp();
-      process.exit(0);
+    if (arg.startsWith('-')) {
+      throw new Error(`Unknown option "${arg}". Run with --help for usage.`);
     }
+    throw new Error(`Unexpected positional argument "${arg}". Run with --help for usage.`);
   }
 
   if (args.jobs < 1) {
     throw new Error('`--jobs` must be >= 1.');
   }
+
+  args.matches = [...new Set(args.matches)];
 
   return args;
 }
@@ -202,8 +261,9 @@ Options:
       --pipeline <mode>     Layout pipeline: headless | presentation (default: ${DEFAULT_PIPELINE})
       --headless            Shorthand for --pipeline headless
       --presentation        Shorthand for --pipeline presentation
-      --jobs <n>            Process docs with n worker processes (default: 1)
+      --jobs <n>            Process docs with n worker processes (default: ${DEFAULT_JOBS})
       --limit <n>           Process at most n DOCX files
+      --match <pattern>     Filter docs by relative path substring (repeatable, case-insensitive)
       --timeout-ms <ms>     Per-document layout timeout for presentation mode (default: 30000)
       --fail-fast           Stop on first error
       --telemetry <on|off>  Enable/disable editor telemetry (default: off)
@@ -214,6 +274,7 @@ Options:
 Examples:
   bun tests/layout-snapshots/export-layout-snapshots.mjs
   bun tests/layout-snapshots/export-layout-snapshots.mjs --jobs 4
+  bun tests/layout-snapshots/export-layout-snapshots.mjs --match list-in-table
   bun tests/layout-snapshots/export-layout-snapshots.mjs --pipeline presentation --limit 10
   node tests/layout-snapshots/export-layout-snapshots.mjs --module superdoc/super-editor
 `);
@@ -412,6 +473,22 @@ async function listDocxFiles(rootPath) {
   return found.sort();
 }
 
+function filterDocxFilesByMatchPatterns(docxFiles, inputRoot, patterns) {
+  if (!Array.isArray(patterns) || patterns.length === 0) {
+    return docxFiles;
+  }
+
+  return docxFiles.filter((docxPath) => {
+    const relativePath = pathToPosix(path.relative(inputRoot, docxPath));
+    if (matchesAnyPattern(relativePath, patterns)) return true;
+    if (relativePath.toLowerCase().endsWith('.docx')) {
+      const withoutExtension = relativePath.slice(0, -'.docx'.length);
+      if (matchesAnyPattern(withoutExtension, patterns)) return true;
+    }
+    return false;
+  });
+}
+
 function toJsonSafe(value) {
   const seen = new WeakSet();
 
@@ -465,6 +542,175 @@ function toJsonSafe(value) {
   };
 
   return visit(value);
+}
+
+function roundMetric(value) {
+  if (!Number.isFinite(value)) return null;
+  return Math.round(value * 1000) / 1000;
+}
+
+function readPxMetric(styleValue) {
+  if (typeof styleValue !== 'string' || styleValue.length === 0) return null;
+  const parsed = Number.parseFloat(styleValue);
+  return Number.isFinite(parsed) ? roundMetric(parsed) : null;
+}
+
+function readStyleString(styleValue) {
+  if (typeof styleValue !== 'string' || styleValue.length === 0) return null;
+  return styleValue;
+}
+
+function compactObject(input) {
+  const out = {};
+  for (const [key, value] of Object.entries(input)) {
+    if (value == null) continue;
+    if (Array.isArray(value) && value.length === 0) continue;
+    out[key] = value;
+  }
+  return out;
+}
+
+function snapshotLineStyle(lineEl) {
+  const style = lineEl?.style;
+  if (!style) return {};
+  return compactObject({
+    paddingLeftPx: readPxMetric(style.paddingLeft),
+    paddingRightPx: readPxMetric(style.paddingRight),
+    textIndentPx: readPxMetric(style.textIndent),
+    marginLeftPx: readPxMetric(style.marginLeft),
+    marginRightPx: readPxMetric(style.marginRight),
+    leftPx: readPxMetric(style.left),
+    topPx: readPxMetric(style.top),
+    widthPx: readPxMetric(style.width),
+    heightPx: readPxMetric(style.height),
+    display: readStyleString(style.display),
+    position: readStyleString(style.position),
+    textAlign: readStyleString(style.textAlign),
+    justifyContent: readStyleString(style.justifyContent),
+  });
+}
+
+function snapshotMarkerStyle(markerEl) {
+  const style = markerEl?.style;
+  if (!style) return {};
+  return compactObject({
+    text: markerEl?.textContent ?? '',
+    leftPx: readPxMetric(style.left),
+    widthPx: readPxMetric(style.width),
+    paddingRightPx: readPxMetric(style.paddingRight),
+    display: readStyleString(style.display),
+    position: readStyleString(style.position),
+    textAlign: readStyleString(style.textAlign),
+    fontWeight: readStyleString(style.fontWeight),
+    fontStyle: readStyleString(style.fontStyle),
+    color: readStyleString(style.color),
+  });
+}
+
+function collectLineMarkers(lineEl) {
+  const markers = [];
+  const parent = lineEl?.parentElement;
+  if (parent) {
+    for (const child of parent.children) {
+      if (!(child instanceof HTMLElement)) continue;
+      if (!child.classList.contains('superdoc-paragraph-marker')) continue;
+      markers.push(snapshotMarkerStyle(child));
+    }
+  }
+
+  const inlineMarkers = lineEl?.querySelectorAll?.('.superdoc-paragraph-marker') ?? [];
+  for (const markerEl of inlineMarkers) {
+    if (!(markerEl instanceof HTMLElement)) continue;
+    if (markers.some((existing) => existing.text === markerEl.textContent && existing.leftPx === readPxMetric(markerEl.style.left))) {
+      continue;
+    }
+    markers.push(snapshotMarkerStyle(markerEl));
+  }
+
+  return markers;
+}
+
+function collectLineTabs(lineEl) {
+  const tabs = [];
+  const tabElements = lineEl?.querySelectorAll?.('.superdoc-tab') ?? [];
+  for (const tabEl of tabElements) {
+    if (!(tabEl instanceof HTMLElement)) continue;
+    tabs.push(
+      compactObject({
+        widthPx: readPxMetric(tabEl.style.width),
+        leftPx: readPxMetric(tabEl.style.left),
+        position: readStyleString(tabEl.style.position),
+        borderBottom: readStyleString(tabEl.style.borderBottom),
+      }),
+    );
+  }
+  return tabs;
+}
+
+function collectPaintSnapshotFromDomRoot(rootEl) {
+  const pageElements = Array.from(rootEl?.querySelectorAll?.('.superdoc-page') ?? []);
+  const pages = [];
+  let totalLineCount = 0;
+  let totalMarkerCount = 0;
+  let totalTabCount = 0;
+
+  for (let pageIndex = 0; pageIndex < pageElements.length; pageIndex += 1) {
+    const pageEl = pageElements[pageIndex];
+    if (!(pageEl instanceof HTMLElement)) continue;
+
+    const lineElements = Array.from(pageEl.querySelectorAll('.superdoc-line'));
+    const lines = [];
+    for (let lineIndex = 0; lineIndex < lineElements.length; lineIndex += 1) {
+      const lineEl = lineElements[lineIndex];
+      if (!(lineEl instanceof HTMLElement)) continue;
+
+      const markers = collectLineMarkers(lineEl);
+      const tabs = collectLineTabs(lineEl);
+      totalMarkerCount += markers.length;
+      totalTabCount += tabs.length;
+      totalLineCount += 1;
+
+      lines.push(
+        compactObject({
+          index: lineIndex,
+          inTableFragment: Boolean(lineEl.closest('.superdoc-table-fragment')),
+          inTableParagraph: Boolean(lineEl.closest('.superdoc-table-paragraph')),
+          style: snapshotLineStyle(lineEl),
+          markers,
+          tabs,
+        }),
+      );
+    }
+
+    const pageNumberRaw = pageEl.dataset?.pageNumber;
+    const pageNumberParsed = pageNumberRaw == null ? Number.NaN : Number(pageNumberRaw);
+
+    pages.push(
+      compactObject({
+        index: pageIndex,
+        pageNumber: Number.isFinite(pageNumberParsed) ? pageNumberParsed : null,
+        lineCount: lines.length,
+        lines,
+      }),
+    );
+  }
+
+  return {
+    formatVersion: 1,
+    pageCount: pages.length,
+    lineCount: totalLineCount,
+    markerCount: totalMarkerCount,
+    tabCount: totalTabCount,
+    pages,
+  };
+}
+
+function readPaintSnapshotFromPresentation(presentation, host) {
+  const snapshotFromPainter = presentation?.getPaintSnapshot?.();
+  if (snapshotFromPainter && typeof snapshotFromPainter === 'object' && snapshotFromPainter.formatVersion != null) {
+    return snapshotFromPainter;
+  }
+  return collectPaintSnapshotFromDomRoot(host);
 }
 
 function waitForLayoutUpdate(presentation, timeoutMs) {
@@ -1250,6 +1496,7 @@ async function renderWithPresentation({
   let editorInitMs = 0;
   let layoutWaitMs = 0;
   let layoutMs = 0;
+  let paintSnapshot = null;
 
   try {
     const importStartedAtMs = nowMs();
@@ -1291,9 +1538,11 @@ async function renderWithPresentation({
     const snapshot = presentation.getLayoutSnapshot();
     const layoutOptions = presentation.getLayoutOptions();
     const pageCount = snapshot.layout?.pages?.length ?? 0;
+    paintSnapshot = readPaintSnapshotFromPresentation(presentation, host);
 
     return {
       snapshot,
+      paintSnapshot,
       layoutOptions,
       metrics: payload.metrics,
       pageCount,
@@ -1317,8 +1566,59 @@ async function renderWithPresentation({
   }
 }
 
+async function renderPaintSnapshotWithPresentation({
+  PresentationEditor,
+  getStarterExtensions,
+  args,
+  docId,
+  content,
+  media,
+  mediaFiles,
+  fonts,
+}) {
+  if (!PresentationEditor) {
+    throw new Error('PresentationEditor is required to capture paintSnapshot.');
+  }
+
+  let presentation = null;
+  let host = null;
+  try {
+    host = document.createElement('div');
+    document.body.appendChild(host);
+
+    presentation = new PresentationEditor({
+      element: host,
+      documentId: `${docId}-paint`,
+      mode: 'docx',
+      telemetry: { enabled: args.telemetryEnabled },
+      extensions: getStarterExtensions(),
+      content,
+      media,
+      mediaFiles,
+      fonts,
+      layoutEngineOptions: {
+        virtualization: { enabled: false },
+      },
+    });
+
+    await waitForLayoutUpdate(presentation, args.timeoutMs);
+    return readPaintSnapshotFromPresentation(presentation, host);
+  } catch (error) {
+    const message = error instanceof Error ? error.message : String(error);
+    throw new Error(`Failed to capture paintSnapshot via PresentationEditor: ${message}`);
+  } finally {
+    try {
+      presentation?.destroy?.();
+    } catch {}
+    try {
+      host?.remove?.();
+    } catch {}
+  }
+}
+
 async function renderWithHeadless({
   Editor,
+  PresentationEditor,
   getStarterExtensions,
   headlessPrimitives,
   args,
@@ -1331,6 +1631,7 @@ async function renderWithHeadless({
   let importMs = 0;
   let editorInitMs = 0;
   let layoutMs = 0;
+  let paintSnapshot = null;
 
   try {
     const importStartedAtMs = nowMs();
@@ -1447,9 +1748,20 @@ async function renderWithHeadless({
     };
 
     const pageCount = snapshot.layout?.pages?.length ?? 0;
+    paintSnapshot = await renderPaintSnapshotWithPresentation({
+      PresentationEditor,
+      getStarterExtensions,
+      args,
+      docId,
+      content,
+      media,
+      mediaFiles,
+      fonts,
+    });
 
     return {
       snapshot,
+      paintSnapshot,
       layoutOptions: {
         pageSize: layoutOptions.pageSize,
         margins: layoutOptions.margins,
@@ -1548,6 +1860,7 @@ async function runDocBatch({
             })
           : await renderWithHeadless({
               Editor,
+              PresentationEditor,
               getStarterExtensions,
               headlessPrimitives,
               args,
@@ -1580,6 +1893,7 @@ async function runDocBatch({
           ...rendered.pipelineRuntime,
         },
         layoutSnapshot: rendered.snapshot,
+        paintSnapshot: rendered.paintSnapshot ?? null,
         layoutOptions: rendered.layoutOptions,
         metrics: rendered.metrics,
       };
@@ -1667,14 +1981,23 @@ async function run() {
     }
 
     let allDocxFiles = [];
+    let matchedDocxFiles = [];
     let docEntries = [];
 
     if (args.isWorker) {
       docEntries = await loadWorkerDocEntries(args);
       allDocxFiles = docEntries.map((entry) => (typeof entry === 'string' ? entry : entry.path));
+      matchedDocxFiles = allDocxFiles;
     } else {
       allDocxFiles = await listDocxFiles(inputRoot);
-      const limited = args.limit ? allDocxFiles.slice(0, args.limit) : allDocxFiles;
+      matchedDocxFiles = filterDocxFilesByMatchPatterns(allDocxFiles, inputRoot, args.matches);
+      if (args.matches.length > 0 && matchedDocxFiles.length === 0) {
+        throw new Error(
+          `No DOCX files matched --match patterns (${args.matches.join(', ')}) under ${inputRoot}.`,
+        );
+      }
+
+      const limited = args.limit ? matchedDocxFiles.slice(0, args.limit) : matchedDocxFiles;
       docEntries = limited.map((docxPath, index) => ({ path: docxPath, index: index + 1 }));
     }
 
@@ -1690,6 +2013,10 @@ async function run() {
       logLine(`[layout-snapshots] Input root:  ${inputRoot}`);
       logLine(`[layout-snapshots] Output root: ${outputRoot}`);
       logLine(`[layout-snapshots] Docs found:  ${allDocxFiles.length}`);
+      if (args.matches.length > 0) {
+        logLine(`[layout-snapshots] Match:      ${args.matches.join(', ')}`);
+        logLine(`[layout-snapshots] Docs matched: ${matchedDocxFiles.length}`);
+      }
       logLine(`[layout-snapshots] Docs to run: ${docEntries.length}`);
       logLine(`[layout-snapshots] Module:      ${moduleUrl}`);
       logLine(`[layout-snapshots] Pipeline:    ${args.pipeline}`);

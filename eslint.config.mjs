@@ -27,6 +27,8 @@ export default [
       '**/src/**/*.d.ts.map',
       // Test files
       '**/*.test.js',
+      '**/*.test.ts',
+      '**/*.test.tsx',
       '**/*.spec.js',
       '**/tests/**',
       '**/test/**',

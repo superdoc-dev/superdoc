@@ -1,6 +1,6 @@
 import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
 import { createPinia, setActivePinia, defineStore } from 'pinia';
-import { ref, reactive } from 'vue';
+import { ref, reactive, nextTick } from 'vue';
 
 vi.mock('./superdoc-store.js', () => {
   const documents = ref([]);
@@ -152,6 +152,17 @@ describe('comments-store', () => {
     expect(setActiveCommentSpy).toHaveBeenCalledWith({ commentId: null });
   });
 
+  it('does not throw when superdoc is unavailable during active comment updates', () => {
+    const comment = { commentId: 'comment-2' };
+    store.commentsList = [comment];
+
+    expect(() => store.setActiveComment(undefined, 'comment-2')).not.toThrow();
+    expect(store.activeComment).toBe('comment-2');
+
+    expect(() => store.setActiveComment(undefined, null)).not.toThrow();
+    expect(store.activeComment).toBeNull();
+  });
+
   it('updates tracked change comments and emits events', () => {
     const superdoc = {
       emit: vi.fn(),
@@ -219,46 +230,49 @@ describe('comments-store', () => {
           commentId: 'c-1',
           createdTime: now,
           creatorName: 'Gabriel',
-          textJson: {
-            content: [
-              {
-                type: 'run',
-                content: [],
-                attrs: {
-                  runProperties: [
-                    {
-                      xmlName: 'w:rStyle',
-                      attributes: {
-                        'w:val': 'CommentReference',
-                      },
-                    },
-                  ],
-                },
-              },
-              {
-                type: 'run',
-                content: [
-                  {
-                    type: 'text',
-                    text: 'I am a comment~!',
-                    attrs: {
-                      type: 'element',
-                      attributes: {},
-                    },
-                    marks: [
+          elements: [
+            {
+              type: 'paragraph',
+              content: [
+                {
+                  type: 'run',
+                  content: [],
+                  attrs: {
+                    runProperties: [
                       {
-                        type: 'textStyle',
-                        attrs: {
-                          fontSize: '10pt',
-                          fontSizeCs: '10pt',
+                        xmlName: 'w:rStyle',
+                        attributes: {
+                          'w:val': 'CommentReference',
                         },
                       },
                     ],
                   },
-                ],
-              },
-            ],
-          },
+                },
+                {
+                  type: 'run',
+                  content: [
+                    {
+                      type: 'text',
+                      text: 'I am a comment~!',
+                      attrs: {
+                        type: 'element',
+                        attributes: {},
+                      },
+                      marks: [
+                        {
+                          type: 'textStyle',
+                          attrs: {
+                            fontSize: '10pt',
+                            fontSizeCs: '10pt',
+                          },
+                        },
+                      ],
+                    },
+                  ],
+                },
+              ],
+            },
+          ],
         },
       ],
       documentId: 'doc-1',
@@ -392,6 +406,338 @@ describe('comments-store', () => {
       });
 
       expect(store.getGroupedComments.parentComments).toEqual([]);
+    });
+  });
+
+  describe('getCommentsByPosition', () => {
+    it('orders parent comments by document position when available', () => {
+      store.commentsList = [
+        { commentId: 'c-1', createdTime: 2 },
+        { commentId: 'c-2', createdTime: 1 },
+        { commentId: 'c-3', createdTime: 3 },
+      ];
+
+      store.editorCommentPositions = {
+        'c-1': { start: 40, end: 50 },
+        'c-2': { start: 10, end: 20 },
+      };
+
+      const ordered = store.getCommentsByPosition.parentComments.map((c) => c.commentId);
+      expect(ordered).toEqual(['c-2', 'c-1', 'c-3']);
+    });
+
+    it('falls back to createdTime for comments without positions', () => {
+      store.commentsList = [
+        { commentId: 'c-1', createdTime: 3 },
+        { commentId: 'c-2', createdTime: 1 },
+        { commentId: 'c-3', createdTime: 2 },
+      ];
+
+      store.editorCommentPositions = {};
+
+      const ordered = store.getCommentsByPosition.parentComments.map((c) => c.commentId);
+      expect(ordered).toEqual(['c-2', 'c-3', 'c-1']);
+    });
+
+    it('uses importedId over commentId when looking up positions', () => {
+      store.commentsList = [
+        { commentId: 'uuid-1', importedId: 'imported-1', createdTime: 3 },
+        { commentId: 'uuid-2', importedId: 'imported-2', createdTime: 1 },
+        { commentId: 'uuid-3', createdTime: 2 },
+      ];
+
+      store.editorCommentPositions = {
+        'imported-1': { start: 50, end: 60 },
+        'imported-2': { start: 10, end: 20 },
+        'uuid-3': { start: 30, end: 40 },
+      };
+
+      const ordered = store.getCommentsByPosition.parentComments.map((c) => c.commentId);
+      expect(ordered).toEqual(['uuid-2', 'uuid-3', 'uuid-1']);
+    });
+
+    it('orders resolved comments by document position', () => {
+      store.commentsList = [
+        { commentId: 'c-1', createdTime: 1, resolvedTime: 100 },
+        { commentId: 'c-2', createdTime: 2, resolvedTime: 200 },
+        { commentId: 'c-3', createdTime: 3, resolvedTime: 300 },
+      ];
+
+      store.editorCommentPositions = {
+        'c-1': { start: 50 },
+        'c-2': { start: 10 },
+        'c-3': { start: 30 },
+      };
+
+      const ordered = store.getCommentsByPosition.resolvedComments.map((c) => c.commentId);
+      expect(ordered).toEqual(['c-2', 'c-3', 'c-1']);
+    });
+
+    it('supports pos property for position lookup', () => {
+      store.commentsList = [
+        { commentId: 'c-1', createdTime: 1 },
+        { commentId: 'c-2', createdTime: 2 },
+      ];
+
+      store.editorCommentPositions = {
+        'c-1': { pos: 50 },
+        'c-2': { pos: 10 },
+      };
+
+      const ordered = store.getCommentsByPosition.parentComments.map((c) => c.commentId);
+      expect(ordered).toEqual(['c-2', 'c-1']);
+    });
+
+    it('supports from property for position lookup', () => {
+      store.commentsList = [
+        { commentId: 'c-1', createdTime: 1 },
+        { commentId: 'c-2', createdTime: 2 },
+      ];
+
+      store.editorCommentPositions = {
+        'c-1': { from: 50, to: 60 },
+        'c-2': { from: 10, to: 20 },
+      };
+
+      const ordered = store.getCommentsByPosition.parentComments.map((c) => c.commentId);
+      expect(ordered).toEqual(['c-2', 'c-1']);
+    });
+
+    it('supports to property as fallback for position lookup', () => {
+      store.commentsList = [
+        { commentId: 'c-1', createdTime: 1 },
+        { commentId: 'c-2', createdTime: 2 },
+      ];
+
+      store.editorCommentPositions = {
+        'c-1': { to: 50 },
+        'c-2': { to: 10 },
+      };
+
+      const ordered = store.getCommentsByPosition.parentComments.map((c) => c.commentId);
+      expect(ordered).toEqual(['c-2', 'c-1']);
+    });
+
+    it('falls back to createdTime when positions are equal', () => {
+      store.commentsList = [
+        { commentId: 'c-1', createdTime: 3 },
+        { commentId: 'c-2', createdTime: 1 },
+        { commentId: 'c-3', createdTime: 2 },
+      ];
+
+      store.editorCommentPositions = {
+        'c-1': { start: 10 },
+        'c-2': { start: 10 },
+        'c-3': { start: 10 },
+      };
+
+      const ordered = store.getCommentsByPosition.parentComments.map((c) => c.commentId);
+      expect(ordered).toEqual(['c-2', 'c-3', 'c-1']);
+    });
+
+    it('handles comments with null or undefined ids gracefully', () => {
+      store.commentsList = [
+        { commentId: 'c-1', createdTime: 2 },
+        { commentId: null, createdTime: 1 },
+        { createdTime: 3 },
+      ];
+
+      store.editorCommentPositions = {
+        'c-1': { start: 10 },
+      };
+
+      const ordered = store.getCommentsByPosition.parentComments.map((c) => c.commentId);
+      expect(ordered).toEqual(['c-1', null, undefined]);
+    });
+  });
+
+  describe('comment anchor helpers', () => {
+    it('returns comment position by id or comment object', () => {
+      const comment = { commentId: 'c-1', fileId: 'doc-1' };
+      store.commentsList = [comment];
+      store.editorCommentPositions = {
+        'c-1': { start: 12, end: 18 },
+      };
+
+      expect(store.getCommentPosition('c-1')).toEqual({ start: 12, end: 18 });
+      expect(store.getCommentPosition(comment)).toEqual({ start: 12, end: 18 });
+    });
+
+    it('returns comment position using importedId fallback', () => {
+      const comment = { importedId: 'imported-1', fileId: 'doc-1' };
+      store.commentsList = [comment];
+      store.editorCommentPositions = {
+        'imported-1': { start: 20, end: 30 },
+      };
+
+      expect(store.getCommentPosition('imported-1')).toEqual({ start: 20, end: 30 });
+      expect(store.getCommentPosition(comment)).toEqual({ start: 20, end: 30 });
+    });
+
+    it('returns anchored text when editor and positions are available', () => {
+      const textBetween = vi.fn(() => 'Anchored text');
+      const editorStub = { state: { doc: { textBetween } } };
+      __mockSuperdoc.documents.value = [{ id: 'doc-1', type: 'docx', getEditor: () => editorStub }];
+
+      store.commentsList = [{ commentId: 'c-1', fileId: 'doc-1' }];
+      store.editorCommentPositions = {
+        'c-1': { start: 5, end: 12 },
+      };
+
+      expect(store.getCommentAnchoredText('c-1')).toBe('Anchored text');
+      expect(textBetween).toHaveBeenCalledWith(5, 12, ' ', ' ');
+    });
+
+    it('returns anchored text with custom separator option', () => {
+      const textBetween = vi.fn(() => 'Line1\nLine2');
+      const editorStub = { state: { doc: { textBetween } } };
+      __mockSuperdoc.documents.value = [{ id: 'doc-1', type: 'docx', getEditor: () => editorStub }];
+
+      store.commentsList = [{ commentId: 'c-1', fileId: 'doc-1' }];
+      store.editorCommentPositions = {
+        'c-1': { start: 0, end: 20 },
+      };
+
+      expect(store.getCommentAnchoredText('c-1', { separator: '\n' })).toBe('Line1\nLine2');
+      expect(textBetween).toHaveBeenCalledWith(0, 20, '\n', '\n');
+    });
+
+    it('returns anchored text without trimming when trim is false', () => {
+      const textBetween = vi.fn(() => '  spaced text  ');
+      const editorStub = { state: { doc: { textBetween } } };
+      __mockSuperdoc.documents.value = [{ id: 'doc-1', type: 'docx', getEditor: () => editorStub }];
+
+      store.commentsList = [{ commentId: 'c-1', fileId: 'doc-1' }];
+      store.editorCommentPositions = {
+        'c-1': { start: 0, end: 15 },
+      };
+
+      expect(store.getCommentAnchoredText('c-1', { trim: false })).toBe('  spaced text  ');
+      expect(store.getCommentAnchoredText('c-1')).toBe('spaced text');
+    });
+
+    it('returns null when position or editor is missing', () => {
+      store.commentsList = [{ commentId: 'c-1', fileId: 'doc-1' }];
+      store.editorCommentPositions = {};
+
+      expect(store.getCommentAnchoredText('c-1')).toBeNull();
+      expect(store.getCommentAnchorData('c-1')).toBeNull();
+    });
+
+    it('returns anchor data with position and text when available', () => {
+      const textBetween = vi.fn(() => 'Selected text');
+      const editorStub = { state: { doc: { textBetween } } };
+      __mockSuperdoc.documents.value = [{ id: 'doc-1', type: 'docx', getEditor: () => editorStub }];
+
+      store.commentsList = [{ commentId: 'c-1', fileId: 'doc-1' }];
+      store.editorCommentPositions = {
+        'c-1': { start: 10, end: 25 },
+      };
+
+      const result = store.getCommentAnchorData('c-1');
+      expect(result).toEqual({
+        position: { start: 10, end: 25 },
+        anchoredText: 'Selected text',
+      });
+    });
+
+    it('handles empty anchored text', () => {
+      const textBetween = vi.fn(() => '');
+      const editorStub = { state: { doc: { textBetween } } };
+      __mockSuperdoc.documents.value = [{ id: 'doc-1', type: 'docx', getEditor: () => editorStub }];
+
+      store.commentsList = [{ commentId: 'c-1', fileId: 'doc-1' }];
+      store.editorCommentPositions = {
+        'c-1': { start: 5, end: 5 },
+      };
+
+      expect(store.getCommentAnchoredText('c-1')).toBe('');
+    });
+  });
+
+  describe('document-driven resolution state', () => {
+    it('clears resolved metadata when document anchors reappear', async () => {
+      const comment = {
+        commentId: 'reopen-1',
+        resolvedTime: 123,
+        resolvedByEmail: 'user@example.com',
+        resolvedByName: 'User',
+      };
+
+      store.commentsList = [comment];
+
+      store.handleEditorLocationsUpdate({
+        'reopen-1': { start: 1, end: 5, bounds: { top: 0, left: 0 } },
+      });
+      await nextTick();
+
+      expect(comment.resolvedTime).toBeNull();
+      expect(comment.resolvedByEmail).toBeNull();
+      expect(comment.resolvedByName).toBeNull();
+    });
+
+    it('preserves resolved metadata for non-editor comments', async () => {
+      const comment = useCommentMock({
+        commentId: 'pdf-1',
+        fileType: 'pdf',
+        selection: { source: 'pdf', selectionBounds: {} },
+        resolvedTime: 555,
+        resolvedByEmail: 'user@example.com',
+        resolvedByName: 'User',
+      });
+
+      store.commentsList = [comment];
+
+      store.handleEditorLocationsUpdate({
+        'pdf-1': { start: 1, end: 2, bounds: { top: 0, left: 0 } },
+      });
+      await nextTick();
+
+      expect(comment.resolvedTime).toBe(555);
+      expect(comment.resolvedByEmail).toBe('user@example.com');
+      expect(comment.resolvedByName).toBe('User');
+    });
+
+    it('preserves resolved metadata for tracked-change comments', async () => {
+      const comment = {
+        commentId: 'tc-1',
+        trackedChange: true,
+        resolvedTime: 999,
+        resolvedByEmail: 'user@example.com',
+        resolvedByName: 'User',
+      };
+
+      store.commentsList = [comment];
+
+      store.handleEditorLocationsUpdate({
+        'tc-1': { start: 3, end: 6, bounds: { top: 0, left: 0 } },
+      });
+      await nextTick();
+
+      expect(comment.resolvedTime).toBe(999);
+      expect(comment.resolvedByEmail).toBe('user@example.com');
+      expect(comment.resolvedByName).toBe('User');
+    });
+
+    it('preserves resolved metadata for replies to tracked-change comments', async () => {
+      const comment = {
+        commentId: 'tc-reply-1',
+        trackedChangeParentId: 'tc-parent',
+        resolvedTime: 888,
+        resolvedByEmail: 'user@example.com',
+        resolvedByName: 'User',
+      };
+
+      store.commentsList = [comment];
+
+      store.handleEditorLocationsUpdate({
+        'tc-reply-1': { start: 10, end: 15, bounds: { top: 0, left: 0 } },
+      });
+      await nextTick();
+
+      expect(comment.resolvedTime).toBe(888);
+      expect(comment.resolvedByEmail).toBe('user@example.com');
+      expect(comment.resolvedByName).toBe('User');
     });
   });
 });

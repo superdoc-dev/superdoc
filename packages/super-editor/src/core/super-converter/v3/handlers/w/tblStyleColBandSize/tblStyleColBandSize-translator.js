@@ -1,5 +1,5 @@
 import { NodeTranslator } from '@translator';
-import { createSingleAttrPropertyHandler } from '../../utils.js';
+import { createSingleIntegerPropertyHandler } from '../../utils.js';
 
 /**
  * The NodeTranslator instance for the tblStyleColBandSize element.
@@ -7,5 +7,5 @@ import { createSingleAttrPropertyHandler } from '../../utils.js';
  * @see {@link https://ecma-international.org/publications-and-standards/standards/ecma-376/} "Fundamentals And Markup Language Reference", page 657
  */
 export const translator = NodeTranslator.from(
-  createSingleAttrPropertyHandler('w:tblStyleColBandSize', 'tableStyleColBandSize'),
+  createSingleIntegerPropertyHandler('w:tblStyleColBandSize', 'tableStyleColBandSize'),
 );

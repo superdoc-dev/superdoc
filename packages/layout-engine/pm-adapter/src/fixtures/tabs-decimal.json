@@ -4,10 +4,12 @@
     {
       "type": "paragraph",
       "attrs": {
-        "tabs": [
-          { "pos": 96, "align": "decimal", "leader": "dot" },
-          { "pos": 192, "align": "right", "leader": "none" }
-        ]
+        "paragraphProperties": {
+          "tabStops": [
+            { "pos": 96, "align": "decimal", "leader": "dot" },
+            { "pos": 192, "align": "right", "leader": "none" }
+          ]
+        }
       },
       "content": [
         { "type": "text", "text": "Price:" },
@@ -17,7 +19,9 @@
     {
       "type": "paragraph",
       "attrs": {
-        "tabs": [{ "pos": 120, "align": "right", "leader": "dot" }]
+        "paragraphProperties": {
+          "tabStops": [{ "pos": 120, "align": "right", "leader": "dot" }]
+        }
       },
       "content": [
         { "type": "text", "text": "Total" },

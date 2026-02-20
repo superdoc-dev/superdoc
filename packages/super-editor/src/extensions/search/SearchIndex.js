@@ -45,6 +45,9 @@ export class SearchIndex {
   /** @type {number} */
   docSize = 0;
 
+  /** @type {import('prosemirror-model').Node | null} */
+  doc = null;
+
   /**
    * Build the search index from a ProseMirror document.
    * Uses doc.textBetween for the flattened string and walks
@@ -57,6 +60,7 @@ export class SearchIndex {
     this.text = doc.textBetween(0, doc.content.size, BLOCK_SEPARATOR, ATOM_PLACEHOLDER);
     this.segments = [];
     this.docSize = doc.content.size;
+    this.doc = doc;
 
     // Walk the document to build the segment map
     // Note: doc node's content starts at position 0 (doc has no opening tag)
@@ -174,7 +178,7 @@ export class SearchIndex {
    * @returns {boolean} True if index is stale and needs rebuilding
    */
   isStale(doc) {
-    return !this.valid || doc.content.size !== this.docSize;
+    return !this.valid || this.doc !== doc;
   }
 
   /**
@@ -270,10 +274,27 @@ export class SearchIndex {
    * @returns {string} Regex pattern string
    */
   static toFlexiblePattern(searchString) {
+    const hasLeadingWhitespace = /^[\s\u00a0]+/.test(searchString);
+    const hasTrailingWhitespace = /[\s\u00a0]+$/.test(searchString);
+    const trimmed = searchString.replace(/^[\s\u00a0]+|[\s\u00a0]+$/g, '');
     // Split by whitespace (including non-breaking spaces), escape each part, rejoin with flexible whitespace pattern
-    const parts = searchString.split(/[\s\u00a0]+/).filter((part) => part.length > 0);
-    if (parts.length === 0) return '';
-    return parts.map((part) => SearchIndex.escapeRegex(part)).join('[\\s\\u00a0]+');
+    const parts = trimmed.split(/[\s\u00a0]+/).filter((part) => part.length > 0);
+    if (parts.length === 0) {
+      return hasLeadingWhitespace || hasTrailingWhitespace ? '[\\s\\u00a0]+' : '';
+    }
+    const blockSeparatorPattern = '(?:\\n)*';
+    const escapedParts = parts.map((part) => {
+      const chars = Array.from(part);
+      return chars.map((ch) => SearchIndex.escapeRegex(ch)).join(blockSeparatorPattern);
+    });
+    let pattern = escapedParts.join('[\\s\\u00a0]+');
+    if (hasLeadingWhitespace) {
+      pattern = '[\\s\\u00a0]+' + pattern;
+    }
+    if (hasTrailingWhitespace) {
+      pattern = pattern + '[\\s\\u00a0]+';
+    }
+    return pattern;
   }
 
   /**

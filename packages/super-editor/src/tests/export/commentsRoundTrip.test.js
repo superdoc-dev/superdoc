@@ -5,9 +5,19 @@ import { importCommentData } from '@converter/v2/importer/documentCommentsImport
 
 const extractNodeText = (node) => {
   if (!node) return '';
+  if (Array.isArray(node)) {
+    return node.map((child) => extractNodeText(child)).join('');
+  }
   if (typeof node.text === 'string') return node.text;
   const content = Array.isArray(node.content) ? node.content : [];
   return content.map((child) => extractNodeText(child)).join('');
+};
+
+const getCommentJSONNodes = (comment) => {
+  if (Array.isArray(comment.elements) && comment.elements.length) {
+    return comment.elements;
+  }
+  return [];
 };
 
 /**
@@ -53,7 +63,7 @@ describe('Comment origin detection and round trip', () => {
 
         const commentsForExport = editor.converter.comments.map((comment) => ({
           ...comment,
-          commentJSON: comment.textJson,
+          commentJSON: getCommentJSONNodes(comment),
         }));
 
         await editor.exportDocx({
@@ -104,7 +114,7 @@ describe('Comment origin detection and round trip', () => {
 
         expect(reimportedComments).toHaveLength(2);
         const roundTripTexts = reimportedComments
-          .map((comment) => extractNodeText(comment.textJson).trim())
+          .map((comment) => extractNodeText(comment.elements).trim())
           .filter((text) => text.length);
         expect(roundTripTexts).toEqual(expect.arrayContaining(['comment on text', 'BLANK']));
         reimportedComments.forEach((comment) => {
@@ -145,7 +155,7 @@ describe('Comment origin detection and round trip', () => {
 
         const commentsForExport = editor.converter.comments.map((comment) => ({
           ...comment,
-          commentJSON: comment.textJson,
+          commentJSON: getCommentJSONNodes(comment),
         }));
 
         await editor.exportDocx({
@@ -259,7 +269,7 @@ describe('Comment origin detection and round trip', () => {
 
           const commentsForExport = editor.converter.comments.map((comment) => ({
             ...comment,
-            commentJSON: comment.textJson,
+            commentJSON: getCommentJSONNodes(comment),
           }));
 
           await editor.exportDocx({
@@ -304,7 +314,7 @@ describe('Resolved comments round-trip', () => {
 
       const commentsForExport = editor.converter.comments.map((comment) => ({
         ...comment,
-        commentJSON: comment.textJson,
+        commentJSON: getCommentJSONNodes(comment),
       }));
 
       await editor.exportDocx({
@@ -343,7 +353,7 @@ describe('Resolved comments round-trip', () => {
     try {
       const commentsForExport = editor.converter.comments.map((comment) => ({
         ...comment,
-        commentJSON: comment.textJson,
+        commentJSON: getCommentJSONNodes(comment),
       }));
 
       await editor.exportDocx({
@@ -464,6 +474,54 @@ describe('Nested comments export', () => {
       // Re-import and verify comments are preserved
       const reimportedComments = importCommentData({ docx: exportedXml }) ?? [];
       expect(reimportedComments.length).toBe(originalCommentCount);
+    } finally {
+      editor.destroy();
+    }
+  });
+
+  it('exports commentsExtended.xml and preserves comments as separate (not threaded) after round-trip', async () => {
+    // Regression test for SD-1519: Nested comments should remain separate bubbles,
+    // not get threaded together based on range nesting.
+    const { editor } = initTestEditor({ content: docx, media, mediaFiles, fonts });
+
+    try {
+      const originalComments = editor.converter.comments;
+      expect(originalComments.length).toBeGreaterThanOrEqual(2);
+
+      // Verify original comments don't have parentCommentId (they're independent)
+      const originalNonThreaded = originalComments.filter((c) => !c.parentCommentId);
+      expect(originalNonThreaded.length).toBeGreaterThanOrEqual(2);
+
+      const commentsForExport = originalComments.map((comment) => ({
+        ...comment,
+        commentJSON: getCommentJSONNodes(comment),
+      }));
+
+      await editor.exportDocx({
+        comments: commentsForExport,
+        commentsType: 'external',
+      });
+
+      const exportedXml = editor.converter.convertedXml;
+
+      // Verify commentsExtended.xml is generated (key for preserving non-threaded status)
+      const commentsExtendedXml = exportedXml['word/commentsExtended.xml'];
+      expect(commentsExtendedXml).toBeDefined();
+      const extendedElements = commentsExtendedXml?.elements?.[0]?.elements ?? [];
+      expect(extendedElements.length).toBe(originalComments.length);
+
+      // Verify NO comments have w15:paraIdParent (they should be independent)
+      const hasParaIdParent = extendedElements.some((el) => el.attributes?.['w15:paraIdParent']);
+      expect(hasParaIdParent).toBe(false);
+
+      // Re-import and verify comments remain independent (no parentCommentId from range-based threading)
+      const reimportedComments = importCommentData({ docx: carbonCopy(exportedXml) }) ?? [];
+      expect(reimportedComments.length).toBe(originalComments.length);
+
+      // Key assertion: After round-trip, comments should NOT have parentCommentId
+      // set based on range nesting (they should remain separate bubbles)
+      const reimportedNonThreaded = reimportedComments.filter((c) => !c.parentCommentId);
+      expect(reimportedNonThreaded.length).toBe(originalNonThreaded.length);
     } finally {
       editor.destroy();
     }

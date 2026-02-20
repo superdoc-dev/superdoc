@@ -37,7 +37,10 @@ export class ParagraphNodeView {
     calculateResolvedParagraphProperties(this.editor, this.node, this.editor.state.doc.resolve(this.getPos()));
 
     this.dom = document.createElement('p');
-    this.contentDOM = document.createElement('span');
+    const contentEl = document.createElement('span');
+    contentEl.classList.add('sd-paragraph-content');
+
+    this.contentDOM = contentEl;
     this.dom.appendChild(this.contentDOM);
     if (this.#checkIsList()) {
       this.#initList(node.attrs.listRendering);
@@ -392,7 +395,10 @@ export class ParagraphNodeView {
     // START: modify after CSS styles
     const paragraphProperties = getResolvedParagraphProperties(this.node);
     const runProperties = resolveRunProperties(
-      { docx: this.editor.converter.convertedXml, numbering: this.editor.converter.numbering },
+      {
+        translatedNumbering: this.editor.converter.translatedNumbering,
+        translatedLinkedStyles: this.editor.converter.translatedLinkedStyles,
+      },
       paragraphProperties.runProperties || {},
       paragraphProperties,
       true,

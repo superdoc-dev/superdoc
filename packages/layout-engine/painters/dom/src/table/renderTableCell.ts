@@ -18,6 +18,7 @@ import type {
   RenderedLineInfo,
 } from '@superdoc/contracts';
 import { applyCellBorders } from './border-utils.js';
+import { applyImageClipPath } from '../utils/image-clip-path.js';
 import type { FragmentRenderContext, BlockLookup } from '../renderer.js';
 import { applyParagraphBorderStyles, applyParagraphShadingStyles } from '../renderer.js';
 import { applySquareWrapExclusionsToLines } from '../utils/anchor-helpers';
@@ -29,6 +30,7 @@ import {
   getSdtContainerKey,
   type SdtBoundaryOptions,
 } from '../utils/sdt-helpers.js';
+import { normalizeZIndex } from '@superdoc/pm-adapter/utilities.js';
 
 /**
  * Default gap between list marker and text content in pixels.
@@ -66,6 +68,8 @@ type WordLayoutMarker = {
     color?: string;
     /** Letter spacing in pixels */
     letterSpacing?: number;
+    /** Hidden text flag */
+    vanish?: boolean;
   };
 };
 
@@ -340,6 +344,12 @@ type EmbeddedTableRenderParams = {
     lineIndex: number,
     isLastLine: boolean,
   ) => HTMLElement;
+  /** Optional callback invoked after a table line's final styles/markers are applied. */
+  captureLineSnapshot?: (
+    lineEl: HTMLElement,
+    context: FragmentRenderContext,
+    options?: { inTableParagraph?: boolean; wrapperEl?: HTMLElement },
+  ) => void;
   /** Optional callback to render drawing content (shapes, etc.) */
   renderDrawingContent?: (block: DrawingBlock) => HTMLElement;
   /** Function to apply SDT metadata as data attributes */
@@ -376,7 +386,8 @@ const EMBEDDED_TABLE_VERSION = 'embedded-table';
  * ```
  */
 const renderEmbeddedTable = (params: EmbeddedTableRenderParams): HTMLElement => {
-  const { doc, table, measure, context, renderLine, renderDrawingContent, applySdtDataset } = params;
+  const { doc, table, measure, context, renderLine, captureLineSnapshot, renderDrawingContent, applySdtDataset } =
+    params;
   const fragment: TableFragment = {
     kind: 'table',
     blockId: table.id,
@@ -410,6 +421,7 @@ const renderEmbeddedTable = (params: EmbeddedTableRenderParams): HTMLElement => 
     context,
     blockLookup,
     renderLine,
+    captureLineSnapshot,
     renderDrawingContent,
     applyFragmentFrame,
     applySdtDataset,
@@ -492,6 +504,12 @@ type TableCellRenderDependencies = {
     lineIndex: number,
     isLastLine: boolean,
   ) => HTMLElement;
+  /** Optional callback invoked after a table line's final styles/markers are applied. */
+  captureLineSnapshot?: (
+    lineEl: HTMLElement,
+    context: FragmentRenderContext,
+    options?: { inTableParagraph?: boolean; wrapperEl?: HTMLElement },
+  ) => void;
   /**
    * Optional callback function to render drawing content (vectorShapes, shapeGroups).
    * If provided, this callback is used to render DrawingBlocks with drawingKind of 'vectorShape' or 'shapeGroup'.
@@ -506,6 +524,10 @@ type TableCellRenderDependencies = {
   applySdtDataset: (el: HTMLElement | null, metadata?: SdtMetadata | null) => void;
   /** Table-level SDT metadata for suppressing duplicate container styling in cells */
   tableSdt?: SdtMetadata | null;
+  /** Table indent in pixels (applied to table fragment positioning) */
+  tableIndent?: number;
+  /** Computed cell width from rescaled columnWidths (overrides cellMeasure.width when present) */
+  cellWidth?: number;
   /** Starting line index for partial row rendering (inclusive) */
   fromLine?: number;
   /** Ending line index for partial row rendering (exclusive), -1 means render to end */
@@ -586,26 +608,29 @@ export const renderTableCell = (deps: TableCellRenderDependencies): TableCellRen
     borders,
     useDefaultBorder,
     renderLine,
+    captureLineSnapshot,
     renderDrawingContent,
     context,
     applySdtDataset,
     tableSdt,
+    tableIndent,
+    cellWidth,
     fromLine,
     toLine,
   } = deps;
 
   const attrs = cell?.attrs;
-  const padding = attrs?.padding || { top: 2, left: 4, right: 4, bottom: 2 };
+  const padding = attrs?.padding || { top: 0, left: 4, right: 4, bottom: 0 };
   const paddingLeft = padding.left ?? 4;
-  const paddingTop = padding.top ?? 2;
+  const paddingTop = padding.top ?? 0;
   const paddingRight = padding.right ?? 4;
-  const paddingBottom = padding.bottom ?? 2;
+  const paddingBottom = padding.bottom ?? 0;
 
   const cellEl = doc.createElement('div');
   cellEl.style.position = 'absolute';
   cellEl.style.left = `${x}px`;
   cellEl.style.top = `${y}px`;
-  cellEl.style.width = `${cellMeasure.width}px`;
+  cellEl.style.width = `${cellWidth ?? cellMeasure.width}px`;
   cellEl.style.height = `${rowHeight}px`;
   cellEl.style.boxSizing = 'border-box';
   // Cell clips all overflow - no scrollbars, content just gets clipped at boundaries
@@ -724,7 +749,8 @@ export const renderTableCell = (deps: TableCellRenderDependencies): TableCellRen
     const globalFromLine = fromLine ?? 0;
     const globalToLine = toLine === -1 || toLine === undefined ? totalLines : toLine;
 
-    const contentWidthPx = Math.max(0, cellMeasure.width - paddingLeft - paddingRight);
+    const effectiveCellWidth = cellWidth ?? cellMeasure.width;
+    const contentWidthPx = Math.max(0, effectiveCellWidth - paddingLeft - paddingRight);
     const contentHeightPx = Math.max(0, rowHeight - paddingTop - paddingBottom);
     const paragraphTopById = new Map<string, number>();
     let flowCursorY = 0;
@@ -750,6 +776,7 @@ export const renderTableCell = (deps: TableCellRenderDependencies): TableCellRen
           measure: tableMeasure,
           context: { ...context, section: 'body' },
           renderLine,
+          captureLineSnapshot,
           renderDrawingContent,
           applySdtDataset,
         });
@@ -787,6 +814,7 @@ export const renderTableCell = (deps: TableCellRenderDependencies): TableCellRen
         if (block.objectFit === 'cover') {
           imgEl.style.objectPosition = 'left top';
         }
+        applyImageClipPath(imgEl, block.attrs?.clipPath, { clipContainer: imageWrapper });
         imgEl.style.display = 'block';
 
         imageWrapper.appendChild(imgEl);
@@ -830,6 +858,7 @@ export const renderTableCell = (deps: TableCellRenderDependencies): TableCellRen
           if (block.objectFit === 'cover') {
             img.style.objectPosition = 'left top';
           }
+          applyImageClipPath(img, block.attrs?.clipPath, { clipContainer: drawingInner });
           drawingInner.appendChild(img);
         } else if (renderDrawingContent) {
           // Use the callback for other drawing types (vectorShape, shapeGroup, etc.)
@@ -840,10 +869,14 @@ export const renderTableCell = (deps: TableCellRenderDependencies): TableCellRen
         } else {
           // Fallback placeholder when no rendering callback is provided
           const placeholder = doc.createElement('div');
+          placeholder.classList.add('superdoc-drawing-placeholder');
           placeholder.style.width = '100%';
           placeholder.style.height = '100%';
-          placeholder.style.background =
+          const stripePattern =
             'repeating-linear-gradient(45deg, rgba(15,23,42,0.1), rgba(15,23,42,0.1) 6px, rgba(15,23,42,0.2) 6px, rgba(15,23,42,0.2) 12px)';
+          // Set both shorthand and longhand to handle partial CSS property support in test DOMs.
+          placeholder.style.background = stripePattern;
+          placeholder.style.backgroundImage = stripePattern;
           placeholder.style.border = '1px dashed rgba(15, 23, 42, 0.3)';
           drawingInner.appendChild(placeholder);
         }
@@ -960,7 +993,12 @@ export const renderTableCell = (deps: TableCellRenderDependencies): TableCellRen
            * - The marker has a non-zero width
            */
           const shouldRenderMarker =
-            markerLayout && markerMeasure && lineIdx === 0 && localStartLine === 0 && markerMeasure.markerWidth > 0;
+            markerLayout &&
+            markerMeasure &&
+            lineIdx === 0 &&
+            localStartLine === 0 &&
+            markerMeasure.markerWidth > 0 &&
+            !markerLayout.run?.vanish;
 
           if (shouldRenderMarker) {
             /**
@@ -1014,9 +1052,10 @@ export const renderTableCell = (deps: TableCellRenderDependencies): TableCellRen
 
         flowCursorY += renderedHeight;
 
-        // Apply paragraph spacing.after as margin-bottom for all paragraphs.
-        // Word applies spacing.after even to the last paragraph in a cell, creating space at the bottom.
-        if (renderedEntireBlock) {
+        // Apply paragraph spacing.after as margin-bottom for non-last paragraphs.
+        // In Word, the last paragraph's spacing.after is absorbed by the cell's bottom padding.
+        const isLastBlock = i === Math.min(blockMeasures.length, cellBlocks.length) - 1;
+        if (renderedEntireBlock && !isLastBlock) {
           const spacingAfter = (block as ParagraphBlock).attrs?.spacing?.after;
           if (typeof spacingAfter === 'number' && spacingAfter > 0) {
             paraWrapper.style.marginBottom = `${spacingAfter}px`;
@@ -1052,17 +1091,17 @@ export const renderTableCell = (deps: TableCellRenderDependencies): TableCellRen
       const objectWidth = anchoredMeasure.width;
       const objectHeight = anchoredMeasure.height;
 
-      const left = anchor.offsetH ?? 0;
+      const baseLeft = anchor.offsetH ?? 0;
+      const indentOffset = typeof tableIndent === 'number' && Number.isFinite(tableIndent) ? tableIndent : 0;
+      const left = anchor.hRelativeFrom === 'column' ? baseLeft - x - indentOffset : baseLeft;
       const top = anchor.offsetV ?? 0;
 
       const behindDoc =
         anchor.behindDoc === true || (anchoredBlock.wrap?.type === 'None' && anchoredBlock.wrap?.behindDoc);
       const zIndex =
-        anchoredBlock.kind === 'drawing' && typeof anchoredBlock.zIndex === 'number'
+        typeof anchoredBlock.zIndex === 'number'
           ? anchoredBlock.zIndex
-          : behindDoc
-            ? -1
-            : 1;
+          : (normalizeZIndex(anchoredBlock.attrs?.originalAttributes) ?? (behindDoc ? -1 : 1));
 
       const wrap = anchoredBlock.wrap;
       if (!behindDoc && wrap?.type === 'Square') {
@@ -1104,6 +1143,7 @@ export const renderTableCell = (deps: TableCellRenderDependencies): TableCellRen
         if (anchoredBlock.objectFit === 'cover') {
           imgEl.style.objectPosition = 'left top';
         }
+        applyImageClipPath(imgEl, anchoredBlock.attrs?.clipPath, { clipContainer: imageWrapper });
         imgEl.style.display = 'block';
         imageWrapper.appendChild(imgEl);
         content.appendChild(imageWrapper);
@@ -1139,6 +1179,7 @@ export const renderTableCell = (deps: TableCellRenderDependencies): TableCellRen
           if (anchoredBlock.objectFit === 'cover') {
             img.style.objectPosition = 'left top';
           }
+          applyImageClipPath(img, anchoredBlock.attrs?.clipPath, { clipContainer: drawingInner });
           drawingInner.appendChild(img);
         } else if (renderDrawingContent) {
           const drawingContent = renderDrawingContent(anchoredBlock as DrawingBlock);
@@ -1147,10 +1188,14 @@ export const renderTableCell = (deps: TableCellRenderDependencies): TableCellRen
           drawingInner.appendChild(drawingContent);
         } else {
           const placeholder = doc.createElement('div');
+          placeholder.classList.add('superdoc-drawing-placeholder');
           placeholder.style.width = '100%';
           placeholder.style.height = '100%';
-          placeholder.style.background =
+          const stripePattern =
             'repeating-linear-gradient(45deg, rgba(15,23,42,0.1), rgba(15,23,42,0.1) 6px, rgba(15,23,42,0.2) 6px, rgba(15,23,42,0.2) 12px)';
+          // Set both shorthand and longhand to handle partial CSS property support in test DOMs.
+          placeholder.style.background = stripePattern;
+          placeholder.style.backgroundImage = stripePattern;
           placeholder.style.border = '1px dashed rgba(15, 23, 42, 0.3)';
           drawingInner.appendChild(placeholder);
         }
@@ -1163,6 +1208,19 @@ export const renderTableCell = (deps: TableCellRenderDependencies): TableCellRen
     // Apply wrapSquare exclusions after all blocks are rendered and anchored positions are known.
     // This keeps anchored objects out-of-flow while preventing text overlap in table cells.
     applySquareWrapExclusionsToLines(renderedLines, wrapExclusions, contentWidthPx, alignmentOffsetY);
+
+    if (captureLineSnapshot) {
+      for (const rendered of renderedLines) {
+        const candidateLine = rendered.el.classList.contains('superdoc-line')
+          ? rendered.el
+          : rendered.el.querySelector('.superdoc-line');
+        if (!(candidateLine instanceof HTMLElement)) {
+          continue;
+        }
+        const wrapperEl = rendered.el.classList.contains('superdoc-line') ? undefined : rendered.el;
+        captureLineSnapshot(candidateLine, { ...context, section: 'body' }, { inTableParagraph: false, wrapperEl });
+      }
+    }
   }
 
   return { cellElement: cellEl };

@@ -71,6 +71,8 @@ async function loadDocxFixture(filename: string): Promise<{ pmDoc: PMNode; conve
     docx,
     numbering: result.numbering,
     linkedStyles: result.linkedStyles,
+    translatedLinkedStyles: result.translatedLinkedStyles,
+    translatedNumbering: result.translatedNumbering,
   };
 
   return { pmDoc: result.pmDoc, converterContext };

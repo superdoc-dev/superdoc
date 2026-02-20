@@ -1,0 +1,445 @@
+---
+title: Configuration Options
+sidebarTitle: Configuration
+---
+
+Complete guide to configuring the template builder component.
+
+## Document options
+
+Control which document is loaded and how users interact with it:
+
+```tsx
+<SuperDocTemplateBuilder
+  document={{
+    source: string | File | Blob, // Document to load
+    mode: "editing" | "viewing", // Default: "editing"
+  }}
+/>
+```
+
+**Editing mode** - Users can edit document content and insert fields.
+**Viewing mode** - Read-only document display, fields can still be inserted.
+
+## Field system
+
+### Available fields
+
+Define which fields users can insert:
+
+```tsx
+<SuperDocTemplateBuilder
+  fields={{
+    available: [
+      {
+        id: "1",
+        label: "Customer Name",
+        defaultValue: "John Doe",
+        metadata: { type: "text" },
+      },
+      {
+        id: "2",
+        label: "Signature",
+        mode: "block",
+        fieldType: "signer",
+      },
+    ],
+    allowCreate: true,
+  }}
+/>
+```
+
+### Field types
+
+Tag fields with a `fieldType` to distinguish roles:
+
+```tsx
+<SuperDocTemplateBuilder
+  fields={{
+    available: [
+      { id: "1", label: "Company Name", fieldType: "owner" },
+      { id: "2", label: "Signer Name", fieldType: "signer" },
+      { id: "3", label: "Date" }, // defaults to "owner"
+    ],
+  }}
+/>
+```
+
+Import the optional CSS to color-code fields in the editor:
+
+```jsx
+import "@superdoc-dev/template-builder/field-types.css";
+```
+
+Customize colors with CSS variables:
+
+```css
+:root {
+  --superdoc-field-owner-color: #629be7;
+  --superdoc-field-signer-color: #d97706;
+}
+```
+
+<Important>
+  Without `field-types.css`, structured content fields use the default Word-like appearance: borders are transparent and only visible on selection. Importing this stylesheet makes field borders always visible and color-coded by field type, which helps template authors quickly identify fields in the document.
+</Important>
+
+The `fieldType` value flows through all callbacks (`onFieldInsert`, `onFieldsChange`, `onExport`, etc.) and is stored in the SDT tag metadata.
+
+### Field creation
+
+Allow users to create new fields while building templates:
+
+```tsx
+<SuperDocTemplateBuilder
+  fields={{
+    available: myFields,
+    allowCreate: true,
+  }}
+  onFieldCreate={async (field) => {
+    // field.id starts with "custom_"
+    // field.fieldType is "owner" or "signer" (user-selected)
+    // field.mode is "inline" or "block" (user-selected)
+    const savedField = await api.createField(field);
+
+    // Return updated field or void
+    return { ...field, id: savedField.id };
+  }}
+/>
+```
+
+When enabled, the field menu shows a "Create New Field" option with inputs for name, mode (inline/block), and field type (owner/signer).
+
+### Linked fields
+
+When a user selects an existing field from the "Existing Fields" section in the menu, a linked copy is inserted. Both instances share a group ID and stay in sync.
+
+The menu automatically groups existing fields and shows the count. When the last field in a group is deleted, the remaining field's group tag is removed.
+
+## Menu customization
+
+### Trigger pattern
+
+Change what opens the field insertion menu:
+
+```tsx
+<SuperDocTemplateBuilder
+  menu={{
+    trigger: "@@", // Now type @@ instead of {{
+  }}
+/>
+```
+
+### Custom menu component
+
+Replace the default field menu entirely:
+
+```tsx
+function CustomMenu({
+  isVisible,
+  position,
+  filteredFields,
+  filterQuery,
+  existingFields,
+  allowCreate,
+  onSelect,
+  onSelectExisting,
+  onClose,
+}) {
+  if (!isVisible) return null;
+
+  return (
+    <div style={{ position: "fixed", left: position?.left, top: position?.top }}>
+      {filterQuery && <div>Searching: {filterQuery}</div>}
+
+      {existingFields?.length > 0 && (
+        <div>
+          <h4>Existing fields</h4>
+          {existingFields.map((field) => (
+            <button key={field.id} onClick={() => onSelectExisting?.(field)}>
+              {field.alias} {field.fieldType && `[${field.fieldType}]`}
+            </button>
+          ))}
+        </div>
+      )}
+
+      <h4>Available fields</h4>
+      {filteredFields.map((field) => (
+        <button key={field.id} onClick={() => onSelect(field)}>
+          {field.label} {field.fieldType && `(${field.fieldType})`}
+        </button>
+      ))}
+
+      <button onClick={onClose}>Close</button>
+    </div>
+  );
+}
+
+<SuperDocTemplateBuilder menu={{ component: CustomMenu }} />;
+```
+
+The component handles trigger detection, filtering, and positioning. You render the UI.
+
+## List sidebar
+
+### Position and visibility
+
+```tsx
+<SuperDocTemplateBuilder
+  list={{
+    position: "left" | "right",
+  }}
+/>
+```
+
+Omit `list` prop entirely to hide the sidebar.
+
+### Custom list component
+
+Replace the default sidebar:
+
+```tsx
+function CustomFieldList({ fields, onSelect, onDelete, selectedFieldId }) {
+  return (
+    <aside>
+      <h3>Template Fields ({fields.length})</h3>
+      {fields.map((field) => (
+        <div
+          key={field.id}
+          onClick={() => onSelect(field)}
+          style={{
+            background: selectedFieldId === field.id ? "#e3f2fd" : "white",
+          }}
+        >
+          <strong>{field.alias}</strong>
+          {field.fieldType && <span> [{field.fieldType}]</span>}
+          {field.group && <span> (grouped)</span>}
+          <button
+            onClick={(e) => {
+              e.stopPropagation();
+              onDelete(field.id);
+            }}
+          >
+            Delete
+          </button>
+        </div>
+      ))}
+    </aside>
+  );
+}
+
+<SuperDocTemplateBuilder
+  list={{
+    position: "right",
+    component: CustomFieldList,
+  }}
+/>;
+```
+
+## Toolbar configuration
+
+Control the document editing toolbar:
+
+```tsx
+// Boolean — render default toolbar container
+<SuperDocTemplateBuilder toolbar={true} />
+
+// String — mount into an existing element
+<SuperDocTemplateBuilder toolbar="#my-toolbar" />
+
+// Object — full control
+<SuperDocTemplateBuilder
+  toolbar={{
+    selector: "#my-toolbar",
+    toolbarGroups: ["center"],
+    excludeItems: ["italic", "bold"],
+  }}
+/>
+```
+
+## Event handlers
+
+### Field lifecycle events
+
+```tsx
+<SuperDocTemplateBuilder
+  onFieldInsert={(field) => {
+    console.log("Inserted:", field.alias, field.fieldType);
+  }}
+  onFieldUpdate={(field) => {
+    console.log("Updated:", field.alias);
+  }}
+  onFieldDelete={(fieldId) => {
+    console.log("Deleted:", fieldId);
+  }}
+  onFieldsChange={(fields) => {
+    console.log("Template has", fields.length, "fields");
+    const signerFields = fields.filter((f) => f.fieldType === "signer");
+    console.log("Signer fields:", signerFields.length);
+  }}
+/>
+```
+
+### Selection and interaction
+
+```tsx
+<SuperDocTemplateBuilder
+  onFieldSelect={(field) => {
+    if (field) {
+      console.log("Selected:", field.alias, field.fieldType);
+    }
+  }}
+  onTrigger={(event) => {
+    console.log("Trigger at:", event.position);
+    console.log("Bounds:", event.bounds);
+  }}
+/>
+```
+
+### Export event
+
+```tsx
+<SuperDocTemplateBuilder
+  onExport={(event) => {
+    console.log("Exported", event.fields.length, "fields");
+    console.log("File:", event.fileName);
+    // event.blob is available when triggerDownload: false
+  }}
+/>
+```
+
+### Document ready
+
+```tsx
+<SuperDocTemplateBuilder
+  onReady={() => {
+    console.log("Document loaded and ready");
+  }}
+/>
+```
+
+## Telemetry
+
+Telemetry is enabled by default with `source: 'template-builder'` metadata. You can override or extend the defaults:
+
+```tsx
+<SuperDocTemplateBuilder
+  telemetry={{
+    enabled: true,
+    metadata: { source: "my-app", environment: "production" },
+  }}
+/>
+```
+
+To disable telemetry:
+
+```tsx
+<SuperDocTemplateBuilder telemetry={{ enabled: false }} />
+```
+
+For more details on how telemetry works, see the [Telemetry](/resources/telemetry) page.
+
+## License key
+
+Pass your license key to activate commercial features:
+
+```tsx
+<SuperDocTemplateBuilder licenseKey="your-license-key" />
+```
+
+The key is forwarded to the underlying SuperDoc instance.
+
+## Complete example
+
+Putting it all together:
+
+```tsx
+import { useState, useRef } from "react";
+import SuperDocTemplateBuilder from "@superdoc-dev/template-builder";
+import type {
+  SuperDocTemplateBuilderHandle,
+  FieldDefinition,
+} from "@superdoc-dev/template-builder";
+import "superdoc/style.css";
+import "@superdoc-dev/template-builder/field-types.css";
+
+function TemplateEditor() {
+  const builderRef = useRef<SuperDocTemplateBuilderHandle>(null);
+  const [fields, setFields] = useState<FieldDefinition[]>([
+    { id: "1", label: "Customer Name" },
+    { id: "2", label: "Customer Email" },
+    { id: "3", label: "Invoice Date" },
+    { id: "4", label: "Total Amount" },
+    { id: "5", label: "Signer Name", fieldType: "signer" },
+    { id: "6", label: "Signature", mode: "block", fieldType: "signer" },
+  ]);
+
+  const handleExport = async () => {
+    await builderRef.current?.exportTemplate({
+      fileName: "invoice-template",
+    });
+  };
+
+  const handleFieldCreate = async (field: FieldDefinition) => {
+    const saved = await fetch("/api/fields", {
+      method: "POST",
+      body: JSON.stringify(field),
+    }).then((r) => r.json());
+
+    setFields((prev) => [...prev, { ...field, id: saved.id }]);
+    return { ...field, id: saved.id };
+  };
+
+  return (
+    <div>
+      <header>
+        <h1>Invoice Template Builder</h1>
+        <button onClick={handleExport}>Export Template</button>
+      </header>
+
+      <SuperDocTemplateBuilder
+        ref={builderRef}
+        document={{
+          source: "invoice-base.docx",
+          mode: "editing",
+        }}
+        fields={{
+          available: fields,
+          allowCreate: true,
+        }}
+        list={{ position: "right" }}
+        toolbar={true}
+        onFieldsChange={(templateFields) => {
+          console.log("Template updated:", templateFields);
+        }}
+        onFieldCreate={handleFieldCreate}
+        onExport={(event) => {
+          console.log("Exported", event.fields.length, "fields");
+        }}
+      />
+    </div>
+  );
+}
+```
+
+## Styling
+
+The component uses CSS classes you can target:
+
+```css
+.superdoc-template-builder {
+  height: 100vh;
+}
+
+.superdoc-field-menu {
+  border: 1px solid #ccc;
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.1);
+}
+
+.superdoc-field-list {
+  background: #f5f5f5;
+  border-left: 1px solid #ddd;
+}
+```
+
+Import `superdoc/style.css` for proper rendering. Optionally import `@superdoc-dev/template-builder/field-types.css` for field type color-coding.

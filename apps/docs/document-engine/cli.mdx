@@ -1,0 +1,109 @@
+---
+title: CLI
+sidebarTitle: CLI
+description: Edit documents from the terminal with the SuperDoc CLI
+keywords: "cli, command line, terminal, document automation, headless docx, superdoc cli"
+---
+
+The SuperDoc CLI lets you open, query, and edit `.docx` files from any shell. It exposes the same operations as the [Document API](/document-api/overview) through a stdio-based process.
+
+<Info>
+The CLI is in <strong>alpha</strong>. Commands and output formats may change.
+</Info>
+
+## Installation
+
+```bash
+npm install -g @superdoc-dev/cli
+```
+
+Or run without installing:
+
+```bash
+npx @superdoc-dev/cli open my-doc.docx
+```
+
+## Workflow
+
+The CLI uses persistent sessions. Open a document, run operations, then save and close:
+
+```bash
+# Open a document
+superdoc open contract.docx
+
+# Search for text
+superdoc find --pattern "ACME Corp"
+
+# Replace it
+superdoc replace --target-json '{"kind":"text","blockId":"...","range":{"start":0,"end":9}}' --text "NewCo Inc."
+
+# Save and close
+superdoc save
+superdoc close
+```
+
+## Commands
+
+### Lifecycle
+
+| Command | Description |
+| --- | --- |
+| `superdoc open <doc>` | Open a document and create an editing session |
+| `superdoc save` | Save the current session to disk |
+| `superdoc close` | Close the active session and clean up resources |
+
+### Document operations
+
+The CLI exposes all [Document API operations](/document-api/overview) as commands. The command name matches the operation's member path, converted to kebab-case:
+
+| CLI command | Operation | Description |
+| --- | --- | --- |
+| `superdoc find` | `find` | Search by text, node type, or structured query |
+| `superdoc info` | `info` | Get document structure and metadata |
+| `superdoc get-node` | `getNode` | Get a node by address |
+| `superdoc get-node-by-id` | `getNodeById` | Get a node by ID |
+| `superdoc insert` | `insert` | Insert text at a position |
+| `superdoc replace` | `replace` | Replace content at a position |
+| `superdoc delete` | `delete` | Delete content at a position |
+| `superdoc format bold` | `format.bold` | Toggle bold on a range |
+| `superdoc format italic` | `format.italic` | Toggle italic on a range |
+| `superdoc format underline` | `format.underline` | Toggle underline on a range |
+| `superdoc format strikethrough` | `format.strikethrough` | Toggle strikethrough on a range |
+| `superdoc create paragraph` | `create.paragraph` | Insert a new paragraph |
+| `superdoc comments add` | `comments.add` | Add a comment thread |
+| `superdoc comments list` | `comments.list` | List all comments |
+| `superdoc track-changes list` | `trackChanges.list` | List tracked changes |
+| `superdoc track-changes accept` | `trackChanges.accept` | Accept a tracked change |
+| `superdoc track-changes reject` | `trackChanges.reject` | Reject a tracked change |
+
+Run `superdoc --help` for the full list, or `superdoc describe` for machine-readable metadata.
+
+### Session management
+
+| Command | Description |
+| --- | --- |
+| `superdoc session list` | List all active sessions |
+| `superdoc session save <id>` | Save a specific session |
+| `superdoc session close <id>` | Close a specific session |
+| `superdoc session set-default <id>` | Set the default session for subsequent commands |
+
+### Introspection
+
+| Command | Description |
+| --- | --- |
+| `superdoc status` | Show current session status and document metadata |
+| `superdoc describe` | List all available operations and contract metadata |
+| `superdoc describe command <cmd>` | Show detailed metadata for a single operation |
+
+## JSON I/O
+
+All commands accept `--input-json` or `--input-file` for structured input and return JSON output. Use `superdoc call <operationId>` for raw operation invocation:
+
+```bash
+superdoc call doc.find --input-json '{"doc":"./contract.docx","query":{"select":{"type":"text","pattern":"test"}}}'
+```
+
+## Related
+
+- [SDKs](/document-engine/sdks) — typed Node.js and Python wrappers over the CLI
+- [Document API](/document-api/overview) — the in-browser API that defines the operation set

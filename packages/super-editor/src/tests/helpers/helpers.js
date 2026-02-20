@@ -4,6 +4,7 @@ import { parseXmlToJson } from '@converter/v2/docxHelper.js';
 import { getStarterExtensions } from '@extensions/index.js';
 import { Editor } from '@core/Editor.js';
 import DocxZipper from '@core/DocxZipper.js';
+import { SuperConverter } from '@core/super-converter/SuperConverter.js';
 
 const EXTENSIONS_TO_CONVERT = new Set(['.xml', '.rels']);
 
@@ -88,6 +89,63 @@ export const loadTestDataForEditorTests = async (filename) => {
   return { docx, media, mediaFiles, fonts };
 };
 
+export const getMinimalTranslatedLinkedStyles = () => ({
+  docDefaults: {
+    runProperties: {},
+    paragraphProperties: {},
+  },
+  latentStyles: {},
+  styles: {
+    Normal: {
+      styleId: 'Normal',
+      type: 'paragraph',
+      default: true,
+      name: 'Normal',
+      runProperties: {},
+      paragraphProperties: {},
+    },
+  },
+});
+
+const createMinimalConverter = () => {
+  const converter = new SuperConverter();
+  converter.translatedLinkedStyles = getMinimalTranslatedLinkedStyles();
+  converter.translatedNumbering = { definitions: {}, abstracts: {} };
+  return converter;
+};
+
+const ensureTranslatedLinkedStyles = (converter) => {
+  if (!converter) return;
+
+  const fallback = getMinimalTranslatedLinkedStyles();
+  const translated = converter.translatedLinkedStyles;
+
+  if (!translated || typeof translated !== 'object') {
+    converter.translatedLinkedStyles = fallback;
+    return;
+  }
+
+  translated.docDefaults ??= { ...fallback.docDefaults };
+  translated.docDefaults.runProperties ??= {};
+  translated.docDefaults.paragraphProperties ??= {};
+  translated.latentStyles ??= {};
+  translated.styles ??= {};
+  translated.styles.Normal ??= { ...fallback.styles.Normal };
+  translated.styles.Normal.styleId ??= 'Normal';
+};
+
+const ensureTranslatedNumbering = (converter) => {
+  if (!converter) return;
+
+  if (!converter.translatedNumbering || typeof converter.translatedNumbering !== 'object') {
+    converter.translatedNumbering = { definitions: {}, abstracts: {} };
+    return;
+  }
+
+  converter.translatedNumbering.definitions ??= {};
+  converter.translatedNumbering.abstracts ??= {};
+};
+
 /**
  * Instantiate a new test editor instance and wait for it to be ready.
  *
@@ -100,6 +158,22 @@ export const loadTestDataForEditorTests = async (filename) => {
  */
 export const initTestEditor = (options = {}) => {
   const { onCreate: userOnCreate, element: providedElement, useImmediateSetTimeout = true, ...restOptions } = options;
+  const isSchemaContent =
+    restOptions.content &&
+    typeof restOptions.content === 'object' &&
+    !Array.isArray(restOptions.content) &&
+    restOptions.content.type === 'doc';
+  const shouldProvideConverter =
+    !restOptions.converter &&
+    (restOptions.mode === 'text' ||
+      restOptions.mode === 'html' ||
+      restOptions.loadFromSchema ||
+      typeof restOptions.content === 'string' ||
+      isSchemaContent);
+
+  if (shouldProvideConverter) {
+    restOptions.converter = createMinimalConverter();
+  }
 
   const hasWindow = typeof window !== 'undefined' && window?.setTimeout;
   const originalSetTimeout = hasWindow ? window.setTimeout : null;
@@ -131,6 +205,12 @@ export const initTestEditor = (options = {}) => {
   if (hasWindow && originalSetTimeout && useImmediateSetTimeout) {
     window.setTimeout = originalSetTimeout;
   }
+
+  if (!editor.converter && restOptions.converter) {
+    editor.converter = restOptions.converter;
+  }
+  ensureTranslatedLinkedStyles(editor.converter);
+  ensureTranslatedNumbering(editor.converter);
 
   return {
     editor,

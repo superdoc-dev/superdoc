@@ -1,0 +1,78 @@
+---
+title: LineBreak extension
+sidebarTitle: "Line Break"
+keywords: "LineBreak extension, superdoc LineBreak, word LineBreak, document LineBreak, docx LineBreak"
+---
+
+import Description from '/snippets/extensions/line-break.mdx'
+
+<Description />
+
+## Commands
+
+### `insertLineBreak`
+
+Insert a line break
+
+<Note>
+Creates a soft break within the same paragraph
+</Note>
+
+**Example:**
+
+<CodeGroup>
+```javascript Usage
+editor.commands.insertLineBreak()
+```
+
+```javascript Full Example
+import { SuperDoc } from 'superdoc';
+import 'superdoc/style.css';
+
+const superdoc = new SuperDoc({
+  selector: '#editor',
+  document: yourFile,
+  onReady: (superdoc) => {
+    const editor = superdoc.activeEditor;
+    editor.commands.insertLineBreak()
+  },
+});
+```
+</CodeGroup>
+
+### `insertPageBreak`
+
+Insert a page break
+
+<Note>
+Forces content to start on a new page when printed
+</Note>
+
+**Example:**
+
+<CodeGroup>
+```javascript Usage
+editor.commands.insertPageBreak()
+```
+
+```javascript Full Example
+import { SuperDoc } from 'superdoc';
+import 'superdoc/style.css';
+
+const superdoc = new SuperDoc({
+  selector: '#editor',
+  document: yourFile,
+  onReady: (superdoc) => {
+    const editor = superdoc.activeEditor;
+    editor.commands.insertPageBreak()
+  },
+});
+```
+</CodeGroup>
+
+
+## Source code
+
+import { SourceCodeLink } from '/snippets/components/source-code-link.jsx'
+
+<SourceCodeLink path="packages/super-editor/src/extensions/line-break/line-break.js" />

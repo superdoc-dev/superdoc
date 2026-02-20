@@ -7,412 +7,65 @@
  * - Tracked changes processing
  */
 
-import type {
-  FlowBlock,
-  Run,
-  TextRun,
-  ImageRun,
-  ImageBlock,
-  TrackedChangeMeta,
-  SdtMetadata,
-  ParagraphAttrs,
-  ParagraphIndent,
-  FieldAnnotationRun,
-  FieldAnnotationMetadata,
-} from '@superdoc/contracts';
+import type { ParagraphProperties, RunProperties } from '@superdoc/style-engine/ooxml';
+import type { FlowBlock, Run, TextRun, SdtMetadata, DrawingBlock } from '@superdoc/contracts';
 import type {
   PMNode,
   PMMark,
+  NodeHandlerContext,
+  ParagraphToFlowBlocksParams,
   BlockIdGenerator,
   PositionMap,
-  StyleContext,
-  ListCounterContext,
-  TrackedChangesConfig,
-  HyperlinkConfig,
-  NodeHandlerContext,
-  ThemeColorPalette,
 } from '../types.js';
+import { getStableParagraphId, shiftCachedBlocks } from '../cache.js';
 import type { ConverterContext } from '../converter-context.js';
-import {
-  computeParagraphAttrs,
-  cloneParagraphAttrs,
-  hasPageBreakBefore,
-  buildStyleNodeFromAttrs,
-  normalizeParagraphSpacing,
-  normalizeParagraphIndent,
-  normalizePxIndent,
-  normalizeOoxmlTabs,
-} from '../attributes/index.js';
-import { hydrateParagraphStyleAttrs, hydrateCharacterStyleAttrs } from '../attributes/paragraph-styles.js';
-import { resolveNodeSdtMetadata, getNodeInstruction } from '../sdt/index.js';
+import { computeParagraphAttrs, deepClone } from '../attributes/index.js';
 import { shouldRequirePageBoundary, hasIntrinsicBoundarySignals, createSectionBreakBlock } from '../sections/index.js';
-import { trackedChangesCompatible, collectTrackedChangeFromMarks, applyMarksToRun } from '../marks/index.js';
-import {
-  shouldHideTrackedNode,
-  annotateBlockWithTrackedChange,
-  applyTrackedChangesModeToRuns,
-} from '../tracked-changes.js';
-import { textNodeToRun, tabNodeToRun, tokenNodeToRun } from './text-run.js';
-import { contentBlockNodeToDrawingBlock } from './content-block.js';
+import { trackedChangesCompatible, applyMarksToRun } from '../marks/index.js';
+import { applyTrackedChangesModeToRuns } from '../tracked-changes.js';
+import { textNodeToRun } from './inline-converters/text-run.js';
 import { DEFAULT_HYPERLINK_CONFIG, TOKEN_INLINE_TYPES } from '../constants.js';
-import { createLinkedStyleResolver, applyLinkedStyleToRun, extractRunStyleId } from '../styles/linked-run.js';
+import { computeRunAttrs } from '../attributes/paragraph.js';
+import { resolveRunProperties } from '@superdoc/style-engine/ooxml';
+import { footnoteReferenceToBlock } from './inline-converters/footnote-reference.js';
 import {
-  ptToPx,
-  pickNumber,
-  isPlainObject,
-  convertIndentTwipsToPx,
-  twipsToPx,
-  toBoolean,
-  asOoxmlElement,
-  findOoxmlChild,
-  getOoxmlAttribute,
-  parseOoxmlNumber,
-  type OoxmlElement,
-} from '../utilities.js';
-import { resolveStyle } from '@superdoc/style-engine';
-import { resolveDocxFontFamily } from '@superdoc/style-engine/ooxml';
-import { SuperConverter } from '@superdoc/super-editor/converter/internal/SuperConverter.js';
-
-// ============================================================================
-// Constants
-// ============================================================================
-
-/**
- * Default dimension (in pixels) for images when size information is missing or invalid.
- * This ensures images are always rendered with a fallback size for better UX.
- */
-const DEFAULT_IMAGE_DIMENSION_PX = 100;
-
-/**
- * Conversion constant: OOXML font sizes are stored in half-points.
- * To convert to full points: divide by 2.
- */
-const HALF_POINTS_PER_POINT = 2;
-
-/**
- * Screen DPI (dots per inch) for pixel conversions.
- * Standard display density is 96 DPI.
- */
-const SCREEN_DPI = 96;
-
-/**
- * Point DPI (dots per inch) for typography.
- * Standard typography uses 72 DPI (1 inch = 72 points).
- */
-const POINT_DPI = 72;
+  HiddenByVanishError,
+  NotInlineNodeError,
+  InlineConverterParams,
+  BlockConverterOptions,
+} from './inline-converters/common.js';
+import { runNodeChildrenToRuns } from './inline-converters/run.js';
+import { structuredContentNodeToBlocks } from './inline-converters/structured-content.js';
+import { pageReferenceNodeToBlock } from './inline-converters/page-reference.js';
+import { fieldAnnotationNodeToRun } from './inline-converters/field-annotation.js';
+import { bookmarkStartNodeToBlocks } from './inline-converters/bookmark-start.js';
+import { tabNodeToRun } from './inline-converters/tab.js';
+import { tokenNodeToRun } from './inline-converters/generic-token.js';
+import { imageNodeToRun } from './inline-converters/image.js';
+import { lineBreakNodeToRun } from './inline-converters/line-break.js';
+import { lineBreakNodeToBreakBlock } from './break.js';
+import { inlineContentBlockConverter } from './inline-converters/content-block.js';
+import { handleImageNode } from './image.js';
+import {
+  shapeContainerNodeToDrawingBlock,
+  shapeGroupNodeToDrawingBlock,
+  shapeTextboxNodeToDrawingBlock,
+  vectorShapeNodeToDrawingBlock,
+} from './shapes.js';
+import { tableNodeToBlock } from './table.js';
 
 // ============================================================================
 // Helper functions for inline image detection and conversion
 // ============================================================================
 
-/**
- * Detects if an image node should be rendered inline (as ImageRun) vs. as a separate block (ImageBlock).
- *
- * CRITICAL: Must check RAW attributes BEFORE normalization, because normalizeWrap() would discard
- * the wrap.type === 'Inline' information.
- *
- * Priority order (highest to lowest):
- * 1. wrap.type === 'Inline' - Authoritative signal for inline rendering
- * 2. wrap.type !== 'Inline' - Any other wrap type (Tight, Square, etc.) means block-level
- * 3. attrs.inline === true - Legacy fallback for inline detection
- * 4. attrs.display === 'inline' - Additional fallback for inline detection
- * 5. Default: false (treat as block-level image)
- *
- * @param node - Image node to check for inline rendering indicators
- * @returns true if image should be rendered inline (as ImageRun), false for block-level (as ImageBlock)
- *
- * @example
- * ```typescript
- * // Inline image (explicit wrap type)
- * isInlineImage({ type: 'image', attrs: { wrap: { type: 'Inline' } } })
- * // Returns: true
- *
- * // Block image (anchored wrap type)
- * isInlineImage({ type: 'image', attrs: { wrap: { type: 'Tight' } } })
- * // Returns: false
- *
- * // Inline image (legacy attribute)
- * isInlineImage({ type: 'image', attrs: { inline: true } })
- * // Returns: true
- *
- * // Block image (default behavior)
- * isInlineImage({ type: 'image', attrs: {} })
- * // Returns: false
- * ```
- */
-export function isInlineImage(node: PMNode): boolean {
-  const attrs = (node.attrs ?? {}) as Record<string, unknown>;
-
-  // Check raw wrap type BEFORE normalization (highest priority)
-  // This is the authoritative source for how the image should be rendered
-  const wrap = attrs.wrap as Record<string, unknown> | undefined;
-  const rawWrapType = wrap?.type;
-
-  // If wrap type is explicitly 'Inline', treat as inline
-  if (rawWrapType === 'Inline') {
-    return true;
-  }
-
-  // If wrap type is any OTHER value (Tight, Square, None, etc.), treat as block
-  // This takes precedence over the legacy `inline` attribute
-  if (rawWrapType && rawWrapType !== 'Inline') {
+const isHiddenShape = (node: PMNode): boolean => {
+  if (!node.type.toLowerCase().includes('shape')) {
     return false;
   }
-
-  // Fallback checks for other inline indicators (only when wrap type is not specified)
-  if (attrs.inline === true) {
-    return true;
-  }
-
-  if (attrs.display === 'inline') {
-    return true;
-  }
-
-  return false;
-}
-
-const isNodeHidden = (node: PMNode): boolean => {
   const attrs = (node.attrs ?? {}) as Record<string, unknown>;
-  if (toBoolean(attrs.hidden) === true) return true;
+  if (attrs.hidden === true) return true;
   return typeof attrs.visibility === 'string' && attrs.visibility.toLowerCase() === 'hidden';
 };
-
-/**
- * Converts an image PM node to an ImageRun for inline rendering.
- *
- * Extracts all necessary properties from the node including:
- * - Image source and dimensions (from attrs.size, NOT attrs.width/height)
- * - Spacing attributes (distT/distB/distL/distR from wrap.attrs)
- * - Position tracking (pmStart/pmEnd)
- * - SDT metadata if present
- *
- * IMPORTANT: Dimensions are read from attrs.size, NOT from attrs.width/height.
- * This is because Word documents store image dimensions in a nested size object.
- *
- * ERROR CONDITIONS:
- * - Returns null if node.attrs.src is missing or empty
- * - Falls back to DEFAULT_IMAGE_DIMENSION_PX for invalid/missing dimensions
- *
- * @param node - Image PM node containing image metadata in attrs
- * @param positions - Position map for ProseMirror node tracking (pmStart/pmEnd)
- * @param activeSdt - Optional active SDT metadata to attach to the ImageRun
- * @returns ImageRun object with all extracted properties, or null if src is missing
- *
- * @example
- * ```typescript
- * // Successful conversion with all properties
- * imageNodeToRun(
- *   {
- *     type: 'image',
- *     attrs: {
- *       src: 'data:image/png;base64,iVBORw...',
- *       size: { width: 200, height: 150 },
- *       alt: 'Company logo',
- *       wrap: { attrs: { distTop: 10, distBottom: 10 } }
- *     }
- *   },
- *   positionMap
- * )
- * // Returns: { kind: 'image', src: 'data:...', width: 200, height: 150, alt: 'Company logo', distTop: 10, distBottom: 10, verticalAlign: 'bottom' }
- *
- * // Missing src - returns null
- * imageNodeToRun({ type: 'image', attrs: {} }, positionMap)
- * // Returns: null
- *
- * // Invalid dimensions - uses defaults
- * imageNodeToRun(
- *   { type: 'image', attrs: { src: 'image.png', size: { width: NaN, height: -10 } } },
- *   positionMap
- * )
- * // Returns: { kind: 'image', src: 'image.png', width: 100, height: 100, verticalAlign: 'bottom' }
- * ```
- */
-export function imageNodeToRun(node: PMNode, positions: PositionMap, activeSdt?: SdtMetadata): ImageRun | null {
-  if (isNodeHidden(node)) {
-    return null;
-  }
-  const attrs = node.attrs ?? {};
-
-  // Extract src (required)
-  const src = typeof attrs.src === 'string' ? attrs.src : '';
-  if (!src) {
-    return null;
-  }
-
-  // Extract dimensions from attrs.size (NOT attrs.width/height!)
-  const size = (attrs.size ?? {}) as { width?: number; height?: number };
-  const width =
-    typeof size.width === 'number' && Number.isFinite(size.width) && size.width > 0
-      ? size.width
-      : DEFAULT_IMAGE_DIMENSION_PX;
-  const height =
-    typeof size.height === 'number' && Number.isFinite(size.height) && size.height > 0
-      ? size.height
-      : DEFAULT_IMAGE_DIMENSION_PX;
-
-  // Extract spacing from RAW wrap.attrs (before normalization discards it)
-  const wrap = isPlainObject(attrs.wrap) ? attrs.wrap : {};
-  const wrapAttrs = isPlainObject(wrap.attrs) ? wrap.attrs : {};
-
-  const run: ImageRun = {
-    kind: 'image',
-    src,
-    width,
-    height,
-  };
-
-  // Optional properties
-  if (typeof attrs.alt === 'string') run.alt = attrs.alt;
-  if (typeof attrs.title === 'string') run.title = attrs.title;
-
-  // Spacing attributes (from wrap.attrs.distT/distB/distL/distR)
-  const distTop = pickNumber(wrapAttrs.distTop ?? wrapAttrs.distT);
-  if (distTop != null) run.distTop = distTop;
-
-  const distBottom = pickNumber(wrapAttrs.distBottom ?? wrapAttrs.distB);
-  if (distBottom != null) run.distBottom = distBottom;
-
-  const distLeft = pickNumber(wrapAttrs.distLeft ?? wrapAttrs.distL);
-  if (distLeft != null) run.distLeft = distLeft;
-
-  const distRight = pickNumber(wrapAttrs.distRight ?? wrapAttrs.distR);
-  if (distRight != null) run.distRight = distRight;
-
-  // Default vertical alignment to bottom (text baseline alignment)
-  run.verticalAlign = 'bottom';
-
-  // Position tracking
-  const pos = positions.get(node);
-  if (pos) {
-    run.pmStart = pos.start;
-    run.pmEnd = pos.end;
-  }
-
-  // SDT metadata
-  if (activeSdt) {
-    run.sdt = activeSdt;
-  }
-
-  return run;
-}
-
-/**
- * Converts a ProseMirror fieldAnnotation node into a FieldAnnotationRun for layout engine rendering.
- *
- * Field annotations are inline "pill" elements that display form fields or placeholders.
- * They render with distinctive styling (border, background, rounded corners) and can
- * contain different content types (text, image, signature, etc.).
- *
- * @param node - FieldAnnotation PM node with attrs containing field configuration
- * @param positions - Position map for ProseMirror node tracking (pmStart/pmEnd)
- * @param fieldMetadata - SDT metadata extracted from the fieldAnnotation node
- * @returns FieldAnnotationRun object with all extracted properties
- */
-export function fieldAnnotationNodeToRun(
-  node: PMNode,
-  positions: PositionMap,
-  fieldMetadata?: FieldAnnotationMetadata | null,
-): FieldAnnotationRun {
-  const attrs = (node.attrs ?? {}) as Record<string, unknown>;
-
-  // Determine variant (defaults to 'text')
-  const rawVariant = attrs.type ?? fieldMetadata?.variant ?? 'text';
-  const validVariants = ['text', 'image', 'signature', 'checkbox', 'html', 'link'] as const;
-  const variant: FieldAnnotationRun['variant'] = validVariants.includes(rawVariant as (typeof validVariants)[number])
-    ? (rawVariant as FieldAnnotationRun['variant'])
-    : 'text';
-
-  // Determine display label with fallback chain
-  const displayLabel =
-    (typeof attrs.displayLabel === 'string' ? attrs.displayLabel : undefined) ||
-    (typeof attrs.defaultDisplayLabel === 'string' ? attrs.defaultDisplayLabel : undefined) ||
-    (typeof fieldMetadata?.displayLabel === 'string' ? fieldMetadata.displayLabel : undefined) ||
-    (typeof fieldMetadata?.defaultDisplayLabel === 'string' ? fieldMetadata.defaultDisplayLabel : undefined) ||
-    (typeof attrs.alias === 'string' ? attrs.alias : undefined) ||
-    (typeof fieldMetadata?.alias === 'string' ? fieldMetadata.alias : undefined) ||
-    '';
-
-  const run: FieldAnnotationRun = {
-    kind: 'fieldAnnotation',
-    variant,
-    displayLabel,
-  };
-
-  // Field identification
-  const fieldId = typeof attrs.fieldId === 'string' ? attrs.fieldId : fieldMetadata?.fieldId;
-  if (fieldId) run.fieldId = fieldId;
-
-  const fieldType = typeof attrs.fieldType === 'string' ? attrs.fieldType : fieldMetadata?.fieldType;
-  if (fieldType) run.fieldType = fieldType;
-
-  // Styling
-  const fieldColor = typeof attrs.fieldColor === 'string' ? attrs.fieldColor : fieldMetadata?.fieldColor;
-  if (fieldColor) run.fieldColor = fieldColor;
-
-  const borderColor = typeof attrs.borderColor === 'string' ? attrs.borderColor : fieldMetadata?.borderColor;
-  if (borderColor) run.borderColor = borderColor;
-
-  // Highlighted defaults to true if not explicitly false
-  const highlighted = attrs.highlighted ?? fieldMetadata?.highlighted;
-  if (highlighted === false) run.highlighted = false;
-
-  // Hidden/visibility
-  if (attrs.hidden === true || fieldMetadata?.hidden === true) run.hidden = true;
-  const visibility = attrs.visibility ?? fieldMetadata?.visibility;
-  if (visibility === 'hidden') run.visibility = 'hidden';
-
-  // Type-specific content
-  const imageSrc = typeof attrs.imageSrc === 'string' ? attrs.imageSrc : fieldMetadata?.imageSrc;
-  if (imageSrc) run.imageSrc = imageSrc;
-
-  const linkUrl = typeof attrs.linkUrl === 'string' ? attrs.linkUrl : fieldMetadata?.linkUrl;
-  if (linkUrl) run.linkUrl = linkUrl;
-
-  const rawHtml = attrs.rawHtml ?? fieldMetadata?.rawHtml;
-  if (typeof rawHtml === 'string') run.rawHtml = rawHtml;
-
-  // Sizing
-  const size = (attrs.size ?? fieldMetadata?.size) as { width?: number; height?: number } | null | undefined;
-  if (size && (typeof size.width === 'number' || typeof size.height === 'number')) {
-    run.size = {
-      width: typeof size.width === 'number' ? size.width : undefined,
-      height: typeof size.height === 'number' ? size.height : undefined,
-    };
-  }
-
-  // Typography
-  const fontFamily = attrs.fontFamily ?? fieldMetadata?.fontFamily;
-  if (typeof fontFamily === 'string') run.fontFamily = fontFamily;
-
-  const fontSize = attrs.fontSize ?? fieldMetadata?.fontSize;
-  if (typeof fontSize === 'string' || typeof fontSize === 'number') run.fontSize = fontSize;
-
-  const textColor = attrs.textColor ?? fieldMetadata?.textColor;
-  if (typeof textColor === 'string') run.textColor = textColor;
-
-  const textHighlight = attrs.textHighlight ?? fieldMetadata?.textHighlight;
-  if (typeof textHighlight === 'string') run.textHighlight = textHighlight;
-
-  // Text formatting
-  const formatting = fieldMetadata?.formatting;
-  if (attrs.bold === true || formatting?.bold === true) run.bold = true;
-  if (attrs.italic === true || formatting?.italic === true) run.italic = true;
-  if (attrs.underline === true || formatting?.underline === true) run.underline = true;
-
-  // Position tracking
-  const pos = positions.get(node);
-  if (pos) {
-    run.pmStart = pos.start;
-    run.pmEnd = pos.end;
-  }
-
-  // Attach full SDT metadata if available
-  if (fieldMetadata) {
-    run.sdt = fieldMetadata;
-  }
-
-  return run;
-}
 
 /**
  * Helper to check if a run is a text run.
@@ -540,305 +193,33 @@ export function mergeAdjacentRuns(runs: Run[]): Run[] {
   return merged;
 }
 
-type RunDefaults = {
-  fontFamily?: string;
-  fontSizePx?: number;
-  color?: string;
-  bold?: boolean;
-  italic?: boolean;
-  underline?: TextRun['underline'];
-  letterSpacing?: number;
-};
-
 /**
- * Extracts font properties from the first text node in a paragraph's content.
- * This is used to match list marker font to the paragraph's first text run.
- *
- * @param para - The paragraph PM node
- * @returns Font properties (fontSizePx already in pixels, fontFamily) or undefined if not found
+ * Extracts the default font family and size from paragraph properties.
+ * Used for creating default runs in empty paragraphs.
+ * @param converterContext - Converter context with document styles
+ * @param paragraphProperties - Resolved paragraph properties
+ * @returns Object with defaultFont and defaultSize
  */
-const extractFirstTextRunFont = (para: PMNode): { fontSizePx?: number; fontFamily?: string } | undefined => {
-  if (!para.content || !Array.isArray(para.content) || para.content.length === 0) {
-    return undefined;
-  }
-
-  // Helper to find fontSize mark and extract value
-  const extractFontFromMarks = (marks?: PMMark[]): { fontSizePx?: number; fontFamily?: string } | undefined => {
-    if (!marks || !Array.isArray(marks)) return undefined;
-
-    const result: { fontSizePx?: number; fontFamily?: string } = {};
-
-    for (const mark of marks) {
-      if (!mark || typeof mark !== 'object') continue;
-
-      // Look for textStyle mark which contains font info
-      if (mark.type === 'textStyle' && mark.attrs) {
-        const attrs = mark.attrs as Record<string, unknown>;
-        // fontSize is stored as a string with unit, e.g., '12pt' or '16px'
-        if (attrs.fontSize != null) {
-          const fontSizeStr = String(attrs.fontSize);
-          const size = parseFloat(fontSizeStr);
-          if (Number.isFinite(size)) {
-            // Check the unit - only convert if it's in points
-            if (fontSizeStr.endsWith('pt')) {
-              result.fontSizePx = ptToPx(size);
-            } else {
-              // px or unitless - already in pixels
-              result.fontSizePx = size;
-            }
-          }
-        }
-        if (typeof attrs.fontFamily === 'string') {
-          result.fontFamily = attrs.fontFamily;
-        }
-      }
-    }
-
-    return Object.keys(result).length > 0 ? result : undefined;
+function extractDefaultFontProperties(
+  converterContext: ConverterContext,
+  paragraphProperties: ParagraphProperties,
+): { defaultFont: string; defaultSize: number } {
+  const defaultRunAttrs = computeRunAttrs(
+    resolveRunProperties(
+      converterContext,
+      paragraphProperties.runProperties,
+      paragraphProperties,
+      converterContext.tableInfo,
+      false,
+      false,
+    ),
+    converterContext,
+  );
+  return {
+    defaultFont: defaultRunAttrs.fontFamily!,
+    defaultSize: defaultRunAttrs.fontSize!,
   };
-
-  // Recursively find first text node
-  const findFirstTextFont = (nodes: PMNode[]): { fontSizePx?: number; fontFamily?: string } | undefined => {
-    for (const node of nodes) {
-      if (!node) continue;
-
-      // If it's a text node, check its marks
-      if (node.type === 'text') {
-        const font = extractFontFromMarks(node.marks);
-        if (font) return font;
-      }
-
-      // If it's a run node, check its content
-      if (node.type === 'run' && Array.isArray(node.content)) {
-        // First check the run's own marks
-        const runFont = extractFontFromMarks(node.marks);
-        // Then check children
-        const childFont = findFirstTextFont(node.content);
-        // Merge: child takes precedence for fontSizePx
-        if (runFont || childFont) {
-          return {
-            fontSizePx: childFont?.fontSizePx ?? runFont?.fontSizePx,
-            fontFamily: childFont?.fontFamily ?? runFont?.fontFamily,
-          };
-        }
-      }
-
-      // Handle other container nodes
-      if (Array.isArray(node.content)) {
-        const font = findFirstTextFont(node.content);
-        if (font) return font;
-      }
-    }
-    return undefined;
-  };
-
-  const font = findFirstTextFont(para.content);
-  return font;
-};
-
-/**
- * Resolves a font family value to a CSS-compatible font family string.
- *
- * Handles both simple string font families and complex OOXML font family objects
- * that may include theme fonts, different scripts (ascii, hAnsi, eastAsia, cs).
- *
- * @param fontFamily - The font family value (string or OOXML font family object)
- * @param docx - Optional docx context for theme font resolution
- * @returns Resolved CSS font family string, or undefined if resolution fails
- *
- * @example
- * ```typescript
- * resolveRunFontFamily('Arial'); // 'Arial'
- * resolveRunFontFamily({ ascii: 'Calibri', hAnsi: 'Calibri' }, docx); // 'Calibri'
- * ```
- */
-const resolveRunFontFamily = (fontFamily: unknown, docx?: Record<string, unknown>): string | undefined => {
-  if (typeof fontFamily === 'string' && fontFamily.trim().length > 0) {
-    return fontFamily;
-  }
-  if (!fontFamily || typeof fontFamily !== 'object') return undefined;
-  const toCssFontFamily = (
-    SuperConverter as { toCssFontFamily?: (fontName: string, docx?: Record<string, unknown>) => string }
-  ).toCssFontFamily;
-  const resolved = resolveDocxFontFamily(fontFamily as Record<string, unknown>, docx ?? null, toCssFontFamily);
-  return resolved ?? undefined;
-};
-
-/**
- * Parses a font size value to pixels.
- *
- * Handles multiple input formats:
- * - Raw number: interpreted as half-points (OOXML format)
- * - String ending in 'pt': interpreted as points
- * - String ending in 'px': returned as-is
- * - String without suffix: interpreted as half-points
- *
- * @param fontSize - The font size value to parse
- * @returns Font size in pixels, or undefined if parsing fails
- *
- * @example
- * ```typescript
- * parseRunFontSizePx(24); // 16 (24 half-points = 12pt = 16px)
- * parseRunFontSizePx('12pt'); // 16
- * parseRunFontSizePx('16px'); // 16
- * ```
- */
-const parseRunFontSizePx = (fontSize: unknown): number | undefined => {
-  if (typeof fontSize === 'number' && Number.isFinite(fontSize)) {
-    return ptToPx(fontSize / HALF_POINTS_PER_POINT) ?? undefined;
-  }
-  if (typeof fontSize === 'string') {
-    const numeric = Number.parseFloat(fontSize);
-    if (!Number.isFinite(numeric)) return undefined;
-    if (fontSize.endsWith('pt')) {
-      return ptToPx(numeric);
-    }
-    if (fontSize.endsWith('px')) {
-      return numeric;
-    }
-    return ptToPx(numeric / HALF_POINTS_PER_POINT) ?? undefined;
-  }
-  return undefined;
-};
-
-/**
- * Extracts run properties from paragraph mark (w:pPr/w:rPr) in OOXML.
- *
- * The paragraph mark in Word has its own run properties that apply to empty
- * paragraphs or the paragraph mark character itself. This function extracts
- * font size and font family from these properties.
- *
- * @param paragraphProps - The paragraph properties object
- * @returns Extracted run properties (fontSize, fontFamily), or undefined if none found
- *
- * @example
- * ```typescript
- * extractParagraphMarkRunProps({
- *   runProperties: { fontSize: 24 }
- * }); // { fontSize: 24 }
- * ```
- */
-const extractParagraphMarkRunProps = (paragraphProps: Record<string, unknown>): Record<string, unknown> | undefined => {
-  const directRunProps = paragraphProps.runProperties;
-  const directRunPropsElement = asOoxmlElement(directRunProps);
-  if (directRunProps && isPlainObject(directRunProps) && !directRunPropsElement) {
-    return directRunProps as Record<string, unknown>;
-  }
-
-  const element = asOoxmlElement(paragraphProps);
-  const pPr = element ? (element.name === 'w:pPr' ? element : findOoxmlChild(element, 'w:pPr')) : undefined;
-  const rPr = directRunPropsElement?.name === 'w:rPr' ? directRunPropsElement : findOoxmlChild(pPr, 'w:rPr');
-  if (!rPr) return undefined;
-
-  const runProps: Record<string, unknown> = {};
-  const sz =
-    parseOoxmlNumber(getOoxmlAttribute(findOoxmlChild(rPr, 'w:sz'), 'w:val')) ??
-    parseOoxmlNumber(getOoxmlAttribute(findOoxmlChild(rPr, 'w:szCs'), 'w:val'));
-  if (sz != null) {
-    runProps.fontSize = sz;
-  }
-
-  const rFonts = findOoxmlChild(rPr, 'w:rFonts');
-  if (rFonts) {
-    const fontFamily: Record<string, unknown> = {};
-    const keys = ['ascii', 'hAnsi', 'eastAsia', 'cs', 'val', 'asciiTheme', 'hAnsiTheme', 'eastAsiaTheme', 'cstheme'];
-    for (const key of keys) {
-      const value = getOoxmlAttribute(rFonts, `w:${key}`);
-      if (value != null) {
-        fontFamily[key] = value;
-      }
-    }
-    if (Object.keys(fontFamily).length > 0) {
-      runProps.fontFamily = fontFamily;
-    }
-  }
-
-  return Object.keys(runProps).length > 0 ? runProps : undefined;
-};
-
-/**
- * Applies paragraph mark run properties to an empty paragraph's text run.
- *
- * In Word, empty paragraphs inherit their appearance from the paragraph mark's
- * run properties (w:pPr/w:rPr). This function applies those properties to ensure
- * empty paragraphs render with the correct font size and family.
- *
- * @param run - The text run to apply properties to
- * @param paragraphProps - The paragraph properties containing run properties
- * @param converterContext - Optional converter context for font resolution
- *
- * @example
- * ```typescript
- * const run: TextRun = { text: '' };
- * applyParagraphMarkRunProps(run, paragraphProps, context);
- * // run.fontSize and run.fontFamily may now be set
- * ```
- */
-const applyParagraphMarkRunProps = (
-  run: TextRun,
-  paragraphProps: Record<string, unknown>,
-  converterContext?: ConverterContext,
-): void => {
-  const runProps = extractParagraphMarkRunProps(paragraphProps);
-  if (!runProps) return;
-  const fontSizePx = parseRunFontSizePx(runProps.fontSize);
-  if (fontSizePx != null) {
-    run.fontSize = fontSizePx;
-  }
-  const fontFamily = resolveRunFontFamily(runProps.fontFamily, converterContext?.docx);
-  if (fontFamily) {
-    run.fontFamily = fontFamily;
-  }
-};
-
-const applyBaseRunDefaults = (
-  run: TextRun,
-  defaults: RunDefaults,
-  uiDisplayFallbackFont: string,
-  fallbackSize: number,
-): void => {
-  if (!run) return;
-  if (defaults.fontFamily && run.fontFamily === uiDisplayFallbackFont) {
-    run.fontFamily = defaults.fontFamily;
-  }
-  if (defaults.fontSizePx != null && run.fontSize === fallbackSize) {
-    run.fontSize = defaults.fontSizePx;
-  }
-  if (defaults.color && !run.color) {
-    run.color = defaults.color;
-  }
-  if (defaults.letterSpacing != null && run.letterSpacing == null) {
-    run.letterSpacing = defaults.letterSpacing;
-  }
-  // NOTE: We intentionally do NOT apply bold, italic, or underline from baseRunDefaults.
-  // These properties come from the paragraph's default character style (e.g., Heading 1's bold),
-  // but should NOT be applied to runs that have their own character styles or marks.
-  // Bold/italic/underline should only come from:
-  // 1. Linked character styles (via applyRunStyles)
-  // 2. Inline marks (via applyMarksToRun)
-  // Applying paragraph-level character defaults here causes incorrect bolding of normal text
-  // in paragraphs with bold styles like Heading 1.
-};
-
-const applyInlineRunProperties = (
-  run: TextRun,
-  runProperties: (Record<string, unknown> & { letterSpacing?: number | null }) | null | undefined,
-): void => {
-  if (!runProperties) return;
-  if (runProperties?.letterSpacing != null) {
-    run.letterSpacing = twipsToPx(runProperties.letterSpacing);
-  }
-};
-
-const getVanishValue = (runProperties: unknown): boolean | undefined => {
-  if (!runProperties || typeof runProperties !== 'object' || Array.isArray(runProperties)) {
-    return undefined;
-  }
-  if (!Object.prototype.hasOwnProperty.call(runProperties, 'vanish')) {
-    return undefined;
-  }
-  return (runProperties as Record<string, unknown>).vanish === true;
-};
+}
 
 /**
  * Converts a paragraph PM node to an array of FlowBlocks.
@@ -853,10 +234,6 @@ const getVanishValue = (runProperties: unknown): boolean | undefined => {
  * @param para - Paragraph PM node to convert
  * @param nextBlockId - Block ID generator
  * @param positions - Position map for PM node tracking
- * @param defaultFont - Default font family
- * @param defaultSize - Default font size
- * @param styleContext - Style resolution context
- * @param listCounterContext - Optional list counter context
  * @param trackedChanges - Optional tracked changes configuration
  * @param bookmarks - Optional bookmark position map
  * @param hyperlinkConfig - Hyperlink configuration
@@ -866,213 +243,35 @@ const getVanishValue = (runProperties: unknown): boolean | undefined => {
  * @param enableComments - Whether to include comment marks in the output (defaults to true). Set to false for viewing modes where comments should be hidden.
  * @returns Array of FlowBlocks (paragraphs, images, drawings, page breaks, etc.)
  */
-export function paragraphToFlowBlocks(
-  para: PMNode,
-  nextBlockId: BlockIdGenerator,
-  positions: PositionMap,
-  defaultFont: string,
-  defaultSize: number,
-  styleContext: StyleContext,
-  listCounterContext?: ListCounterContext,
-  trackedChanges?: TrackedChangesConfig,
-  bookmarks?: Map<string, number>,
-  hyperlinkConfig: HyperlinkConfig = DEFAULT_HYPERLINK_CONFIG,
-  themeColors?: ThemeColorPalette,
-  // Converter dependencies injected to avoid circular imports
-  converters?: {
-    contentBlockNodeToDrawingBlock?: (
-      node: PMNode,
-      nextBlockId: BlockIdGenerator,
-      positions: PositionMap,
-    ) => FlowBlock | null;
-    imageNodeToBlock: (
-      node: PMNode,
-      nextBlockId: BlockIdGenerator,
-      positions: PositionMap,
-      trackedMeta?: TrackedChangeMeta,
-      trackedChanges?: TrackedChangesConfig,
-    ) => ImageBlock | null;
-    vectorShapeNodeToDrawingBlock: (
-      node: PMNode,
-      nextBlockId: BlockIdGenerator,
-      positions: PositionMap,
-    ) => FlowBlock | null;
-    shapeGroupNodeToDrawingBlock: (
-      node: PMNode,
-      nextBlockId: BlockIdGenerator,
-      positions: PositionMap,
-    ) => FlowBlock | null;
-    shapeContainerNodeToDrawingBlock: (
-      node: PMNode,
-      nextBlockId: BlockIdGenerator,
-      positions: PositionMap,
-    ) => FlowBlock | null;
-    shapeTextboxNodeToDrawingBlock: (
-      node: PMNode,
-      nextBlockId: BlockIdGenerator,
-      positions: PositionMap,
-    ) => FlowBlock | null;
-    tableNodeToBlock: (
-      node: PMNode,
-      nextBlockId: BlockIdGenerator,
-      positions: PositionMap,
-      defaultFont: string,
-      defaultSize: number,
-      styleContext: StyleContext,
-      trackedChanges?: TrackedChangesConfig,
-      bookmarks?: Map<string, number>,
-      hyperlinkConfig?: HyperlinkConfig,
-      themeColors?: ThemeColorPalette,
-      converterContext?: ConverterContext,
-    ) => FlowBlock | null;
-  },
-  converterContext?: ConverterContext,
+export function paragraphToFlowBlocks({
+  para,
+  nextBlockId,
+  positions,
+  trackedChangesConfig,
+  bookmarks,
+  hyperlinkConfig = DEFAULT_HYPERLINK_CONFIG,
+  themeColors,
+  converters,
+  converterContext,
   enableComments = true,
-): FlowBlock[] {
-  const baseBlockId = nextBlockId('paragraph');
+  stableBlockId,
+}: ParagraphToFlowBlocksParams): FlowBlock[] {
+  // Use stable ID if provided, otherwise fall back to generator
+  const baseBlockId = stableBlockId ?? nextBlockId('paragraph');
+
+  // When stableBlockId is provided, create a deterministic ID generator for inline blocks
+  // (images, shapes, tables, etc.) to ensure consistent IDs across cached/uncached renders.
+  // This prevents ID drift that would cause unnecessary dirty regions.
+  let inlineBlockCounter = 0;
+  const stableNextBlockId: BlockIdGenerator = stableBlockId
+    ? (prefix: string) => `${stableBlockId}-${prefix}-${inlineBlockCounter++}`
+    : nextBlockId;
   const paragraphProps =
     typeof para.attrs?.paragraphProperties === 'object' && para.attrs.paragraphProperties !== null
-      ? (para.attrs.paragraphProperties as Record<string, unknown>)
+      ? (para.attrs.paragraphProperties as ParagraphProperties)
       : {};
-  const paragraphHiddenByVanish = getVanishValue(paragraphProps.runProperties) === true;
-  const paragraphStyleId =
-    typeof para.attrs?.styleId === 'string' && para.attrs.styleId.trim()
-      ? para.attrs.styleId
-      : typeof paragraphProps.styleId === 'string' && paragraphProps.styleId.trim()
-        ? (paragraphProps.styleId as string)
-        : null;
-  const paragraphHydration = converterContext ? hydrateParagraphStyleAttrs(para, converterContext) : null;
+  const { paragraphAttrs, resolvedParagraphProperties } = computeParagraphAttrs(para, converterContext);
 
-  let baseRunDefaults: RunDefaults = {};
-  try {
-    // Try to get character defaults from the correct OOXML cascade via styles.js
-    // This includes w:rPrDefault from w:docDefaults, which resolveStyle() ignores
-    const charHydration = converterContext
-      ? hydrateCharacterStyleAttrs(para, converterContext, paragraphHydration?.resolved as Record<string, unknown>)
-      : null;
-
-    if (charHydration) {
-      // Use correctly cascaded character properties from styles.js
-      // Font size is in half-points, convert to pixels: halfPts / 2 = pts, pts * (96/72) = px
-      const fontSizePx = (charHydration.fontSize / HALF_POINTS_PER_POINT) * (SCREEN_DPI / POINT_DPI);
-      baseRunDefaults = {
-        fontFamily: charHydration.fontFamily,
-        fontSizePx,
-        color: charHydration.color ? `#${charHydration.color.replace('#', '')}` : undefined,
-        bold: charHydration.bold,
-        italic: charHydration.italic,
-        underline: charHydration.underline
-          ? {
-              style: charHydration.underline.type as TextRun['underline'] extends { style?: infer S } ? S : never,
-              color: charHydration.underline.color,
-            }
-          : undefined,
-        letterSpacing: charHydration.letterSpacing != null ? twipsToPx(charHydration.letterSpacing) : undefined,
-      };
-    } else {
-      // Fallback: use resolveStyle when converterContext is not available
-      // This path uses hardcoded defaults but maintains backwards compatibility
-      const spacingSource =
-        para.attrs?.spacing !== undefined
-          ? para.attrs.spacing
-          : paragraphProps.spacing !== undefined
-            ? paragraphProps.spacing
-            : paragraphHydration?.spacing;
-      const normalizeIndentObject = (value: unknown): ParagraphIndent | undefined => {
-        if (!value || typeof value !== 'object') return;
-        return normalizePxIndent(value) ?? convertIndentTwipsToPx(value as ParagraphIndent);
-      };
-      const normalizedSpacing = normalizeParagraphSpacing(spacingSource);
-      const normalizedIndent =
-        normalizeIndentObject(para.attrs?.indent) ??
-        convertIndentTwipsToPx(paragraphProps.indent as ParagraphIndent) ??
-        convertIndentTwipsToPx(paragraphHydration?.indent as ParagraphIndent) ??
-        normalizeParagraphIndent(para.attrs?.textIndent);
-      const styleNodeAttrs =
-        paragraphHydration?.tabStops && !para.attrs?.tabStops && !para.attrs?.tabs
-          ? { ...(para.attrs ?? {}), tabStops: paragraphHydration.tabStops }
-          : (para.attrs ?? {});
-      const styleNode = buildStyleNodeFromAttrs(styleNodeAttrs, normalizedSpacing, normalizedIndent);
-      if (styleNodeAttrs.styleId == null && paragraphProps.styleId) {
-        styleNode.styleId = paragraphProps.styleId as string;
-      }
-      const resolved = resolveStyle(styleNode, styleContext);
-      baseRunDefaults = {
-        fontFamily: resolved.character.font?.family,
-        fontSizePx: ptToPx(resolved.character.font?.size),
-        color: resolved.character.color,
-        bold: resolved.character.font?.weight != null ? resolved.character.font.weight >= 600 : undefined,
-        italic: resolved.character.font?.italic,
-        underline: resolved.character.underline
-          ? {
-              style: resolved.character.underline.style,
-              color: resolved.character.underline.color,
-            }
-          : undefined,
-        letterSpacing: ptToPx(resolved.character.letterSpacing),
-      };
-    }
-  } catch {
-    baseRunDefaults = {};
-  }
-  const paragraphAttrs = computeParagraphAttrs(
-    para,
-    styleContext,
-    listCounterContext,
-    converterContext,
-    paragraphHydration,
-  );
-  if (paragraphAttrs && (!Array.isArray(paragraphAttrs.tabs) || paragraphAttrs.tabs.length === 0)) {
-    const rawTabs = para.attrs?.tabs ?? para.attrs?.tabStops ?? paragraphProps.tabStops ?? paragraphProps.tabs;
-    const normalizedTabs = normalizeOoxmlTabs(rawTabs);
-    if (normalizedTabs && normalizedTabs.length > 0) {
-      paragraphAttrs.tabs = normalizedTabs;
-    }
-  }
-
-  if (paragraphAttrs?.spacing) {
-    const spacing = { ...(paragraphAttrs.spacing as Record<string, unknown>) };
-    const effectiveFontSize = baseRunDefaults.fontSizePx ?? defaultSize;
-    const isList = Boolean(paragraphAttrs.numberingProperties);
-    if (spacing.beforeAutospacing) {
-      spacing.before = isList ? 0 : Math.max(0, Number(spacing.before ?? 0) + effectiveFontSize * 0.5);
-    }
-    if (spacing.afterAutospacing) {
-      spacing.after = isList ? 0 : Math.max(0, Number(spacing.after ?? 0) + effectiveFontSize * 0.5);
-    }
-    paragraphAttrs.spacing = spacing as ParagraphAttrs['spacing'];
-  }
-
-  // Update marker font from first text run if paragraph has numbering
-  // BUT only when the numbering level doesn't explicitly define marker font properties.
-  // This matches MS Word behavior: explicit <w:rFonts> in numbering.xml takes precedence,
-  // otherwise markers inherit font from first text run.
-  if (paragraphAttrs?.numberingProperties && paragraphAttrs?.wordLayout) {
-    const numberingProps = paragraphAttrs.numberingProperties as Record<string, unknown>;
-    const resolvedMarkerRpr = numberingProps.resolvedMarkerRpr as Record<string, unknown> | undefined;
-    // Check if numbering level explicitly defined font properties
-    const hasExplicitMarkerFont = resolvedMarkerRpr?.fontFamily != null;
-    const hasExplicitMarkerSize = resolvedMarkerRpr?.fontSize != null;
-
-    const firstRunFont = extractFirstTextRunFont(para);
-    if (firstRunFont) {
-      const wordLayout = paragraphAttrs.wordLayout as Record<string, unknown>;
-      const marker = wordLayout.marker as Record<string, unknown> | undefined;
-      if (marker?.run) {
-        const markerRun = marker.run as Record<string, unknown>;
-        // Only override with first text run's font if numbering level didn't explicitly define it
-        // fontSizePx is already converted to pixels by extractFirstTextRunFont
-        if (!hasExplicitMarkerSize && firstRunFont.fontSizePx != null && Number.isFinite(firstRunFont.fontSizePx)) {
-          markerRun.fontSize = firstRunFont.fontSizePx;
-        }
-        if (!hasExplicitMarkerFont && firstRunFont.fontFamily) {
-          markerRun.fontFamily = firstRunFont.fontFamily;
-        }
-      }
-    }
-  }
-
-  const linkedStyleResolver = createLinkedStyleResolver(converterContext?.linkedStyles);
   const blocks: FlowBlock[] = [];
   const paraAttrs = (para.attrs ?? {}) as Record<string, unknown>;
   const rawParagraphProps =
@@ -1081,17 +280,19 @@ export function paragraphToFlowBlocks(
       : undefined;
   const hasSectPr = Boolean(rawParagraphProps?.sectPr);
   const isSectPrMarker = hasSectPr || paraAttrs.pageBreakSource === 'sectPr';
+  const { defaultFont, defaultSize } = extractDefaultFontProperties(converterContext, resolvedParagraphProperties);
 
-  if (hasPageBreakBefore(para)) {
+  if (paragraphAttrs.pageBreakBefore) {
     blocks.push({
       kind: 'pageBreak',
-      id: nextBlockId('pageBreak'),
+      // Use deterministic suffix when stable ID is provided, otherwise use generator
+      id: stableBlockId ? `${stableBlockId}-pageBreak` : nextBlockId('pageBreak'),
       attrs: { source: 'pageBreakBefore' },
     });
   }
 
   if (!para.content || para.content.length === 0) {
-    if (paragraphHiddenByVanish) {
+    if (paragraphProps.runProperties?.vanish) {
       return blocks;
     }
     // Get the PM position of the empty paragraph for caret rendering
@@ -1107,9 +308,7 @@ export function paragraphToFlowBlocks(
       emptyRun.pmStart = paraPos.start + 1;
       emptyRun.pmEnd = paraPos.start + 1;
     }
-    applyBaseRunDefaults(emptyRun, baseRunDefaults, defaultFont, defaultSize);
-    applyParagraphMarkRunProps(emptyRun, paragraphProps, converterContext);
-    let emptyParagraphAttrs = cloneParagraphAttrs(paragraphAttrs);
+    let emptyParagraphAttrs = deepClone(paragraphAttrs);
     if (isSectPrMarker) {
       if (emptyParagraphAttrs) {
         emptyParagraphAttrs.sectPrMarker = true;
@@ -1121,7 +320,7 @@ export function paragraphToFlowBlocks(
       kind: 'paragraph',
       id: baseBlockId,
       runs: [emptyRun],
-      attrs: emptyParagraphAttrs,
+      attrs: deepClone(paragraphAttrs),
     });
     return blocks;
   }
@@ -1131,33 +330,6 @@ export function paragraphToFlowBlocks(
   let tabOrdinal = 0;
   let suppressedByVanish = false;
 
-  const toSuperscriptDigits = (value: unknown): string => {
-    const map: Record<string, string> = {
-      '0': '⁰',
-      '1': '¹',
-      '2': '²',
-      '3': '³',
-      '4': '⁴',
-      '5': '⁵',
-      '6': '⁶',
-      '7': '⁷',
-      '8': '⁸',
-      '9': '⁹',
-    };
-    return String(value ?? '')
-      .split('')
-      .map((ch) => map[ch] ?? ch)
-      .join('');
-  };
-
-  const resolveFootnoteDisplayNumber = (id: unknown): unknown => {
-    const key = id == null ? null : String(id);
-    if (!key) return null;
-    const mapping = converterContext?.footnoteNumberById;
-    const mapped = mapping && typeof mapping === 'object' ? (mapping as Record<string, number>)[key] : undefined;
-    return typeof mapped === 'number' && Number.isFinite(mapped) && mapped > 0 ? mapped : null;
-  };
-
   const nextId = () => (partIndex === 0 ? baseBlockId : `${baseBlockId}-${partIndex}`);
   const attachAnchorParagraphId = <T extends FlowBlock>(block: T, anchorParagraphId: string): T => {
     const applicableKinds = new Set(['drawing', 'image', 'table']);
@@ -1165,13 +337,11 @@ export function paragraphToFlowBlocks(
       return block;
     }
     const blockWithAttrs = block as T & { attrs?: Record<string, unknown> };
-    return {
-      ...blockWithAttrs,
-      attrs: {
-        ...(blockWithAttrs.attrs ?? {}),
-        anchorParagraphId,
-      },
-    };
+    if (!blockWithAttrs.attrs) {
+      blockWithAttrs.attrs = {};
+    }
+    blockWithAttrs.attrs.anchorParagraphId = anchorParagraphId;
+    return blockWithAttrs;
   };
 
   const flushParagraph = () => {
@@ -1184,553 +354,122 @@ export function paragraphToFlowBlocks(
       kind: 'paragraph',
       id: nextId(),
       runs,
-      attrs: cloneParagraphAttrs(paragraphAttrs),
+      attrs: deepClone(paragraphAttrs),
     });
     partIndex += 1;
-  };
-
-  const getInlineStyleId = (marks: PMMark[] = []): string | null => {
-    const mark = marks.find(
-      (m) => m?.type === 'textStyle' && typeof m.attrs?.styleId === 'string' && m.attrs.styleId.trim(),
-    );
-    return mark ? (mark.attrs!.styleId as string) : null;
-  };
-
-  const applyRunStyles = (run: TextRun, inlineStyleId: string | null, runStyleId: string | null) => {
-    if (!linkedStyleResolver) return;
-    applyLinkedStyleToRun(run, {
-      resolver: linkedStyleResolver,
-      paragraphStyleId,
-      inlineStyleId,
-      runStyleId,
-      defaultFont,
-      defaultSize,
-    });
   };
 
   const visitNode = (
     node: PMNode,
     inheritedMarks: PMMark[] = [],
     activeSdt?: SdtMetadata,
-    activeRunStyleId: string | null = null,
-    activeRunProperties?: Record<string, unknown> | null,
+    activeRunProperties?: RunProperties,
     activeHidden = false,
   ) => {
-    if (node.type === 'footnoteReference') {
-      const mergedMarks = [...(node.marks ?? []), ...(inheritedMarks ?? [])];
-      const refPos = positions.get(node);
-      const id = (node.attrs as Record<string, unknown> | undefined)?.id;
-      const displayId = resolveFootnoteDisplayNumber(id) ?? id ?? '*';
-      const displayText = toSuperscriptDigits(displayId);
-
-      const run = textNodeToRun(
-        { type: 'text', text: displayText } as PMNode,
-        positions,
-        defaultFont,
-        defaultSize,
-        [], // marks applied after linked styles/base defaults
-        activeSdt,
-        hyperlinkConfig,
-        themeColors,
-      );
-      const inlineStyleId = getInlineStyleId(mergedMarks);
-      applyRunStyles(run, inlineStyleId, activeRunStyleId);
-      applyBaseRunDefaults(run, baseRunDefaults, defaultFont, defaultSize);
-      applyMarksToRun(run, mergedMarks, hyperlinkConfig, themeColors);
-
-      // Copy PM positions from the parent footnoteReference node
-      if (refPos) {
-        run.pmStart = refPos.start;
-        run.pmEnd = refPos.end;
-      }
-
-      currentRuns.push(run);
-      return;
-    }
-
     if (activeHidden && node.type !== 'run') {
       suppressedByVanish = true;
       return;
     }
-
-    if (node.type === 'text' && node.text) {
-      // Apply styles in correct priority order:
-      // 1. Create run with defaults (lowest priority) - textNodeToRun with empty marks
-      // 2. Apply linked styles from paragraph/character styles (medium priority)
-      // 3. Apply base run defaults (medium-high priority)
-      // 4. Apply marks ONCE (highest priority) - inline marks override everything
-      //
-      // Pass empty array to textNodeToRun to prevent double mark application.
-      // Marks will be applied AFTER linked styles to ensure proper priority.
-      const run = textNodeToRun(
-        node,
-        positions,
-        defaultFont,
-        defaultSize,
-        [], // Empty marks - will be applied after linked styles
-        activeSdt,
-        hyperlinkConfig,
-        themeColors,
-      );
-      const inlineStyleId = getInlineStyleId(inheritedMarks);
-      applyRunStyles(run, inlineStyleId, activeRunStyleId);
-      applyBaseRunDefaults(run, baseRunDefaults, defaultFont, defaultSize);
-      applyInlineRunProperties(run, activeRunProperties);
-      // Apply marks ONCE here - this ensures they override linked styles
-      applyMarksToRun(
-        run,
-        [...(node.marks ?? []), ...(inheritedMarks ?? [])],
-        hyperlinkConfig,
-        themeColors,
-        converterContext?.backgroundColor,
-        enableComments,
-      );
-      currentRuns.push(run);
+    if (isHiddenShape(node)) {
       return;
     }
 
-    if (node.type === 'run' && Array.isArray(node.content)) {
-      const mergedMarks = [...(node.marks ?? []), ...(inheritedMarks ?? [])];
-      const runProperties =
-        typeof node.attrs?.runProperties === 'object' && node.attrs.runProperties !== null
-          ? (node.attrs.runProperties as Record<string, unknown>)
-          : null;
-      const runVanish = getVanishValue(runProperties);
-      const nextHidden = runVanish === undefined ? activeHidden : runVanish;
-      if (nextHidden) {
-        suppressedByVanish = true;
-        return;
-      }
-      const nextRunStyleId = extractRunStyleId(runProperties) ?? activeRunStyleId;
-      const nextRunProperties = runProperties ?? activeRunProperties;
-      node.content.forEach((child) =>
-        visitNode(child, mergedMarks, activeSdt, nextRunStyleId, nextRunProperties, nextHidden),
-      );
-      return;
-    }
+    const inlineConverterParams = {
+      node: node,
+      positions,
+      defaultFont,
+      defaultSize,
+      inheritedMarks: inheritedMarks ?? [],
+      sdtMetadata: activeSdt,
+      hyperlinkConfig,
+      themeColors,
+      enableComments,
+      runProperties: activeRunProperties,
+      paragraphProperties: resolvedParagraphProperties,
+      converterContext,
+      visitNode,
+      bookmarks,
+      tabOrdinal,
+      paragraphAttrs,
+      nextBlockId: stableNextBlockId,
+    };
 
-    // SDT inline structured content: treat as transparent container
-    if (node.type === 'structuredContent' && Array.isArray(node.content)) {
-      const inlineMetadata = resolveNodeSdtMetadata(node, 'structuredContent');
-      const nextSdt = inlineMetadata ?? activeSdt;
-      node.content.forEach((child) =>
-        visitNode(child, inheritedMarks, nextSdt, activeRunStyleId, activeRunProperties, activeHidden),
-      );
-      return;
-    }
+    const blockOptions: BlockConverterOptions = {
+      blocks,
+      nextBlockId: stableNextBlockId,
+      nextId,
+      positions,
+      trackedChangesConfig,
+      defaultFont,
+      defaultSize,
+      converterContext,
+      hyperlinkConfig,
+      enableComments,
+      bookmarks: bookmarks!,
+      converters,
+      paragraphAttrs,
+    };
 
-    // SDT fieldAnnotation: create FieldAnnotationRun for pill-style rendering
-    if (node.type === 'fieldAnnotation') {
-      if (activeHidden) {
-        suppressedByVanish = true;
-        return;
-      }
-      const fieldMetadata = resolveNodeSdtMetadata(node, 'fieldAnnotation') as FieldAnnotationMetadata | null;
-
-      // If there's inner content, extract text to use as displayLabel override
-      let contentText: string | undefined;
-      if (Array.isArray(node.content) && node.content.length > 0) {
-        const extractText = (n: PMNode): string => {
-          if (n.type === 'text' && typeof n.text === 'string') return n.text;
-          if (Array.isArray(n.content)) {
-            return n.content.map(extractText).join('');
-          }
-          return '';
-        };
-        contentText = node.content.map(extractText).join('');
-      }
-
-      // Create the FieldAnnotationRun (handles displayLabel fallback chain internally)
-      // If we have contentText, temporarily override displayLabel in attrs
-      const nodeForRun =
-        contentText && contentText.length > 0
-          ? { ...node, attrs: { ...(node.attrs ?? {}), displayLabel: contentText } }
-          : node;
-
-      const run = fieldAnnotationNodeToRun(nodeForRun, positions, fieldMetadata);
-      currentRuns.push(run);
-      return;
-    }
-
-    if (node.type === 'pageReference') {
-      if (activeHidden) {
-        suppressedByVanish = true;
-        return;
-      }
-      // Create pageReference token run for dynamic resolution
-      const instruction = getNodeInstruction(node) || '';
-      const nodeAttrs =
-        typeof node.attrs === 'object' && node.attrs !== null ? (node.attrs as Record<string, unknown>) : {};
-      const refMarks = Array.isArray(nodeAttrs.marksAsAttrs) ? (nodeAttrs.marksAsAttrs as PMMark[]) : [];
-      const mergedMarks = [...refMarks, ...(inheritedMarks ?? [])];
-
-      // Extract bookmark ID from instruction, handling optional quotes
-      // Examples: "PAGEREF _Toc123 \h" or "PAGEREF "_Toc123" \h"
-      const bookmarkMatch = instruction.match(/PAGEREF\s+"?([^"\s\\]+)"?/i);
-      const bookmarkId = bookmarkMatch ? bookmarkMatch[1] : '';
-
-      // If we have a bookmark ID, create a token run for dynamic resolution
-      if (bookmarkId) {
-        // Check if there's materialized content (pre-baked page number from Word)
-        let fallbackText = '??'; // Default placeholder if resolution fails
-        if (Array.isArray(node.content) && node.content.length > 0) {
-          // Extract text from children as fallback
-          const extractText = (n: PMNode): string => {
-            if (n.type === 'text' && n.text) return n.text;
-            if (Array.isArray(n.content)) {
-              return n.content.map(extractText).join('');
+    if (INLINE_CONVERTERS_REGISTRY[node.type]) {
+      const { inlineConverter, extraCheck, blockConverter } = INLINE_CONVERTERS_REGISTRY[node.type];
+      if (!extraCheck || extraCheck(node)) {
+        try {
+          if (!inlineConverter) {
+            throw new NotInlineNodeError();
+          } else {
+            const run = inlineConverter(inlineConverterParams);
+            if (run) {
+              currentRuns.push(run);
+              if (node.type === 'tab') {
+                tabOrdinal += 1;
+              }
             }
-            return '';
-          };
-          fallbackText = node.content.map(extractText).join('').trim() || '??';
+          }
+        } catch (error) {
+          if (error instanceof HiddenByVanishError) {
+            suppressedByVanish = true;
+          } else if (error instanceof NotInlineNodeError && blockConverter) {
+            const anchorParagraphId = nextId();
+            flushParagraph();
+            const newBlocks: FlowBlock[] = [];
+            const block = blockConverter(node, { ...blockOptions, blocks: newBlocks });
+            if (block) {
+              attachAnchorParagraphId(block, anchorParagraphId);
+              blocks.push(block);
+            } else if (newBlocks.length > 0) {
+              // Some block converters may push multiple blocks to the provided array
+              newBlocks.forEach((b) => {
+                attachAnchorParagraphId(b, anchorParagraphId);
+                blocks.push(b);
+              });
+            }
+          } else {
+            throw error;
+          }
         }
-
-        // Create token run with pageReference metadata
-        // Get PM positions from the parent pageReference node (not the synthetic text node)
-        const pageRefPos = positions.get(node);
-        // Pass empty marks to textNodeToRun to prevent double mark application.
-        // Marks will be applied AFTER linked styles to ensure proper priority and honor enableComments.
-        const tokenRun = textNodeToRun(
-          { type: 'text', text: fallbackText } as PMNode,
-          positions,
-          defaultFont,
-          defaultSize,
-          [], // Empty marks - will be applied after linked styles
-          activeSdt,
-          hyperlinkConfig,
-          themeColors,
-        );
-        const inlineStyleId = getInlineStyleId(mergedMarks);
-        applyRunStyles(tokenRun, inlineStyleId, activeRunStyleId);
-        applyBaseRunDefaults(tokenRun, baseRunDefaults, defaultFont, defaultSize);
-        applyInlineRunProperties(tokenRun, activeRunProperties);
-        // Apply marks ONCE here - this ensures they override linked styles and honor enableComments
-        applyMarksToRun(
-          tokenRun,
-          mergedMarks,
-          hyperlinkConfig,
-          themeColors,
-          converterContext?.backgroundColor,
-          enableComments,
-        );
-        // Copy PM positions from parent pageReference node
-        if (pageRefPos) {
-          (tokenRun as TextRun).pmStart = pageRefPos.start;
-          (tokenRun as TextRun).pmEnd = pageRefPos.end;
-        }
-        (tokenRun as TextRun).token = 'pageReference';
-        (tokenRun as TextRun).pageRefMetadata = {
-          bookmarkId,
-          instruction,
-        };
-        if (activeSdt) {
-          tokenRun.sdt = activeSdt;
-        }
-        currentRuns.push(tokenRun);
-      } else if (Array.isArray(node.content)) {
-        // No bookmark found, fall back to treating as transparent container
-        node.content.forEach((child) =>
-          visitNode(child, mergedMarks, activeSdt, activeRunStyleId, activeRunProperties),
-        );
       }
       return;
     }
 
-    if (node.type === 'bookmarkStart') {
-      // Track bookmark position for cross-reference resolution
-      const nodeAttrs =
-        typeof node.attrs === 'object' && node.attrs !== null ? (node.attrs as Record<string, unknown>) : {};
-      const bookmarkName = typeof nodeAttrs.name === 'string' ? nodeAttrs.name : undefined;
-      if (bookmarkName && bookmarks) {
-        const nodePos = positions.get(node);
-        if (nodePos) {
-          bookmarks.set(bookmarkName, nodePos.start);
-        }
-      }
-      // Process any content inside the bookmark (usually empty)
-      if (Array.isArray(node.content)) {
-        node.content.forEach((child) =>
-          visitNode(child, inheritedMarks, activeSdt, activeRunStyleId, activeRunProperties),
-        );
-      }
-      return;
-    }
-
-    if (node.type === 'tab') {
-      const tabRun = tabNodeToRun(node, positions, tabOrdinal, para, inheritedMarks);
-      tabOrdinal += 1;
-      if (tabRun) {
-        currentRuns.push(tabRun);
-      }
-      return;
-    }
-
-    if (TOKEN_INLINE_TYPES.has(node.type)) {
-      const tokenKind = TOKEN_INLINE_TYPES.get(node.type);
-      if (tokenKind) {
-        const marksAsAttrs = Array.isArray(node.attrs?.marksAsAttrs) ? (node.attrs.marksAsAttrs as PMMark[]) : [];
-        const nodeMarks = node.marks ?? [];
-        const effectiveMarks = nodeMarks.length > 0 ? nodeMarks : marksAsAttrs;
-        const mergedMarks = [...effectiveMarks, ...(inheritedMarks ?? [])];
-        const tokenRun = tokenNodeToRun(
-          node,
-          positions,
-          defaultFont,
-          defaultSize,
-          inheritedMarks,
-          tokenKind,
-          hyperlinkConfig,
-          themeColors,
-        );
-        if (activeSdt) {
-          (tokenRun as TextRun).sdt = activeSdt;
-        }
-        const inlineStyleId = getInlineStyleId(inheritedMarks);
-        applyRunStyles(tokenRun as TextRun, inlineStyleId, activeRunStyleId);
-        applyBaseRunDefaults(tokenRun as TextRun, baseRunDefaults, defaultFont, defaultSize);
-        if (mergedMarks.length > 0) {
-          applyMarksToRun(
-            tokenRun as TextRun,
-            mergedMarks,
-            hyperlinkConfig,
-            themeColors,
-            converterContext?.backgroundColor,
-            enableComments,
-          );
-        }
-        applyInlineRunProperties(tokenRun as TextRun, activeRunProperties);
-        currentRuns.push(tokenRun);
-      }
-      return;
-    }
-
-    if (node.type === 'image') {
-      if (activeHidden) {
-        suppressedByVanish = true;
-        return;
-      }
-      if (isNodeHidden(node)) {
-        return;
-      }
-      const isInline = isInlineImage(node);
-
-      // Check if this image should be inline (ImageRun) or block (ImageBlock)
-      if (isInline) {
-        // Inline image: add to current runs WITHOUT flushing paragraph
-        const imageRun = imageNodeToRun(node, positions, activeSdt);
-        if (imageRun) {
-          currentRuns.push(imageRun);
-        }
-        // Continue without returning - let marks/SDT state flow through
-        return;
-      }
-
-      // Anchored/floating image: existing behavior (flush and create ImageBlock)
+    if (SHAPE_CONVERTERS_REGISTRY[node.type]) {
       const anchorParagraphId = nextId();
       flushParagraph();
-      const mergedMarks = [...(node.marks ?? []), ...(inheritedMarks ?? [])];
-      const trackedMeta = trackedChanges?.enabled ? collectTrackedChangeFromMarks(mergedMarks) : undefined;
-      if (shouldHideTrackedNode(trackedMeta, trackedChanges)) {
-        return;
+      const converter = SHAPE_CONVERTERS_REGISTRY[node.type];
+      const drawingBlock = converter(node, stableNextBlockId, positions);
+      if (drawingBlock) {
+        blocks.push(attachAnchorParagraphId(drawingBlock, anchorParagraphId));
       }
-      if (converters?.imageNodeToBlock) {
-        const imageBlock = converters.imageNodeToBlock(node, nextBlockId, positions, trackedMeta, trackedChanges);
-        if (imageBlock && imageBlock.kind === 'image') {
-          annotateBlockWithTrackedChange(imageBlock, trackedMeta, trackedChanges);
-          blocks.push(attachAnchorParagraphId(imageBlock, anchorParagraphId));
-        }
-      }
-      return;
-    }
-
-    if (node.type === 'contentBlock') {
-      if (activeHidden) {
-        suppressedByVanish = true;
-        return;
-      }
-      const attrs = node.attrs ?? {};
-      if (attrs.horizontalRule === true) {
-        const anchorParagraphId = nextId();
-        flushParagraph();
-        const indent = paragraphAttrs?.indent;
-        const hrIndentLeft = typeof indent?.left === 'number' ? indent.left : undefined;
-        const hrIndentRight = typeof indent?.right === 'number' ? indent.right : undefined;
-        const hasIndent =
-          (typeof hrIndentLeft === 'number' && hrIndentLeft !== 0) ||
-          (typeof hrIndentRight === 'number' && hrIndentRight !== 0);
-        const hrNode = hasIndent ? { ...node, attrs: { ...attrs, hrIndentLeft, hrIndentRight } } : node;
-        const convert = converters?.contentBlockNodeToDrawingBlock ?? contentBlockNodeToDrawingBlock;
-        const drawingBlock = convert(hrNode, nextBlockId, positions);
-        if (drawingBlock) {
-          blocks.push(attachAnchorParagraphId(drawingBlock, anchorParagraphId));
-        }
-      }
-      return;
-    }
-
-    if (node.type === 'vectorShape') {
-      if (activeHidden) {
-        suppressedByVanish = true;
-        return;
-      }
-      if (isNodeHidden(node)) {
-        return;
-      }
-      const anchorParagraphId = nextId();
-      flushParagraph();
-      if (converters?.vectorShapeNodeToDrawingBlock) {
-        const drawingBlock = converters.vectorShapeNodeToDrawingBlock(node, nextBlockId, positions);
-        if (drawingBlock) {
-          blocks.push(attachAnchorParagraphId(drawingBlock, anchorParagraphId));
-        }
-      }
-      return;
-    }
-
-    if (node.type === 'shapeGroup') {
-      if (activeHidden) {
-        suppressedByVanish = true;
-        return;
-      }
-      if (isNodeHidden(node)) {
-        return;
-      }
-      const anchorParagraphId = nextId();
-      flushParagraph();
-      if (converters?.shapeGroupNodeToDrawingBlock) {
-        const drawingBlock = converters.shapeGroupNodeToDrawingBlock(node, nextBlockId, positions);
-        if (drawingBlock) {
-          blocks.push(attachAnchorParagraphId(drawingBlock, anchorParagraphId));
-        }
-      }
-      return;
-    }
-
-    if (node.type === 'shapeContainer') {
-      if (activeHidden) {
-        suppressedByVanish = true;
-        return;
-      }
-      if (isNodeHidden(node)) {
-        return;
-      }
-      const anchorParagraphId = nextId();
-      flushParagraph();
-      if (converters?.shapeContainerNodeToDrawingBlock) {
-        const drawingBlock = converters.shapeContainerNodeToDrawingBlock(node, nextBlockId, positions);
-        if (drawingBlock) {
-          blocks.push(attachAnchorParagraphId(drawingBlock, anchorParagraphId));
-        }
-      }
-      return;
-    }
-
-    if (node.type === 'shapeTextbox') {
-      if (activeHidden) {
-        suppressedByVanish = true;
-        return;
-      }
-      if (isNodeHidden(node)) {
-        return;
-      }
-      const anchorParagraphId = nextId();
-      flushParagraph();
-      if (converters?.shapeTextboxNodeToDrawingBlock) {
-        const drawingBlock = converters.shapeTextboxNodeToDrawingBlock(node, nextBlockId, positions);
-        if (drawingBlock) {
-          blocks.push(attachAnchorParagraphId(drawingBlock, anchorParagraphId));
-        }
-      }
-      return;
-    }
-
-    // Tables may occasionally appear inline via wrappers; treat as block-level
-    if (node.type === 'table') {
-      if (activeHidden) {
-        suppressedByVanish = true;
-        return;
-      }
-      const anchorParagraphId = nextId();
-      flushParagraph();
-      if (converters?.tableNodeToBlock) {
-        const tableBlock = converters.tableNodeToBlock(
-          node,
-          nextBlockId,
-          positions,
-          defaultFont,
-          defaultSize,
-          styleContext,
-          trackedChanges,
-          bookmarks,
-          hyperlinkConfig,
-          themeColors,
-          ...(converterContext !== undefined ? [converterContext] : []),
-        );
-        if (tableBlock) {
-          blocks.push(attachAnchorParagraphId(tableBlock, anchorParagraphId));
-        }
-      }
-      return;
-    }
-
-    // Hard / line breaks
-    if (node.type === 'hardBreak' || node.type === 'lineBreak') {
-      if (activeHidden) {
-        suppressedByVanish = true;
-        return;
-      }
-      const attrs = node.attrs ?? {};
-      const breakType = attrs.pageBreakType ?? attrs.lineBreakType ?? 'line';
-
-      if (breakType === 'page') {
-        flushParagraph();
-        blocks.push({
-          kind: 'pageBreak',
-          id: nextId(),
-          attrs: node.attrs || {},
-        });
-        return;
-      }
-
-      if (breakType === 'column') {
-        flushParagraph();
-        blocks.push({
-          kind: 'columnBreak',
-          id: nextId(),
-          attrs: node.attrs || {},
-        });
-        return;
-      }
-      // Inline line break: preserve as a run so measurer can create a new line
-      const lineBreakRun: Run = { kind: 'lineBreak', attrs: {} };
-      const lbAttrs: Record<string, string> = {};
-      if (attrs.lineBreakType) lbAttrs.lineBreakType = String(attrs.lineBreakType);
-      if (attrs.clear) lbAttrs.clear = String(attrs.clear);
-      if (Object.keys(lbAttrs).length > 0) {
-        (lineBreakRun as { attrs: Record<string, string> }).attrs = lbAttrs;
-      } else {
-        delete (lineBreakRun as { attrs?: Record<string, string> }).attrs;
-      }
-      const pos = positions.get(node);
-      if (pos) {
-        (lineBreakRun as { pmStart: number }).pmStart = pos.start;
-        (lineBreakRun as { pmEnd: number }).pmEnd = pos.end;
-      }
-      if (activeSdt) {
-        (lineBreakRun as { sdt?: SdtMetadata }).sdt = activeSdt;
-      }
-      currentRuns.push(lineBreakRun);
       return;
     }
   };
 
   para.content.forEach((child) => {
-    visitNode(child, [], undefined, null, undefined);
+    visitNode(child, [], undefined, undefined);
   });
   flushParagraph();
 
   const hasParagraphBlock = blocks.some((block) => block.kind === 'paragraph');
-  if (!hasParagraphBlock && !suppressedByVanish && !paragraphHiddenByVanish) {
+  if (!hasParagraphBlock && !suppressedByVanish && !paragraphProps.runProperties?.vanish) {
     blocks.push({
       kind: 'paragraph',
       id: baseBlockId,
@@ -1741,7 +480,7 @@ export function paragraphToFlowBlocks(
           fontSize: defaultSize,
         },
       ],
-      attrs: cloneParagraphAttrs(paragraphAttrs),
+      attrs: deepClone(paragraphAttrs),
     });
   }
 
@@ -1754,7 +493,7 @@ export function paragraphToFlowBlocks(
     }
   });
 
-  if (!trackedChanges) {
+  if (!trackedChangesConfig) {
     return blocks;
   }
 
@@ -1766,20 +505,20 @@ export function paragraphToFlowBlocks(
     }
     const filteredRuns = applyTrackedChangesModeToRuns(
       block.runs,
-      trackedChanges,
+      trackedChangesConfig,
       hyperlinkConfig,
       applyMarksToRun,
       themeColors,
       enableComments,
     );
-    if (trackedChanges.enabled && filteredRuns.length === 0) {
+    if (trackedChangesConfig.enabled && filteredRuns.length === 0) {
       return;
     }
     block.runs = filteredRuns;
     block.attrs = {
       ...(block.attrs ?? {}),
-      trackedChangesMode: trackedChanges.mode,
-      trackedChangesEnabled: trackedChanges.enabled,
+      trackedChangesMode: trackedChangesConfig.mode,
+      trackedChangesEnabled: trackedChangesConfig.enabled,
     };
     processedBlocks.push(block);
   });
@@ -1787,10 +526,86 @@ export function paragraphToFlowBlocks(
   return processedBlocks;
 }
 
+type InlineConverterSpec = {
+  inlineConverter?: (params: InlineConverterParams) => Run | void | null;
+  extraCheck?: (node: PMNode) => boolean;
+  blockConverter?: (node: PMNode, options: BlockConverterOptions) => FlowBlock | DrawingBlock | void | null;
+};
+
+const INLINE_CONVERTERS_REGISTRY: Record<string, InlineConverterSpec> = {
+  footnoteReference: {
+    inlineConverter: footnoteReferenceToBlock,
+  },
+  text: {
+    inlineConverter: textNodeToRun,
+    extraCheck: (node: PMNode) => Boolean(node.text),
+  },
+  run: {
+    inlineConverter: runNodeChildrenToRuns,
+    extraCheck: (node: PMNode) => Array.isArray(node.content),
+  },
+  structuredContent: {
+    inlineConverter: structuredContentNodeToBlocks,
+    extraCheck: (node: PMNode) => Array.isArray(node.content),
+  },
+  fieldAnnotation: {
+    inlineConverter: fieldAnnotationNodeToRun,
+  },
+  pageReference: {
+    inlineConverter: pageReferenceNodeToBlock,
+  },
+  bookmarkStart: {
+    inlineConverter: bookmarkStartNodeToBlocks,
+  },
+  tab: {
+    inlineConverter: tabNodeToRun,
+  },
+  image: {
+    inlineConverter: imageNodeToRun,
+    blockConverter: handleImageNode,
+  },
+  contentBlock: {
+    blockConverter: inlineContentBlockConverter,
+  },
+  hardBreak: {
+    inlineConverter: lineBreakNodeToRun,
+    blockConverter: lineBreakNodeToBreakBlock,
+  },
+  lineBreak: {
+    inlineConverter: lineBreakNodeToRun,
+    blockConverter: lineBreakNodeToBreakBlock,
+  },
+  table: {
+    blockConverter: tableNodeToBlock,
+  },
+};
+
+for (const type of TOKEN_INLINE_TYPES.keys()) {
+  INLINE_CONVERTERS_REGISTRY[type] = {
+    inlineConverter: tokenNodeToRun,
+  };
+}
+
+const SHAPE_CONVERTERS_REGISTRY: Record<
+  string,
+  (node: PMNode, nextBlockId: BlockIdGenerator, positions: PositionMap) => DrawingBlock | null
+> = {
+  vectorShape: vectorShapeNodeToDrawingBlock,
+  shapeGroup: shapeGroupNodeToDrawingBlock,
+  shapeContainer: shapeContainerNodeToDrawingBlock,
+  shapeTextbox: shapeTextboxNodeToDrawingBlock,
+};
+
 /**
  * Handle paragraph nodes.
  * Special handling: Emits section breaks BEFORE processing the paragraph
  * if this paragraph starts a new section.
+ *
+ * Supports incremental conversion via FlowBlockCache:
+ * - If cache is available and paragraph has stable ID (sdBlockId/paraId)
+ * - Check cache for matching node content
+ * - On cache hit: reuse blocks with position adjustment
+ * - On cache miss: convert normally and store in cache
  *
  * @param node - Paragraph node to process
  * @param context - Shared handler context
@@ -1800,18 +615,19 @@ export function handleParagraphNode(node: PMNode, context: NodeHandlerContext): 
     blocks,
     recordBlockKind,
     nextBlockId,
+    blockIdPrefix = '',
     positions,
-    defaultFont,
-    defaultSize,
-    styleContext,
-    listCounterContext,
     trackedChangesConfig,
     bookmarks,
     hyperlinkConfig,
     sectionState,
     converters,
+    converterContext,
+    themeColors,
+    flowBlockCache,
+    enableComments,
   } = context;
-  const { ranges: sectionRanges, currentSectionIndex, currentParagraphIndex } = sectionState;
+  const { ranges: sectionRanges, currentSectionIndex, currentParagraphIndex } = sectionState!;
 
   // Emit section break BEFORE the first paragraph of the next section
   if (sectionRanges.length > 0) {
@@ -1823,35 +639,79 @@ export function handleParagraphNode(node: PMNode, context: NodeHandlerContext): 
       const extraAttrs = requiresPageBoundary ? { requirePageBoundary: true } : undefined;
       const sectionBreak = createSectionBreakBlock(nextSection, nextBlockId, extraAttrs);
       blocks.push(sectionBreak);
-      recordBlockKind(sectionBreak.kind);
-      sectionState.currentSectionIndex++;
+      recordBlockKind?.(sectionBreak.kind);
+      sectionState!.currentSectionIndex++;
     }
   }
 
-  const { getListCounter, incrementListCounter, resetListCounter } = listCounterContext;
-  const paragraphToFlowBlocks = converters?.paragraphToFlowBlocks;
-  if (!paragraphToFlowBlocks) {
+  const paragraphToFlowBlocks = converters.paragraphToFlowBlocks;
+  const stableId = getStableParagraphId(node);
+  const prefixedStableId = stableId ? `${blockIdPrefix}${stableId}` : null;
+  const nodePos = positions.get(node);
+  const pmStart = nodePos?.start ?? 0;
+
+  if (prefixedStableId && flowBlockCache) {
+    // get() returns both the entry (if hit) and pre-computed nodeJson to avoid double serialization
+    const { entry: cached, nodeJson, nodeRev } = flowBlockCache.get(prefixedStableId, node);
+    if (cached) {
+      // Cache hit: reuse blocks with position adjustment
+      const delta = pmStart - cached.pmStart;
+      const reusedBlocks = shiftCachedBlocks(cached.blocks, delta);
+
+      reusedBlocks.forEach((block) => {
+        blocks.push(block);
+        recordBlockKind?.(block.kind);
+      });
+
+      // Store in next cache generation with current position (reuse nodeJson)
+      flowBlockCache.set(prefixedStableId, nodeJson, nodeRev, reusedBlocks, pmStart);
+      sectionState!.currentParagraphIndex++;
+      return;
+    }
+
+    // Cache miss: convert normally, then store using pre-computed nodeJson
+    const paragraphBlocks = paragraphToFlowBlocks({
+      para: node,
+      nextBlockId,
+      positions,
+      trackedChangesConfig,
+      bookmarks,
+      hyperlinkConfig,
+      themeColors,
+      converters,
+      converterContext,
+      enableComments,
+      stableBlockId: prefixedStableId,
+    });
+
+    paragraphBlocks.forEach((block) => {
+      blocks.push(block);
+      recordBlockKind?.(block.kind);
+    });
+
+    // Store in cache using pre-computed nodeJson (avoids double serialization)
+    flowBlockCache.set(prefixedStableId, nodeJson, nodeRev, paragraphBlocks, pmStart);
+    sectionState!.currentParagraphIndex++;
     return;
   }
 
-  const paragraphBlocks = paragraphToFlowBlocks(
-    node,
+  const paragraphBlocks = paragraphToFlowBlocks({
+    para: node,
     nextBlockId,
     positions,
-    defaultFont,
-    defaultSize,
-    styleContext,
-    { getListCounter, incrementListCounter, resetListCounter },
     trackedChangesConfig,
     bookmarks,
     hyperlinkConfig,
-    undefined, // themeColors - not available in NodeHandlerContext
-    context.converterContext,
-  );
+    themeColors,
+    converters,
+    converterContext,
+    enableComments,
+    stableBlockId: prefixedStableId ?? undefined,
+  });
   paragraphBlocks.forEach((block) => {
     blocks.push(block);
-    recordBlockKind(block.kind);
+    recordBlockKind?.(block.kind);
   });
 
-  sectionState.currentParagraphIndex++;
+  sectionState!.currentParagraphIndex++;
 }

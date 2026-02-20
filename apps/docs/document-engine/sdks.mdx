@@ -1,0 +1,203 @@
+---
+title: SDKs
+sidebarTitle: SDKs
+description: Node.js and Python SDKs for programmatic document editing
+keywords: "sdk, node, python, document automation, headless docx, superdoc sdk"
+---
+
+SuperDoc SDKs let you open, read, and edit `.docx` files from Node.js or Python. They manage the CLI process for you and expose typed methods for every operation.
+
+<Info>
+The SDKs are in <strong>alpha</strong>. The API surface matches the [Document API](/document-api/overview) and will evolve alongside it.
+</Info>
+
+## Installation
+
+<Tabs>
+  <Tab title="Node.js">
+    ```bash
+    npm install @superdoc-dev/sdk
+    ```
+  </Tab>
+  <Tab title="Python">
+    ```bash
+    pip install superdoc-sdk
+    ```
+  </Tab>
+</Tabs>
+
+The CLI is bundled with the SDK — no separate install needed.
+
+## Quick start
+
+<Tabs>
+  <Tab title="Node.js">
+    ```typescript
+    import { SuperDocClient } from '@superdoc-dev/sdk';
+
+    const client = new SuperDocClient();
+
+    // Open a document
+    await client.doc.open({ doc: './contract.docx' });
+
+    // Find text
+    const result = await client.doc.find({ pattern: 'ACME Corp' });
+
+    // Replace it
+    const target = result.context?.[0]?.textRanges?.[0];
+    if (target) {
+      await client.doc.replace({ target, text: 'NewCo Inc.' });
+    }
+
+    // Save and close
+    await client.doc.save();
+    await client.doc.close();
+    ```
+  </Tab>
+  <Tab title="Python">
+    ```python
+    from superdoc import SuperDocClient
+
+    client = SuperDocClient()
+
+    # Open a document
+    await client.doc.open(doc="./contract.docx")
+
+    # Find text
+    result = await client.doc.find(pattern="ACME Corp")
+
+    # Replace it
+    target = result["context"][0]["textRanges"][0]
+    await client.doc.replace(target=target, text="NewCo Inc.")
+
+    # Save and close
+    await client.doc.save()
+    await client.doc.close()
+    ```
+  </Tab>
+</Tabs>
+
+## AI tool use
+
+The SDKs include tool catalogs for LLM integrations. You can expose document operations as tools for AI agents:
+
+```typescript
+import { chooseSuperDocTools, dispatchSuperDocTool } from '@superdoc-dev/sdk';
+
+// Get tools scoped to the current task
+const tools = chooseSuperDocTools({
+  phase: 'mutate',
+  features: { comments: true, trackChanges: true },
+});
+
+// Dispatch a tool call from your LLM
+const result = await dispatchSuperDocTool(client, toolCall);
+```
+
+{/* SDK_OPERATIONS_START */}
+## Available operations
+
+The SDKs expose all operations from the [Document API](/document-api/overview) plus lifecycle and session commands. The tables below are grouped by category.
+
+#### Lifecycle
+
+| Operation | CLI command | Description |
+| --- | --- | --- |
+| `doc.open` | `open` | Open a document and create a persistent editing session. |
+| `doc.save` | `save` | Save the current session to the original file or a new path. |
+| `doc.close` | `close` | Close the active editing session and clean up resources. |
+
+#### Query
+
+| Operation | CLI command | Description |
+| --- | --- | --- |
+| `doc.find` | `find` | Search the document for nodes matching type, text, or attribute criteria. |
+| `doc.getNode` | `get-node` | Retrieve a single node by target position. |
+| `doc.getNodeById` | `get-node-by-id` | Retrieve a single node by its unique ID. |
+| `doc.info` | `info` | Return document metadata including revision, node count, and capabilities. |
+
+#### Mutation
+
+| Operation | CLI command | Description |
+| --- | --- | --- |
+| `doc.insert` | `insert` | Insert text or inline content at a target position. |
+| `doc.replace` | `replace` | Replace content at a target position with new text or inline content. |
+| `doc.delete` | `delete` | Delete content at a target position. |
+
+#### Format
+
+| Operation | CLI command | Description |
+| --- | --- | --- |
+| `doc.format.bold` | `format bold` | Toggle bold formatting on the target range. |
+| `doc.format.italic` | `format italic` | Toggle italic formatting on the target range. |
+| `doc.format.underline` | `format underline` | Toggle underline formatting on the target range. |
+| `doc.format.strikethrough` | `format strikethrough` | Toggle strikethrough formatting on the target range. |
+
+#### Create
+
+| Operation | CLI command | Description |
+| --- | --- | --- |
+| `doc.create.paragraph` | `create paragraph` | Create a new paragraph at the target position. |
+
+#### Lists
+
+| Operation | CLI command | Description |
+| --- | --- | --- |
+| `doc.lists.list` | `lists list` | List all list nodes in the document, optionally filtered by scope. |
+| `doc.lists.get` | `lists get` | Retrieve a specific list node by target. |
+| `doc.lists.insert` | `lists insert` | Insert a new list at the target position. |
+| `doc.lists.setType` | `lists set-type` | Change the list type (ordered, unordered) of a target list. |
+| `doc.lists.indent` | `lists indent` | Increase the indentation level of a list item. |
+| `doc.lists.outdent` | `lists outdent` | Decrease the indentation level of a list item. |
+| `doc.lists.restart` | `lists restart` | Restart numbering of an ordered list at the target item. |
+| `doc.lists.exit` | `lists exit` | Exit a list context, converting the target item to a paragraph. |
+
+#### Comments
+
+| Operation | CLI command | Description |
+| --- | --- | --- |
+| `doc.comments.add` | `comments add` | Add a new comment thread anchored to a target range. |
+| `doc.comments.edit` | `comments edit` | Edit the content of an existing comment. |
+| `doc.comments.reply` | `comments reply` | Add a reply to an existing comment thread. |
+| `doc.comments.move` | `comments move` | Move a comment thread to a new anchor range. |
+| `doc.comments.resolve` | `comments resolve` | Resolve or unresolve a comment thread. |
+| `doc.comments.remove` | `comments remove` | Remove a comment or reply by ID. |
+| `doc.comments.setInternal` | `comments set-internal` | Toggle the internal (private) flag on a comment thread. |
+| `doc.comments.setActive` | `comments set-active` | Set the active (focused) comment thread for UI highlighting. |
+| `doc.comments.goTo` | `comments go-to` | Scroll the viewport to a comment thread by ID. |
+| `doc.comments.get` | `comments get` | Retrieve a single comment thread by ID. |
+| `doc.comments.list` | `comments list` | List all comment threads in the document. |
+
+#### Track changes
+
+| Operation | CLI command | Description |
+| --- | --- | --- |
+| `doc.trackChanges.list` | `track-changes list` | List all tracked changes in the document. |
+| `doc.trackChanges.get` | `track-changes get` | Retrieve a single tracked change by ID. |
+| `doc.trackChanges.accept` | `track-changes accept` | Accept a tracked change, applying it permanently. |
+| `doc.trackChanges.reject` | `track-changes reject` | Reject a tracked change, reverting it. |
+| `doc.trackChanges.acceptAll` | `track-changes accept-all` | Accept all tracked changes in the document. |
+| `doc.trackChanges.rejectAll` | `track-changes reject-all` | Reject all tracked changes in the document. |
+
+#### Session
+
+| Operation | CLI command | Description |
+| --- | --- | --- |
+| `doc.session.list` | `session list` | List all active editing sessions. |
+| `doc.session.save` | `session save` | Persist the current session state. |
+| `doc.session.close` | `session close` | Close a specific editing session by ID. |
+| `doc.session.setDefault` | `session set-default` | Set the default session for subsequent commands. |
+
+#### Introspection
+
+| Operation | CLI command | Description |
+| --- | --- | --- |
+| `doc.status` | `status` | Show the current session status and document metadata. |
+| `doc.describe` | `describe` | List all available CLI operations and contract metadata. |
+| `doc.describeCommand` | `describe command` | Show detailed metadata for a single CLI operation. |
+{/* SDK_OPERATIONS_END */}
+
+## Related
+
+- [Document API](/document-api/overview) — the in-browser API that defines the operation set
+- [CLI](/document-engine/cli) — use the same operations from the terminal

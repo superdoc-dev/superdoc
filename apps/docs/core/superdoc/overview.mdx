@@ -1,0 +1,43 @@
+---
+title: SuperDoc API
+sidebarTitle: Overview
+keywords: "superdoc class, document editor api, docx sdk methods, word editor instance, document initialization"
+---
+
+The SuperDoc instance is your main interface for controlling the DOCX editor. It handles document loading, editor management, and all interactions.
+
+## Creating an instance
+
+```javascript
+import { SuperDoc } from 'superdoc';
+
+const superdoc = new SuperDoc({
+  selector: '#editor',
+  document: 'contract.docx'
+});
+```
+
+## Instance lifecycle
+
+```javascript
+// 1. Creation
+const superdoc = new SuperDoc(config);
+
+// 2. Ready event
+superdoc.on('ready', () => {
+  // Now safe to use methods
+});
+
+// 3. Runtime operations
+superdoc.setDocumentMode('suggesting');
+superdoc.export();
+
+// 4. Cleanup
+superdoc.destroy();
+```
+
+## API structure
+
+- **[Configuration](/core/superdoc/configuration)** - Settings passed at creation
+- **[Methods](/core/superdoc/methods)** - Control the editor, access properties and types
+- **[Events](/core/superdoc/events)** - Lifecycle and change notifications

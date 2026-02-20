@@ -5,7 +5,7 @@ import { ref, onMounted, onBeforeUnmount, shallowRef, reactive, markRaw, compute
 import { Editor } from '@superdoc/super-editor';
 import { PresentationEditor } from '@core/presentation-editor/index.js';
 import { getStarterExtensions } from '@extensions/index.js';
-import SlashMenu from './slash-menu/SlashMenu.vue';
+import ContextMenu from './context-menu/ContextMenu.vue';
 import { onMarginClickCursorChange } from './cursor-helpers.js';
 import Ruler from './rulers/Ruler.vue';
 import GenericPopover from './popovers/GenericPopover.vue';
@@ -19,6 +19,7 @@ import { getFileObject } from '@superdoc/common';
 import BlankDOCX from '@superdoc/common/data/blank.docx?url';
 import { isHeadless } from '@utils/headless-helpers.js';
 import { isMacOS } from '@core/utilities/isMacOS.js';
+import { DOM_CLASS_NAMES, buildImagePmSelector, buildInlineImagePmSelector } from '@superdoc/painter-dom';
 const emit = defineEmits(['editor-ready', 'editor-click', 'editor-keydown', 'comments-loaded', 'selection-update']);
 
 const DOCX = 'application/vnd.openxmlformats-officedocument.wordprocessingml.document';
@@ -58,6 +59,14 @@ const activeEditor = computed(() => {
 const contextMenuDisabled = computed(() => {
   const active = activeEditor.value;
   return active?.options ? Boolean(active.options.disableContextMenu) : Boolean(props.options.disableContextMenu);
+});
+
+/**
+ * Computed property that determines if web layout mode is active (OOXML ST_View 'web').
+ * @returns {boolean} True if viewOptions.layout is 'web'
+ */
+const isWebLayout = computed(() => {
+  return props.options.viewOptions?.layout === 'web';
 });
 
 /**
@@ -126,6 +135,12 @@ watch(
  * falling back to 8.5in (letter size).
  */
 const containerStyle = computed(() => {
+  // Web layout mode: no min-width, let CSS handle responsive width
+  if (isWebLayout.value) {
+    return {};
+  }
+
+  // Print layout mode: use fixed page dimensions
   // Default: 8.5 inches at 96 DPI = 816px (letter size)
   let maxWidth = 8.5 * 96;
 
@@ -575,19 +590,30 @@ const updateImageResizeOverlay = (event: MouseEvent): void => {
     }
 
     // Check for standalone image fragments (ImageBlock)
-    if (target.classList?.contains('superdoc-image-fragment') && target.hasAttribute('data-image-metadata')) {
+    if (target.classList?.contains(DOM_CLASS_NAMES.IMAGE_FRAGMENT) && target.hasAttribute('data-image-metadata')) {
       imageResizeState.visible = true;
       imageResizeState.imageElement = target as HTMLElement;
       imageResizeState.blockId = target.getAttribute('data-sd-block-id');
       return;
     }
 
-    // Check for inline images (ImageRun inside paragraphs)
-    if (target.classList?.contains('superdoc-inline-image') && target.hasAttribute('data-image-metadata')) {
+    // Check for clip wrapper first (cropped inline image): use wrapper so resizer works on cropped portion
+    if (
+      target.classList?.contains(DOM_CLASS_NAMES.INLINE_IMAGE_CLIP_WRAPPER) &&
+      target.querySelector?.('[data-image-metadata]')
+    ) {
       imageResizeState.visible = true;
       imageResizeState.imageElement = target as HTMLElement;
-      // Inline images don't have block IDs, use pmStart as identifier
       imageResizeState.blockId = target.getAttribute('data-pm-start');
+      return;
+    }
+    // Check for inline images (ImageRun inside paragraphs). When image has clipPath it is wrapped;
+    // use the wrapper so the resizer works on the cropped portion's box.
+    if (target.classList?.contains(DOM_CLASS_NAMES.INLINE_IMAGE) && target.hasAttribute('data-image-metadata')) {
+      imageResizeState.visible = true;
+      const wrapper = target.closest?.(`.${DOM_CLASS_NAMES.INLINE_IMAGE_CLIP_WRAPPER}`) as HTMLElement | null;
+      imageResizeState.imageElement = (wrapper ?? target) as HTMLElement;
+      imageResizeState.blockId = (wrapper ?? target).getAttribute('data-pm-start');
       return;
     }
     target = target.parentElement;
@@ -801,13 +827,16 @@ const initEditor = async ({ content, media = {}, mediaFiles = {}, fonts = {} } =
       if (imageResizeState.visible && imageResizeState.blockId) {
         // Re-acquire element reference (may have been recreated after re-render)
         const escapedBlockId = CSS.escape(imageResizeState.blockId);
-        const newElement = editorElem.value?.querySelector(
-          `.superdoc-image-fragment[data-sd-block-id="${escapedBlockId}"]`,
+        let newElement = editorElem.value?.querySelector(
+          `.${DOM_CLASS_NAMES.IMAGE_FRAGMENT}[data-sd-block-id="${escapedBlockId}"]`,
         );
+        if (!newElement) {
+          // Inline images (and cropped inline use wrapper): re-acquire by pmStart
+          newElement = editorElem.value?.querySelector(buildInlineImagePmSelector(escapedBlockId));
+        }
         if (newElement) {
-          imageResizeState.imageElement = newElement;
+          imageResizeState.imageElement = newElement as HTMLElement;
         } else {
-          // Image virtualized away - hide overlay
           imageResizeState.visible = false;
           imageResizeState.imageElement = null;
           imageResizeState.blockId = null;
@@ -817,15 +846,14 @@ const initEditor = async ({ content, media = {}, mediaFiles = {}, fonts = {} } =
       if (selectedImageState.blockId) {
         const escapedBlockId = CSS.escape(selectedImageState.blockId);
         const refreshed = editorElem.value?.querySelector(
-          `.superdoc-image-fragment[data-sd-block-id="${escapedBlockId}"]`,
+          `.${DOM_CLASS_NAMES.IMAGE_FRAGMENT}[data-sd-block-id="${escapedBlockId}"]`,
         );
         if (refreshed) {
           setSelectedImage(refreshed, selectedImageState.blockId, selectedImageState.pmStart);
         } else {
           // Try pmStart-based re-acquisition (inline images)
           if (selectedImageState.pmStart != null) {
-            const pmSelector = `.superdoc-image-fragment[data-pm-start="${selectedImageState.pmStart}"], .superdoc-inline-image[data-pm-start="${selectedImageState.pmStart}"]`;
-            const pmElement = editorElem.value?.querySelector(pmSelector);
+            const pmElement = editorElem.value?.querySelector(buildImagePmSelector(selectedImageState.pmStart));
             if (pmElement) {
               setSelectedImage(pmElement, selectedImageState.blockId, selectedImageState.pmStart);
               return;
@@ -973,7 +1001,7 @@ const handleMarginClick = (event) => {
   if (target?.classList?.contains('ProseMirror')) return;
 
   // Causes issues with node selection.
-  if (target?.closest?.('.presentation-editor, .superdoc-layout')) {
+  if (target?.closest?.('.presentation-editor, .superdoc-layout, .context-menu')) {
     return;
   }
 
@@ -1040,7 +1068,7 @@ onBeforeUnmount(() => {
 </script>
 
 <template>
-  <div class="super-editor-container" :style="containerStyle">
+  <div class="super-editor-container" :class="{ 'web-layout': isWebLayout }" :style="containerStyle">
     <!-- Ruler: teleport to external container if specified, otherwise render inline -->
     <Teleport v-if="options.rulerContainer && rulersVisible && !!activeEditor" :to="options.rulerContainer">
       <div class="ruler-host" :style="rulerHostStyle">
@@ -1061,8 +1089,8 @@ onBeforeUnmount(() => {
       @mouseleave="handleOverlayHide"
     >
       <div ref="editorElem" class="editor-element super-editor__element" role="presentation"></div>
-      <!-- Single SlashMenu component, no Teleport needed -->
-      <SlashMenu
+      <!-- Single ContextMenu component, no Teleport needed -->
+      <ContextMenu
         v-if="!contextMenuDisabled && editorReady && activeEditor"
         :editor="activeEditor"
         :popoverControls="popoverControls"
@@ -1139,6 +1167,35 @@ onBeforeUnmount(() => {
   position: relative;
   display: flex;
   flex-direction: column;
+}
+
+/* Web layout mode (OOXML ST_View 'web'): content reflows to fit container */
+.super-editor-container.web-layout {
+  min-height: unset;
+  min-width: unset;
+  width: 100%;
+}
+
+.super-editor-container.web-layout .super-editor {
+  width: 100%;
+}
+
+.super-editor-container.web-layout .editor-element {
+  width: 100%;
+}
+
+/* Web layout: ensure editor fills screen width and content reflows (WCAG AA) */
+.super-editor-container.web-layout :deep(.ProseMirror) {
+  width: 100%;
+  max-width: 100%;
+  overflow-wrap: break-word;
+}
+
+.super-editor-container.web-layout :deep(.ProseMirror p),
+.super-editor-container.web-layout :deep(.ProseMirror div),
+.super-editor-container.web-layout :deep(.ProseMirror li) {
+  max-width: 100%;
+  overflow-wrap: break-word;
 }
 
 .ruler-host {

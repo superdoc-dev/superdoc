@@ -10,7 +10,6 @@ import type {
   DrawingBlock,
   DrawingContentSnapshot,
   ImageBlock,
-  ParagraphIndent,
   ShapeGroupChild,
   ShapeGroupDrawing,
   ShapeGroupImageChild,
@@ -78,52 +77,6 @@ export const twipsToPx = (value: number): number => (value / TWIPS_PER_INCH) * P
 export const ptToPx = (pt?: number | null): number | undefined => {
   if (pt == null || !Number.isFinite(pt)) return undefined;
   return pt * PX_PER_PT;
-};
-
-/**
- * Converts a value from pixels to points.
- *
- * @param px - The value in pixels to convert (optional, nullable)
- * @returns The equivalent value in points, or undefined if input is null/undefined/not finite
- *
- * @example
- * ```typescript
- * const points = pxToPt(16); // 12pt (16px at 96 DPI)
- * pxToPt(null); // undefined
- * pxToPt(Infinity); // undefined
- * ```
- */
-export const pxToPt = (px?: number | null): number | undefined => {
-  if (px == null || !Number.isFinite(px)) return undefined;
-  return px / PX_PER_PT;
-};
-
-/**
- * Converts paragraph indent values from twips to pixels.
- *
- * Takes an indent object with potentially four properties (left, right, firstLine, hanging)
- * and converts any finite numeric values from twips to pixels.
- *
- * @param indent - The paragraph indent object with values in twips (optional, nullable)
- * @returns A new indent object with values in pixels, or undefined if no valid values exist
- *
- * @example
- * ```typescript
- * const pxIndent = convertIndentTwipsToPx({ left: 1440, firstLine: 720 });
- * // { left: 96, firstLine: 48 }
- *
- * convertIndentTwipsToPx(null); // undefined
- * convertIndentTwipsToPx({}); // undefined (no valid properties)
- * ```
- */
-export const convertIndentTwipsToPx = (indent?: ParagraphIndent | null): ParagraphIndent | undefined => {
-  if (!indent) return undefined;
-  const result: ParagraphIndent = {};
-  if (isFiniteNumber(indent.left)) result.left = twipsToPx(indent.left);
-  if (isFiniteNumber(indent.right)) result.right = twipsToPx(indent.right);
-  if (isFiniteNumber(indent.firstLine)) result.firstLine = twipsToPx(indent.firstLine);
-  if (isFiniteNumber(indent.hanging)) result.hanging = twipsToPx(indent.hanging);
-  return Object.keys(result).length ? result : undefined;
 };
 
 // ============================================================================
@@ -221,52 +174,6 @@ export const pickNumber = (value: unknown): number | undefined => {
     return Number.isFinite(parsed) ? parsed : undefined;
   }
   return undefined;
-};
-
-/**
- * Validates and normalizes a decimal separator character.
- *
- * Only accepts '.' or ',' as valid decimal separators.
- *
- * @param value - The value to validate as a decimal separator
- * @returns The normalized separator ('.' or ','), or undefined if invalid
- *
- * @example
- * ```typescript
- * pickDecimalSeparator("."); // "."
- * pickDecimalSeparator(","); // ","
- * pickDecimalSeparator(" . "); // "."
- * pickDecimalSeparator(";"); // undefined
- * pickDecimalSeparator(123); // undefined
- * ```
- */
-export const pickDecimalSeparator = (value: unknown): string | undefined => {
-  if (typeof value !== 'string') return undefined;
-  const normalized = value.trim();
-  if (normalized === '.' || normalized === ',') return normalized;
-  return undefined;
-};
-
-/**
- * Extracts and normalizes a language code string.
- *
- * Trims whitespace and converts to lowercase. Returns undefined for empty strings.
- *
- * @param value - The language code to normalize
- * @returns The normalized language code, or undefined if invalid or empty
- *
- * @example
- * ```typescript
- * pickLang("EN-US"); // "en-us"
- * pickLang("  fr  "); // "fr"
- * pickLang(""); // undefined
- * pickLang(123); // undefined
- * ```
- */
-export const pickLang = (value: unknown): string | undefined => {
-  if (typeof value !== 'string') return undefined;
-  const normalized = value.trim().toLowerCase();
-  return normalized || undefined;
 };
 
 /**
@@ -463,78 +370,6 @@ export const toBoolean = (value: unknown): boolean | undefined => {
     if (value === 0) return false;
   }
   return undefined;
-};
-
-/**
- * Checks if a value is explicitly truthy according to specific patterns.
- *
- * Unlike coerceBoolean which returns undefined for unrecognized values, this
- * function always returns a definite boolean. It returns true ONLY for explicitly
- * truthy values, and false for everything else (including unrecognized values).
- *
- * Use this when you need a definite boolean answer and want to treat unknown
- * values as false rather than undefined.
- *
- * Recognized truthy values: true, 1, 'true', '1', 'on'
- *
- * @param value - The value to check for truthiness
- * @returns True if the value matches truthy patterns, false otherwise
- *
- * @example
- * ```typescript
- * isTruthy(true); // true
- * isTruthy(1); // true
- * isTruthy("true"); // true
- * isTruthy("on"); // true
- * isTruthy(false); // false
- * isTruthy(0); // false
- * isTruthy("yes"); // false (not in recognized patterns)
- * isTruthy("maybe"); // false
- * isTruthy(null); // false
- * ```
- */
-export const isTruthy = (value: unknown): boolean => {
-  if (value === true || value === 1) return true;
-  if (typeof value === 'string') {
-    const normalized = value.toLowerCase();
-    if (normalized === 'true' || normalized === '1' || normalized === 'on') {
-      return true;
-    }
-  }
-  return false;
-};
-
-/**
- * Checks if a value is explicitly false according to specific patterns.
- *
- * Similar to isTruthy, this always returns a definite boolean. It returns true
- * ONLY when the value explicitly indicates false, not for unrecognized values.
- *
- * Recognized falsy values: false, 0, 'false', '0', 'off'
- *
- * @param value - The value to check for explicit falseness
- * @returns True if the value matches explicit false patterns, false otherwise
- *
- * @example
- * ```typescript
- * isExplicitFalse(false); // true
- * isExplicitFalse(0); // true
- * isExplicitFalse("false"); // true
- * isExplicitFalse("off"); // true
- * isExplicitFalse(true); // false
- * isExplicitFalse(1); // false
- * isExplicitFalse("no"); // false (not in recognized patterns)
- * isExplicitFalse("maybe"); // false
- * isExplicitFalse(null); // false
- * ```
- */
-export const isExplicitFalse = (value: unknown): boolean => {
-  if (value === false || value === 0) return true;
-  if (typeof value === 'string') {
-    const normalized = value.toLowerCase();
-    return normalized === 'false' || normalized === '0' || normalized === 'off';
-  }
-  return false;
 };
 
 // ============================================================================
@@ -1602,147 +1437,20 @@ export function normalizeTextInsets(
 export const OOXML_Z_INDEX_BASE = 251658240;
 
 // ============================================================================
-// OOXML Element Utilities
+// OOXML Element Utilities (z-index from relativeHeight)
 // ============================================================================
 
 /**
- * Represents an OOXML XML element structure.
- *
- * Used for parsing and traversing OOXML document elements that come from
- * parsed XML structures (e.g., from xml-js or similar parsers).
- *
- * @example
- * ```typescript
- * const element: OoxmlElement = {
- *   name: 'w:p',
- *   attributes: { 'w:rsidR': '00A77B3E' },
- *   elements: [
- *     { name: 'w:pPr', elements: [...] },
- *     { name: 'w:r', elements: [...] }
- *   ]
- * };
- * ```
+ * Coerces relativeHeight from OOXML (number or string) to a finite number.
  */
-export type OoxmlElement = {
-  /** The element name (e.g., 'w:p', 'w:r', 'w:spacing') */
-  name?: string;
-  /** Element attributes as key-value pairs */
-  attributes?: Record<string, unknown>;
-  /** Child elements */
-  elements?: OoxmlElement[];
-};
-
-/**
- * Safely converts an unknown value to an OoxmlElement if it has the expected structure.
- *
- * Validates that the value is a non-null object with at least one of the
- * expected OoxmlElement properties (name, attributes, or elements).
- *
- * @param value - The value to convert
- * @returns The value as an OoxmlElement, or undefined if invalid
- *
- * @example
- * ```typescript
- * asOoxmlElement({ name: 'w:p' }); // { name: 'w:p' }
- * asOoxmlElement({ elements: [] }); // { elements: [] }
- * asOoxmlElement(null); // undefined
- * asOoxmlElement('string'); // undefined
- * asOoxmlElement({}); // undefined (no recognized properties)
- * ```
- */
-export const asOoxmlElement = (value: unknown): OoxmlElement | undefined => {
-  if (!value || typeof value !== 'object') return undefined;
-  const element = value as OoxmlElement;
-  if (element.name == null && element.attributes == null && element.elements == null) return undefined;
-  return element;
-};
-
-/**
- * Finds a direct child element by name within an OOXML element.
- *
- * Searches only immediate children, not nested descendants.
- *
- * @param parent - The parent element to search within
- * @param name - The element name to find (e.g., 'w:pPr', 'w:spacing')
- * @returns The first matching child element, or undefined if not found
- *
- * @example
- * ```typescript
- * const pPr = findOoxmlChild(paragraph, 'w:pPr');
- * const spacing = findOoxmlChild(pPr, 'w:spacing');
- * ```
- */
-export const findOoxmlChild = (parent: OoxmlElement | undefined, name: string): OoxmlElement | undefined => {
-  return parent?.elements?.find((child) => child?.name === name);
-};
-
-/**
- * Gets an attribute value from an OOXML element, handling both prefixed and unprefixed keys.
- *
- * OOXML attributes may be stored with or without the 'w:' namespace prefix.
- * This function checks both variants to ensure robust attribute retrieval.
- *
- * @param element - The element to get the attribute from
- * @param key - The attribute key (can be with or without 'w:' prefix)
- * @returns The attribute value, or undefined if not found
- *
- * @example
- * ```typescript
- * // Element: { attributes: { 'w:before': '240' } }
- * getOoxmlAttribute(element, 'w:before'); // '240'
- * getOoxmlAttribute(element, 'before'); // '240'
- *
- * // Element: { attributes: { 'before': '240' } }
- * getOoxmlAttribute(element, 'w:before'); // '240'
- * ```
- */
-export const getOoxmlAttribute = (element: OoxmlElement | undefined, key: string): unknown => {
-  if (!element?.attributes) return undefined;
-  const attrs = element.attributes as Record<string, unknown>;
-  return attrs[key] ?? attrs[key.startsWith('w:') ? key.slice(2) : `w:${key}`];
-};
-
-/**
- * Parses a value as an integer number, handling both number and string inputs.
- *
- * Used for parsing OOXML attribute values which may be stored as strings.
- *
- * @param value - The value to parse (number, string, or other)
- * @returns The parsed integer, or undefined if parsing fails or value is null/undefined
- *
- * @example
- * ```typescript
- * parseOoxmlNumber(240); // 240
- * parseOoxmlNumber('240'); // 240
- * parseOoxmlNumber('invalid'); // undefined
- * parseOoxmlNumber(null); // undefined
- * ```
- */
-export const parseOoxmlNumber = (value: unknown): number | undefined => {
-  if (value == null) return undefined;
-  const num = typeof value === 'number' ? value : Number.parseInt(String(value), 10);
-  return Number.isFinite(num) ? num : undefined;
-};
-
-/**
- * Checks if an object has its own property (not inherited).
- *
- * Uses Object.prototype.hasOwnProperty.call for safety with objects
- * that may have a null prototype or override hasOwnProperty.
- *
- * @param obj - The object to check
- * @param key - The property key to check for
- * @returns True if the object has its own property with the given key
- *
- * @example
- * ```typescript
- * hasOwnProperty({ a: 1 }, 'a'); // true
- * hasOwnProperty({ a: 1 }, 'b'); // false
- * hasOwnProperty({ a: 1 }, 'toString'); // false (inherited)
- * ```
- */
-export const hasOwnProperty = (obj: Record<string, unknown>, key: string): boolean =>
-  Object.prototype.hasOwnProperty.call(obj, key);
+export function coerceRelativeHeight(raw: unknown): number | undefined {
+  if (typeof raw === 'number' && Number.isFinite(raw)) return raw;
+  if (typeof raw === 'string' && raw.trim() !== '') {
+    const n = Number(raw);
+    if (Number.isFinite(n)) return n;
+  }
+  return undefined;
+}
 
 /**
  * Normalizes z-index from OOXML relativeHeight value.
@@ -1766,8 +1474,50 @@ export const hasOwnProperty = (obj: Record<string, unknown>, key: string): boole
  */
 export function normalizeZIndex(originalAttributes: unknown): number | undefined {
   if (!isPlainObject(originalAttributes)) return undefined;
-  const relativeHeight = originalAttributes.relativeHeight;
-  if (typeof relativeHeight !== 'number') return undefined;
-  // Subtract base to get relative z-index, ensuring non-negative values
+  const relativeHeight = coerceRelativeHeight(originalAttributes.relativeHeight);
+  if (relativeHeight === undefined) return undefined;
   return Math.max(0, relativeHeight - OOXML_Z_INDEX_BASE);
+}
+
+/**
+ * Resolves the CSS z-index for a floating object based on its behindDoc flag
+ * and an OOXML-derived raw value.
+ *
+ * - behindDoc objects always return 0.
+ * - Non-behindDoc objects are clamped to at least 1 so they never share the
+ *   behindDoc sentinel value (0).
+ *
+ * @param behindDoc - Whether the object is behind body text
+ * @param raw - OOXML-derived z-index (from normalizeZIndex or block.zIndex)
+ * @param fallback - Value to use when raw is undefined (default: 1)
+ * @returns Resolved z-index
+ */
+export function resolveFloatingZIndex(behindDoc: boolean, raw: number | undefined, fallback = 1): number {
+  if (behindDoc) return 0;
+  if (raw === undefined) return Math.max(1, fallback);
+  return Math.max(1, raw);
+}
+
+/**
+ * Returns z-index for an image or drawing block.
+ *
+ * We cannot rely on `block.zIndex` only: when the flow-block cache hits, the
+ * paragraph handler reuses cached blocks and never calls the image/shape
+ * converters, so those blocks never get `zIndex` set. This helper uses
+ * `block.zIndex` when present, otherwise derives from
+ * `block.attrs.originalAttributes.relativeHeight` via normalizeZIndex,
+ * otherwise behindDoc ? 0 : 1.
+ *
+ * Rendering policy:
+ * - behindDoc anchored objects always return 0.
+ * - Anchored objects with text wrapping (Square/Tight/Through/TopAndBottom, or
+ *   missing wrap metadata) keep OOXML relativeHeight ordering but are clamped
+ *   to at least 1 (never 0 unless behindDoc=true).
+ * - Front/no-wrap anchored objects (wrap None) also preserve OOXML relativeHeight order.
+ */
+export function getFragmentZIndex(block: ImageBlock | DrawingBlock): number {
+  const attrs = block.attrs as { originalAttributes?: unknown } | undefined;
+  const raw = typeof block.zIndex === 'number' ? block.zIndex : normalizeZIndex(attrs?.originalAttributes);
+
+  return resolveFloatingZIndex(block.anchor?.behindDoc === true, raw);
 }

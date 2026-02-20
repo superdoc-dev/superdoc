@@ -6,7 +6,6 @@
  * @property {Object} COMMENTS_IDS_XML_DEF - XML definition for comment identifiers.
  * @property {Object} DOCUMENT_RELS_XML_DEF - XML definition for document relationships.
  * @property {Object} PEOPLE_XML_DEF - XML definition for people-related information.
- * @property {Object} CONTENT_TYPES - XML definition for custom settings.
  */
 
 export const DEFAULT_DOCX_DEFS = {
@@ -745,6 +744,66 @@ export const DEFAULT_LINKED_STYLES = {
       },
     ],
   },
+  Hyperlink: {
+    type: 'element',
+    name: 'w:style',
+    attributes: {
+      'w:styleId': 'Hyperlink',
+      'w:type': 'character',
+    },
+    elements: [
+      {
+        type: 'element',
+        name: 'w:name',
+        attributes: {
+          'w:val': 'Hyperlink',
+        },
+      },
+      {
+        type: 'element',
+        name: 'w:basedOn',
+        attributes: {
+          'w:val': 'DefaultParagraphFont',
+        },
+      },
+      {
+        type: 'element',
+        name: 'w:uiPriority',
+        attributes: {
+          'w:val': '99',
+        },
+      },
+      { type: 'element', name: 'w:unhideWhenUsed' },
+      {
+        type: 'element',
+        name: 'w:rsid',
+        attributes: {
+          'w:val': '00D87CC4',
+        },
+      },
+      {
+        type: 'element',
+        name: 'w:rPr',
+        elements: [
+          {
+            type: 'element',
+            name: 'w:color',
+            attributes: {
+              'w:themeColor': 'hyperlink',
+              'w:val': '467886',
+            },
+          },
+          {
+            type: 'element',
+            name: 'w:u',
+            attributes: {
+              'w:val': 'single',
+            },
+          },
+        ],
+      },
+    ],
+  },
 };
 
 export const COMMENTS_XML_DEF = {
@@ -1198,155 +1257,6 @@ export const PEOPLE_XML_DEF = {
   ],
 };
 
-export const CONTENT_TYPES = {
-  declaration: {
-    attributes: {
-      version: '1.0',
-      encoding: 'UTF-8',
-      standalone: 'yes',
-    },
-  },
-  elements: [
-    {
-      type: 'element',
-      name: 'Types',
-      attributes: {
-        xmlns: 'http://schemas.openxmlformats.org/package/2006/content-types',
-      },
-      elements: [
-        {
-          type: 'element',
-          name: 'Default',
-          attributes: {
-            Extension: 'rels',
-            ContentType: 'application/vnd.openxmlformats-package.relationships+xml',
-          },
-        },
-        {
-          type: 'element',
-          name: 'Default',
-          attributes: {
-            Extension: 'xml',
-            ContentType: 'application/xml',
-          },
-        },
-        {
-          type: 'element',
-          name: 'Override',
-          attributes: {
-            PartName: '/word/document.xml',
-            ContentType: 'application/vnd.openxmlformats-officedocument.wordprocessingml.document.main+xml',
-          },
-        },
-        {
-          type: 'element',
-          name: 'Override',
-          attributes: {
-            PartName: '/word/styles.xml',
-            ContentType: 'application/vnd.openxmlformats-officedocument.wordprocessingml.styles+xml',
-          },
-        },
-        {
-          type: 'element',
-          name: 'Override',
-          attributes: {
-            PartName: '/word/settings.xml',
-            ContentType: 'application/vnd.openxmlformats-officedocument.wordprocessingml.settings+xml',
-          },
-        },
-        {
-          type: 'element',
-          name: 'Override',
-          attributes: {
-            PartName: '/word/webSettings.xml',
-            ContentType: 'application/vnd.openxmlformats-officedocument.wordprocessingml.webSettings+xml',
-          },
-        },
-        {
-          type: 'element',
-          name: 'Override',
-          attributes: {
-            PartName: '/word/comments.xml',
-            ContentType: 'application/vnd.openxmlformats-officedocument.wordprocessingml.comments+xml',
-          },
-        },
-        {
-          type: 'element',
-          name: 'Override',
-          attributes: {
-            PartName: '/word/commentsExtended.xml',
-            ContentType: 'application/vnd.openxmlformats-officedocument.wordprocessingml.commentsExtended+xml',
-          },
-        },
-        {
-          type: 'element',
-          name: 'Override',
-          attributes: {
-            PartName: '/word/commentsIds.xml',
-            ContentType: 'application/vnd.openxmlformats-officedocument.wordprocessingml.commentsIds+xml',
-          },
-        },
-        {
-          type: 'element',
-          name: 'Override',
-          attributes: {
-            PartName: '/word/commentsExtensible.xml',
-            ContentType: 'application/vnd.openxmlformats-officedocument.wordprocessingml.commentsExtensible+xml',
-          },
-        },
-        {
-          type: 'element',
-          name: 'Override',
-          attributes: {
-            PartName: '/word/fontTable.xml',
-            ContentType: 'application/vnd.openxmlformats-officedocument.wordprocessingml.fontTable+xml',
-          },
-        },
-        {
-          type: 'element',
-          name: 'Override',
-          attributes: {
-            PartName: '/word/people.xml',
-            ContentType: 'application/vnd.openxmlformats-officedocument.wordprocessingml.people+xml',
-          },
-        },
-        {
-          type: 'element',
-          name: 'Override',
-          attributes: {
-            PartName: '/word/theme/theme1.xml',
-            ContentType: 'application/vnd.openxmlformats-officedocument.theme+xml',
-          },
-        },
-        {
-          type: 'element',
-          name: 'Override',
-          attributes: {
-            PartName: '/docProps/core.xml',
-            ContentType: 'application/vnd.openxmlformats-package.core-properties+xml',
-          },
-        },
-        {
-          type: 'element',
-          name: 'Override',
-          attributes: {
-            PartName: '/docProps/app.xml',
-            ContentType: 'application/vnd.openxmlformats-officedocument.extended-properties+xml',
-          },
-        },
-        {
-          type: 'element',
-          name: 'Override',
-          attributes: {
-            PartName: '/word/numbering.xml',
-            ContentType: 'application/vnd.openxmlformats-officedocument.wordprocessingml.numbering+xml',
-          },
-        },
-      ],
-    },
-  ],
-};
-
 /**
  * @type {CommentsXmlDefinitions}
  */
@@ -1357,5 +1267,4 @@ export const COMMENTS_XML_DEFINITIONS = {
   COMMENTS_IDS_XML_DEF,
   DOCUMENT_RELS_XML_DEF,
   PEOPLE_XML_DEF,
-  CONTENT_TYPES,
 };

@@ -70,7 +70,7 @@ import {
   DEFAULT_LIST_HANGING_PX as DEFAULT_LIST_HANGING,
   SPACE_SUFFIX_GAP_PX,
 } from '@superdoc/common/layout-constants';
-import { resolveListTextStartPx } from '@superdoc/common/list-marker-utils';
+import { resolveListTextStartPx, type MinimalMarker } from '@superdoc/common/list-marker-utils';
 import { calculateRotatedBounds, normalizeRotation } from '@superdoc/geometry-utils';
 import { toCssFontFamily } from '@superdoc/font-utils';
 export { installNodeCanvasPolyfill } from './setup.js';
@@ -157,6 +157,23 @@ const FIELD_ANNOTATION_PILL_PADDING = 8; // Border (2px each side) + padding (2p
 const FIELD_ANNOTATION_LINE_HEIGHT_MULTIPLIER = 1.2; // Line height multiplier for pill height
 const FIELD_ANNOTATION_VERTICAL_PADDING = 6; // Vertical padding/border for pill height
 const DEFAULT_FIELD_ANNOTATION_FONT_SIZE = 16; // Default font size for field annotations
+const DEFAULT_PARAGRAPH_FONT_SIZE = 12;
+const DEFAULT_PARAGRAPH_FONT_FAMILY = 'Arial';
+
+const isValidFontSize = (value: unknown): value is number =>
+  typeof value === 'number' && Number.isFinite(value) && value > 0;
+
+const normalizeFontSize = (value: unknown, fallback = DEFAULT_PARAGRAPH_FONT_SIZE): number => {
+  if (isValidFontSize(value)) return value;
+  if (typeof value === 'string') {
+    const parsed = parseFloat(value);
+    if (isValidFontSize(parsed)) return parsed;
+  }
+  return fallback;
+};
+
+const normalizeFontFamily = (value: unknown, fallback = DEFAULT_PARAGRAPH_FONT_FAMILY): string =>
+  typeof value === 'string' && value.trim().length > 0 ? value : fallback;
 
 /**
  * Tab stop in pixel coordinates for measurement.
@@ -353,10 +370,16 @@ function calculateTypographyMetrics(
   descent: number;
   lineHeight: number;
 } {
+  const resolvedFontSize = normalizeFontSize(fontSize);
   let ascent: number;
   let descent: number;
 
-  if (fontInfo) {
+  if (
+    fontInfo &&
+    isValidFontSize(fontInfo.fontSize) &&
+    typeof fontInfo.fontFamily === 'string' &&
+    fontInfo.fontFamily.trim().length > 0
+  ) {
     // Use actual font metrics from Canvas API for accurate measurements
     const ctx = getCanvasContext();
     const metrics = getFontMetrics(ctx, fontInfo, measurementConfig.mode, measurementConfig.fonts);
@@ -364,18 +387,11 @@ function calculateTypographyMetrics(
     descent = roundValue(metrics.descent);
   } else {
     // Fallback approximations for empty paragraphs or missing font info
-    ascent = roundValue(fontSize * 0.8);
-    descent = roundValue(fontSize * 0.2);
+    ascent = roundValue(resolvedFontSize * 0.8);
+    descent = roundValue(resolvedFontSize * 0.2);
   }
 
-  // Calculate base line height using Word's default 1.15 line spacing multiplier.
-  // Word 2007+ uses 1.15× font size as "single" line spacing, not just ascent+descent.
-  // The Canvas TextMetrics API doesn't expose lineGap, so we use this multiplier.
-  // For 12pt (16px) font: 16 * 1.15 = 18.4px - matches Word exactly.
-  // Also clamp to actual glyph bounds (ascent + descent) to prevent overlap/clipping
-  // for fonts with unusually tall glyphs that exceed the 1.15 multiplier.
-  const baseLineHeight = Math.max(fontSize * WORD_SINGLE_LINE_SPACING_MULTIPLIER, ascent + descent);
-  const lineHeight = roundValue(resolveLineHeight(spacing, baseLineHeight));
+  const lineHeight = resolveLineHeight(spacing, fontSize, ascent + descent);
 
   return {
     ascent,
@@ -413,22 +429,28 @@ function calculateEmptyParagraphMetrics(
   descent: number;
   lineHeight: number;
 } {
+  const resolvedFontSize = normalizeFontSize(fontSize);
   let ascent: number;
   let descent: number;
 
-  if (fontInfo) {
+  if (
+    fontInfo &&
+    isValidFontSize(fontInfo.fontSize) &&
+    typeof fontInfo.fontFamily === 'string' &&
+    fontInfo.fontFamily.trim().length > 0
+  ) {
     const ctx = getCanvasContext();
     const metrics = getFontMetrics(ctx, fontInfo, measurementConfig.mode, measurementConfig.fonts);
     ascent = roundValue(metrics.ascent);
     descent = roundValue(metrics.descent);
   } else {
-    ascent = roundValue(fontSize * 0.8);
-    descent = roundValue(fontSize * 0.2);
+    ascent = roundValue(resolvedFontSize * 0.8);
+    descent = roundValue(resolvedFontSize * 0.2);
   }
 
   // Word treats empty paragraphs as a single font-sized line unless line spacing is explicitly set.
-  const baseLineHeight = Math.max(fontSize, ascent + descent);
-  const lineHeight = roundValue(resolveLineHeight(spacing, baseLineHeight));
+  const maxLineHeight = Math.max(resolvedFontSize, ascent + descent);
+  const lineHeight = roundValue(resolveLineHeight(spacing, resolvedFontSize, maxLineHeight));
 
   return {
     ascent,
@@ -442,8 +464,8 @@ function calculateEmptyParagraphMetrics(
  */
 function getFontInfoFromRun(run: TextRun): FontInfo {
   return {
-    fontFamily: run.fontFamily,
-    fontSize: run.fontSize,
+    fontFamily: normalizeFontFamily(run.fontFamily),
+    fontSize: normalizeFontSize(run.fontSize),
     bold: run.bold,
     italic: run.italic,
   };
@@ -462,6 +484,13 @@ function updateMaxFontInfo(
     return getFontInfoFromRun(newRun);
   }
   return currentMaxInfo;
+}
+
+/**
+ * Type guard to check if a run is a text run (kind is optional and defaults to 'text').
+ */
+function isTextRun(run: Run): run is TextRun {
+  return run.kind === 'text' || run.kind === undefined;
 }
 
 /**
@@ -506,6 +535,17 @@ const isEmptyTextRun = (run: Run): run is TextRun => {
 function isFieldAnnotationRun(run: Run): run is FieldAnnotationRun {
   return run.kind === 'fieldAnnotation';
 }
+
+const normalizeRunsForMeasurement = (runs: Run[], fallbackFontSize: number, fallbackFontFamily: string): Run[] =>
+  runs.map((run) => {
+    if (run.kind && run.kind !== 'text') return run;
+    if (!('text' in run)) return run;
+    const textRun = run as TextRun;
+    const fontSize = normalizeFontSize(textRun.fontSize, fallbackFontSize);
+    const fontFamily = normalizeFontFamily(textRun.fontFamily, fallbackFontFamily);
+    if (fontSize === textRun.fontSize && fontFamily === textRun.fontFamily) return run;
+    return { ...textRun, fontSize, fontFamily };
+  });
 
 /**
  * Information about a single run in a tab alignment group.
@@ -715,6 +755,49 @@ async function measureParagraphBlock(block: ParagraphBlock, maxWidth: number): P
     | WordParagraphLayoutOutput
     | undefined;
 
+  // Compute fallback font size from the first text run BEFORE marker measurement.
+  // This ensures the marker uses the paragraph's actual font context when its own fontSize is missing.
+  const firstTextRunWithSize = block.runs.find(
+    (run): run is TextRun => isTextRun(run) && 'fontSize' in run && run.fontSize != null,
+  );
+  const fallbackFontSize = normalizeFontSize(firstTextRunWithSize?.fontSize, DEFAULT_PARAGRAPH_FONT_SIZE);
+  const firstTextRunWithFont = block.runs.find(
+    (run): run is TextRun => isTextRun(run) && typeof run.fontFamily === 'string' && run.fontFamily.trim().length > 0,
+  );
+  const fallbackFontFamily = firstTextRunWithFont?.fontFamily ?? DEFAULT_PARAGRAPH_FONT_FAMILY;
+  const normalizedRuns = normalizeRunsForMeasurement(block.runs as Run[], fallbackFontSize, fallbackFontFamily);
+
+  const markerInfo: ParagraphMeasure['marker'] | undefined = wordLayout?.marker
+    ? (() => {
+        const markerRun = {
+          fontFamily: toCssFontFamily(wordLayout.marker.run.fontFamily) ?? wordLayout.marker.run.fontFamily,
+          fontSize: wordLayout.marker.run.fontSize ?? fallbackFontSize,
+          bold: wordLayout.marker.run.bold,
+          italic: wordLayout.marker.run.italic,
+        };
+        const { font: markerFont } = buildFontString(markerRun);
+        const markerText = wordLayout.marker.markerText ?? '';
+        const glyphWidth = markerText ? measureText(markerText, markerFont, ctx) : 0;
+        const gutter =
+          typeof wordLayout.marker.gutterWidthPx === 'number' &&
+          isFinite(wordLayout.marker.gutterWidthPx) &&
+          wordLayout.marker.gutterWidthPx >= 0
+            ? wordLayout.marker.gutterWidthPx
+            : LIST_MARKER_GAP;
+
+        // Marker box should match Word's box width when provided; otherwise fall back to glyph + gap.
+        const markerBoxWidth = Math.max(0, glyphWidth + LIST_MARKER_GAP);
+
+        return {
+          markerWidth: markerBoxWidth,
+          markerTextWidth: glyphWidth,
+          indentLeft: wordLayout.indentLeftPx ?? 0,
+          // For tab sizing in the renderer: expose gutter for word-layout lists
+          gutterWidth: gutter,
+        } as ParagraphMeasure['marker'];
+      })()
+    : undefined;
+
   /**
    * Floating-point tolerance for line breaking decisions (0.5px).
    *
@@ -788,27 +871,20 @@ async function measureParagraphBlock(block: ParagraphBlock, maxWidth: number): P
   // Note: wordLayout.marker.justification (from lvlJc) describes text alignment WITHIN
   // the marker box (left/center/right), NOT whether the marker takes in-flow space.
   let initialAvailableWidth: number;
-  // Some producers provide `marker.textStartX` without setting top-level `textStartPx`.
-  // Both values represent the same concept: where the first-line text begins after the marker/tab.
-  // IMPORTANT: Priority must match the painter (renderer.ts) which prefers marker.textStartX
-  // because it's consistent with marker.markerX positioning. Mismatched priority causes justify overflow.
+  // Shared helper is the canonical source for list text-start geometry.
+  // Keep an explicit top-level fallback for producers that only provide textStartPx.
   const rawTextStartPx = (wordLayout as { textStartPx?: unknown } | undefined)?.textStartPx;
-  const markerTextStartX = (wordLayout as { marker?: { textStartX?: unknown } } | undefined)?.marker?.textStartX;
   const textStartPx =
-    typeof markerTextStartX === 'number' && Number.isFinite(markerTextStartX)
-      ? markerTextStartX
-      : typeof rawTextStartPx === 'number' && Number.isFinite(rawTextStartPx)
-        ? rawTextStartPx
-        : undefined;
+    typeof rawTextStartPx === 'number' && Number.isFinite(rawTextStartPx) ? rawTextStartPx : undefined;
   const resolvedTextStartPx = resolveListTextStartPx(
     wordLayout,
     indentLeft,
     firstLine,
     hanging,
-    (markerText, marker) => {
+    (markerText: string, marker: MinimalMarker) => {
       const markerRun = {
         fontFamily: toCssFontFamily(marker.run?.fontFamily) ?? marker.run?.fontFamily ?? 'Arial',
-        fontSize: marker.run?.fontSize ?? 16,
+        fontSize: marker.run?.fontSize ?? fallbackFontSize,
         bold: marker.run?.bold ?? false,
         italic: marker.run?.italic ?? false,
       };
@@ -868,9 +944,9 @@ async function measureParagraphBlock(block: ParagraphBlock, maxWidth: number): P
   }
 
   const emptyParagraphRun =
-    block.runs.length === 1 && isEmptyTextRun(block.runs[0] as Run) ? (block.runs[0] as TextRun) : null;
+    normalizedRuns.length === 1 && isEmptyTextRun(normalizedRuns[0] as Run) ? (normalizedRuns[0] as TextRun) : null;
   if (emptyParagraphRun) {
-    const fontSize = emptyParagraphRun.fontSize ?? 12;
+    const fontSize = emptyParagraphRun.fontSize ?? DEFAULT_PARAGRAPH_FONT_SIZE;
     const metrics = calculateEmptyParagraphMetrics(fontSize, spacing, getFontInfoFromRun(emptyParagraphRun));
     const emptyLine: Line = {
       fromRun: 0,
@@ -887,11 +963,12 @@ async function measureParagraphBlock(block: ParagraphBlock, maxWidth: number): P
       kind: 'paragraph',
       lines,
       totalHeight: metrics.lineHeight,
+      ...(markerInfo ? { marker: markerInfo } : {}),
     };
   }
 
-  if (block.runs.length === 0) {
-    const metrics = calculateEmptyParagraphMetrics(12, spacing);
+  if (normalizedRuns.length === 0) {
+    const metrics = calculateEmptyParagraphMetrics(DEFAULT_PARAGRAPH_FONT_SIZE, spacing);
     const emptyLine: Line = {
       fromRun: 0,
       fromChar: 0,
@@ -907,18 +984,10 @@ async function measureParagraphBlock(block: ParagraphBlock, maxWidth: number): P
       kind: 'paragraph',
       lines,
       totalHeight: metrics.lineHeight,
+      ...(markerInfo ? { marker: markerInfo } : {}),
     };
   }
 
-  /**
-   * Find the first text run with a valid font size to use as fallback for line breaks.
-   * This ensures leading line breaks (before any text) use the correct font size for height calculation.
-   */
-  const firstTextRunWithSize = block.runs.find(
-    (run): run is TextRun => 'text' in run && 'fontSize' in run && typeof run.fontSize === 'number',
-  );
-  /** Fallback font size for empty lines or leading line breaks. */
-  const fallbackFontSize = firstTextRunWithSize?.fontSize ?? 12;
   /** Fallback font info for accurate typography metrics on leading line breaks. */
   const fallbackFontInfo = firstTextRunWithSize ? getFontInfoFromRun(firstTextRunWithSize) : undefined;
 
@@ -1077,7 +1146,7 @@ async function measureParagraphBlock(block: ParagraphBlock, maxWidth: number): P
 
   // Expand runs to handle inline newlines as explicit break runs
   const runsToProcess: Run[] = [];
-  for (const run of block.runs as Run[]) {
+  for (const run of normalizedRuns as Run[]) {
     if ((run as TextRun).text && typeof (run as TextRun).text === 'string' && (run as TextRun).text.includes('\n')) {
       const textRun = run as TextRun;
       const segments = textRun.text.split('\n');
@@ -2251,7 +2320,9 @@ async function measureParagraphBlock(block: ParagraphBlock, maxWidth: number): P
   }
 
   if (!currentLine && lines.length === 0) {
-    const uiDisplayFallbackFontSize = (block.runs[0]?.kind === 'text' ? block.runs[0].fontSize : undefined) ?? 12;
+    const uiDisplayFallbackFontSize =
+      (normalizedRuns[0]?.kind === 'text' ? (normalizedRuns[0] as TextRun).fontSize : undefined) ??
+      DEFAULT_PARAGRAPH_FONT_SIZE;
     const metrics = calculateTypographyMetrics(uiDisplayFallbackFontSize, spacing);
     const fallbackLine: Line = {
       fromRun: 0,
@@ -2278,37 +2349,6 @@ async function measureParagraphBlock(block: ParagraphBlock, maxWidth: number): P
   }
 
   const totalHeight = lines.reduce((sum, line) => sum + line.lineHeight, 0);
-
-  let markerInfo: ParagraphMeasure['marker'];
-
-  if (wordLayout?.marker) {
-    const markerRun = {
-      fontFamily: toCssFontFamily(wordLayout.marker.run.fontFamily) ?? wordLayout.marker.run.fontFamily,
-      fontSize: wordLayout.marker.run.fontSize,
-      bold: wordLayout.marker.run.bold,
-      italic: wordLayout.marker.run.italic,
-    };
-    const { font: markerFont } = buildFontString(markerRun);
-    const markerText = wordLayout.marker.markerText ?? '';
-    const glyphWidth = markerText ? measureText(markerText, markerFont, ctx) : 0;
-    const gutter =
-      typeof wordLayout.marker.gutterWidthPx === 'number' &&
-      isFinite(wordLayout.marker.gutterWidthPx) &&
-      wordLayout.marker.gutterWidthPx >= 0
-        ? wordLayout.marker.gutterWidthPx
-        : LIST_MARKER_GAP;
-
-    // Marker box should match Word's box width when provided; otherwise fall back to glyph + gap.
-    const markerBoxWidth = Math.max(wordLayout.marker.markerBoxWidthPx ?? 0, glyphWidth + LIST_MARKER_GAP);
-
-    markerInfo = {
-      markerWidth: markerBoxWidth,
-      markerTextWidth: glyphWidth,
-      indentLeft: wordLayout.indentLeftPx ?? 0,
-      // For tab sizing in the renderer: expose gutter for word-layout lists
-      gutterWidth: gutter,
-    } as ParagraphMeasure['marker'];
-  }
 
   return {
     kind: 'paragraph',
@@ -2407,7 +2447,6 @@ function resolveTableWidth(attrs: TableBlock['attrs'], maxWidth: number): number
 
 async function measureTableBlock(block: TableBlock, constraints: MeasureConstraints): Promise<TableMeasure> {
   const maxWidth = typeof constraints === 'number' ? constraints : constraints.maxWidth;
-
   // Resolve percentage or explicit pixel table width
   const resolvedTableWidth = resolveTableWidth(block.attrs, maxWidth);
 
@@ -2477,8 +2516,11 @@ async function measureTableBlock(block: TableBlock, constraints: MeasureConstrai
 
     return scaled;
   };
-  // Determine actual column count from table structure
-  const maxCellCount = Math.max(1, Math.max(...block.rows.map((r) => r.cells.length)));
+  // Determine actual column count from table structure (accounting for colspan)
+  const maxCellCount = Math.max(
+    1,
+    Math.max(...block.rows.map((r) => r.cells.reduce((sum, cell) => sum + (cell.colSpan ?? 1), 0))),
+  );
 
   // Effective target width: use resolvedTableWidth if set (from percentage or explicit px),
   // but never exceed maxWidth (available column space)
@@ -2496,9 +2538,17 @@ async function measureTableBlock(block: TableBlock, constraints: MeasureConstrai
     // For tables with explicit/percentage width or fixed layout, scale to target width
     if (hasExplicitWidth || hasFixedLayout) {
       const totalWidth = columnWidths.reduce((a, b) => a + b, 0);
+      const tableWidthType = (block.attrs?.tableWidth as TableWidthAttr | undefined)?.type;
+      const shouldScaleDown = totalWidth > effectiveTargetWidth;
+      const shouldScaleUp =
+        totalWidth < effectiveTargetWidth &&
+        effectiveTargetWidth > 0 &&
+        (tableWidthType === 'pct' || (hasExplicitWidth && !hasFixedLayout));
+
       // Scale to effectiveTargetWidth (resolved percentage or explicit width)
-      // This handles both scaling down (too wide) and scaling up (percentage-based)
-      if (totalWidth !== effectiveTargetWidth && effectiveTargetWidth > 0) {
+      // - Always scale down if too wide
+      // - Only scale up for percentage widths or auto-layout tables
+      if ((shouldScaleDown || shouldScaleUp) && effectiveTargetWidth > 0 && totalWidth > 0) {
         const scale = effectiveTargetWidth / totalWidth;
         columnWidths = columnWidths.map((w) => Math.max(1, Math.round(w * scale)));
         // Normalize to exact target width (handle rounding errors)
@@ -2522,7 +2572,10 @@ async function measureTableBlock(block: TableBlock, constraints: MeasureConstrai
         columnWidths = columnWidths.slice(0, maxCellCount);
       }
 
-      // Scale proportionally if total width exceeds effective target width
+      // Scale down if total width exceeds available space (prevent overflow).
+      // Auto-width tables (w:tblW type="auto") size to their grid/content in Word.
+      // Do NOT scale up — tables that fill the page do so because their grid columns
+      // already sum to the page width, not because of scaling.
       const totalWidth = columnWidths.reduce((a, b) => a + b, 0);
       if (totalWidth > effectiveTargetWidth) {
         columnWidths = scaleColumnWidths(columnWidths, effectiveTargetWidth);
@@ -2590,9 +2643,9 @@ async function measureTableBlock(block: TableBlock, constraints: MeasureConstrai
       }
 
       // Get cell padding for height calculation
-      const cellPadding = cell.attrs?.padding ?? { top: 2, left: 4, right: 4, bottom: 2 };
-      const paddingTop = cellPadding.top ?? 2;
-      const paddingBottom = cellPadding.bottom ?? 2;
+      const cellPadding = cell.attrs?.padding ?? { top: 0, left: 4, right: 4, bottom: 0 };
+      const paddingTop = cellPadding.top ?? 0;
+      const paddingBottom = cellPadding.bottom ?? 0;
       const paddingLeft = cellPadding.left ?? 4;
       const paddingRight = cellPadding.right ?? 4;
 
@@ -2620,7 +2673,7 @@ async function measureTableBlock(block: TableBlock, constraints: MeasureConstrai
        * ```
        * cell.blocks = [paragraph1, paragraph2, paragraph3]
        * contentHeight = para1.height + para2.height + para3.height
-       * totalCellHeight = contentHeight + 2 (top) + 2 (bottom)
+       * totalCellHeight = contentHeight;
        * ```
        */
       const blockMeasures: Measure[] = [];
@@ -2646,12 +2699,20 @@ async function measureTableBlock(block: TableBlock, constraints: MeasureConstrai
 
         contentHeight += blockHeight;
 
-        // Add paragraph spacing.after to content height for all paragraphs.
-        // Word applies spacing.after even to the last paragraph in a cell, creating space at the bottom.
+        // Add paragraph spacing.after to content height.
+        // For the last paragraph, Word absorbs spacing.after into cell bottom padding —
+        // so only add the excess beyond what the padding already provides.
+        const isLastBlock = blockIndex === cellBlocks.length - 1;
         if (block.kind === 'paragraph') {
           const spacingAfter = (block as ParagraphBlock).attrs?.spacing?.after;
           if (typeof spacingAfter === 'number' && spacingAfter > 0) {
-            contentHeight += spacingAfter;
+            if (isLastBlock) {
+              // Only add the portion not absorbed by cell bottom padding
+              const excess = Math.max(0, spacingAfter - paddingBottom);
+              contentHeight += excess;
+            } else {
+              contentHeight += spacingAfter;
+            }
           }
         }
       }
@@ -2961,17 +3022,19 @@ async function measureListBlock(block: ListBlock, constraints: MeasureConstraint
     if ((wordLayout as WordParagraphLayoutOutput | undefined)?.marker) {
       // Track B: Use wordLayout from @superdoc/word-layout when available
       const marker = (wordLayout as WordParagraphLayoutOutput).marker!;
+      // Fall back to paragraph's primary run fontSize if marker fontSize is missing
+      const paragraphFallbackFontSize = getPrimaryRun(item.paragraph).fontSize ?? DEFAULT_PARAGRAPH_FONT_SIZE;
       const markerFontRun: TextRun = {
         text: marker.markerText,
         fontFamily: toCssFontFamily(marker.run.fontFamily) ?? marker.run.fontFamily,
-        fontSize: marker.run.fontSize,
+        fontSize: marker.run.fontSize ?? paragraphFallbackFontSize,
         bold: marker.run.bold,
         italic: marker.run.italic,
         letterSpacing: marker.run.letterSpacing,
       };
       const { font: markerFont } = buildFontString(markerFontRun);
       markerTextWidth = marker.markerText ? measureText(marker.markerText, markerFont, ctx) : 0;
-      markerWidth = marker.markerBoxWidthPx;
+      markerWidth = 0;
       indentLeft = (wordLayout as WordParagraphLayoutOutput).indentLeftPx ?? 0;
     } else {
       // Fallback: legacy behavior for backwards compatibility
@@ -3204,28 +3267,17 @@ const appendSegment = (
   segments.push({ runIndex, fromChar, toChar, width, x });
 };
 
-const resolveLineHeight = (spacing: ParagraphSpacing | undefined, baseLineHeight: number): number => {
-  if (!spacing || spacing.line == null || spacing.line <= 0) {
-    return baseLineHeight;
+const resolveLineHeight = (spacing: ParagraphSpacing | undefined, fontSize: number, maxHeight: number = -1): number => {
+  let computedHeight = spacing?.line ?? WORD_SINGLE_LINE_SPACING_MULTIPLIER;
+  if (spacing?.lineUnit === 'multiplier') {
+    computedHeight = computedHeight * fontSize;
   }
 
-  const raw = spacing.line;
-  const isAuto = spacing.lineRule === 'auto';
-  const treatAsMultiplier = (isAuto || spacing.lineRule == null) && raw > 0 && (isAuto || raw <= 10);
-
-  if (treatAsMultiplier) {
-    return raw * baseLineHeight;
+  const lineRule = spacing?.lineRule ?? 'auto';
+  if (['atLeast', 'auto'].includes(lineRule)) {
+    return Math.max(computedHeight, maxHeight, WORD_SINGLE_LINE_SPACING_MULTIPLIER * fontSize);
   }
-
-  if (spacing.lineRule === 'exact') {
-    return raw;
-  }
-
-  if (spacing.lineRule === 'atLeast') {
-    return Math.max(baseLineHeight, raw);
-  }
-
-  return Math.max(baseLineHeight, raw);
+  return computedHeight;
 };
 
 const sanitizePositive = (value: number | undefined): number =>
@@ -3292,8 +3344,8 @@ const measureDropCap = (
 
   // Calculate height based on the number of lines the drop cap should span
   // This uses the base line height calculation from the paragraph's spacing
-  const baseLineHeight = resolveLineHeight(spacing, run.fontSize * WORD_SINGLE_LINE_SPACING_MULTIPLIER);
-  const height = roundValue(baseLineHeight * lines);
+  const lineHeight = resolveLineHeight(spacing, run.fontSize);
+  const height = roundValue(lineHeight * lines);
 
   return {
     width,

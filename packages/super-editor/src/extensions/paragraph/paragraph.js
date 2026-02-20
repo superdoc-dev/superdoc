@@ -1,8 +1,8 @@
 import { OxmlNode, Attribute } from '@core/index.js';
-import { TextSelection } from 'prosemirror-state';
+import { Plugin, TextSelection } from 'prosemirror-state';
 import { ListHelpers } from '@helpers/list-numbering-helpers.js';
 import { splitBlock } from '@core/commands/splitBlock.js';
-import { removeNumberingProperties } from '@core/commands/removeNumberingProperties.js';
+import { removeNumberingProperties, isVisuallyEmptyParagraph } from '@core/commands/removeNumberingProperties.js';
 import { isList } from '@core/commands/list-helpers';
 import { findParentNode } from '@helpers/index.js';
 import { InputRule } from '@core/InputRule.js';
@@ -10,9 +10,52 @@ import { toggleList } from '@core/commands/index.js';
 import { restartNumbering } from '@core/commands/restartNumbering.js';
 import { ParagraphNodeView } from './ParagraphNodeView.js';
 import { createNumberingPlugin } from './numberingPlugin.js';
+import { createLeadingCaretPlugin } from './leadingCaretPlugin.js';
 import { createDropcapPlugin } from './dropcapPlugin.js';
 import { shouldSkipNodeView } from '../../utils/headless-helpers.js';
 import { parseAttrs } from './helpers/parseAttrs.js';
+
+/**
+ * Whether a paragraph's only inline leaf content is break placeholders
+ * (lineBreak / hardBreak), with no visible text or other embedded objects.
+ *
+ * Distinct from `isVisuallyEmptyParagraph`, which returns false when any
+ * break node is present. This predicate catches the complementary case:
+ * paragraphs that *look* empty to the user but technically contain a break.
+ *
+ * Context: after splitting a list item that ends with a trailing `w:br`,
+ * the new paragraph inherits that break. In WebKit the resulting DOM shape
+ * causes native text insertion to land in the list-marker element
+ * (`contenteditable="false"`) instead of the content area — and
+ * `ParagraphNodeView.ignoreMutation` silently drops it. Detecting
+ * this shape lets the `beforeinput` handler insert via ProseMirror
+ * transaction instead of relying on native DOM insertion.
+ *
+ * @param {import('prosemirror-model').Node} node
+ * @returns {boolean}
+ */
+export function hasOnlyBreakContent(node) {
+  if (!node || node.type.name !== 'paragraph') return false;
+
+  const text = (node.textContent || '').replace(/\u200b/g, '').trim();
+  if (text.length > 0) return false;
+
+  let hasBreak = false;
+  let hasOtherContent = false;
+
+  node.descendants((child) => {
+    if (!child.isInline || !child.isLeaf) return true;
+
+    if (child.type.name === 'lineBreak' || child.type.name === 'hardBreak') {
+      hasBreak = true;
+    } else {
+      hasOtherContent = true;
+    }
+    return !hasOtherContent;
+  });
+
+  return hasBreak && !hasOtherContent;
+}
 
 /**
  * Input rule regex that matches a bullet list marker (-, +, or *)
@@ -112,6 +155,11 @@ export const Paragraph = OxmlNode.create({
         renderDOM: (attrs) => {
           return attrs.sdBlockId ? { 'data-sd-block-id': attrs.sdBlockId } : {};
         },
+      },
+      sdBlockRev: {
+        default: 0,
+        rendered: false,
+        keepOnSplit: false,
       },
       attributes: {
         rendered: false,
@@ -288,6 +336,49 @@ export const Paragraph = OxmlNode.create({
   addPmPlugins() {
     const dropcapPlugin = createDropcapPlugin(this.editor);
     const numberingPlugin = createNumberingPlugin(this.editor);
-    return [dropcapPlugin, numberingPlugin];
+    const listInputFallbackPlugin = new Plugin({
+      props: {
+        handleDOMEvents: {
+          beforeinput: (view, event) => {
+            if (!event || event.inputType !== 'insertText' || !event.data) {
+              return false;
+            }
+            if (event.isComposing) return false;
+
+            const { state } = view;
+            const { selection } = state;
+            if (!selection.empty) return false;
+
+            // Find the enclosing paragraph directly from the resolved position.
+            // We avoid `findParentNode(isList)` here because `isList` depends on
+            // `getResolvedParagraphProperties`, a WeakMap cache keyed by node
+            // identity. After the numbering plugin's `appendTransaction` sets
+            // `listRendering`, the paragraph node object is replaced, leaving
+            // the new node uncached — causing `isList` to return false.
+            const { $from } = selection;
+            let paragraph = null;
+            for (let d = $from.depth; d >= 0; d--) {
+              const node = $from.node(d);
+              if (node.type.name === 'paragraph') {
+                paragraph = node;
+                break;
+              }
+            }
+            if (!paragraph) return false;
+
+            const isListParagraph =
+              paragraph.attrs?.paragraphProperties?.numberingProperties && paragraph.attrs?.listRendering;
+            if (!isListParagraph) return false;
+            if (!isVisuallyEmptyParagraph(paragraph) && !hasOnlyBreakContent(paragraph)) return false;
+
+            const tr = state.tr.insertText(event.data);
+            view.dispatch(tr);
+            event.preventDefault();
+            return true;
+          },
+        },
+      },
+    });
+    return [dropcapPlugin, numberingPlugin, listInputFallbackPlugin, createLeadingCaretPlugin()];
   },
 });

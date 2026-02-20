@@ -165,6 +165,7 @@ export function exportSchemaToJson(params) {
     table: wTblNodeTranslator,
     tableRow: wTrNodeTranslator,
     tableCell: wTcNodeTranslator,
+    tableHeader: wTcNodeTranslator,
     bookmarkStart: wBookmarkStartTranslator,
     bookmarkEnd: wBookmarkEndTranslator,
     fieldAnnotation: wSdtNodeTranslator,
@@ -175,6 +176,8 @@ export function exportSchemaToJson(params) {
     commentRangeEnd: wCommentRangeEndTranslator,
     permStart: wPermStartTranslator,
     permEnd: wPermEndTranslator,
+    permStartBlock: wPermStartTranslator,
+    permEndBlock: wPermEndTranslator,
     commentReference: () => null,
     footnoteReference: wFootnoteReferenceTranslator,
     shapeContainer: pictTranslator,
@@ -314,6 +317,20 @@ function translateHeadingNode(params) {
 }
 
 /**
+ * Merge mc:Ignorable lists from two attribute objects, deduplicating entries.
+ *
+ * @param {string} defaultIgnorable - The default mc:Ignorable string
+ * @param {string} originalIgnorable - The original mc:Ignorable string from import
+ * @returns {string} Merged and deduplicated mc:Ignorable string
+ */
+function mergeMcIgnorable(defaultIgnorable = '', originalIgnorable = '') {
+  const merged = [
+    ...new Set([...defaultIgnorable.split(/\s+/).filter(Boolean), ...originalIgnorable.split(/\s+/).filter(Boolean)]),
+  ];
+  return merged.join(' ');
+}
+
+/**
  * Translate a document node
  *
  * @param {ExportParams} params The parameters object
@@ -326,10 +343,24 @@ function translateDocumentNode(params) {
   };
 
   const translatedBodyNode = exportSchemaToJson({ ...params, node: bodyNode });
+
+  // Merge original document attributes with defaults to preserve custom namespaces
+  const originalAttrs = params.converter?.documentAttributes || {};
+  const attributes = {
+    ...DEFAULT_DOCX_DEFS,
+    ...originalAttrs,
+  };
+
+  // Merge mc:Ignorable lists - combine both default and original ignorable namespaces
+  const mergedIgnorable = mergeMcIgnorable(DEFAULT_DOCX_DEFS['mc:Ignorable'], originalAttrs['mc:Ignorable']);
+  if (mergedIgnorable) {
+    attributes['mc:Ignorable'] = mergedIgnorable;
+  }
+
   const node = {
     name: 'w:document',
     elements: [translatedBodyNode],
-    attributes: DEFAULT_DOCX_DEFS,
+    attributes,
   };
 
   return [node, params];
@@ -583,6 +614,14 @@ export class DocxExporter {
     if (!node) return null;
     let { name } = node;
     const { elements, attributes } = node;
+
+    // Normalize w:delInstrText → w:instrText. During import, w:del wrappers around
+    // field character runs lose their trackDelete marks (only text content gets marked),
+    // so on export the w:del wrapper is absent. Per ECMA-376 §17.16.13, w:delInstrText
+    // outside w:del is non-conformant — renaming to w:instrText keeps the field valid.
+    if (name === 'w:delInstrText') {
+      name = 'w:instrText';
+    }
 
     let tag = `<${name}`;
 

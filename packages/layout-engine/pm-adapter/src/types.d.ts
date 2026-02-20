@@ -3,16 +3,11 @@
  */
 import type { TrackedChangesMode, SectionMetadata, FlowBlock, TrackedChangeMeta } from '@superdoc/contracts';
 import type { Engines } from '@superdoc/contracts';
-import type {
-  StyleContext as StyleEngineContext,
-  StyleNode as StyleEngineNode,
-  ComputedParagraphStyle,
-} from '@superdoc/style-engine';
+import type { StyleContext as StyleEngineContext, ComputedParagraphStyle } from '@superdoc/style-engine';
 import type { SectionRange } from './sections/index.js';
 import type { ConverterContext } from './converter-context.js';
 export type { ConverterContext } from './converter-context.js';
 export type StyleContext = StyleEngineContext;
-export type StyleNode = StyleEngineNode;
 export type { ComputedParagraphStyle };
 export type ThemeColorPalette = Record<string, string>;
 /**
@@ -230,12 +225,12 @@ export interface NodeHandlerContext {
   blocks: FlowBlock[];
   recordBlockKind: (kind: string) => void;
   nextBlockId: BlockIdGenerator;
+  blockIdPrefix?: string;
   positions: PositionMap;
   defaultFont: string;
   defaultSize: number;
   styleContext: StyleContext;
   converterContext?: ConverterContext;
-  listCounterContext: ListCounterContext;
   trackedChangesConfig: TrackedChangesConfig;
   hyperlinkConfig: HyperlinkConfig;
   bookmarks: Map<string, number>;
@@ -252,7 +247,6 @@ export interface NodeHandlerContext {
       defaultFont: string,
       defaultSize: number,
       styleContext: StyleContext,
-      listCounterContext?: ListCounterContext,
       trackedChanges?: TrackedChangesConfig,
       bookmarks?: Map<string, number>,
       hyperlinkConfig?: HyperlinkConfig,

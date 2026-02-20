@@ -4,12 +4,11 @@
  * Tests cover:
  * - nodeHandlers dispatch map
  * - toFlowBlocks() main conversion function
- * - toFlowBlocksMap() batch converter
  * - paragraphToFlowBlocks() wrapper function
  */
 
 import { describe, it, expect, beforeEach, vi } from 'vitest';
-import { toFlowBlocks, toFlowBlocksMap, nodeHandlers } from './internal.js';
+import { toFlowBlocks, nodeHandlers } from './internal.js';
 import type { PMNode, AdapterOptions, BatchAdapterOptions, PMDocumentMap } from './types.js';
 
 // Mock all external dependencies
@@ -63,15 +62,7 @@ vi.mock('./sections/index.js', () => {
 });
 
 vi.mock('./utilities.js', () => ({
-  pxToPt: vi.fn((px) => (px != null ? px / 1.333 : undefined)),
   pickNumber: vi.fn((value) => (typeof value === 'number' ? value : undefined)),
-  pickDecimalSeparator: vi.fn((value) => {
-    if (typeof value === 'string' && (value.trim() === '.' || value.trim() === ',')) {
-      return value.trim();
-    }
-    return undefined;
-  }),
-  pickLang: vi.fn((value) => (typeof value === 'string' ? value.toLowerCase() : undefined)),
   normalizePrefix: vi.fn((value) => (value ? String(value) : '')),
   buildPositionMap: vi.fn(() => new WeakMap()),
   createBlockIdGenerator: vi.fn((prefix = '') => {
@@ -285,8 +276,8 @@ describe('internal', () => {
         expect(handleParagraphNode).toHaveBeenCalledWith(
           expect.any(Object),
           expect.objectContaining({
-            defaultFont: 'Arial',
-            defaultSize: 16,
+            defaultFont: 'Times New Roman',
+            defaultSize: 10 / 0.75,
           }),
         );
       });
@@ -638,26 +629,6 @@ describe('internal', () => {
     });
 
     describe('options handling', () => {
-      it('should pass custom decimal separator to style context', () => {
-        const doc: PMNode = {
-          type: 'doc',
-          content: [{ type: 'paragraph', content: [] }],
-        };
-
-        toFlowBlocks(doc, { locale: { decimalSeparator: ',' } });
-
-        expect(handleParagraphNode).toHaveBeenCalledWith(
-          expect.any(Object),
-          expect.objectContaining({
-            styleContext: expect.objectContaining({
-              defaults: expect.objectContaining({
-                decimalSeparator: ',',
-              }),
-            }),
-          }),
-        );
-      });
-
       it('should extract lang from document attrs', () => {
         const doc: PMNode = {
           type: 'doc',
@@ -667,7 +638,6 @@ describe('internal', () => {
 
         toFlowBlocks(doc);
 
-        // pickLang should be called with the lang value
         expect(handleParagraphNode).toHaveBeenCalled();
       });
 
@@ -789,28 +759,6 @@ describe('internal', () => {
       });
     });
 
-    describe('list counter context', () => {
-      it('should provide list counter methods to handlers', () => {
-        const doc: PMNode = {
-          type: 'doc',
-          content: [{ type: 'paragraph', content: [] }],
-        };
-
-        toFlowBlocks(doc);
-
-        expect(handleParagraphNode).toHaveBeenCalledWith(
-          expect.any(Object),
-          expect.objectContaining({
-            listCounterContext: {
-              getListCounter: expect.any(Function),
-              incrementListCounter: expect.any(Function),
-              resetListCounter: expect.any(Function),
-            },
-          }),
-        );
-      });
-    });
-
     describe('converters', () => {
       it('should provide converter functions to handlers', () => {
         const doc: PMNode = {
@@ -831,191 +779,6 @@ describe('internal', () => {
           }),
         );
       });
-    });
-  });
-
-  describe('toFlowBlocksMap', () => {
-    it('should return empty object for empty documents map', () => {
-      const result = toFlowBlocksMap({});
-      expect(result).toEqual({});
-    });
-
-    it('should return empty object for null documents', () => {
-      const result = toFlowBlocksMap(null as never);
-      expect(result).toEqual({});
-    });
-
-    it('should return empty object for undefined documents', () => {
-      const result = toFlowBlocksMap(undefined as never);
-      expect(result).toEqual({});
-    });
-
-    it('should convert single document', () => {
-      const documents: PMDocumentMap = {
-        doc1: {
-          type: 'doc',
-          content: [{ type: 'paragraph', content: [] }],
-        },
-      };
-
-      vi.mocked(handleParagraphNode).mockImplementationOnce((node, context) => {
-        context.blocks.push({ kind: 'paragraph', id: '0-paragraph' } as never);
-      });
-
-      const result = toFlowBlocksMap(documents);
-
-      expect(result).toHaveProperty('doc1');
-      expect(Array.isArray(result.doc1)).toBe(true);
-      expect(result.doc1!.length).toBeGreaterThan(0);
-    });
-
-    it('should convert multiple documents', () => {
-      const documents: PMDocumentMap = {
-        header: { type: 'doc', content: [{ type: 'paragraph', content: [] }] },
-        body: { type: 'doc', content: [{ type: 'paragraph', content: [] }] },
-        footer: { type: 'doc', content: [{ type: 'paragraph', content: [] }] },
-      };
-
-      vi.mocked(handleParagraphNode).mockImplementation((node, context) => {
-        context.blocks.push({ kind: 'paragraph', id: '0-paragraph' } as never);
-      });
-
-      const result = toFlowBlocksMap(documents);
-
-      expect(Object.keys(result)).toEqual(['header', 'body', 'footer']);
-      expect(result.header).toBeDefined();
-      expect(result.body).toBeDefined();
-      expect(result.footer).toBeDefined();
-    });
-
-    it('should use document key as default prefix', () => {
-      const documents: PMDocumentMap = {
-        'test-doc': { type: 'doc', content: [{ type: 'paragraph', content: [] }] },
-      };
-
-      toFlowBlocksMap(documents);
-
-      // The prefix should be 'test-doc-' by default
-      expect(handleParagraphNode).toHaveBeenCalled();
-    });
-
-    it('should use blockIdPrefixFactory when provided', () => {
-      const documents: PMDocumentMap = {
-        header: { type: 'doc', content: [{ type: 'paragraph', content: [] }] },
-        footer: { type: 'doc', content: [{ type: 'paragraph', content: [] }] },
-      };
-
-      const prefixFactory = vi.fn((key: string) => `custom-${key}-`);
-      const options: BatchAdapterOptions = { blockIdPrefixFactory: prefixFactory };
-
-      toFlowBlocksMap(documents, options);
-
-      expect(prefixFactory).toHaveBeenCalledWith('header');
-      expect(prefixFactory).toHaveBeenCalledWith('footer');
-      expect(prefixFactory).toHaveBeenCalledTimes(2);
-    });
-
-    it('should use blockIdPrefix as fallback when no factory', () => {
-      const documents: PMDocumentMap = {
-        doc1: { type: 'doc', content: [{ type: 'paragraph', content: [] }] },
-      };
-
-      toFlowBlocksMap(documents, { blockIdPrefix: 'fallback-' });
-
-      // Should use 'fallback-' instead of 'doc1-'
-      expect(handleParagraphNode).toHaveBeenCalled();
-    });
-
-    it('should skip null documents', () => {
-      const documents: PMDocumentMap = {
-        valid: { type: 'doc', content: [{ type: 'paragraph', content: [] }] },
-        invalid: null,
-      };
-
-      vi.mocked(handleParagraphNode).mockImplementation((node, context) => {
-        context.blocks.push({ kind: 'paragraph', id: '0-paragraph' } as never);
-      });
-
-      const result = toFlowBlocksMap(documents);
-
-      expect(result).toHaveProperty('valid');
-      expect(result).not.toHaveProperty('invalid');
-    });
-
-    it('should skip undefined documents', () => {
-      const documents: PMDocumentMap = {
-        valid: { type: 'doc', content: [{ type: 'paragraph', content: [] }] },
-        invalid: undefined,
-      };
-
-      vi.mocked(handleParagraphNode).mockImplementation((node, context) => {
-        context.blocks.push({ kind: 'paragraph', id: '0-paragraph' } as never);
-      });
-
-      const result = toFlowBlocksMap(documents);
-
-      expect(result).toHaveProperty('valid');
-      expect(result).not.toHaveProperty('invalid');
-    });
-
-    it('should pass adapter options to each conversion', () => {
-      const documents: PMDocumentMap = {
-        doc1: { type: 'doc', content: [{ type: 'paragraph', content: [] }] },
-      };
-
-      const options: BatchAdapterOptions = {
-        defaultFont: 'Courier',
-        defaultSize: 10,
-        trackedChangesMode: 'original',
-      };
-
-      toFlowBlocksMap(documents, options);
-
-      expect(handleParagraphNode).toHaveBeenCalledWith(
-        expect.any(Object),
-        expect.objectContaining({
-          defaultFont: 'Courier',
-          defaultSize: 10,
-          trackedChangesConfig: expect.objectContaining({
-            mode: 'original',
-          }),
-        }),
-      );
-    });
-
-    it('should return result keyed by document keys', () => {
-      const documents: PMDocumentMap = {
-        alpha: { type: 'doc', content: [] },
-        beta: { type: 'doc', content: [] },
-        gamma: { type: 'doc', content: [] },
-      };
-
-      const result = toFlowBlocksMap(documents);
-
-      expect(Object.keys(result).sort()).toEqual(['alpha', 'beta', 'gamma']);
-    });
-
-    it('should extract blocks correctly from each document', () => {
-      const documents: PMDocumentMap = {
-        doc1: { type: 'doc', content: [{ type: 'paragraph', content: [] }] },
-        doc2: { type: 'doc', content: [{ type: 'paragraph', content: [] }] },
-      };
-
-      let callCount = 0;
-      vi.mocked(handleParagraphNode).mockImplementation((node, context) => {
-        callCount++;
-        context.blocks.push({
-          kind: 'paragraph',
-          id: `${callCount}-paragraph`,
-        } as never);
-      });
-
-      const result = toFlowBlocksMap(documents);
-
-      expect(result.doc1).toHaveLength(1);
-      expect(result.doc2).toHaveLength(1);
-      expect(result.doc1![0]!.id).toBe('1-paragraph');
-      expect(result.doc2![0]!.id).toBe('2-paragraph');
     });
   });
 
@@ -1104,24 +867,32 @@ describe('internal', () => {
       const converterCtx = { docx: { foo: 'bar' } } as never;
       const themeColors = { primary: '#123456' } as never;
 
-      paragraphConverter(
-        paraNode,
-        context.nextBlockId,
-        context.positions,
-        context.defaultFont,
-        context.defaultSize,
-        context.styleContext,
-        undefined,
-        context.trackedChangesConfig,
-        context.bookmarks,
-        context.hyperlinkConfig,
+      paragraphConverter({
+        para: paraNode,
+        nextBlockId: context.nextBlockId,
+        positions: context.positions,
+        defaultFont: context.defaultFont,
+        defaultSize: context.defaultSize,
+        trackedChangesConfig: context.trackedChangesConfig,
+        bookmarks: context.bookmarks,
+        hyperlinkConfig: context.hyperlinkConfig,
         themeColors,
-        converterCtx,
-      );
+        converters: context.converters,
+        enableComments: context.enableComments,
+        converterContext: converterCtx,
+      });
 
       const lastCall = vi.mocked(paragraphToFlowBlocks).mock.calls.at(-1);
-      expect(lastCall?.[10]).toBe(themeColors);
-      expect(lastCall?.[12]).toBe(converterCtx);
+      expect(lastCall?.[0]).toEqual(
+        expect.objectContaining({
+          themeColors,
+          converterContext: converterCtx,
+          converters: expect.objectContaining({
+            imageNodeToBlock: expect.any(Function),
+            tableNodeToBlock: expect.any(Function),
+          }),
+        }),
+      );
     });
   });
 });

@@ -5,6 +5,20 @@ import { parseXmlToJson } from '@converter/v2/docxHelper.js';
 import { getTestDataByFileName } from '@tests/helpers/helpers.js';
 import { extractParagraphText } from '@tests/helpers/getParagraphText.js';
 
+const minimalStylesXml =
+  '<w:styles xmlns:w="http://schemas.openxmlformats.org/wordprocessingml/2006/main">' +
+  '<w:docDefaults>' +
+  '<w:rPrDefault><w:rPr/></w:rPrDefault>' +
+  '<w:pPrDefault><w:pPr/></w:pPrDefault>' +
+  '</w:docDefaults>' +
+  '<w:style w:type="paragraph" w:styleId="Normal">' +
+  '<w:name w:val="Normal"/>' +
+  '<w:qFormat/>' +
+  '<w:pPr/>' +
+  '<w:rPr/>' +
+  '</w:style>' +
+  '</w:styles>';
+
 describe('addDefaultStylesIfMissing', () => {
   const styles = {
     declaration: {
@@ -53,6 +67,7 @@ describe('createDocumentJson', () => {
 
     const docx = {
       'word/document.xml': parseXmlToJson(simpleDocXml),
+      'word/styles.xml': parseXmlToJson(minimalStylesXml),
     };
 
     const converter = {
@@ -62,7 +77,7 @@ describe('createDocumentJson', () => {
       footerIds: {},
     };
 
-    const editor = { options: {} };
+    const editor = { options: {}, emit: vi.fn() };
 
     const result = createDocumentJson(docx, converter, editor);
 
@@ -150,6 +165,7 @@ describe('createDocumentJson', () => {
 
     const docx = {
       'word/document.xml': parseXmlToJson(simpleDocXml),
+      'word/styles.xml': parseXmlToJson(minimalStylesXml),
     };
 
     const converter = {
@@ -206,7 +222,19 @@ describe('createDocumentJson', () => {
     const docXml =
       '<w:document xmlns:w="http://schemas.openxmlformats.org/wordprocessingml/2006/main"><w:body><w:p><w:r><w:t>Hello world</w:t></w:r></w:p></w:body></w:document>';
     const stylesXml =
-      '<w:styles xmlns:w="http://schemas.openxmlformats.org/wordprocessingml/2006/main"><w:latentStyles w:count="1" /></w:styles>';
+      '<w:styles xmlns:w="http://schemas.openxmlformats.org/wordprocessingml/2006/main">' +
+      '<w:docDefaults>' +
+      '<w:rPrDefault><w:rPr/></w:rPrDefault>' +
+      '<w:pPrDefault><w:pPr/></w:pPrDefault>' +
+      '</w:docDefaults>' +
+      '<w:latentStyles w:count="1" />' +
+      '<w:style w:type="paragraph" w:styleId="Normal">' +
+      '<w:name w:val="Normal"/>' +
+      '<w:qFormat/>' +
+      '<w:pPr/>' +
+      '<w:rPr/>' +
+      '</w:style>' +
+      '</w:styles>';
 
     const docx = {
       'word/document.xml': parseXmlToJson(docXml),

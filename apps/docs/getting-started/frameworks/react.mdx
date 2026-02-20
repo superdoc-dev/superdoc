@@ -1,0 +1,660 @@
+---
+title: React Integration
+sidebarTitle: React
+keywords: "react docx editor, react word component, superdoc react, microsoft word react, document editor react hooks, @superdoc-dev/react"
+---
+
+SuperDoc provides `@superdoc-dev/react` - a first-party wrapper with proper lifecycle management, SSR safety, and React Strict Mode compatibility.
+
+## Installation
+
+```bash
+npm install @superdoc-dev/react
+```
+
+<Note>
+`superdoc` is included as a dependency, so `npm install @superdoc-dev/react` works out of the box.
+
+If you need to pin the underlying `superdoc` version, add an override in your app's `package.json`:
+
+```json
+{
+  "overrides": {
+    "superdoc": "1.14.1"
+  }
+}
+```
+
+For pnpm, use:
+
+```json
+{
+  "pnpm": {
+    "overrides": {
+      "superdoc": "1.14.1"
+    }
+  }
+}
+```
+</Note>
+
+## Quick Start
+
+```jsx
+import { SuperDocEditor } from '@superdoc-dev/react';
+import '@superdoc-dev/react/style.css';
+
+function App() {
+  return (
+    <SuperDocEditor
+      document={file}
+      documentMode="editing"
+      onReady={() => console.log('Editor ready!')}
+    />
+  );
+}
+```
+
+That's it! You now have a fully functional DOCX editor in your React app.
+
+---
+
+## Core Concepts
+
+### The Component
+
+`<SuperDocEditor>` handles everything for you:
+
+- **Mounting** - Creates a SuperDoc instance when the component mounts
+- **Updates** - Rebuilds automatically when the `document` prop changes
+- **Cleanup** - Properly destroys the instance on unmount
+- **SSR-Safe** - Renders container structure on server, initializes SuperDoc after hydration
+
+### Document Modes
+
+SuperDoc supports three editing modes:
+
+| Mode | Description | Use Case |
+|------|-------------|----------|
+| `editing` | Full editing capabilities | Default editing experience |
+| `viewing` | Read-only presentation | Document preview |
+| `suggesting` | Track changes mode | Collaborative review |
+
+```jsx
+<SuperDocEditor document={file} documentMode="editing" />
+```
+
+<Tip>
+Changing `documentMode` via props is efficient - the component calls `setDocumentMode()` internally without rebuilding. You can also use `getInstance()?.setDocumentMode()` directly if preferred.
+</Tip>
+
+### User Roles
+
+Roles control what actions a user can perform:
+
+| Role | Can Edit | Can Suggest | Can View |
+|------|----------|-------------|----------|
+| `editor` | Yes | Yes | Yes |
+| `suggester` | No | Yes | Yes |
+| `viewer` | No | No | Yes |
+
+```jsx
+<SuperDocEditor document={file} role="editor" />
+```
+
+---
+
+## Working with Refs
+
+For programmatic control, use a ref to access the SuperDoc instance:
+
+```jsx
+import { useRef } from 'react';
+import { SuperDocEditor } from '@superdoc-dev/react';
+import '@superdoc-dev/react/style.css';
+
+function App() {
+  const editorRef = useRef(null);
+
+  const handleExport = async () => {
+    // Export as DOCX and trigger download
+    await editorRef.current?.getInstance()?.export({ triggerDownload: true });
+  };
+
+  const handleModeSwitch = () => {
+    // Switch mode without rebuilding
+    editorRef.current?.getInstance()?.setDocumentMode('suggesting');
+  };
+
+  return (
+    <>
+      <button onClick={handleExport}>Download DOCX</button>
+      <button onClick={handleModeSwitch}>Review Mode</button>
+      <SuperDocEditor
+        ref={editorRef}
+        document={file}
+        user={{ name: 'John', email: 'john@company.com' }}
+        onReady={({ superdoc }) => console.log('Ready', superdoc)}
+      />
+    </>
+  );
+}
+```
+
+### Ref API
+
+The ref exposes a single method:
+
+| Method | Returns | Description |
+|--------|---------|-------------|
+| `getInstance()` | `SuperDoc \| null` | Access the underlying SuperDoc instance |
+
+<Note>
+`getInstance()` returns `null` before the editor is ready. Use optional chaining (`?.`) for safe access.
+</Note>
+
+### Available Instance Methods
+
+Once you have the SuperDoc instance via `getInstance()`, you can call any SuperDoc method:
+
+| Method | Returns | Description |
+|--------|---------|-------------|
+| `setDocumentMode(mode)` | `void` | Change mode without rebuild |
+| `export(options?)` | `Promise<Blob \| void>` | Export document as DOCX |
+| `getHTML(options?)` | `string[]` | Get document as HTML |
+| `focus()` | `void` | Focus the editor |
+| `search(text)` | `SearchResult[]` | Search document content |
+| `goToSearchResult(match)` | `void` | Navigate to a search result |
+| `setLocked(locked)` | `void` | Lock/unlock editing |
+| `toggleRuler()` | `void` | Toggle ruler visibility |
+| `save()` | `Promise<void[]>` | Save (in collaboration mode) |
+
+---
+
+## Common Patterns
+
+### PDF setup (React)
+
+Use `pdfjs-dist` with `modules.pdf` for predictable PDF rendering.
+
+```jsx
+import { useMemo } from 'react';
+import { SuperDocEditor } from '@superdoc-dev/react';
+import '@superdoc-dev/react/style.css';
+import * as pdfjsLib from 'pdfjs-dist/build/pdf.mjs';
+
+const workerSrc = new URL('pdfjs-dist/build/pdf.worker.min.mjs', import.meta.url).toString();
+
+function PdfEditor({ document }) {
+  const modules = useMemo(
+    () => ({
+      pdf: {
+        pdfLib: pdfjsLib,
+        setWorker: true,
+        workerSrc,
+        textLayer: true,
+      },
+    }),
+    [],
+  );
+
+  return (
+    <SuperDocEditor
+      document={document} // File/Blob, URL string, or { type: 'pdf', url/data, name }
+      modules={modules}
+      onPdfDocumentReady={() => console.log('PDF ready')}
+    />
+  );
+}
+```
+
+<Tip>
+Use `document.data` for local `File`/`Blob` and `document.url` for remote URLs.
+</Tip>
+
+### Whiteboard stickers (PDF)
+
+When using whiteboard sticker drag/drop in React, register stickers when the whiteboard instance is available and pass the sticker id via `application/sticker`.
+
+```jsx
+const STICKERS = [
+  { id: 'cite-source', src: '/stickers/cite-source.svg', width: 52, height: 52 },
+];
+
+const onStickerDragStart = (event, stickerId) => {
+  event.dataTransfer.setData('application/sticker', stickerId);
+  event.dataTransfer.setData('text/plain', '');
+};
+
+<SuperDocEditor
+  document={file}
+  modules={{ whiteboard: { enabled: true } }}
+  onReady={({ superdoc }) => {
+    const register = (whiteboard) => whiteboard?.register('stickers', STICKERS);
+    superdoc.on('whiteboard:init', ({ whiteboard }) => register(whiteboard));
+    register(superdoc.whiteboard);
+  }}
+/>
+```
+
+<Tip>
+For drop placement, switch whiteboard to `select` mode before dragging stickers.
+</Tip>
+
+### File Upload
+
+```jsx
+import { useState, useRef } from 'react';
+import { SuperDocEditor } from '@superdoc-dev/react';
+import '@superdoc-dev/react/style.css';
+
+function FileEditor() {
+  const [file, setFile] = useState(null);
+  const editorRef = useRef(null);
+
+  const handleFileChange = (e) => {
+    const selected = e.target.files?.[0];
+    if (selected) setFile(selected);
+  };
+
+  const handleExport = async () => {
+    const blob = await editorRef.current?.getInstance()?.export({ triggerDownload: false });
+    // Use blob for custom handling...
+  };
+
+  return (
+    <div>
+      <input type="file" accept=".docx" onChange={handleFileChange} />
+      {file && (
+        <>
+          <button onClick={handleExport}>Export</button>
+          <SuperDocEditor
+            ref={editorRef}
+            document={file}
+            user={{ name: 'User', email: 'user@company.com' }}
+          />
+        </>
+      )}
+    </div>
+  );
+}
+```
+
+### Loading State
+
+Show a custom loading indicator while SuperDoc initializes:
+
+```jsx
+<SuperDocEditor
+  document={file}
+  renderLoading={() => (
+    <div className="loading-spinner">
+      Loading document...
+    </div>
+  )}
+  onReady={() => console.log('Ready!')}
+/>
+```
+
+### Document Switching
+
+The editor automatically rebuilds when the `document` prop changes:
+
+```jsx
+function MultiDocEditor() {
+  const [currentDoc, setCurrentDoc] = useState(doc1);
+
+  return (
+    <div>
+      <button onClick={() => setCurrentDoc(doc1)}>Document 1</button>
+      <button onClick={() => setCurrentDoc(doc2)}>Document 2</button>
+      <SuperDocEditor document={currentDoc} />
+    </div>
+  );
+}
+```
+
+### View-Only Mode
+
+```jsx
+<SuperDocEditor
+  document={file}
+  documentMode="viewing"
+  role="viewer"
+  hideToolbar
+/>
+```
+
+### With User Information
+
+```jsx
+<SuperDocEditor
+  document={file}
+  user={{
+    name: 'John Doe',
+    email: 'john@example.com',
+    image: 'https://example.com/avatar.jpg'
+  }}
+  users={[
+    { name: 'Jane Smith', email: 'jane@example.com' },
+    { name: 'Bob Wilson', email: 'bob@example.com' },
+  ]}
+/>
+```
+
+---
+
+## TypeScript Support
+
+The wrapper includes full TypeScript support:
+
+```tsx
+import { useRef } from 'react';
+import { SuperDocEditor } from '@superdoc-dev/react';
+import type { SuperDocRef } from '@superdoc-dev/react';
+import '@superdoc-dev/react/style.css';
+
+interface EditorProps {
+  document: string | File | Blob;
+  userId: string;
+}
+
+function DocEditor({ document, userId }: EditorProps) {
+  const editorRef = useRef<SuperDocRef>(null);
+
+  const handleReady = ({ superdoc }: { superdoc: any }) => {
+    console.log('SuperDoc ready');
+  };
+
+  const handleExport = async () => {
+    const blob = await editorRef.current?.getInstance()?.export({
+      triggerDownload: true
+    });
+    return blob;
+  };
+
+  return (
+    <SuperDocEditor
+      ref={editorRef}
+      document={document}
+      documentMode="editing"
+      role="editor"
+      user={{
+        name: userId,
+        email: `${userId}@company.com`
+      }}
+      onReady={handleReady}
+    />
+  );
+}
+```
+
+### Exported Types
+
+```tsx
+import type {
+  SuperDocEditorProps,
+  SuperDocRef,
+  DocumentMode,
+  UserRole,
+  SuperDocUser,
+  SuperDocModules,
+  SuperDocConfig,
+  SuperDocInstance,
+} from '@superdoc-dev/react';
+```
+
+---
+
+## Framework Integration
+
+### Next.js (App Router)
+
+The wrapper handles SSR automatically. For additional control:
+
+```jsx
+'use client';
+
+import dynamic from 'next/dynamic';
+
+const SuperDocEditor = dynamic(
+  () => import('@superdoc-dev/react').then(mod => mod.SuperDocEditor),
+  {
+    ssr: false,
+    loading: () => <div>Loading editor...</div>
+  }
+);
+
+export default function EditorPage() {
+  return <SuperDocEditor document="/api/document" />;
+}
+```
+
+### Next.js (Pages Router)
+
+```jsx
+import dynamic from 'next/dynamic';
+
+const SuperDocEditor = dynamic(
+  () => import('@superdoc-dev/react').then(mod => mod.SuperDocEditor),
+  { ssr: false }
+);
+
+export default function EditorPage() {
+  return <SuperDocEditor document="/api/document" />;
+}
+```
+
+### Vite / Create React App
+
+Works out of the box - just import and use:
+
+```jsx
+import { SuperDocEditor } from '@superdoc-dev/react';
+import '@superdoc-dev/react/style.css';
+
+function App() {
+  return <SuperDocEditor document={file} />;
+}
+```
+
+---
+
+## Advanced Features
+
+### Real-time Collaboration
+
+```jsx
+import * as Y from 'yjs';
+import { WebsocketProvider } from 'y-websocket';
+
+function CollaborativeEditor() {
+  const ydoc = useMemo(() => new Y.Doc(), []);
+  const provider = useMemo(
+    () => new WebsocketProvider('wss://your-server.com', 'doc-id', ydoc),
+    [ydoc]
+  );
+
+  return (
+    <SuperDocEditor
+      document={file}
+      modules={{
+        collaboration: {
+          ydoc,
+          provider,
+        },
+      }}
+    />
+  );
+}
+```
+
+<CardGroup cols={1}>
+<Card title="Collaboration Guide" icon="users" href="/modules/collaboration/overview">
+  Learn more about setting up real-time collaboration
+</Card>
+</CardGroup>
+
+### Search and Navigate
+
+```jsx
+const editorRef = useRef(null);
+
+const handleSearch = (query) => {
+  const instance = editorRef.current?.getInstance();
+  const results = instance?.search(query);
+  if (results?.length) {
+    instance?.goToSearchResult(results[0]);
+  }
+};
+```
+
+### Export to HTML
+
+```jsx
+const editorRef = useRef(null);
+
+const getHtmlContent = () => {
+  const htmlArray = editorRef.current?.getInstance()?.getHTML();
+  console.log(htmlArray); // Array of HTML strings per section
+};
+```
+
+---
+
+## Props Reference
+
+### Document Props
+
+| Prop | Type | Default | Description |
+|------|------|---------|-------------|
+| `document` | `File \| Blob \| string \| object` | required | Document to load |
+| `documentMode` | `'editing' \| 'viewing' \| 'suggesting'` | `'editing'` | Initial editing mode |
+| `role` | `'editor' \| 'viewer' \| 'suggester'` | `'editor'` | User's permission level |
+
+### User Props
+
+| Prop | Type | Description |
+|------|------|-------------|
+| `user` | `{ name, email?, image? }` | Current user info |
+| `users` | `Array<{ name, email, image? }>` | All users (for @-mentions) |
+
+### UI Props
+
+| Prop | Type | Default | Description |
+|------|------|---------|-------------|
+| `id` | `string` | auto-generated | Custom container ID |
+| `hideToolbar` | `boolean` | `false` | Hide the toolbar |
+| `rulers` | `boolean` | - | Show/hide rulers (SuperDoc default) |
+| `className` | `string` | - | CSS class for wrapper |
+| `style` | `CSSProperties` | - | Inline styles |
+| `renderLoading` | `() => ReactNode` | - | Custom loading UI |
+
+### Event Callbacks
+
+| Prop | Type | Description |
+|------|------|-------------|
+| `onReady` | `({ superdoc }) => void` | Editor initialized |
+| `onEditorCreate` | `({ editor }) => void` | ProseMirror editor created |
+| `onEditorDestroy` | `() => void` | Editor destroyed |
+| `onEditorUpdate` | `({ editor }) => void` | Content changed |
+| `onContentError` | `(event) => void` | Document parsing error |
+| `onException` | `({ error }) => void` | Runtime error |
+
+### Advanced Props
+
+| Prop | Type | Description |
+|------|------|-------------|
+| `modules` | `object` | Configure collaboration, AI, comments |
+
+<Note>
+All SuperDoc config options are available as props. The component extends `SuperDocConfig`, so any option from the core package can be passed directly.
+</Note>
+
+### Props That Trigger Rebuild
+
+These props trigger a full instance rebuild when changed:
+
+| Prop | Reason |
+|------|--------|
+| `document` | New document to load |
+| `user` | User identity changed |
+| `users` | Users list changed |
+| `modules` | Module configuration changed |
+| `role` | Permission level changed |
+| `hideToolbar` | Toolbar visibility changed |
+
+Other props like `documentMode` and callbacks are handled efficiently without rebuild.
+
+---
+
+## Troubleshooting
+
+### "document is not defined" (SSR)
+
+The component handles SSR internally, but if you still see errors:
+
+```jsx
+// Use dynamic import in Next.js
+const SuperDocEditor = dynamic(
+  () => import('@superdoc-dev/react').then(mod => mod.SuperDocEditor),
+  { ssr: false }
+);
+```
+
+### React Strict Mode Double-Mount
+
+The component handles React 18 Strict Mode correctly. The internal cleanup flag prevents issues from double-invocation during development.
+
+### Document Not Loading
+
+1. Verify the file is a valid `.docx` document
+2. Check that `document` prop is a `File`, `Blob`, URL string, or config object
+3. Listen for `onContentError` events for parsing errors
+
+### Changing Document Mode
+
+The component handles `documentMode` prop changes efficiently without rebuilding:
+
+```jsx
+const [mode, setMode] = useState('editing');
+
+// Just update state - no rebuild, no flicker
+<button onClick={() => setMode('viewing')}>View</button>
+<SuperDocEditor documentMode={mode} />
+```
+
+You can also use the imperative API if preferred:
+
+```jsx
+editorRef.current?.getInstance()?.setDocumentMode('viewing');
+```
+
+---
+
+## Requirements
+
+| Requirement | Version |
+|-------------|---------|
+| React | 16.8.0+ |
+| Node.js | 16+ |
+
+## Next Steps
+
+<CardGroup cols={2}>
+<Card title="Configuration" icon="gear" href="/core/superdoc/configuration">
+  Full configuration options
+</Card>
+<Card title="Methods" icon="code" href="/core/superdoc/methods">
+  All available methods
+</Card>
+<Card title="Collaboration" icon="users" href="/modules/collaboration/overview">
+  Real-time collaboration setup
+</Card>
+<Card title="React Example" icon="github" href="https://github.com/superdoc-dev/superdoc/tree/main/examples/getting-started/react">
+  React + TypeScript example
+</Card>
+<Card title="Next.js Example" icon="github" href="https://github.com/superdoc-dev/superdoc/tree/main/examples/integrations/nextjs-ssr">
+  Next.js SSR integration
+</Card>
+</CardGroup>

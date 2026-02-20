@@ -67,24 +67,12 @@ const decode = (params) => {
     return commentSchema;
   }
 
-  const trackedMark = node.marks?.find((mark) => mark.type === 'trackInsert' || mark.type === 'trackDelete');
-  if (trackedMark) {
-    const wrapperName = trackedMark.type === 'trackDelete' ? 'w:del' : 'w:ins';
-    const markAttrs = trackedMark.attrs || {};
-    const date = markAttrs.date || new Date(Date.now()).toISOString().replace(/\.\d{3}Z$/, 'Z');
-    const wrapperAttributes = {
-      ...(markAttrs.id ? { 'w:id': String(markAttrs.id) } : {}),
-      ...(markAttrs.author ? { 'w:author': markAttrs.author } : {}),
-      ...(markAttrs.authorEmail ? { 'w:authorEmail': markAttrs.authorEmail } : {}),
-      'w:date': date,
-    };
-
-    return {
-      name: wrapperName,
-      attributes: wrapperAttributes,
-      elements: Array.isArray(commentSchema) ? commentSchema : [commentSchema],
-    };
-  }
+  // Note: Comment range nodes may have trackInsert/trackDelete marks attached
+  // from prepareCommentsForExport(), but we should NOT wrap them in their own
+  // <w:ins>/<w:del> elements. The ECMA-376 spec allows comment markers inside
+  // tracked change elements, so they should be output as bare markers and will
+  // naturally sit inside or around the tracked change wrapper for the text content.
+  // See SD-1519 for details.
 
   if (!parentComment?.trackedChange) {
     return commentSchema;

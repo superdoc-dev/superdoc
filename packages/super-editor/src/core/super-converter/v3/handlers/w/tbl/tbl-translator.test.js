@@ -147,7 +147,7 @@ describe('w:tbl translator', () => {
       });
       expect(result.attrs.grid).toEqual([{ col: 2000 }]);
       expect(result.attrs.tableStyleId).toBe('TableGrid');
-      expect(result.attrs.tableWidth).toEqual({ width: 250, type: 'pct' });
+      expect(result.attrs.tableWidth).toEqual({ value: 5000, type: 'pct' });
       expect(result.attrs.justification).toBe('center');
       expect(result.attrs.tableIndent).toEqual({ width: 7.2, type: 'dxa' });
       expect(result.attrs.tableLayout).toBe('fixed');
@@ -177,6 +177,54 @@ describe('w:tbl translator', () => {
       expect(result.content).toEqual([]);
       expect(result.attrs.tableProperties).toEqual({ cellMargins: {} });
       expect(trTranslator.encode).not.toHaveBeenCalled();
+    });
+
+    it('preserves raw OOXML value for pct table width with dxa grid columns', () => {
+      // SD-1581: Tables with percentage width but fixed (dxa) grid columns
+      // should preserve the raw pct value for downstream layout calculations
+      const mixedTable = {
+        name: 'w:tbl',
+        elements: [
+          {
+            name: 'w:tblPr',
+            elements: [
+              { name: 'w:tblW', attributes: { 'w:w': '5000', 'w:type': 'pct' } }, // 100% width
+            ],
+          },
+          {
+            name: 'w:tblGrid',
+            elements: [
+              { name: 'w:gridCol', attributes: { 'w:w': '2880' } }, // 2 inches in twips
+              { name: 'w:gridCol', attributes: { 'w:w': '2880' } },
+            ],
+          },
+        ],
+      };
+      const params = { nodes: [mixedTable], docx: {} };
+
+      const result = translator.encode(params, {});
+
+      // tableWidth should use { value, type } shape for pct (not converted to pixels)
+      expect(result.attrs.tableWidth).toEqual({ value: 5000, type: 'pct' });
+      // grid columns should still be converted to pixels
+      expect(result.attrs.grid).toEqual([{ col: 2880 }, { col: 2880 }]);
+    });
+
+    it('handles auto table width type as fallback', () => {
+      const autoWidthTable = {
+        name: 'w:tbl',
+        elements: [
+          {
+            name: 'w:tblPr',
+            elements: [{ name: 'w:tblW', attributes: { 'w:w': '0', 'w:type': 'auto' } }],
+          },
+        ],
+      };
+      const params = { nodes: [autoWidthTable], docx: {} };
+
+      const result = translator.encode(params, {});
+
+      expect(result.attrs.tableWidth).toEqual({ width: 0, type: 'auto' });
     });
   });
 

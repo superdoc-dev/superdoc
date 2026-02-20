@@ -45,63 +45,54 @@ export function handleIndexNode(node: PMNode, context: NodeHandlerContext): void
     recordBlockKind,
     nextBlockId,
     positions,
-    defaultFont,
-    defaultSize,
-    styleContext,
-    listCounterContext,
     trackedChangesConfig,
     bookmarks,
     hyperlinkConfig,
     sectionState,
     converters,
+    themeColors,
+    enableComments,
   } = context;
 
-  const paragraphToFlowBlocks = converters?.paragraphToFlowBlocks;
-  if (!paragraphToFlowBlocks) {
-    return;
-  }
-
-  const { getListCounter, incrementListCounter, resetListCounter } = listCounterContext;
+  const paragraphToFlowBlocks = converters.paragraphToFlowBlocks;
 
   children.forEach((child) => {
     if (child.type !== 'paragraph') {
       return;
     }
 
-    if (sectionState?.ranges?.length > 0) {
-      const nextSection = sectionState.ranges[sectionState.currentSectionIndex + 1];
-      if (nextSection && sectionState.currentParagraphIndex === nextSection.startParagraphIndex) {
-        const currentSection = sectionState.ranges[sectionState.currentSectionIndex];
+    if ((sectionState?.ranges?.length ?? 0) > 0) {
+      const nextSection = sectionState!.ranges[sectionState!.currentSectionIndex + 1];
+      if (nextSection && sectionState!.currentParagraphIndex === nextSection.startParagraphIndex) {
+        const currentSection = sectionState!.ranges[sectionState!.currentSectionIndex];
         const requiresPageBoundary =
           shouldRequirePageBoundary(currentSection, nextSection) || hasIntrinsicBoundarySignals(nextSection);
         const extraAttrs = requiresPageBoundary ? { requirePageBoundary: true } : undefined;
         const sectionBreak = createSectionBreakBlock(nextSection, nextBlockId, extraAttrs);
         blocks.push(sectionBreak);
-        recordBlockKind(sectionBreak.kind);
-        sectionState.currentSectionIndex++;
+        recordBlockKind?.(sectionBreak.kind);
+        sectionState!.currentSectionIndex++;
       }
     }
 
-    const paragraphBlocks = paragraphToFlowBlocks(
-      child,
+    const paragraphBlocks = paragraphToFlowBlocks({
+      para: child,
       nextBlockId,
       positions,
-      defaultFont,
-      defaultSize,
-      styleContext,
-      { getListCounter, incrementListCounter, resetListCounter },
       trackedChangesConfig,
       bookmarks,
       hyperlinkConfig,
-      undefined, // themeColors - not available in NodeHandlerContext
-      context.converterContext,
-    );
+      themeColors,
+      converterContext: context.converterContext,
+      enableComments: enableComments,
+      converters,
+    });
 
     paragraphBlocks.forEach((block) => {
       blocks.push(block);
-      recordBlockKind(block.kind);
+      recordBlockKind?.(block.kind);
     });
 
-    sectionState.currentParagraphIndex++;
+    sectionState!.currentParagraphIndex++;
   });
 }

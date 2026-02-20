@@ -1,4 +1,4 @@
-import { eighthPointsToPixels, twipsToPixels } from '@converter/helpers';
+import { eighthPointsToPixels, twipsToPixels, resolveShadingFillColor } from '@converter/helpers';
 import { translator as tcPrTranslator } from '../../tcPr';
 
 /**
@@ -10,6 +10,7 @@ export function handleTableCellNode({
   node,
   table,
   row,
+  tableProperties,
   rowBorders,
   baseTableBorders,
   tableLook,
@@ -20,6 +21,7 @@ export function handleTableCellNode({
   rowIndex = 0,
   totalRows = 1,
   totalColumns,
+  preferTableGridWidths = false,
   _referencedStyles,
 }) {
   const { nodeListHandler } = params;
@@ -58,10 +60,17 @@ export function handleTableCellNode({
   if (colspan > 1) attributes['colspan'] = colspan;
 
   // Width
-  let width = tableCellProperties.cellWidth?.value ? twipsToPixels(tableCellProperties.cellWidth?.value) : null;
+  let width = null;
   const widthType = tableCellProperties.cellWidth?.type;
+  if (!preferTableGridWidths) {
+    // For percentage widths, don't convert to px here; allow table/grid widths to drive layout.
+    if (widthType !== 'pct') {
+      width = tableCellProperties.cellWidth?.value ? twipsToPixels(tableCellProperties.cellWidth?.value) : null;
+    }
+  }
   if (widthType) attributes['widthType'] = widthType;
 
+  const cellOwnWidth = width; // tcW-derived width (before grid fallback)
   if (!width && columnWidth) width = columnWidth;
   if (width) {
     attributes['colwidth'] = [width];
@@ -72,13 +81,22 @@ export function handleTableCellNode({
 
     if (colspan > 1 && hasDefaultColWidths) {
       let colwidth = [];
+      // When cell has its own tcW width that exceeds the grid span total,
+      // distribute tcW proportionally across grid columns to match Word behavior.
+      // Only scale UP (tcW > grid), not down — smaller tcW is just a minimum.
+      const gridSpanTotal = defaultColWidths
+        .slice(columnIndex, columnIndex + colspan)
+        .reduce((sum, w) => sum + (w || 0), 0);
+      const shouldScale = cellOwnWidth && gridSpanTotal > 0 && cellOwnWidth > gridSpanTotal + 1;
 
       for (let i = 0; i < colspan; i++) {
         let colwidthValue = defaultColWidths[columnIndex + i];
         let defaultColwidth = 100;
 
         if (typeof colwidthValue !== 'undefined') {
-          colwidth.push(colwidthValue);
+          colwidth.push(
+            shouldScale ? Math.round(colwidthValue * (cellOwnWidth / gridSpanTotal) * 1000) / 1000 : colwidthValue,
+          );
         } else {
           colwidth.push(defaultColwidth);
         }
@@ -91,9 +109,10 @@ export function handleTableCellNode({
   }
 
   // Background
-  const background = {
-    color: tableCellProperties.shading?.fill,
-  };
+  const backgroundColor =
+    resolveShadingFillColor(tableCellProperties.shading) ?? resolveShadingFillColor(tableProperties?.shading);
+  const background = { color: backgroundColor };
+
   // TODO: Do we need other background attrs?
   if (background.color) attributes['background'] = background;
 

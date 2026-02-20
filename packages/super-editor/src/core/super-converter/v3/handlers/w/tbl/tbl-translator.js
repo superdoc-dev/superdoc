@@ -15,6 +15,47 @@ const XML_NODE_NAME = 'w:tbl';
 /** @type {import('@translator').SuperDocNodeOrKeyName} */
 const SD_NODE_NAME = 'table';
 
+/** Tolerance in twips for matching cell width sum to grid + indent. Accounts for rounding in Word. */
+const INDENT_TWIPS_TOLERANCE = 5;
+
+/**
+ * Sum all column widths from a tblGrid encoded grid array.
+ * @param {Array<{col: number | string}>} columns - Grid columns with col width in twips
+ * @returns {number} Total width in twips
+ */
+const sumColumnTwips = (columns = []) =>
+  columns.reduce((sum, col) => {
+    const raw = col?.col;
+    const value = typeof raw === 'number' ? raw : Number.parseInt(raw, 10);
+    return Number.isFinite(value) ? sum + value : sum;
+  }, 0);
+
+/**
+ * Sum tcW widths from all cells in the first table row containing cells.
+ * Returns null if any cell lacks a valid width (indicates unreliable data).
+ * @param {Array<Object>} rows - XML row elements (w:tr)
+ * @returns {number | null} Total cell width in twips, or null if incomplete
+ */
+const getFirstRowCellWidthSumTwips = (rows = []) => {
+  const firstRow = rows.find((row) => row?.elements?.some((el) => el.name === 'w:tc'));
+  if (!firstRow?.elements) return null;
+
+  const cells = firstRow.elements.filter((el) => el.name === 'w:tc');
+  if (!cells.length) return null;
+
+  let sum = 0;
+  for (const cell of cells) {
+    const tcPr = cell.elements?.find((el) => el.name === 'w:tcPr');
+    const tcW = tcPr?.elements?.find((el) => el.name === 'w:tcW');
+    const rawWidth = tcW?.attributes?.['w:w'];
+    const width = typeof rawWidth === 'number' ? rawWidth : Number.parseInt(rawWidth, 10);
+    if (!Number.isFinite(width)) return null;
+    sum += width;
+  }
+
+  return sum;
+};
+
 /**
  * Encode a w:tbl element as a SuperDoc 'table' node.
  * @param {import('@translator').SCEncoderConfig} [params]
@@ -71,13 +112,26 @@ const encode = (params, encodedAttrs) => {
 
   if (encodedAttrs.tableProperties.tableWidth) {
     const tableWidthMeasurement = encodedAttrs.tableProperties.tableWidth;
-    const widthPx = twipsToPixels(tableWidthMeasurement.value);
-    if (widthPx != null) {
+    if (tableWidthMeasurement.type === 'pct' && typeof tableWidthMeasurement.value === 'number') {
+      // For percentage widths, preserve the raw OOXML value (in 1/50th of a percent units)
+      // using { value, type } shape. This allows downstream code to calculate the actual
+      // percentage (value / 50) without precision loss from pixel conversion.
       encodedAttrs.tableWidth = {
-        width: widthPx,
+        value: tableWidthMeasurement.value,
         type: tableWidthMeasurement.type,
       };
-    } else if (tableWidthMeasurement.type === 'auto') {
+    } else {
+      // For fixed widths (dxa), convert to pixels using { width, type } shape.
+      const widthPx = twipsToPixels(tableWidthMeasurement.value);
+      if (widthPx != null) {
+        encodedAttrs.tableWidth = {
+          width: widthPx,
+          type: tableWidthMeasurement.type,
+        };
+      }
+    }
+
+    if (!encodedAttrs.tableWidth && tableWidthMeasurement.type === 'auto') {
       encodedAttrs.tableWidth = {
         width: 0,
         type: tableWidthMeasurement.type,
@@ -101,6 +155,20 @@ const encode = (params, encodedAttrs) => {
   let columnWidths = Array.isArray(encodedAttrs['grid'])
     ? encodedAttrs['grid'].map((item) => twipsToPixels(item.col))
     : [];
+
+  const tableIndentTwips = encodedAttrs.tableProperties?.tableIndent?.value;
+  const hasIndent = Number.isFinite(tableIndentTwips) && tableIndentTwips !== 0;
+  const hasExplicitGrid = Boolean(tblGrid);
+  const gridTwipsTotal = hasExplicitGrid ? sumColumnTwips(encodedAttrs['grid']) : null;
+  const rowTcWTwipsTotal = hasExplicitGrid && hasIndent ? getFirstRowCellWidthSumTwips(rows) : null;
+  const indentDiff = rowTcWTwipsTotal != null && gridTwipsTotal != null ? rowTcWTwipsTotal - gridTwipsTotal : null;
+  const preferTableGridWidths =
+    hasExplicitGrid &&
+    hasIndent &&
+    gridTwipsTotal != null &&
+    rowTcWTwipsTotal != null &&
+    Math.sign(indentDiff) === Math.sign(tableIndentTwips) &&
+    Math.abs(indentDiff - tableIndentTwips) <= INDENT_TWIPS_TOLERANCE;
 
   if (!columnWidths.length) {
     const fallback = buildFallbackGridForTable({
@@ -127,6 +195,7 @@ const encode = (params, encodedAttrs) => {
       extraParams: {
         row,
         table: node,
+        tableProperties: encodedAttrs.tableProperties,
         tableBorders: encodedAttrs.borders,
         tableLook,
         columnWidths,
@@ -134,6 +203,7 @@ const encode = (params, encodedAttrs) => {
         rowIndex,
         totalRows,
         totalColumns,
+        preferTableGridWidths,
         _referencedStyles: referencedStyles,
       },
     });

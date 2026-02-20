@@ -2,7 +2,7 @@ import { beforeAll, describe, expect, it } from 'vitest';
 import { initTestEditor, loadTestDataForEditorTests } from '@tests/helpers/helpers.js';
 import { computeParagraphReferenceSnapshot } from '@tests/helpers/paragraphReference.js';
 import { computeParagraphAttrs } from '@superdoc/pm-adapter/attributes/paragraph.js';
-import { buildStyleContextFromEditor, buildConverterContextFromEditor } from '../helpers/adapterTestHelpers.js';
+import { buildConverterContextFromEditor } from '../helpers/adapterTestHelpers.js';
 
 const findParagraphAt = (doc, predicate) => {
   let match = null;
@@ -46,20 +46,19 @@ describe('spacing/indent and rendering polish', () => {
     expect(referenceMatch).toBeTruthy();
     expect(paraNode).toBeTruthy();
 
-    const styleContext = buildStyleContextFromEditor(editor);
     const converterContext = buildConverterContextFromEditor(editor);
-    const adapterAttrs = computeParagraphAttrs(paraNode, styleContext, undefined, converterContext);
+    const { paragraphAttrs } = computeParagraphAttrs(paraNode, converterContext);
 
     // Compare spacing.before
     if (referenceMatch.paragraphProperties.spacing?.before !== undefined) {
-      expect(typeof adapterAttrs?.spacing?.before).toBe('number');
-      expect(adapterAttrs.spacing.before).toBeGreaterThanOrEqual(0);
+      expect(typeof paragraphAttrs?.spacing?.before).toBe('number');
+      expect(paragraphAttrs.spacing.before).toBeGreaterThanOrEqual(0);
     }
 
     // Compare spacing.after
     if (referenceMatch.paragraphProperties.spacing?.after !== undefined) {
-      expect(typeof adapterAttrs?.spacing?.after).toBe('number');
-      expect(adapterAttrs.spacing.after).toBeGreaterThanOrEqual(0);
+      expect(typeof paragraphAttrs?.spacing?.after).toBe('number');
+      expect(paragraphAttrs.spacing.after).toBeGreaterThanOrEqual(0);
     }
 
     editor.destroy();
@@ -92,14 +91,13 @@ describe('spacing/indent and rendering polish', () => {
       return;
     }
 
-    const styleContext = buildStyleContextFromEditor(editor);
     const converterContext = buildConverterContextFromEditor(editor);
-    const adapterAttrs = computeParagraphAttrs(paraNode, styleContext, undefined, converterContext);
+    const { paragraphAttrs } = computeParagraphAttrs(paraNode, converterContext);
 
     // Compare line spacing
     if (referenceMatch.paragraphProperties.spacing?.line !== undefined) {
-      expect(typeof adapterAttrs?.spacing?.line).toBe('number');
-      expect(adapterAttrs.spacing.line).toBeGreaterThan(0);
+      expect(typeof paragraphAttrs?.spacing?.line).toBe('number');
+      expect(paragraphAttrs.spacing.line).toBeGreaterThan(0);
     }
 
     editor.destroy();
@@ -130,30 +128,24 @@ describe('spacing/indent and rendering polish', () => {
       const mockPara = {
         type: { name: 'paragraph' },
         attrs: {
-          spacing: {
+          paragraphProperties: {
             contextualSpacing: true,
           },
         },
       };
 
-      const styleContext = {
-        styles: {},
-        defaults: { defaultTabIntervalTwips: 720, decimalSeparator: '.' },
-      };
-
-      const adapterAttrs = computeParagraphAttrs(mockPara, styleContext);
-      expect(adapterAttrs?.contextualSpacing).toBe(true);
+      const { paragraphAttrs } = computeParagraphAttrs(mockPara);
+      expect(paragraphAttrs?.contextualSpacing).toBe(true);
       editor.destroy();
       return;
     }
 
-    const styleContext = buildStyleContextFromEditor(editor);
     const converterContext = buildConverterContextFromEditor(editor);
-    const adapterAttrs = computeParagraphAttrs(match, styleContext, undefined, converterContext);
+    const { paragraphAttrs } = computeParagraphAttrs(match, converterContext);
 
     // contextualSpacing should be preserved
     if (match.attrs?.paragraphProperties?.contextualSpacing !== undefined) {
-      expect(adapterAttrs?.contextualSpacing).toBe(match.attrs.paragraphProperties.contextualSpacing);
+      expect(paragraphAttrs?.contextualSpacing).toBe(match.attrs.paragraphProperties.contextualSpacing);
     }
 
     editor.destroy();
@@ -164,25 +156,22 @@ describe('spacing/indent and rendering polish', () => {
     const mockPara = {
       type: { name: 'paragraph' },
       attrs: {
-        spacing: {
-          beforeAutospacing: true,
-          afterAutospacing: false,
+        paragraphProperties: {
+          spacing: {
+            beforeAutospacing: true,
+            afterAutospacing: false,
+          },
         },
       },
     };
 
-    const styleContext = {
-      styles: {},
-      defaults: { defaultTabIntervalTwips: 720, decimalSeparator: '.' },
-    };
-
-    const adapterAttrs = computeParagraphAttrs(mockPara, styleContext);
+    const { paragraphAttrs } = computeParagraphAttrs(mockPara);
 
     // Autospacing flags should be preserved in spacing object
-    expect(typeof adapterAttrs?.spacing?.beforeAutospacing).toBe('boolean');
-    expect(typeof adapterAttrs?.spacing?.afterAutospacing).toBe('boolean');
-    expect(adapterAttrs.spacing.beforeAutospacing).toBe(true);
-    expect(adapterAttrs.spacing.afterAutospacing).toBe(false);
+    expect(typeof paragraphAttrs?.spacing?.beforeAutospacing).toBe('boolean');
+    expect(typeof paragraphAttrs?.spacing?.afterAutospacing).toBe('boolean');
+    expect(paragraphAttrs.spacing.beforeAutospacing).toBe(true);
+    expect(paragraphAttrs.spacing.afterAutospacing).toBe(false);
   });
 
   it('compares text indent and padding between reference and adapter', () => {
@@ -211,24 +200,23 @@ describe('spacing/indent and rendering polish', () => {
       return;
     }
 
-    const styleContext = buildStyleContextFromEditor(editor);
     const converterContext = buildConverterContextFromEditor(editor);
-    const adapterAttrs = computeParagraphAttrs(paraNode, styleContext, undefined, converterContext);
+    const { paragraphAttrs } = computeParagraphAttrs(paraNode, converterContext);
 
     const referenceIndent = referenceMatch.paragraphProperties.indent;
 
     // Compare indent numeric properties
     if (referenceIndent.left !== undefined) {
-      expect(typeof adapterAttrs.indent.left).toBe('number');
+      expect(typeof paragraphAttrs.indent.left).toBe('number');
     }
     if (referenceIndent.right !== undefined) {
-      expect(typeof adapterAttrs.indent.right).toBe('number');
+      expect(typeof paragraphAttrs.indent.right).toBe('number');
     }
     if (referenceIndent.firstLine !== undefined) {
-      expect(typeof adapterAttrs.indent.firstLine).toBe('number');
+      expect(typeof paragraphAttrs.indent.firstLine).toBe('number');
     }
     if (referenceIndent.hanging !== undefined) {
-      expect(typeof adapterAttrs.indent.hanging).toBe('number');
+      expect(typeof paragraphAttrs.indent.hanging).toBe('number');
     }
 
     editor.destroy();
@@ -245,13 +233,8 @@ describe('spacing/indent and rendering polish', () => {
       },
     };
 
-    const styleContext = {
-      styles: {},
-      defaults: { defaultTabIntervalTwips: 720, decimalSeparator: '.' },
-    };
-
-    const adapterAttrs = computeParagraphAttrs(mockPara, styleContext);
-    expect(adapterAttrs?.keepNext).toBe(true);
+    const { paragraphAttrs } = computeParagraphAttrs(mockPara);
+    expect(paragraphAttrs?.keepNext).toBe(true);
   });
 
   it('ensures keepLines flag is preserved', () => {
@@ -265,13 +248,8 @@ describe('spacing/indent and rendering polish', () => {
       },
     };
 
-    const styleContext = {
-      styles: {},
-      defaults: { defaultTabIntervalTwips: 720, decimalSeparator: '.' },
-    };
-
-    const adapterAttrs = computeParagraphAttrs(mockPara, styleContext);
-    expect(adapterAttrs?.keepLines).toBe(true);
+    const { paragraphAttrs } = computeParagraphAttrs(mockPara);
+    expect(paragraphAttrs?.keepLines).toBe(true);
   });
 
   it('ensures paragraph borders are preserved', () => {
@@ -280,20 +258,17 @@ describe('spacing/indent and rendering polish', () => {
     const mockPara = {
       type: { name: 'paragraph' },
       attrs: {
-        borders: {
-          top: { val: 'single', size: 32, color: 'FF0000' },
-          bottom: { val: 'single', size: 32, color: '0000FF' },
+        paragraphProperties: {
+          borders: {
+            top: { val: 'single', size: 32, color: 'FF0000' },
+            bottom: { val: 'single', size: 32, color: '0000FF' },
+          },
         },
       },
     };
 
-    const styleContext = {
-      styles: {},
-      defaults: { defaultTabIntervalTwips: 720, decimalSeparator: '.' },
-    };
-
-    const adapterAttrs = computeParagraphAttrs(mockPara, styleContext);
-    expect(adapterAttrs?.borders).toEqual({
+    const { paragraphAttrs } = computeParagraphAttrs(mockPara);
+    expect(paragraphAttrs?.borders).toEqual({
       top: { style: 'solid', width: (32 / 8) * (96 / 72), color: '#FF0000' },
       bottom: { style: 'solid', width: (32 / 8) * (96 / 72), color: '#0000FF' },
     });
@@ -303,38 +278,32 @@ describe('spacing/indent and rendering polish', () => {
     const mockPara = {
       type: { name: 'paragraph' },
       attrs: {
-        shading: {
-          fill: '#FFFF00',
-          color: '#000000',
+        paragraphProperties: {
+          shading: {
+            fill: '#FFFF00',
+            color: '#000000',
+          },
         },
       },
     };
 
-    const styleContext = {
-      styles: {},
-      defaults: { defaultTabIntervalTwips: 720, decimalSeparator: '.' },
-    };
-
-    const adapterAttrs = computeParagraphAttrs(mockPara, styleContext);
-    expect(adapterAttrs?.shading).toEqual(mockPara.attrs.shading);
+    const { paragraphAttrs } = computeParagraphAttrs(mockPara);
+    expect(paragraphAttrs?.shading).toEqual(mockPara.attrs.paragraphProperties.shading);
   });
 
   it('ensures framePr and floatAlignment flags are preserved', () => {
     const mockPara = {
       type: { name: 'paragraph' },
       attrs: {
-        framePr: {
-          xAlign: 'right',
+        paragraphProperties: {
+          framePr: {
+            xAlign: 'right',
+          },
         },
       },
     };
 
-    const styleContext = {
-      styles: {},
-      defaults: { defaultTabIntervalTwips: 720, decimalSeparator: '.' },
-    };
-
-    const adapterAttrs = computeParagraphAttrs(mockPara, styleContext);
-    expect(adapterAttrs?.floatAlignment).toBe('right');
+    const { paragraphAttrs } = computeParagraphAttrs(mockPara);
+    expect(paragraphAttrs?.floatAlignment).toBe('right');
   });
 });

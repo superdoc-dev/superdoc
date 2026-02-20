@@ -22,17 +22,20 @@
 export function createHiddenHost(doc: Document, widthPx: number): HTMLElement {
   const host = doc.createElement('div');
   host.className = 'presentation-editor__hidden-host';
-  host.style.position = 'fixed';
-  host.style.left = '-9999px';
-  host.style.top = '0';
-  host.style.width = `${widthPx}px`;
+  host.style.setProperty('position', 'fixed');
+  host.style.setProperty('left', '-9999px');
+  host.style.setProperty('top', '0');
+  // Only set valid (non-negative) width values
+  if (widthPx >= 0) {
+    host.style.setProperty('width', `${widthPx}px`);
+  }
   host.style.setProperty('overflow-anchor', 'none');
-  host.style.pointerEvents = 'none';
+  host.style.setProperty('pointer-events', 'none');
   // DO NOT use visibility:hidden - it prevents focusing!
   // Instead use opacity:0 and z-index to hide while keeping focusable
-  host.style.opacity = '0';
-  host.style.zIndex = '-1';
-  host.style.userSelect = 'none';
+  host.style.setProperty('opacity', '0');
+  host.style.setProperty('z-index', '-1');
+  host.style.setProperty('user-select', 'none');
   // DO NOT set aria-hidden="true" on this element.
   // This hidden host contains the actual ProseMirror editor which must remain accessible
   // to screen readers and keyboard navigation. The viewport (#viewportHost) is aria-hidden

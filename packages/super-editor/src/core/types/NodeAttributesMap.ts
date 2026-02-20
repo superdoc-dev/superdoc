@@ -27,8 +27,9 @@ export interface NodeAttributesMap {}
 
 /**
  * Get all registered node names.
+ * Uses mapped type to force TypeScript to expand the union in hover tooltips.
  */
-export type NodeName = keyof NodeAttributesMap;
+export type NodeName = { [K in keyof NodeAttributesMap]: K }[keyof NodeAttributesMap];
 
 /**
  * Get the attribute type for a node by name.

@@ -1,0 +1,270 @@
+---
+title: Telemetry
+sidebarTitle: Telemetry
+keywords: "telemetry, analytics, usage tracking, billing, license key, document tracking"
+---
+
+SuperDoc collects lightweight telemetry to track document opens for usage-based billing. Telemetry is enabled by default and runs silently in the background — it never blocks rendering or breaks your app.
+
+## What gets collected
+
+Each time a document is opened or imported, SuperDoc sends a single event containing:
+
+| Field | Description | Example |
+|-------|-------------|---------|
+| `documentId` | A hashed document identifier (not the content itself) | `a1b2c3d4...` |
+| `documentCreatedAt` | The document's original creation timestamp | `2024-01-15T10:30:00Z` |
+| `superdocVersion` | The version of the SuperDoc library | `1.15.0` |
+| `browserInfo` | User agent, hostname, and screen size | `{ hostname: "app.example.com", ... }` |
+| `metadata` | Custom key-value pairs you optionally provide | `{ customerId: "123" }` |
+
+SuperDoc does **not** collect:
+- Document content or text
+- User identities or personal data
+- Keystrokes, edits, or change history
+- Cookies or session tokens (`credentials: 'omit'`)
+
+## How it works
+
+1. You open or import a document
+2. SuperDoc generates a **document identifier** — a hash derived from the file's metadata (not its content)
+3. A single `POST` request fires to the telemetry endpoint
+4. If the request fails (network error, blocked by firewall), it fails silently
+
+```
+Document opened → Generate identifier hash → POST to endpoint → Done
+```
+
+<Note>
+The telemetry request is non-blocking and fire-and-forget. Your editor loads regardless of the outcome.
+</Note>
+
+## Configuration
+
+Pass `licenseKey` and `telemetry` in your SuperDoc or SuperEditor config:
+
+<CodeGroup>
+
+```javascript SuperDoc
+import { SuperDoc } from 'superdoc';
+
+const superdoc = new SuperDoc({
+  selector: '#editor',
+  document: yourFile,
+  licenseKey: 'your-license-key',
+  telemetry: {
+    enabled: true,
+  },
+});
+```
+
+```javascript SuperEditor
+import { Editor } from 'superdoc/super-editor';
+
+const editor = await Editor.open(file, {
+  element: document.querySelector('#editor'),
+  licenseKey: 'your-license-key',
+  telemetry: {
+    enabled: true,
+  },
+});
+```
+
+</CodeGroup>
+
+### Options
+
+<ParamField path="licenseKey" type="string">
+  Your organization's license key. Links document opens to your account for billing.
+  Defaults to `community-and-eval-agplv3` if not provided.
+</ParamField>
+
+<ParamField path="telemetry.enabled" type="boolean">
+  Enable or disable telemetry. Default: `true`.
+</ParamField>
+
+<ParamField path="telemetry.endpoint" type="string">
+  Override the telemetry endpoint. Default: `https://ingest.superdoc.dev/v1/collect`. Useful for proxying through your own infrastructure.
+</ParamField>
+
+<ParamField path="telemetry.metadata" type="Record<string, unknown>">
+  Custom key-value pairs included with every event. Use this to attach your own identifiers (customer ID, environment, etc.).
+</ParamField>
+
+<ParamField path="telemetry.licenseKey" type="string" deprecated>
+  **Deprecated.** Use the root-level `licenseKey` instead. If both are provided, the root-level key takes priority.
+</ParamField>
+
+### Disabling telemetry
+
+Set `enabled: false` to turn telemetry off entirely:
+
+```javascript
+const superdoc = new SuperDoc({
+  selector: '#editor',
+  document: yourFile,
+  telemetry: {
+    enabled: false,
+  },
+});
+```
+
+No network requests will be made. Document metadata (GUID and timestamp) is still generated locally so files export correctly.
+
+### Self-reporting
+
+You can route telemetry through your own server using `telemetry.endpoint`. SuperDoc sends the same JSON payload to whatever URL you provide — inspect it, store it, forward it, or drop it.
+
+```javascript
+const superdoc = new SuperDoc({
+  selector: '#editor',
+  document: yourFile,
+  licenseKey: 'your-license-key',
+  telemetry: {
+    enabled: true,
+    endpoint: 'https://your-server.com/superdoc/telemetry',
+  },
+});
+```
+
+Your server receives a `POST` with the payload described in [Payload example](#payload-example). From there you can aggregate usage on your side — count document opens per customer, track adoption across teams, or feed the data into your own billing pipeline.
+
+<Note>
+A dedicated self-reporting API with dashboards and usage summaries is under development and will be available by Feb 28, 2026. In the meantime, proxying via `telemetry.endpoint` gives you full control over the raw data.
+</Note>
+
+## License key
+
+The license key identifies your organization. It's sent as an `X-License-Key` header with every telemetry request.
+
+| License type | Key | How to get it |
+|-------------|-----|---------------|
+| Community / evaluation | `community-and-eval-agplv3` (default) | No action needed — used automatically |
+| Commercial | Your organization key | Email [q@superdoc.dev](mailto:q@superdoc.dev) |
+
+If you're evaluating SuperDoc or using it under AGPLv3, you don't need to configure a license key. The community key is applied automatically.
+
+For a commercial license key, email [q@superdoc.dev](mailto:q@superdoc.dev). You'll receive a key tied to your organization that unlocks usage tracking for your account.
+
+## How document uniqueness works
+
+SuperDoc needs to identify each document uniquely so that opening the same file twice counts as one document, not two. This matters for accurate billing.
+
+### Identifier strategies
+
+SuperDoc uses two strategies depending on what metadata the file contains:
+
+**1. Metadata hash — file already has a GUID and timestamp**
+
+DOCX files created by Microsoft Word (and other tools) typically contain a unique GUID and a creation timestamp in their internal metadata (`docProps/` and `word/settings.xml`). When both are present, SuperDoc hashes them together:
+
+```
+documentId = hash(GUID | creationTimestamp)   →   "HASH-A1B2C3D4"
+```
+
+This is the most stable strategy. The same file always produces the same identifier regardless of content edits, because the hash is derived from metadata, not content.
+
+**2. Generated identifier — file is missing metadata**
+
+Some tools produce DOCX files without a GUID or timestamp. When either is missing, SuperDoc does two things:
+
+1. **For the current open**: generates a content hash of the raw file bytes so the same file still produces a consistent identifier
+2. **For future opens**: generates the missing GUID and/or timestamp and embeds them into the document's metadata
+
+The generated metadata is saved when you export. On the next import, the file now has both a GUID and timestamp, so SuperDoc switches to the stable metadata hash automatically.
+
+```
+First open:  no GUID in file → content hash used, GUID + timestamp generated
+Export:      GUID + timestamp written into the file
+Next open:   GUID + timestamp found → metadata hash (stable from now on)
+```
+
+This self-healing behavior means document identification improves automatically as files pass through SuperDoc. After one export cycle, every document gets a permanent, edit-resistant identifier.
+
+## Payload example
+
+Here's what a telemetry request looks like on the wire:
+
+```
+POST https://ingest.superdoc.dev/v1/collect
+Content-Type: application/json
+X-License-Key: your-license-key
+```
+
+```json
+{
+  "superdocVersion": "1.15.0",
+  "browserInfo": {
+    "userAgent": "Mozilla/5.0...",
+    "currentUrl": "https://app.example.com/doc/123",
+    "hostname": "app.example.com",
+    "screenSize": { "width": 1920, "height": 1080 }
+  },
+  "metadata": {
+    "customerId": "cust-456"
+  },
+  "events": [
+    {
+      "timestamp": "2026-02-12T14:30:00.000Z",
+      "documentId": "a1b2c3d4e5f6...",
+      "documentCreatedAt": "2024-01-15T10:30:00Z"
+    }
+  ]
+}
+```
+
+## Try it: document counting demo
+
+See document uniqueness in action. Upload a DOCX file and watch the counter — then try the steps below.
+
+import { DocCounter } from '/snippets/components/doc-counter.jsx'
+
+<DocCounter height="300px" />
+
+<Steps>
+  <Step title="Upload a DOCX file">
+    Click **Upload DOCX** and pick any `.docx` file. The counter goes to **1**. SuperDoc reads the file's internal metadata and generates a document identifier.
+  </Step>
+  <Step title="Edit the document">
+    Make some changes in the editor — add text, delete a paragraph, change formatting. The identifier stays the same because it's based on metadata, not content.
+  </Step>
+  <Step title="Export and re-import">
+    Click **Export & re-import**. SuperDoc exports the document to DOCX and immediately re-imports it. The counter stays at **1** — same metadata, same identifier.
+  </Step>
+  <Step title="Upload a different file">
+    Upload a second DOCX file. The counter goes to **2**. Each file with distinct metadata gets its own identifier.
+  </Step>
+  <Step title="Re-upload the first file">
+    Upload the original file again. The counter stays at **2**. SuperDoc recognizes it as the same document.
+  </Step>
+</Steps>
+
+<Info>
+The event log at the bottom shows exactly what SuperDoc sees: the identifier hash, whether a document is new or recognized, and how many times each has been opened.
+</Info>
+
+## FAQ
+
+<AccordionGroup>
+
+<Accordion title="Does telemetry affect performance?">
+No. The request is non-blocking and fire-and-forget. Your editor loads and renders regardless of the telemetry outcome.
+</Accordion>
+
+<Accordion title="What happens if telemetry fails?">
+Nothing. Errors are caught silently. No retries, no queuing, no user-visible errors. Your app continues to work normally.
+</Accordion>
+
+<Accordion title="Can I route telemetry through my own server?">
+Yes. Set `telemetry.endpoint` to your proxy URL. The payload format stays the same.
+</Accordion>
+
+<Accordion title="Does the same document get counted twice?">
+Not if it has metadata. SuperDoc hashes the document's GUID and creation timestamp, so the same file produces the same identifier every time. See [How document uniqueness works](#how-document-uniqueness-works) above.
+</Accordion>
+
+<Accordion title="Do I need a license key for open-source use?">
+No. The community key (`community-and-eval-agplv3`) is applied automatically when you don't provide one.
+</Accordion>
+
+</AccordionGroup>

@@ -10,7 +10,7 @@ import { marginTopTranslator } from '../top/index.js';
 
 // Property translators for w:tcMar child elements
 // Each translator handles a specific margin property of the table cell
-/** @type {import('@translator').NodeTranslatorConfig[]} */
+/** @type {import('@translator').NodeTranslator[]} */
 const propertyTranslators = [
   marginBottomTranslator,
   marginEndTranslator,

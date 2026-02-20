@@ -9,19 +9,7 @@
  */
 
 import type { ParagraphSpacing } from '@superdoc/contracts';
-
-export type ConverterNumberingContext = {
-  definitions?: Record<string, unknown>;
-  abstracts?: Record<string, unknown>;
-};
-
-export type ConverterLinkedStyle = {
-  id: string;
-  definition?: {
-    styles?: Record<string, unknown>;
-    attrs?: Record<string, unknown>;
-  };
-};
+import type { NumberingProperties, StylesDocumentProperties, TableInfo } from '@superdoc/style-engine/ooxml';
 
 /**
  * Paragraph properties from a table style that should be applied to
@@ -33,8 +21,8 @@ export type TableStyleParagraphProps = {
 
 export type ConverterContext = {
   docx?: Record<string, unknown>;
-  numbering?: ConverterNumberingContext;
-  linkedStyles?: ConverterLinkedStyle[];
+  translatedNumbering: NumberingProperties;
+  translatedLinkedStyles: StylesDocumentProperties;
   /**
    * Optional mapping from OOXML footnote id -> display number.
    * Display numbers are assigned in order of first appearance in the document (1-based),
@@ -49,27 +37,13 @@ export type ConverterContext = {
    *
    * Style cascade: docDefaults → tableStyleParagraphProps → paragraph style → direct formatting
    */
-  tableStyleParagraphProps?: TableStyleParagraphProps;
+  tableInfo?: TableInfo;
   /**
    * Background color of the containing table cell (hex format, e.g., "#342D8C").
    * Used for auto text color resolution - text without explicit color should
    * contrast with the cell background per WCAG guidelines.
    */
   backgroundColor?: string;
-};
-
-/**
- * Guard that checks whether the converter context includes DOCX data
- * required for paragraph style hydration.
- *
- * Paragraph hydration needs DOCX structures so it can follow style
- * inheritance chains via resolveParagraphProperties. Numbering is optional
- * since documents without lists should still get docDefaults spacing.
- */
-export const hasParagraphStyleContext = (
-  context?: ConverterContext,
-): context is ConverterContext & { docx: Record<string, unknown> } => {
-  return Boolean(context?.docx);
 };
 
 /**

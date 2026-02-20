@@ -18,6 +18,8 @@ const {
   prepareCommentsForImport,
   translateFormatChangesToEnglish,
   getHighlightColor,
+  clampOpacity,
+  applyAlphaToHex,
 } = CommentHelpers;
 
 afterEach(() => {
@@ -113,7 +115,9 @@ describe('comment helpers', () => {
 
     const positions = getCommentPositionsById('comment-123', state.doc);
 
-    expect(positions).toEqual([{ from: 1, to: 6 }]);
+    expect(positions).toEqual([expect.objectContaining({ from: 1, to: 6 })]);
+    expect(positions[0].mark).toBeDefined();
+    expect(positions[0].mark.type.name).toBe(CommentMarkName);
   });
 
   it('removes comments by id and dispatches transaction', () => {
@@ -125,7 +129,11 @@ describe('comment helpers', () => {
 
     removeCommentsById({ commentId: 'comment-123', state, tr, dispatch });
 
-    expect(removeSpy).toHaveBeenCalledWith(1, 6, schema.marks[CommentMarkName]);
+    expect(removeSpy).toHaveBeenCalledWith(
+      1,
+      6,
+      expect.objectContaining({ type: expect.objectContaining({ name: CommentMarkName }) }),
+    );
     expect(dispatch).toHaveBeenCalledWith(tr);
   });
 
@@ -341,14 +349,137 @@ describe('comment helpers', () => {
       externalColor: '#abcdef',
     });
 
+    // Active comment gets brighter highlight (27% = 44 hex)
     const color = getHighlightColor({ activeThreadId: 'thread-1', threadId: 'thread-1', isInternal: false, editor });
     expect(color).toBe('#abcdef44');
 
+    // Other comments get lighter highlight (13% = 22 hex) when another is active
     const external = getHighlightColor({ activeThreadId: 'thread-2', threadId: 'thread-1', isInternal: false, editor });
     expect(external).toBe('#abcdef22');
 
+    // No active comment - shows lighter highlight (13% = 22 hex)
+    const inactive = getHighlightColor({ activeThreadId: null, threadId: 'thread-3', isInternal: false, editor });
+    expect(inactive).toBe('#abcdef22');
+
+    // Internal comment when not in internal mode is hidden
     const hidden = getHighlightColor({ activeThreadId: null, threadId: 'thread-3', isInternal: true, editor });
     expect(hidden).toBe('transparent');
+  });
+
+  it('uses configured highlight colors and opacity for inactive comments', () => {
+    const editor = {
+      options: {
+        isInternal: false,
+        comments: {
+          highlightColors: { external: '#112233' },
+          highlightOpacity: { inactive: 0.25 },
+        },
+      },
+      state: {},
+    };
+    vi.spyOn(CommentsPluginKey, 'getState').mockReturnValue({
+      internalColor: '#123456',
+      externalColor: '#abcdef',
+    });
+
+    const color = getHighlightColor({ activeThreadId: 'thread-2', threadId: 'thread-1', isInternal: false, editor });
+    expect(color).toBe('#11223340');
+  });
+
+  it('uses active highlight override color when provided', () => {
+    const editor = {
+      options: {
+        isInternal: false,
+        comments: {
+          highlightColors: { external: '#112233', activeExternal: '#ff0000' },
+        },
+      },
+      state: {},
+    };
+    vi.spyOn(CommentsPluginKey, 'getState').mockReturnValue({
+      internalColor: '#123456',
+      externalColor: '#abcdef',
+    });
+
+    const color = getHighlightColor({ activeThreadId: 'thread-1', threadId: 'thread-1', isInternal: false, editor });
+    expect(color).toBe('#ff0000');
+  });
+
+  it('falls back to plugin colors with custom opacity', () => {
+    const editor = {
+      options: {
+        isInternal: false,
+        comments: {
+          highlightOpacity: { active: 0.2 },
+        },
+      },
+      state: {},
+    };
+    vi.spyOn(CommentsPluginKey, 'getState').mockReturnValue({
+      internalColor: '#123456',
+      externalColor: '#abcdef',
+    });
+
+    const color = getHighlightColor({ activeThreadId: 'thread-1', threadId: 'thread-1', isInternal: false, editor });
+    expect(color).toBe('#abcdef33');
+  });
+});
+
+describe('clampOpacity', () => {
+  it('returns the value when within valid range', () => {
+    expect(clampOpacity(0.5)).toBe(0.5);
+    expect(clampOpacity(0)).toBe(0);
+    expect(clampOpacity(1)).toBe(1);
+  });
+
+  it('clamps values below 0 to 0', () => {
+    expect(clampOpacity(-0.5)).toBe(0);
+    expect(clampOpacity(-100)).toBe(0);
+  });
+
+  it('clamps values above 1 to 1', () => {
+    expect(clampOpacity(1.5)).toBe(1);
+    expect(clampOpacity(100)).toBe(1);
+  });
+
+  it('returns null for non-finite values', () => {
+    expect(clampOpacity(NaN)).toBeNull();
+    expect(clampOpacity(Infinity)).toBeNull();
+    expect(clampOpacity(-Infinity)).toBeNull();
+    expect(clampOpacity(undefined)).toBeNull();
+    expect(clampOpacity(null)).toBeNull();
+  });
+});
+
+describe('applyAlphaToHex', () => {
+  it('applies alpha to 6-digit hex colors', () => {
+    expect(applyAlphaToHex('#aabbcc', 0.5)).toBe('#aabbcc80');
+    expect(applyAlphaToHex('#000000', 1)).toBe('#000000ff');
+    expect(applyAlphaToHex('#ffffff', 0)).toBe('#ffffff00');
+  });
+
+  it('expands and applies alpha to 3-digit hex colors', () => {
+    expect(applyAlphaToHex('#abc', 0.5)).toBe('#aabbcc80');
+    expect(applyAlphaToHex('#000', 1)).toBe('#000000ff');
+    expect(applyAlphaToHex('#fff', 0.25)).toBe('#ffffff40');
+  });
+
+  it('returns original color for invalid hex formats', () => {
+    expect(applyAlphaToHex('rgb(255,0,0)', 0.5)).toBe('rgb(255,0,0)');
+    expect(applyAlphaToHex('#gg0000', 0.5)).toBe('#gg0000');
+    expect(applyAlphaToHex('red', 0.5)).toBe('red');
+    expect(applyAlphaToHex('#aabbccdd', 0.5)).toBe('#aabbccdd');
+  });
+
+  it('returns original value for non-string input', () => {
+    expect(applyAlphaToHex(null, 0.5)).toBeNull();
+    expect(applyAlphaToHex(undefined, 0.5)).toBeUndefined();
+    expect(applyAlphaToHex(123, 0.5)).toBe(123);
+  });
+
+  it('handles case-insensitive hex colors', () => {
+    expect(applyAlphaToHex('#AABBCC', 0.5)).toBe('#AABBCC80');
+    expect(applyAlphaToHex('#AbCdEf', 0.5)).toBe('#AbCdEf80');
   });
 });
 

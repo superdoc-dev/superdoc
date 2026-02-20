@@ -1,0 +1,67 @@
+---
+title: Document API reference
+sidebarTitle: Reference
+description: Generated operation reference from the canonical Document API contract.
+---
+
+{/* GENERATED FILE: DO NOT EDIT. Regenerate via `pnpm run docapi:sync`. */}
+
+This reference is generated from `packages/document-api/src/contract/*`.
+Document API is currently alpha and subject to breaking changes.
+
+## Browse by namespace
+
+| Namespace | Operations | Reference |
+| --- | --- | --- |
+| Core | 8 | [Open](./core/index) |
+| Capabilities | 1 | [Open](./capabilities/index) |
+| Create | 2 | [Open](./create/index) |
+| Format | 4 | [Open](./format/index) |
+| Lists | 8 | [Open](./lists/index) |
+| Comments | 11 | [Open](./comments/index) |
+| Track Changes | 6 | [Open](./track-changes/index) |
+
+## All operations
+
+| Operation | Namespace | Member path | Mutates | Idempotency | Tracked | Dry run |
+| --- | --- | --- | --- | --- | --- | --- |
+| [`find`](./find) | Core | `find` | No | `idempotent` | No | No |
+| [`getNode`](./get-node) | Core | `getNode` | No | `idempotent` | No | No |
+| [`getNodeById`](./get-node-by-id) | Core | `getNodeById` | No | `idempotent` | No | No |
+| [`getText`](./get-text) | Core | `getText` | No | `idempotent` | No | No |
+| [`info`](./info) | Core | `info` | No | `idempotent` | No | No |
+| [`insert`](./insert) | Core | `insert` | Yes | `non-idempotent` | Yes | Yes |
+| [`replace`](./replace) | Core | `replace` | Yes | `conditional` | Yes | Yes |
+| [`delete`](./delete) | Core | `delete` | Yes | `conditional` | Yes | Yes |
+| [`format.bold`](./format/bold) | Format | `format.bold` | Yes | `conditional` | Yes | Yes |
+| [`format.italic`](./format/italic) | Format | `format.italic` | Yes | `conditional` | Yes | Yes |
+| [`format.underline`](./format/underline) | Format | `format.underline` | Yes | `conditional` | Yes | Yes |
+| [`format.strikethrough`](./format/strikethrough) | Format | `format.strikethrough` | Yes | `conditional` | Yes | Yes |
+| [`create.paragraph`](./create/paragraph) | Create | `create.paragraph` | Yes | `non-idempotent` | Yes | Yes |
+| [`create.heading`](./create/heading) | Create | `create.heading` | Yes | `non-idempotent` | Yes | Yes |
+| [`lists.list`](./lists/list) | Lists | `lists.list` | No | `idempotent` | No | No |
+| [`lists.get`](./lists/get) | Lists | `lists.get` | No | `idempotent` | No | No |
+| [`lists.insert`](./lists/insert) | Lists | `lists.insert` | Yes | `non-idempotent` | Yes | Yes |
+| [`lists.setType`](./lists/set-type) | Lists | `lists.setType` | Yes | `conditional` | No | Yes |
+| [`lists.indent`](./lists/indent) | Lists | `lists.indent` | Yes | `conditional` | No | Yes |
+| [`lists.outdent`](./lists/outdent) | Lists | `lists.outdent` | Yes | `conditional` | No | Yes |
+| [`lists.restart`](./lists/restart) | Lists | `lists.restart` | Yes | `conditional` | No | Yes |
+| [`lists.exit`](./lists/exit) | Lists | `lists.exit` | Yes | `conditional` | No | Yes |
+| [`comments.add`](./comments/add) | Comments | `comments.add` | Yes | `non-idempotent` | No | No |
+| [`comments.edit`](./comments/edit) | Comments | `comments.edit` | Yes | `conditional` | No | No |
+| [`comments.reply`](./comments/reply) | Comments | `comments.reply` | Yes | `non-idempotent` | No | No |
+| [`comments.move`](./comments/move) | Comments | `comments.move` | Yes | `conditional` | No | No |
+| [`comments.resolve`](./comments/resolve) | Comments | `comments.resolve` | Yes | `conditional` | No | No |
+| [`comments.remove`](./comments/remove) | Comments | `comments.remove` | Yes | `conditional` | No | No |
+| [`comments.setInternal`](./comments/set-internal) | Comments | `comments.setInternal` | Yes | `conditional` | No | No |
+| [`comments.setActive`](./comments/set-active) | Comments | `comments.setActive` | Yes | `conditional` | No | No |
+| [`comments.goTo`](./comments/go-to) | Comments | `comments.goTo` | No | `conditional` | No | No |
+| [`comments.get`](./comments/get) | Comments | `comments.get` | No | `idempotent` | No | No |
+| [`comments.list`](./comments/list) | Comments | `comments.list` | No | `idempotent` | No | No |
+| [`trackChanges.list`](./track-changes/list) | Track Changes | `trackChanges.list` | No | `idempotent` | No | No |
+| [`trackChanges.get`](./track-changes/get) | Track Changes | `trackChanges.get` | No | `idempotent` | No | No |
+| [`trackChanges.accept`](./track-changes/accept) | Track Changes | `trackChanges.accept` | Yes | `conditional` | No | No |
+| [`trackChanges.reject`](./track-changes/reject) | Track Changes | `trackChanges.reject` | Yes | `conditional` | No | No |
+| [`trackChanges.acceptAll`](./track-changes/accept-all) | Track Changes | `trackChanges.acceptAll` | Yes | `conditional` | No | No |
+| [`trackChanges.rejectAll`](./track-changes/reject-all) | Track Changes | `trackChanges.rejectAll` | Yes | `conditional` | No | No |
+| [`capabilities.get`](./capabilities/get) | Capabilities | `capabilities` | No | `idempotent` | No | No |

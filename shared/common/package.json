@@ -33,6 +33,7 @@
     "list-numbering"
   ],
   "scripts": {
+    "build": "tsc --project tsconfig.json --emitDeclarationOnly",
     "test": "vitest run",
     "test:watch": "vitest",
     "typecheck": "tsc --noEmit"

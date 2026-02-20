@@ -11,6 +11,22 @@ describe('generateOrderedListIndex', () => {
     expect(result).toBe('.12.4)');
   });
 
+  it('formats decimalZero markers with leading zeros for single digits', () => {
+    const singleDigit = generateOrderedListIndex({
+      listLevel: [1, 1],
+      lvlText: '%1.%2',
+      listNumberingType: 'decimalZero',
+    });
+    expect(singleDigit).toBe('1.01');
+
+    const doubleDigit = generateOrderedListIndex({
+      listLevel: [1, 10],
+      lvlText: '%1.%2',
+      listNumberingType: 'decimalZero',
+    });
+    expect(doubleDigit).toBe('1.10');
+  });
+
   it('formats lower roman numerals', () => {
     const result = generateOrderedListIndex({
       listLevel: [4],
@@ -56,6 +72,54 @@ describe('generateOrderedListIndex', () => {
       listNumberingType: 'non-existent',
     });
     expect(result).toBeNull();
+  });
+
+  describe('malformed lvlText', () => {
+    it('returns null when lvlText is null', () => {
+      const result = generateOrderedListIndex({
+        listLevel: [1],
+        lvlText: null,
+        listNumberingType: 'decimal',
+      });
+      expect(result).toBeNull();
+    });
+
+    it('returns null when lvlText is undefined', () => {
+      const result = generateOrderedListIndex({
+        listLevel: [1],
+        lvlText: undefined,
+        listNumberingType: 'decimal',
+      });
+      expect(result).toBeNull();
+    });
+
+    it('returns null when lvlText is a non-string type', () => {
+      const result = generateOrderedListIndex({
+        listLevel: [1],
+        lvlText: 42 as any,
+        listNumberingType: 'decimal',
+      });
+      expect(result).toBeNull();
+    });
+
+    it('still formats correctly with valid lvlText after guard', () => {
+      const result = generateOrderedListIndex({
+        listLevel: [3],
+        lvlText: '%1.',
+        listNumberingType: 'decimal',
+      });
+      expect(result).toBe('3.');
+    });
+  });
+
+  it('handles undefined customFormat for custom numbering type', () => {
+    const result = generateOrderedListIndex({
+      listLevel: [5],
+      lvlText: '%1)',
+      listNumberingType: 'custom',
+      customFormat: undefined,
+    });
+    expect(result).toBe('5)');
   });
 });
 

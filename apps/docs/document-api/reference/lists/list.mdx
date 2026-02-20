@@ -1,0 +1,183 @@
+---
+title: lists.list
+sidebarTitle: lists.list
+description: Generated reference for lists.list
+---
+
+{/* GENERATED FILE: DO NOT EDIT. Regenerate via `pnpm run docapi:sync`. */}
+
+> Alpha: Document API is currently alpha and subject to breaking changes.
+
+## Summary
+
+- Operation ID: `lists.list`
+- API member path: `editor.doc.lists.list(...)`
+- Mutates document: `no`
+- Idempotency: `idempotent`
+- Supports tracked mode: `no`
+- Supports dry run: `no`
+- Deterministic target resolution: `yes`
+
+## Pre-apply throws
+
+- `TARGET_NOT_FOUND`
+
+## Non-applied failure codes
+
+- None
+
+## Input schema
+
+```json
+{
+  "additionalProperties": false,
+  "properties": {
+    "kind": {
+      "enum": [
+        "ordered",
+        "bullet"
+      ]
+    },
+    "level": {
+      "type": "integer"
+    },
+    "limit": {
+      "type": "integer"
+    },
+    "offset": {
+      "type": "integer"
+    },
+    "ordinal": {
+      "type": "integer"
+    },
+    "within": {
+      "additionalProperties": false,
+      "properties": {
+        "kind": {
+          "const": "block"
+        },
+        "nodeId": {
+          "type": "string"
+        },
+        "nodeType": {
+          "enum": [
+            "paragraph",
+            "heading",
+            "listItem",
+            "table",
+            "tableRow",
+            "tableCell",
+            "image",
+            "sdt"
+          ]
+        }
+      },
+      "required": [
+        "kind",
+        "nodeType",
+        "nodeId"
+      ],
+      "type": "object"
+    }
+  },
+  "type": "object"
+}
+```
+
+## Output schema
+
+```json
+{
+  "additionalProperties": false,
+  "properties": {
+    "items": {
+      "items": {
+        "additionalProperties": false,
+        "properties": {
+          "address": {
+            "additionalProperties": false,
+            "properties": {
+              "kind": {
+                "const": "block"
+              },
+              "nodeId": {
+                "type": "string"
+              },
+              "nodeType": {
+                "const": "listItem"
+              }
+            },
+            "required": [
+              "kind",
+              "nodeType",
+              "nodeId"
+            ],
+            "type": "object"
+          },
+          "kind": {
+            "enum": [
+              "ordered",
+              "bullet"
+            ]
+          },
+          "level": {
+            "type": "integer"
+          },
+          "marker": {
+            "type": "string"
+          },
+          "ordinal": {
+            "type": "integer"
+          },
+          "path": {
+            "items": {
+              "type": "integer"
+            },
+            "type": "array"
+          },
+          "text": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "address"
+        ],
+        "type": "object"
+      },
+      "type": "array"
+    },
+    "matches": {
+      "items": {
+        "additionalProperties": false,
+        "properties": {
+          "kind": {
+            "const": "block"
+          },
+          "nodeId": {
+            "type": "string"
+          },
+          "nodeType": {
+            "const": "listItem"
+          }
+        },
+        "required": [
+          "kind",
+          "nodeType",
+          "nodeId"
+        ],
+        "type": "object"
+      },
+      "type": "array"
+    },
+    "total": {
+      "type": "integer"
+    }
+  },
+  "required": [
+    "matches",
+    "total",
+    "items"
+  ],
+  "type": "object"
+}
+```

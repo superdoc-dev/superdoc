@@ -1,0 +1,107 @@
+---
+title: Paragraph extension
+sidebarTitle: "Paragraph"
+keywords: "Paragraph extension, superdoc Paragraph, word Paragraph, document Paragraph, docx Paragraph"
+---
+
+import Description from '/snippets/extensions/paragraph.mdx'
+
+<Description />
+
+## Commands
+
+### `toggleBulletList`
+
+Convert selected paragraphs to a bullet list, or remove list formatting if already a bullet list.
+
+<CodeGroup>
+```javascript Usage
+editor.commands.toggleBulletList()
+```
+
+```javascript Full Example
+import { SuperDoc } from 'superdoc';
+import 'superdoc/style.css';
+
+const superdoc = new SuperDoc({
+  selector: '#editor',
+  document: yourFile,
+  onReady: (superdoc) => {
+    const editor = superdoc.activeEditor;
+    editor.commands.toggleBulletList()
+  },
+});
+```
+</CodeGroup>
+
+### `toggleOrderedList`
+
+Convert selected paragraphs to an ordered list, or remove list formatting if already an ordered list.
+
+<CodeGroup>
+```javascript Usage
+editor.commands.toggleOrderedList()
+```
+
+```javascript Full Example
+import { SuperDoc } from 'superdoc';
+import 'superdoc/style.css';
+
+const superdoc = new SuperDoc({
+  selector: '#editor',
+  document: yourFile,
+  onReady: (superdoc) => {
+    const editor = superdoc.activeEditor;
+    editor.commands.toggleOrderedList()
+  },
+});
+```
+</CodeGroup>
+
+### `restartNumbering`
+
+Reset list numbering for the current list item and following items.
+
+<CodeGroup>
+```javascript Usage
+editor.commands.restartNumbering()
+```
+
+```javascript Full Example
+import { SuperDoc } from 'superdoc';
+import 'superdoc/style.css';
+
+const superdoc = new SuperDoc({
+  selector: '#editor',
+  document: yourFile,
+  onReady: (superdoc) => {
+    const editor = superdoc.activeEditor;
+    editor.commands.restartNumbering()
+  },
+});
+```
+</CodeGroup>
+
+## Keyboard shortcuts
+
+| Command | Shortcut | Description |
+|---------|----------|-------------|
+| toggleOrderedList() | `Mod-Shift-7` | Toggle ordered list |
+| toggleBulletList() | `Mod-Shift-8` | Toggle bullet list |
+| (split paragraph) | `Enter` | Split paragraph at cursor |
+| (line break) | `Shift-Enter` | Insert line break without list properties |
+| (indent) | `Tab` | Increase list indent level |
+| (outdent) | `Shift-Tab` | Decrease list indent level |
+
+## Input rules
+
+| Trigger | Result |
+|---------|--------|
+| `- `, `+ `, or `* ` at line start | Create bullet list |
+| `1. ` (or any number) at line start | Create ordered list |
+
+## Source code
+
+import { SourceCodeLink } from '/snippets/components/source-code-link.jsx'
+
+<SourceCodeLink path="packages/super-editor/src/extensions/paragraph/paragraph.js" />

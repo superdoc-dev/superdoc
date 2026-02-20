@@ -3,30 +3,88 @@
  */
 
 import { describe, it, expect, vi } from 'vitest';
-import { tableNodeToBlock, handleTableNode } from './table.js';
-import type { PMNode, BlockIdGenerator, PositionMap, StyleContext } from '../types.js';
+import { tableNodeToBlock as baseTableNodeToBlock, handleTableNode } from './table.js';
+import type {
+  PMNode,
+  BlockIdGenerator,
+  PositionMap,
+  TrackedChangesConfig,
+  HyperlinkConfig,
+  ThemeColorPalette,
+  NestedConverters,
+} from '../types.js';
+import type { ConverterContext } from '../converter-context.js';
 import type { FlowBlock, ParagraphBlock, TableBlock, ImageBlock } from '@superdoc/contracts';
 import { twipsToPx } from '../utilities.js';
 
-describe('table converter', () => {
-  const mockStyleContext: StyleContext = {
-    defaults: {
-      paragraphFont: 'Arial',
-      fontSize: 12,
-      decimalSeparator: '.',
-    },
-  };
+const DEFAULT_HYPERLINK_CONFIG: HyperlinkConfig = { enableRichHyperlinks: false };
+const DEFAULT_CONVERTER_CONTEXT: ConverterContext = {
+  translatedNumbering: {},
+  translatedLinkedStyles: {
+    docDefaults: {},
+    latentStyles: {},
+    styles: {},
+  },
+};
 
+const tableNodeToBlock = (
+  node: PMNode,
+  nextBlockId: BlockIdGenerator,
+  positions: PositionMap,
+  defaultFont: string,
+  defaultSize: number,
+  trackedChangesConfig?: TrackedChangesConfig,
+  bookmarks?: Map<string, number>,
+  hyperlinkConfig?: HyperlinkConfig,
+  themeColors?: ThemeColorPalette,
+  paragraphToFlowBlocks?: NestedConverters['paragraphToFlowBlocks'],
+  converterContext?: ConverterContext,
+) => {
+  const converters = paragraphToFlowBlocks ? ({ paragraphToFlowBlocks } as NestedConverters) : ({} as NestedConverters);
+  const effectiveConverterContext =
+    converterContext ??
+    ({
+      ...DEFAULT_CONVERTER_CONTEXT,
+      translatedLinkedStyles: {
+        ...DEFAULT_CONVERTER_CONTEXT.translatedLinkedStyles,
+        docDefaults: {
+          ...DEFAULT_CONVERTER_CONTEXT.translatedLinkedStyles.docDefaults,
+          runProperties: {
+            ...(DEFAULT_CONVERTER_CONTEXT.translatedLinkedStyles.docDefaults?.runProperties ?? {}),
+            fontFamily: {
+              ...(DEFAULT_CONVERTER_CONTEXT.translatedLinkedStyles.docDefaults?.runProperties?.fontFamily ?? {}),
+              ascii: defaultFont,
+            },
+            fontSize: defaultSize * 2,
+          },
+        },
+      },
+    } as ConverterContext);
+
+  return baseTableNodeToBlock(node, {
+    nextBlockId,
+    positions,
+    trackedChangesConfig,
+    bookmarks,
+    hyperlinkConfig: hyperlinkConfig ?? DEFAULT_HYPERLINK_CONFIG,
+    themeColors,
+    converterContext: effectiveConverterContext,
+    converters,
+    enableComments: true,
+  });
+};
+
+describe('table converter', () => {
   describe('tableNodeToBlock', () => {
     const mockBlockIdGenerator: BlockIdGenerator = vi.fn((kind) => `test-${kind}`);
     const mockPositionMap: PositionMap = new Map();
 
-    const mockParagraphConverter = vi.fn((node) => {
+    const mockParagraphConverter = vi.fn((params) => {
       return [
         {
           kind: 'paragraph',
           id: 'p1',
-          runs: [{ text: node.content?.[0]?.text || 'text', fontFamily: 'Arial', fontSize: 12 }],
+          runs: [{ text: params.para.content?.[0]?.text || 'text', fontFamily: 'Arial', fontSize: 12 }],
         } as ParagraphBlock,
       ];
     });
@@ -43,7 +101,6 @@ describe('table converter', () => {
         mockPositionMap,
         'Arial',
         16,
-        mockStyleContext,
         undefined,
         undefined,
         undefined,
@@ -76,7 +133,6 @@ describe('table converter', () => {
         mockPositionMap,
         'Arial',
         16,
-        mockStyleContext,
         undefined,
         undefined,
         undefined,
@@ -109,7 +165,6 @@ describe('table converter', () => {
         mockPositionMap,
         'Arial',
         16,
-        mockStyleContext,
         undefined,
         undefined,
         undefined,
@@ -163,7 +218,6 @@ describe('table converter', () => {
         mockPositionMap,
         'Arial',
         16,
-        mockStyleContext,
         undefined,
         undefined,
         undefined,
@@ -198,7 +252,6 @@ describe('table converter', () => {
         mockPositionMap,
         'Arial',
         16,
-        mockStyleContext,
         undefined,
         undefined,
         undefined,
@@ -210,7 +263,7 @@ describe('table converter', () => {
       expect(result.rows).toHaveLength(1);
     });
 
-    it('forwards listCounterContext into paragraph conversion', () => {
+    it('forwards converterContext into paragraph conversion', () => {
       const node: PMNode = {
         type: 'table',
         content: [
@@ -226,16 +279,11 @@ describe('table converter', () => {
         ],
       };
 
-      const listCounterContext = {
-        getListCounter: vi.fn(),
-        incrementListCounter: vi.fn(),
-        resetListCounter: vi.fn(),
-      };
+      const converterContext = { docx: { foo: 'bar' } } as never;
 
-      const paragraphSpy = vi.fn((para, ...args) => {
-        const [, , , , , passedListContext] = args;
-        expect(passedListContext).toBe(listCounterContext);
-        return mockParagraphConverter(para);
+      const paragraphSpy = vi.fn((params) => {
+        expect(params.converterContext).toBe(converterContext);
+        return mockParagraphConverter(params);
       });
 
       const result = tableNodeToBlock(
@@ -244,14 +292,12 @@ describe('table converter', () => {
         mockPositionMap,
         'Arial',
         16,
-        mockStyleContext,
         undefined,
         undefined,
         undefined,
         undefined,
         paragraphSpy,
-        undefined,
-        { listCounterContext },
+        converterContext,
       ) as TableBlock;
 
       expect(result.rows[0].cells[0].blocks?.[0].kind).toBe('paragraph');
@@ -277,26 +323,22 @@ describe('table converter', () => {
       const imageBlock: ImageBlock = { kind: 'image', id: 'image-1', src: 'image.png' };
       const imageConverter = vi.fn().mockReturnValue(imageBlock);
 
-      const result = tableNodeToBlock(
-        node,
-        mockBlockIdGenerator,
-        mockPositionMap,
-        'Arial',
-        16,
-        mockStyleContext,
-        undefined,
-        undefined,
-        undefined,
-        undefined,
-        mockParagraphConverter,
-        undefined,
-        {
-          converters: {
-            imageNodeToBlock: imageConverter,
-            paragraphToFlowBlocks: mockParagraphConverter,
-          },
-        },
-      ) as TableBlock;
+      const result = baseTableNodeToBlock(node, {
+        nextBlockId: mockBlockIdGenerator,
+        positions: mockPositionMap,
+        defaultFont: 'Arial',
+        defaultSize: 16,
+        trackedChangesConfig: undefined,
+        bookmarks: undefined,
+        hyperlinkConfig: DEFAULT_HYPERLINK_CONFIG,
+        themeColors: undefined,
+        converterContext: DEFAULT_CONVERTER_CONTEXT,
+        converters: {
+          paragraphToFlowBlocks: mockParagraphConverter,
+          imageNodeToBlock: imageConverter,
+        } as NestedConverters,
+        enableComments: true,
+      }) as TableBlock;
 
       expect(imageConverter).toHaveBeenCalled();
       expect(result.rows[0].cells[0].blocks?.[0]).toBe(imageBlock);
@@ -332,25 +374,21 @@ describe('table converter', () => {
         } as ParagraphBlock,
       ]);
 
-      const result = tableNodeToBlock(
-        node,
-        mockBlockIdGenerator,
-        mockPositionMap,
-        'Arial',
-        16,
-        mockStyleContext,
-        undefined,
-        undefined,
-        undefined,
-        undefined,
-        paragraphConverter,
-        undefined,
-        {
-          converters: {
-            paragraphToFlowBlocks: paragraphConverter,
-          },
-        },
-      ) as TableBlock;
+      const result = baseTableNodeToBlock(node, {
+        nextBlockId: mockBlockIdGenerator,
+        positions: mockPositionMap,
+        defaultFont: 'Arial',
+        defaultSize: 16,
+        trackedChangesConfig: undefined,
+        bookmarks: undefined,
+        hyperlinkConfig: DEFAULT_HYPERLINK_CONFIG,
+        themeColors: undefined,
+        converterContext: DEFAULT_CONVERTER_CONTEXT,
+        converters: {
+          paragraphToFlowBlocks: paragraphConverter,
+        } as NestedConverters,
+        enableComments: true,
+      }) as TableBlock;
 
       const cellBlocks = result.rows[0].cells[0].blocks ?? [];
       expect(cellBlocks[0]?.kind).toBe('paragraph');
@@ -407,26 +445,22 @@ describe('table converter', () => {
 
       const tableConverter = vi.fn().mockReturnValue(nestedTableBlock);
 
-      const result = tableNodeToBlock(
-        node,
-        mockBlockIdGenerator,
-        mockPositionMap,
-        'Arial',
-        16,
-        mockStyleContext,
-        undefined,
-        undefined,
-        undefined,
-        undefined,
-        mockParagraphConverter,
-        undefined,
-        {
-          converters: {
-            paragraphToFlowBlocks: mockParagraphConverter,
-            tableNodeToBlock: tableConverter,
-          },
-        },
-      ) as TableBlock;
+      const result = baseTableNodeToBlock(node, {
+        nextBlockId: mockBlockIdGenerator,
+        positions: mockPositionMap,
+        defaultFont: 'Arial',
+        defaultSize: 16,
+        trackedChangesConfig: undefined,
+        bookmarks: undefined,
+        hyperlinkConfig: DEFAULT_HYPERLINK_CONFIG,
+        themeColors: undefined,
+        converterContext: DEFAULT_CONVERTER_CONTEXT,
+        converters: {
+          paragraphToFlowBlocks: mockParagraphConverter,
+          tableNodeToBlock: tableConverter,
+        } as NestedConverters,
+        enableComments: true,
+      }) as TableBlock;
 
       const cellBlocks = result.rows[0].cells[0].blocks ?? [];
       const nestedTable = cellBlocks.find((block) => block.kind === 'table') as TableBlock | undefined;
@@ -462,7 +496,6 @@ describe('table converter', () => {
         mockPositionMap,
         'Arial',
         16,
-        mockStyleContext,
         undefined,
         undefined,
         undefined,
@@ -501,7 +534,6 @@ describe('table converter', () => {
         mockPositionMap,
         'Arial',
         16,
-        mockStyleContext,
         undefined,
         undefined,
         undefined,
@@ -544,7 +576,6 @@ describe('table converter', () => {
         mockPositionMap,
         'Arial',
         16,
-        mockStyleContext,
         undefined,
         undefined,
         undefined,
@@ -584,7 +615,6 @@ describe('table converter', () => {
         mockPositionMap,
         'Arial',
         16,
-        mockStyleContext,
         undefined,
         undefined,
         undefined,
@@ -623,7 +653,6 @@ describe('table converter', () => {
         mockPositionMap,
         'Arial',
         16,
-        mockStyleContext,
         undefined,
         undefined,
         undefined,
@@ -664,7 +693,6 @@ describe('table converter', () => {
         mockPositionMap,
         'Arial',
         16,
-        mockStyleContext,
         undefined,
         undefined,
         undefined,
@@ -700,7 +728,6 @@ describe('table converter', () => {
         mockPositionMap,
         'Arial',
         16,
-        mockStyleContext,
         undefined,
         undefined,
         undefined,
@@ -738,7 +765,6 @@ describe('table converter', () => {
         mockPositionMap,
         'Arial',
         16,
-        mockStyleContext,
         undefined,
         undefined,
         undefined,
@@ -777,7 +803,6 @@ describe('table converter', () => {
         mockPositionMap,
         'Arial',
         16,
-        mockStyleContext,
         undefined,
         undefined,
         undefined,
@@ -821,7 +846,6 @@ describe('table converter', () => {
           mockPositionMap,
           'Arial',
           16,
-          mockStyleContext,
           undefined,
           undefined,
           undefined,
@@ -858,7 +882,6 @@ describe('table converter', () => {
         mockPositionMap,
         'Arial',
         16,
-        mockStyleContext,
         undefined,
         undefined,
         undefined,
@@ -894,7 +917,6 @@ describe('table converter', () => {
         mockPositionMap,
         'Arial',
         16,
-        mockStyleContext,
         undefined,
         undefined,
         undefined,
@@ -932,7 +954,6 @@ describe('table converter', () => {
         mockPositionMap,
         'Arial',
         16,
-        mockStyleContext,
         undefined,
         undefined,
         undefined,
@@ -970,7 +991,6 @@ describe('table converter', () => {
         mockPositionMap,
         'Arial',
         16,
-        mockStyleContext,
         undefined,
         undefined,
         undefined,
@@ -1006,7 +1026,6 @@ describe('table converter', () => {
         mockPositionMap,
         'Arial',
         16,
-        mockStyleContext,
         undefined,
         undefined,
         undefined,
@@ -1015,6 +1034,42 @@ describe('table converter', () => {
       ) as TableBlock;
 
       expect(result.attrs?.cellSpacing).toBe(5);
+    });
+
+    it('forwards tableIndent to table block attrs', () => {
+      const tableIndent = { width: 96, type: 'dxa' };
+      const node: PMNode = {
+        type: 'table',
+        attrs: {
+          tableIndent,
+        },
+        content: [
+          {
+            type: 'tableRow',
+            content: [
+              {
+                type: 'tableCell',
+                content: [{ type: 'paragraph', content: [{ type: 'text', text: 'Indented cell' }] }],
+              },
+            ],
+          },
+        ],
+      };
+
+      const result = tableNodeToBlock(
+        node,
+        mockBlockIdGenerator,
+        mockPositionMap,
+        'Arial',
+        16,
+        undefined,
+        undefined,
+        undefined,
+        undefined,
+        mockParagraphConverter,
+      ) as TableBlock;
+
+      expect(result.attrs?.tableIndent).toEqual(tableIndent);
     });
 
     it('converts column widths from twips to pixels', () => {
@@ -1050,7 +1105,6 @@ describe('table converter', () => {
         mockPositionMap,
         'Arial',
         16,
-        mockStyleContext,
         undefined,
         undefined,
         undefined,
@@ -1090,7 +1144,6 @@ describe('table converter', () => {
         mockPositionMap,
         'Arial',
         16,
-        mockStyleContext,
         undefined,
         undefined,
         undefined,
@@ -1132,7 +1185,6 @@ describe('table converter', () => {
         mockPositionMap,
         'Arial',
         16,
-        mockStyleContext,
         trackedChangesConfig,
         undefined,
         undefined,
@@ -1143,7 +1195,7 @@ describe('table converter', () => {
       expect(mockConverter).toHaveBeenCalled();
       // Verify tracked changes config was passed
       const callArgs = mockConverter.mock.calls[0];
-      expect(callArgs[7]).toEqual(trackedChangesConfig);
+      expect(callArgs[0].trackedChangesConfig).toEqual(trackedChangesConfig);
     });
 
     it('returns null when all rows have no cells', () => {
@@ -1165,7 +1217,6 @@ describe('table converter', () => {
         mockPositionMap,
         'Arial',
         16,
-        mockStyleContext,
         undefined,
         undefined,
         undefined,
@@ -1211,7 +1262,6 @@ describe('table converter', () => {
         positions: new Map(),
         defaultFont: 'Arial',
         defaultSize: 16,
-        styleContext: mockStyleContext,
         trackedChangesConfig: undefined,
         bookmarks: undefined,
         hyperlinkConfig: undefined,
@@ -1243,7 +1293,6 @@ describe('table converter', () => {
         positions: new Map(),
         defaultFont: 'Arial',
         defaultSize: 16,
-        styleContext: mockStyleContext,
         trackedChangesConfig: undefined,
         bookmarks: undefined,
         hyperlinkConfig: undefined,
@@ -1304,7 +1353,6 @@ describe('table converter', () => {
         mockPositionMap,
         'Arial',
         12,
-        mockStyleContext,
         undefined,
         undefined,
         undefined,
@@ -1354,7 +1402,6 @@ describe('table converter', () => {
         mockPositionMap,
         'Arial',
         12,
-        mockStyleContext,
         undefined,
         undefined,
         undefined,
@@ -1367,7 +1414,7 @@ describe('table converter', () => {
       expect(tableBlock.columnWidths).toEqual([100, 150]);
     });
 
-    it('Priority 2/3 interplay: should prefer colwidth when userEdited is false even if grid present', () => {
+    it('Priority 2/3 interplay: should prefer grid over colwidth when userEdited is false', () => {
       const node: PMNode = {
         type: 'table',
         attrs: {
@@ -1399,7 +1446,6 @@ describe('table converter', () => {
         mockPositionMap,
         'Arial',
         12,
-        mockStyleContext,
         undefined,
         undefined,
         undefined,
@@ -1411,13 +1457,15 @@ describe('table converter', () => {
       const tableBlock = result as TableBlock;
 
       // When userEdited is false and both grid and colwidth are present,
-      // colwidth (Priority 2) takes precedence over grid (Priority 3)
+      // grid (Priority 2) takes precedence over colwidth (Priority 3).
+      // Grid values represent actual column positions and sum to the page width.
       expect(tableBlock.columnWidths).toBeDefined();
       expect(tableBlock.columnWidths).toHaveLength(2);
-      expect(tableBlock.columnWidths).toEqual([50, 100]);
+      // 1440 twips = 96px, 2880 twips = 192px
+      expect(tableBlock.columnWidths).toEqual([96, 192]);
     });
 
-    it('Priority 3: should use grid when no colwidth present', () => {
+    it('Priority 2: should use grid when no colwidth present', () => {
       const node: PMNode = {
         type: 'table',
         attrs: {
@@ -1446,7 +1494,6 @@ describe('table converter', () => {
         mockPositionMap,
         'Arial',
         12,
-        mockStyleContext,
         undefined,
         undefined,
         undefined,
@@ -1462,7 +1509,7 @@ describe('table converter', () => {
       expect(tableBlock.columnWidths![1]).toBeCloseTo(192, 1);
     });
 
-    it('Priority 4: should auto-calculate when no width attributes', () => {
+    it('Priority 4: should leave columnWidths undefined when no width attributes', () => {
       const node: PMNode = {
         type: 'table',
         attrs: {
@@ -1492,7 +1539,6 @@ describe('table converter', () => {
         mockPositionMap,
         'Arial',
         12,
-        mockStyleContext,
         undefined,
         undefined,
         undefined,
@@ -1533,7 +1579,6 @@ describe('table converter', () => {
         mockPositionMap,
         'Arial',
         12,
-        mockStyleContext,
         undefined,
         undefined,
         undefined,
@@ -1576,7 +1621,6 @@ describe('table converter', () => {
         mockPositionMap,
         'Arial',
         12,
-        mockStyleContext,
         undefined,
         undefined,
         undefined,

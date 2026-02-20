@@ -10,11 +10,12 @@ import type {
   PMNode,
   BlockIdGenerator,
   PositionMap,
-  StyleContext,
-  ListCounterContext,
   HyperlinkConfig,
   TrackedChangesConfig,
   NodeHandlerContext,
+  NestedConverters,
+  ConverterContext,
+  ThemeColorPalette,
 } from '../types.js';
 import { applySdtMetadataToParagraphBlocks, getNodeInstruction } from './metadata.js';
 
@@ -93,49 +94,37 @@ export function processTocChildren(
   context: {
     nextBlockId: BlockIdGenerator;
     positions: PositionMap;
-    defaultFont: string;
-    defaultSize: number;
-    styleContext: StyleContext;
-    listCounterContext?: ListCounterContext;
-    bookmarks?: Map<string, number>;
-    trackedChanges?: TrackedChangesConfig;
+    bookmarks: Map<string, number>;
+    trackedChangesConfig: TrackedChangesConfig;
     hyperlinkConfig: HyperlinkConfig;
+    enableComments: boolean;
+    converters: NestedConverters;
+    converterContext: ConverterContext;
+    themeColors?: ThemeColorPalette;
   },
   outputArrays: {
     blocks: FlowBlock[];
-    recordBlockKind: (kind: FlowBlock['kind']) => void;
+    recordBlockKind?: (kind: FlowBlock['kind']) => void;
   },
-  paragraphConverter: (
-    para: PMNode,
-    nextBlockId: BlockIdGenerator,
-    positions: PositionMap,
-    defaultFont: string,
-    defaultSize: number,
-    styleContext: StyleContext,
-    listCounterContext?: ListCounterContext,
-    trackedChanges?: TrackedChangesConfig,
-    bookmarks?: Map<string, number>,
-    hyperlinkConfig?: HyperlinkConfig,
-  ) => FlowBlock[],
 ): void {
+  const paragraphConverter = context.converters.paragraphToFlowBlocks;
   const { docPartGallery, docPartObjectId, tocInstruction } = metadata;
   const { blocks, recordBlockKind } = outputArrays;
 
   children.forEach((child) => {
     if (child.type === 'paragraph') {
       // Direct paragraph child - convert and tag
-      const paragraphBlocks = paragraphConverter(
-        child,
-        context.nextBlockId,
-        context.positions,
-        context.defaultFont,
-        context.defaultSize,
-        context.styleContext,
-        context.listCounterContext,
-        context.trackedChanges,
-        context.bookmarks,
-        context.hyperlinkConfig,
-      );
+      const paragraphBlocks = paragraphConverter({
+        para: child,
+        nextBlockId: context.nextBlockId,
+        positions: context.positions,
+        trackedChangesConfig: context.trackedChangesConfig,
+        bookmarks: context.bookmarks,
+        hyperlinkConfig: context.hyperlinkConfig,
+        converters: context.converters,
+        enableComments: context.enableComments,
+        converterContext: context.converterContext,
+      });
 
       applyTocMetadata(paragraphBlocks, {
         gallery: docPartGallery,
@@ -149,7 +138,7 @@ export function processTocChildren(
 
       paragraphBlocks.forEach((block) => {
         blocks.push(block);
-        recordBlockKind(block.kind);
+        recordBlockKind?.(block.kind);
       });
     } else if (child.type === 'tableOfContents' && Array.isArray(child.content)) {
       // Nested tableOfContents - recurse with potentially different instruction
@@ -161,7 +150,6 @@ export function processTocChildren(
         { docPartGallery, docPartObjectId, tocInstruction: finalInstruction, sdtMetadata: metadata.sdtMetadata },
         context,
         outputArrays,
-        paragraphConverter,
       );
     }
   });
@@ -182,36 +170,31 @@ export function handleTableOfContentsNode(node: PMNode, context: NodeHandlerCont
     recordBlockKind,
     nextBlockId,
     positions,
-    defaultFont,
-    defaultSize,
-    styleContext,
-    listCounterContext,
     trackedChangesConfig,
     bookmarks,
     hyperlinkConfig,
     converters,
+    converterContext,
+    themeColors,
+    enableComments,
   } = context;
-  const { getListCounter, incrementListCounter, resetListCounter } = listCounterContext;
   const tocInstruction = getNodeInstruction(node);
-  const paragraphToFlowBlocks = converters?.paragraphToFlowBlocks;
-  if (!paragraphToFlowBlocks) {
-    return;
-  }
+  const paragraphToFlowBlocks = converters.paragraphToFlowBlocks;
 
   node.content.forEach((child) => {
     if (child.type === 'paragraph') {
-      const paragraphBlocks = paragraphToFlowBlocks(
-        child,
+      const paragraphBlocks = paragraphToFlowBlocks({
+        para: child,
         nextBlockId,
         positions,
-        defaultFont,
-        defaultSize,
-        styleContext,
-        { getListCounter, incrementListCounter, resetListCounter },
         trackedChangesConfig,
         bookmarks,
+        themeColors,
         hyperlinkConfig,
-      );
+        converters,
+        enableComments,
+        converterContext,
+      });
       paragraphBlocks.forEach((block) => {
         if (block.kind === 'paragraph') {
           if (!block.attrs) block.attrs = {};
@@ -219,7 +202,7 @@ export function handleTableOfContentsNode(node: PMNode, context: NodeHandlerCont
           if (tocInstruction) block.attrs.tocInstruction = tocInstruction;
         }
         blocks.push(block);
-        recordBlockKind(block.kind);
+        recordBlockKind?.(block.kind);
       });
     }
   });

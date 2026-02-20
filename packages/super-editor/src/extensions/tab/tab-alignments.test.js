@@ -52,7 +52,7 @@ describe('tab alignment calculations', () => {
           {
             type: 'paragraph',
             attrs: {
-              tabStops: [{ val: 'start', pos: 144 }],
+              paragraphProperties: { tabStops: [{ val: 'start', pos: 144 }] },
             },
             content: [makeText('Text'), makeTab(), makeText('After')],
           },
@@ -103,10 +103,12 @@ describe('tab alignment calculations', () => {
           {
             type: 'paragraph',
             attrs: {
-              tabStops: [
-                { val: 'start', pos: 96 },
-                { val: 'start', pos: 192 },
-              ],
+              paragraphProperties: {
+                tabStops: [
+                  { val: 'start', pos: 96 },
+                  { val: 'start', pos: 192 },
+                ],
+              },
             },
             content: [makeText('A'), makeTab(), makeText('B'), makeTab(), makeText('C')],
           },
@@ -136,7 +138,7 @@ describe('tab alignment calculations', () => {
           {
             type: 'paragraph',
             attrs: {
-              tabStops: [{ val: 'center', pos: 144 }],
+              paragraphProperties: { tabStops: [{ val: 'center', pos: 144 }] },
             },
             content: [makeText('Left'), makeTab(), makeText('Center')],
           },
@@ -164,7 +166,7 @@ describe('tab alignment calculations', () => {
           {
             type: 'paragraph',
             attrs: {
-              tabStops: [{ val: 'end', pos: 200 }],
+              paragraphProperties: { tabStops: [{ val: 'end', pos: 200 }] },
             },
             content: [makeText('Left'), makeTab(), makeText('Right')],
           },
@@ -190,7 +192,7 @@ describe('tab alignment calculations', () => {
           {
             type: 'paragraph',
             attrs: {
-              tabStops: [{ val: 'right', pos: 180 }],
+              paragraphProperties: { tabStops: [{ val: 'right', pos: 180 }] },
             },
             content: [makeText('Left'), makeTab(), makeText('Right Text')],
           },
@@ -218,7 +220,7 @@ describe('tab alignment calculations', () => {
           {
             type: 'paragraph',
             attrs: {
-              tabStops: [{ val: 'decimal', pos: 200 }],
+              paragraphProperties: { tabStops: [{ val: 'decimal', pos: 200 }] },
             },
             content: [makeText('Price: '), makeTab(), makeText('123.45')],
           },
@@ -244,7 +246,7 @@ describe('tab alignment calculations', () => {
           {
             type: 'paragraph',
             attrs: {
-              tabStops: [{ val: 'decimal', pos: 180 }],
+              paragraphProperties: { tabStops: [{ val: 'decimal', pos: 180 }] },
             },
             content: [makeText('Count: '), makeTab(), makeText('42')],
           },
@@ -272,7 +274,7 @@ describe('tab alignment calculations', () => {
           {
             type: 'paragraph',
             attrs: {
-              tabStops: [{ val: 'start', pos: 200, leader: 'dot' }],
+              paragraphProperties: { tabStops: [{ val: 'start', pos: 200, leader: 'dot' }] },
             },
             content: [makeText('Item'), makeTab(), makeText('Value')],
           },
@@ -299,7 +301,7 @@ describe('tab alignment calculations', () => {
           {
             type: 'paragraph',
             attrs: {
-              tabStops: [{ val: 'start', pos: 200, leader: 'heavy' }],
+              paragraphProperties: { tabStops: [{ val: 'start', pos: 200, leader: 'heavy' }] },
             },
             content: [makeText('Item'), makeTab(), makeText('Value')],
           },

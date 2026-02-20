@@ -158,7 +158,10 @@ function getNestedLists(nodes) {
 function mergeSeparateLists(container) {
   const tempCont = container.cloneNode(true);
 
-  const rootLevelLists = Array.from(tempCont.querySelectorAll('ol:not(ol ol):not(ul ol)') || []);
+  // Find root-level ordered lists (not nested inside other lists)
+  // Note: Using filter instead of complex :not() selectors for better browser compatibility
+  const allOls = Array.from(tempCont.querySelectorAll('ol') || []);
+  const rootLevelLists = allOls.filter((ol) => !ol.parentElement?.closest('ol, ul'));
   const mainList = rootLevelLists.find((list) => !list.getAttribute('start')) || rootLevelLists[0];
   const hasStartAttr = rootLevelLists.some((list) => list.getAttribute('start') !== null);
 

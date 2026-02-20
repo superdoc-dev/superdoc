@@ -10,41 +10,66 @@ const TRACK_CHANGE_MARKS = [TrackInsertMarkName, TrackDeleteMarkName, TrackForma
  *
  * @param {Object} param0
  * @param {string} param0.commentId The comment ID
+ * @param {string} [param0.importedId] The imported comment ID
  * @param {import('prosemirror-state').EditorState} state The current editor state
  * @param {import('prosemirror-state').Transaction} tr The current transaction
  * @param {Function} param0.dispatch The dispatch function
- * @returns {void}
+ * @returns {boolean} True if any comment marks were removed
  */
-export const removeCommentsById = ({ commentId, state, tr, dispatch }) => {
-  const positions = getCommentPositionsById(commentId, state.doc);
+export const removeCommentsById = ({ commentId, importedId, state, tr, dispatch }) => {
+  const positions = getCommentPositionsById(commentId, state.doc, importedId);
+  const anchorNodePositions = [];
+
+  state.doc.descendants((node, pos) => {
+    const nodeTypeName = node.type?.name;
+    if (nodeTypeName !== 'commentRangeStart' && nodeTypeName !== 'commentRangeEnd') return;
+    const wid = node.attrs?.['w:id'];
+    if (wid === commentId || (importedId && wid === importedId)) {
+      anchorNodePositions.push(pos);
+    }
+  });
+
+  if (!positions.length && !anchorNodePositions.length) return false;
 
   // Remove the mark
-  positions.forEach(({ from, to }) => {
-    tr.removeMark(from, to, state.schema.marks[CommentMarkName]);
+  positions.forEach(({ from, to, mark }) => {
+    tr.removeMark(from, to, mark);
   });
+
+  // Remove resolved-comment anchors (commentRangeStart/commentRangeEnd) when present.
+  anchorNodePositions
+    .slice()
+    .sort((a, b) => b - a)
+    .forEach((pos) => {
+      tr.delete(pos, pos + 1);
+    });
+
   dispatch(tr);
+  return true;
 };
 
 /**
  * Get the positions of a comment by ID
  *
  * @param {String} commentId The comment ID
+ * @param {String} [importedId] The imported comment ID
  * @param {import('prosemirror-model').Node} doc The prosemirror document
- * @returns {Array} The positions of the comment
+ * @returns {Array<{from:number,to:number,mark:Object}>} The positions and exact mark instances for the comment
  */
-export const getCommentPositionsById = (commentId, doc) => {
+export const getCommentPositionsById = (commentId, doc, importedId) => {
   const positions = [];
   doc.descendants((node, pos) => {
     const { marks } = node;
-    const commentMark = marks.find((mark) => mark.type.name === CommentMarkName);
-
-    if (commentMark) {
-      const { attrs } = commentMark;
-      const { commentId: currentCommentId } = attrs;
-      if (commentId === currentCommentId) {
-        positions.push({ from: pos, to: pos + node.nodeSize });
-      }
-    }
+    marks
+      .filter((mark) => mark.type.name === CommentMarkName)
+      .forEach((commentMark) => {
+        const { attrs } = commentMark;
+        const currentCommentId = attrs?.commentId;
+        const currentImportedId = attrs?.importedId;
+        if (commentId === currentCommentId || (importedId && importedId === currentImportedId)) {
+          positions.push({ from: pos, to: pos + node.nodeSize, mark: commentMark });
+        }
+      });
   });
   return positions;
 };
@@ -54,16 +79,19 @@ export const getCommentPositionsById = (commentId, doc) => {
  * This returns the raw segments (per inline node) rather than merged contiguous ranges.
  *
  * @param {string} commentId The comment ID to match
+ * @param {string} [importedId] The imported comment ID to match
  * @param {import('prosemirror-model').Node} doc The ProseMirror document
  * @returns {Array<{from:number,to:number,attrs:Object}>} Segments containing mark attrs
  */
-const getCommentMarkSegmentsById = (commentId, doc) => {
+const getCommentMarkSegmentsById = (commentId, doc, importedId) => {
   const segments = [];
 
   doc.descendants((node, pos) => {
     if (!node.isInline) return;
     const commentMark = node.marks?.find(
-      (mark) => mark.type.name === CommentMarkName && mark.attrs?.commentId === commentId,
+      (mark) =>
+        mark.type.name === CommentMarkName &&
+        (mark.attrs?.commentId === commentId || (importedId && mark.attrs?.importedId === importedId)),
     );
     if (!commentMark) return;
 
@@ -83,11 +111,12 @@ const getCommentMarkSegmentsById = (commentId, doc) => {
  * so this returns both the raw segments and the merged ranges.
  *
  * @param {string} commentId The comment ID to match
+ * @param {string} [importedId] The imported comment ID to match
  * @param {import('prosemirror-model').Node} doc The ProseMirror document
  * @returns {{segments:Array<{from:number,to:number,attrs:Object}>,ranges:Array<{from:number,to:number,internal:boolean}>}}
  */
-const getCommentMarkRangesById = (commentId, doc) => {
-  const segments = getCommentMarkSegmentsById(commentId, doc);
+const getCommentMarkRangesById = (commentId, doc, importedId) => {
+  const segments = getCommentMarkSegmentsById(commentId, doc, importedId);
   if (!segments.length) return { segments, ranges: [] };
 
   const ranges = [];
@@ -127,17 +156,18 @@ const getCommentMarkRangesById = (commentId, doc) => {
  *
  * @param {Object} param0
  * @param {string} param0.commentId The comment ID
+ * @param {string} [param0.importedId] The imported comment ID
  * @param {import('prosemirror-state').EditorState} param0.state The current editor state
  * @param {import('prosemirror-state').Transaction} param0.tr The current transaction
  * @param {Function} param0.dispatch The dispatch function
  * @returns {boolean} True if the comment mark existed and was processed
  */
-export const resolveCommentById = ({ commentId, state, tr, dispatch }) => {
+export const resolveCommentById = ({ commentId, importedId, state, tr, dispatch }) => {
   const { schema } = state;
   const markType = schema.marks?.[CommentMarkName];
   if (!markType) return false;
 
-  const { segments, ranges } = getCommentMarkRangesById(commentId, state.doc);
+  const { segments, ranges } = getCommentMarkRangesById(commentId, state.doc, importedId);
   if (!segments.length) return false;
 
   segments.forEach(({ from, to, attrs }) => {
@@ -208,7 +238,7 @@ export const prepareCommentsForExport = (doc, tr, schema, comments = []) => {
   });
 
   const getThreadingParentId = (comment) => {
-    if (!comment) return comment?.parentCommentId;
+    if (!comment) return undefined;
     const usesRangeThreading =
       comment.threadingStyleOverride === 'range-based' ||
       comment.threadingMethod === 'range-based' ||
@@ -278,6 +308,8 @@ export const prepareCommentsForExport = (doc, tr, schema, comments = []) => {
         comment,
         parentCommentId,
         trackedChangeId,
+        actualStart: start,
+        actualEnd: end,
       });
       return;
     }
@@ -336,7 +368,7 @@ export const prepareCommentsForExport = (doc, tr, schema, comments = []) => {
   });
 
   if (trackedChangeSpanById.size > 0) {
-    trackedChangeCommentMeta.forEach(({ comment, parentCommentId, trackedChangeId }) => {
+    trackedChangeCommentMeta.forEach(({ comment, parentCommentId, trackedChangeId, actualStart, actualEnd }) => {
       if (!comment || !trackedChangeSpanById.has(trackedChangeId)) return;
 
       const span = trackedChangeSpanById.get(trackedChangeId);
@@ -359,9 +391,13 @@ export const prepareCommentsForExport = (doc, tr, schema, comments = []) => {
           ? [trackedMarks.insertMark]
           : undefined;
 
+      // Use actual comment range if available, fall back to full TC span
+      const startPos = actualStart ?? span.startPos;
+      const endPos = actualEnd ?? span.endPos;
+
       const childStartNode = schema.nodes.commentRangeStart.create(childMark, null, startMarks);
       startNodes.push({
-        pos: span.startPos,
+        pos: startPos,
         node: childStartNode,
         commentId: comment.commentId,
         parentCommentId,
@@ -369,7 +405,7 @@ export const prepareCommentsForExport = (doc, tr, schema, comments = []) => {
 
       const childEndNode = schema.nodes.commentRangeEnd.create(childMark, null, endMarks);
       endNodes.push({
-        pos: span.endPos,
+        pos: endPos,
         node: childEndNode,
         commentId: comment.commentId,
         parentCommentId,
@@ -384,8 +420,9 @@ export const prepareCommentsForExport = (doc, tr, schema, comments = []) => {
         seen.add(c.commentId);
 
         const childRange = commentRanges.get(c.commentId);
-        const childStart = childRange?.start ?? span.startPos;
-        const childEnd = childRange?.end ?? span.endPos;
+        // Use child's own range, fall back to parent's actual range, then TC span
+        const childStart = childRange?.start ?? actualStart ?? span.startPos;
+        const childEnd = childRange?.end ?? actualEnd ?? span.endPos;
         const childStartMarks = childRange ? undefined : startMarks;
         const childEndMarks = childRange ? undefined : endMarks;
 
@@ -412,14 +449,19 @@ export const prepareCommentsForExport = (doc, tr, schema, comments = []) => {
       });
     });
 
+    // Handle comments that are on tracked change text (identified by trackedChangeParentId)
     comments
-      .filter((comment) => trackedChangeSpanById.has(comment.parentCommentId) && !comment.trackedChange)
+      .filter((comment) => {
+        const tcParentId = comment.trackedChangeParentId || comment.parentCommentId;
+        return trackedChangeSpanById.has(tcParentId) && !comment.trackedChange;
+      })
       .sort((a, b) => a.createdTime - b.createdTime)
       .forEach((comment) => {
         if (seen.has(comment.commentId)) return;
         seen.add(comment.commentId);
 
-        const span = trackedChangeSpanById.get(comment.parentCommentId);
+        const tcParentId = comment.trackedChangeParentId || comment.parentCommentId;
+        const span = trackedChangeSpanById.get(tcParentId);
         if (!span) return;
 
         const childMark = getPreparedComment({
@@ -428,7 +470,7 @@ export const prepareCommentsForExport = (doc, tr, schema, comments = []) => {
         });
 
         const parentCommentId = getThreadingParentId(comment);
-        const trackedMarks = trackedChangeMarksById.get(comment.parentCommentId) || {};
+        const trackedMarks = trackedChangeMarksById.get(tcParentId) || {};
         const startMarks = trackedMarks.insertMark
           ? [trackedMarks.insertMark]
           : trackedMarks.deleteMark
@@ -694,6 +736,8 @@ export const translateFormatChangesToEnglish = (attrs = {}) => {
         const label = formatAttrName(attr); // Convert camelCase to lowercase words
         if (beforeValue === undefined || beforeValue === null) {
           textStyleChanges.push(`Set ${label} to ${afterValue}`);
+        } else if (afterValue === undefined || afterValue === null) {
+          textStyleChanges.push(`Removed ${label} (was ${beforeValue})`);
         } else {
           textStyleChanges.push(`Changed ${label} from ${beforeValue} to ${afterValue}`);
         }
@@ -718,10 +762,62 @@ export const translateFormatChangesToEnglish = (attrs = {}) => {
  * @param {EditorView} param0.editor The current editor view
  * @returns {String} The color to use for the highlight
  */
+
+/** Default opacity for active comment highlights (0x44/0xff ≈ 0.267) */
+const DEFAULT_ACTIVE_ALPHA = 0x44 / 0xff;
+
+/** Default opacity for inactive comment highlights (0x22/0xff ≈ 0.133) */
+const DEFAULT_INACTIVE_ALPHA = 0x22 / 0xff;
+
+/**
+ * Clamps an opacity value to the valid range [0, 1].
+ * @param {number} value - The opacity value to clamp
+ * @returns {number|null} The clamped value, or null if input is not a finite number
+ */
+export const clampOpacity = (value) => {
+  if (!Number.isFinite(value)) return null;
+  return Math.max(0, Math.min(1, value));
+};
+
+/**
+ * Applies an alpha/opacity value to a hex color string.
+ * @param {string} color - Hex color in 3-digit (#abc) or 6-digit (#aabbcc) format
+ * @param {number} opacity - Opacity value between 0 and 1
+ * @returns {string} The color with alpha appended (e.g., #aabbcc44), or original color if invalid format
+ */
+export const applyAlphaToHex = (color, opacity) => {
+  if (typeof color !== 'string') return color;
+  const match = color.match(/^#([0-9a-f]{3}|[0-9a-f]{6})$/i);
+  if (!match) return color;
+
+  const hex =
+    match[1].length === 3
+      ? match[1]
+          .split('')
+          .map((c) => c + c)
+          .join('')
+      : match[1];
+  const alpha = Math.round(opacity * 255)
+    .toString(16)
+    .padStart(2, '0');
+  return `#${hex}${alpha}`;
+};
+
 export const getHighlightColor = ({ activeThreadId, threadId, isInternal, editor }) => {
   if (!editor.options.isInternal && isInternal) return 'transparent';
   const pluginState = CommentsPluginKey.getState(editor.state);
-  const color = isInternal ? pluginState.internalColor : pluginState.externalColor;
-  const alpha = activeThreadId == threadId ? '44' : '22';
-  return `${color}${alpha}`;
+  const highlightColors = editor.options.comments?.highlightColors || {};
+  const highlightOpacity = editor.options.comments?.highlightOpacity || {};
+  const isActive = activeThreadId === threadId;
+
+  const baseColor = isInternal
+    ? (highlightColors.internal ?? pluginState.internalColor)
+    : (highlightColors.external ?? pluginState.externalColor);
+
+  const activeOverride = isInternal ? highlightColors.activeInternal : highlightColors.activeExternal;
+  if (isActive && activeOverride) return activeOverride;
+
+  const resolvedOpacity = clampOpacity(isActive ? highlightOpacity.active : highlightOpacity.inactive);
+  const opacity = resolvedOpacity ?? (isActive ? DEFAULT_ACTIVE_ALPHA : DEFAULT_INACTIVE_ALPHA);
+  return applyAlphaToHex(baseColor, opacity);
 };

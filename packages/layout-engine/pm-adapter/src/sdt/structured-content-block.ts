@@ -24,63 +24,57 @@ export function handleStructuredContentBlockNode(node: PMNode, context: NodeHand
     recordBlockKind,
     nextBlockId,
     positions,
-    defaultFont,
-    defaultSize,
-    styleContext,
-    listCounterContext,
     trackedChangesConfig,
     bookmarks,
     hyperlinkConfig,
     converters,
+    converterContext,
+    enableComments,
+    themeColors,
   } = context;
-  const { getListCounter, incrementListCounter, resetListCounter } = listCounterContext;
   const structuredContentMetadata = resolveNodeSdtMetadata(node, 'structuredContentBlock');
-  const paragraphToFlowBlocks = converters?.paragraphToFlowBlocks;
-
-  if (!paragraphToFlowBlocks) {
-    return;
-  }
+  const paragraphToFlowBlocks = converters.paragraphToFlowBlocks;
 
   node.content.forEach((child) => {
     if (child.type === 'paragraph') {
-      const paragraphBlocks = paragraphToFlowBlocks(
-        child,
+      const paragraphBlocks = paragraphToFlowBlocks({
+        para: child,
         nextBlockId,
         positions,
-        defaultFont,
-        defaultSize,
-        styleContext,
-        { getListCounter, incrementListCounter, resetListCounter },
         trackedChangesConfig,
         bookmarks,
         hyperlinkConfig,
-      );
+        themeColors,
+        enableComments,
+        converters,
+        converterContext,
+      });
       applySdtMetadataToParagraphBlocks(
         paragraphBlocks.filter((b) => b.kind === 'paragraph') as ParagraphBlock[],
         structuredContentMetadata,
       );
       paragraphBlocks.forEach((block) => {
         blocks.push(block);
-        recordBlockKind(block.kind);
+        recordBlockKind?.(block.kind);
       });
     } else if (child.type === 'table') {
       const tableNodeToBlock = converters?.tableNodeToBlock;
       if (tableNodeToBlock) {
-        const tableBlock = tableNodeToBlock(
-          child,
+        const tableBlock = tableNodeToBlock(child, {
           nextBlockId,
           positions,
-          defaultFont,
-          defaultSize,
-          styleContext,
           trackedChangesConfig,
           bookmarks,
           hyperlinkConfig,
-        );
+          themeColors,
+          enableComments,
+          converters,
+          converterContext,
+        });
         if (tableBlock) {
           applySdtMetadataToTableBlock(tableBlock as TableBlock, structuredContentMetadata);
           blocks.push(tableBlock);
-          recordBlockKind(tableBlock.kind);
+          recordBlockKind?.(tableBlock.kind);
         }
       }
     }

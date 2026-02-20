@@ -1,1 +1,2 @@
-export * from './slash-menu.js';
+/** @deprecated Use context-menu instead */
+export * from '../context-menu/index.js';

@@ -60,19 +60,20 @@ export function importCommentData({ docx, editor, converter }) {
 
     // Per OOXML spec, commentsExtended.xml links via the LAST paragraph's paraId
     // when a comment has multiple paragraphs
-    const lastElement = parsedElements[parsedElements.length - 1];
+    const textElements = Array.isArray(parsedElements) ? parsedElements : parsedElements ? [parsedElements] : [];
+    const lastElement = textElements[textElements.length - 1];
     const paraId = lastElement?.attrs?.['w14:paraId'];
 
     const threadingMethod = commentThreadingProfile.defaultStyle;
+    const commentId = getCommentId(internalId, importedId, unixTimestampMs);
 
     return {
-      commentId: internalId || uuidv4(),
+      commentId,
       importedId,
       creatorName: authorName,
       creatorEmail: authorEmail,
       createdTime: unixTimestampMs,
-      textJson: parsedElements[0],
-      elements: parsedElements,
+      elements: textElements,
       initials,
       paraId,
       trackedChange,
@@ -166,6 +167,11 @@ const generateCommentsWithExtendedData = ({ docx, comments, converter, threading
     const trackedChangeParent = trackedChangeParentMap.get(comment.importedId);
     const isInsideTrackedChange = trackedChangeParent?.isTrackedChangeParent;
 
+    // Track whether comment has an entry in commentsExtended.xml
+    // If it has an entry but no paraIdParent, it's explicitly a top-level comment
+    // and we should NOT use range-based parenting as a fallback
+    const hasExtendedEntry = !!extendedDef;
+
     if (extendedDef) {
       const details = getExtendedDetails(extendedDef);
       isDone = details.isDone ?? false;
@@ -177,22 +183,34 @@ const generateCommentsWithExtendedData = ({ docx, comments, converter, threading
             c.elements?.some((el) => el.attrs?.['w14:paraId'] === details.paraIdParent),
         );
         const rangeParent = rangeParentMap.get(comment.commentId);
-        if (parentComment?.trackedChange && rangeParent) {
-          threadingParentCommentId = rangeParent;
+        if (parentComment?.trackedChange) {
+          // Parent is a tracked change - use range parent if available, otherwise leave parentCommentId undefined
+          // (TC association is tracked separately via trackedChangeParentId, not parentCommentId)
+          if (rangeParent) {
+            threadingParentCommentId = rangeParent;
+            parentCommentId = threadingParentCommentId;
+          }
+          // If no rangeParent, we intentionally leave parentCommentId undefined
+          // so the comment appears as a separate bubble from the TC
         } else {
+          // Parent is a real comment (not a TC) - use it for threading
           threadingParentCommentId = parentComment?.commentId;
-        }
-        if (!isInsideTrackedChange) {
           parentCommentId = threadingParentCommentId;
         }
       }
     }
 
-    if (isInsideTrackedChange) {
-      parentCommentId = trackedChangeParent.trackedChangeId;
-    }
+    // Track the tracked change association but don't use it as parentCommentId
+    // This keeps comments and tracked changes as separate bubbles in the UI
+    // while preserving the relationship for export and visual purposes
+    const trackedChangeParentId = isInsideTrackedChange ? trackedChangeParent.trackedChangeId : undefined;
 
-    if (!parentCommentId && rangeParentMap.has(comment.commentId)) {
+    // Only use range-based parenting as fallback when:
+    // 1. parentCommentId is not set from commentsExtended.xml, AND
+    // 2. The comment has NO entry in commentsExtended.xml at all
+    // If a comment has an entry in commentsExtended.xml but no paraIdParent,
+    // it's explicitly a top-level comment - don't override with range-based parenting
+    if (!parentCommentId && !hasExtendedEntry && rangeParentMap.has(comment.commentId)) {
       parentCommentId = rangeParentMap.get(comment.commentId);
       if (threadingProfile?.defaultStyle === 'commentsExtended') {
         threadingStyleOverride = 'range-based';
@@ -205,6 +223,7 @@ const generateCommentsWithExtendedData = ({ docx, comments, converter, threading
       parentCommentId,
       threadingStyleOverride,
       threadingParentCommentId,
+      trackedChangeParentId,
     };
   });
 };
@@ -594,23 +613,52 @@ const findCommentsWithSharedStartPosition = (comments, rangePositions) => {
 const applyParentRelationships = (comments, parentMap, trackedChangeParentMap = new Map()) => {
   return comments.map((comment) => {
     const trackedChangeParent = trackedChangeParentMap.get(comment.importedId);
-    if (trackedChangeParent && trackedChangeParent.isTrackedChangeParent) {
-      return {
-        ...comment,
-        parentCommentId: trackedChangeParent.trackedChangeId,
-      };
-    }
+    const updatedComment =
+      trackedChangeParent && trackedChangeParent.isTrackedChangeParent
+        ? {
+            ...comment,
+            trackedChangeParentId: trackedChangeParent.trackedChangeId,
+          }
+        : comment;
 
     const parentImportedId = parentMap.get(comment.importedId);
     if (parentImportedId) {
       const parentComment = comments.find((c) => c.importedId === parentImportedId);
       if (parentComment) {
         return {
-          ...comment,
+          ...updatedComment,
           parentCommentId: parentComment.commentId,
         };
       }
     }
-    return comment;
+    return updatedComment;
   });
+};
+
+/**
+ * Lightweight, non-cryptographic FNV-1a 32-bit hash for stable identifiers.
+ *
+ * @param {string} input
+ * @returns {string} 8-char hex string
+ */
+const simpleHash = (input) => {
+  let hash = 0x811c9dc5;
+  for (let i = 0; i < input.length; i++) {
+    hash ^= input.charCodeAt(i);
+    hash += (hash << 1) + (hash << 4) + (hash << 7) + (hash << 8) + (hash << 24);
+  }
+  return (hash >>> 0).toString(16).padStart(8, '0');
+};
+
+/**
+ * Resolve a stable comment ID for imported comments.
+ * - Prefer the explicit internal ID when present.
+ * - If the comment has an imported ID, derive a stable hash from imported ID + created time.
+ * - Otherwise, fall back to a new UUID.
+ */
+const getCommentId = (internalId, importedId, createdTime) => {
+  if (internalId != null) return internalId;
+  if (importedId == null || !Number.isFinite(createdTime)) return uuidv4();
+  const hash = simpleHash(`${importedId}-${createdTime}`);
+  return `imported-${hash}`;
 };

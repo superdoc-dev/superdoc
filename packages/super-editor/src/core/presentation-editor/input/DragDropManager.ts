@@ -138,8 +138,15 @@ function extractFieldAnnotationData(element: HTMLElement): FieldAnnotationDragDa
  */
 function hasFieldAnnotationData(event: DragEvent): boolean {
   if (!event.dataTransfer) return false;
-  const types = event.dataTransfer.types;
-  return types.includes(INTERNAL_MIME_TYPE) || types.includes(FIELD_ANNOTATION_DATA_TYPE);
+  const types = Array.from(event.dataTransfer.types ?? []);
+  const lowerTypes = types.map((type) => type.toLowerCase());
+  const hasFieldAnnotationType =
+    lowerTypes.includes(INTERNAL_MIME_TYPE.toLowerCase()) ||
+    lowerTypes.includes(FIELD_ANNOTATION_DATA_TYPE.toLowerCase());
+  if (hasFieldAnnotationType) return true;
+  return Boolean(
+    event.dataTransfer.getData(INTERNAL_MIME_TYPE) || event.dataTransfer.getData(FIELD_ANNOTATION_DATA_TYPE),
+  );
 }
 
 /**
@@ -175,6 +182,8 @@ function extractDragData(event: DragEvent): FieldAnnotationDragData | null {
 
 export class DragDropManager {
   #deps: DragDropDependencies | null = null;
+  #dragOverRaf: number | null = null;
+  #pendingDragOver: { x: number; y: number } | null = null;
 
   // Bound handlers for cleanup
   #boundHandleDragStart: ((e: DragEvent) => void) | null = null;
@@ -261,6 +270,7 @@ export class DragDropManager {
   }
 
   destroy(): void {
+    this.#cancelPendingDragOverSelection();
     this.unbind();
     this.#deps = null;
   }
@@ -312,8 +322,39 @@ export class DragDropManager {
       event.dataTransfer.dropEffect = isInternalDrag(event) ? 'move' : 'copy';
     }
 
-    // Update cursor position
-    const hit = this.#deps.hitTest(event.clientX, event.clientY);
+    // Coalesce dragover selection updates to one per animation frame.
+    this.#scheduleDragOverSelection(event.clientX, event.clientY);
+  }
+
+  #scheduleDragOverSelection(clientX: number, clientY: number): void {
+    if (!this.#deps) return;
+    this.#pendingDragOver = { x: clientX, y: clientY };
+    if (this.#dragOverRaf !== null) return;
+    const win = this.#deps.getViewportHost()?.ownerDocument?.defaultView ?? window;
+    this.#dragOverRaf = win.requestAnimationFrame(() => {
+      this.#dragOverRaf = null;
+      const pending = this.#pendingDragOver;
+      this.#pendingDragOver = null;
+      if (!pending || !this.#deps) return;
+      this.#applyDragOverSelection(pending.x, pending.y);
+    });
+  }
+
+  #cancelPendingDragOverSelection(): void {
+    if (this.#dragOverRaf !== null) {
+      const win = this.#deps?.getViewportHost()?.ownerDocument?.defaultView ?? window;
+      win.cancelAnimationFrame(this.#dragOverRaf);
+      this.#dragOverRaf = null;
+    }
+    this.#pendingDragOver = null;
+  }
+
+  #applyDragOverSelection(clientX: number, clientY: number): void {
+    if (!this.#deps) return;
+    const activeEditor = this.#deps.getActiveEditor();
+    if (!activeEditor?.isEditable) return;
+
+    const hit = this.#deps.hitTest(clientX, clientY);
     const doc = activeEditor.state?.doc;
     if (!hit || !doc) return;
 
@@ -341,6 +382,8 @@ export class DragDropManager {
 
     event.preventDefault();
     event.stopPropagation();
+
+    this.#cancelPendingDragOverSelection();
 
     const activeEditor = this.#deps.getActiveEditor();
     if (!activeEditor?.isEditable) return;
@@ -470,6 +513,7 @@ export class DragDropManager {
   }
 
   #handleDragEnd(_event: DragEvent): void {
+    this.#cancelPendingDragOverSelection();
     // Remove visual feedback
     this.#deps?.getPainterHost()?.classList.remove('drag-over');
   }

@@ -73,10 +73,15 @@ const InternalDropdownStub = defineComponent({
   },
 });
 
+let commentInputFocusSpies;
+
 const CommentInputStub = defineComponent({
   name: 'CommentInputStub',
   props: ['users', 'config', 'comment'],
-  setup() {
+  setup(_, { expose }) {
+    const focusSpy = vi.fn();
+    commentInputFocusSpies.push(focusSpy);
+    expose({ focus: focusSpy });
     return () => h('div', { class: 'comment-input-stub' });
   },
 });
@@ -215,6 +220,7 @@ const mountDialog = async ({ baseCommentOverrides = {}, extraComments = [], prop
 describe('CommentDialog.vue', () => {
   beforeEach(() => {
     vi.clearAllMocks();
+    commentInputFocusSpies = [];
   });
 
   it('focuses the comment on mount and adds replies', async () => {
@@ -311,6 +317,42 @@ describe('CommentDialog.vue', () => {
     expect(baseComment.setIsInternal).toHaveBeenCalledWith({ isInternal: false, superdoc: superdocStub });
   });
 
+  it('prepopulates edit text from a ref-based commentText value', async () => {
+    const baseCommentWithRef = {
+      commentText: { value: '<p>Ref text</p>' },
+    };
+
+    const { wrapper, superdocStub } = await mountDialog({
+      baseCommentOverrides: baseCommentWithRef,
+    });
+
+    const header = wrapper.findComponent(CommentHeaderStub);
+    header.vm.$emit('overflow-select', 'edit');
+
+    expect(commentsStoreStub.currentCommentText.value).toBe('<p>Ref text</p>');
+    expect(typeof commentsStoreStub.currentCommentText.value).toBe('string');
+    expect(commentsStoreStub.currentCommentText.value).not.toBe(baseCommentWithRef.commentText);
+    expect(commentsStoreStub.setActiveComment).toHaveBeenCalledWith(superdocStub, 'comment-1');
+  });
+
+  it('auto-focuses the edit input when entering edit mode', async () => {
+    const { wrapper } = await mountDialog();
+
+    const header = wrapper.findComponent(CommentHeaderStub);
+    header.vm.$emit('overflow-select', 'edit');
+    await nextTick();
+
+    expect(commentInputFocusSpies.at(-1)).toHaveBeenCalled();
+  });
+
+  it('auto-focuses the new comment input when active', async () => {
+    const { wrapper, baseComment } = await mountDialog();
+    commentsStoreStub.activeComment.value = baseComment.commentId;
+    await nextTick();
+
+    expect(commentInputFocusSpies.at(-1)).toHaveBeenCalled();
+  });
+
   it('emits dialog-exit when clicking outside active comment and no track changes highlighted', async () => {
     const { wrapper, baseComment } = await mountDialog();
     commentsStoreStub.activeComment.value = baseComment.commentId;
@@ -404,5 +446,83 @@ describe('CommentDialog.vue', () => {
 
     // Third should be child-2 (created at time 2000)
     expect(headers[2].props('comment').commentId).toBe('child-2');
+  });
+
+  it('threads range-based comments under tracked change parent', async () => {
+    const rangeBasedRoot = reactive({
+      uid: 'uid-range-root',
+      commentId: 'range-root',
+      parentCommentId: null,
+      trackedChangeParentId: 'tc-parent',
+      threadingMethod: 'range-based',
+      email: 'root@example.com',
+      commentText: '<p>Root comment</p>',
+      createdTime: 1000,
+      fileId: 'doc-1',
+      fileType: 'DOCX',
+      setActive: vi.fn(),
+      setText: vi.fn(),
+      setIsInternal: vi.fn(),
+      resolveComment: vi.fn(),
+      trackedChange: false,
+      selection: {
+        getValues: () => ({ selectionBounds: { top: 120, bottom: 150, left: 20, right: 40 } }),
+        selectionBounds: { top: 120, bottom: 150, left: 20, right: 40 },
+      },
+    });
+
+    const replyToRoot = reactive({
+      uid: 'uid-range-reply',
+      commentId: 'range-reply',
+      parentCommentId: 'range-root',
+      email: 'reply@example.com',
+      commentText: '<p>Reply comment</p>',
+      createdTime: 1500,
+      fileId: 'doc-1',
+      fileType: 'DOCX',
+      setActive: vi.fn(),
+      setText: vi.fn(),
+      setIsInternal: vi.fn(),
+      resolveComment: vi.fn(),
+      trackedChange: false,
+      selection: {
+        getValues: () => ({ selectionBounds: { top: 120, bottom: 150, left: 20, right: 40 } }),
+        selectionBounds: { top: 120, bottom: 150, left: 20, right: 40 },
+      },
+    });
+
+    const { wrapper } = await mountDialog({
+      baseCommentOverrides: {
+        commentId: 'tc-parent',
+        trackedChange: true,
+        trackedChangeType: 'trackInsert',
+        trackedChangeText: 'Added',
+        createdTime: 500,
+      },
+      extraComments: [replyToRoot, rangeBasedRoot],
+    });
+
+    const headers = wrapper.findAllComponents(CommentHeaderStub);
+    expect(headers).toHaveLength(3);
+    expect(headers[0].props('comment').commentId).toBe('tc-parent');
+    expect(headers[1].props('comment').commentId).toBe('range-root');
+    expect(headers[2].props('comment').commentId).toBe('range-reply');
+  });
+
+  it('calls cancelComment with superdoc instance when cancel button is clicked', async () => {
+    const { wrapper, baseComment, superdocStub } = await mountDialog();
+
+    // Set up as active comment to show the cancel button
+    commentsStoreStub.activeComment.value = baseComment.commentId;
+    await nextTick();
+
+    // Find the cancel button in the comment footer (add new comment section)
+    const cancelButton = wrapper.findAll('button.sd-button').find((btn) => btn.text() === 'Cancel');
+    expect(cancelButton).toBeDefined();
+
+    await cancelButton.trigger('click');
+
+    // Verify cancelComment was called with the superdoc instance
+    expect(commentsStoreStub.cancelComment).toHaveBeenCalledWith(superdocStub);
   });
 });

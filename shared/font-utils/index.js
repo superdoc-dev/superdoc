@@ -69,6 +69,50 @@ const normalizeParts = (value) =>
     .filter(Boolean);
 
 /**
+ * Splits a string by a delimiter, but only when the delimiter is outside of quotes.
+ *
+ * @private
+ * @param {string} str - The string to split
+ * @param {string} delimiter - The delimiter to split on (single character)
+ * @returns {string[]} Array of parts, trimmed and filtered for empty strings
+ */
+const splitOutsideQuotes = (str, delimiter) => {
+  // Fast path: no quotes, just split normally
+  if (!str.includes('"') && !str.includes("'")) {
+    return str
+      .split(delimiter)
+      .map((p) => p.trim())
+      .filter(Boolean);
+  }
+
+  const parts = [];
+  let current = '';
+  let inQuote = false;
+  let quoteChar = null;
+
+  for (const char of str) {
+    if (!inQuote && (char === '"' || char === "'")) {
+      inQuote = true;
+      quoteChar = char;
+      current += char;
+    } else if (inQuote && char === quoteChar) {
+      inQuote = false;
+      quoteChar = null;
+      current += char;
+    } else if (!inQuote && char === delimiter) {
+      if (current.trim()) parts.push(current.trim());
+      current = '';
+    } else {
+      current += char;
+    }
+  }
+
+  if (current.trim()) parts.push(current.trim());
+
+  return parts;
+};
+
+/**
  * Maps a DOCX font family classification to a CSS fallback string.
  *
  * Takes a Word/DOCX font family type (from the w:family attribute) and returns
@@ -190,8 +234,13 @@ export function mapWordFamilyFallback(wordFamily) {
  */
 export function toCssFontFamily(fontName, options = {}) {
   if (!fontName || typeof fontName !== 'string') return fontName;
-  const trimmed = fontName.trim();
+  let trimmed = fontName.trim();
   if (!trimmed || trimmed.includes(',')) return trimmed;
+  // Replace semicolon font fallback separators (e.g., "Liberation Sans;Arial" from LibreOffice).
+  // Only split on semicolons outside of quotes to preserve font names like "Foo;Bar".
+  if (trimmed.includes(';')) {
+    trimmed = splitOutsideQuotes(trimmed, ';').join(', ');
+  }
 
   const { fallback, wordFamily } = options;
   const fallbackValue =

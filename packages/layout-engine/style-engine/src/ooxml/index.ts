@@ -5,393 +5,317 @@
  * This module is format-aware (docx), but translator-agnostic.
  */
 
-import {
-  applyInlineOverrides,
-  combineIndentProperties,
-  combineProperties,
-  combineRunProperties,
-  createFirstLineIndentHandler,
-  DEFAULT_FONT_SIZE_HALF_POINTS,
-  INLINE_OVERRIDE_PROPERTIES,
-  isValidFontSize,
-  orderDefaultsAndNormal,
-  resolveFontSizeWithFallback,
-} from '../cascade.js';
-import type { CombinePropertiesOptions, PropertyObject, SpecialHandler } from '../cascade.js';
+import { combineIndentProperties, combineProperties, combineRunProperties } from '../cascade.js';
+import type { PropertyObject } from '../cascade.js';
+import type { ParagraphProperties, RunProperties } from './types.ts';
+import type { NumberingProperties } from './numbering-types.ts';
+import type {
+  StylesDocumentProperties,
+  TableStyleType,
+  TableProperties,
+  TableLookProperties,
+  TableCellProperties,
+} from './styles-types.ts';
 
-export {
-  applyInlineOverrides,
-  combineIndentProperties,
-  combineProperties,
-  combineRunProperties,
-  createFirstLineIndentHandler,
-  DEFAULT_FONT_SIZE_HALF_POINTS,
-  INLINE_OVERRIDE_PROPERTIES,
-  isValidFontSize,
-  orderDefaultsAndNormal,
-  resolveFontSizeWithFallback,
-};
-export type { CombinePropertiesOptions, PropertyObject, SpecialHandler };
-
-export interface OoxmlTranslator {
-  xmlName: string;
-  encode: (params: unknown) => Record<string, unknown> | null | undefined;
-}
-
-export interface OoxmlTranslators {
-  pPr: OoxmlTranslator;
-  rPr: OoxmlTranslator;
-}
-
-export interface OoxmlNumberingContext {
-  definitions?: Record<string, unknown>;
-  abstracts?: Record<string, unknown>;
-}
+export { combineIndentProperties, combineProperties, combineRunProperties };
+export type { PropertyObject };
+export type * from './types.ts';
+export type * from './numbering-types.ts';
+export type * from './styles-types.ts';
 
 export interface OoxmlResolverParams {
-  docx?: Record<string, unknown>;
-  numbering?: OoxmlNumberingContext | null;
+  translatedNumbering: NumberingProperties | null | undefined;
+  translatedLinkedStyles: StylesDocumentProperties | null | undefined;
 }
 
-export function createOoxmlResolver(translators: OoxmlTranslators) {
-  return {
-    resolveRunProperties: (
-      params: OoxmlResolverParams,
-      inlineRpr: Record<string, unknown> | null | undefined,
-      resolvedPpr: Record<string, unknown> | null | undefined,
-      isListNumber = false,
-      numberingDefinedInline = false,
-    ) => resolveRunProperties(translators, params, inlineRpr, resolvedPpr, isListNumber, numberingDefinedInline),
-    resolveParagraphProperties: (
-      params: OoxmlResolverParams,
-      inlineProps: Record<string, unknown> | null | undefined,
-      insideTable = false,
-      overrideInlineStyleId = false,
-      tableStyleId: string | null = null,
-    ) => resolveParagraphProperties(translators, params, inlineProps, insideTable, overrideInlineStyleId, tableStyleId),
-    getDefaultProperties,
-    getStyleProperties,
-    resolveStyleChain,
-    getNumberingProperties: (
-      params: OoxmlResolverParams,
-      ilvl: number,
-      numId: number | string,
-      translator: OoxmlTranslator,
-      tries = 0,
-    ) => getNumberingProperties(translators, params, ilvl, numId, translator, tries),
-  };
+export interface TableInfo {
+  tableProperties: TableProperties | null | undefined;
+  rowIndex: number;
+  cellIndex: number;
+  numCells: number;
+  numRows: number;
 }
 
 export function resolveRunProperties(
-  translators: OoxmlTranslators,
   params: OoxmlResolverParams,
-  inlineRpr: Record<string, unknown> | null | undefined,
-  resolvedPpr: Record<string, unknown> | null | undefined,
+  inlineRpr: RunProperties | null | undefined,
+  resolvedPpr: ParagraphProperties | null | undefined,
+  tableInfo: TableInfo | null | undefined = null,
   isListNumber = false,
   numberingDefinedInline = false,
-): Record<string, unknown> {
+): RunProperties {
+  if (!params.translatedLinkedStyles?.styles) {
+    return inlineRpr ?? {};
+  }
+  if (!inlineRpr) {
+    inlineRpr = {} as RunProperties;
+  }
+  // Getting properties from style
   const paragraphStyleId = resolvedPpr?.styleId as string | undefined;
-  const paragraphStyleProps = resolveStyleChain(params, paragraphStyleId, translators.rPr);
+  const paragraphStyleProps = resolveStyleChain('runProperties', params, paragraphStyleId) as RunProperties;
 
-  const defaultProps = getDefaultProperties(params, translators.rPr);
-  const { properties: normalProps, isDefault: isNormalDefault } = getStyleProperties(params, 'Normal', translators.rPr);
+  // Getting default properties and normal style properties
+  const defaultProps = params.translatedLinkedStyles.docDefaults?.runProperties ?? {};
+  const normalStyleDef = params.translatedLinkedStyles.styles['Normal'];
+  const normalProps = (normalStyleDef?.runProperties ?? {}) as RunProperties;
 
-  let runStyleProps: Record<string, unknown> = {};
+  // Getting table style run properties
+  const tableStyleProps = (
+    tableInfo?.tableProperties?.tableStyleId
+      ? resolveStyleChain('runProperties', params, tableInfo?.tableProperties?.tableStyleId)
+      : {}
+  ) as RunProperties;
+
+  // Getting cell style run properties
+  const cellStyleProps: RunProperties[] = resolveCellStyles<RunProperties>(
+    'runProperties',
+    tableInfo,
+    params.translatedLinkedStyles,
+  );
+
+  // Get run properties from direct character style, unless it's inside a TOC paragraph style
+  let runStyleProps = {} as RunProperties;
   if (!paragraphStyleId?.startsWith('TOC')) {
-    runStyleProps = inlineRpr?.styleId ? resolveStyleChain(params, inlineRpr.styleId as string, translators.rPr) : {};
+    runStyleProps = (
+      inlineRpr?.styleId ? resolveStyleChain('runProperties', params, inlineRpr.styleId as string) : {}
+    ) as RunProperties;
   }
 
-  const defaultsChain = orderDefaultsAndNormal(defaultProps, normalProps, isNormalDefault);
-  const inlineRprSafe = inlineRpr ?? {};
-  let styleChain: PropertyObject[];
-  let inlineOverrideSource: Record<string, unknown> = inlineRprSafe;
+  let defaultsChain;
+  if (!paragraphStyleId) {
+    defaultsChain = [defaultProps, normalProps];
+  } else {
+    defaultsChain = [defaultProps];
+  }
+  let styleChain: RunProperties[];
 
   if (isListNumber) {
-    let numberingProps: Record<string, unknown> = {};
-    const numberingProperties = resolvedPpr?.numberingProperties as Record<string, unknown> | undefined;
-    const numId = numberingProperties?.numId as number | string | undefined;
-    if (numId != null && numId !== 0 && numId !== '0') {
-      numberingProps = getNumberingProperties(
-        translators,
-        params,
-        (numberingProperties?.ilvl as number | undefined) ?? 0,
-        numId,
-        translators.rPr,
-      );
+    const numberingProperties = resolvedPpr?.numberingProperties;
+    const numId = resolvedPpr?.numberingProperties?.numId;
+    let numberingProps: RunProperties = {} as RunProperties;
+    if (numId != null && numId !== 0) {
+      numberingProps = getNumberingProperties('runProperties', params, numberingProperties?.ilvl ?? 0, numId);
     }
 
-    const inlineRprForList = numberingDefinedInline ? inlineRprSafe : {};
-    if (inlineRprForList?.underline) {
-      delete inlineRprForList.underline;
+    if (!numberingDefinedInline) {
+      // If numbering is not defined inline, we need to ignore the inline rPr
+      inlineRpr = {} as RunProperties;
     }
 
-    styleChain = [...defaultsChain, paragraphStyleProps, runStyleProps, inlineRprForList, numberingProps];
-    inlineOverrideSource = inlineRprForList;
+    // Inline underlines are ignored for list numbers
+    if (inlineRpr?.underline) {
+      delete inlineRpr.underline;
+    }
+
+    styleChain = [
+      ...defaultsChain,
+      tableStyleProps,
+      ...cellStyleProps,
+      paragraphStyleProps,
+      runStyleProps,
+      inlineRpr,
+      numberingProps,
+    ];
   } else {
-    styleChain = [...defaultsChain, paragraphStyleProps, runStyleProps, inlineRprSafe];
+    styleChain = [...defaultsChain, tableStyleProps, ...cellStyleProps, paragraphStyleProps, runStyleProps, inlineRpr];
   }
 
   const finalProps = combineRunProperties(styleChain);
-
-  applyInlineOverrides(finalProps, inlineOverrideSource);
-  finalProps.fontSize = resolveFontSizeWithFallback(finalProps.fontSize, defaultProps, normalProps);
 
   return finalProps;
 }
 
 export function resolveParagraphProperties(
-  translators: OoxmlTranslators,
   params: OoxmlResolverParams,
-  inlineProps: Record<string, unknown> | null | undefined,
-  insideTable = false,
-  overrideInlineStyleId = false,
-  tableStyleId: string | null = null,
-): Record<string, unknown> {
-  const defaultProps = getDefaultProperties(params, translators.pPr);
-  const { properties: normalProps, isDefault: isNormalDefault } = getStyleProperties(params, 'Normal', translators.pPr);
-
-  const inlinePropsSafe = inlineProps ?? {};
-  let styleId = inlinePropsSafe?.styleId as string | undefined;
-  let styleProps = inlinePropsSafe?.styleId
-    ? resolveStyleChain(params, inlinePropsSafe.styleId as string, translators.pPr)
-    : {};
-
-  let numberingProps: Record<string, unknown> = {};
-  const ilvl =
-    (inlinePropsSafe?.numberingProperties as Record<string, unknown> | undefined)?.ilvl ??
-    (styleProps?.numberingProperties as Record<string, unknown> | undefined)?.ilvl;
-  let numId =
-    (inlinePropsSafe?.numberingProperties as Record<string, unknown> | undefined)?.numId ??
-    (styleProps?.numberingProperties as Record<string, unknown> | undefined)?.numId;
-  let numberingDefinedInline =
-    (inlinePropsSafe?.numberingProperties as Record<string, unknown> | undefined)?.numId != null;
-
-  const inlineNumId = (inlinePropsSafe?.numberingProperties as Record<string, unknown> | undefined)?.numId;
-  const inlineNumIdDisablesNumbering = inlineNumId === 0 || inlineNumId === '0';
-  if (inlineNumIdDisablesNumbering) {
-    numId = null;
+  inlineProps: ParagraphProperties | null | undefined,
+  tableInfo: TableInfo | null | undefined,
+): ParagraphProperties {
+  if (!inlineProps) {
+    inlineProps = {} as ParagraphProperties;
+  }
+  if (!params.translatedLinkedStyles?.styles) {
+    return inlineProps;
   }
 
-  const isList = numId != null && numId !== 0 && numId !== '0';
+  // Normal style and default properties
+  const defaultProps = params.translatedLinkedStyles.docDefaults?.paragraphProperties ?? {};
+  const normalStyleDef = params.translatedLinkedStyles.styles['Normal'];
+  const normalProps = (normalStyleDef?.paragraphProperties ?? {}) as ParagraphProperties;
+
+  // Properties from styles
+  let styleId = inlineProps.styleId as string | undefined;
+  let styleProps = (
+    inlineProps.styleId ? resolveStyleChain('paragraphProperties', params, inlineProps.styleId) : {}
+  ) as ParagraphProperties;
+
+  // Properties from numbering
+  let numberingProps = {} as ParagraphProperties;
+  const ilvl = inlineProps?.numberingProperties?.ilvl ?? styleProps?.numberingProperties?.ilvl;
+  const numId = inlineProps?.numberingProperties?.numId ?? styleProps?.numberingProperties?.numId;
+  let numberingDefinedInline = inlineProps?.numberingProperties?.numId != null;
+
+  const isList = numId != null && numId !== 0;
   if (isList) {
     const ilvlNum = ilvl != null ? (ilvl as number) : 0;
-    numberingProps = getNumberingProperties(translators, params, ilvlNum, numId as number | string, translators.pPr);
-    if (overrideInlineStyleId && numberingProps.styleId) {
+    numberingProps = getNumberingProperties('paragraphProperties', params, ilvlNum, numId);
+    if (numberingProps.styleId) {
+      // If numbering level defines a style, replace styleProps with that style
       styleId = numberingProps.styleId as string;
-      styleProps = resolveStyleChain(params, styleId, translators.pPr);
-      if (inlinePropsSafe) {
-        inlinePropsSafe.styleId = styleId;
-        const inlineNumProps = inlinePropsSafe.numberingProperties as Record<string, unknown> | undefined;
-        if (
-          (styleProps.numberingProperties as Record<string, unknown> | undefined)?.ilvl === inlineNumProps?.ilvl &&
-          (styleProps.numberingProperties as Record<string, unknown> | undefined)?.numId === inlineNumProps?.numId
-        ) {
-          delete inlinePropsSafe.numberingProperties;
-          numberingDefinedInline = false;
-        }
+      styleProps = resolveStyleChain('paragraphProperties', params, styleId);
+      inlineProps.styleId = styleId;
+      const inlineNumProps = inlineProps.numberingProperties;
+      if (
+        styleProps.numberingProperties?.ilvl === inlineNumProps?.ilvl &&
+        styleProps.numberingProperties?.numId === inlineNumProps?.numId
+      ) {
+        // Numbering is already defined in style, so remove from inline props
+        delete inlineProps.numberingProperties;
+        numberingDefinedInline = false;
       }
     }
   }
 
-  const tableProps = tableStyleId ? resolveStyleChain(params, tableStyleId, translators.pPr) : {};
+  // Table properties
+  const tableProps = (
+    tableInfo?.tableProperties?.tableStyleId
+      ? resolveStyleChain('paragraphProperties', params, tableInfo?.tableProperties?.tableStyleId)
+      : {}
+  ) as ParagraphProperties;
 
-  const defaultsChain = orderDefaultsAndNormal(defaultProps, normalProps, isNormalDefault);
-  const propsChain = [...defaultsChain, tableProps, numberingProps, styleProps, inlinePropsSafe];
+  // Cell style properties
+  const cellStyleProps: ParagraphProperties[] = resolveCellStyles<ParagraphProperties>(
+    'paragraphProperties',
+    tableInfo,
+    params.translatedLinkedStyles,
+  );
 
-  let indentChain: PropertyObject[];
+  // Resolve property chain - regular properties are treated differently from indentation
+  //   Chain for regular properties
+  let defaultsChain;
+  if (!styleId) {
+    defaultsChain = [defaultProps, normalProps];
+  } else {
+    defaultsChain = [defaultProps];
+  }
+  const propsChain = [...defaultsChain, tableProps, ...cellStyleProps, numberingProps, styleProps, inlineProps];
+
+  //   Chain for indentation properties
+  let indentChain: ParagraphProperties[];
   if (isList) {
     if (numberingDefinedInline) {
-      indentChain = [...defaultsChain, styleProps, numberingProps, inlinePropsSafe];
+      // If numbering is defined inline, then numberingProps should override styleProps for indentation
+      indentChain = [...defaultsChain, styleProps, numberingProps, inlineProps];
     } else {
-      styleProps = resolveStyleChain(params, styleId, translators.pPr, false);
-      indentChain = [...defaultsChain, numberingProps, styleProps, inlinePropsSafe];
+      // Otherwise, styleProps should override numberingProps for indentation but it should not follow the based-on chain
+      styleProps = resolveStyleChain('paragraphProperties', params, styleId, false);
+      indentChain = [...defaultsChain, numberingProps, styleProps, inlineProps];
     }
   } else {
-    indentChain = [...defaultsChain, numberingProps, styleProps, inlinePropsSafe];
+    indentChain = [...defaultsChain, styleProps, inlineProps];
   }
 
-  const finalProps = combineProperties(propsChain);
+  const finalProps = combineProperties(propsChain, {
+    specialHandling: {
+      tabStops: (target: ParagraphProperties, source: ParagraphProperties): unknown => {
+        // If a higher priority source defines firstLine, remove hanging from the final result
+        if (target.tabStops != null && source.tabStops != null) {
+          return [...(target.tabStops as unknown[]), ...(source.tabStops as unknown[])];
+        }
+        return source.tabStops;
+      },
+    },
+  });
   const finalIndent = combineIndentProperties(indentChain);
-  finalProps.indent = (finalIndent as Record<string, unknown>).indent;
-
-  if (insideTable && !inlinePropsSafe?.spacing && !(styleProps as Record<string, unknown>)?.spacing) {
-    finalProps.spacing = undefined;
-  }
+  finalProps.indent = finalIndent.indent;
 
   return finalProps;
 }
 
-export function resolveStyleChain(
+export function resolveStyleChain<T extends PropertyObject>(
+  propertyType: 'paragraphProperties' | 'runProperties',
   params: OoxmlResolverParams,
   styleId: string | undefined,
-  translator: OoxmlTranslator,
   followBasedOnChain = true,
-): Record<string, unknown> {
-  let styleProps: Record<string, unknown> = {};
-  let basedOn: string | undefined = undefined;
-  if (styleId && styleId !== 'Normal') {
-    ({ properties: styleProps, basedOn } = getStyleProperties(params, styleId, translator));
-  }
+): T {
+  if (!styleId) return {} as T;
 
-  let styleChain: Record<string, unknown>[] = [styleProps];
+  const styleDef = params.translatedLinkedStyles?.styles?.[styleId];
+  if (!styleDef) return {} as T;
+
+  const styleProps = (styleDef[propertyType as keyof typeof styleDef] ?? {}) as T;
+  const basedOn = styleDef.basedOn;
+
+  let styleChain: T[] = [styleProps];
   const seenStyles = new Set<string>();
   let nextBasedOn = basedOn;
   while (followBasedOnChain && nextBasedOn) {
-    if (seenStyles.has(basedOn as string)) {
+    if (seenStyles.has(nextBasedOn as string)) {
       break;
     }
     seenStyles.add(basedOn as string);
-    const result = getStyleProperties(params, nextBasedOn, translator);
-    const basedOnProps = result.properties;
-    nextBasedOn = result.basedOn;
+    const basedOnStyleDef = params.translatedLinkedStyles?.styles?.[nextBasedOn];
+    const basedOnProps = basedOnStyleDef?.[propertyType as keyof typeof basedOnStyleDef] as T;
+
     if (basedOnProps && Object.keys(basedOnProps).length) {
       styleChain.push(basedOnProps);
     }
-    basedOn = nextBasedOn;
+    nextBasedOn = basedOnStyleDef?.basedOn;
   }
   styleChain = styleChain.reverse();
   return combineProperties(styleChain);
 }
 
-export function getDefaultProperties(
-  params: OoxmlResolverParams,
-  translator: OoxmlTranslator,
-): Record<string, unknown> {
-  const docx = params?.docx as Record<string, unknown> | undefined;
-  const styles = docx?.['word/styles.xml'] as Record<string, unknown> | undefined;
-  const rootElements = (styles as { elements?: Array<Record<string, unknown>> })?.elements?.[0]?.elements as
-    | Array<Record<string, unknown>>
-    | undefined;
-  if (!rootElements?.length) {
-    return {};
-  }
-
-  const defaults = rootElements.find((el) => el.name === 'w:docDefaults');
-  const xmlName = translator.xmlName;
-  const defaultsElements = (defaults as Record<string, unknown>)?.elements as
-    | Array<Record<string, unknown>>
-    | undefined;
-  const elementPrDefault = defaultsElements?.find((el) => el.name === `${xmlName}Default`);
-  const elementPrDefaultElements = elementPrDefault?.elements as Array<Record<string, unknown>> | undefined;
-  const elementPr = elementPrDefaultElements?.find((el) => el.name === xmlName);
-  if (!elementPr) {
-    return {};
-  }
-
-  return translator.encode({ ...params, nodes: [elementPr] }) || {};
-}
-
-export function getStyleProperties(
-  params: OoxmlResolverParams,
-  styleId: string,
-  translator: OoxmlTranslator,
-): { properties: Record<string, unknown>; isDefault: boolean; basedOn: string | undefined } {
-  const emptyResult = { properties: {}, isDefault: false, basedOn: undefined };
-  if (!styleId) return emptyResult;
-
-  const docx = params?.docx as Record<string, unknown> | undefined;
-  const styles = docx?.['word/styles.xml'] as Record<string, unknown> | undefined;
-  const rootElements = (styles as { elements?: Array<Record<string, unknown>> })?.elements?.[0]?.elements as
-    | Array<Record<string, unknown>>
-    | undefined;
-  if (!rootElements?.length) {
-    return emptyResult;
-  }
-
-  const style = rootElements.find(
-    (el) => el.name === 'w:style' && (el.attributes as Record<string, unknown>)?.['w:styleId'] === styleId,
-  ) as Record<string, unknown> | undefined;
-  const styleElements = style?.elements as Array<Record<string, unknown>> | undefined;
-  const basedOnElement = styleElements?.find((el) => el.name === 'w:basedOn');
-  const basedOn = (basedOnElement?.attributes as Record<string, unknown> | undefined)?.['w:val'] as string | undefined;
-  const elementPr = styleElements?.find((el) => el.name === translator.xmlName);
-  if (!elementPr) {
-    return { ...emptyResult, basedOn };
-  }
-
-  const result = translator.encode({ ...params, nodes: [elementPr] }) || {};
-  const isDefault = (style?.attributes as Record<string, unknown>)?.['w:default'] === '1';
-
-  return { properties: result, isDefault, basedOn };
-}
-
-export function getNumberingProperties(
-  translators: OoxmlTranslators,
+export function getNumberingProperties<T extends ParagraphProperties | RunProperties>(
+  propertyType: 'paragraphProperties' | 'runProperties',
   params: OoxmlResolverParams,
   ilvl: number,
-  numId: number | string,
-  translator: OoxmlTranslator,
+  numId: number,
   tries = 0,
-): Record<string, unknown> {
-  const numbering = params?.numbering as OoxmlNumberingContext | null | undefined;
-  if (!numbering) return {};
+): T {
+  const numbering = params.translatedNumbering;
+  if (!numbering) return {} as T;
   const { definitions, abstracts } = numbering;
-  if (!definitions || !abstracts) return {};
+  if (!definitions || !abstracts) return {} as T;
 
-  const propertiesChain: Record<string, unknown>[] = [];
+  const propertiesChain: T[] = [];
 
-  const numDefinition = definitions[numId as keyof typeof definitions] as Record<string, unknown> | undefined;
-  if (!numDefinition) return {};
+  const numDefinition = definitions[String(numId)];
+  if (!numDefinition) return {} as T;
 
-  const numDefElements = numDefinition.elements as Array<Record<string, unknown>> | undefined;
-  const lvlOverride = numDefElements?.find(
-    (element) =>
-      element.name === 'w:lvlOverride' &&
-      (element.attributes as Record<string, unknown> | undefined)?.['w:ilvl'] == ilvl,
-  );
-  const lvlOverrideElements = lvlOverride?.elements as Array<Record<string, unknown>> | undefined;
-  const overridePr = lvlOverrideElements?.find((el) => el.name === translator.xmlName);
-  if (overridePr) {
-    const overrideProps = translator.encode({ ...params, nodes: [overridePr] }) || {};
+  const lvlOverride = numDefinition.lvlOverrides?.[String(ilvl)];
+  const overrideProps = lvlOverride?.[propertyType as keyof typeof lvlOverride] as T;
+
+  if (overrideProps) {
     propertiesChain.push(overrideProps);
   }
 
-  const abstractNumIdElement = numDefElements?.find((item) => item.name === 'w:abstractNumId');
-  const abstractNumId = (abstractNumIdElement?.attributes as Record<string, unknown> | undefined)?.['w:val'] as
-    | string
-    | undefined;
+  const abstractNumId = numDefinition.abstractNumId!;
 
-  const listDefinitionForThisNumId = abstracts[abstractNumId as keyof typeof abstracts] as
-    | Record<string, unknown>
-    | undefined;
-  if (!listDefinitionForThisNumId) return {};
+  const listDefinitionForThisNumId = abstracts[String(abstractNumId)];
+  if (!listDefinitionForThisNumId) return {} as T;
 
-  const listDefElements = listDefinitionForThisNumId.elements as Array<Record<string, unknown>> | undefined;
-  const numStyleLink = listDefElements?.find((item) => item.name === 'w:numStyleLink');
-  const styleId = (numStyleLink?.attributes as Record<string, unknown> | undefined)?.['w:val'] as string | undefined;
+  const numStyleLinkId = listDefinitionForThisNumId.numStyleLink ?? listDefinitionForThisNumId.styleLink;
 
-  if (styleId && tries < 1) {
-    const { properties: styleProps } = getStyleProperties(params, styleId, translators.pPr);
-    const numIdFromStyle = (styleProps?.numberingProperties as Record<string, unknown> | undefined)?.numId;
+  if (numStyleLinkId && tries < 1) {
+    const styleDef = params.translatedLinkedStyles?.styles?.[numStyleLinkId];
+    const styleProps = styleDef?.paragraphProperties;
+    const numIdFromStyle = styleProps?.numberingProperties?.numId;
     if (numIdFromStyle) {
-      return getNumberingProperties(
-        translators,
-        params,
-        ilvl,
-        numIdFromStyle as number | string,
-        translator,
-        tries + 1,
-      );
+      return getNumberingProperties(propertyType, params, ilvl, numIdFromStyle, tries + 1);
     }
   }
 
-  const levelDefinition = listDefElements?.find(
-    (element) =>
-      element.name === 'w:lvl' && (element.attributes as Record<string, unknown> | undefined)?.['w:ilvl'] == ilvl,
-  );
-  if (!levelDefinition) return {};
+  const levelDefinition = listDefinitionForThisNumId.levels?.[String(ilvl)];
+  if (!levelDefinition) return {} as T;
 
-  const levelDefElements = levelDefinition.elements as Array<Record<string, unknown>> | undefined;
-  const abstractElementPr = levelDefElements?.find((el) => el.name === translator.xmlName);
-  if (!abstractElementPr) return {};
-  const abstractProps = translator.encode({ ...params, nodes: [abstractElementPr] }) || {};
+  const abstractProps = levelDefinition[propertyType as keyof typeof levelDefinition] as T;
 
-  const pStyleElement = levelDefElements?.find((el) => el.name === 'w:pStyle');
-  if (pStyleElement) {
-    const pStyleId = (pStyleElement.attributes as Record<string, unknown> | undefined)?.['w:val'] as string | undefined;
-    (abstractProps as Record<string, unknown>).styleId = pStyleId;
+  if (abstractProps != null) {
+    if (levelDefinition?.styleId) {
+      abstractProps.styleId = levelDefinition?.styleId;
+    }
+    propertiesChain.push(abstractProps);
   }
-  propertiesChain.push(abstractProps as Record<string, unknown>);
 
   propertiesChain.reverse();
   return combineProperties(propertiesChain);
@@ -404,8 +328,11 @@ export function resolveDocxFontFamily(
 ): string | null {
   if (!attributes || typeof attributes !== 'object') return null;
 
-  const ascii = (attributes['w:ascii'] ?? attributes['ascii']) as string | undefined;
-  const themeAscii = (attributes['w:asciiTheme'] ?? attributes['asciiTheme']) as string | undefined;
+  const ascii = (attributes['w:ascii'] ?? attributes['ascii'] ?? attributes['eastAsia']) as string | undefined;
+  let themeAscii = (attributes['w:asciiTheme'] ?? attributes['asciiTheme']) as string | undefined;
+  if ((!ascii && attributes.hint === 'default') || (!ascii && !themeAscii)) {
+    themeAscii = 'major';
+  }
 
   let resolved = ascii;
   if (docx && themeAscii) {
@@ -432,4 +359,145 @@ export function resolveDocxFontFamily(
     return toCssFontFamily(resolved, docx ?? undefined);
   }
   return resolved;
+}
+
+export function resolveCellStyles<T extends PropertyObject>(
+  propertyType: 'paragraphProperties' | 'runProperties' | 'tableCellProperties',
+  tableInfo: TableInfo | null | undefined,
+  translatedLinkedStyles: StylesDocumentProperties,
+): T[] {
+  if (tableInfo == null || !tableInfo.tableProperties?.tableStyleId) {
+    return [];
+  }
+  const cellStyleProps: T[] = [];
+  if (tableInfo != null && tableInfo.tableProperties.tableStyleId) {
+    const tableStyleDef = translatedLinkedStyles.styles[tableInfo.tableProperties.tableStyleId];
+    const tableStylePropsDef = tableStyleDef?.tableProperties;
+    const rowBandSize = tableStylePropsDef?.tableStyleRowBandSize ?? 1;
+    const colBandSize = tableStylePropsDef?.tableStyleColBandSize ?? 1;
+    const cellStyleTypes = determineCellStyleTypes(
+      tableInfo.tableProperties?.tblLook,
+      tableInfo.rowIndex,
+      tableInfo.cellIndex,
+      tableInfo.numRows,
+      tableInfo.numCells,
+      rowBandSize,
+      colBandSize,
+    );
+    cellStyleTypes.forEach((styleType) => {
+      const typeProps = tableStyleDef?.tableStyleProperties?.[styleType]?.[propertyType] as T;
+      if (typeProps) {
+        cellStyleProps.push(typeProps);
+      }
+    });
+  }
+  return cellStyleProps;
+}
+
+/**
+ * Resolve table cell properties (shading, borders, margins) by cascading
+ * conditional table style properties with inline cell properties.
+ *
+ * Cascade order (low → high priority):
+ *   wholeTable → bands → firstRow/lastRow/firstCol/lastCol → corner cells → inline
+ */
+export function resolveTableCellProperties(
+  inlineProps: TableCellProperties | null | undefined,
+  tableInfo: TableInfo | null | undefined,
+  translatedLinkedStyles: StylesDocumentProperties | null | undefined,
+): TableCellProperties {
+  if (!translatedLinkedStyles) {
+    return (inlineProps ?? {}) as TableCellProperties;
+  }
+
+  const cellStyleProps = resolveCellStyles<TableCellProperties>(
+    'tableCellProperties',
+    tableInfo,
+    translatedLinkedStyles,
+  );
+
+  if (cellStyleProps.length === 0) {
+    return (inlineProps ?? {}) as TableCellProperties;
+  }
+
+  // Cascade: style properties (low→high) then inline wins last
+  const chain: TableCellProperties[] = [...cellStyleProps];
+  if (inlineProps && Object.keys(inlineProps).length > 0) {
+    chain.push(inlineProps);
+  }
+
+  return combineProperties(chain, { fullOverrideProps: ['shading'] });
+}
+
+function determineCellStyleTypes(
+  tblLook: TableLookProperties | null | undefined,
+  rowIndex: number,
+  cellIndex: number,
+  numRows?: number | null,
+  numCells?: number | null,
+  rowBandSize = 1,
+  colBandSize = 1,
+): TableStyleType[] {
+  const styleTypes: TableStyleType[] = ['wholeTable'];
+
+  const normalizedRowBandSize = rowBandSize > 0 ? rowBandSize : 1;
+  const normalizedColBandSize = colBandSize > 0 ? colBandSize : 1;
+
+  // Per ECMA-376, banding excludes header/footer rows and first/last columns.
+  // Offset the index so the first data row/column starts at band1.
+  const bandRowIndex = Math.max(0, rowIndex - (tblLook?.firstRow ? 1 : 0));
+  const bandColIndex = Math.max(0, cellIndex - (tblLook?.firstColumn ? 1 : 0));
+  const rowGroup = Math.floor(bandRowIndex / normalizedRowBandSize);
+  const colGroup = Math.floor(bandColIndex / normalizedColBandSize);
+
+  if (!tblLook?.noHBand) {
+    if (rowGroup % 2 === 0) {
+      styleTypes.push('band1Horz');
+    } else {
+      styleTypes.push('band2Horz');
+    }
+  }
+
+  if (!tblLook?.noVBand) {
+    if (colGroup % 2 === 0) {
+      styleTypes.push('band1Vert');
+    } else {
+      styleTypes.push('band2Vert');
+    }
+  }
+
+  if (tblLook?.firstRow && rowIndex === 0) {
+    styleTypes.push('firstRow');
+  }
+  if (tblLook?.firstColumn && cellIndex === 0) {
+    styleTypes.push('firstCol');
+  }
+  if (tblLook?.lastRow && numRows != null && numRows > 0 && rowIndex === numRows - 1) {
+    styleTypes.push('lastRow');
+  }
+  if (tblLook?.lastColumn && numCells != null && numCells > 0 && cellIndex === numCells - 1) {
+    styleTypes.push('lastCol');
+  }
+
+  if (rowIndex === 0 && cellIndex === 0) {
+    styleTypes.push('nwCell');
+  }
+  if (rowIndex === 0 && numCells != null && numCells > 0 && cellIndex === numCells - 1) {
+    styleTypes.push('neCell');
+  }
+  if (numRows != null && numRows > 0 && rowIndex === numRows - 1 && cellIndex === 0) {
+    styleTypes.push('swCell');
+  }
+  if (
+    numRows != null &&
+    numRows > 0 &&
+    numCells != null &&
+    numCells > 0 &&
+    rowIndex === numRows - 1 &&
+    cellIndex === numCells - 1
+  ) {
+    styleTypes.push('seCell');
+  }
+
+  return styleTypes;
 }

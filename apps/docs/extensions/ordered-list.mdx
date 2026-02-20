@@ -1,0 +1,85 @@
+---
+title: Ordered list
+sidebarTitle: "Ordered List"
+keywords: "ordered list, superdoc ordered list, word ordered list, document numbered list, docx ordered list"
+---
+
+import Description from '/snippets/extensions/ordered-list.mdx'
+
+<Description />
+
+<Info>
+Ordered list functionality is part of the [Paragraph extension](/extensions/paragraph). There is no separate ordered list extension.
+</Info>
+
+## Commands
+
+### `toggleOrderedList`
+
+Toggle ordered list formatting on the current selection. Converts selected paragraphs to numbered list items or removes list formatting.
+
+**Example:**
+
+<CodeGroup>
+```javascript Usage
+editor.commands.toggleOrderedList()
+```
+
+```javascript Full Example
+import { SuperDoc } from 'superdoc';
+import 'superdoc/style.css';
+
+const superdoc = new SuperDoc({
+  selector: '#editor',
+  document: yourFile,
+  onReady: (superdoc) => {
+    const editor = superdoc.activeEditor;
+    editor.commands.toggleOrderedList()
+  },
+});
+```
+</CodeGroup>
+
+### `restartNumbering`
+
+Restart list numbering from the current position.
+
+**Example:**
+
+<CodeGroup>
+```javascript Usage
+editor.commands.restartNumbering()
+```
+
+```javascript Full Example
+import { SuperDoc } from 'superdoc';
+import 'superdoc/style.css';
+
+const superdoc = new SuperDoc({
+  selector: '#editor',
+  document: yourFile,
+  onReady: (superdoc) => {
+    const editor = superdoc.activeEditor;
+    editor.commands.restartNumbering()
+  },
+});
+```
+</CodeGroup>
+
+## Keyboard shortcuts
+
+| Command | Shortcut | Description |
+|---------|----------|-------------|
+| toggleOrderedList() | `⌘/Ctrl-Shift-7` | Toggle ordered list |
+| (indent) | `Tab` | Increase list indentation |
+| (outdent) | `Shift-Tab` | Decrease list indentation |
+
+## Input rules
+
+Type `1. ` followed by a space to start a numbered list automatically.
+
+## Source code
+
+import { SourceCodeLink } from '/snippets/components/source-code-link.jsx'
+
+<SourceCodeLink path="packages/super-editor/src/extensions/paragraph/paragraph.js" />

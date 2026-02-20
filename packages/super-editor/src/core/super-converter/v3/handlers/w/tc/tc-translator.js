@@ -21,6 +21,7 @@ function encode(params, encodedAttrs) {
     node,
     table,
     row,
+    tableProperties,
     rowBorders,
     baseTableBorders,
     tableLook,
@@ -31,6 +32,7 @@ function encode(params, encodedAttrs) {
     rowIndex,
     totalRows,
     totalColumns,
+    preferTableGridWidths,
     _referencedStyles,
   } = params.extraParams;
 
@@ -39,6 +41,7 @@ function encode(params, encodedAttrs) {
     node,
     table,
     row,
+    tableProperties,
     rowBorders,
     baseTableBorders,
     tableLook,
@@ -49,6 +52,7 @@ function encode(params, encodedAttrs) {
     rowIndex,
     totalRows,
     totalColumns,
+    preferTableGridWidths,
     _referencedStyles,
   });
 

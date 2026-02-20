@@ -9,12 +9,39 @@
  * precedence according to the OOXML specification.
  */
 import { describe, it, expect, vi, beforeAll } from 'vitest';
-import { resolveRunProperties } from './styles.js';
+import { resolveRunProperties, combineRunProperties } from './styles.js';
 
 beforeAll(() => {
   vi.stubGlobal('SuperConverter', {
     toCssFontFamily: (font) => font,
   });
+});
+
+const buildTranslatedLinkedStyles = (styles = {}) => ({
+  docDefaults: {
+    runProperties: {},
+    paragraphProperties: {},
+  },
+  latentStyles: {},
+  styles: {
+    Normal: {
+      styleId: 'Normal',
+      type: 'paragraph',
+      default: true,
+      name: 'Normal',
+      runProperties: {},
+      paragraphProperties: {},
+    },
+    DefaultParagraphFont: {
+      styleId: 'DefaultParagraphFont',
+      type: 'character',
+      default: true,
+      name: 'Default Paragraph Font',
+      runProperties: {},
+      paragraphProperties: {},
+    },
+    ...styles,
+  },
 });
 
 describe('resolveRunProperties - inline property priority', () => {
@@ -27,71 +54,30 @@ describe('resolveRunProperties - inline property priority', () => {
    * - Expected: fontSize should be 24 (12pt from inline), not 18 (from style)
    */
   it('should prioritize inline fontSize over character style fontSize', () => {
-    // Mock params with styles
-    const params = {
-      docx: {
-        'word/styles.xml': {
-          elements: [
-            {
-              elements: [
-                // p1 paragraph style with rPr
-                {
-                  name: 'w:style',
-                  attributes: { 'w:type': 'paragraph', 'w:styleId': 'p1' },
-                  elements: [
-                    {
-                      name: 'w:basedOn',
-                      attributes: { 'w:val': 'Normal' },
-                    },
-                    {
-                      name: 'w:rPr',
-                      elements: [
-                        {
-                          name: 'w:sz',
-                          attributes: { 'w:val': '18' }, // 9pt in paragraph style
-                        },
-                      ],
-                    },
-                  ],
-                },
-                // s1 character style
-                {
-                  name: 'w:style',
-                  attributes: { 'w:type': 'character', 'w:styleId': 's1' },
-                  elements: [
-                    {
-                      name: 'w:basedOn',
-                      attributes: { 'w:val': 'DefaultParagraphFont' },
-                    },
-                    {
-                      name: 'w:rPr',
-                      elements: [
-                        {
-                          name: 'w:sz',
-                          attributes: { 'w:val': '18' }, // 9pt in character style
-                        },
-                      ],
-                    },
-                  ],
-                },
-                // Normal style
-                {
-                  name: 'w:style',
-                  attributes: { 'w:type': 'paragraph', 'w:styleId': 'Normal', 'w:default': '1' },
-                  elements: [],
-                },
-                // DefaultParagraphFont style
-                {
-                  name: 'w:style',
-                  attributes: { 'w:type': 'character', 'w:styleId': 'DefaultParagraphFont', 'w:default': '1' },
-                  elements: [],
-                },
-              ],
-            },
-          ],
+    const translatedLinkedStyles = buildTranslatedLinkedStyles({
+      p1: {
+        styleId: 'p1',
+        type: 'paragraph',
+        basedOn: 'Normal',
+        runProperties: {
+          fontSize: 18,
         },
+        paragraphProperties: {},
       },
-      numbering: { definitions: {}, abstracts: {} },
+      s1: {
+        styleId: 's1',
+        type: 'character',
+        basedOn: 'DefaultParagraphFont',
+        runProperties: {
+          fontSize: 18,
+        },
+        paragraphProperties: {},
+      },
+    });
+
+    const params = {
+      translatedLinkedStyles,
+      translatedNumbering: { definitions: {}, abstracts: {} },
     };
 
     // Inline run properties: has BOTH styleId (s1) AND inline fontSize (24)
@@ -115,46 +101,18 @@ describe('resolveRunProperties - inline property priority', () => {
 
   it('should use character style fontSize when no inline fontSize is specified', () => {
     const params = {
-      docx: {
-        'word/styles.xml': {
-          elements: [
-            {
-              elements: [
-                {
-                  name: 'w:style',
-                  attributes: { 'w:type': 'character', 'w:styleId': 's1' },
-                  elements: [
-                    {
-                      name: 'w:basedOn',
-                      attributes: { 'w:val': 'DefaultParagraphFont' },
-                    },
-                    {
-                      name: 'w:rPr',
-                      elements: [
-                        {
-                          name: 'w:sz',
-                          attributes: { 'w:val': '18' },
-                        },
-                      ],
-                    },
-                  ],
-                },
-                {
-                  name: 'w:style',
-                  attributes: { 'w:type': 'paragraph', 'w:styleId': 'Normal', 'w:default': '1' },
-                  elements: [],
-                },
-                {
-                  name: 'w:style',
-                  attributes: { 'w:type': 'character', 'w:styleId': 'DefaultParagraphFont', 'w:default': '1' },
-                  elements: [],
-                },
-              ],
-            },
-          ],
+      translatedLinkedStyles: buildTranslatedLinkedStyles({
+        s1: {
+          styleId: 's1',
+          type: 'character',
+          basedOn: 'DefaultParagraphFont',
+          runProperties: {
+            fontSize: 18,
+          },
+          paragraphProperties: {},
         },
-      },
-      numbering: { definitions: {}, abstracts: {} },
+      }),
+      translatedNumbering: { definitions: {}, abstracts: {} },
     };
 
     // Inline run properties: ONLY has styleId, NO inline fontSize
@@ -175,50 +133,19 @@ describe('resolveRunProperties - inline property priority', () => {
 
   it('should handle hyperlink character style with color and underline', () => {
     const params = {
-      docx: {
-        'word/styles.xml': {
-          elements: [
-            {
-              elements: [
-                {
-                  name: 'w:style',
-                  attributes: { 'w:type': 'character', 'w:styleId': 'Hyperlink' },
-                  elements: [
-                    {
-                      name: 'w:basedOn',
-                      attributes: { 'w:val': 'DefaultParagraphFont' },
-                    },
-                    {
-                      name: 'w:rPr',
-                      elements: [
-                        {
-                          name: 'w:color',
-                          attributes: { 'w:val': '0000FF' }, // Blue
-                        },
-                        {
-                          name: 'w:u',
-                          attributes: { 'w:val': 'single' }, // Underline
-                        },
-                      ],
-                    },
-                  ],
-                },
-                {
-                  name: 'w:style',
-                  attributes: { 'w:type': 'paragraph', 'w:styleId': 'Normal', 'w:default': '1' },
-                  elements: [],
-                },
-                {
-                  name: 'w:style',
-                  attributes: { 'w:type': 'character', 'w:styleId': 'DefaultParagraphFont', 'w:default': '1' },
-                  elements: [],
-                },
-              ],
-            },
-          ],
+      translatedLinkedStyles: buildTranslatedLinkedStyles({
+        Hyperlink: {
+          styleId: 'Hyperlink',
+          type: 'character',
+          basedOn: 'DefaultParagraphFont',
+          runProperties: {
+            color: { val: '0000FF' },
+            underline: { 'w:val': 'single' },
+          },
+          paragraphProperties: {},
         },
-      },
-      numbering: { definitions: {}, abstracts: {} },
+      }),
+      translatedNumbering: { definitions: {}, abstracts: {} },
     };
 
     const inlineRpr = {
@@ -235,14 +162,12 @@ describe('resolveRunProperties - inline property priority', () => {
   });
 
   it('should test combineProperties with fontSize override', async () => {
-    const { combineProperties } = await import('./styles.js');
-
     const chain = [
       { fontSize: 18, color: { val: 'FF0000' } }, // from character style
       { fontSize: 24, bold: true, color: { val: '00FF00' } }, // from inline (should win)
     ];
 
-    const result = combineProperties(chain, ['color']);
+    const result = combineRunProperties(chain);
 
     // fontSize should be 24 (from inline)
     expect(result.fontSize).toBe(24);
@@ -254,54 +179,20 @@ describe('resolveRunProperties - inline property priority', () => {
 
   it('should ensure all inline properties override character style properties', () => {
     const params = {
-      docx: {
-        'word/styles.xml': {
-          elements: [
-            {
-              elements: [
-                {
-                  name: 'w:style',
-                  attributes: { 'w:type': 'character', 'w:styleId': 's1' },
-                  elements: [
-                    {
-                      name: 'w:basedOn',
-                      attributes: { 'w:val': 'DefaultParagraphFont' },
-                    },
-                    {
-                      name: 'w:rPr',
-                      elements: [
-                        {
-                          name: 'w:sz',
-                          attributes: { 'w:val': '18' }, // 9pt from style
-                        },
-                        {
-                          name: 'w:b',
-                          attributes: {}, // bold from style
-                        },
-                        {
-                          name: 'w:i',
-                          attributes: {}, // italic from style
-                        },
-                      ],
-                    },
-                  ],
-                },
-                {
-                  name: 'w:style',
-                  attributes: { 'w:type': 'paragraph', 'w:styleId': 'Normal', 'w:default': '1' },
-                  elements: [],
-                },
-                {
-                  name: 'w:style',
-                  attributes: { 'w:type': 'character', 'w:styleId': 'DefaultParagraphFont', 'w:default': '1' },
-                  elements: [],
-                },
-              ],
-            },
-          ],
+      translatedLinkedStyles: buildTranslatedLinkedStyles({
+        s1: {
+          styleId: 's1',
+          type: 'character',
+          basedOn: 'DefaultParagraphFont',
+          runProperties: {
+            fontSize: 18,
+            bold: true,
+            italic: true,
+          },
+          paragraphProperties: {},
         },
-      },
-      numbering: { definitions: {}, abstracts: {} },
+      }),
+      translatedNumbering: { definitions: {}, abstracts: {} },
     };
 
     // Inline run properties: override fontSize, bold, italic with different values

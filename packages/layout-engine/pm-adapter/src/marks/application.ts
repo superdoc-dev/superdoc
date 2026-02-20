@@ -588,6 +588,9 @@ export const collectTrackedChangeFromMarks = (marks?: PMMark[]): TrackedChangeMe
  * ```
  */
 export const normalizeUnderlineStyle = (value: unknown): UnderlineStyle | undefined => {
+  if (value === 'none') {
+    return undefined;
+  }
   if (value === undefined || value === null) {
     return 'single';
   }

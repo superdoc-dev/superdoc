@@ -78,3 +78,7 @@ devtools/visual-testing/pnpm-lock.yaml
 
 .bun-cache/
 
+# Python
+__pycache__/
+*.pyc
+*.pyo

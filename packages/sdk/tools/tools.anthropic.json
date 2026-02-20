@@ -1,0 +1,3557 @@
+{
+  "contractVersion": "0.1.0",
+  "profiles": {
+    "intent": [
+      {
+        "name": "find_content",
+        "description": "Search the document for nodes matching type, text, or attribute criteria.",
+        "input_schema": {
+          "type": "object",
+          "properties": {
+            "doc": {
+              "type": "string"
+            },
+            "sessionId": {
+              "type": "string"
+            },
+            "within": {
+              "oneOf": [
+                {
+                  "type": "object",
+                  "properties": {
+                    "kind": {
+                      "const": "block"
+                    },
+                    "nodeType": {
+                      "oneOf": [
+                        {
+                          "const": "paragraph"
+                        },
+                        {
+                          "const": "heading"
+                        },
+                        {
+                          "const": "listItem"
+                        },
+                        {
+                          "const": "table"
+                        },
+                        {
+                          "const": "tableRow"
+                        },
+                        {
+                          "const": "tableCell"
+                        },
+                        {
+                          "const": "image"
+                        },
+                        {
+                          "const": "sdt"
+                        }
+                      ]
+                    },
+                    "nodeId": {
+                      "type": "string"
+                    }
+                  },
+                  "required": [
+                    "kind",
+                    "nodeType",
+                    "nodeId"
+                  ]
+                },
+                {
+                  "type": "object",
+                  "properties": {
+                    "kind": {
+                      "const": "inline"
+                    },
+                    "nodeType": {
+                      "oneOf": [
+                        {
+                          "const": "run"
+                        },
+                        {
+                          "const": "bookmark"
+                        },
+                        {
+                          "const": "comment"
+                        },
+                        {
+                          "const": "hyperlink"
+                        },
+                        {
+                          "const": "sdt"
+                        },
+                        {
+                          "const": "image"
+                        },
+                        {
+                          "const": "footnoteRef"
+                        },
+                        {
+                          "const": "tab"
+                        },
+                        {
+                          "const": "lineBreak"
+                        }
+                      ]
+                    },
+                    "anchor": {
+                      "type": "object",
+                      "properties": {
+                        "start": {
+                          "type": "object",
+                          "properties": {
+                            "blockId": {
+                              "type": "string"
+                            },
+                            "offset": {
+                              "type": "number"
+                            }
+                          },
+                          "required": [
+                            "blockId",
+                            "offset"
+                          ]
+                        },
+                        "end": {
+                          "type": "object",
+                          "properties": {
+                            "blockId": {
+                              "type": "string"
+                            },
+                            "offset": {
+                              "type": "number"
+                            }
+                          },
+                          "required": [
+                            "blockId",
+                            "offset"
+                          ]
+                        }
+                      },
+                      "required": [
+                        "start",
+                        "end"
+                      ]
+                    }
+                  },
+                  "required": [
+                    "kind",
+                    "nodeType",
+                    "anchor"
+                  ]
+                }
+              ]
+            },
+            "limit": {
+              "type": "number"
+            },
+            "offset": {
+              "type": "number"
+            },
+            "includeNodes": {
+              "type": "boolean"
+            },
+            "includeUnknown": {
+              "type": "boolean"
+            },
+            "type": {
+              "type": "string"
+            },
+            "nodeType": {
+              "type": "string"
+            },
+            "kind": {
+              "type": "string"
+            },
+            "pattern": {
+              "type": "string"
+            },
+            "mode": {
+              "type": "string"
+            },
+            "caseSensitive": {
+              "type": "boolean"
+            },
+            "query": {}
+          },
+          "additionalProperties": false
+        }
+      },
+      {
+        "name": "get_node",
+        "description": "Retrieve a single node by target position.",
+        "input_schema": {
+          "type": "object",
+          "properties": {
+            "doc": {
+              "type": "string"
+            },
+            "sessionId": {
+              "type": "string"
+            },
+            "address": {}
+          },
+          "additionalProperties": false
+        }
+      },
+      {
+        "name": "get_node_by_id",
+        "description": "Retrieve a single node by its unique ID.",
+        "input_schema": {
+          "type": "object",
+          "properties": {
+            "doc": {
+              "type": "string"
+            },
+            "sessionId": {
+              "type": "string"
+            },
+            "id": {
+              "type": "string"
+            },
+            "nodeType": {
+              "type": "string"
+            }
+          },
+          "required": [
+            "id"
+          ],
+          "additionalProperties": false
+        }
+      },
+      {
+        "name": "get_document_info",
+        "description": "Return document metadata including revision, node count, and capabilities.",
+        "input_schema": {
+          "type": "object",
+          "properties": {
+            "doc": {
+              "type": "string"
+            },
+            "sessionId": {
+              "type": "string"
+            }
+          },
+          "additionalProperties": false
+        }
+      },
+      {
+        "name": "insert_content",
+        "description": "Insert text or inline content at a target position.",
+        "input_schema": {
+          "type": "object",
+          "properties": {
+            "doc": {
+              "type": "string"
+            },
+            "sessionId": {
+              "type": "string"
+            },
+            "force": {
+              "type": "boolean"
+            },
+            "target": {
+              "type": "object",
+              "properties": {
+                "kind": {
+                  "const": "text"
+                },
+                "blockId": {
+                  "type": "string"
+                },
+                "range": {
+                  "type": "object",
+                  "properties": {
+                    "start": {
+                      "type": "number"
+                    },
+                    "end": {
+                      "type": "number"
+                    }
+                  },
+                  "required": [
+                    "start",
+                    "end"
+                  ]
+                }
+              },
+              "required": [
+                "kind",
+                "blockId",
+                "range"
+              ]
+            },
+            "text": {
+              "type": "string"
+            }
+          },
+          "required": [
+            "text"
+          ],
+          "additionalProperties": false
+        }
+      },
+      {
+        "name": "replace_content",
+        "description": "Replace content at a target position with new text or inline content.",
+        "input_schema": {
+          "type": "object",
+          "properties": {
+            "doc": {
+              "type": "string"
+            },
+            "sessionId": {
+              "type": "string"
+            },
+            "force": {
+              "type": "boolean"
+            },
+            "target": {
+              "type": "object",
+              "properties": {
+                "kind": {
+                  "const": "text"
+                },
+                "blockId": {
+                  "type": "string"
+                },
+                "range": {
+                  "type": "object",
+                  "properties": {
+                    "start": {
+                      "type": "number"
+                    },
+                    "end": {
+                      "type": "number"
+                    }
+                  },
+                  "required": [
+                    "start",
+                    "end"
+                  ]
+                }
+              },
+              "required": [
+                "kind",
+                "blockId",
+                "range"
+              ]
+            },
+            "text": {
+              "type": "string"
+            }
+          },
+          "required": [
+            "target",
+            "text"
+          ],
+          "additionalProperties": false
+        }
+      },
+      {
+        "name": "delete_content",
+        "description": "Delete content at a target position.",
+        "input_schema": {
+          "type": "object",
+          "properties": {
+            "doc": {
+              "type": "string"
+            },
+            "sessionId": {
+              "type": "string"
+            },
+            "force": {
+              "type": "boolean"
+            },
+            "target": {
+              "type": "object",
+              "properties": {
+                "kind": {
+                  "const": "text"
+                },
+                "blockId": {
+                  "type": "string"
+                },
+                "range": {
+                  "type": "object",
+                  "properties": {
+                    "start": {
+                      "type": "number"
+                    },
+                    "end": {
+                      "type": "number"
+                    }
+                  },
+                  "required": [
+                    "start",
+                    "end"
+                  ]
+                }
+              },
+              "required": [
+                "kind",
+                "blockId",
+                "range"
+              ]
+            }
+          },
+          "required": [
+            "target"
+          ],
+          "additionalProperties": false
+        }
+      },
+      {
+        "name": "format_bold",
+        "description": "Toggle bold formatting on the target range.",
+        "input_schema": {
+          "type": "object",
+          "properties": {
+            "doc": {
+              "type": "string"
+            },
+            "sessionId": {
+              "type": "string"
+            },
+            "force": {
+              "type": "boolean"
+            },
+            "target": {
+              "type": "object",
+              "properties": {
+                "kind": {
+                  "const": "text"
+                },
+                "blockId": {
+                  "type": "string"
+                },
+                "range": {
+                  "type": "object",
+                  "properties": {
+                    "start": {
+                      "type": "number"
+                    },
+                    "end": {
+                      "type": "number"
+                    }
+                  },
+                  "required": [
+                    "start",
+                    "end"
+                  ]
+                }
+              },
+              "required": [
+                "kind",
+                "blockId",
+                "range"
+              ]
+            }
+          },
+          "required": [
+            "target"
+          ],
+          "additionalProperties": false
+        }
+      },
+      {
+        "name": "format_italic",
+        "description": "Toggle italic formatting on the target range.",
+        "input_schema": {
+          "type": "object",
+          "properties": {
+            "doc": {
+              "type": "string"
+            },
+            "sessionId": {
+              "type": "string"
+            },
+            "force": {
+              "type": "boolean"
+            },
+            "target": {
+              "type": "object",
+              "properties": {
+                "kind": {
+                  "const": "text"
+                },
+                "blockId": {
+                  "type": "string"
+                },
+                "range": {
+                  "type": "object",
+                  "properties": {
+                    "start": {
+                      "type": "number"
+                    },
+                    "end": {
+                      "type": "number"
+                    }
+                  },
+                  "required": [
+                    "start",
+                    "end"
+                  ]
+                }
+              },
+              "required": [
+                "kind",
+                "blockId",
+                "range"
+              ]
+            }
+          },
+          "required": [
+            "target"
+          ],
+          "additionalProperties": false
+        }
+      },
+      {
+        "name": "format_underline",
+        "description": "Toggle underline formatting on the target range.",
+        "input_schema": {
+          "type": "object",
+          "properties": {
+            "doc": {
+              "type": "string"
+            },
+            "sessionId": {
+              "type": "string"
+            },
+            "force": {
+              "type": "boolean"
+            },
+            "target": {
+              "type": "object",
+              "properties": {
+                "kind": {
+                  "const": "text"
+                },
+                "blockId": {
+                  "type": "string"
+                },
+                "range": {
+                  "type": "object",
+                  "properties": {
+                    "start": {
+                      "type": "number"
+                    },
+                    "end": {
+                      "type": "number"
+                    }
+                  },
+                  "required": [
+                    "start",
+                    "end"
+                  ]
+                }
+              },
+              "required": [
+                "kind",
+                "blockId",
+                "range"
+              ]
+            }
+          },
+          "required": [
+            "target"
+          ],
+          "additionalProperties": false
+        }
+      },
+      {
+        "name": "format_strikethrough",
+        "description": "Toggle strikethrough formatting on the target range.",
+        "input_schema": {
+          "type": "object",
+          "properties": {
+            "doc": {
+              "type": "string"
+            },
+            "sessionId": {
+              "type": "string"
+            },
+            "force": {
+              "type": "boolean"
+            },
+            "target": {
+              "type": "object",
+              "properties": {
+                "kind": {
+                  "const": "text"
+                },
+                "blockId": {
+                  "type": "string"
+                },
+                "range": {
+                  "type": "object",
+                  "properties": {
+                    "start": {
+                      "type": "number"
+                    },
+                    "end": {
+                      "type": "number"
+                    }
+                  },
+                  "required": [
+                    "start",
+                    "end"
+                  ]
+                }
+              },
+              "required": [
+                "kind",
+                "blockId",
+                "range"
+              ]
+            }
+          },
+          "required": [
+            "target"
+          ],
+          "additionalProperties": false
+        }
+      },
+      {
+        "name": "create_paragraph",
+        "description": "Create a new paragraph at the target position.",
+        "input_schema": {
+          "type": "object",
+          "properties": {
+            "doc": {
+              "type": "string"
+            },
+            "sessionId": {
+              "type": "string"
+            },
+            "force": {
+              "type": "boolean"
+            },
+            "at": {
+              "oneOf": [
+                {
+                  "type": "object",
+                  "properties": {
+                    "kind": {
+                      "const": "documentStart"
+                    }
+                  },
+                  "required": [
+                    "kind"
+                  ]
+                },
+                {
+                  "type": "object",
+                  "properties": {
+                    "kind": {
+                      "const": "documentEnd"
+                    }
+                  },
+                  "required": [
+                    "kind"
+                  ]
+                },
+                {
+                  "type": "object",
+                  "properties": {
+                    "kind": {
+                      "const": "before"
+                    },
+                    "target": {
+                      "type": "object",
+                      "properties": {
+                        "kind": {
+                          "const": "block"
+                        },
+                        "nodeType": {
+                          "oneOf": [
+                            {
+                              "const": "paragraph"
+                            },
+                            {
+                              "const": "heading"
+                            },
+                            {
+                              "const": "listItem"
+                            },
+                            {
+                              "const": "table"
+                            },
+                            {
+                              "const": "tableRow"
+                            },
+                            {
+                              "const": "tableCell"
+                            },
+                            {
+                              "const": "image"
+                            },
+                            {
+                              "const": "sdt"
+                            }
+                          ]
+                        },
+                        "nodeId": {
+                          "type": "string"
+                        }
+                      },
+                      "required": [
+                        "kind",
+                        "nodeType",
+                        "nodeId"
+                      ]
+                    }
+                  },
+                  "required": [
+                    "kind",
+                    "target"
+                  ]
+                },
+                {
+                  "type": "object",
+                  "properties": {
+                    "kind": {
+                      "const": "after"
+                    },
+                    "target": {
+                      "type": "object",
+                      "properties": {
+                        "kind": {
+                          "const": "block"
+                        },
+                        "nodeType": {
+                          "oneOf": [
+                            {
+                              "const": "paragraph"
+                            },
+                            {
+                              "const": "heading"
+                            },
+                            {
+                              "const": "listItem"
+                            },
+                            {
+                              "const": "table"
+                            },
+                            {
+                              "const": "tableRow"
+                            },
+                            {
+                              "const": "tableCell"
+                            },
+                            {
+                              "const": "image"
+                            },
+                            {
+                              "const": "sdt"
+                            }
+                          ]
+                        },
+                        "nodeId": {
+                          "type": "string"
+                        }
+                      },
+                      "required": [
+                        "kind",
+                        "nodeType",
+                        "nodeId"
+                      ]
+                    }
+                  },
+                  "required": [
+                    "kind",
+                    "target"
+                  ]
+                }
+              ]
+            },
+            "text": {
+              "type": "string"
+            },
+            "input": {}
+          },
+          "additionalProperties": false
+        }
+      },
+      {
+        "name": "list_lists",
+        "description": "List all list nodes in the document, optionally filtered by scope.",
+        "input_schema": {
+          "type": "object",
+          "properties": {
+            "doc": {
+              "type": "string"
+            },
+            "sessionId": {
+              "type": "string"
+            },
+            "within": {
+              "type": "object",
+              "properties": {
+                "kind": {
+                  "const": "block"
+                },
+                "nodeType": {
+                  "oneOf": [
+                    {
+                      "const": "paragraph"
+                    },
+                    {
+                      "const": "heading"
+                    },
+                    {
+                      "const": "listItem"
+                    },
+                    {
+                      "const": "table"
+                    },
+                    {
+                      "const": "tableRow"
+                    },
+                    {
+                      "const": "tableCell"
+                    },
+                    {
+                      "const": "image"
+                    },
+                    {
+                      "const": "sdt"
+                    }
+                  ]
+                },
+                "nodeId": {
+                  "type": "string"
+                }
+              },
+              "required": [
+                "kind",
+                "nodeType",
+                "nodeId"
+              ]
+            },
+            "limit": {
+              "type": "number"
+            },
+            "offset": {
+              "type": "number"
+            },
+            "kind": {
+              "type": "string"
+            },
+            "level": {
+              "type": "number"
+            },
+            "ordinal": {
+              "type": "number"
+            },
+            "query": {}
+          },
+          "additionalProperties": false
+        }
+      },
+      {
+        "name": "get_list",
+        "description": "Retrieve a specific list node by target.",
+        "input_schema": {
+          "type": "object",
+          "properties": {
+            "doc": {
+              "type": "string"
+            },
+            "sessionId": {
+              "type": "string"
+            },
+            "address": {
+              "type": "object",
+              "properties": {
+                "kind": {
+                  "const": "block"
+                },
+                "nodeType": {
+                  "const": "listItem"
+                },
+                "nodeId": {
+                  "type": "string"
+                }
+              },
+              "required": [
+                "kind",
+                "nodeType",
+                "nodeId"
+              ]
+            }
+          },
+          "required": [
+            "address"
+          ],
+          "additionalProperties": false
+        }
+      },
+      {
+        "name": "insert_list",
+        "description": "Insert a new list at the target position.",
+        "input_schema": {
+          "type": "object",
+          "properties": {
+            "doc": {
+              "type": "string"
+            },
+            "sessionId": {
+              "type": "string"
+            },
+            "force": {
+              "type": "boolean"
+            },
+            "target": {
+              "type": "object",
+              "properties": {
+                "kind": {
+                  "const": "block"
+                },
+                "nodeType": {
+                  "const": "listItem"
+                },
+                "nodeId": {
+                  "type": "string"
+                }
+              },
+              "required": [
+                "kind",
+                "nodeType",
+                "nodeId"
+              ]
+            },
+            "position": {
+              "type": "string"
+            },
+            "text": {
+              "type": "string"
+            },
+            "input": {}
+          },
+          "additionalProperties": false
+        }
+      },
+      {
+        "name": "set_list_type",
+        "description": "Change the list type (ordered, unordered) of a target list.",
+        "input_schema": {
+          "type": "object",
+          "properties": {
+            "doc": {
+              "type": "string"
+            },
+            "sessionId": {
+              "type": "string"
+            },
+            "force": {
+              "type": "boolean"
+            },
+            "target": {
+              "type": "object",
+              "properties": {
+                "kind": {
+                  "const": "block"
+                },
+                "nodeType": {
+                  "const": "listItem"
+                },
+                "nodeId": {
+                  "type": "string"
+                }
+              },
+              "required": [
+                "kind",
+                "nodeType",
+                "nodeId"
+              ]
+            },
+            "kind": {
+              "type": "string"
+            },
+            "input": {}
+          },
+          "additionalProperties": false
+        }
+      },
+      {
+        "name": "indent_list",
+        "description": "Increase the indentation level of a list item.",
+        "input_schema": {
+          "type": "object",
+          "properties": {
+            "doc": {
+              "type": "string"
+            },
+            "sessionId": {
+              "type": "string"
+            },
+            "force": {
+              "type": "boolean"
+            },
+            "target": {
+              "type": "object",
+              "properties": {
+                "kind": {
+                  "const": "block"
+                },
+                "nodeType": {
+                  "const": "listItem"
+                },
+                "nodeId": {
+                  "type": "string"
+                }
+              },
+              "required": [
+                "kind",
+                "nodeType",
+                "nodeId"
+              ]
+            },
+            "input": {}
+          },
+          "additionalProperties": false
+        }
+      },
+      {
+        "name": "outdent_list",
+        "description": "Decrease the indentation level of a list item.",
+        "input_schema": {
+          "type": "object",
+          "properties": {
+            "doc": {
+              "type": "string"
+            },
+            "sessionId": {
+              "type": "string"
+            },
+            "force": {
+              "type": "boolean"
+            },
+            "target": {
+              "type": "object",
+              "properties": {
+                "kind": {
+                  "const": "block"
+                },
+                "nodeType": {
+                  "const": "listItem"
+                },
+                "nodeId": {
+                  "type": "string"
+                }
+              },
+              "required": [
+                "kind",
+                "nodeType",
+                "nodeId"
+              ]
+            },
+            "input": {}
+          },
+          "additionalProperties": false
+        }
+      },
+      {
+        "name": "restart_list_numbering",
+        "description": "Restart numbering of an ordered list at the target item.",
+        "input_schema": {
+          "type": "object",
+          "properties": {
+            "doc": {
+              "type": "string"
+            },
+            "sessionId": {
+              "type": "string"
+            },
+            "force": {
+              "type": "boolean"
+            },
+            "target": {
+              "type": "object",
+              "properties": {
+                "kind": {
+                  "const": "block"
+                },
+                "nodeType": {
+                  "const": "listItem"
+                },
+                "nodeId": {
+                  "type": "string"
+                }
+              },
+              "required": [
+                "kind",
+                "nodeType",
+                "nodeId"
+              ]
+            },
+            "input": {}
+          },
+          "additionalProperties": false
+        }
+      },
+      {
+        "name": "exit_list",
+        "description": "Exit a list context, converting the target item to a paragraph.",
+        "input_schema": {
+          "type": "object",
+          "properties": {
+            "doc": {
+              "type": "string"
+            },
+            "sessionId": {
+              "type": "string"
+            },
+            "force": {
+              "type": "boolean"
+            },
+            "target": {
+              "type": "object",
+              "properties": {
+                "kind": {
+                  "const": "block"
+                },
+                "nodeType": {
+                  "const": "listItem"
+                },
+                "nodeId": {
+                  "type": "string"
+                }
+              },
+              "required": [
+                "kind",
+                "nodeType",
+                "nodeId"
+              ]
+            },
+            "input": {}
+          },
+          "additionalProperties": false
+        }
+      },
+      {
+        "name": "add_comment",
+        "description": "Add a new comment thread anchored to a target range.",
+        "input_schema": {
+          "type": "object",
+          "properties": {
+            "doc": {
+              "type": "string"
+            },
+            "sessionId": {
+              "type": "string"
+            },
+            "force": {
+              "type": "boolean"
+            },
+            "target": {
+              "type": "object",
+              "properties": {
+                "kind": {
+                  "const": "text"
+                },
+                "blockId": {
+                  "type": "string"
+                },
+                "range": {
+                  "type": "object",
+                  "properties": {
+                    "start": {
+                      "type": "number"
+                    },
+                    "end": {
+                      "type": "number"
+                    }
+                  },
+                  "required": [
+                    "start",
+                    "end"
+                  ]
+                }
+              },
+              "required": [
+                "kind",
+                "blockId",
+                "range"
+              ]
+            },
+            "text": {
+              "type": "string"
+            }
+          },
+          "required": [
+            "target",
+            "text"
+          ],
+          "additionalProperties": false
+        }
+      },
+      {
+        "name": "edit_comment",
+        "description": "Edit the content of an existing comment.",
+        "input_schema": {
+          "type": "object",
+          "properties": {
+            "doc": {
+              "type": "string"
+            },
+            "sessionId": {
+              "type": "string"
+            },
+            "force": {
+              "type": "boolean"
+            },
+            "id": {
+              "type": "string"
+            },
+            "text": {
+              "type": "string"
+            }
+          },
+          "required": [
+            "id",
+            "text"
+          ],
+          "additionalProperties": false
+        }
+      },
+      {
+        "name": "reply_to_comment",
+        "description": "Add a reply to an existing comment thread.",
+        "input_schema": {
+          "type": "object",
+          "properties": {
+            "doc": {
+              "type": "string"
+            },
+            "sessionId": {
+              "type": "string"
+            },
+            "force": {
+              "type": "boolean"
+            },
+            "parentId": {
+              "type": "string"
+            },
+            "text": {
+              "type": "string"
+            }
+          },
+          "required": [
+            "parentId",
+            "text"
+          ],
+          "additionalProperties": false
+        }
+      },
+      {
+        "name": "move_comment",
+        "description": "Move a comment thread to a new anchor range.",
+        "input_schema": {
+          "type": "object",
+          "properties": {
+            "doc": {
+              "type": "string"
+            },
+            "sessionId": {
+              "type": "string"
+            },
+            "force": {
+              "type": "boolean"
+            },
+            "id": {
+              "type": "string"
+            },
+            "target": {
+              "type": "object",
+              "properties": {
+                "kind": {
+                  "const": "text"
+                },
+                "blockId": {
+                  "type": "string"
+                },
+                "range": {
+                  "type": "object",
+                  "properties": {
+                    "start": {
+                      "type": "number"
+                    },
+                    "end": {
+                      "type": "number"
+                    }
+                  },
+                  "required": [
+                    "start",
+                    "end"
+                  ]
+                }
+              },
+              "required": [
+                "kind",
+                "blockId",
+                "range"
+              ]
+            }
+          },
+          "required": [
+            "id",
+            "target"
+          ],
+          "additionalProperties": false
+        }
+      },
+      {
+        "name": "resolve_comment",
+        "description": "Resolve or unresolve a comment thread.",
+        "input_schema": {
+          "type": "object",
+          "properties": {
+            "doc": {
+              "type": "string"
+            },
+            "sessionId": {
+              "type": "string"
+            },
+            "force": {
+              "type": "boolean"
+            },
+            "id": {
+              "type": "string"
+            }
+          },
+          "required": [
+            "id"
+          ],
+          "additionalProperties": false
+        }
+      },
+      {
+        "name": "remove_comment",
+        "description": "Remove a comment or reply by ID.",
+        "input_schema": {
+          "type": "object",
+          "properties": {
+            "doc": {
+              "type": "string"
+            },
+            "sessionId": {
+              "type": "string"
+            },
+            "force": {
+              "type": "boolean"
+            },
+            "id": {
+              "type": "string"
+            }
+          },
+          "required": [
+            "id"
+          ],
+          "additionalProperties": false
+        }
+      },
+      {
+        "name": "set_comment_internal",
+        "description": "Toggle the internal (private) flag on a comment thread.",
+        "input_schema": {
+          "type": "object",
+          "properties": {
+            "doc": {
+              "type": "string"
+            },
+            "sessionId": {
+              "type": "string"
+            },
+            "force": {
+              "type": "boolean"
+            },
+            "id": {
+              "type": "string"
+            },
+            "isInternal": {
+              "type": "boolean"
+            }
+          },
+          "required": [
+            "id",
+            "isInternal"
+          ],
+          "additionalProperties": false
+        }
+      },
+      {
+        "name": "set_comment_active",
+        "description": "Set the active (focused) comment thread for UI highlighting.",
+        "input_schema": {
+          "type": "object",
+          "properties": {
+            "doc": {
+              "type": "string"
+            },
+            "sessionId": {
+              "type": "string"
+            },
+            "force": {
+              "type": "boolean"
+            },
+            "commentId": {
+              "type": "json"
+            },
+            "id": {
+              "type": "string"
+            },
+            "clear": {
+              "type": "boolean"
+            }
+          },
+          "additionalProperties": false
+        }
+      },
+      {
+        "name": "go_to_comment",
+        "description": "Scroll the viewport to a comment thread by ID.",
+        "input_schema": {
+          "type": "object",
+          "properties": {
+            "doc": {
+              "type": "string"
+            },
+            "sessionId": {
+              "type": "string"
+            },
+            "id": {
+              "type": "string"
+            }
+          },
+          "required": [
+            "id"
+          ],
+          "additionalProperties": false
+        }
+      },
+      {
+        "name": "get_comment",
+        "description": "Retrieve a single comment thread by ID.",
+        "input_schema": {
+          "type": "object",
+          "properties": {
+            "doc": {
+              "type": "string"
+            },
+            "sessionId": {
+              "type": "string"
+            },
+            "id": {
+              "type": "string"
+            }
+          },
+          "required": [
+            "id"
+          ],
+          "additionalProperties": false
+        }
+      },
+      {
+        "name": "list_comments",
+        "description": "List all comment threads in the document.",
+        "input_schema": {
+          "type": "object",
+          "properties": {
+            "doc": {
+              "type": "string"
+            },
+            "sessionId": {
+              "type": "string"
+            },
+            "includeResolved": {
+              "type": "boolean"
+            }
+          },
+          "additionalProperties": false
+        }
+      },
+      {
+        "name": "list_tracked_changes",
+        "description": "List all tracked changes in the document.",
+        "input_schema": {
+          "type": "object",
+          "properties": {
+            "doc": {
+              "type": "string"
+            },
+            "sessionId": {
+              "type": "string"
+            },
+            "limit": {
+              "type": "number"
+            },
+            "offset": {
+              "type": "number"
+            },
+            "type": {
+              "type": "string"
+            }
+          },
+          "additionalProperties": false
+        }
+      },
+      {
+        "name": "get_tracked_change",
+        "description": "Retrieve a single tracked change by ID.",
+        "input_schema": {
+          "type": "object",
+          "properties": {
+            "doc": {
+              "type": "string"
+            },
+            "sessionId": {
+              "type": "string"
+            },
+            "id": {
+              "type": "string"
+            }
+          },
+          "required": [
+            "id"
+          ],
+          "additionalProperties": false
+        }
+      },
+      {
+        "name": "accept_tracked_change",
+        "description": "Accept a tracked change, applying it permanently.",
+        "input_schema": {
+          "type": "object",
+          "properties": {
+            "doc": {
+              "type": "string"
+            },
+            "sessionId": {
+              "type": "string"
+            },
+            "force": {
+              "type": "boolean"
+            },
+            "id": {
+              "type": "string"
+            }
+          },
+          "required": [
+            "id"
+          ],
+          "additionalProperties": false
+        }
+      },
+      {
+        "name": "reject_tracked_change",
+        "description": "Reject a tracked change, reverting it.",
+        "input_schema": {
+          "type": "object",
+          "properties": {
+            "doc": {
+              "type": "string"
+            },
+            "sessionId": {
+              "type": "string"
+            },
+            "force": {
+              "type": "boolean"
+            },
+            "id": {
+              "type": "string"
+            }
+          },
+          "required": [
+            "id"
+          ],
+          "additionalProperties": false
+        }
+      },
+      {
+        "name": "accept_all_tracked_changes",
+        "description": "Accept all tracked changes in the document.",
+        "input_schema": {
+          "type": "object",
+          "properties": {
+            "doc": {
+              "type": "string"
+            },
+            "sessionId": {
+              "type": "string"
+            },
+            "force": {
+              "type": "boolean"
+            }
+          },
+          "additionalProperties": false
+        }
+      },
+      {
+        "name": "reject_all_tracked_changes",
+        "description": "Reject all tracked changes in the document.",
+        "input_schema": {
+          "type": "object",
+          "properties": {
+            "doc": {
+              "type": "string"
+            },
+            "sessionId": {
+              "type": "string"
+            },
+            "force": {
+              "type": "boolean"
+            }
+          },
+          "additionalProperties": false
+        }
+      },
+      {
+        "name": "open_document",
+        "description": "Open a document and create a persistent editing session.",
+        "input_schema": {
+          "type": "object",
+          "properties": {
+            "doc": {
+              "type": "string"
+            },
+            "sessionId": {
+              "type": "string"
+            },
+            "collaboration": {},
+            "collabDocumentId": {
+              "type": "string"
+            },
+            "collabUrl": {
+              "type": "string"
+            }
+          },
+          "required": [
+            "doc"
+          ],
+          "additionalProperties": false
+        }
+      },
+      {
+        "name": "save_document",
+        "description": "Save the current session to the original file or a new path.",
+        "input_schema": {
+          "type": "object",
+          "properties": {
+            "sessionId": {
+              "type": "string"
+            },
+            "force": {
+              "type": "boolean"
+            },
+            "inPlace": {
+              "type": "boolean"
+            }
+          },
+          "additionalProperties": false
+        }
+      },
+      {
+        "name": "close_document",
+        "description": "Close the active editing session and clean up resources.",
+        "input_schema": {
+          "type": "object",
+          "properties": {
+            "sessionId": {
+              "type": "string"
+            },
+            "discard": {
+              "type": "boolean"
+            }
+          },
+          "additionalProperties": false
+        }
+      },
+      {
+        "name": "get_status",
+        "description": "Show the current session status and document metadata.",
+        "input_schema": {
+          "type": "object",
+          "properties": {
+            "sessionId": {
+              "type": "string"
+            }
+          },
+          "additionalProperties": false
+        }
+      },
+      {
+        "name": "describe_commands",
+        "description": "List all available CLI operations and contract metadata.",
+        "input_schema": {
+          "type": "object",
+          "properties": {},
+          "additionalProperties": false
+        }
+      },
+      {
+        "name": "describe_command",
+        "description": "Show detailed metadata for a single CLI operation.",
+        "input_schema": {
+          "type": "object",
+          "properties": {
+            "operationId": {
+              "type": "string"
+            }
+          },
+          "required": [
+            "operationId"
+          ],
+          "additionalProperties": false
+        }
+      },
+      {
+        "name": "list_sessions",
+        "description": "List all active editing sessions.",
+        "input_schema": {
+          "type": "object",
+          "properties": {},
+          "additionalProperties": false
+        }
+      },
+      {
+        "name": "save_session",
+        "description": "Persist the current session state.",
+        "input_schema": {
+          "type": "object",
+          "properties": {
+            "sessionId": {
+              "type": "string"
+            },
+            "force": {
+              "type": "boolean"
+            },
+            "inPlace": {
+              "type": "boolean"
+            }
+          },
+          "required": [
+            "sessionId"
+          ],
+          "additionalProperties": false
+        }
+      },
+      {
+        "name": "close_session",
+        "description": "Close a specific editing session by ID.",
+        "input_schema": {
+          "type": "object",
+          "properties": {
+            "sessionId": {
+              "type": "string"
+            },
+            "discard": {
+              "type": "boolean"
+            }
+          },
+          "required": [
+            "sessionId"
+          ],
+          "additionalProperties": false
+        }
+      },
+      {
+        "name": "set_default_session",
+        "description": "Set the default session for subsequent commands.",
+        "input_schema": {
+          "type": "object",
+          "properties": {
+            "sessionId": {
+              "type": "string"
+            }
+          },
+          "required": [
+            "sessionId"
+          ],
+          "additionalProperties": false
+        }
+      }
+    ],
+    "operation": [
+      {
+        "name": "doc_find",
+        "description": "Search the document for nodes matching type, text, or attribute criteria.",
+        "input_schema": {
+          "type": "object",
+          "properties": {
+            "doc": {
+              "type": "string"
+            },
+            "sessionId": {
+              "type": "string"
+            },
+            "within": {
+              "oneOf": [
+                {
+                  "type": "object",
+                  "properties": {
+                    "kind": {
+                      "const": "block"
+                    },
+                    "nodeType": {
+                      "oneOf": [
+                        {
+                          "const": "paragraph"
+                        },
+                        {
+                          "const": "heading"
+                        },
+                        {
+                          "const": "listItem"
+                        },
+                        {
+                          "const": "table"
+                        },
+                        {
+                          "const": "tableRow"
+                        },
+                        {
+                          "const": "tableCell"
+                        },
+                        {
+                          "const": "image"
+                        },
+                        {
+                          "const": "sdt"
+                        }
+                      ]
+                    },
+                    "nodeId": {
+                      "type": "string"
+                    }
+                  },
+                  "required": [
+                    "kind",
+                    "nodeType",
+                    "nodeId"
+                  ]
+                },
+                {
+                  "type": "object",
+                  "properties": {
+                    "kind": {
+                      "const": "inline"
+                    },
+                    "nodeType": {
+                      "oneOf": [
+                        {
+                          "const": "run"
+                        },
+                        {
+                          "const": "bookmark"
+                        },
+                        {
+                          "const": "comment"
+                        },
+                        {
+                          "const": "hyperlink"
+                        },
+                        {
+                          "const": "sdt"
+                        },
+                        {
+                          "const": "image"
+                        },
+                        {
+                          "const": "footnoteRef"
+                        },
+                        {
+                          "const": "tab"
+                        },
+                        {
+                          "const": "lineBreak"
+                        }
+                      ]
+                    },
+                    "anchor": {
+                      "type": "object",
+                      "properties": {
+                        "start": {
+                          "type": "object",
+                          "properties": {
+                            "blockId": {
+                              "type": "string"
+                            },
+                            "offset": {
+                              "type": "number"
+                            }
+                          },
+                          "required": [
+                            "blockId",
+                            "offset"
+                          ]
+                        },
+                        "end": {
+                          "type": "object",
+                          "properties": {
+                            "blockId": {
+                              "type": "string"
+                            },
+                            "offset": {
+                              "type": "number"
+                            }
+                          },
+                          "required": [
+                            "blockId",
+                            "offset"
+                          ]
+                        }
+                      },
+                      "required": [
+                        "start",
+                        "end"
+                      ]
+                    }
+                  },
+                  "required": [
+                    "kind",
+                    "nodeType",
+                    "anchor"
+                  ]
+                }
+              ]
+            },
+            "limit": {
+              "type": "number"
+            },
+            "offset": {
+              "type": "number"
+            },
+            "includeNodes": {
+              "type": "boolean"
+            },
+            "includeUnknown": {
+              "type": "boolean"
+            },
+            "type": {
+              "type": "string"
+            },
+            "nodeType": {
+              "type": "string"
+            },
+            "kind": {
+              "type": "string"
+            },
+            "pattern": {
+              "type": "string"
+            },
+            "mode": {
+              "type": "string"
+            },
+            "caseSensitive": {
+              "type": "boolean"
+            },
+            "query": {}
+          },
+          "additionalProperties": false
+        }
+      },
+      {
+        "name": "doc_getNode",
+        "description": "Retrieve a single node by target position.",
+        "input_schema": {
+          "type": "object",
+          "properties": {
+            "doc": {
+              "type": "string"
+            },
+            "sessionId": {
+              "type": "string"
+            },
+            "address": {}
+          },
+          "additionalProperties": false
+        }
+      },
+      {
+        "name": "doc_getNodeById",
+        "description": "Retrieve a single node by its unique ID.",
+        "input_schema": {
+          "type": "object",
+          "properties": {
+            "doc": {
+              "type": "string"
+            },
+            "sessionId": {
+              "type": "string"
+            },
+            "id": {
+              "type": "string"
+            },
+            "nodeType": {
+              "type": "string"
+            }
+          },
+          "required": [
+            "id"
+          ],
+          "additionalProperties": false
+        }
+      },
+      {
+        "name": "doc_info",
+        "description": "Return document metadata including revision, node count, and capabilities.",
+        "input_schema": {
+          "type": "object",
+          "properties": {
+            "doc": {
+              "type": "string"
+            },
+            "sessionId": {
+              "type": "string"
+            }
+          },
+          "additionalProperties": false
+        }
+      },
+      {
+        "name": "doc_insert",
+        "description": "Insert text or inline content at a target position.",
+        "input_schema": {
+          "type": "object",
+          "properties": {
+            "doc": {
+              "type": "string"
+            },
+            "sessionId": {
+              "type": "string"
+            },
+            "force": {
+              "type": "boolean"
+            },
+            "target": {
+              "type": "object",
+              "properties": {
+                "kind": {
+                  "const": "text"
+                },
+                "blockId": {
+                  "type": "string"
+                },
+                "range": {
+                  "type": "object",
+                  "properties": {
+                    "start": {
+                      "type": "number"
+                    },
+                    "end": {
+                      "type": "number"
+                    }
+                  },
+                  "required": [
+                    "start",
+                    "end"
+                  ]
+                }
+              },
+              "required": [
+                "kind",
+                "blockId",
+                "range"
+              ]
+            },
+            "text": {
+              "type": "string"
+            }
+          },
+          "required": [
+            "text"
+          ],
+          "additionalProperties": false
+        }
+      },
+      {
+        "name": "doc_replace",
+        "description": "Replace content at a target position with new text or inline content.",
+        "input_schema": {
+          "type": "object",
+          "properties": {
+            "doc": {
+              "type": "string"
+            },
+            "sessionId": {
+              "type": "string"
+            },
+            "force": {
+              "type": "boolean"
+            },
+            "target": {
+              "type": "object",
+              "properties": {
+                "kind": {
+                  "const": "text"
+                },
+                "blockId": {
+                  "type": "string"
+                },
+                "range": {
+                  "type": "object",
+                  "properties": {
+                    "start": {
+                      "type": "number"
+                    },
+                    "end": {
+                      "type": "number"
+                    }
+                  },
+                  "required": [
+                    "start",
+                    "end"
+                  ]
+                }
+              },
+              "required": [
+                "kind",
+                "blockId",
+                "range"
+              ]
+            },
+            "text": {
+              "type": "string"
+            }
+          },
+          "required": [
+            "target",
+            "text"
+          ],
+          "additionalProperties": false
+        }
+      },
+      {
+        "name": "doc_delete",
+        "description": "Delete content at a target position.",
+        "input_schema": {
+          "type": "object",
+          "properties": {
+            "doc": {
+              "type": "string"
+            },
+            "sessionId": {
+              "type": "string"
+            },
+            "force": {
+              "type": "boolean"
+            },
+            "target": {
+              "type": "object",
+              "properties": {
+                "kind": {
+                  "const": "text"
+                },
+                "blockId": {
+                  "type": "string"
+                },
+                "range": {
+                  "type": "object",
+                  "properties": {
+                    "start": {
+                      "type": "number"
+                    },
+                    "end": {
+                      "type": "number"
+                    }
+                  },
+                  "required": [
+                    "start",
+                    "end"
+                  ]
+                }
+              },
+              "required": [
+                "kind",
+                "blockId",
+                "range"
+              ]
+            }
+          },
+          "required": [
+            "target"
+          ],
+          "additionalProperties": false
+        }
+      },
+      {
+        "name": "doc_format_bold",
+        "description": "Toggle bold formatting on the target range.",
+        "input_schema": {
+          "type": "object",
+          "properties": {
+            "doc": {
+              "type": "string"
+            },
+            "sessionId": {
+              "type": "string"
+            },
+            "force": {
+              "type": "boolean"
+            },
+            "target": {
+              "type": "object",
+              "properties": {
+                "kind": {
+                  "const": "text"
+                },
+                "blockId": {
+                  "type": "string"
+                },
+                "range": {
+                  "type": "object",
+                  "properties": {
+                    "start": {
+                      "type": "number"
+                    },
+                    "end": {
+                      "type": "number"
+                    }
+                  },
+                  "required": [
+                    "start",
+                    "end"
+                  ]
+                }
+              },
+              "required": [
+                "kind",
+                "blockId",
+                "range"
+              ]
+            }
+          },
+          "required": [
+            "target"
+          ],
+          "additionalProperties": false
+        }
+      },
+      {
+        "name": "doc_format_italic",
+        "description": "Toggle italic formatting on the target range.",
+        "input_schema": {
+          "type": "object",
+          "properties": {
+            "doc": {
+              "type": "string"
+            },
+            "sessionId": {
+              "type": "string"
+            },
+            "force": {
+              "type": "boolean"
+            },
+            "target": {
+              "type": "object",
+              "properties": {
+                "kind": {
+                  "const": "text"
+                },
+                "blockId": {
+                  "type": "string"
+                },
+                "range": {
+                  "type": "object",
+                  "properties": {
+                    "start": {
+                      "type": "number"
+                    },
+                    "end": {
+                      "type": "number"
+                    }
+                  },
+                  "required": [
+                    "start",
+                    "end"
+                  ]
+                }
+              },
+              "required": [
+                "kind",
+                "blockId",
+                "range"
+              ]
+            }
+          },
+          "required": [
+            "target"
+          ],
+          "additionalProperties": false
+        }
+      },
+      {
+        "name": "doc_format_underline",
+        "description": "Toggle underline formatting on the target range.",
+        "input_schema": {
+          "type": "object",
+          "properties": {
+            "doc": {
+              "type": "string"
+            },
+            "sessionId": {
+              "type": "string"
+            },
+            "force": {
+              "type": "boolean"
+            },
+            "target": {
+              "type": "object",
+              "properties": {
+                "kind": {
+                  "const": "text"
+                },
+                "blockId": {
+                  "type": "string"
+                },
+                "range": {
+                  "type": "object",
+                  "properties": {
+                    "start": {
+                      "type": "number"
+                    },
+                    "end": {
+                      "type": "number"
+                    }
+                  },
+                  "required": [
+                    "start",
+                    "end"
+                  ]
+                }
+              },
+              "required": [
+                "kind",
+                "blockId",
+                "range"
+              ]
+            }
+          },
+          "required": [
+            "target"
+          ],
+          "additionalProperties": false
+        }
+      },
+      {
+        "name": "doc_format_strikethrough",
+        "description": "Toggle strikethrough formatting on the target range.",
+        "input_schema": {
+          "type": "object",
+          "properties": {
+            "doc": {
+              "type": "string"
+            },
+            "sessionId": {
+              "type": "string"
+            },
+            "force": {
+              "type": "boolean"
+            },
+            "target": {
+              "type": "object",
+              "properties": {
+                "kind": {
+                  "const": "text"
+                },
+                "blockId": {
+                  "type": "string"
+                },
+                "range": {
+                  "type": "object",
+                  "properties": {
+                    "start": {
+                      "type": "number"
+                    },
+                    "end": {
+                      "type": "number"
+                    }
+                  },
+                  "required": [
+                    "start",
+                    "end"
+                  ]
+                }
+              },
+              "required": [
+                "kind",
+                "blockId",
+                "range"
+              ]
+            }
+          },
+          "required": [
+            "target"
+          ],
+          "additionalProperties": false
+        }
+      },
+      {
+        "name": "doc_create_paragraph",
+        "description": "Create a new paragraph at the target position.",
+        "input_schema": {
+          "type": "object",
+          "properties": {
+            "doc": {
+              "type": "string"
+            },
+            "sessionId": {
+              "type": "string"
+            },
+            "force": {
+              "type": "boolean"
+            },
+            "at": {
+              "oneOf": [
+                {
+                  "type": "object",
+                  "properties": {
+                    "kind": {
+                      "const": "documentStart"
+                    }
+                  },
+                  "required": [
+                    "kind"
+                  ]
+                },
+                {
+                  "type": "object",
+                  "properties": {
+                    "kind": {
+                      "const": "documentEnd"
+                    }
+                  },
+                  "required": [
+                    "kind"
+                  ]
+                },
+                {
+                  "type": "object",
+                  "properties": {
+                    "kind": {
+                      "const": "before"
+                    },
+                    "target": {
+                      "type": "object",
+                      "properties": {
+                        "kind": {
+                          "const": "block"
+                        },
+                        "nodeType": {
+                          "oneOf": [
+                            {
+                              "const": "paragraph"
+                            },
+                            {
+                              "const": "heading"
+                            },
+                            {
+                              "const": "listItem"
+                            },
+                            {
+                              "const": "table"
+                            },
+                            {
+                              "const": "tableRow"
+                            },
+                            {
+                              "const": "tableCell"
+                            },
+                            {
+                              "const": "image"
+                            },
+                            {
+                              "const": "sdt"
+                            }
+                          ]
+                        },
+                        "nodeId": {
+                          "type": "string"
+                        }
+                      },
+                      "required": [
+                        "kind",
+                        "nodeType",
+                        "nodeId"
+                      ]
+                    }
+                  },
+                  "required": [
+                    "kind",
+                    "target"
+                  ]
+                },
+                {
+                  "type": "object",
+                  "properties": {
+                    "kind": {
+                      "const": "after"
+                    },
+                    "target": {
+                      "type": "object",
+                      "properties": {
+                        "kind": {
+                          "const": "block"
+                        },
+                        "nodeType": {
+                          "oneOf": [
+                            {
+                              "const": "paragraph"
+                            },
+                            {
+                              "const": "heading"
+                            },
+                            {
+                              "const": "listItem"
+                            },
+                            {
+                              "const": "table"
+                            },
+                            {
+                              "const": "tableRow"
+                            },
+                            {
+                              "const": "tableCell"
+                            },
+                            {
+                              "const": "image"
+                            },
+                            {
+                              "const": "sdt"
+                            }
+                          ]
+                        },
+                        "nodeId": {
+                          "type": "string"
+                        }
+                      },
+                      "required": [
+                        "kind",
+                        "nodeType",
+                        "nodeId"
+                      ]
+                    }
+                  },
+                  "required": [
+                    "kind",
+                    "target"
+                  ]
+                }
+              ]
+            },
+            "text": {
+              "type": "string"
+            },
+            "input": {}
+          },
+          "additionalProperties": false
+        }
+      },
+      {
+        "name": "doc_lists_list",
+        "description": "List all list nodes in the document, optionally filtered by scope.",
+        "input_schema": {
+          "type": "object",
+          "properties": {
+            "doc": {
+              "type": "string"
+            },
+            "sessionId": {
+              "type": "string"
+            },
+            "within": {
+              "type": "object",
+              "properties": {
+                "kind": {
+                  "const": "block"
+                },
+                "nodeType": {
+                  "oneOf": [
+                    {
+                      "const": "paragraph"
+                    },
+                    {
+                      "const": "heading"
+                    },
+                    {
+                      "const": "listItem"
+                    },
+                    {
+                      "const": "table"
+                    },
+                    {
+                      "const": "tableRow"
+                    },
+                    {
+                      "const": "tableCell"
+                    },
+                    {
+                      "const": "image"
+                    },
+                    {
+                      "const": "sdt"
+                    }
+                  ]
+                },
+                "nodeId": {
+                  "type": "string"
+                }
+              },
+              "required": [
+                "kind",
+                "nodeType",
+                "nodeId"
+              ]
+            },
+            "limit": {
+              "type": "number"
+            },
+            "offset": {
+              "type": "number"
+            },
+            "kind": {
+              "type": "string"
+            },
+            "level": {
+              "type": "number"
+            },
+            "ordinal": {
+              "type": "number"
+            },
+            "query": {}
+          },
+          "additionalProperties": false
+        }
+      },
+      {
+        "name": "doc_lists_get",
+        "description": "Retrieve a specific list node by target.",
+        "input_schema": {
+          "type": "object",
+          "properties": {
+            "doc": {
+              "type": "string"
+            },
+            "sessionId": {
+              "type": "string"
+            },
+            "address": {
+              "type": "object",
+              "properties": {
+                "kind": {
+                  "const": "block"
+                },
+                "nodeType": {
+                  "const": "listItem"
+                },
+                "nodeId": {
+                  "type": "string"
+                }
+              },
+              "required": [
+                "kind",
+                "nodeType",
+                "nodeId"
+              ]
+            }
+          },
+          "required": [
+            "address"
+          ],
+          "additionalProperties": false
+        }
+      },
+      {
+        "name": "doc_lists_insert",
+        "description": "Insert a new list at the target position.",
+        "input_schema": {
+          "type": "object",
+          "properties": {
+            "doc": {
+              "type": "string"
+            },
+            "sessionId": {
+              "type": "string"
+            },
+            "force": {
+              "type": "boolean"
+            },
+            "target": {
+              "type": "object",
+              "properties": {
+                "kind": {
+                  "const": "block"
+                },
+                "nodeType": {
+                  "const": "listItem"
+                },
+                "nodeId": {
+                  "type": "string"
+                }
+              },
+              "required": [
+                "kind",
+                "nodeType",
+                "nodeId"
+              ]
+            },
+            "position": {
+              "type": "string"
+            },
+            "text": {
+              "type": "string"
+            },
+            "input": {}
+          },
+          "additionalProperties": false
+        }
+      },
+      {
+        "name": "doc_lists_setType",
+        "description": "Change the list type (ordered, unordered) of a target list.",
+        "input_schema": {
+          "type": "object",
+          "properties": {
+            "doc": {
+              "type": "string"
+            },
+            "sessionId": {
+              "type": "string"
+            },
+            "force": {
+              "type": "boolean"
+            },
+            "target": {
+              "type": "object",
+              "properties": {
+                "kind": {
+                  "const": "block"
+                },
+                "nodeType": {
+                  "const": "listItem"
+                },
+                "nodeId": {
+                  "type": "string"
+                }
+              },
+              "required": [
+                "kind",
+                "nodeType",
+                "nodeId"
+              ]
+            },
+            "kind": {
+              "type": "string"
+            },
+            "input": {}
+          },
+          "additionalProperties": false
+        }
+      },
+      {
+        "name": "doc_lists_indent",
+        "description": "Increase the indentation level of a list item.",
+        "input_schema": {
+          "type": "object",
+          "properties": {
+            "doc": {
+              "type": "string"
+            },
+            "sessionId": {
+              "type": "string"
+            },
+            "force": {
+              "type": "boolean"
+            },
+            "target": {
+              "type": "object",
+              "properties": {
+                "kind": {
+                  "const": "block"
+                },
+                "nodeType": {
+                  "const": "listItem"
+                },
+                "nodeId": {
+                  "type": "string"
+                }
+              },
+              "required": [
+                "kind",
+                "nodeType",
+                "nodeId"
+              ]
+            },
+            "input": {}
+          },
+          "additionalProperties": false
+        }
+      },
+      {
+        "name": "doc_lists_outdent",
+        "description": "Decrease the indentation level of a list item.",
+        "input_schema": {
+          "type": "object",
+          "properties": {
+            "doc": {
+              "type": "string"
+            },
+            "sessionId": {
+              "type": "string"
+            },
+            "force": {
+              "type": "boolean"
+            },
+            "target": {
+              "type": "object",
+              "properties": {
+                "kind": {
+                  "const": "block"
+                },
+                "nodeType": {
+                  "const": "listItem"
+                },
+                "nodeId": {
+                  "type": "string"
+                }
+              },
+              "required": [
+                "kind",
+                "nodeType",
+                "nodeId"
+              ]
+            },
+            "input": {}
+          },
+          "additionalProperties": false
+        }
+      },
+      {
+        "name": "doc_lists_restart",
+        "description": "Restart numbering of an ordered list at the target item.",
+        "input_schema": {
+          "type": "object",
+          "properties": {
+            "doc": {
+              "type": "string"
+            },
+            "sessionId": {
+              "type": "string"
+            },
+            "force": {
+              "type": "boolean"
+            },
+            "target": {
+              "type": "object",
+              "properties": {
+                "kind": {
+                  "const": "block"
+                },
+                "nodeType": {
+                  "const": "listItem"
+                },
+                "nodeId": {
+                  "type": "string"
+                }
+              },
+              "required": [
+                "kind",
+                "nodeType",
+                "nodeId"
+              ]
+            },
+            "input": {}
+          },
+          "additionalProperties": false
+        }
+      },
+      {
+        "name": "doc_lists_exit",
+        "description": "Exit a list context, converting the target item to a paragraph.",
+        "input_schema": {
+          "type": "object",
+          "properties": {
+            "doc": {
+              "type": "string"
+            },
+            "sessionId": {
+              "type": "string"
+            },
+            "force": {
+              "type": "boolean"
+            },
+            "target": {
+              "type": "object",
+              "properties": {
+                "kind": {
+                  "const": "block"
+                },
+                "nodeType": {
+                  "const": "listItem"
+                },
+                "nodeId": {
+                  "type": "string"
+                }
+              },
+              "required": [
+                "kind",
+                "nodeType",
+                "nodeId"
+              ]
+            },
+            "input": {}
+          },
+          "additionalProperties": false
+        }
+      },
+      {
+        "name": "doc_comments_add",
+        "description": "Add a new comment thread anchored to a target range.",
+        "input_schema": {
+          "type": "object",
+          "properties": {
+            "doc": {
+              "type": "string"
+            },
+            "sessionId": {
+              "type": "string"
+            },
+            "force": {
+              "type": "boolean"
+            },
+            "target": {
+              "type": "object",
+              "properties": {
+                "kind": {
+                  "const": "text"
+                },
+                "blockId": {
+                  "type": "string"
+                },
+                "range": {
+                  "type": "object",
+                  "properties": {
+                    "start": {
+                      "type": "number"
+                    },
+                    "end": {
+                      "type": "number"
+                    }
+                  },
+                  "required": [
+                    "start",
+                    "end"
+                  ]
+                }
+              },
+              "required": [
+                "kind",
+                "blockId",
+                "range"
+              ]
+            },
+            "text": {
+              "type": "string"
+            }
+          },
+          "required": [
+            "target",
+            "text"
+          ],
+          "additionalProperties": false
+        }
+      },
+      {
+        "name": "doc_comments_edit",
+        "description": "Edit the content of an existing comment.",
+        "input_schema": {
+          "type": "object",
+          "properties": {
+            "doc": {
+              "type": "string"
+            },
+            "sessionId": {
+              "type": "string"
+            },
+            "force": {
+              "type": "boolean"
+            },
+            "id": {
+              "type": "string"
+            },
+            "text": {
+              "type": "string"
+            }
+          },
+          "required": [
+            "id",
+            "text"
+          ],
+          "additionalProperties": false
+        }
+      },
+      {
+        "name": "doc_comments_reply",
+        "description": "Add a reply to an existing comment thread.",
+        "input_schema": {
+          "type": "object",
+          "properties": {
+            "doc": {
+              "type": "string"
+            },
+            "sessionId": {
+              "type": "string"
+            },
+            "force": {
+              "type": "boolean"
+            },
+            "parentId": {
+              "type": "string"
+            },
+            "text": {
+              "type": "string"
+            }
+          },
+          "required": [
+            "parentId",
+            "text"
+          ],
+          "additionalProperties": false
+        }
+      },
+      {
+        "name": "doc_comments_move",
+        "description": "Move a comment thread to a new anchor range.",
+        "input_schema": {
+          "type": "object",
+          "properties": {
+            "doc": {
+              "type": "string"
+            },
+            "sessionId": {
+              "type": "string"
+            },
+            "force": {
+              "type": "boolean"
+            },
+            "id": {
+              "type": "string"
+            },
+            "target": {
+              "type": "object",
+              "properties": {
+                "kind": {
+                  "const": "text"
+                },
+                "blockId": {
+                  "type": "string"
+                },
+                "range": {
+                  "type": "object",
+                  "properties": {
+                    "start": {
+                      "type": "number"
+                    },
+                    "end": {
+                      "type": "number"
+                    }
+                  },
+                  "required": [
+                    "start",
+                    "end"
+                  ]
+                }
+              },
+              "required": [
+                "kind",
+                "blockId",
+                "range"
+              ]
+            }
+          },
+          "required": [
+            "id",
+            "target"
+          ],
+          "additionalProperties": false
+        }
+      },
+      {
+        "name": "doc_comments_resolve",
+        "description": "Resolve or unresolve a comment thread.",
+        "input_schema": {
+          "type": "object",
+          "properties": {
+            "doc": {
+              "type": "string"
+            },
+            "sessionId": {
+              "type": "string"
+            },
+            "force": {
+              "type": "boolean"
+            },
+            "id": {
+              "type": "string"
+            }
+          },
+          "required": [
+            "id"
+          ],
+          "additionalProperties": false
+        }
+      },
+      {
+        "name": "doc_comments_remove",
+        "description": "Remove a comment or reply by ID.",
+        "input_schema": {
+          "type": "object",
+          "properties": {
+            "doc": {
+              "type": "string"
+            },
+            "sessionId": {
+              "type": "string"
+            },
+            "force": {
+              "type": "boolean"
+            },
+            "id": {
+              "type": "string"
+            }
+          },
+          "required": [
+            "id"
+          ],
+          "additionalProperties": false
+        }
+      },
+      {
+        "name": "doc_comments_setInternal",
+        "description": "Toggle the internal (private) flag on a comment thread.",
+        "input_schema": {
+          "type": "object",
+          "properties": {
+            "doc": {
+              "type": "string"
+            },
+            "sessionId": {
+              "type": "string"
+            },
+            "force": {
+              "type": "boolean"
+            },
+            "id": {
+              "type": "string"
+            },
+            "isInternal": {
+              "type": "boolean"
+            }
+          },
+          "required": [
+            "id",
+            "isInternal"
+          ],
+          "additionalProperties": false
+        }
+      },
+      {
+        "name": "doc_comments_setActive",
+        "description": "Set the active (focused) comment thread for UI highlighting.",
+        "input_schema": {
+          "type": "object",
+          "properties": {
+            "doc": {
+              "type": "string"
+            },
+            "sessionId": {
+              "type": "string"
+            },
+            "force": {
+              "type": "boolean"
+            },
+            "commentId": {
+              "type": "json"
+            },
+            "id": {
+              "type": "string"
+            },
+            "clear": {
+              "type": "boolean"
+            }
+          },
+          "additionalProperties": false
+        }
+      },
+      {
+        "name": "doc_comments_goTo",
+        "description": "Scroll the viewport to a comment thread by ID.",
+        "input_schema": {
+          "type": "object",
+          "properties": {
+            "doc": {
+              "type": "string"
+            },
+            "sessionId": {
+              "type": "string"
+            },
+            "id": {
+              "type": "string"
+            }
+          },
+          "required": [
+            "id"
+          ],
+          "additionalProperties": false
+        }
+      },
+      {
+        "name": "doc_comments_get",
+        "description": "Retrieve a single comment thread by ID.",
+        "input_schema": {
+          "type": "object",
+          "properties": {
+            "doc": {
+              "type": "string"
+            },
+            "sessionId": {
+              "type": "string"
+            },
+            "id": {
+              "type": "string"
+            }
+          },
+          "required": [
+            "id"
+          ],
+          "additionalProperties": false
+        }
+      },
+      {
+        "name": "doc_comments_list",
+        "description": "List all comment threads in the document.",
+        "input_schema": {
+          "type": "object",
+          "properties": {
+            "doc": {
+              "type": "string"
+            },
+            "sessionId": {
+              "type": "string"
+            },
+            "includeResolved": {
+              "type": "boolean"
+            }
+          },
+          "additionalProperties": false
+        }
+      },
+      {
+        "name": "doc_trackChanges_list",
+        "description": "List all tracked changes in the document.",
+        "input_schema": {
+          "type": "object",
+          "properties": {
+            "doc": {
+              "type": "string"
+            },
+            "sessionId": {
+              "type": "string"
+            },
+            "limit": {
+              "type": "number"
+            },
+            "offset": {
+              "type": "number"
+            },
+            "type": {
+              "type": "string"
+            }
+          },
+          "additionalProperties": false
+        }
+      },
+      {
+        "name": "doc_trackChanges_get",
+        "description": "Retrieve a single tracked change by ID.",
+        "input_schema": {
+          "type": "object",
+          "properties": {
+            "doc": {
+              "type": "string"
+            },
+            "sessionId": {
+              "type": "string"
+            },
+            "id": {
+              "type": "string"
+            }
+          },
+          "required": [
+            "id"
+          ],
+          "additionalProperties": false
+        }
+      },
+      {
+        "name": "doc_trackChanges_accept",
+        "description": "Accept a tracked change, applying it permanently.",
+        "input_schema": {
+          "type": "object",
+          "properties": {
+            "doc": {
+              "type": "string"
+            },
+            "sessionId": {
+              "type": "string"
+            },
+            "force": {
+              "type": "boolean"
+            },
+            "id": {
+              "type": "string"
+            }
+          },
+          "required": [
+            "id"
+          ],
+          "additionalProperties": false
+        }
+      },
+      {
+        "name": "doc_trackChanges_reject",
+        "description": "Reject a tracked change, reverting it.",
+        "input_schema": {
+          "type": "object",
+          "properties": {
+            "doc": {
+              "type": "string"
+            },
+            "sessionId": {
+              "type": "string"
+            },
+            "force": {
+              "type": "boolean"
+            },
+            "id": {
+              "type": "string"
+            }
+          },
+          "required": [
+            "id"
+          ],
+          "additionalProperties": false
+        }
+      },
+      {
+        "name": "doc_trackChanges_acceptAll",
+        "description": "Accept all tracked changes in the document.",
+        "input_schema": {
+          "type": "object",
+          "properties": {
+            "doc": {
+              "type": "string"
+            },
+            "sessionId": {
+              "type": "string"
+            },
+            "force": {
+              "type": "boolean"
+            }
+          },
+          "additionalProperties": false
+        }
+      },
+      {
+        "name": "doc_trackChanges_rejectAll",
+        "description": "Reject all tracked changes in the document.",
+        "input_schema": {
+          "type": "object",
+          "properties": {
+            "doc": {
+              "type": "string"
+            },
+            "sessionId": {
+              "type": "string"
+            },
+            "force": {
+              "type": "boolean"
+            }
+          },
+          "additionalProperties": false
+        }
+      },
+      {
+        "name": "doc_open",
+        "description": "Open a document and create a persistent editing session.",
+        "input_schema": {
+          "type": "object",
+          "properties": {
+            "doc": {
+              "type": "string"
+            },
+            "sessionId": {
+              "type": "string"
+            },
+            "collaboration": {},
+            "collabDocumentId": {
+              "type": "string"
+            },
+            "collabUrl": {
+              "type": "string"
+            }
+          },
+          "required": [
+            "doc"
+          ],
+          "additionalProperties": false
+        }
+      },
+      {
+        "name": "doc_save",
+        "description": "Save the current session to the original file or a new path.",
+        "input_schema": {
+          "type": "object",
+          "properties": {
+            "sessionId": {
+              "type": "string"
+            },
+            "force": {
+              "type": "boolean"
+            },
+            "inPlace": {
+              "type": "boolean"
+            }
+          },
+          "additionalProperties": false
+        }
+      },
+      {
+        "name": "doc_close",
+        "description": "Close the active editing session and clean up resources.",
+        "input_schema": {
+          "type": "object",
+          "properties": {
+            "sessionId": {
+              "type": "string"
+            },
+            "discard": {
+              "type": "boolean"
+            }
+          },
+          "additionalProperties": false
+        }
+      },
+      {
+        "name": "doc_status",
+        "description": "Show the current session status and document metadata.",
+        "input_schema": {
+          "type": "object",
+          "properties": {
+            "sessionId": {
+              "type": "string"
+            }
+          },
+          "additionalProperties": false
+        }
+      },
+      {
+        "name": "doc_describe",
+        "description": "List all available CLI operations and contract metadata.",
+        "input_schema": {
+          "type": "object",
+          "properties": {},
+          "additionalProperties": false
+        }
+      },
+      {
+        "name": "doc_describeCommand",
+        "description": "Show detailed metadata for a single CLI operation.",
+        "input_schema": {
+          "type": "object",
+          "properties": {
+            "operationId": {
+              "type": "string"
+            }
+          },
+          "required": [
+            "operationId"
+          ],
+          "additionalProperties": false
+        }
+      },
+      {
+        "name": "doc_session_list",
+        "description": "List all active editing sessions.",
+        "input_schema": {
+          "type": "object",
+          "properties": {},
+          "additionalProperties": false
+        }
+      },
+      {
+        "name": "doc_session_save",
+        "description": "Persist the current session state.",
+        "input_schema": {
+          "type": "object",
+          "properties": {
+            "sessionId": {
+              "type": "string"
+            },
+            "force": {
+              "type": "boolean"
+            },
+            "inPlace": {
+              "type": "boolean"
+            }
+          },
+          "required": [
+            "sessionId"
+          ],
+          "additionalProperties": false
+        }
+      },
+      {
+        "name": "doc_session_close",
+        "description": "Close a specific editing session by ID.",
+        "input_schema": {
+          "type": "object",
+          "properties": {
+            "sessionId": {
+              "type": "string"
+            },
+            "discard": {
+              "type": "boolean"
+            }
+          },
+          "required": [
+            "sessionId"
+          ],
+          "additionalProperties": false
+        }
+      },
+      {
+        "name": "doc_session_setDefault",
+        "description": "Set the default session for subsequent commands.",
+        "input_schema": {
+          "type": "object",
+          "properties": {
+            "sessionId": {
+              "type": "string"
+            }
+          },
+          "required": [
+            "sessionId"
+          ],
+          "additionalProperties": false
+        }
+      }
+    ]
+  }
+}

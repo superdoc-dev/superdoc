@@ -1,0 +1,100 @@
+{
+  "policyVersion": "v1",
+  "phases": {
+    "read": {
+      "include": [
+        "introspection",
+        "query"
+      ],
+      "exclude": [
+        "mutation",
+        "trackChanges",
+        "session",
+        "create",
+        "comments",
+        "format"
+      ],
+      "priority": [
+        "query",
+        "introspection"
+      ]
+    },
+    "locate": {
+      "include": [
+        "query"
+      ],
+      "exclude": [
+        "mutation",
+        "trackChanges",
+        "session",
+        "create",
+        "comments",
+        "format"
+      ],
+      "priority": [
+        "query"
+      ]
+    },
+    "mutate": {
+      "include": [
+        "query",
+        "mutation",
+        "format",
+        "comments",
+        "create"
+      ],
+      "exclude": [
+        "session"
+      ],
+      "priority": [
+        "query",
+        "mutation",
+        "create",
+        "format",
+        "comments"
+      ]
+    },
+    "review": {
+      "include": [
+        "query",
+        "trackChanges",
+        "comments"
+      ],
+      "exclude": [
+        "mutation",
+        "create",
+        "session",
+        "format"
+      ],
+      "priority": [
+        "trackChanges",
+        "comments",
+        "query"
+      ]
+    }
+  },
+  "defaults": {
+    "maxToolsByProfile": {
+      "intent": 12,
+      "operation": 16
+    },
+    "minReadTools": 2,
+    "foundationalOperationIds": [
+      "doc.info",
+      "doc.find"
+    ],
+    "chooserDecisionVersion": "v1"
+  },
+  "capabilityFeatures": {
+    "comments": [
+      "hasComments"
+    ],
+    "trackChanges": [
+      "hasTrackedChanges"
+    ],
+    "lists": [
+      "hasLists"
+    ]
+  },
+  "contractHash": "937cad0ad9eb592c"
+}

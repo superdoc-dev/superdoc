@@ -70,7 +70,11 @@
     "test:cli": "pnpm --prefix apps/cli run test",
     "cli:prepare": "pnpm run test:cli && pnpm --prefix apps/cli run build:prepublish",
     "cli:release": "pnpm run cli:prepare && pnpm --prefix apps/cli run publish:platforms",
-    "cli:release:dry": "pnpm run cli:prepare && pnpm --prefix apps/cli run publish:platforms:dry"
+    "cli:release:dry": "pnpm run cli:prepare && pnpm --prefix apps/cli run publish:platforms:dry",
+    "cli:export-sdk-contract": "bun apps/cli/scripts/export-sdk-contract.ts",
+    "sdk:sync-version": "node packages/sdk/scripts/sync-sdk-version.mjs",
+    "sdk:release": "node packages/sdk/scripts/sdk-release.mjs",
+    "sdk:release:dry": "node packages/sdk/scripts/sdk-release.mjs --dry-run"
   },
   "devDependencies": {
     "@commitlint/cli": "catalog:",

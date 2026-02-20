@@ -1,0 +1,42 @@
+{
+  "name": "@superdoc-dev/sdk",
+  "version": "1.0.0-alpha.5",
+  "private": false,
+  "type": "module",
+  "main": "./dist/index.js",
+  "module": "./dist/index.js",
+  "types": "./dist/index.d.ts",
+  "exports": {
+    ".": {
+      "import": {
+        "types": "./dist/index.d.ts",
+        "default": "./dist/index.js"
+      }
+    }
+  },
+  "files": [
+    "dist",
+    "tools"
+  ],
+  "scripts": {
+    "build": "tsc",
+    "typecheck": "tsc --noEmit",
+    "prepack": "rm -rf tools && cp -r ../../tools ./tools && rm -f ./tools/__init__.py",
+    "postpack": "rm -rf tools && ln -s ../../tools tools"
+  },
+  "optionalDependencies": {
+    "@superdoc-dev/sdk-darwin-arm64": "1.0.0-alpha.5",
+    "@superdoc-dev/sdk-darwin-x64": "1.0.0-alpha.5",
+    "@superdoc-dev/sdk-linux-arm64": "1.0.0-alpha.5",
+    "@superdoc-dev/sdk-linux-x64": "1.0.0-alpha.5",
+    "@superdoc-dev/sdk-windows-x64": "1.0.0-alpha.5"
+  },
+  "devDependencies": {
+    "@types/bun": "catalog:",
+    "@types/node": "catalog:",
+    "typescript": "catalog:"
+  },
+  "publishConfig": {
+    "access": "public"
+  }
+}

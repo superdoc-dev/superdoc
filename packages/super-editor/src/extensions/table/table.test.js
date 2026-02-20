@@ -506,6 +506,71 @@ describe('Table commands', async () => {
     });
   });
 
+  describe('toggleHeaderRow preserves cell attributes (IT-550)', async () => {
+    beforeEach(async () => {
+      const { docx, media, mediaFiles, fonts } = cachedBlankDoc;
+      ({ editor } = initTestEditor({ content: docx, media, mediaFiles, fonts }));
+      ({ schema } = editor);
+
+      // Create a 2x2 table with explicit cell attributes
+      const CellType = schema.nodes.tableCell;
+      const RowType = schema.nodes.tableRow;
+      const TableType = schema.nodes.table;
+
+      const cellAttrs = {
+        colspan: 1,
+        rowspan: 1,
+        colwidth: [150],
+        widthUnit: 'px',
+        widthType: 'dxa',
+        background: { color: 'FF0000' },
+        tableCellProperties: { cellWidth: { value: 2250, type: 'dxa' } },
+      };
+
+      const makeCell = (text) => CellType.create(cellAttrs, schema.nodes.paragraph.create(null, schema.text(text)));
+
+      const row1 = RowType.create(null, [makeCell('A'), makeCell('B')]);
+      const row2 = RowType.create(null, [makeCell('C'), makeCell('D')]);
+      table = TableType.create(null, [row1, row2]);
+
+      const doc = schema.nodes.doc.create(null, [table]);
+      const nextState = EditorState.create({ schema, doc, plugins: editor.state.plugins });
+      editor.setState(nextState);
+    });
+
+    it('toggleHeaderRow preserves widthUnit, widthType, background, and tableCellProperties', async () => {
+      const tablePos = findTablePos(editor.state.doc);
+      expect(tablePos).not.toBeNull();
+
+      // Position cursor in first row
+      editor.commands.setTextSelection(tablePos + 3);
+
+      // Toggle first row to header
+      const didToggle = editor.commands.toggleHeaderRow();
+      expect(didToggle).toBe(true);
+
+      const updatedTable = editor.state.doc.nodeAt(tablePos);
+      const firstRow = updatedTable.child(0);
+
+      // First row cells should now be tableHeader type
+      firstRow.forEach((cell) => {
+        expect(cell.type.name).toBe('tableHeader');
+        // Critical attrs that were previously dropped
+        expect(cell.attrs.widthUnit).toBe('px');
+        expect(cell.attrs.widthType).toBe('dxa');
+        expect(cell.attrs.colwidth).toEqual([150]);
+        expect(cell.attrs.background).toEqual({ color: 'FF0000' });
+        expect(cell.attrs.tableCellProperties).toEqual({ cellWidth: { value: 2250, type: 'dxa' } });
+      });
+
+      // Second row should remain tableCell
+      const secondRow = updatedTable.child(1);
+      secondRow.forEach((cell) => {
+        expect(cell.type.name).toBe('tableCell');
+      });
+    });
+  });
+
   describe('deleteCellAndTableBorders', async () => {
     let table, tablePos;
 

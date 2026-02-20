@@ -9,6 +9,7 @@ import { markDeletion } from './trackChangesHelpers/markDeletion.js';
 import { markInsertion } from './trackChangesHelpers/markInsertion.js';
 import { collectTrackedChanges, isTrackedChangeActionAllowed } from './permission-helpers.js';
 import { CommentsPluginKey } from '../comment/comments-plugin.js';
+import { findMarkInRangeBySnapshot } from './trackChangesHelpers/markSnapshotHelpers.js';
 
 export const TrackChanges = Extension.create({
   name: 'trackChanges',
@@ -119,13 +120,20 @@ export const TrackChanges = Extension.create({
               });
 
               formatChangeMark.attrs.after.forEach((newMark) => {
-                tr.step(
-                  new RemoveMarkStep(
-                    map.map(Math.max(pos, from)),
-                    map.map(Math.min(pos + node.nodeSize, to)),
-                    node.marks.find((mark) => mark.type.name === newMark.type),
-                  ),
-                );
+                const mappedFrom = map.map(Math.max(pos, from));
+                const mappedTo = map.map(Math.min(pos + node.nodeSize, to));
+                const liveMark = findMarkInRangeBySnapshot({
+                  doc: tr.doc,
+                  from: mappedFrom,
+                  to: mappedTo,
+                  snapshot: newMark,
+                });
+
+                if (!liveMark) {
+                  return;
+                }
+
+                tr.step(new RemoveMarkStep(mappedFrom, mappedTo, liveMark));
               });
 
               tr.step(
@@ -250,6 +258,7 @@ export const TrackChanges = Extension.create({
             from = state.selection.from,
             to = state.selection.to,
             text = '',
+            id,
             user,
             comment,
             addToHistory = true,
@@ -288,7 +297,7 @@ export const TrackChanges = Extension.create({
           // For replacements (both deletion and insertion), generate a shared ID upfront
           // so the deletion and insertion marks are linked together
           const isReplacement = from !== to && text;
-          const sharedId = isReplacement ? uuidv4() : null;
+          const sharedId = id ?? (isReplacement ? uuidv4() : null);
 
           let changeId = sharedId;
           let insertPos = to; // Default insert position is after the selection

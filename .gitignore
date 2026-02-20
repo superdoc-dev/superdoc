@@ -1,6 +1,7 @@
 logs
 *.log
 .cache
+.vite
 .DS_Store
 .temp
 node_modules
@@ -63,8 +64,17 @@ reports/
 
 # Planning and progress tracking documents
 **/plan/progress.md
-
+wrangler/
 codex.config.json
 perf-baseline-results.json
 .claude
-dev/
+plans/
+
+tests/layout-snapshots/candidate/
+tests/layout-snapshots/reference/
+test-corpus/
+.pnpm-store
+devtools/visual-testing/pnpm-lock.yaml
+
+.bun-cache/
+

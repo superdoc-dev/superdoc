@@ -18,6 +18,7 @@ export function tabNodeToRun({
   tabOrdinal,
   paragraphAttrs,
   inheritedMarks,
+  sdtMetadata,
 }: InlineConverterParams): Run | null {
   const pos = positions.get(node);
   if (!pos) return null;
@@ -33,6 +34,10 @@ export function tabNodeToRun({
     indent,
     leader: (node.attrs?.leader as TabRun['leader']) ?? null,
   };
+
+  if (sdtMetadata) {
+    run.sdt = sdtMetadata;
+  }
 
   // Apply marks (e.g., underline) to the tab run
   const marks = [...(node.marks ?? []), ...(inheritedMarks ?? [])];

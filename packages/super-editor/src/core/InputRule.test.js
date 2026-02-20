@@ -80,11 +80,15 @@ describe('InputRule helpers', () => {
   });
 
   it('sanitizes forbidden tags and attributes', () => {
-    const sanitized = sanitizeHtml('<div linebreaktype="soft"><script>bad()</script><span>ok</span></div>');
+    const sanitized = sanitizeHtml(
+      '<div linebreaktype="soft"><p data-sd-block-id="block-1"><script>bad()</script><span>ok</span></p></div>',
+    );
 
     expect(sanitized.querySelector('script')).toBeNull();
     const div = sanitized.querySelector('div');
     expect(div?.hasAttribute('linebreaktype')).toBe(false);
+    const paragraph = sanitized.querySelector('p');
+    expect(paragraph?.hasAttribute('data-sd-block-id')).toBe(false);
     expect(div?.querySelector('span')?.textContent).toBe('ok');
   });
 

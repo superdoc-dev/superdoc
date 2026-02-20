@@ -50,6 +50,17 @@ export const MyExtension = Mark.create({
 | Add visual decoration | Use `addPmPlugins()` with DecorationSet |
 | Support new DOCX element | Add handler in `super-converter/v3/handlers/w/` |
 
+## Converter Rules (super-converter)
+
+The converter is a **parser**, not a style resolver.
+
+- **DO**: Parse XML elements and store their raw properties on node attributes
+- **DO**: Store style references (e.g., `tableStyleId`) so the style-engine can resolve them later
+- **DON'T**: Resolve style cascades (e.g., looking up table style conditional formatting to compute cell backgrounds)
+- **DON'T**: Merge inherited properties into inline attributes
+
+Style cascade resolution belongs in `layout-engine/style-engine/`. See root CLAUDE.md "Style Resolution Boundary".
+
 ## Entry Points
 
 - `src/extensions/index.js` - All registered extensions

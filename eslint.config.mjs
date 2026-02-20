@@ -12,6 +12,7 @@ export default [
   {
     ignores: [
       '**/dist/**',
+      '**/dist-types/**',
       '**/node_modules/**',
       // Generated/vendor files that shouldn't be linted
       '**/pdfjs.js',
@@ -26,6 +27,8 @@ export default [
       '**/src/**/*.d.ts.map',
       // Test files
       '**/*.test.js',
+      '**/*.test.ts',
+      '**/*.test.tsx',
       '**/*.spec.js',
       '**/tests/**',
       '**/test/**',
@@ -34,6 +37,9 @@ export default [
       // Examples (different environments and coding styles)
       'examples/**',
       '**/examples/**',
+      // Demos (different environments and dependency sets)
+      'demos/**',
+      '**/demos/**',
       // Config files (CommonJS/different environments)
       '**/*.config.js',
       '**/*.cjs',
@@ -49,6 +55,7 @@ export default [
         // Universal APIs (available in both environments)
         console: 'readonly',
         fetch: 'readonly',
+        AbortSignal: 'readonly',
         setTimeout: 'readonly',
         clearTimeout: 'readonly',
         setInterval: 'readonly',
@@ -133,6 +140,9 @@ export default [
           // Temporarily all "@"-prefixed imports. This should likely be changed to use https://github.com/pzmosquito/eslint-import-resolver-vite to properly resolve these aliases
           ignore: [
             '^@.*$',
+            '^bun:.*$', // Bun built-in modules
+            '^superdoc$',
+            '^superdoc/style\\.css$',
           ],
         }
       ]

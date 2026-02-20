@@ -1203,6 +1203,24 @@ describe('toFlowBlocks', () => {
         expect(block.id.startsWith('header-default-')).toBe(true);
       });
     });
+
+    it('applies blockIdPrefix to stable paragraph ids', () => {
+      const pmDoc = {
+        type: 'doc',
+        content: [
+          {
+            type: 'paragraph',
+            attrs: { sdBlockId: 'ABC123' },
+            content: [{ type: 'text', text: 'Alpha' }],
+          },
+        ],
+      };
+
+      const { blocks } = toFlowBlocks(pmDoc, { blockIdPrefix: 'doc-' });
+      const paragraph = blocks.find((block) => block.kind === 'paragraph');
+
+      expect(paragraph?.id).toBe('doc-ABC123');
+    });
   });
 
   it('populates pm ranges on runs', () => {

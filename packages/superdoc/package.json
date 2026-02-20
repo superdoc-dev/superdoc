@@ -1,7 +1,7 @@
 {
   "name": "superdoc",
   "type": "module",
-  "version": "1.10.1-next.4",
+  "version": "1.15.0",
   "license": "AGPL-3.0",
   "repository": {
     "type": "git",
@@ -24,7 +24,7 @@
       "require": "./dist/superdoc.cjs"
     },
     "./types": {
-      "types": "./dist/types.d.ts",
+      "types": "./dist/super-editor/src/types.d.ts",
       "source": "./src/types.ts",
       "import": "./dist/types.es.js",
       "require": "./dist/types.cjs"
@@ -52,19 +52,21 @@
         "./dist/super-editor/src/index.d.ts"
       ],
       "types": [
-        "./dist/types.d.ts"
+        "./dist/super-editor/src/types.d.ts"
       ]
     }
   },
   "main": "./dist/superdoc.umd.js",
   "module": "./dist/superdoc.es.js",
   "scripts": {
-    "dev": "vite",
-    "dev:collab": "concurrently -k -n VITE,COLLAB -c cyan,green \"vite\" \"node src/dev/collab-server.js\"",
+    "dev": "concurrently -k -n VITE,WORD -c cyan,magenta \"vite\" \"node ../../devtools/word-benchmark-sidecar/server.js --stay-alive-on-reuse\"",
+    "dev:collab": "concurrently -k -n VITE,COLLAB,WORD -c cyan,green,magenta \"vite\" \"node src/dev/collab-server.js\" \"node ../../devtools/word-benchmark-sidecar/server.js --stay-alive-on-reuse\"",
     "collab-server": "node src/dev/collab-server.js",
-    "build": "pnpm --prefix ../super-editor run types:build && vite build && pnpm run build:umd",
+    "word-benchmark-sidecar": "node ../../devtools/word-benchmark-sidecar/server.js",
+    "build": "vite build && pnpm run build:umd",
+    "build:dev": "SUPERDOC_SKIP_DTS=1 vite build",
     "postbuild": "node ./scripts/ensure-types.cjs",
-    "build:es": "pnpm --prefix ../super-editor run types:build && vite build && node ./scripts/ensure-types.cjs",
+    "build:es": "vite build && node ./scripts/ensure-types.cjs",
     "watch:es": "vite build --watch",
     "build:umd": "vite build --config vite.config.umd.js",
     "clean": "rm -rf dist",
@@ -77,6 +79,7 @@
     "buffer-crc32": "catalog:",
     "eventemitter3": "catalog:",
     "jsdom": "catalog:",
+    "konva": "catalog:",
     "naive-ui": "catalog:",
     "pinia": "catalog:",
     "rollup-plugin-copy": "catalog:",
@@ -86,7 +89,7 @@
   },
   "peerDependencies": {
     "@hocuspocus/provider": "^2.13.6",
-    "pdfjs-dist": ">=4.3.136 <=4.6.82",
+    "pdfjs-dist": "^5.4.296",
     "y-prosemirror": "catalog:",
     "yjs": "catalog:"
   },

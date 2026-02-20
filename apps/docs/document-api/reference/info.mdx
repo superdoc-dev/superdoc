@@ -1,0 +1,132 @@
+---
+title: info
+sidebarTitle: info
+description: Generated reference for info
+---
+
+{/* GENERATED FILE: DO NOT EDIT. Regenerate via `pnpm run docapi:sync`. */}
+
+> Alpha: Document API is currently alpha and subject to breaking changes.
+
+## Summary
+
+- Operation ID: `info`
+- API member path: `editor.doc.info(...)`
+- Mutates document: `no`
+- Idempotency: `idempotent`
+- Supports tracked mode: `no`
+- Supports dry run: `no`
+- Deterministic target resolution: `yes`
+
+## Pre-apply throws
+
+- None
+
+## Non-applied failure codes
+
+- None
+
+## Input schema
+
+```json
+{
+  "additionalProperties": false,
+  "properties": {},
+  "type": "object"
+}
+```
+
+## Output schema
+
+```json
+{
+  "additionalProperties": false,
+  "properties": {
+    "capabilities": {
+      "additionalProperties": false,
+      "properties": {
+        "canComment": {
+          "type": "boolean"
+        },
+        "canFind": {
+          "type": "boolean"
+        },
+        "canGetNode": {
+          "type": "boolean"
+        },
+        "canReplace": {
+          "type": "boolean"
+        }
+      },
+      "required": [
+        "canFind",
+        "canGetNode",
+        "canComment",
+        "canReplace"
+      ],
+      "type": "object"
+    },
+    "counts": {
+      "additionalProperties": false,
+      "properties": {
+        "comments": {
+          "type": "integer"
+        },
+        "headings": {
+          "type": "integer"
+        },
+        "images": {
+          "type": "integer"
+        },
+        "paragraphs": {
+          "type": "integer"
+        },
+        "tables": {
+          "type": "integer"
+        },
+        "words": {
+          "type": "integer"
+        }
+      },
+      "required": [
+        "words",
+        "paragraphs",
+        "headings",
+        "tables",
+        "images",
+        "comments"
+      ],
+      "type": "object"
+    },
+    "outline": {
+      "items": {
+        "additionalProperties": false,
+        "properties": {
+          "level": {
+            "type": "integer"
+          },
+          "nodeId": {
+            "type": "string"
+          },
+          "text": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "level",
+          "text",
+          "nodeId"
+        ],
+        "type": "object"
+      },
+      "type": "array"
+    }
+  },
+  "required": [
+    "counts",
+    "outline",
+    "capabilities"
+  ],
+  "type": "object"
+}
+```

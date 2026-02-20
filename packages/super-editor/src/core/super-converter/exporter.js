@@ -165,6 +165,7 @@ export function exportSchemaToJson(params) {
     table: wTblNodeTranslator,
     tableRow: wTrNodeTranslator,
     tableCell: wTcNodeTranslator,
+    tableHeader: wTcNodeTranslator,
     bookmarkStart: wBookmarkStartTranslator,
     bookmarkEnd: wBookmarkEndTranslator,
     fieldAnnotation: wSdtNodeTranslator,
@@ -175,6 +176,8 @@ export function exportSchemaToJson(params) {
     commentRangeEnd: wCommentRangeEndTranslator,
     permStart: wPermStartTranslator,
     permEnd: wPermEndTranslator,
+    permStartBlock: wPermStartTranslator,
+    permEndBlock: wPermEndTranslator,
     commentReference: () => null,
     footnoteReference: wFootnoteReferenceTranslator,
     shapeContainer: pictTranslator,
@@ -611,6 +614,14 @@ export class DocxExporter {
     if (!node) return null;
     let { name } = node;
     const { elements, attributes } = node;
+
+    // Normalize w:delInstrText → w:instrText. During import, w:del wrappers around
+    // field character runs lose their trackDelete marks (only text content gets marked),
+    // so on export the w:del wrapper is absent. Per ECMA-376 §17.16.13, w:delInstrText
+    // outside w:del is non-conformant — renaming to w:instrText keeps the field valid.
+    if (name === 'w:delInstrText') {
+      name = 'w:instrText';
+    }
 
     let tag = `<${name}`;
 

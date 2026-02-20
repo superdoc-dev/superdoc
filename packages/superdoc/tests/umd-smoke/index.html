@@ -1,0 +1,16 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <title>UMD Smoke Test</title>
+    <link href="/dist/style.css" rel="stylesheet" />
+    <script src="/dist/superdoc.umd.js"></script>
+  </head>
+  <body>
+    <div id="editor" style="height: 100vh"></div>
+    <script>
+      var superdoc = new SuperDocLibrary.SuperDoc({ selector: '#editor' });
+      window.__SUPERDOC_READY__ = true;
+    </script>
+  </body>
+</html>

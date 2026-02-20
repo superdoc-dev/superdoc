@@ -1,5 +1,6 @@
 import { beforeEach, afterEach, describe, expect, it, vi } from 'vitest';
 import { EditorState, TextSelection } from 'prosemirror-state';
+import { DOMParser as PMDOMParser, Slice } from 'prosemirror-model';
 import { trackedTransaction, documentHelpers } from './index.js';
 import { TrackInsertMarkName, TrackDeleteMarkName } from '../constants.js';
 import { TrackChangesBasePluginKey } from '../plugins/trackChangesBasePlugin.js';
@@ -205,6 +206,245 @@ describe('trackChangesHelpers replaceStep', () => {
 
     // Both characters should be tracked
     expect(insertedText).toBe('xy');
+  });
+
+  it('tracks single-paragraph HTML paste insertions', () => {
+    const doc = schema.nodes.doc.create(
+      {},
+      schema.nodes.paragraph.create({}, schema.nodes.run.create({}, [schema.text('Base')])),
+    );
+    let state = createState(doc);
+
+    const basePos = findTextPos(state.doc, 'Base');
+    expect(basePos).toBeTypeOf('number');
+    const insertPos = basePos + 'Base'.length;
+    state = state.apply(state.tr.setSelection(TextSelection.create(state.doc, insertPos)));
+
+    const tempDiv = document.createElement('div');
+    tempDiv.innerHTML = '<p>Paste One</p>';
+    const parsedDoc = PMDOMParser.fromSchema(schema).parse(tempDiv);
+    const slice = new Slice(parsedDoc.content, 0, 0);
+
+    let tr = state.tr.replaceSelection(slice);
+    tr.setMeta('inputType', 'insertFromPaste');
+    const tracked = trackedTransaction({ tr, state, user });
+    const finalState = state.apply(tracked);
+
+    let insertedText = '';
+    finalState.doc.descendants((node) => {
+      if (node.isText && node.marks.some((mark) => mark.type.name === TrackInsertMarkName)) {
+        insertedText += node.text;
+      }
+    });
+
+    expect(insertedText).toContain('Paste One');
+  });
+
+  it('tracks multi-paragraph HTML paste insertions', () => {
+    const doc = schema.nodes.doc.create(
+      {},
+      schema.nodes.paragraph.create({}, schema.nodes.run.create({}, [schema.text('Base')])),
+    );
+    let state = createState(doc);
+
+    const basePos = findTextPos(state.doc, 'Base');
+    expect(basePos).toBeTypeOf('number');
+    const insertPos = basePos + 'Base'.length;
+    state = state.apply(state.tr.setSelection(TextSelection.create(state.doc, insertPos)));
+
+    const tempDiv = document.createElement('div');
+    tempDiv.innerHTML = '<p>Paste One</p><p>Paste Two</p>';
+    const parsedDoc = PMDOMParser.fromSchema(schema).parse(tempDiv);
+    const slice = new Slice(parsedDoc.content, 0, 0);
+
+    let tr = state.tr.replaceSelection(slice);
+    tr.setMeta('inputType', 'insertFromPaste');
+    const tracked = trackedTransaction({ tr, state, user });
+    const finalState = state.apply(tracked);
+
+    let insertedText = '';
+    finalState.doc.descendants((node) => {
+      if (node.isText && node.marks.some((mark) => mark.type.name === TrackInsertMarkName)) {
+        insertedText += node.text;
+      }
+    });
+
+    expect(insertedText).toContain('Paste One');
+    expect(insertedText).toContain('Paste Two');
+  });
+
+  it('tracks plain-text paste insertions', () => {
+    const doc = schema.nodes.doc.create(
+      {},
+      schema.nodes.paragraph.create({}, schema.nodes.run.create({}, [schema.text('Base')])),
+    );
+    let state = createState(doc);
+
+    const basePos = findTextPos(state.doc, 'Base');
+    expect(basePos).toBeTypeOf('number');
+    const insertPos = basePos + 'Base'.length;
+    state = state.apply(state.tr.setSelection(TextSelection.create(state.doc, insertPos)));
+
+    let tr = state.tr.insertText('Plain Paste', insertPos);
+    tr.setMeta('inputType', 'insertFromPaste');
+    const tracked = trackedTransaction({ tr, state, user });
+    const finalState = state.apply(tracked);
+
+    let insertedText = '';
+    finalState.doc.descendants((node) => {
+      if (node.isText && node.marks.some((mark) => mark.type.name === TrackInsertMarkName)) {
+        insertedText += node.text;
+      }
+    });
+
+    expect(insertedText).toContain('Plain Paste');
+  });
+
+  it('tracks paste replacement over selected existing text', () => {
+    const doc = schema.nodes.doc.create(
+      {},
+      schema.nodes.paragraph.create({}, schema.nodes.run.create({}, [schema.text('Hello World')])),
+    );
+    let state = createState(doc);
+
+    const worldPos = findTextPos(state.doc, 'Hello World');
+    expect(worldPos).toBeTypeOf('number');
+    const from = worldPos + 'Hello '.length;
+    const to = from + 'World'.length;
+    state = state.apply(state.tr.setSelection(TextSelection.create(state.doc, from, to)));
+
+    const tempDiv = document.createElement('div');
+    tempDiv.innerHTML = '<p>Pasted</p>';
+    const parsedDoc = PMDOMParser.fromSchema(schema).parse(tempDiv);
+    const slice = new Slice(parsedDoc.content, 0, 0);
+
+    let tr = state.tr.replaceSelection(slice);
+    tr.setMeta('inputType', 'insertFromPaste');
+    const tracked = trackedTransaction({ tr, state, user });
+    const meta = tracked.getMeta(TrackChangesBasePluginKey);
+    const finalState = state.apply(tracked);
+
+    let insertedText = '';
+    let deletedText = '';
+    finalState.doc.descendants((node) => {
+      if (!node.isText) return;
+      if (node.marks.some((mark) => mark.type.name === TrackInsertMarkName)) insertedText += node.text;
+      if (node.marks.some((mark) => mark.type.name === TrackDeleteMarkName)) deletedText += node.text;
+    });
+
+    expect(insertedText).toContain('Pasted');
+    expect(deletedText).toContain('World');
+    expect(meta?.insertedMark).toBeDefined();
+    expect(meta?.deletionMark).toBeDefined();
+    expect(meta.insertedMark.attrs.id).toBe(meta.deletionMark.attrs.id);
+  });
+
+  it('prefers original paste slice before maxOpen fallback for collapsed insertions', () => {
+    const doc = schema.nodes.doc.create(
+      {},
+      schema.nodes.paragraph.create({}, schema.nodes.run.create({}, [schema.text('Base')])),
+    );
+    let state = createState(doc);
+
+    const basePos = findTextPos(state.doc, 'Base');
+    expect(basePos).toBeTypeOf('number');
+    const insertPos = basePos + 'Base'.length;
+    state = state.apply(state.tr.setSelection(TextSelection.create(state.doc, insertPos)));
+
+    const originalDiv = document.createElement('div');
+    originalDiv.innerHTML = '<p>Paste One</p><p>Paste Two</p>';
+    const originalSlice = new Slice(PMDOMParser.fromSchema(schema).parse(originalDiv).content, 0, 0);
+
+    const fallbackDiv = document.createElement('div');
+    fallbackDiv.innerHTML = '<p>Flattened Fallback</p>';
+    const fallbackSlice = new Slice(PMDOMParser.fromSchema(schema).parse(fallbackDiv).content, 0, 0);
+    vi.spyOn(Slice, 'maxOpen').mockReturnValue(fallbackSlice);
+
+    let tr = state.tr.replaceSelection(originalSlice);
+    tr.setMeta('inputType', 'insertFromPaste');
+    const tracked = trackedTransaction({ tr, state, user });
+    const finalState = state.apply(tracked);
+
+    const text = finalState.doc.textBetween(0, finalState.doc.content.size, '\n');
+    expect(text).toContain('Paste One');
+    expect(text).toContain('Paste Two');
+    expect(text).not.toContain('Flattened Fallback');
+  });
+
+  it('deletes empty paragraph on Backspace in suggesting mode', () => {
+    // When the cursor is inside an empty paragraph and the user presses Backspace,
+    // ProseMirror creates a ReplaceStep that removes the empty paragraph node.
+    // The track changes system should allow this deletion to proceed since there's
+    // no inline content to track.
+
+    // Create doc with: <p>Hello</p><p></p>
+    const run = schema.nodes.run.create({}, [schema.text('Hello')]);
+    const para1 = schema.nodes.paragraph.create({}, run);
+    const para2 = schema.nodes.paragraph.create();
+    const doc = schema.nodes.doc.create({}, [para1, para2]);
+    let state = createState(doc);
+
+    // Find empty paragraph position dynamically
+    let emptyParaOffset = null;
+    state.doc.forEach((node, offset) => {
+      if (node.type.name === 'paragraph' && node.content.size === 0) {
+        emptyParaOffset = offset;
+      }
+    });
+    expect(emptyParaOffset).not.toBeNull();
+
+    // Cursor inside empty paragraph (offset + 1 for the opening position)
+    state = state.apply(state.tr.setSelection(TextSelection.create(state.doc, emptyParaOffset + 1)));
+
+    // Simulate Backspace: joinBackward creates a ReplaceStep that removes the empty paragraph
+    const tr = state.tr.delete(emptyParaOffset, emptyParaOffset + para2.nodeSize);
+    tr.setMeta('inputType', 'deleteContentBackward');
+
+    const tracked = trackedTransaction({ tr, state, user });
+    const finalState = state.apply(tracked);
+
+    // The empty paragraph should be deleted — only one paragraph should remain
+    let paragraphCount = 0;
+    finalState.doc.forEach((node) => {
+      if (node.type.name === 'paragraph') paragraphCount++;
+    });
+    expect(paragraphCount).toBe(1);
+
+    // The remaining paragraph should contain "Hello"
+    let textContent = '';
+    finalState.doc.descendants((node) => {
+      if (node.isText) textContent += node.text;
+    });
+    expect(textContent).toBe('Hello');
+  });
+
+  it('applies paragraph join directly in suggesting mode (no inline content to track)', () => {
+    // Paragraph joins have no inline content in their step range (only block boundary
+    // tokens), so markDeletion has nothing to mark. The join is applied directly.
+    const para1 = schema.nodes.paragraph.create({}, schema.nodes.run.create({}, [schema.text('Hello')]));
+    const para2 = schema.nodes.paragraph.create({}, schema.nodes.run.create({}, [schema.text('World')]));
+    const doc = schema.nodes.doc.create({}, [para1, para2]);
+    let state = createState(doc);
+
+    let joinPos = null;
+    state.doc.forEach((node, offset, index) => {
+      if (index === 0) joinPos = offset + node.nodeSize;
+    });
+    expect(joinPos).not.toBeNull();
+
+    const tr = state.tr.join(joinPos);
+    tr.setMeta('inputType', 'deleteContentBackward');
+
+    const tracked = trackedTransaction({ tr, state, user });
+    const finalState = state.apply(tracked);
+
+    // The join should be applied — only one paragraph remains
+    let paragraphCount = 0;
+    finalState.doc.forEach(() => paragraphCount++);
+    expect(paragraphCount).toBe(1);
+
+    // Both texts should be merged
+    expect(finalState.doc.textContent).toBe('HelloWorld');
   });
 
   it('tracks replace even when selection contains existing deletions and links', () => {

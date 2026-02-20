@@ -9,6 +9,7 @@
     { "path": "packages/layout-engine/painters/dom/tsconfig.json" },
     { "path": "packages/layout-engine/style-engine/tsconfig.json" },
     { "path": "packages/layout-engine/layout-bridge/tsconfig.types.json" },
+    { "path": "packages/document-api/tsconfig.json" },
     { "path": "packages/super-editor/tsconfig.types.json" },
     { "path": "packages/superdoc/tsconfig.types.json" }
   ]

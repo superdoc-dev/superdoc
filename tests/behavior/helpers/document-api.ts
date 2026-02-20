@@ -90,9 +90,14 @@ export async function addCommentByText(
     mode?: 'contains' | 'exact' | 'regex';
     caseSensitive?: boolean;
   },
-): Promise<void> {
-  await page.evaluate((payload) => {
+): Promise<string> {
+  const commentId = await page.evaluate((payload) => {
     const docApi = (window as any).editor.doc;
+    type ReceiptLike = {
+      success?: boolean;
+      inserted?: Array<{ entityType?: string; entityId?: string }>;
+      failure?: { code?: string; message?: string };
+    };
     const found = docApi.find({
       select: {
         type: 'text',
@@ -103,8 +108,21 @@ export async function addCommentByText(
     });
     const target = found?.context?.[payload.occurrence ?? 0]?.textRanges?.[0];
     if (!target) throw new Error(`No text range found for pattern "${payload.pattern}".`);
-    docApi.comments.add({ target, text: payload.text });
+    const receipt = docApi.comments.add({ target, text: payload.text }) as ReceiptLike | undefined;
+    if (!receipt || receipt.success !== true) {
+      const failureCode = receipt?.failure?.code ?? 'UNKNOWN';
+      const failureMessage = receipt?.failure?.message ?? 'comments.add returned a non-success receipt';
+      throw new Error(`comments.add failed: ${failureCode} ${failureMessage}`);
+    }
+    const insertedEntity = Array.isArray(receipt.inserted)
+      ? receipt.inserted.find((entry) => entry?.entityType === 'comment' && typeof entry?.entityId === 'string')
+      : null;
+    if (!insertedEntity) {
+      throw new Error('comments.add succeeded but no inserted comment entityId was returned.');
+    }
+    return insertedEntity.entityId as string;
   }, input);
+  return commentId;
 }
 
 export async function editComment(page: Page, input: { commentId: string; text: string }): Promise<void> {

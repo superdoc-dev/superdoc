@@ -450,17 +450,173 @@ export function extractFillColor(spPr, style) {
 }
 
 /**
+ * Returns the built-in OOXML guide constants for a given path coordinate space.
+ * These are pre-defined names that can appear as coordinate or angle values in custGeom.
+ *
+ * Coordinates are in the path's own coordinate space (path.w × path.h).
+ * Angles are in 60,000ths of a degree.
+ *
+ * @param {number} pathW - Path coordinate space width (a:path @w)
+ * @param {number} pathH - Path coordinate space height (a:path @h)
+ * @returns {Record<string, number>}
+ */
+function buildBuiltinGuides(pathW, pathH) {
+  const ss = Math.min(pathW, pathH);
+  const ls = Math.max(pathW, pathH);
+  return {
+    l: 0,
+    t: 0,
+    r: pathW,
+    b: pathH,
+    w: pathW,
+    h: pathH,
+    hc: Math.round(pathW / 2),
+    vc: Math.round(pathH / 2),
+    wd2: Math.round(pathW / 2),
+    hd2: Math.round(pathH / 2),
+    wd3: Math.round(pathW / 3),
+    hd3: Math.round(pathH / 3),
+    wd4: Math.round(pathW / 4),
+    hd4: Math.round(pathH / 4),
+    wd5: Math.round(pathW / 5),
+    hd5: Math.round(pathH / 5),
+    wd6: Math.round(pathW / 6),
+    hd6: Math.round(pathH / 6),
+    wd8: Math.round(pathW / 8),
+    hd8: Math.round(pathH / 8),
+    wd10: Math.round(pathW / 10),
+    wd32: Math.round(pathW / 32),
+    ss,
+    ls,
+    ssd2: Math.round(ss / 2),
+    ssd4: Math.round(ss / 4),
+    ssd6: Math.round(ss / 6),
+    ssd8: Math.round(ss / 8),
+    ssd16: Math.round(ss / 16),
+    ssd32: Math.round(ss / 32),
+    // Angle constants (in 60,000ths of a degree)
+    cd2: 10800000,
+    cd4: 5400000,
+    cd8: 2700000,
+    '3cd4': 16200000,
+    '3cd8': 8100000,
+    '5cd8': 13500000,
+    '7cd8': 18900000,
+  };
+}
+
+/**
+ * Evaluates a single OOXML guide formula against a resolved guide map.
+ * Supports all 17 formula operators from the ECMA-376 spec.
+ *
+ * @param {string} fmla - Formula string, e.g. "*\/ w 1 2"
+ * @param {Record<string, number>} guides - Already-resolved guide values
+ * @returns {number}
+ */
+function evalGuideFormula(fmla, guides) {
+  const parts = fmla.trim().split(/\s+/);
+  const op = parts[0];
+  const resolve = (v) => {
+    const n = Number(v);
+    if (!isNaN(n)) return n;
+    return guides[v] ?? 0;
+  };
+  const a = () => resolve(parts[1]);
+  const b = () => resolve(parts[2]);
+  const c = () => resolve(parts[3]);
+  switch (op) {
+    case '*/':
+      return Math.round((a() * b()) / c());
+    case '+-':
+      return a() + b() - c();
+    case '+/':
+      return Math.round((a() + b()) / c());
+    case '?:':
+      return a() > 0 ? b() : c();
+    case 'abs':
+      return Math.abs(a());
+    case 'val':
+      return a();
+    case 'cos':
+      return Math.round(a() * Math.cos((b() / 60000) * (Math.PI / 180)));
+    case 'sin':
+      return Math.round(a() * Math.sin((b() / 60000) * (Math.PI / 180)));
+    case 'tan':
+      return Math.round(a() * Math.tan((b() / 60000) * (Math.PI / 180)));
+    case 'sqrt':
+      return Math.round(Math.sqrt(a()));
+    case 'max':
+      return Math.max(a(), b());
+    case 'min':
+      return Math.min(a(), b());
+    case 'pin':
+      return Math.max(a(), Math.min(c(), b()));
+    case 'mod':
+      return Math.round(Math.sqrt(a() ** 2 + b() ** 2 + c() ** 2));
+    case 'at2':
+      return Math.round((Math.atan2(b(), a()) * 180 * 60000) / Math.PI);
+    case 'cat2':
+      return Math.round(a() * Math.cos(Math.atan2(c(), b())));
+    case 'sat2':
+      return Math.round(a() * Math.sin(Math.atan2(c(), b())));
+    default:
+      return 0;
+  }
+}
+
+/**
+ * Parses the a:gdLst (guide list) element and returns a map of resolved guide names to values.
+ * Guides are processed in declaration order — guides can reference earlier guides.
+ *
+ * @param {Object|undefined} gdLst - The a:gdLst element
+ * @param {Record<string, number>} baseGuides - Built-in constants to seed the context
+ * @returns {Record<string, number>}
+ */
+function parseGuideList(gdLst, baseGuides) {
+  const guides = { ...baseGuides };
+  if (!gdLst?.elements) return guides;
+  for (const gd of gdLst.elements) {
+    if (gd.name !== 'a:gd') continue;
+    const name = gd.attributes?.name;
+    const fmla = gd.attributes?.fmla;
+    if (name && fmla) {
+      guides[name] = evalGuideFormula(fmla, guides);
+    }
+  }
+  return guides;
+}
+
+/**
+ * Resolves a coordinate or angle value that may be a literal number or a guide name.
+ *
+ * @param {string|number|undefined} value
+ * @param {Record<string, number>} guides
+ * @returns {number}
+ */
+function resolveValue(value, guides) {
+  if (value === undefined || value === null) return 0;
+  const n = Number(value);
+  if (!isNaN(n)) return n;
+  return guides[String(value)] ?? 0;
+}
+
+/**
  * Extracts custom geometry path data from a shape's properties (spPr).
  * Parses OOXML a:custGeom/a:pathLst into SVG-compatible path data.
  *
- * OOXML path commands map to SVG:
- *   a:moveTo/a:pt → M x y
- *   a:lnTo/a:pt   → L x y
- *   a:cubicBezTo (3 a:pt) → C x1 y1 x2 y2 x y
- *   a:close        → Z
+ * Supports all OOXML path commands:
+ *   a:moveTo/a:pt       → M x y
+ *   a:lnTo/a:pt         → L x y
+ *   a:cubicBezTo/3×a:pt → C x1 y1 x2 y2 x y
+ *   a:quadBezTo/2×a:pt  → Q cx cy x y
+ *   a:arcTo             → A wR hR 0 largeArc sweep ex ey
+ *   a:close             → Z
+ *
+ * Also resolves OOXML built-in guide constants (w, h, wd2, hd2, r, b, cd4, etc.)
+ * and user-defined guide formulas from a:gdLst.
  *
  * @param {Object} spPr - The shape properties element (a:spPr or wps:spPr)
- * @returns {{ paths: Array<{ d: string, fill: string }>, width: number, height: number }|null}
+ * @returns {{ paths: Array<{ d: string, fill: string, stroke: boolean }>, width: number, height: number }|null}
  */
 export function extractCustomGeometry(spPr) {
   const custGeom = spPr?.elements?.find((el) => el.name === 'a:custGeom');
@@ -479,37 +635,109 @@ export function extractCustomGeometry(spPr) {
     const w = parseInt(pathEl.attributes?.['w'] || '0', 10);
     const h = parseInt(pathEl.attributes?.['h'] || '0', 10);
     const fill = pathEl.attributes?.['fill'] || 'norm';
+    // stroke attribute: "0" or "false" means no stroke; default is true
+    const strokeAttr = pathEl.attributes?.['stroke'];
+    const stroke = strokeAttr !== '0' && strokeAttr !== 'false';
 
     if (w > maxWidth) maxWidth = w;
     if (h > maxHeight) maxHeight = h;
 
+    // Build guide context: built-in constants for this path's coordinate space,
+    // then any user-defined guides from a:gdLst (processed in declaration order)
+    const builtins = buildBuiltinGuides(w, h);
+    const gdLst = custGeom.elements?.find((el) => el.name === 'a:gdLst');
+    const guides = parseGuideList(gdLst, builtins);
+
     const segments = [];
+    // Track current pen position — needed for a:arcTo center computation
+    let penX = 0;
+    let penY = 0;
+
     if (pathEl.elements) {
       for (const cmd of pathEl.elements) {
         switch (cmd.name) {
           case 'a:moveTo': {
             const pt = cmd.elements?.find((el) => el.name === 'a:pt');
             if (pt) {
-              segments.push(`M ${pt.attributes?.['x'] || 0} ${pt.attributes?.['y'] || 0}`);
+              const x = resolveValue(pt.attributes?.['x'], guides);
+              const y = resolveValue(pt.attributes?.['y'], guides);
+              penX = x;
+              penY = y;
+              segments.push(`M ${x} ${y}`);
             }
             break;
           }
           case 'a:lnTo': {
             const pt = cmd.elements?.find((el) => el.name === 'a:pt');
             if (pt) {
-              segments.push(`L ${pt.attributes?.['x'] || 0} ${pt.attributes?.['y'] || 0}`);
+              const x = resolveValue(pt.attributes?.['x'], guides);
+              const y = resolveValue(pt.attributes?.['y'], guides);
+              penX = x;
+              penY = y;
+              segments.push(`L ${x} ${y}`);
             }
             break;
           }
           case 'a:cubicBezTo': {
             const pts = cmd.elements?.filter((el) => el.name === 'a:pt') || [];
             if (pts.length === 3) {
+              const coords = pts.map((p) => [
+                resolveValue(p.attributes?.['x'], guides),
+                resolveValue(p.attributes?.['y'], guides),
+              ]);
+              penX = coords[2][0];
+              penY = coords[2][1];
               segments.push(
-                `C ${pts[0].attributes?.['x'] || 0} ${pts[0].attributes?.['y'] || 0} ` +
-                  `${pts[1].attributes?.['x'] || 0} ${pts[1].attributes?.['y'] || 0} ` +
-                  `${pts[2].attributes?.['x'] || 0} ${pts[2].attributes?.['y'] || 0}`,
+                `C ${coords[0][0]} ${coords[0][1]} ${coords[1][0]} ${coords[1][1]} ${coords[2][0]} ${coords[2][1]}`,
               );
             }
+            break;
+          }
+          case 'a:quadBezTo': {
+            // Two a:pt children: control point + end point → SVG Q command
+            const pts = cmd.elements?.filter((el) => el.name === 'a:pt') || [];
+            if (pts.length === 2) {
+              const cx = resolveValue(pts[0].attributes?.['x'], guides);
+              const cy = resolveValue(pts[0].attributes?.['y'], guides);
+              const ex = resolveValue(pts[1].attributes?.['x'], guides);
+              const ey = resolveValue(pts[1].attributes?.['y'], guides);
+              penX = ex;
+              penY = ey;
+              segments.push(`Q ${cx} ${cy} ${ex} ${ey}`);
+            }
+            break;
+          }
+          case 'a:arcTo': {
+            // OOXML arcTo: the current pen position lies on the ellipse at stAng.
+            // The ellipse center is derived from the pen position and stAng.
+            // Angles are in 60,000ths of a degree.
+            const wR = resolveValue(cmd.attributes?.['wR'], guides);
+            const hR = resolveValue(cmd.attributes?.['hR'], guides);
+            const stAngRaw = resolveValue(cmd.attributes?.['stAng'], guides);
+            const swAngRaw = resolveValue(cmd.attributes?.['swAng'], guides);
+
+            const stAngDeg = stAngRaw / 60000;
+            const swAngDeg = swAngRaw / 60000;
+            const stAngRad = (stAngDeg * Math.PI) / 180;
+            const swAngRad = (swAngDeg * Math.PI) / 180;
+
+            // Compute ellipse center: pen = center + (wR*cos(stAng), hR*sin(stAng))
+            const cx = penX - wR * Math.cos(stAngRad);
+            const cy = penY - hR * Math.sin(stAngRad);
+
+            // Compute arc end point
+            const endAngRad = stAngRad + swAngRad;
+            const ex = cx + wR * Math.cos(endAngRad);
+            const ey = cy + hR * Math.sin(endAngRad);
+
+            // SVG large-arc-flag: 1 if |sweep| > 180°
+            const largeArcFlag = Math.abs(swAngDeg) > 180 ? 1 : 0;
+            // SVG sweep-flag: 1 = clockwise (positive swAng)
+            const sweepFlag = swAngDeg > 0 ? 1 : 0;
+
+            penX = Math.round(ex);
+            penY = Math.round(ey);
+            segments.push(`A ${wR} ${hR} 0 ${largeArcFlag} ${sweepFlag} ${penX} ${penY}`);
             break;
           }
           case 'a:close': {
@@ -521,7 +749,7 @@ export function extractCustomGeometry(spPr) {
     }
 
     if (segments.length > 0) {
-      paths.push({ d: segments.join(' '), fill });
+      paths.push({ d: segments.join(' '), fill, stroke });
     }
   }
 

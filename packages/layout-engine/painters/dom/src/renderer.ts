@@ -2797,10 +2797,12 @@ export class DomPainter {
     contentContainer.style.width = `${innerWidth}px`;
     contentContainer.style.height = `${innerHeight}px`;
 
-    const svgMarkup = block.shapeKind
-      ? this.tryCreatePresetSvg(block, innerWidth, innerHeight)
-      : block.customGeometry
-        ? this.createCustomGeometrySvg(block, innerWidth, innerHeight)
+    // customGeometry takes precedence: a:custGeom shapes have kind='rect' as their PM default,
+    // but the actual shape is defined by the custom path data, not the preset.
+    const svgMarkup = block.customGeometry
+      ? this.createCustomGeometrySvg(block, innerWidth, innerHeight)
+      : block.shapeKind
+        ? this.tryCreatePresetSvg(block, innerWidth, innerHeight)
         : null;
     if (svgMarkup) {
       const svgElement = this.parseSafeSvg(svgMarkup);
@@ -3124,9 +3126,12 @@ export class DomPainter {
     const pathElements = geom.paths
       .map((p) => {
         const pathFill = p.fill === 'none' ? 'none' : fillColor;
+        // Per-path stroke: a:path stroke="0" suppresses the outline for that path
+        const pathStroke = p.stroke === false ? 'none' : strokeColor;
+        const pathStrokeWidth = p.stroke === false ? 0 : strokeWidth;
         // Sanitize d attribute — only allow SVG path commands and numbers
         const safeD = p.d.replace(/[^MmLlHhVvCcSsQqTtAaZz0-9.,\s\-+eE]/g, '');
-        return `<path d="${safeD}" fill="${pathFill}" stroke="${strokeColor}" stroke-width="${strokeWidth}" />`;
+        return `<path d="${safeD}" fill="${pathFill}" stroke="${pathStroke}" stroke-width="${pathStrokeWidth}" />`;
       })
       .join('');
 

@@ -809,6 +809,7 @@ export function normalizeCustomGeometry(value: unknown): CustomGeometry | undefi
     paths: validPaths.map((p: Record<string, unknown>) => ({
       d: p.d as string,
       fill: typeof p.fill === 'string' ? p.fill : 'norm',
+      stroke: p.stroke !== false,
     })),
     width: obj.width,
     height: obj.height,

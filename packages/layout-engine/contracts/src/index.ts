@@ -666,7 +666,7 @@ export type EffectExtent = {
   bottom: number;
 };
 
-export type CustomGeometryPath = { d: string; fill: string };
+export type CustomGeometryPath = { d: string; fill: string; stroke: boolean };
 export type CustomGeometry = { paths: CustomGeometryPath[]; width: number; height: number };
 
 export type VectorShapeStyle = {

@@ -691,4 +691,176 @@ describe('extractCustomGeometry', () => {
     expect(result.height).toBe(200);
     expect(result.paths).toHaveLength(2);
   });
+
+  it('parses quadBezTo commands', () => {
+    const spPr = {
+      elements: [
+        {
+          name: 'a:custGeom',
+          elements: [
+            {
+              name: 'a:pathLst',
+              elements: [
+                {
+                  name: 'a:path',
+                  attributes: { w: '200', h: '200' },
+                  elements: [
+                    { name: 'a:moveTo', elements: [{ name: 'a:pt', attributes: { x: '0', y: '100' } }] },
+                    {
+                      name: 'a:quadBezTo',
+                      elements: [
+                        { name: 'a:pt', attributes: { x: '100', y: '0' } },
+                        { name: 'a:pt', attributes: { x: '200', y: '100' } },
+                      ],
+                    },
+                  ],
+                },
+              ],
+            },
+          ],
+        },
+      ],
+    };
+
+    const result = extractCustomGeometry(spPr);
+    expect(result).not.toBeNull();
+    expect(result.paths[0].d).toBe('M 0 100 Q 100 0 200 100');
+  });
+
+  it('parses arcTo commands and computes end point from pen position', () => {
+    // Right-angle arc: start at (200, 100), stAng=0° (east), swAng=90° clockwise → end at (100, 200)
+    // Ellipse center: (200 - 100*cos(0), 100 - 100*sin(0)) = (100, 100)
+    // End point: (100 + 100*cos(90°), 100 + 100*sin(90°)) = (100, 200)
+    const spPr = {
+      elements: [
+        {
+          name: 'a:custGeom',
+          elements: [
+            {
+              name: 'a:pathLst',
+              elements: [
+                {
+                  name: 'a:path',
+                  attributes: { w: '200', h: '200' },
+                  elements: [
+                    { name: 'a:moveTo', elements: [{ name: 'a:pt', attributes: { x: '200', y: '100' } }] },
+                    { name: 'a:arcTo', attributes: { wR: '100', hR: '100', stAng: '0', swAng: '5400000' } },
+                  ],
+                },
+              ],
+            },
+          ],
+        },
+      ],
+    };
+
+    const result = extractCustomGeometry(spPr);
+    expect(result).not.toBeNull();
+    expect(result.paths[0].d).toMatch(/^M 200 100 A 100 100 0 0 1/);
+    // End point should be near (100, 200)
+    const match = result.paths[0].d.match(/A \d+ \d+ \d+ \d+ \d+ (\d+) (\d+)/);
+    expect(Number(match[1])).toBeCloseTo(100, 0);
+    expect(Number(match[2])).toBeCloseTo(200, 0);
+  });
+
+  it('resolves built-in guide constants (wd2, hd2, r, b)', () => {
+    const spPr = {
+      elements: [
+        {
+          name: 'a:custGeom',
+          elements: [
+            {
+              name: 'a:pathLst',
+              elements: [
+                {
+                  name: 'a:path',
+                  attributes: { w: '200', h: '100' },
+                  elements: [
+                    { name: 'a:moveTo', elements: [{ name: 'a:pt', attributes: { x: 'wd2', y: '0' } }] },
+                    { name: 'a:lnTo', elements: [{ name: 'a:pt', attributes: { x: 'r', y: 'hd2' } }] },
+                    { name: 'a:lnTo', elements: [{ name: 'a:pt', attributes: { x: 'wd2', y: 'b' } }] },
+                    { name: 'a:lnTo', elements: [{ name: 'a:pt', attributes: { x: 'l', y: 'hd2' } }] },
+                    { name: 'a:close' },
+                  ],
+                },
+              ],
+            },
+          ],
+        },
+      ],
+    };
+
+    const result = extractCustomGeometry(spPr);
+    expect(result).not.toBeNull();
+    // wd2=100, r=200, hd2=50, b=100, l=0
+    expect(result.paths[0].d).toBe('M 100 0 L 200 50 L 100 100 L 0 50 Z');
+  });
+
+  it('evaluates user-defined guide formulas from a:gdLst', () => {
+    const spPr = {
+      elements: [
+        {
+          name: 'a:custGeom',
+          elements: [
+            {
+              name: 'a:gdLst',
+              elements: [
+                // margin = w / 10 = 200 / 10 = 20
+                { name: 'a:gd', attributes: { name: 'margin', fmla: '*/ w 1 10' } },
+                // inner = w - margin = 200 - 20 = 180
+                { name: 'a:gd', attributes: { name: 'inner', fmla: '+- w 0 margin' } },
+              ],
+            },
+            {
+              name: 'a:pathLst',
+              elements: [
+                {
+                  name: 'a:path',
+                  attributes: { w: '200', h: '200' },
+                  elements: [
+                    { name: 'a:moveTo', elements: [{ name: 'a:pt', attributes: { x: 'margin', y: 'margin' } }] },
+                    { name: 'a:lnTo', elements: [{ name: 'a:pt', attributes: { x: 'inner', y: 'margin' } }] },
+                    { name: 'a:close' },
+                  ],
+                },
+              ],
+            },
+          ],
+        },
+      ],
+    };
+
+    const result = extractCustomGeometry(spPr);
+    expect(result).not.toBeNull();
+    expect(result.paths[0].d).toBe('M 20 20 L 180 20 Z');
+  });
+
+  it('respects path stroke="0" attribute', () => {
+    const spPr = {
+      elements: [
+        {
+          name: 'a:custGeom',
+          elements: [
+            {
+              name: 'a:pathLst',
+              elements: [
+                {
+                  name: 'a:path',
+                  attributes: { w: '100', h: '100', stroke: '0' },
+                  elements: [
+                    { name: 'a:moveTo', elements: [{ name: 'a:pt', attributes: { x: '0', y: '0' } }] },
+                    { name: 'a:lnTo', elements: [{ name: 'a:pt', attributes: { x: '100', y: '100' } }] },
+                  ],
+                },
+              ],
+            },
+          ],
+        },
+      ],
+    };
+
+    const result = extractCustomGeometry(spPr);
+    expect(result).not.toBeNull();
+    expect(result.paths[0].stroke).toBe(false);
+  });
 });

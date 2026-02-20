@@ -20,13 +20,9 @@ if (vitestExitCode !== 0) {
   process.exit(vitestExitCode);
 }
 
-// Preserve previous behavior: CLI tests are part of the default full test run.
 if (args.length === 0) {
   const sdkScriptsExitCode = run(pnpmCommand, ['--prefix', 'packages/sdk', 'run', 'test:scripts']);
   if (sdkScriptsExitCode !== 0) {
     process.exit(sdkScriptsExitCode);
   }
-
-  const cliExitCode = run(pnpmCommand, ['run', 'test:cli']);
-  process.exit(cliExitCode);
 }

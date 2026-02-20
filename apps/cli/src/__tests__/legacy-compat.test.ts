@@ -2,6 +2,7 @@ import { beforeAll, beforeEach, describe, expect, test } from 'bun:test';
 import { copyFile, mkdir } from 'node:fs/promises';
 import { join } from 'node:path';
 import { run } from '../index';
+import { resolveSourceDocFixture } from './fixtures';
 
 type RunResult = {
   code: number;
@@ -10,7 +11,6 @@ type RunResult = {
 };
 
 const TEST_DIR = join(import.meta.dir, 'fixtures-cli-legacy');
-const SOURCE_DOC = join(import.meta.dir, '../../../../e2e-tests/test-data/basic-documents/advanced-text.docx');
 const SAMPLE_DOC = join(TEST_DIR, 'sample.docx');
 const REPLACE_DOC = join(TEST_DIR, 'replace-test.docx');
 
@@ -36,7 +36,7 @@ async function runCli(args: string[]): Promise<RunResult> {
 describe('legacy command compatibility', () => {
   beforeAll(async () => {
     await mkdir(TEST_DIR, { recursive: true });
-    await copyFile(SOURCE_DOC, SAMPLE_DOC);
+    await copyFile(await resolveSourceDocFixture(), SAMPLE_DOC);
   });
 
   test('search supports legacy pretty output by default', async () => {
@@ -96,7 +96,7 @@ describe('legacy command compatibility', () => {
 
   describe('replace-legacy', () => {
     beforeEach(async () => {
-      await copyFile(SOURCE_DOC, REPLACE_DOC);
+      await copyFile(await resolveSourceDocFixture(), REPLACE_DOC);
     });
 
     test('replace-legacy supports legacy pretty output by default', async () => {

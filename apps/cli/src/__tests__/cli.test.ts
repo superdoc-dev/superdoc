@@ -2,6 +2,7 @@ import { afterAll, beforeAll, beforeEach, describe, expect, test } from 'bun:tes
 import { access, copyFile, mkdir, readFile, rm, writeFile } from 'node:fs/promises';
 import { join } from 'node:path';
 import { run } from '../index';
+import { resolveListDocFixture, resolveSourceDocFixture } from './fixtures';
 
 type RunResult = {
   code: number;
@@ -43,26 +44,8 @@ type ErrorEnvelope = {
 
 const TEST_DIR = join(import.meta.dir, 'fixtures-cli');
 const STATE_DIR = join(TEST_DIR, 'state');
-const SOURCE_DOC = join(import.meta.dir, '../../../../e2e-tests/test-data/basic-documents/advanced-text.docx');
-const LIST_SOURCE_DOC_CANDIDATES = [
-  join(import.meta.dir, '../../../../devtools/document-api-tests/fixtures/matrix-list.input.docx'),
-  join(import.meta.dir, '../../../../e2e-tests/test-data/basic-documents/lists-complex-items.docx'),
-];
 const SAMPLE_DOC = join(TEST_DIR, 'sample.docx');
 const LIST_SAMPLE_DOC = join(TEST_DIR, 'lists-sample.docx');
-
-async function resolveListSourceDoc(): Promise<string> {
-  for (const candidate of LIST_SOURCE_DOC_CANDIDATES) {
-    try {
-      await access(candidate);
-      return candidate;
-    } catch {
-      // try next candidate
-    }
-  }
-
-  throw new Error(`No list fixture found. Tried: ${LIST_SOURCE_DOC_CANDIDATES.join(', ')}`);
-}
 
 async function runCli(args: string[], stdinBytes?: Uint8Array): Promise<RunResult> {
   let stdout = '';
@@ -164,8 +147,8 @@ describe('superdoc CLI', () => {
   beforeAll(async () => {
     process.env.SUPERDOC_CLI_STATE_DIR = STATE_DIR;
     await mkdir(TEST_DIR, { recursive: true });
-    await copyFile(SOURCE_DOC, SAMPLE_DOC);
-    await copyFile(await resolveListSourceDoc(), LIST_SAMPLE_DOC);
+    await copyFile(await resolveSourceDocFixture(), SAMPLE_DOC);
+    await copyFile(await resolveListDocFixture(), LIST_SAMPLE_DOC);
   });
 
   beforeEach(async () => {

@@ -324,6 +324,7 @@ Telemetry is enabled by default with `source: 'template-builder'` metadata. You 
 
 ```tsx
 <SuperDocTemplateBuilder
+  licenseKey="your-license-key"
   telemetry={{
     enabled: true,
     metadata: { source: "my-app", environment: "production" },
@@ -339,15 +340,15 @@ To disable telemetry:
 
 For more details on how telemetry works, see the [Telemetry](/resources/telemetry) page.
 
-## License key
+### License key
 
-Pass your license key to activate commercial features:
+Pass `licenseKey` to identify your organization in telemetry:
 
 ```tsx
 <SuperDocTemplateBuilder licenseKey="your-license-key" />
 ```
 
-The key is forwarded to the underlying SuperDoc instance.
+The key is used solely for organization identification. It does not enable or disable any features, and nothing is blocked if a usage quota is reached. The key is forwarded to the underlying SuperDoc instance.
 
 ## Complete example
 

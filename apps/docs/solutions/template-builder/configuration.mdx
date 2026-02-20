@@ -80,6 +80,10 @@ Customize colors with CSS variables:
 }
 ```
 
+<Important>
+  Without `field-types.css`, structured content fields use the default Word-like appearance: borders are transparent and only visible on selection. Importing this stylesheet makes field borders always visible and color-coded by field type, which helps template authors quickly identify fields in the document.
+</Important>
+
 The `fieldType` value flows through all callbacks (`onFieldInsert`, `onFieldsChange`, `onExport`, etc.) and is stored in the SDT tag metadata.
 
 ### Field creation

@@ -83,6 +83,10 @@ Import the optional CSS to visually distinguish field types:
 import "@superdoc-dev/template-builder/field-types.css";
 ```
 
+<Important>
+  Without `field-types.css`, structured content fields use the default Word-like appearance: borders are transparent and only visible on selection. Importing this stylesheet makes field borders always visible and color-coded by field type, which helps template authors quickly identify fields in the document.
+</Important>
+
 Customize colors with CSS variables:
 
 ```css

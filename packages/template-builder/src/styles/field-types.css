@@ -2,6 +2,10 @@
 .superdoc-structured-content-block.superdoc-structured-content-block {
   border-color: var(--superdoc-field-owner-color, #629be7);
 }
+.superdoc-structured-content-inline.superdoc-structured-content-inline:hover,
+.superdoc-structured-content-block.superdoc-structured-content-block:hover {
+  border-color: var(--superdoc-field-owner-color, #629be7);
+}
 .superdoc-structured-content-inline.superdoc-structured-content-inline .superdoc-structured-content-inline__label,
 .superdoc-structured-content-block.superdoc-structured-content-block .superdoc-structured-content-block__label {
   border-color: var(--superdoc-field-owner-color, #629be7);
@@ -9,6 +13,10 @@
 }
 .superdoc-structured-content-inline[data-sdt-tag*='"fieldType":"signer"'],
 .superdoc-structured-content-block[data-sdt-tag*='"fieldType":"signer"'] {
+  border-color: var(--superdoc-field-signer-color, #d97706);
+}
+.superdoc-structured-content-inline[data-sdt-tag*='"fieldType":"signer"']:hover,
+.superdoc-structured-content-block[data-sdt-tag*='"fieldType":"signer"']:hover {
   border-color: var(--superdoc-field-signer-color, #d97706);
 }
 .superdoc-structured-content-inline[data-sdt-tag*='"fieldType":"signer"'] .superdoc-structured-content-inline__label,

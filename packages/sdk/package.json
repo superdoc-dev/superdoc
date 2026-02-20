@@ -1,0 +1,15 @@
+{
+  "name": "@superdoc-dev/sdk-workspace",
+  "version": "1.0.0-alpha.6",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "version:sync": "node scripts/sync-sdk-version.mjs",
+    "version:set": "node scripts/sync-sdk-version.mjs --set",
+    "generate": "node scripts/sdk-generate.mjs",
+    "validate": "node scripts/sdk-validate.mjs",
+    "build:node": "pnpm --prefix langs/node run build",
+    "release": "node scripts/sdk-release.mjs",
+    "release:dry": "node scripts/sdk-release.mjs --dry-run"
+  }
+}

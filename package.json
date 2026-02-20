@@ -64,13 +64,19 @@
     "update-preset-geometry": "ROOT=$(pwd) && cd ../superdoc-devtools/preset-geometry && pnpm run build && cp ./dist/index.js ./dist/index.js.map ./dist/index.d.ts \"$ROOT/packages/preset-geometry/\"",
     "manual-tag": "bash scripts/manual-tag.sh",
     "manual-clean-tag": "bash scripts/manual-clean-tag.sh",
+    "generate:all": "node scripts/generate-all.mjs",
     "docapi:sync": "pnpm exec tsx packages/document-api/scripts/generate-contract-outputs.ts",
     "docapi:check": "pnpm exec tsx packages/document-api/scripts/check-contract-parity.ts && pnpm exec tsx packages/document-api/scripts/check-contract-outputs.ts",
     "docapi:sync:check": "pnpm run docapi:sync && pnpm run docapi:check",
     "test:cli": "pnpm --prefix apps/cli run test",
     "cli:prepare": "pnpm run test:cli && pnpm --prefix apps/cli run build:prepublish",
     "cli:release": "pnpm run cli:prepare && pnpm --prefix apps/cli run publish:platforms",
-    "cli:release:dry": "pnpm run cli:prepare && pnpm --prefix apps/cli run publish:platforms:dry"
+    "cli:release:dry": "pnpm run cli:prepare && pnpm --prefix apps/cli run publish:platforms:dry",
+    "cli:export-sdk-contract": "bun apps/cli/scripts/export-sdk-contract.ts",
+    "docs:sync-engine": "pnpm exec tsx apps/docs/scripts/generate-sdk-overview.ts",
+    "sdk:sync-version": "node packages/sdk/scripts/sync-sdk-version.mjs",
+    "sdk:release": "node packages/sdk/scripts/sdk-release.mjs",
+    "sdk:release:dry": "node packages/sdk/scripts/sdk-release.mjs --dry-run"
   },
   "devDependencies": {
     "@commitlint/cli": "catalog:",

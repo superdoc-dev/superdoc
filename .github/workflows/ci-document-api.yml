@@ -32,5 +32,11 @@ jobs:
       - name: Install dependencies
         run: pnpm install --frozen-lockfile
 
+      - name: Generate contract outputs
+        run: pnpm run docapi:sync
+
+      - name: Check overview.mdx freshness
+        run: git diff --exit-code apps/docs/document-api/overview.mdx
+
       - name: Check contract parity and generated outputs
         run: pnpm run docapi:check

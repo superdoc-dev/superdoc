@@ -1,0 +1,35 @@
+[build-system]
+requires = ["setuptools>=70.1", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "superdoc-sdk"
+version = "1.0.0-alpha.6"
+description = "SuperDoc SDK (CLI-backed)"
+requires-python = ">=3.9"
+license = "AGPL-3.0"
+authors = [{ name = "SuperDoc" }]
+
+[tool.setuptools]
+packages = [
+  "superdoc",
+  "superdoc.generated",
+  "superdoc.skills",
+  "superdoc.tools",
+  "superdoc._vendor",
+  "superdoc._vendor.cli",
+]
+
+[tool.setuptools.package-data]
+superdoc = [
+  "_vendor/cli/*/superdoc",
+  "_vendor/cli/*/superdoc.exe",
+  "skills/*.md",
+  "tools/*.json",
+]
+
+[tool.cibuildwheel]
+build = "cp39-* cp310-* cp311-* cp312-* cp313-*"
+skip = "pp* *-musllinux_*"
+build-verbosity = 1
+test-command = "python -c \"import superdoc; print('superdoc-sdk wheel smoke ok')\""

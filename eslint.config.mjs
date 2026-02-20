@@ -143,6 +143,7 @@ export default [
             '^bun:.*$', // Bun built-in modules
             '^superdoc$',
             '^superdoc/style\\.css$',
+            '^\\..*\/generated\/', // Generated files (codegen artifacts, not in git)
           ],
         }
       ]

@@ -3,12 +3,13 @@
  *
  * `validateOperationResponseData()` validates `CommandExecution["data"]`,
  * which for doc-backed ops IS the document-api output directly.
- * For CLI-only ops, schemas are defined inline.
+ * For CLI-only ops, permissive JSON validation is derived from the canonical
+ * definitions object (precise schemas live in outputSchema for SDK use).
  */
 
-import { buildInternalContractSchemas, type OperationId } from '@superdoc/document-api';
+import { buildInternalContractSchemas } from '@superdoc/document-api';
 import type { CliTypeSpec } from './types';
-import { toDocApiId, type CliOperationId } from './operation-set';
+import { CLI_ONLY_OPERATION_DEFINITIONS } from './cli-only-operation-definitions';
 
 type JsonSchema = Record<string, unknown>;
 
@@ -62,19 +63,10 @@ function getDocResponseSchemas(): Map<string, CliTypeSpec> {
   return cachedDocSchemas;
 }
 
-/** CLI-only operation response schemas (permissive — CLI-only ops have varied shapes). */
-const CLI_ONLY_RESPONSE_SCHEMAS: Record<string, CliTypeSpec> = {
-  'doc.open': { type: 'json' },
-  'doc.save': { type: 'json' },
-  'doc.close': { type: 'json' },
-  'doc.status': { type: 'json' },
-  'doc.describe': { type: 'json' },
-  'doc.describeCommand': { type: 'json' },
-  'doc.session.list': { type: 'json' },
-  'doc.session.save': { type: 'json' },
-  'doc.session.close': { type: 'json' },
-  'doc.session.setDefault': { type: 'json' },
-};
+/** CLI-only operation response schemas (permissive — derived from canonical definitions). */
+const CLI_ONLY_RESPONSE_SCHEMAS: Record<string, CliTypeSpec> = Object.fromEntries(
+  Object.keys(CLI_ONLY_OPERATION_DEFINITIONS).map((op) => [`doc.${op}`, { type: 'json' } as CliTypeSpec]),
+);
 
 /**
  * Returns the response validation schema for a CLI operation.

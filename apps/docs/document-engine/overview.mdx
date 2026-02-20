@@ -1,0 +1,36 @@
+---
+title: Document Engine
+sidebarTitle: Overview
+description: Programmatic document editing — in the browser, from the terminal, or through SDKs
+keywords: "document engine, document api, sdk, cli, headless docx, document automation"
+---
+
+<Info>
+Document Engine is in <strong>alpha</strong> and subject to breaking changes while the contract and adapters continue to evolve.
+</Info>
+
+Document Engine is the programmatic surface of SuperDoc. It gives you three ways to read and edit `.docx` files without a visible editor:
+
+| Surface | Use case | Runtime |
+| --- | --- | --- |
+| [Document API](/document-api/overview) | In-browser editing via `editor.doc.*` methods | Browser (ProseMirror) |
+| [SDKs](/document-engine/sdks) | Node.js and Python wrappers for backend automation | Node / Python |
+| [CLI](/document-engine/cli) | Terminal commands for scripting and CI pipelines | Any shell |
+
+All three surfaces share the same operation set. An operation like `find` is available as `editor.doc.find()` in the browser, `superdoc.doc.find()` in the SDK, and `superdoc find` in the CLI.
+
+## How it works
+
+The Document API defines the canonical operations. The CLI wraps them in a stdio-based process. The SDKs manage the CLI process and expose typed methods for each operation.
+
+```
+Document API (source of truth)
+  → CLI (stdio process)
+    → Node SDK / Python SDK (typed wrappers)
+```
+
+## Where to start
+
+- **Building a web editor?** Start with the [Document API](/document-api/overview).
+- **Automating documents from a backend?** Start with the [SDKs](/document-engine/sdks).
+- **Scripting from the terminal or CI?** Start with the [CLI](/document-engine/cli).

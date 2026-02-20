@@ -18,14 +18,11 @@
  */
 
 import { execSync } from 'node:child_process';
-import { writeFileSync, readFileSync } from 'node:fs';
-import { fileURLToPath } from 'node:url';
-import { dirname, resolve } from 'node:path';
+import { writeFileSync } from 'node:fs';
 
 // Allow running inside a Claude Code session
 delete process.env.CLAUDECODE;
 
-const __dirname = dirname(fileURLToPath(import.meta.url));
 const REPO = process.env.REPO || 'superdoc-dev/superdoc';
 
 /** Extract the first valid JSON object containing "level" from text. */
@@ -60,11 +57,6 @@ function extractJSON(text) {
 
 function run(cmd) {
   return execSync(cmd, { encoding: 'utf-8', maxBuffer: 10 * 1024 * 1024 }).trim();
-}
-
-function getPRInfo(pr) {
-  const json = run(`gh pr view ${pr} --repo ${REPO} --json title,files,changedFiles`);
-  return JSON.parse(json);
 }
 
 function getPRDiff(pr) {
@@ -353,7 +345,6 @@ async function main() {
   }
 
   const forceDeep = flags.has('--deep');
-  const dryRun = flags.has('--dry-run');
   const repoRoot = process.env.REPO_ROOT || run('git rev-parse --show-toplevel');
 
   const results = [];

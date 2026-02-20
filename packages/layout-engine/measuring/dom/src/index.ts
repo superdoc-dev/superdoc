@@ -871,18 +871,11 @@ async function measureParagraphBlock(block: ParagraphBlock, maxWidth: number): P
   // Note: wordLayout.marker.justification (from lvlJc) describes text alignment WITHIN
   // the marker box (left/center/right), NOT whether the marker takes in-flow space.
   let initialAvailableWidth: number;
-  // Some producers provide `marker.textStartX` without setting top-level `textStartPx`.
-  // Both values represent the same concept: where the first-line text begins after the marker/tab.
-  // IMPORTANT: Priority must match the painter (renderer.ts) which prefers marker.textStartX
-  // because it's consistent with marker.markerX positioning. Mismatched priority causes justify overflow.
+  // Shared helper is the canonical source for list text-start geometry.
+  // Keep an explicit top-level fallback for producers that only provide textStartPx.
   const rawTextStartPx = (wordLayout as { textStartPx?: unknown } | undefined)?.textStartPx;
-  const markerTextStartX = (wordLayout as { marker?: { textStartX?: unknown } } | undefined)?.marker?.textStartX;
   const textStartPx =
-    typeof markerTextStartX === 'number' && Number.isFinite(markerTextStartX)
-      ? markerTextStartX
-      : typeof rawTextStartPx === 'number' && Number.isFinite(rawTextStartPx)
-        ? rawTextStartPx
-        : undefined;
+    typeof rawTextStartPx === 'number' && Number.isFinite(rawTextStartPx) ? rawTextStartPx : undefined;
   const resolvedTextStartPx = resolveListTextStartPx(
     wordLayout,
     indentLeft,
@@ -899,9 +892,7 @@ async function measureParagraphBlock(block: ParagraphBlock, maxWidth: number): P
       return measureText(markerText, markerFont, ctx);
     },
   );
-  // Keep precedence aligned with the painter:
-  // explicit producer-provided starts (marker.textStartX/textStartPx) win over inferred values.
-  const effectiveTextStartPx = textStartPx ?? resolvedTextStartPx;
+  const effectiveTextStartPx = resolvedTextStartPx ?? textStartPx;
 
   if (typeof effectiveTextStartPx === 'number' && effectiveTextStartPx > indentLeft) {
     // textStartPx indicates where text actually starts on the first line (after marker + tab/space).
@@ -2456,7 +2447,6 @@ function resolveTableWidth(attrs: TableBlock['attrs'], maxWidth: number): number
 
 async function measureTableBlock(block: TableBlock, constraints: MeasureConstraints): Promise<TableMeasure> {
   const maxWidth = typeof constraints === 'number' ? constraints : constraints.maxWidth;
-
   // Resolve percentage or explicit pixel table width
   const resolvedTableWidth = resolveTableWidth(block.attrs, maxWidth);
 
@@ -2526,8 +2516,11 @@ async function measureTableBlock(block: TableBlock, constraints: MeasureConstrai
 
     return scaled;
   };
-  // Determine actual column count from table structure
-  const maxCellCount = Math.max(1, Math.max(...block.rows.map((r) => r.cells.length)));
+  // Determine actual column count from table structure (accounting for colspan)
+  const maxCellCount = Math.max(
+    1,
+    Math.max(...block.rows.map((r) => r.cells.reduce((sum, cell) => sum + (cell.colSpan ?? 1), 0))),
+  );
 
   // Effective target width: use resolvedTableWidth if set (from percentage or explicit px),
   // but never exceed maxWidth (available column space)
@@ -2579,7 +2572,10 @@ async function measureTableBlock(block: TableBlock, constraints: MeasureConstrai
         columnWidths = columnWidths.slice(0, maxCellCount);
       }
 
-      // Scale proportionally if total width exceeds effective target width
+      // Scale down if total width exceeds available space (prevent overflow).
+      // Auto-width tables (w:tblW type="auto") size to their grid/content in Word.
+      // Do NOT scale up — tables that fill the page do so because their grid columns
+      // already sum to the page width, not because of scaling.
       const totalWidth = columnWidths.reduce((a, b) => a + b, 0);
       if (totalWidth > effectiveTargetWidth) {
         columnWidths = scaleColumnWidths(columnWidths, effectiveTargetWidth);
@@ -2647,9 +2643,9 @@ async function measureTableBlock(block: TableBlock, constraints: MeasureConstrai
       }
 
       // Get cell padding for height calculation
-      const cellPadding = cell.attrs?.padding ?? { top: 2, left: 4, right: 4, bottom: 2 };
-      const paddingTop = cellPadding.top ?? 2;
-      const paddingBottom = cellPadding.bottom ?? 2;
+      const cellPadding = cell.attrs?.padding ?? { top: 0, left: 4, right: 4, bottom: 0 };
+      const paddingTop = cellPadding.top ?? 0;
+      const paddingBottom = cellPadding.bottom ?? 0;
       const paddingLeft = cellPadding.left ?? 4;
       const paddingRight = cellPadding.right ?? 4;
 
@@ -2677,7 +2673,7 @@ async function measureTableBlock(block: TableBlock, constraints: MeasureConstrai
        * ```
        * cell.blocks = [paragraph1, paragraph2, paragraph3]
        * contentHeight = para1.height + para2.height + para3.height
-       * totalCellHeight = contentHeight + 2 (top) + 2 (bottom)
+       * totalCellHeight = contentHeight;
        * ```
        */
       const blockMeasures: Measure[] = [];
@@ -2703,12 +2699,20 @@ async function measureTableBlock(block: TableBlock, constraints: MeasureConstrai
 
         contentHeight += blockHeight;
 
-        // Add paragraph spacing.after to content height for all paragraphs.
-        // Word applies spacing.after even to the last paragraph in a cell, creating space at the bottom.
+        // Add paragraph spacing.after to content height.
+        // For the last paragraph, Word absorbs spacing.after into cell bottom padding —
+        // so only add the excess beyond what the padding already provides.
+        const isLastBlock = blockIndex === cellBlocks.length - 1;
         if (block.kind === 'paragraph') {
           const spacingAfter = (block as ParagraphBlock).attrs?.spacing?.after;
           if (typeof spacingAfter === 'number' && spacingAfter > 0) {
-            contentHeight += spacingAfter;
+            if (isLastBlock) {
+              // Only add the portion not absorbed by cell bottom padding
+              const excess = Math.max(0, spacingAfter - paddingBottom);
+              contentHeight += excess;
+            } else {
+              contentHeight += spacingAfter;
+            }
           }
         }
       }

@@ -43,8 +43,8 @@ vi.mock('./cursor-helpers.js', () => ({
   checkNodeSpecificClicks: checkNodeSpecificClicksMock,
 }));
 
-vi.mock('./slash-menu/SlashMenu.vue', () => ({
-  default: { name: 'SlashMenu', render: () => null },
+vi.mock('./context-menu/ContextMenu.vue', () => ({
+  default: { name: 'ContextMenu', render: () => null },
 }));
 
 vi.mock('./rulers/Ruler.vue', () => ({
@@ -384,11 +384,11 @@ describe('SuperEditor.vue', () => {
     };
 
     const enabledWrapper = await mountAndReady(false);
-    expect(enabledWrapper.findComponent({ name: 'SlashMenu' }).exists()).toBe(true);
+    expect(enabledWrapper.findComponent({ name: 'ContextMenu' }).exists()).toBe(true);
     enabledWrapper.unmount();
 
     const disabledWrapper = await mountAndReady(true);
-    expect(disabledWrapper.findComponent({ name: 'SlashMenu' }).exists()).toBe(false);
+    expect(disabledWrapper.findComponent({ name: 'ContextMenu' }).exists()).toBe(false);
     disabledWrapper.unmount();
 
     vi.useRealTimers();

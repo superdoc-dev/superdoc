@@ -35,6 +35,9 @@ export default [
       // Examples (different environments and coding styles)
       'examples/**',
       '**/examples/**',
+      // Demos (different environments and dependency sets)
+      'demos/**',
+      '**/demos/**',
       // Config files (CommonJS/different environments)
       '**/*.config.js',
       '**/*.cjs',

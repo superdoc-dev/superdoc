@@ -118,11 +118,11 @@ describe('renderTableCell', () => {
       cell: baseCell,
     });
 
-    // Default padding is top: 2, left: 4, right: 4, bottom: 2
-    expect(cellElement.style.paddingTop).toBe('2px');
+    // Default padding is top: 0, left: 4, right: 4, bottom: 0
+    expect(cellElement.style.paddingTop).toBe('0px');
     expect(cellElement.style.paddingLeft).toBe('4px');
     expect(cellElement.style.paddingRight).toBe('4px');
-    expect(cellElement.style.paddingBottom).toBe('2px');
+    expect(cellElement.style.paddingBottom).toBe('0px');
   });
 
   it('content fills cell with 100% width and height', () => {
@@ -526,6 +526,107 @@ describe('renderTableCell', () => {
     expect(lineEl?.style.width).toBe('');
   });
 
+  it('passes list marker wrapper margins to captureLineSnapshot callbacks', () => {
+    const para: ParagraphBlock = {
+      kind: 'paragraph',
+      id: 'para-wrap-marker',
+      runs: [{ text: 'Wrapped list item', fontFamily: 'Arial', fontSize: 16 }],
+      attrs: {
+        wordLayout: {
+          marker: {
+            markerText: '1.',
+            markerBoxWidthPx: 20,
+            gutterWidthPx: 8,
+            justification: 'left' as const,
+            run: {
+              fontFamily: 'Arial',
+              fontSize: 14,
+              bold: false,
+              italic: false,
+              color: '#000000',
+            },
+          },
+          indentLeftPx: 30,
+        },
+      },
+    };
+
+    const paraMeasure: ParagraphMeasure = {
+      kind: 'paragraph',
+      lines: [
+        {
+          fromRun: 0,
+          fromChar: 0,
+          toRun: 0,
+          toChar: 16,
+          width: 100,
+          ascent: 12,
+          descent: 4,
+          lineHeight: 20,
+        },
+      ],
+      totalHeight: 20,
+      marker: {
+        markerWidth: 20,
+        gutterWidth: 8,
+        indentLeft: 30,
+      },
+    };
+
+    const anchoredImage: ImageBlock = {
+      kind: 'image',
+      id: 'img-wrap-marker',
+      src: 'data:image/png;base64,AAA',
+      anchor: { isAnchored: true, alignH: 'left', offsetH: 0, vRelativeFrom: 'paragraph', offsetV: 0 },
+      wrap: { type: 'Square', wrapText: 'bothSides' },
+      attrs: { anchorParagraphId: 'para-wrap-marker' },
+    };
+
+    const cellMeasure: TableCellMeasure = {
+      blocks: [
+        paraMeasure,
+        {
+          kind: 'image' as const,
+          width: 20,
+          height: 10,
+        },
+      ],
+      width: 80,
+      height: 30,
+      gridColumnStart: 0,
+      colSpan: 1,
+      rowSpan: 1,
+    };
+
+    const cell: TableCell = {
+      id: 'cell-with-wrap-marker',
+      blocks: [para, anchoredImage],
+      attrs: {},
+    };
+
+    const captured: Array<{ lineEl: HTMLElement; wrapperEl?: HTMLElement }> = [];
+
+    renderTableCell({
+      ...createBaseDeps(),
+      cellMeasure,
+      cell,
+      renderLine: () => {
+        const el = doc.createElement('div');
+        el.classList.add('superdoc-line');
+        return el;
+      },
+      captureLineSnapshot: (lineEl, _context, options) => {
+        captured.push({ lineEl, wrapperEl: options?.wrapperEl });
+      },
+    });
+
+    expect(captured).toHaveLength(1);
+    expect(captured[0]?.lineEl.classList.contains('superdoc-line')).toBe(true);
+    expect(captured[0]?.wrapperEl).toBeTruthy();
+    expect(captured[0]?.wrapperEl?.style.marginLeft).toBe('20px');
+    expect(captured[0]?.wrapperEl?.style.marginRight).toBe('0px');
+  });
+
   describe('spacing.after margin-bottom rendering', () => {
     it('should apply margin-bottom for spacing.after on paragraphs', () => {
       const para1: ParagraphBlock = {
@@ -607,12 +708,13 @@ describe('renderTableCell', () => {
       const firstParaWrapper = paraWrappers[0] as HTMLElement;
       const secondParaWrapper = paraWrappers[1] as HTMLElement;
 
-      // Both paragraphs should have margin-bottom for spacing.after
+      // First paragraph should have margin-bottom, last paragraph should NOT
+      // (last paragraph's spacing.after is absorbed by cell bottom padding)
       expect(firstParaWrapper.style.marginBottom).toBe('10px');
-      expect(secondParaWrapper.style.marginBottom).toBe('20px');
+      expect(secondParaWrapper.style.marginBottom).toBe('');
     });
 
-    it('should apply spacing.after even to the last paragraph', () => {
+    it('should NOT apply spacing.after to the last paragraph', () => {
       const lastPara: ParagraphBlock = {
         kind: 'paragraph',
         id: 'para-last',
@@ -661,9 +763,9 @@ describe('renderTableCell', () => {
       const contentElement = cellElement.firstElementChild as HTMLElement;
       const paraWrapper = contentElement.firstElementChild as HTMLElement;
 
-      // Last paragraph should still have margin-bottom applied
-      // This matches Word's behavior
-      expect(paraWrapper.style.marginBottom).toBe('15px');
+      // Last paragraph should NOT have margin-bottom applied
+      // In Word, the last paragraph's spacing.after is absorbed by the cell's bottom padding
+      expect(paraWrapper.style.marginBottom).toBe('');
     });
 
     it('should only apply margin-bottom when spacing.after > 0', () => {
@@ -737,8 +839,8 @@ describe('renderTableCell', () => {
       expect(wrapper1.style.marginBottom).toBe('');
       expect(wrapper2.style.marginBottom).toBe('');
 
-      // Positive spacing should have margin-bottom
-      expect(wrapper3.style.marginBottom).toBe('10px');
+      // Last paragraph's spacing.after is skipped (absorbed by cell bottom padding)
+      expect(wrapper3.style.marginBottom).toBe('');
     });
 
     it('should handle paragraphs without spacing.after attribute', () => {
@@ -935,8 +1037,9 @@ describe('renderTableCell', () => {
       const fullContent = fullCell.firstElementChild as HTMLElement;
       const fullWrapper = fullContent.firstElementChild as HTMLElement;
 
-      // Full render SHOULD apply spacing.after
-      expect(fullWrapper.style.marginBottom).toBe('15px');
+      // Full render of last paragraph should NOT apply spacing.after
+      // (last paragraph's spacing.after is absorbed by cell bottom padding)
+      expect(fullWrapper.style.marginBottom).toBe('');
     });
   });
 

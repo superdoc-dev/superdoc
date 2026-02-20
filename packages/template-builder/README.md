@@ -97,6 +97,12 @@ function TemplateEditor() {
   //   excludeItems: ['italic', 'bold'],
   // }}
 
+  // Telemetry (optional, enabled by default)
+  telemetry={{ enabled: true, metadata: { source: 'template-builder' } }}
+
+  // License key (optional)
+  licenseKey="your-license-key"
+
   // Event handlers
   onReady={() => {}}
   onTrigger={(event) => {}}
@@ -262,6 +268,18 @@ exportTemplate(config?: ExportConfig): Promise<void | Blob>
 
 - `Promise<void>` when `triggerDownload: true` (download happens automatically)
 - `Promise<Blob>` when `triggerDownload: false` (returns the docx data)
+
+## Telemetry
+
+Telemetry is enabled by default with `source: 'template-builder'` metadata. You can override or extend the configuration:
+
+```jsx
+<SuperDocTemplateBuilder
+  telemetry={{ enabled: true, metadata: { source: 'my-app', environment: 'production' } }}
+/>
+```
+
+For more details, see the [Telemetry](https://docs.superdoc.dev/resources/telemetry) documentation.
 
 ## TypeScript
 

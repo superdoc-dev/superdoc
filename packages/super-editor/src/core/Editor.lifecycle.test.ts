@@ -884,4 +884,81 @@ describe('Editor Lifecycle API', () => {
       });
     });
   });
+
+  describe('editor.doc (DocumentApi)', () => {
+    let editor: InstanceType<typeof Editor>;
+
+    afterEach(() => {
+      if (editor && !editor.isDestroyed) {
+        editor.destroy();
+      }
+    });
+
+    it('should be available after open', async () => {
+      editor = await Editor.open(undefined, {
+        extensions: getStarterExtensions(),
+        suppressDefaultDocxStyles: true,
+        ...getBlankDocOptions(),
+      });
+
+      expect(editor.doc).toBeDefined();
+      expect(typeof editor.doc.find).toBe('function');
+    });
+
+    it('should be lazy and memoized', async () => {
+      editor = await Editor.open(undefined, {
+        extensions: getStarterExtensions(),
+        suppressDefaultDocxStyles: true,
+        ...getBlankDocOptions(),
+      });
+
+      const first = editor.doc;
+      const second = editor.doc;
+      expect(first).toBe(second);
+    });
+
+    it('should throw InvalidStateError before open (initialized state)', () => {
+      editor = createTestEditor();
+      expect(() => editor.doc).toThrow(InvalidStateError);
+    });
+
+    it('should throw InvalidStateError after close', async () => {
+      editor = createTestEditor();
+      await editor.open(undefined, getBlankDocOptions());
+
+      editor.close();
+      expect(() => editor.doc).toThrow(InvalidStateError);
+    });
+
+    it('should throw InvalidStateError after destroy', async () => {
+      editor = await Editor.open(undefined, {
+        extensions: getStarterExtensions(),
+        suppressDefaultDocxStyles: true,
+        ...getBlankDocOptions(),
+      });
+
+      editor.destroy();
+      expect(() => editor.doc).toThrow(InvalidStateError);
+    });
+
+    it('should work after close and reopen cycle', async () => {
+      editor = createTestEditor();
+      await editor.open(undefined, getBlankDocOptions());
+
+      const docBeforeClose = editor.doc;
+      expect(typeof docBeforeClose.find).toBe('function');
+
+      editor.close();
+      await editor.open(undefined, getBlankDocOptions());
+
+      // After reopen, editor.doc should be a fresh instance
+      const docAfterReopen = editor.doc;
+      expect(docAfterReopen).not.toBe(docBeforeClose);
+      expect(typeof docAfterReopen.find).toBe('function');
+
+      // find should execute without throwing
+      const result = docAfterReopen.find({ nodeType: 'paragraph' });
+      expect(result).toBeDefined();
+    });
+  });
 });

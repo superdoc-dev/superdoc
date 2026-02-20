@@ -315,6 +315,49 @@ describe('CommentsPlugin commands', () => {
     expect(updatedMark?.attrs.internal).toBe(false);
   });
 
+  it('supports moveComment capability checks when dispatch is undefined', () => {
+    const schema = createCommentSchema();
+    const mark = schema.marks[CommentMarkName].create({ commentId: 'c-move', internal: true });
+    const paragraph = schema.node('paragraph', null, [schema.text('Hello', [mark])]);
+    const doc = schema.node('doc', null, [paragraph]);
+    const { editor, commands } = createEditorEnvironment(schema, doc);
+
+    const command = commands.moveComment({ commentId: 'c-move', from: 2, to: 4 });
+
+    let result;
+    expect(() => {
+      result = command({ tr: editor.state.tr, dispatch: undefined, state: editor.state, editor });
+    }).not.toThrow();
+    expect(result).toBe(true);
+  });
+
+  it('returns false (without throwing) when moveComment targets an out-of-bounds range', () => {
+    const schema = createCommentSchema();
+    const mark = schema.marks[CommentMarkName].create({ commentId: 'c-oob', internal: true });
+    const paragraph = schema.node('paragraph', null, [schema.text('Hello', [mark])]);
+    const doc = schema.node('doc', null, [paragraph]);
+    const { editor, commands, view } = createEditorEnvironment(schema, doc);
+
+    let currentState = editor.state;
+    const dispatch = vi.fn((tr) => {
+      currentState = currentState.apply(tr);
+      view.state = currentState;
+    });
+
+    const command = commands.moveComment({
+      commentId: 'c-oob',
+      from: doc.content.size + 5,
+      to: doc.content.size + 8,
+    });
+
+    let result;
+    expect(() => {
+      result = command({ tr: currentState.tr, dispatch, state: currentState, editor });
+    }).not.toThrow();
+    expect(result).toBe(false);
+    expect(dispatch).not.toHaveBeenCalled();
+  });
+
   it('focuses editor when moving the cursor to a comment by id', () => {
     const schema = createCommentSchema();
     const mark = schema.marks[CommentMarkName].create({ commentId: 'c-10', internal: true });
@@ -906,6 +949,20 @@ describe('internal helper functions', () => {
       isDeletionInsertion: false,
     });
     expect(formatResult.trackedChangeText).toContain('Added formatting');
+
+    const deltaFormatMark = schema.marks[TrackFormatMarkName].create({
+      id: 'format-2',
+      before: [{ type: 'textStyle', attrs: { color: '#111111', fontSize: '12px' } }],
+      after: [{ type: 'bold', attrs: {} }],
+    });
+    const deltaFormatResult = getTrackedChangeText({
+      nodes: [schema.text('Format', [deltaFormatMark])],
+      mark: deltaFormatMark,
+      trackedChangeType: TrackFormatMarkName,
+      isDeletionInsertion: false,
+    });
+    expect(deltaFormatResult.trackedChangeText).toContain('Added formatting: bold');
+    expect(deltaFormatResult.trackedChangeText).not.toContain('undefined');
 
     const combinedResult = getTrackedChangeText({
       nodes: [...insertionNodes, ...deletionNodes],

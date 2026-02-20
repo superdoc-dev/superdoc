@@ -2414,6 +2414,89 @@ describe('DomPainter', () => {
     expect(fragmentAfter?.textContent).toContain('world!!!');
   });
 
+  it('updates structured-content lock metadata when lockMode changes via setData', () => {
+    const lockedBlock: FlowBlock = {
+      kind: 'paragraph',
+      id: 'lock-mode-block',
+      runs: [{ text: 'Protected text', fontFamily: 'Arial', fontSize: 16, pmStart: 0, pmEnd: 14 }],
+      attrs: {
+        sdt: {
+          type: 'structuredContent',
+          scope: 'block',
+          id: 'sc-lock-mode-1',
+          alias: 'Protected Control',
+          lockMode: 'unlocked',
+        },
+      },
+    };
+
+    const lockedMeasure: Measure = {
+      kind: 'paragraph',
+      lines: [
+        {
+          fromRun: 0,
+          fromChar: 0,
+          toRun: 0,
+          toChar: 14,
+          width: 140,
+          ascent: 12,
+          descent: 4,
+          lineHeight: 20,
+        },
+      ],
+      totalHeight: 20,
+    };
+
+    const lockedLayout: Layout = {
+      pageSize: { w: 400, h: 500 },
+      pages: [
+        {
+          number: 1,
+          fragments: [
+            {
+              kind: 'para',
+              blockId: 'lock-mode-block',
+              fromLine: 0,
+              toLine: 1,
+              x: 20,
+              y: 30,
+              width: 300,
+              pmStart: 0,
+              pmEnd: 14,
+            },
+          ],
+        },
+      ],
+    };
+
+    const painter = createDomPainter({ blocks: [lockedBlock], measures: [lockedMeasure] });
+    painter.paint(lockedLayout, mount);
+
+    const fragmentBefore = mount.querySelector('.superdoc-fragment') as HTMLElement;
+    expect(fragmentBefore.dataset.lockMode).toBe('unlocked');
+
+    const updatedLockedBlock: FlowBlock = {
+      kind: 'paragraph',
+      id: 'lock-mode-block',
+      runs: [{ text: 'Protected text', fontFamily: 'Arial', fontSize: 16, pmStart: 0, pmEnd: 14 }],
+      attrs: {
+        sdt: {
+          type: 'structuredContent',
+          scope: 'block',
+          id: 'sc-lock-mode-1',
+          alias: 'Protected Control',
+          lockMode: 'contentLocked',
+        },
+      },
+    };
+
+    painter.setData?.([updatedLockedBlock], [lockedMeasure]);
+    painter.paint(lockedLayout, mount);
+
+    const fragmentAfter = mount.querySelector('.superdoc-fragment') as HTMLElement;
+    expect(fragmentAfter.dataset.lockMode).toBe('contentLocked');
+  });
+
   it('updates fragment positions in virtualized mode when layout changes without block diffs', () => {
     const painter = createDomPainter({
       blocks: [block],
@@ -2460,6 +2543,70 @@ describe('DomPainter', () => {
     const fragmentAfter = virtualMount.querySelector('.superdoc-fragment') as HTMLElement;
 
     expect(fragmentAfter.style.left).toBe('70px');
+  });
+
+  it('exposes a paint snapshot after rendering', () => {
+    const painter = createDomPainter({ blocks: [block], measures: [measure] });
+
+    painter.paint(layout, mount);
+
+    const snapshot = painter.getPaintSnapshot?.();
+    expect(snapshot).toBeTruthy();
+    expect(snapshot?.formatVersion).toBe(1);
+    expect(snapshot?.pageCount).toBe(1);
+    expect(snapshot?.lineCount).toBeGreaterThan(0);
+  });
+
+  it('uses actual page indices when collecting virtualized paint snapshots', () => {
+    const painter = createDomPainter({
+      blocks: [block],
+      measures: [measure],
+      virtualization: { enabled: true, window: 2 },
+    });
+    const virtualMount = document.createElement('div');
+    virtualMount.getBoundingClientRect = () =>
+      ({
+        width: 0,
+        height: 0,
+        top: 0,
+        left: 0,
+        right: 0,
+        bottom: 0,
+        x: 0,
+        y: 0,
+        toJSON() {
+          return {};
+        },
+      }) as DOMRect;
+
+    const multiPageLayout: Layout = {
+      ...layout,
+      pages: Array.from({ length: 10 }, (_, pageIndex) => ({
+        number: pageIndex + 1,
+        fragments: [
+          {
+            kind: 'para',
+            blockId: 'block-1',
+            fromLine: 0,
+            toLine: 1,
+            x: 30,
+            y: 40,
+            width: 300,
+            pmStart: 1,
+            pmEnd: 12,
+          },
+        ],
+      })),
+    };
+
+    painter.setVirtualizationPins?.([8]);
+    painter.paint(multiPageLayout, virtualMount);
+
+    const snapshot = painter.getPaintSnapshot?.();
+    expect(snapshot).toBeTruthy();
+    const pageIndices = snapshot?.pages.map((page) => page.index) ?? [];
+    expect(pageIndices).toContain(8);
+    expect(snapshot?.pages.find((page) => page.index === 8)?.pageNumber).toBe(9);
   });
 
   it('renders header decorations with tokens resolved', () => {
@@ -3095,6 +3242,109 @@ describe('DomPainter', () => {
       expect(fragEl).toBeTruthy();
       expect(footerEl.style.top).toBe(`${footerOffset}px`);
       expect(fragEl.style.top).toBe(`${footerHeight - contentHeight + footerFragment.y}px`);
+    });
+
+    it('renders page-relative behindDoc header media at absolute page Y', () => {
+      const headerImageBlock: FlowBlock = {
+        kind: 'image',
+        id: 'header-page-relative-img',
+        src: 'data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNk+M9QDwADhgGAWjR9awAAAABJRU5ErkJggg==',
+        anchor: {
+          isAnchored: true,
+          hRelativeFrom: 'page',
+          vRelativeFrom: 'page',
+          behindDoc: true,
+        },
+      };
+      const headerImageMeasure: Measure = {
+        kind: 'image',
+        width: 24,
+        height: 14,
+      };
+      const headerFragment: Fragment = {
+        kind: 'image',
+        blockId: 'header-page-relative-img',
+        x: 12,
+        y: 40,
+        width: 24,
+        height: 14,
+        isAnchored: true,
+        behindDoc: true,
+      };
+
+      const painter = createDomPainter({
+        blocks: [block, headerImageBlock],
+        measures: [measure, headerImageMeasure],
+        headerProvider: () => ({
+          fragments: [headerFragment],
+          height: 20,
+          offset: 60,
+          marginLeft: 30,
+        }),
+      });
+
+      painter.paint({ ...layout, pages: [{ ...layout.pages[0], number: 1 }] }, mount);
+
+      const pageEl = mount.querySelector('.superdoc-page') as HTMLElement;
+      const behindDocEl = pageEl.querySelector(
+        '[data-behind-doc-section="header"][data-block-id="header-page-relative-img"]',
+      ) as HTMLElement;
+
+      expect(behindDocEl).toBeTruthy();
+      expect(behindDocEl.style.top).toBe('40px');
+      expect(behindDocEl.style.left).toBe('42px');
+    });
+
+    it('does not apply footer bottom-alignment offset to page-relative media', () => {
+      const footerImageBlock: FlowBlock = {
+        kind: 'image',
+        id: 'footer-page-relative-img',
+        src: 'data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNk+M9QDwADhgGAWjR9awAAAABJRU5ErkJggg==',
+        anchor: {
+          isAnchored: true,
+          hRelativeFrom: 'page',
+          vRelativeFrom: 'page',
+        },
+      };
+      const footerImageMeasure: Measure = {
+        kind: 'image',
+        width: 20,
+        height: 20,
+      };
+      const footerFragment: Fragment = {
+        kind: 'image',
+        blockId: 'footer-page-relative-img',
+        x: 8,
+        y: 25,
+        width: 20,
+        height: 20,
+        isAnchored: true,
+      };
+
+      const footerOffset = 350;
+      const footerHeight = 80;
+      const footerContentHeight = 30;
+
+      const painter = createDomPainter({
+        blocks: [block, footerImageBlock],
+        measures: [measure, footerImageMeasure],
+        footerProvider: () => ({
+          fragments: [footerFragment],
+          height: footerHeight,
+          contentHeight: footerContentHeight,
+          offset: footerOffset,
+        }),
+      });
+
+      painter.paint({ ...layout, pages: [{ ...layout.pages[0], number: 1 }] }, mount);
+
+      const footerEl = mount.querySelector('.superdoc-page-footer') as HTMLElement;
+      const footerFragmentEl = footerEl.querySelector('[data-block-id="footer-page-relative-img"]') as HTMLElement;
+
+      expect(footerFragmentEl).toBeTruthy();
+      expect(footerFragmentEl.style.top).toBe(`${footerFragment.y - footerOffset}px`);
+      const renderedPageTop = parseFloat(footerEl.style.top || '0') + parseFloat(footerFragmentEl.style.top || '0');
+      expect(renderedPageTop).toBe(footerFragment.y);
     });
 
     it('preserves bold styling on page number tokens in DOM', () => {
@@ -4542,6 +4792,77 @@ describe('DomPainter', () => {
 
       const img = mount.querySelector('img');
       expect(img).toBeNull();
+    });
+
+    it('renders cropped inline image with clipPath in wrapper (overflow hidden, img with clip-path and transform)', () => {
+      const clipPath = 'inset(10% 20% 30% 40%)';
+      const imageBlock: FlowBlock = {
+        kind: 'paragraph',
+        id: 'img-block',
+        runs: [
+          {
+            kind: 'image',
+            src: 'data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNk+M9QDwADhgGAWjR9awAAAABJRU5ErkJggg==',
+            width: 80,
+            height: 60,
+            clipPath,
+          },
+        ],
+      };
+
+      const imageMeasure: Measure = {
+        kind: 'paragraph',
+        lines: [
+          {
+            fromRun: 0,
+            fromChar: 0,
+            toRun: 0,
+            toChar: 0,
+            width: 80,
+            ascent: 60,
+            descent: 0,
+            lineHeight: 60,
+          },
+        ],
+        totalHeight: 60,
+      };
+
+      const imageLayout: Layout = {
+        pageSize: { w: 400, h: 500 },
+        pages: [
+          {
+            number: 1,
+            fragments: [
+              {
+                kind: 'para',
+                blockId: 'img-block',
+                fromLine: 0,
+                toLine: 1,
+                x: 0,
+                y: 0,
+                width: 80,
+              },
+            ],
+          },
+        ],
+      };
+
+      const painter = createDomPainter({ blocks: [imageBlock], measures: [imageMeasure] });
+      painter.paint(imageLayout, mount);
+
+      const wrapper = mount.querySelector('.superdoc-inline-image-clip-wrapper');
+      expect(wrapper).toBeTruthy();
+      expect((wrapper as HTMLElement).style.overflow).toBe('hidden');
+      expect((wrapper as HTMLElement).style.width).toBe('80px');
+      expect((wrapper as HTMLElement).style.height).toBe('60px');
+
+      const img = wrapper?.querySelector('img');
+      expect(img).toBeTruthy();
+      expect((img as HTMLElement).style.clipPath).toBe(clipPath);
+      expect((img as HTMLElement).style.transformOrigin).toBe('0 0');
+      expect((img as HTMLElement).style.transform).toMatch(
+        /translate\([-\d.]+%,\s*[-\d.]+%\)\s*scale\([-\d.]+,\s*[-\d.]+\)/,
+      );
     });
 
     it('returns null for data URLs exceeding MAX_DATA_URL_LENGTH (10MB)', () => {

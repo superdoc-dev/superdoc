@@ -16,6 +16,8 @@ import {
   loadRegistryOrNull,
   normalizePath,
   printCorpusEnvHint,
+  saveRegistry,
+  sortRegistryDocs,
 } from './shared.mjs';
 
 const VISUAL_LEGACY_PATH_MAP = {
@@ -112,6 +114,7 @@ async function loadCorpusDocs(client) {
   if (registry?.docs?.length) {
     return {
       source: REGISTRY_KEY,
+      registry,
       docs: registry.docs
         .map((doc) => {
           const relativePath = buildDocRelativePath(doc);
@@ -140,8 +143,34 @@ async function loadCorpusDocs(client) {
 
   return {
     source: 'documents/ (legacy prefix fallback)',
+    registry: null,
     docs,
   };
+}
+
+function pruneRegistryByPaths(registry, paths) {
+  const docs = Array.isArray(registry?.docs) ? registry.docs : [];
+  const normalizedPathSet = new Set(paths.map((value) => normalizePath(value).toLowerCase()).filter(Boolean));
+
+  const nextDocs = docs.filter((doc) => {
+    const docPath = normalizePath(buildDocRelativePath(doc)).toLowerCase();
+    return !normalizedPathSet.has(docPath);
+  });
+
+  return {
+    removedCount: docs.length - nextDocs.length,
+    nextRegistry: {
+      ...registry,
+      updated_at: new Date().toISOString(),
+      docs: sortRegistryDocs(nextDocs),
+    },
+  };
+}
+
+function isMissingObjectError(error) {
+  const message = error instanceof Error ? error.message : String(error);
+  return /specified key does not exist|NoSuchKey|The specified key does not exist/i.test(message)
+    || (error?.['$metadata']?.httpStatusCode === 404);
 }
 
 function ensureLegacyVisualAliases(destinationRoot) {
@@ -192,7 +221,8 @@ async function main() {
     });
 
     const selectedSet = new Set(selected);
-    const selectedDocs = corpus.docs.filter((doc) => selectedSet.has(normalizePath(doc.relative_path)));
+    let selectedDocs = corpus.docs.filter((doc) => selectedSet.has(normalizePath(doc.relative_path)));
+    let missingRegistryPaths = [];
 
     if (selectedDocs.length === 0) {
       console.log('[corpus] No docs matched filters.');
@@ -207,6 +237,28 @@ async function main() {
     console.log(`[corpus] Source: ${corpus.source}`);
     console.log(`[corpus] Destination: ${destinationRoot}`);
     console.log(`[corpus] Matched docs: ${selectedDocs.length}`);
+
+    if (corpus.source === REGISTRY_KEY && corpus.registry) {
+      const allObjectKeys = await client.listObjects('');
+      const objectKeySet = new Set(allObjectKeys.map((key) => normalizePath(key).toLowerCase()));
+      const existingDocs = [];
+      const missingDocs = [];
+
+      for (const doc of selectedDocs) {
+        const objectKey = normalizePath(doc.object_key ?? doc.relative_path).toLowerCase();
+        if (objectKeySet.has(objectKey)) existingDocs.push(doc);
+        else missingDocs.push(doc);
+      }
+
+      if (missingDocs.length > 0) {
+        missingRegistryPaths = missingDocs.map((doc) => normalizePath(doc.relative_path));
+        selectedDocs = existingDocs;
+        console.log(`[corpus] Missing objects in bucket: ${missingDocs.length}.`);
+        for (const missingPath of missingRegistryPaths) {
+          console.log(`[corpus] Missing key: ${missingPath}`);
+        }
+      }
+    }
 
     for (const doc of selectedDocs) {
       const relativePath = normalizePath(doc.relative_path);
@@ -224,11 +276,29 @@ async function main() {
         continue;
       }
 
-      await client.getObjectToFile(objectKey, destinationPath);
-      downloaded += 1;
+      try {
+        await client.getObjectToFile(objectKey, destinationPath);
+        downloaded += 1;
+      } catch (error) {
+        if (isMissingObjectError(error) && corpus.source === REGISTRY_KEY && corpus.registry) {
+          missingRegistryPaths.push(relativePath);
+          console.log(`[corpus] Missing key during download: ${relativePath}`);
+          continue;
+        }
+        throw error;
+      }
 
       if (downloaded % 25 === 0 || downloaded === selectedDocs.length) {
         console.log(`[corpus] Downloaded ${downloaded}/${selectedDocs.length}`);
+      }
+    }
+
+    if (missingRegistryPaths.length > 0 && corpus.source === REGISTRY_KEY && corpus.registry && !args.dryRun) {
+      const uniqueMissing = [...new Set(missingRegistryPaths.map((value) => normalizePath(value).toLowerCase()))];
+      const { removedCount, nextRegistry } = pruneRegistryByPaths(corpus.registry, uniqueMissing);
+      if (removedCount > 0) {
+        await saveRegistry(client, nextRegistry);
+        console.log(`[corpus] Pruned ${removedCount} missing path(s) from registry.json.`);
       }
     }
 
@@ -253,7 +323,9 @@ async function main() {
     }
 
     const elapsed = Date.now() - startedAt;
-    console.log(`[corpus] Done. Downloaded: ${downloaded}, Skipped: ${skipped}, Elapsed: ${formatDurationMs(elapsed)}`);
+    console.log(
+      `[corpus] Done. Downloaded: ${downloaded}, Skipped: ${skipped}, Missing: ${missingRegistryPaths.length}, Elapsed: ${formatDurationMs(elapsed)}`,
+    );
   } finally {
     client.destroy();
   }

@@ -1353,8 +1353,9 @@ export function layoutDocument(blocks: FlowBlock[], measures: Measure[], options
   // must be registered first so all paragraphs can wrap around them.
   const preRegisteredAnchors = collectPreRegisteredAnchors(blocks, measures);
 
-  // Map to store pre-computed positions for page-relative anchors (for fragment creation later)
-  const preRegisteredPositions = new Map<string, { anchorX: number; anchorY: number; pageNumber: number }>();
+  // Map to store pre-computed positions for page-relative anchors (for fragment creation later).
+  // Page placement is resolved at encounter time so anchors follow pagination (e.g., after page breaks).
+  const preRegisteredPositions = new Map<string, { anchorX: number; anchorY: number }>();
 
   for (const entry of preRegisteredAnchors) {
     // Ensure first page exists
@@ -1420,8 +1421,8 @@ export function layoutDocument(blocks: FlowBlock[], measures: Measure[], options
     // This prevents the section break logic from seeing "content" on the page and creating a new page.
     floatManager.registerDrawing(entry.block, entry.measure, anchorY, state.columnIndex, state.page.number);
 
-    // Store pre-computed position for later use when creating the fragment
-    preRegisteredPositions.set(entry.block.id, { anchorX, anchorY, pageNumber: state.page.number });
+    // Store pre-computed position for later use when creating the fragment.
+    preRegisteredPositions.set(entry.block.id, { anchorX, anchorY });
   }
 
   // Pre-compute keepNext chains for correct pagination grouping.
@@ -1932,13 +1933,8 @@ export function layoutDocument(blocks: FlowBlock[], measures: Measure[], options
 
       // Check if this is a pre-registered page-relative anchor
       const preRegPos = preRegisteredPositions.get(block.id);
-      if (
-        preRegPos &&
-        Number.isFinite(preRegPos.anchorX) &&
-        Number.isFinite(preRegPos.anchorY) &&
-        Number.isFinite(preRegPos.pageNumber)
-      ) {
-        // Use pre-computed position for page-relative anchors
+      if (preRegPos && Number.isFinite(preRegPos.anchorX) && Number.isFinite(preRegPos.anchorY)) {
+        // Use pre-computed coordinates, but place on the current pagination page where this block is encountered.
         const state = paginator.ensurePage();
         const imgBlock = block as ImageBlock;
         const imgMeasure = measure as ImageMeasure;
@@ -2005,6 +2001,40 @@ export function layoutDocument(blocks: FlowBlock[], measures: Measure[], options
       if (measure.kind !== 'drawing') {
         throw new Error(`layoutDocument: expected drawing measure for block ${block.id}`);
       }
+
+      // Check if this is a pre-registered page-relative anchor
+      const preRegPos = preRegisteredPositions.get(block.id);
+      if (preRegPos && Number.isFinite(preRegPos.anchorX) && Number.isFinite(preRegPos.anchorY)) {
+        // Use pre-computed coordinates, but place on the current pagination page where this block is encountered.
+        const state = paginator.ensurePage();
+        const drawBlock = block as DrawingBlock;
+        const drawMeasure = measure as DrawingMeasure;
+
+        const fragment: DrawingFragment = {
+          kind: 'drawing',
+          blockId: drawBlock.id,
+          drawingKind: drawBlock.drawingKind,
+          x: preRegPos.anchorX,
+          y: preRegPos.anchorY,
+          width: drawMeasure.width,
+          height: drawMeasure.height,
+          geometry: drawMeasure.geometry,
+          scale: drawMeasure.scale,
+          isAnchored: true,
+          behindDoc: drawBlock.anchor?.behindDoc === true,
+          zIndex: getFragmentZIndex(drawBlock),
+          drawingContentId: drawBlock.drawingContentId,
+        };
+
+        const attrs = drawBlock.attrs as Record<string, unknown> | undefined;
+        if (attrs?.pmStart != null) fragment.pmStart = attrs.pmStart as number;
+        if (attrs?.pmEnd != null) fragment.pmEnd = attrs.pmEnd as number;
+
+        state.page.fragments.push(fragment);
+        placedAnchoredIds.add(drawBlock.id);
+        continue;
+      }
+
       layoutDrawingBlock({
         block: block as DrawingBlock,
         measure: measure as DrawingMeasure,

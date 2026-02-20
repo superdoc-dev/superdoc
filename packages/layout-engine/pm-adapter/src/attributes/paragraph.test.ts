@@ -143,4 +143,14 @@ describe('computeRunAttrs', () => {
     expect(result.fontSize).toBeGreaterThan(0);
     expect(result.color).toBe('#FF0000');
   });
+
+  it('includes the vanish property', () => {
+    const runProps = {
+      vanish: true,
+    };
+
+    const result = computeRunAttrs(runProps as never);
+
+    expect(result.vanish).toBe(true);
+  });
 });

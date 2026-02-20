@@ -12,8 +12,6 @@ import { fieldAnnotationHelpers } from '@superdoc/super-editor';
 import { toolbarIcons } from '../../../../super-editor/src/components/toolbar/toolbarIcons';
 import BlankDOCX from '@superdoc/common/data/blank.docx?url';
 import * as pdfjsLib from 'pdfjs-dist/build/pdf.mjs';
-import * as pdfjsViewer from 'pdfjs-dist/web/pdf_viewer.mjs';
-import { getWorkerSrcFromCDN } from '../../components/PdfViewer/pdf/pdf-adapter.js';
 import SidebarSearch from './sidebar/SidebarSearch.vue';
 import SidebarFieldAnnotations from './sidebar/SidebarFieldAnnotations.vue';
 import SidebarLayout from './sidebar/SidebarLayout.vue';
@@ -22,10 +20,7 @@ import * as Y from 'yjs';
 
 // note:
 // Or set worker globally outside the component.
-// pdfjsLib.GlobalWorkerOptions.workerSrc = new URL(
-//   'pdfjs-dist/build/pdf.worker.min.mjs',
-//   import.meta.url,
-// ).toString();
+pdfjsLib.GlobalWorkerOptions.workerSrc = new URL('pdfjs-dist/build/pdf.worker.min.mjs', import.meta.url).toString();
 
 /* For local dev */
 const superdoc = shallowRef(null);
@@ -219,9 +214,20 @@ const handleNewFile = async (file) => {
     currentFile.value = await getFileObject(url, file.name, file.type);
   }
 
-  nextTick(() => {
-    init();
-  });
+  // In collab mode, use replaceFile() on the existing editor instead of
+  // destroying and recreating SuperDoc. This avoids the Y.js race condition
+  // where empty room state overwrites the DOCX content during reinit.
+  if (useCollaboration && activeEditor.value && !isMarkdown && !isHtml) {
+    try {
+      await activeEditor.value.replaceFile(currentFile.value);
+      console.log('[collab] Replaced file via editor.replaceFile()');
+    } catch (err) {
+      console.error('[collab] replaceFile failed, falling back to full reinit:', err);
+      nextTick(() => init());
+    }
+  } else {
+    nextTick(() => init());
+  }
 
   sidebarInstanceKey.value += 1;
 };
@@ -341,8 +347,8 @@ const init = async () => {
         excludeItems: [], // ['italic', 'bold'],
         // texts: {},
       },
-      // Test custom slash menu configuration
-      slashMenu: {
+      // Test custom context menu configuration
+      contextMenu: {
         // includeDefaultItems: true, // Include default items
         // customItems: [
         //   {
@@ -465,14 +471,14 @@ const init = async () => {
       },
       pdf: {
         pdfLib: pdfjsLib,
-        pdfViewer: pdfjsViewer,
-        setWorker: true,
-        workerSrc: getWorkerSrcFromCDN(pdfjsLib.version),
-        textLayerMode: 0,
+        setWorker: false,
+        // workerSrc: getWorkerSrcFromCDN(pdfjsLib.version),
+        // textLayer: true,
+        // outputScale: 1.5,
       },
-      whiteboard: {
-        enabled: false,
-      },
+      // whiteboard: {
+      //   enabled: true,
+      // },
     },
     onEditorCreate,
     onContentError,
@@ -718,7 +724,7 @@ onMounted(async () => {
     const ydoc = new Y.Doc();
     const provider = new HocuspocusProvider({
       url: 'ws://localhost:3050',
-      name: 'superdoc-dev-room',
+      name: urlParams.get('room') || 'superdoc-dev-room',
       document: ydoc,
     });
 

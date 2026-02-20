@@ -7,7 +7,7 @@
 export const updateYdocDocxData = async (editor, ydoc) => {
   try {
     ydoc = ydoc || editor?.options?.ydoc;
-    if (!ydoc) return;
+    if (!ydoc || ydoc.isDestroyed) return;
     if (!editor || editor.isDestroyed) return;
 
     const metaMap = ydoc.getMap('meta');
@@ -34,9 +34,10 @@ export const updateYdocDocxData = async (editor, ydoc) => {
     Object.keys(newXml).forEach((key) => {
       const fileIndex = docx.findIndex((item) => item.name === key);
       const existingContent = fileIndex > -1 ? docx[fileIndex].content : null;
+      const newContent = newXml[key];
 
       // Skip if content hasn't changed
-      if (existingContent === newXml[key]) {
+      if (existingContent === newContent) {
         return;
       }
 
@@ -44,14 +45,22 @@ export const updateYdocDocxData = async (editor, ydoc) => {
       if (fileIndex > -1) {
         docx.splice(fileIndex, 1);
       }
-      docx.push({
-        name: key,
-        content: newXml[key],
-      });
+
+      // A null value means the file was deleted during export (e.g. comment
+      // parts removed).  Only add entries with real content — pushing
+      // { content: null } would crash parseXmlToJson on next hydration.
+      if (newContent != null) {
+        docx.push({
+          name: key,
+          content: newContent,
+        });
+      }
     });
 
-    // Only transact if there were actual changes OR this is initial setup
-    if (hasChanges || !docxValue) {
+    // Only transact if there were actual changes OR this is initial setup.
+    // Re-check ydoc/editor after the async export — they may have been
+    // destroyed while exportDocx was running.
+    if ((hasChanges || !docxValue) && !ydoc.isDestroyed && !editor.isDestroyed) {
       ydoc.transact(
         () => {
           metaMap.set('docx', docx);
@@ -87,7 +96,7 @@ export const pushHeaderFooterToYjs = (editor, type, sectionId, content) => {
   if (isApplyingRemoteChanges) return;
 
   const ydoc = editor?.options?.ydoc;
-  if (!ydoc) return;
+  if (!ydoc || ydoc.isDestroyed) return;
 
   const headerFooterMap = ydoc.getMap('headerFooterJson');
   const key = `${type}:${sectionId}`;

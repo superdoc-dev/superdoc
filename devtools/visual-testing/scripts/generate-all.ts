@@ -1,5 +1,5 @@
 /**
- * Run both visual and interaction screenshot generation.
+ * Run visual screenshot generation.
  *
  * Usage:
  *   pnpm generate
@@ -34,7 +34,6 @@ async function main(): Promise<void> {
   const passThrough = process.argv.slice(2);
 
   await runCommand(['exec', 'tsx', 'scripts/generate-refs.ts', ...passThrough]);
-  await runCommand(['exec', 'tsx', 'scripts/generate-interactions.ts', ...passThrough]);
 }
 
 const isMainModule = import.meta.url === `file://${process.argv[1]}`;

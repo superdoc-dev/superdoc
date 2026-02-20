@@ -1,0 +1,129 @@
+---
+title: getNodeById
+sidebarTitle: getNodeById
+description: Generated reference for getNodeById
+---
+
+{/* GENERATED FILE: DO NOT EDIT. Regenerate via `pnpm run docapi:sync`. */}
+
+> Alpha: Document API is currently alpha and subject to breaking changes.
+
+## Summary
+
+- Operation ID: `getNodeById`
+- API member path: `editor.doc.getNodeById(...)`
+- Mutates document: `no`
+- Idempotency: `idempotent`
+- Supports tracked mode: `no`
+- Supports dry run: `no`
+- Deterministic target resolution: `yes`
+
+## Pre-apply throws
+
+- `TARGET_NOT_FOUND`
+
+## Non-applied failure codes
+
+- None
+
+## Input schema
+
+```json
+{
+  "additionalProperties": false,
+  "properties": {
+    "nodeId": {
+      "type": "string"
+    },
+    "nodeType": {
+      "enum": [
+        "paragraph",
+        "heading",
+        "listItem",
+        "table",
+        "tableRow",
+        "tableCell",
+        "image",
+        "sdt"
+      ]
+    }
+  },
+  "required": [
+    "nodeId"
+  ],
+  "type": "object"
+}
+```
+
+## Output schema
+
+```json
+{
+  "additionalProperties": false,
+  "properties": {
+    "bodyNodes": {
+      "items": {
+        "type": "object"
+      },
+      "type": "array"
+    },
+    "bodyText": {
+      "type": "string"
+    },
+    "kind": {
+      "enum": [
+        "block",
+        "inline"
+      ]
+    },
+    "nodes": {
+      "items": {
+        "type": "object"
+      },
+      "type": "array"
+    },
+    "nodeType": {
+      "enum": [
+        "paragraph",
+        "heading",
+        "listItem",
+        "table",
+        "tableRow",
+        "tableCell",
+        "image",
+        "sdt",
+        "run",
+        "bookmark",
+        "comment",
+        "hyperlink",
+        "footnoteRef",
+        "tab",
+        "lineBreak"
+      ]
+    },
+    "properties": {
+      "type": "object"
+    },
+    "summary": {
+      "additionalProperties": false,
+      "properties": {
+        "label": {
+          "type": "string"
+        },
+        "text": {
+          "type": "string"
+        }
+      },
+      "type": "object"
+    },
+    "text": {
+      "type": "string"
+    }
+  },
+  "required": [
+    "nodeType",
+    "kind"
+  ],
+  "type": "object"
+}
+```

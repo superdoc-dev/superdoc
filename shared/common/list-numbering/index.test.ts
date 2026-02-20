@@ -73,6 +73,54 @@ describe('generateOrderedListIndex', () => {
     });
     expect(result).toBeNull();
   });
+
+  describe('malformed lvlText', () => {
+    it('returns null when lvlText is null', () => {
+      const result = generateOrderedListIndex({
+        listLevel: [1],
+        lvlText: null,
+        listNumberingType: 'decimal',
+      });
+      expect(result).toBeNull();
+    });
+
+    it('returns null when lvlText is undefined', () => {
+      const result = generateOrderedListIndex({
+        listLevel: [1],
+        lvlText: undefined,
+        listNumberingType: 'decimal',
+      });
+      expect(result).toBeNull();
+    });
+
+    it('returns null when lvlText is a non-string type', () => {
+      const result = generateOrderedListIndex({
+        listLevel: [1],
+        lvlText: 42 as any,
+        listNumberingType: 'decimal',
+      });
+      expect(result).toBeNull();
+    });
+
+    it('still formats correctly with valid lvlText after guard', () => {
+      const result = generateOrderedListIndex({
+        listLevel: [3],
+        lvlText: '%1.',
+        listNumberingType: 'decimal',
+      });
+      expect(result).toBe('3.');
+    });
+  });
+
+  it('handles undefined customFormat for custom numbering type', () => {
+    const result = generateOrderedListIndex({
+      listLevel: [5],
+      lvlText: '%1)',
+      listNumberingType: 'custom',
+      customFormat: undefined,
+    });
+    expect(result).toBe('5)');
+  });
 });
 
 describe('normalizeLvlTextChar', () => {

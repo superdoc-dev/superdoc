@@ -152,6 +152,17 @@ describe('comments-store', () => {
     expect(setActiveCommentSpy).toHaveBeenCalledWith({ commentId: null });
   });
 
+  it('does not throw when superdoc is unavailable during active comment updates', () => {
+    const comment = { commentId: 'comment-2' };
+    store.commentsList = [comment];
+
+    expect(() => store.setActiveComment(undefined, 'comment-2')).not.toThrow();
+    expect(store.activeComment).toBe('comment-2');
+
+    expect(() => store.setActiveComment(undefined, null)).not.toThrow();
+    expect(store.activeComment).toBeNull();
+  });
+
   it('updates tracked change comments and emits events', () => {
     const superdoc = {
       emit: vi.fn(),

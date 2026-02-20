@@ -148,8 +148,8 @@ catalogs:
       specifier: ^8.0.1
       version: 8.0.1
     pdfjs-dist:
-      specifier: 4.3.136
-      version: 4.3.136
+      specifier: ^5.4.296
+      version: 5.4.624
     pinia:
       specifier: ^2.1.7
       version: 2.3.1
@@ -387,6 +387,9 @@ importers:
       semantic-release-pnpm:
         specifier: ^1.0.2
         version: 1.0.2(semantic-release@24.2.9(typescript@5.9.3))
+      tsx:
+        specifier: 'catalog:'
+        version: 4.21.0
       typescript:
         specifier: 'catalog:'
         version: 5.9.3
@@ -408,22 +411,54 @@ importers:
         version: 3.2.0
 
   apps/cli:
+    dependencies:
+      '@hocuspocus/provider':
+        specifier: 'catalog:'
+        version: 2.15.3(y-protocols@1.0.7(yjs@13.6.19))(yjs@13.6.19)
+      '@superdoc/document-api':
+        specifier: workspace:*
+        version: link:../../packages/document-api
+      fast-glob:
+        specifier: 'catalog:'
+        version: 3.3.3
+      y-websocket:
+        specifier: 'catalog:'
+        version: 3.0.0(yjs@13.6.19)
+      yjs:
+        specifier: 'catalog:'
+        version: 13.6.19
     devDependencies:
+      '@superdoc/super-editor':
+        specifier: workspace:*
+        version: link:../../packages/super-editor
       '@types/bun':
         specifier: 'catalog:'
         version: 1.3.8
       '@types/node':
         specifier: 'catalog:'
         version: 22.19.2
-      fast-glob:
-        specifier: 'catalog:'
-        version: 3.3.3
       superdoc:
         specifier: workspace:*
         version: link:../../packages/superdoc
       typescript:
         specifier: 'catalog:'
         version: 5.9.3
+    optionalDependencies:
+      '@superdoc-dev/cli-darwin-arm64':
+        specifier: workspace:*
+        version: link:platforms/cli-darwin-arm64
+      '@superdoc-dev/cli-darwin-x64':
+        specifier: workspace:*
+        version: link:platforms/cli-darwin-x64
+      '@superdoc-dev/cli-linux-arm64':
+        specifier: workspace:*
+        version: link:platforms/cli-linux-arm64
+      '@superdoc-dev/cli-linux-x64':
+        specifier: workspace:*
+        version: link:platforms/cli-linux-x64
+      '@superdoc-dev/cli-windows-x64':
+        specifier: workspace:*
+        version: link:platforms/cli-windows-x64
 
   apps/docs:
     devDependencies:
@@ -432,7 +467,7 @@ importers:
         version: 14.0.3
       mintlify:
         specifier: ^4.2.331
-        version: 4.2.331(@radix-ui/react-popover@1.1.15(@types/react-dom@19.2.3(@types/react@19.2.11))(@types/react@19.2.11)(react-dom@19.2.4(react@19.2.3))(react@19.2.3))(@types/node@22.19.2)(@types/react@19.2.11)(react-dom@19.2.4(react@19.2.3))(typescript@5.9.3)
+        version: 4.2.331(@radix-ui/react-popover@1.1.15(@types/react-dom@19.2.3(@types/react@19.2.11))(@types/react@19.2.11)(react-dom@19.2.4(react@19.2.3))(react@19.2.3))(@types/node@22.19.8)(@types/react@19.2.11)(react-dom@19.2.4(react@19.2.3))(typescript@5.9.3)
       remark-mdx:
         specifier: ^3.1.1
         version: 3.1.1
@@ -629,6 +664,8 @@ importers:
       vitest:
         specifier: 'catalog:'
         version: 3.2.4(@types/debug@4.1.12)(@types/node@22.19.2)(esbuild@0.27.2)(happy-dom@20.4.0)(jiti@2.6.1)(jsdom@27.3.0(canvas@3.2.0))(tsx@4.21.0)(yaml@2.8.2)
+
+  packages/document-api: {}
 
   packages/esign:
     devDependencies:
@@ -919,7 +956,7 @@ importers:
     dependencies:
       superdoc:
         specifier: '>=1.0.0'
-        version: 1.11.0(@hocuspocus/provider@2.15.3(y-protocols@1.0.7(yjs@13.6.19))(yjs@13.6.19))(canvas@3.2.0)(pdfjs-dist@4.3.136)(typescript@5.9.3)(y-prosemirror@1.3.7(prosemirror-model@1.25.4)(prosemirror-state@1.4.4)(prosemirror-view@1.41.5)(y-protocols@1.0.7(yjs@13.6.19))(yjs@13.6.19))(yjs@13.6.19)
+        version: 1.11.0(@hocuspocus/provider@2.15.3(y-protocols@1.0.7(yjs@13.6.19))(yjs@13.6.19))(canvas@3.2.0)(pdfjs-dist@5.4.624)(typescript@5.9.3)(y-prosemirror@1.3.7(prosemirror-model@1.25.4)(prosemirror-state@1.4.4)(prosemirror-view@1.41.5)(y-protocols@1.0.7(yjs@13.6.19))(yjs@13.6.19))(yjs@13.6.19)
     devDependencies:
       '@testing-library/react':
         specifier: 'catalog:'
@@ -1072,6 +1109,9 @@ importers:
       '@superdoc/contracts':
         specifier: workspace:*
         version: link:../layout-engine/contracts
+      '@superdoc/document-api':
+        specifier: workspace:*
+        version: link:../document-api
       '@superdoc/layout-bridge':
         specifier: workspace:*
         version: link:../layout-engine/layout-bridge
@@ -1204,7 +1244,7 @@ importers:
         version: 3.1.11
       pdfjs-dist:
         specifier: 'catalog:'
-        version: 4.3.136
+        version: 5.4.624
       postcss-nested:
         specifier: 'catalog:'
         version: 6.2.0(postcss@8.5.6)
@@ -1359,6 +1399,22 @@ importers:
   shared/locale-utils: {}
 
   shared/url-validation: {}
+
+  tests/behavior:
+    dependencies:
+      '@superdoc/document-api':
+        specifier: workspace:*
+        version: link:../../packages/document-api
+      superdoc:
+        specifier: workspace:*
+        version: link:../../packages/superdoc
+    devDependencies:
+      '@playwright/test':
+        specifier: 'catalog:'
+        version: 1.58.1
+      vite:
+        specifier: npm:rolldown-vite@7.3.1
+        version: rolldown-vite@7.3.1(@types/node@22.19.8)(esbuild@0.27.2)(jiti@2.6.1)(tsx@4.21.0)(yaml@2.8.2)
 
   tests/visual:
     dependencies:
@@ -2909,6 +2965,76 @@ packages:
 
   '@mintlify/validation@0.1.585':
     resolution: {integrity: sha512-32mezT7v1dmPQa2DyGDYf0t+HHUbmpShJVnMrxxhXyMHvKUqOu4ENoRCAxRbfc4OLPxAFRB4qEEq2toID+tOHw==}
+
+  '@napi-rs/canvas-android-arm64@0.1.91':
+    resolution: {integrity: sha512-SLLzXXgSnfct4zy/BVAfweZQkYkPJsNsJ2e5DOE8DFEHC6PufyUrwb12yqeu2So2IOIDpWJJaDAxKY/xpy6MYQ==}
+    engines: {node: '>= 10'}
+    cpu: [arm64]
+    os: [android]
+
+  '@napi-rs/canvas-darwin-arm64@0.1.91':
+    resolution: {integrity: sha512-bzdbCjIjw3iRuVFL+uxdSoMra/l09ydGNX9gsBxO/zg+5nlppscIpj6gg+nL6VNG85zwUarDleIrUJ+FWHvmuA==}
+    engines: {node: '>= 10'}
+    cpu: [arm64]
+    os: [darwin]
+
+  '@napi-rs/canvas-darwin-x64@0.1.91':
+    resolution: {integrity: sha512-q3qpkpw0IsG9fAS/dmcGIhCVoNxj8ojbexZKWwz3HwxlEWsLncEQRl4arnxrwbpLc2nTNTyj4WwDn7QR5NDAaA==}
+    engines: {node: '>= 10'}
+    cpu: [x64]
+    os: [darwin]
+
+  '@napi-rs/canvas-linux-arm-gnueabihf@0.1.91':
+    resolution: {integrity: sha512-Io3g8wJZVhK8G+Fpg1363BE90pIPqg+ZbeehYNxPWDSzbgwU3xV0l8r/JBzODwC7XHi1RpFEk+xyUTMa2POj6w==}
+    engines: {node: '>= 10'}
+    cpu: [arm]
+    os: [linux]
+
+  '@napi-rs/canvas-linux-arm64-gnu@0.1.91':
+    resolution: {integrity: sha512-HBnto+0rxx1bQSl8bCWA9PyBKtlk2z/AI32r3cu4kcNO+M/5SD4b0v1MWBWZyqMQyxFjWgy3ECyDjDKMC6tY1A==}
+    engines: {node: '>= 10'}
+    cpu: [arm64]
+    os: [linux]
+
+  '@napi-rs/canvas-linux-arm64-musl@0.1.91':
+    resolution: {integrity: sha512-/eJtVe2Xw9A86I4kwXpxxoNagdGclu12/NSMsfoL8q05QmeRCbfjhg1PJS7ENAuAvaiUiALGrbVfeY1KU1gztQ==}
+    engines: {node: '>= 10'}
+    cpu: [arm64]
+    os: [linux]
+
+  '@napi-rs/canvas-linux-riscv64-gnu@0.1.91':
+    resolution: {integrity: sha512-floNK9wQuRWevUhhXRcuis7h0zirdytVxPgkonWO+kQlbvxV7gEUHGUFQyq4n55UHYFwgck1SAfJ1HuXv/+ppQ==}
+    engines: {node: '>= 10'}
+    cpu: [riscv64]
+    os: [linux]
+
+  '@napi-rs/canvas-linux-x64-gnu@0.1.91':
+    resolution: {integrity: sha512-c3YDqBdf7KETuZy2AxsHFMsBBX1dWT43yFfWUq+j1IELdgesWtxf/6N7csi3VPf6VA3PmnT9EhMyb+M1wfGtqw==}
+    engines: {node: '>= 10'}
+    cpu: [x64]
+    os: [linux]
+
+  '@napi-rs/canvas-linux-x64-musl@0.1.91':
+    resolution: {integrity: sha512-RpZ3RPIwgEcNBHSHSX98adm+4VP8SMT5FN6250s5jQbWpX/XNUX5aLMfAVJS/YnDjS1QlsCgQxFOPU0aCCWgag==}
+    engines: {node: '>= 10'}
+    cpu: [x64]
+    os: [linux]
+
+  '@napi-rs/canvas-win32-arm64-msvc@0.1.91':
+    resolution: {integrity: sha512-gF8MBp4X134AgVurxqlCdDA2qO0WaDdi9o6Sd5rWRVXRhWhYQ6wkdEzXNLIrmmros0Tsp2J0hQzx4ej/9O8trQ==}
+    engines: {node: '>= 10'}
+    cpu: [arm64]
+    os: [win32]
+
+  '@napi-rs/canvas-win32-x64-msvc@0.1.91':
+    resolution: {integrity: sha512-++gtW9EV/neKI8TshD8WFxzBYALSPag2kFRahIJV+LYsyt5kBn21b1dBhEUDHf7O+wiZmuFCeUa7QKGHnYRZBA==}
+    engines: {node: '>= 10'}
+    cpu: [x64]
+    os: [win32]
+
+  '@napi-rs/canvas@0.1.91':
+    resolution: {integrity: sha512-eeIe1GoB74P1B0Nkw6pV8BCQ3hfCfvyYr4BntzlCsnFXzVJiPMDnLeIx3gVB0xQMblHYnjK/0nCLvirEhOjr5g==}
+    engines: {node: '>= 10'}
 
   '@napi-rs/wasm-runtime@0.2.12':
     resolution: {integrity: sha512-ZVWUcfwY4E/yPitQJl481FjFo3K22D6qF0DuFH6Y/nbnE11GY5uguDxZMGXPQ8WQ0128MXQD7TnfHyK4oWoIJQ==}
@@ -8392,6 +8518,9 @@ packages:
     resolution: {integrity: sha512-dRB78srN/l6gqWulah9SrxeYnxeddIG30+GOqK/9OlLVyLg3HPnr6SqOWTWOXKRwC2eGYCkZ59NNuSgvSrpgOA==}
     engines: {node: ^12.20.0 || ^14.13.1 || >=16.0.0}
 
+  node-readable-to-web-readable-stream@0.4.2:
+    resolution: {integrity: sha512-/cMZNI34v//jUTrI+UIo4ieHAB5EZRY/+7OmXZgBxaWBMcW2tGdceIw06RFxWxrKZ5Jp3sI2i5TsRo+CBhtVLQ==}
+
   node-releases@2.0.27:
     resolution: {integrity: sha512-nmh3lCkYZ3grZvqcCH+fjmQ7X+H0OeZgP40OierEaAptX4XofMh5kwNbWh7lBduUzCcV/8kZ+NDLCwm2iorIlA==}
 
@@ -8948,10 +9077,6 @@ packages:
     resolution: {integrity: sha512-gDKb8aZMDeD/tZWs9P6+q0J9Mwkdl6xMV8TjnGP3qJVJ06bdMgkbBlLU8IdfOsIsFz2BW1rNVT3XuNEl8zPAvw==}
     engines: {node: '>=8'}
 
-  path2d@0.2.2:
-    resolution: {integrity: sha512-+vnG6S4dYcYxZd+CZxzXCNKdELYZSKfohrk98yajCo1PtRoDgCTrrwOvK1GT0UoAdVszagDVllQc0U1vaX4NUQ==}
-    engines: {node: '>=6'}
-
   pathe@2.0.3:
     resolution: {integrity: sha512-WUjGcAqP1gQacoQe+OBJsFA7Ld4DyXuUIjZ5cc75cLHvJ7dtNsTugphxIADwspS+AraAUePCKrSVtPLFj/F88w==}
 
@@ -8963,9 +9088,9 @@ packages:
     resolution: {integrity: sha512-Q3CG/cYvCO1ye4QKkuH7EXxs3VC/rI1/trd+qX2+PolbaKG0H+bgcZzrTt96mMyRtejk+JMCiLUn3y29W8qmFQ==}
     engines: {node: '>= 0.10'}
 
-  pdfjs-dist@4.3.136:
-    resolution: {integrity: sha512-gzfnt1qc4yA+U46golPGYtU4WM2ssqP2MvFjKga8GEKOrEnzRPrA/9jogLLPYHiA3sGBPJ+p7BdAq+ytmw3jEg==}
-    engines: {node: '>=18'}
+  pdfjs-dist@5.4.624:
+    resolution: {integrity: sha512-sm6TxKTtWv1Oh6n3C6J6a8odejb5uO4A4zo/2dgkHuC0iu8ZMAXOezEODkVaoVp8nX1Xzr+0WxFJJmUr45hQzg==}
+    engines: {node: '>=20.16.0 || >=22.3.0'}
 
   peek-readable@4.1.0:
     resolution: {integrity: sha512-ZI3LnwUv5nOGbQzD9c2iDG6toheuXSZP5esSHBjopsXH4dg19soufvpUGA3uohi5anFtGb2lhAVdHzH6R/Evvg==}
@@ -12702,128 +12827,128 @@ snapshots:
 
   '@inquirer/ansi@1.0.2': {}
 
-  '@inquirer/checkbox@4.3.2(@types/node@22.19.2)':
+  '@inquirer/checkbox@4.3.2(@types/node@22.19.8)':
     dependencies:
       '@inquirer/ansi': 1.0.2
-      '@inquirer/core': 10.3.2(@types/node@22.19.2)
+      '@inquirer/core': 10.3.2(@types/node@22.19.8)
       '@inquirer/figures': 1.0.15
-      '@inquirer/type': 3.0.10(@types/node@22.19.2)
+      '@inquirer/type': 3.0.10(@types/node@22.19.8)
       yoctocolors-cjs: 2.1.3
     optionalDependencies:
-      '@types/node': 22.19.2
+      '@types/node': 22.19.8
 
-  '@inquirer/confirm@5.1.21(@types/node@22.19.2)':
+  '@inquirer/confirm@5.1.21(@types/node@22.19.8)':
     dependencies:
-      '@inquirer/core': 10.3.2(@types/node@22.19.2)
-      '@inquirer/type': 3.0.10(@types/node@22.19.2)
+      '@inquirer/core': 10.3.2(@types/node@22.19.8)
+      '@inquirer/type': 3.0.10(@types/node@22.19.8)
     optionalDependencies:
-      '@types/node': 22.19.2
+      '@types/node': 22.19.8
 
-  '@inquirer/core@10.3.2(@types/node@22.19.2)':
+  '@inquirer/core@10.3.2(@types/node@22.19.8)':
     dependencies:
       '@inquirer/ansi': 1.0.2
       '@inquirer/figures': 1.0.15
-      '@inquirer/type': 3.0.10(@types/node@22.19.2)
+      '@inquirer/type': 3.0.10(@types/node@22.19.8)
       cli-width: 4.1.0
       mute-stream: 2.0.0
       signal-exit: 4.1.0
       wrap-ansi: 6.2.0
       yoctocolors-cjs: 2.1.3
     optionalDependencies:
-      '@types/node': 22.19.2
+      '@types/node': 22.19.8
 
-  '@inquirer/editor@4.2.23(@types/node@22.19.2)':
+  '@inquirer/editor@4.2.23(@types/node@22.19.8)':
     dependencies:
-      '@inquirer/core': 10.3.2(@types/node@22.19.2)
-      '@inquirer/external-editor': 1.0.3(@types/node@22.19.2)
-      '@inquirer/type': 3.0.10(@types/node@22.19.2)
+      '@inquirer/core': 10.3.2(@types/node@22.19.8)
+      '@inquirer/external-editor': 1.0.3(@types/node@22.19.8)
+      '@inquirer/type': 3.0.10(@types/node@22.19.8)
     optionalDependencies:
-      '@types/node': 22.19.2
+      '@types/node': 22.19.8
 
-  '@inquirer/expand@4.0.23(@types/node@22.19.2)':
+  '@inquirer/expand@4.0.23(@types/node@22.19.8)':
     dependencies:
-      '@inquirer/core': 10.3.2(@types/node@22.19.2)
-      '@inquirer/type': 3.0.10(@types/node@22.19.2)
+      '@inquirer/core': 10.3.2(@types/node@22.19.8)
+      '@inquirer/type': 3.0.10(@types/node@22.19.8)
       yoctocolors-cjs: 2.1.3
     optionalDependencies:
-      '@types/node': 22.19.2
+      '@types/node': 22.19.8
 
-  '@inquirer/external-editor@1.0.3(@types/node@22.19.2)':
+  '@inquirer/external-editor@1.0.3(@types/node@22.19.8)':
     dependencies:
       chardet: 2.1.1
       iconv-lite: 0.7.2
     optionalDependencies:
-      '@types/node': 22.19.2
+      '@types/node': 22.19.8
 
   '@inquirer/figures@1.0.15': {}
 
-  '@inquirer/input@4.3.1(@types/node@22.19.2)':
+  '@inquirer/input@4.3.1(@types/node@22.19.8)':
     dependencies:
-      '@inquirer/core': 10.3.2(@types/node@22.19.2)
-      '@inquirer/type': 3.0.10(@types/node@22.19.2)
+      '@inquirer/core': 10.3.2(@types/node@22.19.8)
+      '@inquirer/type': 3.0.10(@types/node@22.19.8)
     optionalDependencies:
-      '@types/node': 22.19.2
+      '@types/node': 22.19.8
 
-  '@inquirer/number@3.0.23(@types/node@22.19.2)':
+  '@inquirer/number@3.0.23(@types/node@22.19.8)':
     dependencies:
-      '@inquirer/core': 10.3.2(@types/node@22.19.2)
-      '@inquirer/type': 3.0.10(@types/node@22.19.2)
+      '@inquirer/core': 10.3.2(@types/node@22.19.8)
+      '@inquirer/type': 3.0.10(@types/node@22.19.8)
     optionalDependencies:
-      '@types/node': 22.19.2
+      '@types/node': 22.19.8
 
-  '@inquirer/password@4.0.23(@types/node@22.19.2)':
-    dependencies:
-      '@inquirer/ansi': 1.0.2
-      '@inquirer/core': 10.3.2(@types/node@22.19.2)
-      '@inquirer/type': 3.0.10(@types/node@22.19.2)
-    optionalDependencies:
-      '@types/node': 22.19.2
-
-  '@inquirer/prompts@7.9.0(@types/node@22.19.2)':
-    dependencies:
-      '@inquirer/checkbox': 4.3.2(@types/node@22.19.2)
-      '@inquirer/confirm': 5.1.21(@types/node@22.19.2)
-      '@inquirer/editor': 4.2.23(@types/node@22.19.2)
-      '@inquirer/expand': 4.0.23(@types/node@22.19.2)
-      '@inquirer/input': 4.3.1(@types/node@22.19.2)
-      '@inquirer/number': 3.0.23(@types/node@22.19.2)
-      '@inquirer/password': 4.0.23(@types/node@22.19.2)
-      '@inquirer/rawlist': 4.1.11(@types/node@22.19.2)
-      '@inquirer/search': 3.2.2(@types/node@22.19.2)
-      '@inquirer/select': 4.4.2(@types/node@22.19.2)
-    optionalDependencies:
-      '@types/node': 22.19.2
-
-  '@inquirer/rawlist@4.1.11(@types/node@22.19.2)':
-    dependencies:
-      '@inquirer/core': 10.3.2(@types/node@22.19.2)
-      '@inquirer/type': 3.0.10(@types/node@22.19.2)
-      yoctocolors-cjs: 2.1.3
-    optionalDependencies:
-      '@types/node': 22.19.2
-
-  '@inquirer/search@3.2.2(@types/node@22.19.2)':
-    dependencies:
-      '@inquirer/core': 10.3.2(@types/node@22.19.2)
-      '@inquirer/figures': 1.0.15
-      '@inquirer/type': 3.0.10(@types/node@22.19.2)
-      yoctocolors-cjs: 2.1.3
-    optionalDependencies:
-      '@types/node': 22.19.2
-
-  '@inquirer/select@4.4.2(@types/node@22.19.2)':
+  '@inquirer/password@4.0.23(@types/node@22.19.8)':
     dependencies:
       '@inquirer/ansi': 1.0.2
-      '@inquirer/core': 10.3.2(@types/node@22.19.2)
-      '@inquirer/figures': 1.0.15
-      '@inquirer/type': 3.0.10(@types/node@22.19.2)
+      '@inquirer/core': 10.3.2(@types/node@22.19.8)
+      '@inquirer/type': 3.0.10(@types/node@22.19.8)
+    optionalDependencies:
+      '@types/node': 22.19.8
+
+  '@inquirer/prompts@7.9.0(@types/node@22.19.8)':
+    dependencies:
+      '@inquirer/checkbox': 4.3.2(@types/node@22.19.8)
+      '@inquirer/confirm': 5.1.21(@types/node@22.19.8)
+      '@inquirer/editor': 4.2.23(@types/node@22.19.8)
+      '@inquirer/expand': 4.0.23(@types/node@22.19.8)
+      '@inquirer/input': 4.3.1(@types/node@22.19.8)
+      '@inquirer/number': 3.0.23(@types/node@22.19.8)
+      '@inquirer/password': 4.0.23(@types/node@22.19.8)
+      '@inquirer/rawlist': 4.1.11(@types/node@22.19.8)
+      '@inquirer/search': 3.2.2(@types/node@22.19.8)
+      '@inquirer/select': 4.4.2(@types/node@22.19.8)
+    optionalDependencies:
+      '@types/node': 22.19.8
+
+  '@inquirer/rawlist@4.1.11(@types/node@22.19.8)':
+    dependencies:
+      '@inquirer/core': 10.3.2(@types/node@22.19.8)
+      '@inquirer/type': 3.0.10(@types/node@22.19.8)
       yoctocolors-cjs: 2.1.3
     optionalDependencies:
-      '@types/node': 22.19.2
+      '@types/node': 22.19.8
 
-  '@inquirer/type@3.0.10(@types/node@22.19.2)':
+  '@inquirer/search@3.2.2(@types/node@22.19.8)':
+    dependencies:
+      '@inquirer/core': 10.3.2(@types/node@22.19.8)
+      '@inquirer/figures': 1.0.15
+      '@inquirer/type': 3.0.10(@types/node@22.19.8)
+      yoctocolors-cjs: 2.1.3
     optionalDependencies:
-      '@types/node': 22.19.2
+      '@types/node': 22.19.8
+
+  '@inquirer/select@4.4.2(@types/node@22.19.8)':
+    dependencies:
+      '@inquirer/ansi': 1.0.2
+      '@inquirer/core': 10.3.2(@types/node@22.19.8)
+      '@inquirer/figures': 1.0.15
+      '@inquirer/type': 3.0.10(@types/node@22.19.8)
+      yoctocolors-cjs: 2.1.3
+    optionalDependencies:
+      '@types/node': 22.19.8
+
+  '@inquirer/type@3.0.10(@types/node@22.19.8)':
+    optionalDependencies:
+      '@types/node': 22.19.8
 
   '@isaacs/balanced-match@4.0.1': {}
 
@@ -13175,9 +13300,9 @@ snapshots:
 
   '@microsoft/tsdoc@0.16.0': {}
 
-  '@mintlify/cli@4.0.935(@radix-ui/react-popover@1.1.15(@types/react-dom@19.2.3(@types/react@19.2.11))(@types/react@19.2.11)(react-dom@19.2.4(react@19.2.3))(react@19.2.3))(@types/node@22.19.2)(@types/react@19.2.11)(react-dom@19.2.4(react@19.2.3))(typescript@5.9.3)':
+  '@mintlify/cli@4.0.935(@radix-ui/react-popover@1.1.15(@types/react-dom@19.2.3(@types/react@19.2.11))(@types/react@19.2.11)(react-dom@19.2.4(react@19.2.3))(react@19.2.3))(@types/node@22.19.8)(@types/react@19.2.11)(react-dom@19.2.4(react@19.2.3))(typescript@5.9.3)':
     dependencies:
-      '@inquirer/prompts': 7.9.0(@types/node@22.19.2)
+      '@inquirer/prompts': 7.9.0(@types/node@22.19.8)
       '@mintlify/common': 1.0.713(@radix-ui/react-popover@1.1.15(@types/react-dom@19.2.3(@types/react@19.2.11))(@types/react@19.2.11)(react-dom@19.2.4(react@19.2.3))(react@19.2.3))(@types/react@19.2.11)(react-dom@19.2.4(react@19.2.3))(react@19.2.3)(typescript@5.9.3)
       '@mintlify/link-rot': 3.0.872(@radix-ui/react-popover@1.1.15(@types/react-dom@19.2.3(@types/react@19.2.11))(@types/react@19.2.11)(react-dom@19.2.4(react@19.2.3))(react@19.2.3))(@types/react@19.2.11)(react-dom@19.2.4(react@19.2.3))(react@19.2.3)(typescript@5.9.3)
       '@mintlify/models': 0.0.268
@@ -13191,7 +13316,7 @@ snapshots:
       front-matter: 4.0.2
       fs-extra: 11.2.0
       ink: 6.3.0(@types/react@19.2.11)(react@19.2.3)
-      inquirer: 12.3.0(@types/node@22.19.2)
+      inquirer: 12.3.0(@types/node@22.19.8)
       js-yaml: 4.1.0
       mdast-util-mdx-jsx: 3.2.0
       react: 19.2.3
@@ -13594,6 +13719,54 @@ snapshots:
       - react-dom
       - supports-color
       - typescript
+
+  '@napi-rs/canvas-android-arm64@0.1.91':
+    optional: true
+
+  '@napi-rs/canvas-darwin-arm64@0.1.91':
+    optional: true
+
+  '@napi-rs/canvas-darwin-x64@0.1.91':
+    optional: true
+
+  '@napi-rs/canvas-linux-arm-gnueabihf@0.1.91':
+    optional: true
+
+  '@napi-rs/canvas-linux-arm64-gnu@0.1.91':
+    optional: true
+
+  '@napi-rs/canvas-linux-arm64-musl@0.1.91':
+    optional: true
+
+  '@napi-rs/canvas-linux-riscv64-gnu@0.1.91':
+    optional: true
+
+  '@napi-rs/canvas-linux-x64-gnu@0.1.91':
+    optional: true
+
+  '@napi-rs/canvas-linux-x64-musl@0.1.91':
+    optional: true
+
+  '@napi-rs/canvas-win32-arm64-msvc@0.1.91':
+    optional: true
+
+  '@napi-rs/canvas-win32-x64-msvc@0.1.91':
+    optional: true
+
+  '@napi-rs/canvas@0.1.91':
+    optionalDependencies:
+      '@napi-rs/canvas-android-arm64': 0.1.91
+      '@napi-rs/canvas-darwin-arm64': 0.1.91
+      '@napi-rs/canvas-darwin-x64': 0.1.91
+      '@napi-rs/canvas-linux-arm-gnueabihf': 0.1.91
+      '@napi-rs/canvas-linux-arm64-gnu': 0.1.91
+      '@napi-rs/canvas-linux-arm64-musl': 0.1.91
+      '@napi-rs/canvas-linux-riscv64-gnu': 0.1.91
+      '@napi-rs/canvas-linux-x64-gnu': 0.1.91
+      '@napi-rs/canvas-linux-x64-musl': 0.1.91
+      '@napi-rs/canvas-win32-arm64-msvc': 0.1.91
+      '@napi-rs/canvas-win32-x64-msvc': 0.1.91
+    optional: true
 
   '@napi-rs/wasm-runtime@0.2.12':
     dependencies:
@@ -18670,12 +18843,12 @@ snapshots:
 
   inline-style-parser@0.2.7: {}
 
-  inquirer@12.3.0(@types/node@22.19.2):
+  inquirer@12.3.0(@types/node@22.19.8):
     dependencies:
-      '@inquirer/core': 10.3.2(@types/node@22.19.2)
-      '@inquirer/prompts': 7.9.0(@types/node@22.19.2)
-      '@inquirer/type': 3.0.10(@types/node@22.19.2)
-      '@types/node': 22.19.2
+      '@inquirer/core': 10.3.2(@types/node@22.19.8)
+      '@inquirer/prompts': 7.9.0(@types/node@22.19.8)
+      '@inquirer/type': 3.0.10(@types/node@22.19.8)
+      '@types/node': 22.19.8
       ansi-escapes: 4.3.2
       mute-stream: 2.0.0
       run-async: 3.0.0
@@ -20440,9 +20613,9 @@ snapshots:
       minipass: 3.3.6
       yallist: 4.0.0
 
-  mintlify@4.2.331(@radix-ui/react-popover@1.1.15(@types/react-dom@19.2.3(@types/react@19.2.11))(@types/react@19.2.11)(react-dom@19.2.4(react@19.2.3))(react@19.2.3))(@types/node@22.19.2)(@types/react@19.2.11)(react-dom@19.2.4(react@19.2.3))(typescript@5.9.3):
+  mintlify@4.2.331(@radix-ui/react-popover@1.1.15(@types/react-dom@19.2.3(@types/react@19.2.11))(@types/react@19.2.11)(react-dom@19.2.4(react@19.2.3))(react@19.2.3))(@types/node@22.19.8)(@types/react@19.2.11)(react-dom@19.2.4(react@19.2.3))(typescript@5.9.3):
     dependencies:
-      '@mintlify/cli': 4.0.935(@radix-ui/react-popover@1.1.15(@types/react-dom@19.2.3(@types/react@19.2.11))(@types/react@19.2.11)(react-dom@19.2.4(react@19.2.3))(react@19.2.3))(@types/node@22.19.2)(@types/react@19.2.11)(react-dom@19.2.4(react@19.2.3))(typescript@5.9.3)
+      '@mintlify/cli': 4.0.935(@radix-ui/react-popover@1.1.15(@types/react-dom@19.2.3(@types/react@19.2.11))(@types/react@19.2.11)(react-dom@19.2.4(react@19.2.3))(react@19.2.3))(@types/node@22.19.8)(@types/react@19.2.11)(react-dom@19.2.4(react@19.2.3))(typescript@5.9.3)
     transitivePeerDependencies:
       - '@radix-ui/react-popover'
       - '@types/node'
@@ -20595,6 +20768,9 @@ snapshots:
       data-uri-to-buffer: 4.0.1
       fetch-blob: 3.2.0
       formdata-polyfill: 4.0.10
+
+  node-readable-to-web-readable-stream@0.4.2:
+    optional: true
 
   node-releases@2.0.27: {}
 
@@ -21061,9 +21237,6 @@ snapshots:
 
   path-type@4.0.0: {}
 
-  path2d@0.2.2:
-    optional: true
-
   pathe@2.0.3: {}
 
   pathval@2.0.1: {}
@@ -21077,10 +21250,10 @@ snapshots:
       sha.js: 2.4.12
       to-buffer: 1.2.2
 
-  pdfjs-dist@4.3.136:
+  pdfjs-dist@5.4.624:
     optionalDependencies:
-      canvas: 3.2.0
-      path2d: 0.2.2
+      '@napi-rs/canvas': 0.1.91
+      node-readable-to-web-readable-stream: 0.4.2
 
   peek-readable@4.1.0: {}
 
@@ -22820,14 +22993,14 @@ snapshots:
       make-asynchronous: 1.0.1
       time-span: 5.1.0
 
-  superdoc@1.11.0(@hocuspocus/provider@2.15.3(y-protocols@1.0.7(yjs@13.6.19))(yjs@13.6.19))(canvas@3.2.0)(pdfjs-dist@4.3.136)(typescript@5.9.3)(y-prosemirror@1.3.7(prosemirror-model@1.25.4)(prosemirror-state@1.4.4)(prosemirror-view@1.41.5)(y-protocols@1.0.7(yjs@13.6.19))(yjs@13.6.19))(yjs@13.6.19):
+  superdoc@1.11.0(@hocuspocus/provider@2.15.3(y-protocols@1.0.7(yjs@13.6.19))(yjs@13.6.19))(canvas@3.2.0)(pdfjs-dist@5.4.624)(typescript@5.9.3)(y-prosemirror@1.3.7(prosemirror-model@1.25.4)(prosemirror-state@1.4.4)(prosemirror-view@1.41.5)(y-protocols@1.0.7(yjs@13.6.19))(yjs@13.6.19))(yjs@13.6.19):
     dependencies:
       '@hocuspocus/provider': 2.15.3(y-protocols@1.0.7(yjs@13.6.19))(yjs@13.6.19)
       buffer-crc32: 1.0.0
       eventemitter3: 5.0.4
       jsdom: 27.3.0(canvas@3.2.0)
       naive-ui: 2.43.2(vue@3.5.25(typescript@5.9.3))
-      pdfjs-dist: 4.3.136
+      pdfjs-dist: 5.4.624
       pinia: 2.3.1(typescript@5.9.3)(vue@3.5.25(typescript@5.9.3))
       rollup-plugin-copy: 3.5.0
       uuid: 9.0.1

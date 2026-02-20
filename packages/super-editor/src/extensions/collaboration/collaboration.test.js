@@ -256,6 +256,32 @@ describe('collaboration helpers', () => {
     );
   });
 
+  it('does not persist null comment xml payloads into meta.docx', async () => {
+    const existingDocx = [
+      { name: 'word/document.xml', content: '<old doc />' },
+      { name: 'word/comments.xml', content: '<old comments />' },
+      { name: 'word/commentsExtended.xml', content: '<old comments extended />' },
+    ];
+    const ydoc = createYDocStub({ docxValue: existingDocx });
+    const metas = ydoc._maps.metas;
+
+    const editor = {
+      options: { ydoc, user: { id: 'user-null-comments' } },
+      exportDocx: vi.fn().mockResolvedValue({
+        'word/document.xml': '<new doc />',
+        'word/comments.xml': null,
+        'word/commentsExtended.xml': null,
+      }),
+    };
+
+    await updateYdocDocxData(editor);
+
+    const persistedDocx = metas.set.mock.calls.at(-1)?.[1] || [];
+    expect(persistedDocx.some((file) => file.name === 'word/comments.xml')).toBe(false);
+    expect(persistedDocx.some((file) => file.name === 'word/commentsExtended.xml')).toBe(false);
+    expect(persistedDocx.every((file) => typeof file.content === 'string')).toBe(true);
+  });
+
   it('triggers transaction when new file is added', async () => {
     const existingDocx = [{ name: 'word/document.xml', content: '<doc />' }];
     const ydoc = createYDocStub({ docxValue: existingDocx });
@@ -383,7 +409,7 @@ describe('collaboration extension', () => {
   });
 
   describe('debounced docx sync', () => {
-    const DEBOUNCE_DELAY_MS = 1000;
+    const DEBOUNCE_DELAY_MS = 30000;
 
     const createDebouncedSyncTestContext = () => {
       const updateSpy = vi.spyOn(CollaborationHelpers, 'updateYdocDocxData').mockResolvedValue();
@@ -447,6 +473,26 @@ describe('collaboration extension', () => {
 
       vi.advanceTimersByTime(1);
       expect(updateSpy).toHaveBeenCalledTimes(1);
+    });
+
+    it('does not starve docx metadata sync during sustained local edits', () => {
+      const { updateSpy, ydoc, context } = createDebouncedSyncTestContext();
+      Collaboration.config.addPmPlugins.call(context);
+
+      const transaction = {
+        local: true,
+        changed: new Map([['headerFooterJson', new Set(['headerFooterJson'])]]),
+      };
+
+      const sustainedEditIntervalMs = 5000;
+      const sustainedEditDurationMs = 2 * 60 * 1000;
+
+      for (let elapsedMs = 0; elapsedMs < sustainedEditDurationMs; elapsedMs += sustainedEditIntervalMs) {
+        ydoc._listeners.afterTransaction(transaction);
+        vi.advanceTimersByTime(sustainedEditIntervalMs);
+      }
+
+      expect(updateSpy).toHaveBeenCalled();
     });
   });
 

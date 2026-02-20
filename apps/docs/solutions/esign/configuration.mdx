@@ -346,6 +346,35 @@ Style the component to match your brand.
 />
 ```
 
+## Telemetry
+
+Telemetry is enabled by default with `source: 'esign'` metadata. You can override or extend the defaults:
+
+```jsx
+<SuperDocESign
+  telemetry={{ enabled: true, metadata: { source: "my-app", environment: "production" } }}
+  // ... other props
+/>
+```
+
+To disable telemetry:
+
+```jsx
+<SuperDocESign telemetry={{ enabled: false }} />
+```
+
+For more details on how telemetry works, see the [Telemetry](/resources/telemetry) page.
+
+## License key
+
+Pass your license key to activate commercial features:
+
+```jsx
+<SuperDocESign licenseKey="your-license-key" />
+```
+
+The key is forwarded to the underlying SuperDoc instance.
+
 ## Complete example
 
 ```jsx

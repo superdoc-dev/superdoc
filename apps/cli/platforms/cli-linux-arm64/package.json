@@ -1,0 +1,19 @@
+{
+  "name": "@superdoc-dev/cli-linux-arm64",
+  "version": "1.0.0",
+  "os": [
+    "linux"
+  ],
+  "cpu": [
+    "arm64"
+  ],
+  "bin": {
+    "superdoc": "bin/superdoc"
+  },
+  "files": [
+    "bin"
+  ],
+  "publishConfig": {
+    "access": "public"
+  }
+}

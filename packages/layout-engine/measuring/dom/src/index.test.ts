@@ -7,6 +7,7 @@ import type {
   Measure,
   DrawingMeasure,
   DrawingBlock,
+  TableMeasure,
 } from '@superdoc/contracts';
 
 const expectParagraphMeasure = (measure: Measure): ParagraphMeasure => {
@@ -211,7 +212,7 @@ describe('measureBlock', () => {
       expect(measure.lines[0].maxWidth).toBe(maxWidth - textStartPx);
     });
 
-    it('falls back to marker.textStartX when wordLayout.textStartPx is missing', async () => {
+    it('uses shared resolver output when only marker.textStartX exists in standard mode', async () => {
       const maxWidth = 200;
       const textStartX = 96; // First-line text start after marker + tab
       const block: FlowBlock = {
@@ -247,7 +248,49 @@ describe('measureBlock', () => {
       };
 
       const measure = expectParagraphMeasure(await measureBlock(block, maxWidth));
-      expect(measure.lines[0].maxWidth).toBe(maxWidth - textStartX);
+      // Standard mode resolution is governed by resolveListTextStartPx (Step 8),
+      // which computes text start from indent/marker geometry when textStartPx is absent.
+      expect(measure.lines[0].maxWidth).toBe(120);
+    });
+
+    it('prefers shared resolved text start over top-level textStartPx when both exist', async () => {
+      const maxWidth = 240;
+      const resolvedTextStart = 112;
+      const topLevelTextStart = 160;
+      const block: FlowBlock = {
+        kind: 'paragraph',
+        id: 'wordlayout-list-resolved-precedence',
+        runs: [
+          {
+            text: 'List item should size first-line width from shared resolver output',
+            fontFamily: 'Times New Roman',
+            fontSize: 16,
+          },
+        ],
+        attrs: {
+          indent: { left: 0, firstLine: 48 },
+          wordLayout: {
+            firstLineIndentMode: true,
+            textStartPx: topLevelTextStart,
+            marker: {
+              markerText: '(a)',
+              markerBoxWidthPx: 24,
+              gutterWidthPx: 8,
+              textStartX: resolvedTextStart,
+              run: {
+                fontFamily: 'Times New Roman',
+                fontSize: 16,
+                bold: false,
+                italic: false,
+                letterSpacing: 0,
+              },
+            },
+          },
+        },
+      };
+
+      const measure = expectParagraphMeasure(await measureBlock(block, maxWidth));
+      expect(measure.lines[0].maxWidth).toBe(maxWidth - resolvedTextStart);
     });
 
     it('expands first-line width for hanging indents on non-list paragraphs', async () => {
@@ -3249,14 +3292,13 @@ describe('measureBlock', () => {
       expect(cellMeasure.blocks[1].kind).toBe('paragraph');
       expect(cellMeasure.blocks[2].kind).toBe('paragraph');
 
-      // Heights should accumulate (3 paragraphs + padding)
+      // Heights should accumulate (3 paragraphs)
       const para1Height = cellMeasure.blocks[0].totalHeight;
       const para2Height = cellMeasure.blocks[1].totalHeight;
       const para3Height = cellMeasure.blocks[2].totalHeight;
       const totalContentHeight = para1Height + para2Height + para3Height;
-      const padding = 4; // Default top (2) + bottom (2)
 
-      expect(cellMeasure.height).toBe(totalContentHeight + padding);
+      expect(cellMeasure.height).toBe(totalContentHeight);
     });
 
     it('measures cell with empty blocks array', async () => {
@@ -3284,10 +3326,7 @@ describe('measureBlock', () => {
 
       const cellMeasure = measure.rows[0].cells[0];
       expect(cellMeasure.blocks).toHaveLength(0);
-
-      // Height should be just padding
-      const padding = 4; // Default top (2) + bottom (2)
-      expect(cellMeasure.height).toBe(padding);
+      expect(cellMeasure.height).toBe(0);
     });
 
     it('maintains backward compatibility with legacy paragraph field', async () => {
@@ -3419,6 +3458,145 @@ describe('measureBlock', () => {
       // Should use blocks array (not paragraph field)
       expect(cellMeasure.blocks).toHaveLength(1);
       expect((cellMeasure.blocks[0] as any).lines?.[0]).toBeDefined();
+    });
+  });
+
+  describe('autofit tables with colspan should not truncate grid columns', () => {
+    const makeCell = (id: string) => ({
+      id,
+      blocks: [
+        {
+          kind: 'paragraph' as const,
+          id: `para-${id}`,
+          runs: [{ text: 'Text', fontFamily: 'Arial', fontSize: 12 }],
+        },
+      ],
+    });
+
+    it('preserves all 4 grid columns when max physical cells is 3 but colspans sum to 4', async () => {
+      // Reproduces SD-1797: table with 4-column grid where no row has 4 physical cells.
+      // Row patterns: 2 cells (span 3+1), 3 cells (span 1+2+1)
+      // maxCellCount must be 4 (from colspan sums), not 3 (from physical cell count)
+      const block: FlowBlock = {
+        kind: 'table',
+        id: 'autofit-colspan-table',
+        rows: [
+          {
+            id: 'row-0',
+            cells: [
+              { ...makeCell('c-0-0'), colSpan: 3 },
+              { ...makeCell('c-0-1'), colSpan: 1 },
+            ],
+          },
+          {
+            id: 'row-1',
+            cells: [
+              { ...makeCell('c-1-0'), colSpan: 1 },
+              { ...makeCell('c-1-1'), colSpan: 2 },
+              { ...makeCell('c-1-2'), colSpan: 1 },
+            ],
+          },
+        ],
+        columnWidths: [172, 13, 128, 310], // 4 grid columns from w:tblGrid
+      };
+
+      const measure = await measureBlock(block, { maxWidth: 800 });
+      expect(measure.kind).toBe('table');
+      if (measure.kind !== 'table') throw new Error('expected table measure');
+
+      // All 4 column widths should be preserved (not truncated to 3)
+      expect(measure.columnWidths).toHaveLength(4);
+      expect(measure.columnWidths).toEqual([172, 13, 128, 310]);
+      expect(measure.totalWidth).toBe(623);
+
+      // Row 0: 2 cells spanning 3+1 = both cells measured
+      expect(measure.rows[0].cells).toHaveLength(2);
+
+      // Row 1: 3 cells spanning 1+2+1 = all 3 cells measured
+      expect(measure.rows[1].cells).toHaveLength(3);
+    });
+
+    it('does not drop rightmost cell when colspan exhausts truncated grid', async () => {
+      // 4-column grid, rows with span patterns [2,2] and [3,1]
+      // Without the fix, grid gets truncated to 2 columns (max physical cells = 2),
+      // and the second cell in span [3,1] rows is dropped
+      const block: FlowBlock = {
+        kind: 'table',
+        id: 'autofit-colspan-table-2',
+        rows: [
+          {
+            id: 'row-0',
+            cells: [
+              { ...makeCell('c-0-0'), colSpan: 2 },
+              { ...makeCell('c-0-1'), colSpan: 2 },
+            ],
+          },
+          {
+            id: 'row-1',
+            cells: [
+              { ...makeCell('c-1-0'), colSpan: 3 },
+              { ...makeCell('c-1-1'), colSpan: 1 },
+            ],
+          },
+        ],
+        columnWidths: [100, 50, 100, 300], // 4 grid columns
+      };
+
+      const measure = await measureBlock(block, { maxWidth: 800 });
+      expect(measure.kind).toBe('table');
+      if (measure.kind !== 'table') throw new Error('expected table measure');
+
+      // Grid should not be truncated
+      expect(measure.columnWidths).toHaveLength(4);
+
+      // Both cells in each row must be present
+      expect(measure.rows[0].cells).toHaveLength(2);
+      expect(measure.rows[1].cells).toHaveLength(2);
+
+      // Cell widths should correctly sum their spanned columns
+      // Row 0 cell 0: cols 0+1 = 100+50 = 150
+      expect(measure.rows[0].cells[0].width).toBe(150);
+      // Row 0 cell 1: cols 2+3 = 100+300 = 400
+      expect(measure.rows[0].cells[1].width).toBe(400);
+      // Row 1 cell 0: cols 0+1+2 = 100+50+100 = 250
+      expect(measure.rows[1].cells[0].width).toBe(250);
+      // Row 1 cell 1: col 3 = 300
+      expect(measure.rows[1].cells[1].width).toBe(300);
+    });
+
+    it('handles single-cell full-span row correctly', async () => {
+      const block: FlowBlock = {
+        kind: 'table',
+        id: 'autofit-fullspan-table',
+        rows: [
+          {
+            id: 'row-0',
+            cells: [{ ...makeCell('c-0-0'), colSpan: 4 }],
+          },
+          {
+            id: 'row-1',
+            cells: [
+              { ...makeCell('c-1-0'), colSpan: 1 },
+              { ...makeCell('c-1-1'), colSpan: 2 },
+              { ...makeCell('c-1-2'), colSpan: 1 },
+            ],
+          },
+        ],
+        columnWidths: [100, 50, 100, 300],
+      };
+
+      const measure = await measureBlock(block, { maxWidth: 800 });
+      expect(measure.kind).toBe('table');
+      if (measure.kind !== 'table') throw new Error('expected table measure');
+
+      expect(measure.columnWidths).toHaveLength(4);
+
+      // Full-span row: 1 cell spanning all 4 columns
+      expect(measure.rows[0].cells).toHaveLength(1);
+      expect(measure.rows[0].cells[0].width).toBe(550); // 100+50+100+300
+
+      // 3-cell row: all cells present
+      expect(measure.rows[1].cells).toHaveLength(3);
     });
   });
 
@@ -4524,7 +4702,7 @@ describe('measureBlock', () => {
   });
 
   describe('table cell measurement with spacing.after', () => {
-    it('should add spacing.after to content height for all paragraphs', async () => {
+    it('should add spacing.after to content height for non-last paragraphs', async () => {
       const table: FlowBlock = {
         kind: 'table',
         id: 'table-spacing',
@@ -4564,17 +4742,19 @@ describe('measureBlock', () => {
       const block0Measure = cellMeasure.blocks[0];
       const block1Measure = cellMeasure.blocks[1];
 
-      // Content height should include both paragraph heights and both spacing.after values
+      // Content height should include first paragraph's spacing.after.
+      // The last paragraph contributes max(0, spacing.after - paddingBottom).
+      // With default paddingBottom=0 in this fixture, the full last spacing is included.
       // First paragraph: height + 10px spacing
-      // Last paragraph: height + 20px spacing (even though it's the last paragraph)
+      // Last paragraph: height + 20px spacing
       expect(block0Measure.kind).toBe('paragraph');
       expect(block1Measure.kind).toBe('paragraph');
 
       const para0Height = block0Measure.kind === 'paragraph' ? block0Measure.totalHeight : 0;
       const para1Height = block1Measure.kind === 'paragraph' ? block1Measure.totalHeight : 0;
 
-      // Cell height includes: para0Height + 10 + para1Height + 20 + padding (default 2 top + 2 bottom)
-      const expectedCellHeight = para0Height + 10 + para1Height + 20 + 4;
+      // Cell height includes: para0Height + 10 + para1Height + 20
+      const expectedCellHeight = para0Height + 10 + para1Height + 20;
       expect(cellMeasure.height).toBe(expectedCellHeight);
     });
 
@@ -4629,10 +4809,12 @@ describe('measureBlock', () => {
       const para1Height = block1.kind === 'paragraph' ? block1.totalHeight : 0;
       const para2Height = block2.kind === 'paragraph' ? block2.totalHeight : 0;
 
-      // Only positive spacing should be added
-      // Zero and negative spacing should not be added
-      // Cell height = para0 + para1 + para2 + 15 (positive spacing) + 4 (padding)
-      const expectedCellHeight = para0Height + para1Height + para2Height + 15 + 4;
+      // Only positive spacing should be added.
+      // Zero and negative spacing should not be added.
+      // para-2 is the last paragraph, so it contributes max(0, 15 - paddingBottom).
+      // paddingBottom is 0 in this fixture, so +15 is included.
+      // Cell height = para0 + para1 + para2 + 15
+      const expectedCellHeight = para0Height + para1Height + para2Height + 15;
       expect(cellMeasure.height).toBe(expectedCellHeight);
     });
 
@@ -4671,8 +4853,8 @@ describe('measureBlock', () => {
 
       const paraHeight = block0.kind === 'paragraph' ? block0.totalHeight : 0;
 
-      // Cell height should just be paragraph height + padding (no spacing.after)
-      const expectedCellHeight = paraHeight + 4;
+      // Cell height should just be paragraph height (no spacing.after)
+      const expectedCellHeight = paraHeight;
       expect(cellMeasure.height).toBe(expectedCellHeight);
     });
 
@@ -4718,7 +4900,7 @@ describe('measureBlock', () => {
       const paraHeight = paraMeasure.kind === 'paragraph' ? paraMeasure.totalHeight : 0;
 
       // Anchored image is out-of-flow: it should not increase cell height.
-      const expectedCellHeight = paraHeight + 4; // default top+bottom padding
+      const expectedCellHeight = paraHeight;
       expect(cellMeasure.height).toBe(expectedCellHeight);
     });
 
@@ -4774,8 +4956,8 @@ describe('measureBlock', () => {
       const para2Height = block2.kind === 'paragraph' ? block2.totalHeight : 0;
 
       // Only the valid number should add spacing
-      // Cell height = para0 + 10 (valid spacing) + para1 + para2 + 4 (padding)
-      const expectedCellHeight = para0Height + 10 + para1Height + para2Height + 4;
+      // Cell height = para0 + 10 (valid spacing) + para1 + para2
+      const expectedCellHeight = para0Height + 10 + para1Height + para2Height;
       expect(cellMeasure.height).toBe(expectedCellHeight);
     });
 
@@ -4825,7 +5007,9 @@ describe('measureBlock', () => {
       const cellMeasure = measure.rows[0].cells[0];
 
       // Should handle mixed block types correctly
-      // Paragraphs should have spacing.after applied, image should not
+      // Non-last paragraphs should have spacing.after applied, image should not
+      // Last paragraph contributes max(0, spacing.after - paddingBottom).
+      // paddingBottom is 0 in this fixture.
       expect(cellMeasure.blocks).toHaveLength(3);
       expect(cellMeasure.blocks[0].kind).toBe('paragraph');
       expect(cellMeasure.blocks[1].kind).toBe('image');
@@ -4839,9 +5023,98 @@ describe('measureBlock', () => {
       const imageHeight = block1.kind === 'image' ? block1.height : 0;
       const para1Height = block2.kind === 'paragraph' ? block2.totalHeight : 0;
 
-      // Cell height = para0 + 10 + image + para1 + 5 + 4 (padding)
-      const expectedCellHeight = para0Height + 10 + imageHeight + para1Height + 5 + 4;
+      // Cell height = para0 + 10 + image + para1 + 5
+      const expectedCellHeight = para0Height + 10 + imageHeight + para1Height + 5;
       expect(cellMeasure.height).toBe(expectedCellHeight);
+    });
+  });
+
+  describe('table column count with rowspan', () => {
+    it('should preserve all grid columns when rows have fewer physical cells due to rowspan', async () => {
+      // Simulates PCI table structure: 4 grid columns, but some rows have only 2-3 physical cells
+      // because rowspan cells from above occupy grid slots.
+      const table: FlowBlock = {
+        kind: 'table',
+        id: 'table-rowspan-cols',
+        attrs: {},
+        columnWidths: [170, 15, 130, 310], // 4 grid columns, sum = 625
+        rows: [
+          {
+            id: 'row-0',
+            cells: [
+              {
+                id: 'cell-0-0',
+                colSpan: 2,
+                attrs: {},
+                blocks: [{ kind: 'paragraph', id: 'p-0-0', runs: [{ text: 'A', fontFamily: 'Arial', fontSize: 12 }] }],
+              },
+              {
+                id: 'cell-0-1',
+                colSpan: 2,
+                attrs: {},
+                blocks: [{ kind: 'paragraph', id: 'p-0-1', runs: [{ text: 'B', fontFamily: 'Arial', fontSize: 12 }] }],
+              },
+            ],
+          },
+          {
+            id: 'row-1',
+            cells: [
+              {
+                id: 'cell-1-0',
+                colSpan: 1,
+                rowSpan: 2,
+                attrs: {},
+                blocks: [{ kind: 'paragraph', id: 'p-1-0', runs: [{ text: 'C', fontFamily: 'Arial', fontSize: 12 }] }],
+              },
+              {
+                id: 'cell-1-1',
+                colSpan: 2,
+                attrs: {},
+                blocks: [{ kind: 'paragraph', id: 'p-1-1', runs: [{ text: 'D', fontFamily: 'Arial', fontSize: 12 }] }],
+              },
+              {
+                id: 'cell-1-2',
+                colSpan: 1,
+                attrs: {},
+                blocks: [{ kind: 'paragraph', id: 'p-1-2', runs: [{ text: 'E', fontFamily: 'Arial', fontSize: 12 }] }],
+              },
+            ],
+          },
+          {
+            // Row 2: only 2 physical cells because col 0 is occupied by row-1 rowSpan=2
+            id: 'row-2',
+            cells: [
+              {
+                id: 'cell-2-0',
+                colSpan: 2,
+                attrs: {},
+                blocks: [{ kind: 'paragraph', id: 'p-2-0', runs: [{ text: 'F', fontFamily: 'Arial', fontSize: 12 }] }],
+              },
+              {
+                id: 'cell-2-1',
+                colSpan: 1,
+                attrs: {},
+                blocks: [{ kind: 'paragraph', id: 'p-2-1', runs: [{ text: 'G', fontFamily: 'Arial', fontSize: 12 }] }],
+              },
+            ],
+          },
+        ],
+      };
+
+      const measure = await measureBlock(table, 625);
+      expect(measure.kind).toBe('table');
+      const tableMeasure = measure as TableMeasure;
+
+      // All 4 grid columns must be preserved (not truncated to 3 based on max physical cell count)
+      expect(tableMeasure.columnWidths).toHaveLength(4);
+      expect(tableMeasure.columnWidths[0]).toBe(170);
+      expect(tableMeasure.columnWidths[1]).toBe(15);
+      expect(tableMeasure.columnWidths[2]).toBe(130);
+      expect(tableMeasure.columnWidths[3]).toBe(310);
+
+      // Total width should match page width
+      const totalWidth = tableMeasure.columnWidths.reduce((a: number, b: number) => a + b, 0);
+      expect(totalWidth).toBe(625);
     });
   });
 });

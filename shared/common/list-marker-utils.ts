@@ -12,7 +12,7 @@
  * - measuring/dom/src/index.ts (full typography measurement)
  */
 
-import { LIST_MARKER_GAP, SPACE_SUFFIX_GAP_PX, DEFAULT_TAB_INTERVAL_PX } from './layout-constants.js';
+import { LIST_MARKER_GAP, SPACE_SUFFIX_GAP_PX } from './layout-constants.js';
 
 /**
  * Minimal marker run formatting information for text measurement.
@@ -334,7 +334,7 @@ export function resolveListTextStartPx(
   const textStart = indentLeft + firstLine;
   let tabWidth = textStart - currentPosStandard;
 
-  // If tab doesn't reach text start, use default tab interval
+  // Hanging-overflow safeguard: marker overruns the hanging space, use minimum gutter gap
   if (tabWidth <= 0) {
     tabWidth = gutterWidth;
   } else if (tabWidth < LIST_MARKER_GAP) {

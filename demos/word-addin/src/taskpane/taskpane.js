@@ -5,7 +5,7 @@
 
 /* eslint-disable prettier/prettier */
 /* global document, Office, Word */
-/* eslint-disable no-use-before-define */
+ 
 
 import SERVER_DOMAIN from '../server-domain.js';
 

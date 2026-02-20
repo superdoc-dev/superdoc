@@ -222,7 +222,14 @@ const handleRemove = () => {
       <!-- Text input -->
       <div class="input-row text-input-row">
         <div class="input-icon text-input-icon">T</div>
-        <input type="text" name="text" placeholder="Text" v-model="text" :readonly="isViewingMode" @keydown.enter.stop.prevent="!isViewingMode && handleSubmit" />
+        <input
+          type="text"
+          name="text"
+          placeholder="Text"
+          v-model="text"
+          :readonly="isViewingMode"
+          @keydown.enter.stop.prevent="!isViewingMode && handleSubmit"
+        />
       </div>
 
       <!-- URL input -->

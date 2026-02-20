@@ -646,7 +646,18 @@ export const hitTestTableFragment = (
     if (!rowMeasure || !row) continue;
 
     // Find the column at localX using column widths
+    // IMPORTANT: For rows with rowspan cells from above, the first cell may not start at grid column 0.
+    // We need to calculate the X offset for columns occupied by rowspans.
+    const firstCellGridStart = rowMeasure.cells[0]?.gridColumnStart ?? 0;
     let colX = 0;
+    // Calculate X offset for columns before the first cell (occupied by rowspans from above)
+    if (firstCellGridStart > 0 && tableMeasure.columnWidths) {
+      for (let col = 0; col < firstCellGridStart && col < tableMeasure.columnWidths.length; col++) {
+        colX += tableMeasure.columnWidths[col];
+      }
+    }
+    const initialColX = colX;
+
     let colIndex = -1;
     // Bounds check: skip if row has no cells
     if (rowMeasure.cells.length === 0 || row.cells.length === 0) continue;
@@ -660,8 +671,13 @@ export const hitTestTableFragment = (
     }
 
     if (colIndex === -1) {
-      // Click is to the right of all columns, use the last column
-      colIndex = rowMeasure.cells.length - 1;
+      if (localX < initialColX) {
+        // Click is in a rowspanned area (left of all cells in this row) - use first cell
+        colIndex = 0;
+      } else {
+        // Click is to the right of all columns - use last cell
+        colIndex = rowMeasure.cells.length - 1;
+      }
       if (colIndex < 0) continue;
     }
 
@@ -702,9 +718,9 @@ export const hitTestTableFragment = (
       const blockEndY = blockStartY + blockHeight;
 
       // Calculate position within the cell (accounting for cell padding)
-      const padding = cell.attrs?.padding ?? { top: 2, left: 4, right: 4, bottom: 2 };
+      const padding = cell.attrs?.padding ?? { top: 0, left: 4, right: 4, bottom: 0 };
       const cellLocalX = localX - colX - (padding.left ?? 4);
-      const cellLocalY = localY - rowY - (padding.top ?? 2);
+      const cellLocalY = localY - rowY - (padding.top ?? 0);
       const paragraphBlock = cellBlock as ParagraphBlock;
       const paragraphMeasure = cellBlockMeasure as ParagraphMeasure;
 
@@ -720,7 +736,7 @@ export const hitTestTableFragment = (
           measure: tableMeasure,
           pageIndex: pageHit.pageIndex,
           cellRowIndex: rowIndex,
-          cellColIndex: colIndex,
+          cellColIndex: colIndex, // Use cell array index for PM selection (not gridColIndex)
           cellBlock: paragraphBlock,
           cellMeasure: paragraphMeasure,
           localX: Math.max(0, cellLocalX),
@@ -1339,7 +1355,7 @@ type TableRowBlock = TableBlock['rows'][number];
 type TableCellBlock = TableRowBlock['cells'][number];
 type TableCellMeasure = TableMeasure['rows'][number]['cells'][number];
 
-const DEFAULT_CELL_PADDING = { top: 2, bottom: 2, left: 4, right: 4 };
+const DEFAULT_CELL_PADDING = { top: 0, bottom: 0, left: 4, right: 4 };
 
 const getCellPaddingFromRow = (cellIdx: number, row?: TableRowBlock) => {
   const padding = row?.cells?.[cellIdx]?.attrs?.padding ?? {};

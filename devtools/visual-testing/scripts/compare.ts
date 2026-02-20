@@ -46,7 +46,13 @@ import {
   resolveBaselineFolderForBrowser,
   type BrowserName,
 } from './browser-utils.js';
-import { ensureBaselineDownloaded, getLatestBaselineVersion, refreshBaselineSubset } from './r2-baselines.js';
+import {
+  ensureBaselineDownloaded,
+  getLatestBaselineVersion,
+  refreshBaselineSubset,
+  isWordR2Available,
+  downloadWordBaselines,
+} from './r2-baselines.js';
 import {
   buildStorageArgs,
   findLatestBaselineLocal,
@@ -147,21 +153,12 @@ export interface ImageCompareResult {
   word?: WordImageSet;
   /** Source document metadata (if available) */
   sourceDoc?: SourceDocMetadata;
-  /** Interaction story metadata (if available) */
-  interaction?: InteractionMetadata;
 }
 
 export interface WordImageSet {
   baseline: string;
   diff: string;
   actual: string;
-}
-
-export interface InteractionMetadata {
-  storyName?: string;
-  storyDescription?: string;
-  milestoneLabel?: string;
-  milestoneDescription?: string;
 }
 
 /** Metadata linking a comparison result back to its source .docx file. */
@@ -174,6 +171,8 @@ export interface SourceDocMetadata {
   localPath: string;
   /** ms-word: protocol deep-link URL (macOS only) */
   wordUrl?: string;
+  /** Pre-downloaded Word overlay page paths relative to resultsRoot (from R2) */
+  wordOverlayPages?: string[];
 }
 
 type DocumentInfo = {
@@ -188,12 +187,6 @@ type WordTarget =
   | { mode: 'local'; value: string }
   | { mode: 'version'; value: string }
   | { mode: 'skip'; reason: string };
-
-interface StoryMetadataFile {
-  name?: string;
-  description?: string;
-  milestones?: Record<string, { label?: string; description?: string }>;
-}
 
 export interface ComparisonReport {
   /** Results folder compared */
@@ -258,8 +251,7 @@ function buildDiffBundlePaths(
 interface ReportOptions {
   reportFileName?: string;
   showAll?: boolean;
-  mode?: 'visual' | 'interactions';
-  reportMode?: 'visual' | 'interactions';
+  mode?: 'visual';
   trimPrefix?: string;
 }
 
@@ -325,7 +317,7 @@ async function runGenerate(options: {
 }
 
 async function runBaseline(options: {
-  script: 'scripts/baseline-visual.ts' | 'scripts/baseline-interactions.ts';
+  script: 'scripts/baseline-visual.ts';
   versionSpec?: string;
   filters: string[];
   matches: string[];
@@ -401,6 +393,92 @@ async function runVersionSwitch(version: string): Promise<void> {
       }
     });
   });
+}
+
+type VersionSwitchRunner = (version: string) => Promise<void>;
+
+/**
+ * Read the current `superdoc` dependency specifier from the harness package.
+ *
+ * @returns Dependency specifier, or `unknown` when the package cannot be read
+ */
+export function getHarnessSuperdocSpecifier(): string {
+  try {
+    const pkgPath = path.resolve(process.cwd(), 'packages/harness/package.json');
+    const pkg = JSON.parse(fs.readFileSync(pkgPath, 'utf-8'));
+    const spec = pkg?.dependencies?.superdoc;
+    return typeof spec === 'string' && spec.trim().length > 0 ? spec.trim() : 'unknown';
+  } catch (error) {
+    const message = error instanceof Error ? error.message : String(error);
+    console.warn(colors.warning(`Unable to read harness superdoc dependency: ${message}`));
+    return 'unknown';
+  }
+}
+
+/**
+ * Build candidate version specifiers that can be used to restore harness state.
+ *
+ * @param specifier - Raw dependency specifier from `packages/harness/package.json`
+ * @param installedVersion - Installed `superdoc` package version from `node_modules`
+ * @returns Deduplicated list of restore candidates in preferred order
+ */
+export function buildRestoreCandidates(specifier: string, installedVersion: string): string[] {
+  const candidates: string[] = [];
+  if (specifier && specifier !== 'unknown') {
+    candidates.push(specifier);
+  }
+  if (installedVersion && installedVersion !== 'unknown') {
+    candidates.push(normalizeVersionSpecifier(installedVersion));
+  }
+  return Array.from(new Set(candidates));
+}
+
+/**
+ * Decide if the harness should be restored to its previous `superdoc` version.
+ *
+ * @param versionSpec - Baseline generation version specifier
+ * @param targetVersion - Explicit target version mode flag
+ * @param restoreCandidates - Candidate versions for restore
+ * @returns `true` when a restore should be attempted
+ */
+export function shouldRestoreAfterBaselineSwitch(
+  versionSpec: string | undefined,
+  targetVersion: string | undefined,
+  restoreCandidates: string[],
+): boolean {
+  if (!versionSpec || Boolean(targetVersion) || restoreCandidates.length === 0) {
+    return false;
+  }
+
+  return normalizeVersionSpecifier(restoreCandidates[0]) !== normalizeVersionSpecifier(versionSpec);
+}
+
+/**
+ * Restore harness `superdoc` dependency by trying candidate specifiers in order.
+ *
+ * @param candidates - Candidate version specifiers to attempt
+ * @param switchVersion - Version switch implementation (defaults to `runVersionSwitch`)
+ * @throws {Error} When all restore candidates fail
+ */
+export async function restoreSuperdocVersion(
+  candidates: string[],
+  switchVersion: VersionSwitchRunner = runVersionSwitch,
+): Promise<void> {
+  const failures: string[] = [];
+  for (const candidate of candidates) {
+    try {
+      console.log(colors.muted(`Restoring SuperDoc version: ${candidate}`));
+      await switchVersion(candidate);
+      return;
+    } catch (error) {
+      failures.push(error instanceof Error ? error.message : String(error));
+    }
+  }
+
+  const attempted = candidates.length > 0 ? candidates.join(', ') : '(none)';
+  const details =
+    failures.length > 0 ? failures.map((message, index) => `${index + 1}. ${message}`).join(' | ') : 'No candidates';
+  throw new Error(`Unable to restore previous SuperDoc version. Tried: ${attempted}. Failures: ${details}`);
 }
 
 // (baseline generation handled via runBaseline in local mode)
@@ -781,50 +859,6 @@ function deriveMissingBaselineDocFilters(
   return Array.from(filters);
 }
 
-function readStoryMetadata(filePath: string): StoryMetadataFile | null {
-  if (!fs.existsSync(filePath)) return null;
-  try {
-    const raw = fs.readFileSync(filePath, 'utf8');
-    const parsed = JSON.parse(raw) as StoryMetadataFile;
-    return parsed && typeof parsed === 'object' ? parsed : null;
-  } catch {
-    return null;
-  }
-}
-
-function getInteractionMetadata(
-  relativePath: string,
-  resultsFolderName: string,
-  resultsPrefix: string | undefined,
-  resultsFolder: string,
-  baselineFolder: string,
-  cache: Map<string, StoryMetadataFile | null>,
-): InteractionMetadata | undefined {
-  const assetPath = extractAssetPath(relativePath, resultsFolderName, resultsPrefix);
-  const normalized = normalizePath(assetPath);
-  const storyDir = path.posix.dirname(normalized);
-  const fileName = path.posix.basename(normalized);
-  if (!storyDir || storyDir === '.') return undefined;
-
-  let meta = cache.get(storyDir) ?? null;
-  if (!cache.has(storyDir)) {
-    const normalizedPrefix = normalizePrefix(resultsPrefix) ?? '';
-    const resultsMetaPath = path.join(resultsFolder, normalizedPrefix, storyDir, '_story.json');
-    const baselineMetaPath = path.join(baselineFolder, storyDir, '_story.json');
-    meta = readStoryMetadata(resultsMetaPath) ?? readStoryMetadata(baselineMetaPath);
-    cache.set(storyDir, meta);
-  }
-
-  if (!meta) return undefined;
-  const milestone = meta.milestones?.[fileName];
-  return {
-    storyName: meta.name,
-    storyDescription: meta.description,
-    milestoneLabel: milestone?.label,
-    milestoneDescription: milestone?.description,
-  };
-}
-
 function parseDocKeyAndPage(
   relativePath: string,
   resultsFolderName: string,
@@ -921,11 +955,52 @@ export async function findMissingDocuments(
   return { missingDocs, unknownKeys };
 }
 
-async function augmentReportWithSourceDocs(
+type WordBaselineIndex = Map<string, { relativePath: string; pages: string[] }>;
+
+async function downloadWordBaselinesForReport(
   report: ComparisonReport,
   options: {
     resultsPrefix?: string;
     providerOptions?: { mode: StorageMode; docsDir?: string };
+  },
+): Promise<WordBaselineIndex> {
+  const provider = await createCorpusProvider(options.providerOptions);
+  try {
+    const docInfoMap = await buildDocumentInfoMap(provider);
+    const docKeys = new Set<string>();
+
+    for (const item of report.results) {
+      const parsed = parseDocKeyAndPage(item.relativePath, report.resultsFolder, options.resultsPrefix);
+      if (parsed) {
+        docKeys.add(parsed.docKey);
+      }
+    }
+
+    const docPaths = new Map<string, string>();
+    for (const docKey of docKeys) {
+      const docInfo = docInfoMap.get(docKey);
+      if (docInfo) {
+        docPaths.set(docKey, docInfo.relativePath);
+      }
+    }
+
+    if (docPaths.size === 0) {
+      return new Map();
+    }
+
+    return await downloadWordBaselines({ docPaths });
+  } finally {
+    await provider?.close?.();
+  }
+}
+
+async function augmentReportWithSourceDocs(
+  report: ComparisonReport,
+  options: {
+    resultsPrefix?: string;
+    resultsFolderName?: string;
+    providerOptions?: { mode: StorageMode; docsDir?: string };
+    wordBaselineIndex?: WordBaselineIndex;
   },
 ): Promise<ComparisonReport> {
   const diffResults = report.results.filter((item) => !item.passed);
@@ -984,6 +1059,32 @@ async function augmentReportWithSourceDocs(
 
     if (sourceDocByKey.size === 0) {
       return report;
+    }
+
+    const wordIndex = options.wordBaselineIndex;
+    const resultsRoot = options.resultsFolderName
+      ? path.resolve(process.cwd(), RESULTS_DIR, options.resultsFolderName)
+      : null;
+
+    if (wordIndex && wordIndex.size > 0 && resultsRoot) {
+      for (const [docKey, sourceDoc] of sourceDocByKey.entries()) {
+        if (!sourceDoc) continue;
+        const wordEntry = wordIndex.get(docKey);
+        if (!wordEntry || wordEntry.pages.length === 0) continue;
+
+        const overlayDir = path.join(resultsRoot, 'word-overlays', docKey);
+        fs.mkdirSync(overlayDir, { recursive: true });
+
+        const relativePaths: string[] = [];
+        for (const pagePath of wordEntry.pages) {
+          const fileName = path.basename(pagePath);
+          const dest = path.join(overlayDir, fileName);
+          fs.copyFileSync(pagePath, dest);
+          relativePaths.push(normalizePath(path.relative(resultsRoot, dest)));
+        }
+
+        sourceDoc.wordOverlayPages = relativePaths;
+      }
     }
 
     for (const item of report.results) {
@@ -1319,10 +1420,7 @@ export async function runComparison(
 
   const resultsFolder = path.join(resultsRoot, resultsFolderName);
   const initialNormalizedResultsPrefix = normalizePrefix(resultsPrefix);
-  const reportMode = options.reportOptions?.mode ?? options.reportOptions?.reportMode;
   const reportAll = Boolean(options.reportOptions?.showAll);
-  const isInteractionsRun = reportMode === 'interactions' || initialNormalizedResultsPrefix === 'interactions/';
-  const includeInteractionMeta = isInteractionsRun;
   let normalizedResultsPrefix = initialNormalizedResultsPrefix;
   const normalizedIgnorePrefixes = ignorePrefixes
     .map((prefix) => normalizePrefix(prefix))
@@ -1485,14 +1583,7 @@ export async function runComparison(
   const resolvedOutputFolderName = outputFolderName ?? resultsFolderName;
   const outputFolder = path.join(RESULTS_DIR, resolvedOutputFolderName);
   if (fs.existsSync(outputFolder)) {
-    if (isInteractionsRun) {
-      const interactionsOutput = path.join(outputFolder, 'interactions');
-      if (fs.existsSync(interactionsOutput)) {
-        fs.rmSync(interactionsOutput, { recursive: true });
-      }
-    } else {
-      fs.rmSync(outputFolder, { recursive: true });
-    }
+    fs.rmSync(outputFolder, { recursive: true });
   }
   fs.mkdirSync(outputFolder, { recursive: true });
 
@@ -1501,22 +1592,6 @@ export async function runComparison(
   let failed = 0;
   let missingInBaseline = 0;
   let missingInResults = 0;
-  const interactionMetaCache = new Map<string, StoryMetadataFile | null>();
-
-  const attachInteractionMeta = (result: ImageCompareResult): void => {
-    if (!includeInteractionMeta) return;
-    const meta = getInteractionMetadata(
-      result.relativePath,
-      resultsFolderName,
-      resultsPrefix,
-      resultsFolder,
-      baselineFolder,
-      interactionMetaCache,
-    );
-    if (meta) {
-      result.interaction = meta;
-    }
-  };
 
   // Helper to track current document and log failures grouped by document
   let currentDoc = '';
@@ -1541,7 +1616,7 @@ export async function runComparison(
 
       if (generateDiffs || reportAll) {
         const result = generateMissingPageDiff(resultPath, bundlePaths!.diffPath, 'missing_in_baseline', resultsRoot);
-        attachInteractionMeta(result);
+
         results.push(result);
         copyArtifactImage(resultPath, bundlePaths!.actualPath);
         logDocHeader(relativePath);
@@ -1557,7 +1632,7 @@ export async function runComparison(
     const diffPath = generateDiffs ? bundlePaths!.diffPath : undefined;
 
     const result = compareImages(baselinePath, resultPath, diffPath, threshold, resultsRoot);
-    attachInteractionMeta(result);
+
     results.push(result);
 
     if (result.passed) {
@@ -1590,7 +1665,7 @@ export async function runComparison(
         const bundlePaths = buildDiffBundlePaths(outputFolder, expectedResultPath);
         const result = generateMissingPageDiff(baselinePath, bundlePaths.diffPath, 'missing_in_results', resultsRoot);
         result.relativePath = normalizePath(path.join(resultsFolderName, expectedResultPath));
-        attachInteractionMeta(result);
+
         results.push(result);
         copyArtifactImage(baselinePath, bundlePaths.baselinePath);
         logDocHeader(expectedResultPath);
@@ -1707,54 +1782,60 @@ async function runWordBenchmark(inputDir: string, target: WordTarget, outputRoot
   return path.join(comparisonsDir, runName);
 }
 
-async function augmentReportWithWord(
-  report: ComparisonReport,
-  options: {
-    resultsFolderName: string;
-    resultsPrefix?: string;
-    targetVersion?: string;
-    providerOptions?: { mode: StorageMode; docsDir?: string };
-  },
-): Promise<ComparisonReport> {
-  const diffResults = report.results.filter((item) => !item.passed);
-  if (diffResults.length === 0) {
-    return report;
+/**
+ * Copy a Word baseline+actual pair into the results directory and generate a diff image.
+ * Returns the relative paths for the word asset set, or null if the diff image was not created.
+ */
+function copyWordPageAsset(
+  baselinePath: string,
+  actualPath: string,
+  docKey: string,
+  pageToken: string,
+  resultsRoot: string,
+  generateDiff: boolean,
+): WordImageSet {
+  const destDir = path.join(resultsRoot, 'word', docKey);
+  fs.mkdirSync(destDir, { recursive: true });
+
+  const baselineDest = path.join(destDir, `${pageToken}-word.png`);
+  const diffDest = path.join(destDir, `${pageToken}-word-diff.png`);
+  const actualDest = path.join(destDir, `${pageToken}-word-superdoc.png`);
+
+  fs.copyFileSync(baselinePath, baselineDest);
+  fs.copyFileSync(actualPath, actualDest);
+
+  if (generateDiff) {
+    compareImages(baselinePath, actualPath, diffDest, 0, resultsRoot);
   }
 
-  if (!isCommandAvailable('superdoc-benchmark')) {
-    console.warn(colors.warning('Skipping Word compare: superdoc-benchmark not found in PATH.'));
-    return report;
-  }
+  const relativeBase = normalizePath(path.relative(resultsRoot, baselineDest));
+  const relativeActual = normalizePath(path.relative(resultsRoot, actualDest));
+  const relativeDiff = fs.existsSync(diffDest) ? normalizePath(path.relative(resultsRoot, diffDest)) : '';
 
-  const provider = await createCorpusProvider(options.providerOptions);
-  const docInfoMap = await buildDocumentInfoMap(provider);
-  const pagesByDoc = new Map<string, Set<number>>();
+  return { baseline: relativeBase, diff: relativeDiff, actual: relativeActual };
+}
 
-  for (const item of diffResults) {
-    const parsed = parseDocKeyAndPage(item.relativePath, report.resultsFolder, options.resultsPrefix);
-    if (!parsed) continue;
-    const { docKey, pageIndex } = parsed;
-    if (!docInfoMap.has(docKey)) {
-      continue;
-    }
-    if (!pagesByDoc.has(docKey)) {
-      pagesByDoc.set(docKey, new Set());
-    }
-    pagesByDoc.get(docKey)!.add(pageIndex);
-  }
+/**
+ * Generate Word comparison assets via superdoc-benchmark for a set of documents.
+ * Populates the provided `wordAssets` map with results.
+ */
+async function generateWordAssetsViaBenchmark(options: {
+  docKeys: Set<string>;
+  pagesByDoc: Map<string, Set<number>>;
+  docInfoMap: Map<string, DocumentInfo>;
+  provider: CorpusProvider;
+  resultsRoot: string;
+  targetVersion?: string;
+  wordAssets: Map<string, WordImageSet>;
+}): Promise<void> {
+  const { docKeys, pagesByDoc, docInfoMap, provider, resultsRoot, wordAssets } = options;
 
-  if (pagesByDoc.size === 0) {
-    console.warn(colors.warning('Skipping Word compare: no matching docs found.'));
-    return report;
-  }
-
-  const resultsRoot = path.resolve(process.cwd(), RESULTS_DIR, options.resultsFolderName);
   const wordInputDir = path.join(resultsRoot, 'word-input');
   fs.rmSync(wordInputDir, { recursive: true, force: true });
   fs.mkdirSync(wordInputDir, { recursive: true });
 
   const docPathMap = new Map<string, string>();
-  for (const [docKey] of pagesByDoc.entries()) {
+  for (const docKey of docKeys) {
     const docInfo = docInfoMap.get(docKey);
     if (!docInfo) {
       console.warn(colors.warning(`Skipping Word compare for missing doc: ${docKey}`));
@@ -1768,31 +1849,27 @@ async function augmentReportWithWord(
     docPathMap.set(docKey, destination);
   }
 
-  if (docPathMap.size === 0) {
-    console.warn(colors.warning('Skipping Word compare: no documents available to copy.'));
-    return report;
-  }
+  if (docPathMap.size === 0) return;
 
   const target = resolveWordTarget(options.targetVersion);
   const outputRoot = path.join(resultsRoot, 'word-benchmark');
   fs.mkdirSync(outputRoot, { recursive: true });
 
-  console.log(colors.info('🔠 Generating Word comparison assets...'));
+  console.log(colors.info(`🔠 Generating Word comparison assets for ${docPathMap.size} fallback doc(s)...`));
   let runDir: string | null = null;
   try {
     runDir = await runWordBenchmark(wordInputDir, target, outputRoot);
   } catch (error) {
     console.warn(colors.warning(`Word compare failed: ${error instanceof Error ? error.message : String(error)}`));
-    return report;
   }
 
   const rootForReports = path.dirname(wordInputDir);
-  const wordAssets = new Map<string, WordImageSet>();
 
   if (runDir) {
-    for (const [docKey, pages] of pagesByDoc.entries()) {
+    for (const docKey of docKeys) {
+      const pages = pagesByDoc.get(docKey);
       const docPath = docPathMap.get(docKey);
-      if (!docPath) continue;
+      if (!docPath || !pages) continue;
       const docId = makeDocxOutputPath(docPath, rootForReports);
       const docOutputDir = path.join(runDir, docId);
 
@@ -1807,26 +1884,13 @@ async function augmentReportWithWord(
           continue;
         }
 
-        const destDir = path.join(resultsRoot, 'word', docKey);
-        fs.mkdirSync(destDir, { recursive: true });
-
-        const baselineDest = path.join(destDir, `${pageToken}-word.png`);
-        const diffDest = path.join(destDir, `${pageToken}-word-diff.png`);
-        const actualDest = path.join(destDir, `${pageToken}-word-superdoc.png`);
-
-        fs.copyFileSync(baselinePath, baselineDest);
+        const asset = copyWordPageAsset(baselinePath, actualPath, docKey, pageToken, resultsRoot, false);
+        // The benchmark already produced a diff — copy it instead of regenerating
+        const diffDest = path.join(resultsRoot, 'word', docKey, `${pageToken}-word-diff.png`);
         fs.copyFileSync(diffPath, diffDest);
-        fs.copyFileSync(actualPath, actualDest);
+        asset.diff = normalizePath(path.relative(resultsRoot, diffDest));
 
-        const relativeBase = normalizePath(path.relative(resultsRoot, baselineDest));
-        const relativeDiff = normalizePath(path.relative(resultsRoot, diffDest));
-        const relativeActual = normalizePath(path.relative(resultsRoot, actualDest));
-
-        wordAssets.set(`${docKey}/${pageToken}`, {
-          baseline: relativeBase,
-          diff: relativeDiff,
-          actual: relativeActual,
-        });
+        wordAssets.set(`${docKey}/${pageToken}`, asset);
       }
     }
   }
@@ -1836,16 +1900,15 @@ async function augmentReportWithWord(
     const wordCapturesRoot = path.join(reportsRoot, 'word-captures');
     const superdocCapturesRoot = path.join(reportsRoot, 'superdoc-captures');
 
-    for (const [docKey, pages] of pagesByDoc.entries()) {
+    for (const docKey of docKeys) {
+      const pages = pagesByDoc.get(docKey);
       const docPath = docPathMap.get(docKey);
-      if (!docPath) continue;
+      if (!docPath || !pages) continue;
       const outputName = makeDocxOutputName(docPath, outputRoot);
       const wordDir = path.join(wordCapturesRoot, outputName);
       const superdocDir = findNewestDirWithPrefix(superdocCapturesRoot, `${outputName}-`);
 
-      if (!fs.existsSync(wordDir) || !superdocDir) {
-        continue;
-      }
+      if (!fs.existsSync(wordDir) || !superdocDir) continue;
 
       for (const pageIndex of pages) {
         const pageToken = `p${String(pageIndex).padStart(3, '0')}`;
@@ -1853,32 +1916,130 @@ async function augmentReportWithWord(
         const baselinePath = path.join(wordDir, pageBase);
         const actualPath = path.join(superdocDir, pageBase);
 
-        if (!fs.existsSync(baselinePath) || !fs.existsSync(actualPath)) {
-          continue;
-        }
+        if (!fs.existsSync(baselinePath) || !fs.existsSync(actualPath)) continue;
 
-        const destDir = path.join(resultsRoot, 'word', docKey);
-        fs.mkdirSync(destDir, { recursive: true });
-
-        const baselineDest = path.join(destDir, `${pageToken}-word.png`);
-        const diffDest = path.join(destDir, `${pageToken}-word-diff.png`);
-        const actualDest = path.join(destDir, `${pageToken}-word-superdoc.png`);
-
-        fs.copyFileSync(baselinePath, baselineDest);
-        fs.copyFileSync(actualPath, actualDest);
-
-        compareImages(baselinePath, actualPath, diffDest, 0, resultsRoot);
-
-        const relativeBase = normalizePath(path.relative(resultsRoot, baselineDest));
-        const relativeActual = normalizePath(path.relative(resultsRoot, actualDest));
-        const relativeDiff = fs.existsSync(diffDest) ? normalizePath(path.relative(resultsRoot, diffDest)) : '';
-
-        wordAssets.set(`${docKey}/${pageToken}`, {
-          baseline: relativeBase,
-          diff: relativeDiff,
-          actual: relativeActual,
-        });
+        wordAssets.set(
+          `${docKey}/${pageToken}`,
+          copyWordPageAsset(baselinePath, actualPath, docKey, pageToken, resultsRoot, true),
+        );
       }
+    }
+  }
+
+  fs.rmSync(wordInputDir, { recursive: true, force: true });
+  fs.rmSync(outputRoot, { recursive: true, force: true });
+}
+
+async function augmentReportWithWord(
+  report: ComparisonReport,
+  options: {
+    resultsFolderName: string;
+    resultsPrefix?: string;
+    targetVersion?: string;
+    providerOptions?: { mode: StorageMode; docsDir?: string };
+    wordBaselineIndex?: WordBaselineIndex;
+  },
+): Promise<ComparisonReport> {
+  const diffResults = report.results.filter((item) => !item.passed);
+  if (diffResults.length === 0) {
+    return report;
+  }
+
+  const provider = await createCorpusProvider(options.providerOptions);
+  const docInfoMap = await buildDocumentInfoMap(provider);
+  const pagesByDoc = new Map<string, Set<number>>();
+
+  for (const item of diffResults) {
+    const parsed = parseDocKeyAndPage(item.relativePath, report.resultsFolder, options.resultsPrefix);
+    if (!parsed) continue;
+    const { docKey, pageIndex } = parsed;
+    if (!docInfoMap.has(docKey)) continue;
+    if (!pagesByDoc.has(docKey)) {
+      pagesByDoc.set(docKey, new Set());
+    }
+    pagesByDoc.get(docKey)!.add(pageIndex);
+  }
+
+  if (pagesByDoc.size === 0) {
+    console.warn(colors.warning('Skipping Word compare: no matching docs found.'));
+    return report;
+  }
+
+  const resultsRoot = path.resolve(process.cwd(), RESULTS_DIR, options.resultsFolderName);
+  const wordAssets = new Map<string, WordImageSet>();
+  const wordIndex = options.wordBaselineIndex;
+
+  // --- R2 path: use pre-downloaded Word baselines to generate diffs locally ---
+  const fallbackDocKeys = new Set<string>();
+
+  if (wordIndex && wordIndex.size > 0) {
+    // Pre-build lookup map: "docKey/pageIndex" -> relativePath of the actual screenshot
+    const resultByDocPage = new Map<string, string>();
+    for (const item of diffResults) {
+      const parsed = parseDocKeyAndPage(item.relativePath, report.resultsFolder, options.resultsPrefix);
+      if (parsed) {
+        resultByDocPage.set(`${parsed.docKey}/${parsed.pageIndex}`, item.relativePath);
+      }
+    }
+
+    const screenshotsDir = path.resolve(process.cwd(), SCREENSHOTS_DIR);
+
+    for (const [docKey, pages] of pagesByDoc.entries()) {
+      const wordEntry = wordIndex.get(docKey);
+      if (!wordEntry || wordEntry.pages.length === 0) {
+        fallbackDocKeys.add(docKey);
+        continue;
+      }
+
+      for (const pageIndex of pages) {
+        const pageToken = `p${String(pageIndex).padStart(3, '0')}`;
+        const wordPagePath = wordEntry.pages[pageIndex - 1];
+        if (!wordPagePath || !fs.existsSync(wordPagePath)) continue;
+
+        const matchRelPath = resultByDocPage.get(`${docKey}/${pageIndex}`);
+        if (!matchRelPath) continue;
+
+        const actualPath = path.join(screenshotsDir, matchRelPath);
+        if (!fs.existsSync(actualPath)) continue;
+
+        wordAssets.set(
+          `${docKey}/${pageToken}`,
+          copyWordPageAsset(wordPagePath, actualPath, docKey, pageToken, resultsRoot, true),
+        );
+      }
+    }
+
+    if (wordAssets.size > 0) {
+      console.log(colors.info(`Used R2 Word baselines for ${wordAssets.size} page comparison(s).`));
+    }
+  } else {
+    for (const docKey of pagesByDoc.keys()) {
+      fallbackDocKeys.add(docKey);
+    }
+  }
+
+  // --- Fallback path: use superdoc-benchmark for docs not in R2 ---
+  if (fallbackDocKeys.size > 0) {
+    if (!isCommandAvailable('superdoc-benchmark')) {
+      if (wordAssets.size === 0) {
+        console.warn(colors.warning('Skipping Word compare: superdoc-benchmark not found in PATH.'));
+        return report;
+      }
+      console.warn(
+        colors.warning(
+          `Skipping Word compare fallback for ${fallbackDocKeys.size} doc(s): superdoc-benchmark not found.`,
+        ),
+      );
+    } else {
+      await generateWordAssetsViaBenchmark({
+        docKeys: fallbackDocKeys,
+        pagesByDoc,
+        docInfoMap,
+        provider,
+        resultsRoot,
+        targetVersion: options.targetVersion,
+        wordAssets,
+      });
     }
   }
 
@@ -1886,9 +2047,6 @@ async function augmentReportWithWord(
     console.warn(colors.warning('Skipping Word compare: no assets matched the diffs.'));
     return report;
   }
-
-  fs.rmSync(wordInputDir, { recursive: true, force: true });
-  fs.rmSync(outputRoot, { recursive: true, force: true });
 
   for (const item of report.results) {
     const parsed = parseDocKeyAndPage(item.relativePath, report.resultsFolder, options.resultsPrefix);
@@ -1921,7 +2079,6 @@ function parseArgs(): {
   resultsRoot?: string;
   resultsPrefix?: string;
   reportFileName?: string;
-  reportMode?: 'visual' | 'interactions';
   reportTrim?: string;
   reportAll: boolean;
   includeWord: boolean;
@@ -1945,7 +2102,6 @@ function parseArgs(): {
   let resultsRoot: string | undefined;
   let resultsPrefix: string | undefined;
   let reportFileName: string | undefined;
-  let reportMode: 'visual' | 'interactions' | undefined;
   let reportTrim: string | undefined;
   let reportAll = false;
   let includeWord = false;
@@ -2002,10 +2158,6 @@ function parseArgs(): {
       reportFileName = args[i + 1];
       i++;
     } else if (args[i] === '--report-mode' && args[i + 1]) {
-      const mode = args[i + 1];
-      if (mode === 'visual' || mode === 'interactions') {
-        reportMode = mode;
-      }
       i++;
     } else if (args[i] === '--report-trim' && args[i + 1]) {
       reportTrim = args[i + 1];
@@ -2050,7 +2202,6 @@ function parseArgs(): {
     resultsRoot,
     resultsPrefix,
     reportFileName,
-    reportMode,
     reportTrim,
     reportAll,
     includeWord,
@@ -2080,7 +2231,6 @@ async function main(): Promise<void> {
     resultsRoot,
     resultsPrefix,
     reportFileName,
-    reportMode,
     reportTrim,
     reportAll,
     includeWord,
@@ -2102,13 +2252,7 @@ async function main(): Promise<void> {
 
   const storageArgs = buildStorageArgs(mode, docsDir);
   const normalizedResultsPrefix = normalizePrefix(resultsPrefix);
-  const normalizedReportTrim = normalizePrefix(reportTrim);
-  const isInteractionMode =
-    reportMode === 'interactions' ||
-    (normalizedResultsPrefix ? normalizedResultsPrefix.startsWith('interactions/') : false) ||
-    (normalizedReportTrim ? normalizedReportTrim.startsWith('interactions/') : false) ||
-    effectiveFilters.some((value) => value.startsWith('interactions/'));
-  const baselinePrefix = isInteractionMode ? 'baselines-interactions' : BASELINES_DIR;
+  const baselinePrefix = BASELINES_DIR;
   const baselineDir = resolveBaselineRoot(baselinePrefix, mode, baselineRoot);
   const resolvedResultsRoot = resultsRoot ? resolvePathInput(resultsRoot) : undefined;
 
@@ -2136,11 +2280,6 @@ async function main(): Promise<void> {
     process.exit(1);
   }
 
-  if (targetVersion && isInteractionMode) {
-    console.error(colors.error('Use "pnpm compare:interactions --target" for interaction baselines.'));
-    process.exit(1);
-  }
-
   const ensureBaseline = async (version: string, versionSpec?: string, force: boolean = false): Promise<void> => {
     if (mode === 'local') {
       const baselinePath = path.join(baselineDir, version);
@@ -2152,17 +2291,12 @@ async function main(): Promise<void> {
         } else {
           console.log(colors.info(`📸 Ensuring baseline coverage for ${normalizedDocs.length} selected doc(s)...`));
         }
-        const script =
-          baselinePrefix === 'baselines-interactions'
-            ? 'scripts/baseline-interactions.ts'
-            : 'scripts/baseline-visual.ts';
+        const script = 'scripts/baseline-visual.ts' as const;
         const browserArg = browsers.length > 0 ? browsers.join(',') : undefined;
-        const currentSpec = getSuperdocVersion();
-        const shouldRestore =
-          Boolean(versionSpec) &&
-          !targetVersion &&
-          currentSpec &&
-          normalizeVersionSpecifier(currentSpec) !== normalizeVersionSpecifier(versionSpec!);
+        const currentSpec = getHarnessSuperdocSpecifier();
+        const currentInstalledVersion = getSuperdocVersion();
+        const restoreCandidates = buildRestoreCandidates(currentSpec, currentInstalledVersion);
+        const shouldRestore = shouldRestoreAfterBaselineSwitch(versionSpec, targetVersion, restoreCandidates);
         await runBaseline({
           script,
           versionSpec,
@@ -2175,8 +2309,7 @@ async function main(): Promise<void> {
           storageArgs,
         });
         if (shouldRestore) {
-          console.log(colors.muted(`Restoring SuperDoc version: ${currentSpec}`));
-          await runVersionSwitch(currentSpec);
+          await restoreSuperdocVersion(restoreCandidates);
         }
         if (!fs.existsSync(baselinePath)) {
           throw new Error(`Failed to generate baseline for version ${version} in ${baselineDir}.`);
@@ -2337,11 +2470,8 @@ async function main(): Promise<void> {
     await ensureBaseline(resultsFolderName, normalizeVersionSpecifier(resultsFolderName));
   }
 
-  const resolvedMode =
-    reportMode ??
-    (reportTrim || effectiveFilters.some((value) => value.startsWith('interactions/')) ? 'interactions' : 'visual');
-  const resolvedTrim = reportTrim ?? (resolvedMode === 'interactions' ? 'interactions/' : undefined);
-  const ignorePrefixes = resolvedMode === 'visual' ? ['interactions/'] : undefined;
+  const resolvedMode = 'visual' as const;
+  const resolvedTrim = reportTrim;
 
   const outputFolderNameForBrowser = (browser: BrowserName): string =>
     browsers.length > 1 ? path.join(resultsFolderName!, browser) : resultsFolderName!;
@@ -2372,7 +2502,7 @@ async function main(): Promise<void> {
         filters: effectiveFilters,
         matches,
         excludes,
-        ignorePrefixes,
+
         reportOptions: {
           showAll: reportAll,
           reportFileName,
@@ -2409,7 +2539,7 @@ async function main(): Promise<void> {
               filters: effectiveFilters,
               matches,
               excludes,
-              ignorePrefixes,
+
               reportOptions: {
                 showAll: reportAll,
                 reportFileName,
@@ -2427,31 +2557,49 @@ async function main(): Promise<void> {
         }
       }
 
-      if (resolvedMode === 'visual') {
-        const visualResultsPrefix = browser ? `${normalizePrefix(resultsPrefix) ?? ''}${browser}/` : resultsPrefix;
-        report = await augmentReportWithSourceDocs(report, {
-          resultsPrefix: visualResultsPrefix,
-          providerOptions: { mode, docsDir },
-        });
+      const visualResultsPrefix = browser ? `${normalizePrefix(resultsPrefix) ?? ''}${browser}/` : resultsPrefix;
 
-        if (includeWord) {
-          report = await augmentReportWithWord(report, {
-            resultsFolderName: resultsFolderName!,
+      let wordBaselineIndex: WordBaselineIndex | undefined;
+      if (isWordR2Available()) {
+        try {
+          wordBaselineIndex = await downloadWordBaselinesForReport(report, {
             resultsPrefix: visualResultsPrefix,
-            targetVersion: resolvedTargetVersion,
             providerOptions: { mode, docsDir },
           });
+        } catch (error) {
+          console.warn(
+            colors.warning(
+              `Word R2 baseline download failed, falling back: ${error instanceof Error ? error.message : String(error)}`,
+            ),
+          );
         }
+      }
 
-        const outputFolder = path.join(RESULTS_DIR, outputFolderName);
-        fs.writeFileSync(path.join(outputFolder, REPORT_FILE), JSON.stringify(report, null, 2));
-        writeHtmlReport(report, outputFolder, {
-          showAll: reportAll,
-          reportFileName,
-          mode: resolvedMode,
-          trimPrefix: resolvedTrim,
+      report = await augmentReportWithSourceDocs(report, {
+        resultsPrefix: visualResultsPrefix,
+        resultsFolderName: resultsFolderName!,
+        providerOptions: { mode, docsDir },
+        wordBaselineIndex,
+      });
+
+      if (includeWord) {
+        report = await augmentReportWithWord(report, {
+          resultsFolderName: resultsFolderName!,
+          resultsPrefix: visualResultsPrefix,
+          targetVersion: resolvedTargetVersion,
+          providerOptions: { mode, docsDir },
+          wordBaselineIndex,
         });
       }
+
+      const outputFolder = path.join(RESULTS_DIR, outputFolderName);
+      fs.writeFileSync(path.join(outputFolder, REPORT_FILE), JSON.stringify(report, null, 2));
+      writeHtmlReport(report, outputFolder, {
+        showAll: reportAll,
+        reportFileName,
+        mode: resolvedMode,
+        trimPrefix: resolvedTrim,
+      });
 
       // Summary
       console.log('');

@@ -1,6 +1,7 @@
 import { NodeSelection, Selection, TextSelection } from 'prosemirror-state';
-import { SlashMenuPluginKey } from '@extensions/slash-menu/slash-menu.js';
+import { ContextMenuPluginKey } from '@extensions/context-menu/context-menu.js';
 import { CellSelection } from 'prosemirror-tables';
+import { DecorationBridge } from './dom/DecorationBridge.js';
 import type { EditorState, Transaction } from 'prosemirror-state';
 import type { Node as ProseMirrorNode, Mark } from 'prosemirror-model';
 import type { Mapping } from 'prosemirror-transform';
@@ -88,7 +89,7 @@ import type {
 
 import { createDomPainter } from '@superdoc/painter-dom';
 
-import type { LayoutMode } from '@superdoc/painter-dom';
+import type { LayoutMode, PaintSnapshot } from '@superdoc/painter-dom';
 import { measureBlock } from '@superdoc/measuring-dom';
 import type {
   ColumnLayout,
@@ -101,6 +102,7 @@ import type {
   Fragment,
 } from '@superdoc/contracts';
 import { extractHeaderFooterSpace as _extractHeaderFooterSpace } from '@superdoc/contracts';
+// TrackChangesBasePluginKey is used by #syncTrackedChangesPreferences and getTrackChangesPluginState.
 import { TrackChangesBasePluginKey } from '@extensions/track-changes/plugins/index.js';
 
 // Collaboration cursor imports
@@ -290,6 +292,10 @@ export class PresentationEditor extends EventEmitter {
   #htmlAnnotationMeasureAttempts = 0;
   #domPositionIndex = new DomPositionIndex();
   #domIndexObserverManager: DomPositionIndexObserverManager | null = null;
+  /** Bridges external PM plugin decorations onto painted DOM elements. */
+  #decorationBridge = new DecorationBridge();
+  /** RAF handle for coalesced decoration sync scheduling. */
+  #decorationSyncRafHandle: number | null = null;
   #rafHandle: number | null = null;
   #editorListeners: Array<{ event: string; handler: (...args: unknown[]) => void }> = [];
   #scrollHandler: (() => void) | null = null;
@@ -312,10 +318,24 @@ export class PresentationEditor extends EventEmitter {
     element: HTMLElement;
     pmStart: number;
   } | null = null;
+  #lastSelectedStructuredContentBlock: {
+    id: string | null;
+    elements: HTMLElement[];
+  } | null = null;
+  #lastSelectedStructuredContentInline: {
+    id: string | null;
+    elements: HTMLElement[];
+  } | null = null;
+  #lastHoveredStructuredContentBlock: {
+    id: string | null;
+    elements: HTMLElement[];
+  } | null = null;
 
   // Remote cursor/presence state management
   /** Manager for remote cursor rendering and awareness subscriptions */
   #remoteCursorManager: RemoteCursorManager | null = null;
+  /** Debounce timer for local cursor awareness updates (avoids ~190ms Liveblocks overhead per keystroke) */
+  #cursorUpdateTimer: ReturnType<typeof setTimeout> | null = null;
   /** DOM element for rendering remote cursor overlays */
   #remoteCursorOverlay: HTMLElement | null = null;
   /** DOM element for rendering local selection/caret (dual-layer overlay architecture) */
@@ -397,12 +417,18 @@ export class PresentationEditor extends EventEmitter {
     this.#painterHost.className = 'presentation-editor__pages';
     this.#painterHost.style.transformOrigin = 'top left';
     this.#viewportHost.appendChild(this.#painterHost);
+
+    // Add event listeners for structured content hover coordination
+    this.#painterHost.addEventListener('mouseover', this.#handleStructuredContentBlockMouseEnter);
+    this.#painterHost.addEventListener('mouseout', this.#handleStructuredContentBlockMouseLeave);
+
     const win = this.#visibleHost?.ownerDocument?.defaultView ?? window;
     this.#domIndexObserverManager = new DomPositionIndexObserverManager({
       windowRoot: win,
       getPainterHost: () => this.#painterHost,
       onRebuild: () => {
         this.#rebuildDomPositionIndex();
+        this.#syncDecorations();
         this.#selectionSync.requestRender({ immediate: true });
       },
     });
@@ -463,7 +489,6 @@ export class PresentationEditor extends EventEmitter {
 
     // Wire up manager callbacks to use PresentationEditor methods
     this.#remoteCursorManager.setUpdateCallback(() => this.#updateRemoteCursors());
-    this.#remoteCursorManager.setReRenderCallback(() => this.#renderRemoteCursors());
 
     this.#hoverOverlay = doc.createElement('div');
     this.#hoverOverlay.className = 'presentation-editor__hover-overlay';
@@ -763,7 +788,7 @@ export class PresentationEditor extends EventEmitter {
    * - In body mode, returns the main editor's state
    * - In header/footer mode, returns the active header/footer editor's state
    *
-   * This enables components like SlashMenu and context menus to access document
+   * This enables components like ContextMenu to access document
    * state, selection, and schema information in the correct editing context.
    *
    * @returns The EditorState for the active editor
@@ -808,7 +833,7 @@ export class PresentationEditor extends EventEmitter {
    *
    * This property returns the options object from the appropriate editor instance,
    * providing access to configuration like document mode, AI settings, and custom
-   * slash menu configuration.
+   * context menu configuration.
    *
    * @returns The options object for the active editor
    *
@@ -1487,6 +1512,13 @@ export class PresentationEditor extends EventEmitter {
   }
 
   /**
+   * Return a snapshot of painter output captured during the latest paint cycle.
+   */
+  getPaintSnapshot(): PaintSnapshot | null {
+    return this.#domPainter?.getPaintSnapshot?.() ?? null;
+  }
+
+  /**
    * Get the page styles for the section containing the current caret position.
    *
    * In multi-section documents, different sections can have different page sizes,
@@ -2154,6 +2186,22 @@ export class PresentationEditor extends EventEmitter {
       }, 'Layout RAF');
     }
 
+    // Cancel pending decoration sync RAF
+    if (this.#decorationSyncRafHandle != null) {
+      safeCleanup(() => {
+        const win = this.#visibleHost?.ownerDocument?.defaultView ?? window;
+        win.cancelAnimationFrame(this.#decorationSyncRafHandle!);
+        this.#decorationSyncRafHandle = null;
+      }, 'Decoration sync RAF');
+    }
+    this.#decorationBridge.destroy();
+
+    // Cancel pending cursor awareness update
+    if (this.#cursorUpdateTimer !== null) {
+      clearTimeout(this.#cursorUpdateTimer);
+      this.#cursorUpdateTimer = null;
+    }
+
     // Clean up remote cursor manager
     if (this.#remoteCursorManager) {
       safeCleanup(() => {
@@ -2240,12 +2288,69 @@ export class PresentationEditor extends EventEmitter {
     }
   }
 
+  /**
+   * Runs a full decoration bridge sync: reads external plugin decorations and
+   * reconciles them onto painted DOM elements (add/update/remove).
+   *
+   * Called synchronously from post-paint and observer-rebuild paths where the
+   * DOM index is guaranteed to be fresh.
+   */
+  #syncDecorations(): void {
+    const state = this.#editor?.view?.state;
+    if (!state) return;
+
+    try {
+      this.#decorationBridge.sync(state, this.#domPositionIndex);
+    } catch (error) {
+      debugLog('warn', 'Decoration bridge sync failed', { error: String(error) });
+    }
+  }
+
+  /**
+   * Schedules a decoration sync on the next animation frame, coalesced so
+   * rapid transactions (cursor movement, selection changes) don't cause
+   * redundant work.
+   *
+   * Skips scheduling when:
+   * - A rerender is already pending (post-paint will sync).
+   * - No DecorationSet references have actually changed (identity check).
+   */
+  #scheduleDecorationSync(): void {
+    // If a full rerender is pending, the post-paint path will sync. Skip.
+    if (this.#renderScheduled || this.#isRerendering) return;
+
+    // Cheap identity check: bail if no DecorationSet references changed.
+    const state = this.#editor?.view?.state;
+    if (!state || !this.#decorationBridge.hasChanges(state)) return;
+
+    // Already scheduled — RAF will handle it.
+    if (this.#decorationSyncRafHandle != null) return;
+
+    const win = this.#visibleHost?.ownerDocument?.defaultView ?? window;
+    this.#decorationSyncRafHandle = win.requestAnimationFrame(() => {
+      this.#decorationSyncRafHandle = null;
+      // Re-check: a rerender may have been scheduled between when we queued
+      // this RAF and when it fires. The post-paint path will sync instead.
+      if (this.#renderScheduled || this.#isRerendering) return;
+      this.#syncDecorations();
+    });
+  }
+
   #setupEditorListeners() {
     const handleUpdate = ({ transaction }: { transaction?: Transaction }) => {
       const trackedChangesChanged = this.#syncTrackedChangesPreferences();
       if (transaction) {
         this.#epochMapper.recordTransaction(transaction);
         this.#selectionSync.setDocEpoch(this.#epochMapper.getCurrentEpoch());
+
+        // Detect Y.js-origin transactions (remote collaboration changes).
+        // These bypass the blockNodePlugin's sdBlockRev increment to prevent
+        // feedback loops, so the FlowBlockCache's fast revision comparison
+        // cannot be trusted — signal it to fall through to JSON comparison.
+        const ySyncMeta = transaction.getMeta?.(ySyncPluginKey);
+        if (ySyncMeta?.isChangeOrigin && transaction.docChanged) {
+          this.#flowBlockCache?.setHasExternalChanges(true);
+        }
       }
       if (trackedChangesChanged || transaction?.docChanged) {
         this.#pendingDocChange = true;
@@ -2276,16 +2381,38 @@ export class PresentationEditor extends EventEmitter {
       }
     };
     const handleSelection = () => {
-      this.#scheduleSelectionUpdate();
+      // Use immediate rendering for selection-only changes (clicks, arrow keys).
+      // Without immediate, the render is RAF-deferred — leaving a window where
+      // a remote collaborator's edit can cancel the pending render via
+      // setDocEpoch → cancelScheduledRender. Immediate rendering is safe here:
+      // if layout is updating (due to a concurrent doc change), flushNow()
+      // is a no-op and the render will be picked up after layout completes.
+      this.#scheduleSelectionUpdate({ immediate: true });
       // Update local cursor in awareness for collaboration
       // This bypasses y-prosemirror's focus check which may fail for hidden PM views
       this.#updateLocalAwarenessCursor();
       this.#scheduleA11ySelectionAnnouncement();
     };
+
+    // The 'transaction' event fires for ALL transactions (doc changes,
+    // selection changes, meta-only). The 'update' event only fires for
+    // docChanged transactions, and 'selectionUpdate' only for selection
+    // changes. A meta-only transaction (e.g., a custom command that sets
+    // plugin state without editing text) fires neither.
+    //
+    // We listen on 'transaction' so the decoration bridge picks up changes
+    // from any transaction type. The bridge's own identity check + RAF
+    // coalescing prevent unnecessary work.
+    const handleTransaction = () => {
+      this.#scheduleDecorationSync();
+    };
+
     this.#editor.on('update', handleUpdate);
     this.#editor.on('selectionUpdate', handleSelection);
+    this.#editor.on('transaction', handleTransaction);
     this.#editorListeners.push({ event: 'update', handler: handleUpdate as (...args: unknown[]) => void });
     this.#editorListeners.push({ event: 'selectionUpdate', handler: handleSelection as (...args: unknown[]) => void });
+    this.#editorListeners.push({ event: 'transaction', handler: handleTransaction as (...args: unknown[]) => void });
 
     // Listen for page style changes (e.g., margin adjustments via ruler).
     // These changes don't modify document content (docChanged === false),
@@ -2370,16 +2497,18 @@ export class PresentationEditor extends EventEmitter {
    * @private
    */
   #updateLocalAwarenessCursor(): void {
-    this.#remoteCursorManager?.updateLocalCursor(this.#editor?.state ?? null);
-  }
-
-  /**
-   * Schedule a remote cursor re-render without re-normalizing awareness states.
-   * Delegates to RemoteCursorManager.
-   * @private
-   */
-  #scheduleRemoteCursorReRender() {
-    this.#remoteCursorManager?.scheduleReRender();
+    // Debounce awareness cursor updates to avoid per-keystroke overhead.
+    // Collaboration providers (e.g. Liveblocks) can spend ~190ms encoding and
+    // syncing awareness state per setLocalStateField call. Batching rapid
+    // cursor movements into a single update every 100ms keeps typing responsive
+    // while maintaining real-time cursor sharing for other participants.
+    if (this.#cursorUpdateTimer !== null) {
+      clearTimeout(this.#cursorUpdateTimer);
+    }
+    this.#cursorUpdateTimer = setTimeout(() => {
+      this.#cursorUpdateTimer = null;
+      this.#remoteCursorManager?.updateLocalCursor(this.#editor?.state ?? null);
+    }, 100);
   }
 
   /**
@@ -3131,6 +3260,7 @@ export class PresentationEditor extends EventEmitter {
       const painterPostStart = perfNow();
       this.#applyVertAlignToLayout();
       this.#rebuildDomPositionIndex();
+      this.#syncDecorations();
       this.#domIndexObserverManager?.resume();
       const painterPostEnd = perfNow();
       perfLog(`[Perf] painter.postPaint: ${(painterPostEnd - painterPostStart).toFixed(2)}ms`);
@@ -3170,11 +3300,13 @@ export class PresentationEditor extends EventEmitter {
 
       this.#selectionSync.requestRender({ immediate: true });
 
-      // Trigger cursor re-rendering on layout changes without re-normalizing awareness
-      // Layout reflow requires repositioning cursors in the DOM, but awareness states haven't changed
-      // This optimization avoids expensive Yjs position conversions on every layout update
+      // Re-normalize remote cursor positions after layout completes.
+      // Local document changes shift absolute positions, so Yjs relative positions
+      // must be re-resolved against the updated editor state. Without this,
+      // remote cursors appear offset by the number of characters the local user typed.
       if (this.#remoteCursorManager?.hasRemoteCursors()) {
-        this.#scheduleRemoteCursorReRender();
+        this.#remoteCursorManager.markDirty();
+        this.#remoteCursorManager.scheduleUpdate();
       }
     } finally {
       if (!layoutCompleted) {
@@ -3332,6 +3464,243 @@ export class PresentationEditor extends EventEmitter {
     this.#setSelectedFieldAnnotationClass(element, pmStart);
   }
 
+  #clearSelectedStructuredContentBlockClass() {
+    if (!this.#lastSelectedStructuredContentBlock) return;
+    this.#lastSelectedStructuredContentBlock.elements.forEach((element) => {
+      element.classList.remove('ProseMirror-selectednode');
+    });
+    this.#lastSelectedStructuredContentBlock = null;
+  }
+
+  #setSelectedStructuredContentBlockClass(elements: HTMLElement[], id: string | null) {
+    if (
+      this.#lastSelectedStructuredContentBlock &&
+      this.#lastSelectedStructuredContentBlock.id === id &&
+      this.#lastSelectedStructuredContentBlock.elements.length === elements.length &&
+      this.#lastSelectedStructuredContentBlock.elements.every((el) => elements.includes(el))
+    ) {
+      return;
+    }
+
+    this.#clearSelectedStructuredContentBlockClass();
+    elements.forEach((element) => element.classList.add('ProseMirror-selectednode'));
+    this.#lastSelectedStructuredContentBlock = { id, elements };
+  }
+
+  #syncSelectedStructuredContentBlockClass(selection: Selection | null | undefined) {
+    if (!selection) {
+      this.#clearSelectedStructuredContentBlockClass();
+      return;
+    }
+
+    let node: ProseMirrorNode | null = null;
+    let id: string | null = null;
+
+    if (selection instanceof NodeSelection) {
+      if (selection.node?.type?.name !== 'structuredContentBlock') {
+        this.#clearSelectedStructuredContentBlockClass();
+        return;
+      }
+      node = selection.node;
+    } else {
+      const $pos = selection.$from;
+      for (let depth = $pos.depth; depth > 0; depth--) {
+        const candidate = $pos.node(depth);
+        if (candidate.type?.name === 'structuredContentBlock') {
+          node = candidate;
+          break;
+        }
+      }
+      if (!node) {
+        this.#clearSelectedStructuredContentBlockClass();
+        return;
+      }
+    }
+
+    if (!this.#painterHost) {
+      this.#clearSelectedStructuredContentBlockClass();
+      return;
+    }
+
+    const rawId = (node.attrs as { id?: unknown } | null | undefined)?.id;
+    id = rawId != null ? String(rawId) : null;
+    let elements: HTMLElement[] = [];
+
+    if (id) {
+      const escapedId = typeof CSS !== 'undefined' && CSS.escape ? CSS.escape(id) : id.replace(/"/g, '\\"');
+      elements = Array.from(
+        this.#painterHost.querySelectorAll(`.superdoc-structured-content-block[data-sdt-id="${escapedId}"]`),
+      ) as HTMLElement[];
+    }
+
+    if (elements.length === 0) {
+      const elementAtPos = this.getElementAtPos(selection.from, { fallbackToCoords: true });
+      const container = elementAtPos?.closest?.('.superdoc-structured-content-block') as HTMLElement | null;
+      if (container) {
+        elements = [container];
+      }
+    }
+
+    if (elements.length === 0) {
+      this.#clearSelectedStructuredContentBlockClass();
+      return;
+    }
+
+    this.#setSelectedStructuredContentBlockClass(elements, id);
+  }
+
+  #handleStructuredContentBlockMouseEnter = (event: MouseEvent) => {
+    const target = event.target as HTMLElement;
+    const block = target.closest('.superdoc-structured-content-block');
+
+    if (!block || !(block instanceof HTMLElement)) return;
+
+    // Don't show hover effect if already selected
+    if (block.classList.contains('ProseMirror-selectednode')) return;
+
+    const rawId = block.dataset.sdtId;
+    if (!rawId) return;
+
+    this.#setHoveredStructuredContentBlockClass(rawId);
+  };
+
+  #handleStructuredContentBlockMouseLeave = (event: MouseEvent) => {
+    const target = event.target as HTMLElement;
+    const block = target.closest('.superdoc-structured-content-block') as HTMLElement | null;
+
+    if (!block) return;
+
+    const relatedTarget = event.relatedTarget as HTMLElement | null;
+    if (
+      relatedTarget &&
+      block.dataset.sdtId &&
+      relatedTarget.closest(`.superdoc-structured-content-block[data-sdt-id="${block.dataset.sdtId}"]`)
+    ) {
+      return;
+    }
+
+    this.#clearHoveredStructuredContentBlockClass();
+  };
+
+  #clearHoveredStructuredContentBlockClass() {
+    if (!this.#lastHoveredStructuredContentBlock) return;
+    this.#lastHoveredStructuredContentBlock.elements.forEach((element) => {
+      element.classList.remove('sdt-group-hover');
+    });
+    this.#lastHoveredStructuredContentBlock = null;
+  }
+
+  #setHoveredStructuredContentBlockClass(id: string) {
+    if (this.#lastHoveredStructuredContentBlock?.id === id) return;
+
+    this.#clearHoveredStructuredContentBlockClass();
+
+    if (!this.#painterHost) return;
+
+    const escapedId = typeof CSS !== 'undefined' && CSS.escape ? CSS.escape(id) : id.replace(/"/g, '\\"');
+    const elements = Array.from(
+      this.#painterHost.querySelectorAll(`.superdoc-structured-content-block[data-sdt-id="${escapedId}"]`),
+    ) as HTMLElement[];
+
+    if (elements.length === 0) return;
+
+    elements.forEach((element) => {
+      if (!element.classList.contains('ProseMirror-selectednode')) {
+        element.classList.add('sdt-group-hover');
+      }
+    });
+
+    this.#lastHoveredStructuredContentBlock = { id, elements };
+  }
+
+  #clearSelectedStructuredContentInlineClass() {
+    if (!this.#lastSelectedStructuredContentInline) return;
+    this.#lastSelectedStructuredContentInline.elements.forEach((element) => {
+      element.classList.remove('ProseMirror-selectednode');
+    });
+    this.#lastSelectedStructuredContentInline = null;
+  }
+
+  #setSelectedStructuredContentInlineClass(elements: HTMLElement[], id: string | null) {
+    if (
+      this.#lastSelectedStructuredContentInline &&
+      this.#lastSelectedStructuredContentInline.id === id &&
+      this.#lastSelectedStructuredContentInline.elements.length === elements.length &&
+      this.#lastSelectedStructuredContentInline.elements.every((el) => elements.includes(el))
+    ) {
+      return;
+    }
+
+    this.#clearSelectedStructuredContentInlineClass();
+    elements.forEach((element) => element.classList.add('ProseMirror-selectednode'));
+    this.#lastSelectedStructuredContentInline = { id, elements };
+  }
+
+  #syncSelectedStructuredContentInlineClass(selection: Selection | null | undefined) {
+    if (!selection) {
+      this.#clearSelectedStructuredContentInlineClass();
+      return;
+    }
+
+    let node: ProseMirrorNode | null = null;
+    let id: string | null = null;
+    let pos: number | null = null;
+
+    if (selection instanceof NodeSelection) {
+      if (selection.node?.type?.name !== 'structuredContent') {
+        this.#clearSelectedStructuredContentInlineClass();
+        return;
+      }
+      node = selection.node;
+      pos = selection.from;
+    } else {
+      const $pos = selection.$from;
+      for (let depth = $pos.depth; depth > 0; depth--) {
+        const candidate = $pos.node(depth);
+        if (candidate.type?.name === 'structuredContent') {
+          node = candidate;
+          pos = $pos.before(depth);
+          break;
+        }
+      }
+      if (!node || pos == null) {
+        this.#clearSelectedStructuredContentInlineClass();
+        return;
+      }
+    }
+
+    if (!this.#painterHost) {
+      this.#clearSelectedStructuredContentInlineClass();
+      return;
+    }
+
+    const rawId = (node.attrs as { id?: unknown } | null | undefined)?.id;
+    id = rawId != null ? String(rawId) : null;
+    let elements: HTMLElement[] = [];
+
+    if (id) {
+      const escapedId = typeof CSS !== 'undefined' && CSS.escape ? CSS.escape(id) : id.replace(/"/g, '\\"');
+      elements = Array.from(
+        this.#painterHost.querySelectorAll(`.superdoc-structured-content-inline[data-sdt-id="${escapedId}"]`),
+      ) as HTMLElement[];
+    }
+
+    if (elements.length === 0) {
+      const elementAtPos = this.getElementAtPos(pos, { fallbackToCoords: true });
+      const container = elementAtPos?.closest?.('.superdoc-structured-content-inline') as HTMLElement | null;
+      if (container) {
+        elements = [container];
+      }
+    }
+
+    if (elements.length === 0) {
+      this.#clearSelectedStructuredContentInlineClass();
+      return;
+    }
+
+    this.#setSelectedStructuredContentInlineClass(elements, id);
+  }
+
   /**
    * Updates the visual cursor/selection overlay to match the current editor selection.
    *
@@ -3388,10 +3757,16 @@ export class PresentationEditor extends EventEmitter {
 
     const activeEditor = this.getActiveEditor();
     const hasFocus = activeEditor?.view?.hasFocus?.() ?? false;
-    // Keep selection visible when context menu (SlashMenu) is open
-    const slashMenuOpen = activeEditor?.state ? !!SlashMenuPluginKey.getState(activeEditor.state)?.open : false;
+    // Keep selection visible when context menu is open.
+    const contextMenuOpen = activeEditor?.state ? !!ContextMenuPluginKey.getState(activeEditor.state)?.open : false;
 
-    if (!hasFocus && !slashMenuOpen) {
+    // Keep selection visible when focus is on editor UI surfaces (toolbar, dropdowns).
+    // Naive-UI portals dropdown content under .v-binder-follower-content at <body> level,
+    // so it won't be inside [data-editor-ui-surface]. Check both.
+    const activeEl = document.activeElement;
+    const isOnEditorUi = !!(activeEl as Element)?.closest?.('[data-editor-ui-surface], .v-binder-follower-content');
+
+    if (!hasFocus && !contextMenuOpen && !isOnEditorUi) {
       try {
         this.#clearSelectedFieldAnnotationClass();
         this.#localSelectionLayer.innerHTML = '';
@@ -3406,6 +3781,8 @@ export class PresentationEditor extends EventEmitter {
     if (!selection) {
       try {
         this.#clearSelectedFieldAnnotationClass();
+        this.#clearSelectedStructuredContentBlockClass();
+        this.#clearSelectedStructuredContentInlineClass();
         this.#localSelectionLayer.innerHTML = '';
       } catch (error) {
         if (process.env.NODE_ENV === 'development') {
@@ -3429,6 +3806,8 @@ export class PresentationEditor extends EventEmitter {
     }
 
     this.#syncSelectedFieldAnnotationClass(selection);
+    this.#syncSelectedStructuredContentBlockClass(selection);
+    this.#syncSelectedStructuredContentInlineClass(selection);
 
     // Ensure selection endpoints remain mounted under virtualization so DOM-first
     // caret/selection rendering stays available during cross-page selection.

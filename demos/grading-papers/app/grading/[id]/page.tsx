@@ -1,7 +1,7 @@
 "use client"
 
 import 'superdoc/style.css'
-import { useState, useEffect, useRef } from "react"
+import { useState, useEffect, useRef, use  } from "react"
 import { useRouter } from "next/navigation"
 import { ChevronLeft, Save, Send, Download, Printer, Menu, Bell, Search } from "lucide-react"
 import { Button } from "@/components/ui/button"
@@ -13,7 +13,6 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
 import { Slider } from "@/components/ui/slider"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { SuperDoc } from "superdoc"
-import { use } from 'react';
 import { docMap } from './_doc-links';
 
 export default function GradingPage({ params }: { params: Promise<{ id: string }> }) {

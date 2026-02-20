@@ -556,29 +556,36 @@ function createFixture(page: Page, editor: Locator, modKey: string) {
     },
 
     async assertCommentHighlightExists(opts?: { text?: string; commentId?: string }) {
-      const highlights = page.locator('.superdoc-comment-highlight');
-      await expect(highlights.first()).toBeAttached();
+      const expectedText = opts?.text;
+      const expectedCommentId = opts?.commentId;
+      await expect
+        .poll(() =>
+          page.evaluate(
+            ({ text, commentId }) => {
+              const highlights = Array.from(document.querySelectorAll('.superdoc-comment-highlight'));
+              if (highlights.length === 0) return false;
 
-      if (opts?.text) {
-        await expect(highlights.filter({ hasText: opts.text }).first()).toBeAttached();
-      }
-      if (opts?.commentId) {
-        const commentId = opts.commentId;
-        await expect
-          .poll(() =>
-            page.evaluate(
-              (id) =>
-                Array.from(document.querySelectorAll('.superdoc-comment-highlight')).some((el) =>
+              if (text) {
+                const hasTextMatch = highlights.some((el) => (el.textContent ?? '').includes(text));
+                if (!hasTextMatch) return false;
+              }
+
+              if (commentId) {
+                const hasCommentId = highlights.some((el) =>
                   (el.getAttribute('data-comment-ids') ?? '')
                     .split(/[\s,]+/)
                     .filter(Boolean)
-                    .includes(id),
-                ),
-              commentId,
-            ),
-          )
-          .toBe(true);
-      }
+                    .includes(commentId),
+                );
+                if (!hasCommentId) return false;
+              }
+
+              return true;
+            },
+            { text: expectedText, commentId: expectedCommentId },
+          ),
+        )
+        .toBe(true);
     },
 
     async assertTrackedChangeExists(type: 'insert' | 'delete' | 'format') {

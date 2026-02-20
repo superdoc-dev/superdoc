@@ -6,6 +6,7 @@ import {
   extractStrokeWidth,
   extractStrokeColor,
   extractFillColor,
+  extractCustomGeometry,
 } from './vector-shape-helpers.js';
 import { emuToPixels } from '@converter/helpers.js';
 
@@ -511,5 +512,183 @@ describe('extractFillColor', () => {
     };
 
     expect(extractFillColor(spPr, style)).toBe('#808080');
+  });
+});
+
+describe('extractCustomGeometry', () => {
+  it('returns null when spPr has no a:custGeom', () => {
+    const spPr = {
+      elements: [{ name: 'a:prstGeom', attributes: { prst: 'rect' } }],
+    };
+    expect(extractCustomGeometry(spPr)).toBeNull();
+  });
+
+  it('returns null when custGeom has no pathLst', () => {
+    const spPr = {
+      elements: [
+        {
+          name: 'a:custGeom',
+          elements: [{ name: 'a:avLst' }],
+        },
+      ],
+    };
+    expect(extractCustomGeometry(spPr)).toBeNull();
+  });
+
+  it('returns null when pathLst is empty', () => {
+    const spPr = {
+      elements: [
+        {
+          name: 'a:custGeom',
+          elements: [{ name: 'a:pathLst', elements: [] }],
+        },
+      ],
+    };
+    expect(extractCustomGeometry(spPr)).toBeNull();
+  });
+
+  it('parses a simple rectangle path (moveTo, lnTo, close)', () => {
+    const spPr = {
+      elements: [
+        {
+          name: 'a:custGeom',
+          elements: [
+            {
+              name: 'a:pathLst',
+              elements: [
+                {
+                  name: 'a:path',
+                  attributes: { w: '100', h: '200' },
+                  elements: [
+                    { name: 'a:moveTo', elements: [{ name: 'a:pt', attributes: { x: '0', y: '0' } }] },
+                    { name: 'a:lnTo', elements: [{ name: 'a:pt', attributes: { x: '100', y: '0' } }] },
+                    { name: 'a:lnTo', elements: [{ name: 'a:pt', attributes: { x: '100', y: '200' } }] },
+                    { name: 'a:lnTo', elements: [{ name: 'a:pt', attributes: { x: '0', y: '200' } }] },
+                    { name: 'a:close' },
+                  ],
+                },
+              ],
+            },
+          ],
+        },
+      ],
+    };
+
+    const result = extractCustomGeometry(spPr);
+    expect(result).not.toBeNull();
+    expect(result.width).toBe(100);
+    expect(result.height).toBe(200);
+    expect(result.paths).toHaveLength(1);
+    expect(result.paths[0].d).toBe('M 0 0 L 100 0 L 100 200 L 0 200 Z');
+    expect(result.paths[0].fill).toBe('norm');
+  });
+
+  it('parses a path with fill="none"', () => {
+    const spPr = {
+      elements: [
+        {
+          name: 'a:custGeom',
+          elements: [
+            {
+              name: 'a:pathLst',
+              elements: [
+                {
+                  name: 'a:path',
+                  attributes: { w: '50', h: '50', fill: 'none' },
+                  elements: [
+                    { name: 'a:moveTo', elements: [{ name: 'a:pt', attributes: { x: '0', y: '0' } }] },
+                    { name: 'a:lnTo', elements: [{ name: 'a:pt', attributes: { x: '50', y: '50' } }] },
+                  ],
+                },
+              ],
+            },
+          ],
+        },
+      ],
+    };
+
+    const result = extractCustomGeometry(spPr);
+    expect(result).not.toBeNull();
+    expect(result.paths[0].fill).toBe('none');
+  });
+
+  it('parses cubicBezTo commands', () => {
+    const spPr = {
+      elements: [
+        {
+          name: 'a:custGeom',
+          elements: [
+            {
+              name: 'a:pathLst',
+              elements: [
+                {
+                  name: 'a:path',
+                  attributes: { w: '300', h: '300' },
+                  elements: [
+                    { name: 'a:moveTo', elements: [{ name: 'a:pt', attributes: { x: '0', y: '0' } }] },
+                    {
+                      name: 'a:cubicBezTo',
+                      elements: [
+                        { name: 'a:pt', attributes: { x: '50', y: '100' } },
+                        { name: 'a:pt', attributes: { x: '150', y: '200' } },
+                        { name: 'a:pt', attributes: { x: '300', y: '300' } },
+                      ],
+                    },
+                  ],
+                },
+              ],
+            },
+          ],
+        },
+      ],
+    };
+
+    const result = extractCustomGeometry(spPr);
+    expect(result).not.toBeNull();
+    expect(result.paths[0].d).toBe('M 0 0 C 50 100 150 200 300 300');
+  });
+
+  it('returns null when spPr is null/undefined', () => {
+    expect(extractCustomGeometry(null)).toBeNull();
+    expect(extractCustomGeometry(undefined)).toBeNull();
+  });
+
+  it('uses max width/height from multiple paths', () => {
+    const spPr = {
+      elements: [
+        {
+          name: 'a:custGeom',
+          elements: [
+            {
+              name: 'a:pathLst',
+              elements: [
+                {
+                  name: 'a:path',
+                  attributes: { w: '100', h: '200' },
+                  elements: [
+                    { name: 'a:moveTo', elements: [{ name: 'a:pt', attributes: { x: '0', y: '0' } }] },
+                    { name: 'a:close' },
+                  ],
+                },
+                {
+                  name: 'a:path',
+                  attributes: { w: '300', h: '150' },
+                  elements: [
+                    { name: 'a:moveTo', elements: [{ name: 'a:pt', attributes: { x: '0', y: '0' } }] },
+                    { name: 'a:close' },
+                  ],
+                },
+              ],
+            },
+          ],
+        },
+      ],
+    };
+
+    const result = extractCustomGeometry(spPr);
+    expect(result).not.toBeNull();
+    expect(result.width).toBe(300);
+    expect(result.height).toBe(200);
+    expect(result.paths).toHaveLength(2);
   });
 });

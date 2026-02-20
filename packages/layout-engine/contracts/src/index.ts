@@ -666,6 +666,9 @@ export type EffectExtent = {
   bottom: number;
 };
 
+export type CustomGeometryPath = { d: string; fill: string };
+export type CustomGeometry = { paths: CustomGeometryPath[]; width: number; height: number };
+
 export type VectorShapeStyle = {
   fillColor?: FillColor;
   strokeColor?: StrokeColor;
@@ -700,6 +703,7 @@ export type ShapeGroupVectorChild = {
   attrs: PositionedDrawingGeometry &
     VectorShapeStyle & {
       kind?: string;
+      customGeometry?: CustomGeometry;
       shapeId?: string;
       shapeName?: string;
     };
@@ -741,6 +745,7 @@ export type VectorShapeDrawing = DrawingBlockBase & {
   drawingKind: 'vectorShape';
   geometry: DrawingGeometry;
   shapeKind?: string;
+  customGeometry?: CustomGeometry;
   fillColor?: FillColor;
   strokeColor?: StrokeColor;
   strokeWidth?: number;

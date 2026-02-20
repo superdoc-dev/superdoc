@@ -450,6 +450,87 @@ export function extractFillColor(spPr, style) {
 }
 
 /**
+ * Extracts custom geometry path data from a shape's properties (spPr).
+ * Parses OOXML a:custGeom/a:pathLst into SVG-compatible path data.
+ *
+ * OOXML path commands map to SVG:
+ *   a:moveTo/a:pt → M x y
+ *   a:lnTo/a:pt   → L x y
+ *   a:cubicBezTo (3 a:pt) → C x1 y1 x2 y2 x y
+ *   a:close        → Z
+ *
+ * @param {Object} spPr - The shape properties element (a:spPr or wps:spPr)
+ * @returns {{ paths: Array<{ d: string, fill: string }>, width: number, height: number }|null}
+ */
+export function extractCustomGeometry(spPr) {
+  const custGeom = spPr?.elements?.find((el) => el.name === 'a:custGeom');
+  if (!custGeom) return null;
+
+  const pathLst = custGeom.elements?.find((el) => el.name === 'a:pathLst');
+  if (!pathLst?.elements?.length) return null;
+
+  const paths = [];
+  let maxWidth = 0;
+  let maxHeight = 0;
+
+  for (const pathEl of pathLst.elements) {
+    if (pathEl.name !== 'a:path') continue;
+
+    const w = parseInt(pathEl.attributes?.['w'] || '0', 10);
+    const h = parseInt(pathEl.attributes?.['h'] || '0', 10);
+    const fill = pathEl.attributes?.['fill'] || 'norm';
+
+    if (w > maxWidth) maxWidth = w;
+    if (h > maxHeight) maxHeight = h;
+
+    const segments = [];
+    if (pathEl.elements) {
+      for (const cmd of pathEl.elements) {
+        switch (cmd.name) {
+          case 'a:moveTo': {
+            const pt = cmd.elements?.find((el) => el.name === 'a:pt');
+            if (pt) {
+              segments.push(`M ${pt.attributes?.['x'] || 0} ${pt.attributes?.['y'] || 0}`);
+            }
+            break;
+          }
+          case 'a:lnTo': {
+            const pt = cmd.elements?.find((el) => el.name === 'a:pt');
+            if (pt) {
+              segments.push(`L ${pt.attributes?.['x'] || 0} ${pt.attributes?.['y'] || 0}`);
+            }
+            break;
+          }
+          case 'a:cubicBezTo': {
+            const pts = cmd.elements?.filter((el) => el.name === 'a:pt') || [];
+            if (pts.length === 3) {
+              segments.push(
+                `C ${pts[0].attributes?.['x'] || 0} ${pts[0].attributes?.['y'] || 0} ` +
+                  `${pts[1].attributes?.['x'] || 0} ${pts[1].attributes?.['y'] || 0} ` +
+                  `${pts[2].attributes?.['x'] || 0} ${pts[2].attributes?.['y'] || 0}`,
+              );
+            }
+            break;
+          }
+          case 'a:close': {
+            segments.push('Z');
+            break;
+          }
+        }
+      }
+    }
+
+    if (segments.length > 0) {
+      paths.push({ d: segments.join(' '), fill });
+    }
+  }
+
+  if (paths.length === 0 || (maxWidth === 0 && maxHeight === 0)) return null;
+
+  return { paths, width: maxWidth, height: maxHeight };
+}
+
+/**
  * Extracts gradient fill information from a:gradFill element
  * @param {Object} gradFill - The a:gradFill element
  * @returns {Object} Gradient fill data with type, stops, and angle

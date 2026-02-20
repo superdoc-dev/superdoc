@@ -1,6 +1,12 @@
 import { emuToPixels, rotToDegrees, polygonToObj } from '@converter/helpers.js';
 import { carbonCopy } from '@core/utilities/carbonCopy.js';
-import { extractStrokeWidth, extractStrokeColor, extractFillColor, extractLineEnds } from './vector-shape-helpers';
+import {
+  extractStrokeWidth,
+  extractStrokeColor,
+  extractFillColor,
+  extractLineEnds,
+  extractCustomGeometry,
+} from './vector-shape-helpers';
 import { convertMetafileToSvg, isMetafileExtension, setMetafileDomEnvironment } from './metafile-converter.js';
 import {
   collectTextBoxParagraphs,
@@ -488,9 +494,10 @@ const handleShapeDrawing = (
   const spPr = wsp.elements.find((el) => el.name === 'wps:spPr');
   const prstGeom = spPr?.elements.find((el) => el.name === 'a:prstGeom');
   const shapeType = prstGeom?.attributes['prst'];
+  const hasCustGeom = !!spPr?.elements?.find((el) => el.name === 'a:custGeom');
 
-  // For all other shapes (with or without text), or shapes with gradients, use the vector shape handler
-  if (shapeType) {
+  // For shapes with preset or custom geometry, use the vector shape handler
+  if (shapeType || hasCustGeom) {
     const result = getVectorShape({ params, node, graphicData, size, marginOffset, anchorData, wrap, isAnchor });
     if (result?.attrs && isHidden) {
       result.attrs.hidden = true;
@@ -592,9 +599,10 @@ const handleShapeGroup = (params, node, graphicData, size, padding, marginOffset
       const spPr = wsp.elements?.find((el) => el.name === 'wps:spPr');
       if (!spPr) return null;
 
-      // Extract shape kind
+      // Extract shape kind from preset geometry, or parse custom geometry paths
       const prstGeom = spPr.elements?.find((el) => el.name === 'a:prstGeom');
       const shapeKind = prstGeom?.attributes?.['prst'];
+      const customGeometry = !shapeKind ? extractCustomGeometry(spPr) : null;
 
       // Extract size and transformations
       const shapeXfrm = spPr.elements?.find((el) => el.name === 'a:xfrm');
@@ -664,6 +672,7 @@ const handleShapeGroup = (params, node, graphicData, size, padding, marginOffset
         shapeType: 'vectorShape',
         attrs: {
           kind: shapeKind,
+          customGeometry: customGeometry || undefined,
           x,
           y,
           width,
@@ -1099,13 +1108,17 @@ export function getVectorShape({ params, node, graphicData, size, marginOffset, 
     return null;
   }
 
-  // Extract shape kind
+  // Extract shape kind from preset geometry, or parse custom geometry paths
   const prstGeom = spPr.elements?.find((el) => el.name === 'a:prstGeom');
   const shapeKind = prstGeom?.attributes?.['prst'];
-  if (!shapeKind) {
-    console.warn('Shape kind not found');
-  }
   schemaAttrs.kind = shapeKind;
+
+  if (!shapeKind) {
+    const customGeometry = extractCustomGeometry(spPr);
+    if (customGeometry) {
+      schemaAttrs.customGeometry = customGeometry;
+    }
+  }
 
   // Use wp:extent for dimensions (final displayed size from anchor)
   // This is the correct size that Word displays the shape at

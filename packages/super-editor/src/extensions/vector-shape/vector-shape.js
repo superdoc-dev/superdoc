@@ -158,6 +158,11 @@ export const VectorShape = Node.create({
         default: null,
         rendered: false,
       },
+
+      customGeometry: {
+        default: null,
+        rendered: false,
+      },
     };
   },
 

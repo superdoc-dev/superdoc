@@ -43,6 +43,7 @@ import type {
   TableAttrs,
   TableCellAttrs,
   PositionMapping,
+  CustomGeometry,
 } from '@superdoc/contracts';
 import { calculateJustifySpacing, computeLinePmRange, shouldApplyJustify, SPACE_CHARS } from '@superdoc/contracts';
 import { getPresetShapeSvg } from '@superdoc/preset-geometry';
@@ -2796,7 +2797,11 @@ export class DomPainter {
     contentContainer.style.width = `${innerWidth}px`;
     contentContainer.style.height = `${innerHeight}px`;
 
-    const svgMarkup = block.shapeKind ? this.tryCreatePresetSvg(block, innerWidth, innerHeight) : null;
+    const svgMarkup = block.shapeKind
+      ? this.tryCreatePresetSvg(block, innerWidth, innerHeight)
+      : block.customGeometry
+        ? this.createCustomGeometrySvg(block, innerWidth, innerHeight)
+        : null;
     if (svgMarkup) {
       const svgElement = this.parseSafeSvg(svgMarkup);
       if (svgElement) {
@@ -3084,6 +3089,48 @@ export class DomPainter {
       console.warn(`[DomPainter] Unable to render preset shape "${block.shapeKind}":`, error);
       return null;
     }
+  }
+
+  /**
+   * Generates SVG markup from custom geometry path data (a:custGeom).
+   * Converts stored OOXML path commands (already converted to SVG d-strings) into a full SVG element.
+   */
+  private createCustomGeometrySvg(
+    block: VectorShapeDrawingWithEffects,
+    widthOverride?: number,
+    heightOverride?: number,
+  ): string | null {
+    const geom = block.customGeometry;
+    if (!geom || !geom.paths.length) return null;
+
+    const width = widthOverride ?? block.geometry.width;
+    const height = heightOverride ?? block.geometry.height;
+
+    // Resolve fill color — null means "no fill" (a:noFill), use 'none'
+    let fillColor: string;
+    if (block.fillColor === null) {
+      fillColor = 'none';
+    } else if (typeof block.fillColor === 'string') {
+      fillColor = block.fillColor;
+    } else {
+      fillColor = 'none';
+    }
+
+    const strokeColor =
+      block.strokeColor === null ? 'none' : typeof block.strokeColor === 'string' ? block.strokeColor : 'none';
+    const strokeWidth = block.strokeWidth ?? 0;
+
+    // Build SVG paths — scale the path coordinate space to the actual display dimensions via viewBox
+    const pathElements = geom.paths
+      .map((p) => {
+        const pathFill = p.fill === 'none' ? 'none' : fillColor;
+        // Sanitize d attribute — only allow SVG path commands and numbers
+        const safeD = p.d.replace(/[^MmLlHhVvCcSsQqTtAaZz0-9.,\s\-+eE]/g, '');
+        return `<path d="${safeD}" fill="${pathFill}" stroke="${strokeColor}" stroke-width="${strokeWidth}" />`;
+      })
+      .join('');
+
+    return `<svg xmlns="http://www.w3.org/2000/svg" width="${width}" height="${height}" viewBox="0 0 ${geom.width} ${geom.height}" preserveAspectRatio="none">${pathElements}</svg>`;
   }
 
   private parseSafeSvg(markup: string): SVGElement | null {
@@ -3375,6 +3422,7 @@ export class DomPainter {
       const attrs = child.attrs as PositionedDrawingGeometry &
         VectorShapeStyle & {
           kind?: string;
+          customGeometry?: CustomGeometry;
           shapeId?: string;
           shapeName?: string;
           textContent?: ShapeTextContent;
@@ -3401,6 +3449,7 @@ export class DomPainter {
         drawingContentId: undefined,
         drawingContent: undefined,
         shapeKind: attrs.kind,
+        customGeometry: attrs.customGeometry,
         fillColor: attrs.fillColor,
         strokeColor: attrs.strokeColor,
         strokeWidth: attrs.strokeWidth,
@@ -5892,6 +5941,7 @@ const deriveBlockVersion = (block: FlowBlock): string => {
       return [
         'drawing:vector',
         vector.shapeKind ?? '',
+        vector.customGeometry ? JSON.stringify(vector.customGeometry) : '',
         vector.fillColor ?? '',
         vector.strokeColor ?? '',
         vector.strokeWidth ?? '',

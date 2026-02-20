@@ -7,6 +7,7 @@
 
 import type {
   BoxSpacing,
+  CustomGeometry,
   DrawingBlock,
   DrawingContentSnapshot,
   ImageBlock,
@@ -789,6 +790,29 @@ export function normalizeShapeGroupChildren(value: unknown): ShapeGroupChild[] {
     if (!child || typeof child !== 'object') return false;
     return typeof (child as { shapeType?: unknown }).shapeType === 'string';
   });
+}
+
+/**
+ * Normalizes a custom geometry value, validating its structure.
+ * Returns undefined if the value is not a valid CustomGeometry object.
+ */
+export function normalizeCustomGeometry(value: unknown): CustomGeometry | undefined {
+  if (!value || typeof value !== 'object') return undefined;
+  const obj = value as Record<string, unknown>;
+  if (typeof obj.width !== 'number' || typeof obj.height !== 'number') return undefined;
+  if (!Array.isArray(obj.paths) || obj.paths.length === 0) return undefined;
+  const validPaths = obj.paths.filter(
+    (p: unknown) => p && typeof p === 'object' && typeof (p as Record<string, unknown>).d === 'string',
+  );
+  if (validPaths.length === 0) return undefined;
+  return {
+    paths: validPaths.map((p: Record<string, unknown>) => ({
+      d: p.d as string,
+      fill: typeof p.fill === 'string' ? p.fill : 'norm',
+    })),
+    width: obj.width,
+    height: obj.height,
+  };
 }
 
 // ============================================================================

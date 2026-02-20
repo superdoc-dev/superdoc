@@ -73,6 +73,19 @@ describe('document-api contract catalog', () => {
     }
   });
 
+  it('encodes insert locator pairing and exclusivity constraints in the input schema', () => {
+    const schemas = buildInternalContractSchemas();
+    const insertInputSchema = schemas.operations.insert.input as {
+      allOf?: Array<Record<string, unknown>>;
+    };
+
+    expect(insertInputSchema.allOf).toEqual([
+      { not: { required: ['target', 'blockId'] } },
+      { not: { required: ['target', 'offset'] } },
+      { if: { required: ['offset'] }, then: { required: ['blockId'] } },
+    ]);
+  });
+
   it('derives OPERATION_IDS from OPERATION_DEFINITIONS keys', () => {
     const definitionKeys = Object.keys(OPERATION_DEFINITIONS).sort();
     const operationIds = [...OPERATION_IDS].sort();

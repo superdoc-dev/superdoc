@@ -4,8 +4,7 @@ import type { SubmitData, SigningState, FieldChange, DownloadData, PdfModuleConf
 import * as pdfjsLib from 'pdfjs-dist/build/pdf.mjs';
 import TabHeader from './TabHeader';
 
-pdfjsLib.GlobalWorkerOptions.workerSrc = new URL('pdfjs-dist/build/pdf.worker.min.mjs', import.meta.url).toString();
-
+const pathToPDFWorker = new URL('pdfjs-dist/build/pdf.worker.min.mjs', import.meta.url).toString();
 const pdfDocumentSource = 'https://storage.googleapis.com/public_static_hosting/public_demo_docs/demo%20pdf.pdf';
 
 interface PdfTabProps {
@@ -32,8 +31,8 @@ export default function PdfTab({
   const pdfConfig = useMemo<PdfModuleConfig>(
     () => ({
       pdfLib: pdfjsLib,
-      workerSrc: pdfjsLib.GlobalWorkerOptions.workerSrc as string,
-      setWorker: false,
+      workerSrc: pathToPDFWorker as string,
+      setWorker: true,
       outputScale: 2,
     }),
     [],

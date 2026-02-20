@@ -239,7 +239,7 @@ Render PDF documents in eSign by passing the `pdf` prop. This forwards the PDF m
 ```jsx
 import * as pdfjsLib from 'pdfjs-dist/build/pdf.mjs';
 
-pdfjsLib.GlobalWorkerOptions.workerSrc = new URL(
+const pdfWorkerUrl = new URL(
   'pdfjs-dist/build/pdf.worker.min.mjs',
   import.meta.url,
 ).toString();
@@ -254,8 +254,8 @@ pdfjsLib.GlobalWorkerOptions.workerSrc = new URL(
   }}
   pdf={{
     pdfLib: pdfjsLib,
-    workerSrc: pdfjsLib.GlobalWorkerOptions.workerSrc,
-    setWorker: false,
+    workerSrc: pdfWorkerUrl,
+    setWorker: true,
     outputScale: 2,
   }}
   fields={{

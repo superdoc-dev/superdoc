@@ -626,6 +626,7 @@ export type TextFormatting = {
   color?: string;
   fontSize?: number;
   fontFamily?: string;
+  letterSpacing?: number;
 };
 
 /** A single text part with optional formatting. */

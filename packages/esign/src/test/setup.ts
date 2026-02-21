@@ -51,7 +51,15 @@ let lastConstructorOptions: any = null;
 const SuperDocMock = vi.fn((options: any = {}) => {
   lastConstructorOptions = options;
 
-  if (options?.onReady) {
+  const isPdf = options?.modules?.pdf;
+
+  if (isPdf && options?.onPdfDocumentReady) {
+    if (typeof queueMicrotask === 'function') {
+      queueMicrotask(() => options.onPdfDocumentReady());
+    } else {
+      Promise.resolve().then(() => options.onPdfDocumentReady());
+    }
+  } else if (options?.onReady) {
     if (typeof queueMicrotask === 'function') {
       queueMicrotask(() => options.onReady());
     } else {
@@ -61,7 +69,7 @@ const SuperDocMock = vi.fn((options: any = {}) => {
 
   return {
     destroy: mockDestroy,
-    activeEditor: mockEditor,
+    activeEditor: isPdf ? null : mockEditor,
     on: vi.fn(),
   };
 });

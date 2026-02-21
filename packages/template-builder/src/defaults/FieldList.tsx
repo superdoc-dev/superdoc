@@ -1,6 +1,7 @@
 import type { FC } from 'react';
 import { useMemo, useState } from 'react';
 import type { FieldListProps, TemplateField } from '../types';
+import { getFieldTypeStyle } from '../utils';
 
 const shortenGroupId = (group: string): string => {
   const parts = group.split('-');
@@ -108,6 +109,19 @@ const FieldItem: FC<{
               }}
             >
               {field.mode}
+            </span>
+          )}
+          {field.fieldType && (
+            <span
+              style={{
+                fontSize: '9px',
+                padding: '2px 5px',
+                borderRadius: '3px',
+                ...getFieldTypeStyle(field.fieldType),
+                fontWeight: '500',
+              }}
+            >
+              {field.fieldType}
             </span>
           )}
         </div>

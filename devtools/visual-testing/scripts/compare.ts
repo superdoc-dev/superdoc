@@ -153,21 +153,12 @@ export interface ImageCompareResult {
   word?: WordImageSet;
   /** Source document metadata (if available) */
   sourceDoc?: SourceDocMetadata;
-  /** Interaction story metadata (if available) */
-  interaction?: InteractionMetadata;
 }
 
 export interface WordImageSet {
   baseline: string;
   diff: string;
   actual: string;
-}
-
-export interface InteractionMetadata {
-  storyName?: string;
-  storyDescription?: string;
-  milestoneLabel?: string;
-  milestoneDescription?: string;
 }
 
 /** Metadata linking a comparison result back to its source .docx file. */
@@ -196,12 +187,6 @@ type WordTarget =
   | { mode: 'local'; value: string }
   | { mode: 'version'; value: string }
   | { mode: 'skip'; reason: string };
-
-interface StoryMetadataFile {
-  name?: string;
-  description?: string;
-  milestones?: Record<string, { label?: string; description?: string }>;
-}
 
 export interface ComparisonReport {
   /** Results folder compared */
@@ -266,8 +251,7 @@ function buildDiffBundlePaths(
 interface ReportOptions {
   reportFileName?: string;
   showAll?: boolean;
-  mode?: 'visual' | 'interactions';
-  reportMode?: 'visual' | 'interactions';
+  mode?: 'visual';
   trimPrefix?: string;
 }
 
@@ -333,7 +317,7 @@ async function runGenerate(options: {
 }
 
 async function runBaseline(options: {
-  script: 'scripts/baseline-visual.ts' | 'scripts/baseline-interactions.ts';
+  script: 'scripts/baseline-visual.ts';
   versionSpec?: string;
   filters: string[];
   matches: string[];
@@ -873,50 +857,6 @@ function deriveMissingBaselineDocFilters(
   }
 
   return Array.from(filters);
-}
-
-function readStoryMetadata(filePath: string): StoryMetadataFile | null {
-  if (!fs.existsSync(filePath)) return null;
-  try {
-    const raw = fs.readFileSync(filePath, 'utf8');
-    const parsed = JSON.parse(raw) as StoryMetadataFile;
-    return parsed && typeof parsed === 'object' ? parsed : null;
-  } catch {
-    return null;
-  }
-}
-
-function getInteractionMetadata(
-  relativePath: string,
-  resultsFolderName: string,
-  resultsPrefix: string | undefined,
-  resultsFolder: string,
-  baselineFolder: string,
-  cache: Map<string, StoryMetadataFile | null>,
-): InteractionMetadata | undefined {
-  const assetPath = extractAssetPath(relativePath, resultsFolderName, resultsPrefix);
-  const normalized = normalizePath(assetPath);
-  const storyDir = path.posix.dirname(normalized);
-  const fileName = path.posix.basename(normalized);
-  if (!storyDir || storyDir === '.') return undefined;
-
-  let meta = cache.get(storyDir) ?? null;
-  if (!cache.has(storyDir)) {
-    const normalizedPrefix = normalizePrefix(resultsPrefix) ?? '';
-    const resultsMetaPath = path.join(resultsFolder, normalizedPrefix, storyDir, '_story.json');
-    const baselineMetaPath = path.join(baselineFolder, storyDir, '_story.json');
-    meta = readStoryMetadata(resultsMetaPath) ?? readStoryMetadata(baselineMetaPath);
-    cache.set(storyDir, meta);
-  }
-
-  if (!meta) return undefined;
-  const milestone = meta.milestones?.[fileName];
-  return {
-    storyName: meta.name,
-    storyDescription: meta.description,
-    milestoneLabel: milestone?.label,
-    milestoneDescription: milestone?.description,
-  };
 }
 
 function parseDocKeyAndPage(
@@ -1480,10 +1420,7 @@ export async function runComparison(
 
   const resultsFolder = path.join(resultsRoot, resultsFolderName);
   const initialNormalizedResultsPrefix = normalizePrefix(resultsPrefix);
-  const reportMode = options.reportOptions?.mode ?? options.reportOptions?.reportMode;
   const reportAll = Boolean(options.reportOptions?.showAll);
-  const isInteractionsRun = reportMode === 'interactions' || initialNormalizedResultsPrefix === 'interactions/';
-  const includeInteractionMeta = isInteractionsRun;
   let normalizedResultsPrefix = initialNormalizedResultsPrefix;
   const normalizedIgnorePrefixes = ignorePrefixes
     .map((prefix) => normalizePrefix(prefix))
@@ -1646,14 +1583,7 @@ export async function runComparison(
   const resolvedOutputFolderName = outputFolderName ?? resultsFolderName;
   const outputFolder = path.join(RESULTS_DIR, resolvedOutputFolderName);
   if (fs.existsSync(outputFolder)) {
-    if (isInteractionsRun) {
-      const interactionsOutput = path.join(outputFolder, 'interactions');
-      if (fs.existsSync(interactionsOutput)) {
-        fs.rmSync(interactionsOutput, { recursive: true });
-      }
-    } else {
-      fs.rmSync(outputFolder, { recursive: true });
-    }
+    fs.rmSync(outputFolder, { recursive: true });
   }
   fs.mkdirSync(outputFolder, { recursive: true });
 
@@ -1662,22 +1592,6 @@ export async function runComparison(
   let failed = 0;
   let missingInBaseline = 0;
   let missingInResults = 0;
-  const interactionMetaCache = new Map<string, StoryMetadataFile | null>();
-
-  const attachInteractionMeta = (result: ImageCompareResult): void => {
-    if (!includeInteractionMeta) return;
-    const meta = getInteractionMetadata(
-      result.relativePath,
-      resultsFolderName,
-      resultsPrefix,
-      resultsFolder,
-      baselineFolder,
-      interactionMetaCache,
-    );
-    if (meta) {
-      result.interaction = meta;
-    }
-  };
 
   // Helper to track current document and log failures grouped by document
   let currentDoc = '';
@@ -1702,7 +1616,7 @@ export async function runComparison(
 
       if (generateDiffs || reportAll) {
         const result = generateMissingPageDiff(resultPath, bundlePaths!.diffPath, 'missing_in_baseline', resultsRoot);
-        attachInteractionMeta(result);
+
         results.push(result);
         copyArtifactImage(resultPath, bundlePaths!.actualPath);
         logDocHeader(relativePath);
@@ -1718,7 +1632,7 @@ export async function runComparison(
     const diffPath = generateDiffs ? bundlePaths!.diffPath : undefined;
 
     const result = compareImages(baselinePath, resultPath, diffPath, threshold, resultsRoot);
-    attachInteractionMeta(result);
+
     results.push(result);
 
     if (result.passed) {
@@ -1751,7 +1665,7 @@ export async function runComparison(
         const bundlePaths = buildDiffBundlePaths(outputFolder, expectedResultPath);
         const result = generateMissingPageDiff(baselinePath, bundlePaths.diffPath, 'missing_in_results', resultsRoot);
         result.relativePath = normalizePath(path.join(resultsFolderName, expectedResultPath));
-        attachInteractionMeta(result);
+
         results.push(result);
         copyArtifactImage(baselinePath, bundlePaths.baselinePath);
         logDocHeader(expectedResultPath);
@@ -2165,7 +2079,6 @@ function parseArgs(): {
   resultsRoot?: string;
   resultsPrefix?: string;
   reportFileName?: string;
-  reportMode?: 'visual' | 'interactions';
   reportTrim?: string;
   reportAll: boolean;
   includeWord: boolean;
@@ -2189,7 +2102,6 @@ function parseArgs(): {
   let resultsRoot: string | undefined;
   let resultsPrefix: string | undefined;
   let reportFileName: string | undefined;
-  let reportMode: 'visual' | 'interactions' | undefined;
   let reportTrim: string | undefined;
   let reportAll = false;
   let includeWord = false;
@@ -2246,10 +2158,6 @@ function parseArgs(): {
       reportFileName = args[i + 1];
       i++;
     } else if (args[i] === '--report-mode' && args[i + 1]) {
-      const mode = args[i + 1];
-      if (mode === 'visual' || mode === 'interactions') {
-        reportMode = mode;
-      }
       i++;
     } else if (args[i] === '--report-trim' && args[i + 1]) {
       reportTrim = args[i + 1];
@@ -2294,7 +2202,6 @@ function parseArgs(): {
     resultsRoot,
     resultsPrefix,
     reportFileName,
-    reportMode,
     reportTrim,
     reportAll,
     includeWord,
@@ -2324,7 +2231,6 @@ async function main(): Promise<void> {
     resultsRoot,
     resultsPrefix,
     reportFileName,
-    reportMode,
     reportTrim,
     reportAll,
     includeWord,
@@ -2346,13 +2252,7 @@ async function main(): Promise<void> {
 
   const storageArgs = buildStorageArgs(mode, docsDir);
   const normalizedResultsPrefix = normalizePrefix(resultsPrefix);
-  const normalizedReportTrim = normalizePrefix(reportTrim);
-  const isInteractionMode =
-    reportMode === 'interactions' ||
-    (normalizedResultsPrefix ? normalizedResultsPrefix.startsWith('interactions/') : false) ||
-    (normalizedReportTrim ? normalizedReportTrim.startsWith('interactions/') : false) ||
-    effectiveFilters.some((value) => value.startsWith('interactions/'));
-  const baselinePrefix = isInteractionMode ? 'baselines-interactions' : BASELINES_DIR;
+  const baselinePrefix = BASELINES_DIR;
   const baselineDir = resolveBaselineRoot(baselinePrefix, mode, baselineRoot);
   const resolvedResultsRoot = resultsRoot ? resolvePathInput(resultsRoot) : undefined;
 
@@ -2380,11 +2280,6 @@ async function main(): Promise<void> {
     process.exit(1);
   }
 
-  if (targetVersion && isInteractionMode) {
-    console.error(colors.error('Use "pnpm compare:interactions --target" for interaction baselines.'));
-    process.exit(1);
-  }
-
   const ensureBaseline = async (version: string, versionSpec?: string, force: boolean = false): Promise<void> => {
     if (mode === 'local') {
       const baselinePath = path.join(baselineDir, version);
@@ -2396,10 +2291,7 @@ async function main(): Promise<void> {
         } else {
           console.log(colors.info(`📸 Ensuring baseline coverage for ${normalizedDocs.length} selected doc(s)...`));
         }
-        const script =
-          baselinePrefix === 'baselines-interactions'
-            ? 'scripts/baseline-interactions.ts'
-            : 'scripts/baseline-visual.ts';
+        const script = 'scripts/baseline-visual.ts' as const;
         const browserArg = browsers.length > 0 ? browsers.join(',') : undefined;
         const currentSpec = getHarnessSuperdocSpecifier();
         const currentInstalledVersion = getSuperdocVersion();
@@ -2578,11 +2470,8 @@ async function main(): Promise<void> {
     await ensureBaseline(resultsFolderName, normalizeVersionSpecifier(resultsFolderName));
   }
 
-  const resolvedMode =
-    reportMode ??
-    (reportTrim || effectiveFilters.some((value) => value.startsWith('interactions/')) ? 'interactions' : 'visual');
-  const resolvedTrim = reportTrim ?? (resolvedMode === 'interactions' ? 'interactions/' : undefined);
-  const ignorePrefixes = resolvedMode === 'visual' ? ['interactions/'] : undefined;
+  const resolvedMode = 'visual' as const;
+  const resolvedTrim = reportTrim;
 
   const outputFolderNameForBrowser = (browser: BrowserName): string =>
     browsers.length > 1 ? path.join(resultsFolderName!, browser) : resultsFolderName!;
@@ -2613,7 +2502,7 @@ async function main(): Promise<void> {
         filters: effectiveFilters,
         matches,
         excludes,
-        ignorePrefixes,
+
         reportOptions: {
           showAll: reportAll,
           reportFileName,
@@ -2650,7 +2539,7 @@ async function main(): Promise<void> {
               filters: effectiveFilters,
               matches,
               excludes,
-              ignorePrefixes,
+
               reportOptions: {
                 showAll: reportAll,
                 reportFileName,
@@ -2668,51 +2557,49 @@ async function main(): Promise<void> {
         }
       }
 
-      if (resolvedMode === 'visual') {
-        const visualResultsPrefix = browser ? `${normalizePrefix(resultsPrefix) ?? ''}${browser}/` : resultsPrefix;
+      const visualResultsPrefix = browser ? `${normalizePrefix(resultsPrefix) ?? ''}${browser}/` : resultsPrefix;
 
-        let wordBaselineIndex: WordBaselineIndex | undefined;
-        if (isWordR2Available()) {
-          try {
-            wordBaselineIndex = await downloadWordBaselinesForReport(report, {
-              resultsPrefix: visualResultsPrefix,
-              providerOptions: { mode, docsDir },
-            });
-          } catch (error) {
-            console.warn(
-              colors.warning(
-                `Word R2 baseline download failed, falling back: ${error instanceof Error ? error.message : String(error)}`,
-              ),
-            );
-          }
+      let wordBaselineIndex: WordBaselineIndex | undefined;
+      if (isWordR2Available()) {
+        try {
+          wordBaselineIndex = await downloadWordBaselinesForReport(report, {
+            resultsPrefix: visualResultsPrefix,
+            providerOptions: { mode, docsDir },
+          });
+        } catch (error) {
+          console.warn(
+            colors.warning(
+              `Word R2 baseline download failed, falling back: ${error instanceof Error ? error.message : String(error)}`,
+            ),
+          );
         }
+      }
 
-        report = await augmentReportWithSourceDocs(report, {
-          resultsPrefix: visualResultsPrefix,
+      report = await augmentReportWithSourceDocs(report, {
+        resultsPrefix: visualResultsPrefix,
+        resultsFolderName: resultsFolderName!,
+        providerOptions: { mode, docsDir },
+        wordBaselineIndex,
+      });
+
+      if (includeWord) {
+        report = await augmentReportWithWord(report, {
           resultsFolderName: resultsFolderName!,
+          resultsPrefix: visualResultsPrefix,
+          targetVersion: resolvedTargetVersion,
           providerOptions: { mode, docsDir },
           wordBaselineIndex,
         });
-
-        if (includeWord) {
-          report = await augmentReportWithWord(report, {
-            resultsFolderName: resultsFolderName!,
-            resultsPrefix: visualResultsPrefix,
-            targetVersion: resolvedTargetVersion,
-            providerOptions: { mode, docsDir },
-            wordBaselineIndex,
-          });
-        }
-
-        const outputFolder = path.join(RESULTS_DIR, outputFolderName);
-        fs.writeFileSync(path.join(outputFolder, REPORT_FILE), JSON.stringify(report, null, 2));
-        writeHtmlReport(report, outputFolder, {
-          showAll: reportAll,
-          reportFileName,
-          mode: resolvedMode,
-          trimPrefix: resolvedTrim,
-        });
       }
+
+      const outputFolder = path.join(RESULTS_DIR, outputFolderName);
+      fs.writeFileSync(path.join(outputFolder, REPORT_FILE), JSON.stringify(report, null, 2));
+      writeHtmlReport(report, outputFolder, {
+        showAll: reportAll,
+        reportFileName,
+        mode: resolvedMode,
+        trimPrefix: resolvedTrim,
+      });
 
       // Summary
       console.log('');

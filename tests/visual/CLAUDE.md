@@ -4,11 +4,6 @@ Playwright visual regression tests for SuperDoc. Screenshots and test documents 
 
 ## When to Add Visual Tests
 
-Add a **behavior test** when you:
-- Fix a bug that affects rendering or user interaction
-- Add or change an editing feature (formatting, commands, toolbar)
-- Modify comments, track changes, or collaboration UI
-
 Add a **rendering test** when you:
 - Fix a DOCX import/export rendering issue
 - Change the layout engine or style resolution
@@ -17,16 +12,6 @@ Add a **rendering test** when you:
 
 ```
 tests/
-  behavior/              Simulate user actions, screenshot result
-    basic-commands/      Typing, undo/redo, tables, select-all, toolbar
-    formatting/          Bold/italic, hyperlinks, clear format, fonts
-    comments-tcs/        Comments, track changes, nested comments
-    lists/               List creation, indentation, markers
-    field-annotations/   Field annotation types and formatting
-    headers/             Header/footer editing
-    search/              Search and navigation
-    importing/           Document import edge cases
-    structured-content/  SDT lock modes
   rendering/             Auto-discovers all .docx in test-data/rendering/
   fixtures/superdoc.ts   Shared fixture with helpers
 test-data/               Symlink to shared repo corpus mirror (`<repo>/test-corpus`)
@@ -59,47 +44,6 @@ pnpm test                 # verify it loads and renders
 Baselines are generated in CI from the `stable` branch — never locally (macOS font rendering differs from Linux).
 
 **Naming convention**: `<issue-id>-<description>.docx` for regressions (e.g. `sd-1679-anchor-table-overlap.docx`). General coverage docs can skip the issue ID.
-
-## Writing a Behavior Test
-
-```ts
-import { test } from '../../fixtures/superdoc.js';
-
-test('@behavior description of what it tests', async ({ superdoc }) => {
-  // 1. Set up state (type, execute commands, load doc)
-  await superdoc.type('Hello world');
-  await superdoc.bold();
-
-  // 2. Screenshot the result
-  await superdoc.screenshot('my-test-name');
-});
-```
-
-Place the file in the matching category folder. Use `@behavior` tag in the test name.
-
-## Loading Test Documents
-
-Test documents are stored in the shared corpus bucket. Download with `pnpm docs:download`. Upload rendering docs with `pnpm docs:upload <file>`.
-
-```ts
-import fs from 'node:fs';
-import path from 'node:path';
-import { fileURLToPath } from 'node:url';
-import { test } from '../../fixtures/superdoc.js';
-
-const __dirname = path.dirname(fileURLToPath(import.meta.url));
-const DOCS_DIR = path.resolve(__dirname, '../../../test-data');
-const DOC_PATH = path.join(DOCS_DIR, 'behavior/comments-tcs/tracked-changes.docx');
-
-test.skip(!fs.existsSync(DOC_PATH), 'Test document not available');
-
-test('@behavior my doc test', async ({ superdoc }) => {
-  await superdoc.loadDocument(DOC_PATH);
-  await superdoc.screenshot('my-test');
-});
-```
-
-Document paths mirror the test folder structure. A test in `tests/behavior/comments-tcs/` uses documents from `test-data/behavior/comments-tcs/`.
 
 ## CI Behavior
 

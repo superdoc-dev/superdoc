@@ -114,7 +114,28 @@ function isRestartNoOp(editor: Editor, item: ListItemProjection): boolean {
 }
 
 function withListTarget(editor: Editor, input: ListTargetInput): ListItemProjection {
-  return resolveListItem(editor, input.target);
+  if (input.target) return resolveListItem(editor, input.target);
+
+  const nodeId = input.nodeId!;
+  const index = getBlockIndex(editor);
+
+  // Prefer a listItem match so that duplicate IDs across block types don't
+  // shadow a valid list item (e.g. paragraph:dup before listItem:dup).
+  const listMatch = index.candidates.find((c) => c.nodeType === 'listItem' && c.nodeId === nodeId);
+  if (listMatch) {
+    return resolveListItem(editor, { kind: 'block', nodeType: 'listItem', nodeId });
+  }
+
+  // No listItem found — distinguish "exists but wrong type" from "missing".
+  const anyMatch = index.candidates.find((c) => c.nodeId === nodeId);
+  if (anyMatch) {
+    throw new DocumentApiAdapterError('INVALID_TARGET', `Node "${nodeId}" is a ${anyMatch.nodeType}, not a listItem.`, {
+      nodeId,
+      actualNodeType: anyMatch.nodeType,
+    });
+  }
+
+  throw new DocumentApiAdapterError('TARGET_NOT_FOUND', 'List item target was not found.', { nodeId });
 }
 
 export function listsListAdapter(editor: Editor, query?: ListsListQuery): ListsListResult {
@@ -131,7 +152,7 @@ export function listsInsertAdapter(
   input: ListInsertInput,
   options?: MutationOptions,
 ): ListsInsertResult {
-  const target = withListTarget(editor, { target: input.target });
+  const target = withListTarget(editor, input);
   const changeMode = options?.changeMode ?? 'direct';
   const mode = changeMode === 'tracked' ? 'tracked' : 'direct';
   if (mode === 'tracked') ensureTrackedCapability(editor, { operation: 'lists.insert' });
@@ -209,7 +230,7 @@ export function listsSetTypeAdapter(
   options?: MutationOptions,
 ): ListsMutateItemResult {
   rejectTrackedMode('lists.setType', options);
-  const target = withListTarget(editor, { target: input.target });
+  const target = withListTarget(editor, input);
   if (target.kind === input.kind) {
     return toListsFailure('NO_OP', 'List item already has the requested list kind.', {
       target: input.target,

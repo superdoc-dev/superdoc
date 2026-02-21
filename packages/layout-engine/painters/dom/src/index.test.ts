@@ -3244,6 +3244,109 @@ describe('DomPainter', () => {
       expect(fragEl.style.top).toBe(`${footerHeight - contentHeight + footerFragment.y}px`);
     });
 
+    it('renders page-relative behindDoc header media at absolute page Y', () => {
+      const headerImageBlock: FlowBlock = {
+        kind: 'image',
+        id: 'header-page-relative-img',
+        src: 'data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNk+M9QDwADhgGAWjR9awAAAABJRU5ErkJggg==',
+        anchor: {
+          isAnchored: true,
+          hRelativeFrom: 'page',
+          vRelativeFrom: 'page',
+          behindDoc: true,
+        },
+      };
+      const headerImageMeasure: Measure = {
+        kind: 'image',
+        width: 24,
+        height: 14,
+      };
+      const headerFragment: Fragment = {
+        kind: 'image',
+        blockId: 'header-page-relative-img',
+        x: 12,
+        y: 40,
+        width: 24,
+        height: 14,
+        isAnchored: true,
+        behindDoc: true,
+      };
+
+      const painter = createDomPainter({
+        blocks: [block, headerImageBlock],
+        measures: [measure, headerImageMeasure],
+        headerProvider: () => ({
+          fragments: [headerFragment],
+          height: 20,
+          offset: 60,
+          marginLeft: 30,
+        }),
+      });
+
+      painter.paint({ ...layout, pages: [{ ...layout.pages[0], number: 1 }] }, mount);
+
+      const pageEl = mount.querySelector('.superdoc-page') as HTMLElement;
+      const behindDocEl = pageEl.querySelector(
+        '[data-behind-doc-section="header"][data-block-id="header-page-relative-img"]',
+      ) as HTMLElement;
+
+      expect(behindDocEl).toBeTruthy();
+      expect(behindDocEl.style.top).toBe('40px');
+      expect(behindDocEl.style.left).toBe('42px');
+    });
+
+    it('does not apply footer bottom-alignment offset to page-relative media', () => {
+      const footerImageBlock: FlowBlock = {
+        kind: 'image',
+        id: 'footer-page-relative-img',
+        src: 'data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNk+M9QDwADhgGAWjR9awAAAABJRU5ErkJggg==',
+        anchor: {
+          isAnchored: true,
+          hRelativeFrom: 'page',
+          vRelativeFrom: 'page',
+        },
+      };
+      const footerImageMeasure: Measure = {
+        kind: 'image',
+        width: 20,
+        height: 20,
+      };
+      const footerFragment: Fragment = {
+        kind: 'image',
+        blockId: 'footer-page-relative-img',
+        x: 8,
+        y: 25,
+        width: 20,
+        height: 20,
+        isAnchored: true,
+      };
+
+      const footerOffset = 350;
+      const footerHeight = 80;
+      const footerContentHeight = 30;
+
+      const painter = createDomPainter({
+        blocks: [block, footerImageBlock],
+        measures: [measure, footerImageMeasure],
+        footerProvider: () => ({
+          fragments: [footerFragment],
+          height: footerHeight,
+          contentHeight: footerContentHeight,
+          offset: footerOffset,
+        }),
+      });
+
+      painter.paint({ ...layout, pages: [{ ...layout.pages[0], number: 1 }] }, mount);
+
+      const footerEl = mount.querySelector('.superdoc-page-footer') as HTMLElement;
+      const footerFragmentEl = footerEl.querySelector('[data-block-id="footer-page-relative-img"]') as HTMLElement;
+
+      expect(footerFragmentEl).toBeTruthy();
+      expect(footerFragmentEl.style.top).toBe(`${footerFragment.y - footerOffset}px`);
+      const renderedPageTop = parseFloat(footerEl.style.top || '0') + parseFloat(footerFragmentEl.style.top || '0');
+      expect(renderedPageTop).toBe(footerFragment.y);
+    });
+
     it('preserves bold styling on page number tokens in DOM', () => {
       const headerBlock: FlowBlock = {
         kind: 'paragraph',

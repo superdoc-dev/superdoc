@@ -24,6 +24,7 @@ import { handleTrackChangeNode } from '@converter/v2/importer/trackChangesImport
 import { defaultNodeListHandler } from '@converter/v2/importer/docxImporter.js';
 import { parseXmlToJson } from '@converter/v2/docxHelper.js';
 import { initTestEditor } from '@tests/helpers/helpers.js';
+import { findTextPos } from './testUtils.js';
 
 describe('trackChangesHelpers', () => {
   let editor;
@@ -168,6 +169,128 @@ describe('trackChangesHelpers', () => {
     const inlineNodes = documentHelpers.findInlineNodes(applied.doc);
     const hasDelete = inlineNodes.some(({ node }) => node.marks.some((m) => m.type.name === TrackDeleteMarkName));
     expect(hasDelete).toBe(true);
+  });
+
+  it('markDeletion reassigns existing deletions and removes own insertions for replacements', () => {
+    const ownInsertMark = schema.marks[TrackInsertMarkName].create({
+      id: 'ins-own',
+      author: user.name,
+      authorEmail: user.email,
+      date,
+    });
+    const oldDeleteMark = schema.marks[TrackDeleteMarkName].create({
+      id: 'del-old',
+      author: 'Other User',
+      authorEmail: 'other@example.com',
+      date,
+    });
+
+    const run = schema.nodes.run.create({}, [
+      schema.text('Keep '),
+      schema.text('OwnInsert', [ownInsertMark]),
+      schema.text(' OldDelete', [oldDeleteMark]),
+      schema.text(' Plain'),
+    ]);
+    const doc = schema.nodes.doc.create({}, schema.nodes.paragraph.create({}, run));
+    const state = createState(doc);
+    const tr = state.tr;
+
+    const ownInsertPos = findTextPos(state.doc, 'OwnInsert');
+    const plainPos = findTextPos(state.doc, ' Plain');
+    expect(ownInsertPos).toBeTypeOf('number');
+    expect(plainPos).toBeTypeOf('number');
+
+    const replacementId = 'replacement-id';
+    const result = markDeletion({
+      tr,
+      from: ownInsertPos,
+      to: plainPos + ' Plain'.length,
+      user,
+      date,
+      id: replacementId,
+    });
+    const finalState = state.apply(tr);
+
+    expect(result.deletionMark.attrs.id).toBe(replacementId);
+    expect(result.nodes.some((node) => node.text?.includes('OldDelete'))).toBe(true);
+    expect(result.nodes.some((node) => node.text?.includes('Plain'))).toBe(true);
+    expect(result.deletionMap.maps.length).toBeGreaterThan(0);
+
+    expect(finalState.doc.textContent).not.toContain('OwnInsert');
+
+    let reassignedDeletedText = '';
+    let hasOldDeletionId = false;
+    finalState.doc.descendants((node) => {
+      if (!node.isText) return;
+      node.marks.forEach((mark) => {
+        if (mark.type.name !== TrackDeleteMarkName) return;
+        if (mark.attrs.id === replacementId) {
+          reassignedDeletedText += node.text;
+        }
+        if (mark.attrs.id === 'del-old') {
+          hasOldDeletionId = true;
+        }
+      });
+    });
+
+    expect(reassignedDeletedText).toContain('OldDelete');
+    expect(reassignedDeletedText).toContain('Plain');
+    expect(hasOldDeletionId).toBe(false);
+  });
+
+  it('markDeletion preserves existing deletions on plain delete actions', () => {
+    const oldDeleteMark = schema.marks[TrackDeleteMarkName].create({
+      id: 'del-old',
+      author: 'Other User',
+      authorEmail: 'other@example.com',
+      date,
+    });
+
+    const run = schema.nodes.run.create({}, [
+      schema.text('Keep '),
+      schema.text('OldDelete', [oldDeleteMark]),
+      schema.text(' Plain'),
+    ]);
+    const doc = schema.nodes.doc.create({}, schema.nodes.paragraph.create({}, run));
+    const state = createState(doc);
+    const tr = state.tr;
+
+    const oldDeletePos = findTextPos(state.doc, 'OldDelete');
+    const plainPos = findTextPos(state.doc, ' Plain');
+    expect(oldDeletePos).toBeTypeOf('number');
+    expect(plainPos).toBeTypeOf('number');
+
+    markDeletion({
+      tr,
+      from: oldDeletePos,
+      to: plainPos + ' Plain'.length,
+      user,
+      date,
+    });
+    const finalState = state.apply(tr);
+
+    let hasOldDeleteId = false;
+    let plainHasDeleteMark = false;
+    let plainHasOldDeleteId = false;
+
+    finalState.doc.descendants((node) => {
+      if (!node.isText) return;
+      const deleteMarks = node.marks.filter((mark) => mark.type.name === TrackDeleteMarkName);
+      if (!deleteMarks.length) return;
+
+      if (deleteMarks.some((mark) => mark.attrs.id === 'del-old')) {
+        hasOldDeleteId = true;
+      }
+
+      if (node.text.includes('Plain')) {
+        plainHasDeleteMark = true;
+        plainHasOldDeleteId = deleteMarks.some((mark) => mark.attrs.id === 'del-old');
+      }
+    });
+
+    expect(hasOldDeleteId).toBe(true);
+    expect(plainHasDeleteMark).toBe(true);
+    expect(plainHasOldDeleteId).toBe(false);
   });
 
   it('removes Word-imported insertions without authorEmail when deleted', () => {

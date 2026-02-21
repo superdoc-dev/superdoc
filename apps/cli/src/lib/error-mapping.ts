@@ -129,7 +129,11 @@ function mapCreateError(operationId: CliExposedOperationId, error: unknown, code
     return new CliError('TARGET_NOT_FOUND', message, { operationId, details });
   }
 
-  if (code === 'TRACK_CHANGE_COMMAND_UNAVAILABLE') {
+  if (code === 'AMBIGUOUS_TARGET' || code === 'INVALID_TARGET') {
+    return new CliError('INVALID_ARGUMENT', message, { operationId, details });
+  }
+
+  if (code === 'TRACK_CHANGE_COMMAND_UNAVAILABLE' || code === 'CAPABILITY_UNAVAILABLE') {
     return new CliError('TRACK_CHANGE_COMMAND_UNAVAILABLE', message, { operationId, details });
   }
 

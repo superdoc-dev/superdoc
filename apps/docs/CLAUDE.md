@@ -19,11 +19,11 @@ When moving or renaming a page, always add a redirect in `docs.json`:
 
 Document API docs have mixed manual/generated ownership. Treat these paths as authoritative:
 
-- `apps/docs/document-api/reference/*`: generated, commit to git, do not hand-edit.
-- `packages/document-api/generated/*`: generated, commit to git, do not hand-edit.
+- `apps/docs/document-api/reference/*`: generated, committed to git (Mintlify deploys from git), do not hand-edit.
+- `packages/document-api/generated/*`: generated, **not in git**, do not hand-edit. Run `pnpm run generate:all` to produce.
 - `apps/docs/document-api/overview.mdx`: manual except for the block between:
-  - `/* DOC_API_GENERATED_API_SURFACE_START */`
-  - `/* DOC_API_GENERATED_API_SURFACE_END */`
+  - `{/* DOC_API_OPERATIONS_START */}`
+  - `{/* DOC_API_OPERATIONS_END */}`
 
 To refresh generated content:
 

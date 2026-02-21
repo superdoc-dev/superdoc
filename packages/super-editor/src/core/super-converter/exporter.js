@@ -176,6 +176,8 @@ export function exportSchemaToJson(params) {
     commentRangeEnd: wCommentRangeEndTranslator,
     permStart: wPermStartTranslator,
     permEnd: wPermEndTranslator,
+    permStartBlock: wPermStartTranslator,
+    permEndBlock: wPermEndTranslator,
     commentReference: () => null,
     footnoteReference: wFootnoteReferenceTranslator,
     shapeContainer: pictTranslator,

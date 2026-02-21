@@ -384,6 +384,81 @@ describe('createParagraphAdapter', () => {
       'requires a user to be configured',
     );
   });
+
+  it('creates a paragraph before a target resolved by nodeId shorthand', () => {
+    const { editor, insertParagraphAt } = makeEditor();
+
+    const result = createParagraphAdapter(
+      editor,
+      {
+        at: { kind: 'before', nodeId: 'p1' },
+      },
+      { changeMode: 'direct' },
+    );
+
+    expect(result.success).toBe(true);
+    expect(insertParagraphAt.mock.calls[0]?.[0]?.pos).toBe(0);
+  });
+
+  it('creates a paragraph after a target resolved by nodeId shorthand', () => {
+    const { editor, insertParagraphAt } = makeEditor();
+
+    const result = createParagraphAdapter(
+      editor,
+      {
+        at: { kind: 'after', nodeId: 'p1' },
+      },
+      { changeMode: 'direct' },
+    );
+
+    expect(result.success).toBe(true);
+    // 'Hello' paragraph nodeSize = 7, so after position = 7
+    expect(insertParagraphAt.mock.calls[0]?.[0]?.pos).toBe(7);
+  });
+
+  it('throws TARGET_NOT_FOUND when nodeId shorthand cannot be resolved', () => {
+    const { editor } = makeEditor();
+
+    expect(() =>
+      createParagraphAdapter(
+        editor,
+        {
+          at: { kind: 'before', nodeId: 'missing' },
+        },
+        { changeMode: 'direct' },
+      ),
+    ).toThrow('was not found');
+  });
+
+  it('throws AMBIGUOUS_TARGET when nodeId shorthand matches multiple blocks', () => {
+    const doc = createDocNode([createParagraphNode('dup', 'First'), createParagraphNode('dup', 'Second')]);
+    const editor = {
+      state: { doc },
+      commands: { insertParagraphAt: vi.fn(() => true) },
+      can: () => ({ insertParagraphAt: () => true }),
+      options: {},
+    } as unknown as Editor;
+
+    expect(() =>
+      createParagraphAdapter(editor, { at: { kind: 'before', nodeId: 'dup' } }, { changeMode: 'direct' }),
+    ).toThrow('Multiple blocks share nodeId');
+  });
+
+  it('resolves by nodeId when location object has an undefined target key (object spread edge case)', () => {
+    const { editor, insertParagraphAt } = makeEditor();
+
+    // Simulates { ...defaults, kind: 'before', nodeId: 'p1' } where defaults = { target: undefined }
+    const location = {
+      kind: 'before' as const,
+      nodeId: 'p1',
+      target: undefined,
+    } as unknown as import('@superdoc/document-api').ParagraphCreateLocation;
+
+    const result = createParagraphAdapter(editor, { at: location }, { changeMode: 'direct' });
+
+    expect(result.success).toBe(true);
+    expect(insertParagraphAt.mock.calls[0]?.[0]?.pos).toBe(0);
+  });
 });
 
 // ---------------------------------------------------------------------------
@@ -675,6 +750,53 @@ describe('createHeadingAdapter', () => {
     expect(() => createHeadingAdapter(editor, { level: 1, text: 'Tracked' }, { changeMode: 'tracked' })).toThrow(
       'requires a user to be configured',
     );
+  });
+
+  it('creates a heading before a target resolved by nodeId shorthand', () => {
+    const { editor, insertHeadingAt } = makeHeadingEditor();
+
+    const result = createHeadingAdapter(
+      editor,
+      {
+        level: 2,
+        at: { kind: 'before', nodeId: 'p1' },
+      },
+      { changeMode: 'direct' },
+    );
+
+    expect(result.success).toBe(true);
+    expect(insertHeadingAt.mock.calls[0]?.[0]?.pos).toBe(0);
+  });
+
+  it('creates a heading after a target resolved by nodeId shorthand', () => {
+    const { editor, insertHeadingAt } = makeHeadingEditor();
+
+    const result = createHeadingAdapter(
+      editor,
+      {
+        level: 1,
+        at: { kind: 'after', nodeId: 'p1' },
+      },
+      { changeMode: 'direct' },
+    );
+
+    expect(result.success).toBe(true);
+    expect(insertHeadingAt.mock.calls[0]?.[0]?.pos).toBe(7);
+  });
+
+  it('throws TARGET_NOT_FOUND when heading nodeId shorthand cannot be resolved', () => {
+    const { editor } = makeHeadingEditor();
+
+    expect(() =>
+      createHeadingAdapter(
+        editor,
+        {
+          level: 1,
+          at: { kind: 'before', nodeId: 'missing' },
+        },
+        { changeMode: 'direct' },
+      ),
+    ).toThrow('was not found');
   });
 
   it('passes level through to the insertHeadingAt command', () => {

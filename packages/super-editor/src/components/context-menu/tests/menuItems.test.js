@@ -550,7 +550,6 @@ describe('menuItems.js', () => {
       mockEditor = createMockEditor({
         commands: { insertContent },
       });
-      mockEditor.view.dom.focus = vi.fn();
       // No pasteHTML or pasteText on view
       delete mockEditor.view.pasteHTML;
       delete mockEditor.view.pasteText;
@@ -573,6 +572,188 @@ describe('menuItems.js', () => {
       await pasteAction(mockEditor);
 
       expect(insertContent).toHaveBeenCalledWith('fallback text', { contentType: 'text' });
+    });
+  });
+
+  describe('getItems - paste selection preservation (SD-1302)', () => {
+    /**
+     * Creates a mock editor with doc.content.size and selection.constructor.create
+     * to exercise the selection save/restore logic in the paste action.
+     */
+    function createPasteTestEditor(options = {}) {
+      const selFrom = options.selectionFrom ?? 50;
+      const selTo = options.selectionTo ?? 55;
+      const docSize = options.docSize ?? 100;
+
+      const mockDoc = {
+        textBetween: vi.fn(() => ''),
+        nodeAt: vi.fn(() => ({ type: { name: 'paragraph' } })),
+        resolve: vi.fn(() => ({})),
+        content: { size: docSize },
+      };
+
+      const mockCreate = vi.fn((_doc, from, to) => ({ from, to }));
+
+      const mockSelection = {
+        from: selFrom,
+        to: selTo,
+        empty: selFrom === selTo,
+        $head: { marks: vi.fn(() => []) },
+        $from: { depth: 2, node: vi.fn(() => ({ type: { name: 'paragraph' } })) },
+        $to: { depth: 2, node: vi.fn(() => ({ type: { name: 'paragraph' } })) },
+        constructor: { create: mockCreate, near: vi.fn() },
+      };
+
+      const mockSetSelection = vi.fn(function () {
+        return this;
+      });
+      const mockTr = {
+        setMeta: vi.fn(function () {
+          return this;
+        }),
+        setSelection: mockSetSelection,
+      };
+
+      const editor = createMockEditor({
+        commands: options.commands || {},
+      });
+
+      // Replace state with enhanced version
+      editor.view.state.selection = mockSelection;
+      editor.view.state.doc = mockDoc;
+      editor.view.state.tr = mockTr;
+      editor.state = editor.view.state;
+
+      // Add pasteText/pasteHTML if not explicitly removed
+      if (options.pasteText !== false) {
+        editor.view.pasteText = vi.fn();
+      }
+      if (options.pasteHTML !== false) {
+        editor.view.pasteHTML = vi.fn();
+      }
+
+      return {
+        editor,
+        mocks: { mockCreate, mockSetSelection, mockDoc, mockSelection, mockTr },
+      };
+    }
+
+    /** Helper to extract the paste action from menu items */
+    function getPasteAction(editor) {
+      const context = createMockContext({ editor, trigger: TRIGGERS.click });
+      const sections = getItems(context);
+      return sections.find((section) => section.id === 'clipboard')?.items.find((item) => item.id === 'paste')?.action;
+    }
+
+    it('should call view.focus() instead of view.dom.focus()', async () => {
+      const { editor } = createPasteTestEditor();
+      editor.view.dom.focus = vi.fn();
+
+      clipboardMocks.readClipboardRaw.mockResolvedValue({ html: '', text: 'test' });
+      clipboardMocks.handleClipboardPaste.mockReturnValue(false);
+
+      const pasteAction = getPasteAction(editor);
+      await pasteAction(editor);
+
+      expect(editor.view.focus).toHaveBeenCalled();
+      expect(editor.view.dom.focus).not.toHaveBeenCalled();
+    });
+
+    it('should save selection before focus and restore it after clipboard read', async () => {
+      const { editor, mocks } = createPasteTestEditor({ selectionFrom: 50, selectionTo: 55, docSize: 100 });
+
+      clipboardMocks.readClipboardRaw.mockResolvedValue({ html: '', text: 'pasted' });
+      clipboardMocks.handleClipboardPaste.mockReturnValue(false);
+
+      const pasteAction = getPasteAction(editor);
+      await pasteAction(editor);
+
+      // Selection should be restored via dispatch(tr.setSelection(...))
+      expect(mocks.mockCreate).toHaveBeenCalledWith(editor.view.state.doc, 50, 55);
+      expect(mocks.mockSetSelection).toHaveBeenCalled();
+      expect(editor.view.dispatch).toHaveBeenCalled();
+    });
+
+    it('should clamp restored selection to doc size when document shrinks during async gap', async () => {
+      // Simulate: selection was at pos 90-95, but doc shrunk to size 80 during async clipboard read
+      const { editor, mocks } = createPasteTestEditor({ selectionFrom: 90, selectionTo: 95, docSize: 80 });
+
+      clipboardMocks.readClipboardRaw.mockResolvedValue({ html: '', text: 'text' });
+      clipboardMocks.handleClipboardPaste.mockReturnValue(false);
+
+      const pasteAction = getPasteAction(editor);
+      await pasteAction(editor);
+
+      // Positions should be clamped to maxPos (80)
+      expect(mocks.mockCreate).toHaveBeenCalledWith(editor.view.state.doc, 80, 80);
+    });
+
+    it('should skip selection restore when doc.content is not available', async () => {
+      const { editor, mocks } = createPasteTestEditor();
+      // Remove doc.content to simulate missing property
+      delete editor.view.state.doc.content;
+
+      clipboardMocks.readClipboardRaw.mockResolvedValue({ html: '', text: 'text' });
+      clipboardMocks.handleClipboardPaste.mockReturnValue(false);
+
+      const pasteAction = getPasteAction(editor);
+      await pasteAction(editor);
+
+      // setSelection should NOT have been called (no selection restore)
+      expect(mocks.mockSetSelection).not.toHaveBeenCalled();
+      // But paste should still proceed — pasteText should be called
+      expect(editor.view.pasteText).toHaveBeenCalled();
+    });
+
+    it('should skip selection restore when SelectionType.create is not a function', async () => {
+      const { editor, mocks } = createPasteTestEditor();
+      // Remove create method to simulate selection type without static create
+      delete editor.view.state.selection.constructor.create;
+
+      clipboardMocks.readClipboardRaw.mockResolvedValue({ html: '', text: 'text' });
+      clipboardMocks.handleClipboardPaste.mockReturnValue(false);
+
+      const pasteAction = getPasteAction(editor);
+      await pasteAction(editor);
+
+      // setSelection should NOT have been called
+      expect(mocks.mockSetSelection).not.toHaveBeenCalled();
+      // Paste should still proceed
+      expect(editor.view.pasteText).toHaveBeenCalled();
+    });
+
+    it('should restore a collapsed selection (cursor) correctly', async () => {
+      const { editor, mocks } = createPasteTestEditor({ selectionFrom: 42, selectionTo: 42, docSize: 100 });
+
+      clipboardMocks.readClipboardRaw.mockResolvedValue({ html: '', text: 'word' });
+      clipboardMocks.handleClipboardPaste.mockReturnValue(false);
+
+      const pasteAction = getPasteAction(editor);
+      await pasteAction(editor);
+
+      // Both from and to should be the same cursor position
+      expect(mocks.mockCreate).toHaveBeenCalledWith(editor.view.state.doc, 42, 42);
+    });
+
+    it('should restore selection before invoking handleClipboardPaste', async () => {
+      const { editor, mocks } = createPasteTestEditor({ selectionFrom: 50, selectionTo: 55 });
+
+      const callOrder = [];
+      mocks.mockSetSelection.mockImplementation(function () {
+        callOrder.push('setSelection');
+        return this;
+      });
+      clipboardMocks.handleClipboardPaste.mockImplementation(() => {
+        callOrder.push('handleClipboardPaste');
+        return true;
+      });
+      clipboardMocks.readClipboardRaw.mockResolvedValue({ html: '<p>html</p>', text: 'html' });
+
+      const pasteAction = getPasteAction(editor);
+      await pasteAction(editor);
+
+      // Selection must be restored BEFORE handleClipboardPaste is called
+      expect(callOrder).toEqual(['setSelection', 'handleClipboardPaste']);
     });
   });
 });

@@ -33,15 +33,15 @@ npx wrangler login
 CI / explicit credentials can use:
 
 - `SUPERDOC_CORPUS_R2_ACCOUNT_ID`
-- `SUPERDOC_CORPUS_R2_BUCKET`
 - `SUPERDOC_CORPUS_R2_ACCESS_KEY_ID`
 - `SUPERDOC_CORPUS_R2_SECRET_ACCESS_KEY`
+
+Corpus bucket is fixed in code to `docx-test-corpus`.
 
 Backward-compatible env names are also accepted:
 
 - `SD_TESTING_R2_*`
-- `SD_VISUAL_TESTING_R2_*`
 
 Word baseline upload additionally requires a Word baseline bucket environment variable
-(typically `SD_TESTING_R2_WORD_BUCKET_NAME`; `SD_VISUAL_TESTING_R2_WORD_BUCKET_NAME` and
-`SUPERDOC_CORPUS_R2_WORD_BUCKET` are also recognized by `corpus:push`).
+(typically `SD_TESTING_R2_WORD_BUCKET_NAME`; `SUPERDOC_CORPUS_R2_WORD_BUCKET`
+is also recognized by `corpus:push`).

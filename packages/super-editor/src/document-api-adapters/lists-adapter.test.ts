@@ -353,6 +353,97 @@ describe('lists adapter', () => {
     expect(restartNumbering).not.toHaveBeenCalled();
   });
 
+  it('inserts a list item resolved by nodeId shorthand', () => {
+    const editor = makeEditor([
+      makeListParagraph({
+        id: 'li-1',
+        text: 'One',
+        numId: 1,
+        ilvl: 0,
+        markerText: '1.',
+        path: [1],
+        numberingType: 'decimal',
+      }),
+    ]);
+
+    const result = listsInsertAdapter(
+      editor,
+      {
+        nodeId: 'li-1',
+        position: 'after',
+        text: 'Inserted',
+      },
+      { changeMode: 'direct' },
+    );
+
+    expect(result.success).toBe(true);
+    if (!result.success) return;
+    expect(result.item.nodeType).toBe('listItem');
+    expect(result.insertionPoint.range).toEqual({ start: 0, end: 0 });
+  });
+
+  it('indents a list item resolved by nodeId shorthand', () => {
+    vi.spyOn(ListHelpers, 'hasListDefinition').mockReturnValue(true);
+    const editor = makeEditor([
+      makeListParagraph({
+        id: 'li-1',
+        text: 'One',
+        numId: 1,
+        ilvl: 0,
+        markerText: '1.',
+        path: [1],
+        numberingType: 'decimal',
+      }),
+    ]);
+
+    const result = listsIndentAdapter(editor, { nodeId: 'li-1' });
+
+    expect(result.success).toBe(true);
+    if (!result.success) return;
+    expect(result.item.nodeId).toBe('li-1');
+  });
+
+  it('throws TARGET_NOT_FOUND when lists nodeId shorthand cannot be resolved', () => {
+    const editor = makeEditor([
+      makeListParagraph({ id: 'li-1', numId: 1, ilvl: 0, markerText: '1.', path: [1], numberingType: 'decimal' }),
+    ]);
+
+    expect(() =>
+      listsInsertAdapter(editor, { nodeId: 'missing', position: 'after' }, { changeMode: 'direct' }),
+    ).toThrow('List item target was not found');
+  });
+
+  it('throws INVALID_TARGET when nodeId shorthand resolves to a non-list-item block', () => {
+    // plain-para has no numbering, so it's indexed as 'paragraph', not 'listItem'
+    const editor = makeEditor([makeListParagraph({ id: 'plain-para', text: 'Not a list item' })]);
+
+    expect(() => listsIndentAdapter(editor, { nodeId: 'plain-para' })).toThrow('not a listItem');
+  });
+
+  it('resolves listItem when a paragraph with the same nodeId appears first in the document', () => {
+    vi.spyOn(ListHelpers, 'hasListDefinition').mockReturnValue(true);
+    const editor = makeEditor([
+      // paragraph:dup appears before listItem:dup
+      makeListParagraph({ id: 'dup', text: 'plain paragraph' }),
+      makeListParagraph({
+        id: 'dup',
+        text: 'list item',
+        numId: 1,
+        ilvl: 0,
+        markerText: '1.',
+        path: [1],
+        numberingType: 'decimal',
+      }),
+    ]);
+
+    const result = listsIndentAdapter(editor, { nodeId: 'dup' });
+
+    expect(result.success).toBe(true);
+    if (!result.success) return;
+    expect(result.item.nodeType).toBe('listItem');
+    expect(result.item.nodeId).toBe('dup');
+  });
+
   it('throws TARGET_NOT_FOUND for stale list targets', () => {
     const editor = makeEditor([
       makeListParagraph({ id: 'li-1', numId: 1, ilvl: 0, markerText: '1.', path: [1], numberingType: 'decimal' }),

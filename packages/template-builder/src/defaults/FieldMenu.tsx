@@ -1,5 +1,7 @@
 import { useEffect, useMemo, useState } from 'react';
 import type { FieldDefinition, FieldMenuProps } from '../types';
+import { getFieldTypeStyle } from '../utils';
+import { InfoTooltip } from './InfoTooltip';
 
 export const FieldMenu: React.FC<FieldMenuProps> = ({
   isVisible,
@@ -17,6 +19,7 @@ export const FieldMenu: React.FC<FieldMenuProps> = ({
   const [isCreating, setIsCreating] = useState(false);
   const [newFieldName, setNewFieldName] = useState('');
   const [fieldMode, setFieldMode] = useState<'inline' | 'block'>('inline');
+  const [fieldType, setFieldType] = useState<string>('owner');
   const [existingExpanded, setExistingExpanded] = useState(true);
   const [availableExpanded, setAvailableExpanded] = useState(true);
 
@@ -25,12 +28,13 @@ export const FieldMenu: React.FC<FieldMenuProps> = ({
       setIsCreating(false);
       setNewFieldName('');
       setFieldMode('inline');
+      setFieldType('owner');
     }
   }, [isVisible]);
 
   const menuStyle = useMemo(() => {
     return {
-      position: 'absolute' as const,
+      position: 'fixed' as const,
       left: position?.left,
       top: position?.top,
       zIndex: 1000,
@@ -40,6 +44,8 @@ export const FieldMenu: React.FC<FieldMenuProps> = ({
       boxShadow: '0 2px 8px rgba(0,0,0,0.1)',
       padding: '8px 0',
       width: '280px',
+      maxHeight: `calc(100vh - ${(position?.top ?? 0) + 10}px)`,
+      overflowY: 'auto' as const,
     };
   }, [position]);
 
@@ -62,6 +68,7 @@ export const FieldMenu: React.FC<FieldMenuProps> = ({
       id: `custom_${Date.now()}`,
       label: trimmedName,
       mode: fieldMode,
+      fieldType: fieldType,
     };
 
     try {
@@ -75,6 +82,7 @@ export const FieldMenu: React.FC<FieldMenuProps> = ({
       setIsCreating(false);
       setNewFieldName('');
       setFieldMode('inline');
+      setFieldType('owner');
     }
   };
 
@@ -151,6 +159,7 @@ export const FieldMenu: React.FC<FieldMenuProps> = ({
             >
               <input
                 type='radio'
+                name='fieldMode'
                 value='inline'
                 checked={fieldMode === 'inline'}
                 onChange={() => setFieldMode('inline')}
@@ -167,11 +176,55 @@ export const FieldMenu: React.FC<FieldMenuProps> = ({
             >
               <input
                 type='radio'
+                name='fieldMode'
                 value='block'
                 checked={fieldMode === 'block'}
                 onChange={() => setFieldMode('block')}
               />
               Block
+            </label>
+          </div>
+          <div
+            style={{
+              marginTop: '8px',
+              display: 'flex',
+              gap: '12px',
+              fontSize: '13px',
+            }}
+          >
+            <label
+              style={{
+                display: 'flex',
+                alignItems: 'center',
+                gap: '4px',
+                cursor: 'pointer',
+              }}
+            >
+              <input
+                type='radio'
+                name='fieldType'
+                value='owner'
+                checked={fieldType === 'owner'}
+                onChange={() => setFieldType('owner')}
+              />
+              Owner
+            </label>
+            <label
+              style={{
+                display: 'flex',
+                alignItems: 'center',
+                gap: '4px',
+                cursor: 'pointer',
+              }}
+            >
+              <input
+                type='radio'
+                name='fieldType'
+                value='signer'
+                checked={fieldType === 'signer'}
+                onChange={() => setFieldType('signer')}
+              />
+              Signer
             </label>
           </div>
           <div
@@ -200,6 +253,7 @@ export const FieldMenu: React.FC<FieldMenuProps> = ({
                 setIsCreating(false);
                 setNewFieldName('');
                 setFieldMode('inline');
+                setFieldType('owner');
               }}
               style={{
                 padding: '4px 12px',
@@ -263,7 +317,10 @@ export const FieldMenu: React.FC<FieldMenuProps> = ({
                   textAlign: 'left',
                 }}
               >
-                <span>Existing Fields ({uniqueEntries.length})</span>
+                <span style={{ display: 'flex', alignItems: 'center', gap: '4px' }}>
+                  Existing Fields ({uniqueEntries.length})
+                  <InfoTooltip text='Insert a linked copy of a field already in the document. Linked fields share the same group and stay in sync.' />
+                </span>
                 <span
                   aria-hidden
                   style={{
@@ -278,7 +335,7 @@ export const FieldMenu: React.FC<FieldMenuProps> = ({
                 />
               </button>
               {existingExpanded && (
-                <div style={{ maxHeight: '300px', overflowY: 'auto' }}>
+                <div>
                   {uniqueEntries.map((entry) => (
                     <div
                       key={entry.group || entry.id}
@@ -305,19 +362,34 @@ export const FieldMenu: React.FC<FieldMenuProps> = ({
                           {entry.group ? `group (${entry.count} fields)` : `ID: ${entry.id}`}
                         </div>
                       </div>
-                      <span
-                        style={{
-                          fontSize: '11px',
-                          color: '#6b7280',
-                          padding: '2px 6px',
-                          background: '#f3f4f6',
-                          borderRadius: '3px',
-                          textTransform: 'capitalize',
-                          flexShrink: 0,
-                        }}
-                      >
-                        {entry.mode || 'inline'}
-                      </span>
+                      <div style={{ display: 'flex', gap: '4px', flexShrink: 0 }}>
+                        {entry.fieldType && (
+                          <span
+                            style={{
+                              fontSize: '11px',
+                              padding: '2px 6px',
+                              borderRadius: '3px',
+                              textTransform: 'capitalize',
+                              ...getFieldTypeStyle(entry.fieldType),
+                              fontWeight: 500,
+                            }}
+                          >
+                            {entry.fieldType}
+                          </span>
+                        )}
+                        <span
+                          style={{
+                            fontSize: '11px',
+                            color: '#6b7280',
+                            padding: '2px 6px',
+                            background: '#f3f4f6',
+                            borderRadius: '3px',
+                            textTransform: 'capitalize',
+                          }}
+                        >
+                          {entry.mode || 'inline'}
+                        </span>
+                      </div>
                     </div>
                   ))}
                 </div>
@@ -357,7 +429,10 @@ export const FieldMenu: React.FC<FieldMenuProps> = ({
               textAlign: 'left',
             }}
           >
-            <span>Available Fields ({fieldsToDisplay.length})</span>
+            <span style={{ display: 'flex', alignItems: 'center', gap: '4px' }}>
+              Available Fields ({fieldsToDisplay.length})
+              <InfoTooltip text='Insert a new, independent field instance into the document.' />
+            </span>
             <span
               aria-hidden
               style={{
@@ -372,7 +447,7 @@ export const FieldMenu: React.FC<FieldMenuProps> = ({
             />
           </button>
           {availableExpanded && (
-            <div style={{ maxHeight: '300px', overflowY: 'auto' }}>
+            <div>
               {fieldsToDisplay.map((field) => (
                 <div
                   key={field.id}
@@ -399,19 +474,34 @@ export const FieldMenu: React.FC<FieldMenuProps> = ({
                       ID: {field.id}
                     </div>
                   </div>
-                  <span
-                    style={{
-                      fontSize: '11px',
-                      color: '#6b7280',
-                      padding: '2px 6px',
-                      background: '#f3f4f6',
-                      borderRadius: '3px',
-                      textTransform: 'capitalize',
-                      flexShrink: 0,
-                    }}
-                  >
-                    {field.mode || 'inline'}
-                  </span>
+                  <div style={{ display: 'flex', gap: '4px', flexShrink: 0 }}>
+                    {field.fieldType && (
+                      <span
+                        style={{
+                          fontSize: '11px',
+                          padding: '2px 6px',
+                          borderRadius: '3px',
+                          textTransform: 'capitalize',
+                          ...getFieldTypeStyle(field.fieldType),
+                          fontWeight: 500,
+                        }}
+                      >
+                        {field.fieldType}
+                      </span>
+                    )}
+                    <span
+                      style={{
+                        fontSize: '11px',
+                        color: '#6b7280',
+                        padding: '2px 6px',
+                        background: '#f3f4f6',
+                        borderRadius: '3px',
+                        textTransform: 'capitalize',
+                      }}
+                    >
+                      {field.mode || 'inline'}
+                    </span>
+                  </div>
                 </div>
               ))}
             </div>

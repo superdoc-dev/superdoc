@@ -2,6 +2,7 @@ import { afterAll, beforeAll, beforeEach, describe, expect, test } from 'bun:tes
 import { access, copyFile, mkdir, readFile, rm, writeFile } from 'node:fs/promises';
 import { join } from 'node:path';
 import { run } from '../index';
+import { resolveListDocFixture, resolveSourceDocFixture } from './fixtures';
 
 type RunResult = {
   code: number;
@@ -43,26 +44,8 @@ type ErrorEnvelope = {
 
 const TEST_DIR = join(import.meta.dir, 'fixtures-cli');
 const STATE_DIR = join(TEST_DIR, 'state');
-const SOURCE_DOC = join(import.meta.dir, '../../../../e2e-tests/test-data/basic-documents/advanced-text.docx');
-const LIST_SOURCE_DOC_CANDIDATES = [
-  join(import.meta.dir, '../../../../devtools/document-api-tests/fixtures/matrix-list.input.docx'),
-  join(import.meta.dir, '../../../../e2e-tests/test-data/basic-documents/lists-complex-items.docx'),
-];
 const SAMPLE_DOC = join(TEST_DIR, 'sample.docx');
 const LIST_SAMPLE_DOC = join(TEST_DIR, 'lists-sample.docx');
-
-async function resolveListSourceDoc(): Promise<string> {
-  for (const candidate of LIST_SOURCE_DOC_CANDIDATES) {
-    try {
-      await access(candidate);
-      return candidate;
-    } catch {
-      // try next candidate
-    }
-  }
-
-  throw new Error(`No list fixture found. Tried: ${LIST_SOURCE_DOC_CANDIDATES.join(', ')}`);
-}
 
 async function runCli(args: string[], stdinBytes?: Uint8Array): Promise<RunResult> {
   let stdout = '';
@@ -164,8 +147,8 @@ describe('superdoc CLI', () => {
   beforeAll(async () => {
     process.env.SUPERDOC_CLI_STATE_DIR = STATE_DIR;
     await mkdir(TEST_DIR, { recursive: true });
-    await copyFile(SOURCE_DOC, SAMPLE_DOC);
-    await copyFile(await resolveListSourceDoc(), LIST_SAMPLE_DOC);
+    await copyFile(await resolveSourceDocFixture(), SAMPLE_DOC);
+    await copyFile(await resolveListDocFixture(), LIST_SAMPLE_DOC);
   });
 
   beforeEach(async () => {
@@ -294,6 +277,13 @@ describe('superdoc CLI', () => {
     expect(result.code).toBe(0);
     expect(result.stdout).toContain('<sessionId>');
     expect(result.stdout).not.toContain('<doc>  Document path or stdin');
+  });
+
+  test('describe command doc.insert includes --block-id and --offset flags', async () => {
+    const result = await runCli(['describe', 'command', 'doc.insert', '--output', 'pretty']);
+    expect(result.code).toBe(0);
+    expect(result.stdout).toContain('--block-id');
+    expect(result.stdout).toContain('--offset');
   });
 
   test('call executes an operation from canonical input payload', async () => {
@@ -947,6 +937,85 @@ describe('superdoc CLI', () => {
     expect(verifyResult.code).toBe(0);
     const verifyEnvelope = parseJsonOutput<SuccessEnvelope<{ result: { total: number } }>>(verifyResult);
     expect(verifyEnvelope.data.result.total).toBeGreaterThan(0);
+  });
+
+  test('insert with --block-id and --offset targets a specific block position', async () => {
+    const insertSource = join(TEST_DIR, 'insert-blockid-offset-source.docx');
+    const insertOut = join(TEST_DIR, 'insert-blockid-offset-out.docx');
+    await copyFile(SAMPLE_DOC, insertSource);
+
+    // Get a real blockId from the document
+    const target = await firstTextRange(['find', insertSource, '--type', 'text', '--pattern', 'Wilde']);
+
+    const insertResult = await runCli([
+      'insert',
+      insertSource,
+      '--block-id',
+      target.blockId,
+      '--offset',
+      '0',
+      '--text',
+      'CLI_BLOCKID_OFFSET_INSERT_1597',
+      '--out',
+      insertOut,
+    ]);
+
+    expect(insertResult.code).toBe(0);
+
+    const verifyResult = await runCli([
+      'find',
+      insertOut,
+      '--type',
+      'text',
+      '--pattern',
+      'CLI_BLOCKID_OFFSET_INSERT_1597',
+    ]);
+    expect(verifyResult.code).toBe(0);
+    const verifyEnvelope = parseJsonOutput<SuccessEnvelope<{ result: { total: number } }>>(verifyResult);
+    expect(verifyEnvelope.data.result.total).toBeGreaterThan(0);
+  });
+
+  test('insert with --block-id alone defaults offset to 0', async () => {
+    const insertSource = join(TEST_DIR, 'insert-blockid-only-source.docx');
+    const insertOut = join(TEST_DIR, 'insert-blockid-only-out.docx');
+    await copyFile(SAMPLE_DOC, insertSource);
+
+    const target = await firstTextRange(['find', insertSource, '--type', 'text', '--pattern', 'Wilde']);
+
+    const insertResult = await runCli([
+      'insert',
+      insertSource,
+      '--block-id',
+      target.blockId,
+      '--text',
+      'CLI_BLOCKID_ONLY_INSERT_1597',
+      '--out',
+      insertOut,
+    ]);
+
+    expect(insertResult.code).toBe(0);
+
+    const insertEnvelope = parseJsonOutput<
+      SuccessEnvelope<{
+        target: TextRange;
+      }>
+    >(insertResult);
+    // blockId alone → offset defaults to 0 → collapsed range at start
+    expect(insertEnvelope.data.target.range.start).toBe(0);
+    expect(insertEnvelope.data.target.range.end).toBe(0);
+  });
+
+  test('insert with --offset but no --block-id returns INVALID_ARGUMENT', async () => {
+    const insertSource = join(TEST_DIR, 'insert-offset-no-blockid-source.docx');
+    const insertOut = join(TEST_DIR, 'insert-offset-no-blockid-out.docx');
+    await copyFile(SAMPLE_DOC, insertSource);
+
+    const result = await runCli(['insert', insertSource, '--offset', '5', '--text', 'should-fail', '--out', insertOut]);
+
+    expect(result.code).toBe(1);
+    const envelope = parseJsonOutput<ErrorEnvelope>(result);
+    expect(envelope.error.code).toBe('INVALID_ARGUMENT');
+    expect(envelope.error.message).toContain('offset requires blockId');
   });
 
   test('create paragraph writes output and adds a new paragraph with seed text', async () => {

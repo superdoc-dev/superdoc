@@ -57,6 +57,45 @@ Most templates start from an existing document:
 
 The component loads the document and discovers any existing fields.
 
+## Add field types
+
+Distinguish between owner-filled and signer-filled fields:
+
+```jsx
+<SuperDocTemplateBuilder
+  fields={{
+    available: [
+      { id: "1", label: "Company Name", fieldType: "owner" },
+      { id: "2", label: "Signer Name", fieldType: "signer" },
+      { id: "3", label: "Signature", mode: "block", fieldType: "signer" },
+    ],
+  }}
+/>
+```
+
+Fields default to `'owner'` when no `fieldType` is specified.
+
+### Color-code fields in the editor
+
+Import the optional CSS to visually distinguish field types:
+
+```jsx
+import "@superdoc-dev/template-builder/field-types.css";
+```
+
+<Important>
+  Without `field-types.css`, structured content fields use the default Word-like appearance: borders are transparent and only visible on selection. Importing this stylesheet makes field borders always visible and color-coded by field type, which helps template authors quickly identify fields in the document.
+</Important>
+
+Customize colors with CSS variables:
+
+```css
+:root {
+  --superdoc-field-owner-color: #629be7;
+  --superdoc-field-signer-color: #d97706;
+}
+```
+
 ## Add the field list sidebar
 
 Show all template fields in a sidebar:
@@ -70,7 +109,7 @@ Show all template fields in a sidebar:
       { id: "2", label: "Invoice Date" },
     ],
   }}
-  list={{ position: "right" }} // Add this
+  list={{ position: "right" }}
 />
 ```
 
@@ -98,7 +137,7 @@ function App() {
 }
 ```
 
-The `onFieldsChange` callback receives the complete list of fields in the template whenever they change.
+The `onFieldsChange` callback receives the complete list of fields in the template whenever they change. Each field includes its `fieldType`.
 
 ## Export the template
 
@@ -112,7 +151,7 @@ function App() {
 
   const handleExport = async () => {
     await builderRef.current?.exportTemplate({
-      fileName: "my-template.docx",
+      fileName: "my-template",
       triggerDownload: true,
     });
   };
@@ -125,6 +164,9 @@ function App() {
         document={{ source: "template.docx", mode: "editing" }}
         fields={{ available: myFields }}
         list={{ position: "right" }}
+        onExport={(event) => {
+          console.log("Exported", event.fields.length, "fields");
+        }}
       />
     </>
   );
@@ -138,7 +180,8 @@ The exported document contains all field definitions embedded as Structured Docu
 Full TypeScript definitions are included:
 
 ```tsx
-import SuperDocTemplateBuilder, {
+import SuperDocTemplateBuilder from "@superdoc-dev/template-builder";
+import type {
   SuperDocTemplateBuilderHandle,
   FieldDefinition,
   TemplateField,
@@ -148,11 +191,11 @@ const builderRef = useRef<SuperDocTemplateBuilderHandle>(null);
 
 const availableFields: FieldDefinition[] = [
   { id: "1", label: "Customer Name", defaultValue: "John Doe" },
-  { id: "2", label: "Contract Date", defaultValue: new Date().toISOString() },
+  { id: "2", label: "Signer Name", fieldType: "signer" },
 ];
 
 const handleFieldInsert = (field: TemplateField) => {
-  console.log(`Inserted field: ${field.alias}`);
+  console.log(`Inserted: ${field.alias} (${field.fieldType})`);
 };
 ```
 

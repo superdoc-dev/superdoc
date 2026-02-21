@@ -13,12 +13,6 @@ pnpm docs:download
 # Run all tests
 pnpm test
 
-# Run a specific category
-pnpm exec playwright test tests/behavior/formatting/
-
-# Run a single test
-pnpm exec playwright test tests/behavior/basic-commands/undo-redo.spec.ts
-
 # Run one browser only
 pnpm exec playwright test --project=chromium
 
@@ -31,34 +25,9 @@ pnpm report
 
 ## Test Types
 
-**Behavior** (`tests/behavior/`) — Simulate user interactions (typing, formatting, commands) and screenshot the result. Organized by category:
-
-- `basic-commands/` — typing, undo/redo, tables, select-all, toolbar, drag selection
-- `formatting/` — bold/italic, hyperlinks, clear format, style inheritance, fonts
-- `comments-tcs/` — comments, track changes, nested comments
-- `lists/` — list creation, indentation, markers
-- `field-annotations/` — field annotation types and formatting
-- `headers/` — header/footer editing
-- `search/` — search and navigation
-- `importing/` — document import edge cases
-- `structured-content/` — SDT lock modes
-
 **Rendering** (`tests/rendering/`) — Auto-discovers all `.docx` files in `test-data/rendering/` and screenshots each page. Tagged with `@rendering` for baseline filtering. Drop a file in the folder = new test.
 
 ## Adding a Test
-
-### Behavior test (no document needed)
-
-```ts
-import { test } from '../../fixtures/superdoc.js';
-
-test('@behavior description of what it tests', async ({ superdoc }) => {
-  await superdoc.type('Hello');
-  await superdoc.bold();
-  await superdoc.type(' world');
-  await superdoc.screenshot('my-test-name');
-});
-```
 
 ### Rendering test (no code needed)
 
@@ -93,13 +62,6 @@ Screenshot baselines remain in R2 and are auto-generated in CI:
 
 ```
 baselines/
-    behavior/
-      basic-commands/
-        type-basic-text.spec.ts-snapshots/
-          chromium/
-          firefox/
-          webkit/
-      ...
     rendering/
       ...
 ```

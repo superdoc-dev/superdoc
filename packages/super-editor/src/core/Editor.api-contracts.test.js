@@ -117,6 +117,28 @@ describe('Editor - API Contracts (Regression Prevention)', () => {
       });
     });
 
+    it('docx markdown initialization forwards unsupported-content callback', () => {
+      const onUnsupportedContent = vi.fn();
+
+      ({ editor } = initTestEditor({
+        mode: 'docx',
+        content: '<p>Fallback content</p>',
+        markdown: '<video src="demo.mp4"></video>',
+        onUnsupportedContent,
+        useImmediateSetTimeout: false,
+      }));
+
+      return new Promise((resolve) => {
+        setTimeout(() => {
+          expect(onUnsupportedContent).toHaveBeenCalledTimes(1);
+          expect(onUnsupportedContent.mock.calls[0][0]).toEqual([
+            expect.objectContaining({ tagName: 'VIDEO', count: 1 }),
+          ]);
+          resolve();
+        }, 10);
+      });
+    });
+
     it('html option should initialize with editor instance', () => {
       let initCompleted = false;
 

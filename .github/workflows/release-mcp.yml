@@ -48,6 +48,9 @@ jobs:
       - name: Install dependencies
         run: pnpm install
 
+      - name: Build superdoc (dependency)
+        run: pnpm run build:superdoc
+
       - name: Build MCP server
         run: pnpm --prefix apps/mcp run build
 

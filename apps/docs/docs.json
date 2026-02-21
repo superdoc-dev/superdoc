@@ -96,7 +96,8 @@
               "document-engine/overview",
               "document-api/overview",
               "document-engine/sdks",
-              "document-engine/cli"
+              "document-engine/cli",
+              "document-engine/mcp"
             ]
           },
           {

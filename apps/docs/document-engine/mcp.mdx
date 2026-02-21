@@ -1,0 +1,179 @@
+---
+title: MCP Server
+sidebarTitle: MCP Server
+description: Give AI agents direct access to .docx files through the Model Context Protocol
+keywords: "mcp, model context protocol, ai agents, claude, cursor, windsurf, document automation, llm docx"
+---
+
+The SuperDoc MCP server lets AI agents open, read, edit, and save `.docx` files. It exposes the same operations as the [Document API](/document-api/overview) through the [Model Context Protocol](https://modelcontextprotocol.io) — the open standard for connecting AI tools to agents.
+
+<Info>
+The MCP server is in <strong>alpha</strong>. Tools and output formats may change.
+</Info>
+
+## Setup
+
+Install once. Your MCP client spawns the server automatically on each conversation.
+
+<Tabs>
+  <Tab title="Claude Code">
+    ```bash
+    claude mcp add superdoc -- npx @superdoc-dev/mcp
+    ```
+  </Tab>
+  <Tab title="Claude Desktop">
+    Add to `~/Library/Application Support/Claude/claude_desktop_config.json`:
+
+    ```json
+    {
+      "mcpServers": {
+        "superdoc": {
+          "command": "npx",
+          "args": ["@superdoc-dev/mcp"]
+        }
+      }
+    }
+    ```
+  </Tab>
+  <Tab title="Cursor">
+    Add to `~/.cursor/mcp.json`:
+
+    ```json
+    {
+      "mcpServers": {
+        "superdoc": {
+          "command": "npx",
+          "args": ["@superdoc-dev/mcp"]
+        }
+      }
+    }
+    ```
+  </Tab>
+  <Tab title="Windsurf">
+    Add to `~/.codeium/windsurf/mcp_config.json`:
+
+    ```json
+    {
+      "mcpServers": {
+        "superdoc": {
+          "command": "npx",
+          "args": ["@superdoc-dev/mcp"]
+        }
+      }
+    }
+    ```
+  </Tab>
+</Tabs>
+
+## Workflow
+
+Every interaction follows the same pattern: open, read or edit, save, close.
+
+```
+superdoc_open → superdoc_find / superdoc_get_text → edit tools → superdoc_save → superdoc_close
+```
+
+1. `superdoc_open` loads a `.docx` file and returns a `session_id`
+2. `superdoc_find` locates content and returns target addresses
+3. Edit tools (`superdoc_insert`, `superdoc_replace`, `superdoc_delete`, `superdoc_format`) use those addresses
+4. `superdoc_save` writes changes to disk
+5. `superdoc_close` releases the session
+
+## Tools
+
+13 tools in five groups. All tools take a `session_id` from `superdoc_open`.
+
+### Lifecycle
+
+| Tool | Input | Description |
+| --- | --- | --- |
+| `superdoc_open` | `path` | Open a `.docx` file. Returns `session_id` and file path |
+| `superdoc_save` | `session_id`, `out?` | Save to the original path, or to `out` if specified |
+| `superdoc_close` | `session_id` | Close the session. Unsaved changes are lost |
+
+### Query
+
+| Tool | Input | Description |
+| --- | --- | --- |
+| `superdoc_find` | `session_id`, `type?`, `pattern?`, `limit?`, `offset?` | Search by node type, text pattern, or both. Returns matches with addresses |
+| `superdoc_get_node` | `session_id`, `address` | Get details about a specific node by its address |
+| `superdoc_info` | `session_id` | Document metadata: structure summary, node counts, capabilities |
+| `superdoc_get_text` | `session_id` | Full plain-text content of the document |
+
+### Mutation
+
+| Tool | Input | Description |
+| --- | --- | --- |
+| `superdoc_insert` | `session_id`, `text`, `target` | Insert text at a target position |
+| `superdoc_replace` | `session_id`, `text`, `target` | Replace content at a target range |
+| `superdoc_delete` | `session_id`, `target` | Delete content at a target range |
+
+### Format
+
+| Tool | Input | Description |
+| --- | --- | --- |
+| `superdoc_format` | `session_id`, `style`, `target` | Toggle formatting on a text range. Styles: `bold`, `italic`, `underline`, `strikethrough` |
+
+### Create
+
+| Tool | Input | Description |
+| --- | --- | --- |
+| `superdoc_create` | `session_id`, `type`, `text?`, `level?`, `at?` | Create a block element. Types: `paragraph`, `heading` (headings require `level` 1-6) |
+
+## Example conversation
+
+Here's what a typical agent interaction looks like:
+
+```
+User: "Replace all mentions of 'Acme Corp' with 'NewCo Inc.' in contract.docx"
+
+Agent calls: superdoc_open({ path: "/path/to/contract.docx" })
+  → { session_id: "contract-a1b2c3", filePath: "/path/to/contract.docx" }
+
+Agent calls: superdoc_find({ session_id: "contract-a1b2c3", pattern: "Acme Corp" })
+  → { matches: [{ kind: "text", blockId: "p1", range: { start: 12, end: 21 } }, ...], total: 4 }
+
+Agent calls: superdoc_replace({ session_id: "contract-a1b2c3", text: "NewCo Inc.", target: "<address>" })
+  → (repeats for each match)
+
+Agent calls: superdoc_save({ session_id: "contract-a1b2c3" })
+  → { path: "/path/to/contract.docx", byteLength: 24583 }
+
+Agent calls: superdoc_close({ session_id: "contract-a1b2c3" })
+```
+
+## How it works
+
+The MCP server runs as a local subprocess, communicating over stdio. It manages document sessions in memory — each `superdoc_open` creates an Editor instance, and all subsequent operations run against that in-memory state until you `superdoc_save`.
+
+```
+AI Agent (Claude, Cursor, Windsurf)
+  │ MCP protocol (stdio)
+  ▼
+@superdoc-dev/mcp
+  │ Document API
+  ▼
+SuperDoc Editor (in-memory)
+  │ export
+  ▼
+.docx file on disk
+```
+
+Your documents never leave your machine. The server runs locally, reads files from disk, and writes back to disk.
+
+## Debugging
+
+Test the server directly with the MCP Inspector:
+
+```bash
+npx @modelcontextprotocol/inspector -- npx @superdoc-dev/mcp
+```
+
+This opens a browser UI where you can call each tool manually and inspect the raw JSON-RPC messages.
+
+## Related
+
+- [CLI](/document-engine/cli) — edit documents from the terminal
+- [SDKs](/document-engine/sdks) — typed Node.js and Python wrappers
+- [Document API](/document-api/overview) — the in-browser API that defines the operation set
+- [AI Agents](/getting-started/ai-agents) — headless mode for server-side AI workflows

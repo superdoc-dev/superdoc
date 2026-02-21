@@ -6,8 +6,7 @@
     "superdoc-mcp": "./dist/index.js"
   },
   "files": [
-    "dist",
-    "skill"
+    "dist"
   ],
   "scripts": {
     "dev": "bun run src/index.ts",

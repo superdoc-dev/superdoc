@@ -8,7 +8,7 @@ export function registerQueryTools(server: McpServer, sessions: SessionManager):
     {
       title: 'Find in Document',
       description:
-        'Search the document for nodes matching a type, text pattern, or both. Returns matching nodes with their addresses (use addresses in subsequent edit operations).',
+        'Search the document for nodes matching a type, text pattern, or both. For text searches, the result includes context[].textRanges — these are the TextAddress objects you pass as "target" to replace/insert/delete/format tools. Do NOT use matches[] as mutation targets (those are block addresses).',
       inputSchema: {
         session_id: z.string().describe('Session ID from superdoc_open.'),
         type: z.string().optional().describe('Node type to filter by (e.g. "heading", "paragraph", "table", "image").'),
@@ -21,18 +21,21 @@ export function registerQueryTools(server: McpServer, sessions: SessionManager):
     async ({ session_id, type, pattern, limit, offset }) => {
       try {
         const { api } = sessions.get(session_id);
-        const query: Record<string, unknown> = {};
 
-        if (type) {
-          query.select = { type };
-        }
+        // Build a Selector or Query object directly — find accepts both.
+        // Selector: { type: 'text', pattern } or { type: 'node', nodeType }
+        // Query: { select: Selector, limit?, offset? }
+        let selector: Record<string, unknown>;
         if (pattern) {
-          query.select = { ...(query.select as object), pattern, mode: 'contains' };
+          selector = { type: 'text', pattern, mode: 'contains' };
+        } else if (type) {
+          selector = { type: 'node', nodeType: type };
+        } else {
+          selector = { type: 'node' };
         }
 
-        const input: Record<string, unknown> = { query };
-        if (limit != null) input.limit = limit;
-        if (offset != null) input.offset = offset;
+        const input: Record<string, unknown> =
+          limit != null || offset != null ? { select: selector, limit, offset } : selector;
 
         const result = api.invoke({ operationId: 'find', input });
         return {

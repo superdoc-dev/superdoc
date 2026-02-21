@@ -10,7 +10,7 @@ export function registerCreateTools(server: McpServer, sessions: SessionManager)
     {
       title: 'Create Block',
       description:
-        'Create a new block element in the document. Supports paragraphs and headings. Optionally specify text content and position.',
+        'Create a new block element in the document. Supports paragraphs and headings. Optionally specify text content and position. Set suggest=true to create as a tracked change (suggestion).',
       inputSchema: {
         session_id: z.string().describe('Session ID from superdoc_open.'),
         type: z.enum(TYPES).describe('The type of block to create.'),
@@ -20,10 +20,16 @@ export function registerCreateTools(server: McpServer, sessions: SessionManager)
           .string()
           .optional()
           .describe('JSON-encoded position specifying where to create the block. If omitted, appends to the end.'),
+        suggest: z
+          .boolean()
+          .optional()
+          .describe(
+            'If true, create as a tracked change (suggestion) that can be accepted or rejected later. Defaults to false (direct edit).',
+          ),
       },
       annotations: { readOnlyHint: false },
     },
-    async ({ session_id, type, text, level, at }) => {
+    async ({ session_id, type, text, level, at, suggest }) => {
       try {
         const { api } = sessions.get(session_id);
         const input: Record<string, unknown> = {};
@@ -34,6 +40,7 @@ export function registerCreateTools(server: McpServer, sessions: SessionManager)
         const result = api.invoke({
           operationId: `create.${type}`,
           input,
+          options: suggest ? { changeMode: 'tracked' as const } : undefined,
         });
         return {
           content: [{ type: 'text' as const, text: JSON.stringify(result, null, 2) }],

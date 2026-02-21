@@ -19,6 +19,17 @@ const EXPECTED_TOOLS = [
   'superdoc_delete',
   'superdoc_format',
   'superdoc_create',
+  'superdoc_list_changes',
+  'superdoc_accept_change',
+  'superdoc_reject_change',
+  'superdoc_accept_all_changes',
+  'superdoc_reject_all_changes',
+  'superdoc_add_comment',
+  'superdoc_list_comments',
+  'superdoc_reply_comment',
+  'superdoc_resolve_comment',
+  'superdoc_insert_list',
+  'superdoc_list_set_type',
 ];
 
 function textContent(result: Awaited<ReturnType<Client['callTool']>>): string {

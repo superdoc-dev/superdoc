@@ -97,7 +97,10 @@
               "document-api/overview",
               "document-engine/sdks",
               "document-engine/cli",
-              "document-engine/mcp"
+              {
+                "page": "document-engine/mcp",
+                "tag": "NEW"
+              }
             ]
           },
           {

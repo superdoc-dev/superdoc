@@ -1023,8 +1023,15 @@ export class SuperDoc extends EventEmitter {
       return;
     }
 
+    // Update store — SuperDoc.vue's activeZoom watcher propagates the zoom
+    // to all PresentationEditor instances via PresentationEditor.setGlobalZoom().
     if (this.superdocStore) {
       this.superdocStore.activeZoom = percent;
+    }
+
+    // Update toolbar UI so the dropdown label reflects the new zoom level
+    if (this.toolbar && typeof this.toolbar.setZoom === 'function') {
+      this.toolbar.setZoom(percent);
     }
 
     this.emit('zoomChange', { zoom: percent });

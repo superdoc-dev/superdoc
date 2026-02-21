@@ -4,12 +4,19 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "superdoc-sdk"
-version = "1.0.0-alpha.6"
+version = "1.0.0a6"
 description = "SuperDoc SDK (CLI-backed)"
 readme = "README.md"
 requires-python = ">=3.9"
 license = "AGPL-3.0"
 authors = [{ name = "SuperDoc" }]
+dependencies = [
+  "superdoc-sdk-cli-darwin-arm64==1.0.0a6; platform_system == 'Darwin' and (platform_machine == 'arm64' or platform_machine == 'aarch64' or platform_machine == 'ARM64')",
+  "superdoc-sdk-cli-darwin-x64==1.0.0a6; platform_system == 'Darwin' and (platform_machine == 'x86_64' or platform_machine == 'AMD64' or platform_machine == 'amd64')",
+  "superdoc-sdk-cli-linux-x64==1.0.0a6; platform_system == 'Linux' and (platform_machine == 'x86_64' or platform_machine == 'AMD64' or platform_machine == 'amd64')",
+  "superdoc-sdk-cli-linux-arm64==1.0.0a6; platform_system == 'Linux' and (platform_machine == 'arm64' or platform_machine == 'aarch64' or platform_machine == 'ARM64')",
+  "superdoc-sdk-cli-windows-x64==1.0.0a6; platform_system == 'Windows' and (platform_machine == 'x86_64' or platform_machine == 'AMD64' or platform_machine == 'amd64')",
+]
 
 [tool.setuptools]
 packages = [
@@ -17,20 +24,10 @@ packages = [
   "superdoc.generated",
   "superdoc.skills",
   "superdoc.tools",
-  "superdoc._vendor",
-  "superdoc._vendor.cli",
 ]
 
 [tool.setuptools.package-data]
 superdoc = [
-  "_vendor/cli/*/superdoc",
-  "_vendor/cli/*/superdoc.exe",
   "skills/*.md",
   "tools/*.json",
 ]
-
-[tool.cibuildwheel]
-build = "cp39-* cp310-* cp311-* cp312-* cp313-*"
-skip = "pp* *-musllinux_*"
-build-verbosity = 1
-test-command = "python -c \"import superdoc; print('superdoc-sdk wheel smoke ok')\""

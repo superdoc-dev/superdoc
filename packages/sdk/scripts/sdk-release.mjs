@@ -5,7 +5,6 @@ import { mkdir, rm, cp, symlink, lstat } from 'node:fs/promises';
 import path from 'node:path';
 import { promisify } from 'node:util';
 import { fileURLToPath } from 'node:url';
-import { pythonEmbeddedCliTargetIds } from './python-embedded-cli-targets.mjs';
 
 const execFileAsync = promisify(execFile);
 
@@ -16,13 +15,13 @@ const CLI_APP_DIR = path.join(REPO_ROOT, 'apps/cli');
 const SUPERDOC_PACKAGE_DIR = path.join(REPO_ROOT, 'packages/superdoc');
 const NODE_SDK_DIR = path.join(REPO_ROOT, 'packages/sdk/langs/node');
 const PYTHON_SDK_DIR = path.join(REPO_ROOT, 'packages/sdk/langs/python');
-const PYTHON_VENDOR_CLI_DIR = path.join(PYTHON_SDK_DIR, 'superdoc', '_vendor', 'cli');
-const STAGE_PYTHON_EMBEDDED_SCRIPT = path.join(REPO_ROOT, 'packages/sdk/scripts/stage-python-embedded-cli.mjs');
-const VERIFY_PYTHON_WHEEL_SCRIPT = path.join(REPO_ROOT, 'packages/sdk/scripts/verify-python-wheel-embedded-cli.mjs');
+const COMPANION_DIST_DIR = path.join(PYTHON_SDK_DIR, 'companion-dist');
 const TOOLS_SOURCE = path.join(REPO_ROOT, 'packages/sdk/tools');
 const NPM_CACHE_DIR = path.join(REPO_ROOT, '.cache', 'npm');
 
-const PYTHON_EMBEDDED_TARGETS = pythonEmbeddedCliTargetIds();
+const STAGE_COMPANION_SCRIPT = path.join(__dirname, 'stage-python-companion-cli.mjs');
+const BUILD_COMPANION_SCRIPT = path.join(__dirname, 'build-python-companion-wheels.mjs');
+const VERIFY_COMPANION_SCRIPT = path.join(__dirname, 'verify-python-companion-wheels.mjs');
 
 const argv = process.argv.slice(2);
 const dryRun = argv.includes('--dry-run');
@@ -77,6 +76,14 @@ async function withMaterializedTools(symlinkPath, relativeTarget, fn) {
   }
 }
 
+async function cleanPythonBuildArtifacts() {
+  await rm(path.join(PYTHON_SDK_DIR, 'dist'), { recursive: true, force: true });
+  await rm(path.join(PYTHON_SDK_DIR, 'build'), { recursive: true, force: true });
+  await rm(COMPANION_DIST_DIR, { recursive: true, force: true });
+  await rm(path.join(PYTHON_SDK_DIR, 'superdoc_sdk.egg-info'), { recursive: true, force: true });
+  try { await rm(path.join(PYTHON_SDK_DIR, 'setup.py'), { force: true }); } catch { /* noop */ }
+}
+
 async function main() {
   const distTag = parseArgValue('--tag') ?? process.env.RELEASE_DIST_TAG ?? 'latest';
 
@@ -118,9 +125,7 @@ async function main() {
     },
   });
 
-  // --- Python SDK ---
-  // Python publishing is handled by the release-sdk.yml workflow via PyPI trusted publishing (OIDC).
-  // This script only builds the wheel for local verification.
+  // --- Python SDK (build only — publish via release-sdk.yml workflow) ---
   console.log('\n--- Python SDK (build only — publish via release-sdk.yml workflow) ---');
   await run('pnpm', ['run', 'build:es'], { cwd: SUPERDOC_PACKAGE_DIR });
   await run('pnpm', ['--prefix', CLI_APP_DIR, 'run', 'build:native:all']);
@@ -130,24 +135,21 @@ async function main() {
 
   try {
     await withMaterializedTools(pythonToolsSymlink, '../../../tools', async () => {
-      await rm(path.join(PYTHON_SDK_DIR, 'dist'), { recursive: true, force: true });
-      await rm(path.join(PYTHON_SDK_DIR, 'build'), { recursive: true, force: true });
+      await cleanPythonBuildArtifacts();
 
-      await run('node', [STAGE_PYTHON_EMBEDDED_SCRIPT]);
+      // Build order: companion wheels first, root second.
+      // If companion builds fail, don't waste time on root.
+      await run('node', [STAGE_COMPANION_SCRIPT]);
+      await run('node', [BUILD_COMPANION_SCRIPT]);
+      await run('node', [VERIFY_COMPANION_SCRIPT, '--companions-only']);
+
       await run('python3', ['-m', 'build'], { cwd: PYTHON_SDK_DIR });
-      await run('node', [VERIFY_PYTHON_WHEEL_SCRIPT]);
-      console.log('  Python wheel built. Use the release-sdk.yml workflow to publish to PyPI.');
+      await run('node', [VERIFY_COMPANION_SCRIPT, '--root-only']);
 
-      // Clean build artifacts
-      await rm(path.join(PYTHON_SDK_DIR, 'dist'), { recursive: true, force: true });
-      await rm(path.join(PYTHON_SDK_DIR, 'build'), { recursive: true, force: true });
-      await rm(path.join(PYTHON_SDK_DIR, 'superdoc_sdk.egg-info'), { recursive: true, force: true });
-      try { await rm(path.join(PYTHON_SDK_DIR, 'setup.py'), { force: true }); } catch { /* noop */ }
+      console.log('  Python wheels built. Use the release-sdk.yml workflow to publish to PyPI.');
     });
   } finally {
-    for (const target of PYTHON_EMBEDDED_TARGETS) {
-      await rm(path.join(PYTHON_VENDOR_CLI_DIR, target), { recursive: true, force: true });
-    }
+    await cleanPythonBuildArtifacts();
   }
 
   console.log(`\nSDK release${dryRun ? ' dry-run' : ''} complete.`);

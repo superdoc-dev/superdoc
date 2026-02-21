@@ -8,6 +8,7 @@ node_modules
 dist
 dist-ssr
 dist-types
+companion-dist
 *.local
 .env
 .npmrc

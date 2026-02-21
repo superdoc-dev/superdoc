@@ -8,7 +8,7 @@ Programmatic SDK for deterministic DOCX operations through SuperDoc's Document A
 pip install superdoc-sdk
 ```
 
-The package bundles a native CLI binary for your platform. Supported platforms:
+The package installs a platform-specific CLI companion package automatically via [PEP 508 environment markers](https://peps.python.org/pep-0508/). Supported platforms:
 
 | Platform | Architecture |
 |----------|-------------|
@@ -76,6 +76,25 @@ await client.doc.insert(params)
 | **Lifecycle** | `open`, `save`, `close` |
 | **Session** | `session.list`, `session.save`, `session.close`, `session.set_default` |
 | **Introspection** | `status`, `describe`, `describe_command` |
+
+## Troubleshooting
+
+### Custom CLI binary
+
+If you need to use a custom-built CLI binary (e.g. a newer version or a patched build), set the `SUPERDOC_CLI_BIN` environment variable:
+
+```bash
+export SUPERDOC_CLI_BIN=/path/to/superdoc
+```
+
+### Air-gapped / private index environments
+
+Mirror both `superdoc-sdk` and the `superdoc-sdk-cli-*` package for your platform to your private index. For example, on macOS ARM64:
+
+```bash
+pip download superdoc-sdk superdoc-sdk-cli-darwin-arm64
+# Upload both wheels to your private index
+```
 
 ## Part of SuperDoc
 

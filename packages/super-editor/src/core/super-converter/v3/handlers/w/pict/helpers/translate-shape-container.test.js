@@ -2,17 +2,14 @@ import { describe, it, expect, vi } from 'vitest';
 import { translateShapeContainer } from './translate-shape-container';
 import { translateChildNodes } from '@converter/v2/exporter/helpers/translateChildNodes';
 import { generateRandomSigned32BitIntStrId } from '@helpers/generateDocxRandomId';
-import { wrapTextInRun } from '@converter/exporter';
 
 vi.mock('@converter/v2/exporter/helpers/translateChildNodes');
 vi.mock('@helpers/generateDocxRandomId');
-vi.mock('@converter/exporter');
 
 describe('translateShapeContainer', () => {
   beforeEach(() => {
     vi.clearAllMocks();
     generateRandomSigned32BitIntStrId.mockReturnValue('12345678');
-    wrapTextInRun.mockImplementation((content) => ({ name: 'w:r', elements: [content] }));
   });
 
   it('should create shape container structure with all nested elements', () => {
@@ -35,30 +32,20 @@ describe('translateShapeContainer', () => {
     const result = translateShapeContainer(params);
 
     expect(result).toEqual({
-      name: 'w:p',
+      name: 'w:pict',
+      attributes: {
+        'w14:anchorId': '12345678',
+      },
       elements: [
         {
-          name: 'w:r',
-          elements: [
-            {
-              name: 'w:pict',
-              attributes: {
-                'w14:anchorId': '12345678',
-              },
-              elements: [
-                {
-                  name: 'v:shape',
-                  attributes: {
-                    id: '_x0000_s1026',
-                    type: '#_x0000_t202',
-                    style: 'position:absolute',
-                    fillcolor: '#4472C4',
-                  },
-                  elements: mockElements,
-                },
-              ],
-            },
-          ],
+          name: 'v:shape',
+          attributes: {
+            id: '_x0000_s1026',
+            type: '#_x0000_t202',
+            style: 'position:absolute',
+            fillcolor: '#4472C4',
+          },
+          elements: mockElements,
         },
       ],
     });
@@ -81,7 +68,7 @@ describe('translateShapeContainer', () => {
     };
 
     const result = translateShapeContainer(params);
-    const shape = result.elements[0].elements[0].elements[0];
+    const shape = result.elements[0];
 
     expect(shape.elements).toContainEqual({
       name: 'w10:wrap',
@@ -105,7 +92,7 @@ describe('translateShapeContainer', () => {
     };
 
     const result = translateShapeContainer(params);
-    const shape = result.elements[0].elements[0].elements[0];
+    const shape = result.elements[0];
 
     expect(shape.elements).not.toContainEqual(expect.objectContaining({ name: 'w10:wrap' }));
   });

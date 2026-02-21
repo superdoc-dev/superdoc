@@ -103,6 +103,8 @@ export const Image = Node.create({
 
       id: { rendered: false },
 
+      isPict: { rendered: false },
+
       hidden: {
         default: false,
         rendered: false,
@@ -154,6 +156,9 @@ export const Image = Node.create({
       },
 
       isAnchor: { rendered: false },
+      vmlWatermark: { rendered: false },
+      vmlAttributes: { rendered: false },
+      vmlImagedata: { rendered: false },
 
       /**
        * @category Attribute

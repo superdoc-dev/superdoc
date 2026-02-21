@@ -64,6 +64,7 @@ describe('handleShapeImageWatermarkImport', () => {
     expect(result).toEqual({
       type: 'image',
       attrs: expect.objectContaining({
+        isPict: true,
         src: 'word/media/image1.png',
         alt: 'Balloons',
         title: 'Balloons',
@@ -85,6 +86,7 @@ describe('handleShapeImageWatermarkImport', () => {
         gain: '19661f',
         blacklevel: '22938f',
       }),
+      content: [],
     });
   });
 

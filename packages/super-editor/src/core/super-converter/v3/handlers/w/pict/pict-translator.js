@@ -5,6 +5,7 @@ import { translateShapeTextbox } from './helpers/translate-shape-textbox';
 import { translateContentBlock } from './helpers/translate-content-block';
 import { translateImageWatermark } from './helpers/translate-image-watermark';
 import { translateTextWatermark } from './helpers/translate-text-watermark';
+import { carbonCopy } from '@core/utilities/carbonCopy.js';
 
 /** @type {import('@translator').XmlNodeName} */
 const XML_NODE_NAME = 'w:pict';
@@ -19,8 +20,12 @@ const validXmlAttributes = []; // No attrs for "w:pict".
  * @param {import('@translator').SCEncoderConfig} params
  * @returns {import('@translator').SCEncoderResult}
  */
-function encode(params) {
-  const { node, pNode } = params.extraParams;
+function encode({ nodes, ...params }) {
+  const [node] = nodes;
+
+  if (!node) {
+    return undefined;
+  }
 
   const { type: pictType, handler } = pictNodeTypeStrategy(node);
 
@@ -30,7 +35,6 @@ function encode(params) {
 
   const result = handler({
     params,
-    pNode,
     pict: node,
   });
 
@@ -69,6 +73,20 @@ function decode(params) {
 
   const decoder = types[node.type] ?? types.default;
   const result = decoder();
+  if (result) {
+    const passthroughNodes = node.content?.filter((n) => n.type === 'passthroughInline');
+    if (passthroughNodes && passthroughNodes.length > 0) {
+      result.elements ??= [];
+      result.elements.push(
+        ...passthroughNodes
+          .map((n) => {
+            const original = n.attrs?.originalXml;
+            return original ? carbonCopy(original) : null;
+          })
+          .filter(Boolean),
+      );
+    }
+  }
   return result;
 }
 

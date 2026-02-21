@@ -1,6 +1,5 @@
 import { translateChildNodes } from '@converter/v2/exporter/helpers/translateChildNodes';
 import { generateRandomSigned32BitIntStrId } from '@helpers/generateDocxRandomId';
-import { wrapTextInRun } from '@converter/exporter';
 
 /**
  * @param {Object} params - The parameters for translation.
@@ -37,10 +36,5 @@ export function translateShapeContainer(params) {
     elements: [shape],
   };
 
-  const par = {
-    name: 'w:p',
-    elements: [wrapTextInRun(pict)],
-  };
-
-  return par;
+  return pict;
 }

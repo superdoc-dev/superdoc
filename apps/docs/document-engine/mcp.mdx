@@ -2,7 +2,7 @@
 title: MCP Server
 sidebarTitle: MCP Server
 description: Give AI agents direct access to .docx files through the Model Context Protocol
-keywords: "mcp, model context protocol, ai agents, claude, cursor, windsurf, document automation, llm docx"
+keywords: "mcp, model context protocol, ai agents, claude, cursor, windsurf, document automation, llm docx, track changes, comments"
 ---
 
 The SuperDoc MCP server lets AI agents open, read, edit, and save `.docx` files. It exposes the same operations as the [Document API](/document-api/overview) through the [Model Context Protocol](https://modelcontextprotocol.io) — the open standard for connecting AI tools to agents.
@@ -81,7 +81,7 @@ superdoc_open → superdoc_find / superdoc_get_text → edit tools → superdoc_
 
 ## Tools
 
-13 tools in five groups. All tools take a `session_id` from `superdoc_open`.
+23 tools in eight groups. All tools take a `session_id` from `superdoc_open`.
 
 ### Lifecycle
 
@@ -102,45 +102,59 @@ superdoc_open → superdoc_find / superdoc_get_text → edit tools → superdoc_
 
 ### Mutation
 
+All mutation tools accept `suggest?` — set to `true` to make the edit a tracked change instead of a direct edit.
+
 | Tool | Input | Description |
 | --- | --- | --- |
-| `superdoc_insert` | `session_id`, `text`, `target` | Insert text at a target position |
-| `superdoc_replace` | `session_id`, `text`, `target` | Replace content at a target range |
-| `superdoc_delete` | `session_id`, `target` | Delete content at a target range |
+| `superdoc_insert` | `session_id`, `text`, `target`, `suggest?` | Insert text at a target position |
+| `superdoc_replace` | `session_id`, `text`, `target`, `suggest?` | Replace content at a target range |
+| `superdoc_delete` | `session_id`, `target`, `suggest?` | Delete content at a target range |
 
 ### Format
 
 | Tool | Input | Description |
 | --- | --- | --- |
-| `superdoc_format` | `session_id`, `style`, `target` | Toggle formatting on a text range. Styles: `bold`, `italic`, `underline`, `strikethrough` |
+| `superdoc_format` | `session_id`, `style`, `target`, `suggest?` | Toggle formatting on a text range. Styles: `bold`, `italic`, `underline`, `strikethrough` |
 
 ### Create
 
 | Tool | Input | Description |
 | --- | --- | --- |
-| `superdoc_create` | `session_id`, `type`, `text?`, `level?`, `at?` | Create a block element. Types: `paragraph`, `heading` (headings require `level` 1-6) |
+| `superdoc_create` | `session_id`, `type`, `text?`, `level?`, `at?`, `suggest?` | Create a block element. Types: `paragraph`, `heading` (headings require `level` 1-6) |
 
-## Example conversation
+### Track changes
 
-Here's what a typical agent interaction looks like:
+Review and resolve tracked changes (suggestions) in the document.
 
-```
-User: "Replace all mentions of 'Acme Corp' with 'NewCo Inc.' in contract.docx"
+| Tool | Input | Description |
+| --- | --- | --- |
+| `superdoc_list_changes` | `session_id`, `type?`, `limit?`, `offset?` | List tracked changes with type, author, date, and excerpt |
+| `superdoc_accept_change` | `session_id`, `id` | Accept a single change, applying it to the document |
+| `superdoc_reject_change` | `session_id`, `id` | Reject a single change, reverting it |
+| `superdoc_accept_all_changes` | `session_id` | Accept all tracked changes at once |
+| `superdoc_reject_all_changes` | `session_id` | Reject all tracked changes at once |
 
-Agent calls: superdoc_open({ path: "/path/to/contract.docx" })
-  → { session_id: "contract-a1b2c3", filePath: "/path/to/contract.docx" }
+### Comments
 
-Agent calls: superdoc_find({ session_id: "contract-a1b2c3", pattern: "Acme Corp" })
-  → { matches: [{ kind: "text", blockId: "p1", range: { start: 12, end: 21 } }, ...], total: 4 }
+Add and manage comments anchored to text ranges.
 
-Agent calls: superdoc_replace({ session_id: "contract-a1b2c3", text: "NewCo Inc.", target: "<address>" })
-  → (repeats for each match)
+| Tool | Input | Description |
+| --- | --- | --- |
+| `superdoc_add_comment` | `session_id`, `text`, `target` | Add a comment anchored to a text range |
+| `superdoc_list_comments` | `session_id`, `include_resolved?` | List all comments with author, status, and anchored text |
+| `superdoc_reply_comment` | `session_id`, `comment_id`, `text` | Reply to an existing comment thread |
+| `superdoc_resolve_comment` | `session_id`, `comment_id` | Mark a comment as resolved |
 
-Agent calls: superdoc_save({ session_id: "contract-a1b2c3" })
-  → { path: "/path/to/contract.docx", byteLength: 24583 }
+### Lists
 
-Agent calls: superdoc_close({ session_id: "contract-a1b2c3" })
-```
+| Tool | Input | Description |
+| --- | --- | --- |
+| `superdoc_insert_list` | `session_id`, `target`, `position`, `text?` | Insert a list item before or after an existing one |
+| `superdoc_list_set_type` | `session_id`, `target`, `kind` | Change a list between `ordered` (numbered) and `bullet` |
+
+## Suggesting mode
+
+Set `suggest=true` on any mutation, format, or create tool to make edits appear as tracked changes. The document stays unchanged until someone accepts the suggestions — in Word, in SuperDoc's browser editor, or programmatically via the track changes tools.
 
 ## How it works
 

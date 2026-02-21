@@ -1,5 +1,6 @@
 import { translateChildNodes } from '@converter/v2/exporter/helpers/translateChildNodes';
 import { generateRandomSigned32BitIntStrId } from '@helpers/generateDocxRandomId';
+import { wrapTextInRun } from '@converter/exporter';
 
 /**
  * @param {Object} params - The parameters for translation.
@@ -36,5 +37,10 @@ export function translateShapeContainer(params) {
     elements: [shape],
   };
 
-  return pict;
+  // shapeContainer is a block node exported at body level — w:pict must be
+  // wrapped in w:p > w:r to produce valid OOXML.
+  return {
+    name: 'w:p',
+    elements: [wrapTextInRun(pict)],
+  };
 }

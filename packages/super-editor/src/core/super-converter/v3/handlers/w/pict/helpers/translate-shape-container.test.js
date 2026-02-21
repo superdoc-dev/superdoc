@@ -32,20 +32,30 @@ describe('translateShapeContainer', () => {
     const result = translateShapeContainer(params);
 
     expect(result).toEqual({
-      name: 'w:pict',
-      attributes: {
-        'w14:anchorId': '12345678',
-      },
+      name: 'w:p',
       elements: [
         {
-          name: 'v:shape',
-          attributes: {
-            id: '_x0000_s1026',
-            type: '#_x0000_t202',
-            style: 'position:absolute',
-            fillcolor: '#4472C4',
-          },
-          elements: mockElements,
+          name: 'w:r',
+          elements: [
+            {
+              name: 'w:pict',
+              attributes: {
+                'w14:anchorId': '12345678',
+              },
+              elements: [
+                {
+                  name: 'v:shape',
+                  attributes: {
+                    id: '_x0000_s1026',
+                    type: '#_x0000_t202',
+                    style: 'position:absolute',
+                    fillcolor: '#4472C4',
+                  },
+                  elements: mockElements,
+                },
+              ],
+            },
+          ],
         },
       ],
     });
@@ -68,7 +78,8 @@ describe('translateShapeContainer', () => {
     };
 
     const result = translateShapeContainer(params);
-    const shape = result.elements[0];
+    const pict = result.elements[0].elements[0]; // w:p > w:r > w:pict
+    const shape = pict.elements[0];
 
     expect(shape.elements).toContainEqual({
       name: 'w10:wrap',
@@ -92,8 +103,57 @@ describe('translateShapeContainer', () => {
     };
 
     const result = translateShapeContainer(params);
-    const shape = result.elements[0];
+    const pict = result.elements[0].elements[0]; // w:p > w:r > w:pict
+    const shape = pict.elements[0];
 
     expect(shape.elements).not.toContainEqual(expect.objectContaining({ name: 'w10:wrap' }));
+  });
+
+  it('wraps shapeContainer export in paragraph and run XML', () => {
+    translateChildNodes.mockReturnValue([{ name: 'v:textbox' }]);
+
+    const params = {
+      node: {
+        attrs: {
+          attributes: {
+            id: '_x0000_s2048',
+            type: '#_x0000_t202',
+            style: 'position:absolute',
+          },
+          fillcolor: '#FFFFFF',
+        },
+      },
+    };
+
+    const result = translateShapeContainer(params);
+
+    expect(result).toEqual({
+      name: 'w:p',
+      elements: [
+        {
+          name: 'w:r',
+          elements: [
+            {
+              name: 'w:pict',
+              attributes: {
+                'w14:anchorId': '12345678',
+              },
+              elements: [
+                {
+                  name: 'v:shape',
+                  attributes: {
+                    id: '_x0000_s2048',
+                    type: '#_x0000_t202',
+                    style: 'position:absolute',
+                    fillcolor: '#FFFFFF',
+                  },
+                  elements: [{ name: 'v:textbox' }],
+                },
+              ],
+            },
+          ],
+        },
+      ],
+    });
   });
 });

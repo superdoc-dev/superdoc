@@ -104,6 +104,7 @@ export const Image = Node.create({
       id: { rendered: false },
 
       isPict: { rendered: false },
+      passthroughSiblings: { rendered: false },
 
       hidden: {
         default: false,

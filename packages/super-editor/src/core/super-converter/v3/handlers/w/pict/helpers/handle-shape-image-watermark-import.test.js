@@ -86,7 +86,6 @@ describe('handleShapeImageWatermarkImport', () => {
         gain: '19661f',
         blacklevel: '22938f',
       }),
-      content: [],
     });
   });
 
@@ -305,5 +304,25 @@ describe('handleShapeImageWatermarkImport', () => {
     expect(result.attrs.gain).toBeUndefined();
     expect(result.attrs.blacklevel).toBeUndefined();
     expect(result.attrs.alt).toBe('Watermark'); // Default value
+  });
+
+  it('keeps imported watermark image schema-valid when pict has extra children', () => {
+    const params = {
+      docx: createMockDocx(),
+      filename: 'header1.xml',
+    };
+    const pict = createWatermarkPict();
+    pict.elements.push({
+      name: 'v:shapetype',
+      attributes: {
+        id: '_x0000_t75',
+      },
+    });
+
+    const result = handleShapeImageWatermarkImport({ params, pict });
+
+    expect(result).not.toBeNull();
+    expect(result.type).toBe('image');
+    expect(result.content).toBeUndefined();
   });
 });

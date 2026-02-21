@@ -100,7 +100,6 @@ describe('VML Watermark Integration Tests', () => {
           vmlAttributes: expect.any(Object),
           vmlImagedata: expect.any(Object),
         }),
-        content: [],
       });
 
       // Step 2: Export - Convert from SuperDoc node back to DOCX XML

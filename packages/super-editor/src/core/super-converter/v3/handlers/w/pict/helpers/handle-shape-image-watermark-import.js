@@ -123,13 +123,13 @@ export function handleShapeImageWatermarkImport({ params, pict }) {
       ...(gain && { gain }),
       ...(blacklevel && { blacklevel }),
     },
-    content: passthroughElements.map((node) => ({
-      type: 'passthroughInline',
-      attrs: {
-        originalXml: carbonCopy(node),
-      },
-    })),
   };
+
+  // Store passthrough siblings as an attribute (not content) because image is
+  // a leaf node — PM would silently drop any content children.
+  if (passthroughElements.length > 0) {
+    imageNode.attrs.passthroughSiblings = passthroughElements.map((node) => carbonCopy(node));
+  }
 
   return imageNode;
 }

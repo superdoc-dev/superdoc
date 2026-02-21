@@ -67,4 +67,21 @@ describe('handlePictNode', () => {
     const result = handlePictNode({ nodes: [{ name: 'w:pict', elements: [] }] });
     expect(result).toEqual({ nodes: multiResult, consumed: 1 });
   });
+
+  it('does not return block shapeContainer nodes from run-level pict parsing', () => {
+    const shapeContainerResult = {
+      type: 'shapeContainer',
+      attrs: { attributes: { id: '_x0000_s1026' } },
+      content: [{ type: 'paragraph', content: [] }],
+    };
+    mockHandler.mockReturnValue(shapeContainerResult);
+    pictNodeTypeStrategy.mockReturnValue({ type: 'shapeContainer', handler: mockHandler });
+
+    const result = handlePictNode({
+      nodes: [{ name: 'w:pict', elements: [] }],
+      path: ['w:document', 'w:body', 'w:p', 'w:r'],
+    });
+
+    expect(result).toEqual({ nodes: [], consumed: 0 });
+  });
 });

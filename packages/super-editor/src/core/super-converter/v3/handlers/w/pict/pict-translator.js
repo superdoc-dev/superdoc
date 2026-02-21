@@ -74,17 +74,12 @@ function decode(params) {
   const decoder = types[node.type] ?? types.default;
   const result = decoder();
   if (result) {
-    const passthroughNodes = node.content?.filter((n) => n.type === 'passthroughInline');
-    if (passthroughNodes && passthroughNodes.length > 0) {
+    // Passthrough siblings are stored as an attribute (not content) because
+    // image is a leaf node in the PM schema.
+    const siblings = node.attrs?.passthroughSiblings;
+    if (Array.isArray(siblings) && siblings.length > 0) {
       result.elements ??= [];
-      result.elements.push(
-        ...passthroughNodes
-          .map((n) => {
-            const original = n.attrs?.originalXml;
-            return original ? carbonCopy(original) : null;
-          })
-          .filter(Boolean),
-      );
+      result.elements.push(...siblings.map((xml) => carbonCopy(xml)));
     }
   }
   return result;

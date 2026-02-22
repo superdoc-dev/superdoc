@@ -106,7 +106,7 @@ const BARE_ELEMENT_PATTERN =
  */
 function isScopedSelector(selector) {
   // Already scoped under .super-editor, .superdoc, .sd-, .presentation-editor, .tippy-box
-  const scopedPrefixes = ['.super-editor', '.superdoc', '.sd-', '.presentation-editor', '.tippy-box', '.toolbar-icon'];
+  const scopedPrefixes = ['.super-editor', '.superdoc', '.sd-', '.presentation-editor', '.tippy-box'];
 
   return scopedPrefixes.some((prefix) => selector.startsWith(prefix));
 }
@@ -231,5 +231,33 @@ describe('CSS Bleed Prevention (SD-1850)', () => {
     expect(selectors).toContain('a');
     // .child is nested, should not appear
     expect(selectors).not.toContain('.child');
+  });
+
+  it("should namespace all @keyframes names with superdoc- or sd-", () => {
+    const cssFiles = findCssFiles(SUPER_EDITOR_STYLES_DIR);
+    const violations = [];
+
+    for (const file of cssFiles) {
+      const fullPath = join(SUPER_EDITOR_STYLES_DIR, file);
+      const cssText = readFileSync(fullPath, "utf8");
+      const keyframePattern = /@keyframes\s+([\w-]+)/g;
+      let match;
+
+      while ((match = keyframePattern.exec(cssText)) !== null) {
+        const name = match[1];
+        if (!name.startsWith("superdoc-") && !name.startsWith("sd-")) {
+          violations.push({ file, keyframe: name });
+        }
+      }
+    }
+
+    if (violations.length > 0) {
+      const message = violations
+        .map((v) => `  ${v.file}: @keyframes ${v.keyframe}`)
+        .join("\n");
+      expect.fail(
+        `Found @keyframes names not prefixed with "superdoc-" or "sd-":\n${message}\n\nRename to start with "superdoc-" or "sd-" to avoid collisions with host apps`,
+      );
+    }
   });
 });

@@ -1423,7 +1423,7 @@ async function measureParagraphBlock(block: ParagraphBlock, maxWidth: number): P
       if (stop && stop.leader && stop.leader !== 'none') {
         const leaderStyle: 'heavy' | 'dot' | 'hyphen' | 'underscore' | 'middleDot' = stop.leader;
         const relativeTarget = clampedTarget - effectiveIndent;
-        const from = Math.min(originX, relativeTarget);
+        const from = Math.min(originX + effectiveIndent, relativeTarget);
         const to = Math.max(originX, relativeTarget);
         if (!currentLine.leaders) currentLine.leaders = [];
         currentLine.leaders.push({ from, to, style: leaderStyle });
@@ -1452,6 +1452,13 @@ async function measureParagraphBlock(block: ParagraphBlock, maxWidth: number): P
               // Decimal-align: position so decimal point is at tab stop
               const beforeDecimal = groupMeasure.beforeDecimalWidth ?? groupMeasure.totalWidth;
               groupStartX = Math.max(0, relativeTarget - beforeDecimal);
+            }
+
+            // Update leader "to" ensuring leaders end where right-aligned content begins
+            if (currentLine.leaders && currentLine.leaders.length > 0) {
+              const lastLeader = currentLine.leaders.at(-1);
+
+              if (lastLeader) lastLeader.to = groupStartX + effectiveIndent;
             }
 
             // Set up active tab group for subsequent run processing
@@ -2381,7 +2388,7 @@ async function measureParagraphBlock(block: ParagraphBlock, maxWidth: number): P
         if (stop && stop.leader && stop.leader !== 'none' && stop.leader !== 'middleDot') {
           const leaderStyle: 'heavy' | 'dot' | 'hyphen' | 'underscore' = stop.leader;
           const relativeTarget = clampedTarget - effectiveIndent;
-          const from = Math.min(originX, relativeTarget);
+          const from = Math.min(originX + effectiveIndent, relativeTarget);
           const to = Math.max(originX, relativeTarget);
           if (!currentLine.leaders) currentLine.leaders = [];
           currentLine.leaders.push({ from, to, style: leaderStyle });

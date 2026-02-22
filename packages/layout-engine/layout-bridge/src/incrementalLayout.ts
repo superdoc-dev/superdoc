@@ -6,7 +6,6 @@ import type {
   SectionMetadata,
   ParagraphBlock,
   ColumnLayout,
-  SectionBreakBlock,
 } from '@superdoc/contracts';
 import {
   layoutDocument,
@@ -749,13 +748,6 @@ export async function incrementalLayout(
 
   // Perf summary emitted at the end of the function.
 
-  // Per-section constraints: each block is measured at its own section's content width.
-  // This prevents text clipping in mixed-orientation documents (SD-1962) where the old
-  // global-max approach measured all blocks at the widest section's width, causing line
-  // breaks to be too wide for narrower sections.
-  const perSectionConstraints = computePerSectionConstraints(options, nextBlocks);
-
-  // Global max constraints are still used for cache invalidation comparison.
   const { measurementWidth, measurementHeight } = resolveMeasurementConstraints(options, nextBlocks);
 
   if (measurementWidth <= 0 || measurementHeight <= 0) {
@@ -773,6 +765,7 @@ export async function incrementalLayout(
     : null;
 
   const measureStart = performance.now();
+  const constraints = { maxWidth: measurementWidth, maxHeight: measurementHeight };
   const measures: Measure[] = [];
   let cacheHits = 0;
   let cacheMisses = 0;
@@ -780,17 +773,11 @@ export async function incrementalLayout(
   let cacheLookupTime = 0;
   let actualMeasureTime = 0;
 
-  for (let blockIndex = 0; blockIndex < nextBlocks.length; blockIndex++) {
-    const block = nextBlocks[blockIndex];
+  for (const block of nextBlocks) {
     if (block.kind === 'sectionBreak') {
       measures.push({ kind: 'sectionBreak' });
       continue;
     }
-
-    // Use per-section constraints for this block's measurement.
-    const sectionConstraints = perSectionConstraints[blockIndex];
-    const blockMeasureWidth = sectionConstraints.maxWidth;
-    const blockMeasureHeight = sectionConstraints.maxHeight;
 
     if (canReusePreviousMeasures && dirty.stableBlockIds.has(block.id)) {
       const previousMeasure = previousMeasuresById?.get(block.id);
@@ -803,7 +790,7 @@ export async function incrementalLayout(
 
     // Time the cache lookup (includes hashRuns computation)
     const lookupStart = performance.now();
-    const cached = measureCache.get(block, blockMeasureWidth, blockMeasureHeight);
+    const cached = measureCache.get(block, measurementWidth, measurementHeight);
     cacheLookupTime += performance.now() - lookupStart;
 
     if (cached) {
@@ -814,10 +801,10 @@ export async function incrementalLayout(
 
     // Time the actual DOM measurement
     const measureBlockStart = performance.now();
-    const measurement = await measureBlock(block, sectionConstraints);
+    const measurement = await measureBlock(block, constraints);
     actualMeasureTime += performance.now() - measureBlockStart;
 
-    measureCache.set(block, blockMeasureWidth, blockMeasureHeight, measurement);
+    measureCache.set(block, measurementWidth, measurementHeight, measurement);
     measures.push(measurement);
     cacheMisses++;
   }
@@ -1117,16 +1104,14 @@ export async function incrementalLayout(
       // Invalidate cache for affected blocks
       measureCache.invalidate(Array.from(tokenResult.affectedBlockIds));
 
-      // Re-measure affected blocks using per-section constraints
+      // Re-measure affected blocks
       const remeasureStart = performance.now();
-      const currentPerSectionConstraints = computePerSectionConstraints(options, currentBlocks);
       currentMeasures = await remeasureAffectedBlocks(
         currentBlocks,
         currentMeasures,
         tokenResult.affectedBlockIds,
-        currentPerSectionConstraints,
+        constraints,
         measureBlock,
-        measureCache,
       );
       const remeasureEnd = performance.now();
       const remeasureTime = remeasureEnd - remeasureStart;
@@ -1909,83 +1894,19 @@ export const normalizeMargin = (value: number | undefined, fallback: number): nu
   Number.isFinite(value) ? (value as number) : fallback;
 
 /**
- * Computes measurement constraints for each block based on its section's properties.
- *
- * In mixed-orientation documents (e.g., portrait + landscape sections), each section has a
- * different content width. Measuring ALL blocks at the maximum width (the old approach)
- * causes text line breaks to be computed for wider cells than actually rendered, leading to
- * text clipping in table cells with `overflow: hidden` (SD-1962).
- *
- * This function returns a per-block constraint array so each block is measured at its own
- * section's content width. Section breaks act as state transitions: each break defines the
- * constraints for subsequent content blocks until the next break.
- *
- * @param options - Layout options containing default page size, margins, and columns
- * @param blocks - Array of flow blocks (content + section breaks)
- * @returns Array parallel to `blocks` with per-block measurement constraints.
- *   Section break entries have the constraints of the section they introduce.
- */
-function computePerSectionConstraints(
-  options: LayoutOptions,
-  blocks: FlowBlock[],
-): Array<{ maxWidth: number; maxHeight: number }> {
-  const pageSize = options.pageSize ?? DEFAULT_PAGE_SIZE;
-  const defaultMargins = {
-    top: normalizeMargin(options.margins?.top, DEFAULT_MARGINS.top),
-    right: normalizeMargin(options.margins?.right, DEFAULT_MARGINS.right),
-    bottom: normalizeMargin(options.margins?.bottom, DEFAULT_MARGINS.bottom),
-    left: normalizeMargin(options.margins?.left, DEFAULT_MARGINS.left),
-  };
-  const computeColumnWidth = (contentWidth: number, columns?: { count: number; gap?: number }): number => {
-    if (!columns || columns.count <= 1) return contentWidth;
-    const gap = Math.max(0, columns.gap ?? 0);
-    const totalGap = gap * (columns.count - 1);
-    return (contentWidth - totalGap) / columns.count;
-  };
-
-  const defaultContentWidth = pageSize.w - (defaultMargins.left + defaultMargins.right);
-  const defaultContentHeight = pageSize.h - (defaultMargins.top + defaultMargins.bottom);
-  const defaultConstraints = {
-    maxWidth: computeColumnWidth(defaultContentWidth, options.columns),
-    maxHeight: defaultContentHeight,
-  };
-
-  let current = defaultConstraints;
-  const result: Array<{ maxWidth: number; maxHeight: number }> = [];
-
-  for (const block of blocks) {
-    if (block.kind === 'sectionBreak') {
-      const sb = block as SectionBreakBlock;
-      const sectionPageSize = sb.pageSize ?? pageSize;
-      const sectionMargins = {
-        top: normalizeMargin(sb.margins?.top, defaultMargins.top),
-        right: normalizeMargin(sb.margins?.right, defaultMargins.right),
-        bottom: normalizeMargin(sb.margins?.bottom, defaultMargins.bottom),
-        left: normalizeMargin(sb.margins?.left, defaultMargins.left),
-      };
-      const contentWidth = sectionPageSize.w - (sectionMargins.left + sectionMargins.right);
-      const contentHeight = sectionPageSize.h - (sectionMargins.top + sectionMargins.bottom);
-      if (contentWidth > 0 && contentHeight > 0) {
-        current = {
-          maxWidth: computeColumnWidth(contentWidth, sb.columns ?? options.columns),
-          maxHeight: contentHeight,
-        };
-      }
-    }
-    result.push(current);
-  }
-
-  return result;
-}
-
-/**
  * Resolves the maximum measurement constraints (width and height) needed for measuring blocks
  * across all sections in a document.
  *
  * This function scans the entire document (including all section breaks) to determine the
  * widest column configuration and tallest content area that will be encountered during layout.
- * The result is used for cache invalidation and backward-compatible comparison (see
- * `canReusePreviousMeasures`). Actual per-block measurement uses `computePerSectionConstraints`.
+ * All blocks must be measured at these maximum constraints to ensure they fit correctly when
+ * placed in any section, preventing remeasurement during pagination.
+ *
+ * Why maximum constraints are needed:
+ * - Documents can have multiple sections with different page sizes, margins, and column counts
+ * - Each section may have a different effective column width (e.g., 2 columns vs 3 columns)
+ * - Blocks measured too narrow will overflow when placed in wider sections
+ * - Blocks measured at maximum width will fit in all sections (may have extra space in narrower ones)
  *
  * Algorithm:
  * 1. Start with base content width/height from options.pageSize and options.margins
@@ -2133,7 +2054,7 @@ function buildNumberingContext(layout: Layout, sections: SectionMetadata[]): Num
  * @param blocks - Current blocks array (with resolved tokens)
  * @param measures - Current measures array (parallel to blocks)
  * @param affectedBlockIds - Set of block IDs that need re-measurement
- * @param perBlockConstraints - Per-block measurement constraints (parallel to blocks)
+ * @param constraints - Measurement constraints (width, height)
  * @param measureBlock - Function to measure a block
  * @returns Updated measures array with re-measured blocks
  */
@@ -2141,9 +2062,8 @@ async function remeasureAffectedBlocks(
   blocks: FlowBlock[],
   measures: Measure[],
   affectedBlockIds: Set<string>,
-  perBlockConstraints: Array<{ maxWidth: number; maxHeight: number }>,
+  constraints: { maxWidth: number; maxHeight: number },
   measureBlock: (block: FlowBlock, constraints: { maxWidth: number; maxHeight: number }) => Promise<Measure>,
-  measureCache?: MeasureCache<Measure>,
 ): Promise<Measure[]> {
   const updatedMeasures: Measure[] = [...measures];
 
@@ -2156,15 +2076,14 @@ async function remeasureAffectedBlocks(
     }
 
     try {
-      // Re-measure the block with its section's constraints
-      const newMeasure = await measureBlock(block, perBlockConstraints[i]);
+      // Re-measure the block
+      const newMeasure = await measureBlock(block, constraints);
 
       // Update in the measures array
       updatedMeasures[i] = newMeasure;
 
-      // Cache the new measurement using per-block section constraints
-      const blockConstraints = perBlockConstraints[i];
-      measureCache?.set(block, blockConstraints.maxWidth, blockConstraints.maxHeight, newMeasure);
+      // Cache the new measurement
+      measureCache.set(block, constraints.maxWidth, constraints.maxHeight, newMeasure);
     } catch (error) {
       // Error handling per plan: log warning, keep prior layout for block
       console.warn(`[incrementalLayout] Failed to re-measure block ${block.id} after token resolution:`, error);

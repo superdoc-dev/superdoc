@@ -326,6 +326,24 @@ export function resolveListTextStartPx(
       : LIST_MARKER_GAP;
   const currentPosStandard = markerStartPos + markerWidthEffective;
 
+  // Check for explicit tab stops past the marker position.
+  // The renderer uses these to position the tab after the list marker, so the measurer
+  // must also account for them to avoid a width mismatch that causes extreme negative word-spacing.
+  let explicitTabStop: number | undefined;
+  if (Array.isArray(wordLayout?.tabsPx)) {
+    for (const tab of wordLayout.tabsPx) {
+      if (typeof tab === 'number' && tab > currentPosStandard) {
+        explicitTabStop = tab;
+        break;
+      }
+    }
+  }
+
+  if (explicitTabStop !== undefined) {
+    // Use the explicit tab stop — this matches the renderer's computeTabWidth() behavior
+    return explicitTabStop;
+  }
+
   if (textStartTarget !== undefined) {
     const gap = Math.max(textStartTarget - currentPosStandard, gutterWidth);
     return currentPosStandard + gap;

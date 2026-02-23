@@ -2659,3 +2659,6 @@ export type { PageNumberFormat, DisplayPageInfo } from './pageNumbering.js';
 // Export page token resolution utilities
 export { resolvePageNumberTokens } from './resolvePageTokens.js';
 export type { NumberingContext, ResolvePageTokensResult } from './resolvePageTokens.js';
+
+// Export table utilities for reuse by painter-dom
+export { rescaleColumnWidths, getCellLines } from './layout-table.js';

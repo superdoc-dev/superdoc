@@ -787,6 +787,9 @@ importers:
       '@superdoc/font-utils':
         specifier: workspace:*
         version: link:../../../../shared/font-utils
+      '@superdoc/layout-engine':
+        specifier: workspace:*
+        version: link:../../layout-engine
       '@superdoc/pm-adapter':
         specifier: workspace:*
         version: link:../../pm-adapter

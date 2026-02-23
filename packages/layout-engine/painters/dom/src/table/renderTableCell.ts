@@ -19,6 +19,7 @@ import type {
   WrapTextMode,
 } from '@superdoc/contracts';
 import { toCssFontFamily } from '@superdoc/font-utils';
+import { rescaleColumnWidths } from '@superdoc/layout-engine';
 import { normalizeZIndex } from '@superdoc/pm-adapter/utilities.js';
 import type { BlockLookup, FragmentRenderContext } from '../renderer.js';
 import { applyParagraphBorderStyles, applyParagraphShadingStyles } from '../renderer.js';
@@ -97,7 +98,7 @@ type TableCellMeasure = TableRowMeasure['cells'][number];
  * embedded tables contribute the sum of their rows' recursive segment counts,
  * and other blocks (images, drawings) contribute 1 segment.
  */
-function getCellSegmentCount(cell: TableCellMeasure): number {
+export function getCellSegmentCount(cell: TableCellMeasure): number {
   if (cell.blocks && cell.blocks.length > 0) {
     let total = 0;
     for (const block of cell.blocks) {
@@ -128,9 +129,7 @@ function getCellSegmentCount(cell: TableCellMeasure): number {
  * This mirrors the layout engine's getEmbeddedRowLines() logic.
  */
 function getEmbeddedRowSegmentCount(row: TableRowMeasure): number {
-  const hasNestedTable = row.cells.some((cell: TableCellMeasure) =>
-    cell.blocks?.some((b) => b.kind === 'table'),
-  );
+  const hasNestedTable = row.cells.some((cell: TableCellMeasure) => cell.blocks?.some((b) => b.kind === 'table'));
   if (!hasNestedTable) return 1;
 
   let maxSegments = 0;
@@ -149,6 +148,80 @@ function getEmbeddedTableSegmentCount(tableMeasure: TableMeasure): number {
     total += getEmbeddedRowSegmentCount(row);
   }
   return total;
+}
+
+/**
+ * Compute the visible height for a range of table rows, using partial height
+ * where a row is only partially rendered (mid-row split).
+ */
+function computeVisibleHeight(
+  rows: TableMeasure['rows'],
+  fromRow: number,
+  toRow: number,
+  partialRow?: PartialRowInfo,
+): number {
+  let height = 0;
+  for (let r = fromRow; r < toRow; r++) {
+    if (partialRow && partialRow.rowIndex === r) {
+      height += partialRow.partialHeight;
+    } else {
+      height += rows[r]?.height || 0;
+    }
+  }
+  return height;
+}
+
+/**
+ * Compute the visible height of a single cell's content for a given segment range.
+ * Handles paragraphs, embedded tables, and non-paragraph blocks (images, drawings).
+ * Falls back to cell.paragraph for legacy single-paragraph cells.
+ */
+function computeCellVisibleHeight(cell: TableCellMeasure, cellFrom: number, cellTo: number): number {
+  let cellVisHeight = 0;
+  if (cell.blocks && cell.blocks.length > 0) {
+    let segIdx = 0;
+    for (const blk of cell.blocks) {
+      if (blk.kind === 'paragraph') {
+        const lines = (blk as ParagraphMeasure).lines || [];
+        for (const line of lines) {
+          if (segIdx >= cellFrom && segIdx < cellTo) {
+            cellVisHeight += line.lineHeight || 0;
+          }
+          segIdx++;
+        }
+      } else if (blk.kind === 'table') {
+        const nestedTable = blk as TableMeasure;
+        for (const nestedRow of nestedTable.rows) {
+          const nestedRowSegs = getEmbeddedRowSegmentCount(nestedRow);
+          // TODO: use actual segment heights from getEmbeddedRowLines() instead of
+          // even split for more precise height when rows have non-uniform line heights.
+          for (let s = 0; s < nestedRowSegs; s++) {
+            if (segIdx >= cellFrom && segIdx < cellTo) {
+              cellVisHeight += (nestedRow.height || 0) / nestedRowSegs;
+            }
+            segIdx++;
+          }
+        }
+      } else {
+        const blkHeight = 'height' in blk ? (blk as { height: number }).height : 0;
+        if (blkHeight > 0) {
+          if (segIdx >= cellFrom && segIdx < cellTo) {
+            cellVisHeight += blkHeight;
+          }
+          segIdx++;
+        }
+      }
+    }
+  } else if (cell.paragraph) {
+    // Legacy single-paragraph fallback (matches getCellSegmentCount)
+    const lines = (cell.paragraph as ParagraphMeasure).lines || [];
+    for (let i = 0; i < lines.length; i++) {
+      if (i >= cellFrom && i < cellTo) {
+        cellVisHeight += lines[i].lineHeight || 0;
+      }
+    }
+  }
+  return cellVisHeight;
 }
 
 /**
@@ -474,32 +547,13 @@ const renderEmbeddedTable = (params: EmbeddedTableRenderParams): HTMLElement => 
   const effectiveFromRow = paramFromRow ?? 0;
   const effectiveToRow = paramToRow ?? table.rows.length;
 
-  // Calculate the height for the visible row range.
-  // For rows with partial rendering (mid-row split), use the partial height.
-  let visibleHeight = 0;
-  for (let r = effectiveFromRow; r < effectiveToRow; r++) {
-    if (paramPartialRow && paramPartialRow.rowIndex === r) {
-      visibleHeight += paramPartialRow.partialHeight;
-    } else {
-      visibleHeight += measure.rows[r]?.height || 0;
-    }
-  }
+  const visibleHeight = computeVisibleHeight(measure.rows, effectiveFromRow, effectiveToRow, paramPartialRow);
 
   // Rescale column widths when measurement-scale exceeds render-scale (SD-1962).
   // Top-level tables get rescaled by layout-engine's rescaleColumnWidths(), but
-  // embedded tables bypass that path. We apply the same scaling here.
-  let fragmentWidth = measure.totalWidth;
-  let columnWidths: number[] | undefined;
-  if (measure.totalWidth > availableWidth && measure.columnWidths?.length && availableWidth > 0) {
-    const scale = availableWidth / measure.totalWidth;
-    columnWidths = measure.columnWidths.map((w) => Math.max(1, Math.round(w * scale)));
-    const scaledSum = columnWidths.reduce((a, b) => a + b, 0);
-    const target = Math.round(availableWidth);
-    if (scaledSum !== target && columnWidths.length > 0) {
-      columnWidths[columnWidths.length - 1] = Math.max(1, columnWidths[columnWidths.length - 1] + (target - scaledSum));
-    }
-    fragmentWidth = availableWidth;
-  }
+  // embedded tables bypass that path. We reuse the same function here.
+  const columnWidths = rescaleColumnWidths(measure.columnWidths, measure.totalWidth, availableWidth);
+  const fragmentWidth = columnWidths ? availableWidth : measure.totalWidth;
 
   const fragment: TableFragment = {
     kind: 'table',
@@ -543,6 +597,142 @@ const renderEmbeddedTable = (params: EmbeddedTableRenderParams): HTMLElement => 
     applyStyles: applyInlineStyles,
   });
 };
+
+/**
+ * Render an embedded table block within a cell, handling segment-based pagination.
+ *
+ * Maps the cell's global segment range into the embedded table's local row range,
+ * computes partial row info when a page break falls mid-row, and delegates to
+ * renderEmbeddedTable for actual DOM creation.
+ */
+function renderPartialEmbeddedTable(params: {
+  doc: Document;
+  block: TableBlock;
+  blockMeasure: TableMeasure;
+  cumulativeLineCount: number;
+  globalFromLine: number;
+  globalToLine: number;
+  contentWidthPx: number;
+  context: FragmentRenderContext;
+  renderLine: EmbeddedTableRenderParams['renderLine'];
+  captureLineSnapshot?: EmbeddedTableRenderParams['captureLineSnapshot'];
+  renderDrawingContent?: EmbeddedTableRenderParams['renderDrawingContent'];
+  applySdtDataset: EmbeddedTableRenderParams['applySdtDataset'];
+}): { element: HTMLElement | null; height: number; nextCumulativeLineCount: number } {
+  const {
+    doc,
+    block,
+    blockMeasure: tableMeasure,
+    cumulativeLineCount,
+    globalFromLine,
+    globalToLine,
+    contentWidthPx,
+    context,
+    renderLine,
+    captureLineSnapshot,
+    renderDrawingContent,
+    applySdtDataset,
+  } = params;
+
+  // Compute per-row segment counts (recursive, matching getCellLines/getEmbeddedRowLines).
+  const rowSegmentCounts = tableMeasure.rows.map((row: TableRowMeasure) => getEmbeddedRowSegmentCount(row));
+  const totalTableSegments = rowSegmentCounts.reduce((s: number, c: number) => s + c, 0);
+
+  const tableStartSegment = cumulativeLineCount;
+  const nextCumulativeLineCount = cumulativeLineCount + totalTableSegments;
+  const tableEndSegment = nextCumulativeLineCount;
+
+  // Skip entirely if no segments are in the visible range
+  if (tableEndSegment <= globalFromLine || tableStartSegment >= globalToLine) {
+    return { element: null, height: 0, nextCumulativeLineCount };
+  }
+
+  // Map global line range to local segment range within this embedded table
+  const localFrom = Math.max(0, globalFromLine - tableStartSegment);
+  const localTo = Math.min(totalTableSegments, globalToLine - tableStartSegment);
+
+  // Determine which rows to render and whether any need partial rendering
+  let segmentOffset = 0;
+  let embeddedFromRow = -1;
+  let embeddedToRow = -1;
+  // TODO: partialRowInfo is overwritten each iteration — if the visible segment range
+  // cuts through two different multi-segment rows, only the last one's info survives.
+  // TableFragment only supports a single partialRow, so fixing this requires a design change.
+  let partialRowInfo: PartialRowInfo | undefined;
+
+  for (let r = 0; r < tableMeasure.rows.length; r++) {
+    const rowSegs = rowSegmentCounts[r];
+    const rowStart = segmentOffset;
+    const rowEnd = segmentOffset + rowSegs;
+    segmentOffset = rowEnd;
+
+    // Skip rows completely outside the range
+    if (rowEnd <= localFrom || rowStart >= localTo) continue;
+
+    if (embeddedFromRow === -1) embeddedFromRow = r;
+    embeddedToRow = r + 1;
+
+    // Check if this row needs partial rendering (multi-segment row spanning the boundary)
+    if (rowSegs > 1 && (rowStart < localFrom || rowEnd > localTo)) {
+      const rowLocalFrom = Math.max(0, localFrom - rowStart);
+      const rowLocalTo = Math.min(rowSegs, localTo - rowStart);
+      const row = tableMeasure.rows[r];
+
+      const fromLineByCell: number[] = [];
+      const toLineByCell: number[] = [];
+      let partialHeight = 0;
+
+      for (const cell of row.cells) {
+        const cellTotal = getCellSegmentCount(cell);
+        const cellFrom = Math.min(rowLocalFrom, cellTotal);
+        const cellTo = Math.min(rowLocalTo, cellTotal);
+        fromLineByCell.push(cellFrom);
+        toLineByCell.push(cellTo);
+        partialHeight = Math.max(partialHeight, computeCellVisibleHeight(cell, cellFrom, cellTo));
+      }
+
+      partialRowInfo = {
+        rowIndex: r,
+        fromLineByCell,
+        toLineByCell,
+        isFirstPart: rowLocalFrom === 0,
+        isLastPart: rowLocalTo >= rowSegs,
+        partialHeight,
+      };
+    }
+  }
+
+  if (embeddedFromRow === -1) {
+    return { element: null, height: 0, nextCumulativeLineCount };
+  }
+
+  const visibleHeight = computeVisibleHeight(tableMeasure.rows, embeddedFromRow, embeddedToRow, partialRowInfo);
+
+  const tableWrapper = doc.createElement('div');
+  tableWrapper.style.position = 'relative';
+  tableWrapper.style.width = '100%';
+  tableWrapper.style.height = `${visibleHeight}px`;
+  tableWrapper.style.flexShrink = '0';
+  tableWrapper.style.boxSizing = 'border-box';
+
+  const tableEl = renderEmbeddedTable({
+    doc,
+    table: block,
+    measure: tableMeasure,
+    availableWidth: contentWidthPx,
+    context: { ...context, section: 'body' },
+    renderLine,
+    captureLineSnapshot,
+    renderDrawingContent,
+    applySdtDataset,
+    fromRow: embeddedFromRow,
+    toRow: embeddedToRow,
+    partialRow: partialRowInfo,
+  });
+  tableWrapper.appendChild(tableEl);
+
+  return { element: tableWrapper, height: visibleHeight, nextCumulativeLineCount };
+}
 
 /**
  * Apply paragraph-level visual styling such as borders and shading.
@@ -851,18 +1041,27 @@ export const renderTableCell = (deps: TableCellRenderDependencies): TableCellRen
     // Calculate total segments across all blocks for proper global index mapping.
     // Embedded tables expand recursively (matching the layout engine's getCellLines()
     // which uses getEmbeddedRowLines() for recursive nested table expansion).
-    // Other non-paragraph blocks (images, drawings) occupy 1 segment each.
+    // Non-paragraph blocks (images, drawings) occupy 1 segment each, except anchored
+    // blocks which are rendered out-of-flow and do not consume segment indices.
     const blockLineCounts: number[] = [];
     for (let i = 0; i < Math.min(blockMeasures.length, cellBlocks.length); i++) {
       const bm = blockMeasures[i];
+      const blk = cellBlocks[i];
       if (bm.kind === 'paragraph') {
         blockLineCounts.push((bm as ParagraphMeasure).lines?.length || 0);
       } else if (bm.kind === 'table') {
         // Embedded tables: recursively count segments (matches getCellLines expansion)
         blockLineCounts.push(getEmbeddedTableSegmentCount(bm as TableMeasure));
       } else {
-        // Non-paragraph blocks (image, drawing) occupy 1 segment
-        blockLineCounts.push(1);
+        // Anchored blocks are rendered out-of-flow — they don't consume segment slots.
+        // Skip them to stay in sync with the rendering loop which also skips them.
+        const anchor = (blk as ImageBlock | DrawingBlock)?.anchor;
+        if (anchor?.isAnchored) {
+          blockLineCounts.push(0);
+        } else {
+          // Non-anchored non-paragraph blocks (image, drawing) occupy 1 segment
+          blockLineCounts.push(1);
+        }
       }
     }
     const totalLines = blockLineCounts.reduce((a, b) => a + b, 0);
@@ -885,148 +1084,25 @@ export const renderTableCell = (deps: TableCellRenderDependencies): TableCellRen
       const block = cellBlocks[i];
 
       if (blockMeasure.kind === 'table' && block?.kind === 'table') {
-        const tableMeasure = blockMeasure as TableMeasure;
-
-        // Compute per-row segment counts (recursive, matching getCellLines/getEmbeddedRowLines).
-        const rowSegmentCounts = tableMeasure.rows.map((row: TableRowMeasure) => getEmbeddedRowSegmentCount(row));
-        const totalTableSegments = rowSegmentCounts.reduce((s: number, c: number) => s + c, 0);
-
-        const tableStartSegment = cumulativeLineCount;
-        cumulativeLineCount += totalTableSegments;
-        const tableEndSegment = cumulativeLineCount;
-
-        // Skip entirely if no segments are in the visible range
-        if (tableEndSegment <= globalFromLine || tableStartSegment >= globalToLine) {
-          continue;
-        }
-
-        // Map global line range to local segment range within this embedded table
-        const localFrom = Math.max(0, globalFromLine - tableStartSegment);
-        const localTo = Math.min(totalTableSegments, globalToLine - tableStartSegment);
-
-        // Determine which rows to render and whether any need partial rendering
-        let segmentOffset = 0;
-        let embeddedFromRow = -1;
-        let embeddedToRow = -1;
-        let partialRowInfo: PartialRowInfo | undefined;
-
-        for (let r = 0; r < tableMeasure.rows.length; r++) {
-          const rowSegs = rowSegmentCounts[r];
-          const rowStart = segmentOffset;
-          const rowEnd = segmentOffset + rowSegs;
-          segmentOffset = rowEnd;
-
-          // Skip rows completely outside the range
-          if (rowEnd <= localFrom || rowStart >= localTo) continue;
-
-          if (embeddedFromRow === -1) embeddedFromRow = r;
-          embeddedToRow = r + 1;
-
-          // Check if this row needs partial rendering (recursive row with nested tables)
-          if (rowSegs > 1 && (rowStart < localFrom || rowEnd > localTo)) {
-            // This row is partially visible — compute per-cell fromLine/toLine
-            const rowLocalFrom = Math.max(0, localFrom - rowStart);
-            const rowLocalTo = Math.min(rowSegs, localTo - rowStart);
-            const row = tableMeasure.rows[r];
-
-            const fromLineByCell: number[] = [];
-            const toLineByCell: number[] = [];
-            let partialHeight = 0;
-
-            for (const cell of row.cells) {
-              const cellTotal = getCellSegmentCount(cell);
-              const cellFrom = Math.min(rowLocalFrom, cellTotal);
-              const cellTo = Math.min(rowLocalTo, cellTotal);
-              fromLineByCell.push(cellFrom);
-              toLineByCell.push(cellTo);
-
-              // Compute visible height for this cell's segment range
-              let cellVisHeight = 0;
-              if (cell.blocks && cell.blocks.length > 0) {
-                let segIdx = 0;
-                for (const blk of cell.blocks) {
-                  if (blk.kind === 'paragraph') {
-                    const lines = (blk as ParagraphMeasure).lines || [];
-                    for (const line of lines) {
-                      if (segIdx >= cellFrom && segIdx < cellTo) {
-                        cellVisHeight += line.lineHeight || 0;
-                      }
-                      segIdx++;
-                    }
-                  } else if (blk.kind === 'table') {
-                    const nestedTable = blk as TableMeasure;
-                    for (const nestedRow of nestedTable.rows) {
-                      const nestedRowSegs = getEmbeddedRowSegmentCount(nestedRow);
-                      for (let s = 0; s < nestedRowSegs; s++) {
-                        if (segIdx >= cellFrom && segIdx < cellTo) {
-                          cellVisHeight += (nestedRow.height || 0) / nestedRowSegs;
-                        }
-                        segIdx++;
-                      }
-                    }
-                  } else {
-                    const blkHeight = 'height' in blk ? (blk as { height: number }).height : 0;
-                    if (blkHeight > 0) {
-                      if (segIdx >= cellFrom && segIdx < cellTo) {
-                        cellVisHeight += blkHeight;
-                      }
-                      segIdx++;
-                    }
-                  }
-                }
-              }
-              partialHeight = Math.max(partialHeight, cellVisHeight);
-            }
-
-            partialRowInfo = {
-              rowIndex: r,
-              fromLineByCell,
-              toLineByCell,
-              isFirstPart: rowLocalFrom === 0,
-              isLastPart: rowLocalTo >= rowSegs,
-              partialHeight,
-            };
-          }
-        }
-
-        if (embeddedFromRow === -1) {
-          continue;
-        }
-
-        // Calculate visible height (sum of visible row heights, using partial height where applicable)
-        let visibleHeight = 0;
-        for (let r = embeddedFromRow; r < embeddedToRow; r++) {
-          if (partialRowInfo && partialRowInfo.rowIndex === r) {
-            visibleHeight += partialRowInfo.partialHeight;
-          } else {
-            visibleHeight += tableMeasure.rows[r]?.height || 0;
-          }
-        }
-
-        const tableWrapper = doc.createElement('div');
-        tableWrapper.style.position = 'relative';
-        tableWrapper.style.width = '100%';
-        tableWrapper.style.height = `${visibleHeight}px`;
-        tableWrapper.style.flexShrink = '0';
-        tableWrapper.style.boxSizing = 'border-box';
-
-        const tableEl = renderEmbeddedTable({
+        const result = renderPartialEmbeddedTable({
           doc,
-          table: block as TableBlock,
-          measure: tableMeasure,
-          availableWidth: contentWidthPx,
-          context: { ...context, section: 'body' },
+          block: block as TableBlock,
+          blockMeasure: blockMeasure as TableMeasure,
+          cumulativeLineCount,
+          globalFromLine,
+          globalToLine,
+          contentWidthPx,
+          context,
           renderLine,
           captureLineSnapshot,
           renderDrawingContent,
           applySdtDataset,
-          fromRow: embeddedFromRow,
-          toRow: embeddedToRow,
-          partialRow: partialRowInfo,
         });
-        tableWrapper.appendChild(tableEl);
-        content.appendChild(tableWrapper);
-        flowCursorY += visibleHeight;
+        cumulativeLineCount = result.nextCumulativeLineCount;
+        if (result.element) {
+          content.appendChild(result.element);
+          flowCursorY += result.height;
+        }
         continue;
       }
 

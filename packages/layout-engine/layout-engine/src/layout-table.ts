@@ -170,7 +170,7 @@ function resolveTableFrame(
  *
  * @returns Rescaled column widths if clamping occurred, undefined otherwise.
  */
-function rescaleColumnWidths(
+export function rescaleColumnWidths(
   measureColumnWidths: number[] | undefined,
   measureTotalWidth: number,
   fragmentWidth: number,
@@ -337,15 +337,6 @@ type SplitPointResult = {
 const MIN_PARTIAL_ROW_HEIGHT = 20;
 
 /**
- * Get all lines from a cell's blocks (multi-block or single paragraph).
- *
- * Cells can have multiple blocks (cell.blocks) or a single paragraph (cell.paragraph).
- * This function normalizes access to all lines across all paragraph blocks.
- *
- * @param cell - Cell measure
- * @returns Array of all lines with their lineHeight
- */
-/**
  * Get the line segments for a single embedded table row.
  *
  * If any cell in the row contains nested tables, recursively expand using
@@ -374,7 +365,7 @@ function getEmbeddedRowLines(row: TableRowMeasure): Array<{ lineHeight: number }
   return tallestLines.length > 0 ? tallestLines : [{ lineHeight: row.height || 0 }];
 }
 
-function getCellLines(cell: TableRowMeasure['cells'][number]): Array<{ lineHeight: number }> {
+export function getCellLines(cell: TableRowMeasure['cells'][number]): Array<{ lineHeight: number }> {
   // Multi-block cells use the `blocks` array
   if (cell.blocks && cell.blocks.length > 0) {
     const allLines: Array<{ lineHeight: number }> = [];
@@ -415,7 +406,6 @@ function getCellLines(cell: TableRowMeasure['cells'][number]): Array<{ lineHeigh
 
   return [];
 }
-
 
 type CellPadding = { top: number; bottom: number; left: number; right: number };
 
@@ -1404,7 +1394,14 @@ export function layoutTableBlock({
     // If still no rows fit after retry, force split
     // This handles edge case where row is too tall to fit on empty page
     if (endRow === bodyStartRow && partialRow === null) {
-      const forcedPartialRow = computePartialRow(bodyStartRow, block.rows[bodyStartRow], measure, availableForBody, undefined, fullPageHeight);
+      const forcedPartialRow = computePartialRow(
+        bodyStartRow,
+        block.rows[bodyStartRow],
+        measure,
+        availableForBody,
+        undefined,
+        fullPageHeight,
+      );
       const forcedEndRow = bodyStartRow + 1;
       const fragmentHeight = forcedPartialRow.partialHeight + (repeatHeaderCount > 0 ? headerHeight : 0);
 

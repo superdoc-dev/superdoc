@@ -1,30 +1,37 @@
 <script setup lang="ts">
-const file = ref<File | null>(null);
+import { SuperDoc } from 'superdoc'
 
-const handleFile = (event: Event) => {
-  const input = event.target as HTMLInputElement;
+const editor = ref<HTMLDivElement | null>(null);
+const file = ref<File | null>(null)
 
-  const selected = input.files?.[0];
+let superdoc: SuperDoc | null = null;
 
-  if (selected) {
-    file.value = selected;
-  }
+const handleFile = (e: Event) => {
+  const input = e.target as HTMLInputElement
+  if (input.files?.[0]) file.value = input.files[0]
 }
+
+const initEditor = () => {
+  if (!editor.value || !file.value) return
+  superdoc?.destroy()
+  superdoc = new SuperDoc({
+    selector: editor.value,
+    documentMode: 'editing',
+    document: file.value,
+  })
+}
+
+watch(file, initEditor)
+onBeforeUnmount(() => superdoc?.destroy())
 </script>
 
 <template>
   <div>
-    <input
-      type="file"
-      accept=".docx"
-      @change="handleFile"
-    >
+    <div style="padding: 1rem; background: #f5f5f5">
+      <input type="file" accept=".docx" @change="handleFile" />
+    </div>
     <ClientOnly>
-      <DocEditor
-        v-if="file"
-        :document="file"
-        :user="{ name: 'Vue User', email: 'user@company.com' }"
-      />
+      <div ref="editor" style="height: calc(100vh - 60px); overflow: auto;" />
     </ClientOnly>
   </div>
 </template>

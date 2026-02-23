@@ -1653,7 +1653,10 @@ describe('measureBlock', () => {
       }
     });
 
-    it('positions leader from/to correctly for right-aligned tab without indent', async () => {
+    it.each([
+      { label: 'without indent', indentLeft: 0 },
+      { label: 'with indent', indentLeft: 36 },
+    ])('positions leader from/to correctly for right-aligned tab $label', async ({ indentLeft }) => {
       const textBlock: FlowBlock = {
         kind: 'paragraph',
         id: '0-paragraph',
@@ -1661,9 +1664,16 @@ describe('measureBlock', () => {
         attrs: {},
       };
 
+      const pageNumBlock: FlowBlock = {
+        kind: 'paragraph',
+        id: '1-paragraph',
+        runs: [{ text: '42', fontFamily: 'Arial', fontSize: 16 }],
+        attrs: {},
+      };
+
       const block: FlowBlock = {
         kind: 'paragraph',
-        id: '0-paragraph',
+        id: '2-paragraph',
         runs: [
           { text: 'Chapter 1', fontFamily: 'Arial', fontSize: 16 },
           {
@@ -1677,11 +1687,15 @@ describe('measureBlock', () => {
         ],
         attrs: {
           tabs: [{ pos: 4500, val: 'end', leader: 'dot' }],
+          ...(indentLeft > 0 && { indent: { left: indentLeft } }),
         },
       };
 
       const textMeasure = expectParagraphMeasure(await measureBlock(textBlock, 1000));
       const textWidth = textMeasure.lines[0].width;
+
+      const pageNumMeasure = expectParagraphMeasure(await measureBlock(pageNumBlock, 1000));
+      const pageNumWidth = pageNumMeasure.lines[0].width;
 
       const measure = expectParagraphMeasure(await measureBlock(block, 1000));
       expect(measure.lines).toHaveLength(1);
@@ -1691,53 +1705,10 @@ describe('measureBlock', () => {
       expect(leaders!.length).toBe(1);
 
       const leader = leaders![0];
-      expect(leader.from).toBeCloseTo(textWidth, 0);
-      expect(leader.to).toBeLessThan(300);
-    });
+      expect(leader.from).toBeCloseTo(textWidth + indentLeft, 0);
 
-    it('positions leader from/to correctly for right-aligned tab with indent', async () => {
-      const textBlock: FlowBlock = {
-        kind: 'paragraph',
-        id: '0-paragraph',
-        runs: [{ text: 'Chapter 1', fontFamily: 'Arial', fontSize: 16 }],
-        attrs: {},
-      };
-
-      const block: FlowBlock = {
-        kind: 'paragraph',
-        id: '0-paragraph',
-        runs: [
-          { text: 'Chapter 1', fontFamily: 'Arial', fontSize: 16 },
-          {
-            kind: 'tab',
-            leader: 'dot',
-            text: '\t',
-            pmStart: 9,
-            pmEnd: 10,
-          },
-          { text: '42', fontFamily: 'Arial', fontSize: 16 },
-        ],
-        attrs: {
-          tabs: [{ pos: 4500, val: 'end', leader: 'dot' }],
-          indent: {
-            left: 36,
-          },
-        },
-      };
-
-      const textMeasure = expectParagraphMeasure(await measureBlock(textBlock, 1000));
-      const textWidth = textMeasure.lines[0].width;
-
-      const measure = expectParagraphMeasure(await measureBlock(block, 1000));
-      expect(measure.lines).toHaveLength(1);
-
-      const leaders = measure.lines[0].leaders;
-      expect(leaders).toBeDefined();
-      expect(leaders!.length).toBe(1);
-
-      const leader = leaders![0];
-      expect(leader.from).toBeCloseTo(textWidth + 36, 0);
-      expect(leader.to).toBeLessThan(300);
+      // Tab stop is 4500 twips = 300px; right-aligned "42" ends at 300px
+      expect(leader.to).toBeCloseTo(300 - pageNumWidth, 0);
     });
 
     it('preserves trailing spaces after tabs when line breaks', async () => {

@@ -1701,8 +1701,7 @@ describe('measureBlock', () => {
       expect(measure.lines).toHaveLength(1);
 
       const leaders = measure.lines[0].leaders;
-      expect(leaders).toBeDefined();
-      expect(leaders!.length).toBe(1);
+      expect(leaders).toHaveLength(1);
 
       const leader = leaders![0];
       expect(leader.from).toBeCloseTo(textWidth + indentLeft, 0);

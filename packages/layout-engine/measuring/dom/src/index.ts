@@ -1422,9 +1422,8 @@ async function measureParagraphBlock(block: ParagraphBlock, maxWidth: number): P
       // Emit leader decoration if requested
       if (stop && stop.leader && stop.leader !== 'none') {
         const leaderStyle: 'heavy' | 'dot' | 'hyphen' | 'underscore' | 'middleDot' = stop.leader;
-        const relativeTarget = clampedTarget - effectiveIndent;
-        const from = Math.min(originX + effectiveIndent, relativeTarget);
-        const to = Math.max(originX, relativeTarget);
+        const from = Math.min(originX + effectiveIndent, clampedTarget);
+        const to = Math.max(originX + effectiveIndent, clampedTarget);
         if (!currentLine.leaders) currentLine.leaders = [];
         currentLine.leaders.push({ from, to, style: leaderStyle });
       }
@@ -2387,9 +2386,8 @@ async function measureParagraphBlock(block: ParagraphBlock, maxWidth: number): P
         // Emit leader decoration if requested
         if (stop && stop.leader && stop.leader !== 'none' && stop.leader !== 'middleDot') {
           const leaderStyle: 'heavy' | 'dot' | 'hyphen' | 'underscore' = stop.leader;
-          const relativeTarget = clampedTarget - effectiveIndent;
-          const from = Math.min(originX + effectiveIndent, relativeTarget);
-          const to = Math.max(originX, relativeTarget);
+          const from = Math.min(originX + effectiveIndent, clampedTarget);
+          const to = Math.max(originX + effectiveIndent, clampedTarget);
           if (!currentLine.leaders) currentLine.leaders = [];
           currentLine.leaders.push({ from, to, style: leaderStyle });
         }

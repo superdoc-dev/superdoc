@@ -9,31 +9,36 @@ keywords: "document engine, document api, sdk, cli, headless docx, document auto
 Document Engine is in <strong>alpha</strong> and subject to breaking changes while the contract and adapters continue to evolve.
 </Info>
 
-Document Engine is the programmatic surface of SuperDoc. It gives you four ways to read and edit `.docx` files without a visible editor:
+Document Engine gives you four ways to read and edit `.docx` files without a visible editor:
 
-| Surface | Use case | Runtime |
+| Surface | Best for | Runtime |
 | --- | --- | --- |
-| [Document API](/document-api/overview) | In-browser editing via `editor.doc.*` methods | Browser (ProseMirror) |
-| [SDKs](/document-engine/sdks) | Node.js and Python wrappers for backend automation | Node / Python |
-| [CLI](/document-engine/cli) | Terminal commands for scripting and CI pipelines | Any shell |
-| [MCP Server](/document-engine/mcp) | AI agent access via the Model Context Protocol | Local subprocess |
+| [Document API](/document-api/overview) | In-browser editing via `editor.doc.*` | Browser |
+| [SDKs](/document-engine/sdks) | Backend automation with typed methods | Node / Python |
+| [CLI](/document-engine/cli) | Scripts and CI pipelines | Any shell |
+| [MCP Server](/document-engine/mcp) | AI agents (Claude Code, Cursor, custom) | Local subprocess |
 
-All four surfaces share the same operation set. An operation like `find` is available as `editor.doc.find()` in the browser, `superdoc.doc.find()` in the SDK, `superdoc find` in the CLI, and `superdoc_find` in MCP.
+All four share the same operation set. `find` is `editor.doc.find()` in the browser, `superdoc.doc.find()` in the SDK, `superdoc find` in the CLI, and `superdoc_find` in MCP.
 
 ## How it works
 
+```mermaid
+flowchart TD
+    API["Document API<br/><em>source of truth</em>"]
+    API --> CLI["CLI<br/>terminal interface"]
+    API --> MCP["MCP Server<br/>AI agent interface"]
+    API --> SDK["Node SDK / Python SDK<br/>typed wrappers over CLI"]
+```
+
 The Document API defines the canonical operations. The CLI and MCP server wrap them for different consumers. The SDKs manage the CLI process and expose typed methods.
 
-```
-Document API (source of truth)
-  → CLI (terminal interface)
-  → MCP Server (AI agent interface)
-  → Node SDK / Python SDK (typed wrappers over CLI)
-```
+## Which surface should I use?
 
-## Where to start
+| Your setup | Surface | Why |
+| --- | --- | --- |
+| Web app with a visible editor | [Document API](/document-api/overview) | Direct access via `editor.doc.*` — no network round-trips |
+| AI agent (Claude Code, Cursor, Windsurf, custom) | [MCP Server](/document-engine/mcp) | Sessions keep the editor alive across tool calls |
+| Backend automation (Node.js / Python) | [SDKs](/document-engine/sdks) | Typed methods, session management, error handling built in |
+| Shell scripts or CI pipelines | [CLI](/document-engine/cli) | Stateless one-shot commands — no process to manage |
+| Serverless (Lambda, Vercel, Workers) | [CLI](/document-engine/cli) or [SDKs](/document-engine/sdks) | Open the file, run the operation, return the result |
 
-- **Building a web editor?** Start with the [Document API](/document-api/overview).
-- **Automating documents from a backend?** Start with the [SDKs](/document-engine/sdks).
-- **Scripting from the terminal or CI?** Start with the [CLI](/document-engine/cli).
-- **Connecting AI agents (Claude, Cursor, Windsurf)?** Start with the [MCP Server](/document-engine/mcp).

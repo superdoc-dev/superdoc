@@ -64,6 +64,7 @@ import {
   type TableBorders,
   type TableBorderValue,
   effectiveTableCellSpacing,
+  LeaderDecoration,
 } from '@superdoc/contracts';
 import type { WordParagraphLayoutOutput } from '@superdoc/word-layout';
 import {
@@ -1418,6 +1419,7 @@ async function measureParagraphBlock(block: ParagraphBlock, maxWidth: number): P
       currentLine.maxFontSize = Math.max(currentLine.maxFontSize, 12);
       currentLine.toRun = runIndex;
       currentLine.toChar = 1; // tab is a single character
+      let currentLeader: LeaderDecoration | null = null;
 
       // Emit leader decoration if requested
       if (stop && stop.leader && stop.leader !== 'none') {
@@ -1425,7 +1427,8 @@ async function measureParagraphBlock(block: ParagraphBlock, maxWidth: number): P
         const from = Math.min(originX + effectiveIndent, clampedTarget);
         const to = Math.max(originX + effectiveIndent, clampedTarget);
         if (!currentLine.leaders) currentLine.leaders = [];
-        currentLine.leaders.push({ from, to, style: leaderStyle });
+        currentLeader = { from, to, style: leaderStyle };
+        currentLine.leaders.push(currentLeader);
       }
 
       if (stop) {
@@ -1453,11 +1456,9 @@ async function measureParagraphBlock(block: ParagraphBlock, maxWidth: number): P
               groupStartX = Math.max(0, relativeTarget - beforeDecimal);
             }
 
-            // Update leader "to" ensuring leaders end where right-aligned content begins
-            if (currentLine.leaders && currentLine.leaders.length > 0) {
-              const lastLeader = currentLine.leaders.at(-1);
-
-              if (lastLeader) lastLeader.to = groupStartX + effectiveIndent;
+            // Update current leader "to" ensuring leaders end where right-aligned content begins
+            if (currentLeader) {
+              currentLeader.to = groupStartX + effectiveIndent;
             }
 
             // Set up active tab group for subsequent run processing

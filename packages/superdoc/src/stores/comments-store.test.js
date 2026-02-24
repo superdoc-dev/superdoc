@@ -343,6 +343,31 @@ describe('comments-store', () => {
     expect(store.activeComment).toBeNull();
   });
 
+  it('removes stale tracked-change anchor when live position key is commentId', () => {
+    const trackedComment = {
+      commentId: 'change-5b',
+      importedId: 'import-change-5b',
+      fileId: 'doc-1',
+      trackedChange: true,
+      selection: { source: 'super-editor', selectionBounds: {} },
+    };
+    store.commentsList = [trackedComment];
+    store.editorCommentPositions = {
+      'change-5b': { start: 1, end: 5 },
+    };
+    store.activeComment = 'change-5b';
+
+    getTrackChangesMock.mockReturnValueOnce([]);
+    const removedCount = store.syncTrackedChangePositionsWithDocument({
+      documentId: 'doc-1',
+      editor: { state: { doc: {} } },
+    });
+
+    expect(removedCount).toBe(1);
+    expect(store.editorCommentPositions).toEqual({});
+    expect(store.activeComment).toBeNull();
+  });
+
   it('removes child anchors when stale importedId root is referenced by commentId', () => {
     const trackedComment = {
       commentId: 'change-6',

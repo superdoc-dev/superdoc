@@ -2162,9 +2162,14 @@ export class DomPainter {
 		const gap = page.columns.gap;
 		const columnWidth = (contentWidth - gap * (columnCount - 1)) / columnCount;
 
-		for (let i = 0; i < columnCount - 1; i++) {
-			const separatorX = leftMargin + (i + 1) * columnWidth + i * gap + gap / 2;
-			const separatorEl = this.doc.createElement('div');
+    // Given the separator will have 1px width, ensure column has a larger width.
+    if (columnWidth <= 1) {
+      return;
+    }
+
+    for (let i = 0; i < columnCount - 1; i++) {
+      const separatorX = leftMargin + (i + 1) * columnWidth + i * gap + gap / 2;
+      const separatorEl = this.doc.createElement('div');
 
       separatorEl.style.position = 'absolute';
       separatorEl.style.left = `${separatorX}px`;

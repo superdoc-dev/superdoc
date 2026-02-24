@@ -38,19 +38,33 @@ const getCommentPosition = computed(() => (comment) => {
   return { top: `${comment.top}px` };
 });
 
+const getCommentAliasIds = (comment) =>
+  [comment?.importedId, comment?.commentId].filter((id) => id !== undefined && id !== null).map((id) => String(id));
+
+const resolvePositionEntry = (comment, preferredId) => {
+  const candidates = [preferredId, ...getCommentAliasIds(comment)];
+  for (const key of candidates) {
+    const entry = editorCommentPositions.value[key];
+    if (entry !== undefined) return { key, entry };
+  }
+  return { key: null, entry: null };
+};
+
 const handleDialog = (dialog) => {
   if (!dialog) return;
   const { elementRef, commentId } = dialog;
   if (!elementRef) return;
 
   nextTick(() => {
-    const id = commentId;
+    const id = commentId !== undefined && commentId !== null ? String(commentId) : null;
+    if (!id) return;
     if (renderedSizes.value.some((item) => item.id == id)) return;
 
-    const comment = getFloatingComments.value.find((c) => c.commentId === id || c.importedId == id);
-    const positionKey = id || comment?.importedId;
-    const positionEntry = editorCommentPositions.value[positionKey];
-    const position = positionEntry?.bounds || {};
+    const comment = getFloatingComments.value.find((c) => getCommentAliasIds(c).includes(id));
+    if (!comment) return;
+
+    const { entry: positionEntry } = resolvePositionEntry(comment, id);
+    const position = positionEntry?.bounds ? { ...positionEntry.bounds } : {};
 
     // If this is a PDF, set the position based on selection bounds
     if (props.currentDocument.type === 'application/pdf') {
@@ -127,8 +141,8 @@ watch(activeComment, (newVal, oldVal) => {
 
     const comment = commentsStore.getComment(activeComment.value);
     if (!comment) return (verticalOffset.value = 0);
-    const commentKey = comment.commentId || comment.importedId;
-    const renderedItem = renderedSizes.value.find((item) => item.id === commentKey);
+    const commentAliases = getCommentAliasIds(comment);
+    const renderedItem = renderedSizes.value.find((item) => commentAliases.includes(String(item.id)));
     if (!renderedItem) return (verticalOffset.value = 0);
 
     const selectionTop = comment.selection.selectionBounds.top;
@@ -159,12 +173,10 @@ watch(activeZoom, () => {
 watch(
   getFloatingComments,
   (comments) => {
-    const activeIds = new Set(
-      comments
-        .map((comment) => comment?.commentId ?? comment?.importedId)
-        .filter((id) => id !== undefined && id !== null)
-        .map((id) => String(id)),
-    );
+    const activeIds = new Set();
+    comments.forEach((comment) => {
+      getCommentAliasIds(comment).forEach((id) => activeIds.add(id));
+    });
 
     if (!activeIds.size) {
       renderedSizes.value = [];

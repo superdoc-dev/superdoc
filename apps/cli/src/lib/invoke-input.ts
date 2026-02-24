@@ -59,6 +59,12 @@ const PARAM_RENAMES: Partial<Record<CliExposedOperationId, Record<string, string
 const CLI_LEVEL_KEYS = new Set(['doc', 'sessionId', 'out', 'dryRun', 'force', 'expectedRevision', 'changeMode']);
 
 /**
+ * Operations where `changeMode` is part of the API input schema, not a CLI-level option.
+ * For these, `changeMode` must NOT be stripped from the input.
+ */
+const CHANGEMODE_IN_INPUT = new Set<CliExposedOperationId>(['mutations.apply', 'mutations.preview']);
+
+/**
  * Extracts the invoke-level input from a CLI input object.
  *
  * Returns the input that should be passed to `editor.doc.invoke({ input })`.
@@ -71,8 +77,9 @@ export function extractInvokeInput(operationId: CliExposedOperationId, cliInput:
 
   const renames = PARAM_RENAMES[operationId];
   const apiInput: Record<string, unknown> = {};
+  const keepChangeMode = CHANGEMODE_IN_INPUT.has(operationId);
   for (const [key, value] of Object.entries(cliInput)) {
-    if (CLI_LEVEL_KEYS.has(key)) continue;
+    if (CLI_LEVEL_KEYS.has(key) && !(key === 'changeMode' && keepChangeMode)) continue;
     const apiKey = renames?.[key] ?? key;
     apiInput[apiKey] = value;
   }

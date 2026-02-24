@@ -3,6 +3,7 @@ packages:
   - e2e-tests/templates/vue
   - tests/visual
   - tests/behavior
+  - tests/doc-api-stories
   - apps/*
   - apps/cli/platforms/*
   - packages/**/*

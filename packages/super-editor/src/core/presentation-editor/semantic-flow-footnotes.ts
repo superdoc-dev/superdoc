@@ -104,9 +104,6 @@ function createSemanticFootnoteHeadingBlock(style: { fontFamily: string; fontSiz
 }
 
 function cloneFlowBlock(block: FlowBlock): FlowBlock {
-  if (typeof globalThis.structuredClone === 'function') {
-    return globalThis.structuredClone(block) as FlowBlock;
-  }
   return JSON.parse(JSON.stringify(block)) as FlowBlock;
 }
 

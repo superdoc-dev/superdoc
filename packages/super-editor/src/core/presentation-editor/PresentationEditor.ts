@@ -210,15 +210,6 @@ const MAX_SELECTION_RECTS_PER_USER = 100;
 const SEMANTIC_RESIZE_DEBOUNCE_MS = 120;
 /** Minimum semantic content width in pixels. */
 const MIN_SEMANTIC_CONTENT_WIDTH_PX = 1;
-/**
- * Stricter margin normalizer that also rejects negative values.
- * Wraps {@link normalizeMargin} from layout-bridge with an additional `>= 0` guard.
- * Used for semantic layout margins where negative values are not valid.
- */
-const normalizeMarginNonNegative = (value: number | undefined, fallback: number): number => {
-  const resolved = normalizeMargin(value, fallback);
-  return resolved >= 0 ? resolved : fallback;
-};
 
 const GLOBAL_PERFORMANCE: Performance | undefined = typeof performance !== 'undefined' ? performance : undefined;
 
@@ -1551,26 +1542,24 @@ export class PresentationEditor extends EventEmitter {
     if (mode === 'none') {
       return { left: 0, right: 0, top: 0, bottom: 0 };
     }
+
+    const clamp = (value: number | undefined, fallback: number): number =>
+      Math.max(0, normalizeMargin(value, fallback));
+
     if (mode === 'custom') {
       const custom = this.#layoutOptions.semanticOptions?.customMargins;
       return {
-        left: normalizeMarginNonNegative(custom?.left, normalizeMarginNonNegative(margins.left, DEFAULT_MARGINS.left!)),
-        right: normalizeMarginNonNegative(
-          custom?.right,
-          normalizeMarginNonNegative(margins.right, DEFAULT_MARGINS.right!),
-        ),
-        top: normalizeMarginNonNegative(custom?.top, normalizeMarginNonNegative(margins.top, DEFAULT_MARGINS.top!)),
-        bottom: normalizeMarginNonNegative(
-          custom?.bottom,
-          normalizeMarginNonNegative(margins.bottom, DEFAULT_MARGINS.bottom!),
-        ),
+        left: clamp(custom?.left, clamp(margins.left, DEFAULT_MARGINS.left!)),
+        right: clamp(custom?.right, clamp(margins.right, DEFAULT_MARGINS.right!)),
+        top: clamp(custom?.top, clamp(margins.top, DEFAULT_MARGINS.top!)),
+        bottom: clamp(custom?.bottom, clamp(margins.bottom, DEFAULT_MARGINS.bottom!)),
       };
     }
     // mode === 'firstSection' — keep horizontal margins from the first DOCX section
     // but zero vertical margins so stacked pages form a seamless continuous surface.
     return {
-      left: normalizeMarginNonNegative(margins.left, DEFAULT_MARGINS.left!),
-      right: normalizeMarginNonNegative(margins.right, DEFAULT_MARGINS.right!),
+      left: clamp(margins.left, DEFAULT_MARGINS.left!),
+      right: clamp(margins.right, DEFAULT_MARGINS.right!),
       top: 0,
       bottom: 0,
     };

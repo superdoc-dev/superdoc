@@ -1083,11 +1083,8 @@ export async function incrementalLayout(
     perfLog(`[Perf] 4.1.6 Pre-layout footers for height: ${(footerPreEnd - footerPreStart).toFixed(2)}ms`);
   }
 
-  // In semantic mode, nextBlocks were already rewritten during pre-processing.
-  const blocksForLayout = nextBlocks;
-
   const layoutStart = performance.now();
-  let layout = layoutDocument(blocksForLayout, measures, {
+  let layout = layoutDocument(nextBlocks, measures, {
     ...options,
     headerContentHeights, // Pass header heights to prevent overlap (per-variant)
     footerContentHeights, // Pass footer heights to prevent overlap (per-variant)
@@ -1106,7 +1103,7 @@ export async function incrementalLayout(
   // Steps: paginate -> build numbering context -> resolve PAGE/NUMPAGES tokens
   //        -> remeasure affected blocks -> re-paginate -> repeat until stable
   const maxIterations = 3;
-  let currentBlocks = blocksForLayout;
+  let currentBlocks = nextBlocks;
   let currentMeasures = measures;
   let iteration = 0;
 

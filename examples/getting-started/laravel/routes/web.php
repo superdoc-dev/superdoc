@@ -2,4 +2,4 @@
 
 use Illuminate\Support\Facades\Route;
 
-Route::livewire('/editor', 'pages::editor');
+Route::get('/', fn () => view('editor'));

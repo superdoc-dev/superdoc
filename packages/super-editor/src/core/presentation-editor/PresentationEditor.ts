@@ -1543,8 +1543,10 @@ export class PresentationEditor extends EventEmitter {
       return { left: 0, right: 0, top: 0, bottom: 0 };
     }
 
-    const clamp = (value: number | undefined, fallback: number): number =>
-      Math.max(0, normalizeMargin(value, fallback));
+    const clamp = (value: number | undefined, fallback: number): number => {
+      const v = normalizeMargin(value, fallback);
+      return v >= 0 ? v : fallback;
+    };
 
     if (mode === 'custom') {
       const custom = this.#layoutOptions.semanticOptions?.customMargins;

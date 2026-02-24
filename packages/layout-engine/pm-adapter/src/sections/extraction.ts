@@ -6,6 +6,7 @@
 
 import type { PMNode } from '../types.js';
 import type { ParagraphProperties, SectionVerticalAlign } from './types.js';
+import { ColumnLayout } from '@superdoc/contracts';
 
 const TWIPS_PER_INCH = 1440;
 const PX_PER_INCH = 96;
@@ -217,9 +218,7 @@ function extractPageNumbering(elements: SectionElement[]):
 /**
  * Extract columns from <w:cols> element.
  */
-function extractColumns(
-  elements: SectionElement[],
-): { count: number; gap: number; withSeparator?: boolean } | undefined {
+function extractColumns(elements: SectionElement[]): ColumnLayout | undefined {
   const cols = elements.find((el) => el?.name === 'w:cols');
   if (!cols?.attributes) return undefined;
 
@@ -299,7 +298,7 @@ export function extractSectionData(para: PMNode): {
   type?: SectionType;
   pageSizePx?: { w: number; h: number };
   orientation?: Orientation;
-  columnsPx?: { count: number; gap: number; withSeparator?: boolean };
+  columnsPx?: ColumnLayout;
   titlePg?: boolean;
   headerRefs?: HeaderRefType;
   footerRefs?: HeaderRefType;

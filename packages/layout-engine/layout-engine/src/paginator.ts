@@ -4,7 +4,7 @@ export type NormalizedColumns = ColumnLayout & { width: number };
 
 export type ConstraintBoundary = {
   y: number;
-  columns: { count: number; gap: number; withSeparator?: boolean };
+  columns: ColumnLayout;
 };
 
 export type PageState = {
@@ -27,7 +27,7 @@ export type PaginatorOptions = {
   getActiveFooterDistance(): number;
   getActivePageSize(): { w: number; h: number };
   getDefaultPageSize(): { w: number; h: number };
-  getActiveColumns(): { count: number; gap: number; withSeparator?: boolean };
+  getActiveColumns(): ColumnLayout;
   getCurrentColumns(): NormalizedColumns;
   createPage(number: number, pageMargins: PageMargins, pageSizeOverride?: { w: number; h: number }): Page;
   onNewPage?: (state: PageState) => void;
@@ -37,7 +37,7 @@ export function createPaginator(opts: PaginatorOptions) {
   const states: PageState[] = [];
   const pages: Page[] = [];
 
-  const getActiveColumnsForState = (state: PageState): { count: number; gap: number; withSeparator?: boolean } => {
+  const getActiveColumnsForState = (state: PageState): ColumnLayout => {
     if (state.activeConstraintIndex >= 0 && state.constraintBoundaries[state.activeConstraintIndex]) {
       return state.constraintBoundaries[state.activeConstraintIndex].columns;
     }

@@ -1,4 +1,4 @@
-import type { FlowBlock, SectionVerticalAlign } from '@superdoc/contracts';
+import type { ColumnLayout, FlowBlock, SectionVerticalAlign } from '@superdoc/contracts';
 
 /**
  * Section-level formatting properties that control page layout.
@@ -16,7 +16,7 @@ import type { FlowBlock, SectionVerticalAlign } from '@superdoc/contracts';
 export type SectionProps = {
   margins?: { header?: number; footer?: number; top?: number; right?: number; bottom?: number; left?: number };
   pageSize?: { w: number; h: number };
-  columns?: { count: number; gap: number; withSeparator?: boolean };
+  columns?: ColumnLayout;
   orientation?: 'portrait' | 'landscape';
   vAlign?: SectionVerticalAlign;
 };

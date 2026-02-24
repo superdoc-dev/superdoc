@@ -17,6 +17,7 @@ import {
   resolvePageNumberTokens,
   type NumberingContext,
   SEMANTIC_PAGE_HEIGHT_PX,
+  SINGLE_COLUMN_DEFAULT,
 } from '@superdoc/layout-engine';
 import { remeasureParagraph } from './remeasure';
 import { computeDirtyRegions } from './diff';
@@ -128,7 +129,10 @@ const COLUMN_EPSILON = 0.01;
 type NormalizedColumns = ColumnLayout & { width: number };
 type PageColumns = NormalizedColumns & { left: number; contentWidth: number };
 
-const normalizeColumnsForFootnotes = (input: ColumnLayout | undefined, contentWidth: number): NormalizedColumns => {
+const normalizeColumnsForFootnotes = (
+  input: Readonly<ColumnLayout> | undefined,
+  contentWidth: number,
+): NormalizedColumns => {
   const rawCount = Number.isFinite(input?.count) ? Math.floor(input!.count) : 1;
   const count = Math.max(1, rawCount || 1);
   const gap = Math.max(0, input?.gap ?? 0);
@@ -150,7 +154,7 @@ const normalizeColumnsForFootnotes = (input: ColumnLayout | undefined, contentWi
 
 const resolveSectionColumnsByIndex = (options: LayoutOptions, blocks?: FlowBlock[]): Map<number, ColumnLayout> => {
   const result = new Map<number, ColumnLayout>();
-  let activeColumns: ColumnLayout = options.columns ?? { count: 1, gap: 0, withSeparator: false };
+  let activeColumns: ColumnLayout = options.columns ?? { ...SINGLE_COLUMN_DEFAULT };
 
   if (blocks && blocks.length > 0) {
     for (const block of blocks) {
@@ -193,8 +197,7 @@ const resolvePageColumns = (layout: Layout, options: LayoutOptions, blocks?: Flo
     );
     const contentWidth = pageSize.w - (marginLeft + marginRight);
     const sectionIndex = page.sectionIndex ?? 0;
-    const columnsConfig = sectionColumns.get(sectionIndex) ??
-      options.columns ?? { count: 1, gap: 0, withSeparator: false };
+    const columnsConfig = sectionColumns.get(sectionIndex) ?? options.columns ?? SINGLE_COLUMN_DEFAULT;
     const normalized = normalizeColumnsForFootnotes(columnsConfig, contentWidth);
     result.set(pageIndex, { ...normalized, left: marginLeft, contentWidth });
   }
@@ -267,7 +270,7 @@ const resolveFootnoteMeasurementWidth = (options: LayoutOptions, blocks?: FlowBl
     left: normalizeMargin(options.margins?.left, DEFAULT_MARGINS.left),
   };
   let width = pageSize.w - (margins.left + margins.right);
-  let activeColumns: ColumnLayout = options.columns ?? { count: 1, gap: 0, withSeparator: false };
+  let activeColumns: ColumnLayout = options.columns ?? SINGLE_COLUMN_DEFAULT;
   let activePageSize = pageSize;
   let activeMargins = { ...margins };
 
@@ -1510,7 +1513,7 @@ export async function incrementalLayout(
           );
           const pageContentWidth = pageSize.w - (marginLeft + marginRight);
           const fallbackColumns = normalizeColumnsForFootnotes(
-            options.columns ?? { count: 1, gap: 0, withSeparator: false },
+            options.columns ?? SINGLE_COLUMN_DEFAULT,
             pageContentWidth,
           );
           const columns = pageColumns.get(pageIndex) ?? {

@@ -929,11 +929,8 @@ export type SectionBreakBlock = {
     even?: string;
     odd?: string;
   };
-  columns?: {
-    count: number;
-    gap: number;
+  columns?: ColumnLayout & {
     equalWidth?: boolean;
-    withSeparator?: boolean;
   };
   /**
    * Vertical alignment of content within the section's pages.

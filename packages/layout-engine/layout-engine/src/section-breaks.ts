@@ -1,4 +1,4 @@
-import type { SectionBreakBlock } from '@superdoc/contracts';
+import type { ColumnLayout, SectionBreakBlock } from '@superdoc/contracts';
 
 export type SectionState = {
   activeTopMargin: number;
@@ -15,8 +15,8 @@ export type SectionState = {
   pendingFooterDistance: number | null;
   activePageSize: { w: number; h: number };
   pendingPageSize: { w: number; h: number } | null;
-  activeColumns: { count: number; gap: number; withSeparator?: boolean };
-  pendingColumns: { count: number; gap: number; withSeparator?: boolean } | null;
+  activeColumns: ColumnLayout;
+  pendingColumns: ColumnLayout | null;
   activeOrientation: 'portrait' | 'landscape' | null;
   pendingOrientation: 'portrait' | 'landscape' | null;
   hasAnyPages: boolean;
@@ -29,7 +29,7 @@ export type BreakDecision = {
 };
 
 /** Default single-column configuration per OOXML spec (absence of w:cols element) */
-const SINGLE_COLUMN_DEFAULT: Readonly<{ count: number; gap: number; withSeparator?: boolean }> = {
+export const SINGLE_COLUMN_DEFAULT: Readonly<ColumnLayout> = {
   count: 1,
   gap: 0,
 };
@@ -42,11 +42,7 @@ const SINGLE_COLUMN_DEFAULT: Readonly<{ count: number; gap: number; withSeparato
  * @param blockColumns - The columns property from the section break block (may be undefined)
  * @returns Column configuration with count, gap, and separator presence
  */
-function getColumnConfig(blockColumns: { count: number; gap: number; withSeparator?: boolean } | undefined): {
-  count: number;
-  gap: number;
-  withSeparator?: boolean;
-} {
+function getColumnConfig(blockColumns: ColumnLayout | undefined): ColumnLayout {
   return blockColumns
     ? { count: blockColumns.count, gap: blockColumns.gap, withSeparator: blockColumns.withSeparator }
     : { ...SINGLE_COLUMN_DEFAULT };

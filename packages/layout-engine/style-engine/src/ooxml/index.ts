@@ -7,7 +7,7 @@
 
 import { combineIndentProperties, combineProperties, combineRunProperties } from '../cascade.js';
 import type { PropertyObject } from '../cascade.js';
-import type { ParagraphProperties, RunProperties } from './types.ts';
+import type { ParagraphProperties, ParagraphTabStop, RunProperties } from './types.ts';
 import type { NumberingProperties } from './numbering-types.ts';
 import type {
   StylesDocumentProperties,
@@ -217,9 +217,26 @@ export function resolveParagraphProperties(
   const finalProps = combineProperties(propsChain, {
     specialHandling: {
       tabStops: (target: ParagraphProperties, source: ParagraphProperties): unknown => {
-        // If a higher priority source defines firstLine, remove hanging from the final result
         if (target.tabStops != null && source.tabStops != null) {
-          return [...(target.tabStops as unknown[]), ...(source.tabStops as unknown[])];
+          // Merge tab stops from lower-priority (target) and higher-priority (source).
+          // Per OOXML spec, 'clear' tabs in a higher-priority source remove matching
+          // tab stops (by position) from lower-priority sources.
+          const sourceArr = source.tabStops as ParagraphTabStop[];
+          const clearPositions = new Set<number>();
+          for (const ts of sourceArr) {
+            if (ts.tab?.tabType === 'clear' && ts.tab.pos != null) {
+              clearPositions.add(ts.tab.pos);
+            }
+          }
+          const targetArr = target.tabStops as ParagraphTabStop[];
+          // Keep target tabs not cleared by source, plus non-clear source tabs
+          const merged = targetArr.filter((ts) => !(ts.tab?.pos != null && clearPositions.has(ts.tab.pos)));
+          for (const ts of sourceArr) {
+            if (ts.tab?.tabType !== 'clear') {
+              merged.push(ts);
+            }
+          }
+          return merged;
         }
         return source.tabStops;
       },

@@ -28,11 +28,7 @@ import { CLI_ONLY_OPERATIONS, type CliCategory, type CliOnlyOperation } from './
 // ---------------------------------------------------------------------------
 
 /** Operations explicitly excluded from the CLI (with justification). */
-const CLI_OPERATION_DENYLIST = [
-  'getText', // Subsumed by find + info; revisit if needed
-  'capabilities.get', // Internal engine concern, not user-facing
-  'create.heading', // Currently unavailable in the CLI/runtime command surface
-] as const satisfies readonly OperationId[];
+const CLI_OPERATION_DENYLIST = [] as const satisfies readonly OperationId[];
 
 type DeniedOperationId = (typeof CLI_OPERATION_DENYLIST)[number];
 

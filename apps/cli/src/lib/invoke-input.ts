@@ -31,6 +31,7 @@ const WRAPPED_INPUT_KEY: Partial<Record<CliExposedOperationId, string>> = {
   'lists.restart': 'input',
   'lists.exit': 'input',
   'create.paragraph': 'input',
+  'create.heading': 'input',
 };
 
 /**

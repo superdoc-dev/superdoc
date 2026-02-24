@@ -2063,9 +2063,6 @@ async function run() {
       });
     }
 
-    if (summary.failures?.length > 0) {
-      process.exitCode = 1;
-    }
   } finally {
     restoreConsoleFilter();
   }

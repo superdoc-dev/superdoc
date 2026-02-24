@@ -312,6 +312,7 @@ const EXTRA_CLI_PARAMS: Partial<Record<string, CliOperationParamSpec[]>> = {
   'doc.lists.restart': [{ name: 'input', kind: 'jsonFlag', flag: 'input-json', type: 'json' }],
   'doc.lists.exit': [{ name: 'input', kind: 'jsonFlag', flag: 'input-json', type: 'json' }],
   'doc.create.paragraph': [{ name: 'input', kind: 'jsonFlag', flag: 'input-json', type: 'json' }],
+  'doc.create.heading': [{ name: 'input', kind: 'jsonFlag', flag: 'input-json', type: 'json' }],
 };
 
 // ---------------------------------------------------------------------------

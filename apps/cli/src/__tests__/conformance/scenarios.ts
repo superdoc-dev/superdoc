@@ -248,6 +248,32 @@ export const SUCCESS_SCENARIOS = {
       args: ['comments', 'list', fixture.docPath, '--include-resolved', 'false'],
     };
   },
+  'doc.getText': async (harness: ConformanceHarness): Promise<ScenarioInvocation> => {
+    const stateDir = await harness.createStateDir('doc-get-text-success');
+    const docPath = await harness.copyFixtureDoc('doc-get-text');
+    return { stateDir, args: ['get-text', docPath] };
+  },
+  'doc.capabilities.get': async (harness: ConformanceHarness): Promise<ScenarioInvocation> => {
+    const stateDir = await harness.createStateDir('doc-capabilities-get-success');
+    await harness.openSessionFixture(stateDir, 'doc-capabilities-get', 'capabilities-session');
+    return { stateDir, args: ['capabilities', '--session', 'capabilities-session'] };
+  },
+  'doc.create.heading': async (harness: ConformanceHarness): Promise<ScenarioInvocation> => {
+    const stateDir = await harness.createStateDir('doc-create-heading-success');
+    const docPath = await harness.copyFixtureDoc('doc-create-heading');
+    return {
+      stateDir,
+      args: [
+        'create',
+        'heading',
+        docPath,
+        '--input-json',
+        JSON.stringify({ level: 1, text: 'Conformance heading text' }),
+        '--out',
+        harness.createOutputPath('doc-create-heading-output'),
+      ],
+    };
+  },
   'doc.create.paragraph': async (harness: ConformanceHarness): Promise<ScenarioInvocation> => {
     const stateDir = await harness.createStateDir('doc-create-paragraph-success');
     const docPath = await harness.copyFixtureDoc('doc-create-paragraph');

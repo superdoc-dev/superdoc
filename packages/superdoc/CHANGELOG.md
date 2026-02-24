@@ -1,3 +1,27 @@
+# [1.16.0](https://github.com/superdoc-dev/superdoc/compare/v1.15.0...v1.16.0) (2026-02-24)
+
+
+### Bug Fixes
+
+* consolidate deletions under new replacement ([#2094](https://github.com/superdoc-dev/superdoc/issues/2094)) ([0a84b86](https://github.com/superdoc-dev/superdoc/commit/0a84b8604c9a30ed2755cfd0ecc7694e1999c6eb))
+* **context-menu:** paste via context menu inserts at wrong position (SD-1302) ([#2110](https://github.com/superdoc-dev/superdoc/issues/2110)) ([30f03f9](https://github.com/superdoc-dev/superdoc/commit/30f03f93b59261a7fce55e7d62cc83897b457afd))
+* correctly set color and highlight of pasted text ([#2033](https://github.com/superdoc-dev/superdoc/issues/2033)) ([41058b5](https://github.com/superdoc-dev/superdoc/commit/41058b5bfadbc34d83891afe88c6b8c24505f83c))
+* **doc-api:** stabilize create composability and expand SDK surface ([fc17167](https://github.com/superdoc-dev/superdoc/commit/fc1716721b7c15b3fd1ac5724e48cc709a9fd986))
+* **document-api:** add friendlier insert at node id with offset, or pos ([#2128](https://github.com/superdoc-dev/superdoc/issues/2128)) ([c1d3682](https://github.com/superdoc-dev/superdoc/commit/c1d3682e15dc7c99b1450c2f008f6f937729fc39))
+* **document-api:** add nodeId shorthand resolution across all operations ([#2131](https://github.com/superdoc-dev/superdoc/issues/2131)) ([8abdaad](https://github.com/superdoc-dev/superdoc/commit/8abdaadd7dda2ef4751d040527adab61c06f3c48))
+* find tracked change for firefox ([#1899](https://github.com/superdoc-dev/superdoc/issues/1899)) ([a39cb68](https://github.com/superdoc-dev/superdoc/commit/a39cb683df898ca9a41b4c7f54d3d2f8e48ea8f1))
+* **layout-engine:** text clipping inside table in document with multi-orientation, recursive pagination for deeply nested tables (SD-1962) ([#2140](https://github.com/superdoc-dev/superdoc/issues/2140)) ([072c009](https://github.com/superdoc-dev/superdoc/commit/072c0093f6fa8977e44801f6aa03ff5cb0b6ac5f))
+* pict import/export  ([#2135](https://github.com/superdoc-dev/superdoc/issues/2135)) ([7e97b7b](https://github.com/superdoc-dev/superdoc/commit/7e97b7b986d73a78bc4e646db6854188ee114cac))
+* resolve sdk/adapter composability issues ([b60b17e](https://github.com/superdoc-dev/superdoc/commit/b60b17e50b0ea46474a92afd06438222a3537d42))
+
+
+### Features
+
+* adaptive insert table column width ([#1533](https://github.com/superdoc-dev/superdoc/issues/1533)) ([d4cae2d](https://github.com/superdoc-dev/superdoc/commit/d4cae2dd0f954be52f754df6203ac72c6452e1e3))
+* add public scroll to page method ([#1791](https://github.com/superdoc-dev/superdoc/issues/1791)) ([1b7687b](https://github.com/superdoc-dev/superdoc/commit/1b7687be295a6d658cf49b17cb1900dae6c2b914))
+* expose setZoom and getZoom API on SuperDoc ([#2137](https://github.com/superdoc-dev/superdoc/issues/2137)) ([ab09dd5](https://github.com/superdoc-dev/superdoc/commit/ab09dd5dee38081054a3215650d5fc8e6994f128)), closes [#928](https://github.com/superdoc-dev/superdoc/issues/928)
+* superdoc sdk ([#2129](https://github.com/superdoc-dev/superdoc/issues/2129)) ([3f55d23](https://github.com/superdoc-dev/superdoc/commit/3f55d2366b025d9468ae26f9848582446b280569))
+
 # [1.15.0](https://github.com/superdoc-dev/superdoc/compare/v1.14.0...v1.15.0) (2026-02-20)
 
 

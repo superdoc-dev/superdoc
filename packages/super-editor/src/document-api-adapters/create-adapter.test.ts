@@ -171,12 +171,16 @@ function makeEditor({
 } {
   const doc = createDocNode([createParagraphNode('p1', 'Hello')]);
 
-  const insertParagraphAt = vi.fn((options: { pos: number; text?: string; sdBlockId?: string; tracked?: boolean }) => {
-    if (!insertReturns) return false;
-    const nodeId = options.sdBlockId ?? 'new-paragraph';
-    const paragraph = createParagraphNode(nodeId, options.text ?? '', options.tracked === true, insertedParagraphAttrs);
-    return insertChildAtPos(doc, paragraph, options.pos);
-  });
+  const insertParagraphAt = vi.fn(
+    (options: { pos: number; text?: string; sdBlockId?: string; paraId?: string; tracked?: boolean }) => {
+      if (!insertReturns) return false;
+      const nodeId = options.sdBlockId ?? 'new-paragraph';
+      // Merge: command-supplied paraId overrides fixture attrs (matching real behavior).
+      const mergedAttrs = { ...insertedParagraphAttrs, ...(options.paraId ? { paraId: options.paraId } : {}) };
+      const paragraph = createParagraphNode(nodeId, options.text ?? '', options.tracked === true, mergedAttrs);
+      return insertChildAtPos(doc, paragraph, options.pos);
+    },
+  );
 
   const editor = {
     state: {
@@ -335,21 +339,16 @@ describe('createParagraphAdapter', () => {
     ).toThrow('requires the insertTrackedChange command');
   });
 
-  it('resolves created paragraph by sdBlockId even when paraId is also present', () => {
-    const { editor } = makeEditor({
-      insertedParagraphAttrs: {
-        paraId: 'pm-para-id',
-      },
-    });
+  it('returns a stable paraId that survives DOCX round-trips, not the ephemeral sdBlockId', () => {
+    const { editor } = makeEditor();
 
     const result = createParagraphAdapter(editor, { text: 'Inserted paragraph' }, { changeMode: 'direct' });
 
     expect(result.success).toBe(true);
     if (!result.success) return;
     expect(result.paragraph.nodeType).toBe('paragraph');
-    // sdBlockId takes priority — the returned ID is always the one the create command assigned.
-    expect(result.paragraph.nodeId).not.toBe('pm-para-id');
-    expect(typeof result.paragraph.nodeId).toBe('string');
+    // The returned nodeId is an 8-char hex paraId, not a UUID sdBlockId.
+    expect(result.paragraph.nodeId).toMatch(/^[0-9A-F]{8}$/);
     expect(result.insertionPoint.blockId).toBe(result.paragraph.nodeId);
   });
 
@@ -533,15 +532,23 @@ function makeHeadingEditor({
   const doc = createDocNode([createParagraphNode('p1', 'Hello')]);
 
   const insertHeadingAt = vi.fn(
-    (options: { pos: number; level: number; text?: string; sdBlockId?: string; tracked?: boolean }) => {
+    (options: {
+      pos: number;
+      level: number;
+      text?: string;
+      sdBlockId?: string;
+      paraId?: string;
+      tracked?: boolean;
+    }) => {
       if (!insertReturns) return false;
       const nodeId = options.sdBlockId ?? 'new-heading';
+      const mergedAttrs = { ...insertedHeadingAttrs, ...(options.paraId ? { paraId: options.paraId } : {}) };
       const heading = createHeadingNode(
         nodeId,
         options.level,
         options.text ?? '',
         options.tracked === true,
-        insertedHeadingAttrs,
+        mergedAttrs,
       );
       return insertChildAtPos(doc, heading, options.pos);
     },
@@ -719,6 +726,18 @@ describe('createHeadingAdapter', () => {
     ).toThrow('requires the insertTrackedChange command');
   });
 
+  it('returns a stable paraId that survives DOCX round-trips for headings', () => {
+    const { editor } = makeHeadingEditor();
+
+    const result = createHeadingAdapter(editor, { level: 1, text: 'Inserted heading' }, { changeMode: 'direct' });
+
+    expect(result.success).toBe(true);
+    if (!result.success) return;
+    expect(result.heading.nodeType).toBe('heading');
+    expect(result.heading.nodeId).toMatch(/^[0-9A-F]{8}$/);
+    expect(result.insertionPoint.blockId).toBe(result.heading.nodeId);
+  });
+
   it('returns success with generated ID when post-apply heading resolution fails', () => {
     const { editor } = makeHeadingEditor({
       insertedHeadingAttrs: {
@@ -811,20 +830,18 @@ describe('createHeadingAdapter', () => {
 });
 
 // ---------------------------------------------------------------------------
-// BUG: Returned nodeId from create is not composable with getNodeById
+// create → getNodeById composability
 // ---------------------------------------------------------------------------
-// These tests expose a real bug: when a created paragraph later gains a paraId
-// (e.g. through DOCX import merge or round-trip), the ID returned by
-// create.paragraph can no longer be used with getNodeById — because the block
-// index resolves the node by paraId (higher priority) instead of sdBlockId.
+// These tests verify that the paraId returned by create operations is
+// immediately resolvable by getNodeById, and survives sdBlockId regeneration
+// (as happens during DOCX round-trip re-open).
 
 import { getNodeByIdAdapter } from './get-node-adapter.js';
 import { buildBlockIndex } from './helpers/node-address-resolver.js';
 import { clearIndexCache } from './helpers/index-cache.js';
 
-describe('BUG: create → getNodeById composability', () => {
-  it('returned nodeId from create.paragraph should be resolvable by getNodeById after paraId injection', () => {
-    // Step 1: Create a paragraph — sdBlockId is the only ID, so create returns it.
+describe('create → getNodeById composability', () => {
+  it('returned paraId from create.paragraph is immediately resolvable by getNodeById', () => {
     const { editor } = makeEditor();
     const createResult = createParagraphAdapter(editor, { text: 'New content' }, { changeMode: 'direct' });
 
@@ -832,50 +849,78 @@ describe('BUG: create → getNodeById composability', () => {
     if (!createResult.success) return;
 
     const returnedId = createResult.paragraph.nodeId;
+    expect(returnedId).toMatch(/^[0-9A-F]{8}$/);
 
-    // Step 2: Simulate the node gaining a paraId (as happens during DOCX round-trip
-    // or when a collaboration merge assigns OOXML identity).
-    // The node now has BOTH sdBlockId (the returned ID) and paraId (the import ID).
-    const doc = editor.state.doc as unknown as MockNode;
-    const createdNode = doc._children?.find(
-      (child) => (child.attrs as Record<string, unknown>)?.sdBlockId === returnedId,
-    );
-    expect(createdNode).toBeDefined();
-
-    // Inject a paraId onto the node attrs (simulating DOCX import merge)
-    (createdNode!.attrs as Record<string, unknown>).paraId = 'imported-para-id';
-
-    // Clear the index cache so it rebuilds from the mutated document.
-    // In a real scenario, a DOCX round-trip or collaboration merge produces
-    // a new document snapshot, which naturally invalidates the cache.
-    clearIndexCache(editor);
-
-    // Step 3: Try to resolve the node using the ID that create.paragraph returned.
-    // This SHOULD work — the ID we gave the consumer should always resolve.
-    // BUG: This FAILS because buildBlockIndex prefers paraId over sdBlockId,
-    // so the node's resolved ID is now 'imported-para-id', not the returned ID.
     const result = getNodeByIdAdapter(editor, { nodeId: returnedId, nodeType: 'paragraph' });
     expect(result.nodeType).toBe('paragraph');
   });
 
-  it('returned insertionPoint.blockId from create.paragraph should be usable as a target', () => {
+  it('returned paraId survives sdBlockId regeneration (simulating DOCX round-trip re-open)', () => {
     const { editor } = makeEditor();
     const createResult = createParagraphAdapter(editor, { text: 'First' }, { changeMode: 'direct' });
 
     expect(createResult.success).toBe(true);
     if (!createResult.success) return;
 
+    const returnedId = createResult.paragraph.nodeId;
     const blockId = createResult.insertionPoint.blockId;
+    expect(blockId).toBe(returnedId);
 
-    // Simulate paraId injection (same as above)
+    // Simulate what happens on DOCX re-open: the block-node plugin assigns a
+    // new random sdBlockId, but paraId (written as w14:paraId) remains stable.
     const doc = editor.state.doc as unknown as MockNode;
-    const createdNode = doc._children?.find((child) => (child.attrs as Record<string, unknown>)?.sdBlockId === blockId);
-    (createdNode!.attrs as Record<string, unknown>).paraId = 'ooxml-para-id';
+    const createdNode = doc._children?.find((child) => (child.attrs as Record<string, unknown>)?.paraId === returnedId);
+    expect(createdNode).toBeDefined();
+    (createdNode!.attrs as Record<string, unknown>).sdBlockId = 'regenerated-uuid';
 
-    // BUG: The block index now resolves this node as 'ooxml-para-id',
-    // so using blockId (the sdBlockId) as a target fails.
+    clearIndexCache(editor);
+
+    // The returned paraId should still resolve despite sdBlockId changing.
+    const result = getNodeByIdAdapter(editor, { nodeId: returnedId, nodeType: 'paragraph' });
+    expect(result.nodeType).toBe('paragraph');
+
+    // The index should also have the paraId as a lookup key.
     const index = buildBlockIndex(editor);
-    const match = index.byId.get(`paragraph:${blockId}`);
+    const match = index.byId.get(`paragraph:${returnedId}`);
+    expect(match).toBeDefined();
+  });
+
+  it('returned paraId from create.heading is immediately resolvable by getNodeById', () => {
+    const { editor } = makeHeadingEditor();
+    const createResult = createHeadingAdapter(editor, { level: 2, text: 'Heading content' }, { changeMode: 'direct' });
+
+    expect(createResult.success).toBe(true);
+    if (!createResult.success) return;
+
+    const returnedId = createResult.heading.nodeId;
+    expect(returnedId).toMatch(/^[0-9A-F]{8}$/);
+
+    const result = getNodeByIdAdapter(editor, { nodeId: returnedId, nodeType: 'heading' });
+    expect(result.nodeType).toBe('heading');
+  });
+
+  it('returned paraId from create.heading survives sdBlockId regeneration', () => {
+    const { editor } = makeHeadingEditor();
+    const createResult = createHeadingAdapter(editor, { level: 3, text: 'Heading text' }, { changeMode: 'direct' });
+
+    expect(createResult.success).toBe(true);
+    if (!createResult.success) return;
+
+    const returnedId = createResult.heading.nodeId;
+    expect(createResult.insertionPoint.blockId).toBe(returnedId);
+
+    const doc = editor.state.doc as unknown as MockNode;
+    const createdNode = doc._children?.find((child) => (child.attrs as Record<string, unknown>)?.paraId === returnedId);
+    expect(createdNode).toBeDefined();
+    (createdNode!.attrs as Record<string, unknown>).sdBlockId = 'regenerated-heading-uuid';
+
+    clearIndexCache(editor);
+
+    const result = getNodeByIdAdapter(editor, { nodeId: returnedId, nodeType: 'heading' });
+    expect(result.nodeType).toBe('heading');
+
+    const index = buildBlockIndex(editor);
+    const match = index.byId.get(`heading:${returnedId}`);
     expect(match).toBeDefined();
   });
 });

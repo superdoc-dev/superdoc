@@ -1,6 +1,6 @@
 {
   "name": "@superdoc-dev/mcp",
-  "version": "0.0.0",
+  "version": "0.1.1",
   "type": "module",
   "bin": {
     "superdoc-mcp": "./dist/index.js"

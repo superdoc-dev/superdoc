@@ -185,7 +185,7 @@ const LINK_AND_TOC_STYLES = `
 }
 
 /* Screen reader only content (WCAG SC 1.3.1) */
-.sr-only {
+.superdoc-sr-only {
   position: absolute;
   width: 1px;
   height: 1px;

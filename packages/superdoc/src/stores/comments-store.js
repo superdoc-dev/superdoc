@@ -154,6 +154,83 @@ export const useCommentsStore = defineStore('comments', () => {
    */
   const isTrackedChangeThread = (comment) => Boolean(comment?.trackedChange) || Boolean(comment?.trackedChangeParentId);
 
+  const syncTrackedChangePositionsWithDocument = ({ documentId, editor } = {}) => {
+    // Keep editor-driven comment anchors in sync with live tracked-change marks
+    if (!editor?.state) return 0;
+    if (!commentsList.value?.length) return 0;
+
+    const currentPositions = editorCommentPositions.value || {};
+    if (!Object.keys(currentPositions).length) return 0;
+
+    // First pass: find tracked-change root comments that still have positions in this document
+    const candidateRootIds = new Set();
+
+    commentsList.value.forEach((comment) => {
+      if (!comment?.trackedChange) return;
+      if (documentId) {
+        const resolvedDocumentId = comment?.fileId ?? null;
+        if (resolvedDocumentId && resolvedDocumentId !== documentId) return;
+      }
+
+      const positionKey = getCommentPositionKey(comment);
+      if (!positionKey) return;
+      const normalizedPositionKey = String(positionKey);
+      if (currentPositions[positionKey] === undefined) return;
+      candidateRootIds.add(normalizedPositionKey);
+    });
+
+    if (!candidateRootIds.size) return 0;
+
+    // Collect IDs for all currently active tracked-change marks in the document
+    const trackedIds = new Set(
+      trackChangesHelpers
+        .getTrackChanges(editor.state)
+        .map(({ mark }) => mark?.attrs?.id)
+        .filter((id) => id !== undefined && id !== null)
+        .map((id) => String(id)),
+    );
+    // Any comment positions whose IDs are missing from the document marks are considered stale
+    const staleRootIds = new Set(Array.from(candidateRootIds).filter((id) => !trackedIds.has(id)));
+    if (!staleRootIds.size) return 0;
+
+    const stalePositionKeys = new Set(staleRootIds);
+
+    commentsList.value.forEach((comment) => {
+      const positionKey = getCommentPositionKey(comment);
+      if (!positionKey || currentPositions[positionKey] === undefined) return;
+
+      // Extend staleness to replies / child comments that thread under a stale tracked-change root
+      const parentKeys = [comment?.trackedChangeParentId, comment?.parentCommentId]
+        .filter((id) => id !== undefined && id !== null)
+        .map((id) => String(id));
+
+      if (parentKeys.some((id) => staleRootIds.has(id))) {
+        stalePositionKeys.add(String(positionKey));
+      }
+    });
+
+    const nextPositions = { ...currentPositions };
+    stalePositionKeys.forEach((key) => {
+      delete nextPositions[key];
+    });
+    editorCommentPositions.value = nextPositions;
+
+    if (activeComment.value !== undefined && activeComment.value !== null) {
+      const activeId = String(activeComment.value);
+      const activeCommentModel = getComment(activeComment.value);
+      // If the active comment is part of a stale tracked-change thread, clear the active state
+      const activeParentKeys = [activeCommentModel?.trackedChangeParentId, activeCommentModel?.parentCommentId]
+        .filter((id) => id !== undefined && id !== null)
+        .map((id) => String(id));
+
+      if (staleRootIds.has(activeId) || activeParentKeys.some((id) => staleRootIds.has(id))) {
+        activeComment.value = null;
+      }
+    }
+
+    return stalePositionKeys.size;
+  };
+
   const syncResolvedCommentsWithDocument = () => {
     const docPositions = editorCommentPositions.value || {};
     const activeKeys = new Set(Object.keys(docPositions));
@@ -335,6 +412,7 @@ export const useCommentsStore = defineStore('comments', () => {
       isInternal: false,
       importedAuthor,
       selection: {
+        source: 'super-editor',
         selectionBounds: coords,
       },
     });
@@ -598,7 +676,7 @@ export const useCommentsStore = defineStore('comments', () => {
 
     if (pendingComment.value) newComment.setText({ text: currentCommentText.value, suppressUpdate: true });
     else newComment.setText({ text: comment.commentText, suppressUpdate: true });
-    newComment.selection.source = pendingComment.value?.selection?.source;
+    newComment.selection.source = pendingComment.value?.selection?.source ?? newComment.selection.source;
 
     // Set isInternal flag
     if (parentComment) {
@@ -823,9 +901,6 @@ export const useCommentsStore = defineStore('comments', () => {
    * @returns {void}
    */
   const handleEditorLocationsUpdate = (allCommentPositions) => {
-    if ((!allCommentPositions || Object.keys(allCommentPositions).length === 0) && commentsList.value.length > 0) {
-      return;
-    }
     editorCommentPositions.value = allCommentPositions || {};
   };
 
@@ -1019,5 +1094,6 @@ export const useCommentsStore = defineStore('comments', () => {
     handleEditorLocationsUpdate,
     clearEditorCommentPositions,
     handleTrackedChangeUpdate,
+    syncTrackedChangePositionsWithDocument,
   };
 });

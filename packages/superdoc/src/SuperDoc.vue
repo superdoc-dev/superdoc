@@ -90,6 +90,7 @@ const {
   showAddComment,
   handleEditorLocationsUpdate,
   handleTrackedChangeUpdate,
+  syncTrackedChangePositionsWithDocument,
   addComment,
   getComment,
   COMMENT_EVENTS,
@@ -667,6 +668,15 @@ const onEditorCommentsUpdate = (params = {}) => {
 };
 
 const onEditorTransaction = ({ editor, transaction, duration }) => {
+  const inputType = transaction?.getMeta?.('inputType');
+
+  // Call sync on editor transaction but only if it's undo or redo
+  // This could be extended to other listeners in the future
+  if (inputType === 'historyUndo' || inputType === 'historyRedo') {
+    const documentId = editor?.options?.documentId;
+    syncTrackedChangePositionsWithDocument({ documentId, editor });
+  }
+
   if (typeof proxy.$superdoc.config.onTransaction === 'function') {
     proxy.$superdoc.config.onTransaction({ editor, transaction, duration });
   }

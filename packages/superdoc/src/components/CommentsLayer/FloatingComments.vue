@@ -156,6 +156,34 @@ watch(activeZoom, () => {
   }
 });
 
+watch(
+  getFloatingComments,
+  (comments) => {
+    const activeIds = new Set(
+      comments
+        .map((comment) => comment?.commentId ?? comment?.importedId)
+        .filter((id) => id !== undefined && id !== null)
+        .map((id) => String(id)),
+    );
+
+    if (!activeIds.size) {
+      renderedSizes.value = [];
+      firstGroupRendered.value = false;
+      verticalOffset.value = 0;
+      return;
+    }
+
+    const filtered = renderedSizes.value.filter((item) => activeIds.has(String(item.id)));
+    if (filtered.length !== renderedSizes.value.length) {
+      renderedSizes.value = filtered;
+      if (!filtered.length) {
+        firstGroupRendered.value = false;
+      }
+    }
+  },
+  { immediate: true },
+);
+
 onBeforeUnmount(() => {
   // Clean up pending timeout to prevent memory leak
   if (measurementTimeoutId.value) {

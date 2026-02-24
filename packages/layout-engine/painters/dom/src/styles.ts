@@ -249,6 +249,14 @@ const TRACK_CHANGE_STYLES = `
 .superdoc-layout .track-format-dec.highlighted {
   border-bottom: 2px solid gold;
 }
+
+.superdoc-layout .track-insert-dec.highlighted.track-change-focused {
+  border-width: 2px;
+}
+
+.superdoc-layout .track-delete-dec.highlighted.track-change-focused {
+  border-width: 2px;
+}
 `;
 
 /**

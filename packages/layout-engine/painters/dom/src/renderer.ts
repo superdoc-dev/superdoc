@@ -683,6 +683,7 @@ const TRACK_CHANGE_BASE_CLASS: Record<TrackedChangeKind, string> = {
   delete: 'track-delete-dec',
   format: 'track-format-dec',
 };
+const TRACK_CHANGE_FOCUSED_CLASS = 'track-change-focused';
 
 const TRACK_CHANGE_MODIFIER_CLASS: Record<TrackedChangeKind, Record<TrackedChangesMode, string | undefined>> = {
   insert: {
@@ -5536,6 +5537,9 @@ export class DomPainter {
     }
     if (meta.date) {
       elem.dataset.trackChangeDate = meta.date;
+    }
+    if (this.activeCommentId && meta.id === this.activeCommentId) {
+      elem.classList.add(TRACK_CHANGE_FOCUSED_CLASS);
     }
   }
 

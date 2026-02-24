@@ -296,6 +296,10 @@ export class PresentationEditor extends EventEmitter {
   #decorationBridge = new DecorationBridge();
   /** RAF handle for coalesced decoration sync scheduling. */
   #decorationSyncRafHandle: number | null = null;
+  /** DOM element for rendering decoration highlight overlays (character-accurate). */
+  #decorationOverlayLayer: HTMLElement | null = null;
+  /** DEBUG: Call counter for tracking sync cycles */
+  #syncDecoCallCount = 0;
   #rafHandle: number | null = null;
   #editorListeners: Array<{ event: string; handler: (...args: unknown[]) => void }> = [];
   #scrollHandler: (() => void) | null = null;
@@ -456,6 +460,13 @@ export class PresentationEditor extends EventEmitter {
     this.#selectionOverlay.style.pointerEvents = 'none';
     this.#selectionOverlay.style.zIndex = '10';
 
+    // Create decoration layer (renders below selections - for customer highlight plugins)
+    this.#decorationOverlayLayer = doc.createElement('div');
+    this.#decorationOverlayLayer.className = 'presentation-editor__decoration-layer';
+    this.#decorationOverlayLayer.style.position = 'absolute';
+    this.#decorationOverlayLayer.style.inset = '0';
+    this.#decorationOverlayLayer.style.pointerEvents = 'none';
+
     // Create remote layer (renders below local)
     this.#remoteCursorOverlay = doc.createElement('div');
     this.#remoteCursorOverlay.className = 'presentation-editor__selection-layer--remote';
@@ -470,7 +481,8 @@ export class PresentationEditor extends EventEmitter {
     this.#localSelectionLayer.style.inset = '0';
     this.#localSelectionLayer.style.pointerEvents = 'none';
 
-    // Append layers in correct z-index order (remote first, local second)
+    // Append layers in correct z-index order (decoration first, remote second, local third)
+    this.#selectionOverlay.appendChild(this.#decorationOverlayLayer);
     this.#selectionOverlay.appendChild(this.#remoteCursorOverlay);
     this.#selectionOverlay.appendChild(this.#localSelectionLayer);
     this.#viewportHost.appendChild(this.#selectionOverlay);
@@ -2289,8 +2301,8 @@ export class PresentationEditor extends EventEmitter {
   }
 
   /**
-   * Runs a full decoration bridge sync: reads external plugin decorations and
-   * reconciles them onto painted DOM elements (add/update/remove).
+   * Runs a full decoration sync: renders character-accurate highlight overlays
+   * for external plugin decorations, and syncs data-* attributes to DOM elements.
    *
    * Called synchronously from post-paint and observer-rebuild paths where the
    * DOM index is guaranteed to be fresh.
@@ -2299,11 +2311,121 @@ export class PresentationEditor extends EventEmitter {
     const state = this.#editor?.view?.state;
     if (!state) return;
 
-    try {
-      this.#decorationBridge.sync(state, this.#domPositionIndex);
-    } catch (error) {
-      debugLog('warn', 'Decoration bridge sync failed', { error: String(error) });
+    // DEBUG: Log when sync is called with call count and caller
+    this.#syncDecoCallCount++;
+    const callId = this.#syncDecoCallCount;
+    const caller = new Error().stack?.split('\n')[2]?.trim() || 'unknown';
+    const ranges = this.#decorationBridge.collectDecorationRanges(state);
+    console.log(`[syncDecorations #${callId}] called from:`, caller);
+    console.log(`[syncDecorations #${callId}] decoration ranges:`, ranges);
+
+    // Render character-accurate highlight overlays
+    this.#renderDecorationOverlays(state, callId);
+
+    // NOTE: We no longer call this.#decorationBridge.sync() here because:
+    // - Visual styling (classes) is now handled by overlay divs above
+    // - The bridge applies classes to entire DOM elements (run-level granularity)
+    // - This caused "double highlighting" where both overlay and element had styles
+    // If data-* attribute syncing is needed in the future, we can add a separate
+    // bridge method that only syncs data attributes without classes.
+  }
+
+  /**
+   * Renders decoration highlights as positioned overlay divs for character-accurate
+   * highlighting. Uses DOM-based rect computation (same as selection rendering)
+   * for pixel-perfect accuracy.
+   */
+  #renderDecorationOverlays(state: EditorState, callId?: number): void {
+    const logPrefix = callId != null ? `[renderDecorationOverlays #${callId}]` : '[renderDecorationOverlays]';
+
+    if (!this.#decorationOverlayLayer) {
+      console.log(logPrefix, 'BAIL: no overlay layer');
+      return;
     }
+
+    // Clear existing overlays
+    const prevCount = this.#decorationOverlayLayer.childElementCount;
+    this.#decorationOverlayLayer.innerHTML = '';
+    console.log(logPrefix, 'CLEARED overlay (had', prevCount, 'children)');
+
+    const layout = this.#layoutState.layout;
+    if (!layout) {
+      console.log(logPrefix, 'BAIL: no layout');
+      return;
+    }
+
+    // Collect decoration ranges from eligible plugins
+    const decorationRanges = this.#decorationBridge.collectDecorationRanges(state);
+    if (decorationRanges.length === 0) {
+      console.log(logPrefix, 'BAIL: no decoration ranges');
+      return;
+    }
+
+    const pageHeight = this.#getBodyPageHeight();
+    const pageGap = layout.pageGap ?? 0;
+    const doc = this.#decorationOverlayLayer.ownerDocument;
+    if (!doc) return;
+
+    let totalRectsCreated = 0;
+    console.log(logPrefix, 'processing', decorationRanges.length, 'decoration ranges');
+    for (const deco of decorationRanges) {
+      // Use DOM-based rect computation (same as selection rendering) for accuracy
+      const rects = this.#computeSelectionRectsFromDom(deco.from, deco.to);
+      // DEBUG: Log rect computation result with full rect details
+      console.log(logPrefix, 'deco:', deco.from, '-', deco.to, 'classes:', deco.classes, 'rects:', rects);
+      if (!rects || rects.length === 0) {
+        console.log(logPrefix, 'SKIP: no rects for deco', deco.from, '-', deco.to);
+        continue;
+      }
+
+      for (const rect of rects) {
+        const pageLocalY = rect.y - rect.pageIndex * (pageHeight + pageGap);
+        const coords = this.#convertPageLocalToOverlayCoords(rect.pageIndex, rect.x, pageLocalY);
+        // DEBUG: Log coord conversion
+        if (!coords) {
+          console.log(logPrefix, 'coords null for rect:', rect);
+          continue;
+        }
+
+        const div = doc.createElement('div');
+        div.style.position = 'absolute';
+        div.style.left = `${coords.x}px`;
+        div.style.top = `${coords.y}px`;
+        div.style.width = `${Math.max(1, rect.width)}px`;
+        div.style.height = `${Math.max(1, rect.height)}px`;
+        div.style.pointerEvents = 'none';
+        div.style.borderRadius = '2px';
+
+        // Apply decoration classes for CSS styling
+        for (const cls of deco.classes) {
+          div.classList.add(cls);
+        }
+
+        // Apply inline styles if present
+        if (deco.style) {
+          div.style.cssText += deco.style;
+        }
+
+        this.#decorationOverlayLayer.appendChild(div);
+        totalRectsCreated++;
+        // DEBUG: Log overlay coordinates
+        console.log(logPrefix, 'created overlay div:', {
+          left: coords.x,
+          top: coords.y,
+          width: Math.max(1, rect.width),
+          height: Math.max(1, rect.height),
+          classes: deco.classes,
+        });
+      }
+    }
+    // DEBUG: Log final overlay count and layer state
+    console.log(logPrefix, 'DONE - overlay children:', this.#decorationOverlayLayer.childElementCount, 'rects created:', totalRectsCreated);
+    console.log(logPrefix, 'overlay layer visible?', {
+      display: this.#decorationOverlayLayer.style.display,
+      visibility: this.#decorationOverlayLayer.style.visibility,
+      opacity: this.#decorationOverlayLayer.style.opacity,
+      parentConnected: this.#decorationOverlayLayer.parentElement?.isConnected,
+    });
   }
 
   /**

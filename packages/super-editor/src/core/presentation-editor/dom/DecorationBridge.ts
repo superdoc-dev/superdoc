@@ -145,7 +145,10 @@ export class DecorationBridge {
    * restore the previous range when the plugin incorrectly clears it but the
    * original positions are still valid in the document.
    */
-  #previousRanges = new Map<Plugin, Array<{ from: number; to: number; classes: string[]; style: string | null }>>();
+  #previousRanges = new Map<
+    Plugin,
+    Array<{ from: number; to: number; classes: string[]; style: string | null; dataAttrs: Record<string, string> }>
+  >();
 
   // -------------------------------------------------------------------------
   // Public API
@@ -212,14 +215,27 @@ export class DecorationBridge {
     to: number;
     classes: string[];
     style: string | null;
+    dataAttrs: Record<string, string>;
   }> {
     this.#refreshEligiblePlugins(state);
 
-    const ranges: Array<{ from: number; to: number; classes: string[]; style: string | null }> = [];
+    const ranges: Array<{
+      from: number;
+      to: number;
+      classes: string[];
+      style: string | null;
+      dataAttrs: Record<string, string>;
+    }> = [];
     const docSize = state.doc.content.size;
 
     for (const plugin of this.#eligiblePlugins) {
-      const pluginRanges: Array<{ from: number; to: number; classes: string[]; style: string | null }> = [];
+      const pluginRanges: Array<{
+        from: number;
+        to: number;
+        classes: string[];
+        style: string | null;
+        dataAttrs: Record<string, string>;
+      }> = [];
       const decorationSet = this.#getDecorationSet(plugin, state);
 
       if (decorationSet !== DecorationSet.empty) {
@@ -231,33 +247,39 @@ export class DecorationBridge {
           // Only include decorations that have visual styling (classes or inline style)
           if (attrs.classes.length === 0 && attrs.styleEntries.length === 0) continue;
 
+          const dataAttrs: Record<string, string> = {};
+          for (const [key, value] of attrs.dataEntries) dataAttrs[key] = value;
+
           pluginRanges.push({
             from: decoration.from,
             to: decoration.to,
             classes: attrs.classes,
-            style: attrs.styleEntries.length > 0
-              ? attrs.styleEntries.map(([prop, val]) => `${prop}: ${val}`).join('; ')
-              : null,
+            style:
+              attrs.styleEntries.length > 0
+                ? attrs.styleEntries.map(([prop, val]) => `${prop}: ${val}`).join('; ')
+                : null,
+            dataAttrs,
           });
         }
       }
 
       // Fallback: If plugin has no ranges but previously had valid ranges,
       // check if the previous positions are still valid in the document.
-      // This handles the case where mark application causes bad transaction
-      // mappings that incorrectly clear decorations.
+      // This handles the case where mark application (e.g. bold elsewhere) causes
+      // transaction mappings that temporarily clear decoration state.
       const previousPluginRanges = this.#previousRanges.get(plugin);
       if (pluginRanges.length === 0 && previousPluginRanges && previousPluginRanges.length > 0) {
         for (const prevRange of previousPluginRanges) {
           // Check if previous positions are still valid in the document
           if (prevRange.from >= 0 && prevRange.from < prevRange.to && prevRange.to <= docSize) {
-            // Restore the previous range
+            // Restore the previous range so highlight is not lost
             pluginRanges.push({ ...prevRange });
           }
         }
       }
 
-      // Store current ranges for next comparison
+      // Store current ranges for next comparison. When we restored from previous,
+      // keep that as the new previous so we don't clear on the next call.
       this.#previousRanges.set(plugin, pluginRanges.length > 0 ? [...pluginRanges] : []);
 
       // Add to final output
@@ -344,21 +366,48 @@ export class DecorationBridge {
     for (const plugin of this.#eligiblePlugins) {
       const decorationSet = this.#getDecorationSet(plugin, state);
       this.#prevDecorationSets.set(plugin, decorationSet);
-      if (decorationSet === DecorationSet.empty) continue;
 
-      const decorations = decorationSet.find(0, docSize);
-      for (const decoration of decorations) {
-        if (!this.#isInlineDecoration(decoration)) continue;
+      let addedFromCurrent = false;
+      if (decorationSet !== DecorationSet.empty) {
+        const decorations = decorationSet.find(0, docSize);
+        for (const decoration of decorations) {
+          if (!this.#isInlineDecoration(decoration)) continue;
 
-        const attrs = this.#extractSafeAttrs(decoration);
-        if (attrs.classes.length === 0 && attrs.dataEntries.length === 0 && attrs.styleEntries.length === 0) continue;
+          const attrs = this.#extractSafeAttrs(decoration);
+          if (attrs.classes.length === 0 && attrs.dataEntries.length === 0 && attrs.styleEntries.length === 0) continue;
 
-        const entries = domIndex.findEntriesInRange(decoration.from, decoration.to);
-        for (const entry of entries) {
-          const state = this.#getOrCreateDesired(desired, entry.el);
-          for (const cls of attrs.classes) state.classes.add(cls);
-          for (const [key, value] of attrs.dataEntries) state.dataAttrs.set(key, value);
-          for (const [prop, value] of attrs.styleEntries) state.styleProps.set(prop, value);
+          // Collapsed or invalid range yields no entries; mapping can produce from === to
+          if (decoration.from >= decoration.to) continue;
+
+          const entries = domIndex.findEntriesInRange(decoration.from, decoration.to);
+          for (const entry of entries) {
+            const d = this.#getOrCreateDesired(desired, entry.el);
+            for (const cls of attrs.classes) d.classes.add(cls);
+            for (const [key, value] of attrs.dataEntries) d.dataAttrs.set(key, value);
+            for (const [prop, value] of attrs.styleEntries) d.styleProps.set(prop, value);
+            addedFromCurrent = true;
+          }
+        }
+      }
+
+      // Fallback: plugin returned empty or only collapsed/wrong decorations (e.g. after
+      // another plugin's ReplaceStep mapping). Use previous ranges so decoration is not lost.
+      if (addedFromCurrent) continue;
+      const previousPluginRanges = this.#previousRanges.get(plugin);
+      if (previousPluginRanges?.length) {
+        for (const prev of previousPluginRanges) {
+          if (prev.from < 0 || prev.to <= prev.from || prev.to > docSize) continue;
+          const entries = domIndex.findEntriesInRange(prev.from, prev.to);
+          for (const entry of entries) {
+            const d = this.#getOrCreateDesired(desired, entry.el);
+            for (const cls of prev.classes) d.classes.add(cls);
+            for (const [key, value] of Object.entries(prev.dataAttrs)) d.dataAttrs.set(key, value);
+            if (prev.style) {
+              for (const [prop, value] of DecorationBridge.#parseStyleString(prev.style)) {
+                d.styleProps.set(prop, value);
+              }
+            }
+          }
         }
       }
     }

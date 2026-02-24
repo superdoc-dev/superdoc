@@ -1,0 +1,5 @@
+/* Focus plugin: custom highlight for selection/clause (setFocus/clearFocus commands) */
+.highlight-selection {
+  background-color: rgba(251, 191, 36, 0.4);
+  border-radius: 2px;
+}

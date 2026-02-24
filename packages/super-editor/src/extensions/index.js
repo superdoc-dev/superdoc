@@ -67,6 +67,7 @@ import { Placeholder } from './placeholder/index.js';
 import { PopoverPlugin } from './popover-plugin/index.js';
 import { LinkedStyles } from './linked-styles/linked-styles.js';
 import { Search } from './search/index.js';
+import { Focus } from './focus/focus.js';
 import { NodeResizer } from './noderesizer/index.js';
 import { CustomSelection } from './custom-selection/index.js';
 import { PermissionRanges } from './permission-ranges/index.js';
@@ -97,6 +98,7 @@ const getRichTextExtensions = () => {
     TextStyle,
     Underline,
     Placeholder,
+    Focus,
     PopoverPlugin,
     Mention,
     Highlight,
@@ -181,6 +183,7 @@ const getStarterExtensions = () => {
     ShapeContainer,
     ShapeTextbox,
     ContentBlock,
+    Focus,
     Search,
     StructuredContent,
     StructuredContentBlock,
@@ -237,6 +240,7 @@ export {
   DocumentIndex,
   IndexEntry,
   Placeholder,
+  Focus,
   DropCursor,
   BlockNode,
   FieldAnnotation,

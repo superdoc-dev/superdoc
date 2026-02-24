@@ -20,6 +20,9 @@ export default defineConfig(({ command }) => {
     },
     build: {
       emptyOutDir: false,
+      watch: {
+        buildDelay: 300,
+      },
       target: 'es2022',
       cssCodeSplit: false,
       lib: {

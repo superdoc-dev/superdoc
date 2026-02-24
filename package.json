@@ -32,7 +32,7 @@
     "dev:super-editor": "pnpm --prefix packages/super-editor run dev",
     "dev:collab": "pnpm --prefix packages/superdoc run dev:collab",
     "word-benchmark-sidecar": "pnpm --prefix packages/superdoc run word-benchmark-sidecar",
-    "dev:docs": "pnpm --prefix apps/docs run dev",
+    "dev:docs": "concurrently -k -n VITE,UMD,DOCS -c cyan,yellow,green \"pnpm --prefix packages/superdoc run dev\" \"pnpm --prefix packages/superdoc run watch:umd\" \"pnpm --prefix apps/docs run dev\"",
     "build:superdoc": "pnpm --prefix packages/superdoc run build",
     "build:super-editor": "pnpm --prefix packages/super-editor run build",
     "build": "pnpm run build:superdoc && pnpm run type-check",
@@ -84,6 +84,7 @@
   },
   "devDependencies": {
     "@commitlint/cli": "catalog:",
+    "concurrently": "catalog:",
     "@commitlint/config-conventional": "catalog:",
     "@eslint/js": "catalog:",
     "@semantic-release/changelog": "catalog:",

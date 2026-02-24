@@ -1,6 +1,7 @@
 import path from 'path';
 import copy from 'rollup-plugin-copy'
 import dts from 'vite-plugin-dts'
+import sirv from 'sirv';
 import { defineConfig } from 'vite'
 import { configDefaults } from 'vitest/config'
 import { createRequire } from 'node:module';
@@ -89,6 +90,21 @@ export default defineConfig(({ mode, command }) => {
       hook: 'writeBundle'
     }),
     // visualizer(visualizerConfig)
+    {
+      // Serve dist/ as static files so the docs dev server can load the local UMD build - Development only.
+      name: 'serve-dist-for-docs',
+      configureServer(server) {
+        server.middlewares.use(
+          '/dist',
+          sirv(path.resolve(__dirname, 'dist'), {
+            dev: true,
+            setHeaders(res) {
+              res.setHeader('Access-Control-Allow-Origin', '*');
+            },
+          }),
+        );
+      },
+    },
   ].filter(Boolean);
   if (mode !== 'test') plugins.push(nodePolyfills());
   const isDev = command === 'serve';

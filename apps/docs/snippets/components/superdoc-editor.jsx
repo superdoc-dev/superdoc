@@ -9,33 +9,80 @@ export const SuperDocEditor = ({
   const [ready, setReady] = useState(false);
   const editorRef = useRef(null);
   const containerIdRef = useRef(`editor-${Math.random().toString(36).substr(2, 9)}`);
+  const DEV_DIST_URL = 'http://localhost:9094/dist';
+  const UNPKG_DIST_URL = 'https://unpkg.com/superdoc@latest/dist';
 
-  useEffect(() => {
+  const getBaseUrl = () => {
+    const isDev = typeof window !== 'undefined' && window.location.hostname === 'localhost';
+    return isDev ? DEV_DIST_URL : UNPKG_DIST_URL;
+  };
+
+  const ensureStyle = (baseUrl) => {
+    const styleHref = `${baseUrl}/style.css`;
+    if (document.querySelector(`link[href="${styleHref}"]`)) return;
+
     const link = document.createElement('link');
     link.rel = 'stylesheet';
-    link.href = 'https://unpkg.com/superdoc@latest/dist/style.css';
+    link.href = styleHref;
     document.head.appendChild(link);
+  };
 
-    const script = document.createElement('script');
-    script.src = 'https://unpkg.com/superdoc@latest/dist/superdoc.umd.js';
-    script.onload = () => {
-      setTimeout(() => {
-        if (window.SuperDocLibrary) {
-          editorRef.current = new window.SuperDocLibrary.SuperDoc({
-            selector: `#${containerIdRef.current}`,
-            html,
-            rulers: true,
-            onReady: () => {
-              setReady(true);
-              if (onReady) onReady(editorRef.current);
-            },
-          });
-        }
-      }, 100);
+  const loadSuperDocLibrary = (baseUrl) => {
+    if (window.SuperDocLibrary) return Promise.resolve();
+
+    const scriptSrc = `${baseUrl}/superdoc.umd.js`;
+    const existingScript = document.querySelector(`script[src="${scriptSrc}"]`);
+
+    if (existingScript) {
+      return new Promise((resolve) => {
+        existingScript.addEventListener('load', resolve, { once: true });
+      });
+    }
+
+    return new Promise((resolve, reject) => {
+      const script = document.createElement('script');
+      script.src = scriptSrc;
+      script.onload = resolve;
+      script.onerror = reject;
+      document.body.appendChild(script);
+    });
+  };
+
+  const initEditor = () => {
+    setTimeout(() => {
+      if (!window.SuperDocLibrary) return;
+      if (!document.getElementById(containerIdRef.current)) return;
+      if (editorRef.current) return;
+
+      editorRef.current = new window.SuperDocLibrary.SuperDoc({
+        selector: `#${containerIdRef.current}`,
+        html,
+        rulers: true,
+        onReady: () => {
+          setReady(true);
+          if (onReady) onReady(editorRef.current);
+        },
+      });
+    }, 100);
+  };
+
+  useEffect(() => {
+    let cancelled = false;
+
+    const boot = async () => {
+      const baseUrl = getBaseUrl();
+      ensureStyle(baseUrl);
+      await loadSuperDocLibrary(baseUrl);
+      if (!cancelled) initEditor();
     };
-    document.body.appendChild(script);
 
-    return () => editorRef.current?.destroy?.();
+    void boot();
+
+    return () => {
+      cancelled = true;
+      editorRef.current?.destroy?.();
+      editorRef.current = null;
+    };
   }, []);
 
   const exportDocx = () => {

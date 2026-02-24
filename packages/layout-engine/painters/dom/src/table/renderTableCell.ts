@@ -31,17 +31,9 @@ import {
   getSdtContainerKey,
   type SdtBoundaryOptions,
 } from '../utils/sdt-helpers.js';
-import { normalizeZIndex } from '@superdoc/pm-adapter/utilities.js';
 import { computeTabWidth } from '../utils/marker-helpers.js';
 import { applyCellBorders } from './border-utils.js';
 import { renderTableFragment as renderTableFragmentElement } from './renderTableFragment.js';
-
-/**
- * Default gap between list marker and text content in pixels.
- * This is applied when a gutter width is not explicitly provided in the marker layout.
- * The 8px default matches Microsoft Word's standard list marker spacing.
- */
-const LIST_MARKER_GAP = 8;
 
 /**
  * Word layout information for paragraph list markers.
@@ -75,6 +67,7 @@ type WordLayoutMarker = {
     /** Hidden text flag */
     vanish?: boolean;
   };
+  /** Separator between marker and text: tab (default), space, or nothing */
   suffix?: 'tab' | 'space' | 'nothing';
 };
 
@@ -90,6 +83,8 @@ type WordLayoutInfo = {
   indentLeftPx?: number;
   /** Whether first-line indent mode is enabled */
   firstLineIndentMode?: boolean;
+  /** Array of explicit tab stop positions in pixels */
+  tabsPx?: number[];
 };
 
 type TableRowMeasure = TableMeasure['rows'][number];
@@ -272,26 +267,26 @@ type TableCellIndentParams = {
 };
 
 /**
- * Renders a list marker (bullet or number) for a paragraph line.
+ * Renders a list marker (bullet or number) for a paragraph line inside a table cell.
  *
- * This function creates a positioned marker element and wraps the line in a container
- * to support absolute positioning of the marker relative to the text.
+ * Mirrors the top-level renderer approach: the marker and suffix separator are prepended
+ * inside `lineEl` as inline elements, and `lineEl.paddingLeft` controls the text start
+ * position. This avoids a wrapper div and ensures consistent positioning across all
+ * justification modes.
  *
- * **Marker Positioning Logic:**
- * - `markerStartPos`: The x-coordinate where text content begins (after the marker + gutter)
- * - `markerLeftPos`: The x-coordinate where the marker box starts (markerStartPos - markerBoxWidth)
- * - The marker is absolutely positioned within the line container
- * - Text gets left padding equal to markerStartPos to align with the marker end
+ * **Anchor Point Model:**
+ * The anchor point (`indentLeftPx - hangingIndent + firstLineIndent`) is where the
+ * numbering position is defined in OOXML. Justification determines how the marker text
+ * aligns relative to this point:
+ * - `left`: Marker text starts at anchor, flows right
+ * - `right`: Marker text ends at anchor
+ * - `center`: Marker text is centered on anchor
  *
- * **Justification Handling:**
- * - `left`: Marker box starts at indentLeftPx, text follows after box + gutter
- * - `right`: Uses markerX from layout engine, marker right-aligns within its box
- * - `center`: Uses markerX from layout engine, marker center-aligns within its box
+ * After the marker, a suffix separator (tab/space/nothing) fills the gap to the text start.
  *
  * @param params - Marker rendering parameters
- * @returns Container element with marker and line as children
  */
-function renderListMarker(params: MarkerRenderParams): HTMLElement {
+function renderListMarker(params: MarkerRenderParams): void {
   const { doc, lineEl, markerLayout, markerMeasure, indentLeftPx, hangingIndentPx, firstLineIndentPx, tabsPx } = params;
 
   const anchorPoint = indentLeftPx - hangingIndentPx + firstLineIndentPx;
@@ -326,16 +321,26 @@ function renderListMarker(params: MarkerRenderParams): HTMLElement {
     listTabWidth = 4;
   }
 
-  // Create container to hold both marker and line
-  const lineContainer = doc.createElement('div');
-  lineContainer.style.position = 'relative';
-  lineContainer.style.width = '100%';
+  // Set line padding to the anchor point — this is where the inline marker flow starts.
+  // Matches renderer.ts: lineEl.style.paddingLeft = anchorPoint
+  lineEl.style.paddingLeft = `${anchorPoint}px`;
 
-  // Create marker element with styling from layout engine
+  if (markerLayout?.run?.vanish) {
+    // Hidden marker — preserve list indentation but don't render marker text
+    return;
+  }
+
+  // Create marker container (inline-block to isolate from word-spacing used for justification)
+  const markerContainer = doc.createElement('span');
+  markerContainer.style.display = 'inline-block';
+  markerContainer.style.wordSpacing = '0px';
+
   const markerEl = doc.createElement('span');
   markerEl.classList.add('superdoc-paragraph-marker');
   markerEl.textContent = markerLayout?.markerText ?? '';
-  markerEl.style.display = 'inline-block';
+  markerEl.style.pointerEvents = 'none';
+
+  // Apply marker run styling
   markerEl.style.fontFamily = toCssFontFamily(markerLayout?.run?.fontFamily) ?? markerLayout?.run?.fontFamily ?? '';
   if (markerLayout?.run?.fontSize != null) {
     markerEl.style.fontSize = `${markerLayout.run.fontSize}px`;
@@ -349,42 +354,40 @@ function renderListMarker(params: MarkerRenderParams): HTMLElement {
     markerEl.style.letterSpacing = `${markerLayout.run.letterSpacing}px`;
   }
 
-  // Position marker within the container
-  if (['center', 'right'].includes(markerJustification)) {
-    lineEl.style.paddingLeft = parseFloat(lineEl.style.paddingLeft || '0') + currentPos + listTabWidth + 'px';
-    if (markerJustification === 'right') {
-      markerEl.style.position = 'absolute';
-      markerEl.style.left = `${markerStartPos}px`;
-    } else {
-      markerEl.style.position = 'absolute';
-      markerEl.style.left = `${markerStartPos - markerTextWidth / 2}px`;
-    }
-  }
-  lineEl.style.display = 'inline-block';
-
-  // Add separator
-  let separatorEl;
-  if (suffix === 'tab') {
-    separatorEl = doc.createElement('span');
-    separatorEl.className = 'superdoc-tab';
-    separatorEl.innerHTML = '&nbsp;';
-    separatorEl.style.display = 'inline-block';
-    separatorEl.style.wordSpacing = '0px';
-    separatorEl.style.width = `${listTabWidth}px`;
-  } else if (suffix === 'space') {
-    separatorEl = doc.createElement('span');
-    separatorEl.className = 'superdoc-marker-suffix-space';
-    separatorEl.style.wordSpacing = '0px';
-    separatorEl.textContent = '\u00A0';
+  // Left-justified markers stay inline (position: relative) within the text flow.
+  // Right/center-justified markers are absolutely positioned.
+  markerContainer.style.position = 'relative';
+  if (markerJustification === 'right') {
+    markerContainer.style.position = 'absolute';
+    markerContainer.style.left = `${markerStartPos}px`;
+  } else if (markerJustification === 'center') {
+    markerContainer.style.position = 'absolute';
+    // Match renderer.ts center positioning
+    markerContainer.style.left = `${markerStartPos - markerTextWidth / 2}px`;
+    lineEl.style.paddingLeft = parseFloat(lineEl.style.paddingLeft) + markerTextWidth / 2 + 'px';
   }
 
-  lineContainer.appendChild(markerEl);
-  if (separatorEl) {
-    lineContainer.appendChild(separatorEl);
-  }
-  lineContainer.appendChild(lineEl);
+  markerContainer.appendChild(markerEl);
 
-  return lineContainer;
+  // Add suffix separator after marker, before text content
+  const suffixType = markerLayout?.suffix ?? 'tab';
+  if (suffixType === 'tab') {
+    const tabEl = doc.createElement('span');
+    tabEl.className = 'superdoc-tab';
+    tabEl.innerHTML = '&nbsp;';
+    tabEl.style.display = 'inline-block';
+    tabEl.style.wordSpacing = '0px';
+    tabEl.style.width = `${listTabWidth}px`;
+    lineEl.prepend(tabEl);
+  } else if (suffixType === 'space') {
+    const spaceEl = doc.createElement('span');
+    spaceEl.classList.add('superdoc-marker-suffix-space');
+    spaceEl.style.wordSpacing = '0px';
+    spaceEl.textContent = '\u00A0';
+    lineEl.prepend(spaceEl);
+  }
+
+  lineEl.prepend(markerContainer);
 }
 
 /**
@@ -1326,7 +1329,6 @@ export const renderTableCell = (deps: TableCellRenderDependencies): TableCellRen
         // Create wrapper for this paragraph's SDT metadata
         // Use absolute positioning within the content container to stack blocks vertically
         const paraWrapper = doc.createElement('div');
-        paraWrapper.classList.add('superdoc-table-paragraph');
         paraWrapper.style.position = 'relative';
         paraWrapper.style.left = '0';
         paraWrapper.style.width = '100%';
@@ -1379,22 +1381,19 @@ export const renderTableCell = (deps: TableCellRenderDependencies): TableCellRen
            * - This is the first line (lineIdx === 0)
            * - We're rendering from the start of the paragraph (localStartLine === 0)
            * - The marker has a non-zero width
+           * Note: vanish markers are handled inside renderListMarker (sets correct
+           * indentation but skips marker text rendering).
            */
           const shouldRenderMarker =
             markerLayout &&
             markerMeasure &&
             lineIdx === 0 &&
             localStartLine === 0 &&
-            markerMeasure.markerWidth > 0 &&
-            !markerLayout.run?.vanish;
+            markerMeasure.markerWidth > 0;
 
           if (shouldRenderMarker) {
-            /**
-             * Render the list marker using the extracted helper function.
-             * This creates a container with the marker positioned absolutely
-             * and the line content positioned with appropriate padding.
-             */
-            const lineContainer = renderListMarker({
+            // Prepend marker + suffix inside lineEl (mirrors renderer.ts approach)
+            renderListMarker({
               doc,
               lineEl,
               markerLayout,
@@ -1402,9 +1401,10 @@ export const renderTableCell = (deps: TableCellRenderDependencies): TableCellRen
               indentLeftPx,
               hangingIndentPx,
               firstLineIndentPx,
+              tabsPx: wordLayout?.tabsPx,
             });
-            renderedLines.push({ el: lineContainer, top: lineTop, height: line.lineHeight });
-            paraWrapper.appendChild(lineContainer);
+            renderedLines.push({ el: lineEl, top: lineTop, height: line.lineHeight });
+            paraWrapper.appendChild(lineEl);
           } else {
             /**
              * For lines without markers, apply appropriate indentation:

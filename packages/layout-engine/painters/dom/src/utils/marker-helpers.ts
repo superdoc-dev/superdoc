@@ -5,6 +5,21 @@
  */
 const DEFAULT_TAB_INTERVAL_PX = 48;
 
+/**
+ * Compute the width of the tab separator between a list marker and its text content.
+ *
+ * Finds the next tab stop past `currentPos` (the x position after the marker text)
+ * using explicit tab stops first, then falling back to default 48px intervals.
+ * For hanging indents, an implicit tab stop is injected at `leftIndent`.
+ *
+ * @param currentPos - X position after the marker text ends (pixels)
+ * @param justification - Marker justification ('left', 'right', or 'center')
+ * @param tabs - Explicit tab stop positions in pixels
+ * @param hangingIndent - Hanging indent in pixels
+ * @param firstLineIndent - First line indent in pixels
+ * @param leftIndent - Left indent in pixels (paraIndentLeft)
+ * @returns Width of the tab separator in pixels
+ */
 export const computeTabWidth = (
   currentPos: number,
   justification: string,
@@ -15,35 +30,25 @@ export const computeTabWidth = (
 ): number => {
   const nextDefaultTabStop = currentPos + DEFAULT_TAB_INTERVAL_PX - (currentPos % DEFAULT_TAB_INTERVAL_PX);
   let tabWidth: number;
-  if ((justification ?? 'left') === 'left') {
+  if (justification === 'left') {
     // Check for explicit tab stops past current position
     const explicitTabs = [...(tabs ?? [])];
     if (hangingIndent && hangingIndent > 0) {
-      // Account for hanging indent by adding an implicit tab stop at (left + hanging)
-      const implicitTabPos = leftIndent; // paraIndentLeft already accounts for hanging
-      explicitTabs.push(implicitTabPos);
-      // Sort tab stops to maintain order
-      explicitTabs.sort((a, b) => {
-        if (typeof a === 'number' && typeof b === 'number') {
-          return a - b;
-        }
-        return 0;
-      });
+      // Account for hanging indent by adding an implicit tab stop at leftIndent
+      explicitTabs.push(leftIndent);
+      explicitTabs.sort((a, b) => a - b);
     }
     let targetTabStop: number | undefined;
 
-    if (Array.isArray(explicitTabs) && explicitTabs.length > 0) {
-      // Find the first tab stop that's past the current position
-      for (const tab of explicitTabs) {
-        if (typeof tab === 'number' && tab > currentPos) {
-          targetTabStop = tab;
-          break;
-        }
+    for (const tab of explicitTabs) {
+      if (tab > currentPos) {
+        targetTabStop = tab;
+        break;
       }
     }
 
     if (targetTabStop === undefined) {
-      // advance to next default 48px tab interval, matching Word behavior.
+      // Advance to next default 48px tab interval, matching Word behavior.
       targetTabStop = nextDefaultTabStop;
     }
     tabWidth = targetTabStop - currentPos;

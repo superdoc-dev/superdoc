@@ -80,6 +80,9 @@ export const TrackChanges = Extension.create({
           if (!isTrackedChangeActionAllowed({ editor, action: 'reject', trackedChanges })) return false;
 
           const { tr, doc } = state;
+          // Keep the IDs rejected in this transaction so the comments layer can
+          // resolve/hide the corresponding tracked-change bubbles in one path.
+          const rejectedChangeIds = new Set();
 
           // tr.setMeta('acceptReject', true);
           tr.setMeta('inputType', 'acceptReject');
@@ -89,6 +92,7 @@ export const TrackChanges = Extension.create({
           doc.nodesBetween(from, to, (node, pos) => {
             if (node.marks && node.marks.find((mark) => mark.type.name === TrackDeleteMarkName)) {
               const deletionMark = node.marks.find((mark) => mark.type.name === TrackDeleteMarkName);
+              if (deletionMark?.attrs?.id) rejectedChangeIds.add(deletionMark.attrs.id);
 
               tr.step(
                 new RemoveMarkStep(
@@ -98,6 +102,9 @@ export const TrackChanges = Extension.create({
                 ),
               );
             } else if (node.marks && node.marks.find((mark) => mark.type.name === TrackInsertMarkName)) {
+              const insertionMark = node.marks.find((mark) => mark.type.name === TrackInsertMarkName);
+              if (insertionMark?.attrs?.id) rejectedChangeIds.add(insertionMark.attrs.id);
+
               const deletionStep = new ReplaceStep(
                 map.map(Math.max(pos, from)),
                 map.map(Math.min(pos + node.nodeSize, to)),
@@ -108,6 +115,7 @@ export const TrackChanges = Extension.create({
               map.appendMap(deletionStep.getMap());
             } else if (node.marks && node.marks.find((mark) => mark.type.name === TrackFormatMarkName)) {
               const formatChangeMark = node.marks.find((mark) => mark.type.name === TrackFormatMarkName);
+              if (formatChangeMark?.attrs?.id) rejectedChangeIds.add(formatChangeMark.attrs.id);
 
               formatChangeMark.attrs.before.forEach((oldMark) => {
                 tr.step(
@@ -148,6 +156,23 @@ export const TrackChanges = Extension.create({
 
           if (tr.steps.length) {
             dispatch(tr);
+
+            if (editor?.emit && rejectedChangeIds.size) {
+              const resolvedByEmail = editor.options?.user?.email;
+              const resolvedByName = editor.options?.user?.name;
+
+              // Bubble reject-by-selection/reject-all through the same
+              // tracked-change comment resolution channel used by bubble actions.
+              rejectedChangeIds.forEach((changeId) => {
+                editor.emit('commentsUpdate', {
+                  type: 'trackedChange',
+                  event: 'resolve',
+                  changeId,
+                  resolvedByEmail,
+                  resolvedByName,
+                });
+              });
+            }
           }
 
           return true;

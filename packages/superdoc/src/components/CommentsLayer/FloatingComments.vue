@@ -121,6 +121,28 @@ watchEffect(() => {
   nextTick(processLocations);
 });
 
+watch(
+  () =>
+    getFloatingComments.value
+      .map((comment) => String(comment.commentId || comment.importedId))
+      .sort()
+      .join('|'),
+  () => {
+    const activeIds = new Set(
+      getFloatingComments.value.map((comment) => String(comment.commentId || comment.importedId)).filter(Boolean),
+    );
+
+    // Remove rendered entries for comments that no longer exist so old tracked
+    // change dialogs do not linger after bulk reject clears their threads.
+    renderedSizes.value = renderedSizes.value.filter((item) => activeIds.has(String(item.id)));
+
+    if (!activeIds.size) {
+      firstGroupRendered.value = false;
+      verticalOffset.value = 0;
+    }
+  },
+);
+
 watch(activeComment, (newVal, oldVal) => {
   nextTick(() => {
     if (!activeComment.value) return (verticalOffset.value = 0);

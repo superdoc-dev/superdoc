@@ -360,6 +360,17 @@ export const useCommentsStore = defineStore('comments', () => {
 
       syncCommentsToClients(superdoc, emitData);
       debounceEmit(changeId, emitData, superdoc);
+    } else if (event === 'resolve') {
+      const existingTrackedChange = commentsList.value.find((comment) => comment.commentId === changeId);
+      if (!existingTrackedChange || existingTrackedChange.resolvedTime) return;
+
+      // Selection/toolbar reject emits tracked-change resolve events. Use the same
+      // resolution path as the comment dialog so one method owns state + sync + emit.
+      existingTrackedChange.resolveComment({
+        email: params.resolvedByEmail ?? superdoc?.user?.email ?? null,
+        name: params.resolvedByName ?? superdoc?.user?.name ?? null,
+        superdoc,
+      });
     }
   };
 
@@ -823,10 +834,12 @@ export const useCommentsStore = defineStore('comments', () => {
    * @returns {void}
    */
   const handleEditorLocationsUpdate = (allCommentPositions) => {
-    if ((!allCommentPositions || Object.keys(allCommentPositions).length === 0) && commentsList.value.length > 0) {
+    if (allCommentPositions == null) {
       return;
     }
-    editorCommentPositions.value = allCommentPositions || {};
+    // `{}` is authoritative: when marks are removed, positions can become empty
+    // and we must clear stale anchors instead of preserving previous ones.
+    editorCommentPositions.value = allCommentPositions;
   };
 
   /**

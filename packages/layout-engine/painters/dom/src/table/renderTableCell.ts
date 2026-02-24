@@ -1041,8 +1041,8 @@ export const renderTableCell = (deps: TableCellRenderDependencies): TableCellRen
     // Calculate total segments across all blocks for proper global index mapping.
     // Embedded tables expand recursively (matching the layout engine's getCellLines()
     // which uses getEmbeddedRowLines() for recursive nested table expansion).
-    // Non-paragraph blocks (images, drawings) occupy 1 segment each, except anchored
-    // blocks which are rendered out-of-flow and do not consume segment indices.
+    // Non-paragraph blocks (images, drawings) occupy 1 segment each when height > 0,
+    // including anchored blocks (matching getCellLines() in layout-table.ts).
     const blockLineCounts: number[] = [];
     for (let i = 0; i < Math.min(blockMeasures.length, cellBlocks.length); i++) {
       const bm = blockMeasures[i];
@@ -1053,15 +1053,11 @@ export const renderTableCell = (deps: TableCellRenderDependencies): TableCellRen
         // Embedded tables: recursively count segments (matches getCellLines expansion)
         blockLineCounts.push(getEmbeddedTableSegmentCount(bm as TableMeasure));
       } else {
-        // Anchored blocks are rendered out-of-flow — they don't consume segment slots.
-        // Skip them to stay in sync with the rendering loop which also skips them.
-        const anchor = (blk as ImageBlock | DrawingBlock)?.anchor;
-        if (anchor?.isAnchored) {
-          blockLineCounts.push(0);
-        } else {
-          // Non-anchored non-paragraph blocks (image, drawing) occupy 1 segment
-          blockLineCounts.push(1);
-        }
+        // Non-paragraph/non-table blocks (images, drawings) occupy 1 segment when
+        // their height > 0, matching getCellLines() in layout-table.ts which only
+        // counts non-paragraph blocks with positive height.
+        const blockHeight = 'height' in bm ? (bm as { height: number }).height : 0;
+        blockLineCounts.push(blockHeight > 0 ? 1 : 0);
       }
     }
     const totalLines = blockLineCounts.reduce((a, b) => a + b, 0);
@@ -1109,6 +1105,11 @@ export const renderTableCell = (deps: TableCellRenderDependencies): TableCellRen
       if (blockMeasure.kind === 'image' && block?.kind === 'image') {
         if (block.anchor?.isAnchored) {
           anchoredBlocks.push({ block, measure: blockMeasure as ImageMeasure });
+          // Advance cumulative count only when height > 0 to stay aligned with
+          // getCellLines() which only counts non-paragraph blocks with positive height.
+          if (blockMeasure.height > 0) {
+            cumulativeLineCount += 1;
+          }
           continue;
         }
 
@@ -1154,6 +1155,11 @@ export const renderTableCell = (deps: TableCellRenderDependencies): TableCellRen
       if (blockMeasure.kind === 'drawing' && block?.kind === 'drawing') {
         if (block.anchor?.isAnchored) {
           anchoredBlocks.push({ block, measure: blockMeasure as DrawingMeasure });
+          // Advance cumulative count only when height > 0 to stay aligned with
+          // getCellLines() which only counts non-paragraph blocks with positive height.
+          if (blockMeasure.height > 0) {
+            cumulativeLineCount += 1;
+          }
           continue;
         }
 

@@ -239,6 +239,70 @@ describe('renderTableCell', () => {
     expect(imgEl?.parentElement?.style.top).toBe('5px');
   });
 
+  it('keeps partial-row segment indexing aligned when anchored blocks are between paragraphs', () => {
+    const paraBefore: ParagraphBlock = {
+      kind: 'paragraph',
+      id: 'para-before-anchor',
+      runs: [{ text: 'Before', fontFamily: 'Arial', fontSize: 16 }],
+    };
+
+    const paraAfter: ParagraphBlock = {
+      kind: 'paragraph',
+      id: 'para-after-anchor',
+      runs: [{ text: 'After', fontFamily: 'Arial', fontSize: 16 }],
+    };
+
+    const anchoredImage: ImageBlock = {
+      kind: 'image',
+      id: 'img-between',
+      src: 'data:image/png;base64,AAA',
+      anchor: { isAnchored: true, alignH: 'left', offsetH: 0, vRelativeFrom: 'paragraph', offsetV: 0 },
+      wrap: { type: 'None' },
+      attrs: { anchorParagraphId: 'para-before-anchor' },
+    };
+
+    const cellMeasure: TableCellMeasure = {
+      blocks: [
+        paragraphMeasure,
+        {
+          kind: 'image' as const,
+          width: 20,
+          height: 10,
+        },
+        paragraphMeasure,
+      ],
+      width: 120,
+      height: 60,
+      gridColumnStart: 0,
+      colSpan: 1,
+      rowSpan: 1,
+    };
+
+    const cell: TableCell = {
+      id: 'cell-partial-anchored-alignment',
+      blocks: [paraBefore, anchoredImage, paraAfter],
+      attrs: {},
+    };
+
+    const { cellElement } = renderTableCell({
+      ...createBaseDeps(),
+      cellMeasure,
+      cell,
+      fromLine: 2,
+      toLine: 3,
+      renderLine: (block) => {
+        const line = doc.createElement('div');
+        line.classList.add('segment-alignment-line');
+        line.dataset.blockId = (block as ParagraphBlock).id;
+        return line;
+      },
+    });
+
+    const renderedLines = Array.from(cellElement.querySelectorAll('.segment-alignment-line')) as HTMLElement[];
+    expect(renderedLines).toHaveLength(1);
+    expect(renderedLines[0]?.dataset.blockId).toBe('para-after-anchor');
+  });
+
   it('adjusts column-relative anchored images by table indent and cell offset', () => {
     const para: ParagraphBlock = {
       kind: 'paragraph',

@@ -768,8 +768,14 @@ export async function incrementalLayout(
     hasPreviousMeasures &&
     previousConstraints?.measurementWidth === measurementWidth &&
     previousConstraints?.measurementHeight === measurementHeight;
+  const previousPerSectionConstraints = canReusePreviousMeasures
+    ? computePerSectionConstraints(options, previousBlocks)
+    : null;
   const previousMeasuresById = canReusePreviousMeasures
     ? new Map(previousBlocks.map((block, index) => [block.id, previousMeasures![index]]))
+    : null;
+  const previousConstraintsById = canReusePreviousMeasures
+    ? new Map(previousBlocks.map((block, index) => [block.id, previousPerSectionConstraints![index]]))
     : null;
 
   const measureStart = performance.now();
@@ -794,7 +800,12 @@ export async function incrementalLayout(
 
     if (canReusePreviousMeasures && dirty.stableBlockIds.has(block.id)) {
       const previousMeasure = previousMeasuresById?.get(block.id);
-      if (previousMeasure) {
+      const previousBlockConstraints = previousConstraintsById?.get(block.id);
+      if (
+        previousMeasure &&
+        previousBlockConstraints?.maxWidth === blockMeasureWidth &&
+        previousBlockConstraints?.maxHeight === blockMeasureHeight
+      ) {
         measures.push(previousMeasure);
         reusedMeasures++;
         continue;

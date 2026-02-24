@@ -135,6 +135,18 @@ export class DecorationBridge {
   /** True if the last sync had at least one eligible plugin. Used to detect the → 0 transition. */
   #hadEligiblePlugins = false;
 
+  /**
+   * Previous decoration ranges per plugin, used for fallback when plugins
+   * incorrectly clear decorations due to bad transaction mappings.
+   *
+   * SuperDoc's `calculateInlineRunPropertiesPlugin` splits runs when marks are
+   * applied, producing transaction mappings that cause `DecorationSet.map()` to
+   * collapse or invalidate decoration ranges. This cache allows the bridge to
+   * restore the previous range when the plugin incorrectly clears it but the
+   * original positions are still valid in the document.
+   */
+  #previousRanges = new Map<Plugin, Array<{ from: number; to: number; classes: string[]; style: string | null }>>();
+
   // -------------------------------------------------------------------------
   // Public API
   // -------------------------------------------------------------------------
@@ -181,6 +193,81 @@ export class DecorationBridge {
   }
 
   /**
+   * Collects all decoration ranges from eligible plugins for overlay rendering.
+   * Returns an array of {from, to, classes, style} objects representing each
+   * inline decoration that should be visually rendered.
+   *
+   * This is used by PresentationEditor to render character-accurate highlight
+   * overlays using selectionToRects, bypassing the element-level granularity
+   * limitation of the DOM-based sync approach.
+   *
+   * **Fallback behavior**: When a plugin returns empty/collapsed decoration ranges
+   * but previously had valid ranges, and the previous positions are still within
+   * document bounds, this method restores the previous ranges. This handles cases
+   * where `calculateInlineRunPropertiesPlugin` splits runs (when applying marks)
+   * and produces transaction mappings that incorrectly invalidate decorations.
+   */
+  collectDecorationRanges(state: EditorState): Array<{
+    from: number;
+    to: number;
+    classes: string[];
+    style: string | null;
+  }> {
+    this.#refreshEligiblePlugins(state);
+
+    const ranges: Array<{ from: number; to: number; classes: string[]; style: string | null }> = [];
+    const docSize = state.doc.content.size;
+
+    for (const plugin of this.#eligiblePlugins) {
+      const pluginRanges: Array<{ from: number; to: number; classes: string[]; style: string | null }> = [];
+      const decorationSet = this.#getDecorationSet(plugin, state);
+
+      if (decorationSet !== DecorationSet.empty) {
+        const decorations = decorationSet.find(0, docSize);
+        for (const decoration of decorations) {
+          if (!this.#isInlineDecoration(decoration)) continue;
+
+          const attrs = this.#extractSafeAttrs(decoration);
+          // Only include decorations that have visual styling (classes or inline style)
+          if (attrs.classes.length === 0 && attrs.styleEntries.length === 0) continue;
+
+          pluginRanges.push({
+            from: decoration.from,
+            to: decoration.to,
+            classes: attrs.classes,
+            style: attrs.styleEntries.length > 0
+              ? attrs.styleEntries.map(([prop, val]) => `${prop}: ${val}`).join('; ')
+              : null,
+          });
+        }
+      }
+
+      // Fallback: If plugin has no ranges but previously had valid ranges,
+      // check if the previous positions are still valid in the document.
+      // This handles the case where mark application causes bad transaction
+      // mappings that incorrectly clear decorations.
+      const previousPluginRanges = this.#previousRanges.get(plugin);
+      if (pluginRanges.length === 0 && previousPluginRanges && previousPluginRanges.length > 0) {
+        for (const prevRange of previousPluginRanges) {
+          // Check if previous positions are still valid in the document
+          if (prevRange.from >= 0 && prevRange.from < prevRange.to && prevRange.to <= docSize) {
+            // Restore the previous range
+            pluginRanges.push({ ...prevRange });
+          }
+        }
+      }
+
+      // Store current ranges for next comparison
+      this.#previousRanges.set(plugin, pluginRanges.length > 0 ? [...pluginRanges] : []);
+
+      // Add to final output
+      ranges.push(...pluginRanges);
+    }
+
+    return ranges;
+  }
+
+  /**
    * Removes all bridge-owned classes and data-attributes from the DOM.
    * Called during teardown.
    */
@@ -188,6 +275,7 @@ export class DecorationBridge {
     this.#eligiblePlugins = [];
     this.#pluginListSnapshot = [];
     this.#prevDecorationSets.clear();
+    this.#previousRanges.clear();
     this.#hadEligiblePlugins = false;
     // WeakMap entries are garbage collected with their elements.
   }

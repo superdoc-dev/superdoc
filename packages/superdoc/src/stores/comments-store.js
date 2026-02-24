@@ -340,7 +340,13 @@ export const useCommentsStore = defineStore('comments', () => {
     });
 
     if (event === 'add') {
-      // If this is a new tracked change, add it to our comments
+      const existing = commentsList.value.find((c) => c.commentId === changeId);
+      if (existing) {
+        // Already exists (e.g. created during batch import) — update instead of duplicating
+        existing.trackedChangeText = trackedChangeText;
+        if (deletedText) existing.deletedText = deletedText;
+        return;
+      }
       addComment({ superdoc, comment });
     } else if (event === 'update') {
       // If we have an update event, simply update the composable comment

@@ -318,6 +318,62 @@ describe('comments-store', () => {
     expect(store.commentsList).toEqual([trackedComment, regularComment]);
   });
 
+  it('clears active tracked-change thread when stale root uses importedId position key', () => {
+    const trackedComment = {
+      commentId: 'change-5',
+      importedId: 'import-change-5',
+      fileId: 'doc-1',
+      trackedChange: true,
+      selection: { source: 'super-editor', selectionBounds: {} },
+    };
+    store.commentsList = [trackedComment];
+    store.editorCommentPositions = {
+      'import-change-5': { start: 1, end: 5 },
+    };
+    store.activeComment = 'change-5';
+
+    getTrackChangesMock.mockReturnValueOnce([]);
+    const removedCount = store.syncTrackedChangePositionsWithDocument({
+      documentId: 'doc-1',
+      editor: { state: { doc: {} } },
+    });
+
+    expect(removedCount).toBe(1);
+    expect(store.editorCommentPositions).toEqual({});
+    expect(store.activeComment).toBeNull();
+  });
+
+  it('removes child anchors when stale importedId root is referenced by commentId', () => {
+    const trackedComment = {
+      commentId: 'change-6',
+      importedId: 'import-change-6',
+      fileId: 'doc-1',
+      trackedChange: true,
+      selection: { source: 'super-editor', selectionBounds: {} },
+    };
+    const replyComment = {
+      commentId: 'reply-1',
+      parentCommentId: 'change-6',
+      fileId: 'doc-1',
+      trackedChange: false,
+      selection: { source: 'super-editor', selectionBounds: {} },
+    };
+    store.commentsList = [trackedComment, replyComment];
+    store.editorCommentPositions = {
+      'import-change-6': { start: 1, end: 5 },
+      'reply-1': { start: 6, end: 9 },
+    };
+
+    getTrackChangesMock.mockReturnValueOnce([]);
+    const removedCount = store.syncTrackedChangePositionsWithDocument({
+      documentId: 'doc-1',
+      editor: { state: { doc: {} } },
+    });
+
+    expect(removedCount).toBe(2);
+    expect(store.editorCommentPositions).toEqual({});
+  });
+
   it('keeps tracked-change anchors when tracked marks still exist', () => {
     const trackedComment = {
       commentId: 'change-4',

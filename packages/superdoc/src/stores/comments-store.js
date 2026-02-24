@@ -162,8 +162,11 @@ export const useCommentsStore = defineStore('comments', () => {
     const currentPositions = editorCommentPositions.value || {};
     if (!Object.keys(currentPositions).length) return 0;
 
+    const toNormalizedId = (id) => (id === undefined || id === null ? null : String(id));
+
     // First pass: find tracked-change root comments that still have positions in this document
-    const candidateRootIds = new Set();
+    const candidateRootPositionKeys = new Set();
+    const rootAliasesByPositionKey = new Map();
 
     commentsList.value.forEach((comment) => {
       if (!comment?.trackedChange) return;
@@ -175,11 +178,20 @@ export const useCommentsStore = defineStore('comments', () => {
       const positionKey = getCommentPositionKey(comment);
       if (!positionKey) return;
       const normalizedPositionKey = String(positionKey);
-      if (currentPositions[positionKey] === undefined) return;
-      candidateRootIds.add(normalizedPositionKey);
+      // mirror editorCommentPositions keying: positions are indexed by getCommentPositionKey
+      // (importedId when present, otherwise commentId), so we normalize against that key first.
+      if (currentPositions[normalizedPositionKey] === undefined) return;
+
+      candidateRootPositionKeys.add(normalizedPositionKey);
+      const aliases = new Set([normalizedPositionKey]);
+      const commentIdAlias = toNormalizedId(comment?.commentId);
+      const importedIdAlias = toNormalizedId(comment?.importedId);
+      if (commentIdAlias) aliases.add(commentIdAlias);
+      if (importedIdAlias) aliases.add(importedIdAlias);
+      rootAliasesByPositionKey.set(normalizedPositionKey, aliases);
     });
 
-    if (!candidateRootIds.size) return 0;
+    if (!candidateRootPositionKeys.size) return 0;
 
     // Collect IDs for all currently active tracked-change marks in the document
     const trackedIds = new Set(
@@ -189,23 +201,38 @@ export const useCommentsStore = defineStore('comments', () => {
         .filter((id) => id !== undefined && id !== null)
         .map((id) => String(id)),
     );
-    // Any comment positions whose IDs are missing from the document marks are considered stale
-    const staleRootIds = new Set(Array.from(candidateRootIds).filter((id) => !trackedIds.has(id)));
-    if (!staleRootIds.size) return 0;
+    // Any tracked-change roots whose aliases are missing from document marks are considered stale
+    const staleRootPositionKeys = new Set(
+      Array.from(candidateRootPositionKeys).filter((positionKey) => {
+        const aliases = rootAliasesByPositionKey.get(positionKey) ?? new Set([positionKey]);
+        // Keep stale detection aligned with editorCommentPositions:
+        // tracked marks may surface either importedId or commentId, so we match both.
+        return !Array.from(aliases).some((alias) => trackedIds.has(alias));
+      }),
+    );
+    if (!staleRootPositionKeys.size) return 0;
 
-    const stalePositionKeys = new Set(staleRootIds);
+    const staleRootAliasIds = new Set();
+    staleRootPositionKeys.forEach((positionKey) => {
+      const aliases = rootAliasesByPositionKey.get(positionKey) ?? new Set([positionKey]);
+      aliases.forEach((alias) => staleRootAliasIds.add(alias));
+    });
+
+    const stalePositionKeys = new Set(staleRootPositionKeys);
 
     commentsList.value.forEach((comment) => {
       const positionKey = getCommentPositionKey(comment);
-      if (!positionKey || currentPositions[positionKey] === undefined) return;
+      if (!positionKey) return;
+      const normalizedPositionKey = String(positionKey);
+      if (currentPositions[normalizedPositionKey] === undefined) return;
 
       // Extend staleness to replies / child comments that thread under a stale tracked-change root
       const parentKeys = [comment?.trackedChangeParentId, comment?.parentCommentId]
-        .filter((id) => id !== undefined && id !== null)
-        .map((id) => String(id));
+        .map((id) => toNormalizedId(id))
+        .filter(Boolean);
 
-      if (parentKeys.some((id) => staleRootIds.has(id))) {
-        stalePositionKeys.add(String(positionKey));
+      if (parentKeys.some((id) => staleRootAliasIds.has(id))) {
+        stalePositionKeys.add(normalizedPositionKey);
       }
     });
 
@@ -216,14 +243,19 @@ export const useCommentsStore = defineStore('comments', () => {
     editorCommentPositions.value = nextPositions;
 
     if (activeComment.value !== undefined && activeComment.value !== null) {
-      const activeId = String(activeComment.value);
       const activeCommentModel = getComment(activeComment.value);
+      const activeAliases = new Set(
+        [activeComment.value, activeCommentModel?.commentId, activeCommentModel?.importedId]
+          .map((id) => toNormalizedId(id))
+          .filter(Boolean),
+      );
       // If the active comment is part of a stale tracked-change thread, clear the active state
       const activeParentKeys = [activeCommentModel?.trackedChangeParentId, activeCommentModel?.parentCommentId]
-        .filter((id) => id !== undefined && id !== null)
-        .map((id) => String(id));
+        .map((id) => toNormalizedId(id))
+        .filter(Boolean);
 
-      if (staleRootIds.has(activeId) || activeParentKeys.some((id) => staleRootIds.has(id))) {
+      const isActiveStale = Array.from(activeAliases).some((id) => staleRootAliasIds.has(id));
+      if (isActiveStale || activeParentKeys.some((id) => staleRootAliasIds.has(id))) {
         activeComment.value = null;
       }
     }

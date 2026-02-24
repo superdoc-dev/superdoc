@@ -43,7 +43,7 @@ export const groupChanges = (changes) => {
 
       // Try adjacent match within group
       const c2 = group[i + 1];
-      if (c2 && !processed.has(i + 1) && c1.to === c2.from) {
+      if (c2 && !processed.has(i + 1) && c1.to === c2.from && c1.mark.type.name !== c2.mark.type.name) {
         const c2Key = markMetaKeys[c2.mark.type.name];
         grouped.push({
           from: c1.from,

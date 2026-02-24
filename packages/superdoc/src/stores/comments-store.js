@@ -345,6 +345,14 @@ export const useCommentsStore = defineStore('comments', () => {
         // Already exists (e.g. created during batch import) — update instead of duplicating
         existing.trackedChangeText = trackedChangeText;
         if (deletedText) existing.deletedText = deletedText;
+
+        const emitData = {
+          type: COMMENT_EVENTS.UPDATE,
+          comment: existing.getValues(),
+        };
+
+        syncCommentsToClients(superdoc, emitData);
+        debounceEmit(changeId, emitData, superdoc);
         return;
       }
       addComment({ superdoc, comment });

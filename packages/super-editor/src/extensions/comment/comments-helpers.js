@@ -736,6 +736,8 @@ export const translateFormatChangesToEnglish = (attrs = {}) => {
         const label = formatAttrName(attr); // Convert camelCase to lowercase words
         if (beforeValue === undefined || beforeValue === null) {
           textStyleChanges.push(`Set ${label} to ${afterValue}`);
+        } else if (afterValue === undefined || afterValue === null) {
+          textStyleChanges.push(`Removed ${label} (was ${beforeValue})`);
         } else {
           textStyleChanges.push(`Changed ${label} from ${beforeValue} to ${afterValue}`);
         }

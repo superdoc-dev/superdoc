@@ -1,6 +1,6 @@
 # SuperDoc Visual Testing
 
-Visual and interaction snapshot testing for SuperDoc, with HTML reports.
+Visual snapshot testing for SuperDoc, with HTML reports.
 
 **In cloud mode, baselines are not stored in this repo.** Generate baselines for the SuperDoc versions you want to compare against, then run a comparison. (Local mode stores baselines in `./baselines`.)
 
@@ -47,7 +47,7 @@ Use local docs and store baselines/results on disk with:
 - `--docs <path>` required in local mode; points to a folder containing `.docx` files (nested folders OK)
 
 Behavior in local mode:
-- Baselines are stored in `./baselines` and `./baselines-interactions`
+- Baselines are stored in `./baselines`
 - Screenshots/results are stored in `./screenshots` and `./results`
 - No R2 env vars required
 - If a baseline is missing, `pnpm compare` will generate it automatically
@@ -63,15 +63,12 @@ Examples:
 - `pnpm superdoc /path/to/superdoc` use a local repo build (monorepo root or packages/superdoc).
 - `pnpm superdoc local` pack and install the local repo superdoc tarball (requires repo checkout).
 - `pnpm superdoc:version` show the current installed SuperDoc version.
-- `pnpm generate` generate visual + interaction snapshots.
-- `pnpm generate:visual` generate visual snapshots only.
-- `pnpm generate:interactions` generate interaction snapshots only.
-- `pnpm baseline` generate visual + interaction baselines.
-- `pnpm baseline:visual` generate visual baselines only.
-- `pnpm baseline:interactions` generate interaction baselines only.
-- `pnpm compare` compare visual + interaction snapshots.
-- `pnpm compare:visual` compare visual snapshots only.
-- `pnpm compare:interactions` compare interaction snapshots only.
+- `pnpm generate` generate visual snapshots.
+- `pnpm generate:visual` generate visual snapshots.
+- `pnpm baseline` generate visual baselines.
+- `pnpm baseline:visual` generate visual baselines.
+- `pnpm compare` compare visual snapshots.
+- `pnpm compare:visual` compare visual snapshots.
 - `pnpm upload --folder <name> <file.docx>` upload a single docx via the shared repo corpus CLI and update `registry.json`.
 - `pnpm get-corpus [dest] --filter <name>` download corpus docs via the shared repo corpus CLI (default: `./test-docs`).
 - `pnpm get-docx <path>` download a single docx into a temp folder (prints the local path).
@@ -93,9 +90,9 @@ Notes:
 
 ## Common flags
 
-- `--filter <prefix>` match by path/story prefix (e.g. `layout`, `sd-1401`).
-- `--match <text>` match by substring anywhere in path/story.
-- `--exclude <prefix>` skip by path/story prefix.
+- `--filter <prefix>` match by path prefix (e.g. `layout`, `sd-1401`).
+- `--match <text>` match by substring anywhere in path.
+- `--exclude <prefix>` skip by path prefix.
 - `--doc <relative.docx>` target specific corpus docs on visual commands (repeatable), e.g. `comments-tcs/basic-comments.docx`.
 - Repeat `--filter`, `--match`, or `--exclude` to combine multiple values.
 - `--force` regenerate baselines even if they already exist.
@@ -108,24 +105,19 @@ Notes:
 - `--refresh-baselines` re-download baseline files from R2 for the current filters (or full baseline if no filters).
 - `--local` use local docs and local baselines/results (no R2).
 - `--docs <path>` local docs root (required when using `--local`).
-- `--ci` or `--silent` hide per-doc/story logs and show progress only (CI-friendly).
+- `--ci` or `--silent` hide per-doc logs and show progress only (CI-friendly).
 
 ## Multi-browser baselines
 
 - Baselines and results are stored per browser.
-  - Visual: `baselines/v.X.Y/<browser>/...`, `screenshots/<run>/<browser>/...`
-  - Interactions: `baselines-interactions/v.X.Y/<browser>/...`, `screenshots/<run>/interactions/<browser>/...`
+  - `baselines/v.X.Y/<browser>/...`, `screenshots/<run>/<browser>/...`
 - Legacy baselines without a browser folder are treated as `chromium` during compare.
 - If multiple browsers run, reports/diffs are written under `results/<run>/<browser>/...`.
 
 ## Reports
 
-- Single browser:
-  - Visual report: `results/<run>/report.html`
-  - Interaction report: `results/<run>/interactions-report.html`
-- Multiple browsers:
-  - Visual report: `results/<run>/<browser>/report.html`
-  - Interaction report: `results/<run>/<browser>/interactions-report.html`
+- Single browser: `results/<run>/report.html`
+- Multiple browsers: `results/<run>/<browser>/report.html`
 
 Open the HTML file in your browser.
 
@@ -145,22 +137,4 @@ Requirements:
 - sidecar running from repo root: `pnpm word-benchmark-sidecar`
 
 Notes:
-- this is available on visual reports only (not interaction reports)
 - the report calls `http://127.0.0.1:9185` by default; override with `?wordOverlayService=http://host:port`
-
-## Interaction stories
-
-Stories live in `tests/interactions/stories`.
-
-How to add a story:
-
-1. Copy `tests/interactions/stories/_template.ts`.
-2. Rename the file to your story name.
-3. Update the `name`, `description`, and `run` steps.
-4. Add `milestone()` calls where you want screenshots.
-
-Run a single story:
-
-- `pnpm generate:interactions --filter your-story-name`
-- `pnpm baseline:interactions --filter your-story-name`
-- `pnpm compare:interactions --filter your-story-name`

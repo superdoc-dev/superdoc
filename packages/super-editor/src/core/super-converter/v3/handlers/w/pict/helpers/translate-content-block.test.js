@@ -185,3 +185,128 @@ describe('translateVRectContentBlock', () => {
     expect(generateRandomSigned32BitIntStrId).toHaveBeenCalled();
   });
 });
+
+// ---------------------------------------------------------------------------
+// VML fallback synthesis: horizontalRule nodes without legacy VML metadata
+// (created via insertHorizontalRule or parsed from <hr> tags).
+// ---------------------------------------------------------------------------
+describe('translateVRectContentBlock - VML synthesis for new HRs', () => {
+  /** Helper: build params matching createDefaultHorizontalRuleAttrs() output. */
+  const buildNewHRParams = (overrides = {}) => ({
+    node: {
+      attrs: {
+        horizontalRule: true,
+        size: { width: '100%', height: 2 },
+        background: '#e5e7eb',
+        ...overrides,
+      },
+    },
+  });
+
+  /** Helper: extract the v:rect attributes from the translated result. */
+  const getRectAttrs = (result) => result.elements[0].elements[0].attributes;
+
+  beforeEach(() => {
+    vi.clearAllMocks();
+    generateRandomSigned32BitIntStrId.mockReturnValue('12345678');
+    wrapTextInRun.mockImplementation((content) => ({ name: 'w:r', elements: [content] }));
+  });
+
+  it('should synthesize VML HR flags when vmlAttributes is absent', () => {
+    const rectAttrs = getRectAttrs(translateVRectContentBlock(buildNewHRParams()));
+
+    expect(rectAttrs['o:hr']).toBe('t');
+    expect(rectAttrs['o:hrstd']).toBe('t');
+    expect(rectAttrs['o:hralign']).toBe('center');
+    expect(rectAttrs.stroked).toBe('f');
+  });
+
+  it('should synthesize VML style from size for full-width HR', () => {
+    const rectAttrs = getRectAttrs(translateVRectContentBlock(buildNewHRParams()));
+
+    // width: 100% -> nominal 468pt, height: 2px -> 1.5pt
+    expect(rectAttrs.style).toBe('width:468pt;height:1.5pt');
+  });
+
+  it('should synthesize VML style from size for fixed-width HR', () => {
+    const params = buildNewHRParams({ size: { width: 200, height: 3 } });
+    const rectAttrs = getRectAttrs(translateVRectContentBlock(params));
+
+    // 200px / 1.33 ~= 150.4pt, 3px / 1.33 ~= 2.3pt
+    expect(rectAttrs.style).toBe('width:150.4pt;height:2.3pt');
+  });
+
+  it('should synthesize VML style from percentage width without NaN values', () => {
+    const params = buildNewHRParams({ size: { width: '50%', height: 2 } });
+    const rectAttrs = getRectAttrs(translateVRectContentBlock(params));
+
+    expect(rectAttrs.style).toBe('width:234pt;height:1.5pt');
+    expect(rectAttrs.style).not.toContain('NaN');
+  });
+
+  it('should synthesize VML style from px strings without NaN values', () => {
+    const params = buildNewHRParams({ size: { width: '200px', height: '3px' } });
+    const rectAttrs = getRectAttrs(translateVRectContentBlock(params));
+
+    expect(rectAttrs.style).toBe('width:150.4pt;height:2.3pt');
+    expect(rectAttrs.style).not.toContain('NaN');
+  });
+
+  it('should omit invalid style dimensions instead of emitting NaNpt', () => {
+    const params = buildNewHRParams({ size: { width: 'auto', height: 2 } });
+    const rectAttrs = getRectAttrs(translateVRectContentBlock(params));
+
+    expect(rectAttrs.style).toBe('height:1.5pt');
+    expect(rectAttrs.style).not.toContain('NaN');
+  });
+
+  it('should set fillcolor from background', () => {
+    const rectAttrs = getRectAttrs(translateVRectContentBlock(buildNewHRParams()));
+
+    expect(rectAttrs.fillcolor).toBe('#e5e7eb');
+  });
+
+  it('should synthesize missing HR flags when vmlAttributes is partial', () => {
+    const params = buildNewHRParams({
+      vmlAttributes: { hralign: 'left' },
+    });
+    const rectAttrs = getRectAttrs(translateVRectContentBlock(params));
+
+    expect(rectAttrs['o:hralign']).toBe('left');
+    expect(rectAttrs['o:hr']).toBe('t');
+    expect(rectAttrs['o:hrstd']).toBe('t');
+    expect(rectAttrs.stroked).toBe('f');
+  });
+
+  it('should preserve explicit vmlAttributes over synthesis', () => {
+    const params = buildNewHRParams({
+      vmlAttributes: { hr: 't', hrstd: 't', hralign: 'left', stroked: 'f' },
+    });
+    const rectAttrs = getRectAttrs(translateVRectContentBlock(params));
+
+    // Uses the explicit value, not the synthesized default
+    expect(rectAttrs['o:hralign']).toBe('left');
+  });
+
+  it('should preserve explicit style over synthesis', () => {
+    const params = buildNewHRParams({ style: 'width:300pt;height:2pt' });
+    const rectAttrs = getRectAttrs(translateVRectContentBlock(params));
+
+    expect(rectAttrs.style).toBe('width:300pt;height:2pt');
+  });
+
+  it('should produce a complete exportable v:rect for a default HR', () => {
+    const rectAttrs = getRectAttrs(translateVRectContentBlock(buildNewHRParams()));
+
+    // Every attribute Word needs to render an HR should be present
+    expect(rectAttrs).toMatchObject({
+      style: 'width:468pt;height:1.5pt',
+      fillcolor: '#e5e7eb',
+      'o:hr': 't',
+      'o:hrstd': 't',
+      'o:hralign': 'center',
+      stroked: 'f',
+    });
+    expect(rectAttrs.id).toBeDefined();
+  });
+});

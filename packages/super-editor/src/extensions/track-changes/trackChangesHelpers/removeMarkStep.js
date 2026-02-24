@@ -18,7 +18,7 @@ export const removeMarkStep = ({ state, step, newTr, doc, user, date }) => {
   const meta = {};
 
   doc.nodesBetween(step.from, step.to, (node, pos) => {
-    if (!node.isInline) {
+    if (!node.isInline || node.type.name === 'run') {
       return true;
     }
 
@@ -62,12 +62,17 @@ export const removeMarkStep = ({ state, step, newTr, doc, user, date }) => {
         }
       } else {
         after = [];
-        before = [
-          {
-            type: step.mark.type.name,
-            attrs: { ...step.mark.attrs },
-          },
-        ];
+        let existingMark = node.marks.find((mark) => mark.type === step.mark.type);
+        if (existingMark) {
+          before = [
+            {
+              type: step.mark.type.name,
+              attrs: { ...existingMark.attrs },
+            },
+          ];
+        } else {
+          before = [];
+        }
       }
 
       if (after.length || before.length) {

@@ -83,10 +83,11 @@
  * @property {number} [pdf.outputScale] Canvas render scale (quality)
  * @property {CollaborationConfig} [collaboration] Collaboration module configuration
  * @property {Object} [toolbar] Toolbar module configuration
- * @property {Object} [slashMenu] Slash menu module configuration
- * @property {Array} [slashMenu.customItems] Array of custom menu sections with items
- * @property {Function} [slashMenu.menuProvider] Function to customize menu items
- * @property {boolean} [slashMenu.includeDefaultItems] Whether to include default menu items
+ * @property {Object} [contextMenu] Context menu module configuration
+ * @property {Array} [contextMenu.customItems] Array of custom menu sections with items
+ * @property {Function} [contextMenu.menuProvider] Function to customize menu items
+ * @property {boolean} [contextMenu.includeDefaultItems] Whether to include default menu items
+ * @property {Object} [slashMenu] @deprecated Use contextMenu instead
  */
 
 /** @typedef {import('@superdoc/super-editor').Editor} Editor */
@@ -165,6 +166,7 @@
  *   Example (custom font):
  *     uiDisplayFallbackFont: '"Inter", Arial, sans-serif'
  * @property {boolean} [isDev] Whether the SuperDoc is in development mode
+ * @property {boolean} [disablePiniaDevtools=false] Disable Pinia/Vue devtools plugin setup for this SuperDoc instance (useful in non-Vue hosts)
  * @property {Object} [layoutEngineOptions] Layout engine overrides passed through to PresentationEditor (page size, margins, virtualization, zoom, debug label, etc.)
  * @property {'paginated' | 'semantic'} [layoutEngineOptions.flowMode='paginated'] Layout engine flow mode.
  *   - 'paginated': standard page-first layout (default)
@@ -204,6 +206,8 @@
  * @property {boolean} [disableContextMenu] Whether to disable slash / right-click custom context menu
  * @property {string} [html] HTML content to initialize the editor with
  * @property {string} [markdown] Markdown content to initialize the editor with
+ * @property {((items: Array<{tagName: string, outerHTML: string, count: number}>) => void) | null} [onUnsupportedContent] Callback invoked with unsupported HTML elements dropped during import. When provided, console.warn is NOT emitted.
+ * @property {boolean} [warnOnUnsupportedContent] When true and no onUnsupportedContent callback is provided, emits a console.warn with unsupported items
  * @property {boolean} [isDebug=false] Whether to enable debug mode
  * @property {ViewOptions} [viewOptions] Document view options (OOXML ST_View compatible)
  * @property {string} [cspNonce] Content Security Policy nonce for dynamically injected styles

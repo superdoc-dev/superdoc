@@ -37,10 +37,10 @@ export function translateShapeContainer(params) {
     elements: [shape],
   };
 
-  const par = {
+  // shapeContainer is a block node exported at body level — w:pict must be
+  // wrapped in w:p > w:r to produce valid OOXML.
+  return {
     name: 'w:p',
     elements: [wrapTextInRun(pict)],
   };
-
-  return par;
 }

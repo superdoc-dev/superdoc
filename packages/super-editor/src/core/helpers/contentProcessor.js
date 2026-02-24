@@ -5,6 +5,10 @@ import { createDocFromMarkdown } from './importMarkdown.js';
 import { wrapTextsInRuns } from '../inputRules/docx-paste/docx-paste.js';
 
 /**
+ * @typedef {import('./catchAllSchema.js').UnsupportedContentItem} UnsupportedContentItem
+ */
+
+/**
  * Unified content processor that handles all content types.
  *
  * This function validates inputs and converts various content formats
@@ -14,13 +18,15 @@ import { wrapTextsInRuns } from '../inputRules/docx-paste/docx-paste.js';
  * @param {string} params.content - The content to process (required, must not be null/undefined)
  * @param {string} params.type - Content type: 'html', 'markdown', 'text', or 'schema'
  * @param {Object} params.editor - The editor instance (required, must have schema)
+ * @param {((items: UnsupportedContentItem[]) => void) | null} [params.onUnsupportedContent] - Callback invoked with unsupported items
+ * @param {boolean} [params.warnOnUnsupportedContent] - When true and no callback is provided, emits console.warn
  * @returns {Object} Processed ProseMirror document node
  * @throws {Error} If editor is missing or invalid
  * @throws {Error} If content is null/undefined
  * @throws {Error} If DOM is required but not available (for HTML/markdown/text types)
  * @throws {Error} If content type is unknown
  */
-export function processContent({ content, type, editor }) {
+export function processContent({ content, type, editor, onUnsupportedContent, warnOnUnsupportedContent }) {
   // Validate editor instance
   if (!editor) {
     throw new Error('[processContent] Editor instance is required');
@@ -48,7 +54,12 @@ export function processContent({ content, type, editor }) {
           '[processContent] HTML processing requires a DOM. Provide { document } (e.g. from JSDOM), set DOM globals, or run in a browser environment.',
         );
       }
-      doc = createDocFromHTML(content, editor, { isImport: true, document: domDocument });
+      doc = createDocFromHTML(content, editor, {
+        isImport: true,
+        document: domDocument,
+        onUnsupportedContent,
+        warnOnUnsupportedContent,
+      });
       break;
 
     case 'markdown':
@@ -58,7 +69,12 @@ export function processContent({ content, type, editor }) {
           '[processContent] Markdown processing requires a DOM. Provide { document } (e.g. from JSDOM), set DOM globals, or run in a browser environment.',
         );
       }
-      doc = createDocFromMarkdown(content, editor, { isImport: true, document: domDocument });
+      doc = createDocFromMarkdown(content, editor, {
+        isImport: true,
+        document: domDocument,
+        onUnsupportedContent,
+        warnOnUnsupportedContent,
+      });
       break;
 
     case 'text':

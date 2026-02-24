@@ -68,6 +68,96 @@ describe('normalizeFindQuery', () => {
   });
 });
 
+// ---------------------------------------------------------------------------
+// BUG: SDK-shaped find params are not directly usable with the contract API
+// ---------------------------------------------------------------------------
+// The Node and Python SDKs generate a flat params interface for find:
+//   { type?: string, pattern?: string, nodeType?: string, kind?: string, ... }
+//
+// This works end-to-end because the CLI wraps these flat flags into a proper
+// Query object (via find-query.ts buildFlatFindQueryDraft). But the contract
+// API (normalizeFindQuery / executeFind) expects either:
+//   - A Selector: { type: 'text', pattern: '...' } or { nodeType: 'paragraph' }
+//   - A Query: { select: { type: 'text', pattern: '...' }, limit?: ... }
+//
+// The SDK interface shape misleads consumers about what the actual API expects.
+// If anyone bypasses the CLI (e.g. calling the Document API directly), the flat
+// params shape doesn't match the contract.
+
+describe('BUG: SDK params shape vs Document API contract', () => {
+  it('SDK-shaped params with top-level "type" and "pattern" should produce a valid Query', () => {
+    // This is what the SDK sends: flat { type, pattern } fields.
+    // The CLI wraps these into { select: { type, pattern } } before calling the API.
+    // But normalizeFindQuery receives the raw input and should handle both forms.
+    const sdkShapedParams = { type: 'text', pattern: 'termination' } as unknown as Selector;
+
+    // normalizeFindQuery treats { type: 'text', pattern: '...' } as a TextSelector
+    // (it has a 'type' discriminant), so this case DOES work for TextSelector.
+    const result = normalizeFindQuery(sdkShapedParams);
+
+    expect(result.select).toEqual({ type: 'text', pattern: 'termination' });
+  });
+
+  it('SDK-shaped params with additional CLI-only fields pollute the Query', () => {
+    // The SDK sends ALL flat params together: type, pattern, limit, offset, etc.
+    // When these are passed as a "Selector" to normalizeFindQuery, the extra fields
+    // (limit, offset, sessionId, doc) leak into the select object.
+    const sdkShapedParams = {
+      type: 'text',
+      pattern: 'hello',
+      limit: 10,
+      offset: 0,
+      sessionId: 'sess-1',
+      doc: './contract.docx',
+    } as unknown as Selector;
+
+    const result = normalizeFindQuery(sdkShapedParams);
+
+    // BUG: The select object now contains limit, offset, sessionId, doc —
+    // fields that belong on the Query, not on the Selector.
+    expect(result.select).toEqual({ type: 'text', pattern: 'hello' });
+    expect(result.select).not.toHaveProperty('limit');
+    expect(result.select).not.toHaveProperty('sessionId');
+    expect(result.select).not.toHaveProperty('doc');
+  });
+
+  it('SDK-shaped nodeType params should produce a valid node Query', () => {
+    // SDK sends: { type: 'node', nodeType: 'paragraph' }
+    // But the Selector shorthand is just { nodeType: 'paragraph' } (no 'type' field).
+    // The SDK shape with type='node' IS a valid NodeSelector, so this works.
+    const sdkShapedParams = { type: 'node', nodeType: 'paragraph' } as unknown as Selector;
+
+    const result = normalizeFindQuery(sdkShapedParams);
+
+    // The 'type' field should be preserved on the selector
+    expect(result.select.type).toBe('node');
+    expect((result.select as { nodeType?: string }).nodeType).toBe('paragraph');
+  });
+
+  it('SDK-shaped params without query wrapper are not interchangeable with Query shape', () => {
+    // The SDK interface suggests you can do: client.doc.find({ type: 'text', pattern: 'hello' })
+    // But the Document API's find operation input type is `Selector | Query`.
+    // A Query requires a `select` field. If someone passes SDK-shaped flat params
+    // to code expecting a Query, the `select` field is missing.
+    const sdkShapedParams = { type: 'text', pattern: 'hello' };
+
+    // Check that it does NOT have a `select` field — proving it's not a Query.
+    expect(sdkShapedParams).not.toHaveProperty('select');
+
+    // And normalizeFindQuery would treat it as a Selector (because 'type' in obj is true),
+    // wrapping it. But code that directly checks for Query shape (has 'select') would fail.
+    const isQuery = 'select' in sdkShapedParams;
+    expect(isQuery).toBe(false);
+
+    // The proper Query form should be:
+    const properQuery: Query = { select: { type: 'text', pattern: 'hello' } };
+    expect(properQuery).toHaveProperty('select');
+
+    // This means SDK params and Document API Query params are structurally incompatible.
+    // Any code path that expects a Query (not Selector|Query) will break with SDK params.
+  });
+});
+
 describe('executeFind', () => {
   it('normalizes the input and delegates to the adapter', () => {
     const expected: QueryResult = { matches: [], total: 0 };

@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { clickToPosition, hitTestPage } from '../src/index.ts';
+import { clickToPosition, hitTestPage, hitTestTableFragment } from '../src/index.ts';
 import type { FlowBlock, Layout, Measure } from '@superdoc/contracts';
 import {
   simpleLayout,
@@ -11,7 +11,12 @@ import {
   drawingLayout,
   drawingBlock,
   drawingMeasure,
+  rowspanTableLayout,
+  rowspanTableBlock,
+  rowspanTableMeasure,
   buildTableFixtures,
+  buildTableWithListFixtures,
+  buildTableWithSdtFixtures,
 } from './mock-data';
 
 describe('clickToPosition', () => {
@@ -99,6 +104,61 @@ describe('hitTestPage with pageGap', () => {
     // With no gap, page 1 starts at y = 500
     const result = hitTestPage(layoutUndefinedGap, { x: 100, y: 500 });
     expect(result?.pageIndex).toBe(1);
+  });
+});
+
+describe('hitTestTableFragment with rowspan (SD-1626 / IT-22)', () => {
+  // Table is at x:30, y:60, width:300, height:48
+  // Row 0: y:60-84 (height 24) - has 3 cells
+  // Row 1: y:84-108 (height 24) - has 2 cells starting at gridColumnStart=1
+
+  it('selects first cell when clicking in rowspanned area, not last cell', () => {
+    // Table structure:
+    // Row 0: [Cell A (rowspan=2)] [Cell B] [Cell C]
+    // Row 1:                      [Cell D] [Cell E]
+    //
+    // When clicking in the rowspanned area (column 0) on row 1,
+    // the first cell in row 1 (Cell D at index 0) should be selected,
+    // NOT the last cell (Cell E at index 1).
+
+    // Click at x=80 (in column 0 area), y=90 (in row 1)
+    const pageHit = hitTestPage(rowspanTableLayout, { x: 80, y: 90 });
+    expect(pageHit).not.toBeNull();
+
+    if (pageHit) {
+      // x=80 -> localX=50 (in rowspanned area, column 0 is 0-100)
+      // y=90 -> localY=30 (row 1 starts at y=24 relative to table)
+      const result = hitTestTableFragment(pageHit, [rowspanTableBlock], [rowspanTableMeasure], { x: 80, y: 90 });
+
+      expect(result).not.toBeNull();
+      if (result) {
+        // Should select first cell (index 0), not last cell (index 1)
+        expect(result.cellColIndex).toBe(0);
+        // Row should be 1 (the row we clicked on)
+        expect(result.cellRowIndex).toBe(1);
+      }
+    }
+  });
+
+  it('still selects last cell when clicking right of all columns', () => {
+    // Click at x=320 (right edge of table but still inside), y=90 (row 1)
+    // Table ends at x=330, so x=320 is still inside
+    const pageHit = hitTestPage(rowspanTableLayout, { x: 320, y: 90 });
+    expect(pageHit).not.toBeNull();
+
+    if (pageHit) {
+      // x=320 -> localX=290 (right of all cells: col0=0-100, col1=100-200, col2=200-300)
+      // But row 1 cells start at gridColumnStart=1, so they span 100-300
+      // localX=290 is within cell at gridColumnStart=2 (200-300)
+      const result = hitTestTableFragment(pageHit, [rowspanTableBlock], [rowspanTableMeasure], { x: 320, y: 90 });
+
+      expect(result).not.toBeNull();
+      if (result) {
+        // Should select the cell at gridColumnStart=2 (last cell in row 1)
+        expect(result.cellColIndex).toBe(1); // Last cell in row 1
+        expect(result.cellRowIndex).toBe(1);
+      }
+    }
   });
 });
 
@@ -347,5 +407,103 @@ describe('clickToPosition: table cell on page 2 (multi-page)', () => {
     expect(result!.pos).toBeLessThanOrEqual(111);
     expect(result!.blockId).toBe('page2-table');
     expect(result!.pageIndex).toBe(1);
+  });
+});
+
+// ---------------------------------------------------------------------------
+// Table cells with list markers (PR 0 safety rails)
+// ---------------------------------------------------------------------------
+
+describe('clickToPosition: table cells with list markers', () => {
+  const { block: tableBlock, measure: tableMeasure } = buildTableWithListFixtures({
+    cellWidth: 200,
+    pmStart: 60,
+    pmEnd: 69,
+    text: 'List text',
+    markerWidth: 18,
+  });
+
+  const layout: Layout = {
+    pageSize: { w: 400, h: 500 },
+    pages: [
+      {
+        number: 1,
+        fragments: [
+          {
+            kind: 'table',
+            blockId: 'table-list-block',
+            fromRow: 0,
+            toRow: 1,
+            x: 30,
+            y: 40,
+            width: 200,
+            height: 24,
+          },
+        ],
+      },
+    ],
+  };
+
+  it('resolves click on marker region to correct PM position', () => {
+    // Click at x=35 (within the table fragment, near the left edge where marker lives)
+    const result = clickToPosition(layout, [tableBlock], [tableMeasure], { x: 35, y: 52 });
+    expect(result).not.toBeNull();
+    expect(result!.blockId).toBe('table-list-block');
+    expect(result!.pos).toBeGreaterThanOrEqual(60);
+    expect(result!.pos).toBeLessThanOrEqual(69);
+  });
+
+  it('resolves click on text after marker to correct PM position', () => {
+    // Click at x=100 (well past the marker region, into text content)
+    const markerResult = clickToPosition(layout, [tableBlock], [tableMeasure], { x: 35, y: 52 });
+    const result = clickToPosition(layout, [tableBlock], [tableMeasure], { x: 100, y: 52 });
+    expect(markerResult).not.toBeNull();
+    expect(result).not.toBeNull();
+    expect(result!.blockId).toBe('table-list-block');
+    expect(result!.pos).toBeGreaterThanOrEqual(60);
+    expect(result!.pos).toBeLessThanOrEqual(69);
+    expect(result!.pos).toBeGreaterThanOrEqual(markerResult!.pos);
+  });
+});
+
+// ---------------------------------------------------------------------------
+// Table cells with SDT wrappers (PR 0 safety rails)
+// ---------------------------------------------------------------------------
+
+describe('clickToPosition: table cells with SDT wrappers', () => {
+  const { block: tableBlock, measure: tableMeasure } = buildTableWithSdtFixtures({
+    cellWidth: 200,
+    pmStart: 70,
+    pmEnd: 78,
+    text: 'SDT text',
+  });
+
+  const layout: Layout = {
+    pageSize: { w: 400, h: 500 },
+    pages: [
+      {
+        number: 1,
+        fragments: [
+          {
+            kind: 'table',
+            blockId: 'table-sdt-block',
+            fromRow: 0,
+            toRow: 1,
+            x: 30,
+            y: 40,
+            width: 200,
+            height: 24,
+          },
+        ],
+      },
+    ],
+  };
+
+  it('resolves click inside SDT wrapper to correct PM position', () => {
+    const result = clickToPosition(layout, [tableBlock], [tableMeasure], { x: 80, y: 52 });
+    expect(result).not.toBeNull();
+    expect(result!.blockId).toBe('table-sdt-block');
+    expect(result!.pos).toBeGreaterThanOrEqual(70);
+    expect(result!.pos).toBeLessThanOrEqual(78);
   });
 });

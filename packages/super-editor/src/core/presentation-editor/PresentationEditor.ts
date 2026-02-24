@@ -1,6 +1,7 @@
 import { NodeSelection, Selection, TextSelection } from 'prosemirror-state';
-import { SlashMenuPluginKey } from '@extensions/slash-menu/slash-menu.js';
+import { ContextMenuPluginKey } from '@extensions/context-menu/context-menu.js';
 import { CellSelection } from 'prosemirror-tables';
+import { DecorationBridge } from './dom/DecorationBridge.js';
 import type { EditorState, Transaction } from 'prosemirror-state';
 import type { Node as ProseMirrorNode, Mark } from 'prosemirror-model';
 import type { Mapping } from 'prosemirror-transform';
@@ -89,7 +90,7 @@ import type {
 
 import { createDomPainter } from '@superdoc/painter-dom';
 
-import type { LayoutMode } from '@superdoc/painter-dom';
+import type { LayoutMode, PaintSnapshot } from '@superdoc/painter-dom';
 import { measureBlock } from '@superdoc/measuring-dom';
 import type {
   ColumnLayout,
@@ -102,6 +103,7 @@ import type {
   Fragment,
 } from '@superdoc/contracts';
 import { extractHeaderFooterSpace as _extractHeaderFooterSpace } from '@superdoc/contracts';
+// TrackChangesBasePluginKey is used by #syncTrackedChangesPreferences and getTrackChangesPluginState.
 import { TrackChangesBasePluginKey } from '@extensions/track-changes/plugins/index.js';
 
 // Collaboration cursor imports
@@ -306,6 +308,10 @@ export class PresentationEditor extends EventEmitter {
   #htmlAnnotationMeasureAttempts = 0;
   #domPositionIndex = new DomPositionIndex();
   #domIndexObserverManager: DomPositionIndexObserverManager | null = null;
+  /** Bridges external PM plugin decorations onto painted DOM elements. */
+  #decorationBridge = new DecorationBridge();
+  /** RAF handle for coalesced decoration sync scheduling. */
+  #decorationSyncRafHandle: number | null = null;
   #rafHandle: number | null = null;
   #semanticResizeObserver: ResizeObserver | null = null;
   #semanticResizeRaf: number | null = null;
@@ -452,6 +458,7 @@ export class PresentationEditor extends EventEmitter {
       getPainterHost: () => this.#painterHost,
       onRebuild: () => {
         this.#rebuildDomPositionIndex();
+        this.#syncDecorations();
         this.#selectionSync.requestRender({ immediate: true });
       },
     });
@@ -812,7 +819,7 @@ export class PresentationEditor extends EventEmitter {
    * - In body mode, returns the main editor's state
    * - In header/footer mode, returns the active header/footer editor's state
    *
-   * This enables components like SlashMenu and context menus to access document
+   * This enables components like ContextMenu to access document
    * state, selection, and schema information in the correct editing context.
    *
    * @returns The EditorState for the active editor
@@ -857,7 +864,7 @@ export class PresentationEditor extends EventEmitter {
    *
    * This property returns the options object from the appropriate editor instance,
    * providing access to configuration like document mode, AI settings, and custom
-   * slash menu configuration.
+   * context menu configuration.
    *
    * @returns The options object for the active editor
    *
@@ -1633,6 +1640,13 @@ export class PresentationEditor extends EventEmitter {
   }
 
   /**
+   * Return a snapshot of painter output captured during the latest paint cycle.
+   */
+  getPaintSnapshot(): PaintSnapshot | null {
+    return this.#domPainter?.getPaintSnapshot?.() ?? null;
+  }
+
+  /**
    * Get the page styles for the section containing the current caret position.
    *
    * In multi-section documents, different sections can have different page sizes,
@@ -2171,6 +2185,58 @@ export class PresentationEditor extends EventEmitter {
   }
 
   /**
+   * Scrolls a specific page into view.
+   *
+   * This method supports virtualized rendering: if the target page is not currently
+   * mounted in the DOM, it will scroll to the computed y-position to trigger
+   * virtualization, wait for the page to mount, then perform precise scrolling.
+   *
+   * @param pageNumber - One-based page number to scroll to (e.g., 1 for first page)
+   * @param scrollBehavior - Scroll behavior ('auto' | 'smooth'). Defaults to 'smooth'.
+   * @returns Promise resolving to true if the page was scrolled to, false if layout not available or invalid page
+   *
+   * @example
+   * ```typescript
+   * // Smooth scroll to first page
+   * await presentationEditor.scrollToPage(1);
+   *
+   * // Instant scroll to page 5
+   * await presentationEditor.scrollToPage(5, 'auto');
+   * ```
+   */
+  async scrollToPage(pageNumber: number, scrollBehavior: ScrollBehavior = 'smooth'): Promise<boolean> {
+    const layout = this.#layoutState.layout;
+    if (!layout) return false;
+
+    // Reject non-finite or non-integer input to fail fast instead of timing out
+    if (!Number.isInteger(pageNumber)) return false;
+
+    // Convert 1-based page number to 0-based index
+    const pageIndex = pageNumber - 1;
+
+    // Clamp to valid page range
+    const maxPage = layout.pages.length - 1;
+    if (pageIndex < 0 || pageIndex > maxPage) return false;
+
+    // Check if page is already mounted
+    let pageEl = getPageElementByIndex(this.#viewportHost, pageIndex);
+
+    // If not mounted (virtualized), scroll to computed y-position to trigger mount
+    if (!pageEl) {
+      this.#scrollPageIntoView(pageIndex);
+      const mounted = await this.#waitForPageMount(pageIndex, { timeout: 2000 });
+      if (!mounted) return false;
+      pageEl = getPageElementByIndex(this.#viewportHost, pageIndex);
+    }
+
+    if (pageEl) {
+      pageEl.scrollIntoView({ block: 'start', inline: 'nearest', behavior: scrollBehavior });
+      return true;
+    }
+    return false;
+  }
+
+  /**
    * Get document position from viewport coordinates (header/footer-aware).
    *
    * This method maps viewport coordinates to document positions while respecting
@@ -2303,6 +2369,16 @@ export class PresentationEditor extends EventEmitter {
       }, 'Layout RAF');
     }
 
+    // Cancel pending decoration sync RAF
+    if (this.#decorationSyncRafHandle != null) {
+      safeCleanup(() => {
+        const win = this.#visibleHost?.ownerDocument?.defaultView ?? window;
+        win.cancelAnimationFrame(this.#decorationSyncRafHandle!);
+        this.#decorationSyncRafHandle = null;
+      }, 'Decoration sync RAF');
+    }
+    this.#decorationBridge.destroy();
+
     // Cancel pending cursor awareness update
     if (this.#cursorUpdateTimer !== null) {
       clearTimeout(this.#cursorUpdateTimer);
@@ -2412,12 +2488,69 @@ export class PresentationEditor extends EventEmitter {
     }
   }
 
+  /**
+   * Runs a full decoration bridge sync: reads external plugin decorations and
+   * reconciles them onto painted DOM elements (add/update/remove).
+   *
+   * Called synchronously from post-paint and observer-rebuild paths where the
+   * DOM index is guaranteed to be fresh.
+   */
+  #syncDecorations(): void {
+    const state = this.#editor?.view?.state;
+    if (!state) return;
+
+    try {
+      this.#decorationBridge.sync(state, this.#domPositionIndex);
+    } catch (error) {
+      debugLog('warn', 'Decoration bridge sync failed', { error: String(error) });
+    }
+  }
+
+  /**
+   * Schedules a decoration sync on the next animation frame, coalesced so
+   * rapid transactions (cursor movement, selection changes) don't cause
+   * redundant work.
+   *
+   * Skips scheduling when:
+   * - A rerender is already pending (post-paint will sync).
+   * - No DecorationSet references have actually changed (identity check).
+   */
+  #scheduleDecorationSync(): void {
+    // If a full rerender is pending, the post-paint path will sync. Skip.
+    if (this.#renderScheduled || this.#isRerendering) return;
+
+    // Cheap identity check: bail if no DecorationSet references changed.
+    const state = this.#editor?.view?.state;
+    if (!state || !this.#decorationBridge.hasChanges(state)) return;
+
+    // Already scheduled — RAF will handle it.
+    if (this.#decorationSyncRafHandle != null) return;
+
+    const win = this.#visibleHost?.ownerDocument?.defaultView ?? window;
+    this.#decorationSyncRafHandle = win.requestAnimationFrame(() => {
+      this.#decorationSyncRafHandle = null;
+      // Re-check: a rerender may have been scheduled between when we queued
+      // this RAF and when it fires. The post-paint path will sync instead.
+      if (this.#renderScheduled || this.#isRerendering) return;
+      this.#syncDecorations();
+    });
+  }
+
   #setupEditorListeners() {
     const handleUpdate = ({ transaction }: { transaction?: Transaction }) => {
       const trackedChangesChanged = this.#syncTrackedChangesPreferences();
       if (transaction) {
         this.#epochMapper.recordTransaction(transaction);
         this.#selectionSync.setDocEpoch(this.#epochMapper.getCurrentEpoch());
+
+        // Detect Y.js-origin transactions (remote collaboration changes).
+        // These bypass the blockNodePlugin's sdBlockRev increment to prevent
+        // feedback loops, so the FlowBlockCache's fast revision comparison
+        // cannot be trusted — signal it to fall through to JSON comparison.
+        const ySyncMeta = transaction.getMeta?.(ySyncPluginKey);
+        if (ySyncMeta?.isChangeOrigin && transaction.docChanged) {
+          this.#flowBlockCache?.setHasExternalChanges(true);
+        }
       }
       if (trackedChangesChanged || transaction?.docChanged) {
         this.#pendingDocChange = true;
@@ -2460,10 +2593,26 @@ export class PresentationEditor extends EventEmitter {
       this.#updateLocalAwarenessCursor();
       this.#scheduleA11ySelectionAnnouncement();
     };
+
+    // The 'transaction' event fires for ALL transactions (doc changes,
+    // selection changes, meta-only). The 'update' event only fires for
+    // docChanged transactions, and 'selectionUpdate' only for selection
+    // changes. A meta-only transaction (e.g., a custom command that sets
+    // plugin state without editing text) fires neither.
+    //
+    // We listen on 'transaction' so the decoration bridge picks up changes
+    // from any transaction type. The bridge's own identity check + RAF
+    // coalescing prevent unnecessary work.
+    const handleTransaction = () => {
+      this.#scheduleDecorationSync();
+    };
+
     this.#editor.on('update', handleUpdate);
     this.#editor.on('selectionUpdate', handleSelection);
+    this.#editor.on('transaction', handleTransaction);
     this.#editorListeners.push({ event: 'update', handler: handleUpdate as (...args: unknown[]) => void });
     this.#editorListeners.push({ event: 'selectionUpdate', handler: handleSelection as (...args: unknown[]) => void });
+    this.#editorListeners.push({ event: 'transaction', handler: handleTransaction as (...args: unknown[]) => void });
 
     // Listen for page style changes (e.g., margin adjustments via ruler).
     // These changes don't modify document content (docChanged === false),
@@ -3318,6 +3467,7 @@ export class PresentationEditor extends EventEmitter {
       const painterPostStart = perfNow();
       this.#applyVertAlignToLayout();
       this.#rebuildDomPositionIndex();
+      this.#syncDecorations();
       this.#domIndexObserverManager?.resume();
       const painterPostEnd = perfNow();
       perfLog(`[Perf] painter.postPaint: ${(painterPostEnd - painterPostStart).toFixed(2)}ms`);
@@ -3561,7 +3711,12 @@ export class PresentationEditor extends EventEmitter {
       }
       node = selection.node;
     } else {
-      const $pos = selection.$from;
+      const $pos = (selection as Selection & { $from?: { depth?: number; node?: (depth: number) => ProseMirrorNode } })
+        .$from;
+      if (!$pos || typeof $pos.depth !== 'number' || typeof $pos.node !== 'function') {
+        this.#clearSelectedStructuredContentBlockClass();
+        return;
+      }
       for (let depth = $pos.depth; depth > 0; depth--) {
         const candidate = $pos.node(depth);
         if (candidate.type?.name === 'structuredContentBlock') {
@@ -3712,10 +3867,22 @@ export class PresentationEditor extends EventEmitter {
       node = selection.node;
       pos = selection.from;
     } else {
-      const $pos = selection.$from;
+      const $pos = (
+        selection as Selection & {
+          $from?: { depth?: number; node?: (depth: number) => ProseMirrorNode; before?: (depth: number) => number };
+        }
+      ).$from;
+      if (!$pos || typeof $pos.depth !== 'number' || typeof $pos.node !== 'function') {
+        this.#clearSelectedStructuredContentInlineClass();
+        return;
+      }
       for (let depth = $pos.depth; depth > 0; depth--) {
         const candidate = $pos.node(depth);
         if (candidate.type?.name === 'structuredContent') {
+          if (typeof $pos.before !== 'function') {
+            this.#clearSelectedStructuredContentInlineClass();
+            return;
+          }
           node = candidate;
           pos = $pos.before(depth);
           break;
@@ -3815,10 +3982,16 @@ export class PresentationEditor extends EventEmitter {
 
     const activeEditor = this.getActiveEditor();
     const hasFocus = activeEditor?.view?.hasFocus?.() ?? false;
-    // Keep selection visible when context menu (SlashMenu) is open
-    const slashMenuOpen = activeEditor?.state ? !!SlashMenuPluginKey.getState(activeEditor.state)?.open : false;
+    // Keep selection visible when context menu is open.
+    const contextMenuOpen = activeEditor?.state ? !!ContextMenuPluginKey.getState(activeEditor.state)?.open : false;
 
-    if (!hasFocus && !slashMenuOpen) {
+    // Keep selection visible when focus is on editor UI surfaces (toolbar, dropdowns).
+    // Naive-UI portals dropdown content under .v-binder-follower-content at <body> level,
+    // so it won't be inside [data-editor-ui-surface]. Check both.
+    const activeEl = document.activeElement;
+    const isOnEditorUi = !!(activeEl as Element)?.closest?.('[data-editor-ui-surface], .v-binder-follower-content');
+
+    if (!hasFocus && !contextMenuOpen && !isOnEditorUi) {
       try {
         this.#clearSelectedFieldAnnotationClass();
         this.#localSelectionLayer.innerHTML = '';
@@ -4500,11 +4673,17 @@ export class PresentationEditor extends EventEmitter {
     const layout = this.#layoutState.layout;
     if (!layout) return;
 
-    const pageHeight = layout.pageSize?.h ?? DEFAULT_PAGE_SIZE.h;
-    const virtualGap = this.#layoutOptions.virtualization?.gap ?? 0;
+    const defaultHeight = layout.pageSize?.h ?? DEFAULT_PAGE_SIZE.h;
+    const virtualGap = this.#getEffectivePageGap();
 
-    // Calculate approximate y position for the page
-    const yPosition = pageIndex * (pageHeight + virtualGap);
+    // Use cumulative per-page heights so mixed-size documents scroll to the
+    // correct position. The renderer's virtualizer uses the same prefix-sum
+    // approach, so the scroll position lands inside the correct window.
+    let yPosition = 0;
+    for (let i = 0; i < pageIndex; i++) {
+      const pageHeight = layout.pages[i]?.size?.h ?? defaultHeight;
+      yPosition += pageHeight + virtualGap;
+    }
 
     // Scroll viewport to the calculated position
     if (this.#visibleHost) {

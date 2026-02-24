@@ -2,9 +2,9 @@
  * Tests for table layout with column boundary metadata generation
  */
 
-import { describe, it, expect } from 'vitest';
+import type { BlockId, TableAttrs, TableBlock, TableFragment, TableMeasure } from '@superdoc/contracts';
+import { describe, expect, it } from 'vitest';
 import { layoutTableBlock } from './layout-table.js';
-import type { TableBlock, TableMeasure, TableFragment, BlockId, TableAttrs } from '@superdoc/contracts';
 
 /**
  * Creates a dummy table fragment for test scenarios where prior page content is needed.
@@ -2347,6 +2347,60 @@ describe('layoutTableBlock', () => {
         expect(fragments[0].width).toBe(170); // 200 - 30
       });
 
+      it('should not shrink width when table already fits after positive indent', () => {
+        const block = createMockTableBlock(1);
+        block.attrs = { tableIndent: { width: 30 } } as TableAttrs;
+        const measure = createMockTableMeasure([100], [20]);
+
+        const fragments: TableFragment[] = [];
+        const mockPage = { fragments };
+
+        layoutTableBlock({
+          block,
+          measure,
+          columnWidth: 200,
+          ensurePage: () => ({
+            page: mockPage,
+            columnIndex: 0,
+            cursorY: 0,
+            contentBottom: 1000,
+          }),
+          advanceColumn: (state) => state,
+          columnX: () => 0,
+        });
+
+        expect(fragments).toHaveLength(1);
+        expect(fragments[0].x).toBe(30);
+        expect(fragments[0].width).toBe(100);
+      });
+
+      it('should avoid double-shrinking when measure width already reflects tblGrid with tblInd', () => {
+        const block = createMockTableBlock(1);
+        block.attrs = { tableIndent: { width: 1440 } } as TableAttrs;
+        const measure = createMockTableMeasure([7910], [20]);
+
+        const fragments: TableFragment[] = [];
+        const mockPage = { fragments };
+
+        layoutTableBlock({
+          block,
+          measure,
+          columnWidth: 9350,
+          ensurePage: () => ({
+            page: mockPage,
+            columnIndex: 0,
+            cursorY: 0,
+            contentBottom: 1000,
+          }),
+          advanceColumn: (state) => state,
+          columnX: () => 0,
+        });
+
+        expect(fragments).toHaveLength(1);
+        expect(fragments[0].x).toBe(1440);
+        expect(fragments[0].width).toBe(7910);
+      });
+
       it('should apply negative indent correctly (extends into margin)', () => {
         const block = createMockTableBlock(1);
         block.attrs = { tableIndent: { width: -40 } } as TableAttrs;
@@ -2465,7 +2519,7 @@ describe('layoutTableBlock', () => {
         expect(fragments.length).toBeGreaterThan(1);
         fragments.forEach((fragment) => {
           expect(fragment.x).toBe(25);
-          expect(fragment.width).toBe(75); // 100 - 25 (measure totalWidth is used, not columnWidth)
+          expect(fragment.width).toBe(100);
         });
       });
 
@@ -2533,7 +2587,7 @@ describe('layoutTableBlock', () => {
 
         expect(fragments).toHaveLength(1);
         expect(fragments[0].x).toBe(40);
-        expect(fragments[0].width).toBe(60); // 100 - 40
+        expect(fragments[0].width).toBe(100);
       });
 
       it('should apply tableIndent to tables with no rows but non-zero totalHeight', () => {
@@ -2561,7 +2615,7 @@ describe('layoutTableBlock', () => {
 
         expect(fragments).toHaveLength(1);
         expect(fragments[0].x).toBe(20);
-        expect(fragments[0].width).toBe(80); // 100 - 20
+        expect(fragments[0].width).toBe(100);
       });
 
       it('should apply tableIndent to partial row fragments', () => {
@@ -2600,7 +2654,7 @@ describe('layoutTableBlock', () => {
         expect(fragments.length).toBeGreaterThan(1);
         fragments.forEach((fragment) => {
           expect(fragment.x).toBe(30);
-          expect(fragment.width).toBe(70); // 100 - 30
+          expect(fragment.width).toBe(100);
         });
       });
     });
@@ -3178,6 +3232,152 @@ describe('layoutTableBlock', () => {
         // Second fragment should start from row 2 or 3 (not row 0)
         expect(fragments[1].pmStart).toBeGreaterThan(15); // After first page content
       }
+    });
+  });
+
+  describe('column width rescaling (SD-1859)', () => {
+    it('should rescale column widths when table is wider than section content width', () => {
+      // Simulate a table measured at landscape width (700px) but rendered in
+      // a portrait section (450px). Column widths should be rescaled to fit.
+      const block = createMockTableBlock(2);
+      const measure = createMockTableMeasure([250, 200, 250], [30, 30]);
+      // measure.totalWidth = 700
+
+      const fragments: TableFragment[] = [];
+      const mockPage = { fragments };
+
+      layoutTableBlock({
+        block,
+        measure,
+        columnWidth: 450, // Portrait section width (narrower than table)
+        ensurePage: () => ({
+          page: mockPage,
+          columnIndex: 0,
+          cursorY: 0,
+          contentBottom: 1000,
+        }),
+        advanceColumn: (state) => state,
+        columnX: () => 0,
+      });
+
+      expect(fragments).toHaveLength(1);
+      const fragment = fragments[0];
+
+      // Fragment width should be clamped to section width
+      expect(fragment.width).toBe(450);
+
+      // Column widths should be rescaled proportionally
+      expect(fragment.columnWidths).toBeDefined();
+      expect(fragment.columnWidths!.length).toBe(3);
+
+      // Sum of rescaled column widths should equal fragment width
+      const sum = fragment.columnWidths!.reduce((a, b) => a + b, 0);
+      expect(sum).toBe(450);
+
+      // Proportions should be maintained (250:200:250 → ~161:129:161)
+      expect(fragment.columnWidths![0]).toBeGreaterThan(fragment.columnWidths![1]);
+      expect(fragment.columnWidths![0]).toBeCloseTo(fragment.columnWidths![2], -1);
+    });
+
+    it('should not set fragment columnWidths when table fits within section width', () => {
+      const block = createMockTableBlock(2);
+      const measure = createMockTableMeasure([100, 150, 100], [30, 30]);
+      // measure.totalWidth = 350
+
+      const fragments: TableFragment[] = [];
+      const mockPage = { fragments };
+
+      layoutTableBlock({
+        block,
+        measure,
+        columnWidth: 450, // Section is wider than table
+        ensurePage: () => ({
+          page: mockPage,
+          columnIndex: 0,
+          cursorY: 0,
+          contentBottom: 1000,
+        }),
+        advanceColumn: (state) => state,
+        columnX: () => 0,
+      });
+
+      expect(fragments).toHaveLength(1);
+      // No rescaling needed — columnWidths should be undefined
+      expect(fragments[0].columnWidths).toBeUndefined();
+    });
+
+    it('should rescale column widths on paginated table fragments', () => {
+      // Table that splits across pages should have rescaled column widths on each fragment
+      const block = createMockTableBlock(4);
+      const measure = createMockTableMeasure([300, 300], [200, 200, 200, 200]);
+      // totalWidth = 600, each row = 200px
+
+      const fragments: TableFragment[] = [];
+      let pageIndex = 0;
+
+      layoutTableBlock({
+        block,
+        measure,
+        columnWidth: 400, // Narrower than table
+        ensurePage: () => ({
+          page: { fragments },
+          columnIndex: 0,
+          cursorY: 0,
+          contentBottom: 500, // Only fits ~2 rows per page
+        }),
+        advanceColumn: (state) => {
+          pageIndex++;
+          return {
+            ...state,
+            cursorY: 0,
+            contentBottom: 500,
+          };
+        },
+        columnX: () => 0,
+      });
+
+      // Should have multiple fragments (table paginated)
+      expect(fragments.length).toBeGreaterThanOrEqual(1);
+
+      // Every fragment should have rescaled column widths
+      for (const fragment of fragments) {
+        expect(fragment.columnWidths).toBeDefined();
+        const sum = fragment.columnWidths!.reduce((a, b) => a + b, 0);
+        expect(sum).toBe(400);
+      }
+    });
+
+    it('should generate metadata boundaries from rescaled column widths when table is clamped', () => {
+      const block = createMockTableBlock(2);
+      const measure = createMockTableMeasure([250, 200, 250], [30, 30]);
+
+      const fragments: TableFragment[] = [];
+      const mockPage = { fragments };
+
+      layoutTableBlock({
+        block,
+        measure,
+        columnWidth: 450,
+        ensurePage: () => ({
+          page: mockPage,
+          columnIndex: 0,
+          cursorY: 0,
+          contentBottom: 1000,
+        }),
+        advanceColumn: (state) => state,
+        columnX: () => 0,
+      });
+
+      expect(fragments).toHaveLength(1);
+      const fragment = fragments[0];
+      const boundaries = fragment.metadata?.columnBoundaries;
+
+      expect(fragment.columnWidths).toBeDefined();
+      expect(boundaries).toBeDefined();
+      expect(boundaries!.map((boundary) => boundary.width)).toEqual(fragment.columnWidths);
+
+      const lastBoundary = boundaries![boundaries!.length - 1];
+      expect(lastBoundary.x + lastBoundary.width).toBe(fragment.width);
     });
   });
 });

@@ -950,6 +950,20 @@ describe('internal helper functions', () => {
     });
     expect(formatResult.trackedChangeText).toContain('Added formatting');
 
+    const deltaFormatMark = schema.marks[TrackFormatMarkName].create({
+      id: 'format-2',
+      before: [{ type: 'textStyle', attrs: { color: '#111111', fontSize: '12px' } }],
+      after: [{ type: 'bold', attrs: {} }],
+    });
+    const deltaFormatResult = getTrackedChangeText({
+      nodes: [schema.text('Format', [deltaFormatMark])],
+      mark: deltaFormatMark,
+      trackedChangeType: TrackFormatMarkName,
+      isDeletionInsertion: false,
+    });
+    expect(deltaFormatResult.trackedChangeText).toContain('Added formatting: bold');
+    expect(deltaFormatResult.trackedChangeText).not.toContain('undefined');
+
     const combinedResult = getTrackedChangeText({
       nodes: [...insertionNodes, ...deletionNodes],
       mark: insertMark,

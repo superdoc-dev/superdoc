@@ -17,28 +17,18 @@ describe('RectImporter', () => {
     it('should handle v:rect elements and return contentBlock', () => {
       const nodes = [
         {
-          name: 'w:p',
+          name: 'w:pict',
           elements: [
             {
-              name: 'w:r',
-              elements: [
-                {
-                  name: 'w:pict',
-                  elements: [
-                    {
-                      name: 'v:rect',
-                      attributes: {
-                        style: 'width: 100pt; height: 2pt;',
-                        fillcolor: '#000000',
-                        'o:hr': 't',
-                        'o:hralign': 'center',
-                        'o:hrstd': 't',
-                        stroked: 'f',
-                      },
-                    },
-                  ],
-                },
-              ],
+              name: 'v:rect',
+              attributes: {
+                style: 'width: 100pt; height: 2pt;',
+                fillcolor: '#000000',
+                'o:hr': 't',
+                'o:hralign': 'center',
+                'o:hrstd': 't',
+                stroked: 'f',
+              },
             },
           ],
         },
@@ -49,12 +39,8 @@ describe('RectImporter', () => {
       expect(result.nodes).toHaveLength(1);
       expect(result.consumed).toBe(1);
 
-      const node = result.nodes[0];
-      expect(node.type).toBe('paragraph');
-      expect(node.content).toHaveLength(1);
-      expect(node.content[0].type).toBe('contentBlock');
-
-      const contentBlock = node.content[0];
+      const contentBlock = result.nodes[0];
+      expect(contentBlock.type).toBe('contentBlock');
       expect(contentBlock.attrs.attributes).toBeDefined();
       expect(contentBlock.attrs.style).toBeDefined();
       expect(contentBlock.attrs.size).toBeDefined();
@@ -66,24 +52,14 @@ describe('RectImporter', () => {
     it('should handle v:rect elements without style attribute', () => {
       const nodes = [
         {
-          name: 'w:p',
+          name: 'w:pict',
           elements: [
             {
-              name: 'w:r',
-              elements: [
-                {
-                  name: 'w:pict',
-                  elements: [
-                    {
-                      name: 'v:rect',
-                      attributes: {
-                        fillcolor: '#FF0000',
-                        'o:hr': 't',
-                      },
-                    },
-                  ],
-                },
-              ],
+              name: 'v:rect',
+              attributes: {
+                fillcolor: '#FF0000',
+                'o:hr': 't',
+              },
             },
           ],
         },
@@ -94,8 +70,7 @@ describe('RectImporter', () => {
       expect(result.nodes).toHaveLength(1);
       expect(result.consumed).toBe(1);
 
-      const node = result.nodes[0];
-      const contentBlock = node.content[0];
+      const contentBlock = result.nodes[0];
       expect(contentBlock.attrs.attributes).toBeDefined();
       expect(contentBlock.attrs.style).toBeUndefined();
       expect(contentBlock.attrs.size).toBeUndefined();
@@ -103,80 +78,14 @@ describe('RectImporter', () => {
       expect(contentBlock.attrs.horizontalRule).toBe(true);
     });
 
-    it('should handle v:rect elements with paragraph spacing', () => {
-      const nodes = [
-        {
-          name: 'w:p',
-          attributes: { 'w:rsidRDefault': 'test123' },
-          elements: [
-            {
-              name: 'w:pPr',
-              elements: [
-                {
-                  name: 'w:spacing',
-                  attributes: {
-                    'w:after': '240', // 12pt in twips
-                    'w:before': '120', // 6pt in twips
-                    'w:line': '276', // 1.15 line spacing
-                    'w:lineRule': 'auto',
-                  },
-                },
-              ],
-            },
-            {
-              name: 'w:r',
-              elements: [
-                {
-                  name: 'w:pict',
-                  elements: [
-                    {
-                      name: 'v:rect',
-                      attributes: {
-                        style: 'width: 50pt; height: 1pt;',
-                        'o:hr': 't',
-                      },
-                    },
-                  ],
-                },
-              ],
-            },
-          ],
-        },
-      ];
-
-      const result = handlePictNode({ nodes, ...mockParams });
-
-      expect(result.nodes).toHaveLength(1);
-      expect(result.consumed).toBe(1);
-
-      const node = result.nodes[0];
-      expect(node.attrs.rsidRDefault).toBe('test123');
-      const spacing = node.attrs.paragraphProperties?.spacing;
-      expect(spacing).toBeDefined();
-      expect(spacing.after).toBe(240); // 240 twips = 12px
-      expect(spacing.before).toBe(120); // 120 twips = 6px
-      expect(spacing.line).toBe(276);
-      expect(spacing.lineRule).toBe('auto');
-    });
-
     it('should return empty result for non-v:rect pict elements', () => {
       const nodes = [
         {
-          name: 'w:p',
+          name: 'w:pict',
           elements: [
             {
-              name: 'w:r',
-              elements: [
-                {
-                  name: 'w:pict',
-                  elements: [
-                    {
-                      name: 'v:shape',
-                      attributes: { style: 'width: 100pt; height: 50pt;' },
-                    },
-                  ],
-                },
-              ],
+              name: 'v:shape',
+              attributes: { style: 'width: 100pt; height: 50pt;' },
             },
           ],
         },
@@ -233,27 +142,12 @@ describe('RectImporter', () => {
       };
       const rect = pict.elements.find((el) => el.name === 'v:rect');
 
-      const pNode = {
-        elements: [
-          {
-            name: 'w:pPr',
-            elements: [
-              {
-                name: 'w:spacing',
-                attributes: { 'w:after': '240' },
-              },
-            ],
-          },
-        ],
-      };
+      const result = handleVRectImport({ pict });
 
-      const result = handleVRectImport({ pict, pNode, params: mockParams });
+      expect(result).toHaveLength(1);
+      expect(result[0].type).toBe('contentBlock');
 
-      expect(result.type).toBe('paragraph');
-      expect(result.content).toHaveLength(1);
-      expect(result.content[0].type).toBe('contentBlock');
-
-      const contentBlock = result.content[0];
+      const contentBlock = result[0];
       expect(contentBlock.attrs.attributes).toEqual(rect.attributes);
       expect(contentBlock.attrs.style).toBe('width: 200pt;height: 3pt;margin-left: 10pt;');
       expect(contentBlock.attrs.size.height).toBe(4); // 3pt * 1.33 ≈ 4px
@@ -281,13 +175,10 @@ describe('RectImporter', () => {
           },
         ],
       };
-      const rect = pict.elements.find((el) => el.name === 'v:rect');
 
-      const pNode = { elements: [] };
+      const result = handleVRectImport({ pict });
 
-      const result = handleVRectImport({ pict, pNode, params: mockParams });
-
-      const contentBlock = result.content[0];
+      const contentBlock = result[0];
       expect(contentBlock.attrs.size.width).toBe('100%');
       expect(contentBlock.attrs.horizontalRule).toBe(true);
     });
@@ -305,13 +196,10 @@ describe('RectImporter', () => {
           },
         ],
       };
-      const rect = pict.elements.find((el) => el.name === 'v:rect');
 
-      const pNode = { elements: [] };
+      const result = handleVRectImport({ pict });
 
-      const result = handleVRectImport({ pict, pNode, params: mockParams });
-
-      const contentBlock = result.content[0];
+      const contentBlock = result[0];
       expect(contentBlock.attrs.style).toBeUndefined();
       expect(contentBlock.attrs.size).toBeUndefined();
       expect(contentBlock.attrs.background).toBe('#CCCCCC');
@@ -331,13 +219,10 @@ describe('RectImporter', () => {
           },
         ],
       };
-      const rect = pict.elements.find((el) => el.name === 'v:rect');
 
-      const pNode = { elements: [] };
+      const result = handleVRectImport({ pict });
 
-      const result = handleVRectImport({ pict, pNode, params: mockParams });
-
-      const contentBlock = result.content[0];
+      const contentBlock = result[0];
       expect(contentBlock.attrs.attributes.id).toBe('rect1');
       expect(contentBlock.attrs.background).toBe('#FF0000');
       expect(contentBlock.attrs.horizontalRule).toBeFalsy();

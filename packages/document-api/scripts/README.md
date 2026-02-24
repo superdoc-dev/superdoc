@@ -10,8 +10,8 @@ This folder contains deterministic generator/check entry points for the Document
   - `pnpm run docapi:sync` — runs `generate-contract-outputs.ts`
   - `pnpm run docapi:check` — runs `check-contract-parity.ts` + `check-contract-outputs.ts`
   - `pnpm run docapi:sync:check` — sync then check
-- Pre-commit hook (`lefthook.yml`) auto-runs `docapi:sync` when document-api source files are staged.
-- CI workflow (`ci-document-api.yml`) runs `docapi:check` on PRs touching document-api paths.
+- Pre-commit hook (`lefthook.yml`) auto-runs `docapi:sync` when contract or script sources are staged, and restages `reference/` and `overview.mdx`.
+- CI workflow (`ci-document-api.yml`) generates outputs, checks overview freshness, then runs `docapi:check` on PRs touching document-api paths.
 
 ## Manual vs generated boundaries
 
@@ -19,9 +19,11 @@ This folder contains deterministic generator/check entry points for the Document
   - `packages/document-api/src/contract/*`
   - `packages/document-api/src/index.ts` and related runtime/types
   - `packages/document-api/scripts/*`
-- Generated outputs (checked into git):
+- Generated outputs (gitignored — run `pnpm run generate:all`):
   - `packages/document-api/generated/*`
+- Generated outputs (committed — Mintlify deploys from git):
   - `apps/docs/document-api/reference/*`
+- Committed mixed-content file:
   - generated marker block in `apps/docs/document-api/overview.mdx`
 
 Do not hand-edit generated output files. Regenerate instead.

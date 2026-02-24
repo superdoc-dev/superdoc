@@ -472,6 +472,8 @@ header {
 
 .superdoc-esign-document-viewer {
   background: #f9fafb;
+  display: flex;
+  justify-content: center;
 }
 
 .superdoc-esign-controls {

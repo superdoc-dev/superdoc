@@ -1414,7 +1414,7 @@ describe('table converter', () => {
       expect(tableBlock.columnWidths).toEqual([100, 150]);
     });
 
-    it('Priority 2/3 interplay: should prefer colwidth when userEdited is false even if grid present', () => {
+    it('Priority 2/3 interplay: should prefer grid over colwidth when userEdited is false', () => {
       const node: PMNode = {
         type: 'table',
         attrs: {
@@ -1457,13 +1457,15 @@ describe('table converter', () => {
       const tableBlock = result as TableBlock;
 
       // When userEdited is false and both grid and colwidth are present,
-      // colwidth (Priority 2) takes precedence over grid (Priority 3)
+      // grid (Priority 2) takes precedence over colwidth (Priority 3).
+      // Grid values represent actual column positions and sum to the page width.
       expect(tableBlock.columnWidths).toBeDefined();
       expect(tableBlock.columnWidths).toHaveLength(2);
-      expect(tableBlock.columnWidths).toEqual([50, 100]);
+      // 1440 twips = 96px, 2880 twips = 192px
+      expect(tableBlock.columnWidths).toEqual([96, 192]);
     });
 
-    it('Priority 3: should use grid when no colwidth present', () => {
+    it('Priority 2: should use grid when no colwidth present', () => {
       const node: PMNode = {
         type: 'table',
         attrs: {
@@ -1507,7 +1509,7 @@ describe('table converter', () => {
       expect(tableBlock.columnWidths![1]).toBeCloseTo(192, 1);
     });
 
-    it('Priority 4: should auto-calculate when no width attributes', () => {
+    it('Priority 4: should leave columnWidths undefined when no width attributes', () => {
       const node: PMNode = {
         type: 'table',
         attrs: {

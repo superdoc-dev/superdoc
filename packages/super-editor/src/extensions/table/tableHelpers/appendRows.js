@@ -23,6 +23,20 @@ const ROW_START_TO_TEXT_OFFSET = 3;
 const CELL_TO_TEXT_OFFSET = 2;
 
 /**
+ * When converting tableHeader nodes into tableCell nodes, avoid passing
+ * `borders: null` so tableCell defaults can apply.
+ *
+ * @param {Record<string, any>} attrs
+ * @returns {Record<string, any>}
+ */
+const normalizeHeaderAttrsForBodyCell = (attrs) => {
+  if (attrs?.borders !== null) return attrs;
+  const nextAttrs = { ...attrs };
+  delete nextAttrs.borders;
+  return nextAttrs;
+};
+
+/**
  * Row template formatting
  * @typedef {Object} RowTemplateFormatting
  * @property {import('prosemirror-model').NodeType} blockType - Node type used when building cell content
@@ -174,7 +188,7 @@ export function buildRowFromTemplateRow({ schema, tableNode, templateRow, values
   templateRow.content.content.forEach((cellNode, cellIndex) => {
     const isHeaderCell = cellNode.type === HeaderType;
     const targetCellType = isHeaderCell ? CellType : cellNode.type;
-    const attrs = { ...cellNode.attrs };
+    const attrs = isHeaderCell ? normalizeHeaderAttrsForBodyCell({ ...cellNode.attrs }) : { ...cellNode.attrs };
     const formatting = extractRowTemplateFormatting(cellNode, schema);
 
     let cellValue = '';
@@ -301,7 +315,9 @@ export function insertRowAtIndex({ tr, tablePos, tableNode, sourceRowIndex, inse
 
     const content = buildFormattedCellBlock(schema, '', formatting, true);
     const targetCellType = sourceCell.type.name === 'tableHeader' ? CellType : sourceCell.type;
-    const newCell = targetCellType.createAndFill(cellAttrs, content);
+    const normalizedCellAttrs =
+      sourceCell.type.name === 'tableHeader' ? normalizeHeaderAttrsForBodyCell(cellAttrs) : cellAttrs;
+    const newCell = targetCellType.createAndFill(normalizedCellAttrs, content);
     if (newCell) newCells.push(newCell);
 
     col += colspan;

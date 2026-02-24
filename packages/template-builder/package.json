@@ -11,10 +11,12 @@
       "types": "./dist/index.d.ts",
       "import": "./dist/index.mjs",
       "require": "./dist/index.js"
-    }
+    },
+    "./field-types.css": "./src/styles/field-types.css"
   },
   "files": [
     "dist",
+    "src/styles",
     "README.md"
   ],
   "scripts": {

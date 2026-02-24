@@ -88,7 +88,11 @@ export function computeWordParagraphLayout(input: WordParagraphLayoutInput): Wor
     indentLeftPx: paragraph.indent?.left ?? 0,
     hangingPx: paragraph.indent?.hanging ?? 0,
     firstLinePx: paragraph.indent?.firstLine,
-    tabsPx: paragraph.tabs?.map((tab) => twipsToPixels(tab.pos)) ?? [],
+    tabsPx:
+      paragraph.tabs
+        ?.filter((tab) => tab.val !== 'clear' && tab.val !== 'bar')
+        .map((tab) => twipsToPixels(tab.pos))
+        .sort((a, b) => a - b) ?? [],
     textStartPx: paragraph.indent?.left ?? 0,
     marker: undefined,
     defaultTabIntervalPx: paragraph.tabIntervalTwips,

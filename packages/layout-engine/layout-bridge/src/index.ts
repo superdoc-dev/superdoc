@@ -646,7 +646,18 @@ export const hitTestTableFragment = (
     if (!rowMeasure || !row) continue;
 
     // Find the column at localX using column widths
+    // IMPORTANT: For rows with rowspan cells from above, the first cell may not start at grid column 0.
+    // We need to calculate the X offset for columns occupied by rowspans.
+    const firstCellGridStart = rowMeasure.cells[0]?.gridColumnStart ?? 0;
     let colX = 0;
+    // Calculate X offset for columns before the first cell (occupied by rowspans from above)
+    if (firstCellGridStart > 0 && tableMeasure.columnWidths) {
+      for (let col = 0; col < firstCellGridStart && col < tableMeasure.columnWidths.length; col++) {
+        colX += tableMeasure.columnWidths[col];
+      }
+    }
+    const initialColX = colX;
+
     let colIndex = -1;
     // Bounds check: skip if row has no cells
     if (rowMeasure.cells.length === 0 || row.cells.length === 0) continue;
@@ -660,8 +671,13 @@ export const hitTestTableFragment = (
     }
 
     if (colIndex === -1) {
-      // Click is to the right of all columns, use the last column
-      colIndex = rowMeasure.cells.length - 1;
+      if (localX < initialColX) {
+        // Click is in a rowspanned area (left of all cells in this row) - use first cell
+        colIndex = 0;
+      } else {
+        // Click is to the right of all columns - use last cell
+        colIndex = rowMeasure.cells.length - 1;
+      }
       if (colIndex < 0) continue;
     }
 
@@ -720,7 +736,7 @@ export const hitTestTableFragment = (
           measure: tableMeasure,
           pageIndex: pageHit.pageIndex,
           cellRowIndex: rowIndex,
-          cellColIndex: colIndex,
+          cellColIndex: colIndex, // Use cell array index for PM selection (not gridColIndex)
           cellBlock: paragraphBlock,
           cellMeasure: paragraphMeasure,
           localX: Math.max(0, cellLocalX),

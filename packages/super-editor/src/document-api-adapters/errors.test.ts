@@ -20,7 +20,7 @@ describe('DocumentApiAdapterError', () => {
   });
 
   it('supports all error codes', () => {
-    const codes = ['TARGET_NOT_FOUND', 'INVALID_TARGET', 'CAPABILITY_UNAVAILABLE'] as const;
+    const codes = ['TARGET_NOT_FOUND', 'INVALID_TARGET', 'AMBIGUOUS_TARGET', 'CAPABILITY_UNAVAILABLE'] as const;
 
     for (const code of codes) {
       const error = new DocumentApiAdapterError(code, `Error: ${code}`);

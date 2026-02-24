@@ -4,6 +4,7 @@ import type { BlockNodeAttributes } from '../../core/types/NodeCategories.js';
 import type { BlockNodeAddress, BlockNodeType, NodeAddress, NodeType } from '@superdoc/document-api';
 import type { ParagraphAttrs } from '../../extensions/types/node-attributes.js';
 import { toId } from './value-utils.js';
+import { DocumentApiAdapterError } from '../errors.js';
 
 /** Superset of all possible ID attributes across block node types. */
 type BlockIdAttrs = BlockNodeAttributes & {
@@ -107,17 +108,14 @@ function mapBlockNodeType(node: ProseMirrorNode): BlockNodeType | undefined {
 function resolveBlockNodeId(node: ProseMirrorNode): string | undefined {
   if (node.type.name === 'paragraph') {
     const attrs = node.attrs as ParagraphAttrs | undefined;
-    // NOTE: Migration surface for the stable-addresses plan.
-    // Today we preserve DOCX-import identity precedence (`paraId` first) for
-    // paragraph nodes. Any future switch to `sdBlockId` canonical precedence
-    // must be handled as an explicit compatibility migration.
+    // paraId (imported from DOCX) is the primary identity — it's stable across
+    // document opens. sdBlockId is auto-generated per open, so using it as the
+    // canonical ID would break stateless CLI workflows.
+    // When paraId is absent (freshly created node), sdBlockId is the fallback.
     return toId(attrs?.paraId) ?? toId(attrs?.sdBlockId);
   }
 
   const attrs = (node.attrs ?? {}) as BlockIdAttrs;
-  // NOTE: Migration surface for the stable-addresses plan.
-  // Imported IDs currently win over `sdBlockId` to preserve historical
-  // identity during DOCX round-trips.
   return toId(attrs.blockId) ?? toId(attrs.id) ?? toId(attrs.paraId) ?? toId(attrs.uuid) ?? toId(attrs.sdBlockId);
 }
 
@@ -136,6 +134,23 @@ export function toBlockAddress(candidate: BlockCandidate): BlockNodeAddress {
 }
 
 /**
+ * Block types whose nodes carry both `paraId` and `sdBlockId`, and thus need
+ * an alias entry so that lookups by either ID succeed.  Headings and list
+ * items are PM `paragraph` nodes distinguished by style/numbering attrs, so
+ * they share the same dual-ID shape.
+ */
+const ALIAS_ELIGIBLE_TYPES: ReadonlySet<BlockNodeType> = new Set(['paragraph', 'heading', 'listItem']);
+
+/** Returns the sdBlockId for an alias-eligible node, if it differs from the primary nodeId. */
+function resolveBlockAliasId(node: ProseMirrorNode, nodeType: BlockNodeType, primaryId: string): string | undefined {
+  if (!ALIAS_ELIGIBLE_TYPES.has(nodeType)) return undefined;
+  const attrs = node.attrs as ParagraphAttrs | undefined;
+  const sdBlockId = toId(attrs?.sdBlockId);
+  if (sdBlockId && sdBlockId !== primaryId) return sdBlockId;
+  return undefined;
+}
+
+/**
  * Walks the editor document and builds a positional index of all recognised
  * block-level nodes.
  *
@@ -149,6 +164,15 @@ export function buildBlockIndex(editor: Editor): BlockIndex {
   const candidates: BlockCandidate[] = [];
   const byId = new Map<string, BlockCandidate>();
   const ambiguous = new Set<string>();
+
+  function registerKey(key: string, candidate: BlockCandidate): void {
+    if (byId.has(key)) {
+      ambiguous.add(key);
+      byId.delete(key);
+    } else if (!ambiguous.has(key)) {
+      byId.set(key, candidate);
+    }
+  }
 
   // This traversal is a hot path for adapter workflows (for example find ->
   // getNode). Keep this pure snapshot builder so a transaction-invalidated
@@ -168,12 +192,15 @@ export function buildBlockIndex(editor: Editor): BlockIndex {
     };
 
     candidates.push(candidate);
-    const key = `${candidate.nodeType}:${candidate.nodeId}`;
-    if (byId.has(key)) {
-      ambiguous.add(key);
-      byId.delete(key);
-    } else if (!ambiguous.has(key)) {
-      byId.set(key, candidate);
+    registerKey(`${nodeType}:${nodeId}`, candidate);
+
+    // For alias-eligible types (paragraph, heading, listItem), also register
+    // under sdBlockId so that IDs returned by create operations remain
+    // resolvable even after paraId is injected (e.g., via DOCX round-trip or
+    // collaboration merge).
+    const aliasId = resolveBlockAliasId(node, nodeType, nodeId);
+    if (aliasId) {
+      registerKey(`${nodeType}:${aliasId}`, candidate);
     }
   });
 
@@ -190,6 +217,54 @@ export function buildBlockIndex(editor: Editor): BlockIndex {
 export function findBlockById(index: BlockIndex, address: NodeAddress): BlockCandidate | undefined {
   if (address.kind !== 'block') return undefined;
   return index.byId.get(`${address.nodeType}:${address.nodeId}`);
+}
+
+/**
+ * Finds a block candidate by raw nodeId without requiring a nodeType.
+ *
+ * This is needed for create operations that position relative to _any_ block type.
+ *
+ * @param index - The block index to search.
+ * @param nodeId - The node ID to resolve.
+ * @returns The single matching candidate.
+ * @throws {DocumentApiAdapterError} `TARGET_NOT_FOUND` if no candidate matches.
+ * @throws {DocumentApiAdapterError} `AMBIGUOUS_TARGET` if more than one candidate matches.
+ */
+export function findBlockByNodeIdOnly(index: BlockIndex, nodeId: string): BlockCandidate {
+  const matches = index.candidates.filter((candidate) => candidate.nodeId === nodeId);
+
+  if (matches.length === 1) return matches[0]!;
+
+  if (matches.length > 1) {
+    throw new DocumentApiAdapterError('AMBIGUOUS_TARGET', `Multiple blocks share nodeId "${nodeId}".`, {
+      nodeId,
+      count: matches.length,
+    });
+  }
+
+  // No primary match — check alias entries (e.g., sdBlockId for paragraph-like nodes).
+  const aliasMatches = new Map<string, BlockCandidate>();
+  for (const [key, candidate] of index.byId) {
+    if (!key.endsWith(`:${nodeId}`)) continue;
+    aliasMatches.set(`${candidate.nodeType}:${candidate.nodeId}`, candidate);
+  }
+
+  if (aliasMatches.size === 1) {
+    return Array.from(aliasMatches.values())[0]!;
+  }
+
+  if (aliasMatches.size > 1) {
+    throw new DocumentApiAdapterError('AMBIGUOUS_TARGET', `Multiple blocks share nodeId "${nodeId}" via aliases.`, {
+      nodeId,
+      count: aliasMatches.size,
+      matches: Array.from(aliasMatches.values()).map((candidate) => ({
+        nodeType: candidate.nodeType,
+        nodeId: candidate.nodeId,
+      })),
+    });
+  }
+
+  throw new DocumentApiAdapterError('TARGET_NOT_FOUND', `Block with nodeId "${nodeId}" was not found.`, { nodeId });
 }
 
 /**

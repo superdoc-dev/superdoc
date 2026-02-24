@@ -171,7 +171,7 @@ describe('classify', () => {
 
   it('test directories are recognized as low risk', () => {
     assert.equal(
-      classify(['tests/visual/tests/behavior/bold.spec.ts']).level,
+      classify(['tests/visual/tests/rendering/rendering.spec.ts']).level,
       'low',
     );
     assert.equal(classify(['e2e-tests/foo.test.ts']).level, 'low');

@@ -4,6 +4,7 @@ import type { NodeAddress } from '@superdoc/document-api';
 import {
   buildBlockIndex,
   findBlockById,
+  findBlockByNodeIdOnly,
   findBlockByPos,
   isSupportedNodeType,
   toBlockAddress,
@@ -254,13 +255,27 @@ describe('buildBlockIndex', () => {
   });
 
   describe('ID resolution — paragraph nodes', () => {
-    it('prefers paraId over sdBlockId when both are present', () => {
+    it('prefers paraId over sdBlockId as primary ID when both are present', () => {
       const index = indexFromNodes({
         typeName: 'paragraph',
         attrs: { sdBlockId: 'sd1', paraId: 'p1' },
         offset: 0,
       });
       expect(index.candidates[0].nodeId).toBe('p1');
+    });
+
+    it('registers sdBlockId as alias so lookups by either ID work', () => {
+      const index = indexFromNodes({
+        typeName: 'paragraph',
+        attrs: { sdBlockId: 'sd1', paraId: 'p1' },
+        offset: 0,
+      });
+      // Primary lookup by paraId
+      expect(index.byId.get('paragraph:p1')).toBeDefined();
+      // Alias lookup by sdBlockId
+      expect(index.byId.get('paragraph:sd1')).toBeDefined();
+      // Both point to the same candidate
+      expect(index.byId.get('paragraph:sd1')).toBe(index.byId.get('paragraph:p1'));
     });
 
     it('falls back to paraId when sdBlockId is absent', () => {
@@ -288,6 +303,69 @@ describe('buildBlockIndex', () => {
         offset: 7,
       });
       expect(index.candidates).toHaveLength(0);
+    });
+  });
+
+  describe('alias registration — heading nodes', () => {
+    it('registers sdBlockId as alias for headings so lookups by either ID work', () => {
+      const index = indexFromNodes({
+        typeName: 'paragraph',
+        attrs: { sdBlockId: 'sd-h1', paraId: 'hp1', paragraphProperties: { styleId: 'Heading1' } },
+        offset: 0,
+      });
+      expect(index.candidates[0].nodeType).toBe('heading');
+      expect(index.candidates[0].nodeId).toBe('hp1');
+      // Primary lookup by paraId
+      expect(index.byId.get('heading:hp1')).toBeDefined();
+      // Alias lookup by sdBlockId
+      expect(index.byId.get('heading:sd-h1')).toBeDefined();
+      // Both point to the same candidate
+      expect(index.byId.get('heading:sd-h1')).toBe(index.byId.get('heading:hp1'));
+    });
+
+    it('does not register alias when sdBlockId equals paraId', () => {
+      const index = indexFromNodes({
+        typeName: 'paragraph',
+        attrs: { sdBlockId: 'same', paraId: 'same', paragraphProperties: { styleId: 'Heading2' } },
+        offset: 0,
+      });
+      expect(index.byId.get('heading:same')).toBeDefined();
+      // Only one entry, no duplicate alias
+      expect([...index.byId.keys()].filter((k) => k.includes('same'))).toHaveLength(1);
+    });
+  });
+
+  describe('alias registration — listItem nodes', () => {
+    it('registers sdBlockId as alias for listItems', () => {
+      const index = indexFromNodes({
+        typeName: 'paragraph',
+        attrs: {
+          sdBlockId: 'sd-li',
+          paraId: 'lp1',
+          paragraphProperties: { numberingProperties: { numId: 1, ilvl: 0 } },
+        },
+        offset: 0,
+      });
+      expect(index.candidates[0].nodeType).toBe('listItem');
+      expect(index.candidates[0].nodeId).toBe('lp1');
+      expect(index.byId.get('listItem:lp1')).toBeDefined();
+      expect(index.byId.get('listItem:sd-li')).toBeDefined();
+      expect(index.byId.get('listItem:sd-li')).toBe(index.byId.get('listItem:lp1'));
+    });
+  });
+
+  describe('alias registration — non-eligible types', () => {
+    it('does NOT register sdBlockId alias for table nodes', () => {
+      const index = indexFromNodes({
+        typeName: 'table',
+        attrs: { sdBlockId: 'sd-t1', blockId: 'b1' },
+        offset: 0,
+      });
+      expect(index.candidates[0].nodeType).toBe('table');
+      expect(index.candidates[0].nodeId).toBe('b1');
+      expect(index.byId.get('table:b1')).toBeDefined();
+      // sdBlockId should NOT be registered as alias for non-eligible types
+      expect(index.byId.get('table:sd-t1')).toBeUndefined();
     });
   });
 
@@ -467,6 +545,51 @@ describe('findBlockById', () => {
     );
 
     expect(findBlockById(index, { kind: 'block', nodeType: 'paragraph', nodeId: 'dup' })).toBeUndefined();
+  });
+});
+
+// ---------------------------------------------------------------------------
+// findBlockByNodeIdOnly
+// ---------------------------------------------------------------------------
+
+describe('findBlockByNodeIdOnly', () => {
+  it('resolves a unique alias match', () => {
+    const index = indexFromNodes({
+      typeName: 'paragraph',
+      attrs: { paraId: 'p1', sdBlockId: 'sd1' },
+      offset: 0,
+    });
+
+    const result = findBlockByNodeIdOnly(index, 'sd1');
+    expect(result.nodeType).toBe('paragraph');
+    expect(result.nodeId).toBe('p1');
+  });
+
+  it('throws AMBIGUOUS_TARGET when an alias matches multiple block types', () => {
+    const index = indexFromNodes(
+      {
+        typeName: 'paragraph',
+        attrs: { paraId: 'p1', sdBlockId: 'shared' },
+        offset: 0,
+      },
+      {
+        typeName: 'paragraph',
+        attrs: { paraId: 'h1', sdBlockId: 'shared', paragraphProperties: { styleId: 'Heading1' } },
+        offset: 12,
+      },
+    );
+
+    expect(() => findBlockByNodeIdOnly(index, 'shared')).toThrow('Multiple blocks share nodeId');
+  });
+
+  it('throws TARGET_NOT_FOUND when no primary or alias match exists', () => {
+    const index = indexFromNodes({
+      typeName: 'paragraph',
+      attrs: { paraId: 'p1', sdBlockId: 'sd1' },
+      offset: 0,
+    });
+
+    expect(() => findBlockByNodeIdOnly(index, 'missing')).toThrow('was not found');
   });
 });
 

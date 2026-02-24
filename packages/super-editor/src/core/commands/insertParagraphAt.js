@@ -4,17 +4,20 @@
  * Supports optional seed text, deterministic block id assignment, and
  * operation-scoped tracked-change conversion via transaction meta.
  *
- * @param {{ pos: number; text?: string; sdBlockId?: string; tracked?: boolean }} options
+ * @param {{ pos: number; text?: string; sdBlockId?: string; paraId?: string; tracked?: boolean }} options
  * @returns {import('./types/index.js').Command}
  */
 export const insertParagraphAt =
-  ({ pos, text = '', sdBlockId, tracked }) =>
+  ({ pos, text = '', sdBlockId, paraId, tracked }) =>
   ({ state, dispatch }) => {
     const paragraphType = state.schema.nodes.paragraph;
     if (!paragraphType) return false;
     if (!Number.isInteger(pos) || pos < 0 || pos > state.doc.content.size) return false;
 
-    const attrs = sdBlockId ? { sdBlockId } : undefined;
+    const attrs = {
+      ...(sdBlockId ? { sdBlockId } : undefined),
+      ...(paraId ? { paraId } : undefined),
+    };
     const normalizedText = typeof text === 'string' ? text : '';
     const textNode = normalizedText.length > 0 ? state.schema.text(normalizedText) : null;
 

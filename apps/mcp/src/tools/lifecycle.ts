@@ -8,7 +8,7 @@ export function registerLifecycleTools(server: McpServer, sessions: SessionManag
     {
       title: 'Open Document',
       description:
-        'Open a Word document (.docx) for reading and editing. Must be called before any other operation. Returns a session_id to use in subsequent calls.',
+        'Open a Word document (.docx) for reading and editing. If the file does not exist, a new blank document is created at that path. Must be called before any other operation. Returns a session_id to use in subsequent calls.',
       inputSchema: {
         path: z.string().describe('Absolute path to the .docx file.'),
       },

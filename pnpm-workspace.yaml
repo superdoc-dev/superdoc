@@ -4,6 +4,7 @@ packages:
   - tests/visual
   - tests/behavior
   - apps/*
+  - apps/cli/platforms/*
   - packages/**/*
   - shared/*
   - examples/*

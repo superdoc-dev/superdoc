@@ -7,11 +7,11 @@
  * Supports optional seed text, deterministic block id assignment, and
  * operation-scoped tracked-change conversion via transaction meta.
  *
- * @param {{ pos: number; level: number; text?: string; sdBlockId?: string; tracked?: boolean }} options
+ * @param {{ pos: number; level: number; text?: string; sdBlockId?: string; paraId?: string; tracked?: boolean }} options
  * @returns {import('./types/index.js').Command}
  */
 export const insertHeadingAt =
-  ({ pos, level, text = '', sdBlockId, tracked }) =>
+  ({ pos, level, text = '', sdBlockId, paraId, tracked }) =>
   ({ state, dispatch }) => {
     const paragraphType = state.schema.nodes.paragraph;
     if (!paragraphType) return false;
@@ -20,6 +20,7 @@ export const insertHeadingAt =
 
     const attrs = {
       ...(sdBlockId ? { sdBlockId } : undefined),
+      ...(paraId ? { paraId } : undefined),
       paragraphProperties: { styleId: `Heading${level}` },
     };
     const normalizedText = typeof text === 'string' ? text : '';

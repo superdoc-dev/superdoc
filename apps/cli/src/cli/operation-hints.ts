@@ -30,6 +30,7 @@ export const SUCCESS_VERB: Record<CliExposedOperationId, string> = {
   find: 'completed search',
   getNode: 'resolved node',
   getNodeById: 'resolved node',
+  getText: 'extracted text',
   info: 'retrieved info',
   insert: 'inserted text',
   replace: 'replaced text',
@@ -39,6 +40,7 @@ export const SUCCESS_VERB: Record<CliExposedOperationId, string> = {
   'format.underline': 'applied underline',
   'format.strikethrough': 'applied strikethrough',
   'create.paragraph': 'created paragraph',
+  'create.heading': 'created heading',
   'lists.list': 'listed items',
   'lists.get': 'resolved list item',
   'lists.insert': 'inserted list item',
@@ -64,6 +66,7 @@ export const SUCCESS_VERB: Record<CliExposedOperationId, string> = {
   'trackChanges.reject': 'rejected tracked change',
   'trackChanges.acceptAll': 'accepted all tracked changes',
   'trackChanges.rejectAll': 'rejected all tracked changes',
+  'capabilities.get': 'retrieved capabilities',
 };
 
 // ---------------------------------------------------------------------------
@@ -93,6 +96,7 @@ export const OUTPUT_FORMAT: Record<CliExposedOperationId, OutputFormat> = {
   find: 'queryResult',
   getNode: 'nodeInfo',
   getNodeById: 'nodeInfo',
+  getText: 'plain',
   info: 'documentInfo',
   insert: 'mutationReceipt',
   replace: 'mutationReceipt',
@@ -102,6 +106,7 @@ export const OUTPUT_FORMAT: Record<CliExposedOperationId, OutputFormat> = {
   'format.underline': 'mutationReceipt',
   'format.strikethrough': 'mutationReceipt',
   'create.paragraph': 'createResult',
+  'create.heading': 'createResult',
   'lists.list': 'listResult',
   'lists.get': 'listItemInfo',
   'lists.insert': 'listsMutationResult',
@@ -127,6 +132,7 @@ export const OUTPUT_FORMAT: Record<CliExposedOperationId, OutputFormat> = {
   'trackChanges.reject': 'trackChangeMutationReceipt',
   'trackChanges.acceptAll': 'trackChangeMutationReceipt',
   'trackChanges.rejectAll': 'trackChangeMutationReceipt',
+  'capabilities.get': 'plain',
 };
 
 // ---------------------------------------------------------------------------
@@ -144,6 +150,7 @@ export const RESPONSE_ENVELOPE_KEY: Record<CliExposedOperationId, string | null>
   find: 'result',
   getNode: 'node',
   getNodeById: 'node',
+  getText: 'text',
   info: null,
   insert: null,
   replace: null,
@@ -153,6 +160,7 @@ export const RESPONSE_ENVELOPE_KEY: Record<CliExposedOperationId, string | null>
   'format.underline': null,
   'format.strikethrough': null,
   'create.paragraph': 'result',
+  'create.heading': 'result',
   'lists.list': 'result',
   'lists.get': 'item',
   'lists.insert': 'result',
@@ -178,6 +186,7 @@ export const RESPONSE_ENVELOPE_KEY: Record<CliExposedOperationId, string | null>
   'trackChanges.reject': 'receipt',
   'trackChanges.acceptAll': 'receipt',
   'trackChanges.rejectAll': 'receipt',
+  'capabilities.get': 'capabilities',
 };
 
 // ---------------------------------------------------------------------------
@@ -215,6 +224,7 @@ export const OPERATION_FAMILY: Record<CliExposedOperationId, OperationFamily> = 
   find: 'query',
   getNode: 'query',
   getNodeById: 'query',
+  getText: 'query',
   info: 'general',
   insert: 'textMutation',
   replace: 'textMutation',
@@ -224,6 +234,7 @@ export const OPERATION_FAMILY: Record<CliExposedOperationId, OperationFamily> = 
   'format.underline': 'textMutation',
   'format.strikethrough': 'textMutation',
   'create.paragraph': 'create',
+  'create.heading': 'create',
   'lists.list': 'lists',
   'lists.get': 'lists',
   'lists.insert': 'lists',
@@ -249,4 +260,5 @@ export const OPERATION_FAMILY: Record<CliExposedOperationId, OperationFamily> = 
   'trackChanges.reject': 'trackChanges',
   'trackChanges.acceptAll': 'trackChanges',
   'trackChanges.rejectAll': 'trackChanges',
+  'capabilities.get': 'general',
 };

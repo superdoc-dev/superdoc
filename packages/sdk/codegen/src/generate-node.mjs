@@ -74,8 +74,11 @@ function toTsType(typeSpec, indent = '') {
       if (props.length === 0) return 'Record<string, unknown>';
       const lines = ['{'];
       for (const [name, propSpec] of props) {
+        const propertyKey = /^[A-Za-z_$][A-Za-z0-9_$]*$/.test(name)
+          ? name
+          : JSON.stringify(name);
         const opt = required.has(name) ? '' : '?';
-        lines.push(`${indent}  ${name}${opt}: ${toTsType(propSpec, `${indent}  `)};`);
+        lines.push(`${indent}  ${propertyKey}${opt}: ${toTsType(propSpec, `${indent}  `)};`);
       }
       lines.push(`${indent}}`);
       return lines.join('\n');

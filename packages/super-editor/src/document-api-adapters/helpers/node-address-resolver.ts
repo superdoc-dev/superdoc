@@ -133,9 +133,17 @@ export function toBlockAddress(candidate: BlockCandidate): BlockNodeAddress {
   };
 }
 
-/** Returns the sdBlockId for a paragraph node, if it differs from the primary nodeId. */
-function resolveParagraphAliasId(node: ProseMirrorNode, primaryId: string): string | undefined {
-  if (node.type.name !== 'paragraph') return undefined;
+/**
+ * Block types whose nodes carry both `paraId` and `sdBlockId`, and thus need
+ * an alias entry so that lookups by either ID succeed.  Headings and list
+ * items are PM `paragraph` nodes distinguished by style/numbering attrs, so
+ * they share the same dual-ID shape.
+ */
+const ALIAS_ELIGIBLE_TYPES: ReadonlySet<BlockNodeType> = new Set(['paragraph', 'heading', 'listItem']);
+
+/** Returns the sdBlockId for an alias-eligible node, if it differs from the primary nodeId. */
+function resolveBlockAliasId(node: ProseMirrorNode, nodeType: BlockNodeType, primaryId: string): string | undefined {
+  if (!ALIAS_ELIGIBLE_TYPES.has(nodeType)) return undefined;
   const attrs = node.attrs as ParagraphAttrs | undefined;
   const sdBlockId = toId(attrs?.sdBlockId);
   if (sdBlockId && sdBlockId !== primaryId) return sdBlockId;
@@ -186,10 +194,11 @@ export function buildBlockIndex(editor: Editor): BlockIndex {
     candidates.push(candidate);
     registerKey(`${nodeType}:${nodeId}`, candidate);
 
-    // For paragraphs, also register under sdBlockId so that IDs returned by
-    // create operations remain resolvable even after paraId is injected
-    // (e.g., via DOCX round-trip or collaboration merge).
-    const aliasId = resolveParagraphAliasId(node, nodeId);
+    // For alias-eligible types (paragraph, heading, listItem), also register
+    // under sdBlockId so that IDs returned by create operations remain
+    // resolvable even after paraId is injected (e.g., via DOCX round-trip or
+    // collaboration merge).
+    const aliasId = resolveBlockAliasId(node, nodeType, nodeId);
     if (aliasId) {
       registerKey(`${nodeType}:${aliasId}`, candidate);
     }
@@ -233,9 +242,26 @@ export function findBlockByNodeIdOnly(index: BlockIndex, nodeId: string): BlockC
     });
   }
 
-  // No primary match — check alias entries (e.g., sdBlockId for paragraphs).
+  // No primary match — check alias entries (e.g., sdBlockId for paragraph-like nodes).
+  const aliasMatches = new Map<string, BlockCandidate>();
   for (const [key, candidate] of index.byId) {
-    if (key.endsWith(`:${nodeId}`)) return candidate;
+    if (!key.endsWith(`:${nodeId}`)) continue;
+    aliasMatches.set(`${candidate.nodeType}:${candidate.nodeId}`, candidate);
+  }
+
+  if (aliasMatches.size === 1) {
+    return Array.from(aliasMatches.values())[0]!;
+  }
+
+  if (aliasMatches.size > 1) {
+    throw new DocumentApiAdapterError('AMBIGUOUS_TARGET', `Multiple blocks share nodeId "${nodeId}" via aliases.`, {
+      nodeId,
+      count: aliasMatches.size,
+      matches: Array.from(aliasMatches.values()).map((candidate) => ({
+        nodeType: candidate.nodeType,
+        nodeId: candidate.nodeId,
+      })),
+    });
   }
 
   throw new DocumentApiAdapterError('TARGET_NOT_FOUND', `Block with nodeId "${nodeId}" was not found.`, { nodeId });

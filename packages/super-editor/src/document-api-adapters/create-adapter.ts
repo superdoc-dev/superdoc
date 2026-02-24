@@ -1,4 +1,5 @@
 import { v4 as uuidv4 } from 'uuid';
+import { generateDocxRandomId } from '../core/helpers/generateDocxRandomId.js';
 import type { Editor } from '../core/Editor.js';
 import type {
   CreateParagraphInput,
@@ -19,6 +20,7 @@ type InsertParagraphAtCommandOptions = {
   pos: number;
   text?: string;
   sdBlockId?: string;
+  paraId?: string;
   tracked?: boolean;
 };
 
@@ -29,6 +31,7 @@ type InsertHeadingAtCommandOptions = {
   level: number;
   text?: string;
   sdBlockId?: string;
+  paraId?: string;
   tracked?: boolean;
 };
 
@@ -54,30 +57,23 @@ function resolveParagraphInsertPosition(editor: Editor, input: CreateParagraphIn
   return location.kind === 'before' ? target.pos : target.end;
 }
 
-function resolveCreatedParagraph(editor: Editor, paragraphId: string): BlockCandidate {
+function resolveCreatedParagraph(editor: Editor, paraId: string): BlockCandidate {
   const index = getBlockIndex(editor);
-  const resolved = index.byId.get(`paragraph:${paragraphId}`);
-
+  // paraId is the primary key in the index, so this is a direct hit.
+  const resolved = index.byId.get(`paragraph:${paraId}`);
   if (resolved) return resolved;
 
-  // Paragraph addresses may currently prefer imported paraId over sdBlockId.
-  // After insertion, resolve by sdBlockId as a deterministic fallback so a
-  // successful insert cannot be reported as a failure solely due to ID
-  // projection differences.
-  const bySdBlockId = index.candidates.find((candidate) => {
+  // Fallback: scan by paraId attr in case the index was built before the node
+  // was fully materialised.
+  const byAttr = index.candidates.find((candidate) => {
     if (candidate.nodeType !== 'paragraph') return false;
-    const attrs = (candidate.node as { attrs?: { sdBlockId?: unknown } }).attrs;
-    return typeof attrs?.sdBlockId === 'string' && attrs.sdBlockId === paragraphId;
+    const attrs = (candidate.node as { attrs?: { paraId?: unknown } }).attrs;
+    return typeof attrs?.paraId === 'string' && attrs.paraId === paraId;
   });
-  if (bySdBlockId) return bySdBlockId;
-
-  const fallback = index.candidates.find(
-    (candidate) => candidate.nodeType === 'paragraph' && candidate.nodeId === paragraphId,
-  );
-  if (fallback) return fallback;
+  if (byAttr) return byAttr;
 
   throw new DocumentApiAdapterError('TARGET_NOT_FOUND', 'Created paragraph could not be resolved after insertion.', {
-    paragraphId,
+    paraId,
   });
 }
 
@@ -150,12 +146,14 @@ export function createParagraphAdapter(
     };
   }
 
-  const paragraphId = uuidv4();
+  const sdBlockId = uuidv4();
+  const paraId = generateDocxRandomId();
 
   const didApply = insertParagraphAt({
     pos: insertAt,
     text: input.text,
-    sdBlockId: paragraphId,
+    sdBlockId,
+    paraId,
     tracked: mode === 'tracked',
   });
 
@@ -171,18 +169,18 @@ export function createParagraphAdapter(
 
   clearIndexCache(editor);
   try {
-    const paragraph = resolveCreatedParagraph(editor, paragraphId);
+    const paragraph = resolveCreatedParagraph(editor, paraId);
     const trackedChangeRefs =
       mode === 'tracked' ? collectTrackInsertRefsInRange(editor, paragraph.pos, paragraph.end) : undefined;
 
-    // Always return the sdBlockId we assigned — it's deterministic and the
-    // index alias guarantees it stays resolvable even if paraId is later
-    // injected as the primary identity.
-    return buildParagraphCreateSuccess(paragraphId, trackedChangeRefs);
+    // Return the paraId — it's written as w14:paraId during DOCX export and
+    // survives round-trips, giving callers a stable identity for subsequent
+    // operations even across separate CLI invocations.
+    return buildParagraphCreateSuccess(paraId, trackedChangeRefs);
   } catch {
     // Mutation already applied — contract requires success: true.
-    // Fall back to the generated ID we assigned to the command.
-    return buildParagraphCreateSuccess(paragraphId);
+    // Fall back to the paraId we generated.
+    return buildParagraphCreateSuccess(paraId);
   }
 }
 
@@ -210,26 +208,23 @@ function resolveHeadingInsertPosition(editor: Editor, input: CreateHeadingInput)
   return location.kind === 'before' ? target.pos : target.end;
 }
 
-function resolveCreatedHeading(editor: Editor, headingId: string): BlockCandidate {
+function resolveCreatedHeading(editor: Editor, paraId: string): BlockCandidate {
   const index = getBlockIndex(editor);
-  const resolved = index.byId.get(`heading:${headingId}`);
-
+  // paraId is the primary key in the index, so this is a direct hit.
+  const resolved = index.byId.get(`heading:${paraId}`);
   if (resolved) return resolved;
 
-  const bySdBlockId = index.candidates.find((candidate) => {
+  // Fallback: scan by paraId attr in case the index was built before the node
+  // was fully materialised.
+  const byAttr = index.candidates.find((candidate) => {
     if (candidate.nodeType !== 'heading') return false;
-    const attrs = (candidate.node as { attrs?: { sdBlockId?: unknown } }).attrs;
-    return typeof attrs?.sdBlockId === 'string' && attrs.sdBlockId === headingId;
+    const attrs = (candidate.node as { attrs?: { paraId?: unknown } }).attrs;
+    return typeof attrs?.paraId === 'string' && attrs.paraId === paraId;
   });
-  if (bySdBlockId) return bySdBlockId;
-
-  const fallback = index.candidates.find(
-    (candidate) => candidate.nodeType === 'heading' && candidate.nodeId === headingId,
-  );
-  if (fallback) return fallback;
+  if (byAttr) return byAttr;
 
   throw new DocumentApiAdapterError('TARGET_NOT_FOUND', 'Created heading could not be resolved after insertion.', {
-    headingId,
+    paraId,
   });
 }
 
@@ -303,13 +298,15 @@ export function createHeadingAdapter(
     };
   }
 
-  const headingId = uuidv4();
+  const sdBlockId = uuidv4();
+  const paraId = generateDocxRandomId();
 
   const didApply = insertHeadingAt({
     pos: insertAt,
     level: input.level,
     text: input.text,
-    sdBlockId: headingId,
+    sdBlockId,
+    paraId,
     tracked: mode === 'tracked',
   });
 
@@ -325,14 +322,14 @@ export function createHeadingAdapter(
 
   clearIndexCache(editor);
   try {
-    const heading = resolveCreatedHeading(editor, headingId);
+    const heading = resolveCreatedHeading(editor, paraId);
     const trackedChangeRefs =
       mode === 'tracked' ? collectTrackInsertRefsInRange(editor, heading.pos, heading.end) : undefined;
 
-    return buildHeadingCreateSuccess(headingId, trackedChangeRefs);
+    return buildHeadingCreateSuccess(paraId, trackedChangeRefs);
   } catch {
     // Mutation already applied — contract requires success: true.
-    // Fall back to the generated ID we assigned to the command.
-    return buildHeadingCreateSuccess(headingId);
+    // Fall back to the paraId we generated.
+    return buildHeadingCreateSuccess(paraId);
   }
 }

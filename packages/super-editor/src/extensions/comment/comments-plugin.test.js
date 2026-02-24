@@ -121,7 +121,7 @@ const createEditorEnvironment = (schema, doc) => {
   extension.addPmPlugins = CommentsPlugin.config.addPmPlugins.bind(extension);
   extension.editor = editor;
 
-  return { editor, commands: extension.addCommands(), view };
+  return { editor, commands: extension.addCommands(), view, extension };
 };
 
 describe('CommentsPlugin commands', () => {
@@ -1227,5 +1227,88 @@ describe('getActiveCommentId - nested comments and TC precedence', () => {
     expect(getActiveCommentId(doc, TextSelection.create(doc, 3))).toBe('a');
     // Position 8 is on "World" (mark B)
     expect(getActiveCommentId(doc, TextSelection.create(doc, 8))).toBe('b');
+  });
+});
+
+describe('SD-1940: no recursive dispatch from apply() on selection change', () => {
+  it('does not dispatch from apply() when selection moves onto a comment', () => {
+    const schema = createCommentSchema();
+    const commentMark = schema.marks[CommentMarkName].create({ commentId: 'c-1' });
+    const paragraph = schema.node('paragraph', null, [
+      schema.text('Plain text. '),
+      schema.text('Commented text.', [commentMark]),
+    ]);
+    const doc = schema.node('doc', null, [paragraph]);
+
+    const { editor, view, extension } = createEditorEnvironment(schema, doc);
+    const plugins = extension.addPmPlugins();
+
+    // Create state WITH the comments plugin so apply() runs
+    const initialState = EditorState.create({
+      schema,
+      doc,
+      selection: TextSelection.create(doc, 3),
+      plugins,
+    });
+    view.state = initialState;
+
+    // Track dispatch calls
+    const dispatchSpy = vi.fn((tr) => {
+      view.state = view.state.apply(tr);
+    });
+    view.dispatch = dispatchSpy;
+
+    // Move selection onto commented text (pos 14) — triggers active thread change in apply()
+    const tr = initialState.tr.setSelection(TextSelection.create(doc, 14));
+    const newState = initialState.apply(tr);
+    view.state = newState;
+
+    // apply() should NOT have called view.dispatch() (the old bug dispatched a 'force' transaction)
+    expect(dispatchSpy).not.toHaveBeenCalled();
+
+    // But the commentsUpdate event should still have been emitted
+    expect(editor.emit).toHaveBeenCalledWith(
+      'commentsUpdate',
+      expect.objectContaining({
+        type: comments_module_events.SELECTED,
+        activeCommentId: 'c-1',
+      }),
+    );
+  });
+
+  it('handles programmatic selection + addComment without recursive dispatch', () => {
+    const schema = createCommentSchema();
+    const paragraph = schema.node('paragraph', null, [schema.text('Hello world')]);
+    const doc = schema.node('doc', null, [paragraph]);
+
+    const { editor, commands, view, extension } = createEditorEnvironment(schema, doc);
+    const plugins = extension.addPmPlugins();
+
+    const initialState = EditorState.create({
+      schema,
+      doc,
+      selection: TextSelection.create(doc, 1, 1),
+      plugins,
+    });
+    view.state = initialState;
+
+    let dispatchCount = 0;
+    view.dispatch = vi.fn((tr) => {
+      dispatchCount++;
+      if (dispatchCount > 10) throw new Error('Dispatch loop detected — exceeded 10 dispatches');
+      view.state = view.state.apply(tr);
+    });
+
+    // Step 1: Programmatically select text (like the customer's code)
+    const selTr = view.state.tr.setSelection(TextSelection.create(view.state.doc, 1, 6));
+    view.dispatch(selTr);
+
+    // Step 2: Immediately add a comment (like the customer's code)
+    const addCommentCmd = commands.addComment({ content: 'Test comment' });
+    const addTr = view.state.tr;
+    addCommentCmd({ tr: addTr, state: view.state, dispatch: view.dispatch, editor });
+
+    // Should complete without loop — max 2-3 dispatches (selection + addComment + maybe decoration)
+    expect(dispatchCount).toBeLessThanOrEqual(3);
   });
 });

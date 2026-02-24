@@ -1,11 +1,10 @@
 import { generateRandomSigned32BitIntStrId } from '@helpers/generateDocxRandomId';
-import { wrapTextInRun } from '@converter/exporter';
 
 /**
  * Translates an image node with VML watermark attributes back to w:pict XML.
  *
  * @param {Object} params - The parameters for translation.
- * @returns {Object} The XML representation (w:p containing w:pict).
+ * @returns {Object} The XML representation (w:pict).
  */
 export function translateImageWatermark(params) {
   const { node } = params;
@@ -35,12 +34,7 @@ export function translateImageWatermark(params) {
       elements: [shape],
     };
 
-    const par = {
-      name: 'w:p',
-      elements: [wrapTextInRun(pict)],
-    };
-
-    return par;
+    return pict;
   }
 
   // Fallback: construct VML from image attributes
@@ -77,12 +71,7 @@ export function translateImageWatermark(params) {
     elements: [shape],
   };
 
-  const par = {
-    name: 'w:p',
-    elements: [wrapTextInRun(pict)],
-  };
-
-  return par;
+  return pict;
 }
 
 /**

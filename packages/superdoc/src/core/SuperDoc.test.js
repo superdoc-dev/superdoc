@@ -16,6 +16,7 @@ vi.mock('uuid', () => ({
 
 const toolbarUpdateSpy = vi.fn();
 const toolbarSetActiveSpy = vi.fn();
+const toolbarSetZoomSpy = vi.fn();
 
 class MockToolbar {
   constructor(config) {
@@ -36,6 +37,10 @@ class MockToolbar {
   setActiveEditor(editor) {
     this.activeEditor = editor;
     toolbarSetActiveSpy(editor);
+  }
+
+  setZoom(percent) {
+    toolbarSetZoomSpy(percent);
   }
 }
 
@@ -172,6 +177,7 @@ describe('SuperDoc core', () => {
     vi.resetModules();
     toolbarUpdateSpy.mockClear();
     toolbarSetActiveSpy.mockClear();
+    toolbarSetZoomSpy.mockClear();
     createZipMock.mockClear();
     createDownloadMock.mockClear();
     cleanNameMock.mockClear();
@@ -209,13 +215,35 @@ describe('SuperDoc core', () => {
     const instance = new SuperDoc(config);
     await flushMicrotasks();
 
-    expect(createVueAppMock).toHaveBeenCalled();
-    expect(app.mount).toHaveBeenCalledWith('#host');
+    expect(createVueAppMock).toHaveBeenCalledWith({ disablePiniaDevtools: false });
+    // Vue mounts on a child wrapper element inside the user's container (SD-1832)
+    const mountArg = app.mount.mock.calls[0][0];
+    expect(mountArg).toBeInstanceOf(HTMLDivElement);
+    expect(mountArg.parentElement).toBe(document.querySelector('#host'));
     expect(superdocStore.init).toHaveBeenCalledWith(instance.config);
     expect(instance.config.documents).toHaveLength(1);
     expect(instance.config.documents[0]).toMatchObject({ type: DOCX, url: 'https://example.com/doc.docx' });
     expect(instance.colors).toEqual(['blue', 'red']);
     expect(shuffleArrayMock).toHaveBeenCalledWith(['red', 'blue']);
+  });
+
+  it('passes disablePiniaDevtools option to createSuperdocVueApp', async () => {
+    createAppHarness();
+
+    new SuperDoc({
+      selector: '#host',
+      document: 'https://example.com/doc.docx',
+      documents: [],
+      modules: { comments: {}, toolbar: {} },
+      colors: ['red'],
+      user: { name: 'Jane', email: 'jane@example.com' },
+      disablePiniaDevtools: true,
+      onException: vi.fn(),
+    });
+
+    await flushMicrotasks();
+
+    expect(createVueAppMock).toHaveBeenCalledWith({ disablePiniaDevtools: true });
   });
 
   it('defaults comments module config when omitted', async () => {
@@ -518,6 +546,121 @@ describe('SuperDoc core', () => {
     expect(instance.listenerCount('ready')).toBe(0);
   });
 
+  it('mounts Vue on a wrapper element inside the user container', async () => {
+    const { app } = createAppHarness();
+    const instance = new SuperDoc({
+      selector: '#host',
+      document: 'https://example.com/doc.docx',
+      documents: [],
+      modules: { comments: {} },
+      colors: ['red'],
+      user: { name: 'Jane', email: 'jane@example.com' },
+    });
+    await flushMicrotasks();
+
+    const host = document.querySelector('#host');
+    const mountArg = app.mount.mock.calls[0][0];
+
+    // Vue should mount on a child wrapper, not the user's container
+    expect(mountArg).toBeInstanceOf(HTMLDivElement);
+    expect(mountArg.parentElement).toBe(host);
+  });
+
+  it('removes wrapper element on destroy', async () => {
+    const { app } = createAppHarness();
+    const instance = new SuperDoc({
+      selector: '#host',
+      document: 'https://example.com/doc.docx',
+      documents: [],
+      modules: { comments: {} },
+      colors: ['red'],
+      user: { name: 'Jane', email: 'jane@example.com' },
+    });
+    await flushMicrotasks();
+
+    const host = document.querySelector('#host');
+    expect(host.children.length).toBe(1);
+
+    instance.destroy();
+
+    expect(host.children.length).toBe(0);
+    expect(app.unmount).toHaveBeenCalled();
+  });
+
+  it('allows re-mounting after destroy (React StrictMode pattern)', async () => {
+    const { app } = createAppHarness();
+
+    // First mount
+    const instance1 = new SuperDoc({
+      selector: '#host',
+      document: 'https://example.com/doc.docx',
+      documents: [],
+      modules: { comments: {} },
+      colors: ['red'],
+      user: { name: 'Jane', email: 'jane@example.com' },
+    });
+    await flushMicrotasks();
+
+    const host = document.querySelector('#host');
+    expect(host.children.length).toBe(1);
+
+    // Destroy (simulates React cleanup)
+    instance1.destroy();
+    expect(host.children.length).toBe(0);
+
+    // Re-mount (simulates React re-render)
+    const { app: app2 } = createAppHarness();
+    const instance2 = new SuperDoc({
+      selector: '#host',
+      document: 'https://example.com/doc.docx',
+      documents: [],
+      modules: { comments: {} },
+      colors: ['red'],
+      user: { name: 'Jane', email: 'jane@example.com' },
+    });
+    await flushMicrotasks();
+
+    // Second mount should work without errors
+    expect(app2.mount).toHaveBeenCalled();
+    const mountArg = app2.mount.mock.calls[0][0];
+    expect(mountArg.parentElement).toBe(host);
+    expect(host.children.length).toBe(1);
+  });
+
+  it('mounts Vue on wrapper when selector is a DOM element', async () => {
+    const { app } = createAppHarness();
+    const host = document.querySelector('#host');
+
+    const instance = new SuperDoc({
+      selector: host,
+      document: 'https://example.com/doc.docx',
+      documents: [],
+      modules: { comments: {} },
+      colors: ['red'],
+      user: { name: 'Jane', email: 'jane@example.com' },
+    });
+    await flushMicrotasks();
+
+    const mountArg = app.mount.mock.calls[0][0];
+    expect(mountArg).toBeInstanceOf(HTMLDivElement);
+    expect(mountArg.parentElement).toBe(host);
+  });
+
+  it('throws when selector does not match any DOM element', () => {
+    createAppHarness();
+    expect(
+      () =>
+        new SuperDoc({
+          selector: '#nonexistent',
+          document: 'https://example.com/doc.docx',
+          documents: [],
+          modules: { comments: {} },
+          colors: ['red'],
+          user: { name: 'Jane', email: 'jane@example.com' },
+        }),
+    ).toThrow('SuperDoc: selector must be a valid CSS selector string or DOM element');
+  });
+
   it('prevents app mounting if destroy is called during async init', async () => {
     const { app } = createAppHarness();
 
@@ -650,6 +793,48 @@ describe('SuperDoc core', () => {
     });
   });
 
+  it('propagates context menu toggles to presentation and flow editors and skips no-op updates', async () => {
+    const { superdocStore } = createAppHarness();
+    const setContextMenuDisabled = vi.fn();
+    const setOptions = vi.fn();
+    const docStub = {
+      getPresentationEditor: vi.fn(() => ({ setContextMenuDisabled })),
+      getEditor: vi.fn(() => ({ setOptions })),
+    };
+
+    const instance = new SuperDoc({
+      selector: '#host',
+      document: 'https://example.com/doc.docx',
+      documents: [],
+      modules: { comments: {}, toolbar: {} },
+      colors: ['red'],
+      role: 'editor',
+      user: { name: 'Jane', email: 'jane@example.com' },
+      onException: vi.fn(),
+    });
+    await flushMicrotasks();
+
+    superdocStore.documents = [docStub];
+
+    instance.setDisableContextMenu(false);
+    expect(setContextMenuDisabled).not.toHaveBeenCalled();
+    expect(setOptions).not.toHaveBeenCalled();
+
+    instance.setDisableContextMenu(true);
+    expect(instance.config.disableContextMenu).toBe(true);
+    expect(setContextMenuDisabled).toHaveBeenCalledWith(true);
+    expect(setOptions).toHaveBeenCalledWith({ disableContextMenu: true });
+
+    instance.setDisableContextMenu(true);
+    expect(setContextMenuDisabled).toHaveBeenCalledTimes(1);
+    expect(setOptions).toHaveBeenCalledTimes(1);
+
+    instance.setDisableContextMenu(false);
+    expect(instance.config.disableContextMenu).toBe(false);
+    expect(setContextMenuDisabled).toHaveBeenLastCalledWith(false);
+    expect(setOptions).toHaveBeenLastCalledWith({ disableContextMenu: false });
+  });
+
   it('skips rendering comments list when role is viewer', async () => {
     createAppHarness();
 
@@ -713,8 +898,10 @@ describe('SuperDoc core', () => {
           id: expect.any(String),
           type: 'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
           name: 'contract.docx',
-          isNewFile: true,
         });
+        // isNewFile should NOT be set when importing existing files
+        // It should only be true when creating from blank template
+        expect(instance.config.documents[0].isNewFile).toBeUndefined();
         expect(instance.config.documents[0].data).toBe(file);
       });
 
@@ -737,8 +924,9 @@ describe('SuperDoc core', () => {
           id: expect.any(String),
           type: 'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
           name: 'document', // Default name for Blobs
-          isNewFile: true,
         });
+        // isNewFile should NOT be set when importing existing files
+        expect(instance.config.documents[0].isNewFile).toBeUndefined();
         // Blob should be wrapped as File
         expect(instance.config.documents[0].data).toBeInstanceOf(File);
       });
@@ -888,6 +1076,286 @@ describe('SuperDoc core', () => {
           isNewFile: true,
         });
       });
+    });
+  });
+
+  describe('Zoom API', () => {
+    it('getZoom returns 100 by default', async () => {
+      createAppHarness();
+
+      const instance = new SuperDoc({
+        selector: '#host',
+        document: 'https://example.com/doc.docx',
+      });
+      await flushMicrotasks();
+
+      expect(instance.getZoom()).toBe(100);
+    });
+
+    it('getZoom returns current activeZoom from store', async () => {
+      const { superdocStore } = createAppHarness();
+
+      const instance = new SuperDoc({
+        selector: '#host',
+        document: 'https://example.com/doc.docx',
+      });
+      await flushMicrotasks();
+
+      superdocStore.activeZoom = 150;
+      expect(instance.getZoom()).toBe(150);
+
+      superdocStore.activeZoom = 75;
+      expect(instance.getZoom()).toBe(75);
+    });
+
+    it('setZoom updates activeZoom in the store', async () => {
+      const { superdocStore } = createAppHarness();
+
+      const instance = new SuperDoc({
+        selector: '#host',
+        document: 'https://example.com/doc.docx',
+      });
+      await flushMicrotasks();
+
+      instance.setZoom(150);
+
+      expect(superdocStore.activeZoom).toBe(150);
+    });
+
+    it('setZoom propagates multiplier through activeZoom watcher', async () => {
+      const { superdocStore } = createAppHarness();
+      const mockPresentationEditor = {
+        zoom: 1,
+        setZoom: vi.fn(),
+      };
+
+      superdocStore.documents = [
+        {
+          id: 'doc-1',
+          type: DOCX,
+          getPresentationEditor: vi.fn(() => mockPresentationEditor),
+        },
+      ];
+
+      // Simulate SuperDoc.vue's activeZoom watcher
+      let activeZoom = 100;
+      Object.defineProperty(superdocStore, 'activeZoom', {
+        configurable: true,
+        get: () => activeZoom,
+        set: (value) => {
+          activeZoom = value;
+          const zoomMultiplier = (value ?? 100) / 100;
+          superdocStore.documents.forEach((doc) => {
+            const presentationEditor = doc.getPresentationEditor?.();
+            presentationEditor?.setZoom?.(zoomMultiplier);
+          });
+        },
+      });
+
+      const instance = new SuperDoc({
+        selector: '#host',
+        document: 'https://example.com/doc.docx',
+        documents: [],
+        modules: { comments: {}, toolbar: {} },
+        colors: ['red'],
+        user: { name: 'Jane', email: 'jane@example.com' },
+      });
+      await flushMicrotasks();
+
+      instance.setZoom(150);
+
+      expect(mockPresentationEditor.setZoom).toHaveBeenCalledWith(1.5);
+      expect(superdocStore.activeZoom).toBe(150);
+    });
+
+    it('setZoom emits zoomChange event', async () => {
+      createAppHarness();
+
+      const instance = new SuperDoc({
+        selector: '#host',
+        document: 'https://example.com/doc.docx',
+      });
+      await flushMicrotasks();
+
+      const zoomChangeSpy = vi.fn();
+      instance.on('zoomChange', zoomChangeSpy);
+
+      instance.setZoom(200);
+
+      expect(zoomChangeSpy).toHaveBeenCalledWith({ zoom: 200 });
+    });
+
+    it('getZoom reflects value set by setZoom', async () => {
+      const { superdocStore } = createAppHarness();
+
+      // Simulate SuperDoc.vue's activeZoom watcher
+      let activeZoom = 100;
+      Object.defineProperty(superdocStore, 'activeZoom', {
+        configurable: true,
+        get: () => activeZoom,
+        set: (value) => {
+          activeZoom = value;
+          const zoomMultiplier = (value ?? 100) / 100;
+          superdocStore.documents.forEach((doc) => {
+            const presentationEditor = doc.getPresentationEditor?.();
+            presentationEditor?.setZoom?.(zoomMultiplier);
+          });
+        },
+      });
+
+      const instance = new SuperDoc({
+        selector: '#host',
+        document: 'https://example.com/doc.docx',
+      });
+      await flushMicrotasks();
+
+      instance.setZoom(75);
+      expect(instance.getZoom()).toBe(75);
+
+      instance.setZoom(200);
+      expect(instance.getZoom()).toBe(200);
+    });
+
+    it('setZoom avoids duplicate presentation-editor updates when activeZoom store watcher also applies zoom', async () => {
+      const { superdocStore } = createAppHarness();
+      const mockPresentationEditor = { zoom: 1, setZoom: vi.fn() };
+
+      superdocStore.documents = [
+        {
+          id: 'doc-1',
+          type: DOCX,
+          getPresentationEditor: vi.fn(() => mockPresentationEditor),
+        },
+      ];
+
+      // Simulate SuperDoc.vue's activeZoom watcher:
+      // watch(activeZoom, zoom => PresentationEditor.setGlobalZoom(zoom / 100))
+      let activeZoom = 100;
+      Object.defineProperty(superdocStore, 'activeZoom', {
+        configurable: true,
+        get: () => activeZoom,
+        set: (value) => {
+          activeZoom = value;
+          const zoomMultiplier = (value ?? 100) / 100;
+          superdocStore.documents.forEach((doc) => {
+            const presentationEditor = doc.getPresentationEditor?.();
+            presentationEditor?.setZoom?.(zoomMultiplier);
+          });
+        },
+      });
+
+      const instance = new SuperDoc({
+        selector: '#host',
+        document: 'https://example.com/doc.docx',
+        documents: [],
+        modules: { comments: {}, toolbar: {} },
+        colors: ['red'],
+        user: { name: 'Jane', email: 'jane@example.com' },
+      });
+      await flushMicrotasks();
+
+      instance.setZoom(125);
+
+      expect(mockPresentationEditor.setZoom).toHaveBeenCalledTimes(1);
+      expect(mockPresentationEditor.setZoom).toHaveBeenCalledWith(1.25);
+    });
+
+    it('setZoom updates toolbar zoom UI for programmatic calls', async () => {
+      const { superdocStore } = createAppHarness();
+      const mockPresentationEditor = { zoom: 1, setZoom: vi.fn() };
+
+      superdocStore.documents = [
+        {
+          id: 'doc-1',
+          type: DOCX,
+          getPresentationEditor: vi.fn(() => mockPresentationEditor),
+        },
+      ];
+
+      const instance = new SuperDoc({
+        selector: '#host',
+        document: 'https://example.com/doc.docx',
+        documents: [],
+        modules: { comments: {}, toolbar: {} },
+        colors: ['red'],
+        user: { name: 'Jane', email: 'jane@example.com' },
+      });
+      await flushMicrotasks();
+      toolbarSetZoomSpy.mockClear();
+
+      instance.setZoom(140);
+
+      expect(toolbarSetZoomSpy).toHaveBeenCalledWith(140);
+      expect(toolbarSetZoomSpy).toHaveBeenCalledTimes(1);
+    });
+
+    it('setZoom warns and returns early for invalid values', async () => {
+      const warnSpy = vi.spyOn(console, 'warn').mockImplementation(() => {});
+      const { superdocStore } = createAppHarness();
+
+      const instance = new SuperDoc({
+        selector: '#host',
+        document: 'https://example.com/doc.docx',
+      });
+      await flushMicrotasks();
+
+      const zoomChangeSpy = vi.fn();
+      instance.on('zoomChange', zoomChangeSpy);
+
+      // Test negative value
+      instance.setZoom(-50);
+      expect(warnSpy).toHaveBeenCalledWith('[SuperDoc] setZoom expects a positive number representing percentage');
+      expect(superdocStore.activeZoom).toBe(100);
+      expect(zoomChangeSpy).not.toHaveBeenCalled();
+
+      warnSpy.mockClear();
+
+      // Test zero
+      instance.setZoom(0);
+      expect(warnSpy).toHaveBeenCalled();
+      expect(superdocStore.activeZoom).toBe(100);
+
+      warnSpy.mockClear();
+
+      // Test non-number
+      instance.setZoom('150');
+      expect(warnSpy).toHaveBeenCalled();
+      expect(superdocStore.activeZoom).toBe(100);
+
+      warnSpy.mockClear();
+
+      // Test NaN
+      instance.setZoom(NaN);
+      expect(warnSpy).toHaveBeenCalled();
+      expect(superdocStore.activeZoom).toBe(100);
+
+      warnSpy.mockClear();
+
+      // Test Infinity
+      instance.setZoom(Infinity);
+      expect(warnSpy).toHaveBeenCalled();
+      expect(superdocStore.activeZoom).toBe(100);
+
+      warnSpy.mockRestore();
+    });
+
+    it('setZoom is consistent with toolbar zoom command', async () => {
+      const { superdocStore } = createAppHarness();
+
+      const instance = new SuperDoc({
+        selector: '#host',
+        document: 'https://example.com/doc.docx',
+      });
+      await flushMicrotasks();
+
+      // Programmatic API should update the same store property as the toolbar
+      instance.setZoom(150);
+      expect(superdocStore.activeZoom).toBe(150);
+
+      // Simulate toolbar zoom (same path)
+      instance.onToolbarCommand({ item: { command: 'setZoom' }, argument: 200 });
+      expect(superdocStore.activeZoom).toBe(200);
+      expect(instance.getZoom()).toBe(200);
     });
   });
 

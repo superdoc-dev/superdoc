@@ -77,6 +77,15 @@ export const StructuredContentBlock = Node.create({
         },
       },
 
+      lockMode: {
+        default: 'unlocked',
+        parseDOM: (elem) => elem.getAttribute('data-lock-mode') || 'unlocked',
+        renderDOM: (attrs) => {
+          if (!attrs.lockMode || attrs.lockMode === 'unlocked') return {};
+          return { 'data-lock-mode': attrs.lockMode };
+        },
+      },
+
       sdtPr: {
         rendered: false,
       },

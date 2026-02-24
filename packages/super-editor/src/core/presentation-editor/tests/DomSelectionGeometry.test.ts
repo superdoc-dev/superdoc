@@ -1569,7 +1569,7 @@ describe('computeDomCaretPageLocal', () => {
       expect(caret).toBe(null);
     });
 
-    it('returns null when no entry found for position', () => {
+    it('returns the closest valid caret when position is out of bounds', () => {
       painterHost.innerHTML = `
         <div class="superdoc-page" data-page-index="0">
           <div class="superdoc-line">
@@ -1583,7 +1583,11 @@ describe('computeDomCaretPageLocal', () => {
       const options = createCaretOptions();
       const caret = computeDomCaretPageLocal(options, 999);
 
-      expect(caret).toBe(null);
+      expect(caret).toMatchObject({
+        pageIndex: 0,
+        x: expect.any(Number),
+        y: expect.any(Number),
+      });
     });
 
     it('returns null when element is not within a page', () => {

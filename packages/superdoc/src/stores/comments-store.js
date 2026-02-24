@@ -277,24 +277,23 @@ export const useCommentsStore = defineStore('comments', () => {
   /**
    * Set the active comment or clear all active comments
    *
+   * @param {Object | undefined | null} superdoc The SuperDoc instance holding the active editor
    * @param {string | undefined | null} id The comment ID
    * @returns {void}
    */
   const setActiveComment = (superdoc, id) => {
+    const activeEditor = superdoc?.activeEditor;
+
     // If no ID, we clear any focused comments
     if (id === undefined || id === null) {
       activeComment.value = null;
-      if (superdoc.activeEditor) {
-        superdoc.activeEditor.commands?.setActiveComment({ commentId: null });
-      }
+      activeEditor?.commands?.setActiveComment({ commentId: null });
       return;
     }
 
     const comment = getComment(id);
     if (comment) activeComment.value = comment.commentId;
-    if (superdoc.activeEditor) {
-      superdoc.activeEditor.commands?.setActiveComment({ commentId: activeComment.value });
-    }
+    activeEditor?.commands?.setActiveComment({ commentId: activeComment.value });
   };
 
   /**
@@ -384,7 +383,7 @@ export const useCommentsStore = defineStore('comments', () => {
     const selection = { ...superdocStore.activeSelection };
     selection.selectionBounds = { ...selection.selectionBounds };
 
-    if (superdocStore.selectionPosition?.source) {
+    if (superdocStore.selectionPosition?.source && superdocStore.selectionPosition.source !== 'pdf') {
       superdocStore.selectionPosition.source = null;
     }
 
@@ -635,6 +634,9 @@ export const useCommentsStore = defineStore('comments', () => {
   const deleteComment = ({ commentId: commentIdToDelete, superdoc }) => {
     const commentIndex = commentsList.value.findIndex((c) => c.commentId === commentIdToDelete);
     const comment = commentsList.value[commentIndex];
+    if (!comment) {
+      return;
+    }
     const { commentId, importedId } = comment;
     const { fileId } = comment;
 
@@ -821,6 +823,9 @@ export const useCommentsStore = defineStore('comments', () => {
    * @returns {void}
    */
   const handleEditorLocationsUpdate = (allCommentPositions) => {
+    if ((!allCommentPositions || Object.keys(allCommentPositions).length === 0) && commentsList.value.length > 0) {
+      return;
+    }
     editorCommentPositions.value = allCommentPositions || {};
   };
 

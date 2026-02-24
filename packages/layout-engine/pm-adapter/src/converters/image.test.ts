@@ -443,6 +443,95 @@ describe('image converter', () => {
       expect(result.attrs?.pmEnd).toBe(20);
     });
 
+    describe('zIndex from originalAttributes.relativeHeight', () => {
+      const OOXML_BASE = 251658240;
+
+      it('sets zIndex when originalAttributes.relativeHeight is a number', () => {
+        const node: PMNode = {
+          type: 'image',
+          attrs: {
+            src: 'image.jpg',
+            anchorData: { isAnchored: true },
+            originalAttributes: { relativeHeight: OOXML_BASE + 10 },
+          },
+        };
+
+        const result = imageNodeToBlock(node, mockBlockIdGenerator, mockPositionMap) as ImageBlock;
+
+        expect(result.zIndex).toBe(10);
+      });
+
+      it('sets zIndex when originalAttributes.relativeHeight is a string (OOXML)', () => {
+        const node: PMNode = {
+          type: 'image',
+          attrs: {
+            src: 'image.jpg',
+            anchorData: { isAnchored: true },
+            originalAttributes: { relativeHeight: '251658291' },
+          },
+        };
+
+        const result = imageNodeToBlock(node, mockBlockIdGenerator, mockPositionMap) as ImageBlock;
+
+        expect(result.zIndex).toBe(51);
+      });
+
+      it('sets zIndex to 0 when anchor.behindDoc is true and no relativeHeight', () => {
+        const node: PMNode = {
+          type: 'image',
+          attrs: {
+            src: 'image.jpg',
+            anchorData: { isAnchored: true, behindDoc: true },
+          },
+        };
+
+        const result = imageNodeToBlock(node, mockBlockIdGenerator, mockPositionMap) as ImageBlock;
+
+        expect(result.zIndex).toBe(0);
+      });
+
+      it('forces zIndex to 0 when behindDoc is true even with relativeHeight', () => {
+        const node: PMNode = {
+          type: 'image',
+          attrs: {
+            src: 'image.jpg',
+            anchorData: { isAnchored: true, behindDoc: true },
+            originalAttributes: { relativeHeight: OOXML_BASE + 10 },
+          },
+        };
+
+        const result = imageNodeToBlock(node, mockBlockIdGenerator, mockPositionMap) as ImageBlock;
+
+        expect(result.zIndex).toBe(0);
+      });
+
+      it('clamps base relativeHeight to 1 when not behindDoc', () => {
+        const node: PMNode = {
+          type: 'image',
+          attrs: {
+            src: 'image.jpg',
+            anchorData: { isAnchored: true, behindDoc: false },
+            originalAttributes: { relativeHeight: OOXML_BASE },
+          },
+        };
+
+        const result = imageNodeToBlock(node, mockBlockIdGenerator, mockPositionMap) as ImageBlock;
+
+        expect(result.zIndex).toBe(1);
+      });
+
+      it('sets zIndex to 1 when no originalAttributes and not behindDoc (default stacking)', () => {
+        const node: PMNode = {
+          type: 'image',
+          attrs: { src: 'image.jpg' },
+        };
+
+        const result = imageNodeToBlock(node, mockBlockIdGenerator, mockPositionMap) as ImageBlock;
+
+        expect(result.zIndex).toBe(1);
+      });
+    });
+
     it('validates and filters invalid wrap type', () => {
       const node: PMNode = {
         type: 'image',

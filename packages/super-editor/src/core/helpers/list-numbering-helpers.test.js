@@ -290,20 +290,10 @@ describe('getListDefinitionDetails', () => {
         editor: mockEditor,
       });
 
-      expect(result).toEqual({
-        start: null,
-        numFmt: null,
-        lvlText: null,
-        listNumberingType: null,
-        customFormat: null,
-        justification: null,
-        suffix: null,
-        abstract: null,
-        abstractId: 'nonexistent', // The function correctly returns the abstractId even when abstract is not found
-      });
+      expect(result).toBeNull();
     });
 
-    it('should return partial data when abstract exists but level definition is missing', () => {
+    it('should return null when abstract exists but level definition is missing', () => {
       mockDefinitions[1] = {
         elements: [
           {
@@ -329,17 +319,7 @@ describe('getListDefinitionDetails', () => {
         editor: mockEditor,
       });
 
-      expect(result).toEqual({
-        start: null,
-        numFmt: null,
-        lvlText: null,
-        suffix: null,
-        justification: null,
-        listNumberingType: null,
-        customFormat: null,
-        abstract: mockAbstracts['abstract1'],
-        abstractId: 'abstract1',
-      });
+      expect(result).toBeNull();
     });
   });
 
@@ -464,8 +444,7 @@ describe('getListDefinitionDetails', () => {
       });
 
       // Should not recurse, should return null values since no level definition exists
-      expect(result.abstract).toBe(mockAbstracts['abstract1']);
-      expect(result.start).toBe(null);
+      expect(result).toBeNull();
     });
 
     it('should handle missing style definition gracefully', () => {
@@ -495,8 +474,7 @@ describe('getListDefinitionDetails', () => {
         editor: mockEditor,
       });
 
-      expect(result.abstract).toBe(mockAbstracts['abstract1']);
-      expect(result.start).toBe(null);
+      expect(result).toBeNull();
     });
 
     it('should handle incomplete style definition chain', () => {
@@ -539,8 +517,7 @@ describe('getListDefinitionDetails', () => {
         editor: mockEditor,
       });
 
-      expect(result.abstract).toBe(mockAbstracts['abstract1']);
-      expect(result.start).toBe(null);
+      expect(result).toBeNull();
     });
 
     it('should handle style definition with missing nested elements', () => {
@@ -582,8 +559,7 @@ describe('getListDefinitionDetails', () => {
         editor: mockEditor,
       });
 
-      expect(result.abstract).toBe(mockAbstracts['abstract1']);
-      expect(result.start).toBe(null);
+      expect(result).toBeNull();
     });
   });
 
@@ -643,8 +619,7 @@ describe('getListDefinitionDetails', () => {
         editor: mockEditor,
       });
 
-      expect(result.abstract).toBe(mockAbstracts['abstract1']);
-      expect(result.start).toBe(null);
+      expect(result).toBeNull();
     });
 
     it('should handle undefined editor or numbering data', () => {
@@ -663,17 +638,7 @@ describe('getListDefinitionDetails', () => {
         editor: emptyEditor,
       });
 
-      expect(result).toEqual({
-        start: null,
-        numFmt: null,
-        lvlText: null,
-        justification: null,
-        suffix: null,
-        listNumberingType: null,
-        customFormat: null,
-        abstract: null,
-        abstractId: undefined,
-      });
+      expect(result).toBeNull();
     });
   });
 
@@ -865,7 +830,13 @@ describe('getListDefinitionDetails', () => {
       };
       mockEditor.converter.numbering.abstracts['10'] = {
         attributes: { 'w:abstractNumId': '10' },
-        elements: [],
+        elements: [
+          {
+            name: 'w:lvl',
+            attributes: { 'w:ilvl': '0' },
+            elements: [{ name: 'w:numFmt', attributes: { 'w:val': 'decimal' } }],
+          },
+        ],
       };
 
       const newNumId = ListHelpers.changeNumIdSameAbstract(1, 0, 'orderedList', mockEditor);

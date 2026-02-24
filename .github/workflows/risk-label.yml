@@ -1,0 +1,87 @@
+name: PR Risk Label
+
+on:
+  pull_request:
+    types: [opened, synchronize, reopened]
+
+permissions:
+  contents: read
+  pull-requests: write
+
+concurrency:
+  group: risk-label-${{ github.event.pull_request.number }}
+  cancel-in-progress: true
+
+jobs:
+  label:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v6
+
+      - name: Get changed files and classify risk
+        id: risk
+        run: |
+          gh pr diff ${{ github.event.pull_request.number }} --name-only \
+            | node .github/scripts/risk-label.mjs > /tmp/risk.json
+          echo "level=$(node -e "console.log(JSON.parse(require('fs').readFileSync('/tmp/risk.json','utf-8')).level)")" >> $GITHUB_OUTPUT
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Apply risk label
+        uses: actions/github-script@v7
+        with:
+          script: |
+            const level = '${{ steps.risk.outputs.level }}';
+
+            const LABELS = {
+              critical: { name: 'risk: critical', color: 'd73a4a' },
+              sensitive: { name: 'risk: sensitive', color: 'fbca04' },
+              low: { name: 'risk: low', color: '0e8a16' },
+            };
+
+            const prNumber = context.issue.number;
+            const owner = context.repo.owner;
+            const repo = context.repo.repo;
+
+            // Ensure all risk labels exist
+            for (const label of Object.values(LABELS)) {
+              try {
+                await github.rest.issues.getLabel({ owner, repo, name: label.name });
+              } catch {
+                await github.rest.issues.createLabel({
+                  owner,
+                  repo,
+                  name: label.name,
+                  color: label.color,
+                });
+              }
+            }
+
+            // Remove stale risk labels, add current one
+            const { data: currentLabels } = await github.rest.issues.listLabelsOnIssue({
+              owner,
+              repo,
+              issue_number: prNumber,
+            });
+
+            const riskLabels = currentLabels.filter((l) => l.name.startsWith('risk: '));
+            for (const label of riskLabels) {
+              if (label.name !== LABELS[level].name) {
+                await github.rest.issues.removeLabel({
+                  owner,
+                  repo,
+                  issue_number: prNumber,
+                  name: label.name,
+                });
+              }
+            }
+
+            const hasCorrectLabel = riskLabels.some((l) => l.name === LABELS[level].name);
+            if (!hasCorrectLabel) {
+              await github.rest.issues.addLabels({
+                owner,
+                repo,
+                issue_number: prNumber,
+                labels: [LABELS[level].name],
+              });
+            }

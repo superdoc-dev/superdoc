@@ -600,6 +600,110 @@ describe('DomPositionIndex', () => {
     });
   });
 
+  describe('findEntryClosestToPosition', () => {
+    it('returns null for non-finite positions', () => {
+      const container = document.createElement('div');
+      container.innerHTML = `
+        <div class="superdoc-line">
+          <span data-pm-start="1" data-pm-end="5">test</span>
+        </div>
+      `;
+
+      const index = new DomPositionIndex();
+      index.rebuild(container);
+
+      expect(index.findEntryClosestToPosition(NaN)).toBe(null);
+      expect(index.findEntryClosestToPosition(Infinity)).toBe(null);
+      expect(index.findEntryClosestToPosition(-Infinity)).toBe(null);
+    });
+
+    it('returns entry that contains the position', () => {
+      const container = document.createElement('div');
+      container.innerHTML = `
+        <div class="superdoc-line">
+          <span data-pm-start="1" data-pm-end="5">alpha</span>
+          <span data-pm-start="10" data-pm-end="15">beta</span>
+        </div>
+      `;
+
+      const index = new DomPositionIndex();
+      index.rebuild(container);
+
+      expect(index.findEntryClosestToPosition(3)?.el.textContent).toBe('alpha');
+      expect(index.findEntryClosestToPosition(12)?.el.textContent).toBe('beta');
+    });
+
+    it('returns closest entry before the position when after all entries', () => {
+      const container = document.createElement('div');
+      container.innerHTML = `
+        <div class="superdoc-line">
+          <span data-pm-start="1" data-pm-end="5">first</span>
+          <span data-pm-start="10" data-pm-end="15">second</span>
+        </div>
+      `;
+
+      const index = new DomPositionIndex();
+      index.rebuild(container);
+
+      expect(index.findEntryClosestToPosition(20)?.el.textContent).toBe('second');
+    });
+
+    it('returns closest entry after the position when before all entries', () => {
+      const container = document.createElement('div');
+      container.innerHTML = `
+        <div class="superdoc-line">
+          <span data-pm-start="10" data-pm-end="15">first</span>
+          <span data-pm-start="20" data-pm-end="25">second</span>
+        </div>
+      `;
+
+      const index = new DomPositionIndex();
+      index.rebuild(container);
+
+      expect(index.findEntryClosestToPosition(3)?.el.textContent).toBe('first');
+    });
+
+    it('returns the closer entry when position is between ranges', () => {
+      const container = document.createElement('div');
+      container.innerHTML = `
+        <div class="superdoc-line">
+          <span data-pm-start="1" data-pm-end="5">first</span>
+          <span data-pm-start="20" data-pm-end="25">second</span>
+        </div>
+      `;
+
+      const index = new DomPositionIndex();
+      index.rebuild(container);
+
+      expect(index.findEntryClosestToPosition(8)?.el.textContent).toBe('first');
+      expect(index.findEntryClosestToPosition(18)?.el.textContent).toBe('second');
+    });
+
+    it('prefers the previous entry when equidistant between ranges', () => {
+      const container = document.createElement('div');
+      container.innerHTML = `
+        <div class="superdoc-line">
+          <span data-pm-start="1" data-pm-end="5">first</span>
+          <span data-pm-start="11" data-pm-end="15">second</span>
+        </div>
+      `;
+
+      const index = new DomPositionIndex();
+      index.rebuild(container);
+
+      // Distance to first: 8 - 5 = 3, distance to second: 11 - 8 = 3
+      expect(index.findEntryClosestToPosition(8)?.el.textContent).toBe('first');
+    });
+
+    it('returns null when index is empty', () => {
+      const container = document.createElement('div');
+      const index = new DomPositionIndex();
+      index.rebuild(container);
+
+      expect(index.findEntryClosestToPosition(5)).toBe(null);
+    });
+  });
+
   describe('edge cases - findElementsInRange', () => {
     it('returns empty array for NaN from parameter', () => {
       const container = document.createElement('div');

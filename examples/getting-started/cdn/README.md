@@ -1,5 +1,14 @@
-# SuperDoc - From CDN example
+# SuperDoc — CDN
 
-This is a very basic example of loading SuperDoc from CDN without any bundlers.
+Zero build tools. Open `index.html` in a browser or serve with any static server.
 
-Note: You can test this locally by using something like ```npx http-server```
+## Run
+
+```bash
+npx serve .
+```
+
+## Learn more
+
+- [Vanilla JS Guide](https://docs.superdoc.dev/getting-started/frameworks/vanilla-js)
+- [Configuration Reference](https://docs.superdoc.dev/core/superdoc/configuration)

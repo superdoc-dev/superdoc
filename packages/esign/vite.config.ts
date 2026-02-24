@@ -20,5 +20,6 @@ export default defineConfig({
     globals: true,
     clearMocks: true,
     restoreMocks: true,
+    exclude: ['**/node_modules/**', '**/demo/server/**'],
   },
 });

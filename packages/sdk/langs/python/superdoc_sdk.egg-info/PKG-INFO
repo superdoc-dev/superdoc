@@ -1,0 +1,7 @@
+Metadata-Version: 2.4
+Name: superdoc-sdk
+Version: 1.0.0a4
+Summary: SuperDoc SDK (CLI-backed)
+Author: SuperDoc
+License-Expression: AGPL-3.0
+Requires-Python: >=3.9

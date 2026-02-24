@@ -21,9 +21,9 @@ import {
   isEmptyTextParagraph,
 } from './layout-utils.js';
 import { computeAnchorX } from './floating-objects.js';
+import { getFragmentZIndex } from '@superdoc/pm-adapter/utilities.js';
 
 const spacingDebugEnabled = false;
-
 /**
  * Type definition for Word layout attributes attached to paragraph blocks.
  * This is a subset of the WordParagraphLayoutOutput from @superdoc/word-layout.
@@ -389,7 +389,8 @@ export function layoutParagraphBlock(ctx: ParagraphLayoutContext, anchors?: Para
           width: entry.measure.width,
           height: entry.measure.height,
           isAnchored: true,
-          zIndex: entry.block.anchor?.behindDoc ? 0 : 1,
+          behindDoc: entry.block.anchor?.behindDoc === true,
+          zIndex: getFragmentZIndex(entry.block),
           metadata,
         };
         if (pmRange.pmStart != null) fragment.pmStart = pmRange.pmStart;
@@ -407,7 +408,8 @@ export function layoutParagraphBlock(ctx: ParagraphLayoutContext, anchors?: Para
           geometry: entry.measure.geometry,
           scale: entry.measure.scale,
           isAnchored: true,
-          zIndex: entry.block.anchor?.behindDoc ? 0 : 1,
+          behindDoc: entry.block.anchor?.behindDoc === true,
+          zIndex: getFragmentZIndex(entry.block),
           drawingContentId: entry.block.drawingContentId,
         };
         if (pmRange.pmStart != null) fragment.pmStart = pmRange.pmStart;
@@ -433,7 +435,6 @@ export function layoutParagraphBlock(ctx: ParagraphLayoutContext, anchors?: Para
   const negativeRightIndent = indentRight < 0 ? indentRight : 0;
   // Paragraph content width should honor paragraph indents (including negative values).
   const remeasureWidth = Math.max(1, columnWidth - indentLeft - indentRight);
-  const hasNegativeIndent = indentLeft < 0 || indentRight < 0;
   let didRemeasureForColumnWidth = false;
   // Track remeasured marker info to ensure fragment gets accurate marker text width
   let remeasuredMarkerInfo: ParagraphMeasure['marker'] | undefined;

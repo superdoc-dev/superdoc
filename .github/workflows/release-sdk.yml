@@ -1,0 +1,178 @@
+name: "\U0001F4E6 Release SDK"
+
+on:
+  workflow_dispatch:
+    inputs:
+      version:
+        description: "Version to release (e.g. 1.0.0-alpha.7). Leave empty to release the current version."
+        required: false
+        type: string
+      dry-run:
+        description: "Dry run — build and validate without publishing"
+        required: false
+        type: boolean
+        default: false
+
+permissions:
+  contents: read
+  id-token: write # PyPI trusted publishing (OIDC)
+
+concurrency:
+  group: release-sdk
+  cancel-in-progress: false
+
+jobs:
+  release:
+    runs-on: ubuntu-24.04
+    environment: ${{ inputs.dry-run && '' || 'pypi' }}
+    steps:
+      - uses: actions/checkout@v6
+
+      - uses: pnpm/action-setup@v4
+
+      - uses: actions/setup-node@v6
+        with:
+          node-version-file: .nvmrc
+          cache: pnpm
+          registry-url: "https://registry.npmjs.org"
+
+      - uses: oven-sh/setup-bun@v2
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+
+      - name: Install Python build tools
+        run: pip install build
+
+      # ---------------------------------------------------------------
+      # Show current version (visible in the Actions run summary)
+      # ---------------------------------------------------------------
+      - name: Show current version
+        run: |
+          CURRENT=$(node -p "require('./packages/sdk/package.json').version")
+          echo "### SDK Release" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "| | Version |" >> $GITHUB_STEP_SUMMARY
+          echo "|---|---|" >> $GITHUB_STEP_SUMMARY
+          echo "| **Current (in repo)** | \`${CURRENT}\` |" >> $GITHUB_STEP_SUMMARY
+          if [ -n "${{ inputs.version }}" ]; then
+            echo "| **Releasing** | \`${{ inputs.version }}\` |" >> $GITHUB_STEP_SUMMARY
+          else
+            echo "| **Releasing** | \`${CURRENT}\` (unchanged) |" >> $GITHUB_STEP_SUMMARY
+          fi
+          echo "| **Dry run** | \`${{ inputs.dry-run }}\` |" >> $GITHUB_STEP_SUMMARY
+
+      # ---------------------------------------------------------------
+      # Set version (if provided)
+      # ---------------------------------------------------------------
+      - name: Set version
+        if: inputs.version != ''
+        run: node packages/sdk/scripts/sync-sdk-version.mjs --set "${{ inputs.version }}"
+
+      # ---------------------------------------------------------------
+      # Generate + validate
+      # ---------------------------------------------------------------
+      - name: Generate all artifacts
+        run: pnpm run generate:all
+
+      - name: Validate SDK
+        run: node packages/sdk/scripts/sdk-validate.mjs
+
+      # ---------------------------------------------------------------
+      # Node SDK
+      # ---------------------------------------------------------------
+      - name: Build Node SDK
+        run: pnpm --prefix packages/sdk/langs/node run build
+
+      - name: Publish Node SDK
+        if: ${{ !inputs.dry-run }}
+        run: npm publish --access public --tag latest
+        working-directory: packages/sdk/langs/node
+        env:
+          NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
+
+      - name: Publish Node SDK (dry run)
+        if: ${{ inputs.dry-run }}
+        run: npm pack --dry-run
+        working-directory: packages/sdk/langs/node
+
+      # ---------------------------------------------------------------
+      # Python SDK (main + 5 companion packages)
+      # ---------------------------------------------------------------
+      - name: Build superdoc package for CLI native bundling
+        run: pnpm --prefix packages/superdoc run build:es
+
+      - name: Verify superdoc build output exists
+        run: |
+          test -f packages/superdoc/dist/super-editor.es.js \
+            || (echo "FATAL: packages/superdoc/dist/super-editor.es.js missing — build:es likely failed silently" && exit 1)
+
+      - name: Build CLI platform artifacts
+        run: |
+          pnpm --prefix apps/cli run build:native:all
+          pnpm --prefix apps/cli run build:stage
+
+      - name: Prepare Python SDK tools
+        run: |
+          rm -rf packages/sdk/langs/python/superdoc/tools
+          cp -r packages/sdk/tools packages/sdk/langs/python/superdoc/tools
+          rm -f packages/sdk/langs/python/superdoc/tools/__init__.py
+
+      - name: Stage CLI binaries into companion packages
+        run: node packages/sdk/scripts/stage-python-companion-cli.mjs
+
+      - name: Build companion Python wheels
+        run: node packages/sdk/scripts/build-python-companion-wheels.mjs
+
+      - name: Verify companion wheels
+        run: node packages/sdk/scripts/verify-python-companion-wheels.mjs --companions-only
+
+      - name: Build main Python SDK wheel
+        run: python -m build
+        working-directory: packages/sdk/langs/python
+
+      - name: Verify main wheel
+        run: node packages/sdk/scripts/verify-python-companion-wheels.mjs --root-only
+
+      # Pre-publish install smoke gate — validates marker-driven resolution
+      # end-to-end before anything reaches PyPI. Uses a wheelhouse so pip
+      # resolves the marker deps from local files, not the network.
+      - name: Smoke test (wheelhouse install + marker resolution)
+        run: |
+          python3 -m venv /tmp/sdk-smoke
+          mkdir -p /tmp/sdk-wheelhouse
+          cp packages/sdk/langs/python/dist/*.whl /tmp/sdk-wheelhouse/
+          cp packages/sdk/langs/python/companion-dist/*.whl /tmp/sdk-wheelhouse/
+          /tmp/sdk-smoke/bin/pip install superdoc-sdk --find-links /tmp/sdk-wheelhouse --no-index
+          /tmp/sdk-smoke/bin/python -c "from superdoc import SuperDocClient; SuperDocClient()"
+          /tmp/sdk-smoke/bin/python -c "from superdoc.embedded_cli import resolve_embedded_cli_path; import subprocess; p = resolve_embedded_cli_path(); r = subprocess.run([p, '--help'], capture_output=True, text=True, timeout=10); assert r.returncode == 0, f'CLI exited {r.returncode}: {r.stderr}'; print(f'CLI binary OK: {p}')"
+          echo "Smoke test passed — marker resolution + binary execution work."
+          rm -rf /tmp/sdk-smoke /tmp/sdk-wheelhouse
+
+      # Publish companions first — root depends on them being on PyPI.
+      - name: Publish companion Python packages to PyPI
+        if: ${{ !inputs.dry-run }}
+        uses: pypa/gh-action-pypi-publish@release/v1
+        with:
+          packages-dir: packages/sdk/langs/python/companion-dist/
+          skip-existing: true
+
+      # Publish root last.
+      - name: Publish main Python SDK to PyPI
+        if: ${{ !inputs.dry-run }}
+        uses: pypa/gh-action-pypi-publish@release/v1
+        with:
+          packages-dir: packages/sdk/langs/python/dist/
+          skip-existing: true
+
+      - name: Publish Python SDK (dry run)
+        if: ${{ inputs.dry-run }}
+        run: |
+          echo "=== Companion wheels ==="
+          ls -la packages/sdk/langs/python/companion-dist/
+          echo "=== Root wheel ==="
+          ls -la packages/sdk/langs/python/dist/

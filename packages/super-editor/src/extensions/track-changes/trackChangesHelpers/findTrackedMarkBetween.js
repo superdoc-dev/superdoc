@@ -47,7 +47,17 @@ export const findTrackedMarkBetween = ({
 
     const resolved = doc.resolve(pos);
     const before = resolved.nodeBefore;
-    if (before?.type?.name === 'run') {
+    const after = resolved.nodeAfter;
+
+    // Check if nodeBefore is a text node directly (not wrapped in a run).
+    // This handles cases where text is inserted outside of run nodes,
+    // such as in Google Docs exports with paragraph > lineBreak structure.
+    // Firefox inserts text directly as paragraph children, while Chrome
+    // tends to use run wrappers, so we need to handle both cases.
+    if (before?.type?.name === 'text') {
+      const beforeStart = Math.max(pos - before.nodeSize, 0);
+      tryMatch(before, beforeStart);
+    } else if (before?.type?.name === 'run') {
       const beforeStart = Math.max(pos - before.nodeSize, 0);
       const node = before.content?.content?.[0];
       if (node?.type?.name === 'text') {
@@ -55,8 +65,10 @@ export const findTrackedMarkBetween = ({
       }
     }
 
-    const after = resolved.nodeAfter;
-    if (after?.type?.name === 'run') {
+    // Check if nodeAfter is a text node directly (not wrapped in a run)
+    if (after?.type?.name === 'text') {
+      tryMatch(after, pos);
+    } else if (after?.type?.name === 'run') {
       const node = after.content?.content?.[0];
       if (node?.type?.name === 'text') {
         tryMatch(node, pos);

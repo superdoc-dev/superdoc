@@ -1,0 +1,83 @@
+name: Behavior Tests
+
+permissions:
+  contents: read
+
+on:
+  pull_request:
+    branches: [main]
+    paths:
+      - 'packages/superdoc/**'
+      - 'packages/layout-engine/**'
+      - 'packages/super-editor/**'
+      - 'packages/ai/**'
+      - 'packages/word-layout/**'
+      - 'packages/preset-geometry/**'
+      - 'tests/behavior/**'
+      - 'shared/**'
+      - '!**/*.md'
+  workflow_dispatch:
+
+concurrency:
+  group: ci-behavior-${{ github.event.pull_request.number || github.run_id }}
+  cancel-in-progress: true
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        shard: [1, 2, 3]
+    steps:
+      - uses: actions/checkout@v6
+
+      - uses: pnpm/action-setup@v4
+
+      - uses: actions/setup-node@v6
+        with:
+          node-version-file: .nvmrc
+          cache: pnpm
+
+      - name: Install dependencies
+        run: pnpm install --ignore-scripts
+
+      - name: Build SuperDoc
+        run: pnpm build
+
+      - name: Get Playwright version
+        id: pw
+        run: echo "version=$(node -p "require('@playwright/test/package.json').version")" >> $GITHUB_OUTPUT
+        working-directory: tests/behavior
+
+      - name: Cache Playwright browsers
+        uses: actions/cache@v5
+        id: pw-cache
+        with:
+          path: ~/.cache/ms-playwright
+          key: playwright-${{ runner.os }}-${{ steps.pw.outputs.version }}
+
+      - name: Install Playwright browsers
+        if: steps.pw-cache.outputs.cache-hit != 'true'
+        run: pnpm exec playwright install --with-deps chromium firefox webkit
+        working-directory: tests/behavior
+
+      - name: Install Playwright system deps
+        if: steps.pw-cache.outputs.cache-hit == 'true'
+        run: pnpm exec playwright install-deps chromium firefox webkit
+        working-directory: tests/behavior
+
+      - name: Run behavior tests (shard ${{ matrix.shard }}/3)
+        run: pnpm exec playwright test --shard=${{ matrix.shard }}/3
+        working-directory: tests/behavior
+
+  validate:
+    if: always()
+    needs: [test]
+    runs-on: ubuntu-latest
+    steps:
+      - name: Check results
+        run: |
+          if [[ "${{ contains(needs.*.result, 'failure') }}" == "true" ]]; then
+            exit 1
+          fi

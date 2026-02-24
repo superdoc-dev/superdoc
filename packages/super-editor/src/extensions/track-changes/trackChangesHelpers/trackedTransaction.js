@@ -101,9 +101,6 @@ export const trackedTransaction = ({ tr, state, user }) => {
   const trackMeta = newTr.getMeta(TrackChangesBasePluginKey);
 
   if (tr.selectionSet) {
-    const deletionMarkSchema = state.schema.marks[TrackDeleteMarkName];
-    const deletionMark = findMark(state, deletionMarkSchema, false);
-
     if (
       tr.selection instanceof TextSelection &&
       (tr.selection.from < state.selection.from || tr.getMeta('inputType') === 'deleteContentBackward')
@@ -111,14 +108,21 @@ export const trackedTransaction = ({ tr, state, user }) => {
       const caretPos = map.map(tr.selection.from, -1);
       newTr.setSelection(new TextSelection(newTr.doc.resolve(caretPos)));
     } else if (trackMeta?.insertedTo !== undefined) {
-      // SD-1624: When content was inserted after a deletion span, position cursor after the insertion.
-      // This must be checked before the deletionMark branch to handle fully-deleted content correctly.
-      newTr.setSelection(new TextSelection(newTr.doc.resolve(trackMeta.insertedTo)));
-    } else if (tr.selection.from > state.selection.from && deletionMark) {
-      const caretPos = map.map(deletionMark.to + 1, 1);
-      newTr.setSelection(new TextSelection(newTr.doc.resolve(caretPos)));
+      const boundedInsertedTo = Math.max(0, Math.min(trackMeta.insertedTo, newTr.doc.content.size));
+      const $insertPos = newTr.doc.resolve(boundedInsertedTo);
+      // Near is used here because its safer than an exact position
+      // exact is not guaranteed to be a valid cursor position
+      newTr.setSelection(TextSelection.near($insertPos, 1));
     } else {
-      newTr.setSelection(tr.selection.map(newTr.doc, map));
+      const deletionMarkSchema = state.schema.marks[TrackDeleteMarkName];
+      const deletionMark = findMark(state, deletionMarkSchema, false);
+
+      if (tr.selection.from > state.selection.from && deletionMark) {
+        const caretPos = map.map(deletionMark.to + 1, 1);
+        newTr.setSelection(new TextSelection(newTr.doc.resolve(caretPos)));
+      } else {
+        newTr.setSelection(tr.selection.map(newTr.doc, map));
+      }
     }
   } else if (state.selection.from - tr.selection.from > 1 && tr.selection.$head.depth > 1) {
     const caretPos = map.map(tr.selection.from - 2, -1);

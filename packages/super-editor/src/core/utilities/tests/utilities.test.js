@@ -12,6 +12,7 @@ import { isRegExp } from '../isRegExp.js';
 import { minMax } from '../minMax.js';
 import { objectIncludes } from '../objectIncludes.js';
 import { parseSizeUnit } from '../parseSizeUnit.js';
+import { cssColorToHex } from '../cssColorToHex.js';
 
 const originalNavigator = global.navigator;
 const originalFile = global.File;
@@ -220,6 +221,67 @@ describe('core utilities', () => {
 
     it('returns null unit when unrecognised', () => {
       expect(parseSizeUnit('10unknown')).toEqual([10, null]);
+    });
+  });
+
+  describe('cssColorToHex', () => {
+    it('returns null for null, undefined, and empty string', () => {
+      expect(cssColorToHex(null)).toBeNull();
+      expect(cssColorToHex(undefined)).toBeNull();
+      expect(cssColorToHex('')).toBeNull();
+      expect(cssColorToHex('  ')).toBeNull();
+    });
+
+    it('passes through 6-digit hex colors', () => {
+      expect(cssColorToHex('#ff0000')).toBe('#ff0000');
+      expect(cssColorToHex('#00FF00')).toBe('#00FF00');
+    });
+
+    it('passes through 3-digit hex colors', () => {
+      expect(cssColorToHex('#f00')).toBe('#f00');
+    });
+
+    it('converts rgb() to hex', () => {
+      expect(cssColorToHex('rgb(255, 0, 0)')).toBe('#ff0000');
+      expect(cssColorToHex('rgb(0, 128, 255)')).toBe('#0080ff');
+      expect(cssColorToHex('rgb(0, 0, 0)')).toBe('#000000');
+      expect(cssColorToHex('rgb(255, 255, 255)')).toBe('#ffffff');
+    });
+
+    it('converts rgba() to hex (ignoring alpha)', () => {
+      expect(cssColorToHex('rgba(255, 0, 0, 0.5)')).toBe('#ff0000');
+      expect(cssColorToHex('rgba(0, 128, 255, 1)')).toBe('#0080ff');
+    });
+
+    it('returns null for fully transparent rgba (alpha 0)', () => {
+      expect(cssColorToHex('rgba(255, 0, 0, 0)')).toBeNull();
+      expect(cssColorToHex('rgba(0, 0, 0, 0.0)')).toBeNull();
+    });
+
+    it('returns null for out-of-range rgb channel values', () => {
+      expect(cssColorToHex('rgb(256, 0, 0)')).toBeNull();
+      expect(cssColorToHex('rgb(0, 300, 0)')).toBeNull();
+      expect(cssColorToHex('rgb(0, 0, 999)')).toBeNull();
+      expect(cssColorToHex('rgba(256, 0, 0, 1)')).toBeNull();
+    });
+
+    it('accepts rgb boundary values', () => {
+      expect(cssColorToHex('rgb(0, 0, 0)')).toBe('#000000');
+      expect(cssColorToHex('rgb(255, 255, 255)')).toBe('#ffffff');
+    });
+
+    it('handles rgb with no spaces', () => {
+      expect(cssColorToHex('rgb(255,0,0)')).toBe('#ff0000');
+    });
+
+    it('returns named colors as-is', () => {
+      expect(cssColorToHex('red')).toBe('red');
+      expect(cssColorToHex('blue')).toBe('blue');
+    });
+
+    it('trims whitespace', () => {
+      expect(cssColorToHex('  #ff0000  ')).toBe('#ff0000');
+      expect(cssColorToHex('  rgb(255, 0, 0)  ')).toBe('#ff0000');
     });
   });
 });

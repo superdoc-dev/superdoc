@@ -298,6 +298,19 @@ export interface EditorOptions {
   /** Markdown content to initialize the editor with */
   markdown?: string;
 
+  /**
+   * Callback invoked with unsupported HTML elements that were dropped during import.
+   * When provided, `console.warn` is NOT emitted automatically.
+   */
+  onUnsupportedContent?: ((items: { tagName: string; outerHTML: string; count: number }[]) => void) | null;
+
+  /**
+   * When true and no `onUnsupportedContent` callback is provided,
+   * emits a `console.warn` with unsupported items dropped during import.
+   * Default: false (silent).
+   */
+  warnOnUnsupportedContent?: boolean;
+
   /** Whether to enable debug mode */
   isDebug?: boolean;
 
@@ -415,4 +428,26 @@ export interface EditorOptions {
    * The static Editor.open() factory sets this automatically.
    */
   deferDocumentLoad?: boolean;
+
+  /**
+   * License key for billing and telemetry authentication.
+   */
+  licenseKey?: string | null;
+
+  /**
+   * Telemetry configuration for tracking document opens.
+   * When enabled, sends document open events for usage-based billing.
+   */
+  telemetry?: {
+    /** Whether telemetry is enabled */
+    enabled: boolean;
+    /** Custom telemetry endpoint (optional) */
+    endpoint?: string;
+    /** Custom metadata to include with telemetry events (optional) */
+    metadata?: Record<string, unknown>;
+    /**
+     * @deprecated Use root-level `licenseKey` instead. If both are provided, root-level has priority.
+     */
+    licenseKey?: string | null;
+  } | null;
 }

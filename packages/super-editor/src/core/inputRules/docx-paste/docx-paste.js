@@ -31,6 +31,7 @@ export const handleDocxPaste = (html, editor, view) => {
 
   const tempDiv = document.createElement('div');
   tempDiv.innerHTML = cleanedHtml;
+  tempDiv.querySelectorAll('[data-sd-block-id]').forEach((node) => node.removeAttribute('data-sd-block-id'));
 
   const data = tempDiv.querySelectorAll('p, li, ' + [1, 2, 3, 4, 5, 6, 7, 8, 9].map((n) => `h${n}`).join(', '));
 

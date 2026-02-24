@@ -1,9 +1,0 @@
-{
-  "name": "superdoc-y-sweet-example",
-  "private": true,
-  "scripts": {
-    "dev": "npx concurrently -n y-sweet,server,client -c blue,green,cyan \"npx y-sweet@latest serve\" \"pnpm --filter ./server dev\" \"pnpm --filter ./client dev\"",
-    "dev:y-sweet": "npx y-sweet@latest serve",
-    "build": "pnpm --filter ./client build"
-  }
-}

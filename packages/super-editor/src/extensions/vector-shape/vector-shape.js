@@ -1,5 +1,6 @@
 import { Node, Attribute } from '@core/index';
 import { VectorShapeView } from './VectorShapeView';
+import { OOXML_Z_INDEX_BASE } from '@extensions/shared/constants.js';
 
 export const VectorShape = Node.create({
   name: 'vectorShape',
@@ -112,7 +113,13 @@ export const VectorShape = Node.create({
 
       anchorData: {
         default: null,
-        rendered: false,
+        renderDOM: ({ anchorData, originalAttributes }) => {
+          const relativeHeight = originalAttributes?.relativeHeight;
+          if (anchorData && relativeHeight) {
+            const zIndex = Math.max(0, relativeHeight - OOXML_Z_INDEX_BASE);
+            return { style: `z-index: ${zIndex}` };
+          }
+        },
       },
 
       isAnchor: {

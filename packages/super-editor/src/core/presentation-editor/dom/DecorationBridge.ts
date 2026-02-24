@@ -159,15 +159,19 @@ export class DecorationBridge {
    * plugins, maps them to painted DOM via the position index, and diffs
    * against previously applied state.
    *
+   * @param options.restoreEmptyDecorations - When false, do not restore from
+   *   previous ranges when a plugin returns empty (e.g. clearFocus); clears
+   *   previousRanges so highlight is removed from DOM.
    * @returns `true` if any DOM mutations were made, `false` if skipped.
    */
-  sync(state: EditorState, domIndex: DomPositionIndex): boolean {
+  sync(state: EditorState, domIndex: DomPositionIndex, options?: { restoreEmptyDecorations?: boolean }): boolean {
     this.#refreshEligiblePlugins(state);
 
     const docSize = state.doc.content.size;
+    const restoreEmpty = options?.restoreEmptyDecorations !== false;
     const desired =
       this.#eligiblePlugins.length > 0
-        ? this.#collectDesiredState(state, domIndex, docSize)
+        ? this.#collectDesiredState(state, domIndex, docSize, restoreEmpty)
         : new Map<HTMLElement, DesiredState>();
 
     this.#hadEligiblePlugins = this.#eligiblePlugins.length > 0;
@@ -360,6 +364,7 @@ export class DecorationBridge {
     state: EditorState,
     domIndex: DomPositionIndex,
     docSize: number,
+    restoreEmptyDecorations: boolean,
   ): Map<HTMLElement, DesiredState> {
     const desired = new Map<HTMLElement, DesiredState>();
 
@@ -392,7 +397,13 @@ export class DecorationBridge {
 
       // Fallback: plugin returned empty or only collapsed/wrong decorations (e.g. after
       // another plugin's ReplaceStep mapping). Use previous ranges so decoration is not lost.
+      // When restoreEmptyDecorations is false (e.g. clearFocus), do not restore and clear
+      // previousRanges so reconcile will remove the decoration from DOM.
       if (addedFromCurrent) continue;
+      if (!restoreEmptyDecorations) {
+        this.#previousRanges.set(plugin, []);
+        continue;
+      }
       const previousPluginRanges = this.#previousRanges.get(plugin);
       if (previousPluginRanges?.length) {
         for (const prev of previousPluginRanges) {

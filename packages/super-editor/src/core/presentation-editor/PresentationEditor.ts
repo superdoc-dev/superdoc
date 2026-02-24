@@ -2465,10 +2465,20 @@ export class PresentationEditor extends EventEmitter {
     // When decoration state changes without a doc change (e.g. setFocus), we must
     // still run a full rerender so runs are split at the new decoration boundaries;
     // otherwise the bridge applies the class to whole runs and highlights too much.
-    const handleTransaction = () => {
-      this.#scheduleDecorationSync();
+    const handleTransaction = (event?: { transaction?: Transaction }) => {
+      const tr = event?.transaction;
       const state = this.#editor?.view?.state;
-      if (state && this.#decorationBridge.hasChanges(state)) {
+      const decorationChanged = state && this.#decorationBridge.hasChanges(state);
+      // Sync immediately whenever decorations changed so e.g. clearFocus removes
+      // highlight-selection in the same tick. Only restore when we had a doc change.
+      if (decorationChanged) {
+        const restoreEmpty = tr ? tr.docChanged === true : false;
+        this.#decorationBridge.sync(state!, this.#domPositionIndex, {
+          restoreEmptyDecorations: restoreEmpty,
+        });
+      }
+      this.#scheduleDecorationSync();
+      if (decorationChanged) {
         this.#pendingDocChange = true;
         this.#selectionSync.onLayoutStart();
         this.#scheduleRerender();

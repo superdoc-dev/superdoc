@@ -132,6 +132,50 @@ describe('validateCreateParagraphInput', () => {
     expect(result.at?.kind).toBe('before');
   });
 
+  test('validates at: before with nodeId shorthand', () => {
+    const result = validateCreateParagraphInput({
+      at: {
+        kind: 'before',
+        nodeId: 'p1',
+      },
+    });
+
+    expect(result.at).toEqual({
+      kind: 'before',
+      nodeId: 'p1',
+    });
+  });
+
+  test('validates at: after with nodeId shorthand', () => {
+    const result = validateCreateParagraphInput({
+      at: {
+        kind: 'after',
+        nodeId: 'p2',
+      },
+    });
+
+    expect(result.at).toEqual({
+      kind: 'after',
+      nodeId: 'p2',
+    });
+  });
+
+  test('rejects relative at location when both target and nodeId are provided', () => {
+    expect(() =>
+      validateCreateParagraphInput({
+        at: {
+          kind: 'before',
+          nodeId: 'p1',
+          target: { kind: 'block', nodeType: 'paragraph', nodeId: 'p1' },
+        },
+      }),
+    ).toThrow(CliError);
+  });
+
+  test('rejects relative at location when neither target nor nodeId is provided', () => {
+    expect(() => validateCreateParagraphInput({ at: { kind: 'after' } })).toThrow(CliError);
+  });
+
   test('rejects non-string text', () => {
     expect(() => validateCreateParagraphInput({ text: 42 })).toThrow(CliError);
   });

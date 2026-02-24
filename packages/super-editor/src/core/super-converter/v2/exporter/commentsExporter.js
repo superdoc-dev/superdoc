@@ -1,7 +1,7 @@
 import { translator as wPTranslator } from '@converter/v3/handlers/w/p';
 import { carbonCopy } from '../../../utilities/carbonCopy.js';
 import { COMMENT_REF, COMMENTS_XML_DEFINITIONS } from '../../exporter-docx-defs.js';
-import { generateRandom32BitHex } from '../../../helpers/generateDocxRandomId.js';
+import { generateDocxRandomId } from '../../../helpers/generateDocxRandomId.js';
 import { COMMENT_FILE_BASENAMES } from '../../constants.js';
 
 /**
@@ -13,7 +13,7 @@ import { COMMENT_FILE_BASENAMES } from '../../constants.js';
 export const prepareCommentParaIds = (comment) => {
   const newComment = {
     ...comment,
-    commentParaId: generateRandom32BitHex(),
+    commentParaId: generateDocxRandomId(),
   };
   return newComment;
 };
@@ -258,7 +258,7 @@ export const updateCommentsIdsAndExtensible = (comments = [], commentsIds, exten
   if (extensibleUpdated) extensibleUpdated.elements[0].elements = [];
 
   comments.forEach((comment) => {
-    const newDurableId = generateRandom32BitHex();
+    const newDurableId = generateDocxRandomId();
 
     if (documentIdsUpdated) {
       documentIdsUpdated.elements[0].elements.push({

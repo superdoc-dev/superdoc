@@ -1,6 +1,6 @@
 {
   "name": "@superdoc-dev/cli",
-  "version": "1.0.0",
+  "version": "1.0.2",
   "type": "module",
   "bin": {
     "superdoc": "./dist/index.js"
@@ -31,12 +31,12 @@
   },
   "dependencies": {
     "@hocuspocus/provider": "catalog:",
-    "@superdoc/document-api": "workspace:*",
     "fast-glob": "catalog:",
     "y-websocket": "catalog:",
     "yjs": "catalog:"
   },
   "devDependencies": {
+    "@superdoc/document-api": "workspace:*",
     "@superdoc/super-editor": "workspace:*",
     "@types/bun": "catalog:",
     "@types/node": "catalog:",
@@ -46,5 +46,12 @@
   "module": "src/index.ts",
   "publishConfig": {
     "access": "public"
+  },
+  "optionalDependencies": {
+    "@superdoc-dev/cli-darwin-arm64": "workspace:*",
+    "@superdoc-dev/cli-darwin-x64": "workspace:*",
+    "@superdoc-dev/cli-linux-x64": "workspace:*",
+    "@superdoc-dev/cli-linux-arm64": "workspace:*",
+    "@superdoc-dev/cli-windows-x64": "workspace:*"
   }
 }

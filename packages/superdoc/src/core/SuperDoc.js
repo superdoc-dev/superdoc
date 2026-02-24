@@ -999,6 +999,45 @@ export class SuperDoc extends EventEmitter {
   }
 
   /**
+   * Get the current zoom level as a percentage (e.g., 100 for 100%)
+   * @returns {number} The current zoom level as a percentage
+   * @example
+   * const zoom = superdoc.getZoom(); // Returns 100, 150, 200, etc.
+   */
+  getZoom() {
+    return this.superdocStore?.activeZoom ?? 100;
+  }
+
+  /**
+   * Set the zoom level for all documents.
+   * Updates the centralized activeZoom state, which propagates to all
+   * presentation editors, PDF viewers, and whiteboard layers via the Vue watcher.
+   * @param {number} percent - The zoom level as a percentage (e.g., 100, 150, 200)
+   * @example
+   * superdoc.setZoom(150); // Set zoom to 150%
+   * superdoc.setZoom(50);  // Set zoom to 50%
+   */
+  setZoom(percent) {
+    if (typeof percent !== 'number' || !Number.isFinite(percent) || percent <= 0) {
+      console.warn('[SuperDoc] setZoom expects a positive number representing percentage');
+      return;
+    }
+
+    // Update store — SuperDoc.vue's activeZoom watcher propagates the zoom
+    // to all PresentationEditor instances via PresentationEditor.setGlobalZoom().
+    if (this.superdocStore) {
+      this.superdocStore.activeZoom = percent;
+    }
+
+    // Update toolbar UI so the dropdown label reflects the new zoom level
+    if (this.toolbar && typeof this.toolbar.setZoom === 'function') {
+      this.toolbar.setZoom(percent);
+    }
+
+    this.emit('zoomChange', { zoom: percent });
+  }
+
+  /**
    * Set the document to locked or unlocked
    * @param {boolean} lock
    */

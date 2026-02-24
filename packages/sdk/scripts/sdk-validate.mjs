@@ -17,7 +17,8 @@
  * 11. Skill files only reference existing operations (fails on unknown refs)
  * 12. Provider tool name extraction smoke test
  * 13. Node npm pack includes required tools/*.json assets
- * 14. SDK test suite passes (contract-integrity + cross-lang parity)
+ * 14. SDK release scripts test suite passes
+ * 15. SDK test suite passes (contract-integrity + cross-lang parity)
  */
 
 import { execFile } from 'node:child_process';
@@ -278,7 +279,12 @@ async function main() {
     }
   });
 
-  // 14. Run SDK test suite (contract-integrity + cross-lang parity)
+  // 14. Run SDK release script tests
+  await check('SDK release scripts tests pass', async () => {
+    await run('pnpm', ['--prefix', path.join(REPO_ROOT, 'packages/sdk'), 'run', 'test:scripts']);
+  });
+
+  // 15. Run SDK codegen test suite (contract-integrity + cross-lang parity)
   await check('SDK test suite passes (bun test)', async () => {
     await run('bun', ['test', path.join(REPO_ROOT, 'packages/sdk/codegen/src/__tests__/')]);
   });

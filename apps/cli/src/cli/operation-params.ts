@@ -24,7 +24,6 @@ import type {
 } from './types';
 import {
   CLI_DOC_OPERATIONS,
-  CLI_ONLY_OPERATIONS,
   CLI_OPERATION_IDS,
   type CliOperationId,
   type CliOnlyOperation,
@@ -297,6 +296,7 @@ const EXTRA_CLI_PARAMS: Partial<Record<string, CliOperationParamSpec[]>> = {
     { name: 'pattern', kind: 'flag', type: 'string' },
     { name: 'mode', kind: 'flag', type: 'string' },
     { name: 'caseSensitive', kind: 'flag', flag: 'case-sensitive', type: 'boolean' },
+    { name: 'select', kind: 'jsonFlag', flag: 'select-json', type: 'json' },
     { name: 'query', kind: 'jsonFlag', flag: 'query-json', type: 'json' },
   ],
   'doc.lists.list': [{ name: 'query', kind: 'jsonFlag', flag: 'query-json', type: 'json' }],
@@ -312,6 +312,7 @@ const EXTRA_CLI_PARAMS: Partial<Record<string, CliOperationParamSpec[]>> = {
   'doc.lists.restart': [{ name: 'input', kind: 'jsonFlag', flag: 'input-json', type: 'json' }],
   'doc.lists.exit': [{ name: 'input', kind: 'jsonFlag', flag: 'input-json', type: 'json' }],
   'doc.create.paragraph': [{ name: 'input', kind: 'jsonFlag', flag: 'input-json', type: 'json' }],
+  'doc.create.heading': [{ name: 'input', kind: 'jsonFlag', flag: 'input-json', type: 'json' }],
 };
 
 // ---------------------------------------------------------------------------

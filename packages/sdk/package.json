@@ -9,6 +9,7 @@
     "generate": "node scripts/sdk-generate.mjs",
     "validate": "node scripts/sdk-validate.mjs",
     "build:node": "pnpm --prefix langs/node run build",
+    "test:scripts": "node --test scripts/__tests__/*.test.mjs",
     "release": "node scripts/sdk-release.mjs",
     "release:dry": "node scripts/sdk-release.mjs --dry-run"
   }

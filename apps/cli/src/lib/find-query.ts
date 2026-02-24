@@ -84,15 +84,34 @@ function buildFlatFindQueryDraft(parsed: ParsedArgs): unknown {
 
 export async function resolveFindQuery(parsed: ParsedArgs): Promise<Query> {
   // Canonical path: always execute against a normalized Query object.
-  // Flat CLI flags are convenience syntax that is converted into Query here.
+  // Three input styles are supported (mutually exclusive):
+  //   1. --query-json   → full Query object (with `select` inside)
+  //   2. --select-json  → selector object, wrapped into a Query here
+  //   3. flat flags     → --type, --pattern, etc., built into a Query
   const queryPayload = await resolveJsonInput(parsed, 'query');
+  const selectPayload = await resolveJsonInput(parsed, 'select');
   const withinPayload = await resolveJsonInput(parsed, 'within');
+  const hasFlat = hasFlatFindFlags(parsed);
+  const hasQueryPayload = queryPayload !== undefined;
+  const hasSelectPayload = selectPayload !== undefined;
 
-  if (queryPayload && hasFlatFindFlags(parsed)) {
-    throw new CliError('INVALID_ARGUMENT', 'find: do not combine --query-* with flat selector flags.');
+  const providedCount = [hasQueryPayload, hasSelectPayload, hasFlat].filter((value) => value).length;
+  if (providedCount > 1) {
+    throw new CliError(
+      'INVALID_ARGUMENT',
+      'find: use only one of --query-json, --select-json, or flat selector flags (--type/--pattern).',
+    );
   }
 
-  const queryDraft = queryPayload ?? buildFlatFindQueryDraft(parsed);
+  let queryDraft: unknown;
+  if (hasQueryPayload) {
+    queryDraft = queryPayload;
+  } else if (hasSelectPayload) {
+    queryDraft = { select: selectPayload };
+  } else {
+    queryDraft = buildFlatFindQueryDraft(parsed);
+  }
+
   const finalDraft =
     withinPayload == null
       ? queryDraft

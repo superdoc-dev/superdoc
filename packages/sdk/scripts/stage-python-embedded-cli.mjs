@@ -1,80 +1,23 @@
 #!/usr/bin/env node
 
-import { access, chmod, copyFile, mkdir, rm, writeFile } from 'node:fs/promises';
-import path from 'node:path';
-import { fileURLToPath } from 'node:url';
+/**
+ * @deprecated Compatibility wrapper — delegates to stage-python-companion-cli.mjs.
+ * Remove after one release cycle.
+ */
 
-const __filename = fileURLToPath(import.meta.url);
-const __dirname = path.dirname(__filename);
-const REPO_ROOT = path.resolve(__dirname, '../../../');
+import { stageAllCompanionBinaries } from './stage-python-companion-cli.mjs';
 
-const CLI_PLATFORMS_ROOT = path.join(REPO_ROOT, 'apps/cli/platforms');
-const PYTHON_VENDOR_ROOT = path.join(REPO_ROOT, 'packages/sdk/langs/python/superdoc/_vendor');
-const PYTHON_VENDOR_CLI_ROOT = path.join(PYTHON_VENDOR_ROOT, 'cli');
-
-const TARGETS = [
-  { id: 'darwin-arm64', sourcePackage: 'cli-darwin-arm64', binaryName: 'superdoc' },
-  { id: 'darwin-x64', sourcePackage: 'cli-darwin-x64', binaryName: 'superdoc' },
-  { id: 'linux-x64', sourcePackage: 'cli-linux-x64', binaryName: 'superdoc' },
-  { id: 'linux-arm64', sourcePackage: 'cli-linux-arm64', binaryName: 'superdoc' },
-  { id: 'windows-x64', sourcePackage: 'cli-windows-x64', binaryName: 'superdoc.exe' },
-];
-
-async function fileExists(filePath) {
-  try {
-    await access(filePath);
-    return true;
-  } catch {
-    return false;
-  }
-}
-
-async function ensureInitFile(filePath) {
-  await mkdir(path.dirname(filePath), { recursive: true });
-  if (!(await fileExists(filePath))) {
-    await writeFile(filePath, '', 'utf8');
-  }
-}
-
-async function stageTargetBinary(target) {
-  const sourcePath = path.join(CLI_PLATFORMS_ROOT, target.sourcePackage, 'bin', target.binaryName);
-  if (!(await fileExists(sourcePath))) {
-    throw new Error(
-      `Missing CLI binary for ${target.id}: ${sourcePath}\n` +
-      'Build and stage CLI artifacts first: pnpm --prefix apps/cli run build:native:all && pnpm --prefix apps/cli run build:stage',
-    );
-  }
-
-  const targetDir = path.join(PYTHON_VENDOR_CLI_ROOT, target.id);
-  await rm(targetDir, { recursive: true, force: true });
-  await mkdir(targetDir, { recursive: true });
-
-  const destinationPath = path.join(targetDir, target.binaryName);
-  await copyFile(sourcePath, destinationPath);
-
-  if (!target.binaryName.endsWith('.exe')) {
-    try {
-      await chmod(destinationPath, 0o755);
-    } catch {
-      // Non-fatal; runtime will surface execution errors if permissions are invalid.
-    }
-  }
-
-  console.log(`Staged ${target.id}: ${path.relative(REPO_ROOT, destinationPath)}`);
-}
+export { stageAllCompanionBinaries as stagePythonEmbeddedCli };
 
 async function main() {
-  await ensureInitFile(path.join(PYTHON_VENDOR_ROOT, '__init__.py'));
-  await ensureInitFile(path.join(PYTHON_VENDOR_CLI_ROOT, '__init__.py'));
-
-  for (const target of TARGETS) {
-    await stageTargetBinary(target);
-  }
-
-  console.log(`Staged ${TARGETS.length} platform binaries for Python SDK.`);
+  console.warn('stage-python-embedded-cli.mjs is deprecated — use stage-python-companion-cli.mjs');
+  await stageAllCompanionBinaries();
 }
 
-main().catch((error) => {
-  console.error(error instanceof Error ? error.message : error);
-  process.exitCode = 1;
-});
+const __filename = (await import('node:url')).fileURLToPath(import.meta.url);
+if (process.argv[1] && (await import('node:path')).resolve(process.argv[1]) === __filename) {
+  main().catch((error) => {
+    console.error(error instanceof Error ? error.message : error);
+    process.exitCode = 1;
+  });
+}

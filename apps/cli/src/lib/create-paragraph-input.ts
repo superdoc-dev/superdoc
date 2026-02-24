@@ -4,11 +4,13 @@ import { CliError } from './errors';
 import { validateCreateParagraphInput, validateNodeAddress } from './validate';
 import type { CreateParagraphInput } from './types';
 
+type BlockTarget = Extract<NonNullable<CreateParagraphInput['at']>, { target: unknown }>['target'];
+
 type FlatLocation =
   | { kind: 'documentStart' }
   | { kind: 'documentEnd' }
-  | { kind: 'before'; target: Extract<CreateParagraphInput['at'], { kind: 'before' }>['target'] }
-  | { kind: 'after'; target: Extract<CreateParagraphInput['at'], { kind: 'after' }>['target'] };
+  | { kind: 'before'; target: BlockTarget }
+  | { kind: 'after'; target: BlockTarget };
 
 function parseAtFlag(rawAt: string | undefined, commandName: string): FlatLocation | undefined {
   if (!rawAt) return undefined;
@@ -22,10 +24,7 @@ function parseAtFlag(rawAt: string | undefined, commandName: string): FlatLocati
   );
 }
 
-function ensureBlockTarget(
-  value: unknown,
-  path: string,
-): Extract<CreateParagraphInput['at'], { kind: 'before' }>['target'] {
+function ensureBlockTarget(value: unknown, path: string): BlockTarget {
   const target = validateNodeAddress(value, path);
   if (target.kind !== 'block') {
     throw new CliError('VALIDATION_ERROR', `${path}.kind must be "block".`);
@@ -84,6 +83,7 @@ export async function resolveCreateParagraphInput(
   commandName: string,
 ): Promise<CreateParagraphInput> {
   const inputJson = await resolveJsonInput(parsed, 'input');
+  const inputProvided = inputJson !== undefined;
   const hasFlatFlags =
     getStringOption(parsed, 'text') != null ||
     getStringOption(parsed, 'at') != null ||
@@ -92,14 +92,14 @@ export async function resolveCreateParagraphInput(
     getStringOption(parsed, 'after-address-json') != null ||
     getStringOption(parsed, 'after-address-file') != null;
 
-  if (inputJson && hasFlatFlags) {
+  if (inputProvided && hasFlatFlags) {
     throw new CliError(
       'INVALID_ARGUMENT',
       `${commandName}: --input-json/--input-file cannot be combined with flat create flags.`,
     );
   }
 
-  if (inputJson) {
+  if (inputProvided) {
     return validateCreateParagraphInput(inputJson, 'input');
   }
 

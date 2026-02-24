@@ -85,19 +85,24 @@ def _apply_default_change_mode(
     return {**payload, 'changeMode': default_change_mode}
 
 
-def _parse_envelope(stdout: str, stderr: str) -> Dict[str, Any]:
-    payload = stdout or stderr
-    if not payload.strip():
-        raise SuperDocError('CLI returned no JSON envelope.', code='COMMAND_FAILED', details={'stdout': stdout, 'stderr': stderr})
-
-    attempts: list = [payload.strip()]
-    lines = payload.splitlines()
+def _extract_envelope_candidates(text: str) -> list:
+    """Build a list of JSON parse candidates from a CLI output stream."""
+    candidates: list = []
+    stripped = text.strip()
+    if not stripped:
+        return candidates
+    candidates.append(stripped)
+    lines = stripped.splitlines()
     for index, line in enumerate(lines):
         if not line.strip().startswith('{'):
             continue
-        attempts.append('\n'.join(lines[index:]).strip())
+        candidates.append('\n'.join(lines[index:]).strip())
+    return candidates
 
-    for candidate in attempts:
+
+def _try_parse_candidates(candidates: list) -> Optional[Dict[str, Any]]:
+    """Try to parse a JSON envelope from a list of candidates."""
+    for candidate in candidates:
         if not candidate:
             continue
         try:
@@ -106,6 +111,24 @@ def _parse_envelope(stdout: str, stderr: str) -> Dict[str, Any]:
                 return parsed
         except Exception:
             continue
+    return None
+
+
+def _parse_envelope(stdout: str, stderr: str) -> Dict[str, Any]:
+    if not stdout.strip() and not stderr.strip():
+        raise SuperDocError('CLI returned no JSON envelope.', code='COMMAND_FAILED', details={'stdout': stdout, 'stderr': stderr})
+
+    # Try stdout first (where successful responses go), then stderr (where
+    # errors go). Previous code used `stdout or stderr` which silently
+    # discarded stderr whenever stdout was non-empty — even if stdout
+    # contained only telemetry noise.
+    result = _try_parse_candidates(_extract_envelope_candidates(stdout))
+    if result is not None:
+        return result
+
+    result = _try_parse_candidates(_extract_envelope_candidates(stderr))
+    if result is not None:
+        return result
 
     raise SuperDocError(
         'CLI returned invalid JSON envelope.',

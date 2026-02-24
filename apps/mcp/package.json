@@ -1,0 +1,32 @@
+{
+  "name": "@superdoc-dev/mcp",
+  "version": "0.0.0",
+  "type": "module",
+  "bin": {
+    "superdoc-mcp": "./dist/index.js"
+  },
+  "files": [
+    "dist"
+  ],
+  "scripts": {
+    "dev": "bun run src/index.ts",
+    "build": "bun build src/index.ts --outdir dist --target node --format esm",
+    "test": "NODE_ENV=test bun test",
+    "typecheck": "tsc --noEmit"
+  },
+  "dependencies": {
+    "@modelcontextprotocol/sdk": "^1.26.0",
+    "zod": "^4.3.6"
+  },
+  "devDependencies": {
+    "@superdoc/document-api": "workspace:*",
+    "@superdoc/super-editor": "workspace:*",
+    "superdoc": "workspace:*",
+    "@types/bun": "catalog:",
+    "@types/node": "catalog:",
+    "typescript": "catalog:"
+  },
+  "publishConfig": {
+    "access": "public"
+  }
+}

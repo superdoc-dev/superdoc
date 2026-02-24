@@ -1,7 +1,8 @@
-import { access, copyFile, mkdtemp, mkdir, rm } from 'node:fs/promises';
+import { copyFile, mkdtemp, mkdir, rm } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import path from 'node:path';
 import { run } from '../../index';
+import { resolveListDocFixture, resolveSourceDocFixture } from '../fixtures';
 
 type RunResult = {
   code: number;
@@ -46,31 +47,6 @@ export type ListItemAddress = {
   nodeType: 'listItem';
   nodeId: string;
 };
-
-const REPO_ROOT = path.resolve(import.meta.dir, '../../../../../');
-const SOURCE_DOC = path.join(REPO_ROOT, 'e2e-tests/test-data/basic-documents/advanced-text.docx');
-const LIST_SOURCE_DOC_CANDIDATES = [
-  path.join(REPO_ROOT, 'devtools/document-api-tests/fixtures/matrix-list.input.docx'),
-  path.join(REPO_ROOT, 'e2e-tests/test-data/basic-documents/lists-complex-items.docx'),
-];
-
-let resolvedListSourceDoc: string | null = null;
-
-async function resolveListSourceDoc(): Promise<string> {
-  if (resolvedListSourceDoc != null) return resolvedListSourceDoc;
-
-  for (const candidate of LIST_SOURCE_DOC_CANDIDATES) {
-    try {
-      await access(candidate);
-      resolvedListSourceDoc = candidate;
-      return candidate;
-    } catch {
-      // try next candidate
-    }
-  }
-
-  throw new Error(`No list fixture found. Tried: ${LIST_SOURCE_DOC_CANDIDATES.join(', ')}`);
-}
 
 function parseEnvelope(raw: RunResult): CommandEnvelope {
   const source = raw.stdout.trim() || raw.stderr.trim();
@@ -133,13 +109,13 @@ export class ConformanceHarness {
 
   async copyFixtureDoc(label: string): Promise<string> {
     const filePath = path.join(this.docsDir, `${this.nextId()}-${label}.docx`);
-    await copyFile(SOURCE_DOC, filePath);
+    await copyFile(await resolveSourceDocFixture(), filePath);
     return filePath;
   }
 
   async copyListFixtureDoc(label: string): Promise<string> {
     const filePath = path.join(this.docsDir, `${this.nextId()}-${label}.docx`);
-    await copyFile(await resolveListSourceDoc(), filePath);
+    await copyFile(await resolveListDocFixture(), filePath);
     return filePath;
   }
 

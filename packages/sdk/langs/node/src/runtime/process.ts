@@ -28,7 +28,7 @@ export class SuperDocRuntime {
     await this.transport.dispose();
   }
 
-  async invoke<TData extends Record<string, unknown>>(
+  async invoke<TData = unknown>(
     operation: OperationSpec,
     params: Record<string, unknown> = {},
     options: InvokeOptions = {},

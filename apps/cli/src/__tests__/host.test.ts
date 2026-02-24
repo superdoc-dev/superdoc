@@ -5,10 +5,10 @@ import { tmpdir } from 'node:os';
 import path from 'node:path';
 import type { CliOperationId } from '../cli';
 import { validateOperationResponseData } from '../lib/operation-args';
+import { resolveSourceDocFixture } from './fixtures';
 
 const REPO_ROOT = path.resolve(import.meta.dir, '../../../..');
 const CLI_BIN = path.join(REPO_ROOT, 'apps/cli/src/index.ts');
-const SOURCE_DOC = path.join(REPO_ROOT, 'e2e-tests/test-data/basic-documents/advanced-text.docx');
 
 type JsonRpcMessage = {
   jsonrpc: '2.0';
@@ -230,7 +230,7 @@ describe('CLI host mode', () => {
     await mkdir(stateDir, { recursive: true });
 
     const docPath = path.join(stateDir, 'host-conformance.docx');
-    await copyFile(SOURCE_DOC, docPath);
+    await copyFile(await resolveSourceDocFixture(), docPath);
 
     const host = launchHost(stateDir);
 

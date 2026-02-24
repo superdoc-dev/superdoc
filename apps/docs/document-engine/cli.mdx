@@ -35,7 +35,7 @@ superdoc open contract.docx
 superdoc find --pattern "ACME Corp"
 
 # Replace it
-superdoc replace --target-json '{"kind":"text","blockId":"...","range":{"start":0,"end":9}}' --text "NewCo Inc."
+superdoc replace --target-json '{"blockId":"...","range":{"start":0,"end":9}}' --text "NewCo Inc."
 
 # Save and close
 superdoc save

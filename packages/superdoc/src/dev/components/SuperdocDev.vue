@@ -499,6 +499,10 @@ const init = async () => {
     console.error('SuperDoc exception:', error);
   });
 
+  superdoc.value?.on('zoomChange', ({ zoom }) => {
+    currentZoom.value = zoom;
+  });
+
   window.superdoc = superdoc.value;
 
   // const ydoc = superdoc.value.ydoc;
@@ -782,6 +786,23 @@ const toggleViewLayout = () => {
   window.location.href = url.toString();
 };
 
+const currentZoom = ref(100);
+const ZOOM_STEP = 10;
+const ZOOM_MIN = 25;
+const ZOOM_MAX = 400;
+
+const zoomIn = () => {
+  const next = Math.min(ZOOM_MAX, currentZoom.value + ZOOM_STEP);
+  currentZoom.value = next;
+  superdoc.value?.setZoom(next);
+};
+
+const zoomOut = () => {
+  const next = Math.max(ZOOM_MIN, currentZoom.value - ZOOM_STEP);
+  currentZoom.value = next;
+  superdoc.value?.setZoom(next);
+};
+
 const showExportMenu = ref(false);
 const closeExportMenu = () => {
   showExportMenu.value = false;
@@ -989,6 +1010,11 @@ if (scrollTestMode.value) {
                   Export Docx Blob
                 </button>
               </div>
+            </div>
+            <div class="dev-app__zoom-controls">
+              <button class="dev-app__header-export-btn" @click="zoomOut">−</button>
+              <span class="dev-app__zoom-label">{{ currentZoom }}%</span>
+              <button class="dev-app__header-export-btn" @click="zoomIn">+</button>
             </div>
             <button class="dev-app__header-export-btn" @click="toggleLayoutEngine">
               Turn Layout Engine {{ useLayoutEngine ? 'off' : 'on' }} (reloads)
@@ -1421,6 +1447,27 @@ if (scrollTestMode.value) {
   opacity: 0.55;
   cursor: not-allowed;
   box-shadow: none;
+}
+
+.dev-app__zoom-controls {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+}
+
+.dev-app__zoom-controls .dev-app__header-export-btn {
+  min-width: 32px;
+  padding: 6px 8px;
+  font-size: 16px;
+  font-weight: 600;
+}
+
+.dev-app__zoom-label {
+  color: #e2e8f0;
+  font-size: 13px;
+  min-width: 42px;
+  text-align: center;
+  user-select: none;
 }
 
 .dev-app__dropdown {

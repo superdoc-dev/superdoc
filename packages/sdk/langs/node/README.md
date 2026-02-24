@@ -31,7 +31,7 @@ await client.doc.open({ doc: './contract.docx' });
 const info = await client.doc.info();
 console.log(info.counts);
 
-const results = await client.doc.find({ query: { kind: 'text', pattern: 'termination' } });
+const results = await client.doc.find({ type: 'text', pattern: 'termination' });
 
 await client.doc.replace({
   target: results.context[0].textRanges[0],

@@ -6,9 +6,9 @@ import { syncCommentsToClients } from '../core/collaboration/helpers.js';
 import {
   Editor,
   trackChangesHelpers,
-  TrackChangesBasePluginKey,
   CommentsPluginKey,
   getRichTextExtensions,
+  createOrUpdateTrackedChangeComment,
 } from '@superdoc/super-editor';
 import useComment from '@superdoc/components/CommentsLayer/use-comment';
 import { groupChanges } from '../helpers/group-changes.js';
@@ -734,50 +734,58 @@ export const useCommentsStore = defineStore('comments', () => {
     setTimeout(() => {
       // do not block the first rendering of the doc
       // and create comments asynchronously.
-      createCommentForTrackChanges(editor);
+      createCommentForTrackChanges(editor, superdoc);
     }, 0);
   };
 
-  const createCommentForTrackChanges = (editor) => {
-    let trackedChanges = trackChangesHelpers.getTrackChanges(editor.state);
-
+  const createCommentForTrackChanges = (editor, superdoc) => {
+    const trackedChanges = trackChangesHelpers.getTrackChanges(editor.state);
     const groupedChanges = groupChanges(trackedChanges);
 
-    // Create comments for tracked changes
-    // that do not have a corresponding comment (created in Word).
-    const { tr } = editor.view.state;
-    const { dispatch } = editor.view;
+    // Build a Set of existing comment IDs for O(1) lookup
+    const existingIds = new Set(commentsList.value.map((c) => c.commentId));
 
-    groupedChanges.forEach(({ insertedMark, deletionMark, formatMark }, index) => {
-      console.debug(`Create comment for track change: ${index}`);
-      const foundComment = commentsList.value.find(
-        (i) =>
-          i.commentId === insertedMark?.mark.attrs.id ||
-          i.commentId === deletionMark?.mark.attrs.id ||
-          i.commentId === formatMark?.mark.attrs.id,
-      );
-      const isLastIteration = trackedChanges.length === index + 1;
+    // Build a Map of change ID → tracked change entries for O(1) lookup per group.
+    // This avoids re-scanning the entire document for each tracked change.
+    const changesByIdMap = new Map();
+    for (const change of trackedChanges) {
+      const id = change.mark.attrs.id;
+      if (!changesByIdMap.has(id)) changesByIdMap.set(id, []);
+      changesByIdMap.get(id).push(change);
+    }
 
-      if (foundComment) {
-        if (isLastIteration) {
-          tr.setMeta(CommentsPluginKey, { type: 'force' });
-        }
-        return;
+    const documentId = editor.options.documentId;
+
+    // Build comment params directly from grouped changes — no PM dispatch needed
+    groupedChanges.forEach(({ insertedMark, deletionMark, formatMark }) => {
+      const id = insertedMark?.mark.attrs.id || deletionMark?.mark.attrs.id || formatMark?.mark.attrs.id;
+      if (!id || existingIds.has(id)) return;
+
+      const marks = {
+        ...(insertedMark && { insertedMark: insertedMark.mark }),
+        ...(deletionMark && { deletionMark: deletionMark.mark }),
+        ...(formatMark && { formatMark: formatMark.mark }),
+      };
+
+      const params = createOrUpdateTrackedChangeComment({
+        event: 'add',
+        marks,
+        nodes: [],
+        newEditorState: editor.state,
+        documentId,
+        trackedChangesForId: changesByIdMap.get(id) || [],
+      });
+
+      if (params) {
+        handleTrackedChangeUpdate({ superdoc, params });
+        existingIds.add(id);
       }
-
-      if (insertedMark || deletionMark || formatMark) {
-        const trackChangesPayload = {
-          ...(insertedMark && { insertedMark: insertedMark.mark }),
-          ...(deletionMark && { deletionMark: deletionMark.mark }),
-          ...(formatMark && { formatMark: formatMark.mark }),
-        };
-
-        if (isLastIteration) tr.setMeta(CommentsPluginKey, { type: 'force' });
-        tr.setMeta(CommentsPluginKey, { type: 'forceTrackChanges' });
-        tr.setMeta(TrackChangesBasePluginKey, trackChangesPayload);
-      }
-      dispatch(tr);
     });
+
+    // Single force-update to refresh decorations
+    const { tr } = editor.view.state;
+    tr.setMeta(CommentsPluginKey, { type: 'force' });
+    editor.view.dispatch(tr);
   };
 
   const normalizeDocxSchemaForExport = (value) => {

@@ -2,16 +2,16 @@
  * Basic ProseMirror styles.
  * https://github.com/ProseMirror/prosemirror-view/blob/master/style/prosemirror.css
  *
- * All selectors are scoped under .super-editor to prevent bleeding into host apps.
+ * All selectors are scoped under .sd-editor-scoped to prevent bleeding into host apps.
  * See: SD-1850
  */
-.super-editor .ProseMirror {
+.sd-editor-scoped .ProseMirror {
   position: relative;
   /* We use "all: revert" to isolate the editor content from external stylesheets. This makes the "contenteditable" not editable on Safari devices. So we need to keep this. */
   -webkit-user-modify: read-write-plaintext-only;
 }
 
-.super-editor .ProseMirror {
+.sd-editor-scoped .ProseMirror {
   word-wrap: break-word;
   white-space: pre-wrap;
   white-space: break-spaces;
@@ -21,35 +21,35 @@
   z-index: 0; /* Needed to place images behind text with lower z-index */
 }
 
-.super-editor .ProseMirror pre {
+.sd-editor-scoped .ProseMirror pre {
   white-space: pre-wrap;
 }
 
-.super-editor .ProseMirror ol,
-.super-editor .ProseMirror ul {
+.sd-editor-scoped .ProseMirror ol,
+.sd-editor-scoped .ProseMirror ul {
   margin-block-start: 0;
   margin-block-end: 0;
   margin-inline-start: 0;
   margin-inline-end: 0;
 }
 
-.super-editor .ProseMirror ol,
-.super-editor .ProseMirror ul {
+.sd-editor-scoped .ProseMirror ol,
+.sd-editor-scoped .ProseMirror ul {
   padding-inline-start: 0;
   padding-left: 0;
   list-style: none;
 }
 
-.super-editor .ProseMirror li::marker {
+.sd-editor-scoped .ProseMirror li::marker {
   content: none;
 }
 
-.super-editor .ProseMirror li::marker {
+.sd-editor-scoped .ProseMirror li::marker {
   padding: 0;
   margin: 0;
 }
 
-.super-editor .ProseMirror li > p {
+.sd-editor-scoped .ProseMirror li > p {
   margin: 0;
   padding: 0;
   display: inline-block;
@@ -59,44 +59,44 @@
  * Hide marker for indented lists.
  * If a list-item contains a list but doesn't contain a "p" tag with text.
  */
-.super-editor .ProseMirror ol {
+.sd-editor-scoped .ProseMirror ol {
   margin: 0;
 }
-.super-editor .ProseMirror li:has(> ul:first-child, > ol:first-child):not(:has(> p)) {
+.sd-editor-scoped .ProseMirror li:has(> ul:first-child, > ol:first-child):not(:has(> p)) {
   list-style-type: none;
 }
 
-.super-editor .ProseMirror li:has(> ul:first-child, > ol:first-child):not(:has(> p))::marker {
+.sd-editor-scoped .ProseMirror li:has(> ul:first-child, > ol:first-child):not(:has(> p))::marker {
   content: '';
 }
 
-.super-editor .ProseMirror-hideselection *::selection {
+.sd-editor-scoped .ProseMirror-hideselection *::selection {
   background: transparent;
 }
 
-.super-editor .ProseMirror-hideselection *::-moz-selection {
+.sd-editor-scoped .ProseMirror-hideselection *::-moz-selection {
   background: transparent;
 }
 
-.super-editor .ProseMirror-hideselection * {
+.sd-editor-scoped .ProseMirror-hideselection * {
   caret-color: transparent;
 }
 
 /* See https://github.com/ProseMirror/prosemirror/issues/1421#issuecomment-1759320191 */
-.super-editor .ProseMirror [draggable][contenteditable='false'] {
+.sd-editor-scoped .ProseMirror [draggable][contenteditable='false'] {
   user-select: text;
 }
 
-.super-editor .ProseMirror-selectednode {
+.sd-editor-scoped .ProseMirror-selectednode {
   outline: 2px solid #8cf;
 }
 
 /* Make sure li selections wrap around markers */
-.super-editor li.ProseMirror-selectednode {
+.sd-editor-scoped li.ProseMirror-selectednode {
   outline: none;
 }
 
-.super-editor li.ProseMirror-selectednode:after {
+.sd-editor-scoped li.ProseMirror-selectednode:after {
   content: '';
   position: absolute;
   left: -32px;
@@ -107,24 +107,24 @@
   pointer-events: none;
 }
 
-.super-editor .ProseMirror img {
+.sd-editor-scoped .ProseMirror img {
   height: auto;
   max-width: 100%;
 }
 
 /* Protect against generic img rules */
-.super-editor img.ProseMirror-separator {
+.sd-editor-scoped img.ProseMirror-separator {
   display: inline !important;
   border: none !important;
   margin: 0 !important;
 }
 
-.super-editor .ProseMirror .sd-editor-tab {
+.sd-editor-scoped .ProseMirror .sd-editor-tab {
   display: inline-block;
   vertical-align: text-bottom;
 }
 
-.super-editor .ProseMirror u .sd-editor-tab {
+.sd-editor-scoped .ProseMirror u .sd-editor-tab {
   white-space: pre;
   border-bottom: 1px solid #000;
   margin-bottom: 1.5px;
@@ -135,12 +135,12 @@ Tables
 https://github.com/ProseMirror/prosemirror-tables/blob/master/style/tables.css
 https://github.com/ProseMirror/prosemirror-tables/blob/master/demo/index.html
 */
-.super-editor .ProseMirror.resize-cursor {
+.sd-editor-scoped .ProseMirror.resize-cursor {
   cursor: ew-resize;
   cursor: col-resize;
 }
 
-.super-editor .ProseMirror .tableWrapper {
+.sd-editor-scoped .ProseMirror .tableWrapper {
   --table-border-width: 1px;
   --offset: 2px;
 
@@ -154,7 +154,7 @@ https://github.com/ProseMirror/prosemirror-tables/blob/master/demo/index.html
   width: calc(100% + (var(--table-border-width) + var(--offset)));
 }
 
-.super-editor .ProseMirror table {
+.sd-editor-scoped .ProseMirror table {
   border-collapse: collapse;
   border-spacing: 0;
   table-layout: auto;
@@ -162,12 +162,12 @@ https://github.com/ProseMirror/prosemirror-tables/blob/master/demo/index.html
   /* width: 100%; */
 }
 
-.super-editor .ProseMirror tr {
+.sd-editor-scoped .ProseMirror tr {
   position: relative;
 }
 
-.super-editor .ProseMirror td,
-.super-editor .ProseMirror th {
+.sd-editor-scoped .ProseMirror td,
+.sd-editor-scoped .ProseMirror th {
   min-width: 0;
   position: relative;
   vertical-align: top;
@@ -175,24 +175,24 @@ https://github.com/ProseMirror/prosemirror-tables/blob/master/demo/index.html
   overflow-wrap: anywhere;
 }
 
-.super-editor .ProseMirror td[data-placeholder],
-.super-editor .ProseMirror th[data-placeholder] {
+.sd-editor-scoped .ProseMirror td[data-placeholder],
+.sd-editor-scoped .ProseMirror th[data-placeholder] {
   padding: 0 !important;
   border: 0 !important;
   background: transparent !important;
 }
 
-.super-editor .ProseMirror td[data-placeholder] > *,
-.super-editor .ProseMirror th[data-placeholder] > * {
+.sd-editor-scoped .ProseMirror td[data-placeholder] > *,
+.sd-editor-scoped .ProseMirror th[data-placeholder] > * {
   display: none !important;
 }
 
-.super-editor .ProseMirror th {
+.sd-editor-scoped .ProseMirror th {
   font-weight: bold;
   text-align: left;
 }
 
-.super-editor .ProseMirror table .column-resize-handle {
+.sd-editor-scoped .ProseMirror table .column-resize-handle {
   position: absolute;
   right: -2px;
   top: 0;
@@ -203,7 +203,7 @@ https://github.com/ProseMirror/prosemirror-tables/blob/master/demo/index.html
   pointer-events: none;
 }
 
-.super-editor .ProseMirror table .selectedCell:after {
+.sd-editor-scoped .ProseMirror table .selectedCell:after {
   position: absolute;
   content: '';
   left: 0;
@@ -217,24 +217,24 @@ https://github.com/ProseMirror/prosemirror-tables/blob/master/demo/index.html
 /* Tables - end */
 
 /* Track changes */
-.super-editor .ProseMirror .track-insert-dec,
-.super-editor .ProseMirror .track-delete-dec,
-.super-editor .ProseMirror .track-format-dec {
+.sd-editor-scoped .ProseMirror .track-insert-dec,
+.sd-editor-scoped .ProseMirror .track-delete-dec,
+.sd-editor-scoped .ProseMirror .track-format-dec {
   pointer-events: none;
 }
 
-.super-editor .ProseMirror .track-insert-dec.hidden,
-.super-editor .ProseMirror .track-delete-dec.hidden {
+.sd-editor-scoped .ProseMirror .track-insert-dec.hidden,
+.sd-editor-scoped .ProseMirror .track-delete-dec.hidden {
   display: none;
 }
 
-.super-editor .ProseMirror .track-insert-dec.highlighted {
+.sd-editor-scoped .ProseMirror .track-insert-dec.highlighted {
   border-top: 1px dashed var(--sd-track-insert-border, #00853d);
   border-bottom: 1px dashed var(--sd-track-insert-border, #00853d);
   background-color: var(--sd-track-insert-bg, #399c7222);
 }
 
-.super-editor .ProseMirror .track-delete-dec.highlighted {
+.sd-editor-scoped .ProseMirror .track-delete-dec.highlighted {
   border-top: 1px dashed var(--sd-track-delete-border, #cb0e47);
   border-bottom: 1px dashed var(--sd-track-delete-border, #cb0e47);
   background-color: var(--sd-track-delete-bg, #cb0e4722);
@@ -242,21 +242,21 @@ https://github.com/ProseMirror/prosemirror-tables/blob/master/demo/index.html
   text-decoration-thickness: 2px !important;
 }
 
-.super-editor .ProseMirror .track-format-dec.highlighted {
+.sd-editor-scoped .ProseMirror .track-format-dec.highlighted {
   border-bottom: 2px solid var(--sd-track-format-border, gold);
 }
 
-.super-editor .ProseMirror .track-delete-widget {
+.sd-editor-scoped .ProseMirror .track-delete-widget {
   visibility: hidden;
 }
 /* Track changes - end */
 
 /* Collaboration cursors */
-.super-editor .ProseMirror > .ProseMirror-yjs-cursor:first-child {
+.sd-editor-scoped .ProseMirror > .ProseMirror-yjs-cursor:first-child {
   margin-top: 16px;
 }
 
-.super-editor .ProseMirror-yjs-cursor {
+.sd-editor-scoped .ProseMirror-yjs-cursor {
   position: relative;
   margin-left: -1px;
   margin-right: -1px;
@@ -267,7 +267,7 @@ https://github.com/ProseMirror/prosemirror-tables/blob/master/demo/index.html
   pointer-events: none;
 }
 
-.super-editor .ProseMirror-yjs-cursor > div {
+.sd-editor-scoped .ProseMirror-yjs-cursor > div {
   position: absolute;
   top: -1.05em;
   left: -1px;
@@ -326,7 +326,7 @@ https://github.com/ProseMirror/prosemirror-tables/blob/master/demo/index.html
 /* Presentation Editor Remote Cursors - end */
 
 /* Footnotes */
-.super-editor .sd-footnote-ref {
+.sd-editor-scoped .sd-footnote-ref {
   font-size: 0.75em;
   line-height: 1;
   vertical-align: super;
@@ -334,13 +334,13 @@ https://github.com/ProseMirror/prosemirror-tables/blob/master/demo/index.html
 }
 
 /* Image placeholder */
-.super-editor .ProseMirror placeholder {
+.sd-editor-scoped .ProseMirror placeholder {
   display: inline;
   border: 1px solid #ccc;
   color: #ccc;
 }
 
-.super-editor .ProseMirror placeholder:after {
+.sd-editor-scoped .ProseMirror placeholder:after {
   content: '☁';
   font-size: 200%;
   line-height: 0.1;
@@ -348,14 +348,14 @@ https://github.com/ProseMirror/prosemirror-tables/blob/master/demo/index.html
 }
 
 /* Gapcursor */
-.super-editor .ProseMirror-gapcursor {
+.sd-editor-scoped .ProseMirror-gapcursor {
   display: none;
   pointer-events: none;
   position: absolute;
   margin: 0;
 }
 
-.super-editor .ProseMirror-gapcursor:after {
+.sd-editor-scoped .ProseMirror-gapcursor:after {
   content: '';
   display: block;
   position: absolute;
@@ -371,18 +371,18 @@ https://github.com/ProseMirror/prosemirror-tables/blob/master/demo/index.html
   }
 }
 
-.super-editor .ProseMirror-focused .ProseMirror-gapcursor {
+.sd-editor-scoped .ProseMirror-focused .ProseMirror-gapcursor {
   display: block;
 }
 
-.super-editor .ProseMirror div[data-type='contentBlock'] {
+.sd-editor-scoped .ProseMirror div[data-type='contentBlock'] {
   position: absolute;
   outline: none;
   user-select: none;
   z-index: -1;
 }
 
-.super-editor .ProseMirror div[data-horizontal-rule='true'] {
+.sd-editor-scoped .ProseMirror div[data-horizontal-rule='true'] {
   position: relative;
   z-index: auto;
   display: inline-block;
@@ -391,23 +391,23 @@ https://github.com/ProseMirror/prosemirror-tables/blob/master/demo/index.html
   align-self: flex-end;
 }
 
-.super-editor .sd-editor-dropcap {
+.sd-editor-scoped .sd-editor-dropcap {
   float: left;
   display: flex;
   align-items: baseline;
   margin-top: -5px;
 }
 
-.super-editor .ProseMirror-search-match {
+.sd-editor-scoped .ProseMirror-search-match {
   background-color: #ffff0054;
 }
-.super-editor .ProseMirror-active-search-match {
+.sd-editor-scoped .ProseMirror-active-search-match {
   background-color: #ff6a0054;
 }
-.super-editor .ProseMirror span.sd-custom-selection::selection {
+.sd-editor-scoped .ProseMirror span.sd-custom-selection::selection {
   background: transparent;
 }
-.super-editor .sd-custom-selection {
+.sd-editor-scoped .sd-custom-selection {
   background-color: #d9d9d9;
   border-radius: 0.1em;
 }

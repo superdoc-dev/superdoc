@@ -177,4 +177,43 @@ describe('CSS Scoping Regressions', () => {
       host.remove();
     }
   });
+
+  it('noderesizer stylesheet should define overlay selectors that do not require .super-editor ancestry', () => {
+    const cssText = readFileSync(NODE_RESIZER_CSS_PATH, 'utf8');
+    const selectors = extractTopLevelSelectors(cssText);
+
+    const overlayContainerSelectors = selectors.filter(
+      (selector) =>
+        selector.includes('.sd-editor-resize-container') && !selector.includes(':hover') && !selector.includes('::'),
+    );
+    const overlayHandleSelectors = selectors.filter(
+      (selector) =>
+        selector.includes('.sd-editor-resize-handle') && !selector.includes(':hover') && !selector.includes('::'),
+    );
+
+    expect(overlayContainerSelectors.length).toBeGreaterThan(0);
+    expect(overlayHandleSelectors.length).toBeGreaterThan(0);
+    expect(overlayContainerSelectors.some((selector) => !selector.includes('.super-editor'))).toBe(true);
+    expect(overlayHandleSelectors.some((selector) => !selector.includes('.super-editor'))).toBe(true);
+  });
+
+  it('prosemirror stylesheet should define core selectors that do not require .super-editor ancestry', () => {
+    const cssText = readFileSync(PROSEMIRROR_CSS_PATH, 'utf8');
+    const selectors = extractTopLevelSelectors(cssText);
+
+    const proseMirrorRootSelectors = selectors.filter(targetsProseMirrorRoot);
+    const proseMirrorListSelectors = selectors.filter(
+      (selector) => selector.includes('.ProseMirror ol') || selector.includes('.ProseMirror ul'),
+    );
+    const proseMirrorSelectedNodeSelectors = selectors.filter((selector) =>
+      selector.includes('.ProseMirror-selectednode'),
+    );
+
+    expect(proseMirrorRootSelectors.length).toBeGreaterThan(0);
+    expect(proseMirrorListSelectors.length).toBeGreaterThan(0);
+    expect(proseMirrorSelectedNodeSelectors.length).toBeGreaterThan(0);
+    expect(proseMirrorRootSelectors.some((selector) => !selector.includes('.super-editor'))).toBe(true);
+    expect(proseMirrorListSelectors.some((selector) => !selector.includes('.super-editor'))).toBe(true);
+    expect(proseMirrorSelectedNodeSelectors.some((selector) => !selector.includes('.super-editor'))).toBe(true);
+  });
 });

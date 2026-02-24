@@ -29,17 +29,12 @@ export function resolveDocsDir(mode: StorageMode, docsDir?: string): string | un
   return resolved;
 }
 
-export function getBaselineOutputRoot(
-  mode: StorageMode,
-  kind: 'visual' | 'interactions',
-  baselineLabel: string,
-): string {
+export function getBaselineOutputRoot(mode: StorageMode, baselineLabel: string): string {
   if (mode === 'local') {
-    const prefix = kind === 'visual' ? 'baselines' : 'baselines-interactions';
-    return path.join(prefix, baselineLabel);
+    return path.join('baselines', baselineLabel);
   }
   const tmpRoot = process.env.R2_BASELINES_TMP_DIR ?? path.join(os.tmpdir(), 'superdoc-baselines');
-  return path.join(tmpRoot, kind, baselineLabel);
+  return path.join(tmpRoot, 'visual', baselineLabel);
 }
 
 export function getBaselineLocalRoot(mode: StorageMode, prefix: string): string {

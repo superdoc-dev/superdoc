@@ -4,6 +4,11 @@ on:
   pull_request:
     paths:
       - 'apps/docs/**'
+      - 'packages/document-api/src/contract/**'
+      - 'packages/document-api/scripts/**'
+      - 'scripts/generate-all.mjs'
+      - 'package.json'
+      - 'pnpm-lock.yaml'
   workflow_dispatch:
 
 jobs:
@@ -26,6 +31,9 @@ jobs:
 
       - name: Install Dependencies
         run: pnpm install --frozen-lockfile
+
+      - name: Generate all artifacts
+        run: pnpm run generate:all
 
       - name: Validate Docs
         run: pnpm --filter @superdoc/docs validate

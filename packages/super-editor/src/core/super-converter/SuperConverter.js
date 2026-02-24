@@ -1,9 +1,9 @@
+/* global TextEncoder */
 import * as xmljs from 'xml-js';
 import { v4 as uuidv4 } from 'uuid';
-import crc32 from 'buffer-crc32';
 import { DocxExporter, exportSchemaToJson } from './exporter';
 import { createDocumentJson, addDefaultStylesIfMissing } from './v2/importer/docxImporter.js';
-import { deobfuscateFont, getArrayBufferFromUrl } from './helpers.js';
+import { deobfuscateFont, getArrayBufferFromUrl, computeCrc32Hex } from './helpers.js';
 import { baseNumbering } from './v2/exporter/helpers/base-list.definitions.js';
 import { DEFAULT_CUSTOM_XML, DEFAULT_DOCX_DEFS } from './exporter-docx-defs.js';
 import {
@@ -14,6 +14,7 @@ import {
 import { prepareFootnotesXmlForExport } from './v2/exporter/footnotesExporter.js';
 import { DocxHelpers } from './docx-helpers/index.js';
 import { mergeRelationshipElements } from './relationship-helpers.js';
+import { COMMENT_RELATIONSHIP_TYPES } from './constants.js';
 
 const FONT_FAMILY_FALLBACKS = Object.freeze({
   swiss: 'Arial, sans-serif',
@@ -189,6 +190,9 @@ class SuperConverter {
     this.footnoteProperties = null;
     this.inlineDocumentFonts = [];
     this.commentThreadingProfile = null;
+
+    /** @type {string[]} Warnings emitted during export */
+    this.exportWarnings = [];
 
     // Store custom highlight colors
     this.docHiglightColors = new Set([]);
@@ -758,9 +762,8 @@ class SuperConverter {
    */
   #generateIdentifierHash() {
     const combined = `${this.documentGuid}|${this.getDocumentCreatedTimestamp()}`;
-    const buffer = Buffer.from(combined, 'utf8');
-    const hash = crc32(buffer);
-    return `HASH-${hash.toString('hex').toUpperCase()}`;
+    const data = new TextEncoder().encode(combined);
+    return `HASH-${computeCrc32Hex(data).toUpperCase()}`;
   }
 
   /**
@@ -775,21 +778,21 @@ class SuperConverter {
     }
 
     try {
-      let buffer;
+      let data;
 
-      if (Buffer.isBuffer(this.fileSource)) {
-        buffer = this.fileSource;
+      if (ArrayBuffer.isView(this.fileSource)) {
+        const view = this.fileSource;
+        data = new Uint8Array(view.buffer, view.byteOffset, view.byteLength);
       } else if (this.fileSource instanceof ArrayBuffer) {
-        buffer = Buffer.from(this.fileSource);
+        data = new Uint8Array(this.fileSource);
       } else if (this.fileSource instanceof Blob || this.fileSource instanceof File) {
         const arrayBuffer = await this.fileSource.arrayBuffer();
-        buffer = Buffer.from(arrayBuffer);
+        data = new Uint8Array(arrayBuffer);
       } else {
         return `HASH-${uuidv4().replace(/-/g, '').substring(0, 8).toUpperCase()}`;
       }
 
-      const hash = crc32(buffer);
-      return `HASH-${hash.toString('hex').toUpperCase()}`;
+      return `HASH-${computeCrc32Hex(data).toUpperCase()}`;
     } catch (e) {
       console.warn('[super-converter] Could not generate content hash:', e);
       return `HASH-${uuidv4().replace(/-/g, '').substring(0, 8).toUpperCase()}`;
@@ -1099,6 +1102,9 @@ class SuperConverter {
     exportJsonOnly = false,
     fieldsHighlightColor,
   ) {
+    // Reset export warnings for this export cycle
+    this.exportWarnings = [];
+
     // Filter out synthetic tracked change comments - they shouldn't be exported to comments.xml
     const exportableComments = comments.filter((c) => !c.trackedChange);
     const commentsWithParaIds = exportableComments.map((c) => prepareCommentParaIds(c));
@@ -1145,25 +1151,41 @@ class SuperConverter {
       editor,
     );
 
-    // Update content types and comments files as needed
-    let updatedXml = { ...this.convertedXml };
-    let commentsRels = [];
-    if (comments.length) {
-      const { documentXml, relationships } = this.#prepareCommentsXmlFilesForExport({
-        defs: params.exportedCommentDefs,
-        exportType: commentsExportType,
-        commentsWithParaIds,
-      });
-      updatedXml = { ...documentXml };
-      commentsRels = relationships;
-    }
+    // Update content types and comments files as needed — always run so cleanup
+    // happens even when all comments have been removed
+    const {
+      documentXml,
+      relationships: commentsRels,
+      removedTargets,
+    } = this.#prepareCommentsXmlFilesForExport({
+      defs: params.exportedCommentDefs,
+      exportType: commentsExportType,
+      commentsWithParaIds,
+    });
+    const updatedXml = { ...documentXml };
 
     this.convertedXml = { ...this.convertedXml, ...updatedXml };
+
+    // Physically remove comment parts that the exporter deleted from documentXml.
+    // The spread merge above only adds/overwrites keys — absent keys survive from
+    // the old this.convertedXml. Without this, Editor.ts sees stale data and
+    // serializes comment files that should have been null-sentinelled.
+    if (removedTargets?.length) {
+      for (const target of removedTargets) {
+        const key = target.startsWith('word/') ? target : `word/${target}`;
+        delete this.convertedXml[key];
+      }
+    }
 
     const headFootRels = this.#exportProcessHeadersFooters({ isFinalDoc });
 
     // Update the rels table
     this.#exportProcessNewRelationships([...params.relationships, ...commentsRels, ...footnotesRels, ...headFootRels]);
+
+    // Prune relationships for comment parts that were removed
+    if (removedTargets?.length) {
+      this.#pruneCommentRelationships(removedTargets);
+    }
 
     // Store SuperDoc version
     SuperConverter.setStoredSuperdocVersion(this.convertedXml);
@@ -1239,7 +1261,12 @@ class SuperConverter {
    * Update comments files and relationships depending on export type
    */
   #prepareCommentsXmlFilesForExport({ defs, exportType, commentsWithParaIds }) {
-    const { documentXml, relationships } = prepareCommentsXmlFilesForExport({
+    const {
+      documentXml,
+      relationships,
+      removedTargets = [],
+      warnings = [],
+    } = prepareCommentsXmlFilesForExport({
       exportType,
       convertedXml: this.convertedXml,
       defs,
@@ -1247,7 +1274,11 @@ class SuperConverter {
       threadingProfile: this.commentThreadingProfile,
     });
 
-    return { documentXml, relationships };
+    if (warnings.length) {
+      this.exportWarnings.push(...warnings);
+    }
+
+    return { documentXml, relationships, removedTargets };
   }
 
   #exportProcessHeadersFooters({ isFinalDoc = false }) {
@@ -1391,6 +1422,37 @@ class SuperConverter {
     const relationships = relsData.elements.find((x) => x.name === 'Relationships');
 
     relationships.elements = mergeRelationshipElements(relationships.elements, rels);
+  }
+
+  /**
+   * Remove relationship entries for comment parts that are no longer being emitted.
+   * Matches by both normalized target AND comment relationship type to avoid
+   * accidentally pruning unrelated relationships.
+   * @param {string[]} removedTargets - bare filenames like 'commentsExtended.xml'
+   */
+  #pruneCommentRelationships(removedTargets) {
+    const relsData = this.convertedXml['word/_rels/document.xml.rels'];
+    const relationships = relsData.elements.find((x) => x.name === 'Relationships');
+    if (!relationships?.elements) return;
+
+    const normalizeTarget = (target) => {
+      if (!target) return '';
+      return target
+        .replace(/^\.\//, '')
+        .replace(/^\//, '')
+        .replace(/^word\//, '');
+    };
+
+    const removedSet = new Set(removedTargets.map(normalizeTarget));
+
+    relationships.elements = relationships.elements.filter((rel) => {
+      const type = rel.attributes?.Type;
+      const target = normalizeTarget(rel.attributes?.Target);
+      if (COMMENT_RELATIONSHIP_TYPES.has(type) && removedSet.has(target)) {
+        return false;
+      }
+      return true;
+    });
   }
 
   async #exportProcessMediaFiles(media = {}) {

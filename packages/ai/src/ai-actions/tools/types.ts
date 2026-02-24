@@ -50,7 +50,7 @@ export interface AIToolActions {
   literalReplace: (
     findText: string,
     replaceText: string,
-    options?: { caseSensitive?: boolean; trackChanges?: boolean },
+    options?: { caseSensitive?: boolean; trackChanges?: boolean; contentType?: 'html' | 'markdown' | 'text' },
   ) => Promise<Result>;
   insertTrackedChanges: (instruction: string) => Promise<Result>;
   insertComments: (instruction: string) => Promise<Result>;
@@ -60,7 +60,10 @@ export interface AIToolActions {
     options?: { caseSensitive?: boolean },
   ) => Promise<Result>;
   summarize: (instruction: string) => Promise<Result>;
-  insertContent: (instruction: string, options?: { position?: 'before' | 'after' | 'replace' }) => Promise<Result>;
+  insertContent: (
+    instruction: string,
+    options?: { position?: 'before' | 'after' | 'replace'; contentType?: 'html' | 'markdown' | 'text' },
+  ) => Promise<Result>;
 }
 
 /**

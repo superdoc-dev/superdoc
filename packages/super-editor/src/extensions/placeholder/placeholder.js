@@ -29,6 +29,7 @@ export const Placeholder = Extension.create({
       if (plainText !== '') return DecorationSet.empty;
 
       const { $from } = state.selection;
+      if ($from.depth === 0) return DecorationSet.empty;
       const decoration = Decoration.node($from.before(), $from.after(), {
         'data-placeholder': this.options.placeholder,
         class: 'sd-editor-placeholder',

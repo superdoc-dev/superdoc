@@ -2,9 +2,10 @@ import '../style.css';
 
 import { EventEmitter } from 'eventemitter3';
 import { v4 as uuidv4 } from 'uuid';
+import { markRaw } from 'vue';
 import { HocuspocusProviderWebsocket } from '@hocuspocus/provider';
 
-import { DOCX, PDF, HTML, COMMUNITY_LICENSE_KEY } from '@superdoc/common';
+import { DOCX, PDF, HTML } from '@superdoc/common';
 import { SuperToolbar, createZip } from '@superdoc/super-editor';
 import { SuperComments } from '../components/CommentsLayer/commentsList/super-comments-list.js';
 import { createSuperdocVueApp } from './create-app.js';
@@ -59,6 +60,7 @@ export class SuperDoc extends EventEmitter {
   /** @type {import('@hocuspocus/provider').HocuspocusProvider | undefined} */
   provider;
 
+  /** @type {Whiteboard | null} */
   whiteboard;
 
   /** @type {Config} */
@@ -79,11 +81,11 @@ export class SuperDoc extends EventEmitter {
     modules: {}, // Optional: Modules to load. Use modules.ai.{your_key} to pass in your key
     permissionResolver: null, // Optional: Override for permission checks
 
-    // License key for organization identification (defaults to community key)
-    licenseKey: COMMUNITY_LICENSE_KEY,
+    // License key (resolved downstream; undefined means "not explicitly set")
+    licenseKey: undefined,
 
     // Telemetry settings
-    telemetry: { enabled: false }, // Enable to track document opens
+    telemetry: { enabled: true },
 
     title: 'SuperDoc',
     conversations: [],
@@ -101,6 +103,8 @@ export class SuperDoc extends EventEmitter {
     uiDisplayFallbackFont: 'Arial, Helvetica, sans-serif',
 
     isDev: false,
+
+    disablePiniaDevtools: false,
 
     // Events
     onEditorBeforeCreate: () => null,
@@ -289,7 +293,7 @@ export class SuperDoc extends EventEmitter {
       superdoc: this,
       enabled,
     });
-    this.emit('whiteboard:ready', { whiteboard: this.whiteboard });
+    this.emit('whiteboard:init', { whiteboard: this.whiteboard });
   }
 
   /**
@@ -400,7 +404,9 @@ export class SuperDoc extends EventEmitter {
   }
 
   #initVueApp() {
-    const { app, pinia, superdocStore, commentsStore, highContrastModeStore } = createSuperdocVueApp();
+    const { app, pinia, superdocStore, commentsStore, highContrastModeStore } = createSuperdocVueApp({
+      disablePiniaDevtools: Boolean(this.config.disablePiniaDevtools),
+    });
     this.app = app;
     this.pinia = pinia;
     this.app.config.globalProperties.$config = this.config;
@@ -430,7 +436,7 @@ export class SuperDoc extends EventEmitter {
     this.on('comments-update', this.config.onCommentsUpdate);
     this.on('awareness-update', this.config.onAwarenessUpdate);
     this.on('locked', this.config.onLocked);
-    this.on('pdf-document-ready', this.config.onPdfDocumentReady);
+    this.on('pdf:document-ready', this.config.onPdfDocumentReady);
     this.on('sidebar-toggle', this.config.onSidebarToggle);
     this.on('collaboration-ready', this.config.onCollaborationReady);
     this.on('editor-update', this.config.onEditorUpdate);
@@ -459,8 +465,56 @@ export class SuperDoc extends EventEmitter {
 
     if (externalYdoc && externalProvider) {
       // Use external provider - wire up awareness for SuperDoc events
-      this.ydoc = externalYdoc;
-      this.provider = externalProvider;
+      // Mark Y.js objects as raw to prevent Vue's deep reactive traversal
+      // from hitting circular references inside Y.js internals (causes stack overflow).
+      this.ydoc = markRaw(externalYdoc);
+      this.provider = markRaw(externalProvider);
+
+      // Assign a stable color to the local user so awareness broadcasts it.
+      // Without this, y-prosemirror's cursor plugin mutates user.color to '#ffa500'
+      // (orange) as a default, causing color flickering between that default and
+      // the fallback colors used by RemoteCursorAwareness.
+      // Use a hash of the user identity to pick a deterministic color from the
+      // palette so that different users get different colors.
+      if (!this.config.user.color) {
+        // 24 visually distinct hex colors — large enough palette to minimize
+        // collisions (~4% for two users) while staying within y-prosemirror's
+        // hex-only color format requirement.
+        const defaultPalette = [
+          '#FF6B6B',
+          '#4ECDC4',
+          '#45B7D1',
+          '#FFA07A',
+          '#98D8C8',
+          '#F7DC6F',
+          '#BB8FCE',
+          '#85C1E2',
+          '#F1948A',
+          '#82E0AA',
+          '#F8C471',
+          '#AED6F1',
+          '#D7BDE2',
+          '#A3E4D7',
+          '#F0B27A',
+          '#AEB6BF',
+          '#E74C3C',
+          '#2ECC71',
+          '#3498DB',
+          '#E67E22',
+          '#1ABC9C',
+          '#9B59B6',
+          '#34495E',
+          '#F39C12',
+        ];
+        const palette = this.colors.length > 0 ? this.colors : defaultPalette;
+        const userKey = this.config.user.email || this.config.user.name || '';
+        let hash = 5381;
+        for (let i = 0; i < userKey.length; i++) {
+          hash = ((hash << 5) + hash) ^ userKey.charCodeAt(i);
+        }
+        this.config.user.color = palette[Math.abs(hash) % palette.length];
+      }
+
       setupAwarenessHandler(externalProvider, this, this.config.user);
 
       // If no documents provided, create a default blank document
@@ -501,11 +555,11 @@ export class SuperDoc extends EventEmitter {
     // Optionally, initialize separate superdoc sync - for comments, view, etc.
     if (commentsConfig.useInternalExternalComments && !commentsConfig.suppressInternalExternalComments) {
       const { ydoc: sdYdoc, provider: sdProvider } = initSuperdocYdoc(this);
-      this.ydoc = sdYdoc;
-      this.provider = sdProvider;
+      this.ydoc = markRaw(sdYdoc);
+      this.provider = markRaw(sdProvider);
     } else {
-      this.ydoc = processedDocuments[0].ydoc;
-      this.provider = processedDocuments[0].provider;
+      this.ydoc = markRaw(processedDocuments[0].ydoc);
+      this.provider = markRaw(processedDocuments[0].provider);
     }
 
     // Initialize comments sync, if enabled
@@ -550,7 +604,7 @@ export class SuperDoc extends EventEmitter {
    * @returns {void}
    */
   broadcastPdfDocumentReady() {
-    this.emit('pdf-document-ready');
+    this.emit('pdf:document-ready');
   }
 
   /**
@@ -945,6 +999,45 @@ export class SuperDoc extends EventEmitter {
   }
 
   /**
+   * Get the current zoom level as a percentage (e.g., 100 for 100%)
+   * @returns {number} The current zoom level as a percentage
+   * @example
+   * const zoom = superdoc.getZoom(); // Returns 100, 150, 200, etc.
+   */
+  getZoom() {
+    return this.superdocStore?.activeZoom ?? 100;
+  }
+
+  /**
+   * Set the zoom level for all documents.
+   * Updates the centralized activeZoom state, which propagates to all
+   * presentation editors, PDF viewers, and whiteboard layers via the Vue watcher.
+   * @param {number} percent - The zoom level as a percentage (e.g., 100, 150, 200)
+   * @example
+   * superdoc.setZoom(150); // Set zoom to 150%
+   * superdoc.setZoom(50);  // Set zoom to 50%
+   */
+  setZoom(percent) {
+    if (typeof percent !== 'number' || !Number.isFinite(percent) || percent <= 0) {
+      console.warn('[SuperDoc] setZoom expects a positive number representing percentage');
+      return;
+    }
+
+    // Update store — SuperDoc.vue's activeZoom watcher propagates the zoom
+    // to all PresentationEditor instances via PresentationEditor.setGlobalZoom().
+    if (this.superdocStore) {
+      this.superdocStore.activeZoom = percent;
+    }
+
+    // Update toolbar UI so the dropdown label reflects the new zoom level
+    if (this.toolbar && typeof this.toolbar.setZoom === 'function') {
+      this.toolbar.setZoom(percent);
+    }
+
+    this.emit('zoomChange', { zoom: percent });
+  }
+
+  /**
    * Set the document to locked or unlocked
    * @param {boolean} lock
    */
@@ -1035,7 +1128,7 @@ export class SuperDoc extends EventEmitter {
 
   /**
    * Export editors to DOCX format.
-   * @param {{ commentsType?: string, isFinalDoc?: boolean }} [options]
+   * @param {{ commentsType?: string, isFinalDoc?: boolean, fieldsHighlightColor?: string }} [options]
    * @returns {Promise<Array<Blob>>}
    */
   async exportEditorsToDOCX({ commentsType, isFinalDoc, fieldsHighlightColor } = {}) {
@@ -1147,20 +1240,19 @@ export class SuperDoc extends EventEmitter {
     // Mark as destroyed early to prevent in-flight init from mounting
     this.#destroyed = true;
 
-    this.#cleanupCollaboration();
-
-    if (!this.app) {
-      return;
+    // Unmount the app FIRST so editors are destroyed — this triggers each
+    // extension's onDestroy() which cancels debounced Y.js writes and
+    // unobserves Y.js maps. Only then is it safe to destroy the ydoc/provider.
+    if (this.app) {
+      this.#log('[superdoc] Unmounting app');
+      this.superdocStore.reset();
+      this.app.unmount();
+      this.removeAllListeners();
+      delete this.app.config.globalProperties.$config;
+      delete this.app.config.globalProperties.$superdoc;
     }
 
-    this.#log('[superdoc] Unmounting app');
-
-    this.superdocStore.reset();
-
-    this.app.unmount();
-    this.removeAllListeners();
-    delete this.app.config.globalProperties.$config;
-    delete this.app.config.globalProperties.$superdoc;
+    this.#cleanupCollaboration();
 
     // Remove the internal wrapper element from the user's container
     if (this.#mountWrapper) {

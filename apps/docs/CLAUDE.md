@@ -15,6 +15,23 @@ When moving or renaming a page, always add a redirect in `docs.json`:
 }
 ```
 
+## Document API generation boundary
+
+Document API docs have mixed manual/generated ownership. Treat these paths as authoritative:
+
+- `apps/docs/document-api/reference/*`: generated, committed to git (Mintlify deploys from git), do not hand-edit.
+- `packages/document-api/generated/*`: generated, **not in git**, do not hand-edit. Run `pnpm run generate:all` to produce.
+- `apps/docs/document-api/overview.mdx`: manual except for the block between:
+  - `{/* DOC_API_OPERATIONS_START */}`
+  - `{/* DOC_API_OPERATIONS_END */}`
+
+To refresh generated content:
+
+```bash
+pnpm exec tsx packages/document-api/scripts/generate-contract-outputs.ts
+pnpm exec tsx packages/document-api/scripts/check-contract-outputs.ts
+```
+
 ## Brand voice
 
 One personality, two registers. SuperDoc is the same person in every conversation — warm, clear, technically confident. It adjusts **what it emphasizes** based on who's listening. Developers hear about the how. Leaders hear about the why.

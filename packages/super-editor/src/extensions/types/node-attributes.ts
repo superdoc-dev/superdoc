@@ -484,6 +484,8 @@ export interface ImageAttrs extends ShapeNodeAttributes {
   originalSrc?: string;
   /** @internal Should use cover+clip mode (from empty srcRect with stretch/fillRect) */
   shouldCover?: boolean;
+  /** @internal Clip-path value for srcRect image crops */
+  clipPath?: string;
 }
 
 // ============================================
@@ -1156,6 +1158,8 @@ declare module '../../core/types/NodeAttributesMap.js' {
     // Permissions
     permStart: PermStartAttrs;
     permEnd: PermEndAttrs;
+    permStartBlock: PermStartAttrs;
+    permEndBlock: PermEndAttrs;
 
     // Page elements
     pageReference: PageReferenceAttrs;

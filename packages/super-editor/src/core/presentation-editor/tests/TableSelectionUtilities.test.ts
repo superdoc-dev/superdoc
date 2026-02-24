@@ -191,6 +191,103 @@ describe('TableSelectionUtilities', () => {
       const result = getCellPosFromTableHit(hit, state.doc, blocks);
       expect(result).not.toBe(null);
     });
+
+    it('IT-22: handles rowspan correctly - cellColIndex should be cell array index not grid column', () => {
+      // Create table with vertically merged cells (rowspan)
+      // Row 0: [A1 (rowspan=3)] [B1] [C1]
+      // Row 1:                  [B2] [C2]  <- only 2 cells in array, but grid has 3 columns
+      // Row 2:                  [B3] [C3]
+      const cell = (text: string, rowspan = 1, colspan = 1) =>
+        tableSchema.node('tableCell', { colspan, rowspan }, [
+          tableSchema.node('paragraph', null, [tableSchema.text(text)]),
+        ]);
+      const row = (...cells: ReturnType<typeof cell>[]) => tableSchema.node('tableRow', null, cells);
+
+      const table = tableSchema.node('table', null, [
+        row(cell('A1', 3), cell('B1'), cell('C1')), // First row: 3 cells, A1 spans 3 rows
+        row(cell('B2'), cell('C2')), // Second row: 2 cells (A column occupied by rowspan)
+        row(cell('B3'), cell('C3')), // Third row: 2 cells (A column occupied by rowspan)
+      ]);
+      const doc = tableSchema.node('doc', null, [table]);
+      const state = EditorState.create({ schema: tableSchema, doc });
+
+      const blocks: FlowBlock[] = [{ kind: 'table', id: '0-table', rows: [] }];
+
+      // When clicking on cell C2 (grid column 2, but array index 1 in row 1),
+      // cellColIndex should be 1 (the array index), not 2 (the grid column).
+      // The fix in hitTestTableFragment now correctly returns cell array index.
+      const hit: TableHitResult = {
+        block: { id: '0-table', kind: 'table' } as FlowBlock,
+        cellRowIndex: 1, // Second row
+        cellColIndex: 1, // Cell array index (C2 is at index 1 in row 1's cell array)
+        fragment: {} as TableHitResult['fragment'],
+        pageIndex: 0,
+      };
+
+      const result = getCellPosFromTableHit(hit, state.doc, blocks);
+      // Should successfully find the cell position using array index
+      expect(result).not.toBe(null);
+      expect(typeof result).toBe('number');
+
+      // Verify it's the correct cell (C2) by checking the node at that position
+      // nodeAt() returns the node starting at that position
+      if (result !== null) {
+        const cellNode = state.doc.nodeAt(result);
+        expect(cellNode).not.toBe(null);
+        expect(cellNode!.type.name).toBe('tableCell');
+        // C2 should contain text "C2"
+        expect(cellNode!.textContent).toBe('C2');
+      }
+    });
+
+    it('IT-22: handles selecting last column in row with rowspan from previous row', () => {
+      // This test verifies the specific bug reported in IT-22:
+      // When a table has rowspan, clicking the last column in affected rows
+      // would fail because the grid column index exceeded the cell array bounds.
+      const cell = (text: string, rowspan = 1, colspan = 1) =>
+        tableSchema.node('tableCell', { colspan, rowspan }, [
+          tableSchema.node('paragraph', null, [tableSchema.text(text)]),
+        ]);
+      const row = (...cells: ReturnType<typeof cell>[]) => tableSchema.node('tableRow', null, cells);
+
+      // 5-row table with first column merged
+      const table = tableSchema.node('table', null, [
+        row(cell('A', 5), cell('B1'), cell('C1')),
+        row(cell('B2'), cell('C2')),
+        row(cell('B3'), cell('C3')),
+        row(cell('B4'), cell('C4')),
+        row(cell('B5'), cell('C5')),
+      ]);
+      const doc = tableSchema.node('doc', null, [table]);
+      const state = EditorState.create({ schema: tableSchema, doc });
+
+      const blocks: FlowBlock[] = [{ kind: 'table', id: '0-table', rows: [] }];
+
+      // Click on last column (C5) in last row
+      // Grid column would be 2, but array index is 1 (only 2 cells in row 4)
+      const hit: TableHitResult = {
+        block: { id: '0-table', kind: 'table' } as FlowBlock,
+        cellRowIndex: 4, // Last row (index 4)
+        cellColIndex: 1, // Last cell in array (C5 is at index 1)
+        fragment: {} as TableHitResult['fragment'],
+        pageIndex: 0,
+      };
+
+      const result = getCellPosFromTableHit(hit, state.doc, blocks);
+      // Before the fix, this would return null because it would look for
+      // array index 2 which doesn't exist in a row with only 2 cells
+      expect(result).not.toBe(null);
+      expect(typeof result).toBe('number');
+
+      // Verify it's the correct cell (C5) by checking the node at that position
+      // nodeAt() returns the node starting at that position
+      if (result !== null) {
+        const cellNode = state.doc.nodeAt(result);
+        expect(cellNode).not.toBe(null);
+        expect(cellNode!.type.name).toBe('tableCell');
+        expect(cellNode!.textContent).toBe('C5');
+      }
+    });
   });
 
   describe('shouldUseCellSelection', () => {

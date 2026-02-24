@@ -57,6 +57,17 @@ const {
 } = storeToRefs(superdocStore);
 const { handlePageReady, modules, user, getDocument } = superdocStore;
 
+/*
+NOTE: new PdfViewer does not emit page-loaded. Hrbr fields/annotations
+rely on handlePageReady; revisit when wiring fields for PDF.
+
+From the old code:
+const containerBounds = container.getBoundingClientRect();
+containerBounds.originalWidth = width;
+containerBounds.originalHeight = height;
+emit('page-loaded', documentId, index, containerBounds);
+*/
+
 //prettier-ignore
 const {
   getConfig,
@@ -135,6 +146,7 @@ const superdocStyleVars = computed(() => {
 
 // Refs
 const layers = ref(null);
+const pdfViewerRef = ref(null);
 
 // Comments layer
 const commentsLayer = ref(null);
@@ -279,7 +291,15 @@ const onEditorUpdate = ({ editor }) => {
   proxy.$superdoc.emit('editor-update', { editor });
 };
 
-const onEditorSelectionChange = ({ editor, transaction }) => {
+let selectionUpdateRafId = null;
+const onEditorSelectionChange = ({ editor }) => {
+  // Always cancel any pending RAF first — a queued callback from a previous
+  // call could fire after mode switches and repopulate stale selection state.
+  if (selectionUpdateRafId != null) {
+    cancelAnimationFrame(selectionUpdateRafId);
+    selectionUpdateRafId = null;
+  }
+
   if (skipSelectionUpdate.value) {
     // When comment is added selection will be equal to comment text
     // Should skip calculations to keep text selection for comments correct
@@ -295,6 +315,25 @@ const onEditorSelectionChange = ({ editor, transaction }) => {
     return;
   }
 
+  // Defer selection-related Vue reactive updates to the next animation frame.
+  // Without this, each PM transaction synchronously mutates reactive refs (selectionPosition,
+  // activeSelection, toolsMenuPosition), which triggers Vue's flushJobs microtask to re-evaluate
+  // hundreds of components — blocking the main thread for ~300ms per keystroke.
+  // RAF batches this work with the layout pipeline rerender, keeping typing responsive.
+  // Note: we capture only `editor` (not `transaction`) — by the time RAF fires,
+  // ProseMirror may have processed more keystrokes, making the transaction stale.
+  // processSelectionChange already reads editor.state.selection as the primary source.
+  selectionUpdateRafId = requestAnimationFrame(() => {
+    selectionUpdateRafId = null;
+    if (isViewingMode()) {
+      resetSelection();
+      return;
+    }
+    processSelectionChange(editor);
+  });
+};
+
+const processSelectionChange = (editor, transaction) => {
   const { documentId } = editor.options;
   const txnSelection = transaction?.selection;
   const stateSelection = editor.state?.selection ?? editor.view?.state?.selection;
@@ -475,7 +514,14 @@ const editorOptions = (doc) => {
     annotations: proxy.$superdoc.config.annotations,
     isCommentsEnabled: Boolean(commentsModuleConfig.value),
     isAiEnabled: proxy.$superdoc.config.modules?.ai,
-    slashMenuConfig: proxy.$superdoc.config.modules?.slashMenu,
+    contextMenuConfig: (() => {
+      if (proxy.$superdoc.config.modules?.slashMenu && !proxy.$superdoc.config.modules?.contextMenu) {
+        console.warn('[SuperDoc] modules.slashMenu is deprecated. Use modules.contextMenu instead.');
+      }
+      return proxy.$superdoc.config.modules?.contextMenu ?? proxy.$superdoc.config.modules?.slashMenu;
+    })(),
+    /** @deprecated Use contextMenuConfig instead */
+    slashMenuConfig: proxy.$superdoc.config.modules?.contextMenu ?? proxy.$superdoc.config.modules?.slashMenu,
     comments: {
       highlightColors: commentsModuleConfig.value?.highlightColors,
       highlightOpacity: commentsModuleConfig.value?.highlightOpacity,
@@ -527,6 +573,7 @@ const editorOptions = (doc) => {
           enabled: true,
           endpoint: proxy.$superdoc.config.telemetry?.endpoint,
           metadata: proxy.$superdoc.config.telemetry?.metadata,
+          licenseKey: proxy.$superdoc.config.telemetry?.licenseKey,
         }
       : null,
   };
@@ -676,6 +723,10 @@ onMounted(() => {
 
 onBeforeUnmount(() => {
   document.removeEventListener('mousedown', handleDocumentMouseDown);
+  if (selectionUpdateRafId != null) {
+    cancelAnimationFrame(selectionUpdateRafId);
+    selectionUpdateRafId = null;
+  }
 });
 
 const selectionLayer = ref(null);
@@ -686,10 +737,12 @@ const getSelectionPosition = computed(() => {
     return { x: null, y: null };
   }
 
-  const top = selectionPosition.value.top;
-  const left = selectionPosition.value.left;
-  const right = selectionPosition.value.right;
-  const bottom = selectionPosition.value.bottom;
+  const isPdf = selectionPosition.value.source === 'pdf';
+  const zoom = isPdf ? (activeZoom.value ?? 100) / 100 : 1;
+  const top = selectionPosition.value.top * zoom;
+  const left = selectionPosition.value.left * zoom;
+  const right = selectionPosition.value.right * zoom;
+  const bottom = selectionPosition.value.bottom * zoom;
   const style = {
     zIndex: 500,
     borderRadius: '4px',
@@ -732,7 +785,9 @@ const handleSelectionChange = (selection) => {
   activeSelection.value = selection;
 
   // Place the tools menu at the level of the selection
-  let top = selection.selectionBounds.top;
+  const isPdf = selection.source === 'pdf' || selection.source?.value === 'pdf';
+  const zoom = isPdf ? (activeZoom.value ?? 100) / 100 : 1;
+  const top = selection.selectionBounds.top * zoom;
   toolsMenuPosition.top = top + 'px';
   toolsMenuPosition.right = isMobileView ? '0' : '-25px';
 };
@@ -794,7 +849,7 @@ const getPdfPageNumberFromEvent = (event) => {
   const y = event?.clientY;
   if (typeof x !== 'number' || typeof y !== 'number') return null;
   const elements = document.elementsFromPoint(x, y);
-  const pageEl = elements.find((el) => el?.classList?.contains?.('pdf-page'));
+  const pageEl = elements.find((el) => el?.dataset?.pdfPage != null);
   if (pageEl) {
     const pageNumber = Number(pageEl.dataset?.pageNumber);
     return Number.isFinite(pageNumber) ? pageNumber : null;
@@ -820,7 +875,7 @@ const handleSelectionStart = (e) => {
     const zoom = activeZoom.value / 100;
     const x = (e.clientX - layerBounds.left) / zoom;
     const y = (e.clientY - layerBounds.top) / zoom;
-    updateSelection({ startX: x, startY: y, page: pageNumber });
+    updateSelection({ startX: x, startY: y, page: pageNumber, source: 'pdf' });
     selectionLayer.value.addEventListener('mousemove', handleDragMove);
   });
 };
@@ -849,6 +904,7 @@ const handleDragEnd = (e) => {
     },
     page: pageNumber ?? 1,
     documentId: documents.value[0].id,
+    source: 'pdf',
   });
 
   handleSelectionChange(selection);
@@ -872,12 +928,27 @@ const handlePdfClick = (e) => {
   handleSelectionStart(e);
 };
 
+const handlePdfSelectionRaw = ({ selectionBounds, documentId, page }) => {
+  if (!selectionBounds || !documentId) return;
+  const selection = useSelection({
+    selectionBounds,
+    documentId,
+    page,
+    source: 'pdf',
+  });
+  handleSelectionChange(selection);
+};
+
 watch(
   () => activeZoom.value,
   (zoom) => {
     if (proxy.$superdoc.config.useLayoutEngine !== false) {
       PresentationEditor.setGlobalZoom((zoom ?? 100) / 100);
     }
+
+    const pdfViewer = getPDFViewer();
+    pdfViewer?.updateScale((zoom ?? 100) / 100);
+
     nextTick(() => {
       updateWhiteboardPageSizes();
       updateWhiteboardPageOffsets();
@@ -909,6 +980,10 @@ const {
   documents,
   modules,
 });
+
+const getPDFViewer = () => {
+  return Array.isArray(pdfViewerRef.value) ? pdfViewerRef.value[0] : pdfViewerRef.value;
+};
 </script>
 
 <template>
@@ -997,16 +1072,16 @@ const {
 
           <div class="superdoc__sub-document sub-document" v-for="doc in documents" :key="doc.id">
             <!-- PDF renderer -->
-
             <PdfViewer
               v-if="doc.type === PDF"
-              :document-data="doc"
+              :file="doc.data"
+              :file-id="doc.id"
               :config="pdfConfig"
-              @selection-change="handleSelectionChange"
-              @ready="handleDocumentReady"
-              @page-loaded="handlePageReady"
-              @page-ready="handleWhiteboardPageReady"
+              @selection-raw="handlePdfSelectionRaw"
               @bypass-selection="handlePdfClick"
+              @page-rendered="handleWhiteboardPageReady"
+              @document-ready="({ documentId, viewerContainer }) => handleDocumentReady(documentId, viewerContainer)"
+              ref="pdfViewerRef"
             />
 
             <n-message-provider>

@@ -8,6 +8,22 @@ import { describe, it, expect, beforeEach } from 'vitest';
 import { createDomPainter } from './index.js';
 import type { FlowBlock, Measure, Layout } from '@superdoc/contracts';
 
+const expectCssColor = (actual: string, expectedHex: string): void => {
+  const normalizedActual = actual.replace(/\s+/g, '').toLowerCase();
+  let normalizedHex = expectedHex.toLowerCase();
+  if (!normalizedHex.startsWith('#')) {
+    normalizedHex = `#${normalizedHex}`;
+  }
+  if (normalizedHex.length === 4) {
+    normalizedHex = `#${normalizedHex[1]}${normalizedHex[1]}${normalizedHex[2]}${normalizedHex[2]}${normalizedHex[3]}${normalizedHex[3]}`;
+  }
+  const r = Number.parseInt(normalizedHex.slice(1, 3), 16);
+  const g = Number.parseInt(normalizedHex.slice(3, 5), 16);
+  const b = Number.parseInt(normalizedHex.slice(5, 7), 16);
+  const rgb = `rgb(${r},${g},${b})`;
+  expect([normalizedHex, rgb]).toContain(normalizedActual);
+};
+
 describe('DomPainter text style CSS rendering', () => {
   let container: HTMLDivElement;
 
@@ -303,7 +319,7 @@ describe('DomPainter text style CSS rendering', () => {
       expect(span?.style.textTransform).toBe('uppercase');
       expect(span?.style.fontWeight).toBe('bold');
       expect(span?.style.fontStyle).toBe('italic');
-      expect(span?.style.color).toBe('rgb(255, 0, 0)');
+      expectCssColor(span?.style.color ?? '', '#ff0000');
     });
 
     it('should handle empty text with textTransform', () => {

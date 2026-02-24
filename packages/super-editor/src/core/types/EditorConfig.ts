@@ -298,6 +298,19 @@ export interface EditorOptions {
   /** Markdown content to initialize the editor with */
   markdown?: string;
 
+  /**
+   * Callback invoked with unsupported HTML elements that were dropped during import.
+   * When provided, `console.warn` is NOT emitted automatically.
+   */
+  onUnsupportedContent?: ((items: { tagName: string; outerHTML: string; count: number }[]) => void) | null;
+
+  /**
+   * When true and no `onUnsupportedContent` callback is provided,
+   * emits a `console.warn` with unsupported items dropped during import.
+   * Default: false (silent).
+   */
+  warnOnUnsupportedContent?: boolean;
+
   /** Whether to enable debug mode */
   isDebug?: boolean;
 
@@ -432,5 +445,9 @@ export interface EditorOptions {
     endpoint?: string;
     /** Custom metadata to include with telemetry events (optional) */
     metadata?: Record<string, unknown>;
+    /**
+     * @deprecated Use root-level `licenseKey` instead. If both are provided, root-level has priority.
+     */
+    licenseKey?: string | null;
   } | null;
 }

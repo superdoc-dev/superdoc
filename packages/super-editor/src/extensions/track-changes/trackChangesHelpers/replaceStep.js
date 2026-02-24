@@ -21,6 +21,32 @@ import { findMarkPosition } from './documentHelpers.js';
  * @param {number} options.originalStepIndex Original step index.
  */
 export const replaceStep = ({ state, tr, step, newTr, map, user, date, originalStep, originalStepIndex }) => {
+  // Handle structural deletions with no inline content (e.g., empty paragraph removal,
+  // paragraph joins). When there's no content being inserted and no inline content in
+  // the deletion range, markDeletion has nothing to mark — apply the step directly.
+  //
+  // Edge case: if a paragraph contains only TrackDelete-marked text, hasInlineContent
+  // returns true and the normal tracking flow runs. markDeletion skips already-deleted
+  // nodes, but the join still applies through the replace machinery — the delete is
+  // not swallowed. This is correct: the structural join merges the blocks while
+  // preserving the existing deletion marks on the text content.
+  if (step.from !== step.to && step.slice.content.size === 0) {
+    let hasInlineContent = false;
+    newTr.doc.nodesBetween(step.from, step.to, (node) => {
+      if (node.isInline) {
+        hasInlineContent = true;
+        return false;
+      }
+    });
+
+    if (!hasInlineContent) {
+      if (!newTr.maybeStep(step).failed) {
+        map.appendMap(step.getMap());
+      }
+      return;
+    }
+  }
+
   const trTemp = state.apply(newTr).tr;
 
   // Default: insert replacement after the selected range (Word-like replace behavior).
@@ -28,7 +54,6 @@ export const replaceStep = ({ state, tr, step, newTr, map, user, date, originalS
   // NOTE: Only adjust position for single-step transactions. Multi-step transactions (like input rules)
   // have subsequent steps that depend on original positions, and adjusting breaks their mapping.
   let positionTo = step.to;
-  let positionAdjusted = false;
   const isSingleStep = tr.steps.length === 1;
 
   if (isSingleStep) {
@@ -36,7 +61,6 @@ export const replaceStep = ({ state, tr, step, newTr, map, user, date, originalS
     const deletionSpan = findMarkPosition(trTemp.doc, probePos, TrackDeleteMarkName);
     if (deletionSpan && deletionSpan.to > positionTo) {
       positionTo = deletionSpan.to;
-      positionAdjusted = true;
     }
   }
 
@@ -112,11 +136,12 @@ export const replaceStep = ({ state, tr, step, newTr, map, user, date, originalS
   if (insertedFrom !== insertedTo) {
     meta.insertedMark = insertedMark;
     meta.step = condensedStep;
-    // Store the actual insertion end position for cursor placement (SD-1624).
-    // Only needed when position was adjusted to insert after a deletion span.
-    // For single-step transactions, positionTo is in newTr.doc coordinates after our condensedStep,
-    // so we just add the insertion length to get the cursor position.
-    if (positionAdjusted) {
+    // Store insertion end position when (1) we adjusted the insertion position (e.g. past a
+    // deletion span), or (2) single-step replace of a range — selection mapping is wrong then
+    // so we need an explicit caret position. Skip for multi-step (e.g. input rules) so their
+    // intended selection is preserved.
+    const needInsertedTo = positionTo !== step.to || (isSingleStep && step.from !== step.to);
+    if (needInsertedTo) {
       const insertionLength = insertedTo - insertedFrom;
       meta.insertedTo = positionTo + insertionLength;
     }

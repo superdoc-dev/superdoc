@@ -8,6 +8,7 @@ node_modules
 dist
 dist-ssr
 dist-types
+companion-dist
 *.local
 .env
 .npmrc
@@ -69,4 +70,26 @@ codex.config.json
 perf-baseline-results.json
 .claude
 plans/
-dev/
+
+tests/layout-snapshots/candidate/
+tests/layout-snapshots/reference/
+test-corpus/
+.pnpm-store
+devtools/visual-testing/pnpm-lock.yaml
+
+.bun-cache/
+
+# Python
+__pycache__/
+*.pyc
+*.pyo
+
+# Generated artifacts — run `pnpm run generate:all` to produce
+packages/document-api/generated/
+packages/document-api/.generated-internal/
+apps/cli/generated/
+packages/sdk/langs/node/src/generated/
+packages/sdk/langs/python/superdoc/generated/
+packages/sdk/tools/*.json
+# Note: apps/docs/document-api/reference/ stays committed because Mintlify
+# deploys directly from git with no pre-build hook support.

@@ -1,0 +1,105 @@
+---
+title: mutations.preview
+sidebarTitle: mutations.preview
+description: Generated reference for mutations.preview
+---
+
+{/* GENERATED FILE: DO NOT EDIT. Regenerate via `pnpm run docapi:sync`. */}
+
+> Alpha: Document API is currently alpha and subject to breaking changes.
+
+## Summary
+
+- Operation ID: `mutations.preview`
+- API member path: `editor.doc.mutations.preview(...)`
+- Mutates document: `no`
+- Idempotency: `idempotent`
+- Supports tracked mode: `no`
+- Supports dry run: `no`
+- Deterministic target resolution: `yes`
+
+## Pre-apply throws
+
+- `REVISION_MISMATCH`
+- `MATCH_NOT_FOUND`
+- `AMBIGUOUS_MATCH`
+- `STYLE_CONFLICT`
+- `PRECONDITION_FAILED`
+- `INVALID_INPUT`
+- `CROSS_BLOCK_MATCH`
+- `PLAN_CONFLICT_OVERLAP`
+- `INVALID_STEP_COMBINATION`
+- `CAPABILITY_UNAVAILABLE`
+
+## Non-applied failure codes
+
+- None
+
+## Input schema
+
+```json
+{
+  "additionalProperties": false,
+  "properties": {
+    "atomic": {
+      "const": true
+    },
+    "changeMode": {
+      "enum": [
+        "direct",
+        "tracked"
+      ]
+    },
+    "expectedRevision": {
+      "type": "string"
+    },
+    "steps": {
+      "items": {
+        "type": "object"
+      },
+      "type": "array"
+    }
+  },
+  "required": [
+    "expectedRevision",
+    "atomic",
+    "changeMode",
+    "steps"
+  ],
+  "type": "object"
+}
+```
+
+## Output schema
+
+```json
+{
+  "additionalProperties": false,
+  "properties": {
+    "evaluatedRevision": {
+      "type": "string"
+    },
+    "failures": {
+      "items": {
+        "type": "object"
+      },
+      "type": "array"
+    },
+    "steps": {
+      "items": {
+        "type": "object"
+      },
+      "type": "array"
+    },
+    "valid": {
+      "type": "boolean"
+    }
+  },
+  "required": [
+    "evaluatedRevision",
+    "steps",
+    "valid"
+  ],
+  "type": "object"
+}
+```

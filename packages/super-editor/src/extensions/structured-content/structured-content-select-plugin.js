@@ -1,4 +1,4 @@
-import { Plugin, TextSelection  } from 'prosemirror-state';
+import { Plugin, TextSelection } from 'prosemirror-state';
 
 /**
  * Select-all-on-click plugin for inline StructuredContent nodes.

@@ -60,6 +60,7 @@ function extractVersion(args: string[]): string | undefined {
     '--filter',
     '--match',
     '--exclude',
+    '--doc',
     '--parallel',
     '--output',
     '--browser',

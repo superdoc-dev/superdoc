@@ -48,6 +48,19 @@ describe('needsImageRegistration', () => {
     const node = createImageNode({ src: 'data:image/png;base64,AAA' });
     expect(needsImageRegistration(node)).toBe(true);
   });
+
+  it('skips relative paths that the browser can resolve directly', () => {
+    expect(needsImageRegistration(createImageNode({ src: '/images/photo.png' }))).toBe(false);
+    expect(needsImageRegistration(createImageNode({ src: '/public/images/extensions/image-landscape.png' }))).toBe(
+      false,
+    );
+    expect(needsImageRegistration(createImageNode({ src: 'images/photo.png' }))).toBe(false);
+  });
+
+  it('requires registration for http URLs', () => {
+    expect(needsImageRegistration(createImageNode({ src: 'https://example.com/photo.png' }))).toBe(true);
+    expect(needsImageRegistration(createImageNode({ src: 'http://example.com/photo.png' }))).toBe(true);
+  });
 });
 
 describe('handleNodePath', () => {

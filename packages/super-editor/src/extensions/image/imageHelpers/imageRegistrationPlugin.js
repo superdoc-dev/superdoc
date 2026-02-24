@@ -30,6 +30,11 @@ export const needsImageRegistration = (node) => {
   // Data URI with rId means it was converted (e.g., EMF→SVG) but already has export metadata
   if (src.startsWith('data:') && node.attrs?.rId) return false;
 
+  // Relative or absolute path (e.g., /images/photo.png) — the browser resolves these directly
+  if (!src.startsWith('http') && !src.startsWith('data:') && !src.startsWith('blob:')) {
+    return false;
+  }
+
   return true;
 };
 

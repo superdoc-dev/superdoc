@@ -5785,10 +5785,10 @@ describe('URL sanitization security', () => {
     expect(sanitizeUrl('#top')).toBe('#top');
   });
 
-  it('blocks relative URLs', () => {
-    expect(sanitizeUrl('/path/to/page')).toBeNull();
-    expect(sanitizeUrl('./relative/path')).toBeNull();
-    expect(sanitizeUrl('../parent/path')).toBeNull();
+  it('resolves relative URLs against page origin', () => {
+    expect(sanitizeUrl('/path/to/page')).toBe(`${window.location.origin}/path/to/page`);
+    expect(sanitizeUrl('./relative/path')).toBe(`${window.location.origin}/relative/path`);
+    expect(sanitizeUrl('../parent/path')).toBe(`${window.location.origin}/parent/path`);
   });
 
   it('handles empty and whitespace-only URLs', () => {

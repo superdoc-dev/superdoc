@@ -90,6 +90,15 @@ export const DEFAULT_TOOLTIP_MAX_LENGTH = 500;
 const ANCHOR_NAME_PATTERN = /^[A-Za-z0-9._-]+$/;
 
 /**
+ * Control characters and whitespace tricks that can smuggle payloads
+ * past naive string checks (e.g. tab, newline, null byte, zero-width chars).
+ *
+ * @constant {RegExp}
+ * @private
+ */
+const CONTROL_CHAR_PATTERN = /[\x00-\x1f\x7f\u200b-\u200f\u2028\u2029\ufeff]/;
+
+/**
  * Normalize protocol values into a lowercase Set for case-insensitive matching.
  * Filters out non-string values and empty/whitespace-only strings.
  *
@@ -366,6 +375,52 @@ function isBlockedByRedirectList(normalizedHref, parsed, blocklist) {
 }
 
 /**
+ * Validate and resolve a relative or absolute path for safe use as an element src/href.
+ *
+ * SECURITY MODEL:
+ * 1. Reject control characters / whitespace-trick inputs.
+ * 2. Resolve via `new URL(raw, origin)` — normalises `..`, `//`, encoded sequences.
+ * 3. Enforce same-origin — the resolved URL must share the base origin.
+ *
+ * @param {string} pathString - The trimmed relative/absolute path to validate.
+ * @param {{hosts: Set<string>, urls: Set<string>}} blocklist - Normalized redirect blocklist.
+ * @returns {{href: string, protocol: null, isExternal: false} | null}
+ * @private
+ */
+function sanitizeRelativePath(pathString, blocklist) {
+  // 1. Reject control chars (null byte injection, newline smuggling, etc.)
+  if (CONTROL_CHAR_PATTERN.test(pathString)) {
+    return null;
+  }
+
+  // Determine base origin
+  const origin = typeof window !== 'undefined' ? window.location.origin : null;
+  if (!origin) {
+    return null;
+  }
+
+  // 2. Resolve against the origin (normalises .., //, encoded sequences)
+  let resolved;
+  try {
+    resolved = new URL(pathString, origin);
+  } catch {
+    return null;
+  }
+
+  // 3. Same-origin gate — prevents open-redirect style attacks
+  if (resolved.origin !== new URL(origin).origin) {
+    return null;
+  }
+
+  // 4. Apply redirect blocklist to resolved same-origin URL
+  if (isBlockedByRedirectList(resolved.href, resolved, blocklist)) {
+    return null;
+  }
+
+  return { href: resolved.href, protocol: null, isExternal: false };
+}
+
+/**
  * Sanitize and validate a hyperlink URL for safe use in HTML href attributes.
  *
  * This is the primary security boundary for user-provided URLs in the application.
@@ -379,7 +434,7 @@ function isBlockedByRedirectList(normalizedHref, parsed, blocklist) {
  * 4. Anchor Injection: Validates anchor names match safe pattern (alphanumeric, dots, hyphens, underscores)
  * 5. Length Limits: Prevents resource exhaustion from excessively long URLs
  * 6. Blocklist Enforcement: Rejects URLs matching hostname or prefix blocklists
- * 7. Format Validation: Rejects relative paths, protocol-relative URLs, bare hostnames
+ * 7. Relative Path Safety: Resolves relative paths against page origin with same-origin enforcement
  *
  * IMPORTANT BEHAVIORS:
  * - Returns null for ANY validation failure (fail-closed security model)
@@ -426,9 +481,9 @@ function isBlockedByRedirectList(normalizedHref, parsed, blocklist) {
  * // Returns: null
  *
  * @example
- * // Relative path blocked
+ * // Relative path (resolved against window.location.origin)
  * sanitizeHref('/docs/page')
- * // Returns: null
+ * // Returns: { href: 'https://localhost:3000/docs/page', protocol: null, isExternal: false }
  *
  * @example
  * // Custom blocklist
@@ -458,9 +513,17 @@ export function sanitizeHref(raw, config = {}) {
     return anchorResult;
   }
 
-  // Reject relative paths, protocol-relative URLs, and bare hostnames
-  if (trimmed.startsWith('/') || trimmed.startsWith('.') || trimmed.startsWith('//') || /^www\./i.test(trimmed)) {
+  // Protocol-relative URLs and bare hostnames are not allowed
+  if (trimmed.startsWith('//') || /^www\./i.test(trimmed)) {
     return null;
+  }
+
+  // Normalize redirect blocklist once and enforce across all URL forms
+  const blocklist = normalizeBlocklist(config.redirectBlocklist);
+
+  // Relative paths and protocol-relative URLs
+  if (trimmed.startsWith('/') || trimmed.startsWith('.')) {
+    return sanitizeRelativePath(trimmed, blocklist);
   }
 
   // Extract and validate protocol
@@ -526,7 +589,6 @@ export function sanitizeHref(raw, config = {}) {
   const normalizedHref = trimmed;
 
   // Check redirect blocklist
-  const blocklist = normalizeBlocklist(config.redirectBlocklist);
   if (isBlockedByRedirectList(normalizedHref, parsed, blocklist)) {
     return null;
   }

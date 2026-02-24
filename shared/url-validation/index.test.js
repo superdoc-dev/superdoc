@@ -11,7 +11,7 @@ describe('url-validation', () => {
       expect(result?.isExternal).toBe(true);
     });
 
-    it('rejects relative paths and bare hostnames', () => {
+    it('returns null for relative paths when window is unavailable (Node.js)', () => {
       expect(sanitizeHref('/docs/page')).toBeNull();
       expect(sanitizeHref('www.example.com')).toBeNull();
       expect(sanitizeHref('./foo')).toBeNull();
@@ -104,6 +104,65 @@ describe('url-validation', () => {
     it('applies redirect blocklist by hostname', () => {
       expect(
         sanitizeHref('https://blocked.example.com/path', { redirectBlocklist: ['blocked.example.com'] }),
+      ).toBeNull();
+    });
+  });
+
+  describe('Relative path sanitization (browser context)', () => {
+    const origin = 'https://localhost:3000';
+
+    beforeEach(() => {
+      globalThis.window = { location: { origin } };
+    });
+
+    afterEach(() => {
+      delete globalThis.window;
+    });
+
+    it('resolves absolute paths against page origin', () => {
+      const result = sanitizeHref('/docs/page');
+      expect(result).toBeTruthy();
+      expect(result?.href).toBe(`${origin}/docs/page`);
+      expect(result?.protocol).toBeNull();
+      expect(result?.isExternal).toBe(false);
+    });
+
+    it('resolves dot-relative paths', () => {
+      const result = sanitizeHref('./images/chart.jpg');
+      expect(result).toBeTruthy();
+      expect(result?.href).toContain('chart.jpg');
+    });
+
+    it('normalises path traversal', () => {
+      const result = sanitizeHref('/a/../b/page');
+      expect(result).toBeTruthy();
+      expect(result?.href).toBe(`${origin}/b/page`);
+    });
+
+    it('rejects control characters', () => {
+      expect(sanitizeHref('/images/photo\x00.png')).toBeNull();
+      expect(sanitizeHref('/images/photo\n.png')).toBeNull();
+      expect(sanitizeHref('/images/photo\t.png')).toBeNull();
+      expect(sanitizeHref('/images/\u200bphoto.png')).toBeNull();
+    });
+
+    it('rejects paths that escape to a different origin', () => {
+      expect(sanitizeHref('//evil.com/image.png')).toBeNull();
+    });
+
+    it('applies redirect blocklist by hostname for relative paths', () => {
+      expect(
+        sanitizeHref('/docs/page', {
+          redirectBlocklist: ['localhost'],
+        }),
+      ).toBeNull();
+    });
+
+    it('applies redirect blocklist by URL prefix for relative paths', () => {
+      expect(
+        sanitizeHref('/docs/page', {
+          redirectBlocklist: ['https://localhost:3000/docs'],
+        }),
       ).toBeNull();
     });
   });

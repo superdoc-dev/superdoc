@@ -29,11 +29,27 @@ export interface OperationRuntimeCapability {
 
 export type OperationCapabilities = Record<OperationId, OperationRuntimeCapability>;
 
+/** Runtime capabilities exposed by the plan engine (mutations.apply / mutations.preview). */
+export interface PlanEngineCapabilities {
+  /** Step op codes the engine can execute (e.g., 'text.rewrite', 'style.apply'). */
+  supportedStepOps: readonly string[];
+  /** Non-uniform style resolution strategies available for `onNonUniform`. */
+  supportedNonUniformStrategies: readonly string[];
+  /** Mark names that `setMarks` can override (e.g., 'bold', 'italic'). */
+  supportedSetMarks: readonly string[];
+  /** Regex safety limits enforced by the selector engine. */
+  regex: {
+    maxPatternLength: number;
+    maxExecutionMs?: number;
+  };
+}
+
 /**
  * Complete runtime capability snapshot for a Document API editor instance.
  *
  * `global` contains namespace-level flags (track changes, comments, lists, dry-run).
  * `operations` contains per-operation availability details keyed by {@link OperationId}.
+ * `planEngine` describes plan engine capabilities (step ops, style strategies, limits).
  */
 export interface DocumentApiCapabilities {
   global: {
@@ -43,6 +59,7 @@ export interface DocumentApiCapabilities {
     dryRun: CapabilityFlag;
   };
   operations: OperationCapabilities;
+  planEngine: PlanEngineCapabilities;
 }
 
 /** Engine-specific adapter that resolves runtime capabilities for the current editor instance. */

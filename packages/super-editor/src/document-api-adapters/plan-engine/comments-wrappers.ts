@@ -1,4 +1,13 @@
-import type { Editor } from '../core/Editor.js';
+/**
+ * Comments convenience wrappers — bridge comments operations to the plan
+ * engine's revision management and execution path.
+ *
+ * Read operations (list, get, goTo) are pure queries or non-mutating navigation.
+ * Mutating operations (add, edit, reply, move, resolve, remove, setInternal, setActive)
+ * delegate to editor commands with plan-engine revision tracking.
+ */
+
+import type { Editor } from '../../core/Editor.js';
 import type {
   AddCommentInput,
   CommentInfo,
@@ -13,15 +22,17 @@ import type {
   RemoveCommentInput,
   ReplyToCommentInput,
   ResolveCommentInput,
+  RevisionGuardOptions,
   SetCommentActiveInput,
   SetCommentInternalInput,
 } from '@superdoc/document-api';
 import { TextSelection } from 'prosemirror-state';
 import { v4 as uuidv4 } from 'uuid';
-import { DocumentApiAdapterError } from './errors.js';
-import { requireEditorCommand } from './helpers/mutation-helpers.js';
-import { clearIndexCache } from './helpers/index-cache.js';
-import { resolveTextTarget } from './helpers/adapter-utils.js';
+import { DocumentApiAdapterError } from '../errors.js';
+import { requireEditorCommand } from '../helpers/mutation-helpers.js';
+import { clearIndexCache } from '../helpers/index-cache.js';
+import { resolveTextTarget } from '../helpers/adapter-utils.js';
+import { executeDomainCommand } from './plan-wrappers.js';
 import {
   buildCommentJsonFromText,
   extractCommentText,
@@ -31,9 +42,13 @@ import {
   removeCommentEntityTree,
   toCommentInfo,
   upsertCommentEntity,
-} from './helpers/comment-entity-store.js';
-import { listCommentAnchors, resolveCommentAnchorsById } from './helpers/comment-target-resolver.js';
-import { toNonEmptyString } from './helpers/value-utils.js';
+} from '../helpers/comment-entity-store.js';
+import { listCommentAnchors, resolveCommentAnchorsById } from '../helpers/comment-target-resolver.js';
+import { toNonEmptyString } from '../helpers/value-utils.js';
+
+// ---------------------------------------------------------------------------
+// Internal helpers
+// ---------------------------------------------------------------------------
 
 type EditorUserIdentity = {
   name?: string;
@@ -62,16 +77,6 @@ function isSameTarget(
   return left.blockId === right.blockId && left.range.start === right.range.start && left.range.end === right.range.end;
 }
 
-/**
- * Attempts to list comment anchors, returning an empty array on failure.
- *
- * listCommentAnchors walks the ProseMirror document tree and can throw when
- * the document is in a transient or inconsistent state (e.g. mid-transaction,
- * partially-loaded). Since this is only used by read-path aggregation
- * (buildCommentInfos), returning an empty array is a safe degradation —
- * callers will simply see fewer anchors rather than crashing the entire
- * list/get flow.
- */
 function listCommentAnchorsSafe(editor: Editor): ReturnType<typeof listCommentAnchors> {
   try {
     return listCommentAnchors(editor);
@@ -149,17 +154,6 @@ function resolveCommentIdentity(
   };
 }
 
-/**
- * Merges document anchor data into a partially-built CommentInfo map.
- *
- * Grouping by anchor.commentId is safe because prepareCommentsForImport always
- * sets the canonical commentId on marks (comments-helpers.js:650) and rewrites
- * w:id on resolved range nodes (comments-helpers.js:621,639).
- * resolveCommentIdFromAttrs returns canonical commentId first, so
- * anchor.commentId matches the entity store key. If a non-import path ever
- * creates marks without a canonical commentId attr, this grouping would need
- * alias-merging by importedId.
- */
 function mergeAnchorData(infosById: Map<string, CommentInfo>, anchors: ReturnType<typeof listCommentAnchors>): void {
   const grouped = new Map<string, typeof anchors>();
   for (const anchor of anchors) {
@@ -228,14 +222,11 @@ function buildCommentInfos(editor: Editor): CommentInfo[] {
   return infos;
 }
 
-/**
- * Adds a comment to the document at the specified text range.
- *
- * @param editor - The editor instance.
- * @param input - The comment target and text.
- * @returns A receipt indicating success and the created entity address.
- */
-function addCommentHandler(editor: Editor, input: AddCommentInput): Receipt {
+// ---------------------------------------------------------------------------
+// Mutation handlers
+// ---------------------------------------------------------------------------
+
+function addCommentHandler(editor: Editor, input: AddCommentInput, options?: RevisionGuardOptions): Receipt {
   requireEditorCommand(editor.commands?.addComment, 'comments.add (addComment)');
 
   if (input.target.range.start === input.target.range.end) {
@@ -264,8 +255,6 @@ function addCommentHandler(editor: Editor, input: AddCommentInput): Receipt {
     };
   }
 
-  const commentId = uuidv4();
-
   if (!applyTextSelection(editor, resolved.from, resolved.to)) {
     return {
       success: false,
@@ -277,53 +266,49 @@ function addCommentHandler(editor: Editor, input: AddCommentInput): Receipt {
     };
   }
 
-  // Re-read after selection so the command closure captures the updated selection snapshot.
-  const addComment = requireEditorCommand(editor.commands?.addComment, 'comments.add (addComment)');
+  const commentId = uuidv4();
 
-  const didInsert =
-    addComment({
-      content: input.text,
-      isInternal: false,
-      commentId,
-    }) === true;
+  const receipt = executeDomainCommand(
+    editor,
+    () => {
+      const addComment = requireEditorCommand(editor.commands?.addComment, 'comments.add (addComment)');
+      const didInsert = addComment({ content: input.text, isInternal: false, commentId }) === true;
+      if (didInsert) {
+        clearIndexCache(editor);
+        const store = getCommentEntityStore(editor);
+        const now = Date.now();
+        const user = (editor.options?.user ?? {}) as EditorUserIdentity;
+        upsertCommentEntity(store, commentId, {
+          commentId,
+          commentText: input.text,
+          commentJSON: buildCommentJsonFromText(input.text),
+          parentCommentId: undefined,
+          createdTime: now,
+          creatorName: user.name,
+          creatorEmail: user.email,
+          creatorImage: user.image,
+          isDone: false,
+          isInternal: false,
+          fileId: editor.options?.documentId,
+          documentId: editor.options?.documentId,
+        });
+      }
+      return didInsert;
+    },
+    { expectedRevision: options?.expectedRevision },
+  );
 
-  if (!didInsert) {
+  if (receipt.steps[0]?.effect !== 'changed') {
     return {
       success: false,
-      failure: {
-        code: 'NO_OP',
-        message: 'Comment insertion produced no change.',
-      },
+      failure: { code: 'NO_OP', message: 'Comment insertion produced no change.' },
     };
   }
 
-  clearIndexCache(editor);
-
-  const store = getCommentEntityStore(editor);
-  const now = Date.now();
-  const user = (editor.options?.user ?? {}) as EditorUserIdentity;
-  upsertCommentEntity(store, commentId, {
-    commentId,
-    commentText: input.text,
-    commentJSON: buildCommentJsonFromText(input.text),
-    parentCommentId: undefined,
-    createdTime: now,
-    creatorName: user.name,
-    creatorEmail: user.email,
-    creatorImage: user.image,
-    isDone: false,
-    isInternal: false,
-    fileId: editor.options?.documentId,
-    documentId: editor.options?.documentId,
-  });
-
-  return {
-    success: true,
-    inserted: [toCommentAddress(commentId)],
-  };
+  return { success: true, inserted: [toCommentAddress(commentId)] };
 }
 
-function editCommentHandler(editor: Editor, input: EditCommentInput): Receipt {
+function editCommentHandler(editor: Editor, input: EditCommentInput, options?: RevisionGuardOptions): Receipt {
   const editComment = requireEditorCommand(editor.commands?.editComment, 'comments.edit (editComment)');
 
   const store = getCommentEntityStore(editor);
@@ -333,41 +318,41 @@ function editCommentHandler(editor: Editor, input: EditCommentInput): Receipt {
   if (existingText === input.text) {
     return {
       success: false,
-      failure: {
-        code: 'NO_OP',
-        message: 'Comment edit produced no change.',
-      },
+      failure: { code: 'NO_OP', message: 'Comment edit produced no change.' },
     };
   }
 
-  const didEdit = editComment({
-    commentId: identity.commentId,
-    importedId: identity.importedId,
-    content: input.text,
-  });
-  if (!didEdit) {
+  const receipt = executeDomainCommand(
+    editor,
+    () => {
+      const didEdit = editComment({
+        commentId: identity.commentId,
+        importedId: identity.importedId,
+        content: input.text,
+      });
+      if (didEdit) {
+        upsertCommentEntity(store, identity.commentId, {
+          commentText: input.text,
+          commentJSON: buildCommentJsonFromText(input.text),
+          importedId: identity.importedId,
+        });
+      }
+      return Boolean(didEdit);
+    },
+    { expectedRevision: options?.expectedRevision },
+  );
+
+  if (receipt.steps[0]?.effect !== 'changed') {
     return {
       success: false,
-      failure: {
-        code: 'NO_OP',
-        message: 'Comment edit produced no change.',
-      },
+      failure: { code: 'NO_OP', message: 'Comment edit produced no change.' },
     };
   }
 
-  upsertCommentEntity(store, identity.commentId, {
-    commentText: input.text,
-    commentJSON: buildCommentJsonFromText(input.text),
-    importedId: identity.importedId,
-  });
-
-  return {
-    success: true,
-    updated: [toCommentAddress(identity.commentId)],
-  };
+  return { success: true, updated: [toCommentAddress(identity.commentId)] };
 }
 
-function replyToCommentHandler(editor: Editor, input: ReplyToCommentInput): Receipt {
+function replyToCommentHandler(editor: Editor, input: ReplyToCommentInput, options?: RevisionGuardOptions): Receipt {
   const addCommentReply = requireEditorCommand(editor.commands?.addCommentReply, 'comments.reply (addCommentReply)');
 
   if (!input.parentCommentId) {
@@ -382,55 +367,56 @@ function replyToCommentHandler(editor: Editor, input: ReplyToCommentInput): Rece
 
   const parentIdentity = resolveCommentIdentity(editor, input.parentCommentId);
   const replyId = uuidv4();
-  const didReply = addCommentReply({
-    parentId: parentIdentity.commentId,
-    content: input.text,
-    commentId: replyId,
-  });
-  if (!didReply) {
+
+  const receipt = executeDomainCommand(
+    editor,
+    () => {
+      const didReply = addCommentReply({
+        parentId: parentIdentity.commentId,
+        content: input.text,
+        commentId: replyId,
+      });
+      if (didReply) {
+        const now = Date.now();
+        const user = (editor.options?.user ?? {}) as EditorUserIdentity;
+        const store = getCommentEntityStore(editor);
+        upsertCommentEntity(store, replyId, {
+          commentId: replyId,
+          parentCommentId: parentIdentity.commentId,
+          commentText: input.text,
+          commentJSON: buildCommentJsonFromText(input.text),
+          createdTime: now,
+          creatorName: user.name,
+          creatorEmail: user.email,
+          creatorImage: user.image,
+          isDone: false,
+          isInternal: false,
+          fileId: editor.options?.documentId,
+          documentId: editor.options?.documentId,
+        });
+      }
+      return Boolean(didReply);
+    },
+    { expectedRevision: options?.expectedRevision },
+  );
+
+  if (receipt.steps[0]?.effect !== 'changed') {
     return {
       success: false,
-      failure: {
-        code: 'INVALID_TARGET',
-        message: 'Comment reply could not be applied.',
-      },
+      failure: { code: 'INVALID_TARGET', message: 'Comment reply could not be applied.' },
     };
   }
 
-  const now = Date.now();
-  const user = (editor.options?.user ?? {}) as EditorUserIdentity;
-  const store = getCommentEntityStore(editor);
-  upsertCommentEntity(store, replyId, {
-    commentId: replyId,
-    parentCommentId: parentIdentity.commentId,
-    commentText: input.text,
-    commentJSON: buildCommentJsonFromText(input.text),
-    createdTime: now,
-    creatorName: user.name,
-    creatorEmail: user.email,
-    creatorImage: user.image,
-    isDone: false,
-    isInternal: false,
-    fileId: editor.options?.documentId,
-    documentId: editor.options?.documentId,
-  });
-
-  return {
-    success: true,
-    inserted: [toCommentAddress(replyId)],
-  };
+  return { success: true, inserted: [toCommentAddress(replyId)] };
 }
 
-function moveCommentHandler(editor: Editor, input: MoveCommentInput): Receipt {
+function moveCommentHandler(editor: Editor, input: MoveCommentInput, options?: RevisionGuardOptions): Receipt {
   const moveComment = requireEditorCommand(editor.commands?.moveComment, 'comments.move (moveComment)');
 
   if (input.target.range.start === input.target.range.end) {
     return {
       success: false,
-      failure: {
-        code: 'INVALID_TARGET',
-        message: 'Comment target range must be non-collapsed.',
-      },
+      failure: { code: 'INVALID_TARGET', message: 'Comment target range must be non-collapsed.' },
     };
   }
 
@@ -441,10 +427,7 @@ function moveCommentHandler(editor: Editor, input: MoveCommentInput): Receipt {
   if (resolved.from === resolved.to) {
     return {
       success: false,
-      failure: {
-        code: 'INVALID_TARGET',
-        message: 'Comment target range must be non-collapsed.',
-      },
+      failure: { code: 'INVALID_TARGET', message: 'Comment target range must be non-collapsed.' },
     };
   }
 
@@ -452,10 +435,7 @@ function moveCommentHandler(editor: Editor, input: MoveCommentInput): Receipt {
   if (!identity.anchors.length) {
     return {
       success: false,
-      failure: {
-        code: 'INVALID_TARGET',
-        message: 'Comment cannot be moved because it has no resolvable anchor.',
-      },
+      failure: { code: 'INVALID_TARGET', message: 'Comment cannot be moved because it has no resolvable anchor.' },
     };
   }
 
@@ -473,41 +453,27 @@ function moveCommentHandler(editor: Editor, input: MoveCommentInput): Receipt {
   if (currentTarget && isSameTarget(currentTarget, input.target)) {
     return {
       success: false,
-      failure: {
-        code: 'NO_OP',
-        message: 'Comment move produced no change.',
-      },
+      failure: { code: 'NO_OP', message: 'Comment move produced no change.' },
     };
   }
 
-  // NOTE: Passing canonical commentId is sufficient because findRangeById checks
-  // marks by commentId || importedId (comments-plugin.js:1058) and resolved range
-  // nodes have w:id rewritten to canonical id during import (comments-helpers.js:621,639).
-  // If a non-import path ever creates anchors keyed only by importedId, this would
-  // need to fall back to identity.importedId.
-  const didMove = moveComment({
-    commentId: identity.commentId,
-    from: resolved.from,
-    to: resolved.to,
-  });
+  const receipt = executeDomainCommand(
+    editor,
+    () => Boolean(moveComment({ commentId: identity.commentId, from: resolved.from, to: resolved.to })),
+    { expectedRevision: options?.expectedRevision },
+  );
 
-  if (!didMove) {
+  if (receipt.steps[0]?.effect !== 'changed') {
     return {
       success: false,
-      failure: {
-        code: 'NO_OP',
-        message: 'Comment move produced no change.',
-      },
+      failure: { code: 'NO_OP', message: 'Comment move produced no change.' },
     };
   }
 
-  return {
-    success: true,
-    updated: [toCommentAddress(identity.commentId)],
-  };
+  return { success: true, updated: [toCommentAddress(identity.commentId)] };
 }
 
-function resolveCommentHandler(editor: Editor, input: ResolveCommentInput): Receipt {
+function resolveCommentHandler(editor: Editor, input: ResolveCommentInput, options?: RevisionGuardOptions): Receipt {
   const resolveComment = requireEditorCommand(editor.commands?.resolveComment, 'comments.resolve (resolveComment)');
 
   const store = getCommentEntityStore(editor);
@@ -519,59 +485,62 @@ function resolveCommentHandler(editor: Editor, input: ResolveCommentInput): Rece
   if (alreadyResolved) {
     return {
       success: false,
-      failure: {
-        code: 'NO_OP',
-        message: 'Comment is already resolved.',
-      },
+      failure: { code: 'NO_OP', message: 'Comment is already resolved.' },
     };
   }
 
-  const didResolve = resolveComment({
-    commentId: identity.commentId,
-    importedId: identity.importedId,
-  });
-  if (!didResolve) {
+  const receipt = executeDomainCommand(
+    editor,
+    () => {
+      const didResolve = resolveComment({
+        commentId: identity.commentId,
+        importedId: identity.importedId,
+      });
+      if (didResolve) {
+        upsertCommentEntity(store, identity.commentId, {
+          importedId: identity.importedId,
+          isDone: true,
+          resolvedTime: Date.now(),
+        });
+      }
+      return Boolean(didResolve);
+    },
+    { expectedRevision: options?.expectedRevision },
+  );
+
+  if (receipt.steps[0]?.effect !== 'changed') {
     return {
       success: false,
-      failure: {
-        code: 'NO_OP',
-        message: 'Comment resolve produced no change.',
-      },
+      failure: { code: 'NO_OP', message: 'Comment resolve produced no change.' },
     };
   }
 
-  upsertCommentEntity(store, identity.commentId, {
-    importedId: identity.importedId,
-    isDone: true,
-    resolvedTime: Date.now(),
-  });
-
-  return {
-    success: true,
-    updated: [toCommentAddress(identity.commentId)],
-  };
+  return { success: true, updated: [toCommentAddress(identity.commentId)] };
 }
 
-function removeCommentHandler(editor: Editor, input: RemoveCommentInput): Receipt {
+function removeCommentHandler(editor: Editor, input: RemoveCommentInput, options?: RevisionGuardOptions): Receipt {
   const removeComment = requireEditorCommand(editor.commands?.removeComment, 'comments.remove (removeComment)');
 
   const store = getCommentEntityStore(editor);
   const identity = resolveCommentIdentity(editor, input.commentId);
 
-  const didRemove =
-    removeComment({
-      commentId: identity.commentId,
-      importedId: identity.importedId,
-    }) === true;
+  let didRemove = false;
+  let removedRecords: ReturnType<typeof removeCommentEntityTree> = [];
 
-  const removedRecords = removeCommentEntityTree(store, identity.commentId);
-  if (!didRemove && removedRecords.length === 0) {
+  const receipt = executeDomainCommand(
+    editor,
+    () => {
+      didRemove = removeComment({ commentId: identity.commentId, importedId: identity.importedId }) === true;
+      removedRecords = removeCommentEntityTree(store, identity.commentId);
+      return didRemove || removedRecords.length > 0;
+    },
+    { expectedRevision: options?.expectedRevision },
+  );
+
+  if (receipt.steps[0]?.effect !== 'changed') {
     return {
       success: false,
-      failure: {
-        code: 'NO_OP',
-        message: 'Comment remove produced no change.',
-      },
+      failure: { code: 'NO_OP', message: 'Comment remove produced no change.' },
     };
   }
 
@@ -592,7 +561,11 @@ function removeCommentHandler(editor: Editor, input: RemoveCommentInput): Receip
   };
 }
 
-function setCommentInternalHandler(editor: Editor, input: SetCommentInternalInput): Receipt {
+function setCommentInternalHandler(
+  editor: Editor,
+  input: SetCommentInternalInput,
+  options?: RevisionGuardOptions,
+): Receipt {
   const setCommentInternal = requireEditorCommand(
     editor.commands?.setCommentInternal,
     'comments.setInternal (setCommentInternal)',
@@ -607,43 +580,50 @@ function setCommentInternalHandler(editor: Editor, input: SetCommentInternalInpu
   if (typeof currentInternal === 'boolean' && currentInternal === input.isInternal) {
     return {
       success: false,
-      failure: {
-        code: 'NO_OP',
-        message: 'Comment internal state is already set to the requested value.',
-      },
+      failure: { code: 'NO_OP', message: 'Comment internal state is already set to the requested value.' },
     };
   }
 
   const hasOpenAnchor = identity.anchors.some((anchor) => anchor.status === 'open');
-  if (hasOpenAnchor) {
-    const didApply = setCommentInternal({
-      commentId: identity.commentId,
-      importedId: identity.importedId,
-      isInternal: input.isInternal,
-    });
-    if (!didApply) {
-      return {
-        success: false,
-        failure: {
-          code: 'INVALID_TARGET',
-          message: 'Comment internal state could not be updated on the current anchor.',
-        },
-      };
-    }
+
+  const receipt = executeDomainCommand(
+    editor,
+    () => {
+      if (hasOpenAnchor) {
+        const didApply = setCommentInternal({
+          commentId: identity.commentId,
+          importedId: identity.importedId,
+          isInternal: input.isInternal,
+        });
+        if (!didApply) return false;
+      }
+      upsertCommentEntity(store, identity.commentId, {
+        importedId: identity.importedId,
+        isInternal: input.isInternal,
+      });
+      return true;
+    },
+    { expectedRevision: options?.expectedRevision },
+  );
+
+  if (receipt.steps[0]?.effect !== 'changed') {
+    return {
+      success: false,
+      failure: {
+        code: 'INVALID_TARGET',
+        message: 'Comment internal state could not be updated on the current anchor.',
+      },
+    };
   }
 
-  upsertCommentEntity(store, identity.commentId, {
-    importedId: identity.importedId,
-    isInternal: input.isInternal,
-  });
-
-  return {
-    success: true,
-    updated: [toCommentAddress(identity.commentId)],
-  };
+  return { success: true, updated: [toCommentAddress(identity.commentId)] };
 }
 
-function setCommentActiveHandler(editor: Editor, input: SetCommentActiveInput): Receipt {
+function setCommentActiveHandler(
+  editor: Editor,
+  input: SetCommentActiveInput,
+  options?: RevisionGuardOptions,
+): Receipt {
   const setActiveComment = requireEditorCommand(
     editor.commands?.setActiveComment,
     'comments.setActive (setActiveComment)',
@@ -654,8 +634,11 @@ function setCommentActiveHandler(editor: Editor, input: SetCommentActiveInput): 
     resolvedCommentId = resolveCommentIdentity(editor, input.commentId).commentId;
   }
 
-  const didSet = setActiveComment({ commentId: resolvedCommentId });
-  if (!didSet) {
+  const receipt = executeDomainCommand(editor, () => Boolean(setActiveComment({ commentId: resolvedCommentId })), {
+    expectedRevision: options?.expectedRevision,
+  });
+
+  if (receipt.steps[0]?.effect !== 'changed') {
     return {
       success: false,
       failure: {
@@ -670,6 +653,10 @@ function setCommentActiveHandler(editor: Editor, input: SetCommentActiveInput): 
     updated: resolvedCommentId ? [toCommentAddress(resolvedCommentId)] : undefined,
   };
 }
+
+// ---------------------------------------------------------------------------
+// Read handlers
+// ---------------------------------------------------------------------------
 
 function goToCommentHandler(editor: Editor, input: GoToCommentInput): Receipt {
   const setCursorById = requireEditorCommand(editor.commands?.setCursorById, 'comments.goTo (setCursorById)');
@@ -711,22 +698,24 @@ function listCommentsHandler(editor: Editor, query?: CommentsListQuery): Comment
   };
 }
 
-/**
- * Creates the comments adapter namespace for the Document API.
- *
- * @param editor - The editor instance to bind comment operations to.
- * @returns A {@link CommentsAdapter} that delegates to editor commands.
- */
-export function createCommentsAdapter(editor: Editor): CommentsAdapter {
+// ---------------------------------------------------------------------------
+// Adapter factory
+// ---------------------------------------------------------------------------
+
+export function createCommentsWrapper(editor: Editor): CommentsAdapter {
   return {
-    add: (input: AddCommentInput) => addCommentHandler(editor, input),
-    edit: (input: EditCommentInput) => editCommentHandler(editor, input),
-    reply: (input: ReplyToCommentInput) => replyToCommentHandler(editor, input),
-    move: (input: MoveCommentInput) => moveCommentHandler(editor, input),
-    resolve: (input: ResolveCommentInput) => resolveCommentHandler(editor, input),
-    remove: (input: RemoveCommentInput) => removeCommentHandler(editor, input),
-    setInternal: (input: SetCommentInternalInput) => setCommentInternalHandler(editor, input),
-    setActive: (input: SetCommentActiveInput) => setCommentActiveHandler(editor, input),
+    add: (input: AddCommentInput, options?: RevisionGuardOptions) => addCommentHandler(editor, input, options),
+    edit: (input: EditCommentInput, options?: RevisionGuardOptions) => editCommentHandler(editor, input, options),
+    reply: (input: ReplyToCommentInput, options?: RevisionGuardOptions) =>
+      replyToCommentHandler(editor, input, options),
+    move: (input: MoveCommentInput, options?: RevisionGuardOptions) => moveCommentHandler(editor, input, options),
+    resolve: (input: ResolveCommentInput, options?: RevisionGuardOptions) =>
+      resolveCommentHandler(editor, input, options),
+    remove: (input: RemoveCommentInput, options?: RevisionGuardOptions) => removeCommentHandler(editor, input, options),
+    setInternal: (input: SetCommentInternalInput, options?: RevisionGuardOptions) =>
+      setCommentInternalHandler(editor, input, options),
+    setActive: (input: SetCommentActiveInput, options?: RevisionGuardOptions) =>
+      setCommentActiveHandler(editor, input, options),
     goTo: (input: GoToCommentInput) => goToCommentHandler(editor, input),
     get: (input: GetCommentInput) => getCommentHandler(editor, input),
     list: (query?: CommentsListQuery) => listCommentsHandler(editor, query),

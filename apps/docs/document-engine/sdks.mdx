@@ -114,7 +114,10 @@ The SDKs expose all operations from the [Document API](/document-api/overview) p
 | `doc.find` | `find` | Search the document for nodes matching type, text, or attribute criteria. |
 | `doc.getNode` | `get-node` | Retrieve a single node by target position. |
 | `doc.getNodeById` | `get-node-by-id` | Retrieve a single node by its unique ID. |
+| `doc.getText` | `get-text` | Extract the plain-text content of the document. |
 | `doc.info` | `info` | Return document metadata including revision, node count, and capabilities. |
+| `doc.query.match` | `query match` | Deterministic selector-based search with cardinality contracts for mutation targeting. |
+| `doc.mutations.preview` | `mutations preview` | Dry-run a mutation plan, returning resolved targets without applying changes. |
 
 #### Mutation
 
@@ -123,6 +126,7 @@ The SDKs expose all operations from the [Document API](/document-api/overview) p
 | `doc.insert` | `insert` | Insert text or inline content at a target position. |
 | `doc.replace` | `replace` | Replace content at a target position with new text or inline content. |
 | `doc.delete` | `delete` | Delete content at a target position. |
+| `doc.mutations.apply` | `mutations apply` | Execute a mutation plan atomically against the document. |
 
 #### Format
 
@@ -138,6 +142,7 @@ The SDKs expose all operations from the [Document API](/document-api/overview) p
 | Operation | CLI command | Description |
 | --- | --- | --- |
 | `doc.create.paragraph` | `create paragraph` | Create a new paragraph at the target position. |
+| `doc.create.heading` | `create heading` | Create a new heading at the target position. |
 
 #### Lists
 

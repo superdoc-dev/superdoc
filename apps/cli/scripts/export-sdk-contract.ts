@@ -89,6 +89,9 @@ const INTENT_NAMES = {
   'doc.trackChanges.reject': 'reject_tracked_change',
   'doc.trackChanges.acceptAll': 'accept_all_tracked_changes',
   'doc.trackChanges.rejectAll': 'reject_all_tracked_changes',
+  'doc.query.match': 'query_match',
+  'doc.mutations.preview': 'preview_mutations',
+  'doc.mutations.apply': 'apply_mutations',
 } as const satisfies Record<DocBackedCliOpId, string>;
 
 // ---------------------------------------------------------------------------

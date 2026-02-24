@@ -1,5 +1,14 @@
+/**
+ * Lists convenience wrappers — bridge lists operations to the plan engine's
+ * revision management and execution path.
+ *
+ * Read operations (list, get) are pure queries.
+ * Mutating operations (insert, setType, indent, outdent, restart, exit)
+ * delegate to editor commands with plan-engine revision tracking.
+ */
+
 import { v4 as uuidv4 } from 'uuid';
-import type { Editor } from '../core/Editor.js';
+import type { Editor } from '../../core/Editor.js';
 import type {
   ListInsertInput,
   ListItemInfo,
@@ -13,17 +22,22 @@ import type {
   ListTargetInput,
   MutationOptions,
 } from '@superdoc/document-api';
-import { DocumentApiAdapterError } from './errors.js';
-import { requireEditorCommand, ensureTrackedCapability, rejectTrackedMode } from './helpers/mutation-helpers.js';
-import { clearIndexCache, getBlockIndex } from './helpers/index-cache.js';
-import { collectTrackInsertRefsInRange } from './helpers/tracked-change-refs.js';
+import { DocumentApiAdapterError } from '../errors.js';
+import { requireEditorCommand, ensureTrackedCapability, rejectTrackedMode } from '../helpers/mutation-helpers.js';
+import { executeDomainCommand } from './plan-wrappers.js';
+import { clearIndexCache, getBlockIndex } from '../helpers/index-cache.js';
+import { collectTrackInsertRefsInRange } from '../helpers/tracked-change-refs.js';
 import {
   listItemProjectionToInfo,
   listListItems,
   resolveListItem,
   type ListItemProjection,
-} from './helpers/list-item-resolver.js';
-import { ListHelpers } from '../core/helpers/list-numbering-helpers.js';
+} from '../helpers/list-item-resolver.js';
+import { ListHelpers } from '../../core/helpers/list-numbering-helpers.js';
+
+// ---------------------------------------------------------------------------
+// Command types
+// ---------------------------------------------------------------------------
 
 type InsertListItemAtCommand = (options: {
   pos: number;
@@ -36,6 +50,10 @@ type InsertListItemAtCommand = (options: {
 type SetListTypeAtCommand = (options: { pos: number; kind: 'ordered' | 'bullet' }) => boolean;
 type ExitListItemAtCommand = (options: { pos: number }) => boolean;
 type SetTextSelectionCommand = (options: { from: number; to?: number }) => boolean;
+
+// ---------------------------------------------------------------------------
+// Shared helpers
+// ---------------------------------------------------------------------------
 
 function toListsFailure(code: 'NO_OP' | 'INVALID_TARGET', message: string, details?: unknown) {
   return { success: false as const, failure: { code, message, details } };
@@ -119,14 +137,11 @@ function withListTarget(editor: Editor, input: ListTargetInput): ListItemProject
   const nodeId = input.nodeId!;
   const index = getBlockIndex(editor);
 
-  // Prefer a listItem match so that duplicate IDs across block types don't
-  // shadow a valid list item (e.g. paragraph:dup before listItem:dup).
   const listMatch = index.candidates.find((c) => c.nodeType === 'listItem' && c.nodeId === nodeId);
   if (listMatch) {
     return resolveListItem(editor, { kind: 'block', nodeType: 'listItem', nodeId });
   }
 
-  // No listItem found — distinguish "exists but wrong type" from "missing".
   const anyMatch = index.candidates.find((c) => c.nodeId === nodeId);
   if (anyMatch) {
     throw new DocumentApiAdapterError('INVALID_TARGET', `Node "${nodeId}" is a ${anyMatch.nodeType}, not a listItem.`, {
@@ -138,16 +153,24 @@ function withListTarget(editor: Editor, input: ListTargetInput): ListItemProject
   throw new DocumentApiAdapterError('TARGET_NOT_FOUND', 'List item target was not found.', { nodeId });
 }
 
-export function listsListAdapter(editor: Editor, query?: ListsListQuery): ListsListResult {
+// ---------------------------------------------------------------------------
+// Read operations (queries)
+// ---------------------------------------------------------------------------
+
+export function listsListWrapper(editor: Editor, query?: ListsListQuery): ListsListResult {
   return listListItems(editor, query);
 }
 
-export function listsGetAdapter(editor: Editor, input: ListsGetInput): ListItemInfo {
+export function listsGetWrapper(editor: Editor, input: ListsGetInput): ListItemInfo {
   const item = resolveListItem(editor, input.address);
   return listItemProjectionToInfo(item);
 }
 
-export function listsInsertAdapter(
+// ---------------------------------------------------------------------------
+// Mutating operations (wrappers)
+// ---------------------------------------------------------------------------
+
+export function listsInsertWrapper(
   editor: Editor,
   input: ListInsertInput,
   options?: MutationOptions,
@@ -175,29 +198,39 @@ export function listsInsertAdapter(
   }
 
   const createdId = uuidv4();
-  const didApply = insertListItemAt({
-    pos: target.candidate.pos,
-    position: input.position,
-    text: input.text ?? '',
-    sdBlockId: createdId,
-    tracked: mode === 'tracked',
-  });
+  let created: ListItemProjection | null = null;
 
-  if (!didApply) {
+  const receipt = executeDomainCommand(
+    editor,
+    () => {
+      const didApply = insertListItemAt({
+        pos: target.candidate.pos,
+        position: input.position,
+        text: input.text ?? '',
+        sdBlockId: createdId,
+        tracked: mode === 'tracked',
+      });
+      if (didApply) {
+        clearIndexCache(editor);
+        try {
+          created = resolveInsertedListItem(editor, createdId);
+        } catch {
+          /* fallback below */
+        }
+      }
+      return didApply;
+    },
+    { expectedRevision: options?.expectedRevision },
+  );
+
+  if (receipt.steps[0]?.effect !== 'changed') {
     return toListsFailure('INVALID_TARGET', 'List item insertion could not be applied at the requested target.', {
       target: input.target,
       position: input.position,
     });
   }
 
-  clearIndexCache(editor);
-
-  let created: ListItemProjection;
-  try {
-    created = resolveInsertedListItem(editor, createdId);
-  } catch {
-    // Mutation already applied — contract requires success: true.
-    // Fall back to the generated ID we assigned to the command.
+  if (!created) {
     return {
       success: true,
       item: { kind: 'block', nodeType: 'listItem', nodeId: createdId },
@@ -224,7 +257,7 @@ export function listsInsertAdapter(
   };
 }
 
-export function listsSetTypeAdapter(
+export function listsSetTypeWrapper(
   editor: Editor,
   input: ListSetTypeInput,
   options?: MutationOptions,
@@ -247,25 +280,21 @@ export function listsSetTypeAdapter(
     return { success: true, item: target.address };
   }
 
-  const didApply = setListTypeAt({
-    pos: target.candidate.pos,
-    kind: input.kind,
+  const receipt = executeDomainCommand(editor, () => setListTypeAt({ pos: target.candidate.pos, kind: input.kind }), {
+    expectedRevision: options?.expectedRevision,
   });
 
-  if (!didApply) {
+  if (receipt.steps[0]?.effect !== 'changed') {
     return toListsFailure('INVALID_TARGET', 'List type conversion could not be applied.', {
       target: input.target,
       kind: input.kind,
     });
   }
 
-  return {
-    success: true,
-    item: target.address,
-  };
+  return { success: true, item: target.address };
 }
 
-export function listsIndentAdapter(
+export function listsIndentWrapper(
   editor: Editor,
   input: ListTargetInput,
   options?: MutationOptions,
@@ -291,18 +320,18 @@ export function listsIndentAdapter(
     });
   }
 
-  const didApply = increaseListIndent();
-  if (!didApply) {
+  const receipt = executeDomainCommand(editor, () => increaseListIndent(), {
+    expectedRevision: options?.expectedRevision,
+  });
+
+  if (receipt.steps[0]?.effect !== 'changed') {
     return toListsFailure('INVALID_TARGET', 'List indentation could not be applied.', { target: input.target });
   }
 
-  return {
-    success: true,
-    item: target.address,
-  };
+  return { success: true, item: target.address };
 }
 
-export function listsOutdentAdapter(
+export function listsOutdentWrapper(
   editor: Editor,
   input: ListTargetInput,
   options?: MutationOptions,
@@ -328,18 +357,18 @@ export function listsOutdentAdapter(
     });
   }
 
-  const didApply = decreaseListIndent();
-  if (!didApply) {
+  const receipt = executeDomainCommand(editor, () => decreaseListIndent(), {
+    expectedRevision: options?.expectedRevision,
+  });
+
+  if (receipt.steps[0]?.effect !== 'changed') {
     return toListsFailure('INVALID_TARGET', 'List outdent could not be applied.', { target: input.target });
   }
 
-  return {
-    success: true,
-    item: target.address,
-  };
+  return { success: true, item: target.address };
 }
 
-export function listsRestartAdapter(
+export function listsRestartWrapper(
   editor: Editor,
   input: ListTargetInput,
   options?: MutationOptions,
@@ -372,18 +401,18 @@ export function listsRestartAdapter(
     });
   }
 
-  const didApply = restartNumbering();
-  if (!didApply) {
+  const receipt = executeDomainCommand(editor, () => restartNumbering(), {
+    expectedRevision: options?.expectedRevision,
+  });
+
+  if (receipt.steps[0]?.effect !== 'changed') {
     return toListsFailure('INVALID_TARGET', 'List restart could not be applied.', { target: input.target });
   }
 
-  return {
-    success: true,
-    item: target.address,
-  };
+  return { success: true, item: target.address };
 }
 
-export function listsExitAdapter(editor: Editor, input: ListTargetInput, options?: MutationOptions): ListsExitResult {
+export function listsExitWrapper(editor: Editor, input: ListTargetInput, options?: MutationOptions): ListsExitResult {
   rejectTrackedMode('lists.exit', options);
   const target = withListTarget(editor, input);
 
@@ -403,8 +432,11 @@ export function listsExitAdapter(editor: Editor, input: ListTargetInput, options
     };
   }
 
-  const didApply = exitListItemAt({ pos: target.candidate.pos });
-  if (!didApply) {
+  const receipt = executeDomainCommand(editor, () => exitListItemAt({ pos: target.candidate.pos }), {
+    expectedRevision: options?.expectedRevision,
+  });
+
+  if (receipt.steps[0]?.effect !== 'changed') {
     return toListsFailure('INVALID_TARGET', 'List exit could not be applied.', { target: input.target });
   }
 

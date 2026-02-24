@@ -13,3 +13,7 @@ export * from './references.types.js';
 export * from './track-changes.types.js';
 export * from './create.types.js';
 export * from './info.types.js';
+export * from './style-policy.types.js';
+export * from './mutation-plan.types.js';
+export * from './query-match.types.js';
+export * from './step-manifest.types.js';

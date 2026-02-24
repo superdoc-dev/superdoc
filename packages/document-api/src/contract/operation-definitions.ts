@@ -31,7 +31,16 @@ import type { CommandStaticMetadata, OperationIdempotency, PreApplyThrowCode } f
 // Reference group key
 // ---------------------------------------------------------------------------
 
-export type ReferenceGroupKey = 'core' | 'capabilities' | 'create' | 'format' | 'lists' | 'comments' | 'trackChanges';
+export type ReferenceGroupKey =
+  | 'core'
+  | 'capabilities'
+  | 'create'
+  | 'format'
+  | 'lists'
+  | 'comments'
+  | 'trackChanges'
+  | 'query'
+  | 'mutations';
 
 // ---------------------------------------------------------------------------
 // Entry shape
@@ -111,6 +120,22 @@ const T_NOT_FOUND_COMMAND_TRACKED = [
   'TRACK_CHANGE_COMMAND_UNAVAILABLE',
   'CAPABILITY_UNAVAILABLE',
 ] as const;
+
+// Plan-engine throw-code arrays
+const T_PLAN_ENGINE = [
+  'REVISION_MISMATCH',
+  'MATCH_NOT_FOUND',
+  'AMBIGUOUS_MATCH',
+  'STYLE_CONFLICT',
+  'PRECONDITION_FAILED',
+  'INVALID_INPUT',
+  'CROSS_BLOCK_MATCH',
+  'PLAN_CONFLICT_OVERLAP',
+  'INVALID_STEP_COMBINATION',
+  'CAPABILITY_UNAVAILABLE',
+] as const;
+
+const T_QUERY_MATCH = ['MATCH_NOT_FOUND', 'AMBIGUOUS_MATCH', 'INVALID_INPUT'] as const;
 
 // ---------------------------------------------------------------------------
 // Canonical definitions
@@ -624,6 +649,48 @@ export const OPERATION_DEFINITIONS = {
     }),
     referenceDocPath: 'track-changes/reject-all.mdx',
     referenceGroup: 'trackChanges',
+  },
+
+  'query.match': {
+    memberPath: 'query.match',
+    description: 'Deterministic selector-based search with cardinality contracts for mutation targeting.',
+    requiresDocumentContext: true,
+    metadata: readOperation({
+      idempotency: 'idempotent',
+      throws: T_QUERY_MATCH,
+      deterministicTargetResolution: true,
+    }),
+    referenceDocPath: 'query/match.mdx',
+    referenceGroup: 'query',
+  },
+
+  'mutations.preview': {
+    memberPath: 'mutations.preview',
+    description: 'Dry-run a mutation plan, returning resolved targets without applying changes.',
+    requiresDocumentContext: true,
+    metadata: readOperation({
+      idempotency: 'idempotent',
+      throws: T_PLAN_ENGINE,
+      deterministicTargetResolution: true,
+    }),
+    referenceDocPath: 'mutations/preview.mdx',
+    referenceGroup: 'mutations',
+  },
+
+  'mutations.apply': {
+    memberPath: 'mutations.apply',
+    description: 'Execute a mutation plan atomically against the document.',
+    requiresDocumentContext: true,
+    metadata: mutationOperation({
+      idempotency: 'non-idempotent',
+      supportsDryRun: false,
+      supportsTrackedMode: true,
+      possibleFailureCodes: NONE_FAILURES,
+      throws: T_PLAN_ENGINE,
+      deterministicTargetResolution: true,
+    }),
+    referenceDocPath: 'mutations/apply.mdx',
+    referenceGroup: 'mutations',
   },
 
   'capabilities.get': {

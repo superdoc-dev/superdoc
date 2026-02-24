@@ -10,9 +10,15 @@ import type {
   CreateParagraphInput,
   CreateParagraphResult,
   DocumentInfo,
+  MutationsApplyInput,
+  MutationsPreviewInput,
+  MutationsPreviewOutput,
   NodeAddress,
   NodeInfo,
+  PlanReceipt,
   Query,
+  QueryMatchInput,
+  QueryMatchOutput,
   QueryResult,
   Receipt,
   Selector,
@@ -116,7 +122,7 @@ import {
   executeTrackChangesReject,
   executeTrackChangesRejectAll,
 } from './track-changes/track-changes.js';
-import type { MutationOptions, WriteAdapter } from './write/write.js';
+import type { MutationOptions, RevisionGuardOptions, WriteAdapter } from './write/write.js';
 import {
   executeCapabilities,
   type CapabilitiesAdapter,
@@ -130,7 +136,7 @@ export type { FindAdapter, FindOptions } from './find/find.js';
 export type { GetNodeAdapter, GetNodeByIdInput } from './get-node/get-node.js';
 export type { GetTextAdapter, GetTextInput } from './get-text/get-text.js';
 export type { InfoAdapter, InfoInput } from './info/info.js';
-export type { MutationOptions, WriteAdapter, WriteRequest } from './write/write.js';
+export type { WriteAdapter, WriteRequest } from './write/write.js';
 export type {
   FormatAdapter,
   FormatBoldInput,
@@ -191,6 +197,24 @@ export type { DeleteInput } from './delete/delete.js';
 export interface CapabilitiesApi {
   (): DocumentApiCapabilities;
   get(): DocumentApiCapabilities;
+}
+
+export interface QueryApi {
+  match(input: QueryMatchInput): QueryMatchOutput;
+}
+
+export interface MutationsApi {
+  preview(input: MutationsPreviewInput): MutationsPreviewOutput;
+  apply(input: MutationsApplyInput): PlanReceipt;
+}
+
+export interface QueryAdapter {
+  match(input: QueryMatchInput): QueryMatchOutput;
+}
+
+export interface MutationsAdapter {
+  preview(input: MutationsPreviewInput): MutationsPreviewOutput;
+  apply(input: MutationsApplyInput): PlanReceipt;
 }
 
 /**
@@ -264,6 +288,14 @@ export interface DocumentApi {
    */
   lists: ListsApi;
   /**
+   * Selector-based query with cardinality contracts for mutation targeting.
+   */
+  query: QueryApi;
+  /**
+   * Mutation plan engine — preview and apply atomic mutation plans.
+   */
+  mutations: MutationsApi;
+  /**
    * Runtime capability introspection.
    *
    * Callable directly (`capabilities()`) or via `.get()`.
@@ -296,6 +328,8 @@ export interface DocumentApiAdapters {
   trackChanges: TrackChangesAdapter;
   create: CreateAdapter;
   lists: ListsAdapter;
+  query: QueryAdapter;
+  mutations: MutationsAdapter;
 }
 
 /**
@@ -335,29 +369,29 @@ export function createDocumentApi(adapters: DocumentApiAdapters): DocumentApi {
       return executeInfo(adapters.info, input);
     },
     comments: {
-      add(input: AddCommentInput): Receipt {
-        return executeAddComment(adapters.comments, input);
+      add(input: AddCommentInput, options?: RevisionGuardOptions): Receipt {
+        return executeAddComment(adapters.comments, input, options);
       },
-      edit(input: EditCommentInput): Receipt {
-        return executeEditComment(adapters.comments, input);
+      edit(input: EditCommentInput, options?: RevisionGuardOptions): Receipt {
+        return executeEditComment(adapters.comments, input, options);
       },
-      reply(input: ReplyToCommentInput): Receipt {
-        return executeReplyToComment(adapters.comments, input);
+      reply(input: ReplyToCommentInput, options?: RevisionGuardOptions): Receipt {
+        return executeReplyToComment(adapters.comments, input, options);
       },
-      move(input: MoveCommentInput): Receipt {
-        return executeMoveComment(adapters.comments, input);
+      move(input: MoveCommentInput, options?: RevisionGuardOptions): Receipt {
+        return executeMoveComment(adapters.comments, input, options);
       },
-      resolve(input: ResolveCommentInput): Receipt {
-        return executeResolveComment(adapters.comments, input);
+      resolve(input: ResolveCommentInput, options?: RevisionGuardOptions): Receipt {
+        return executeResolveComment(adapters.comments, input, options);
       },
-      remove(input: RemoveCommentInput): Receipt {
-        return executeRemoveComment(adapters.comments, input);
+      remove(input: RemoveCommentInput, options?: RevisionGuardOptions): Receipt {
+        return executeRemoveComment(adapters.comments, input, options);
       },
-      setInternal(input: SetCommentInternalInput): Receipt {
-        return executeSetCommentInternal(adapters.comments, input);
+      setInternal(input: SetCommentInternalInput, options?: RevisionGuardOptions): Receipt {
+        return executeSetCommentInternal(adapters.comments, input, options);
       },
-      setActive(input: SetCommentActiveInput): Receipt {
-        return executeSetCommentActive(adapters.comments, input);
+      setActive(input: SetCommentActiveInput, options?: RevisionGuardOptions): Receipt {
+        return executeSetCommentActive(adapters.comments, input, options);
       },
       goTo(input: GoToCommentInput): Receipt {
         return executeGoToComment(adapters.comments, input);
@@ -399,17 +433,17 @@ export function createDocumentApi(adapters: DocumentApiAdapters): DocumentApi {
       get(input: TrackChangesGetInput): TrackChangeInfo {
         return executeTrackChangesGet(adapters.trackChanges, input);
       },
-      accept(input: TrackChangesAcceptInput): Receipt {
-        return executeTrackChangesAccept(adapters.trackChanges, input);
+      accept(input: TrackChangesAcceptInput, options?: RevisionGuardOptions): Receipt {
+        return executeTrackChangesAccept(adapters.trackChanges, input, options);
       },
-      reject(input: TrackChangesRejectInput): Receipt {
-        return executeTrackChangesReject(adapters.trackChanges, input);
+      reject(input: TrackChangesRejectInput, options?: RevisionGuardOptions): Receipt {
+        return executeTrackChangesReject(adapters.trackChanges, input, options);
       },
-      acceptAll(input: TrackChangesAcceptAllInput): Receipt {
-        return executeTrackChangesAcceptAll(adapters.trackChanges, input);
+      acceptAll(input: TrackChangesAcceptAllInput, options?: RevisionGuardOptions): Receipt {
+        return executeTrackChangesAcceptAll(adapters.trackChanges, input, options);
       },
-      rejectAll(input: TrackChangesRejectAllInput): Receipt {
-        return executeTrackChangesRejectAll(adapters.trackChanges, input);
+      rejectAll(input: TrackChangesRejectAllInput, options?: RevisionGuardOptions): Receipt {
+        return executeTrackChangesRejectAll(adapters.trackChanges, input, options);
       },
     },
     create: {
@@ -418,6 +452,19 @@ export function createDocumentApi(adapters: DocumentApiAdapters): DocumentApi {
       },
       heading(input: CreateHeadingInput, options?: MutationOptions): CreateHeadingResult {
         return executeCreateHeading(adapters.create, input, options);
+      },
+    },
+    query: {
+      match(input: QueryMatchInput): QueryMatchOutput {
+        return adapters.query.match(input);
+      },
+    },
+    mutations: {
+      preview(input: MutationsPreviewInput): MutationsPreviewOutput {
+        return adapters.mutations.preview(input);
+      },
+      apply(input: MutationsApplyInput): PlanReceipt {
+        return adapters.mutations.apply(input);
       },
     },
     capabilities,

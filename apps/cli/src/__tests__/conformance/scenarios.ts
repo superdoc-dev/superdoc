@@ -253,6 +253,94 @@ export const SUCCESS_SCENARIOS = {
     const docPath = await harness.copyFixtureDoc('doc-get-text');
     return { stateDir, args: ['get-text', docPath] };
   },
+  'doc.query.match': async (harness: ConformanceHarness): Promise<ScenarioInvocation> => {
+    const stateDir = await harness.createStateDir('doc-query-match-success');
+    const docPath = await harness.copyFixtureDoc('doc-query-match');
+    return {
+      stateDir,
+      args: [
+        'query',
+        'match',
+        docPath,
+        '--select-json',
+        JSON.stringify({ type: 'node', nodeType: 'paragraph' }),
+        '--require',
+        'any',
+        '--limit',
+        '1',
+      ],
+    };
+  },
+  'doc.mutations.preview': async (harness: ConformanceHarness): Promise<ScenarioInvocation> => {
+    const stateDir = await harness.createStateDir('doc-mutations-preview-success');
+    const docPath = await harness.copyFixtureDoc('doc-mutations-preview');
+    const steps = [
+      {
+        id: 'preview-insert',
+        op: 'text.insert',
+        where: {
+          by: 'select',
+          select: { type: 'node', nodeType: 'paragraph' },
+          require: 'first',
+        },
+        args: {
+          position: 'before',
+          content: { text: 'PREVIEW_MUTATION_TOKEN' },
+        },
+      },
+    ];
+    return {
+      stateDir,
+      args: [
+        'mutations',
+        'preview',
+        docPath,
+        '--expected-revision',
+        '0',
+        '--atomic-json',
+        'true',
+        '--change-mode',
+        'direct',
+        '--steps-json',
+        JSON.stringify(steps),
+      ],
+    };
+  },
+  'doc.mutations.apply': async (harness: ConformanceHarness): Promise<ScenarioInvocation> => {
+    const stateDir = await harness.createStateDir('doc-mutations-apply-success');
+    const docPath = await harness.copyFixtureDoc('doc-mutations-apply');
+    const steps = [
+      {
+        id: 'apply-insert',
+        op: 'text.insert',
+        where: {
+          by: 'select',
+          select: { type: 'node', nodeType: 'paragraph' },
+          require: 'first',
+        },
+        args: {
+          position: 'before',
+          content: { text: 'APPLY_MUTATION_TOKEN' },
+        },
+      },
+    ];
+    return {
+      stateDir,
+      args: [
+        'mutations',
+        'apply',
+        docPath,
+        '--atomic-json',
+        'true',
+        '--change-mode',
+        'direct',
+        '--steps-json',
+        JSON.stringify(steps),
+        '--out',
+        harness.createOutputPath('doc-mutations-apply-output'),
+      ],
+    };
+  },
   'doc.capabilities.get': async (harness: ConformanceHarness): Promise<ScenarioInvocation> => {
     const stateDir = await harness.createStateDir('doc-capabilities-get-success');
     await harness.openSessionFixture(stateDir, 'doc-capabilities-get', 'capabilities-session');

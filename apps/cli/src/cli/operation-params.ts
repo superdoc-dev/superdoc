@@ -268,6 +268,23 @@ const PARAM_FLAG_OVERRIDES: Partial<Record<string, Record<string, { name?: strin
 };
 
 // ---------------------------------------------------------------------------
+// Per-operation param schema overrides
+//
+// Some contract schemas intentionally use broad placeholders (for example,
+// mutation-step arrays represented as { type: 'object' }). Validate these
+// payloads as generic JSON to avoid over-constraining CLI flags.
+// ---------------------------------------------------------------------------
+
+const PARAM_SCHEMA_OVERRIDES: Partial<Record<string, Record<string, CliTypeSpec>>> = {
+  'doc.mutations.preview': {
+    steps: { type: 'json' },
+  },
+  'doc.mutations.apply': {
+    steps: { type: 'json' },
+  },
+};
+
+// ---------------------------------------------------------------------------
 // Schema-derived param exclusions
 //
 // Params derived from the document-api input schema that should NOT be
@@ -453,6 +470,7 @@ function buildDocBackedMetadata(): Record<DocBackedCliOpId, CliOperationMetadata
 
     // Apply flag overrides and exclusions to schema params before merging
     const overrides = PARAM_FLAG_OVERRIDES[cliOpId];
+    const schemaOverrides = PARAM_SCHEMA_OVERRIDES[cliOpId];
     const exclusions = PARAM_EXCLUSIONS[cliOpId];
     for (const param of schemaParams) {
       if (exclusions?.has(param.name)) continue;
@@ -460,6 +478,9 @@ function buildDocBackedMetadata(): Record<DocBackedCliOpId, CliOperationMetadata
         const override = overrides[param.name];
         if (override.name) param.name = override.name;
         if (override.flag) param.flag = override.flag;
+      }
+      if (schemaOverrides?.[param.name]) {
+        param.schema = schemaOverrides[param.name];
       }
       if (seenNames.has(param.name)) continue;
       seenNames.add(param.name);

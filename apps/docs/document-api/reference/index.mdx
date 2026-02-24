@@ -20,6 +20,8 @@ Document API is currently alpha and subject to breaking changes.
 | Lists | 8 | [Open](./lists/index) |
 | Comments | 11 | [Open](./comments/index) |
 | Track Changes | 6 | [Open](./track-changes/index) |
+| Query | 1 | [Open](./query/index) |
+| Mutations | 2 | [Open](./mutations/index) |
 
 ## All operations
 
@@ -64,4 +66,7 @@ Document API is currently alpha and subject to breaking changes.
 | [`trackChanges.reject`](./track-changes/reject) | Track Changes | `trackChanges.reject` | Yes | `conditional` | No | No |
 | [`trackChanges.acceptAll`](./track-changes/accept-all) | Track Changes | `trackChanges.acceptAll` | Yes | `conditional` | No | No |
 | [`trackChanges.rejectAll`](./track-changes/reject-all) | Track Changes | `trackChanges.rejectAll` | Yes | `conditional` | No | No |
+| [`query.match`](./query/match) | Query | `query.match` | No | `idempotent` | No | No |
+| [`mutations.preview`](./mutations/preview) | Mutations | `mutations.preview` | No | `idempotent` | No | No |
+| [`mutations.apply`](./mutations/apply) | Mutations | `mutations.apply` | Yes | `non-idempotent` | Yes | No |
 | [`capabilities.get`](./capabilities/get) | Capabilities | `capabilities` | No | `idempotent` | No | No |

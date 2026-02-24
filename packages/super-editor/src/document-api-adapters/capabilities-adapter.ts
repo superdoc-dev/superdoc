@@ -4,6 +4,7 @@ import {
   COMMAND_CATALOG,
   type CapabilityReasonCode,
   type DocumentApiCapabilities,
+  type PlanEngineCapabilities,
   type OperationId,
   OPERATION_IDS,
 } from '@superdoc/document-api';
@@ -156,6 +157,34 @@ function buildOperationCapabilities(editor: Editor): DocumentApiCapabilities['op
   return operations;
 }
 
+// ---------------------------------------------------------------------------
+// Plan engine capabilities
+// ---------------------------------------------------------------------------
+
+const SUPPORTED_STEP_OPS = [
+  'text.rewrite',
+  'text.insert',
+  'text.delete',
+  'style.apply',
+  'assert',
+  'create.paragraph',
+  'create.heading',
+] as const;
+const SUPPORTED_NON_UNIFORM_STRATEGIES = ['error', 'useLeadingRun', 'majority', 'union'] as const;
+const SUPPORTED_SET_MARKS = ['bold', 'italic', 'underline', 'strike'] as const;
+const REGEX_MAX_PATTERN_LENGTH = 1024;
+
+function buildPlanEngineCapabilities(): PlanEngineCapabilities {
+  return {
+    supportedStepOps: SUPPORTED_STEP_OPS,
+    supportedNonUniformStrategies: SUPPORTED_NON_UNIFORM_STRATEGIES,
+    supportedSetMarks: SUPPORTED_SET_MARKS,
+    regex: {
+      maxPatternLength: REGEX_MAX_PATTERN_LENGTH,
+    },
+  };
+}
+
 /**
  * Builds a {@link DocumentApiCapabilities} snapshot by introspecting the editor's
  * registered commands and schema marks.
@@ -190,5 +219,6 @@ export function getDocumentApiCapabilities(editor: Editor): DocumentApiCapabilit
       },
     },
     operations,
+    planEngine: buildPlanEngineCapabilities(),
   };
 }

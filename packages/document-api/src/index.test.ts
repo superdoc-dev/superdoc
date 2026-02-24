@@ -205,6 +205,12 @@ function makeCapabilitiesAdapter(overrides?: Partial<DocumentApiCapabilities>): 
       dryRun: { enabled: false },
     },
     operations: {} as DocumentApiCapabilities['operations'],
+    planEngine: {
+      supportedStepOps: [],
+      supportedNonUniformStrategies: [],
+      supportedSetMarks: [],
+      regex: { maxPatternLength: 1024, maxExecutionMs: 100 },
+    },
   };
   return {
     get: vi.fn(() => ({ ...defaultCapabilities, ...overrides })),
@@ -378,7 +384,7 @@ describe('createDocumentApi', () => {
     const receipt = api.comments.add(input);
 
     expect(receipt.success).toBe(true);
-    expect(commentsAdpt.add).toHaveBeenCalledWith(input);
+    expect(commentsAdpt.add).toHaveBeenCalledWith(input, undefined);
   });
 
   it('delegates all comments namespace commands through the comments adapter', () => {
@@ -432,13 +438,13 @@ describe('createDocumentApi', () => {
     expect((getResult as CommentInfo).commentId).toBe('c1');
     expect((listResult as CommentsListResult).total).toBe(0);
 
-    expect(commentsAdpt.edit).toHaveBeenCalledWith(editInput);
-    expect(commentsAdpt.reply).toHaveBeenCalledWith(replyInput);
-    expect(commentsAdpt.move).toHaveBeenCalledWith(moveInput);
-    expect(commentsAdpt.resolve).toHaveBeenCalledWith(resolveInput);
-    expect(commentsAdpt.remove).toHaveBeenCalledWith(removeInput);
-    expect(commentsAdpt.setInternal).toHaveBeenCalledWith(setInternalInput);
-    expect(commentsAdpt.setActive).toHaveBeenCalledWith(setActiveInput);
+    expect(commentsAdpt.edit).toHaveBeenCalledWith(editInput, undefined);
+    expect(commentsAdpt.reply).toHaveBeenCalledWith(replyInput, undefined);
+    expect(commentsAdpt.move).toHaveBeenCalledWith(moveInput, undefined);
+    expect(commentsAdpt.resolve).toHaveBeenCalledWith(resolveInput, undefined);
+    expect(commentsAdpt.remove).toHaveBeenCalledWith(removeInput, undefined);
+    expect(commentsAdpt.setInternal).toHaveBeenCalledWith(setInternalInput, undefined);
+    expect(commentsAdpt.setActive).toHaveBeenCalledWith(setActiveInput, undefined);
     expect(commentsAdpt.goTo).toHaveBeenCalledWith(goToInput);
     expect(commentsAdpt.get).toHaveBeenCalledWith(getInput);
     expect(commentsAdpt.list).toHaveBeenCalledWith(listQuery);
@@ -1726,10 +1732,13 @@ describe('createDocumentApi', () => {
       });
 
       api.comments.add({ blockId: 'p1', start: 0, end: 5, text: 'comment' });
-      expect(commentsAdpt.add).toHaveBeenCalledWith({
-        target: { kind: 'text', blockId: 'p1', range: { start: 0, end: 5 } },
-        text: 'comment',
-      });
+      expect(commentsAdpt.add).toHaveBeenCalledWith(
+        {
+          target: { kind: 'text', blockId: 'p1', range: { start: 0, end: 5 } },
+          text: 'comment',
+        },
+        undefined,
+      );
     });
 
     it('sends canonical target through unchanged', () => {
@@ -1750,7 +1759,7 @@ describe('createDocumentApi', () => {
 
       const target = { kind: 'text', blockId: 'p1', range: { start: 0, end: 5 } } as const;
       api.comments.add({ target, text: 'comment' });
-      expect(commentsAdpt.add).toHaveBeenCalledWith({ target, text: 'comment' });
+      expect(commentsAdpt.add).toHaveBeenCalledWith({ target, text: 'comment' }, undefined);
     });
   });
 
@@ -1863,10 +1872,13 @@ describe('createDocumentApi', () => {
       });
 
       api.comments.move({ commentId: 'c1', blockId: 'p1', start: 0, end: 5 });
-      expect(commentsAdpt.move).toHaveBeenCalledWith({
-        commentId: 'c1',
-        target: { kind: 'text', blockId: 'p1', range: { start: 0, end: 5 } },
-      });
+      expect(commentsAdpt.move).toHaveBeenCalledWith(
+        {
+          commentId: 'c1',
+          target: { kind: 'text', blockId: 'p1', range: { start: 0, end: 5 } },
+        },
+        undefined,
+      );
     });
   });
 

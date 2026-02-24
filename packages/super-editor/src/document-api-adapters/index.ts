@@ -5,45 +5,45 @@ import type {
   InfoInput,
   NodeAddress,
   Query,
-  TrackChangesAcceptAllInput,
-  TrackChangesAcceptInput,
-  TrackChangesGetInput,
-  TrackChangesRejectAllInput,
-  TrackChangesRejectInput,
 } from '@superdoc/document-api';
 import type { Editor } from '../core/Editor.js';
 import { getDocumentApiCapabilities } from './capabilities-adapter.js';
-import { createCommentsAdapter } from './comments-adapter.js';
-import { createParagraphAdapter, createHeadingAdapter } from './create-adapter.js';
+import { createCommentsWrapper } from './plan-engine/comments-wrappers.js';
+import { createParagraphWrapper, createHeadingWrapper } from './plan-engine/create-wrappers.js';
 import { findAdapter } from './find-adapter.js';
 import {
-  formatBoldAdapter,
-  formatItalicAdapter,
-  formatUnderlineAdapter,
-  formatStrikethroughAdapter,
-} from './format-adapter.js';
+  writeWrapper,
+  formatBoldWrapper,
+  formatItalicWrapper,
+  formatUnderlineWrapper,
+  formatStrikethroughWrapper,
+} from './plan-engine/plan-wrappers.js';
 import { getNodeAdapter, getNodeByIdAdapter } from './get-node-adapter.js';
 import { getTextAdapter } from './get-text-adapter.js';
 import { infoAdapter } from './info-adapter.js';
 import {
-  listsExitAdapter,
-  listsGetAdapter,
-  listsIndentAdapter,
-  listsInsertAdapter,
-  listsListAdapter,
-  listsOutdentAdapter,
-  listsRestartAdapter,
-  listsSetTypeAdapter,
-} from './lists-adapter.js';
+  listsExitWrapper,
+  listsGetWrapper,
+  listsIndentWrapper,
+  listsInsertWrapper,
+  listsListWrapper,
+  listsOutdentWrapper,
+  listsRestartWrapper,
+  listsSetTypeWrapper,
+} from './plan-engine/lists-wrappers.js';
 import {
-  trackChangesAcceptAdapter,
-  trackChangesAcceptAllAdapter,
-  trackChangesGetAdapter,
-  trackChangesListAdapter,
-  trackChangesRejectAdapter,
-  trackChangesRejectAllAdapter,
-} from './track-changes-adapter.js';
-import { writeAdapter } from './write-adapter.js';
+  trackChangesAcceptWrapper,
+  trackChangesAcceptAllWrapper,
+  trackChangesGetWrapper,
+  trackChangesListWrapper,
+  trackChangesRejectWrapper,
+  trackChangesRejectAllWrapper,
+} from './plan-engine/track-changes-wrappers.js';
+import { executePlan } from './plan-engine/executor.js';
+import { previewPlan } from './plan-engine/preview.js';
+import { queryMatchAdapter } from './plan-engine/query-match-adapter.js';
+import { initRevision, trackRevisions } from './plan-engine/revision-tracker.js';
+import { registerBuiltInExecutors } from './plan-engine/register-executors.js';
 
 /**
  * Creates the full set of Document API adapters backed by the given editor instance.
@@ -52,6 +52,11 @@ import { writeAdapter } from './write-adapter.js';
  * @returns Adapter implementations for document query/mutation APIs.
  */
 export function getDocumentApiAdapters(editor: Editor): DocumentApiAdapters {
+  registerBuiltInExecutors();
+  // Initialize revision tracking for this editor instance
+  initRevision(editor);
+  trackRevisions(editor);
+
   return {
     find: {
       find: (query: Query) => findAdapter(editor, query),
@@ -70,37 +75,44 @@ export function getDocumentApiAdapters(editor: Editor): DocumentApiAdapters {
       get: () => getDocumentApiCapabilities(editor),
     },
     // Factory pattern — comments has 11 methods; inline lambdas would be unwieldy.
-    comments: createCommentsAdapter(editor),
+    comments: createCommentsWrapper(editor),
     write: {
-      write: (request, options) => writeAdapter(editor, request, options),
+      write: (request, options) => writeWrapper(editor, request, options),
     },
     format: {
-      bold: (input, options) => formatBoldAdapter(editor, input, options),
-      italic: (input, options) => formatItalicAdapter(editor, input, options),
-      underline: (input, options) => formatUnderlineAdapter(editor, input, options),
-      strikethrough: (input, options) => formatStrikethroughAdapter(editor, input, options),
+      bold: (input, options) => formatBoldWrapper(editor, input, options),
+      italic: (input, options) => formatItalicWrapper(editor, input, options),
+      underline: (input, options) => formatUnderlineWrapper(editor, input, options),
+      strikethrough: (input, options) => formatStrikethroughWrapper(editor, input, options),
     },
     trackChanges: {
-      list: (query) => trackChangesListAdapter(editor, query),
-      get: (input: TrackChangesGetInput) => trackChangesGetAdapter(editor, input),
-      accept: (input: TrackChangesAcceptInput) => trackChangesAcceptAdapter(editor, input),
-      reject: (input: TrackChangesRejectInput) => trackChangesRejectAdapter(editor, input),
-      acceptAll: (input: TrackChangesAcceptAllInput) => trackChangesAcceptAllAdapter(editor, input),
-      rejectAll: (input: TrackChangesRejectAllInput) => trackChangesRejectAllAdapter(editor, input),
+      list: (query) => trackChangesListWrapper(editor, query),
+      get: (input) => trackChangesGetWrapper(editor, input),
+      accept: (input, options) => trackChangesAcceptWrapper(editor, input, options),
+      reject: (input, options) => trackChangesRejectWrapper(editor, input, options),
+      acceptAll: (input, options) => trackChangesAcceptAllWrapper(editor, input, options),
+      rejectAll: (input, options) => trackChangesRejectAllWrapper(editor, input, options),
     },
     create: {
-      paragraph: (input, options) => createParagraphAdapter(editor, input, options),
-      heading: (input, options) => createHeadingAdapter(editor, input, options),
+      paragraph: (input, options) => createParagraphWrapper(editor, input, options),
+      heading: (input, options) => createHeadingWrapper(editor, input, options),
     },
     lists: {
-      list: (query) => listsListAdapter(editor, query),
-      get: (input) => listsGetAdapter(editor, input),
-      insert: (input, options) => listsInsertAdapter(editor, input, options),
-      setType: (input, options) => listsSetTypeAdapter(editor, input, options),
-      indent: (input, options) => listsIndentAdapter(editor, input, options),
-      outdent: (input, options) => listsOutdentAdapter(editor, input, options),
-      restart: (input, options) => listsRestartAdapter(editor, input, options),
-      exit: (input, options) => listsExitAdapter(editor, input, options),
+      list: (query) => listsListWrapper(editor, query),
+      get: (input) => listsGetWrapper(editor, input),
+      insert: (input, options) => listsInsertWrapper(editor, input, options),
+      setType: (input, options) => listsSetTypeWrapper(editor, input, options),
+      indent: (input, options) => listsIndentWrapper(editor, input, options),
+      outdent: (input, options) => listsOutdentWrapper(editor, input, options),
+      restart: (input, options) => listsRestartWrapper(editor, input, options),
+      exit: (input, options) => listsExitWrapper(editor, input, options),
+    },
+    query: {
+      match: (input) => queryMatchAdapter(editor, input),
+    },
+    mutations: {
+      preview: (input) => previewPlan(editor, input),
+      apply: (input) => executePlan(editor, input),
     },
   };
 }

@@ -90,7 +90,7 @@ function deriveCategoryFromDocApi(docApiId: OperationId): CliCategory {
   const group = REFERENCE_GROUP_BY_OP.get(docApiId);
   if (!group) return 'query';
 
-  if (group === 'core') {
+  if (group === 'core' || group === 'mutations') {
     return COMMAND_CATALOG[docApiId].mutates ? 'mutation' : 'query';
   }
 

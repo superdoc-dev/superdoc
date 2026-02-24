@@ -1,5 +1,6 @@
 import type { Receipt, TextAddress } from '../types/index.js';
 import type { CommentInfo, CommentsListQuery, CommentsListResult } from './comments.types.js';
+import type { RevisionGuardOptions } from '../write/write.js';
 import { DocumentApiValidationError } from '../errors.js';
 import { isRecord, isTextAddress, assertNoUnknownFields, assertNonNegativeInteger } from '../validation-primitives.js';
 
@@ -76,21 +77,21 @@ export interface GetCommentInput {
  */
 export interface CommentsAdapter {
   /** Add a comment at the specified text range. */
-  add(input: AddCommentInput): Receipt;
+  add(input: AddCommentInput, options?: RevisionGuardOptions): Receipt;
   /** Edit the body text of an existing comment. */
-  edit(input: EditCommentInput): Receipt;
+  edit(input: EditCommentInput, options?: RevisionGuardOptions): Receipt;
   /** Reply to an existing comment thread. */
-  reply(input: ReplyToCommentInput): Receipt;
+  reply(input: ReplyToCommentInput, options?: RevisionGuardOptions): Receipt;
   /** Move a comment to a different text range. */
-  move(input: MoveCommentInput): Receipt;
+  move(input: MoveCommentInput, options?: RevisionGuardOptions): Receipt;
   /** Resolve an open comment. */
-  resolve(input: ResolveCommentInput): Receipt;
+  resolve(input: ResolveCommentInput, options?: RevisionGuardOptions): Receipt;
   /** Remove a comment from the document. */
-  remove(input: RemoveCommentInput): Receipt;
+  remove(input: RemoveCommentInput, options?: RevisionGuardOptions): Receipt;
   /** Set the internal/private flag on a comment. */
-  setInternal(input: SetCommentInternalInput): Receipt;
+  setInternal(input: SetCommentInternalInput, options?: RevisionGuardOptions): Receipt;
   /** Set which comment is currently active/focused. Pass `null` to clear. */
-  setActive(input: SetCommentActiveInput): Receipt;
+  setActive(input: SetCommentActiveInput, options?: RevisionGuardOptions): Receipt;
   /** Scroll to and focus a comment in the document. */
   goTo(input: GoToCommentInput): Receipt;
   /** Retrieve full information for a single comment. */
@@ -302,40 +303,72 @@ function normalizeCommentTarget<T extends { target?: TextAddress; blockId?: stri
  * directly. Mutation operations will gain validation as the API matures.
  * Keep the wrappers to preserve this extension surface.
  */
-export function executeAddComment(adapter: CommentsAdapter, input: AddCommentInput): Receipt {
+export function executeAddComment(
+  adapter: CommentsAdapter,
+  input: AddCommentInput,
+  options?: RevisionGuardOptions,
+): Receipt {
   validateAddCommentInput(input);
   const normalized = normalizeCommentTarget(input);
-  return adapter.add(normalized);
+  return adapter.add(normalized, options);
 }
 
-export function executeEditComment(adapter: CommentsAdapter, input: EditCommentInput): Receipt {
-  return adapter.edit(input);
+export function executeEditComment(
+  adapter: CommentsAdapter,
+  input: EditCommentInput,
+  options?: RevisionGuardOptions,
+): Receipt {
+  return adapter.edit(input, options);
 }
 
-export function executeReplyToComment(adapter: CommentsAdapter, input: ReplyToCommentInput): Receipt {
-  return adapter.reply(input);
+export function executeReplyToComment(
+  adapter: CommentsAdapter,
+  input: ReplyToCommentInput,
+  options?: RevisionGuardOptions,
+): Receipt {
+  return adapter.reply(input, options);
 }
 
-export function executeMoveComment(adapter: CommentsAdapter, input: MoveCommentInput): Receipt {
+export function executeMoveComment(
+  adapter: CommentsAdapter,
+  input: MoveCommentInput,
+  options?: RevisionGuardOptions,
+): Receipt {
   validateMoveCommentInput(input);
   const normalized = normalizeCommentTarget(input);
-  return adapter.move(normalized);
+  return adapter.move(normalized, options);
 }
 
-export function executeResolveComment(adapter: CommentsAdapter, input: ResolveCommentInput): Receipt {
-  return adapter.resolve(input);
+export function executeResolveComment(
+  adapter: CommentsAdapter,
+  input: ResolveCommentInput,
+  options?: RevisionGuardOptions,
+): Receipt {
+  return adapter.resolve(input, options);
 }
 
-export function executeRemoveComment(adapter: CommentsAdapter, input: RemoveCommentInput): Receipt {
-  return adapter.remove(input);
+export function executeRemoveComment(
+  adapter: CommentsAdapter,
+  input: RemoveCommentInput,
+  options?: RevisionGuardOptions,
+): Receipt {
+  return adapter.remove(input, options);
 }
 
-export function executeSetCommentInternal(adapter: CommentsAdapter, input: SetCommentInternalInput): Receipt {
-  return adapter.setInternal(input);
+export function executeSetCommentInternal(
+  adapter: CommentsAdapter,
+  input: SetCommentInternalInput,
+  options?: RevisionGuardOptions,
+): Receipt {
+  return adapter.setInternal(input, options);
 }
 
-export function executeSetCommentActive(adapter: CommentsAdapter, input: SetCommentActiveInput): Receipt {
-  return adapter.setActive(input);
+export function executeSetCommentActive(
+  adapter: CommentsAdapter,
+  input: SetCommentActiveInput,
+  options?: RevisionGuardOptions,
+): Receipt {
+  return adapter.setActive(input, options);
 }
 
 export function executeGoToComment(adapter: CommentsAdapter, input: GoToCommentInput): Receipt {

@@ -41,6 +41,11 @@
     "apps/docs/document-api/reference/lists/outdent.mdx",
     "apps/docs/document-api/reference/lists/restart.mdx",
     "apps/docs/document-api/reference/lists/set-type.mdx",
+    "apps/docs/document-api/reference/mutations/apply.mdx",
+    "apps/docs/document-api/reference/mutations/index.mdx",
+    "apps/docs/document-api/reference/mutations/preview.mdx",
+    "apps/docs/document-api/reference/query/index.mdx",
+    "apps/docs/document-api/reference/query/match.mdx",
     "apps/docs/document-api/reference/replace.mdx",
     "apps/docs/document-api/reference/track-changes/accept-all.mdx",
     "apps/docs/document-api/reference/track-changes/accept.mdx",
@@ -121,8 +126,20 @@
       ],
       "pagePath": "apps/docs/document-api/reference/track-changes/index.mdx",
       "title": "Track Changes"
+    },
+    {
+      "key": "query",
+      "operationIds": ["query.match"],
+      "pagePath": "apps/docs/document-api/reference/query/index.mdx",
+      "title": "Query"
+    },
+    {
+      "key": "mutations",
+      "operationIds": ["mutations.preview", "mutations.apply"],
+      "pagePath": "apps/docs/document-api/reference/mutations/index.mdx",
+      "title": "Mutations"
     }
   ],
   "marker": "{/* GENERATED FILE: DO NOT EDIT. Regenerate via `pnpm run docapi:sync`. */}",
-  "sourceHash": "dd10c0218ba8a9148e8a3412053672bbbe88976f7a779650602aa98dec6efeee"
+  "sourceHash": "def6d3b7f9e73d872b213cde06be8293f5f607501e777f9cb5f76c6d8e3f252a"
 }

@@ -3,7 +3,12 @@ import type { BlockRelativeLocator, BlockRelativeRange } from './locator.js';
 
 export type ChangeMode = 'direct' | 'tracked';
 
-export interface MutationOptions {
+export interface RevisionGuardOptions {
+  /** When provided, the engine rejects with REVISION_MISMATCH if the document has advanced past this revision. */
+  expectedRevision?: string;
+}
+
+export interface MutationOptions extends RevisionGuardOptions {
   /**
    * Controls whether mutation applies directly or as a tracked change.
    * Defaults to `direct`.
@@ -48,6 +53,7 @@ export interface WriteAdapter {
 
 export function normalizeMutationOptions(options?: MutationOptions): MutationOptions {
   return {
+    expectedRevision: options?.expectedRevision,
     changeMode: options?.changeMode ?? 'direct',
     dryRun: options?.dryRun ?? false,
   };

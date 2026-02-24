@@ -1096,6 +1096,97 @@ const operationSchemas: Record<OperationId, OperationSchemaSet> = {
     success: receiptSuccessSchema,
     failure: receiptFailureResultSchemaFor('trackChanges.rejectAll'),
   },
+  'query.match': {
+    input: objectSchema(
+      {
+        select: { oneOf: [textSelectorSchema, nodeSelectorSchema] },
+        within: nodeAddressSchema,
+        require: { enum: ['any', 'first', 'exactlyOne', 'all'] },
+        includeNodes: { type: 'boolean' },
+        includeStyle: { type: 'boolean' },
+        limit: { type: 'integer', minimum: 1 },
+        offset: { type: 'integer', minimum: 0 },
+      },
+      ['select'],
+    ),
+    output: objectSchema(
+      {
+        evaluatedRevision: { type: 'string' },
+        matches: arraySchema(
+          objectSchema({
+            address: nodeAddressSchema,
+            textRanges: arraySchema(textAddressSchema),
+            ref: { type: 'string' },
+            refStability: { enum: ['ephemeral', 'stable'] },
+            style: objectSchema(
+              {
+                marks: objectSchema({
+                  bold: { type: 'boolean' },
+                  italic: { type: 'boolean' },
+                  underline: { type: 'boolean' },
+                  strike: { type: 'boolean' },
+                }),
+                isUniform: { type: 'boolean' },
+              },
+              ['marks', 'isUniform'],
+            ),
+          }),
+        ),
+        totalMatches: { type: 'integer', minimum: 0 },
+      },
+      ['evaluatedRevision', 'matches', 'totalMatches'],
+    ),
+  },
+  'mutations.preview': {
+    input: objectSchema(
+      {
+        expectedRevision: { type: 'string' },
+        atomic: { const: true },
+        changeMode: { enum: ['direct', 'tracked'] },
+        steps: arraySchema({ type: 'object' }),
+      },
+      ['expectedRevision', 'atomic', 'changeMode', 'steps'],
+    ),
+    output: objectSchema(
+      {
+        evaluatedRevision: { type: 'string' },
+        steps: arraySchema({ type: 'object' }),
+        valid: { type: 'boolean' },
+        failures: arraySchema({ type: 'object' }),
+      },
+      ['evaluatedRevision', 'steps', 'valid'],
+    ),
+  },
+  'mutations.apply': {
+    input: objectSchema(
+      {
+        expectedRevision: { type: 'string' },
+        atomic: { const: true },
+        changeMode: { enum: ['direct', 'tracked'] },
+        steps: arraySchema({ type: 'object' }),
+      },
+      ['expectedRevision', 'atomic', 'changeMode', 'steps'],
+    ),
+    output: objectSchema(
+      {
+        success: { const: true },
+        revision: objectSchema({ before: { type: 'string' }, after: { type: 'string' } }, ['before', 'after']),
+        steps: arraySchema({ type: 'object' }),
+        trackedChanges: arraySchema({ type: 'object' }),
+        timing: objectSchema({ totalMs: { type: 'number' } }, ['totalMs']),
+      },
+      ['success', 'revision', 'steps', 'timing'],
+    ),
+    success: objectSchema(
+      {
+        success: { const: true },
+        revision: objectSchema({ before: { type: 'string' }, after: { type: 'string' } }, ['before', 'after']),
+        steps: arraySchema({ type: 'object' }),
+        timing: objectSchema({ totalMs: { type: 'number' } }, ['totalMs']),
+      },
+      ['success', 'revision', 'steps', 'timing'],
+    ),
+  },
   'capabilities.get': {
     input: strictEmptyObjectSchema,
     output: capabilitiesOutputSchema,

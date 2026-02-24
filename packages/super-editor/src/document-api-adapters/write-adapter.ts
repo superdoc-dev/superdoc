@@ -10,6 +10,7 @@ import type {
 import { DocumentApiAdapterError } from './errors.js';
 import { ensureTrackedCapability } from './helpers/mutation-helpers.js';
 import { applyDirectMutationMeta } from './helpers/transaction-meta.js';
+import { checkRevision } from './plan-engine/revision-tracker.js';
 import { resolveDefaultInsertTarget, resolveTextTarget, type ResolvedTextTarget } from './helpers/adapter-utils.js';
 import { buildTextMutationResolution, readTextAtResolvedRange } from './helpers/text-mutation-resolution.js';
 import { toCanonicalTrackedChangeId } from './helpers/tracked-change-resolver.js';
@@ -280,6 +281,8 @@ function toFailureReceipt(failure: ReceiptFailure, resolvedTarget: ResolvedWrite
 }
 
 export function writeAdapter(editor: Editor, request: WriteRequest, options?: MutationOptions): TextMutationReceipt {
+  checkRevision(editor, options?.expectedRevision);
+
   // Normalize friendly locator fields (blockId + offset) into canonical TextAddress
   // before resolution. This is the adapter-layer normalization per the contract.
   const normalizedRequest = normalizeWriteLocator(request);

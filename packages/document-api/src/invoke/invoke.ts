@@ -65,14 +65,14 @@ export function buildDispatchTable(api: DocumentApi): TypedDispatchTable {
     'lists.exit': (input, options) => api.lists.exit(input, options),
 
     // --- comments.* ---
-    'comments.add': (input) => api.comments.add(input),
-    'comments.edit': (input) => api.comments.edit(input),
-    'comments.reply': (input) => api.comments.reply(input),
-    'comments.move': (input) => api.comments.move(input),
-    'comments.resolve': (input) => api.comments.resolve(input),
-    'comments.remove': (input) => api.comments.remove(input),
-    'comments.setInternal': (input) => api.comments.setInternal(input),
-    'comments.setActive': (input) => api.comments.setActive(input),
+    'comments.add': (input, options) => api.comments.add(input, options),
+    'comments.edit': (input, options) => api.comments.edit(input, options),
+    'comments.reply': (input, options) => api.comments.reply(input, options),
+    'comments.move': (input, options) => api.comments.move(input, options),
+    'comments.resolve': (input, options) => api.comments.resolve(input, options),
+    'comments.remove': (input, options) => api.comments.remove(input, options),
+    'comments.setInternal': (input, options) => api.comments.setInternal(input, options),
+    'comments.setActive': (input, options) => api.comments.setActive(input, options),
     'comments.goTo': (input) => api.comments.goTo(input),
     'comments.get': (input) => api.comments.get(input),
     'comments.list': (input) => api.comments.list(input),
@@ -80,10 +80,17 @@ export function buildDispatchTable(api: DocumentApi): TypedDispatchTable {
     // --- trackChanges.* ---
     'trackChanges.list': (input) => api.trackChanges.list(input),
     'trackChanges.get': (input) => api.trackChanges.get(input),
-    'trackChanges.accept': (input) => api.trackChanges.accept(input),
-    'trackChanges.reject': (input) => api.trackChanges.reject(input),
-    'trackChanges.acceptAll': (input) => api.trackChanges.acceptAll(input),
-    'trackChanges.rejectAll': (input) => api.trackChanges.rejectAll(input),
+    'trackChanges.accept': (input, options) => api.trackChanges.accept(input, options),
+    'trackChanges.reject': (input, options) => api.trackChanges.reject(input, options),
+    'trackChanges.acceptAll': (input, options) => api.trackChanges.acceptAll(input, options),
+    'trackChanges.rejectAll': (input, options) => api.trackChanges.rejectAll(input, options),
+
+    // --- query.* ---
+    'query.match': (input) => api.query.match(input),
+
+    // --- mutations.* ---
+    'mutations.preview': (input) => api.mutations.preview(input),
+    'mutations.apply': (input) => api.mutations.apply(input),
 
     // --- capabilities ---
     'capabilities.get': () => api.capabilities(),

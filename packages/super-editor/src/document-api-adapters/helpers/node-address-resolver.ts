@@ -78,7 +78,7 @@ export function getHeadingLevel(styleId?: string | null): number | undefined {
   return Number(match[1]);
 }
 
-function mapBlockNodeType(node: ProseMirrorNode): BlockNodeType | undefined {
+export function mapBlockNodeType(node: ProseMirrorNode): BlockNodeType | undefined {
   if (!node.isBlock) return undefined;
   switch (node.type.name) {
     case 'paragraph': {

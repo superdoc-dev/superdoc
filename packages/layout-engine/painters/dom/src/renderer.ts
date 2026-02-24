@@ -2166,16 +2166,16 @@ export class DomPainter {
 			const separatorX = leftMargin + (i + 1) * columnWidth + i * gap + gap / 2;
 			const separatorEl = this.doc.createElement('div');
 
-			separatorEl.style.position = 'absolute';
-			separatorEl.style.left = `${separatorX}px`;
-			separatorEl.style.top = `${topMargin}px`;
-			separatorEl.style.height = `${pageHeight - topMargin - bottomMargin}px`;
-			separatorEl.style.width = '1px';
-			separatorEl.style.backgroundColor = '#b3b3b3';
-			separatorEl.style.pointerEvents = 'none';
-			pageEl.appendChild(separatorEl);
-		}
-	}
+      separatorEl.style.position = 'absolute';
+      separatorEl.style.left = `${separatorX}px`;
+      separatorEl.style.top = `${topMargin}px`;
+      separatorEl.style.height = `${pageHeight - topMargin - bottomMargin}px`;
+      separatorEl.style.width = '1px';
+      separatorEl.style.backgroundColor = '#000000';
+      separatorEl.style.pointerEvents = 'none';
+      pageEl.appendChild(separatorEl);
+    }
+  }
 
   private renderDecorationsForPage(pageEl: HTMLElement, page: Page, pageIndex: number): void {
     if (this.isSemanticFlow) return;

@@ -1,15 +1,39 @@
+// In-flight deduplication: if an export is already running for this editor,
+// subsequent calls return the same promise instead of spawning a parallel export.
+const inFlightUpdates = new WeakMap();
+
 /**
  * Update the Ydoc document data with the latest Docx XML.
+ *
+ * Deduplicates concurrent calls for the same editor — if an export is already
+ * in progress, the existing promise is returned instead of starting a second
+ * expensive exportDocx() call.
  *
  * @param {Editor} editor The editor instance
  * @returns {Promise<void>}
  */
-export const updateYdocDocxData = async (editor, ydoc) => {
-  try {
-    ydoc = ydoc || editor?.options?.ydoc;
-    if (!ydoc || ydoc.isDestroyed) return;
-    if (!editor || editor.isDestroyed) return;
+export const updateYdocDocxData = (editor, ydoc) => {
+  ydoc = ydoc || editor?.options?.ydoc;
+  if (!ydoc || ydoc.isDestroyed) return Promise.resolve();
+  if (!editor || editor.isDestroyed) return Promise.resolve();
 
+  const existing = inFlightUpdates.get(editor);
+  if (existing) {
+    return existing;
+  }
+
+  const promise = _doUpdateYdocDocxData(editor, ydoc).finally(() => {
+    if (inFlightUpdates.get(editor) === promise) {
+      inFlightUpdates.delete(editor);
+    }
+  });
+
+  inFlightUpdates.set(editor, promise);
+  return promise;
+};
+
+const _doUpdateYdocDocxData = async (editor, ydoc) => {
+  try {
     const metaMap = ydoc.getMap('meta');
     const docxValue = metaMap.get('docx');
 

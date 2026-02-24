@@ -34,7 +34,7 @@ import {
 import { AnnotatorHelpers } from '@helpers/annotator.js';
 import { prepareCommentsForExport, prepareCommentsForImport } from '@extensions/comment/comments-helpers.js';
 import DocxZipper from '@core/DocxZipper.js';
-import { generateCollaborationData } from '@extensions/collaboration/collaboration.js';
+import { generateCollaborationData, cancelDebouncedDocxUpdate } from '@extensions/collaboration/collaboration.js';
 import { useHighContrastMode } from '../composables/use-high-contrast-mode.js';
 import { updateYdocDocxData } from '@extensions/collaboration/collaboration-helpers.js';
 import { setImageNodeSelection } from './helpers/setImageNodeSelection.js';
@@ -3164,7 +3164,11 @@ export class Editor extends EventEmitter<EditorEventMap> {
     this.initDefaultStyles();
 
     if (this.options.ydoc && this.options.collaborationProvider) {
-      updateYdocDocxData(this, this.options.ydoc);
+      // Cancel any pending debounced docx update — we are about to do a
+      // fresh export with the new file data. Without cancel, the debounced
+      // export from the previous transaction cycle could fire redundantly.
+      cancelDebouncedDocxUpdate(this);
+      await updateYdocDocxData(this, this.options.ydoc);
       this.initializeCollaborationData();
     } else {
       this.#insertNewFileData();

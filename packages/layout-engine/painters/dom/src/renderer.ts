@@ -2146,21 +2146,22 @@ export class DomPainter {
       return null;
     }
   }
-	private renderColumnSeparators(pageEl: HTMLElement, page: Page, pageWidth: number, pageHeight: number): void {
-		if (!this.doc) return;
-		if (!page.columns) return;
-		if (!page.columns.withSeparator) return;
-		if (page.columns.count <= 1) return;
-		if (!page.margins) return;
 
-		const leftMargin = page.margins.left ?? 0;
-		const rightMargin = page.margins.right ?? 0;
-		const topMargin = page.margins.top ?? 0;
-		const bottomMargin = page.margins.bottom ?? 0;
-		const contentWidth = pageWidth - leftMargin - rightMargin;
-		const columnCount = page.columns.count;
-		const gap = page.columns.gap;
-		const columnWidth = (contentWidth - gap * (columnCount - 1)) / columnCount;
+  private renderColumnSeparators(pageEl: HTMLElement, page: Page, pageWidth: number, pageHeight: number): void {
+    if (!this.doc) return;
+    if (!page.columns) return;
+    if (!page.columns.withSeparator) return;
+    if (page.columns.count <= 1) return;
+    if (!page.margins) return;
+
+    const leftMargin = page.margins.left ?? 0;
+    const rightMargin = page.margins.right ?? 0;
+    const topMargin = page.margins.top ?? 0;
+    const bottomMargin = page.margins.bottom ?? 0;
+    const contentWidth = pageWidth - leftMargin - rightMargin;
+    const columnCount = page.columns.count;
+    const gap = page.columns.gap;
+    const columnWidth = (contentWidth - gap * (columnCount - 1)) / columnCount;
 
     // Given the separator will have 1px width, ensure column has a larger width.
     if (columnWidth <= 1) {
@@ -2618,7 +2619,7 @@ export class DomPainter {
     this.renderDecorationsForPage(el, page, pageIndex);
     this.renderColumnSeparators(el, page, pageSize.w, pageSize.h);
 
-	return { element: el, fragments: fragmentStates };
+    return { element: el, fragments: fragmentStates };
   }
 
   private applySemanticPageOverrides(el: HTMLElement): void {

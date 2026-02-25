@@ -5,6 +5,17 @@ import { createSingleItemList } from '../html/html-helpers.js';
 import { getLvlTextForGoogleList, googleNumDefMap } from '../../helpers/pasteListHelpers.js';
 import { wrapTextsInRuns } from '../docx-paste/docx-paste.js';
 
+// Ordered largest → smallest; first match wins.
+const headingSizeMap = [
+  { minPt: 20, tag: 'h1' },
+  { minPt: 16, tag: 'h2' },
+  { minPt: 14, tag: 'h3' },
+  { minPt: 12, tag: 'h4' },
+  { minPt: 10, tag: 'h5' },
+];
+
+const boldWeightRegex = /^(bold|700|800|900)$/i;
+
 /**
  * Main handler for pasted Google Docs content.
  *
@@ -21,7 +32,9 @@ export const handleGoogleDocsHtml = (html, editor, view) => {
   const tempDiv = document.createElement('div');
   tempDiv.innerHTML = cleanedHtml;
 
-  const htmlWithMergedLists = mergeSeparateLists(tempDiv);
+  const tempDivWithHeadings = convertStyledHeadings(tempDiv);
+
+  const htmlWithMergedLists = mergeSeparateLists(tempDivWithHeadings);
   const flattenHtml = flattenListsInHtml(htmlWithMergedLists, editor);
 
   let doc = DOMParser.fromSchema(editor.schema).parse(flattenHtml);
@@ -252,4 +265,61 @@ function buildListPath(level, map) {
     }
   }
   return path;
+}
+
+/**
+ * Converts Google Docs styled <p> elements that represent headings into proper
+ * <h1>–<h5> tags before ProseMirror parsing.
+ *
+ * Google Docs converts heading levels to <p> tags with inline font-size /
+ * font-weight styling instead of semantic heading tags. This function detects
+ * that pattern and replaces the elements in-place.
+ *
+ * @param {HTMLElement} container
+ */
+function convertStyledHeadings(container) {
+  const paragraphs = Array.from(container.querySelectorAll('p'));
+
+  paragraphs.forEach((p) => {
+    const { fontSize, isBold } = getHeadingStyleProps(p);
+    if (!isBold || fontSize === null) return;
+
+    const match = headingSizeMap.find(({ minPt }) => fontSize >= minPt);
+    if (!match) return;
+
+    const heading = document.createElement(match.tag);
+    heading.innerHTML = p.innerHTML;
+    Array.from(p.attributes).forEach((attr) => heading.setAttribute(attr.name, attr.value));
+    p.replaceWith(heading);
+  });
+
+  return container;
+}
+
+/**
+ * Reads font-size (in pt) and bold status from an element's inline style.
+ * Checks both the element itself and its first child <span> to cover both
+ * Google Docs style placements (style on <p> vs. style on inner <span>).
+ *
+ * @param {HTMLElement} el
+ * @returns {{ fontSize: number|null, isBold: boolean }}
+ */
+function getHeadingStyleProps(el) {
+  const span = el.querySelector('span');
+  const fontSize = parsePtValue(el.style.fontSize) ?? parsePtValue(span?.style.fontSize);
+  const isBold = boldWeightRegex.test(el.style.fontWeight || '') || boldWeightRegex.test(span?.style.fontWeight || '');
+  return { fontSize, isBold };
+}
+
+/**
+ * Parses a CSS font-size value in pt units, e.g. "20pt" → 20. Returns null
+ * for any other format.
+ *
+ * @param {string|undefined} cssValue
+ * @returns {number|null}
+ */
+function parsePtValue(cssValue) {
+  if (!cssValue) return null;
+  const m = cssValue.match(/^([\d.]+)pt$/i);
+  return m ? parseFloat(m[1]) : null;
 }

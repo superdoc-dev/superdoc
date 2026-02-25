@@ -95,4 +95,79 @@ describe('handleGoogleDocsHtml', () => {
     expect(replaceSelectionWith).toHaveBeenCalledWith(parseResult, true);
     expect(dispatch).toHaveBeenCalledWith('next');
   });
+
+  describe('convertStyledHeadings', () => {
+    function makeEditor(dispatch, replaceSelectionWith) {
+      return {
+        editor: { schema: {}, view: { dispatch }, options: {} },
+        view: { state: { tr: { replaceSelectionWith } } },
+      };
+    }
+
+    function parseHeadings(html) {
+      const dispatch = vi.fn();
+      const replaceSelectionWith = vi.fn(() => 'next');
+      const { editor, view } = makeEditor(dispatch, replaceSelectionWith);
+      handleGoogleDocsHtml(html, editor, view);
+      return parseSpy.mock.calls[0][0];
+    }
+
+    it('converts bold <p> with large font-size to heading tags', () => {
+      const html = `
+        <p style="font-size:20pt;font-weight:700">Heading 1</p>
+        <p style="font-size:16pt;font-weight:bold">Heading 2</p>
+        <p style="font-size:14pt;font-weight:700">Heading 3</p>
+        <p style="font-size:12pt;font-weight:700">Heading 4</p>
+        <p style="font-size:11pt;font-weight:700">Heading 5</p>
+      `;
+      const dom = parseHeadings(html);
+      expect(dom.querySelector('h1')?.textContent?.trim()).toBe('Heading 1');
+      expect(dom.querySelector('h2')?.textContent?.trim()).toBe('Heading 2');
+      expect(dom.querySelector('h3')?.textContent?.trim()).toBe('Heading 3');
+      expect(dom.querySelector('h4')?.textContent?.trim()).toBe('Heading 4');
+      expect(dom.querySelector('h5')?.textContent?.trim()).toBe('Heading 5');
+    });
+
+    it('converts when style is on a child <span> instead of the <p>', () => {
+      const html = `
+        <p><span style="font-size:20pt;font-weight:700">Heading from span</span></p>
+      `;
+      const dom = parseHeadings(html);
+      expect(dom.querySelector('h1')?.textContent?.trim()).toBe('Heading from span');
+      expect(dom.querySelector('p')).toBeNull();
+    });
+
+    it('does not convert non-bold paragraphs', () => {
+      const html = `<p style="font-size:20pt">Not a heading</p>`;
+      const dom = parseHeadings(html);
+      expect(dom.querySelector('h1')).toBeNull();
+      expect(dom.querySelector('p')?.textContent?.trim()).toBe('Not a heading');
+    });
+
+    it('does not convert bold paragraphs with small font-size', () => {
+      const html = `<p style="font-size:9pt;font-weight:700">Small bold</p>`;
+      const dom = parseHeadings(html);
+      expect(dom.querySelector('h1,h2,h3,h4,h5')).toBeNull();
+    });
+
+    it('handles large font-sizes from alternate Google Docs themes (e.g. 24pt → h1)', () => {
+      const html = `<p style="font-size:24pt;font-weight:700">Big Heading</p>`;
+      const dom = parseHeadings(html);
+      expect(dom.querySelector('h1')?.textContent?.trim()).toBe('Big Heading');
+    });
+
+    it('converts when font-size is on <p> but font-weight is only on the child <span>', () => {
+      const html = `
+        <p style="font-size:20pt"><span style="font-weight:700">Split style heading</span></p>
+      `;
+      const dom = parseHeadings(html);
+      expect(dom.querySelector('h1')?.textContent?.trim()).toBe('Split style heading');
+    });
+
+    it('preserves attributes from the original <p> on the new heading element', () => {
+      const html = `<p style="font-size:20pt;font-weight:700" data-custom="yes">With attr</p>`;
+      const dom = parseHeadings(html);
+      expect(dom.querySelector('h1')?.getAttribute('data-custom')).toBe('yes');
+    });
+  });
 });

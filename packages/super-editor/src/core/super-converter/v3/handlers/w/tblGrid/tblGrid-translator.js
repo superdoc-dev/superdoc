@@ -47,7 +47,7 @@ const decode = (params) => {
   const grid = Array.isArray(rawGrid) ? rawGrid : [];
   const { firstRow = {}, preferTableGrid = false, totalColumns: requestedColumns } = params.extraParams || {};
 
-  const cellNodes = firstRow.content?.filter((n) => n.type === 'tableCell') ?? [];
+  const cellNodes = firstRow.content?.filter((n) => n.type === 'tableCell' || n.type === 'tableHeader') ?? [];
 
   let colWidthsFromCellNodes = cellNodes.flatMap((cell) => {
     const spanCount = Math.max(1, cell?.attrs?.colspan ?? 1);

@@ -1,18 +1,30 @@
-.sd-structured-content,
-.sd-structured-content-block {
+.super-editor .sd-structured-content,
+.super-editor .sd-structured-content-block {
   padding: 1px;
   box-sizing: border-box;
   border-radius: 4px;
-  border: 1px solid #629be7;
+  border: 1px solid transparent;
   position: relative;
 }
 
-.sd-structured-content:has(img),
-.sd-structured-content:has(img) .sd-structured-content__content {
+.super-editor .sd-structured-content:has(img),
+.super-editor .sd-structured-content:has(img) .sd-structured-content__content {
   display: inline-block;
 }
 
-.sd-structured-content-draggable {
+/* Hover (not selected): light grey background, no handle */
+.super-editor .sd-structured-content:not(.ProseMirror-selectednode):hover,
+.super-editor .sd-structured-content-block:not(.ProseMirror-selectednode):hover {
+  background-color: #f2f2f2;
+}
+
+/* Selected: border + handle visible */
+.super-editor .sd-structured-content.ProseMirror-selectednode,
+.super-editor .sd-structured-content-block.ProseMirror-selectednode {
+  border-color: #629be7;
+}
+
+.super-editor .sd-structured-content-draggable {
   font-size: 10px;
   align-items: center;
   justify-content: center;
@@ -34,25 +46,26 @@
   display: none;
 }
 
-.sd-structured-content-draggable span {
+.super-editor .sd-structured-content-draggable span {
   max-width: 100%;
   overflow: hidden;
   white-space: nowrap;
   text-overflow: ellipsis;
 }
 
-.sd-structured-content:hover .sd-structured-content-draggable,
-.sd-structured-content-block:hover .sd-structured-content-draggable {
+/* Handle only visible when selected */
+.super-editor .sd-structured-content.ProseMirror-selectednode .sd-structured-content-draggable,
+.super-editor .sd-structured-content-block.ProseMirror-selectednode .sd-structured-content-draggable {
   display: inline-flex;
 }
 
-.ProseMirror.view-mode .sd-structured-content,
-.ProseMirror.view-mode .sd-structured-content-block {
+.super-editor .ProseMirror.view-mode .sd-structured-content,
+.super-editor .ProseMirror.view-mode .sd-structured-content-block {
   padding: 0;
   border: none;
 }
 
-.ProseMirror.view-mode .sd-structured-content-draggable {
+.super-editor .ProseMirror.view-mode .sd-structured-content-draggable {
   display: none;
 }
 

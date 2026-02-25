@@ -338,5 +338,6 @@ export const computeRunAttrs = (
     allCaps: runProps?.textTransform === 'uppercase',
     letterSpacing: runProps.letterSpacing ? twipsToPx(runProps.letterSpacing) : undefined,
     lang: runProps.lang?.val || undefined,
+    vanish: runProps.vanish,
   };
 };

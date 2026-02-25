@@ -39,15 +39,28 @@ export function generateTableCellProperties(node) {
   const { attrs } = node;
 
   // Width
-  const { colwidth = [], cellWidthType = 'dxa', widthUnit } = attrs;
-  const colwidthSum = colwidth.reduce((acc, curr) => acc + curr, 0);
-  const propertiesWidthPixels = twipsToPixels(tableCellProperties.cellWidth?.value);
-  if (propertiesWidthPixels !== colwidthSum) {
-    // If the value has changed, update it
-    tableCellProperties['cellWidth'] = {
-      value: widthUnit === 'px' ? pixelsToTwips(colwidthSum) : inchesToTwips(colwidthSum),
-      type: cellWidthType,
-    };
+  const { colwidth: rawColwidth, widthUnit = 'px' } = attrs;
+  const resolvedWidthType =
+    attrs.cellWidthType ??
+    (attrs.widthType !== 'auto' ? attrs.widthType : undefined) ??
+    tableCellProperties.cellWidth?.type ??
+    'dxa';
+
+  // Filter to finite numbers to guard against NaN/Infinity/non-numeric entries
+  const colwidth = Array.isArray(rawColwidth) ? rawColwidth.filter((v) => Number.isFinite(v)) : [];
+
+  // Skip rewrite when:
+  // - colwidth is empty (no data to compute from — preserve original cellWidth)
+  // - resolvedWidthType is 'pct' (colwidth is in pixels but type expects fiftieths-of-percent)
+  if (colwidth.length > 0 && resolvedWidthType !== 'pct') {
+    const colwidthSum = colwidth.reduce((acc, curr) => acc + curr, 0);
+    const propertiesWidthPixels = twipsToPixels(tableCellProperties.cellWidth?.value);
+    if (propertiesWidthPixels !== colwidthSum) {
+      tableCellProperties['cellWidth'] = {
+        value: widthUnit === 'px' ? pixelsToTwips(colwidthSum) : inchesToTwips(colwidthSum),
+        type: resolvedWidthType,
+      };
+    }
   }
 
   // Colspan

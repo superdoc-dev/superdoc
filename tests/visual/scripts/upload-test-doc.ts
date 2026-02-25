@@ -5,16 +5,18 @@
  *   pnpm docs:upload <file>
  *
  * Prompts for an optional Linear issue ID and a short description,
- * then uploads to documents/rendering/<issue-id>-<description>.docx.
+ * then uploads to rendering/<issue-id>-<description>.docx in the shared corpus.
  *
  * Examples:
  *   pnpm docs:upload ~/Downloads/bug-repro.docx
  */
-import { execSync } from 'node:child_process';
+import { execSync, spawn } from 'node:child_process';
 import fs from 'node:fs';
 import path from 'node:path';
+import process from 'node:process';
 import { intro, outro, text, confirm, cancel, isCancel, log } from '@clack/prompts';
-import { createR2Client, ensureR2Auth, DOCUMENTS_PREFIX } from './r2.js';
+
+const REPO_ROOT = path.resolve(import.meta.dirname, '../../..');
 
 function toKebab(str: string): string {
   return str
@@ -45,8 +47,6 @@ async function main() {
     process.exit(1);
   }
 
-  ensureR2Auth();
-
   intro(`Upload: ${path.basename(resolved)}`);
 
   const issueId = exitIfCancelled(
@@ -73,18 +73,31 @@ async function main() {
 
   const parts = [issueId ? toKebab(issueId) : null, description].filter(Boolean);
   const fileName = `${parts.join('-')}.docx`;
-  const key = `${DOCUMENTS_PREFIX}/rendering/${fileName}`;
+  const targetRelativePath = `rendering/${fileName}`;
 
-  const confirmed = exitIfCancelled(await confirm({ message: `Upload as ${key}?` }));
+  const confirmed = exitIfCancelled(await confirm({ message: `Upload as ${targetRelativePath}?` }));
 
   if (!confirmed) {
     cancel('Upload cancelled.');
     process.exit(0);
   }
 
-  const client = await createR2Client();
-  await client.putObject(key, resolved, 'application/vnd.openxmlformats-officedocument.wordprocessingml.document');
-  client.destroy();
+  const uploadArgs = ['run', 'corpus:push', '--', '--path', targetRelativePath, resolved];
+  const uploadChild = spawn('pnpm', uploadArgs, {
+    cwd: REPO_ROOT,
+    env: process.env,
+    stdio: 'inherit',
+  });
+  const uploadExitCode = await new Promise<number>((resolve) => {
+    uploadChild.on('close', (code) => resolve(code ?? 1));
+    uploadChild.on('error', (err) => {
+      console.error(`Failed to spawn corpus:push: ${err.message}`);
+      resolve(1);
+    });
+  });
+  if (uploadExitCode !== 0) {
+    throw new Error(`Corpus upload failed with exit code ${uploadExitCode}.`);
+  }
 
   // Trigger baseline generation if gh CLI is available
   let triggered = false;

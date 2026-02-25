@@ -101,6 +101,7 @@ export function imageNodeToRun({ node, positions, sdtMetadata }: InlineConverter
   // Optional properties
   if (typeof attrs.alt === 'string') run.alt = attrs.alt;
   if (typeof attrs.title === 'string') run.title = attrs.title;
+  if (typeof attrs.clipPath === 'string') run.clipPath = attrs.clipPath;
 
   // Spacing attributes (from wrap.attrs.distT/distB/distL/distR)
   const distTop = pickNumber(wrapAttrs.distTop ?? wrapAttrs.distT);

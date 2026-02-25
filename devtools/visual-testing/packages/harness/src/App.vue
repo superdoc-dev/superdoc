@@ -36,6 +36,15 @@ interface SuperDocConfig {
   selector: string;
   pagination: boolean;
   useLayoutEngine: boolean;
+  layoutEngineOptions?: {
+    virtualization?: {
+      enabled?: boolean;
+      window?: number;
+      overscan?: number;
+      gap?: number;
+      paddingTop?: number;
+    };
+  };
   onReady: () => void;
   onTransaction: (data: TransactionData) => void;
   onFontsResolved?: (data: FontsResolvedData) => void;
@@ -158,6 +167,16 @@ function buildSuperdocConfig(): SuperDocConfig {
     onTransaction,
     modules: {},
   };
+
+  // Disable virtualization by default in the harness so all pages stay mounted.
+  if (config.layout && !config.virtualization) {
+    superdocConfig.layoutEngineOptions = {
+      virtualization: {
+        enabled: false,
+      },
+    };
+  }
+  // When virtualization is enabled explicitly, omit overrides and use SuperDoc defaults.
 
   // Toolbar configuration
   if (config.toolbar === 'none') {

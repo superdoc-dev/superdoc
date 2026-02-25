@@ -782,15 +782,16 @@ export function tableNodeToBlock(
   };
 
   /**
-   * Column width priority hierarchy (per plan Phase 3):
+   * Column width priority hierarchy:
    * 1. User-edited grid (userEdited flag + grid attribute)
-   * 2. PM colwidth attributes (fallback for PM-native edits)
-   * 3. Original OOXML grid (untouched documents)
+   * 2. Original OOXML grid (untouched documents — grid values sum to page width)
+   * 3. PM colwidth attributes (fallback for PM-native edits or missing grid)
    * 4. Auto-calculate from content (no explicit widths)
    *
-   * When both grid and colwidth are present:
-   * - If userEdited=true: use grid (Priority 1)
-   * - Otherwise: use colwidth (Priority 2) over grid (Priority 3)
+   * Grid values (from w:tblGrid) represent actual column positions on the page and
+   * sum to exactly the content width. Cell colwidth values may be scaled up from tcW
+   * (cell width hints) during import and require down-scaling in the measuring code,
+   * which introduces proportion changes that make columns narrower than they should be.
    */
 
   // Priority 1: User-edited grid (preserves resize operations)
@@ -811,7 +812,22 @@ export function tableNodeToBlock(
     }
   }
 
-  // Priority 2: PM colwidth attributes (higher priority than grid when userEdited !== true)
+  // Priority 2: Original OOXML grid (grid values are authoritative for column positions)
+  if (!columnWidths && Array.isArray(node.attrs?.grid) && node.attrs.grid.length > 0) {
+    columnWidths = (node.attrs.grid as Array<{ col?: number } | null | undefined>)
+      .filter((col): col is { col?: number } => col != null && typeof col === 'object')
+      .map((col) => {
+        const twips = typeof col.col === 'number' ? col.col : 0;
+        return twips > 0 ? twipsToPixels(twips) : 0;
+      })
+      .filter((width: number) => width > 0);
+
+    if (columnWidths.length === 0) {
+      columnWidths = undefined;
+    }
+  }
+
+  // Priority 3: PM colwidth attributes (fallback when no grid is available)
   if (!columnWidths && Array.isArray(node.content) && node.content.length > 0) {
     const firstRow = node.content[0];
     if (firstRow && isTableRowNode(firstRow) && Array.isArray(firstRow.content) && firstRow.content.length > 0) {
@@ -829,21 +845,6 @@ export function tableNodeToBlock(
       if (tempWidths.length > 0) {
         columnWidths = tempWidths;
       }
-    }
-  }
-
-  // Priority 3: Original OOXML grid (fallback when no colwidth)
-  if (!columnWidths && Array.isArray(node.attrs?.grid) && node.attrs.grid.length > 0) {
-    columnWidths = (node.attrs.grid as Array<{ col?: number } | null | undefined>)
-      .filter((col): col is { col?: number } => col != null && typeof col === 'object')
-      .map((col) => {
-        const twips = typeof col.col === 'number' ? col.col : 0;
-        return twips > 0 ? twipsToPixels(twips) : 0;
-      })
-      .filter((width: number) => width > 0);
-
-    if (columnWidths.length === 0) {
-      columnWidths = undefined;
     }
   }
 

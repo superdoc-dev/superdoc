@@ -125,6 +125,8 @@ export const translateImageNode = (params) => {
     }
   }
 
+  const rawSrcRect = attrs.rawSrcRect;
+
   const drawingXmlns = 'http://schemas.openxmlformats.org/drawingml/2006/main';
   const pictureXmlns = 'http://schemas.openxmlformats.org/drawingml/2006/picture';
 
@@ -211,6 +213,7 @@ export const translateImageNode = (params) => {
                             }
                           : {}),
                       },
+                      ...(rawSrcRect ? [rawSrcRect] : []),
                       {
                         name: 'a:stretch',
                         elements: [{ name: 'a:fillRect' }],

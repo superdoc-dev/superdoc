@@ -46,11 +46,140 @@ Node attributes that can be set and retrieved:
   Display name for the block
 </ParamField>
 
+<ParamField path="lockMode" type="StructuredContentLockMode" default="unlocked">
+  Controls editing and deletion restrictions on the structured content node. See [Lock modes](#lock-modes) below.
+</ParamField>
+
+## Lock modes
+
+Structured content nodes support four lock modes based on the OOXML [`w:lock` element](https://learn.microsoft.com/en-us/dotnet/api/documentformat.openxml.wordprocessing.lock) (ISO/IEC 29500 §17.5.2.23). Lock modes control whether users can edit the content inside a field and whether they can delete the field wrapper itself.
+
+| Lock mode | Wrapper | Content | Use case |
+|-----------|---------|---------|----------|
+| `unlocked` | Deletable | Editable | Default — no restrictions |
+| `sdtLocked` | Protected | Editable | Protect field structure, allow value changes |
+| `contentLocked` | Deletable | Read-only | Display a computed value users can remove |
+| `sdtContentLocked` | Protected | Read-only | Fully protected field (e.g., system-generated ID) |
+
+Set the lock mode when inserting:
+
+<CodeGroup>
+```javascript Usage
+editor.commands.insertStructuredContentInline({
+  attrs: {
+    id: '3',
+    alias: 'Account ID',
+    lockMode: 'sdtContentLocked',
+  },
+  text: 'ACC-00042',
+});
+```
+
+```javascript Full Example
+import { SuperDoc } from 'superdoc';
+import 'superdoc/style.css';
+
+const superdoc = new SuperDoc({
+  selector: '#editor',
+  document: yourFile,
+  onReady: (superdoc) => {
+    const editor = superdoc.activeEditor;
+    editor.commands.insertStructuredContentInline({
+      attrs: {
+        id: '3',
+        alias: 'Account ID',
+        lockMode: 'sdtContentLocked',
+      },
+      text: 'ACC-00042',
+    });
+  },
+});
+```
+</CodeGroup>
+
+Change the lock mode on an existing field:
+
+<CodeGroup>
+```javascript Usage
+editor.commands.updateStructuredContentById('1', {
+  attrs: { lockMode: 'contentLocked' },
+});
+```
+
+```javascript Full Example
+import { SuperDoc } from 'superdoc';
+import 'superdoc/style.css';
+
+const superdoc = new SuperDoc({
+  selector: '#editor',
+  document: yourFile,
+  onReady: (superdoc) => {
+    const editor = superdoc.activeEditor;
+    editor.commands.updateStructuredContentById('1', {
+      attrs: { lockMode: 'contentLocked' },
+    });
+  },
+});
+```
+</CodeGroup>
+
+<Expandable title="How lock enforcement works">
+Lock modes are enforced at the editor plugin level using a three-layer defense:
+
+1. **Key interception** — Delete, Backspace, and Cut are blocked before a transaction is created, preventing cursor jumps
+2. **Text input blocking** — Typing is silently blocked in content-locked nodes
+3. **Transaction filter** — Safety net that catches paste, drag-drop, and programmatic edits
+
+Users can still place their cursor inside locked content and select text for copying. Only modifications are blocked.
+</Expandable>
+
+<Info>
+  Lock modes round-trip through DOCX. A document with `w:lock` elements in
+  its SDT properties will import with the correct lock mode and export the
+  `w:lock` element back to the saved file.
+</Info>
+
 ## Commands
 
 ### `insertStructuredContentInline`
 
-Inserts a structured content inline at selection.
+Inserts a structured content inline at the current selection.
+
+**Example:**
+
+<CodeGroup>
+```javascript Usage
+editor.commands.insertStructuredContentInline({
+  attrs: {
+    id: '1',
+    alias: 'Customer Name',
+    lockMode: 'sdtLocked', // optional, defaults to 'unlocked'
+  },
+  text: 'John Doe',
+});
+```
+
+```javascript Full Example
+import { SuperDoc } from 'superdoc';
+import 'superdoc/style.css';
+
+const superdoc = new SuperDoc({
+  selector: '#editor',
+  document: yourFile,
+  onReady: (superdoc) => {
+    const editor = superdoc.activeEditor;
+    editor.commands.insertStructuredContentInline({
+      attrs: {
+        id: '1',
+        alias: 'Customer Name',
+        lockMode: 'sdtLocked',
+      },
+      text: 'John Doe',
+    });
+  },
+});
+```
+</CodeGroup>
 
 **Parameters:**
 
@@ -62,7 +191,43 @@ Inserts a structured content inline at selection.
 
 ### `insertStructuredContentBlock`
 
-Inserts a structured content block at selection.
+Inserts a structured content block at the current selection.
+
+**Example:**
+
+<CodeGroup>
+```javascript Usage
+editor.commands.insertStructuredContentBlock({
+  attrs: {
+    id: '2',
+    alias: 'Terms Section',
+    lockMode: 'sdtContentLocked', // optional, defaults to 'unlocked'
+  },
+  html: '<p>These terms are non-negotiable.</p>',
+});
+```
+
+```javascript Full Example
+import { SuperDoc } from 'superdoc';
+import 'superdoc/style.css';
+
+const superdoc = new SuperDoc({
+  selector: '#editor',
+  document: yourFile,
+  onReady: (superdoc) => {
+    const editor = superdoc.activeEditor;
+    editor.commands.insertStructuredContentBlock({
+      attrs: {
+        id: '2',
+        alias: 'Terms Section',
+        lockMode: 'sdtContentLocked',
+      },
+      html: '<p>These terms are non-negotiable.</p>',
+    });
+  },
+});
+```
+</CodeGroup>
 
 **Parameters:**
 
@@ -77,6 +242,53 @@ Inserts a structured content block at selection.
 Updates a single structured content field by its unique ID.
 IDs are unique identifiers, so this will update at most one field.
 If the updated node does not match the schema, it will not be updated.
+
+Pass `attrs` alone to change attributes (like `lockMode`) without replacing content:
+
+**Example:**
+
+<CodeGroup>
+```javascript Usage
+// Update content
+editor.commands.updateStructuredContentById('1', {
+  text: 'Jane Smith',
+});
+
+// Update lock mode only (preserves content)
+editor.commands.updateStructuredContentById('1', {
+  attrs: { lockMode: 'contentLocked' },
+});
+
+// Update both content and attributes
+editor.commands.updateStructuredContentById('1', {
+  text: 'New value',
+  attrs: { alias: 'Updated Label', lockMode: 'sdtLocked' },
+});
+```
+
+```javascript Full Example
+import { SuperDoc } from 'superdoc';
+import 'superdoc/style.css';
+
+const superdoc = new SuperDoc({
+  selector: '#editor',
+  document: yourFile,
+  onReady: (superdoc) => {
+    const editor = superdoc.activeEditor;
+
+    // Update content
+    editor.commands.updateStructuredContentById('1', {
+      text: 'Jane Smith',
+    });
+
+    // Update lock mode only (preserves content)
+    editor.commands.updateStructuredContentById('1', {
+      attrs: { lockMode: 'contentLocked' },
+    });
+  },
+});
+```
+</CodeGroup>
 
 **Parameters:**
 
@@ -456,6 +668,12 @@ const superdoc = new SuperDoc({
 
 ## Types
 
+### `StructuredContentLockMode`
+
+```typescript
+type StructuredContentLockMode = 'unlocked' | 'sdtLocked' | 'contentLocked' | 'sdtContentLocked'
+```
+
 ### `StructuredContentInlineInsert`
 
 <Expandable title="Properties">
@@ -466,7 +684,7 @@ const superdoc = new SuperDoc({
     ProseMirror JSON
   </ResponseField>
   <ResponseField name="attrs" type="Object">
-    Node attributes
+    Node attributes (`id`, `alias`, `tag`, `lockMode`, `group`)
   </ResponseField>
 </Expandable>
 
@@ -480,7 +698,7 @@ const superdoc = new SuperDoc({
     ProseMirror JSON
   </ResponseField>
   <ResponseField name="attrs" type="Object">
-    Node attributes
+    Node attributes (`id`, `alias`, `tag`, `lockMode`, `group`)
   </ResponseField>
 </Expandable>
 
@@ -497,7 +715,7 @@ const superdoc = new SuperDoc({
     Replace content with ProseMirror JSON (overrides html)
   </ResponseField>
   <ResponseField name="attrs" type="Object">
-    Update attributes only (preserves content)
+    Update attributes only (preserves content). Supports `lockMode`, `alias`, `tag`.
   </ResponseField>
 </Expandable>
 

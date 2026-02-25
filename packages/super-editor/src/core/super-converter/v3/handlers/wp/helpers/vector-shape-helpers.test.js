@@ -1,6 +1,7 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 import {
   getThemeColor,
+  getPresetColor,
   applyColorModifier,
   extractStrokeWidth,
   extractStrokeColor,
@@ -20,6 +21,21 @@ describe('getThemeColor', () => {
 
   it('returns default black for unknown theme name', () => {
     expect(getThemeColor('unknown')).toBe('#000000');
+  });
+});
+
+describe('getPresetColor', () => {
+  it('returns correct color for common preset color names', () => {
+    expect(getPresetColor('black')).toBe('#000000');
+    expect(getPresetColor('white')).toBe('#ffffff');
+    expect(getPresetColor('red')).toBe('#ff0000');
+    expect(getPresetColor('blue')).toBe('#0000ff');
+    expect(getPresetColor('green')).toBe('#008000');
+    expect(getPresetColor('yellow')).toBe('#ffff00');
+  });
+
+  it('returns null for unknown preset color name', () => {
+    expect(getPresetColor('unknownColor')).toBeNull();
   });
 });
 
@@ -63,9 +79,31 @@ describe('extractStrokeWidth', () => {
     expect(extractStrokeWidth(spPr)).toBe(2);
   });
 
-  it('returns default 1 when not found', () => {
+  it('returns default 1 when no a:ln element found', () => {
     expect(extractStrokeWidth({ elements: [] })).toBe(1);
     expect(extractStrokeWidth(null)).toBe(1);
+  });
+
+  it('returns default 1 when a:ln has no w attribute', () => {
+    const spPr = {
+      elements: [{ name: 'a:ln', attributes: {} }],
+    };
+    expect(extractStrokeWidth(spPr)).toBe(1);
+  });
+
+  it('returns hairline width (0.75) for w="0"', () => {
+    // In OOXML, w="0" means hairline (thinnest visible stroke), not invisible
+    const spPr = {
+      elements: [{ name: 'a:ln', attributes: { w: '0' } }],
+    };
+    expect(extractStrokeWidth(spPr)).toBe(0.75);
+  });
+
+  it('returns hairline width (0.75) for w=0 (numeric)', () => {
+    const spPr = {
+      elements: [{ name: 'a:ln', attributes: { w: 0 } }],
+    };
+    expect(extractStrokeWidth(spPr)).toBe(0.75);
   });
 });
 
@@ -125,6 +163,74 @@ describe('extractStrokeColor', () => {
     expect(extractStrokeColor(spPr, null)).toBe('#ff0000');
   });
 
+  it('extracts preset color from prstClr (e.g., black)', () => {
+    // Text boxes commonly use <a:prstClr val="black"/> for stroke
+    const spPr = {
+      elements: [
+        {
+          name: 'a:ln',
+          attributes: { w: '0' },
+          elements: [
+            {
+              name: 'a:solidFill',
+              elements: [{ name: 'a:prstClr', attributes: { val: 'black' } }],
+            },
+          ],
+        },
+      ],
+    };
+
+    expect(extractStrokeColor(spPr, null)).toBe('#000000');
+  });
+
+  it('extracts preset color with modifiers from prstClr', () => {
+    const spPr = {
+      elements: [
+        {
+          name: 'a:ln',
+          elements: [
+            {
+              name: 'a:solidFill',
+              elements: [
+                {
+                  name: 'a:prstClr',
+                  attributes: { val: 'white' },
+                  elements: [{ name: 'a:shade', attributes: { val: '50000' } }],
+                },
+              ],
+            },
+          ],
+        },
+      ],
+    };
+
+    expect(extractStrokeColor(spPr, null)).toBe('#808080');
+  });
+
+  it('applies shade modifier to srgbClr stroke color', () => {
+    const spPr = {
+      elements: [
+        {
+          name: 'a:ln',
+          elements: [
+            {
+              name: 'a:solidFill',
+              elements: [
+                {
+                  name: 'a:srgbClr',
+                  attributes: { val: 'FFFFFF' },
+                  elements: [{ name: 'a:shade', attributes: { val: '50000' } }],
+                },
+              ],
+            },
+          ],
+        },
+      ],
+    };
+
+    expect(extractStrokeColor(spPr, null)).toBe('#808080');
+  });
+
   it('falls back to style when spPr has no stroke', () => {
     const spPr = { elements: [] };
     const style = {
@@ -178,6 +284,42 @@ describe('extractStrokeColor', () => {
     };
     expect(extractStrokeColor(spPr, style)).toBeNull();
   });
+
+  it('falls back to style lnRef with srgbClr', () => {
+    const spPr = { elements: [] };
+    const style = {
+      elements: [
+        {
+          name: 'a:lnRef',
+          attributes: { idx: '1' },
+          elements: [{ name: 'a:srgbClr', attributes: { val: '123456' } }],
+        },
+      ],
+    };
+
+    expect(extractStrokeColor(spPr, style)).toBe('#123456');
+  });
+
+  it('falls back to style lnRef with prstClr and modifiers', () => {
+    const spPr = { elements: [] };
+    const style = {
+      elements: [
+        {
+          name: 'a:lnRef',
+          attributes: { idx: '1' },
+          elements: [
+            {
+              name: 'a:prstClr',
+              attributes: { val: 'white' },
+              elements: [{ name: 'a:shade', attributes: { val: '50000' } }],
+            },
+          ],
+        },
+      ],
+    };
+
+    expect(extractStrokeColor(spPr, style)).toBe('#808080');
+  });
 });
 
 describe('extractFillColor', () => {
@@ -219,6 +361,42 @@ describe('extractFillColor', () => {
     };
 
     expect(extractFillColor(spPr, null)).toBe('#00ff00');
+  });
+
+  it('extracts preset color from prstClr (e.g., white)', () => {
+    const spPr = {
+      elements: [
+        {
+          name: 'a:solidFill',
+          elements: [{ name: 'a:prstClr', attributes: { val: 'white' } }],
+        },
+      ],
+    };
+
+    expect(extractFillColor(spPr, null)).toBe('#ffffff');
+  });
+
+  it('extracts preset color with alpha from prstClr', () => {
+    const spPr = {
+      elements: [
+        {
+          name: 'a:solidFill',
+          elements: [
+            {
+              name: 'a:prstClr',
+              attributes: { val: 'red' },
+              elements: [{ name: 'a:alpha', attributes: { val: '50000' } }],
+            },
+          ],
+        },
+      ],
+    };
+
+    expect(extractFillColor(spPr, null)).toEqual({
+      type: 'solidWithAlpha',
+      color: '#ff0000',
+      alpha: 0.5,
+    });
   });
 
   it('returns placeholder for unsupported fills', () => {
@@ -287,5 +465,51 @@ describe('extractFillColor', () => {
       ],
     };
     expect(extractFillColor(spPr, style)).toBeNull();
+  });
+
+  it('falls back to style fillRef with srgbClr and alpha', () => {
+    const spPr = { elements: [] };
+    const style = {
+      elements: [
+        {
+          name: 'a:fillRef',
+          attributes: { idx: '1' },
+          elements: [
+            {
+              name: 'a:srgbClr',
+              attributes: { val: '00ff00' },
+              elements: [{ name: 'a:alpha', attributes: { val: '50000' } }],
+            },
+          ],
+        },
+      ],
+    };
+
+    expect(extractFillColor(spPr, style)).toEqual({
+      type: 'solidWithAlpha',
+      color: '#00ff00',
+      alpha: 0.5,
+    });
+  });
+
+  it('falls back to style fillRef with prstClr and modifiers', () => {
+    const spPr = { elements: [] };
+    const style = {
+      elements: [
+        {
+          name: 'a:fillRef',
+          attributes: { idx: '1' },
+          elements: [
+            {
+              name: 'a:prstClr',
+              attributes: { val: 'white' },
+              elements: [{ name: 'a:shade', attributes: { val: '50000' } }],
+            },
+          ],
+        },
+      ],
+    };
+
+    expect(extractFillColor(spPr, style)).toBe('#808080');
   });
 });

@@ -31,8 +31,7 @@ jobs:
       - name: Get visual test infrastructure from main
         run: |
           git fetch origin main --depth=1
-          git checkout FETCH_HEAD -- tests/visual
-          sed -i '/^packages:/a\  - tests/visual' pnpm-workspace.yaml
+          git checkout FETCH_HEAD -- tests/visual pnpm-workspace.yaml patches/
 
       - uses: pnpm/action-setup@v4
 

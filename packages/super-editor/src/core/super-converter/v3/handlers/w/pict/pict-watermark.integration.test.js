@@ -80,6 +80,7 @@ describe('VML Watermark Integration Tests', () => {
           extension: 'png',
           rId: 'rId1',
           vmlWatermark: true,
+          isPict: true,
           isAnchor: true,
           inline: false,
           wrap: {
@@ -105,15 +106,10 @@ describe('VML Watermark Integration Tests', () => {
       const exportedXml = translateImageWatermark({ node: importedNode });
 
       // Verify exported structure
-      expect(exportedXml.name).toBe('w:p');
-      expect(exportedXml.elements).toHaveLength(1);
-      expect(exportedXml.elements[0].name).toBe('w:r');
+      expect(exportedXml.name).toBe('w:pict');
+      expect(exportedXml.attributes['w14:anchorId']).toBeDefined();
 
-      const pict = exportedXml.elements[0].elements.find((el) => el.name === 'w:pict');
-      expect(pict).toBeDefined();
-      expect(pict.attributes['w14:anchorId']).toBeDefined();
-
-      const shape = pict.elements.find((el) => el.name === 'v:shape');
+      const shape = exportedXml.elements.find((el) => el.name === 'v:shape');
       expect(shape).toBeDefined();
       expect(shape.attributes).toMatchObject({
         id: 'WordPictureWatermark100927634',
@@ -171,11 +167,9 @@ describe('VML Watermark Integration Tests', () => {
       const exportedXml = translateImageWatermark({ node: programmaticNode });
 
       // Verify the structure is created correctly
-      expect(exportedXml.name).toBe('w:p');
-      const pict = exportedXml.elements[0].elements.find((el) => el.name === 'w:pict');
-      expect(pict).toBeDefined();
+      expect(exportedXml.name).toBe('w:pict');
 
-      const shape = pict.elements.find((el) => el.name === 'v:shape');
+      const shape = exportedXml.elements.find((el) => el.name === 'v:shape');
       expect(shape).toBeDefined();
       expect(shape.attributes.id).toContain('WordPictureWatermark');
       expect(shape.attributes.type).toBe('#_x0000_t75');
@@ -371,14 +365,9 @@ describe('VML Watermark Integration Tests', () => {
       const exportedXml = translateTextWatermark({ node: importedNode });
 
       // Verify exported structure
-      expect(exportedXml.name).toBe('w:p');
-      expect(exportedXml.elements).toHaveLength(1);
-      expect(exportedXml.elements[0].name).toBe('w:r');
+      expect(exportedXml.name).toBe('w:pict');
 
-      const pict = exportedXml.elements[0].elements[0];
-      expect(pict.name).toBe('w:pict');
-
-      const shape = pict.elements.find((el) => el.name === 'v:shape');
+      const shape = exportedXml.elements.find((el) => el.name === 'v:shape');
       expect(shape).toBeDefined();
       expect(shape.attributes).toMatchObject({
         id: 'PowerPlusWaterMarkObject',
@@ -452,11 +441,9 @@ describe('VML Watermark Integration Tests', () => {
       const exportedXml = translateTextWatermark({ node: programmaticNode });
 
       // Verify the structure is created correctly
-      expect(exportedXml.name).toBe('w:p');
-      const pict = exportedXml.elements[0].elements[0];
-      expect(pict).toBeDefined();
+      expect(exportedXml.name).toBe('w:pict');
 
-      const shape = pict.elements.find((el) => el.name === 'v:shape');
+      const shape = exportedXml.elements.find((el) => el.name === 'v:shape');
       expect(shape).toBeDefined();
       expect(shape.attributes.id).toContain('PowerPlusWaterMarkObject');
       expect(shape.attributes.type).toBe('#_x0000_t136');

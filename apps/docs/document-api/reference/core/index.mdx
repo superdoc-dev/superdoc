@@ -1,0 +1,24 @@
+---
+title: Core operations
+sidebarTitle: Core
+description: Generated Core operation reference from the canonical Document API contract.
+---
+
+{/* GENERATED FILE: DO NOT EDIT. Regenerate via `pnpm run docapi:sync`. */}
+
+> Alpha: Document API is currently alpha and subject to breaking changes.
+
+[Back to full reference](../index)
+
+Primary read and write operations.
+
+| Operation | Member path | Mutates | Idempotency | Tracked | Dry run |
+| --- | --- | --- | --- | --- | --- |
+| [`find`](../find) | `find` | No | `idempotent` | No | No |
+| [`getNode`](../get-node) | `getNode` | No | `idempotent` | No | No |
+| [`getNodeById`](../get-node-by-id) | `getNodeById` | No | `idempotent` | No | No |
+| [`getText`](../get-text) | `getText` | No | `idempotent` | No | No |
+| [`info`](../info) | `info` | No | `idempotent` | No | No |
+| [`insert`](../insert) | `insert` | Yes | `non-idempotent` | Yes | Yes |
+| [`replace`](../replace) | `replace` | Yes | `conditional` | Yes | Yes |
+| [`delete`](../delete) | `delete` | Yes | `conditional` | Yes | Yes |

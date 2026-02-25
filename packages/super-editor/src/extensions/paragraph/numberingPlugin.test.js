@@ -487,4 +487,111 @@ describe('numberingPlugin', () => {
       expect(tr.setNodeAttribute).not.toHaveBeenCalledWith(6, 'sdBlockRev', expect.anything());
     });
   });
+
+  describe('null lvlText crash prevention', () => {
+    it('does not crash when ordered list has null lvlText', () => {
+      const editor = createEditor();
+      const plugin = createNumberingPlugin(editor);
+      const { appendTransaction } = plugin.spec;
+
+      const paragraph = {
+        type: { name: 'paragraph' },
+        attrs: {
+          listRendering: null,
+          paragraphProperties: {
+            numberingProperties: { numId: 1, ilvl: 0 },
+          },
+        },
+      };
+
+      const doc = makeDoc([{ node: paragraph, pos: 5 }]);
+      const tr = createTransaction();
+      const transactions = [{ docChanged: true, getMeta: vi.fn().mockReturnValue(false) }];
+
+      numberingManager.calculateCounter.mockReturnValue(1);
+      numberingManager.calculatePath.mockReturnValue([1]);
+      generateOrderedListIndex.mockReturnValue(null);
+      ListHelpers.getListDefinitionDetails.mockReturnValue({
+        lvlText: null,
+        customFormat: null,
+        listNumberingType: 'decimal',
+        suffix: '.',
+        justification: 'left',
+        abstractId: 'a1',
+      });
+
+      const result = appendTransaction(transactions, {}, { doc, tr });
+
+      expect(tr.setNodeAttribute).toHaveBeenCalledWith(5, 'listRendering', {
+        markerText: '',
+        suffix: '.',
+        justification: 'left',
+        path: [1],
+        numberingType: 'decimal',
+      });
+      expect(result).toBe(tr);
+    });
+
+    it('produces empty marker for bullet list with null lvlText', () => {
+      const editor = createEditor();
+      const plugin = createNumberingPlugin(editor);
+      const { appendTransaction } = plugin.spec;
+
+      const paragraph = {
+        type: { name: 'paragraph' },
+        attrs: {
+          listRendering: null,
+          paragraphProperties: {
+            numberingProperties: { numId: 1, ilvl: 0 },
+          },
+        },
+      };
+
+      const doc = makeDoc([{ node: paragraph, pos: 5 }]);
+      const tr = createTransaction();
+      const transactions = [{ docChanged: true, getMeta: vi.fn().mockReturnValue(false) }];
+
+      numberingManager.calculateCounter.mockReturnValue(1);
+      numberingManager.calculatePath.mockReturnValue([1]);
+      docxNumberingHelpers.normalizeLvlTextChar.mockReturnValue(undefined);
+      ListHelpers.getListDefinitionDetails.mockReturnValue({
+        lvlText: null,
+        customFormat: null,
+        listNumberingType: 'bullet',
+        suffix: '\t',
+        justification: 'left',
+        abstractId: 'a1',
+      });
+
+      const result = appendTransaction(transactions, {}, { doc, tr });
+
+      expect(tr.setNodeAttribute).toHaveBeenCalledWith(5, 'listRendering', {
+        markerText: '',
+        suffix: '\t',
+        justification: 'left',
+        path: [1],
+        numberingType: 'bullet',
+      });
+      expect(result).toBe(tr);
+    });
+
+    it('ensures disableCache runs even if descendants scan throws', () => {
+      const editor = createEditor();
+      const plugin = createNumberingPlugin(editor);
+      const { appendTransaction } = plugin.spec;
+
+      const doc = {
+        descendants: vi.fn(() => {
+          throw new Error('simulated crash');
+        }),
+        resolve: vi.fn(),
+      };
+      const tr = createTransaction();
+      const transactions = [{ docChanged: true, getMeta: vi.fn().mockReturnValue(false) }];
+
+      expect(() => appendTransaction(transactions, {}, { doc, tr })).toThrow('simulated crash');
+      expect(numberingManager.enableCache).toHaveBeenCalled();
+      expect(numberingManager.disableCache).toHaveBeenCalled();
+    });
+  });
 });

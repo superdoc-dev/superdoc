@@ -90,9 +90,15 @@
             ]
           },
           {
-            "group": "Document API",
-            "tag": "SOON",
-            "pages": ["document-api/overview"]
+            "group": "Document Engine",
+            "tag": "ALPHA",
+            "pages": [
+              "document-engine/overview",
+              "document-api/overview",
+              "document-engine/sdks",
+              "document-engine/cli",
+              "document-engine/mcp"
+            ]
           },
           {
             "group": "Modules",
@@ -108,7 +114,9 @@
               },
               "modules/comments",
               "modules/toolbar",
-              "modules/context-menu"
+              "modules/context-menu",
+              "modules/pdf",
+              "modules/whiteboard"
             ]
           },
           {
@@ -155,7 +163,7 @@
                   "extensions/search",
                   "extensions/shape-container",
                   "extensions/shape-textbox",
-                  "extensions/slash-menu",
+                  "extensions/context-menu",
                   "extensions/strike",
                   "extensions/structured-content",
                   "extensions/tab",
@@ -390,6 +398,10 @@
     {
       "source": "/modules/collaboration/self-hosted/overview",
       "destination": "/guides/collaboration/self-hosted-overview"
+    },
+    {
+      "source": "/extensions/slash-menu",
+      "destination": "/extensions/context-menu"
     },
     {
       "source": "/guides/breaking-changes-v1",

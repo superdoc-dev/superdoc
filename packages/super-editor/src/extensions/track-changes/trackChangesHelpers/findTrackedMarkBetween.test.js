@@ -1,6 +1,6 @@
 import { beforeEach, afterEach, describe, expect, it } from 'vitest';
 import { EditorState } from 'prosemirror-state';
-import { TrackDeleteMarkName } from '../constants.js';
+import { TrackDeleteMarkName, TrackInsertMarkName } from '../constants.js';
 import { findTrackedMarkBetween } from './findTrackedMarkBetween.js';
 import { initTestEditor } from '@tests/helpers/helpers.js';
 
@@ -113,5 +113,100 @@ describe('findTrackedMarkBetween', () => {
         }),
       }),
     );
+  });
+
+  it('finds trackInsert mark on text node directly (not wrapped in run) at start position', () => {
+    // This tests the fix for SD-1707: Google Docs exports can have text nodes
+    // directly as children of paragraph, not wrapped in run nodes.
+    const insertMark = schema.marks[TrackInsertMarkName].create({
+      id: 'abc12345-1234-1234-1234-123456789abc',
+      author: user.name,
+      authorEmail: user.email,
+      date,
+    });
+    // Create: paragraph > text("1" with trackInsert) + run > lineBreak
+    // This mimics the structure after typing in a Google Docs exported empty list item
+    const textNode = schema.text('1', [insertMark]);
+    const lineBreak = schema.nodes.lineBreak.create();
+    const run = schema.nodes.run.create({}, lineBreak);
+    const paragraph = schema.nodes.paragraph.create({}, [textNode, run]);
+    const doc = schema.nodes.doc.create({}, paragraph);
+
+    const state = createState(doc);
+    const tr = state.tr;
+
+    // Search from position after the text node (where the run starts)
+    // This simulates what happens when inserting the 2nd character
+    const found = findTrackedMarkBetween({
+      tr,
+      from: 3, // Position after text node "1"
+      to: 4,
+      markName: TrackInsertMarkName,
+      attrs: { authorEmail: user.email },
+    });
+
+    expect(found).not.toBeNull();
+    expect(found.mark.attrs.id).toBe('abc12345-1234-1234-1234-123456789abc');
+  });
+
+  it('finds trackInsert mark on text node directly when nodeBefore is a text node', () => {
+    const insertMark = schema.marks[TrackInsertMarkName].create({
+      id: 'def67890-5678-5678-5678-567890123def',
+      author: user.name,
+      authorEmail: user.email,
+      date,
+    });
+    // Create: paragraph > text("ab" with trackInsert)
+    const textNode = schema.text('ab', [insertMark]);
+    const paragraph = schema.nodes.paragraph.create({}, [textNode]);
+    const doc = schema.nodes.doc.create({}, paragraph);
+
+    const state = createState(doc);
+    const tr = state.tr;
+
+    // Search at position right after the text - this is where new text would be inserted
+    // nodeBefore at pos 3 should be the text node "ab"
+    const found = findTrackedMarkBetween({
+      tr,
+      from: 3,
+      to: 4,
+      markName: TrackInsertMarkName,
+      attrs: { authorEmail: user.email },
+    });
+
+    expect(found).not.toBeNull();
+    expect(found.mark.attrs.id).toBe('def67890-5678-5678-5678-567890123def');
+  });
+
+  it('finds trackInsert mark on text node directly when nodeAfter is a text node', () => {
+    // This tests the nodeAfter branch of the fix - when the text node comes
+    // after the search position (e.g., inserting at paragraph start)
+    const insertMark = schema.marks[TrackInsertMarkName].create({
+      id: 'ghi01234-9012-9012-9012-901234567ghi',
+      author: user.name,
+      authorEmail: user.email,
+      date,
+    });
+    // Create: paragraph > text("xy" with trackInsert)
+    // Search at position 2 (start of paragraph content) where text node is nodeAfter
+    const textNode = schema.text('xy', [insertMark]);
+    const paragraph = schema.nodes.paragraph.create({}, [textNode]);
+    const doc = schema.nodes.doc.create({}, paragraph);
+
+    const state = createState(doc);
+    const tr = state.tr;
+
+    // Position 2 is at the start of paragraph content (after doc open + paragraph open)
+    // At this position, nodeAfter should be the text node "xy"
+    const found = findTrackedMarkBetween({
+      tr,
+      from: 2,
+      to: 3,
+      markName: TrackInsertMarkName,
+      attrs: { authorEmail: user.email },
+    });
+
+    expect(found).not.toBeNull();
+    expect(found.mark.attrs.id).toBe('ghi01234-9012-9012-9012-901234567ghi');
   });
 });

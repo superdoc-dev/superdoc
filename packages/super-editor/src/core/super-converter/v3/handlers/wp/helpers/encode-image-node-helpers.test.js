@@ -671,10 +671,11 @@ describe('handleImageNode', () => {
    *
    * shouldCover is set to true when:
    * - stretch+fillRect is present AND
-   * - srcRect has NO negative values (meaning we need CSS to handle clipping)
+   * - no explicit srcRect clipPath is emitted AND
+   * - srcRect has no negative values
    *
    * Real-world examples:
-   * - whalar_tables_issue_tbl_only/word/header1.xml: <a:srcRect r="84800"/> → shouldCover=true
+   * - whalar_tables_issue_tbl_only/word/header1.xml: <a:srcRect r="84800"/> → clipPath + shouldCover=false + objectFit=fill
    * - whalar_tables_issue_tbl_only/word/header2.xml: <a:srcRect/> (empty) → shouldCover=true
    * - certn_logo_left/word/header2.xml: <a:srcRect b="-3978"/> → shouldCover=false
    */
@@ -746,10 +747,10 @@ describe('handleImageNode', () => {
       expect(result.attrs.shouldCover).toBe(true);
     });
 
-    it('sets shouldCover=true when stretch+fillRect with POSITIVE srcRect values', () => {
+    it('sets shouldCover=false when stretch+fillRect with POSITIVE srcRect values', () => {
       // Example: whalar header1.xml - <a:srcRect r="84800"/>
       // Positive value = crop 84.8% from right
-      // Since we don't implement actual srcRect cropping, CSS cover handles it
+      // Explicit srcRect clipping should replace cover fallback to avoid double-cropping.
       const node = makeNodeWithBlipFill([
         {
           name: 'a:stretch',
@@ -764,10 +765,67 @@ describe('handleImageNode', () => {
       const result = handleImageNode(node, makeParams(), false);
 
       expect(result).not.toBeNull();
-      expect(result.attrs.shouldCover).toBe(true);
+      expect(result.attrs.shouldCover).toBe(false);
+      expect(result.attrs.objectFit).toBe('fill');
     });
 
-    it('sets shouldCover=true when stretch+fillRect with multiple positive srcRect values', () => {
+    it('sets clipPath when srcRect has positive values', () => {
+      const node = makeNodeWithBlipFill([
+        {
+          name: 'a:stretch',
+          elements: [{ name: 'a:fillRect' }],
+        },
+        {
+          name: 'a:srcRect',
+          attributes: { r: '84800' },
+        },
+      ]);
+
+      const result = handleImageNode(node, makeParams(), false);
+
+      expect(result).not.toBeNull();
+      expect(result.attrs.clipPath).toBe('inset(0% 84.8% 0% 0%)');
+    });
+
+    it('disables shouldCover when srcRect emits clipPath cropping', () => {
+      const node = makeNodeWithBlipFill([
+        {
+          name: 'a:stretch',
+          elements: [{ name: 'a:fillRect' }],
+        },
+        {
+          name: 'a:srcRect',
+          attributes: { r: '50000' },
+        },
+      ]);
+
+      const result = handleImageNode(node, makeParams(), false);
+
+      expect(result).not.toBeNull();
+      expect(result.attrs.clipPath).toBe('inset(0% 50% 0% 0%)');
+      expect(result.attrs.shouldCover).toBe(false);
+      expect(result.attrs.objectFit).toBe('fill');
+    });
+
+    it('does not set clipPath when srcRect has negative values', () => {
+      const node = makeNodeWithBlipFill([
+        {
+          name: 'a:stretch',
+          elements: [{ name: 'a:fillRect' }],
+        },
+        {
+          name: 'a:srcRect',
+          attributes: { b: '-3978' },
+        },
+      ]);
+
+      const result = handleImageNode(node, makeParams(), false);
+
+      expect(result).not.toBeNull();
+      expect(result.attrs.clipPath).toBeUndefined();
+    });
+
+    it('sets shouldCover=false when stretch+fillRect with multiple positive srcRect values', () => {
       const node = makeNodeWithBlipFill([
         {
           name: 'a:stretch',
@@ -782,7 +840,8 @@ describe('handleImageNode', () => {
       const result = handleImageNode(node, makeParams(), false);
 
       expect(result).not.toBeNull();
-      expect(result.attrs.shouldCover).toBe(true);
+      expect(result.attrs.shouldCover).toBe(false);
+      expect(result.attrs.objectFit).toBe('fill');
     });
 
     it('sets shouldCover=false when stretch+fillRect with NEGATIVE srcRect value', () => {

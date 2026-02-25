@@ -4,11 +4,6 @@ Playwright visual regression tests for SuperDoc. Screenshots and test documents 
 
 ## When to Add Visual Tests
 
-Add a **behavior test** when you:
-- Fix a bug that affects rendering or user interaction
-- Add or change an editing feature (formatting, commands, toolbar)
-- Modify comments, track changes, or collaboration UI
-
 Add a **rendering test** when you:
 - Fix a DOCX import/export rendering issue
 - Change the layout engine or style resolution
@@ -17,19 +12,9 @@ Add a **rendering test** when you:
 
 ```
 tests/
-  behavior/              Simulate user actions, screenshot result
-    basic-commands/      Typing, undo/redo, tables, select-all, toolbar
-    formatting/          Bold/italic, hyperlinks, clear format, fonts
-    comments-tcs/        Comments, track changes, nested comments
-    lists/               List creation, indentation, markers
-    field-annotations/   Field annotation types and formatting
-    headers/             Header/footer editing
-    search/              Search and navigation
-    importing/           Document import edge cases
-    structured-content/  SDT lock modes
   rendering/             Auto-discovers all .docx in test-data/rendering/
   fixtures/superdoc.ts   Shared fixture with helpers
-test-data/               Downloaded from R2 (gitignored), mirrors R2 documents/ prefix
+test-data/               Symlink to shared repo corpus mirror (`<repo>/test-corpus`)
 scripts/
   download-test-docs.ts  Auto-discover and download all documents from R2
   upload-test-doc.ts     Upload rendering doc — prompts for issue ID and description
@@ -39,17 +24,9 @@ scripts/
 
 ## R2 Storage
 
-Single bucket with two prefixes. Local `test-data/` mirrors the `documents/` prefix exactly:
-
-```
-superdoc-visual-testing/
-  documents/                    → downloads to test-data/
-    behavior/
-      comments-tcs/doc.docx     → test-data/behavior/comments-tcs/doc.docx
-      formatting/doc.docx       → test-data/behavior/formatting/doc.docx
-    rendering/doc.docx          → test-data/rendering/doc.docx
-  baselines/                    → downloads to tests/ (snapshot dirs)
-```
+DOCX files are stored in a shared corpus bucket as plain relative keys plus `registry.json`.
+`pnpm docs:download` syncs corpus files into `<repo>/test-corpus` and links `tests/visual/test-data` to that shared root.
+Visual baseline images are stored separately under the `baselines/` prefix.
 
 ## Adding a Rendering Test
 
@@ -58,7 +35,7 @@ Rendering tests are auto-discovered. Just upload a document:
 ```bash
 pnpm docs:upload ~/Downloads/my-file.docx
 # Prompts: Linear issue ID, short description
-# → uploads to documents/rendering/sd-1679-anchor-table-overlap.docx
+# → uploads to rendering/sd-1679-anchor-table-overlap.docx
 
 pnpm docs:download        # pull the new file locally
 pnpm test                 # verify it loads and renders
@@ -67,47 +44,6 @@ pnpm test                 # verify it loads and renders
 Baselines are generated in CI from the `stable` branch — never locally (macOS font rendering differs from Linux).
 
 **Naming convention**: `<issue-id>-<description>.docx` for regressions (e.g. `sd-1679-anchor-table-overlap.docx`). General coverage docs can skip the issue ID.
-
-## Writing a Behavior Test
-
-```ts
-import { test } from '../../fixtures/superdoc.js';
-
-test('@behavior description of what it tests', async ({ superdoc }) => {
-  // 1. Set up state (type, execute commands, load doc)
-  await superdoc.type('Hello world');
-  await superdoc.bold();
-
-  // 2. Screenshot the result
-  await superdoc.screenshot('my-test-name');
-});
-```
-
-Place the file in the matching category folder. Use `@behavior` tag in the test name.
-
-## Loading Test Documents
-
-Test documents are stored in R2 (`documents/` prefix). Download with `pnpm docs:download`. Upload rendering docs with `pnpm docs:upload <file>`.
-
-```ts
-import fs from 'node:fs';
-import path from 'node:path';
-import { fileURLToPath } from 'node:url';
-import { test } from '../../fixtures/superdoc.js';
-
-const __dirname = path.dirname(fileURLToPath(import.meta.url));
-const DOCS_DIR = path.resolve(__dirname, '../../../test-data');
-const DOC_PATH = path.join(DOCS_DIR, 'behavior/comments-tcs/tracked-changes.docx');
-
-test.skip(!fs.existsSync(DOC_PATH), 'Test document not available');
-
-test('@behavior my doc test', async ({ superdoc }) => {
-  await superdoc.loadDocument(DOC_PATH);
-  await superdoc.screenshot('my-test');
-});
-```
-
-Document paths mirror the test folder structure. A test in `tests/behavior/comments-tcs/` uses documents from `test-data/behavior/comments-tcs/`.
 
 ## CI Behavior
 

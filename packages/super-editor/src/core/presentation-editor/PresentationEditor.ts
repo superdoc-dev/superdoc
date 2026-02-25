@@ -610,10 +610,12 @@ export class PresentationEditor extends EventEmitter {
       this.#setupInputBridge();
       this.#syncTrackedChangesPreferences();
 
-      // Register this instance in the static registry
-      if (options.documentId) {
-        PresentationEditor.#instances.set(options.documentId, this);
-      }
+      // Register this instance in the static registry.
+      // Generate a fallback ID when documentId is not provided (e.g., blank documents)
+      // so that setGlobalZoom() can always find and update all instances.
+      const registryKey = options.documentId || `__anonymous_${Date.now()}_${Math.random().toString(36).slice(2)}`;
+      this.#options.documentId = registryKey;
+      PresentationEditor.#instances.set(registryKey, this);
 
       this.#pendingDocChange = true;
       this.#scheduleRerender();

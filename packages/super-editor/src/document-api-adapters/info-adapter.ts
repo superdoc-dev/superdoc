@@ -1,4 +1,4 @@
-import type { DocumentInfo, InfoInput, NodeInfo, NodeType, QueryResult } from '@superdoc/document-api';
+import type { DocumentInfo, FindOutput, InfoInput, NodeInfo, NodeType } from '@superdoc/document-api';
 import type { Editor } from '../core/Editor.js';
 import { findAdapter } from './find-adapter.js';
 import { getTextAdapter } from './get-text-adapter.js';
@@ -35,29 +35,29 @@ function getHeadingText(node: HeadingNodeInfo | undefined): string {
   return '';
 }
 
-function buildOutline(result: QueryResult): DocumentInfo['outline'] {
+function buildOutline(result: FindOutput): DocumentInfo['outline'] {
   const outline: DocumentInfo['outline'] = [];
 
-  for (const [index, match] of result.matches.entries()) {
-    if (match.kind !== 'block') continue;
+  for (const item of result.items) {
+    if (item.address.kind !== 'block') continue;
 
-    const maybeHeading = isHeadingNodeInfo(result.nodes?.[index]) ? result.nodes[index] : undefined;
+    const maybeHeading = isHeadingNodeInfo(item.node) ? item.node : undefined;
     outline.push({
       level: clampHeadingLevel(maybeHeading?.properties.headingLevel),
       text: getHeadingText(maybeHeading),
-      nodeId: match.nodeId,
+      nodeId: item.address.nodeId,
     });
   }
 
   return outline;
 }
 
-function countDistinctCommentIds(result: QueryResult): number {
+function countDistinctCommentIds(result: FindOutput): number {
   const commentIds = new Set<string>();
-  for (const node of result.nodes ?? []) {
-    if (!isCommentNodeInfo(node)) continue;
-    if (typeof node.properties.commentId !== 'string' || node.properties.commentId.length === 0) continue;
-    commentIds.add(node.properties.commentId);
+  for (const item of result.items) {
+    if (!isCommentNodeInfo(item.node)) continue;
+    if (typeof item.node.properties.commentId !== 'string' || item.node.properties.commentId.length === 0) continue;
+    commentIds.add(item.node.properties.commentId);
   }
 
   // When node data is available, deduplicate by commentId. Otherwise fall
@@ -68,7 +68,7 @@ function countDistinctCommentIds(result: QueryResult): number {
   return result.total;
 }
 
-function findByNodeType(editor: Editor, nodeType: NodeType, includeNodes = false): QueryResult {
+function findByNodeType(editor: Editor, nodeType: NodeType, includeNodes = false): FindOutput {
   return findAdapter(editor, {
     select: { type: 'node', nodeType },
     includeNodes,

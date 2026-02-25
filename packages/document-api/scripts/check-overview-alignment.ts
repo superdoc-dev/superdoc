@@ -7,7 +7,7 @@
  */
 import { readFile } from 'node:fs/promises';
 import { resolve } from 'node:path';
-import { DOCUMENT_API_MEMBER_PATHS } from '../src/index.js';
+import { DOCUMENT_API_MEMBER_PATHS, REFERENCE_OPERATION_ALIASES } from '../src/index.js';
 import { runScript } from './lib/generation-utils.js';
 import {
   getOverviewApiSurfaceEndMarker,
@@ -87,7 +87,10 @@ runScript('document-api overview alignment check', async () => {
     }
   }
 
-  const knownMemberPaths = new Set(DOCUMENT_API_MEMBER_PATHS);
+  const knownMemberPaths = new Set([
+    ...DOCUMENT_API_MEMBER_PATHS,
+    ...REFERENCE_OPERATION_ALIASES.map((a) => a.memberPath),
+  ]);
   const overviewMemberPaths = extractOverviewMemberPaths(content);
 
   const unknownPaths = overviewMemberPaths.filter((path) => !knownMemberPaths.has(path));

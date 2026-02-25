@@ -3,8 +3,15 @@ import type { Editor } from '../../core/Editor.js';
 import type { TextRewriteStep, StyleApplyStep, AssertStep } from '@superdoc/document-api';
 import type { CompiledTarget } from './executor-registry.types.js';
 import type { CompiledPlan } from './compiler.js';
-import { executeCompiledPlan, runMutationsOnTransaction } from './executor.js';
+import {
+  executeCompiledPlan,
+  executeSpanTextDelete,
+  executeSpanTextRewrite,
+  runMutationsOnTransaction,
+} from './executor.js';
 import { registerBuiltInExecutors } from './register-executors.js';
+import { PlanError } from './errors.js';
+import { Schema } from 'prosemirror-model';
 
 // ---------------------------------------------------------------------------
 // Module mocks
@@ -154,15 +161,18 @@ function makeEditor(text = 'Hello'): {
 
 function makeTarget(overrides: Partial<CompiledTarget> = {}): CompiledTarget {
   return {
+    kind: 'range',
     stepId: 'step-1',
     op: 'text.rewrite',
     blockId: 'p1',
     from: 0,
     to: 5,
+    absFrom: 1,
+    absTo: 6,
     text: 'Hello',
     marks: [],
     ...overrides,
-  };
+  } as CompiledTarget;
 }
 
 function setupBlockIndex(candidates: Array<{ nodeId: string; pos: number; node: any }>) {
@@ -976,5 +986,170 @@ describe('executeCompiledPlan: revision tracking', () => {
     // Revision unchanged
     expect(receipt.revision.before).toBe('5');
     expect(receipt.revision.after).toBe('5');
+  });
+});
+
+describe('span target contiguity checks', () => {
+  it('throws SPAN_FRAGMENTED when mapping changes the gap between segments', () => {
+    const tr = {
+      delete: vi.fn(),
+    };
+
+    const target = {
+      kind: 'span',
+      stepId: 'step-span-delete',
+      op: 'text.delete',
+      matchId: 'm:0',
+      segments: [
+        { blockId: 'p1', from: 0, to: 3, absFrom: 1, absTo: 4 },
+        { blockId: 'p2', from: 0, to: 3, absFrom: 6, absTo: 9 },
+      ],
+      text: 'abcdef',
+      marks: [],
+    } as any;
+
+    const step = { id: 'step-span-delete', op: 'text.delete', args: {} } as any;
+    const mapping = {
+      map: (pos: number) => {
+        if (pos === 1) return 1;
+        if (pos === 4) return 4;
+        if (pos === 6) return 9;
+        if (pos === 9) return 12;
+        return pos;
+      },
+    };
+
+    try {
+      executeSpanTextDelete({} as Editor, tr, target, step, mapping);
+    } catch (error) {
+      expect(error).toBeInstanceOf(PlanError);
+      expect((error as PlanError).code).toBe('SPAN_FRAGMENTED');
+      expect(tr.delete).not.toHaveBeenCalled();
+      return;
+    }
+
+    throw new Error('expected executeSpanTextDelete to throw SPAN_FRAGMENTED');
+  });
+
+  it('accepts span execution when mapping preserves inter-segment gaps', () => {
+    const tr = {
+      delete: vi.fn(),
+    };
+
+    const target = {
+      kind: 'span',
+      stepId: 'step-span-delete-ok',
+      op: 'text.delete',
+      matchId: 'm:1',
+      segments: [
+        { blockId: 'p1', from: 0, to: 3, absFrom: 1, absTo: 4 },
+        { blockId: 'p2', from: 0, to: 3, absFrom: 6, absTo: 9 },
+      ],
+      text: 'abcdef',
+      marks: [],
+    } as any;
+
+    const step = { id: 'step-span-delete-ok', op: 'text.delete', args: {} } as any;
+    const mapping = {
+      map: (pos: number) => pos + 5,
+    };
+
+    const outcome = executeSpanTextDelete({} as Editor, tr, target, step, mapping);
+
+    expect(outcome.changed).toBe(true);
+    expect(tr.delete).toHaveBeenCalledWith(6, 14);
+  });
+
+  it('inherits paragraph-level attrs for multi-block span rewrites without copying ids', () => {
+    const schema = new Schema({
+      nodes: {
+        doc: { content: 'block+' },
+        paragraph: {
+          group: 'block',
+          content: 'text*',
+          attrs: {
+            paragraphProperties: { default: null },
+            listRendering: { default: null },
+            paraId: { default: null },
+            sdBlockId: { default: null },
+          },
+        },
+        text: { group: 'inline' },
+      },
+    });
+
+    const sourceP1 = schema.nodes.paragraph.create({
+      paragraphProperties: { styleId: 'Heading2' },
+      paraId: 'p1',
+      sdBlockId: 'sd-p1',
+    });
+    const sourceP2 = schema.nodes.paragraph.create({
+      paragraphProperties: { styleId: 'Normal' },
+      listRendering: { markerText: '1.' },
+      paraId: 'p2',
+      sdBlockId: 'sd-p2',
+    });
+
+    mockedDeps.getBlockIndex.mockReturnValue({
+      candidates: [
+        { nodeId: 'p1', node: sourceP1, pos: 0, end: 12 },
+        { nodeId: 'p2', node: sourceP2, pos: 20, end: 32 },
+      ],
+    });
+
+    const tr = {
+      replace: vi.fn(),
+      replaceWith: vi.fn(),
+    };
+
+    const target = {
+      kind: 'span',
+      stepId: 'step-span-rewrite',
+      op: 'text.rewrite',
+      matchId: 'm:2',
+      segments: [
+        { blockId: 'p1', from: 0, to: 3, absFrom: 1, absTo: 4 },
+        { blockId: 'p2', from: 0, to: 3, absFrom: 6, absTo: 9 },
+      ],
+      text: 'abcdef',
+      marks: [],
+      capturedStyleBySegment: [],
+    } as any;
+
+    const step: TextRewriteStep = {
+      id: 'step-span-rewrite',
+      op: 'text.rewrite',
+      where: {
+        by: 'select',
+        select: { type: 'text', pattern: 'unused' },
+        require: 'exactlyOne',
+      },
+      args: {
+        replacement: {
+          blocks: [{ text: 'alpha' }, { text: 'beta' }],
+        },
+        style: {
+          inline: { mode: 'clear' },
+          paragraph: { mode: 'preserve' },
+        },
+      },
+    };
+
+    const mapping = { map: (pos: number) => pos };
+    executeSpanTextRewrite({ state: { schema } } as unknown as Editor, tr, target, step, mapping);
+
+    expect(tr.replace).toHaveBeenCalledTimes(1);
+    const slice = tr.replace.mock.calls[0][2];
+    const first = slice.content.child(0);
+    const second = slice.content.child(1);
+
+    expect(first.attrs.paragraphProperties).toEqual({ styleId: 'Heading2' });
+    expect(first.attrs.paraId).toBeNull();
+    expect(first.attrs.sdBlockId).toBeNull();
+
+    expect(second.attrs.paragraphProperties).toEqual({ styleId: 'Normal' });
+    expect(second.attrs.listRendering).toEqual({ markerText: '1.' });
+    expect(second.attrs.paraId).toBeNull();
+    expect(second.attrs.sdBlockId).toBeNull();
   });
 });

@@ -38,7 +38,7 @@ const GROUP_METADATA: Record<ReferenceGroupKey, { title: string; description: st
   },
   format: {
     title: 'Format',
-    description: 'Formatting mutations.',
+    description: 'Canonical formatting mutation with boolean patch semantics.',
     pagePath: 'format/index.mdx',
   },
   lists: {

@@ -1,4 +1,5 @@
 import type { Query, TextAddress, UnknownNodeDiagnostic } from '@superdoc/document-api';
+import { DocumentApiValidationError } from '@superdoc/document-api';
 import { getBlockIndex } from './index-cache.js';
 import { findBlockById, isTextBlockCandidate, type BlockCandidate, type BlockIndex } from './node-address-resolver.js';
 import { resolveTextRangeInBlock } from './text-offset-resolver.js';
@@ -87,18 +88,35 @@ export function addDiagnostic(diagnostics: UnknownNodeDiagnostic[], message: str
 }
 
 /**
+ * Validates pagination inputs, throwing `INVALID_INPUT` for invalid values.
+ *
+ * @param offset - Must be non-negative when provided.
+ * @param limit - Must be positive when provided.
+ * @throws {DocumentApiValidationError} `INVALID_INPUT` for negative offset or non-positive limit.
+ */
+export function validatePaginationInput(offset?: number, limit?: number): void {
+  if (offset != null && offset < 0) {
+    throw new DocumentApiValidationError('INVALID_INPUT', `offset must be >= 0, got ${offset}`, { offset });
+  }
+  if (limit != null && limit <= 0) {
+    throw new DocumentApiValidationError('INVALID_INPUT', `limit must be > 0, got ${limit}`, { limit });
+  }
+}
+
+/**
  * Applies offset/limit pagination to an array, returning the total count and the sliced page.
  *
  * @param items - The full result array.
  * @param offset - Number of items to skip (default `0`).
  * @param limit - Maximum items to return (default: all remaining).
  * @returns An object with `total` (pre-pagination count) and `items` (the sliced page).
+ * @throws {DocumentApiValidationError} `INVALID_INPUT` for negative offset or non-positive limit.
  */
-export function paginate<T>(items: T[], offset = 0, limit = items.length): { total: number; items: T[] } {
+export function paginate<T>(items: T[], offset = 0, limit?: number): { total: number; items: T[] } {
+  validatePaginationInput(offset, limit);
   const total = items.length;
-  const safeOffset = Math.max(0, offset ?? 0);
-  const safeLimit = Math.max(0, limit ?? total);
-  return { total, items: items.slice(safeOffset, safeOffset + safeLimit) };
+  const effectiveLimit = limit ?? total;
+  return { total, items: items.slice(offset, offset + effectiveLimit) };
 }
 
 /**

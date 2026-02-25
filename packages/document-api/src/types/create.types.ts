@@ -6,9 +6,7 @@ export type ParagraphCreateLocation =
   | { kind: 'documentStart' }
   | { kind: 'documentEnd' }
   | { kind: 'before'; target: BlockNodeAddress }
-  | { kind: 'after'; target: BlockNodeAddress }
-  | { kind: 'before'; nodeId: string }
-  | { kind: 'after'; nodeId: string };
+  | { kind: 'after'; target: BlockNodeAddress };
 
 export interface CreateParagraphInput {
   at?: ParagraphCreateLocation;

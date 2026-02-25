@@ -94,6 +94,12 @@ export type CliCommandSpec = {
   alias: boolean;
   canonicalKey: string;
   examples: readonly string[];
+  /** Pre-filled input fields merged before dispatch (used by helper commands). */
+  defaultInput?: Record<string, unknown>;
+  /** Extra CLI option specs for flags not in the canonical operation (used by helper commands). */
+  extraOptionSpecs?: readonly { name: string; type: 'string' | 'boolean' | 'number' }[];
+  /** Post-parse transform mapping helper-specific flags into canonical input shape. */
+  inputTransform?: (input: Record<string, unknown>) => Record<string, unknown>;
 };
 
 // ---------------------------------------------------------------------------

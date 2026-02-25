@@ -31,7 +31,7 @@ export type OperationCapabilities = Record<OperationId, OperationRuntimeCapabili
 
 /** Runtime capabilities exposed by the plan engine (mutations.apply / mutations.preview). */
 export interface PlanEngineCapabilities {
-  /** Step op codes the engine can execute (e.g., 'text.rewrite', 'style.apply'). */
+  /** Step op codes the engine can execute (e.g., 'text.rewrite', 'format.apply'). */
   supportedStepOps: readonly string[];
   /** Non-uniform style resolution strategies available for `onNonUniform`. */
   supportedNonUniformStrategies: readonly string[];
@@ -51,6 +51,12 @@ export interface PlanEngineCapabilities {
  * `operations` contains per-operation availability details keyed by {@link OperationId}.
  * `planEngine` describes plan engine capabilities (step ops, style strategies, limits).
  */
+/** Format capability snapshot — advertises which boolean mark keys this editor supports. */
+export interface FormatCapabilities {
+  /** Mark keys that `format.apply` can set/unset (derived from the shared mark registry). */
+  supportedMarks: readonly string[];
+}
+
 export interface DocumentApiCapabilities {
   global: {
     trackChanges: CapabilityFlag;
@@ -58,6 +64,8 @@ export interface DocumentApiCapabilities {
     lists: CapabilityFlag;
     dryRun: CapabilityFlag;
   };
+  /** Format capability discovery for `format.apply`. */
+  format: FormatCapabilities;
   operations: OperationCapabilities;
   planEngine: PlanEngineCapabilities;
 }

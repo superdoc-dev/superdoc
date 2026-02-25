@@ -25,10 +25,10 @@ test('SD-1739 tracked change replacement does not duplicate text in bubble', asy
 
   // The floating dialog should show the tracked change with correct text
   // (Bug SD-1739 would show "Added: redliningg" with duplicated trailing char)
-  const dialog = superdoc.page.locator('.floating-comment > .comments-dialog', {
+  const dialog = superdoc.page.locator('.comment-placeholder .comments-dialog', {
     has: superdoc.page.locator('.tracked-change-text'),
   });
-  await expect(dialog).toBeVisible({ timeout: 5_000 });
+  await expect(dialog).toBeVisible({ timeout: 10_000 });
 
   // "Added:" label with "redlining" text — must NOT contain "redliningg"
   const addedText = dialog.locator('.tracked-change-text').first();

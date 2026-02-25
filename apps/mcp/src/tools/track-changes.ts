@@ -2,6 +2,10 @@ import { z } from 'zod';
 import type { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
 import type { SessionManager } from '../session-manager.js';
 
+function toErrorMessage(error: unknown): string {
+  return error instanceof Error ? error.message : String(error);
+}
+
 export function registerTrackChangesTools(server: McpServer, sessions: SessionManager): void {
   server.registerTool(
     'superdoc_list_changes',
@@ -31,7 +35,7 @@ export function registerTrackChangesTools(server: McpServer, sessions: SessionMa
         };
       } catch (err) {
         return {
-          content: [{ type: 'text' as const, text: `List changes failed: ${(err as Error).message}` }],
+          content: [{ type: 'text' as const, text: `List changes failed: ${toErrorMessage(err)}` }],
           isError: true,
         };
       }
@@ -53,13 +57,13 @@ export function registerTrackChangesTools(server: McpServer, sessions: SessionMa
     async ({ session_id, id }) => {
       try {
         const { api } = sessions.get(session_id);
-        const result = api.invoke({ operationId: 'trackChanges.accept', input: { id } });
+        const result = api.invoke({ operationId: 'review.decide', input: { decision: 'accept', target: { id } } });
         return {
           content: [{ type: 'text' as const, text: JSON.stringify(result, null, 2) }],
         };
       } catch (err) {
         return {
-          content: [{ type: 'text' as const, text: `Accept change failed: ${(err as Error).message}` }],
+          content: [{ type: 'text' as const, text: `Accept change failed: ${toErrorMessage(err)}` }],
           isError: true,
         };
       }
@@ -81,13 +85,13 @@ export function registerTrackChangesTools(server: McpServer, sessions: SessionMa
     async ({ session_id, id }) => {
       try {
         const { api } = sessions.get(session_id);
-        const result = api.invoke({ operationId: 'trackChanges.reject', input: { id } });
+        const result = api.invoke({ operationId: 'review.decide', input: { decision: 'reject', target: { id } } });
         return {
           content: [{ type: 'text' as const, text: JSON.stringify(result, null, 2) }],
         };
       } catch (err) {
         return {
-          content: [{ type: 'text' as const, text: `Reject change failed: ${(err as Error).message}` }],
+          content: [{ type: 'text' as const, text: `Reject change failed: ${toErrorMessage(err)}` }],
           isError: true,
         };
       }
@@ -107,13 +111,16 @@ export function registerTrackChangesTools(server: McpServer, sessions: SessionMa
     async ({ session_id }) => {
       try {
         const { api } = sessions.get(session_id);
-        const result = api.invoke({ operationId: 'trackChanges.acceptAll', input: {} });
+        const result = api.invoke({
+          operationId: 'review.decide',
+          input: { decision: 'accept', target: { scope: 'all' } },
+        });
         return {
           content: [{ type: 'text' as const, text: JSON.stringify(result, null, 2) }],
         };
       } catch (err) {
         return {
-          content: [{ type: 'text' as const, text: `Accept all failed: ${(err as Error).message}` }],
+          content: [{ type: 'text' as const, text: `Accept all failed: ${toErrorMessage(err)}` }],
           isError: true,
         };
       }
@@ -133,13 +140,16 @@ export function registerTrackChangesTools(server: McpServer, sessions: SessionMa
     async ({ session_id }) => {
       try {
         const { api } = sessions.get(session_id);
-        const result = api.invoke({ operationId: 'trackChanges.rejectAll', input: {} });
+        const result = api.invoke({
+          operationId: 'review.decide',
+          input: { decision: 'reject', target: { scope: 'all' } },
+        });
         return {
           content: [{ type: 'text' as const, text: JSON.stringify(result, null, 2) }],
         };
       } catch (err) {
         return {
-          content: [{ type: 'text' as const, text: `Reject all failed: ${(err as Error).message}` }],
+          content: [{ type: 'text' as const, text: `Reject all failed: ${toErrorMessage(err)}` }],
           isError: true,
         };
       }

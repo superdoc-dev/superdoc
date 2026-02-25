@@ -244,12 +244,12 @@ describe('invoke', () => {
       expect(invoked).toEqual(direct);
     });
 
-    it('review.decide: invoke returns same result as direct call', () => {
+    it('trackChanges.decide: invoke returns same result as direct call', () => {
       const { adapters } = makeAdapters();
       const api = createDocumentApi(adapters);
       const input = { decision: 'accept' as const, target: { id: 'tc-1' } };
-      const direct = api.review.decide(input);
-      const invoked = api.invoke({ operationId: 'review.decide', input });
+      const direct = api.trackChanges.decide(input);
+      const invoked = api.invoke({ operationId: 'trackChanges.decide', input });
       expect(invoked).toEqual(direct);
     });
 
@@ -275,7 +275,7 @@ describe('invoke', () => {
       const api = createDocumentApi(adapters);
       const input = {
         target: { kind: 'text' as const, blockId: 'p1', range: { start: 0, end: 2 } },
-        marks: { bold: true },
+        inline: { bold: true },
       };
       const direct = api.format.apply(input);
       const invoked = api.invoke({ operationId: 'format.apply', input });

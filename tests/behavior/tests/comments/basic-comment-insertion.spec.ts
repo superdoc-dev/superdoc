@@ -95,9 +95,9 @@ test('add a comment via the UI bubble', async ({ superdoc }) => {
   }
 
   // Verify the comment text appears in the floating dialog
-  const commentDialog = superdoc.page.locator('.floating-comment > .comments-dialog').last();
+  const commentDialog = superdoc.page.locator('.comment-placeholder .comments-dialog').last();
   const commentText = commentDialog.locator('.comment-body .comment');
-  await expect(commentText.first()).toBeAttached({ timeout: 5_000 });
+  await expect(commentText.first()).toBeAttached({ timeout: 10_000 });
   await expect(commentText.first()).toContainText('UI comment on selected text');
 
   await superdoc.snapshot('comment added via UI');

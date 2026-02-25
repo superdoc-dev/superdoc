@@ -144,7 +144,7 @@ const resolveTrackChangeId: PreInvokeHook = (input, context) => {
 };
 
 /**
- * review.decide needs stable-ID → raw-ID translation on target.id.
+ * trackChanges.decide needs stable-ID → raw-ID translation on target.id.
  */
 const resolveReviewDecideId: PreInvokeHook = (input, context) => {
   const record = asRecord(input);
@@ -230,8 +230,8 @@ const flattenTextMutationReceipt: PostInvokeHook = (result) => {
 export const PRE_INVOKE_HOOKS: Partial<Record<CliExposedOperationId, PreInvokeHook>> = {
   // Track-changes get needs stable-ID → raw-ID translation
   'trackChanges.get': resolveTrackChangeId,
-  // review.decide needs stable-ID → raw-ID translation on target.id
-  'review.decide': resolveReviewDecideId,
+  // trackChanges.decide needs stable-ID → raw-ID translation on target.id
+  'trackChanges.decide': resolveReviewDecideId,
 };
 
 /** Post-invoke: transform the raw invoke() result before envelope wrapping. */

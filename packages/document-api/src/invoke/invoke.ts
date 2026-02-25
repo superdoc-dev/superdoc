@@ -68,12 +68,10 @@ export function buildDispatchTable(api: DocumentApi): TypedDispatchTable {
     'comments.get': (input) => api.comments.get(input),
     'comments.list': (input) => api.comments.list(input),
 
-    // --- trackChanges.* (reads) ---
+    // --- trackChanges.* ---
     'trackChanges.list': (input) => api.trackChanges.list(input),
     'trackChanges.get': (input) => api.trackChanges.get(input),
-
-    // --- review.* ---
-    'review.decide': (input, options) => api.review.decide(input, options),
+    'trackChanges.decide': (input, options) => api.trackChanges.decide(input, options),
 
     // --- query.* ---
     'query.match': (input) => api.query.match(input),

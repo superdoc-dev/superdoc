@@ -1,7 +1,7 @@
 ---
 title: Format operations
 sidebarTitle: Format
-description: Generated Format operation reference from the canonical Document API contract.
+description: Format operation reference from the canonical Document API contract.
 ---
 
 {/* GENERATED FILE: DO NOT EDIT. Regenerate via `pnpm run docapi:sync`. */}
@@ -14,4 +14,15 @@ Canonical formatting mutation with boolean patch semantics.
 
 | Operation | Member path | Mutates | Idempotency | Tracked | Dry run |
 | --- | --- | --- | --- | --- | --- |
-| [`format.apply`](./apply) | `format.apply` | Yes | `conditional` | Yes | Yes |
+| <span style={{ whiteSpace: 'nowrap', wordBreak: 'normal', overflowWrap: 'normal' }}><a href="/document-api/reference/format/apply"><code>format.apply</code></a></span> | `format.apply` | Yes | `conditional` | Yes | Yes |
+
+
+## Convenience aliases
+
+| Alias method | Canonical operation | Behavior |
+| --- | --- | --- |
+| `editor.doc.format.bold(...)` | <span style={{ whiteSpace: 'nowrap', wordBreak: 'normal', overflowWrap: 'normal' }}><a href="/document-api/reference/format/apply"><code>format.apply</code></a></span> | Convenience alias for `format.apply` with `inline.bold: true`. |
+| `editor.doc.format.italic(...)` | <span style={{ whiteSpace: 'nowrap', wordBreak: 'normal', overflowWrap: 'normal' }}><a href="/document-api/reference/format/apply"><code>format.apply</code></a></span> | Convenience alias for `format.apply` with `inline.italic: true`. |
+| `editor.doc.format.underline(...)` | <span style={{ whiteSpace: 'nowrap', wordBreak: 'normal', overflowWrap: 'normal' }}><a href="/document-api/reference/format/apply"><code>format.apply</code></a></span> | Convenience alias for `format.apply` with `inline.underline: true`. |
+| `editor.doc.format.strikethrough(...)` | <span style={{ whiteSpace: 'nowrap', wordBreak: 'normal', overflowWrap: 'normal' }}><a href="/document-api/reference/format/apply"><code>format.apply</code></a></span> | Convenience alias for `format.apply` with `inline.strike: true`. |
+

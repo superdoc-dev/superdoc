@@ -23,6 +23,7 @@ const OPTIONAL_PLATFORM_PACKAGES = [
   '@superdoc-dev/sdk-linux-x64',
   '@superdoc-dev/sdk-windows-x64',
 ];
+const OPTIONAL_PLATFORM_DEP_SPEC = 'workspace:*';
 
 const SEMVER_RE = /^\d+\.\d+\.\d+(?:-[0-9A-Za-z.-]+)?(?:\+[0-9A-Za-z.-]+)?$/;
 
@@ -125,7 +126,7 @@ async function syncNodePackage(version) {
   for (const packageName of OPTIONAL_PLATFORM_PACKAGES) {
     const optionalDepRe = new RegExp(`("${escapeRegExp(packageName)}"\\s*:\\s*")([^"]*)(")`);
     if (optionalDepRe.test(next)) {
-      next = next.replace(optionalDepRe, `$1${version}$3`);
+      next = next.replace(optionalDepRe, `$1${OPTIONAL_PLATFORM_DEP_SPEC}$3`);
     }
   }
 

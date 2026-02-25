@@ -188,10 +188,10 @@ export function executeStyleApply(
   let changed = false;
 
   const markEntries: Array<[string, boolean | undefined, MarkType | undefined]> = [
-    ['bold', step.args.marks.bold, schema.marks.bold],
-    ['italic', step.args.marks.italic, schema.marks.italic],
-    ['underline', step.args.marks.underline, schema.marks.underline],
-    ['strike', step.args.marks.strike, schema.marks.strike],
+    ['bold', step.args.inline.bold, schema.marks.bold],
+    ['italic', step.args.inline.italic, schema.marks.italic],
+    ['underline', step.args.inline.underline, schema.marks.underline],
+    ['strike', step.args.inline.strike, schema.marks.strike],
   ];
 
   for (const [, value, markType] of markEntries) {
@@ -352,10 +352,10 @@ export function executeSpanStyleApply(
   const absTo = mapping.map(lastSeg.absTo, -1);
 
   const markEntries: Array<[string, boolean | undefined, MarkType | undefined]> = [
-    ['bold', step.args.marks.bold, schema.marks.bold],
-    ['italic', step.args.marks.italic, schema.marks.italic],
-    ['underline', step.args.marks.underline, schema.marks.underline],
-    ['strike', step.args.marks.strike, schema.marks.strike],
+    ['bold', step.args.inline.bold, schema.marks.bold],
+    ['italic', step.args.inline.italic, schema.marks.italic],
+    ['underline', step.args.inline.underline, schema.marks.underline],
+    ['strike', step.args.inline.strike, schema.marks.strike],
   ];
 
   for (const [, value, markType] of markEntries) {

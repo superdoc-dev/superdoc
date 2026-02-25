@@ -231,7 +231,7 @@ function makeCapabilitiesAdapter(): { get: ReturnType<typeof vi.fn> } {
         'comments.list',
         'trackChanges.list',
         'trackChanges.get',
-        'review.decide',
+        'trackChanges.decide',
         'capabilities.get',
         'query.match',
         'mutations.preview',
@@ -393,7 +393,7 @@ describe('overview.mdx examples', () => {
             id: 'style-terms',
             op: 'format.apply',
             where: { by: 'ref' as const, ref },
-            args: { marks: { bold: true } },
+            args: { inline: { bold: true } },
           },
         ],
       };
@@ -449,7 +449,7 @@ describe('overview.mdx examples', () => {
       const target = { kind: 'text', blockId: 'p1', range: { start: 0, end: 3 } };
 
       if (caps.operations['format.apply'].available) {
-        doc.format.apply({ target, marks: { bold: true } });
+        doc.format.apply({ target, inline: { bold: true } });
       }
 
       if (caps.global.trackChanges.enabled) {
@@ -564,7 +564,7 @@ describe('src/README.md workflow examples', () => {
 
       const caps = doc.capabilities();
       if (caps.operations['format.apply'].available) {
-        doc.format.apply({ target, marks: { bold: true } });
+        doc.format.apply({ target, inline: { bold: true } });
       }
       if (caps.global.trackChanges.enabled) {
         doc.insert({ text: 'tracked' }, { changeMode: 'tracked' });

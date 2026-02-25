@@ -35,18 +35,33 @@ The CLI is bundled with the SDK — no separate install needed.
     ```typescript
     import { SuperDocClient } from '@superdoc-dev/sdk';
 
-    const client = new SuperDocClient();
+    const client = new SuperDocClient({
+      defaultChangeMode: 'tracked',
+    });
 
     // Open a document
     await client.doc.open({ doc: './contract.docx' });
 
-    // Find text
-    const result = await client.doc.find({ pattern: 'ACME Corp' });
+    // Find and replace text with query + mutation plan
+    const match = await client.doc.query.match({
+      select: { type: 'text', pattern: 'ACME Corp' },
+      require: 'first',
+    });
 
-    // Replace it
-    const target = result.context?.[0]?.textRanges?.[0];
-    if (target) {
-      await client.doc.replace({ target, text: 'NewCo Inc.' });
+    const ref = match.items?.[0]?.handle?.ref;
+    if (ref) {
+      await client.doc.mutations.apply({
+        expectedRevision: match.evaluatedRevision,
+        atomic: true,
+        steps: [
+          {
+            id: 'replace-acme',
+            op: 'text.rewrite',
+            where: { by: 'ref', ref },
+            args: { replacement: { text: 'NewCo Inc.' } },
+          },
+        ],
+      });
     }
 
     // Save and close
@@ -56,43 +71,53 @@ The CLI is bundled with the SDK — no separate install needed.
   </Tab>
   <Tab title="Python">
     ```python
-    from superdoc import SuperDocClient
+    import asyncio
 
-    client = SuperDocClient()
+    from superdoc import AsyncSuperDocClient
 
-    # Open a document
-    await client.doc.open(doc="./contract.docx")
 
-    # Find text
-    result = await client.doc.find(pattern="ACME Corp")
+    async def main():
+        client = AsyncSuperDocClient(default_change_mode="tracked")
 
-    # Replace it
-    target = result["context"][0]["textRanges"][0]
-    await client.doc.replace(target=target, text="NewCo Inc.")
+        # Open a document
+        await client.doc.open({"doc": "./contract.docx"})
 
-    # Save and close
-    await client.doc.save()
-    await client.doc.close()
+        # Find and replace text with query + mutation plan
+        match = await client.doc.query.match(
+            {
+                "select": {"type": "text", "pattern": "ACME Corp"},
+                "require": "first",
+            }
+        )
+
+        ref = match.get("items", [{}])[0].get("handle", {}).get("ref")
+        if ref:
+            await client.doc.mutations.apply(
+                {
+                    "expectedRevision": match["evaluatedRevision"],
+                    "atomic": True,
+                    "steps": [
+                        {
+                            "id": "replace-acme",
+                            "op": "text.rewrite",
+                            "where": {"by": "ref", "ref": ref},
+                            "args": {"replacement": {"text": "NewCo Inc."}},
+                        }
+                    ],
+                }
+            )
+
+        # Save and close
+        await client.doc.save({"inPlace": True})
+        await client.doc.close({})
+
+
+    asyncio.run(main())
     ```
   </Tab>
 </Tabs>
 
-## AI tool use
-
-The SDKs include tool catalogs for LLM integrations. You can expose document operations as tools for AI agents:
-
-```typescript
-import { chooseSuperDocTools, dispatchSuperDocTool } from '@superdoc-dev/sdk';
-
-// Get tools scoped to the current task
-const tools = chooseSuperDocTools({
-  phase: 'mutate',
-  features: { comments: true, trackChanges: true },
-});
-
-// Dispatch a tool call from your LLM
-const result = await dispatchSuperDocTool(client, toolCall);
-```
+Set `defaultChangeMode: 'tracked'` (Node) or `default_change_mode='tracked'` (Python) to make mutations use tracked changes by default. If you pass `changeMode` on a specific call, that explicit value overrides the default.
 
 {/* SDK_OPERATIONS_START */}
 ## Available operations
@@ -132,7 +157,7 @@ The SDKs expose all operations from the [Document API](/document-api/overview) p
 
 | Operation | CLI command | Description |
 | --- | --- | --- |
-| `doc.format.apply` | `format apply` | Apply explicit mark changes (bold, italic, underline, strike) to the target range using boolean patch semantics. |
+| `doc.format.apply` | `format apply` | Apply explicit inline style changes (bold, italic, underline, strike) to the target range using boolean patch semantics. |
 
 #### Create
 
@@ -170,7 +195,7 @@ The SDKs expose all operations from the [Document API](/document-api/overview) p
 | --- | --- | --- |
 | `doc.trackChanges.list` | `track-changes list` | List all tracked changes in the document. |
 | `doc.trackChanges.get` | `track-changes get` | Retrieve a single tracked change by ID. |
-| `doc.review.decide` | `review decide` | Accept or reject a tracked change (by ID or scope: all). |
+| `doc.trackChanges.decide` | `track-changes decide` | Accept or reject a tracked change (by ID or scope: all). |
 
 #### Session
 

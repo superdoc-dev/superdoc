@@ -514,7 +514,7 @@ export const SUCCESS_SCENARIOS = {
         docPath,
         '--target-json',
         JSON.stringify(target),
-        '--marks-json',
+        '--inline-json',
         JSON.stringify({ bold: true }),
         '--out',
         harness.createOutputPath('doc-style-apply-output'),
@@ -537,13 +537,13 @@ export const SUCCESS_SCENARIOS = {
       args: ['track-changes', 'get', fixture.docPath, '--id', fixture.changeId],
     };
   },
-  'doc.review.decide': async (harness: ConformanceHarness): Promise<ScenarioInvocation> => {
-    const stateDir = await harness.createStateDir('doc-review-decide-success');
-    const fixture = await harness.addTrackedChangeFixture(stateDir, 'doc-review-decide');
+  'doc.trackChanges.decide': async (harness: ConformanceHarness): Promise<ScenarioInvocation> => {
+    const stateDir = await harness.createStateDir('doc-trackChanges-decide-success');
+    const fixture = await harness.addTrackedChangeFixture(stateDir, 'doc-trackChanges-decide');
     return {
       stateDir,
       args: [
-        'review',
+        'track-changes',
         'decide',
         fixture.docPath,
         '--decision',
@@ -551,7 +551,7 @@ export const SUCCESS_SCENARIOS = {
         '--target-json',
         JSON.stringify({ id: fixture.changeId }),
         '--out',
-        harness.createOutputPath('doc-review-decide-output'),
+        harness.createOutputPath('doc-trackChanges-decide-output'),
       ],
     };
   },

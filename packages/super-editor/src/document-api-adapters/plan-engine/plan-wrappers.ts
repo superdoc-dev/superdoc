@@ -349,7 +349,7 @@ export function writeWrapper(editor: Editor, request: WriteRequest, options?: Mu
 }
 
 // ---------------------------------------------------------------------------
-// Canonical format.apply wrapper (multi-mark, boolean patch semantics)
+// Canonical format.apply wrapper (multi-style inline patch semantics)
 // ---------------------------------------------------------------------------
 
 /** Map from mark key to editor schema mark name. */
@@ -388,8 +388,8 @@ export function styleApplyWrapper(
     };
   }
 
-  // Validate that at least one requested mark exists in the schema
-  const markKeys = Object.keys(input.marks).filter((k) => input.marks[k as keyof SetMarks] !== undefined);
+  // Validate that at least one requested inline style exists in the schema
+  const markKeys = Object.keys(input.inline).filter((k) => input.inline[k as keyof SetMarks] !== undefined);
   for (const key of markKeys) {
     const schemaName = MARK_KEY_TO_SCHEMA_NAME[key];
     if (schemaName) {
@@ -406,13 +406,13 @@ export function styleApplyWrapper(
     return { success: true, resolution };
   }
 
-  // Build single-step compiled plan using the full marks payload
+  // Build single-step compiled plan using the full inline payload
   const stepId = uuidv4();
   const step = {
     id: stepId,
     op: 'format.apply',
     where: STUB_WHERE,
-    args: { marks: input.marks },
+    args: { inline: input.inline },
   } as unknown as MutationStep;
 
   const target: CompiledTarget = {

@@ -911,7 +911,7 @@ const operationSchemas: Record<OperationId, OperationSchemaSet> = {
     input: objectSchema(
       {
         target: textAddressSchema,
-        marks: (() => {
+        inline: (() => {
           const markProperties = Object.fromEntries(
             MARK_KEYS.map((key) => [key, { type: 'boolean' } as JsonSchema]),
           ) as Record<string, JsonSchema>;
@@ -923,7 +923,7 @@ const operationSchemas: Record<OperationId, OperationSchemaSet> = {
           } as JsonSchema;
         })(),
       },
-      ['target', 'marks'],
+      ['target', 'inline'],
     ),
     output: textMutationResultSchemaFor('format.apply'),
     success: textMutationSuccessSchema,
@@ -1131,7 +1131,7 @@ const operationSchemas: Record<OperationId, OperationSchemaSet> = {
     input: objectSchema({ id: { type: 'string' } }, ['id']),
     output: trackChangeInfoSchema,
   },
-  'review.decide': {
+  'trackChanges.decide': {
     input: {
       type: 'object',
       properties: {
@@ -1146,9 +1146,9 @@ const operationSchemas: Record<OperationId, OperationSchemaSet> = {
       required: ['decision', 'target'],
       additionalProperties: false,
     },
-    output: receiptResultSchemaFor('review.decide'),
+    output: receiptResultSchemaFor('trackChanges.decide'),
     success: receiptSuccessSchema,
-    failure: receiptFailureResultSchemaFor('review.decide'),
+    failure: receiptFailureResultSchemaFor('trackChanges.decide'),
   },
   'query.match': {
     input: objectSchema(

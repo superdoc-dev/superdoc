@@ -38,8 +38,7 @@
     "apps/docs/document-api/reference/query/index.mdx",
     "apps/docs/document-api/reference/query/match.mdx",
     "apps/docs/document-api/reference/replace.mdx",
-    "apps/docs/document-api/reference/review/decide.mdx",
-    "apps/docs/document-api/reference/review/index.mdx",
+    "apps/docs/document-api/reference/track-changes/decide.mdx",
     "apps/docs/document-api/reference/track-changes/get.mdx",
     "apps/docs/document-api/reference/track-changes/index.mdx",
     "apps/docs/document-api/reference/track-changes/list.mdx"
@@ -47,30 +46,35 @@
   "generatedBy": "packages/document-api/scripts/generate-reference-docs.ts",
   "groups": [
     {
+      "aliasMemberPaths": [],
       "key": "core",
       "operationIds": ["find", "getNode", "getNodeById", "getText", "info", "insert", "replace", "delete"],
       "pagePath": "apps/docs/document-api/reference/core/index.mdx",
       "title": "Core"
     },
     {
+      "aliasMemberPaths": [],
       "key": "capabilities",
       "operationIds": ["capabilities.get"],
       "pagePath": "apps/docs/document-api/reference/capabilities/index.mdx",
       "title": "Capabilities"
     },
     {
+      "aliasMemberPaths": [],
       "key": "create",
       "operationIds": ["create.paragraph", "create.heading"],
       "pagePath": "apps/docs/document-api/reference/create/index.mdx",
       "title": "Create"
     },
     {
+      "aliasMemberPaths": ["format.bold", "format.italic", "format.underline", "format.strikethrough"],
       "key": "format",
       "operationIds": ["format.apply"],
       "pagePath": "apps/docs/document-api/reference/format/index.mdx",
       "title": "Format"
     },
     {
+      "aliasMemberPaths": [],
       "key": "lists",
       "operationIds": [
         "lists.list",
@@ -86,30 +90,28 @@
       "title": "Lists"
     },
     {
+      "aliasMemberPaths": [],
       "key": "comments",
       "operationIds": ["comments.create", "comments.patch", "comments.delete", "comments.get", "comments.list"],
       "pagePath": "apps/docs/document-api/reference/comments/index.mdx",
       "title": "Comments"
     },
     {
+      "aliasMemberPaths": [],
       "key": "trackChanges",
-      "operationIds": ["trackChanges.list", "trackChanges.get"],
+      "operationIds": ["trackChanges.list", "trackChanges.get", "trackChanges.decide"],
       "pagePath": "apps/docs/document-api/reference/track-changes/index.mdx",
       "title": "Track Changes"
     },
     {
-      "key": "review",
-      "operationIds": ["review.decide"],
-      "pagePath": "apps/docs/document-api/reference/review/index.mdx",
-      "title": "Review"
-    },
-    {
+      "aliasMemberPaths": [],
       "key": "query",
       "operationIds": ["query.match"],
       "pagePath": "apps/docs/document-api/reference/query/index.mdx",
       "title": "Query"
     },
     {
+      "aliasMemberPaths": [],
       "key": "mutations",
       "operationIds": ["mutations.preview", "mutations.apply"],
       "pagePath": "apps/docs/document-api/reference/mutations/index.mdx",
@@ -117,5 +119,5 @@
     }
   ],
   "marker": "{/* GENERATED FILE: DO NOT EDIT. Regenerate via `pnpm run docapi:sync`. */}",
-  "sourceHash": "ecfd8bad8d01a8ebd92fb3f3148373fd01f3ffa9ed9ec91a2b8d6e4a992de695"
+  "sourceHash": "71719d809aa97aaaf7d9200dedd1edf47dc16486b208b473cc009257667bed77"
 }

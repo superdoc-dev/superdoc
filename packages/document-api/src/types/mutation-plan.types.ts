@@ -118,7 +118,7 @@ export type StyleApplyStep = {
   op: 'format.apply';
   where: StepWhere;
   args: {
-    marks: SetMarks;
+    inline: SetMarks;
   };
 };
 

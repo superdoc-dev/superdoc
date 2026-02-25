@@ -76,7 +76,7 @@ const INTENT_NAMES = {
   'doc.comments.list': 'list_comments',
   'doc.trackChanges.list': 'list_tracked_changes',
   'doc.trackChanges.get': 'get_tracked_change',
-  'doc.review.decide': 'review_decide',
+  'doc.trackChanges.decide': 'decide_tracked_change',
   'doc.query.match': 'query_match',
   'doc.mutations.preview': 'preview_mutations',
   'doc.mutations.apply': 'apply_mutations',

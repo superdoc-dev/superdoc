@@ -95,7 +95,11 @@ import type {
   TrackChangesListInput,
   ReviewDecideInput,
 } from './track-changes/track-changes.js';
-import { executeTrackChangesGet, executeTrackChangesList, executeReviewDecide } from './track-changes/track-changes.js';
+import {
+  executeTrackChangesGet,
+  executeTrackChangesList,
+  executeTrackChangesDecide,
+} from './track-changes/track-changes.js';
 import type { MutationOptions, RevisionGuardOptions, WriteAdapter } from './write/write.js';
 import {
   executeCapabilities,
@@ -189,14 +193,6 @@ export interface MutationsApi {
   apply(input: MutationsApplyInput): PlanReceipt;
 }
 
-export interface ReviewApi {
-  decide(input: ReviewDecideInput, options?: RevisionGuardOptions): Receipt;
-}
-
-export interface ReviewAdapter {
-  decide(input: ReviewDecideInput, options?: RevisionGuardOptions): Receipt;
-}
-
 export interface QueryAdapter {
   match(input: QueryMatchInput): QueryMatchOutput;
 }
@@ -265,13 +261,9 @@ export interface DocumentApi {
    */
   format: FormatApi;
   /**
-   * Tracked-change read operations (list, get).
+   * Tracked-change operations (list, get, decide).
    */
   trackChanges: TrackChangesApi;
-  /**
-   * Review operations — accept or reject tracked changes.
-   */
-  review: ReviewApi;
   /**
    * Structural creation operations.
    */
@@ -389,16 +381,16 @@ export function createDocumentApi(adapters: DocumentApiAdapters): DocumentApi {
     },
     format: {
       bold(input: FormatBoldInput, options?: MutationOptions): TextMutationReceipt {
-        return executeStyleApply(adapters.format, { ...input, marks: { bold: true } }, options);
+        return executeStyleApply(adapters.format, { ...input, inline: { bold: true } }, options);
       },
       italic(input: FormatItalicInput, options?: MutationOptions): TextMutationReceipt {
-        return executeStyleApply(adapters.format, { ...input, marks: { italic: true } }, options);
+        return executeStyleApply(adapters.format, { ...input, inline: { italic: true } }, options);
       },
       underline(input: FormatUnderlineInput, options?: MutationOptions): TextMutationReceipt {
-        return executeStyleApply(adapters.format, { ...input, marks: { underline: true } }, options);
+        return executeStyleApply(adapters.format, { ...input, inline: { underline: true } }, options);
       },
       strikethrough(input: FormatStrikethroughInput, options?: MutationOptions): TextMutationReceipt {
-        return executeStyleApply(adapters.format, { ...input, marks: { strike: true } }, options);
+        return executeStyleApply(adapters.format, { ...input, inline: { strike: true } }, options);
       },
       apply(input: StyleApplyInput, options?: MutationOptions): TextMutationReceipt {
         return executeStyleApply(adapters.format, input, options);
@@ -411,10 +403,8 @@ export function createDocumentApi(adapters: DocumentApiAdapters): DocumentApi {
       get(input: TrackChangesGetInput): TrackChangeInfo {
         return executeTrackChangesGet(adapters.trackChanges, input);
       },
-    },
-    review: {
       decide(input: ReviewDecideInput, options?: RevisionGuardOptions): Receipt {
-        return executeReviewDecide(adapters.trackChanges, input, options);
+        return executeTrackChangesDecide(adapters.trackChanges, input, options);
       },
     },
     create: {

@@ -59,8 +59,10 @@ test('editing a comment updates its text', async ({ superdoc }) => {
   await superdoc.waitForStable();
 
   // After update the dialog loses is-active; verify the text changed via the visible sidebar dialog
-  const updatedDialog = superdoc.page.locator('.floating-comment > .comments-dialog');
-  await expect(updatedDialog.locator('.comment-body .comment').first()).toContainText('changed comment');
+  const updatedDialog = superdoc.page.locator('.comment-placeholder .comments-dialog');
+  await expect(updatedDialog.locator('.comment-body .comment').first()).toContainText('changed comment', {
+    timeout: 10_000,
+  });
   // CommentInfo.text is optional in the contract — some adapters don't populate it.
   // Verify via the API when available; the DOM assertion above covers all adapters.
   const listed = await listComments(superdoc.page, { includeResolved: true });

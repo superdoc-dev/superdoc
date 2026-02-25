@@ -1,61 +1,115 @@
 ---
 title: Document API reference
 sidebarTitle: Reference
-description: Generated operation reference from the canonical Document API contract.
+description: Operation reference from the canonical Document API contract.
 ---
 
 {/* GENERATED FILE: DO NOT EDIT. Regenerate via `pnpm run docapi:sync`. */}
 
-This reference is generated from `packages/document-api/src/contract/*`.
+This reference is sourced from `packages/document-api/src/contract/*`.
 Document API is currently alpha and subject to breaking changes.
+
+<style>{`
+  table th,
+  table td {
+    font-size: calc(1em - 2px);
+  }
+`}</style>
 
 ## Browse by namespace
 
-| Namespace | Operations | Reference |
+| Namespace | Canonical ops | Aliases | Total surface | Reference |
+| --- | --- | --- | --- | --- |
+| Core | 8 | 0 | 8 | [Open](/document-api/reference/core/index) |
+| Capabilities | 1 | 0 | 1 | [Open](/document-api/reference/capabilities/index) |
+| Create | 2 | 0 | 2 | [Open](/document-api/reference/create/index) |
+| Format | 1 | 4 | 5 | [Open](/document-api/reference/format/index) |
+| Lists | 8 | 0 | 8 | [Open](/document-api/reference/lists/index) |
+| Comments | 5 | 0 | 5 | [Open](/document-api/reference/comments/index) |
+| Track Changes | 3 | 0 | 3 | [Open](/document-api/reference/track-changes/index) |
+| Query | 1 | 0 | 1 | [Open](/document-api/reference/query/index) |
+| Mutations | 2 | 0 | 2 | [Open](/document-api/reference/mutations/index) |
+
+## Available operations
+
+The tables below are grouped by namespace.
+
+#### Core
+
+| Operation | API member path | Description |
 | --- | --- | --- |
-| Core | 8 | [Open](./core/index) |
-| Capabilities | 1 | [Open](./capabilities/index) |
-| Create | 2 | [Open](./create/index) |
-| Format | 1 | [Open](./format/index) |
-| Lists | 8 | [Open](./lists/index) |
-| Comments | 5 | [Open](./comments/index) |
-| Track Changes | 2 | [Open](./track-changes/index) |
-| Review | 1 | [Open](./review/index) |
-| Query | 1 | [Open](./query/index) |
-| Mutations | 2 | [Open](./mutations/index) |
+| <span style={{ whiteSpace: 'nowrap', wordBreak: 'normal', overflowWrap: 'normal' }}><a href="/document-api/reference/find"><code>find</code></a></span> | <span style={{ whiteSpace: 'nowrap', wordBreak: 'normal', overflowWrap: 'normal' }}><code>editor.doc.find(...)</code></span> | Search the document for nodes matching type, text, or attribute criteria. |
+| <span style={{ whiteSpace: 'nowrap', wordBreak: 'normal', overflowWrap: 'normal' }}><a href="/document-api/reference/get-node"><code>getNode</code></a></span> | <span style={{ whiteSpace: 'nowrap', wordBreak: 'normal', overflowWrap: 'normal' }}><code>editor.doc.getNode(...)</code></span> | Retrieve a single node by target position. |
+| <span style={{ whiteSpace: 'nowrap', wordBreak: 'normal', overflowWrap: 'normal' }}><a href="/document-api/reference/get-node-by-id"><code>getNodeById</code></a></span> | <span style={{ whiteSpace: 'nowrap', wordBreak: 'normal', overflowWrap: 'normal' }}><code>editor.doc.getNodeById(...)</code></span> | Retrieve a single node by its unique ID. |
+| <span style={{ whiteSpace: 'nowrap', wordBreak: 'normal', overflowWrap: 'normal' }}><a href="/document-api/reference/get-text"><code>getText</code></a></span> | <span style={{ whiteSpace: 'nowrap', wordBreak: 'normal', overflowWrap: 'normal' }}><code>editor.doc.getText(...)</code></span> | Extract the plain-text content of the document. |
+| <span style={{ whiteSpace: 'nowrap', wordBreak: 'normal', overflowWrap: 'normal' }}><a href="/document-api/reference/info"><code>info</code></a></span> | <span style={{ whiteSpace: 'nowrap', wordBreak: 'normal', overflowWrap: 'normal' }}><code>editor.doc.info(...)</code></span> | Return document metadata including revision, node count, and capabilities. |
+| <span style={{ whiteSpace: 'nowrap', wordBreak: 'normal', overflowWrap: 'normal' }}><a href="/document-api/reference/insert"><code>insert</code></a></span> | <span style={{ whiteSpace: 'nowrap', wordBreak: 'normal', overflowWrap: 'normal' }}><code>editor.doc.insert(...)</code></span> | Insert text or inline content at a target position. |
+| <span style={{ whiteSpace: 'nowrap', wordBreak: 'normal', overflowWrap: 'normal' }}><a href="/document-api/reference/replace"><code>replace</code></a></span> | <span style={{ whiteSpace: 'nowrap', wordBreak: 'normal', overflowWrap: 'normal' }}><code>editor.doc.replace(...)</code></span> | Replace content at a target position with new text or inline content. |
+| <span style={{ whiteSpace: 'nowrap', wordBreak: 'normal', overflowWrap: 'normal' }}><a href="/document-api/reference/delete"><code>delete</code></a></span> | <span style={{ whiteSpace: 'nowrap', wordBreak: 'normal', overflowWrap: 'normal' }}><code>editor.doc.delete(...)</code></span> | Delete content at a target position. |
 
-## All operations
+#### Capabilities
 
-| Operation | Namespace | Member path | Mutates | Idempotency | Tracked | Dry run |
-| --- | --- | --- | --- | --- | --- | --- |
-| [`find`](./find) | Core | `find` | No | `idempotent` | No | No |
-| [`getNode`](./get-node) | Core | `getNode` | No | `idempotent` | No | No |
-| [`getNodeById`](./get-node-by-id) | Core | `getNodeById` | No | `idempotent` | No | No |
-| [`getText`](./get-text) | Core | `getText` | No | `idempotent` | No | No |
-| [`info`](./info) | Core | `info` | No | `idempotent` | No | No |
-| [`insert`](./insert) | Core | `insert` | Yes | `non-idempotent` | Yes | Yes |
-| [`replace`](./replace) | Core | `replace` | Yes | `conditional` | Yes | Yes |
-| [`delete`](./delete) | Core | `delete` | Yes | `conditional` | Yes | Yes |
-| [`format.apply`](./format/apply) | Format | `format.apply` | Yes | `conditional` | Yes | Yes |
-| [`create.paragraph`](./create/paragraph) | Create | `create.paragraph` | Yes | `non-idempotent` | Yes | Yes |
-| [`create.heading`](./create/heading) | Create | `create.heading` | Yes | `non-idempotent` | Yes | Yes |
-| [`lists.list`](./lists/list) | Lists | `lists.list` | No | `idempotent` | No | No |
-| [`lists.get`](./lists/get) | Lists | `lists.get` | No | `idempotent` | No | No |
-| [`lists.insert`](./lists/insert) | Lists | `lists.insert` | Yes | `non-idempotent` | Yes | Yes |
-| [`lists.setType`](./lists/set-type) | Lists | `lists.setType` | Yes | `conditional` | No | Yes |
-| [`lists.indent`](./lists/indent) | Lists | `lists.indent` | Yes | `conditional` | No | Yes |
-| [`lists.outdent`](./lists/outdent) | Lists | `lists.outdent` | Yes | `conditional` | No | Yes |
-| [`lists.restart`](./lists/restart) | Lists | `lists.restart` | Yes | `conditional` | No | Yes |
-| [`lists.exit`](./lists/exit) | Lists | `lists.exit` | Yes | `conditional` | No | Yes |
-| [`comments.create`](./comments/create) | Comments | `comments.create` | Yes | `non-idempotent` | No | No |
-| [`comments.patch`](./comments/patch) | Comments | `comments.patch` | Yes | `conditional` | No | No |
-| [`comments.delete`](./comments/delete) | Comments | `comments.delete` | Yes | `conditional` | No | No |
-| [`comments.get`](./comments/get) | Comments | `comments.get` | No | `idempotent` | No | No |
-| [`comments.list`](./comments/list) | Comments | `comments.list` | No | `idempotent` | No | No |
-| [`trackChanges.list`](./track-changes/list) | Track Changes | `trackChanges.list` | No | `idempotent` | No | No |
-| [`trackChanges.get`](./track-changes/get) | Track Changes | `trackChanges.get` | No | `idempotent` | No | No |
-| [`review.decide`](./review/decide) | Review | `review.decide` | Yes | `conditional` | No | No |
-| [`query.match`](./query/match) | Query | `query.match` | No | `idempotent` | No | No |
-| [`mutations.preview`](./mutations/preview) | Mutations | `mutations.preview` | No | `idempotent` | No | No |
-| [`mutations.apply`](./mutations/apply) | Mutations | `mutations.apply` | Yes | `non-idempotent` | Yes | No |
-| [`capabilities.get`](./capabilities/get) | Capabilities | `capabilities` | No | `idempotent` | No | No |
+| Operation | API member path | Description |
+| --- | --- | --- |
+| <span style={{ whiteSpace: 'nowrap', wordBreak: 'normal', overflowWrap: 'normal' }}><a href="/document-api/reference/capabilities/get"><code>capabilities.get</code></a></span> | <span style={{ whiteSpace: 'nowrap', wordBreak: 'normal', overflowWrap: 'normal' }}><code>editor.doc.capabilities()</code></span> | Query runtime capabilities supported by the current document engine. |
+
+#### Create
+
+| Operation | API member path | Description |
+| --- | --- | --- |
+| <span style={{ whiteSpace: 'nowrap', wordBreak: 'normal', overflowWrap: 'normal' }}><a href="/document-api/reference/create/paragraph"><code>create.paragraph</code></a></span> | <span style={{ whiteSpace: 'nowrap', wordBreak: 'normal', overflowWrap: 'normal' }}><code>editor.doc.create.paragraph(...)</code></span> | Create a new paragraph at the target position. |
+| <span style={{ whiteSpace: 'nowrap', wordBreak: 'normal', overflowWrap: 'normal' }}><a href="/document-api/reference/create/heading"><code>create.heading</code></a></span> | <span style={{ whiteSpace: 'nowrap', wordBreak: 'normal', overflowWrap: 'normal' }}><code>editor.doc.create.heading(...)</code></span> | Create a new heading at the target position. |
+
+#### Format
+
+| Operation | API member path | Description |
+| --- | --- | --- |
+| <span style={{ whiteSpace: 'nowrap', wordBreak: 'normal', overflowWrap: 'normal' }}><a href="/document-api/reference/format/apply"><code>format.apply</code></a></span> | <span style={{ whiteSpace: 'nowrap', wordBreak: 'normal', overflowWrap: 'normal' }}><code>editor.doc.format.apply(...)</code></span> | Apply explicit inline style changes (bold, italic, underline, strike) to the target range using boolean patch semantics. |
+| <span style={{ whiteSpace: 'nowrap', wordBreak: 'normal', overflowWrap: 'normal' }}><a href="/document-api/reference/format/apply"><code>format.bold</code></a></span> | <span style={{ whiteSpace: 'nowrap', wordBreak: 'normal', overflowWrap: 'normal' }}><code>editor.doc.format.bold(...)</code></span> | Convenience alias for `format.apply` with `inline.bold: true`. |
+| <span style={{ whiteSpace: 'nowrap', wordBreak: 'normal', overflowWrap: 'normal' }}><a href="/document-api/reference/format/apply"><code>format.italic</code></a></span> | <span style={{ whiteSpace: 'nowrap', wordBreak: 'normal', overflowWrap: 'normal' }}><code>editor.doc.format.italic(...)</code></span> | Convenience alias for `format.apply` with `inline.italic: true`. |
+| <span style={{ whiteSpace: 'nowrap', wordBreak: 'normal', overflowWrap: 'normal' }}><a href="/document-api/reference/format/apply"><code>format.underline</code></a></span> | <span style={{ whiteSpace: 'nowrap', wordBreak: 'normal', overflowWrap: 'normal' }}><code>editor.doc.format.underline(...)</code></span> | Convenience alias for `format.apply` with `inline.underline: true`. |
+| <span style={{ whiteSpace: 'nowrap', wordBreak: 'normal', overflowWrap: 'normal' }}><a href="/document-api/reference/format/apply"><code>format.strikethrough</code></a></span> | <span style={{ whiteSpace: 'nowrap', wordBreak: 'normal', overflowWrap: 'normal' }}><code>editor.doc.format.strikethrough(...)</code></span> | Convenience alias for `format.apply` with `inline.strike: true`. |
+
+#### Lists
+
+| Operation | API member path | Description |
+| --- | --- | --- |
+| <span style={{ whiteSpace: 'nowrap', wordBreak: 'normal', overflowWrap: 'normal' }}><a href="/document-api/reference/lists/list"><code>lists.list</code></a></span> | <span style={{ whiteSpace: 'nowrap', wordBreak: 'normal', overflowWrap: 'normal' }}><code>editor.doc.lists.list(...)</code></span> | List all list nodes in the document, optionally filtered by scope. |
+| <span style={{ whiteSpace: 'nowrap', wordBreak: 'normal', overflowWrap: 'normal' }}><a href="/document-api/reference/lists/get"><code>lists.get</code></a></span> | <span style={{ whiteSpace: 'nowrap', wordBreak: 'normal', overflowWrap: 'normal' }}><code>editor.doc.lists.get(...)</code></span> | Retrieve a specific list node by target. |
+| <span style={{ whiteSpace: 'nowrap', wordBreak: 'normal', overflowWrap: 'normal' }}><a href="/document-api/reference/lists/insert"><code>lists.insert</code></a></span> | <span style={{ whiteSpace: 'nowrap', wordBreak: 'normal', overflowWrap: 'normal' }}><code>editor.doc.lists.insert(...)</code></span> | Insert a new list at the target position. |
+| <span style={{ whiteSpace: 'nowrap', wordBreak: 'normal', overflowWrap: 'normal' }}><a href="/document-api/reference/lists/set-type"><code>lists.setType</code></a></span> | <span style={{ whiteSpace: 'nowrap', wordBreak: 'normal', overflowWrap: 'normal' }}><code>editor.doc.lists.setType(...)</code></span> | Change the list type (ordered, unordered) of a target list. |
+| <span style={{ whiteSpace: 'nowrap', wordBreak: 'normal', overflowWrap: 'normal' }}><a href="/document-api/reference/lists/indent"><code>lists.indent</code></a></span> | <span style={{ whiteSpace: 'nowrap', wordBreak: 'normal', overflowWrap: 'normal' }}><code>editor.doc.lists.indent(...)</code></span> | Increase the indentation level of a list item. |
+| <span style={{ whiteSpace: 'nowrap', wordBreak: 'normal', overflowWrap: 'normal' }}><a href="/document-api/reference/lists/outdent"><code>lists.outdent</code></a></span> | <span style={{ whiteSpace: 'nowrap', wordBreak: 'normal', overflowWrap: 'normal' }}><code>editor.doc.lists.outdent(...)</code></span> | Decrease the indentation level of a list item. |
+| <span style={{ whiteSpace: 'nowrap', wordBreak: 'normal', overflowWrap: 'normal' }}><a href="/document-api/reference/lists/restart"><code>lists.restart</code></a></span> | <span style={{ whiteSpace: 'nowrap', wordBreak: 'normal', overflowWrap: 'normal' }}><code>editor.doc.lists.restart(...)</code></span> | Restart numbering of an ordered list at the target item. |
+| <span style={{ whiteSpace: 'nowrap', wordBreak: 'normal', overflowWrap: 'normal' }}><a href="/document-api/reference/lists/exit"><code>lists.exit</code></a></span> | <span style={{ whiteSpace: 'nowrap', wordBreak: 'normal', overflowWrap: 'normal' }}><code>editor.doc.lists.exit(...)</code></span> | Exit a list context, converting the target item to a paragraph. |
+
+#### Comments
+
+| Operation | API member path | Description |
+| --- | --- | --- |
+| <span style={{ whiteSpace: 'nowrap', wordBreak: 'normal', overflowWrap: 'normal' }}><a href="/document-api/reference/comments/create"><code>comments.create</code></a></span> | <span style={{ whiteSpace: 'nowrap', wordBreak: 'normal', overflowWrap: 'normal' }}><code>editor.doc.comments.create(...)</code></span> | Create a new comment thread (or reply when parentCommentId is given). |
+| <span style={{ whiteSpace: 'nowrap', wordBreak: 'normal', overflowWrap: 'normal' }}><a href="/document-api/reference/comments/patch"><code>comments.patch</code></a></span> | <span style={{ whiteSpace: 'nowrap', wordBreak: 'normal', overflowWrap: 'normal' }}><code>editor.doc.comments.patch(...)</code></span> | Patch fields on an existing comment (text, target, status, or isInternal). |
+| <span style={{ whiteSpace: 'nowrap', wordBreak: 'normal', overflowWrap: 'normal' }}><a href="/document-api/reference/comments/delete"><code>comments.delete</code></a></span> | <span style={{ whiteSpace: 'nowrap', wordBreak: 'normal', overflowWrap: 'normal' }}><code>editor.doc.comments.delete(...)</code></span> | Remove a comment or reply by ID. |
+| <span style={{ whiteSpace: 'nowrap', wordBreak: 'normal', overflowWrap: 'normal' }}><a href="/document-api/reference/comments/get"><code>comments.get</code></a></span> | <span style={{ whiteSpace: 'nowrap', wordBreak: 'normal', overflowWrap: 'normal' }}><code>editor.doc.comments.get(...)</code></span> | Retrieve a single comment thread by ID. |
+| <span style={{ whiteSpace: 'nowrap', wordBreak: 'normal', overflowWrap: 'normal' }}><a href="/document-api/reference/comments/list"><code>comments.list</code></a></span> | <span style={{ whiteSpace: 'nowrap', wordBreak: 'normal', overflowWrap: 'normal' }}><code>editor.doc.comments.list(...)</code></span> | List all comment threads in the document. |
+
+#### Track Changes
+
+| Operation | API member path | Description |
+| --- | --- | --- |
+| <span style={{ whiteSpace: 'nowrap', wordBreak: 'normal', overflowWrap: 'normal' }}><a href="/document-api/reference/track-changes/list"><code>trackChanges.list</code></a></span> | <span style={{ whiteSpace: 'nowrap', wordBreak: 'normal', overflowWrap: 'normal' }}><code>editor.doc.trackChanges.list(...)</code></span> | List all tracked changes in the document. |
+| <span style={{ whiteSpace: 'nowrap', wordBreak: 'normal', overflowWrap: 'normal' }}><a href="/document-api/reference/track-changes/get"><code>trackChanges.get</code></a></span> | <span style={{ whiteSpace: 'nowrap', wordBreak: 'normal', overflowWrap: 'normal' }}><code>editor.doc.trackChanges.get(...)</code></span> | Retrieve a single tracked change by ID. |
+| <span style={{ whiteSpace: 'nowrap', wordBreak: 'normal', overflowWrap: 'normal' }}><a href="/document-api/reference/track-changes/decide"><code>trackChanges.decide</code></a></span> | <span style={{ whiteSpace: 'nowrap', wordBreak: 'normal', overflowWrap: 'normal' }}><code>editor.doc.trackChanges.decide(...)</code></span> | Accept or reject a tracked change (by ID or scope: all). |
+
+#### Query
+
+| Operation | API member path | Description |
+| --- | --- | --- |
+| <span style={{ whiteSpace: 'nowrap', wordBreak: 'normal', overflowWrap: 'normal' }}><a href="/document-api/reference/query/match"><code>query.match</code></a></span> | <span style={{ whiteSpace: 'nowrap', wordBreak: 'normal', overflowWrap: 'normal' }}><code>editor.doc.query.match(...)</code></span> | Deterministic selector-based search with cardinality contracts for mutation targeting. |
+
+#### Mutations
+
+| Operation | API member path | Description |
+| --- | --- | --- |
+| <span style={{ whiteSpace: 'nowrap', wordBreak: 'normal', overflowWrap: 'normal' }}><a href="/document-api/reference/mutations/preview"><code>mutations.preview</code></a></span> | <span style={{ whiteSpace: 'nowrap', wordBreak: 'normal', overflowWrap: 'normal' }}><code>editor.doc.mutations.preview(...)</code></span> | Dry-run a mutation plan, returning resolved targets without applying changes. |
+| <span style={{ whiteSpace: 'nowrap', wordBreak: 'normal', overflowWrap: 'normal' }}><a href="/document-api/reference/mutations/apply"><code>mutations.apply</code></a></span> | <span style={{ whiteSpace: 'nowrap', wordBreak: 'normal', overflowWrap: 'normal' }}><code>editor.doc.mutations.apply(...)</code></span> | Execute a mutation plan atomically against the document. |

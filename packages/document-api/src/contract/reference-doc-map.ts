@@ -53,13 +53,8 @@ const GROUP_METADATA: Record<ReferenceGroupKey, { title: string; description: st
   },
   trackChanges: {
     title: 'Track Changes',
-    description: 'Tracked-change inspection operations.',
+    description: 'Tracked-change inspection and review operations.',
     pagePath: 'track-changes/index.mdx',
-  },
-  review: {
-    title: 'Review',
-    description: 'Accept or reject tracked changes.',
-    pagePath: 'review/index.mdx',
   },
   query: {
     title: 'Query',

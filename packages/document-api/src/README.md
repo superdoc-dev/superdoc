@@ -90,7 +90,7 @@ Locate text in the document and replace it:
 
 ```ts
 const result = editor.doc.find({ type: 'text', text: 'foo' });
-const target = result.context?.[0]?.textRanges?.[0];
+const target = result.items?.[0]?.context?.textRanges?.[0];
 if (target) {
   editor.doc.replace({ target, text: 'bar' });
 }
@@ -126,13 +126,13 @@ const receipt = editor.doc.insert(
 Add a comment, reply, then resolve the thread:
 
 ```ts
-const target = result.context?.[0]?.textRanges?.[0];
-const addReceipt = editor.doc.comments.add({ target, text: 'Review this section.' });
+const target = result.items?.[0]?.context?.textRanges?.[0];
+const createReceipt = editor.doc.comments.create({ target, text: 'Review this section.' });
 // Use the comment ID from the receipt to reply
 const comments = editor.doc.comments.list();
-const thread = comments.matches[0];
-editor.doc.comments.reply({ parentCommentId: thread.commentId, text: 'Looks good.' });
-editor.doc.comments.resolve({ commentId: thread.commentId });
+const thread = comments.items[0];
+editor.doc.comments.create({ parentCommentId: thread.id, text: 'Looks good.' });
+editor.doc.comments.patch({ commentId: thread.id, status: 'resolved' });
 ```
 
 ### Workflow: List Manipulation
@@ -141,8 +141,8 @@ Insert a list item, change its type, then indent it:
 
 ```ts
 const lists = editor.doc.lists.list();
-const firstItem = lists.matches[0];
-const insertResult = editor.doc.lists.insert({ target: firstItem, position: 'after', text: 'New item' });
+const firstItem = lists.items[0];
+const insertResult = editor.doc.lists.insert({ target: firstItem.address, position: 'after', text: 'New item' });
 if (insertResult.success) {
   editor.doc.lists.setType({ target: insertResult.item, kind: 'ordered' });
   editor.doc.lists.indent({ target: insertResult.item });
@@ -430,94 +430,35 @@ Convert a list item back into a plain paragraph, exiting the list. Supports dry-
 
 ### Comments
 
-### `comments.add`
+### `comments.create`
 
-Attach a new comment to a text range.
+Create a new comment thread or reply. When `parentCommentId` is provided, creates a reply. Otherwise creates a root comment anchored to the given text range.
 
-- **Input**: `AddCommentInput` (`{ target, text }`)
-- **Output**: `Receipt`
-- **Mutates**: Yes
-- **Idempotency**: non-idempotent
-- **Failure codes**: `INVALID_TARGET`, `NO_OP`
-
-### `comments.edit`
-
-Update the body text of an existing comment.
-
-- **Input**: `EditCommentInput` (`{ commentId, text }`)
-- **Output**: `Receipt`
-- **Mutates**: Yes
-- **Idempotency**: conditional
-- **Failure codes**: `NO_OP`
-
-### `comments.reply`
-
-Add a reply to an existing comment thread.
-
-- **Input**: `ReplyToCommentInput` (`{ parentCommentId, text }`)
+- **Input**: `CommentsCreateInput` (`{ text, target?, parentCommentId? }`)
 - **Output**: `Receipt`
 - **Mutates**: Yes
 - **Idempotency**: non-idempotent
 - **Failure codes**: `INVALID_TARGET`
 
-### `comments.move`
+### `comments.patch`
 
-Move a comment to a different text range.
+Field-level patch on an existing comment. Exactly one mutation field must be provided per call.
 
-- **Input**: `MoveCommentInput` (`{ commentId, target }`)
+- **Input**: `CommentsPatchInput` (`{ commentId, text?, target?, status?, isInternal? }`)
 - **Output**: `Receipt`
 - **Mutates**: Yes
 - **Idempotency**: conditional
-- **Failure codes**: `INVALID_TARGET`, `NO_OP`
+- **Failure codes**: `INVALID_INPUT`, `INVALID_TARGET`, `NO_OP`
 
-### `comments.resolve`
-
-Resolve an open comment, marking it as addressed.
-
-- **Input**: `ResolveCommentInput` (`{ commentId }`)
-- **Output**: `Receipt`
-- **Mutates**: Yes
-- **Idempotency**: conditional
-- **Failure codes**: `NO_OP`
-
-### `comments.remove`
+### `comments.delete`
 
 Remove a comment from the document.
 
-- **Input**: `RemoveCommentInput` (`{ commentId }`)
+- **Input**: `CommentsDeleteInput` (`{ commentId }`)
 - **Output**: `Receipt`
 - **Mutates**: Yes
 - **Idempotency**: conditional
 - **Failure codes**: `NO_OP`
-
-### `comments.setInternal`
-
-Set or clear the internal/private flag on a comment.
-
-- **Input**: `SetCommentInternalInput` (`{ commentId, isInternal }`)
-- **Output**: `Receipt`
-- **Mutates**: Yes
-- **Idempotency**: conditional
-- **Failure codes**: `NO_OP`, `INVALID_TARGET`
-
-### `comments.setActive`
-
-Set which comment is currently active/focused. Pass `null` to clear.
-
-- **Input**: `SetCommentActiveInput` (`{ commentId }`)
-- **Output**: `Receipt`
-- **Mutates**: Yes
-- **Idempotency**: conditional
-- **Failure codes**: `INVALID_TARGET`
-
-### `comments.goTo`
-
-Scroll to and focus a comment in the document.
-
-- **Input**: `GoToCommentInput` (`{ commentId }`)
-- **Output**: `Receipt`
-- **Mutates**: No
-- **Idempotency**: conditional
 
 ### `comments.get`
 
@@ -557,42 +498,12 @@ Retrieve full information for a single tracked change by its canonical ID. Throw
 - **Mutates**: No
 - **Idempotency**: idempotent
 
-### `trackChanges.accept`
+### `trackChanges.decide`
 
-Accept a tracked change, applying it permanently to the document. Returns `NO_OP` when the change has already been accepted.
+Accept or reject a tracked change by ID, or accept/reject all changes with `{ scope: 'all' }`.
 
-- **Input**: `TrackChangesAcceptInput` (`{ id }`)
+- **Input**: `ReviewDecideInput` (`{ decision: 'accept' | 'reject', target: { id } | { scope: 'all' } }`)
 - **Output**: `Receipt`
 - **Mutates**: Yes
 - **Idempotency**: conditional
-- **Failure codes**: `NO_OP`
-
-### `trackChanges.reject`
-
-Reject a tracked change, reverting it from the document. Returns `NO_OP` when the change has already been rejected.
-
-- **Input**: `TrackChangesRejectInput` (`{ id }`)
-- **Output**: `Receipt`
-- **Mutates**: Yes
-- **Idempotency**: conditional
-- **Failure codes**: `NO_OP`
-
-### `trackChanges.acceptAll`
-
-Accept all tracked changes in the document. Returns `NO_OP` when there are no pending changes.
-
-- **Input**: `TrackChangesAcceptAllInput` (empty object)
-- **Output**: `Receipt`
-- **Mutates**: Yes
-- **Idempotency**: conditional
-- **Failure codes**: `NO_OP`
-
-### `trackChanges.rejectAll`
-
-Reject all tracked changes in the document. Returns `NO_OP` when there are no pending changes.
-
-- **Input**: `TrackChangesRejectAllInput` (empty object)
-- **Output**: `Receipt`
-- **Mutates**: Yes
-- **Idempotency**: conditional
-- **Failure codes**: `NO_OP`
+- **Failure codes**: `NO_OP`, `TARGET_NOT_FOUND`, `COMMAND_UNAVAILABLE`

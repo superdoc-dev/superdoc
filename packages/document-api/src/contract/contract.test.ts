@@ -106,7 +106,6 @@ describe('document-api contract catalog', () => {
       'lists',
       'comments',
       'trackChanges',
-      'review',
       'query',
       'mutations',
     ];

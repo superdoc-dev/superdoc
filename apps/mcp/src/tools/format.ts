@@ -3,7 +3,7 @@ import type { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
 import type { SessionManager } from '../session-manager.js';
 
 const STYLES = ['bold', 'italic', 'underline', 'strikethrough'] as const;
-const MARKS_BY_STYLE = {
+const INLINE_BY_STYLE = {
   bold: { bold: true },
   italic: { italic: true },
   underline: { underline: true },
@@ -40,7 +40,7 @@ export function registerFormatTools(server: McpServer, sessions: SessionManager)
         const parsed = JSON.parse(target);
         const result = api.invoke({
           operationId: 'format.apply',
-          input: { target: parsed, marks: MARKS_BY_STYLE[style] },
+          input: { target: parsed, inline: INLINE_BY_STYLE[style] },
           options: suggest ? { changeMode: 'tracked' as const } : undefined,
         });
         return {

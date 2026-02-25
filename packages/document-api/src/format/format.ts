@@ -35,12 +35,12 @@ export interface FormatStrikethroughInput {
 /**
  * Input payload for `format.apply`.
  *
- * `marks` uses boolean patch semantics: `true` sets, `false` removes, omitted leaves unchanged.
+ * `inline` uses boolean patch semantics: `true` sets, `false` removes, omitted leaves unchanged.
  */
 export interface StyleApplyInput {
   target: TextAddress;
-  /** Boolean mark patch — at least one known key required. */
-  marks: SetMarks;
+  /** Boolean inline-style patch — at least one known key required. */
+  inline: SetMarks;
 }
 
 /** Options for `format.apply` — same shape as all other mutations. */
@@ -51,7 +51,7 @@ export type StyleApplyOptions = MutationOptions;
  * Per-mark methods were removed in the Phase 2c contract simplification.
  */
 export interface FormatAdapter {
-  /** Apply explicit mark changes using boolean patch semantics. */
+  /** Apply explicit inline-style changes using boolean patch semantics. */
   apply(input: StyleApplyInput, options?: MutationOptions): TextMutationReceipt;
 }
 
@@ -71,7 +71,7 @@ export interface FormatApi {
 // format.apply — validation and execution
 // ---------------------------------------------------------------------------
 
-const STYLE_APPLY_INPUT_ALLOWED_KEYS = new Set(['target', 'marks']);
+const STYLE_APPLY_INPUT_ALLOWED_KEYS = new Set(['target', 'inline']);
 
 /**
  * Validates a `format.apply` input and throws on violations.
@@ -80,10 +80,10 @@ const STYLE_APPLY_INPUT_ALLOWED_KEYS = new Set(['target', 'marks']);
  * 0. Input shape guard
  * 1. Unknown field rejection
  * 2. Locator validation (same rules as format operations)
- * 3. `marks` presence and type
- * 4. At least one known mark key
- * 5. No unknown mark keys
- * 6. All mark values are booleans
+ * 3. `inline` presence and type
+ * 4. At least one known inline key
+ * 5. No unknown inline keys
+ * 6. All inline values are booleans
  */
 function validateStyleApplyInput(input: unknown): asserts input is StyleApplyInput {
   if (!isRecord(input)) {
@@ -93,7 +93,7 @@ function validateStyleApplyInput(input: unknown): asserts input is StyleApplyInp
   assertNoUnknownFields(input, STYLE_APPLY_INPUT_ALLOWED_KEYS, 'format.apply');
 
   // --- Locator validation ---
-  const { target, marks } = input;
+  const { target, inline } = input;
 
   if (target === undefined) {
     throw new DocumentApiValidationError('INVALID_TARGET', 'format.apply requires a target.');
@@ -106,42 +106,46 @@ function validateStyleApplyInput(input: unknown): asserts input is StyleApplyInp
     });
   }
 
-  // --- Marks validation ---
-  if (marks === undefined || marks === null) {
-    throw new DocumentApiValidationError('INVALID_INPUT', 'format.apply requires a marks object.');
+  // --- Inline-style validation ---
+  if (inline === undefined || inline === null) {
+    throw new DocumentApiValidationError('INVALID_INPUT', 'format.apply requires an inline object.');
   }
 
-  if (!isRecord(marks)) {
-    throw new DocumentApiValidationError('INVALID_INPUT', 'marks must be a non-null object.', {
-      field: 'marks',
-      value: marks,
+  if (!isRecord(inline)) {
+    throw new DocumentApiValidationError('INVALID_INPUT', 'inline must be a non-null object.', {
+      field: 'inline',
+      value: inline,
     });
   }
 
-  const markKeys = Object.keys(marks);
+  const inlineKeys = Object.keys(inline);
 
-  if (markKeys.length === 0) {
-    throw new DocumentApiValidationError('INVALID_INPUT', 'marks must include at least one known key.');
+  if (inlineKeys.length === 0) {
+    throw new DocumentApiValidationError('INVALID_INPUT', 'inline must include at least one known key.');
   }
 
-  for (const key of markKeys) {
+  for (const key of inlineKeys) {
     if (!MARK_KEY_SET.has(key)) {
       throw new DocumentApiValidationError(
         'INVALID_INPUT',
-        `Unknown mark key "${key}". Known keys: bold, italic, underline, strike.`,
+        `Unknown inline style key "${key}". Known keys: bold, italic, underline, strike.`,
         {
-          field: 'marks',
+          field: 'inline',
           key,
         },
       );
     }
-    const value = marks[key];
+    const value = inline[key];
     if (typeof value !== 'boolean') {
-      throw new DocumentApiValidationError('INVALID_INPUT', `Mark "${key}" must be a boolean, got ${typeof value}.`, {
-        field: 'marks',
-        key,
-        value,
-      });
+      throw new DocumentApiValidationError(
+        'INVALID_INPUT',
+        `Inline style "${key}" must be a boolean, got ${typeof value}.`,
+        {
+          field: 'inline',
+          key,
+          value,
+        },
+      );
     }
   }
 }
@@ -149,9 +153,9 @@ function validateStyleApplyInput(input: unknown): asserts input is StyleApplyInp
 /**
  * Executes `format.apply` using the provided adapter.
  *
- * Validates input (locator + marks), then delegates to the adapter's `apply()` method.
- * Marks use boolean patch semantics: `true` sets a mark, `false` removes it, omitted keys are unchanged.
- * All mark changes within one call are applied in a single ProseMirror transaction.
+ * Validates input (locator + inline), then delegates to the adapter's `apply()` method.
+ * Inline styles use boolean patch semantics: `true` sets a style, `false` removes it, omitted keys are unchanged.
+ * All inline changes within one call are applied in a single ProseMirror transaction.
  */
 export function executeStyleApply(
   adapter: FormatAdapter,

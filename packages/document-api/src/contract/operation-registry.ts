@@ -94,12 +94,10 @@ export interface OperationRegistry {
   'comments.get': { input: GetCommentInput; options: never; output: CommentInfo };
   'comments.list': { input: CommentsListQuery | undefined; options: never; output: CommentsListResult };
 
-  // --- trackChanges.* (reads) ---
+  // --- trackChanges.* ---
   'trackChanges.list': { input: TrackChangesListInput | undefined; options: never; output: TrackChangesListResult };
   'trackChanges.get': { input: TrackChangesGetInput; options: never; output: TrackChangeInfo };
-
-  // --- review.* ---
-  'review.decide': { input: ReviewDecideInput; options: RevisionGuardOptions; output: Receipt };
+  'trackChanges.decide': { input: ReviewDecideInput; options: RevisionGuardOptions; output: Receipt };
 
   // --- query.* ---
   'query.match': { input: QueryMatchInput; options: never; output: QueryMatchOutput };

@@ -115,7 +115,7 @@ describe('getDocumentApiCapabilities', () => {
     expect(capabilities.operations.insert.dryRun).toBe(true);
     expect(capabilities.operations['lists.setType'].tracked).toBe(false);
     expect(capabilities.operations['lists.setType'].dryRun).toBe(true);
-    expect(capabilities.operations['review.decide'].dryRun).toBe(false);
+    expect(capabilities.operations['trackChanges.decide'].dryRun).toBe(false);
     expect(capabilities.operations['create.paragraph'].dryRun).toBe(true);
     expect(capabilities.operations['create.heading'].available).toBe(true);
     expect(capabilities.operations['create.heading'].tracked).toBe(true);
@@ -185,11 +185,11 @@ describe('getDocumentApiCapabilities', () => {
   it('does not emit unavailable reasons for modes that are unsupported by design', () => {
     const capabilities = getDocumentApiCapabilities(makeEditor());
     const setTypeReasons = capabilities.operations['lists.setType'].reasons ?? [];
-    const reviewDecideReasons = capabilities.operations['review.decide'].reasons ?? [];
+    const decideReasons = capabilities.operations['trackChanges.decide'].reasons ?? [];
 
     expect(setTypeReasons).not.toContain('TRACKED_MODE_UNAVAILABLE');
     expect(setTypeReasons).not.toContain('DRY_RUN_UNAVAILABLE');
-    expect(reviewDecideReasons).not.toContain('DRY_RUN_UNAVAILABLE');
+    expect(decideReasons).not.toContain('DRY_RUN_UNAVAILABLE');
   });
 
   it('handles an editor with undefined schema gracefully', () => {

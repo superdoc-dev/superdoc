@@ -29,7 +29,7 @@ const REQUIRED_COMMANDS: Partial<Record<OperationId, readonly EditorCommandName[
   'comments.create': ['addComment', 'setTextSelection', 'addCommentReply'],
   'comments.patch': ['editComment', 'moveComment', 'resolveComment', 'setCommentInternal'],
   'comments.delete': ['removeComment'],
-  'review.decide': [
+  'trackChanges.decide': [
     'acceptTrackedChangeById',
     'rejectTrackedChangeById',
     'acceptAllTrackedChanges',

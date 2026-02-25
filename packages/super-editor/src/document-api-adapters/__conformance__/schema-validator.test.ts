@@ -12,7 +12,7 @@ describe('schema-validator $ref resolution', () => {
       required: ['kind', 'blockId'],
       additionalProperties: false,
     },
-    MarkSet: {
+    InlineStylePatch: {
       type: 'object' as const,
       properties: {
         bold: { type: 'boolean' as const },
@@ -39,14 +39,14 @@ describe('schema-validator $ref resolution', () => {
       type: 'object' as const,
       properties: {
         target: { $ref: '#/$defs/Address' },
-        marks: { $ref: '#/$defs/MarkSet' },
+        inline: { $ref: '#/$defs/InlineStylePatch' },
       },
-      required: ['target', 'marks'],
+      required: ['target', 'inline'],
       additionalProperties: false,
     };
     const result = validateJsonSchema(
       schema,
-      { target: { kind: 'text', blockId: 'p1' }, marks: { bold: true } },
+      { target: { kind: 'text', blockId: 'p1' }, inline: { bold: true } },
       $defs,
     );
     expect(result.valid).toBe(true);

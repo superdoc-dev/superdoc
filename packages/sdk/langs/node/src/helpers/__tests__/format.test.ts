@@ -17,43 +17,44 @@ function createMockInvoke(): {
 }
 
 describe('format helpers', () => {
-  test('formatBold calls format.apply with marks.bold=true', async () => {
+  test('formatBold calls format.apply with inline.bold=true', async () => {
     const { invoke, calls } = createMockInvoke();
     await formatBold(invoke, { blockId: 'p1', start: 0, end: 5 });
 
     expect(calls).toHaveLength(1);
     expect(calls[0].spec.operationId).toBe('doc.format.apply');
-    expect(calls[0].params.marks).toEqual({ bold: true });
-    expect(calls[0].params.blockId).toBe('p1');
-    expect(calls[0].params.start).toBe(0);
-    expect(calls[0].params.end).toBe(5);
+    expect(calls[0].params.inline).toEqual({ bold: true });
+    expect(calls[0].params.target).toEqual({ kind: 'text', blockId: 'p1', range: { start: 0, end: 5 } });
+    expect(calls[0].params.blockId).toBeUndefined();
+    expect(calls[0].params.start).toBeUndefined();
+    expect(calls[0].params.end).toBeUndefined();
   });
 
-  test('formatItalic calls format.apply with marks.italic=true', async () => {
+  test('formatItalic calls format.apply with inline.italic=true', async () => {
     const { invoke, calls } = createMockInvoke();
     await formatItalic(invoke, { blockId: 'p1', start: 0, end: 5 });
 
     expect(calls).toHaveLength(1);
     expect(calls[0].spec.operationId).toBe('doc.format.apply');
-    expect(calls[0].params.marks).toEqual({ italic: true });
+    expect(calls[0].params.inline).toEqual({ italic: true });
   });
 
-  test('formatUnderline calls format.apply with marks.underline=true', async () => {
+  test('formatUnderline calls format.apply with inline.underline=true', async () => {
     const { invoke, calls } = createMockInvoke();
     await formatUnderline(invoke, { blockId: 'p1', start: 0, end: 5 });
 
     expect(calls).toHaveLength(1);
     expect(calls[0].spec.operationId).toBe('doc.format.apply');
-    expect(calls[0].params.marks).toEqual({ underline: true });
+    expect(calls[0].params.inline).toEqual({ underline: true });
   });
 
-  test('formatStrikethrough calls format.apply with marks.strike=true', async () => {
+  test('formatStrikethrough calls format.apply with inline.strike=true', async () => {
     const { invoke, calls } = createMockInvoke();
     await formatStrikethrough(invoke, { blockId: 'p1', start: 0, end: 5 });
 
     expect(calls).toHaveLength(1);
     expect(calls[0].spec.operationId).toBe('doc.format.apply');
-    expect(calls[0].params.marks).toEqual({ strike: true });
+    expect(calls[0].params.inline).toEqual({ strike: true });
   });
 
   test('helpers pass through target address', async () => {
@@ -85,7 +86,7 @@ describe('format helpers', () => {
     await formatBold(invoke);
 
     expect(calls).toHaveLength(1);
-    expect(calls[0].params.marks).toEqual({ bold: true });
+    expect(calls[0].params.inline).toEqual({ bold: true });
   });
 
   test('all helpers use the same operation spec', async () => {

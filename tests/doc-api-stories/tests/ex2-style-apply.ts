@@ -36,19 +36,20 @@ describe('document-api story: ex2 format.apply', () => {
     expect(matchResult.page).toBeDefined();
 
     const match = matchResult.items[0];
-    expect(match.handle.ref).toBeDefined();
+    const block = match.blocks?.[0];
+    if (!block) throw new Error('Expected query.match to return at least one block.');
 
-    // 2. Apply bold using canonical format.apply with the matched ref
+    // 2. Apply bold using canonical format.apply with the matched block range
     const boldResult = unwrap<any>(
       await client.doc.format.apply({
         sessionId,
-        target: match.handle.ref,
-        marks: { bold: true },
+        target: { kind: 'text', blockId: block.blockId, range: block.range },
+        inline: { bold: true },
       }),
     );
 
     expect(boldResult).toBeDefined();
-    expect(boldResult.success).toBe(true);
+    expect(boldResult.receipt?.success).toBe(true);
   });
 
   it('multi-mark atomic: apply bold + italic in one call', async () => {
@@ -69,18 +70,20 @@ describe('document-api story: ex2 format.apply', () => {
     expect(matchResult.items).toBeDefined();
     expect(matchResult.items.length).toBeGreaterThan(0);
     const match = matchResult.items[0];
+    const block = match.blocks?.[0];
+    if (!block) throw new Error('Expected query.match to return at least one block.');
 
     // 2. Apply bold + italic in a single atomic call
     const result = unwrap<any>(
       await client.doc.format.apply({
         sessionId,
-        target: match.handle.ref,
-        marks: { bold: true, italic: true },
+        target: { kind: 'text', blockId: block.blockId, range: block.range },
+        inline: { bold: true, italic: true },
       }),
     );
 
     expect(result).toBeDefined();
-    expect(result.success).toBe(true);
+    expect(result.receipt?.success).toBe(true);
   });
 
   it('mark removal: set bold false on a range', async () => {
@@ -101,18 +104,20 @@ describe('document-api story: ex2 format.apply', () => {
     expect(matchResult.items).toBeDefined();
     expect(matchResult.items.length).toBeGreaterThan(0);
     const match = matchResult.items[0];
+    const block = match.blocks?.[0];
+    if (!block) throw new Error('Expected query.match to return at least one block.');
 
     // 2. Remove bold (false = unset)
     const result = unwrap<any>(
       await client.doc.format.apply({
         sessionId,
-        target: match.handle.ref,
-        marks: { bold: false },
+        target: { kind: 'text', blockId: block.blockId, range: block.range },
+        inline: { bold: false },
       }),
     );
 
     expect(result).toBeDefined();
-    expect(result.success).toBe(true);
+    expect(result.receipt?.success).toBe(true);
   });
 
   it('mixed patch: set bold true + remove italic false in one call', async () => {
@@ -132,17 +137,19 @@ describe('document-api story: ex2 format.apply', () => {
     expect(matchResult.items).toBeDefined();
     expect(matchResult.items.length).toBeGreaterThan(0);
     const match = matchResult.items[0];
+    const block = match.blocks?.[0];
+    if (!block) throw new Error('Expected query.match to return at least one block.');
 
     // Mixed patch: bold on, italic off
     const result = unwrap<any>(
       await client.doc.format.apply({
         sessionId,
-        target: match.handle.ref,
-        marks: { bold: true, italic: false },
+        target: { kind: 'text', blockId: block.blockId, range: block.range },
+        inline: { bold: true, italic: false },
       }),
     );
 
     expect(result).toBeDefined();
-    expect(result.success).toBe(true);
+    expect(result.receipt?.success).toBe(true);
   });
 });

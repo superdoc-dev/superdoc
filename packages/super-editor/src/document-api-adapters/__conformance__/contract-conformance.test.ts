@@ -534,7 +534,7 @@ const mutationVectors: Partial<Record<OperationId, MutationVector>> = {
       const { editor } = makeTextEditor();
       return styleApplyWrapper(
         editor,
-        { target: { kind: 'text', blockId: 'missing', range: { start: 0, end: 1 } }, marks: { bold: true } },
+        { target: { kind: 'text', blockId: 'missing', range: { start: 0, end: 1 } }, inline: { bold: true } },
         { changeMode: 'direct' },
       );
     },
@@ -542,7 +542,7 @@ const mutationVectors: Partial<Record<OperationId, MutationVector>> = {
       const { editor } = makeTextEditor();
       return styleApplyWrapper(
         editor,
-        { target: { kind: 'text', blockId: 'p1', range: { start: 2, end: 2 } }, marks: { bold: true } },
+        { target: { kind: 'text', blockId: 'p1', range: { start: 2, end: 2 } }, inline: { bold: true } },
         { changeMode: 'direct' },
       );
     },
@@ -550,7 +550,7 @@ const mutationVectors: Partial<Record<OperationId, MutationVector>> = {
       const { editor } = makeTextEditor();
       return styleApplyWrapper(
         editor,
-        { target: { kind: 'text', blockId: 'p1', range: { start: 0, end: 5 } }, marks: { bold: true, italic: false } },
+        { target: { kind: 'text', blockId: 'p1', range: { start: 0, end: 5 } }, inline: { bold: true, italic: false } },
         { changeMode: 'direct' },
       );
     },
@@ -795,7 +795,7 @@ const mutationVectors: Partial<Record<OperationId, MutationVector>> = {
       return createCommentsWrapper(editor).remove({ commentId: 'c1' });
     },
   },
-  'review.decide': {
+  'trackChanges.decide': {
     throwCase: () => {
       setTrackChanges([]);
       const { editor } = makeTextEditor();
@@ -867,7 +867,7 @@ const dryRunVectors: Partial<Record<OperationId, () => unknown>> = {
     const { editor, dispatch, tr } = makeTextEditor();
     const result = styleApplyWrapper(
       editor,
-      { target: { kind: 'text', blockId: 'p1', range: { start: 0, end: 5 } }, marks: { bold: true } },
+      { target: { kind: 'text', blockId: 'p1', range: { start: 0, end: 5 } }, inline: { bold: true } },
       { changeMode: 'direct', dryRun: true },
     );
     expect(dispatch).not.toHaveBeenCalled();
@@ -1096,7 +1096,7 @@ describe('document-api adapter conformance', () => {
     const { editor } = makeTextEditor();
     const reject = trackChangesRejectWrapper(editor, { id: requireCanonicalTrackChangeId(editor, 'tc-delete-1') });
     expect(reject.success).toBe(true);
-    assertSchema('review.decide', 'output', reject);
-    assertSchema('review.decide', 'success', reject);
+    assertSchema('trackChanges.decide', 'output', reject);
+    assertSchema('trackChanges.decide', 'success', reject);
   });
 });

@@ -1766,7 +1766,7 @@ describe('createDocumentApi', () => {
       const api = makeApi();
       expectValidationError(
         () => api.create.paragraph({ at: { kind: 'before' } as any, text: 'Hello' }),
-        'requires either at.target or at.nodeId',
+        'requires at.target',
       );
     });
 

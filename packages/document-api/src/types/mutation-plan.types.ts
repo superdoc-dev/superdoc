@@ -25,13 +25,6 @@ export type RefWhere = {
   by: 'ref';
   ref: string;
   within?: NodeAddress;
-  /**
-   * Legacy field — kept for backward compatibility during migration.
-   * Only `'exactlyOne'` is accepted; other values fail with INVALID_INPUT.
-   * A ref already identifies one logical target, so cardinality is implicit.
-   * @deprecated Will be removed in the next major contract version.
-   */
-  require?: 'exactlyOne';
 };
 
 export type StepWhere = SelectWhere | RefWhere;

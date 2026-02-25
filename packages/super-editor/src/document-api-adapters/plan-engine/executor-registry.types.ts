@@ -24,7 +24,7 @@ export interface CompiledSegment {
   absTo: number;
 }
 
-/** Single-block range target — used for all legacy single-block operations. */
+/** Single-block range target — used for all single-block operations. */
 export interface CompiledRangeTarget {
   kind: 'range';
   stepId: string;

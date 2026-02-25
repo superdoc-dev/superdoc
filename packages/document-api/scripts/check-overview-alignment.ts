@@ -42,15 +42,15 @@ const REQUIRED_PATTERNS = [
 
 const FORBIDDEN_PATTERNS = [
   {
-    label: 'legacy placeholder query API',
+    label: 'removed placeholder query API',
     pattern: /\bdoc\.query\s*\(/,
   },
   {
-    label: 'legacy placeholder table API',
+    label: 'removed placeholder table API',
     pattern: /\bdoc\.table\s*\(/,
   },
   {
-    label: 'legacy field-annotation selector example',
+    label: 'removed field-annotation selector example',
     pattern: /field-annotation/i,
   },
   {

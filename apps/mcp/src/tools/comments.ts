@@ -8,14 +8,14 @@ export function registerCommentTools(server: McpServer, sessions: SessionManager
     {
       title: 'Add Comment',
       description:
-        'Add a comment anchored to a text range in the document. Use superdoc_find with a text pattern first, then pass a TextAddress from context[].textRanges as the target.',
+        'Add a comment anchored to a text range in the document. Use superdoc_find with a text pattern first, then pass a TextAddress from items[].context.textRanges as the target.',
       inputSchema: {
         session_id: z.string().describe('Session ID from superdoc_open.'),
         text: z.string().describe('The comment text (question, concern, or feedback).'),
         target: z
           .string()
           .describe(
-            'JSON-encoded TextAddress: {"kind":"text","blockId":"...","range":{"start":N,"end":N}}. Get this from superdoc_find context[].textRanges, NOT from matches[].',
+            'JSON-encoded TextAddress: {"kind":"text","blockId":"...","range":{"start":N,"end":N}}. Get this from superdoc_find items[].context.textRanges.',
           ),
       },
       annotations: { readOnlyHint: false },

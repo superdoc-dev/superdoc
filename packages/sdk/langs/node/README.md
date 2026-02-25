@@ -34,7 +34,7 @@ console.log(info.counts);
 const results = await client.doc.find({ type: 'text', pattern: 'termination' });
 
 await client.doc.replace({
-  target: results.context[0].textRanges[0],
+  target: results.items[0].context.textRanges[0],
   text: 'expiration',
 });
 

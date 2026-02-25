@@ -363,7 +363,7 @@ function buildCommentInfos(editor: Editor): CommentInfo[] {
 // ---------------------------------------------------------------------------
 
 function addCommentHandler(editor: Editor, input: AddCommentInput, options?: RevisionGuardOptions): Receipt {
-  requireEditorCommand(editor.commands?.addComment, 'comments.add (addComment)');
+  requireEditorCommand(editor.commands?.addComment, 'comments.create (addComment)');
 
   if (input.target.range.start === input.target.range.end) {
     return {
@@ -407,7 +407,7 @@ function addCommentHandler(editor: Editor, input: AddCommentInput, options?: Rev
   const receipt = executeDomainCommand(
     editor,
     () => {
-      const addComment = requireEditorCommand(editor.commands?.addComment, 'comments.add (addComment)');
+      const addComment = requireEditorCommand(editor.commands?.addComment, 'comments.create (addComment)');
       const didInsert = addComment({ content: input.text, isInternal: false, commentId }) === true;
       if (didInsert) {
         clearIndexCache(editor);
@@ -445,7 +445,7 @@ function addCommentHandler(editor: Editor, input: AddCommentInput, options?: Rev
 }
 
 function editCommentHandler(editor: Editor, input: EditCommentInput, options?: RevisionGuardOptions): Receipt {
-  const editComment = requireEditorCommand(editor.commands?.editComment, 'comments.edit (editComment)');
+  const editComment = requireEditorCommand(editor.commands?.editComment, 'comments.patch (editComment)');
 
   const store = getCommentEntityStore(editor);
   const identity = resolveCommentIdentity(editor, input.commentId);
@@ -489,7 +489,7 @@ function editCommentHandler(editor: Editor, input: EditCommentInput, options?: R
 }
 
 function replyToCommentHandler(editor: Editor, input: ReplyToCommentInput, options?: RevisionGuardOptions): Receipt {
-  const addCommentReply = requireEditorCommand(editor.commands?.addCommentReply, 'comments.reply (addCommentReply)');
+  const addCommentReply = requireEditorCommand(editor.commands?.addCommentReply, 'comments.create (addCommentReply)');
 
   if (!input.parentCommentId) {
     return {
@@ -547,7 +547,7 @@ function replyToCommentHandler(editor: Editor, input: ReplyToCommentInput, optio
 }
 
 function moveCommentHandler(editor: Editor, input: MoveCommentInput, options?: RevisionGuardOptions): Receipt {
-  const moveComment = requireEditorCommand(editor.commands?.moveComment, 'comments.move (moveComment)');
+  const moveComment = requireEditorCommand(editor.commands?.moveComment, 'comments.patch (moveComment)');
 
   if (input.target.range.start === input.target.range.end) {
     return {
@@ -610,7 +610,7 @@ function moveCommentHandler(editor: Editor, input: MoveCommentInput, options?: R
 }
 
 function resolveCommentHandler(editor: Editor, input: ResolveCommentInput, options?: RevisionGuardOptions): Receipt {
-  const resolveComment = requireEditorCommand(editor.commands?.resolveComment, 'comments.resolve (resolveComment)');
+  const resolveComment = requireEditorCommand(editor.commands?.resolveComment, 'comments.patch (resolveComment)');
 
   const store = getCommentEntityStore(editor);
   const identity = resolveCommentIdentity(editor, input.commentId);

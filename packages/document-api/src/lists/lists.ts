@@ -27,33 +27,11 @@ export type {
 } from './lists.types.js';
 
 /**
- * Validates that a list operation input has exactly one target locator mode:
- * either `target` (canonical ListItemAddress) or `nodeId` (shorthand).
+ * Validates that a list operation input has a target locator.
  */
-function validateListTarget(input: { target?: unknown; nodeId?: unknown }, operationName: string): void {
-  const hasTarget = input.target !== undefined;
-  const hasNodeId = input.nodeId !== undefined;
-
-  if (hasTarget && hasNodeId) {
-    throw new DocumentApiValidationError(
-      'INVALID_TARGET',
-      `Cannot combine target with nodeId on ${operationName} request. Use exactly one locator mode.`,
-      { fields: ['target', 'nodeId'] },
-    );
-  }
-
-  if (!hasTarget && !hasNodeId) {
-    throw new DocumentApiValidationError(
-      'INVALID_TARGET',
-      `${operationName} requires a target. Provide either target or nodeId.`,
-    );
-  }
-
-  if (hasNodeId && typeof input.nodeId !== 'string') {
-    throw new DocumentApiValidationError('INVALID_TARGET', `nodeId must be a string, got ${typeof input.nodeId}.`, {
-      field: 'nodeId',
-      value: input.nodeId,
-    });
+function validateListTarget(input: { target?: unknown }, operationName: string): void {
+  if (input.target === undefined) {
+    throw new DocumentApiValidationError('INVALID_TARGET', `${operationName} requires a target.`);
   }
 }
 

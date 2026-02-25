@@ -37,6 +37,7 @@ description: Reference for comments.get
 | Field | Type | Required | Description |
 | --- | --- | --- | --- |
 | `address` | CommentAddress | yes | CommentAddress |
+| `anchoredText` | string | no |  |
 | `commentId` | string | yes |  |
 | `createdTime` | number | no |  |
 | `creatorEmail` | string | no |  |
@@ -98,6 +99,9 @@ description: Reference for comments.get
   "properties": {
     "address": {
       "$ref": "#/$defs/CommentAddress"
+    },
+    "anchoredText": {
+      "type": "string"
     },
     "commentId": {
       "type": "string"

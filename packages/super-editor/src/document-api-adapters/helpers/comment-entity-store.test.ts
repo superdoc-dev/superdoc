@@ -240,4 +240,14 @@ describe('toCommentInfo', () => {
     const info = toCommentInfo({ commentId: 'c1' }, { target });
     expect(info.target).toBe(target);
   });
+
+  it('includes anchoredText when provided', () => {
+    const info = toCommentInfo({ commentId: 'c1' }, { anchoredText: 'hello world' });
+    expect(info.anchoredText).toBe('hello world');
+  });
+
+  it('omits anchoredText when not provided', () => {
+    const info = toCommentInfo({ commentId: 'c1' });
+    expect(info.anchoredText).toBeUndefined();
+  });
 });

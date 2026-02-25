@@ -187,6 +187,7 @@ export function toCommentInfo(
   options: {
     target?: TextAddress;
     status?: CommentStatus;
+    anchoredText?: string;
   } = {},
 ): CommentInfo {
   const resolvedId = typeof entry.commentId === 'string' ? entry.commentId : String(entry.importedId ?? '');
@@ -205,6 +206,7 @@ export function toCommentInfo(
     isInternal: typeof entry.isInternal === 'boolean' ? entry.isInternal : undefined,
     status,
     target: options.target,
+    anchoredText: options.anchoredText,
     createdTime: typeof entry.createdTime === 'number' ? entry.createdTime : undefined,
     creatorName: typeof entry.creatorName === 'string' ? entry.creatorName : undefined,
     creatorEmail: typeof entry.creatorEmail === 'string' ? entry.creatorEmail : undefined,

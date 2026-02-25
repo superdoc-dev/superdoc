@@ -12,6 +12,7 @@ export interface CommentInfo {
   isInternal?: boolean;
   status: CommentStatus;
   target?: TextAddress;
+  anchoredText?: string;
   createdTime?: number;
   creatorName?: string;
   creatorEmail?: string;
@@ -37,6 +38,7 @@ export interface CommentDomain {
   isInternal?: boolean;
   status: CommentStatus;
   target?: TextAddress;
+  anchoredText?: string;
   createdTime?: number;
   creatorName?: string;
   creatorEmail?: string;

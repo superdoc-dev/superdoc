@@ -46,7 +46,7 @@ import {
   upsertCommentEntity,
 } from '../helpers/comment-entity-store.js';
 import { listCommentAnchors, resolveCommentAnchorsById } from '../helpers/comment-target-resolver.js';
-import { toNonEmptyString } from '../helpers/value-utils.js';
+import { normalizeExcerpt, toNonEmptyString } from '../helpers/value-utils.js';
 
 // ---------------------------------------------------------------------------
 // Internal helpers
@@ -156,7 +156,22 @@ function resolveCommentIdentity(
   };
 }
 
-function mergeAnchorData(infosById: Map<string, CommentInfo>, anchors: ReturnType<typeof listCommentAnchors>): void {
+function extractAnchoredText(editor: Editor, pos: number, end: number): string | undefined {
+  try {
+    const raw = editor.state.doc.textBetween(pos, end, ' ', '\ufffc');
+    // Strip object-replacement characters emitted for atom nodes (e.g.
+    // commentRangeStart/commentRangeEnd) so they don't leak into the excerpt.
+    return normalizeExcerpt(raw.replace(/\ufffc/g, ''));
+  } catch {
+    return undefined;
+  }
+}
+
+function mergeAnchorData(
+  editor: Editor,
+  infosById: Map<string, CommentInfo>,
+  anchors: ReturnType<typeof listCommentAnchors>,
+): void {
   const grouped = new Map<string, typeof anchors>();
   for (const anchor of anchors) {
     const group = grouped.get(anchor.commentId) ?? [];
@@ -168,6 +183,7 @@ function mergeAnchorData(infosById: Map<string, CommentInfo>, anchors: ReturnTyp
     const sorted = [...commentAnchors].sort((a, b) => (a.pos === b.pos ? a.end - b.end : a.pos - b.pos));
     const primary = sorted[0];
     const status = sorted.every((anchor) => anchor.status === 'resolved') ? 'resolved' : 'open';
+    const anchoredText = extractAnchoredText(editor, primary.pos, primary.end);
     const existing = infosById.get(commentId);
 
     if (existing) {
@@ -175,6 +191,7 @@ function mergeAnchorData(infosById: Map<string, CommentInfo>, anchors: ReturnTyp
       if (!existing.importedId && primary.importedId) existing.importedId = primary.importedId;
       if (existing.isInternal == null && primary.isInternal != null) existing.isInternal = primary.isInternal;
       if (status === 'open') existing.status = 'open';
+      if (existing.anchoredText == null && anchoredText != null) existing.anchoredText = anchoredText;
       continue;
     }
 
@@ -190,6 +207,7 @@ function mergeAnchorData(infosById: Map<string, CommentInfo>, anchors: ReturnTyp
         {
           target: primary.target,
           status,
+          anchoredText,
         },
       ),
     );
@@ -206,7 +224,24 @@ function buildCommentInfos(editor: Editor): CommentInfo[] {
     infosById.set(commentId, toCommentInfo({ ...entry, commentId }));
   }
 
-  mergeAnchorData(infosById, listCommentAnchorsSafe(editor));
+  mergeAnchorData(editor, infosById, listCommentAnchorsSafe(editor));
+
+  // Inherit anchoredText from nearest ancestor for replies (walks up the
+  // parent chain so deep threads resolve regardless of iteration order).
+  for (const info of infosById.values()) {
+    if (info.anchoredText != null || !info.parentCommentId) continue;
+    const visited = new Set<string>();
+    let cursor: CommentInfo | undefined = info;
+    while (cursor?.parentCommentId && !visited.has(cursor.parentCommentId)) {
+      visited.add(cursor.parentCommentId);
+      const ancestor = infosById.get(cursor.parentCommentId);
+      if (ancestor?.anchoredText != null) {
+        info.anchoredText = ancestor.anchoredText;
+        break;
+      }
+      cursor = ancestor;
+    }
+  }
 
   const infos = Array.from(infosById.values());
   infos.sort((left, right) => {
@@ -708,6 +743,7 @@ function listCommentsHandler(editor: Editor, query?: CommentsListQuery): Comment
       isInternal,
       status,
       target,
+      anchoredText,
       createdTime,
       creatorName,
       creatorEmail,
@@ -721,6 +757,7 @@ function listCommentsHandler(editor: Editor, query?: CommentsListQuery): Comment
       isInternal,
       status,
       target,
+      anchoredText,
       createdTime,
       creatorName,
       creatorEmail,

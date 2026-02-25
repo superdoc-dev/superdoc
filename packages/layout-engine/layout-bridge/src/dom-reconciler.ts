@@ -383,8 +383,6 @@ export class DomReconciler {
 
     // Update position/size attributes if needed
     // (In a real implementation, this would update transform/position styles)
-
-    console.log(updated);
     return updated;
   }
 

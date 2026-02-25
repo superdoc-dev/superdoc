@@ -17,6 +17,12 @@ import { ListHelpers } from '../../core/helpers/list-numbering-helpers.js';
 import { createCommentsWrapper } from '../plan-engine/comments-wrappers.js';
 import { createParagraphWrapper, createHeadingWrapper } from '../plan-engine/create-wrappers.js';
 import { writeWrapper, styleApplyWrapper } from '../plan-engine/plan-wrappers.js';
+import {
+  formatFontSizeWrapper,
+  formatFontFamilyWrapper,
+  formatColorWrapper,
+  formatAlignWrapper,
+} from '../plan-engine/format-value-wrappers.js';
 import { getDocumentApiCapabilities } from '../capabilities-adapter.js';
 import {
   listsExitWrapper,
@@ -194,6 +200,14 @@ function makeTextEditor(
     decreaseListIndent: vi.fn(() => true),
     restartNumbering: vi.fn(() => true),
     exitListItemAt: vi.fn(() => true),
+    setFontSize: vi.fn(() => true),
+    unsetFontSize: vi.fn(() => true),
+    setFontFamily: vi.fn(() => true),
+    unsetFontFamily: vi.fn(() => true),
+    setColor: vi.fn(() => true),
+    unsetColor: vi.fn(() => true),
+    setTextAlign: vi.fn(() => true),
+    unsetTextAlign: vi.fn(() => true),
   };
 
   const baseMarks = {
@@ -208,6 +222,9 @@ function makeTextEditor(
     },
     strike: {
       create: vi.fn(() => ({ type: 'strike' })),
+    },
+    textStyle: {
+      create: vi.fn(() => ({ type: 'textStyle' })),
     },
     [TrackFormatMarkName]: {
       create: vi.fn(() => ({ type: TrackFormatMarkName })),
@@ -239,6 +256,11 @@ function makeTextEditor(
     state: {
       doc: {
         ...doc,
+        nodeAt: vi.fn((pos: number) => {
+          if (pos === 0) return paragraph;
+          if (pos === 1) return textNode;
+          return null;
+        }),
         textBetween: vi.fn((from: number, to: number) => {
           const start = Math.max(0, from - 1);
           const end = Math.max(start, to - 1);
@@ -551,6 +573,103 @@ const mutationVectors: Partial<Record<OperationId, MutationVector>> = {
       return styleApplyWrapper(
         editor,
         { target: { kind: 'text', blockId: 'p1', range: { start: 0, end: 5 } }, inline: { bold: true, italic: false } },
+        { changeMode: 'direct' },
+      );
+    },
+  },
+  'format.fontSize': {
+    throwCase: () => {
+      const { editor } = makeTextEditor();
+      return formatFontSizeWrapper(
+        editor,
+        { target: { kind: 'text', blockId: 'missing', range: { start: 0, end: 1 } }, value: '14pt' },
+        { changeMode: 'direct' },
+      );
+    },
+    failureCase: () => {
+      const { editor } = makeTextEditor();
+      return formatFontSizeWrapper(
+        editor,
+        { target: { kind: 'text', blockId: 'p1', range: { start: 2, end: 2 } }, value: '14pt' },
+        { changeMode: 'direct' },
+      );
+    },
+    applyCase: () => {
+      const { editor } = makeTextEditor();
+      return formatFontSizeWrapper(
+        editor,
+        { target: { kind: 'text', blockId: 'p1', range: { start: 0, end: 5 } }, value: '14pt' },
+        { changeMode: 'direct' },
+      );
+    },
+  },
+  'format.fontFamily': {
+    throwCase: () => {
+      const { editor } = makeTextEditor();
+      return formatFontFamilyWrapper(
+        editor,
+        { target: { kind: 'text', blockId: 'missing', range: { start: 0, end: 1 } }, value: 'Arial' },
+        { changeMode: 'direct' },
+      );
+    },
+    failureCase: () => {
+      const { editor } = makeTextEditor();
+      return formatFontFamilyWrapper(
+        editor,
+        { target: { kind: 'text', blockId: 'p1', range: { start: 2, end: 2 } }, value: 'Arial' },
+        { changeMode: 'direct' },
+      );
+    },
+    applyCase: () => {
+      const { editor } = makeTextEditor();
+      return formatFontFamilyWrapper(
+        editor,
+        { target: { kind: 'text', blockId: 'p1', range: { start: 0, end: 5 } }, value: 'Arial' },
+        { changeMode: 'direct' },
+      );
+    },
+  },
+  'format.color': {
+    throwCase: () => {
+      const { editor } = makeTextEditor();
+      return formatColorWrapper(
+        editor,
+        { target: { kind: 'text', blockId: 'missing', range: { start: 0, end: 1 } }, value: '#ff0000' },
+        { changeMode: 'direct' },
+      );
+    },
+    failureCase: () => {
+      const { editor } = makeTextEditor();
+      return formatColorWrapper(
+        editor,
+        { target: { kind: 'text', blockId: 'p1', range: { start: 2, end: 2 } }, value: '#ff0000' },
+        { changeMode: 'direct' },
+      );
+    },
+    applyCase: () => {
+      const { editor } = makeTextEditor();
+      return formatColorWrapper(
+        editor,
+        { target: { kind: 'text', blockId: 'p1', range: { start: 0, end: 5 } }, value: '#ff0000' },
+        { changeMode: 'direct' },
+      );
+    },
+  },
+  'format.align': {
+    throwCase: () => {
+      const { editor } = makeTextEditor();
+      return formatAlignWrapper(
+        editor,
+        { target: { kind: 'text', blockId: 'missing', range: { start: 0, end: 1 } }, alignment: 'center' },
+        { changeMode: 'direct' },
+      );
+    },
+    // No failureCase — align allows collapsed ranges (paragraph-level operation)
+    applyCase: () => {
+      const { editor } = makeTextEditor();
+      return formatAlignWrapper(
+        editor,
+        { target: { kind: 'text', blockId: 'p1', range: { start: 0, end: 5 } }, alignment: 'center' },
         { changeMode: 'direct' },
       );
     },
@@ -872,6 +991,46 @@ const dryRunVectors: Partial<Record<OperationId, () => unknown>> = {
     );
     expect(dispatch).not.toHaveBeenCalled();
     expect(tr.addMark).not.toHaveBeenCalled();
+    return result;
+  },
+  'format.fontSize': () => {
+    const { editor, dispatch } = makeTextEditor();
+    const result = formatFontSizeWrapper(
+      editor,
+      { target: { kind: 'text', blockId: 'p1', range: { start: 0, end: 5 } }, value: '14pt' },
+      { changeMode: 'direct', dryRun: true },
+    );
+    expect(dispatch).not.toHaveBeenCalled();
+    return result;
+  },
+  'format.fontFamily': () => {
+    const { editor, dispatch } = makeTextEditor();
+    const result = formatFontFamilyWrapper(
+      editor,
+      { target: { kind: 'text', blockId: 'p1', range: { start: 0, end: 5 } }, value: 'Arial' },
+      { changeMode: 'direct', dryRun: true },
+    );
+    expect(dispatch).not.toHaveBeenCalled();
+    return result;
+  },
+  'format.color': () => {
+    const { editor, dispatch } = makeTextEditor();
+    const result = formatColorWrapper(
+      editor,
+      { target: { kind: 'text', blockId: 'p1', range: { start: 0, end: 5 } }, value: '#ff0000' },
+      { changeMode: 'direct', dryRun: true },
+    );
+    expect(dispatch).not.toHaveBeenCalled();
+    return result;
+  },
+  'format.align': () => {
+    const { editor, dispatch } = makeTextEditor();
+    const result = formatAlignWrapper(
+      editor,
+      { target: { kind: 'text', blockId: 'p1', range: { start: 0, end: 5 } }, alignment: 'center' },
+      { changeMode: 'direct', dryRun: true },
+    );
+    expect(dispatch).not.toHaveBeenCalled();
     return result;
   },
   'create.paragraph': () => {

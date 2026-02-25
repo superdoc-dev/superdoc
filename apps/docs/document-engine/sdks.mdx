@@ -158,6 +158,10 @@ The SDKs expose all operations from the [Document API](/document-api/overview) p
 | Operation | CLI command | Description |
 | --- | --- | --- |
 | `doc.format.apply` | `format apply` | Apply explicit inline style changes (bold, italic, underline, strike) to the target range using boolean patch semantics. |
+| `doc.format.fontSize` | `format font-size` | Set or unset the font size on the target text range. Pass null to remove. |
+| `doc.format.fontFamily` | `format font-family` | Set or unset the font family on the target text range. Pass null to remove. |
+| `doc.format.color` | `format color` | Set or unset the text color on the target text range. Pass null to remove. |
+| `doc.format.align` | `format align` | Set or unset paragraph alignment on the block containing the target. Pass null to reset to default. |
 
 #### Create
 

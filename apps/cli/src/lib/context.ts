@@ -25,7 +25,7 @@ export type SessionType = 'local' | 'collab';
 export type ContextMetadata = {
   contextId: string;
   projectRoot: string;
-  source: 'path' | 'stdin';
+  source: 'path' | 'stdin' | 'blank';
   sourcePath?: string;
   workingDocPath: string;
   dirty: boolean;
@@ -48,7 +48,7 @@ export type ContextPaths = {
 
 export type ProjectSessionSummary = {
   sessionId: string;
-  source: 'path' | 'stdin';
+  source: 'path' | 'stdin' | 'blank';
   sourcePath?: string;
   dirty: boolean;
   revision: number;
@@ -653,7 +653,7 @@ export function createInitialContextMetadata(
   paths: ContextPaths,
   contextId: string,
   input: {
-    source: 'path' | 'stdin';
+    source: 'path' | 'stdin' | 'blank';
     sourcePath?: string;
     sourceSnapshot?: SourceSnapshot;
     sessionType?: SessionType;

@@ -52,8 +52,12 @@ import type {
   FormatUnderlineInput,
   FormatStrikethroughInput,
   StyleApplyInput,
+  FormatFontSizeInput,
+  FormatFontFamilyInput,
+  FormatColorInput,
+  FormatAlignInput,
 } from './format/format.js';
-import { executeStyleApply } from './format/format.js';
+import { executeStyleApply, executeFontSize, executeFontFamily, executeColor, executeAlign } from './format/format.js';
 import type { GetNodeAdapter, GetNodeByIdInput } from './get-node/get-node.js';
 import { executeGetNode, executeGetNodeById } from './get-node/get-node.js';
 import { executeGetText, type GetTextAdapter, type GetTextInput } from './get-text/get-text.js';
@@ -123,7 +127,12 @@ export type {
   FormatStrikethroughInput,
   StyleApplyInput,
   StyleApplyOptions,
+  FormatFontSizeInput,
+  FormatFontFamilyInput,
+  FormatColorInput,
+  FormatAlignInput,
 } from './format/format.js';
+export { ALIGNMENTS, type Alignment } from './format/format.js';
 export type { CreateAdapter } from './create/create.js';
 export type {
   TrackChangesAdapter,
@@ -394,6 +403,18 @@ export function createDocumentApi(adapters: DocumentApiAdapters): DocumentApi {
       },
       apply(input: StyleApplyInput, options?: MutationOptions): TextMutationReceipt {
         return executeStyleApply(adapters.format, input, options);
+      },
+      fontSize(input: FormatFontSizeInput, options?: MutationOptions): TextMutationReceipt {
+        return executeFontSize(adapters.format, input, options);
+      },
+      fontFamily(input: FormatFontFamilyInput, options?: MutationOptions): TextMutationReceipt {
+        return executeFontFamily(adapters.format, input, options);
+      },
+      color(input: FormatColorInput, options?: MutationOptions): TextMutationReceipt {
+        return executeColor(adapters.format, input, options);
+      },
+      align(input: FormatAlignInput, options?: MutationOptions): TextMutationReceipt {
+        return executeAlign(adapters.format, input, options);
       },
     },
     trackChanges: {

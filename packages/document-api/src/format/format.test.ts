@@ -1,6 +1,6 @@
 import { describe, expect, it, vi } from 'vitest';
 import type { FormatAdapter, StyleApplyInput } from './format.js';
-import { executeStyleApply } from './format.js';
+import { executeStyleApply, executeFontSize, executeFontFamily, executeColor, executeAlign } from './format.js';
 import { DocumentApiValidationError } from '../errors.js';
 import type { TextMutationReceipt } from '../types/index.js';
 
@@ -19,8 +19,14 @@ function makeReceipt(): TextMutationReceipt {
   };
 }
 
-function makeAdapter(): FormatAdapter & { apply: ReturnType<typeof vi.fn> } {
-  return { apply: vi.fn(() => makeReceipt()) };
+function makeAdapter(): FormatAdapter & Record<string, ReturnType<typeof vi.fn>> {
+  return {
+    apply: vi.fn(() => makeReceipt()),
+    fontSize: vi.fn(() => makeReceipt()),
+    fontFamily: vi.fn(() => makeReceipt()),
+    color: vi.fn(() => makeReceipt()),
+    align: vi.fn(() => makeReceipt()),
+  };
 }
 
 describe('executeStyleApply validation', () => {
@@ -253,5 +259,176 @@ describe('executeStyleApply validation', () => {
     const result = executeStyleApply(adapter, input);
     expect(result.success).toBe(true);
     expect(adapter.apply).toHaveBeenCalledWith(input, expect.objectContaining({}));
+  });
+});
+
+// ---------------------------------------------------------------------------
+// Shared target validation helper for value-based format operations
+// ---------------------------------------------------------------------------
+
+function targetValidationSuite(
+  name: string,
+  exec: (adapter: ReturnType<typeof makeAdapter>, input: unknown, options?: unknown) => unknown,
+) {
+  describe(`${name} target validation`, () => {
+    it('rejects non-object input', () => {
+      expect(() => exec(makeAdapter(), null)).toThrow(DocumentApiValidationError);
+    });
+
+    it('rejects missing target', () => {
+      expect(() => exec(makeAdapter(), { value: '12pt' })).toThrow('requires a target');
+    });
+
+    it('rejects invalid target', () => {
+      expect(() => exec(makeAdapter(), { target: 'bad', value: '12pt' })).toThrow('text address');
+    });
+  });
+}
+
+// ---------------------------------------------------------------------------
+// executeFontSize validation
+// ---------------------------------------------------------------------------
+
+describe('executeFontSize validation', () => {
+  targetValidationSuite('format.fontSize', (a, i) => executeFontSize(a, i as any));
+
+  it('rejects missing value', () => {
+    expect(() => executeFontSize(makeAdapter(), { target: TARGET } as any)).toThrow('requires a value');
+  });
+
+  it('rejects empty string value', () => {
+    expect(() => executeFontSize(makeAdapter(), { target: TARGET, value: '' })).toThrow('empty string');
+  });
+
+  it('rejects boolean value', () => {
+    expect(() => executeFontSize(makeAdapter(), { target: TARGET, value: true } as any)).toThrow(
+      'string, number, or null',
+    );
+  });
+
+  it('rejects unknown fields', () => {
+    expect(() => executeFontSize(makeAdapter(), { target: TARGET, value: 12, extra: 1 } as any)).toThrow('extra');
+  });
+
+  it('accepts null value (unset)', () => {
+    const adapter = makeAdapter();
+    executeFontSize(adapter, { target: TARGET, value: null });
+    expect(adapter.fontSize).toHaveBeenCalled();
+  });
+
+  it('accepts string value', () => {
+    const adapter = makeAdapter();
+    executeFontSize(adapter, { target: TARGET, value: '14pt' });
+    expect(adapter.fontSize).toHaveBeenCalledWith({ target: TARGET, value: '14pt' }, expect.any(Object));
+  });
+
+  it('accepts numeric value', () => {
+    const adapter = makeAdapter();
+    executeFontSize(adapter, { target: TARGET, value: 16 });
+    expect(adapter.fontSize).toHaveBeenCalled();
+  });
+});
+
+// ---------------------------------------------------------------------------
+// executeFontFamily validation
+// ---------------------------------------------------------------------------
+
+describe('executeFontFamily validation', () => {
+  targetValidationSuite('format.fontFamily', (a, i) => executeFontFamily(a, i as any));
+
+  it('rejects missing value', () => {
+    expect(() => executeFontFamily(makeAdapter(), { target: TARGET } as any)).toThrow('requires a value');
+  });
+
+  it('rejects empty string value', () => {
+    expect(() => executeFontFamily(makeAdapter(), { target: TARGET, value: '' })).toThrow('empty string');
+  });
+
+  it('rejects non-string value', () => {
+    expect(() => executeFontFamily(makeAdapter(), { target: TARGET, value: 42 } as any)).toThrow('string or null');
+  });
+
+  it('accepts null value (unset)', () => {
+    const adapter = makeAdapter();
+    executeFontFamily(adapter, { target: TARGET, value: null });
+    expect(adapter.fontFamily).toHaveBeenCalled();
+  });
+
+  it('accepts valid string value', () => {
+    const adapter = makeAdapter();
+    executeFontFamily(adapter, { target: TARGET, value: 'Arial' });
+    expect(adapter.fontFamily).toHaveBeenCalled();
+  });
+});
+
+// ---------------------------------------------------------------------------
+// executeColor validation
+// ---------------------------------------------------------------------------
+
+describe('executeColor validation', () => {
+  targetValidationSuite('format.color', (a, i) => executeColor(a, i as any));
+
+  it('rejects missing value', () => {
+    expect(() => executeColor(makeAdapter(), { target: TARGET } as any)).toThrow('requires a value');
+  });
+
+  it('rejects empty string value', () => {
+    expect(() => executeColor(makeAdapter(), { target: TARGET, value: '' })).toThrow('empty string');
+  });
+
+  it('rejects non-string value', () => {
+    expect(() => executeColor(makeAdapter(), { target: TARGET, value: 123 } as any)).toThrow('string or null');
+  });
+
+  it('accepts null value (unset)', () => {
+    const adapter = makeAdapter();
+    executeColor(adapter, { target: TARGET, value: null });
+    expect(adapter.color).toHaveBeenCalled();
+  });
+
+  it('accepts hex color string', () => {
+    const adapter = makeAdapter();
+    executeColor(adapter, { target: TARGET, value: '#ff0000' });
+    expect(adapter.color).toHaveBeenCalled();
+  });
+});
+
+// ---------------------------------------------------------------------------
+// executeAlign validation
+// ---------------------------------------------------------------------------
+
+describe('executeAlign validation', () => {
+  targetValidationSuite('format.align', (a, i) => executeAlign(a, i as any));
+
+  it('rejects missing alignment', () => {
+    expect(() => executeAlign(makeAdapter(), { target: TARGET } as any)).toThrow('requires an alignment');
+  });
+
+  it('rejects invalid alignment value', () => {
+    expect(() => executeAlign(makeAdapter(), { target: TARGET, alignment: 'middle' } as any)).toThrow(
+      'left, center, right, justify',
+    );
+  });
+
+  it('rejects empty string alignment', () => {
+    expect(() => executeAlign(makeAdapter(), { target: TARGET, alignment: '' } as any)).toThrow(
+      'left, center, right, justify',
+    );
+  });
+
+  it('rejects unknown fields', () => {
+    expect(() => executeAlign(makeAdapter(), { target: TARGET, alignment: 'left', extra: 1 } as any)).toThrow('extra');
+  });
+
+  it('accepts null alignment (unset)', () => {
+    const adapter = makeAdapter();
+    executeAlign(adapter, { target: TARGET, alignment: null });
+    expect(adapter.align).toHaveBeenCalled();
+  });
+
+  it.each(['left', 'center', 'right', 'justify'] as const)('accepts alignment "%s"', (alignment) => {
+    const adapter = makeAdapter();
+    executeAlign(adapter, { target: TARGET, alignment });
+    expect(adapter.align).toHaveBeenCalled();
   });
 });

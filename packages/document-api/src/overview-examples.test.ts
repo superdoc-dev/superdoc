@@ -75,6 +75,10 @@ function makeWriteAdapter() {
 function makeFormatAdapter() {
   return {
     apply: vi.fn(() => makeTextMutationReceipt()),
+    fontSize: vi.fn(() => makeTextMutationReceipt()),
+    fontFamily: vi.fn(() => makeTextMutationReceipt()),
+    color: vi.fn(() => makeTextMutationReceipt()),
+    align: vi.fn(() => makeTextMutationReceipt()),
   };
 }
 

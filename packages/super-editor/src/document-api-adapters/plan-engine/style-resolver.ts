@@ -69,37 +69,63 @@ const METADATA_MARK_NAMES = new Set([
  */
 export function captureRunsInRange(editor: Editor, blockPos: number, from: number, to: number): CapturedStyle {
   const doc = editor.state.doc;
-  // Block content starts at blockPos + 1 (the +1 skips the block node's opening token)
-  const contentStart = blockPos + 1;
-  const absFrom = contentStart + from;
-  const absTo = contentStart + to;
+  const blockNode = doc.nodeAt(blockPos);
+  if (!blockNode || from < 0 || to < from || from === to) {
+    return { runs: [], isUniform: true };
+  }
 
   const runs: CapturedRun[] = [];
+  let offset = 0;
 
-  // Walk inline content between absFrom and absTo
-  doc.nodesBetween(absFrom, absTo, (node, pos) => {
-    if (!node.isText) return true;
-
-    // Clamp to the matched range
-    const nodeStart = Math.max(pos, absFrom);
-    const nodeEnd = Math.min(pos + node.nodeSize, absTo);
-    if (nodeStart >= nodeEnd) return true;
-
-    const relFrom = nodeStart - contentStart;
-    const relTo = nodeEnd - contentStart;
-
-    // Filter out metadata marks
-    const formattingMarks = (node.marks as unknown as PmMark[]).filter((m) => !METADATA_MARK_NAMES.has(m.type.name));
+  const maybePushRun = (start: number, end: number, marks: readonly PmMark[]) => {
+    const overlapStart = Math.max(start, from);
+    const overlapEnd = Math.min(end, to);
+    if (overlapStart >= overlapEnd) return;
 
     runs.push({
-      from: relFrom,
-      to: relTo,
-      charCount: relTo - relFrom,
-      marks: formattingMarks,
+      from: overlapStart,
+      to: overlapEnd,
+      charCount: overlapEnd - overlapStart,
+      marks: marks.filter((m) => !METADATA_MARK_NAMES.has(m.type.name)),
     });
+  };
 
-    return true;
-  });
+  const walkNode = (node: import('prosemirror-model').Node): void => {
+    if (node.isText) {
+      const text = node.text ?? '';
+      if (text.length > 0) {
+        const start = offset;
+        const end = offset + text.length;
+        const marks = Array.isArray((node as { marks?: unknown }).marks)
+          ? ((node as unknown as { marks: PmMark[] }).marks as readonly PmMark[])
+          : [];
+        maybePushRun(start, end, marks);
+        offset = end;
+      }
+      return;
+    }
+
+    if (node.isLeaf) {
+      // Keep offset math aligned with resolveTextRangeInBlock's flattened model.
+      offset += 1;
+      return;
+    }
+
+    let isFirstChild = true;
+    for (let i = 0; i < node.childCount; i++) {
+      const child = node.child(i);
+
+      // Block separators contribute one offset slot in the flattened model.
+      if (child.isBlock && !isFirstChild) {
+        offset += 1;
+      }
+
+      walkNode(child);
+      isFirstChild = false;
+    }
+  };
+
+  walkNode(blockNode);
 
   const isUniform = checkUniformity(runs);
 

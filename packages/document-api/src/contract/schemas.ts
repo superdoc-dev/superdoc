@@ -2,6 +2,7 @@ import { COMMAND_CATALOG } from './command-catalog.js';
 import { CONTRACT_VERSION, JSON_SCHEMA_DIALECT, OPERATION_IDS, type OperationId } from './types.js';
 import { NODE_TYPES, BLOCK_NODE_TYPES, INLINE_NODE_TYPES } from '../types/base.js';
 import { MARK_KEYS } from '../types/style-policy.types.js';
+import { ALIGNMENTS } from '../format/format.js';
 
 type JsonSchema = Record<string, unknown>;
 
@@ -945,6 +946,54 @@ const operationSchemas: Record<OperationId, OperationSchemaSet> = {
     output: textMutationResultSchemaFor('format.apply'),
     success: textMutationSuccessSchema,
     failure: textMutationFailureSchemaFor('format.apply'),
+  },
+  'format.fontSize': {
+    input: objectSchema(
+      {
+        target: textAddressSchema,
+        value: { oneOf: [{ type: 'string', minLength: 1 }, { type: 'number' }, { type: 'null' }] },
+      },
+      ['target', 'value'],
+    ),
+    output: textMutationResultSchemaFor('format.fontSize'),
+    success: textMutationSuccessSchema,
+    failure: textMutationFailureSchemaFor('format.fontSize'),
+  },
+  'format.fontFamily': {
+    input: objectSchema(
+      {
+        target: textAddressSchema,
+        value: { oneOf: [{ type: 'string', minLength: 1 }, { type: 'null' }] },
+      },
+      ['target', 'value'],
+    ),
+    output: textMutationResultSchemaFor('format.fontFamily'),
+    success: textMutationSuccessSchema,
+    failure: textMutationFailureSchemaFor('format.fontFamily'),
+  },
+  'format.color': {
+    input: objectSchema(
+      {
+        target: textAddressSchema,
+        value: { oneOf: [{ type: 'string', minLength: 1 }, { type: 'null' }] },
+      },
+      ['target', 'value'],
+    ),
+    output: textMutationResultSchemaFor('format.color'),
+    success: textMutationSuccessSchema,
+    failure: textMutationFailureSchemaFor('format.color'),
+  },
+  'format.align': {
+    input: objectSchema(
+      {
+        target: textAddressSchema,
+        alignment: { oneOf: [{ enum: [...ALIGNMENTS] }, { type: 'null' }] },
+      },
+      ['target', 'alignment'],
+    ),
+    output: textMutationResultSchemaFor('format.align'),
+    success: textMutationSuccessSchema,
+    failure: textMutationFailureSchemaFor('format.align'),
   },
   'create.paragraph': {
     input: objectSchema({

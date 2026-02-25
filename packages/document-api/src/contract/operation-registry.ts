@@ -26,7 +26,13 @@ import type { InsertInput } from '../insert/insert.js';
 import type { ReplaceInput } from '../replace/replace.js';
 import type { DeleteInput } from '../delete/delete.js';
 import type { MutationOptions, RevisionGuardOptions } from '../write/write.js';
-import type { StyleApplyInput } from '../format/format.js';
+import type {
+  StyleApplyInput,
+  FormatFontSizeInput,
+  FormatFontFamilyInput,
+  FormatColorInput,
+  FormatAlignInput,
+} from '../format/format.js';
 import type {
   CommentsCreateInput,
   CommentsPatchInput,
@@ -72,6 +78,10 @@ export interface OperationRegistry {
 
   // --- format.* ---
   'format.apply': { input: StyleApplyInput; options: MutationOptions; output: TextMutationReceipt };
+  'format.fontSize': { input: FormatFontSizeInput; options: MutationOptions; output: TextMutationReceipt };
+  'format.fontFamily': { input: FormatFontFamilyInput; options: MutationOptions; output: TextMutationReceipt };
+  'format.color': { input: FormatColorInput; options: MutationOptions; output: TextMutationReceipt };
+  'format.align': { input: FormatAlignInput; options: MutationOptions; output: TextMutationReceipt };
 
   // --- create.* ---
   'create.paragraph': { input: CreateParagraphInput; options: MutationOptions; output: CreateParagraphResult };

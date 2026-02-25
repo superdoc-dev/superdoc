@@ -12,6 +12,12 @@ import { createCommentsWrapper } from './plan-engine/comments-wrappers.js';
 import { createParagraphWrapper, createHeadingWrapper } from './plan-engine/create-wrappers.js';
 import { findAdapter } from './find-adapter.js';
 import { writeWrapper, styleApplyWrapper } from './plan-engine/plan-wrappers.js';
+import {
+  formatFontSizeWrapper,
+  formatFontFamilyWrapper,
+  formatColorWrapper,
+  formatAlignWrapper,
+} from './plan-engine/format-value-wrappers.js';
 import { getNodeAdapter, getNodeByIdAdapter } from './get-node-adapter.js';
 import { getTextAdapter } from './get-text-adapter.js';
 import { infoAdapter } from './info-adapter.js';
@@ -75,6 +81,10 @@ export function getDocumentApiAdapters(editor: Editor): DocumentApiAdapters {
     },
     format: {
       apply: (input, options) => styleApplyWrapper(editor, input, options),
+      fontSize: (input, options) => formatFontSizeWrapper(editor, input, options),
+      fontFamily: (input, options) => formatFontFamilyWrapper(editor, input, options),
+      color: (input, options) => formatColorWrapper(editor, input, options),
+      align: (input, options) => formatAlignWrapper(editor, input, options),
     },
     trackChanges: {
       list: (query) => trackChangesListWrapper(editor, query),

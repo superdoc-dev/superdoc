@@ -18,6 +18,10 @@ type EditorCommandName = string;
 // they are backed by writeAdapter which is always available when the editor exists.
 // Read-only operations (find, getNode, getText, info, etc.) similarly need no commands.
 const REQUIRED_COMMANDS: Partial<Record<OperationId, readonly EditorCommandName[]>> = {
+  'format.fontSize': ['setTextSelection', 'setFontSize', 'unsetFontSize'],
+  'format.fontFamily': ['setTextSelection', 'setFontFamily', 'unsetFontFamily'],
+  'format.color': ['setTextSelection', 'setColor', 'unsetColor'],
+  'format.align': ['setTextSelection', 'setTextAlign', 'unsetTextAlign'],
   'create.paragraph': ['insertParagraphAt'],
   'create.heading': ['insertHeadingAt'],
   'lists.insert': ['insertListItemAt'],
@@ -66,6 +70,12 @@ const STYLE_MARK_SCHEMA_NAMES: Record<string, string> = {
 function isMarkBackedOperation(operationId: OperationId): boolean {
   return operationId === 'format.apply';
 }
+
+/**
+ * Inline value-format operations (fontSize, fontFamily, color) require the 'textStyle'
+ * mark in the schema — they apply values via `setMark('textStyle', ...)`.
+ */
+const INLINE_FORMAT_OPERATIONS = new Set<OperationId>(['format.fontSize', 'format.fontFamily', 'format.color']);
 
 function hasTrackedModeCapability(editor: Editor, operationId: OperationId): boolean {
   if (!hasCommand(editor, 'insertTrackedChange')) return false;
@@ -116,11 +126,16 @@ function isOperationAvailable(editor: Editor, operationId: OperationId): boolean
     return MARK_KEYS.some((key) => hasMarkCapability(editor, STYLE_MARK_SCHEMA_NAMES[key] ?? key));
   }
 
+  // Inline format ops (fontSize, fontFamily, color) require the textStyle mark in the schema
+  if (INLINE_FORMAT_OPERATIONS.has(operationId)) {
+    return hasAllCommands(editor, operationId) && hasMarkCapability(editor, 'textStyle');
+  }
+
   return hasAllCommands(editor, operationId);
 }
 
 function isCommandBackedAvailability(operationId: OperationId): boolean {
-  return !isMarkBackedOperation(operationId);
+  return !isMarkBackedOperation(operationId) && !INLINE_FORMAT_OPERATIONS.has(operationId);
 }
 
 function buildOperationCapabilities(editor: Editor): DocumentApiCapabilities['operations'] {

@@ -85,6 +85,10 @@ function makeAdapters() {
   });
   const formatAdapter: FormatAdapter = {
     apply: vi.fn(formatReceipt),
+    fontSize: vi.fn(formatReceipt),
+    fontFamily: vi.fn(formatReceipt),
+    color: vi.fn(formatReceipt),
+    align: vi.fn(formatReceipt),
   };
   const trackChangesAdapter: TrackChangesAdapter = {
     list: vi.fn(() => ({ evaluatedRevision: '', total: 0, items: [], page: { limit: 50, offset: 0, returned: 0 } })),
@@ -279,6 +283,45 @@ describe('invoke', () => {
       };
       const direct = api.format.apply(input);
       const invoked = api.invoke({ operationId: 'format.apply', input });
+      expect(invoked).toEqual(direct);
+    });
+
+    it('format.fontSize: invoke returns same result as direct call', () => {
+      const { adapters } = makeAdapters();
+      const api = createDocumentApi(adapters);
+      const input = { target: { kind: 'text' as const, blockId: 'p1', range: { start: 0, end: 2 } }, value: '14pt' };
+      const direct = api.format.fontSize(input);
+      const invoked = api.invoke({ operationId: 'format.fontSize', input });
+      expect(invoked).toEqual(direct);
+    });
+
+    it('format.fontFamily: invoke returns same result as direct call', () => {
+      const { adapters } = makeAdapters();
+      const api = createDocumentApi(adapters);
+      const input = { target: { kind: 'text' as const, blockId: 'p1', range: { start: 0, end: 2 } }, value: 'Arial' };
+      const direct = api.format.fontFamily(input);
+      const invoked = api.invoke({ operationId: 'format.fontFamily', input });
+      expect(invoked).toEqual(direct);
+    });
+
+    it('format.color: invoke returns same result as direct call', () => {
+      const { adapters } = makeAdapters();
+      const api = createDocumentApi(adapters);
+      const input = { target: { kind: 'text' as const, blockId: 'p1', range: { start: 0, end: 2 } }, value: '#ff0000' };
+      const direct = api.format.color(input);
+      const invoked = api.invoke({ operationId: 'format.color', input });
+      expect(invoked).toEqual(direct);
+    });
+
+    it('format.align: invoke returns same result as direct call', () => {
+      const { adapters } = makeAdapters();
+      const api = createDocumentApi(adapters);
+      const input = {
+        target: { kind: 'text' as const, blockId: 'p1', range: { start: 0, end: 2 } },
+        alignment: 'center' as const,
+      };
+      const direct = api.format.align(input);
+      const invoked = api.invoke({ operationId: 'format.align', input });
       expect(invoked).toEqual(direct);
     });
 

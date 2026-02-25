@@ -117,6 +117,10 @@ function makeFormatReceipt() {
 function makeFormatAdapter(): FormatAdapter {
   return {
     apply: vi.fn(() => makeFormatReceipt()),
+    fontSize: vi.fn(() => makeFormatReceipt()),
+    fontFamily: vi.fn(() => makeFormatReceipt()),
+    color: vi.fn(() => makeFormatReceipt()),
+    align: vi.fn(() => makeFormatReceipt()),
   };
 }
 
@@ -582,6 +586,98 @@ describe('createDocumentApi', () => {
     expect(formatAdpt.apply).toHaveBeenCalledWith(
       { target, inline: { strike: true } },
       { changeMode: 'tracked', dryRun: false },
+    );
+  });
+
+  it('delegates format.fontSize to adapter.fontSize', () => {
+    const formatAdpt = makeFormatAdapter();
+    const api = createDocumentApi({
+      find: makeFindAdapter(QUERY_RESULT),
+      getNode: makeGetNodeAdapter(PARAGRAPH_INFO),
+      getText: makeGetTextAdapter(),
+      info: makeInfoAdapter(),
+      comments: makeCommentsAdapter(),
+      write: makeWriteAdapter(),
+      format: formatAdpt,
+      trackChanges: makeTrackChangesAdapter(),
+      create: makeCreateAdapter(),
+      lists: makeListsAdapter(),
+    });
+
+    const target = { kind: 'text', blockId: 'p1', range: { start: 0, end: 2 } } as const;
+    api.format.fontSize({ target, value: '14pt' });
+    expect(formatAdpt.fontSize).toHaveBeenCalledWith(
+      { target, value: '14pt' },
+      { changeMode: 'direct', dryRun: false },
+    );
+  });
+
+  it('delegates format.fontFamily to adapter.fontFamily', () => {
+    const formatAdpt = makeFormatAdapter();
+    const api = createDocumentApi({
+      find: makeFindAdapter(QUERY_RESULT),
+      getNode: makeGetNodeAdapter(PARAGRAPH_INFO),
+      getText: makeGetTextAdapter(),
+      info: makeInfoAdapter(),
+      comments: makeCommentsAdapter(),
+      write: makeWriteAdapter(),
+      format: formatAdpt,
+      trackChanges: makeTrackChangesAdapter(),
+      create: makeCreateAdapter(),
+      lists: makeListsAdapter(),
+    });
+
+    const target = { kind: 'text', blockId: 'p1', range: { start: 0, end: 2 } } as const;
+    api.format.fontFamily({ target, value: 'Arial' });
+    expect(formatAdpt.fontFamily).toHaveBeenCalledWith(
+      { target, value: 'Arial' },
+      { changeMode: 'direct', dryRun: false },
+    );
+  });
+
+  it('delegates format.color to adapter.color', () => {
+    const formatAdpt = makeFormatAdapter();
+    const api = createDocumentApi({
+      find: makeFindAdapter(QUERY_RESULT),
+      getNode: makeGetNodeAdapter(PARAGRAPH_INFO),
+      getText: makeGetTextAdapter(),
+      info: makeInfoAdapter(),
+      comments: makeCommentsAdapter(),
+      write: makeWriteAdapter(),
+      format: formatAdpt,
+      trackChanges: makeTrackChangesAdapter(),
+      create: makeCreateAdapter(),
+      lists: makeListsAdapter(),
+    });
+
+    const target = { kind: 'text', blockId: 'p1', range: { start: 0, end: 2 } } as const;
+    api.format.color({ target, value: '#ff0000' });
+    expect(formatAdpt.color).toHaveBeenCalledWith(
+      { target, value: '#ff0000' },
+      { changeMode: 'direct', dryRun: false },
+    );
+  });
+
+  it('delegates format.align to adapter.align', () => {
+    const formatAdpt = makeFormatAdapter();
+    const api = createDocumentApi({
+      find: makeFindAdapter(QUERY_RESULT),
+      getNode: makeGetNodeAdapter(PARAGRAPH_INFO),
+      getText: makeGetTextAdapter(),
+      info: makeInfoAdapter(),
+      comments: makeCommentsAdapter(),
+      write: makeWriteAdapter(),
+      format: formatAdpt,
+      trackChanges: makeTrackChangesAdapter(),
+      create: makeCreateAdapter(),
+      lists: makeListsAdapter(),
+    });
+
+    const target = { kind: 'text', blockId: 'p1', range: { start: 0, end: 2 } } as const;
+    api.format.align({ target, alignment: 'center' });
+    expect(formatAdpt.align).toHaveBeenCalledWith(
+      { target, alignment: 'center' },
+      { changeMode: 'direct', dryRun: false },
     );
   });
 

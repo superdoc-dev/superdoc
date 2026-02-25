@@ -521,6 +521,82 @@ export const SUCCESS_SCENARIOS = {
       ],
     };
   },
+  'doc.format.fontSize': async (harness: ConformanceHarness): Promise<ScenarioInvocation> => {
+    const stateDir = await harness.createStateDir('doc-format-font-size-success');
+    const docPath = await harness.copyFixtureDoc('doc-format-font-size');
+    const target = await harness.firstTextRange(docPath, stateDir);
+    return {
+      stateDir,
+      args: [
+        'format',
+        'font-size',
+        docPath,
+        '--target-json',
+        JSON.stringify(target),
+        '--value-json',
+        JSON.stringify('14pt'),
+        '--out',
+        harness.createOutputPath('doc-format-font-size-output'),
+      ],
+    };
+  },
+  'doc.format.fontFamily': async (harness: ConformanceHarness): Promise<ScenarioInvocation> => {
+    const stateDir = await harness.createStateDir('doc-format-font-family-success');
+    const docPath = await harness.copyFixtureDoc('doc-format-font-family');
+    const target = await harness.firstTextRange(docPath, stateDir);
+    return {
+      stateDir,
+      args: [
+        'format',
+        'font-family',
+        docPath,
+        '--target-json',
+        JSON.stringify(target),
+        '--value-json',
+        JSON.stringify('Arial'),
+        '--out',
+        harness.createOutputPath('doc-format-font-family-output'),
+      ],
+    };
+  },
+  'doc.format.color': async (harness: ConformanceHarness): Promise<ScenarioInvocation> => {
+    const stateDir = await harness.createStateDir('doc-format-color-success');
+    const docPath = await harness.copyFixtureDoc('doc-format-color');
+    const target = await harness.firstTextRange(docPath, stateDir);
+    return {
+      stateDir,
+      args: [
+        'format',
+        'color',
+        docPath,
+        '--target-json',
+        JSON.stringify(target),
+        '--value-json',
+        JSON.stringify('#ff0000'),
+        '--out',
+        harness.createOutputPath('doc-format-color-output'),
+      ],
+    };
+  },
+  'doc.format.align': async (harness: ConformanceHarness): Promise<ScenarioInvocation> => {
+    const stateDir = await harness.createStateDir('doc-format-align-success');
+    const docPath = await harness.copyFixtureDoc('doc-format-align');
+    const target = await harness.firstTextRange(docPath, stateDir);
+    return {
+      stateDir,
+      args: [
+        'format',
+        'align',
+        docPath,
+        '--target-json',
+        JSON.stringify(target),
+        '--alignment-json',
+        JSON.stringify('center'),
+        '--out',
+        harness.createOutputPath('doc-format-align-output'),
+      ],
+    };
+  },
   'doc.trackChanges.list': async (harness: ConformanceHarness): Promise<ScenarioInvocation> => {
     const stateDir = await harness.createStateDir('doc-track-changes-list-success');
     const fixture = await harness.addTrackedChangeFixture(stateDir, 'doc-track-changes-list');

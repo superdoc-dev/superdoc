@@ -23,7 +23,7 @@ Document API is currently alpha and subject to breaking changes.
 | Core | 8 | 0 | 8 | [Open](/document-api/reference/core/index) |
 | Capabilities | 1 | 0 | 1 | [Open](/document-api/reference/capabilities/index) |
 | Create | 2 | 0 | 2 | [Open](/document-api/reference/create/index) |
-| Format | 1 | 4 | 5 | [Open](/document-api/reference/format/index) |
+| Format | 5 | 4 | 9 | [Open](/document-api/reference/format/index) |
 | Lists | 8 | 0 | 8 | [Open](/document-api/reference/lists/index) |
 | Comments | 5 | 0 | 5 | [Open](/document-api/reference/comments/index) |
 | Track Changes | 3 | 0 | 3 | [Open](/document-api/reference/track-changes/index) |
@@ -65,6 +65,10 @@ The tables below are grouped by namespace.
 | Operation | API member path | Description |
 | --- | --- | --- |
 | <span style={{ whiteSpace: 'nowrap', wordBreak: 'normal', overflowWrap: 'normal' }}><a href="/document-api/reference/format/apply"><code>format.apply</code></a></span> | <span style={{ whiteSpace: 'nowrap', wordBreak: 'normal', overflowWrap: 'normal' }}><code>editor.doc.format.apply(...)</code></span> | Apply explicit inline style changes (bold, italic, underline, strike) to the target range using boolean patch semantics. |
+| <span style={{ whiteSpace: 'nowrap', wordBreak: 'normal', overflowWrap: 'normal' }}><a href="/document-api/reference/format/font-size"><code>format.fontSize</code></a></span> | <span style={{ whiteSpace: 'nowrap', wordBreak: 'normal', overflowWrap: 'normal' }}><code>editor.doc.format.fontSize(...)</code></span> | Set or unset the font size on the target text range. Pass null to remove. |
+| <span style={{ whiteSpace: 'nowrap', wordBreak: 'normal', overflowWrap: 'normal' }}><a href="/document-api/reference/format/font-family"><code>format.fontFamily</code></a></span> | <span style={{ whiteSpace: 'nowrap', wordBreak: 'normal', overflowWrap: 'normal' }}><code>editor.doc.format.fontFamily(...)</code></span> | Set or unset the font family on the target text range. Pass null to remove. |
+| <span style={{ whiteSpace: 'nowrap', wordBreak: 'normal', overflowWrap: 'normal' }}><a href="/document-api/reference/format/color"><code>format.color</code></a></span> | <span style={{ whiteSpace: 'nowrap', wordBreak: 'normal', overflowWrap: 'normal' }}><code>editor.doc.format.color(...)</code></span> | Set or unset the text color on the target text range. Pass null to remove. |
+| <span style={{ whiteSpace: 'nowrap', wordBreak: 'normal', overflowWrap: 'normal' }}><a href="/document-api/reference/format/align"><code>format.align</code></a></span> | <span style={{ whiteSpace: 'nowrap', wordBreak: 'normal', overflowWrap: 'normal' }}><code>editor.doc.format.align(...)</code></span> | Set or unset paragraph alignment on the block containing the target. Pass null to reset to default. |
 | <span style={{ whiteSpace: 'nowrap', wordBreak: 'normal', overflowWrap: 'normal' }}><a href="/document-api/reference/format/apply"><code>format.bold</code></a></span> | <span style={{ whiteSpace: 'nowrap', wordBreak: 'normal', overflowWrap: 'normal' }}><code>editor.doc.format.bold(...)</code></span> | Convenience alias for `format.apply` with `inline.bold: true`. |
 | <span style={{ whiteSpace: 'nowrap', wordBreak: 'normal', overflowWrap: 'normal' }}><a href="/document-api/reference/format/apply"><code>format.italic</code></a></span> | <span style={{ whiteSpace: 'nowrap', wordBreak: 'normal', overflowWrap: 'normal' }}><code>editor.doc.format.italic(...)</code></span> | Convenience alias for `format.apply` with `inline.italic: true`. |
 | <span style={{ whiteSpace: 'nowrap', wordBreak: 'normal', overflowWrap: 'normal' }}><a href="/document-api/reference/format/apply"><code>format.underline</code></a></span> | <span style={{ whiteSpace: 'nowrap', wordBreak: 'normal', overflowWrap: 'normal' }}><code>editor.doc.format.underline(...)</code></span> | Convenience alias for `format.apply` with `inline.underline: true`. |

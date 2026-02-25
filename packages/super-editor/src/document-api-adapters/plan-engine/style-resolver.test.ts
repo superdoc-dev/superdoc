@@ -1,140 +1,157 @@
-import { describe, expect, it, vi } from 'vitest';
+import { describe, expect, it } from 'vitest';
 import { captureRunsInRange } from './style-resolver.js';
 import type { Editor } from '../../core/Editor.js';
+import type { Node as ProseMirrorNode } from 'prosemirror-model';
 
-// ---------------------------------------------------------------------------
-// captureRunsInRange — block content offset tests
-// ---------------------------------------------------------------------------
+type MockMark = {
+  type: { name: string };
+  attrs: Record<string, unknown>;
+  eq: (other: MockMark) => boolean;
+};
 
-describe('captureRunsInRange: block content offset (blockPos + 1)', () => {
-  /**
-   * ProseMirror block content starts at blockPos + 1 (the +1 skips the
-   * block node's opening token). This test verifies that captureRunsInRange
-   * correctly uses contentStart = blockPos + 1 when computing absolute
-   * positions for doc.nodesBetween.
-   */
-  it('walks document starting at blockPos + 1, not blockPos', () => {
-    const nodesBetween = vi.fn();
-    const editor = {
-      state: {
-        doc: { nodesBetween },
+type MockNodeOptions = {
+  text?: string;
+  marks?: MockMark[];
+  isInline?: boolean;
+  isBlock?: boolean;
+  isLeaf?: boolean;
+  inlineContent?: boolean;
+  nodeSize?: number;
+};
+
+function mockMark(name: string, attrs: Record<string, unknown> = {}): MockMark {
+  return {
+    type: { name },
+    attrs,
+    eq(other: MockMark) {
+      if (other.type.name !== name) return false;
+      const keys = new Set([...Object.keys(attrs), ...Object.keys(other.attrs ?? {})]);
+      for (const key of keys) {
+        if ((attrs as Record<string, unknown>)[key] !== other.attrs[key]) return false;
+      }
+      return true;
+    },
+  };
+}
+
+function createNode(
+  typeName: string,
+  children: ProseMirrorNode[] = [],
+  options: MockNodeOptions = {},
+): ProseMirrorNode {
+  const text = options.text ?? '';
+  const isText = typeName === 'text';
+  const isInline = options.isInline ?? isText;
+  const isBlock = options.isBlock ?? (!isInline && typeName !== 'doc');
+  const inlineContent = options.inlineContent ?? isBlock;
+  const isLeaf = options.isLeaf ?? (isInline && !isText && children.length === 0);
+
+  const contentSize = children.reduce((sum, child) => sum + child.nodeSize, 0);
+  const nodeSize = isText ? text.length : options.nodeSize != null ? options.nodeSize : isLeaf ? 1 : contentSize + 2;
+
+  return {
+    type: { name: typeName },
+    text: isText ? text : undefined,
+    nodeSize,
+    isText,
+    isInline,
+    isBlock,
+    inlineContent,
+    isTextblock: inlineContent,
+    isLeaf,
+    marks: options.marks ?? [],
+    childCount: children.length,
+    child(index: number) {
+      return children[index]!;
+    },
+  } as unknown as ProseMirrorNode;
+}
+
+function makeEditor(blockPos: number, blockNode: ProseMirrorNode | null): Editor {
+  return {
+    state: {
+      doc: {
+        nodeAt(pos: number) {
+          return pos === blockPos ? blockNode : null;
+        },
       },
-    } as unknown as Editor;
+    },
+  } as unknown as Editor;
+}
 
-    // Block at position 10, text offsets [2, 5)
-    // Content starts at 11 (blockPos + 1)
-    // So absolute range should be [13, 16) not [12, 15)
-    captureRunsInRange(editor, 10, 2, 5);
+describe('captureRunsInRange', () => {
+  it('uses wrapper-transparent text offsets so adjacent runs stay contiguous', () => {
+    const bold = mockMark('bold');
+    const textStyle = mockMark('textStyle');
 
-    expect(nodesBetween).toHaveBeenCalledTimes(1);
-    const [absFrom, absTo] = nodesBetween.mock.calls[0];
-    expect(absFrom).toBe(13); // 10 + 1 + 2
-    expect(absTo).toBe(16); // 10 + 1 + 5
-  });
-
-  it('computes correct absolute positions for blockPos=0', () => {
-    const nodesBetween = vi.fn();
-    const editor = {
-      state: {
-        doc: { nodesBetween },
-      },
-    } as unknown as Editor;
-
-    // Block at position 0, text offsets [0, 3)
-    // Content starts at 1 (0 + 1)
-    captureRunsInRange(editor, 0, 0, 3);
-
-    const [absFrom, absTo] = nodesBetween.mock.calls[0];
-    expect(absFrom).toBe(1); // 0 + 1 + 0
-    expect(absTo).toBe(4); // 0 + 1 + 3
-  });
-
-  it('returns content-relative offsets in captured runs', () => {
-    // Simulate a text node at absolute position 11, size 5
-    const textNode = {
-      isText: true,
-      nodeSize: 5,
-      marks: [],
-    };
-
-    const nodesBetween = vi.fn((from: number, to: number, cb: Function) => {
-      // Call back with a text node starting at absolute position 11
-      cb(textNode, 11);
+    const runA = createNode('run', [createNode('text', [], { text: 'Hello', marks: [bold, textStyle] })], {
+      isInline: true,
+      isBlock: false,
+      isLeaf: false,
     });
+    const runB = createNode('run', [createNode('text', [], { text: ' world', marks: [textStyle] })], {
+      isInline: true,
+      isBlock: false,
+      isLeaf: false,
+    });
+    const paragraph = createNode('paragraph', [runA, runB], { isBlock: true, inlineContent: true });
+    const editor = makeEditor(10, paragraph);
 
-    const editor = {
-      state: {
-        doc: { nodesBetween },
-      },
-    } as unknown as Editor;
+    const result = captureRunsInRange(editor, 10, 0, 11);
 
-    // Block at position 10, text offsets [0, 5)
-    // contentStart = 11, absFrom = 11, absTo = 16
-    const result = captureRunsInRange(editor, 10, 0, 5);
-
-    expect(result.runs).toHaveLength(1);
-    // Run offsets should be relative to contentStart (blockPos + 1)
-    // nodeStart = max(11, 11) = 11, relFrom = 11 - 11 = 0
-    // nodeEnd = min(11 + 5, 16) = 16, relTo = 16 - 11 = 5
-    expect(result.runs[0].from).toBe(0);
-    expect(result.runs[0].to).toBe(5);
-    expect(result.runs[0].charCount).toBe(5);
+    expect(result.runs).toHaveLength(2);
+    expect(result.runs[0]).toMatchObject({ from: 0, to: 5, charCount: 5 });
+    expect(result.runs[1]).toMatchObject({ from: 5, to: 11, charCount: 6 });
+    expect(result.runs[0].marks.map((m) => m.type.name)).toEqual(['bold', 'textStyle']);
+    expect(result.runs[1].marks.map((m) => m.type.name)).toEqual(['textStyle']);
   });
 
-  it('clamps run offsets to the requested range', () => {
-    // Text node extends beyond the requested range
-    const textNode = {
-      isText: true,
-      nodeSize: 10,
-      marks: [],
-    };
+  it('clamps runs to the requested offset subrange across wrappers', () => {
+    const bold = mockMark('bold');
 
-    const nodesBetween = vi.fn((from: number, to: number, cb: Function) => {
-      // Text node starts at contentStart (11), extends to 21
-      cb(textNode, 11);
+    const runA = createNode('run', [createNode('text', [], { text: 'Hello', marks: [bold] })], {
+      isInline: true,
+      isBlock: false,
+      isLeaf: false,
     });
+    const runB = createNode('run', [createNode('text', [], { text: ' world', marks: [] })], {
+      isInline: true,
+      isBlock: false,
+      isLeaf: false,
+    });
+    const paragraph = createNode('paragraph', [runA, runB], { isBlock: true, inlineContent: true });
+    const editor = makeEditor(20, paragraph);
 
-    const editor = {
-      state: {
-        doc: { nodesBetween },
-      },
-    } as unknown as Editor;
+    const result = captureRunsInRange(editor, 20, 2, 8);
 
-    // Block at position 10, requesting only text offsets [2, 5)
-    // contentStart = 11, absFrom = 13, absTo = 16
-    const result = captureRunsInRange(editor, 10, 2, 5);
-
-    expect(result.runs).toHaveLength(1);
-    // nodeStart = max(11, 13) = 13, relFrom = 13 - 11 = 2
-    // nodeEnd = min(21, 16) = 16, relTo = 16 - 11 = 5
-    expect(result.runs[0].from).toBe(2);
-    expect(result.runs[0].to).toBe(5);
-    expect(result.runs[0].charCount).toBe(3);
+    expect(result.runs).toHaveLength(2);
+    expect(result.runs[0]).toMatchObject({ from: 2, to: 5, charCount: 3 });
+    expect(result.runs[1]).toMatchObject({ from: 5, to: 8, charCount: 3 });
   });
 
-  it('filters out metadata marks (trackInsert, commentMark, etc.)', () => {
-    const boldMark = { type: { name: 'bold' }, attrs: {}, eq: () => true };
-    const trackMark = { type: { name: 'trackInsert' }, attrs: {}, eq: () => true };
+  it('filters metadata marks from captured runs', () => {
+    const boldMark = mockMark('bold');
+    const trackInsert = mockMark('trackInsert');
+    const commentMark = mockMark('commentMark');
 
-    const textNode = {
-      isText: true,
-      nodeSize: 5,
-      marks: [boldMark, trackMark],
-    };
-
-    const nodesBetween = vi.fn((_from: number, _to: number, cb: Function) => {
-      cb(textNode, 1);
-    });
-
-    const editor = {
-      state: { doc: { nodesBetween } },
-    } as unknown as Editor;
+    const paragraph = createNode(
+      'paragraph',
+      [createNode('text', [], { text: 'Hello', marks: [boldMark, trackInsert, commentMark] })],
+      { isBlock: true, inlineContent: true },
+    );
+    const editor = makeEditor(0, paragraph);
 
     const result = captureRunsInRange(editor, 0, 0, 5);
 
     expect(result.runs).toHaveLength(1);
-    // Only bold should be present, trackInsert filtered out
-    expect(result.runs[0].marks).toHaveLength(1);
-    expect(result.runs[0].marks[0].type.name).toBe('bold');
+    expect(result.runs[0].marks.map((m) => m.type.name)).toEqual(['bold']);
+  });
+
+  it('returns empty runs when the block node cannot be resolved', () => {
+    const editor = makeEditor(0, null);
+    const result = captureRunsInRange(editor, 0, 0, 5);
+
+    expect(result.runs).toEqual([]);
+    expect(result.isUniform).toBe(true);
   });
 });

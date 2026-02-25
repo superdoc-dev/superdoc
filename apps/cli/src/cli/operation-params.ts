@@ -347,6 +347,10 @@ const EXTRA_CLI_PARAMS: Partial<Record<string, CliOperationParamSpec[]>> = {
   'doc.replace': [...TEXT_TARGET_FLAT_PARAMS],
   'doc.delete': [...TEXT_TARGET_FLAT_PARAMS],
   'doc.format.apply': [...TEXT_TARGET_FLAT_PARAMS],
+  'doc.format.fontSize': [...TEXT_TARGET_FLAT_PARAMS],
+  'doc.format.fontFamily': [...TEXT_TARGET_FLAT_PARAMS],
+  'doc.format.color': [...TEXT_TARGET_FLAT_PARAMS],
+  'doc.format.align': [...TEXT_TARGET_FLAT_PARAMS],
   'doc.comments.create': [...TEXT_TARGET_FLAT_PARAMS],
   'doc.comments.patch': [...TEXT_TARGET_FLAT_PARAMS],
   // List operations: flat flag (--node-id) as shortcut for --target-json, plus --input-json
@@ -398,9 +402,9 @@ const CLI_ONLY_METADATA: Record<CliOnlyOperationId, CliOperationMetadata> = {
   'doc.open': {
     command: 'open',
     positionalParams: ['doc'],
-    docRequirement: 'required',
+    docRequirement: 'none',
     params: [
-      { name: 'doc', kind: 'doc', type: 'string', required: true },
+      { name: 'doc', kind: 'doc', type: 'string' },
       SESSION_PARAM,
       { name: 'collaboration', kind: 'jsonFlag', flag: 'collaboration-json', type: 'json' },
       { name: 'collabDocumentId', kind: 'flag', flag: 'collab-document-id', type: 'string' },

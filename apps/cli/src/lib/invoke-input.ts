@@ -74,6 +74,10 @@ const TEXT_TARGET_OPERATIONS = new Set<CliExposedOperationId>([
   'replace',
   'delete',
   'format.apply',
+  'format.fontSize',
+  'format.fontFamily',
+  'format.color',
+  'format.align',
   'comments.create',
   'comments.patch',
 ]);

@@ -2213,6 +2213,8 @@ export class PresentationEditor extends EventEmitter {
     }
     this.#layoutOptions.zoom = zoom;
     this.#applyZoom();
+    // Notify DomPainter so virtualization accounts for the CSS transform scale
+    this.#domPainter?.setZoom?.(zoom);
     this.emit('zoomChange', { zoom });
     this.#scheduleSelectionUpdate();
     // Trigger cursor updates on zoom changes
@@ -3377,17 +3379,30 @@ export class PresentationEditor extends EventEmitter {
 
   #ensurePainter(blocks: FlowBlock[], measures: Measure[]) {
     if (!this.#domPainter) {
+      // Ensure the virtualization gap matches the effective page gap so that
+      // DomPainter's spacer/offset math stays consistent with #applyZoom() height calculations.
+      const virtualization = this.#layoutOptions.virtualization;
+      const effectiveGap = this.#getEffectivePageGap();
+      const normalizedVirtualization = virtualization?.enabled
+        ? { ...virtualization, gap: virtualization.gap ?? effectiveGap }
+        : virtualization;
+
       this.#domPainter = createDomPainter({
         blocks,
         measures,
         layoutMode: this.#layoutOptions.layoutMode ?? 'vertical',
-        virtualization: this.#layoutOptions.virtualization,
+        virtualization: normalizedVirtualization,
         pageStyles: this.#layoutOptions.pageStyles,
         headerProvider: this.#headerFooterSession?.headerDecorationProvider,
         footerProvider: this.#headerFooterSession?.footerDecorationProvider,
         ruler: this.#layoutOptions.ruler,
-        pageGap: this.#layoutState.layout?.pageGap ?? this.#getEffectivePageGap(),
+        pageGap: this.#layoutState.layout?.pageGap ?? effectiveGap,
       });
+      // Pass the current zoom so virtualization accounts for the CSS transform scale
+      const currentZoom = this.#layoutOptions.zoom ?? 1;
+      if (currentZoom !== 1) {
+        this.#domPainter.setZoom(currentZoom);
+      }
     }
     return this.#domPainter;
   }
@@ -4849,7 +4864,9 @@ export class PresentationEditor extends EventEmitter {
 
       this.#viewportHost.style.width = `${scaledWidth}px`;
       this.#viewportHost.style.minWidth = `${scaledWidth}px`;
-      this.#viewportHost.style.minHeight = `${scaledHeight}px`;
+      this.#viewportHost.style.minHeight = '';
+      this.#viewportHost.style.height = `${scaledHeight}px`;
+      this.#viewportHost.style.overflow = 'hidden';
       this.#viewportHost.style.transform = '';
 
       this.#painterHost.style.width = `${totalWidth}px`;
@@ -4872,13 +4889,24 @@ export class PresentationEditor extends EventEmitter {
     //
     // This ensures the scroll container sees the correct scaled content size while
     // the transform provides visual scaling.
+    //
+    // IMPORTANT: CSS transform: scale() does NOT change the element's CSS box dimensions.
+    // At zoom < 1, painterHost's CSS box stays at the full unscaled height while its
+    // visual size is smaller. Without overflow: hidden, the CSS box would push viewportHost
+    // taller than intended, creating extra scrollable space at the bottom.
+    // Using explicit height + overflow: hidden ensures the scroll container sees only
+    // the scaled visual size.
     const scaledWidth = maxWidth * zoom;
     const scaledHeight = totalHeight * zoom;
 
-    // Set viewport to scaled dimensions for scroll container
+    // Set viewport to scaled dimensions for scroll container.
+    // Use explicit height (not just minHeight) with overflow: hidden to prevent
+    // painterHost's unscaled CSS box from inflating the scroll range.
     this.#viewportHost.style.width = `${scaledWidth}px`;
     this.#viewportHost.style.minWidth = `${scaledWidth}px`;
-    this.#viewportHost.style.minHeight = `${scaledHeight}px`;
+    this.#viewportHost.style.minHeight = '';
+    this.#viewportHost.style.height = `${scaledHeight}px`;
+    this.#viewportHost.style.overflow = 'hidden';
     this.#viewportHost.style.transform = '';
 
     // Set painterHost to UNSCALED dimensions and apply transform

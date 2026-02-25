@@ -33,6 +33,15 @@ const { activeZoom } = storeToRefs(superdocStore);
 const floatingCommentsContainer = ref(null);
 const commentsRenderKey = ref(0);
 
+// Resolve activeComment (which stores commentId) to the position key used by allPositions
+// (which prefers importedId). Without this, imported Word comments where importedId !== commentId
+// would fail the template guard and could unmount when scrolled out of the observer viewport.
+const activeCommentKey = computed(() => {
+  if (!activeComment.value) return null;
+  const comment = commentsStore.getComment(activeComment.value);
+  return comment ? commentsStore.getCommentPositionKey(comment) : null;
+});
+
 // Heights: measured (actual) or estimated. Seeded from module-level cache to
 // survive remounts triggered by hasInitializedLocations toggle in SuperDoc.vue.
 const measuredHeights = ref({ ..._heightsCache });
@@ -250,7 +259,7 @@ onBeforeUnmount(() => {
       >
         <!-- Only mount the heavy CommentDialog when near the viewport -->
         <CommentDialog
-          v-if="visibleIds.has(pos.id) || pos.id === activeComment"
+          v-if="visibleIds.has(pos.id) || pos.id === activeCommentKey"
           :key="pos.id + commentsRenderKey"
           @ready="handleDialog"
           class="floating-comment"

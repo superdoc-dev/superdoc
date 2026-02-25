@@ -989,6 +989,22 @@ importers:
       typescript:
         specifier: 'catalog:'
         version: 5.9.3
+    optionalDependencies:
+      '@superdoc-dev/sdk-darwin-arm64':
+        specifier: 1.0.0-alpha.6
+        version: link:platforms/sdk-darwin-arm64
+      '@superdoc-dev/sdk-darwin-x64':
+        specifier: 1.0.0-alpha.6
+        version: link:platforms/sdk-darwin-x64
+      '@superdoc-dev/sdk-linux-arm64':
+        specifier: 1.0.0-alpha.6
+        version: link:platforms/sdk-linux-arm64
+      '@superdoc-dev/sdk-linux-x64':
+        specifier: 1.0.0-alpha.6
+        version: link:platforms/sdk-linux-x64
+      '@superdoc-dev/sdk-windows-x64':
+        specifier: 1.0.0-alpha.6
+        version: link:platforms/sdk-windows-x64
 
   packages/sdk/langs/node/platforms/sdk-darwin-arm64: {}
 

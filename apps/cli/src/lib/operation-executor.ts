@@ -9,13 +9,7 @@ import { getLegacyRunner } from './legacy-operation-dispatch';
 import { MANUAL_OPERATION_ALLOWLIST } from './manual-command-allowlist';
 import { validateOperationInputData } from './operation-args';
 import { getOperationRuntimeMetadata } from './operation-runtime-metadata';
-import {
-  CLI_OPERATION_METADATA,
-  isDocBackedOperation,
-  toDocApiId,
-  type CliOperationId,
-  type CliOperationParamSpec,
-} from '../cli';
+import { CLI_OPERATION_METADATA, toDocApiId, type CliOperationId, type CliOperationParamSpec } from '../cli';
 import type { CliExposedOperationId } from '../cli/operation-set.js';
 import type { CommandContext, CommandExecution } from './types';
 
@@ -25,6 +19,12 @@ type ExecuteOperationWrapperRequest = {
   commandName: string;
   tokens: string[];
   context: CommandContext;
+  /** Pre-filled input from helper commands, merged before dispatch. */
+  defaultInput?: Record<string, unknown>;
+  /** Extra CLI option specs for flags not in the canonical operation (used by helper commands). */
+  extraOptionSpecs?: readonly { name: string; type: 'string' | 'boolean' | 'number' }[];
+  /** Post-parse transform mapping helper-specific flags into canonical input shape. */
+  inputTransform?: (input: Record<string, unknown>) => Record<string, unknown>;
 };
 
 type ExecuteOperationCallRequest = {
@@ -185,9 +185,22 @@ export async function executeOperation(request: ExecuteOperationRequest): Promis
 
   if (request.mode === 'wrapper') {
     commandName = request.commandName;
+    const hasDefaults = request.defaultInput != null && Object.keys(request.defaultInput).length > 0;
     input = (pruneUndefinedDeep(
-      await parseWrapperOperationInput(request.operationId, request.tokens, request.commandName),
+      await parseWrapperOperationInput(request.operationId, request.tokens, request.commandName, {
+        skipConstraints: hasDefaults,
+        extraOptionSpecs: request.extraOptionSpecs,
+      }),
     ) ?? {}) as Record<string, unknown>;
+    // Merge helper command defaults (e.g., marks: { bold: true } for `format bold`).
+    // User-provided values take precedence over defaults.
+    if (request.defaultInput) {
+      input = { ...request.defaultInput, ...input };
+    }
+    // Apply helper-specific input transforms (e.g., --id → target: { id })
+    if (request.inputTransform) {
+      input = request.inputTransform(input);
+    }
   } else {
     commandName = 'call';
     if (!isRecord(request.input)) {

@@ -132,10 +132,7 @@ The SDKs expose all operations from the [Document API](/document-api/overview) p
 
 | Operation | CLI command | Description |
 | --- | --- | --- |
-| `doc.format.bold` | `format bold` | Toggle bold formatting on the target range. |
-| `doc.format.italic` | `format italic` | Toggle italic formatting on the target range. |
-| `doc.format.underline` | `format underline` | Toggle underline formatting on the target range. |
-| `doc.format.strikethrough` | `format strikethrough` | Toggle strikethrough formatting on the target range. |
+| `doc.format.apply` | `format apply` | Apply explicit mark changes (bold, italic, underline, strike) to the target range using boolean patch semantics. |
 
 #### Create
 
@@ -161,15 +158,9 @@ The SDKs expose all operations from the [Document API](/document-api/overview) p
 
 | Operation | CLI command | Description |
 | --- | --- | --- |
-| `doc.comments.add` | `comments add` | Add a new comment thread anchored to a target range. |
-| `doc.comments.edit` | `comments edit` | Edit the content of an existing comment. |
-| `doc.comments.reply` | `comments reply` | Add a reply to an existing comment thread. |
-| `doc.comments.move` | `comments move` | Move a comment thread to a new anchor range. |
-| `doc.comments.resolve` | `comments resolve` | Resolve or unresolve a comment thread. |
-| `doc.comments.remove` | `comments remove` | Remove a comment or reply by ID. |
-| `doc.comments.setInternal` | `comments set-internal` | Toggle the internal (private) flag on a comment thread. |
-| `doc.comments.setActive` | `comments set-active` | Set the active (focused) comment thread for UI highlighting. |
-| `doc.comments.goTo` | `comments go-to` | Scroll the viewport to a comment thread by ID. |
+| `doc.comments.create` | `comments create` | Create a new comment thread (or reply when parentCommentId is given). |
+| `doc.comments.patch` | `comments patch` | Patch fields on an existing comment (text, target, status, or isInternal). |
+| `doc.comments.delete` | `comments delete` | Remove a comment or reply by ID. |
 | `doc.comments.get` | `comments get` | Retrieve a single comment thread by ID. |
 | `doc.comments.list` | `comments list` | List all comment threads in the document. |
 
@@ -179,10 +170,7 @@ The SDKs expose all operations from the [Document API](/document-api/overview) p
 | --- | --- | --- |
 | `doc.trackChanges.list` | `track-changes list` | List all tracked changes in the document. |
 | `doc.trackChanges.get` | `track-changes get` | Retrieve a single tracked change by ID. |
-| `doc.trackChanges.accept` | `track-changes accept` | Accept a tracked change, applying it permanently. |
-| `doc.trackChanges.reject` | `track-changes reject` | Reject a tracked change, reverting it. |
-| `doc.trackChanges.acceptAll` | `track-changes accept-all` | Accept all tracked changes in the document. |
-| `doc.trackChanges.rejectAll` | `track-changes reject-all` | Reject all tracked changes in the document. |
+| `doc.review.decide` | `review decide` | Accept or reject a tracked change (by ID or scope: all). |
 
 #### Session
 

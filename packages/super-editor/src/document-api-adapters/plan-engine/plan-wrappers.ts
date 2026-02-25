@@ -14,16 +14,13 @@ import type {
   TextMutationReceipt,
   TextMutationResolution,
   WriteRequest,
-  FormatBoldInput,
-  FormatItalicInput,
-  FormatUnderlineInput,
-  FormatStrikethroughInput,
+  StyleApplyInput,
   SetMarks,
   PlanReceipt,
   ReceiptFailure,
 } from '@superdoc/document-api';
 import type { Editor } from '../../core/Editor.js';
-import type { CompiledPlan, CompiledStep } from './compiler.js';
+import type { CompiledPlan } from './compiler.js';
 import type { CompiledTarget } from './executor-registry.types.js';
 import { executeCompiledPlan } from './executor.js';
 import { DocumentApiAdapterError } from '../errors.js';
@@ -211,11 +208,14 @@ export const STUB_WHERE = {
 
 function toCompiledTarget(stepId: string, op: string, resolved: ResolvedWrite): CompiledTarget {
   return {
+    kind: 'range',
     stepId,
     op,
     blockId: resolved.effectiveTarget.blockId,
     from: resolved.effectiveTarget.range.start,
     to: resolved.effectiveTarget.range.end,
+    absFrom: resolved.range.from,
+    absTo: resolved.range.to,
     text: resolved.resolution.text,
     marks: [],
   };
@@ -253,13 +253,6 @@ export function executeDomainCommand(
 // ---------------------------------------------------------------------------
 // Write wrappers (insert / replace / delete)
 // ---------------------------------------------------------------------------
-
-const FORMAT_OPERATION_LABEL = {
-  'format.bold': 'Bold',
-  'format.italic': 'Italic',
-  'format.underline': 'Underline',
-  'format.strikethrough': 'Strikethrough',
-} as const;
 
 function validateWriteRequest(request: WriteRequest, resolved: ResolvedWrite): ReceiptFailure | null {
   if (request.kind === 'insert') {
@@ -356,23 +349,26 @@ export function writeWrapper(editor: Editor, request: WriteRequest, options?: Mu
 }
 
 // ---------------------------------------------------------------------------
-// Format wrappers (bold / italic / underline / strikethrough)
+// Canonical format.apply wrapper (multi-mark, boolean patch semantics)
 // ---------------------------------------------------------------------------
 
-type FormatMarkName = 'bold' | 'italic' | 'underline' | 'strike';
-type FormatOperationId = keyof typeof FORMAT_OPERATION_LABEL;
+/** Map from mark key to editor schema mark name. */
+const MARK_KEY_TO_SCHEMA_NAME: Record<string, string> = {
+  bold: 'bold',
+  italic: 'italic',
+  underline: 'underline',
+  strike: 'strike',
+};
 
-function formatMarkWrapper(
+export function styleApplyWrapper(
   editor: Editor,
-  markName: FormatMarkName,
-  operationId: FormatOperationId,
-  input: FormatOperationInput,
+  input: StyleApplyInput,
   options?: MutationOptions,
 ): TextMutationReceipt {
   const normalizedInput = normalizeFormatLocator(input);
   const range = resolveTextTarget(editor, normalizedInput.target!);
   if (!range) {
-    throw new DocumentApiAdapterError('TARGET_NOT_FOUND', 'Format target could not be resolved.', {
+    throw new DocumentApiAdapterError('TARGET_NOT_FOUND', 'format.apply target could not be resolved.', {
       target: normalizedInput.target,
     });
   }
@@ -385,46 +381,49 @@ function formatMarkWrapper(
   });
 
   if (range.from === range.to) {
-    const label = FORMAT_OPERATION_LABEL[operationId];
     return {
       success: false,
       resolution,
-      failure: { code: 'INVALID_TARGET', message: `${label} formatting requires a non-collapsed target range.` },
+      failure: { code: 'INVALID_TARGET', message: 'format.apply requires a non-collapsed target range.' },
     };
   }
 
-  requireSchemaMark(editor, markName, operationId);
+  // Validate that at least one requested mark exists in the schema
+  const markKeys = Object.keys(input.marks).filter((k) => input.marks[k as keyof SetMarks] !== undefined);
+  for (const key of markKeys) {
+    const schemaName = MARK_KEY_TO_SCHEMA_NAME[key];
+    if (schemaName) {
+      requireSchemaMark(editor, schemaName, 'format.apply');
+    }
+  }
 
   const mode = options?.changeMode ?? 'direct';
   if (mode === 'tracked') {
-    ensureTrackedCapability(editor, { operation: operationId, requireMarks: [TrackFormatMarkName] });
+    ensureTrackedCapability(editor, { operation: 'format.apply', requireMarks: [TrackFormatMarkName] });
   }
 
   if (options?.dryRun) {
     return { success: true, resolution };
   }
 
-  // Build single-step compiled plan for style.apply
+  // Build single-step compiled plan using the full marks payload
   const stepId = uuidv4();
-  const marks: SetMarks = {};
-  if (markName === 'bold') marks.bold = true;
-  else if (markName === 'italic') marks.italic = true;
-  else if (markName === 'underline') marks.underline = true;
-  else if (markName === 'strike') marks.strike = true;
-
   const step = {
     id: stepId,
-    op: 'style.apply',
+    op: 'format.apply',
     where: STUB_WHERE,
-    args: { marks },
+    args: { marks: input.marks },
   } as unknown as MutationStep;
 
   const target: CompiledTarget = {
+    kind: 'range',
     stepId,
-    op: 'style.apply',
+    op: 'format.apply',
     blockId: normalizedInput.target!.blockId,
     from: normalizedInput.target!.range.start,
     to: normalizedInput.target!.range.end,
+    absFrom: range.from,
+    absTo: range.to,
     text: resolution.text,
     marks: [],
   };
@@ -440,36 +439,4 @@ function formatMarkWrapper(
   });
 
   return mapPlanReceiptToTextReceipt(receipt, resolution);
-}
-
-export function formatBoldWrapper(
-  editor: Editor,
-  input: FormatBoldInput,
-  options?: MutationOptions,
-): TextMutationReceipt {
-  return formatMarkWrapper(editor, 'bold', 'format.bold', input, options);
-}
-
-export function formatItalicWrapper(
-  editor: Editor,
-  input: FormatItalicInput,
-  options?: MutationOptions,
-): TextMutationReceipt {
-  return formatMarkWrapper(editor, 'italic', 'format.italic', input, options);
-}
-
-export function formatUnderlineWrapper(
-  editor: Editor,
-  input: FormatUnderlineInput,
-  options?: MutationOptions,
-): TextMutationReceipt {
-  return formatMarkWrapper(editor, 'underline', 'format.underline', input, options);
-}
-
-export function formatStrikethroughWrapper(
-  editor: Editor,
-  input: FormatStrikethroughInput,
-  options?: MutationOptions,
-): TextMutationReceipt {
-  return formatMarkWrapper(editor, 'strike', 'format.strikethrough', input, options);
 }

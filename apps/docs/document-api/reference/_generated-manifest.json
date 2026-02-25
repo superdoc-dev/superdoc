@@ -3,29 +3,20 @@
   "files": [
     "apps/docs/document-api/reference/capabilities/get.mdx",
     "apps/docs/document-api/reference/capabilities/index.mdx",
-    "apps/docs/document-api/reference/comments/add.mdx",
-    "apps/docs/document-api/reference/comments/edit.mdx",
+    "apps/docs/document-api/reference/comments/create.mdx",
+    "apps/docs/document-api/reference/comments/delete.mdx",
     "apps/docs/document-api/reference/comments/get.mdx",
-    "apps/docs/document-api/reference/comments/go-to.mdx",
     "apps/docs/document-api/reference/comments/index.mdx",
     "apps/docs/document-api/reference/comments/list.mdx",
-    "apps/docs/document-api/reference/comments/move.mdx",
-    "apps/docs/document-api/reference/comments/remove.mdx",
-    "apps/docs/document-api/reference/comments/reply.mdx",
-    "apps/docs/document-api/reference/comments/resolve.mdx",
-    "apps/docs/document-api/reference/comments/set-active.mdx",
-    "apps/docs/document-api/reference/comments/set-internal.mdx",
+    "apps/docs/document-api/reference/comments/patch.mdx",
     "apps/docs/document-api/reference/core/index.mdx",
     "apps/docs/document-api/reference/create/heading.mdx",
     "apps/docs/document-api/reference/create/index.mdx",
     "apps/docs/document-api/reference/create/paragraph.mdx",
     "apps/docs/document-api/reference/delete.mdx",
     "apps/docs/document-api/reference/find.mdx",
-    "apps/docs/document-api/reference/format/bold.mdx",
+    "apps/docs/document-api/reference/format/apply.mdx",
     "apps/docs/document-api/reference/format/index.mdx",
-    "apps/docs/document-api/reference/format/italic.mdx",
-    "apps/docs/document-api/reference/format/strikethrough.mdx",
-    "apps/docs/document-api/reference/format/underline.mdx",
     "apps/docs/document-api/reference/get-node-by-id.mdx",
     "apps/docs/document-api/reference/get-node.mdx",
     "apps/docs/document-api/reference/get-text.mdx",
@@ -47,13 +38,11 @@
     "apps/docs/document-api/reference/query/index.mdx",
     "apps/docs/document-api/reference/query/match.mdx",
     "apps/docs/document-api/reference/replace.mdx",
-    "apps/docs/document-api/reference/track-changes/accept-all.mdx",
-    "apps/docs/document-api/reference/track-changes/accept.mdx",
+    "apps/docs/document-api/reference/review/decide.mdx",
+    "apps/docs/document-api/reference/review/index.mdx",
     "apps/docs/document-api/reference/track-changes/get.mdx",
     "apps/docs/document-api/reference/track-changes/index.mdx",
-    "apps/docs/document-api/reference/track-changes/list.mdx",
-    "apps/docs/document-api/reference/track-changes/reject-all.mdx",
-    "apps/docs/document-api/reference/track-changes/reject.mdx"
+    "apps/docs/document-api/reference/track-changes/list.mdx"
   ],
   "generatedBy": "packages/document-api/scripts/generate-reference-docs.ts",
   "groups": [
@@ -77,7 +66,7 @@
     },
     {
       "key": "format",
-      "operationIds": ["format.bold", "format.italic", "format.underline", "format.strikethrough"],
+      "operationIds": ["format.apply"],
       "pagePath": "apps/docs/document-api/reference/format/index.mdx",
       "title": "Format"
     },
@@ -98,34 +87,21 @@
     },
     {
       "key": "comments",
-      "operationIds": [
-        "comments.add",
-        "comments.edit",
-        "comments.reply",
-        "comments.move",
-        "comments.resolve",
-        "comments.remove",
-        "comments.setInternal",
-        "comments.setActive",
-        "comments.goTo",
-        "comments.get",
-        "comments.list"
-      ],
+      "operationIds": ["comments.create", "comments.patch", "comments.delete", "comments.get", "comments.list"],
       "pagePath": "apps/docs/document-api/reference/comments/index.mdx",
       "title": "Comments"
     },
     {
       "key": "trackChanges",
-      "operationIds": [
-        "trackChanges.list",
-        "trackChanges.get",
-        "trackChanges.accept",
-        "trackChanges.reject",
-        "trackChanges.acceptAll",
-        "trackChanges.rejectAll"
-      ],
+      "operationIds": ["trackChanges.list", "trackChanges.get"],
       "pagePath": "apps/docs/document-api/reference/track-changes/index.mdx",
       "title": "Track Changes"
+    },
+    {
+      "key": "review",
+      "operationIds": ["review.decide"],
+      "pagePath": "apps/docs/document-api/reference/review/index.mdx",
+      "title": "Review"
     },
     {
       "key": "query",
@@ -141,5 +117,5 @@
     }
   ],
   "marker": "{/* GENERATED FILE: DO NOT EDIT. Regenerate via `pnpm run docapi:sync`. */}",
-  "sourceHash": "79c55014e0db6c85c573b0fc674ff61adfc6d6ff9682148b3f83794cb188f2d7"
+  "sourceHash": "ecfd8bad8d01a8ebd92fb3f3148373fd01f3ffa9ed9ec91a2b8d6e4a992de695"
 }

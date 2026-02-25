@@ -18,6 +18,59 @@ description: Generated reference for mutations.apply
 - Supports dry run: `no`
 - Deterministic target resolution: `yes`
 
+## Input fields
+
+| Field | Type | Required | Description |
+| --- | --- | --- | --- |
+| `atomic` | `true` | yes | Constant: `true` |
+| `changeMode` | enum | yes | `"direct"`, `"tracked"` |
+| `expectedRevision` | string | yes |  |
+| `steps` | object[] | yes |  |
+
+### Example request
+
+```json
+{
+  "atomic": true,
+  "changeMode": "direct",
+  "expectedRevision": "rev-001",
+  "steps": [
+    {}
+  ]
+}
+```
+
+## Output fields
+
+| Field | Type | Required | Description |
+| --- | --- | --- | --- |
+| `revision` | object | yes |  |
+| `steps` | object[] | yes |  |
+| `success` | `true` | yes | Constant: `true` |
+| `timing` | object | yes |  |
+| `trackedChanges` | object[] | no |  |
+
+### Example response
+
+```json
+{
+  "revision": {
+    "after": "example",
+    "before": "example"
+  },
+  "steps": [
+    {}
+  ],
+  "success": true,
+  "timing": {
+    "totalMs": 12.5
+  },
+  "trackedChanges": [
+    {}
+  ]
+}
+```
+
 ## Pre-apply throws
 
 - `REVISION_MISMATCH`
@@ -27,6 +80,8 @@ description: Generated reference for mutations.apply
 - `PRECONDITION_FAILED`
 - `INVALID_INPUT`
 - `CROSS_BLOCK_MATCH`
+- `SPAN_FRAGMENTED`
+- `TARGET_MOVED`
 - `PLAN_CONFLICT_OVERLAP`
 - `INVALID_STEP_COMBINATION`
 - `CAPABILITY_UNAVAILABLE`
@@ -35,8 +90,9 @@ description: Generated reference for mutations.apply
 
 - None
 
-## Input schema
+## Raw schemas
 
+<Accordion title="Raw input schema">
 ```json
 {
   "additionalProperties": false,
@@ -69,9 +125,9 @@ description: Generated reference for mutations.apply
   "type": "object"
 }
 ```
+</Accordion>
 
-## Output schema
-
+<Accordion title="Raw output schema">
 ```json
 {
   "additionalProperties": false,
@@ -129,9 +185,9 @@ description: Generated reference for mutations.apply
   "type": "object"
 }
 ```
+</Accordion>
 
-## Success schema
-
+<Accordion title="Raw success schema">
 ```json
 {
   "additionalProperties": false,
@@ -183,8 +239,9 @@ description: Generated reference for mutations.apply
   "type": "object"
 }
 ```
+</Accordion>
 
-## Failure schema
+<Accordion title="Raw failure schema">
 
 ```json
 {
@@ -229,3 +286,4 @@ description: Generated reference for mutations.apply
   "type": "object"
 }
 ```
+</Accordion>

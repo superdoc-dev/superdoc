@@ -26,12 +26,14 @@ import type {
   SetCommentActiveInput,
   SetCommentInternalInput,
 } from '@superdoc/document-api';
+import { buildResolvedHandle, buildDiscoveryItem, buildDiscoveryResult } from '@superdoc/document-api';
 import { TextSelection } from 'prosemirror-state';
 import { v4 as uuidv4 } from 'uuid';
 import { DocumentApiAdapterError } from '../errors.js';
 import { requireEditorCommand } from '../helpers/mutation-helpers.js';
 import { clearIndexCache } from '../helpers/index-cache.js';
-import { resolveTextTarget } from '../helpers/adapter-utils.js';
+import { getRevision } from './revision-tracker.js';
+import { resolveTextTarget, paginate, validatePaginationInput } from '../helpers/adapter-utils.js';
 import { executeDomainCommand } from './plan-wrappers.js';
 import {
   buildCommentJsonFromText,
@@ -688,14 +690,49 @@ function getCommentHandler(editor: Editor, input: GetCommentInput): CommentInfo 
 }
 
 function listCommentsHandler(editor: Editor, query?: CommentsListQuery): CommentsListResult {
+  validatePaginationInput(query?.offset, query?.limit);
+
   const comments = buildCommentInfos(editor);
   const includeResolved = query?.includeResolved ?? true;
-  const matches = includeResolved ? comments : comments.filter((comment) => comment.status !== 'resolved');
+  const filtered = includeResolved ? comments : comments.filter((comment) => comment.status !== 'resolved');
+  const evaluatedRevision = getRevision(editor);
 
-  return {
-    matches,
-    total: matches.length,
-  };
+  const paged = paginate(filtered, query?.offset, query?.limit);
+
+  const items = paged.items.map((comment) => {
+    const handle = buildResolvedHandle(`comment:${comment.commentId}`, 'stable', 'comment');
+    const {
+      importedId,
+      parentCommentId,
+      text,
+      isInternal,
+      status,
+      target,
+      createdTime,
+      creatorName,
+      creatorEmail,
+      address,
+    } = comment;
+    return buildDiscoveryItem(comment.commentId, handle, {
+      address,
+      importedId,
+      parentCommentId,
+      text,
+      isInternal,
+      status,
+      target,
+      createdTime,
+      creatorName,
+      creatorEmail,
+    });
+  });
+
+  return buildDiscoveryResult({
+    evaluatedRevision,
+    total: paged.total,
+    items,
+    page: { limit: query?.limit ?? paged.total, offset: query?.offset ?? 0, returned: items.length },
+  });
 }
 
 // ---------------------------------------------------------------------------

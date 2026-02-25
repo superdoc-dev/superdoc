@@ -19,6 +19,16 @@ export type TrackChangesAcceptAllInput = Record<string, never>;
 
 export type TrackChangesRejectAllInput = Record<string, never>;
 
+// ---------------------------------------------------------------------------
+// review.decide — canonical consolidated review operation (Phase 4 Wave 1)
+// ---------------------------------------------------------------------------
+
+export type ReviewDecideInput =
+  | { decision: 'accept'; target: { id: string } }
+  | { decision: 'reject'; target: { id: string } }
+  | { decision: 'accept'; target: { scope: 'all' } }
+  | { decision: 'reject'; target: { scope: 'all' } };
+
 export interface TrackChangesAdapter {
   /** List tracked changes matching the given query. */
   list(input?: TrackChangesListInput): TrackChangesListResult;
@@ -34,7 +44,11 @@ export interface TrackChangesAdapter {
   rejectAll(input: TrackChangesRejectAllInput, options?: RevisionGuardOptions): Receipt;
 }
 
-export type TrackChangesApi = TrackChangesAdapter;
+/** Public read-only surface for trackChanges on DocumentApi. Mutations go through review.decide. */
+export interface TrackChangesApi {
+  list(input?: TrackChangesListInput): TrackChangesListResult;
+  get(input: TrackChangesGetInput): TrackChangeInfo;
+}
 
 /**
  * Execute wrappers below are the canonical interception point for input
@@ -83,4 +97,24 @@ export function executeTrackChangesRejectAll(
   options?: RevisionGuardOptions,
 ): Receipt {
   return adapter.rejectAll(input, options);
+}
+
+/**
+ * Executes the consolidated `review.decide` operation by routing to the
+ * appropriate adapter method based on the discriminated input.
+ */
+export function executeReviewDecide(
+  adapter: TrackChangesAdapter,
+  input: ReviewDecideInput,
+  options?: RevisionGuardOptions,
+): Receipt {
+  const isAll = 'scope' in input.target && input.target.scope === 'all';
+
+  if (input.decision === 'accept') {
+    if (isAll) return adapter.acceptAll({} as TrackChangesAcceptAllInput, options);
+    return adapter.accept({ id: (input.target as { id: string }).id }, options);
+  }
+
+  if (isAll) return adapter.rejectAll({} as TrackChangesRejectAllInput, options);
+  return adapter.reject({ id: (input.target as { id: string }).id }, options);
 }

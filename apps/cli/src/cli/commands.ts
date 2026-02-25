@@ -15,9 +15,9 @@ import {
   cliCommandTokens,
   cliDescription,
   cliRequiresDocumentContext,
-  toDocApiId,
   type CliOperationId,
 } from './operation-set';
+import { buildHelperSpecs } from './helper-commands.js';
 
 // ---------------------------------------------------------------------------
 // Build command specs for doc-backed operations
@@ -129,6 +129,7 @@ function buildAllSpecs(): CliCommandSpec[] {
   }
 
   specs.push(...ALIAS_SPECS);
+  specs.push(...buildHelperSpecs());
 
   return specs;
 }
@@ -190,9 +191,11 @@ export const CLI_HELP: string = buildHelpText();
 // Lookup maps
 // ---------------------------------------------------------------------------
 
-/** Maps CliOperationId → CLI command key. */
+/** Maps CliOperationId → CLI command key. Excludes aliases and helper commands. */
 const CANONICAL_SPEC_BY_OPERATION = new Map<CliOperationId, CliCommandSpec>(
-  CLI_COMMAND_SPECS.filter((spec) => !spec.alias).map((spec) => [spec.operationId as CliOperationId, spec] as const),
+  CLI_COMMAND_SPECS.filter((spec) => !spec.alias && !spec.defaultInput).map(
+    (spec) => [spec.operationId as CliOperationId, spec] as const,
+  ),
 );
 
 export const CLI_OPERATION_COMMAND_KEYS: Record<CliOperationId, string> = Object.fromEntries(

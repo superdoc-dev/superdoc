@@ -3,6 +3,12 @@ import type { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
 import type { SessionManager } from '../session-manager.js';
 
 const STYLES = ['bold', 'italic', 'underline', 'strikethrough'] as const;
+const MARKS_BY_STYLE = {
+  bold: { bold: true },
+  italic: { italic: true },
+  underline: { underline: true },
+  strikethrough: { strike: true },
+} as const;
 
 export function registerFormatTools(server: McpServer, sessions: SessionManager): void {
   server.registerTool(
@@ -10,10 +16,10 @@ export function registerFormatTools(server: McpServer, sessions: SessionManager)
     {
       title: 'Format Text',
       description:
-        "Toggle a formatting style on a text range. Use superdoc_find with a text pattern first, then pass a TextAddress from the result's context[].textRanges as the target. Set suggest=true to format as a tracked change (suggestion).",
+        "Apply formatting on a text range. Use superdoc_find with a text pattern first, then pass a TextAddress from the result's context[].textRanges as the target. Set suggest=true to format as a tracked change (suggestion).",
       inputSchema: {
         session_id: z.string().describe('Session ID from superdoc_open.'),
-        style: z.enum(STYLES).describe('The formatting style to toggle.'),
+        style: z.enum(STYLES).describe('The formatting style to apply.'),
         target: z
           .string()
           .describe(
@@ -33,8 +39,8 @@ export function registerFormatTools(server: McpServer, sessions: SessionManager)
         const { api } = sessions.get(session_id);
         const parsed = JSON.parse(target);
         const result = api.invoke({
-          operationId: `format.${style}`,
-          input: { target: parsed },
+          operationId: 'format.apply',
+          input: { target: parsed, marks: MARKS_BY_STYLE[style] },
           options: suggest ? { changeMode: 'tracked' as const } : undefined,
         });
         return {

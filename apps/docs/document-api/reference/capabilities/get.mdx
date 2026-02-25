@@ -18,6 +18,312 @@ description: Generated reference for capabilities.get
 - Supports dry run: `no`
 - Deterministic target resolution: `yes`
 
+## Input fields
+
+_No fields._
+
+### Example request
+
+```json
+{}
+```
+
+## Output fields
+
+| Field | Type | Required | Description |
+| --- | --- | --- | --- |
+| `format` | object | yes |  |
+| `global` | object | yes |  |
+| `operations` | object | yes |  |
+
+### Example response
+
+```json
+{
+  "format": {
+    "supportedMarks": [
+      "bold"
+    ]
+  },
+  "global": {
+    "comments": {
+      "enabled": true,
+      "reasons": [
+        "COMMAND_UNAVAILABLE"
+      ]
+    },
+    "dryRun": {
+      "enabled": true,
+      "reasons": [
+        "COMMAND_UNAVAILABLE"
+      ]
+    },
+    "lists": {
+      "enabled": true,
+      "reasons": [
+        "COMMAND_UNAVAILABLE"
+      ]
+    },
+    "trackChanges": {
+      "enabled": true,
+      "reasons": [
+        "COMMAND_UNAVAILABLE"
+      ]
+    }
+  },
+  "operations": {
+    "capabilities.get": {
+      "available": true,
+      "dryRun": true,
+      "reasons": [
+        "COMMAND_UNAVAILABLE"
+      ],
+      "tracked": true
+    },
+    "comments.create": {
+      "available": true,
+      "dryRun": true,
+      "reasons": [
+        "COMMAND_UNAVAILABLE"
+      ],
+      "tracked": true
+    },
+    "comments.delete": {
+      "available": true,
+      "dryRun": true,
+      "reasons": [
+        "COMMAND_UNAVAILABLE"
+      ],
+      "tracked": true
+    },
+    "comments.get": {
+      "available": true,
+      "dryRun": true,
+      "reasons": [
+        "COMMAND_UNAVAILABLE"
+      ],
+      "tracked": true
+    },
+    "comments.list": {
+      "available": true,
+      "dryRun": true,
+      "reasons": [
+        "COMMAND_UNAVAILABLE"
+      ],
+      "tracked": true
+    },
+    "comments.patch": {
+      "available": true,
+      "dryRun": true,
+      "reasons": [
+        "COMMAND_UNAVAILABLE"
+      ],
+      "tracked": true
+    },
+    "create.heading": {
+      "available": true,
+      "dryRun": true,
+      "reasons": [
+        "COMMAND_UNAVAILABLE"
+      ],
+      "tracked": true
+    },
+    "create.paragraph": {
+      "available": true,
+      "dryRun": true,
+      "reasons": [
+        "COMMAND_UNAVAILABLE"
+      ],
+      "tracked": true
+    },
+    "delete": {
+      "available": true,
+      "dryRun": true,
+      "reasons": [
+        "COMMAND_UNAVAILABLE"
+      ],
+      "tracked": true
+    },
+    "find": {
+      "available": true,
+      "dryRun": true,
+      "reasons": [
+        "COMMAND_UNAVAILABLE"
+      ],
+      "tracked": true
+    },
+    "format.apply": {
+      "available": true,
+      "dryRun": true,
+      "reasons": [
+        "COMMAND_UNAVAILABLE"
+      ],
+      "tracked": true
+    },
+    "getNode": {
+      "available": true,
+      "dryRun": true,
+      "reasons": [
+        "COMMAND_UNAVAILABLE"
+      ],
+      "tracked": true
+    },
+    "getNodeById": {
+      "available": true,
+      "dryRun": true,
+      "reasons": [
+        "COMMAND_UNAVAILABLE"
+      ],
+      "tracked": true
+    },
+    "getText": {
+      "available": true,
+      "dryRun": true,
+      "reasons": [
+        "COMMAND_UNAVAILABLE"
+      ],
+      "tracked": true
+    },
+    "info": {
+      "available": true,
+      "dryRun": true,
+      "reasons": [
+        "COMMAND_UNAVAILABLE"
+      ],
+      "tracked": true
+    },
+    "insert": {
+      "available": true,
+      "dryRun": true,
+      "reasons": [
+        "COMMAND_UNAVAILABLE"
+      ],
+      "tracked": true
+    },
+    "lists.exit": {
+      "available": true,
+      "dryRun": true,
+      "reasons": [
+        "COMMAND_UNAVAILABLE"
+      ],
+      "tracked": true
+    },
+    "lists.get": {
+      "available": true,
+      "dryRun": true,
+      "reasons": [
+        "COMMAND_UNAVAILABLE"
+      ],
+      "tracked": true
+    },
+    "lists.indent": {
+      "available": true,
+      "dryRun": true,
+      "reasons": [
+        "COMMAND_UNAVAILABLE"
+      ],
+      "tracked": true
+    },
+    "lists.insert": {
+      "available": true,
+      "dryRun": true,
+      "reasons": [
+        "COMMAND_UNAVAILABLE"
+      ],
+      "tracked": true
+    },
+    "lists.list": {
+      "available": true,
+      "dryRun": true,
+      "reasons": [
+        "COMMAND_UNAVAILABLE"
+      ],
+      "tracked": true
+    },
+    "lists.outdent": {
+      "available": true,
+      "dryRun": true,
+      "reasons": [
+        "COMMAND_UNAVAILABLE"
+      ],
+      "tracked": true
+    },
+    "lists.restart": {
+      "available": true,
+      "dryRun": true,
+      "reasons": [
+        "COMMAND_UNAVAILABLE"
+      ],
+      "tracked": true
+    },
+    "lists.setType": {
+      "available": true,
+      "dryRun": true,
+      "reasons": [
+        "COMMAND_UNAVAILABLE"
+      ],
+      "tracked": true
+    },
+    "mutations.apply": {
+      "available": true,
+      "dryRun": true,
+      "reasons": [
+        "COMMAND_UNAVAILABLE"
+      ],
+      "tracked": true
+    },
+    "mutations.preview": {
+      "available": true,
+      "dryRun": true,
+      "reasons": [
+        "COMMAND_UNAVAILABLE"
+      ],
+      "tracked": true
+    },
+    "query.match": {
+      "available": true,
+      "dryRun": true,
+      "reasons": [
+        "COMMAND_UNAVAILABLE"
+      ],
+      "tracked": true
+    },
+    "replace": {
+      "available": true,
+      "dryRun": true,
+      "reasons": [
+        "COMMAND_UNAVAILABLE"
+      ],
+      "tracked": true
+    },
+    "review.decide": {
+      "available": true,
+      "dryRun": true,
+      "reasons": [
+        "COMMAND_UNAVAILABLE"
+      ],
+      "tracked": true
+    },
+    "trackChanges.get": {
+      "available": true,
+      "dryRun": true,
+      "reasons": [
+        "COMMAND_UNAVAILABLE"
+      ],
+      "tracked": true
+    },
+    "trackChanges.list": {
+      "available": true,
+      "dryRun": true,
+      "reasons": [
+        "COMMAND_UNAVAILABLE"
+      ],
+      "tracked": true
+    }
+  }
+}
+```
+
 ## Pre-apply throws
 
 - None
@@ -26,8 +332,9 @@ description: Generated reference for capabilities.get
 
 - None
 
-## Input schema
+## Raw schemas
 
+<Accordion title="Raw input schema">
 ```json
 {
   "additionalProperties": false,
@@ -35,13 +342,34 @@ description: Generated reference for capabilities.get
   "type": "object"
 }
 ```
+</Accordion>
 
-## Output schema
-
+<Accordion title="Raw output schema">
 ```json
 {
   "additionalProperties": false,
   "properties": {
+    "format": {
+      "additionalProperties": false,
+      "properties": {
+        "supportedMarks": {
+          "items": {
+            "enum": [
+              "bold",
+              "italic",
+              "underline",
+              "strike"
+            ],
+            "type": "string"
+          },
+          "type": "array"
+        }
+      },
+      "required": [
+        "supportedMarks"
+      ],
+      "type": "object"
+    },
     "global": {
       "additionalProperties": false,
       "properties": {
@@ -185,7 +513,7 @@ description: Generated reference for capabilities.get
           ],
           "type": "object"
         },
-        "comments.add": {
+        "comments.create": {
           "additionalProperties": false,
           "properties": {
             "available": {
@@ -217,7 +545,7 @@ description: Generated reference for capabilities.get
           ],
           "type": "object"
         },
-        "comments.edit": {
+        "comments.delete": {
           "additionalProperties": false,
           "properties": {
             "available": {
@@ -281,38 +609,6 @@ description: Generated reference for capabilities.get
           ],
           "type": "object"
         },
-        "comments.goTo": {
-          "additionalProperties": false,
-          "properties": {
-            "available": {
-              "type": "boolean"
-            },
-            "dryRun": {
-              "type": "boolean"
-            },
-            "reasons": {
-              "items": {
-                "enum": [
-                  "COMMAND_UNAVAILABLE",
-                  "OPERATION_UNAVAILABLE",
-                  "TRACKED_MODE_UNAVAILABLE",
-                  "DRY_RUN_UNAVAILABLE",
-                  "NAMESPACE_UNAVAILABLE"
-                ]
-              },
-              "type": "array"
-            },
-            "tracked": {
-              "type": "boolean"
-            }
-          },
-          "required": [
-            "available",
-            "tracked",
-            "dryRun"
-          ],
-          "type": "object"
-        },
         "comments.list": {
           "additionalProperties": false,
           "properties": {
@@ -345,167 +641,7 @@ description: Generated reference for capabilities.get
           ],
           "type": "object"
         },
-        "comments.move": {
-          "additionalProperties": false,
-          "properties": {
-            "available": {
-              "type": "boolean"
-            },
-            "dryRun": {
-              "type": "boolean"
-            },
-            "reasons": {
-              "items": {
-                "enum": [
-                  "COMMAND_UNAVAILABLE",
-                  "OPERATION_UNAVAILABLE",
-                  "TRACKED_MODE_UNAVAILABLE",
-                  "DRY_RUN_UNAVAILABLE",
-                  "NAMESPACE_UNAVAILABLE"
-                ]
-              },
-              "type": "array"
-            },
-            "tracked": {
-              "type": "boolean"
-            }
-          },
-          "required": [
-            "available",
-            "tracked",
-            "dryRun"
-          ],
-          "type": "object"
-        },
-        "comments.remove": {
-          "additionalProperties": false,
-          "properties": {
-            "available": {
-              "type": "boolean"
-            },
-            "dryRun": {
-              "type": "boolean"
-            },
-            "reasons": {
-              "items": {
-                "enum": [
-                  "COMMAND_UNAVAILABLE",
-                  "OPERATION_UNAVAILABLE",
-                  "TRACKED_MODE_UNAVAILABLE",
-                  "DRY_RUN_UNAVAILABLE",
-                  "NAMESPACE_UNAVAILABLE"
-                ]
-              },
-              "type": "array"
-            },
-            "tracked": {
-              "type": "boolean"
-            }
-          },
-          "required": [
-            "available",
-            "tracked",
-            "dryRun"
-          ],
-          "type": "object"
-        },
-        "comments.reply": {
-          "additionalProperties": false,
-          "properties": {
-            "available": {
-              "type": "boolean"
-            },
-            "dryRun": {
-              "type": "boolean"
-            },
-            "reasons": {
-              "items": {
-                "enum": [
-                  "COMMAND_UNAVAILABLE",
-                  "OPERATION_UNAVAILABLE",
-                  "TRACKED_MODE_UNAVAILABLE",
-                  "DRY_RUN_UNAVAILABLE",
-                  "NAMESPACE_UNAVAILABLE"
-                ]
-              },
-              "type": "array"
-            },
-            "tracked": {
-              "type": "boolean"
-            }
-          },
-          "required": [
-            "available",
-            "tracked",
-            "dryRun"
-          ],
-          "type": "object"
-        },
-        "comments.resolve": {
-          "additionalProperties": false,
-          "properties": {
-            "available": {
-              "type": "boolean"
-            },
-            "dryRun": {
-              "type": "boolean"
-            },
-            "reasons": {
-              "items": {
-                "enum": [
-                  "COMMAND_UNAVAILABLE",
-                  "OPERATION_UNAVAILABLE",
-                  "TRACKED_MODE_UNAVAILABLE",
-                  "DRY_RUN_UNAVAILABLE",
-                  "NAMESPACE_UNAVAILABLE"
-                ]
-              },
-              "type": "array"
-            },
-            "tracked": {
-              "type": "boolean"
-            }
-          },
-          "required": [
-            "available",
-            "tracked",
-            "dryRun"
-          ],
-          "type": "object"
-        },
-        "comments.setActive": {
-          "additionalProperties": false,
-          "properties": {
-            "available": {
-              "type": "boolean"
-            },
-            "dryRun": {
-              "type": "boolean"
-            },
-            "reasons": {
-              "items": {
-                "enum": [
-                  "COMMAND_UNAVAILABLE",
-                  "OPERATION_UNAVAILABLE",
-                  "TRACKED_MODE_UNAVAILABLE",
-                  "DRY_RUN_UNAVAILABLE",
-                  "NAMESPACE_UNAVAILABLE"
-                ]
-              },
-              "type": "array"
-            },
-            "tracked": {
-              "type": "boolean"
-            }
-          },
-          "required": [
-            "available",
-            "tracked",
-            "dryRun"
-          ],
-          "type": "object"
-        },
-        "comments.setInternal": {
+        "comments.patch": {
           "additionalProperties": false,
           "properties": {
             "available": {
@@ -665,103 +801,7 @@ description: Generated reference for capabilities.get
           ],
           "type": "object"
         },
-        "format.bold": {
-          "additionalProperties": false,
-          "properties": {
-            "available": {
-              "type": "boolean"
-            },
-            "dryRun": {
-              "type": "boolean"
-            },
-            "reasons": {
-              "items": {
-                "enum": [
-                  "COMMAND_UNAVAILABLE",
-                  "OPERATION_UNAVAILABLE",
-                  "TRACKED_MODE_UNAVAILABLE",
-                  "DRY_RUN_UNAVAILABLE",
-                  "NAMESPACE_UNAVAILABLE"
-                ]
-              },
-              "type": "array"
-            },
-            "tracked": {
-              "type": "boolean"
-            }
-          },
-          "required": [
-            "available",
-            "tracked",
-            "dryRun"
-          ],
-          "type": "object"
-        },
-        "format.italic": {
-          "additionalProperties": false,
-          "properties": {
-            "available": {
-              "type": "boolean"
-            },
-            "dryRun": {
-              "type": "boolean"
-            },
-            "reasons": {
-              "items": {
-                "enum": [
-                  "COMMAND_UNAVAILABLE",
-                  "OPERATION_UNAVAILABLE",
-                  "TRACKED_MODE_UNAVAILABLE",
-                  "DRY_RUN_UNAVAILABLE",
-                  "NAMESPACE_UNAVAILABLE"
-                ]
-              },
-              "type": "array"
-            },
-            "tracked": {
-              "type": "boolean"
-            }
-          },
-          "required": [
-            "available",
-            "tracked",
-            "dryRun"
-          ],
-          "type": "object"
-        },
-        "format.strikethrough": {
-          "additionalProperties": false,
-          "properties": {
-            "available": {
-              "type": "boolean"
-            },
-            "dryRun": {
-              "type": "boolean"
-            },
-            "reasons": {
-              "items": {
-                "enum": [
-                  "COMMAND_UNAVAILABLE",
-                  "OPERATION_UNAVAILABLE",
-                  "TRACKED_MODE_UNAVAILABLE",
-                  "DRY_RUN_UNAVAILABLE",
-                  "NAMESPACE_UNAVAILABLE"
-                ]
-              },
-              "type": "array"
-            },
-            "tracked": {
-              "type": "boolean"
-            }
-          },
-          "required": [
-            "available",
-            "tracked",
-            "dryRun"
-          ],
-          "type": "object"
-        },
-        "format.underline": {
+        "format.apply": {
           "additionalProperties": false,
           "properties": {
             "available": {
@@ -1337,39 +1377,7 @@ description: Generated reference for capabilities.get
           ],
           "type": "object"
         },
-        "trackChanges.accept": {
-          "additionalProperties": false,
-          "properties": {
-            "available": {
-              "type": "boolean"
-            },
-            "dryRun": {
-              "type": "boolean"
-            },
-            "reasons": {
-              "items": {
-                "enum": [
-                  "COMMAND_UNAVAILABLE",
-                  "OPERATION_UNAVAILABLE",
-                  "TRACKED_MODE_UNAVAILABLE",
-                  "DRY_RUN_UNAVAILABLE",
-                  "NAMESPACE_UNAVAILABLE"
-                ]
-              },
-              "type": "array"
-            },
-            "tracked": {
-              "type": "boolean"
-            }
-          },
-          "required": [
-            "available",
-            "tracked",
-            "dryRun"
-          ],
-          "type": "object"
-        },
-        "trackChanges.acceptAll": {
+        "review.decide": {
           "additionalProperties": false,
           "properties": {
             "available": {
@@ -1464,70 +1472,6 @@ description: Generated reference for capabilities.get
             "dryRun"
           ],
           "type": "object"
-        },
-        "trackChanges.reject": {
-          "additionalProperties": false,
-          "properties": {
-            "available": {
-              "type": "boolean"
-            },
-            "dryRun": {
-              "type": "boolean"
-            },
-            "reasons": {
-              "items": {
-                "enum": [
-                  "COMMAND_UNAVAILABLE",
-                  "OPERATION_UNAVAILABLE",
-                  "TRACKED_MODE_UNAVAILABLE",
-                  "DRY_RUN_UNAVAILABLE",
-                  "NAMESPACE_UNAVAILABLE"
-                ]
-              },
-              "type": "array"
-            },
-            "tracked": {
-              "type": "boolean"
-            }
-          },
-          "required": [
-            "available",
-            "tracked",
-            "dryRun"
-          ],
-          "type": "object"
-        },
-        "trackChanges.rejectAll": {
-          "additionalProperties": false,
-          "properties": {
-            "available": {
-              "type": "boolean"
-            },
-            "dryRun": {
-              "type": "boolean"
-            },
-            "reasons": {
-              "items": {
-                "enum": [
-                  "COMMAND_UNAVAILABLE",
-                  "OPERATION_UNAVAILABLE",
-                  "TRACKED_MODE_UNAVAILABLE",
-                  "DRY_RUN_UNAVAILABLE",
-                  "NAMESPACE_UNAVAILABLE"
-                ]
-              },
-              "type": "array"
-            },
-            "tracked": {
-              "type": "boolean"
-            }
-          },
-          "required": [
-            "available",
-            "tracked",
-            "dryRun"
-          ],
-          "type": "object"
         }
       },
       "required": [
@@ -1539,10 +1483,7 @@ description: Generated reference for capabilities.get
         "insert",
         "replace",
         "delete",
-        "format.bold",
-        "format.italic",
-        "format.underline",
-        "format.strikethrough",
+        "format.apply",
         "create.paragraph",
         "create.heading",
         "lists.list",
@@ -1553,23 +1494,14 @@ description: Generated reference for capabilities.get
         "lists.outdent",
         "lists.restart",
         "lists.exit",
-        "comments.add",
-        "comments.edit",
-        "comments.reply",
-        "comments.move",
-        "comments.resolve",
-        "comments.remove",
-        "comments.setInternal",
-        "comments.setActive",
-        "comments.goTo",
+        "comments.create",
+        "comments.patch",
+        "comments.delete",
         "comments.get",
         "comments.list",
         "trackChanges.list",
         "trackChanges.get",
-        "trackChanges.accept",
-        "trackChanges.reject",
-        "trackChanges.acceptAll",
-        "trackChanges.rejectAll",
+        "review.decide",
         "query.match",
         "mutations.preview",
         "mutations.apply",
@@ -1580,8 +1512,10 @@ description: Generated reference for capabilities.get
   },
   "required": [
     "global",
+    "format",
     "operations"
   ],
   "type": "object"
 }
 ```
+</Accordion>

@@ -15,8 +15,11 @@ export type ReceiptFailureCode =
   | 'PRECONDITION_FAILED'
   | 'INVALID_INPUT'
   | 'CROSS_BLOCK_MATCH'
+  | 'SPAN_FRAGMENTED'
+  | 'TARGET_MOVED'
   | 'PLAN_CONFLICT_OVERLAP'
-  | 'INVALID_STEP_COMBINATION';
+  | 'INVALID_STEP_COMBINATION'
+  | 'INTERNAL_ERROR';
 
 export type ReceiptFailure = {
   code: ReceiptFailureCode;

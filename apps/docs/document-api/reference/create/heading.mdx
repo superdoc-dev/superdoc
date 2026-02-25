@@ -18,6 +18,58 @@ description: Generated reference for create.heading
 - Supports dry run: `yes`
 - Deterministic target resolution: `yes`
 
+## Input fields
+
+| Field | Type | Required | Description |
+| --- | --- | --- | --- |
+| `at` | object(kind="documentStart") \\| object(kind="documentEnd") \\| object(kind="before") \\| object(kind="after") | no | One of: object(kind="documentStart"), object(kind="documentEnd"), object(kind="before"), object(kind="after") |
+| `level` | integer | yes |  |
+| `text` | string | no |  |
+
+### Example request
+
+```json
+{
+  "at": {
+    "kind": "documentStart"
+  },
+  "level": 1,
+  "text": "Hello, world."
+}
+```
+
+## Output fields
+
+_No fields._
+
+### Example response
+
+```json
+{
+  "heading": {
+    "kind": "block",
+    "nodeId": "node-def456",
+    "nodeType": "heading"
+  },
+  "insertionPoint": {
+    "blockId": "block-abc123",
+    "kind": "text",
+    "range": {
+      "end": 10,
+      "start": 0
+    }
+  },
+  "success": true,
+  "trackedChangeRefs": [
+    {
+      "entityId": "entity-789",
+      "entityType": "trackedChange",
+      "kind": "entity"
+    }
+  ]
+}
+```
+
 ## Pre-apply throws
 
 - `TARGET_NOT_FOUND`
@@ -31,8 +83,9 @@ description: Generated reference for create.heading
 
 - `INVALID_TARGET`
 
-## Input schema
+## Raw schemas
 
+<Accordion title="Raw input schema">
 ```json
 {
   "additionalProperties": false,
@@ -65,115 +118,33 @@ description: Generated reference for create.heading
         },
         {
           "additionalProperties": false,
-          "oneOf": [
-            {
-              "required": [
-                "target"
-              ]
-            },
-            {
-              "required": [
-                "nodeId"
-              ]
-            }
-          ],
           "properties": {
             "kind": {
               "const": "before"
             },
-            "nodeId": {
-              "description": "Node ID shorthand — adapter resolves to a full BlockNodeAddress.",
-              "type": "string"
-            },
             "target": {
-              "additionalProperties": false,
-              "properties": {
-                "kind": {
-                  "const": "block"
-                },
-                "nodeId": {
-                  "type": "string"
-                },
-                "nodeType": {
-                  "enum": [
-                    "paragraph",
-                    "heading",
-                    "listItem",
-                    "table",
-                    "tableRow",
-                    "tableCell",
-                    "image",
-                    "sdt"
-                  ]
-                }
-              },
-              "required": [
-                "kind",
-                "nodeType",
-                "nodeId"
-              ],
-              "type": "object"
+              "$ref": "#/$defs/BlockNodeAddress"
             }
           },
           "required": [
-            "kind"
+            "kind",
+            "target"
           ],
           "type": "object"
         },
         {
           "additionalProperties": false,
-          "oneOf": [
-            {
-              "required": [
-                "target"
-              ]
-            },
-            {
-              "required": [
-                "nodeId"
-              ]
-            }
-          ],
           "properties": {
             "kind": {
               "const": "after"
             },
-            "nodeId": {
-              "description": "Node ID shorthand — adapter resolves to a full BlockNodeAddress.",
-              "type": "string"
-            },
             "target": {
-              "additionalProperties": false,
-              "properties": {
-                "kind": {
-                  "const": "block"
-                },
-                "nodeId": {
-                  "type": "string"
-                },
-                "nodeType": {
-                  "enum": [
-                    "paragraph",
-                    "heading",
-                    "listItem",
-                    "table",
-                    "tableRow",
-                    "tableCell",
-                    "image",
-                    "sdt"
-                  ]
-                }
-              },
-              "required": [
-                "kind",
-                "nodeType",
-                "nodeId"
-              ],
-              "type": "object"
+              "$ref": "#/$defs/BlockNodeAddress"
             }
           },
           "required": [
-            "kind"
+            "kind",
+            "target"
           ],
           "type": "object"
         }
@@ -194,9 +165,9 @@ description: Generated reference for create.heading
   "type": "object"
 }
 ```
+</Accordion>
 
-## Output schema
-
+<Accordion title="Raw output schema">
 ```json
 {
   "oneOf": [
@@ -204,81 +175,17 @@ description: Generated reference for create.heading
       "additionalProperties": false,
       "properties": {
         "heading": {
-          "additionalProperties": false,
-          "properties": {
-            "kind": {
-              "const": "block"
-            },
-            "nodeId": {
-              "type": "string"
-            },
-            "nodeType": {
-              "const": "heading"
-            }
-          },
-          "required": [
-            "kind",
-            "nodeType",
-            "nodeId"
-          ],
-          "type": "object"
+          "$ref": "#/$defs/HeadingAddress"
         },
         "insertionPoint": {
-          "additionalProperties": false,
-          "properties": {
-            "blockId": {
-              "type": "string"
-            },
-            "kind": {
-              "const": "text"
-            },
-            "range": {
-              "additionalProperties": false,
-              "properties": {
-                "end": {
-                  "type": "integer"
-                },
-                "start": {
-                  "type": "integer"
-                }
-              },
-              "required": [
-                "start",
-                "end"
-              ],
-              "type": "object"
-            }
-          },
-          "required": [
-            "kind",
-            "blockId",
-            "range"
-          ],
-          "type": "object"
+          "$ref": "#/$defs/TextAddress"
         },
         "success": {
           "const": true
         },
         "trackedChangeRefs": {
           "items": {
-            "additionalProperties": false,
-            "properties": {
-              "entityId": {
-                "type": "string"
-              },
-              "entityType": {
-                "const": "trackedChange"
-              },
-              "kind": {
-                "const": "entity"
-              }
-            },
-            "required": [
-              "kind",
-              "entityType",
-              "entityId"
-            ],
-            "type": "object"
+            "$ref": "#/$defs/TrackedChangeAddress"
           },
           "type": "array"
         }
@@ -325,89 +232,25 @@ description: Generated reference for create.heading
   ]
 }
 ```
+</Accordion>
 
-## Success schema
-
+<Accordion title="Raw success schema">
 ```json
 {
   "additionalProperties": false,
   "properties": {
     "heading": {
-      "additionalProperties": false,
-      "properties": {
-        "kind": {
-          "const": "block"
-        },
-        "nodeId": {
-          "type": "string"
-        },
-        "nodeType": {
-          "const": "heading"
-        }
-      },
-      "required": [
-        "kind",
-        "nodeType",
-        "nodeId"
-      ],
-      "type": "object"
+      "$ref": "#/$defs/HeadingAddress"
     },
     "insertionPoint": {
-      "additionalProperties": false,
-      "properties": {
-        "blockId": {
-          "type": "string"
-        },
-        "kind": {
-          "const": "text"
-        },
-        "range": {
-          "additionalProperties": false,
-          "properties": {
-            "end": {
-              "type": "integer"
-            },
-            "start": {
-              "type": "integer"
-            }
-          },
-          "required": [
-            "start",
-            "end"
-          ],
-          "type": "object"
-        }
-      },
-      "required": [
-        "kind",
-        "blockId",
-        "range"
-      ],
-      "type": "object"
+      "$ref": "#/$defs/TextAddress"
     },
     "success": {
       "const": true
     },
     "trackedChangeRefs": {
       "items": {
-        "additionalProperties": false,
-        "properties": {
-          "entityId": {
-            "type": "string"
-          },
-          "entityType": {
-            "const": "trackedChange"
-          },
-          "kind": {
-            "const": "entity"
-          }
-        },
-        "required": [
-          "kind",
-          "entityType",
-          "entityId"
-        ],
-        "type": "object"
+        "$ref": "#/$defs/TrackedChangeAddress"
       },
       "type": "array"
     }
@@ -420,9 +263,9 @@ description: Generated reference for create.heading
   "type": "object"
 }
 ```
+</Accordion>
 
-## Failure schema
-
+<Accordion title="Raw failure schema">
 ```json
 {
   "additionalProperties": false,
@@ -457,3 +300,4 @@ description: Generated reference for create.heading
   "type": "object"
 }
 ```
+</Accordion>

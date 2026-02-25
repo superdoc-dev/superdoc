@@ -23,7 +23,7 @@ export async function assertDocumentApiReady(page: Page): Promise<void> {
       ['editor.doc.getText', docApi.getText],
       ['editor.doc.find', docApi.find],
       ['editor.doc.comments.list', docApi.comments?.list],
-      ['editor.doc.comments.add', docApi.comments?.add],
+      ['editor.doc.comments.create', docApi.comments?.create],
       ['editor.doc.trackChanges.list', docApi.trackChanges?.list],
     ];
 
@@ -78,7 +78,7 @@ export async function findFirstTextRange(
 }
 
 export async function addComment(page: Page, input: { target: TextAddress; text: string }): Promise<void> {
-  await page.evaluate((payload) => (window as any).editor.doc.comments.add(payload), input);
+  await page.evaluate((payload) => (window as any).editor.doc.comments.create(payload), input);
 }
 
 export async function addCommentByText(
@@ -108,17 +108,17 @@ export async function addCommentByText(
     });
     const target = found?.context?.[payload.occurrence ?? 0]?.textRanges?.[0];
     if (!target) throw new Error(`No text range found for pattern "${payload.pattern}".`);
-    const receipt = docApi.comments.add({ target, text: payload.text }) as ReceiptLike | undefined;
+    const receipt = docApi.comments.create({ target, text: payload.text }) as ReceiptLike | undefined;
     if (!receipt || receipt.success !== true) {
       const failureCode = receipt?.failure?.code ?? 'UNKNOWN';
-      const failureMessage = receipt?.failure?.message ?? 'comments.add returned a non-success receipt';
-      throw new Error(`comments.add failed: ${failureCode} ${failureMessage}`);
+      const failureMessage = receipt?.failure?.message ?? 'comments.create returned a non-success receipt';
+      throw new Error(`comments.create failed: ${failureCode} ${failureMessage}`);
     }
     const insertedEntity = Array.isArray(receipt.inserted)
       ? receipt.inserted.find((entry) => entry?.entityType === 'comment' && typeof entry?.entityId === 'string')
       : null;
     if (!insertedEntity) {
-      throw new Error('comments.add succeeded but no inserted comment entityId was returned.');
+      throw new Error('comments.create succeeded but no inserted comment entityId was returned.');
     }
     return insertedEntity.entityId as string;
   }, input);
@@ -126,15 +126,18 @@ export async function addCommentByText(
 }
 
 export async function editComment(page: Page, input: { commentId: string; text: string }): Promise<void> {
-  await page.evaluate((payload) => (window as any).editor.doc.comments.edit(payload), input);
+  await page.evaluate((payload) => (window as any).editor.doc.comments.patch(payload), input);
 }
 
 export async function replyToComment(page: Page, input: { parentCommentId: string; text: string }): Promise<void> {
-  await page.evaluate((payload) => (window as any).editor.doc.comments.reply(payload), input);
+  await page.evaluate((payload) => (window as any).editor.doc.comments.create(payload), input);
 }
 
 export async function resolveComment(page: Page, input: { commentId: string }): Promise<void> {
-  await page.evaluate((payload) => (window as any).editor.doc.comments.resolve(payload), input);
+  await page.evaluate(
+    (payload) => (window as any).editor.doc.comments.patch({ commentId: payload.commentId, status: 'resolved' }),
+    input,
+  );
 }
 
 export async function listComments(
@@ -189,17 +192,23 @@ export async function listItems(page: Page): Promise<ListsListResult> {
 }
 
 export async function acceptTrackChange(page: Page, input: { id: string }): Promise<void> {
-  await page.evaluate((payload) => (window as any).editor.doc.trackChanges.accept(payload), input);
+  await page.evaluate(
+    (payload) => (window as any).editor.doc.review.decide({ decision: 'accept', target: { id: payload.id } }),
+    input,
+  );
 }
 
 export async function rejectTrackChange(page: Page, input: { id: string }): Promise<void> {
-  await page.evaluate((payload) => (window as any).editor.doc.trackChanges.reject(payload), input);
+  await page.evaluate(
+    (payload) => (window as any).editor.doc.review.decide({ decision: 'reject', target: { id: payload.id } }),
+    input,
+  );
 }
 
 export async function acceptAllTrackChanges(page: Page): Promise<void> {
-  await page.evaluate(() => (window as any).editor.doc.trackChanges.acceptAll({}));
+  await page.evaluate(() => (window as any).editor.doc.review.decide({ decision: 'accept', target: { scope: 'all' } }));
 }
 
 export async function rejectAllTrackChanges(page: Page): Promise<void> {
-  await page.evaluate(() => (window as any).editor.doc.trackChanges.rejectAll({}));
+  await page.evaluate(() => (window as any).editor.doc.review.decide({ decision: 'reject', target: { scope: 'all' } }));
 }

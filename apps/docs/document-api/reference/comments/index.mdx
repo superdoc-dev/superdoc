@@ -14,14 +14,8 @@ Comment authoring and thread lifecycle operations.
 
 | Operation | Member path | Mutates | Idempotency | Tracked | Dry run |
 | --- | --- | --- | --- | --- | --- |
-| [`comments.add`](./add) | `comments.add` | Yes | `non-idempotent` | No | No |
-| [`comments.edit`](./edit) | `comments.edit` | Yes | `conditional` | No | No |
-| [`comments.reply`](./reply) | `comments.reply` | Yes | `non-idempotent` | No | No |
-| [`comments.move`](./move) | `comments.move` | Yes | `conditional` | No | No |
-| [`comments.resolve`](./resolve) | `comments.resolve` | Yes | `conditional` | No | No |
-| [`comments.remove`](./remove) | `comments.remove` | Yes | `conditional` | No | No |
-| [`comments.setInternal`](./set-internal) | `comments.setInternal` | Yes | `conditional` | No | No |
-| [`comments.setActive`](./set-active) | `comments.setActive` | Yes | `conditional` | No | No |
-| [`comments.goTo`](./go-to) | `comments.goTo` | No | `conditional` | No | No |
+| [`comments.create`](./create) | `comments.create` | Yes | `non-idempotent` | No | No |
+| [`comments.patch`](./patch) | `comments.patch` | Yes | `conditional` | No | No |
+| [`comments.delete`](./delete) | `comments.delete` | Yes | `conditional` | No | No |
 | [`comments.get`](./get) | `comments.get` | No | `idempotent` | No | No |
 | [`comments.list`](./list) | `comments.list` | No | `idempotent` | No | No |

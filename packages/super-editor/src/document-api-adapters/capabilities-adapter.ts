@@ -2,9 +2,11 @@ import type { Editor } from '../core/Editor.js';
 import {
   CAPABILITY_REASON_CODES,
   COMMAND_CATALOG,
+  MARK_KEYS,
   type CapabilityReasonCode,
   type DocumentApiCapabilities,
   type PlanEngineCapabilities,
+  type FormatCapabilities,
   type OperationId,
   OPERATION_IDS,
 } from '@superdoc/document-api';
@@ -24,19 +26,15 @@ const REQUIRED_COMMANDS: Partial<Record<OperationId, readonly EditorCommandName[
   'lists.outdent': ['setTextSelection', 'decreaseListIndent'],
   'lists.restart': ['setTextSelection', 'restartNumbering'],
   'lists.exit': ['exitListItemAt'],
-  'comments.add': ['addComment', 'setTextSelection'],
-  'comments.edit': ['editComment'],
-  'comments.reply': ['addCommentReply'],
-  'comments.move': ['moveComment'],
-  'comments.resolve': ['resolveComment'],
-  'comments.remove': ['removeComment'],
-  'comments.setInternal': ['setCommentInternal'],
-  'comments.setActive': ['setActiveComment'],
-  'comments.goTo': ['setCursorById'],
-  'trackChanges.accept': ['acceptTrackedChangeById'],
-  'trackChanges.reject': ['rejectTrackedChangeById'],
-  'trackChanges.acceptAll': ['acceptAllTrackedChanges'],
-  'trackChanges.rejectAll': ['rejectAllTrackedChanges'],
+  'comments.create': ['addComment', 'setTextSelection', 'addCommentReply'],
+  'comments.patch': ['editComment', 'moveComment', 'resolveComment', 'setCommentInternal'],
+  'comments.delete': ['removeComment'],
+  'review.decide': [
+    'acceptTrackedChangeById',
+    'rejectTrackedChangeById',
+    'acceptAllTrackedChanges',
+    'rejectAllTrackedChanges',
+  ],
 };
 
 /** Runtime guard — ensures only canonical reason codes are emitted even if the set grows. */
@@ -56,13 +54,18 @@ function hasMarkCapability(editor: Editor, markName: string): boolean {
   return Boolean(editor.schema?.marks?.[markName]);
 }
 
-/** Map from format operation IDs to their editor mark names. */
-const FORMAT_MARK_MAP: Partial<Record<OperationId, string>> = {
-  'format.bold': 'bold',
-  'format.italic': 'italic',
-  'format.underline': 'underline',
-  'format.strikethrough': 'strike',
+/** Mark key → editor schema mark name mapping (shared source of truth for format.apply). */
+const STYLE_MARK_SCHEMA_NAMES: Record<string, string> = {
+  bold: 'bold',
+  italic: 'italic',
+  underline: 'underline',
+  strike: 'strike',
 };
+
+/** Operation IDs whose availability is determined by schema mark presence, not editor commands. */
+function isMarkBackedOperation(operationId: OperationId): boolean {
+  return operationId === 'format.apply';
+}
 
 function hasTrackedModeCapability(editor: Editor, operationId: OperationId): boolean {
   if (!hasCommand(editor, 'insertTrackedChange')) return false;
@@ -70,7 +73,7 @@ function hasTrackedModeCapability(editor: Editor, operationId: OperationId): boo
   // report tracked mode as unavailable when no user is configured so capability-
   // gated clients don't offer tracked actions that would deterministically fail.
   if (!editor.options?.user) return false;
-  if (FORMAT_MARK_MAP[operationId]) {
+  if (isMarkBackedOperation(operationId)) {
     return Boolean(editor.schema?.marks?.[TrackFormatMarkName]);
   }
   return true;
@@ -108,16 +111,16 @@ function pushReason(reasons: CapabilityReasonCode[], reason: CapabilityReasonCod
 }
 
 function isOperationAvailable(editor: Editor, operationId: OperationId): boolean {
-  const markName = FORMAT_MARK_MAP[operationId];
-  if (markName) {
-    return hasMarkCapability(editor, markName);
+  // format.apply is available if at least one mark type exists in the schema
+  if (operationId === 'format.apply') {
+    return MARK_KEYS.some((key) => hasMarkCapability(editor, STYLE_MARK_SCHEMA_NAMES[key] ?? key));
   }
 
   return hasAllCommands(editor, operationId);
 }
 
 function isCommandBackedAvailability(operationId: OperationId): boolean {
-  return !FORMAT_MARK_MAP[operationId];
+  return !isMarkBackedOperation(operationId);
 }
 
 function buildOperationCapabilities(editor: Editor): DocumentApiCapabilities['operations'] {
@@ -165,7 +168,7 @@ const SUPPORTED_STEP_OPS = [
   'text.rewrite',
   'text.insert',
   'text.delete',
-  'style.apply',
+  'format.apply',
   'assert',
   'create.paragraph',
   'create.heading',
@@ -173,6 +176,11 @@ const SUPPORTED_STEP_OPS = [
 const SUPPORTED_NON_UNIFORM_STRATEGIES = ['error', 'useLeadingRun', 'majority', 'union'] as const;
 const SUPPORTED_SET_MARKS = ['bold', 'italic', 'underline', 'strike'] as const;
 const REGEX_MAX_PATTERN_LENGTH = 1024;
+
+function buildFormatCapabilities(editor: Editor): FormatCapabilities {
+  const supportedMarks = MARK_KEYS.filter((key) => hasMarkCapability(editor, STYLE_MARK_SCHEMA_NAMES[key] ?? key));
+  return { supportedMarks };
+}
 
 function buildPlanEngineCapabilities(): PlanEngineCapabilities {
   return {
@@ -218,6 +226,7 @@ export function getDocumentApiCapabilities(editor: Editor): DocumentApiCapabilit
         reasons: dryRunEnabled ? undefined : ['DRY_RUN_UNAVAILABLE'],
       },
     },
+    format: buildFormatCapabilities(editor),
     operations,
     planEngine: buildPlanEngineCapabilities(),
   };

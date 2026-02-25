@@ -18,6 +18,70 @@ description: Generated reference for lists.list
 - Supports dry run: `no`
 - Deterministic target resolution: `yes`
 
+## Input fields
+
+| Field | Type | Required | Description |
+| --- | --- | --- | --- |
+| `kind` | enum | no | `"ordered"`, `"bullet"` |
+| `level` | integer | no |  |
+| `limit` | integer | no |  |
+| `offset` | integer | no |  |
+| `ordinal` | integer | no |  |
+| `within` | BlockNodeAddress | no | BlockNodeAddress |
+
+### Example request
+
+```json
+{
+  "limit": 50,
+  "within": {
+    "kind": "block",
+    "nodeId": "node-def456",
+    "nodeType": "paragraph"
+  }
+}
+```
+
+## Output fields
+
+| Field | Type | Required | Description |
+| --- | --- | --- | --- |
+| `evaluatedRevision` | string | yes |  |
+| `items` | object[] | yes |  |
+| `page` | PageInfo | yes | PageInfo |
+| `total` | integer | yes |  |
+
+### Example response
+
+```json
+{
+  "evaluatedRevision": "rev-001",
+  "items": [
+    {
+      "address": {
+        "kind": "block",
+        "nodeId": "node-def456",
+        "nodeType": "listItem"
+      },
+      "handle": {
+        "ref": "handle:abc123",
+        "refStability": "stable",
+        "targetKind": "text"
+      },
+      "id": "id-001",
+      "marker": "1.",
+      "ordinal": 1
+    }
+  ],
+  "page": {
+    "limit": 50,
+    "offset": 0,
+    "returned": 1
+  },
+  "total": 1
+}
+```
+
 ## Pre-apply throws
 
 - `TARGET_NOT_FOUND`
@@ -26,8 +90,9 @@ description: Generated reference for lists.list
 
 - None
 
-## Input schema
+## Raw schemas
 
+<Accordion title="Raw input schema">
 ```json
 {
   "additionalProperties": false,
@@ -51,68 +116,34 @@ description: Generated reference for lists.list
       "type": "integer"
     },
     "within": {
-      "additionalProperties": false,
-      "properties": {
-        "kind": {
-          "const": "block"
-        },
-        "nodeId": {
-          "type": "string"
-        },
-        "nodeType": {
-          "enum": [
-            "paragraph",
-            "heading",
-            "listItem",
-            "table",
-            "tableRow",
-            "tableCell",
-            "image",
-            "sdt"
-          ]
-        }
-      },
-      "required": [
-        "kind",
-        "nodeType",
-        "nodeId"
-      ],
-      "type": "object"
+      "$ref": "#/$defs/BlockNodeAddress"
     }
   },
   "type": "object"
 }
 ```
+</Accordion>
 
-## Output schema
-
+<Accordion title="Raw output schema">
 ```json
 {
   "additionalProperties": false,
   "properties": {
+    "evaluatedRevision": {
+      "type": "string"
+    },
     "items": {
       "items": {
         "additionalProperties": false,
         "properties": {
           "address": {
-            "additionalProperties": false,
-            "properties": {
-              "kind": {
-                "const": "block"
-              },
-              "nodeId": {
-                "type": "string"
-              },
-              "nodeType": {
-                "const": "listItem"
-              }
-            },
-            "required": [
-              "kind",
-              "nodeType",
-              "nodeId"
-            ],
-            "type": "object"
+            "$ref": "#/$defs/ListItemAddress"
+          },
+          "handle": {
+            "$ref": "#/$defs/ResolvedHandle"
+          },
+          "id": {
+            "type": "string"
           },
           "kind": {
             "enum": [
@@ -140,44 +171,29 @@ description: Generated reference for lists.list
           }
         },
         "required": [
+          "id",
+          "handle",
           "address"
         ],
         "type": "object"
       },
       "type": "array"
     },
-    "matches": {
-      "items": {
-        "additionalProperties": false,
-        "properties": {
-          "kind": {
-            "const": "block"
-          },
-          "nodeId": {
-            "type": "string"
-          },
-          "nodeType": {
-            "const": "listItem"
-          }
-        },
-        "required": [
-          "kind",
-          "nodeType",
-          "nodeId"
-        ],
-        "type": "object"
-      },
-      "type": "array"
+    "page": {
+      "$ref": "#/$defs/PageInfo"
     },
     "total": {
+      "minimum": 0,
       "type": "integer"
     }
   },
   "required": [
-    "matches",
+    "evaluatedRevision",
     "total",
-    "items"
+    "items",
+    "page"
   ],
   "type": "object"
 }
 ```
+</Accordion>

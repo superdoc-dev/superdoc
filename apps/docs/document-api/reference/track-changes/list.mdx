@@ -18,6 +18,64 @@ description: Generated reference for trackChanges.list
 - Supports dry run: `no`
 - Deterministic target resolution: `yes`
 
+## Input fields
+
+| Field | Type | Required | Description |
+| --- | --- | --- | --- |
+| `limit` | integer | no |  |
+| `offset` | integer | no |  |
+| `type` | enum | no | `"insert"`, `"delete"`, `"format"` |
+
+### Example request
+
+```json
+{
+  "limit": 50,
+  "offset": 0
+}
+```
+
+## Output fields
+
+| Field | Type | Required | Description |
+| --- | --- | --- | --- |
+| `evaluatedRevision` | string | yes |  |
+| `items` | object[] | yes |  |
+| `page` | PageInfo | yes | PageInfo |
+| `total` | integer | yes |  |
+
+### Example response
+
+```json
+{
+  "evaluatedRevision": "rev-001",
+  "items": [
+    {
+      "address": {
+        "entityId": "entity-789",
+        "entityType": "trackedChange",
+        "kind": "entity"
+      },
+      "author": "Jane Doe",
+      "authorEmail": "jane@example.com",
+      "handle": {
+        "ref": "handle:abc123",
+        "refStability": "stable",
+        "targetKind": "text"
+      },
+      "id": "id-001",
+      "type": "insert"
+    }
+  ],
+  "page": {
+    "limit": 50,
+    "offset": 0,
+    "returned": 1
+  },
+  "total": 1
+}
+```
+
 ## Pre-apply throws
 
 - None
@@ -26,8 +84,9 @@ description: Generated reference for trackChanges.list
 
 - None
 
-## Input schema
+## Raw schemas
 
+<Accordion title="Raw input schema">
 ```json
 {
   "additionalProperties": false,
@@ -49,36 +108,22 @@ description: Generated reference for trackChanges.list
   "type": "object"
 }
 ```
+</Accordion>
 
-## Output schema
-
+<Accordion title="Raw output schema">
 ```json
 {
   "additionalProperties": false,
   "properties": {
-    "changes": {
+    "evaluatedRevision": {
+      "type": "string"
+    },
+    "items": {
       "items": {
         "additionalProperties": false,
         "properties": {
           "address": {
-            "additionalProperties": false,
-            "properties": {
-              "entityId": {
-                "type": "string"
-              },
-              "entityType": {
-                "const": "trackedChange"
-              },
-              "kind": {
-                "const": "entity"
-              }
-            },
-            "required": [
-              "kind",
-              "entityType",
-              "entityId"
-            ],
-            "type": "object"
+            "$ref": "#/$defs/TrackedChangeAddress"
           },
           "author": {
             "type": "string"
@@ -95,6 +140,9 @@ description: Generated reference for trackChanges.list
           "excerpt": {
             "type": "string"
           },
+          "handle": {
+            "$ref": "#/$defs/ResolvedHandle"
+          },
           "id": {
             "type": "string"
           },
@@ -107,45 +155,30 @@ description: Generated reference for trackChanges.list
           }
         },
         "required": [
-          "address",
           "id",
+          "handle",
+          "address",
           "type"
         ],
         "type": "object"
       },
       "type": "array"
     },
-    "matches": {
-      "items": {
-        "additionalProperties": false,
-        "properties": {
-          "entityId": {
-            "type": "string"
-          },
-          "entityType": {
-            "const": "trackedChange"
-          },
-          "kind": {
-            "const": "entity"
-          }
-        },
-        "required": [
-          "kind",
-          "entityType",
-          "entityId"
-        ],
-        "type": "object"
-      },
-      "type": "array"
+    "page": {
+      "$ref": "#/$defs/PageInfo"
     },
     "total": {
+      "minimum": 0,
       "type": "integer"
     }
   },
   "required": [
-    "matches",
-    "total"
+    "evaluatedRevision",
+    "total",
+    "items",
+    "page"
   ],
   "type": "object"
 }
 ```
+</Accordion>

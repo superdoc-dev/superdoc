@@ -19,7 +19,7 @@ import type {
   Query,
   QueryMatchInput,
   QueryMatchOutput,
-  QueryResult,
+  FindOutput,
   Receipt,
   Selector,
   TextMutationReceipt,
@@ -28,31 +28,19 @@ import type {
 } from './types/index.js';
 import type { CommentInfo, CommentsListQuery, CommentsListResult } from './comments/comments.types.js';
 import type {
-  AddCommentInput,
   CommentsAdapter,
   CommentsApi,
-  EditCommentInput,
+  CommentsCreateInput,
+  CommentsPatchInput,
+  CommentsDeleteInput,
   GetCommentInput,
-  GoToCommentInput,
-  MoveCommentInput,
-  RemoveCommentInput,
-  ReplyToCommentInput,
-  ResolveCommentInput,
-  SetCommentActiveInput,
-  SetCommentInternalInput,
 } from './comments/comments.js';
 import {
-  executeAddComment,
-  executeEditComment,
+  executeCommentsCreate,
+  executeCommentsPatch,
+  executeCommentsDelete,
   executeGetComment,
-  executeGoToComment,
   executeListComments,
-  executeMoveComment,
-  executeRemoveComment,
-  executeReplyToComment,
-  executeResolveComment,
-  executeSetCommentActive,
-  executeSetCommentInternal,
 } from './comments/comments.js';
 import type { DeleteInput } from './delete/delete.js';
 import { executeFind, type FindAdapter, type FindOptions } from './find/find.js';
@@ -63,13 +51,9 @@ import type {
   FormatItalicInput,
   FormatUnderlineInput,
   FormatStrikethroughInput,
+  StyleApplyInput,
 } from './format/format.js';
-import {
-  executeFormatBold,
-  executeFormatItalic,
-  executeFormatUnderline,
-  executeFormatStrikethrough,
-} from './format/format.js';
+import { executeStyleApply } from './format/format.js';
 import type { GetNodeAdapter, GetNodeByIdInput } from './get-node/get-node.js';
 import { executeGetNode, executeGetNodeById } from './get-node/get-node.js';
 import { executeGetText, type GetTextAdapter, type GetTextInput } from './get-text/get-text.js';
@@ -105,23 +89,13 @@ import type { CreateAdapter, CreateApi } from './create/create.js';
 import { executeCreateParagraph, executeCreateHeading } from './create/create.js';
 import type { CreateHeadingInput, CreateHeadingResult } from './types/create.types.js';
 import type {
-  TrackChangesAcceptAllInput,
-  TrackChangesAcceptInput,
   TrackChangesAdapter,
   TrackChangesApi,
   TrackChangesGetInput,
   TrackChangesListInput,
-  TrackChangesRejectAllInput,
-  TrackChangesRejectInput,
+  ReviewDecideInput,
 } from './track-changes/track-changes.js';
-import {
-  executeTrackChangesAccept,
-  executeTrackChangesAcceptAll,
-  executeTrackChangesGet,
-  executeTrackChangesList,
-  executeTrackChangesReject,
-  executeTrackChangesRejectAll,
-} from './track-changes/track-changes.js';
+import { executeTrackChangesGet, executeTrackChangesList, executeReviewDecide } from './track-changes/track-changes.js';
 import type { MutationOptions, RevisionGuardOptions, WriteAdapter } from './write/write.js';
 import {
   executeCapabilities,
@@ -143,16 +117,19 @@ export type {
   FormatItalicInput,
   FormatUnderlineInput,
   FormatStrikethroughInput,
+  StyleApplyInput,
+  StyleApplyOptions,
 } from './format/format.js';
 export type { CreateAdapter } from './create/create.js';
 export type {
-  TrackChangesAcceptAllInput,
-  TrackChangesAcceptInput,
   TrackChangesAdapter,
   TrackChangesGetInput,
   TrackChangesListInput,
-  TrackChangesRejectAllInput,
+  TrackChangesAcceptInput,
   TrackChangesRejectInput,
+  TrackChangesAcceptAllInput,
+  TrackChangesRejectAllInput,
+  ReviewDecideInput,
 } from './track-changes/track-changes.js';
 export type { ListsAdapter } from './lists/lists.js';
 export type {
@@ -171,17 +148,21 @@ export type {
 } from './lists/lists.types.js';
 export { LIST_KINDS, LIST_INSERT_POSITIONS } from './lists/lists.types.js';
 export type {
-  AddCommentInput,
+  CommentsCreateInput,
+  CommentsPatchInput,
+  CommentsDeleteInput,
   CommentsAdapter,
-  EditCommentInput,
   GetCommentInput,
-  GoToCommentInput,
-  MoveCommentInput,
-  RemoveCommentInput,
+  // Legacy input types — exported for internal adapter use, not part of the contract.
+  AddCommentInput,
+  EditCommentInput,
   ReplyToCommentInput,
+  MoveCommentInput,
   ResolveCommentInput,
-  SetCommentActiveInput,
+  RemoveCommentInput,
   SetCommentInternalInput,
+  GoToCommentInput,
+  SetCommentActiveInput,
 } from './comments/comments.js';
 export type { CommentInfo, CommentsListQuery, CommentsListResult } from './comments/comments.types.js';
 export { DocumentApiValidationError } from './errors.js';
@@ -208,6 +189,14 @@ export interface MutationsApi {
   apply(input: MutationsApplyInput): PlanReceipt;
 }
 
+export interface ReviewApi {
+  decide(input: ReviewDecideInput, options?: RevisionGuardOptions): Receipt;
+}
+
+export interface ReviewAdapter {
+  decide(input: ReviewDecideInput, options?: RevisionGuardOptions): Receipt;
+}
+
 export interface QueryAdapter {
   match(input: QueryMatchInput): QueryMatchOutput;
 }
@@ -226,14 +215,14 @@ export interface DocumentApi {
    * @param query - A full query object specifying selection criteria.
    * @returns The query result containing matches and metadata.
    */
-  find(query: Query): QueryResult;
+  find(query: Query): FindOutput;
   /**
    * Find nodes in the document matching a selector with optional options.
    * @param selector - A selector specifying what to find.
    * @param options - Optional find options (limit, offset, within, etc.).
    * @returns The query result containing matches and metadata.
    */
-  find(selector: Selector, options?: FindOptions): QueryResult;
+  find(selector: Selector, options?: FindOptions): FindOutput;
   /**
    * Get detailed information about a specific node by its address.
    * @param address - The node address to resolve.
@@ -276,9 +265,13 @@ export interface DocumentApi {
    */
   format: FormatApi;
   /**
-   * Tracked-change lifecycle operations.
+   * Tracked-change read operations (list, get).
    */
   trackChanges: TrackChangesApi;
+  /**
+   * Review operations — accept or reject tracked changes.
+   */
+  review: ReviewApi;
   /**
    * Structural creation operations.
    */
@@ -342,8 +335,8 @@ export interface DocumentApiAdapters {
  * ```ts
  * const api = createDocumentApi(adapters);
  * const result = api.find({ nodeType: 'heading' });
- * for (const address of result.matches) {
- *   const node = api.getNode(address);
+ * for (const item of result.items) {
+ *   const node = api.getNode(item.address);
  *   console.log(node.properties);
  * }
  * ```
@@ -353,7 +346,7 @@ export function createDocumentApi(adapters: DocumentApiAdapters): DocumentApi {
   const capabilities: CapabilitiesApi = Object.assign(capFn, { get: capFn });
 
   const api: DocumentApi = {
-    find(selectorOrQuery: Selector | Query, options?: FindOptions): QueryResult {
+    find(selectorOrQuery: Selector | Query, options?: FindOptions): FindOutput {
       return executeFind(adapters.find, selectorOrQuery, options);
     },
     getNode(address: NodeAddress): NodeInfo {
@@ -369,32 +362,14 @@ export function createDocumentApi(adapters: DocumentApiAdapters): DocumentApi {
       return executeInfo(adapters.info, input);
     },
     comments: {
-      add(input: AddCommentInput, options?: RevisionGuardOptions): Receipt {
-        return executeAddComment(adapters.comments, input, options);
+      create(input: CommentsCreateInput, options?: RevisionGuardOptions): Receipt {
+        return executeCommentsCreate(adapters.comments, input, options);
       },
-      edit(input: EditCommentInput, options?: RevisionGuardOptions): Receipt {
-        return executeEditComment(adapters.comments, input, options);
+      patch(input: CommentsPatchInput, options?: RevisionGuardOptions): Receipt {
+        return executeCommentsPatch(adapters.comments, input, options);
       },
-      reply(input: ReplyToCommentInput, options?: RevisionGuardOptions): Receipt {
-        return executeReplyToComment(adapters.comments, input, options);
-      },
-      move(input: MoveCommentInput, options?: RevisionGuardOptions): Receipt {
-        return executeMoveComment(adapters.comments, input, options);
-      },
-      resolve(input: ResolveCommentInput, options?: RevisionGuardOptions): Receipt {
-        return executeResolveComment(adapters.comments, input, options);
-      },
-      remove(input: RemoveCommentInput, options?: RevisionGuardOptions): Receipt {
-        return executeRemoveComment(adapters.comments, input, options);
-      },
-      setInternal(input: SetCommentInternalInput, options?: RevisionGuardOptions): Receipt {
-        return executeSetCommentInternal(adapters.comments, input, options);
-      },
-      setActive(input: SetCommentActiveInput, options?: RevisionGuardOptions): Receipt {
-        return executeSetCommentActive(adapters.comments, input, options);
-      },
-      goTo(input: GoToCommentInput): Receipt {
-        return executeGoToComment(adapters.comments, input);
+      delete(input: CommentsDeleteInput, options?: RevisionGuardOptions): Receipt {
+        return executeCommentsDelete(adapters.comments, input, options);
       },
       get(input: GetCommentInput): CommentInfo {
         return executeGetComment(adapters.comments, input);
@@ -414,16 +389,19 @@ export function createDocumentApi(adapters: DocumentApiAdapters): DocumentApi {
     },
     format: {
       bold(input: FormatBoldInput, options?: MutationOptions): TextMutationReceipt {
-        return executeFormatBold(adapters.format, input, options);
+        return executeStyleApply(adapters.format, { ...input, marks: { bold: true } }, options);
       },
       italic(input: FormatItalicInput, options?: MutationOptions): TextMutationReceipt {
-        return executeFormatItalic(adapters.format, input, options);
+        return executeStyleApply(adapters.format, { ...input, marks: { italic: true } }, options);
       },
       underline(input: FormatUnderlineInput, options?: MutationOptions): TextMutationReceipt {
-        return executeFormatUnderline(adapters.format, input, options);
+        return executeStyleApply(adapters.format, { ...input, marks: { underline: true } }, options);
       },
       strikethrough(input: FormatStrikethroughInput, options?: MutationOptions): TextMutationReceipt {
-        return executeFormatStrikethrough(adapters.format, input, options);
+        return executeStyleApply(adapters.format, { ...input, marks: { strike: true } }, options);
+      },
+      apply(input: StyleApplyInput, options?: MutationOptions): TextMutationReceipt {
+        return executeStyleApply(adapters.format, input, options);
       },
     },
     trackChanges: {
@@ -433,17 +411,10 @@ export function createDocumentApi(adapters: DocumentApiAdapters): DocumentApi {
       get(input: TrackChangesGetInput): TrackChangeInfo {
         return executeTrackChangesGet(adapters.trackChanges, input);
       },
-      accept(input: TrackChangesAcceptInput, options?: RevisionGuardOptions): Receipt {
-        return executeTrackChangesAccept(adapters.trackChanges, input, options);
-      },
-      reject(input: TrackChangesRejectInput, options?: RevisionGuardOptions): Receipt {
-        return executeTrackChangesReject(adapters.trackChanges, input, options);
-      },
-      acceptAll(input: TrackChangesAcceptAllInput, options?: RevisionGuardOptions): Receipt {
-        return executeTrackChangesAcceptAll(adapters.trackChanges, input, options);
-      },
-      rejectAll(input: TrackChangesRejectAllInput, options?: RevisionGuardOptions): Receipt {
-        return executeTrackChangesRejectAll(adapters.trackChanges, input, options);
+    },
+    review: {
+      decide(input: ReviewDecideInput, options?: RevisionGuardOptions): Receipt {
+        return executeReviewDecide(adapters.trackChanges, input, options);
       },
     },
     create: {

@@ -73,17 +73,22 @@ describe('document-api contract catalog', () => {
     }
   });
 
-  it('encodes insert locator pairing and exclusivity constraints in the input schema', () => {
+  it('uses simplified target-based insert input schema without legacy locator constraints', () => {
     const schemas = buildInternalContractSchemas();
     const insertInputSchema = schemas.operations.insert.input as {
-      allOf?: Array<Record<string, unknown>>;
+      type?: string;
+      properties?: Record<string, unknown>;
+      required?: string[];
+      allOf?: unknown;
+      additionalProperties?: boolean;
     };
 
-    expect(insertInputSchema.allOf).toEqual([
-      { not: { required: ['target', 'blockId'] } },
-      { not: { required: ['target', 'offset'] } },
-      { if: { required: ['offset'] }, then: { required: ['blockId'] } },
-    ]);
+    // Simplified schema: target (optional) + text (required), no allOf constraints
+    expect(insertInputSchema.type).toBe('object');
+    expect(Object.keys(insertInputSchema.properties!).sort()).toEqual(['target', 'text']);
+    expect(insertInputSchema.required).toEqual(['text']);
+    expect(insertInputSchema.allOf).toBeUndefined();
+    expect(insertInputSchema.additionalProperties).toBe(false);
   });
 
   it('derives OPERATION_IDS from OPERATION_DEFINITIONS keys', () => {
@@ -101,6 +106,7 @@ describe('document-api contract catalog', () => {
       'lists',
       'comments',
       'trackChanges',
+      'review',
       'query',
       'mutations',
     ];

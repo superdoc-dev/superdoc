@@ -18,18 +18,130 @@ description: Generated reference for query.match
 - Supports dry run: `no`
 - Deterministic target resolution: `yes`
 
+## Input fields
+
+| Field | Type | Required | Description |
+| --- | --- | --- | --- |
+| `includeNodes` | boolean | no |  |
+| `limit` | integer | no |  |
+| `mode` | enum | no | `"strict"`, `"candidates"` |
+| `offset` | integer | no |  |
+| `require` | enum | no | `"any"`, `"first"`, `"exactlyOne"`, `"all"` |
+| `select` | object(type="text") \\| object(type="node") | yes | One of: object(type="text"), object(type="node") |
+| `within` | NodeAddress | no | NodeAddress |
+
+### Example request
+
+```json
+{
+  "require": "any",
+  "select": {
+    "caseSensitive": true,
+    "mode": "contains",
+    "pattern": "hello world",
+    "type": "text"
+  },
+  "within": {
+    "kind": "block",
+    "nodeId": "node-def456",
+    "nodeType": "paragraph"
+  }
+}
+```
+
+## Output fields
+
+| Field | Type | Required | Description |
+| --- | --- | --- | --- |
+| `evaluatedRevision` | string | yes |  |
+| `items` | object(matchKind="text") \\| object(matchKind="node")[] | yes |  |
+| `page` | PageInfo | yes | PageInfo |
+| `total` | integer | yes |  |
+
+### Example response
+
+```json
+{
+  "evaluatedRevision": "rev-001",
+  "items": [
+    {
+      "address": {
+        "kind": "block",
+        "nodeId": "node-def456",
+        "nodeType": "paragraph"
+      },
+      "blocks": [
+        {
+          "blockId": "block-abc123",
+          "nodeType": "paragraph",
+          "paragraphStyle": {
+            "isListItem": true,
+            "styleId": "style-001"
+          },
+          "range": {
+            "end": 10,
+            "start": 0
+          },
+          "ref": "handle:abc123",
+          "runs": [
+            {
+              "range": {
+                "end": 10,
+                "start": 0
+              },
+              "ref": "handle:abc123",
+              "styleId": "style-001",
+              "styles": {
+                "bold": true,
+                "color": "example",
+                "highlight": "example",
+                "italic": true,
+                "strike": true,
+                "underline": true
+              },
+              "text": "Hello, world."
+            }
+          ],
+          "text": "Hello, world."
+        }
+      ],
+      "handle": {
+        "ref": "handle:abc123",
+        "refStability": "stable",
+        "targetKind": "text"
+      },
+      "highlightRange": {
+        "end": 10,
+        "start": 0
+      },
+      "id": "id-001",
+      "matchKind": "text",
+      "snippet": "...the quick brown fox..."
+    }
+  ],
+  "page": {
+    "limit": 50,
+    "offset": 0,
+    "returned": 1
+  },
+  "total": 1
+}
+```
+
 ## Pre-apply throws
 
 - `MATCH_NOT_FOUND`
 - `AMBIGUOUS_MATCH`
 - `INVALID_INPUT`
+- `INTERNAL_ERROR`
 
 ## Non-applied failure codes
 
 - None
 
-## Input schema
+## Raw schemas
 
+<Accordion title="Raw input schema">
 ```json
 {
   "additionalProperties": false,
@@ -37,12 +149,15 @@ description: Generated reference for query.match
     "includeNodes": {
       "type": "boolean"
     },
-    "includeStyle": {
-      "type": "boolean"
-    },
     "limit": {
       "minimum": 1,
       "type": "integer"
+    },
+    "mode": {
+      "enum": [
+        "strict",
+        "candidates"
+      ]
     },
     "offset": {
       "minimum": 0,
@@ -123,106 +238,7 @@ description: Generated reference for query.match
       ]
     },
     "within": {
-      "oneOf": [
-        {
-          "additionalProperties": false,
-          "properties": {
-            "kind": {
-              "const": "block"
-            },
-            "nodeId": {
-              "type": "string"
-            },
-            "nodeType": {
-              "enum": [
-                "paragraph",
-                "heading",
-                "listItem",
-                "table",
-                "tableRow",
-                "tableCell",
-                "image",
-                "sdt"
-              ]
-            }
-          },
-          "required": [
-            "kind",
-            "nodeType",
-            "nodeId"
-          ],
-          "type": "object"
-        },
-        {
-          "additionalProperties": false,
-          "properties": {
-            "anchor": {
-              "additionalProperties": false,
-              "properties": {
-                "end": {
-                  "additionalProperties": false,
-                  "properties": {
-                    "blockId": {
-                      "type": "string"
-                    },
-                    "offset": {
-                      "type": "integer"
-                    }
-                  },
-                  "required": [
-                    "blockId",
-                    "offset"
-                  ],
-                  "type": "object"
-                },
-                "start": {
-                  "additionalProperties": false,
-                  "properties": {
-                    "blockId": {
-                      "type": "string"
-                    },
-                    "offset": {
-                      "type": "integer"
-                    }
-                  },
-                  "required": [
-                    "blockId",
-                    "offset"
-                  ],
-                  "type": "object"
-                }
-              },
-              "required": [
-                "start",
-                "end"
-              ],
-              "type": "object"
-            },
-            "kind": {
-              "const": "inline"
-            },
-            "nodeType": {
-              "enum": [
-                "run",
-                "bookmark",
-                "comment",
-                "hyperlink",
-                "sdt",
-                "image",
-                "footnoteRef",
-                "tab",
-                "lineBreak"
-              ]
-            }
-          },
-          "required": [
-            "kind",
-            "nodeType",
-            "anchor"
-          ],
-          "type": "object"
-        }
-      ]
+      "$ref": "#/$defs/NodeAddress"
     }
   },
   "required": [
@@ -231,9 +247,9 @@ description: Generated reference for query.match
   "type": "object"
 }
 ```
+</Accordion>
 
-## Output schema
-
+<Accordion title="Raw output schema">
 ```json
 {
   "additionalProperties": false,
@@ -241,203 +257,100 @@ description: Generated reference for query.match
     "evaluatedRevision": {
       "type": "string"
     },
-    "matches": {
+    "items": {
       "items": {
-        "additionalProperties": false,
-        "properties": {
-          "address": {
-            "oneOf": [
-              {
-                "additionalProperties": false,
-                "properties": {
-                  "kind": {
-                    "const": "block"
-                  },
-                  "nodeId": {
-                    "type": "string"
-                  },
-                  "nodeType": {
-                    "enum": [
-                      "paragraph",
-                      "heading",
-                      "listItem",
-                      "table",
-                      "tableRow",
-                      "tableCell",
-                      "image",
-                      "sdt"
-                    ]
-                  }
-                },
-                "required": [
-                  "kind",
-                  "nodeType",
-                  "nodeId"
-                ],
-                "type": "object"
-              },
-              {
-                "additionalProperties": false,
-                "properties": {
-                  "anchor": {
-                    "additionalProperties": false,
-                    "properties": {
-                      "end": {
-                        "additionalProperties": false,
-                        "properties": {
-                          "blockId": {
-                            "type": "string"
-                          },
-                          "offset": {
-                            "type": "integer"
-                          }
-                        },
-                        "required": [
-                          "blockId",
-                          "offset"
-                        ],
-                        "type": "object"
-                      },
-                      "start": {
-                        "additionalProperties": false,
-                        "properties": {
-                          "blockId": {
-                            "type": "string"
-                          },
-                          "offset": {
-                            "type": "integer"
-                          }
-                        },
-                        "required": [
-                          "blockId",
-                          "offset"
-                        ],
-                        "type": "object"
-                      }
-                    },
-                    "required": [
-                      "start",
-                      "end"
-                    ],
-                    "type": "object"
-                  },
-                  "kind": {
-                    "const": "inline"
-                  },
-                  "nodeType": {
-                    "enum": [
-                      "run",
-                      "bookmark",
-                      "comment",
-                      "hyperlink",
-                      "sdt",
-                      "image",
-                      "footnoteRef",
-                      "tab",
-                      "lineBreak"
-                    ]
-                  }
-                },
-                "required": [
-                  "kind",
-                  "nodeType",
-                  "anchor"
-                ],
-                "type": "object"
-              }
-            ]
-          },
-          "ref": {
-            "type": "string"
-          },
-          "refStability": {
-            "enum": [
-              "ephemeral",
-              "stable"
-            ]
-          },
-          "style": {
+        "oneOf": [
+          {
             "additionalProperties": false,
             "properties": {
-              "isUniform": {
-                "type": "boolean"
+              "address": {
+                "$ref": "#/$defs/NodeAddress"
               },
-              "marks": {
-                "additionalProperties": false,
-                "properties": {
-                  "bold": {
-                    "type": "boolean"
-                  },
-                  "italic": {
-                    "type": "boolean"
-                  },
-                  "strike": {
-                    "type": "boolean"
-                  },
-                  "underline": {
-                    "type": "boolean"
-                  }
+              "blocks": {
+                "items": {
+                  "$ref": "#/$defs/MatchBlock"
                 },
-                "type": "object"
+                "minItems": 1,
+                "type": "array"
+              },
+              "handle": {
+                "$ref": "#/$defs/ResolvedHandle"
+              },
+              "highlightRange": {
+                "$ref": "#/$defs/Range"
+              },
+              "id": {
+                "type": "string"
+              },
+              "matchKind": {
+                "const": "text"
+              },
+              "snippet": {
+                "type": "string"
               }
             },
             "required": [
-              "marks",
-              "isUniform"
+              "id",
+              "handle",
+              "matchKind",
+              "address",
+              "snippet",
+              "highlightRange",
+              "blocks"
             ],
             "type": "object"
           },
-          "textRanges": {
-            "items": {
-              "additionalProperties": false,
-              "properties": {
-                "blockId": {
-                  "type": "string"
-                },
-                "kind": {
-                  "const": "text"
-                },
-                "range": {
-                  "additionalProperties": false,
-                  "properties": {
-                    "end": {
-                      "type": "integer"
-                    },
-                    "start": {
-                      "type": "integer"
-                    }
-                  },
-                  "required": [
-                    "start",
-                    "end"
-                  ],
-                  "type": "object"
-                }
+          {
+            "additionalProperties": false,
+            "properties": {
+              "address": {
+                "$ref": "#/$defs/NodeAddress"
               },
-              "required": [
-                "kind",
-                "blockId",
-                "range"
-              ],
-              "type": "object"
+              "blocks": {
+                "items": {
+                  "$ref": "#/$defs/MatchBlock"
+                },
+                "maxItems": 0,
+                "type": "array"
+              },
+              "handle": {
+                "$ref": "#/$defs/ResolvedHandle"
+              },
+              "id": {
+                "type": "string"
+              },
+              "matchKind": {
+                "const": "node"
+              }
             },
-            "type": "array"
+            "required": [
+              "id",
+              "handle",
+              "matchKind",
+              "address",
+              "blocks"
+            ],
+            "type": "object"
           }
-        },
-        "type": "object"
+        ]
       },
       "type": "array"
     },
-    "totalMatches": {
+    "page": {
+      "$ref": "#/$defs/PageInfo"
+    },
+    "total": {
       "minimum": 0,
       "type": "integer"
     }
   },
   "required": [
     "evaluatedRevision",
-    "matches",
-    "totalMatches"
+    "total",
+    "items",
+    "page"
   ],
   "type": "object"
 }
 ```
+</Accordion>

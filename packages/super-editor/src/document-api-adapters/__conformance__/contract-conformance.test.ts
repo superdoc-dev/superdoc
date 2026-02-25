@@ -16,13 +16,7 @@ import {
 import { ListHelpers } from '../../core/helpers/list-numbering-helpers.js';
 import { createCommentsWrapper } from '../plan-engine/comments-wrappers.js';
 import { createParagraphWrapper, createHeadingWrapper } from '../plan-engine/create-wrappers.js';
-import {
-  writeWrapper,
-  formatBoldWrapper,
-  formatItalicWrapper,
-  formatUnderlineWrapper,
-  formatStrikethroughWrapper,
-} from '../plan-engine/plan-wrappers.js';
+import { writeWrapper, styleApplyWrapper } from '../plan-engine/plan-wrappers.js';
 import { getDocumentApiCapabilities } from '../capabilities-adapter.js';
 import {
   listsExitWrapper,
@@ -436,7 +430,8 @@ function assertSchema(operationId: OperationId, schemaType: 'output' | 'success'
   const schema = schemaSet[schemaType];
   expect(schema).toBeDefined();
 
-  const result = validateJsonSchema(schema as Parameters<typeof validateJsonSchema>[0], value);
+  const $defs = INTERNAL_SCHEMAS.$defs as Record<string, Parameters<typeof validateJsonSchema>[0]> | undefined;
+  const result = validateJsonSchema(schema as Parameters<typeof validateJsonSchema>[0], value, $defs);
   expect(
     result.valid,
     `Schema validation failed for ${operationId} (${schemaType}):\n${result.errors.join('\n')}`,
@@ -534,112 +529,28 @@ const mutationVectors: Partial<Record<OperationId, MutationVector>> = {
       );
     },
   },
-  'format.bold': {
+  'format.apply': {
     throwCase: () => {
       const { editor } = makeTextEditor();
-      return formatBoldWrapper(
+      return styleApplyWrapper(
         editor,
-        {
-          target: { kind: 'text', blockId: 'missing', range: { start: 0, end: 1 } },
-        },
+        { target: { kind: 'text', blockId: 'missing', range: { start: 0, end: 1 } }, marks: { bold: true } },
         { changeMode: 'direct' },
       );
     },
     failureCase: () => {
       const { editor } = makeTextEditor();
-      return formatBoldWrapper(
+      return styleApplyWrapper(
         editor,
-        {
-          target: { kind: 'text', blockId: 'p1', range: { start: 2, end: 2 } },
-        },
+        { target: { kind: 'text', blockId: 'p1', range: { start: 2, end: 2 } }, marks: { bold: true } },
         { changeMode: 'direct' },
       );
     },
     applyCase: () => {
       const { editor } = makeTextEditor();
-      return formatBoldWrapper(
+      return styleApplyWrapper(
         editor,
-        {
-          target: { kind: 'text', blockId: 'p1', range: { start: 0, end: 5 } },
-        },
-        { changeMode: 'direct' },
-      );
-    },
-  },
-  'format.italic': {
-    throwCase: () => {
-      const { editor } = makeTextEditor();
-      return formatItalicWrapper(
-        editor,
-        { target: { kind: 'text', blockId: 'missing', range: { start: 0, end: 1 } } },
-        { changeMode: 'direct' },
-      );
-    },
-    failureCase: () => {
-      const { editor } = makeTextEditor();
-      return formatItalicWrapper(
-        editor,
-        { target: { kind: 'text', blockId: 'p1', range: { start: 2, end: 2 } } },
-        { changeMode: 'direct' },
-      );
-    },
-    applyCase: () => {
-      const { editor } = makeTextEditor();
-      return formatItalicWrapper(
-        editor,
-        { target: { kind: 'text', blockId: 'p1', range: { start: 0, end: 5 } } },
-        { changeMode: 'direct' },
-      );
-    },
-  },
-  'format.underline': {
-    throwCase: () => {
-      const { editor } = makeTextEditor();
-      return formatUnderlineWrapper(
-        editor,
-        { target: { kind: 'text', blockId: 'missing', range: { start: 0, end: 1 } } },
-        { changeMode: 'direct' },
-      );
-    },
-    failureCase: () => {
-      const { editor } = makeTextEditor();
-      return formatUnderlineWrapper(
-        editor,
-        { target: { kind: 'text', blockId: 'p1', range: { start: 2, end: 2 } } },
-        { changeMode: 'direct' },
-      );
-    },
-    applyCase: () => {
-      const { editor } = makeTextEditor();
-      return formatUnderlineWrapper(
-        editor,
-        { target: { kind: 'text', blockId: 'p1', range: { start: 0, end: 5 } } },
-        { changeMode: 'direct' },
-      );
-    },
-  },
-  'format.strikethrough': {
-    throwCase: () => {
-      const { editor } = makeTextEditor();
-      return formatStrikethroughWrapper(
-        editor,
-        { target: { kind: 'text', blockId: 'missing', range: { start: 0, end: 1 } } },
-        { changeMode: 'direct' },
-      );
-    },
-    failureCase: () => {
-      const { editor } = makeTextEditor();
-      return formatStrikethroughWrapper(
-        editor,
-        { target: { kind: 'text', blockId: 'p1', range: { start: 2, end: 2 } } },
-        { changeMode: 'direct' },
-      );
-    },
-    applyCase: () => {
-      const { editor } = makeTextEditor();
-      return formatStrikethroughWrapper(
-        editor,
-        { target: { kind: 'text', blockId: 'p1', range: { start: 0, end: 5 } } },
+        { target: { kind: 'text', blockId: 'p1', range: { start: 0, end: 5 } }, marks: { bold: true, italic: false } },
         { changeMode: 'direct' },
       );
     },
@@ -819,7 +730,7 @@ const mutationVectors: Partial<Record<OperationId, MutationVector>> = {
       return listsExitWrapper(editor, { target: { kind: 'block', nodeType: 'listItem', nodeId: 'li-1' } });
     },
   },
-  'comments.add': {
+  'comments.create': {
     throwCase: () => {
       const editor = makeCommentsEditor([], { addComment: undefined });
       return createCommentsWrapper(editor).add({
@@ -842,7 +753,7 @@ const mutationVectors: Partial<Record<OperationId, MutationVector>> = {
       });
     },
   },
-  'comments.edit': {
+  'comments.patch': {
     throwCase: () => {
       const editor = makeCommentsEditor();
       return createCommentsWrapper(editor).edit({ commentId: 'missing', text: 'X' });
@@ -856,73 +767,7 @@ const mutationVectors: Partial<Record<OperationId, MutationVector>> = {
       return createCommentsWrapper(editor).edit({ commentId: 'c1', text: 'New' });
     },
   },
-  'comments.reply': {
-    throwCase: () => {
-      const editor = makeCommentsEditor();
-      return createCommentsWrapper(editor).reply({ parentCommentId: 'missing', text: 'X' });
-    },
-    failureCase: () => {
-      const editor = makeCommentsEditor([makeCommentRecord('c1')]);
-      return createCommentsWrapper(editor).reply({ parentCommentId: '', text: 'X' });
-    },
-    applyCase: () => {
-      const editor = makeCommentsEditor([makeCommentRecord('c1')]);
-      return createCommentsWrapper(editor).reply({ parentCommentId: 'c1', text: 'Reply' });
-    },
-  },
-  'comments.move': {
-    throwCase: () => {
-      const editor = makeCommentsEditor([makeCommentRecord('c1')]);
-      return createCommentsWrapper(editor).move({
-        commentId: 'c1',
-        target: { kind: 'text', blockId: 'missing', range: { start: 0, end: 2 } },
-      });
-    },
-    failureCase: () => {
-      mockedDeps.resolveCommentAnchorsById.mockImplementation(() => []);
-      const editor = makeCommentsEditor([makeCommentRecord('c1')]);
-      return createCommentsWrapper(editor).move({
-        commentId: 'c1',
-        target: { kind: 'text', blockId: 'p1', range: { start: 0, end: 2 } },
-      });
-    },
-    applyCase: () => {
-      mockedDeps.resolveCommentAnchorsById.mockImplementation((_editor, id) =>
-        id === 'c1'
-          ? [
-              {
-                commentId: 'c1',
-                status: 'open',
-                target: { kind: 'text', blockId: 'p1', range: { start: 0, end: 1 } },
-                pos: 1,
-                end: 2,
-                attrs: {},
-              },
-            ]
-          : [],
-      );
-      const editor = makeCommentsEditor([makeCommentRecord('c1')]);
-      return createCommentsWrapper(editor).move({
-        commentId: 'c1',
-        target: { kind: 'text', blockId: 'p1', range: { start: 1, end: 3 } },
-      });
-    },
-  },
-  'comments.resolve': {
-    throwCase: () => {
-      const editor = makeCommentsEditor();
-      return createCommentsWrapper(editor).resolve({ commentId: 'missing' });
-    },
-    failureCase: () => {
-      const editor = makeCommentsEditor([makeCommentRecord('c1', { isDone: true })]);
-      return createCommentsWrapper(editor).resolve({ commentId: 'c1' });
-    },
-    applyCase: () => {
-      const editor = makeCommentsEditor([makeCommentRecord('c1', { isDone: false })]);
-      return createCommentsWrapper(editor).resolve({ commentId: 'c1' });
-    },
-  },
-  'comments.remove': {
+  'comments.delete': {
     throwCase: () => {
       const editor = makeCommentsEditor();
       return createCommentsWrapper(editor).remove({ commentId: 'missing' });
@@ -950,35 +795,7 @@ const mutationVectors: Partial<Record<OperationId, MutationVector>> = {
       return createCommentsWrapper(editor).remove({ commentId: 'c1' });
     },
   },
-  'comments.setInternal': {
-    throwCase: () => {
-      const editor = makeCommentsEditor();
-      return createCommentsWrapper(editor).setInternal({ commentId: 'missing', isInternal: true });
-    },
-    failureCase: () => {
-      const editor = makeCommentsEditor([makeCommentRecord('c1', { isInternal: true })]);
-      return createCommentsWrapper(editor).setInternal({ commentId: 'c1', isInternal: true });
-    },
-    applyCase: () => {
-      const editor = makeCommentsEditor([makeCommentRecord('c1', { isInternal: false })]);
-      return createCommentsWrapper(editor).setInternal({ commentId: 'c1', isInternal: true });
-    },
-  },
-  'comments.setActive': {
-    throwCase: () => {
-      const editor = makeCommentsEditor();
-      return createCommentsWrapper(editor).setActive({ commentId: 'missing' });
-    },
-    failureCase: () => {
-      const editor = makeCommentsEditor([], { setActiveComment: vi.fn(() => false) });
-      return createCommentsWrapper(editor).setActive({ commentId: null });
-    },
-    applyCase: () => {
-      const editor = makeCommentsEditor([], { setActiveComment: vi.fn(() => true) });
-      return createCommentsWrapper(editor).setActive({ commentId: null });
-    },
-  },
-  'trackChanges.accept': {
+  'review.decide': {
     throwCase: () => {
       setTrackChanges([]);
       const { editor } = makeTextEditor();
@@ -993,53 +810,6 @@ const mutationVectors: Partial<Record<OperationId, MutationVector>> = {
       setTrackChanges([makeTrackedChange('tc-1')]);
       const { editor } = makeTextEditor('Hello', { commands: { acceptTrackedChangeById: vi.fn(() => true) } });
       return trackChangesAcceptWrapper(editor, { id: requireCanonicalTrackChangeId(editor, 'tc-1') });
-    },
-  },
-  'trackChanges.reject': {
-    throwCase: () => {
-      setTrackChanges([]);
-      const { editor } = makeTextEditor();
-      return trackChangesRejectWrapper(editor, { id: 'missing' });
-    },
-    failureCase: () => {
-      setTrackChanges([makeTrackedChange('tc-1')]);
-      const { editor } = makeTextEditor('Hello', { commands: { rejectTrackedChangeById: vi.fn(() => false) } });
-      return trackChangesRejectWrapper(editor, { id: requireCanonicalTrackChangeId(editor, 'tc-1') });
-    },
-    applyCase: () => {
-      setTrackChanges([makeTrackedChange('tc-1')]);
-      const { editor } = makeTextEditor('Hello', { commands: { rejectTrackedChangeById: vi.fn(() => true) } });
-      return trackChangesRejectWrapper(editor, { id: requireCanonicalTrackChangeId(editor, 'tc-1') });
-    },
-  },
-  'trackChanges.acceptAll': {
-    throwCase: () => {
-      const { editor } = makeTextEditor('Hello', { commands: { acceptAllTrackedChanges: undefined } });
-      return trackChangesAcceptAllWrapper(editor, {});
-    },
-    failureCase: () => {
-      const { editor } = makeTextEditor('Hello', { commands: { acceptAllTrackedChanges: vi.fn(() => false) } });
-      return trackChangesAcceptAllWrapper(editor, {});
-    },
-    applyCase: () => {
-      setTrackChanges([makeTrackedChange('tc-1')]);
-      const { editor } = makeTextEditor('Hello', { commands: { acceptAllTrackedChanges: vi.fn(() => true) } });
-      return trackChangesAcceptAllWrapper(editor, {});
-    },
-  },
-  'trackChanges.rejectAll': {
-    throwCase: () => {
-      const { editor } = makeTextEditor('Hello', { commands: { rejectAllTrackedChanges: undefined } });
-      return trackChangesRejectAllWrapper(editor, {});
-    },
-    failureCase: () => {
-      const { editor } = makeTextEditor('Hello', { commands: { rejectAllTrackedChanges: vi.fn(() => false) } });
-      return trackChangesRejectAllWrapper(editor, {});
-    },
-    applyCase: () => {
-      setTrackChanges([makeTrackedChange('tc-1')]);
-      const { editor } = makeTextEditor('Hello', { commands: { rejectAllTrackedChanges: vi.fn(() => true) } });
-      return trackChangesRejectAllWrapper(editor, {});
     },
   },
   'mutations.apply': {
@@ -1093,44 +863,11 @@ const dryRunVectors: Partial<Record<OperationId, () => unknown>> = {
     expect(tr.delete).not.toHaveBeenCalled();
     return result;
   },
-  'format.bold': () => {
+  'format.apply': () => {
     const { editor, dispatch, tr } = makeTextEditor();
-    const result = formatBoldWrapper(
+    const result = styleApplyWrapper(
       editor,
-      { target: { kind: 'text', blockId: 'p1', range: { start: 0, end: 5 } } },
-      { changeMode: 'direct', dryRun: true },
-    );
-    expect(dispatch).not.toHaveBeenCalled();
-    expect(tr.addMark).not.toHaveBeenCalled();
-    return result;
-  },
-  'format.italic': () => {
-    const { editor, dispatch, tr } = makeTextEditor();
-    const result = formatItalicWrapper(
-      editor,
-      { target: { kind: 'text', blockId: 'p1', range: { start: 0, end: 5 } } },
-      { changeMode: 'direct', dryRun: true },
-    );
-    expect(dispatch).not.toHaveBeenCalled();
-    expect(tr.addMark).not.toHaveBeenCalled();
-    return result;
-  },
-  'format.underline': () => {
-    const { editor, dispatch, tr } = makeTextEditor();
-    const result = formatUnderlineWrapper(
-      editor,
-      { target: { kind: 'text', blockId: 'p1', range: { start: 0, end: 5 } } },
-      { changeMode: 'direct', dryRun: true },
-    );
-    expect(dispatch).not.toHaveBeenCalled();
-    expect(tr.addMark).not.toHaveBeenCalled();
-    return result;
-  },
-  'format.strikethrough': () => {
-    const { editor, dispatch, tr } = makeTextEditor();
-    const result = formatStrikethroughWrapper(
-      editor,
-      { target: { kind: 'text', blockId: 'p1', range: { start: 0, end: 5 } } },
+      { target: { kind: 'text', blockId: 'p1', range: { start: 0, end: 5 } }, marks: { bold: true } },
       { changeMode: 'direct', dryRun: true },
     );
     expect(dispatch).not.toHaveBeenCalled();
@@ -1359,7 +1096,7 @@ describe('document-api adapter conformance', () => {
     const { editor } = makeTextEditor();
     const reject = trackChangesRejectWrapper(editor, { id: requireCanonicalTrackChangeId(editor, 'tc-delete-1') });
     expect(reject.success).toBe(true);
-    assertSchema('trackChanges.reject', 'output', reject);
-    assertSchema('trackChanges.reject', 'success', reject);
+    assertSchema('review.decide', 'output', reject);
+    assertSchema('review.decide', 'success', reject);
   });
 });

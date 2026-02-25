@@ -19,10 +19,20 @@ import { OPERATION_REFERENCE_DOC_PATH_MAP } from '../src/contract/reference-doc-
 import { buildDispatchTable } from '../src/invoke/invoke.js';
 
 /**
- * Meta-methods on DocumentApi that are not operations.
+ * Meta-methods and helper methods on DocumentApi that are not contract operations.
  * These are excluded from operation-to-member-path parity checks.
+ *
+ * - `invoke` — generic dispatch method
+ * - `format.bold|italic|underline|strikethrough` — ergonomic helpers
+ *   that delegate to canonical `format.apply`.
  */
-const META_MEMBER_PATHS = ['invoke'] as const;
+const META_MEMBER_PATHS = [
+  'invoke',
+  'format.bold',
+  'format.italic',
+  'format.underline',
+  'format.strikethrough',
+] as const;
 
 function collectFunctionMemberPaths(value: unknown, prefix = ''): string[] {
   if (!value || typeof value !== 'object') return [];
@@ -47,7 +57,7 @@ function collectFunctionMemberPaths(value: unknown, prefix = ''): string[] {
 function createNoopAdapters(): DocumentApiAdapters {
   return {
     find: {
-      find: () => ({ matches: [], total: 0 }),
+      find: () => ({ evaluatedRevision: '', total: 0, items: [], page: { limit: 50, offset: 0, returned: 0 } }),
     },
     getNode: {
       getNode: () => ({ kind: 'block', nodeType: 'paragraph', properties: {} }),
@@ -71,7 +81,14 @@ function createNoopAdapters(): DocumentApiAdapters {
           lists: { enabled: false },
           dryRun: { enabled: false },
         },
+        format: { supportedMarks: [] },
         operations: {} as ReturnType<DocumentApiAdapters['capabilities']['get']>['operations'],
+        planEngine: {
+          supportedStepOps: [],
+          supportedNonUniformStrategies: [],
+          supportedSetMarks: [],
+          regex: { maxPatternLength: 1024, maxExecutionMs: 100 },
+        },
       }),
     },
     comments: {
@@ -89,7 +106,7 @@ function createNoopAdapters(): DocumentApiAdapters {
         commentId: 'comment-1',
         status: 'open',
       }),
-      list: () => ({ matches: [], total: 0 }),
+      list: () => ({ evaluatedRevision: '', total: 0, items: [], page: { limit: 50, offset: 0, returned: 0 } }),
     },
     write: {
       write: () => ({
@@ -102,7 +119,7 @@ function createNoopAdapters(): DocumentApiAdapters {
       }),
     },
     format: {
-      bold: () => ({
+      apply: () => ({
         success: true,
         resolution: {
           target: { kind: 'text', blockId: 'p1', range: { start: 0, end: 1 } },
@@ -112,7 +129,7 @@ function createNoopAdapters(): DocumentApiAdapters {
       }),
     },
     trackChanges: {
-      list: () => ({ matches: [], total: 0 }),
+      list: () => ({ evaluatedRevision: '', total: 0, items: [], page: { limit: 50, offset: 0, returned: 0 } }),
       get: ({ id }) => ({
         address: { kind: 'entity', entityType: 'trackedChange', entityId: id },
         id,
@@ -131,7 +148,7 @@ function createNoopAdapters(): DocumentApiAdapters {
       }),
     },
     lists: {
-      list: () => ({ matches: [], total: 0, items: [] }),
+      list: () => ({ evaluatedRevision: '', total: 0, items: [], page: { limit: 50, offset: 0, returned: 0 } }),
       get: () => ({
         address: { kind: 'block', nodeType: 'listItem', nodeId: 'li-1' },
       }),

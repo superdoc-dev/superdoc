@@ -28,6 +28,7 @@ function buildOperationContractMap() {
     contractVersion: snapshot.contractVersion,
     schemaDialect: snapshot.schemaDialect,
     sourceHash: snapshot.sourceHash,
+    ...(snapshot.$defs ? { $defs: snapshot.$defs } : {}),
     operations,
   };
 }
@@ -196,7 +197,7 @@ export function buildAgentArtifacts(): GeneratedFile[] {
       {
         id: 'track-change-review',
         title: 'Track-change review workflow',
-        operations: ['trackChanges.list', 'trackChanges.accept', 'trackChanges.reject'],
+        operations: ['trackChanges.list', 'review.decide'],
       },
     ],
   };

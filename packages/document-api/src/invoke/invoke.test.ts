@@ -13,7 +13,9 @@ import type { CommentsAdapter } from '../comments/comments.js';
 import type { CapabilitiesAdapter, DocumentApiCapabilities } from '../capabilities/capabilities.js';
 
 function makeAdapters() {
-  const findAdapter: FindAdapter = { find: vi.fn(() => ({ matches: [], total: 0 })) };
+  const findAdapter: FindAdapter = {
+    find: vi.fn(() => ({ evaluatedRevision: '', total: 0, items: [], page: { limit: 50, offset: 0, returned: 0 } })),
+  };
   const getNodeAdapter: GetNodeAdapter = {
     getNode: vi.fn(() => ({ kind: 'block' as const, nodeType: 'paragraph' as const, properties: {} })),
     getNodeById: vi.fn(() => ({ kind: 'block' as const, nodeType: 'paragraph' as const, properties: {} })),
@@ -35,6 +37,7 @@ function makeAdapters() {
           lists: { enabled: false },
           dryRun: { enabled: false },
         },
+        format: { supportedMarks: [] },
         operations: {} as DocumentApiCapabilities['operations'],
         planEngine: {
           supportedStepOps: [],
@@ -60,7 +63,7 @@ function makeAdapters() {
       commentId: 'c1',
       status: 'open' as const,
     })),
-    list: vi.fn(() => ({ matches: [], total: 0 })),
+    list: vi.fn(() => ({ evaluatedRevision: '', total: 0, items: [], page: { limit: 50, offset: 0, returned: 0 } })),
   };
   const writeAdapter: WriteAdapter = {
     write: vi.fn(() => ({
@@ -81,13 +84,10 @@ function makeAdapters() {
     },
   });
   const formatAdapter: FormatAdapter = {
-    bold: vi.fn(formatReceipt),
-    italic: vi.fn(formatReceipt),
-    underline: vi.fn(formatReceipt),
-    strikethrough: vi.fn(formatReceipt),
+    apply: vi.fn(formatReceipt),
   };
   const trackChangesAdapter: TrackChangesAdapter = {
-    list: vi.fn(() => ({ matches: [], total: 0 })),
+    list: vi.fn(() => ({ evaluatedRevision: '', total: 0, items: [], page: { limit: 50, offset: 0, returned: 0 } })),
     get: vi.fn((input: { id: string }) => ({
       address: { kind: 'entity' as const, entityType: 'trackedChange' as const, entityId: input.id },
       id: input.id,
@@ -111,7 +111,7 @@ function makeAdapters() {
     })),
   };
   const listsAdapter: ListsAdapter = {
-    list: vi.fn(() => ({ matches: [], total: 0, items: [] })),
+    list: vi.fn(() => ({ evaluatedRevision: '', total: 0, items: [], page: { limit: 50, offset: 0, returned: 0 } })),
     get: vi.fn(() => ({
       address: { kind: 'block' as const, nodeType: 'listItem' as const, nodeId: 'li-1' },
     })),
@@ -142,6 +142,20 @@ function makeAdapters() {
     })),
   };
 
+  const queryAdapter = {
+    match: vi.fn(() => ({ evaluatedRevision: 'r1', total: 0, items: [], page: { limit: 0, offset: 0, returned: 0 } })),
+  };
+  const mutationsAdapter = {
+    preview: vi.fn(() => ({ evaluatedRevision: 'r1', steps: [], valid: true })),
+    apply: vi.fn(() => ({
+      success: true as const,
+      revision: { before: 'r1', after: 'r2' },
+      steps: [],
+      trackedChanges: [],
+      timing: { totalMs: 0 },
+    })),
+  };
+
   const adapters: DocumentApiAdapters = {
     find: findAdapter,
     getNode: getNodeAdapter,
@@ -154,6 +168,8 @@ function makeAdapters() {
     trackChanges: trackChangesAdapter,
     create: createAdapter,
     lists: listsAdapter,
+    query: queryAdapter,
+    mutations: mutationsAdapter,
   };
 
   return { adapters, findAdapter, writeAdapter, commentsAdapter, trackChangesAdapter };
@@ -208,15 +224,15 @@ describe('invoke', () => {
       );
     });
 
-    it('comments.add: invoke returns same result as direct call', () => {
+    it('comments.create: invoke returns same result as direct call', () => {
       const { adapters } = makeAdapters();
       const api = createDocumentApi(adapters);
       const input = {
         target: { kind: 'text' as const, blockId: 'p1', range: { start: 0, end: 5 } },
         text: 'A comment',
       };
-      const direct = api.comments.add(input);
-      const invoked = api.invoke({ operationId: 'comments.add', input });
+      const direct = api.comments.create(input);
+      const invoked = api.invoke({ operationId: 'comments.create', input });
       expect(invoked).toEqual(direct);
     });
 
@@ -225,6 +241,15 @@ describe('invoke', () => {
       const api = createDocumentApi(adapters);
       const direct = api.trackChanges.list();
       const invoked = api.invoke({ operationId: 'trackChanges.list', input: undefined });
+      expect(invoked).toEqual(direct);
+    });
+
+    it('review.decide: invoke returns same result as direct call', () => {
+      const { adapters } = makeAdapters();
+      const api = createDocumentApi(adapters);
+      const input = { decision: 'accept' as const, target: { id: 'tc-1' } };
+      const direct = api.review.decide(input);
+      const invoked = api.invoke({ operationId: 'review.decide', input });
       expect(invoked).toEqual(direct);
     });
 
@@ -245,30 +270,15 @@ describe('invoke', () => {
       expect(invoked).toEqual(direct);
     });
 
-    it('format.italic: invoke returns same result as direct call', () => {
+    it('format.apply: invoke returns same result as direct call', () => {
       const { adapters } = makeAdapters();
       const api = createDocumentApi(adapters);
-      const input = { target: { kind: 'text' as const, blockId: 'p1', range: { start: 0, end: 2 } } };
-      const direct = api.format.italic(input);
-      const invoked = api.invoke({ operationId: 'format.italic', input });
-      expect(invoked).toEqual(direct);
-    });
-
-    it('format.underline: invoke returns same result as direct call', () => {
-      const { adapters } = makeAdapters();
-      const api = createDocumentApi(adapters);
-      const input = { target: { kind: 'text' as const, blockId: 'p1', range: { start: 0, end: 2 } } };
-      const direct = api.format.underline(input);
-      const invoked = api.invoke({ operationId: 'format.underline', input });
-      expect(invoked).toEqual(direct);
-    });
-
-    it('format.strikethrough: invoke returns same result as direct call', () => {
-      const { adapters } = makeAdapters();
-      const api = createDocumentApi(adapters);
-      const input = { target: { kind: 'text' as const, blockId: 'p1', range: { start: 0, end: 2 } } };
-      const direct = api.format.strikethrough(input);
-      const invoked = api.invoke({ operationId: 'format.strikethrough', input });
+      const input = {
+        target: { kind: 'text' as const, blockId: 'p1', range: { start: 0, end: 2 } },
+        marks: { bold: true },
+      };
+      const direct = api.format.apply(input);
+      const invoked = api.invoke({ operationId: 'format.apply', input });
       expect(invoked).toEqual(direct);
     });
 
@@ -306,7 +316,10 @@ describe('invoke', () => {
       const api = createDocumentApi(adapters);
       const input: unknown = { nodeType: 'paragraph' };
       const result = api.invoke({ operationId: 'find', input });
-      expect(result).toEqual({ matches: [], total: 0 });
+      expect(result).toHaveProperty('items');
+      expect(result).toHaveProperty('total', 0);
+      expect(result).toHaveProperty('evaluatedRevision');
+      expect(result).toHaveProperty('page');
     });
 
     it('forwards unknown options through to the handler', () => {

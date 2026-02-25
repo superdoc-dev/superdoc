@@ -16,10 +16,11 @@ Document API is currently alpha and subject to breaking changes.
 | Core | 8 | [Open](./core/index) |
 | Capabilities | 1 | [Open](./capabilities/index) |
 | Create | 2 | [Open](./create/index) |
-| Format | 4 | [Open](./format/index) |
+| Format | 1 | [Open](./format/index) |
 | Lists | 8 | [Open](./lists/index) |
-| Comments | 11 | [Open](./comments/index) |
-| Track Changes | 6 | [Open](./track-changes/index) |
+| Comments | 5 | [Open](./comments/index) |
+| Track Changes | 2 | [Open](./track-changes/index) |
+| Review | 1 | [Open](./review/index) |
 | Query | 1 | [Open](./query/index) |
 | Mutations | 2 | [Open](./mutations/index) |
 
@@ -35,10 +36,7 @@ Document API is currently alpha and subject to breaking changes.
 | [`insert`](./insert) | Core | `insert` | Yes | `non-idempotent` | Yes | Yes |
 | [`replace`](./replace) | Core | `replace` | Yes | `conditional` | Yes | Yes |
 | [`delete`](./delete) | Core | `delete` | Yes | `conditional` | Yes | Yes |
-| [`format.bold`](./format/bold) | Format | `format.bold` | Yes | `conditional` | Yes | Yes |
-| [`format.italic`](./format/italic) | Format | `format.italic` | Yes | `conditional` | Yes | Yes |
-| [`format.underline`](./format/underline) | Format | `format.underline` | Yes | `conditional` | Yes | Yes |
-| [`format.strikethrough`](./format/strikethrough) | Format | `format.strikethrough` | Yes | `conditional` | Yes | Yes |
+| [`format.apply`](./format/apply) | Format | `format.apply` | Yes | `conditional` | Yes | Yes |
 | [`create.paragraph`](./create/paragraph) | Create | `create.paragraph` | Yes | `non-idempotent` | Yes | Yes |
 | [`create.heading`](./create/heading) | Create | `create.heading` | Yes | `non-idempotent` | Yes | Yes |
 | [`lists.list`](./lists/list) | Lists | `lists.list` | No | `idempotent` | No | No |
@@ -49,23 +47,14 @@ Document API is currently alpha and subject to breaking changes.
 | [`lists.outdent`](./lists/outdent) | Lists | `lists.outdent` | Yes | `conditional` | No | Yes |
 | [`lists.restart`](./lists/restart) | Lists | `lists.restart` | Yes | `conditional` | No | Yes |
 | [`lists.exit`](./lists/exit) | Lists | `lists.exit` | Yes | `conditional` | No | Yes |
-| [`comments.add`](./comments/add) | Comments | `comments.add` | Yes | `non-idempotent` | No | No |
-| [`comments.edit`](./comments/edit) | Comments | `comments.edit` | Yes | `conditional` | No | No |
-| [`comments.reply`](./comments/reply) | Comments | `comments.reply` | Yes | `non-idempotent` | No | No |
-| [`comments.move`](./comments/move) | Comments | `comments.move` | Yes | `conditional` | No | No |
-| [`comments.resolve`](./comments/resolve) | Comments | `comments.resolve` | Yes | `conditional` | No | No |
-| [`comments.remove`](./comments/remove) | Comments | `comments.remove` | Yes | `conditional` | No | No |
-| [`comments.setInternal`](./comments/set-internal) | Comments | `comments.setInternal` | Yes | `conditional` | No | No |
-| [`comments.setActive`](./comments/set-active) | Comments | `comments.setActive` | Yes | `conditional` | No | No |
-| [`comments.goTo`](./comments/go-to) | Comments | `comments.goTo` | No | `conditional` | No | No |
+| [`comments.create`](./comments/create) | Comments | `comments.create` | Yes | `non-idempotent` | No | No |
+| [`comments.patch`](./comments/patch) | Comments | `comments.patch` | Yes | `conditional` | No | No |
+| [`comments.delete`](./comments/delete) | Comments | `comments.delete` | Yes | `conditional` | No | No |
 | [`comments.get`](./comments/get) | Comments | `comments.get` | No | `idempotent` | No | No |
 | [`comments.list`](./comments/list) | Comments | `comments.list` | No | `idempotent` | No | No |
 | [`trackChanges.list`](./track-changes/list) | Track Changes | `trackChanges.list` | No | `idempotent` | No | No |
 | [`trackChanges.get`](./track-changes/get) | Track Changes | `trackChanges.get` | No | `idempotent` | No | No |
-| [`trackChanges.accept`](./track-changes/accept) | Track Changes | `trackChanges.accept` | Yes | `conditional` | No | No |
-| [`trackChanges.reject`](./track-changes/reject) | Track Changes | `trackChanges.reject` | Yes | `conditional` | No | No |
-| [`trackChanges.acceptAll`](./track-changes/accept-all) | Track Changes | `trackChanges.acceptAll` | Yes | `conditional` | No | No |
-| [`trackChanges.rejectAll`](./track-changes/reject-all) | Track Changes | `trackChanges.rejectAll` | Yes | `conditional` | No | No |
+| [`review.decide`](./review/decide) | Review | `review.decide` | Yes | `conditional` | No | No |
 | [`query.match`](./query/match) | Query | `query.match` | No | `idempotent` | No | No |
 | [`mutations.preview`](./mutations/preview) | Mutations | `mutations.preview` | No | `idempotent` | No | No |
 | [`mutations.apply`](./mutations/apply) | Mutations | `mutations.apply` | Yes | `non-idempotent` | Yes | No |

@@ -45,10 +45,7 @@ export function buildDispatchTable(api: DocumentApi): TypedDispatchTable {
     delete: (input, options) => api.delete(input, options),
 
     // --- format.* ---
-    'format.bold': (input, options) => api.format.bold(input, options),
-    'format.italic': (input, options) => api.format.italic(input, options),
-    'format.underline': (input, options) => api.format.underline(input, options),
-    'format.strikethrough': (input, options) => api.format.strikethrough(input, options),
+    'format.apply': (input, options) => api.format.apply(input, options),
 
     // --- create.* ---
     'create.paragraph': (input, options) => api.create.paragraph(input, options),
@@ -65,25 +62,18 @@ export function buildDispatchTable(api: DocumentApi): TypedDispatchTable {
     'lists.exit': (input, options) => api.lists.exit(input, options),
 
     // --- comments.* ---
-    'comments.add': (input, options) => api.comments.add(input, options),
-    'comments.edit': (input, options) => api.comments.edit(input, options),
-    'comments.reply': (input, options) => api.comments.reply(input, options),
-    'comments.move': (input, options) => api.comments.move(input, options),
-    'comments.resolve': (input, options) => api.comments.resolve(input, options),
-    'comments.remove': (input, options) => api.comments.remove(input, options),
-    'comments.setInternal': (input, options) => api.comments.setInternal(input, options),
-    'comments.setActive': (input, options) => api.comments.setActive(input, options),
-    'comments.goTo': (input) => api.comments.goTo(input),
+    'comments.create': (input, options) => api.comments.create(input, options),
+    'comments.patch': (input, options) => api.comments.patch(input, options),
+    'comments.delete': (input, options) => api.comments.delete(input, options),
     'comments.get': (input) => api.comments.get(input),
     'comments.list': (input) => api.comments.list(input),
 
-    // --- trackChanges.* ---
+    // --- trackChanges.* (reads) ---
     'trackChanges.list': (input) => api.trackChanges.list(input),
     'trackChanges.get': (input) => api.trackChanges.get(input),
-    'trackChanges.accept': (input, options) => api.trackChanges.accept(input, options),
-    'trackChanges.reject': (input, options) => api.trackChanges.reject(input, options),
-    'trackChanges.acceptAll': (input, options) => api.trackChanges.acceptAll(input, options),
-    'trackChanges.rejectAll': (input, options) => api.trackChanges.rejectAll(input, options),
+
+    // --- review.* ---
+    'review.decide': (input, options) => api.review.decide(input, options),
 
     // --- query.* ---
     'query.match': (input) => api.query.match(input),

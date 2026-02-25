@@ -12,10 +12,4 @@ export { planError, PlanError } from './errors.js';
 export { captureRunsInRange, resolveInlineStyle } from './style-resolver.js';
 export type { CapturedRun, CapturedStyle } from './style-resolver.js';
 export type { CompiledTarget, StepExecutor, CompileContext, ExecuteContext } from './executor-registry.types.js';
-export {
-  writeWrapper,
-  formatBoldWrapper,
-  formatItalicWrapper,
-  formatUnderlineWrapper,
-  formatStrikethroughWrapper,
-} from './plan-wrappers.js';
+export { writeWrapper, styleApplyWrapper } from './plan-wrappers.js';

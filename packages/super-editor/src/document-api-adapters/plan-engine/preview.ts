@@ -3,7 +3,8 @@
  * without dispatching it. Reports what would happen.
  *
  * Runs the full two-phase evaluation (compile + execute) on an ephemeral
- * transaction that is never dispatched.
+ * transaction that is never dispatched. Supports both single-block (range)
+ * and cross-block (span) target resolutions in preview output.
  */
 
 import type {
@@ -54,6 +55,10 @@ export function previewPlan(editor: Editor, input: MutationsPreviewInput): Mutat
 
       if (outcome.data && 'resolutions' in outcome.data && outcome.data.domain === 'text') {
         preview.resolutions = outcome.data.resolutions;
+
+        if ('spanResolutions' in outcome.data && outcome.data.spanResolutions?.length) {
+          preview.spanResolutions = outcome.data.spanResolutions;
+        }
       }
 
       stepPreviews.push(preview);

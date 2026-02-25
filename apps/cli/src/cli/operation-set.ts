@@ -94,6 +94,9 @@ function deriveCategoryFromDocApi(docApiId: OperationId): CliCategory {
     return COMMAND_CATALOG[docApiId].mutates ? 'mutation' : 'query';
   }
 
+  // Map 'review' reference group to 'trackChanges' CLI category
+  if (group === 'review') return 'trackChanges';
+
   return group as CliCategory;
 }
 
@@ -131,7 +134,7 @@ export function cliRequiresDocumentContext(cliOpId: CliOperationId): boolean {
 
 /**
  * Derives CLI command tokens from a doc-api member path.
- * E.g. "comments.add" → ["comments", "add"], "find" → ["find"]
+ * E.g. "comments.create" → ["comments", "create"], "find" → ["find"]
  *
  * For CLI-only ops, converts camelCase to kebab-case:
  * E.g. "session.setDefault" → ["session", "set-default"]

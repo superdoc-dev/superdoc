@@ -58,10 +58,7 @@ const INTENT_NAMES = {
   'doc.insert': 'insert_content',
   'doc.replace': 'replace_content',
   'doc.delete': 'delete_content',
-  'doc.format.bold': 'format_bold',
-  'doc.format.italic': 'format_italic',
-  'doc.format.underline': 'format_underline',
-  'doc.format.strikethrough': 'format_strikethrough',
+  'doc.format.apply': 'format_apply',
   'doc.create.paragraph': 'create_paragraph',
   'doc.create.heading': 'create_heading',
   'doc.lists.list': 'list_lists',
@@ -72,23 +69,14 @@ const INTENT_NAMES = {
   'doc.lists.outdent': 'outdent_list',
   'doc.lists.restart': 'restart_list_numbering',
   'doc.lists.exit': 'exit_list',
-  'doc.comments.add': 'add_comment',
-  'doc.comments.edit': 'edit_comment',
-  'doc.comments.reply': 'reply_to_comment',
-  'doc.comments.move': 'move_comment',
-  'doc.comments.resolve': 'resolve_comment',
-  'doc.comments.remove': 'remove_comment',
-  'doc.comments.setInternal': 'set_comment_internal',
-  'doc.comments.setActive': 'set_comment_active',
-  'doc.comments.goTo': 'go_to_comment',
+  'doc.comments.create': 'create_comment',
+  'doc.comments.patch': 'patch_comment',
+  'doc.comments.delete': 'delete_comment',
   'doc.comments.get': 'get_comment',
   'doc.comments.list': 'list_comments',
   'doc.trackChanges.list': 'list_tracked_changes',
   'doc.trackChanges.get': 'get_tracked_change',
-  'doc.trackChanges.accept': 'accept_tracked_change',
-  'doc.trackChanges.reject': 'reject_tracked_change',
-  'doc.trackChanges.acceptAll': 'accept_all_tracked_changes',
-  'doc.trackChanges.rejectAll': 'reject_all_tracked_changes',
+  'doc.review.decide': 'review_decide',
   'doc.query.match': 'query_match',
   'doc.mutations.preview': 'preview_mutations',
   'doc.mutations.apply': 'apply_mutations',
@@ -100,6 +88,7 @@ const INTENT_NAMES = {
 
 function loadDocApiContract(): {
   contractVersion: string;
+  $defs?: Record<string, unknown>;
   operations: Record<string, Record<string, unknown>>;
 } {
   const raw = readFileSync(CONTRACT_JSON_PATH, 'utf-8');
@@ -200,6 +189,7 @@ function buildSdkContract() {
   return {
     contractVersion: docApiContract.contractVersion,
     sourceHash,
+    ...(docApiContract.$defs ? { $defs: docApiContract.$defs } : {}),
     cli: {
       package: cliPkg.name,
       // Envelope meta.version is contract-version-based today, so minVersion must match that domain.
@@ -228,9 +218,13 @@ function main() {
     let existing: string;
     try {
       existing = readFileSync(OUTPUT_PATH, 'utf-8');
-    } catch {
-      console.error(`--check: ${OUTPUT_PATH} does not exist. Run without --check to generate.`);
-      process.exit(1);
+    } catch (error) {
+      const fsError = error as NodeJS.ErrnoException;
+      if (fsError?.code === 'ENOENT') {
+        console.error(`--check: ${OUTPUT_PATH} does not exist. Run without --check to generate.`);
+        process.exit(1);
+      }
+      throw error;
     }
 
     if (existing === json) {

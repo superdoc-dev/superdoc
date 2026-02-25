@@ -18,6 +18,52 @@ description: Generated reference for comments.get
 - Supports dry run: `no`
 - Deterministic target resolution: `yes`
 
+## Input fields
+
+| Field | Type | Required | Description |
+| --- | --- | --- | --- |
+| `commentId` | string | yes |  |
+
+### Example request
+
+```json
+{
+  "commentId": "comment-001"
+}
+```
+
+## Output fields
+
+| Field | Type | Required | Description |
+| --- | --- | --- | --- |
+| `address` | CommentAddress | yes | CommentAddress |
+| `commentId` | string | yes |  |
+| `createdTime` | number | no |  |
+| `creatorEmail` | string | no |  |
+| `creatorName` | string | no |  |
+| `importedId` | string | no |  |
+| `isInternal` | boolean | no |  |
+| `parentCommentId` | string | no |  |
+| `status` | enum | yes | `"open"`, `"resolved"` |
+| `target` | TextAddress | no | TextAddress |
+| `text` | string | no |  |
+
+### Example response
+
+```json
+{
+  "address": {
+    "entityId": "entity-789",
+    "entityType": "comment",
+    "kind": "entity"
+  },
+  "commentId": "comment-001",
+  "importedId": "imp-001",
+  "parentCommentId": "comment-000",
+  "status": "open"
+}
+```
+
 ## Pre-apply throws
 
 - `TARGET_NOT_FOUND`
@@ -26,8 +72,9 @@ description: Generated reference for comments.get
 
 - None
 
-## Input schema
+## Raw schemas
 
+<Accordion title="Raw input schema">
 ```json
 {
   "additionalProperties": false,
@@ -42,32 +89,15 @@ description: Generated reference for comments.get
   "type": "object"
 }
 ```
+</Accordion>
 
-## Output schema
-
+<Accordion title="Raw output schema">
 ```json
 {
   "additionalProperties": false,
   "properties": {
     "address": {
-      "additionalProperties": false,
-      "properties": {
-        "entityId": {
-          "type": "string"
-        },
-        "entityType": {
-          "const": "comment"
-        },
-        "kind": {
-          "const": "entity"
-        }
-      },
-      "required": [
-        "kind",
-        "entityType",
-        "entityId"
-      ],
-      "type": "object"
+      "$ref": "#/$defs/CommentAddress"
     },
     "commentId": {
       "type": "string"
@@ -97,37 +127,7 @@ description: Generated reference for comments.get
       ]
     },
     "target": {
-      "additionalProperties": false,
-      "properties": {
-        "blockId": {
-          "type": "string"
-        },
-        "kind": {
-          "const": "text"
-        },
-        "range": {
-          "additionalProperties": false,
-          "properties": {
-            "end": {
-              "type": "integer"
-            },
-            "start": {
-              "type": "integer"
-            }
-          },
-          "required": [
-            "start",
-            "end"
-          ],
-          "type": "object"
-        }
-      },
-      "required": [
-        "kind",
-        "blockId",
-        "range"
-      ],
-      "type": "object"
+      "$ref": "#/$defs/TextAddress"
     },
     "text": {
       "type": "string"
@@ -141,3 +141,4 @@ description: Generated reference for comments.get
   "type": "object"
 }
 ```
+</Accordion>

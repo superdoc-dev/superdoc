@@ -38,7 +38,7 @@ const GROUP_METADATA: Record<ReferenceGroupKey, { title: string; description: st
   },
   format: {
     title: 'Format',
-    description: 'Formatting mutations.',
+    description: 'Canonical formatting mutation with boolean patch semantics.',
     pagePath: 'format/index.mdx',
   },
   lists: {
@@ -53,8 +53,13 @@ const GROUP_METADATA: Record<ReferenceGroupKey, { title: string; description: st
   },
   trackChanges: {
     title: 'Track Changes',
-    description: 'Tracked-change inspection and review operations.',
+    description: 'Tracked-change inspection operations.',
     pagePath: 'track-changes/index.mdx',
+  },
+  review: {
+    title: 'Review',
+    description: 'Accept or reject tracked changes.',
+    pagePath: 'review/index.mdx',
   },
   query: {
     title: 'Query',

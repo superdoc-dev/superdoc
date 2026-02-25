@@ -39,6 +39,7 @@ export type ReferenceGroupKey =
   | 'lists'
   | 'comments'
   | 'trackChanges'
+  | 'review'
   | 'query'
   | 'mutations';
 
@@ -111,7 +112,6 @@ function mutationOperation(options: {
 
 // Throw-code shorthand arrays
 const T_NOT_FOUND = ['TARGET_NOT_FOUND'] as const;
-const T_COMMAND = ['COMMAND_UNAVAILABLE', 'CAPABILITY_UNAVAILABLE'] as const;
 const T_NOT_FOUND_COMMAND = ['TARGET_NOT_FOUND', 'COMMAND_UNAVAILABLE', 'CAPABILITY_UNAVAILABLE'] as const;
 const T_NOT_FOUND_TRACKED = ['TARGET_NOT_FOUND', 'TRACK_CHANGE_COMMAND_UNAVAILABLE', 'CAPABILITY_UNAVAILABLE'] as const;
 const T_NOT_FOUND_COMMAND_TRACKED = [
@@ -130,12 +130,14 @@ const T_PLAN_ENGINE = [
   'PRECONDITION_FAILED',
   'INVALID_INPUT',
   'CROSS_BLOCK_MATCH',
+  'SPAN_FRAGMENTED',
+  'TARGET_MOVED',
   'PLAN_CONFLICT_OVERLAP',
   'INVALID_STEP_COMBINATION',
   'CAPABILITY_UNAVAILABLE',
 ] as const;
 
-const T_QUERY_MATCH = ['MATCH_NOT_FOUND', 'AMBIGUOUS_MATCH', 'INVALID_INPUT'] as const;
+const T_QUERY_MATCH = ['MATCH_NOT_FOUND', 'AMBIGUOUS_MATCH', 'INVALID_INPUT', 'INTERNAL_ERROR'] as const;
 
 // ---------------------------------------------------------------------------
 // Canonical definitions
@@ -235,60 +237,19 @@ export const OPERATION_DEFINITIONS = {
     referenceGroup: 'core',
   },
 
-  'format.bold': {
-    memberPath: 'format.bold',
-    description: 'Toggle bold formatting on the target range.',
+  'format.apply': {
+    memberPath: 'format.apply',
+    description:
+      'Apply explicit mark changes (bold, italic, underline, strike) to the target range using boolean patch semantics.',
     requiresDocumentContext: true,
     metadata: mutationOperation({
       idempotency: 'conditional',
       supportsDryRun: true,
       supportsTrackedMode: true,
       possibleFailureCodes: ['INVALID_TARGET'],
-      throws: [...T_NOT_FOUND_COMMAND_TRACKED, 'INVALID_TARGET'],
+      throws: [...T_NOT_FOUND_COMMAND_TRACKED, 'INVALID_TARGET', 'INVALID_INPUT'],
     }),
-    referenceDocPath: 'format/bold.mdx',
-    referenceGroup: 'format',
-  },
-  'format.italic': {
-    memberPath: 'format.italic',
-    description: 'Toggle italic formatting on the target range.',
-    requiresDocumentContext: true,
-    metadata: mutationOperation({
-      idempotency: 'conditional',
-      supportsDryRun: true,
-      supportsTrackedMode: true,
-      possibleFailureCodes: ['INVALID_TARGET'],
-      throws: [...T_NOT_FOUND_COMMAND_TRACKED, 'INVALID_TARGET'],
-    }),
-    referenceDocPath: 'format/italic.mdx',
-    referenceGroup: 'format',
-  },
-  'format.underline': {
-    memberPath: 'format.underline',
-    description: 'Toggle underline formatting on the target range.',
-    requiresDocumentContext: true,
-    metadata: mutationOperation({
-      idempotency: 'conditional',
-      supportsDryRun: true,
-      supportsTrackedMode: true,
-      possibleFailureCodes: ['INVALID_TARGET'],
-      throws: [...T_NOT_FOUND_COMMAND_TRACKED, 'INVALID_TARGET'],
-    }),
-    referenceDocPath: 'format/underline.mdx',
-    referenceGroup: 'format',
-  },
-  'format.strikethrough': {
-    memberPath: 'format.strikethrough',
-    description: 'Toggle strikethrough formatting on the target range.',
-    requiresDocumentContext: true,
-    metadata: mutationOperation({
-      idempotency: 'conditional',
-      supportsDryRun: true,
-      supportsTrackedMode: true,
-      possibleFailureCodes: ['INVALID_TARGET'],
-      throws: [...T_NOT_FOUND_COMMAND_TRACKED, 'INVALID_TARGET'],
-    }),
-    referenceDocPath: 'format/strikethrough.mdx',
+    referenceDocPath: 'format/apply.mdx',
     referenceGroup: 'format',
   },
 
@@ -428,9 +389,9 @@ export const OPERATION_DEFINITIONS = {
     referenceGroup: 'lists',
   },
 
-  'comments.add': {
-    memberPath: 'comments.add',
-    description: 'Add a new comment thread anchored to a target range.',
+  'comments.create': {
+    memberPath: 'comments.create',
+    description: 'Create a new comment thread (or reply when parentCommentId is given).',
     requiresDocumentContext: true,
     metadata: mutationOperation({
       idempotency: 'non-idempotent',
@@ -439,40 +400,12 @@ export const OPERATION_DEFINITIONS = {
       possibleFailureCodes: ['INVALID_TARGET', 'NO_OP'],
       throws: [...T_NOT_FOUND_COMMAND, 'INVALID_TARGET'],
     }),
-    referenceDocPath: 'comments/add.mdx',
+    referenceDocPath: 'comments/create.mdx',
     referenceGroup: 'comments',
   },
-  'comments.edit': {
-    memberPath: 'comments.edit',
-    description: 'Edit the content of an existing comment.',
-    requiresDocumentContext: true,
-    metadata: mutationOperation({
-      idempotency: 'conditional',
-      supportsDryRun: false,
-      supportsTrackedMode: false,
-      possibleFailureCodes: ['NO_OP'],
-      throws: T_NOT_FOUND_COMMAND,
-    }),
-    referenceDocPath: 'comments/edit.mdx',
-    referenceGroup: 'comments',
-  },
-  'comments.reply': {
-    memberPath: 'comments.reply',
-    description: 'Add a reply to an existing comment thread.',
-    requiresDocumentContext: true,
-    metadata: mutationOperation({
-      idempotency: 'non-idempotent',
-      supportsDryRun: false,
-      supportsTrackedMode: false,
-      possibleFailureCodes: ['INVALID_TARGET'],
-      throws: T_NOT_FOUND_COMMAND,
-    }),
-    referenceDocPath: 'comments/reply.mdx',
-    referenceGroup: 'comments',
-  },
-  'comments.move': {
-    memberPath: 'comments.move',
-    description: 'Move a comment thread to a new anchor range.',
+  'comments.patch': {
+    memberPath: 'comments.patch',
+    description: 'Patch fields on an existing comment (text, target, status, or isInternal).',
     requiresDocumentContext: true,
     metadata: mutationOperation({
       idempotency: 'conditional',
@@ -481,25 +414,11 @@ export const OPERATION_DEFINITIONS = {
       possibleFailureCodes: ['INVALID_TARGET', 'NO_OP'],
       throws: [...T_NOT_FOUND_COMMAND, 'INVALID_TARGET'],
     }),
-    referenceDocPath: 'comments/move.mdx',
+    referenceDocPath: 'comments/patch.mdx',
     referenceGroup: 'comments',
   },
-  'comments.resolve': {
-    memberPath: 'comments.resolve',
-    description: 'Resolve or unresolve a comment thread.',
-    requiresDocumentContext: true,
-    metadata: mutationOperation({
-      idempotency: 'conditional',
-      supportsDryRun: false,
-      supportsTrackedMode: false,
-      possibleFailureCodes: ['NO_OP'],
-      throws: T_NOT_FOUND_COMMAND,
-    }),
-    referenceDocPath: 'comments/resolve.mdx',
-    referenceGroup: 'comments',
-  },
-  'comments.remove': {
-    memberPath: 'comments.remove',
+  'comments.delete': {
+    memberPath: 'comments.delete',
     description: 'Remove a comment or reply by ID.',
     requiresDocumentContext: true,
     metadata: mutationOperation({
@@ -509,46 +428,7 @@ export const OPERATION_DEFINITIONS = {
       possibleFailureCodes: ['NO_OP'],
       throws: T_NOT_FOUND_COMMAND,
     }),
-    referenceDocPath: 'comments/remove.mdx',
-    referenceGroup: 'comments',
-  },
-  'comments.setInternal': {
-    memberPath: 'comments.setInternal',
-    description: 'Toggle the internal (private) flag on a comment thread.',
-    requiresDocumentContext: true,
-    metadata: mutationOperation({
-      idempotency: 'conditional',
-      supportsDryRun: false,
-      supportsTrackedMode: false,
-      possibleFailureCodes: ['NO_OP', 'INVALID_TARGET'],
-      throws: T_NOT_FOUND_COMMAND,
-    }),
-    referenceDocPath: 'comments/set-internal.mdx',
-    referenceGroup: 'comments',
-  },
-  'comments.setActive': {
-    memberPath: 'comments.setActive',
-    description: 'Set the active (focused) comment thread for UI highlighting.',
-    requiresDocumentContext: true,
-    metadata: mutationOperation({
-      idempotency: 'conditional',
-      supportsDryRun: false,
-      supportsTrackedMode: false,
-      possibleFailureCodes: ['INVALID_TARGET'],
-      throws: T_NOT_FOUND_COMMAND,
-    }),
-    referenceDocPath: 'comments/set-active.mdx',
-    referenceGroup: 'comments',
-  },
-  'comments.goTo': {
-    memberPath: 'comments.goTo',
-    description: 'Scroll the viewport to a comment thread by ID.',
-    requiresDocumentContext: true,
-    metadata: readOperation({
-      idempotency: 'conditional',
-      throws: T_NOT_FOUND_COMMAND,
-    }),
-    referenceDocPath: 'comments/go-to.mdx',
+    referenceDocPath: 'comments/delete.mdx',
     referenceGroup: 'comments',
   },
   'comments.get': {
@@ -594,9 +474,9 @@ export const OPERATION_DEFINITIONS = {
     referenceDocPath: 'track-changes/get.mdx',
     referenceGroup: 'trackChanges',
   },
-  'trackChanges.accept': {
-    memberPath: 'trackChanges.accept',
-    description: 'Accept a tracked change, applying it permanently.',
+  'review.decide': {
+    memberPath: 'review.decide',
+    description: 'Accept or reject a tracked change (by ID or scope: all).',
     requiresDocumentContext: true,
     metadata: mutationOperation({
       idempotency: 'conditional',
@@ -605,50 +485,8 @@ export const OPERATION_DEFINITIONS = {
       possibleFailureCodes: ['NO_OP'],
       throws: T_NOT_FOUND_COMMAND,
     }),
-    referenceDocPath: 'track-changes/accept.mdx',
-    referenceGroup: 'trackChanges',
-  },
-  'trackChanges.reject': {
-    memberPath: 'trackChanges.reject',
-    description: 'Reject a tracked change, reverting it.',
-    requiresDocumentContext: true,
-    metadata: mutationOperation({
-      idempotency: 'conditional',
-      supportsDryRun: false,
-      supportsTrackedMode: false,
-      possibleFailureCodes: ['NO_OP'],
-      throws: T_NOT_FOUND_COMMAND,
-    }),
-    referenceDocPath: 'track-changes/reject.mdx',
-    referenceGroup: 'trackChanges',
-  },
-  'trackChanges.acceptAll': {
-    memberPath: 'trackChanges.acceptAll',
-    description: 'Accept all tracked changes in the document.',
-    requiresDocumentContext: true,
-    metadata: mutationOperation({
-      idempotency: 'conditional',
-      supportsDryRun: false,
-      supportsTrackedMode: false,
-      possibleFailureCodes: ['NO_OP'],
-      throws: T_COMMAND,
-    }),
-    referenceDocPath: 'track-changes/accept-all.mdx',
-    referenceGroup: 'trackChanges',
-  },
-  'trackChanges.rejectAll': {
-    memberPath: 'trackChanges.rejectAll',
-    description: 'Reject all tracked changes in the document.',
-    requiresDocumentContext: true,
-    metadata: mutationOperation({
-      idempotency: 'conditional',
-      supportsDryRun: false,
-      supportsTrackedMode: false,
-      possibleFailureCodes: ['NO_OP'],
-      throws: T_COMMAND,
-    }),
-    referenceDocPath: 'track-changes/reject-all.mdx',
-    referenceGroup: 'trackChanges',
+    referenceDocPath: 'review/decide.mdx',
+    referenceGroup: 'review',
   },
 
   'query.match': {

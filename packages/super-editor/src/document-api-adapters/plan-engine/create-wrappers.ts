@@ -18,7 +18,7 @@ import type {
   MutationOptions,
 } from '@superdoc/document-api';
 import { clearIndexCache, getBlockIndex } from '../helpers/index-cache.js';
-import { findBlockById, findBlockByNodeIdOnly, type BlockCandidate } from '../helpers/node-address-resolver.js';
+import { findBlockById, type BlockCandidate } from '../helpers/node-address-resolver.js';
 import { collectTrackInsertRefsInRange } from '../helpers/tracked-change-refs.js';
 import { DocumentApiAdapterError } from '../errors.js';
 import { requireEditorCommand, ensureTrackedCapability } from '../helpers/mutation-helpers.js';
@@ -62,13 +62,10 @@ function resolveCreateInsertPosition(
   if (location.kind === 'documentEnd') return editor.state.doc.content.size;
 
   const index = getBlockIndex(editor);
-  const hasTarget = 'target' in location && location.target != null;
-  const target = hasTarget
-    ? findBlockById(index, location.target)
-    : findBlockByNodeIdOnly(index, (location as { nodeId: string }).nodeId);
+  const target = findBlockById(index, location.target);
   if (!target) {
     throw new DocumentApiAdapterError('TARGET_NOT_FOUND', `Create ${operationLabel} target block was not found.`, {
-      target: hasTarget ? location.target : (location as { nodeId: string }).nodeId,
+      target: location.target,
     });
   }
 

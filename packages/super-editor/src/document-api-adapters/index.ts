@@ -11,13 +11,7 @@ import { getDocumentApiCapabilities } from './capabilities-adapter.js';
 import { createCommentsWrapper } from './plan-engine/comments-wrappers.js';
 import { createParagraphWrapper, createHeadingWrapper } from './plan-engine/create-wrappers.js';
 import { findAdapter } from './find-adapter.js';
-import {
-  writeWrapper,
-  formatBoldWrapper,
-  formatItalicWrapper,
-  formatUnderlineWrapper,
-  formatStrikethroughWrapper,
-} from './plan-engine/plan-wrappers.js';
+import { writeWrapper, styleApplyWrapper } from './plan-engine/plan-wrappers.js';
 import { getNodeAdapter, getNodeByIdAdapter } from './get-node-adapter.js';
 import { getTextAdapter } from './get-text-adapter.js';
 import { infoAdapter } from './info-adapter.js';
@@ -80,10 +74,7 @@ export function getDocumentApiAdapters(editor: Editor): DocumentApiAdapters {
       write: (request, options) => writeWrapper(editor, request, options),
     },
     format: {
-      bold: (input, options) => formatBoldWrapper(editor, input, options),
-      italic: (input, options) => formatItalicWrapper(editor, input, options),
-      underline: (input, options) => formatUnderlineWrapper(editor, input, options),
-      strikethrough: (input, options) => formatStrikethroughWrapper(editor, input, options),
+      apply: (input, options) => styleApplyWrapper(editor, input, options),
     },
     trackChanges: {
       list: (query) => trackChangesListWrapper(editor, query),

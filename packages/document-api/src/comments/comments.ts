@@ -2,7 +2,7 @@ import type { Receipt, TextAddress } from '../types/index.js';
 import type { CommentInfo, CommentsListQuery, CommentsListResult } from './comments.types.js';
 import type { RevisionGuardOptions } from '../write/write.js';
 import { DocumentApiValidationError } from '../errors.js';
-import { isRecord, isTextAddress, assertNoUnknownFields, assertNonNegativeInteger } from '../validation-primitives.js';
+import { isRecord, isTextAddress, assertNoUnknownFields } from '../validation-primitives.js';
 
 /**
  * Input for adding a comment to a text range.
@@ -18,12 +18,6 @@ export interface AddCommentInput {
   target?: TextAddress;
   /** The comment body text. */
   text: string;
-  /** Block ID for block-relative range targeting. Requires `start` and `end`. */
-  blockId?: string;
-  /** Start offset within the block. Requires `blockId` and `end`. Non-negative integer. */
-  start?: number;
-  /** End offset within the block. Requires `blockId` and `start`. Non-negative integer, >= start. */
-  end?: number;
 }
 
 export interface EditCommentInput {
@@ -38,13 +32,7 @@ export interface ReplyToCommentInput {
 
 export interface MoveCommentInput {
   commentId: string;
-  target?: TextAddress;
-  /** Block ID for block-relative range targeting. Requires `start` and `end`. */
-  blockId?: string;
-  /** Start offset within the block. Requires `blockId` and `end`. Non-negative integer. */
-  start?: number;
-  /** End offset within the block. Requires `blockId` and `start`. Non-negative integer, >= start. */
-  end?: number;
+  target: TextAddress;
 }
 
 export interface ResolveCommentInput {
@@ -69,6 +57,52 @@ export interface GoToCommentInput {
 }
 
 export interface GetCommentInput {
+  commentId: string;
+}
+
+// ---------------------------------------------------------------------------
+// Canonical consolidated inputs (Phase 4 Wave 3)
+// ---------------------------------------------------------------------------
+
+/**
+ * Input for `comments.create` — creates a new comment thread or a reply.
+ *
+ * When `parentCommentId` is provided, creates a reply on an existing thread.
+ * Otherwise, creates a new root comment anchored to the given text range.
+ */
+export interface CommentsCreateInput {
+  /** The comment body text. */
+  text: string;
+  /** The text range to attach the comment to (root comments only). */
+  target?: TextAddress;
+  /** Parent comment ID — when provided, creates a reply instead of a root comment. */
+  parentCommentId?: string;
+}
+
+/**
+ * Input for `comments.patch` — field-level patch on an existing comment.
+ *
+ * Exactly one mutation field (`text`, `target`, `status`, `isInternal`)
+ * should be provided per call. Multiple fields are applied sequentially.
+ */
+export interface CommentsPatchInput {
+  /** The ID of the comment to patch. */
+  commentId: string;
+  /** New body text (routes to edit). */
+  text?: string;
+  /** New anchor range (routes to move). */
+  target?: TextAddress;
+  /** Set status to 'resolved' (routes to resolve). */
+  status?: 'resolved';
+  /** Set the internal/private flag (routes to setInternal). */
+  isInternal?: boolean;
+}
+
+/**
+ * Input for `comments.delete` — removes a comment by ID.
+ */
+export interface CommentsDeleteInput {
+  /** The ID of the comment to delete. */
   commentId: string;
 }
 
@@ -102,33 +136,36 @@ export interface CommentsAdapter {
 
 /**
  * Public comments API surface exposed on `editor.doc.comments`.
+ *
+ * Canonical operations: `create`, `patch`, `delete`, `get`, `list`.
+ *
+ * Excludes UI-state operations (`setActive`, `goTo`) that live on
+ * {@link CommentsAdapter} for internal editor use but are not part
+ * of the document-api contract.
  */
-export type CommentsApi = CommentsAdapter;
+export interface CommentsApi {
+  create(input: CommentsCreateInput, options?: RevisionGuardOptions): Receipt;
+  patch(input: CommentsPatchInput, options?: RevisionGuardOptions): Receipt;
+  delete(input: CommentsDeleteInput, options?: RevisionGuardOptions): Receipt;
+  get(input: GetCommentInput): CommentInfo;
+  list(query?: CommentsListQuery): CommentsListResult;
+}
 
-const ADD_COMMENT_ALLOWED_KEYS = new Set(['target', 'text', 'blockId', 'start', 'end']);
+const CREATE_COMMENT_ALLOWED_KEYS = new Set(['target', 'text', 'parentCommentId']);
 
 /**
- * Validates AddCommentInput and throws DocumentApiValidationError on violations.
+ * Validates CommentsCreateInput for root comments (non-reply) and throws DocumentApiValidationError on violations.
  */
-function validateAddCommentInput(input: unknown): asserts input is AddCommentInput {
+function validateCreateCommentInput(input: unknown): asserts input is CommentsCreateInput {
   if (!isRecord(input)) {
-    throw new DocumentApiValidationError('INVALID_TARGET', 'comments.add input must be a non-null object.');
+    throw new DocumentApiValidationError('INVALID_TARGET', 'comments.create input must be a non-null object.');
   }
 
-  assertNoUnknownFields(input, ADD_COMMENT_ALLOWED_KEYS, 'comments.add');
+  assertNoUnknownFields(input, CREATE_COMMENT_ALLOWED_KEYS, 'comments.create');
 
-  const { target, text, blockId, start, end } = input;
+  const { target, text, parentCommentId } = input;
   const hasTarget = target !== undefined;
-  const hasBlockId = blockId !== undefined;
-  const hasStart = start !== undefined;
-  const hasEnd = end !== undefined;
-
-  if (hasTarget && !isTextAddress(target)) {
-    throw new DocumentApiValidationError('INVALID_TARGET', 'target must be a text address object.', {
-      field: 'target',
-      value: target,
-    });
-  }
+  const isReply = parentCommentId !== undefined;
 
   if (typeof text !== 'string') {
     throw new DocumentApiValidationError('INVALID_TARGET', `text must be a string, got ${typeof text}.`, {
@@ -137,82 +174,60 @@ function validateAddCommentInput(input: unknown): asserts input is AddCommentInp
     });
   }
 
-  if (hasBlockId && typeof blockId !== 'string') {
-    throw new DocumentApiValidationError('INVALID_TARGET', `blockId must be a string, got ${typeof blockId}.`, {
-      field: 'blockId',
-      value: blockId,
-    });
-  }
-
-  if (!hasTarget && !hasBlockId && !hasStart && !hasEnd) {
-    throw new DocumentApiValidationError(
-      'INVALID_TARGET',
-      'comments.add requires a target. Provide either target or blockId + start + end.',
-    );
-  }
-
-  if (hasTarget && (hasBlockId || hasStart || hasEnd)) {
-    throw new DocumentApiValidationError(
-      'INVALID_TARGET',
-      'Cannot combine target with blockId/start/end. Use exactly one locator mode.',
-      {
-        fields: [
-          'target',
-          ...(hasBlockId ? ['blockId'] : []),
-          ...(hasStart ? ['start'] : []),
-          ...(hasEnd ? ['end'] : []),
-        ],
-      },
-    );
-  }
-
-  if (!hasBlockId && (hasStart || hasEnd)) {
-    throw new DocumentApiValidationError('INVALID_TARGET', 'start/end require blockId.', {
-      fields: ['blockId', ...(hasStart ? ['start'] : []), ...(hasEnd ? ['end'] : [])],
-    });
-  }
-
-  if (hasBlockId && !hasTarget) {
-    if (!hasStart || !hasEnd) {
-      throw new DocumentApiValidationError('INVALID_TARGET', 'blockId requires both start and end for comments.add.', {
-        fields: ['blockId', 'start', 'end'],
+  // Replies only need parentCommentId + text — skip target validation
+  if (isReply) {
+    if (typeof parentCommentId !== 'string' || parentCommentId.length === 0) {
+      throw new DocumentApiValidationError('INVALID_TARGET', 'parentCommentId must be a non-empty string.', {
+        field: 'parentCommentId',
+        value: parentCommentId,
       });
     }
+    if (hasTarget) {
+      throw new DocumentApiValidationError(
+        'INVALID_TARGET',
+        'Cannot combine parentCommentId with target. Replies do not take a target.',
+        { fields: ['parentCommentId', 'target'] },
+      );
+    }
+    return;
   }
 
-  if (hasStart) assertNonNegativeInteger(start, 'start');
-  if (hasEnd) assertNonNegativeInteger(end, 'end');
-  if (hasStart && hasEnd && (start as number) > (end as number)) {
-    throw new DocumentApiValidationError('INVALID_TARGET', `start must be <= end, got start=${start}, end=${end}.`, {
-      fields: ['start', 'end'],
-      start,
-      end,
+  if (hasTarget && !isTextAddress(target)) {
+    throw new DocumentApiValidationError('INVALID_TARGET', 'target must be a text address object.', {
+      field: 'target',
+      value: target,
     });
   }
 }
 
-const MOVE_COMMENT_ALLOWED_KEYS = new Set(['commentId', 'target', 'blockId', 'start', 'end']);
+const PATCH_COMMENT_ALLOWED_KEYS = new Set(['commentId', 'target', 'text', 'status', 'isInternal']);
 
 /**
- * Validates MoveCommentInput and throws DocumentApiValidationError on violations.
+ * Validates CommentsPatchInput target fields and throws DocumentApiValidationError on violations.
+ * Only validates target-related fields when a target is being patched.
  */
-function validateMoveCommentInput(input: unknown): asserts input is MoveCommentInput {
+function validatePatchCommentInput(input: unknown): asserts input is CommentsPatchInput {
   if (!isRecord(input)) {
-    throw new DocumentApiValidationError('INVALID_TARGET', 'comments.move input must be a non-null object.');
+    throw new DocumentApiValidationError('INVALID_TARGET', 'comments.patch input must be a non-null object.');
   }
 
-  assertNoUnknownFields(input, MOVE_COMMENT_ALLOWED_KEYS, 'comments.move');
+  assertNoUnknownFields(input, PATCH_COMMENT_ALLOWED_KEYS, 'comments.patch');
 
-  const { commentId, target, blockId, start, end } = input;
+  const { commentId, target } = input;
   const hasTarget = target !== undefined;
-  const hasBlockId = blockId !== undefined;
-  const hasStart = start !== undefined;
-  const hasEnd = end !== undefined;
 
   if (typeof commentId !== 'string') {
     throw new DocumentApiValidationError('INVALID_TARGET', `commentId must be a string, got ${typeof commentId}.`, {
       field: 'commentId',
       value: commentId,
+    });
+  }
+
+  const { status } = input;
+  if (status !== undefined && status !== 'resolved') {
+    throw new DocumentApiValidationError('INVALID_TARGET', `status must be "resolved", got "${String(status)}".`, {
+      field: 'status',
+      value: status,
     });
   }
 
@@ -222,147 +237,77 @@ function validateMoveCommentInput(input: unknown): asserts input is MoveCommentI
       value: target,
     });
   }
+}
 
-  if (hasBlockId && typeof blockId !== 'string') {
-    throw new DocumentApiValidationError('INVALID_TARGET', `blockId must be a string, got ${typeof blockId}.`, {
-      field: 'blockId',
-      value: blockId,
-    });
-  }
+// ---------------------------------------------------------------------------
+// Execute wrappers — canonical interception point for input normalization
+// and validation. These route to the fine-grained adapter methods.
+// ---------------------------------------------------------------------------
 
-  if (!hasTarget && !hasBlockId && !hasStart && !hasEnd) {
-    throw new DocumentApiValidationError(
-      'INVALID_TARGET',
-      'comments.move requires a target. Provide either target or blockId + start + end.',
-    );
-  }
+/**
+ * Execute `comments.create` — routes to `adapter.add` or `adapter.reply`
+ * depending on whether `parentCommentId` is provided.
+ */
+export function executeCommentsCreate(
+  adapter: CommentsAdapter,
+  input: CommentsCreateInput,
+  options?: RevisionGuardOptions,
+): Receipt {
+  // Validate the raw input first (catches null, unknown fields, etc.)
+  validateCreateCommentInput(input);
 
-  if (hasTarget && (hasBlockId || hasStart || hasEnd)) {
-    throw new DocumentApiValidationError(
-      'INVALID_TARGET',
-      'Cannot combine target with blockId/start/end. Use exactly one locator mode.',
-      {
-        fields: [
-          'target',
-          ...(hasBlockId ? ['blockId'] : []),
-          ...(hasStart ? ['start'] : []),
-          ...(hasEnd ? ['end'] : []),
-        ],
-      },
-    );
+  if (input.parentCommentId !== undefined) {
+    return adapter.reply({ parentCommentId: input.parentCommentId, text: input.text }, options);
   }
-
-  if (!hasBlockId && (hasStart || hasEnd)) {
-    throw new DocumentApiValidationError('INVALID_TARGET', 'start/end require blockId.', {
-      fields: ['blockId', ...(hasStart ? ['start'] : []), ...(hasEnd ? ['end'] : [])],
-    });
-  }
-
-  if (hasBlockId && !hasTarget) {
-    if (!hasStart || !hasEnd) {
-      throw new DocumentApiValidationError('INVALID_TARGET', 'blockId requires both start and end for comments.move.', {
-        fields: ['blockId', 'start', 'end'],
-      });
-    }
-  }
-
-  if (hasStart) assertNonNegativeInteger(start, 'start');
-  if (hasEnd) assertNonNegativeInteger(end, 'end');
-  if (hasStart && hasEnd && (start as number) > (end as number)) {
-    throw new DocumentApiValidationError('INVALID_TARGET', `start must be <= end, got start=${start}, end=${end}.`, {
-      fields: ['start', 'end'],
-      start,
-      end,
-    });
-  }
+  return adapter.add(input, options);
 }
 
 /**
- * Normalizes friendly locator fields into canonical TextAddress for comment inputs.
- * Returns the input with `target` resolved if blockId+start+end was provided.
+ * Execute `comments.patch` — routes to the appropriate adapter method(s)
+ * based on which fields are provided.
  */
-function normalizeCommentTarget<T extends { target?: TextAddress; blockId?: string; start?: number; end?: number }>(
-  input: T,
-): T & { target: TextAddress } {
-  if (input.target) return input as T & { target: TextAddress };
+export function executeCommentsPatch(
+  adapter: CommentsAdapter,
+  input: CommentsPatchInput,
+  options?: RevisionGuardOptions,
+): Receipt {
+  // Validate the full input up front — commentId, unknown fields, and target
+  // constraints — before any adapter mutations.
+  validatePatchCommentInput(input);
 
-  const target: TextAddress = {
-    kind: 'text',
-    blockId: input.blockId!,
-    range: { start: input.start!, end: input.end! },
-  };
+  let lastReceipt: Receipt = { success: true };
 
-  // Return a clean object with the canonical target — no leftover friendly fields.
-  const { blockId: _b, start: _s, end: _e, ...rest } = input;
-  return { ...rest, target } as T & { target: TextAddress };
+  if (input.text !== undefined) {
+    lastReceipt = adapter.edit({ commentId: input.commentId, text: input.text }, options);
+  }
+
+  if (input.target !== undefined) {
+    lastReceipt = adapter.move({ commentId: input.commentId, target: input.target }, options);
+  }
+
+  if (input.status === 'resolved') {
+    lastReceipt = adapter.resolve({ commentId: input.commentId }, options);
+  }
+
+  if (input.isInternal !== undefined) {
+    lastReceipt = adapter.setInternal({ commentId: input.commentId, isInternal: input.isInternal }, options);
+  }
+
+  return lastReceipt;
 }
 
 /**
- * Execute wrappers below are the canonical interception point for input
- * normalization and validation. Query-only operations currently pass through
- * directly. Mutation operations will gain validation as the API matures.
- * Keep the wrappers to preserve this extension surface.
+ * Execute `comments.delete` — routes to `adapter.remove`.
  */
-export function executeAddComment(
+export function executeCommentsDelete(
   adapter: CommentsAdapter,
-  input: AddCommentInput,
+  input: CommentsDeleteInput,
   options?: RevisionGuardOptions,
 ): Receipt {
-  validateAddCommentInput(input);
-  const normalized = normalizeCommentTarget(input);
-  return adapter.add(normalized, options);
+  return adapter.remove({ commentId: input.commentId }, options);
 }
 
-export function executeEditComment(
-  adapter: CommentsAdapter,
-  input: EditCommentInput,
-  options?: RevisionGuardOptions,
-): Receipt {
-  return adapter.edit(input, options);
-}
-
-export function executeReplyToComment(
-  adapter: CommentsAdapter,
-  input: ReplyToCommentInput,
-  options?: RevisionGuardOptions,
-): Receipt {
-  return adapter.reply(input, options);
-}
-
-export function executeMoveComment(
-  adapter: CommentsAdapter,
-  input: MoveCommentInput,
-  options?: RevisionGuardOptions,
-): Receipt {
-  validateMoveCommentInput(input);
-  const normalized = normalizeCommentTarget(input);
-  return adapter.move(normalized, options);
-}
-
-export function executeResolveComment(
-  adapter: CommentsAdapter,
-  input: ResolveCommentInput,
-  options?: RevisionGuardOptions,
-): Receipt {
-  return adapter.resolve(input, options);
-}
-
-export function executeRemoveComment(
-  adapter: CommentsAdapter,
-  input: RemoveCommentInput,
-  options?: RevisionGuardOptions,
-): Receipt {
-  return adapter.remove(input, options);
-}
-
-export function executeSetCommentInternal(
-  adapter: CommentsAdapter,
-  input: SetCommentInternalInput,
-  options?: RevisionGuardOptions,
-): Receipt {
-  return adapter.setInternal(input, options);
-}
-
+// Internal-use execute wrappers (setActive, goTo remain for adapter consumers)
 export function executeSetCommentActive(
   adapter: CommentsAdapter,
   input: SetCommentActiveInput,

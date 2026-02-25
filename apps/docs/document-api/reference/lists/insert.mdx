@@ -18,6 +18,60 @@ description: Generated reference for lists.insert
 - Supports dry run: `yes`
 - Deterministic target resolution: `yes`
 
+## Input fields
+
+| Field | Type | Required | Description |
+| --- | --- | --- | --- |
+| `position` | enum | yes | `"before"`, `"after"` |
+| `target` | ListItemAddress | yes | ListItemAddress |
+| `text` | string | no |  |
+
+### Example request
+
+```json
+{
+  "position": "before",
+  "target": {
+    "kind": "block",
+    "nodeId": "node-def456",
+    "nodeType": "listItem"
+  },
+  "text": "Hello, world."
+}
+```
+
+## Output fields
+
+_No fields._
+
+### Example response
+
+```json
+{
+  "insertionPoint": {
+    "blockId": "block-abc123",
+    "kind": "text",
+    "range": {
+      "end": 10,
+      "start": 0
+    }
+  },
+  "item": {
+    "kind": "block",
+    "nodeId": "node-def456",
+    "nodeType": "listItem"
+  },
+  "success": true,
+  "trackedChangeRefs": [
+    {
+      "entityId": "entity-789",
+      "entityType": "trackedChange",
+      "kind": "entity"
+    }
+  ]
+}
+```
+
 ## Pre-apply throws
 
 - `TARGET_NOT_FOUND`
@@ -30,28 +84,13 @@ description: Generated reference for lists.insert
 
 - `INVALID_TARGET`
 
-## Input schema
+## Raw schemas
 
+<Accordion title="Raw input schema">
 ```json
 {
   "additionalProperties": false,
-  "oneOf": [
-    {
-      "required": [
-        "target"
-      ]
-    },
-    {
-      "required": [
-        "nodeId"
-      ]
-    }
-  ],
   "properties": {
-    "nodeId": {
-      "description": "Node ID shorthand — adapter resolves to a ListItemAddress.",
-      "type": "string"
-    },
     "position": {
       "enum": [
         "before",
@@ -59,38 +98,22 @@ description: Generated reference for lists.insert
       ]
     },
     "target": {
-      "additionalProperties": false,
-      "properties": {
-        "kind": {
-          "const": "block"
-        },
-        "nodeId": {
-          "type": "string"
-        },
-        "nodeType": {
-          "const": "listItem"
-        }
-      },
-      "required": [
-        "kind",
-        "nodeType",
-        "nodeId"
-      ],
-      "type": "object"
+      "$ref": "#/$defs/ListItemAddress"
     },
     "text": {
       "type": "string"
     }
   },
   "required": [
+    "target",
     "position"
   ],
   "type": "object"
 }
 ```
+</Accordion>
 
-## Output schema
-
+<Accordion title="Raw output schema">
 ```json
 {
   "oneOf": [
@@ -98,81 +121,17 @@ description: Generated reference for lists.insert
       "additionalProperties": false,
       "properties": {
         "insertionPoint": {
-          "additionalProperties": false,
-          "properties": {
-            "blockId": {
-              "type": "string"
-            },
-            "kind": {
-              "const": "text"
-            },
-            "range": {
-              "additionalProperties": false,
-              "properties": {
-                "end": {
-                  "type": "integer"
-                },
-                "start": {
-                  "type": "integer"
-                }
-              },
-              "required": [
-                "start",
-                "end"
-              ],
-              "type": "object"
-            }
-          },
-          "required": [
-            "kind",
-            "blockId",
-            "range"
-          ],
-          "type": "object"
+          "$ref": "#/$defs/TextAddress"
         },
         "item": {
-          "additionalProperties": false,
-          "properties": {
-            "kind": {
-              "const": "block"
-            },
-            "nodeId": {
-              "type": "string"
-            },
-            "nodeType": {
-              "const": "listItem"
-            }
-          },
-          "required": [
-            "kind",
-            "nodeType",
-            "nodeId"
-          ],
-          "type": "object"
+          "$ref": "#/$defs/ListItemAddress"
         },
         "success": {
           "const": true
         },
         "trackedChangeRefs": {
           "items": {
-            "additionalProperties": false,
-            "properties": {
-              "entityId": {
-                "type": "string"
-              },
-              "entityType": {
-                "const": "trackedChange"
-              },
-              "kind": {
-                "const": "entity"
-              }
-            },
-            "required": [
-              "kind",
-              "entityType",
-              "entityId"
-            ],
-            "type": "object"
+            "$ref": "#/$defs/TrackedChangeAddress"
           },
           "type": "array"
         }
@@ -219,89 +178,25 @@ description: Generated reference for lists.insert
   ]
 }
 ```
+</Accordion>
 
-## Success schema
-
+<Accordion title="Raw success schema">
 ```json
 {
   "additionalProperties": false,
   "properties": {
     "insertionPoint": {
-      "additionalProperties": false,
-      "properties": {
-        "blockId": {
-          "type": "string"
-        },
-        "kind": {
-          "const": "text"
-        },
-        "range": {
-          "additionalProperties": false,
-          "properties": {
-            "end": {
-              "type": "integer"
-            },
-            "start": {
-              "type": "integer"
-            }
-          },
-          "required": [
-            "start",
-            "end"
-          ],
-          "type": "object"
-        }
-      },
-      "required": [
-        "kind",
-        "blockId",
-        "range"
-      ],
-      "type": "object"
+      "$ref": "#/$defs/TextAddress"
     },
     "item": {
-      "additionalProperties": false,
-      "properties": {
-        "kind": {
-          "const": "block"
-        },
-        "nodeId": {
-          "type": "string"
-        },
-        "nodeType": {
-          "const": "listItem"
-        }
-      },
-      "required": [
-        "kind",
-        "nodeType",
-        "nodeId"
-      ],
-      "type": "object"
+      "$ref": "#/$defs/ListItemAddress"
     },
     "success": {
       "const": true
     },
     "trackedChangeRefs": {
       "items": {
-        "additionalProperties": false,
-        "properties": {
-          "entityId": {
-            "type": "string"
-          },
-          "entityType": {
-            "const": "trackedChange"
-          },
-          "kind": {
-            "const": "entity"
-          }
-        },
-        "required": [
-          "kind",
-          "entityType",
-          "entityId"
-        ],
-        "type": "object"
+        "$ref": "#/$defs/TrackedChangeAddress"
       },
       "type": "array"
     }
@@ -314,9 +209,9 @@ description: Generated reference for lists.insert
   "type": "object"
 }
 ```
+</Accordion>
 
-## Failure schema
-
+<Accordion title="Raw failure schema">
 ```json
 {
   "additionalProperties": false,
@@ -351,3 +246,4 @@ description: Generated reference for lists.insert
   "type": "object"
 }
 ```
+</Accordion>

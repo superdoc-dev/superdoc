@@ -23,7 +23,7 @@ describe('assembleDocumentApiAdapters', () => {
     expect(adapters).toHaveProperty('info.info');
     expect(adapters).toHaveProperty('comments');
     expect(adapters).toHaveProperty('write.write');
-    expect(adapters).toHaveProperty('format.bold');
+    expect(adapters).toHaveProperty('format.apply');
     expect(adapters).toHaveProperty('trackChanges.list');
     expect(adapters).toHaveProperty('trackChanges.get');
     expect(adapters).toHaveProperty('trackChanges.accept');
@@ -47,7 +47,7 @@ describe('assembleDocumentApiAdapters', () => {
 
     expect(typeof adapters.find.find).toBe('function');
     expect(typeof adapters.write.write).toBe('function');
-    expect(typeof adapters.format.bold).toBe('function');
+    expect(typeof adapters.format.apply).toBe('function');
     expect(typeof adapters.create.paragraph).toBe('function');
     expect(typeof adapters.create.heading).toBe('function');
     expect(typeof adapters.lists.insert).toBe('function');

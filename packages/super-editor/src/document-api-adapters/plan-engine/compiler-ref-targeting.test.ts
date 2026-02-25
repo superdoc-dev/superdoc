@@ -95,47 +95,6 @@ describe('compilePlan ref-targeting semantics', () => {
 
     throw new Error('expected compilePlan to throw MATCH_NOT_FOUND');
   });
-
-  it('throws INVALID_INPUT when v2 span ref segments are not contiguous in block order', () => {
-    mockedDeps.getBlockIndex.mockReturnValue({
-      candidates: [
-        { nodeId: 'p1', pos: 0, end: 12, node: {} },
-        { nodeId: 'p2', pos: 20, end: 32, node: {} },
-        { nodeId: 'p3', pos: 40, end: 52, node: {} },
-      ],
-    });
-
-    const ref = encodeTextRefPayload({
-      v: 2,
-      rev: '0',
-      matchId: 'm:0',
-      segments: [
-        { blockId: 'p1', start: 0, end: 3 },
-        { blockId: 'p3', start: 0, end: 3 },
-      ],
-    });
-
-    const editor = makeEditor();
-    const steps: MutationStep[] = [
-      {
-        id: 'span-delete',
-        op: 'text.delete',
-        where: { by: 'ref', ref },
-        args: {},
-      },
-    ];
-
-    try {
-      compilePlan(editor, steps);
-    } catch (error) {
-      expect(error).toBeInstanceOf(PlanError);
-      expect((error as PlanError).code).toBe('INVALID_INPUT');
-      expect((error as PlanError).message).toContain('not contiguous');
-      return;
-    }
-
-    throw new Error('expected compilePlan to throw INVALID_INPUT for non-contiguous span');
-  });
 });
 
 // ---------------------------------------------------------------------------

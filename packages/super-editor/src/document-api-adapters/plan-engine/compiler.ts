@@ -59,21 +59,6 @@ function isRefWhere(where: MutationStep['where']): where is RefWhere {
 // Text ref payload versions
 // ---------------------------------------------------------------------------
 
-/** V1: single-block text ref (legacy). */ // TODO(v1v2-sunset)
-interface TextRefV1 {
-  rev: string;
-  addr: unknown;
-  ranges?: TextAddress[];
-}
-
-/** V2: multi-block span ref with explicit version tag. */ // TODO(v1v2-sunset)
-interface TextRefV2 {
-  v: 2;
-  rev: string;
-  matchId: string;
-  segments: Array<{ blockId: string; start: number; end: number }>;
-}
-
 /** V3: scope-aware ref with match/block/run targeting (D6). */
 interface TextRefV3 {
   v: 3;
@@ -85,14 +70,10 @@ interface TextRefV3 {
   runIndex?: number;
 }
 
-type TextRefPayload = TextRefV1 | TextRefV2 | TextRefV3;
-
-function isV3Ref(payload: TextRefPayload): payload is TextRefV3 {
-  return 'v' in payload && payload.v === 3;
-}
-
-function isV2Ref(payload: TextRefPayload): payload is TextRefV2 {
-  return 'v' in payload && payload.v === 2;
+function isV3Ref(payload: unknown): payload is TextRefV3 {
+  return (
+    typeof payload === 'object' && payload !== null && 'v' in payload && (payload as Record<string, unknown>).v === 3
+  );
 }
 
 // ---------------------------------------------------------------------------
@@ -127,15 +108,12 @@ function resolveAbsoluteRange(
 }
 
 // ---------------------------------------------------------------------------
-// Single-block range normalizer (legacy compatibility wrapper per D12)
+// Single-block range normalizer — delegates to normalizeMatchSpan (D12)
 // ---------------------------------------------------------------------------
 
 /**
  * Coalesces text ranges from a single logical match into one contiguous range.
  * All ranges must belong to the same block.
- *
- * @deprecated Use `normalizeMatchSpan` for new code paths; this wrapper
- * delegates to it and extracts the single-block result.
  */
 export function normalizeMatchRanges(
   stepId: string,
@@ -462,86 +440,12 @@ function getBlockText(editor: Editor, candidate: { pos: number; end: number }): 
 // Ref resolution
 // ---------------------------------------------------------------------------
 
-function decodeTextRefPayload(encoded: string, stepId: string): TextRefPayload {
+function decodeTextRefPayload(encoded: string, stepId: string): unknown {
   try {
     return JSON.parse(atob(encoded));
   } catch {
     throw planError('INVALID_INPUT', 'invalid text ref encoding', stepId);
   }
-}
-
-function resolveV1TextRef(editor: Editor, index: BlockIndex, step: MutationStep, refData: TextRefV1): CompiledTarget[] {
-  const currentRevision = getRevision(editor);
-  if (refData.rev !== currentRevision) {
-    throw planError(
-      'REVISION_MISMATCH',
-      `text ref was created at revision "${refData.rev}" but document is at "${currentRevision}"`,
-      step.id,
-      { refRevision: refData.rev, currentRevision },
-    );
-  }
-
-  if (!refData.ranges?.length) return [];
-
-  const coalesced = normalizeMatchRanges(step.id, refData.ranges);
-  const candidate = index.candidates.find((c) => c.nodeId === coalesced.blockId);
-  if (!candidate) return [];
-
-  const blockText = getBlockText(editor, candidate);
-  const matchText = blockText.slice(coalesced.from, coalesced.to);
-
-  const addr: ResolvedAddress = {
-    blockId: coalesced.blockId,
-    from: coalesced.from,
-    to: coalesced.to,
-    text: matchText,
-    marks: [],
-    blockPos: candidate.pos,
-  };
-
-  return [buildRangeTarget(editor, step, addr, candidate)];
-}
-
-function resolveV2TextRef(editor: Editor, index: BlockIndex, step: MutationStep, refData: TextRefV2): CompiledTarget[] {
-  const currentRevision = getRevision(editor);
-  if (refData.rev !== currentRevision) {
-    throw planError(
-      'REVISION_MISMATCH',
-      `text ref was created at revision "${refData.rev}" but document is at "${currentRevision}"`,
-      step.id,
-      { refRevision: refData.rev, currentRevision },
-    );
-  }
-
-  if (!refData.segments?.length) return [];
-
-  const segments = refData.segments.map((s) => ({ blockId: s.blockId, from: s.start, to: s.end }));
-
-  // D2/Phase 3: single-segment V2 refs downcast to range target
-  if (segments.length === 1) {
-    const seg = segments[0];
-    const candidate = index.candidates.find((c) => c.nodeId === seg.blockId);
-    if (!candidate) return [];
-
-    const blockText = getBlockText(editor, candidate);
-    const matchText = blockText.slice(seg.from, seg.to);
-
-    const addr: ResolvedAddress = {
-      blockId: seg.blockId,
-      from: seg.from,
-      to: seg.to,
-      text: matchText,
-      marks: [],
-      blockPos: candidate.pos,
-    };
-
-    const target = buildRangeTarget(editor, step, addr, candidate);
-    target.matchId = refData.matchId;
-    return [target];
-  }
-
-  // Multi-segment: build span target
-  return [buildSpanTarget(editor, index, step, segments, refData.matchId)];
 }
 
 /**
@@ -598,15 +502,11 @@ function resolveTextRef(editor: Editor, index: BlockIndex, step: MutationStep, r
   const encoded = ref.slice(5); // strip 'text:' prefix
   const payload = decodeTextRefPayload(encoded, step.id);
 
-  if (isV3Ref(payload)) {
-    return resolveV3TextRef(editor, index, step, payload);
+  if (!isV3Ref(payload)) {
+    throw planError('INVALID_INPUT', 'only V3 text refs are supported', step.id);
   }
 
-  if (isV2Ref(payload)) {
-    return resolveV2TextRef(editor, index, step, payload); // TODO(v1v2-sunset)
-  }
-
-  return resolveV1TextRef(editor, index, step, payload); // TODO(v1v2-sunset)
+  return resolveV3TextRef(editor, index, step, payload);
 }
 
 function resolveBlockRef(editor: Editor, index: BlockIndex, step: MutationStep, ref: string): CompiledTarget[] {
@@ -674,15 +574,6 @@ function dispatchRefHandler(editor: Editor, index: BlockIndex, step: MutationSte
 }
 
 function resolveRefTargets(editor: Editor, index: BlockIndex, step: MutationStep, where: RefWhere): CompiledTarget[] {
-  // D7: validate legacy require field
-  if (where.require !== undefined && where.require !== 'exactlyOne') {
-    throw planError(
-      'INVALID_INPUT',
-      `ref-based targeting only accepts require: 'exactlyOne' (received '${where.require}')`,
-      step.id,
-    );
-  }
-
   return dispatchRefHandler(editor, index, step, where.ref);
 }
 

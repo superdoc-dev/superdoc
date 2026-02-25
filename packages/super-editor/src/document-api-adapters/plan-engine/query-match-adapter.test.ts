@@ -130,7 +130,7 @@ function makeEditorWithBlocks(
 // ---------------------------------------------------------------------------
 
 /**
- * Builds a FindOutput-shaped mock from legacy-style matches/context arrays.
+ * Builds a FindOutput-shaped mock from matches/context arrays.
  * Merges parallel arrays into per-item discovery items as the real findAdapter does.
  */
 function setupFindResult(options: { matches: any[]; context?: any[]; total: number }) {

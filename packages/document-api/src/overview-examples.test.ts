@@ -490,7 +490,7 @@ describe('src/README.md workflow examples', () => {
     it('find then replace', () => {
       const doc = makeApi();
 
-      const result = doc.find({ type: 'text', text: 'foo' });
+      const result = doc.find({ type: 'text', pattern: 'foo' });
       const target = result.items[0]?.context?.textRanges?.[0];
       if (target) {
         doc.replace({ target, text: 'bar' });
@@ -522,17 +522,17 @@ describe('src/README.md workflow examples', () => {
       const doc = makeApi();
 
       // Simulate having a find result in scope (the example assumes `result` exists)
-      const result = doc.find({ type: 'text', text: 'something' });
+      const result = doc.find({ type: 'text', pattern: 'something' });
       const target = result.items[0]?.context?.textRanges?.[0];
       const createReceipt = doc.comments.create({ target: target!, text: 'Review this section.' });
       // Use the comment ID from the receipt to reply
       const comments = doc.comments.list();
       const thread = comments.items[0];
-      doc.comments.create({ parentCommentId: thread.commentId, text: 'Looks good.' });
-      doc.comments.patch({ commentId: thread.commentId, status: 'resolved' });
+      doc.comments.create({ parentCommentId: thread.id, text: 'Looks good.' });
+      doc.comments.patch({ commentId: thread.id, status: 'resolved' });
 
       expect(createReceipt.success).toBe(true);
-      expect(thread.commentId).toBeDefined();
+      expect(thread.id).toBeDefined();
     });
   });
 

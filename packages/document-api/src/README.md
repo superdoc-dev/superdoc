@@ -32,7 +32,7 @@ Do not hand-edit generated files; regenerate via script.
 ## Purpose
 
 This package defines the Document API surface and type contracts. Editor-specific behavior
-lives in adapter layers that map engine behavior into `QueryResult` and other API outputs.
+lives in adapter layers that map engine behavior into discovery envelopes and other API outputs.
 
 ## Selector Semantics
 
@@ -41,11 +41,11 @@ lives in adapter layers that map engine behavior into `QueryResult` and other AP
 
 ## Find Result Contract
 
-- `find` always returns `matches` as `NodeAddress[]`.
-- For text selectors (`{ type: 'text', ... }`), `matches` are containing block addresses.
-- Exact matched spans are returned in `context[*].textRanges` as `TextAddress`.
-- Mutating operations should target `TextAddress` values from `context[*].textRanges`.
-- `insert` supports three targeting modes: canonical `TextAddress`, block-relative (`blockId` + optional `offset`), or default insertion point when all target fields are omitted.
+- `find` always returns `items` as discovery items.
+- For text selectors (`{ type: 'text', ... }`), items include containing block addresses.
+- Exact matched spans are returned in `items[*].context.textRanges` as `TextAddress`.
+- Mutating operations should target `TextAddress` values from `items[*].context.textRanges`.
+- `insert` supports canonical `TextAddress` targeting or default insertion point when target is omitted.
 - Structural creation is exposed under `create.*` (for example `create.paragraph`), separate from text mutations.
 
 ## Adapter Error Convention
@@ -59,9 +59,9 @@ lives in adapter layers that map engine behavior into `QueryResult` and other AP
 ## Tracked-Change Semantics
 
 - Tracking is operation-scoped (`changeMode: 'direct' | 'tracked'`), not global editor-mode state.
-- `insert`, `replace`, `delete`, `format.bold`, `format.italic`, `format.underline`, `format.strikethrough`, and `create.paragraph`, `create.heading` may run in tracked mode.
-- `trackChanges.*` (`list`, `get`, `accept`, `reject`, `acceptAll`, `rejectAll`) is the review lifecycle namespace.
-- `lists.insert` may run in tracked mode; `lists.setType|indent|outdent|restart|exit` are direct-only in v1.
+- `insert`, `replace`, `delete`, `format.apply`, and `create.paragraph`, `create.heading` may run in tracked mode.
+- `trackChanges.*` (`list`, `get`, `decide`) is the review lifecycle namespace.
+- `lists.insert` may run in tracked mode; `lists.setType|indent|outdent|restart|exit` are direct-only.
 
 ## List Namespace Semantics
 
@@ -89,23 +89,11 @@ The following examples show typical multi-step patterns using the Document API.
 Locate text in the document and replace it:
 
 ```ts
-const result = editor.doc.find({ type: 'text', text: 'foo' });
+const result = editor.doc.find({ type: 'text', pattern: 'foo' });
 const target = result.items?.[0]?.context?.textRanges?.[0];
 if (target) {
   editor.doc.replace({ target, text: 'bar' });
 }
-```
-
-### Workflow: Block-Relative Insert
-
-Insert text at a specific position within a known block, without constructing a full `TextAddress`:
-
-```ts
-// Insert at the start of a block
-editor.doc.insert({ blockId: 'paragraph-1', text: 'Hello ' });
-
-// Insert at a specific character offset within a block
-editor.doc.insert({ blockId: 'paragraph-1', offset: 5, text: 'world' });
 ```
 
 ### Workflow: Tracked-Mode Insert
@@ -155,8 +143,8 @@ Check what the editor supports before attempting mutations:
 
 ```ts
 const caps = editor.doc.capabilities();
-if (caps.operations['format.bold'].available) {
-  editor.doc.format.bold({ target });
+if (caps.operations['format.apply'].available) {
+  editor.doc.format.apply({ target, inline: { bold: true } });
 }
 if (caps.global.trackChanges.enabled) {
   editor.doc.insert({ text: 'tracked' }, { changeMode: 'tracked' });
@@ -177,10 +165,10 @@ Each operation has a dedicated section below. Grouped by namespace.
 
 ### `find`
 
-Search the document for nodes or text matching a selector. Returns `QueryResult` with `matches` as `NodeAddress[]`. Text selectors include `context[*].textRanges` for precise span targeting.
+Search the document for nodes or text matching a selector. Returns discovery items via `items`. Text selectors include `items[*].context.textRanges` for precise span targeting.
 
 - **Input**: `Selector | Query`
-- **Output**: `QueryResult`
+- **Output**: `FindOutput`
 - **Mutates**: No
 - **Idempotency**: idempotent
 
@@ -222,17 +210,11 @@ Return document summary metadata (block count, word count, character count).
 
 ### `insert`
 
-Insert text at a target location. Supports three targeting modes:
-
-1. **Canonical target**: `{ target: TextAddress, text }` — full address with block ID and range.
-2. **Block-relative**: `{ blockId, offset?, text }` — friendly shorthand. `offset` defaults to 0 when omitted.
-3. **Default insertion point**: `{ text }` — no target; adapter resolves to first paragraph start.
-
-Exactly one targeting mode is allowed per call. Mixing `target` with `blockId`/`offset` throws `INVALID_TARGET`. `offset` without `blockId` throws `INVALID_TARGET`. `offset` must be a non-negative integer.
+Insert text at a target location. When `target` is provided, inserts at that `TextAddress`. When omitted, the adapter resolves to the default insertion point (first paragraph start).
 
 Supports dry-run and tracked mode.
 
-- **Input**: `InsertInput` (`{ target?, blockId?, offset?, text }`)
+- **Input**: `InsertInput` (`{ target?, text }`)
 - **Options**: `MutationOptions` (`{ changeMode?, dryRun? }`)
 - **Output**: `TextMutationReceipt`
 - **Mutates**: Yes
@@ -298,44 +280,11 @@ Insert a new heading node at a specified location with a given level (1-6). Retu
 
 ### Format
 
-### `format.bold`
+### `format.apply`
 
-Toggle bold formatting on a `TextAddress` range. Supports dry-run and tracked mode. Availability depends on the `bold` mark being registered in the editor schema.
+Apply explicit inline style changes (bold, italic, underline, strike) to a `TextAddress` range using boolean patch semantics. Supports dry-run and tracked mode. Availability depends on the corresponding marks being registered in the editor schema.
 
-- **Input**: `FormatBoldInput` (`{ target }`)
-- **Options**: `MutationOptions` (`{ changeMode?, dryRun? }`)
-- **Output**: `TextMutationReceipt`
-- **Mutates**: Yes
-- **Idempotency**: conditional
-- **Failure codes**: `INVALID_TARGET`
-
-### `format.italic`
-
-Toggle italic formatting on a `TextAddress` range. Supports dry-run and tracked mode. Availability depends on the `italic` mark being registered in the editor schema.
-
-- **Input**: `FormatItalicInput` (`{ target }`)
-- **Options**: `MutationOptions` (`{ changeMode?, dryRun? }`)
-- **Output**: `TextMutationReceipt`
-- **Mutates**: Yes
-- **Idempotency**: conditional
-- **Failure codes**: `INVALID_TARGET`
-
-### `format.underline`
-
-Toggle underline formatting on a `TextAddress` range. Supports dry-run and tracked mode. Availability depends on the `underline` mark being registered in the editor schema.
-
-- **Input**: `FormatUnderlineInput` (`{ target }`)
-- **Options**: `MutationOptions` (`{ changeMode?, dryRun? }`)
-- **Output**: `TextMutationReceipt`
-- **Mutates**: Yes
-- **Idempotency**: conditional
-- **Failure codes**: `INVALID_TARGET`
-
-### `format.strikethrough`
-
-Toggle strikethrough formatting on a `TextAddress` range. Supports dry-run and tracked mode. Availability depends on the `strike` mark being registered in the editor schema.
-
-- **Input**: `FormatStrikethroughInput` (`{ target }`)
+- **Input**: `StyleApplyInput` (`{ target, inline: { bold?, italic?, underline?, strike? } }`)
 - **Options**: `MutationOptions` (`{ changeMode?, dryRun? }`)
 - **Output**: `TextMutationReceipt`
 - **Mutates**: Yes
@@ -349,7 +298,7 @@ Toggle strikethrough formatting on a `TextAddress` range. Supports dry-run and t
 List all list items in the document, optionally filtered by `within`, `kind`, `level`, or `ordinal`. Supports pagination via `limit` and `offset`.
 
 - **Input**: `ListsListQuery | undefined`
-- **Output**: `ListsListResult` (`{ matches, total, items }`)
+- **Output**: `ListsListResult` (`{ items, total }`)
 - **Mutates**: No
 - **Idempotency**: idempotent
 
@@ -375,7 +324,7 @@ Insert a new list item before or after a target item. Returns the new item's `Li
 
 ### `lists.setType`
 
-Change a list item's kind (`ordered` or `bullet`). Returns `NO_OP` when the item already has the requested kind. Direct-only (no tracked mode in v1). Supports dry-run.
+Change a list item's kind (`ordered` or `bullet`). Returns `NO_OP` when the item already has the requested kind. Direct-only. Supports dry-run.
 
 - **Input**: `ListSetTypeInput` (`{ target, kind }`)
 - **Options**: `MutationOptions` (`{ dryRun? }`)
@@ -386,7 +335,7 @@ Change a list item's kind (`ordered` or `bullet`). Returns `NO_OP` when the item
 
 ### `lists.indent`
 
-Increase the indent level of a list item. Returns `NO_OP` when already at maximum depth. Direct-only (no tracked mode in v1). Supports dry-run.
+Increase the indent level of a list item. Returns `NO_OP` when already at maximum depth. Direct-only. Supports dry-run.
 
 - **Input**: `ListTargetInput` (`{ target }`)
 - **Options**: `MutationOptions` (`{ dryRun? }`)
@@ -397,7 +346,7 @@ Increase the indent level of a list item. Returns `NO_OP` when already at maximu
 
 ### `lists.outdent`
 
-Decrease the indent level of a list item. Returns `NO_OP` when already at top level. Direct-only (no tracked mode in v1). Supports dry-run.
+Decrease the indent level of a list item. Returns `NO_OP` when already at top level. Direct-only. Supports dry-run.
 
 - **Input**: `ListTargetInput` (`{ target }`)
 - **Options**: `MutationOptions` (`{ dryRun? }`)
@@ -474,7 +423,7 @@ Retrieve full information for a single comment by ID. Throws `TARGET_NOT_FOUND` 
 List all comments in the document. Optionally include resolved comments.
 
 - **Input**: `CommentsListQuery | undefined` (`{ includeResolved? }`)
-- **Output**: `CommentsListResult` (`{ matches, total }`)
+- **Output**: `CommentsListResult` (`{ items, total }`)
 - **Mutates**: No
 - **Idempotency**: idempotent
 
@@ -485,7 +434,7 @@ List all comments in the document. Optionally include resolved comments.
 List tracked changes in the document. Supports filtering by `type` and pagination via `limit`/`offset`.
 
 - **Input**: `TrackChangesListInput | undefined` (`{ limit?, offset?, type? }`)
-- **Output**: `TrackChangesListResult` (`{ matches, total, changes? }`)
+- **Output**: `TrackChangesListResult` (`{ items, total }`)
 - **Mutates**: No
 - **Idempotency**: idempotent
 
@@ -506,4 +455,4 @@ Accept or reject a tracked change by ID, or accept/reject all changes with `{ sc
 - **Output**: `Receipt`
 - **Mutates**: Yes
 - **Idempotency**: conditional
-- **Failure codes**: `NO_OP`, `TARGET_NOT_FOUND`, `COMMAND_UNAVAILABLE`
+- **Failure codes**: `NO_OP`, `TARGET_NOT_FOUND`

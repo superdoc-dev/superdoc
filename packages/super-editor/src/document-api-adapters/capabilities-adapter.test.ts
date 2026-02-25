@@ -185,11 +185,11 @@ describe('getDocumentApiCapabilities', () => {
   it('does not emit unavailable reasons for modes that are unsupported by design', () => {
     const capabilities = getDocumentApiCapabilities(makeEditor());
     const setTypeReasons = capabilities.operations['lists.setType'].reasons ?? [];
-    const decideReasons = capabilities.operations['trackChanges.decide'].reasons ?? [];
+    const trackChangesDecideReasons = capabilities.operations['trackChanges.decide'].reasons ?? [];
 
     expect(setTypeReasons).not.toContain('TRACKED_MODE_UNAVAILABLE');
     expect(setTypeReasons).not.toContain('DRY_RUN_UNAVAILABLE');
-    expect(decideReasons).not.toContain('DRY_RUN_UNAVAILABLE');
+    expect(trackChangesDecideReasons).not.toContain('DRY_RUN_UNAVAILABLE');
   });
 
   it('handles an editor with undefined schema gracefully', () => {

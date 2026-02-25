@@ -1,5 +1,5 @@
 import type { Editor } from '../../core/Editor.js';
-import type { CommentInfo, CommentStatus, TextAddress } from '@superdoc/document-api';
+import type { CommentInfo, CommentStatus, TextTarget } from '@superdoc/document-api';
 
 const FALLBACK_STORE_KEY = '__documentApiComments';
 
@@ -185,7 +185,7 @@ export function isCommentResolved(entry: CommentEntityRecord): boolean {
 export function toCommentInfo(
   entry: CommentEntityRecord,
   options: {
-    target?: TextAddress;
+    target?: TextTarget;
     status?: CommentStatus;
     anchoredText?: string;
   } = {},

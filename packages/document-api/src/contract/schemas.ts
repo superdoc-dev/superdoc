@@ -116,6 +116,20 @@ const SHARED_DEFS: Record<string, JsonSchema> = {
     },
     ['kind', 'blockId', 'range'],
   ),
+  TextSegment: objectSchema(
+    {
+      blockId: { type: 'string' },
+      range: ref('Range'),
+    },
+    ['blockId', 'range'],
+  ),
+  TextTarget: objectSchema(
+    {
+      kind: { const: 'text' },
+      segments: { type: 'array', items: ref('TextSegment'), minItems: 1 },
+    },
+    ['kind', 'segments'],
+  ),
   BlockNodeAddress: objectSchema(
     {
       kind: { const: 'block' },
@@ -284,6 +298,7 @@ const positionSchema = ref('Position');
 const inlineAnchorSchema = ref('InlineAnchor');
 const targetKindSchema = ref('TargetKind');
 const textAddressSchema = ref('TextAddress');
+const textTargetSchema = ref('TextTarget');
 const blockNodeAddressSchema = ref('BlockNodeAddress');
 const paragraphAddressSchema = ref('ParagraphAddress');
 const headingAddressSchema = ref('HeadingAddress');
@@ -724,7 +739,7 @@ const commentInfoSchema = objectSchema(
     text: { type: 'string' },
     isInternal: { type: 'boolean' },
     status: { enum: ['open', 'resolved'] },
-    target: textAddressSchema,
+    target: textTargetSchema,
     anchoredText: { type: 'string' },
     createdTime: { type: 'number' },
     creatorName: { type: 'string' },
@@ -741,7 +756,7 @@ const commentDomainItemSchema = discoveryItemSchema(
     text: { type: 'string' },
     isInternal: { type: 'boolean' },
     status: { enum: ['open', 'resolved'] },
-    target: textAddressSchema,
+    target: textTargetSchema,
     anchoredText: { type: 'string' },
     createdTime: { type: 'number' },
     creatorName: { type: 'string' },

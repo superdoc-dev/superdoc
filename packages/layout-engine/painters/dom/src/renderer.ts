@@ -3119,6 +3119,9 @@ export class DomPainter {
     const viewW = firstPath.w || width;
     const viewH = firstPath.h || height;
 
+    // Degenerate: zero-dimension viewBox is invalid SVG — skip rendering.
+    if (viewW === 0 || viewH === 0) return null;
+
     // When the SVG viewBox maps to a non-uniform aspect ratio (common with group transforms),
     // thin fill borders can become sub-pixel on one axis. Add a hairline stroke matching the
     // fill color with vector-effect="non-scaling-stroke" so edges remain at least 0.5px visible.

@@ -452,7 +452,8 @@ export function extractFillColor(spPr, style) {
 /**
  * Extracts custom geometry path data from a:custGeom element and converts it to SVG paths.
  * Per ECMA-376, a:custGeom contains a:pathLst with path commands (moveTo, lnTo, cubicBezTo,
- * quadBezTo, arcTo, close) in a coordinate space defined by the path's w/h attributes.
+ * quadBezTo, close) in a coordinate space defined by the path's w/h attributes.
+ * Note: arcTo is not currently translated (no SVG arc equivalent is emitted; it is skipped).
  * @param {Object} spPr - The shape properties element (a:spPr or wps:spPr)
  * @returns {{ paths: Array<{ d: string, w: number, h: number }> } | null}
  */
@@ -480,6 +481,7 @@ export function extractCustomGeometry(spPr) {
 /**
  * Converts a DrawingML a:path element's child commands to an SVG path d attribute.
  * Supports: moveTo→M, lnTo→L, cubicBezTo→C, quadBezTo→Q, close→Z
+ * Unsupported commands (e.g. arcTo) are intentionally skipped — they produce no output.
  * @param {Object} pathEl - The a:path element
  * @returns {string} SVG path d attribute
  */
@@ -526,6 +528,9 @@ function convertDrawingMLPathToSvg(pathEl) {
       }
       case 'a:close':
         parts.push('Z');
+        break;
+      default:
+        // Unknown DrawingML path commands (e.g. arcTo) are skipped — no SVG equivalent is emitted.
         break;
     }
   }

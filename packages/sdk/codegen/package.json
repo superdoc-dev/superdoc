@@ -1,0 +1,10 @@
+{
+  "name": "@superdoc-dev/sdk-codegen",
+  "version": "0.0.1",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "generate": "node ./src/generate-all.mjs",
+    "test": "bun test"
+  }
+}

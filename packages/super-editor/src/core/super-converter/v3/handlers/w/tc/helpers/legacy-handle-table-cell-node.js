@@ -70,6 +70,7 @@ export function handleTableCellNode({
   }
   if (widthType) attributes['widthType'] = widthType;
 
+  const cellOwnWidth = width; // tcW-derived width (before grid fallback)
   if (!width && columnWidth) width = columnWidth;
   if (width) {
     attributes['colwidth'] = [width];
@@ -80,13 +81,22 @@ export function handleTableCellNode({
 
     if (colspan > 1 && hasDefaultColWidths) {
       let colwidth = [];
+      // When cell has its own tcW width that exceeds the grid span total,
+      // distribute tcW proportionally across grid columns to match Word behavior.
+      // Only scale UP (tcW > grid), not down — smaller tcW is just a minimum.
+      const gridSpanTotal = defaultColWidths
+        .slice(columnIndex, columnIndex + colspan)
+        .reduce((sum, w) => sum + (w || 0), 0);
+      const shouldScale = cellOwnWidth && gridSpanTotal > 0 && cellOwnWidth > gridSpanTotal + 1;
 
       for (let i = 0; i < colspan; i++) {
         let colwidthValue = defaultColWidths[columnIndex + i];
         let defaultColwidth = 100;
 
         if (typeof colwidthValue !== 'undefined') {
-          colwidth.push(colwidthValue);
+          colwidth.push(
+            shouldScale ? Math.round(colwidthValue * (cellOwnWidth / gridSpanTotal) * 1000) / 1000 : colwidthValue,
+          );
         } else {
           colwidth.push(defaultColwidth);
         }

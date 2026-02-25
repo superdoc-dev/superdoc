@@ -77,6 +77,7 @@ import {
   type SdtBoundaryOptions,
 } from './utils/sdt-helpers.js';
 import { SdtGroupedHover } from './utils/sdt-hover.js';
+import { computeTabWidth } from './utils/marker-helpers.js';
 import { generateRulerDefinitionFromPx, createRulerElement, ensureRulerStyles } from './ruler/index.js';
 import { toCssFontFamily } from '@superdoc/font-utils';
 import {
@@ -368,15 +369,211 @@ export type FragmentRenderContext = {
   totalPages: number;
   section: 'body' | 'header' | 'footer';
   pageNumberText?: string;
+  pageIndex?: number;
 };
 
+export type PaintSnapshotLineStyle = {
+  paddingLeftPx?: number;
+  paddingRightPx?: number;
+  textIndentPx?: number;
+  marginLeftPx?: number;
+  marginRightPx?: number;
+  leftPx?: number;
+  topPx?: number;
+  widthPx?: number;
+  heightPx?: number;
+  display?: string;
+  position?: string;
+  textAlign?: string;
+  justifyContent?: string;
+};
+
+export type PaintSnapshotMarkerStyle = {
+  text?: string;
+  leftPx?: number;
+  widthPx?: number;
+  paddingRightPx?: number;
+  display?: string;
+  position?: string;
+  textAlign?: string;
+  fontWeight?: string;
+  fontStyle?: string;
+  color?: string;
+};
+
+export type PaintSnapshotTabStyle = {
+  widthPx?: number;
+  leftPx?: number;
+  position?: string;
+  borderBottom?: string;
+};
+
+export type PaintSnapshotLine = {
+  index: number;
+  inTableFragment: boolean;
+  inTableParagraph: boolean;
+  style: PaintSnapshotLineStyle;
+  markers?: PaintSnapshotMarkerStyle[];
+  tabs?: PaintSnapshotTabStyle[];
+};
+
+export type PaintSnapshotPage = {
+  index: number;
+  pageNumber?: number;
+  lineCount: number;
+  lines: PaintSnapshotLine[];
+};
+
+export type PaintSnapshot = {
+  formatVersion: 1;
+  pageCount: number;
+  lineCount: number;
+  markerCount: number;
+  tabCount: number;
+  pages: PaintSnapshotPage[];
+};
+
+type PaintSnapshotPageBuilder = {
+  index: number;
+  pageNumber: number | null;
+  lineCount: number;
+  lines: PaintSnapshotLine[];
+};
+
+type PaintSnapshotBuilder = {
+  formatVersion: 1;
+  lineCount: number;
+  markerCount: number;
+  tabCount: number;
+  pages: PaintSnapshotPageBuilder[];
+};
+
+type PaintSnapshotCaptureOptions = {
+  inTableFragment?: boolean;
+  inTableParagraph?: boolean;
+  wrapperEl?: HTMLElement;
+};
+
+function roundSnapshotMetric(value: number): number | null {
+  if (!Number.isFinite(value)) return null;
+  return Math.round(value * 1000) / 1000;
+}
+
+function readSnapshotPxMetric(styleValue: string | null | undefined): number | null {
+  if (typeof styleValue !== 'string' || styleValue.length === 0) return null;
+  const parsed = Number.parseFloat(styleValue);
+  return Number.isFinite(parsed) ? roundSnapshotMetric(parsed) : null;
+}
+
+function readSnapshotStyleValue(styleValue: string | null | undefined): string | null {
+  if (typeof styleValue !== 'string' || styleValue.length === 0) return null;
+  return styleValue;
+}
+
+function compactSnapshotObject<T extends Record<string, unknown>>(input: T): T {
+  const out = {} as T;
+  for (const [key, value] of Object.entries(input)) {
+    if (value == null) continue;
+    if (Array.isArray(value) && value.length === 0) continue;
+    (out as Record<string, unknown>)[key] = value;
+  }
+  return out;
+}
+
+function snapshotLineStyleFromElement(lineEl: HTMLElement): PaintSnapshotLineStyle {
+  const style = lineEl?.style;
+  if (!style) return {};
+  return compactSnapshotObject({
+    paddingLeftPx: readSnapshotPxMetric(style.paddingLeft),
+    paddingRightPx: readSnapshotPxMetric(style.paddingRight),
+    textIndentPx: readSnapshotPxMetric(style.textIndent),
+    marginLeftPx: readSnapshotPxMetric(style.marginLeft),
+    marginRightPx: readSnapshotPxMetric(style.marginRight),
+    leftPx: readSnapshotPxMetric(style.left),
+    topPx: readSnapshotPxMetric(style.top),
+    widthPx: readSnapshotPxMetric(style.width),
+    heightPx: readSnapshotPxMetric(style.height),
+    display: readSnapshotStyleValue(style.display),
+    position: readSnapshotStyleValue(style.position),
+    textAlign: readSnapshotStyleValue(style.textAlign),
+    justifyContent: readSnapshotStyleValue(style.justifyContent),
+  }) as PaintSnapshotLineStyle;
+}
+
+function applyWrapperMarginsToSnapshotStyle(
+  lineStyle: PaintSnapshotLineStyle,
+  wrapperEl?: HTMLElement,
+): PaintSnapshotLineStyle {
+  if (!wrapperEl?.style) return lineStyle;
+
+  return compactSnapshotObject({
+    ...lineStyle,
+    marginLeftPx: readSnapshotPxMetric(wrapperEl.style.marginLeft) ?? lineStyle.marginLeftPx,
+    marginRightPx: readSnapshotPxMetric(wrapperEl.style.marginRight) ?? lineStyle.marginRightPx,
+  }) as PaintSnapshotLineStyle;
+}
+
+function snapshotMarkerStyleFromElement(markerEl: HTMLElement): PaintSnapshotMarkerStyle {
+  const style = markerEl?.style;
+  if (!style) return {};
+  return compactSnapshotObject({
+    text: markerEl?.textContent ?? '',
+    leftPx: readSnapshotPxMetric(style.left),
+    widthPx: readSnapshotPxMetric(style.width),
+    paddingRightPx: readSnapshotPxMetric(style.paddingRight),
+    display: readSnapshotStyleValue(style.display),
+    position: readSnapshotStyleValue(style.position),
+    textAlign: readSnapshotStyleValue(style.textAlign),
+    fontWeight: readSnapshotStyleValue(style.fontWeight),
+    fontStyle: readSnapshotStyleValue(style.fontStyle),
+    color: readSnapshotStyleValue(style.color),
+  }) as PaintSnapshotMarkerStyle;
+}
+
+function collectLineMarkersForSnapshot(lineEl: HTMLElement): PaintSnapshotMarkerStyle[] {
+  const markers: PaintSnapshotMarkerStyle[] = [];
+  const parent = lineEl?.parentElement;
+  if (parent) {
+    for (const child of Array.from(parent.children)) {
+      if (!(child instanceof HTMLElement)) continue;
+      if (!child.classList.contains('superdoc-paragraph-marker')) continue;
+      markers.push(snapshotMarkerStyleFromElement(child));
+    }
+  }
+
+  const inlineMarkers = lineEl?.querySelectorAll?.('.superdoc-paragraph-marker') ?? [];
+  for (const markerEl of Array.from(inlineMarkers)) {
+    if (!(markerEl instanceof HTMLElement)) continue;
+    const markerStyle = snapshotMarkerStyleFromElement(markerEl);
+    const markerText = markerEl.textContent ?? '';
+    const markerLeft = readSnapshotPxMetric(markerEl.style.left);
+    if (markers.some((existing) => existing.text === markerText && existing.leftPx === markerLeft)) {
+      continue;
+    }
+    markers.push(markerStyle);
+  }
+
+  return markers;
+}
+
+function collectLineTabsForSnapshot(lineEl: HTMLElement): PaintSnapshotTabStyle[] {
+  const tabs: PaintSnapshotTabStyle[] = [];
+  const tabElements = lineEl?.querySelectorAll?.('.superdoc-tab') ?? [];
+  for (const tabEl of Array.from(tabElements)) {
+    if (!(tabEl instanceof HTMLElement)) continue;
+    tabs.push(
+      compactSnapshotObject({
+        widthPx: readSnapshotPxMetric(tabEl.style.width),
+        leftPx: readSnapshotPxMetric(tabEl.style.left),
+        position: readSnapshotStyleValue(tabEl.style.position),
+        borderBottom: readSnapshotStyleValue(tabEl.style.borderBottom),
+      }) as PaintSnapshotTabStyle,
+    );
+  }
+  return tabs;
+}
+
 const LIST_MARKER_GAP = 8;
-/**
- * Default tab interval in pixels (0.5 inch at 96 DPI).
- * Used when calculating tab stops for list markers that extend past the implicit tab stop.
- * This matches Microsoft Word's default tab interval behavior.
- */
-const DEFAULT_TAB_INTERVAL_PX = 48;
 /**
  * Default page height in pixels (11 inches at 96 DPI).
  * Used as a fallback when page size information is not available for ruler rendering.
@@ -482,6 +679,7 @@ const TRACK_CHANGE_BASE_CLASS: Record<TrackedChangeKind, string> = {
   delete: 'track-delete-dec',
   format: 'track-format-dec',
 };
+const TRACK_CHANGE_FOCUSED_CLASS = 'track-change-focused';
 
 const TRACK_CHANGE_MODIFIER_CLASS: Record<TrackedChangeKind, Record<TrackedChangesMode, string | undefined>> = {
   insert: {
@@ -830,6 +1028,8 @@ export class DomPainter {
   private sdtHover = new SdtGroupedHover();
   /** The currently active/selected comment ID for highlighting */
   private activeCommentId: string | null = null;
+  private paintSnapshotBuilder: PaintSnapshotBuilder | null = null;
+  private lastPaintSnapshot: PaintSnapshot | null = null;
 
   constructor(blocks: FlowBlock[], measures: Measure[], options: PainterOptions = {}) {
     this.options = options;
@@ -911,6 +1111,151 @@ export class DomPainter {
    */
   public getActiveComment(): string | null {
     return this.activeCommentId;
+  }
+
+  /**
+   * Returns the latest painter snapshot captured during the last paint cycle.
+   */
+  public getPaintSnapshot(): PaintSnapshot | null {
+    return this.lastPaintSnapshot;
+  }
+
+  private beginPaintSnapshot(layout: Layout): void {
+    this.paintSnapshotBuilder = {
+      formatVersion: 1,
+      lineCount: 0,
+      markerCount: 0,
+      tabCount: 0,
+      pages: layout.pages.map((page, index) => ({
+        index,
+        pageNumber: Number.isFinite(page.number) ? page.number : null,
+        lineCount: 0,
+        lines: [],
+      })),
+    };
+  }
+
+  private finalizePaintSnapshotFromBuilder(): void {
+    const builder = this.paintSnapshotBuilder;
+    if (!builder) {
+      this.lastPaintSnapshot = null;
+      return;
+    }
+
+    const pages = builder.pages.map((page) =>
+      compactSnapshotObject({
+        index: page.index,
+        pageNumber: page.pageNumber,
+        lineCount: page.lineCount,
+        lines: page.lines,
+      }),
+    ) as PaintSnapshotPage[];
+
+    this.lastPaintSnapshot = {
+      formatVersion: builder.formatVersion,
+      pageCount: pages.length,
+      lineCount: builder.lineCount,
+      markerCount: builder.markerCount,
+      tabCount: builder.tabCount,
+      pages,
+    };
+    this.paintSnapshotBuilder = null;
+  }
+
+  private capturePaintSnapshotLine(
+    lineEl: HTMLElement,
+    context: FragmentRenderContext,
+    options: PaintSnapshotCaptureOptions = {},
+  ): void {
+    const builder = this.paintSnapshotBuilder;
+    if (!builder) return;
+    const pageIndex = context.pageIndex;
+    if (!Number.isInteger(pageIndex)) return;
+
+    const page = builder.pages[pageIndex as number];
+    if (!page) return;
+
+    const markers = collectLineMarkersForSnapshot(lineEl);
+    const tabs = collectLineTabsForSnapshot(lineEl);
+    const lineIndex = page.lines.length;
+    const style = applyWrapperMarginsToSnapshotStyle(snapshotLineStyleFromElement(lineEl), options.wrapperEl);
+
+    page.lines.push(
+      compactSnapshotObject({
+        index: lineIndex,
+        inTableFragment: options.inTableFragment === true,
+        inTableParagraph: options.inTableParagraph === true,
+        style,
+        markers,
+        tabs,
+      }) as PaintSnapshotLine,
+    );
+
+    page.lineCount += 1;
+    builder.lineCount += 1;
+    builder.markerCount += markers.length;
+    builder.tabCount += tabs.length;
+  }
+
+  private collectPaintSnapshotFromDomRoot(rootEl: HTMLElement): PaintSnapshot {
+    const pageElements = Array.from(rootEl?.querySelectorAll?.('.superdoc-page') ?? []);
+    const pages: PaintSnapshotPage[] = [];
+    let lineCount = 0;
+    let markerCount = 0;
+    let tabCount = 0;
+
+    for (let domPageIndex = 0; domPageIndex < pageElements.length; domPageIndex += 1) {
+      const pageEl = pageElements[domPageIndex];
+      if (!(pageEl instanceof HTMLElement)) continue;
+      const pageIndexRaw = pageEl.dataset?.pageIndex;
+      const pageIndexParsed = pageIndexRaw == null ? Number.NaN : Number(pageIndexRaw);
+      const pageIndex = Number.isInteger(pageIndexParsed) ? pageIndexParsed : domPageIndex;
+
+      const lineElements = Array.from(pageEl.querySelectorAll('.superdoc-line'));
+      const lines: PaintSnapshotLine[] = [];
+      for (let lineIndex = 0; lineIndex < lineElements.length; lineIndex += 1) {
+        const lineEl = lineElements[lineIndex];
+        if (!(lineEl instanceof HTMLElement)) continue;
+
+        const markers = collectLineMarkersForSnapshot(lineEl);
+        const tabs = collectLineTabsForSnapshot(lineEl);
+        markerCount += markers.length;
+        tabCount += tabs.length;
+        lineCount += 1;
+
+        lines.push(
+          compactSnapshotObject({
+            index: lineIndex,
+            inTableFragment: Boolean(lineEl.closest('.superdoc-table-fragment')),
+            inTableParagraph: Boolean(lineEl.closest('.superdoc-table-paragraph')),
+            style: snapshotLineStyleFromElement(lineEl),
+            markers,
+            tabs,
+          }) as PaintSnapshotLine,
+        );
+      }
+
+      const pageNumberRaw = pageEl.dataset?.pageNumber;
+      const pageNumberParsed = pageNumberRaw == null ? Number.NaN : Number(pageNumberRaw);
+
+      pages.push(
+        compactSnapshotObject({
+          index: pageIndex,
+          pageNumber: Number.isFinite(pageNumberParsed) ? pageNumberParsed : null,
+          lineCount: lines.length,
+          lines,
+        }) as PaintSnapshotPage,
+      );
+    }
+
+    return {
+      formatVersion: 1,
+      pageCount: pages.length,
+      lineCount,
+      markerCount,
+      tabCount,
+      pages,
+    };
   }
 
   /**
@@ -1045,14 +1390,17 @@ export class DomPainter {
     this.layoutVersion += 1;
     this.layoutEpoch = layout.layoutEpoch ?? 0;
     this.mount = mount;
+    this.beginPaintSnapshot(layout);
 
     this.totalPages = layout.pages.length;
+    let useDomSnapshotFallback = false;
     const mode = this.layoutMode;
     if (mode === 'horizontal') {
       applyStyles(mount, containerStylesHorizontal);
       // Use configured page gap for horizontal rendering
       mount.style.gap = `${this.pageGap}px`;
       this.renderHorizontal(layout, mount);
+      this.finalizePaintSnapshotFromBuilder();
       this.currentLayout = layout;
       this.pageStates = [];
       this.changedBlocks.clear();
@@ -1062,6 +1410,7 @@ export class DomPainter {
     if (mode === 'book') {
       applyStyles(mount, containerStyles);
       this.renderBookMode(layout, mount);
+      this.finalizePaintSnapshotFromBuilder();
       this.currentLayout = layout;
       this.pageStates = [];
       this.changedBlocks.clear();
@@ -1076,18 +1425,26 @@ export class DomPainter {
       // Keep container gap at 0 so spacer elements don't introduce extra offsets.
       mount.style.gap = '0px';
       this.renderVirtualized(layout, mount);
+      useDomSnapshotFallback = true;
       this.currentLayout = layout;
       this.changedBlocks.clear();
       this.currentMapping = null;
-      return;
+    } else {
+      // Use configured page gap for normal vertical rendering
+      mount.style.gap = `${this.pageGap}px`;
+      if (!this.currentLayout || this.pageStates.length === 0) {
+        this.fullRender(layout);
+      } else {
+        this.patchLayout(layout);
+        useDomSnapshotFallback = true;
+      }
     }
 
-    // Use configured page gap for normal vertical rendering
-    mount.style.gap = `${this.pageGap}px`;
-    if (!this.currentLayout || this.pageStates.length === 0) {
-      this.fullRender(layout);
+    if (useDomSnapshotFallback) {
+      this.lastPaintSnapshot = this.collectPaintSnapshotFromDomRoot(mount);
+      this.paintSnapshotBuilder = null;
     } else {
-      this.patchLayout(layout);
+      this.finalizePaintSnapshotFromBuilder();
     }
 
     this.currentLayout = layout;
@@ -1329,7 +1686,7 @@ export class DomPainter {
       const pageSize = page.size ?? layout.pageSize;
       const existing = this.pageIndexToState.get(i);
       if (!existing) {
-        const newState = this.createPageState(page, pageSize);
+        const newState = this.createPageState(page, pageSize, i);
         newState.element.dataset.pageNumber = String(page.number);
         newState.element.dataset.pageIndex = String(i);
         // Ensure virtualization uses page margin 0
@@ -1338,7 +1695,7 @@ export class DomPainter {
         this.pageIndexToState.set(i, newState);
       } else {
         // Patch in place
-        this.patchPage(existing, page, pageSize);
+        this.patchPage(existing, page, pageSize, i);
       }
     }
 
@@ -1417,9 +1774,7 @@ export class DomPainter {
     mount.innerHTML = '';
     layout.pages.forEach((page, pageIndex) => {
       const pageSize = page.size ?? layout.pageSize;
-      const pageEl = this.renderPage(pageSize.w, pageSize.h, page);
-      pageEl.dataset.pageNumber = String(page.number);
-      pageEl.dataset.pageIndex = String(pageIndex);
+      const pageEl = this.renderPage(pageSize.w, pageSize.h, page, pageIndex);
       mount.appendChild(pageEl);
     });
   }
@@ -1431,9 +1786,7 @@ export class DomPainter {
     if (pages.length === 0) return;
 
     const firstPageSize = pages[0].size ?? layout.pageSize;
-    const firstPageEl = this.renderPage(firstPageSize.w, firstPageSize.h, pages[0]);
-    firstPageEl.dataset.pageNumber = String(pages[0].number);
-    firstPageEl.dataset.pageIndex = '0';
+    const firstPageEl = this.renderPage(firstPageSize.w, firstPageSize.h, pages[0], 0);
     mount.appendChild(firstPageEl);
 
     for (let i = 1; i < pages.length; i += 2) {
@@ -1443,17 +1796,13 @@ export class DomPainter {
 
       const leftPage = pages[i];
       const leftPageSize = leftPage.size ?? layout.pageSize;
-      const leftPageEl = this.renderPage(leftPageSize.w, leftPageSize.h, leftPage);
-      leftPageEl.dataset.pageNumber = String(leftPage.number);
-      leftPageEl.dataset.pageIndex = String(i);
+      const leftPageEl = this.renderPage(leftPageSize.w, leftPageSize.h, leftPage, i);
       spreadEl.appendChild(leftPageEl);
 
       if (i + 1 < pages.length) {
         const rightPage = pages[i + 1];
         const rightPageSize = rightPage.size ?? layout.pageSize;
-        const rightPageEl = this.renderPage(rightPageSize.w, rightPageSize.h, rightPage);
-        rightPageEl.dataset.pageNumber = String(rightPage.number);
-        rightPageEl.dataset.pageIndex = String(i + 1);
+        const rightPageEl = this.renderPage(rightPageSize.w, rightPageSize.h, rightPage, i + 1);
         spreadEl.appendChild(rightPageEl);
       }
 
@@ -1461,7 +1810,7 @@ export class DomPainter {
     }
   }
 
-  private renderPage(width: number, height: number, page: Page): HTMLElement {
+  private renderPage(width: number, height: number, page: Page, pageIndex: number): HTMLElement {
     if (!this.doc) {
       throw new Error('DomPainter: document is not available');
     }
@@ -1469,6 +1818,8 @@ export class DomPainter {
     el.classList.add(CLASS_NAMES.page);
     applyStyles(el, pageStyles(width, height, this.getEffectivePageStyles()));
     el.dataset.layoutEpoch = String(this.layoutEpoch);
+    el.dataset.pageNumber = String(page.number);
+    el.dataset.pageIndex = String(pageIndex);
 
     // Render per-page ruler if enabled
     if (this.options.ruler?.enabled) {
@@ -1483,6 +1834,7 @@ export class DomPainter {
       totalPages: this.totalPages,
       section: 'body',
       pageNumberText: page.numberText,
+      pageIndex,
     };
 
     const sdtBoundaries = computeSdtBoundaries(page.fragments, this.blockLookup, this.sdtLabelsRendered);
@@ -1491,7 +1843,7 @@ export class DomPainter {
       const sdtBoundary = sdtBoundaries.get(index);
       el.appendChild(this.renderFragment(fragment, contextBase, sdtBoundary));
     });
-    this.renderDecorationsForPage(el, page);
+    this.renderDecorationsForPage(el, page, pageIndex);
     return el;
   }
 
@@ -1572,12 +1924,27 @@ export class DomPainter {
     }
   }
 
-  private renderDecorationsForPage(pageEl: HTMLElement, page: Page): void {
-    this.renderDecorationSection(pageEl, page, 'header');
-    this.renderDecorationSection(pageEl, page, 'footer');
+  private renderDecorationsForPage(pageEl: HTMLElement, page: Page, pageIndex: number): void {
+    this.renderDecorationSection(pageEl, page, pageIndex, 'header');
+    this.renderDecorationSection(pageEl, page, pageIndex, 'footer');
   }
 
-  private renderDecorationSection(pageEl: HTMLElement, page: Page, kind: 'header' | 'footer'): void {
+  private isPageRelativeVerticalAnchorFragment(fragment: Fragment): boolean {
+    if (fragment.kind !== 'image' && fragment.kind !== 'drawing') {
+      return false;
+    }
+    const lookup = this.blockLookup.get(fragment.blockId);
+    if (!lookup) {
+      return false;
+    }
+    const block = lookup.block;
+    if (block.kind !== 'image' && block.kind !== 'drawing') {
+      return false;
+    }
+    return block.anchor?.vRelativeFrom === 'page';
+  }
+
+  private renderDecorationSection(pageEl: HTMLElement, page: Page, pageIndex: number, kind: 'header' | 'footer'): void {
     if (!this.doc) return;
     const provider = kind === 'header' ? this.headerProvider : this.footerProvider;
     const className = kind === 'header' ? CLASS_NAMES.pageHeader : CLASS_NAMES.pageFooter;
@@ -1651,6 +2018,7 @@ export class DomPainter {
       totalPages: this.totalPages,
       section: kind,
       pageNumberText: page.numberText,
+      pageIndex,
     };
 
     // Separate behindDoc fragments from normal fragments.
@@ -1685,8 +2053,12 @@ export class DomPainter {
     // which also has z-index values but comes later in DOM order.
     behindDocFragments.forEach((fragment) => {
       const fragEl = this.renderFragment(fragment, context);
-      // Adjust position: fragment.y is relative to header container, we need page-relative
-      const pageY = effectiveOffset + fragment.y + (kind === 'footer' ? footerYOffset : 0);
+      const isPageRelativeVertical = this.isPageRelativeVerticalAnchorFragment(fragment);
+      // Page-relative anchors already carry absolute page Y coordinates. Adding decoration
+      // container offsets would shift them twice and can push header art into body content.
+      const pageY = isPageRelativeVertical
+        ? fragment.y
+        : effectiveOffset + fragment.y + (kind === 'footer' ? footerYOffset : 0);
       fragEl.style.top = `${pageY}px`;
       fragEl.style.left = `${marginLeft + fragment.x}px`;
       fragEl.style.zIndex = '0'; // Same level as page, but inserted first so renders behind
@@ -1698,8 +2070,14 @@ export class DomPainter {
     // Render normal fragments in the header/footer container
     normalFragments.forEach((fragment) => {
       const fragEl = this.renderFragment(fragment, context);
+      const isPageRelativeVertical = this.isPageRelativeVerticalAnchorFragment(fragment);
+      if (isPageRelativeVertical) {
+        // Convert absolute page Y back to decoration-container local coordinates.
+        // Container top is applied separately, so we subtract it here to avoid a second offset.
+        fragEl.style.top = `${fragment.y - effectiveOffset}px`;
+      }
       // Apply footer offset to push content to bottom
-      if (footerYOffset > 0) {
+      if (footerYOffset > 0 && !isPageRelativeVertical) {
         const currentTop = parseFloat(fragEl.style.top) || fragment.y;
         fragEl.style.top = `${currentTop + footerYOffset}px`;
       }
@@ -1742,6 +2120,8 @@ export class DomPainter {
     this.sdtHover.destroy();
     this.layoutVersion = 0;
     this.processedLayoutVersion = -1;
+    this.paintSnapshotBuilder = null;
+    this.lastPaintSnapshot = null;
   }
 
   private fullRender(layout: Layout): void {
@@ -1751,7 +2131,7 @@ export class DomPainter {
 
     layout.pages.forEach((page, pageIndex) => {
       const pageSize = page.size ?? layout.pageSize;
-      const pageState = this.createPageState(page, pageSize);
+      const pageState = this.createPageState(page, pageSize, pageIndex);
       pageState.element.dataset.pageNumber = String(page.number);
       pageState.element.dataset.pageIndex = String(pageIndex);
       this.mount!.appendChild(pageState.element);
@@ -1768,14 +2148,14 @@ export class DomPainter {
       const pageSize = page.size ?? layout.pageSize;
       const prevState = this.pageStates[index];
       if (!prevState) {
-        const newState = this.createPageState(page, pageSize);
+        const newState = this.createPageState(page, pageSize, index);
         newState.element.dataset.pageNumber = String(page.number);
         newState.element.dataset.pageIndex = String(index);
         this.mount!.insertBefore(newState.element, this.mount!.children[index] ?? null);
         nextStates.push(newState);
         return;
       }
-      this.patchPage(prevState, page, pageSize);
+      this.patchPage(prevState, page, pageSize, index);
       nextStates.push(prevState);
     });
 
@@ -1788,7 +2168,7 @@ export class DomPainter {
     this.pageStates = nextStates;
   }
 
-  private patchPage(state: PageDomState, page: Page, pageSize: { w: number; h: number }): void {
+  private patchPage(state: PageDomState, page: Page, pageSize: { w: number; h: number }, pageIndex: number): void {
     const pageEl = state.element;
     applyStyles(pageEl, pageStyles(pageSize.w, pageSize.h, this.getEffectivePageStyles()));
     pageEl.dataset.pageNumber = String(page.number);
@@ -1804,6 +2184,7 @@ export class DomPainter {
       totalPages: this.totalPages,
       section: 'body',
       pageNumberText: page.numberText,
+      pageIndex,
     };
 
     page.fragments.forEach((fragment, index) => {
@@ -1872,7 +2253,7 @@ export class DomPainter {
     });
 
     state.fragments = nextFragments;
-    this.renderDecorationsForPage(pageEl, page);
+    this.renderDecorationsForPage(pageEl, page, pageIndex);
   }
 
   /**
@@ -1928,7 +2309,7 @@ export class DomPainter {
     }
   }
 
-  private createPageState(page: Page, pageSize: { w: number; h: number }): PageDomState {
+  private createPageState(page: Page, pageSize: { w: number; h: number }, pageIndex: number): PageDomState {
     if (!this.doc) {
       throw new Error('DomPainter.createPageState requires a document');
     }
@@ -1941,6 +2322,7 @@ export class DomPainter {
       pageNumber: page.number,
       totalPages: this.totalPages,
       section: 'body',
+      pageIndex,
     };
 
     const sdtBoundaries = computeSdtBoundaries(page.fragments, this.blockLookup, this.sdtLabelsRendered);
@@ -1957,7 +2339,7 @@ export class DomPainter {
       };
     });
 
-    this.renderDecorationsForPage(el, page);
+    this.renderDecorationsForPage(el, page, pageIndex);
     return { element: el, fragments: fragmentStates };
   }
 
@@ -2357,6 +2739,10 @@ export class DomPainter {
             lineEl.prepend(markerContainer);
           }
         }
+        this.capturePaintSnapshotLine(lineEl, context, {
+          inTableFragment: false,
+          inTableParagraph: false,
+        });
         fragmentEl.appendChild(lineEl);
       });
 
@@ -2570,6 +2956,10 @@ export class DomPainter {
       };
       lines.forEach((line, idx) => {
         const lineEl = this.renderLine(paraForList, line, context, fragment.width, fragment.fromLine + idx, true);
+        this.capturePaintSnapshotLine(lineEl, context, {
+          inTableFragment: false,
+          inTableParagraph: false,
+        });
         contentEl.appendChild(lineEl);
       });
       fragmentEl.appendChild(contentEl);
@@ -3033,6 +3423,9 @@ export class DomPainter {
           }
           if (part.formatting.fontSize) {
             span.style.fontSize = `${part.formatting.fontSize}px`;
+          }
+          if (part.formatting.letterSpacing != null) {
+            span.style.letterSpacing = `${part.formatting.letterSpacing}px`;
           }
         }
         currentParagraph.appendChild(span);
@@ -3580,6 +3973,13 @@ export class DomPainter {
       blockLookup: this.blockLookup,
       sdtBoundary,
       renderLine: renderLineForTableCell,
+      captureLineSnapshot: (lineEl, lineContext, options) => {
+        this.capturePaintSnapshotLine(lineEl, lineContext, {
+          inTableFragment: true,
+          inTableParagraph: options?.inTableParagraph ?? false,
+          wrapperEl: options?.wrapperEl,
+        });
+      },
       renderDrawingContent: renderDrawingContentForTableCell,
       applyFragmentFrame: applyFragmentFrameWithSection,
       applySdtDataset: this.applySdtDataset.bind(this),
@@ -3707,7 +4107,7 @@ export class DomPainter {
     const descId = `link-desc-${linkId}`;
     const descElem = this.doc.createElement('span');
     descElem.id = descId;
-    descElem.className = 'sr-only'; // Screen reader only class
+    descElem.className = 'superdoc-sr-only'; // Screen reader only class
     descElem.textContent = tooltip;
 
     // Insert description element after the link
@@ -5197,6 +5597,9 @@ export class DomPainter {
     if (meta.date) {
       elem.dataset.trackChangeDate = meta.date;
     }
+    if (this.activeCommentId && meta.id === this.activeCommentId) {
+      elem.classList.add(TRACK_CHANGE_FOCUSED_CLASS);
+    }
   }
 
   /**
@@ -6617,58 +7020,4 @@ const resolveRunText = (run: Run, context: FragmentRenderContext): string => {
     return context.totalPages ? String(context.totalPages) : (run.text ?? '');
   }
   return run.text ?? '';
-};
-
-const computeTabWidth = (
-  currentPos: number,
-  justification: string,
-  tabs: number[] | undefined,
-  hangingIndent: number | undefined,
-  firstLineIndent: number | undefined,
-  leftIndent: number,
-): number => {
-  const nextDefaultTabStop = currentPos + DEFAULT_TAB_INTERVAL_PX - (currentPos % DEFAULT_TAB_INTERVAL_PX);
-  let tabWidth: number;
-  if ((justification ?? 'left') === 'left') {
-    // Check for explicit tab stops past current position
-    const explicitTabs = [...(tabs ?? [])];
-    if (hangingIndent && hangingIndent > 0) {
-      // Account for hanging indent by adding an implicit tab stop at (left + hanging)
-      const implicitTabPos = leftIndent; // paraIndentLeft already accounts for hanging
-      explicitTabs.push(implicitTabPos);
-      // Sort tab stops to maintain order
-      explicitTabs.sort((a, b) => {
-        if (typeof a === 'number' && typeof b === 'number') {
-          return a - b;
-        }
-        return 0;
-      });
-    }
-    let targetTabStop: number | undefined;
-
-    if (Array.isArray(explicitTabs) && explicitTabs.length > 0) {
-      // Find the first tab stop that's past the current position
-      for (const tab of explicitTabs) {
-        if (typeof tab === 'number' && tab > currentPos) {
-          targetTabStop = tab;
-          break;
-        }
-      }
-    }
-
-    if (targetTabStop === undefined) {
-      // advance to next default 48px tab interval, matching Word behavior.
-      targetTabStop = nextDefaultTabStop;
-    }
-    tabWidth = targetTabStop - currentPos;
-  } else if (justification === 'right') {
-    if (firstLineIndent != null && firstLineIndent > 0) {
-      tabWidth = nextDefaultTabStop - currentPos;
-    } else {
-      tabWidth = hangingIndent ?? 0;
-    }
-  } else {
-    tabWidth = nextDefaultTabStop - currentPos;
-  }
-  return tabWidth;
 };

@@ -18,6 +18,49 @@ description: Generated reference for trackChanges.get
 - Supports dry run: `no`
 - Deterministic target resolution: `yes`
 
+## Input fields
+
+| Field | Type | Required | Description |
+| --- | --- | --- | --- |
+| `id` | string | yes |  |
+
+### Example request
+
+```json
+{
+  "id": "id-001"
+}
+```
+
+## Output fields
+
+| Field | Type | Required | Description |
+| --- | --- | --- | --- |
+| `address` | TrackedChangeAddress | yes | TrackedChangeAddress |
+| `author` | string | no |  |
+| `authorEmail` | string | no |  |
+| `authorImage` | string | no |  |
+| `date` | string | no |  |
+| `excerpt` | string | no |  |
+| `id` | string | yes |  |
+| `type` | enum | yes | `"insert"`, `"delete"`, `"format"` |
+
+### Example response
+
+```json
+{
+  "address": {
+    "entityId": "entity-789",
+    "entityType": "trackedChange",
+    "kind": "entity"
+  },
+  "author": "Jane Doe",
+  "authorEmail": "jane@example.com",
+  "id": "id-001",
+  "type": "insert"
+}
+```
+
 ## Pre-apply throws
 
 - `TARGET_NOT_FOUND`
@@ -26,8 +69,9 @@ description: Generated reference for trackChanges.get
 
 - None
 
-## Input schema
+## Raw schemas
 
+<Accordion title="Raw input schema">
 ```json
 {
   "additionalProperties": false,
@@ -42,32 +86,15 @@ description: Generated reference for trackChanges.get
   "type": "object"
 }
 ```
+</Accordion>
 
-## Output schema
-
+<Accordion title="Raw output schema">
 ```json
 {
   "additionalProperties": false,
   "properties": {
     "address": {
-      "additionalProperties": false,
-      "properties": {
-        "entityId": {
-          "type": "string"
-        },
-        "entityType": {
-          "const": "trackedChange"
-        },
-        "kind": {
-          "const": "entity"
-        }
-      },
-      "required": [
-        "kind",
-        "entityType",
-        "entityId"
-      ],
-      "type": "object"
+      "$ref": "#/$defs/TrackedChangeAddress"
     },
     "author": {
       "type": "string"
@@ -103,3 +130,4 @@ description: Generated reference for trackChanges.get
   "type": "object"
 }
 ```
+</Accordion>

@@ -18,6 +18,49 @@ description: Generated reference for getNodeById
 - Supports dry run: `no`
 - Deterministic target resolution: `yes`
 
+## Input fields
+
+| Field | Type | Required | Description |
+| --- | --- | --- | --- |
+| `nodeId` | string | yes |  |
+| `nodeType` | enum | no | `"paragraph"`, `"heading"`, `"listItem"`, `"table"`, `"tableRow"`, `"tableCell"`, `"image"`, `"sdt"` |
+
+### Example request
+
+```json
+{
+  "nodeId": "node-def456",
+  "nodeType": "paragraph"
+}
+```
+
+## Output fields
+
+| Field | Type | Required | Description |
+| --- | --- | --- | --- |
+| `bodyNodes` | object[] | no |  |
+| `bodyText` | string | no |  |
+| `kind` | enum | yes | `"block"`, `"inline"` |
+| `nodeType` | enum | yes | `"paragraph"`, `"heading"`, `"listItem"`, `"table"`, `"tableRow"`, `"tableCell"`, `"image"`, `"sdt"`, `"run"`, `"bookmark"`, `"comment"`, `"hyperlink"`, `"footnoteRef"`, `"tab"`, `"lineBreak"` |
+| `nodes` | object[] | no |  |
+| `properties` | object | no |  |
+| `summary` | object | no |  |
+| `text` | string | no |  |
+
+### Example response
+
+```json
+{
+  "kind": "block",
+  "nodeType": "paragraph",
+  "summary": {
+    "label": "Paragraph 1",
+    "text": "Hello, world."
+  },
+  "text": "Hello, world."
+}
+```
+
 ## Pre-apply throws
 
 - `TARGET_NOT_FOUND`
@@ -26,8 +69,9 @@ description: Generated reference for getNodeById
 
 - None
 
-## Input schema
+## Raw schemas
 
+<Accordion title="Raw input schema">
 ```json
 {
   "additionalProperties": false,
@@ -54,9 +98,9 @@ description: Generated reference for getNodeById
   "type": "object"
 }
 ```
+</Accordion>
 
-## Output schema
-
+<Accordion title="Raw output schema">
 ```json
 {
   "additionalProperties": false,
@@ -127,3 +171,4 @@ description: Generated reference for getNodeById
   "type": "object"
 }
 ```
+</Accordion>

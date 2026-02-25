@@ -18,6 +18,118 @@ description: Generated reference for find
 - Supports dry run: `no`
 - Deterministic target resolution: `no`
 
+## Input fields
+
+| Field | Type | Required | Description |
+| --- | --- | --- | --- |
+| `includeNodes` | boolean | no |  |
+| `includeUnknown` | boolean | no |  |
+| `limit` | integer | no |  |
+| `offset` | integer | no |  |
+| `require` | enum | no | `"any"`, `"first"`, `"exactlyOne"`, `"all"` |
+| `select` | object(type="text") \\| object(type="node") \\| object | yes | One of: object(type="text"), object(type="node"), object |
+| `within` | NodeAddress | no | NodeAddress |
+
+### Example request
+
+```json
+{
+  "limit": 50,
+  "select": {
+    "caseSensitive": true,
+    "mode": "contains",
+    "pattern": "hello world",
+    "type": "text"
+  },
+  "within": {
+    "kind": "block",
+    "nodeId": "node-def456",
+    "nodeType": "paragraph"
+  }
+}
+```
+
+## Output fields
+
+| Field | Type | Required | Description |
+| --- | --- | --- | --- |
+| `diagnostics` | object[] | no |  |
+| `evaluatedRevision` | string | yes |  |
+| `items` | object[] | yes |  |
+| `page` | PageInfo | yes | PageInfo |
+| `total` | integer | yes |  |
+
+### Example response
+
+```json
+{
+  "diagnostics": [
+    {
+      "address": {
+        "kind": "block",
+        "nodeId": "node-def456",
+        "nodeType": "paragraph"
+      },
+      "hint": "example",
+      "message": "Operation failed."
+    }
+  ],
+  "evaluatedRevision": "rev-001",
+  "items": [
+    {
+      "address": {
+        "kind": "block",
+        "nodeId": "node-def456",
+        "nodeType": "paragraph"
+      },
+      "context": {
+        "address": {
+          "kind": "block",
+          "nodeId": "node-def456",
+          "nodeType": "paragraph"
+        },
+        "highlightRange": {
+          "end": 10,
+          "start": 0
+        },
+        "snippet": "...the quick brown fox...",
+        "textRanges": [
+          {
+            "blockId": "block-abc123",
+            "kind": "text",
+            "range": {
+              "end": 10,
+              "start": 0
+            }
+          }
+        ]
+      },
+      "handle": {
+        "ref": "handle:abc123",
+        "refStability": "stable",
+        "targetKind": "text"
+      },
+      "id": "id-001",
+      "node": {
+        "kind": "block",
+        "nodeType": "paragraph",
+        "summary": {
+          "label": "Paragraph 1",
+          "text": "Hello, world."
+        },
+        "text": "Hello, world."
+      }
+    }
+  ],
+  "page": {
+    "limit": 50,
+    "offset": 0,
+    "returned": 1
+  },
+  "total": 1
+}
+```
+
 ## Pre-apply throws
 
 - None
@@ -26,8 +138,9 @@ description: Generated reference for find
 
 - None
 
-## Input schema
+## Raw schemas
 
+<Accordion title="Raw input schema">
 ```json
 {
   "additionalProperties": false,
@@ -43,6 +156,14 @@ description: Generated reference for find
     },
     "offset": {
       "type": "integer"
+    },
+    "require": {
+      "enum": [
+        "any",
+        "first",
+        "exactlyOne",
+        "all"
+      ]
     },
     "select": {
       "anyOf": [
@@ -139,106 +260,7 @@ description: Generated reference for find
       ]
     },
     "within": {
-      "oneOf": [
-        {
-          "additionalProperties": false,
-          "properties": {
-            "kind": {
-              "const": "block"
-            },
-            "nodeId": {
-              "type": "string"
-            },
-            "nodeType": {
-              "enum": [
-                "paragraph",
-                "heading",
-                "listItem",
-                "table",
-                "tableRow",
-                "tableCell",
-                "image",
-                "sdt"
-              ]
-            }
-          },
-          "required": [
-            "kind",
-            "nodeType",
-            "nodeId"
-          ],
-          "type": "object"
-        },
-        {
-          "additionalProperties": false,
-          "properties": {
-            "anchor": {
-              "additionalProperties": false,
-              "properties": {
-                "end": {
-                  "additionalProperties": false,
-                  "properties": {
-                    "blockId": {
-                      "type": "string"
-                    },
-                    "offset": {
-                      "type": "integer"
-                    }
-                  },
-                  "required": [
-                    "blockId",
-                    "offset"
-                  ],
-                  "type": "object"
-                },
-                "start": {
-                  "additionalProperties": false,
-                  "properties": {
-                    "blockId": {
-                      "type": "string"
-                    },
-                    "offset": {
-                      "type": "integer"
-                    }
-                  },
-                  "required": [
-                    "blockId",
-                    "offset"
-                  ],
-                  "type": "object"
-                }
-              },
-              "required": [
-                "start",
-                "end"
-              ],
-              "type": "object"
-            },
-            "kind": {
-              "const": "inline"
-            },
-            "nodeType": {
-              "enum": [
-                "run",
-                "bookmark",
-                "comment",
-                "hyperlink",
-                "sdt",
-                "image",
-                "footnoteRef",
-                "tab",
-                "lineBreak"
-              ]
-            }
-          },
-          "required": [
-            "kind",
-            "nodeType",
-            "anchor"
-          ],
-          "type": "object"
-        }
-      ]
+      "$ref": "#/$defs/NodeAddress"
     }
   },
   "required": [
@@ -247,289 +269,19 @@ description: Generated reference for find
   "type": "object"
 }
 ```
+</Accordion>
 
-## Output schema
-
+<Accordion title="Raw output schema">
 ```json
 {
   "additionalProperties": false,
   "properties": {
-    "context": {
-      "items": {
-        "additionalProperties": false,
-        "properties": {
-          "address": {
-            "oneOf": [
-              {
-                "additionalProperties": false,
-                "properties": {
-                  "kind": {
-                    "const": "block"
-                  },
-                  "nodeId": {
-                    "type": "string"
-                  },
-                  "nodeType": {
-                    "enum": [
-                      "paragraph",
-                      "heading",
-                      "listItem",
-                      "table",
-                      "tableRow",
-                      "tableCell",
-                      "image",
-                      "sdt"
-                    ]
-                  }
-                },
-                "required": [
-                  "kind",
-                  "nodeType",
-                  "nodeId"
-                ],
-                "type": "object"
-              },
-              {
-                "additionalProperties": false,
-                "properties": {
-                  "anchor": {
-                    "additionalProperties": false,
-                    "properties": {
-                      "end": {
-                        "additionalProperties": false,
-                        "properties": {
-                          "blockId": {
-                            "type": "string"
-                          },
-                          "offset": {
-                            "type": "integer"
-                          }
-                        },
-                        "required": [
-                          "blockId",
-                          "offset"
-                        ],
-                        "type": "object"
-                      },
-                      "start": {
-                        "additionalProperties": false,
-                        "properties": {
-                          "blockId": {
-                            "type": "string"
-                          },
-                          "offset": {
-                            "type": "integer"
-                          }
-                        },
-                        "required": [
-                          "blockId",
-                          "offset"
-                        ],
-                        "type": "object"
-                      }
-                    },
-                    "required": [
-                      "start",
-                      "end"
-                    ],
-                    "type": "object"
-                  },
-                  "kind": {
-                    "const": "inline"
-                  },
-                  "nodeType": {
-                    "enum": [
-                      "run",
-                      "bookmark",
-                      "comment",
-                      "hyperlink",
-                      "sdt",
-                      "image",
-                      "footnoteRef",
-                      "tab",
-                      "lineBreak"
-                    ]
-                  }
-                },
-                "required": [
-                  "kind",
-                  "nodeType",
-                  "anchor"
-                ],
-                "type": "object"
-              }
-            ]
-          },
-          "highlightRange": {
-            "additionalProperties": false,
-            "properties": {
-              "end": {
-                "type": "integer"
-              },
-              "start": {
-                "type": "integer"
-              }
-            },
-            "required": [
-              "start",
-              "end"
-            ],
-            "type": "object"
-          },
-          "snippet": {
-            "type": "string"
-          },
-          "textRanges": {
-            "items": {
-              "additionalProperties": false,
-              "properties": {
-                "blockId": {
-                  "type": "string"
-                },
-                "kind": {
-                  "const": "text"
-                },
-                "range": {
-                  "additionalProperties": false,
-                  "properties": {
-                    "end": {
-                      "type": "integer"
-                    },
-                    "start": {
-                      "type": "integer"
-                    }
-                  },
-                  "required": [
-                    "start",
-                    "end"
-                  ],
-                  "type": "object"
-                }
-              },
-              "required": [
-                "kind",
-                "blockId",
-                "range"
-              ],
-              "type": "object"
-            },
-            "type": "array"
-          }
-        },
-        "required": [
-          "address",
-          "snippet",
-          "highlightRange"
-        ],
-        "type": "object"
-      },
-      "type": "array"
-    },
     "diagnostics": {
       "items": {
         "additionalProperties": false,
         "properties": {
           "address": {
-            "oneOf": [
-              {
-                "additionalProperties": false,
-                "properties": {
-                  "kind": {
-                    "const": "block"
-                  },
-                  "nodeId": {
-                    "type": "string"
-                  },
-                  "nodeType": {
-                    "enum": [
-                      "paragraph",
-                      "heading",
-                      "listItem",
-                      "table",
-                      "tableRow",
-                      "tableCell",
-                      "image",
-                      "sdt"
-                    ]
-                  }
-                },
-                "required": [
-                  "kind",
-                  "nodeType",
-                  "nodeId"
-                ],
-                "type": "object"
-              },
-              {
-                "additionalProperties": false,
-                "properties": {
-                  "anchor": {
-                    "additionalProperties": false,
-                    "properties": {
-                      "end": {
-                        "additionalProperties": false,
-                        "properties": {
-                          "blockId": {
-                            "type": "string"
-                          },
-                          "offset": {
-                            "type": "integer"
-                          }
-                        },
-                        "required": [
-                          "blockId",
-                          "offset"
-                        ],
-                        "type": "object"
-                      },
-                      "start": {
-                        "additionalProperties": false,
-                        "properties": {
-                          "blockId": {
-                            "type": "string"
-                          },
-                          "offset": {
-                            "type": "integer"
-                          }
-                        },
-                        "required": [
-                          "blockId",
-                          "offset"
-                        ],
-                        "type": "object"
-                      }
-                    },
-                    "required": [
-                      "start",
-                      "end"
-                    ],
-                    "type": "object"
-                  },
-                  "kind": {
-                    "const": "inline"
-                  },
-                  "nodeType": {
-                    "enum": [
-                      "run",
-                      "bookmark",
-                      "comment",
-                      "hyperlink",
-                      "sdt",
-                      "image",
-                      "footnoteRef",
-                      "tab",
-                      "lineBreak"
-                    ]
-                  }
-                },
-                "required": [
-                  "kind",
-                  "nodeType",
-                  "anchor"
-                ],
-                "type": "object"
-              }
-            ]
+            "$ref": "#/$defs/NodeAddress"
           },
           "hint": {
             "type": "string"
@@ -545,17 +297,71 @@ description: Generated reference for find
       },
       "type": "array"
     },
-    "matches": {
+    "evaluatedRevision": {
+      "type": "string"
+    },
+    "items": {
       "items": {
-        "oneOf": [
-          {
+        "additionalProperties": false,
+        "properties": {
+          "address": {
+            "$ref": "#/$defs/NodeAddress"
+          },
+          "context": {
             "additionalProperties": false,
             "properties": {
-              "kind": {
-                "const": "block"
+              "address": {
+                "$ref": "#/$defs/NodeAddress"
               },
-              "nodeId": {
+              "highlightRange": {
+                "$ref": "#/$defs/Range"
+              },
+              "snippet": {
                 "type": "string"
+              },
+              "textRanges": {
+                "items": {
+                  "$ref": "#/$defs/TextAddress"
+                },
+                "type": "array"
+              }
+            },
+            "required": [
+              "address",
+              "snippet",
+              "highlightRange"
+            ],
+            "type": "object"
+          },
+          "handle": {
+            "$ref": "#/$defs/ResolvedHandle"
+          },
+          "id": {
+            "type": "string"
+          },
+          "node": {
+            "additionalProperties": false,
+            "properties": {
+              "bodyNodes": {
+                "items": {
+                  "type": "object"
+                },
+                "type": "array"
+              },
+              "bodyText": {
+                "type": "string"
+              },
+              "kind": {
+                "enum": [
+                  "block",
+                  "inline"
+                ]
+              },
+              "nodes": {
+                "items": {
+                  "type": "object"
+                },
+                "type": "array"
               },
               "nodeType": {
                 "enum": [
@@ -566,169 +372,66 @@ description: Generated reference for find
                   "tableRow",
                   "tableCell",
                   "image",
-                  "sdt"
-                ]
-              }
-            },
-            "required": [
-              "kind",
-              "nodeType",
-              "nodeId"
-            ],
-            "type": "object"
-          },
-          {
-            "additionalProperties": false,
-            "properties": {
-              "anchor": {
-                "additionalProperties": false,
-                "properties": {
-                  "end": {
-                    "additionalProperties": false,
-                    "properties": {
-                      "blockId": {
-                        "type": "string"
-                      },
-                      "offset": {
-                        "type": "integer"
-                      }
-                    },
-                    "required": [
-                      "blockId",
-                      "offset"
-                    ],
-                    "type": "object"
-                  },
-                  "start": {
-                    "additionalProperties": false,
-                    "properties": {
-                      "blockId": {
-                        "type": "string"
-                      },
-                      "offset": {
-                        "type": "integer"
-                      }
-                    },
-                    "required": [
-                      "blockId",
-                      "offset"
-                    ],
-                    "type": "object"
-                  }
-                },
-                "required": [
-                  "start",
-                  "end"
-                ],
-                "type": "object"
-              },
-              "kind": {
-                "const": "inline"
-              },
-              "nodeType": {
-                "enum": [
+                  "sdt",
                   "run",
                   "bookmark",
                   "comment",
                   "hyperlink",
-                  "sdt",
-                  "image",
                   "footnoteRef",
                   "tab",
                   "lineBreak"
                 ]
-              }
-            },
-            "required": [
-              "kind",
-              "nodeType",
-              "anchor"
-            ],
-            "type": "object"
-          }
-        ]
-      },
-      "type": "array"
-    },
-    "nodes": {
-      "items": {
-        "additionalProperties": false,
-        "properties": {
-          "bodyNodes": {
-            "items": {
-              "type": "object"
-            },
-            "type": "array"
-          },
-          "bodyText": {
-            "type": "string"
-          },
-          "kind": {
-            "enum": [
-              "block",
-              "inline"
-            ]
-          },
-          "nodes": {
-            "items": {
-              "type": "object"
-            },
-            "type": "array"
-          },
-          "nodeType": {
-            "enum": [
-              "paragraph",
-              "heading",
-              "listItem",
-              "table",
-              "tableRow",
-              "tableCell",
-              "image",
-              "sdt",
-              "run",
-              "bookmark",
-              "comment",
-              "hyperlink",
-              "footnoteRef",
-              "tab",
-              "lineBreak"
-            ]
-          },
-          "properties": {
-            "type": "object"
-          },
-          "summary": {
-            "additionalProperties": false,
-            "properties": {
-              "label": {
-                "type": "string"
+              },
+              "properties": {
+                "type": "object"
+              },
+              "summary": {
+                "additionalProperties": false,
+                "properties": {
+                  "label": {
+                    "type": "string"
+                  },
+                  "text": {
+                    "type": "string"
+                  }
+                },
+                "type": "object"
               },
               "text": {
                 "type": "string"
               }
             },
+            "required": [
+              "nodeType",
+              "kind"
+            ],
             "type": "object"
-          },
-          "text": {
-            "type": "string"
           }
         },
         "required": [
-          "nodeType",
-          "kind"
+          "id",
+          "handle",
+          "address"
         ],
         "type": "object"
       },
       "type": "array"
     },
+    "page": {
+      "$ref": "#/$defs/PageInfo"
+    },
     "total": {
+      "minimum": 0,
       "type": "integer"
     }
   },
   "required": [
-    "matches",
-    "total"
+    "evaluatedRevision",
+    "total",
+    "items",
+    "page"
   ],
   "type": "object"
 }
 ```
+</Accordion>

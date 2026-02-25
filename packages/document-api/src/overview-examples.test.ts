@@ -1,6 +1,6 @@
 /**
  * Tests that exercise the exact code patterns shown in:
- *   - apps/docs/document-api/overview.mdx  (Common workflows + Programmatic invocation)
+ *   - apps/docs/document-api/overview.mdx  (Common workflows)
  *   - packages/document-api/src/README.md  (Workflow examples)
  *
  * If any of these tests break, the corresponding documentation example is wrong
@@ -9,7 +9,6 @@
 import { describe, expect, it, vi } from 'vitest';
 import { createDocumentApi } from './index.js';
 import type { DocumentApiCapabilities } from './capabilities/capabilities.js';
-import type { OperationId } from './contract/types.js';
 import type { TextAddress } from './types/index.js';
 
 // ---------------------------------------------------------------------------
@@ -33,13 +32,17 @@ function makeTextMutationReceipt(target = TEXT_TARGET) {
 function makeFindAdapter() {
   return {
     find: vi.fn(() => ({
-      matches: [{ kind: 'block' as const, nodeType: 'paragraph' as const, nodeId: 'p1' }],
+      evaluatedRevision: '',
       total: 1,
-      context: [
+      items: [
         {
-          textRanges: [TEXT_TARGET],
+          id: 'p1',
+          handle: { ref: 'p1', refStability: 'ephemeral' as const, targetKind: 'node' as const },
+          address: { kind: 'block' as const, nodeType: 'paragraph' as const, nodeId: 'p1' },
+          context: { textRanges: [TEXT_TARGET] },
         },
       ],
+      page: { limit: 1, offset: 0, returned: 1 },
     })),
   };
 }
@@ -71,10 +74,7 @@ function makeWriteAdapter() {
 
 function makeFormatAdapter() {
   return {
-    bold: vi.fn(() => makeTextMutationReceipt()),
-    italic: vi.fn(() => makeTextMutationReceipt()),
-    underline: vi.fn(() => makeTextMutationReceipt()),
-    strikethrough: vi.fn(() => makeTextMutationReceipt()),
+    apply: vi.fn(() => makeTextMutationReceipt()),
   };
 }
 
@@ -96,22 +96,26 @@ function makeCommentsAdapter() {
       text: 'Review this section.',
     })),
     list: vi.fn(() => ({
-      matches: [
+      evaluatedRevision: 'r1',
+      total: 1,
+      items: [
         {
+          id: 'c1',
+          handle: { ref: 'comment:c1', refStability: 'stable' as const, targetKind: 'comment' as const },
           address: { kind: 'entity' as const, entityType: 'comment' as const, entityId: 'c1' },
           commentId: 'c1',
           status: 'open' as const,
           text: 'Review this section.',
         },
       ],
-      total: 1,
+      page: { limit: 1, offset: 0, returned: 1 },
     })),
   };
 }
 
 function makeTrackChangesAdapter() {
   return {
-    list: vi.fn(() => ({ matches: [], total: 0 })),
+    list: vi.fn(() => ({ evaluatedRevision: 'r1', total: 0, items: [], page: { limit: 0, offset: 0, returned: 0 } })),
     get: vi.fn((input: { id: string }) => ({
       address: { kind: 'entity' as const, entityType: 'trackedChange' as const, entityId: input.id },
       id: input.id,
@@ -142,16 +146,19 @@ function makeCreateAdapter() {
 function makeListsAdapter() {
   return {
     list: vi.fn(() => ({
-      matches: [{ kind: 'block' as const, nodeType: 'listItem' as const, nodeId: 'li-1' }],
+      evaluatedRevision: 'r1',
       total: 1,
       items: [
         {
+          id: 'li-1',
+          handle: { ref: 'li-1', refStability: 'stable' as const, targetKind: 'list' as const },
           address: { kind: 'block' as const, nodeType: 'listItem' as const, nodeId: 'li-1' },
           kind: 'ordered' as const,
           level: 0,
           text: 'List item',
         },
       ],
+      page: { limit: 1, offset: 0, returned: 1 },
     })),
     get: vi.fn(() => ({
       address: { kind: 'block' as const, nodeType: 'listItem' as const, nodeId: 'li-1' },
@@ -195,6 +202,7 @@ function makeCapabilitiesAdapter(): { get: ReturnType<typeof vi.fn> } {
       lists: { enabled: true },
       dryRun: { enabled: true },
     },
+    format: { supportedMarks: ['bold', 'italic', 'underline', 'strike'] },
     operations: Object.fromEntries(
       [
         'find',
@@ -205,10 +213,7 @@ function makeCapabilitiesAdapter(): { get: ReturnType<typeof vi.fn> } {
         'insert',
         'replace',
         'delete',
-        'format.bold',
-        'format.italic',
-        'format.underline',
-        'format.strikethrough',
+        'format.apply',
         'create.paragraph',
         'create.heading',
         'lists.list',
@@ -219,26 +224,26 @@ function makeCapabilitiesAdapter(): { get: ReturnType<typeof vi.fn> } {
         'lists.outdent',
         'lists.restart',
         'lists.exit',
-        'comments.add',
-        'comments.edit',
-        'comments.reply',
-        'comments.move',
-        'comments.resolve',
-        'comments.remove',
-        'comments.setInternal',
-        'comments.setActive',
-        'comments.goTo',
+        'comments.create',
+        'comments.patch',
+        'comments.delete',
         'comments.get',
         'comments.list',
         'trackChanges.list',
         'trackChanges.get',
-        'trackChanges.accept',
-        'trackChanges.reject',
-        'trackChanges.acceptAll',
-        'trackChanges.rejectAll',
+        'review.decide',
         'capabilities.get',
+        'query.match',
+        'mutations.preview',
+        'mutations.apply',
       ].map((id) => [id, { available: true, tracked: true, dryRun: true }]),
     ) as DocumentApiCapabilities['operations'],
+    planEngine: {
+      supportedStepOps: [],
+      supportedNonUniformStrategies: [],
+      supportedSetMarks: [],
+      regex: { maxPatternLength: 1024, maxExecutionMs: 100 },
+    },
   };
   return { get: vi.fn(() => caps) };
 }
@@ -256,6 +261,63 @@ function makeApi() {
     trackChanges: makeTrackChangesAdapter(),
     create: makeCreateAdapter(),
     lists: makeListsAdapter(),
+    query: {
+      match: vi.fn(() => ({
+        evaluatedRevision: 'r1',
+        total: 1,
+        items: [
+          {
+            id: 'm:1',
+            handle: {
+              ref: 'ref:match-1',
+              refStability: 'stable' as const,
+              targetKind: 'text' as const,
+            },
+            matchKind: 'text' as const,
+            address: {
+              kind: 'block' as const,
+              nodeType: 'paragraph' as const,
+              nodeId: 'p1',
+            },
+            snippet: 'foo',
+            highlightRange: { start: 0, end: 3 },
+            blocks: [
+              {
+                blockId: 'p1',
+                nodeType: 'paragraph',
+                range: { start: 0, end: 3 },
+                text: 'foo',
+                ref: 'ref:block-1',
+                runs: [
+                  {
+                    range: { start: 0, end: 3 },
+                    text: 'foo',
+                    styles: {
+                      bold: false,
+                      italic: false,
+                      underline: false,
+                      strike: false,
+                    },
+                    ref: 'ref:run-1',
+                  },
+                ],
+              },
+            ],
+          },
+        ],
+        page: { limit: 1, offset: 0, returned: 1 },
+      })),
+    },
+    mutations: {
+      preview: vi.fn(() => ({ evaluatedRevision: 'r1', steps: [], valid: true })),
+      apply: vi.fn(() => ({
+        success: true as const,
+        revision: { before: 'r1', after: 'r2' },
+        steps: [],
+        trackedChanges: [],
+        timing: { totalMs: 0 },
+      })),
+    },
   });
 }
 
@@ -264,19 +326,105 @@ function makeApi() {
 // ---------------------------------------------------------------------------
 
 describe('overview.mdx examples', () => {
-  describe('Find and mutate', () => {
-    // Mirrors the exact code block from overview.mdx § "Find and mutate"
-    it('find text then replace it', () => {
+  describe('Plan with query.match, then apply with mutations', () => {
+    // Mirrors the exact code block from overview.mdx § "Plan with query.match, then apply with mutations"
+    it('matches, previews, and applies a deterministic plan', () => {
       const doc = makeApi();
 
-      const result = doc.find({ type: 'text', text: 'foo' });
-      const target = result.context?.[0]?.textRanges?.[0];
+      const match = doc.query.match({
+        select: { type: 'text', pattern: 'foo' },
+        require: 'first',
+      });
+
+      const ref = match.items?.[0]?.handle?.ref;
+      if (!ref) return;
+
+      const plan = {
+        expectedRevision: match.evaluatedRevision,
+        atomic: true as const,
+        changeMode: 'direct' as const,
+        steps: [
+          {
+            id: 'replace-foo',
+            op: 'text.rewrite',
+            where: { by: 'ref' as const, ref },
+            args: { replacement: { text: 'bar' } },
+          },
+        ],
+      };
+
+      const preview = doc.mutations.preview(plan);
+      if (preview.valid) {
+        doc.mutations.apply(plan);
+      }
+
+      expect(ref).toBeDefined();
+      expect(preview.valid).toBe(true);
+    });
+  });
+
+  describe('Run multiple edits as one plan', () => {
+    // Mirrors the exact code block from overview.mdx § "Run multiple edits as one plan"
+    it('runs multiple steps through preview + apply', () => {
+      const doc = makeApi();
+
+      const match = doc.query.match({
+        select: { type: 'text', pattern: 'payment terms' },
+        require: 'first',
+      });
+
+      const ref = match.items?.[0]?.handle?.ref;
+      if (!ref) return;
+
+      const plan = {
+        expectedRevision: match.evaluatedRevision,
+        atomic: true as const,
+        changeMode: 'direct' as const,
+        steps: [
+          {
+            id: 'rewrite-terms',
+            op: 'text.rewrite',
+            where: { by: 'ref' as const, ref },
+            args: {
+              replacement: { text: 'updated payment terms' },
+            },
+          },
+          {
+            id: 'style-terms',
+            op: 'format.apply',
+            where: { by: 'ref' as const, ref },
+            args: { marks: { bold: true } },
+          },
+        ],
+      };
+
+      const preview = doc.mutations.preview(plan);
+      if (preview.valid) {
+        doc.mutations.apply(plan);
+      }
+
+      expect(ref).toBeDefined();
+      expect(preview.valid).toBe(true);
+    });
+  });
+
+  describe('Quick search and single edit', () => {
+    // Mirrors the exact code block from overview.mdx § "Quick search and single edit"
+    it('finds and replaces with direct operations', () => {
+      const doc = makeApi();
+
+      const result = doc.find({
+        select: { type: 'text', pattern: 'foo' },
+        require: 'first',
+      });
+
+      const target = result.items?.[0]?.context?.textRanges?.[0];
       if (target) {
         doc.replace({ target, text: 'bar' });
       }
 
       expect(target).toBeDefined();
-      expect(target!.kind).toBe('text');
+      expect(target?.kind).toBe('text');
     });
   });
 
@@ -296,12 +444,12 @@ describe('overview.mdx examples', () => {
     // Mirrors the exact code block from overview.mdx § "Check capabilities before acting"
     it('branch on capabilities', () => {
       const doc = makeApi();
-      const target = TEXT_TARGET;
 
       const caps = doc.capabilities();
+      const target = { kind: 'text', blockId: 'p1', range: { start: 0, end: 3 } };
 
-      if (caps.operations['format.bold'].available) {
-        doc.format.bold({ target });
+      if (caps.operations['format.apply'].available) {
+        doc.format.apply({ target, marks: { bold: true } });
       }
 
       if (caps.global.trackChanges.enabled) {
@@ -309,7 +457,7 @@ describe('overview.mdx examples', () => {
       }
 
       // Both branches should execute with our fully-capable mock
-      expect(caps.operations['format.bold'].available).toBe(true);
+      expect(caps.operations['format.apply'].available).toBe(true);
       expect(caps.global.trackChanges.enabled).toBe(true);
     });
   });
@@ -330,21 +478,6 @@ describe('overview.mdx examples', () => {
       expect(preview.resolution).toHaveProperty('range');
     });
   });
-
-  describe('Programmatic invocation', () => {
-    // Mirrors the exact code block from overview.mdx § "Programmatic invocation"
-    it('invoke with operationId string', () => {
-      const doc = makeApi();
-
-      const result = doc.invoke({
-        operationId: 'insert',
-        input: { text: 'hello' },
-        options: { changeMode: 'tracked' },
-      });
-
-      expect(result).toBeDefined();
-    });
-  });
 });
 
 // ---------------------------------------------------------------------------
@@ -358,7 +491,7 @@ describe('src/README.md workflow examples', () => {
       const doc = makeApi();
 
       const result = doc.find({ type: 'text', text: 'foo' });
-      const target = result.context?.[0]?.textRanges?.[0];
+      const target = result.items[0]?.context?.textRanges?.[0];
       if (target) {
         doc.replace({ target, text: 'bar' });
       }
@@ -385,20 +518,20 @@ describe('src/README.md workflow examples', () => {
 
   describe('Workflow: Comment Thread Lifecycle', () => {
     // Mirrors the exact code block from src/README.md § "Workflow: Comment Thread Lifecycle"
-    it('add comment, reply, then resolve', () => {
+    it('create comment, reply, then resolve', () => {
       const doc = makeApi();
 
       // Simulate having a find result in scope (the example assumes `result` exists)
       const result = doc.find({ type: 'text', text: 'something' });
-      const target = result.context?.[0]?.textRanges?.[0];
-      const addReceipt = doc.comments.add({ target: target!, text: 'Review this section.' });
+      const target = result.items[0]?.context?.textRanges?.[0];
+      const createReceipt = doc.comments.create({ target: target!, text: 'Review this section.' });
       // Use the comment ID from the receipt to reply
       const comments = doc.comments.list();
-      const thread = comments.matches[0];
-      doc.comments.reply({ parentCommentId: thread.commentId, text: 'Looks good.' });
-      doc.comments.resolve({ commentId: thread.commentId });
+      const thread = comments.items[0];
+      doc.comments.create({ parentCommentId: thread.commentId, text: 'Looks good.' });
+      doc.comments.patch({ commentId: thread.commentId, status: 'resolved' });
 
-      expect(addReceipt.success).toBe(true);
+      expect(createReceipt.success).toBe(true);
       expect(thread.commentId).toBeDefined();
     });
   });
@@ -409,7 +542,7 @@ describe('src/README.md workflow examples', () => {
       const doc = makeApi();
 
       const lists = doc.lists.list();
-      const firstItem = lists.matches[0];
+      const firstItem = lists.items[0].address;
       const insertResult = doc.lists.insert({ target: firstItem, position: 'after', text: 'New item' });
       if (insertResult.success) {
         doc.lists.setType({ target: insertResult.item, kind: 'ordered' });
@@ -430,8 +563,8 @@ describe('src/README.md workflow examples', () => {
       const target = TEXT_TARGET;
 
       const caps = doc.capabilities();
-      if (caps.operations['format.bold'].available) {
-        doc.format.bold({ target });
+      if (caps.operations['format.apply'].available) {
+        doc.format.apply({ target, marks: { bold: true } });
       }
       if (caps.global.trackChanges.enabled) {
         doc.insert({ text: 'tracked' }, { changeMode: 'tracked' });
@@ -441,7 +574,7 @@ describe('src/README.md workflow examples', () => {
         expect(preview).toBeDefined();
       }
 
-      expect(caps.operations['format.bold'].available).toBe(true);
+      expect(caps.operations['format.apply'].available).toBe(true);
       expect(caps.global.trackChanges.enabled).toBe(true);
       expect(caps.operations['create.heading'].dryRun).toBe(true);
     });

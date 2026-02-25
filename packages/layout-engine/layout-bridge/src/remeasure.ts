@@ -1075,10 +1075,8 @@ export function remeasureParagraph(
   const allowNegativeFirstLineOffset = !wordLayout?.marker && !hasNegativeIndent && baseFirstLineOffset < 0;
   const effectiveFirstLineOffset = allowNegativeFirstLineOffset ? baseFirstLineOffset : clampedFirstLineOffset;
   const contentWidth = Math.max(1, maxWidth - indentLeft - indentRight);
-  // Some producers provide `marker.textStartX` without setting top-level `textStartPx`.
-  // Both values represent the same concept: where the first-line text begins after the marker/tab.
-  // IMPORTANT: Priority must match the painter (renderer.ts) which prefers marker.textStartX
-  // because it's consistent with marker.markerX positioning. Mismatched priority causes justify overflow.
+  // Shared helper is the canonical source for list text-start geometry.
+  // Keep an explicit top-level fallback for producers that only provide textStartPx.
   const textStartPx = wordLayout?.textStartPx;
   // Track measured marker text width for returning in measure.marker
   let measuredMarkerTextWidth: number | undefined;

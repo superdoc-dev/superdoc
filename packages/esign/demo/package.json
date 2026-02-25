@@ -9,6 +9,7 @@
   },
   "dependencies": {
     "@superdoc-dev/esign": "workspace:*",
+    "pdfjs-dist": "5.4.624",
     "react": "catalog:",
     "react-dom": "catalog:",
     "signature_pad": "^5.1.1",

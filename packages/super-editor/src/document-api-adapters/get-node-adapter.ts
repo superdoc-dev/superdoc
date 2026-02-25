@@ -7,6 +7,12 @@ import { mapNodeInfo } from './helpers/node-info-mapper.js';
 import { DocumentApiAdapterError } from './errors.js';
 
 function findBlocksByTypeAndId(blockIndex: BlockIndex, nodeType: BlockNodeType, nodeId: string): BlockCandidate[] {
+  // Fast path: check the byId map which includes alias entries (e.g., sdBlockId
+  // for paragraphs that also have paraId as their primary nodeId).
+  const byIdMatch = blockIndex.byId.get(`${nodeType}:${nodeId}`);
+  if (byIdMatch) return [byIdMatch];
+
+  // Fallback: linear scan for candidates whose primary nodeId matches.
   return blockIndex.candidates.filter((candidate) => candidate.nodeType === nodeType && candidate.nodeId === nodeId);
 }
 
@@ -70,8 +76,8 @@ function resolveBlockById(
   }
 
   const matches = blockIndex.candidates.filter((candidate) => candidate.nodeId === nodeId);
-  if (matches.length === 0) {
-    throw new DocumentApiAdapterError('TARGET_NOT_FOUND', `Node not found for id "${nodeId}".`);
+  if (matches.length === 1) {
+    return { candidate: matches[0]!, resolvedType: matches[0]!.nodeType };
   }
   if (matches.length > 1) {
     throw new DocumentApiAdapterError(
@@ -80,7 +86,14 @@ function resolveBlockById(
     );
   }
 
-  return { candidate: matches[0]!, resolvedType: matches[0]!.nodeType };
+  // No primary match — check alias entries (e.g., sdBlockId for paragraphs).
+  for (const [key, candidate] of blockIndex.byId) {
+    if (key.endsWith(`:${nodeId}`)) {
+      return { candidate, resolvedType: candidate.nodeType };
+    }
+  }
+
+  throw new DocumentApiAdapterError('TARGET_NOT_FOUND', `Node not found for id "${nodeId}".`);
 }
 
 /**

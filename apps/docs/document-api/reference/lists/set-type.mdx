@@ -18,20 +18,59 @@ description: Generated reference for lists.setType
 - Supports dry run: `yes`
 - Deterministic target resolution: `yes`
 
+## Input fields
+
+| Field | Type | Required | Description |
+| --- | --- | --- | --- |
+| `kind` | enum | yes | `"ordered"`, `"bullet"` |
+| `target` | ListItemAddress | yes | ListItemAddress |
+
+### Example request
+
+```json
+{
+  "kind": "ordered",
+  "target": {
+    "kind": "block",
+    "nodeId": "node-def456",
+    "nodeType": "listItem"
+  }
+}
+```
+
+## Output fields
+
+_No fields._
+
+### Example response
+
+```json
+{
+  "item": {
+    "kind": "block",
+    "nodeId": "node-def456",
+    "nodeType": "listItem"
+  },
+  "success": true
+}
+```
+
 ## Pre-apply throws
 
 - `TARGET_NOT_FOUND`
 - `COMMAND_UNAVAILABLE`
 - `TRACK_CHANGE_COMMAND_UNAVAILABLE`
 - `CAPABILITY_UNAVAILABLE`
+- `INVALID_TARGET`
 
 ## Non-applied failure codes
 
 - `NO_OP`
 - `INVALID_TARGET`
 
-## Input schema
+## Raw schemas
 
+<Accordion title="Raw input schema">
 ```json
 {
   "additionalProperties": false,
@@ -43,24 +82,7 @@ description: Generated reference for lists.setType
       ]
     },
     "target": {
-      "additionalProperties": false,
-      "properties": {
-        "kind": {
-          "const": "block"
-        },
-        "nodeId": {
-          "type": "string"
-        },
-        "nodeType": {
-          "const": "listItem"
-        }
-      },
-      "required": [
-        "kind",
-        "nodeType",
-        "nodeId"
-      ],
-      "type": "object"
+      "$ref": "#/$defs/ListItemAddress"
     }
   },
   "required": [
@@ -70,9 +92,9 @@ description: Generated reference for lists.setType
   "type": "object"
 }
 ```
+</Accordion>
 
-## Output schema
-
+<Accordion title="Raw output schema">
 ```json
 {
   "oneOf": [
@@ -80,24 +102,7 @@ description: Generated reference for lists.setType
       "additionalProperties": false,
       "properties": {
         "item": {
-          "additionalProperties": false,
-          "properties": {
-            "kind": {
-              "const": "block"
-            },
-            "nodeId": {
-              "type": "string"
-            },
-            "nodeType": {
-              "const": "listItem"
-            }
-          },
-          "required": [
-            "kind",
-            "nodeType",
-            "nodeId"
-          ],
-          "type": "object"
+          "$ref": "#/$defs/ListItemAddress"
         },
         "success": {
           "const": true
@@ -145,32 +150,15 @@ description: Generated reference for lists.setType
   ]
 }
 ```
+</Accordion>
 
-## Success schema
-
+<Accordion title="Raw success schema">
 ```json
 {
   "additionalProperties": false,
   "properties": {
     "item": {
-      "additionalProperties": false,
-      "properties": {
-        "kind": {
-          "const": "block"
-        },
-        "nodeId": {
-          "type": "string"
-        },
-        "nodeType": {
-          "const": "listItem"
-        }
-      },
-      "required": [
-        "kind",
-        "nodeType",
-        "nodeId"
-      ],
-      "type": "object"
+      "$ref": "#/$defs/ListItemAddress"
     },
     "success": {
       "const": true
@@ -183,9 +171,9 @@ description: Generated reference for lists.setType
   "type": "object"
 }
 ```
+</Accordion>
 
-## Failure schema
-
+<Accordion title="Raw failure schema">
 ```json
 {
   "additionalProperties": false,
@@ -221,3 +209,4 @@ description: Generated reference for lists.setType
   "type": "object"
 }
 ```
+</Accordion>

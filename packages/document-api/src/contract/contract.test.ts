@@ -73,6 +73,24 @@ describe('document-api contract catalog', () => {
     }
   });
 
+  it('uses simplified target-based insert input schema without legacy locator constraints', () => {
+    const schemas = buildInternalContractSchemas();
+    const insertInputSchema = schemas.operations.insert.input as {
+      type?: string;
+      properties?: Record<string, unknown>;
+      required?: string[];
+      allOf?: unknown;
+      additionalProperties?: boolean;
+    };
+
+    // Simplified schema: target (optional) + text (required), no allOf constraints
+    expect(insertInputSchema.type).toBe('object');
+    expect(Object.keys(insertInputSchema.properties!).sort()).toEqual(['target', 'text']);
+    expect(insertInputSchema.required).toEqual(['text']);
+    expect(insertInputSchema.allOf).toBeUndefined();
+    expect(insertInputSchema.additionalProperties).toBe(false);
+  });
+
   it('derives OPERATION_IDS from OPERATION_DEFINITIONS keys', () => {
     const definitionKeys = Object.keys(OPERATION_DEFINITIONS).sort();
     const operationIds = [...OPERATION_IDS].sort();
@@ -88,6 +106,9 @@ describe('document-api contract catalog', () => {
       'lists',
       'comments',
       'trackChanges',
+      'review',
+      'query',
+      'mutations',
     ];
     for (const id of OPERATION_IDS) {
       expect(validGroups, `${id} has invalid referenceGroup`).toContain(OPERATION_DEFINITIONS[id].referenceGroup);

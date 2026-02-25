@@ -514,7 +514,14 @@ const editorOptions = (doc) => {
     annotations: proxy.$superdoc.config.annotations,
     isCommentsEnabled: Boolean(commentsModuleConfig.value),
     isAiEnabled: proxy.$superdoc.config.modules?.ai,
-    slashMenuConfig: proxy.$superdoc.config.modules?.slashMenu,
+    contextMenuConfig: (() => {
+      if (proxy.$superdoc.config.modules?.slashMenu && !proxy.$superdoc.config.modules?.contextMenu) {
+        console.warn('[SuperDoc] modules.slashMenu is deprecated. Use modules.contextMenu instead.');
+      }
+      return proxy.$superdoc.config.modules?.contextMenu ?? proxy.$superdoc.config.modules?.slashMenu;
+    })(),
+    /** @deprecated Use contextMenuConfig instead */
+    slashMenuConfig: proxy.$superdoc.config.modules?.contextMenu ?? proxy.$superdoc.config.modules?.slashMenu,
     comments: {
       highlightColors: commentsModuleConfig.value?.highlightColors,
       highlightOpacity: commentsModuleConfig.value?.highlightOpacity,

@@ -141,6 +141,22 @@ const editor = await Editor.open(file, {
   Use ProseMirror JSON content instead of DOCX parsing
 </ParamField>
 
+<ParamField path="onUnsupportedContent" type="function">
+  Callback invoked with HTML elements that were dropped during import because they have no schema representation. Receives an array of `{ tagName, outerHTML, count }` items. When provided, `console.warn` is suppressed.
+
+  ```javascript
+  onUnsupportedContent: (items) => {
+    items.forEach(({ tagName, count }) => {
+      console.log(`Dropped ${count}x <${tagName}>`);
+    });
+  }
+  ```
+</ParamField>
+
+<ParamField path="warnOnUnsupportedContent" type="boolean" default="false">
+  Log a `console.warn` listing HTML elements dropped during import. Ignored when `onUnsupportedContent` is provided.
+</ParamField>
+
 ## Features
 
 <ParamField path="isCommentsEnabled" type="boolean" default="false">

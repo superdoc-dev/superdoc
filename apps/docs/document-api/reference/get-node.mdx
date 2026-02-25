@@ -18,6 +18,47 @@ description: Generated reference for getNode
 - Supports dry run: `no`
 - Deterministic target resolution: `yes`
 
+## Input fields
+
+_No fields._
+
+### Example request
+
+```json
+{
+  "kind": "block",
+  "nodeId": "node-def456",
+  "nodeType": "paragraph"
+}
+```
+
+## Output fields
+
+| Field | Type | Required | Description |
+| --- | --- | --- | --- |
+| `bodyNodes` | object[] | no |  |
+| `bodyText` | string | no |  |
+| `kind` | enum | yes | `"block"`, `"inline"` |
+| `nodeType` | enum | yes | `"paragraph"`, `"heading"`, `"listItem"`, `"table"`, `"tableRow"`, `"tableCell"`, `"image"`, `"sdt"`, `"run"`, `"bookmark"`, `"comment"`, `"hyperlink"`, `"footnoteRef"`, `"tab"`, `"lineBreak"` |
+| `nodes` | object[] | no |  |
+| `properties` | object | no |  |
+| `summary` | object | no |  |
+| `text` | string | no |  |
+
+### Example response
+
+```json
+{
+  "kind": "block",
+  "nodeType": "paragraph",
+  "summary": {
+    "label": "Paragraph 1",
+    "text": "Hello, world."
+  },
+  "text": "Hello, world."
+}
+```
+
 ## Pre-apply throws
 
 - `TARGET_NOT_FOUND`
@@ -26,115 +67,17 @@ description: Generated reference for getNode
 
 - None
 
-## Input schema
+## Raw schemas
 
+<Accordion title="Raw input schema">
 ```json
 {
-  "oneOf": [
-    {
-      "additionalProperties": false,
-      "properties": {
-        "kind": {
-          "const": "block"
-        },
-        "nodeId": {
-          "type": "string"
-        },
-        "nodeType": {
-          "enum": [
-            "paragraph",
-            "heading",
-            "listItem",
-            "table",
-            "tableRow",
-            "tableCell",
-            "image",
-            "sdt"
-          ]
-        }
-      },
-      "required": [
-        "kind",
-        "nodeType",
-        "nodeId"
-      ],
-      "type": "object"
-    },
-    {
-      "additionalProperties": false,
-      "properties": {
-        "anchor": {
-          "additionalProperties": false,
-          "properties": {
-            "end": {
-              "additionalProperties": false,
-              "properties": {
-                "blockId": {
-                  "type": "string"
-                },
-                "offset": {
-                  "type": "integer"
-                }
-              },
-              "required": [
-                "blockId",
-                "offset"
-              ],
-              "type": "object"
-            },
-            "start": {
-              "additionalProperties": false,
-              "properties": {
-                "blockId": {
-                  "type": "string"
-                },
-                "offset": {
-                  "type": "integer"
-                }
-              },
-              "required": [
-                "blockId",
-                "offset"
-              ],
-              "type": "object"
-            }
-          },
-          "required": [
-            "start",
-            "end"
-          ],
-          "type": "object"
-        },
-        "kind": {
-          "const": "inline"
-        },
-        "nodeType": {
-          "enum": [
-            "run",
-            "bookmark",
-            "comment",
-            "hyperlink",
-            "sdt",
-            "image",
-            "footnoteRef",
-            "tab",
-            "lineBreak"
-          ]
-        }
-      },
-      "required": [
-        "kind",
-        "nodeType",
-        "anchor"
-      ],
-      "type": "object"
-    }
-  ]
+  "$ref": "#/$defs/NodeAddress"
 }
 ```
+</Accordion>
 
-## Output schema
-
+<Accordion title="Raw output schema">
 ```json
 {
   "additionalProperties": false,
@@ -205,3 +148,4 @@ description: Generated reference for getNode
   "type": "object"
 }
 ```
+</Accordion>

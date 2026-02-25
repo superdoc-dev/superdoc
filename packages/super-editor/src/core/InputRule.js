@@ -411,7 +411,7 @@ export function sanitizeHtml(html, forbiddenTags = ['meta', 'svg', 'script', 'st
 /**
  * Reusable paste-handling utility that replicates the logic formerly held only
  * inside the `inputRulesPlugin` paste handler. This allows other components
- * (e.g. slash-menu items) to invoke the same paste logic without duplicating
+ * (e.g. context-menu items) to invoke the same paste logic without duplicating
  * code.
  *
  * @param {Object}   params

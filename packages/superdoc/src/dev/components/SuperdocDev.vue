@@ -214,9 +214,20 @@ const handleNewFile = async (file) => {
     currentFile.value = await getFileObject(url, file.name, file.type);
   }
 
-  nextTick(() => {
-    init();
-  });
+  // In collab mode, use replaceFile() on the existing editor instead of
+  // destroying and recreating SuperDoc. This avoids the Y.js race condition
+  // where empty room state overwrites the DOCX content during reinit.
+  if (useCollaboration && activeEditor.value && !isMarkdown && !isHtml) {
+    try {
+      await activeEditor.value.replaceFile(currentFile.value);
+      console.log('[collab] Replaced file via editor.replaceFile()');
+    } catch (err) {
+      console.error('[collab] replaceFile failed, falling back to full reinit:', err);
+      nextTick(() => init());
+    }
+  } else {
+    nextTick(() => init());
+  }
 
   sidebarInstanceKey.value += 1;
 };
@@ -336,8 +347,8 @@ const init = async () => {
         excludeItems: [], // ['italic', 'bold'],
         // texts: {},
       },
-      // Test custom slash menu configuration
-      slashMenu: {
+      // Test custom context menu configuration
+      contextMenu: {
         // includeDefaultItems: true, // Include default items
         // customItems: [
         //   {
@@ -472,6 +483,17 @@ const init = async () => {
     onEditorCreate,
     onContentError,
     // handleImageUpload: async (file) => url,
+
+    // Tracked change bubble button handlers - replace default accept/reject behavior
+    // Only fires from bubble buttons, not toolbar or context menu
+    // onTrackedChangeBubbleAccept: (comment, editor) => {
+    //   console.log('Custom accept handler', comment);
+    //   editor.commands.acceptTrackedChangeById(comment.commentId);
+    // },
+    // onTrackedChangeBubbleReject: (comment, editor) => {
+    //   console.log('Custom reject handler', comment);
+    //   editor.commands.rejectTrackedChangeById(comment.commentId);
+    // },
     // Override icons.
     toolbarIcons: {},
     onCommentsUpdate,
@@ -486,6 +508,10 @@ const init = async () => {
   });
   superdoc.value?.on('exception', (error) => {
     console.error('SuperDoc exception:', error);
+  });
+
+  superdoc.value?.on('zoomChange', ({ zoom }) => {
+    currentZoom.value = zoom;
   });
 
   window.superdoc = superdoc.value;
@@ -713,7 +739,7 @@ onMounted(async () => {
     const ydoc = new Y.Doc();
     const provider = new HocuspocusProvider({
       url: 'ws://localhost:3050',
-      name: 'superdoc-dev-room',
+      name: urlParams.get('room') || 'superdoc-dev-room',
       document: ydoc,
     });
 
@@ -771,6 +797,23 @@ const toggleViewLayout = () => {
   window.location.href = url.toString();
 };
 
+const currentZoom = ref(100);
+const ZOOM_STEP = 10;
+const ZOOM_MIN = 25;
+const ZOOM_MAX = 400;
+
+const zoomIn = () => {
+  const next = Math.min(ZOOM_MAX, currentZoom.value + ZOOM_STEP);
+  currentZoom.value = next;
+  superdoc.value?.setZoom(next);
+};
+
+const zoomOut = () => {
+  const next = Math.max(ZOOM_MIN, currentZoom.value - ZOOM_STEP);
+  currentZoom.value = next;
+  superdoc.value?.setZoom(next);
+};
+
 const showExportMenu = ref(false);
 const closeExportMenu = () => {
   showExportMenu.value = false;
@@ -798,7 +841,7 @@ const sidebarOptions = [
     component: SidebarLayout,
   },
 ];
-const activeSidebarId = ref('layout');
+const activeSidebarId = ref('off');
 const activeSidebar = computed(
   () => sidebarOptions.find((option) => option.id === activeSidebarId.value) ?? sidebarOptions[0],
 );
@@ -978,6 +1021,11 @@ if (scrollTestMode.value) {
                   Export Docx Blob
                 </button>
               </div>
+            </div>
+            <div class="dev-app__zoom-controls">
+              <button class="dev-app__header-export-btn" @click="zoomOut">−</button>
+              <span class="dev-app__zoom-label">{{ currentZoom }}%</span>
+              <button class="dev-app__header-export-btn" @click="zoomIn">+</button>
             </div>
             <button class="dev-app__header-export-btn" @click="toggleLayoutEngine">
               Turn Layout Engine {{ useLayoutEngine ? 'off' : 'on' }} (reloads)
@@ -1410,6 +1458,27 @@ if (scrollTestMode.value) {
   opacity: 0.55;
   cursor: not-allowed;
   box-shadow: none;
+}
+
+.dev-app__zoom-controls {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+}
+
+.dev-app__zoom-controls .dev-app__header-export-btn {
+  min-width: 32px;
+  padding: 6px 8px;
+  font-size: 16px;
+  font-weight: 600;
+}
+
+.dev-app__zoom-label {
+  color: #e2e8f0;
+  font-size: 13px;
+  min-width: 42px;
+  text-align: center;
+  user-select: none;
 }
 
 .dev-app__dropdown {

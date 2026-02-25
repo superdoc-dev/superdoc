@@ -96,3 +96,118 @@ describe('translate-table-cell helpers', () => {
     expect(out.elements[1]).toMatchObject({ name: 'w:p' });
   });
 });
+
+/** Helper: extract w:tcW element from a generateTableCellProperties result */
+function getTcW(tcPr) {
+  return tcPr.elements?.find((e) => e.name === 'w:tcW') ?? null;
+}
+
+describe('IT-550: tableHeader width export fixes', () => {
+  it('uses pixelsToTwips when widthUnit is px', () => {
+    const node = { attrs: { colwidth: [100], widthUnit: 'px' } };
+    const tcPr = generateTableCellProperties(node);
+    const tcW = getTcW(tcPr);
+    expect(tcW.attributes['w:w']).toBe(String(pixelsToTwips(100)));
+    expect(tcW.attributes['w:type']).toBe('dxa');
+  });
+
+  it('defaults widthUnit to px when missing', () => {
+    // Simulates a tableHeader node before Step 1 fix — no widthUnit attr at all
+    const node = { attrs: { colwidth: [100] } };
+    const tcPr = generateTableCellProperties(node);
+    const tcW = getTcW(tcPr);
+    // Should use pixelsToTwips (not inchesToTwips), producing 1500, not 144000
+    expect(tcW.attributes['w:w']).toBe(String(pixelsToTwips(100)));
+  });
+
+  it('preserves existing cellWidth when colwidth is null', () => {
+    const originalCellWidth = { value: 3000, type: 'dxa' };
+    const node = {
+      attrs: {
+        colwidth: null,
+        widthUnit: 'px',
+        tableCellProperties: { cellWidth: originalCellWidth },
+      },
+    };
+    const tcPr = generateTableCellProperties(node);
+    const tcW = getTcW(tcPr);
+    // Should preserve the original value, not write 0
+    expect(tcW.attributes['w:w']).toBe('3000');
+    expect(tcW.attributes['w:type']).toBe('dxa');
+  });
+
+  it('preserves existing cellWidth when colwidth is empty array', () => {
+    const originalCellWidth = { value: 3000, type: 'dxa' };
+    const node = {
+      attrs: {
+        colwidth: [],
+        widthUnit: 'px',
+        tableCellProperties: { cellWidth: originalCellWidth },
+      },
+    };
+    const tcPr = generateTableCellProperties(node);
+    const tcW = getTcW(tcPr);
+    expect(tcW.attributes['w:w']).toBe('3000');
+  });
+
+  it('filters non-finite values from colwidth', () => {
+    const node = { attrs: { colwidth: [100, NaN, 50], widthUnit: 'px' } };
+    const tcPr = generateTableCellProperties(node);
+    const tcW = getTcW(tcPr);
+    // Only 100 + 50 = 150 should be summed (NaN filtered out)
+    expect(tcW.attributes['w:w']).toBe(String(pixelsToTwips(150)));
+  });
+
+  it('preserves original cellWidth for pct width type', () => {
+    // Simulates a pct-imported cell: widthType is 'pct', colwidth is in pixels (from tblGrid fallback)
+    const originalCellWidth = { value: 5000, type: 'pct' };
+    const node = {
+      attrs: {
+        colwidth: [200],
+        widthUnit: 'px',
+        widthType: 'pct',
+        tableCellProperties: { cellWidth: originalCellWidth },
+      },
+    };
+    const tcPr = generateTableCellProperties(node);
+    const tcW = getTcW(tcPr);
+    // Should preserve original pct value, NOT rewrite with pixelsToTwips(200)
+    expect(tcW.attributes['w:w']).toBe('5000');
+    expect(tcW.attributes['w:type']).toBe('pct');
+  });
+
+  it('resolves widthType dxa from node attrs', () => {
+    const node = { attrs: { colwidth: [100], widthUnit: 'px', widthType: 'dxa' } };
+    const tcPr = generateTableCellProperties(node);
+    const tcW = getTcW(tcPr);
+    expect(tcW.attributes['w:type']).toBe('dxa');
+  });
+
+  it('falls through auto widthType to tableCellProperties.cellWidth.type', () => {
+    const node = {
+      attrs: {
+        colwidth: [100],
+        widthUnit: 'px',
+        widthType: 'auto',
+        tableCellProperties: { cellWidth: { value: 1500, type: 'dxa' } },
+      },
+    };
+    const tcPr = generateTableCellProperties(node);
+    const tcW = getTcW(tcPr);
+    // 'auto' is the uninformative default — should fall through to tableCellProperties type
+    expect(tcW.attributes['w:type']).toBe('dxa');
+  });
+
+  it('falls through auto widthType to dxa when no tableCellProperties type', () => {
+    const node = {
+      attrs: {
+        colwidth: [100],
+        widthUnit: 'px',
+        widthType: 'auto',
+      },
+    };
+    const tcPr = generateTableCellProperties(node);
+    const tcW = getTcW(tcPr);
+    expect(tcW.attributes['w:type']).toBe('dxa');
+  });
+});

@@ -173,7 +173,7 @@ export function generateBaselineFolderName(version?: string): string {
  */
 export function getBaselineRootDir(version?: string, mode: StorageMode = 'cloud'): string {
   const baselineFolderName = generateBaselineFolderName(version);
-  return getBaselineOutputRoot(mode, 'visual', baselineFolderName);
+  return getBaselineOutputRoot(mode, baselineFolderName);
 }
 
 interface DocumentInfo {

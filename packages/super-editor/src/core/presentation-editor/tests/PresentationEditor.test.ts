@@ -388,6 +388,203 @@ describe('PresentationEditor', () => {
     });
   });
 
+  describe('scrollToPage', () => {
+    const buildMixedPageLayout = () => ({
+      layout: {
+        pageSize: { w: 612, h: 600 },
+        pageGap: 10,
+        pages: [
+          {
+            number: 1,
+            size: { w: 612, h: 600 },
+            fragments: [],
+          },
+          {
+            number: 2,
+            size: { w: 612, h: 1200 },
+            fragments: [],
+          },
+          {
+            number: 3,
+            size: { w: 612, h: 400 },
+            fragments: [],
+          },
+        ],
+      },
+      measures: [],
+    });
+
+    it('mounts and scrolls to virtualized pages using cumulative mixed-height offsets', async () => {
+      mockIncrementalLayout.mockResolvedValueOnce(buildMixedPageLayout());
+
+      editor = new PresentationEditor({
+        element: container,
+        documentId: 'test-scroll-to-page-mixed-heights',
+        content: { type: 'doc', content: [{ type: 'paragraph' }] },
+        mode: 'docx',
+        layoutEngineOptions: {
+          virtualization: { enabled: true, gap: 10, window: 1, overscan: 0 },
+        },
+      });
+
+      await vi.waitFor(() => expect(mockIncrementalLayout).toHaveBeenCalled());
+
+      const pagesHost = container.querySelector('.presentation-editor__pages') as HTMLElement;
+      const expectedPageTop = 600 + 10 + 1200 + 10;
+      let mountedPageEl: HTMLElement | null = null;
+      let scrollTopValue = 0;
+      Object.defineProperty(container, 'scrollTop', {
+        get: () => scrollTopValue,
+        set: (next) => {
+          scrollTopValue = Number(next);
+          if (!mountedPageEl && Math.abs(scrollTopValue - expectedPageTop) < 0.5) {
+            mountedPageEl = document.createElement('div');
+            mountedPageEl.setAttribute('data-page-index', '2');
+            Object.defineProperty(mountedPageEl, 'scrollIntoView', {
+              value: vi.fn(),
+              configurable: true,
+            });
+            pagesHost.appendChild(mountedPageEl);
+          }
+        },
+        configurable: true,
+      });
+
+      let now = 0;
+      const performanceNowSpy = vi.spyOn(performance, 'now').mockImplementation(() => now);
+      const rafSpy = vi.spyOn(window, 'requestAnimationFrame').mockImplementation((cb: FrameRequestCallback) => {
+        now += 100;
+        cb(now);
+        return 1;
+      });
+
+      try {
+        const didScroll = await editor.scrollToPage(3, 'auto');
+
+        expect(didScroll).toBe(true);
+        expect(mountedPageEl).not.toBeNull();
+        expect(mountedPageEl!.scrollIntoView).toHaveBeenCalledWith({
+          block: 'start',
+          inline: 'nearest',
+          behavior: 'auto',
+        });
+      } finally {
+        rafSpy.mockRestore();
+        performanceNowSpy.mockRestore();
+      }
+    });
+
+    it('uses effective virtualization default gap when pre-scrolling to unmounted pages', async () => {
+      mockIncrementalLayout.mockResolvedValueOnce(buildMixedPageLayout());
+
+      editor = new PresentationEditor({
+        element: container,
+        documentId: 'test-scroll-to-page-default-virtual-gap',
+        content: { type: 'doc', content: [{ type: 'paragraph' }] },
+        mode: 'docx',
+        layoutEngineOptions: {
+          // Intentionally omit `gap` so editor must rely on the effective default.
+          virtualization: { enabled: true, window: 1, overscan: 0 },
+        },
+      });
+
+      await vi.waitFor(() => expect(mockIncrementalLayout).toHaveBeenCalled());
+
+      const pagesHost = container.querySelector('.presentation-editor__pages') as HTMLElement;
+      const layoutGap = editor.getLayoutSnapshot().layout?.pageGap ?? 0;
+      const expectedPageTop = 600 + layoutGap + 1200 + layoutGap;
+      let mountedPageEl: HTMLElement | null = null;
+      let scrollTopValue = 0;
+      Object.defineProperty(container, 'scrollTop', {
+        get: () => scrollTopValue,
+        set: (next) => {
+          scrollTopValue = Number(next);
+          if (!mountedPageEl && Math.abs(scrollTopValue - expectedPageTop) < 0.5) {
+            mountedPageEl = document.createElement('div');
+            mountedPageEl.setAttribute('data-page-index', '2');
+            Object.defineProperty(mountedPageEl, 'scrollIntoView', {
+              value: vi.fn(),
+              configurable: true,
+            });
+            pagesHost.appendChild(mountedPageEl);
+          }
+        },
+        configurable: true,
+      });
+
+      let now = 0;
+      const performanceNowSpy = vi.spyOn(performance, 'now').mockImplementation(() => now);
+      const rafSpy = vi.spyOn(window, 'requestAnimationFrame').mockImplementation((cb: FrameRequestCallback) => {
+        now += 100;
+        cb(now);
+        return 1;
+      });
+
+      try {
+        const didScroll = await editor.scrollToPage(3, 'auto');
+
+        expect(didScroll).toBe(true);
+        expect(mountedPageEl).not.toBeNull();
+        expect(mountedPageEl!.scrollIntoView).toHaveBeenCalledWith({
+          block: 'start',
+          inline: 'nearest',
+          behavior: 'auto',
+        });
+      } finally {
+        rafSpy.mockRestore();
+        performanceNowSpy.mockRestore();
+      }
+    });
+
+    it.each([Number.NaN, 1.5])(
+      'rejects invalid pageNumber %p before attempting pre-scroll or mount polling',
+      async (invalidPageNumber) => {
+        mockIncrementalLayout.mockResolvedValueOnce(buildMixedPageLayout());
+
+        editor = new PresentationEditor({
+          element: container,
+          documentId: 'test-scroll-to-page-invalid-input',
+          content: { type: 'doc', content: [{ type: 'paragraph' }] },
+          mode: 'docx',
+          layoutEngineOptions: {
+            virtualization: { enabled: true, gap: 10, window: 1, overscan: 0 },
+          },
+        });
+
+        await vi.waitFor(() => expect(mockIncrementalLayout).toHaveBeenCalled());
+
+        let scrollTopValue = 0;
+        let scrollWrites = 0;
+        Object.defineProperty(container, 'scrollTop', {
+          get: () => scrollTopValue,
+          set: (next) => {
+            scrollWrites += 1;
+            scrollTopValue = Number(next);
+          },
+          configurable: true,
+        });
+
+        let now = 0;
+        const performanceNowSpy = vi.spyOn(performance, 'now').mockImplementation(() => now);
+        const rafSpy = vi.spyOn(window, 'requestAnimationFrame').mockImplementation((cb: FrameRequestCallback) => {
+          now += 2500;
+          cb(now);
+          return 1;
+        });
+
+        try {
+          const didScroll = await editor.scrollToPage(invalidPageNumber, 'auto');
+          expect(didScroll).toBe(false);
+          expect(scrollWrites).toBe(0);
+          expect(rafSpy).not.toHaveBeenCalled();
+        } finally {
+          rafSpy.mockRestore();
+          performanceNowSpy.mockRestore();
+        }
+      },
+    );
+  });
+
   describe('setDocumentMode', () => {
     it('should initialize with editing mode by default', () => {
       editor = new PresentationEditor({

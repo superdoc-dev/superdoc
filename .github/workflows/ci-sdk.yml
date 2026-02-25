@@ -1,0 +1,52 @@
+name: CI SDK
+
+permissions:
+  contents: read
+
+on:
+  pull_request:
+    paths:
+      - 'packages/document-api/src/contract/**'
+      - 'packages/document-api/scripts/**'
+      - 'apps/cli/**'
+      - 'packages/sdk/**'
+      - 'scripts/generate-all.mjs'
+      - 'package.json'
+      - 'pnpm-lock.yaml'
+      - '.github/workflows/ci-sdk.yml'
+  workflow_dispatch:
+
+concurrency:
+  group: ci-sdk-${{ github.event.pull_request.number || github.run_id }}
+  cancel-in-progress: true
+
+jobs:
+  validate:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: pnpm/action-setup@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version-file: .nvmrc
+          cache: pnpm
+
+      - uses: oven-sh/setup-bun@v2
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+
+      - name: Generate all artifacts
+        run: pnpm run generate:all
+
+      - name: Validate SDK
+        run: node packages/sdk/scripts/sdk-validate.mjs
+
+      - name: Build Node SDK
+        run: pnpm --prefix packages/sdk/langs/node run build

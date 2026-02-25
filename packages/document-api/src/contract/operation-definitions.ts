@@ -31,7 +31,17 @@ import type { CommandStaticMetadata, OperationIdempotency, PreApplyThrowCode } f
 // Reference group key
 // ---------------------------------------------------------------------------
 
-export type ReferenceGroupKey = 'core' | 'capabilities' | 'create' | 'format' | 'lists' | 'comments' | 'trackChanges';
+export type ReferenceGroupKey =
+  | 'core'
+  | 'capabilities'
+  | 'create'
+  | 'format'
+  | 'lists'
+  | 'comments'
+  | 'trackChanges'
+  | 'review'
+  | 'query'
+  | 'mutations';
 
 // ---------------------------------------------------------------------------
 // Entry shape
@@ -39,6 +49,8 @@ export type ReferenceGroupKey = 'core' | 'capabilities' | 'create' | 'format' | 
 
 export interface OperationDefinitionEntry {
   memberPath: string;
+  description: string;
+  requiresDocumentContext: boolean;
   metadata: CommandStaticMetadata;
   referenceDocPath: string;
   referenceGroup: ReferenceGroupKey;
@@ -100,7 +112,6 @@ function mutationOperation(options: {
 
 // Throw-code shorthand arrays
 const T_NOT_FOUND = ['TARGET_NOT_FOUND'] as const;
-const T_COMMAND = ['COMMAND_UNAVAILABLE', 'CAPABILITY_UNAVAILABLE'] as const;
 const T_NOT_FOUND_COMMAND = ['TARGET_NOT_FOUND', 'COMMAND_UNAVAILABLE', 'CAPABILITY_UNAVAILABLE'] as const;
 const T_NOT_FOUND_TRACKED = ['TARGET_NOT_FOUND', 'TRACK_CHANGE_COMMAND_UNAVAILABLE', 'CAPABILITY_UNAVAILABLE'] as const;
 const T_NOT_FOUND_COMMAND_TRACKED = [
@@ -110,6 +121,24 @@ const T_NOT_FOUND_COMMAND_TRACKED = [
   'CAPABILITY_UNAVAILABLE',
 ] as const;
 
+// Plan-engine throw-code arrays
+const T_PLAN_ENGINE = [
+  'REVISION_MISMATCH',
+  'MATCH_NOT_FOUND',
+  'AMBIGUOUS_MATCH',
+  'STYLE_CONFLICT',
+  'PRECONDITION_FAILED',
+  'INVALID_INPUT',
+  'CROSS_BLOCK_MATCH',
+  'SPAN_FRAGMENTED',
+  'TARGET_MOVED',
+  'PLAN_CONFLICT_OVERLAP',
+  'INVALID_STEP_COMBINATION',
+  'CAPABILITY_UNAVAILABLE',
+] as const;
+
+const T_QUERY_MATCH = ['MATCH_NOT_FOUND', 'AMBIGUOUS_MATCH', 'INVALID_INPUT', 'INTERNAL_ERROR'] as const;
+
 // ---------------------------------------------------------------------------
 // Canonical definitions
 // ---------------------------------------------------------------------------
@@ -117,6 +146,8 @@ const T_NOT_FOUND_COMMAND_TRACKED = [
 export const OPERATION_DEFINITIONS = {
   find: {
     memberPath: 'find',
+    description: 'Search the document for nodes matching type, text, or attribute criteria.',
+    requiresDocumentContext: true,
     metadata: readOperation({
       idempotency: 'idempotent',
       deterministicTargetResolution: false,
@@ -126,6 +157,8 @@ export const OPERATION_DEFINITIONS = {
   },
   getNode: {
     memberPath: 'getNode',
+    description: 'Retrieve a single node by target position.',
+    requiresDocumentContext: true,
     metadata: readOperation({
       idempotency: 'idempotent',
       throws: T_NOT_FOUND,
@@ -135,6 +168,8 @@ export const OPERATION_DEFINITIONS = {
   },
   getNodeById: {
     memberPath: 'getNodeById',
+    description: 'Retrieve a single node by its unique ID.',
+    requiresDocumentContext: true,
     metadata: readOperation({
       idempotency: 'idempotent',
       throws: T_NOT_FOUND,
@@ -144,12 +179,16 @@ export const OPERATION_DEFINITIONS = {
   },
   getText: {
     memberPath: 'getText',
+    description: 'Extract the plain-text content of the document.',
+    requiresDocumentContext: true,
     metadata: readOperation(),
     referenceDocPath: 'get-text.mdx',
     referenceGroup: 'core',
   },
   info: {
     memberPath: 'info',
+    description: 'Return document metadata including revision, node count, and capabilities.',
+    requiresDocumentContext: true,
     metadata: readOperation(),
     referenceDocPath: 'info.mdx',
     referenceGroup: 'core',
@@ -157,110 +196,87 @@ export const OPERATION_DEFINITIONS = {
 
   insert: {
     memberPath: 'insert',
+    description: 'Insert text or inline content at a target position.',
+    requiresDocumentContext: true,
     metadata: mutationOperation({
       idempotency: 'non-idempotent',
       supportsDryRun: true,
       supportsTrackedMode: true,
       possibleFailureCodes: ['INVALID_TARGET', 'NO_OP'],
-      throws: T_NOT_FOUND_TRACKED,
+      throws: [...T_NOT_FOUND_TRACKED, 'INVALID_TARGET'],
     }),
     referenceDocPath: 'insert.mdx',
     referenceGroup: 'core',
   },
   replace: {
     memberPath: 'replace',
+    description: 'Replace content at a target position with new text or inline content.',
+    requiresDocumentContext: true,
     metadata: mutationOperation({
       idempotency: 'conditional',
       supportsDryRun: true,
       supportsTrackedMode: true,
       possibleFailureCodes: ['INVALID_TARGET', 'NO_OP'],
-      throws: T_NOT_FOUND_TRACKED,
+      throws: [...T_NOT_FOUND_TRACKED, 'INVALID_TARGET'],
     }),
     referenceDocPath: 'replace.mdx',
     referenceGroup: 'core',
   },
   delete: {
     memberPath: 'delete',
+    description: 'Delete content at a target position.',
+    requiresDocumentContext: true,
     metadata: mutationOperation({
       idempotency: 'conditional',
       supportsDryRun: true,
       supportsTrackedMode: true,
       possibleFailureCodes: ['NO_OP'],
-      throws: T_NOT_FOUND_TRACKED,
+      throws: [...T_NOT_FOUND_TRACKED, 'INVALID_TARGET'],
     }),
     referenceDocPath: 'delete.mdx',
     referenceGroup: 'core',
   },
 
-  'format.bold': {
-    memberPath: 'format.bold',
+  'format.apply': {
+    memberPath: 'format.apply',
+    description:
+      'Apply explicit mark changes (bold, italic, underline, strike) to the target range using boolean patch semantics.',
+    requiresDocumentContext: true,
     metadata: mutationOperation({
       idempotency: 'conditional',
       supportsDryRun: true,
       supportsTrackedMode: true,
       possibleFailureCodes: ['INVALID_TARGET'],
-      throws: T_NOT_FOUND_COMMAND_TRACKED,
+      throws: [...T_NOT_FOUND_COMMAND_TRACKED, 'INVALID_TARGET', 'INVALID_INPUT'],
     }),
-    referenceDocPath: 'format/bold.mdx',
-    referenceGroup: 'format',
-  },
-  'format.italic': {
-    memberPath: 'format.italic',
-    metadata: mutationOperation({
-      idempotency: 'conditional',
-      supportsDryRun: true,
-      supportsTrackedMode: true,
-      possibleFailureCodes: ['INVALID_TARGET'],
-      throws: T_NOT_FOUND_COMMAND_TRACKED,
-    }),
-    referenceDocPath: 'format/italic.mdx',
-    referenceGroup: 'format',
-  },
-  'format.underline': {
-    memberPath: 'format.underline',
-    metadata: mutationOperation({
-      idempotency: 'conditional',
-      supportsDryRun: true,
-      supportsTrackedMode: true,
-      possibleFailureCodes: ['INVALID_TARGET'],
-      throws: T_NOT_FOUND_COMMAND_TRACKED,
-    }),
-    referenceDocPath: 'format/underline.mdx',
-    referenceGroup: 'format',
-  },
-  'format.strikethrough': {
-    memberPath: 'format.strikethrough',
-    metadata: mutationOperation({
-      idempotency: 'conditional',
-      supportsDryRun: true,
-      supportsTrackedMode: true,
-      possibleFailureCodes: ['INVALID_TARGET'],
-      throws: T_NOT_FOUND_COMMAND_TRACKED,
-    }),
-    referenceDocPath: 'format/strikethrough.mdx',
+    referenceDocPath: 'format/apply.mdx',
     referenceGroup: 'format',
   },
 
   'create.paragraph': {
     memberPath: 'create.paragraph',
+    description: 'Create a new paragraph at the target position.',
+    requiresDocumentContext: true,
     metadata: mutationOperation({
       idempotency: 'non-idempotent',
       supportsDryRun: true,
       supportsTrackedMode: true,
       possibleFailureCodes: ['INVALID_TARGET'],
-      throws: T_NOT_FOUND_COMMAND_TRACKED,
+      throws: [...T_NOT_FOUND_COMMAND_TRACKED, 'INVALID_TARGET', 'AMBIGUOUS_TARGET'],
     }),
     referenceDocPath: 'create/paragraph.mdx',
     referenceGroup: 'create',
   },
   'create.heading': {
     memberPath: 'create.heading',
+    description: 'Create a new heading at the target position.',
+    requiresDocumentContext: true,
     metadata: mutationOperation({
       idempotency: 'non-idempotent',
       supportsDryRun: true,
       supportsTrackedMode: true,
       possibleFailureCodes: ['INVALID_TARGET'],
-      throws: T_NOT_FOUND_COMMAND_TRACKED,
+      throws: [...T_NOT_FOUND_COMMAND_TRACKED, 'INVALID_TARGET', 'AMBIGUOUS_TARGET'],
     }),
     referenceDocPath: 'create/heading.mdx',
     referenceGroup: 'create',
@@ -268,6 +284,8 @@ export const OPERATION_DEFINITIONS = {
 
   'lists.list': {
     memberPath: 'lists.list',
+    description: 'List all list nodes in the document, optionally filtered by scope.',
+    requiresDocumentContext: true,
     metadata: readOperation({
       idempotency: 'idempotent',
       throws: T_NOT_FOUND,
@@ -277,6 +295,8 @@ export const OPERATION_DEFINITIONS = {
   },
   'lists.get': {
     memberPath: 'lists.get',
+    description: 'Retrieve a specific list node by target.',
+    requiresDocumentContext: true,
     metadata: readOperation({
       idempotency: 'idempotent',
       throws: T_NOT_FOUND,
@@ -286,127 +306,121 @@ export const OPERATION_DEFINITIONS = {
   },
   'lists.insert': {
     memberPath: 'lists.insert',
+    description: 'Insert a new list at the target position.',
+    requiresDocumentContext: true,
     metadata: mutationOperation({
       idempotency: 'non-idempotent',
       supportsDryRun: true,
       supportsTrackedMode: true,
       possibleFailureCodes: ['INVALID_TARGET'],
-      throws: T_NOT_FOUND_COMMAND_TRACKED,
+      throws: [...T_NOT_FOUND_COMMAND_TRACKED, 'INVALID_TARGET'],
     }),
     referenceDocPath: 'lists/insert.mdx',
     referenceGroup: 'lists',
   },
   'lists.setType': {
     memberPath: 'lists.setType',
+    description: 'Change the list type (ordered, unordered) of a target list.',
+    requiresDocumentContext: true,
     metadata: mutationOperation({
       idempotency: 'conditional',
       supportsDryRun: true,
       supportsTrackedMode: false,
       possibleFailureCodes: ['NO_OP', 'INVALID_TARGET'],
-      throws: T_NOT_FOUND_COMMAND_TRACKED,
+      throws: [...T_NOT_FOUND_COMMAND_TRACKED, 'INVALID_TARGET'],
     }),
     referenceDocPath: 'lists/set-type.mdx',
     referenceGroup: 'lists',
   },
   'lists.indent': {
     memberPath: 'lists.indent',
+    description: 'Increase the indentation level of a list item.',
+    requiresDocumentContext: true,
     metadata: mutationOperation({
       idempotency: 'conditional',
       supportsDryRun: true,
       supportsTrackedMode: false,
       possibleFailureCodes: ['NO_OP', 'INVALID_TARGET'],
-      throws: T_NOT_FOUND_COMMAND_TRACKED,
+      throws: [...T_NOT_FOUND_COMMAND_TRACKED, 'INVALID_TARGET'],
     }),
     referenceDocPath: 'lists/indent.mdx',
     referenceGroup: 'lists',
   },
   'lists.outdent': {
     memberPath: 'lists.outdent',
+    description: 'Decrease the indentation level of a list item.',
+    requiresDocumentContext: true,
     metadata: mutationOperation({
       idempotency: 'conditional',
       supportsDryRun: true,
       supportsTrackedMode: false,
       possibleFailureCodes: ['NO_OP', 'INVALID_TARGET'],
-      throws: T_NOT_FOUND_COMMAND_TRACKED,
+      throws: [...T_NOT_FOUND_COMMAND_TRACKED, 'INVALID_TARGET'],
     }),
     referenceDocPath: 'lists/outdent.mdx',
     referenceGroup: 'lists',
   },
   'lists.restart': {
     memberPath: 'lists.restart',
+    description: 'Restart numbering of an ordered list at the target item.',
+    requiresDocumentContext: true,
     metadata: mutationOperation({
       idempotency: 'conditional',
       supportsDryRun: true,
       supportsTrackedMode: false,
       possibleFailureCodes: ['NO_OP', 'INVALID_TARGET'],
-      throws: T_NOT_FOUND_COMMAND_TRACKED,
+      throws: [...T_NOT_FOUND_COMMAND_TRACKED, 'INVALID_TARGET'],
     }),
     referenceDocPath: 'lists/restart.mdx',
     referenceGroup: 'lists',
   },
   'lists.exit': {
     memberPath: 'lists.exit',
+    description: 'Exit a list context, converting the target item to a paragraph.',
+    requiresDocumentContext: true,
     metadata: mutationOperation({
       idempotency: 'conditional',
       supportsDryRun: true,
       supportsTrackedMode: false,
       possibleFailureCodes: ['INVALID_TARGET'],
-      throws: T_NOT_FOUND_COMMAND_TRACKED,
+      throws: [...T_NOT_FOUND_COMMAND_TRACKED, 'INVALID_TARGET'],
     }),
     referenceDocPath: 'lists/exit.mdx',
     referenceGroup: 'lists',
   },
 
-  'comments.add': {
-    memberPath: 'comments.add',
+  'comments.create': {
+    memberPath: 'comments.create',
+    description: 'Create a new comment thread (or reply when parentCommentId is given).',
+    requiresDocumentContext: true,
     metadata: mutationOperation({
       idempotency: 'non-idempotent',
       supportsDryRun: false,
       supportsTrackedMode: false,
       possibleFailureCodes: ['INVALID_TARGET', 'NO_OP'],
-      throws: T_NOT_FOUND_COMMAND,
+      throws: [...T_NOT_FOUND_COMMAND, 'INVALID_TARGET'],
     }),
-    referenceDocPath: 'comments/add.mdx',
+    referenceDocPath: 'comments/create.mdx',
     referenceGroup: 'comments',
   },
-  'comments.edit': {
-    memberPath: 'comments.edit',
-    metadata: mutationOperation({
-      idempotency: 'conditional',
-      supportsDryRun: false,
-      supportsTrackedMode: false,
-      possibleFailureCodes: ['NO_OP'],
-      throws: T_NOT_FOUND_COMMAND,
-    }),
-    referenceDocPath: 'comments/edit.mdx',
-    referenceGroup: 'comments',
-  },
-  'comments.reply': {
-    memberPath: 'comments.reply',
-    metadata: mutationOperation({
-      idempotency: 'non-idempotent',
-      supportsDryRun: false,
-      supportsTrackedMode: false,
-      possibleFailureCodes: ['INVALID_TARGET'],
-      throws: T_NOT_FOUND_COMMAND,
-    }),
-    referenceDocPath: 'comments/reply.mdx',
-    referenceGroup: 'comments',
-  },
-  'comments.move': {
-    memberPath: 'comments.move',
+  'comments.patch': {
+    memberPath: 'comments.patch',
+    description: 'Patch fields on an existing comment (text, target, status, or isInternal).',
+    requiresDocumentContext: true,
     metadata: mutationOperation({
       idempotency: 'conditional',
       supportsDryRun: false,
       supportsTrackedMode: false,
       possibleFailureCodes: ['INVALID_TARGET', 'NO_OP'],
-      throws: T_NOT_FOUND_COMMAND,
+      throws: [...T_NOT_FOUND_COMMAND, 'INVALID_TARGET'],
     }),
-    referenceDocPath: 'comments/move.mdx',
+    referenceDocPath: 'comments/patch.mdx',
     referenceGroup: 'comments',
   },
-  'comments.resolve': {
-    memberPath: 'comments.resolve',
+  'comments.delete': {
+    memberPath: 'comments.delete',
+    description: 'Remove a comment or reply by ID.',
+    requiresDocumentContext: true,
     metadata: mutationOperation({
       idempotency: 'conditional',
       supportsDryRun: false,
@@ -414,56 +428,13 @@ export const OPERATION_DEFINITIONS = {
       possibleFailureCodes: ['NO_OP'],
       throws: T_NOT_FOUND_COMMAND,
     }),
-    referenceDocPath: 'comments/resolve.mdx',
-    referenceGroup: 'comments',
-  },
-  'comments.remove': {
-    memberPath: 'comments.remove',
-    metadata: mutationOperation({
-      idempotency: 'conditional',
-      supportsDryRun: false,
-      supportsTrackedMode: false,
-      possibleFailureCodes: ['NO_OP'],
-      throws: T_NOT_FOUND_COMMAND,
-    }),
-    referenceDocPath: 'comments/remove.mdx',
-    referenceGroup: 'comments',
-  },
-  'comments.setInternal': {
-    memberPath: 'comments.setInternal',
-    metadata: mutationOperation({
-      idempotency: 'conditional',
-      supportsDryRun: false,
-      supportsTrackedMode: false,
-      possibleFailureCodes: ['NO_OP', 'INVALID_TARGET'],
-      throws: T_NOT_FOUND_COMMAND,
-    }),
-    referenceDocPath: 'comments/set-internal.mdx',
-    referenceGroup: 'comments',
-  },
-  'comments.setActive': {
-    memberPath: 'comments.setActive',
-    metadata: mutationOperation({
-      idempotency: 'conditional',
-      supportsDryRun: false,
-      supportsTrackedMode: false,
-      possibleFailureCodes: ['INVALID_TARGET'],
-      throws: T_NOT_FOUND_COMMAND,
-    }),
-    referenceDocPath: 'comments/set-active.mdx',
-    referenceGroup: 'comments',
-  },
-  'comments.goTo': {
-    memberPath: 'comments.goTo',
-    metadata: readOperation({
-      idempotency: 'conditional',
-      throws: T_NOT_FOUND_COMMAND,
-    }),
-    referenceDocPath: 'comments/go-to.mdx',
+    referenceDocPath: 'comments/delete.mdx',
     referenceGroup: 'comments',
   },
   'comments.get': {
     memberPath: 'comments.get',
+    description: 'Retrieve a single comment thread by ID.',
+    requiresDocumentContext: true,
     metadata: readOperation({
       idempotency: 'idempotent',
       throws: T_NOT_FOUND,
@@ -473,6 +444,8 @@ export const OPERATION_DEFINITIONS = {
   },
   'comments.list': {
     memberPath: 'comments.list',
+    description: 'List all comment threads in the document.',
+    requiresDocumentContext: true,
     metadata: readOperation({
       idempotency: 'idempotent',
     }),
@@ -482,6 +455,8 @@ export const OPERATION_DEFINITIONS = {
 
   'trackChanges.list': {
     memberPath: 'trackChanges.list',
+    description: 'List all tracked changes in the document.',
+    requiresDocumentContext: true,
     metadata: readOperation({
       idempotency: 'idempotent',
     }),
@@ -490,6 +465,8 @@ export const OPERATION_DEFINITIONS = {
   },
   'trackChanges.get': {
     memberPath: 'trackChanges.get',
+    description: 'Retrieve a single tracked change by ID.',
+    requiresDocumentContext: true,
     metadata: readOperation({
       idempotency: 'idempotent',
       throws: T_NOT_FOUND,
@@ -497,8 +474,10 @@ export const OPERATION_DEFINITIONS = {
     referenceDocPath: 'track-changes/get.mdx',
     referenceGroup: 'trackChanges',
   },
-  'trackChanges.accept': {
-    memberPath: 'trackChanges.accept',
+  'review.decide': {
+    memberPath: 'review.decide',
+    description: 'Accept or reject a tracked change (by ID or scope: all).',
+    requiresDocumentContext: true,
     metadata: mutationOperation({
       idempotency: 'conditional',
       supportsDryRun: false,
@@ -506,48 +485,56 @@ export const OPERATION_DEFINITIONS = {
       possibleFailureCodes: ['NO_OP'],
       throws: T_NOT_FOUND_COMMAND,
     }),
-    referenceDocPath: 'track-changes/accept.mdx',
-    referenceGroup: 'trackChanges',
+    referenceDocPath: 'review/decide.mdx',
+    referenceGroup: 'review',
   },
-  'trackChanges.reject': {
-    memberPath: 'trackChanges.reject',
-    metadata: mutationOperation({
-      idempotency: 'conditional',
-      supportsDryRun: false,
-      supportsTrackedMode: false,
-      possibleFailureCodes: ['NO_OP'],
-      throws: T_NOT_FOUND_COMMAND,
+
+  'query.match': {
+    memberPath: 'query.match',
+    description: 'Deterministic selector-based search with cardinality contracts for mutation targeting.',
+    requiresDocumentContext: true,
+    metadata: readOperation({
+      idempotency: 'idempotent',
+      throws: T_QUERY_MATCH,
+      deterministicTargetResolution: true,
     }),
-    referenceDocPath: 'track-changes/reject.mdx',
-    referenceGroup: 'trackChanges',
+    referenceDocPath: 'query/match.mdx',
+    referenceGroup: 'query',
   },
-  'trackChanges.acceptAll': {
-    memberPath: 'trackChanges.acceptAll',
-    metadata: mutationOperation({
-      idempotency: 'conditional',
-      supportsDryRun: false,
-      supportsTrackedMode: false,
-      possibleFailureCodes: ['NO_OP'],
-      throws: T_COMMAND,
+
+  'mutations.preview': {
+    memberPath: 'mutations.preview',
+    description: 'Dry-run a mutation plan, returning resolved targets without applying changes.',
+    requiresDocumentContext: true,
+    metadata: readOperation({
+      idempotency: 'idempotent',
+      throws: T_PLAN_ENGINE,
+      deterministicTargetResolution: true,
     }),
-    referenceDocPath: 'track-changes/accept-all.mdx',
-    referenceGroup: 'trackChanges',
+    referenceDocPath: 'mutations/preview.mdx',
+    referenceGroup: 'mutations',
   },
-  'trackChanges.rejectAll': {
-    memberPath: 'trackChanges.rejectAll',
+
+  'mutations.apply': {
+    memberPath: 'mutations.apply',
+    description: 'Execute a mutation plan atomically against the document.',
+    requiresDocumentContext: true,
     metadata: mutationOperation({
-      idempotency: 'conditional',
+      idempotency: 'non-idempotent',
       supportsDryRun: false,
-      supportsTrackedMode: false,
-      possibleFailureCodes: ['NO_OP'],
-      throws: T_COMMAND,
+      supportsTrackedMode: true,
+      possibleFailureCodes: NONE_FAILURES,
+      throws: T_PLAN_ENGINE,
+      deterministicTargetResolution: true,
     }),
-    referenceDocPath: 'track-changes/reject-all.mdx',
-    referenceGroup: 'trackChanges',
+    referenceDocPath: 'mutations/apply.mdx',
+    referenceGroup: 'mutations',
   },
 
   'capabilities.get': {
     memberPath: 'capabilities',
+    description: 'Query runtime capabilities supported by the current document engine.',
+    requiresDocumentContext: false,
     metadata: readOperation({
       idempotency: 'idempotent',
       throws: NONE_THROWS,

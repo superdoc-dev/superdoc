@@ -185,7 +185,7 @@ const LINK_AND_TOC_STYLES = `
 }
 
 /* Screen reader only content (WCAG SC 1.3.1) */
-.sr-only {
+.superdoc-sr-only {
   position: absolute;
   width: 1px;
   height: 1px;
@@ -248,6 +248,14 @@ const TRACK_CHANGE_STYLES = `
 
 .superdoc-layout .track-format-dec.highlighted {
   border-bottom: 2px solid gold;
+}
+
+.superdoc-layout .track-insert-dec.highlighted.track-change-focused {
+  border-width: 2px;
+}
+
+.superdoc-layout .track-delete-dec.highlighted.track-change-focused {
+  border-width: 2px;
 }
 `;
 

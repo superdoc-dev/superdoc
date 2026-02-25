@@ -278,4 +278,120 @@ describe('insertContent (integration) list export', () => {
     expect(first.numId).toBeDefined();
     expect(first.ilvl).toBe('0');
   });
+
+  it('defaults imported HTML tables to 100% width', async () => {
+    const editor = await setupEditor();
+    editor.commands.insertContent(
+      '<table><tbody><tr><td>Query</td><td>Assessment</td></tr><tr><td>A</td><td>B</td></tr></tbody></table>',
+      { contentType: 'html' },
+    );
+    await Promise.resolve();
+
+    const tableNode = (editor.getJSON().content || []).find((node) => node.type === 'table');
+    expect(tableNode).toBeTruthy();
+    expect(tableNode.attrs?.tableProperties?.tableWidth).toEqual({
+      value: 5000,
+      type: 'pct',
+    });
+  });
+
+  it('normalizes imported HTML table header borders for render and export parity', async () => {
+    const editor = await setupEditor();
+    editor.commands.insertContent(
+      '<table><thead><tr><th>Search Query</th><th>Findings / Assessment</th></tr></thead><tbody><tr><td>A</td><td>B</td></tr></tbody></table>',
+      { contentType: 'html' },
+    );
+    await Promise.resolve();
+
+    const tableNode = (editor.getJSON().content || []).find((node) => node.type === 'table');
+    expect(tableNode).toBeTruthy();
+    const headerCell = tableNode?.content?.[0]?.content?.[0];
+    expect(headerCell?.type).toBe('tableHeader');
+    const borders = headerCell?.attrs?.borders;
+    expect(borders?.top).toBeDefined();
+    expect(borders?.right).toBeDefined();
+    expect(borders?.bottom).toBeDefined();
+    expect(borders?.left).toBeDefined();
+
+    const result = await exportFromEditorContent(editor);
+    const body = result.elements?.find((el) => el.name === 'w:body');
+    const table = body?.elements?.find((el) => el.name === 'w:tbl');
+    const firstRow = table?.elements?.find((el) => el.name === 'w:tr');
+    const firstCell = firstRow?.elements?.find((el) => el.name === 'w:tc');
+    const firstCellProperties = firstCell?.elements?.find((el) => el.name === 'w:tcPr');
+    const firstCellBorders = firstCellProperties?.elements?.find((el) => el.name === 'w:tcBorders');
+    const topBorder = firstCellBorders?.elements?.find((el) => el.name === 'w:top');
+
+    expect(firstCellBorders).toBeDefined();
+    expect(topBorder?.attributes?.['w:val']).toBe('single');
+    expect(Number(topBorder?.attributes?.['w:sz'])).toBeGreaterThan(0);
+  });
+});
+
+// ---------------------------------------------------------------------------
+// CI-only: horizontal rule insertion (requires real Editor which depends on
+// @superdoc/document-api — unresolvable in local workspace, works in CI).
+// ---------------------------------------------------------------------------
+describe.skipIf(!process.env.CI)('insertContent (integration) horizontal rule', () => {
+  let helpers = null;
+  let cachedDocxData = null;
+
+  const setupEditor = async () => {
+    vi.resetModules();
+    vi.doUnmock('../helpers/contentProcessor.js');
+
+    if (!helpers) {
+      helpers = await import('../../tests/helpers/helpers.js');
+    }
+    if (!cachedDocxData) {
+      cachedDocxData = await helpers.loadTestDataForEditorTests('blank-doc.docx');
+    }
+
+    const { docx, media, mediaFiles, fonts } = cachedDocxData;
+    const { editor } = helpers.initTestEditor({ content: docx, media, mediaFiles, fonts, mode: 'docx' });
+    return editor;
+  };
+
+  const countHorizontalRules = (editor) => {
+    let count = 0;
+    const content = editor.getJSON().content || [];
+    for (const block of content) {
+      if (block.type === 'contentBlock' && block.attrs?.horizontalRule) count++;
+      // contentBlock is inline — check inside paragraph > run or paragraph directly
+      for (const inline of block.content || []) {
+        if (inline.type === 'contentBlock' && inline.attrs?.horizontalRule) count++;
+        for (const child of inline.content || []) {
+          if (child.type === 'contentBlock' && child.attrs?.horizontalRule) count++;
+        }
+      }
+    }
+    return count;
+  };
+
+  it('insertContent with contentType html creates a horizontal rule', async () => {
+    const editor = await setupEditor();
+    expect(countHorizontalRules(editor)).toBe(0);
+
+    editor.commands.insertContent('<hr>', { contentType: 'html' });
+
+    expect(countHorizontalRules(editor)).toBe(1);
+  });
+
+  it('insertContent with contentType markdown creates a horizontal rule', async () => {
+    const editor = await setupEditor();
+    expect(countHorizontalRules(editor)).toBe(0);
+
+    editor.commands.insertContent('---', { contentType: 'markdown' });
+
+    expect(countHorizontalRules(editor)).toBe(1);
+  });
+
+  it('insertContent with bare <hr> (no contentType) creates a horizontal rule', async () => {
+    const editor = await setupEditor();
+    expect(countHorizontalRules(editor)).toBe(0);
+
+    editor.commands.insertContent('<hr>');
+
+    expect(countHorizontalRules(editor)).toBe(1);
+  });
 });

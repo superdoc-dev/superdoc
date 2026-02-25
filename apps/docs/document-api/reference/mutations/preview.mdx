@@ -1,0 +1,155 @@
+---
+title: mutations.preview
+sidebarTitle: mutations.preview
+description: Generated reference for mutations.preview
+---
+
+{/* GENERATED FILE: DO NOT EDIT. Regenerate via `pnpm run docapi:sync`. */}
+
+> Alpha: Document API is currently alpha and subject to breaking changes.
+
+## Summary
+
+- Operation ID: `mutations.preview`
+- API member path: `editor.doc.mutations.preview(...)`
+- Mutates document: `no`
+- Idempotency: `idempotent`
+- Supports tracked mode: `no`
+- Supports dry run: `no`
+- Deterministic target resolution: `yes`
+
+## Input fields
+
+| Field | Type | Required | Description |
+| --- | --- | --- | --- |
+| `atomic` | `true` | yes | Constant: `true` |
+| `changeMode` | enum | yes | `"direct"`, `"tracked"` |
+| `expectedRevision` | string | yes |  |
+| `steps` | object[] | yes |  |
+
+### Example request
+
+```json
+{
+  "atomic": true,
+  "changeMode": "direct",
+  "expectedRevision": "rev-001",
+  "steps": [
+    {}
+  ]
+}
+```
+
+## Output fields
+
+| Field | Type | Required | Description |
+| --- | --- | --- | --- |
+| `evaluatedRevision` | string | yes |  |
+| `failures` | object[] | no |  |
+| `steps` | object[] | yes |  |
+| `valid` | boolean | yes |  |
+
+### Example response
+
+```json
+{
+  "evaluatedRevision": "rev-001",
+  "failures": [
+    {}
+  ],
+  "steps": [
+    {}
+  ],
+  "valid": true
+}
+```
+
+## Pre-apply throws
+
+- `REVISION_MISMATCH`
+- `MATCH_NOT_FOUND`
+- `AMBIGUOUS_MATCH`
+- `STYLE_CONFLICT`
+- `PRECONDITION_FAILED`
+- `INVALID_INPUT`
+- `CROSS_BLOCK_MATCH`
+- `SPAN_FRAGMENTED`
+- `TARGET_MOVED`
+- `PLAN_CONFLICT_OVERLAP`
+- `INVALID_STEP_COMBINATION`
+- `CAPABILITY_UNAVAILABLE`
+
+## Non-applied failure codes
+
+- None
+
+## Raw schemas
+
+<Accordion title="Raw input schema">
+```json
+{
+  "additionalProperties": false,
+  "properties": {
+    "atomic": {
+      "const": true
+    },
+    "changeMode": {
+      "enum": [
+        "direct",
+        "tracked"
+      ]
+    },
+    "expectedRevision": {
+      "type": "string"
+    },
+    "steps": {
+      "items": {
+        "type": "object"
+      },
+      "type": "array"
+    }
+  },
+  "required": [
+    "expectedRevision",
+    "atomic",
+    "changeMode",
+    "steps"
+  ],
+  "type": "object"
+}
+```
+</Accordion>
+
+<Accordion title="Raw output schema">
+```json
+{
+  "additionalProperties": false,
+  "properties": {
+    "evaluatedRevision": {
+      "type": "string"
+    },
+    "failures": {
+      "items": {
+        "type": "object"
+      },
+      "type": "array"
+    },
+    "steps": {
+      "items": {
+        "type": "object"
+      },
+      "type": "array"
+    },
+    "valid": {
+      "type": "boolean"
+    }
+  },
+  "required": [
+    "evaluatedRevision",
+    "steps",
+    "valid"
+  ],
+  "type": "object"
+}
+```
+</Accordion>

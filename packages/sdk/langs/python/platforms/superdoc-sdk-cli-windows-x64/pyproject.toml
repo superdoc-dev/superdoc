@@ -1,0 +1,18 @@
+[build-system]
+requires = ["setuptools>=70.1", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "superdoc-sdk-cli-windows-x64"
+version = "1.0.0a6"
+description = "SuperDoc CLI binary for Windows x64"
+readme = "README.md"
+requires-python = ">=3.9"
+license = "AGPL-3.0"
+authors = [{ name = "SuperDoc" }]
+
+[tool.setuptools]
+packages = ["superdoc_sdk_cli_windows_x64"]
+
+[tool.setuptools.package-data]
+superdoc_sdk_cli_windows_x64 = ["bin/superdoc.exe"]

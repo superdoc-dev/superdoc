@@ -8,7 +8,7 @@
 
 import type { OperationId } from './types.js';
 
-import type { NodeAddress, NodeInfo, QueryResult, Selector, Query } from '../types/index.js';
+import type { NodeAddress, NodeInfo, FindOutput, Selector, Query } from '../types/index.js';
 import type { TextMutationReceipt, Receipt } from '../types/receipt.js';
 import type { DocumentInfo } from '../types/info.types.js';
 import type {
@@ -25,34 +25,16 @@ import type { InfoInput } from '../info/info.js';
 import type { InsertInput } from '../insert/insert.js';
 import type { ReplaceInput } from '../replace/replace.js';
 import type { DeleteInput } from '../delete/delete.js';
-import type { MutationOptions } from '../write/write.js';
+import type { MutationOptions, RevisionGuardOptions } from '../write/write.js';
+import type { StyleApplyInput } from '../format/format.js';
 import type {
-  FormatBoldInput,
-  FormatItalicInput,
-  FormatUnderlineInput,
-  FormatStrikethroughInput,
-} from '../format/format.js';
-import type {
-  AddCommentInput,
-  EditCommentInput,
-  ReplyToCommentInput,
-  MoveCommentInput,
-  ResolveCommentInput,
-  RemoveCommentInput,
-  SetCommentInternalInput,
-  SetCommentActiveInput,
-  GoToCommentInput,
+  CommentsCreateInput,
+  CommentsPatchInput,
+  CommentsDeleteInput,
   GetCommentInput,
 } from '../comments/comments.js';
 import type { CommentInfo, CommentsListQuery, CommentsListResult } from '../comments/comments.types.js';
-import type {
-  TrackChangesListInput,
-  TrackChangesGetInput,
-  TrackChangesAcceptInput,
-  TrackChangesRejectInput,
-  TrackChangesAcceptAllInput,
-  TrackChangesRejectAllInput,
-} from '../track-changes/track-changes.js';
+import type { TrackChangesListInput, TrackChangesGetInput, ReviewDecideInput } from '../track-changes/track-changes.js';
 import type { TrackChangeInfo, TrackChangesListResult } from '../types/track-changes.types.js';
 import type { DocumentApiCapabilities } from '../capabilities/capabilities.js';
 import type {
@@ -67,10 +49,17 @@ import type {
   ListTargetInput,
   ListsExitResult,
 } from '../lists/lists.types.js';
+import type { QueryMatchInput, QueryMatchOutput } from '../types/query-match.types.js';
+import type {
+  MutationsApplyInput,
+  MutationsPreviewInput,
+  MutationsPreviewOutput,
+  PlanReceipt,
+} from '../types/mutation-plan.types.js';
 
 export interface OperationRegistry {
   // --- Singleton reads ---
-  find: { input: Selector | Query; options: FindOptions; output: QueryResult };
+  find: { input: Selector | Query; options: FindOptions; output: FindOutput };
   getNode: { input: NodeAddress; options: never; output: NodeInfo };
   getNodeById: { input: GetNodeByIdInput; options: never; output: NodeInfo };
   getText: { input: GetTextInput; options: never; output: string };
@@ -82,10 +71,7 @@ export interface OperationRegistry {
   delete: { input: DeleteInput; options: MutationOptions; output: TextMutationReceipt };
 
   // --- format.* ---
-  'format.bold': { input: FormatBoldInput; options: MutationOptions; output: TextMutationReceipt };
-  'format.italic': { input: FormatItalicInput; options: MutationOptions; output: TextMutationReceipt };
-  'format.underline': { input: FormatUnderlineInput; options: MutationOptions; output: TextMutationReceipt };
-  'format.strikethrough': { input: FormatStrikethroughInput; options: MutationOptions; output: TextMutationReceipt };
+  'format.apply': { input: StyleApplyInput; options: MutationOptions; output: TextMutationReceipt };
 
   // --- create.* ---
   'create.paragraph': { input: CreateParagraphInput; options: MutationOptions; output: CreateParagraphResult };
@@ -102,25 +88,25 @@ export interface OperationRegistry {
   'lists.exit': { input: ListTargetInput; options: MutationOptions; output: ListsExitResult };
 
   // --- comments.* ---
-  'comments.add': { input: AddCommentInput; options: never; output: Receipt };
-  'comments.edit': { input: EditCommentInput; options: never; output: Receipt };
-  'comments.reply': { input: ReplyToCommentInput; options: never; output: Receipt };
-  'comments.move': { input: MoveCommentInput; options: never; output: Receipt };
-  'comments.resolve': { input: ResolveCommentInput; options: never; output: Receipt };
-  'comments.remove': { input: RemoveCommentInput; options: never; output: Receipt };
-  'comments.setInternal': { input: SetCommentInternalInput; options: never; output: Receipt };
-  'comments.setActive': { input: SetCommentActiveInput; options: never; output: Receipt };
-  'comments.goTo': { input: GoToCommentInput; options: never; output: Receipt };
+  'comments.create': { input: CommentsCreateInput; options: RevisionGuardOptions; output: Receipt };
+  'comments.patch': { input: CommentsPatchInput; options: RevisionGuardOptions; output: Receipt };
+  'comments.delete': { input: CommentsDeleteInput; options: RevisionGuardOptions; output: Receipt };
   'comments.get': { input: GetCommentInput; options: never; output: CommentInfo };
   'comments.list': { input: CommentsListQuery | undefined; options: never; output: CommentsListResult };
 
-  // --- trackChanges.* ---
+  // --- trackChanges.* (reads) ---
   'trackChanges.list': { input: TrackChangesListInput | undefined; options: never; output: TrackChangesListResult };
   'trackChanges.get': { input: TrackChangesGetInput; options: never; output: TrackChangeInfo };
-  'trackChanges.accept': { input: TrackChangesAcceptInput; options: never; output: Receipt };
-  'trackChanges.reject': { input: TrackChangesRejectInput; options: never; output: Receipt };
-  'trackChanges.acceptAll': { input: TrackChangesAcceptAllInput; options: never; output: Receipt };
-  'trackChanges.rejectAll': { input: TrackChangesRejectAllInput; options: never; output: Receipt };
+
+  // --- review.* ---
+  'review.decide': { input: ReviewDecideInput; options: RevisionGuardOptions; output: Receipt };
+
+  // --- query.* ---
+  'query.match': { input: QueryMatchInput; options: never; output: QueryMatchOutput };
+
+  // --- mutations.* ---
+  'mutations.preview': { input: MutationsPreviewInput; options: never; output: MutationsPreviewOutput };
+  'mutations.apply': { input: MutationsApplyInput; options: never; output: PlanReceipt };
 
   // --- capabilities ---
   'capabilities.get': { input: undefined; options: never; output: DocumentApiCapabilities };

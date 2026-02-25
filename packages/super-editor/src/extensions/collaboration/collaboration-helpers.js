@@ -34,9 +34,10 @@ export const updateYdocDocxData = async (editor, ydoc) => {
     Object.keys(newXml).forEach((key) => {
       const fileIndex = docx.findIndex((item) => item.name === key);
       const existingContent = fileIndex > -1 ? docx[fileIndex].content : null;
+      const newContent = newXml[key];
 
       // Skip if content hasn't changed
-      if (existingContent === newXml[key]) {
+      if (existingContent === newContent) {
         return;
       }
 
@@ -44,10 +45,16 @@ export const updateYdocDocxData = async (editor, ydoc) => {
       if (fileIndex > -1) {
         docx.splice(fileIndex, 1);
       }
-      docx.push({
-        name: key,
-        content: newXml[key],
-      });
+
+      // A null value means the file was deleted during export (e.g. comment
+      // parts removed).  Only add entries with real content — pushing
+      // { content: null } would crash parseXmlToJson on next hydration.
+      if (newContent != null) {
+        docx.push({
+          name: key,
+          content: newContent,
+        });
+      }
     });
 
     // Only transact if there were actual changes OR this is initial setup.

@@ -18,6 +18,52 @@ description: Generated reference for info
 - Supports dry run: `no`
 - Deterministic target resolution: `yes`
 
+## Input fields
+
+_No fields._
+
+### Example request
+
+```json
+{}
+```
+
+## Output fields
+
+| Field | Type | Required | Description |
+| --- | --- | --- | --- |
+| `capabilities` | object | yes |  |
+| `counts` | object | yes |  |
+| `outline` | object[] | yes |  |
+
+### Example response
+
+```json
+{
+  "capabilities": {
+    "canComment": true,
+    "canFind": true,
+    "canGetNode": true,
+    "canReplace": true
+  },
+  "counts": {
+    "comments": 0,
+    "headings": 3,
+    "images": 2,
+    "paragraphs": 12,
+    "tables": 1,
+    "words": 250
+  },
+  "outline": [
+    {
+      "level": 1,
+      "nodeId": "node-def456",
+      "text": "Hello, world."
+    }
+  ]
+}
+```
+
 ## Pre-apply throws
 
 - None
@@ -26,8 +72,9 @@ description: Generated reference for info
 
 - None
 
-## Input schema
+## Raw schemas
 
+<Accordion title="Raw input schema">
 ```json
 {
   "additionalProperties": false,
@@ -35,9 +82,9 @@ description: Generated reference for info
   "type": "object"
 }
 ```
+</Accordion>
 
-## Output schema
-
+<Accordion title="Raw output schema">
 ```json
 {
   "additionalProperties": false,
@@ -130,3 +177,4 @@ description: Generated reference for info
   "type": "object"
 }
 ```
+</Accordion>

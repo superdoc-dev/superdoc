@@ -16,31 +16,18 @@ export const REPO_ROOT = path.resolve(SCRIPT_DIR, '../..');
 export const DEFAULT_CORPUS_ROOT = path.join(REPO_ROOT, 'test-corpus');
 export const REGISTRY_KEY = 'registry.json';
 export const DOCX_CONTENT_TYPE = 'application/vnd.openxmlformats-officedocument.wordprocessingml.document';
-
-const DEFAULT_BUCKET_CANDIDATES = ['docx-test-corpus', 'superdoc-visual-testing'];
+export const CORPUS_BUCKET_NAME = 'docx-test-corpus';
 
 const WRANGLER_CONFIG_PATHS =
   process.platform === 'darwin'
     ? [path.join(os.homedir(), 'Library/Preferences/.wrangler/config/default.toml')]
     : [path.join(os.homedir(), '.config/.wrangler/config/default.toml')];
 
-const ACCOUNT_ID_ENV_KEYS = ['SUPERDOC_CORPUS_R2_ACCOUNT_ID', 'SD_TESTING_R2_ACCOUNT_ID', 'SD_VISUAL_TESTING_R2_ACCOUNT_ID'];
-const BUCKET_ENV_KEYS = [
-  'SUPERDOC_CORPUS_R2_BUCKET',
-  'SD_TESTING_R2_BUCKET_NAME',
-  'SD_TESTING_R2_BUCKET',
-  'SD_VISUAL_TESTING_R2_BUCKET_NAME',
-  'SD_VISUAL_TESTING_R2_BUCKET',
-];
-const ACCESS_KEY_ID_ENV_KEYS = [
-  'SUPERDOC_CORPUS_R2_ACCESS_KEY_ID',
-  'SD_TESTING_R2_ACCESS_KEY_ID',
-  'SD_VISUAL_TESTING_R2_ACCESS_KEY_ID',
-];
+const ACCOUNT_ID_ENV_KEYS = ['SUPERDOC_CORPUS_R2_ACCOUNT_ID', 'SD_TESTING_R2_ACCOUNT_ID'];
+const ACCESS_KEY_ID_ENV_KEYS = ['SUPERDOC_CORPUS_R2_ACCESS_KEY_ID', 'SD_TESTING_R2_ACCESS_KEY_ID'];
 const SECRET_ACCESS_KEY_ENV_KEYS = [
   'SUPERDOC_CORPUS_R2_SECRET_ACCESS_KEY',
   'SD_TESTING_R2_SECRET_ACCESS_KEY',
-  'SD_VISUAL_TESTING_R2_SECRET_ACCESS_KEY',
 ];
 
 function firstEnv(names) {
@@ -95,7 +82,7 @@ function assertWranglerToken() {
   const config = readWranglerConfig();
   if (!config?.oauthToken) {
     throw new Error(
-      'No wrangler OAuth token found. Run `npx wrangler login` (or set SUPERDOC_CORPUS_R2_* / SD_TESTING_R2_* / SD_VISUAL_TESTING_R2_* credentials).',
+      'No wrangler OAuth token found. Run `npx wrangler login` (or set SUPERDOC_CORPUS_R2_* / SD_TESTING_R2_* credentials).',
     );
   }
 
@@ -149,28 +136,8 @@ async function resolveAccountId(token) {
   return accountId;
 }
 
-async function resolveBucketName({ token, accountId }) {
-  const explicit = firstEnv(BUCKET_ENV_KEYS);
-  if (explicit) return explicit;
-
-  const payload = await fetchCloudflareJson(
-    `https://api.cloudflare.com/client/v4/accounts/${accountId}/r2/buckets`,
-    token,
-  );
-  const buckets = Array.isArray(payload?.result?.buckets) ? payload.result.buckets.map((bucket) => bucket?.name).filter(Boolean) : [];
-  if (buckets.length === 0) {
-    throw new Error('No R2 buckets found for this account. Set SUPERDOC_CORPUS_R2_BUCKET explicitly.');
-  }
-
-  for (const candidate of DEFAULT_BUCKET_CANDIDATES) {
-    if (buckets.includes(candidate)) return candidate;
-  }
-
-  if (buckets.length === 1) return buckets[0];
-
-  throw new Error(
-    `Multiple R2 buckets found (${buckets.join(', ')}). Set SUPERDOC_CORPUS_R2_BUCKET to choose one explicitly.`,
-  );
+async function resolveBucketName() {
+  return CORPUS_BUCKET_NAME;
 }
 
 function isMissingWranglerBinary(error) {
@@ -218,11 +185,11 @@ function resolveS3Credentials() {
   if (!accessKeyId && !secretAccessKey) return null;
 
   const accountId = firstEnv(ACCOUNT_ID_ENV_KEYS);
-  const bucketName = firstEnv(BUCKET_ENV_KEYS);
+  const bucketName = CORPUS_BUCKET_NAME;
 
-  if (!accountId || !bucketName || !accessKeyId || !secretAccessKey) {
+  if (!accountId || !accessKeyId || !secretAccessKey) {
     throw new Error(
-      'Incomplete S3 credential configuration. Set account, bucket, access key ID, and secret access key (SUPERDOC_CORPUS_R2_*, SD_TESTING_R2_*, or SD_VISUAL_TESTING_R2_*).',
+      'Incomplete S3 credential configuration. Set account, access key ID, and secret access key (SUPERDOC_CORPUS_R2_* or SD_TESTING_R2_*).',
     );
   }
 
@@ -325,7 +292,7 @@ async function createS3R2Client(config) {
 async function createWranglerR2Client() {
   const token = assertWranglerToken();
   const accountId = await resolveAccountId(token);
-  const bucketName = await resolveBucketName({ token, accountId });
+  const bucketName = await resolveBucketName();
 
   const listObjects = async (prefix = '') => {
     const keys = [];
@@ -481,8 +448,8 @@ export function printCorpusEnvHint() {
   const lines = [
     'Auth options:',
     '- Local (recommended): `npx wrangler login`',
-    '- CI / explicit creds: set SUPERDOC_CORPUS_R2_* (or SD_TESTING_R2_* / SD_VISUAL_TESTING_R2_*)',
-    '- Optional explicit bucket: SUPERDOC_CORPUS_R2_BUCKET',
+    '- CI / explicit creds: set SUPERDOC_CORPUS_R2_* (or SD_TESTING_R2_*)',
+    `- Corpus bucket is fixed to: ${CORPUS_BUCKET_NAME}`,
   ];
   return lines.join('\n');
 }

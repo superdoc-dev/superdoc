@@ -27,6 +27,8 @@ export default [
       '**/src/**/*.d.ts.map',
       // Test files
       '**/*.test.js',
+      '**/*.test.ts',
+      '**/*.test.tsx',
       '**/*.spec.js',
       '**/tests/**',
       '**/test/**',
@@ -141,6 +143,7 @@ export default [
             '^bun:.*$', // Bun built-in modules
             '^superdoc$',
             '^superdoc/style\\.css$',
+            '^\\..*\/generated\/', // Generated files (codegen artifacts, not in git)
           ],
         }
       ]

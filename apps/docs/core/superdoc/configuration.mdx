@@ -36,15 +36,21 @@ new SuperDoc({
     ```json
     {
       id: 'doc-123', // string
-      type: 'docx', // string, can be 'docx' or 'pdf'
-      data: File // File or Blob
+      type: 'pdf', // string, can be 'docx' or 'pdf'
+      data: File, // local File or Blob source
+      // OR
+      url: 'https://example.com/report.pdf' // remote URL source
     }
     ```
     - `string` - URL to fetch
     - `File` - From file input
   </Expandable>
   
-  <Note>Use `documents` array for multiple documents instead</Note>
+  <Note>
+    For a `Document` object, use `data` for local files and `url` for remote files.
+    Provide one source field (`data` or `url`) per document object.
+    Use `documents` array for multiple documents instead.
+  </Note>
 </ParamField>
 
 <ParamField path="documents" type="Document[]">
@@ -224,6 +230,10 @@ new SuperDoc({
   </Expandable>
 </ParamField>
 
+<ParamField path="modules.slashMenu" type="Object" deprecated>
+  <Warning>**Deprecated** — Use `modules.contextMenu` instead. See the [Context Menu module](/modules/context-menu) for configuration options.</Warning>
+</ParamField>
+
 ## Appearance
 
 <ParamField path="title" type="string" default="'SuperDoc'">
@@ -314,6 +324,22 @@ new SuperDoc({
   Disable custom context menus
 </ParamField>
 
+<ParamField path="onUnsupportedContent" type="function">
+  Callback invoked with HTML elements that were dropped during import because they have no schema representation. Receives an array of `{ tagName, outerHTML, count }` items. When provided, `console.warn` is suppressed.
+
+  ```javascript
+  onUnsupportedContent: (items) => {
+    items.forEach(({ tagName, count }) => {
+      console.log(`Dropped ${count}x <${tagName}>`);
+    });
+  }
+  ```
+</ParamField>
+
+<ParamField path="warnOnUnsupportedContent" type="boolean" default="false">
+  Log a `console.warn` listing HTML elements dropped during import. Ignored when `onUnsupportedContent` is provided.
+</ParamField>
+
 <ParamField path="cspNonce" type="string">
   Content Security Policy nonce
 </ParamField>
@@ -348,12 +374,44 @@ All handlers are optional functions in the configuration:
 
 <ParamField path="onEditorUpdate" type="function">
   Called on content changes
-  
+
   ```javascript
   onEditorUpdate: ({ editor }) => {
     autoSave(editor.getJSON());
   }
   ```
+</ParamField>
+
+<ParamField path="onTrackedChangeBubbleAccept" type="function">
+  Custom handler for accepting tracked changes from comment bubbles. Replaces default accept behavior when provided.
+
+  ```javascript
+  onTrackedChangeBubbleAccept: (comment, editor) => {
+    // Custom logic before accepting
+    editor.commands.acceptTrackedChangeById(comment.commentId);
+    saveDocument(); // e.g., trigger auto-save after accept
+  }
+  ```
+
+  <Note>Only fires from bubble buttons, not toolbar or context menu. The dialog cleanup (closing the bubble) happens automatically after your handler runs.</Note>
+
+  <Warning>When using a custom handler, you are responsible for calling `editor.commands.acceptTrackedChangeById()` if you want the change accepted. The default behavior is fully replaced.</Warning>
+</ParamField>
+
+<ParamField path="onTrackedChangeBubbleReject" type="function">
+  Custom handler for rejecting tracked changes from comment bubbles. Replaces default reject behavior when provided.
+
+  ```javascript
+  onTrackedChangeBubbleReject: (comment, editor) => {
+    // Custom logic before rejecting
+    editor.commands.rejectTrackedChangeById(comment.commentId);
+    logRejection(comment); // e.g., track rejections
+  }
+  ```
+
+  <Note>Only fires from bubble buttons, not toolbar or context menu. The dialog cleanup (closing the bubble) happens automatically after your handler runs.</Note>
+
+  <Warning>When using a custom handler, you are responsible for calling `editor.commands.rejectTrackedChangeById()` if you want the change rejected. The default behavior is fully replaced.</Warning>
 </ParamField>
 
 <ParamField path="onSidebarToggle" type="function">

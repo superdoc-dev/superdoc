@@ -102,10 +102,10 @@ describe('getDocumentApiCapabilities', () => {
     expect(capabilities.global.comments.enabled).toBe(false);
     expect(capabilities.global.lists.enabled).toBe(false);
     expect(capabilities.global.trackChanges.enabled).toBe(false);
-    expect(capabilities.operations['comments.add'].available).toBe(false);
+    expect(capabilities.operations['comments.create'].available).toBe(false);
     expect(capabilities.operations['lists.setType'].available).toBe(false);
     expect(capabilities.operations.insert.tracked).toBe(false);
-    expect(capabilities.operations['format.bold'].available).toBe(false);
+    expect(capabilities.operations['format.apply'].available).toBe(false);
   });
 
   it('exposes tracked + dryRun flags in line with command catalog capabilities', () => {
@@ -115,7 +115,7 @@ describe('getDocumentApiCapabilities', () => {
     expect(capabilities.operations.insert.dryRun).toBe(true);
     expect(capabilities.operations['lists.setType'].tracked).toBe(false);
     expect(capabilities.operations['lists.setType'].dryRun).toBe(true);
-    expect(capabilities.operations['trackChanges.accept'].dryRun).toBe(false);
+    expect(capabilities.operations['review.decide'].dryRun).toBe(false);
     expect(capabilities.operations['create.paragraph'].dryRun).toBe(true);
     expect(capabilities.operations['create.heading'].available).toBe(true);
     expect(capabilities.operations['create.heading'].tracked).toBe(true);
@@ -185,11 +185,11 @@ describe('getDocumentApiCapabilities', () => {
   it('does not emit unavailable reasons for modes that are unsupported by design', () => {
     const capabilities = getDocumentApiCapabilities(makeEditor());
     const setTypeReasons = capabilities.operations['lists.setType'].reasons ?? [];
-    const acceptAllReasons = capabilities.operations['trackChanges.acceptAll'].reasons ?? [];
+    const reviewDecideReasons = capabilities.operations['review.decide'].reasons ?? [];
 
     expect(setTypeReasons).not.toContain('TRACKED_MODE_UNAVAILABLE');
     expect(setTypeReasons).not.toContain('DRY_RUN_UNAVAILABLE');
-    expect(acceptAllReasons).not.toContain('DRY_RUN_UNAVAILABLE');
+    expect(reviewDecideReasons).not.toContain('DRY_RUN_UNAVAILABLE');
   });
 
   it('handles an editor with undefined schema gracefully', () => {
@@ -199,7 +199,7 @@ describe('getDocumentApiCapabilities', () => {
 
     const capabilities = getDocumentApiCapabilities(editor);
 
-    expect(capabilities.operations['format.bold'].available).toBe(false);
+    expect(capabilities.operations['format.apply'].available).toBe(false);
     // insert.tracked remains true because the default insertTrackedChange command
     // is still present — tracked mode for insert depends on commands, not schema.
     expect(capabilities.operations.insert.tracked).toBe(true);
@@ -221,8 +221,8 @@ describe('getDocumentApiCapabilities', () => {
       }),
     );
 
-    const formatReasons = capabilities.operations['format.bold'].reasons ?? [];
-    expect(formatReasons).toContain('OPERATION_UNAVAILABLE');
-    expect(formatReasons).not.toContain('COMMAND_UNAVAILABLE');
+    const styleReasons = capabilities.operations['format.apply'].reasons ?? [];
+    expect(styleReasons).toContain('OPERATION_UNAVAILABLE');
+    expect(styleReasons).not.toContain('COMMAND_UNAVAILABLE');
   });
 });

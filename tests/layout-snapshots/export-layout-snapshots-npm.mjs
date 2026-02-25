@@ -35,7 +35,7 @@ Wrapper Options:
 
 All other arguments are forwarded to export-layout-snapshots.mjs.
 Common forwarded options include:
-  --jobs <n> --limit <n> --pipeline <mode> --timeout-ms <ms> --fail-fast --input-root <path>
+  --jobs <n> --limit <n> --match <pattern> --pipeline <mode> --timeout-ms <ms> --fail-fast --input-root <path>
 
 Examples:
   bun tests/layout-snapshots/export-layout-snapshots-npm.mjs 1.12.0 --jobs 4

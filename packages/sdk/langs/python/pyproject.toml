@@ -1,0 +1,33 @@
+[build-system]
+requires = ["setuptools>=70.1", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "superdoc-sdk"
+version = "1.0.0a6"
+description = "SuperDoc SDK (CLI-backed)"
+readme = "README.md"
+requires-python = ">=3.9"
+license = "AGPL-3.0"
+authors = [{ name = "SuperDoc" }]
+dependencies = [
+  "superdoc-sdk-cli-darwin-arm64==1.0.0a6; platform_system == 'Darwin' and (platform_machine == 'arm64' or platform_machine == 'aarch64' or platform_machine == 'ARM64')",
+  "superdoc-sdk-cli-darwin-x64==1.0.0a6; platform_system == 'Darwin' and (platform_machine == 'x86_64' or platform_machine == 'AMD64' or platform_machine == 'amd64')",
+  "superdoc-sdk-cli-linux-x64==1.0.0a6; platform_system == 'Linux' and (platform_machine == 'x86_64' or platform_machine == 'AMD64' or platform_machine == 'amd64')",
+  "superdoc-sdk-cli-linux-arm64==1.0.0a6; platform_system == 'Linux' and (platform_machine == 'arm64' or platform_machine == 'aarch64' or platform_machine == 'ARM64')",
+  "superdoc-sdk-cli-windows-x64==1.0.0a6; platform_system == 'Windows' and (platform_machine == 'x86_64' or platform_machine == 'AMD64' or platform_machine == 'amd64')",
+]
+
+[tool.setuptools]
+packages = [
+  "superdoc",
+  "superdoc.generated",
+  "superdoc.skills",
+  "superdoc.tools",
+]
+
+[tool.setuptools.package-data]
+superdoc = [
+  "skills/*.md",
+  "tools/*.json",
+]

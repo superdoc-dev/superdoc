@@ -572,6 +572,144 @@ describe('renderTableFragment', () => {
     });
   });
 
+  describe('cell width rescaling (SD-1859)', () => {
+    it('should use fragment.columnWidths for cell widths when present', () => {
+      // Simulates a mixed-orientation doc: table measured at landscape width (432px per col)
+      // but rendered in portrait where fragment.columnWidths rescales to 312px per col.
+      const block: TableBlock = {
+        kind: 'table',
+        id: 'test-table-1' as BlockId,
+        rows: [
+          {
+            id: 'row-1' as BlockId,
+            cells: [
+              {
+                id: 'cell-1-1' as BlockId,
+                paragraph: {
+                  kind: 'paragraph',
+                  id: 'para-1-1' as BlockId,
+                  runs: [],
+                },
+              },
+              {
+                id: 'cell-1-2' as BlockId,
+                paragraph: {
+                  kind: 'paragraph',
+                  id: 'para-1-2' as BlockId,
+                  runs: [],
+                },
+              },
+            ],
+          },
+        ],
+      };
+
+      const measure: TableMeasure = {
+        kind: 'table',
+        rows: [
+          {
+            cells: [
+              {
+                paragraph: { kind: 'paragraph', lines: [], totalHeight: 20 },
+                width: 432,
+                height: 20,
+                gridColumnStart: 0,
+                colSpan: 1,
+              },
+              {
+                paragraph: { kind: 'paragraph', lines: [], totalHeight: 20 },
+                width: 432,
+                height: 20,
+                gridColumnStart: 1,
+                colSpan: 1,
+              },
+            ],
+            height: 20,
+          },
+        ],
+        columnWidths: [432, 432],
+        totalWidth: 864,
+        totalHeight: 20,
+      };
+
+      // Fragment with rescaled column widths (portrait: 624px total)
+      const fragment: TableFragment = {
+        kind: 'table',
+        blockId: 'test-table-1' as BlockId,
+        fromRow: 0,
+        toRow: 1,
+        x: 0,
+        y: 0,
+        width: 624,
+        height: 20,
+        columnWidths: [312, 312], // rescaled from [432, 432]
+      };
+
+      blockLookup.set(fragment.blockId, { block, measure });
+
+      const element = renderTableFragment({
+        doc,
+        fragment,
+        context,
+        blockLookup,
+        renderLine: (_block, _line, _ctx, _lineIndex, _isLastLine) => doc.createElement('div'),
+        applyFragmentFrame: () => {},
+        applySdtDataset: () => {},
+        applyStyles: () => {},
+      });
+
+      // Find rendered cell elements (absolutely positioned divs inside container)
+      const cells = element.querySelectorAll<HTMLElement>('div[style*="position: absolute"]');
+      expect(cells.length).toBeGreaterThanOrEqual(2);
+
+      // Cell 1: should be at x=0, width=312 (not 432)
+      const cell1 = cells[0];
+      expect(cell1.style.left).toBe('0px');
+      expect(cell1.style.width).toBe('312px');
+
+      // Cell 2: should be at x=312, width=312 (not 432)
+      const cell2 = cells[1];
+      expect(cell2.style.left).toBe('312px');
+      expect(cell2.style.width).toBe('312px');
+    });
+
+    it('should fall back to cellMeasure.width when fragment.columnWidths is absent', () => {
+      const block = createTestTableBlock();
+      const measure = createTestTableMeasure();
+      // Fragment without columnWidths — should use measure.columnWidths
+      const fragment: TableFragment = {
+        kind: 'table',
+        blockId: 'test-table-1' as BlockId,
+        fromRow: 0,
+        toRow: 1,
+        x: 0,
+        y: 0,
+        width: 100,
+        height: 20,
+        // no columnWidths
+      };
+
+      blockLookup.set(fragment.blockId, { block, measure });
+
+      const element = renderTableFragment({
+        doc,
+        fragment,
+        context,
+        blockLookup,
+        renderLine: (_block, _line, _ctx, _lineIndex, _isLastLine) => doc.createElement('div'),
+        applyFragmentFrame: () => {},
+        applySdtDataset: () => {},
+        applyStyles: () => {},
+      });
+
+      const cells = element.querySelectorAll<HTMLElement>('div[style*="position: absolute"]');
+      expect(cells.length).toBeGreaterThanOrEqual(1);
+
+      // Should use measure.columnWidths[0] = 100
+      expect(cells[0].style.width).toBe('100px');
+    });
+  });
+
   describe('boundary segment logic', () => {
     it('should create segments for cells with varying rowspan', () => {
       // Create a table with mixed rowspans:

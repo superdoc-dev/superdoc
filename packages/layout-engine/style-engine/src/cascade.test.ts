@@ -120,12 +120,12 @@ describe('cascade - combineProperties', () => {
 });
 
 describe('cascade - combineRunProperties', () => {
-  it('applies full override for fontFamily', () => {
+  it('preserves unspecified fontFamily fields from lower-priority sources', () => {
     const result = combineRunProperties([
       { fontFamily: { ascii: 'Calibri', hAnsi: 'Calibri' } },
       { fontFamily: { ascii: 'Arial' } },
     ]);
-    expect(result.fontFamily).toEqual({ ascii: 'Arial' });
+    expect(result.fontFamily).toEqual({ ascii: 'Arial', hAnsi: 'Calibri' });
   });
 
   it('applies full override for color', () => {

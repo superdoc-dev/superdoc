@@ -11,7 +11,7 @@ export const BASELINES_PREFIX = 'baselines';
 export const DOCUMENTS_PREFIX = 'documents';
 
 const ACCOUNT_ID = 'afc2655a510195709ae6fa06772d73f2';
-const BUCKET = 'superdoc-visual-testing';
+const BUCKET = process.env.SD_VISUAL_TESTING_R2_BUCKET || 'superdoc-visual-testing';
 
 export interface R2Client {
   listObjects(prefix: string): Promise<string[]>;
@@ -25,7 +25,8 @@ export interface R2Client {
 // --- S3 backend (CI / explicit credentials) ---
 
 async function createS3Client(): Promise<R2Client> {
-  const { S3Client, ListObjectsV2Command, GetObjectCommand, PutObjectCommand, CopyObjectCommand, DeleteObjectCommand } = await import('@aws-sdk/client-s3');
+  const { S3Client, ListObjectsV2Command, GetObjectCommand, PutObjectCommand, CopyObjectCommand, DeleteObjectCommand } =
+    await import('@aws-sdk/client-s3');
 
   const accessKeyId = process.env.SD_VISUAL_TESTING_R2_ACCESS_KEY_ID!;
   const secretAccessKey = process.env.SD_VISUAL_TESTING_R2_SECRET_ACCESS_KEY!;

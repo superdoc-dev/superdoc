@@ -41,6 +41,7 @@ const {
   editorCommentPositions,
   isCommentHighlighted,
 } = storeToRefs(commentsStore);
+const { activeZoom } = storeToRefs(superdocStore);
 
 const isInternal = ref(true);
 const commentInput = ref(null);
@@ -226,7 +227,12 @@ const handleAddComment = () => {
 };
 
 const handleReject = () => {
-  if (props.comment.trackedChange) {
+  const customHandler = proxy.$superdoc.config.onTrackedChangeBubbleReject;
+
+  if (props.comment.trackedChange && typeof customHandler === 'function') {
+    // Custom handler replaces default behavior
+    customHandler(props.comment, proxy.$superdoc.activeEditor);
+  } else if (props.comment.trackedChange) {
     props.comment.resolveComment({
       email: superdocStore.user.email,
       name: superdocStore.user.name,
@@ -237,6 +243,7 @@ const handleReject = () => {
     commentsStore.deleteComment({ superdoc: proxy.$superdoc, commentId: props.comment.commentId });
   }
 
+  // Always cleanup the dialog state
   nextTick(() => {
     commentsStore.lastUpdate = new Date();
     activeComment.value = null;
@@ -245,16 +252,24 @@ const handleReject = () => {
 };
 
 const handleResolve = () => {
-  if (props.comment.trackedChange) {
-    proxy.$superdoc.activeEditor.commands.acceptTrackedChangeById(props.comment.commentId);
+  const customHandler = proxy.$superdoc.config.onTrackedChangeBubbleAccept;
+
+  if (props.comment.trackedChange && typeof customHandler === 'function') {
+    // Custom handler replaces default behavior
+    customHandler(props.comment, proxy.$superdoc.activeEditor);
+  } else {
+    if (props.comment.trackedChange) {
+      proxy.$superdoc.activeEditor.commands.acceptTrackedChangeById(props.comment.commentId);
+    }
+
+    props.comment.resolveComment({
+      email: superdocStore.user.email,
+      name: superdocStore.user.name,
+      superdoc: proxy.$superdoc,
+    });
   }
 
-  props.comment.resolveComment({
-    email: superdocStore.user.email,
-    name: superdocStore.user.name,
-    superdoc: proxy.$superdoc,
-  });
-
+  // Always cleanup the dialog state
   nextTick(() => {
     commentsStore.lastUpdate = new Date();
     activeComment.value = null;
@@ -319,7 +334,10 @@ const getSidebarCommentStyle = computed(() => {
   }
 
   if (pendingComment.value && pendingComment.value.commentId === props.comment.commentId) {
-    const top = Math.max(96, pendingComment.value.selection?.selectionBounds.top - 50);
+    const source = pendingComment.value.selection?.source;
+    const isPdf = source === 'pdf' || source?.value === 'pdf';
+    const zoom = isPdf ? (activeZoom.value ?? 100) / 100 : 1;
+    const top = Math.max(96, pendingComment.value.selection?.selectionBounds.top * zoom - 50);
     style.position = 'absolute';
     style.top = top + 'px';
   }

@@ -1,77 +1,47 @@
 // @ts-check
-import { translator as pictTranslator } from '../../v3/handlers/w/pict/pict-translator';
-import { translator as w_pPrTranslator } from '../../v3/handlers/w/pPr';
-import { parseProperties } from './importerHelpers.js';
-
-/** @type {Set<string>} */
-const INLINE_PICT_RESULT_TYPES = new Set(['image', 'contentBlock']);
+import { pictNodeTypeStrategy } from '@converter/v3/handlers/w/pict/helpers/pict-node-type-strategy';
 
 /**
- * Build paragraph attributes from a w:p node for wrapping inline pict results.
- * @param {Object} pNode - The XML w:p node
- * @param {Object} params - Import params containing docx context
- * @returns {Object} Paragraph attributes including paragraphProperties, rsidRDefault, filename
+ * v2 handler that matches `w:pict` elements and delegates to the pict
+ * node-type strategy for import.
+ *
+ * NOTE: We intentionally avoid importing pict-translator here to prevent a
+ * circular initialisation chain:
+ *   pictNodeImporter → pict-translator → translate-content-block → exporter
+ *     → SuperConverter → docxImporter → pictNodeImporter
+ *
+ * @type {import("./types/index.js").NodeHandler}
  */
-const buildParagraphAttrsFromPNode = (pNode, params) => {
-  const { attributes = {} } = parseProperties(pNode);
-  const pPr = pNode?.elements?.find((el) => el.name === 'w:pPr');
-  const inlineParagraphProperties = pPr ? w_pPrTranslator.encode({ ...params, nodes: [pPr] }) || {} : {};
-
-  return {
-    ...attributes,
-    paragraphProperties: inlineParagraphProperties,
-    rsidRDefault: pNode?.attributes?.['w:rsidRDefault'],
-    filename: params?.filename,
-  };
-};
-
 export const handlePictNode = (params) => {
   const { nodes } = params;
-
-  if (!nodes.length || nodes[0].name !== 'w:p') {
+  if (!Array.isArray(nodes) || nodes.length === 0 || nodes[0]?.name !== 'w:pict') {
     return { nodes: [], consumed: 0 };
   }
-
-  const pNode = nodes[0];
-  const runs = pNode.elements?.filter((el) => el.name === 'w:r') || [];
-
-  let pict = null;
-  for (const run of runs) {
-    const foundPict = run.elements?.find((el) => el.name === 'w:pict');
-    if (foundPict) {
-      pict = foundPict;
-      break;
-    }
-  }
-
-  // if there is no pict, then process as a paragraph or list.
-  if (!pict) {
+  const pict = nodes[0];
+  const { type: pictType, handler } = pictNodeTypeStrategy(pict);
+  if (!handler || pictType === 'unknown') {
     return { nodes: [], consumed: 0 };
   }
-
-  const node = pict;
-  const result = pictTranslator.encode({ ...params, extraParams: { node, pNode } });
-
-  if (!result) {
+  const result = handler({ params, pict });
+  if (!result) return { nodes: [], consumed: 0 };
+  const resultNodes = Array.isArray(result) ? result : [result];
+  // Block nodes (e.g. shapeContainer from v:textbox) cannot be returned from
+  // run-level parsing — the v2 handler list runs inside w:r children where only
+  // inline nodes are valid.  Skip them here so the paragraph-level importer
+  // handles the whole w:p instead.
+  const BLOCK_TYPES = new Set(['shapeContainer', 'shapeTextbox']);
+  if (resultNodes.some((n) => BLOCK_TYPES.has(n.type))) {
     return { nodes: [], consumed: 0 };
   }
-
-  const shouldWrapInParagraph = INLINE_PICT_RESULT_TYPES.has(result.type);
-  const wrappedNode = shouldWrapInParagraph
-    ? {
-        type: 'paragraph',
-        content: [result],
-        attrs: buildParagraphAttrsFromPNode(pNode, params),
-        marks: [],
-      }
-    : result;
-
   return {
-    nodes: [wrappedNode],
+    nodes: resultNodes,
     consumed: 1,
   };
 };
 
+/**
+ * @type {import("./types/index.js").NodeHandlerEntry}
+ */
 export const pictNodeHandlerEntity = {
   handlerName: 'handlePictNode',
   handler: handlePictNode,

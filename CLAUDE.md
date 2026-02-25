@@ -64,6 +64,8 @@ tests/visual/        Visual regression tests (Playwright + R2 baselines)
 | Style resolution | `layout-engine/style-engine/` |
 | Main entry point (Vue) | `superdoc/src/SuperDoc.vue` |
 | Visual regression tests | `tests/visual/` (see its CLAUDE.md) |
+| Document API contract | `packages/document-api/src/contract/operation-definitions.ts` |
+| Adding a doc-api operation | See `packages/document-api/README.md` § "Adding a new operation" |
 
 ## Style Resolution Boundary
 
@@ -82,8 +84,46 @@ tests/visual/        Visual regression tests (Playwright + R2 baselines)
 - **Editing commands/behavior**: Modify `super-editor/src/extensions/`
 - **State bridging**: Modify `PresentationEditor.ts`
 
+## Document API Contract
+
+The `packages/document-api/` package uses a contract-first pattern with a single source of truth.
+
+- **`operation-definitions.ts`** — canonical object defining every operation's key, metadata, member path, reference doc path, and group. All downstream maps are projected from this file automatically.
+- **`operation-registry.ts`** — type-level registry mapping each operation to its `input`, `options`, and `output` types.
+- **`invoke.ts`** — `TypedDispatchTable` validates dispatch wiring against the registry at compile time.
+
+Adding a new operation touches 4 files: `operation-definitions.ts`, `operation-registry.ts`, `invoke.ts` (dispatch table), and the implementation. See `packages/document-api/README.md` for the full guide.
+
+Do NOT hand-edit `COMMAND_CATALOG`, `OPERATION_MEMBER_PATH_MAP`, `OPERATION_REFERENCE_DOC_PATH_MAP`, or `REFERENCE_OPERATION_GROUPS` — they are derived from `OPERATION_DEFINITIONS`.
+
+## JSDoc types
+
+Many packages use `.js` files with JSDoc `@typedef` for type definitions (e.g., `packages/superdoc/src/core/types/index.js`). These typedefs ARE the published type declarations — `vite-plugin-dts` generates `.d.ts` files from them.
+
+- **Keep JSDoc typedefs in sync with code.** If a function destructures `{ a, b, c }`, the `@typedef` must include all three properties. Missing properties become type errors for consumers.
+- **Verify types after adding parameters.** When adding a parameter to a function, update its `@typedef` or `@param` JSDoc. Build with `pnpm run --filter superdoc build:es` and check the generated `.d.ts` in `dist/`.
+- **Workspace packages don't publish types.** `@superdoc/common`, `@superdoc/contracts`, etc. are private. If a public API references their types, those types must be inlined or resolved through path aliases — consumers can't resolve workspace packages.
+
 ## Commands
 
 - `pnpm build` - Build all packages
 - `pnpm test` - Run tests
 - `pnpm dev` - Start dev server (from examples/)
+- `pnpm run generate:all` - Generate all derived artifacts (schemas, SDK clients, tool catalogs, reference docs)
+
+## Generated Artifacts
+
+These directories are produced by `pnpm run generate:all`:
+
+| Directory | In git? | What it contains |
+|-----------|---------|-----------------|
+| `packages/document-api/generated/` | No (gitignored) | Agent tool schemas, JSON schemas, manifest |
+| `apps/cli/generated/` | No (gitignored) | SDK contract JSON exported from CLI metadata |
+| `packages/sdk/langs/node/src/generated/` | No (gitignored) | Node SDK generated client code |
+| `packages/sdk/langs/python/superdoc/generated/` | No (gitignored) | Python SDK generated client code |
+| `packages/sdk/tools/*.json` | No (gitignored) | Tool catalogs for all providers (catalog.json, tools.openai.json, etc.) |
+| `apps/docs/document-api/reference/` | Yes (Mintlify deploys from git) | Reference doc pages generated from contract |
+
+After a fresh clone, run `pnpm run generate:all` before working on SDK, CLI, or doc-api code.
+
+Note: `packages/sdk/tools/__init__.py` is a manual file (Python package marker) and stays committed.

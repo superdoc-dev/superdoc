@@ -152,6 +152,17 @@ describe('comments-store', () => {
     expect(setActiveCommentSpy).toHaveBeenCalledWith({ commentId: null });
   });
 
+  it('does not throw when superdoc is unavailable during active comment updates', () => {
+    const comment = { commentId: 'comment-2' };
+    store.commentsList = [comment];
+
+    expect(() => store.setActiveComment(undefined, 'comment-2')).not.toThrow();
+    expect(store.activeComment).toBe('comment-2');
+
+    expect(() => store.setActiveComment(undefined, null)).not.toThrow();
+    expect(store.activeComment).toBeNull();
+  });
+
   it('updates tracked change comments and emits events', () => {
     const superdoc = {
       emit: vi.fn(),
@@ -199,6 +210,58 @@ describe('comments-store', () => {
       expect.objectContaining({
         type: comments_module_events.UPDATE,
         comment: { commentId: 'change-1' },
+      }),
+    );
+  });
+
+  it('syncs and emits an update when add event dedupes an existing tracked change', () => {
+    const superdoc = {
+      emit: vi.fn(),
+    };
+
+    const existingComment = {
+      commentId: 'change-1',
+      trackedChangeText: 'old',
+      deletedText: '',
+      getValues: vi.fn(() => ({ commentId: 'change-1', trackedChangeText: 'new text', deletedText: 'removed' })),
+    };
+
+    store.commentsList = [existingComment];
+
+    store.handleTrackedChangeUpdate({
+      superdoc,
+      params: {
+        event: 'add',
+        changeId: 'change-1',
+        trackedChangeText: 'new text',
+        trackedChangeType: 'insert',
+        deletedText: 'removed',
+        authorEmail: 'user@example.com',
+        author: 'User',
+        date: 123,
+        importedAuthor: null,
+        documentId: 'doc-1',
+        coords: {},
+      },
+    });
+
+    expect(existingComment.trackedChangeText).toBe('new text');
+    expect(existingComment.deletedText).toBe('removed');
+    expect(syncCommentsToClientsMock).toHaveBeenCalledWith(
+      superdoc,
+      expect.objectContaining({
+        type: comments_module_events.UPDATE,
+        comment: { commentId: 'change-1', trackedChangeText: 'new text', deletedText: 'removed' },
+      }),
+    );
+
+    expect(superdoc.emit).not.toHaveBeenCalled();
+    vi.advanceTimersByTime(1000);
+    expect(superdoc.emit).toHaveBeenCalledWith(
+      'comments-update',
+      expect.objectContaining({
+        type: comments_module_events.UPDATE,
+        comment: { commentId: 'change-1', trackedChangeText: 'new text', deletedText: 'removed' },
       }),
     );
   });

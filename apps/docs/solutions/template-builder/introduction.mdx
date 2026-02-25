@@ -9,7 +9,9 @@ A React component for creating document templates with dynamic fields that can b
 
 - Load Word documents and convert them into reusable templates
 - Insert dynamic fields using a simple trigger pattern (`{{`)
-- Organize fields with grouping for repeating data structures
+- Distinguish field types (owner vs signer) with visual color-coding
+- Link fields into groups that stay in sync
+- Let users create custom fields inline
 - Export templates with embedded field definitions
 - Navigate between fields using keyboard shortcuts
 
@@ -19,7 +21,7 @@ A React component for creating document templates with dynamic fields that can b
 - **Invoice templates** - Line items, totals, and customer information
 - **Form letters** - Personalized content with consistent structure
 - **Report templates** - Dynamic data sections with repeating groups
-- **Proposal documents** - Client-specific information in standardized layouts
+- **Signing workflows** - Distinguish owner-filled vs signer-filled fields
 
 ## How it works
 
@@ -38,25 +40,27 @@ function TemplateEditor() {
         available: [
           { id: "1", label: "Customer Name" },
           { id: "2", label: "Contract Date" },
-          { id: "3", label: "Payment Amount" },
+          { id: "3", label: "Signature", mode: "block", fieldType: "signer" },
         ],
       }}
       list={{ position: "right" }}
-      onFieldInsert={(field) => console.log("Field inserted:", field)}
+      onFieldInsert={(field) => console.log("Inserted:", field.alias, field.fieldType)}
     />
   );
 }
 ```
 
-That's it! Users type `{{` anywhere in the document to insert fields. The sidebar shows all fields in the template.
+Users type `{{` anywhere in the document to insert fields. The sidebar shows all fields in the template.
 
 ## Key concepts
 
 **Fields** - Placeholders in the document that get replaced with actual data during merge operations. Each field has a unique identifier.
 
+**Field types** - Fields can be tagged with a type like `'owner'` or `'signer'`. Think of owner fields as those that get prepopulated with known data (company name, address, contract terms), while signer fields are filled dynamically by the recipient (signature, date signed, initials). The default type is `'owner'`. Inside the document, both types are identical — the distinction is a metadata label so you can filter and route fields on your side during export and merge.
+
 **Structured Document Tags (SDT)** - The underlying Word standard used to mark field locations. Ensures compatibility with Microsoft Word.
 
-**Field grouping** - Multiple instances of the same field that create a logical group, useful for repeating sections like line items.
+**Linked fields (groups)** - When you insert a copy of an existing field, both instances share a group ID and stay in sync. Useful for repeating the same value in multiple places.
 
 **Trigger pattern** - The character sequence (default `{{`) that opens the field insertion menu.
 

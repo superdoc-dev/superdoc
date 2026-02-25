@@ -511,8 +511,9 @@ export class HeaderFooterSessionManager {
 
   /**
    * Hit test for header/footer regions.
-   * When knownPageIndex is provided (from normalizeClientPoint), use it directly
-   * since y is already page-local. Otherwise derive pageIndex from global y.
+   * `y` is a global layout Y coordinate. When `knownPageIndex` and `knownPageLocalY`
+   * are provided (from normalizeClientPoint), use them directly as the page index
+   * and page-local Y. Otherwise, derive pageIndex and page-local Y from the global `y`.
    */
   hitTestRegion(
     x: number,
@@ -763,7 +764,7 @@ export class HeaderFooterSessionManager {
           editorHost,
           availableWidth: region.width,
           availableHeight: region.height,
-          currentPageNumber: parseInt(region.displayPageNumber ?? '', 10) || region.pageNumber,
+          currentPageNumber: region.pageNumber,
           totalPageCount: bodyPageCount,
         });
       } catch (editorError) {
@@ -838,7 +839,7 @@ export class HeaderFooterSessionManager {
         headerId: descriptor.id,
         sectionType: descriptor.variant ?? region.sectionType ?? null,
         pageIndex: region.pageIndex,
-        pageNumber: parseInt(region.displayPageNumber ?? '', 10) || region.pageNumber,
+        pageNumber: region.pageNumber,
       };
 
       this.clearHover();

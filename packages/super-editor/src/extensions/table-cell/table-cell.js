@@ -39,6 +39,7 @@
 
 import { Node, Attribute } from '@core/index.js';
 import { createCellBorders } from './helpers/createCellBorders.js';
+import { renderCellBorderStyle } from './helpers/renderCellBorderStyle.js';
 
 /**
  * Cell margins configuration
@@ -164,21 +165,7 @@ export const TableCell = Node.create({
 
       borders: {
         default: () => createCellBorders(),
-        renderDOM({ borders }) {
-          if (!borders) return {};
-          const sides = ['top', 'right', 'bottom', 'left'];
-          const style = sides
-            .map((side) => {
-              const border = borders?.[side];
-              if (border && border.val === 'none') return `border-${side}: ${border.val};`;
-              let color = border?.color || 'black';
-              if (color === 'auto') color = 'black';
-              if (border) return `border-${side}: ${Math.ceil(border.size)}px solid ${color};`;
-              return '';
-            })
-            .join(' ');
-          return { style };
-        },
+        renderDOM: ({ borders }) => renderCellBorderStyle(borders),
       },
 
       widthType: {

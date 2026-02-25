@@ -731,6 +731,580 @@ describe('SuperDocESign component', () => {
     });
   });
 
+  describe('download button', () => {
+    it('invokes onDownload with correct payload when download button is clicked', async () => {
+      const onDownload = vi.fn();
+
+      const { getByRole } = renderComponent({
+        onDownload,
+        document: {
+          source: 'https://example.com/doc.docx',
+          mode: 'full',
+        },
+        fields: {
+          document: [{ id: 'd1', value: 'Doc Value' }],
+          signer: [
+            {
+              id: 's1',
+              type: 'checkbox',
+              label: 'Accept',
+              validation: { required: false },
+            },
+          ],
+        },
+        download: { fileName: 'my-contract.pdf' },
+      });
+
+      await waitForSuperDocReady();
+
+      const downloadButton = getByRole('button', { name: /download/i });
+      await userEvent.click(downloadButton);
+
+      await waitFor(() => expect(onDownload).toHaveBeenCalledTimes(1));
+
+      const payload = onDownload.mock.calls[0][0];
+      expect(payload).toMatchObject({
+        eventId: 'evt_test',
+        documentSource: 'https://example.com/doc.docx',
+        fileName: 'my-contract.pdf',
+        fields: {
+          document: [{ id: 'd1', value: 'Doc Value' }],
+          signer: [{ id: 's1', value: null }],
+        },
+      });
+    });
+
+    it('uses default fileName when none is configured', async () => {
+      const onDownload = vi.fn();
+
+      renderComponent({ onDownload });
+
+      await waitForSuperDocReady();
+
+      const downloadButton = screen.getByRole('button', { name: /download/i });
+      await userEvent.click(downloadButton);
+
+      await waitFor(() => expect(onDownload).toHaveBeenCalledTimes(1));
+      expect(onDownload.mock.calls[0][0].fileName).toBe('document.pdf');
+    });
+  });
+
+  describe('isDisabled prop', () => {
+    it('disables submit button when isDisabled is true', async () => {
+      renderComponent({ isDisabled: true });
+
+      await waitForSuperDocReady();
+
+      const submitButton = screen.getByRole('button', { name: /submit/i });
+      expect(submitButton).toBeDisabled();
+    });
+
+    it('prevents submit when isDisabled is true even if form is valid', async () => {
+      const onSubmit = vi.fn();
+
+      renderComponent({
+        isDisabled: true,
+        onSubmit,
+        fields: {
+          signer: [
+            {
+              id: '1',
+              type: 'checkbox',
+              label: 'Accept',
+              validation: { required: true },
+            },
+          ],
+        },
+      });
+
+      await waitForSuperDocReady();
+
+      const checkbox = screen.getByRole('checkbox');
+      await userEvent.click(checkbox);
+
+      const submitButton = screen.getByRole('button', { name: /submit/i });
+      expect(submitButton).toBeDisabled();
+    });
+
+    it('disables signer fields when isDisabled is true', async () => {
+      renderComponent({
+        isDisabled: true,
+        fields: {
+          signer: [
+            {
+              id: '1',
+              type: 'checkbox',
+              label: 'Accept',
+              validation: { required: false },
+            },
+          ],
+        },
+      });
+
+      await waitForSuperDocReady();
+
+      const checkbox = screen.getByRole('checkbox');
+      expect(checkbox).toBeDisabled();
+    });
+  });
+
+  describe('className, style, and documentHeight props', () => {
+    it('applies custom className to container', async () => {
+      renderComponent({ className: 'my-custom-class' });
+
+      await waitForSuperDocReady();
+
+      const container = screen.getByTestId('superdoc-esign-document').parentElement;
+      expect(container?.className).toContain('my-custom-class');
+    });
+
+    it('applies custom style to container', async () => {
+      renderComponent({ style: { maxWidth: '800px', border: '1px solid red' } });
+
+      await waitForSuperDocReady();
+
+      const container = screen.getByTestId('superdoc-esign-document').parentElement;
+      expect(container?.style.maxWidth).toBe('800px');
+      expect(container?.style.border).toBe('1px solid red');
+    });
+
+    it('applies documentHeight to scroll container', async () => {
+      renderComponent({ documentHeight: '400px' });
+
+      await waitForSuperDocReady();
+
+      const scrollContainer = screen.getByTestId('superdoc-scroll-container');
+      expect(scrollContainer.style.height).toBe('400px');
+    });
+
+    it('uses default documentHeight of 600px when not specified', async () => {
+      renderComponent();
+
+      await waitForSuperDocReady();
+
+      const scrollContainer = screen.getByTestId('superdoc-scroll-container');
+      expect(scrollContainer.style.height).toBe('600px');
+    });
+  });
+
+  describe('document mode', () => {
+    it('hides submit button when mode is "download"', async () => {
+      renderComponent({
+        document: {
+          source: '<p>Download only</p>',
+          mode: 'download',
+        },
+      });
+
+      await waitForSuperDocReady();
+
+      expect(screen.queryByRole('button', { name: /submit/i })).not.toBeInTheDocument();
+      expect(screen.getByRole('button', { name: /download/i })).toBeInTheDocument();
+    });
+  });
+
+  describe('custom labels', () => {
+    it('renders custom submit label', async () => {
+      renderComponent({
+        submit: { label: 'Sign & Complete' },
+      });
+
+      await waitForSuperDocReady();
+
+      expect(screen.getByRole('button', { name: 'Sign & Complete' })).toBeInTheDocument();
+    });
+
+    it('renders custom download label', async () => {
+      renderComponent({
+        download: { label: 'Save Copy' },
+      });
+
+      await waitForSuperDocReady();
+
+      expect(screen.getByRole('button', { name: 'Save Copy' })).toBeInTheDocument();
+    });
+  });
+
+  describe('field validation', () => {
+    it('keeps submit disabled when required checkbox is unchecked', async () => {
+      renderComponent({
+        fields: {
+          signer: [
+            {
+              id: '1',
+              type: 'checkbox',
+              label: 'Required checkbox',
+              validation: { required: true },
+            },
+          ],
+        },
+      });
+
+      await waitForSuperDocReady();
+
+      const submitButton = screen.getByRole('button', { name: /submit/i });
+      await waitFor(() => expect(submitButton).toBeDisabled());
+    });
+
+    it('enables submit when all required fields are filled', async () => {
+      renderComponent({
+        fields: {
+          signer: [
+            {
+              id: '1',
+              type: 'checkbox',
+              label: 'Required',
+              validation: { required: true },
+            },
+            {
+              id: '2',
+              type: 'checkbox',
+              label: 'Optional',
+              validation: { required: false },
+            },
+          ],
+        },
+      });
+
+      await waitForSuperDocReady();
+
+      const checkboxes = screen.getAllByRole('checkbox');
+      // Only check the required one
+      await userEvent.click(checkboxes[0]);
+
+      const submitButton = screen.getByRole('button', { name: /submit/i });
+      await waitFor(() => expect(submitButton).not.toBeDisabled());
+    });
+
+    it('treats optional fields as valid when empty', async () => {
+      const onSubmit = vi.fn();
+
+      renderComponent({
+        onSubmit,
+        fields: {
+          signer: [
+            {
+              id: '1',
+              type: 'checkbox',
+              label: 'Optional',
+              validation: { required: false },
+            },
+          ],
+        },
+      });
+
+      await waitForSuperDocReady();
+
+      const submitButton = screen.getByRole('button', { name: /submit/i });
+      await waitFor(() => expect(submitButton).not.toBeDisabled());
+      await userEvent.click(submitButton);
+
+      await waitFor(() => expect(onSubmit).toHaveBeenCalledTimes(1));
+    });
+  });
+
+  describe('multiple field types', () => {
+    it('renders signature, checkbox, and text fields together', async () => {
+      renderComponent({
+        fields: {
+          signer: [
+            {
+              id: 'sig',
+              type: 'signature',
+              label: 'Your Signature',
+              validation: { required: true },
+            },
+            {
+              id: 'cb',
+              type: 'checkbox',
+              label: 'I agree',
+              validation: { required: true },
+            },
+            {
+              id: 'txt',
+              type: 'text',
+              label: 'Your Name',
+              validation: { required: false },
+            },
+          ],
+        },
+      });
+
+      await waitForSuperDocReady();
+
+      // Signature and text both render as text inputs
+      const inputs = screen.getAllByPlaceholderText('Type your full name');
+      expect(inputs).toHaveLength(2);
+
+      const checkbox = screen.getByRole('checkbox');
+      expect(checkbox).toBeInTheDocument();
+    });
+
+    it('includes all field values in submit payload', async () => {
+      const onSubmit = vi.fn();
+
+      const { getByRole } = renderComponent({
+        onSubmit,
+        fields: {
+          signer: [
+            {
+              id: 'sig',
+              type: 'signature',
+              label: 'Signature',
+              validation: { required: true },
+            },
+            {
+              id: 'cb',
+              type: 'checkbox',
+              label: 'Accept',
+              validation: { required: true },
+            },
+          ],
+        },
+      });
+
+      await waitForSuperDocReady();
+
+      const input = screen.getByPlaceholderText('Type your full name');
+      fireEvent.change(input, { target: { value: 'Test User' } });
+
+      const checkbox = getByRole('checkbox');
+      await userEvent.click(checkbox);
+
+      const submitButton = getByRole('button', { name: /submit/i });
+      await waitFor(() => expect(submitButton).not.toBeDisabled());
+      await userEvent.click(submitButton);
+
+      await waitFor(() => expect(onSubmit).toHaveBeenCalledTimes(1));
+
+      const payload = onSubmit.mock.calls[0][0];
+      expect(payload.signerFields).toEqual([
+        { id: 'sig', value: 'Test User' },
+        { id: 'cb', value: true },
+      ]);
+    });
+  });
+
+  describe('onFieldsDiscovered callback', () => {
+    it('invokes onFieldsDiscovered with discovered fields on ready', async () => {
+      const onFieldsDiscovered = vi.fn();
+
+      superDocMock.mockGetStructuredContentTags.mockReturnValue([
+        {
+          node: {
+            attrs: { id: 'f1', label: 'Name' },
+            type: { name: 'structuredContentBlock' },
+            textContent: 'default',
+          },
+        },
+        { node: { attrs: { id: 'f2', label: 'Date' }, type: { name: 'structuredContentBlock' }, textContent: '' } },
+      ]);
+
+      renderComponent({
+        onFieldsDiscovered,
+        fields: {
+          document: [
+            { id: 'f1', value: 'John' },
+            { id: 'f2', value: '2024-01-01' },
+          ],
+        },
+      });
+
+      await waitForSuperDocReady();
+
+      await waitFor(() => expect(onFieldsDiscovered).toHaveBeenCalledTimes(1));
+
+      const discovered = onFieldsDiscovered.mock.calls[0][0];
+      expect(discovered).toEqual([
+        { id: 'f1', label: 'Name', value: 'John' },
+        { id: 'f2', label: 'Date', value: '2024-01-01' },
+      ]);
+    });
+  });
+
+  describe('destroy on unmount', () => {
+    it('calls destroy on SuperDoc instance when component unmounts', async () => {
+      const { unmount } = renderComponent();
+
+      await waitForSuperDocReady();
+
+      unmount();
+
+      expect(superDocMock.mockDestroy).toHaveBeenCalled();
+    });
+  });
+
+  describe('PDF support', () => {
+    const pdfConfig = {
+      pdfLib: {},
+      workerSrc: 'mock-worker.js',
+      setWorker: false,
+      outputScale: 2,
+    };
+
+    const waitForPdfReady = async () => {
+      await waitFor(() => {
+        const options = getLastConstructorOptions();
+        expect(options).toBeTruthy();
+        expect(options.modules?.pdf).toBeTruthy();
+      });
+    };
+
+    it('passes pdf config to SuperDoc modules when pdf prop is provided', async () => {
+      renderComponent({
+        pdf: pdfConfig,
+        document: {
+          source: 'https://example.com/doc.pdf',
+          mode: 'full',
+        },
+      });
+
+      await waitForPdfReady();
+
+      const options = getLastConstructorOptions();
+      expect(options.modules).toEqual({
+        comments: false,
+        pdf: pdfConfig,
+      });
+    });
+
+    it('converts string source to { url, type: "pdf" } when pdf prop is provided', async () => {
+      renderComponent({
+        pdf: pdfConfig,
+        document: {
+          source: 'https://example.com/doc.pdf',
+          mode: 'full',
+        },
+      });
+
+      await waitForPdfReady();
+
+      const options = getLastConstructorOptions();
+      expect(options.document).toEqual({
+        url: 'https://example.com/doc.pdf',
+        type: 'pdf',
+      });
+    });
+
+    it('does not convert document source when pdf prop is not provided', async () => {
+      renderComponent({
+        document: {
+          source: 'https://example.com/doc.docx',
+          mode: 'full',
+        },
+      });
+
+      await waitForSuperDocReady();
+
+      const options = getLastConstructorOptions();
+      expect(options.document).toBe('https://example.com/doc.docx');
+    });
+
+    it('fires onPdfDocumentReady and sets component ready for PDFs', async () => {
+      const onStateChange = vi.fn();
+
+      renderComponent({
+        pdf: pdfConfig,
+        onStateChange,
+        document: {
+          source: 'https://example.com/doc.pdf',
+          mode: 'full',
+        },
+        fields: {
+          signer: [
+            {
+              id: 'cb1',
+              type: 'checkbox',
+              label: 'I agree',
+              validation: { required: true },
+            },
+          ],
+        },
+      });
+
+      await waitForPdfReady();
+
+      // The component should become ready — verify the checkbox is interactive
+      const checkbox = await screen.findByRole('checkbox');
+      expect(checkbox).toBeInTheDocument();
+    });
+
+    it('does not pass pdf module when pdf prop is omitted', async () => {
+      renderComponent({
+        document: {
+          source: '<p>Test</p>',
+          mode: 'full',
+        },
+      });
+
+      await waitForSuperDocReady();
+
+      const options = getLastConstructorOptions();
+      expect(options.modules).toEqual({ comments: false });
+    });
+
+    it('records ready audit event via onPdfDocumentReady', async () => {
+      const ref = createRef<SuperDocESignHandle>();
+
+      renderComponent(
+        {
+          pdf: pdfConfig,
+          document: {
+            source: 'https://example.com/doc.pdf',
+            mode: 'full',
+          },
+        },
+        { ref },
+      );
+
+      await waitForPdfReady();
+      await waitFor(() => expect(ref.current).toBeTruthy());
+
+      await waitFor(() => {
+        const auditTrail = ref.current?.getAuditTrail() ?? [];
+        const types = auditTrail.map((e) => e.type);
+        expect(types).toContain('ready');
+      });
+    });
+
+    it('enables submit flow for PDF with signer fields', async () => {
+      const onSubmit = vi.fn();
+
+      const { getByRole } = renderComponent({
+        pdf: pdfConfig,
+        onSubmit,
+        document: {
+          source: 'https://example.com/doc.pdf',
+          mode: 'full',
+        },
+        fields: {
+          signer: [
+            {
+              id: 'cb1',
+              type: 'checkbox',
+              label: 'I agree',
+              validation: { required: true },
+            },
+          ],
+        },
+      });
+
+      await waitForPdfReady();
+
+      const checkbox = await screen.findByRole('checkbox');
+      await userEvent.click(checkbox);
+
+      const submitButton = getByRole('button', { name: /submit/i });
+      await waitFor(() => expect(submitButton).not.toBeDisabled());
+      await userEvent.click(submitButton);
+
+      await waitFor(() => expect(onSubmit).toHaveBeenCalledTimes(1));
+
+      const submitData = onSubmit.mock.calls[0][0];
+      expect(submitData.signerFields).toEqual([{ id: 'cb1', value: true }]);
+    });
+  });
+
   describe('viewOptions configuration', () => {
     it('passes viewOptions directly to SuperDoc when provided', async () => {
       renderComponent({

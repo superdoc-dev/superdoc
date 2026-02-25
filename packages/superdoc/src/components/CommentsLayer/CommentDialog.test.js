@@ -270,6 +270,170 @@ describe('CommentDialog.vue', () => {
     expect(superdocStub.activeEditor.commands.rejectTrackedChangeById).toHaveBeenCalledWith(baseComment.commentId);
   });
 
+  it('calls custom accept handler instead of default behavior when configured', async () => {
+    const customAcceptHandler = vi.fn();
+
+    const { wrapper, baseComment, superdocStub } = await mountDialog({
+      baseCommentOverrides: {
+        trackedChange: true,
+        trackedChangeType: 'trackInsert',
+        trackedChangeText: 'Added',
+      },
+    });
+
+    // Configure custom handler
+    superdocStub.config.onTrackedChangeBubbleAccept = customAcceptHandler;
+
+    const header = wrapper.findComponent(CommentHeaderStub);
+    header.vm.$emit('resolve');
+
+    // Custom handler should be called
+    expect(customAcceptHandler).toHaveBeenCalledWith(baseComment, superdocStub.activeEditor);
+
+    // Default behavior should NOT be called
+    expect(superdocStub.activeEditor.commands.acceptTrackedChangeById).not.toHaveBeenCalled();
+    expect(baseComment.resolveComment).not.toHaveBeenCalled();
+
+    // Cleanup should still happen
+    await nextTick();
+    expect(commentsStoreStub.activeComment.value).toBe(null);
+    expect(commentsStoreStub.setActiveComment).toHaveBeenCalledWith(superdocStub, null);
+  });
+
+  it('calls custom reject handler instead of default behavior when configured', async () => {
+    const customRejectHandler = vi.fn();
+
+    const { wrapper, baseComment, superdocStub } = await mountDialog({
+      baseCommentOverrides: {
+        trackedChange: true,
+        trackedChangeType: 'trackDelete',
+        deletedText: 'Removed',
+      },
+    });
+
+    // Configure custom handler
+    superdocStub.config.onTrackedChangeBubbleReject = customRejectHandler;
+
+    const header = wrapper.findComponent(CommentHeaderStub);
+    header.vm.$emit('reject');
+
+    // Custom handler should be called
+    expect(customRejectHandler).toHaveBeenCalledWith(baseComment, superdocStub.activeEditor);
+
+    // Default behavior should NOT be called
+    expect(superdocStub.activeEditor.commands.rejectTrackedChangeById).not.toHaveBeenCalled();
+    expect(baseComment.resolveComment).not.toHaveBeenCalled();
+
+    // Cleanup should still happen
+    await nextTick();
+    expect(commentsStoreStub.activeComment.value).toBe(null);
+    expect(commentsStoreStub.setActiveComment).toHaveBeenCalledWith(superdocStub, null);
+  });
+
+  it('uses default behavior when custom handler is not a function', async () => {
+    const { wrapper, baseComment, superdocStub } = await mountDialog({
+      baseCommentOverrides: {
+        trackedChange: true,
+        trackedChangeType: 'trackInsert',
+        trackedChangeText: 'Added',
+      },
+    });
+
+    // Set to non-function value
+    superdocStub.config.onTrackedChangeBubbleAccept = 'not-a-function';
+
+    const header = wrapper.findComponent(CommentHeaderStub);
+    header.vm.$emit('resolve');
+
+    // Default behavior should be called
+    expect(superdocStub.activeEditor.commands.acceptTrackedChangeById).toHaveBeenCalledWith(baseComment.commentId);
+    expect(baseComment.resolveComment).toHaveBeenCalled();
+  });
+
+  it('uses default behavior when no custom handler is configured', async () => {
+    const { wrapper, baseComment, superdocStub } = await mountDialog({
+      baseCommentOverrides: {
+        trackedChange: true,
+        trackedChangeType: 'trackInsert',
+        trackedChangeText: 'Added',
+      },
+    });
+
+    // Explicitly ensure no handlers are configured
+    expect(superdocStub.config.onTrackedChangeBubbleAccept).toBeUndefined();
+    expect(superdocStub.config.onTrackedChangeBubbleReject).toBeUndefined();
+
+    const header = wrapper.findComponent(CommentHeaderStub);
+
+    // Test accept
+    header.vm.$emit('resolve');
+    expect(superdocStub.activeEditor.commands.acceptTrackedChangeById).toHaveBeenCalledWith(baseComment.commentId);
+    expect(baseComment.resolveComment).toHaveBeenCalled();
+
+    // Test reject
+    header.vm.$emit('reject');
+    expect(superdocStub.activeEditor.commands.rejectTrackedChangeById).toHaveBeenCalledWith(baseComment.commentId);
+  });
+
+  it('still runs cleanup when custom handler does nothing (no-op)', async () => {
+    const noOpHandler = vi.fn(); // Does nothing, just records call
+
+    const { wrapper, baseComment, superdocStub } = await mountDialog({
+      baseCommentOverrides: {
+        trackedChange: true,
+        trackedChangeType: 'trackInsert',
+        trackedChangeText: 'Added',
+      },
+    });
+
+    superdocStub.config.onTrackedChangeBubbleAccept = noOpHandler;
+
+    const header = wrapper.findComponent(CommentHeaderStub);
+    header.vm.$emit('resolve');
+
+    // Handler was called
+    expect(noOpHandler).toHaveBeenCalledWith(baseComment, superdocStub.activeEditor);
+
+    // Default behavior should NOT run
+    expect(superdocStub.activeEditor.commands.acceptTrackedChangeById).not.toHaveBeenCalled();
+    expect(baseComment.resolveComment).not.toHaveBeenCalled();
+
+    // Cleanup should still happen (dialog closes even though handler did nothing)
+    await nextTick();
+    expect(commentsStoreStub.activeComment.value).toBe(null);
+    expect(commentsStoreStub.setActiveComment).toHaveBeenCalledWith(superdocStub, null);
+  });
+
+  it('does not call custom handler for non-tracked-change comments', async () => {
+    const customAcceptHandler = vi.fn();
+    const customRejectHandler = vi.fn();
+
+    const { wrapper, baseComment, superdocStub } = await mountDialog({
+      baseCommentOverrides: {
+        trackedChange: false, // Regular comment, not a tracked change
+        commentText: '<p>Regular comment</p>',
+      },
+    });
+
+    superdocStub.config.onTrackedChangeBubbleAccept = customAcceptHandler;
+    superdocStub.config.onTrackedChangeBubbleReject = customRejectHandler;
+
+    const header = wrapper.findComponent(CommentHeaderStub);
+
+    // Resolve on regular comment should use default behavior (resolveComment)
+    header.vm.$emit('resolve');
+    expect(customAcceptHandler).not.toHaveBeenCalled();
+    expect(baseComment.resolveComment).toHaveBeenCalled();
+
+    // Reject on regular comment should delete the comment
+    header.vm.$emit('reject');
+    expect(customRejectHandler).not.toHaveBeenCalled();
+    expect(commentsStoreStub.deleteComment).toHaveBeenCalledWith({
+      superdoc: superdocStub,
+      commentId: baseComment.commentId,
+    });
+  });
+
   it('supports editing threaded comments and toggling internal state', async () => {
     const childComment = reactive({
       uid: 'uid-2',

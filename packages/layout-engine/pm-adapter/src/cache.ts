@@ -65,6 +65,7 @@ export class FlowBlockCache {
   #next = new Map<string, CachedParagraphEntry>();
   #hits = 0;
   #misses = 0;
+  #hasExternalChanges = false;
 
   /**
    * Begin a new render cycle. Clears the "next" map and resets stats.
@@ -76,8 +77,29 @@ export class FlowBlockCache {
   }
 
   /**
+   * Signal that external changes (e.g. Y.js collaboration) may have modified
+   * document content without updating sdBlockRev. When set, the fast revision
+   * comparison falls through to a JSON equality check to prevent false cache hits.
+   *
+   * The flag is automatically cleared after {@link commit}.
+   */
+  setHasExternalChanges(value: boolean): void {
+    this.#hasExternalChanges = value;
+  }
+
+  /**
    * Look up cached blocks for a paragraph by its stable ID.
-   * Returns the cached entry only if the node content matches (via JSON comparison).
+   * Returns the cached entry only if the node content matches.
+   *
+   * Uses a dual comparison strategy:
+   * 1. Fast path: compare sdBlockRev numbers (O(1)). A different rev is a
+   *    definitive miss. A matching rev is a hit **only** when we trust that
+   *    sdBlockRev is always incremented for content changes (i.e. no external
+   *    changes pending).
+   * 2. JSON path: full node serialization + string comparison. Used as a
+   *    safety net when external changes may have bypassed the revision counter
+   *    (e.g. Y.js-origin collaboration transactions) or when revision info is
+   *    unavailable.
    *
    * Always returns the serialized nodeJson to avoid double serialization -
    * pass this to set() instead of the node object.
@@ -92,24 +114,28 @@ export class FlowBlockCache {
     const cached = this.#previous.get(id);
     if (!cached) {
       this.#misses++;
-      if (nodeRev != null) {
-        return { entry: null, nodeRev };
-      }
-      // Serialize once - this is reused in set() to avoid double serialization
       const nodeJson = JSON.stringify(node);
-      return { entry: null, nodeJson };
+      return { entry: null, nodeJson, nodeRev };
     }
 
     if (nodeRev != null && cached.nodeRev != null) {
+      // Fast rejection: different revision is always a miss
       if (cached.nodeRev !== nodeRev) {
         this.#misses++;
         return { entry: null, nodeRev };
       }
-      this.#hits++;
-      return { entry: cached, nodeRev };
+
+      // Fast acceptance: safe only when all changes go through blockNodePlugin
+      // (which always increments sdBlockRev for local edits). When external
+      // changes are pending (e.g. Y.js collaboration), sdBlockRev may not have
+      // been updated despite content changes — fall through to JSON comparison.
+      if (!this.#hasExternalChanges) {
+        this.#hits++;
+        return { entry: cached, nodeRev, nodeJson: cached.nodeJson };
+      }
     }
 
-    // Fallback to JSON comparison when revision is unavailable
+    // JSON comparison: always correct, handles external changes and missing revisions
     const nodeJson = JSON.stringify(node);
     if (cached.nodeJson !== nodeJson) {
       this.#misses++;
@@ -141,10 +167,12 @@ export class FlowBlockCache {
   /**
    * Commit the current render cycle.
    * Swaps "next" to "previous", so only blocks seen in this render are retained.
+   * Clears the external-changes flag since the render cycle consumed it.
    */
   commit(): void {
     this.#previous = this.#next;
     this.#next = new Map();
+    this.#hasExternalChanges = false;
   }
 
   /**

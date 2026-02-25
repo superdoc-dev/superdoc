@@ -117,6 +117,28 @@ describe('Editor - API Contracts (Regression Prevention)', () => {
       });
     });
 
+    it('docx markdown initialization forwards unsupported-content callback', () => {
+      const onUnsupportedContent = vi.fn();
+
+      ({ editor } = initTestEditor({
+        mode: 'docx',
+        content: '<p>Fallback content</p>',
+        markdown: '<video src="demo.mp4"></video>',
+        onUnsupportedContent,
+        useImmediateSetTimeout: false,
+      }));
+
+      return new Promise((resolve) => {
+        setTimeout(() => {
+          expect(onUnsupportedContent).toHaveBeenCalledTimes(1);
+          expect(onUnsupportedContent.mock.calls[0][0]).toEqual([
+            expect.objectContaining({ tagName: 'VIDEO', count: 1 }),
+          ]);
+          resolve();
+        }, 10);
+      });
+    });
+
     it('html option should initialize with editor instance', () => {
       let initCompleted = false;
 
@@ -173,6 +195,18 @@ describe('Editor - API Contracts (Regression Prevention)', () => {
       // This is tested by the method existing and not throwing
       expect(editor.replaceNodeWithHTML).toBeDefined();
       expect(typeof editor.replaceNodeWithHTML).toBe('function');
+    });
+
+    it('editor.doc getter exposes DocumentApi with find and capabilities', () => {
+      ({ editor } = initTestEditor({
+        mode: 'text',
+        content: '<p>Test</p>',
+      }));
+
+      const doc = editor.doc;
+      expect(doc).toBeDefined();
+      expect(typeof doc.find).toBe('function');
+      expect(typeof doc.capabilities).toBe('function');
     });
   });
 });

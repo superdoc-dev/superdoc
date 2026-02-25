@@ -2,6 +2,7 @@ import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { TextSelection } from 'prosemirror-state';
 import { initTestEditor, loadTestDataForEditorTests } from '../../tests/helpers/helpers.js';
 import { calculateResolvedParagraphProperties } from './resolvedPropertiesCache.js';
+import { hasOnlyBreakContent } from './paragraph.js';
 
 describe('Paragraph Node', () => {
   let docx, media, mediaFiles, fonts, editor;
@@ -123,5 +124,166 @@ describe('Paragraph Node', () => {
     editor.view.dom.dispatchEvent(beforeInputEvent);
 
     expect(editor.state.doc.textContent).toBe('t');
+  });
+
+  describe('hasOnlyBreakContent', () => {
+    it('returns true for a list paragraph containing only a lineBreak', () => {
+      let paragraphPos = null;
+      editor.state.doc.descendants((node, pos) => {
+        if (node.type.name === 'paragraph' && paragraphPos == null) {
+          paragraphPos = pos;
+          return false;
+        }
+        return true;
+      });
+
+      const lineBreakNode = editor.schema.nodes.lineBreak.create();
+      const tr = editor.state.tr.insert(paragraphPos + 1, lineBreakNode);
+      editor.view.dispatch(tr);
+
+      const paragraph = editor.state.doc.nodeAt(paragraphPos);
+      expect(hasOnlyBreakContent(paragraph)).toBe(true);
+    });
+
+    it('returns false for a paragraph with visible text', () => {
+      editor.commands.insertContent('visible text');
+      const paragraph = editor.state.doc.content.content[0];
+      expect(hasOnlyBreakContent(paragraph)).toBe(false);
+    });
+
+    it('returns false for an empty paragraph with no content at all', () => {
+      const paragraph = editor.state.doc.content.content[0];
+      expect(hasOnlyBreakContent(paragraph)).toBe(false);
+    });
+
+    it('returns false for null or non-paragraph nodes', () => {
+      expect(hasOnlyBreakContent(null)).toBe(false);
+      expect(hasOnlyBreakContent(undefined)).toBe(false);
+
+      const runNode = editor.schema.nodes.run.create();
+      expect(hasOnlyBreakContent(runNode)).toBe(false);
+    });
+  });
+
+  it('handles beforeinput in a list paragraph with only a lineBreak (SD-1707)', () => {
+    let paragraphPos = null;
+    let paragraphNode = null;
+    editor.state.doc.descendants((node, pos) => {
+      if (node.type.name === 'paragraph' && paragraphPos == null) {
+        paragraphPos = pos;
+        paragraphNode = node;
+        return false;
+      }
+      return true;
+    });
+
+    const numberingProperties = { numId: 1, ilvl: 0 };
+    const listRendering = {
+      markerText: '1.',
+      suffix: 'tab',
+      justification: 'left',
+      path: [1],
+      numberingType: 'decimal',
+    };
+
+    // Make the paragraph a list item
+    let tr = editor.state.tr.setNodeMarkup(paragraphPos, null, {
+      ...paragraphNode.attrs,
+      paragraphProperties: {
+        ...(paragraphNode.attrs.paragraphProperties || {}),
+        numberingProperties,
+      },
+      numberingProperties,
+      listRendering,
+    });
+    editor.view.dispatch(tr);
+
+    // Insert a lineBreak so the paragraph has only break content
+    const lineBreakNode = editor.schema.nodes.lineBreak.create();
+    tr = editor.state.tr.insert(paragraphPos + 1, lineBreakNode);
+    editor.view.dispatch(tr);
+
+    const updatedParagraph = editor.state.doc.nodeAt(paragraphPos);
+    calculateResolvedParagraphProperties(editor, updatedParagraph, editor.state.doc.resolve(paragraphPos));
+
+    // Place cursor inside the paragraph
+    tr = editor.state.tr.setSelection(TextSelection.create(editor.state.doc, paragraphPos + 1));
+    editor.view.dispatch(tr);
+
+    const beforeInputEvent = new InputEvent('beforeinput', {
+      data: 'a',
+      inputType: 'insertText',
+      bubbles: true,
+      cancelable: true,
+    });
+    editor.view.dom.dispatchEvent(beforeInputEvent);
+
+    expect(editor.state.doc.textContent).toBe('a');
+  });
+
+  it('does NOT intercept beforeinput for a list paragraph with visible text', () => {
+    let paragraphPos = null;
+    let paragraphNode = null;
+    editor.state.doc.descendants((node, pos) => {
+      if (node.type.name === 'paragraph' && paragraphPos == null) {
+        paragraphPos = pos;
+        paragraphNode = node;
+        return false;
+      }
+      return true;
+    });
+
+    const numberingProperties = { numId: 1, ilvl: 0 };
+    const listRendering = {
+      markerText: '1.',
+      suffix: 'tab',
+      justification: 'left',
+      path: [1],
+      numberingType: 'decimal',
+    };
+
+    // Insert text first, then make it a list item
+    editor.commands.insertContent('hello');
+
+    paragraphPos = null;
+    paragraphNode = null;
+    editor.state.doc.descendants((node, pos) => {
+      if (node.type.name === 'paragraph' && paragraphPos == null) {
+        paragraphPos = pos;
+        paragraphNode = node;
+        return false;
+      }
+      return true;
+    });
+
+    let tr = editor.state.tr.setNodeMarkup(paragraphPos, null, {
+      ...paragraphNode.attrs,
+      paragraphProperties: {
+        ...(paragraphNode.attrs.paragraphProperties || {}),
+        numberingProperties,
+      },
+      numberingProperties,
+      listRendering,
+    });
+    editor.view.dispatch(tr);
+
+    const updatedParagraph = editor.state.doc.nodeAt(paragraphPos);
+    calculateResolvedParagraphProperties(editor, updatedParagraph, editor.state.doc.resolve(paragraphPos));
+
+    // Place cursor at the end of the text
+    const endPos = paragraphPos + updatedParagraph.nodeSize - 1;
+    tr = editor.state.tr.setSelection(TextSelection.create(editor.state.doc, endPos));
+    editor.view.dispatch(tr);
+
+    const beforeInputEvent = new InputEvent('beforeinput', {
+      data: 'x',
+      inputType: 'insertText',
+      bubbles: true,
+      cancelable: true,
+    });
+
+    // The handler should NOT intercept because the paragraph has visible text
+    const prevented = !editor.view.dom.dispatchEvent(beforeInputEvent);
+    expect(prevented).toBe(false);
   });
 });

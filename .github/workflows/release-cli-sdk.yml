@@ -1,0 +1,251 @@
+# Automatic release orchestrator for CLI + SDK.
+#
+# Runs CLI release first, then SDK release sequentially to prevent race
+# conditions on tags/commits. Both jobs rely on semantic-release to determine
+# whether a release is needed. On a no-op (no releasable commits),
+# semantic-release exits early — the initial TS/Vite build still runs, but
+# the expensive native cross-compilation and publish steps are skipped
+# (they live inside semantic-release's exec prepare/publish lifecycle).
+#
+# push.paths is a workflow-level filter: if ANY path matches, ALL jobs run.
+# Per-job conditioning relies on semantic-release itself no-oping.
+name: "\U0001F680 Release CLI + SDK"
+
+on:
+  push:
+    branches:
+      - main
+      - stable
+    paths:
+      - 'apps/cli/**'
+      - 'packages/sdk/**'
+      - 'packages/document-api/**'
+      - 'packages/superdoc/**'
+      - 'packages/super-editor/**'
+      - 'packages/layout-engine/**'
+      - 'packages/ai/**'
+      - 'packages/word-layout/**'
+      - 'packages/preset-geometry/**'
+      - '!**/*.md'
+  workflow_dispatch:
+
+permissions:
+  contents: write
+  packages: write
+  id-token: write # PyPI trusted publishing (OIDC)
+
+concurrency:
+  group: release-${{ github.ref }}
+  cancel-in-progress: false
+
+jobs:
+  # ===================================================================
+  # Job 1: CLI Release
+  # ===================================================================
+  release-cli:
+    name: Release CLI
+    runs-on: ubuntu-24.04
+    steps:
+      - name: Generate token
+        id: generate_token
+        uses: actions/create-github-app-token@v2
+        with:
+          app-id: ${{ secrets.APP_ID }}
+          private-key: ${{ secrets.APP_PRIVATE_KEY }}
+
+      - uses: actions/checkout@v6
+        with:
+          fetch-depth: 0
+          token: ${{ steps.generate_token.outputs.token }}
+
+      - uses: pnpm/action-setup@v4
+
+      - uses: actions/setup-node@v6
+        with:
+          node-version-file: .nvmrc
+          cache: pnpm
+          registry-url: 'https://registry.npmjs.org'
+
+      - uses: oven-sh/setup-bun@v2
+
+      - name: Cache apt packages
+        uses: actions/cache@v5
+        with:
+          path: ~/apt-cache
+          key: apt-canvas-${{ runner.os }}-v1
+
+      - name: Install canvas system dependencies
+        run: |
+          mkdir -p ~/apt-cache
+          sudo apt-get update
+          sudo apt-get install -y -o Dir::Cache::Archives="$HOME/apt-cache" \
+            build-essential \
+            libcairo2-dev \
+            libpango1.0-dev \
+            libjpeg-dev \
+            libgif-dev \
+            librsvg2-dev \
+            libpixman-1-dev
+
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+
+      - name: Build packages
+        run: pnpm run build
+
+      - name: Release CLI
+        env:
+          GITHUB_TOKEN: ${{ steps.generate_token.outputs.token }}
+          NPM_TOKEN: ${{ secrets.NPM_TOKEN }}
+          NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
+          LINEAR_TOKEN: ${{ secrets.LINEAR_TOKEN }}
+        working-directory: apps/cli
+        run: pnpx semantic-release
+
+  # ===================================================================
+  # Job 2: SDK Release (runs after CLI, even if CLI was a no-op)
+  # ===================================================================
+  release-sdk:
+    name: Release SDK
+    needs: release-cli
+    if: ${{ always() && !failure() }}
+    runs-on: ubuntu-24.04
+    environment: pypi
+    steps:
+      - name: Generate token
+        id: generate_token
+        uses: actions/create-github-app-token@v2
+        with:
+          app-id: ${{ secrets.APP_ID }}
+          private-key: ${{ secrets.APP_PRIVATE_KEY }}
+
+      - uses: actions/checkout@v6
+        with:
+          fetch-depth: 0
+          token: ${{ steps.generate_token.outputs.token }}
+
+      # On stable, CLI job may have pushed a version-bump commit.
+      # Pull latest to avoid building stale code.
+      - name: Pull latest (stable branch)
+        if: github.ref_name == 'stable'
+        run: git pull origin stable
+
+      - uses: pnpm/action-setup@v4
+
+      - uses: actions/setup-node@v6
+        with:
+          node-version-file: .nvmrc
+          cache: pnpm
+          registry-url: 'https://registry.npmjs.org'
+
+      - uses: oven-sh/setup-bun@v2
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+
+      - name: Cache apt packages
+        uses: actions/cache@v5
+        with:
+          path: ~/apt-cache
+          key: apt-canvas-${{ runner.os }}-v1
+
+      - name: Install canvas system dependencies
+        run: |
+          mkdir -p ~/apt-cache
+          sudo apt-get update
+          sudo apt-get install -y -o Dir::Cache::Archives="$HOME/apt-cache" \
+            build-essential \
+            libcairo2-dev \
+            libpango1.0-dev \
+            libjpeg-dev \
+            libgif-dev \
+            librsvg2-dev \
+            libpixman-1-dev
+
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+
+      - name: Install Python build tools
+        run: pip install build
+
+      - name: Build packages
+        run: pnpm run build
+
+      # ---------------------------------------------------------------
+      # Semantic-release determines version + runs npm publish via exec
+      # ---------------------------------------------------------------
+      - name: Release SDK (semantic-release)
+        id: sdk_release
+        env:
+          GITHUB_TOKEN: ${{ steps.generate_token.outputs.token }}
+          NPM_TOKEN: ${{ secrets.NPM_TOKEN }}
+          NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
+          LINEAR_TOKEN: ${{ secrets.LINEAR_TOKEN }}
+        working-directory: packages/sdk
+        run: |
+          # Snapshot existing sdk-v* tags before semantic-release runs
+          TAGS_BEFORE=$(git tag -l 'sdk-v*' | sort)
+          pnpx semantic-release
+          # Compare tags after — a new tag means a release happened
+          TAGS_AFTER=$(git tag -l 'sdk-v*' | sort)
+          if [ "$TAGS_BEFORE" != "$TAGS_AFTER" ]; then
+            echo "released=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "released=false" >> "$GITHUB_OUTPUT"
+          fi
+
+      # ---------------------------------------------------------------
+      # Python SDK publish (only if semantic-release created a release)
+      # PyPI uses OIDC trusted publishing via gh-action-pypi-publish.
+      # ---------------------------------------------------------------
+      - name: Prepare Python SDK tools
+        if: steps.sdk_release.outputs.released == 'true'
+        run: |
+          rm -rf packages/sdk/langs/python/superdoc/tools
+          cp -r packages/sdk/tools packages/sdk/langs/python/superdoc/tools
+          rm -f packages/sdk/langs/python/superdoc/tools/__init__.py
+
+      - name: Build companion Python wheels
+        if: steps.sdk_release.outputs.released == 'true'
+        run: node packages/sdk/scripts/build-python-companion-wheels.mjs
+
+      - name: Verify companion wheels
+        if: steps.sdk_release.outputs.released == 'true'
+        run: node packages/sdk/scripts/verify-python-companion-wheels.mjs --companions-only
+
+      - name: Build main Python SDK wheel
+        if: steps.sdk_release.outputs.released == 'true'
+        run: python -m build
+        working-directory: packages/sdk/langs/python
+
+      - name: Verify main wheel
+        if: steps.sdk_release.outputs.released == 'true'
+        run: node packages/sdk/scripts/verify-python-companion-wheels.mjs --root-only
+
+      - name: Smoke test (wheelhouse install + marker resolution)
+        if: steps.sdk_release.outputs.released == 'true'
+        run: |
+          python3 -m venv /tmp/sdk-smoke
+          mkdir -p /tmp/sdk-wheelhouse
+          cp packages/sdk/langs/python/dist/*.whl /tmp/sdk-wheelhouse/
+          cp packages/sdk/langs/python/companion-dist/*.whl /tmp/sdk-wheelhouse/
+          /tmp/sdk-smoke/bin/pip install superdoc-sdk --find-links /tmp/sdk-wheelhouse --no-index
+          /tmp/sdk-smoke/bin/python -c "from superdoc import SuperDocClient; SuperDocClient()"
+          /tmp/sdk-smoke/bin/python -c "from superdoc.embedded_cli import resolve_embedded_cli_path; import subprocess; p = resolve_embedded_cli_path(); r = subprocess.run([p, '--help'], capture_output=True, text=True, timeout=10); assert r.returncode == 0, f'CLI exited {r.returncode}: {r.stderr}'; print(f'CLI binary OK: {p}')"
+          echo "Smoke test passed."
+          rm -rf /tmp/sdk-smoke /tmp/sdk-wheelhouse
+
+      - name: Publish companion Python packages to PyPI
+        if: steps.sdk_release.outputs.released == 'true'
+        uses: pypa/gh-action-pypi-publish@release/v1
+        with:
+          packages-dir: packages/sdk/langs/python/companion-dist/
+          skip-existing: true
+
+      - name: Publish main Python SDK to PyPI
+        if: steps.sdk_release.outputs.released == 'true'
+        uses: pypa/gh-action-pypi-publish@release/v1
+        with:
+          packages-dir: packages/sdk/langs/python/dist/
+          skip-existing: true

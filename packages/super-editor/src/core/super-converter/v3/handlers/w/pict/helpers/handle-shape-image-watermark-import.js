@@ -1,3 +1,5 @@
+import { carbonCopy } from '@core/utilities/carbonCopy.js';
+
 /**
  * Handles VML shape elements with v:imagedata (image watermarks).
  *
@@ -75,10 +77,14 @@ export function handleShapeImageWatermarkImport({ params, pict }) {
   const blacklevel = imagedataAttrs['blacklevel'];
   const title = imagedataAttrs['o:title'] || 'Watermark';
 
+  // Pass through any extra children of the pict element
+  const passthroughElements = pict.elements.filter((el) => el !== shape);
+
   // Build the image node
   const imageNode = {
     type: 'image',
     attrs: {
+      isPict: true,
       src: normalizedPath,
       alt: title,
       extension: normalizedPath.substring(normalizedPath.lastIndexOf('.') + 1),
@@ -118,6 +124,12 @@ export function handleShapeImageWatermarkImport({ params, pict }) {
       ...(blacklevel && { blacklevel }),
     },
   };
+
+  // Store passthrough siblings as an attribute (not content) because image is
+  // a leaf node — PM would silently drop any content children.
+  if (passthroughElements.length > 0) {
+    imageNode.attrs.passthroughSiblings = passthroughElements.map((node) => carbonCopy(node));
+  }
 
   return imageNode;
 }

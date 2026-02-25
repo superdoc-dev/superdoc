@@ -1,0 +1,19 @@
+{
+  "name": "@superdoc-dev/sdk-linux-x64",
+  "version": "1.0.0-alpha.6",
+  "os": [
+    "linux"
+  ],
+  "cpu": [
+    "x64"
+  ],
+  "bin": {
+    "superdoc": "bin/superdoc"
+  },
+  "files": [
+    "bin"
+  ],
+  "publishConfig": {
+    "access": "public"
+  }
+}

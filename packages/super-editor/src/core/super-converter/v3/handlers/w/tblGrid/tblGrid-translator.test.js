@@ -322,6 +322,28 @@ describe('w:tblGrid translator', () => {
       expect(widths).toEqual(['2000', '4000']);
     });
 
+    it('derives grid widths from tableHeader cells in header-only first row', () => {
+      const params = {
+        node: {
+          attrs: {},
+        },
+        extraParams: {
+          firstRow: {
+            content: [
+              { type: 'tableHeader', attrs: { colspan: 1, colwidth: [80] } },
+              { type: 'tableHeader', attrs: { colspan: 1, colwidth: [120] } },
+            ],
+          },
+        },
+      };
+
+      const result = translator.decode(params);
+      expect(result.name).toBe('w:tblGrid');
+      const widths = result.elements.map((el) => el.attributes['w:w']);
+      // 80 * 20 = 1600, 120 * 20 = 2400 (via mocked pixelsToTwips)
+      expect(widths).toEqual(['1600', '2400']);
+    });
+
     it('preserves narrow grid columns for placeholder cells without inflating width', () => {
       const params = {
         node: {

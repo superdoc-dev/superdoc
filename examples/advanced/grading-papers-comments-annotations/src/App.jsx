@@ -1,12 +1,14 @@
-import '@harbour-enterprises/superdoc/style.css';
+import 'superdoc/style.css';
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import Header from './components/Header.jsx';
 import AssignmentHeader from './components/AssignmentHeader.jsx';
 import Drawer from './components/Drawer.jsx';
-import { SuperDoc } from '@harbour-enterprises/superdoc';
+import { SuperDoc } from 'superdoc';
 import NickPDF from '/nick.pdf?url';
 import * as pdfjsLib from 'pdfjs-dist/build/pdf.mjs';
-import * as pdfjsViewer from 'pdfjs-dist/web/pdf_viewer.mjs';
+
+// Set worker globally outside SD.
+pdfjsLib.GlobalWorkerOptions.workerSrc = new URL('pdfjs-dist/build/pdf.worker.min.mjs', import.meta.url,).toString();
 
 const defaultWhiteboardOpacity = 1;
 const disabledWhiteboardOpacity = 0.5;
@@ -16,7 +18,7 @@ const App = () => {
   const docFileRef = useRef(null);
 
   // UI state only (do not store SuperDoc instance in state).
-  const [whiteboardReady, setWhiteboardReady] = useState(false);
+  const [whiteboardInitialized, setWhiteboardInit] = useState(false);
   const [whiteboardEnabled, setWhiteboardEnabled] = useState(true);
   const [activeTool, setActiveTool] = useState('select');
 
@@ -51,15 +53,15 @@ const App = () => {
     const superdoc = superdocRef.current;
     if (!superdoc) return;
     superdoc.on('whiteboard:change', (data) => {
-      console.log('whiteboard:change', { data });
+      console.log('whiteboard:change', data);
     });
     superdoc.on('whiteboard:tool', (tool) => {
       setActiveTool(tool);
     });
   }, []);
 
-  const onWhiteboardReady = useCallback((whiteboard) => {
-    setWhiteboardReady(true);
+  const onWhiteboardInit = useCallback((whiteboard) => {
+    setWhiteboardInit(true);
     setActiveTool(whiteboard?.getTool?.() ?? 'select');
     registerStickers();
     registerComments();
@@ -75,7 +77,7 @@ const App = () => {
 
     const superdocInstance = new SuperDoc({
       selector: '#superdoc',
-      document: { data: docFileRef.current },
+      document: docFileRef.current,
       toolbar: 'superdoc-toolbar',
       licenseKey: 'public_license_key_superdocinternal_ad7035140c4b',
       telemetry: { enabled: false },
@@ -87,15 +89,16 @@ const App = () => {
           excludeItems: [
             'acceptTrackedChangeBySelection',
             'rejectTrackedChangeOnSelection',
-            'zoom',
+            // 'zoom',
             'documentMode',
           ],
         },
         pdf: {
           pdfLib: pdfjsLib,
-          pdfViewer: pdfjsViewer,
-          setWorker: true,
-          textLayerMode: 0,
+          setWorker: false,
+          // workerSrc: '',
+          textLayer: true,
+          // outputScale: 1.5,
         },
         whiteboard: {
           enabled: whiteboardEnabled,
@@ -113,10 +116,10 @@ const App = () => {
     superdocRef.current = superdocInstance;
     window.superdoc = superdocInstance;
 
-    superdocInstance.on('whiteboard:ready', ({ whiteboard }) => {
-      onWhiteboardReady(whiteboard);
+    superdocInstance.on('whiteboard:init', ({ whiteboard }) => {
+      onWhiteboardInit(whiteboard);
     });
-  }, [onWhiteboardReady]);
+  }, [onWhiteboardInit]);
 
   // Load selected file and boot SuperDoc.
   const handleNewFile = useCallback(async (fileName) => {
@@ -163,7 +166,7 @@ const App = () => {
   const exportWhiteboard = useCallback(() => {
     const data = superdocRef.current?.whiteboard?.getWhiteboardData();
     if (!data) return;
-    console.log('[Whiteboard] export', { data });
+    console.log('[Whiteboard] export', data);
     console.log('[Whiteboard] export json:', JSON.stringify(data, null, 2));
   }, []);
 
@@ -202,7 +205,7 @@ const App = () => {
               <div className="document-viewer">
                 <div className="viewer-header">
                   <h3>Document Viewer</h3>
-                  {whiteboardReady && (
+                  {whiteboardInitialized && (
                     <div className="whiteboard-toolbar">
                       <div className="whiteboard-tools">
                         {toolButtons.map((tool) => (

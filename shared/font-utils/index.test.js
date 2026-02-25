@@ -379,4 +379,18 @@ describe('toCssFontFamily', () => {
       expect(toCssFontFamily('Times New Roman', { fallback: 'times new roman, serif' })).toBe('times new roman, serif');
     });
   });
+
+  describe('semicolon handling', () => {
+    it('should convert semicolons to commas and append fallback', () => {
+      expect(toCssFontFamily('Liberation Sans;Arial')).toBe('Liberation Sans, Arial, sans-serif');
+    });
+
+    it('should use wordFamily fallback with semicolon input', () => {
+      expect(toCssFontFamily('Foo;Bar', { wordFamily: 'swiss' })).toBe('Foo, Bar, Arial, sans-serif');
+    });
+
+    it('should preserve semicolons inside quoted font names', () => {
+      expect(toCssFontFamily('"Foo;Bar";Arial')).toBe('"Foo;Bar", Arial, sans-serif');
+    });
+  });
 });

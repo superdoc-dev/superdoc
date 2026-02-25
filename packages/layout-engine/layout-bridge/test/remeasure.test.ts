@@ -901,6 +901,22 @@ describe('remeasureParagraph', () => {
       expect(measure.lines[1].maxWidth).toBe(90);
     });
 
+    it('prefers shared resolved text start over top-level textStartPx when both exist', () => {
+      const block = createBlock([textRun('A'.repeat(60))], {
+        indent: { left: 10 },
+        wordLayout: {
+          firstLineIndentMode: true,
+          textStartPx: 80,
+          marker: { textStartX: 50 },
+        },
+      });
+      const measure = remeasureParagraph(block, 100);
+
+      expect(measure.lines.length).toBeGreaterThan(1);
+      expect(measure.lines[0].maxWidth).toBe(50);
+      expect(measure.lines[1].maxWidth).toBe(90);
+    });
+
     it('handles hanging indent with left indent for list formatting', () => {
       // Common list pattern: left indent with hanging indent
       const block = createBlock([textRun('A'.repeat(30))], {

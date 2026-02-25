@@ -339,6 +339,32 @@ superdoc.on('locked', ({ isLocked, lockedBy }) => {
 
 ## UI events
 
+### `zoomChange`
+
+When the zoom level changes via `setZoom()`.
+
+<CodeGroup>
+```javascript Usage
+superdoc.on('zoomChange', ({ zoom }) => {
+  console.log(`Zoom: ${zoom}%`);
+});
+```
+
+```javascript Full Example
+import { SuperDoc } from 'superdoc';
+import 'superdoc/style.css';
+
+const superdoc = new SuperDoc({
+  selector: '#editor',
+  document: yourFile,
+});
+
+superdoc.on('zoomChange', ({ zoom }) => {
+  console.log(`Zoom: ${zoom}%`);
+});
+```
+</CodeGroup>
+
 ### `sidebar-toggle`
 
 When the comments sidebar is toggled.

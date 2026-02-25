@@ -1,4 +1,4 @@
-# Generates visual + interaction baselines for released SuperDoc versions
+# Generates visual baselines for released SuperDoc versions
 # Triggered manually via workflow_dispatch
 name: 📸 Baseline superdoc
 
@@ -213,7 +213,6 @@ jobs:
 
           ### R2 Paths
           - Visual: \`baselines/v.$VERSION/<browser>/\`
-          - Interactions: \`baselines-interactions/v.$VERSION/<browser>/\`
           EOF
 
       - name: Summary (skipped)

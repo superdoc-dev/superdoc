@@ -639,6 +639,90 @@ describe('createDocumentApi', () => {
     expect(trackAdpt.rejectAll).toHaveBeenCalledWith({}, undefined);
   });
 
+  describe('trackChanges.decide input validation', () => {
+    function makeApi() {
+      return createDocumentApi({
+        find: makeFindAdapter(QUERY_RESULT),
+        getNode: makeGetNodeAdapter(PARAGRAPH_INFO),
+        getText: makeGetTextAdapter(),
+        info: makeInfoAdapter(),
+        comments: makeCommentsAdapter(),
+        write: makeWriteAdapter(),
+        format: makeFormatAdapter(),
+        trackChanges: makeTrackChangesAdapter(),
+        create: makeCreateAdapter(),
+        lists: makeListsAdapter(),
+      });
+    }
+
+    function expectError(fn: () => void, code: string, messageMatch: string) {
+      try {
+        fn();
+        expect.fail('Expected DocumentApiValidationError to be thrown');
+      } catch (err: unknown) {
+        const e = err as { name: string; code: string; message: string };
+        expect(e.name).toBe('DocumentApiValidationError');
+        expect(e.code).toBe(code);
+        expect(e.message).toContain(messageMatch);
+      }
+    }
+
+    it('rejects null input', () => {
+      const api = makeApi();
+      expectError(() => api.trackChanges.decide(null as any), 'INVALID_INPUT', 'non-null object');
+    });
+
+    it('rejects primitive input', () => {
+      const api = makeApi();
+      expectError(() => api.trackChanges.decide('accept' as any), 'INVALID_INPUT', 'non-null object');
+    });
+
+    it('rejects invalid decision value', () => {
+      const api = makeApi();
+      expectError(
+        () => api.trackChanges.decide({ decision: 'maybe', target: { id: 'tc-1' } } as any),
+        'INVALID_INPUT',
+        '"accept" or "reject"',
+      );
+    });
+
+    it('rejects non-object target', () => {
+      const api = makeApi();
+      expectError(
+        () => api.trackChanges.decide({ decision: 'accept', target: 'tc-1' } as any),
+        'INVALID_TARGET',
+        '{ id: string } or { scope: "all" }',
+      );
+    });
+
+    it('rejects null target', () => {
+      const api = makeApi();
+      expectError(
+        () => api.trackChanges.decide({ decision: 'accept', target: null } as any),
+        'INVALID_TARGET',
+        '{ id: string } or { scope: "all" }',
+      );
+    });
+
+    it('rejects object target without id or scope', () => {
+      const api = makeApi();
+      expectError(
+        () => api.trackChanges.decide({ decision: 'accept', target: { foo: 'bar' } } as any),
+        'INVALID_TARGET',
+        '{ id: string } or { scope: "all" }',
+      );
+    });
+
+    it('rejects target with empty id', () => {
+      const api = makeApi();
+      expectError(
+        () => api.trackChanges.decide({ decision: 'accept', target: { id: '' } } as any),
+        'INVALID_TARGET',
+        '{ id: string } or { scope: "all" }',
+      );
+    });
+  });
+
   it('delegates create.paragraph to the create adapter', () => {
     const createAdpt = makeCreateAdapter();
     const api = createDocumentApi({
@@ -1416,6 +1500,11 @@ describe('createDocumentApi', () => {
       );
     });
 
+    it('rejects root comment without target', () => {
+      const api = makeApi();
+      expectValidationError(() => api.comments.create({ text: 'comment' }), 'requires a target for root comments');
+    });
+
     it('rejects malformed target', () => {
       const api = makeApi();
       expectValidationError(
@@ -1555,7 +1644,7 @@ describe('createDocumentApi', () => {
       );
     });
 
-    it('rejects invalid locator before applying text edit', () => {
+    it('rejects multiple mutation fields in a single patch call', () => {
       const commentsAdpt = makeCommentsAdapter();
       const api = createDocumentApi({
         find: makeFindAdapter(QUERY_RESULT),
@@ -1571,10 +1660,15 @@ describe('createDocumentApi', () => {
         lists: makeListsAdapter(),
       });
 
-      expectValidationError(
-        () => api.comments.patch({ commentId: 'c1', text: 'new text', target: { kind: 'text', blockId: 'p1' } } as any),
-        'target must be a text address object',
-      );
+      try {
+        api.comments.patch({ commentId: 'c1', text: 'new text', target: { kind: 'text', blockId: 'p1' } } as any);
+        expect.fail('Expected DocumentApiValidationError to be thrown');
+      } catch (err: unknown) {
+        const e = err as { name: string; code: string; message: string };
+        expect(e.name).toBe('DocumentApiValidationError');
+        expect(e.code).toBe('INVALID_INPUT');
+        expect(e.message).toContain('exactly one mutation field per call');
+      }
       expect(commentsAdpt.edit).not.toHaveBeenCalled();
     });
 

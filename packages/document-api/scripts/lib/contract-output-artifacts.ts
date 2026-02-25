@@ -182,7 +182,7 @@ export function buildAgentArtifacts(): GeneratedFile[] {
       {
         id: 'comment-thread-lifecycle',
         title: 'Comment lifecycle workflow',
-        operations: ['comments.add', 'comments.reply', 'comments.resolve'],
+        operations: ['comments.create', 'comments.patch', 'comments.delete'],
       },
       {
         id: 'list-manipulation',

@@ -25,7 +25,7 @@ export function registerCommentTools(server: McpServer, sessions: SessionManager
         const { api } = sessions.get(session_id);
         const parsed = JSON.parse(target);
         const result = api.invoke({
-          operationId: 'comments.add',
+          operationId: 'comments.create',
           input: { text, target: parsed },
         });
         return {
@@ -87,7 +87,7 @@ export function registerCommentTools(server: McpServer, sessions: SessionManager
       try {
         const { api } = sessions.get(session_id);
         const result = api.invoke({
-          operationId: 'comments.reply',
+          operationId: 'comments.create',
           input: { parentCommentId: comment_id, text },
         });
         return {
@@ -117,8 +117,8 @@ export function registerCommentTools(server: McpServer, sessions: SessionManager
       try {
         const { api } = sessions.get(session_id);
         const result = api.invoke({
-          operationId: 'comments.resolve',
-          input: { commentId: comment_id },
+          operationId: 'comments.patch',
+          input: { commentId: comment_id, status: 'resolved' },
         });
         return {
           content: [{ type: 'text' as const, text: JSON.stringify(result, null, 2) }],

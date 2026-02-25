@@ -73,9 +73,8 @@ client.doc.insert(params)
 | **Format** | `format.bold`, `format.italic`, `format.underline`, `format.strikethrough` |
 | **Create** | `create.paragraph` |
 | **Lists** | `lists.list`, `lists.get`, `lists.insert`, `lists.setType`, `lists.indent`, `lists.outdent`, `lists.restart`, `lists.exit` |
-| **Comments** | `comments.add`, `comments.edit`, `comments.reply`, `comments.move`, `comments.resolve`, `comments.remove`, `comments.setInternal`, `comments.get`, `comments.list` |
-| **Track Changes** | `trackChanges.list`, `trackChanges.get` |
-| **Review** | `review.decide` |
+| **Comments** | `comments.create`, `comments.patch`, `comments.delete`, `comments.get`, `comments.list` |
+| **Track Changes** | `trackChanges.list`, `trackChanges.get`, `trackChanges.decide` |
 | **Lifecycle** | `open`, `save`, `close` |
 | **Session** | `session.list`, `session.save`, `session.close`, `session.setDefault` |
 | **Introspection** | `status`, `describe`, `describeCommand` |

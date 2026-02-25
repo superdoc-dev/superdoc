@@ -229,85 +229,27 @@ export async function listItems(page: Page): Promise<ListsListResult> {
 }
 
 export async function acceptTrackChange(page: Page, input: { id: string }): Promise<void> {
-  await page.evaluate((payload) => {
-    const docApi = (window as any).editor.doc;
-    if (typeof docApi.review?.decide === 'function') {
-      docApi.review.decide({ decision: 'accept', target: { id: payload.id } });
-      return;
-    }
-    if (typeof docApi.trackChanges?.decide === 'function') {
-      docApi.trackChanges.decide({ decision: 'accept', target: { id: payload.id } });
-      return;
-    }
-    if (typeof docApi.trackChanges?.accept === 'function') {
-      docApi.trackChanges.accept({ id: payload.id });
-      return;
-    }
-    throw new Error(
-      'Document API is unavailable: expected review.decide(), trackChanges.decide(), or trackChanges.accept().',
-    );
-  }, input);
+  await page.evaluate(
+    (payload) => (window as any).editor.doc.trackChanges.decide({ decision: 'accept', target: { id: payload.id } }),
+    input,
+  );
 }
 
 export async function rejectTrackChange(page: Page, input: { id: string }): Promise<void> {
-  await page.evaluate((payload) => {
-    const docApi = (window as any).editor.doc;
-    if (typeof docApi.review?.decide === 'function') {
-      docApi.review.decide({ decision: 'reject', target: { id: payload.id } });
-      return;
-    }
-    if (typeof docApi.trackChanges?.decide === 'function') {
-      docApi.trackChanges.decide({ decision: 'reject', target: { id: payload.id } });
-      return;
-    }
-    if (typeof docApi.trackChanges?.reject === 'function') {
-      docApi.trackChanges.reject({ id: payload.id });
-      return;
-    }
-    throw new Error(
-      'Document API is unavailable: expected review.decide(), trackChanges.decide(), or trackChanges.reject().',
-    );
-  }, input);
+  await page.evaluate(
+    (payload) => (window as any).editor.doc.trackChanges.decide({ decision: 'reject', target: { id: payload.id } }),
+    input,
+  );
 }
 
 export async function acceptAllTrackChanges(page: Page): Promise<void> {
-  await page.evaluate(() => {
-    const docApi = (window as any).editor.doc;
-    if (typeof docApi.review?.decide === 'function') {
-      docApi.review.decide({ decision: 'accept', target: { scope: 'all' } });
-      return;
-    }
-    if (typeof docApi.trackChanges?.decide === 'function') {
-      docApi.trackChanges.decide({ decision: 'accept', target: { scope: 'all' } });
-      return;
-    }
-    if (typeof docApi.trackChanges?.acceptAll === 'function') {
-      docApi.trackChanges.acceptAll({});
-      return;
-    }
-    throw new Error(
-      'Document API is unavailable: expected review.decide(), trackChanges.decide(), or trackChanges.acceptAll().',
-    );
-  });
+  await page.evaluate(() =>
+    (window as any).editor.doc.trackChanges.decide({ decision: 'accept', target: { scope: 'all' } }),
+  );
 }
 
 export async function rejectAllTrackChanges(page: Page): Promise<void> {
-  await page.evaluate(() => {
-    const docApi = (window as any).editor.doc;
-    if (typeof docApi.review?.decide === 'function') {
-      docApi.review.decide({ decision: 'reject', target: { scope: 'all' } });
-      return;
-    }
-    if (typeof docApi.trackChanges?.decide === 'function') {
-      docApi.trackChanges.decide({ decision: 'reject', target: { scope: 'all' } });
-      return;
-    }
-    if (typeof docApi.trackChanges?.rejectAll === 'function') {
-      docApi.trackChanges.rejectAll({});
-      return;
-    }
-    throw new Error(
-      'Document API is unavailable: expected review.decide(), trackChanges.decide(), or trackChanges.rejectAll().',
-    );
-  });
+  await page.evaluate(() =>
+    (window as any).editor.doc.trackChanges.decide({ decision: 'reject', target: { scope: 'all' } }),
+  );
 }

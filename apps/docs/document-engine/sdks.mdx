@@ -35,7 +35,9 @@ The CLI is bundled with the SDK — no separate install needed.
     ```typescript
     import { SuperDocClient } from '@superdoc-dev/sdk';
 
-    const client = new SuperDocClient();
+    const client = new SuperDocClient({
+      defaultChangeMode: 'tracked',
+    });
 
     // Open a document
     await client.doc.open({ doc: './contract.docx' });
@@ -51,7 +53,6 @@ The CLI is bundled with the SDK — no separate install needed.
       await client.doc.mutations.apply({
         expectedRevision: match.evaluatedRevision,
         atomic: true,
-        changeMode: 'direct',
         steps: [
           {
             id: 'replace-acme',
@@ -76,7 +77,7 @@ The CLI is bundled with the SDK — no separate install needed.
 
 
     async def main():
-        client = AsyncSuperDocClient()
+        client = AsyncSuperDocClient(default_change_mode="tracked")
 
         # Open a document
         await client.doc.open({"doc": "./contract.docx"})
@@ -95,7 +96,6 @@ The CLI is bundled with the SDK — no separate install needed.
                 {
                     "expectedRevision": match["evaluatedRevision"],
                     "atomic": True,
-                    "changeMode": "direct",
                     "steps": [
                         {
                             "id": "replace-acme",
@@ -116,6 +116,8 @@ The CLI is bundled with the SDK — no separate install needed.
     ```
   </Tab>
 </Tabs>
+
+Set `defaultChangeMode: 'tracked'` (Node) or `default_change_mode='tracked'` (Python) to make mutations use tracked changes by default. If you pass `changeMode` on a specific call, that explicit value overrides the default.
 
 {/* SDK_OPERATIONS_START */}
 ## Available operations

@@ -1,6 +1,7 @@
 import { COMMAND_CATALOG } from './command-catalog.js';
 import { CONTRACT_VERSION, JSON_SCHEMA_DIALECT, OPERATION_IDS, type OperationId } from './types.js';
 import { NODE_TYPES, BLOCK_NODE_TYPES, INLINE_NODE_TYPES } from '../types/base.js';
+import { MARK_KEYS } from '../types/style-policy.types.js';
 
 type JsonSchema = Record<string, unknown>;
 
@@ -22,6 +23,8 @@ export interface InternalContractSchemas {
   $schema: string;
   /** Semantic version of the document-api contract these schemas describe. */
   contractVersion: string;
+  /** Shared schema definitions referenced by `$ref` in operation schemas. */
+  $defs?: Record<string, JsonSchema>;
   /** Per-operation schema sets keyed by {@link OperationId}. */
   operations: Record<OperationId, OperationSchemaSet>;
 }
@@ -45,116 +48,312 @@ function arraySchema(items: JsonSchema): JsonSchema {
   };
 }
 
+/** Returns a `{ $ref: '#/$defs/<name>' }` pointer for use in operation schemas. */
+function ref(name: string): JsonSchema {
+  return { $ref: `#/$defs/${name}` };
+}
+
 const nodeTypeValues = NODE_TYPES;
 const blockNodeTypeValues = BLOCK_NODE_TYPES;
 const inlineNodeTypeValues = INLINE_NODE_TYPES;
 
-const rangeSchema = objectSchema(
-  {
-    start: { type: 'integer' },
-    end: { type: 'integer' },
-  },
-  ['start', 'end'],
-);
+// ---------------------------------------------------------------------------
+// Shared $defs — canonical schema definitions referenced via ref()
+// ---------------------------------------------------------------------------
 
-const positionSchema = objectSchema(
-  {
-    blockId: { type: 'string' },
-    offset: { type: 'integer' },
-  },
-  ['blockId', 'offset'],
-);
+const knownTargetKindValues = [
+  'text',
+  'node',
+  'list',
+  'comment',
+  'trackedChange',
+  'table',
+  'tableCell',
+  'section',
+  'sdt',
+  'field',
+] as const;
 
-const inlineAnchorSchema = objectSchema(
-  {
-    start: positionSchema,
-    end: positionSchema,
+/**
+ * Shared schema definitions referenced by `$ref` in operation schemas.
+ *
+ * Within entries, cross-references use `ref()` so that the entire $defs
+ * graph is self-consistent.
+ */
+const SHARED_DEFS: Record<string, JsonSchema> = {
+  // -- Primitives --
+  Range: objectSchema(
+    {
+      start: { type: 'integer' },
+      end: { type: 'integer' },
+    },
+    ['start', 'end'],
+  ),
+  Position: objectSchema(
+    {
+      blockId: { type: 'string' },
+      offset: { type: 'integer' },
+    },
+    ['blockId', 'offset'],
+  ),
+  InlineAnchor: objectSchema(
+    {
+      start: ref('Position'),
+      end: ref('Position'),
+    },
+    ['start', 'end'],
+  ),
+  TargetKind: {
+    anyOf: [{ enum: [...knownTargetKindValues] }, { type: 'string', pattern: '^ext:.+$' }],
   },
-  ['start', 'end'],
-);
 
-const textAddressSchema = objectSchema(
-  {
-    kind: { const: 'text' },
-    blockId: { type: 'string' },
-    range: rangeSchema,
+  // -- Address types --
+  TextAddress: objectSchema(
+    {
+      kind: { const: 'text' },
+      blockId: { type: 'string' },
+      range: ref('Range'),
+    },
+    ['kind', 'blockId', 'range'],
+  ),
+  BlockNodeAddress: objectSchema(
+    {
+      kind: { const: 'block' },
+      nodeType: { enum: [...blockNodeTypeValues] },
+      nodeId: { type: 'string' },
+    },
+    ['kind', 'nodeType', 'nodeId'],
+  ),
+  ParagraphAddress: objectSchema(
+    {
+      kind: { const: 'block' },
+      nodeType: { const: 'paragraph' },
+      nodeId: { type: 'string' },
+    },
+    ['kind', 'nodeType', 'nodeId'],
+  ),
+  HeadingAddress: objectSchema(
+    {
+      kind: { const: 'block' },
+      nodeType: { const: 'heading' },
+      nodeId: { type: 'string' },
+    },
+    ['kind', 'nodeType', 'nodeId'],
+  ),
+  ListItemAddress: objectSchema(
+    {
+      kind: { const: 'block' },
+      nodeType: { const: 'listItem' },
+      nodeId: { type: 'string' },
+    },
+    ['kind', 'nodeType', 'nodeId'],
+  ),
+  InlineNodeAddress: objectSchema(
+    {
+      kind: { const: 'inline' },
+      nodeType: { enum: [...inlineNodeTypeValues] },
+      anchor: ref('InlineAnchor'),
+    },
+    ['kind', 'nodeType', 'anchor'],
+  ),
+  NodeAddress: {
+    oneOf: [ref('BlockNodeAddress'), ref('InlineNodeAddress')],
   },
-  ['kind', 'blockId', 'range'],
-);
-
-const blockNodeAddressSchema = objectSchema(
-  {
-    kind: { const: 'block' },
-    nodeType: { enum: [...blockNodeTypeValues] },
-    nodeId: { type: 'string' },
+  CommentAddress: objectSchema(
+    {
+      kind: { const: 'entity' },
+      entityType: { const: 'comment' },
+      entityId: { type: 'string' },
+    },
+    ['kind', 'entityType', 'entityId'],
+  ),
+  TrackedChangeAddress: objectSchema(
+    {
+      kind: { const: 'entity' },
+      entityType: { const: 'trackedChange' },
+      entityId: { type: 'string' },
+    },
+    ['kind', 'entityType', 'entityId'],
+  ),
+  EntityAddress: {
+    oneOf: [ref('CommentAddress'), ref('TrackedChangeAddress')],
   },
-  ['kind', 'nodeType', 'nodeId'],
-);
 
-const paragraphAddressSchema = objectSchema(
-  {
-    kind: { const: 'block' },
-    nodeType: { const: 'paragraph' },
-    nodeId: { type: 'string' },
-  },
-  ['kind', 'nodeType', 'nodeId'],
-);
+  // -- Discovery components --
+  ResolvedHandle: objectSchema(
+    {
+      ref: { type: 'string' },
+      refStability: { enum: ['stable', 'ephemeral'] },
+      targetKind: ref('TargetKind'),
+    },
+    ['ref', 'refStability', 'targetKind'],
+  ),
+  PageInfo: objectSchema(
+    {
+      limit: { type: 'integer', minimum: 0 },
+      offset: { type: 'integer', minimum: 0 },
+      returned: { type: 'integer', minimum: 0 },
+    },
+    ['limit', 'offset', 'returned'],
+  ),
 
-const headingAddressSchema = objectSchema(
-  {
-    kind: { const: 'block' },
-    nodeType: { const: 'heading' },
-    nodeId: { type: 'string' },
-  },
-  ['kind', 'nodeType', 'nodeId'],
-);
+  // -- Receipt scaffolds --
+  ReceiptSuccess: objectSchema(
+    {
+      success: { const: true },
+      inserted: arraySchema(ref('EntityAddress')),
+      updated: arraySchema(ref('EntityAddress')),
+      removed: arraySchema(ref('EntityAddress')),
+    },
+    ['success'],
+  ),
+  TextMutationRange: objectSchema(
+    {
+      from: { type: 'integer' },
+      to: { type: 'integer' },
+    },
+    ['from', 'to'],
+  ),
+  TextMutationResolution: objectSchema(
+    {
+      requestedTarget: ref('TextAddress'),
+      target: ref('TextAddress'),
+      range: ref('TextMutationRange'),
+      text: { type: 'string' },
+    },
+    ['target', 'range', 'text'],
+  ),
+  TextMutationSuccess: objectSchema(
+    {
+      success: { const: true },
+      resolution: ref('TextMutationResolution'),
+      inserted: arraySchema(ref('EntityAddress')),
+      updated: arraySchema(ref('EntityAddress')),
+      removed: arraySchema(ref('EntityAddress')),
+    },
+    ['success', 'resolution'],
+  ),
 
-const listItemAddressSchema = objectSchema(
-  {
-    kind: { const: 'block' },
-    nodeType: { const: 'listItem' },
-    nodeId: { type: 'string' },
-  },
-  ['kind', 'nodeType', 'nodeId'],
-);
-
-const inlineNodeAddressSchema = objectSchema(
-  {
-    kind: { const: 'inline' },
-    nodeType: { enum: [...inlineNodeTypeValues] },
-    anchor: inlineAnchorSchema,
-  },
-  ['kind', 'nodeType', 'anchor'],
-);
-
-const nodeAddressSchema: JsonSchema = {
-  oneOf: [blockNodeAddressSchema, inlineNodeAddressSchema],
+  // -- Match fragments (query.match) --
+  MatchRun: objectSchema(
+    {
+      range: ref('Range'),
+      text: { type: 'string' },
+      styleId: { type: 'string' },
+      styles: objectSchema(
+        {
+          bold: { type: 'boolean' },
+          italic: { type: 'boolean' },
+          underline: { type: 'boolean' },
+          strike: { type: 'boolean' },
+          color: { type: 'string' },
+          highlight: { type: 'string' },
+          fontFamily: { type: 'string' },
+          fontSizePt: { type: 'number' },
+        },
+        ['bold', 'italic', 'underline', 'strike'],
+      ),
+      ref: { type: 'string' },
+    },
+    ['range', 'text', 'styles', 'ref'],
+  ),
+  MatchBlock: objectSchema(
+    {
+      blockId: { type: 'string' },
+      nodeType: { type: 'string' },
+      range: ref('Range'),
+      text: { type: 'string' },
+      paragraphStyle: objectSchema({
+        styleId: { type: 'string' },
+        isListItem: { type: 'boolean' },
+        listLevel: { type: 'integer', minimum: 0 },
+      }),
+      ref: { type: 'string' },
+      runs: arraySchema(ref('MatchRun')),
+    },
+    ['blockId', 'nodeType', 'range', 'text', 'ref', 'runs'],
+  ),
 };
 
-const commentAddressSchema = objectSchema(
-  {
-    kind: { const: 'entity' },
-    entityType: { const: 'comment' },
-    entityId: { type: 'string' },
-  },
-  ['kind', 'entityType', 'entityId'],
-);
+// ---------------------------------------------------------------------------
+// Module-level aliases using $ref pointers
+// ---------------------------------------------------------------------------
 
-const trackedChangeAddressSchema = objectSchema(
-  {
-    kind: { const: 'entity' },
-    entityType: { const: 'trackedChange' },
-    entityId: { type: 'string' },
-  },
-  ['kind', 'entityType', 'entityId'],
-);
+const rangeSchema = ref('Range');
+const positionSchema = ref('Position');
+const inlineAnchorSchema = ref('InlineAnchor');
+const targetKindSchema = ref('TargetKind');
+const textAddressSchema = ref('TextAddress');
+const blockNodeAddressSchema = ref('BlockNodeAddress');
+const paragraphAddressSchema = ref('ParagraphAddress');
+const headingAddressSchema = ref('HeadingAddress');
+const listItemAddressSchema = ref('ListItemAddress');
+const inlineNodeAddressSchema = ref('InlineNodeAddress');
+const nodeAddressSchema = ref('NodeAddress');
+const commentAddressSchema = ref('CommentAddress');
+const trackedChangeAddressSchema = ref('TrackedChangeAddress');
+const entityAddressSchema = ref('EntityAddress');
+const resolvedHandleSchema = ref('ResolvedHandle');
+const pageInfoSchema = ref('PageInfo');
+const receiptSuccessSchema = ref('ReceiptSuccess');
+const textMutationRangeSchema = ref('TextMutationRange');
+const textMutationResolutionSchema = ref('TextMutationResolution');
+const textMutationSuccessSchema = ref('TextMutationSuccess');
+const matchRunSchema = ref('MatchRun');
+const matchBlockSchema = ref('MatchBlock');
 
-const entityAddressSchema: JsonSchema = {
-  oneOf: [commentAddressSchema, trackedChangeAddressSchema],
-};
+// Keep these aliases for internal readability
+void positionSchema;
+void inlineAnchorSchema;
+void targetKindSchema;
+void inlineNodeAddressSchema;
+void textMutationRangeSchema;
+void entityAddressSchema;
+void matchRunSchema;
+
+// ---------------------------------------------------------------------------
+// Discovery envelope schemas (C0)
+// ---------------------------------------------------------------------------
+
+/**
+ * Builds a DiscoveryResult schema wrapping the given item schema.
+ */
+function discoveryResultSchema(itemSchema: JsonSchema): JsonSchema {
+  return objectSchema(
+    {
+      evaluatedRevision: { type: 'string' },
+      total: { type: 'integer', minimum: 0 },
+      items: arraySchema(itemSchema),
+      page: pageInfoSchema,
+    },
+    ['evaluatedRevision', 'total', 'items', 'page'],
+  );
+}
+
+/**
+ * Wraps domain-specific properties into a DiscoveryItem schema
+ * (adds `id` and `handle` fields).
+ */
+function discoveryItemSchema(
+  domainProperties: Record<string, JsonSchema>,
+  domainRequired: readonly string[] = [],
+): JsonSchema {
+  return objectSchema(
+    {
+      id: { type: 'string' },
+      handle: resolvedHandleSchema,
+      ...domainProperties,
+    },
+    ['id', 'handle', ...domainRequired],
+  );
+}
 
 function possibleFailureCodes(operationId: OperationId): string[] {
   return [...COMMAND_CATALOG[operationId].possibleFailureCodes];
+}
+
+function preApplyThrowCodes(operationId: OperationId): string[] {
+  return [...COMMAND_CATALOG[operationId].throws.preApply];
 }
 
 function receiptFailureSchemaFor(operationId: OperationId): JsonSchema {
@@ -175,16 +374,23 @@ function receiptFailureSchemaFor(operationId: OperationId): JsonSchema {
   );
 }
 
-const receiptSuccessSchema = objectSchema(
-  {
-    success: { const: true },
-    inserted: arraySchema(entityAddressSchema),
-    updated: arraySchema(entityAddressSchema),
-    removed: arraySchema(entityAddressSchema),
-  },
-  ['success'],
-);
+function preApplyFailureSchemaFor(operationId: OperationId): JsonSchema {
+  const codes = preApplyThrowCodes(operationId);
+  if (codes.length === 0) {
+    throw new Error(`Operation "${operationId}" does not declare pre-apply throw codes.`);
+  }
 
+  return objectSchema(
+    {
+      code: {
+        enum: codes,
+      },
+      message: { type: 'string' },
+      details: {},
+    },
+    ['code', 'message'],
+  );
+}
 function receiptFailureResultSchemaFor(operationId: OperationId): JsonSchema {
   return objectSchema(
     {
@@ -195,40 +401,21 @@ function receiptFailureResultSchemaFor(operationId: OperationId): JsonSchema {
   );
 }
 
+function preApplyFailureResultSchemaFor(operationId: OperationId): JsonSchema {
+  return objectSchema(
+    {
+      success: { const: false },
+      failure: preApplyFailureSchemaFor(operationId),
+    },
+    ['success', 'failure'],
+  );
+}
+
 function receiptResultSchemaFor(operationId: OperationId): JsonSchema {
   return {
     oneOf: [receiptSuccessSchema, receiptFailureResultSchemaFor(operationId)],
   };
 }
-
-const textMutationRangeSchema = objectSchema(
-  {
-    from: { type: 'integer' },
-    to: { type: 'integer' },
-  },
-  ['from', 'to'],
-);
-
-const textMutationResolutionSchema = objectSchema(
-  {
-    requestedTarget: textAddressSchema,
-    target: textAddressSchema,
-    range: textMutationRangeSchema,
-    text: { type: 'string' },
-  },
-  ['target', 'range', 'text'],
-);
-
-const textMutationSuccessSchema = objectSchema(
-  {
-    success: { const: true },
-    resolution: textMutationResolutionSchema,
-    inserted: arraySchema(entityAddressSchema),
-    updated: arraySchema(entityAddressSchema),
-    removed: arraySchema(entityAddressSchema),
-  },
-  ['success', 'resolution'],
-);
 
 function textMutationFailureSchemaFor(operationId: OperationId): JsonSchema {
   return objectSchema(
@@ -433,22 +620,29 @@ const findInputSchema = objectSchema(
     within: nodeAddressSchema,
     limit: { type: 'integer' },
     offset: { type: 'integer' },
+    require: { enum: ['any', 'first', 'exactlyOne', 'all'] },
     includeNodes: { type: 'boolean' },
     includeUnknown: { type: 'boolean' },
   },
   ['select'],
 );
 
-const findOutputSchema = objectSchema(
+const findItemDomainSchema = discoveryItemSchema(
   {
-    matches: arraySchema(nodeAddressSchema),
-    total: { type: 'integer' },
-    nodes: arraySchema(nodeInfoSchema),
-    context: arraySchema(matchContextSchema),
+    address: nodeAddressSchema,
+    node: nodeInfoSchema,
+    context: matchContextSchema,
+  },
+  ['address'],
+);
+
+const findOutputSchema: JsonSchema = {
+  ...discoveryResultSchema(findItemDomainSchema),
+  properties: {
+    ...(discoveryResultSchema(findItemDomainSchema) as { properties: Record<string, JsonSchema> }).properties,
     diagnostics: arraySchema(unknownNodeDiagnosticSchema),
   },
-  ['matches', 'total'],
-);
+};
 
 const documentInfoCountsSchema = objectSchema(
   {
@@ -506,14 +700,20 @@ const listItemInfoSchema = objectSchema(
   ['address'],
 );
 
-const listsListResultSchema = objectSchema(
+const listItemDomainItemSchema = discoveryItemSchema(
   {
-    matches: arraySchema(listItemAddressSchema),
-    total: { type: 'integer' },
-    items: arraySchema(listItemInfoSchema),
+    address: listItemAddressSchema,
+    marker: { type: 'string' },
+    ordinal: { type: 'integer' },
+    path: arraySchema({ type: 'integer' }),
+    level: { type: 'integer' },
+    kind: listKindSchema,
+    text: { type: 'string' },
   },
-  ['matches', 'total', 'items'],
+  ['address'],
 );
+
+const listsListResultSchema = discoveryResultSchema(listItemDomainItemSchema);
 
 const commentInfoSchema = objectSchema(
   {
@@ -532,13 +732,23 @@ const commentInfoSchema = objectSchema(
   ['address', 'commentId', 'status'],
 );
 
-const commentsListResultSchema = objectSchema(
+const commentDomainItemSchema = discoveryItemSchema(
   {
-    matches: arraySchema(commentInfoSchema),
-    total: { type: 'integer' },
+    address: commentAddressSchema,
+    importedId: { type: 'string' },
+    parentCommentId: { type: 'string' },
+    text: { type: 'string' },
+    isInternal: { type: 'boolean' },
+    status: { enum: ['open', 'resolved'] },
+    target: textAddressSchema,
+    createdTime: { type: 'number' },
+    creatorName: { type: 'string' },
+    creatorEmail: { type: 'string' },
   },
-  ['matches', 'total'],
+  ['address', 'status'],
 );
+
+const commentsListResultSchema = discoveryResultSchema(commentDomainItemSchema);
 
 const trackChangeInfoSchema = objectSchema(
   {
@@ -554,14 +764,20 @@ const trackChangeInfoSchema = objectSchema(
   ['address', 'id', 'type'],
 );
 
-const trackChangesListResultSchema = objectSchema(
+const trackChangeDomainItemSchema = discoveryItemSchema(
   {
-    matches: arraySchema(trackedChangeAddressSchema),
-    total: { type: 'integer' },
-    changes: arraySchema(trackChangeInfoSchema),
+    address: trackedChangeAddressSchema,
+    type: { enum: ['insert', 'delete', 'format'] },
+    author: { type: 'string' },
+    authorEmail: { type: 'string' },
+    authorImage: { type: 'string' },
+    date: { type: 'string' },
+    excerpt: { type: 'string' },
   },
-  ['matches', 'total'],
+  ['address', 'type'],
 );
+
+const trackChangesListResultSchema = discoveryResultSchema(trackChangeDomainItemSchema);
 
 const capabilityReasonCodeSchema: JsonSchema = {
   enum: [
@@ -601,6 +817,13 @@ const operationCapabilitiesSchema = objectSchema(
   OPERATION_IDS,
 );
 
+const formatCapabilitiesSchema = objectSchema(
+  {
+    supportedMarks: arraySchema({ type: 'string', enum: [...MARK_KEYS] }),
+  },
+  ['supportedMarks'],
+);
+
 const capabilitiesOutputSchema = objectSchema(
   {
     global: objectSchema(
@@ -612,28 +835,21 @@ const capabilitiesOutputSchema = objectSchema(
       },
       ['trackChanges', 'comments', 'lists', 'dryRun'],
     ),
+    format: formatCapabilitiesSchema,
     operations: operationCapabilitiesSchema,
   },
-  ['global', 'operations'],
+  ['global', 'format', 'operations'],
 );
 
 const strictEmptyObjectSchema = objectSchema({});
-const insertInputSchema: JsonSchema = {
-  ...objectSchema(
-    {
-      target: textAddressSchema,
-      text: { type: 'string' },
-      blockId: { type: 'string', description: 'Block ID for block-relative targeting.' },
-      offset: { type: 'integer', minimum: 0, description: 'Character offset within the block identified by blockId.' },
-    },
-    ['text'],
-  ),
-  allOf: [
-    { not: { required: ['target', 'blockId'] } },
-    { not: { required: ['target', 'offset'] } },
-    { if: { required: ['offset'] }, then: { required: ['blockId'] } },
-  ],
-};
+
+const insertInputSchema = objectSchema(
+  {
+    target: textAddressSchema,
+    text: { type: 'string' },
+  },
+  ['text'],
+);
 
 const operationSchemas: Record<OperationId, OperationSchemaSet> = {
   find: {
@@ -691,49 +907,27 @@ const operationSchemas: Record<OperationId, OperationSchemaSet> = {
     success: textMutationSuccessSchema,
     failure: textMutationFailureSchemaFor('delete'),
   },
-  'format.bold': {
+  'format.apply': {
     input: objectSchema(
       {
         target: textAddressSchema,
+        inline: (() => {
+          const markProperties = Object.fromEntries(
+            MARK_KEYS.map((key) => [key, { type: 'boolean' } as JsonSchema]),
+          ) as Record<string, JsonSchema>;
+          return {
+            type: 'object',
+            properties: markProperties,
+            additionalProperties: false,
+            minProperties: 1,
+          } as JsonSchema;
+        })(),
       },
-      ['target'],
+      ['target', 'inline'],
     ),
-    output: textMutationResultSchemaFor('format.bold'),
+    output: textMutationResultSchemaFor('format.apply'),
     success: textMutationSuccessSchema,
-    failure: textMutationFailureSchemaFor('format.bold'),
-  },
-  'format.italic': {
-    input: objectSchema(
-      {
-        target: textAddressSchema,
-      },
-      ['target'],
-    ),
-    output: textMutationResultSchemaFor('format.italic'),
-    success: textMutationSuccessSchema,
-    failure: textMutationFailureSchemaFor('format.italic'),
-  },
-  'format.underline': {
-    input: objectSchema(
-      {
-        target: textAddressSchema,
-      },
-      ['target'],
-    ),
-    output: textMutationResultSchemaFor('format.underline'),
-    success: textMutationSuccessSchema,
-    failure: textMutationFailureSchemaFor('format.underline'),
-  },
-  'format.strikethrough': {
-    input: objectSchema(
-      {
-        target: textAddressSchema,
-      },
-      ['target'],
-    ),
-    output: textMutationResultSchemaFor('format.strikethrough'),
-    success: textMutationSuccessSchema,
-    failure: textMutationFailureSchemaFor('format.strikethrough'),
+    failure: textMutationFailureSchemaFor('format.apply'),
   },
   'create.paragraph': {
     input: objectSchema({
@@ -836,117 +1030,93 @@ const operationSchemas: Record<OperationId, OperationSchemaSet> = {
     failure: listsFailureSchemaFor('lists.setType'),
   },
   'lists.indent': {
-    input: objectSchema({ target: listItemAddressSchema }, ['target']),
+    input: objectSchema(
+      {
+        target: listItemAddressSchema,
+      },
+      ['target'],
+    ),
     output: listsMutateItemResultSchemaFor('lists.indent'),
     success: listsMutateItemSuccessSchema,
     failure: listsFailureSchemaFor('lists.indent'),
   },
   'lists.outdent': {
-    input: objectSchema({ target: listItemAddressSchema }, ['target']),
+    input: objectSchema(
+      {
+        target: listItemAddressSchema,
+      },
+      ['target'],
+    ),
     output: listsMutateItemResultSchemaFor('lists.outdent'),
     success: listsMutateItemSuccessSchema,
     failure: listsFailureSchemaFor('lists.outdent'),
   },
   'lists.restart': {
-    input: objectSchema({ target: listItemAddressSchema }, ['target']),
+    input: objectSchema(
+      {
+        target: listItemAddressSchema,
+      },
+      ['target'],
+    ),
     output: listsMutateItemResultSchemaFor('lists.restart'),
     success: listsMutateItemSuccessSchema,
     failure: listsFailureSchemaFor('lists.restart'),
   },
   'lists.exit': {
-    input: objectSchema({ target: listItemAddressSchema }, ['target']),
+    input: objectSchema(
+      {
+        target: listItemAddressSchema,
+      },
+      ['target'],
+    ),
     output: listsExitResultSchemaFor('lists.exit'),
     success: listsExitSuccessSchema,
     failure: listsFailureSchemaFor('lists.exit'),
   },
-  'comments.add': {
+  'comments.create': {
     input: objectSchema(
       {
+        text: { type: 'string' },
         target: textAddressSchema,
-        text: { type: 'string' },
-      },
-      ['target', 'text'],
-    ),
-    output: receiptResultSchemaFor('comments.add'),
-    success: receiptSuccessSchema,
-    failure: receiptFailureResultSchemaFor('comments.add'),
-  },
-  'comments.edit': {
-    input: objectSchema(
-      {
-        commentId: { type: 'string' },
-        text: { type: 'string' },
-      },
-      ['commentId', 'text'],
-    ),
-    output: receiptResultSchemaFor('comments.edit'),
-    success: receiptSuccessSchema,
-    failure: receiptFailureResultSchemaFor('comments.edit'),
-  },
-  'comments.reply': {
-    input: objectSchema(
-      {
         parentCommentId: { type: 'string' },
+      },
+      ['text'],
+    ),
+    output: receiptResultSchemaFor('comments.create'),
+    success: receiptSuccessSchema,
+    failure: receiptFailureResultSchemaFor('comments.create'),
+  },
+  'comments.patch': {
+    input: objectSchema(
+      {
+        commentId: { type: 'string' },
         text: { type: 'string' },
-      },
-      ['parentCommentId', 'text'],
-    ),
-    output: receiptResultSchemaFor('comments.reply'),
-    success: receiptSuccessSchema,
-    failure: receiptFailureResultSchemaFor('comments.reply'),
-  },
-  'comments.move': {
-    input: objectSchema(
-      {
-        commentId: { type: 'string' },
         target: textAddressSchema,
-      },
-      ['commentId', 'target'],
-    ),
-    output: receiptResultSchemaFor('comments.move'),
-    success: receiptSuccessSchema,
-    failure: receiptFailureResultSchemaFor('comments.move'),
-  },
-  'comments.resolve': {
-    input: objectSchema({ commentId: { type: 'string' } }, ['commentId']),
-    output: receiptResultSchemaFor('comments.resolve'),
-    success: receiptSuccessSchema,
-    failure: receiptFailureResultSchemaFor('comments.resolve'),
-  },
-  'comments.remove': {
-    input: objectSchema({ commentId: { type: 'string' } }, ['commentId']),
-    output: receiptResultSchemaFor('comments.remove'),
-    success: receiptSuccessSchema,
-    failure: receiptFailureResultSchemaFor('comments.remove'),
-  },
-  'comments.setInternal': {
-    input: objectSchema(
-      {
-        commentId: { type: 'string' },
+        status: { enum: ['resolved'] },
         isInternal: { type: 'boolean' },
       },
-      ['commentId', 'isInternal'],
+      ['commentId'],
     ),
-    output: receiptResultSchemaFor('comments.setInternal'),
+    output: receiptResultSchemaFor('comments.patch'),
     success: receiptSuccessSchema,
-    failure: receiptFailureResultSchemaFor('comments.setInternal'),
+    failure: receiptFailureResultSchemaFor('comments.patch'),
   },
-  'comments.setActive': {
-    input: objectSchema({ commentId: { type: ['string', 'null'] } }, ['commentId']),
-    output: receiptResultSchemaFor('comments.setActive'),
-    success: receiptSuccessSchema,
-    failure: receiptFailureResultSchemaFor('comments.setActive'),
-  },
-  'comments.goTo': {
+  'comments.delete': {
     input: objectSchema({ commentId: { type: 'string' } }, ['commentId']),
-    output: receiptSuccessSchema,
+    output: receiptResultSchemaFor('comments.delete'),
+    success: receiptSuccessSchema,
+    failure: receiptFailureResultSchemaFor('comments.delete'),
   },
   'comments.get': {
     input: objectSchema({ commentId: { type: 'string' } }, ['commentId']),
     output: commentInfoSchema,
   },
   'comments.list': {
-    input: objectSchema({ includeResolved: { type: 'boolean' } }),
+    input: objectSchema({
+      includeResolved: { type: 'boolean' },
+      limit: { type: 'integer' },
+      offset: { type: 'integer' },
+    }),
     output: commentsListResultSchema,
   },
   'trackChanges.list': {
@@ -961,29 +1131,121 @@ const operationSchemas: Record<OperationId, OperationSchemaSet> = {
     input: objectSchema({ id: { type: 'string' } }, ['id']),
     output: trackChangeInfoSchema,
   },
-  'trackChanges.accept': {
-    input: objectSchema({ id: { type: 'string' } }, ['id']),
-    output: receiptResultSchemaFor('trackChanges.accept'),
+  'trackChanges.decide': {
+    input: {
+      type: 'object',
+      properties: {
+        decision: { enum: ['accept', 'reject'] },
+        target: {
+          oneOf: [
+            objectSchema({ id: { type: 'string' } }, ['id']),
+            objectSchema({ scope: { enum: ['all'] } }, ['scope']),
+          ],
+        },
+      },
+      required: ['decision', 'target'],
+      additionalProperties: false,
+    },
+    output: receiptResultSchemaFor('trackChanges.decide'),
     success: receiptSuccessSchema,
-    failure: receiptFailureResultSchemaFor('trackChanges.accept'),
+    failure: receiptFailureResultSchemaFor('trackChanges.decide'),
   },
-  'trackChanges.reject': {
-    input: objectSchema({ id: { type: 'string' } }, ['id']),
-    output: receiptResultSchemaFor('trackChanges.reject'),
-    success: receiptSuccessSchema,
-    failure: receiptFailureResultSchemaFor('trackChanges.reject'),
+  'query.match': {
+    input: objectSchema(
+      {
+        select: { oneOf: [textSelectorSchema, nodeSelectorSchema] },
+        within: nodeAddressSchema,
+        require: { enum: ['any', 'first', 'exactlyOne', 'all'] },
+        mode: { enum: ['strict', 'candidates'] },
+        includeNodes: { type: 'boolean' },
+        limit: { type: 'integer', minimum: 1 },
+        offset: { type: 'integer', minimum: 0 },
+      },
+      ['select'],
+    ),
+    output: (() => {
+      // D18: discriminated union schema for TextMatchDomain vs NodeMatchDomain.
+      // Text matches require snippet + highlightRange + non-empty blocks.
+      // Node matches forbid snippet + highlightRange and have empty blocks.
+
+      // Text match item: id + handle + address + snippet + highlightRange + non-empty blocks
+      const textMatchItemSchema = discoveryItemSchema(
+        {
+          matchKind: { const: 'text' },
+          address: nodeAddressSchema,
+          snippet: { type: 'string' },
+          highlightRange: rangeSchema,
+          blocks: { type: 'array', items: matchBlockSchema, minItems: 1 },
+        },
+        ['matchKind', 'address', 'snippet', 'highlightRange', 'blocks'],
+      );
+
+      // Node match item: id + handle + address + empty blocks
+      const nodeMatchItemSchema = discoveryItemSchema(
+        {
+          matchKind: { const: 'node' },
+          address: nodeAddressSchema,
+          blocks: { type: 'array', items: matchBlockSchema, maxItems: 0 },
+        },
+        ['matchKind', 'address', 'blocks'],
+      );
+
+      return discoveryResultSchema({ oneOf: [textMatchItemSchema, nodeMatchItemSchema] });
+    })(),
   },
-  'trackChanges.acceptAll': {
-    input: strictEmptyObjectSchema,
-    output: receiptResultSchemaFor('trackChanges.acceptAll'),
-    success: receiptSuccessSchema,
-    failure: receiptFailureResultSchemaFor('trackChanges.acceptAll'),
+  'mutations.preview': {
+    input: objectSchema(
+      {
+        expectedRevision: { type: 'string' },
+        atomic: { const: true },
+        changeMode: { enum: ['direct', 'tracked'] },
+        steps: arraySchema({ type: 'object' }),
+      },
+      ['expectedRevision', 'atomic', 'changeMode', 'steps'],
+    ),
+    output: objectSchema(
+      {
+        evaluatedRevision: { type: 'string' },
+        steps: arraySchema({ type: 'object' }),
+        valid: { type: 'boolean' },
+        failures: arraySchema({ type: 'object' }),
+      },
+      ['evaluatedRevision', 'steps', 'valid'],
+    ),
   },
-  'trackChanges.rejectAll': {
-    input: strictEmptyObjectSchema,
-    output: receiptResultSchemaFor('trackChanges.rejectAll'),
-    success: receiptSuccessSchema,
-    failure: receiptFailureResultSchemaFor('trackChanges.rejectAll'),
+  'mutations.apply': {
+    input: objectSchema(
+      {
+        expectedRevision: { type: 'string' },
+        atomic: { const: true },
+        changeMode: { enum: ['direct', 'tracked'] },
+        steps: arraySchema({ type: 'object' }),
+      },
+      ['expectedRevision', 'atomic', 'changeMode', 'steps'],
+    ),
+    output: objectSchema(
+      {
+        success: { const: true },
+        revision: objectSchema({ before: { type: 'string' }, after: { type: 'string' } }, ['before', 'after']),
+        steps: arraySchema({ type: 'object' }),
+        trackedChanges: arraySchema({ type: 'object' }),
+        timing: objectSchema({ totalMs: { type: 'number' } }, ['totalMs']),
+      },
+      ['success', 'revision', 'steps', 'timing'],
+    ),
+    success: objectSchema(
+      {
+        success: { const: true },
+        revision: objectSchema({ before: { type: 'string' }, after: { type: 'string' } }, ['before', 'after']),
+        steps: arraySchema({ type: 'object' }),
+        timing: objectSchema({ totalMs: { type: 'number' } }, ['totalMs']),
+      },
+      ['success', 'revision', 'steps', 'timing'],
+    ),
+    // `mutations.apply` throws pre-apply plan-engine errors rather than returning
+    // receipt-style non-applied failures, but SDK contract consumers still require
+    // an explicit failure schema descriptor for mutation operations.
+    failure: preApplyFailureResultSchemaFor('mutations.apply'),
   },
   'capabilities.get': {
     input: strictEmptyObjectSchema,
@@ -1018,6 +1280,7 @@ export function buildInternalContractSchemas(): InternalContractSchemas {
   return {
     $schema: JSON_SCHEMA_DIALECT,
     contractVersion: CONTRACT_VERSION,
+    $defs: SHARED_DEFS,
     operations,
   };
 }

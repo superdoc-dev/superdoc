@@ -9,7 +9,7 @@ describe('isValidOperationIdFormat', () => {
   });
 
   it('accepts namespaced identifiers (namespace.camelCase)', () => {
-    expect(isValidOperationIdFormat('comments.add')).toBe(true);
+    expect(isValidOperationIdFormat('comments.create')).toBe(true);
     expect(isValidOperationIdFormat('trackChanges.list')).toBe(true);
     expect(isValidOperationIdFormat('lists.setType')).toBe(true);
   });

@@ -233,6 +233,7 @@ const isImportedTableElement = (element) => Boolean(element?.closest?.(IMPORT_CO
  * @property {number} [rows=3] - Number of rows to create
  * @property {number} [cols=3] - Number of columns to create
  * @property {boolean} [withHeaderRow=false] - Create first row as header row
+ * @property {number[]} [columnWidths] - Explicit column widths in pixels
  */
 
 /**
@@ -554,11 +555,28 @@ export const Table = Node.create({
        * @example
        * editor.commands.insertTable()
        * editor.commands.insertTable({ rows: 3, cols: 3, withHeaderRow: true })
+       * editor.commands.insertTable({ rows: 3, cols: 3, columnWidths: [200, 100, 200] })
        */
       insertTable:
-        ({ rows = 3, cols = 3, withHeaderRow = false } = {}) =>
+        ({ rows = 3, cols = 3, withHeaderRow = false, columnWidths = null } = {}) =>
         ({ tr, dispatch, editor }) => {
-          const node = createTable(editor.schema, rows, cols, withHeaderRow);
+          let widths = columnWidths;
+
+          // If no widths provided, auto-calculate to fill available page width
+          if (!widths) {
+            const { pageSize = {}, pageMargins = {} } = editor.converter?.pageStyles ?? {};
+            const { width: pageWidth } = pageSize;
+            const { left = 0, right = 0 } = pageMargins;
+
+            if (pageWidth) {
+              // Page dimensions are in inches, convert to pixels (96 PPI)
+              const availableWidth = (pageWidth - left - right) * 96;
+              const columnWidth = Math.floor(availableWidth / cols);
+              widths = Array(cols).fill(columnWidth);
+            }
+          }
+
+          const node = createTable(editor.schema, rows, cols, withHeaderRow, null, widths);
 
           if (dispatch) {
             let offset = tr.selection.$from.end() + 1;

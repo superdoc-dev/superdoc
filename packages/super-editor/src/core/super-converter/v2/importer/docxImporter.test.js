@@ -83,6 +83,14 @@ describe('filterOutRootInlineNodes', () => {
     expect(result[1].type).toBe('paragraph');
   });
 
+  it('converts root permission tags into block nodes', () => {
+    const input = [n('permStart', { id: '1' }), n('permEnd', { id: '1' })];
+    const result = filterOutRootInlineNodes(input);
+    expect(result.map((node) => node.type)).toEqual(['permStartBlock', 'permEndBlock']);
+    expect(result[0].attrs.id).toBe('1');
+    expect(result[1].attrs.id).toBe('1');
+  });
+
   it('derives inline types from schema when provided', () => {
     // Build a minimal fake schema map using Map with forEach(name, nodeType)
     const nodes = new Map();

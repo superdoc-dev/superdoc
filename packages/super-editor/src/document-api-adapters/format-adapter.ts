@@ -14,6 +14,7 @@ import { requireSchemaMark, ensureTrackedCapability } from './helpers/mutation-h
 import { applyDirectMutationMeta, applyTrackedMutationMeta } from './helpers/transaction-meta.js';
 import { resolveTextTarget } from './helpers/adapter-utils.js';
 import { buildTextMutationResolution, readTextAtResolvedRange } from './helpers/text-mutation-resolution.js';
+import { checkRevision } from './plan-engine/revision-tracker.js';
 
 /** Maps each format operation to the display label used in failure messages. */
 const FORMAT_OPERATION_LABEL = {
@@ -25,7 +26,52 @@ const FORMAT_OPERATION_LABEL = {
 
 type FormatOperationId = keyof typeof FORMAT_OPERATION_LABEL;
 type FormatMarkName = 'bold' | 'italic' | 'underline' | 'strike';
-type FormatOperationInput = { target: TextAddress };
+type FormatOperationInput = { target?: TextAddress; blockId?: string; start?: number; end?: number };
+
+/**
+ * Normalize block-relative locator fields into a canonical TextAddress.
+ *
+ * blockId + start + end → TextAddress with range { start, end }.
+ * Returns the original input unchanged when no friendly locator is present.
+ */
+function normalizeFormatLocator(input: FormatOperationInput): FormatOperationInput {
+  const hasBlockId = input.blockId !== undefined;
+  const hasStart = input.start !== undefined;
+  const hasEnd = input.end !== undefined;
+
+  // Defensive: reject range fields mixed with canonical target.
+  if (input.target && (hasBlockId || hasStart || hasEnd)) {
+    throw new DocumentApiAdapterError(
+      'INVALID_TARGET',
+      'Cannot combine target with blockId/start/end on format request.',
+      { fields: ['target', 'blockId', 'start', 'end'] },
+    );
+  }
+
+  // Defensive: reject orphaned start/end without blockId.
+  if (!hasBlockId && (hasStart || hasEnd)) {
+    throw new DocumentApiAdapterError('INVALID_TARGET', 'start/end require blockId on format request.', {
+      fields: ['blockId', 'start', 'end'],
+    });
+  }
+
+  if (!hasBlockId) return input;
+
+  // Defensive: reject incomplete range.
+  if (!hasStart || !hasEnd) {
+    throw new DocumentApiAdapterError('INVALID_TARGET', 'blockId requires both start and end on format request.', {
+      fields: ['blockId', 'start', 'end'],
+    });
+  }
+
+  const target: TextAddress = {
+    kind: 'text',
+    blockId: input.blockId!,
+    range: { start: input.start!, end: input.end! },
+  };
+
+  return { target };
+}
 
 /**
  * Shared adapter logic for toggle-mark format operations.
@@ -43,16 +89,18 @@ function formatMarkAdapter(
   input: FormatOperationInput,
   options?: MutationOptions,
 ): TextMutationReceipt {
-  const range = resolveTextTarget(editor, input.target);
+  checkRevision(editor, options?.expectedRevision);
+  const normalizedInput = normalizeFormatLocator(input);
+  const range = resolveTextTarget(editor, normalizedInput.target!);
   if (!range) {
     throw new DocumentApiAdapterError('TARGET_NOT_FOUND', 'Format target could not be resolved.', {
-      target: input.target,
+      target: normalizedInput.target,
     });
   }
 
   const resolution = buildTextMutationResolution({
     requestedTarget: input.target,
-    target: input.target,
+    target: normalizedInput.target!,
     range,
     text: readTextAtResolvedRange(editor, range),
   });

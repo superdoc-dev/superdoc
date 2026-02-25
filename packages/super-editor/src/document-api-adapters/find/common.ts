@@ -51,7 +51,7 @@ const KNOWN_INLINE_PM_NODE_TYPES = new Set<string>([
 
 function resolveUnknownBlockId(attrs: Record<string, unknown> | undefined): string | undefined {
   if (!attrs) return undefined;
-  return toId(attrs.sdBlockId) ?? toId(attrs.paraId) ?? toId(attrs.blockId) ?? toId(attrs.id) ?? toId(attrs.uuid);
+  return toId(attrs.paraId) ?? toId(attrs.sdBlockId) ?? toId(attrs.blockId) ?? toId(attrs.id) ?? toId(attrs.uuid);
 }
 
 function isDualKindType(nodeType: NodeType | undefined): boolean {

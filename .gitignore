@@ -8,6 +8,7 @@ node_modules
 dist
 dist-ssr
 dist-types
+companion-dist
 *.local
 .env
 .npmrc
@@ -78,3 +79,19 @@ devtools/visual-testing/pnpm-lock.yaml
 
 .bun-cache/
 
+# Python
+__pycache__/
+*.pyc
+*.pyo
+# Generated platform companion build metadata (do not commit)
+packages/sdk/langs/python/platforms/**/*.egg-info/
+
+# Generated artifacts — run `pnpm run generate:all` to produce
+packages/document-api/generated/
+packages/document-api/.generated-internal/
+apps/cli/generated/
+packages/sdk/langs/node/src/generated/
+packages/sdk/langs/python/superdoc/generated/
+packages/sdk/tools/*.json
+# Note: apps/docs/document-api/reference/ stays committed because Mintlify
+# deploys directly from git with no pre-build hook support.

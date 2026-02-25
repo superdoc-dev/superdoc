@@ -1,0 +1,64 @@
+---
+title: Available operations
+sidebarTitle: Available Operations
+description: All Document API operations and their editor method mappings
+---
+
+Document API is in alpha and subject to breaking changes while the contract continues to evolve.
+See the full [operation reference](/document-api/reference/index) for detailed input/output schemas.
+
+{/* DOC_API_OPERATIONS_START */}
+### Available operations
+
+Use the tables below to see what operations are available and where each one is documented.
+
+| Namespace | Canonical ops | Aliases | Total surface | Reference |
+| --- | --- | --- | --- | --- |
+| Capabilities | 1 | 0 | 1 | [Reference](/document-api/reference/capabilities/index) |
+| Comments | 5 | 0 | 5 | [Reference](/document-api/reference/comments/index) |
+| Core | 8 | 0 | 8 | [Reference](/document-api/reference/core/index) |
+| Create | 2 | 0 | 2 | [Reference](/document-api/reference/create/index) |
+| Format | 1 | 4 | 5 | [Reference](/document-api/reference/format/index) |
+| Lists | 8 | 0 | 8 | [Reference](/document-api/reference/lists/index) |
+| Mutations | 2 | 0 | 2 | [Reference](/document-api/reference/mutations/index) |
+| Query | 1 | 0 | 1 | [Reference](/document-api/reference/query/index) |
+| Track Changes | 3 | 0 | 3 | [Reference](/document-api/reference/track-changes/index) |
+
+| Editor method | Operation |
+| --- | --- |
+| <span style={{ whiteSpace: 'nowrap', wordBreak: 'normal', overflowWrap: 'normal' }}><code>editor.doc.capabilities()</code></span> | [`capabilities.get`](/document-api/reference/capabilities/get) |
+| <span style={{ whiteSpace: 'nowrap', wordBreak: 'normal', overflowWrap: 'normal' }}><code>editor.doc.comments.create(...)</code></span> | [`comments.create`](/document-api/reference/comments/create) |
+| <span style={{ whiteSpace: 'nowrap', wordBreak: 'normal', overflowWrap: 'normal' }}><code>editor.doc.comments.patch(...)</code></span> | [`comments.patch`](/document-api/reference/comments/patch) |
+| <span style={{ whiteSpace: 'nowrap', wordBreak: 'normal', overflowWrap: 'normal' }}><code>editor.doc.comments.delete(...)</code></span> | [`comments.delete`](/document-api/reference/comments/delete) |
+| <span style={{ whiteSpace: 'nowrap', wordBreak: 'normal', overflowWrap: 'normal' }}><code>editor.doc.comments.get(...)</code></span> | [`comments.get`](/document-api/reference/comments/get) |
+| <span style={{ whiteSpace: 'nowrap', wordBreak: 'normal', overflowWrap: 'normal' }}><code>editor.doc.comments.list(...)</code></span> | [`comments.list`](/document-api/reference/comments/list) |
+| <span style={{ whiteSpace: 'nowrap', wordBreak: 'normal', overflowWrap: 'normal' }}><code>editor.doc.find(...)</code></span> | [`find`](/document-api/reference/find) |
+| <span style={{ whiteSpace: 'nowrap', wordBreak: 'normal', overflowWrap: 'normal' }}><code>editor.doc.getNode(...)</code></span> | [`getNode`](/document-api/reference/get-node) |
+| <span style={{ whiteSpace: 'nowrap', wordBreak: 'normal', overflowWrap: 'normal' }}><code>editor.doc.getNodeById(...)</code></span> | [`getNodeById`](/document-api/reference/get-node-by-id) |
+| <span style={{ whiteSpace: 'nowrap', wordBreak: 'normal', overflowWrap: 'normal' }}><code>editor.doc.getText(...)</code></span> | [`getText`](/document-api/reference/get-text) |
+| <span style={{ whiteSpace: 'nowrap', wordBreak: 'normal', overflowWrap: 'normal' }}><code>editor.doc.info(...)</code></span> | [`info`](/document-api/reference/info) |
+| <span style={{ whiteSpace: 'nowrap', wordBreak: 'normal', overflowWrap: 'normal' }}><code>editor.doc.insert(...)</code></span> | [`insert`](/document-api/reference/insert) |
+| <span style={{ whiteSpace: 'nowrap', wordBreak: 'normal', overflowWrap: 'normal' }}><code>editor.doc.replace(...)</code></span> | [`replace`](/document-api/reference/replace) |
+| <span style={{ whiteSpace: 'nowrap', wordBreak: 'normal', overflowWrap: 'normal' }}><code>editor.doc.delete(...)</code></span> | [`delete`](/document-api/reference/delete) |
+| <span style={{ whiteSpace: 'nowrap', wordBreak: 'normal', overflowWrap: 'normal' }}><code>editor.doc.create.paragraph(...)</code></span> | [`create.paragraph`](/document-api/reference/create/paragraph) |
+| <span style={{ whiteSpace: 'nowrap', wordBreak: 'normal', overflowWrap: 'normal' }}><code>editor.doc.create.heading(...)</code></span> | [`create.heading`](/document-api/reference/create/heading) |
+| <span style={{ whiteSpace: 'nowrap', wordBreak: 'normal', overflowWrap: 'normal' }}><code>editor.doc.format.apply(...)</code></span> | [`format.apply`](/document-api/reference/format/apply) |
+| <span style={{ whiteSpace: 'nowrap', wordBreak: 'normal', overflowWrap: 'normal' }}><code>editor.doc.format.bold(...)</code></span> | [`format.apply`](/document-api/reference/format/apply) |
+| <span style={{ whiteSpace: 'nowrap', wordBreak: 'normal', overflowWrap: 'normal' }}><code>editor.doc.format.italic(...)</code></span> | [`format.apply`](/document-api/reference/format/apply) |
+| <span style={{ whiteSpace: 'nowrap', wordBreak: 'normal', overflowWrap: 'normal' }}><code>editor.doc.format.underline(...)</code></span> | [`format.apply`](/document-api/reference/format/apply) |
+| <span style={{ whiteSpace: 'nowrap', wordBreak: 'normal', overflowWrap: 'normal' }}><code>editor.doc.format.strikethrough(...)</code></span> | [`format.apply`](/document-api/reference/format/apply) |
+| <span style={{ whiteSpace: 'nowrap', wordBreak: 'normal', overflowWrap: 'normal' }}><code>editor.doc.lists.list(...)</code></span> | [`lists.list`](/document-api/reference/lists/list) |
+| <span style={{ whiteSpace: 'nowrap', wordBreak: 'normal', overflowWrap: 'normal' }}><code>editor.doc.lists.get(...)</code></span> | [`lists.get`](/document-api/reference/lists/get) |
+| <span style={{ whiteSpace: 'nowrap', wordBreak: 'normal', overflowWrap: 'normal' }}><code>editor.doc.lists.insert(...)</code></span> | [`lists.insert`](/document-api/reference/lists/insert) |
+| <span style={{ whiteSpace: 'nowrap', wordBreak: 'normal', overflowWrap: 'normal' }}><code>editor.doc.lists.setType(...)</code></span> | [`lists.setType`](/document-api/reference/lists/set-type) |
+| <span style={{ whiteSpace: 'nowrap', wordBreak: 'normal', overflowWrap: 'normal' }}><code>editor.doc.lists.indent(...)</code></span> | [`lists.indent`](/document-api/reference/lists/indent) |
+| <span style={{ whiteSpace: 'nowrap', wordBreak: 'normal', overflowWrap: 'normal' }}><code>editor.doc.lists.outdent(...)</code></span> | [`lists.outdent`](/document-api/reference/lists/outdent) |
+| <span style={{ whiteSpace: 'nowrap', wordBreak: 'normal', overflowWrap: 'normal' }}><code>editor.doc.lists.restart(...)</code></span> | [`lists.restart`](/document-api/reference/lists/restart) |
+| <span style={{ whiteSpace: 'nowrap', wordBreak: 'normal', overflowWrap: 'normal' }}><code>editor.doc.lists.exit(...)</code></span> | [`lists.exit`](/document-api/reference/lists/exit) |
+| <span style={{ whiteSpace: 'nowrap', wordBreak: 'normal', overflowWrap: 'normal' }}><code>editor.doc.mutations.preview(...)</code></span> | [`mutations.preview`](/document-api/reference/mutations/preview) |
+| <span style={{ whiteSpace: 'nowrap', wordBreak: 'normal', overflowWrap: 'normal' }}><code>editor.doc.mutations.apply(...)</code></span> | [`mutations.apply`](/document-api/reference/mutations/apply) |
+| <span style={{ whiteSpace: 'nowrap', wordBreak: 'normal', overflowWrap: 'normal' }}><code>editor.doc.query.match(...)</code></span> | [`query.match`](/document-api/reference/query/match) |
+| <span style={{ whiteSpace: 'nowrap', wordBreak: 'normal', overflowWrap: 'normal' }}><code>editor.doc.trackChanges.list(...)</code></span> | [`trackChanges.list`](/document-api/reference/track-changes/list) |
+| <span style={{ whiteSpace: 'nowrap', wordBreak: 'normal', overflowWrap: 'normal' }}><code>editor.doc.trackChanges.get(...)</code></span> | [`trackChanges.get`](/document-api/reference/track-changes/get) |
+| <span style={{ whiteSpace: 'nowrap', wordBreak: 'normal', overflowWrap: 'normal' }}><code>editor.doc.trackChanges.decide(...)</code></span> | [`trackChanges.decide`](/document-api/reference/track-changes/decide) |
+{/* DOC_API_OPERATIONS_END */}

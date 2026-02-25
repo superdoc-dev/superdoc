@@ -2437,8 +2437,9 @@ function resolveTableWidth(attrs: TableBlock['attrs'], maxWidth: number): number
     // Convert OOXML percentage to pixels
     // OOXML_PCT_DIVISOR (5000) = 100%
     return Math.round(maxWidth * (validValue / OOXML_PCT_DIVISOR));
-  } else if (typedAttr.type === 'px' || typedAttr.type === 'pixel') {
+  } else if (typedAttr.type === 'px' || typedAttr.type === 'pixel' || typedAttr.type === 'dxa') {
     // Explicit pixel width - use directly
+    // Note: 'dxa' values are already converted to pixels by tbl-translator during import
     return validValue;
   }
 
@@ -2452,70 +2453,6 @@ async function measureTableBlock(block: TableBlock, constraints: MeasureConstrai
 
   let columnWidths: number[];
 
-  /**
-   * Scales column widths proportionally to fit within a target width.
-   *
-   * This function is used when table column widths exceed the available page width.
-   * It proportionally reduces all columns to fit the constraint while maintaining
-   * their relative proportions.
-   *
-   * Rounding Adjustment Logic:
-   * - Initial scaling uses Math.round() for each column, which can cause the sum
-   *   to deviate from the target due to accumulated rounding errors
-   * - After scaling, the function adjusts columns one-by-one to reach the exact target
-   * - For excess width (sum > target): decrements columns starting from index 0
-   * - For deficit width (sum < target): increments columns starting from index 0
-   * - Ensures no column goes below 1px minimum width
-   * - Distributes adjustments cyclically to avoid bias toward any single column
-   *
-   * @param widths - Array of column widths in pixels
-   * @param targetWidth - Maximum total width in pixels
-   * @returns Scaled column widths that sum exactly to targetWidth (or original widths if already fit)
-   *
-   * @example
-   * ```typescript
-   * scaleColumnWidths([100, 200, 100], 300)
-   * // Returns: [75, 150, 75] (scaled from 400px down to 300px, maintaining 1:2:1 ratio)
-   *
-   * scaleColumnWidths([50, 50], 200)
-   * // Returns: [50, 50] (already within target, no scaling needed)
-   *
-   * scaleColumnWidths([33, 33, 33], 100)
-   * // Returns: [34, 33, 33] (sum adjusted from 99 to exactly 100)
-   * ```
-   */
-  const scaleColumnWidths = (widths: number[], targetWidth: number): number[] => {
-    const totalWidth = widths.reduce((a, b) => a + b, 0);
-    if (totalWidth <= targetWidth || widths.length === 0) return widths;
-
-    const scale = targetWidth / totalWidth;
-    const scaled = widths.map((w) => Math.max(1, Math.round(w * scale)));
-    const sum = scaled.reduce((a, b) => a + b, 0);
-
-    // Normalize to the exact target to avoid overflows from rounding.
-    if (sum !== targetWidth) {
-      const adjust = (delta: number): void => {
-        let idx = 0;
-        const direction = delta > 0 ? 1 : -1;
-        delta = Math.abs(delta);
-        while (delta > 0 && scaled.length > 0) {
-          const i = idx % scaled.length;
-          if (direction > 0) {
-            scaled[i] += 1;
-            delta -= 1;
-          } else if (scaled[i] > 1) {
-            scaled[i] -= 1;
-            delta -= 1;
-          }
-          idx += 1;
-          if (idx > scaled.length * 2 && delta > 0) break;
-        }
-      };
-      adjust(targetWidth - sum);
-    }
-
-    return scaled;
-  };
   // Determine actual column count from table structure (accounting for colspan)
   const maxCellCount = Math.max(
     1,
@@ -2572,13 +2509,19 @@ async function measureTableBlock(block: TableBlock, constraints: MeasureConstrai
         columnWidths = columnWidths.slice(0, maxCellCount);
       }
 
-      // Scale down if total width exceeds available space (prevent overflow).
-      // Auto-width tables (w:tblW type="auto") size to their grid/content in Word.
-      // Do NOT scale up — tables that fill the page do so because their grid columns
-      // already sum to the page width, not because of scaling.
+      // Auto-layout: only scale DOWN if columns exceed available width.
+      // Do NOT scale up — explicit w:tblGrid column widths are authoritative.
+      // Tables without w:tblGrid already arrive with page-width columns via
+      // the fallback grid builder in tableFallbackHelpers.
       const totalWidth = columnWidths.reduce((a, b) => a + b, 0);
-      if (totalWidth > effectiveTargetWidth) {
-        columnWidths = scaleColumnWidths(columnWidths, effectiveTargetWidth);
+      if (totalWidth > effectiveTargetWidth && effectiveTargetWidth > 0) {
+        const scale = effectiveTargetWidth / totalWidth;
+        columnWidths = columnWidths.map((w) => Math.max(1, Math.round(w * scale)));
+        const scaledSum = columnWidths.reduce((a, b) => a + b, 0);
+        if (scaledSum !== effectiveTargetWidth && columnWidths.length > 0) {
+          const diff = effectiveTargetWidth - scaledSum;
+          columnWidths[columnWidths.length - 1] = Math.max(1, columnWidths[columnWidths.length - 1] + diff);
+        }
       }
     }
   } else {

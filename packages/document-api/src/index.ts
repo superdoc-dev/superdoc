@@ -10,10 +10,16 @@ import type {
   CreateParagraphInput,
   CreateParagraphResult,
   DocumentInfo,
+  MutationsApplyInput,
+  MutationsPreviewInput,
+  MutationsPreviewOutput,
   NodeAddress,
   NodeInfo,
+  PlanReceipt,
   Query,
-  QueryResult,
+  QueryMatchInput,
+  QueryMatchOutput,
+  FindOutput,
   Receipt,
   Selector,
   TextMutationReceipt,
@@ -22,31 +28,19 @@ import type {
 } from './types/index.js';
 import type { CommentInfo, CommentsListQuery, CommentsListResult } from './comments/comments.types.js';
 import type {
-  AddCommentInput,
   CommentsAdapter,
   CommentsApi,
-  EditCommentInput,
+  CommentsCreateInput,
+  CommentsPatchInput,
+  CommentsDeleteInput,
   GetCommentInput,
-  GoToCommentInput,
-  MoveCommentInput,
-  RemoveCommentInput,
-  ReplyToCommentInput,
-  ResolveCommentInput,
-  SetCommentActiveInput,
-  SetCommentInternalInput,
 } from './comments/comments.js';
 import {
-  executeAddComment,
-  executeEditComment,
+  executeCommentsCreate,
+  executeCommentsPatch,
+  executeCommentsDelete,
   executeGetComment,
-  executeGoToComment,
   executeListComments,
-  executeMoveComment,
-  executeRemoveComment,
-  executeReplyToComment,
-  executeResolveComment,
-  executeSetCommentActive,
-  executeSetCommentInternal,
 } from './comments/comments.js';
 import type { DeleteInput } from './delete/delete.js';
 import { executeFind, type FindAdapter, type FindOptions } from './find/find.js';
@@ -57,13 +51,9 @@ import type {
   FormatItalicInput,
   FormatUnderlineInput,
   FormatStrikethroughInput,
+  StyleApplyInput,
 } from './format/format.js';
-import {
-  executeFormatBold,
-  executeFormatItalic,
-  executeFormatUnderline,
-  executeFormatStrikethrough,
-} from './format/format.js';
+import { executeStyleApply } from './format/format.js';
 import type { GetNodeAdapter, GetNodeByIdInput } from './get-node/get-node.js';
 import { executeGetNode, executeGetNodeById } from './get-node/get-node.js';
 import { executeGetText, type GetTextAdapter, type GetTextInput } from './get-text/get-text.js';
@@ -99,24 +89,18 @@ import type { CreateAdapter, CreateApi } from './create/create.js';
 import { executeCreateParagraph, executeCreateHeading } from './create/create.js';
 import type { CreateHeadingInput, CreateHeadingResult } from './types/create.types.js';
 import type {
-  TrackChangesAcceptAllInput,
-  TrackChangesAcceptInput,
   TrackChangesAdapter,
   TrackChangesApi,
   TrackChangesGetInput,
   TrackChangesListInput,
-  TrackChangesRejectAllInput,
-  TrackChangesRejectInput,
+  ReviewDecideInput,
 } from './track-changes/track-changes.js';
 import {
-  executeTrackChangesAccept,
-  executeTrackChangesAcceptAll,
   executeTrackChangesGet,
   executeTrackChangesList,
-  executeTrackChangesReject,
-  executeTrackChangesRejectAll,
+  executeTrackChangesDecide,
 } from './track-changes/track-changes.js';
-import type { MutationOptions, WriteAdapter } from './write/write.js';
+import type { MutationOptions, RevisionGuardOptions, WriteAdapter } from './write/write.js';
 import {
   executeCapabilities,
   type CapabilitiesAdapter,
@@ -130,23 +114,26 @@ export type { FindAdapter, FindOptions } from './find/find.js';
 export type { GetNodeAdapter, GetNodeByIdInput } from './get-node/get-node.js';
 export type { GetTextAdapter, GetTextInput } from './get-text/get-text.js';
 export type { InfoAdapter, InfoInput } from './info/info.js';
-export type { MutationOptions, WriteAdapter, WriteRequest } from './write/write.js';
+export type { WriteAdapter, WriteRequest } from './write/write.js';
 export type {
   FormatAdapter,
   FormatBoldInput,
   FormatItalicInput,
   FormatUnderlineInput,
   FormatStrikethroughInput,
+  StyleApplyInput,
+  StyleApplyOptions,
 } from './format/format.js';
 export type { CreateAdapter } from './create/create.js';
 export type {
-  TrackChangesAcceptAllInput,
-  TrackChangesAcceptInput,
   TrackChangesAdapter,
   TrackChangesGetInput,
   TrackChangesListInput,
-  TrackChangesRejectAllInput,
+  TrackChangesAcceptInput,
   TrackChangesRejectInput,
+  TrackChangesAcceptAllInput,
+  TrackChangesRejectAllInput,
+  ReviewDecideInput,
 } from './track-changes/track-changes.js';
 export type { ListsAdapter } from './lists/lists.js';
 export type {
@@ -165,21 +152,27 @@ export type {
 } from './lists/lists.types.js';
 export { LIST_KINDS, LIST_INSERT_POSITIONS } from './lists/lists.types.js';
 export type {
-  AddCommentInput,
+  CommentsCreateInput,
+  CommentsPatchInput,
+  CommentsDeleteInput,
   CommentsAdapter,
-  EditCommentInput,
   GetCommentInput,
-  GoToCommentInput,
-  MoveCommentInput,
-  RemoveCommentInput,
+  // Legacy input types — exported for internal adapter use, not part of the contract.
+  AddCommentInput,
+  EditCommentInput,
   ReplyToCommentInput,
+  MoveCommentInput,
   ResolveCommentInput,
-  SetCommentActiveInput,
+  RemoveCommentInput,
   SetCommentInternalInput,
+  GoToCommentInput,
+  SetCommentActiveInput,
 } from './comments/comments.js';
 export type { CommentInfo, CommentsListQuery, CommentsListResult } from './comments/comments.types.js';
 export { DocumentApiValidationError } from './errors.js';
 export type { InsertInput } from './insert/insert.js';
+export type { ReplaceInput } from './replace/replace.js';
+export type { DeleteInput } from './delete/delete.js';
 
 /**
  * Callable capability accessor returned by `createDocumentApi`.
@@ -191,6 +184,24 @@ export interface CapabilitiesApi {
   get(): DocumentApiCapabilities;
 }
 
+export interface QueryApi {
+  match(input: QueryMatchInput): QueryMatchOutput;
+}
+
+export interface MutationsApi {
+  preview(input: MutationsPreviewInput): MutationsPreviewOutput;
+  apply(input: MutationsApplyInput): PlanReceipt;
+}
+
+export interface QueryAdapter {
+  match(input: QueryMatchInput): QueryMatchOutput;
+}
+
+export interface MutationsAdapter {
+  preview(input: MutationsPreviewInput): MutationsPreviewOutput;
+  apply(input: MutationsApplyInput): PlanReceipt;
+}
+
 /**
  * The Document API interface for querying and inspecting document nodes.
  */
@@ -200,14 +211,14 @@ export interface DocumentApi {
    * @param query - A full query object specifying selection criteria.
    * @returns The query result containing matches and metadata.
    */
-  find(query: Query): QueryResult;
+  find(query: Query): FindOutput;
   /**
    * Find nodes in the document matching a selector with optional options.
    * @param selector - A selector specifying what to find.
    * @param options - Optional find options (limit, offset, within, etc.).
    * @returns The query result containing matches and metadata.
    */
-  find(selector: Selector, options?: FindOptions): QueryResult;
+  find(selector: Selector, options?: FindOptions): FindOutput;
   /**
    * Get detailed information about a specific node by its address.
    * @param address - The node address to resolve.
@@ -250,7 +261,7 @@ export interface DocumentApi {
    */
   format: FormatApi;
   /**
-   * Tracked-change lifecycle operations.
+   * Tracked-change operations (list, get, decide).
    */
   trackChanges: TrackChangesApi;
   /**
@@ -261,6 +272,14 @@ export interface DocumentApi {
    * List item operations.
    */
   lists: ListsApi;
+  /**
+   * Selector-based query with cardinality contracts for mutation targeting.
+   */
+  query: QueryApi;
+  /**
+   * Mutation plan engine — preview and apply atomic mutation plans.
+   */
+  mutations: MutationsApi;
   /**
    * Runtime capability introspection.
    *
@@ -294,6 +313,8 @@ export interface DocumentApiAdapters {
   trackChanges: TrackChangesAdapter;
   create: CreateAdapter;
   lists: ListsAdapter;
+  query: QueryAdapter;
+  mutations: MutationsAdapter;
 }
 
 /**
@@ -306,8 +327,8 @@ export interface DocumentApiAdapters {
  * ```ts
  * const api = createDocumentApi(adapters);
  * const result = api.find({ nodeType: 'heading' });
- * for (const address of result.matches) {
- *   const node = api.getNode(address);
+ * for (const item of result.items) {
+ *   const node = api.getNode(item.address);
  *   console.log(node.properties);
  * }
  * ```
@@ -317,7 +338,7 @@ export function createDocumentApi(adapters: DocumentApiAdapters): DocumentApi {
   const capabilities: CapabilitiesApi = Object.assign(capFn, { get: capFn });
 
   const api: DocumentApi = {
-    find(selectorOrQuery: Selector | Query, options?: FindOptions): QueryResult {
+    find(selectorOrQuery: Selector | Query, options?: FindOptions): FindOutput {
       return executeFind(adapters.find, selectorOrQuery, options);
     },
     getNode(address: NodeAddress): NodeInfo {
@@ -333,32 +354,14 @@ export function createDocumentApi(adapters: DocumentApiAdapters): DocumentApi {
       return executeInfo(adapters.info, input);
     },
     comments: {
-      add(input: AddCommentInput): Receipt {
-        return executeAddComment(adapters.comments, input);
+      create(input: CommentsCreateInput, options?: RevisionGuardOptions): Receipt {
+        return executeCommentsCreate(adapters.comments, input, options);
       },
-      edit(input: EditCommentInput): Receipt {
-        return executeEditComment(adapters.comments, input);
+      patch(input: CommentsPatchInput, options?: RevisionGuardOptions): Receipt {
+        return executeCommentsPatch(adapters.comments, input, options);
       },
-      reply(input: ReplyToCommentInput): Receipt {
-        return executeReplyToComment(adapters.comments, input);
-      },
-      move(input: MoveCommentInput): Receipt {
-        return executeMoveComment(adapters.comments, input);
-      },
-      resolve(input: ResolveCommentInput): Receipt {
-        return executeResolveComment(adapters.comments, input);
-      },
-      remove(input: RemoveCommentInput): Receipt {
-        return executeRemoveComment(adapters.comments, input);
-      },
-      setInternal(input: SetCommentInternalInput): Receipt {
-        return executeSetCommentInternal(adapters.comments, input);
-      },
-      setActive(input: SetCommentActiveInput): Receipt {
-        return executeSetCommentActive(adapters.comments, input);
-      },
-      goTo(input: GoToCommentInput): Receipt {
-        return executeGoToComment(adapters.comments, input);
+      delete(input: CommentsDeleteInput, options?: RevisionGuardOptions): Receipt {
+        return executeCommentsDelete(adapters.comments, input, options);
       },
       get(input: GetCommentInput): CommentInfo {
         return executeGetComment(adapters.comments, input);
@@ -378,16 +381,19 @@ export function createDocumentApi(adapters: DocumentApiAdapters): DocumentApi {
     },
     format: {
       bold(input: FormatBoldInput, options?: MutationOptions): TextMutationReceipt {
-        return executeFormatBold(adapters.format, input, options);
+        return executeStyleApply(adapters.format, { ...input, inline: { bold: true } }, options);
       },
       italic(input: FormatItalicInput, options?: MutationOptions): TextMutationReceipt {
-        return executeFormatItalic(adapters.format, input, options);
+        return executeStyleApply(adapters.format, { ...input, inline: { italic: true } }, options);
       },
       underline(input: FormatUnderlineInput, options?: MutationOptions): TextMutationReceipt {
-        return executeFormatUnderline(adapters.format, input, options);
+        return executeStyleApply(adapters.format, { ...input, inline: { underline: true } }, options);
       },
       strikethrough(input: FormatStrikethroughInput, options?: MutationOptions): TextMutationReceipt {
-        return executeFormatStrikethrough(adapters.format, input, options);
+        return executeStyleApply(adapters.format, { ...input, inline: { strike: true } }, options);
+      },
+      apply(input: StyleApplyInput, options?: MutationOptions): TextMutationReceipt {
+        return executeStyleApply(adapters.format, input, options);
       },
     },
     trackChanges: {
@@ -397,17 +403,8 @@ export function createDocumentApi(adapters: DocumentApiAdapters): DocumentApi {
       get(input: TrackChangesGetInput): TrackChangeInfo {
         return executeTrackChangesGet(adapters.trackChanges, input);
       },
-      accept(input: TrackChangesAcceptInput): Receipt {
-        return executeTrackChangesAccept(adapters.trackChanges, input);
-      },
-      reject(input: TrackChangesRejectInput): Receipt {
-        return executeTrackChangesReject(adapters.trackChanges, input);
-      },
-      acceptAll(input: TrackChangesAcceptAllInput): Receipt {
-        return executeTrackChangesAcceptAll(adapters.trackChanges, input);
-      },
-      rejectAll(input: TrackChangesRejectAllInput): Receipt {
-        return executeTrackChangesRejectAll(adapters.trackChanges, input);
+      decide(input: ReviewDecideInput, options?: RevisionGuardOptions): Receipt {
+        return executeTrackChangesDecide(adapters.trackChanges, input, options);
       },
     },
     create: {
@@ -416,6 +413,19 @@ export function createDocumentApi(adapters: DocumentApiAdapters): DocumentApi {
       },
       heading(input: CreateHeadingInput, options?: MutationOptions): CreateHeadingResult {
         return executeCreateHeading(adapters.create, input, options);
+      },
+    },
+    query: {
+      match(input: QueryMatchInput): QueryMatchOutput {
+        return adapters.query.match(input);
+      },
+    },
+    mutations: {
+      preview(input: MutationsPreviewInput): MutationsPreviewOutput {
+        return adapters.mutations.preview(input);
+      },
+      apply(input: MutationsApplyInput): PlanReceipt {
+        return adapters.mutations.apply(input);
       },
     },
     capabilities,

@@ -31,7 +31,7 @@ Stateful editing flow (recommended for multi-step edits):
 ```bash
 superdoc open ./contract.docx
 superdoc find --type text --pattern "termination"
-superdoc replace --target-json '{"kind":"text","blockId":"p1","range":{"start":0,"end":11}}' --text "expiration"
+superdoc replace --target-json '{"blockId":"p1","range":{"start":0,"end":11}}' --text "expiration"
 superdoc save --in-place
 superdoc close
 ```

@@ -1,5 +1,8 @@
 import { normalizeMutationOptions, type MutationOptions } from '../write/write.js';
-import type { TextAddress, TextMutationReceipt } from '../types/index.js';
+import type { TextAddress, TextMutationReceipt, SetMarks } from '../types/index.js';
+import { MARK_KEY_SET } from '../types/style-policy.types.js';
+import { DocumentApiValidationError } from '../errors.js';
+import { isRecord, isTextAddress, assertNoUnknownFields } from '../validation-primitives.js';
 
 /**
  * Input payload for `format.bold`.
@@ -29,111 +32,136 @@ export interface FormatStrikethroughInput {
   target: TextAddress;
 }
 
+/**
+ * Input payload for `format.apply`.
+ *
+ * `inline` uses boolean patch semantics: `true` sets, `false` removes, omitted leaves unchanged.
+ */
+export interface StyleApplyInput {
+  target: TextAddress;
+  /** Boolean inline-style patch — at least one known key required. */
+  inline: SetMarks;
+}
+
+/** Options for `format.apply` — same shape as all other mutations. */
+export type StyleApplyOptions = MutationOptions;
+
+/**
+ * Engine-specific adapter — only `apply()` is required.
+ * Per-mark methods were removed in the Phase 2c contract simplification.
+ */
 export interface FormatAdapter {
-  /** Apply or toggle bold formatting on the target text range. */
+  /** Apply explicit inline-style changes using boolean patch semantics. */
+  apply(input: StyleApplyInput, options?: MutationOptions): TextMutationReceipt;
+}
+
+/**
+ * Public helper surface exposed on `DocumentApi.format`.
+ * Per-mark helpers route through `executeStyleApply` internally.
+ */
+export interface FormatApi {
   bold(input: FormatBoldInput, options?: MutationOptions): TextMutationReceipt;
-  /** Apply or toggle italic formatting on the target text range. */
   italic(input: FormatItalicInput, options?: MutationOptions): TextMutationReceipt;
-  /** Apply or toggle underline formatting on the target text range. */
   underline(input: FormatUnderlineInput, options?: MutationOptions): TextMutationReceipt;
-  /** Apply or toggle strikethrough formatting on the target text range. */
   strikethrough(input: FormatStrikethroughInput, options?: MutationOptions): TextMutationReceipt;
+  apply(input: StyleApplyInput, options?: MutationOptions): TextMutationReceipt;
 }
 
-export type FormatApi = FormatAdapter;
+// ---------------------------------------------------------------------------
+// format.apply — validation and execution
+// ---------------------------------------------------------------------------
+
+const STYLE_APPLY_INPUT_ALLOWED_KEYS = new Set(['target', 'inline']);
 
 /**
- * Executes `format.bold` using the provided adapter.
+ * Validates a `format.apply` input and throws on violations.
  *
- * @param adapter - Adapter implementation that performs format mutations.
- * @param input - Text target payload for the bold mutation.
- * @param options - Optional mutation execution options.
- * @returns The mutation receipt produced by the adapter.
- * @throws {Error} Propagates adapter errors when the target or capabilities are invalid.
- *
- * @example
- * ```ts
- * const receipt = executeFormatBold(adapter, {
- *   target: { kind: 'text', blockId: 'p1', range: { start: 0, end: 5 } },
- * });
- * ```
+ * Validation order:
+ * 0. Input shape guard
+ * 1. Unknown field rejection
+ * 2. Locator validation (same rules as format operations)
+ * 3. `inline` presence and type
+ * 4. At least one known inline key
+ * 5. No unknown inline keys
+ * 6. All inline values are booleans
  */
-export function executeFormatBold(
-  adapter: FormatAdapter,
-  input: FormatBoldInput,
-  options?: MutationOptions,
-): TextMutationReceipt {
-  return adapter.bold(input, normalizeMutationOptions(options));
+function validateStyleApplyInput(input: unknown): asserts input is StyleApplyInput {
+  if (!isRecord(input)) {
+    throw new DocumentApiValidationError('INVALID_INPUT', 'format.apply input must be a non-null object.');
+  }
+
+  assertNoUnknownFields(input, STYLE_APPLY_INPUT_ALLOWED_KEYS, 'format.apply');
+
+  // --- Locator validation ---
+  const { target, inline } = input;
+
+  if (target === undefined) {
+    throw new DocumentApiValidationError('INVALID_TARGET', 'format.apply requires a target.');
+  }
+
+  if (!isTextAddress(target)) {
+    throw new DocumentApiValidationError('INVALID_TARGET', 'target must be a text address object.', {
+      field: 'target',
+      value: target,
+    });
+  }
+
+  // --- Inline-style validation ---
+  if (inline === undefined || inline === null) {
+    throw new DocumentApiValidationError('INVALID_INPUT', 'format.apply requires an inline object.');
+  }
+
+  if (!isRecord(inline)) {
+    throw new DocumentApiValidationError('INVALID_INPUT', 'inline must be a non-null object.', {
+      field: 'inline',
+      value: inline,
+    });
+  }
+
+  const inlineKeys = Object.keys(inline);
+
+  if (inlineKeys.length === 0) {
+    throw new DocumentApiValidationError('INVALID_INPUT', 'inline must include at least one known key.');
+  }
+
+  for (const key of inlineKeys) {
+    if (!MARK_KEY_SET.has(key)) {
+      throw new DocumentApiValidationError(
+        'INVALID_INPUT',
+        `Unknown inline style key "${key}". Known keys: bold, italic, underline, strike.`,
+        {
+          field: 'inline',
+          key,
+        },
+      );
+    }
+    const value = inline[key];
+    if (typeof value !== 'boolean') {
+      throw new DocumentApiValidationError(
+        'INVALID_INPUT',
+        `Inline style "${key}" must be a boolean, got ${typeof value}.`,
+        {
+          field: 'inline',
+          key,
+          value,
+        },
+      );
+    }
+  }
 }
 
 /**
- * Executes `format.italic` using the provided adapter.
+ * Executes `format.apply` using the provided adapter.
  *
- * @param adapter - Adapter implementation that performs format mutations.
- * @param input - Text target payload for the italic mutation.
- * @param options - Optional mutation execution options.
- * @returns The mutation receipt produced by the adapter.
- * @throws {Error} Propagates adapter errors when the target or capabilities are invalid.
- *
- * @example
- * ```ts
- * const receipt = executeFormatItalic(adapter, {
- *   target: { kind: 'text', blockId: 'p1', range: { start: 0, end: 5 } },
- * });
- * ```
+ * Validates input (locator + inline), then delegates to the adapter's `apply()` method.
+ * Inline styles use boolean patch semantics: `true` sets a style, `false` removes it, omitted keys are unchanged.
+ * All inline changes within one call are applied in a single ProseMirror transaction.
  */
-export function executeFormatItalic(
+export function executeStyleApply(
   adapter: FormatAdapter,
-  input: FormatItalicInput,
+  input: StyleApplyInput,
   options?: MutationOptions,
 ): TextMutationReceipt {
-  return adapter.italic(input, normalizeMutationOptions(options));
-}
-
-/**
- * Executes `format.underline` using the provided adapter.
- *
- * @param adapter - Adapter implementation that performs format mutations.
- * @param input - Text target payload for the underline mutation.
- * @param options - Optional mutation execution options.
- * @returns The mutation receipt produced by the adapter.
- * @throws {Error} Propagates adapter errors when the target or capabilities are invalid.
- *
- * @example
- * ```ts
- * const receipt = executeFormatUnderline(adapter, {
- *   target: { kind: 'text', blockId: 'p1', range: { start: 0, end: 5 } },
- * });
- * ```
- */
-export function executeFormatUnderline(
-  adapter: FormatAdapter,
-  input: FormatUnderlineInput,
-  options?: MutationOptions,
-): TextMutationReceipt {
-  return adapter.underline(input, normalizeMutationOptions(options));
-}
-
-/**
- * Executes `format.strikethrough` using the provided adapter.
- *
- * @param adapter - Adapter implementation that performs format mutations.
- * @param input - Text target payload for the strikethrough mutation.
- * @param options - Optional mutation execution options.
- * @returns The mutation receipt produced by the adapter.
- * @throws {Error} Propagates adapter errors when the target or capabilities are invalid.
- *
- * @example
- * ```ts
- * const receipt = executeFormatStrikethrough(adapter, {
- *   target: { kind: 'text', blockId: 'p1', range: { start: 0, end: 5 } },
- * });
- * ```
- */
-export function executeFormatStrikethrough(
-  adapter: FormatAdapter,
-  input: FormatStrikethroughInput,
-  options?: MutationOptions,
-): TextMutationReceipt {
-  return adapter.strikethrough(input, normalizeMutationOptions(options));
+  validateStyleApplyInput(input);
+  return adapter.apply(input, normalizeMutationOptions(options));
 }

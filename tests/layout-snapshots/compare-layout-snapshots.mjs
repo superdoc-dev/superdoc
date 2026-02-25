@@ -934,7 +934,83 @@ function groupDiffsByPage(diffEntries, blockPagesMap) {
   };
 }
 
+async function readSnapshotGenerationSummary(summaryPath) {
+  try {
+    const raw = await fs.readFile(summaryPath, 'utf8');
+    const parsed = JSON.parse(raw);
+    if (!parsed || typeof parsed !== 'object') return null;
+    return parsed;
+  } catch {
+    return null;
+  }
+}
+
+function normalizeGenerationFailures({ source, stage, summary }) {
+  if (!summary || !Array.isArray(summary.failures)) return [];
+
+  return summary.failures.map((entry) => ({
+    source,
+    stage,
+    path: typeof entry?.path === 'string' ? entry.path : '<unknown>',
+    message: typeof entry?.message === 'string' ? entry.message : summarizeValue(entry?.message ?? entry),
+    ...(typeof entry?.elapsedMs === 'number' ? { elapsedMs: entry.elapsedMs } : {}),
+  }));
+}
+
+function dedupeGenerationFailures(failures) {
+  const unique = [];
+  const seen = new Set();
+  for (const failure of failures) {
+    const key = `${failure.source}|${failure.path}|${failure.message}`;
+    if (seen.has(key)) continue;
+    seen.add(key);
+    unique.push(failure);
+  }
+  return unique;
+}
+
+/**
+ * Normalizes generation warning text for concise end-of-run reporting.
+ *
+ * @param {unknown} message - Raw error message emitted by snapshot generation.
+ * @returns {string} Human-readable warning message.
+ */
+function normalizeGenerationWarningMessage(message) {
+  const text = String(message ?? '')
+    .replace(/\s+/g, ' ')
+    .trim();
+  const dispatchPrefix = '[CommandService] Dispatch failed: ';
+  if (text.startsWith(dispatchPrefix)) {
+    return text.slice(dispatchPrefix.length);
+  }
+  return text || 'Unknown generation error';
+}
+
+/**
+ * Converts an absolute document path into a stable display label for logs.
+ *
+ * @param {string} docPath - Absolute or relative document path.
+ * @param {string | null | undefined} inputRoot - Optional corpus root.
+ * @returns {string} Relative path when inside corpus root, otherwise normalized absolute path.
+ */
+function toDisplayDocPath(docPath, inputRoot) {
+  if (typeof docPath !== 'string' || docPath.length === 0) return '<unknown>';
+
+  try {
+    const resolvedInputRoot = path.resolve(inputRoot ?? DEFAULT_INPUT_ROOT);
+    const resolvedDocPath = path.resolve(docPath);
+    const rel = path.relative(resolvedInputRoot, resolvedDocPath);
+    if (rel && !rel.startsWith('..') && !path.isAbsolute(rel)) {
+      return pathToPosix(rel);
+    }
+  } catch {}
+
+  return pathToPosix(docPath);
+}
+
 async function runNpmReferenceGeneration({ referenceSpecifier, args }) {
+  const summaryDir = await fs.mkdtemp(path.join(os.tmpdir(), 'layout-snapshots-compare-'));
+  const summaryPath = path.join(summaryDir, 'reference-generation.summary.json');
   const childArgs = [
     NPM_EXPORT_SCRIPT_PATH,
     referenceSpecifier,
@@ -956,53 +1032,64 @@ async function runNpmReferenceGeneration({ referenceSpecifier, args }) {
   if (args.inputRoot) {
     childArgs.push('--input-root', path.resolve(args.inputRoot));
   }
+  childArgs.push('--summary-file', summaryPath);
 
-  const child = spawn(process.execPath, childArgs, {
-    cwd: process.cwd(),
-    env: process.env,
-    stdio: ['ignore', 'pipe', 'pipe'],
-  });
+  try {
+    const child = spawn(process.execPath, childArgs, {
+      cwd: process.cwd(),
+      env: process.env,
+      stdio: ['ignore', 'pipe', 'pipe'],
+    });
 
-  let resolvedVersionFolder = null;
-  const collectLine = (line) => {
-    const trimmed = String(line ?? '').trim();
-    const match = trimmed.match(/^\[layout-snapshots:npm\] Version folder:\s*(.+)$/);
-    if (match) {
-      resolvedVersionFolder = match[1].trim();
+    let resolvedVersionFolder = null;
+    const collectLine = (line) => {
+      const trimmed = String(line ?? '').trim();
+      const match = trimmed.match(/^\[layout-snapshots:npm\] Version folder:\s*(.+)$/);
+      if (match) {
+        resolvedVersionFolder = match[1].trim();
+      }
+    };
+
+    const stdoutRl = readline.createInterface({ input: child.stdout, crlfDelay: Infinity });
+    const stderrRl = readline.createInterface({ input: child.stderr, crlfDelay: Infinity });
+
+    const stdoutDone = (async () => {
+      for await (const line of stdoutRl) {
+        console.log(line);
+        collectLine(line);
+      }
+    })();
+    const stderrDone = (async () => {
+      for await (const line of stderrRl) {
+        console.error(line);
+        collectLine(line);
+      }
+    })();
+
+    const exitCode = await new Promise((resolve) => {
+      child.on('close', (code) => resolve(code ?? 1));
+      child.on('error', () => resolve(1));
+    });
+
+    await Promise.all([stdoutDone, stderrDone]);
+    const summary = await readSnapshotGenerationSummary(summaryPath);
+
+    if (exitCode !== 0) {
+      throw new Error(`Reference generation failed with exit code ${exitCode}.`);
     }
-  };
 
-  const stdoutRl = readline.createInterface({ input: child.stdout, crlfDelay: Infinity });
-  const stderrRl = readline.createInterface({ input: child.stderr, crlfDelay: Infinity });
-
-  const stdoutDone = (async () => {
-    for await (const line of stdoutRl) {
-      console.log(line);
-      collectLine(line);
-    }
-  })();
-  const stderrDone = (async () => {
-    for await (const line of stderrRl) {
-      console.error(line);
-      collectLine(line);
-    }
-  })();
-
-  const exitCode = await new Promise((resolve) => {
-    child.on('close', (code) => resolve(code ?? 1));
-    child.on('error', () => resolve(1));
-  });
-
-  await Promise.all([stdoutDone, stderrDone]);
-
-  if (exitCode !== 0) {
-    throw new Error(`Reference generation failed with exit code ${exitCode}.`);
+    return {
+      resolvedVersionFolder,
+      summary,
+    };
+  } finally {
+    await fs.rm(summaryDir, { recursive: true, force: true }).catch(() => {});
   }
-
-  return resolvedVersionFolder;
 }
 
 async function runCandidateGeneration({ candidateRoot, args }) {
+  const summaryDir = await fs.mkdtemp(path.join(os.tmpdir(), 'layout-snapshots-compare-'));
+  const summaryPath = path.join(summaryDir, 'candidate-generation.summary.json');
   const childArgs = [
     CANDIDATE_EXPORT_SCRIPT_PATH,
     '--output-root',
@@ -1022,36 +1109,46 @@ async function runCandidateGeneration({ candidateRoot, args }) {
   if (args.inputRoot) {
     childArgs.push('--input-root', path.resolve(args.inputRoot));
   }
+  childArgs.push('--summary-file', summaryPath);
 
-  const child = spawn(process.execPath, childArgs, {
-    cwd: process.cwd(),
-    env: process.env,
-    stdio: ['ignore', 'pipe', 'pipe'],
-  });
+  try {
+    const child = spawn(process.execPath, childArgs, {
+      cwd: process.cwd(),
+      env: process.env,
+      stdio: ['ignore', 'pipe', 'pipe'],
+    });
 
-  const stdoutRl = readline.createInterface({ input: child.stdout, crlfDelay: Infinity });
-  const stderrRl = readline.createInterface({ input: child.stderr, crlfDelay: Infinity });
+    const stdoutRl = readline.createInterface({ input: child.stdout, crlfDelay: Infinity });
+    const stderrRl = readline.createInterface({ input: child.stderr, crlfDelay: Infinity });
 
-  const stdoutDone = (async () => {
-    for await (const line of stdoutRl) {
-      console.log(line);
+    const stdoutDone = (async () => {
+      for await (const line of stdoutRl) {
+        console.log(line);
+      }
+    })();
+    const stderrDone = (async () => {
+      for await (const line of stderrRl) {
+        console.error(line);
+      }
+    })();
+
+    const exitCode = await new Promise((resolve) => {
+      child.on('close', (code) => resolve(code ?? 1));
+      child.on('error', () => resolve(1));
+    });
+
+    await Promise.all([stdoutDone, stderrDone]);
+    const summary = await readSnapshotGenerationSummary(summaryPath);
+
+    if (exitCode !== 0) {
+      throw new Error(`Candidate generation failed with exit code ${exitCode}.`);
     }
-  })();
-  const stderrDone = (async () => {
-    for await (const line of stderrRl) {
-      console.error(line);
-    }
-  })();
 
-  const exitCode = await new Promise((resolve) => {
-    child.on('close', (code) => resolve(code ?? 1));
-    child.on('error', () => resolve(1));
-  });
-
-  await Promise.all([stdoutDone, stderrDone]);
-
-  if (exitCode !== 0) {
-    throw new Error(`Candidate generation failed with exit code ${exitCode}.`);
+    return {
+      summary,
+    };
+  } finally {
+    await fs.rm(summaryDir, { recursive: true, force: true }).catch(() => {});
   }
 }
 
@@ -1140,6 +1237,13 @@ async function runVisualCompareForChangedDocs({ changedDocPaths, args }) {
 }
 
 function buildReportMarkdown(summary) {
+  const candidateGenerationFailures = Array.isArray(summary.candidateGenerationFailures)
+    ? summary.candidateGenerationFailures
+    : [];
+  const referenceGenerationFailures = Array.isArray(summary.referenceGenerationFailures)
+    ? summary.referenceGenerationFailures
+    : [];
+
   const lines = [];
   lines.push('# Layout Snapshot Diff Report');
   lines.push('');
@@ -1156,6 +1260,8 @@ function buildReportMarkdown(summary) {
   lines.push(`- Unchanged docs: ${summary.unchangedDocCount}`);
   lines.push(`- Missing in reference: ${summary.missingInReference.length}`);
   lines.push(`- Missing in candidate: ${summary.missingInCandidate.length}`);
+  lines.push(`- Candidate generation warnings: ${candidateGenerationFailures.length}`);
+  lines.push(`- Reference generation warnings: ${referenceGenerationFailures.length}`);
   lines.push('');
 
   if (summary.missingInReference.length > 0) {
@@ -1186,6 +1292,34 @@ function buildReportMarkdown(summary) {
     lines.push('');
   }
 
+  if (candidateGenerationFailures.length > 0) {
+    lines.push('## Candidate Generation Warnings');
+    lines.push('');
+    for (const failure of candidateGenerationFailures) {
+      const stage = String(failure?.stage ?? 'candidate generation');
+      const pathLabel = String(failure?.path ?? '<unknown>');
+      const message = normalizeGenerationWarningMessage(failure?.message);
+      const elapsed =
+        typeof failure?.elapsedMs === 'number' ? ` | elapsed: ${(failure.elapsedMs / 1000).toFixed(2)}s` : '';
+      lines.push(`- ${pathLabel} | stage: ${stage} | skipped (${message})${elapsed}`);
+    }
+    lines.push('');
+  }
+
+  if (referenceGenerationFailures.length > 0) {
+    lines.push('## Reference Generation Warnings');
+    lines.push('');
+    for (const failure of referenceGenerationFailures) {
+      const stage = String(failure?.stage ?? 'reference generation');
+      const pathLabel = String(failure?.path ?? '<unknown>');
+      const message = normalizeGenerationWarningMessage(failure?.message);
+      const elapsed =
+        typeof failure?.elapsedMs === 'number' ? ` | elapsed: ${(failure.elapsedMs / 1000).toFixed(2)}s` : '';
+      lines.push(`- ${pathLabel} | stage: ${stage} | skipped (${message})${elapsed}`);
+    }
+    lines.push('');
+  }
+
   return `${lines.join('\n')}\n`;
 }
 
@@ -1210,6 +1344,8 @@ async function main() {
   let resolvedReferenceLabel = args.reference ? normalizeVersionLabel(args.reference) : path.basename(referenceRoot ?? 'reference');
   let candidateGenerated = false;
   let referenceGenerated = false;
+  const candidateGenerationFailures = [];
+  const referenceGenerationFailures = [];
 
   if (!referenceRoot && args.reference) {
     referenceRoot = path.join(referenceBase, normalizeVersionLabel(args.reference));
@@ -1226,10 +1362,17 @@ async function main() {
     console.log(' done');
 
     console.log(`[layout-snapshots:compare] Refreshing candidate snapshots at ${candidateRoot}...`);
-    await runCandidateGeneration({
+    const candidateGeneration = await runCandidateGeneration({
       candidateRoot,
       args,
     });
+    candidateGenerationFailures.push(
+      ...normalizeGenerationFailures({
+        source: 'candidate',
+        stage: 'candidate generation',
+        summary: candidateGeneration.summary,
+      }),
+    );
     candidateGenerated = true;
     if (!(await pathExists(candidateRoot))) {
       throw new Error(`Candidate generation completed but folder not found: ${candidateRoot}`);
@@ -1244,13 +1387,20 @@ async function main() {
     }
 
     console.log(`[layout-snapshots:compare] Reference not found at ${referenceRoot}. Generating from npm...`);
-    const generatedFolder = await runNpmReferenceGeneration({
+    const referenceGeneration = await runNpmReferenceGeneration({
       referenceSpecifier: args.reference,
       args,
     });
+    referenceGenerationFailures.push(
+      ...normalizeGenerationFailures({
+        source: 'reference',
+        stage: 'reference generation',
+        summary: referenceGeneration.summary,
+      }),
+    );
     referenceGenerated = true;
     const resolved = await resolveGeneratedReferenceRoot({
-      generatedFolder,
+      generatedFolder: referenceGeneration.resolvedVersionFolder,
       referenceBase,
       reference: args.reference,
       errorContext: 'Reference generation',
@@ -1291,18 +1441,26 @@ async function main() {
     relation.missingInReference.length > 0 &&
     args.reference &&
     args.autoGenerateReference &&
-    !args.referenceRoot
+    !args.referenceRoot &&
+    !referenceGenerated
   ) {
     console.log(
       `[layout-snapshots:compare] Reference exists but is incomplete (${relation.missingInReference.length} missing). Regenerating...`,
     );
-    const generatedFolder = await runNpmReferenceGeneration({
+    const referenceGeneration = await runNpmReferenceGeneration({
       referenceSpecifier: args.reference,
       args,
     });
+    referenceGenerationFailures.push(
+      ...normalizeGenerationFailures({
+        source: 'reference',
+        stage: 'reference regeneration',
+        summary: referenceGeneration.summary,
+      }),
+    );
     referenceGenerated = true;
     const resolved = await resolveGeneratedReferenceRoot({
-      generatedFolder,
+      generatedFolder: referenceGeneration.resolvedVersionFolder,
       referenceBase,
       reference: args.reference,
       errorContext: 'Reference regeneration',
@@ -1347,13 +1505,20 @@ async function main() {
       console.log(
         `[layout-snapshots:compare] Reference snapshots require refresh (${refreshReasons.join('; ')}). Regenerating reference snapshots...`,
       );
-      const generatedFolder = await runNpmReferenceGeneration({
+      const referenceGeneration = await runNpmReferenceGeneration({
         referenceSpecifier: args.reference,
         args,
       });
+      referenceGenerationFailures.push(
+        ...normalizeGenerationFailures({
+          source: 'reference',
+          stage: 'reference refresh',
+          summary: referenceGeneration.summary,
+        }),
+      );
       referenceGenerated = true;
       const resolved = await resolveGeneratedReferenceRoot({
-        generatedFolder,
+        generatedFolder: referenceGeneration.resolvedVersionFolder,
         referenceBase,
         reference: args.reference,
         errorContext: 'Reference refresh',
@@ -1373,6 +1538,10 @@ async function main() {
       relation = buildPathRelation(candidatePaths, referencePaths);
     }
   }
+
+  const uniqueCandidateGenerationFailures = dedupeGenerationFailures(candidateGenerationFailures);
+  const uniqueReferenceGenerationFailures = dedupeGenerationFailures(referenceGenerationFailures);
+  const generationFailures = [...uniqueCandidateGenerationFailures, ...uniqueReferenceGenerationFailures];
 
   const reportsRoot = path.resolve(args.reportsRoot);
   const reportDir = args.reportDir
@@ -1573,6 +1742,8 @@ async function main() {
     missingInCandidate: relation.missingInCandidate,
     changedDocs,
     changedDocPaths,
+    candidateGenerationFailures: uniqueCandidateGenerationFailures,
+    referenceGenerationFailures: uniqueReferenceGenerationFailures,
     visualComparison,
   };
 
@@ -1585,10 +1756,26 @@ async function main() {
   console.log(`[layout-snapshots:compare] Unchanged docs:     ${unchangedDocCount}`);
   console.log(`[layout-snapshots:compare] Missing reference:  ${relation.missingInReference.length}`);
   console.log(`[layout-snapshots:compare] Missing candidate:  ${relation.missingInCandidate.length}`);
+  console.log(`[layout-snapshots:compare] Candidate gen warnings: ${uniqueCandidateGenerationFailures.length}`);
+  console.log(`[layout-snapshots:compare] Reference gen warnings: ${uniqueReferenceGenerationFailures.length}`);
   if (visualComparison.executed || visualComparison.enabled) {
     console.log(`[layout-snapshots:compare] Visual compare:    ${visualComparison.status}`);
   }
   console.log(`[layout-snapshots:compare] Report:             ${reportDir}`);
+
+  if (generationFailures.length > 0) {
+    console.warn('');
+    console.warn(
+      `[layout-snapshots:compare] Generation warnings: ${generationFailures.length} document(s) were skipped during snapshot generation; compare completed.`,
+    );
+    for (const failure of generationFailures) {
+      const elapsed =
+        typeof failure.elapsedMs === 'number' ? ` after ${(failure.elapsedMs / 1000).toFixed(2)}s` : '';
+      const displayPath = toDisplayDocPath(failure.path, args.inputRoot);
+      const warningMessage = normalizeGenerationWarningMessage(failure.message);
+      console.warn(`- [${failure.source}] ${displayPath}${elapsed}: skipped (${warningMessage})`);
+    }
+  }
 
   const hasDiffs =
     changedDocs.length > 0 || relation.missingInReference.length > 0 || relation.missingInCandidate.length > 0;
@@ -1597,8 +1784,17 @@ async function main() {
   }
 }
 
-main().catch((error) => {
-  const message = error instanceof Error ? error.stack ?? error.message : String(error);
-  console.error(`[layout-snapshots:compare] Fatal: ${message}`);
-  process.exit(1);
-});
+function isDirectExecution() {
+  if (!process.argv[1]) return false;
+  return path.resolve(process.argv[1]) === SCRIPT_PATH;
+}
+
+export { normalizeGenerationWarningMessage, toDisplayDocPath };
+
+if (isDirectExecution()) {
+  main().catch((error) => {
+    const message = error instanceof Error ? error.stack ?? error.message : String(error);
+    console.error(`[layout-snapshots:compare] Fatal: ${message}`);
+    process.exit(1);
+  });
+}

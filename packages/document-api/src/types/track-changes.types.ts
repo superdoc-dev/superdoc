@@ -1,4 +1,5 @@
 import type { TrackedChangeAddress } from './address.js';
+import type { DiscoveryOutput } from './discovery.js';
 
 export type TrackChangeType = 'insert' | 'delete' | 'format';
 
@@ -20,8 +21,20 @@ export interface TrackChangesListQuery {
   type?: TrackChangeType;
 }
 
-export interface TrackChangesListResult {
-  matches: TrackedChangeAddress[];
-  total: number;
-  changes?: TrackChangeInfo[];
+/**
+ * Domain fields for a tracked-change discovery item (C3a).
+ */
+export interface TrackChangeDomain {
+  address: TrackedChangeAddress;
+  type: TrackChangeType;
+  author?: string;
+  authorEmail?: string;
+  authorImage?: string;
+  date?: string;
+  excerpt?: string;
 }
+
+/**
+ * Standardized discovery output for `trackChanges.list`.
+ */
+export type TrackChangesListResult = DiscoveryOutput<TrackChangeDomain>;

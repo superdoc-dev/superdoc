@@ -1,7 +1,8 @@
-import { access, copyFile, mkdtemp, mkdir, rm } from 'node:fs/promises';
+import { copyFile, mkdtemp, mkdir, rm } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import path from 'node:path';
 import { run } from '../../index';
+import { resolveListDocFixture, resolveSourceDocFixture } from '../fixtures';
 
 type RunResult = {
   code: number;
@@ -46,31 +47,6 @@ export type ListItemAddress = {
   nodeType: 'listItem';
   nodeId: string;
 };
-
-const REPO_ROOT = path.resolve(import.meta.dir, '../../../../../');
-const SOURCE_DOC = path.join(REPO_ROOT, 'e2e-tests/test-data/basic-documents/advanced-text.docx');
-const LIST_SOURCE_DOC_CANDIDATES = [
-  path.join(REPO_ROOT, 'devtools/document-api-tests/fixtures/matrix-list.input.docx'),
-  path.join(REPO_ROOT, 'e2e-tests/test-data/basic-documents/lists-complex-items.docx'),
-];
-
-let resolvedListSourceDoc: string | null = null;
-
-async function resolveListSourceDoc(): Promise<string> {
-  if (resolvedListSourceDoc != null) return resolvedListSourceDoc;
-
-  for (const candidate of LIST_SOURCE_DOC_CANDIDATES) {
-    try {
-      await access(candidate);
-      resolvedListSourceDoc = candidate;
-      return candidate;
-    } catch {
-      // try next candidate
-    }
-  }
-
-  throw new Error(`No list fixture found. Tried: ${LIST_SOURCE_DOC_CANDIDATES.join(', ')}`);
-}
 
 function parseEnvelope(raw: RunResult): CommandEnvelope {
   const source = raw.stdout.trim() || raw.stderr.trim();
@@ -133,13 +109,13 @@ export class ConformanceHarness {
 
   async copyFixtureDoc(label: string): Promise<string> {
     const filePath = path.join(this.docsDir, `${this.nextId()}-${label}.docx`);
-    await copyFile(SOURCE_DOC, filePath);
+    await copyFile(await resolveSourceDocFixture(), filePath);
     return filePath;
   }
 
   async copyListFixtureDoc(label: string): Promise<string> {
     const filePath = path.join(this.docsDir, `${this.nextId()}-${label}.docx`);
-    await copyFile(await resolveListSourceDoc(), filePath);
+    await copyFile(await resolveListDocFixture(), filePath);
     return filePath;
   }
 
@@ -193,12 +169,14 @@ export class ConformanceHarness {
     assertSuccessEnvelope(envelope);
     const data = envelope.data as {
       result?: {
-        context?: Array<{
-          textRanges?: TextRangeAddress[];
+        items?: Array<{
+          context?: {
+            textRanges?: TextRangeAddress[];
+          };
         }>;
       };
     };
-    const range = data.result?.context?.[0]?.textRanges?.[0];
+    const range = data.result?.items?.[0]?.context?.textRanges?.[0];
     if (!range) {
       throw new Error(`No text range found for pattern "${pattern}" in ${docPath}`);
     }
@@ -208,10 +186,9 @@ export class ConformanceHarness {
   async firstBlockMatch(
     docPath: string,
     stateDir: string,
-    pattern = 'Wilde',
   ): Promise<{ nodeId: string; nodeType: string; address: Record<string, unknown> }> {
     const { result, envelope } = await this.runCli(
-      ['find', docPath, '--type', 'text', '--pattern', pattern, '--limit', '1'],
+      ['find', docPath, '--type', 'node', '--node-type', 'paragraph', '--limit', '1'],
       stateDir,
     );
     if (result.code !== 0) {
@@ -221,19 +198,20 @@ export class ConformanceHarness {
     assertSuccessEnvelope(envelope);
     const data = envelope.data as {
       result?: {
-        matches?: Array<Record<string, unknown>>;
+        items?: Array<{
+          address?: Record<string, unknown>;
+        }>;
       };
     };
-    const match = data.result?.matches?.find(
-      (entry) => entry.kind === 'block' && typeof entry.nodeId === 'string' && typeof entry.nodeType === 'string',
-    );
-    if (!match) {
-      throw new Error(`No block match found for pattern "${pattern}" in ${docPath}`);
+    const item = data.result?.items?.[0];
+    const address = item?.address;
+    if (!address || typeof address.nodeId !== 'string' || typeof address.nodeType !== 'string') {
+      throw new Error(`No block match found in ${docPath}`);
     }
     return {
-      nodeId: match.nodeId as string,
-      nodeType: match.nodeType as string,
-      address: match,
+      nodeId: address.nodeId as string,
+      nodeType: address.nodeType as string,
+      address,
     };
   }
 
@@ -246,10 +224,12 @@ export class ConformanceHarness {
     assertSuccessEnvelope(envelope);
     const data = envelope.data as {
       result?: {
-        matches?: ListItemAddress[];
+        items?: Array<{
+          address?: ListItemAddress;
+        }>;
       };
     };
-    const address = data.result?.matches?.[0];
+    const address = data.result?.items?.[0]?.address;
     if (!address) {
       throw new Error(`No list item address found in ${docPath}`);
     }
@@ -332,9 +312,9 @@ export class ConformanceHarness {
       throw new Error(`Failed to list tracked changes for fixture ${label}`);
     }
     assertSuccessEnvelope(list.envelope);
-    const matches =
-      (list.envelope.data as { result?: { matches?: Array<{ entityId?: string }> } }).result?.matches ?? [];
-    const changeId = matches[0]?.entityId;
+    const items =
+      (list.envelope.data as { result?: { items?: Array<{ address?: { entityId?: string } }> } }).result?.items ?? [];
+    const changeId = items[0]?.address?.entityId;
     if (!changeId) {
       throw new Error(`Tracked-change fixture did not produce a tracked change id for ${label}`);
     }

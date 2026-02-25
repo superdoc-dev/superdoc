@@ -1,10 +1,12 @@
 import { describe, it, expect, beforeEach } from 'vitest';
-import { renderTableCell } from './renderTableCell.js';
+import { renderTableCell, getCellSegmentCount } from './renderTableCell.js';
+import { getCellLines } from '@superdoc/layout-engine';
 import type {
   ParagraphBlock,
   ParagraphMeasure,
   TableCell,
   TableCellMeasure,
+  TableMeasure,
   ImageBlock,
   DrawingBlock,
   DrawingMeasure,
@@ -235,6 +237,70 @@ describe('renderTableCell', () => {
     expect(imgEl?.parentElement?.style.position).toBe('absolute');
     expect(imgEl?.parentElement?.style.left).toBe('10px');
     expect(imgEl?.parentElement?.style.top).toBe('5px');
+  });
+
+  it('keeps partial-row segment indexing aligned when anchored blocks are between paragraphs', () => {
+    const paraBefore: ParagraphBlock = {
+      kind: 'paragraph',
+      id: 'para-before-anchor',
+      runs: [{ text: 'Before', fontFamily: 'Arial', fontSize: 16 }],
+    };
+
+    const paraAfter: ParagraphBlock = {
+      kind: 'paragraph',
+      id: 'para-after-anchor',
+      runs: [{ text: 'After', fontFamily: 'Arial', fontSize: 16 }],
+    };
+
+    const anchoredImage: ImageBlock = {
+      kind: 'image',
+      id: 'img-between',
+      src: 'data:image/png;base64,AAA',
+      anchor: { isAnchored: true, alignH: 'left', offsetH: 0, vRelativeFrom: 'paragraph', offsetV: 0 },
+      wrap: { type: 'None' },
+      attrs: { anchorParagraphId: 'para-before-anchor' },
+    };
+
+    const cellMeasure: TableCellMeasure = {
+      blocks: [
+        paragraphMeasure,
+        {
+          kind: 'image' as const,
+          width: 20,
+          height: 10,
+        },
+        paragraphMeasure,
+      ],
+      width: 120,
+      height: 60,
+      gridColumnStart: 0,
+      colSpan: 1,
+      rowSpan: 1,
+    };
+
+    const cell: TableCell = {
+      id: 'cell-partial-anchored-alignment',
+      blocks: [paraBefore, anchoredImage, paraAfter],
+      attrs: {},
+    };
+
+    const { cellElement } = renderTableCell({
+      ...createBaseDeps(),
+      cellMeasure,
+      cell,
+      fromLine: 2,
+      toLine: 3,
+      renderLine: (block) => {
+        const line = doc.createElement('div');
+        line.classList.add('segment-alignment-line');
+        line.dataset.blockId = (block as ParagraphBlock).id;
+        return line;
+      },
+    });
+
+    const renderedLines = Array.from(cellElement.querySelectorAll('.segment-alignment-line')) as HTMLElement[];
+    expect(renderedLines).toHaveLength(1);
+    expect(renderedLines[0]?.dataset.blockId).toBe('para-after-anchor');
   });
 
   it('adjusts column-relative anchored images by table indent and cell offset', () => {
@@ -622,9 +688,11 @@ describe('renderTableCell', () => {
 
     expect(captured).toHaveLength(1);
     expect(captured[0]?.lineEl.classList.contains('superdoc-line')).toBe(true);
-    expect(captured[0]?.wrapperEl).toBeTruthy();
-    expect(captured[0]?.wrapperEl?.style.marginLeft).toBe('20px');
-    expect(captured[0]?.wrapperEl?.style.marginRight).toBe('0px');
+    // With inline marker approach, lineEl has paddingLeft from marker positioning.
+    // applySquareWrapExclusionsToLines skips lines with existing padding, so no
+    // wrapperEl and no margins are applied — this is correct because the marker
+    // positioning already controls the line's horizontal layout.
+    expect(captured[0]?.wrapperEl).toBeFalsy();
   });
 
   describe('spacing.after margin-bottom rendering', () => {
@@ -1120,15 +1188,15 @@ describe('renderTableCell', () => {
 
       const contentElement = cellElement.firstElementChild as HTMLElement;
       const paraWrapper = contentElement.firstElementChild as HTMLElement;
-      const lineContainer = paraWrapper.firstElementChild as HTMLElement;
+      const lineEl = paraWrapper.firstElementChild as HTMLElement;
 
-      // Marker should be in a positioned container
-      expect(lineContainer.style.position).toBe('relative');
-
-      const markerEl = lineContainer.querySelector('.superdoc-paragraph-marker') as HTMLElement;
+      // Marker is prepended inside lineEl (matches renderer.ts approach)
+      const markerEl = lineEl.querySelector('.superdoc-paragraph-marker') as HTMLElement;
       expect(markerEl).toBeTruthy();
       expect(markerEl.textContent).toBe('•');
-      expect(markerEl.style.position).toBe('absolute');
+      // Left-justified markers stay inline (position: relative on container span)
+      const markerContainer = markerEl.parentElement as HTMLElement;
+      expect(markerContainer.style.position).toBe('relative');
     });
 
     it('should render numbered list marker with correct text', () => {
@@ -1157,8 +1225,8 @@ describe('renderTableCell', () => {
 
       const contentElement = cellElement.firstElementChild as HTMLElement;
       const paraWrapper = contentElement.firstElementChild as HTMLElement;
-      const lineContainer = paraWrapper.firstElementChild as HTMLElement;
-      const markerEl = lineContainer.querySelector('.superdoc-paragraph-marker') as HTMLElement;
+      const lineEl = paraWrapper.firstElementChild as HTMLElement;
+      const markerEl = lineEl.querySelector('.superdoc-paragraph-marker') as HTMLElement;
 
       expect(markerEl).toBeTruthy();
       expect(markerEl.textContent).toBe('1.');
@@ -1200,8 +1268,8 @@ describe('renderTableCell', () => {
 
       const contentElement = cellElement.firstElementChild as HTMLElement;
       const paraWrapper = contentElement.firstElementChild as HTMLElement;
-      const lineContainer = paraWrapper.firstElementChild as HTMLElement;
-      const markerEl = lineContainer.querySelector('.superdoc-paragraph-marker') as HTMLElement;
+      const lineEl = paraWrapper.firstElementChild as HTMLElement;
+      const markerEl = lineEl.querySelector('.superdoc-paragraph-marker') as HTMLElement;
 
       expect(markerEl.style.fontFamily).toBe('"Times New Roman", sans-serif');
       expect(markerEl.style.fontSize).toBe('18px');
@@ -1212,13 +1280,18 @@ describe('renderTableCell', () => {
     });
 
     it('should handle marker justification (left, center, right)', () => {
-      const testCases: Array<{ justification: 'left' | 'center' | 'right'; expectedAlign: string }> = [
-        { justification: 'left', expectedAlign: 'left' },
-        { justification: 'center', expectedAlign: 'center' },
-        { justification: 'right', expectedAlign: 'right' },
+      const testCases: Array<{
+        justification: 'left' | 'center' | 'right';
+        expectedPosition: string;
+      }> = [
+        // Left: marker container stays inline (position: relative)
+        { justification: 'left', expectedPosition: 'relative' },
+        // Center/right: marker container is absolutely positioned
+        { justification: 'center', expectedPosition: 'absolute' },
+        { justification: 'right', expectedPosition: 'absolute' },
       ];
 
-      testCases.forEach(({ justification, expectedAlign }) => {
+      testCases.forEach(({ justification, expectedPosition }) => {
         const { para, measure } = createParagraphWithMarker('•');
         if (para.attrs?.wordLayout?.marker) {
           para.attrs.wordLayout.marker.justification = justification;
@@ -1247,10 +1320,11 @@ describe('renderTableCell', () => {
 
         const contentElement = cellElement.firstElementChild as HTMLElement;
         const paraWrapper = contentElement.firstElementChild as HTMLElement;
-        const lineContainer = paraWrapper.firstElementChild as HTMLElement;
-        const markerEl = lineContainer.querySelector('.superdoc-paragraph-marker') as HTMLElement;
+        const lineEl = paraWrapper.firstElementChild as HTMLElement;
+        const markerEl = lineEl.querySelector('.superdoc-paragraph-marker') as HTMLElement;
+        const markerContainer = markerEl.parentElement as HTMLElement;
 
-        expect(markerEl.style.textAlign).toBe(expectedAlign);
+        expect(markerContainer.style.position).toBe(expectedPosition);
       });
     });
 
@@ -1281,10 +1355,10 @@ describe('renderTableCell', () => {
 
       const contentElement = cellElement.firstElementChild as HTMLElement;
       const paraWrapper = contentElement.firstElementChild as HTMLElement;
-      const lineContainer = paraWrapper.firstElementChild as HTMLElement;
-      const lineEl = lineContainer.querySelector('div:not(.superdoc-paragraph-marker)') as HTMLElement;
+      const lineEl = paraWrapper.firstElementChild as HTMLElement;
 
-      // Text should have padding equal to indentLeft
+      // Line paddingLeft should be set to the anchor point (indentLeft - hanging + firstLine).
+      // With no hanging/firstLine, anchor = indentLeft.
       expect(lineEl.style.paddingLeft).toBe(`${indentLeft}px`);
     });
 
@@ -1334,9 +1408,9 @@ describe('renderTableCell', () => {
       const contentElement = cellElement.firstElementChild as HTMLElement;
       const paraWrapper = contentElement.firstElementChild as HTMLElement;
 
-      // First child should be a container with marker
-      const firstLineContainer = paraWrapper.children[0] as HTMLElement;
-      const firstMarker = firstLineContainer.querySelector('.superdoc-paragraph-marker');
+      // First child should be a line element with marker prepended inside
+      const firstLine = paraWrapper.children[0] as HTMLElement;
+      const firstMarker = firstLine.querySelector('.superdoc-paragraph-marker');
       expect(firstMarker).toBeTruthy();
 
       // Second child should be just a line element without marker
@@ -3494,5 +3568,188 @@ describe('renderTableCell', () => {
       // Inline SDTs don't get container styling, so overflow stays hidden
       expect(cellElement.style.overflow).toBe('hidden');
     });
+  });
+});
+
+/**
+ * Sync test: renderer's getCellSegmentCount must agree with layout engine's getCellLines().length.
+ *
+ * These two systems must produce identical segment counts for every cell shape —
+ * if they drift, pagination will render the wrong rows or skip content.
+ */
+describe('segment count sync: renderer vs layout engine', () => {
+  const makeParagraph = (lineCount: number): ParagraphMeasure => ({
+    kind: 'paragraph',
+    lines: Array.from({ length: lineCount }, (_, i) => ({
+      lineHeight: 20,
+      width: 100,
+      x: 0,
+    })),
+    indent: {} as ParagraphMeasure['indent'],
+    height: lineCount * 20,
+    width: 100,
+  });
+
+  const makeImage = (height: number) => ({
+    kind: 'image' as const,
+    width: 100,
+    height,
+    scale: 1,
+  });
+
+  it('simple paragraph cell', () => {
+    const cell: TableCellMeasure = {
+      blocks: [makeParagraph(5)],
+      width: 200,
+      height: 100,
+    };
+    expect(getCellSegmentCount(cell)).toBe(getCellLines(cell).length);
+    expect(getCellSegmentCount(cell)).toBe(5);
+  });
+
+  it('legacy single-paragraph cell (no blocks array)', () => {
+    const cell: TableCellMeasure = {
+      paragraph: makeParagraph(3),
+      width: 200,
+      height: 60,
+    };
+    expect(getCellSegmentCount(cell)).toBe(getCellLines(cell).length);
+    expect(getCellSegmentCount(cell)).toBe(3);
+  });
+
+  it('multi-block cell (paragraphs + image)', () => {
+    const cell: TableCellMeasure = {
+      blocks: [makeParagraph(2), makeImage(50), makeParagraph(3)],
+      width: 200,
+      height: 150,
+    };
+    expect(getCellSegmentCount(cell)).toBe(getCellLines(cell).length);
+    // 2 lines + 1 image segment + 3 lines = 6
+    expect(getCellSegmentCount(cell)).toBe(6);
+  });
+
+  it('cell with nested table (single level)', () => {
+    const nestedTable: TableMeasure = {
+      kind: 'table',
+      rows: [
+        { cells: [{ blocks: [makeParagraph(4)], width: 100, height: 80 }], height: 80 },
+        { cells: [{ blocks: [makeParagraph(2)], width: 100, height: 40 }], height: 40 },
+      ],
+      columnWidths: [100],
+      totalWidth: 100,
+      totalHeight: 120,
+    };
+    const cell: TableCellMeasure = {
+      blocks: [makeParagraph(1), nestedTable],
+      width: 200,
+      height: 140,
+    };
+    expect(getCellSegmentCount(cell)).toBe(getCellLines(cell).length);
+    // 1 paragraph line + 1 (row1, no nested tables → single segment) + 1 (row2, same) = 3
+    expect(getCellSegmentCount(cell)).toBe(3);
+  });
+
+  it('cell with deeply nested table (table-in-table)', () => {
+    const innerTable: TableMeasure = {
+      kind: 'table',
+      rows: [{ cells: [{ blocks: [makeParagraph(3)], width: 80, height: 60 }], height: 60 }],
+      columnWidths: [80],
+      totalWidth: 80,
+      totalHeight: 60,
+    };
+    const outerTable: TableMeasure = {
+      kind: 'table',
+      rows: [
+        {
+          cells: [{ blocks: [innerTable, makeParagraph(1)], width: 100, height: 80 }],
+          height: 80,
+        },
+      ],
+      columnWidths: [100],
+      totalWidth: 100,
+      totalHeight: 80,
+    };
+    const cell: TableCellMeasure = {
+      blocks: [outerTable],
+      width: 200,
+      height: 80,
+    };
+    expect(getCellSegmentCount(cell)).toBe(getCellLines(cell).length);
+    // outerTable has 1 row with nested table → expands recursively.
+    // Tallest cell has: innerTable(1 row, no further nesting → 1 segment) + 1 paragraph line = 2
+    // outerRow expands to 2 segments → cell total = 2
+    expect(getCellSegmentCount(cell)).toBe(2);
+  });
+
+  it('empty cell', () => {
+    const cell: TableCellMeasure = {
+      blocks: [],
+      width: 200,
+      height: 0,
+    };
+    expect(getCellSegmentCount(cell)).toBe(getCellLines(cell).length);
+    expect(getCellSegmentCount(cell)).toBe(0);
+  });
+
+  it('cell with triple-nested table (table-in-table-in-table, triggers recursive expansion)', () => {
+    // Innermost table: 2 rows of simple paragraphs
+    const innermostTable: TableMeasure = {
+      kind: 'table',
+      rows: [
+        { cells: [{ blocks: [makeParagraph(2)], width: 60, height: 40 }], height: 40 },
+        { cells: [{ blocks: [makeParagraph(3)], width: 60, height: 60 }], height: 60 },
+      ],
+      columnWidths: [60],
+      totalWidth: 60,
+      totalHeight: 100,
+    };
+    // Middle table: 1 row containing the innermost table (triggers expansion at this level)
+    const middleTable: TableMeasure = {
+      kind: 'table',
+      rows: [
+        {
+          cells: [{ blocks: [innermostTable], width: 80, height: 100 }],
+          height: 100,
+        },
+      ],
+      columnWidths: [80],
+      totalWidth: 80,
+      totalHeight: 100,
+    };
+    // Outer table: 1 row containing the middle table (triggers expansion at outer level)
+    const outerTable: TableMeasure = {
+      kind: 'table',
+      rows: [
+        {
+          cells: [{ blocks: [middleTable], width: 100, height: 100 }],
+          height: 100,
+        },
+      ],
+      columnWidths: [100],
+      totalWidth: 100,
+      totalHeight: 100,
+    };
+    const cell: TableCellMeasure = {
+      blocks: [outerTable],
+      width: 200,
+      height: 100,
+    };
+    expect(getCellSegmentCount(cell)).toBe(getCellLines(cell).length);
+    // Innermost: 2 rows, no further nesting → 1 segment each = 2 segments
+    // Middle: 1 row with nested table → expands to tallest cell = 2 segments
+    // Outer: 1 row with nested table → expands to tallest cell = 2 segments
+    // Cell total = 2
+    expect(getCellSegmentCount(cell)).toBe(2);
+  });
+
+  it('cell with zero-height image (should not count as segment)', () => {
+    const cell: TableCellMeasure = {
+      blocks: [makeParagraph(2), makeImage(0)],
+      width: 200,
+      height: 40,
+    };
+    expect(getCellSegmentCount(cell)).toBe(getCellLines(cell).length);
+    // 2 lines + 0 (zero-height image skipped) = 2
+    expect(getCellSegmentCount(cell)).toBe(2);
   });
 });

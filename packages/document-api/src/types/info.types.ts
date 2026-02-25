@@ -24,4 +24,6 @@ export interface DocumentInfo {
   counts: DocumentInfoCounts;
   outline: DocumentInfoOutlineItem[];
   capabilities: DocumentInfoCapabilities;
+  /** Monotonic decimal-string revision counter. Increments on every document change. */
+  revision: string;
 }

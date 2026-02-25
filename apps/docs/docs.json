@@ -90,9 +90,23 @@
             ]
           },
           {
-            "group": "Document API",
+            "group": "Document Engine",
             "tag": "ALPHA",
-            "pages": ["document-api/overview"]
+            "pages": [
+              "document-engine/overview",
+              {
+                "group": "Document API",
+                "pages": [
+                  "document-api/overview",
+                  "document-api/reference/index",
+                  "document-api/common-workflows",
+                  "document-api/available-operations"
+                ]
+              },
+              "document-engine/sdks",
+              "document-engine/cli",
+              "document-engine/mcp"
+            ]
           },
           {
             "group": "Modules",

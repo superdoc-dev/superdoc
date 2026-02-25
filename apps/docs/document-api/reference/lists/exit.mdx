@@ -1,7 +1,7 @@
 ---
 title: lists.exit
 sidebarTitle: lists.exit
-description: Generated reference for lists.exit
+description: Reference for lists.exit
 ---
 
 {/* GENERATED FILE: DO NOT EDIT. Regenerate via `pnpm run docapi:sync`. */}
@@ -18,42 +18,62 @@ description: Generated reference for lists.exit
 - Supports dry run: `yes`
 - Deterministic target resolution: `yes`
 
+## Input fields
+
+| Field | Type | Required | Description |
+| --- | --- | --- | --- |
+| `target` | ListItemAddress | yes | ListItemAddress |
+
+### Example request
+
+```json
+{
+  "target": {
+    "kind": "block",
+    "nodeId": "node-def456",
+    "nodeType": "listItem"
+  }
+}
+```
+
+## Output fields
+
+_No fields._
+
+### Example response
+
+```json
+{
+  "paragraph": {
+    "kind": "block",
+    "nodeId": "node-def456",
+    "nodeType": "paragraph"
+  },
+  "success": true
+}
+```
+
 ## Pre-apply throws
 
 - `TARGET_NOT_FOUND`
 - `COMMAND_UNAVAILABLE`
 - `TRACK_CHANGE_COMMAND_UNAVAILABLE`
 - `CAPABILITY_UNAVAILABLE`
+- `INVALID_TARGET`
 
 ## Non-applied failure codes
 
 - `INVALID_TARGET`
 
-## Input schema
+## Raw schemas
 
+<Accordion title="Raw input schema">
 ```json
 {
   "additionalProperties": false,
   "properties": {
     "target": {
-      "additionalProperties": false,
-      "properties": {
-        "kind": {
-          "const": "block"
-        },
-        "nodeId": {
-          "type": "string"
-        },
-        "nodeType": {
-          "const": "listItem"
-        }
-      },
-      "required": [
-        "kind",
-        "nodeType",
-        "nodeId"
-      ],
-      "type": "object"
+      "$ref": "#/$defs/ListItemAddress"
     }
   },
   "required": [
@@ -62,9 +82,9 @@ description: Generated reference for lists.exit
   "type": "object"
 }
 ```
+</Accordion>
 
-## Output schema
-
+<Accordion title="Raw output schema">
 ```json
 {
   "oneOf": [
@@ -72,24 +92,7 @@ description: Generated reference for lists.exit
       "additionalProperties": false,
       "properties": {
         "paragraph": {
-          "additionalProperties": false,
-          "properties": {
-            "kind": {
-              "const": "block"
-            },
-            "nodeId": {
-              "type": "string"
-            },
-            "nodeType": {
-              "const": "paragraph"
-            }
-          },
-          "required": [
-            "kind",
-            "nodeType",
-            "nodeId"
-          ],
-          "type": "object"
+          "$ref": "#/$defs/ParagraphAddress"
         },
         "success": {
           "const": true
@@ -136,32 +139,15 @@ description: Generated reference for lists.exit
   ]
 }
 ```
+</Accordion>
 
-## Success schema
-
+<Accordion title="Raw success schema">
 ```json
 {
   "additionalProperties": false,
   "properties": {
     "paragraph": {
-      "additionalProperties": false,
-      "properties": {
-        "kind": {
-          "const": "block"
-        },
-        "nodeId": {
-          "type": "string"
-        },
-        "nodeType": {
-          "const": "paragraph"
-        }
-      },
-      "required": [
-        "kind",
-        "nodeType",
-        "nodeId"
-      ],
-      "type": "object"
+      "$ref": "#/$defs/ParagraphAddress"
     },
     "success": {
       "const": true
@@ -174,9 +160,9 @@ description: Generated reference for lists.exit
   "type": "object"
 }
 ```
+</Accordion>
 
-## Failure schema
-
+<Accordion title="Raw failure schema">
 ```json
 {
   "additionalProperties": false,
@@ -211,3 +197,4 @@ description: Generated reference for lists.exit
   "type": "object"
 }
 ```
+</Accordion>

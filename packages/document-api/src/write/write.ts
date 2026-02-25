@@ -1,9 +1,14 @@
 import type { TextAddress, TextMutationReceipt } from '../types/index.js';
-import type { BlockRelativeLocator } from './locator.js';
+import type { BlockRelativeLocator, BlockRelativeRange } from './locator.js';
 
 export type ChangeMode = 'direct' | 'tracked';
 
-export interface MutationOptions {
+export interface RevisionGuardOptions {
+  /** When provided, the engine rejects with REVISION_MISMATCH if the document has advanced past this revision. */
+  expectedRevision?: string;
+}
+
+export interface MutationOptions extends RevisionGuardOptions {
   /**
    * Controls whether mutation applies directly or as a tracked change.
    * Defaults to `direct`.
@@ -30,15 +35,15 @@ export type InsertWriteRequest = {
 
 export type ReplaceWriteRequest = {
   kind: 'replace';
-  target: TextAddress;
+  target?: TextAddress;
   text: string;
-};
+} & Partial<BlockRelativeRange>;
 
 export type DeleteWriteRequest = {
   kind: 'delete';
-  target: TextAddress;
+  target?: TextAddress;
   text?: '';
-};
+} & Partial<BlockRelativeRange>;
 
 export type WriteRequest = InsertWriteRequest | ReplaceWriteRequest | DeleteWriteRequest;
 
@@ -48,6 +53,7 @@ export interface WriteAdapter {
 
 export function normalizeMutationOptions(options?: MutationOptions): MutationOptions {
   return {
+    expectedRevision: options?.expectedRevision,
     changeMode: options?.changeMode ?? 'direct',
     dryRun: options?.dryRun ?? false,
   };

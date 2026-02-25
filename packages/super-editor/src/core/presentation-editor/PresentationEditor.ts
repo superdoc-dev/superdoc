@@ -2054,6 +2054,58 @@ export class PresentationEditor extends EventEmitter {
   }
 
   /**
+   * Scrolls a specific page into view.
+   *
+   * This method supports virtualized rendering: if the target page is not currently
+   * mounted in the DOM, it will scroll to the computed y-position to trigger
+   * virtualization, wait for the page to mount, then perform precise scrolling.
+   *
+   * @param pageNumber - One-based page number to scroll to (e.g., 1 for first page)
+   * @param scrollBehavior - Scroll behavior ('auto' | 'smooth'). Defaults to 'smooth'.
+   * @returns Promise resolving to true if the page was scrolled to, false if layout not available or invalid page
+   *
+   * @example
+   * ```typescript
+   * // Smooth scroll to first page
+   * await presentationEditor.scrollToPage(1);
+   *
+   * // Instant scroll to page 5
+   * await presentationEditor.scrollToPage(5, 'auto');
+   * ```
+   */
+  async scrollToPage(pageNumber: number, scrollBehavior: ScrollBehavior = 'smooth'): Promise<boolean> {
+    const layout = this.#layoutState.layout;
+    if (!layout) return false;
+
+    // Reject non-finite or non-integer input to fail fast instead of timing out
+    if (!Number.isInteger(pageNumber)) return false;
+
+    // Convert 1-based page number to 0-based index
+    const pageIndex = pageNumber - 1;
+
+    // Clamp to valid page range
+    const maxPage = layout.pages.length - 1;
+    if (pageIndex < 0 || pageIndex > maxPage) return false;
+
+    // Check if page is already mounted
+    let pageEl = getPageElementByIndex(this.#viewportHost, pageIndex);
+
+    // If not mounted (virtualized), scroll to computed y-position to trigger mount
+    if (!pageEl) {
+      this.#scrollPageIntoView(pageIndex);
+      const mounted = await this.#waitForPageMount(pageIndex, { timeout: 2000 });
+      if (!mounted) return false;
+      pageEl = getPageElementByIndex(this.#viewportHost, pageIndex);
+    }
+
+    if (pageEl) {
+      pageEl.scrollIntoView({ block: 'start', inline: 'nearest', behavior: scrollBehavior });
+      return true;
+    }
+    return false;
+  }
+
+  /**
    * Get document position from viewport coordinates (header/footer-aware).
    *
    * This method maps viewport coordinates to document positions while respecting
@@ -2351,6 +2403,14 @@ export class PresentationEditor extends EventEmitter {
         if (ySyncMeta?.isChangeOrigin && transaction.docChanged) {
           this.#flowBlockCache?.setHasExternalChanges(true);
         }
+        // History undo/redo can restore prior paragraph content while preserving/reusing
+        // sdBlockRev values, which makes the cache's fast revision check unsafe.
+        // Force JSON comparison for this render cycle to avoid stale paragraph reuse.
+        const inputType = transaction.getMeta?.('inputType');
+        const isHistoryType = inputType === 'historyUndo' || inputType === 'historyRedo';
+        if (isHistoryType && transaction.docChanged) {
+          this.#flowBlockCache?.setHasExternalChanges(true);
+        }
       }
       if (trackedChangesChanged || transaction?.docChanged) {
         this.#pendingDocChange = true;
@@ -2589,7 +2649,8 @@ export class PresentationEditor extends EventEmitter {
       goToAnchor: (href: string) => this.goToAnchor(href),
       emit: (event: string, payload: unknown) => this.emit(event, payload),
       normalizeClientPoint: (clientX: number, clientY: number) => this.#normalizeClientPoint(clientX, clientY),
-      hitTestHeaderFooterRegion: (x: number, y: number) => this.#hitTestHeaderFooterRegion(x, y),
+      hitTestHeaderFooterRegion: (x: number, y: number, pageIndex?: number, pageLocalY?: number) =>
+        this.#hitTestHeaderFooterRegion(x, y, pageIndex, pageLocalY),
       exitHeaderFooterMode: () => this.#exitHeaderFooterMode(),
       activateHeaderFooterRegion: (region) => this.#activateHeaderFooterRegion(region),
       createDefaultHeaderFooter: (region) => this.#createDefaultHeaderFooter(region),
@@ -2778,6 +2839,7 @@ export class PresentationEditor extends EventEmitter {
       setPendingDocChange: () => {
         this.#pendingDocChange = true;
       },
+      getBodyPageCount: () => this.#layoutState?.layout?.pages?.length ?? 1,
     });
 
     // Set up callbacks
@@ -3503,7 +3565,12 @@ export class PresentationEditor extends EventEmitter {
       }
       node = selection.node;
     } else {
-      const $pos = selection.$from;
+      const $pos = (selection as Selection & { $from?: { depth?: number; node?: (depth: number) => ProseMirrorNode } })
+        .$from;
+      if (!$pos || typeof $pos.depth !== 'number' || typeof $pos.node !== 'function') {
+        this.#clearSelectedStructuredContentBlockClass();
+        return;
+      }
       for (let depth = $pos.depth; depth > 0; depth--) {
         const candidate = $pos.node(depth);
         if (candidate.type?.name === 'structuredContentBlock') {
@@ -3654,10 +3721,22 @@ export class PresentationEditor extends EventEmitter {
       node = selection.node;
       pos = selection.from;
     } else {
-      const $pos = selection.$from;
+      const $pos = (
+        selection as Selection & {
+          $from?: { depth?: number; node?: (depth: number) => ProseMirrorNode; before?: (depth: number) => number };
+        }
+      ).$from;
+      if (!$pos || typeof $pos.depth !== 'number' || typeof $pos.node !== 'function') {
+        this.#clearSelectedStructuredContentInlineClass();
+        return;
+      }
       for (let depth = $pos.depth; depth > 0; depth--) {
         const candidate = $pos.node(depth);
         if (candidate.type?.name === 'structuredContent') {
+          if (typeof $pos.before !== 'function') {
+            this.#clearSelectedStructuredContentInlineClass();
+            return;
+          }
           node = candidate;
           pos = $pos.before(depth);
           break;
@@ -4157,8 +4236,8 @@ export class PresentationEditor extends EventEmitter {
    * Hit test for header/footer regions at a given point.
    * Delegates to HeaderFooterSessionManager which manages region tracking.
    */
-  #hitTestHeaderFooterRegion(x: number, y: number): HeaderFooterRegion | null {
-    return this.#headerFooterSession?.hitTestRegion(x, y, this.#layoutState.layout) ?? null;
+  #hitTestHeaderFooterRegion(x: number, y: number, pageIndex?: number, pageLocalY?: number): HeaderFooterRegion | null {
+    return this.#headerFooterSession?.hitTestRegion(x, y, this.#layoutState.layout, pageIndex, pageLocalY) ?? null;
   }
 
   #activateHeaderFooterRegion(region: HeaderFooterRegion) {
@@ -4403,11 +4482,17 @@ export class PresentationEditor extends EventEmitter {
     const layout = this.#layoutState.layout;
     if (!layout) return;
 
-    const pageHeight = layout.pageSize?.h ?? DEFAULT_PAGE_SIZE.h;
-    const virtualGap = this.#layoutOptions.virtualization?.gap ?? 0;
+    const defaultHeight = layout.pageSize?.h ?? DEFAULT_PAGE_SIZE.h;
+    const virtualGap = this.#getEffectivePageGap();
 
-    // Calculate approximate y position for the page
-    const yPosition = pageIndex * (pageHeight + virtualGap);
+    // Use cumulative per-page heights so mixed-size documents scroll to the
+    // correct position. The renderer's virtualizer uses the same prefix-sum
+    // approach, so the scroll position lands inside the correct window.
+    let yPosition = 0;
+    for (let i = 0; i < pageIndex; i++) {
+      const pageHeight = layout.pages[i]?.size?.h ?? defaultHeight;
+      yPosition += pageHeight + virtualGap;
+    }
 
     // Scroll viewport to the calculated position
     if (this.#visibleHost) {
@@ -4917,7 +5002,10 @@ export class PresentationEditor extends EventEmitter {
     );
   }
 
-  #normalizeClientPoint(clientX: number, clientY: number): { x: number; y: number } | null {
+  #normalizeClientPoint(
+    clientX: number,
+    clientY: number,
+  ): { x: number; y: number; pageIndex?: number; pageLocalY?: number } | null {
     return normalizeClientPointFromPointer(
       {
         viewportHost: this.#viewportHost,

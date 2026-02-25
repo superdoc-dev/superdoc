@@ -89,7 +89,8 @@ test('resize a column by dragging its boundary', async ({ superdoc }) => {
 });
 
 test('resize the table by dragging the right edge', async ({ superdoc }) => {
-  await superdoc.executeCommand('insertTable', { rows: 3, cols: 3, withHeaderRow: false });
+  // Use narrow explicit widths so the table has room to expand rightward
+  await superdoc.executeCommand('insertTable', { rows: 3, cols: 3, columnWidths: [100, 100, 100] });
   await superdoc.waitForStable();
 
   await superdoc.type('Content');

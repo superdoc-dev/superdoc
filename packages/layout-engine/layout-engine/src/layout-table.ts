@@ -170,7 +170,7 @@ function resolveTableFrame(
  *
  * @returns Rescaled column widths if clamping occurred, undefined otherwise.
  */
-function rescaleColumnWidths(
+export function rescaleColumnWidths(
   measureColumnWidths: number[] | undefined,
   measureTotalWidth: number,
   fragmentWidth: number,
@@ -337,26 +337,62 @@ type SplitPointResult = {
 const MIN_PARTIAL_ROW_HEIGHT = 20;
 
 /**
- * Get all lines from a cell's blocks (multi-block or single paragraph).
+ * Get the line segments for a single embedded table row.
  *
- * Cells can have multiple blocks (cell.blocks) or a single paragraph (cell.paragraph).
- * This function normalizes access to all lines across all paragraph blocks.
- *
- * @param cell - Cell measure
- * @returns Array of all lines with their lineHeight
+ * If any cell in the row contains nested tables, recursively expand using
+ * the tallest cell's segments. This enables the layout engine to split at
+ * sub-row boundaries even for deeply nested tables (table-in-table-in-table).
+ * Otherwise, return the row as a single segment with its measured height.
  */
-function getCellLines(cell: TableRowMeasure['cells'][number]): Array<{ lineHeight: number }> {
+function getEmbeddedRowLines(row: TableRowMeasure): Array<{ lineHeight: number }> {
+  // Check if any cell has nested table blocks
+  const hasNestedTable = row.cells.some((cell) => cell.blocks?.some((b) => b.kind === 'table'));
+
+  if (!hasNestedTable) {
+    // Simple case: no nested tables, row is one segment
+    return [{ lineHeight: row.height || 0 }];
+  }
+
+  // Recursive case: find the cell with the most segments (tallest content)
+  let tallestLines: Array<{ lineHeight: number }> = [];
+  for (const cell of row.cells) {
+    const cellLines = getCellLines(cell);
+    if (cellLines.length > tallestLines.length) {
+      tallestLines = cellLines;
+    }
+  }
+
+  return tallestLines.length > 0 ? tallestLines : [{ lineHeight: row.height || 0 }];
+}
+
+export function getCellLines(cell: TableRowMeasure['cells'][number]): Array<{ lineHeight: number }> {
   // Multi-block cells use the `blocks` array
   if (cell.blocks && cell.blocks.length > 0) {
     const allLines: Array<{ lineHeight: number }> = [];
     for (const block of cell.blocks) {
       if (block.kind === 'paragraph') {
-        // Type guard ensures block is ParagraphMeasure
-        if (block.kind === 'paragraph' && 'lines' in block) {
+        if ('lines' in block) {
           const paraBlock = block as ParagraphMeasure;
           if (paraBlock.lines) {
             allLines.push(...paraBlock.lines);
           }
+        }
+      } else if (block.kind === 'table') {
+        // Embedded tables: expand individual rows as separate segments so the
+        // outer table splitter can break at embedded-table row boundaries,
+        // matching MS Word behavior where nested tables paginate across pages.
+        // Recursively expand rows that contain further nested tables.
+        const tableBlock = block as TableMeasure;
+        for (const row of tableBlock.rows) {
+          allLines.push(...getEmbeddedRowLines(row));
+        }
+      } else {
+        // Non-paragraph blocks (images, drawings) are represented as a single
+        // unsplittable segment with their full height. This ensures computePartialRow
+        // accounts for their height when splitting rows across pages.
+        const blockHeight = 'height' in block ? (block as { height: number }).height : 0;
+        if (blockHeight > 0) {
+          allLines.push({ lineHeight: blockHeight });
         }
       }
     }
@@ -369,27 +405,6 @@ function getCellLines(cell: TableRowMeasure['cells'][number]): Array<{ lineHeigh
   }
 
   return [];
-}
-
-/**
- * Calculate the height of lines from startLine to endLine for a cell.
- *
- * @param cell - Cell measure containing paragraph with lines
- * @param fromLine - Starting line index (inclusive, must be >= 0)
- * @param toLine - Ending line index (exclusive), -1 means to end
- * @returns Height in pixels
- */
-function _calculateCellLinesHeight(cell: TableRowMeasure['cells'][number], fromLine: number, toLine: number): number {
-  if (fromLine < 0) {
-    throw new Error(`Invalid fromLine ${fromLine}: must be >= 0`);
-  }
-  const lines = getCellLines(cell);
-  const endLine = toLine === -1 ? lines.length : toLine;
-  let height = 0;
-  for (let i = fromLine; i < endLine && i < lines.length; i++) {
-    height += lines[i].lineHeight || 0;
-  }
-  return height;
 }
 
 type CellPadding = { top: number; bottom: number; left: number; right: number };
@@ -575,7 +590,30 @@ function computeCellPmRange(
       continue;
     }
 
-    mergePmRange(range, extractBlockPmRange(block as { attrs?: Record<string, unknown> }));
+    // Non-paragraph blocks: advance cumulative count to stay aligned with getCellLines().
+    // Embedded tables expand to N segments (recursively, matching getEmbeddedRowLines);
+    // images/drawings are 1 segment.
+    if (blockMeasure.kind === 'table') {
+      const tableMeasure = blockMeasure as TableMeasure;
+      let tableSegments = 0;
+      for (const row of tableMeasure.rows) {
+        tableSegments += getEmbeddedRowLines(row).length;
+      }
+      const blockStart = cumulativeLineCount;
+      const blockEnd = cumulativeLineCount + tableSegments;
+      // Only include PM range if this block overlaps the requested line range
+      if (blockStart < toLine && blockEnd > fromLine) {
+        mergePmRange(range, extractBlockPmRange(block as { attrs?: Record<string, unknown> }));
+      }
+      cumulativeLineCount += tableSegments;
+    } else {
+      // Images, drawings: 1 segment each
+      const blockStart = cumulativeLineCount;
+      cumulativeLineCount += 1;
+      if (blockStart < toLine && blockStart >= fromLine) {
+        mergePmRange(range, extractBlockPmRange(block as { attrs?: Record<string, unknown> }));
+      }
+    }
   }
 
   return range;
@@ -777,6 +815,7 @@ function computePartialRow(
   measure: TableMeasure,
   availableHeight: number,
   fromLineByCell?: number[],
+  fullPageHeight?: number,
 ): PartialRowInfo {
   const row = measure.rows[rowIndex];
   if (!row) {
@@ -810,7 +849,22 @@ function computePartialRow(
     for (let i = startLine; i < lines.length; i++) {
       const lineHeight = lines[i].lineHeight || 0;
       if (cumulativeHeight + lineHeight > availableForLines) {
-        break; // Can't fit this line
+        // Force progress: only when the segment is truly taller than a full page
+        // (e.g. an embedded table that can never fit on any page). This prevents
+        // infinite pagination loops. Normal lines that don't fit at the bottom of a
+        // page should NOT be forced — the caller will advance to the next page.
+        if (
+          cumulativeHeight === 0 &&
+          i === startLine &&
+          availableForLines > 0 &&
+          fullPageHeight != null &&
+          lineHeight > fullPageHeight
+        ) {
+          // Cap height to available space — overflow:hidden on the cell clips the rest.
+          cumulativeHeight += Math.min(lineHeight, availableForLines);
+          cutLine = i + 1;
+        }
+        break;
       }
       cumulativeHeight += lineHeight;
       cutLine = i + 1; // Exclusive index
@@ -934,7 +988,7 @@ function findSplitPoint(
       // Check if this is an over-tall row (exceeds full page height) - force split regardless of cantSplit
       // This handles edge case where a row is taller than an entire page
       if (fullPageHeight && rowHeight > fullPageHeight) {
-        const partialRow = computePartialRow(i, block.rows[i], measure, remainingHeight);
+        const partialRow = computePartialRow(i, block.rows[i], measure, remainingHeight, undefined, fullPageHeight);
         return { endRow: i + 1, partialRow };
       }
 
@@ -955,7 +1009,7 @@ function findSplitPoint(
       // Row doesn't have cantSplit - try to split mid-row (MS Word default behavior)
       // Only split if we have meaningful space (at least MIN_PARTIAL_ROW_HEIGHT for one line)
       if (remainingHeight >= MIN_PARTIAL_ROW_HEIGHT) {
-        const partialRow = computePartialRow(i, block.rows[i], measure, remainingHeight);
+        const partialRow = computePartialRow(i, block.rows[i], measure, remainingHeight, undefined, fullPageHeight);
 
         // Check if we can actually fit any lines
         const hasContent = partialRow.toLineByCell.some(
@@ -1249,6 +1303,7 @@ export function layoutTableBlock({
         measure,
         availableForBody,
         fromLineByCell,
+        fullPageHeight,
       );
 
       const madeProgress = continuationPartialRow.toLineByCell.some(
@@ -1339,7 +1394,14 @@ export function layoutTableBlock({
     // If still no rows fit after retry, force split
     // This handles edge case where row is too tall to fit on empty page
     if (endRow === bodyStartRow && partialRow === null) {
-      const forcedPartialRow = computePartialRow(bodyStartRow, block.rows[bodyStartRow], measure, availableForBody);
+      const forcedPartialRow = computePartialRow(
+        bodyStartRow,
+        block.rows[bodyStartRow],
+        measure,
+        availableForBody,
+        undefined,
+        fullPageHeight,
+      );
       const forcedEndRow = bodyStartRow + 1;
       const fragmentHeight = forcedPartialRow.partialHeight + (repeatHeaderCount > 0 ? headerHeight : 0);
 

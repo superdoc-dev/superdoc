@@ -5,10 +5,10 @@ import { tmpdir } from 'node:os';
 import path from 'node:path';
 import type { CliOperationId } from '../cli';
 import { validateOperationResponseData } from '../lib/operation-args';
+import { resolveSourceDocFixture } from './fixtures';
 
 const REPO_ROOT = path.resolve(import.meta.dir, '../../../..');
 const CLI_BIN = path.join(REPO_ROOT, 'apps/cli/src/index.ts');
-const SOURCE_DOC = path.join(REPO_ROOT, 'e2e-tests/test-data/basic-documents/advanced-text.docx');
 
 type JsonRpcMessage = {
   jsonrpc: '2.0';
@@ -230,7 +230,7 @@ describe('CLI host mode', () => {
     await mkdir(stateDir, { recursive: true });
 
     const docPath = path.join(stateDir, 'host-conformance.docx');
-    await copyFile(SOURCE_DOC, docPath);
+    await copyFile(await resolveSourceDocFixture(), docPath);
 
     const host = launchHost(stateDir);
 
@@ -261,14 +261,17 @@ describe('CLI host mode', () => {
       '1',
     ]);
     const findResult = findData.result as {
-      matches?: Array<Record<string, unknown>>;
-      context?: Array<{ textRanges?: Array<{ kind: 'text'; blockId: string; range: { start: number; end: number } }> }>;
+      items?: Array<{
+        address?: Record<string, unknown>;
+        context?: { textRanges?: Array<{ kind: 'text'; blockId: string; range: { start: number; end: number } }> };
+      }>;
     };
-    const firstMatch = findResult.matches?.[0];
-    expect(firstMatch).toBeDefined();
-    await invokeAndValidate('doc.getNode', ['get-node', docPath, '--address-json', JSON.stringify(firstMatch)]);
+    const firstItem = findResult.items?.[0];
+    const firstAddress = firstItem?.address;
+    expect(firstAddress).toBeDefined();
+    await invokeAndValidate('doc.getNode', ['get-node', docPath, '--address-json', JSON.stringify(firstAddress)]);
 
-    const textTarget = findResult.context?.[0]?.textRanges?.[0];
+    const textTarget = firstItem?.context?.textRanges?.[0];
     expect(textTarget).toBeDefined();
     const collapsedTarget = {
       ...textTarget,

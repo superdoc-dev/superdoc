@@ -1,0 +1,221 @@
+---
+title: SDKs
+sidebarTitle: SDKs
+description: Node.js and Python SDKs for programmatic document editing
+keywords: "sdk, node, python, document automation, headless docx, superdoc sdk"
+---
+
+SuperDoc SDKs let you open, read, and edit `.docx` files from Node.js or Python. They manage the CLI process for you and expose typed methods for every operation.
+
+<Info>
+The SDKs are in <strong>alpha</strong>. The API surface matches the [Document API](/document-api/overview) and will evolve alongside it.
+</Info>
+
+## Installation
+
+<Tabs>
+  <Tab title="Node.js">
+    ```bash
+    npm install @superdoc-dev/sdk
+    ```
+  </Tab>
+  <Tab title="Python">
+    ```bash
+    pip install superdoc-sdk
+    ```
+  </Tab>
+</Tabs>
+
+The CLI is bundled with the SDK — no separate install needed.
+
+## Quick start
+
+<Tabs>
+  <Tab title="Node.js">
+    ```typescript
+    import { SuperDocClient } from '@superdoc-dev/sdk';
+
+    const client = new SuperDocClient({
+      defaultChangeMode: 'tracked',
+    });
+
+    // Open a document
+    await client.doc.open({ doc: './contract.docx' });
+
+    // Find and replace text with query + mutation plan
+    const match = await client.doc.query.match({
+      select: { type: 'text', pattern: 'ACME Corp' },
+      require: 'first',
+    });
+
+    const ref = match.items?.[0]?.handle?.ref;
+    if (ref) {
+      await client.doc.mutations.apply({
+        expectedRevision: match.evaluatedRevision,
+        atomic: true,
+        steps: [
+          {
+            id: 'replace-acme',
+            op: 'text.rewrite',
+            where: { by: 'ref', ref },
+            args: { replacement: { text: 'NewCo Inc.' } },
+          },
+        ],
+      });
+    }
+
+    // Save and close
+    await client.doc.save();
+    await client.doc.close();
+    ```
+  </Tab>
+  <Tab title="Python">
+    ```python
+    import asyncio
+
+    from superdoc import AsyncSuperDocClient
+
+
+    async def main():
+        client = AsyncSuperDocClient(default_change_mode="tracked")
+
+        # Open a document
+        await client.doc.open({"doc": "./contract.docx"})
+
+        # Find and replace text with query + mutation plan
+        match = await client.doc.query.match(
+            {
+                "select": {"type": "text", "pattern": "ACME Corp"},
+                "require": "first",
+            }
+        )
+
+        ref = match.get("items", [{}])[0].get("handle", {}).get("ref")
+        if ref:
+            await client.doc.mutations.apply(
+                {
+                    "expectedRevision": match["evaluatedRevision"],
+                    "atomic": True,
+                    "steps": [
+                        {
+                            "id": "replace-acme",
+                            "op": "text.rewrite",
+                            "where": {"by": "ref", "ref": ref},
+                            "args": {"replacement": {"text": "NewCo Inc."}},
+                        }
+                    ],
+                }
+            )
+
+        # Save and close
+        await client.doc.save({"inPlace": True})
+        await client.doc.close({})
+
+
+    asyncio.run(main())
+    ```
+  </Tab>
+</Tabs>
+
+Set `defaultChangeMode: 'tracked'` (Node) or `default_change_mode='tracked'` (Python) to make mutations use tracked changes by default. If you pass `changeMode` on a specific call, that explicit value overrides the default.
+
+{/* SDK_OPERATIONS_START */}
+## Available operations
+
+The SDKs expose all operations from the [Document API](/document-api/overview) plus lifecycle and session commands. The tables below are grouped by category.
+
+#### Lifecycle
+
+| Operation | CLI command | Description |
+| --- | --- | --- |
+| `doc.open` | `open` | Open a document and create a persistent editing session. |
+| `doc.save` | `save` | Save the current session to the original file or a new path. |
+| `doc.close` | `close` | Close the active editing session and clean up resources. |
+
+#### Query
+
+| Operation | CLI command | Description |
+| --- | --- | --- |
+| `doc.find` | `find` | Search the document for nodes matching type, text, or attribute criteria. |
+| `doc.getNode` | `get-node` | Retrieve a single node by target position. |
+| `doc.getNodeById` | `get-node-by-id` | Retrieve a single node by its unique ID. |
+| `doc.getText` | `get-text` | Extract the plain-text content of the document. |
+| `doc.info` | `info` | Return document metadata including revision, node count, and capabilities. |
+| `doc.query.match` | `query match` | Deterministic selector-based search with cardinality contracts for mutation targeting. |
+| `doc.mutations.preview` | `mutations preview` | Dry-run a mutation plan, returning resolved targets without applying changes. |
+
+#### Mutation
+
+| Operation | CLI command | Description |
+| --- | --- | --- |
+| `doc.insert` | `insert` | Insert text or inline content at a target position. |
+| `doc.replace` | `replace` | Replace content at a target position with new text or inline content. |
+| `doc.delete` | `delete` | Delete content at a target position. |
+| `doc.mutations.apply` | `mutations apply` | Execute a mutation plan atomically against the document. |
+
+#### Format
+
+| Operation | CLI command | Description |
+| --- | --- | --- |
+| `doc.format.apply` | `format apply` | Apply explicit inline style changes (bold, italic, underline, strike) to the target range using boolean patch semantics. |
+
+#### Create
+
+| Operation | CLI command | Description |
+| --- | --- | --- |
+| `doc.create.paragraph` | `create paragraph` | Create a new paragraph at the target position. |
+| `doc.create.heading` | `create heading` | Create a new heading at the target position. |
+
+#### Lists
+
+| Operation | CLI command | Description |
+| --- | --- | --- |
+| `doc.lists.list` | `lists list` | List all list nodes in the document, optionally filtered by scope. |
+| `doc.lists.get` | `lists get` | Retrieve a specific list node by target. |
+| `doc.lists.insert` | `lists insert` | Insert a new list at the target position. |
+| `doc.lists.setType` | `lists set-type` | Change the list type (ordered, unordered) of a target list. |
+| `doc.lists.indent` | `lists indent` | Increase the indentation level of a list item. |
+| `doc.lists.outdent` | `lists outdent` | Decrease the indentation level of a list item. |
+| `doc.lists.restart` | `lists restart` | Restart numbering of an ordered list at the target item. |
+| `doc.lists.exit` | `lists exit` | Exit a list context, converting the target item to a paragraph. |
+
+#### Comments
+
+| Operation | CLI command | Description |
+| --- | --- | --- |
+| `doc.comments.create` | `comments create` | Create a new comment thread (or reply when parentCommentId is given). |
+| `doc.comments.patch` | `comments patch` | Patch fields on an existing comment (text, target, status, or isInternal). |
+| `doc.comments.delete` | `comments delete` | Remove a comment or reply by ID. |
+| `doc.comments.get` | `comments get` | Retrieve a single comment thread by ID. |
+| `doc.comments.list` | `comments list` | List all comment threads in the document. |
+
+#### Track changes
+
+| Operation | CLI command | Description |
+| --- | --- | --- |
+| `doc.trackChanges.list` | `track-changes list` | List all tracked changes in the document. |
+| `doc.trackChanges.get` | `track-changes get` | Retrieve a single tracked change by ID. |
+| `doc.trackChanges.decide` | `track-changes decide` | Accept or reject a tracked change (by ID or scope: all). |
+
+#### Session
+
+| Operation | CLI command | Description |
+| --- | --- | --- |
+| `doc.session.list` | `session list` | List all active editing sessions. |
+| `doc.session.save` | `session save` | Persist the current session state. |
+| `doc.session.close` | `session close` | Close a specific editing session by ID. |
+| `doc.session.setDefault` | `session set-default` | Set the default session for subsequent commands. |
+
+#### Introspection
+
+| Operation | CLI command | Description |
+| --- | --- | --- |
+| `doc.status` | `status` | Show the current session status and document metadata. |
+| `doc.describe` | `describe` | List all available CLI operations and contract metadata. |
+| `doc.describeCommand` | `describe command` | Show detailed metadata for a single CLI operation. |
+{/* SDK_OPERATIONS_END */}
+
+## Related
+
+- [Document API](/document-api/overview) — the in-browser API that defines the operation set
+- [CLI](/document-engine/cli) — use the same operations from the terminal

@@ -28,7 +28,14 @@ type SearchMatch = {
   ranges?: Array<{ from: number; to: number }>;
 };
 
+/** Maximum allowed pattern length to guard against ReDoS and excessive memory usage. */
+const MAX_PATTERN_LENGTH = 1024;
+
 function compileRegex(selector: TextSelector, diagnostics: UnknownNodeDiagnostic[]): RegExp | null {
+  if (selector.pattern.length > MAX_PATTERN_LENGTH) {
+    addDiagnostic(diagnostics, `Text query regex pattern exceeds ${MAX_PATTERN_LENGTH} characters.`);
+    return null;
+  }
   const flags = selector.caseSensitive ? 'g' : 'gi';
   try {
     return new RegExp(selector.pattern, flags);
@@ -43,6 +50,10 @@ function buildSearchPattern(selector: TextSelector, diagnostics: UnknownNodeDiag
   const mode = selector.mode ?? 'contains';
   if (mode === 'regex') {
     return compileRegex(selector, diagnostics);
+  }
+  if (selector.pattern.length > MAX_PATTERN_LENGTH) {
+    addDiagnostic(diagnostics, `Text query pattern exceeds ${MAX_PATTERN_LENGTH} characters.`);
+    return null;
   }
   // Compile as an escaped RegExp to guarantee literal matching. Passing a raw
   // string can be reinterpreted by the search command (e.g. slash-delimited

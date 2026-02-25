@@ -38,6 +38,8 @@ export type CliOperationParamSpec = {
   type: 'string' | 'number' | 'boolean' | 'string[]' | 'json';
   required?: boolean;
   schema?: CliTypeSpec;
+  /** When false, param is a transport-envelope detail hidden from agent tool schemas. */
+  agentVisible?: boolean;
 };
 
 // ---------------------------------------------------------------------------
@@ -92,6 +94,12 @@ export type CliCommandSpec = {
   alias: boolean;
   canonicalKey: string;
   examples: readonly string[];
+  /** Pre-filled input fields merged before dispatch (used by helper commands). */
+  defaultInput?: Record<string, unknown>;
+  /** Extra CLI option specs for flags not in the canonical operation (used by helper commands). */
+  extraOptionSpecs?: readonly { name: string; type: 'string' | 'boolean' | 'number' }[];
+  /** Post-parse transform mapping helper-specific flags into canonical input shape. */
+  inputTransform?: (input: Record<string, unknown>) => Record<string, unknown>;
 };
 
 // ---------------------------------------------------------------------------
@@ -101,3 +109,36 @@ export type CliCommandSpec = {
 export type CliOperationArgsById = {
   [K: string]: Record<string, unknown>;
 };
+
+// ---------------------------------------------------------------------------
+// CLI-only operation types (shared between operation-set and definitions)
+// ---------------------------------------------------------------------------
+
+export type CliCategory =
+  | 'query'
+  | 'mutation'
+  | 'format'
+  | 'create'
+  | 'lists'
+  | 'comments'
+  | 'trackChanges'
+  | 'capabilities'
+  | 'lifecycle'
+  | 'session'
+  | 'introspection';
+
+/** The 10 CLI-only operation identifiers (without `doc.` prefix). Single source of truth. */
+export const CLI_ONLY_OPERATIONS = [
+  'open',
+  'save',
+  'close',
+  'status',
+  'describe',
+  'describeCommand',
+  'session.list',
+  'session.save',
+  'session.close',
+  'session.setDefault',
+] as const;
+
+export type CliOnlyOperation = (typeof CLI_ONLY_OPERATIONS)[number];

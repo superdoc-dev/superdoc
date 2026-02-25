@@ -3,29 +3,20 @@
   "files": [
     "apps/docs/document-api/reference/capabilities/get.mdx",
     "apps/docs/document-api/reference/capabilities/index.mdx",
-    "apps/docs/document-api/reference/comments/add.mdx",
-    "apps/docs/document-api/reference/comments/edit.mdx",
+    "apps/docs/document-api/reference/comments/create.mdx",
+    "apps/docs/document-api/reference/comments/delete.mdx",
     "apps/docs/document-api/reference/comments/get.mdx",
-    "apps/docs/document-api/reference/comments/go-to.mdx",
     "apps/docs/document-api/reference/comments/index.mdx",
     "apps/docs/document-api/reference/comments/list.mdx",
-    "apps/docs/document-api/reference/comments/move.mdx",
-    "apps/docs/document-api/reference/comments/remove.mdx",
-    "apps/docs/document-api/reference/comments/reply.mdx",
-    "apps/docs/document-api/reference/comments/resolve.mdx",
-    "apps/docs/document-api/reference/comments/set-active.mdx",
-    "apps/docs/document-api/reference/comments/set-internal.mdx",
+    "apps/docs/document-api/reference/comments/patch.mdx",
     "apps/docs/document-api/reference/core/index.mdx",
     "apps/docs/document-api/reference/create/heading.mdx",
     "apps/docs/document-api/reference/create/index.mdx",
     "apps/docs/document-api/reference/create/paragraph.mdx",
     "apps/docs/document-api/reference/delete.mdx",
     "apps/docs/document-api/reference/find.mdx",
-    "apps/docs/document-api/reference/format/bold.mdx",
+    "apps/docs/document-api/reference/format/apply.mdx",
     "apps/docs/document-api/reference/format/index.mdx",
-    "apps/docs/document-api/reference/format/italic.mdx",
-    "apps/docs/document-api/reference/format/strikethrough.mdx",
-    "apps/docs/document-api/reference/format/underline.mdx",
     "apps/docs/document-api/reference/get-node-by-id.mdx",
     "apps/docs/document-api/reference/get-node.mdx",
     "apps/docs/document-api/reference/get-text.mdx",
@@ -41,42 +32,49 @@
     "apps/docs/document-api/reference/lists/outdent.mdx",
     "apps/docs/document-api/reference/lists/restart.mdx",
     "apps/docs/document-api/reference/lists/set-type.mdx",
+    "apps/docs/document-api/reference/mutations/apply.mdx",
+    "apps/docs/document-api/reference/mutations/index.mdx",
+    "apps/docs/document-api/reference/mutations/preview.mdx",
+    "apps/docs/document-api/reference/query/index.mdx",
+    "apps/docs/document-api/reference/query/match.mdx",
     "apps/docs/document-api/reference/replace.mdx",
-    "apps/docs/document-api/reference/track-changes/accept-all.mdx",
-    "apps/docs/document-api/reference/track-changes/accept.mdx",
+    "apps/docs/document-api/reference/track-changes/decide.mdx",
     "apps/docs/document-api/reference/track-changes/get.mdx",
     "apps/docs/document-api/reference/track-changes/index.mdx",
-    "apps/docs/document-api/reference/track-changes/list.mdx",
-    "apps/docs/document-api/reference/track-changes/reject-all.mdx",
-    "apps/docs/document-api/reference/track-changes/reject.mdx"
+    "apps/docs/document-api/reference/track-changes/list.mdx"
   ],
   "generatedBy": "packages/document-api/scripts/generate-reference-docs.ts",
   "groups": [
     {
+      "aliasMemberPaths": [],
       "key": "core",
       "operationIds": ["find", "getNode", "getNodeById", "getText", "info", "insert", "replace", "delete"],
       "pagePath": "apps/docs/document-api/reference/core/index.mdx",
       "title": "Core"
     },
     {
+      "aliasMemberPaths": [],
       "key": "capabilities",
       "operationIds": ["capabilities.get"],
       "pagePath": "apps/docs/document-api/reference/capabilities/index.mdx",
       "title": "Capabilities"
     },
     {
+      "aliasMemberPaths": [],
       "key": "create",
       "operationIds": ["create.paragraph", "create.heading"],
       "pagePath": "apps/docs/document-api/reference/create/index.mdx",
       "title": "Create"
     },
     {
+      "aliasMemberPaths": ["format.bold", "format.italic", "format.underline", "format.strikethrough"],
       "key": "format",
-      "operationIds": ["format.bold", "format.italic", "format.underline", "format.strikethrough"],
+      "operationIds": ["format.apply"],
       "pagePath": "apps/docs/document-api/reference/format/index.mdx",
       "title": "Format"
     },
     {
+      "aliasMemberPaths": [],
       "key": "lists",
       "operationIds": [
         "lists.list",
@@ -92,37 +90,34 @@
       "title": "Lists"
     },
     {
+      "aliasMemberPaths": [],
       "key": "comments",
-      "operationIds": [
-        "comments.add",
-        "comments.edit",
-        "comments.reply",
-        "comments.move",
-        "comments.resolve",
-        "comments.remove",
-        "comments.setInternal",
-        "comments.setActive",
-        "comments.goTo",
-        "comments.get",
-        "comments.list"
-      ],
+      "operationIds": ["comments.create", "comments.patch", "comments.delete", "comments.get", "comments.list"],
       "pagePath": "apps/docs/document-api/reference/comments/index.mdx",
       "title": "Comments"
     },
     {
+      "aliasMemberPaths": [],
       "key": "trackChanges",
-      "operationIds": [
-        "trackChanges.list",
-        "trackChanges.get",
-        "trackChanges.accept",
-        "trackChanges.reject",
-        "trackChanges.acceptAll",
-        "trackChanges.rejectAll"
-      ],
+      "operationIds": ["trackChanges.list", "trackChanges.get", "trackChanges.decide"],
       "pagePath": "apps/docs/document-api/reference/track-changes/index.mdx",
       "title": "Track Changes"
+    },
+    {
+      "aliasMemberPaths": [],
+      "key": "query",
+      "operationIds": ["query.match"],
+      "pagePath": "apps/docs/document-api/reference/query/index.mdx",
+      "title": "Query"
+    },
+    {
+      "aliasMemberPaths": [],
+      "key": "mutations",
+      "operationIds": ["mutations.preview", "mutations.apply"],
+      "pagePath": "apps/docs/document-api/reference/mutations/index.mdx",
+      "title": "Mutations"
     }
   ],
   "marker": "{/* GENERATED FILE: DO NOT EDIT. Regenerate via `pnpm run docapi:sync`. */}",
-  "sourceHash": "d53e75c131bc35996800d18ff3b67961de5d6d031ba20f4a6a03106e1117acaa"
+  "sourceHash": "71719d809aa97aaaf7d9200dedd1edf47dc16486b208b473cc009257667bed77"
 }

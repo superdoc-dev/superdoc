@@ -46,6 +46,8 @@ export default [
       '**/commitlint.config.js',
       // E2E tests
       'e2e-tests/**',
+      // SDK scripts — ESM parsed incorrectly by typescript-eslint
+      'packages/sdk/scripts/**',
     ],
   },
   {
@@ -143,6 +145,7 @@ export default [
             '^bun:.*$', // Bun built-in modules
             '^superdoc$',
             '^superdoc/style\\.css$',
+            '^\\..*\/generated\/', // Generated files (codegen artifacts, not in git)
           ],
         }
       ]

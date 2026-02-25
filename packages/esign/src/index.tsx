@@ -261,7 +261,7 @@ const SuperDocESign = forwardRef<Types.SuperDocESignHandle, Types.SuperDocESignP
     document.source,
     document.mode,
     document.layoutMode,
-    document.viewOptions?.layout, 
+    document.viewOptions?.layout,
     pdf,
     discoverAndApplyFields,
     stableTelemetry,

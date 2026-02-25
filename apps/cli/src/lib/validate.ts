@@ -247,18 +247,48 @@ function validateCreateParagraphLocation(value: unknown, path: string): NonNulla
   const kind = expectString(obj.kind, `${path}.kind`);
 
   if (kind === 'documentStart' || kind === 'documentEnd') {
+    expectOnlyKeys(obj, ['kind'], path);
     return { kind };
   }
 
   if (kind === 'before' || kind === 'after') {
-    const target = validateNodeAddress(obj.target, `${path}.target`);
-    if (target.kind !== 'block') {
-      throw new CliError('VALIDATION_ERROR', `${path}.target.kind must be "block".`);
+    const hasTarget = obj.target != null;
+    const hasNodeId = obj.nodeId != null;
+    if (hasTarget === hasNodeId) {
+      throw new CliError('VALIDATION_ERROR', `${path} must include exactly one of target or nodeId.`);
     }
 
+    if (hasTarget) {
+      expectOnlyKeys(obj, ['kind', 'target'], path);
+      const target = validateNodeAddress(obj.target, `${path}.target`);
+      if (target.kind !== 'block') {
+        throw new CliError('VALIDATION_ERROR', `${path}.target.kind must be "block".`);
+      }
+
+      if (kind === 'before') {
+        return {
+          kind: 'before',
+          target,
+        };
+      }
+
+      return {
+        kind: 'after',
+        target,
+      };
+    }
+
+    expectOnlyKeys(obj, ['kind', 'nodeId'], path);
+    const nodeId = expectString(obj.nodeId, `${path}.nodeId`);
+    if (kind === 'before') {
+      return {
+        kind: 'before',
+        nodeId,
+      };
+    }
     return {
-      kind,
-      target,
+      kind: 'after',
+      nodeId,
     };
   }
 

@@ -22,6 +22,7 @@ export interface ContractSnapshot {
   contractVersion: string;
   schemaDialect: string;
   sourceHash: string;
+  $defs?: Record<string, Record<string, unknown>>;
   operations: ContractOperationSnapshot[];
 }
 
@@ -50,6 +51,7 @@ export function buildContractSnapshot(): ContractSnapshot {
     contractVersion: CONTRACT_VERSION,
     schemaDialect: JSON_SCHEMA_DIALECT,
     sourceHash: sha256(sourcePayload),
+    ...(internalSchemas.$defs ? { $defs: internalSchemas.$defs } : {}),
     operations,
   };
 

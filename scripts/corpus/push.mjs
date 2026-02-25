@@ -5,6 +5,7 @@ import path from 'node:path';
 import process from 'node:process';
 import { spawn, spawnSync } from 'node:child_process';
 import {
+  CORPUS_BUCKET_NAME,
   DOCX_CONTENT_TYPE,
   REGISTRY_KEY,
   buildDocRelativePath,
@@ -113,35 +114,24 @@ function buildBenchmarkEnv(baseEnv) {
   const accountId = firstNonEmptyEnv(env, [
     'SD_TESTING_R2_ACCOUNT_ID',
     'SUPERDOC_CORPUS_R2_ACCOUNT_ID',
-    'SD_VISUAL_TESTING_R2_ACCOUNT_ID',
   ]);
   const accessKeyId = firstNonEmptyEnv(env, [
     'SD_TESTING_R2_ACCESS_KEY_ID',
     'SUPERDOC_CORPUS_R2_ACCESS_KEY_ID',
-    'SD_VISUAL_TESTING_R2_ACCESS_KEY_ID',
   ]);
   const secretAccessKey = firstNonEmptyEnv(env, [
     'SD_TESTING_R2_SECRET_ACCESS_KEY',
     'SUPERDOC_CORPUS_R2_SECRET_ACCESS_KEY',
-    'SD_VISUAL_TESTING_R2_SECRET_ACCESS_KEY',
-  ]);
-  const bucketName = firstNonEmptyEnv(env, [
-    'SD_TESTING_R2_BUCKET_NAME',
-    'SD_TESTING_R2_BUCKET',
-    'SUPERDOC_CORPUS_R2_BUCKET',
-    'SD_VISUAL_TESTING_R2_BUCKET_NAME',
-    'SD_VISUAL_TESTING_R2_BUCKET',
   ]);
   const wordBucketName = firstNonEmptyEnv(env, [
     'SD_TESTING_R2_WORD_BUCKET_NAME',
-    'SD_VISUAL_TESTING_R2_WORD_BUCKET_NAME',
     'SUPERDOC_CORPUS_R2_WORD_BUCKET',
   ]);
 
   if (accountId && !env.SD_TESTING_R2_ACCOUNT_ID) env.SD_TESTING_R2_ACCOUNT_ID = accountId;
   if (accessKeyId && !env.SD_TESTING_R2_ACCESS_KEY_ID) env.SD_TESTING_R2_ACCESS_KEY_ID = accessKeyId;
   if (secretAccessKey && !env.SD_TESTING_R2_SECRET_ACCESS_KEY) env.SD_TESTING_R2_SECRET_ACCESS_KEY = secretAccessKey;
-  if (bucketName && !env.SD_TESTING_R2_BUCKET_NAME) env.SD_TESTING_R2_BUCKET_NAME = bucketName;
+  env.SD_TESTING_R2_BUCKET_NAME = CORPUS_BUCKET_NAME;
   if (wordBucketName && !env.SD_TESTING_R2_WORD_BUCKET_NAME) env.SD_TESTING_R2_WORD_BUCKET_NAME = wordBucketName;
 
   return env;
@@ -183,7 +173,7 @@ async function generateAndUploadWordBaseline(targetRelativePath) {
   if (missingEnvKeys.length > 0) {
     throw new Error(
       `Missing env for Word baseline upload: ${missingEnvKeys.join(', ')}. ` +
-        'Set these (or equivalent SUPERDOC_CORPUS_R2_*/SD_VISUAL_TESTING_R2_* vars) and retry.',
+        'Set these (or equivalent SUPERDOC_CORPUS_R2_* vars) and retry.',
     );
   }
 

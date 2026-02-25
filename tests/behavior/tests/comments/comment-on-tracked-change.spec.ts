@@ -29,7 +29,7 @@ test('comment thread on tracked change shows both the change and replies', async
   await superdoc.waitForStable();
 
   // Find the dialog that contains "new text" tracked change info
-  const dialog = superdoc.page.locator('.floating-comment > .comments-dialog', {
+  const dialog = superdoc.page.locator('.comment-placeholder .comments-dialog', {
     has: superdoc.page.locator('.tracked-change-text', { hasText: 'new text' }),
   });
   await expect(dialog).toBeVisible({ timeout: 5_000 });
@@ -59,7 +59,7 @@ test('clicking a different comment activates its dialog', async ({ superdoc }) =
   await superdoc.waitForStable();
 
   // The active dialog should switch to the clicked "Test" thread
-  const activeDialog = superdoc.page.locator('.floating-comment > .comments-dialog.is-active').last();
+  const activeDialog = superdoc.page.locator('.comment-placeholder .comments-dialog.is-active').last();
   await expect(activeDialog).toBeVisible({ timeout: 5_000 });
   const activeComments = activeDialog.locator('.comment-body .comment');
   await expect(activeComments).toHaveCount(2);
@@ -69,7 +69,7 @@ test('clicking a different comment activates its dialog', async ({ superdoc }) =
   // Click away to deselect
   await superdoc.clickOnLine(4);
   await superdoc.waitForStable();
-  await expect(superdoc.page.locator('.floating-comment > .comments-dialog.is-active')).toHaveCount(0);
+  await expect(superdoc.page.locator('.comment-placeholder .comments-dialog.is-active')).toHaveCount(0);
 
   await superdoc.snapshot('comment deselected after clicking away');
 });

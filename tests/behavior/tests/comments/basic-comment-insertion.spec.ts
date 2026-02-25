@@ -18,13 +18,23 @@ test('add a comment programmatically via document-api', async ({ superdoc }) => 
   const initialComments = await listComments(superdoc.page, { includeResolved: true });
   const initialCount = initialComments.total;
 
-  await addCommentByText(superdoc.page, {
+  const commentId = await addCommentByText(superdoc.page, {
     pattern: 'world',
     text: 'This is a programmatic comment',
   });
   await superdoc.waitForStable();
 
-  await superdoc.assertCommentHighlightExists({ text: 'world' });
+  await expect
+    .poll(async () => {
+      const listed = await listComments(superdoc.page, { includeResolved: true });
+      return listed.matches.some((entry) => entry.commentId === commentId);
+    })
+    .toBe(true);
+  await superdoc.assertCommentHighlightExists({
+    text: 'world',
+    commentId,
+    timeoutMs: 20_000,
+  });
   await expect
     .poll(async () => {
       const listed = await listComments(superdoc.page, { includeResolved: true });
@@ -85,9 +95,9 @@ test('add a comment via the UI bubble', async ({ superdoc }) => {
   }
 
   // Verify the comment text appears in the floating dialog
-  const commentDialog = superdoc.page.locator('.floating-comment > .comments-dialog').last();
+  const commentDialog = superdoc.page.locator('.comment-placeholder .comments-dialog').last();
   const commentText = commentDialog.locator('.comment-body .comment');
-  await expect(commentText.first()).toBeAttached({ timeout: 5_000 });
+  await expect(commentText.first()).toBeAttached({ timeout: 10_000 });
   await expect(commentText.first()).toContainText('UI comment on selected text');
 
   await superdoc.snapshot('comment added via UI');

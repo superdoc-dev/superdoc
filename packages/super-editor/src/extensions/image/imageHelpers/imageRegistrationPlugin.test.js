@@ -49,12 +49,12 @@ describe('needsImageRegistration', () => {
     expect(needsImageRegistration(node)).toBe(true);
   });
 
-  it('skips relative paths that the browser can resolve directly', () => {
-    expect(needsImageRegistration(createImageNode({ src: '/images/photo.png' }))).toBe(false);
+  it('requires registration for relative paths (headless needs media path + rId)', () => {
+    expect(needsImageRegistration(createImageNode({ src: '/images/photo.png' }))).toBe(true);
     expect(needsImageRegistration(createImageNode({ src: '/public/images/extensions/image-landscape.png' }))).toBe(
-      false,
+      true,
     );
-    expect(needsImageRegistration(createImageNode({ src: 'images/photo.png' }))).toBe(false);
+    expect(needsImageRegistration(createImageNode({ src: 'images/photo.png' }))).toBe(true);
   });
 
   it('requires registration for http URLs', () => {

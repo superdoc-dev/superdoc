@@ -30,11 +30,6 @@ export const needsImageRegistration = (node) => {
   // Data URI with rId means it was converted (e.g., EMF→SVG) but already has export metadata
   if (src.startsWith('data:') && node.attrs?.rId) return false;
 
-  // Relative or absolute path (e.g., /images/photo.png) — the browser resolves these directly
-  if (!src.startsWith('http') && !src.startsWith('data:') && !src.startsWith('blob:')) {
-    return false;
-  }
-
   return true;
 };
 
@@ -253,9 +248,16 @@ export const handleNodePath = (foundImages, editor, state) => {
  * @param {import('prosemirror-state').EditorState} state - The current editor state.
  * @returns {import('prosemirror-state').Transaction} - The updated transaction with image nodes replaced by placeholders and registration process initiated.
  */
+const isRelativePath = (src) => !src.startsWith('http') && !src.startsWith('data:') && !src.startsWith('blob:');
+
 const handleBrowserPath = (foundImages, editor, view, state) => {
+  // Relative/absolute paths are resolved by the browser natively — leave them in the doc.
+  const imagesToProcess = foundImages.filter(({ node }) => !isRelativePath(node.attrs?.src));
+
+  if (imagesToProcess.length === 0) return null;
+
   // Register the images. (async process).
-  registerImages(foundImages, editor, view);
+  registerImages(imagesToProcess, editor, view);
 
   // Remove all the images that were found. These will eventually be replaced by the updated images.
   const tr = state.tr;
@@ -266,7 +268,7 @@ const handleBrowserPath = (foundImages, editor, view, state) => {
   let { set } = key.getState(state);
 
   // Add decorations for the images first at their current positions
-  foundImages
+  imagesToProcess
     .slice()
     .sort((a, b) => a.pos - b.pos)
     .forEach(({ pos, id }) => {
@@ -278,7 +280,7 @@ const handleBrowserPath = (foundImages, editor, view, state) => {
     });
 
   // Then delete the image nodes (highest position first to avoid position shifting issues)
-  foundImages
+  imagesToProcess
     .slice()
     .sort((a, b) => b.pos - a.pos)
     .forEach(({ node, pos }) => {

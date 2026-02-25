@@ -521,8 +521,9 @@ export function sanitizeHref(raw, config = {}) {
   // Normalize redirect blocklist once and enforce across all URL forms
   const blocklist = normalizeBlocklist(config.redirectBlocklist);
 
-  // Relative paths and protocol-relative URLs
-  if (trimmed.startsWith('/') || trimmed.startsWith('.')) {
+  // Relative paths have no protocol to validate
+  // resolve against page origin instead
+  if (trimmed.startsWith('/')) {
     return sanitizeRelativePath(trimmed, blocklist);
   }
 

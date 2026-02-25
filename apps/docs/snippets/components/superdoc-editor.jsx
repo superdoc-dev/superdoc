@@ -12,9 +12,17 @@ export const SuperDocEditor = ({
   const DEV_DIST_URL = 'http://localhost:9094/dist';
   const UNPKG_DIST_URL = 'https://unpkg.com/superdoc@latest/dist';
 
-  const getBaseUrl = () => {
+  const getBaseUrl = async () => {
     const isDev = typeof window !== 'undefined' && window.location.hostname === 'localhost';
-    return isDev ? DEV_DIST_URL : UNPKG_DIST_URL;
+
+    if (isDev) {
+      try {
+        const res = await fetch(`${DEV_DIST_URL}/superdoc.umd.js`, { method: 'HEAD' });
+        if (res.ok) return DEV_DIST_URL;
+      } catch {}
+    }
+
+    return UNPKG_DIST_URL;
   };
 
   const ensureStyle = (baseUrl) => {
@@ -70,7 +78,7 @@ export const SuperDocEditor = ({
     let cancelled = false;
 
     const boot = async () => {
-      const baseUrl = getBaseUrl();
+      const baseUrl = await getBaseUrl();
       ensureStyle(baseUrl);
       await loadSuperDocLibrary(baseUrl);
       if (!cancelled) initEditor();

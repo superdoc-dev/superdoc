@@ -66,6 +66,27 @@ const mockState = (plugins: Plugin[]): EditorState =>
   }) as unknown as EditorState;
 
 /**
+ * Builds a mock EditorState whose doc has textBetween() so that collectDecorationRanges
+ * can store text and resolve ranges by text. fullText is the document text; positions
+ * 1..fullText.length map to characters (content.size = fullText.length + 2).
+ */
+const mockStateWithDocText = (plugins: Plugin[], fullText: string): EditorState => {
+  const len = fullText.length;
+  const contentSize = len + 2;
+  const textBetween = (from: number, to: number): string => {
+    if (from >= to) return '';
+    const start = from <= 0 ? 0 : Math.min(from - 1, len);
+    const end = to <= 0 ? 0 : Math.min(to - 1, len);
+    return fullText.slice(start, end);
+  };
+  const doc = {
+    content: { size: contentSize },
+    textBetween: (_from: number, _to: number, _blockSep?: string, _leafSep?: string) => textBetween(_from, _to),
+  };
+  return { plugins, doc } as unknown as EditorState;
+};
+
+/**
  * Creates a real DomPositionIndex backed by a container element.
  * Elements appended to the container with `data-pm-start`/`data-pm-end`
  * become queryable after calling `rebuild()`.
@@ -708,6 +729,107 @@ describe('DecorationBridge', () => {
       setDecorations([]);
       bridge.sync(mockState([plugin]), index);
       expect(span.style.getPropertyValue('background-color')).toBe('white');
+    });
+  });
+
+  // -----------------------------------------------------------------------
+  // collectDecorationRanges: restore by text
+  // -----------------------------------------------------------------------
+
+  describe('collectDecorationRanges restore by text', () => {
+    it('stores and restores decoration range when plugin returns empty (same positions)', () => {
+      const fullText = 'Hello world.'; // extra char so end of "world" is not at doc end (avoids docSize return)
+      const plugin = mutableExternalPlugin('focus');
+      plugin.setDecorations([{ from: 7, to: 12, class: 'highlight-selection' }]);
+      const state = mockStateWithDocText([plugin.plugin], fullText);
+
+      const ranges1 = bridge.collectDecorationRanges(state);
+      expect(ranges1).toHaveLength(1);
+      expect(ranges1[0]).toMatchObject({ from: 7, to: 12, classes: ['highlight-selection'] });
+
+      plugin.setDecorations([]);
+      const ranges2 = bridge.collectDecorationRanges(state);
+      expect(ranges2).toHaveLength(1);
+      expect(ranges2[0]).toMatchObject({ from: 7, to: 12, classes: ['highlight-selection'] });
+    });
+
+    it('resolves restored range by text when text appears at different position', () => {
+      const fullText = 'Hello world';
+      const plugin = mutableExternalPlugin('focus');
+      plugin.setDecorations([{ from: 7, to: 12, class: 'highlight-selection' }]);
+      const state1 = mockStateWithDocText([plugin.plugin], fullText);
+
+      bridge.collectDecorationRanges(state1);
+      plugin.setDecorations([]);
+
+      const fullTextMoved = 'Greetings world world';
+      const state2 = mockStateWithDocText([plugin.plugin], fullTextMoved);
+      const ranges = bridge.collectDecorationRanges(state2);
+      expect(ranges).toHaveLength(1);
+      expect(ranges[0].classes).toContain('highlight-selection');
+      const doc2 = state2.doc as { textBetween: (a: number, b: number) => string };
+      expect(doc2.textBetween(ranges[0].from, ranges[0].to)).toBe('world');
+    });
+
+    it('prefers occurrence closest to hint when same text appears multiple times', () => {
+      const fullText = 'world and world';
+      const plugin = mutableExternalPlugin('focus');
+      plugin.setDecorations([{ from: 10, to: 15, class: 'highlight-selection' }]);
+      const state1 = mockStateWithDocText([plugin.plugin], fullText);
+
+      bridge.collectDecorationRanges(state1);
+      plugin.setDecorations([]);
+
+      const state2 = mockStateWithDocText([plugin.plugin], fullText);
+      const ranges = bridge.collectDecorationRanges(state2);
+      expect(ranges).toHaveLength(1);
+      expect(ranges[0].from).toBe(10);
+      expect(ranges[0].to).toBe(15);
+    });
+  });
+
+  // -----------------------------------------------------------------------
+  // collectDecorationRanges: skip restore (clearFocus)
+  // -----------------------------------------------------------------------
+
+  describe('collectDecorationRanges skip restore when clearFocus', () => {
+    it('does not restore when sync was called with restoreEmptyDecorations: false', () => {
+      const fullText = 'Hello world';
+      const { plugin, setDecorations } = mutableExternalPlugin('focus');
+      setDecorations([{ from: 7, to: 12, class: 'highlight-selection' }]);
+      const state = mockStateWithDocText([plugin], fullText);
+      const { index, addSpan, rebuild } = createIndex();
+      addSpan(7, 12);
+      rebuild();
+
+      bridge.collectDecorationRanges(state);
+      expect(bridge.collectDecorationRanges(state)).toHaveLength(1);
+
+      setDecorations([]);
+      bridge.sync(state, index, { restoreEmptyDecorations: false });
+
+      const rangesAfterClear = bridge.collectDecorationRanges(state);
+      expect(rangesAfterClear).toHaveLength(0);
+    });
+
+    it('restores again on subsequent collect after skip-restore was consumed', () => {
+      const fullText = 'Hello world';
+      const { plugin, setDecorations } = mutableExternalPlugin('focus');
+      setDecorations([{ from: 7, to: 12, class: 'highlight-selection' }]);
+      const state = mockStateWithDocText([plugin], fullText);
+      const { index, addSpan, rebuild } = createIndex();
+      addSpan(7, 12);
+      rebuild();
+
+      bridge.collectDecorationRanges(state);
+      setDecorations([]);
+      bridge.sync(state, index, { restoreEmptyDecorations: false });
+      bridge.collectDecorationRanges(state);
+
+      setDecorations([{ from: 7, to: 12, class: 'highlight-selection' }]);
+      const ranges = bridge.collectDecorationRanges(state);
+      expect(ranges).toHaveLength(1);
+      expect(ranges[0]).toMatchObject({ from: 7, to: 12 });
     });
   });
 

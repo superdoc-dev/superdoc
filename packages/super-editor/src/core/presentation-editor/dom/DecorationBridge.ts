@@ -1,5 +1,6 @@
 import { DecorationSet } from 'prosemirror-view';
 import type { EditorState, Plugin, PluginKey } from 'prosemirror-state';
+import type { Node as ProseMirrorNode } from 'prosemirror-model';
 
 import { TrackChangesBasePluginKey } from '@extensions/track-changes/plugins/index.js';
 import { CommentsPluginKey } from '@extensions/comment/comments-plugin.js';
@@ -93,6 +94,72 @@ const EXCLUDED_PLUGIN_KEY_PREFIXES: readonly string[] = [
   'yjs-cursor',
 ];
 
+/** Block and leaf separators used when storing/finding text (must match doc.textBetween usage). */
+const TEXT_RANGE_BLOCK_SEP = '\n';
+const TEXT_RANGE_LEAF_SEP = '\n';
+
+/** Stored previous decoration range; optional `text` is used to resolve the same span after doc changes. */
+interface PreviousRange {
+  from: number;
+  to: number;
+  classes: string[];
+  style: string | null;
+  dataAttrs: Record<string, string>;
+  /** Text at this range when stored; used to find the same span when positions change. */
+  text?: string;
+}
+
+/**
+ * Maps a character offset in the document's text (with block/leaf separators) to a document position.
+ * Uses binary search so that doc.textBetween(0, result, blockSep, leafSep).length === charOffset.
+ */
+function charOffsetToPosition(doc: ProseMirrorNode, charOffset: number, blockSep: string, leafSep: string): number {
+  const docSize = doc.content.size;
+  if (charOffset <= 0) return 0;
+  const fullLength = doc.textBetween(0, docSize, blockSep, leafSep).length;
+  if (charOffset >= fullLength) return docSize;
+  let low = 0;
+  let high = docSize;
+  while (low < high) {
+    const mid = Math.floor((low + high) / 2);
+    const len = doc.textBetween(0, mid, blockSep, leafSep).length;
+    if (len < charOffset) {
+      low = mid + 1;
+    } else {
+      high = mid;
+    }
+  }
+  return low;
+}
+
+/**
+ * Finds a range in the document that contains the given text (same block/leaf separators as storage).
+ * If multiple matches exist, returns the one whose start is closest to hintFrom.
+ */
+function findRangeByText(doc: ProseMirrorNode, text: string, hintFrom?: number): { from: number; to: number } | null {
+  if (!text) return null;
+  const docSize = doc.content.size;
+  const full = doc.textBetween(0, docSize, TEXT_RANGE_BLOCK_SEP, TEXT_RANGE_LEAF_SEP);
+  const matches: number[] = [];
+  let i = 0;
+  for (;;) {
+    const idx = full.indexOf(text, i);
+    if (idx === -1) break;
+    matches.push(idx);
+    i = idx + 1;
+  }
+  if (matches.length === 0) return null;
+  const charOffsetFrom = matches.reduce((best, idx) => {
+    if (hintFrom == null) return matches[0];
+    const pos = charOffsetToPosition(doc, idx, TEXT_RANGE_BLOCK_SEP, TEXT_RANGE_LEAF_SEP);
+    const bestPos = charOffsetToPosition(doc, best, TEXT_RANGE_BLOCK_SEP, TEXT_RANGE_LEAF_SEP);
+    return Math.abs(pos - hintFrom) < Math.abs(bestPos - hintFrom) ? idx : best;
+  }, matches[0]);
+  const from = charOffsetToPosition(doc, charOffsetFrom, TEXT_RANGE_BLOCK_SEP, TEXT_RANGE_LEAF_SEP);
+  const to = charOffsetToPosition(doc, charOffsetFrom + text.length, TEXT_RANGE_BLOCK_SEP, TEXT_RANGE_LEAF_SEP);
+  return from < to ? { from, to } : null;
+}
+
 // ---------------------------------------------------------------------------
 // DecorationBridge
 // ---------------------------------------------------------------------------
@@ -145,10 +212,15 @@ export class DecorationBridge {
    * restore the previous range when the plugin incorrectly clears it but the
    * original positions are still valid in the document.
    */
-  #previousRanges = new Map<
-    Plugin,
-    Array<{ from: number; to: number; classes: string[]; style: string | null; dataAttrs: Record<string, string> }>
-  >();
+  #previousRanges = new Map<Plugin, PreviousRange[]>();
+
+  /**
+   * When true, the next collectDecorationRanges() must not restore from
+   * previous ranges (e.g. after clearFocus). Set by sync(..., { restoreEmptyDecorations: false }),
+   * consumed and cleared by collectDecorationRanges(). Ensures layout (which calls
+   * collectDecorationRanges before sync) respects an explicit clear.
+   */
+  #skipRestoreEmptyOnNextCollect = false;
 
   // -------------------------------------------------------------------------
   // Public API
@@ -169,6 +241,7 @@ export class DecorationBridge {
 
     const docSize = state.doc.content.size;
     const restoreEmpty = options?.restoreEmptyDecorations !== false;
+    if (!restoreEmpty) this.#skipRestoreEmptyOnNextCollect = true;
     const desired =
       this.#eligiblePlugins.length > 0
         ? this.#collectDesiredState(state, domIndex, docSize, restoreEmpty)
@@ -239,6 +312,7 @@ export class DecorationBridge {
         classes: string[];
         style: string | null;
         dataAttrs: Record<string, string>;
+        text: string | null;
       }> = [];
       const decorationSet = this.#getDecorationSet(plugin, state);
 
@@ -254,6 +328,12 @@ export class DecorationBridge {
           const dataAttrs: Record<string, string> = {};
           for (const [key, value] of attrs.dataEntries) dataAttrs[key] = value;
 
+          const rangeText = state.doc.textBetween(
+            decoration.from,
+            decoration.to,
+            TEXT_RANGE_BLOCK_SEP,
+            TEXT_RANGE_LEAF_SEP,
+          );
           pluginRanges.push({
             from: decoration.from,
             to: decoration.to,
@@ -263,21 +343,37 @@ export class DecorationBridge {
                 ? attrs.styleEntries.map(([prop, val]) => `${prop}: ${val}`).join('; ')
                 : null,
             dataAttrs,
+            text: rangeText,
           });
         }
       }
 
       // Fallback: If plugin has no ranges but previously had valid ranges,
-      // check if the previous positions are still valid in the document.
-      // This handles the case where mark application (e.g. bold elsewhere) causes
-      // transaction mappings that temporarily clear decoration state.
+      // resolve by text so we highlight the same span (same text), not necessarily the same positions.
+      // Skip restore when sync() was called with restoreEmptyDecorations: false (e.g. clearFocus).
       const previousPluginRanges = this.#previousRanges.get(plugin);
-      if (pluginRanges.length === 0 && previousPluginRanges && previousPluginRanges.length > 0) {
+      const mayRestoreEmpty =
+        !this.#skipRestoreEmptyOnNextCollect && previousPluginRanges && previousPluginRanges.length > 0;
+      if (pluginRanges.length === 0 && mayRestoreEmpty) {
         for (const prevRange of previousPluginRanges) {
-          // Check if previous positions are still valid in the document
-          if (prevRange.from >= 0 && prevRange.from < prevRange.to && prevRange.to <= docSize) {
-            // Restore the previous range so highlight is not lost
-            pluginRanges.push({ ...prevRange });
+          let from = prevRange.from;
+          let to = prevRange.to;
+          if (prevRange.text) {
+            const resolved = findRangeByText(state.doc, prevRange.text, prevRange.from);
+            if (resolved) {
+              from = resolved.from;
+              to = resolved.to;
+            }
+          }
+          if (from >= 0 && from < to && to <= docSize) {
+            pluginRanges.push({
+              from,
+              to,
+              classes: prevRange.classes,
+              style: prevRange.style,
+              dataAttrs: prevRange.dataAttrs,
+              text: prevRange.text,
+            });
           }
         }
       }
@@ -290,7 +386,13 @@ export class DecorationBridge {
       ranges.push(...pluginRanges);
     }
 
+    this.#clearSkipRestoreFlagIfSet();
     return ranges;
+  }
+
+  /** Called at end of collectDecorationRanges so the "skip restore" flag is cleared once per call. */
+  #clearSkipRestoreFlagIfSet(): void {
+    if (this.#skipRestoreEmptyOnNextCollect) this.#skipRestoreEmptyOnNextCollect = false;
   }
 
   /**
@@ -303,6 +405,7 @@ export class DecorationBridge {
     this.#prevDecorationSets.clear();
     this.#previousRanges.clear();
     this.#hadEligiblePlugins = false;
+    this.#skipRestoreEmptyOnNextCollect = false;
     // WeakMap entries are garbage collected with their elements.
   }
 
@@ -407,8 +510,17 @@ export class DecorationBridge {
       const previousPluginRanges = this.#previousRanges.get(plugin);
       if (previousPluginRanges?.length) {
         for (const prev of previousPluginRanges) {
-          if (prev.from < 0 || prev.to <= prev.from || prev.to > docSize) continue;
-          const entries = domIndex.findEntriesInRange(prev.from, prev.to);
+          let from = prev.from;
+          let to = prev.to;
+          if (prev.text) {
+            const resolved = findRangeByText(state.doc, prev.text, prev.from);
+            if (resolved) {
+              from = resolved.from;
+              to = resolved.to;
+            }
+          }
+          if (from < 0 || to <= from || to > docSize) continue;
+          const entries = domIndex.findEntriesInRange(from, to);
           for (const entry of entries) {
             const d = this.#getOrCreateDesired(desired, entry.el);
             for (const cls of prev.classes) d.classes.add(cls);

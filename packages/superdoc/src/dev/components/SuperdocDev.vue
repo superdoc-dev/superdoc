@@ -813,19 +813,6 @@ const zoomOut = () => {
   currentZoom.value = next;
   superdoc.value?.setZoom(next);
 };
-
-const handleHighlightSelection = () => {
-  const editor = activeEditor.value;
-  if (editor?.commands?.setFocus) {
-    const { from, to } = editor.state.selection;
-    editor.commands.setFocus(from, to);
-  }
-};
-
-const handleClearFocus = () => {
-  activeEditor.value?.commands?.clearFocus?.();
-};
-
 const showExportMenu = ref(false);
 const closeExportMenu = () => {
   showExportMenu.value = false;
@@ -1041,16 +1028,6 @@ if (scrollTestMode.value) {
             </div>
             <button class="dev-app__header-export-btn" @click="toggleLayoutEngine">
               Turn Layout Engine {{ useLayoutEngine ? 'off' : 'on' }} (reloads)
-            </button>
-            <button
-              class="dev-app__header-export-btn"
-              @click="handleHighlightSelection"
-              title="Highlight current selection (focus plugin)"
-            >
-              Highlight selection
-            </button>
-            <button class="dev-app__header-export-btn" @click="handleClearFocus" title="Clear focus highlight">
-              Clear highlight
             </button>
             <button class="dev-app__header-export-btn" @click="toggleViewLayout">
               Turn Web Layout {{ useWebLayout ? 'off' : 'on' }} (reloads)

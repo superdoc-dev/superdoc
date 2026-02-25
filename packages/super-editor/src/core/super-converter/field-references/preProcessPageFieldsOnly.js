@@ -11,12 +11,16 @@ const shouldSkipFieldProcessing = (node) => SKIP_FIELD_PROCESSING_NODE_NAMES.has
 /**
  * Pre-processes nodes to convert PAGE and NUMPAGES field codes for header/footer rendering.
  *
+ * NOTE: This function is used exclusively when constructing a standalone header/footer
+ * editor for on-screen display/editing. It is NOT part of the DOCX import pipeline.
+ * The original OOXML is preserved separately for round-trip export.
+ *
  * This function specifically handles:
  * - PAGE fields → sd:autoPageNumber (displays current page number)
  * - NUMPAGES fields → sd:totalPageNumber (displays total page count)
- *
- * Other field types (DOCPROPERTY, HYPERLINK, etc.) are preserved unchanged
- * to maintain proper round-trip export fidelity.
+ * - Unhandled fldSimple fields (FILENAME, DOCPROPERTY, etc.) → unwrapped to their
+ *   cached display text (the value Word rendered when the document was last saved),
+ *   so the header renders meaningful content rather than an empty box.
  *
  * @param {OpenXmlNode[]} nodes - The nodes to process.
  * @returns {{ processedNodes: OpenXmlNode[] }} The processed nodes.

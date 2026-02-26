@@ -44,6 +44,9 @@ export function buildDispatchTable(api: DocumentApi): TypedDispatchTable {
     replace: (input, options) => api.replace(input, options),
     delete: (input, options) => api.delete(input, options),
 
+    // --- blocks.* ---
+    'blocks.delete': (input, options) => api.blocks.delete(input, options),
+
     // --- format.* ---
     'format.apply': (input, options) => api.format.apply(input, options),
     'format.fontSize': (input, options) => api.format.fontSize(input, options),

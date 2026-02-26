@@ -26,6 +26,11 @@ const GROUP_METADATA: Record<ReferenceGroupKey, { title: string; description: st
     description: 'Primary read and write operations.',
     pagePath: 'core/index.mdx',
   },
+  blocks: {
+    title: 'Blocks',
+    description: 'Block-level structural operations.',
+    pagePath: 'blocks/index.mdx',
+  },
   capabilities: {
     title: 'Capabilities',
     description: 'Runtime support discovery for capability-aware branching.',

@@ -33,6 +33,7 @@ import type { CommandStaticMetadata, OperationIdempotency, PreApplyThrowCode } f
 
 export type ReferenceGroupKey =
   | 'core'
+  | 'blocks'
   | 'capabilities'
   | 'create'
   | 'format'
@@ -228,6 +229,21 @@ export const OPERATION_DEFINITIONS = {
     }),
     referenceDocPath: 'delete.mdx',
     referenceGroup: 'core',
+  },
+
+  'blocks.delete': {
+    memberPath: 'blocks.delete',
+    description: 'Delete an entire block node (paragraph, heading, list item, table, image, or sdt) deterministically.',
+    requiresDocumentContext: true,
+    metadata: mutationOperation({
+      idempotency: 'conditional',
+      supportsDryRun: true,
+      supportsTrackedMode: false,
+      possibleFailureCodes: NONE_FAILURES,
+      throws: ['TARGET_NOT_FOUND', 'AMBIGUOUS_TARGET', 'CAPABILITY_UNAVAILABLE', 'INVALID_TARGET', 'INTERNAL_ERROR'],
+    }),
+    referenceDocPath: 'blocks/delete.mdx',
+    referenceGroup: 'blocks',
   },
 
   'format.apply': {

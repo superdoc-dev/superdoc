@@ -72,6 +72,14 @@ _No fields._
     }
   },
   "operations": {
+    "blocks.delete": {
+      "available": true,
+      "dryRun": true,
+      "reasons": [
+        "COMMAND_UNAVAILABLE"
+      ],
+      "tracked": true
+    },
     "capabilities.get": {
       "available": true,
       "dryRun": true,
@@ -415,6 +423,7 @@ _No fields._
               "items": {
                 "enum": [
                   "COMMAND_UNAVAILABLE",
+                  "HELPER_UNAVAILABLE",
                   "OPERATION_UNAVAILABLE",
                   "TRACKED_MODE_UNAVAILABLE",
                   "DRY_RUN_UNAVAILABLE",
@@ -439,6 +448,7 @@ _No fields._
               "items": {
                 "enum": [
                   "COMMAND_UNAVAILABLE",
+                  "HELPER_UNAVAILABLE",
                   "OPERATION_UNAVAILABLE",
                   "TRACKED_MODE_UNAVAILABLE",
                   "DRY_RUN_UNAVAILABLE",
@@ -463,6 +473,7 @@ _No fields._
               "items": {
                 "enum": [
                   "COMMAND_UNAVAILABLE",
+                  "HELPER_UNAVAILABLE",
                   "OPERATION_UNAVAILABLE",
                   "TRACKED_MODE_UNAVAILABLE",
                   "DRY_RUN_UNAVAILABLE",
@@ -487,6 +498,7 @@ _No fields._
               "items": {
                 "enum": [
                   "COMMAND_UNAVAILABLE",
+                  "HELPER_UNAVAILABLE",
                   "OPERATION_UNAVAILABLE",
                   "TRACKED_MODE_UNAVAILABLE",
                   "DRY_RUN_UNAVAILABLE",
@@ -513,6 +525,39 @@ _No fields._
     "operations": {
       "additionalProperties": false,
       "properties": {
+        "blocks.delete": {
+          "additionalProperties": false,
+          "properties": {
+            "available": {
+              "type": "boolean"
+            },
+            "dryRun": {
+              "type": "boolean"
+            },
+            "reasons": {
+              "items": {
+                "enum": [
+                  "COMMAND_UNAVAILABLE",
+                  "HELPER_UNAVAILABLE",
+                  "OPERATION_UNAVAILABLE",
+                  "TRACKED_MODE_UNAVAILABLE",
+                  "DRY_RUN_UNAVAILABLE",
+                  "NAMESPACE_UNAVAILABLE"
+                ]
+              },
+              "type": "array"
+            },
+            "tracked": {
+              "type": "boolean"
+            }
+          },
+          "required": [
+            "available",
+            "tracked",
+            "dryRun"
+          ],
+          "type": "object"
+        },
         "capabilities.get": {
           "additionalProperties": false,
           "properties": {
@@ -526,6 +571,7 @@ _No fields._
               "items": {
                 "enum": [
                   "COMMAND_UNAVAILABLE",
+                  "HELPER_UNAVAILABLE",
                   "OPERATION_UNAVAILABLE",
                   "TRACKED_MODE_UNAVAILABLE",
                   "DRY_RUN_UNAVAILABLE",
@@ -558,6 +604,7 @@ _No fields._
               "items": {
                 "enum": [
                   "COMMAND_UNAVAILABLE",
+                  "HELPER_UNAVAILABLE",
                   "OPERATION_UNAVAILABLE",
                   "TRACKED_MODE_UNAVAILABLE",
                   "DRY_RUN_UNAVAILABLE",
@@ -590,6 +637,7 @@ _No fields._
               "items": {
                 "enum": [
                   "COMMAND_UNAVAILABLE",
+                  "HELPER_UNAVAILABLE",
                   "OPERATION_UNAVAILABLE",
                   "TRACKED_MODE_UNAVAILABLE",
                   "DRY_RUN_UNAVAILABLE",
@@ -622,6 +670,7 @@ _No fields._
               "items": {
                 "enum": [
                   "COMMAND_UNAVAILABLE",
+                  "HELPER_UNAVAILABLE",
                   "OPERATION_UNAVAILABLE",
                   "TRACKED_MODE_UNAVAILABLE",
                   "DRY_RUN_UNAVAILABLE",
@@ -654,6 +703,7 @@ _No fields._
               "items": {
                 "enum": [
                   "COMMAND_UNAVAILABLE",
+                  "HELPER_UNAVAILABLE",
                   "OPERATION_UNAVAILABLE",
                   "TRACKED_MODE_UNAVAILABLE",
                   "DRY_RUN_UNAVAILABLE",
@@ -686,6 +736,7 @@ _No fields._
               "items": {
                 "enum": [
                   "COMMAND_UNAVAILABLE",
+                  "HELPER_UNAVAILABLE",
                   "OPERATION_UNAVAILABLE",
                   "TRACKED_MODE_UNAVAILABLE",
                   "DRY_RUN_UNAVAILABLE",
@@ -718,6 +769,7 @@ _No fields._
               "items": {
                 "enum": [
                   "COMMAND_UNAVAILABLE",
+                  "HELPER_UNAVAILABLE",
                   "OPERATION_UNAVAILABLE",
                   "TRACKED_MODE_UNAVAILABLE",
                   "DRY_RUN_UNAVAILABLE",
@@ -750,6 +802,7 @@ _No fields._
               "items": {
                 "enum": [
                   "COMMAND_UNAVAILABLE",
+                  "HELPER_UNAVAILABLE",
                   "OPERATION_UNAVAILABLE",
                   "TRACKED_MODE_UNAVAILABLE",
                   "DRY_RUN_UNAVAILABLE",
@@ -782,6 +835,7 @@ _No fields._
               "items": {
                 "enum": [
                   "COMMAND_UNAVAILABLE",
+                  "HELPER_UNAVAILABLE",
                   "OPERATION_UNAVAILABLE",
                   "TRACKED_MODE_UNAVAILABLE",
                   "DRY_RUN_UNAVAILABLE",
@@ -814,6 +868,7 @@ _No fields._
               "items": {
                 "enum": [
                   "COMMAND_UNAVAILABLE",
+                  "HELPER_UNAVAILABLE",
                   "OPERATION_UNAVAILABLE",
                   "TRACKED_MODE_UNAVAILABLE",
                   "DRY_RUN_UNAVAILABLE",
@@ -846,6 +901,7 @@ _No fields._
               "items": {
                 "enum": [
                   "COMMAND_UNAVAILABLE",
+                  "HELPER_UNAVAILABLE",
                   "OPERATION_UNAVAILABLE",
                   "TRACKED_MODE_UNAVAILABLE",
                   "DRY_RUN_UNAVAILABLE",
@@ -878,6 +934,7 @@ _No fields._
               "items": {
                 "enum": [
                   "COMMAND_UNAVAILABLE",
+                  "HELPER_UNAVAILABLE",
                   "OPERATION_UNAVAILABLE",
                   "TRACKED_MODE_UNAVAILABLE",
                   "DRY_RUN_UNAVAILABLE",
@@ -910,6 +967,7 @@ _No fields._
               "items": {
                 "enum": [
                   "COMMAND_UNAVAILABLE",
+                  "HELPER_UNAVAILABLE",
                   "OPERATION_UNAVAILABLE",
                   "TRACKED_MODE_UNAVAILABLE",
                   "DRY_RUN_UNAVAILABLE",
@@ -942,6 +1000,7 @@ _No fields._
               "items": {
                 "enum": [
                   "COMMAND_UNAVAILABLE",
+                  "HELPER_UNAVAILABLE",
                   "OPERATION_UNAVAILABLE",
                   "TRACKED_MODE_UNAVAILABLE",
                   "DRY_RUN_UNAVAILABLE",
@@ -974,6 +1033,7 @@ _No fields._
               "items": {
                 "enum": [
                   "COMMAND_UNAVAILABLE",
+                  "HELPER_UNAVAILABLE",
                   "OPERATION_UNAVAILABLE",
                   "TRACKED_MODE_UNAVAILABLE",
                   "DRY_RUN_UNAVAILABLE",
@@ -1006,6 +1066,7 @@ _No fields._
               "items": {
                 "enum": [
                   "COMMAND_UNAVAILABLE",
+                  "HELPER_UNAVAILABLE",
                   "OPERATION_UNAVAILABLE",
                   "TRACKED_MODE_UNAVAILABLE",
                   "DRY_RUN_UNAVAILABLE",
@@ -1038,6 +1099,7 @@ _No fields._
               "items": {
                 "enum": [
                   "COMMAND_UNAVAILABLE",
+                  "HELPER_UNAVAILABLE",
                   "OPERATION_UNAVAILABLE",
                   "TRACKED_MODE_UNAVAILABLE",
                   "DRY_RUN_UNAVAILABLE",
@@ -1070,6 +1132,7 @@ _No fields._
               "items": {
                 "enum": [
                   "COMMAND_UNAVAILABLE",
+                  "HELPER_UNAVAILABLE",
                   "OPERATION_UNAVAILABLE",
                   "TRACKED_MODE_UNAVAILABLE",
                   "DRY_RUN_UNAVAILABLE",
@@ -1102,6 +1165,7 @@ _No fields._
               "items": {
                 "enum": [
                   "COMMAND_UNAVAILABLE",
+                  "HELPER_UNAVAILABLE",
                   "OPERATION_UNAVAILABLE",
                   "TRACKED_MODE_UNAVAILABLE",
                   "DRY_RUN_UNAVAILABLE",
@@ -1134,6 +1198,7 @@ _No fields._
               "items": {
                 "enum": [
                   "COMMAND_UNAVAILABLE",
+                  "HELPER_UNAVAILABLE",
                   "OPERATION_UNAVAILABLE",
                   "TRACKED_MODE_UNAVAILABLE",
                   "DRY_RUN_UNAVAILABLE",
@@ -1166,6 +1231,7 @@ _No fields._
               "items": {
                 "enum": [
                   "COMMAND_UNAVAILABLE",
+                  "HELPER_UNAVAILABLE",
                   "OPERATION_UNAVAILABLE",
                   "TRACKED_MODE_UNAVAILABLE",
                   "DRY_RUN_UNAVAILABLE",
@@ -1198,6 +1264,7 @@ _No fields._
               "items": {
                 "enum": [
                   "COMMAND_UNAVAILABLE",
+                  "HELPER_UNAVAILABLE",
                   "OPERATION_UNAVAILABLE",
                   "TRACKED_MODE_UNAVAILABLE",
                   "DRY_RUN_UNAVAILABLE",
@@ -1230,6 +1297,7 @@ _No fields._
               "items": {
                 "enum": [
                   "COMMAND_UNAVAILABLE",
+                  "HELPER_UNAVAILABLE",
                   "OPERATION_UNAVAILABLE",
                   "TRACKED_MODE_UNAVAILABLE",
                   "DRY_RUN_UNAVAILABLE",
@@ -1262,6 +1330,7 @@ _No fields._
               "items": {
                 "enum": [
                   "COMMAND_UNAVAILABLE",
+                  "HELPER_UNAVAILABLE",
                   "OPERATION_UNAVAILABLE",
                   "TRACKED_MODE_UNAVAILABLE",
                   "DRY_RUN_UNAVAILABLE",
@@ -1294,6 +1363,7 @@ _No fields._
               "items": {
                 "enum": [
                   "COMMAND_UNAVAILABLE",
+                  "HELPER_UNAVAILABLE",
                   "OPERATION_UNAVAILABLE",
                   "TRACKED_MODE_UNAVAILABLE",
                   "DRY_RUN_UNAVAILABLE",
@@ -1326,6 +1396,7 @@ _No fields._
               "items": {
                 "enum": [
                   "COMMAND_UNAVAILABLE",
+                  "HELPER_UNAVAILABLE",
                   "OPERATION_UNAVAILABLE",
                   "TRACKED_MODE_UNAVAILABLE",
                   "DRY_RUN_UNAVAILABLE",
@@ -1358,6 +1429,7 @@ _No fields._
               "items": {
                 "enum": [
                   "COMMAND_UNAVAILABLE",
+                  "HELPER_UNAVAILABLE",
                   "OPERATION_UNAVAILABLE",
                   "TRACKED_MODE_UNAVAILABLE",
                   "DRY_RUN_UNAVAILABLE",
@@ -1390,6 +1462,7 @@ _No fields._
               "items": {
                 "enum": [
                   "COMMAND_UNAVAILABLE",
+                  "HELPER_UNAVAILABLE",
                   "OPERATION_UNAVAILABLE",
                   "TRACKED_MODE_UNAVAILABLE",
                   "DRY_RUN_UNAVAILABLE",
@@ -1422,6 +1495,7 @@ _No fields._
               "items": {
                 "enum": [
                   "COMMAND_UNAVAILABLE",
+                  "HELPER_UNAVAILABLE",
                   "OPERATION_UNAVAILABLE",
                   "TRACKED_MODE_UNAVAILABLE",
                   "DRY_RUN_UNAVAILABLE",
@@ -1454,6 +1528,7 @@ _No fields._
               "items": {
                 "enum": [
                   "COMMAND_UNAVAILABLE",
+                  "HELPER_UNAVAILABLE",
                   "OPERATION_UNAVAILABLE",
                   "TRACKED_MODE_UNAVAILABLE",
                   "DRY_RUN_UNAVAILABLE",
@@ -1486,6 +1561,7 @@ _No fields._
               "items": {
                 "enum": [
                   "COMMAND_UNAVAILABLE",
+                  "HELPER_UNAVAILABLE",
                   "OPERATION_UNAVAILABLE",
                   "TRACKED_MODE_UNAVAILABLE",
                   "DRY_RUN_UNAVAILABLE",
@@ -1518,6 +1594,7 @@ _No fields._
               "items": {
                 "enum": [
                   "COMMAND_UNAVAILABLE",
+                  "HELPER_UNAVAILABLE",
                   "OPERATION_UNAVAILABLE",
                   "TRACKED_MODE_UNAVAILABLE",
                   "DRY_RUN_UNAVAILABLE",
@@ -1550,6 +1627,7 @@ _No fields._
               "items": {
                 "enum": [
                   "COMMAND_UNAVAILABLE",
+                  "HELPER_UNAVAILABLE",
                   "OPERATION_UNAVAILABLE",
                   "TRACKED_MODE_UNAVAILABLE",
                   "DRY_RUN_UNAVAILABLE",
@@ -1582,6 +1660,7 @@ _No fields._
               "items": {
                 "enum": [
                   "COMMAND_UNAVAILABLE",
+                  "HELPER_UNAVAILABLE",
                   "OPERATION_UNAVAILABLE",
                   "TRACKED_MODE_UNAVAILABLE",
                   "DRY_RUN_UNAVAILABLE",
@@ -1614,6 +1693,7 @@ _No fields._
               "items": {
                 "enum": [
                   "COMMAND_UNAVAILABLE",
+                  "HELPER_UNAVAILABLE",
                   "OPERATION_UNAVAILABLE",
                   "TRACKED_MODE_UNAVAILABLE",
                   "DRY_RUN_UNAVAILABLE",
@@ -1643,6 +1723,7 @@ _No fields._
         "insert",
         "replace",
         "delete",
+        "blocks.delete",
         "format.apply",
         "format.fontSize",
         "format.fontFamily",

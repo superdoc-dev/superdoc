@@ -30,6 +30,7 @@ const REQUIRED_COMMANDS: Partial<Record<OperationId, readonly EditorCommandName[
   'lists.outdent': ['setTextSelection', 'decreaseListIndent'],
   'lists.restart': ['setTextSelection', 'restartNumbering'],
   'lists.exit': ['exitListItemAt'],
+  'blocks.delete': ['deleteBlockNodeById'],
   'comments.create': ['addComment', 'setTextSelection', 'addCommentReply'],
   'comments.patch': ['editComment', 'moveComment', 'resolveComment', 'setCommentInternal'],
   'comments.delete': ['removeComment'],
@@ -52,6 +53,20 @@ function hasAllCommands(editor: Editor, operationId: OperationId): boolean {
   const required = REQUIRED_COMMANDS[operationId];
   if (!required || required.length === 0) return true;
   return required.every((command) => hasCommand(editor, command));
+}
+
+/**
+ * Operations that require specific editor helpers beyond commands.
+ * Each entry maps an operation to a predicate that checks helper availability.
+ */
+const REQUIRED_HELPERS: Partial<Record<OperationId, (editor: Editor) => boolean>> = {
+  'blocks.delete': (editor) => typeof (editor as any).helpers?.blockNode?.getBlockNodeById === 'function',
+};
+
+function hasRequiredHelpers(editor: Editor, operationId: OperationId): boolean {
+  const check = REQUIRED_HELPERS[operationId];
+  if (!check) return true;
+  return check(editor);
 }
 
 function hasMarkCapability(editor: Editor, markName: string): boolean {
@@ -131,7 +146,7 @@ function isOperationAvailable(editor: Editor, operationId: OperationId): boolean
     return hasAllCommands(editor, operationId) && hasMarkCapability(editor, 'textStyle');
   }
 
-  return hasAllCommands(editor, operationId);
+  return hasAllCommands(editor, operationId) && hasRequiredHelpers(editor, operationId);
 }
 
 function isCommandBackedAvailability(operationId: OperationId): boolean {
@@ -151,7 +166,12 @@ function buildOperationCapabilities(editor: Editor): DocumentApiCapabilities['op
 
     if (!available) {
       if (isCommandBackedAvailability(operationId)) {
-        pushReason(reasons, 'COMMAND_UNAVAILABLE');
+        if (!hasAllCommands(editor, operationId)) {
+          pushReason(reasons, 'COMMAND_UNAVAILABLE');
+        }
+        if (!hasRequiredHelpers(editor, operationId)) {
+          pushReason(reasons, 'HELPER_UNAVAILABLE');
+        }
       }
       pushReason(reasons, 'OPERATION_UNAVAILABLE');
     }

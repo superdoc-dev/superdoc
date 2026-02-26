@@ -1,6 +1,8 @@
 {
   "contractVersion": "0.1.0",
   "files": [
+    "apps/docs/document-api/reference/blocks/delete.mdx",
+    "apps/docs/document-api/reference/blocks/index.mdx",
     "apps/docs/document-api/reference/capabilities/get.mdx",
     "apps/docs/document-api/reference/capabilities/index.mdx",
     "apps/docs/document-api/reference/comments/create.mdx",
@@ -55,6 +57,13 @@
       "operationIds": ["find", "getNode", "getNodeById", "getText", "info", "insert", "replace", "delete"],
       "pagePath": "apps/docs/document-api/reference/core/index.mdx",
       "title": "Core"
+    },
+    {
+      "aliasMemberPaths": [],
+      "key": "blocks",
+      "operationIds": ["blocks.delete"],
+      "pagePath": "apps/docs/document-api/reference/blocks/index.mdx",
+      "title": "Blocks"
     },
     {
       "aliasMemberPaths": [],
@@ -123,5 +132,5 @@
     }
   ],
   "marker": "{/* GENERATED FILE: DO NOT EDIT. Regenerate via `pnpm run docapi:sync`. */}",
-  "sourceHash": "80b39063fa1bd5bf9ba81bada2ad7e8602d0851ba76d002258aae2328f207cfe"
+  "sourceHash": "c2abc0527f8c4cb7d364836f2daf606ccd419c627d0790ac3db2d4c88f0d4df3"
 }

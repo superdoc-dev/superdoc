@@ -291,6 +291,23 @@ export const SUCCESS_SCENARIOS = {
       ],
     };
   },
+  'doc.blocks.delete': async (harness: ConformanceHarness): Promise<ScenarioInvocation> => {
+    const stateDir = await harness.createStateDir('doc-blocks-delete-success');
+    const docPath = await harness.copyFixtureDoc('doc-blocks-delete');
+    const block = await harness.firstBlockMatch(docPath, stateDir);
+    return {
+      stateDir,
+      args: [
+        'blocks',
+        'delete',
+        docPath,
+        '--target-json',
+        JSON.stringify({ kind: 'block', nodeType: block.nodeType, nodeId: block.nodeId }),
+        '--out',
+        harness.createOutputPath('doc-blocks-delete-output'),
+      ],
+    };
+  },
   'doc.lists.list': async (harness: ConformanceHarness): Promise<ScenarioInvocation> => {
     const stateDir = await harness.createStateDir('doc-lists-list-success');
     const docPath = await harness.copyListFixtureDoc('doc-lists-list');

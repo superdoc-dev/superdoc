@@ -18,3 +18,4 @@ export * from './mutation-plan.types.js';
 export * from './query-match.types.js';
 export * from './step-manifest.types.js';
 export * from './discovery.js';
+export * from './blocks.types.js';

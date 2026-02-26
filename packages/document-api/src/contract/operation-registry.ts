@@ -17,6 +17,7 @@ import type {
   CreateHeadingInput,
   CreateHeadingResult,
 } from '../types/create.types.js';
+import type { BlocksDeleteInput, BlocksDeleteResult } from '../types/blocks.types.js';
 
 import type { FindOptions } from '../find/find.js';
 import type { GetNodeByIdInput } from '../get-node/get-node.js';
@@ -75,6 +76,9 @@ export interface OperationRegistry {
   insert: { input: InsertInput; options: MutationOptions; output: TextMutationReceipt };
   replace: { input: ReplaceInput; options: MutationOptions; output: TextMutationReceipt };
   delete: { input: DeleteInput; options: MutationOptions; output: TextMutationReceipt };
+
+  // --- blocks.* ---
+  'blocks.delete': { input: BlocksDeleteInput; options: MutationOptions; output: BlocksDeleteResult };
 
   // --- format.* ---
   'format.apply': { input: StyleApplyInput; options: MutationOptions; output: TextMutationReceipt };

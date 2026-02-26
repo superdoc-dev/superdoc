@@ -22,6 +22,7 @@ import {
   trackChangesRejectAllWrapper,
 } from './plan-engine/track-changes-wrappers.js';
 import { createParagraphWrapper, createHeadingWrapper } from './plan-engine/create-wrappers.js';
+import { blocksDeleteWrapper } from './plan-engine/blocks-wrappers.js';
 import {
   listsListWrapper,
   listsGetWrapper,
@@ -84,6 +85,9 @@ export function assembleDocumentApiAdapters(editor: Editor): DocumentApiAdapters
       reject: (input, options) => trackChangesRejectWrapper(editor, input, options),
       acceptAll: (input, options) => trackChangesAcceptAllWrapper(editor, input, options),
       rejectAll: (input, options) => trackChangesRejectAllWrapper(editor, input, options),
+    },
+    blocks: {
+      delete: (input, options) => blocksDeleteWrapper(editor, input, options),
     },
     create: {
       paragraph: (input, options) => createParagraphWrapper(editor, input, options),

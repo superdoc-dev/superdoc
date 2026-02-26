@@ -16,6 +16,7 @@ import {
 import { ListHelpers } from '../../core/helpers/list-numbering-helpers.js';
 import { createCommentsWrapper } from '../plan-engine/comments-wrappers.js';
 import { createParagraphWrapper, createHeadingWrapper } from '../plan-engine/create-wrappers.js';
+import { blocksDeleteWrapper } from '../plan-engine/blocks-wrappers.js';
 import { writeWrapper, styleApplyWrapper } from '../plan-engine/plan-wrappers.js';
 import {
   formatFontSizeWrapper,
@@ -393,6 +394,46 @@ function makeListEditor(children: MockParagraphNode[], commandOverrides: Record<
   } as unknown as Editor;
 }
 
+function makeBlockDeleteEditor(
+  overrides: {
+    deleteBlockNodeById?: unknown;
+    getBlockNodeById?: unknown;
+    hasParagraph?: boolean;
+  } = {},
+): Editor {
+  const hasParagraph = overrides.hasParagraph ?? true;
+  const paragraph = hasParagraph
+    ? createNode('paragraph', [createNode('text', [], { text: 'Hello' })], {
+        attrs: { paraId: 'p1', sdBlockId: 'p1' },
+        isBlock: true,
+        inlineContent: true,
+      })
+    : null;
+  const doc = createNode('doc', paragraph ? [paragraph] : [], { isBlock: false });
+
+  const dispatch = vi.fn();
+  const tr = {
+    setMeta: vi.fn().mockReturnThis(),
+    mapping: { map: (pos: number) => pos },
+    docChanged: false,
+  };
+
+  return {
+    state: { doc, tr },
+    dispatch,
+    commands: {
+      deleteBlockNodeById: overrides.deleteBlockNodeById ?? vi.fn(() => true),
+    },
+    helpers: {
+      blockNode: {
+        getBlockNodeById:
+          overrides.getBlockNodeById ??
+          vi.fn((id: string) => (id === 'p1' && hasParagraph ? [{ node: paragraph, pos: 0 }] : [])),
+      },
+    },
+  } as unknown as Editor;
+}
+
 function makeCommentRecord(
   commentId: string,
   overrides: Record<string, unknown> = {},
@@ -473,6 +514,24 @@ function expectThrowCode(operationId: OperationId, run: () => unknown): void {
 }
 
 const mutationVectors: Partial<Record<OperationId, MutationVector>> = {
+  'blocks.delete': {
+    throwCase: () => {
+      const editor = makeBlockDeleteEditor();
+      return blocksDeleteWrapper(
+        editor,
+        { target: { kind: 'block', nodeType: 'paragraph', nodeId: 'missing' } },
+        { changeMode: 'direct' },
+      );
+    },
+    applyCase: () => {
+      const editor = makeBlockDeleteEditor();
+      return blocksDeleteWrapper(
+        editor,
+        { target: { kind: 'block', nodeType: 'paragraph', nodeId: 'p1' } },
+        { changeMode: 'direct' },
+      );
+    },
+  },
   insert: {
     throwCase: () => {
       const { editor } = makeTextEditor();
@@ -949,6 +1008,17 @@ const mutationVectors: Partial<Record<OperationId, MutationVector>> = {
 };
 
 const dryRunVectors: Partial<Record<OperationId, () => unknown>> = {
+  'blocks.delete': () => {
+    const deleteBlockNodeById = vi.fn(() => true);
+    const editor = makeBlockDeleteEditor({ deleteBlockNodeById });
+    const result = blocksDeleteWrapper(
+      editor,
+      { target: { kind: 'block', nodeType: 'paragraph', nodeId: 'p1' } },
+      { changeMode: 'direct', dryRun: true },
+    );
+    expect(deleteBlockNodeById).not.toHaveBeenCalled();
+    return result;
+  },
   insert: () => {
     const { editor, dispatch, tr } = makeTextEditor();
     const result = writeWrapper(

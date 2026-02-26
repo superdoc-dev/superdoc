@@ -133,8 +133,44 @@ function mapCreateError(operationId: CliExposedOperationId, error: unknown, code
     return new CliError('INVALID_ARGUMENT', message, { operationId, details });
   }
 
-  if (code === 'TRACK_CHANGE_COMMAND_UNAVAILABLE' || code === 'CAPABILITY_UNAVAILABLE') {
+  if (code === 'TRACK_CHANGE_COMMAND_UNAVAILABLE') {
     return new CliError('TRACK_CHANGE_COMMAND_UNAVAILABLE', message, { operationId, details });
+  }
+
+  if (code === 'CAPABILITY_UNAVAILABLE') {
+    const reason = (details as { reason?: string } | undefined)?.reason;
+    if (reason === 'tracked_mode_unsupported') {
+      return new CliError('TRACK_CHANGE_COMMAND_UNAVAILABLE', message, { operationId, details });
+    }
+    return new CliError('COMMAND_FAILED', message, { operationId, details });
+  }
+
+  if (code === 'COMMAND_UNAVAILABLE') {
+    return new CliError('COMMAND_FAILED', message, { operationId, details });
+  }
+
+  if (error instanceof CliError) return error;
+  return new CliError('COMMAND_FAILED', message, { operationId, details });
+}
+
+function mapBlocksError(operationId: CliExposedOperationId, error: unknown, code: string | undefined): CliError {
+  const message = extractErrorMessage(error);
+  const details = extractErrorDetails(error);
+
+  if (code === 'TARGET_NOT_FOUND') {
+    return new CliError('TARGET_NOT_FOUND', message, { operationId, details });
+  }
+
+  if (code === 'AMBIGUOUS_TARGET' || code === 'INVALID_TARGET') {
+    return new CliError('INVALID_ARGUMENT', message, { operationId, details });
+  }
+
+  if (code === 'CAPABILITY_UNAVAILABLE') {
+    const reason = (details as { reason?: string } | undefined)?.reason;
+    if (reason === 'tracked_mode_unsupported') {
+      return new CliError('TRACK_CHANGE_COMMAND_UNAVAILABLE', message, { operationId, details });
+    }
+    return new CliError('COMMAND_FAILED', message, { operationId, details });
   }
 
   if (code === 'COMMAND_UNAVAILABLE') {
@@ -170,6 +206,7 @@ const FAMILY_MAPPERS: Record<
   lists: mapListsError,
   textMutation: mapTextMutationError,
   create: mapCreateError,
+  blocks: mapBlocksError,
   query: mapQueryError,
   general: (operationId, error) => {
     if (error instanceof CliError) return error;
@@ -266,6 +303,14 @@ export function mapFailedReceipt(operationId: CliExposedOperationId, result: unk
     if (failureCode === 'TRACK_CHANGE_COMMAND_UNAVAILABLE' || failureCode === 'CAPABILITY_UNAVAILABLE') {
       return new CliError('TRACK_CHANGE_COMMAND_UNAVAILABLE', failureMessage, { operationId, failure });
     }
+    if (failureCode === 'INVALID_TARGET') {
+      return new CliError('INVALID_ARGUMENT', failureMessage, { operationId, failure });
+    }
+    return new CliError('COMMAND_FAILED', failureMessage, { operationId, failure });
+  }
+
+  // Blocks family
+  if (family === 'blocks') {
     if (failureCode === 'INVALID_TARGET') {
       return new CliError('INVALID_ARGUMENT', failureMessage, { operationId, failure });
     }

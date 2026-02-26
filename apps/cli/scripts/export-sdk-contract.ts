@@ -58,6 +58,7 @@ const INTENT_NAMES = {
   'doc.insert': 'insert_content',
   'doc.replace': 'replace_content',
   'doc.delete': 'delete_content',
+  'doc.blocks.delete': 'delete_block',
   'doc.format.apply': 'format_apply',
   'doc.format.fontSize': 'format_font_size',
   'doc.format.fontFamily': 'format_font_family',

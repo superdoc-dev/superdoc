@@ -209,6 +209,38 @@ describe('getDocumentApiCapabilities', () => {
     }
   });
 
+  it('marks blocks.delete as unavailable when blockNode helper is missing', () => {
+    const editor = makeEditor({
+      commands: {
+        deleteBlockNodeById: vi.fn(() => true),
+      } as unknown as Editor['commands'],
+    });
+    // editor has the command but no helpers.blockNode.getBlockNodeById
+    const capabilities = getDocumentApiCapabilities(editor);
+
+    expect(capabilities.operations['blocks.delete'].available).toBe(false);
+    expect(capabilities.operations['blocks.delete'].dryRun).toBe(false);
+    expect(capabilities.operations['blocks.delete'].reasons).toContain('HELPER_UNAVAILABLE');
+    expect(capabilities.operations['blocks.delete'].reasons).not.toContain('COMMAND_UNAVAILABLE');
+  });
+
+  it('marks blocks.delete as available when both command and helper are present', () => {
+    const editor = makeEditor({
+      commands: {
+        deleteBlockNodeById: vi.fn(() => true),
+      } as unknown as Editor['commands'],
+    });
+    // Add the required helper
+    (editor as any).helpers = {
+      blockNode: { getBlockNodeById: vi.fn(() => []) },
+    };
+    const capabilities = getDocumentApiCapabilities(editor);
+
+    expect(capabilities.operations['blocks.delete'].available).toBe(true);
+    expect(capabilities.operations['blocks.delete'].dryRun).toBe(true);
+    expect(capabilities.operations['blocks.delete'].tracked).toBe(false);
+  });
+
   it('uses OPERATION_UNAVAILABLE without COMMAND_UNAVAILABLE for non-command-backed availability failures', () => {
     const capabilities = getDocumentApiCapabilities(
       makeEditor({

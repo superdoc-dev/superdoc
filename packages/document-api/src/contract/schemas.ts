@@ -1,6 +1,6 @@
 import { COMMAND_CATALOG } from './command-catalog.js';
 import { CONTRACT_VERSION, JSON_SCHEMA_DIALECT, OPERATION_IDS, type OperationId } from './types.js';
-import { NODE_TYPES, BLOCK_NODE_TYPES, INLINE_NODE_TYPES } from '../types/base.js';
+import { NODE_TYPES, BLOCK_NODE_TYPES, DELETABLE_BLOCK_NODE_TYPES, INLINE_NODE_TYPES } from '../types/base.js';
 import { MARK_KEYS } from '../types/style-policy.types.js';
 import { ALIGNMENTS } from '../format/format.js';
 
@@ -56,6 +56,7 @@ function ref(name: string): JsonSchema {
 
 const nodeTypeValues = NODE_TYPES;
 const blockNodeTypeValues = BLOCK_NODE_TYPES;
+const deletableBlockNodeTypeValues = DELETABLE_BLOCK_NODE_TYPES;
 const inlineNodeTypeValues = INLINE_NODE_TYPES;
 
 // ---------------------------------------------------------------------------
@@ -135,6 +136,14 @@ const SHARED_DEFS: Record<string, JsonSchema> = {
     {
       kind: { const: 'block' },
       nodeType: { enum: [...blockNodeTypeValues] },
+      nodeId: { type: 'string' },
+    },
+    ['kind', 'nodeType', 'nodeId'],
+  ),
+  DeletableBlockNodeAddress: objectSchema(
+    {
+      kind: { const: 'block' },
+      nodeType: { enum: [...deletableBlockNodeTypeValues] },
       nodeId: { type: 'string' },
     },
     ['kind', 'nodeType', 'nodeId'],
@@ -301,6 +310,7 @@ const targetKindSchema = ref('TargetKind');
 const textAddressSchema = ref('TextAddress');
 const textTargetSchema = ref('TextTarget');
 const blockNodeAddressSchema = ref('BlockNodeAddress');
+const deletableBlockNodeAddressSchema = ref('DeletableBlockNodeAddress');
 const paragraphAddressSchema = ref('ParagraphAddress');
 const headingAddressSchema = ref('HeadingAddress');
 const listItemAddressSchema = ref('ListItemAddress');
@@ -800,6 +810,7 @@ const trackChangesListResultSchema = discoveryResultSchema(trackChangeDomainItem
 const capabilityReasonCodeSchema: JsonSchema = {
   enum: [
     'COMMAND_UNAVAILABLE',
+    'HELPER_UNAVAILABLE',
     'OPERATION_UNAVAILABLE',
     'TRACKED_MODE_UNAVAILABLE',
     'DRY_RUN_UNAVAILABLE',
@@ -994,6 +1005,29 @@ const operationSchemas: Record<OperationId, OperationSchemaSet> = {
     output: textMutationResultSchemaFor('format.align'),
     success: textMutationSuccessSchema,
     failure: textMutationFailureSchemaFor('format.align'),
+  },
+  'blocks.delete': {
+    input: objectSchema(
+      {
+        target: deletableBlockNodeAddressSchema,
+      },
+      ['target'],
+    ),
+    output: objectSchema(
+      {
+        success: { const: true },
+        deleted: deletableBlockNodeAddressSchema,
+      },
+      ['success', 'deleted'],
+    ),
+    success: objectSchema(
+      {
+        success: { const: true },
+        deleted: deletableBlockNodeAddressSchema,
+      },
+      ['success', 'deleted'],
+    ),
+    failure: preApplyFailureResultSchemaFor('blocks.delete'),
   },
   'create.paragraph': {
     input: objectSchema({

@@ -91,6 +91,9 @@ import {
 import { executeReplace, type ReplaceInput } from './replace/replace.js';
 import type { CreateAdapter, CreateApi } from './create/create.js';
 import { executeCreateParagraph, executeCreateHeading } from './create/create.js';
+import type { BlocksAdapter, BlocksApi } from './blocks/blocks.js';
+import { executeBlocksDelete } from './blocks/blocks.js';
+import type { BlocksDeleteInput, BlocksDeleteResult } from './types/blocks.types.js';
 import type { CreateHeadingInput, CreateHeadingResult } from './types/create.types.js';
 import type {
   TrackChangesAdapter,
@@ -144,6 +147,7 @@ export type {
   TrackChangesRejectAllInput,
   ReviewDecideInput,
 } from './track-changes/track-changes.js';
+export type { BlocksAdapter } from './blocks/blocks.js';
 export type { ListsAdapter } from './lists/lists.js';
 export type {
   ListInsertInput,
@@ -274,6 +278,10 @@ export interface DocumentApi {
    */
   trackChanges: TrackChangesApi;
   /**
+   * Block-level structural operations (delete whole blocks).
+   */
+  blocks: BlocksApi;
+  /**
    * Structural creation operations.
    */
   create: CreateApi;
@@ -321,6 +329,7 @@ export interface DocumentApiAdapters {
   format: FormatAdapter;
   trackChanges: TrackChangesAdapter;
   create: CreateAdapter;
+  blocks: BlocksAdapter;
   lists: ListsAdapter;
   query: QueryAdapter;
   mutations: MutationsAdapter;
@@ -426,6 +435,11 @@ export function createDocumentApi(adapters: DocumentApiAdapters): DocumentApi {
       },
       decide(input: ReviewDecideInput, options?: RevisionGuardOptions): Receipt {
         return executeTrackChangesDecide(adapters.trackChanges, input, options);
+      },
+    },
+    blocks: {
+      delete(input: BlocksDeleteInput, options?: MutationOptions): BlocksDeleteResult {
+        return executeBlocksDelete(adapters.blocks, input, options);
       },
     },
     create: {

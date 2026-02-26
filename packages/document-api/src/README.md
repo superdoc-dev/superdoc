@@ -243,6 +243,17 @@ Delete the text span covered by a `TextAddress` target. Supports dry-run and tra
 - **Idempotency**: conditional
 - **Failure codes**: `NO_OP`
 
+### `blocks.delete`
+
+Delete an entire block node (paragraph, heading, listItem, table, image, sdt) by its `BlockNodeAddress`. Throws pre-apply errors for missing, ambiguous, or unsupported targets. Direct-only. Supports dry-run.
+
+- **Input**: `BlocksDeleteInput` (`{ target: BlockNodeAddress }`)
+- **Options**: `MutationOptions` (`{ dryRun? }`)
+- **Output**: `BlocksDeleteResult` (`{ success: true, deleted: BlockNodeAddress }`)
+- **Mutates**: Yes
+- **Idempotency**: conditional
+- **Throws**: `TARGET_NOT_FOUND`, `AMBIGUOUS_TARGET`, `CAPABILITY_UNAVAILABLE`, `INVALID_TARGET`, `INTERNAL_ERROR`
+
 ### Capabilities
 
 ### `capabilities.get`

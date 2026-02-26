@@ -35,6 +35,7 @@ export const SUCCESS_VERB: Record<CliExposedOperationId, string> = {
   insert: 'inserted text',
   replace: 'replaced text',
   delete: 'deleted text',
+  'blocks.delete': 'deleted block',
   'format.apply': 'applied style',
   'format.fontSize': 'set font size',
   'format.fontFamily': 'set font family',
@@ -96,6 +97,7 @@ export const OUTPUT_FORMAT: Record<CliExposedOperationId, OutputFormat> = {
   insert: 'mutationReceipt',
   replace: 'mutationReceipt',
   delete: 'mutationReceipt',
+  'blocks.delete': 'plain',
   'format.apply': 'mutationReceipt',
   'format.fontSize': 'mutationReceipt',
   'format.fontFamily': 'mutationReceipt',
@@ -145,6 +147,7 @@ export const RESPONSE_ENVELOPE_KEY: Record<CliExposedOperationId, string | null>
   insert: null,
   replace: null,
   delete: null,
+  'blocks.delete': 'result',
   'format.apply': null,
   'format.fontSize': null,
   'format.fontFamily': null,
@@ -204,7 +207,15 @@ export const RESPONSE_VALIDATION_KEY: Partial<Record<CliExposedOperationId, stri
  * Operation family — determines which error-mapping rules apply.
  * Explicit Record for compile-time completeness (no string-prefix heuristics).
  */
-export type OperationFamily = 'trackChanges' | 'comments' | 'lists' | 'textMutation' | 'create' | 'query' | 'general';
+export type OperationFamily =
+  | 'trackChanges'
+  | 'comments'
+  | 'lists'
+  | 'textMutation'
+  | 'create'
+  | 'blocks'
+  | 'query'
+  | 'general';
 
 export const OPERATION_FAMILY: Record<CliExposedOperationId, OperationFamily> = {
   find: 'query',
@@ -215,6 +226,7 @@ export const OPERATION_FAMILY: Record<CliExposedOperationId, OperationFamily> = 
   insert: 'textMutation',
   replace: 'textMutation',
   delete: 'textMutation',
+  'blocks.delete': 'blocks',
   'format.apply': 'textMutation',
   'format.fontSize': 'textMutation',
   'format.fontFamily': 'textMutation',

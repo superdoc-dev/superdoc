@@ -518,6 +518,7 @@ type AssertIndexCandidate = {
 type AssertIndex = {
   candidates: AssertIndexCandidate[];
   byId: Map<string, AssertIndexCandidate>;
+  ambiguous: ReadonlySet<string>;
 };
 
 function asId(value: unknown): string | undefined {
@@ -582,7 +583,7 @@ function buildAssertIndex(doc: ProseMirrorNode): AssertIndex {
     return true;
   });
 
-  return { candidates, byId };
+  return { candidates, byId, ambiguous };
 }
 
 function resolveAssertScope(

@@ -147,6 +147,20 @@ function normalizeFlatTargetFlags(operationId: CliExposedOperationId, apiInput: 
     return apiInput;
   }
 
+  // --- Block delete (nodeType + nodeId → block target) ---
+  if (operationId === 'blocks.delete') {
+    const nodeType = apiInput.nodeType;
+    const nodeId = apiInput.nodeId;
+    if (typeof nodeType === 'string' && typeof nodeId === 'string') {
+      const { nodeType: _, nodeId: _n, ...rest } = apiInput;
+      return {
+        ...rest,
+        target: { kind: 'block', nodeType, nodeId },
+      };
+    }
+    return apiInput;
+  }
+
   // --- List operations (nodeId → listItem block target) ---
   if (LIST_TARGET_OPERATIONS.has(operationId)) {
     const nodeId = apiInput.nodeId;

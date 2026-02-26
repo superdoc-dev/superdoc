@@ -21,6 +21,7 @@ Document API is currently alpha and subject to breaking changes.
 | Namespace | Canonical ops | Aliases | Total surface | Reference |
 | --- | --- | --- | --- | --- |
 | Core | 8 | 0 | 8 | [Open](/document-api/reference/core/index) |
+| Blocks | 1 | 0 | 1 | [Open](/document-api/reference/blocks/index) |
 | Capabilities | 1 | 0 | 1 | [Open](/document-api/reference/capabilities/index) |
 | Create | 2 | 0 | 2 | [Open](/document-api/reference/create/index) |
 | Format | 5 | 4 | 9 | [Open](/document-api/reference/format/index) |
@@ -46,6 +47,12 @@ The tables below are grouped by namespace.
 | <span style={{ whiteSpace: 'nowrap', wordBreak: 'normal', overflowWrap: 'normal' }}><a href="/document-api/reference/insert"><code>insert</code></a></span> | <span style={{ whiteSpace: 'nowrap', wordBreak: 'normal', overflowWrap: 'normal' }}><code>editor.doc.insert(...)</code></span> | Insert text or inline content at a target position. |
 | <span style={{ whiteSpace: 'nowrap', wordBreak: 'normal', overflowWrap: 'normal' }}><a href="/document-api/reference/replace"><code>replace</code></a></span> | <span style={{ whiteSpace: 'nowrap', wordBreak: 'normal', overflowWrap: 'normal' }}><code>editor.doc.replace(...)</code></span> | Replace content at a target position with new text or inline content. |
 | <span style={{ whiteSpace: 'nowrap', wordBreak: 'normal', overflowWrap: 'normal' }}><a href="/document-api/reference/delete"><code>delete</code></a></span> | <span style={{ whiteSpace: 'nowrap', wordBreak: 'normal', overflowWrap: 'normal' }}><code>editor.doc.delete(...)</code></span> | Delete content at a target position. |
+
+#### Blocks
+
+| Operation | API member path | Description |
+| --- | --- | --- |
+| <span style={{ whiteSpace: 'nowrap', wordBreak: 'normal', overflowWrap: 'normal' }}><a href="/document-api/reference/blocks/delete"><code>blocks.delete</code></a></span> | <span style={{ whiteSpace: 'nowrap', wordBreak: 'normal', overflowWrap: 'normal' }}><code>editor.doc.blocks.delete(...)</code></span> | Delete an entire block node (paragraph, heading, list item, table, image, or sdt) deterministically. |
 
 #### Capabilities
 

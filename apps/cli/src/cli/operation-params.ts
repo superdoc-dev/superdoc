@@ -375,6 +375,10 @@ const EXTRA_CLI_PARAMS: Partial<Record<string, CliOperationParamSpec[]>> = {
     ...LIST_TARGET_FLAT_PARAMS,
   ],
   'doc.lists.exit': [{ name: 'input', kind: 'jsonFlag', flag: 'input-json', type: 'json' }, ...LIST_TARGET_FLAT_PARAMS],
+  'doc.blocks.delete': [
+    { name: 'nodeType', kind: 'flag', flag: 'node-type', type: 'string' },
+    { name: 'nodeId', kind: 'flag', flag: 'node-id', type: 'string' },
+  ],
   'doc.create.paragraph': [{ name: 'input', kind: 'jsonFlag', flag: 'input-json', type: 'json' }],
   'doc.create.heading': [{ name: 'input', kind: 'jsonFlag', flag: 'input-json', type: 'json' }],
 };

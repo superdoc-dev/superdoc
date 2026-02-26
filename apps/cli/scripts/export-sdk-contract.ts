@@ -64,6 +64,7 @@ const INTENT_NAMES = {
   'doc.format.fontFamily': 'format_font_family',
   'doc.format.color': 'format_color',
   'doc.format.align': 'format_align',
+  'doc.styles.apply': 'styles_apply',
   'doc.create.paragraph': 'create_paragraph',
   'doc.create.heading': 'create_heading',
   'doc.lists.list': 'list_lists',

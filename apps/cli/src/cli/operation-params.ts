@@ -351,6 +351,10 @@ const EXTRA_CLI_PARAMS: Partial<Record<string, CliOperationParamSpec[]>> = {
   'doc.format.fontFamily': [...TEXT_TARGET_FLAT_PARAMS],
   'doc.format.color': [...TEXT_TARGET_FLAT_PARAMS],
   'doc.format.align': [...TEXT_TARGET_FLAT_PARAMS],
+  'doc.styles.apply': [
+    { name: 'target', kind: 'jsonFlag', flag: 'target-json', type: 'json' },
+    { name: 'patch', kind: 'jsonFlag', flag: 'patch-json', type: 'json' },
+  ],
   'doc.comments.create': [...TEXT_TARGET_FLAT_PARAMS],
   'doc.comments.patch': [...TEXT_TARGET_FLAT_PARAMS],
   // List operations: flat flag (--node-id) as shortcut for --target-json, plus --input-json

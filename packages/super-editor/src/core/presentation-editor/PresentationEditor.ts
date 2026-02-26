@@ -2489,6 +2489,19 @@ export class PresentationEditor extends EventEmitter {
       handler: handlePageStyleUpdate as (...args: unknown[]) => void,
     });
 
+    // Listen for stylesheet default changes (e.g., styles.apply mutations to docDefaults).
+    // These changes mutate translatedLinkedStyles directly and need a full re-render
+    // so the style-engine picks up the updated default properties.
+    const handleStylesDefaultsChanged = () => {
+      this.#pendingDocChange = true;
+      this.#scheduleRerender();
+    };
+    this.#editor.on('stylesDefaultsChanged', handleStylesDefaultsChanged);
+    this.#editorListeners.push({
+      event: 'stylesDefaultsChanged',
+      handler: handleStylesDefaultsChanged as (...args: unknown[]) => void,
+    });
+
     const handleCollaborationReady = (payload: unknown) => {
       this.emit('collaborationReady', payload);
       // Setup remote cursor rendering after collaboration is ready

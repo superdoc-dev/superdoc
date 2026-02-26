@@ -7,6 +7,7 @@ import { infoAdapter } from './info-adapter.js';
 import { getDocumentApiCapabilities } from './capabilities-adapter.js';
 import { createCommentsWrapper } from './plan-engine/comments-wrappers.js';
 import { writeWrapper, styleApplyWrapper } from './plan-engine/plan-wrappers.js';
+import { stylesApplyAdapter } from './styles-adapter.js';
 import {
   formatFontSizeWrapper,
   formatFontFamilyWrapper,
@@ -77,6 +78,9 @@ export function assembleDocumentApiAdapters(editor: Editor): DocumentApiAdapters
       fontFamily: (input, options) => formatFontFamilyWrapper(editor, input, options),
       color: (input, options) => formatColorWrapper(editor, input, options),
       align: (input, options) => formatAlignWrapper(editor, input, options),
+    },
+    styles: {
+      apply: (input, options) => stylesApplyAdapter(editor, input, options),
     },
     trackChanges: {
       list: (input) => trackChangesListWrapper(editor, input),

@@ -44,6 +44,8 @@
     "apps/docs/document-api/reference/query/index.mdx",
     "apps/docs/document-api/reference/query/match.mdx",
     "apps/docs/document-api/reference/replace.mdx",
+    "apps/docs/document-api/reference/styles/apply.mdx",
+    "apps/docs/document-api/reference/styles/index.mdx",
     "apps/docs/document-api/reference/track-changes/decide.mdx",
     "apps/docs/document-api/reference/track-changes/get.mdx",
     "apps/docs/document-api/reference/track-changes/index.mdx",
@@ -85,6 +87,13 @@
       "operationIds": ["format.apply", "format.fontSize", "format.fontFamily", "format.color", "format.align"],
       "pagePath": "apps/docs/document-api/reference/format/index.mdx",
       "title": "Format"
+    },
+    {
+      "aliasMemberPaths": [],
+      "key": "styles",
+      "operationIds": ["styles.apply"],
+      "pagePath": "apps/docs/document-api/reference/styles/index.mdx",
+      "title": "Styles"
     },
     {
       "aliasMemberPaths": [],
@@ -132,5 +141,5 @@
     }
   ],
   "marker": "{/* GENERATED FILE: DO NOT EDIT. Regenerate via `pnpm run docapi:sync`. */}",
-  "sourceHash": "87c87f3fdb162eb43656a1971fd5f93fec1c0e76cc1f9a9ac22b585f1e4b0b28"
+  "sourceHash": "d5b584c9762004cd89a0af9a3068c83a36049453f26a0e80232cfd51654e32a3"
 }

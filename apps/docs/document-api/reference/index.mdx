@@ -25,6 +25,7 @@ Document API is currently alpha and subject to breaking changes.
 | Capabilities | 1 | 0 | 1 | [Open](/document-api/reference/capabilities/index) |
 | Create | 2 | 0 | 2 | [Open](/document-api/reference/create/index) |
 | Format | 5 | 4 | 9 | [Open](/document-api/reference/format/index) |
+| Styles | 1 | 0 | 1 | [Open](/document-api/reference/styles/index) |
 | Lists | 8 | 0 | 8 | [Open](/document-api/reference/lists/index) |
 | Comments | 5 | 0 | 5 | [Open](/document-api/reference/comments/index) |
 | Track Changes | 3 | 0 | 3 | [Open](/document-api/reference/track-changes/index) |
@@ -80,6 +81,12 @@ The tables below are grouped by namespace.
 | <span style={{ whiteSpace: 'nowrap', wordBreak: 'normal', overflowWrap: 'normal' }}><a href="/document-api/reference/format/apply"><code>format.italic</code></a></span> | <span style={{ whiteSpace: 'nowrap', wordBreak: 'normal', overflowWrap: 'normal' }}><code>editor.doc.format.italic(...)</code></span> | Convenience alias for `format.apply` with `inline.italic: true`. |
 | <span style={{ whiteSpace: 'nowrap', wordBreak: 'normal', overflowWrap: 'normal' }}><a href="/document-api/reference/format/apply"><code>format.underline</code></a></span> | <span style={{ whiteSpace: 'nowrap', wordBreak: 'normal', overflowWrap: 'normal' }}><code>editor.doc.format.underline(...)</code></span> | Convenience alias for `format.apply` with `inline.underline: true`. |
 | <span style={{ whiteSpace: 'nowrap', wordBreak: 'normal', overflowWrap: 'normal' }}><a href="/document-api/reference/format/apply"><code>format.strikethrough</code></a></span> | <span style={{ whiteSpace: 'nowrap', wordBreak: 'normal', overflowWrap: 'normal' }}><code>editor.doc.format.strikethrough(...)</code></span> | Convenience alias for `format.apply` with `inline.strike: true`. |
+
+#### Styles
+
+| Operation | API member path | Description |
+| --- | --- | --- |
+| <span style={{ whiteSpace: 'nowrap', wordBreak: 'normal', overflowWrap: 'normal' }}><a href="/document-api/reference/styles/apply"><code>styles.apply</code></a></span> | <span style={{ whiteSpace: 'nowrap', wordBreak: 'normal', overflowWrap: 'normal' }}><code>editor.doc.styles.apply(...)</code></span> | Apply document-level default style changes to the stylesheet (word/styles.xml). Targets docDefaults run properties with boolean patch semantics. |
 
 #### Lists
 

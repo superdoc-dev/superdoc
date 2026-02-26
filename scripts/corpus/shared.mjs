@@ -137,8 +137,13 @@ async function resolveBucketName() {
 }
 
 function isMissingWranglerBinary(error) {
-  const message = error instanceof Error ? error.message : String(error);
-  return /ENOENT|not found|command not found/i.test(message);
+  // pnpm writes "Command not found" to stdout, not stderr, so check all.
+  const text = [
+    error instanceof Error ? error.message : String(error),
+    typeof error?.stderr === 'string' ? error.stderr : '',
+    typeof error?.stdout === 'string' ? error.stdout : '',
+  ].join('\n');
+  return /ENOENT|not found|command not found/i.test(text);
 }
 
 async function runWrangler(args, { accountId }) {

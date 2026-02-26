@@ -60,6 +60,9 @@ import {
   type DrawingGeometry,
   type DropCapDescriptor,
   type TableWidthAttr,
+  type CellSpacing,
+  type TableBorders,
+  type TableBorderValue,
 } from '@superdoc/contracts';
 import type { WordParagraphLayoutOutput } from '@superdoc/word-layout';
 import {
@@ -68,7 +71,6 @@ import {
   DEFAULT_LIST_INDENT_BASE_PX as DEFAULT_LIST_INDENT_BASE,
   DEFAULT_LIST_INDENT_STEP_PX as DEFAULT_LIST_INDENT_STEP,
   DEFAULT_LIST_HANGING_PX as DEFAULT_LIST_HANGING,
-  SPACE_SUFFIX_GAP_PX,
 } from '@superdoc/common/layout-constants';
 import { resolveListTextStartPx, type MinimalMarker } from '@superdoc/common/list-marker-utils';
 import { calculateRotatedBounds, normalizeRotation } from '@superdoc/geometry-utils';
@@ -146,6 +148,52 @@ const TWIPS_PER_PX = TWIPS_PER_INCH / PX_PER_INCH; // 15 twips per pixel
 const _PX_PER_PT = 96 / 72; // Reserved for future pt↔px conversions
 const twipsToPx = (twips: number): number => twips / TWIPS_PER_PX;
 const pxToTwips = (px: number): number => Math.round(px * TWIPS_PER_PX);
+
+/**
+ * Resolves table cell spacing to pixels (for border-spacing).
+ * Handles number (px) or { type, value }. The editor/DOCX decoder often stores value
+ * already in pixels (twipsToPixels), so we use value as px. If value is in twips (raw OOXML),
+ * type is 'dxa' and we convert; otherwise value is treated as px.
+ */
+export function getCellSpacingPx(cellSpacing: CellSpacing | number | null | undefined): number {
+  if (cellSpacing == null) return 0;
+  if (typeof cellSpacing === 'number') return Math.max(0, cellSpacing);
+  const v = cellSpacing.value;
+  if (typeof v !== 'number' || !Number.isFinite(v)) return 0;
+  const t = (cellSpacing.type ?? '').toLowerCase();
+  // Editor/store often has value already in px; raw OOXML has twips (dxa). Only convert when value looks like twips (large).
+  const asPx = t === 'dxa' && v >= 20 ? twipsToPx(v) : v;
+  return Math.max(0, asPx);
+}
+
+/**
+ * Returns the border width in pixels for a table border value (matches painter border-utils logic).
+ * Used so total table dimensions include outer border sizes and there is enough space for last row/column spacing.
+ */
+function getTableBorderWidthPx(value: TableBorderValue | null | undefined): number {
+  if (value == null) return 0;
+  if (typeof value === 'object' && 'none' in value && value.none) return 0;
+  const raw = value as { style?: string; width?: number; size?: number };
+  const w = typeof raw.width === 'number' ? raw.width : typeof raw.size === 'number' ? raw.size : 1;
+  const width = Math.max(0, w);
+  if (raw.style === 'none') return 0;
+  if (raw.style === 'thick') return Math.max(width * 2, 3);
+  return width;
+}
+
+/** Computes outer table border widths in px from table attrs (for total dimensions and content offset). */
+function getTableBorderWidths(borders: TableBorders | null | undefined): {
+  top: number;
+  right: number;
+  bottom: number;
+  left: number;
+} {
+  const top = getTableBorderWidthPx(borders?.top);
+  const right = getTableBorderWidthPx(borders?.right);
+  const bottom = getTableBorderWidthPx(borders?.bottom);
+  const left = getTableBorderWidthPx(borders?.left);
+  return { top, right, bottom, left };
+}
 
 const DEFAULT_TAB_INTERVAL_PX = twipsToPx(DEFAULT_TAB_INTERVAL_TWIPS);
 const TAB_EPSILON = 0.1;
@@ -2730,14 +2778,39 @@ async function measureTableBlock(block: TableBlock, constraints: MeasureConstrai
     rows[i].height = Math.max(0, rowHeights[i]);
   }
 
-  const totalHeight = rowHeights.reduce((sum, h) => sum + h, 0);
-  const totalWidth = columnWidths.reduce((a, b) => a + b, 0);
+  const contentHeight = rowHeights.reduce((sum, h) => sum + h, 0);
+  const contentWidth = columnWidths.reduce((a, b) => a + b, 0);
+
+  // Cell margins (OOXML cellMargins) are applied as cell padding (attrs.padding) and are already
+  // included in row heights and content width: row height = content + paddingTop + paddingBottom,
+  // and content width per cell = cellWidth - paddingLeft - paddingRight.
+
+  // Cell spacing (border-spacing): gaps between cells plus space before first and after last row/column
+  const cellSpacingPx = getCellSpacingPx(block.attrs?.cellSpacing);
+  const numRows = block.rows.length;
+  const horizontalGaps = gridColumnCount > 0 ? (gridColumnCount + 1) * cellSpacingPx : 0;
+  const verticalGaps = numRows > 0 ? (numRows + 1) * cellSpacingPx : 0;
+
+  // Outer table border widths: only add to total dimensions when borderCollapse === 'separate',
+  // since the DOM renderer only paints container-level outer borders in that path. For collapsed
+  // (default), borders are on cells and don't grow the table container, so including them would
+  // overstate size and cause premature wrapping/page breaks or alignment drift.
+  const tableBorderWidths = getTableBorderWidths(block.attrs?.borders);
+  const borderWidthH = tableBorderWidths.left + tableBorderWidths.right;
+  const borderWidthV = tableBorderWidths.top + tableBorderWidths.bottom;
+  const borderCollapse = block.attrs?.borderCollapse ?? (block.attrs?.cellSpacing != null ? 'separate' : 'collapse');
+  const includeOuterBordersInTotal = borderCollapse === 'separate';
+  const totalWidth = contentWidth + horizontalGaps + (includeOuterBordersInTotal ? borderWidthH : 0);
+  const totalHeight = contentHeight + verticalGaps + (includeOuterBordersInTotal ? borderWidthV : 0);
+
   return {
     kind: 'table',
     rows,
     columnWidths,
     totalWidth,
     totalHeight,
+    cellSpacingPx: cellSpacingPx > 0 ? cellSpacingPx : undefined,
+    tableBorderWidths: borderWidthH > 0 || borderWidthV > 0 ? tableBorderWidths : undefined,
   };
 }
 

@@ -58,6 +58,14 @@ import type {
   FormatAlignInput,
 } from './format/format.js';
 import { executeStyleApply, executeFontSize, executeFontFamily, executeColor, executeAlign } from './format/format.js';
+import type {
+  StylesAdapter,
+  StylesApi,
+  StylesApplyInput,
+  StylesApplyOptions,
+  StylesApplyReceipt,
+} from './styles/styles.js';
+import { executeStylesApply, PROPERTY_REGISTRY } from './styles/styles.js';
 import type { GetNodeAdapter, GetNodeByIdInput } from './get-node/get-node.js';
 import { executeGetNode, executeGetNodeById } from './get-node/get-node.js';
 import { executeGetText, type GetTextAdapter, type GetTextInput } from './get-text/get-text.js';
@@ -136,6 +144,30 @@ export type {
   FormatAlignInput,
 } from './format/format.js';
 export { ALIGNMENTS, type Alignment } from './format/format.js';
+export { PROPERTY_REGISTRY } from './styles/styles.js';
+export type {
+  PropertyDefinition,
+  ObjectSchema,
+  StylesAdapter,
+  StylesApplyInput,
+  StylesApplyRunInput,
+  StylesApplyParagraphInput,
+  StylesApplyOptions,
+  StylesApplyReceipt,
+  StylesBooleanState,
+  StylesNumberState,
+  StylesEnumState,
+  StylesObjectState,
+  StylesStateMap,
+  StylesChannel,
+  StylesJustification,
+  StylesRunPatch,
+  StylesParagraphPatch,
+  StylesTargetResolution,
+  StylesApplyReceiptSuccess,
+  StylesApplyReceiptFailure,
+  NormalizedStylesApplyOptions,
+} from './styles/styles.js';
 export type { CreateAdapter } from './create/create.js';
 export type {
   TrackChangesAdapter,
@@ -274,6 +306,10 @@ export interface DocumentApi {
    */
   format: FormatApi;
   /**
+   * Stylesheet operations (docDefaults, style definitions).
+   */
+  styles: StylesApi;
+  /**
    * Tracked-change operations (list, get, decide).
    */
   trackChanges: TrackChangesApi;
@@ -327,6 +363,7 @@ export interface DocumentApiAdapters {
   comments: CommentsAdapter;
   write: WriteAdapter;
   format: FormatAdapter;
+  styles: StylesAdapter;
   trackChanges: TrackChangesAdapter;
   create: CreateAdapter;
   blocks: BlocksAdapter;
@@ -424,6 +461,11 @@ export function createDocumentApi(adapters: DocumentApiAdapters): DocumentApi {
       },
       align(input: FormatAlignInput, options?: MutationOptions): TextMutationReceipt {
         return executeAlign(adapters.format, input, options);
+      },
+    },
+    styles: {
+      apply(input: StylesApplyInput, options?: StylesApplyOptions): StylesApplyReceipt {
+        return executeStylesApply(adapters.styles, input, options);
       },
     },
     trackChanges: {

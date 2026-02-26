@@ -6,6 +6,7 @@ import type { FindAdapter } from '../find/find.js';
 import type { GetNodeAdapter } from '../get-node/get-node.js';
 import type { WriteAdapter } from '../write/write.js';
 import type { FormatAdapter } from '../format/format.js';
+import type { StylesAdapter } from '../styles/styles.js';
 import type { TrackChangesAdapter } from '../track-changes/track-changes.js';
 import type { CreateAdapter } from '../create/create.js';
 import type { ListsAdapter } from '../lists/lists.js';
@@ -90,6 +91,21 @@ function makeAdapters() {
     color: vi.fn(formatReceipt),
     align: vi.fn(formatReceipt),
   };
+  const stylesAdapter: StylesAdapter = {
+    apply: vi.fn(() => ({
+      success: true as const,
+      changed: true,
+      resolution: {
+        scope: 'docDefaults' as const,
+        channel: 'run' as const,
+        xmlPart: 'word/styles.xml' as const,
+        xmlPath: 'w:styles/w:docDefaults/w:rPrDefault/w:rPr' as const,
+      },
+      dryRun: false,
+      before: { bold: 'inherit' as const },
+      after: { bold: 'on' as const },
+    })),
+  };
   const trackChangesAdapter: TrackChangesAdapter = {
     list: vi.fn(() => ({ evaluatedRevision: '', total: 0, items: [], page: { limit: 50, offset: 0, returned: 0 } })),
     get: vi.fn((input: { id: string }) => ({
@@ -169,6 +185,7 @@ function makeAdapters() {
     comments: commentsAdapter,
     write: writeAdapter,
     format: formatAdapter,
+    styles: stylesAdapter,
     trackChanges: trackChangesAdapter,
     create: createAdapter,
     lists: listsAdapter,
@@ -322,6 +339,18 @@ describe('invoke', () => {
       };
       const direct = api.format.align(input);
       const invoked = api.invoke({ operationId: 'format.align', input });
+      expect(invoked).toEqual(direct);
+    });
+
+    it('styles.apply: invoke returns same result as direct call', () => {
+      const { adapters } = makeAdapters();
+      const api = createDocumentApi(adapters);
+      const input = {
+        target: { scope: 'docDefaults' as const, channel: 'run' as const },
+        patch: { bold: true },
+      };
+      const direct = api.styles.apply(input);
+      const invoked = api.invoke({ operationId: 'styles.apply', input });
       expect(invoked).toEqual(direct);
     });
 

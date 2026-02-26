@@ -171,11 +171,18 @@ function convertListItem(
   listType: string,
 ): JsonNode[] {
   const blocks: JsonNode[] = [];
+  let firstParagraphEmitted = false;
 
   for (const child of item.children) {
     if (child.type === 'paragraph') {
       const runs = convertInlineChildren((child as MdastParagraph).children, ctx, []);
-      blocks.push(makeListParagraph(runs, numId, depth));
+      if (!firstParagraphEmitted) {
+        blocks.push(makeListParagraph(runs, numId, depth));
+        firstParagraphEmitted = true;
+      } else {
+        // Continuation paragraph within the same list item — no list marker
+        blocks.push(makeParagraph(runs));
+      }
     } else if (child.type === 'list') {
       // Nested list — increase depth, reuse same listType context
       blocks.push(...convertList(child as MdastList, ctx, depth + 1));

@@ -33,6 +33,24 @@ function collectNodeTypes(doc) {
   return types;
 }
 
+function collectTopLevelParagraphs(doc) {
+  const paragraphs = [];
+  doc.forEach((node) => {
+    if (node.type.name === 'paragraph') {
+      paragraphs.push(node);
+    }
+  });
+  return paragraphs;
+}
+
+function hasNumbering(node) {
+  return Boolean(node.attrs?.paragraphProperties?.numberingProperties);
+}
+
+function paragraphByText(paragraphs, expectedText) {
+  return paragraphs.find((node) => node.textContent.trim() === expectedText);
+}
+
 describe('markdown to DOCX integration', () => {
   it('converts complete markdown document with headings and lists', () => {
     const markdown = `# Main Title
@@ -57,5 +75,55 @@ More text here.
     const types = collectNodeTypes(doc);
     expect(types).toContain('paragraph');
     expect(types).toContain('run');
+  });
+
+  it('keeps a multi-paragraph bullet item as one logical list entry', () => {
+    const markdown = `- first paragraph
+
+  continuation paragraph
+- second bullet`;
+
+    const doc = createDocFromMarkdown(markdown, editor);
+    const paragraphs = collectTopLevelParagraphs(doc);
+
+    const first = paragraphByText(paragraphs, 'first paragraph');
+    const continuation = paragraphByText(paragraphs, 'continuation paragraph');
+    const second = paragraphByText(paragraphs, 'second bullet');
+
+    expect(first).toBeTruthy();
+    expect(continuation).toBeTruthy();
+    expect(second).toBeTruthy();
+
+    expect(hasNumbering(first)).toBe(true);
+    expect(hasNumbering(continuation)).toBe(false);
+    expect(hasNumbering(second)).toBe(true);
+
+    const numberedParagraphs = paragraphs.filter(hasNumbering);
+    expect(numberedParagraphs).toHaveLength(2);
+  });
+
+  it('keeps a multi-paragraph ordered item as one numbered entry', () => {
+    const markdown = `1. first numbered paragraph
+
+   continuation paragraph
+2. second numbered item`;
+
+    const doc = createDocFromMarkdown(markdown, editor);
+    const paragraphs = collectTopLevelParagraphs(doc);
+
+    const first = paragraphByText(paragraphs, 'first numbered paragraph');
+    const continuation = paragraphByText(paragraphs, 'continuation paragraph');
+    const second = paragraphByText(paragraphs, 'second numbered item');
+
+    expect(first).toBeTruthy();
+    expect(continuation).toBeTruthy();
+    expect(second).toBeTruthy();
+
+    expect(hasNumbering(first)).toBe(true);
+    expect(hasNumbering(continuation)).toBe(false);
+    expect(hasNumbering(second)).toBe(true);
+
+    const numberedParagraphs = paragraphs.filter(hasNumbering);
+    expect(numberedParagraphs).toHaveLength(2);
   });
 });

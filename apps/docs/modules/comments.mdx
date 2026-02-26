@@ -197,6 +197,8 @@ const superdoc = new SuperDoc({
 
 Customize who can resolve comments or accept tracked changes. The resolver receives the permission type, current user, and any tracked-change metadata. Return `false` to block the action.
 
+By default, editors can resolve, edit, and delete any user's comments and tracked changes — regardless of authorship. Use `permissionResolver` to restrict actions when needed.
+
 ```javascript
 modules: {
   comments: {
@@ -217,6 +219,19 @@ modules: {
   },
 }
 ```
+
+Available permission types:
+
+| Permission | Description |
+|---|---|
+| `RESOLVE_OWN` | Resolve your own comments |
+| `RESOLVE_OTHER` | Resolve other users' comments |
+| `REJECT_OWN` | Reject your own tracked changes |
+| `REJECT_OTHER` | Reject other users' tracked changes |
+| `COMMENTS_OVERFLOW_OWN` | Edit your own comments |
+| `COMMENTS_OVERFLOW_OTHER` | Edit other users' comments |
+| `COMMENTS_DELETE_OWN` | Delete your own comments |
+| `COMMENTS_DELETE_OTHER` | Delete other users' comments |
 
 <Note>
   You can set a global resolver with the top-level `permissionResolver` config.

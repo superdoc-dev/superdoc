@@ -251,11 +251,20 @@ const TRACK_CHANGE_STYLES = `
 }
 
 .superdoc-layout .track-insert-dec.highlighted.track-change-focused {
+  border-style: solid;
   border-width: 2px;
+  background-color: #399c7244;
 }
 
 .superdoc-layout .track-delete-dec.highlighted.track-change-focused {
+  border-style: solid;
   border-width: 2px;
+  background-color: #cb0e4744;
+}
+
+.superdoc-layout .track-format-dec.highlighted.track-change-focused {
+  border-bottom-width: 3px;
+  background-color: #ffd70033;
 }
 `;
 

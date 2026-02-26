@@ -106,6 +106,7 @@ class DocxZipper {
   async updateContentTypes(docx, media, fromJson, updatedDocs = {}) {
     const additionalPartNames = Object.keys(updatedDocs || {});
     const imageExts = new Set(['png', 'jpg', 'jpeg', 'gif', 'bmp', 'tiff', 'tif', 'emf', 'wmf', 'svg', 'webp']);
+    const mimeTypeForExt = { tif: 'tiff' };
     const newMediaTypes = Object.keys(media)
       .map((name) => this.getFileExtension(name))
       .filter((ext) => ext && imageExts.has(ext));
@@ -131,7 +132,8 @@ class DocxZipper {
       if (defaultMediaTypes.includes(type)) continue;
       if (seenTypes.has(type)) continue;
 
-      const newContentType = `<Default Extension="${type}" ContentType="image/${type}"/>`;
+      const mime = mimeTypeForExt[type] || type;
+      const newContentType = `<Default Extension="${type}" ContentType="image/${mime}"/>`;
       typesString += newContentType;
       seenTypes.add(type);
     }

@@ -1,6 +1,32 @@
 import { Plugin, PluginKey } from 'prosemirror-state';
 import { Extension } from '../Extension.js';
 
+const handleBackwardReplaceInsertText = (view, event) => {
+  const isInsertTextInput = event?.inputType === 'insertText';
+  const hasTextData = typeof event?.data === 'string' && event.data.length > 0;
+  const hasNonEmptySelection = !view.state.selection.empty;
+
+  if (!isInsertTextInput || !hasTextData || !hasNonEmptySelection) {
+    return false;
+  }
+
+  const selection = view.state.selection;
+  const anchor = selection.anchor ?? selection.from;
+  const head = selection.head ?? selection.to;
+  const isBackwardSelection = anchor > head;
+
+  if (!isBackwardSelection) {
+    return false;
+  }
+
+  const tr = view.state.tr.insertText(event.data, selection.from, selection.to);
+  tr.setMeta('inputType', 'insertText');
+  view.dispatch(tr);
+  event.preventDefault();
+
+  return true;
+};
+
 /**
  * Editable extension controls whether the editor accepts user input.
  *
@@ -22,9 +48,15 @@ export const Editable = Extension.create({
       props: {
         editable: () => editor.options.editable,
         handleDOMEvents: {
-          beforeinput: (_view, event) => {
+          beforeinput: (view, event) => {
             if (!editor.options.editable) {
               event.preventDefault();
+              return true;
+            }
+
+            // Backward (right-to-left) replacement can be misinterpreted downstream as
+            // deleteContentBackward. Handle this narrow case explicitly at beforeinput level.
+            if (handleBackwardReplaceInsertText(view, event)) {
               return true;
             }
             return false;

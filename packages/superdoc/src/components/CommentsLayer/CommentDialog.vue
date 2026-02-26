@@ -524,7 +524,6 @@ watch(editingCommentId, (commentId) => {
   border-radius: 12px;
   background-color: #f3f6fd;
   font-family: var(--sd-ui-font-family, Arial, Helvetica, sans-serif);
-  cursor: pointer;
   transition: background-color 250ms ease;
   -webkit-box-shadow: 0px 4px 12px 0px rgba(50, 50, 50, 0.15);
   -moz-box-shadow: 0px 4px 12px 0px rgba(50, 50, 50, 0.15);
@@ -533,6 +532,9 @@ watch(editingCommentId, (commentId) => {
   max-width: 300px;
   min-width: 200px;
   width: 100%;
+}
+.comments-dialog:not(.is-active) {
+  cursor: pointer;
 }
 .is-active {
   z-index: 10;

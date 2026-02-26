@@ -31,6 +31,7 @@ export default defineConfig({
     entryFileNames: '[name].cjs',
   },
 
-  // Node builtins and platform binary packages are resolved at runtime.
-  external: [/^node:/, /@superdoc-dev\/sdk-/],
+  // Externalize Node builtins, platform binary packages, and all bare-specifier
+  // npm dependencies (anything that isn't a relative or absolute path).
+  external: [/^node:/, /@superdoc-dev\/sdk-/, /^[^./]/],
 });

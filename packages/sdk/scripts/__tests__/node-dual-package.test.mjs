@@ -16,7 +16,7 @@
 import assert from 'node:assert/strict';
 import { execFile } from 'node:child_process';
 import { existsSync } from 'node:fs';
-import { mkdir, mkdtemp } from 'node:fs/promises';
+import { mkdir, mkdtemp, rm } from 'node:fs/promises';
 import os from 'node:os';
 import path from 'node:path';
 import test from 'node:test';
@@ -135,7 +135,7 @@ test('CJS: listTools() resolves tools directory', {
       const { listTools } = require('.');
       const tools = await listTools('generic');
       console.log(JSON.stringify({ count: tools.length, isArray: Array.isArray(tools) }));
-    })();
+    })().catch(e => { console.error(e); process.exit(1); });
   `);
 
   assert.ok(result.isArray, 'listTools should return an array');
@@ -144,41 +144,45 @@ test('CJS: listTools() resolves tools directory', {
 
 test('Packed tarball installs and resolves package entry in CJS', { skip: !existsSync(cjsEntry) }, async () => {
   const sandboxDir = await mkdtemp(path.join(os.tmpdir(), 'sdk-node-package-smoke-'));
-  const packDir = path.join(sandboxDir, 'pack');
-  const consumerDir = path.join(sandboxDir, 'consumer');
-  await mkdir(packDir, { recursive: true });
-  await mkdir(consumerDir, { recursive: true });
+  try {
+    const packDir = path.join(sandboxDir, 'pack');
+    const consumerDir = path.join(sandboxDir, 'consumer');
+    await mkdir(packDir, { recursive: true });
+    await mkdir(consumerDir, { recursive: true });
 
-  const env = { ...process.env, npm_config_cache: NPM_CACHE_DIR };
+    const env = { ...process.env, npm_config_cache: NPM_CACHE_DIR };
 
-  const packStdout = await run(
-    'npm',
-    ['pack', '--json', '--pack-destination', packDir],
-    { cwd: NODE_SDK_DIR, env },
-  );
-  const packOutput = JSON.parse(packStdout);
-  const filename = packOutput[0]?.filename;
-  assert.equal(typeof filename, 'string', 'npm pack should output a tarball filename');
+    const packStdout = await run(
+      'npm',
+      ['pack', '--json', '--pack-destination', packDir],
+      { cwd: NODE_SDK_DIR, env },
+    );
+    const packOutput = JSON.parse(packStdout);
+    const filename = packOutput[0]?.filename;
+    assert.equal(typeof filename, 'string', 'npm pack should output a tarball filename');
 
-  await run('pnpm', ['init'], { cwd: consumerDir, env });
-  await run('pnpm', ['add', path.join(packDir, filename)], { cwd: consumerDir, env });
+    await run('pnpm', ['init'], { cwd: consumerDir, env });
+    await run('pnpm', ['add', path.join(packDir, filename)], { cwd: consumerDir, env });
 
-  const script = `
-    (async () => {
-      const sdk = require('@superdoc-dev/sdk');
-      const skills = sdk.listSkills();
-      const tools = await sdk.listTools('generic');
-      console.log(JSON.stringify({
-        createSuperDocClientType: typeof sdk.createSuperDocClient,
-        skillCount: skills.length,
-        toolCount: tools.length
-      }));
-    })();
-  `;
-  const output = await run('node', ['--eval', script], { cwd: consumerDir, env });
-  const result = JSON.parse(output);
+    const script = `
+      (async () => {
+        const sdk = require('@superdoc-dev/sdk');
+        const skills = sdk.listSkills();
+        const tools = await sdk.listTools('generic');
+        console.log(JSON.stringify({
+          createSuperDocClientType: typeof sdk.createSuperDocClient,
+          skillCount: skills.length,
+          toolCount: tools.length
+        }));
+      })();
+    `;
+    const output = await run('node', ['--eval', script], { cwd: consumerDir, env });
+    const result = JSON.parse(output);
 
-  assert.equal(result.createSuperDocClientType, 'function', 'consumer require() should expose createSuperDocClient');
-  assert.ok(result.skillCount > 0, 'consumer package should include skills');
-  assert.ok(result.toolCount > 0, 'consumer package should include tools');
+    assert.equal(result.createSuperDocClientType, 'function', 'consumer require() should expose createSuperDocClient');
+    assert.ok(result.skillCount > 0, 'consumer package should include skills');
+    assert.ok(result.toolCount > 0, 'consumer package should include tools');
+  } finally {
+    await rm(sandboxDir, { recursive: true, force: true });
+  }
 });

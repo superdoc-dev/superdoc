@@ -2054,6 +2054,21 @@ describe('superdoc CLI', () => {
     expect(closeResult.code).toBe(0);
   });
 
+  test('open with --override-type text preserves leading whitespace literally', async () => {
+    const literalText = '    foo';
+
+    const openResult = await runCli(['open', SAMPLE_DOC, '--content-override', literalText, '--override-type', 'text']);
+    expect(openResult.code).toBe(0);
+
+    const findResult = await runCli(['find', '--type', 'text', '--pattern', literalText]);
+    expect(findResult.code).toBe(0);
+    const findEnvelope = parseJsonOutput<SuccessEnvelope<{ result: { total: number } }>>(findResult);
+    expect(findEnvelope.data.result.total).toBeGreaterThan(0);
+
+    const closeResult = await runCli(['close', '--discard']);
+    expect(closeResult.code).toBe(0);
+  });
+
   test('open with --override-type markdown applies content semantically', async () => {
     const openResult = await runCli([
       'open',

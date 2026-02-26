@@ -208,7 +208,7 @@ export const OPERATION_DEFINITIONS = {
       idempotency: 'non-idempotent',
       supportsDryRun: true,
       supportsTrackedMode: true,
-      possibleFailureCodes: ['INVALID_TARGET', 'NO_OP', 'CAPABILITY_UNAVAILABLE'],
+      possibleFailureCodes: ['INVALID_TARGET', 'NO_OP', 'CAPABILITY_UNAVAILABLE', 'UNSUPPORTED_ENVIRONMENT'],
       throws: [...T_NOT_FOUND_CAPABLE, 'INVALID_TARGET'],
     }),
     referenceDocPath: 'insert.mdx',

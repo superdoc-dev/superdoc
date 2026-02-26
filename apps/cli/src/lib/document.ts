@@ -28,7 +28,7 @@ interface OpenDocumentOptions {
   documentId?: string;
   ydoc?: unknown;
   collaborationProvider?: unknown;
-  /** Options passed through to Editor.open() (e.g., markdown/html for content override). */
+  /** Options passed through to Editor.open() (e.g., markdown/html/plainText for content override). */
   editorOpenOptions?: Record<string, string>;
 }
 
@@ -107,7 +107,12 @@ export async function openDocument(
   // there is no DOM, so we intercept them here:
   //   - markdown: applied post-init via the AST-based markdownToPmDoc pipeline (DOM-free)
   //   - html: rejected with a clear error (no DOM-free HTML pipeline exists)
-  const { markdown: markdownOverride, html: htmlOverride, ...passThroughEditorOpts } = options.editorOpenOptions ?? {};
+  const {
+    markdown: markdownOverride,
+    html: htmlOverride,
+    plainText: plainTextOverride,
+    ...passThroughEditorOpts
+  } = options.editorOpenOptions ?? {};
 
   if (htmlOverride != null) {
     throw new CliError(
@@ -135,7 +140,9 @@ export async function openDocument(
     });
   }
 
-  // Apply markdown content override post-init (DOM-free AST pipeline).
+  // Apply content override post-init.
+  //   - markdown: DOM-free AST pipeline
+  //   - plainText: builds PM paragraphs directly, preserving all whitespace
   if (markdownOverride != null) {
     try {
       const { doc: newDoc } = markdownToPmDoc(markdownOverride, editor);
@@ -147,6 +154,25 @@ export async function openDocument(
       editor.destroy();
       const message = error instanceof Error ? error.message : String(error);
       throw new CliError('DOCUMENT_OPEN_FAILED', 'Failed to apply content override.', {
+        message,
+        source: meta,
+      });
+    }
+  } else if (plainTextOverride != null) {
+    try {
+      const schema = editor.state.schema;
+      const lines = plainTextOverride.split('\n');
+      const paragraphs = lines.map((line) => {
+        const content = line.length > 0 ? [schema.text(line)] : undefined;
+        return schema.nodes.paragraph.create(null, content);
+      });
+      const tr = editor.state.tr;
+      tr.replaceWith(0, editor.state.doc.content.size, paragraphs);
+      editor.dispatch(tr);
+    } catch (error) {
+      editor.destroy();
+      const message = error instanceof Error ? error.message : String(error);
+      throw new CliError('DOCUMENT_OPEN_FAILED', 'Failed to apply text content override.', {
         message,
         source: meta,
       });

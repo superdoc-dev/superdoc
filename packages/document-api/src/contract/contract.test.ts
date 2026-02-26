@@ -91,6 +91,24 @@ describe('document-api contract catalog', () => {
     expect(insertInputSchema.additionalProperties).toBe(false);
   });
 
+  it('declares UNSUPPORTED_ENVIRONMENT for insert metadata and generated failure schema', () => {
+    const schemas = buildInternalContractSchemas();
+    const insertFailureSchema = schemas.operations.insert.failure as {
+      properties?: {
+        failure?: {
+          properties?: {
+            code?: {
+              enum?: string[];
+            };
+          };
+        };
+      };
+    };
+
+    expect(COMMAND_CATALOG.insert.possibleFailureCodes).toContain('UNSUPPORTED_ENVIRONMENT');
+    expect(insertFailureSchema.properties?.failure?.properties?.code?.enum).toContain('UNSUPPORTED_ENVIRONMENT');
+  });
+
   it('derives OPERATION_IDS from OPERATION_DEFINITIONS keys', () => {
     const definitionKeys = Object.keys(OPERATION_DEFINITIONS).sort();
     const operationIds = [...OPERATION_IDS].sort();

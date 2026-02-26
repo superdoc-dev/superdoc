@@ -18,11 +18,6 @@ import type { CommandContext, CommandExecution } from '../lib/types';
 
 const VALID_OVERRIDE_TYPES = new Set(['markdown', 'html', 'text']);
 
-/** Escape CommonMark special characters so the text is treated as literal. */
-function escapeMarkdown(str: string): string {
-  return str.replace(/([\\`*_{}[\]()#+\-.!|>~])/g, '\\$1');
-}
-
 export async function runOpen(tokens: string[], context: CommandContext): Promise<CommandExecution> {
   const { parsed, help } = parseOperationArgs('doc.open', tokens, {
     commandName: 'open',
@@ -111,10 +106,9 @@ export async function runOpen(tokens: string[], context: CommandContext): Promis
     } else if (overrideType === 'html') {
       editorOpenOptions.html = contentOverride;
     } else if (overrideType === 'text') {
-      // Route through the markdown pipeline which is DOM-free (AST-based),
-      // so it works in headless CLI mode. Escape markdown syntax characters
-      // so the content is treated as literal text, not interpreted as formatting.
-      editorOpenOptions.markdown = escapeMarkdown(contentOverride);
+      // Plain text bypass — handed off to document.ts which builds PM
+      // paragraphs directly, preserving all whitespace without markdown parsing.
+      editorOpenOptions.plainText = contentOverride;
     }
   }
 

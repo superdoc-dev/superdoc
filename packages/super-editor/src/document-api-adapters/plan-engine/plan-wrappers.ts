@@ -538,7 +538,13 @@ export function insertStructuredWrapper(
     } else if (contentType === 'html') {
       // NOTE: processContent has no dryRun flag — this runs the full HTML
       // pipeline (DOM creation, wrapTextsInRuns) minus the final insertContentAt.
-      // Acceptable for catching UNSUPPORTED_ENVIRONMENT / INVALID_TARGET early.
+      // Snapshot numbering state so we can roll back after the dry-run, since
+      // HTML list parsing allocates IDs/definitions on editor.converter.
+      const converter = (editor as any).converter;
+      const numberingSnapshot = converter?.numbering ? JSON.parse(JSON.stringify(converter.numbering)) : undefined;
+      const translatedNumberingSnapshot = converter?.translatedNumbering
+        ? JSON.parse(JSON.stringify(converter.translatedNumbering))
+        : undefined;
       try {
         const processedDoc = processContent({ content: value, type: 'html', editor });
         if (!processedDoc || typeof (processedDoc as { toJSON?: unknown }).toJSON !== 'function') {
@@ -561,6 +567,14 @@ export function insertStructuredWrapper(
             message: `HTML structured insert requires a DOM environment. ${message}`,
           },
         };
+      } finally {
+        // Roll back numbering mutations from the dry-run HTML pipeline.
+        if (converter && numberingSnapshot !== undefined) {
+          converter.numbering = numberingSnapshot;
+        }
+        if (converter && translatedNumberingSnapshot !== undefined) {
+          converter.translatedNumbering = translatedNumberingSnapshot;
+        }
       }
     }
     return { success: true, resolution };

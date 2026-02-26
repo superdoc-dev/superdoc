@@ -267,6 +267,27 @@ describe('insertStructuredWrapper — dry-run', () => {
     expect(dryRun.failure?.code).toBe('NO_OP');
   });
 
+  it('does not mutate numbering state on dry-run html list insert', () => {
+    const converter = (editor as any).converter;
+    expect(converter).toBeDefined();
+
+    const numberingBefore = JSON.stringify(converter?.numbering ?? {});
+    const translatedBefore = JSON.stringify(converter?.translatedNumbering ?? {});
+
+    const dryRun = insertStructuredWrapper(
+      editor,
+      {
+        value: '<ol><li>Dry run list item</li></ol>',
+        type: 'html',
+      },
+      { dryRun: true },
+    );
+
+    expect(dryRun.success).toBe(true);
+    expect(JSON.stringify(converter?.numbering ?? {})).toBe(numberingBefore);
+    expect(JSON.stringify(converter?.translatedNumbering ?? {})).toBe(translatedBefore);
+  });
+
   it('mirrors runtime environment failure for html in dry-run mode', () => {
     const opts = (editor as any).options ?? ((editor as any).options = {});
     const prevDocument = opts.document;

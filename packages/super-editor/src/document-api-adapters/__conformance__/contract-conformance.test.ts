@@ -129,8 +129,8 @@ const INTERNAL_SCHEMAS = buildInternalContractSchemas();
 
 type MutationVector = {
   throwCase: () => unknown;
-  failureCase: () => unknown;
   applyCase: () => unknown;
+  failureCase?: () => unknown;
 };
 
 type NodeOptions = {
@@ -906,6 +906,9 @@ const STUB_TABLE_OPS: ReadonlySet<OperationId> = new Set([] as OperationId[]);
  * pattern. mutations.apply returns PlanReceipt (always success: true) or throws.
  */
 const PLAN_ENGINE_META_OPS: ReadonlySet<OperationId> = new Set(['mutations.apply'] as OperationId[]);
+const HAS_STRUCTURED_FAILURE_RESULT = (operationId: OperationId): boolean =>
+  COMMAND_CATALOG[operationId].possibleFailureCodes.length > 0;
+
 function setTrackChanges(changes: Array<Record<string, unknown>>): void {
   mockedDeps.getTrackChanges.mockReturnValue(changes as never);
 }
@@ -2761,6 +2764,15 @@ describe('document-api adapter conformance', () => {
       .filter((id) => !STUB_TABLE_OPS.has(id) && !PLAN_ENGINE_META_OPS.has(id))
       .sort();
     expect(vectorKeys).toEqual(expectedKeys);
+
+    for (const operationId of expectedKeys) {
+      const vector = mutationVectors[operationId];
+      expect(typeof vector?.throwCase, `${operationId} is missing throwCase`).toBe('function');
+      expect(typeof vector?.applyCase, `${operationId} is missing applyCase`).toBe('function');
+      if (HAS_STRUCTURED_FAILURE_RESULT(operationId)) {
+        expect(typeof vector?.failureCase, `${operationId} is missing failureCase`).toBe('function');
+      }
+    }
   });
 
   it('verifies stub table operations throw CAPABILITY_UNAVAILABLE', () => {
@@ -2794,11 +2806,12 @@ describe('document-api adapter conformance', () => {
 
   it('enforces structured non-applied outcomes for every mutating operation', () => {
     const implementedMutatingOps = MUTATING_OPERATION_IDS.filter(
-      (id) => !STUB_TABLE_OPS.has(id) && !PLAN_ENGINE_META_OPS.has(id),
+      (id) => !STUB_TABLE_OPS.has(id) && !PLAN_ENGINE_META_OPS.has(id) && HAS_STRUCTURED_FAILURE_RESULT(id),
     );
     for (const operationId of implementedMutatingOps) {
-      const vector = mutationVectors[operationId]!;
-      const result = vector.failureCase() as { success?: boolean; failure?: { code: string } };
+      const vector = mutationVectors[operationId];
+      expect(typeof vector?.failureCase, `${operationId} is missing failureCase`).toBe('function');
+      const result = vector!.failureCase!() as { success?: boolean; failure?: { code: string } };
       expect(result.success).toBe(false);
       if (result.success !== false || !result.failure) continue;
       expect(COMMAND_CATALOG[operationId].possibleFailureCodes).toContain(result.failure.code);

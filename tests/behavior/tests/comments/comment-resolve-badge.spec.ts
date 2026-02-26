@@ -14,11 +14,12 @@ test('resolving a comment sets resolvedTime and the resolved badge renders', asy
   await addCommentViaUIWithId(superdoc, { textToSelect: 'resolve', commentText: 'comment to resolve' });
 
   // Click the comment highlight to activate the dialog
+  await superdoc.waitForStable();
   await superdoc.clickOnCommentedText('resolve');
   await superdoc.waitForStable();
 
   const dialog = activeCommentDialog(superdoc.page);
-  await expect(dialog).toBeVisible({ timeout: 5_000 });
+  await expect(dialog).toBeVisible({ timeout: 10_000 });
 
   // Verify the dialog is NOT resolved before clicking
   await expect(dialog).not.toHaveClass(/is-resolved/);

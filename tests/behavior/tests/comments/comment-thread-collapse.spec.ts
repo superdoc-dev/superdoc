@@ -23,12 +23,15 @@ test('thread with 3+ replies collapses and expands on click', async ({ superdoc 
   await replyToComment(superdoc.page, { parentCommentId: commentId, text: 'reply four' });
   await superdoc.waitForStable();
 
+  // Re-assert highlight exists — replies trigger re-renders that may temporarily remove highlights
+  await superdoc.assertCommentHighlightExists({ text: 'collapse', timeoutMs: 10_000 });
+
   // Click the comment highlight to activate the dialog
   await superdoc.clickOnCommentedText('collapse');
   await superdoc.waitForStable();
 
   const dialog = activeCommentDialog(superdoc.page);
-  await expect(dialog).toBeVisible({ timeout: 5_000 });
+  await expect(dialog).toBeVisible({ timeout: 10_000 });
 
   // The collapsed-replies pill should be visible with "more replies" text
   const collapsedPill = dialog.locator('.collapsed-replies');

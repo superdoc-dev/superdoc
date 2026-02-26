@@ -1,0 +1,160 @@
+---
+title: tables.getProperties
+sidebarTitle: tables.getProperties
+description: Reference for tables.getProperties
+---
+
+{/* GENERATED FILE: DO NOT EDIT. Regenerate via `pnpm run docapi:sync`. */}
+
+> Alpha: Document API is currently alpha and subject to breaking changes.
+
+## Summary
+
+- Operation ID: `tables.getProperties`
+- API member path: `editor.doc.tables.getProperties(...)`
+- Mutates document: `no`
+- Idempotency: `idempotent`
+- Supports tracked mode: `no`
+- Supports dry run: `no`
+- Deterministic target resolution: `yes`
+
+## Input fields
+
+| Field | Type | Required | Description |
+| --- | --- | --- | --- |
+| `nodeId` | string | no |  |
+| `target` | BlockNodeAddress | no | BlockNodeAddress |
+
+### Example request
+
+```json
+{}
+```
+
+## Output fields
+
+| Field | Type | Required | Description |
+| --- | --- | --- | --- |
+| `alignment` | enum | no | `"left"`, `"center"`, `"right"` |
+| `autoFitMode` | enum | no | `"fixedWidth"`, `"fitContents"`, `"fitWindow"` |
+| `direction` | enum | no | `"ltr"`, `"rtl"` |
+| `nodeId` | string | yes |  |
+| `preferredWidth` | number | no |  |
+| `styleId` | string | no |  |
+| `styleOptions` | object | no |  |
+
+### Example response
+
+```json
+{
+  "alignment": "left",
+  "nodeId": "node-def456",
+  "styleId": "style-001"
+}
+```
+
+## Pre-apply throws
+
+- `TARGET_NOT_FOUND`
+
+## Non-applied failure codes
+
+- None
+
+## Raw schemas
+
+<Accordion title="Raw input schema">
+```json
+{
+  "additionalProperties": false,
+  "oneOf": [
+    {
+      "required": [
+        "target"
+      ]
+    },
+    {
+      "required": [
+        "nodeId"
+      ]
+    }
+  ],
+  "properties": {
+    "nodeId": {
+      "type": "string"
+    },
+    "target": {
+      "$ref": "#/$defs/BlockNodeAddress"
+    }
+  },
+  "type": "object"
+}
+```
+</Accordion>
+
+<Accordion title="Raw output schema">
+```json
+{
+  "additionalProperties": false,
+  "properties": {
+    "alignment": {
+      "enum": [
+        "left",
+        "center",
+        "right"
+      ]
+    },
+    "autoFitMode": {
+      "enum": [
+        "fixedWidth",
+        "fitContents",
+        "fitWindow"
+      ]
+    },
+    "direction": {
+      "enum": [
+        "ltr",
+        "rtl"
+      ]
+    },
+    "nodeId": {
+      "type": "string"
+    },
+    "preferredWidth": {
+      "type": "number"
+    },
+    "styleId": {
+      "type": "string"
+    },
+    "styleOptions": {
+      "additionalProperties": false,
+      "properties": {
+        "bandedColumns": {
+          "type": "boolean"
+        },
+        "bandedRows": {
+          "type": "boolean"
+        },
+        "firstColumn": {
+          "type": "boolean"
+        },
+        "headerRow": {
+          "type": "boolean"
+        },
+        "lastColumn": {
+          "type": "boolean"
+        },
+        "totalRow": {
+          "type": "boolean"
+        }
+      },
+      "type": "object"
+    }
+  },
+  "required": [
+    "nodeId"
+  ],
+  "type": "object"
+}
+```
+</Accordion>

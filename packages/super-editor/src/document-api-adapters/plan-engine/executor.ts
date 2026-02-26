@@ -789,7 +789,7 @@ export function runMutationsOnTransaction(
   editor: Editor,
   tr: Transaction,
   compiled: CompiledPlan,
-  options: { throwOnAssertFailure: boolean },
+  options: { throwOnAssertFailure: boolean; changeMode?: 'direct' | 'tracked'; isPreview?: boolean },
 ): {
   stepOutcomes: StepOutcome[];
   assertFailures: Array<{ stepId: string; expectedCount: number; actualCount: number }>;
@@ -803,9 +803,10 @@ export function runMutationsOnTransaction(
     editor,
     tr,
     mapping,
-    changeMode: 'direct',
+    changeMode: options.changeMode ?? 'direct',
     planGroupId: '',
     commandDispatched: false,
+    isPreview: options.isPreview ?? false,
   };
 
   for (const compiledStep of compiled.mutationSteps) {
@@ -895,7 +896,11 @@ export function executeCompiledPlan(
     applyDirectMutationMeta(tr);
   }
 
-  const { stepOutcomes } = runMutationsOnTransaction(editor, tr, compiled, { throwOnAssertFailure: true });
+  const { stepOutcomes } = runMutationsOnTransaction(editor, tr, compiled, {
+    throwOnAssertFailure: true,
+    changeMode,
+    isPreview: false,
+  });
 
   if (tr.docChanged) {
     editor.dispatch(tr);

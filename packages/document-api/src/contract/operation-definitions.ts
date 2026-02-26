@@ -42,7 +42,8 @@ export type ReferenceGroupKey =
   | 'comments'
   | 'trackChanges'
   | 'query'
-  | 'mutations';
+  | 'mutations'
+  | 'tables';
 
 // ---------------------------------------------------------------------------
 // Entry shape
@@ -133,6 +134,12 @@ const T_PLAN_ENGINE = [
   'DOCUMENT_IDENTITY_CONFLICT',
   'CAPABILITY_UNAVAILABLE',
 ] as const;
+
+// Table-command throw-code arrays.
+// All mutation operations include CAPABILITY_UNAVAILABLE (contract invariant).
+// _TRACKED suffix signals the operation also supports tracked change mode.
+const T_NOT_FOUND_COMMAND = ['TARGET_NOT_FOUND', 'INVALID_TARGET', 'CAPABILITY_UNAVAILABLE'] as const;
+const T_NOT_FOUND_COMMAND_TRACKED = [...T_NOT_FOUND_COMMAND] as const;
 
 const T_QUERY_MATCH = ['MATCH_NOT_FOUND', 'AMBIGUOUS_MATCH', 'INVALID_INPUT', 'INTERNAL_ERROR'] as const;
 
@@ -635,6 +642,602 @@ export const OPERATION_DEFINITIONS = {
     }),
     referenceDocPath: 'capabilities/get.mdx',
     referenceGroup: 'capabilities',
+  },
+
+  // -------------------------------------------------------------------------
+  // Create: table
+  // -------------------------------------------------------------------------
+
+  'create.table': {
+    memberPath: 'create.table',
+    description: 'Create a new table at the target position.',
+    requiresDocumentContext: true,
+    metadata: mutationOperation({
+      idempotency: 'non-idempotent',
+      supportsDryRun: true,
+      supportsTrackedMode: true,
+      possibleFailureCodes: ['INVALID_TARGET'],
+      throws: [...T_NOT_FOUND_COMMAND_TRACKED, 'INVALID_TARGET', 'AMBIGUOUS_TARGET'],
+    }),
+    referenceDocPath: 'create/table.mdx',
+    referenceGroup: 'create',
+  },
+
+  // -------------------------------------------------------------------------
+  // Tables: lifecycle
+  // -------------------------------------------------------------------------
+
+  'tables.convertFromText': {
+    memberPath: 'tables.convertFromText',
+    description: 'Convert a text range into a table.',
+    requiresDocumentContext: true,
+    metadata: mutationOperation({
+      idempotency: 'non-idempotent',
+      supportsDryRun: true,
+      supportsTrackedMode: false,
+      possibleFailureCodes: ['INVALID_TARGET'],
+      throws: T_NOT_FOUND_COMMAND,
+    }),
+    referenceDocPath: 'tables/convert-from-text.mdx',
+    referenceGroup: 'tables',
+  },
+  'tables.delete': {
+    memberPath: 'tables.delete',
+    description: 'Delete the target table from the document.',
+    requiresDocumentContext: true,
+    metadata: mutationOperation({
+      idempotency: 'conditional',
+      supportsDryRun: true,
+      supportsTrackedMode: true,
+      possibleFailureCodes: ['INVALID_TARGET', 'NO_OP'],
+      throws: [...T_NOT_FOUND_COMMAND_TRACKED, 'INVALID_TARGET'],
+    }),
+    referenceDocPath: 'tables/delete.mdx',
+    referenceGroup: 'tables',
+  },
+  'tables.clearContents': {
+    memberPath: 'tables.clearContents',
+    description: 'Clear the contents of the target table or cell range.',
+    requiresDocumentContext: true,
+    metadata: mutationOperation({
+      idempotency: 'conditional',
+      supportsDryRun: true,
+      supportsTrackedMode: false,
+      possibleFailureCodes: ['INVALID_TARGET', 'NO_OP'],
+      throws: T_NOT_FOUND_COMMAND,
+    }),
+    referenceDocPath: 'tables/clear-contents.mdx',
+    referenceGroup: 'tables',
+  },
+  'tables.move': {
+    memberPath: 'tables.move',
+    description: 'Move a table to a new position in the document.',
+    requiresDocumentContext: true,
+    metadata: mutationOperation({
+      idempotency: 'conditional',
+      supportsDryRun: true,
+      supportsTrackedMode: false,
+      possibleFailureCodes: ['INVALID_TARGET', 'NO_OP'],
+      throws: T_NOT_FOUND_COMMAND,
+    }),
+    referenceDocPath: 'tables/move.mdx',
+    referenceGroup: 'tables',
+  },
+  'tables.split': {
+    memberPath: 'tables.split',
+    description: 'Split a table into two tables at the target row.',
+    requiresDocumentContext: true,
+    metadata: mutationOperation({
+      idempotency: 'non-idempotent',
+      supportsDryRun: true,
+      supportsTrackedMode: false,
+      possibleFailureCodes: ['INVALID_TARGET'],
+      throws: T_NOT_FOUND_COMMAND,
+    }),
+    referenceDocPath: 'tables/split.mdx',
+    referenceGroup: 'tables',
+  },
+  'tables.convertToText': {
+    memberPath: 'tables.convertToText',
+    description: 'Convert a table back to plain text.',
+    requiresDocumentContext: true,
+    metadata: mutationOperation({
+      idempotency: 'conditional',
+      supportsDryRun: true,
+      supportsTrackedMode: false,
+      possibleFailureCodes: ['INVALID_TARGET', 'NO_OP'],
+      throws: T_NOT_FOUND_COMMAND,
+    }),
+    referenceDocPath: 'tables/convert-to-text.mdx',
+    referenceGroup: 'tables',
+  },
+
+  // -------------------------------------------------------------------------
+  // Tables: layout
+  // -------------------------------------------------------------------------
+
+  'tables.setLayout': {
+    memberPath: 'tables.setLayout',
+    description: 'Set the layout mode of the target table.',
+    requiresDocumentContext: true,
+    metadata: mutationOperation({
+      idempotency: 'idempotent',
+      supportsDryRun: true,
+      supportsTrackedMode: false,
+      possibleFailureCodes: ['INVALID_TARGET', 'NO_OP'],
+      throws: T_NOT_FOUND_COMMAND,
+    }),
+    referenceDocPath: 'tables/set-layout.mdx',
+    referenceGroup: 'tables',
+  },
+
+  // -------------------------------------------------------------------------
+  // Tables: row structure
+  // -------------------------------------------------------------------------
+
+  'tables.insertRow': {
+    memberPath: 'tables.insertRow',
+    description: 'Insert a new row into the target table.',
+    requiresDocumentContext: true,
+    metadata: mutationOperation({
+      idempotency: 'non-idempotent',
+      supportsDryRun: true,
+      supportsTrackedMode: true,
+      possibleFailureCodes: ['INVALID_TARGET'],
+      throws: [...T_NOT_FOUND_COMMAND_TRACKED, 'INVALID_TARGET'],
+    }),
+    referenceDocPath: 'tables/insert-row.mdx',
+    referenceGroup: 'tables',
+  },
+  'tables.deleteRow': {
+    memberPath: 'tables.deleteRow',
+    description: 'Delete a row from the target table.',
+    requiresDocumentContext: true,
+    metadata: mutationOperation({
+      idempotency: 'conditional',
+      supportsDryRun: true,
+      supportsTrackedMode: true,
+      possibleFailureCodes: ['INVALID_TARGET', 'NO_OP'],
+      throws: [...T_NOT_FOUND_COMMAND_TRACKED, 'INVALID_TARGET'],
+    }),
+    referenceDocPath: 'tables/delete-row.mdx',
+    referenceGroup: 'tables',
+  },
+  'tables.setRowHeight': {
+    memberPath: 'tables.setRowHeight',
+    description: 'Set the height of a table row.',
+    requiresDocumentContext: true,
+    metadata: mutationOperation({
+      idempotency: 'idempotent',
+      supportsDryRun: true,
+      supportsTrackedMode: false,
+      possibleFailureCodes: ['INVALID_TARGET', 'NO_OP'],
+      throws: T_NOT_FOUND_COMMAND,
+    }),
+    referenceDocPath: 'tables/set-row-height.mdx',
+    referenceGroup: 'tables',
+  },
+  'tables.distributeRows': {
+    memberPath: 'tables.distributeRows',
+    description: 'Distribute row heights evenly across the target table.',
+    requiresDocumentContext: true,
+    metadata: mutationOperation({
+      idempotency: 'conditional',
+      supportsDryRun: true,
+      supportsTrackedMode: false,
+      possibleFailureCodes: ['INVALID_TARGET', 'NO_OP'],
+      throws: T_NOT_FOUND_COMMAND,
+    }),
+    referenceDocPath: 'tables/distribute-rows.mdx',
+    referenceGroup: 'tables',
+  },
+  'tables.setRowOptions': {
+    memberPath: 'tables.setRowOptions',
+    description: 'Set options on a table row such as header repeat or page break.',
+    requiresDocumentContext: true,
+    metadata: mutationOperation({
+      idempotency: 'idempotent',
+      supportsDryRun: true,
+      supportsTrackedMode: false,
+      possibleFailureCodes: ['INVALID_TARGET', 'NO_OP'],
+      throws: T_NOT_FOUND_COMMAND,
+    }),
+    referenceDocPath: 'tables/set-row-options.mdx',
+    referenceGroup: 'tables',
+  },
+
+  // -------------------------------------------------------------------------
+  // Tables: column structure
+  // -------------------------------------------------------------------------
+
+  'tables.insertColumn': {
+    memberPath: 'tables.insertColumn',
+    description: 'Insert a new column into the target table.',
+    requiresDocumentContext: true,
+    metadata: mutationOperation({
+      idempotency: 'non-idempotent',
+      supportsDryRun: true,
+      supportsTrackedMode: true,
+      possibleFailureCodes: ['INVALID_TARGET'],
+      throws: [...T_NOT_FOUND_COMMAND_TRACKED, 'INVALID_TARGET'],
+    }),
+    referenceDocPath: 'tables/insert-column.mdx',
+    referenceGroup: 'tables',
+  },
+  'tables.deleteColumn': {
+    memberPath: 'tables.deleteColumn',
+    description: 'Delete a column from the target table.',
+    requiresDocumentContext: true,
+    metadata: mutationOperation({
+      idempotency: 'conditional',
+      supportsDryRun: true,
+      supportsTrackedMode: true,
+      possibleFailureCodes: ['INVALID_TARGET', 'NO_OP'],
+      throws: [...T_NOT_FOUND_COMMAND_TRACKED, 'INVALID_TARGET'],
+    }),
+    referenceDocPath: 'tables/delete-column.mdx',
+    referenceGroup: 'tables',
+  },
+  'tables.setColumnWidth': {
+    memberPath: 'tables.setColumnWidth',
+    description: 'Set the width of a table column.',
+    requiresDocumentContext: true,
+    metadata: mutationOperation({
+      idempotency: 'idempotent',
+      supportsDryRun: true,
+      supportsTrackedMode: false,
+      possibleFailureCodes: ['INVALID_TARGET', 'NO_OP'],
+      throws: T_NOT_FOUND_COMMAND,
+    }),
+    referenceDocPath: 'tables/set-column-width.mdx',
+    referenceGroup: 'tables',
+  },
+  'tables.distributeColumns': {
+    memberPath: 'tables.distributeColumns',
+    description: 'Distribute column widths evenly across the target table.',
+    requiresDocumentContext: true,
+    metadata: mutationOperation({
+      idempotency: 'conditional',
+      supportsDryRun: true,
+      supportsTrackedMode: false,
+      possibleFailureCodes: ['INVALID_TARGET', 'NO_OP'],
+      throws: T_NOT_FOUND_COMMAND,
+    }),
+    referenceDocPath: 'tables/distribute-columns.mdx',
+    referenceGroup: 'tables',
+  },
+
+  // -------------------------------------------------------------------------
+  // Tables: cell structure
+  // -------------------------------------------------------------------------
+
+  'tables.insertCell': {
+    memberPath: 'tables.insertCell',
+    description: 'Insert a new cell into a table row.',
+    requiresDocumentContext: true,
+    metadata: mutationOperation({
+      idempotency: 'non-idempotent',
+      supportsDryRun: true,
+      supportsTrackedMode: false,
+      possibleFailureCodes: ['INVALID_TARGET'],
+      throws: [...T_NOT_FOUND_COMMAND, 'INVALID_TARGET'],
+    }),
+    referenceDocPath: 'tables/insert-cell.mdx',
+    referenceGroup: 'tables',
+  },
+  'tables.deleteCell': {
+    memberPath: 'tables.deleteCell',
+    description: 'Delete a cell from a table row.',
+    requiresDocumentContext: true,
+    metadata: mutationOperation({
+      idempotency: 'conditional',
+      supportsDryRun: true,
+      supportsTrackedMode: false,
+      possibleFailureCodes: ['INVALID_TARGET', 'NO_OP'],
+      throws: [...T_NOT_FOUND_COMMAND, 'INVALID_TARGET'],
+    }),
+    referenceDocPath: 'tables/delete-cell.mdx',
+    referenceGroup: 'tables',
+  },
+  'tables.mergeCells': {
+    memberPath: 'tables.mergeCells',
+    description: 'Merge a range of table cells into one.',
+    requiresDocumentContext: true,
+    metadata: mutationOperation({
+      idempotency: 'conditional',
+      supportsDryRun: true,
+      supportsTrackedMode: false,
+      possibleFailureCodes: ['INVALID_TARGET', 'NO_OP'],
+      throws: T_NOT_FOUND_COMMAND,
+    }),
+    referenceDocPath: 'tables/merge-cells.mdx',
+    referenceGroup: 'tables',
+  },
+  'tables.unmergeCells': {
+    memberPath: 'tables.unmergeCells',
+    description: 'Unmerge a previously merged table cell.',
+    requiresDocumentContext: true,
+    metadata: mutationOperation({
+      idempotency: 'conditional',
+      supportsDryRun: true,
+      supportsTrackedMode: false,
+      possibleFailureCodes: ['INVALID_TARGET', 'NO_OP'],
+      throws: T_NOT_FOUND_COMMAND,
+    }),
+    referenceDocPath: 'tables/unmerge-cells.mdx',
+    referenceGroup: 'tables',
+  },
+  'tables.splitCell': {
+    memberPath: 'tables.splitCell',
+    description: 'Split a table cell into multiple cells.',
+    requiresDocumentContext: true,
+    metadata: mutationOperation({
+      idempotency: 'non-idempotent',
+      supportsDryRun: true,
+      supportsTrackedMode: false,
+      possibleFailureCodes: ['INVALID_TARGET'],
+      throws: T_NOT_FOUND_COMMAND,
+    }),
+    referenceDocPath: 'tables/split-cell.mdx',
+    referenceGroup: 'tables',
+  },
+  'tables.setCellProperties': {
+    memberPath: 'tables.setCellProperties',
+    description: 'Set properties on a table cell such as vertical alignment or text direction.',
+    requiresDocumentContext: true,
+    metadata: mutationOperation({
+      idempotency: 'idempotent',
+      supportsDryRun: true,
+      supportsTrackedMode: false,
+      possibleFailureCodes: ['INVALID_TARGET', 'NO_OP'],
+      throws: T_NOT_FOUND_COMMAND,
+    }),
+    referenceDocPath: 'tables/set-cell-properties.mdx',
+    referenceGroup: 'tables',
+  },
+
+  // -------------------------------------------------------------------------
+  // Tables: data + accessibility
+  // -------------------------------------------------------------------------
+
+  'tables.sort': {
+    memberPath: 'tables.sort',
+    description: 'Sort table rows by a column value.',
+    requiresDocumentContext: true,
+    metadata: mutationOperation({
+      idempotency: 'non-idempotent',
+      supportsDryRun: true,
+      supportsTrackedMode: false,
+      possibleFailureCodes: ['INVALID_TARGET'],
+      throws: T_NOT_FOUND_COMMAND,
+    }),
+    referenceDocPath: 'tables/sort.mdx',
+    referenceGroup: 'tables',
+  },
+  'tables.setAltText': {
+    memberPath: 'tables.setAltText',
+    description: 'Set the alternative text description for a table.',
+    requiresDocumentContext: true,
+    metadata: mutationOperation({
+      idempotency: 'idempotent',
+      supportsDryRun: true,
+      supportsTrackedMode: false,
+      possibleFailureCodes: ['INVALID_TARGET', 'NO_OP'],
+      throws: T_NOT_FOUND_COMMAND,
+    }),
+    referenceDocPath: 'tables/set-alt-text.mdx',
+    referenceGroup: 'tables',
+  },
+
+  // -------------------------------------------------------------------------
+  // Tables: style
+  // -------------------------------------------------------------------------
+
+  'tables.setStyle': {
+    memberPath: 'tables.setStyle',
+    description: 'Apply a named table style to the target table.',
+    requiresDocumentContext: true,
+    metadata: mutationOperation({
+      idempotency: 'idempotent',
+      supportsDryRun: true,
+      supportsTrackedMode: false,
+      possibleFailureCodes: ['INVALID_TARGET', 'NO_OP'],
+      throws: T_NOT_FOUND_COMMAND,
+    }),
+    referenceDocPath: 'tables/set-style.mdx',
+    referenceGroup: 'tables',
+  },
+  'tables.clearStyle': {
+    memberPath: 'tables.clearStyle',
+    description: 'Remove the applied table style, reverting to defaults.',
+    requiresDocumentContext: true,
+    metadata: mutationOperation({
+      idempotency: 'conditional',
+      supportsDryRun: true,
+      supportsTrackedMode: false,
+      possibleFailureCodes: ['INVALID_TARGET', 'NO_OP'],
+      throws: T_NOT_FOUND_COMMAND,
+    }),
+    referenceDocPath: 'tables/clear-style.mdx',
+    referenceGroup: 'tables',
+  },
+  'tables.setStyleOption': {
+    memberPath: 'tables.setStyleOption',
+    description: 'Toggle a conditional style option such as banded rows or first column.',
+    requiresDocumentContext: true,
+    metadata: mutationOperation({
+      idempotency: 'idempotent',
+      supportsDryRun: true,
+      supportsTrackedMode: false,
+      possibleFailureCodes: ['INVALID_TARGET', 'NO_OP'],
+      throws: T_NOT_FOUND_COMMAND,
+    }),
+    referenceDocPath: 'tables/set-style-option.mdx',
+    referenceGroup: 'tables',
+  },
+  'tables.setBorder': {
+    memberPath: 'tables.setBorder',
+    description: 'Set border properties on a table or cell range.',
+    requiresDocumentContext: true,
+    metadata: mutationOperation({
+      idempotency: 'idempotent',
+      supportsDryRun: true,
+      supportsTrackedMode: false,
+      possibleFailureCodes: ['INVALID_TARGET', 'NO_OP'],
+      throws: T_NOT_FOUND_COMMAND,
+    }),
+    referenceDocPath: 'tables/set-border.mdx',
+    referenceGroup: 'tables',
+  },
+  'tables.clearBorder': {
+    memberPath: 'tables.clearBorder',
+    description: 'Remove border formatting from a table or cell range.',
+    requiresDocumentContext: true,
+    metadata: mutationOperation({
+      idempotency: 'conditional',
+      supportsDryRun: true,
+      supportsTrackedMode: false,
+      possibleFailureCodes: ['INVALID_TARGET', 'NO_OP'],
+      throws: T_NOT_FOUND_COMMAND,
+    }),
+    referenceDocPath: 'tables/clear-border.mdx',
+    referenceGroup: 'tables',
+  },
+  'tables.applyBorderPreset': {
+    memberPath: 'tables.applyBorderPreset',
+    description: 'Apply a border preset (e.g. all borders, outside only) to a table.',
+    requiresDocumentContext: true,
+    metadata: mutationOperation({
+      idempotency: 'idempotent',
+      supportsDryRun: true,
+      supportsTrackedMode: false,
+      possibleFailureCodes: ['INVALID_TARGET', 'NO_OP'],
+      throws: T_NOT_FOUND_COMMAND,
+    }),
+    referenceDocPath: 'tables/apply-border-preset.mdx',
+    referenceGroup: 'tables',
+  },
+  'tables.setShading': {
+    memberPath: 'tables.setShading',
+    description: 'Set the background shading color on a table or cell range.',
+    requiresDocumentContext: true,
+    metadata: mutationOperation({
+      idempotency: 'idempotent',
+      supportsDryRun: true,
+      supportsTrackedMode: false,
+      possibleFailureCodes: ['INVALID_TARGET', 'NO_OP'],
+      throws: T_NOT_FOUND_COMMAND,
+    }),
+    referenceDocPath: 'tables/set-shading.mdx',
+    referenceGroup: 'tables',
+  },
+  'tables.clearShading': {
+    memberPath: 'tables.clearShading',
+    description: 'Remove shading from a table or cell range.',
+    requiresDocumentContext: true,
+    metadata: mutationOperation({
+      idempotency: 'conditional',
+      supportsDryRun: true,
+      supportsTrackedMode: false,
+      possibleFailureCodes: ['INVALID_TARGET', 'NO_OP'],
+      throws: T_NOT_FOUND_COMMAND,
+    }),
+    referenceDocPath: 'tables/clear-shading.mdx',
+    referenceGroup: 'tables',
+  },
+  'tables.setTablePadding': {
+    memberPath: 'tables.setTablePadding',
+    description: 'Set default cell padding for the entire table.',
+    requiresDocumentContext: true,
+    metadata: mutationOperation({
+      idempotency: 'idempotent',
+      supportsDryRun: true,
+      supportsTrackedMode: false,
+      possibleFailureCodes: ['INVALID_TARGET', 'NO_OP'],
+      throws: T_NOT_FOUND_COMMAND,
+    }),
+    referenceDocPath: 'tables/set-table-padding.mdx',
+    referenceGroup: 'tables',
+  },
+  'tables.setCellPadding': {
+    memberPath: 'tables.setCellPadding',
+    description: 'Set padding on a specific table cell or cell range.',
+    requiresDocumentContext: true,
+    metadata: mutationOperation({
+      idempotency: 'idempotent',
+      supportsDryRun: true,
+      supportsTrackedMode: false,
+      possibleFailureCodes: ['INVALID_TARGET', 'NO_OP'],
+      throws: T_NOT_FOUND_COMMAND,
+    }),
+    referenceDocPath: 'tables/set-cell-padding.mdx',
+    referenceGroup: 'tables',
+  },
+  'tables.setCellSpacing': {
+    memberPath: 'tables.setCellSpacing',
+    description: 'Set the cell spacing for the target table.',
+    requiresDocumentContext: true,
+    metadata: mutationOperation({
+      idempotency: 'idempotent',
+      supportsDryRun: true,
+      supportsTrackedMode: false,
+      possibleFailureCodes: ['INVALID_TARGET', 'NO_OP'],
+      throws: T_NOT_FOUND_COMMAND,
+    }),
+    referenceDocPath: 'tables/set-cell-spacing.mdx',
+    referenceGroup: 'tables',
+  },
+  'tables.clearCellSpacing': {
+    memberPath: 'tables.clearCellSpacing',
+    description: 'Remove custom cell spacing from the target table.',
+    requiresDocumentContext: true,
+    metadata: mutationOperation({
+      idempotency: 'conditional',
+      supportsDryRun: true,
+      supportsTrackedMode: false,
+      possibleFailureCodes: ['INVALID_TARGET', 'NO_OP'],
+      throws: T_NOT_FOUND_COMMAND,
+    }),
+    referenceDocPath: 'tables/clear-cell-spacing.mdx',
+    referenceGroup: 'tables',
+  },
+
+  // -------------------------------------------------------------------------
+  // Tables: read operations (B4 ref handoff)
+  // -------------------------------------------------------------------------
+
+  'tables.get': {
+    memberPath: 'tables.get',
+    description: 'Retrieve table structure and dimensions by locator.',
+    requiresDocumentContext: true,
+    metadata: readOperation({
+      idempotency: 'idempotent',
+      throws: T_NOT_FOUND,
+    }),
+    referenceDocPath: 'tables/get.mdx',
+    referenceGroup: 'tables',
+  },
+  'tables.getCells': {
+    memberPath: 'tables.getCells',
+    description: 'Retrieve cell information for a table, optionally filtered by row or column.',
+    requiresDocumentContext: true,
+    metadata: readOperation({
+      idempotency: 'idempotent',
+      throws: T_NOT_FOUND,
+    }),
+    referenceDocPath: 'tables/get-cells.mdx',
+    referenceGroup: 'tables',
+  },
+  'tables.getProperties': {
+    memberPath: 'tables.getProperties',
+    description: 'Retrieve layout and style properties of a table.',
+    requiresDocumentContext: true,
+    metadata: readOperation({
+      idempotency: 'idempotent',
+      throws: T_NOT_FOUND,
+    }),
+    referenceDocPath: 'tables/get-properties.mdx',
+    referenceGroup: 'tables',
   },
 } as const satisfies Record<string, OperationDefinitionEntry>;
 

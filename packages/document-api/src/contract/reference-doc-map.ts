@@ -76,6 +76,11 @@ const GROUP_METADATA: Record<ReferenceGroupKey, { title: string; description: st
     description: 'Atomic mutation plan preview and execution.',
     pagePath: 'mutations/index.mdx',
   },
+  tables: {
+    title: 'Tables',
+    description: 'Table structure, layout, styling, and cell operations.',
+    pagePath: 'tables/index.mdx',
+  },
 };
 
 export const REFERENCE_OPERATION_GROUPS: readonly ReferenceOperationGroupDefinition[] = (

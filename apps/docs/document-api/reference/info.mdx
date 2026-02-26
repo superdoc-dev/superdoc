@@ -35,6 +35,7 @@ _No fields._
 | `capabilities` | object | yes |  |
 | `counts` | object | yes |  |
 | `outline` | object[] | yes |  |
+| `revision` | string | yes |  |
 
 ### Example response
 
@@ -60,7 +61,8 @@ _No fields._
       "nodeId": "node-def456",
       "text": "Hello, world."
     }
-  ]
+  ],
+  "revision": "example"
 }
 ```
 
@@ -167,12 +169,16 @@ _No fields._
         "type": "object"
       },
       "type": "array"
+    },
+    "revision": {
+      "type": "string"
     }
   },
   "required": [
     "counts",
     "outline",
-    "capabilities"
+    "capabilities",
+    "revision"
   ],
   "type": "object"
 }

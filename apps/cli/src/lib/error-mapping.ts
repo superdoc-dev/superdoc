@@ -97,6 +97,26 @@ function mapListsError(operationId: CliExposedOperationId, error: unknown, code:
   return new CliError('COMMAND_FAILED', message, { operationId, details });
 }
 
+function mapTablesError(operationId: CliExposedOperationId, error: unknown, code: string | undefined): CliError {
+  const message = extractErrorMessage(error);
+  const details = extractErrorDetails(error);
+
+  if (code === 'TARGET_NOT_FOUND') {
+    return new CliError('TARGET_NOT_FOUND', message, { operationId, details });
+  }
+
+  if (code === 'INVALID_TARGET') {
+    return new CliError('INVALID_ARGUMENT', message, { operationId, details });
+  }
+
+  if (code === 'CAPABILITY_UNAVAILABLE' || code === 'COMMAND_UNAVAILABLE') {
+    return new CliError('COMMAND_FAILED', message, { operationId, details });
+  }
+
+  if (error instanceof CliError) return error;
+  return new CliError('COMMAND_FAILED', message, { operationId, details });
+}
+
 function mapTextMutationError(operationId: CliExposedOperationId, error: unknown, code: string | undefined): CliError {
   const message = extractErrorMessage(error);
   const details = extractErrorDetails(error);
@@ -252,6 +272,7 @@ const FAMILY_MAPPERS: Record<
   trackChanges: mapTrackChangesError,
   comments: mapCommentsError,
   lists: mapListsError,
+  tables: mapTablesError,
   textMutation: mapTextMutationError,
   create: mapCreateError,
   blocks: mapBlocksError,
@@ -381,6 +402,20 @@ export function mapFailedReceipt(operationId: CliExposedOperationId, result: unk
     }
     if (failureCode === 'INVALID_TARGET') {
       return new CliError('INVALID_ARGUMENT', failureMessage, { operationId, failure });
+    }
+    return new CliError('COMMAND_FAILED', failureMessage, { operationId, failure });
+  }
+
+  // Tables family
+  if (family === 'tables') {
+    if (failureCode === 'TARGET_NOT_FOUND') {
+      return new CliError('TARGET_NOT_FOUND', failureMessage, { operationId, failure });
+    }
+    if (failureCode === 'INVALID_TARGET') {
+      return new CliError('INVALID_ARGUMENT', failureMessage, { operationId, failure });
+    }
+    if (failureCode === 'CAPABILITY_UNAVAILABLE') {
+      return new CliError('COMMAND_FAILED', failureMessage, { operationId, failure });
     }
     return new CliError('COMMAND_FAILED', failureMessage, { operationId, failure });
   }

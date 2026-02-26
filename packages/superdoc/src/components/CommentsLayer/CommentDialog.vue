@@ -298,19 +298,23 @@ const setFocus = () => {
 };
 
 const handleClickOutside = (e) => {
-  const excludedClasses = [
-    'n-dropdown-option-body__label',
-    'sd-editor-comment-highlight',
-    'sd-editor-tracked-change-highlight',
-    'track-insert',
-    'track-insert-dec',
-    'track-delete',
-    'track-delete-dec',
-    'track-format',
-    'track-format-dec',
-  ];
+  const targetElement = e.target instanceof Element ? e.target : e.target?.parentElement;
+  const clickedIgnoredTarget = targetElement?.closest?.(
+    [
+      '.n-dropdown-option-body__label',
+      '.superdoc-comment-highlight',
+      '.sd-editor-comment-highlight',
+      '.sd-editor-tracked-change-highlight',
+      '.track-insert',
+      '.track-insert-dec',
+      '.track-delete',
+      '.track-delete-dec',
+      '.track-format',
+      '.track-format-dec',
+    ].join(','),
+  );
 
-  if (excludedClasses.some((className) => e.target.classList.contains(className)) || isCommentHighlighted.value) return;
+  if (clickedIgnoredTarget || isCommentHighlighted.value) return;
 
   // If clicked on another comment dialog, let that dialog's setFocus handle activation.
   // Without this, the outgoing dialog clears activeComment before the new dialog can set it.

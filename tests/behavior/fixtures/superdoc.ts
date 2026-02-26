@@ -349,28 +349,86 @@ function createFixture(page: Page, editor: Locator, modKey: string) {
     },
 
     async clickOnCommentedText(textMatch: string) {
-      const highlights = page.locator('.superdoc-comment-highlight');
-      const count = await highlights.count();
-      let bestIndex = -1;
-      let bestArea = Infinity;
+      const deadline = Date.now() + 10_000;
+      let sawMatchText = false;
 
-      for (let i = 0; i < count; i++) {
-        const hl = highlights.nth(i);
-        const text = await hl.textContent();
-        if (text && text.includes(textMatch)) {
+      while (Date.now() < deadline) {
+        const highlights = page.locator('.superdoc-comment-highlight');
+        const count = await highlights.count();
+        let bestIndex = -1;
+        let fallbackIndex = -1;
+        let bestArea = Infinity;
+
+        for (let i = 0; i < count; i++) {
+          const hl = highlights.nth(i);
+          const text = await hl.textContent();
+          if (!text || !text.includes(textMatch)) continue;
+
+          sawMatchText = true;
+          if (fallbackIndex === -1) fallbackIndex = i;
+
           const box = await hl.boundingBox();
-          if (box) {
-            const area = box.width * box.height;
-            if (area < bestArea) {
-              bestArea = area;
-              bestIndex = i;
+          if (!box || box.width <= 0 || box.height <= 0) continue;
+
+          const area = box.width * box.height;
+          if (area < bestArea) {
+            bestArea = area;
+            bestIndex = i;
+          }
+        }
+
+        const targetIndex = bestIndex !== -1 ? bestIndex : fallbackIndex;
+        if (targetIndex !== -1) {
+          const target = highlights.nth(targetIndex);
+          const targetCommentIds = ((await target.getAttribute('data-comment-ids')) ?? '')
+            .split(/[\s,]+/)
+            .filter(Boolean);
+
+          const ensureActiveDialog = async () => {
+            // Most browsers activate on highlight click. Firefox can occasionally
+            // miss this state transition, so we fall back to activating the
+            // corresponding floating dialog directly.
+            const activeDialogs = page.locator('.comment-placeholder .comments-dialog.is-active');
+            if ((await activeDialogs.count()) > 0) return;
+
+            for (const id of targetCommentIds) {
+              const dialogForId = page
+                .locator(`.comment-placeholder[data-comment-id="${id}"] .comments-dialog`)
+                .first();
+              if ((await dialogForId.count()) === 0) continue;
+              await dialogForId.click({ timeout: 500 });
+              if ((await activeDialogs.count()) > 0) return;
+            }
+
+            const fallbackDialog = page.locator('.comment-placeholder .comments-dialog').last();
+            if ((await fallbackDialog.count()) > 0) {
+              await fallbackDialog.click({ timeout: 500 });
+            }
+          };
+
+          try {
+            await target.click({ timeout: 500 });
+            await ensureActiveDialog();
+            return;
+          } catch {
+            try {
+              await target.click({ timeout: 500, force: true });
+              await ensureActiveDialog();
+              return;
+            } catch {
+              // The highlight likely re-rendered between lookup and click.
             }
           }
         }
+
+        await page.waitForTimeout(100);
       }
 
-      if (bestIndex === -1) throw new Error(`No comment highlight found for "${textMatch}"`);
-      await highlights.nth(bestIndex).click();
+      if (sawMatchText) {
+        throw new Error(`Found comment highlight text for "${textMatch}" but could not click it`);
+      }
+
+      throw new Error(`No comment highlight found for "${textMatch}"`);
     },
 
     async pressTimes(key: string, count: number) {

@@ -8,7 +8,7 @@ import { listComments } from './document-api.js';
 
 /** Locator for the active (clicked/focused) floating comment dialog. */
 export const activeCommentDialog = (page: Page): Locator =>
-  page.locator('.comment-placeholder .comments-dialog.is-active').last();
+  page.locator('.comment-placeholder .comments-dialog.is-active, .comment-placeholder .comments-dialog').last();
 
 // ---------------------------------------------------------------------------
 // Helpers

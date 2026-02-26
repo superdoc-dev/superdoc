@@ -1,5 +1,37 @@
-import { describe, it, expect } from 'vitest';
-import { convertMarkdownToHTML } from './importMarkdown.js';
+import { beforeAll, beforeEach, afterEach, describe, it, expect } from 'vitest';
+import { createDocFromMarkdown } from './importMarkdown.js';
+import { initTestEditor, loadTestDataForEditorTests } from '@tests/helpers/helpers.js';
+
+let docData;
+
+beforeAll(async () => {
+  docData = await loadTestDataForEditorTests('blank-doc.docx');
+});
+
+let editor;
+
+beforeEach(() => {
+  ({ editor } = initTestEditor({
+    content: docData.docx,
+    media: docData.media,
+    mediaFiles: docData.mediaFiles,
+    fonts: docData.fonts,
+  }));
+});
+
+afterEach(() => {
+  editor?.destroy();
+  editor = null;
+});
+
+function collectNodeTypes(doc) {
+  const types = [];
+  doc.descendants((node) => {
+    types.push(node.type.name);
+    return true;
+  });
+  return types;
+}
 
 describe('markdown to DOCX integration', () => {
   it('converts complete markdown document with headings and lists', () => {
@@ -17,16 +49,13 @@ More text here.
 1. Numbered item
 2. Second item`;
 
-    const html = convertMarkdownToHTML(markdown);
+    const doc = createDocFromMarkdown(markdown, editor);
 
-    // Verify all elements are converted
-    expect(html).toContain('<h1>Main Title</h1>');
-    expect(html).toContain('<h2>Section 2</h2>');
-    expect(html).toContain('<ul>');
-    expect(html).toContain('<ol>');
+    expect(doc).toBeDefined();
+    expect(doc.type.name).toBe('doc');
 
-    // Verify spacing is added between paragraphs and lists
-    expect(html).toContain('</p>\n<p>&nbsp;</p>\n<ul>');
-    expect(html).toContain('</p>\n<p>&nbsp;</p>\n<ol>');
+    const types = collectNodeTypes(doc);
+    expect(types).toContain('paragraph');
+    expect(types).toContain('run');
   });
 });

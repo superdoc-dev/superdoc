@@ -128,7 +128,7 @@ The SDKs expose all operations from the [Document API](/document-api/overview) p
 
 | Operation | CLI command | Description |
 | --- | --- | --- |
-| `doc.open` | `open` | Open a document and create a persistent editing session. |
+| `doc.open` | `open` | Open a document and create a persistent editing session. Optionally override the document body with contentOverride + overrideType (markdown, html, or text). |
 | `doc.save` | `save` | Save the current session to the original file or a new path. |
 | `doc.close` | `close` | Close the active editing session and clean up resources. |
 
@@ -148,7 +148,7 @@ The SDKs expose all operations from the [Document API](/document-api/overview) p
 
 | Operation | CLI command | Description |
 | --- | --- | --- |
-| `doc.insert` | `insert` | Insert text or inline content at a target position. |
+| `doc.insert` | `insert` | Insert content at a target position. Supports text (default), markdown, and html content types via the `type` field. |
 | `doc.replace` | `replace` | Replace content at a target position with new text or inline content. |
 | `doc.delete` | `delete` | Delete content at a target position. |
 | `doc.mutations.apply` | `mutations apply` | Execute a mutation plan atomically against the document. |

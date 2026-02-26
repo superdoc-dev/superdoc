@@ -285,7 +285,7 @@ describe('CLI host mode', () => {
       docPath,
       '--target-json',
       JSON.stringify(collapsedTarget),
-      '--text',
+      '--value',
       'HOST_CONFORMANCE_INSERT',
       '--out',
       path.join(stateDir, 'host-conformance-insert.docx'),

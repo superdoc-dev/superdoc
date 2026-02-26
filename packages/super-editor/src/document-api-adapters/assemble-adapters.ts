@@ -6,7 +6,7 @@ import { getTextAdapter } from './get-text-adapter.js';
 import { infoAdapter } from './info-adapter.js';
 import { getDocumentApiCapabilities } from './capabilities-adapter.js';
 import { createCommentsWrapper } from './plan-engine/comments-wrappers.js';
-import { writeWrapper, styleApplyWrapper } from './plan-engine/plan-wrappers.js';
+import { writeWrapper, insertStructuredWrapper, styleApplyWrapper } from './plan-engine/plan-wrappers.js';
 import { stylesApplyAdapter } from './styles-adapter.js';
 import {
   formatFontSizeWrapper,
@@ -111,6 +111,7 @@ export function assembleDocumentApiAdapters(editor: Editor): DocumentApiAdapters
     comments: createCommentsWrapper(editor),
     write: {
       write: (request, options) => writeWrapper(editor, request, options),
+      insertStructured: (input, options) => insertStructuredWrapper(editor, input, options),
     },
     format: {
       apply: (input, options) => styleApplyWrapper(editor, input, options),

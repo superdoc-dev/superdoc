@@ -83,10 +83,10 @@ describe('document-api contract catalog', () => {
       additionalProperties?: boolean;
     };
 
-    // Simplified schema: target (optional) + text (required), no allOf constraints
+    // Simplified schema: target (optional) + value (required) + type (optional enum), no allOf constraints
     expect(insertInputSchema.type).toBe('object');
-    expect(Object.keys(insertInputSchema.properties!).sort()).toEqual(['target', 'text']);
-    expect(insertInputSchema.required).toEqual(['text']);
+    expect(Object.keys(insertInputSchema.properties!).sort()).toEqual(['target', 'type', 'value']);
+    expect(insertInputSchema.required).toEqual(['value']);
     expect(insertInputSchema.allOf).toBeUndefined();
     expect(insertInputSchema.additionalProperties).toBe(false);
   });

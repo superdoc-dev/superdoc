@@ -417,6 +417,8 @@ const CLI_ONLY_METADATA: Record<CliOnlyOperationId, CliOperationMetadata> = {
       { name: 'collaboration', kind: 'jsonFlag', flag: 'collaboration-json', type: 'json' },
       { name: 'collabDocumentId', kind: 'flag', flag: 'collab-document-id', type: 'string' },
       { name: 'collabUrl', kind: 'flag', flag: 'collab-url', type: 'string' },
+      { name: 'contentOverride', kind: 'flag', flag: 'content-override', type: 'string' },
+      { name: 'overrideType', kind: 'flag', flag: 'override-type', type: 'string' },
     ],
     constraints: null,
   },

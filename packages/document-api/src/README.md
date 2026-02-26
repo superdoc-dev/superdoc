@@ -102,7 +102,7 @@ Insert text as a tracked change so reviewers can accept or reject it:
 
 ```ts
 const receipt = editor.doc.insert(
-  { text: 'new content' },
+  { value: 'new content' },
   { changeMode: 'tracked' },
 );
 // receipt.resolution.target contains the resolved insertion point
@@ -147,7 +147,7 @@ if (caps.operations['format.apply'].available) {
   editor.doc.format.apply({ target, inline: { bold: true } });
 }
 if (caps.global.trackChanges.enabled) {
-  editor.doc.insert({ text: 'tracked' }, { changeMode: 'tracked' });
+  editor.doc.insert({ value: 'tracked' }, { changeMode: 'tracked' });
 }
 if (caps.operations['create.heading'].dryRun) {
   const preview = editor.doc.create.heading(

@@ -201,13 +201,14 @@ export const OPERATION_DEFINITIONS = {
 
   insert: {
     memberPath: 'insert',
-    description: 'Insert text or inline content at a target position.',
+    description:
+      'Insert content at a target position. Supports text (default), markdown, and html content types via the `type` field.',
     requiresDocumentContext: true,
     metadata: mutationOperation({
       idempotency: 'non-idempotent',
       supportsDryRun: true,
       supportsTrackedMode: true,
-      possibleFailureCodes: ['INVALID_TARGET', 'NO_OP'],
+      possibleFailureCodes: ['INVALID_TARGET', 'NO_OP', 'CAPABILITY_UNAVAILABLE'],
       throws: [...T_NOT_FOUND_CAPABLE, 'INVALID_TARGET'],
     }),
     referenceDocPath: 'insert.mdx',

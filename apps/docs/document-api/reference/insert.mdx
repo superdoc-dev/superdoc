@@ -23,7 +23,8 @@ description: Reference for insert
 | Field | Type | Required | Description |
 | --- | --- | --- | --- |
 | `target` | TextAddress | no | TextAddress |
-| `text` | string | yes |  |
+| `type` | enum | no | `"text"`, `"markdown"`, `"html"` |
+| `value` | string | yes |  |
 
 ### Example request
 
@@ -37,7 +38,8 @@ description: Reference for insert
       "start": 0
     }
   },
-  "text": "Hello, world."
+  "type": "text",
+  "value": "example"
 }
 ```
 
@@ -100,6 +102,7 @@ _No fields._
 
 - `INVALID_TARGET`
 - `NO_OP`
+- `CAPABILITY_UNAVAILABLE`
 
 ## Raw schemas
 
@@ -111,12 +114,20 @@ _No fields._
     "target": {
       "$ref": "#/$defs/TextAddress"
     },
-    "text": {
+    "type": {
+      "enum": [
+        "text",
+        "markdown",
+        "html"
+      ],
+      "type": "string"
+    },
+    "value": {
       "type": "string"
     }
   },
   "required": [
-    "text"
+    "value"
   ],
   "type": "object"
 }
@@ -139,7 +150,8 @@ _No fields._
             "code": {
               "enum": [
                 "INVALID_TARGET",
-                "NO_OP"
+                "NO_OP",
+                "CAPABILITY_UNAVAILABLE"
               ]
             },
             "details": {},
@@ -191,7 +203,8 @@ _No fields._
         "code": {
           "enum": [
             "INVALID_TARGET",
-            "NO_OP"
+            "NO_OP",
+            "CAPABILITY_UNAVAILABLE"
           ]
         },
         "details": {},

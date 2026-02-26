@@ -894,9 +894,10 @@ const strictEmptyObjectSchema = objectSchema({});
 const insertInputSchema = objectSchema(
   {
     target: textAddressSchema,
-    text: { type: 'string' },
+    value: { type: 'string' },
+    type: { type: 'string', enum: ['text', 'markdown', 'html'] },
   },
-  ['text'],
+  ['value'],
 );
 
 // ---------------------------------------------------------------------------

@@ -22,6 +22,7 @@ export type ReceiptFailureCode =
   | 'REVISION_CHANGED_SINCE_COMPILE'
   | 'INVALID_INSERTION_CONTEXT'
   | 'DOCUMENT_IDENTITY_CONFLICT'
+  | 'UNSUPPORTED_ENVIRONMENT'
   | 'INTERNAL_ERROR';
 
 export type ReceiptFailure = {

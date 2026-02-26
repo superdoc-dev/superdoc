@@ -75,6 +75,14 @@ function makeAdapters() {
         text: '',
       },
     })),
+    insertStructured: vi.fn(() => ({
+      success: true as const,
+      resolution: {
+        target: { kind: 'text' as const, blockId: 'p1', range: { start: 0, end: 0 } },
+        range: { from: 1, to: 1 },
+        text: '',
+      },
+    })),
   };
   const formatReceipt = () => ({
     success: true as const,
@@ -229,7 +237,7 @@ describe('invoke', () => {
     it('insert: invoke returns same result as direct call', () => {
       const { adapters } = makeAdapters();
       const api = createDocumentApi(adapters);
-      const input = { text: 'hello' };
+      const input = { value: 'hello' };
       const direct = api.insert(input);
       const invoked = api.invoke({ operationId: 'insert', input });
       expect(invoked).toEqual(direct);
@@ -238,7 +246,7 @@ describe('invoke', () => {
     it('insert: invoke forwards options through to adapter-backed execution', () => {
       const { adapters, writeAdapter } = makeAdapters();
       const api = createDocumentApi(adapters);
-      api.invoke({ operationId: 'insert', input: { text: 'hello' }, options: { changeMode: 'tracked' } });
+      api.invoke({ operationId: 'insert', input: { value: 'hello' }, options: { changeMode: 'tracked' } });
       expect(writeAdapter.write).toHaveBeenCalledWith(
         { kind: 'insert', text: 'hello' },
         { changeMode: 'tracked', dryRun: false },
@@ -397,7 +405,7 @@ describe('invoke', () => {
     it('forwards unknown options through to the handler', () => {
       const { adapters, writeAdapter } = makeAdapters();
       const api = createDocumentApi(adapters);
-      const input: unknown = { text: 'dynamic' };
+      const input: unknown = { value: 'dynamic' };
       const options: unknown = { changeMode: 'tracked' };
       api.invoke({ operationId: 'insert', input, options });
       expect(writeAdapter.write).toHaveBeenCalledWith(

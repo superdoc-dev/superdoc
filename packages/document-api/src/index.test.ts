@@ -92,15 +92,17 @@ function makeCommentsAdapter(): CommentsAdapter {
 }
 
 function makeWriteAdapter(): WriteAdapter {
+  const defaultReceipt = {
+    success: true as const,
+    resolution: {
+      target: { kind: 'text' as const, blockId: 'p1', range: { start: 0, end: 0 } },
+      range: { from: 1, to: 1 },
+      text: '',
+    },
+  };
   return {
-    write: vi.fn(() => ({
-      success: true as const,
-      resolution: {
-        target: { kind: 'text' as const, blockId: 'p1', range: { start: 0, end: 0 } },
-        range: { from: 1, to: 1 },
-        text: '',
-      },
-    })),
+    write: vi.fn(() => defaultReceipt),
+    insertStructured: vi.fn(() => defaultReceipt),
   };
 }
 
@@ -537,19 +539,19 @@ describe('createDocumentApi', () => {
     });
 
     const target = { kind: 'text', blockId: 'p1', range: { start: 0, end: 2 } } as const;
-    api.insert({ text: 'Hi' });
-    api.insert({ target, text: 'Yo' });
+    api.insert({ value: 'Hi' });
+    api.insert({ target, value: 'Yo' });
     api.replace({ target, text: 'Hello' }, { changeMode: 'tracked' });
     api.delete({ target });
 
     expect(writeAdpt.write).toHaveBeenNthCalledWith(
       1,
-      { kind: 'insert', text: 'Hi' },
+      { kind: 'insert', text: 'Hi' }, // write request keeps `text` (internal protocol)
       { changeMode: 'direct', dryRun: false },
     );
     expect(writeAdpt.write).toHaveBeenNthCalledWith(
       2,
-      { kind: 'insert', target, text: 'Yo' },
+      { kind: 'insert', target, text: 'Yo' }, // write request keeps `text` (internal protocol)
       { changeMode: 'direct', dryRun: false },
     );
     expect(writeAdpt.write).toHaveBeenNthCalledWith(
@@ -1063,14 +1065,14 @@ describe('createDocumentApi', () => {
 
     it('accepts no-target (default insertion point)', () => {
       const api = makeApi();
-      const result = api.insert({ text: 'hello' });
+      const result = api.insert({ value: 'hello' });
       expect(result.success).toBe(true);
     });
 
     it('accepts canonical target', () => {
       const api = makeApi();
       const target = { kind: 'text', blockId: 'p1', range: { start: 0, end: 0 } } as const;
-      const result = api.insert({ target, text: 'hello' });
+      const result = api.insert({ target, value: 'hello' });
       expect(result.success).toBe(true);
     });
 
@@ -1079,7 +1081,7 @@ describe('createDocumentApi', () => {
     it('rejects null target', () => {
       const api = makeApi();
       expectValidationError(
-        () => api.insert({ target: null, text: 'hello' } as any),
+        () => api.insert({ target: null, value: 'hello' } as any),
         'target must be a text address object',
       );
     });
@@ -1087,16 +1089,21 @@ describe('createDocumentApi', () => {
     it('rejects malformed target objects', () => {
       const api = makeApi();
       expectValidationError(
-        () => api.insert({ target: { kind: 'text', blockId: 'p1' }, text: 'hello' } as any),
+        () => api.insert({ target: { kind: 'text', blockId: 'p1' }, value: 'hello' } as any),
         'target must be a text address object',
       );
     });
 
     // -- Type checks --
 
-    it('rejects non-string text', () => {
+    it('rejects non-string value', () => {
       const api = makeApi();
-      expectValidationError(() => api.insert({ text: 42 } as any), 'text must be a string');
+      expectValidationError(() => api.insert({ value: 42 } as any), 'value must be a string');
+    });
+
+    it('rejects invalid type enum', () => {
+      const api = makeApi();
+      expectValidationError(() => api.insert({ value: 'hi', type: 'xml' } as any), 'type must be one of');
     });
 
     // -- Validation error shape --
@@ -1104,7 +1111,7 @@ describe('createDocumentApi', () => {
     it('throws DocumentApiValidationError (not plain Error)', () => {
       const api = makeApi();
       try {
-        api.insert({ text: 42 } as any);
+        api.insert({ value: 42 } as any);
         expect.fail('Expected error');
       } catch (err: unknown) {
         expect((err as Error).constructor.name).toBe('DocumentApiValidationError');
@@ -1133,27 +1140,27 @@ describe('createDocumentApi', () => {
 
     it('rejects unknown top-level fields', () => {
       const api = makeApi();
-      expectValidationError(() => api.insert({ text: 'hi', block_id: 'abc' } as any), 'Unknown field "block_id"');
+      expectValidationError(() => api.insert({ value: 'hi', block_id: 'abc' } as any), 'Unknown field "block_id"');
     });
 
     it('rejects flat blockId as unknown field', () => {
       const api = makeApi();
-      expectValidationError(() => api.insert({ blockId: 'p1', text: 'hello' } as any), 'Unknown field "blockId"');
+      expectValidationError(() => api.insert({ blockId: 'p1', value: 'hello' } as any), 'Unknown field "blockId"');
     });
 
     it('rejects flat offset as unknown field', () => {
       const api = makeApi();
-      expectValidationError(() => api.insert({ text: 'hello', offset: 5 } as any), 'Unknown field "offset"');
+      expectValidationError(() => api.insert({ value: 'hello', offset: 5 } as any), 'Unknown field "offset"');
     });
 
     it('rejects pos as unknown field', () => {
       const api = makeApi();
-      expectValidationError(() => api.insert({ text: 'hi', pos: 3 } as any), 'Unknown field "pos"');
+      expectValidationError(() => api.insert({ value: 'hi', pos: 3 } as any), 'Unknown field "pos"');
     });
 
     // -- Backward compatibility parity --
 
-    it('sends same adapter request for insert({ text }) as before', () => {
+    it('maps insert({ value }) to internal write request with text field', () => {
       const writeAdpt = makeWriteAdapter();
       const api = createDocumentApi({
         find: makeFindAdapter(QUERY_RESULT),
@@ -1169,14 +1176,14 @@ describe('createDocumentApi', () => {
         lists: makeListsAdapter(),
       });
 
-      api.insert({ text: 'hello' });
+      api.insert({ value: 'hello' });
       expect(writeAdpt.write).toHaveBeenCalledWith(
         { kind: 'insert', text: 'hello' },
         { changeMode: 'direct', dryRun: false },
       );
     });
 
-    it('sends same adapter request for insert({ target, text }) as before', () => {
+    it('maps insert({ target, value }) to internal write request with text field', () => {
       const writeAdpt = makeWriteAdapter();
       const api = createDocumentApi({
         find: makeFindAdapter(QUERY_RESULT),
@@ -1193,10 +1200,101 @@ describe('createDocumentApi', () => {
       });
 
       const target = { kind: 'text', blockId: 'p1', range: { start: 0, end: 2 } } as const;
-      api.insert({ target, text: 'hello' });
+      api.insert({ target, value: 'hello' });
       expect(writeAdpt.write).toHaveBeenCalledWith(
         { kind: 'insert', target, text: 'hello' },
         { changeMode: 'direct', dryRun: false },
+      );
+    });
+
+    // -- Structured insert routing (markdown / html) --
+
+    it('routes type:"markdown" insert to insertStructured instead of write', () => {
+      const writeAdpt = makeWriteAdapter();
+      const api = createDocumentApi({
+        find: makeFindAdapter(QUERY_RESULT),
+        getNode: makeGetNodeAdapter(PARAGRAPH_INFO),
+        getText: makeGetTextAdapter(),
+        info: makeInfoAdapter(),
+        capabilities: makeCapabilitiesAdapter(),
+        comments: makeCommentsAdapter(),
+        write: writeAdpt,
+        format: makeFormatAdapter(),
+        trackChanges: makeTrackChangesAdapter(),
+        create: makeCreateAdapter(),
+        lists: makeListsAdapter(),
+      });
+
+      api.insert({ value: '# Heading', type: 'markdown' });
+      expect(writeAdpt.insertStructured).toHaveBeenCalledTimes(1);
+      expect(writeAdpt.insertStructured).toHaveBeenCalledWith({ value: '# Heading', type: 'markdown' }, undefined);
+      expect(writeAdpt.write).not.toHaveBeenCalled();
+    });
+
+    it('routes type:"html" insert to insertStructured instead of write', () => {
+      const writeAdpt = makeWriteAdapter();
+      const api = createDocumentApi({
+        find: makeFindAdapter(QUERY_RESULT),
+        getNode: makeGetNodeAdapter(PARAGRAPH_INFO),
+        getText: makeGetTextAdapter(),
+        info: makeInfoAdapter(),
+        capabilities: makeCapabilitiesAdapter(),
+        comments: makeCommentsAdapter(),
+        write: writeAdpt,
+        format: makeFormatAdapter(),
+        trackChanges: makeTrackChangesAdapter(),
+        create: makeCreateAdapter(),
+        lists: makeListsAdapter(),
+      });
+
+      api.insert({ value: '<p>Hello</p>', type: 'html' });
+      expect(writeAdpt.insertStructured).toHaveBeenCalledTimes(1);
+      expect(writeAdpt.insertStructured).toHaveBeenCalledWith({ value: '<p>Hello</p>', type: 'html' }, undefined);
+      expect(writeAdpt.write).not.toHaveBeenCalled();
+    });
+
+    it('routes type:"text" (or unspecified type) insert to write, not insertStructured', () => {
+      const writeAdpt = makeWriteAdapter();
+      const api = createDocumentApi({
+        find: makeFindAdapter(QUERY_RESULT),
+        getNode: makeGetNodeAdapter(PARAGRAPH_INFO),
+        getText: makeGetTextAdapter(),
+        info: makeInfoAdapter(),
+        capabilities: makeCapabilitiesAdapter(),
+        comments: makeCommentsAdapter(),
+        write: writeAdpt,
+        format: makeFormatAdapter(),
+        trackChanges: makeTrackChangesAdapter(),
+        create: makeCreateAdapter(),
+        lists: makeListsAdapter(),
+      });
+
+      api.insert({ value: 'plain text', type: 'text' });
+      expect(writeAdpt.write).toHaveBeenCalledTimes(1);
+      expect(writeAdpt.insertStructured).not.toHaveBeenCalled();
+    });
+
+    it('forwards target to insertStructured for markdown insert', () => {
+      const writeAdpt = makeWriteAdapter();
+      const api = createDocumentApi({
+        find: makeFindAdapter(QUERY_RESULT),
+        getNode: makeGetNodeAdapter(PARAGRAPH_INFO),
+        getText: makeGetTextAdapter(),
+        info: makeInfoAdapter(),
+        capabilities: makeCapabilitiesAdapter(),
+        comments: makeCommentsAdapter(),
+        write: writeAdpt,
+        format: makeFormatAdapter(),
+        trackChanges: makeTrackChangesAdapter(),
+        create: makeCreateAdapter(),
+        lists: makeListsAdapter(),
+      });
+
+      const target = { kind: 'text', blockId: 'p1', range: { start: 0, end: 0 } } as const;
+      api.insert({ target, value: '**bold**', type: 'markdown' });
+      expect(writeAdpt.insertStructured).toHaveBeenCalledWith(
+        { target, value: '**bold**', type: 'markdown' },
+        undefined,
       );
     });
   });

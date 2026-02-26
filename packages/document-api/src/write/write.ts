@@ -1,5 +1,6 @@
 import type { TextAddress, TextMutationReceipt } from '../types/index.js';
 import type { BlockRelativeLocator, BlockRelativeRange } from './locator.js';
+import type { InsertInput } from '../insert/insert.js';
 
 export type ChangeMode = 'direct' | 'tracked';
 
@@ -49,6 +50,8 @@ export type WriteRequest = InsertWriteRequest | ReplaceWriteRequest | DeleteWrit
 
 export interface WriteAdapter {
   write(request: WriteRequest, options?: MutationOptions): TextMutationReceipt;
+  /** Structured insert for markdown/html content types. */
+  insertStructured(input: InsertInput, options?: MutationOptions): TextMutationReceipt;
 }
 
 export function normalizeMutationOptions(options?: MutationOptions): MutationOptions {

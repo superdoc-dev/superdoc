@@ -580,7 +580,7 @@ export const SUCCESS_SCENARIOS = {
         docPath,
         '--target-json',
         JSON.stringify(collapsed),
-        '--text',
+        '--value',
         'CONFORMANCE_INSERT',
         '--out',
         harness.createOutputPath('doc-insert-output'),

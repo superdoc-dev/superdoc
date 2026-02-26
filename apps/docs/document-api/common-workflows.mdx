@@ -127,7 +127,7 @@ if (caps.operations['format.apply'].available) {
 }
 
 if (caps.global.trackChanges.enabled) {
-  editor.doc.insert({ text: 'tracked' }, { changeMode: 'tracked' });
+  editor.doc.insert({ value: 'tracked' }, { changeMode: 'tracked' });
 }
 ```
 
@@ -137,7 +137,7 @@ Pass `dryRun: true` to validate an operation without applying it:
 
 ```ts
 const preview = editor.doc.insert(
-  { target, text: 'hello' },
+  { target, value: 'hello' },
   { dryRun: true },
 );
 // preview.success tells you whether the insert would succeed

@@ -294,7 +294,7 @@ export class ConformanceHarness {
         sourceDoc,
         '--target-json',
         JSON.stringify(collapsedTarget),
-        '--text',
+        '--value',
         'TRACKED_CONFORMANCE_TOKEN',
         '--change-mode',
         'tracked',

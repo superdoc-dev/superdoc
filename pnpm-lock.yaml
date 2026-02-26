@@ -822,6 +822,9 @@ importers:
       '@superdoc/layout-engine':
         specifier: workspace:*
         version: link:../../layout-engine
+      '@superdoc/measuring-dom':
+        specifier: workspace:*
+        version: link:../../measuring/dom
       '@superdoc/pm-adapter':
         specifier: workspace:*
         version: link:../../pm-adapter

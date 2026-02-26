@@ -1,5 +1,6 @@
 import { expect, type Page, type Locator } from '@playwright/test';
 import type { SuperDocFixture } from '../fixtures/superdoc.js';
+import { listComments } from './document-api.js';
 
 // ---------------------------------------------------------------------------
 // Selectors
@@ -43,4 +44,45 @@ export async function addCommentViaUI(
 
   await dialog.locator('.reply-btn-primary', { hasText: 'Comment' }).first().click();
   await superdoc.waitForStable();
+}
+
+/**
+ * Poll `listComments` until a comment anchored on `anchoredText` appears,
+ * then return its `commentId`.
+ */
+export async function getCommentId(
+  page: Page,
+  anchoredText: string,
+  { timeoutMs = 10_000 }: { timeoutMs?: number } = {},
+): Promise<string> {
+  await expect
+    .poll(
+      async () => {
+        const result = await listComments(page, { includeResolved: true });
+        return result.matches?.some((m: any) => m.anchoredText === anchoredText);
+      },
+      { timeout: timeoutMs },
+    )
+    .toBeTruthy();
+
+  const listed = await listComments(page, { includeResolved: true });
+  const match = listed.matches.find((m: any) => m.anchoredText === anchoredText);
+  if (!match?.commentId) {
+    throw new Error(`No commentId found for anchoredText "${anchoredText}"`);
+  }
+  return match.commentId;
+}
+
+/**
+ * Add a comment through the UI and return its `commentId`.
+ *
+ * Combines `addCommentViaUI` + `assertCommentHighlightExists` + `getCommentId`.
+ */
+export async function addCommentViaUIWithId(
+  superdoc: SuperDocFixture,
+  opts: { textToSelect: string; commentText: string; timeoutMs?: number },
+): Promise<string> {
+  await addCommentViaUI(superdoc, opts);
+  await superdoc.assertCommentHighlightExists({ text: opts.textToSelect, timeoutMs: opts.timeoutMs });
+  return getCommentId(superdoc.page, opts.textToSelect, { timeoutMs: opts.timeoutMs });
 }

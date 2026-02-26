@@ -20,10 +20,10 @@ test('editing a comment updates its text', async ({ superdoc }) => {
   await superdoc.waitForStable();
 
   const pendingDialog = superdoc.page.locator('.comments-dialog').first();
-  await pendingDialog.locator('.comment-entry .editor-element').first().click();
+  await pendingDialog.locator('.comment-entry .superdoc-field').first().click();
   await superdoc.page.keyboard.type('original comment');
   await superdoc.waitForStable();
-  await pendingDialog.locator('.sd-button.primary', { hasText: 'Comment' }).first().click();
+  await pendingDialog.locator('.reply-btn-primary', { hasText: 'Comment' }).first().click();
   await superdoc.waitForStable();
 
   // Click on the comment highlight to activate the floating dialog
@@ -45,7 +45,7 @@ test('editing a comment updates its text', async ({ superdoc }) => {
   await superdoc.waitForStable();
 
   // The comment should now be in edit mode
-  const editInput = activeDialog.locator('.comment-editing .editor-element');
+  const editInput = activeDialog.locator('.comment-editing .superdoc-field');
   await expect(editInput).toBeVisible({ timeout: 5_000 });
 
   // Select all text in the edit input, then type the replacement

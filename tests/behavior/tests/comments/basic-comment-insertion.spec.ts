@@ -71,13 +71,13 @@ test('add a comment via the UI bubble', async ({ superdoc }) => {
   await expect(dialog).toBeVisible({ timeout: 5_000 });
 
   // Type the comment text in the input
-  const commentInput = dialog.locator('.comment-entry .editor-element');
+  const commentInput = dialog.locator('.comment-entry .superdoc-field');
   await commentInput.click();
   await superdoc.page.keyboard.type('UI comment on selected text');
   await superdoc.waitForStable();
 
   // Submit by clicking the "Comment" button
-  await dialog.locator('.sd-button.primary', { hasText: 'Comment' }).first().click();
+  await dialog.locator('.reply-btn-primary', { hasText: 'Comment' }).first().click();
   await superdoc.waitForStable();
 
   // Comment highlight should exist on the word "comment"

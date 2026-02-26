@@ -30,15 +30,15 @@ test('SD-1739 tracked change replacement does not duplicate text in bubble', asy
   });
   await expect(dialog).toBeVisible({ timeout: 10_000 });
 
-  // "Added:" label with "redlining" text — must NOT contain "redliningg"
-  const addedText = dialog.locator('.tracked-change-text').first();
+  // "Replaced ... with ..." layout — the inserted text must NOT contain "redliningg"
+  const addedText = dialog.locator('.tracked-change-text.is-inserted');
   await expect(addedText).toContainText('redlining');
   // Verify exact text doesn't have the duplication bug
   const textContent = await addedText.textContent();
   expect(textContent).not.toContain('redliningg');
 
-  // "Deleted:" label with "editing" text
-  await expect(dialog.locator('.change-type', { hasText: 'Deleted' }).first()).toBeVisible();
+  // Deleted text should also be visible
+  await expect(dialog.locator('.tracked-change-text.is-deleted')).toBeVisible();
 
   await superdoc.snapshot('tracked-change-replacement-bubble');
 });

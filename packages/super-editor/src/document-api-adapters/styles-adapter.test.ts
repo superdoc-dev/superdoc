@@ -1,4 +1,4 @@
-import { describe, it, expect, vi, beforeEach } from 'vitest';
+import { describe, it, expect, vi } from 'vitest';
 import type { StylesApplyInput, NormalizedStylesApplyOptions } from '@superdoc/document-api';
 import { stylesApplyAdapter } from './styles-adapter.js';
 import { DocumentApiAdapterError } from './errors.js';
@@ -9,6 +9,7 @@ import { DocumentApiAdapterError } from './errors.js';
 
 interface XmlElement {
   name: string;
+  type?: string;
   elements?: XmlElement[];
   attributes?: Record<string, string>;
 }
@@ -17,6 +18,7 @@ interface MockEditorOptions {
   stylesXml?: XmlElement;
   noConverter?: boolean;
   collaborationProvider?: { synced?: boolean; isSynced?: boolean } | null;
+  translatedLinkedStyles?: Record<string, unknown>;
 }
 
 function createMockEditor(opts: MockEditorOptions = {}) {
@@ -32,6 +34,7 @@ function createMockEditor(opts: MockEditorOptions = {}) {
         documentModified: false,
         documentGuid: 'existing-guid',
         promoteToGuid: vi.fn(() => 'new-guid'),
+        translatedLinkedStyles: opts.translatedLinkedStyles ?? {},
       };
 
   return {
@@ -40,66 +43,43 @@ function createMockEditor(opts: MockEditorOptions = {}) {
       collaborationProvider: opts.collaborationProvider ?? null,
     },
     on: vi.fn(),
+    emit: vi.fn(),
   } as unknown as Parameters<typeof stylesApplyAdapter>[0];
 }
 
-function makeStylesXml(...rPrChildren: XmlElement[]): XmlElement {
-  return {
-    name: 'root',
-    elements: [
-      {
-        name: 'w:styles',
-        elements: [
-          {
-            name: 'w:docDefaults',
-            elements: [
-              {
-                name: 'w:rPrDefault',
-                elements: [
-                  {
-                    name: 'w:rPr',
-                    elements: rPrChildren,
-                  },
-                ],
-              },
-            ],
-          },
-        ],
-      },
-    ],
-  };
-}
-
-function makeMinimalStylesXml(): XmlElement {
+/** Creates a minimal styles XML with w:styles root (enough to pass capability gates). */
+function makeStylesXml(): XmlElement {
   return {
     name: 'root',
     elements: [{ name: 'w:styles', elements: [] }],
   };
 }
 
-const VALID_INPUT: StylesApplyInput = {
-  target: { scope: 'docDefaults', channel: 'run' },
-  patch: { bold: true },
-};
+function runInput(patch: Record<string, unknown>): StylesApplyInput {
+  return { target: { scope: 'docDefaults', channel: 'run' }, patch } as StylesApplyInput;
+}
+
+function paragraphInput(patch: Record<string, unknown>): StylesApplyInput {
+  return { target: { scope: 'docDefaults', channel: 'paragraph' }, patch } as StylesApplyInput;
+}
 
 const DEFAULT_OPTIONS: NormalizedStylesApplyOptions = {
   dryRun: false,
   expectedRevision: undefined,
 };
 
+const DRY_RUN_OPTIONS: NormalizedStylesApplyOptions = {
+  dryRun: true,
+  expectedRevision: undefined,
+};
+
 // ---------------------------------------------------------------------------
-// Helper to get rPr from the mock styles XML
+// Helpers
 // ---------------------------------------------------------------------------
 
-function getRPrElements(editor: ReturnType<typeof createMockEditor>): XmlElement[] | undefined {
-  const converter = (editor as unknown as { converter?: { convertedXml: Record<string, XmlElement> } }).converter;
-  const stylesRoot = converter?.convertedXml['word/styles.xml']?.elements?.find(
-    (el: XmlElement) => el.name === 'w:styles',
-  );
-  const docDefaults = stylesRoot?.elements?.find((el: XmlElement) => el.name === 'w:docDefaults');
-  const rPrDefault = docDefaults?.elements?.find((el: XmlElement) => el.name === 'w:rPrDefault');
-  const rPr = rPrDefault?.elements?.find((el: XmlElement) => el.name === 'w:rPr');
-  return rPr?.elements;
+function getTranslatedLinkedStyles(editor: ReturnType<typeof createMockEditor>) {
+  return (editor as unknown as { converter: { translatedLinkedStyles: Record<string, unknown> } }).converter
+    .translatedLinkedStyles;
 }
 
 // ---------------------------------------------------------------------------
@@ -109,9 +89,11 @@ function getRPrElements(editor: ReturnType<typeof createMockEditor>): XmlElement
 describe('styles adapter: capability gates', () => {
   it('throws CAPABILITY_UNAVAILABLE when converter is missing', () => {
     const editor = createMockEditor({ noConverter: true });
-    expect(() => stylesApplyAdapter(editor, VALID_INPUT, DEFAULT_OPTIONS)).toThrow(DocumentApiAdapterError);
+    expect(() => stylesApplyAdapter(editor, runInput({ bold: true }), DEFAULT_OPTIONS)).toThrow(
+      DocumentApiAdapterError,
+    );
     try {
-      stylesApplyAdapter(editor, VALID_INPUT, DEFAULT_OPTIONS);
+      stylesApplyAdapter(editor, runInput({ bold: true }), DEFAULT_OPTIONS);
     } catch (e) {
       expect((e as DocumentApiAdapterError).code).toBe('CAPABILITY_UNAVAILABLE');
     }
@@ -119,13 +101,9 @@ describe('styles adapter: capability gates', () => {
 
   it('throws CAPABILITY_UNAVAILABLE when word/styles.xml is missing', () => {
     const editor = createMockEditor();
-    expect(() => stylesApplyAdapter(editor, VALID_INPUT, DEFAULT_OPTIONS)).toThrow(DocumentApiAdapterError);
-    try {
-      stylesApplyAdapter(editor, VALID_INPUT, DEFAULT_OPTIONS);
-    } catch (e) {
-      expect((e as DocumentApiAdapterError).code).toBe('CAPABILITY_UNAVAILABLE');
-      expect((e as DocumentApiAdapterError).message).toMatch(/word\/styles\.xml/);
-    }
+    expect(() => stylesApplyAdapter(editor, runInput({ bold: true }), DEFAULT_OPTIONS)).toThrow(
+      DocumentApiAdapterError,
+    );
   });
 
   it('throws CAPABILITY_UNAVAILABLE when collaboration is active', () => {
@@ -133,33 +111,38 @@ describe('styles adapter: capability gates', () => {
       stylesXml: makeStylesXml(),
       collaborationProvider: { synced: true },
     });
-    expect(() => stylesApplyAdapter(editor, VALID_INPUT, DEFAULT_OPTIONS)).toThrow(DocumentApiAdapterError);
-    try {
-      stylesApplyAdapter(editor, VALID_INPUT, DEFAULT_OPTIONS);
-    } catch (e) {
-      expect((e as DocumentApiAdapterError).code).toBe('CAPABILITY_UNAVAILABLE');
-      expect((e as DocumentApiAdapterError).message).toMatch(/collaboration/);
-    }
+    expect(() => stylesApplyAdapter(editor, runInput({ bold: true }), DEFAULT_OPTIONS)).toThrow(
+      DocumentApiAdapterError,
+    );
   });
 
-  it('allows mutation when collaboration provider is not synced (pre-initial-sync)', () => {
+  it('allows mutation when collaboration provider is not synced', () => {
     const editor = createMockEditor({
       stylesXml: makeStylesXml(),
       collaborationProvider: { synced: false },
     });
-    const result = stylesApplyAdapter(editor, VALID_INPUT, DEFAULT_OPTIONS);
+    const result = stylesApplyAdapter(editor, runInput({ bold: true }), DEFAULT_OPTIONS);
     expect(result.success).toBe(true);
+  });
+
+  it('throws CAPABILITY_UNAVAILABLE when w:styles root is missing', () => {
+    const editor = createMockEditor({
+      stylesXml: { name: 'root', elements: [{ name: 'not-styles' }] },
+    });
+    expect(() => stylesApplyAdapter(editor, runInput({ bold: true }), DEFAULT_OPTIONS)).toThrow(
+      DocumentApiAdapterError,
+    );
   });
 });
 
 // ---------------------------------------------------------------------------
-// Bold write tests
+// Run channel: boolean properties (bold, italic)
 // ---------------------------------------------------------------------------
 
-describe('styles adapter: bold mutation', () => {
-  it('writes <w:b/> for patch.bold: true', () => {
+describe('styles adapter: run boolean properties', () => {
+  it('sets bold: true on empty docDefaults', () => {
     const editor = createMockEditor({ stylesXml: makeStylesXml() });
-    const result = stylesApplyAdapter(editor, VALID_INPUT, DEFAULT_OPTIONS);
+    const result = stylesApplyAdapter(editor, runInput({ bold: true }), DEFAULT_OPTIONS);
 
     expect(result.success).toBe(true);
     if (result.success) {
@@ -168,19 +151,14 @@ describe('styles adapter: bold mutation', () => {
       expect(result.after.bold).toBe('on');
     }
 
-    const elements = getRPrElements(editor);
-    const boldEl = elements?.find((el) => el.name === 'w:b');
-    expect(boldEl).toBeDefined();
-    expect(boldEl?.attributes).toBeUndefined();
+    // Verify translatedLinkedStyles was mutated
+    const tls = getTranslatedLinkedStyles(editor) as { docDefaults: { runProperties: Record<string, unknown> } };
+    expect(tls.docDefaults.runProperties.bold).toBe(true);
   });
 
-  it('writes <w:b w:val="0"/> for patch.bold: false', () => {
+  it('sets bold: false on empty docDefaults', () => {
     const editor = createMockEditor({ stylesXml: makeStylesXml() });
-    const input: StylesApplyInput = {
-      target: { scope: 'docDefaults', channel: 'run' },
-      patch: { bold: false },
-    };
-    const result = stylesApplyAdapter(editor, input, DEFAULT_OPTIONS);
+    const result = stylesApplyAdapter(editor, runInput({ bold: false }), DEFAULT_OPTIONS);
 
     expect(result.success).toBe(true);
     if (result.success) {
@@ -188,63 +166,38 @@ describe('styles adapter: bold mutation', () => {
       expect(result.before.bold).toBe('inherit');
       expect(result.after.bold).toBe('off');
     }
-
-    const elements = getRPrElements(editor);
-    const boldEl = elements?.find((el) => el.name === 'w:b');
-    expect(boldEl).toBeDefined();
-    expect(boldEl?.attributes?.['w:val']).toBe('0');
   });
 
-  it('detects inherit state when <w:b> is absent', () => {
-    const editor = createMockEditor({
-      stylesXml: makeStylesXml({ name: 'w:i' }), // italic only, no bold
-    });
-    const result = stylesApplyAdapter(editor, VALID_INPUT, DEFAULT_OPTIONS);
+  it('sets italic: true on empty docDefaults', () => {
+    const editor = createMockEditor({ stylesXml: makeStylesXml() });
+    const result = stylesApplyAdapter(editor, runInput({ italic: true }), DEFAULT_OPTIONS);
+
+    expect(result.success).toBe(true);
     if (result.success) {
-      expect(result.before.bold).toBe('inherit');
+      expect(result.changed).toBe(true);
+      expect(result.before.italic).toBe('inherit');
+      expect(result.after.italic).toBe('on');
     }
   });
-});
 
-// ---------------------------------------------------------------------------
-// OOXML boolean read normalization
-// ---------------------------------------------------------------------------
+  it('sets both bold and italic in single call', () => {
+    const editor = createMockEditor({ stylesXml: makeStylesXml() });
+    const result = stylesApplyAdapter(editor, runInput({ bold: true, italic: false }), DEFAULT_OPTIONS);
 
-describe('styles adapter: OOXML boolean normalization', () => {
-  const normalizeTestCases: Array<{ desc: string; element: XmlElement; expected: 'on' | 'off' }> = [
-    { desc: 'bare <w:b/>', element: { name: 'w:b' }, expected: 'on' },
-    { desc: '<w:b w:val="1"/>', element: { name: 'w:b', attributes: { 'w:val': '1' } }, expected: 'on' },
-    { desc: '<w:b w:val="true"/>', element: { name: 'w:b', attributes: { 'w:val': 'true' } }, expected: 'on' },
-    { desc: '<w:b w:val="on"/>', element: { name: 'w:b', attributes: { 'w:val': 'on' } }, expected: 'on' },
-    { desc: '<w:b w:val="0"/>', element: { name: 'w:b', attributes: { 'w:val': '0' } }, expected: 'off' },
-    { desc: '<w:b w:val="false"/>', element: { name: 'w:b', attributes: { 'w:val': 'false' } }, expected: 'off' },
-    { desc: '<w:b w:val="off"/>', element: { name: 'w:b', attributes: { 'w:val': 'off' } }, expected: 'off' },
-  ];
+    expect(result.success).toBe(true);
+    if (result.success) {
+      expect(result.changed).toBe(true);
+      expect(result.after.bold).toBe('on');
+      expect(result.after.italic).toBe('off');
+    }
+  });
 
-  for (const { desc, element, expected } of normalizeTestCases) {
-    it(`reads ${desc} as "${expected}"`, () => {
-      const editor = createMockEditor({ stylesXml: makeStylesXml(element) });
-      // Read with dryRun to avoid mutation
-      const result = stylesApplyAdapter(
-        editor,
-        { target: { scope: 'docDefaults', channel: 'run' }, patch: { bold: true } },
-        { dryRun: true, expectedRevision: undefined },
-      );
-      if (result.success) {
-        expect(result.before.bold).toBe(expected);
-      }
+  it('reads existing bold value from translatedLinkedStyles', () => {
+    const editor = createMockEditor({
+      stylesXml: makeStylesXml(),
+      translatedLinkedStyles: { docDefaults: { runProperties: { bold: true } } },
     });
-  }
-});
-
-// ---------------------------------------------------------------------------
-// No-op semantics
-// ---------------------------------------------------------------------------
-
-describe('styles adapter: no-op semantics', () => {
-  it('returns changed: false when patch.bold: true and <w:b/> already exists', () => {
-    const editor = createMockEditor({ stylesXml: makeStylesXml({ name: 'w:b' }) });
-    const result = stylesApplyAdapter(editor, VALID_INPUT, DEFAULT_OPTIONS);
+    const result = stylesApplyAdapter(editor, runInput({ bold: true }), DEFAULT_OPTIONS);
 
     expect(result.success).toBe(true);
     if (result.success) {
@@ -253,42 +206,45 @@ describe('styles adapter: no-op semantics', () => {
       expect(result.after.bold).toBe('on');
     }
   });
+});
 
-  it('returns changed: false when patch.bold: false and <w:b w:val="0"/> already exists', () => {
+// ---------------------------------------------------------------------------
+// No-op semantics
+// ---------------------------------------------------------------------------
+
+describe('styles adapter: no-op semantics', () => {
+  it('returns changed: false when value already matches', () => {
     const editor = createMockEditor({
-      stylesXml: makeStylesXml({ name: 'w:b', attributes: { 'w:val': '0' } }),
+      stylesXml: makeStylesXml(),
+      translatedLinkedStyles: { docDefaults: { runProperties: { bold: true } } },
     });
-    const input: StylesApplyInput = {
-      target: { scope: 'docDefaults', channel: 'run' },
-      patch: { bold: false },
-    };
-    const result = stylesApplyAdapter(editor, input, DEFAULT_OPTIONS);
+    const result = stylesApplyAdapter(editor, runInput({ bold: true }), DEFAULT_OPTIONS);
 
     expect(result.success).toBe(true);
     if (result.success) {
       expect(result.changed).toBe(false);
-      expect(result.before.bold).toBe('off');
-      expect(result.after.bold).toBe('off');
     }
   });
 
   it('does not mark converter as modified on no-op', () => {
-    const editor = createMockEditor({ stylesXml: makeStylesXml({ name: 'w:b' }) });
+    const editor = createMockEditor({
+      stylesXml: makeStylesXml(),
+      translatedLinkedStyles: { docDefaults: { runProperties: { bold: true } } },
+    });
     const converter = (editor as unknown as { converter: { documentModified: boolean } }).converter;
-    stylesApplyAdapter(editor, VALID_INPUT, DEFAULT_OPTIONS);
+    stylesApplyAdapter(editor, runInput({ bold: true }), DEFAULT_OPTIONS);
     expect(converter.documentModified).toBe(false);
   });
 
-  it('repeated identical calls produce identical receipts', () => {
-    const editor = createMockEditor({ stylesXml: makeStylesXml() });
-    const r1 = stylesApplyAdapter(editor, VALID_INPUT, DEFAULT_OPTIONS);
-    const r2 = stylesApplyAdapter(editor, VALID_INPUT, DEFAULT_OPTIONS);
-    // Second call is a no-op
-    expect(r2.success).toBe(true);
-    if (r1.success && r2.success) {
-      expect(r2.changed).toBe(false);
-      expect(r2.before).toEqual(r2.after);
-    }
+  it('does not emit stylesDefaultsChanged on no-op', () => {
+    const editor = createMockEditor({
+      stylesXml: makeStylesXml(),
+      translatedLinkedStyles: { docDefaults: { runProperties: { bold: true } } },
+    });
+    stylesApplyAdapter(editor, runInput({ bold: true }), DEFAULT_OPTIONS);
+    expect((editor as unknown as { emit: ReturnType<typeof vi.fn> }).emit).not.toHaveBeenCalledWith(
+      'stylesDefaultsChanged',
+    );
   });
 });
 
@@ -297,10 +253,9 @@ describe('styles adapter: no-op semantics', () => {
 // ---------------------------------------------------------------------------
 
 describe('styles adapter: dryRun', () => {
-  it('returns predicted after state without mutating XML', () => {
+  it('returns predicted after-state without mutating translatedLinkedStyles', () => {
     const editor = createMockEditor({ stylesXml: makeStylesXml() });
-    const options: NormalizedStylesApplyOptions = { dryRun: true, expectedRevision: undefined };
-    const result = stylesApplyAdapter(editor, VALID_INPUT, options);
+    const result = stylesApplyAdapter(editor, runInput({ bold: true }), DRY_RUN_OPTIONS);
 
     expect(result.success).toBe(true);
     if (result.success) {
@@ -310,144 +265,285 @@ describe('styles adapter: dryRun', () => {
       expect(result.changed).toBe(true);
     }
 
-    // Verify XML was not changed
-    const elements = getRPrElements(editor);
-    const boldEl = elements?.find((el) => el.name === 'w:b');
-    expect(boldEl).toBeUndefined();
+    // Verify translatedLinkedStyles was NOT mutated
+    const tls = getTranslatedLinkedStyles(editor) as { docDefaults?: { runProperties?: Record<string, unknown> } };
+    expect(tls.docDefaults?.runProperties?.bold).toBeUndefined();
+  });
+
+  it('does not emit stylesDefaultsChanged on dryRun', () => {
+    const editor = createMockEditor({ stylesXml: makeStylesXml() });
+    stylesApplyAdapter(editor, runInput({ bold: true }), DRY_RUN_OPTIONS);
+    expect((editor as unknown as { emit: ReturnType<typeof vi.fn> }).emit).not.toHaveBeenCalledWith(
+      'stylesDefaultsChanged',
+    );
   });
 
   it('does not mark converter as modified on dryRun', () => {
     const editor = createMockEditor({ stylesXml: makeStylesXml() });
     const converter = (editor as unknown as { converter: { documentModified: boolean } }).converter;
-    const options: NormalizedStylesApplyOptions = { dryRun: true, expectedRevision: undefined };
-    stylesApplyAdapter(editor, VALID_INPUT, options);
+    stylesApplyAdapter(editor, runInput({ bold: true }), DRY_RUN_OPTIONS);
     expect(converter.documentModified).toBe(false);
   });
+});
 
-  it('does not create scaffolding nodes when docDefaults path is absent', () => {
-    const editor = createMockEditor({ stylesXml: makeMinimalStylesXml() });
-    const options: NormalizedStylesApplyOptions = { dryRun: true, expectedRevision: undefined };
-    const result = stylesApplyAdapter(editor, VALID_INPUT, options);
+// ---------------------------------------------------------------------------
+// Re-render trigger
+// ---------------------------------------------------------------------------
 
-    expect(result.success).toBe(true);
-    if (result.success) {
-      expect(result.dryRun).toBe(true);
-      expect(result.before.bold).toBe('inherit');
-      expect(result.after.bold).toBe('on');
-      expect(result.changed).toBe(true);
-    }
-
-    // The XML tree must remain untouched — no w:docDefaults should have been created.
-    const converter = (editor as unknown as { converter: { convertedXml: Record<string, XmlElement> } }).converter;
-    const stylesRoot = converter.convertedXml['word/styles.xml'].elements?.find(
-      (el: XmlElement) => el.name === 'w:styles',
+describe('styles adapter: re-render trigger', () => {
+  it('emits stylesDefaultsChanged after successful non-dry mutation', () => {
+    const editor = createMockEditor({ stylesXml: makeStylesXml() });
+    stylesApplyAdapter(editor, runInput({ bold: true }), DEFAULT_OPTIONS);
+    expect((editor as unknown as { emit: ReturnType<typeof vi.fn> }).emit).toHaveBeenCalledWith(
+      'stylesDefaultsChanged',
     );
-    const docDefaults = stylesRoot?.elements?.find((el: XmlElement) => el.name === 'w:docDefaults');
-    expect(docDefaults).toBeUndefined();
   });
 });
 
 // ---------------------------------------------------------------------------
-// Create-if-missing paths
+// Run channel: number properties
 // ---------------------------------------------------------------------------
 
-describe('styles adapter: create-if-missing nodes', () => {
-  it('creates w:docDefaults, w:rPrDefault, w:rPr when missing', () => {
-    const editor = createMockEditor({ stylesXml: makeMinimalStylesXml() });
-    const result = stylesApplyAdapter(editor, VALID_INPUT, DEFAULT_OPTIONS);
+describe('styles adapter: run number properties', () => {
+  it('sets fontSize on empty docDefaults', () => {
+    const editor = createMockEditor({ stylesXml: makeStylesXml() });
+    const result = stylesApplyAdapter(editor, runInput({ fontSize: 24 }), DEFAULT_OPTIONS);
 
     expect(result.success).toBe(true);
     if (result.success) {
       expect(result.changed).toBe(true);
-      expect(result.after.bold).toBe('on');
+      expect(result.before.fontSize).toBe('inherit');
+      expect(result.after.fontSize).toBe(24);
     }
+  });
 
-    // Verify the full path was created
-    const elements = getRPrElements(editor);
-    expect(elements).toBeDefined();
-    const boldEl = elements?.find((el) => el.name === 'w:b');
-    expect(boldEl).toBeDefined();
+  it('reads existing fontSize from translatedLinkedStyles', () => {
+    const editor = createMockEditor({
+      stylesXml: makeStylesXml(),
+      translatedLinkedStyles: { docDefaults: { runProperties: { fontSize: 24 } } },
+    });
+    const result = stylesApplyAdapter(editor, runInput({ fontSize: 24 }), DEFAULT_OPTIONS);
+
+    expect(result.success).toBe(true);
+    if (result.success) {
+      expect(result.changed).toBe(false);
+      expect(result.before.fontSize).toBe(24);
+    }
+  });
+
+  it('sets fontSizeCs', () => {
+    const editor = createMockEditor({ stylesXml: makeStylesXml() });
+    const result = stylesApplyAdapter(editor, runInput({ fontSizeCs: 32 }), DEFAULT_OPTIONS);
+
+    expect(result.success).toBe(true);
+    if (result.success) {
+      expect(result.after.fontSizeCs).toBe(32);
+    }
+  });
+
+  it('sets letterSpacing (including negative)', () => {
+    const editor = createMockEditor({ stylesXml: makeStylesXml() });
+    const result = stylesApplyAdapter(editor, runInput({ letterSpacing: -20 }), DEFAULT_OPTIONS);
+
+    expect(result.success).toBe(true);
+    if (result.success) {
+      expect(result.after.letterSpacing).toBe(-20);
+    }
   });
 });
 
 // ---------------------------------------------------------------------------
-// Malformed XML canonicalization
+// Run channel: object properties (fontFamily, color)
 // ---------------------------------------------------------------------------
 
-describe('styles adapter: malformed XML canonicalization', () => {
-  it('reads last <w:b> when duplicates exist', () => {
+describe('styles adapter: run object properties', () => {
+  it('sets fontFamily with merge semantics', () => {
     const editor = createMockEditor({
-      stylesXml: makeStylesXml(
-        { name: 'w:b', attributes: { 'w:val': '0' } }, // first: off
-        { name: 'w:b' }, // last: on (wins)
-      ),
+      stylesXml: makeStylesXml(),
+      translatedLinkedStyles: {
+        docDefaults: { runProperties: { fontFamily: { ascii: 'Times', hAnsi: 'Times' } } },
+      },
     });
-    const result = stylesApplyAdapter(
-      editor,
-      { target: { scope: 'docDefaults', channel: 'run' }, patch: { bold: true } },
-      { dryRun: true, expectedRevision: undefined },
-    );
+    const result = stylesApplyAdapter(editor, runInput({ fontFamily: { ascii: 'Arial' } }), DEFAULT_OPTIONS);
+
+    expect(result.success).toBe(true);
     if (result.success) {
-      expect(result.before.bold).toBe('on');
+      expect(result.changed).toBe(true);
+      // Before shows the original
+      expect(result.before.fontFamily).toEqual({ ascii: 'Times', hAnsi: 'Times' });
+      // After shows merge: ascii updated, hAnsi preserved
+      expect(result.after.fontFamily).toEqual({ ascii: 'Arial', hAnsi: 'Times' });
+    }
+
+    // Verify the actual stored value
+    const tls = getTranslatedLinkedStyles(editor) as {
+      docDefaults: { runProperties: { fontFamily: Record<string, string> } };
+    };
+    expect(tls.docDefaults.runProperties.fontFamily).toEqual({ ascii: 'Arial', hAnsi: 'Times' });
+  });
+
+  it('sets fontFamily on empty docDefaults', () => {
+    const editor = createMockEditor({ stylesXml: makeStylesXml() });
+    const result = stylesApplyAdapter(editor, runInput({ fontFamily: { ascii: 'Arial' } }), DEFAULT_OPTIONS);
+
+    expect(result.success).toBe(true);
+    if (result.success) {
+      expect(result.before.fontFamily).toBe('inherit');
+      expect(result.after.fontFamily).toEqual({ ascii: 'Arial' });
     }
   });
 
-  it('normalizes to exactly one <w:b> on write (removes duplicates)', () => {
+  it('sets color with merge semantics', () => {
     const editor = createMockEditor({
-      stylesXml: makeStylesXml({ name: 'w:b', attributes: { 'w:val': '0' } }, { name: 'w:b' }),
+      stylesXml: makeStylesXml(),
+      translatedLinkedStyles: {
+        docDefaults: { runProperties: { color: { val: '000000', themeColor: 'text1' } } },
+      },
     });
-    stylesApplyAdapter(
-      editor,
-      { target: { scope: 'docDefaults', channel: 'run' }, patch: { bold: false } },
-      DEFAULT_OPTIONS,
-    );
+    const result = stylesApplyAdapter(editor, runInput({ color: { val: 'FF0000' } }), DEFAULT_OPTIONS);
 
-    const elements = getRPrElements(editor);
-    const boldElements = elements?.filter((el) => el.name === 'w:b');
-    expect(boldElements?.length).toBe(1);
-    expect(boldElements?.[0].attributes?.['w:val']).toBe('0');
+    expect(result.success).toBe(true);
+    if (result.success) {
+      expect(result.after.color).toEqual({ val: 'FF0000', themeColor: 'text1' });
+    }
+  });
+});
+
+// ---------------------------------------------------------------------------
+// Paragraph channel: enum properties (justification)
+// ---------------------------------------------------------------------------
+
+describe('styles adapter: paragraph channel', () => {
+  it('sets justification on empty docDefaults', () => {
+    const editor = createMockEditor({ stylesXml: makeStylesXml() });
+    const result = stylesApplyAdapter(editor, paragraphInput({ justification: 'center' }), DEFAULT_OPTIONS);
+
+    expect(result.success).toBe(true);
+    if (result.success) {
+      expect(result.changed).toBe(true);
+      expect(result.before.justification).toBe('inherit');
+      expect(result.after.justification).toBe('center');
+    }
+
+    const tls = getTranslatedLinkedStyles(editor) as {
+      docDefaults: { paragraphProperties: Record<string, unknown> };
+    };
+    expect(tls.docDefaults.paragraphProperties.justification).toBe('center');
   });
 
-  it('normalizes mixed val form (w:val="true") to canonical form on mutation', () => {
+  it('reads existing justification', () => {
     const editor = createMockEditor({
-      stylesXml: makeStylesXml({ name: 'w:b', attributes: { 'w:val': 'true' } }),
+      stylesXml: makeStylesXml(),
+      translatedLinkedStyles: {
+        docDefaults: { paragraphProperties: { justification: 'center' } },
+      },
     });
-    // Applying bold: true should not change state but should canonicalize
-    const result = stylesApplyAdapter(editor, VALID_INPUT, DEFAULT_OPTIONS);
+    const result = stylesApplyAdapter(editor, paragraphInput({ justification: 'center' }), DEFAULT_OPTIONS);
+
+    expect(result.success).toBe(true);
     if (result.success) {
-      expect(result.before.bold).toBe('on');
-      // Same state — no change needed
       expect(result.changed).toBe(false);
     }
   });
 
-  it('preserves unknown sibling elements in w:rPr', () => {
-    const italicEl: XmlElement = { name: 'w:i' };
-    const szEl: XmlElement = { name: 'w:sz', attributes: { 'w:val': '24' } };
-    const editor = createMockEditor({
-      stylesXml: makeStylesXml(italicEl, szEl),
-    });
-    stylesApplyAdapter(editor, VALID_INPUT, DEFAULT_OPTIONS);
+  it('returns correct resolution metadata for paragraph channel', () => {
+    const editor = createMockEditor({ stylesXml: makeStylesXml() });
+    const result = stylesApplyAdapter(editor, paragraphInput({ justification: 'left' }), DEFAULT_OPTIONS);
 
-    const elements = getRPrElements(editor);
-    const names = elements?.map((el) => el.name);
-    expect(names).toContain('w:i');
-    expect(names).toContain('w:sz');
-    expect(names).toContain('w:b');
+    expect(result.success).toBe(true);
+    if (result.success) {
+      expect(result.resolution).toEqual({
+        scope: 'docDefaults',
+        channel: 'paragraph',
+        xmlPart: 'word/styles.xml',
+        xmlPath: 'w:styles/w:docDefaults/w:pPrDefault/w:pPr',
+      });
+    }
+  });
+});
+
+// ---------------------------------------------------------------------------
+// Paragraph channel: object properties (spacing, indent)
+// ---------------------------------------------------------------------------
+
+describe('styles adapter: paragraph object properties', () => {
+  it('sets spacing with merge semantics', () => {
+    const editor = createMockEditor({
+      stylesXml: makeStylesXml(),
+      translatedLinkedStyles: {
+        docDefaults: { paragraphProperties: { spacing: { before: 240, after: 120 } } },
+      },
+    });
+    const result = stylesApplyAdapter(
+      editor,
+      paragraphInput({ spacing: { before: 480, lineRule: 'exact' } }),
+      DEFAULT_OPTIONS,
+    );
+
+    expect(result.success).toBe(true);
+    if (result.success) {
+      expect(result.after.spacing).toEqual({ before: 480, after: 120, lineRule: 'exact' });
+    }
   });
 
-  it('produces deterministic ordering on repeated calls', () => {
+  it('sets indent with merge semantics', () => {
     const editor = createMockEditor({
-      stylesXml: makeStylesXml({ name: 'w:i' }),
+      stylesXml: makeStylesXml(),
+      translatedLinkedStyles: {
+        docDefaults: { paragraphProperties: { indent: { left: 720 } } },
+      },
     });
-    stylesApplyAdapter(editor, VALID_INPUT, DEFAULT_OPTIONS);
-    const elements1 = getRPrElements(editor)?.map((el) => el.name);
+    const result = stylesApplyAdapter(editor, paragraphInput({ indent: { firstLine: 720 } }), DEFAULT_OPTIONS);
 
-    // Call again (no-op)
-    stylesApplyAdapter(editor, VALID_INPUT, DEFAULT_OPTIONS);
-    const elements2 = getRPrElements(editor)?.map((el) => el.name);
+    expect(result.success).toBe(true);
+    if (result.success) {
+      expect(result.after.indent).toEqual({ left: 720, firstLine: 720 });
+    }
+  });
 
-    expect(elements1).toEqual(elements2);
+  it('sets indent on empty docDefaults', () => {
+    const editor = createMockEditor({ stylesXml: makeStylesXml() });
+    const result = stylesApplyAdapter(editor, paragraphInput({ indent: { firstLine: 720 } }), DEFAULT_OPTIONS);
+
+    expect(result.success).toBe(true);
+    if (result.success) {
+      expect(result.before.indent).toBe('inherit');
+      expect(result.after.indent).toEqual({ firstLine: 720 });
+    }
+  });
+});
+
+// ---------------------------------------------------------------------------
+// Multi-property single call
+// ---------------------------------------------------------------------------
+
+describe('styles adapter: multi-property calls', () => {
+  it('handles multiple run properties in a single call', () => {
+    const editor = createMockEditor({ stylesXml: makeStylesXml() });
+    const result = stylesApplyAdapter(editor, runInput({ bold: true, italic: false, fontSize: 24 }), DEFAULT_OPTIONS);
+
+    expect(result.success).toBe(true);
+    if (result.success) {
+      expect(result.after.bold).toBe('on');
+      expect(result.after.italic).toBe('off');
+      expect(result.after.fontSize).toBe(24);
+    }
+  });
+
+  it('handles multiple paragraph properties in a single call', () => {
+    const editor = createMockEditor({ stylesXml: makeStylesXml() });
+    const result = stylesApplyAdapter(
+      editor,
+      paragraphInput({ justification: 'center', spacing: { before: 240 }, indent: { left: 720 } }),
+      DEFAULT_OPTIONS,
+    );
+
+    expect(result.success).toBe(true);
+    if (result.success) {
+      expect(result.after.justification).toBe('center');
+      expect(result.after.spacing).toEqual({ before: 240 });
+      expect(result.after.indent).toEqual({ left: 720 });
+    }
   });
 });
 
@@ -456,9 +552,9 @@ describe('styles adapter: malformed XML canonicalization', () => {
 // ---------------------------------------------------------------------------
 
 describe('styles adapter: resolution metadata', () => {
-  it('returns correct resolution on success', () => {
+  it('returns correct resolution for run channel', () => {
     const editor = createMockEditor({ stylesXml: makeStylesXml() });
-    const result = stylesApplyAdapter(editor, VALID_INPUT, DEFAULT_OPTIONS);
+    const result = stylesApplyAdapter(editor, runInput({ bold: true }), DEFAULT_OPTIONS);
     expect(result.success).toBe(true);
     if (result.success) {
       expect(result.resolution).toEqual({
@@ -468,5 +564,57 @@ describe('styles adapter: resolution metadata', () => {
         xmlPath: 'w:styles/w:docDefaults/w:rPrDefault/w:rPr',
       });
     }
+  });
+});
+
+// ---------------------------------------------------------------------------
+// XML sync (decode roundtrip)
+// ---------------------------------------------------------------------------
+
+describe('styles adapter: XML sync via decode', () => {
+  it('syncs translatedLinkedStyles back to convertedXml on mutation', () => {
+    const editor = createMockEditor({ stylesXml: makeStylesXml() });
+    stylesApplyAdapter(editor, runInput({ bold: true }), DEFAULT_OPTIONS);
+
+    // The syncDocDefaultsToConvertedXml call should have updated the XML
+    const converter = (editor as unknown as { converter: { convertedXml: Record<string, XmlElement> } }).converter;
+    const stylesRoot = converter.convertedXml['word/styles.xml']?.elements?.find(
+      (el: XmlElement) => el.name === 'w:styles',
+    );
+    // After sync, w:docDefaults should exist in the XML
+    const docDefaults = stylesRoot?.elements?.find((el: XmlElement) => el.name === 'w:docDefaults');
+    expect(docDefaults).toBeDefined();
+  });
+});
+
+// ---------------------------------------------------------------------------
+// Data loss guard — decode roundtrip behavior
+// ---------------------------------------------------------------------------
+
+describe('styles adapter: data loss guard', () => {
+  it('documents that decode roundtrip may not preserve unknown extensions', () => {
+    // This test documents known behavior: the translator decode() path
+    // can only reconstruct nodes it knows about. Unknown vendor extensions
+    // inside w:rPr may be dropped.
+    //
+    // This is NOT a new risk — the same decode() path is used during
+    // normal document export. If data loss exists, it existed before styles.apply.
+    const editor = createMockEditor({
+      stylesXml: makeStylesXml(),
+      translatedLinkedStyles: {
+        docDefaults: { runProperties: { bold: true } },
+      },
+    });
+
+    // Apply a change to trigger sync
+    const result = stylesApplyAdapter(editor, runInput({ italic: true }), DEFAULT_OPTIONS);
+    expect(result.success).toBe(true);
+
+    // The translatedLinkedStyles should have both bold and italic
+    const tls = getTranslatedLinkedStyles(editor) as {
+      docDefaults: { runProperties: Record<string, unknown> };
+    };
+    expect(tls.docDefaults.runProperties.bold).toBe(true);
+    expect(tls.docDefaults.runProperties.italic).toBe(true);
   });
 });

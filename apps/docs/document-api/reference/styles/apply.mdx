@@ -20,17 +20,15 @@ description: Reference for styles.apply
 
 ## Input fields
 
-| Field | Type | Required | Description |
-| --- | --- | --- | --- |
-| `patch` | object | yes |  |
-| `target` | object(scope="docDefaults") | yes |  |
+_No fields._
 
 ### Example request
 
 ```json
 {
   "patch": {
-    "bold": true
+    "bold": true,
+    "italic": true
   },
   "target": {
     "channel": "run",
@@ -48,10 +46,12 @@ _No fields._
 ```json
 {
   "after": {
-    "bold": "on"
+    "bold": "on",
+    "italic": "on"
   },
   "before": {
-    "bold": "on"
+    "bold": "on",
+    "italic": "on"
   },
   "changed": true,
   "dryRun": true,
@@ -81,40 +81,232 @@ _No fields._
 <Accordion title="Raw input schema">
 ```json
 {
-  "additionalProperties": false,
-  "properties": {
-    "patch": {
-      "additionalProperties": false,
-      "minProperties": 1,
-      "properties": {
-        "bold": {
-          "type": "boolean"
-        }
-      },
-      "type": "object"
-    },
-    "target": {
+  "oneOf": [
+    {
       "additionalProperties": false,
       "properties": {
-        "channel": {
-          "const": "run"
+        "patch": {
+          "additionalProperties": false,
+          "minProperties": 1,
+          "properties": {
+            "bold": {
+              "type": "boolean"
+            },
+            "color": {
+              "additionalProperties": false,
+              "minProperties": 1,
+              "properties": {
+                "themeColor": {
+                  "type": "string"
+                },
+                "themeShade": {
+                  "type": "string"
+                },
+                "themeTint": {
+                  "type": "string"
+                },
+                "val": {
+                  "type": "string"
+                }
+              },
+              "type": "object"
+            },
+            "fontFamily": {
+              "additionalProperties": false,
+              "minProperties": 1,
+              "properties": {
+                "ascii": {
+                  "type": "string"
+                },
+                "asciiTheme": {
+                  "type": "string"
+                },
+                "cs": {
+                  "type": "string"
+                },
+                "cstheme": {
+                  "type": "string"
+                },
+                "eastAsia": {
+                  "type": "string"
+                },
+                "eastAsiaTheme": {
+                  "type": "string"
+                },
+                "hAnsi": {
+                  "type": "string"
+                },
+                "hAnsiTheme": {
+                  "type": "string"
+                },
+                "hint": {
+                  "type": "string"
+                },
+                "val": {
+                  "type": "string"
+                }
+              },
+              "type": "object"
+            },
+            "fontSize": {
+              "type": "integer"
+            },
+            "fontSizeCs": {
+              "type": "integer"
+            },
+            "italic": {
+              "type": "boolean"
+            },
+            "letterSpacing": {
+              "type": "integer"
+            }
+          },
+          "type": "object"
         },
-        "scope": {
-          "const": "docDefaults"
+        "target": {
+          "additionalProperties": false,
+          "properties": {
+            "channel": {
+              "const": "run"
+            },
+            "scope": {
+              "const": "docDefaults"
+            }
+          },
+          "required": [
+            "scope",
+            "channel"
+          ],
+          "type": "object"
         }
       },
       "required": [
-        "scope",
-        "channel"
+        "target",
+        "patch"
+      ],
+      "type": "object"
+    },
+    {
+      "additionalProperties": false,
+      "properties": {
+        "patch": {
+          "additionalProperties": false,
+          "minProperties": 1,
+          "properties": {
+            "indent": {
+              "additionalProperties": false,
+              "minProperties": 1,
+              "properties": {
+                "end": {
+                  "type": "integer"
+                },
+                "endChars": {
+                  "type": "integer"
+                },
+                "firstLine": {
+                  "type": "integer"
+                },
+                "firstLineChars": {
+                  "type": "integer"
+                },
+                "hanging": {
+                  "type": "integer"
+                },
+                "hangingChars": {
+                  "type": "integer"
+                },
+                "left": {
+                  "type": "integer"
+                },
+                "leftChars": {
+                  "type": "integer"
+                },
+                "right": {
+                  "type": "integer"
+                },
+                "rightChars": {
+                  "type": "integer"
+                },
+                "start": {
+                  "type": "integer"
+                },
+                "startChars": {
+                  "type": "integer"
+                }
+              },
+              "type": "object"
+            },
+            "justification": {
+              "enum": [
+                "left",
+                "center",
+                "right",
+                "justify",
+                "distribute"
+              ]
+            },
+            "spacing": {
+              "additionalProperties": false,
+              "minProperties": 1,
+              "properties": {
+                "after": {
+                  "type": "integer"
+                },
+                "afterAutospacing": {
+                  "type": "boolean"
+                },
+                "afterLines": {
+                  "type": "integer"
+                },
+                "before": {
+                  "type": "integer"
+                },
+                "beforeAutospacing": {
+                  "type": "boolean"
+                },
+                "beforeLines": {
+                  "type": "integer"
+                },
+                "line": {
+                  "type": "integer"
+                },
+                "lineRule": {
+                  "enum": [
+                    "auto",
+                    "exact",
+                    "atLeast"
+                  ]
+                }
+              },
+              "type": "object"
+            }
+          },
+          "type": "object"
+        },
+        "target": {
+          "additionalProperties": false,
+          "properties": {
+            "channel": {
+              "const": "paragraph"
+            },
+            "scope": {
+              "const": "docDefaults"
+            }
+          },
+          "required": [
+            "scope",
+            "channel"
+          ],
+          "type": "object"
+        }
+      },
+      "required": [
+        "target",
+        "patch"
       ],
       "type": "object"
     }
-  },
-  "required": [
-    "target",
-    "patch"
-  ],
-  "type": "object"
+  ]
 }
 ```
 </Accordion>
@@ -135,11 +327,95 @@ _No fields._
                 "off",
                 "inherit"
               ]
+            },
+            "color": {
+              "oneOf": [
+                {
+                  "type": "object"
+                },
+                {
+                  "const": "inherit"
+                }
+              ]
+            },
+            "fontFamily": {
+              "oneOf": [
+                {
+                  "type": "object"
+                },
+                {
+                  "const": "inherit"
+                }
+              ]
+            },
+            "fontSize": {
+              "oneOf": [
+                {
+                  "type": "number"
+                },
+                {
+                  "const": "inherit"
+                }
+              ]
+            },
+            "fontSizeCs": {
+              "oneOf": [
+                {
+                  "type": "number"
+                },
+                {
+                  "const": "inherit"
+                }
+              ]
+            },
+            "indent": {
+              "oneOf": [
+                {
+                  "type": "object"
+                },
+                {
+                  "const": "inherit"
+                }
+              ]
+            },
+            "italic": {
+              "enum": [
+                "on",
+                "off",
+                "inherit"
+              ]
+            },
+            "justification": {
+              "oneOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "const": "inherit"
+                }
+              ]
+            },
+            "letterSpacing": {
+              "oneOf": [
+                {
+                  "type": "number"
+                },
+                {
+                  "const": "inherit"
+                }
+              ]
+            },
+            "spacing": {
+              "oneOf": [
+                {
+                  "type": "object"
+                },
+                {
+                  "const": "inherit"
+                }
+              ]
             }
           },
-          "required": [
-            "bold"
-          ],
           "type": "object"
         },
         "before": {
@@ -151,11 +427,95 @@ _No fields._
                 "off",
                 "inherit"
               ]
+            },
+            "color": {
+              "oneOf": [
+                {
+                  "type": "object"
+                },
+                {
+                  "const": "inherit"
+                }
+              ]
+            },
+            "fontFamily": {
+              "oneOf": [
+                {
+                  "type": "object"
+                },
+                {
+                  "const": "inherit"
+                }
+              ]
+            },
+            "fontSize": {
+              "oneOf": [
+                {
+                  "type": "number"
+                },
+                {
+                  "const": "inherit"
+                }
+              ]
+            },
+            "fontSizeCs": {
+              "oneOf": [
+                {
+                  "type": "number"
+                },
+                {
+                  "const": "inherit"
+                }
+              ]
+            },
+            "indent": {
+              "oneOf": [
+                {
+                  "type": "object"
+                },
+                {
+                  "const": "inherit"
+                }
+              ]
+            },
+            "italic": {
+              "enum": [
+                "on",
+                "off",
+                "inherit"
+              ]
+            },
+            "justification": {
+              "oneOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "const": "inherit"
+                }
+              ]
+            },
+            "letterSpacing": {
+              "oneOf": [
+                {
+                  "type": "number"
+                },
+                {
+                  "const": "inherit"
+                }
+              ]
+            },
+            "spacing": {
+              "oneOf": [
+                {
+                  "type": "object"
+                },
+                {
+                  "const": "inherit"
+                }
+              ]
             }
           },
-          "required": [
-            "bold"
-          ],
           "type": "object"
         },
         "changed": {
@@ -168,7 +528,10 @@ _No fields._
           "additionalProperties": false,
           "properties": {
             "channel": {
-              "const": "run"
+              "enum": [
+                "run",
+                "paragraph"
+              ]
             },
             "scope": {
               "const": "docDefaults"
@@ -177,7 +540,10 @@ _No fields._
               "const": "word/styles.xml"
             },
             "xmlPath": {
-              "const": "w:styles/w:docDefaults/w:rPrDefault/w:rPr"
+              "enum": [
+                "w:styles/w:docDefaults/w:rPrDefault/w:rPr",
+                "w:styles/w:docDefaults/w:pPrDefault/w:pPr"
+              ]
             }
           },
           "required": [
@@ -226,7 +592,10 @@ _No fields._
           "additionalProperties": false,
           "properties": {
             "channel": {
-              "const": "run"
+              "enum": [
+                "run",
+                "paragraph"
+              ]
             },
             "scope": {
               "const": "docDefaults"
@@ -235,7 +604,10 @@ _No fields._
               "const": "word/styles.xml"
             },
             "xmlPath": {
-              "const": "w:styles/w:docDefaults/w:rPrDefault/w:rPr"
+              "enum": [
+                "w:styles/w:docDefaults/w:rPrDefault/w:rPr",
+                "w:styles/w:docDefaults/w:pPrDefault/w:pPr"
+              ]
             }
           },
           "required": [
@@ -276,11 +648,95 @@ _No fields._
             "off",
             "inherit"
           ]
+        },
+        "color": {
+          "oneOf": [
+            {
+              "type": "object"
+            },
+            {
+              "const": "inherit"
+            }
+          ]
+        },
+        "fontFamily": {
+          "oneOf": [
+            {
+              "type": "object"
+            },
+            {
+              "const": "inherit"
+            }
+          ]
+        },
+        "fontSize": {
+          "oneOf": [
+            {
+              "type": "number"
+            },
+            {
+              "const": "inherit"
+            }
+          ]
+        },
+        "fontSizeCs": {
+          "oneOf": [
+            {
+              "type": "number"
+            },
+            {
+              "const": "inherit"
+            }
+          ]
+        },
+        "indent": {
+          "oneOf": [
+            {
+              "type": "object"
+            },
+            {
+              "const": "inherit"
+            }
+          ]
+        },
+        "italic": {
+          "enum": [
+            "on",
+            "off",
+            "inherit"
+          ]
+        },
+        "justification": {
+          "oneOf": [
+            {
+              "type": "string"
+            },
+            {
+              "const": "inherit"
+            }
+          ]
+        },
+        "letterSpacing": {
+          "oneOf": [
+            {
+              "type": "number"
+            },
+            {
+              "const": "inherit"
+            }
+          ]
+        },
+        "spacing": {
+          "oneOf": [
+            {
+              "type": "object"
+            },
+            {
+              "const": "inherit"
+            }
+          ]
         }
       },
-      "required": [
-        "bold"
-      ],
       "type": "object"
     },
     "before": {
@@ -292,11 +748,95 @@ _No fields._
             "off",
             "inherit"
           ]
+        },
+        "color": {
+          "oneOf": [
+            {
+              "type": "object"
+            },
+            {
+              "const": "inherit"
+            }
+          ]
+        },
+        "fontFamily": {
+          "oneOf": [
+            {
+              "type": "object"
+            },
+            {
+              "const": "inherit"
+            }
+          ]
+        },
+        "fontSize": {
+          "oneOf": [
+            {
+              "type": "number"
+            },
+            {
+              "const": "inherit"
+            }
+          ]
+        },
+        "fontSizeCs": {
+          "oneOf": [
+            {
+              "type": "number"
+            },
+            {
+              "const": "inherit"
+            }
+          ]
+        },
+        "indent": {
+          "oneOf": [
+            {
+              "type": "object"
+            },
+            {
+              "const": "inherit"
+            }
+          ]
+        },
+        "italic": {
+          "enum": [
+            "on",
+            "off",
+            "inherit"
+          ]
+        },
+        "justification": {
+          "oneOf": [
+            {
+              "type": "string"
+            },
+            {
+              "const": "inherit"
+            }
+          ]
+        },
+        "letterSpacing": {
+          "oneOf": [
+            {
+              "type": "number"
+            },
+            {
+              "const": "inherit"
+            }
+          ]
+        },
+        "spacing": {
+          "oneOf": [
+            {
+              "type": "object"
+            },
+            {
+              "const": "inherit"
+            }
+          ]
         }
       },
-      "required": [
-        "bold"
-      ],
       "type": "object"
     },
     "changed": {
@@ -309,7 +849,10 @@ _No fields._
       "additionalProperties": false,
       "properties": {
         "channel": {
-          "const": "run"
+          "enum": [
+            "run",
+            "paragraph"
+          ]
         },
         "scope": {
           "const": "docDefaults"
@@ -318,7 +861,10 @@ _No fields._
           "const": "word/styles.xml"
         },
         "xmlPath": {
-          "const": "w:styles/w:docDefaults/w:rPrDefault/w:rPr"
+          "enum": [
+            "w:styles/w:docDefaults/w:rPrDefault/w:rPr",
+            "w:styles/w:docDefaults/w:pPrDefault/w:pPr"
+          ]
         }
       },
       "required": [
@@ -372,7 +918,10 @@ _No fields._
       "additionalProperties": false,
       "properties": {
         "channel": {
-          "const": "run"
+          "enum": [
+            "run",
+            "paragraph"
+          ]
         },
         "scope": {
           "const": "docDefaults"
@@ -381,7 +930,10 @@ _No fields._
           "const": "word/styles.xml"
         },
         "xmlPath": {
-          "const": "w:styles/w:docDefaults/w:rPrDefault/w:rPr"
+          "enum": [
+            "w:styles/w:docDefaults/w:rPrDefault/w:rPr",
+            "w:styles/w:docDefaults/w:pPrDefault/w:pPr"
+          ]
         }
       },
       "required": [

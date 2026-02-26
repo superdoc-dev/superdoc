@@ -517,6 +517,7 @@ function makeStylesEditor(
         documentModified: false,
         documentGuid: 'test-guid',
         promoteToGuid: vi.fn(() => 'promoted-guid'),
+        translatedLinkedStyles: {},
       }
     : undefined;
 
@@ -524,6 +525,7 @@ function makeStylesEditor(
     converter,
     options: {},
     on: vi.fn(),
+    emit: vi.fn(),
   } as unknown as Editor;
 }
 

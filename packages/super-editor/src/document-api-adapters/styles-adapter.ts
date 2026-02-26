@@ -1,25 +1,33 @@
 /**
  * Engine-specific adapter for `styles.apply`.
  *
- * Mutates `word/styles.xml` (docDefaults run properties) directly via the
- * converter's in-memory XML-JS representation. Does NOT use PM commands or
- * transactions — lifecycle is handled by `executeOutOfBandMutation`.
+ * Reads and writes `translatedLinkedStyles.docDefaults` (the style-engine-facing
+ * JS object), then syncs the mutation back to `convertedXml` via the docDefaults
+ * translator's decode path. After a successful non-dry mutation, emits a
+ * `'stylesDefaultsChanged'` event so the layout pipeline re-renders.
+ *
+ * Lifecycle is handled by `executeOutOfBandMutation`.
  */
 
 import type {
   StylesApplyInput,
   StylesApplyReceipt,
-  StylesBooleanState,
   StylesTargetResolution,
+  StylesStateMap,
+  StylesChannel,
   NormalizedStylesApplyOptions,
+  PropertyDefinition,
 } from '@superdoc/document-api';
+import { PROPERTY_REGISTRY } from '@superdoc/document-api';
 import type { Editor } from '../core/Editor.js';
 import { DocumentApiAdapterError } from './errors.js';
 import { isCollaborationActive } from './collaboration-detection.js';
 import { executeOutOfBandMutation } from './out-of-band-mutation.js';
+import { syncDocDefaultsToConvertedXml, type DocDefaultsTranslator } from './styles-xml-sync.js';
+import { translator as docDefaultsTranslator } from '../core/super-converter/v3/handlers/w/docDefaults/docDefaults-translator.js';
 
 // ---------------------------------------------------------------------------
-// XML-JS element shape (subset used by this adapter)
+// Local type shapes (avoids importing engine-specific modules directly)
 // ---------------------------------------------------------------------------
 
 interface XmlElement {
@@ -28,9 +36,14 @@ interface XmlElement {
   attributes?: Record<string, string>;
 }
 
-/** Converter shape accessed from the editor. */
 interface ConverterForStyles {
   convertedXml: Record<string, XmlElement>;
+  translatedLinkedStyles: {
+    docDefaults?: {
+      runProperties?: Record<string, unknown>;
+      paragraphProperties?: Record<string, unknown>;
+    };
+  };
 }
 
 // ---------------------------------------------------------------------------
@@ -39,119 +52,114 @@ interface ConverterForStyles {
 
 const STYLES_PART = 'word/styles.xml';
 
-const DOC_DEFAULTS_RESOLUTION: StylesTargetResolution = {
-  scope: 'docDefaults',
-  channel: 'run',
-  xmlPart: STYLES_PART,
-  xmlPath: 'w:styles/w:docDefaults/w:rPrDefault/w:rPr',
+const PROPERTIES_KEY_BY_CHANNEL: Record<StylesChannel, 'runProperties' | 'paragraphProperties'> = {
+  run: 'runProperties',
+  paragraph: 'paragraphProperties',
 };
 
-/**
- * OOXML boolean "truthy" values (element present with no val, or val = 1/true/on).
- * All other val values are treated as "off".
- */
-const OOXML_BOOLEAN_ON_VALUES = new Set(['1', 'true', 'on']);
+const XML_PATH_BY_CHANNEL: Record<StylesChannel, string> = {
+  run: 'w:styles/w:docDefaults/w:rPrDefault/w:rPr',
+  paragraph: 'w:styles/w:docDefaults/w:pPrDefault/w:pPr',
+};
 
 // ---------------------------------------------------------------------------
-// OOXML boolean read/write helpers
+// State formatting helpers
 // ---------------------------------------------------------------------------
 
+/** A single state value in a before/after receipt. */
+type StateValue = string | number | Record<string, unknown> | 'inherit';
+
 /**
- * Reads the tri-state of a boolean OOXML element within `w:rPr`.
+ * Converts a raw property value to its receipt state representation.
  *
- * Per § Malformed-XML Canonicalization, when duplicate elements exist the
- * **last** one wins (matching Word's behavior).
+ * - `undefined`      → `'inherit'`
+ * - `true`           → `'on'`, `false` → `'off'`
+ * - numbers, strings → pass through as-is
+ * - objects          → shallow copy (for object properties)
  */
-function readBooleanState(rPr: XmlElement, elementName: string): StylesBooleanState {
-  if (!rPr.elements) return 'inherit';
+function formatState(value: unknown, type: PropertyDefinition['type']): StateValue {
+  if (value === undefined) return 'inherit';
+  if (type === 'boolean') return (value ? 'on' : 'off') as StateValue;
+  if (type === 'object' && typeof value === 'object' && value !== null)
+    return { ...(value as Record<string, unknown>) };
+  return value as StateValue;
+}
 
-  // Find all matching elements; last one wins.
-  let lastMatch: XmlElement | undefined;
-  for (const el of rPr.elements) {
-    if (el.name === elementName) lastMatch = el;
+/**
+ * Shallow equality check for before/after state maps.
+ */
+function stateMapEquals(a: StylesStateMap, b: StylesStateMap): boolean {
+  const keys = Object.keys(a);
+  if (keys.length !== Object.keys(b).length) return false;
+  for (const key of keys) {
+    const av = a[key];
+    const bv = b[key];
+    if (av === bv) continue;
+    // Deep compare for object states
+    if (typeof av === 'object' && av !== null && typeof bv === 'object' && bv !== null) {
+      const aKeys = Object.keys(av);
+      const bKeys = Object.keys(bv as Record<string, unknown>);
+      if (aKeys.length !== bKeys.length) return false;
+      for (const k of aKeys) {
+        if ((av as Record<string, unknown>)[k] !== (bv as Record<string, unknown>)[k]) return false;
+      }
+      continue;
+    }
+    return false;
+  }
+  return true;
+}
+
+// ---------------------------------------------------------------------------
+// Registry lookup
+// ---------------------------------------------------------------------------
+
+function getPropertyDefinition(key: string, channel: StylesChannel): PropertyDefinition {
+  const def = PROPERTY_REGISTRY.find((d) => d.key === key && d.channel === channel);
+  if (!def) throw new Error(`No property definition for key "${key}" on channel "${channel}".`);
+  return def;
+}
+
+// ---------------------------------------------------------------------------
+// Patch application
+// ---------------------------------------------------------------------------
+
+/**
+ * Applies a patch to the target properties object.
+ *
+ * - Boolean/number/enum: direct replacement
+ * - Object: merge semantics (provided sub-keys updated, unspecified preserved)
+ *
+ * Returns before/after state maps and a changed flag.
+ */
+function applyPatch(
+  targetProps: Record<string, unknown>,
+  patch: Record<string, unknown>,
+  channel: StylesChannel,
+): { before: StylesStateMap; after: StylesStateMap; changed: boolean } {
+  const before: StylesStateMap = {};
+  const after: StylesStateMap = {};
+
+  for (const [key, value] of Object.entries(patch)) {
+    const def = getPropertyDefinition(key, channel);
+    const currentValue = targetProps[key];
+
+    before[key] = formatState(currentValue, def.type);
+
+    if (def.type === 'object') {
+      const current =
+        typeof currentValue === 'object' && currentValue !== null ? (currentValue as Record<string, unknown>) : {};
+      const merged = { ...current, ...(value as Record<string, unknown>) };
+      targetProps[key] = merged;
+      after[key] = formatState(merged, def.type);
+    } else {
+      targetProps[key] = value;
+      after[key] = formatState(value, def.type);
+    }
   }
 
-  if (!lastMatch) return 'inherit';
-  return normalizeBooleanElement(lastMatch);
-}
-
-/**
- * Normalizes a single OOXML boolean element to a `StylesBooleanState`.
- */
-function normalizeBooleanElement(el: XmlElement): StylesBooleanState {
-  const val = el.attributes?.['w:val'];
-  // Bare element (no w:val attribute) means "on"
-  if (val === undefined) return 'on';
-  return OOXML_BOOLEAN_ON_VALUES.has(val) ? 'on' : 'off';
-}
-
-/**
- * Writes a boolean property to `w:rPr`, replacing any existing instances.
- *
- * - `true`  → single `<w:b/>` (removes duplicates, normalizes val)
- * - `false` → single `<w:b w:val="0"/>` (removes duplicates, normalizes val)
- *
- * Unknown sibling elements are preserved and not reordered.
- */
-function writeBooleanProperty(rPr: XmlElement, elementName: string, value: boolean): void {
-  if (!rPr.elements) rPr.elements = [];
-
-  // Remove all existing instances of this element
-  rPr.elements = rPr.elements.filter((el) => el.name !== elementName);
-
-  // Build the canonical element
-  const newElement: XmlElement = { name: elementName };
-  if (!value) {
-    newElement.attributes = { 'w:val': '0' };
-  }
-
-  // Insert at the beginning (deterministic position for repeated calls)
-  rPr.elements.unshift(newElement);
-}
-
-// ---------------------------------------------------------------------------
-// XML traversal helpers
-// ---------------------------------------------------------------------------
-
-/**
- * Finds a direct child element by name, optionally creating it if missing.
- */
-function findOrCreateChild(parent: XmlElement, childName: string): XmlElement {
-  if (!parent.elements) parent.elements = [];
-
-  const existing = parent.elements.find((el) => el.name === childName);
-  if (existing) return existing;
-
-  const child: XmlElement = { name: childName };
-  parent.elements.push(child);
-  return child;
-}
-
-/** Finds a direct child element by name, returning `undefined` if missing. */
-function findChild(parent: XmlElement, childName: string): XmlElement | undefined {
-  return parent.elements?.find((el) => el.name === childName);
-}
-
-/**
- * Resolves the `w:rPr` element inside `w:styles/w:docDefaults/w:rPrDefault`,
- * creating intermediate nodes as needed within the existing styles part.
- */
-function resolveDocDefaultsRunProperties(stylesRoot: XmlElement): XmlElement {
-  const docDefaults = findOrCreateChild(stylesRoot, 'w:docDefaults');
-  const rPrDefault = findOrCreateChild(docDefaults, 'w:rPrDefault');
-  return findOrCreateChild(rPrDefault, 'w:rPr');
-}
-
-/**
- * Read-only traversal of `w:styles/w:docDefaults/w:rPrDefault/w:rPr`.
- * Returns `undefined` when any node in the path is absent — no mutation.
- */
-function findDocDefaultsRunProperties(stylesRoot: XmlElement): XmlElement | undefined {
-  const docDefaults = findChild(stylesRoot, 'w:docDefaults');
-  if (!docDefaults) return undefined;
-  const rPrDefault = findChild(docDefaults, 'w:rPrDefault');
-  if (!rPrDefault) return undefined;
-  return findChild(rPrDefault, 'w:rPr');
+  const changed = !stateMapEquals(before, after);
+  return { before, after, changed };
 }
 
 // ---------------------------------------------------------------------------
@@ -168,6 +176,8 @@ export function stylesApplyAdapter(
   input: StylesApplyInput,
   options: NormalizedStylesApplyOptions,
 ): StylesApplyReceipt {
+  const channel = input.target.channel;
+
   // --- Capability gates (throw before mutation) ---
   const converter = (editor as unknown as { converter?: ConverterForStyles }).converter;
   if (!converter) {
@@ -193,7 +203,6 @@ export function stylesApplyAdapter(
     );
   }
 
-  // --- Resolve the XML target ---
   const stylesRoot = stylesPart.elements?.find((el: XmlElement) => el.name === 'w:styles');
   if (!stylesRoot) {
     throw new DocumentApiAdapterError(
@@ -203,35 +212,55 @@ export function stylesApplyAdapter(
     );
   }
 
+  // --- Build resolution metadata ---
+  const resolution: StylesTargetResolution = {
+    scope: 'docDefaults',
+    channel,
+    xmlPart: STYLES_PART,
+    xmlPath: XML_PATH_BY_CHANNEL[channel],
+  };
+
   // --- Execute via out-of-band lifecycle ---
   return executeOutOfBandMutation<StylesApplyReceipt>(
     editor,
     (dryRun) => {
-      // Read before-state.  Use the non-mutating traversal so dry-run
-      // never creates scaffolding nodes in the XML tree.
-      const existingRPr = findDocDefaultsRunProperties(stylesRoot);
-      const beforeBold = existingRPr ? readBooleanState(existingRPr, 'w:b') : 'inherit';
-      const before = { bold: beforeBold };
+      const propsKey = PROPERTIES_KEY_BY_CHANNEL[channel];
 
-      // Compute after-state from patch
-      const afterBold = computeAfterState(beforeBold, input.patch.bold);
-      const after = { bold: afterBold };
+      // Read the current target properties (non-mutating read)
+      const existingProps = converter.translatedLinkedStyles?.docDefaults?.[propsKey] as
+        | Record<string, unknown>
+        | undefined;
 
-      const changed = beforeBold !== afterBold;
-
-      // Apply mutation (skip on dryRun or no-op)
-      if (changed && !dryRun) {
-        // Only now create scaffolding — we know a real write will follow.
-        const rPr = resolveDocDefaultsRunProperties(stylesRoot);
-        if (input.patch.bold !== undefined) {
-          writeBooleanProperty(rPr, 'w:b', input.patch.bold);
+      // For dry-run: work on a copy. For real mutation: ensure hierarchy exists.
+      let targetProps: Record<string, unknown>;
+      if (dryRun) {
+        targetProps = existingProps ? { ...existingProps } : {};
+      } else {
+        if (!converter.translatedLinkedStyles) {
+          (converter as unknown as Record<string, unknown>).translatedLinkedStyles = {};
         }
+        if (!converter.translatedLinkedStyles.docDefaults) {
+          converter.translatedLinkedStyles.docDefaults = {};
+        }
+        if (!converter.translatedLinkedStyles.docDefaults[propsKey]) {
+          converter.translatedLinkedStyles.docDefaults[propsKey] = {};
+        }
+        targetProps = converter.translatedLinkedStyles.docDefaults[propsKey] as Record<string, unknown>;
+      }
+
+      // Apply patch and compute before/after
+      const { before, after, changed } = applyPatch(targetProps, input.patch as Record<string, unknown>, channel);
+
+      // Post-mutation side effects (only on real, changed mutations)
+      if (changed && !dryRun) {
+        syncDocDefaultsToConvertedXml(converter, docDefaultsTranslator as unknown as DocDefaultsTranslator);
+        editor.emit('stylesDefaultsChanged');
       }
 
       const receipt: StylesApplyReceipt = {
         success: true,
         changed,
-        resolution: DOC_DEFAULTS_RESOLUTION,
+        resolution,
         dryRun,
         before,
         after,
@@ -241,12 +270,4 @@ export function stylesApplyAdapter(
     },
     options,
   );
-}
-
-/**
- * Computes the predicted after-state for a single boolean property.
- */
-function computeAfterState(currentState: StylesBooleanState, patchValue: boolean | undefined): StylesBooleanState {
-  if (patchValue === undefined) return currentState;
-  return patchValue ? 'on' : 'off';
 }

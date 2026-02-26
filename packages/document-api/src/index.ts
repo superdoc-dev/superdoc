@@ -65,7 +65,7 @@ import type {
   StylesApplyOptions,
   StylesApplyReceipt,
 } from './styles/styles.js';
-import { executeStylesApply } from './styles/styles.js';
+import { executeStylesApply, PROPERTY_REGISTRY } from './styles/styles.js';
 import type { GetNodeAdapter, GetNodeByIdInput } from './get-node/get-node.js';
 import { executeGetNode, executeGetNodeById } from './get-node/get-node.js';
 import { executeGetText, type GetTextAdapter, type GetTextInput } from './get-text/get-text.js';
@@ -144,12 +144,25 @@ export type {
   FormatAlignInput,
 } from './format/format.js';
 export { ALIGNMENTS, type Alignment } from './format/format.js';
+export { PROPERTY_REGISTRY } from './styles/styles.js';
 export type {
+  PropertyDefinition,
+  ObjectSchema,
   StylesAdapter,
   StylesApplyInput,
+  StylesApplyRunInput,
+  StylesApplyParagraphInput,
   StylesApplyOptions,
   StylesApplyReceipt,
   StylesBooleanState,
+  StylesNumberState,
+  StylesEnumState,
+  StylesObjectState,
+  StylesStateMap,
+  StylesChannel,
+  StylesJustification,
+  StylesRunPatch,
+  StylesParagraphPatch,
   StylesTargetResolution,
   StylesApplyReceiptSuccess,
   StylesApplyReceiptFailure,

@@ -1,7 +1,7 @@
 import { Selection } from 'prosemirror-state';
 
-const findPreviousTextDeleteRange = (doc, cursorPos) => {
-  for (let pos = cursorPos - 1; pos > 0; pos -= 1) {
+const findPreviousTextDeleteRange = (doc, cursorPos, minPos) => {
+  for (let pos = cursorPos - 1; pos >= minPos; pos -= 1) {
     const $probe = doc.resolve(pos);
     const nodeBefore = $probe.nodeBefore;
     if (!nodeBefore?.isText || !nodeBefore.text?.length) continue;
@@ -32,7 +32,17 @@ export const backspaceNextToRun =
       if (prevNode?.type !== runType || prevNode.content.size === 0) return false;
     }
 
-    const deleteRange = findPreviousTextDeleteRange(state.doc, $pos.pos);
+    // Constrain the text scan to the adjacent run so we never delete
+    // text from a previous paragraph or an unrelated run.
+    let runContentStart;
+    if ($pos.nodeBefore) {
+      runContentStart = $pos.pos - $pos.nodeBefore.nodeSize + 1;
+    } else {
+      const prevNode = state.doc.resolve($pos.start() - 1).nodeBefore;
+      runContentStart = $pos.start() - 1 - prevNode.nodeSize + 1;
+    }
+
+    const deleteRange = findPreviousTextDeleteRange(state.doc, $pos.pos, runContentStart);
     if (!deleteRange) return false;
 
     tr.delete(deleteRange.from, deleteRange.to).setSelection(Selection.near(tr.doc.resolve(deleteRange.from)));

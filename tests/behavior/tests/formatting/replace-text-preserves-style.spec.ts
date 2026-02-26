@@ -5,23 +5,8 @@ import { test, expect } from '../../fixtures/superdoc.js';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const DOC_PATH = path.resolve(__dirname, '../../test-data/basic/sd-site-doc-2026.docx');
-const OUTPUT_DIR = path.resolve(__dirname, '../../test-results');
 
 test.skip(!fs.existsSync(DOC_PATH), 'Test document not available — run pnpm corpus:pull');
-
-/** Export the current document state as a .docx Buffer via the superdoc API. */
-async function exportDocx(page: import('@playwright/test').Page): Promise<Buffer> {
-  const base64 = await page.evaluate(async () => {
-    const sd = (window as any).superdoc;
-    const blob: Blob = await sd.export({ triggerDownload: false });
-    const buf = await blob.arrayBuffer();
-    const bytes = new Uint8Array(buf);
-    let binary = '';
-    for (let i = 0; i < bytes.length; i++) binary += String.fromCharCode(bytes[i]);
-    return btoa(binary);
-  });
-  return Buffer.from(base64, 'base64');
-}
 
 /**
  * SD-1951: Highlighting text right-to-left (backward selection) and typing a
@@ -35,11 +20,6 @@ test('backward-selected text replacement preserves original style (SD-1951)', as
 
   const titleText = 'Mutual Agreement for Document Excellence';
   await superdoc.assertTextContains(titleText);
-
-  // ── Before: save docx ──
-  fs.mkdirSync(OUTPUT_DIR, { recursive: true });
-  const beforeDocx = await exportDocx(superdoc.page);
-  fs.writeFileSync(path.join(OUTPUT_DIR, 'sd-1951-before.docx'), beforeDocx);
 
   // Capture the title's marks before replacement
   const titleStart = await superdoc.findTextPos(titleText);
@@ -103,8 +83,4 @@ test('backward-selected text replacement preserves original style (SD-1951)', as
   expect(replacementStyle).toBeDefined();
   expect(replacementStyle!.fontFamily).toBe(originalStyle!.fontFamily);
   expect(replacementStyle!.fontSize).toBe(originalStyle!.fontSize);
-
-  // ── After: save docx ──
-  const afterDocx = await exportDocx(superdoc.page);
-  fs.writeFileSync(path.join(OUTPUT_DIR, 'sd-1951-after.docx'), afterDocx);
 });

@@ -3,7 +3,7 @@ import { _getReferencedTableStyles } from '@superdoc/super-editor/converter/inte
 import type { PMNode } from '../types.js';
 import type { ConverterContext, TableStyleParagraphProps } from '../converter-context.js';
 import { hasTableStyleContext } from '../converter-context.js';
-import { twipsToPx } from '../utilities.js';
+import { twipsToPx, normalizeCellPaddingTopBottom } from '../utilities.js';
 import { normalizeLineValue } from '../attributes/spacing-indent.js';
 
 export type TableStyleHydration = {
@@ -31,7 +31,7 @@ export const hydrateTableStyleAttrs = (tableNode: PMNode, context?: ConverterCon
 
   if (tableProps) {
     const padding = convertCellMarginsToPx(tableProps.cellMargins as Record<string, unknown>);
-    if (padding) hydration.cellPadding = padding;
+    if (padding) hydration.cellPadding = normalizeCellPaddingTopBottom(padding);
 
     if (tableProps.borders && typeof tableProps.borders === 'object') {
       hydration.borders = clonePlainObject(tableProps.borders as Record<string, unknown>);
@@ -57,7 +57,7 @@ export const hydrateTableStyleAttrs = (tableNode: PMNode, context?: ConverterCon
       }
       if (!hydration.cellPadding && referenced.cellMargins) {
         const padding = convertCellMarginsToPx(referenced.cellMargins as Record<string, unknown>);
-        if (padding) hydration.cellPadding = padding;
+        if (padding) hydration.cellPadding = normalizeCellPaddingTopBottom(padding);
       }
       if (!hydration.justification && referenced.justification) {
         hydration.justification = referenced.justification;

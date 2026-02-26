@@ -103,8 +103,6 @@ export function buildToolManifestArtifacts(): GeneratedFile[] {
 
 const DEFAULT_REMEDIATION_BY_CODE: Record<string, string> = {
   TARGET_NOT_FOUND: 'Refresh targets via find/get operations and retry with a fresh address or ID.',
-  COMMAND_UNAVAILABLE: 'Call capabilities.get and branch to a fallback when operation availability is false.',
-  TRACK_CHANGE_COMMAND_UNAVAILABLE: 'Verify track-changes support via capabilities.get before requesting tracked mode.',
   CAPABILITY_UNAVAILABLE: 'Check runtime capabilities and switch to supported mode or operation.',
   INVALID_TARGET: 'Confirm the target shape and operation compatibility, then retry with a valid target.',
   NO_OP: 'Treat as idempotent no-op and avoid retry loops unless inputs change.',

@@ -78,7 +78,7 @@ description: Reference for comments.list
 
 ## Pre-apply throws
 
-- None
+- `INVALID_INPUT`
 
 ## Non-applied failure codes
 
@@ -121,6 +121,9 @@ description: Reference for comments.list
           "address": {
             "$ref": "#/$defs/CommentAddress"
           },
+          "anchoredText": {
+            "type": "string"
+          },
           "createdTime": {
             "type": "number"
           },
@@ -152,7 +155,7 @@ description: Reference for comments.list
             ]
           },
           "target": {
-            "$ref": "#/$defs/TextAddress"
+            "$ref": "#/$defs/TextTarget"
           },
           "text": {
             "type": "string"

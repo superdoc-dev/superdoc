@@ -1,6 +1,7 @@
 import { readFile, writeFile } from 'node:fs/promises';
 import { createHash } from 'node:crypto';
 import { Editor } from 'superdoc/super-editor';
+import { BLANK_DOCX_BASE64 } from '@superdoc/super-editor/blank-docx';
 import { getDocumentApiAdapters } from '@superdoc/super-editor/document-api-adapters';
 
 import { createDocumentApi, type DocumentApi } from '@superdoc/document-api';
@@ -80,14 +81,28 @@ async function readDocumentSource(doc: string, io: CliIO): Promise<{ bytes: Uint
   };
 }
 
-export async function openDocument(doc: string, io: CliIO, options: OpenDocumentOptions = {}): Promise<OpenedDocument> {
-  const { bytes, meta } = await readDocumentSource(doc, io);
+export async function openDocument(
+  doc: string | undefined,
+  io: CliIO,
+  options: OpenDocumentOptions = {},
+): Promise<OpenedDocument> {
+  let source: Uint8Array;
+  let meta: DocumentSourceMeta;
+
+  if (doc != null) {
+    const result = await readDocumentSource(doc, io);
+    source = result.bytes;
+    meta = result.meta;
+  } else {
+    source = Buffer.from(BLANK_DOCX_BASE64, 'base64');
+    meta = { source: 'blank', byteLength: source.byteLength };
+  }
 
   let editor: Editor;
   try {
     const isTest = process.env.NODE_ENV === 'test';
-    editor = await Editor.open(Buffer.from(bytes), {
-      documentId: options.documentId ?? meta.path ?? 'stdin.docx',
+    editor = await Editor.open(Buffer.from(source), {
+      documentId: options.documentId ?? meta.path ?? 'blank.docx',
       user: { id: 'cli', name: 'CLI' },
       ...(isTest ? { telemetry: { enabled: false } } : {}),
       ydoc: options.ydoc,

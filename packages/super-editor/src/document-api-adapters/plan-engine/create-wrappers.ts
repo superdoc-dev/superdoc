@@ -18,7 +18,8 @@ import type {
   MutationOptions,
 } from '@superdoc/document-api';
 import { clearIndexCache, getBlockIndex } from '../helpers/index-cache.js';
-import { findBlockById, type BlockCandidate } from '../helpers/node-address-resolver.js';
+import { type BlockCandidate } from '../helpers/node-address-resolver.js';
+import { resolveBlockInsertionPos } from './create-insertion.js';
 import { collectTrackInsertRefsInRange } from '../helpers/tracked-change-refs.js';
 import { DocumentApiAdapterError } from '../errors.js';
 import { requireEditorCommand, ensureTrackedCapability } from '../helpers/mutation-helpers.js';
@@ -61,15 +62,8 @@ function resolveCreateInsertPosition(
   if (location.kind === 'documentStart') return 0;
   if (location.kind === 'documentEnd') return editor.state.doc.content.size;
 
-  const index = getBlockIndex(editor);
-  const target = findBlockById(index, location.target);
-  if (!target) {
-    throw new DocumentApiAdapterError('TARGET_NOT_FOUND', `Create ${operationLabel} target block was not found.`, {
-      target: location.target,
-    });
-  }
-
-  return location.kind === 'before' ? target.pos : target.end;
+  // Delegate before/after resolution to shared helper (§13.15 — single insertion path)
+  return resolveBlockInsertionPos(editor, location.target.nodeId, location.kind);
 }
 
 // ---------------------------------------------------------------------------
@@ -214,8 +208,11 @@ export function createParagraphWrapper(
           if (mode === 'tracked') {
             trackedChangeRefs = collectTrackInsertRefsInRange(editor, paragraph.pos, paragraph.end);
           }
-        } catch {
-          /* will use fallback */
+        } catch (e) {
+          // Post-insertion resolution is best-effort — the block was created but may not
+          // be immediately resolvable (e.g., index timing). Only suppress known resolution
+          // failures; rethrow unexpected errors.
+          if (!(e instanceof DocumentApiAdapterError)) throw e;
         }
       }
       return didApply;
@@ -310,8 +307,8 @@ export function createHeadingWrapper(
           if (mode === 'tracked') {
             trackedChangeRefs = collectTrackInsertRefsInRange(editor, heading.pos, heading.end);
           }
-        } catch {
-          /* will use fallback */
+        } catch (e) {
+          if (!(e instanceof DocumentApiAdapterError)) throw e;
         }
       }
       return didApply;

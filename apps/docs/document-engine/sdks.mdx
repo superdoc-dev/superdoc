@@ -30,8 +30,18 @@ The CLI is bundled with the SDK — no separate install needed.
 
 ## Quick start
 
+The Node SDK supports both ESM and CommonJS:
+
+```ts
+// ESM
+import { createSuperDocClient } from '@superdoc-dev/sdk';
+
+// CommonJS
+const { createSuperDocClient } = require('@superdoc-dev/sdk');
+```
+
 <Tabs>
-  <Tab title="Node.js">
+  <Tab title="Node.js (ESM)">
     ```typescript
     import { SuperDocClient } from '@superdoc-dev/sdk';
 
@@ -67,6 +77,48 @@ The CLI is bundled with the SDK — no separate install needed.
     // Save and close
     await client.doc.save();
     await client.doc.close();
+    ```
+  </Tab>
+  <Tab title="Node.js (CJS)">
+    ```javascript
+    const { SuperDocClient } = require('@superdoc-dev/sdk');
+
+    async function main() {
+      const client = new SuperDocClient({
+        defaultChangeMode: 'tracked',
+      });
+
+      // Open a document
+      await client.doc.open({ doc: './contract.docx' });
+
+      // Find and replace text with query + mutation plan
+      const match = await client.doc.query.match({
+        select: { type: 'text', pattern: 'ACME Corp' },
+        require: 'first',
+      });
+
+      const ref = match.items?.[0]?.handle?.ref;
+      if (ref) {
+        await client.doc.mutations.apply({
+          expectedRevision: match.evaluatedRevision,
+          atomic: true,
+          steps: [
+            {
+              id: 'replace-acme',
+              op: 'text.rewrite',
+              where: { by: 'ref', ref },
+              args: { replacement: { text: 'NewCo Inc.' } },
+            },
+          ],
+        });
+      }
+
+      // Save and close
+      await client.doc.save();
+      await client.doc.close();
+    }
+
+    main();
     ```
   </Tab>
   <Tab title="Python">
@@ -158,6 +210,10 @@ The SDKs expose all operations from the [Document API](/document-api/overview) p
 | Operation | CLI command | Description |
 | --- | --- | --- |
 | `doc.format.apply` | `format apply` | Apply explicit inline style changes (bold, italic, underline, strike) to the target range using boolean patch semantics. |
+| `doc.format.fontSize` | `format font-size` | Set or unset the font size on the target text range. Pass null to remove. |
+| `doc.format.fontFamily` | `format font-family` | Set or unset the font family on the target text range. Pass null to remove. |
+| `doc.format.color` | `format color` | Set or unset the text color on the target text range. Pass null to remove. |
+| `doc.format.align` | `format align` | Set or unset paragraph alignment on the block containing the target. Pass null to reset to default. |
 
 #### Create
 
@@ -165,6 +221,13 @@ The SDKs expose all operations from the [Document API](/document-api/overview) p
 | --- | --- | --- |
 | `doc.create.paragraph` | `create paragraph` | Create a new paragraph at the target position. |
 | `doc.create.heading` | `create heading` | Create a new heading at the target position. |
+| `doc.create.table` | `create table` | Create a new table at the target position. |
+
+#### Blocks
+
+| Operation | CLI command | Description |
+| --- | --- | --- |
+| `doc.blocks.delete` | `blocks delete` | Delete an entire block node (paragraph, heading, list item, table, image, or sdt) deterministically. |
 
 #### Lists
 

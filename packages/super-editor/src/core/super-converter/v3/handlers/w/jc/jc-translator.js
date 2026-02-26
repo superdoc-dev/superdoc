@@ -6,4 +6,12 @@ import { NodeTranslator } from '@translator';
  * @type {import('@translator').NodeTranslator}
  * @see {@link https://ecma-international.org/publications-and-standards/standards/ecma-376/} "Fundamentals And Markup Language Reference", page 411
  */
-export const translator = NodeTranslator.from(createSingleAttrPropertyHandler('w:jc', 'justification'));
+export const translator = NodeTranslator.from(
+  createSingleAttrPropertyHandler(
+    'w:jc',
+    'justification',
+    'w:val',
+    (v) => (v === 'both' ? 'justify' : v),
+    (v) => (v === 'justify' ? 'both' : v),
+  ),
+);

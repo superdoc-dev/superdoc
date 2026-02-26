@@ -1,0 +1,237 @@
+---
+title: format.align
+sidebarTitle: format.align
+description: Reference for format.align
+---
+
+{/* GENERATED FILE: DO NOT EDIT. Regenerate via `pnpm run docapi:sync`. */}
+
+> Alpha: Document API is currently alpha and subject to breaking changes.
+
+## Summary
+
+- Operation ID: `format.align`
+- API member path: `editor.doc.format.align(...)`
+- Mutates document: `yes`
+- Idempotency: `conditional`
+- Supports tracked mode: `no`
+- Supports dry run: `yes`
+- Deterministic target resolution: `yes`
+
+## Input fields
+
+| Field | Type | Required | Description |
+| --- | --- | --- | --- |
+| `alignment` | enum \\| null | yes | One of: enum, null |
+| `target` | TextAddress | yes | TextAddress |
+
+### Example request
+
+```json
+{
+  "alignment": "left",
+  "target": {
+    "blockId": "block-abc123",
+    "kind": "text",
+    "range": {
+      "end": 10,
+      "start": 0
+    }
+  }
+}
+```
+
+## Output fields
+
+_No fields._
+
+### Example response
+
+```json
+{
+  "inserted": [
+    {
+      "entityId": "entity-789",
+      "entityType": "comment",
+      "kind": "entity"
+    }
+  ],
+  "resolution": {
+    "range": {
+      "from": 0,
+      "to": 10
+    },
+    "requestedTarget": {
+      "blockId": "block-abc123",
+      "kind": "text",
+      "range": {
+        "end": 10,
+        "start": 0
+      }
+    },
+    "target": {
+      "blockId": "block-abc123",
+      "kind": "text",
+      "range": {
+        "end": 10,
+        "start": 0
+      }
+    },
+    "text": "Hello, world."
+  },
+  "success": true,
+  "updated": [
+    {
+      "entityId": "entity-789",
+      "entityType": "comment",
+      "kind": "entity"
+    }
+  ]
+}
+```
+
+## Pre-apply throws
+
+- `TARGET_NOT_FOUND`
+- `CAPABILITY_UNAVAILABLE`
+- `INVALID_TARGET`
+- `INVALID_INPUT`
+
+## Non-applied failure codes
+
+- `INVALID_TARGET`
+- `NO_OP`
+
+## Raw schemas
+
+<Accordion title="Raw input schema">
+```json
+{
+  "additionalProperties": false,
+  "properties": {
+    "alignment": {
+      "oneOf": [
+        {
+          "enum": [
+            "left",
+            "center",
+            "right",
+            "justify"
+          ]
+        },
+        {
+          "type": "null"
+        }
+      ]
+    },
+    "target": {
+      "$ref": "#/$defs/TextAddress"
+    }
+  },
+  "required": [
+    "target",
+    "alignment"
+  ],
+  "type": "object"
+}
+```
+</Accordion>
+
+<Accordion title="Raw output schema">
+```json
+{
+  "oneOf": [
+    {
+      "$ref": "#/$defs/TextMutationSuccess"
+    },
+    {
+      "additionalProperties": false,
+      "properties": {
+        "failure": {
+          "additionalProperties": false,
+          "properties": {
+            "code": {
+              "enum": [
+                "INVALID_TARGET",
+                "NO_OP"
+              ]
+            },
+            "details": {},
+            "message": {
+              "type": "string"
+            }
+          },
+          "required": [
+            "code",
+            "message"
+          ],
+          "type": "object"
+        },
+        "resolution": {
+          "$ref": "#/$defs/TextMutationResolution"
+        },
+        "success": {
+          "const": false
+        }
+      },
+      "required": [
+        "success",
+        "failure",
+        "resolution"
+      ],
+      "type": "object"
+    }
+  ]
+}
+```
+</Accordion>
+
+<Accordion title="Raw success schema">
+```json
+{
+  "$ref": "#/$defs/TextMutationSuccess"
+}
+```
+</Accordion>
+
+<Accordion title="Raw failure schema">
+```json
+{
+  "additionalProperties": false,
+  "properties": {
+    "failure": {
+      "additionalProperties": false,
+      "properties": {
+        "code": {
+          "enum": [
+            "INVALID_TARGET",
+            "NO_OP"
+          ]
+        },
+        "details": {},
+        "message": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "code",
+        "message"
+      ],
+      "type": "object"
+    },
+    "resolution": {
+      "$ref": "#/$defs/TextMutationResolution"
+    },
+    "success": {
+      "const": false
+    }
+  },
+  "required": [
+    "success",
+    "failure",
+    "resolution"
+  ],
+  "type": "object"
+}
+```
+</Accordion>

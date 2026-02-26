@@ -25,7 +25,18 @@ export type CliErrorCode =
   | 'TRACK_CHANGE_COMMAND_UNAVAILABLE'
   | 'TRACK_CHANGE_CONFLICT'
   | 'COMMAND_FAILED'
-  | 'TIMEOUT';
+  | 'TIMEOUT'
+  // Plan-engine error codes — passed through from document-api adapters
+  | 'REVISION_CHANGED_SINCE_COMPILE'
+  | 'PLAN_CONFLICT_OVERLAP'
+  | 'DOCUMENT_IDENTITY_CONFLICT'
+  | 'INVALID_INSERTION_CONTEXT'
+  | 'INVALID_INPUT'
+  | 'INVALID_STEP_COMBINATION'
+  | 'MATCH_NOT_FOUND'
+  | 'PRECONDITION_FAILED'
+  | 'CROSS_BLOCK_MATCH'
+  | 'SPAN_FRAGMENTED';
 
 /**
  * Intersection type for errors thrown by document-api adapter operations.

@@ -37,6 +37,7 @@ description: Reference for comments.get
 | Field | Type | Required | Description |
 | --- | --- | --- | --- |
 | `address` | CommentAddress | yes | CommentAddress |
+| `anchoredText` | string | no |  |
 | `commentId` | string | yes |  |
 | `createdTime` | number | no |  |
 | `creatorEmail` | string | no |  |
@@ -45,7 +46,7 @@ description: Reference for comments.get
 | `isInternal` | boolean | no |  |
 | `parentCommentId` | string | no |  |
 | `status` | enum | yes | `"open"`, `"resolved"` |
-| `target` | TextAddress | no | TextAddress |
+| `target` | TextTarget | no | TextTarget |
 | `text` | string | no |  |
 
 ### Example response
@@ -99,6 +100,9 @@ description: Reference for comments.get
     "address": {
       "$ref": "#/$defs/CommentAddress"
     },
+    "anchoredText": {
+      "type": "string"
+    },
     "commentId": {
       "type": "string"
     },
@@ -127,7 +131,7 @@ description: Reference for comments.get
       ]
     },
     "target": {
-      "$ref": "#/$defs/TextAddress"
+      "$ref": "#/$defs/TextTarget"
     },
     "text": {
       "type": "string"

@@ -244,6 +244,10 @@ export const POST_INVOKE_HOOKS: Partial<Record<CliExposedOperationId, PostInvoke
   replace: flattenTextMutationReceipt,
   delete: flattenTextMutationReceipt,
   'format.apply': flattenTextMutationReceipt,
+  'format.fontSize': flattenTextMutationReceipt,
+  'format.fontFamily': flattenTextMutationReceipt,
+  'format.color': flattenTextMutationReceipt,
+  'format.align': flattenTextMutationReceipt,
   // getNodeById: merge nodeId from input into result for pretty output
   getNodeById: (result, context) => {
     const record = asRecord(result);

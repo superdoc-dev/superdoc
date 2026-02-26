@@ -33,7 +33,7 @@ async def main():
     print(info["counts"])
 
     results = await client.doc.find({"type": "text", "pattern": "termination"})
-    target = results["context"][0]["textRanges"][0]
+    target = results["items"][0]["context"]["textRanges"][0]
 
     await client.doc.replace({"target": target, "text": "expiration"})
     await client.doc.save({"inPlace": True})

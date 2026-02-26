@@ -119,6 +119,7 @@ export type CliCategory =
   | 'mutation'
   | 'format'
   | 'create'
+  | 'blocks'
   | 'lists'
   | 'comments'
   | 'trackChanges'

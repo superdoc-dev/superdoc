@@ -16,14 +16,14 @@ export function registerFormatTools(server: McpServer, sessions: SessionManager)
     {
       title: 'Format Text',
       description:
-        "Apply formatting on a text range. Use superdoc_find with a text pattern first, then pass a TextAddress from the result's context[].textRanges as the target. Set suggest=true to format as a tracked change (suggestion).",
+        'Apply formatting on a text range. Use superdoc_find with a text pattern first, then pass a TextAddress from items[].context.textRanges as the target. Set suggest=true to format as a tracked change (suggestion).',
       inputSchema: {
         session_id: z.string().describe('Session ID from superdoc_open.'),
         style: z.enum(STYLES).describe('The formatting style to apply.'),
         target: z
           .string()
           .describe(
-            'JSON-encoded TextAddress: {"kind":"text","blockId":"...","range":{"start":N,"end":N}}. Get this from superdoc_find context[].textRanges, NOT from matches[].',
+            'JSON-encoded TextAddress: {"kind":"text","blockId":"...","range":{"start":N,"end":N}}. Get this from superdoc_find items[].context.textRanges.',
           ),
         suggest: z
           .boolean()

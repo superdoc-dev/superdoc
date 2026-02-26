@@ -16,7 +16,7 @@
  * 10. Catalog input schemas present and required params match contract
  * 11. Skill files only reference existing operations (fails on unknown refs)
  * 12. Provider tool name extraction smoke test
- * 13. Node npm pack includes required tools/*.json assets
+ * 13. Node npm pack includes required tools/*.json, skills/*.md, and CJS artifacts
  * 14. SDK release scripts test suite passes
  * 15. SDK test suite passes (contract-integrity + cross-lang parity)
  * 16. Node SDK platform package manifests exist and are well-formed
@@ -264,8 +264,8 @@ async function main() {
     }
   });
 
-  // 13. Node package tarball includes required tools/*.json assets
-  await check('Node npm pack includes tools/*.json assets', async () => {
+  // 13. Node package tarball includes required tools/*.json, skills/*.md, and CJS artifacts
+  await check('Node npm pack includes tools/*.json, skills/*.md, and CJS artifacts', async () => {
     const npmCacheDir = path.join(REPO_ROOT, '.cache', 'npm');
     const { stdout } = await execFileAsync('npm', ['pack', '--dry-run', '--json'], {
       cwd: path.join(REPO_ROOT, 'packages/sdk/langs/node'),
@@ -274,10 +274,30 @@ async function main() {
     const packOutput = JSON.parse(stdout);
     const files = (packOutput[0]?.files ?? []).map((f) => f.path);
 
-    const requiredTools = ['catalog.json', 'tool-name-map.json', 'tools.openai.json', 'tools.anthropic.json', 'tools.vercel.json', 'tools.generic.json'];
-    const missing = requiredTools.filter((name) => !files.some((f) => f === `tools/${name}`));
-    if (missing.length > 0) {
-      throw new Error(`Node tarball missing tools: ${missing.join(', ')}. Check symlinks and prepack script.`);
+    const requiredTools = [
+      'catalog.json',
+      'tool-name-map.json',
+      'tools-policy.json',
+      'tools.openai.json',
+      'tools.anthropic.json',
+      'tools.vercel.json',
+      'tools.generic.json',
+    ];
+    const missingTools = requiredTools.filter((name) => !files.some((f) => f === `tools/${name}`));
+    if (missingTools.length > 0) {
+      throw new Error(`Node tarball missing tools: ${missingTools.join(', ')}. Check symlinks and prepack script.`);
+    }
+
+    const hasPublishedSkills = files.some((filePath) => /^skills\/.+\.md$/.test(filePath));
+    if (!hasPublishedSkills) {
+      throw new Error('Node tarball missing skills/*.md artifacts.');
+    }
+
+    // Dual-package CJS artifacts: entry point + key runtime modules
+    const requiredCjs = ['dist/index.cjs', 'dist/runtime/embedded-cli.cjs', 'dist/tools.cjs', 'dist/skills.cjs'];
+    const missingCjs = requiredCjs.filter((name) => !files.some((f) => f === name));
+    if (missingCjs.length > 0) {
+      throw new Error(`Node tarball missing CJS artifacts: ${missingCjs.join(', ')}. Run "pnpm run build" in packages/sdk/langs/node.`);
     }
   });
 

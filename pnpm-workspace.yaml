@@ -90,6 +90,7 @@ catalog:
   rehype-remark: ^10.0.1
   remark-gfm: ^4.0.1
   remark-stringify: ^11.0.0
+  rollup: ^4.31.0
   rollup-plugin-copy: ^3.5.0
   rollup-plugin-visualizer: ^5.12.0
   semantic-release: ^24.2.7

@@ -74,6 +74,10 @@ const TEXT_TARGET_OPERATIONS = new Set<CliExposedOperationId>([
   'replace',
   'delete',
   'format.apply',
+  'format.fontSize',
+  'format.fontFamily',
+  'format.color',
+  'format.align',
   'comments.create',
   'comments.patch',
 ]);
@@ -138,6 +142,20 @@ function normalizeFlatTargetFlags(operationId: CliExposedOperationId, apiInput: 
       return {
         ...rest,
         target: { kind: 'text', blockId, range: { start: offset, end: offset } },
+      };
+    }
+    return apiInput;
+  }
+
+  // --- Block delete (nodeType + nodeId → block target) ---
+  if (operationId === 'blocks.delete') {
+    const nodeType = apiInput.nodeType;
+    const nodeId = apiInput.nodeId;
+    if (typeof nodeType === 'string' && typeof nodeId === 'string') {
+      const { nodeType: _, nodeId: _n, ...rest } = apiInput;
+      return {
+        ...rest,
+        target: { kind: 'block', nodeType, nodeId },
       };
     }
     return apiInput;

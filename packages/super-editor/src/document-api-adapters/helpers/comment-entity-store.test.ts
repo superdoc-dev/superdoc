@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import type { Editor } from '../../core/Editor.js';
+import type { TextTarget } from '@superdoc/document-api';
 import {
   buildCommentJsonFromText,
   extractCommentText,
@@ -236,8 +237,18 @@ describe('toCommentInfo', () => {
   });
 
   it('includes target when provided', () => {
-    const target = { kind: 'text' as const, blockId: 'p1', range: { start: 0, end: 5 } };
+    const target: TextTarget = { kind: 'text', segments: [{ blockId: 'p1', range: { start: 0, end: 5 } }] };
     const info = toCommentInfo({ commentId: 'c1' }, { target });
     expect(info.target).toBe(target);
+  });
+
+  it('includes anchoredText when provided', () => {
+    const info = toCommentInfo({ commentId: 'c1' }, { anchoredText: 'hello world' });
+    expect(info.anchoredText).toBe('hello world');
+  });
+
+  it('omits anchoredText when not provided', () => {
+    const info = toCommentInfo({ commentId: 'c1' });
+    expect(info.anchoredText).toBeUndefined();
   });
 });

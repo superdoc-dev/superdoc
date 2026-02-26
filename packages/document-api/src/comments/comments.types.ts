@@ -1,4 +1,4 @@
-import type { CommentAddress, CommentStatus, TextAddress } from '../types/index.js';
+import type { CommentAddress, CommentStatus, TextTarget } from '../types/index.js';
 import type { DiscoveryOutput } from '../types/discovery.js';
 
 export type { CommentStatus } from '../types/index.js';
@@ -11,7 +11,8 @@ export interface CommentInfo {
   text?: string;
   isInternal?: boolean;
   status: CommentStatus;
-  target?: TextAddress;
+  target?: TextTarget;
+  anchoredText?: string;
   createdTime?: number;
   creatorName?: string;
   creatorEmail?: string;
@@ -36,7 +37,8 @@ export interface CommentDomain {
   text?: string;
   isInternal?: boolean;
   status: CommentStatus;
-  target?: TextAddress;
+  target?: TextTarget;
+  anchoredText?: string;
   createdTime?: number;
   creatorName?: string;
   creatorEmail?: string;

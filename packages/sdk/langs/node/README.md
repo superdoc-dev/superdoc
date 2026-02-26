@@ -20,6 +20,16 @@ The package automatically installs a native CLI binary for your platform via opt
 
 ## Quick Start
 
+Both ESM and CommonJS are supported.
+
+```ts
+// ESM
+import { createSuperDocClient } from '@superdoc-dev/sdk';
+
+// CJS
+const { createSuperDocClient } = require('@superdoc-dev/sdk');
+```
+
 ```ts
 import { createSuperDocClient } from '@superdoc-dev/sdk';
 
@@ -34,7 +44,7 @@ console.log(info.counts);
 const results = await client.doc.find({ type: 'text', pattern: 'termination' });
 
 await client.doc.replace({
-  target: results.context[0].textRanges[0],
+  target: results.items[0].context.textRanges[0],
   text: 'expiration',
 });
 

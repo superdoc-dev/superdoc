@@ -23,6 +23,7 @@ import type { Editor } from '../../core/Editor.js';
 import type { CompiledPlan } from './compiler.js';
 import type { CompiledTarget } from './executor-registry.types.js';
 import { executeCompiledPlan } from './executor.js';
+import { getRevision } from './revision-tracker.js';
 import { DocumentApiAdapterError } from '../errors.js';
 import { resolveDefaultInsertTarget, resolveTextTarget, type ResolvedTextTarget } from '../helpers/adapter-utils.js';
 import { buildTextMutationResolution, readTextAtResolvedRange } from '../helpers/text-mutation-resolution.js';
@@ -246,7 +247,11 @@ export function executeDomainCommand(
     args: {},
     _handler: handler,
   } as unknown as MutationStep;
-  const compiled: CompiledPlan = { mutationSteps: [{ step, targets: [] }], assertSteps: [] };
+  const compiled: CompiledPlan = {
+    mutationSteps: [{ step, targets: [] }],
+    assertSteps: [],
+    compiledRevision: getRevision(editor),
+  };
   return executeCompiledPlan(editor, compiled, { expectedRevision: options?.expectedRevision });
 }
 
@@ -338,6 +343,7 @@ export function writeWrapper(editor: Editor, request: WriteRequest, options?: Mu
   const compiled: CompiledPlan = {
     mutationSteps: [{ step, targets: [target] }],
     assertSteps: [],
+    compiledRevision: getRevision(editor),
   };
 
   const receipt = executeCompiledPlan(editor, compiled, {
@@ -431,6 +437,7 @@ export function styleApplyWrapper(
   const compiled: CompiledPlan = {
     mutationSteps: [{ step, targets: [target] }],
     assertSteps: [],
+    compiledRevision: getRevision(editor),
   };
 
   const receipt = executeCompiledPlan(editor, compiled, {

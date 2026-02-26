@@ -6,6 +6,7 @@
 
 import type {
   BoxSpacing,
+  CellSpacing,
   FlowBlock,
   ParagraphBlock,
   ImageBlock,
@@ -42,6 +43,24 @@ import {
   applySdtMetadataToTableBlock,
 } from '../sdt/index.js';
 import { TableProperties, resolveTableCellProperties } from '@superdoc/style-engine/ooxml';
+
+/**
+ * Normalizes tableCellSpacing from PM node to CellSpacing object format.
+ * Converts legacy number values (pixels) to { value, type: 'px' } so that
+ * FlowBlock table attrs always use the object format and deserialization is safe.
+ */
+function normalizeCellSpacing(raw: number | { value?: number; type?: string } | null | undefined): CellSpacing {
+  if (raw == null) {
+    return { value: 0, type: 'px' };
+  }
+  if (typeof raw === 'number') {
+    return { value: Math.max(0, raw), type: 'px' };
+  }
+  const value = typeof raw.value === 'number' ? Math.max(0, raw.value) : 0;
+  const t = (raw.type ?? 'px').toLowerCase();
+  const type = t === 'dxa' ? 'dxa' : 'px';
+  return { value, type };
+}
 
 type TableParserDependencies = {
   nextBlockId: BlockIdGenerator;
@@ -742,8 +761,8 @@ export function tableNodeToBlock(
     tableAttrs.borderCollapse = node.attrs.borderCollapse;
   }
 
-  if (node.attrs?.tableCellSpacing) {
-    tableAttrs.cellSpacing = node.attrs.tableCellSpacing;
+  if (node.attrs?.tableCellSpacing !== undefined && node.attrs?.tableCellSpacing !== null) {
+    tableAttrs.cellSpacing = normalizeCellSpacing(node.attrs.tableCellSpacing);
   }
 
   if (node.attrs?.justification) {
@@ -760,6 +779,10 @@ export function tableNodeToBlock(
 
   if (node.attrs?.tableIndent && typeof node.attrs.tableIndent === 'object') {
     tableAttrs.tableIndent = { ...node.attrs.tableIndent };
+  }
+
+  if (defaultCellPadding && typeof defaultCellPadding === 'object') {
+    tableAttrs.defaultCellPadding = { ...defaultCellPadding };
   }
 
   // Pass tableLayout through (extracted by tblLayout-translator.js)

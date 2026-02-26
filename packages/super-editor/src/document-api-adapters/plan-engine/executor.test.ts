@@ -5,6 +5,7 @@ import type { CompiledTarget } from './executor-registry.types.js';
 import type { CompiledPlan } from './compiler.js';
 import {
   executeCompiledPlan,
+  executeCreateStep,
   executeSpanTextDelete,
   executeSpanTextRewrite,
   runMutationsOnTransaction,
@@ -222,6 +223,7 @@ describe('executeCompiledPlan: text.rewrite style behavior', () => {
         },
       ],
       assertSteps: [],
+      compiledRevision: '0',
     };
 
     const receipt = executeCompiledPlan(editor, compiled);
@@ -278,6 +280,7 @@ describe('executeCompiledPlan: text.rewrite style behavior', () => {
         },
       ],
       assertSteps: [],
+      compiledRevision: '0',
     };
 
     executeCompiledPlan(editor, compiled);
@@ -321,6 +324,7 @@ describe('executeCompiledPlan: text.rewrite style behavior', () => {
         },
       ],
       assertSteps: [],
+      compiledRevision: '0',
     };
 
     executeCompiledPlan(editor, compiled);
@@ -351,6 +355,7 @@ describe('executeCompiledPlan: text.rewrite style behavior', () => {
         },
       ],
       assertSteps: [],
+      compiledRevision: '0',
     };
 
     const receipt = executeCompiledPlan(editor, compiled);
@@ -420,6 +425,7 @@ describe('executeCompiledPlan: multi-target rewrite', () => {
         },
       ],
       assertSteps: [],
+      compiledRevision: '0',
     };
 
     const receipt = executeCompiledPlan(editor, compiled);
@@ -515,6 +521,7 @@ describe('executeAssertStep: node selector uses mapBlockNodeType', () => {
     const compiled: CompiledPlan = {
       mutationSteps: [],
       assertSteps: [assertStep],
+      compiledRevision: '0',
     };
 
     const { stepOutcomes } = runMutationsOnTransaction(editor, tr, compiled, { throwOnAssertFailure: false });
@@ -552,6 +559,7 @@ describe('executeAssertStep: node selector uses mapBlockNodeType', () => {
     const compiled: CompiledPlan = {
       mutationSteps: [],
       assertSteps: [assertStep],
+      compiledRevision: '0',
     };
 
     const { stepOutcomes } = runMutationsOnTransaction(editor, tr, compiled, { throwOnAssertFailure: false });
@@ -584,6 +592,7 @@ describe('executeAssertStep: node selector uses mapBlockNodeType', () => {
     const compiled: CompiledPlan = {
       mutationSteps: [],
       assertSteps: [assertStep],
+      compiledRevision: '0',
     };
 
     const { stepOutcomes, assertFailures } = runMutationsOnTransaction(editor, tr, compiled, {
@@ -625,6 +634,7 @@ describe('executeAssertStep: node selector uses mapBlockNodeType', () => {
     const compiled: CompiledPlan = {
       mutationSteps: [],
       assertSteps: [assertStep],
+      compiledRevision: '0',
     };
 
     const { stepOutcomes } = runMutationsOnTransaction(editor, tr, compiled, { throwOnAssertFailure: false });
@@ -674,6 +684,7 @@ describe('executeAssertStep: node selector uses mapBlockNodeType', () => {
     const compiled: CompiledPlan = {
       mutationSteps: [],
       assertSteps: [assertStep],
+      compiledRevision: '0',
     };
 
     const { stepOutcomes } = runMutationsOnTransaction(editor, tr, compiled, { throwOnAssertFailure: false });
@@ -716,6 +727,7 @@ describe('executeAssertStep: node selector uses mapBlockNodeType', () => {
     const compiled: CompiledPlan = {
       mutationSteps: [],
       assertSteps: [assertStep],
+      compiledRevision: '0',
     };
 
     const { stepOutcomes } = runMutationsOnTransaction(editor, tr, compiled, { throwOnAssertFailure: false });
@@ -750,6 +762,7 @@ describe('executeAssertStep: node selector uses mapBlockNodeType', () => {
     const compiled: CompiledPlan = {
       mutationSteps: [],
       assertSteps: [assertStep],
+      compiledRevision: '0',
     };
 
     const { stepOutcomes } = runMutationsOnTransaction(editor, tr, compiled, { throwOnAssertFailure: false });
@@ -796,6 +809,7 @@ describe('executeAssertStep: node selector uses mapBlockNodeType', () => {
     const compiled: CompiledPlan = {
       mutationSteps: [],
       assertSteps: [assertStep],
+      compiledRevision: '0',
     };
 
     const { stepOutcomes } = runMutationsOnTransaction(editor, tr, compiled, { throwOnAssertFailure: false });
@@ -843,6 +857,7 @@ describe('executeAssertStep: node selector uses mapBlockNodeType', () => {
     const compiled: CompiledPlan = {
       mutationSteps: [],
       assertSteps: [assertStep],
+      compiledRevision: '0',
     };
 
     const { stepOutcomes } = runMutationsOnTransaction(editor, tr, compiled, { throwOnAssertFailure: false });
@@ -893,6 +908,7 @@ describe('executeAssertStep: node selector uses mapBlockNodeType', () => {
     const compiled: CompiledPlan = {
       mutationSteps: [],
       assertSteps: [assertStep],
+      compiledRevision: '0',
     };
 
     const { stepOutcomes } = runMutationsOnTransaction(editor, tr, compiled, { throwOnAssertFailure: false });
@@ -937,6 +953,7 @@ describe('executeCompiledPlan: revision tracking', () => {
         },
       ],
       assertSteps: [],
+      compiledRevision: '0',
     };
 
     const receipt = executeCompiledPlan(editor, compiled);
@@ -977,6 +994,7 @@ describe('executeCompiledPlan: revision tracking', () => {
         },
       ],
       assertSteps: [],
+      compiledRevision: '5',
     };
 
     const receipt = executeCompiledPlan(editor, compiled);
@@ -986,6 +1004,539 @@ describe('executeCompiledPlan: revision tracking', () => {
     // Revision unchanged
     expect(receipt.revision.before).toBe('5');
     expect(receipt.revision.after).toBe('5');
+  });
+});
+
+// ---------------------------------------------------------------------------
+// T7: Revision consistency and compile/execute drift detection
+// ---------------------------------------------------------------------------
+
+describe('executeCompiledPlan: revision drift guard (D3)', () => {
+  it('throws REVISION_CHANGED_SINCE_COMPILE when revision drifts between compile and execute', () => {
+    const { editor } = makeEditor();
+    setupBlockIndex([{ nodeId: 'p1', pos: 0, node: {} }]);
+    setupResolveTextRange(1, 6);
+    mockedDeps.resolveInlineStyle.mockReturnValue([]);
+
+    // Simulate: compiled at rev 3, but document is now at rev 5
+    mockedDeps.getRevision.mockReturnValue('5');
+
+    const step: TextRewriteStep = {
+      id: 'step-drift',
+      op: 'text.rewrite',
+      where: { by: 'select', select: { type: 'text', pattern: 'Hello' }, require: 'exactlyOne' },
+      args: { replacement: { text: 'New' } },
+    };
+
+    const compiled: CompiledPlan = {
+      mutationSteps: [{ step, targets: [makeTarget()] }],
+      assertSteps: [],
+      compiledRevision: '3',
+    };
+
+    try {
+      executeCompiledPlan(editor, compiled);
+    } catch (error) {
+      expect(error).toBeInstanceOf(PlanError);
+      const planErr = error as PlanError;
+      expect(planErr.code).toBe('REVISION_CHANGED_SINCE_COMPILE');
+      expect(planErr.details).toMatchObject({
+        compiledRevision: '3',
+        currentRevision: '5',
+      });
+      expect(planErr.details.remediation).toBeTruthy();
+      return;
+    }
+    throw new Error('expected REVISION_CHANGED_SINCE_COMPILE');
+  });
+
+  it('does not throw when compiledRevision matches current revision', () => {
+    const { editor } = makeEditor();
+    setupBlockIndex([{ nodeId: 'p1', pos: 0, node: {} }]);
+    setupResolveTextRange(1, 6);
+    mockedDeps.resolveInlineStyle.mockReturnValue([]);
+    mockedDeps.getRevision.mockReturnValue('0');
+
+    const step: TextRewriteStep = {
+      id: 'step-ok',
+      op: 'text.rewrite',
+      where: { by: 'select', select: { type: 'text', pattern: 'Hello' }, require: 'exactlyOne' },
+      args: { replacement: { text: 'New' } },
+    };
+
+    const compiled: CompiledPlan = {
+      mutationSteps: [{ step, targets: [makeTarget()] }],
+      assertSteps: [],
+      compiledRevision: '0',
+    };
+
+    expect(() => executeCompiledPlan(editor, compiled)).not.toThrow();
+  });
+
+  it('revision.before matches compiledRevision on success', () => {
+    const { editor } = makeEditor();
+    setupBlockIndex([{ nodeId: 'p1', pos: 0, node: {} }]);
+    setupResolveTextRange(1, 6);
+    mockedDeps.resolveInlineStyle.mockReturnValue([]);
+
+    // First call: before (returns '2'), second call: after (returns '3')
+    mockedDeps.getRevision.mockReturnValueOnce('2').mockReturnValueOnce('3');
+
+    const step: TextRewriteStep = {
+      id: 'step-rev',
+      op: 'text.rewrite',
+      where: { by: 'select', select: { type: 'text', pattern: 'Hello' }, require: 'exactlyOne' },
+      args: { replacement: { text: 'Changed' } },
+    };
+
+    const compiled: CompiledPlan = {
+      mutationSteps: [{ step, targets: [makeTarget()] }],
+      assertSteps: [],
+      compiledRevision: '2',
+    };
+
+    const receipt = executeCompiledPlan(editor, compiled);
+    expect(receipt.revision.before).toBe('2');
+    expect(receipt.revision.after).toBe('3');
+  });
+
+  it('multi-step plan produces single revision bump', () => {
+    const { editor } = makeEditor();
+    setupBlockIndex([{ nodeId: 'p1', pos: 0, node: {} }]);
+    setupResolveTextRange(1, 6);
+    mockedDeps.resolveInlineStyle.mockReturnValue([]);
+
+    // before → '0', after → '1' (one bump for the whole plan)
+    mockedDeps.getRevision.mockReturnValueOnce('0').mockReturnValueOnce('1');
+
+    const step1: TextRewriteStep = {
+      id: 'step-multi-1',
+      op: 'text.rewrite',
+      where: { by: 'select', select: { type: 'text', pattern: 'Hello' }, require: 'exactlyOne' },
+      args: { replacement: { text: 'Hi' } },
+    };
+    const step2: StyleApplyStep = {
+      id: 'step-multi-2',
+      op: 'format.apply',
+      where: { by: 'select', select: { type: 'text', pattern: 'Hello' }, require: 'exactlyOne' },
+      args: { inline: { bold: true } },
+    };
+
+    const compiled: CompiledPlan = {
+      mutationSteps: [
+        { step: step1, targets: [makeTarget()] },
+        { step: step2, targets: [makeTarget()] },
+      ],
+      assertSteps: [],
+      compiledRevision: '0',
+    };
+
+    const receipt = executeCompiledPlan(editor, compiled);
+    expect(receipt.revision.before).toBe('0');
+    expect(receipt.revision.after).toBe('1');
+    expect(receipt.steps.length).toBe(2);
+  });
+});
+
+// ---------------------------------------------------------------------------
+// executeCreateStep — block-anchor position and duplicate ID detection
+// ---------------------------------------------------------------------------
+
+describe('executeCreateStep: block-anchor position resolution', () => {
+  function makeCreateEditor(candidateNodeSize: number) {
+    const insertedNode = {
+      type: { name: 'paragraph' },
+      isTextblock: true,
+      attrs: {},
+    };
+
+    const paragraphType = {
+      createAndFill: vi.fn(() => insertedNode),
+      create: vi.fn(() => insertedNode),
+    };
+
+    const tr = {
+      insert: vi.fn(),
+      mapping: { map: (pos: number) => pos },
+      doc: {
+        descendants: vi.fn((fn: (node: any) => boolean | void) => {
+          fn({ isTextblock: true, attrs: { paraId: 'p1' } });
+          fn({ isTextblock: true, attrs: {} });
+        }),
+      },
+    };
+
+    const editor = {
+      state: {
+        schema: {
+          nodes: { paragraph: paragraphType },
+          text: vi.fn((t: string) => ({ type: { name: 'text' }, text: t })),
+        },
+      },
+    } as unknown as Editor;
+
+    mockedDeps.getBlockIndex.mockReturnValue({
+      candidates: [{ nodeId: 'p1', pos: 10, end: 10 + candidateNodeSize, nodeSize: candidateNodeSize, node: {} }],
+    });
+
+    return { editor, tr, paragraphType };
+  }
+
+  it('inserts after the anchor block when position is "after"', () => {
+    const nodeSize = 20;
+    const { editor, tr } = makeCreateEditor(nodeSize);
+    const step = { id: 'create-1', op: 'create.paragraph', args: { position: 'after', text: 'New' } } as any;
+    const targets = [makeTarget({ blockId: 'p1', kind: 'range' })];
+    const mapping = { map: (pos: number) => pos } as any;
+
+    executeCreateStep(editor, tr as any, step, targets, mapping);
+
+    // 'after' → candidate.pos + candidate.nodeSize = 10 + 20 = 30
+    expect(tr.insert).toHaveBeenCalledWith(30, expect.anything());
+  });
+
+  it('inserts before the anchor block when position is "before"', () => {
+    const nodeSize = 20;
+    const { editor, tr } = makeCreateEditor(nodeSize);
+    const step = { id: 'create-2', op: 'create.paragraph', args: { position: 'before', text: 'New' } } as any;
+    const targets = [makeTarget({ blockId: 'p1', kind: 'range' })];
+    const mapping = { map: (pos: number) => pos } as any;
+
+    executeCreateStep(editor, tr as any, step, targets, mapping);
+
+    // 'before' → candidate.pos = 10
+    expect(tr.insert).toHaveBeenCalledWith(10, expect.anything());
+  });
+
+  it('defaults position to "after" when omitted', () => {
+    const nodeSize = 15;
+    const { editor, tr } = makeCreateEditor(nodeSize);
+    const step = { id: 'create-3', op: 'create.paragraph', args: { text: 'New' } } as any;
+    const targets = [makeTarget({ blockId: 'p1', kind: 'range' })];
+    const mapping = { map: (pos: number) => pos } as any;
+
+    executeCreateStep(editor, tr as any, step, targets, mapping);
+
+    // default 'after' → candidate.pos + candidate.nodeSize = 10 + 15 = 25
+    expect(tr.insert).toHaveBeenCalledWith(25, expect.anything());
+  });
+
+  it('throws TARGET_NOT_FOUND when anchor block is missing', () => {
+    const { editor, tr } = makeCreateEditor(20);
+    // Override to return empty index
+    mockedDeps.getBlockIndex.mockReturnValue({ candidates: [] });
+
+    const step = { id: 'create-missing', op: 'create.paragraph', args: { position: 'after', text: 'New' } } as any;
+    const targets = [makeTarget({ blockId: 'p1', kind: 'range' })];
+    const mapping = { map: (pos: number) => pos } as any;
+
+    try {
+      executeCreateStep(editor, tr as any, step, targets, mapping);
+    } catch (error) {
+      expect(error).toBeInstanceOf(PlanError);
+      expect((error as PlanError).code).toBe('TARGET_NOT_FOUND');
+      return;
+    }
+
+    throw new Error('expected TARGET_NOT_FOUND');
+  });
+});
+
+describe('executeCreateStep: post-insert duplicate ID detection', () => {
+  it('throws INTERNAL_ERROR when insertion creates duplicate block IDs', () => {
+    const insertedNode = {
+      type: { name: 'paragraph' },
+      isTextblock: true,
+      attrs: {},
+    };
+
+    const paragraphType = {
+      createAndFill: vi.fn(() => insertedNode),
+      create: vi.fn(() => insertedNode),
+    };
+
+    const tr = {
+      insert: vi.fn(),
+      mapping: { map: (pos: number) => pos },
+      doc: {
+        descendants: vi.fn((fn: (node: any) => boolean | void) => {
+          // Simulate two textblocks with the same paraId after insertion
+          fn({ isTextblock: true, attrs: { paraId: 'dup-id' } });
+          fn({ isTextblock: true, attrs: { paraId: 'dup-id' } });
+        }),
+      },
+    };
+
+    const editor = {
+      state: {
+        schema: {
+          nodes: { paragraph: paragraphType },
+          text: vi.fn((t: string) => ({ type: { name: 'text' }, text: t })),
+        },
+      },
+    } as unknown as Editor;
+
+    mockedDeps.getBlockIndex.mockReturnValue({
+      candidates: [{ nodeId: 'p1', pos: 0, end: 10, nodeSize: 10, node: {} }],
+    });
+
+    const step = { id: 'create-dup', op: 'create.paragraph', args: { position: 'after', text: 'New' } } as any;
+    const targets = [makeTarget({ blockId: 'p1', kind: 'range' })];
+    const mapping = { map: (pos: number) => pos } as any;
+
+    try {
+      executeCreateStep(editor, tr as any, step, targets, mapping);
+    } catch (error) {
+      expect(error).toBeInstanceOf(PlanError);
+      expect((error as PlanError).code).toBe('INTERNAL_ERROR');
+      expect((error as PlanError).details).toMatchObject({ duplicateBlockIds: ['dup-id'] });
+      expect((error as PlanError).details).toHaveProperty('source');
+      expect((error as PlanError).details).toHaveProperty('invariant');
+      return;
+    }
+
+    throw new Error('expected INTERNAL_ERROR for duplicate block IDs');
+  });
+
+  it('does not throw when all post-insert block IDs are unique', () => {
+    const insertedNode = {
+      type: { name: 'paragraph' },
+      isTextblock: true,
+      attrs: {},
+    };
+
+    const paragraphType = {
+      createAndFill: vi.fn(() => insertedNode),
+      create: vi.fn(() => insertedNode),
+    };
+
+    const tr = {
+      insert: vi.fn(),
+      mapping: { map: (pos: number) => pos },
+      doc: {
+        descendants: vi.fn((fn: (node: any) => boolean | void) => {
+          fn({ isTextblock: true, attrs: { paraId: 'id-a' } });
+          fn({ isTextblock: true, attrs: { paraId: 'id-b' } });
+          fn({ isTextblock: true, attrs: { sdBlockId: 'id-c' } });
+        }),
+      },
+    };
+
+    const editor = {
+      state: {
+        schema: {
+          nodes: { paragraph: paragraphType },
+          text: vi.fn((t: string) => ({ type: { name: 'text' }, text: t })),
+        },
+      },
+    } as unknown as Editor;
+
+    mockedDeps.getBlockIndex.mockReturnValue({
+      candidates: [{ nodeId: 'p1', pos: 0, end: 10, nodeSize: 10, node: {} }],
+    });
+
+    const step = { id: 'create-ok', op: 'create.paragraph', args: { position: 'after', text: 'New' } } as any;
+    const targets = [makeTarget({ blockId: 'p1', kind: 'range' })];
+    const mapping = { map: (pos: number) => pos } as any;
+
+    expect(() => executeCreateStep(editor, tr as any, step, targets, mapping)).not.toThrow();
+  });
+
+  it('skips non-textblock nodes during duplicate check', () => {
+    const insertedNode = {
+      type: { name: 'paragraph' },
+      isTextblock: true,
+      attrs: {},
+    };
+
+    const paragraphType = {
+      createAndFill: vi.fn(() => insertedNode),
+      create: vi.fn(() => insertedNode),
+    };
+
+    const tr = {
+      insert: vi.fn(),
+      mapping: { map: (pos: number) => pos },
+      doc: {
+        descendants: vi.fn((fn: (node: any) => boolean | void) => {
+          // Two container blocks with same ID — should not trigger the check
+          fn({ isTextblock: false, attrs: { nodeId: 'container-1' } });
+          fn({ isTextblock: false, attrs: { nodeId: 'container-1' } });
+          // One textblock with unique ID
+          fn({ isTextblock: true, attrs: { paraId: 'unique' } });
+        }),
+      },
+    };
+
+    const editor = {
+      state: {
+        schema: {
+          nodes: { paragraph: paragraphType },
+          text: vi.fn((t: string) => ({ type: { name: 'text' }, text: t })),
+        },
+      },
+    } as unknown as Editor;
+
+    mockedDeps.getBlockIndex.mockReturnValue({
+      candidates: [{ nodeId: 'p1', pos: 0, end: 10, nodeSize: 10, node: {} }],
+    });
+
+    const step = { id: 'create-skip', op: 'create.paragraph', args: { position: 'after', text: 'X' } } as any;
+    const targets = [makeTarget({ blockId: 'p1', kind: 'range' })];
+    const mapping = { map: (pos: number) => pos } as any;
+
+    // Should not throw — non-textblock duplicates are ignored
+    expect(() => executeCreateStep(editor, tr as any, step, targets, mapping)).not.toThrow();
+  });
+});
+
+// ---------------------------------------------------------------------------
+// executeCreateStep — span target (multi-block ref) support
+// ---------------------------------------------------------------------------
+
+describe('executeCreateStep: span target (multi-block create ref)', () => {
+  function makeSpanCreateEditor(candidates: Array<{ nodeId: string; pos: number; nodeSize: number }>) {
+    const insertedNode = {
+      type: { name: 'paragraph' },
+      isTextblock: true,
+      attrs: {},
+    };
+
+    const paragraphType = {
+      createAndFill: vi.fn(() => insertedNode),
+      create: vi.fn(() => insertedNode),
+    };
+
+    const tr = {
+      insert: vi.fn(),
+      mapping: { map: (pos: number) => pos },
+      doc: {
+        descendants: vi.fn((fn: (node: any) => boolean | void) => {
+          // All unique IDs — no duplicate-ID failures
+          for (let i = 0; i < candidates.length + 1; i++) {
+            fn({ isTextblock: true, attrs: { paraId: `unique-${i}` } });
+          }
+        }),
+      },
+    };
+
+    const editor = {
+      state: {
+        schema: {
+          nodes: { paragraph: paragraphType },
+          text: vi.fn((t: string) => ({ type: { name: 'text' }, text: t })),
+        },
+      },
+    } as unknown as Editor;
+
+    mockedDeps.getBlockIndex.mockReturnValue({
+      candidates: candidates.map((c) => ({ ...c, end: c.pos + c.nodeSize, node: {} })),
+    });
+
+    return { editor, tr, paragraphType };
+  }
+
+  function makeSpanTarget(segments: Array<{ blockId: string; from: number; to: number }>): CompiledTarget {
+    return {
+      kind: 'span',
+      stepId: 'span-create',
+      op: 'create.paragraph',
+      matchId: 'match-1',
+      segments: segments.map((s) => ({
+        ...s,
+        absFrom: s.from,
+        absTo: s.to,
+      })),
+      text: 'span text',
+      marks: [],
+    } as CompiledTarget;
+  }
+
+  it('anchors to last segment block when position is "after" (multi-block ref)', () => {
+    const candidates = [
+      { nodeId: 'p1', pos: 10, nodeSize: 20 },
+      { nodeId: 'p2', pos: 30, nodeSize: 25 },
+      { nodeId: 'p3', pos: 55, nodeSize: 15 },
+    ];
+    const { editor, tr } = makeSpanCreateEditor(candidates);
+
+    const step = { id: 'span-create-after', op: 'create.paragraph', args: { position: 'after', text: 'New' } } as any;
+    const target = makeSpanTarget([
+      { blockId: 'p1', from: 0, to: 5 },
+      { blockId: 'p2', from: 0, to: 10 },
+      { blockId: 'p3', from: 0, to: 8 },
+    ]);
+    const mapping = { map: (pos: number) => pos } as any;
+
+    executeCreateStep(editor, tr as any, step, [target], mapping);
+
+    // 'after' on last segment (p3): candidate.pos + candidate.nodeSize = 55 + 15 = 70
+    expect(tr.insert).toHaveBeenCalledWith(70, expect.anything());
+  });
+
+  it('anchors to first segment block when position is "before" (multi-block ref)', () => {
+    const candidates = [
+      { nodeId: 'p1', pos: 10, nodeSize: 20 },
+      { nodeId: 'p2', pos: 30, nodeSize: 25 },
+    ];
+    const { editor, tr } = makeSpanCreateEditor(candidates);
+
+    const step = { id: 'span-create-before', op: 'create.paragraph', args: { position: 'before', text: 'New' } } as any;
+    const target = makeSpanTarget([
+      { blockId: 'p1', from: 0, to: 5 },
+      { blockId: 'p2', from: 0, to: 10 },
+    ]);
+    const mapping = { map: (pos: number) => pos } as any;
+
+    executeCreateStep(editor, tr as any, step, [target], mapping);
+
+    // 'before' on first segment (p1): candidate.pos = 10
+    expect(tr.insert).toHaveBeenCalledWith(10, expect.anything());
+  });
+
+  it('defaults to "after" on last segment when position is omitted (multi-block ref)', () => {
+    const candidates = [
+      { nodeId: 'p1', pos: 5, nodeSize: 10 },
+      { nodeId: 'p2', pos: 15, nodeSize: 20 },
+    ];
+    const { editor, tr } = makeSpanCreateEditor(candidates);
+
+    const step = { id: 'span-create-default', op: 'create.paragraph', args: { text: 'New' } } as any;
+    const target = makeSpanTarget([
+      { blockId: 'p1', from: 0, to: 3 },
+      { blockId: 'p2', from: 0, to: 8 },
+    ]);
+    const mapping = { map: (pos: number) => pos } as any;
+
+    executeCreateStep(editor, tr as any, step, [target], mapping);
+
+    // default 'after' on last segment (p2): candidate.pos + candidate.nodeSize = 15 + 20 = 35
+    expect(tr.insert).toHaveBeenCalledWith(35, expect.anything());
+  });
+
+  it('does not use text-model offsets from span segments for create insertion', () => {
+    const candidates = [
+      { nodeId: 'p1', pos: 100, nodeSize: 50 },
+      { nodeId: 'p2', pos: 150, nodeSize: 40 },
+    ];
+    const { editor, tr } = makeSpanCreateEditor(candidates);
+
+    const step = {
+      id: 'span-no-offset',
+      op: 'create.heading',
+      args: { position: 'after', level: 2, text: 'Title' },
+    } as any;
+    // Segments have non-zero from/to — these must be ignored for create ops
+    const target = makeSpanTarget([
+      { blockId: 'p1', from: 5, to: 20 },
+      { blockId: 'p2', from: 3, to: 15 },
+    ]);
+    const mapping = { map: (pos: number) => pos } as any;
+
+    executeCreateStep(editor, tr as any, step, [target], mapping);
+
+    // Should use p2's block boundary (150 + 40 = 190), NOT p2's from/to offsets
+    expect(tr.insert).toHaveBeenCalledWith(190, expect.anything());
   });
 });
 
@@ -1151,5 +1702,121 @@ describe('span target contiguity checks', () => {
     expect(second.attrs.listRendering).toEqual({ markerText: '1.' });
     expect(second.attrs.paraId).toBeNull();
     expect(second.attrs.sdBlockId).toBeNull();
+  });
+});
+
+// ---------------------------------------------------------------------------
+// T3: Atomic rollback tests (multi-step failure — §13.13)
+// ---------------------------------------------------------------------------
+
+describe('executeCompiledPlan: atomic rollback on failure', () => {
+  it('does not dispatch when an assert step fails (PRECONDITION_FAILED)', () => {
+    const { editor, dispatch } = makeEditor();
+    setupBlockIndex([{ nodeId: 'p1', pos: 0, node: {} }]);
+    setupResolveTextRange(1, 6);
+    mockedDeps.resolveInlineStyle.mockReturnValue([]);
+    mockedDeps.getRevision.mockReturnValue('0');
+
+    // Patch tr.doc with descendants so buildAssertIndex can run
+    const tr = editor.state.tr as any;
+    tr.doc.descendants = vi.fn();
+    tr.doc.textBetween = vi.fn(() => '');
+
+    const mutationStep: TextRewriteStep = {
+      id: 'step-1',
+      op: 'text.rewrite',
+      where: { by: 'select', select: { type: 'text', pattern: 'Hello' }, require: 'exactlyOne' },
+      args: { replacement: { text: 'Hi' } },
+    };
+
+    // Assert expects 5 matches of "NonExistent" — will find 0 → PRECONDITION_FAILED
+    const assertStep: AssertStep = {
+      id: 'assert-bad',
+      op: 'assert',
+      where: { by: 'select', select: { type: 'text', pattern: 'NonExistent' }, require: 'exactlyOne' },
+      args: { expectCount: 5 },
+    };
+
+    const compiled: CompiledPlan = {
+      mutationSteps: [{ step: mutationStep, targets: [makeTarget()] }],
+      assertSteps: [assertStep],
+      compiledRevision: '0',
+    };
+
+    try {
+      executeCompiledPlan(editor, compiled);
+      throw new Error('expected PRECONDITION_FAILED');
+    } catch (error) {
+      expect(error).toBeInstanceOf(PlanError);
+      expect((error as PlanError).code).toBe('PRECONDITION_FAILED');
+    }
+
+    // dispatch should not have been called — transaction rolled back
+    expect(dispatch).not.toHaveBeenCalled();
+  });
+
+  it('does not dispatch when the executor throws for unsupported op', () => {
+    const { editor, dispatch } = makeEditor();
+    mockedDeps.getRevision.mockReturnValue('0');
+
+    const badStep = {
+      id: 'step-bad-op',
+      op: 'totally.unknown',
+      where: { by: 'select', select: { type: 'text', pattern: 'x' }, require: 'exactlyOne' },
+      args: {},
+    } as any;
+
+    const compiled: CompiledPlan = {
+      mutationSteps: [{ step: badStep, targets: [makeTarget()] }],
+      assertSteps: [],
+      compiledRevision: '0',
+    };
+
+    expect(() => executeCompiledPlan(editor, compiled)).toThrow();
+    expect(dispatch).not.toHaveBeenCalled();
+  });
+
+  it('does not dispatch when revision drift is detected (REVISION_CHANGED_SINCE_COMPILE)', () => {
+    const { editor, dispatch } = makeEditor();
+    mockedDeps.getRevision.mockReturnValue('3');
+
+    const step: TextRewriteStep = {
+      id: 'step-drift-rollback',
+      op: 'text.rewrite',
+      where: { by: 'select', select: { type: 'text', pattern: 'Hello' }, require: 'exactlyOne' },
+      args: { replacement: { text: 'Changed' } },
+    };
+
+    const compiled: CompiledPlan = {
+      mutationSteps: [{ step, targets: [makeTarget()] }],
+      assertSteps: [],
+      compiledRevision: '0',
+    };
+
+    expect(() => executeCompiledPlan(editor, compiled)).toThrow(PlanError);
+    expect(dispatch).not.toHaveBeenCalled();
+  });
+
+  it('does not dispatch when a single step target is not found', () => {
+    const { editor, dispatch } = makeEditor();
+    mockedDeps.getRevision.mockReturnValue('0');
+
+    // Set up an empty block index so TARGET_NOT_FOUND will be thrown during create
+    mockedDeps.getBlockIndex.mockReturnValue({ candidates: [] });
+
+    const step = {
+      id: 'step-missing-target',
+      op: 'create.paragraph',
+      args: { position: 'after', text: 'New' },
+    } as any;
+
+    const compiled: CompiledPlan = {
+      mutationSteps: [{ step, targets: [makeTarget({ blockId: 'nonexistent', kind: 'range' })] }],
+      assertSteps: [],
+      compiledRevision: '0',
+    };
+
+    expect(() => executeCompiledPlan(editor, compiled)).toThrow();
+    expect(dispatch).not.toHaveBeenCalled();
   });
 });

@@ -3923,6 +3923,7 @@ export class PresentationEditor extends EventEmitter {
           console.warn('[PresentationEditor] Failed to render caret overlay:', error);
         }
       }
+      this.#scrollCaretIntoViewIfNeeded(caretLayout);
       return;
     }
 
@@ -3950,6 +3951,67 @@ export class PresentationEditor extends EventEmitter {
       // DOM manipulation can fail if element is detached or in invalid state
       if (process.env.NODE_ENV === 'development') {
         console.warn('[PresentationEditor] Failed to render selection rects:', error);
+      }
+    }
+  }
+
+  /**
+   * Scrolls the scroll container so the caret remains visible after selection changes.
+   *
+   * Called after the caret overlay is rendered in #updateSelection(). Uses the rendered
+   * caret element's screen-space position (via getBoundingClientRect) to determine if
+   * scrolling is needed, keeping a small margin for comfortable viewing.
+   *
+   * If the caret element doesn't exist (page may be virtualized / not mounted),
+   * falls back to scrolling the target page into view to trigger virtualization.
+   */
+  #scrollCaretIntoViewIfNeeded(caretLayout: { pageIndex: number }): void {
+    const caretEl = this.#localSelectionLayer?.querySelector(
+      '.presentation-editor__selection-caret',
+    ) as HTMLElement | null;
+
+    if (!caretEl) {
+      // Caret page may not be mounted (virtualized) — scroll page into view
+      // to trigger mount; next selection update will handle precise scroll.
+      this.#scrollPageIntoView(caretLayout.pageIndex);
+      return;
+    }
+
+    const scrollContainer = this.#scrollContainer;
+    if (!scrollContainer) return;
+
+    const caretRect = caretEl.getBoundingClientRect();
+
+    let containerTop: number;
+    let containerBottom: number;
+
+    if (scrollContainer instanceof Window) {
+      containerTop = 0;
+      containerBottom = scrollContainer.innerHeight;
+    } else {
+      const r = (scrollContainer as Element).getBoundingClientRect();
+      containerTop = r.top;
+      containerBottom = r.bottom;
+    }
+
+    // Margin in screen pixels to keep around the cursor for comfortable viewing
+    const SCROLL_MARGIN = 20;
+
+    if (caretRect.bottom > containerBottom - SCROLL_MARGIN) {
+      // Caret is below the visible area — scroll down
+      const delta = caretRect.bottom - containerBottom + SCROLL_MARGIN;
+      if (scrollContainer instanceof Window) {
+        scrollContainer.scrollBy({ top: delta });
+      } else {
+        (scrollContainer as Element).scrollTop += delta;
+      }
+    } else if (caretRect.top < containerTop + SCROLL_MARGIN) {
+      // Caret is above the visible area — scroll up
+      const delta = containerTop + SCROLL_MARGIN - caretRect.top;
+      if (scrollContainer instanceof Window) {
+        scrollContainer.scrollBy({ top: -delta });
+      } else {
+        (scrollContainer as Element).scrollTop -= delta;
       }
     }
   }

@@ -4,29 +4,46 @@ import { EditorState, TextSelection } from 'prosemirror-state';
 import { EditorView } from 'prosemirror-view';
 import { wrapTextInRunsPlugin } from './wrapTextInRunsPlugin.js';
 
-const makeSchema = () =>
-  new Schema({
-    nodes: {
-      doc: { content: 'block+' },
-      paragraph: {
-        group: 'block',
-        content: 'inline*',
-        toDOM: () => ['p', 0],
-        attrs: {
-          paragraphProperties: { default: null },
-        },
+const makeSchema = ({ includeStructuredContent = false } = {}) => {
+  const nodes = {
+    doc: { content: 'block+' },
+    paragraph: {
+      group: 'block',
+      content: 'inline*',
+      toDOM: () => ['p', 0],
+      attrs: {
+        paragraphProperties: { default: null },
       },
-      run: {
-        inline: true,
-        group: 'inline',
-        content: 'inline*',
-        toDOM: () => ['span', { 'data-run': '1' }, 0],
-        attrs: {
-          runProperties: { default: null },
-        },
-      },
-      text: { group: 'inline' },
     },
+    run: {
+      inline: true,
+      group: 'inline',
+      content: 'inline*',
+      toDOM: () => ['span', { 'data-run': '1' }, 0],
+      attrs: {
+        runProperties: { default: null },
+      },
+    },
+    text: { group: 'inline' },
+  };
+
+  if (includeStructuredContent) {
+    nodes.structuredContent = {
+      inline: true,
+      group: 'inline',
+      content: 'inline*',
+      isolating: true,
+      toDOM: () => ['span', { 'data-structured-content': '' }, 0],
+      attrs: {
+        id: { default: null },
+        tag: { default: null },
+        alias: { default: null },
+      },
+    };
+  }
+
+  return new Schema({
+    nodes,
     marks: {
       bold: {
         toDOM: () => ['strong', 0],
@@ -52,6 +69,7 @@ const makeSchema = () =>
       },
     },
   });
+};
 
 const paragraphDoc = (schema) => schema.node('doc', null, [schema.node('paragraph')]);
 
@@ -538,6 +556,58 @@ describe('wrapTextInRunsPlugin', () => {
       const run = paragraph.firstChild;
       // Should NOT have bold since it's a fresh view
       expect(run.firstChild.marks.some((mark) => mark.type.name === 'bold')).toBe(false);
+    });
+  });
+
+  describe('structuredContent wrapping (SD-2011)', () => {
+    it('wraps text when inserting SDT with bare text content via transaction', () => {
+      const schema = makeSchema({ includeStructuredContent: true });
+      const doc = schema.node('doc', null, [schema.node('paragraph')]);
+      const view = createView(schema, doc);
+
+      // Insert SDT with bare text content (simulates template builder insertion)
+      const sdtNode = schema.nodes.structuredContent.create(
+        { id: '123', alias: 'Field' },
+        schema.text('John Doe'),
+      );
+      const tr = view.state.tr.insert(1, sdtNode);
+      view.dispatch(tr);
+
+      const paragraph = view.state.doc.firstChild;
+      // Find the structuredContent node (may be wrapped in a run by the plugin)
+      let sdt = null;
+      paragraph.descendants((node) => {
+        if (node.type.name === 'structuredContent') sdt = node;
+      });
+      expect(sdt).not.toBeNull();
+      // The text inside SDT should be wrapped in a run
+      expect(sdt.firstChild.type.name).toBe('run');
+      expect(sdt.textContent).toBe('John Doe');
+    });
+
+    it('wraps text replaced inside structuredContent via transaction', () => {
+      const schema = makeSchema({ includeStructuredContent: true });
+      const sdtNode = schema.nodes.structuredContent.create(
+        { id: '456', alias: 'Name' },
+        schema.nodes.run.create(null, schema.text('Old')),
+      );
+      const runNode = schema.nodes.run.create(null, sdtNode);
+      const doc = schema.node('doc', null, [schema.node('paragraph', null, [runNode])]);
+      const view = createView(schema, doc);
+
+      // Structure: paragraph(0) > run(1) > sdt(2) > run(3) > text(4..6="Old")
+      // Replace "Old" with bare text — simulates typing inside the SDT
+      const tr = view.state.tr.replaceWith(4, 7, schema.text('New Value'));
+      view.dispatch(tr);
+
+      let updatedSdt = null;
+      view.state.doc.firstChild.descendants((node) => {
+        if (node.type.name === 'structuredContent') updatedSdt = node;
+      });
+      expect(updatedSdt).not.toBeNull();
+      // Text should still be inside a run within the SDT
+      expect(updatedSdt.firstChild.type.name).toBe('run');
+      expect(updatedSdt.textContent).toBe('New Value');
     });
   });
 });

@@ -110,9 +110,15 @@ const getAnchorTop = (comment) => {
 };
 
 // Compute anchor position for the pending (new) comment.
-// Only uses editor positions (same coordinate space as regular comments).
-// The pending comment renders once the editor reports position for the 'pending' mark.
+// For editor docs, uses the 'pending' mark position from editorCommentPositions.
+// For PDF docs, falls back to selection bounds (same as getAnchorTop).
 const getPendingAnchorTop = () => {
+  if (props.currentDocument.type === 'application/pdf') {
+    const zoom = (activeZoom.value ?? 100) / 100;
+    const top = Number(pendingComment.value?.selection?.selectionBounds?.top);
+    return isNaN(top) ? null : top * zoom;
+  }
+
   const positionEntry = editorCommentPositions.value['pending'];
   return positionEntry?.bounds?.top ?? null;
 };

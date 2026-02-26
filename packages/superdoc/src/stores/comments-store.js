@@ -145,6 +145,8 @@ export const useCommentsStore = defineStore('comments', () => {
     return source === 'super-editor';
   };
 
+  const isTrackedChangeThread = (comment) => Boolean(comment?.trackedChange) || Boolean(comment?.trackedChangeParentId);
+
   const syncResolvedCommentsWithDocument = () => {
     const docPositions = editorCommentPositions.value || {};
     const activeKeys = new Set(Object.keys(docPositions));
@@ -156,7 +158,12 @@ export const useCommentsStore = defineStore('comments', () => {
 
       const hasActiveAnchor = activeKeys.has(String(key));
 
-      if (hasActiveAnchor && comment.resolvedTime && isEditorBackedComment(comment)) {
+      if (
+        hasActiveAnchor &&
+        comment.resolvedTime &&
+        isEditorBackedComment(comment) &&
+        !isTrackedChangeThread(comment)
+      ) {
         clearResolvedMetadata(comment);
       }
     });

@@ -475,7 +475,7 @@ export class DecorationBridge {
       const decorationSet = this.#getDecorationSet(plugin, state);
       this.#prevDecorationSets.set(plugin, decorationSet);
 
-      let addedFromCurrent = false;
+      let pluginHasCurrentRanges = false;
       if (decorationSet !== DecorationSet.empty) {
         const decorations = decorationSet.find(0, docSize);
         for (const decoration of decorations) {
@@ -487,22 +487,22 @@ export class DecorationBridge {
           // Collapsed or invalid range yields no entries; mapping can produce from === to
           if (decoration.from >= decoration.to) continue;
 
+          pluginHasCurrentRanges = true;
+
           const entries = domIndex.findEntriesInRange(decoration.from, decoration.to);
           for (const entry of entries) {
             const d = this.#getOrCreateDesired(desired, entry.el);
             for (const cls of attrs.classes) d.classes.add(cls);
             for (const [key, value] of attrs.dataEntries) d.dataAttrs.set(key, value);
             for (const [prop, value] of attrs.styleEntries) d.styleProps.set(prop, value);
-            addedFromCurrent = true;
           }
         }
       }
 
-      // Fallback: plugin returned empty or only collapsed/wrong decorations (e.g. after
-      // another plugin's ReplaceStep mapping). Use previous ranges so decoration is not lost.
-      // When restoreEmptyDecorations is false (e.g. clearFocus), do not restore and clear
-      // previousRanges so reconcile will remove the decoration from DOM.
-      if (addedFromCurrent) continue;
+      // Fallback: only when the plugin produced no valid current ranges (e.g. mapping cleared them).
+      // Do not restore when the plugin has current ranges but they are offscreen (not in domIndex);
+      // otherwise we would reapply previous ranges to wrong elements and cause highlight drift.
+      if (pluginHasCurrentRanges) continue;
       if (!restoreEmptyDecorations) {
         this.#previousRanges.set(plugin, []);
         continue;

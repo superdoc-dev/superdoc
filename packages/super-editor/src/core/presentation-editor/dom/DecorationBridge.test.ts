@@ -730,6 +730,24 @@ describe('DecorationBridge', () => {
       bridge.sync(mockState([plugin]), index);
       expect(span.style.getPropertyValue('background-color')).toBe('white');
     });
+
+    it('does not restore from previous when plugin has current ranges but they are offscreen (not in domIndex)', () => {
+      const { index, addSpan, rebuild } = createIndex();
+      const span = addSpan(5, 15);
+      rebuild();
+
+      const { plugin, setDecorations } = mutableExternalPlugin('focus');
+      setDecorations([{ from: 5, to: 15, class: 'highlight-selection' }]);
+      bridge.sync(mockState([plugin]), index);
+      expect(span.classList.contains('highlight-selection')).toBe(true);
+
+      const stateWithDoc = mockStateWithDocText([plugin], 'x'.repeat(20));
+      bridge.collectDecorationRanges(stateWithDoc);
+      setDecorations([{ from: 100, to: 110, class: 'highlight-selection' }]);
+      bridge.sync(mockState([plugin]), index);
+
+      expect(span.classList.contains('highlight-selection')).toBe(false);
+    });
   });
 
   // -----------------------------------------------------------------------

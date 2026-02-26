@@ -176,6 +176,42 @@ describe('TrackChanges extension commands', () => {
     );
   });
 
+  it('rejectTrackedChangesBetween expands partial selection to reject the full tracked-change ID', () => {
+    const changeId = 'ins-partial-still-present';
+    const insertMark = schema.marks[TrackInsertMarkName].create({ id: changeId });
+    const doc = createDoc('Pending', [insertMark]);
+    const state = createState(doc);
+    const emit = vi.fn();
+
+    let nextState;
+    commands.rejectTrackedChangesBetween(
+      1,
+      3,
+    )({
+      state,
+      dispatch: (tr) => {
+        nextState = state.apply(tr);
+      },
+      editor: {
+        emit,
+        options: { user: { email: 'reviewer@example.com', name: 'Reviewer' } },
+      },
+    });
+
+    expect(nextState).toBeDefined();
+    expect(nextState.doc.textContent).toBe('');
+
+    const resolveEventsForId = emit.mock.calls.filter(([eventName, payload]) => {
+      return (
+        eventName === 'commentsUpdate' &&
+        payload?.type === 'trackedChange' &&
+        payload?.event === 'resolve' &&
+        payload?.changeId === changeId
+      );
+    });
+    expect(resolveEventsForId).toHaveLength(1);
+  });
+
   it('blocks rejecting tracked changes when permissionResolver denies access', () => {
     const deleteMark = schema.marks[TrackDeleteMarkName].create({ id: 'del-guard', authorEmail: 'author@example.com' });
     const doc = createDoc('Legacy', [deleteMark]);

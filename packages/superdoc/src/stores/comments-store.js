@@ -781,6 +781,8 @@ export const useCommentsStore = defineStore('comments', () => {
         ...(formatMark && { formatMark: formatMark.mark }),
       };
 
+      // nodes/deletionNodes are unused here — the function resolves them from
+      // trackedChangesForId which already contains all document positions for this ID.
       const params = createOrUpdateTrackedChangeComment({
         event: 'add',
         marks,
@@ -1019,6 +1021,7 @@ export const useCommentsStore = defineStore('comments', () => {
     getGroupedComments,
     getCommentsByPosition,
     getFloatingComments,
+    getCommentPositionKey,
     getCommentPosition,
     getCommentAnchoredText,
     getCommentAnchorData,

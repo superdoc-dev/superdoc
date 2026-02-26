@@ -3,7 +3,7 @@ import { rejectAllTrackedChanges } from '../../helpers/tracked-changes.js';
 
 interface FakeEditor {
   doc?: {
-    review?: {
+    trackChanges?: {
       decide?: (input: Record<string, unknown>) => void;
     };
   };
@@ -25,11 +25,11 @@ test.afterEach(() => {
   delete (globalThis as { window?: Window }).window;
 });
 
-test('calls review.decide on the review API', async () => {
+test('calls trackChanges.decide on the trackChanges API', async () => {
   let called = false;
   const page = createMockPageFromEditor({
     doc: {
-      review: {
+      trackChanges: {
         decide: () => {
           called = true;
         },
@@ -41,9 +41,9 @@ test('calls review.decide on the review API', async () => {
   expect(called).toBe(true);
 });
 
-test('throws when document-api review.decide is missing', async () => {
+test('throws when document-api trackChanges.decide is missing', async () => {
   const page = createMockPageFromEditor({});
   await expect(rejectAllTrackedChanges(page)).rejects.toThrow(
-    'Document API is unavailable: expected editor.doc.review.decide.',
+    'Document API is unavailable: expected editor.doc.trackChanges.decide.',
   );
 });

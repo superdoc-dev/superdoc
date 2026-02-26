@@ -52,8 +52,12 @@ import type {
   FormatUnderlineInput,
   FormatStrikethroughInput,
   StyleApplyInput,
+  FormatFontSizeInput,
+  FormatFontFamilyInput,
+  FormatColorInput,
+  FormatAlignInput,
 } from './format/format.js';
-import { executeStyleApply } from './format/format.js';
+import { executeStyleApply, executeFontSize, executeFontFamily, executeColor, executeAlign } from './format/format.js';
 import type { GetNodeAdapter, GetNodeByIdInput } from './get-node/get-node.js';
 import { executeGetNode, executeGetNodeById } from './get-node/get-node.js';
 import { executeGetText, type GetTextAdapter, type GetTextInput } from './get-text/get-text.js';
@@ -87,6 +91,9 @@ import {
 import { executeReplace, type ReplaceInput } from './replace/replace.js';
 import type { CreateAdapter, CreateApi } from './create/create.js';
 import { executeCreateParagraph, executeCreateHeading } from './create/create.js';
+import type { BlocksAdapter, BlocksApi } from './blocks/blocks.js';
+import { executeBlocksDelete } from './blocks/blocks.js';
+import type { BlocksDeleteInput, BlocksDeleteResult } from './types/blocks.types.js';
 import type { CreateHeadingInput, CreateHeadingResult } from './types/create.types.js';
 import type {
   TrackChangesAdapter,
@@ -95,7 +102,11 @@ import type {
   TrackChangesListInput,
   ReviewDecideInput,
 } from './track-changes/track-changes.js';
-import { executeTrackChangesGet, executeTrackChangesList, executeReviewDecide } from './track-changes/track-changes.js';
+import {
+  executeTrackChangesGet,
+  executeTrackChangesList,
+  executeTrackChangesDecide,
+} from './track-changes/track-changes.js';
 import type { MutationOptions, RevisionGuardOptions, WriteAdapter } from './write/write.js';
 import {
   executeCapabilities,
@@ -119,7 +130,12 @@ export type {
   FormatStrikethroughInput,
   StyleApplyInput,
   StyleApplyOptions,
+  FormatFontSizeInput,
+  FormatFontFamilyInput,
+  FormatColorInput,
+  FormatAlignInput,
 } from './format/format.js';
+export { ALIGNMENTS, type Alignment } from './format/format.js';
 export type { CreateAdapter } from './create/create.js';
 export type {
   TrackChangesAdapter,
@@ -131,6 +147,7 @@ export type {
   TrackChangesRejectAllInput,
   ReviewDecideInput,
 } from './track-changes/track-changes.js';
+export type { BlocksAdapter } from './blocks/blocks.js';
 export type { ListsAdapter } from './lists/lists.js';
 export type {
   ListInsertInput,
@@ -187,14 +204,6 @@ export interface QueryApi {
 export interface MutationsApi {
   preview(input: MutationsPreviewInput): MutationsPreviewOutput;
   apply(input: MutationsApplyInput): PlanReceipt;
-}
-
-export interface ReviewApi {
-  decide(input: ReviewDecideInput, options?: RevisionGuardOptions): Receipt;
-}
-
-export interface ReviewAdapter {
-  decide(input: ReviewDecideInput, options?: RevisionGuardOptions): Receipt;
 }
 
 export interface QueryAdapter {
@@ -265,13 +274,13 @@ export interface DocumentApi {
    */
   format: FormatApi;
   /**
-   * Tracked-change read operations (list, get).
+   * Tracked-change operations (list, get, decide).
    */
   trackChanges: TrackChangesApi;
   /**
-   * Review operations — accept or reject tracked changes.
+   * Block-level structural operations (delete whole blocks).
    */
-  review: ReviewApi;
+  blocks: BlocksApi;
   /**
    * Structural creation operations.
    */
@@ -320,6 +329,7 @@ export interface DocumentApiAdapters {
   format: FormatAdapter;
   trackChanges: TrackChangesAdapter;
   create: CreateAdapter;
+  blocks: BlocksAdapter;
   lists: ListsAdapter;
   query: QueryAdapter;
   mutations: MutationsAdapter;
@@ -389,19 +399,31 @@ export function createDocumentApi(adapters: DocumentApiAdapters): DocumentApi {
     },
     format: {
       bold(input: FormatBoldInput, options?: MutationOptions): TextMutationReceipt {
-        return executeStyleApply(adapters.format, { ...input, marks: { bold: true } }, options);
+        return executeStyleApply(adapters.format, { ...input, inline: { bold: true } }, options);
       },
       italic(input: FormatItalicInput, options?: MutationOptions): TextMutationReceipt {
-        return executeStyleApply(adapters.format, { ...input, marks: { italic: true } }, options);
+        return executeStyleApply(adapters.format, { ...input, inline: { italic: true } }, options);
       },
       underline(input: FormatUnderlineInput, options?: MutationOptions): TextMutationReceipt {
-        return executeStyleApply(adapters.format, { ...input, marks: { underline: true } }, options);
+        return executeStyleApply(adapters.format, { ...input, inline: { underline: true } }, options);
       },
       strikethrough(input: FormatStrikethroughInput, options?: MutationOptions): TextMutationReceipt {
-        return executeStyleApply(adapters.format, { ...input, marks: { strike: true } }, options);
+        return executeStyleApply(adapters.format, { ...input, inline: { strike: true } }, options);
       },
       apply(input: StyleApplyInput, options?: MutationOptions): TextMutationReceipt {
         return executeStyleApply(adapters.format, input, options);
+      },
+      fontSize(input: FormatFontSizeInput, options?: MutationOptions): TextMutationReceipt {
+        return executeFontSize(adapters.format, input, options);
+      },
+      fontFamily(input: FormatFontFamilyInput, options?: MutationOptions): TextMutationReceipt {
+        return executeFontFamily(adapters.format, input, options);
+      },
+      color(input: FormatColorInput, options?: MutationOptions): TextMutationReceipt {
+        return executeColor(adapters.format, input, options);
+      },
+      align(input: FormatAlignInput, options?: MutationOptions): TextMutationReceipt {
+        return executeAlign(adapters.format, input, options);
       },
     },
     trackChanges: {
@@ -411,10 +433,13 @@ export function createDocumentApi(adapters: DocumentApiAdapters): DocumentApi {
       get(input: TrackChangesGetInput): TrackChangeInfo {
         return executeTrackChangesGet(adapters.trackChanges, input);
       },
-    },
-    review: {
       decide(input: ReviewDecideInput, options?: RevisionGuardOptions): Receipt {
-        return executeReviewDecide(adapters.trackChanges, input, options);
+        return executeTrackChangesDecide(adapters.trackChanges, input, options);
+      },
+    },
+    blocks: {
+      delete(input: BlocksDeleteInput, options?: MutationOptions): BlocksDeleteResult {
+        return executeBlocksDelete(adapters.blocks, input, options);
       },
     },
     create: {

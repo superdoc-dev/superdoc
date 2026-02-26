@@ -9,15 +9,18 @@ import {
   type GeneratedFile,
 } from './generation-utils.js';
 import {
+  OPERATION_DESCRIPTION_MAP,
   OPERATION_REFERENCE_DOC_PATH_MAP,
+  REFERENCE_OPERATION_ALIASES,
   REFERENCE_OPERATION_GROUPS,
+  type ReferenceAliasDefinition,
   type ReferenceOperationGroupDefinition,
 } from '../../src/index.js';
 
 const GENERATED_MARKER = '{/* GENERATED FILE: DO NOT EDIT. Regenerate via `pnpm run docapi:sync`. */}';
 const OUTPUT_ROOT = 'apps/docs/document-api/reference';
 const REFERENCE_INDEX_PATH = `${OUTPUT_ROOT}/index.mdx`;
-const OVERVIEW_PATH = 'apps/docs/document-api/overview.mdx';
+const OVERVIEW_PATH = 'apps/docs/document-api/available-operations.mdx';
 const OVERVIEW_OPERATIONS_START = '{/* DOC_API_OPERATIONS_START */}';
 const OVERVIEW_OPERATIONS_END = '{/* DOC_API_OPERATIONS_END */}';
 
@@ -25,6 +28,10 @@ interface OperationGroup {
   definition: ReferenceOperationGroupDefinition;
   pagePath: string;
   operations: ContractOperationSnapshot[];
+  aliases: Array<{
+    definition: ReferenceAliasDefinition;
+    canonicalOperation: ContractOperationSnapshot;
+  }>;
 }
 
 function formatMemberPath(memberPath: string): string {
@@ -52,6 +59,14 @@ function toPublicDocHref(path: string): string {
 function renderList(values: readonly string[]): string {
   if (values.length === 0) return '- None';
   return values.map((value) => `- \`${value}\``).join('\n');
+}
+
+function renderNoWrapCode(value: string): string {
+  return `<span style={{ whiteSpace: 'nowrap', wordBreak: 'normal', overflowWrap: 'normal' }}><code>${value}</code></span>`;
+}
+
+function renderNoWrapLinkCode(label: string, href: string): string {
+  return `<span style={{ whiteSpace: 'nowrap', wordBreak: 'normal', overflowWrap: 'normal' }}><a href="${href}"><code>${label}</code></a></span>`;
 }
 
 // ---------------------------------------------------------------------------
@@ -397,10 +412,23 @@ function buildOperationGroups(operations: ContractOperationSnapshot[]): Operatio
       return operation;
     });
 
+    const groupedAliases = REFERENCE_OPERATION_ALIASES.filter((alias) => alias.referenceGroup === definition.key).map(
+      (alias) => {
+        const canonicalOperation = operationById.get(alias.canonicalOperationId);
+        if (!canonicalOperation) {
+          throw new Error(
+            `Missing canonical operation snapshot for alias "${alias.memberPath}" -> "${alias.canonicalOperationId}".`,
+          );
+        }
+        return { definition: alias, canonicalOperation };
+      },
+    );
+
     return {
       definition,
       pagePath: toGroupPath(definition),
       operations: groupedOperations,
+      aliases: groupedAliases,
     };
   });
 }
@@ -429,7 +457,7 @@ function renderOperationPage(operation: ContractOperationSnapshot, $defs: Defs):
   return `---
 title: ${title}
 sidebarTitle: ${title}
-description: Generated reference for ${title}
+description: Reference for ${title}
 ---
 
 ${GENERATED_MARKER}
@@ -492,14 +520,22 @@ function renderGroupIndex(group: OperationGroup): string {
   const rows = group.operations
     .map((operation) => {
       const metadata = operation.metadata;
-      return `| [\`${operation.operationId}\`](${toRelativeDocHref(group.pagePath, toOperationDocPath(operation.operationId))}) | \`${operation.memberPath}\` | ${metadata.mutates ? 'Yes' : 'No'} | \`${metadata.idempotency}\` | ${metadata.supportsTrackedMode ? 'Yes' : 'No'} | ${metadata.supportsDryRun ? 'Yes' : 'No'} |`;
+      const operationHref = toPublicDocHref(toOperationDocPath(operation.operationId));
+      return `| ${renderNoWrapLinkCode(operation.operationId, operationHref)} | \`${operation.memberPath}\` | ${metadata.mutates ? 'Yes' : 'No'} | \`${metadata.idempotency}\` | ${metadata.supportsTrackedMode ? 'Yes' : 'No'} | ${metadata.supportsDryRun ? 'Yes' : 'No'} |`;
+    })
+    .join('\n');
+
+  const aliasRows = group.aliases
+    .map((alias) => {
+      const canonicalLink = toPublicDocHref(toOperationDocPath(alias.canonicalOperation.operationId));
+      return `| \`${formatMemberPath(alias.definition.memberPath)}\` | ${renderNoWrapLinkCode(alias.canonicalOperation.operationId, canonicalLink)} | ${alias.definition.description} |`;
     })
     .join('\n');
 
   return `---
 title: ${group.definition.title} operations
 sidebarTitle: ${group.definition.title}
-description: Generated ${group.definition.title} operation reference from the canonical Document API contract.
+description: ${group.definition.title} operation reference from the canonical Document API contract.
 ---
 
 ${GENERATED_MARKER}
@@ -513,68 +549,114 @@ ${group.definition.description}
 | Operation | Member path | Mutates | Idempotency | Tracked | Dry run |
 | --- | --- | --- | --- | --- | --- |
 ${rows}
+${
+  group.aliases.length > 0
+    ? `
+
+## Convenience aliases
+
+| Alias method | Canonical operation | Behavior |
+| --- | --- | --- |
+${aliasRows}
+`
+    : ''
+}
 `;
 }
 
-function renderReferenceIndex(operations: ContractOperationSnapshot[], groups: OperationGroup[]): string {
+function renderReferenceIndex(groups: OperationGroup[]): string {
   const groupRows = groups
     .map((group) => {
-      return `| ${group.definition.title} | ${group.operations.length} | [Open](${toRelativeDocHref(REFERENCE_INDEX_PATH, group.pagePath)}) |`;
+      const canonicalCount = group.operations.length;
+      const aliasCount = group.aliases.length;
+      const totalCount = canonicalCount + aliasCount;
+      return `| ${group.definition.title} | ${canonicalCount} | ${aliasCount} | ${totalCount} | [Open](${toPublicDocHref(group.pagePath)}) |`;
     })
     .join('\n');
 
-  const operationGroupTitleById = new Map<ContractOperationSnapshot['operationId'], string>();
-  for (const group of groups) {
-    for (const operation of group.operations) {
-      operationGroupTitleById.set(operation.operationId, group.definition.title);
-    }
-  }
+  const availableOperationsSections = groups
+    .map((group) => {
+      const operationRows = group.operations
+        .map((operation) => {
+          const operationHref = toPublicDocHref(toOperationDocPath(operation.operationId));
+          return `| ${renderNoWrapLinkCode(operation.operationId, operationHref)} | ${renderNoWrapCode(formatMemberPath(operation.memberPath))} | ${escapeCell(OPERATION_DESCRIPTION_MAP[operation.operationId] ?? '')} |`;
+        })
+        .join('\n');
 
-  const operationRows = operations
-    .map((operation) => {
-      const metadata = operation.metadata;
-      const groupTitle = operationGroupTitleById.get(operation.operationId) ?? 'Unknown';
-      return `| [\`${operation.operationId}\`](${toRelativeDocHref(REFERENCE_INDEX_PATH, toOperationDocPath(operation.operationId))}) | ${groupTitle} | \`${operation.memberPath}\` | ${metadata.mutates ? 'Yes' : 'No'} | \`${metadata.idempotency}\` | ${metadata.supportsTrackedMode ? 'Yes' : 'No'} | ${metadata.supportsDryRun ? 'Yes' : 'No'} |`;
+      const aliasRows = group.aliases
+        .map((alias) => {
+          const canonicalLink = toPublicDocHref(toOperationDocPath(alias.canonicalOperation.operationId));
+          return `| ${renderNoWrapLinkCode(alias.definition.memberPath, canonicalLink)} | ${renderNoWrapCode(formatMemberPath(alias.definition.memberPath))} | ${escapeCell(alias.definition.description)} |`;
+        })
+        .join('\n');
+
+      const rows = [operationRows, aliasRows].filter(Boolean).join('\n');
+
+      return `#### ${group.definition.title}
+
+| Operation | API member path | Description |
+| --- | --- | --- |
+${rows}`;
     })
-    .join('\n');
+    .join('\n\n');
 
   return `---
 title: Document API reference
 sidebarTitle: Reference
-description: Generated operation reference from the canonical Document API contract.
+description: Operation reference from the canonical Document API contract.
 ---
 
 ${GENERATED_MARKER}
 
-This reference is generated from \`packages/document-api/src/contract/*\`.
+This reference is sourced from \`packages/document-api/src/contract/*\`.
 Document API is currently alpha and subject to breaking changes.
+
+<style>{\`
+  table th,
+  table td {
+    font-size: calc(1em - 2px);
+  }
+\`}</style>
 
 ## Browse by namespace
 
-| Namespace | Operations | Reference |
-| --- | --- | --- |
+| Namespace | Canonical ops | Aliases | Total surface | Reference |
+| --- | --- | --- | --- | --- |
 ${groupRows}
 
-## All operations
+## Available operations
 
-| Operation | Namespace | Member path | Mutates | Idempotency | Tracked | Dry run |
-| --- | --- | --- | --- | --- | --- | --- |
-${operationRows}
+The tables below are grouped by namespace.
+
+${availableOperationsSections}
 `;
 }
 
-function renderOverviewApiSurfaceSection(operations: ContractOperationSnapshot[], groups: OperationGroup[]): string {
+function renderOverviewApiSurfaceSection(groups: OperationGroup[]): string {
   const sortedGroups = [...groups].sort((a, b) => a.definition.title.localeCompare(b.definition.title));
 
   const namespaceRows = sortedGroups
     .map((group) => {
-      return `| ${group.definition.title} | ${group.operations.length} | [Reference](${toPublicDocHref(group.pagePath)}) |`;
+      const canonicalCount = group.operations.length;
+      const aliasCount = group.aliases.length;
+      const totalCount = canonicalCount + aliasCount;
+      return `| ${group.definition.title} | ${canonicalCount} | ${aliasCount} | ${totalCount} | [Reference](${toPublicDocHref(group.pagePath)}) |`;
     })
     .join('\n');
 
-  const operationRows = operations
-    .map((operation) => {
-      return `| \`${formatMemberPath(operation.memberPath)}\` | [\`${operation.operationId}\`](${toPublicDocHref(toOperationDocPath(operation.operationId))}) |`;
+  const operationRows = sortedGroups
+    .flatMap((group) => {
+      const canonicalRows = group.operations.map(
+        (operation) =>
+          `| ${renderNoWrapCode(formatMemberPath(operation.memberPath))} | [\`${operation.operationId}\`](${toPublicDocHref(toOperationDocPath(operation.operationId))}) |`,
+      );
+
+      const aliasRows = group.aliases.map((alias) => {
+        const canonicalOperationId = alias.canonicalOperation.operationId;
+        return `| ${renderNoWrapCode(formatMemberPath(alias.definition.memberPath))} | [\`${canonicalOperationId}\`](${toPublicDocHref(toOperationDocPath(canonicalOperationId))}) |`;
+      });
+
+      return [...canonicalRows, ...aliasRows];
     })
     .join('\n');
 
@@ -583,11 +665,11 @@ function renderOverviewApiSurfaceSection(operations: ContractOperationSnapshot[]
 
 Use the tables below to see what operations are available and where each one is documented.
 
-| Namespace | Operations | Reference |
-| --- | --- | --- |
+| Namespace | Canonical ops | Aliases | Total surface | Reference |
+| --- | --- | --- | --- | --- |
 ${namespaceRows}
 
-| Editor method | Operation ID |
+| Editor method | Operation |
 | --- | --- |
 ${operationRows}
 ${OVERVIEW_OPERATIONS_END}`;
@@ -610,7 +692,7 @@ function replaceOverviewSection(content: string, section: string): string {
 export function applyGeneratedOverviewApiSurface(overviewContent: string): string {
   const snapshot = buildContractSnapshot();
   const groups = buildOperationGroups(snapshot.operations);
-  const section = renderOverviewApiSurfaceSection(snapshot.operations, groups);
+  const section = renderOverviewApiSurfaceSection(groups);
   return replaceOverviewSection(overviewContent, section);
 }
 
@@ -638,7 +720,7 @@ export function buildReferenceDocsArtifacts(): GeneratedFile[] {
   const allFiles = [
     {
       path: REFERENCE_INDEX_PATH,
-      content: renderReferenceIndex(snapshot.operations, groups),
+      content: renderReferenceIndex(groups),
     },
     ...groupFiles,
     ...operationFiles,
@@ -654,6 +736,7 @@ export function buildReferenceDocsArtifacts(): GeneratedFile[] {
       title: group.definition.title,
       pagePath: group.pagePath,
       operationIds: group.operations.map((operation) => operation.operationId),
+      aliasMemberPaths: group.aliases.map((alias) => alias.definition.memberPath),
     })),
     files: allFiles.map((file) => file.path).sort(),
   };

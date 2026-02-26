@@ -35,7 +35,12 @@ export const SUCCESS_VERB: Record<CliExposedOperationId, string> = {
   insert: 'inserted text',
   replace: 'replaced text',
   delete: 'deleted text',
+  'blocks.delete': 'deleted block',
   'format.apply': 'applied style',
+  'format.fontSize': 'set font size',
+  'format.fontFamily': 'set font family',
+  'format.color': 'set text color',
+  'format.align': 'set alignment',
   'create.paragraph': 'created paragraph',
   'create.heading': 'created heading',
   'lists.list': 'listed items',
@@ -53,7 +58,7 @@ export const SUCCESS_VERB: Record<CliExposedOperationId, string> = {
   'comments.list': 'listed comments',
   'trackChanges.list': 'listed tracked changes',
   'trackChanges.get': 'resolved tracked change',
-  'review.decide': 'reviewed tracked change',
+  'trackChanges.decide': 'reviewed tracked change',
   'query.match': 'matched selectors',
   'mutations.preview': 'previewed mutations',
   'mutations.apply': 'applied mutations',
@@ -92,7 +97,12 @@ export const OUTPUT_FORMAT: Record<CliExposedOperationId, OutputFormat> = {
   insert: 'mutationReceipt',
   replace: 'mutationReceipt',
   delete: 'mutationReceipt',
+  'blocks.delete': 'plain',
   'format.apply': 'mutationReceipt',
+  'format.fontSize': 'mutationReceipt',
+  'format.fontFamily': 'mutationReceipt',
+  'format.color': 'mutationReceipt',
+  'format.align': 'mutationReceipt',
   'create.paragraph': 'createResult',
   'create.heading': 'createResult',
   'lists.list': 'listResult',
@@ -110,7 +120,7 @@ export const OUTPUT_FORMAT: Record<CliExposedOperationId, OutputFormat> = {
   'comments.list': 'commentList',
   'trackChanges.list': 'trackChangeList',
   'trackChanges.get': 'trackChangeInfo',
-  'review.decide': 'trackChangeMutationReceipt',
+  'trackChanges.decide': 'trackChangeMutationReceipt',
   'query.match': 'plain',
   'mutations.preview': 'plain',
   'mutations.apply': 'plain',
@@ -137,7 +147,12 @@ export const RESPONSE_ENVELOPE_KEY: Record<CliExposedOperationId, string | null>
   insert: null,
   replace: null,
   delete: null,
+  'blocks.delete': 'result',
   'format.apply': null,
+  'format.fontSize': null,
+  'format.fontFamily': null,
+  'format.color': null,
+  'format.align': null,
   'create.paragraph': 'result',
   'create.heading': 'result',
   'lists.list': 'result',
@@ -155,7 +170,7 @@ export const RESPONSE_ENVELOPE_KEY: Record<CliExposedOperationId, string | null>
   'comments.list': 'result',
   'trackChanges.list': 'result',
   'trackChanges.get': 'change',
-  'review.decide': 'receipt',
+  'trackChanges.decide': 'receipt',
   'query.match': 'result',
   'mutations.preview': 'result',
   'mutations.apply': 'result',
@@ -178,6 +193,10 @@ export const RESPONSE_VALIDATION_KEY: Partial<Record<CliExposedOperationId, stri
   replace: 'receipt',
   delete: 'receipt',
   'format.apply': 'receipt',
+  'format.fontSize': 'receipt',
+  'format.fontFamily': 'receipt',
+  'format.color': 'receipt',
+  'format.align': 'receipt',
 };
 
 // ---------------------------------------------------------------------------
@@ -188,7 +207,15 @@ export const RESPONSE_VALIDATION_KEY: Partial<Record<CliExposedOperationId, stri
  * Operation family — determines which error-mapping rules apply.
  * Explicit Record for compile-time completeness (no string-prefix heuristics).
  */
-export type OperationFamily = 'trackChanges' | 'comments' | 'lists' | 'textMutation' | 'create' | 'query' | 'general';
+export type OperationFamily =
+  | 'trackChanges'
+  | 'comments'
+  | 'lists'
+  | 'textMutation'
+  | 'create'
+  | 'blocks'
+  | 'query'
+  | 'general';
 
 export const OPERATION_FAMILY: Record<CliExposedOperationId, OperationFamily> = {
   find: 'query',
@@ -199,7 +226,12 @@ export const OPERATION_FAMILY: Record<CliExposedOperationId, OperationFamily> = 
   insert: 'textMutation',
   replace: 'textMutation',
   delete: 'textMutation',
+  'blocks.delete': 'blocks',
   'format.apply': 'textMutation',
+  'format.fontSize': 'textMutation',
+  'format.fontFamily': 'textMutation',
+  'format.color': 'textMutation',
+  'format.align': 'textMutation',
   'create.paragraph': 'create',
   'create.heading': 'create',
   'lists.list': 'lists',
@@ -217,7 +249,7 @@ export const OPERATION_FAMILY: Record<CliExposedOperationId, OperationFamily> = 
   'comments.list': 'comments',
   'trackChanges.list': 'trackChanges',
   'trackChanges.get': 'trackChanges',
-  'review.decide': 'trackChanges',
+  'trackChanges.decide': 'trackChanges',
   'query.match': 'query',
   'mutations.preview': 'general',
   'mutations.apply': 'general',

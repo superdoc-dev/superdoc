@@ -79,7 +79,7 @@ export interface CommandContext {
 }
 
 export interface DocumentSourceMeta {
-  source: 'path' | 'stdin';
+  source: 'path' | 'stdin' | 'blank';
   path?: string;
   byteLength: number;
 }

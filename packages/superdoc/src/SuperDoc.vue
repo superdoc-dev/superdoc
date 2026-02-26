@@ -956,11 +956,13 @@ watch(
   },
 );
 
+// Ensure hasInitializedLocations is set when comments arrive (backup for cases
+// where handleDocumentReady hasn't fired yet). Never toggle false→true→false —
+// the virtualized FloatingComments reacts to comment changes via computed properties.
 watch(getFloatingComments, () => {
-  hasInitializedLocations.value = false;
-  nextTick(() => {
+  if (!hasInitializedLocations.value) {
     hasInitializedLocations.value = true;
-  });
+  }
 });
 
 const {

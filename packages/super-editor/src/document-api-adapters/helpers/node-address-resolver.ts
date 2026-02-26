@@ -32,6 +32,7 @@ export type BlockCandidate = {
 export type BlockIndex = {
   candidates: BlockCandidate[];
   byId: Map<string, BlockCandidate>;
+  ambiguous: ReadonlySet<string>;
 };
 
 // Keep in sync with BlockNodeType in document-api/types/node.ts
@@ -204,7 +205,7 @@ export function buildBlockIndex(editor: Editor): BlockIndex {
     }
   });
 
-  return { candidates, byId };
+  return { candidates, byId, ambiguous };
 }
 
 /**
@@ -217,6 +218,35 @@ export function buildBlockIndex(editor: Editor): BlockIndex {
 export function findBlockById(index: BlockIndex, address: NodeAddress): BlockCandidate | undefined {
   if (address.kind !== 'block') return undefined;
   return index.byId.get(`${address.nodeType}:${address.nodeId}`);
+}
+
+/**
+ * Looks up a block candidate by its {@link BlockNodeAddress}, throwing
+ * a precise error for missing or ambiguous targets.
+ *
+ * @param index - The block index to search.
+ * @param address - The block node address to resolve.
+ * @returns The matching candidate.
+ * @throws {DocumentApiAdapterError} `TARGET_NOT_FOUND` if no candidate matches.
+ * @throws {DocumentApiAdapterError} `AMBIGUOUS_TARGET` if multiple candidates share the key.
+ */
+export function findBlockByIdStrict(index: BlockIndex, address: BlockNodeAddress): BlockCandidate {
+  const key = `${address.nodeType}:${address.nodeId}`;
+
+  if (index.ambiguous.has(key)) {
+    throw new DocumentApiAdapterError('AMBIGUOUS_TARGET', `Multiple blocks share key "${key}".`, {
+      target: address,
+    });
+  }
+
+  const candidate = index.byId.get(key);
+  if (!candidate) {
+    throw new DocumentApiAdapterError('TARGET_NOT_FOUND', `Block "${key}" was not found.`, {
+      target: address,
+    });
+  }
+
+  return candidate;
 }
 
 /**

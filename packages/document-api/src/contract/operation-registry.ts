@@ -17,6 +17,7 @@ import type {
   CreateHeadingInput,
   CreateHeadingResult,
 } from '../types/create.types.js';
+import type { BlocksDeleteInput, BlocksDeleteResult } from '../types/blocks.types.js';
 
 import type { FindOptions } from '../find/find.js';
 import type { GetNodeByIdInput } from '../get-node/get-node.js';
@@ -26,7 +27,13 @@ import type { InsertInput } from '../insert/insert.js';
 import type { ReplaceInput } from '../replace/replace.js';
 import type { DeleteInput } from '../delete/delete.js';
 import type { MutationOptions, RevisionGuardOptions } from '../write/write.js';
-import type { StyleApplyInput } from '../format/format.js';
+import type {
+  StyleApplyInput,
+  FormatFontSizeInput,
+  FormatFontFamilyInput,
+  FormatColorInput,
+  FormatAlignInput,
+} from '../format/format.js';
 import type {
   CommentsCreateInput,
   CommentsPatchInput,
@@ -70,8 +77,15 @@ export interface OperationRegistry {
   replace: { input: ReplaceInput; options: MutationOptions; output: TextMutationReceipt };
   delete: { input: DeleteInput; options: MutationOptions; output: TextMutationReceipt };
 
+  // --- blocks.* ---
+  'blocks.delete': { input: BlocksDeleteInput; options: MutationOptions; output: BlocksDeleteResult };
+
   // --- format.* ---
   'format.apply': { input: StyleApplyInput; options: MutationOptions; output: TextMutationReceipt };
+  'format.fontSize': { input: FormatFontSizeInput; options: MutationOptions; output: TextMutationReceipt };
+  'format.fontFamily': { input: FormatFontFamilyInput; options: MutationOptions; output: TextMutationReceipt };
+  'format.color': { input: FormatColorInput; options: MutationOptions; output: TextMutationReceipt };
+  'format.align': { input: FormatAlignInput; options: MutationOptions; output: TextMutationReceipt };
 
   // --- create.* ---
   'create.paragraph': { input: CreateParagraphInput; options: MutationOptions; output: CreateParagraphResult };
@@ -94,12 +108,10 @@ export interface OperationRegistry {
   'comments.get': { input: GetCommentInput; options: never; output: CommentInfo };
   'comments.list': { input: CommentsListQuery | undefined; options: never; output: CommentsListResult };
 
-  // --- trackChanges.* (reads) ---
+  // --- trackChanges.* ---
   'trackChanges.list': { input: TrackChangesListInput | undefined; options: never; output: TrackChangesListResult };
   'trackChanges.get': { input: TrackChangesGetInput; options: never; output: TrackChangeInfo };
-
-  // --- review.* ---
-  'review.decide': { input: ReviewDecideInput; options: RevisionGuardOptions; output: Receipt };
+  'trackChanges.decide': { input: ReviewDecideInput; options: RevisionGuardOptions; output: Receipt };
 
   // --- query.* ---
   'query.match': { input: QueryMatchInput; options: never; output: QueryMatchOutput };

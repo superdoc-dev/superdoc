@@ -147,10 +147,34 @@ function createFixture(page: Page, editor: Locator, modKey: string) {
           throw new Error('Document API is unavailable: expected editor.doc.find().');
         }
 
+        const getAddresses = (result: any): Array<any> => {
+          const discoveryItems = Array.isArray(result?.items) ? result.items : [];
+          if (discoveryItems.length > 0) {
+            return discoveryItems.map((item: any) => item?.address ?? null);
+          }
+          return Array.isArray(result?.matches) ? result.matches : [];
+        };
+
+        const getNodes = (result: any): Array<any> => {
+          const discoveryItems = Array.isArray(result?.items) ? result.items : [];
+          if (discoveryItems.length > 0) {
+            return discoveryItems.map((item: any) => item?.node ?? null);
+          }
+          return Array.isArray(result?.nodes) ? result.nodes : [];
+        };
+
+        const getContexts = (result: any): Array<any> => {
+          const discoveryItems = Array.isArray(result?.items) ? result.items : [];
+          if (discoveryItems.length > 0) {
+            return discoveryItems.map((item: any) => item?.context ?? null);
+          }
+          return Array.isArray(result?.context) ? result.context : [];
+        };
+
         const textResult = docApi.find({
           select: { type: 'text', pattern: searchText, mode: 'contains', caseSensitive: true },
         });
-        const context = textResult?.context?.[matchIndex];
+        const context = getContexts(textResult)[matchIndex];
         if (!context?.address) return null;
 
         const ranges = (context.textRanges ?? []).map((range: any) => ({
@@ -161,7 +185,7 @@ function createFixture(page: Page, editor: Locator, modKey: string) {
         if (!ranges.length) return null;
 
         const toInlineSpans = (result: any): InlineSpan[] =>
-          (result?.matches ?? [])
+          getAddresses(result)
             .map((address: any, i: number) => {
               if (address?.kind !== 'inline') return null;
               const { start, end } = address.anchor ?? {};
@@ -170,7 +194,7 @@ function createFixture(page: Page, editor: Locator, modKey: string) {
                 blockId: start.blockId,
                 start: start.offset,
                 end: end.offset,
-                properties: result.nodes?.[i]?.properties ?? {},
+                properties: getNodes(result)?.[i]?.properties ?? {},
               };
             })
             .filter(Boolean);
@@ -503,15 +527,23 @@ function createFixture(page: Page, editor: Locator, modKey: string) {
                 throw new Error('Document API is unavailable: expected editor.doc.find().');
               }
 
+              const getAddresses = (result: any): any[] => {
+                const discoveryItems = Array.isArray(result?.items) ? result.items : [];
+                if (discoveryItems.length > 0) {
+                  return discoveryItems.map((item: any) => item?.address).filter(Boolean);
+                }
+                return Array.isArray(result?.matches) ? result.matches : [];
+              };
+
               const tableResult = docApi.find({ select: { type: 'node', nodeType: 'table' }, limit: 1 });
-              const tableAddress = tableResult?.matches?.[0];
+              const tableAddress = getAddresses(tableResult)[0];
               if (!tableAddress) return 'no table found in document';
 
               if (expectedRows !== undefined && expectedCols !== undefined) {
                 const expectedCellCount = expectedRows * expectedCols;
 
                 const rowResult = docApi.find({ select: { type: 'node', nodeType: 'tableRow' }, within: tableAddress });
-                const rowCount = rowResult?.matches?.length ?? 0;
+                const rowCount = getAddresses(rowResult).length;
 
                 // Only validate row count when the adapter exposes row-level querying.
                 if (rowCount > 0 && rowCount !== expectedRows) {
@@ -522,13 +554,13 @@ function createFixture(page: Page, editor: Locator, modKey: string) {
                   select: { type: 'node', nodeType: 'tableCell' },
                   within: tableAddress,
                 });
-                let cellCount = cellResult?.matches?.length ?? 0;
+                let cellCount = getAddresses(cellResult).length;
                 try {
                   const headerResult = docApi.find({
                     select: { type: 'node', nodeType: 'tableHeader' },
                     within: tableAddress,
                   });
-                  cellCount += headerResult?.matches?.length ?? 0;
+                  cellCount += getAddresses(headerResult).length;
                 } catch {
                   /* tableHeader may not be queryable */
                 }
@@ -539,7 +571,7 @@ function createFixture(page: Page, editor: Locator, modKey: string) {
                     select: { type: 'node', nodeType: 'paragraph' },
                     within: tableAddress,
                   });
-                  cellCount = paragraphResult?.matches?.length ?? 0;
+                  cellCount = getAddresses(paragraphResult).length;
                 }
 
                 if (cellCount !== expectedCellCount) {
@@ -700,10 +732,18 @@ function createFixture(page: Page, editor: Locator, modKey: string) {
                 throw new Error('Document API is unavailable: expected editor.doc.find/getNode.');
               }
 
+              const getContexts = (result: any): any[] => {
+                const discoveryItems = Array.isArray(result?.items) ? result.items : [];
+                if (discoveryItems.length > 0) {
+                  return discoveryItems.map((item: any) => item?.context).filter(Boolean);
+                }
+                return Array.isArray(result?.context) ? result.context : [];
+              };
+
               const textResult = docApi.find({
                 select: { type: 'text', pattern: searchText, mode: 'contains', caseSensitive: true },
               });
-              const contexts = Array.isArray(textResult?.context) ? textResult.context : [];
+              const contexts = getContexts(textResult);
               const context = contexts[matchIndex];
               if (!context?.address) return null;
 

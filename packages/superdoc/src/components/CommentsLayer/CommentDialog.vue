@@ -533,6 +533,9 @@ watch(editingCommentId, (commentId) => {
   min-width: 200px;
   width: 100%;
 }
+.comments-dialog:not(.is-active) {
+  cursor: pointer;
+}
 .is-active {
   z-index: 10;
 }

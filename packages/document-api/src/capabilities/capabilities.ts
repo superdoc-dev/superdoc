@@ -2,6 +2,7 @@ import type { OperationId } from '../contract/types.js';
 
 export const CAPABILITY_REASON_CODES = [
   'COMMAND_UNAVAILABLE',
+  'HELPER_UNAVAILABLE',
   'OPERATION_UNAVAILABLE',
   'TRACKED_MODE_UNAVAILABLE',
   'DRY_RUN_UNAVAILABLE',

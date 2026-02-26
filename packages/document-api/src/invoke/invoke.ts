@@ -44,8 +44,15 @@ export function buildDispatchTable(api: DocumentApi): TypedDispatchTable {
     replace: (input, options) => api.replace(input, options),
     delete: (input, options) => api.delete(input, options),
 
+    // --- blocks.* ---
+    'blocks.delete': (input, options) => api.blocks.delete(input, options),
+
     // --- format.* ---
     'format.apply': (input, options) => api.format.apply(input, options),
+    'format.fontSize': (input, options) => api.format.fontSize(input, options),
+    'format.fontFamily': (input, options) => api.format.fontFamily(input, options),
+    'format.color': (input, options) => api.format.color(input, options),
+    'format.align': (input, options) => api.format.align(input, options),
 
     // --- create.* ---
     'create.paragraph': (input, options) => api.create.paragraph(input, options),
@@ -68,12 +75,10 @@ export function buildDispatchTable(api: DocumentApi): TypedDispatchTable {
     'comments.get': (input) => api.comments.get(input),
     'comments.list': (input) => api.comments.list(input),
 
-    // --- trackChanges.* (reads) ---
+    // --- trackChanges.* ---
     'trackChanges.list': (input) => api.trackChanges.list(input),
     'trackChanges.get': (input) => api.trackChanges.get(input),
-
-    // --- review.* ---
-    'review.decide': (input, options) => api.review.decide(input, options),
+    'trackChanges.decide': (input, options) => api.trackChanges.decide(input, options),
 
     // --- query.* ---
     'query.match': (input) => api.query.match(input),

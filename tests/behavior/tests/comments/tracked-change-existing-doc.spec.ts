@@ -44,8 +44,7 @@ test('tracked change replacement in existing document', async ({ superdoc }) => 
     .toBeGreaterThanOrEqual(1);
 
   // The floating comment dialog for our change should appear with tracked change details.
-  // Scope to .floating-comment > .comments-dialog to skip the measurement-layer duplicate.
-  const dialog = superdoc.page.locator('.floating-comment > .comments-dialog', {
+  const dialog = superdoc.page.locator('.comment-placeholder .comments-dialog', {
     has: superdoc.page.locator('.tracked-change-text', { hasText: 'programmatically inserted' }),
   });
   await expect(dialog).toBeVisible({ timeout: 5_000 });

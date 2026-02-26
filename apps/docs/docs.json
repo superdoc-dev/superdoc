@@ -94,7 +94,15 @@
             "tag": "ALPHA",
             "pages": [
               "document-engine/overview",
-              "document-api/overview",
+              {
+                "group": "Document API",
+                "pages": [
+                  "document-api/overview",
+                  "document-api/reference/index",
+                  "document-api/common-workflows",
+                  "document-api/available-operations"
+                ]
+              },
               "document-engine/sdks",
               "document-engine/cli",
               "document-engine/mcp"

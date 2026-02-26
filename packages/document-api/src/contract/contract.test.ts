@@ -73,7 +73,7 @@ describe('document-api contract catalog', () => {
     }
   });
 
-  it('uses simplified target-based insert input schema without legacy locator constraints', () => {
+  it('uses simplified target-based insert input schema without locator constraints', () => {
     const schemas = buildInternalContractSchemas();
     const insertInputSchema = schemas.operations.insert.input as {
       type?: string;
@@ -100,13 +100,13 @@ describe('document-api contract catalog', () => {
   it('ensures every definition entry has a valid referenceGroup', () => {
     const validGroups: readonly ReferenceGroupKey[] = [
       'core',
+      'blocks',
       'capabilities',
       'create',
       'format',
       'lists',
       'comments',
       'trackChanges',
-      'review',
       'query',
       'mutations',
     ];

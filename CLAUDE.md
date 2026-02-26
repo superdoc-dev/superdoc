@@ -127,3 +127,15 @@ These directories are produced by `pnpm run generate:all`:
 After a fresh clone, run `pnpm run generate:all` before working on SDK, CLI, or doc-api code.
 
 Note: `packages/sdk/tools/__init__.py` is a manual file (Python package marker) and stays committed.
+
+## Brand & Design System
+
+Brand guidelines, voice, and design tokens live in `brand/`. Token values are defined in `packages/superdoc/src/assets/styles/tokens.css`.
+
+**When creating or modifying UI components:**
+- Use `--sd-*` CSS custom properties — never hardcode hex values. See `tokens.css` for all available variables.
+- Tokens follow three tiers: primitive (`--sd-color-blue-500`) → semantic (`--sd-action-primary`) → component (`--sd-comment-bg`). Components reference semantic or component-level variables.
+- Expose component-specific variables as `--sd-{component}-*` so consumers can customize via CSS.
+- Document component CSS variables in `apps/docs/ui-components/` (Mintlify docs).
+
+**When writing copy or content:** see `brand/brand-guidelines.md` for voice, tone, and the dual-register pattern (developer vs. leader). Product name is always **SuperDoc** (capital S, capital D).

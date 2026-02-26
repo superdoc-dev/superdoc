@@ -1,7 +1,8 @@
 import { COMMAND_CATALOG } from './command-catalog.js';
 import { CONTRACT_VERSION, JSON_SCHEMA_DIALECT, OPERATION_IDS, type OperationId } from './types.js';
-import { NODE_TYPES, BLOCK_NODE_TYPES, INLINE_NODE_TYPES } from '../types/base.js';
+import { NODE_TYPES, BLOCK_NODE_TYPES, DELETABLE_BLOCK_NODE_TYPES, INLINE_NODE_TYPES } from '../types/base.js';
 import { MARK_KEYS } from '../types/style-policy.types.js';
+import { ALIGNMENTS } from '../format/format.js';
 
 type JsonSchema = Record<string, unknown>;
 
@@ -55,6 +56,7 @@ function ref(name: string): JsonSchema {
 
 const nodeTypeValues = NODE_TYPES;
 const blockNodeTypeValues = BLOCK_NODE_TYPES;
+const deletableBlockNodeTypeValues = DELETABLE_BLOCK_NODE_TYPES;
 const inlineNodeTypeValues = INLINE_NODE_TYPES;
 
 // ---------------------------------------------------------------------------
@@ -116,10 +118,32 @@ const SHARED_DEFS: Record<string, JsonSchema> = {
     },
     ['kind', 'blockId', 'range'],
   ),
+  TextSegment: objectSchema(
+    {
+      blockId: { type: 'string' },
+      range: ref('Range'),
+    },
+    ['blockId', 'range'],
+  ),
+  TextTarget: objectSchema(
+    {
+      kind: { const: 'text' },
+      segments: { type: 'array', items: ref('TextSegment'), minItems: 1 },
+    },
+    ['kind', 'segments'],
+  ),
   BlockNodeAddress: objectSchema(
     {
       kind: { const: 'block' },
       nodeType: { enum: [...blockNodeTypeValues] },
+      nodeId: { type: 'string' },
+    },
+    ['kind', 'nodeType', 'nodeId'],
+  ),
+  DeletableBlockNodeAddress: objectSchema(
+    {
+      kind: { const: 'block' },
+      nodeType: { enum: [...deletableBlockNodeTypeValues] },
       nodeId: { type: 'string' },
     },
     ['kind', 'nodeType', 'nodeId'],
@@ -284,7 +308,9 @@ const positionSchema = ref('Position');
 const inlineAnchorSchema = ref('InlineAnchor');
 const targetKindSchema = ref('TargetKind');
 const textAddressSchema = ref('TextAddress');
+const textTargetSchema = ref('TextTarget');
 const blockNodeAddressSchema = ref('BlockNodeAddress');
+const deletableBlockNodeAddressSchema = ref('DeletableBlockNodeAddress');
 const paragraphAddressSchema = ref('ParagraphAddress');
 const headingAddressSchema = ref('HeadingAddress');
 const listItemAddressSchema = ref('ListItemAddress');
@@ -724,7 +750,8 @@ const commentInfoSchema = objectSchema(
     text: { type: 'string' },
     isInternal: { type: 'boolean' },
     status: { enum: ['open', 'resolved'] },
-    target: textAddressSchema,
+    target: textTargetSchema,
+    anchoredText: { type: 'string' },
     createdTime: { type: 'number' },
     creatorName: { type: 'string' },
     creatorEmail: { type: 'string' },
@@ -740,7 +767,8 @@ const commentDomainItemSchema = discoveryItemSchema(
     text: { type: 'string' },
     isInternal: { type: 'boolean' },
     status: { enum: ['open', 'resolved'] },
-    target: textAddressSchema,
+    target: textTargetSchema,
+    anchoredText: { type: 'string' },
     createdTime: { type: 'number' },
     creatorName: { type: 'string' },
     creatorEmail: { type: 'string' },
@@ -782,6 +810,7 @@ const trackChangesListResultSchema = discoveryResultSchema(trackChangeDomainItem
 const capabilityReasonCodeSchema: JsonSchema = {
   enum: [
     'COMMAND_UNAVAILABLE',
+    'HELPER_UNAVAILABLE',
     'OPERATION_UNAVAILABLE',
     'TRACKED_MODE_UNAVAILABLE',
     'DRY_RUN_UNAVAILABLE',
@@ -911,7 +940,7 @@ const operationSchemas: Record<OperationId, OperationSchemaSet> = {
     input: objectSchema(
       {
         target: textAddressSchema,
-        marks: (() => {
+        inline: (() => {
           const markProperties = Object.fromEntries(
             MARK_KEYS.map((key) => [key, { type: 'boolean' } as JsonSchema]),
           ) as Record<string, JsonSchema>;
@@ -923,11 +952,82 @@ const operationSchemas: Record<OperationId, OperationSchemaSet> = {
           } as JsonSchema;
         })(),
       },
-      ['target', 'marks'],
+      ['target', 'inline'],
     ),
     output: textMutationResultSchemaFor('format.apply'),
     success: textMutationSuccessSchema,
     failure: textMutationFailureSchemaFor('format.apply'),
+  },
+  'format.fontSize': {
+    input: objectSchema(
+      {
+        target: textAddressSchema,
+        value: { oneOf: [{ type: 'string', minLength: 1 }, { type: 'number' }, { type: 'null' }] },
+      },
+      ['target', 'value'],
+    ),
+    output: textMutationResultSchemaFor('format.fontSize'),
+    success: textMutationSuccessSchema,
+    failure: textMutationFailureSchemaFor('format.fontSize'),
+  },
+  'format.fontFamily': {
+    input: objectSchema(
+      {
+        target: textAddressSchema,
+        value: { oneOf: [{ type: 'string', minLength: 1 }, { type: 'null' }] },
+      },
+      ['target', 'value'],
+    ),
+    output: textMutationResultSchemaFor('format.fontFamily'),
+    success: textMutationSuccessSchema,
+    failure: textMutationFailureSchemaFor('format.fontFamily'),
+  },
+  'format.color': {
+    input: objectSchema(
+      {
+        target: textAddressSchema,
+        value: { oneOf: [{ type: 'string', minLength: 1 }, { type: 'null' }] },
+      },
+      ['target', 'value'],
+    ),
+    output: textMutationResultSchemaFor('format.color'),
+    success: textMutationSuccessSchema,
+    failure: textMutationFailureSchemaFor('format.color'),
+  },
+  'format.align': {
+    input: objectSchema(
+      {
+        target: textAddressSchema,
+        alignment: { oneOf: [{ enum: [...ALIGNMENTS] }, { type: 'null' }] },
+      },
+      ['target', 'alignment'],
+    ),
+    output: textMutationResultSchemaFor('format.align'),
+    success: textMutationSuccessSchema,
+    failure: textMutationFailureSchemaFor('format.align'),
+  },
+  'blocks.delete': {
+    input: objectSchema(
+      {
+        target: deletableBlockNodeAddressSchema,
+      },
+      ['target'],
+    ),
+    output: objectSchema(
+      {
+        success: { const: true },
+        deleted: deletableBlockNodeAddressSchema,
+      },
+      ['success', 'deleted'],
+    ),
+    success: objectSchema(
+      {
+        success: { const: true },
+        deleted: deletableBlockNodeAddressSchema,
+      },
+      ['success', 'deleted'],
+    ),
+    failure: preApplyFailureResultSchemaFor('blocks.delete'),
   },
   'create.paragraph': {
     input: objectSchema({
@@ -1131,7 +1231,7 @@ const operationSchemas: Record<OperationId, OperationSchemaSet> = {
     input: objectSchema({ id: { type: 'string' } }, ['id']),
     output: trackChangeInfoSchema,
   },
-  'review.decide': {
+  'trackChanges.decide': {
     input: {
       type: 'object',
       properties: {
@@ -1146,9 +1246,9 @@ const operationSchemas: Record<OperationId, OperationSchemaSet> = {
       required: ['decision', 'target'],
       additionalProperties: false,
     },
-    output: receiptResultSchemaFor('review.decide'),
+    output: receiptResultSchemaFor('trackChanges.decide'),
     success: receiptSuccessSchema,
-    failure: receiptFailureResultSchemaFor('review.decide'),
+    failure: receiptFailureResultSchemaFor('trackChanges.decide'),
   },
   'query.match': {
     input: objectSchema(

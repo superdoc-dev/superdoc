@@ -83,7 +83,8 @@ export interface CommentsCreateInput {
  * Input for `comments.patch` — field-level patch on an existing comment.
  *
  * Exactly one mutation field (`text`, `target`, `status`, `isInternal`)
- * should be provided per call. Multiple fields are applied sequentially.
+ * must be provided per call. Providing zero or multiple fields throws
+ * `INVALID_INPUT`.
  */
 export interface CommentsPatchInput {
   /** The ID of the comment to patch. */
@@ -192,7 +193,13 @@ function validateCreateCommentInput(input: unknown): asserts input is CommentsCr
     return;
   }
 
-  if (hasTarget && !isTextAddress(target)) {
+  if (!hasTarget) {
+    throw new DocumentApiValidationError('INVALID_TARGET', 'comments.create requires a target for root comments.', {
+      field: 'target',
+    });
+  }
+
+  if (!isTextAddress(target)) {
     throw new DocumentApiValidationError('INVALID_TARGET', 'target must be a text address object.', {
       field: 'target',
       value: target,
@@ -221,6 +228,24 @@ function validatePatchCommentInput(input: unknown): asserts input is CommentsPat
       field: 'commentId',
       value: commentId,
     });
+  }
+
+  // Enforce exactly one mutation field per call to guarantee atomicity.
+  const mutationFields = ['text', 'target', 'status', 'isInternal'] as const;
+  const providedFields = mutationFields.filter((f) => input[f] !== undefined);
+  if (providedFields.length === 0) {
+    throw new DocumentApiValidationError(
+      'INVALID_INPUT',
+      'comments.patch requires exactly one mutation field (text, target, status, or isInternal).',
+      { allowedFields: [...mutationFields] },
+    );
+  }
+  if (providedFields.length > 1) {
+    throw new DocumentApiValidationError(
+      'INVALID_INPUT',
+      `comments.patch accepts exactly one mutation field per call, got ${providedFields.length}: ${providedFields.join(', ')}.`,
+      { providedFields: [...providedFields] },
+    );
   }
 
   const { status } = input;
@@ -263,37 +288,31 @@ export function executeCommentsCreate(
 }
 
 /**
- * Execute `comments.patch` — routes to the appropriate adapter method(s)
- * based on which fields are provided.
+ * Execute `comments.patch` — routes to exactly one adapter method based on
+ * the single mutation field provided. Validation enforces one-field-per-call.
  */
 export function executeCommentsPatch(
   adapter: CommentsAdapter,
   input: CommentsPatchInput,
   options?: RevisionGuardOptions,
 ): Receipt {
-  // Validate the full input up front — commentId, unknown fields, and target
-  // constraints — before any adapter mutations.
   validatePatchCommentInput(input);
 
-  let lastReceipt: Receipt = { success: true };
-
   if (input.text !== undefined) {
-    lastReceipt = adapter.edit({ commentId: input.commentId, text: input.text }, options);
+    return adapter.edit({ commentId: input.commentId, text: input.text }, options);
   }
-
   if (input.target !== undefined) {
-    lastReceipt = adapter.move({ commentId: input.commentId, target: input.target }, options);
+    return adapter.move({ commentId: input.commentId, target: input.target }, options);
   }
-
   if (input.status === 'resolved') {
-    lastReceipt = adapter.resolve({ commentId: input.commentId }, options);
+    return adapter.resolve({ commentId: input.commentId }, options);
   }
-
   if (input.isInternal !== undefined) {
-    lastReceipt = adapter.setInternal({ commentId: input.commentId, isInternal: input.isInternal }, options);
+    return adapter.setInternal({ commentId: input.commentId, isInternal: input.isInternal }, options);
   }
 
-  return lastReceipt;
+  // Unreachable after validation, but satisfies the return type.
+  return { success: true };
 }
 
 /**

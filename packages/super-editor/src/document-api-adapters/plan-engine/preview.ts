@@ -20,9 +20,7 @@ import { runMutationsOnTransaction } from './executor.js';
 import { planError, PlanError } from './errors.js';
 
 export function previewPlan(editor: Editor, input: MutationsPreviewInput): MutationsPreviewOutput {
-  const evaluatedRevision = getRevision(editor);
-
-  // Revision guard
+  // Revision guard (before compile)
   checkRevision(editor, input.expectedRevision);
 
   if (!input.steps?.length) {
@@ -32,10 +30,13 @@ export function previewPlan(editor: Editor, input: MutationsPreviewInput): Mutat
   const failures: PreviewFailure[] = [];
   const stepPreviews: StepPreview[] = [];
   let currentPhase: 'compile' | 'execute' = 'compile';
+  // Will be set from compiled plan — single source of truth (D3)
+  let evaluatedRevision = getRevision(editor);
 
   try {
     // Phase 1: Compile — resolve selectors against pre-mutation snapshot
     const compiled = compilePlan(editor, input.steps);
+    evaluatedRevision = compiled.compiledRevision;
     currentPhase = 'execute';
 
     // Phase 2: Execute on ephemeral transaction (never dispatched)

@@ -3,7 +3,8 @@ export type DocumentApiAdapterErrorCode =
   | 'TARGET_NOT_FOUND'
   | 'INVALID_TARGET'
   | 'AMBIGUOUS_TARGET'
-  | 'CAPABILITY_UNAVAILABLE';
+  | 'CAPABILITY_UNAVAILABLE'
+  | 'INTERNAL_ERROR';
 
 /**
  * Structured error thrown by document-api adapter functions.

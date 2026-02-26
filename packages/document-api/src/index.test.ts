@@ -117,6 +117,10 @@ function makeFormatReceipt() {
 function makeFormatAdapter(): FormatAdapter {
   return {
     apply: vi.fn(() => makeFormatReceipt()),
+    fontSize: vi.fn(() => makeFormatReceipt()),
+    fontFamily: vi.fn(() => makeFormatReceipt()),
+    color: vi.fn(() => makeFormatReceipt()),
+    align: vi.fn(() => makeFormatReceipt()),
   };
 }
 
@@ -493,7 +497,7 @@ describe('createDocumentApi', () => {
     );
   });
 
-  it('delegates format.bold to adapter.apply with marks.bold', () => {
+  it('delegates format.bold to adapter.apply with inline.bold', () => {
     const formatAdpt = makeFormatAdapter();
     const api = createDocumentApi({
       find: makeFindAdapter(QUERY_RESULT),
@@ -511,12 +515,12 @@ describe('createDocumentApi', () => {
     const target = { kind: 'text', blockId: 'p1', range: { start: 0, end: 2 } } as const;
     api.format.bold({ target }, { changeMode: 'tracked' });
     expect(formatAdpt.apply).toHaveBeenCalledWith(
-      { target, marks: { bold: true } },
+      { target, inline: { bold: true } },
       { changeMode: 'tracked', dryRun: false },
     );
   });
 
-  it('delegates format.italic to adapter.apply with marks.italic', () => {
+  it('delegates format.italic to adapter.apply with inline.italic', () => {
     const formatAdpt = makeFormatAdapter();
     const api = createDocumentApi({
       find: makeFindAdapter(QUERY_RESULT),
@@ -534,12 +538,12 @@ describe('createDocumentApi', () => {
     const target = { kind: 'text', blockId: 'p1', range: { start: 0, end: 2 } } as const;
     api.format.italic({ target }, { changeMode: 'direct' });
     expect(formatAdpt.apply).toHaveBeenCalledWith(
-      { target, marks: { italic: true } },
+      { target, inline: { italic: true } },
       { changeMode: 'direct', dryRun: false },
     );
   });
 
-  it('delegates format.underline to adapter.apply with marks.underline', () => {
+  it('delegates format.underline to adapter.apply with inline.underline', () => {
     const formatAdpt = makeFormatAdapter();
     const api = createDocumentApi({
       find: makeFindAdapter(QUERY_RESULT),
@@ -557,12 +561,12 @@ describe('createDocumentApi', () => {
     const target = { kind: 'text', blockId: 'p1', range: { start: 0, end: 2 } } as const;
     api.format.underline({ target }, { changeMode: 'direct' });
     expect(formatAdpt.apply).toHaveBeenCalledWith(
-      { target, marks: { underline: true } },
+      { target, inline: { underline: true } },
       { changeMode: 'direct', dryRun: false },
     );
   });
 
-  it('delegates format.strikethrough to adapter.apply with marks.strike', () => {
+  it('delegates format.strikethrough to adapter.apply with inline.strike', () => {
     const formatAdpt = makeFormatAdapter();
     const api = createDocumentApi({
       find: makeFindAdapter(QUERY_RESULT),
@@ -580,8 +584,100 @@ describe('createDocumentApi', () => {
     const target = { kind: 'text', blockId: 'p1', range: { start: 0, end: 2 } } as const;
     api.format.strikethrough({ target }, { changeMode: 'tracked' });
     expect(formatAdpt.apply).toHaveBeenCalledWith(
-      { target, marks: { strike: true } },
+      { target, inline: { strike: true } },
       { changeMode: 'tracked', dryRun: false },
+    );
+  });
+
+  it('delegates format.fontSize to adapter.fontSize', () => {
+    const formatAdpt = makeFormatAdapter();
+    const api = createDocumentApi({
+      find: makeFindAdapter(QUERY_RESULT),
+      getNode: makeGetNodeAdapter(PARAGRAPH_INFO),
+      getText: makeGetTextAdapter(),
+      info: makeInfoAdapter(),
+      comments: makeCommentsAdapter(),
+      write: makeWriteAdapter(),
+      format: formatAdpt,
+      trackChanges: makeTrackChangesAdapter(),
+      create: makeCreateAdapter(),
+      lists: makeListsAdapter(),
+    });
+
+    const target = { kind: 'text', blockId: 'p1', range: { start: 0, end: 2 } } as const;
+    api.format.fontSize({ target, value: '14pt' });
+    expect(formatAdpt.fontSize).toHaveBeenCalledWith(
+      { target, value: '14pt' },
+      { changeMode: 'direct', dryRun: false },
+    );
+  });
+
+  it('delegates format.fontFamily to adapter.fontFamily', () => {
+    const formatAdpt = makeFormatAdapter();
+    const api = createDocumentApi({
+      find: makeFindAdapter(QUERY_RESULT),
+      getNode: makeGetNodeAdapter(PARAGRAPH_INFO),
+      getText: makeGetTextAdapter(),
+      info: makeInfoAdapter(),
+      comments: makeCommentsAdapter(),
+      write: makeWriteAdapter(),
+      format: formatAdpt,
+      trackChanges: makeTrackChangesAdapter(),
+      create: makeCreateAdapter(),
+      lists: makeListsAdapter(),
+    });
+
+    const target = { kind: 'text', blockId: 'p1', range: { start: 0, end: 2 } } as const;
+    api.format.fontFamily({ target, value: 'Arial' });
+    expect(formatAdpt.fontFamily).toHaveBeenCalledWith(
+      { target, value: 'Arial' },
+      { changeMode: 'direct', dryRun: false },
+    );
+  });
+
+  it('delegates format.color to adapter.color', () => {
+    const formatAdpt = makeFormatAdapter();
+    const api = createDocumentApi({
+      find: makeFindAdapter(QUERY_RESULT),
+      getNode: makeGetNodeAdapter(PARAGRAPH_INFO),
+      getText: makeGetTextAdapter(),
+      info: makeInfoAdapter(),
+      comments: makeCommentsAdapter(),
+      write: makeWriteAdapter(),
+      format: formatAdpt,
+      trackChanges: makeTrackChangesAdapter(),
+      create: makeCreateAdapter(),
+      lists: makeListsAdapter(),
+    });
+
+    const target = { kind: 'text', blockId: 'p1', range: { start: 0, end: 2 } } as const;
+    api.format.color({ target, value: '#ff0000' });
+    expect(formatAdpt.color).toHaveBeenCalledWith(
+      { target, value: '#ff0000' },
+      { changeMode: 'direct', dryRun: false },
+    );
+  });
+
+  it('delegates format.align to adapter.align', () => {
+    const formatAdpt = makeFormatAdapter();
+    const api = createDocumentApi({
+      find: makeFindAdapter(QUERY_RESULT),
+      getNode: makeGetNodeAdapter(PARAGRAPH_INFO),
+      getText: makeGetTextAdapter(),
+      info: makeInfoAdapter(),
+      comments: makeCommentsAdapter(),
+      write: makeWriteAdapter(),
+      format: formatAdpt,
+      trackChanges: makeTrackChangesAdapter(),
+      create: makeCreateAdapter(),
+      lists: makeListsAdapter(),
+    });
+
+    const target = { kind: 'text', blockId: 'p1', range: { start: 0, end: 2 } } as const;
+    api.format.align({ target, alignment: 'center' });
+    expect(formatAdpt.align).toHaveBeenCalledWith(
+      { target, alignment: 'center' },
+      { changeMode: 'direct', dryRun: false },
     );
   });
 
@@ -609,7 +705,7 @@ describe('createDocumentApi', () => {
     expect(trackAdpt.get).toHaveBeenCalledWith({ id: 'tc-1' });
   });
 
-  it('delegates review.decide to trackChanges adapter methods', () => {
+  it('delegates trackChanges.decide to trackChanges adapter methods', () => {
     const trackAdpt = makeTrackChangesAdapter();
     const api = createDocumentApi({
       find: makeFindAdapter(QUERY_RESULT),
@@ -624,10 +720,10 @@ describe('createDocumentApi', () => {
       lists: makeListsAdapter(),
     });
 
-    const acceptResult = api.review.decide({ decision: 'accept', target: { id: 'tc-1' } });
-    const rejectResult = api.review.decide({ decision: 'reject', target: { id: 'tc-1' } });
-    const acceptAllResult = api.review.decide({ decision: 'accept', target: { scope: 'all' } });
-    const rejectAllResult = api.review.decide({ decision: 'reject', target: { scope: 'all' } });
+    const acceptResult = api.trackChanges.decide({ decision: 'accept', target: { id: 'tc-1' } });
+    const rejectResult = api.trackChanges.decide({ decision: 'reject', target: { id: 'tc-1' } });
+    const acceptAllResult = api.trackChanges.decide({ decision: 'accept', target: { scope: 'all' } });
+    const rejectAllResult = api.trackChanges.decide({ decision: 'reject', target: { scope: 'all' } });
 
     expect(acceptResult.success).toBe(true);
     expect(rejectResult.success).toBe(true);
@@ -637,6 +733,90 @@ describe('createDocumentApi', () => {
     expect(trackAdpt.reject).toHaveBeenCalledWith({ id: 'tc-1' }, undefined);
     expect(trackAdpt.acceptAll).toHaveBeenCalledWith({}, undefined);
     expect(trackAdpt.rejectAll).toHaveBeenCalledWith({}, undefined);
+  });
+
+  describe('trackChanges.decide input validation', () => {
+    function makeApi() {
+      return createDocumentApi({
+        find: makeFindAdapter(QUERY_RESULT),
+        getNode: makeGetNodeAdapter(PARAGRAPH_INFO),
+        getText: makeGetTextAdapter(),
+        info: makeInfoAdapter(),
+        comments: makeCommentsAdapter(),
+        write: makeWriteAdapter(),
+        format: makeFormatAdapter(),
+        trackChanges: makeTrackChangesAdapter(),
+        create: makeCreateAdapter(),
+        lists: makeListsAdapter(),
+      });
+    }
+
+    function expectError(fn: () => void, code: string, messageMatch: string) {
+      try {
+        fn();
+        expect.fail('Expected DocumentApiValidationError to be thrown');
+      } catch (err: unknown) {
+        const e = err as { name: string; code: string; message: string };
+        expect(e.name).toBe('DocumentApiValidationError');
+        expect(e.code).toBe(code);
+        expect(e.message).toContain(messageMatch);
+      }
+    }
+
+    it('rejects null input', () => {
+      const api = makeApi();
+      expectError(() => api.trackChanges.decide(null as any), 'INVALID_INPUT', 'non-null object');
+    });
+
+    it('rejects primitive input', () => {
+      const api = makeApi();
+      expectError(() => api.trackChanges.decide('accept' as any), 'INVALID_INPUT', 'non-null object');
+    });
+
+    it('rejects invalid decision value', () => {
+      const api = makeApi();
+      expectError(
+        () => api.trackChanges.decide({ decision: 'maybe', target: { id: 'tc-1' } } as any),
+        'INVALID_INPUT',
+        '"accept" or "reject"',
+      );
+    });
+
+    it('rejects non-object target', () => {
+      const api = makeApi();
+      expectError(
+        () => api.trackChanges.decide({ decision: 'accept', target: 'tc-1' } as any),
+        'INVALID_TARGET',
+        '{ id: string } or { scope: "all" }',
+      );
+    });
+
+    it('rejects null target', () => {
+      const api = makeApi();
+      expectError(
+        () => api.trackChanges.decide({ decision: 'accept', target: null } as any),
+        'INVALID_TARGET',
+        '{ id: string } or { scope: "all" }',
+      );
+    });
+
+    it('rejects object target without id or scope', () => {
+      const api = makeApi();
+      expectError(
+        () => api.trackChanges.decide({ decision: 'accept', target: { foo: 'bar' } } as any),
+        'INVALID_TARGET',
+        '{ id: string } or { scope: "all" }',
+      );
+    });
+
+    it('rejects target with empty id', () => {
+      const api = makeApi();
+      expectError(
+        () => api.trackChanges.decide({ decision: 'accept', target: { id: '' } } as any),
+        'INVALID_TARGET',
+        '{ id: string } or { scope: "all" }',
+      );
+    });
   });
 
   it('delegates create.paragraph to the create adapter', () => {
@@ -1277,7 +1457,7 @@ describe('createDocumentApi', () => {
 
         it('rejects null input', () => {
           const api = makeApi();
-          // null spreads to {}, so the merged object { marks: {...} } passes shape
+          // null spreads to {}, so the merged object { inline: {...} } passes shape
           // checks but fails the locator requirement
           expectValidationError(() => api.format[method](null as any), 'requires a target');
         });
@@ -1300,7 +1480,7 @@ describe('createDocumentApi', () => {
 
     // -- Canonical payload parity --
 
-    it('passes canonical target through to adapter.apply with marks', () => {
+    it('passes canonical target through to adapter.apply with inline', () => {
       const formatAdpt = makeFormatAdapter();
       const api = createDocumentApi({
         find: makeFindAdapter(QUERY_RESULT),
@@ -1319,7 +1499,7 @@ describe('createDocumentApi', () => {
       const target = { kind: 'text', blockId: 'p1', range: { start: 0, end: 2 } } as const;
       api.format.bold({ target });
       expect(formatAdpt.apply).toHaveBeenCalledWith(
-        { target, marks: { bold: true } },
+        { target, inline: { bold: true } },
         { changeMode: 'direct', dryRun: false },
       );
     });
@@ -1414,6 +1594,11 @@ describe('createDocumentApi', () => {
         () => api.comments.create({ parentCommentId: 'c1', text: 'reply', target }),
         'Cannot combine parentCommentId with target',
       );
+    });
+
+    it('rejects root comment without target', () => {
+      const api = makeApi();
+      expectValidationError(() => api.comments.create({ text: 'comment' }), 'requires a target for root comments');
     });
 
     it('rejects malformed target', () => {
@@ -1555,7 +1740,7 @@ describe('createDocumentApi', () => {
       );
     });
 
-    it('rejects invalid locator before applying text edit', () => {
+    it('rejects multiple mutation fields in a single patch call', () => {
       const commentsAdpt = makeCommentsAdapter();
       const api = createDocumentApi({
         find: makeFindAdapter(QUERY_RESULT),
@@ -1571,10 +1756,15 @@ describe('createDocumentApi', () => {
         lists: makeListsAdapter(),
       });
 
-      expectValidationError(
-        () => api.comments.patch({ commentId: 'c1', text: 'new text', target: { kind: 'text', blockId: 'p1' } } as any),
-        'target must be a text address object',
-      );
+      try {
+        api.comments.patch({ commentId: 'c1', text: 'new text', target: { kind: 'text', blockId: 'p1' } } as any);
+        expect.fail('Expected DocumentApiValidationError to be thrown');
+      } catch (err: unknown) {
+        const e = err as { name: string; code: string; message: string };
+        expect(e.name).toBe('DocumentApiValidationError');
+        expect(e.code).toBe('INVALID_INPUT');
+        expect(e.message).toContain('exactly one mutation field per call');
+      }
       expect(commentsAdpt.edit).not.toHaveBeenCalled();
     });
 
@@ -1672,7 +1862,7 @@ describe('createDocumentApi', () => {
       const api = makeApi();
       expectValidationError(
         () => api.create.paragraph({ at: { kind: 'before' } as any, text: 'Hello' }),
-        'requires either at.target or at.nodeId',
+        'requires at.target',
       );
     });
 

@@ -291,6 +291,23 @@ export const SUCCESS_SCENARIOS = {
       ],
     };
   },
+  'doc.blocks.delete': async (harness: ConformanceHarness): Promise<ScenarioInvocation> => {
+    const stateDir = await harness.createStateDir('doc-blocks-delete-success');
+    const docPath = await harness.copyFixtureDoc('doc-blocks-delete');
+    const block = await harness.firstBlockMatch(docPath, stateDir);
+    return {
+      stateDir,
+      args: [
+        'blocks',
+        'delete',
+        docPath,
+        '--target-json',
+        JSON.stringify({ kind: 'block', nodeType: block.nodeType, nodeId: block.nodeId }),
+        '--out',
+        harness.createOutputPath('doc-blocks-delete-output'),
+      ],
+    };
+  },
   'doc.lists.list': async (harness: ConformanceHarness): Promise<ScenarioInvocation> => {
     const stateDir = await harness.createStateDir('doc-lists-list-success');
     const docPath = await harness.copyListFixtureDoc('doc-lists-list');
@@ -514,10 +531,86 @@ export const SUCCESS_SCENARIOS = {
         docPath,
         '--target-json',
         JSON.stringify(target),
-        '--marks-json',
+        '--inline-json',
         JSON.stringify({ bold: true }),
         '--out',
         harness.createOutputPath('doc-style-apply-output'),
+      ],
+    };
+  },
+  'doc.format.fontSize': async (harness: ConformanceHarness): Promise<ScenarioInvocation> => {
+    const stateDir = await harness.createStateDir('doc-format-font-size-success');
+    const docPath = await harness.copyFixtureDoc('doc-format-font-size');
+    const target = await harness.firstTextRange(docPath, stateDir);
+    return {
+      stateDir,
+      args: [
+        'format',
+        'font-size',
+        docPath,
+        '--target-json',
+        JSON.stringify(target),
+        '--value-json',
+        JSON.stringify('14pt'),
+        '--out',
+        harness.createOutputPath('doc-format-font-size-output'),
+      ],
+    };
+  },
+  'doc.format.fontFamily': async (harness: ConformanceHarness): Promise<ScenarioInvocation> => {
+    const stateDir = await harness.createStateDir('doc-format-font-family-success');
+    const docPath = await harness.copyFixtureDoc('doc-format-font-family');
+    const target = await harness.firstTextRange(docPath, stateDir);
+    return {
+      stateDir,
+      args: [
+        'format',
+        'font-family',
+        docPath,
+        '--target-json',
+        JSON.stringify(target),
+        '--value-json',
+        JSON.stringify('Arial'),
+        '--out',
+        harness.createOutputPath('doc-format-font-family-output'),
+      ],
+    };
+  },
+  'doc.format.color': async (harness: ConformanceHarness): Promise<ScenarioInvocation> => {
+    const stateDir = await harness.createStateDir('doc-format-color-success');
+    const docPath = await harness.copyFixtureDoc('doc-format-color');
+    const target = await harness.firstTextRange(docPath, stateDir);
+    return {
+      stateDir,
+      args: [
+        'format',
+        'color',
+        docPath,
+        '--target-json',
+        JSON.stringify(target),
+        '--value-json',
+        JSON.stringify('#ff0000'),
+        '--out',
+        harness.createOutputPath('doc-format-color-output'),
+      ],
+    };
+  },
+  'doc.format.align': async (harness: ConformanceHarness): Promise<ScenarioInvocation> => {
+    const stateDir = await harness.createStateDir('doc-format-align-success');
+    const docPath = await harness.copyFixtureDoc('doc-format-align');
+    const target = await harness.firstTextRange(docPath, stateDir);
+    return {
+      stateDir,
+      args: [
+        'format',
+        'align',
+        docPath,
+        '--target-json',
+        JSON.stringify(target),
+        '--alignment-json',
+        JSON.stringify('center'),
+        '--out',
+        harness.createOutputPath('doc-format-align-output'),
       ],
     };
   },
@@ -537,13 +630,13 @@ export const SUCCESS_SCENARIOS = {
       args: ['track-changes', 'get', fixture.docPath, '--id', fixture.changeId],
     };
   },
-  'doc.review.decide': async (harness: ConformanceHarness): Promise<ScenarioInvocation> => {
-    const stateDir = await harness.createStateDir('doc-review-decide-success');
-    const fixture = await harness.addTrackedChangeFixture(stateDir, 'doc-review-decide');
+  'doc.trackChanges.decide': async (harness: ConformanceHarness): Promise<ScenarioInvocation> => {
+    const stateDir = await harness.createStateDir('doc-trackChanges-decide-success');
+    const fixture = await harness.addTrackedChangeFixture(stateDir, 'doc-trackChanges-decide');
     return {
       stateDir,
       args: [
-        'review',
+        'track-changes',
         'decide',
         fixture.docPath,
         '--decision',
@@ -551,7 +644,7 @@ export const SUCCESS_SCENARIOS = {
         '--target-json',
         JSON.stringify({ id: fixture.changeId }),
         '--out',
-        harness.createOutputPath('doc-review-decide-output'),
+        harness.createOutputPath('doc-trackChanges-decide-output'),
       ],
     };
   },

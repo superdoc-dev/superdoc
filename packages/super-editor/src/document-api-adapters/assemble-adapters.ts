@@ -8,6 +8,12 @@ import { getDocumentApiCapabilities } from './capabilities-adapter.js';
 import { createCommentsWrapper } from './plan-engine/comments-wrappers.js';
 import { writeWrapper, styleApplyWrapper } from './plan-engine/plan-wrappers.js';
 import {
+  formatFontSizeWrapper,
+  formatFontFamilyWrapper,
+  formatColorWrapper,
+  formatAlignWrapper,
+} from './plan-engine/format-value-wrappers.js';
+import {
   trackChangesListWrapper,
   trackChangesGetWrapper,
   trackChangesAcceptWrapper,
@@ -16,6 +22,7 @@ import {
   trackChangesRejectAllWrapper,
 } from './plan-engine/track-changes-wrappers.js';
 import { createParagraphWrapper, createHeadingWrapper } from './plan-engine/create-wrappers.js';
+import { blocksDeleteWrapper } from './plan-engine/blocks-wrappers.js';
 import {
   listsListWrapper,
   listsGetWrapper,
@@ -66,6 +73,10 @@ export function assembleDocumentApiAdapters(editor: Editor): DocumentApiAdapters
     },
     format: {
       apply: (input, options) => styleApplyWrapper(editor, input, options),
+      fontSize: (input, options) => formatFontSizeWrapper(editor, input, options),
+      fontFamily: (input, options) => formatFontFamilyWrapper(editor, input, options),
+      color: (input, options) => formatColorWrapper(editor, input, options),
+      align: (input, options) => formatAlignWrapper(editor, input, options),
     },
     trackChanges: {
       list: (input) => trackChangesListWrapper(editor, input),
@@ -74,6 +85,9 @@ export function assembleDocumentApiAdapters(editor: Editor): DocumentApiAdapters
       reject: (input, options) => trackChangesRejectWrapper(editor, input, options),
       acceptAll: (input, options) => trackChangesAcceptAllWrapper(editor, input, options),
       rejectAll: (input, options) => trackChangesRejectAllWrapper(editor, input, options),
+    },
+    blocks: {
+      delete: (input, options) => blocksDeleteWrapper(editor, input, options),
     },
     create: {
       paragraph: (input, options) => createParagraphWrapper(editor, input, options),

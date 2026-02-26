@@ -33,13 +33,13 @@ import type { CommandStaticMetadata, OperationIdempotency, PreApplyThrowCode } f
 
 export type ReferenceGroupKey =
   | 'core'
+  | 'blocks'
   | 'capabilities'
   | 'create'
   | 'format'
   | 'lists'
   | 'comments'
   | 'trackChanges'
-  | 'review'
   | 'query'
   | 'mutations';
 
@@ -112,14 +112,7 @@ function mutationOperation(options: {
 
 // Throw-code shorthand arrays
 const T_NOT_FOUND = ['TARGET_NOT_FOUND'] as const;
-const T_NOT_FOUND_COMMAND = ['TARGET_NOT_FOUND', 'COMMAND_UNAVAILABLE', 'CAPABILITY_UNAVAILABLE'] as const;
-const T_NOT_FOUND_TRACKED = ['TARGET_NOT_FOUND', 'TRACK_CHANGE_COMMAND_UNAVAILABLE', 'CAPABILITY_UNAVAILABLE'] as const;
-const T_NOT_FOUND_COMMAND_TRACKED = [
-  'TARGET_NOT_FOUND',
-  'COMMAND_UNAVAILABLE',
-  'TRACK_CHANGE_COMMAND_UNAVAILABLE',
-  'CAPABILITY_UNAVAILABLE',
-] as const;
+const T_NOT_FOUND_CAPABLE = ['TARGET_NOT_FOUND', 'CAPABILITY_UNAVAILABLE'] as const;
 
 // Plan-engine throw-code arrays
 const T_PLAN_ENGINE = [
@@ -134,6 +127,9 @@ const T_PLAN_ENGINE = [
   'TARGET_MOVED',
   'PLAN_CONFLICT_OVERLAP',
   'INVALID_STEP_COMBINATION',
+  'REVISION_CHANGED_SINCE_COMPILE',
+  'INVALID_INSERTION_CONTEXT',
+  'DOCUMENT_IDENTITY_CONFLICT',
   'CAPABILITY_UNAVAILABLE',
 ] as const;
 
@@ -150,6 +146,7 @@ export const OPERATION_DEFINITIONS = {
     requiresDocumentContext: true,
     metadata: readOperation({
       idempotency: 'idempotent',
+      throws: ['CAPABILITY_UNAVAILABLE', 'INVALID_INPUT'],
       deterministicTargetResolution: false,
     }),
     referenceDocPath: 'find.mdx',
@@ -203,7 +200,7 @@ export const OPERATION_DEFINITIONS = {
       supportsDryRun: true,
       supportsTrackedMode: true,
       possibleFailureCodes: ['INVALID_TARGET', 'NO_OP'],
-      throws: [...T_NOT_FOUND_TRACKED, 'INVALID_TARGET'],
+      throws: [...T_NOT_FOUND_CAPABLE, 'INVALID_TARGET'],
     }),
     referenceDocPath: 'insert.mdx',
     referenceGroup: 'core',
@@ -217,7 +214,7 @@ export const OPERATION_DEFINITIONS = {
       supportsDryRun: true,
       supportsTrackedMode: true,
       possibleFailureCodes: ['INVALID_TARGET', 'NO_OP'],
-      throws: [...T_NOT_FOUND_TRACKED, 'INVALID_TARGET'],
+      throws: [...T_NOT_FOUND_CAPABLE, 'INVALID_TARGET'],
     }),
     referenceDocPath: 'replace.mdx',
     referenceGroup: 'core',
@@ -231,25 +228,103 @@ export const OPERATION_DEFINITIONS = {
       supportsDryRun: true,
       supportsTrackedMode: true,
       possibleFailureCodes: ['NO_OP'],
-      throws: [...T_NOT_FOUND_TRACKED, 'INVALID_TARGET'],
+      throws: [...T_NOT_FOUND_CAPABLE, 'INVALID_TARGET'],
     }),
     referenceDocPath: 'delete.mdx',
     referenceGroup: 'core',
   },
 
+  'blocks.delete': {
+    memberPath: 'blocks.delete',
+    description: 'Delete an entire block node (paragraph, heading, list item, table, image, or sdt) deterministically.',
+    requiresDocumentContext: true,
+    metadata: mutationOperation({
+      idempotency: 'conditional',
+      supportsDryRun: true,
+      supportsTrackedMode: false,
+      possibleFailureCodes: NONE_FAILURES,
+      throws: [
+        'TARGET_NOT_FOUND',
+        'AMBIGUOUS_TARGET',
+        'CAPABILITY_UNAVAILABLE',
+        'INVALID_TARGET',
+        'INVALID_INPUT',
+        'INTERNAL_ERROR',
+      ],
+    }),
+    referenceDocPath: 'blocks/delete.mdx',
+    referenceGroup: 'blocks',
+  },
+
   'format.apply': {
     memberPath: 'format.apply',
     description:
-      'Apply explicit mark changes (bold, italic, underline, strike) to the target range using boolean patch semantics.',
+      'Apply explicit inline style changes (bold, italic, underline, strike) to the target range using boolean patch semantics.',
     requiresDocumentContext: true,
     metadata: mutationOperation({
       idempotency: 'conditional',
       supportsDryRun: true,
       supportsTrackedMode: true,
       possibleFailureCodes: ['INVALID_TARGET'],
-      throws: [...T_NOT_FOUND_COMMAND_TRACKED, 'INVALID_TARGET', 'INVALID_INPUT'],
+      throws: [...T_NOT_FOUND_CAPABLE, 'INVALID_TARGET', 'INVALID_INPUT'],
     }),
     referenceDocPath: 'format/apply.mdx',
+    referenceGroup: 'format',
+  },
+  'format.fontSize': {
+    memberPath: 'format.fontSize',
+    description: 'Set or unset the font size on the target text range. Pass null to remove.',
+    requiresDocumentContext: true,
+    metadata: mutationOperation({
+      idempotency: 'conditional',
+      supportsDryRun: true,
+      supportsTrackedMode: false,
+      possibleFailureCodes: ['INVALID_TARGET', 'NO_OP'],
+      throws: [...T_NOT_FOUND_CAPABLE, 'INVALID_TARGET', 'INVALID_INPUT'],
+    }),
+    referenceDocPath: 'format/font-size.mdx',
+    referenceGroup: 'format',
+  },
+  'format.fontFamily': {
+    memberPath: 'format.fontFamily',
+    description: 'Set or unset the font family on the target text range. Pass null to remove.',
+    requiresDocumentContext: true,
+    metadata: mutationOperation({
+      idempotency: 'conditional',
+      supportsDryRun: true,
+      supportsTrackedMode: false,
+      possibleFailureCodes: ['INVALID_TARGET', 'NO_OP'],
+      throws: [...T_NOT_FOUND_CAPABLE, 'INVALID_TARGET', 'INVALID_INPUT'],
+    }),
+    referenceDocPath: 'format/font-family.mdx',
+    referenceGroup: 'format',
+  },
+  'format.color': {
+    memberPath: 'format.color',
+    description: 'Set or unset the text color on the target text range. Pass null to remove.',
+    requiresDocumentContext: true,
+    metadata: mutationOperation({
+      idempotency: 'conditional',
+      supportsDryRun: true,
+      supportsTrackedMode: false,
+      possibleFailureCodes: ['INVALID_TARGET', 'NO_OP'],
+      throws: [...T_NOT_FOUND_CAPABLE, 'INVALID_TARGET', 'INVALID_INPUT'],
+    }),
+    referenceDocPath: 'format/color.mdx',
+    referenceGroup: 'format',
+  },
+  'format.align': {
+    memberPath: 'format.align',
+    description: 'Set or unset paragraph alignment on the block containing the target. Pass null to reset to default.',
+    requiresDocumentContext: true,
+    metadata: mutationOperation({
+      idempotency: 'conditional',
+      supportsDryRun: true,
+      supportsTrackedMode: false,
+      possibleFailureCodes: ['INVALID_TARGET', 'NO_OP'],
+      throws: [...T_NOT_FOUND_CAPABLE, 'INVALID_TARGET', 'INVALID_INPUT'],
+    }),
+    referenceDocPath: 'format/align.mdx',
     referenceGroup: 'format',
   },
 
@@ -262,7 +337,7 @@ export const OPERATION_DEFINITIONS = {
       supportsDryRun: true,
       supportsTrackedMode: true,
       possibleFailureCodes: ['INVALID_TARGET'],
-      throws: [...T_NOT_FOUND_COMMAND_TRACKED, 'INVALID_TARGET', 'AMBIGUOUS_TARGET'],
+      throws: [...T_NOT_FOUND_CAPABLE, 'INVALID_TARGET', 'AMBIGUOUS_TARGET'],
     }),
     referenceDocPath: 'create/paragraph.mdx',
     referenceGroup: 'create',
@@ -276,7 +351,7 @@ export const OPERATION_DEFINITIONS = {
       supportsDryRun: true,
       supportsTrackedMode: true,
       possibleFailureCodes: ['INVALID_TARGET'],
-      throws: [...T_NOT_FOUND_COMMAND_TRACKED, 'INVALID_TARGET', 'AMBIGUOUS_TARGET'],
+      throws: [...T_NOT_FOUND_CAPABLE, 'INVALID_TARGET', 'AMBIGUOUS_TARGET'],
     }),
     referenceDocPath: 'create/heading.mdx',
     referenceGroup: 'create',
@@ -288,7 +363,7 @@ export const OPERATION_DEFINITIONS = {
     requiresDocumentContext: true,
     metadata: readOperation({
       idempotency: 'idempotent',
-      throws: T_NOT_FOUND,
+      throws: ['TARGET_NOT_FOUND', 'INVALID_TARGET', 'INVALID_INPUT'],
     }),
     referenceDocPath: 'lists/list.mdx',
     referenceGroup: 'lists',
@@ -313,7 +388,7 @@ export const OPERATION_DEFINITIONS = {
       supportsDryRun: true,
       supportsTrackedMode: true,
       possibleFailureCodes: ['INVALID_TARGET'],
-      throws: [...T_NOT_FOUND_COMMAND_TRACKED, 'INVALID_TARGET'],
+      throws: [...T_NOT_FOUND_CAPABLE, 'INVALID_TARGET'],
     }),
     referenceDocPath: 'lists/insert.mdx',
     referenceGroup: 'lists',
@@ -327,7 +402,7 @@ export const OPERATION_DEFINITIONS = {
       supportsDryRun: true,
       supportsTrackedMode: false,
       possibleFailureCodes: ['NO_OP', 'INVALID_TARGET'],
-      throws: [...T_NOT_FOUND_COMMAND_TRACKED, 'INVALID_TARGET'],
+      throws: [...T_NOT_FOUND_CAPABLE, 'INVALID_TARGET'],
     }),
     referenceDocPath: 'lists/set-type.mdx',
     referenceGroup: 'lists',
@@ -341,7 +416,7 @@ export const OPERATION_DEFINITIONS = {
       supportsDryRun: true,
       supportsTrackedMode: false,
       possibleFailureCodes: ['NO_OP', 'INVALID_TARGET'],
-      throws: [...T_NOT_FOUND_COMMAND_TRACKED, 'INVALID_TARGET'],
+      throws: [...T_NOT_FOUND_CAPABLE, 'INVALID_TARGET'],
     }),
     referenceDocPath: 'lists/indent.mdx',
     referenceGroup: 'lists',
@@ -355,7 +430,7 @@ export const OPERATION_DEFINITIONS = {
       supportsDryRun: true,
       supportsTrackedMode: false,
       possibleFailureCodes: ['NO_OP', 'INVALID_TARGET'],
-      throws: [...T_NOT_FOUND_COMMAND_TRACKED, 'INVALID_TARGET'],
+      throws: [...T_NOT_FOUND_CAPABLE, 'INVALID_TARGET'],
     }),
     referenceDocPath: 'lists/outdent.mdx',
     referenceGroup: 'lists',
@@ -369,7 +444,7 @@ export const OPERATION_DEFINITIONS = {
       supportsDryRun: true,
       supportsTrackedMode: false,
       possibleFailureCodes: ['NO_OP', 'INVALID_TARGET'],
-      throws: [...T_NOT_FOUND_COMMAND_TRACKED, 'INVALID_TARGET'],
+      throws: [...T_NOT_FOUND_CAPABLE, 'INVALID_TARGET'],
     }),
     referenceDocPath: 'lists/restart.mdx',
     referenceGroup: 'lists',
@@ -383,7 +458,7 @@ export const OPERATION_DEFINITIONS = {
       supportsDryRun: true,
       supportsTrackedMode: false,
       possibleFailureCodes: ['INVALID_TARGET'],
-      throws: [...T_NOT_FOUND_COMMAND_TRACKED, 'INVALID_TARGET'],
+      throws: [...T_NOT_FOUND_CAPABLE, 'INVALID_TARGET'],
     }),
     referenceDocPath: 'lists/exit.mdx',
     referenceGroup: 'lists',
@@ -398,7 +473,7 @@ export const OPERATION_DEFINITIONS = {
       supportsDryRun: false,
       supportsTrackedMode: false,
       possibleFailureCodes: ['INVALID_TARGET', 'NO_OP'],
-      throws: [...T_NOT_FOUND_COMMAND, 'INVALID_TARGET'],
+      throws: [...T_NOT_FOUND_CAPABLE, 'INVALID_TARGET'],
     }),
     referenceDocPath: 'comments/create.mdx',
     referenceGroup: 'comments',
@@ -412,7 +487,7 @@ export const OPERATION_DEFINITIONS = {
       supportsDryRun: false,
       supportsTrackedMode: false,
       possibleFailureCodes: ['INVALID_TARGET', 'NO_OP'],
-      throws: [...T_NOT_FOUND_COMMAND, 'INVALID_TARGET'],
+      throws: [...T_NOT_FOUND_CAPABLE, 'INVALID_TARGET', 'INVALID_INPUT'],
     }),
     referenceDocPath: 'comments/patch.mdx',
     referenceGroup: 'comments',
@@ -426,7 +501,7 @@ export const OPERATION_DEFINITIONS = {
       supportsDryRun: false,
       supportsTrackedMode: false,
       possibleFailureCodes: ['NO_OP'],
-      throws: T_NOT_FOUND_COMMAND,
+      throws: T_NOT_FOUND_CAPABLE,
     }),
     referenceDocPath: 'comments/delete.mdx',
     referenceGroup: 'comments',
@@ -448,6 +523,7 @@ export const OPERATION_DEFINITIONS = {
     requiresDocumentContext: true,
     metadata: readOperation({
       idempotency: 'idempotent',
+      throws: ['INVALID_INPUT'],
     }),
     referenceDocPath: 'comments/list.mdx',
     referenceGroup: 'comments',
@@ -459,6 +535,7 @@ export const OPERATION_DEFINITIONS = {
     requiresDocumentContext: true,
     metadata: readOperation({
       idempotency: 'idempotent',
+      throws: ['INVALID_INPUT'],
     }),
     referenceDocPath: 'track-changes/list.mdx',
     referenceGroup: 'trackChanges',
@@ -474,8 +551,8 @@ export const OPERATION_DEFINITIONS = {
     referenceDocPath: 'track-changes/get.mdx',
     referenceGroup: 'trackChanges',
   },
-  'review.decide': {
-    memberPath: 'review.decide',
+  'trackChanges.decide': {
+    memberPath: 'trackChanges.decide',
     description: 'Accept or reject a tracked change (by ID or scope: all).',
     requiresDocumentContext: true,
     metadata: mutationOperation({
@@ -483,10 +560,10 @@ export const OPERATION_DEFINITIONS = {
       supportsDryRun: false,
       supportsTrackedMode: false,
       possibleFailureCodes: ['NO_OP'],
-      throws: T_NOT_FOUND_COMMAND,
+      throws: [...T_NOT_FOUND_CAPABLE, 'INVALID_INPUT', 'INVALID_TARGET'],
     }),
-    referenceDocPath: 'review/decide.mdx',
-    referenceGroup: 'review',
+    referenceDocPath: 'track-changes/decide.mdx',
+    referenceGroup: 'trackChanges',
   },
 
   'query.match': {

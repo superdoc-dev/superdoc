@@ -1385,11 +1385,7 @@ export const renderTableCell = (deps: TableCellRenderDependencies): TableCellRen
            * indentation but skips marker text rendering).
            */
           const shouldRenderMarker =
-            markerLayout &&
-            markerMeasure &&
-            lineIdx === 0 &&
-            localStartLine === 0 &&
-            markerMeasure.markerWidth > 0;
+            markerLayout && markerMeasure && lineIdx === 0 && localStartLine === 0 && markerMeasure.markerWidth > 0;
 
           if (shouldRenderMarker) {
             // Prepend marker + suffix inside lineEl (mirrors renderer.ts approach)

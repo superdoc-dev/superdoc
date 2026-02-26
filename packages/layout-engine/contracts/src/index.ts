@@ -859,6 +859,17 @@ export type SectionMetadata = {
   titlePg?: boolean;
   /** Vertical alignment of content within this section's pages */
   vAlign?: SectionVerticalAlign;
+  /** Section page margins in CSS px */
+  margins?: {
+    top?: number;
+    right?: number;
+    bottom?: number;
+    left?: number;
+    header?: number;
+    footer?: number;
+  } | null;
+  /** Section page size in CSS px */
+  pageSize?: { w: number; h: number } | null;
 };
 
 export type PageBreakBlock = {

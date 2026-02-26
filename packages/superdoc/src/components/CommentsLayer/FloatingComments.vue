@@ -13,6 +13,46 @@ import CommentDialog from '@superdoc/components/CommentsLayer/CommentDialog.vue'
 const ESTIMATED_HEIGHT = 80;
 const OBSERVER_MARGIN = 600;
 
+// Layout algorithm: positions comments in a single column with collision avoidance.
+// When a comment is active it pins at its anchor; neighbors push up/down to avoid overlap.
+// If upward push produces negative tops, everything shifts down to stay on screen.
+const resolveCollisions = (positions, activeIndex, gap) => {
+  if (activeIndex >= 0) {
+    positions[activeIndex].top = positions[activeIndex].anchorTop;
+
+    // Below: push down from the active comment
+    let cursor = positions[activeIndex].top + positions[activeIndex].height + gap;
+    for (let i = activeIndex + 1; i < positions.length; i++) {
+      positions[i].top = Math.max(positions[i].anchorTop, cursor);
+      cursor = positions[i].top + positions[i].height + gap;
+    }
+
+    // Above: push up from the active comment
+    cursor = positions[activeIndex].top - gap;
+    for (let i = activeIndex - 1; i >= 0; i--) {
+      const bottomEdge = cursor - positions[i].height;
+      positions[i].top = Math.min(positions[i].anchorTop, bottomEdge);
+      cursor = positions[i].top - gap;
+    }
+
+    // Floor: if upward push produced negative tops, shift everything down
+    const minTop = Math.min(...positions.map((p) => p.top));
+    if (minTop < 0) {
+      const shift = Math.abs(minTop);
+      for (const p of positions) p.top += shift;
+    }
+  } else {
+    // No active comment: simple top-to-bottom collision avoidance
+    for (let i = 1; i < positions.length; i++) {
+      const prev = positions[i - 1];
+      const minTop = prev.top + prev.height + gap;
+      if (positions[i].top < minTop) {
+        positions[i].top = minTop;
+      }
+    }
+  }
+};
+
 const props = defineProps({
   currentDocument: {
     type: Object,
@@ -78,54 +118,20 @@ const allPositions = computed(() => {
     const top = getAnchorTop(comment);
     if (!key || typeof top !== 'number' || isNaN(top)) continue;
 
-    const positionEntry = editorCommentPositions.value[key];
     positions.push({
       id: key,
       anchorTop: top,
       top,
       height: measuredHeights.value[key] || ESTIMATED_HEIGHT,
       commentRef: comment,
-      pageIndex: positionEntry?.pageIndex ?? 0,
     });
   }
 
-  // Cross-page collision avoidance (Google Docs-style).
-  // All comments form a single continuous column sorted by anchor position.
-  // When a comment is active, it pins to its anchor and others flow around it.
   positions.sort((a, b) => a.anchorTop - b.anchorTop);
 
   const activeKey = activeCommentKey.value;
   const activeIndex = activeKey ? positions.findIndex((p) => p.id === activeKey) : -1;
-  const gap = 15;
-
-  if (activeIndex >= 0) {
-    // Pin the active comment at its anchor position
-    positions[activeIndex].top = positions[activeIndex].anchorTop;
-
-    // Below the active: push down from the active comment
-    let cursor = positions[activeIndex].top + positions[activeIndex].height + gap;
-    for (let i = activeIndex + 1; i < positions.length; i++) {
-      positions[i].top = Math.max(positions[i].anchorTop, cursor);
-      cursor = positions[i].top + positions[i].height + gap;
-    }
-
-    // Above the active: push up from the active comment
-    cursor = positions[activeIndex].top - gap;
-    for (let i = activeIndex - 1; i >= 0; i--) {
-      const bottomEdge = cursor - positions[i].height;
-      positions[i].top = Math.min(positions[i].anchorTop, bottomEdge);
-      cursor = positions[i].top - gap;
-    }
-  } else {
-    // No active comment: simple top-to-bottom collision avoidance
-    for (let i = 1; i < positions.length; i++) {
-      const prev = positions[i - 1];
-      const minTop = prev.top + prev.height + gap;
-      if (positions[i].top < minTop) {
-        positions[i].top = minTop;
-      }
-    }
-  }
+  resolveCollisions(positions, activeIndex, 15);
 
   return positions;
 });
@@ -176,9 +182,15 @@ const observePlaceholders = () => {
   }
 };
 
+// Store a measured height for a comment key. Deduplicates the update logic
+// shared between initial mount (handleDialog) and active-state remeasure.
+const storeHeight = (key, height) => {
+  if (height <= 0 || height === measuredHeights.value[key]) return;
+  _heightsCache[key] = height;
+  measuredHeights.value = { ...measuredHeights.value, [key]: height };
+};
+
 // When a CommentDialog mounts and reports its size, record the measured height.
-// CommentDialog emits importedId when defined (prefers importedId), but allPositions
-// keys by getCommentPositionKey (also prefers importedId). We normalize here to match.
 const handleDialog = (dialog) => {
   if (!dialog) return;
   const { elementRef, commentId: rawId } = dialog;
@@ -187,16 +199,8 @@ const handleDialog = (dialog) => {
   nextTick(() => {
     const bounds = elementRef.value?.getBoundingClientRect();
     if (!bounds || bounds.height <= 0) return;
-
-    // Normalize to canonical key (matches allPositions)
     const key = commentsStore.getCommentPositionKey(rawId);
-    if (!key) return;
-
-    const current = measuredHeights.value[key];
-    if (current !== bounds.height) {
-      _heightsCache[key] = bounds.height;
-      measuredHeights.value = { ...measuredHeights.value, [key]: bounds.height };
-    }
+    if (key) storeHeight(key, bounds.height);
   });
 };
 
@@ -210,49 +214,40 @@ const setPlaceholderRef = (id, el) => {
   }
 };
 
-// Vertical offset is no longer needed — the cross-page layout algorithm pins the active
-// comment at its anchor position directly, so the sidebar container stays at top: 0.
-const verticalOffset = computed(() => 0);
+// Timer IDs for cancellation on rapid active-comment switching
+let remeasureTimers = [];
+let scrollTimer = null;
 
 // Re-measure when active comment changes. The active dialog expands (reply input, thread)
-// and the previously active one collapses — both change height. We re-measure after DOM
-// updates so the layout algorithm uses the correct heights for collision avoidance.
+// and the previously active one collapses — both change height.
 watch(activeCommentKey, (newKey, oldKey) => {
+  // Cancel stale timers from previous activation
+  remeasureTimers.forEach(clearTimeout);
+  remeasureTimers = [];
+
   const remeasure = () => {
-    const keys = [newKey, oldKey].filter(Boolean);
-    if (!keys.length) return;
-
-    let changed = false;
-    const updates = { ...measuredHeights.value };
-
-    for (const key of keys) {
+    for (const key of [newKey, oldKey].filter(Boolean)) {
       const el = placeholderRefs.value[key];
       if (!el) continue;
       const dialog = el.querySelector('.comments-dialog');
       if (!dialog) continue;
-      const height = dialog.getBoundingClientRect().height;
-      if (height > 0 && height !== updates[key]) {
-        updates[key] = height;
-        _heightsCache[key] = height;
-        changed = true;
-      }
-    }
-
-    if (changed) {
-      measuredHeights.value = updates;
+      storeHeight(key, dialog.getBoundingClientRect().height);
     }
   };
 
-  // Two passes: first after DOM update, second after transitions settle
-  nextTick(() => setTimeout(remeasure, 50));
-  nextTick(() => setTimeout(remeasure, 300));
+  // 50ms: after Vue nextTick + browser rAF settle the initial DOM change
+  // 350ms: after .comment-placeholder transition (300ms ease) completes
+  nextTick(() => {
+    remeasureTimers.push(setTimeout(remeasure, 50));
+    remeasureTimers.push(setTimeout(remeasure, 350));
+  });
 });
 
 // Scroll to the active comment ONLY when its anchor is off-screen.
-// getBoundingClientRect() is viewport-relative, so it already accounts for scroll
-// position and zoom — we just need to check if it's within the visible area.
-// If the anchor text is visible, do nothing — let the comments reflow in place.
+// getBoundingClientRect() is viewport-relative (accounts for scroll + zoom).
 watch(activeComment, () => {
+  if (scrollTimer) clearTimeout(scrollTimer);
+
   if (!activeComment.value) return;
   const comment = commentsStore.getComment(activeComment.value);
   if (!comment) return;
@@ -260,18 +255,15 @@ watch(activeComment, () => {
   if (!key) return;
 
   nextTick(() => {
-    setTimeout(() => {
+    scrollTimer = setTimeout(() => {
       const el = placeholderRefs.value[key];
       if (!el) return;
 
-      // The active comment is pinned at its anchor Y, so the placeholder's
-      // viewport position matches the anchor text's vertical position.
       const rect = el.getBoundingClientRect();
-      const margin = 80; // buffer so it's not at the very edge
+      const margin = 80;
       const isVisible = rect.top >= margin && rect.top <= window.innerHeight - margin;
 
       if (!isVisible) {
-        // Minimal scroll — just enough to bring the anchor into view
         el.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
       }
     }, 100);
@@ -310,7 +302,9 @@ onBeforeUnmount(() => {
 
 <template>
   <div class="section-wrapper" ref="floatingCommentsContainer" :style="{ minHeight: totalHeight + 'px' }">
-    <div class="sidebar-container" :style="{ top: verticalOffset + 'px' }">
+    <!-- sidebar-container stays at top: 0 — the layout algorithm pins the active
+         comment at its anchor position directly, no offset needed -->
+    <div class="sidebar-container">
       <!-- Lightweight placeholders for ALL comments (observed for viewport proximity) -->
       <div
         v-for="pos in allPositions"

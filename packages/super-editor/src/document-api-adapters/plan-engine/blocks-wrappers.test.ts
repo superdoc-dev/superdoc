@@ -204,7 +204,7 @@ describe('blocksDeleteWrapper', () => {
       expect(result).toEqual({ success: true, deleted: { kind: 'block', nodeType: 'table', nodeId: 't1' } });
     });
 
-    it('deletes an image block', () => {
+    it('rejects image target (inline-only in ProseMirror schema)', () => {
       const image = createNode('image', [], {
         attrs: { blockId: 'img1', sdBlockId: 'img1' },
         isBlock: true,
@@ -212,8 +212,9 @@ describe('blocksDeleteWrapper', () => {
         inlineContent: false,
       });
       const { editor } = makeBlockDeleteEditor({ children: [image] });
-      const result = blocksDeleteWrapper(editor, makeInput('image', 'img1'), { changeMode: 'direct' });
-      expect(result).toEqual({ success: true, deleted: { kind: 'block', nodeType: 'image', nodeId: 'img1' } });
+      expect(() => blocksDeleteWrapper(editor, makeInput('image', 'img1'), { changeMode: 'direct' })).toThrow(
+        DocumentApiAdapterError,
+      );
     });
 
     it('deletes an sdt block', () => {

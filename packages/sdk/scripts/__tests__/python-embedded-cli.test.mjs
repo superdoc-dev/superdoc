@@ -317,6 +317,12 @@ test('semverToPep440: rc prerelease', () => {
   assert.equal(semverToPep440('1.0.0-rc.1'), '1.0.0rc1');
 });
 
+test('semverToPep440: next prerelease maps to .devN', () => {
+  assert.equal(semverToPep440('1.1.0-next.1'), '1.1.0.dev1');
+  assert.equal(semverToPep440('2.0.0-next.15'), '2.0.0.dev15');
+  assert.equal(semverToPep440('1.0.0-next.0'), '1.0.0.dev0');
+});
+
 test('semverToPep440: rejects unsupported prerelease channel', () => {
   assert.throws(() => semverToPep440('1.0.0-gamma.1'), /unsupported version format/);
   assert.throws(() => semverToPep440('1.0.0-dev.1'), /unsupported version format/);

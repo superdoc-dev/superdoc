@@ -1,15 +1,5 @@
-import { vi, beforeEach, describe, it, expect } from 'vitest';
+import { describe, it, expect } from 'vitest';
 import { config } from './index.js';
-import { processOutputMarks, generateRunProps } from '../../../../exporter.js';
-
-vi.mock('../../../../exporter.js', () => {
-  const processOutputMarks = vi.fn((marks) => marks || []);
-  const generateRunProps = vi.fn((processedMarks) => ({
-    name: 'w:rPr',
-    elements: [],
-  }));
-  return { processOutputMarks, generateRunProps };
-});
 
 describe('w:tab translator config', () => {
   describe('encode', () => {
@@ -62,58 +52,31 @@ describe('w:tab translator config', () => {
   });
 
   describe('decode — marks and run props', () => {
-    beforeEach(() => {
-      vi.clearAllMocks();
-    });
-
-    it('calls processOutputMarks with node.marks and adds run props before <w:tab>', () => {
-      const fakeMarks = [{ type: 'bold' }, { type: 'italic' }];
-      const processed = [{ type: 'bold' }];
-      const rPrNode = { name: 'w:rPr', elements: [{ name: 'w:b' }] };
-
-      processOutputMarks.mockReturnValue(processed);
-      generateRunProps.mockReturnValue(rPrNode);
-
-      const params = { node: { type: 'tab', marks: fakeMarks } };
-      const res = config.decode(params, undefined);
-
-      expect(processOutputMarks).toHaveBeenCalledTimes(1);
-      expect(processOutputMarks).toHaveBeenCalledWith(fakeMarks);
-
-      expect(generateRunProps).toHaveBeenCalledTimes(1);
-      expect(generateRunProps).toHaveBeenCalledWith(processed);
-
+    it('adds run props from node.marks before <w:tab>', () => {
+      const res = config.decode({ node: { type: 'tab', marks: [{ type: 'bold' }, { type: 'italic' }] } }, undefined);
       expect(res).toBeTruthy();
       expect(res.name).toBe('w:r');
       expect(Array.isArray(res.elements)).toBe(true);
 
-      expect(res.elements[0]).toEqual(rPrNode); // run props first
+      expect(res.elements[0].name).toBe('w:rPr');
+      const childNames = res.elements[0].elements.map((el) => el.name);
+      expect(childNames).toContain('w:b');
+      expect(childNames).toContain('w:i');
       expect(res.elements[1]).toEqual({ name: 'w:tab', attributes: {}, elements: [] });
     });
 
-    it('does not add run props when processOutputMarks returns an empty array', () => {
-      processOutputMarks.mockReturnValue([]);
-
-      const params = { node: { type: 'tab', marks: [{ type: 'bold' }] } };
-      const res = config.decode(params, undefined);
-
-      expect(processOutputMarks).toHaveBeenCalledTimes(1);
-      expect(generateRunProps).not.toHaveBeenCalled();
-
+    it('does not add run props when node.marks is empty', () => {
+      const res = config.decode({ node: { type: 'tab', marks: [] } }, undefined);
       expect(res.name).toBe('w:r');
       expect(res.elements).toEqual([{ name: 'w:tab', attributes: {}, elements: [] }]);
     });
 
     it('still places run props before <w:tab> when decodedAttrs are present', () => {
-      processOutputMarks.mockReturnValue([{ type: 'bold' }]);
-      generateRunProps.mockReturnValue({ name: 'w:rPr', elements: [{ name: 'w:b' }] });
-
-      const params = { node: { type: 'tab', marks: [{ type: 'bold' }] } };
       const decoded = { 'w:val': 'left', 'w:custom': 'foo' };
-      const res = config.decode(params, decoded);
+      const res = config.decode({ node: { type: 'tab', marks: [{ type: 'bold' }] } }, decoded);
 
       expect(res.name).toBe('w:r');
-      expect(res.elements[0]).toEqual({ name: 'w:rPr', elements: [{ name: 'w:b' }] });
+      expect(res.elements[0].name).toBe('w:rPr');
       expect(res.elements[1]).toEqual({
         name: 'w:tab',
         attributes: { 'w:val': 'left', 'w:custom': 'foo' },
@@ -121,14 +84,21 @@ describe('w:tab translator config', () => {
       });
     });
 
-    it('passes an empty array to processOutputMarks when node.marks is missing', () => {
-      processOutputMarks.mockReturnValue([]);
-
+    it('does not add run props when node.marks is missing', () => {
       const res = config.decode({ node: { type: 'tab' } }, undefined);
-
-      expect(processOutputMarks).toHaveBeenCalledTimes(1);
-      expect(processOutputMarks).toHaveBeenCalledWith([]);
       expect(res.elements).toEqual([{ name: 'w:tab', attributes: {}, elements: [] }]);
+    });
+
+    it('preserves textStyle.styleId as w:rStyle in tab run props', () => {
+      const res = config.decode(
+        { node: { type: 'tab', marks: [{ type: 'textStyle', attrs: { styleId: 'Emphasis' } }] } },
+        undefined,
+      );
+
+      expect(res.name).toBe('w:r');
+      expect(res.elements[0].name).toBe('w:rPr');
+      const rStyle = res.elements[0].elements.find((el) => el.name === 'w:rStyle');
+      expect(rStyle?.attributes?.['w:val']).toBe('Emphasis');
     });
   });
 });

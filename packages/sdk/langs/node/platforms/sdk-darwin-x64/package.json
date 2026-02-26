@@ -1,0 +1,19 @@
+{
+  "name": "@superdoc-dev/sdk-darwin-x64",
+  "version": "1.0.0-alpha.6",
+  "os": [
+    "darwin"
+  ],
+  "cpu": [
+    "x64"
+  ],
+  "bin": {
+    "superdoc": "bin/superdoc"
+  },
+  "files": [
+    "bin"
+  ],
+  "publishConfig": {
+    "access": "public"
+  }
+}

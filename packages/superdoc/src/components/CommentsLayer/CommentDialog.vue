@@ -3,11 +3,13 @@ import { computed, ref, getCurrentInstance, onMounted, nextTick, watch } from 'v
 import { storeToRefs } from 'pinia';
 import { useCommentsStore } from '@superdoc/stores/comments-store';
 import { useSuperdocStore } from '@superdoc/stores/superdoc-store';
+import { superdocIcons } from '@superdoc/icons.js';
 import InternalDropdown from './InternalDropdown.vue';
 import CommentHeader from './CommentHeader.vue';
 import CommentInput from './CommentInput.vue';
+import Avatar from '@superdoc/components/general/Avatar.vue';
 
-const emit = defineEmits(['click-outside', 'ready', 'dialog-exit']);
+const emit = defineEmits(['click-outside', 'ready', 'dialog-exit', 'resize']);
 const props = defineProps({
   comment: {
     type: Object,
@@ -41,7 +43,6 @@ const {
   editorCommentPositions,
   isCommentHighlighted,
 } = storeToRefs(commentsStore);
-const { activeZoom } = storeToRefs(superdocStore);
 
 const isInternal = ref(true);
 const commentInput = ref(null);
@@ -68,6 +69,18 @@ const focusEditInput = (commentId) => {
 const commentDialogElement = ref(null);
 
 const isActiveComment = computed(() => activeComment.value === props.comment.commentId);
+
+/* ── Step 1: Resolved badge ── */
+const resolvedBadgeLabel = computed(() => {
+  if (!props.comment.resolvedTime) return null;
+  return props.comment.trackedChange ? 'Accepted' : 'Resolved';
+});
+
+/* ── Pending new comment (brand-new, not a reply) ── */
+const isPendingNewComment = computed(() => {
+  return pendingComment.value && pendingComment.value.commentId === props.comment.commentId;
+});
+
 const showButtons = computed(() => {
   return (
     !getConfig.readOnly &&
@@ -78,8 +91,9 @@ const showButtons = computed(() => {
 });
 
 const showSeparator = computed(() => (index) => {
-  if (showInputSection.value && index === comments.value.length - 1) return true;
-  return comments.value.length > 1 && index !== comments.value.length - 1;
+  const visible = visibleComments.value;
+  if (showInputSection.value && index === visible.length - 1) return true;
+  return visible.length > 1 && index !== visible.length - 1;
 });
 
 const showInputSection = computed(() => {
@@ -90,6 +104,16 @@ const showInputSection = computed(() => {
     editingCommentId.value !== props.comment.commentId
   );
 });
+
+// Reply pill → expanded editor toggle
+const isReplying = ref(false);
+const startReply = () => {
+  isReplying.value = true;
+  nextTick(() => {
+    commentInput.value?.focus?.();
+    emit('resize');
+  });
+};
 
 const isRangeThreadedComment = (comment) => {
   if (!comment) return false;
@@ -150,6 +174,94 @@ const comments = computed(() => {
   });
 });
 
+/* ── Step 2: Text truncation ── */
+const textExpanded = ref(false);
+const parentBodyRef = ref(null);
+const isTextOverflowing = ref(false);
+const shouldTruncate = computed(() => !textExpanded.value);
+const toggleTruncation = () => {
+  textExpanded.value = !textExpanded.value;
+  nextTick(() => emit('resize'));
+};
+const checkOverflow = () => {
+  // Only measure when the clamp is active (initial state)
+  if (textExpanded.value) return;
+  const el = parentBodyRef.value;
+  if (!el) {
+    isTextOverflowing.value = false;
+    return;
+  }
+  isTextOverflowing.value = el.scrollHeight > el.clientHeight + 1;
+};
+// Check overflow when the element first renders
+watch(parentBodyRef, () => {
+  nextTick(checkOverflow);
+});
+// Reset truncation, thread collapse, and reply state when card becomes inactive
+watch(isActiveComment, (active) => {
+  if (!active) {
+    textExpanded.value = false;
+    threadExpanded.value = false;
+    isReplying.value = false;
+    nextTick(() => emit('resize'));
+  }
+});
+
+/* ── Step 3: Thread collapse (Google Docs pattern) ──
+ * >=3 replies → collapse: parent + first reply + "N more replies" + last reply
+ * <3 replies  → show all
+ * Clicking "N more replies" or the card → expand all + activate
+ * Deactivating → re-collapse
+ */
+const threadExpanded = ref(false);
+const childComments = computed(() => comments.value.slice(1));
+
+const shouldCollapseThread = computed(() => {
+  if (threadExpanded.value) return false;
+  return childComments.value.length >= 3;
+});
+
+const visibleComments = computed(() => {
+  if (!shouldCollapseThread.value) return comments.value;
+  // Collapsed: parent + first reply + last reply
+  const parent = comments.value[0];
+  const first = childComments.value[0];
+  const last = childComments.value[childComments.value.length - 1];
+  return [parent, first, last].filter(Boolean);
+});
+
+const collapsedReplyCount = computed(() => {
+  if (!shouldCollapseThread.value) return 0;
+  return childComments.value.length - 2; // first + last are shown
+});
+
+const collapsedReplyAuthors = computed(() => {
+  if (!shouldCollapseThread.value) return [];
+  // Hidden = middle replies (first + last are visible)
+  const hidden = childComments.value.slice(1, -1);
+  const seen = new Set();
+  return hidden
+    .map((c) =>
+      typeof c.getCommentUser === 'function'
+        ? c.getCommentUser()
+        : { name: c.creatorName, email: c.creatorEmail || c.email },
+    )
+    .filter((u) => {
+      if (!u) return false;
+      const key = u.email || u.name;
+      if (seen.has(key)) return false;
+      seen.add(key);
+      return true;
+    })
+    .slice(0, 3);
+});
+
+const expandThread = () => {
+  threadExpanded.value = true;
+  setFocus();
+  nextTick(() => emit('resize'));
+};
+
 const isInternalDropdownDisabled = computed(() => {
   if (props.comment.resolvedTime) return true;
   return getConfig.value.readOnly;
@@ -187,19 +299,33 @@ const setFocus = () => {
 };
 
 const handleClickOutside = (e) => {
-  const excludedClasses = [
-    'n-dropdown-option-body__label',
-    'sd-editor-comment-highlight',
-    'sd-editor-tracked-change-highlight',
-    'track-insert',
-    'track-insert-dec',
-    'track-delete',
-    'track-delete-dec',
-    'track-format',
-    'track-format-dec',
-  ];
+  const targetElement = e.target instanceof Element ? e.target : e.target?.parentElement;
+  const clickedIgnoredTarget = targetElement?.closest?.(
+    [
+      '.n-dropdown-option-body__label',
+      '.superdoc-comment-highlight',
+      '.sd-editor-comment-highlight',
+      '.sd-editor-tracked-change-highlight',
+      '.track-insert',
+      '.track-insert-dec',
+      '.track-delete',
+      '.track-delete-dec',
+      '.track-format',
+      '.track-format-dec',
+    ].join(','),
+  );
 
-  if (excludedClasses.some((className) => e.target.classList.contains(className)) || isCommentHighlighted.value) return;
+  if (clickedIgnoredTarget || isCommentHighlighted.value) return;
+
+  // If clicked on another comment dialog, let that dialog's setFocus handle activation.
+  // Without this, the outgoing dialog clears activeComment before the new dialog can set it.
+  if (e.target.closest?.('.comments-dialog') && !commentDialogElement.value?.contains(e.target)) return;
+
+  // Cancel the pending new comment on click-outside
+  if (isPendingNewComment.value) {
+    cancelComment(proxy.$superdoc);
+    return;
+  }
 
   if (activeComment.value === props.comment.commentId) {
     floatingCommentsOffset.value = 0;
@@ -227,7 +353,12 @@ const handleAddComment = () => {
 };
 
 const handleReject = () => {
-  if (props.comment.trackedChange) {
+  const customHandler = proxy.$superdoc.config.onTrackedChangeBubbleReject;
+
+  if (props.comment.trackedChange && typeof customHandler === 'function') {
+    // Custom handler replaces default behavior
+    customHandler(props.comment, proxy.$superdoc.activeEditor);
+  } else if (props.comment.trackedChange) {
     props.comment.resolveComment({
       email: superdocStore.user.email,
       name: superdocStore.user.name,
@@ -238,6 +369,7 @@ const handleReject = () => {
     commentsStore.deleteComment({ superdoc: proxy.$superdoc, commentId: props.comment.commentId });
   }
 
+  // Always cleanup the dialog state
   nextTick(() => {
     commentsStore.lastUpdate = new Date();
     activeComment.value = null;
@@ -246,16 +378,24 @@ const handleReject = () => {
 };
 
 const handleResolve = () => {
-  if (props.comment.trackedChange) {
-    proxy.$superdoc.activeEditor.commands.acceptTrackedChangeById(props.comment.commentId);
+  const customHandler = proxy.$superdoc.config.onTrackedChangeBubbleAccept;
+
+  if (props.comment.trackedChange && typeof customHandler === 'function') {
+    // Custom handler replaces default behavior
+    customHandler(props.comment, proxy.$superdoc.activeEditor);
+  } else {
+    if (props.comment.trackedChange) {
+      proxy.$superdoc.activeEditor.commands.acceptTrackedChangeById(props.comment.commentId);
+    }
+
+    props.comment.resolveComment({
+      email: superdocStore.user.email,
+      name: superdocStore.user.name,
+      superdoc: proxy.$superdoc,
+    });
   }
 
-  props.comment.resolveComment({
-    email: superdocStore.user.email,
-    name: superdocStore.user.name,
-    superdoc: proxy.$superdoc,
-  });
-
+  // Always cleanup the dialog state
   nextTick(() => {
     commentsStore.lastUpdate = new Date();
     activeComment.value = null;
@@ -286,22 +426,6 @@ const handleCommentUpdate = (comment) => {
   removePendingComment(proxy.$superdoc);
 };
 
-const getTrackedChangeType = (comment) => {
-  const { trackedChangeType } = comment;
-  switch (trackedChangeType) {
-    case 'trackInsert':
-      return 'Add';
-    case 'trackDelete':
-      return 'Delete';
-    case 'both':
-      return 'both';
-    case 'trackFormat':
-      return 'Format';
-    default:
-      return '';
-  }
-};
-
 const handleInternalExternalSelect = (value) => {
   const isPendingComment = !!pendingComment.value;
   const isInternal = value.toLowerCase() === 'internal';
@@ -313,19 +437,8 @@ const handleInternalExternalSelect = (value) => {
 const getSidebarCommentStyle = computed(() => {
   const style = {};
 
-  const comment = props.comment;
-  if (isActiveComment.value) {
-    style.backgroundColor = 'white';
+  if (isActiveComment.value || isPendingNewComment.value) {
     style.zIndex = 50;
-  }
-
-  if (pendingComment.value && pendingComment.value.commentId === props.comment.commentId) {
-    const source = pendingComment.value.selection?.source;
-    const isPdf = source === 'pdf' || source?.value === 'pdf';
-    const zoom = isPdf ? (activeZoom.value ?? 100) / 100 : 1;
-    const top = Math.max(96, pendingComment.value.selection?.selectionBounds.top * zoom - 50);
-    style.position = 'absolute';
-    style.top = top + 'px';
   }
 
   return style;
@@ -356,9 +469,17 @@ onMounted(() => {
     nextTick(() => setFocus());
   }
 
+  // Auto-focus the input for pending new comments
+  if (isPendingNewComment.value) {
+    nextTick(() => {
+      commentInput.value?.focus?.();
+    });
+  }
+
   nextTick(() => {
     const commentId = props.comment.importedId !== undefined ? props.comment.importedId : props.comment.commentId;
     emit('ready', { commentId, elementRef: commentDialogElement });
+    checkOverflow();
   });
 });
 
@@ -386,173 +507,492 @@ watch(editingCommentId, (commentId) => {
 <template>
   <div
     class="comments-dialog"
-    :class="{ 'is-active': isActiveComment, 'is-resolved': props.comment.resolvedTime }"
+    :class="{ 'is-active': isActiveComment || isPendingNewComment, 'is-resolved': props.comment.resolvedTime }"
     v-click-outside="handleClickOutside"
     @click.stop.prevent="setFocus"
     :style="getSidebarCommentStyle"
     ref="commentDialogElement"
     role="dialog"
   >
-    <div v-if="shouldShowInternalExternal" class="existing-internal-input">
-      <InternalDropdown
-        @click.stop.prevent
-        class="internal-dropdown"
-        :is-disabled="isInternalDropdownDisabled"
-        :state="comment.isInternal ? 'internal' : 'external'"
-        @select="handleInternalExternalSelect"
-      />
-    </div>
-
-    <!-- Comments and their threaded (sub) comments are rendered here -->
-    <div v-for="(comment, index) in comments" :key="index" class="conversation-item">
-      <CommentHeader
-        :config="getConfig"
-        :timestamp="getProcessedDate(comment.createdTime)"
-        :comment="comment"
-        @resolve="handleResolve"
-        @reject="handleReject"
-        @overflow-select="handleOverflowSelect($event, comment)"
-      />
-
-      <div class="card-section comment-body" v-if="comment.trackedChange">
-        <div class="tracked-change">
-          <div class="tracked-change">
-            <div v-if="comment.trackedChangeType === 'trackFormat'">
-              <span class="change-type">Format: </span
-              ><span class="tracked-change-text">{{ comment.trackedChangeText }}</span>
-            </div>
-            <div v-if="comment.trackedChangeText && comment.trackedChangeType !== 'trackFormat'">
-              <span class="change-type">Added: </span
-              ><span class="tracked-change-text">{{ comment.trackedChangeText }}</span>
-            </div>
-            <div v-if="comment.deletedText && comment.trackedChangeType !== 'trackFormat'">
-              <span class="change-type">Deleted: </span
-              ><span class="tracked-change-text">{{ comment.deletedText }}</span>
-            </div>
-          </div>
-        </div>
+    <!-- ── New comment card (pending) ── -->
+    <template v-if="isPendingNewComment">
+      <div v-if="shouldShowInternalExternal" class="existing-internal-input">
+        <InternalDropdown
+          @click.stop.prevent
+          class="internal-dropdown"
+          :is-disabled="false"
+          :state="pendingComment.isInternal ? 'internal' : 'external'"
+          @select="handleInternalExternalSelect"
+        />
       </div>
 
-      <!-- Show the comment text, unless we enter edit mode, then show an input and update buttons -->
-      <div class="card-section comment-body" v-if="!comment.trackedChange">
-        <div v-if="!isDebugging && !isEditingThisComment(comment)" class="comment" v-html="comment.commentText"></div>
-        <div v-else-if="isDebugging && !isEditingThisComment(comment)" class="comment">
-          {{
-            editorCommentPositions[comment.importedId !== undefined ? comment.importedId : comment.commentId]?.bounds
-          }}
-        </div>
-        <div v-else class="comment-editing">
-          <CommentInput
-            :ref="setEditCommentInputRef(comment.commentId)"
-            :users="usersFiltered"
-            :config="getConfig"
-            :include-header="false"
-            :comment="comment"
-          />
-          <div class="comment-footer">
-            <button class="sd-button" @click.stop.prevent="handleCancel(comment)">Cancel</button>
-            <button class="sd-button primary" @click.stop.prevent="handleCommentUpdate(comment)">Update</button>
-          </div>
-        </div>
+      <CommentHeader :config="getConfig" :comment="props.comment" :is-pending-input="true" />
+
+      <div class="new-comment-input-wrapper">
+        <CommentInput
+          ref="commentInput"
+          :users="usersFiltered"
+          :config="getConfig"
+          :comment="props.comment"
+          :include-header="false"
+        />
       </div>
-      <div class="comment-separator" v-if="showSeparator(index)"></div>
-    </div>
-
-    <!-- This area is appended to a comment if adding a new sub comment -->
-    <div v-if="showInputSection && !getConfig.readOnly">
-      <CommentInput ref="commentInput" :users="usersFiltered" :config="getConfig" :comment="props.comment" />
-
-      <div class="comment-footer" v-if="showButtons && !getConfig.readOnly">
-        <button class="sd-button" @click.stop.prevent="handleCancel">Cancel</button>
+      <div class="reply-actions">
+        <button class="reply-btn-cancel" @click.stop.prevent="handleCancel">Cancel</button>
         <button
-          class="sd-button primary"
+          class="reply-btn-primary"
           @click.stop.prevent="handleAddComment"
           :disabled="!hasTextContent"
-          :class="{ disabled: !hasTextContent }"
+          :class="{ 'is-disabled': !hasTextContent }"
         >
           Comment
         </button>
       </div>
-    </div>
+    </template>
+
+    <!-- ── Existing comment card ── -->
+    <template v-else>
+      <!-- Resolved badge -->
+      <div v-if="resolvedBadgeLabel" class="resolved-badge">
+        <span class="resolved-badge__icon" v-html="superdocIcons.markDone"></span>
+        {{ resolvedBadgeLabel }}
+      </div>
+
+      <div v-if="shouldShowInternalExternal" class="existing-internal-input">
+        <InternalDropdown
+          @click.stop.prevent
+          class="internal-dropdown"
+          :is-disabled="isInternalDropdownDisabled"
+          :state="comment.isInternal ? 'internal' : 'external'"
+          @select="handleInternalExternalSelect"
+        />
+      </div>
+
+      <!-- Comments and their threaded (sub) comments are rendered here -->
+      <div v-for="(comment, index) in visibleComments" :key="comment.commentId" class="conversation-item">
+        <CommentHeader
+          :config="getConfig"
+          :timestamp="getProcessedDate(comment.createdTime)"
+          :comment="comment"
+          :is-active="isActiveComment"
+          @resolve="handleResolve"
+          @reject="handleReject"
+          @overflow-select="handleOverflowSelect($event, comment)"
+        />
+
+        <div class="card-section comment-body" v-if="comment.trackedChange">
+          <div
+            class="tracked-change"
+            :class="{ 'is-truncated': shouldTruncate && index === 0 }"
+            :ref="index === 0 ? (el) => (parentBodyRef = el) : undefined"
+          >
+            <div v-if="comment.trackedChangeType === 'trackFormat'">
+              <span class="change-type">Format: </span>
+              <span class="tracked-change-text">{{ comment.trackedChangeText }}</span>
+            </div>
+            <div v-else-if="comment.trackedChangeType === 'both'">
+              <span class="change-type">Replaced </span>
+              <span class="tracked-change-text is-deleted">"{{ comment.deletedText }}"</span>
+              <span class="change-type"> with </span>
+              <span class="tracked-change-text is-inserted">"{{ comment.trackedChangeText }}"</span>
+            </div>
+            <div v-else-if="comment.deletedText">
+              <span class="change-type">Deleted </span>
+              <span class="tracked-change-text is-deleted">"{{ comment.deletedText }}"</span>
+            </div>
+            <div v-else-if="comment.trackedChangeText">
+              <span class="change-type">Added </span>
+              <span class="tracked-change-text is-inserted">"{{ comment.trackedChangeText }}"</span>
+            </div>
+          </div>
+          <div
+            v-if="shouldTruncate && isTextOverflowing && index === 0"
+            class="show-more-toggle"
+            @click.stop.prevent="toggleTruncation"
+          >
+            Show more
+          </div>
+          <div
+            v-if="textExpanded && isTextOverflowing && index === 0"
+            class="show-more-toggle"
+            @click.stop.prevent="toggleTruncation"
+          >
+            Show less
+          </div>
+        </div>
+
+        <!-- Show the comment text, unless we enter edit mode, then show an input and update buttons -->
+        <div class="card-section comment-body" v-if="!comment.trackedChange">
+          <div
+            v-if="!isDebugging && !isEditingThisComment(comment)"
+            class="comment"
+            :class="{ 'is-truncated': shouldTruncate && index === 0 }"
+            :ref="index === 0 ? (el) => (parentBodyRef = el) : undefined"
+            v-html="comment.commentText"
+          ></div>
+          <div v-else-if="isDebugging && !isEditingThisComment(comment)" class="comment">
+            {{
+              editorCommentPositions[comment.importedId !== undefined ? comment.importedId : comment.commentId]?.bounds
+            }}
+          </div>
+          <div v-else class="comment-editing">
+            <CommentInput
+              :ref="setEditCommentInputRef(comment.commentId)"
+              :users="usersFiltered"
+              :config="getConfig"
+              :include-header="false"
+              :comment="comment"
+            />
+            <div class="comment-footer">
+              <button class="sd-button" @click.stop.prevent="handleCancel(comment)">Cancel</button>
+              <button class="sd-button primary" @click.stop.prevent="handleCommentUpdate(comment)">Update</button>
+            </div>
+          </div>
+          <div
+            v-if="shouldTruncate && isTextOverflowing && index === 0 && !isEditingThisComment(comment)"
+            class="show-more-toggle"
+            @click.stop.prevent="toggleTruncation"
+          >
+            Show more
+          </div>
+          <div
+            v-if="textExpanded && isTextOverflowing && index === 0 && !isEditingThisComment(comment)"
+            class="show-more-toggle"
+            @click.stop.prevent="toggleTruncation"
+          >
+            Show less
+          </div>
+        </div>
+
+        <!-- Thread collapse: after first reply (index 1), show "N more replies" -->
+        <template v-if="shouldCollapseThread && index === 1">
+          <div class="comment-separator"></div>
+          <div class="collapsed-replies" @click.stop.prevent="expandThread">
+            <div class="collapsed-avatars">
+              <Avatar
+                v-for="author in collapsedReplyAuthors"
+                :key="author.email || author.name"
+                :user="author"
+                class="mini-avatar"
+              />
+            </div>
+            <span>{{ collapsedReplyCount }} more {{ collapsedReplyCount === 1 ? 'reply' : 'replies' }}</span>
+          </div>
+        </template>
+
+        <div class="comment-separator" v-if="showSeparator(index)"></div>
+      </div>
+
+      <!-- Reply area: pill that expands in-place with action buttons -->
+      <template v-if="showInputSection && !getConfig.readOnly">
+        <div v-if="!isReplying" class="reply-pill" @click.stop.prevent="startReply">Reply or add others with @</div>
+        <div v-else class="reply-expanded">
+          <div class="reply-input-wrapper">
+            <CommentInput
+              ref="commentInput"
+              :users="usersFiltered"
+              :config="getConfig"
+              :comment="props.comment"
+              :include-header="false"
+            />
+          </div>
+          <div class="reply-actions">
+            <button class="reply-btn-cancel" @click.stop.prevent="handleCancel">Cancel</button>
+            <button
+              class="reply-btn-primary"
+              @click.stop.prevent="handleAddComment"
+              :disabled="!hasTextContent"
+              :class="{ 'is-disabled': !hasTextContent }"
+            >
+              Reply
+            </button>
+          </div>
+        </div>
+      </template>
+    </template>
   </div>
 </template>
 
 <style scoped>
-.change-type {
-  font-style: italic;
-  font-weight: 600;
-  font-size: 10px;
-  color: #555;
-}
-.tracked-change {
-  font-size: 12px;
-}
-.tracked-change-text {
-  color: #111;
-}
-.comment-separator {
-  background-color: #dbdbdb;
-  height: 1px;
-  width: 100%;
-  margin: 10px 0;
-  font-weight: 400;
-}
-.existing-internal-input {
-  margin-bottom: 10px;
-}
-.initial-internal-dropdown {
-  margin-top: 10px;
-}
 .comments-dialog {
   display: flex;
   flex-direction: column;
-  padding: 10px 15px;
-  border-radius: 12px;
-  background-color: #f3f6fd;
+  padding: var(--sd-comment-padding, 16px);
+  border-radius: var(--sd-comment-radius, 12px);
+  background-color: var(--sd-comment-bg, #f5f5f5);
+  border: 1px solid transparent;
   font-family: var(--sd-ui-font-family, Arial, Helvetica, sans-serif);
-  transition: background-color 250ms ease;
-  -webkit-box-shadow: 0px 4px 12px 0px rgba(50, 50, 50, 0.15);
-  -moz-box-shadow: 0px 4px 12px 0px rgba(50, 50, 50, 0.15);
-  box-shadow: 0px 4px 12px 0px rgba(50, 50, 50, 0.15);
+  font-size: var(--sd-comment-body-size, 14px);
+  line-height: 1.5;
+  transition: var(--sd-comment-transition, all 200ms ease);
+  box-shadow: none;
   z-index: 5;
-  max-width: 300px;
-  min-width: 200px;
+  max-width: var(--sd-comment-max-width, 300px);
+  min-width: var(--sd-comment-min-width, 200px);
   width: 100%;
 }
-.is-active {
+.comments-dialog:not(.is-active) {
+  cursor: pointer;
+}
+.comments-dialog:not(.is-active):not(.is-resolved):hover {
+  background-color: var(--sd-comment-bg-hover, #f2f2f2);
+}
+.comments-dialog:not(.is-resolved):hover :deep(.overflow-menu) {
+  opacity: 1;
+  pointer-events: auto;
+}
+.comments-dialog.is-active {
+  background-color: var(--sd-comment-bg-active, #ffffff);
+  border-color: var(--sd-comment-border-active, #e0e0e0);
+  box-shadow: var(--sd-comment-shadow, 0 4px 20px rgba(15, 23, 42, 0.08));
   z-index: 10;
 }
-.input-section {
-  margin-top: 10px;
+.comments-dialog.is-resolved {
+  background-color: var(--sd-comment-bg-resolved, #f0f0f0);
 }
-.sd-button {
-  font-size: 12px;
-  margin-left: 5px;
-}
-.comment {
-  font-size: 13px;
+
+.comment-separator {
+  background-color: var(--sd-comment-separator, #e0e0e0);
+  height: 1px;
+  width: 100%;
   margin: 10px 0;
 }
-.is-resolved {
-  background-color: #f0f0f0;
+
+.comment {
+  font-size: var(--sd-comment-body-size, 14px);
+  line-height: 1.5;
+  color: var(--sd-comment-author-color, #212121);
+  margin: 4px 0 0 0;
 }
+.comment :deep(p) {
+  margin: 0;
+}
+
+.tracked-change {
+  font-size: var(--sd-comment-body-size, 14px);
+  line-height: 1.5;
+  color: var(--sd-comment-author-color, #212121);
+  margin: 4px 0 0 0;
+}
+.change-type {
+  color: var(--sd-comment-author-color, #212121);
+}
+.tracked-change-text {
+  color: var(--sd-comment-author-color, #212121);
+}
+.tracked-change-text.is-deleted {
+  color: var(--sd-comment-tc-delete-color, #cb0e47);
+}
+.tracked-change-text.is-inserted {
+  color: var(--sd-comment-tc-insert-color, #00853d);
+  font-weight: 500;
+}
+
+/* ── Resolved badge ── */
+.resolved-badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  font-size: 11px;
+  font-weight: 500;
+  color: var(--sd-color-green-500, #00853d);
+  margin-bottom: 4px;
+}
+.resolved-badge__icon {
+  display: inline-flex;
+  width: 12px;
+  height: 12px;
+}
+.resolved-badge__icon :deep(svg) {
+  width: 100%;
+  height: 100%;
+  fill: currentColor;
+}
+
+/* ── Text truncation ── */
+.comment.is-truncated,
+.tracked-change.is-truncated {
+  display: -webkit-box;
+  -webkit-line-clamp: 3;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
+}
+.show-more-toggle {
+  font-size: 12px;
+  color: var(--sd-action-primary, #1355ff);
+  cursor: pointer;
+  font-weight: 500;
+  margin-top: 4px;
+  user-select: none;
+}
+.show-more-toggle:hover {
+  text-decoration: underline;
+}
+
+/* ── Thread collapse ── */
+.collapsed-replies {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 8px 0;
+  font-size: 12px;
+  color: var(--sd-action-primary, #1355ff);
+  font-weight: 500;
+  cursor: pointer;
+  user-select: none;
+}
+.collapsed-replies:hover {
+  text-decoration: underline;
+}
+.collapsed-avatars {
+  display: flex;
+}
+.collapsed-avatars .mini-avatar {
+  --sd-comment-avatar-size: 20px;
+  --sd-comment-avatar-font-size: 8px;
+  margin-left: -4px;
+  border: 2px solid var(--sd-comment-bg-active, #ffffff);
+}
+.collapsed-avatars .mini-avatar:first-child {
+  margin-left: 0;
+}
+
+/* ── New comment input ── */
+.new-comment-input-wrapper {
+  border: 1.5px solid var(--sd-border-default, #dbdbdb);
+  border-radius: 9999px;
+  padding: 8.5px 10.5px;
+  background: var(--sd-surface-card, #ffffff);
+  margin-top: 4px;
+}
+.new-comment-input-wrapper :deep(.comment-entry) {
+  border-radius: 0;
+}
+.new-comment-input-wrapper :deep(.input-section) {
+  margin: 0;
+}
+.new-comment-input-wrapper :deep(.superdoc-field) {
+  font-size: 14px;
+  border: none;
+  padding: 0;
+  border-radius: 0;
+}
+.new-comment-input-wrapper :deep(.superdoc-field:focus),
+.new-comment-input-wrapper :deep(.superdoc-field:active) {
+  border: none;
+}
+.new-comment-input-wrapper :deep(.sd-editor-placeholder::before) {
+  content: 'Comment or add others with @';
+}
+
+/* ── Reply pill & expanded input ── */
+.reply-pill {
+  padding: 8.5px 10.5px;
+  border: 1.5px solid transparent;
+  border-radius: 9999px;
+  font-size: 14px;
+  color: var(--sd-color-gray-500, #ababab);
+  background: var(--sd-color-gray-100, #f5f5f5);
+  margin-top: 10px;
+  cursor: text;
+  transition: background 150ms ease;
+}
+.reply-pill:hover {
+  background: var(--sd-color-gray-200, #f2f2f2);
+}
+.reply-expanded {
+  margin-top: 10px;
+}
+.reply-input-wrapper {
+  border: 1.5px solid var(--sd-border-default, #dbdbdb);
+  border-radius: 9999px;
+  padding: 8.5px 10.5px;
+  background: var(--sd-surface-card, #ffffff);
+}
+.reply-input-wrapper :deep(.comment-entry) {
+  border-radius: 0;
+}
+.reply-input-wrapper :deep(.input-section) {
+  margin: 0;
+}
+.reply-input-wrapper :deep(.superdoc-field) {
+  font-size: 14px;
+  border: none;
+  padding: 0;
+  border-radius: 0;
+}
+.reply-input-wrapper :deep(.superdoc-field:focus),
+.reply-input-wrapper :deep(.superdoc-field:active) {
+  border: none;
+}
+.reply-input-wrapper :deep(.sd-editor-placeholder::before) {
+  content: 'Reply or add others with @';
+}
+.reply-actions {
+  display: flex;
+  justify-content: flex-end;
+  align-items: center;
+  gap: 16px;
+  margin-top: 8px;
+}
+.reply-btn-cancel {
+  background: none;
+  border: none;
+  font-size: 13px;
+  font-weight: 500;
+  color: var(--sd-color-gray-700, #666666);
+  cursor: pointer;
+  padding: 0;
+  font-family: inherit;
+  transition: color 150ms;
+}
+.reply-btn-cancel:hover {
+  color: var(--sd-color-gray-900, #212121);
+}
+.reply-btn-primary {
+  background: var(--sd-action-primary, #1355ff);
+  border: none;
+  font-size: 13px;
+  font-weight: 600;
+  color: #ffffff;
+  cursor: pointer;
+  padding: 6px 16px;
+  border-radius: 9999px;
+  font-family: inherit;
+  transition: background 150ms;
+}
+.reply-btn-primary:hover {
+  background: var(--sd-color-blue-600, #0f44cc);
+}
+.reply-btn-primary.is-disabled {
+  background: var(--sd-color-gray-400, #dbdbdb);
+  color: var(--sd-color-gray-600, #888888);
+  cursor: default;
+  pointer-events: none;
+}
+
+.existing-internal-input {
+  margin-bottom: 10px;
+}
+
 .comment-footer {
   margin: 5px 0 5px;
   display: flex;
   justify-content: flex-end;
   width: 100%;
 }
+.sd-button {
+  font-size: 12px;
+  margin-left: 5px;
+}
+
 .internal-dropdown {
   display: inline-block;
 }
-
 .comment-editing {
   padding-bottom: 10px;
 }
 .comment-editing button {
   margin-left: 5px;
-}
-.tracked-change {
-  margin: 0;
 }
 </style>

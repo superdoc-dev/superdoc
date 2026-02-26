@@ -252,7 +252,7 @@ export interface TableProperties {
   tableCellSpacing?: TableMeasurement;
   tableIndent?: TableMeasurement;
   tableLayout?: 'fixed' | 'autofit';
-  tableLook?: TableLook;
+  tblLook?: TableLook;
   overlap?: 'never' | 'overlap';
   tableStyleId?: string;
   tableStyleColBandSize?: number;
@@ -279,8 +279,10 @@ export interface TableAttrs extends TableNodeAttributes {
   tableGrid: TableGrid | null;
   /** Table properties */
   tableProperties: TableProperties | null;
-  /** Table look settings */
-  tableLook: TableLook | null;
+  /** OOXML paragraph/element identifier (w14:paraId), preserved across DOCX roundtrips */
+  paraId?: string | null;
+  /** OOXML text identifier (w14:textId), preserved across DOCX roundtrips */
+  textId?: string | null;
 }
 
 // ============================================
@@ -364,6 +366,10 @@ export interface CellBackground {
 
 /** Table cell node attributes */
 export interface TableCellAttrs extends TableNodeAttributes {
+  /** OOXML paragraph/element identifier (w14:paraId), preserved across DOCX roundtrips */
+  paraId?: string | null;
+  /** OOXML text identifier (w14:textId), preserved across DOCX roundtrips */
+  textId?: string | null;
   /** Number of columns this cell spans */
   colspan: number;
   /** Number of rows this cell spans */

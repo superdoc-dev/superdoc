@@ -10,6 +10,7 @@ import {
   DOCUMENT_API_MEMBER_PATHS,
   OPERATION_IDS,
   OPERATION_MEMBER_PATH_MAP,
+  REFERENCE_OPERATION_ALIASES,
   createDocumentApi,
   isValidOperationIdFormat,
   type DocumentApiAdapters,
@@ -18,11 +19,8 @@ import { OPERATION_DEFINITIONS } from '../src/contract/operation-definitions.js'
 import { OPERATION_REFERENCE_DOC_PATH_MAP } from '../src/contract/reference-doc-map.js';
 import { buildDispatchTable } from '../src/invoke/invoke.js';
 
-/**
- * Meta-methods on DocumentApi that are not operations.
- * These are excluded from operation-to-member-path parity checks.
- */
-const META_MEMBER_PATHS = ['invoke'] as const;
+/** Meta-methods and helper methods on DocumentApi that are not contract operations. */
+const META_MEMBER_PATHS = ['invoke', ...REFERENCE_OPERATION_ALIASES.map((alias) => alias.memberPath)];
 
 function collectFunctionMemberPaths(value: unknown, prefix = ''): string[] {
   if (!value || typeof value !== 'object') return [];
@@ -47,7 +45,7 @@ function collectFunctionMemberPaths(value: unknown, prefix = ''): string[] {
 function createNoopAdapters(): DocumentApiAdapters {
   return {
     find: {
-      find: () => ({ matches: [], total: 0 }),
+      find: () => ({ evaluatedRevision: '', total: 0, items: [], page: { limit: 50, offset: 0, returned: 0 } }),
     },
     getNode: {
       getNode: () => ({ kind: 'block', nodeType: 'paragraph', properties: {} }),
@@ -71,7 +69,14 @@ function createNoopAdapters(): DocumentApiAdapters {
           lists: { enabled: false },
           dryRun: { enabled: false },
         },
+        format: { supportedMarks: [] },
         operations: {} as ReturnType<DocumentApiAdapters['capabilities']['get']>['operations'],
+        planEngine: {
+          supportedStepOps: [],
+          supportedNonUniformStrategies: [],
+          supportedSetMarks: [],
+          regex: { maxPatternLength: 1024, maxExecutionMs: 100 },
+        },
       }),
     },
     comments: {
@@ -89,7 +94,7 @@ function createNoopAdapters(): DocumentApiAdapters {
         commentId: 'comment-1',
         status: 'open',
       }),
-      list: () => ({ matches: [], total: 0 }),
+      list: () => ({ evaluatedRevision: '', total: 0, items: [], page: { limit: 50, offset: 0, returned: 0 } }),
     },
     write: {
       write: () => ({
@@ -102,7 +107,7 @@ function createNoopAdapters(): DocumentApiAdapters {
       }),
     },
     format: {
-      bold: () => ({
+      apply: () => ({
         success: true,
         resolution: {
           target: { kind: 'text', blockId: 'p1', range: { start: 0, end: 1 } },
@@ -112,7 +117,7 @@ function createNoopAdapters(): DocumentApiAdapters {
       }),
     },
     trackChanges: {
-      list: () => ({ matches: [], total: 0 }),
+      list: () => ({ evaluatedRevision: '', total: 0, items: [], page: { limit: 50, offset: 0, returned: 0 } }),
       get: ({ id }) => ({
         address: { kind: 'entity', entityType: 'trackedChange', entityId: id },
         id,
@@ -131,7 +136,7 @@ function createNoopAdapters(): DocumentApiAdapters {
       }),
     },
     lists: {
-      list: () => ({ matches: [], total: 0, items: [] }),
+      list: () => ({ evaluatedRevision: '', total: 0, items: [], page: { limit: 50, offset: 0, returned: 0 } }),
       get: () => ({
         address: { kind: 'block', nodeType: 'listItem', nodeId: 'li-1' },
       }),
@@ -174,6 +179,7 @@ function run(): void {
   const operationIds = [...OPERATION_IDS];
   const catalogKeys = Object.keys(COMMAND_CATALOG);
   const mappedKeys = Object.keys(OPERATION_MEMBER_PATH_MAP);
+  const aliasMemberPaths = REFERENCE_OPERATION_ALIASES.map((alias) => alias.memberPath);
 
   const invalidFormatIds = operationIds.filter((operationId) => !isValidOperationIdFormat(operationId));
   if (invalidFormatIds.length > 0) {
@@ -237,6 +243,28 @@ function run(): void {
     }
     if (!runtimeMemberPaths.includes(memberPath)) {
       errors.push(`operationId "${operationId}" maps to runtime-missing member path "${memberPath}".`);
+    }
+  }
+
+  // Validate convenience aliases (non-canonical API surface).
+  const duplicateAliasPaths = aliasMemberPaths.filter((path, index) => aliasMemberPaths.indexOf(path) !== index);
+  if (duplicateAliasPaths.length > 0) {
+    errors.push(`reference alias parity failed (duplicate alias member paths: ${duplicateAliasPaths.join(', ')})`);
+  }
+
+  for (const alias of REFERENCE_OPERATION_ALIASES) {
+    if (!operationIds.includes(alias.canonicalOperationId)) {
+      errors.push(
+        `reference alias "${alias.memberPath}" targets unknown canonical operation "${alias.canonicalOperationId}".`,
+      );
+    }
+
+    if (!collectFunctionMemberPaths(api).includes(alias.memberPath)) {
+      errors.push(`reference alias "${alias.memberPath}" is missing from runtime DocumentApi member paths.`);
+    }
+
+    if (declaredMemberPaths.includes(alias.memberPath)) {
+      errors.push(`reference alias "${alias.memberPath}" must not appear in canonical DOCUMENT_API_MEMBER_PATHS.`);
     }
   }
 

@@ -1,4 +1,4 @@
-import { getBooleanOption, getStringOption, requireDocArg, resolveJsonInput } from '../lib/args';
+import { getBooleanOption, getStringOption, resolveDocArg, resolveJsonInput } from '../lib/args';
 import { parseCollaborationInput, resolveCollaborationProfile } from '../lib/collaboration';
 import {
   getProjectRoot,
@@ -27,21 +27,21 @@ export async function runOpen(tokens: string[], context: CommandContext): Promis
       command: 'open',
       data: {
         usage: [
-          'superdoc open <doc> [--session <id>]',
-          'superdoc open <doc> --collaboration-json "{...}" [--session <id>]',
+          'superdoc open [doc] [--session <id>]',
+          'superdoc open [doc] --collaboration-json "{...}" [--session <id>]',
         ],
       },
       pretty: [
         'Usage:',
-        '  superdoc open <doc> [--session <id>]',
-        '  superdoc open <doc> --collaboration-json "{...}" [--session <id>]',
+        '  superdoc open [doc] [--session <id>]',
+        '  superdoc open [doc] --collaboration-json "{...}" [--session <id>]',
       ].join('\n'),
     };
   }
 
-  const { doc } = requireDocArg(parsed, 'open');
+  const { doc } = resolveDocArg(parsed, 'open');
 
-  const sessionId = context.sessionId ?? generateSessionId(doc);
+  const sessionId = context.sessionId ?? generateSessionId(doc ?? 'blank');
   const collaborationPayload = await resolveJsonInput(parsed, 'collaboration');
   const collabUrl = getStringOption(parsed, 'collab-url');
   const collabDocumentId = getStringOption(parsed, 'collab-document-id');
@@ -98,8 +98,12 @@ export async function runOpen(tokens: string[], context: CommandContext): Promis
         );
       }
 
+      if (collaboration && doc == null) {
+        throw new CliError('MISSING_REQUIRED', 'open: a document path is required when using collaboration.');
+      }
+
       const opened = collaboration
-        ? await openCollaborativeDocument(doc, context.io, collaboration)
+        ? await openCollaborativeDocument(doc!, context.io, collaboration)
         : await openDocument(doc, context.io);
       let adoptedToHostPool = false;
       try {
@@ -143,7 +147,7 @@ export async function runOpen(tokens: string[], context: CommandContext): Promis
             openedAt: metadata.openedAt,
             updatedAt: metadata.updatedAt,
           },
-          pretty: `Opened ${metadata.sourcePath ?? '<stdin>'} in context ${metadata.contextId} (${metadata.sessionType})`,
+          pretty: `Opened ${metadata.sourcePath ?? (metadata.source === 'blank' ? '<blank>' : '<stdin>')} in context ${metadata.contextId} (${metadata.sessionType})`,
         };
       } finally {
         if (!adoptedToHostPool) {

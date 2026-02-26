@@ -14,6 +14,7 @@ import { requireSchemaMark, ensureTrackedCapability } from './helpers/mutation-h
 import { applyDirectMutationMeta, applyTrackedMutationMeta } from './helpers/transaction-meta.js';
 import { resolveTextTarget } from './helpers/adapter-utils.js';
 import { buildTextMutationResolution, readTextAtResolvedRange } from './helpers/text-mutation-resolution.js';
+import { checkRevision } from './plan-engine/revision-tracker.js';
 
 /** Maps each format operation to the display label used in failure messages. */
 const FORMAT_OPERATION_LABEL = {
@@ -88,6 +89,7 @@ function formatMarkAdapter(
   input: FormatOperationInput,
   options?: MutationOptions,
 ): TextMutationReceipt {
+  checkRevision(editor, options?.expectedRevision);
   const normalizedInput = normalizeFormatLocator(input);
   const range = resolveTextTarget(editor, normalizedInput.target!);
   if (!range) {

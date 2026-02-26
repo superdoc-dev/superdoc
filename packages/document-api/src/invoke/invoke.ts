@@ -44,11 +44,18 @@ export function buildDispatchTable(api: DocumentApi): TypedDispatchTable {
     replace: (input, options) => api.replace(input, options),
     delete: (input, options) => api.delete(input, options),
 
+    // --- blocks.* ---
+    'blocks.delete': (input, options) => api.blocks.delete(input, options),
+
     // --- format.* ---
-    'format.bold': (input, options) => api.format.bold(input, options),
-    'format.italic': (input, options) => api.format.italic(input, options),
-    'format.underline': (input, options) => api.format.underline(input, options),
-    'format.strikethrough': (input, options) => api.format.strikethrough(input, options),
+    'format.apply': (input, options) => api.format.apply(input, options),
+    'format.fontSize': (input, options) => api.format.fontSize(input, options),
+    'format.fontFamily': (input, options) => api.format.fontFamily(input, options),
+    'format.color': (input, options) => api.format.color(input, options),
+    'format.align': (input, options) => api.format.align(input, options),
+
+    // --- styles.* ---
+    'styles.apply': (input, options) => api.styles.apply(input, options),
 
     // --- create.* ---
     'create.paragraph': (input, options) => api.create.paragraph(input, options),
@@ -65,27 +72,71 @@ export function buildDispatchTable(api: DocumentApi): TypedDispatchTable {
     'lists.exit': (input, options) => api.lists.exit(input, options),
 
     // --- comments.* ---
-    'comments.add': (input) => api.comments.add(input),
-    'comments.edit': (input) => api.comments.edit(input),
-    'comments.reply': (input) => api.comments.reply(input),
-    'comments.move': (input) => api.comments.move(input),
-    'comments.resolve': (input) => api.comments.resolve(input),
-    'comments.remove': (input) => api.comments.remove(input),
-    'comments.setInternal': (input) => api.comments.setInternal(input),
-    'comments.setActive': (input) => api.comments.setActive(input),
-    'comments.goTo': (input) => api.comments.goTo(input),
+    'comments.create': (input, options) => api.comments.create(input, options),
+    'comments.patch': (input, options) => api.comments.patch(input, options),
+    'comments.delete': (input, options) => api.comments.delete(input, options),
     'comments.get': (input) => api.comments.get(input),
     'comments.list': (input) => api.comments.list(input),
 
     // --- trackChanges.* ---
     'trackChanges.list': (input) => api.trackChanges.list(input),
     'trackChanges.get': (input) => api.trackChanges.get(input),
-    'trackChanges.accept': (input) => api.trackChanges.accept(input),
-    'trackChanges.reject': (input) => api.trackChanges.reject(input),
-    'trackChanges.acceptAll': (input) => api.trackChanges.acceptAll(input),
-    'trackChanges.rejectAll': (input) => api.trackChanges.rejectAll(input),
+    'trackChanges.decide': (input, options) => api.trackChanges.decide(input, options),
+
+    // --- query.* ---
+    'query.match': (input) => api.query.match(input),
+
+    // --- mutations.* ---
+    'mutations.preview': (input) => api.mutations.preview(input),
+    'mutations.apply': (input) => api.mutations.apply(input),
 
     // --- capabilities ---
     'capabilities.get': () => api.capabilities(),
+
+    // --- create.table ---
+    'create.table': (input, options) => api.create.table(input, options),
+
+    // --- tables.* ---
+    'tables.convertFromText': (input, options) => api.tables.convertFromText(input, options),
+    'tables.delete': (input, options) => api.tables.delete(input, options),
+    'tables.clearContents': (input, options) => api.tables.clearContents(input, options),
+    'tables.move': (input, options) => api.tables.move(input, options),
+    'tables.split': (input, options) => api.tables.split(input, options),
+    'tables.convertToText': (input, options) => api.tables.convertToText(input, options),
+    'tables.setLayout': (input, options) => api.tables.setLayout(input, options),
+    'tables.insertRow': (input, options) => api.tables.insertRow(input, options),
+    'tables.deleteRow': (input, options) => api.tables.deleteRow(input, options),
+    'tables.setRowHeight': (input, options) => api.tables.setRowHeight(input, options),
+    'tables.distributeRows': (input, options) => api.tables.distributeRows(input, options),
+    'tables.setRowOptions': (input, options) => api.tables.setRowOptions(input, options),
+    'tables.insertColumn': (input, options) => api.tables.insertColumn(input, options),
+    'tables.deleteColumn': (input, options) => api.tables.deleteColumn(input, options),
+    'tables.setColumnWidth': (input, options) => api.tables.setColumnWidth(input, options),
+    'tables.distributeColumns': (input, options) => api.tables.distributeColumns(input, options),
+    'tables.insertCell': (input, options) => api.tables.insertCell(input, options),
+    'tables.deleteCell': (input, options) => api.tables.deleteCell(input, options),
+    'tables.mergeCells': (input, options) => api.tables.mergeCells(input, options),
+    'tables.unmergeCells': (input, options) => api.tables.unmergeCells(input, options),
+    'tables.splitCell': (input, options) => api.tables.splitCell(input, options),
+    'tables.setCellProperties': (input, options) => api.tables.setCellProperties(input, options),
+    'tables.sort': (input, options) => api.tables.sort(input, options),
+    'tables.setAltText': (input, options) => api.tables.setAltText(input, options),
+    'tables.setStyle': (input, options) => api.tables.setStyle(input, options),
+    'tables.clearStyle': (input, options) => api.tables.clearStyle(input, options),
+    'tables.setStyleOption': (input, options) => api.tables.setStyleOption(input, options),
+    'tables.setBorder': (input, options) => api.tables.setBorder(input, options),
+    'tables.clearBorder': (input, options) => api.tables.clearBorder(input, options),
+    'tables.applyBorderPreset': (input, options) => api.tables.applyBorderPreset(input, options),
+    'tables.setShading': (input, options) => api.tables.setShading(input, options),
+    'tables.clearShading': (input, options) => api.tables.clearShading(input, options),
+    'tables.setTablePadding': (input, options) => api.tables.setTablePadding(input, options),
+    'tables.setCellPadding': (input, options) => api.tables.setCellPadding(input, options),
+    'tables.setCellSpacing': (input, options) => api.tables.setCellSpacing(input, options),
+    'tables.clearCellSpacing': (input, options) => api.tables.clearCellSpacing(input, options),
+
+    // --- tables.* reads ---
+    'tables.get': (input) => api.tables.get(input),
+    'tables.getCells': (input) => api.tables.getCells(input),
+    'tables.getProperties': (input) => api.tables.getProperties(input),
   };
 }

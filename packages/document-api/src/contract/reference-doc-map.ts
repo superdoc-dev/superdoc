@@ -26,6 +26,11 @@ const GROUP_METADATA: Record<ReferenceGroupKey, { title: string; description: st
     description: 'Primary read and write operations.',
     pagePath: 'core/index.mdx',
   },
+  blocks: {
+    title: 'Blocks',
+    description: 'Block-level structural operations.',
+    pagePath: 'blocks/index.mdx',
+  },
   capabilities: {
     title: 'Capabilities',
     description: 'Runtime support discovery for capability-aware branching.',
@@ -38,8 +43,13 @@ const GROUP_METADATA: Record<ReferenceGroupKey, { title: string; description: st
   },
   format: {
     title: 'Format',
-    description: 'Formatting mutations.',
+    description: 'Canonical formatting mutation with boolean patch semantics.',
     pagePath: 'format/index.mdx',
+  },
+  styles: {
+    title: 'Styles',
+    description: 'Document-level stylesheet mutations (docDefaults, style definitions).',
+    pagePath: 'styles/index.mdx',
   },
   lists: {
     title: 'Lists',
@@ -55,6 +65,21 @@ const GROUP_METADATA: Record<ReferenceGroupKey, { title: string; description: st
     title: 'Track Changes',
     description: 'Tracked-change inspection and review operations.',
     pagePath: 'track-changes/index.mdx',
+  },
+  query: {
+    title: 'Query',
+    description: 'Deterministic selector-based queries for mutation targeting.',
+    pagePath: 'query/index.mdx',
+  },
+  mutations: {
+    title: 'Mutations',
+    description: 'Atomic mutation plan preview and execution.',
+    pagePath: 'mutations/index.mdx',
+  },
+  tables: {
+    title: 'Tables',
+    description: 'Table structure, layout, styling, and cell operations.',
+    pagePath: 'tables/index.mdx',
   },
 };
 

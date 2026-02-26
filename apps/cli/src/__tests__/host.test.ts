@@ -261,14 +261,17 @@ describe('CLI host mode', () => {
       '1',
     ]);
     const findResult = findData.result as {
-      matches?: Array<Record<string, unknown>>;
-      context?: Array<{ textRanges?: Array<{ kind: 'text'; blockId: string; range: { start: number; end: number } }> }>;
+      items?: Array<{
+        address?: Record<string, unknown>;
+        context?: { textRanges?: Array<{ kind: 'text'; blockId: string; range: { start: number; end: number } }> };
+      }>;
     };
-    const firstMatch = findResult.matches?.[0];
-    expect(firstMatch).toBeDefined();
-    await invokeAndValidate('doc.getNode', ['get-node', docPath, '--address-json', JSON.stringify(firstMatch)]);
+    const firstItem = findResult.items?.[0];
+    const firstAddress = firstItem?.address;
+    expect(firstAddress).toBeDefined();
+    await invokeAndValidate('doc.getNode', ['get-node', docPath, '--address-json', JSON.stringify(firstAddress)]);
 
-    const textTarget = findResult.context?.[0]?.textRanges?.[0];
+    const textTarget = firstItem?.context?.textRanges?.[0];
     expect(textTarget).toBeDefined();
     const collapsedTarget = {
       ...textTarget,

@@ -1,0 +1,236 @@
+---
+title: tables.split
+sidebarTitle: tables.split
+description: Reference for tables.split
+---
+
+{/* GENERATED FILE: DO NOT EDIT. Regenerate via `pnpm run docapi:sync`. */}
+
+> Alpha: Document API is currently alpha and subject to breaking changes.
+
+## Summary
+
+- Operation ID: `tables.split`
+- API member path: `editor.doc.tables.split(...)`
+- Mutates document: `yes`
+- Idempotency: `non-idempotent`
+- Supports tracked mode: `no`
+- Supports dry run: `yes`
+- Deterministic target resolution: `yes`
+
+## Input fields
+
+| Field | Type | Required | Description |
+| --- | --- | --- | --- |
+| `atRowIndex` | integer | yes |  |
+| `nodeId` | string | no |  |
+| `target` | BlockNodeAddress | no | BlockNodeAddress |
+
+### Example request
+
+```json
+{}
+```
+
+## Output fields
+
+_No fields._
+
+### Example response
+
+```json
+{
+  "success": true,
+  "table": {
+    "kind": "block",
+    "nodeId": "node-def456",
+    "nodeType": "paragraph"
+  },
+  "trackedChangeRefs": [
+    {
+      "entityId": "entity-789",
+      "entityType": "comment",
+      "kind": "entity"
+    }
+  ]
+}
+```
+
+## Pre-apply throws
+
+- `TARGET_NOT_FOUND`
+- `INVALID_TARGET`
+- `CAPABILITY_UNAVAILABLE`
+
+## Non-applied failure codes
+
+- `INVALID_TARGET`
+
+## Raw schemas
+
+<Accordion title="Raw input schema">
+```json
+{
+  "additionalProperties": false,
+  "oneOf": [
+    {
+      "required": [
+        "target"
+      ]
+    },
+    {
+      "required": [
+        "nodeId"
+      ]
+    }
+  ],
+  "properties": {
+    "atRowIndex": {
+      "minimum": 1,
+      "type": "integer"
+    },
+    "nodeId": {
+      "type": "string"
+    },
+    "target": {
+      "$ref": "#/$defs/BlockNodeAddress"
+    }
+  },
+  "required": [
+    "atRowIndex"
+  ],
+  "type": "object"
+}
+```
+</Accordion>
+
+<Accordion title="Raw output schema">
+```json
+{
+  "oneOf": [
+    {
+      "additionalProperties": false,
+      "properties": {
+        "success": {
+          "const": true
+        },
+        "table": {
+          "$ref": "#/$defs/BlockNodeAddress"
+        },
+        "trackedChangeRefs": {
+          "items": {
+            "$ref": "#/$defs/EntityAddress"
+          },
+          "type": "array"
+        }
+      },
+      "required": [
+        "success"
+      ],
+      "type": "object"
+    },
+    {
+      "additionalProperties": false,
+      "properties": {
+        "failure": {
+          "additionalProperties": false,
+          "properties": {
+            "code": {
+              "enum": [
+                "NO_OP",
+                "INVALID_TARGET",
+                "TARGET_NOT_FOUND",
+                "CAPABILITY_UNAVAILABLE"
+              ]
+            },
+            "details": {},
+            "message": {
+              "type": "string"
+            }
+          },
+          "required": [
+            "code",
+            "message"
+          ],
+          "type": "object"
+        },
+        "success": {
+          "const": false
+        }
+      },
+      "required": [
+        "success",
+        "failure"
+      ],
+      "type": "object"
+    }
+  ]
+}
+```
+</Accordion>
+
+<Accordion title="Raw success schema">
+```json
+{
+  "additionalProperties": false,
+  "properties": {
+    "success": {
+      "const": true
+    },
+    "table": {
+      "$ref": "#/$defs/BlockNodeAddress"
+    },
+    "trackedChangeRefs": {
+      "items": {
+        "$ref": "#/$defs/EntityAddress"
+      },
+      "type": "array"
+    }
+  },
+  "required": [
+    "success"
+  ],
+  "type": "object"
+}
+```
+</Accordion>
+
+<Accordion title="Raw failure schema">
+```json
+{
+  "additionalProperties": false,
+  "properties": {
+    "failure": {
+      "additionalProperties": false,
+      "properties": {
+        "code": {
+          "enum": [
+            "NO_OP",
+            "INVALID_TARGET",
+            "TARGET_NOT_FOUND",
+            "CAPABILITY_UNAVAILABLE"
+          ]
+        },
+        "details": {},
+        "message": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "code",
+        "message"
+      ],
+      "type": "object"
+    },
+    "success": {
+      "const": false
+    }
+  },
+  "required": [
+    "success",
+    "failure"
+  ],
+  "type": "object"
+}
+```
+</Accordion>

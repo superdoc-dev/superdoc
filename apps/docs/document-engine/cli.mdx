@@ -42,6 +42,32 @@ superdoc save
 superdoc close
 ```
 
+## Tracked mode for mutations
+
+Use `--tracked` on mutating commands to apply edits as tracked changes instead of direct edits.
+
+```bash
+# Replace text as a tracked change
+superdoc replace \
+  --target-json '{"kind":"text","blockId":"...","range":{"start":0,"end":9}}' \
+  --text "NewCo Inc." \
+  --tracked
+
+# Insert text as a tracked change
+superdoc insert --text "Added clause" --tracked
+```
+
+`--tracked` is shorthand for `--change-mode tracked`:
+
+```bash
+superdoc replace \
+  --target-json '{"kind":"text","blockId":"...","range":{"start":0,"end":9}}' \
+  --text "NewCo Inc." \
+  --change-mode tracked
+```
+
+For commands that do not support tracked mode, the CLI returns `TRACK_CHANGE_COMMAND_UNAVAILABLE`.
+
 ## Commands
 
 ### Lifecycle
@@ -70,11 +96,10 @@ The CLI exposes all [Document API operations](/document-api/overview) as command
 | `superdoc format underline` | `format.underline` | Toggle underline on a range |
 | `superdoc format strikethrough` | `format.strikethrough` | Toggle strikethrough on a range |
 | `superdoc create paragraph` | `create.paragraph` | Insert a new paragraph |
-| `superdoc comments add` | `comments.add` | Add a comment thread |
+| `superdoc comments create` | `comments.create` | Create a comment thread |
 | `superdoc comments list` | `comments.list` | List all comments |
 | `superdoc track-changes list` | `trackChanges.list` | List tracked changes |
-| `superdoc track-changes accept` | `trackChanges.accept` | Accept a tracked change |
-| `superdoc track-changes reject` | `trackChanges.reject` | Reject a tracked change |
+| `superdoc track-changes decide` | `trackChanges.decide` | Accept or reject a tracked change |
 
 Run `superdoc --help` for the full list, or `superdoc describe` for machine-readable metadata.
 

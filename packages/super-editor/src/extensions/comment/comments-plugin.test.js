@@ -948,7 +948,7 @@ describe('internal helper functions', () => {
       trackedChangeType: TrackFormatMarkName,
       isDeletionInsertion: false,
     });
-    expect(formatResult.trackedChangeText).toContain('Added formatting');
+    expect(formatResult.trackedChangeText).toBe('italic, removed bold');
 
     const deltaFormatMark = schema.marks[TrackFormatMarkName].create({
       id: 'format-2',
@@ -961,7 +961,7 @@ describe('internal helper functions', () => {
       trackedChangeType: TrackFormatMarkName,
       isDeletionInsertion: false,
     });
-    expect(deltaFormatResult.trackedChangeText).toContain('Added formatting: bold');
+    expect(deltaFormatResult.trackedChangeText).toContain('bold');
     expect(deltaFormatResult.trackedChangeText).not.toContain('undefined');
 
     const combinedResult = getTrackedChangeText({

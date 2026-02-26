@@ -6,9 +6,9 @@ import { syncCommentsToClients } from '../core/collaboration/helpers.js';
 import {
   Editor,
   trackChangesHelpers,
-  TrackChangesBasePluginKey,
   CommentsPluginKey,
   getRichTextExtensions,
+  createOrUpdateTrackedChangeComment,
 } from '@superdoc/super-editor';
 import useComment from '@superdoc/components/CommentsLayer/use-comment';
 import { groupChanges } from '../helpers/group-changes.js';
@@ -145,13 +145,6 @@ export const useCommentsStore = defineStore('comments', () => {
     return source === 'super-editor';
   };
 
-  /**
-   * Check if a comment is part of a tracked-change thread.
-   * Returns true for tracked-change comments or replies to tracked changes.
-   *
-   * @param {Object} comment - The comment to check
-   * @returns {boolean} True if the comment is a tracked-change thread
-   */
   const isTrackedChangeThread = (comment) => Boolean(comment?.trackedChange) || Boolean(comment?.trackedChangeParentId);
 
   const syncResolvedCommentsWithDocument = () => {
@@ -164,6 +157,7 @@ export const useCommentsStore = defineStore('comments', () => {
       if (!key) return;
 
       const hasActiveAnchor = activeKeys.has(String(key));
+
       if (
         hasActiveAnchor &&
         comment.resolvedTime &&
@@ -343,7 +337,21 @@ export const useCommentsStore = defineStore('comments', () => {
     });
 
     if (event === 'add') {
-      // If this is a new tracked change, add it to our comments
+      const existing = commentsList.value.find((c) => c.commentId === changeId);
+      if (existing) {
+        // Already exists (e.g. created during batch import) — update instead of duplicating
+        existing.trackedChangeText = trackedChangeText;
+        if (deletedText) existing.deletedText = deletedText;
+
+        const emitData = {
+          type: COMMENT_EVENTS.UPDATE,
+          comment: existing.getValues(),
+        };
+
+        syncCommentsToClients(superdoc, emitData);
+        debounceEmit(changeId, emitData, superdoc);
+        return;
+      }
       addComment({ superdoc, comment });
     } else if (event === 'update') {
       // If we have an update event, simply update the composable comment
@@ -405,7 +413,7 @@ export const useCommentsStore = defineStore('comments', () => {
       superdocStore.selectionPosition.source = 'super-editor';
     }
 
-    activeComment.value = pendingComment.value.commentID;
+    activeComment.value = pendingComment.value.commentId;
   };
 
   /**
@@ -654,6 +662,11 @@ export const useCommentsStore = defineStore('comments', () => {
       .map((c) => c.commentId || c.importedId);
     commentsList.value = commentsList.value.filter((c) => !childCommentIds.includes(c.commentId));
 
+    // Clear active state so floating layout doesn't reference a deleted comment
+    if (activeComment.value === commentId || childCommentIds.includes(activeComment.value)) {
+      activeComment.value = null;
+    }
+
     const event = {
       type: COMMENT_EVENTS.DELETED,
       comment: comment.getValues(),
@@ -737,50 +750,60 @@ export const useCommentsStore = defineStore('comments', () => {
     setTimeout(() => {
       // do not block the first rendering of the doc
       // and create comments asynchronously.
-      createCommentForTrackChanges(editor);
+      createCommentForTrackChanges(editor, superdoc);
     }, 0);
   };
 
-  const createCommentForTrackChanges = (editor) => {
-    let trackedChanges = trackChangesHelpers.getTrackChanges(editor.state);
-
+  const createCommentForTrackChanges = (editor, superdoc) => {
+    const trackedChanges = trackChangesHelpers.getTrackChanges(editor.state);
     const groupedChanges = groupChanges(trackedChanges);
 
-    // Create comments for tracked changes
-    // that do not have a corresponding comment (created in Word).
-    const { tr } = editor.view.state;
-    const { dispatch } = editor.view;
+    // Build a Set of existing comment IDs for O(1) lookup
+    const existingIds = new Set(commentsList.value.map((c) => c.commentId));
 
-    groupedChanges.forEach(({ insertedMark, deletionMark, formatMark }, index) => {
-      console.debug(`Create comment for track change: ${index}`);
-      const foundComment = commentsList.value.find(
-        (i) =>
-          i.commentId === insertedMark?.mark.attrs.id ||
-          i.commentId === deletionMark?.mark.attrs.id ||
-          i.commentId === formatMark?.mark.attrs.id,
-      );
-      const isLastIteration = trackedChanges.length === index + 1;
+    // Build a Map of change ID → tracked change entries for O(1) lookup per group.
+    // This avoids re-scanning the entire document for each tracked change.
+    const changesByIdMap = new Map();
+    for (const change of trackedChanges) {
+      const id = change.mark.attrs.id;
+      if (!changesByIdMap.has(id)) changesByIdMap.set(id, []);
+      changesByIdMap.get(id).push(change);
+    }
 
-      if (foundComment) {
-        if (isLastIteration) {
-          tr.setMeta(CommentsPluginKey, { type: 'force' });
-        }
-        return;
+    const documentId = editor.options.documentId;
+
+    // Build comment params directly from grouped changes — no PM dispatch needed
+    groupedChanges.forEach(({ insertedMark, deletionMark, formatMark }) => {
+      const id = insertedMark?.mark.attrs.id || deletionMark?.mark.attrs.id || formatMark?.mark.attrs.id;
+      if (!id || existingIds.has(id)) return;
+
+      const marks = {
+        ...(insertedMark && { insertedMark: insertedMark.mark }),
+        ...(deletionMark && { deletionMark: deletionMark.mark }),
+        ...(formatMark && { formatMark: formatMark.mark }),
+      };
+
+      // nodes/deletionNodes are unused here — the function resolves them from
+      // trackedChangesForId which already contains all document positions for this ID.
+      const params = createOrUpdateTrackedChangeComment({
+        event: 'add',
+        marks,
+        nodes: [],
+        newEditorState: editor.state,
+        documentId,
+        trackedChangesForId: changesByIdMap.get(id) || [],
+      });
+
+      if (params) {
+        handleTrackedChangeUpdate({ superdoc, params });
+        existingIds.add(id);
       }
-
-      if (insertedMark || deletionMark || formatMark) {
-        const trackChangesPayload = {
-          ...(insertedMark && { insertedMark: insertedMark.mark }),
-          ...(deletionMark && { deletionMark: deletionMark.mark }),
-          ...(formatMark && { formatMark: formatMark.mark }),
-        };
-
-        if (isLastIteration) tr.setMeta(CommentsPluginKey, { type: 'force' });
-        tr.setMeta(CommentsPluginKey, { type: 'forceTrackChanges' });
-        tr.setMeta(TrackChangesBasePluginKey, trackChangesPayload);
-      }
-      dispatch(tr);
     });
+
+    // Single force-update to refresh decorations
+    const { tr } = editor.view.state;
+    tr.setMeta(CommentsPluginKey, { type: 'force' });
+    editor.view.dispatch(tr);
   };
 
   const normalizeDocxSchemaForExport = (value) => {
@@ -1000,6 +1023,7 @@ export const useCommentsStore = defineStore('comments', () => {
     getGroupedComments,
     getCommentsByPosition,
     getFloatingComments,
+    getCommentPositionKey,
     getCommentPosition,
     getCommentAnchoredText,
     getCommentAnchorData,

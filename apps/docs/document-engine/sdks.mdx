@@ -30,23 +30,48 @@ The CLI is bundled with the SDK — no separate install needed.
 
 ## Quick start
 
+The Node SDK supports both ESM and CommonJS:
+
+```ts
+// ESM
+import { createSuperDocClient } from '@superdoc-dev/sdk';
+
+// CommonJS
+const { createSuperDocClient } = require('@superdoc-dev/sdk');
+```
+
 <Tabs>
-  <Tab title="Node.js">
+  <Tab title="Node.js (ESM)">
     ```typescript
     import { SuperDocClient } from '@superdoc-dev/sdk';
 
-    const client = new SuperDocClient();
+    const client = new SuperDocClient({
+      defaultChangeMode: 'tracked',
+    });
 
     // Open a document
     await client.doc.open({ doc: './contract.docx' });
 
-    // Find text
-    const result = await client.doc.find({ pattern: 'ACME Corp' });
+    // Find and replace text with query + mutation plan
+    const match = await client.doc.query.match({
+      select: { type: 'text', pattern: 'ACME Corp' },
+      require: 'first',
+    });
 
-    // Replace it
-    const target = result.context?.[0]?.textRanges?.[0];
-    if (target) {
-      await client.doc.replace({ target, text: 'NewCo Inc.' });
+    const ref = match.items?.[0]?.handle?.ref;
+    if (ref) {
+      await client.doc.mutations.apply({
+        expectedRevision: match.evaluatedRevision,
+        atomic: true,
+        steps: [
+          {
+            id: 'replace-acme',
+            op: 'text.rewrite',
+            where: { by: 'ref', ref },
+            args: { replacement: { text: 'NewCo Inc.' } },
+          },
+        ],
+      });
     }
 
     // Save and close
@@ -54,45 +79,97 @@ The CLI is bundled with the SDK — no separate install needed.
     await client.doc.close();
     ```
   </Tab>
+  <Tab title="Node.js (CJS)">
+    ```javascript
+    const { SuperDocClient } = require('@superdoc-dev/sdk');
+
+    async function main() {
+      const client = new SuperDocClient({
+        defaultChangeMode: 'tracked',
+      });
+
+      // Open a document
+      await client.doc.open({ doc: './contract.docx' });
+
+      // Find and replace text with query + mutation plan
+      const match = await client.doc.query.match({
+        select: { type: 'text', pattern: 'ACME Corp' },
+        require: 'first',
+      });
+
+      const ref = match.items?.[0]?.handle?.ref;
+      if (ref) {
+        await client.doc.mutations.apply({
+          expectedRevision: match.evaluatedRevision,
+          atomic: true,
+          steps: [
+            {
+              id: 'replace-acme',
+              op: 'text.rewrite',
+              where: { by: 'ref', ref },
+              args: { replacement: { text: 'NewCo Inc.' } },
+            },
+          ],
+        });
+      }
+
+      // Save and close
+      await client.doc.save();
+      await client.doc.close();
+    }
+
+    main();
+    ```
+  </Tab>
   <Tab title="Python">
     ```python
-    from superdoc import SuperDocClient
+    import asyncio
 
-    client = SuperDocClient()
+    from superdoc import AsyncSuperDocClient
 
-    # Open a document
-    await client.doc.open(doc="./contract.docx")
 
-    # Find text
-    result = await client.doc.find(pattern="ACME Corp")
+    async def main():
+        client = AsyncSuperDocClient(default_change_mode="tracked")
 
-    # Replace it
-    target = result["context"][0]["textRanges"][0]
-    await client.doc.replace(target=target, text="NewCo Inc.")
+        # Open a document
+        await client.doc.open({"doc": "./contract.docx"})
 
-    # Save and close
-    await client.doc.save()
-    await client.doc.close()
+        # Find and replace text with query + mutation plan
+        match = await client.doc.query.match(
+            {
+                "select": {"type": "text", "pattern": "ACME Corp"},
+                "require": "first",
+            }
+        )
+
+        ref = match.get("items", [{}])[0].get("handle", {}).get("ref")
+        if ref:
+            await client.doc.mutations.apply(
+                {
+                    "expectedRevision": match["evaluatedRevision"],
+                    "atomic": True,
+                    "steps": [
+                        {
+                            "id": "replace-acme",
+                            "op": "text.rewrite",
+                            "where": {"by": "ref", "ref": ref},
+                            "args": {"replacement": {"text": "NewCo Inc."}},
+                        }
+                    ],
+                }
+            )
+
+        # Save and close
+        await client.doc.save({"inPlace": True})
+        await client.doc.close({})
+
+
+    asyncio.run(main())
     ```
   </Tab>
 </Tabs>
 
-## AI tool use
-
-The SDKs include tool catalogs for LLM integrations. You can expose document operations as tools for AI agents:
-
-```typescript
-import { chooseSuperDocTools, dispatchSuperDocTool } from '@superdoc-dev/sdk';
-
-// Get tools scoped to the current task
-const tools = chooseSuperDocTools({
-  phase: 'mutate',
-  features: { comments: true, trackChanges: true },
-});
-
-// Dispatch a tool call from your LLM
-const result = await dispatchSuperDocTool(client, toolCall);
-```
+Set `defaultChangeMode: 'tracked'` (Node) or `default_change_mode='tracked'` (Python) to make mutations use tracked changes by default. If you pass `changeMode` on a specific call, that explicit value overrides the default.
 
 {/* SDK_OPERATIONS_START */}
 ## Available operations
@@ -114,7 +191,10 @@ The SDKs expose all operations from the [Document API](/document-api/overview) p
 | `doc.find` | `find` | Search the document for nodes matching type, text, or attribute criteria. |
 | `doc.getNode` | `get-node` | Retrieve a single node by target position. |
 | `doc.getNodeById` | `get-node-by-id` | Retrieve a single node by its unique ID. |
+| `doc.getText` | `get-text` | Extract the plain-text content of the document. |
 | `doc.info` | `info` | Return document metadata including revision, node count, and capabilities. |
+| `doc.query.match` | `query match` | Deterministic selector-based search with cardinality contracts for mutation targeting. |
+| `doc.mutations.preview` | `mutations preview` | Dry-run a mutation plan, returning resolved targets without applying changes. |
 
 #### Mutation
 
@@ -123,21 +203,31 @@ The SDKs expose all operations from the [Document API](/document-api/overview) p
 | `doc.insert` | `insert` | Insert text or inline content at a target position. |
 | `doc.replace` | `replace` | Replace content at a target position with new text or inline content. |
 | `doc.delete` | `delete` | Delete content at a target position. |
+| `doc.mutations.apply` | `mutations apply` | Execute a mutation plan atomically against the document. |
 
 #### Format
 
 | Operation | CLI command | Description |
 | --- | --- | --- |
-| `doc.format.bold` | `format bold` | Toggle bold formatting on the target range. |
-| `doc.format.italic` | `format italic` | Toggle italic formatting on the target range. |
-| `doc.format.underline` | `format underline` | Toggle underline formatting on the target range. |
-| `doc.format.strikethrough` | `format strikethrough` | Toggle strikethrough formatting on the target range. |
+| `doc.format.apply` | `format apply` | Apply explicit inline style changes (bold, italic, underline, strike) to the target range using boolean patch semantics. |
+| `doc.format.fontSize` | `format font-size` | Set or unset the font size on the target text range. Pass null to remove. |
+| `doc.format.fontFamily` | `format font-family` | Set or unset the font family on the target text range. Pass null to remove. |
+| `doc.format.color` | `format color` | Set or unset the text color on the target text range. Pass null to remove. |
+| `doc.format.align` | `format align` | Set or unset paragraph alignment on the block containing the target. Pass null to reset to default. |
 
 #### Create
 
 | Operation | CLI command | Description |
 | --- | --- | --- |
 | `doc.create.paragraph` | `create paragraph` | Create a new paragraph at the target position. |
+| `doc.create.heading` | `create heading` | Create a new heading at the target position. |
+| `doc.create.table` | `create table` | Create a new table at the target position. |
+
+#### Blocks
+
+| Operation | CLI command | Description |
+| --- | --- | --- |
+| `doc.blocks.delete` | `blocks delete` | Delete an entire block node (paragraph, heading, list item, table, image, or sdt) deterministically. |
 
 #### Lists
 
@@ -156,15 +246,9 @@ The SDKs expose all operations from the [Document API](/document-api/overview) p
 
 | Operation | CLI command | Description |
 | --- | --- | --- |
-| `doc.comments.add` | `comments add` | Add a new comment thread anchored to a target range. |
-| `doc.comments.edit` | `comments edit` | Edit the content of an existing comment. |
-| `doc.comments.reply` | `comments reply` | Add a reply to an existing comment thread. |
-| `doc.comments.move` | `comments move` | Move a comment thread to a new anchor range. |
-| `doc.comments.resolve` | `comments resolve` | Resolve or unresolve a comment thread. |
-| `doc.comments.remove` | `comments remove` | Remove a comment or reply by ID. |
-| `doc.comments.setInternal` | `comments set-internal` | Toggle the internal (private) flag on a comment thread. |
-| `doc.comments.setActive` | `comments set-active` | Set the active (focused) comment thread for UI highlighting. |
-| `doc.comments.goTo` | `comments go-to` | Scroll the viewport to a comment thread by ID. |
+| `doc.comments.create` | `comments create` | Create a new comment thread (or reply when parentCommentId is given). |
+| `doc.comments.patch` | `comments patch` | Patch fields on an existing comment (text, target, status, or isInternal). |
+| `doc.comments.delete` | `comments delete` | Remove a comment or reply by ID. |
 | `doc.comments.get` | `comments get` | Retrieve a single comment thread by ID. |
 | `doc.comments.list` | `comments list` | List all comment threads in the document. |
 
@@ -174,10 +258,7 @@ The SDKs expose all operations from the [Document API](/document-api/overview) p
 | --- | --- | --- |
 | `doc.trackChanges.list` | `track-changes list` | List all tracked changes in the document. |
 | `doc.trackChanges.get` | `track-changes get` | Retrieve a single tracked change by ID. |
-| `doc.trackChanges.accept` | `track-changes accept` | Accept a tracked change, applying it permanently. |
-| `doc.trackChanges.reject` | `track-changes reject` | Reject a tracked change, reverting it. |
-| `doc.trackChanges.acceptAll` | `track-changes accept-all` | Accept all tracked changes in the document. |
-| `doc.trackChanges.rejectAll` | `track-changes reject-all` | Reject all tracked changes in the document. |
+| `doc.trackChanges.decide` | `track-changes decide` | Accept or reject a tracked change (by ID or scope: all). |
 
 #### Session
 

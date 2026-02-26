@@ -36,6 +36,8 @@ export type HeaderFooterLayoutResult = {
   layout: HeaderFooterLayout;
   blocks: FlowBlock[];
   measures: Measure[];
+  /** Effective layout width when table grid widths exceed section content width (SD-1837). */
+  effectiveWidth?: number;
 };
 
 export type IncrementalLayoutResult = {

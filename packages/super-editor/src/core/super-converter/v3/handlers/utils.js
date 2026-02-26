@@ -317,7 +317,9 @@ export function decodeProperties(params, translatorsBySdName, properties) {
     if (translator) {
       const result = translator.decode({ ...params, node: { attrs: { [key]: properties[key] } } });
       if (result != null) {
-        result.name = translator.xmlName;
+        if (result.name == null) {
+          result.name = translator.xmlName;
+        }
         elements.push(result);
       }
     }

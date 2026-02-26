@@ -11,12 +11,16 @@ const shouldSkipFieldProcessing = (node) => SKIP_FIELD_PROCESSING_NODE_NAMES.has
 /**
  * Pre-processes nodes to convert PAGE and NUMPAGES field codes for header/footer rendering.
  *
+ * NOTE: This function is used exclusively when constructing a standalone header/footer
+ * editor for on-screen display/editing. It is NOT part of the DOCX import pipeline.
+ * The original OOXML is preserved separately for round-trip export.
+ *
  * This function specifically handles:
  * - PAGE fields → sd:autoPageNumber (displays current page number)
  * - NUMPAGES fields → sd:totalPageNumber (displays total page count)
- *
- * Other field types (DOCPROPERTY, HYPERLINK, etc.) are preserved unchanged
- * to maintain proper round-trip export fidelity.
+ * - Unhandled fldSimple fields (FILENAME, DOCPROPERTY, etc.) → unwrapped to their
+ *   cached display text (the value Word rendered when the document was last saved),
+ *   so the header renders meaningful content rather than an empty box.
  *
  * @param {OpenXmlNode[]} nodes - The nodes to process.
  * @returns {{ processedNodes: OpenXmlNode[] }} The processed nodes.
@@ -63,6 +67,23 @@ export const preProcessPageFieldsOnly = (nodes = [], depth = 0) => {
         i++;
         continue;
       }
+
+      // For unhandled fldSimple fields (FILENAME, DOCPROPERTY, etc.),
+      // unwrap the field and emit child content directly.
+      // The child elements (w:r > w:t) contain the cached display value
+      // that Word rendered when the document was last saved.
+      const childElements = node.elements || [];
+      if (childElements.length > 0) {
+        for (const child of childElements) {
+          if (Array.isArray(child.elements)) {
+            const childResult = preProcessPageFieldsOnly(child.elements, depth + 1);
+            child.elements = childResult.processedNodes;
+          }
+          processedNodes.push(child);
+        }
+        i++;
+        continue;
+      }
     }
 
     if (fldType === 'begin') {
@@ -99,6 +120,17 @@ export const preProcessPageFieldsOnly = (nodes = [], depth = 0) => {
           continue;
         }
       }
+    }
+
+    // Handle w:pgNum — legacy OOXML element for current page number.
+    // Appears as <w:r><w:rPr>…</w:rPr><w:pgNum/></w:r>. Treat identically
+    // to a PAGE field by emitting sd:autoPageNumber.
+    if (node.name === 'w:r' && node.elements?.some((el) => el.name === 'w:pgNum')) {
+      const rPr = node.elements.find((el) => el.name === 'w:rPr') || null;
+      const processedField = preProcessPageInstruction([], '', rPr);
+      processedNodes.push(...processedField);
+      i++;
+      continue;
     }
 
     // Not a field or incomplete field - recursively process children and add

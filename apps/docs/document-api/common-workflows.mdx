@@ -1,0 +1,145 @@
+---
+title: Common workflows
+sidebarTitle: Common Workflows
+description: Recommended patterns for working with the Document API
+---
+
+These are the recommended patterns for new integrations.
+
+## Plan with query.match, then apply with mutations
+
+This is the recommended default for most apps: match first, preview, then apply.
+
+```ts
+const match = editor.doc.query.match({
+  select: { type: 'text', pattern: 'foo' },
+  require: 'first',
+});
+
+const ref = match.items?.[0]?.handle?.ref;
+if (!ref) return;
+
+const plan = {
+  expectedRevision: match.evaluatedRevision,
+  atomic: true,
+  changeMode: 'direct',
+  steps: [
+    {
+      id: 'replace-foo',
+      op: 'text.rewrite',
+      where: { by: 'ref', ref },
+      args: { replacement: { text: 'bar' } },
+    },
+  ],
+};
+
+const preview = editor.doc.mutations.preview(plan);
+if (preview.valid) {
+  editor.doc.mutations.apply(plan);
+}
+```
+
+## Run multiple edits as one plan
+
+When several changes should stay together, group them into one plan:
+
+```ts
+const match = editor.doc.query.match({
+  select: { type: 'text', pattern: 'payment terms' },
+  require: 'first',
+});
+
+const ref = match.items?.[0]?.handle?.ref;
+if (!ref) return;
+
+const plan = {
+  expectedRevision: match.evaluatedRevision,
+  atomic: true,
+  changeMode: 'direct',
+  steps: [
+    {
+      id: 'rewrite-terms',
+      op: 'text.rewrite',
+      where: { by: 'ref', ref },
+      args: {
+        replacement: { text: 'updated payment terms' },
+      },
+    },
+    {
+      id: 'format-terms',
+      op: 'format.apply',
+      where: { by: 'ref', ref },
+      args: {
+        marks: { bold: true },
+      },
+    },
+  ],
+};
+
+const preview = editor.doc.mutations.preview(plan);
+if (preview.valid) {
+  editor.doc.mutations.apply(plan);
+}
+```
+
+## Quick search and single edit
+
+For lightweight tasks, `find` is still a good option:
+
+```ts
+const result = editor.doc.find({
+  select: { type: 'text', pattern: 'foo' },
+  require: 'first',
+});
+
+const target = result.items?.[0]?.context?.textRanges?.[0];
+if (target) {
+  editor.doc.replace({ target, text: 'bar' });
+}
+```
+
+## Tracked-mode insert
+
+Insert text as a tracked change so reviewers can accept or reject it:
+
+```ts
+const receipt = editor.doc.insert(
+  { text: 'new content' },
+  { changeMode: 'tracked' },
+);
+```
+
+The receipt includes a `resolution` with the resolved insertion point and `inserted` entries with tracked-change IDs.
+
+## Check capabilities before acting
+
+Use `capabilities()` to branch on what the editor supports:
+
+```ts
+const caps = editor.doc.capabilities();
+const target = { kind: 'text', blockId: 'p1', range: { start: 0, end: 3 } };
+
+if (caps.operations['format.apply'].available) {
+  editor.doc.format.apply({
+    target,
+    marks: { bold: true },
+  });
+}
+
+if (caps.global.trackChanges.enabled) {
+  editor.doc.insert({ text: 'tracked' }, { changeMode: 'tracked' });
+}
+```
+
+## Dry-run preview
+
+Pass `dryRun: true` to validate an operation without applying it:
+
+```ts
+const preview = editor.doc.insert(
+  { target, text: 'hello' },
+  { dryRun: true },
+);
+// preview.success tells you whether the insert would succeed
+// preview.resolution shows the resolved target range
+```

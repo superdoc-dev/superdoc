@@ -155,7 +155,7 @@ describe('MCP protocol integration', () => {
     expect(textContent(result)).toContain('No open session');
   });
 
-  it('returns isError for invalid file path', async () => {
+  it('creates a blank document when file does not exist', async () => {
     await ready;
 
     const result = await client.callTool({
@@ -163,7 +163,8 @@ describe('MCP protocol integration', () => {
       arguments: { path: '/nonexistent/file.docx' },
     });
 
-    expect(result).toHaveProperty('isError', true);
-    expect(textContent(result)).toContain('Failed to open document');
+    expect(result).not.toHaveProperty('isError');
+    const body = JSON.parse(textContent(result));
+    expect(body).toHaveProperty('session_id');
   });
 });

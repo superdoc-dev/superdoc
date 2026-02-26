@@ -5,10 +5,10 @@ import type { Page } from '@playwright/test';
  */
 export async function rejectAllTrackedChanges(page: Page): Promise<void> {
   await page.evaluate(() => {
-    const rejectAll = (window as any).editor?.doc?.trackChanges?.rejectAll;
-    if (typeof rejectAll !== 'function') {
-      throw new Error('Document API is unavailable: expected editor.doc.trackChanges.rejectAll.');
+    const decide = (window as any).editor?.doc?.trackChanges?.decide;
+    if (typeof decide !== 'function') {
+      throw new Error('Document API is unavailable: expected editor.doc.trackChanges.decide.');
     }
-    rejectAll({});
+    decide({ decision: 'reject', target: { scope: 'all' } });
   });
 }

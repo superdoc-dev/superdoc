@@ -13,12 +13,26 @@ import { CLI_ONLY_OPERATION_DEFINITIONS } from './cli-only-operation-definitions
 
 type JsonSchema = Record<string, unknown>;
 
-function jsonSchemaToTypeSpec(schema: JsonSchema): CliTypeSpec {
+function resolveRef(schema: JsonSchema, $defs?: Record<string, JsonSchema>): JsonSchema {
+  if (schema.$ref && $defs) {
+    const prefix = '#/$defs/';
+    if (typeof schema.$ref === 'string' && schema.$ref.startsWith(prefix)) {
+      const name = schema.$ref.slice(prefix.length);
+      const resolved = $defs[name];
+      if (resolved) return resolveRef(resolved, $defs);
+    }
+  }
+  return schema;
+}
+
+function jsonSchemaToTypeSpec(schema: JsonSchema, $defs?: Record<string, JsonSchema>): CliTypeSpec {
+  schema = resolveRef(schema, $defs);
+
   if ('const' in schema) return { const: schema.const } as CliTypeSpec;
 
   if (schema.oneOf) {
     return {
-      oneOf: (schema.oneOf as JsonSchema[]).map(jsonSchemaToTypeSpec),
+      oneOf: (schema.oneOf as JsonSchema[]).map((s) => jsonSchemaToTypeSpec(s, $defs)),
     } as CliTypeSpec;
   }
 
@@ -28,13 +42,13 @@ function jsonSchemaToTypeSpec(schema: JsonSchema): CliTypeSpec {
 
   if (schema.type === 'array') {
     const items = (schema.items as JsonSchema) ?? {};
-    return { type: 'array', items: jsonSchemaToTypeSpec(items) } as CliTypeSpec;
+    return { type: 'array', items: jsonSchemaToTypeSpec(items, $defs) } as CliTypeSpec;
   }
 
   if (schema.type === 'object') {
     const properties: Record<string, CliTypeSpec> = {};
     for (const [key, propSchema] of Object.entries((schema.properties as Record<string, JsonSchema>) ?? {})) {
-      properties[key] = jsonSchemaToTypeSpec(propSchema);
+      properties[key] = jsonSchemaToTypeSpec(propSchema, $defs);
     }
     const result: CliTypeSpec = { type: 'object', properties } as CliTypeSpec;
     if (schema.required && Array.isArray(schema.required)) {
@@ -53,11 +67,12 @@ function getDocResponseSchemas(): Map<string, CliTypeSpec> {
   if (cachedDocSchemas) return cachedDocSchemas;
 
   const schemas = buildInternalContractSchemas();
+  const $defs = schemas.$defs as Record<string, JsonSchema> | undefined;
   cachedDocSchemas = new Map<string, CliTypeSpec>();
 
   for (const [opId, schemaSet] of Object.entries(schemas.operations)) {
     const cliOpId = `doc.${opId}`;
-    cachedDocSchemas.set(cliOpId, jsonSchemaToTypeSpec(schemaSet.output as JsonSchema));
+    cachedDocSchemas.set(cliOpId, jsonSchemaToTypeSpec(schemaSet.output as JsonSchema, $defs));
   }
 
   return cachedDocSchemas;
@@ -79,3 +94,6 @@ export function getResponseSchema(cliOpId: string): CliTypeSpec | null {
 
   return CLI_ONLY_RESPONSE_SCHEMAS[cliOpId] ?? null;
 }
+
+// Exposed for unit testing $ref resolution only
+export const _testExports = { jsonSchemaToTypeSpec } as const;

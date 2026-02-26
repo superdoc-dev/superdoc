@@ -1,0 +1,158 @@
+---
+title: tables.getCells
+sidebarTitle: tables.getCells
+description: Reference for tables.getCells
+---
+
+{/* GENERATED FILE: DO NOT EDIT. Regenerate via `pnpm run docapi:sync`. */}
+
+> Alpha: Document API is currently alpha and subject to breaking changes.
+
+## Summary
+
+- Operation ID: `tables.getCells`
+- API member path: `editor.doc.tables.getCells(...)`
+- Mutates document: `no`
+- Idempotency: `idempotent`
+- Supports tracked mode: `no`
+- Supports dry run: `no`
+- Deterministic target resolution: `yes`
+
+## Input fields
+
+| Field | Type | Required | Description |
+| --- | --- | --- | --- |
+| `columnIndex` | integer | no |  |
+| `nodeId` | string | no |  |
+| `rowIndex` | integer | no |  |
+| `target` | BlockNodeAddress | no | BlockNodeAddress |
+
+### Example request
+
+```json
+{}
+```
+
+## Output fields
+
+| Field | Type | Required | Description |
+| --- | --- | --- | --- |
+| `cells` | object[] | yes |  |
+| `tableNodeId` | string | yes |  |
+
+### Example response
+
+```json
+{
+  "cells": [
+    {
+      "colspan": 1,
+      "columnIndex": 1,
+      "nodeId": "node-def456",
+      "rowIndex": 1,
+      "rowspan": 1
+    }
+  ],
+  "tableNodeId": "example"
+}
+```
+
+## Pre-apply throws
+
+- `TARGET_NOT_FOUND`
+
+## Non-applied failure codes
+
+- None
+
+## Raw schemas
+
+<Accordion title="Raw input schema">
+```json
+{
+  "additionalProperties": false,
+  "oneOf": [
+    {
+      "required": [
+        "target"
+      ]
+    },
+    {
+      "required": [
+        "nodeId"
+      ]
+    }
+  ],
+  "properties": {
+    "columnIndex": {
+      "minimum": 0,
+      "type": "integer"
+    },
+    "nodeId": {
+      "type": "string"
+    },
+    "rowIndex": {
+      "minimum": 0,
+      "type": "integer"
+    },
+    "target": {
+      "$ref": "#/$defs/BlockNodeAddress"
+    }
+  },
+  "type": "object"
+}
+```
+</Accordion>
+
+<Accordion title="Raw output schema">
+```json
+{
+  "additionalProperties": false,
+  "properties": {
+    "cells": {
+      "items": {
+        "additionalProperties": false,
+        "properties": {
+          "colspan": {
+            "minimum": 1,
+            "type": "integer"
+          },
+          "columnIndex": {
+            "minimum": 0,
+            "type": "integer"
+          },
+          "nodeId": {
+            "type": "string"
+          },
+          "rowIndex": {
+            "minimum": 0,
+            "type": "integer"
+          },
+          "rowspan": {
+            "minimum": 1,
+            "type": "integer"
+          }
+        },
+        "required": [
+          "nodeId",
+          "rowIndex",
+          "columnIndex",
+          "colspan",
+          "rowspan"
+        ],
+        "type": "object"
+      },
+      "type": "array"
+    },
+    "tableNodeId": {
+      "type": "string"
+    }
+  },
+  "required": [
+    "tableNodeId",
+    "cells"
+  ],
+  "type": "object"
+}
+```
+</Accordion>

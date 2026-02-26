@@ -8,14 +8,14 @@ export function registerCommentTools(server: McpServer, sessions: SessionManager
     {
       title: 'Add Comment',
       description:
-        'Add a comment anchored to a text range in the document. Use superdoc_find with a text pattern first, then pass a TextAddress from context[].textRanges as the target.',
+        'Add a comment anchored to a text range in the document. Use superdoc_find with a text pattern first, then pass a TextAddress from items[].context.textRanges as the target.',
       inputSchema: {
         session_id: z.string().describe('Session ID from superdoc_open.'),
         text: z.string().describe('The comment text (question, concern, or feedback).'),
         target: z
           .string()
           .describe(
-            'JSON-encoded TextAddress: {"kind":"text","blockId":"...","range":{"start":N,"end":N}}. Get this from superdoc_find context[].textRanges, NOT from matches[].',
+            'JSON-encoded TextAddress: {"kind":"text","blockId":"...","range":{"start":N,"end":N}}. Get this from superdoc_find items[].context.textRanges.',
           ),
       },
       annotations: { readOnlyHint: false },
@@ -25,7 +25,7 @@ export function registerCommentTools(server: McpServer, sessions: SessionManager
         const { api } = sessions.get(session_id);
         const parsed = JSON.parse(target);
         const result = api.invoke({
-          operationId: 'comments.add',
+          operationId: 'comments.create',
           input: { text, target: parsed },
         });
         return {
@@ -87,7 +87,7 @@ export function registerCommentTools(server: McpServer, sessions: SessionManager
       try {
         const { api } = sessions.get(session_id);
         const result = api.invoke({
-          operationId: 'comments.reply',
+          operationId: 'comments.create',
           input: { parentCommentId: comment_id, text },
         });
         return {
@@ -117,8 +117,8 @@ export function registerCommentTools(server: McpServer, sessions: SessionManager
       try {
         const { api } = sessions.get(session_id);
         const result = api.invoke({
-          operationId: 'comments.resolve',
-          input: { commentId: comment_id },
+          operationId: 'comments.patch',
+          input: { commentId: comment_id, status: 'resolved' },
         });
         return {
           content: [{ type: 'text' as const, text: JSON.stringify(result, null, 2) }],

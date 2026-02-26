@@ -1,4 +1,5 @@
 import type { BlockNodeType, ReceiptFailure, ReceiptInsert, TextAddress } from '../types/index.js';
+import type { DiscoveryOutput } from '../types/discovery.js';
 
 export type ListItemAddress = {
   kind: 'block';
@@ -40,24 +41,32 @@ export interface ListItemInfo {
   text?: string;
 }
 
-export interface ListsListResult {
-  matches: ListItemAddress[];
-  total: number;
-  items: ListItemInfo[];
+/**
+ * Domain fields for a list-item discovery item (C3b).
+ */
+export interface ListItemDomain {
+  address: ListItemAddress;
+  marker?: string;
+  ordinal?: number;
+  path?: number[];
+  level?: number;
+  kind?: ListKind;
+  text?: string;
 }
 
+/**
+ * Standardized discovery output for `lists.list`.
+ */
+export type ListsListResult = DiscoveryOutput<ListItemDomain>;
+
 export interface ListInsertInput {
-  target?: ListItemAddress;
-  /** Node ID shorthand — resolves to a ListItemAddress by the adapter. */
-  nodeId?: string;
+  target: ListItemAddress;
   position: ListInsertPosition;
   text?: string;
 }
 
 export interface ListTargetInput {
-  target?: ListItemAddress;
-  /** Node ID shorthand — resolves to a ListItemAddress by the adapter. */
-  nodeId?: string;
+  target: ListItemAddress;
 }
 
 export interface ListSetTypeInput extends ListTargetInput {

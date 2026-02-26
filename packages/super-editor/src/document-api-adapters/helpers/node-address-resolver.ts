@@ -32,6 +32,7 @@ export type BlockCandidate = {
 export type BlockIndex = {
   candidates: BlockCandidate[];
   byId: Map<string, BlockCandidate>;
+  ambiguous: ReadonlySet<string>;
 };
 
 // Keep in sync with BlockNodeType in document-api/types/node.ts
@@ -78,7 +79,7 @@ export function getHeadingLevel(styleId?: string | null): number | undefined {
   return Number(match[1]);
 }
 
-function mapBlockNodeType(node: ProseMirrorNode): BlockNodeType | undefined {
+export function mapBlockNodeType(node: ProseMirrorNode): BlockNodeType | undefined {
   if (!node.isBlock) return undefined;
   switch (node.type.name) {
     case 'paragraph': {
@@ -108,14 +109,25 @@ function mapBlockNodeType(node: ProseMirrorNode): BlockNodeType | undefined {
 function resolveBlockNodeId(node: ProseMirrorNode): string | undefined {
   if (node.type.name === 'paragraph') {
     const attrs = node.attrs as ParagraphAttrs | undefined;
-    // paraId (imported from DOCX) is the primary identity — it's stable across
-    // document opens. sdBlockId is auto-generated per open, so using it as the
-    // canonical ID would break stateless CLI workflows.
-    // When paraId is absent (freshly created node), sdBlockId is the fallback.
+    // paraId (imported from DOCX) is the primary identity for paragraphs. This
+    // preserves historical IDs across DOCX round-trips, while sdBlockId remains
+    // a fallback for freshly created nodes.
     return toId(attrs?.paraId) ?? toId(attrs?.sdBlockId);
   }
 
   const attrs = (node.attrs ?? {}) as BlockIdAttrs;
+  const typeName = node.type.name;
+
+  // Table nodes prefer paraId (preserved across DOCX roundtrips) over
+  // sdBlockId (regenerated on every document open). sdBlockId is still the
+  // fallback for programmatically created tables before their first export.
+  if (typeName === 'table' || typeName === 'tableRow' || typeName === 'tableCell' || typeName === 'tableHeader') {
+    return toId(attrs.paraId) ?? toId(attrs.sdBlockId) ?? toId(attrs.blockId) ?? toId(attrs.id) ?? toId(attrs.uuid);
+  }
+
+  // NOTE: Migration surface for the stable-addresses plan.
+  // Imported IDs currently win over `sdBlockId` to preserve historical
+  // identity during DOCX round-trips.
   return toId(attrs.blockId) ?? toId(attrs.id) ?? toId(attrs.paraId) ?? toId(attrs.uuid) ?? toId(attrs.sdBlockId);
 }
 
@@ -134,18 +146,27 @@ export function toBlockAddress(candidate: BlockCandidate): BlockNodeAddress {
 }
 
 /**
- * Block types whose nodes carry both `paraId` and `sdBlockId`, and thus need
- * an alias entry so that lookups by either ID succeed.  Headings and list
- * items are PM `paragraph` nodes distinguished by style/numbering attrs, so
- * they share the same dual-ID shape.
+ * Block types whose nodes carry both a primary ID (paraId) and sdBlockId,
+ * and thus need an alias entry so that lookups by either ID succeed.
+ *
+ * Headings and list items are PM `paragraph` nodes distinguished by
+ * style/numbering attrs. Table nodes also carry both paraId (DOCX-preserved)
+ * and sdBlockId (in-memory generated).
  */
-const ALIAS_ELIGIBLE_TYPES: ReadonlySet<BlockNodeType> = new Set(['paragraph', 'heading', 'listItem']);
+const ALIAS_ELIGIBLE_TYPES: ReadonlySet<BlockNodeType> = new Set([
+  'paragraph',
+  'heading',
+  'listItem',
+  'table',
+  'tableRow',
+  'tableCell',
+]);
 
 /** Returns the sdBlockId for an alias-eligible node, if it differs from the primary nodeId. */
 function resolveBlockAliasId(node: ProseMirrorNode, nodeType: BlockNodeType, primaryId: string): string | undefined {
   if (!ALIAS_ELIGIBLE_TYPES.has(nodeType)) return undefined;
-  const attrs = node.attrs as ParagraphAttrs | undefined;
-  const sdBlockId = toId(attrs?.sdBlockId);
+  const attrs = (node.attrs ?? {}) as BlockIdAttrs;
+  const sdBlockId = toId(attrs.sdBlockId);
   if (sdBlockId && sdBlockId !== primaryId) return sdBlockId;
   return undefined;
 }
@@ -204,7 +225,7 @@ export function buildBlockIndex(editor: Editor): BlockIndex {
     }
   });
 
-  return { candidates, byId };
+  return { candidates, byId, ambiguous };
 }
 
 /**
@@ -217,6 +238,35 @@ export function buildBlockIndex(editor: Editor): BlockIndex {
 export function findBlockById(index: BlockIndex, address: NodeAddress): BlockCandidate | undefined {
   if (address.kind !== 'block') return undefined;
   return index.byId.get(`${address.nodeType}:${address.nodeId}`);
+}
+
+/**
+ * Looks up a block candidate by its {@link BlockNodeAddress}, throwing
+ * a precise error for missing or ambiguous targets.
+ *
+ * @param index - The block index to search.
+ * @param address - The block node address to resolve.
+ * @returns The matching candidate.
+ * @throws {DocumentApiAdapterError} `TARGET_NOT_FOUND` if no candidate matches.
+ * @throws {DocumentApiAdapterError} `AMBIGUOUS_TARGET` if multiple candidates share the key.
+ */
+export function findBlockByIdStrict(index: BlockIndex, address: BlockNodeAddress): BlockCandidate {
+  const key = `${address.nodeType}:${address.nodeId}`;
+
+  if (index.ambiguous.has(key)) {
+    throw new DocumentApiAdapterError('AMBIGUOUS_TARGET', `Multiple blocks share key "${key}".`, {
+      target: address,
+    });
+  }
+
+  const candidate = index.byId.get(key);
+  if (!candidate) {
+    throw new DocumentApiAdapterError('TARGET_NOT_FOUND', `Block "${key}" was not found.`, {
+      target: address,
+    });
+  }
+
+  return candidate;
 }
 
 /**

@@ -688,9 +688,11 @@ describe('renderTableCell', () => {
 
     expect(captured).toHaveLength(1);
     expect(captured[0]?.lineEl.classList.contains('superdoc-line')).toBe(true);
-    expect(captured[0]?.wrapperEl).toBeTruthy();
-    expect(captured[0]?.wrapperEl?.style.marginLeft).toBe('20px');
-    expect(captured[0]?.wrapperEl?.style.marginRight).toBe('0px');
+    // With inline marker approach, lineEl has paddingLeft from marker positioning.
+    // applySquareWrapExclusionsToLines skips lines with existing padding, so no
+    // wrapperEl and no margins are applied — this is correct because the marker
+    // positioning already controls the line's horizontal layout.
+    expect(captured[0]?.wrapperEl).toBeFalsy();
   });
 
   describe('spacing.after margin-bottom rendering', () => {
@@ -1186,15 +1188,15 @@ describe('renderTableCell', () => {
 
       const contentElement = cellElement.firstElementChild as HTMLElement;
       const paraWrapper = contentElement.firstElementChild as HTMLElement;
-      const lineContainer = paraWrapper.firstElementChild as HTMLElement;
+      const lineEl = paraWrapper.firstElementChild as HTMLElement;
 
-      // Marker should be in a positioned container
-      expect(lineContainer.style.position).toBe('relative');
-
-      const markerEl = lineContainer.querySelector('.superdoc-paragraph-marker') as HTMLElement;
+      // Marker is prepended inside lineEl (matches renderer.ts approach)
+      const markerEl = lineEl.querySelector('.superdoc-paragraph-marker') as HTMLElement;
       expect(markerEl).toBeTruthy();
       expect(markerEl.textContent).toBe('•');
-      expect(markerEl.style.position).toBe('absolute');
+      // Left-justified markers stay inline (position: relative on container span)
+      const markerContainer = markerEl.parentElement as HTMLElement;
+      expect(markerContainer.style.position).toBe('relative');
     });
 
     it('should render numbered list marker with correct text', () => {
@@ -1223,8 +1225,8 @@ describe('renderTableCell', () => {
 
       const contentElement = cellElement.firstElementChild as HTMLElement;
       const paraWrapper = contentElement.firstElementChild as HTMLElement;
-      const lineContainer = paraWrapper.firstElementChild as HTMLElement;
-      const markerEl = lineContainer.querySelector('.superdoc-paragraph-marker') as HTMLElement;
+      const lineEl = paraWrapper.firstElementChild as HTMLElement;
+      const markerEl = lineEl.querySelector('.superdoc-paragraph-marker') as HTMLElement;
 
       expect(markerEl).toBeTruthy();
       expect(markerEl.textContent).toBe('1.');
@@ -1266,8 +1268,8 @@ describe('renderTableCell', () => {
 
       const contentElement = cellElement.firstElementChild as HTMLElement;
       const paraWrapper = contentElement.firstElementChild as HTMLElement;
-      const lineContainer = paraWrapper.firstElementChild as HTMLElement;
-      const markerEl = lineContainer.querySelector('.superdoc-paragraph-marker') as HTMLElement;
+      const lineEl = paraWrapper.firstElementChild as HTMLElement;
+      const markerEl = lineEl.querySelector('.superdoc-paragraph-marker') as HTMLElement;
 
       expect(markerEl.style.fontFamily).toBe('"Times New Roman", sans-serif');
       expect(markerEl.style.fontSize).toBe('18px');
@@ -1278,13 +1280,18 @@ describe('renderTableCell', () => {
     });
 
     it('should handle marker justification (left, center, right)', () => {
-      const testCases: Array<{ justification: 'left' | 'center' | 'right'; expectedAlign: string }> = [
-        { justification: 'left', expectedAlign: 'left' },
-        { justification: 'center', expectedAlign: 'center' },
-        { justification: 'right', expectedAlign: 'right' },
+      const testCases: Array<{
+        justification: 'left' | 'center' | 'right';
+        expectedPosition: string;
+      }> = [
+        // Left: marker container stays inline (position: relative)
+        { justification: 'left', expectedPosition: 'relative' },
+        // Center/right: marker container is absolutely positioned
+        { justification: 'center', expectedPosition: 'absolute' },
+        { justification: 'right', expectedPosition: 'absolute' },
       ];
 
-      testCases.forEach(({ justification, expectedAlign }) => {
+      testCases.forEach(({ justification, expectedPosition }) => {
         const { para, measure } = createParagraphWithMarker('•');
         if (para.attrs?.wordLayout?.marker) {
           para.attrs.wordLayout.marker.justification = justification;
@@ -1313,10 +1320,11 @@ describe('renderTableCell', () => {
 
         const contentElement = cellElement.firstElementChild as HTMLElement;
         const paraWrapper = contentElement.firstElementChild as HTMLElement;
-        const lineContainer = paraWrapper.firstElementChild as HTMLElement;
-        const markerEl = lineContainer.querySelector('.superdoc-paragraph-marker') as HTMLElement;
+        const lineEl = paraWrapper.firstElementChild as HTMLElement;
+        const markerEl = lineEl.querySelector('.superdoc-paragraph-marker') as HTMLElement;
+        const markerContainer = markerEl.parentElement as HTMLElement;
 
-        expect(markerEl.style.textAlign).toBe(expectedAlign);
+        expect(markerContainer.style.position).toBe(expectedPosition);
       });
     });
 
@@ -1347,10 +1355,10 @@ describe('renderTableCell', () => {
 
       const contentElement = cellElement.firstElementChild as HTMLElement;
       const paraWrapper = contentElement.firstElementChild as HTMLElement;
-      const lineContainer = paraWrapper.firstElementChild as HTMLElement;
-      const lineEl = lineContainer.querySelector('div:not(.superdoc-paragraph-marker)') as HTMLElement;
+      const lineEl = paraWrapper.firstElementChild as HTMLElement;
 
-      // Text should have padding equal to indentLeft
+      // Line paddingLeft should be set to the anchor point (indentLeft - hanging + firstLine).
+      // With no hanging/firstLine, anchor = indentLeft.
       expect(lineEl.style.paddingLeft).toBe(`${indentLeft}px`);
     });
 
@@ -1400,9 +1408,9 @@ describe('renderTableCell', () => {
       const contentElement = cellElement.firstElementChild as HTMLElement;
       const paraWrapper = contentElement.firstElementChild as HTMLElement;
 
-      // First child should be a container with marker
-      const firstLineContainer = paraWrapper.children[0] as HTMLElement;
-      const firstMarker = firstLineContainer.querySelector('.superdoc-paragraph-marker');
+      // First child should be a line element with marker prepended inside
+      const firstLine = paraWrapper.children[0] as HTMLElement;
+      const firstMarker = firstLine.querySelector('.superdoc-paragraph-marker');
       expect(firstMarker).toBeTruthy();
 
       // Second child should be just a line element without marker

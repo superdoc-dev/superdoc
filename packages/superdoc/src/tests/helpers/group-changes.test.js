@@ -110,4 +110,46 @@ describe('Group changes helper', () => {
     expect(groupedChanges[2]).toHaveProperty('deletionMark');
     expect(groupedChanges[2]).not.toHaveProperty('insertedMark');
   });
+
+  it('does not consume adjacent same-type slices when a replacement pair exists for the same id', () => {
+    const replacementId = 'replacement-1';
+    const changes = [
+      {
+        mark: { type: { name: 'trackInsert' }, attrs: { id: replacementId } },
+        from: 10,
+        to: 14,
+      },
+      // Interleaving mark from another id mirrors real mark stream ordering.
+      {
+        mark: { type: { name: 'trackInsert' }, attrs: { id: 'other-id' } },
+        from: 14,
+        to: 20,
+      },
+      {
+        mark: { type: { name: 'trackInsert' }, attrs: { id: replacementId } },
+        from: 14,
+        to: 18,
+      },
+      {
+        mark: { type: { name: 'trackDelete' }, attrs: { id: replacementId } },
+        from: 18,
+        to: 22,
+      },
+    ];
+
+    const groupedChanges = groupChanges(changes);
+    const replacementGroups = groupedChanges.filter((group) => {
+      const id =
+        group.insertedMark?.mark.attrs.id || group.deletionMark?.mark.attrs.id || group.formatMark?.mark.attrs.id;
+      return id === replacementId;
+    });
+
+    expect(replacementGroups).toHaveLength(2);
+    expect(replacementGroups.some((group) => group.insertedMark && group.deletionMark)).toBe(true);
+    expect(
+      replacementGroups.some(
+        (group) => group.insertedMark && !group.deletionMark && group.insertedMark.mark.type.name === 'trackInsert',
+      ),
+    ).toBe(true);
+  });
 });

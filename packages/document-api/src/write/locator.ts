@@ -2,7 +2,7 @@
  * Shared internal locator types for friendly target resolution.
  *
  * Point locators are used by insert. Range locators are used by replace,
- * delete, format.*, comments.add, and comments.move. Block-ID shorthand
+ * delete, format.apply, comments.create, and comments.patch. Block-ID shorthand
  * is used by create.* and lists.*.
  *
  * NOT exported from the package root — internal use only.
@@ -14,7 +14,7 @@ export interface BlockRelativeLocator {
   offset?: number;
 }
 
-/** Block-relative range locator: a block ID with start and end offsets. Used by replace, delete, format.*, comments.add/move. */
+/** Block-relative range locator: a block ID with start and end offsets. Used by replace, delete, format.apply, comments.create/patch. */
 export interface BlockRelativeRange {
   blockId: string;
   start: number;

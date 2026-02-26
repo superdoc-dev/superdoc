@@ -124,6 +124,12 @@ export class SuperDoc extends EventEmitter {
     onListDefinitionsChange: () => null,
     onTransaction: () => null,
     onFontsResolved: null,
+
+    // Tracked change bubble handlers - replace default accept/reject behavior
+    // Only fires from bubble buttons, not toolbar or context menu
+    // Signature: (comment, editor) => void
+    onTrackedChangeBubbleAccept: null,
+    onTrackedChangeBubbleReject: null,
     // Image upload handler
     // async (file) => url;
     handleImageUpload: null,

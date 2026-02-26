@@ -11,7 +11,6 @@ import {
   buildDocRelativePath,
   coerceDocEntryFromRelativePath,
   createCorpusR2Client,
-  loadRegistryOrNull,
   normalizePath,
   printCorpusEnvHint,
   saveRegistry,
@@ -210,15 +209,25 @@ function sortRegistryDocs(docs) {
 }
 
 async function loadExistingRegistryForPush(client) {
-  const existing = await loadRegistryOrNull(client);
-  if (existing) return existing;
+  // Inline the fetch+parse so we can surface the real error on failure.
+  let fetchError;
+  try {
+    const raw = await client.getObjectBuffer(REGISTRY_KEY);
+    const parsed = JSON.parse(raw.toString('utf8'));
+    if (parsed && Array.isArray(parsed.docs)) return parsed;
+    fetchError = new Error('Invalid format (missing docs array)');
+  } catch (error) {
+    fetchError = error;
+  }
 
-  // listObjects is prefix-based; exact-match filter to avoid false positives.
+  // Fetch/parse failed — check whether the key actually exists in the bucket.
   const existingKeys = await client.listObjects(REGISTRY_KEY);
   const hasRegistry = existingKeys.some((key) => normalizePath(key) === REGISTRY_KEY);
   if (hasRegistry) {
+    const detail = fetchError instanceof Error ? fetchError.message : String(fetchError);
     throw new Error(
-      'Existing registry.json could not be read. Refusing to overwrite registry; fix registry.json and retry.',
+      `Existing registry.json could not be read: ${detail}\n` +
+        'If this is an auth issue, run `npx wrangler login` to refresh your token.',
     );
   }
 

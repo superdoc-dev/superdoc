@@ -76,6 +76,7 @@ import {
   type SdtBoundaryOptions,
 } from './utils/sdt-helpers.js';
 import { SdtGroupedHover } from './utils/sdt-hover.js';
+import { computeTabWidth } from './utils/marker-helpers.js';
 import { generateRulerDefinitionFromPx, createRulerElement, ensureRulerStyles } from './ruler/index.js';
 import { toCssFontFamily } from '@superdoc/font-utils';
 import {
@@ -573,12 +574,6 @@ function collectLineTabsForSnapshot(lineEl: HTMLElement): PaintSnapshotTabStyle[
 
 const LIST_MARKER_GAP = 8;
 /**
- * Default tab interval in pixels (0.5 inch at 96 DPI).
- * Used when calculating tab stops for list markers that extend past the implicit tab stop.
- * This matches Microsoft Word's default tab interval behavior.
- */
-const DEFAULT_TAB_INTERVAL_PX = 48;
-/**
  * Default page height in pixels (11 inches at 96 DPI).
  * Used as a fallback when page size information is not available for ruler rendering.
  */
@@ -683,6 +678,7 @@ const TRACK_CHANGE_BASE_CLASS: Record<TrackedChangeKind, string> = {
   delete: 'track-delete-dec',
   format: 'track-format-dec',
 };
+const TRACK_CHANGE_FOCUSED_CLASS = 'track-change-focused';
 
 const TRACK_CHANGE_MODIFIER_CLASS: Record<TrackedChangeKind, Record<TrackedChangesMode, string | undefined>> = {
   insert: {
@@ -5537,6 +5533,9 @@ export class DomPainter {
     if (meta.date) {
       elem.dataset.trackChangeDate = meta.date;
     }
+    if (this.activeCommentId && meta.id === this.activeCommentId) {
+      elem.classList.add(TRACK_CHANGE_FOCUSED_CLASS);
+    }
   }
 
   /**
@@ -6465,7 +6464,15 @@ const deriveBlockVersion = (block: FlowBlock): string => {
         hash = hashString(hash, tblAttrs.borderCollapse);
       }
       if (tblAttrs.cellSpacing !== undefined) {
-        hash = hashNumber(hash, tblAttrs.cellSpacing);
+        const cs = tblAttrs.cellSpacing;
+        if (typeof cs === 'number') {
+          hash = hashNumber(hash, cs);
+        } else {
+          // Stable key: value and type only (avoid JSON.stringify key-order variance)
+          const v = (cs as { value?: number; type?: string }).value ?? 0;
+          const t = (cs as { value?: number; type?: string }).type ?? 'px';
+          hash = hashString(hash, `cs:${v}:${t}`);
+        }
       }
       // Include SDT metadata so lock-mode changes invalidate the cache.
       if (tblAttrs.sdt) {
@@ -6957,58 +6964,4 @@ const resolveRunText = (run: Run, context: FragmentRenderContext): string => {
     return context.totalPages ? String(context.totalPages) : (run.text ?? '');
   }
   return run.text ?? '';
-};
-
-const computeTabWidth = (
-  currentPos: number,
-  justification: string,
-  tabs: number[] | undefined,
-  hangingIndent: number | undefined,
-  firstLineIndent: number | undefined,
-  leftIndent: number,
-): number => {
-  const nextDefaultTabStop = currentPos + DEFAULT_TAB_INTERVAL_PX - (currentPos % DEFAULT_TAB_INTERVAL_PX);
-  let tabWidth: number;
-  if ((justification ?? 'left') === 'left') {
-    // Check for explicit tab stops past current position
-    const explicitTabs = [...(tabs ?? [])];
-    if (hangingIndent && hangingIndent > 0) {
-      // Account for hanging indent by adding an implicit tab stop at (left + hanging)
-      const implicitTabPos = leftIndent; // paraIndentLeft already accounts for hanging
-      explicitTabs.push(implicitTabPos);
-      // Sort tab stops to maintain order
-      explicitTabs.sort((a, b) => {
-        if (typeof a === 'number' && typeof b === 'number') {
-          return a - b;
-        }
-        return 0;
-      });
-    }
-    let targetTabStop: number | undefined;
-
-    if (Array.isArray(explicitTabs) && explicitTabs.length > 0) {
-      // Find the first tab stop that's past the current position
-      for (const tab of explicitTabs) {
-        if (typeof tab === 'number' && tab > currentPos) {
-          targetTabStop = tab;
-          break;
-        }
-      }
-    }
-
-    if (targetTabStop === undefined) {
-      // advance to next default 48px tab interval, matching Word behavior.
-      targetTabStop = nextDefaultTabStop;
-    }
-    tabWidth = targetTabStop - currentPos;
-  } else if (justification === 'right') {
-    if (firstLineIndent != null && firstLineIndent > 0) {
-      tabWidth = nextDefaultTabStop - currentPos;
-    } else {
-      tabWidth = hangingIndent ?? 0;
-    }
-  } else {
-    tabWidth = nextDefaultTabStop - currentPos;
-  }
-  return tabWidth;
 };

@@ -564,9 +564,7 @@ export const CommentsPlugin = Extension.create({
             prevDoc = doc;
             shouldUpdate = false;
 
-            if (layoutEngineActive) {
-              return;
-            }
+            if (layoutEngineActive) return;
 
             const decorations = [];
             // Always rebuild positions fresh from the current document to avoid stale PM offsets
@@ -993,7 +991,15 @@ const getTrackedChangeText = ({ nodes, mark, trackedChangeType, isDeletionInsert
   };
 };
 
-const createOrUpdateTrackedChangeComment = ({ event, marks, deletionNodes, nodes, newEditorState, documentId }) => {
+const createOrUpdateTrackedChangeComment = ({
+  event,
+  marks,
+  deletionNodes,
+  nodes,
+  newEditorState,
+  documentId,
+  trackedChangesForId,
+}) => {
   const trackedMark = marks.insertedMark || marks.deletionMark || marks.formatMark;
   const { type, attrs } = trackedMark;
 
@@ -1002,9 +1008,9 @@ const createOrUpdateTrackedChangeComment = ({ event, marks, deletionNodes, nodes
   const id = attrs.id;
 
   const node = nodes[0];
-  // Use getTrackChanges to find all tracked changes with the matching ID
-  // This will find both insertion and deletion marks if they exist with the same ID
-  const trackedChangesWithId = getTrackChanges(newEditorState, id);
+  // Use pre-computed tracked changes when available (batch import path),
+  // otherwise scan the document (real-time edit path).
+  const trackedChangesWithId = trackedChangesForId || getTrackChanges(newEditorState, id);
 
   // Check metadata first - this should be set correctly by groupChanges() in createCommentForTrackChanges
   // for both newly created and imported tracked changes
@@ -1132,6 +1138,8 @@ function findRangeById(doc, id) {
   });
   return from !== null && to !== null ? { from, to } : null;
 }
+
+export { createOrUpdateTrackedChangeComment };
 
 export const __test__ = {
   getActiveCommentId,

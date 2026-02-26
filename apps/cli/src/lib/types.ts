@@ -18,7 +18,7 @@ import type {
   NodeKind as DocumentApiNodeKind,
   NodeType as DocumentApiNodeType,
   Query as DocumentApiQuery,
-  QueryResult as DocumentApiQueryResult,
+  FindOutput as DocumentApiFindOutput,
   Selector as DocumentApiSelector,
   TextAddress as DocumentApiTextAddress,
 } from '@superdoc/document-api';
@@ -45,7 +45,7 @@ export type ListsMutateItemResult = DocumentApiListsMutateItemResult;
 export type ListsExitResult = DocumentApiListsExitResult;
 export type Selector = DocumentApiSelector;
 export type Query = DocumentApiQuery;
-export type QueryResult = DocumentApiQueryResult;
+export type FindOutput = DocumentApiFindOutput;
 
 export type OutputMode = 'json' | 'pretty';
 export type ExecutionMode = 'oneshot' | 'host';
@@ -79,7 +79,7 @@ export interface CommandContext {
 }
 
 export interface DocumentSourceMeta {
-  source: 'path' | 'stdin';
+  source: 'path' | 'stdin' | 'blank';
   path?: string;
   byteLength: number;
 }

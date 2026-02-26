@@ -374,12 +374,44 @@ All handlers are optional functions in the configuration:
 
 <ParamField path="onEditorUpdate" type="function">
   Called on content changes
-  
+
   ```javascript
   onEditorUpdate: ({ editor }) => {
     autoSave(editor.getJSON());
   }
   ```
+</ParamField>
+
+<ParamField path="onTrackedChangeBubbleAccept" type="function">
+  Custom handler for accepting tracked changes from comment bubbles. Replaces default accept behavior when provided.
+
+  ```javascript
+  onTrackedChangeBubbleAccept: (comment, editor) => {
+    // Custom logic before accepting
+    editor.commands.acceptTrackedChangeById(comment.commentId);
+    saveDocument(); // e.g., trigger auto-save after accept
+  }
+  ```
+
+  <Note>Only fires from bubble buttons, not toolbar or context menu. The dialog cleanup (closing the bubble) happens automatically after your handler runs.</Note>
+
+  <Warning>When using a custom handler, you are responsible for calling `editor.commands.acceptTrackedChangeById()` if you want the change accepted. The default behavior is fully replaced.</Warning>
+</ParamField>
+
+<ParamField path="onTrackedChangeBubbleReject" type="function">
+  Custom handler for rejecting tracked changes from comment bubbles. Replaces default reject behavior when provided.
+
+  ```javascript
+  onTrackedChangeBubbleReject: (comment, editor) => {
+    // Custom logic before rejecting
+    editor.commands.rejectTrackedChangeById(comment.commentId);
+    logRejection(comment); // e.g., track rejections
+  }
+  ```
+
+  <Note>Only fires from bubble buttons, not toolbar or context menu. The dialog cleanup (closing the bubble) happens automatically after your handler runs.</Note>
+
+  <Warning>When using a custom handler, you are responsible for calling `editor.commands.rejectTrackedChangeById()` if you want the change rejected. The default behavior is fully replaced.</Warning>
 </ParamField>
 
 <ParamField path="onSidebarToggle" type="function">

@@ -102,6 +102,32 @@ export const TableCell = Node.create({
 
   addAttributes() {
     return {
+      /** @private */
+      sdBlockId: {
+        default: null,
+        keepOnSplit: false,
+        parseDOM: (elem) => elem.getAttribute('data-sd-block-id'),
+        renderDOM: (attrs) => {
+          return attrs.sdBlockId ? { 'data-sd-block-id': attrs.sdBlockId } : {};
+        },
+      },
+
+      /** @private - OOXML identifier preserved across DOCX roundtrips */
+      paraId: {
+        default: null,
+        keepOnSplit: false,
+        parseDOM: () => null,
+        renderDOM: () => ({}),
+      },
+
+      /** @private - OOXML text identifier preserved across DOCX roundtrips */
+      textId: {
+        default: null,
+        keepOnSplit: false,
+        parseDOM: () => null,
+        renderDOM: () => ({}),
+      },
+
       colspan: {
         default: 1,
       },

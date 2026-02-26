@@ -95,12 +95,12 @@ async function firstTextRange(args: string[]): Promise<TextRange> {
   const envelope = parseJsonOutput<
     SuccessEnvelope<{
       result: {
-        context?: Array<{ textRanges?: TextRange[] }>;
+        items?: Array<{ context?: { textRanges?: TextRange[] } }>;
       };
     }>
   >(result);
 
-  const range = envelope.data.result.context?.[0]?.textRanges?.[0];
+  const range = envelope.data.result.items?.[0]?.context?.textRanges?.[0];
   if (!range) {
     throw new Error('Expected at least one text range from find result.');
   }
@@ -130,12 +130,12 @@ async function firstListItemAddress(args: string[]): Promise<ListItemAddress> {
   const envelope = parseJsonOutput<
     SuccessEnvelope<{
       result: {
-        matches: ListItemAddress[];
+        items: Array<{ address: ListItemAddress }>;
       };
     }>
   >(result);
 
-  const address = envelope.data.result.matches[0];
+  const address = envelope.data.result.items[0]?.address;
   if (!address) {
     throw new Error('Expected at least one list item address from lists.list result.');
   }
@@ -279,11 +279,11 @@ describe('superdoc CLI', () => {
     expect(result.stdout).not.toContain('<doc>  Document path or stdin');
   });
 
-  test('describe command doc.insert includes --block-id and --offset flags', async () => {
+  test('describe command doc.insert includes --target and --text flags', async () => {
     const result = await runCli(['describe', 'command', 'doc.insert', '--output', 'pretty']);
     expect(result.code).toBe(0);
-    expect(result.stdout).toContain('--block-id');
-    expect(result.stdout).toContain('--offset');
+    expect(result.stdout).toContain('--target');
+    expect(result.stdout).toContain('--text');
   });
 
   test('call executes an operation from canonical input payload', async () => {
@@ -564,7 +564,7 @@ describe('superdoc CLI', () => {
       SuccessEnvelope<{
         result: {
           total: number;
-          matches: Array<{ kind: string; nodeType: string }>;
+          items: Array<{ address: { kind: string; nodeType: string } }>;
         };
       }>
     >(result);
@@ -572,8 +572,8 @@ describe('superdoc CLI', () => {
     expect(envelope.ok).toBe(true);
     expect(envelope.command).toBe('find');
     expect(envelope.data.result.total).toBeGreaterThan(0);
-    expect(envelope.data.result.matches[0].kind).toBe('inline');
-    expect(envelope.data.result.matches[0].nodeType).toBe('run');
+    expect(envelope.data.result.items[0].address.kind).toBe('inline');
+    expect(envelope.data.result.items[0].address.nodeType).toBe('run');
   });
 
   test('find rejects legacy query.include payloads', async () => {
@@ -608,14 +608,16 @@ describe('superdoc CLI', () => {
     const envelope = parseJsonOutput<
       SuccessEnvelope<{
         result: {
-          context?: Array<{
-            textRanges?: Array<{ kind: 'text'; blockId: string; range: { start: number; end: number } }>;
+          items?: Array<{
+            context?: {
+              textRanges?: Array<{ kind: 'text'; blockId: string; range: { start: number; end: number } }>;
+            };
           }>;
         };
       }>
     >(result);
 
-    const firstContext = envelope.data.result.context?.[0];
+    const firstContext = envelope.data.result.items?.[0]?.context;
     expect(firstContext).toBeDefined();
     expect(firstContext?.textRanges?.length).toBeGreaterThan(0);
   });
@@ -627,12 +629,12 @@ describe('superdoc CLI', () => {
     const findEnvelope = parseJsonOutput<
       SuccessEnvelope<{
         result: {
-          matches: Array<Record<string, unknown>>;
+          items: Array<{ address: Record<string, unknown> }>;
         };
       }>
     >(findResult);
 
-    const address = findEnvelope.data.result.matches[0];
+    const address = findEnvelope.data.result.items[0]?.address;
     expect(address).toBeDefined();
 
     const getNodeResult = await runCli(['get-node', SAMPLE_DOC, '--address-json', JSON.stringify(address)]);
@@ -651,11 +653,11 @@ describe('superdoc CLI', () => {
     const findEnvelope = parseJsonOutput<
       SuccessEnvelope<{
         result: {
-          matches: Array<Record<string, unknown>>;
+          items: Array<{ address: Record<string, unknown> }>;
         };
       }>
     >(findResult);
-    const address = findEnvelope.data.result.matches[0];
+    const address = findEnvelope.data.result.items[0]?.address;
     expect(address).toBeDefined();
     if (!address) return;
 
@@ -689,12 +691,12 @@ describe('superdoc CLI', () => {
     const findEnvelope = parseJsonOutput<
       SuccessEnvelope<{
         result: {
-          matches: Array<{ kind: string; nodeType: string; nodeId: string }>;
+          items: Array<{ address: { kind: string; nodeType: string; nodeId: string } }>;
         };
       }>
     >(findResult);
 
-    const firstMatch = findEnvelope.data.result.matches[0];
+    const firstMatch = findEnvelope.data.result.items[0].address;
     expect(firstMatch.kind).toBe('block');
 
     const getByIdResult = await runCli([
@@ -719,12 +721,12 @@ describe('superdoc CLI', () => {
     const findEnvelope = parseJsonOutput<
       SuccessEnvelope<{
         result: {
-          matches: Array<{ kind: string; nodeType: string; nodeId: string }>;
+          items: Array<{ address: { kind: string; nodeType: string; nodeId: string } }>;
         };
       }>
     >(findResult);
 
-    const firstMatch = findEnvelope.data.result.matches[0];
+    const firstMatch = findEnvelope.data.result.items[0].address;
     expect(firstMatch.kind).toBe('block');
 
     const prettyResult = await runCli([
@@ -1015,7 +1017,7 @@ describe('superdoc CLI', () => {
     expect(result.code).toBe(1);
     const envelope = parseJsonOutput<ErrorEnvelope>(result);
     expect(envelope.error.code).toBe('INVALID_ARGUMENT');
-    expect(envelope.error.message).toContain('offset requires blockId');
+    expect(envelope.error.message).toContain('Unknown field');
   });
 
   test('create paragraph writes output and adds a new paragraph with seed text', async () => {
@@ -1074,13 +1076,13 @@ describe('superdoc CLI', () => {
       SuccessEnvelope<{
         result: {
           total: number;
-          matches: ListItemAddress[];
+          items: Array<{ address: ListItemAddress }>;
         };
       }>
     >(listResult);
     expect(listEnvelope.data.result.total).toBeGreaterThan(0);
 
-    const address = listEnvelope.data.result.matches[0];
+    const address = listEnvelope.data.result.items[0]?.address;
     expect(address).toBeDefined();
     if (!address) return;
 
@@ -1310,8 +1312,7 @@ describe('superdoc CLI', () => {
     const jsonEnvelope = parseJsonOutput<
       SuccessEnvelope<{
         result: {
-          changes?: Array<{ id?: string }>;
-          matches?: Array<{ entityId?: string }>;
+          items?: Array<{ id?: string }>;
         };
       }>
     >(jsonResult);
@@ -1321,12 +1322,9 @@ describe('superdoc CLI', () => {
     expect(prettyResult.stdout).toContain('Revision 0:');
     expect(prettyResult.stdout).toContain('tracked changes');
 
-    const firstChangeId = jsonEnvelope.data.result.changes?.[0]?.id;
-    const firstMatchId = jsonEnvelope.data.result.matches?.[0]?.entityId;
-    if (firstChangeId) {
-      expect(prettyResult.stdout).toContain(firstChangeId);
-    } else if (firstMatchId) {
-      expect(prettyResult.stdout).toContain(firstMatchId);
+    const firstItemId = jsonEnvelope.data.result.items?.[0]?.id;
+    if (firstItemId) {
+      expect(prettyResult.stdout).toContain(firstItemId);
     }
   });
 
@@ -1452,28 +1450,11 @@ describe('superdoc CLI', () => {
     expect(envelope.error.code).toBe('MISSING_REQUIRED');
   });
 
-  test('comments set-active without --out succeeds in stateless mode', async () => {
-    const source = join(TEST_DIR, 'comments-set-active-no-out-source.docx');
-    const addOut = join(TEST_DIR, 'comments-set-active-no-out-added.docx');
-    await copyFile(SAMPLE_DOC, source);
-
-    const target = await firstTextRange(['find', source, '--type', 'text', '--pattern', 'Wilde']);
-    const addResult = await runCli([
-      'comments',
-      'add',
-      source,
-      '--target-json',
-      JSON.stringify(target),
-      '--text',
-      'anchor for set-active',
-      '--out',
-      addOut,
-    ]);
-    expect(addResult.code).toBe(0);
-    const commentId = firstInsertedEntityId(addResult);
-
-    const setActiveResult = await runCli(['comments', 'set-active', addOut, '--clear']);
-    expect(setActiveResult.code).toBe(0);
+  test('comments set-active is not part of the canonical CLI surface', async () => {
+    const setActiveResult = await runCli(['comments', 'set-active', '--clear']);
+    expect(setActiveResult.code).toBe(1);
+    const envelope = parseJsonOutput<ErrorEnvelope>(setActiveResult);
+    expect(envelope.error.code).toBe('UNKNOWN_COMMAND');
   });
 
   test('comments list pretty includes comment ids for actionable output', async () => {
@@ -1545,12 +1526,6 @@ describe('superdoc CLI', () => {
     const listEnvelope = parseJsonOutput<SuccessEnvelope<{ result: { total: number } }>>(listResult);
     expect(listEnvelope.data.result.total).toBeGreaterThanOrEqual(1);
 
-    const setActiveResult = await runCli(['comments', 'set-active', '--id', commentId]);
-    expect(setActiveResult.code).toBe(0);
-
-    const goToResult = await runCli(['comments', 'go-to', '--id', commentId]);
-    expect(goToResult.code).toBe(0);
-
     const resolveResult = await runCli(['comments', 'resolve', '--id', commentId]);
     expect(resolveResult.code).toBe(0);
 
@@ -1573,9 +1548,6 @@ describe('superdoc CLI', () => {
     expect(missingGetResult.code).toBe(1);
     const missingGetEnvelope = parseJsonOutput<ErrorEnvelope>(missingGetResult);
     expect(missingGetEnvelope.error.code).toBe('TARGET_NOT_FOUND');
-
-    const clearActiveResult = await runCli(['comments', 'set-active', '--clear']);
-    expect(clearActiveResult.code).toBe(0);
 
     const setInternalResult = await runCli(['comments', 'set-internal', '--id', commentId, '--is-internal', 'true']);
     expect(setInternalResult.code).toBe(0);

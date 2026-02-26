@@ -1235,17 +1235,41 @@ describe('renderTableCell', () => {
     });
 
     it('applies both margin-top and margin-bottom when paragraph has spacing.before and spacing.after', () => {
-      const para: ParagraphBlock = {
+      const paraWithBoth: ParagraphBlock = {
         kind: 'paragraph',
         id: 'para-before-and-after',
         runs: [{ text: 'Both spacing', fontFamily: 'Arial', fontSize: 16 }],
         attrs: { spacing: { before: 12, after: 18 } },
       };
 
+      const secondPara: ParagraphBlock = {
+        kind: 'paragraph',
+        id: 'para-second',
+        runs: [{ text: 'Second', fontFamily: 'Arial', fontSize: 16 }],
+        attrs: {},
+      };
+
+      const secondMeasure: ParagraphMeasure = {
+        kind: 'paragraph',
+        lines: [
+          {
+            fromRun: 0,
+            fromChar: 0,
+            toRun: 0,
+            toChar: 7,
+            width: 50,
+            ascent: 12,
+            descent: 4,
+            lineHeight: 20,
+          },
+        ],
+        totalHeight: 20,
+      };
+
       const cellMeasure: TableCellMeasure = {
-        blocks: [paragraphMeasure],
+        blocks: [paragraphMeasure, secondMeasure],
         width: 120,
-        height: 60,
+        height: 100,
         gridColumnStart: 0,
         colSpan: 1,
         rowSpan: 1,
@@ -1253,7 +1277,7 @@ describe('renderTableCell', () => {
 
       const cell: TableCell = {
         id: 'cell-before-and-after',
-        blocks: [para],
+        blocks: [paraWithBoth, secondPara],
         attrs: {},
       };
 
@@ -1263,9 +1287,10 @@ describe('renderTableCell', () => {
         cell,
       });
 
-      const paraWrapper = (cellElement.firstElementChild as HTMLElement).firstElementChild as HTMLElement;
-      expect(paraWrapper.style.marginTop).toBe('12px');
-      expect(paraWrapper.style.marginBottom).toBe('18px');
+      const contentElement = cellElement.firstElementChild as HTMLElement;
+      const firstParaWrapper = contentElement.children[0] as HTMLElement;
+      expect(firstParaWrapper.style.marginTop).toBe('12px');
+      expect(firstParaWrapper.style.marginBottom).toBe('18px');
     });
   });
 

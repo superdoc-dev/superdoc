@@ -104,10 +104,8 @@ describe('executeBlocksDelete', () => {
       expect(result.success).toBe(true);
     });
 
-    it('accepts image target', () => {
-      const adapter = makeAdapter({ success: true, deleted: { kind: 'block', nodeType: 'image', nodeId: 'img1' } });
-      const result = executeBlocksDelete(adapter, makeInput('image', 'img1'));
-      expect(result.success).toBe(true);
+    it('rejects image target (inline-only in ProseMirror schema)', () => {
+      expect(() => executeBlocksDelete(makeAdapter(), makeInput('image', 'img1'))).toThrow(DocumentApiValidationError);
     });
 
     it('accepts sdt target', () => {

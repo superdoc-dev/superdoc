@@ -15,6 +15,7 @@ import type { Node as PmNode } from 'prosemirror-model';
 import type { Editor } from '../../Editor.js';
 import { parseMarkdownToAst } from './parseMarkdownAst.js';
 import { convertMdastToBlocks } from './mdastToProseMirror.js';
+import { normalizeFixedWidthTables } from './normalizeFixedWidthTables.js';
 import { wrapTextsInRuns } from '../../inputRules/docx-paste/docx-paste.js';
 import type {
   MarkdownConversionOptions,
@@ -88,7 +89,8 @@ function parseAndConvert(
   editor: Editor,
   options: MarkdownConversionOptions,
 ): { blocks: ReturnType<typeof convertMdastToBlocks>; diagnostics: MdastConversionContext['diagnostics'] } {
-  const ast = parseMarkdownToAst(markdown);
+  const source = options.normalizeFixedWidthTables === false ? markdown : normalizeFixedWidthTables(markdown);
+  const ast = parseMarkdownToAst(source);
 
   const ctx: MdastConversionContext = {
     editor,

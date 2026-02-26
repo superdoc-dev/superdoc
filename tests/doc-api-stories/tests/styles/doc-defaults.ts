@@ -20,7 +20,7 @@ describe('document-api story: styles.apply docDefaults', () => {
 
   async function seedBlankDoc(sessionId: string, text: string, docName: string): Promise<string> {
     await client.doc.open({ sessionId });
-    const insertResult = unwrap<any>(await client.doc.insert({ sessionId, text }));
+    const insertResult = unwrap<any>(await client.doc.insert({ sessionId, value: text }));
     expect(insertResult.receipt?.success).toBe(true);
     const sourceDoc = outPath(docName);
     await client.doc.save({ sessionId, out: sourceDoc });
@@ -33,7 +33,7 @@ describe('document-api story: styles.apply docDefaults', () => {
     }
 
     await client.doc.open({ sessionId });
-    const firstInsert = unwrap<any>(await client.doc.insert({ sessionId, text: paragraphs[0] }));
+    const firstInsert = unwrap<any>(await client.doc.insert({ sessionId, value: paragraphs[0] }));
     expect(firstInsert.receipt?.success).toBe(true);
 
     for (const paragraphText of paragraphs.slice(1)) {

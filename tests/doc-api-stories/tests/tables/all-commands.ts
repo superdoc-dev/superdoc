@@ -206,7 +206,7 @@ describe('document-api story: all table commands', () => {
       operationId: 'tables.convertFromText',
       setup: 'blank',
       prepare: async (sessionId) => {
-        await api.doc.insert({ sessionId, text: 'A\tB\tC' });
+        await api.doc.insert({ sessionId, value: 'A\tB\tC' });
       },
       run: async (sessionId) => {
         const paragraphNodeId = await firstNodeId(sessionId, 'paragraph');
@@ -233,7 +233,7 @@ describe('document-api story: all table commands', () => {
       prepare: async (sessionId) => {
         await api.doc.insert({
           sessionId,
-          text: 'Alpha\tBeta\tGamma',
+          value: 'Alpha\tBeta\tGamma',
         });
 
         const secondParagraphResult = unwrap<any>(
@@ -345,7 +345,7 @@ describe('document-api story: all table commands', () => {
       prepare: async (sessionId) => {
         await api.doc.insert({
           sessionId,
-          text: 'Alpha\tBeta\tGamma',
+          value: 'Alpha\tBeta\tGamma',
         });
 
         const secondParagraphResult = unwrap<any>(
@@ -567,7 +567,7 @@ describe('document-api story: all table commands', () => {
       operationId: 'tables.deleteCell',
       setup: 'blank',
       prepare: async (sessionId) => {
-        await api.doc.insert({ sessionId, text: 'A1\tB1\tC1' });
+        await api.doc.insert({ sessionId, value: 'A1\tB1\tC1' });
 
         for (const rowText of ['A2\tB2\tC2', 'A3\tB3\tC3']) {
           const createRowResult = unwrap<any>(

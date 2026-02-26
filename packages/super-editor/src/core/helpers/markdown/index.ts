@@ -9,6 +9,7 @@
 
 export { markdownToPmDoc, markdownToPmFragment } from './markdownToPmContent.js';
 export { parseMarkdownToAst } from './parseMarkdownAst.js';
+export { normalizeFixedWidthTables } from './normalizeFixedWidthTables.js';
 export type {
   MarkdownConversionOptions,
   MarkdownConversionResult,

@@ -39,7 +39,7 @@ describe('document-api story: inline formatting', () => {
 
     // Insert text into the blank doc's single paragraph.
     // Without an explicit target, insert uses the first paragraph.
-    const insertResult = unwrap<any>(await client.doc.insert({ sessionId, text }));
+    const insertResult = unwrap<any>(await client.doc.insert({ sessionId, value: text }));
     expect(insertResult.receipt?.success).toBe(true);
 
     // The receipt's hoisted target contains the paragraph's stable blockId.

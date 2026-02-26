@@ -12,6 +12,12 @@ import type { Editor } from '../../Editor.js';
 export interface MarkdownConversionOptions {
   /** When true, skip side-effects like numbering allocation (for dry-run validation). */
   dryRun?: boolean;
+  /**
+   * When true (default), detect pandoc-style fixed-width ASCII tables in the
+   * markdown source and rewrite them as GFM pipe tables before AST parsing.
+   * Set to `false` to skip this normalization step.
+   */
+  normalizeFixedWidthTables?: boolean;
 }
 
 // ---------------------------------------------------------------------------

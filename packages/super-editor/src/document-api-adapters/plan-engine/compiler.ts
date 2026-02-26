@@ -41,11 +41,20 @@ export interface CompiledStep {
 export interface CompiledPlan {
   mutationSteps: CompiledStep[];
   assertSteps: AssertStep[];
+  /** Document revision captured at compile start — used by executor to detect drift. */
+  compiledRevision: string;
 }
 
 function isAssertStep(step: MutationStep): step is AssertStep {
   return step.op === 'assert';
 }
+
+function isCreateOp(op: string): boolean {
+  return op === 'create.heading' || op === 'create.paragraph';
+}
+
+/** Valid position values for create operations. */
+const VALID_CREATE_POSITIONS = ['before', 'after'] as const;
 
 function isSelectWhere(where: MutationStep['where']): where is SelectWhere {
   return where.by === 'select';
@@ -53,6 +62,121 @@ function isSelectWhere(where: MutationStep['where']): where is SelectWhere {
 
 function isRefWhere(where: MutationStep['where']): where is RefWhere {
   return where.by === 'ref';
+}
+
+// ---------------------------------------------------------------------------
+// Create-step position validation
+// ---------------------------------------------------------------------------
+
+/**
+ * Validates and defaults the `args.position` field for create operations.
+ * Mutates the step's args to apply the default when position is omitted.
+ */
+function validateCreateStepPosition(step: MutationStep): void {
+  const args = step.args as Record<string, unknown>;
+  if (args.position === undefined || args.position === null) {
+    args.position = 'after';
+    return;
+  }
+  if (!(VALID_CREATE_POSITIONS as readonly string[]).includes(args.position as string)) {
+    throw planError('INVALID_INPUT', `create step requires args.position to be 'before' or 'after'`, step.id, {
+      receivedPosition: args.position,
+      allowedValues: [...VALID_CREATE_POSITIONS],
+      default: 'after',
+    });
+  }
+}
+
+// ---------------------------------------------------------------------------
+// Create-step insertion context validation
+// ---------------------------------------------------------------------------
+
+/**
+ * Resolves the anchor block ID from a compiled target for create operations.
+ * - range target → target.blockId directly
+ * - span target → first segment for 'before', last segment for 'after'
+ */
+function resolveCreateAnchorFromTargets(
+  targets: CompiledTarget[],
+  position: 'before' | 'after',
+  stepId: string,
+): string {
+  const target = targets[0];
+  if (!target) throw planError('INVALID_INPUT', 'create step has no resolved targets', stepId);
+
+  if (target.kind === 'range') return target.blockId;
+
+  const segments = target.segments;
+  if (!segments.length) throw planError('INVALID_INPUT', 'span target has no segments', stepId);
+
+  return position === 'before' ? segments[0].blockId : segments[segments.length - 1].blockId;
+}
+
+/**
+ * Validates that the anchor block's parent node accepts a paragraph child
+ * at the computed insertion slot.
+ *
+ * Both create.heading and create.paragraph create paragraph-type PM nodes,
+ * so this check is schema-based paragraph legality only.
+ *
+ * Uses `parent.canReplaceWith(index, index, paragraphType)` to validate at
+ * the actual insertion position rather than the parent's start-state content
+ * match — this correctly handles ordered content expressions where a node
+ * type may be allowed at some sibling indices but not others.
+ *
+ * Throws INVALID_INSERTION_CONTEXT at compile time for invalid parent contexts
+ * (e.g., inserting inside a node type that doesn't allow paragraph children).
+ */
+function validateInsertionContext(
+  editor: Editor,
+  index: BlockIndex,
+  step: MutationStep,
+  stepIndex: number,
+  anchorBlockId: string,
+  position: 'before' | 'after',
+): void {
+  const candidate = index.candidates.find((c) => c.nodeId === anchorBlockId);
+  if (!candidate) return; // TARGET_NOT_FOUND will be thrown elsewhere
+
+  const paragraphType = editor.state.schema?.nodes?.paragraph;
+  if (!paragraphType) return; // Schema check will fail in executor
+
+  const resolvedPos = editor.state.doc.resolve(candidate.pos);
+  const parent = resolvedPos.parent;
+
+  // Compute the sibling index at the actual insertion slot:
+  // 'before' inserts at the anchor's index; 'after' inserts one past it.
+  const anchorIndex = resolvedPos.index();
+  const insertionIndex = position === 'before' ? anchorIndex : anchorIndex + 1;
+
+  // canReplaceWith checks content expression validity at the specific slot
+  const canInsert =
+    typeof parent.canReplaceWith === 'function'
+      ? parent.canReplaceWith(insertionIndex, insertionIndex, paragraphType)
+      : parent.type.contentMatch.matchType(paragraphType);
+
+  if (!canInsert) {
+    const allowedChildTypes: string[] = [];
+    // Walk the content expression to collect allowed types
+    const match = parent.type.contentMatch;
+    for (const nodeType of Object.values(editor.state.schema.nodes)) {
+      if (match.matchType(nodeType)) {
+        allowedChildTypes.push(nodeType.name);
+      }
+    }
+
+    throw planError('INVALID_INSERTION_CONTEXT', `Cannot create ${step.op} inside ${parent.type.name}`, step.id, {
+      stepIndex,
+      stepId: step.id,
+      operation: step.op,
+      anchorBlockId,
+      parentType: parent.type.name,
+      allowedChildTypes,
+      insertionIndex,
+      requestedChildType: 'paragraph',
+      requestedSemanticType: step.op === 'create.heading' ? 'heading' : 'paragraph',
+    });
+  }
 }
 
 // ---------------------------------------------------------------------------
@@ -461,9 +585,16 @@ function resolveV3TextRef(editor: Editor, index: BlockIndex, step: MutationStep,
   if (refData.rev !== currentRevision) {
     throw planError(
       'REVISION_MISMATCH',
-      `text ref was created at revision "${refData.rev}" but document is at "${currentRevision}"`,
+      `Text ref is ephemeral and revision-scoped. Re-run query.match to obtain a fresh handle.ref for revision ${currentRevision}.`,
       step.id,
-      { refRevision: refData.rev, currentRevision },
+      {
+        refRevision: refData.rev,
+        currentRevision,
+        refStability: 'ephemeral',
+        refScope: refData.scope,
+        blockId: refData.segments?.[0]?.blockId,
+        remediation: `Re-run query.match() to obtain a fresh ref valid for the current revision.`,
+      },
     );
   }
 
@@ -625,7 +756,11 @@ function resolveStepTargets(editor: Editor, index: BlockIndex, step: MutationSte
 
   if (refWhere) {
     if (targets.length === 0) {
-      throw planError('MATCH_NOT_FOUND', `ref "${refWhere.ref}" did not resolve to any targets`, step.id);
+      throw planError('MATCH_NOT_FOUND', `ref "${refWhere.ref}" did not resolve to any targets`, step.id, {
+        selectorType: 'ref',
+        selectorPattern: refWhere.ref,
+        candidateCount: 0,
+      });
     }
     if (targets.length > 1) {
       throw planError('AMBIGUOUS_MATCH', `ref "${refWhere.ref}" resolved to ${targets.length} targets`, step.id, {
@@ -655,6 +790,20 @@ function resolveStepTargets(editor: Editor, index: BlockIndex, step: MutationSte
 // Cardinality
 // ---------------------------------------------------------------------------
 
+function buildMatchNotFoundDetails(step: MutationStep): Record<string, unknown> {
+  const where = step.where;
+  const select =
+    'select' in where ? (where as { select?: { type?: string; pattern?: string; mode?: string } }).select : undefined;
+  const within = 'within' in where ? (where as { within?: { blockId?: string } }).within : undefined;
+  return {
+    selectorType: select?.type ?? 'unknown',
+    selectorPattern: select?.pattern ?? '',
+    selectorMode: select?.mode ?? 'contains',
+    searchScope: within?.blockId ?? 'document',
+    candidateCount: 0,
+  };
+}
+
 function applyCardinalityCheck(step: MutationStep, targets: CompiledTarget[]): void {
   const where = step.where;
   if (!('require' in where) || where.require === undefined) return;
@@ -663,11 +812,11 @@ function applyCardinalityCheck(step: MutationStep, targets: CompiledTarget[]): v
 
   if (require === 'first') {
     if (targets.length === 0) {
-      throw planError('MATCH_NOT_FOUND', 'selector matched zero ranges', step.id);
+      throw planError('MATCH_NOT_FOUND', 'selector matched zero ranges', step.id, buildMatchNotFoundDetails(step));
     }
   } else if (require === 'exactlyOne') {
     if (targets.length === 0) {
-      throw planError('MATCH_NOT_FOUND', 'selector matched zero ranges', step.id);
+      throw planError('MATCH_NOT_FOUND', 'selector matched zero ranges', step.id, buildMatchNotFoundDetails(step));
     }
     if (targets.length > 1) {
       throw planError('AMBIGUOUS_MATCH', `selector matched ${targets.length} ranges, expected exactly one`, step.id, {
@@ -676,65 +825,226 @@ function applyCardinalityCheck(step: MutationStep, targets: CompiledTarget[]): v
     }
   } else if (require === 'all') {
     if (targets.length === 0) {
-      throw planError('MATCH_NOT_FOUND', 'selector matched zero ranges', step.id);
+      throw planError('MATCH_NOT_FOUND', 'selector matched zero ranges', step.id, buildMatchNotFoundDetails(step));
     }
   }
 }
 
 // ---------------------------------------------------------------------------
-// Overlap detection
+// Step interaction matrix (Workstream C)
 // ---------------------------------------------------------------------------
 
-function detectOverlaps(steps: CompiledStep[]): void {
-  const rangesByBlock = new Map<string, Array<{ stepId: string; from: number; to: number }>>();
+type InteractionVerdict = 'allow' | 'reject';
+type OverlapClass = 'same_target' | 'overlapping' | 'same_block';
 
-  for (const compiled of steps) {
-    for (const target of compiled.targets) {
-      if (target.kind === 'range') {
-        addRange(rangesByBlock, target.blockId, target.stepId, target.from, target.to);
-      } else {
-        for (const seg of target.segments) {
-          addRange(rangesByBlock, seg.blockId, target.stepId, seg.from, seg.to);
+interface OverlapClassification {
+  overlapClass: OverlapClass;
+  blockId: string;
+  rangeA: { from: number; to: number };
+  rangeB: { from: number; to: number };
+}
+
+/**
+ * Canonical step interaction matrix. This is the single source of truth for
+ * overlap verdicts when two steps target non-disjoint ranges.
+ *
+ * Key format: `${opA}::${opB}::${overlapClass}`
+ * - Order is significant: (A, B) means A appears before B in plan order.
+ * - Unlisted pairs are rejected by default (allowlist model).
+ */
+export const STEP_INTERACTION_MATRIX: ReadonlyMap<string, InteractionVerdict> = new Map<string, InteractionVerdict>([
+  // text.rewrite combinations
+  ['text.rewrite::format.apply::same_target', 'allow'],
+  ['text.rewrite::text.rewrite::same_target', 'reject'],
+  ['text.rewrite::text.delete::overlapping', 'reject'],
+  ['text.rewrite::create.*::same_block', 'allow'],
+  ['text.rewrite::text.insert::same_target', 'reject'],
+
+  // format.apply combinations
+  ['format.apply::format.apply::same_target', 'allow'],
+  ['format.apply::text.rewrite::same_target', 'reject'],
+  ['format.apply::text.delete::overlapping', 'reject'],
+  ['format.apply::create.*::same_block', 'allow'],
+  ['format.apply::text.insert::same_target', 'allow'],
+
+  // text.delete combinations
+  ['text.delete::text.rewrite::overlapping', 'reject'],
+  ['text.delete::text.delete::overlapping', 'reject'],
+  ['text.delete::format.apply::overlapping', 'reject'],
+  ['text.delete::create.*::same_block', 'allow'],
+  ['text.delete::text.insert::overlapping', 'reject'],
+
+  // create.* combinations
+  ['create.*::text.rewrite::same_block', 'allow'],
+  ['create.*::format.apply::same_block', 'allow'],
+  ['create.*::text.delete::same_block', 'allow'],
+  ['create.*::create.*::same_block', 'allow'],
+  ['create.*::text.insert::same_block', 'allow'],
+
+  // text.insert combinations
+  ['text.insert::format.apply::same_target', 'allow'],
+  ['text.insert::text.rewrite::same_target', 'reject'],
+  ['text.insert::text.delete::overlapping', 'reject'],
+  ['text.insert::create.*::same_block', 'allow'],
+  ['text.insert::text.insert::same_target', 'reject'],
+]);
+
+/** Operations exempt from matrix lookup (non-mutating). */
+export const MATRIX_EXEMPT_OPS = new Set(['assert']);
+
+/** Normalize an op key for matrix lookup (create.heading/create.paragraph → create.*). */
+function normalizeOpForMatrix(op: string): string {
+  return op.startsWith('create.') ? 'create.*' : op;
+}
+
+/**
+ * Classify the overlap relationship between two steps' target ranges.
+ * Returns undefined if the ranges are disjoint (different blocks, no overlap).
+ */
+function classifyOverlap(stepA: CompiledStep, stepB: CompiledStep): OverlapClassification | undefined {
+  const rangesA = extractBlockRanges(stepA);
+  const rangesB = extractBlockRanges(stepB);
+
+  const opA = normalizeOpForMatrix(stepA.step.op);
+  const opB = normalizeOpForMatrix(stepB.step.op);
+  const isCreateA = opA === 'create.*';
+  const isCreateB = opB === 'create.*';
+
+  for (const [blockId, aEntries] of rangesA) {
+    const bEntries = rangesB.get(blockId);
+    if (!bEntries) continue;
+
+    // Both steps target the same block — classify the overlap
+    for (const a of aEntries) {
+      for (const b of bEntries) {
+        // One is block-boundary (create), other is inline → same_block
+        if (isCreateA || isCreateB) {
+          return { overlapClass: 'same_block', blockId, rangeA: a, rangeB: b };
         }
+
+        // Check if ranges actually overlap
+        if (a.to <= b.from || b.to <= a.from) continue;
+
+        // Same range → same_target
+        if (a.from === b.from && a.to === b.to) {
+          return { overlapClass: 'same_target', blockId, rangeA: a, rangeB: b };
+        }
+
+        // Partial overlap
+        return { overlapClass: 'overlapping', blockId, rangeA: a, rangeB: b };
       }
     }
   }
 
-  for (const [blockId, ranges] of rangesByBlock) {
-    ranges.sort((a, b) => a.from - b.from);
-    for (let i = 1; i < ranges.length; i++) {
-      const prev = ranges[i - 1];
-      const curr = ranges[i];
-      if (prev.stepId !== curr.stepId && prev.to > curr.from) {
+  return undefined;
+}
+
+function extractBlockRanges(compiled: CompiledStep): Map<string, Array<{ from: number; to: number }>> {
+  const result = new Map<string, Array<{ from: number; to: number }>>();
+  for (const target of compiled.targets) {
+    if (target.kind === 'range') {
+      pushBlockRange(result, target.blockId, target.from, target.to);
+    } else {
+      for (const seg of target.segments) {
+        pushBlockRange(result, seg.blockId, seg.from, seg.to);
+      }
+    }
+  }
+  return result;
+}
+
+function pushBlockRange(
+  map: Map<string, Array<{ from: number; to: number }>>,
+  blockId: string,
+  from: number,
+  to: number,
+): void {
+  let entries = map.get(blockId);
+  if (!entries) {
+    entries = [];
+    map.set(blockId, entries);
+  }
+  entries.push({ from, to });
+}
+
+/**
+ * Validates step interactions for all compiled step pairs using the interaction matrix.
+ * Disjoint pairs are always allowed without consulting the matrix.
+ */
+function validateStepInteractions(steps: CompiledStep[]): void {
+  for (let i = 0; i < steps.length; i++) {
+    for (let j = i + 1; j < steps.length; j++) {
+      const stepA = steps[i];
+      const stepB = steps[j];
+
+      // Exempt non-mutating ops
+      if (MATRIX_EXEMPT_OPS.has(stepA.step.op) || MATRIX_EXEMPT_OPS.has(stepB.step.op)) continue;
+
+      const overlap = classifyOverlap(stepA, stepB);
+      if (!overlap) continue; // Disjoint — always allowed
+
+      const opA = normalizeOpForMatrix(stepA.step.op);
+      const opB = normalizeOpForMatrix(stepB.step.op);
+      const matrixKey = `${opA}::${opB}::${overlap.overlapClass}`;
+      const verdict = STEP_INTERACTION_MATRIX.get(matrixKey) ?? 'reject';
+
+      if (verdict === 'reject') {
         throw planError(
           'PLAN_CONFLICT_OVERLAP',
-          `steps "${prev.stepId}" and "${curr.stepId}" target overlapping ranges in block "${blockId}"`,
-          curr.stepId,
-          { blockId, rangeA: { from: prev.from, to: prev.to }, rangeB: { from: curr.from, to: curr.to } },
+          `steps "${stepA.step.id}" and "${stepB.step.id}" target overlapping ranges in block "${overlap.blockId}"`,
+          stepB.step.id,
+          {
+            blockId: overlap.blockId,
+            stepIdA: stepA.step.id,
+            stepIdB: stepB.step.id,
+            opKeyA: stepA.step.op,
+            opKeyB: stepB.step.op,
+            rangeA: overlap.rangeA,
+            rangeB: overlap.rangeB,
+            overlapRegion: {
+              from: Math.max(overlap.rangeA.from, overlap.rangeB.from),
+              to: Math.min(overlap.rangeA.to, overlap.rangeB.to),
+            },
+            matrixVerdict: verdict,
+            matrixKey,
+          },
         );
       }
     }
   }
 }
 
-function addRange(
-  map: Map<string, Array<{ stepId: string; from: number; to: number }>>,
-  blockId: string,
-  stepId: string,
-  from: number,
-  to: number,
-): void {
-  let blockRanges = map.get(blockId);
-  if (!blockRanges) {
-    blockRanges = [];
-    map.set(blockId, blockRanges);
-  }
-  blockRanges.push({ stepId, from, to });
-}
+// ---------------------------------------------------------------------------
+// Block identity integrity (Workstream E)
+// ---------------------------------------------------------------------------
 
-// ---------------------------------------------------------------------------
-// Plan compilation entry point
-// ---------------------------------------------------------------------------
+/**
+ * Detects duplicate block IDs in the block index before compilation.
+ * Throws `DOCUMENT_IDENTITY_CONFLICT` if any two blocks share the same ID.
+ */
+function assertNoDuplicateBlockIds(index: BlockIndex): void {
+  const seen = new Map<string, number>();
+  const duplicates: string[] = [];
+
+  for (const candidate of index.candidates) {
+    const count = seen.get(candidate.nodeId) ?? 0;
+    seen.set(candidate.nodeId, count + 1);
+    if (count === 1) duplicates.push(candidate.nodeId);
+  }
+
+  if (duplicates.length > 0) {
+    throw planError(
+      'DOCUMENT_IDENTITY_CONFLICT',
+      'Document contains blocks with duplicate identities. This must be resolved before mutations can be applied.',
+      undefined,
+      {
+        duplicateBlockIds: duplicates,
+        blockCount: duplicates.length,
+        remediation: 'Re-import the document or call document.repair() to assign unique identities.',
+      },
+    );
+  }
+}
 
 export function compilePlan(editor: Editor, steps: MutationStep[]): CompiledPlan {
   // D8: plan step limit
@@ -742,7 +1052,13 @@ export function compilePlan(editor: Editor, steps: MutationStep[]): CompiledPlan
     throw planError('INVALID_INPUT', `plan contains ${steps.length} steps, maximum is ${MAX_PLAN_STEPS}`);
   }
 
+  // Capture revision at compile start — single read point for consistency (D3)
+  const compiledRevision = getRevision(editor);
+
   const index = getBlockIndex(editor);
+
+  // E1: Pre-compilation identity integrity check
+  assertNoDuplicateBlockIds(index);
   const mutationSteps: CompiledStep[] = [];
   const assertSteps: AssertStep[] = [];
 
@@ -760,9 +1076,11 @@ export function compilePlan(editor: Editor, steps: MutationStep[]): CompiledPlan
 
   // Separate assert steps from mutation steps
   let totalTargets = 0;
+  let stepIndex = 0;
   for (const step of steps) {
     if (isAssertStep(step)) {
       assertSteps.push(step);
+      stepIndex++;
       continue;
     }
 
@@ -770,9 +1088,23 @@ export function compilePlan(editor: Editor, steps: MutationStep[]): CompiledPlan
       throw planError('INVALID_INPUT', `unknown step op "${step.op}"`, step.id);
     }
 
+    // Validate and default create-step position at compile time
+    if (isCreateOp(step.op)) {
+      validateCreateStepPosition(step);
+    }
+
     const targets = resolveStepTargets(editor, index, step);
+
+    // Validate insertion context for create ops (B0 invariant 5)
+    if (isCreateOp(step.op) && targets.length > 0) {
+      const position = ((step.args as Record<string, unknown>).position as 'before' | 'after') ?? 'after';
+      const anchorBlockId = resolveCreateAnchorFromTargets(targets, position, step.id);
+      validateInsertionContext(editor, index, step, stepIndex, anchorBlockId, position);
+    }
+
     totalTargets += targets.length;
     mutationSteps.push({ step, targets });
+    stepIndex++;
   }
 
   // D8: resolved target limit
@@ -783,7 +1115,7 @@ export function compilePlan(editor: Editor, steps: MutationStep[]): CompiledPlan
     );
   }
 
-  detectOverlaps(mutationSteps);
+  validateStepInteractions(mutationSteps);
 
-  return { mutationSteps, assertSteps };
+  return { mutationSteps, assertSteps, compiledRevision };
 }

@@ -1002,7 +1002,11 @@ const mutationVectors: Partial<Record<OperationId, MutationVector>> = {
     },
     applyCase: () => {
       const { editor } = makeTextEditor();
-      return executeCompiledPlan(editor, { mutationSteps: [], assertSteps: [] }, { changeMode: 'direct' });
+      return executeCompiledPlan(
+        editor,
+        { mutationSteps: [], assertSteps: [], compiledRevision: '0' },
+        { changeMode: 'direct' },
+      );
     },
   },
 };

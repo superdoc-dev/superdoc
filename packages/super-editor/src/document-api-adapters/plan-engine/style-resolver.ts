@@ -106,8 +106,12 @@ export function captureRunsInRange(editor: Editor, blockPos: number, from: numbe
     }
 
     if (node.isLeaf) {
-      // Keep offset math aligned with resolveTextRangeInBlock's flattened model.
+      // Inline leaf nodes (bookmarks, images, etc.) occupy one offset slot in
+      // the flattened text model. Emit a synthetic run so the runs array tiles
+      // contiguously — without this, assertRunTilingInvariant sees a gap.
+      const start = offset;
       offset += 1;
+      maybePushRun(start, offset, []);
       return;
     }
 

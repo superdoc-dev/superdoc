@@ -36,6 +36,7 @@ import { planError } from './errors.js';
 import { checkRevision, getRevision } from './revision-tracker.js';
 import { compilePlan } from './compiler.js';
 import { getBlockIndex } from '../helpers/index-cache.js';
+import { resolveBlockInsertionPos } from './create-insertion.js';
 import { applyDirectMutationMeta, applyTrackedMutationMeta } from '../helpers/transaction-meta.js';
 import { captureRunsInRange, resolveInlineStyle } from './style-resolver.js';
 import { mapBlockNodeType } from '../helpers/node-address-resolver.js';
@@ -91,14 +92,62 @@ function buildMarksFromSetMarks(editor: Editor, setMarks?: SetMarks): readonly P
 }
 
 // ---------------------------------------------------------------------------
-// Position helpers
+// Shared inline style patch — applies boolean mark patches to a range
 // ---------------------------------------------------------------------------
 
-function toAbsoluteBlockInsertPos(editor: Editor, blockId: string, offset: number, stepId?: string): number {
-  const index = getBlockIndex(editor);
-  const candidate = index.candidates.find((c) => c.nodeId === blockId);
-  if (!candidate) throw planError('TARGET_NOT_FOUND', `block "${blockId}" not found`, stepId);
-  return candidate.pos + offset;
+/** Applies boolean inline mark patches (bold, italic, underline, strike) to a document range. */
+function applyInlineMarkPatches(
+  editor: Editor,
+  tr: Transaction,
+  absFrom: number,
+  absTo: number,
+  inline: StyleApplyStep['args']['inline'],
+): boolean {
+  const { schema } = editor.state;
+  let changed = false;
+
+  const markEntries: Array<[boolean | undefined, MarkType | undefined]> = [
+    [inline.bold, schema.marks.bold],
+    [inline.italic, schema.marks.italic],
+    [inline.underline, schema.marks.underline],
+    [inline.strike, schema.marks.strike],
+  ];
+
+  for (const [value, markType] of markEntries) {
+    if (value === undefined || !markType) continue;
+    if (value) {
+      tr.addMark(absFrom, absTo, markType.create());
+    } else {
+      tr.removeMark(absFrom, absTo, markType);
+    }
+    changed = true;
+  }
+
+  return changed;
+}
+
+// ---------------------------------------------------------------------------
+// Block-anchor position resolution for create operations
+// ---------------------------------------------------------------------------
+
+/**
+ * Derives the anchor block ID for a create step from a compiled target.
+ *
+ * - range target → the target's blockId directly.
+ * - span target  → first segment block for 'before', last segment block for 'after'.
+ *   This implements B0 invariant 4: multi-block refs anchor at span boundaries.
+ */
+function resolveCreateAnchorBlockId(target: CompiledTarget, position: 'before' | 'after', stepId: string): string {
+  if (target.kind === 'range') {
+    return target.blockId;
+  }
+
+  const segments = target.segments;
+  if (!segments.length) {
+    throw planError('INVALID_INPUT', 'span target has no segments', stepId);
+  }
+
+  return position === 'before' ? segments[0].blockId : segments[segments.length - 1].blockId;
 }
 
 // ---------------------------------------------------------------------------
@@ -184,27 +233,7 @@ export function executeStyleApply(
 ): { changed: boolean } {
   const absFrom = mapping.map(target.absFrom);
   const absTo = mapping.map(target.absTo);
-  const { schema } = editor.state;
-  let changed = false;
-
-  const markEntries: Array<[string, boolean | undefined, MarkType | undefined]> = [
-    ['bold', step.args.inline.bold, schema.marks.bold],
-    ['italic', step.args.inline.italic, schema.marks.italic],
-    ['underline', step.args.inline.underline, schema.marks.underline],
-    ['strike', step.args.inline.strike, schema.marks.strike],
-  ];
-
-  for (const [, value, markType] of markEntries) {
-    if (value === undefined || !markType) continue;
-    if (value) {
-      tr.addMark(absFrom, absTo, markType.create());
-    } else {
-      tr.removeMark(absFrom, absTo, markType);
-    }
-    changed = true;
-  }
-
-  return { changed };
+  return { changed: applyInlineMarkPatches(editor, tr, absFrom, absTo, step.args.inline) };
 }
 
 // ---------------------------------------------------------------------------
@@ -342,33 +371,13 @@ export function executeSpanStyleApply(
 ): { changed: boolean } {
   validateMappedSpanContiguity(target, mapping, step.id);
 
-  const { schema } = editor.state;
-  let changed = false;
-
   // Apply marks uniformly across the full span
   const firstSeg = target.segments[0];
   const lastSeg = target.segments[target.segments.length - 1];
   const absFrom = mapping.map(firstSeg.absFrom, 1);
   const absTo = mapping.map(lastSeg.absTo, -1);
 
-  const markEntries: Array<[string, boolean | undefined, MarkType | undefined]> = [
-    ['bold', step.args.inline.bold, schema.marks.bold],
-    ['italic', step.args.inline.italic, schema.marks.italic],
-    ['underline', step.args.inline.underline, schema.marks.underline],
-    ['strike', step.args.inline.strike, schema.marks.strike],
-  ];
-
-  for (const [, value, markType] of markEntries) {
-    if (value === undefined || !markType) continue;
-    if (value) {
-      tr.addMark(absFrom, absTo, markType.create());
-    } else {
-      tr.removeMark(absFrom, absTo, markType);
-    }
-    changed = true;
-  }
-
-  return { changed };
+  return { changed: applyInlineMarkPatches(editor, tr, absFrom, absTo, step.args.inline) };
 }
 
 // ---------------------------------------------------------------------------
@@ -667,14 +676,24 @@ export function executeCreateStep(
   mapping: Mapping,
 ): StepOutcome {
   const target = targets[0];
-  if (!target || target.kind !== 'range') {
-    throw planError('INVALID_INPUT', `${step.op} step requires exactly one range target`, step.id);
+  if (!target) {
+    throw planError('INVALID_INPUT', `${step.op} step requires at least one target`, step.id);
   }
 
   const args = step.args as Record<string, unknown>;
-  const pos = mapping.map(toAbsoluteBlockInsertPos(editor, target.blockId, target.from, step.id));
-  const paragraphType = editor.state.schema?.nodes?.paragraph;
+  const position = (args.position as 'before' | 'after') ?? 'after';
 
+  // Derive anchor block from target kind:
+  //   range  → target.blockId directly
+  //   span   → first segment for 'before', last segment for 'after'
+  const anchorBlockId = resolveCreateAnchorBlockId(target, position, step.id);
+
+  // Create ops use block-anchor semantics: insert at block boundaries, never mid-text.
+  // target.from/target.to (text-model offsets) are intentionally ignored.
+  const anchorPos = resolveBlockInsertionPos(editor, anchorBlockId, position, step.id);
+  const pos = mapping.map(anchorPos);
+
+  const paragraphType = editor.state.schema?.nodes?.paragraph;
   if (!paragraphType) {
     throw planError('INVALID_INPUT', 'paragraph node type not in schema', step.id);
   }
@@ -704,6 +723,9 @@ export function executeCreateStep(
 
   tr.insert(pos, node);
 
+  // E1: Verify no duplicate block IDs after insertion
+  assertNoPostInsertDuplicateIds(tr.doc, step.id);
+
   return {
     stepId: step.id,
     op: step.op,
@@ -711,6 +733,52 @@ export function executeCreateStep(
     matchCount: 1,
     data: { domain: 'text', resolutions: [] } as TextStepData,
   };
+}
+
+// ---------------------------------------------------------------------------
+// Block identity invariant check (Workstream E)
+// ---------------------------------------------------------------------------
+
+/**
+ * Walks the post-mutation document and asserts no two blocks share the same
+ * identity (paraId/sdBlockId/nodeId). Called after every create-step insertion.
+ */
+function assertNoPostInsertDuplicateIds(doc: ProseMirrorNode, stepId: string): void {
+  const seen = new Set<string>();
+  const duplicateSet = new Set<string>();
+
+  doc.descendants((node: ProseMirrorNode) => {
+    // Only check textblock nodes (paragraphs, headings) — skip containers (tables, blockquotes)
+    if (!node.isTextblock) return true;
+    const attrs = (node.attrs ?? {}) as Record<string, unknown>;
+    const id =
+      (typeof attrs.paraId === 'string' && attrs.paraId) ||
+      (typeof attrs.sdBlockId === 'string' && attrs.sdBlockId) ||
+      (typeof attrs.nodeId === 'string' && attrs.nodeId);
+
+    if (!id) return true;
+
+    if (seen.has(id)) {
+      duplicateSet.add(id);
+    } else {
+      seen.add(id);
+    }
+    return true;
+  });
+
+  if (duplicateSet.size > 0) {
+    const duplicates = [...duplicateSet];
+    throw planError(
+      'INTERNAL_ERROR',
+      `create step produced duplicate block identities: [${duplicates.join(', ')}]`,
+      stepId,
+      {
+        source: 'executor:checkPostInsertIdentityUniqueness',
+        invariant: 'post-insert block IDs must be unique',
+        duplicateBlockIds: duplicates,
+      },
+    );
+  }
 }
 
 // ---------------------------------------------------------------------------
@@ -801,6 +869,22 @@ export function executeCompiledPlan(
   const revisionBefore = getRevision(editor);
 
   checkRevision(editor, options.expectedRevision);
+
+  // D3: Detect revision drift between compile and execute
+  if (compiled.compiledRevision !== revisionBefore) {
+    throw planError(
+      'REVISION_CHANGED_SINCE_COMPILE',
+      `Document revision changed between compile and execute. Compiled at "${compiled.compiledRevision}", now at "${revisionBefore}".`,
+      undefined,
+      {
+        compiledRevision: compiled.compiledRevision,
+        currentRevision: revisionBefore,
+        stepCount: compiled.mutationSteps.length,
+        failedAtStep: 'pre-execution',
+        remediation: 'Re-compile the plan against the current document state.',
+      },
+    );
+  }
 
   const tr = editor.state.tr;
   const changeMode = options.changeMode ?? 'direct';

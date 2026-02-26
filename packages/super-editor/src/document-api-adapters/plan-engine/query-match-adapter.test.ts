@@ -251,6 +251,29 @@ describe('queryMatchAdapter — blocks/runs output', () => {
     expect(match.blocks[1].runs).toHaveLength(1);
     expect(match.blocks[1].runs[0].styles.italic).toBe(true);
   });
+
+  it('does not throw when a text match spans an inline placeholder offset', () => {
+    const candidates = [{ nodeId: 'p1', pos: 0, end: 5, text: 'A\ufffcB', nodeType: 'paragraph' }];
+    const editor = makeEditorWithBlocks(candidates);
+    setupBlockIndex(candidates.map(({ nodeId, pos, end }) => ({ nodeId, pos, end })));
+    setupFindResult({
+      matches: [{ kind: 'text', blockId: 'p1' }],
+      context: [{ textRanges: [{ kind: 'text', blockId: 'p1', range: { start: 0, end: 3 } }] }],
+      total: 1,
+    });
+
+    // captureRunsInRange now emits a synthetic run for the inline leaf placeholder,
+    // producing contiguous tiling: [0,1) text, [1,2) placeholder, [2,3) text.
+    mockedDeps.captureRunsInRange.mockReturnValue(
+      captured([capturedRun(0, 1, []), capturedRun(1, 2, []), capturedRun(2, 3, [])]),
+    );
+
+    expect(() =>
+      queryMatchAdapter(editor, {
+        select: { type: 'text', pattern: 'A' },
+      }),
+    ).not.toThrow();
+  });
 });
 
 // ---------------------------------------------------------------------------

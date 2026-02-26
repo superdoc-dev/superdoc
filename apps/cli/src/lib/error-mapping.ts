@@ -11,7 +11,7 @@
 
 import type { CliExposedOperationId } from '../cli/operation-set.js';
 import { OPERATION_FAMILY, type OperationFamily } from '../cli/operation-hints.js';
-import { CliError, type AdapterLikeError } from './errors.js';
+import { CliError, type AdapterLikeError, type CliErrorCode } from './errors.js';
 
 // ---------------------------------------------------------------------------
 // Error code extraction
@@ -101,6 +101,10 @@ function mapTextMutationError(operationId: CliExposedOperationId, error: unknown
   const message = extractErrorMessage(error);
   const details = extractErrorDetails(error);
 
+  // Plan-engine errors pass through with original code and structured details
+  const planEngineError = tryMapPlanEngineError(operationId, error, code);
+  if (planEngineError) return planEngineError;
+
   if (code === 'TARGET_NOT_FOUND') {
     return new CliError('TARGET_NOT_FOUND', message, { operationId, details });
   }
@@ -124,6 +128,10 @@ function mapTextMutationError(operationId: CliExposedOperationId, error: unknown
 function mapCreateError(operationId: CliExposedOperationId, error: unknown, code: string | undefined): CliError {
   const message = extractErrorMessage(error);
   const details = extractErrorDetails(error);
+
+  // Plan-engine errors pass through with original code and structured details
+  const planEngineError = tryMapPlanEngineError(operationId, error, code);
+  if (planEngineError) return planEngineError;
 
   if (code === 'TARGET_NOT_FOUND') {
     return new CliError('TARGET_NOT_FOUND', message, { operationId, details });
@@ -194,6 +202,46 @@ function mapQueryError(operationId: CliExposedOperationId, error: unknown, code:
 }
 
 // ---------------------------------------------------------------------------
+// Plan-engine error codes — pass through with original code and details
+// ---------------------------------------------------------------------------
+
+/**
+ * Plan-engine error codes that must be preserved verbatim in CLI output.
+ * These carry structured details (refRevision, matrixVerdict, remediation, etc.)
+ * that consumers depend on for programmatic triage.
+ */
+const PLAN_ENGINE_PASSTHROUGH_CODES: ReadonlySet<CliErrorCode> = new Set<CliErrorCode>([
+  'REVISION_MISMATCH',
+  'REVISION_CHANGED_SINCE_COMPILE',
+  'PLAN_CONFLICT_OVERLAP',
+  'DOCUMENT_IDENTITY_CONFLICT',
+  'INVALID_INSERTION_CONTEXT',
+  'INVALID_INPUT',
+  'INVALID_STEP_COMBINATION',
+  'MATCH_NOT_FOUND',
+  'PRECONDITION_FAILED',
+  'CROSS_BLOCK_MATCH',
+  'SPAN_FRAGMENTED',
+]);
+
+/**
+ * If the error code is a known plan-engine code, pass it through with
+ * original code and all structured details preserved.
+ * Returns null if the code is not a plan-engine passthrough code.
+ */
+function tryMapPlanEngineError(
+  operationId: CliExposedOperationId,
+  error: unknown,
+  code: string | undefined,
+): CliError | null {
+  if (!code || !(PLAN_ENGINE_PASSTHROUGH_CODES as ReadonlySet<string>).has(code)) return null;
+  return new CliError(code as CliErrorCode, extractErrorMessage(error), {
+    operationId,
+    details: extractErrorDetails(error),
+  });
+}
+
+// ---------------------------------------------------------------------------
 // Per-family error mappers (dispatch by family)
 // ---------------------------------------------------------------------------
 
@@ -208,7 +256,11 @@ const FAMILY_MAPPERS: Record<
   create: mapCreateError,
   blocks: mapBlocksError,
   query: mapQueryError,
-  general: (operationId, error) => {
+  general: (operationId, error, code) => {
+    // Plan-engine errors pass through with original code and structured details
+    const planEngineError = tryMapPlanEngineError(operationId, error, code);
+    if (planEngineError) return planEngineError;
+
     if (error instanceof CliError) return error;
     return new CliError('COMMAND_FAILED', extractErrorMessage(error), { operationId });
   },
@@ -264,6 +316,11 @@ export function mapFailedReceipt(operationId: CliExposedOperationId, result: unk
 
   const failureCode = failure.code;
   const failureMessage = failure.message ?? `${operationId}: operation failed.`;
+
+  // Plan-engine codes pass through with original code and structured details
+  if (failureCode && (PLAN_ENGINE_PASSTHROUGH_CODES as ReadonlySet<string>).has(failureCode)) {
+    return new CliError(failureCode as CliErrorCode, failureMessage, { operationId, failure });
+  }
 
   // Track-changes family
   if (family === 'trackChanges') {

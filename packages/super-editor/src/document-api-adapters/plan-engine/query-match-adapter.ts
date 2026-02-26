@@ -388,7 +388,13 @@ export function queryMatchAdapter(editor: Editor, input: QueryMatchInput): Query
   // Apply cardinality checks on actionable matches (D20)
   if (require === 'first' || require === 'exactlyOne' || require === 'all') {
     if (totalMatches === 0) {
-      throw planError('MATCH_NOT_FOUND', 'selector matched zero ranges');
+      throw planError('MATCH_NOT_FOUND', 'selector matched zero ranges', undefined, {
+        selectorType: input.select?.type ?? 'unknown',
+        selectorPattern: (input.select as { pattern?: string })?.pattern ?? '',
+        selectorMode: (input.select as { mode?: string })?.mode ?? 'contains',
+        searchScope: (input.within?.kind === 'block' ? input.within.nodeId : undefined) ?? 'document',
+        candidateCount: 0,
+      });
     }
   }
   if (require === 'exactlyOne' && totalMatches > 1) {
@@ -409,7 +415,11 @@ export function queryMatchAdapter(editor: Editor, input: QueryMatchInput): Query
 
       if (blocks.length === 0) {
         // Shouldn't happen after zero-width filtering, but guard
-        throw planError('INTERNAL_ERROR', `text match produced no blocks for ${id}`);
+        throw planError('INTERNAL_ERROR', `text match produced no blocks for ${id}`, undefined, {
+          source: 'query-match-adapter:buildMatchEntries',
+          invariant: 'text match must have at least one block after zero-width filtering',
+          context: { matchId: id },
+        });
       }
 
       // Build snippet from blocks (D11)

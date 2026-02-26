@@ -349,4 +349,83 @@ describe('getDocumentApiCapabilities', () => {
       expect(capabilities.operations['format.align'].tracked).toBe(false);
     });
   });
+
+  // --- styles.apply capability tests ---
+
+  it('marks styles.apply as available when converter has a valid styles part', () => {
+    const editor = makeEditor();
+    (editor as unknown as Record<string, unknown>).converter = {
+      convertedXml: {
+        'word/styles.xml': { name: 'root', elements: [{ name: 'w:styles', elements: [] }] },
+      },
+    };
+
+    const capabilities = getDocumentApiCapabilities(editor);
+    expect(capabilities.operations['styles.apply'].available).toBe(true);
+    expect(capabilities.operations['styles.apply'].dryRun).toBe(true);
+    expect(capabilities.operations['styles.apply'].reasons).toBeUndefined();
+  });
+
+  it('marks styles.apply unavailable with OPERATION_UNAVAILABLE when converter is missing', () => {
+    const editor = makeEditor();
+    // No converter set on editor — default case
+
+    const capabilities = getDocumentApiCapabilities(editor);
+    const reasons = capabilities.operations['styles.apply'].reasons ?? [];
+    expect(capabilities.operations['styles.apply'].available).toBe(false);
+    expect(reasons).toContain('OPERATION_UNAVAILABLE');
+    expect(reasons).not.toContain('COMMAND_UNAVAILABLE');
+  });
+
+  it('reports STYLES_PART_MISSING when converter exists but word/styles.xml is absent', () => {
+    const editor = makeEditor();
+    (editor as unknown as Record<string, unknown>).converter = {
+      convertedXml: {},
+    };
+
+    const capabilities = getDocumentApiCapabilities(editor);
+    const reasons = capabilities.operations['styles.apply'].reasons ?? [];
+    expect(capabilities.operations['styles.apply'].available).toBe(false);
+    expect(reasons).toContain('STYLES_PART_MISSING');
+    expect(reasons).toContain('OPERATION_UNAVAILABLE');
+  });
+
+  it('reports STYLES_PART_MISSING when styles part has no w:styles root', () => {
+    const editor = makeEditor();
+    (editor as unknown as Record<string, unknown>).converter = {
+      convertedXml: {
+        'word/styles.xml': { name: 'root', elements: [{ name: 'w:other' }] },
+      },
+    };
+
+    const capabilities = getDocumentApiCapabilities(editor);
+    const reasons = capabilities.operations['styles.apply'].reasons ?? [];
+    expect(capabilities.operations['styles.apply'].available).toBe(false);
+    expect(reasons).toContain('STYLES_PART_MISSING');
+  });
+
+  it('reports COLLABORATION_ACTIVE when collaboration provider is synced', () => {
+    const editor = makeEditor();
+    (editor as unknown as Record<string, unknown>).converter = {
+      convertedXml: {
+        'word/styles.xml': { name: 'root', elements: [{ name: 'w:styles', elements: [] }] },
+      },
+    };
+    (editor as unknown as { options: Record<string, unknown> }).options.collaborationProvider = { synced: true };
+
+    const capabilities = getDocumentApiCapabilities(editor);
+    const reasons = capabilities.operations['styles.apply'].reasons ?? [];
+    expect(capabilities.operations['styles.apply'].available).toBe(false);
+    expect(reasons).toContain('COLLABORATION_ACTIVE');
+    expect(reasons).toContain('OPERATION_UNAVAILABLE');
+  });
+
+  it('styles.apply never reports COMMAND_UNAVAILABLE', () => {
+    const editor = makeEditor();
+    // No converter → unavailable, but should not use COMMAND_UNAVAILABLE
+
+    const capabilities = getDocumentApiCapabilities(editor);
+    const reasons = capabilities.operations['styles.apply'].reasons ?? [];
+    expect(reasons).not.toContain('COMMAND_UNAVAILABLE');
+  });
 });

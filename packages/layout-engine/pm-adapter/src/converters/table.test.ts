@@ -1001,7 +1001,7 @@ describe('table converter', () => {
       expect(result.attrs?.borderCollapse).toBe('collapse');
     });
 
-    it('includes tableCellSpacing', () => {
+    it('includes tableCellSpacing and normalizes legacy number to CellSpacing object', () => {
       const node: PMNode = {
         type: 'table',
         attrs: {
@@ -1033,7 +1033,42 @@ describe('table converter', () => {
         mockParagraphConverter,
       ) as TableBlock;
 
-      expect(result.attrs?.cellSpacing).toBe(5);
+      expect(result.attrs?.cellSpacing).toEqual({ value: 5, type: 'px' });
+    });
+
+    it('passes through tableCellSpacing object as normalized CellSpacing', () => {
+      const node: PMNode = {
+        type: 'table',
+        attrs: {
+          tableCellSpacing: { value: 10, type: 'dxa' },
+        },
+        content: [
+          {
+            type: 'tableRow',
+            content: [
+              {
+                type: 'tableCell',
+                content: [{ type: 'paragraph', content: [{ type: 'text', text: 'Cell' }] }],
+              },
+            ],
+          },
+        ],
+      };
+
+      const result = tableNodeToBlock(
+        node,
+        mockBlockIdGenerator,
+        mockPositionMap,
+        'Arial',
+        16,
+        undefined,
+        undefined,
+        undefined,
+        undefined,
+        mockParagraphConverter,
+      ) as TableBlock;
+
+      expect(result.attrs?.cellSpacing).toEqual({ value: 10, type: 'dxa' });
     });
 
     it('forwards tableIndent to table block attrs', () => {

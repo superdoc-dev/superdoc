@@ -253,7 +253,12 @@ const hashRuns = (block: FlowBlock): string => {
         tableAttrParts.push(`bc:${tblAttrs.borderCollapse}`);
       }
       if (tblAttrs.cellSpacing !== undefined) {
-        tableAttrParts.push(`cs:${tblAttrs.cellSpacing}`);
+        const cs = tblAttrs.cellSpacing;
+        const csKey =
+          typeof cs === 'number'
+            ? `cs:n:${cs}`
+            : `cs:${(cs as { value?: number; type?: string }).value ?? 0}:${(cs as { value?: number; type?: string }).type ?? 'px'}`;
+        tableAttrParts.push(csKey);
       }
       if (tableAttrParts.length > 0) {
         tableAttrsKey = `|ta:${tableAttrParts.join(':')}`;

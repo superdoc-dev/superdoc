@@ -461,7 +461,7 @@ export type TableCellAttrs = {
 export type TableAttrs = {
   borders?: TableBorders;
   borderCollapse?: 'collapse' | 'separate';
-  cellSpacing?: number;
+  cellSpacing?: CellSpacing;
   sdt?: SdtMetadata;
   containerSdt?: SdtMetadata;
   [key: string]: unknown;
@@ -1432,12 +1432,34 @@ export type TableRowMeasure = {
   height: number;
 };
 
+/** Outer table border widths in pixels (top, right, bottom, left). Used for total dimensions and content offset. */
+export type TableBorderWidths = {
+  top: number;
+  right: number;
+  bottom: number;
+  left: number;
+};
+
 export type TableMeasure = {
   kind: 'table';
   rows: TableRowMeasure[];
   columnWidths: number[];
   totalWidth: number;
   totalHeight: number;
+  /**
+   * Cell spacing in pixels (border-spacing between cells).
+   * Used for total table dimensions and cell x/y positioning when border-collapse is 'separate'.
+   */
+  cellSpacingPx?: number;
+  /**
+   * Outer table border widths in pixels. Included in totalWidth/totalHeight; content is offset by (left, top).
+   */
+  tableBorderWidths?: TableBorderWidths;
+};
+
+export type CellSpacing = {
+  type: 'dxa' | 'px';
+  value: number;
 };
 
 export type SectionBreakMeasure = {

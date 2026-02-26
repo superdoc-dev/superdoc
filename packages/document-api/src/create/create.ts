@@ -8,28 +8,44 @@ import type {
   CreateHeadingResult,
   HeadingCreateLocation,
 } from '../types/create.types.js';
+import type { CreateTableInput, CreateTableResult, TableCreateLocation } from '../types/table-operations.types.js';
 import { DocumentApiValidationError } from '../errors.js';
 
 export interface CreateApi {
   paragraph(input: CreateParagraphInput, options?: MutationOptions): CreateParagraphResult;
   heading(input: CreateHeadingInput, options?: MutationOptions): CreateHeadingResult;
+  table(input: CreateTableInput, options?: MutationOptions): CreateTableResult;
 }
 
 export type CreateAdapter = CreateApi;
 
 /**
  * Validates the `at` location for create operations when `before`/`after` is used.
- * Ensures `target` is provided.
+ * Ensures either `target` or `nodeId` is provided.
  */
-function validateCreateLocation(at: ParagraphCreateLocation | HeadingCreateLocation, operationName: string): void {
+function validateCreateLocation(
+  at: ParagraphCreateLocation | HeadingCreateLocation | TableCreateLocation,
+  operationName: string,
+): void {
   if (at.kind !== 'before' && at.kind !== 'after') return;
 
-  const loc = at as { kind: string; target?: unknown };
-  if (loc.target === undefined) {
+  const loc = at as { kind: string; target?: unknown; nodeId?: unknown };
+  const hasTarget = loc.target !== undefined;
+  const hasNodeId = loc.nodeId !== undefined;
+
+  if (hasTarget && hasNodeId) {
     throw new DocumentApiValidationError(
       'INVALID_TARGET',
-      `${operationName} with at.kind="${at.kind}" requires at.target.`,
-      { fields: ['at.target'] },
+      `Cannot combine at.target and at.nodeId for ${operationName}. Use exactly one locator mode.`,
+      { fields: ['at.target', 'at.nodeId'] },
+    );
+  }
+
+  if (!hasTarget && !hasNodeId) {
+    throw new DocumentApiValidationError(
+      'INVALID_TARGET',
+      `${operationName} with at.kind="${at.kind}" requires at.target or at.nodeId.`,
+      { fields: ['at.target', 'at.nodeId'] },
     );
   }
 }
@@ -75,4 +91,26 @@ export function executeCreateHeading(
   const normalized = normalizeCreateHeadingInput(input);
   validateCreateLocation(normalized.at!, 'create.heading');
   return adapter.heading(normalized, normalizeMutationOptions(options));
+}
+
+function normalizeTableCreateLocation(location?: TableCreateLocation): TableCreateLocation {
+  return location ?? { kind: 'documentEnd' };
+}
+
+export function normalizeCreateTableInput(input: CreateTableInput): CreateTableInput {
+  return {
+    rows: input.rows,
+    columns: input.columns,
+    at: normalizeTableCreateLocation(input.at),
+  };
+}
+
+export function executeCreateTable(
+  adapter: CreateAdapter,
+  input: CreateTableInput,
+  options?: MutationOptions,
+): CreateTableResult {
+  const normalized = normalizeCreateTableInput(input);
+  validateCreateLocation(normalized.at!, 'create.table');
+  return adapter.table(normalized, normalizeMutationOptions(options));
 }

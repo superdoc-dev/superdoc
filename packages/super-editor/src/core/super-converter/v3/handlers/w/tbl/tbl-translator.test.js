@@ -151,7 +151,7 @@ describe('w:tbl translator', () => {
       expect(result.attrs.justification).toBe('center');
       expect(result.attrs.tableIndent).toEqual({ width: 7.2, type: 'dxa' });
       expect(result.attrs.tableLayout).toBe('fixed');
-      expect(result.attrs.tableCellSpacing).toEqual({ w: '10', type: 'dxa' });
+      expect(result.attrs.tableCellSpacing).toEqual({ value: 0.5, type: 'dxa' });
       expect(result.attrs.borderCollapse).toBe('separate');
 
       // Check borders (merged from style and inline)

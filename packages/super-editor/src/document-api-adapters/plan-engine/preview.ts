@@ -45,6 +45,8 @@ export function previewPlan(editor: Editor, input: MutationsPreviewInput): Mutat
     // Run mutations without throwing on assert failure — collect failures instead
     const { stepOutcomes, assertFailures } = runMutationsOnTransaction(editor, tr, compiled, {
       throwOnAssertFailure: false,
+      changeMode: input.changeMode ?? 'direct',
+      isPreview: true,
     });
 
     // Build step previews from outcomes

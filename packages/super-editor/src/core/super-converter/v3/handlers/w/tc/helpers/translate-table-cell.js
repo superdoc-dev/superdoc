@@ -67,7 +67,7 @@ export function generateTableCellProperties(node) {
   const { colspan } = attrs;
   if (colspan > 1 && tableCellProperties.gridSpan !== colspan) {
     tableCellProperties['gridSpan'] = colspan;
-  } else if (!colspan || tableCellProperties?.gridSpan === 1) {
+  } else if (!colspan || colspan <= 1) {
     delete tableCellProperties.gridSpan;
   }
 
@@ -104,12 +104,11 @@ export function generateTableCellProperties(node) {
   }
 
   const { rowspan } = attrs;
-  const hasExistingVMerge = tableCellProperties.vMerge != null;
   if (rowspan && rowspan > 1) {
     tableCellProperties['vMerge'] = 'restart';
   } else if (attrs.continueMerge) {
     tableCellProperties['vMerge'] = 'continue';
-  } else if (!hasExistingVMerge) {
+  } else {
     delete tableCellProperties.vMerge;
   }
 

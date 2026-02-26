@@ -134,8 +134,8 @@ new SuperDoc({
 </ParamField>
 
 <ParamField path="permissionResolver" type="function">
-  Override permission checks for comments and tracked changes
-  
+  Override permission checks for comments and tracked changes. By default, editors can resolve, edit, and delete any user's comments and tracked changes. Use this to restrict actions.
+
   ```javascript
   const superdoc = new SuperDoc({
     user: { name: 'Alex Editor', email: 'alex@example.com' },
@@ -147,8 +147,8 @@ new SuperDoc({
     },
   });
   ```
-  
-  <Note>Return `false` to block an action. Return `true` or `undefined` to fall back to the built-in permission matrix.</Note>
+
+  <Note>Return `false` to block an action. Return `true` or `undefined` to fall back to the built-in permission matrix. See [Comments > Permission resolver](/modules/comments#permission-resolver) for the full list of permission types.</Note>
 </ParamField>
 
 ## Modules

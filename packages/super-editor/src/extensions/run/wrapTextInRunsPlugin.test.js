@@ -566,10 +566,7 @@ describe('wrapTextInRunsPlugin', () => {
       const view = createView(schema, doc);
 
       // Insert SDT with bare text content (simulates template builder insertion)
-      const sdtNode = schema.nodes.structuredContent.create(
-        { id: '123', alias: 'Field' },
-        schema.text('John Doe'),
-      );
+      const sdtNode = schema.nodes.structuredContent.create({ id: '123', alias: 'Field' }, schema.text('John Doe'));
       const tr = view.state.tr.insert(1, sdtNode);
       view.dispatch(tr);
 
@@ -608,6 +605,50 @@ describe('wrapTextInRunsPlugin', () => {
       // Text should still be inside a run within the SDT
       expect(updatedSdt.firstChild.type.name).toBe('run');
       expect(updatedSdt.textContent).toBe('New Value');
+    });
+
+    it('does not inherit trailing paragraph run styles when replacing first SDT inner text node', () => {
+      const schema = makeSchema({ includeStructuredContent: true });
+
+      const leadingRun = schema.nodes.run.create({ runProperties: {} }, schema.text('Lead '));
+      const sdtNode = schema.nodes.structuredContent.create({ id: '789', alias: 'Field' }, schema.text('Old'));
+      const trailingRun = schema.nodes.run.create({ runProperties: { bold: true } }, schema.text(' Tail'));
+      const doc = schema.node('doc', null, [schema.node('paragraph', null, [leadingRun, sdtNode, trailingRun])]);
+      const view = createView(schema, doc);
+
+      let oldTextFrom = null;
+      view.state.doc.descendants((node, pos) => {
+        if (oldTextFrom !== null) return false;
+        if (node.isText && node.text === 'Old') {
+          oldTextFrom = pos;
+          return false;
+        }
+        return true;
+      });
+
+      expect(oldTextFrom).not.toBeNull();
+      const oldTextTo = oldTextFrom + 'Old'.length;
+
+      // Replace SDT inner text with bare text (simulates transactional replacement in inline SDT).
+      const tr = view.state.tr.replaceWith(oldTextFrom, oldTextTo, schema.text('New'));
+      view.dispatch(tr);
+
+      let updatedSdt = null;
+      view.state.doc.firstChild.descendants((node) => {
+        if (node.type.name === 'structuredContent') updatedSdt = node;
+      });
+
+      expect(updatedSdt).not.toBeNull();
+      expect(updatedSdt.firstChild.type.name).toBe('run');
+      expect(updatedSdt.textContent).toBe('New');
+
+      const innerRun = updatedSdt.firstChild;
+      const innerText = innerRun.firstChild;
+
+      // Regression guard: replacing text inside inline SDT must not pull styles
+      // from the paragraph's last run.
+      expect(innerRun.attrs.runProperties?.bold).not.toBe(true);
+      expect(innerText.marks.some((mark) => mark.type.name === 'bold')).toBe(false);
     });
   });
 });

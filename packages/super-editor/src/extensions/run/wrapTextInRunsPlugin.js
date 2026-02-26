@@ -107,8 +107,10 @@ const buildWrapTransaction = (state, ranges, runType, editor, markDefsFromMeta =
       let textNode = node;
 
       // For the first node in a paragraph, inherit run properties from previous paragraph
-      // and merge marks (this preserves existing marks like italic while adding inherited ones like bold)
-      if (index === 0) {
+      // and merge marks (this preserves existing marks like italic while adding inherited ones like bold).
+      // Only apply when the text is a direct child of the paragraph — not when it is
+      // first inside an inline wrapper like structuredContent (SDT).
+      if (index === 0 && parent.type.name === 'paragraph') {
         ({ runProperties, textNode } = copyRunPropertiesFromPreviousParagraph(state, pos, textNode, runType, editor));
       }
 

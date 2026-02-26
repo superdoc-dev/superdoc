@@ -1,5 +1,5 @@
 <script setup>
-import { computed, ref, h, onMounted, onBeforeUnmount } from 'vue';
+import { computed, ref, h, watch, onBeforeUnmount } from 'vue';
 import ToolbarButton from './ToolbarButton.vue';
 import ToolbarSeparator from './ToolbarSeparator.vue';
 import OverflowMenu from './OverflowMenu.vue';
@@ -226,9 +226,24 @@ const handleDocumentPointerDown = (event) => {
   closeDropdowns();
 };
 
-onMounted(() => {
-  document.addEventListener('pointerdown', handleDocumentPointerDown, true);
-});
+const isCurrentItemExpanded = () => {
+  if (!currentItem.value) return false;
+  const { expand } = currentItem.value;
+  if (typeof expand === 'object' && expand !== null) return Boolean(expand.value);
+  return Boolean(expand);
+};
+
+watch(
+  isCurrentItemExpanded,
+  (isOpen) => {
+    if (isOpen) {
+      document.addEventListener('pointerdown', handleDocumentPointerDown, true);
+    } else {
+      document.removeEventListener('pointerdown', handleDocumentPointerDown, true);
+    }
+  },
+  { immediate: true },
+);
 
 onBeforeUnmount(() => {
   document.removeEventListener('pointerdown', handleDocumentPointerDown, true);

@@ -161,7 +161,7 @@ function mapBlocksError(operationId: CliExposedOperationId, error: unknown, code
     return new CliError('TARGET_NOT_FOUND', message, { operationId, details });
   }
 
-  if (code === 'AMBIGUOUS_TARGET' || code === 'INVALID_TARGET') {
+  if (code === 'AMBIGUOUS_TARGET' || code === 'INVALID_TARGET' || code === 'INVALID_INPUT') {
     return new CliError('INVALID_ARGUMENT', message, { operationId, details });
   }
 

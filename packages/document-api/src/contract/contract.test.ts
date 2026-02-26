@@ -100,6 +100,7 @@ describe('document-api contract catalog', () => {
   it('ensures every definition entry has a valid referenceGroup', () => {
     const validGroups: readonly ReferenceGroupKey[] = [
       'core',
+      'blocks',
       'capabilities',
       'create',
       'format',

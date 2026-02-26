@@ -1,5 +1,4 @@
 <script setup lang="ts">
-import { NSkeleton, useMessage } from 'naive-ui';
 import 'tippy.js/dist/tippy.css';
 import { ref, onMounted, onBeforeUnmount, shallowRef, reactive, markRaw, computed, watch, nextTick } from 'vue';
 import { Editor } from '@superdoc/super-editor';
@@ -9,6 +8,7 @@ import ContextMenu from './context-menu/ContextMenu.vue';
 import { onMarginClickCursorChange } from './cursor-helpers.js';
 import Ruler from './rulers/Ruler.vue';
 import GenericPopover from './popovers/GenericPopover.vue';
+import EditorSkeleton from './EditorSkeleton.vue';
 import LinkInput from './toolbar/LinkInput.vue';
 import TableResizeOverlay from './TableResizeOverlay.vue';
 import ImageResizeOverlay from './ImageResizeOverlay.vue';
@@ -23,6 +23,8 @@ import { DOM_CLASS_NAMES, buildImagePmSelector, buildInlineImagePmSelector } fro
 const emit = defineEmits(['editor-ready', 'editor-click', 'editor-keydown', 'comments-loaded', 'selection-update']);
 
 const DOCX = 'application/vnd.openxmlformats-officedocument.wordprocessingml.document';
+const FILE_LOAD_ERROR_MESSAGE = 'Unable to load the file. Please verify the .docx is valid and not password protected.';
+
 const props = defineProps({
   documentId: {
     type: String,
@@ -264,8 +266,6 @@ const setupRulerObservers = () => {
     rulerContainerResizeObserver.observe(rulerHost);
   }
 };
-
-const message = useMessage();
 
 const editorWrapper = ref(null);
 const editorElem = ref(null);
@@ -780,12 +780,17 @@ const waitForCollaborativeFragmentSettling = async (ydoc, maxWaitMs = 200) => {
   return fragment;
 };
 
+const notifyFileLoadError = () => {
+  console.warn(FILE_LOAD_ERROR_MESSAGE);
+};
+
 const initializeData = async () => {
   // If we have the file, initialize immediately from file
   if (props.fileSource) {
     let fileData = await loadNewFileData();
     if (!fileData) {
-      message.error('Unable to load the file. Please verify the .docx is valid and not password protected.');
+      // TODO: show a visible error to the user (toast removed with naive-ui)
+      notifyFileLoadError();
       await setDefaultBlankFile();
       fileData = await loadNewFileData();
     }
@@ -1196,23 +1201,7 @@ onBeforeUnmount(() => {
       />
     </div>
 
-    <div class="placeholder-editor" v-if="!editorReady">
-      <div class="placeholder-title">
-        <n-skeleton text style="width: 60%" />
-      </div>
-
-      <n-skeleton text :repeat="6" />
-      <n-skeleton text style="width: 60%" />
-
-      <n-skeleton text :repeat="6" style="width: 30%; display: block; margin: 20px" />
-      <n-skeleton text style="width: 60%" />
-      <n-skeleton text :repeat="5" />
-      <n-skeleton text style="width: 30%" />
-
-      <n-skeleton text style="margin-top: 50px" />
-      <n-skeleton text :repeat="6" />
-      <n-skeleton text style="width: 70%" />
-    </div>
+    <EditorSkeleton v-if="!editorReady" />
 
     <GenericPopover
       v-if="activeEditor"
@@ -1288,24 +1277,5 @@ onBeforeUnmount(() => {
   color: initial;
   overflow: hidden;
   position: relative;
-}
-
-.placeholder-editor {
-  position: absolute;
-  top: 0;
-  left: 0;
-  width: 100%;
-  height: 100%;
-  border-radius: 8px;
-  padding: 1in;
-  z-index: 5;
-  background-color: white;
-  box-sizing: border-box;
-}
-
-.placeholder-title {
-  display: flex;
-  justify-content: center;
-  margin-bottom: 40px;
 }
 </style>

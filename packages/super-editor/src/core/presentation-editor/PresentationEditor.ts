@@ -4230,11 +4230,13 @@ export class PresentationEditor extends EventEmitter {
     // Keep selection visible when context menu is open.
     const contextMenuOpen = activeEditor?.state ? !!ContextMenuPluginKey.getState(activeEditor.state)?.open : false;
 
-    // Keep selection visible when focus is on editor UI surfaces (toolbar, dropdowns).
-    // Naive-UI portals dropdown content under .v-binder-follower-content at <body> level,
-    // so it won't be inside [data-editor-ui-surface]. Check both.
+    // Keep selection visible when focus is on editor UI surfaces (toolbar, dropdowns, tooltips).
+    // Dropdown/tooltip content is portaled under <body>, so it won't be inside
+    // [data-editor-ui-surface]. Check both in-surface and portaled SD UI roots.
     const activeEl = document.activeElement;
-    const isOnEditorUi = !!(activeEl as Element)?.closest?.('[data-editor-ui-surface], .v-binder-follower-content');
+    const isOnEditorUi = !!(activeEl as Element)?.closest?.(
+      '[data-editor-ui-surface], .sd-toolbar-dropdown-menu, .toolbar-dropdown-menu',
+    );
 
     if (!hasFocus && !contextMenuOpen && !isOnEditorUi) {
       try {

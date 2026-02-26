@@ -3,12 +3,14 @@
   height: 100%;
   display: block;
   fill: currentColor;
+  pointer-events: none;
+
   path {
     stroke: currentColor;
   }
 }
 
-.sd-editor-toolbar-dropdown .n-dropdown-option .dropdown-select-icon {
+.sd-editor-toolbar-dropdown .toolbar-dropdown-option .dropdown-select-icon {
   display: flex;
   width: 12px;
   height: 12px;

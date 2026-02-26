@@ -24,6 +24,7 @@ import {
   formatColorWrapper,
   formatAlignWrapper,
 } from '../plan-engine/format-value-wrappers.js';
+import { stylesApplyAdapter } from '../styles-adapter.js';
 import { getDocumentApiCapabilities } from '../capabilities-adapter.js';
 import {
   listsExitWrapper,
@@ -464,6 +465,67 @@ function makeCommentsEditor(
         email: 'agent@example.com',
       },
     },
+  } as unknown as Editor;
+}
+
+/**
+ * Creates a mock editor with a valid `word/styles.xml` structure for styles.apply tests.
+ * Optionally omit the converter or styles part to test capability gates.
+ */
+function makeStylesEditor(
+  opts: {
+    hasConverter?: boolean;
+    hasStylesPart?: boolean;
+    boldElements?: Array<{ attributes?: Record<string, string> }>;
+  } = {},
+): Editor {
+  const { hasConverter = true, hasStylesPart = true, boldElements = [] } = opts;
+
+  const rPrElements = boldElements.map((el) => ({
+    name: 'w:b',
+    ...(el.attributes ? { attributes: el.attributes } : {}),
+  }));
+
+  const stylesXml = {
+    name: 'xml',
+    elements: [
+      {
+        name: 'w:styles',
+        elements: [
+          {
+            name: 'w:docDefaults',
+            elements: [
+              {
+                name: 'w:rPrDefault',
+                elements: [
+                  {
+                    name: 'w:rPr',
+                    elements: rPrElements,
+                  },
+                ],
+              },
+            ],
+          },
+        ],
+      },
+    ],
+  };
+
+  const converter = hasConverter
+    ? {
+        convertedXml: hasStylesPart ? { 'word/styles.xml': stylesXml } : {},
+        documentModified: false,
+        documentGuid: 'test-guid',
+        promoteToGuid: vi.fn(() => 'promoted-guid'),
+        translatedLinkedStyles: {},
+      }
+    : undefined;
+
+  return {
+    converter,
+    options: {},
+    on: vi.fn(),
+    emit: vi.fn(),
   } as unknown as Editor;
 }
 
@@ -1009,6 +1071,24 @@ const mutationVectors: Partial<Record<OperationId, MutationVector>> = {
       );
     },
   },
+  'styles.apply': {
+    throwCase: () => {
+      const editor = makeStylesEditor({ hasConverter: false });
+      return stylesApplyAdapter(
+        editor,
+        { target: { scope: 'docDefaults', channel: 'run' }, patch: { bold: true } },
+        { dryRun: false, expectedRevision: undefined },
+      );
+    },
+    applyCase: () => {
+      const editor = makeStylesEditor();
+      return stylesApplyAdapter(
+        editor,
+        { target: { scope: 'docDefaults', channel: 'run' }, patch: { bold: true } },
+        { dryRun: false, expectedRevision: undefined },
+      );
+    },
+  },
 };
 
 const dryRunVectors: Partial<Record<OperationId, () => unknown>> = {
@@ -1198,6 +1278,17 @@ const dryRunVectors: Partial<Record<OperationId, () => unknown>> = {
       { changeMode: 'direct', dryRun: true },
     );
     expect(exitListItemAt).not.toHaveBeenCalled();
+    return result;
+  },
+  'styles.apply': () => {
+    const editor = makeStylesEditor();
+    const result = stylesApplyAdapter(
+      editor,
+      { target: { scope: 'docDefaults', channel: 'run' }, patch: { bold: true } },
+      { dryRun: true, expectedRevision: undefined },
+    );
+    // dryRun should not mark the document as modified
+    expect((editor as unknown as { converter: { documentModified: boolean } }).converter.documentModified).toBe(false);
     return result;
   },
 };

@@ -17,6 +17,7 @@ export const DEFAULT_CORPUS_ROOT = path.join(REPO_ROOT, 'test-corpus');
 export const REGISTRY_KEY = 'registry.json';
 export const DOCX_CONTENT_TYPE = 'application/vnd.openxmlformats-officedocument.wordprocessingml.document';
 export const CORPUS_BUCKET_NAME = 'docx-test-corpus';
+export const CORPUS_ACCOUNT_ID = 'afc2655a510195709ae6fa06772d73f2';
 
 const WRANGLER_CONFIG_PATHS =
   process.platform === 'darwin'
@@ -124,16 +125,11 @@ async function fetchCloudflareJson(url, token) {
   return parsed;
 }
 
-async function resolveAccountId(token) {
+async function resolveAccountId() {
   const explicit = firstEnv(ACCOUNT_ID_ENV_KEYS);
   if (explicit) return explicit;
 
-  const memberships = await fetchCloudflareJson('https://api.cloudflare.com/client/v4/memberships', token);
-  const accountId = memberships?.result?.[0]?.account?.id;
-  if (!accountId) {
-    throw new Error('Unable to resolve Cloudflare account ID from memberships. Set SUPERDOC_CORPUS_R2_ACCOUNT_ID.');
-  }
-  return accountId;
+  return CORPUS_ACCOUNT_ID;
 }
 
 async function resolveBucketName() {
@@ -291,7 +287,7 @@ async function createS3R2Client(config) {
 
 async function createWranglerR2Client() {
   const token = assertWranglerToken();
-  const accountId = await resolveAccountId(token);
+  const accountId = await resolveAccountId();
   const bucketName = await resolveBucketName();
 
   const listObjects = async (prefix = '') => {

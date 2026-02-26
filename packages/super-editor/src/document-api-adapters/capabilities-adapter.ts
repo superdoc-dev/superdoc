@@ -11,6 +11,7 @@ import {
   OPERATION_IDS,
 } from '@superdoc/document-api';
 import { TrackFormatMarkName } from '../extensions/track-changes/constants.js';
+import { isCollaborationActive } from './collaboration-detection.js';
 
 type EditorCommandName = string;
 
@@ -135,6 +136,37 @@ function pushReason(reasons: CapabilityReasonCode[], reason: CapabilityReasonCod
   if (!reasons.includes(reason)) reasons.push(reason);
 }
 
+/** Operations that determine availability through non-command mechanisms. */
+function isNonCommandBackedOperation(operationId: OperationId): boolean {
+  return operationId === 'format.apply' || operationId === 'styles.apply' || INLINE_FORMAT_OPERATIONS.has(operationId);
+}
+
+/** Checks whether the styles part has a valid w:styles root element. */
+function hasStylesRoot(stylesPart: unknown): boolean {
+  const part = stylesPart as { elements?: Array<{ name?: string }> } | undefined;
+  return part?.elements?.some((el) => el.name === 'w:styles') === true;
+}
+
+function isStylesApplyAvailable(editor: Editor): boolean {
+  const converter = (editor as unknown as { converter?: { convertedXml?: Record<string, unknown> } }).converter;
+  if (!converter?.convertedXml?.['word/styles.xml']) return false;
+  if (!hasStylesRoot(converter.convertedXml['word/styles.xml'])) return false;
+  if (isCollaborationActive(editor)) return false;
+  return true;
+}
+
+/**
+ * Returns the reason code when `styles.apply` is unavailable, or `undefined` if available.
+ */
+function getStylesApplyUnavailableReason(editor: Editor): CapabilityReasonCode | undefined {
+  const converter = (editor as unknown as { converter?: { convertedXml?: Record<string, unknown> } }).converter;
+  if (!converter) return 'OPERATION_UNAVAILABLE';
+  if (!converter.convertedXml?.['word/styles.xml']) return 'STYLES_PART_MISSING';
+  if (!hasStylesRoot(converter.convertedXml['word/styles.xml'])) return 'STYLES_PART_MISSING';
+  if (isCollaborationActive(editor)) return 'COLLABORATION_ACTIVE';
+  return undefined;
+}
+
 function isOperationAvailable(editor: Editor, operationId: OperationId): boolean {
   // format.apply is available if at least one mark type exists in the schema
   if (operationId === 'format.apply') {
@@ -146,11 +178,16 @@ function isOperationAvailable(editor: Editor, operationId: OperationId): boolean
     return hasAllCommands(editor, operationId) && hasMarkCapability(editor, 'textStyle');
   }
 
+  // styles.apply requires converter + styles part + no collaboration
+  if (operationId === 'styles.apply') {
+    return isStylesApplyAvailable(editor);
+  }
+
   return hasAllCommands(editor, operationId) && hasRequiredHelpers(editor, operationId);
 }
 
 function isCommandBackedAvailability(operationId: OperationId): boolean {
-  return !isMarkBackedOperation(operationId) && !INLINE_FORMAT_OPERATIONS.has(operationId);
+  return !isNonCommandBackedOperation(operationId);
 }
 
 function buildOperationCapabilities(editor: Editor): DocumentApiCapabilities['operations'] {
@@ -165,7 +202,10 @@ function buildOperationCapabilities(editor: Editor): DocumentApiCapabilities['op
     const reasons: CapabilityReasonCode[] = [];
 
     if (!available) {
-      if (isCommandBackedAvailability(operationId)) {
+      if (operationId === 'styles.apply') {
+        const stylesReason = getStylesApplyUnavailableReason(editor);
+        if (stylesReason) pushReason(reasons, stylesReason);
+      } else if (isCommandBackedAvailability(operationId)) {
         if (!hasAllCommands(editor, operationId)) {
           pushReason(reasons, 'COMMAND_UNAVAILABLE');
         }

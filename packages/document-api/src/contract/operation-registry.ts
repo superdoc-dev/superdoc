@@ -34,6 +34,7 @@ import type {
   FormatColorInput,
   FormatAlignInput,
 } from '../format/format.js';
+import type { StylesApplyInput, StylesApplyOptions, StylesApplyReceipt } from '../styles/styles.js';
 import type {
   CommentsCreateInput,
   CommentsPatchInput,
@@ -86,6 +87,9 @@ export interface OperationRegistry {
   'format.fontFamily': { input: FormatFontFamilyInput; options: MutationOptions; output: TextMutationReceipt };
   'format.color': { input: FormatColorInput; options: MutationOptions; output: TextMutationReceipt };
   'format.align': { input: FormatAlignInput; options: MutationOptions; output: TextMutationReceipt };
+
+  // --- styles.* ---
+  'styles.apply': { input: StylesApplyInput; options: StylesApplyOptions; output: StylesApplyReceipt };
 
   // --- create.* ---
   'create.paragraph': { input: CreateParagraphInput; options: MutationOptions; output: CreateParagraphResult };

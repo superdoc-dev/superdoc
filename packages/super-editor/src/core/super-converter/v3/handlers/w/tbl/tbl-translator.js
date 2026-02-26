@@ -87,7 +87,7 @@ const encode = (params, encodedAttrs) => {
     'justification',
     'tableLayout',
     ['tableIndent', ({ value, type }) => ({ width: twipsToPixels(value), type })],
-    ['tableCellSpacing', ({ value, type }) => ({ w: String(value), type })],
+    ['tableCellSpacing', ({ value, type }) => ({ value: twipsToPixels(value), type })],
   ].forEach((prop) => {
     /** @type {string} */
     let key;

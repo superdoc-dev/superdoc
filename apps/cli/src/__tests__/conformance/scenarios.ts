@@ -614,6 +614,24 @@ export const SUCCESS_SCENARIOS = {
       ],
     };
   },
+  'doc.styles.apply': async (harness: ConformanceHarness): Promise<ScenarioInvocation> => {
+    const stateDir = await harness.createStateDir('doc-styles-apply-success');
+    const docPath = await harness.copyFixtureDoc('doc-styles-apply');
+    return {
+      stateDir,
+      args: [
+        'styles',
+        'apply',
+        docPath,
+        '--target-json',
+        JSON.stringify({ scope: 'docDefaults', channel: 'run' }),
+        '--patch-json',
+        JSON.stringify({ bold: true }),
+        '--out',
+        harness.createOutputPath('doc-styles-apply-output'),
+      ],
+    };
+  },
   'doc.trackChanges.list': async (harness: ConformanceHarness): Promise<ScenarioInvocation> => {
     const stateDir = await harness.createStateDir('doc-track-changes-list-success');
     const fixture = await harness.addTrackedChangeFixture(stateDir, 'doc-track-changes-list');

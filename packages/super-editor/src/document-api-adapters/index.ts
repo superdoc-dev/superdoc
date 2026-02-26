@@ -19,6 +19,7 @@ import {
   formatColorWrapper,
   formatAlignWrapper,
 } from './plan-engine/format-value-wrappers.js';
+import { stylesApplyAdapter } from './styles-adapter.js';
 import { getNodeAdapter, getNodeByIdAdapter } from './get-node-adapter.js';
 import { getTextAdapter } from './get-text-adapter.js';
 import { infoAdapter } from './info-adapter.js';
@@ -86,6 +87,9 @@ export function getDocumentApiAdapters(editor: Editor): DocumentApiAdapters {
       fontFamily: (input, options) => formatFontFamilyWrapper(editor, input, options),
       color: (input, options) => formatColorWrapper(editor, input, options),
       align: (input, options) => formatAlignWrapper(editor, input, options),
+    },
+    styles: {
+      apply: (input, options) => stylesApplyAdapter(editor, input, options),
     },
     trackChanges: {
       list: (query) => trackChangesListWrapper(editor, query),

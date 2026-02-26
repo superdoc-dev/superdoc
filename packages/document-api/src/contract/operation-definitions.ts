@@ -37,6 +37,7 @@ export type ReferenceGroupKey =
   | 'capabilities'
   | 'create'
   | 'format'
+  | 'styles'
   | 'lists'
   | 'comments'
   | 'trackChanges'
@@ -326,6 +327,22 @@ export const OPERATION_DEFINITIONS = {
     }),
     referenceDocPath: 'format/align.mdx',
     referenceGroup: 'format',
+  },
+
+  'styles.apply': {
+    memberPath: 'styles.apply',
+    description:
+      'Apply document-level default style changes to the stylesheet (word/styles.xml). Targets docDefaults run properties with boolean patch semantics.',
+    requiresDocumentContext: true,
+    metadata: mutationOperation({
+      idempotency: 'idempotent',
+      supportsDryRun: true,
+      supportsTrackedMode: false,
+      possibleFailureCodes: NONE_FAILURES,
+      throws: ['INVALID_TARGET', 'INVALID_INPUT', 'CAPABILITY_UNAVAILABLE', 'REVISION_MISMATCH'],
+    }),
+    referenceDocPath: 'styles/apply.mdx',
+    referenceGroup: 'styles',
   },
 
   'create.paragraph': {

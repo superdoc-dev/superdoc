@@ -367,6 +367,17 @@ export const Table = Node.create({
        */
       borders: {
         default: {},
+        renderDOM({ borders, borderCollapse, tableCellSpacing }) {
+          if (!Object.keys(borders).length && borderCollapse !== 'separate' && !tableCellSpacing) return {};
+
+          const style = Object.entries(borders).reduce((acc, [key, { size, color }]) => {
+            return `${acc}border-${key}: ${Math.ceil(size)}px solid ${color || 'black'};`;
+          }, '');
+
+          return {
+            style,
+          };
+        },
       },
 
       /**
@@ -426,7 +437,12 @@ export const Table = Node.create({
        */
       tableCellSpacing: {
         default: null,
-        rendered: false,
+        renderDOM({ tableCellSpacing }) {
+          if (!tableCellSpacing?.value) return {};
+          return {
+            style: `border-spacing: ${tableCellSpacing.value}px`,
+          };
+        },
       },
 
       /**

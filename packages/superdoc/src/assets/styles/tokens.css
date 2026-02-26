@@ -1,0 +1,106 @@
+/*
+ * SuperDoc Design Tokens as CSS Custom Properties
+ *
+ * Generated from brand/tokens/. In production, a build step (Style Dictionary)
+ * would generate this file automatically. For now, it's maintained manually.
+ *
+ * Users of SuperDoc can override any of these variables to customize
+ * the look and feel of every component.
+ */
+
+:root {
+  /* ─── Primitive: Colors ─── */
+  --sd-color-blue-50: #ebf0ff;
+  --sd-color-blue-100: #d6e1ff;
+  --sd-color-blue-200: #adc3ff;
+  --sd-color-blue-300: #85a5ff;
+  --sd-color-blue-400: #5c87ff;
+  --sd-color-blue-500: #1355ff;
+  --sd-color-blue-600: #0f44cc;
+  --sd-color-blue-700: #0b3399;
+  --sd-color-blue-800: #082266;
+  --sd-color-blue-900: #041133;
+
+  --sd-color-gray-50: #fafafa;
+  --sd-color-gray-100: #f5f5f5;
+  --sd-color-gray-200: #f2f2f2;
+  --sd-color-gray-300: #e0e0e0;
+  --sd-color-gray-400: #dbdbdb;
+  --sd-color-gray-500: #ababab;
+  --sd-color-gray-600: #888888;
+  --sd-color-gray-700: #666666;
+  --sd-color-gray-800: #424242;
+  --sd-color-gray-900: #212121;
+
+  --sd-color-red-500: #ed4337;
+  --sd-color-green-500: #00853d;
+  --sd-color-rose-500: #cb0e47;
+
+  /* ─── Primitive: Typography ─── */
+  --sd-font-family: 'Inter', system-ui, sans-serif;
+  --sd-font-mono: 'JetBrains Mono', monospace;
+
+  /* ─── Primitive: Spacing ─── */
+  --sd-radius-sm: 4px;
+  --sd-radius-md: 8px;
+  --sd-radius-lg: 12px;
+
+  /* ─── Semantic: Surfaces ─── */
+  --sd-surface-page: #ffffff;
+  --sd-surface-canvas: var(--sd-color-gray-50);
+  --sd-surface-card: #ffffff;
+  --sd-surface-muted: var(--sd-color-gray-100);
+  --sd-surface-hover: var(--sd-color-gray-200);
+  --sd-surface-selected: var(--sd-color-blue-100);
+
+  /* ─── Semantic: Text ─── */
+  --sd-text-primary: var(--sd-color-gray-900);
+  --sd-text-secondary: var(--sd-color-gray-700);
+  --sd-text-muted: var(--sd-color-gray-600);
+  --sd-text-placeholder: var(--sd-color-gray-500);
+
+  /* ─── Semantic: Borders ─── */
+  --sd-border-default: var(--sd-color-gray-400);
+  --sd-border-subtle: var(--sd-color-gray-300);
+  --sd-border-focus: var(--sd-color-blue-500);
+
+  /* ─── Semantic: Actions ─── */
+  --sd-action-primary: var(--sd-color-blue-500);
+  --sd-action-primary-hover: var(--sd-color-blue-600);
+
+  /* ─── Component: Comment Dialog ─── */
+  --sd-comment-bg: #f3f6fd;
+  --sd-comment-bg-active: var(--sd-surface-card);
+  --sd-comment-bg-resolved: #f0f0f0;
+  --sd-comment-radius: var(--sd-radius-lg);
+  --sd-comment-padding: 10px 15px;
+  --sd-comment-shadow: 0px 4px 12px 0px rgba(50, 50, 50, 0.15);
+  --sd-comment-max-width: 300px;
+  --sd-comment-min-width: 200px;
+  --sd-comment-separator: var(--sd-border-default);
+  --sd-comment-transition: background-color 250ms ease;
+
+  /* Comment: author & timestamp */
+  --sd-comment-author-color: var(--sd-text-primary);
+  --sd-comment-author-size: 16px;
+  --sd-comment-author-weight: 600;
+  --sd-comment-time-color: var(--sd-text-muted);
+  --sd-comment-time-size: 12px;
+  --sd-comment-body-size: 13px;
+
+  /* Comment: document highlights */
+  --sd-comment-highlight-internal: #078383;
+  --sd-comment-highlight-external: #b1124b;
+  --sd-comment-highlight-opacity: 0.2;
+  --sd-comment-highlight-opacity-active: 0.4;
+
+  /* Comment: internal/external toggle */
+  --sd-comment-internal-bg: #cde6e6;
+  --sd-comment-external-bg: #f5cfda;
+
+  /* Comment: group bubble (collapsed) */
+  --sd-comment-group-bg: #e2e9fb;
+  --sd-comment-group-color: var(--sd-action-primary);
+  --sd-comment-group-size: 51px;
+  --sd-comment-group-expanded-size: 300px;
+}

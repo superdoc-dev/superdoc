@@ -232,5 +232,6 @@ describe('document-api story: inline formatting', () => {
       }),
     );
     expect(result.receipt?.success).toBe(true);
+    await saveResult(sid, 'dryRun.docx');
   });
 });

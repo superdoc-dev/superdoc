@@ -7,6 +7,8 @@ export const CAPABILITY_REASON_CODES = [
   'TRACKED_MODE_UNAVAILABLE',
   'DRY_RUN_UNAVAILABLE',
   'NAMESPACE_UNAVAILABLE',
+  'STYLES_PART_MISSING',
+  'COLLABORATION_ACTIVE',
 ] as const;
 
 export type CapabilityReasonCode = (typeof CAPABILITY_REASON_CODES)[number];

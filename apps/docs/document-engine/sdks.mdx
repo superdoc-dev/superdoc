@@ -30,8 +30,18 @@ The CLI is bundled with the SDK — no separate install needed.
 
 ## Quick start
 
+The Node SDK supports both ESM and CommonJS:
+
+```ts
+// ESM
+import { createSuperDocClient } from '@superdoc-dev/sdk';
+
+// CommonJS
+const { createSuperDocClient } = require('@superdoc-dev/sdk');
+```
+
 <Tabs>
-  <Tab title="Node.js">
+  <Tab title="Node.js (ESM)">
     ```typescript
     import { SuperDocClient } from '@superdoc-dev/sdk';
 
@@ -67,6 +77,48 @@ The CLI is bundled with the SDK — no separate install needed.
     // Save and close
     await client.doc.save();
     await client.doc.close();
+    ```
+  </Tab>
+  <Tab title="Node.js (CJS)">
+    ```javascript
+    const { SuperDocClient } = require('@superdoc-dev/sdk');
+
+    async function main() {
+      const client = new SuperDocClient({
+        defaultChangeMode: 'tracked',
+      });
+
+      // Open a document
+      await client.doc.open({ doc: './contract.docx' });
+
+      // Find and replace text with query + mutation plan
+      const match = await client.doc.query.match({
+        select: { type: 'text', pattern: 'ACME Corp' },
+        require: 'first',
+      });
+
+      const ref = match.items?.[0]?.handle?.ref;
+      if (ref) {
+        await client.doc.mutations.apply({
+          expectedRevision: match.evaluatedRevision,
+          atomic: true,
+          steps: [
+            {
+              id: 'replace-acme',
+              op: 'text.rewrite',
+              where: { by: 'ref', ref },
+              args: { replacement: { text: 'NewCo Inc.' } },
+            },
+          ],
+        });
+      }
+
+      // Save and close
+      await client.doc.save();
+      await client.doc.close();
+    }
+
+    main();
     ```
   </Tab>
   <Tab title="Python">

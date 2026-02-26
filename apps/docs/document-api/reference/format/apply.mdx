@@ -1,7 +1,7 @@
 ---
 title: format.apply
 sidebarTitle: format.apply
-description: Generated reference for format.apply
+description: Reference for format.apply
 ---
 
 {/* GENERATED FILE: DO NOT EDIT. Regenerate via `pnpm run docapi:sync`. */}
@@ -22,14 +22,14 @@ description: Generated reference for format.apply
 
 | Field | Type | Required | Description |
 | --- | --- | --- | --- |
-| `marks` | object | yes |  |
+| `inline` | object | yes |  |
 | `target` | TextAddress | yes | TextAddress |
 
 ### Example request
 
 ```json
 {
-  "marks": {
+  "inline": {
     "bold": true,
     "italic": true
   },
@@ -96,8 +96,6 @@ _No fields._
 ## Pre-apply throws
 
 - `TARGET_NOT_FOUND`
-- `COMMAND_UNAVAILABLE`
-- `TRACK_CHANGE_COMMAND_UNAVAILABLE`
 - `CAPABILITY_UNAVAILABLE`
 - `INVALID_TARGET`
 - `INVALID_INPUT`
@@ -113,7 +111,7 @@ _No fields._
 {
   "additionalProperties": false,
   "properties": {
-    "marks": {
+    "inline": {
       "additionalProperties": false,
       "minProperties": 1,
       "properties": {
@@ -138,7 +136,7 @@ _No fields._
   },
   "required": [
     "target",
-    "marks"
+    "inline"
   ],
   "type": "object"
 }

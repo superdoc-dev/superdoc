@@ -1,5 +1,7 @@
 import { access, copyFile, mkdir, rm } from 'node:fs/promises';
+import { execFile } from 'node:child_process';
 import path from 'node:path';
+import { promisify } from 'node:util';
 import { afterEach, beforeEach } from 'vitest';
 import { createSuperDocClient, type SuperDocClient } from '@superdoc-dev/sdk';
 
@@ -7,6 +9,46 @@ const REPO_ROOT = path.resolve(import.meta.dirname, '../../..');
 const STORIES_ROOT = path.resolve(import.meta.dirname, '..');
 const CLI_DIST_BIN = path.join(REPO_ROOT, 'apps/cli/dist/index.js');
 const CLI_SRC_BIN = path.join(REPO_ROOT, 'apps/cli/src/index.ts');
+const execFileAsync = promisify(execFile);
+
+interface CliInvocation {
+  command: string;
+  prefixArgs: string[];
+}
+
+function resolveInvocation(cliBin: string): CliInvocation {
+  if (cliBin.toLowerCase().endsWith('.js')) {
+    return { command: 'node', prefixArgs: [cliBin] };
+  }
+  if (cliBin.toLowerCase().endsWith('.ts')) {
+    return { command: 'bun', prefixArgs: [cliBin] };
+  }
+  return { command: cliBin, prefixArgs: [] };
+}
+
+function parseJsonEnvelope(stdout: string, stderr: string): any {
+  const source = stdout.trim() || stderr.trim();
+  if (!source) {
+    throw new Error('No CLI JSON envelope output found.');
+  }
+
+  try {
+    return JSON.parse(source);
+  } catch {
+    const lines = source.split(/\r?\n/);
+    for (let index = 0; index < lines.length; index += 1) {
+      const candidate = lines.slice(index).join('\n').trim();
+      if (!candidate.startsWith('{')) continue;
+      try {
+        return JSON.parse(candidate);
+      } catch {
+        // continue scanning
+      }
+    }
+  }
+
+  throw new Error(`Failed to parse CLI JSON envelope:\n${source}`);
+}
 
 /** Resolve a test-corpus relative path to its absolute location. */
 export function corpusDoc(relativePath: string): string {
@@ -24,6 +66,8 @@ export interface StoryContext {
   copyDoc(source: string, name?: string): Promise<string>;
   /** Return a path inside the results dir. */
   outPath(name: string): string;
+  /** Run a raw CLI command with the story's state dir and parse the JSON envelope. */
+  runCli(args: string[]): Promise<any>;
 }
 
 export interface StoryHarnessOptions {
@@ -56,11 +100,12 @@ export function useStoryHarness(storyName: string, options: StoryHarnessOptions 
       () => CLI_DIST_BIN,
       () => CLI_SRC_BIN,
     );
+    const stateDir = path.join(resultsDir, '.superdoc-cli-state');
 
     const client = createSuperDocClient({
       env: {
         SUPERDOC_CLI_BIN: cliBin,
-        SUPERDOC_CLI_STATE_DIR: path.join(resultsDir, '.superdoc-cli-state'),
+        SUPERDOC_CLI_STATE_DIR: stateDir,
       },
       requestTimeoutMs: 30_000,
       startupTimeoutMs: 30_000,
@@ -86,6 +131,25 @@ export function useStoryHarness(storyName: string, options: StoryHarnessOptions 
         return dest;
       },
       outPath: (name) => path.join(resultsDir, name),
+      runCli: async (args) => {
+        const invocation = resolveInvocation(cliBin);
+        const argv = [...invocation.prefixArgs, ...args, '--output', 'json'];
+        const { stdout, stderr } = await execFileAsync(invocation.command, argv, {
+          cwd: REPO_ROOT,
+          env: {
+            ...process.env,
+            SUPERDOC_CLI_STATE_DIR: stateDir,
+          },
+        });
+
+        const envelope = parseJsonEnvelope(stdout, stderr);
+        if (envelope?.ok === false) {
+          const code = envelope.error?.code ?? 'UNKNOWN';
+          const message = envelope.error?.message ?? 'Unknown CLI error';
+          throw new Error(`${code}: ${message}`);
+        }
+        return envelope;
+      },
     };
   });
 
@@ -113,6 +177,7 @@ export function useStoryHarness(storyName: string, options: StoryHarnessOptions 
     client: clientProxy,
     copyDoc: (source: string, name?: string) => requireCtx().copyDoc(source, name),
     outPath: (name: string) => requireCtx().outPath(name),
+    runCli: (args: string[]) => requireCtx().runCli(args),
   } as StoryContext;
 
   Object.defineProperty(api, 'resultsDir', {

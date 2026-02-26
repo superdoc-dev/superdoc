@@ -10,6 +10,7 @@ import {
   DOCUMENT_API_MEMBER_PATHS,
   OPERATION_IDS,
   OPERATION_MEMBER_PATH_MAP,
+  REFERENCE_OPERATION_ALIASES,
   createDocumentApi,
   isValidOperationIdFormat,
   type DocumentApiAdapters,
@@ -18,21 +19,8 @@ import { OPERATION_DEFINITIONS } from '../src/contract/operation-definitions.js'
 import { OPERATION_REFERENCE_DOC_PATH_MAP } from '../src/contract/reference-doc-map.js';
 import { buildDispatchTable } from '../src/invoke/invoke.js';
 
-/**
- * Meta-methods and helper methods on DocumentApi that are not contract operations.
- * These are excluded from operation-to-member-path parity checks.
- *
- * - `invoke` — generic dispatch method
- * - `format.bold|italic|underline|strikethrough` — ergonomic helpers
- *   that delegate to canonical `format.apply`.
- */
-const META_MEMBER_PATHS = [
-  'invoke',
-  'format.bold',
-  'format.italic',
-  'format.underline',
-  'format.strikethrough',
-] as const;
+/** Meta-methods and helper methods on DocumentApi that are not contract operations. */
+const META_MEMBER_PATHS = ['invoke', ...REFERENCE_OPERATION_ALIASES.map((alias) => alias.memberPath)];
 
 function collectFunctionMemberPaths(value: unknown, prefix = ''): string[] {
   if (!value || typeof value !== 'object') return [];
@@ -191,6 +179,7 @@ function run(): void {
   const operationIds = [...OPERATION_IDS];
   const catalogKeys = Object.keys(COMMAND_CATALOG);
   const mappedKeys = Object.keys(OPERATION_MEMBER_PATH_MAP);
+  const aliasMemberPaths = REFERENCE_OPERATION_ALIASES.map((alias) => alias.memberPath);
 
   const invalidFormatIds = operationIds.filter((operationId) => !isValidOperationIdFormat(operationId));
   if (invalidFormatIds.length > 0) {
@@ -254,6 +243,28 @@ function run(): void {
     }
     if (!runtimeMemberPaths.includes(memberPath)) {
       errors.push(`operationId "${operationId}" maps to runtime-missing member path "${memberPath}".`);
+    }
+  }
+
+  // Validate convenience aliases (non-canonical API surface).
+  const duplicateAliasPaths = aliasMemberPaths.filter((path, index) => aliasMemberPaths.indexOf(path) !== index);
+  if (duplicateAliasPaths.length > 0) {
+    errors.push(`reference alias parity failed (duplicate alias member paths: ${duplicateAliasPaths.join(', ')})`);
+  }
+
+  for (const alias of REFERENCE_OPERATION_ALIASES) {
+    if (!operationIds.includes(alias.canonicalOperationId)) {
+      errors.push(
+        `reference alias "${alias.memberPath}" targets unknown canonical operation "${alias.canonicalOperationId}".`,
+      );
+    }
+
+    if (!collectFunctionMemberPaths(api).includes(alias.memberPath)) {
+      errors.push(`reference alias "${alias.memberPath}" is missing from runtime DocumentApi member paths.`);
+    }
+
+    if (declaredMemberPaths.includes(alias.memberPath)) {
+      errors.push(`reference alias "${alias.memberPath}" must not appear in canonical DOCUMENT_API_MEMBER_PATHS.`);
     }
   }
 

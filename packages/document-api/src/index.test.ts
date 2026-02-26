@@ -16,6 +16,7 @@ import type { CommentInfo, CommentsListQuery, CommentsListResult } from './comme
 import type { CreateAdapter } from './create/create.js';
 import type { ListsAdapter } from './lists/lists.js';
 import type { CapabilitiesAdapter, DocumentApiCapabilities } from './capabilities/capabilities.js';
+import type { TablesAdapter } from './index.js';
 
 function makeFindAdapter(result: FindOutput): FindAdapter {
   return { find: vi.fn(() => result) };
@@ -117,6 +118,10 @@ function makeFormatReceipt() {
 function makeFormatAdapter(): FormatAdapter {
   return {
     apply: vi.fn(() => makeFormatReceipt()),
+    fontSize: vi.fn(() => makeFormatReceipt()),
+    fontFamily: vi.fn(() => makeFormatReceipt()),
+    color: vi.fn(() => makeFormatReceipt()),
+    align: vi.fn(() => makeFormatReceipt()),
   };
 }
 
@@ -151,6 +156,10 @@ function makeCreateAdapter(): CreateAdapter {
       success: true as const,
       heading: { kind: 'block' as const, nodeType: 'heading' as const, nodeId: 'new-h' },
       insertionPoint: { kind: 'text' as const, blockId: 'new-h', range: { start: 0, end: 0 } },
+    })),
+    table: vi.fn(() => ({
+      success: true as const,
+      table: { kind: 'block' as const, nodeType: 'table' as const, nodeId: 'new-t' },
     })),
   };
 }
@@ -188,6 +197,68 @@ function makeListsAdapter(): ListsAdapter {
     exit: vi.fn(() => ({
       success: true as const,
       paragraph: { kind: 'block' as const, nodeType: 'paragraph' as const, nodeId: 'p1' },
+    })),
+  };
+}
+
+const TABLE_MUTATION_RESULT = {
+  success: true as const,
+  table: { kind: 'block' as const, nodeType: 'table' as const, nodeId: 't1' },
+};
+
+function makeTablesAdapter(): TablesAdapter {
+  const mutation = vi.fn(() => ({ ...TABLE_MUTATION_RESULT }));
+  return {
+    convertFromText: mutation,
+    delete: mutation,
+    clearContents: mutation,
+    move: mutation,
+    split: mutation,
+    convertToText: mutation,
+    setLayout: mutation,
+    insertRow: mutation,
+    deleteRow: mutation,
+    setRowHeight: mutation,
+    distributeRows: mutation,
+    setRowOptions: mutation,
+    insertColumn: mutation,
+    deleteColumn: mutation,
+    setColumnWidth: mutation,
+    distributeColumns: mutation,
+    insertCell: mutation,
+    deleteCell: mutation,
+    mergeCells: mutation,
+    unmergeCells: mutation,
+    splitCell: mutation,
+    setCellProperties: mutation,
+    sort: mutation,
+    setAltText: mutation,
+    setStyle: mutation,
+    clearStyle: mutation,
+    setStyleOption: mutation,
+    setBorder: mutation,
+    clearBorder: mutation,
+    applyBorderPreset: mutation,
+    setShading: mutation,
+    clearShading: mutation,
+    setTablePadding: mutation,
+    setCellPadding: mutation,
+    setCellSpacing: mutation,
+    clearCellSpacing: mutation,
+    get: vi.fn(() => ({
+      nodeId: 't1',
+      address: { kind: 'block' as const, nodeType: 'table' as const, nodeId: 't1' },
+      rows: 3,
+      columns: 3,
+    })),
+    getCells: vi.fn(() => ({
+      tableNodeId: 't1',
+      cells: [{ nodeId: 'c1', rowIndex: 0, columnIndex: 0, colspan: 1, rowspan: 1 }],
+    })),
+    getProperties: vi.fn(() => ({
+      nodeId: 't1',
+      styleId: 'TableGrid',
+      alignment: 'left' as const,
     })),
   };
 }
@@ -493,7 +564,7 @@ describe('createDocumentApi', () => {
     );
   });
 
-  it('delegates format.bold to adapter.apply with marks.bold', () => {
+  it('delegates format.bold to adapter.apply with inline.bold', () => {
     const formatAdpt = makeFormatAdapter();
     const api = createDocumentApi({
       find: makeFindAdapter(QUERY_RESULT),
@@ -511,12 +582,12 @@ describe('createDocumentApi', () => {
     const target = { kind: 'text', blockId: 'p1', range: { start: 0, end: 2 } } as const;
     api.format.bold({ target }, { changeMode: 'tracked' });
     expect(formatAdpt.apply).toHaveBeenCalledWith(
-      { target, marks: { bold: true } },
+      { target, inline: { bold: true } },
       { changeMode: 'tracked', dryRun: false },
     );
   });
 
-  it('delegates format.italic to adapter.apply with marks.italic', () => {
+  it('delegates format.italic to adapter.apply with inline.italic', () => {
     const formatAdpt = makeFormatAdapter();
     const api = createDocumentApi({
       find: makeFindAdapter(QUERY_RESULT),
@@ -534,12 +605,12 @@ describe('createDocumentApi', () => {
     const target = { kind: 'text', blockId: 'p1', range: { start: 0, end: 2 } } as const;
     api.format.italic({ target }, { changeMode: 'direct' });
     expect(formatAdpt.apply).toHaveBeenCalledWith(
-      { target, marks: { italic: true } },
+      { target, inline: { italic: true } },
       { changeMode: 'direct', dryRun: false },
     );
   });
 
-  it('delegates format.underline to adapter.apply with marks.underline', () => {
+  it('delegates format.underline to adapter.apply with inline.underline', () => {
     const formatAdpt = makeFormatAdapter();
     const api = createDocumentApi({
       find: makeFindAdapter(QUERY_RESULT),
@@ -557,12 +628,12 @@ describe('createDocumentApi', () => {
     const target = { kind: 'text', blockId: 'p1', range: { start: 0, end: 2 } } as const;
     api.format.underline({ target }, { changeMode: 'direct' });
     expect(formatAdpt.apply).toHaveBeenCalledWith(
-      { target, marks: { underline: true } },
+      { target, inline: { underline: true } },
       { changeMode: 'direct', dryRun: false },
     );
   });
 
-  it('delegates format.strikethrough to adapter.apply with marks.strike', () => {
+  it('delegates format.strikethrough to adapter.apply with inline.strike', () => {
     const formatAdpt = makeFormatAdapter();
     const api = createDocumentApi({
       find: makeFindAdapter(QUERY_RESULT),
@@ -580,8 +651,100 @@ describe('createDocumentApi', () => {
     const target = { kind: 'text', blockId: 'p1', range: { start: 0, end: 2 } } as const;
     api.format.strikethrough({ target }, { changeMode: 'tracked' });
     expect(formatAdpt.apply).toHaveBeenCalledWith(
-      { target, marks: { strike: true } },
+      { target, inline: { strike: true } },
       { changeMode: 'tracked', dryRun: false },
+    );
+  });
+
+  it('delegates format.fontSize to adapter.fontSize', () => {
+    const formatAdpt = makeFormatAdapter();
+    const api = createDocumentApi({
+      find: makeFindAdapter(QUERY_RESULT),
+      getNode: makeGetNodeAdapter(PARAGRAPH_INFO),
+      getText: makeGetTextAdapter(),
+      info: makeInfoAdapter(),
+      comments: makeCommentsAdapter(),
+      write: makeWriteAdapter(),
+      format: formatAdpt,
+      trackChanges: makeTrackChangesAdapter(),
+      create: makeCreateAdapter(),
+      lists: makeListsAdapter(),
+    });
+
+    const target = { kind: 'text', blockId: 'p1', range: { start: 0, end: 2 } } as const;
+    api.format.fontSize({ target, value: '14pt' });
+    expect(formatAdpt.fontSize).toHaveBeenCalledWith(
+      { target, value: '14pt' },
+      { changeMode: 'direct', dryRun: false },
+    );
+  });
+
+  it('delegates format.fontFamily to adapter.fontFamily', () => {
+    const formatAdpt = makeFormatAdapter();
+    const api = createDocumentApi({
+      find: makeFindAdapter(QUERY_RESULT),
+      getNode: makeGetNodeAdapter(PARAGRAPH_INFO),
+      getText: makeGetTextAdapter(),
+      info: makeInfoAdapter(),
+      comments: makeCommentsAdapter(),
+      write: makeWriteAdapter(),
+      format: formatAdpt,
+      trackChanges: makeTrackChangesAdapter(),
+      create: makeCreateAdapter(),
+      lists: makeListsAdapter(),
+    });
+
+    const target = { kind: 'text', blockId: 'p1', range: { start: 0, end: 2 } } as const;
+    api.format.fontFamily({ target, value: 'Arial' });
+    expect(formatAdpt.fontFamily).toHaveBeenCalledWith(
+      { target, value: 'Arial' },
+      { changeMode: 'direct', dryRun: false },
+    );
+  });
+
+  it('delegates format.color to adapter.color', () => {
+    const formatAdpt = makeFormatAdapter();
+    const api = createDocumentApi({
+      find: makeFindAdapter(QUERY_RESULT),
+      getNode: makeGetNodeAdapter(PARAGRAPH_INFO),
+      getText: makeGetTextAdapter(),
+      info: makeInfoAdapter(),
+      comments: makeCommentsAdapter(),
+      write: makeWriteAdapter(),
+      format: formatAdpt,
+      trackChanges: makeTrackChangesAdapter(),
+      create: makeCreateAdapter(),
+      lists: makeListsAdapter(),
+    });
+
+    const target = { kind: 'text', blockId: 'p1', range: { start: 0, end: 2 } } as const;
+    api.format.color({ target, value: '#ff0000' });
+    expect(formatAdpt.color).toHaveBeenCalledWith(
+      { target, value: '#ff0000' },
+      { changeMode: 'direct', dryRun: false },
+    );
+  });
+
+  it('delegates format.align to adapter.align', () => {
+    const formatAdpt = makeFormatAdapter();
+    const api = createDocumentApi({
+      find: makeFindAdapter(QUERY_RESULT),
+      getNode: makeGetNodeAdapter(PARAGRAPH_INFO),
+      getText: makeGetTextAdapter(),
+      info: makeInfoAdapter(),
+      comments: makeCommentsAdapter(),
+      write: makeWriteAdapter(),
+      format: formatAdpt,
+      trackChanges: makeTrackChangesAdapter(),
+      create: makeCreateAdapter(),
+      lists: makeListsAdapter(),
+    });
+
+    const target = { kind: 'text', blockId: 'p1', range: { start: 0, end: 2 } } as const;
+    api.format.align({ target, alignment: 'center' });
+    expect(formatAdpt.align).toHaveBeenCalledWith(
+      { target, alignment: 'center' },
+      { changeMode: 'direct', dryRun: false },
     );
   });
 
@@ -609,7 +772,7 @@ describe('createDocumentApi', () => {
     expect(trackAdpt.get).toHaveBeenCalledWith({ id: 'tc-1' });
   });
 
-  it('delegates review.decide to trackChanges adapter methods', () => {
+  it('delegates trackChanges.decide to trackChanges adapter methods', () => {
     const trackAdpt = makeTrackChangesAdapter();
     const api = createDocumentApi({
       find: makeFindAdapter(QUERY_RESULT),
@@ -624,10 +787,10 @@ describe('createDocumentApi', () => {
       lists: makeListsAdapter(),
     });
 
-    const acceptResult = api.review.decide({ decision: 'accept', target: { id: 'tc-1' } });
-    const rejectResult = api.review.decide({ decision: 'reject', target: { id: 'tc-1' } });
-    const acceptAllResult = api.review.decide({ decision: 'accept', target: { scope: 'all' } });
-    const rejectAllResult = api.review.decide({ decision: 'reject', target: { scope: 'all' } });
+    const acceptResult = api.trackChanges.decide({ decision: 'accept', target: { id: 'tc-1' } });
+    const rejectResult = api.trackChanges.decide({ decision: 'reject', target: { id: 'tc-1' } });
+    const acceptAllResult = api.trackChanges.decide({ decision: 'accept', target: { scope: 'all' } });
+    const rejectAllResult = api.trackChanges.decide({ decision: 'reject', target: { scope: 'all' } });
 
     expect(acceptResult.success).toBe(true);
     expect(rejectResult.success).toBe(true);
@@ -637,6 +800,90 @@ describe('createDocumentApi', () => {
     expect(trackAdpt.reject).toHaveBeenCalledWith({ id: 'tc-1' }, undefined);
     expect(trackAdpt.acceptAll).toHaveBeenCalledWith({}, undefined);
     expect(trackAdpt.rejectAll).toHaveBeenCalledWith({}, undefined);
+  });
+
+  describe('trackChanges.decide input validation', () => {
+    function makeApi() {
+      return createDocumentApi({
+        find: makeFindAdapter(QUERY_RESULT),
+        getNode: makeGetNodeAdapter(PARAGRAPH_INFO),
+        getText: makeGetTextAdapter(),
+        info: makeInfoAdapter(),
+        comments: makeCommentsAdapter(),
+        write: makeWriteAdapter(),
+        format: makeFormatAdapter(),
+        trackChanges: makeTrackChangesAdapter(),
+        create: makeCreateAdapter(),
+        lists: makeListsAdapter(),
+      });
+    }
+
+    function expectError(fn: () => void, code: string, messageMatch: string) {
+      try {
+        fn();
+        expect.fail('Expected DocumentApiValidationError to be thrown');
+      } catch (err: unknown) {
+        const e = err as { name: string; code: string; message: string };
+        expect(e.name).toBe('DocumentApiValidationError');
+        expect(e.code).toBe(code);
+        expect(e.message).toContain(messageMatch);
+      }
+    }
+
+    it('rejects null input', () => {
+      const api = makeApi();
+      expectError(() => api.trackChanges.decide(null as any), 'INVALID_INPUT', 'non-null object');
+    });
+
+    it('rejects primitive input', () => {
+      const api = makeApi();
+      expectError(() => api.trackChanges.decide('accept' as any), 'INVALID_INPUT', 'non-null object');
+    });
+
+    it('rejects invalid decision value', () => {
+      const api = makeApi();
+      expectError(
+        () => api.trackChanges.decide({ decision: 'maybe', target: { id: 'tc-1' } } as any),
+        'INVALID_INPUT',
+        '"accept" or "reject"',
+      );
+    });
+
+    it('rejects non-object target', () => {
+      const api = makeApi();
+      expectError(
+        () => api.trackChanges.decide({ decision: 'accept', target: 'tc-1' } as any),
+        'INVALID_TARGET',
+        '{ id: string } or { scope: "all" }',
+      );
+    });
+
+    it('rejects null target', () => {
+      const api = makeApi();
+      expectError(
+        () => api.trackChanges.decide({ decision: 'accept', target: null } as any),
+        'INVALID_TARGET',
+        '{ id: string } or { scope: "all" }',
+      );
+    });
+
+    it('rejects object target without id or scope', () => {
+      const api = makeApi();
+      expectError(
+        () => api.trackChanges.decide({ decision: 'accept', target: { foo: 'bar' } } as any),
+        'INVALID_TARGET',
+        '{ id: string } or { scope: "all" }',
+      );
+    });
+
+    it('rejects target with empty id', () => {
+      const api = makeApi();
+      expectError(
+        () => api.trackChanges.decide({ decision: 'accept', target: { id: '' } } as any),
+        'INVALID_TARGET',
+        '{ id: string } or { scope: "all" }',
+      );
+    });
   });
 
   it('delegates create.paragraph to the create adapter', () => {
@@ -1277,7 +1524,7 @@ describe('createDocumentApi', () => {
 
         it('rejects null input', () => {
           const api = makeApi();
-          // null spreads to {}, so the merged object { marks: {...} } passes shape
+          // null spreads to {}, so the merged object { inline: {...} } passes shape
           // checks but fails the locator requirement
           expectValidationError(() => api.format[method](null as any), 'requires a target');
         });
@@ -1300,7 +1547,7 @@ describe('createDocumentApi', () => {
 
     // -- Canonical payload parity --
 
-    it('passes canonical target through to adapter.apply with marks', () => {
+    it('passes canonical target through to adapter.apply with inline', () => {
       const formatAdpt = makeFormatAdapter();
       const api = createDocumentApi({
         find: makeFindAdapter(QUERY_RESULT),
@@ -1319,7 +1566,7 @@ describe('createDocumentApi', () => {
       const target = { kind: 'text', blockId: 'p1', range: { start: 0, end: 2 } } as const;
       api.format.bold({ target });
       expect(formatAdpt.apply).toHaveBeenCalledWith(
-        { target, marks: { bold: true } },
+        { target, inline: { bold: true } },
         { changeMode: 'direct', dryRun: false },
       );
     });
@@ -1414,6 +1661,11 @@ describe('createDocumentApi', () => {
         () => api.comments.create({ parentCommentId: 'c1', text: 'reply', target }),
         'Cannot combine parentCommentId with target',
       );
+    });
+
+    it('rejects root comment without target', () => {
+      const api = makeApi();
+      expectValidationError(() => api.comments.create({ text: 'comment' }), 'requires a target for root comments');
     });
 
     it('rejects malformed target', () => {
@@ -1555,7 +1807,7 @@ describe('createDocumentApi', () => {
       );
     });
 
-    it('rejects invalid locator before applying text edit', () => {
+    it('rejects multiple mutation fields in a single patch call', () => {
       const commentsAdpt = makeCommentsAdapter();
       const api = createDocumentApi({
         find: makeFindAdapter(QUERY_RESULT),
@@ -1571,10 +1823,15 @@ describe('createDocumentApi', () => {
         lists: makeListsAdapter(),
       });
 
-      expectValidationError(
-        () => api.comments.patch({ commentId: 'c1', text: 'new text', target: { kind: 'text', blockId: 'p1' } } as any),
-        'target must be a text address object',
-      );
+      try {
+        api.comments.patch({ commentId: 'c1', text: 'new text', target: { kind: 'text', blockId: 'p1' } } as any);
+        expect.fail('Expected DocumentApiValidationError to be thrown');
+      } catch (err: unknown) {
+        const e = err as { name: string; code: string; message: string };
+        expect(e.name).toBe('DocumentApiValidationError');
+        expect(e.code).toBe('INVALID_INPUT');
+        expect(e.message).toContain('exactly one mutation field per call');
+      }
       expect(commentsAdpt.edit).not.toHaveBeenCalled();
     });
 
@@ -1672,7 +1929,7 @@ describe('createDocumentApi', () => {
       const api = makeApi();
       expectValidationError(
         () => api.create.paragraph({ at: { kind: 'before' } as any, text: 'Hello' }),
-        'requires either at.target or at.nodeId',
+        'requires at.target',
       );
     });
 
@@ -1815,6 +2072,241 @@ describe('createDocumentApi', () => {
 
       api.lists.indent({ target });
       expect(listsAdpt.indent).toHaveBeenCalledWith({ target }, { changeMode: 'direct', dryRun: false });
+    });
+  });
+
+  // ---------------------------------------------------------------------------
+  // tables namespace
+  // ---------------------------------------------------------------------------
+
+  describe('tables.* delegation', () => {
+    it('delegates table mutations with normalized options', () => {
+      const tablesAdpt = makeTablesAdapter();
+      const api = createDocumentApi({
+        find: makeFindAdapter(QUERY_RESULT),
+        getNode: makeGetNodeAdapter(PARAGRAPH_INFO),
+        getText: makeGetTextAdapter(),
+        info: makeInfoAdapter(),
+        comments: makeCommentsAdapter(),
+        write: makeWriteAdapter(),
+        format: makeFormatAdapter(),
+        trackChanges: makeTrackChangesAdapter(),
+        create: makeCreateAdapter(),
+        lists: makeListsAdapter(),
+        tables: tablesAdpt,
+      });
+
+      const target = { kind: 'block' as const, nodeType: 'table' as const, nodeId: 't1' };
+
+      // setLayout — representative table-locator mutation
+      const layoutResult = api.tables.setLayout({ target, alignment: 'center' }, { changeMode: 'tracked' });
+      expect(layoutResult.success).toBe(true);
+      expect(tablesAdpt.setLayout).toHaveBeenCalledWith(
+        { target, alignment: 'center' },
+        { changeMode: 'tracked', dryRun: false },
+      );
+
+      // delete — no explicit options → defaults
+      const deleteResult = api.tables.delete({ target });
+      expect(deleteResult.success).toBe(true);
+      expect(tablesAdpt.delete).toHaveBeenCalledWith({ target }, { changeMode: 'direct', dryRun: false });
+
+      // setStyle — another representative mutation
+      const styleResult = api.tables.setStyle({ target, styleId: 'TableGrid' });
+      expect(styleResult.success).toBe(true);
+    });
+
+    it('delegates table reads directly without options normalization', () => {
+      const tablesAdpt = makeTablesAdapter();
+      const api = createDocumentApi({
+        find: makeFindAdapter(QUERY_RESULT),
+        getNode: makeGetNodeAdapter(PARAGRAPH_INFO),
+        getText: makeGetTextAdapter(),
+        info: makeInfoAdapter(),
+        comments: makeCommentsAdapter(),
+        write: makeWriteAdapter(),
+        format: makeFormatAdapter(),
+        trackChanges: makeTrackChangesAdapter(),
+        create: makeCreateAdapter(),
+        lists: makeListsAdapter(),
+        tables: tablesAdpt,
+      });
+
+      const target = { kind: 'block' as const, nodeType: 'table' as const, nodeId: 't1' };
+
+      const getResult = api.tables.get({ target });
+      expect(getResult.rows).toBe(3);
+      expect(getResult.columns).toBe(3);
+
+      const cellsResult = api.tables.getCells({ target });
+      expect(cellsResult.tableNodeId).toBe('t1');
+      expect(cellsResult.cells).toHaveLength(1);
+
+      const propsResult = api.tables.getProperties({ target });
+      expect(propsResult.nodeId).toBe('t1');
+      expect(propsResult.styleId).toBe('TableGrid');
+    });
+
+    it('delegates create.table with at defaulting to documentEnd', () => {
+      const createAdpt = makeCreateAdapter();
+      const api = createDocumentApi({
+        find: makeFindAdapter(QUERY_RESULT),
+        getNode: makeGetNodeAdapter(PARAGRAPH_INFO),
+        getText: makeGetTextAdapter(),
+        info: makeInfoAdapter(),
+        comments: makeCommentsAdapter(),
+        write: makeWriteAdapter(),
+        format: makeFormatAdapter(),
+        trackChanges: makeTrackChangesAdapter(),
+        create: createAdpt,
+        lists: makeListsAdapter(),
+        tables: makeTablesAdapter(),
+      });
+
+      const result = api.create.table({ rows: 3, columns: 4 });
+      expect(result.success).toBe(true);
+      expect(createAdpt.table).toHaveBeenCalledWith(
+        { rows: 3, columns: 4, at: { kind: 'documentEnd' } },
+        { changeMode: 'direct', dryRun: false },
+      );
+    });
+
+    it('delegates create.table with explicit at location', () => {
+      const createAdpt = makeCreateAdapter();
+      const api = createDocumentApi({
+        find: makeFindAdapter(QUERY_RESULT),
+        getNode: makeGetNodeAdapter(PARAGRAPH_INFO),
+        getText: makeGetTextAdapter(),
+        info: makeInfoAdapter(),
+        comments: makeCommentsAdapter(),
+        write: makeWriteAdapter(),
+        format: makeFormatAdapter(),
+        trackChanges: makeTrackChangesAdapter(),
+        create: createAdpt,
+        lists: makeListsAdapter(),
+        tables: makeTablesAdapter(),
+      });
+
+      const at = { kind: 'after' as const, nodeId: 'p1' };
+      api.create.table({ rows: 2, columns: 2, at });
+      expect(createAdpt.table).toHaveBeenCalledWith(
+        { rows: 2, columns: 2, at },
+        { changeMode: 'direct', dryRun: false },
+      );
+    });
+  });
+
+  describe('tables.* locator validation', () => {
+    function makeApi() {
+      return createDocumentApi({
+        find: makeFindAdapter(QUERY_RESULT),
+        getNode: makeGetNodeAdapter(PARAGRAPH_INFO),
+        getText: makeGetTextAdapter(),
+        info: makeInfoAdapter(),
+        capabilities: makeCapabilitiesAdapter(),
+        comments: makeCommentsAdapter(),
+        write: makeWriteAdapter(),
+        format: makeFormatAdapter(),
+        trackChanges: makeTrackChangesAdapter(),
+        create: makeCreateAdapter(),
+        lists: makeListsAdapter(),
+        tables: makeTablesAdapter(),
+      });
+    }
+
+    // -- table-locator operations (target/nodeId) --
+
+    it('accepts target for table-locator operations', () => {
+      const api = makeApi();
+      const target = { kind: 'block' as const, nodeType: 'table' as const, nodeId: 't1' };
+
+      expect(() => api.tables.setLayout({ target, alignment: 'center' })).not.toThrow();
+      expect(() => api.tables.get({ target })).not.toThrow();
+      expect(() => api.tables.getCells({ target })).not.toThrow();
+      expect(() => api.tables.getProperties({ target })).not.toThrow();
+    });
+
+    it('accepts nodeId for table-locator operations', () => {
+      const api = makeApi();
+      expect(() => api.tables.setLayout({ nodeId: 't1', alignment: 'center' })).not.toThrow();
+      expect(() => api.tables.get({ nodeId: 't1' })).not.toThrow();
+    });
+
+    it('rejects both target + nodeId for table-locator operations', () => {
+      const api = makeApi();
+      const target = { kind: 'block' as const, nodeType: 'table' as const, nodeId: 't1' };
+      expect(() => api.tables.setLayout({ target, nodeId: 't1' } as any)).toThrow(/Cannot combine/);
+    });
+
+    it('rejects neither target nor nodeId for table-locator operations', () => {
+      const api = makeApi();
+      expect(() => api.tables.setLayout({ alignment: 'center' } as any)).toThrow(/requires a target/);
+    });
+
+    // -- row-locator operations (direct OR table-scoped) --
+
+    it('accepts direct target for row-locator operations', () => {
+      const api = makeApi();
+      const target = { kind: 'block' as const, nodeType: 'tableRow' as const, nodeId: 'r1' };
+      expect(() => api.tables.insertRow({ target, position: 'after' })).not.toThrow();
+      expect(() => api.tables.deleteRow({ target })).not.toThrow();
+    });
+
+    it('accepts table-scoped locator for row-locator operations', () => {
+      const api = makeApi();
+      const tableTarget = { kind: 'block' as const, nodeType: 'table' as const, nodeId: 't1' };
+      expect(() => api.tables.insertRow({ tableTarget, rowIndex: 0, position: 'after' })).not.toThrow();
+    });
+
+    it('rejects both direct + table-scoped for row-locator operations', () => {
+      const api = makeApi();
+      const target = { kind: 'block' as const, nodeType: 'tableRow' as const, nodeId: 'r1' };
+      const tableTarget = { kind: 'block' as const, nodeType: 'table' as const, nodeId: 't1' };
+      expect(() => api.tables.insertRow({ target, tableTarget, rowIndex: 0, position: 'after' } as any)).toThrow(
+        /Cannot combine/,
+      );
+    });
+
+    // -- column-locator operations (tableTarget/tableNodeId) --
+
+    it('accepts tableTarget for column-locator operations', () => {
+      const api = makeApi();
+      const tableTarget = { kind: 'block' as const, nodeType: 'table' as const, nodeId: 't1' };
+      expect(() => api.tables.insertColumn({ tableTarget, columnIndex: 0, position: 'after' })).not.toThrow();
+      expect(() => api.tables.deleteColumn({ tableTarget, columnIndex: 0 })).not.toThrow();
+    });
+
+    it('accepts tableNodeId for column-locator operations', () => {
+      const api = makeApi();
+      expect(() => api.tables.insertColumn({ tableNodeId: 't1', columnIndex: 0, position: 'after' })).not.toThrow();
+    });
+
+    it('rejects both tableTarget + tableNodeId for column-locator operations', () => {
+      const api = makeApi();
+      const tableTarget = { kind: 'block' as const, nodeType: 'table' as const, nodeId: 't1' };
+      expect(() =>
+        api.tables.insertColumn({ tableTarget, tableNodeId: 't1', columnIndex: 0, position: 'after' } as any),
+      ).toThrow(/Cannot combine/);
+    });
+
+    // -- merge range locator (tableTarget/tableNodeId) --
+
+    it('accepts tableTarget for merge range operations', () => {
+      const api = makeApi();
+      const tableTarget = { kind: 'block' as const, nodeType: 'table' as const, nodeId: 't1' };
+      expect(() =>
+        api.tables.mergeCells({ tableTarget, startRow: 0, startColumn: 0, endRow: 1, endColumn: 1 }),
+      ).not.toThrow();
+    });
+
+    // -- create.table locator validation --
+
+    it('rejects ambiguous create.table at locator (both target + nodeId)', () => {
+      const api = makeApi();
+      const target = { kind: 'block' as const, nodeType: 'paragraph' as const, nodeId: 'p1' };
+      expect(() =>
+        api.create.table({ rows: 2, columns: 2, at: { kind: 'after', target, nodeId: 'p1' } as any }),
+      ).toThrow(/Cannot combine/);
     });
   });
 });

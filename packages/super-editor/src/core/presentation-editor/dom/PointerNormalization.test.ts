@@ -60,7 +60,7 @@ describe('PointerNormalization', () => {
       };
 
       const result = normalizeClientPoint(options, 200, 150);
-      expect(result).toEqual({ x: 105, y: 90 });
+      expect(result).toEqual({ x: 105, y: 90, pageIndex: undefined });
     });
 
     it('adjusts X when the pointer is over a page with a known offset', () => {
@@ -81,8 +81,12 @@ describe('PointerNormalization', () => {
         getPageOffsetY: (pageIndex: number) => (pageIndex === 2 ? 8 : null),
       };
 
+      // X is adjusted by page offset, Y stays as global layout coordinates,
+      // pageLocalY is computed from the page element's bounding rect
       const result = normalizeClientPoint(options, 200, 150);
-      expect(result).toEqual({ x: 93, y: 82 });
+      // pageLocalY = (clientY - pageRect.top) / zoom = (150 - 0) / 2 = 75
+      // (pageEl is a detached element so getBoundingClientRect returns 0)
+      expect(result).toEqual({ x: 93, y: 90, pageIndex: 2, pageLocalY: 75 });
     });
 
     it('does not adjust X when page offset is unavailable', () => {
@@ -104,7 +108,8 @@ describe('PointerNormalization', () => {
       };
 
       const result = normalizeClientPoint(options, 200, 150);
-      expect(result).toEqual({ x: 105, y: 90 });
+      // pageLocalY is still computed even when X offset is unavailable
+      expect(result).toEqual({ x: 105, y: 90, pageIndex: 3, pageLocalY: 75 });
     });
   });
 

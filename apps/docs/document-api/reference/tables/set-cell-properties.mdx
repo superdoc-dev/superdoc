@@ -1,7 +1,7 @@
 ---
-title: review.decide
-sidebarTitle: review.decide
-description: Generated reference for review.decide
+title: tables.setCellProperties
+sidebarTitle: tables.setCellProperties
+description: Reference for tables.setCellProperties
 ---
 
 {/* GENERATED FILE: DO NOT EDIT. Regenerate via `pnpm run docapi:sync`. */}
@@ -10,30 +10,29 @@ description: Generated reference for review.decide
 
 ## Summary
 
-- Operation ID: `review.decide`
-- API member path: `editor.doc.review.decide(...)`
+- Operation ID: `tables.setCellProperties`
+- API member path: `editor.doc.tables.setCellProperties(...)`
 - Mutates document: `yes`
-- Idempotency: `conditional`
+- Idempotency: `idempotent`
 - Supports tracked mode: `no`
-- Supports dry run: `no`
+- Supports dry run: `yes`
 - Deterministic target resolution: `yes`
 
 ## Input fields
 
 | Field | Type | Required | Description |
 | --- | --- | --- | --- |
-| `decision` | enum | yes | `"accept"`, `"reject"` |
-| `target` | object \\| object | yes | One of: object, object |
+| `fitText` | boolean | no |  |
+| `nodeId` | string | no |  |
+| `preferredWidthPt` | number | no |  |
+| `target` | BlockNodeAddress | no | BlockNodeAddress |
+| `verticalAlign` | enum | no | `"top"`, `"center"`, `"bottom"` |
+| `wrapText` | boolean | no |  |
 
 ### Example request
 
 ```json
-{
-  "decision": "accept",
-  "target": {
-    "id": "id-001"
-  }
-}
+{}
 ```
 
 ## Output fields
@@ -44,15 +43,13 @@ _No fields._
 
 ```json
 {
-  "inserted": [
-    {
-      "entityId": "entity-789",
-      "entityType": "comment",
-      "kind": "entity"
-    }
-  ],
   "success": true,
-  "updated": [
+  "table": {
+    "kind": "block",
+    "nodeId": "node-def456",
+    "nodeType": "paragraph"
+  },
+  "trackedChangeRefs": [
     {
       "entityId": "entity-789",
       "entityType": "comment",
@@ -65,11 +62,12 @@ _No fields._
 ## Pre-apply throws
 
 - `TARGET_NOT_FOUND`
-- `COMMAND_UNAVAILABLE`
+- `INVALID_TARGET`
 - `CAPABILITY_UNAVAILABLE`
 
 ## Non-applied failure codes
 
+- `INVALID_TARGET`
 - `NO_OP`
 
 ## Raw schemas
@@ -78,48 +76,42 @@ _No fields._
 ```json
 {
   "additionalProperties": false,
-  "properties": {
-    "decision": {
-      "enum": [
-        "accept",
-        "reject"
+  "oneOf": [
+    {
+      "required": [
+        "target"
       ]
     },
-    "target": {
-      "oneOf": [
-        {
-          "additionalProperties": false,
-          "properties": {
-            "id": {
-              "type": "string"
-            }
-          },
-          "required": [
-            "id"
-          ],
-          "type": "object"
-        },
-        {
-          "additionalProperties": false,
-          "properties": {
-            "scope": {
-              "enum": [
-                "all"
-              ]
-            }
-          },
-          "required": [
-            "scope"
-          ],
-          "type": "object"
-        }
+    {
+      "required": [
+        "nodeId"
       ]
     }
-  },
-  "required": [
-    "decision",
-    "target"
   ],
+  "properties": {
+    "fitText": {
+      "type": "boolean"
+    },
+    "nodeId": {
+      "type": "string"
+    },
+    "preferredWidthPt": {
+      "type": "number"
+    },
+    "target": {
+      "$ref": "#/$defs/BlockNodeAddress"
+    },
+    "verticalAlign": {
+      "enum": [
+        "top",
+        "center",
+        "bottom"
+      ]
+    },
+    "wrapText": {
+      "type": "boolean"
+    }
+  },
   "type": "object"
 }
 ```
@@ -130,7 +122,25 @@ _No fields._
 {
   "oneOf": [
     {
-      "$ref": "#/$defs/ReceiptSuccess"
+      "additionalProperties": false,
+      "properties": {
+        "success": {
+          "const": true
+        },
+        "table": {
+          "$ref": "#/$defs/BlockNodeAddress"
+        },
+        "trackedChangeRefs": {
+          "items": {
+            "$ref": "#/$defs/EntityAddress"
+          },
+          "type": "array"
+        }
+      },
+      "required": [
+        "success"
+      ],
+      "type": "object"
     },
     {
       "additionalProperties": false,
@@ -140,7 +150,10 @@ _No fields._
           "properties": {
             "code": {
               "enum": [
-                "NO_OP"
+                "NO_OP",
+                "INVALID_TARGET",
+                "TARGET_NOT_FOUND",
+                "CAPABILITY_UNAVAILABLE"
               ]
             },
             "details": {},
@@ -172,7 +185,25 @@ _No fields._
 <Accordion title="Raw success schema">
 ```json
 {
-  "$ref": "#/$defs/ReceiptSuccess"
+  "additionalProperties": false,
+  "properties": {
+    "success": {
+      "const": true
+    },
+    "table": {
+      "$ref": "#/$defs/BlockNodeAddress"
+    },
+    "trackedChangeRefs": {
+      "items": {
+        "$ref": "#/$defs/EntityAddress"
+      },
+      "type": "array"
+    }
+  },
+  "required": [
+    "success"
+  ],
+  "type": "object"
 }
 ```
 </Accordion>
@@ -187,7 +218,10 @@ _No fields._
       "properties": {
         "code": {
           "enum": [
-            "NO_OP"
+            "NO_OP",
+            "INVALID_TARGET",
+            "TARGET_NOT_FOUND",
+            "CAPABILITY_UNAVAILABLE"
           ]
         },
         "details": {},

@@ -25,13 +25,6 @@ export type RefWhere = {
   by: 'ref';
   ref: string;
   within?: NodeAddress;
-  /**
-   * Legacy field — kept for backward compatibility during migration.
-   * Only `'exactlyOne'` is accepted; other values fail with INVALID_INPUT.
-   * A ref already identifies one logical target, so cardinality is implicit.
-   * @deprecated Will be removed in the next major contract version.
-   */
-  require?: 'exactlyOne';
 };
 
 export type StepWhere = SelectWhere | RefWhere;
@@ -118,7 +111,7 @@ export type StyleApplyStep = {
   op: 'format.apply';
   where: StepWhere;
   args: {
-    marks: SetMarks;
+    inline: SetMarks;
   };
 };
 
@@ -178,7 +171,7 @@ export const MAX_PLAN_RESOLVED_TARGETS = 500;
 // Plan output — receipts
 // ---------------------------------------------------------------------------
 
-export type StepEffect = 'changed' | 'noop' | 'assert_passed' | 'assert_failed';
+export type StepEffect = 'changed' | 'noop' | 'error' | 'assert_passed' | 'assert_failed';
 
 /** Resolution for a single-block (range) target. */
 export type TextStepResolution = {
@@ -208,7 +201,15 @@ export type AssertStepData = {
 
 export type DomainStepData = { domain: 'command'; commandDispatched: boolean };
 
-export type StepOutcomeData = TextStepData | AssertStepData | DomainStepData;
+export type TableStepData = {
+  domain: 'table';
+  tableId: string;
+  affectedRows?: string[];
+  affectedCells?: string[];
+  affectedColumns?: number[];
+};
+
+export type StepOutcomeData = TextStepData | AssertStepData | DomainStepData | TableStepData;
 
 export type StepOutcome = {
   stepId: string;

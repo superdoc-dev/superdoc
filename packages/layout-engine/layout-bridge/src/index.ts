@@ -1617,11 +1617,16 @@ export function selectionToRects(
           return rowMeasure?.height ?? 0;
         });
 
+        const cellSpacingPx = tableMeasure.cellSpacingPx ?? 0;
+        const tableBorderWidths = tableMeasure.tableBorderWidths;
+        const contentOffsetX = tableBlock.attrs?.borderCollapse === 'separate' ? (tableBorderWidths?.left ?? 0) : 0;
+        const contentOffsetY = tableBlock.attrs?.borderCollapse === 'separate' ? (tableBorderWidths?.top ?? 0) : 0;
+
         const calculateCellX = (cellIdx: number, cellMeasure: TableCellMeasure) => {
           const gridStart = cellMeasure.gridColumnStart ?? cellIdx;
-          let x = 0;
+          let x = cellSpacingPx; // space before first column
           for (let i = 0; i < gridStart && i < tableMeasure.columnWidths.length; i += 1) {
-            x += tableMeasure.columnWidths[i];
+            x += tableMeasure.columnWidths[i] + cellSpacingPx;
           }
           return x;
         };
@@ -1752,14 +1757,15 @@ export function selectionToRects(
                   wordLayout: cellWordLayout,
                 });
 
-                const rectX = fragment.x + cellX + padding.left + textIndentAdjust + Math.min(startX, endX);
+                const rectX =
+                  fragment.x + contentOffsetX + cellX + padding.left + textIndentAdjust + Math.min(startX, endX);
                 const rectWidth = Math.max(
                   1,
                   Math.min(Math.abs(endX - startX), line.width), // clamp to line width to prevent runaway widths
                 );
                 const lineOffset =
                   lineHeightBeforeIndex(info.measure, index) - lineHeightBeforeIndex(info.measure, info.startLine);
-                const rectY = fragment.y + rowOffset + blockTopCursor + lineOffset;
+                const rectY = fragment.y + contentOffsetY + rowOffset + blockTopCursor + lineOffset;
 
                 rects.push({
                   x: rectX,
@@ -1777,15 +1783,18 @@ export function selectionToRects(
           return rowOffset + rowHeight;
         };
 
-        let rowCursor = 0;
+        // First row starts after space before table content (space between table border and first row)
+        let rowCursor = cellSpacingPx;
 
         const repeatHeaderCount = tableFragment.repeatHeaderCount ?? 0;
         for (let r = 0; r < repeatHeaderCount && r < tableMeasure.rows.length; r += 1) {
           rowCursor = processRow(r, rowCursor);
+          rowCursor += cellSpacingPx; // spacing after every row (including last) for outer spacing
         }
 
         for (let r = tableFragment.fromRow; r < tableFragment.toRow && r < tableMeasure.rows.length; r += 1) {
           rowCursor = processRow(r, rowCursor);
+          rowCursor += cellSpacingPx; // spacing after every row (including last) for outer spacing
         }
 
         return;

@@ -379,6 +379,26 @@ describe('trackChangesHelpers', () => {
     expect(meta?.formatMark?.attrs?.after).toEqual([{ type: 'textStyle', attrs: changedTextStyle.attrs }]);
   });
 
+  it('addMarkStep tracks highlight mark changes', () => {
+    const state = createState(createDocWithText('Highlight me'));
+    const highlightMark = schema.marks.highlight.create({ color: '#E4668C' });
+    const step = new AddMarkStep(1, 12, highlightMark);
+    const newTr = state.tr;
+
+    addMarkStep({
+      state,
+      step,
+      newTr,
+      doc: state.doc,
+      user,
+      date,
+    });
+
+    const meta = newTr.getMeta(TrackChangesBasePluginKey);
+    expect(meta?.formatMark?.type.name).toBe(TrackFormatMarkName);
+    expect(meta?.formatMark?.attrs?.after).toEqual([{ type: 'highlight', attrs: { color: '#E4668C' } }]);
+  });
+
   it('removeMarkStep records previous formatting when mark removed', () => {
     const bold = schema.marks.bold.create();
     const doc = createDocWithText('Styled', [bold]);
@@ -398,6 +418,27 @@ describe('trackChangesHelpers', () => {
     expect(newTr.steps.length).toBeGreaterThan(0);
     const meta = newTr.getMeta(TrackChangesBasePluginKey);
     expect(meta?.formatMark?.type.name).toBe(TrackFormatMarkName);
+  });
+
+  it('removeMarkStep tracks removed highlight mark', () => {
+    const highlight = schema.marks.highlight.create({ color: '#E4668C' });
+    const doc = createDocWithText('Styled', [highlight]);
+    const state = createState(doc);
+    const step = new RemoveMarkStep(1, 7, highlight);
+    const newTr = state.tr;
+
+    removeMarkStep({
+      state,
+      step,
+      newTr,
+      doc: state.doc,
+      user,
+      date,
+    });
+
+    const meta = newTr.getMeta(TrackChangesBasePluginKey);
+    expect(meta?.formatMark?.type.name).toBe(TrackFormatMarkName);
+    expect(meta?.formatMark?.attrs?.before).toEqual([{ type: 'highlight', attrs: { color: '#E4668C' } }]);
   });
 
   it('getTrackChanges enumerates marks with optional filtering', () => {

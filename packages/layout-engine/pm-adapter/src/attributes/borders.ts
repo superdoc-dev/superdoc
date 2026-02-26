@@ -16,7 +16,7 @@ import type {
   TableBorderValue,
 } from '@superdoc/contracts';
 import type { OoxmlBorder } from '../types.js';
-import { normalizeColor, pickNumber, isFiniteNumber } from '../utilities.js';
+import { normalizeColor, pickNumber, isFiniteNumber, normalizeCellPaddingTopBottom } from '../utilities.js';
 import { PX_PER_PT } from '../constants.js';
 
 const EIGHTHS_PER_POINT = 8;
@@ -299,7 +299,8 @@ export function extractCellPadding(cellAttrs: Record<string, unknown>): BoxSpaci
   if (typeof margins.bottom === 'number') padding.bottom = margins.bottom;
   if (typeof margins.left === 'number') padding.left = margins.left;
 
-  return Object.keys(padding).length > 0 ? padding : undefined;
+  if (Object.keys(padding).length === 0) return undefined;
+  return normalizeCellPaddingTopBottom(padding);
 }
 
 /**

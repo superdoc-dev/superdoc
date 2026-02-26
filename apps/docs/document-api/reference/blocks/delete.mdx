@@ -1,0 +1,173 @@
+---
+title: blocks.delete
+sidebarTitle: blocks.delete
+description: Reference for blocks.delete
+---
+
+{/* GENERATED FILE: DO NOT EDIT. Regenerate via `pnpm run docapi:sync`. */}
+
+> Alpha: Document API is currently alpha and subject to breaking changes.
+
+## Summary
+
+- Operation ID: `blocks.delete`
+- API member path: `editor.doc.blocks.delete(...)`
+- Mutates document: `yes`
+- Idempotency: `conditional`
+- Supports tracked mode: `no`
+- Supports dry run: `yes`
+- Deterministic target resolution: `yes`
+
+## Input fields
+
+| Field | Type | Required | Description |
+| --- | --- | --- | --- |
+| `target` | DeletableBlockNodeAddress | yes | DeletableBlockNodeAddress |
+
+### Example request
+
+```json
+{
+  "target": {
+    "kind": "block",
+    "nodeId": "node-def456",
+    "nodeType": "paragraph"
+  }
+}
+```
+
+## Output fields
+
+| Field | Type | Required | Description |
+| --- | --- | --- | --- |
+| `deleted` | DeletableBlockNodeAddress | yes | DeletableBlockNodeAddress |
+| `success` | `true` | yes | Constant: `true` |
+
+### Example response
+
+```json
+{
+  "deleted": {
+    "kind": "block",
+    "nodeId": "node-def456",
+    "nodeType": "paragraph"
+  },
+  "success": true
+}
+```
+
+## Pre-apply throws
+
+- `TARGET_NOT_FOUND`
+- `AMBIGUOUS_TARGET`
+- `CAPABILITY_UNAVAILABLE`
+- `INVALID_TARGET`
+- `INVALID_INPUT`
+- `INTERNAL_ERROR`
+
+## Non-applied failure codes
+
+- None
+
+## Raw schemas
+
+<Accordion title="Raw input schema">
+```json
+{
+  "additionalProperties": false,
+  "properties": {
+    "target": {
+      "$ref": "#/$defs/DeletableBlockNodeAddress"
+    }
+  },
+  "required": [
+    "target"
+  ],
+  "type": "object"
+}
+```
+</Accordion>
+
+<Accordion title="Raw output schema">
+```json
+{
+  "additionalProperties": false,
+  "properties": {
+    "deleted": {
+      "$ref": "#/$defs/DeletableBlockNodeAddress"
+    },
+    "success": {
+      "const": true
+    }
+  },
+  "required": [
+    "success",
+    "deleted"
+  ],
+  "type": "object"
+}
+```
+</Accordion>
+
+<Accordion title="Raw success schema">
+```json
+{
+  "additionalProperties": false,
+  "properties": {
+    "deleted": {
+      "$ref": "#/$defs/DeletableBlockNodeAddress"
+    },
+    "success": {
+      "const": true
+    }
+  },
+  "required": [
+    "success",
+    "deleted"
+  ],
+  "type": "object"
+}
+```
+</Accordion>
+
+<Accordion title="Raw failure schema">
+```json
+{
+  "additionalProperties": false,
+  "properties": {
+    "failure": {
+      "additionalProperties": false,
+      "properties": {
+        "code": {
+          "enum": [
+            "TARGET_NOT_FOUND",
+            "AMBIGUOUS_TARGET",
+            "CAPABILITY_UNAVAILABLE",
+            "INVALID_TARGET",
+            "INVALID_INPUT",
+            "INTERNAL_ERROR"
+          ]
+        },
+        "details": {},
+        "message": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "code",
+        "message"
+      ],
+      "type": "object"
+    },
+    "success": {
+      "const": false
+    }
+  },
+  "required": [
+    "success",
+    "failure"
+  ],
+  "type": "object"
+}
+```
+</Accordion>

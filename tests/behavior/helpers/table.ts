@@ -13,16 +13,24 @@ export async function countTableCells(page: Page): Promise<number> {
       throw new Error('Document API is unavailable: expected editor.doc.find().');
     }
 
+    const getAddresses = (result: any): any[] => {
+      const discoveryItems = Array.isArray(result?.items) ? result.items : [];
+      if (discoveryItems.length > 0) {
+        return discoveryItems.map((item: any) => item?.address).filter(Boolean);
+      }
+      return Array.isArray(result?.matches) ? result.matches : [];
+    };
+
     const tableResult = docApi.find({ select: { type: 'node', nodeType: 'table' }, limit: 1 });
-    const tableAddress = tableResult?.matches?.[0];
+    const tableAddress = getAddresses(tableResult)[0];
     if (!tableAddress) return 0;
 
     const cellResult = docApi.find({ select: { type: 'node', nodeType: 'tableCell' }, within: tableAddress });
-    let cellCount = cellResult?.matches?.length ?? 0;
+    let cellCount = getAddresses(cellResult).length;
 
     try {
       const headerResult = docApi.find({ select: { type: 'node', nodeType: 'tableHeader' }, within: tableAddress });
-      cellCount += headerResult?.matches?.length ?? 0;
+      cellCount += getAddresses(headerResult).length;
     } catch {
       /* tableHeader may not be queryable */
     }
@@ -31,6 +39,6 @@ export async function countTableCells(page: Page): Promise<number> {
 
     // Fallback: count paragraphs when cell-level querying isn't available.
     const paragraphResult = docApi.find({ select: { type: 'node', nodeType: 'paragraph' }, within: tableAddress });
-    return paragraphResult?.matches?.length ?? 0;
+    return getAddresses(paragraphResult).length;
   });
 }

@@ -584,6 +584,7 @@ const COMMENT_EXTERNAL_COLOR = '#B1124B';
 const COMMENT_INTERNAL_COLOR = '#078383';
 const COMMENT_INACTIVE_ALPHA = '40'; // ~25% for inactive
 const COMMENT_ACTIVE_ALPHA = '66'; // ~40% for active/selected
+const COMMENT_FADED_ALPHA = '20'; // ~12% for non-selected when another comment is active
 
 type LinkRenderData = {
   href?: string;
@@ -6464,7 +6465,15 @@ const deriveBlockVersion = (block: FlowBlock): string => {
         hash = hashString(hash, tblAttrs.borderCollapse);
       }
       if (tblAttrs.cellSpacing !== undefined) {
-        hash = hashNumber(hash, tblAttrs.cellSpacing);
+        const cs = tblAttrs.cellSpacing;
+        if (typeof cs === 'number') {
+          hash = hashNumber(hash, cs);
+        } else {
+          // Stable key: value and type only (avoid JSON.stringify key-order variance)
+          const v = (cs as { value?: number; type?: string }).value ?? 0;
+          const t = (cs as { value?: number; type?: string }).type ?? 'px';
+          hash = hashString(hash, `cs:${v}:${t}`);
+        }
       }
       // Include SDT metadata so lock-mode changes invalidate the cache.
       if (tblAttrs.sdt) {
@@ -6593,8 +6602,10 @@ const getCommentHighlight = (run: TextRun, activeCommentId: string | null): Comm
         hasNestedComments: nestedComments.length > 0,
       };
     }
-    // Active comment is set but this run does not belong to it - do not highlight.
-    return {};
+    // Active comment is set but this run does not belong to it - show faded highlight.
+    const fadedPrimary = comments[0];
+    const fadedBase = fadedPrimary.internal ? COMMENT_INTERNAL_COLOR : COMMENT_EXTERNAL_COLOR;
+    return { color: `${fadedBase}${COMMENT_FADED_ALPHA}` };
   }
 
   // No active comment - show uniform light highlight (like Word/Google Docs)

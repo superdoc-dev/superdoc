@@ -216,6 +216,9 @@ catalogs:
     remark-stringify:
       specifier: ^11.0.0
       version: 11.0.0
+    rollup:
+      specifier: ^4.31.0
+      version: 4.57.1
     rollup-plugin-copy:
       specifier: ^3.5.0
       version: 3.5.0
@@ -822,6 +825,9 @@ importers:
       '@superdoc/layout-engine':
         specifier: workspace:*
         version: link:../../layout-engine
+      '@superdoc/measuring-dom':
+        specifier: workspace:*
+        version: link:../../measuring/dom
       '@superdoc/pm-adapter':
         specifier: workspace:*
         version: link:../../pm-adapter
@@ -986,9 +992,28 @@ importers:
       '@types/node':
         specifier: 'catalog:'
         version: 22.19.2
+      rollup:
+        specifier: 'catalog:'
+        version: 4.57.1
       typescript:
         specifier: 'catalog:'
         version: 5.9.3
+    optionalDependencies:
+      '@superdoc-dev/sdk-darwin-arm64':
+        specifier: workspace:*
+        version: link:platforms/sdk-darwin-arm64
+      '@superdoc-dev/sdk-darwin-x64':
+        specifier: workspace:*
+        version: link:platforms/sdk-darwin-x64
+      '@superdoc-dev/sdk-linux-arm64':
+        specifier: workspace:*
+        version: link:platforms/sdk-linux-arm64
+      '@superdoc-dev/sdk-linux-x64':
+        specifier: workspace:*
+        version: link:platforms/sdk-linux-x64
+      '@superdoc-dev/sdk-windows-x64':
+        specifier: workspace:*
+        version: link:platforms/sdk-windows-x64
 
   packages/sdk/langs/node/platforms/sdk-darwin-arm64: {}
 
@@ -1416,7 +1441,7 @@ importers:
     dependencies:
       '@superdoc-dev/sdk':
         specifier: file:../../packages/sdk/langs/node
-        version: link:../../packages/sdk/langs/node
+        version: file:packages/sdk/langs/node
     devDependencies:
       vitest:
         specifier: 'catalog:'
@@ -3917,6 +3942,9 @@ packages:
   '@stoplight/yaml@4.3.0':
     resolution: {integrity: sha512-JZlVFE6/dYpP9tQmV0/ADfn32L9uFarHWxfcRhReKUnljz1ZiUM5zpX+PH8h5CJs6lao3TuFqnPm9IJJCEkE2w==}
     engines: {node: '>=10.8'}
+
+  '@superdoc-dev/sdk@file:packages/sdk/langs/node':
+    resolution: {directory: packages/sdk/langs/node, type: directory}
 
   '@szmarczak/http-timer@4.0.6':
     resolution: {integrity: sha512-4BAffykYOgO+5nzBWYwE3W90sBgLJoUPRWWcL8wlyiM8IB8ipJz3UMJ9KXQd1RKQXpKp8Tutn80HZtWsu2u76w==}
@@ -14649,6 +14677,14 @@ snapshots:
       '@stoplight/types': 14.1.1
       '@stoplight/yaml-ast-parser': 0.0.50
       tslib: 2.8.1
+
+  '@superdoc-dev/sdk@file:packages/sdk/langs/node':
+    optionalDependencies:
+      '@superdoc-dev/sdk-darwin-arm64': link:packages/sdk/langs/node/platforms/sdk-darwin-arm64
+      '@superdoc-dev/sdk-darwin-x64': link:packages/sdk/langs/node/platforms/sdk-darwin-x64
+      '@superdoc-dev/sdk-linux-arm64': link:packages/sdk/langs/node/platforms/sdk-linux-arm64
+      '@superdoc-dev/sdk-linux-x64': link:packages/sdk/langs/node/platforms/sdk-linux-x64
+      '@superdoc-dev/sdk-windows-x64': link:packages/sdk/langs/node/platforms/sdk-windows-x64
 
   '@szmarczak/http-timer@4.0.6':
     dependencies:

@@ -32,7 +32,7 @@ const $defs: Record<string, Record<string, unknown>> = {
     required: ['kind', 'blockId', 'range'],
     additionalProperties: false,
   },
-  MarkSet: {
+  InlineStylePatch: {
     type: 'object',
     properties: {
       bold: { type: 'boolean' },
@@ -71,10 +71,10 @@ describe('operation-params $ref resolution', () => {
       type: 'object',
       properties: {
         target: { $ref: '#/$defs/TextAddress' },
-        marks: { $ref: '#/$defs/MarkSet' },
+        inline: { $ref: '#/$defs/InlineStylePatch' },
         text: { type: 'string' },
       },
-      required: ['target', 'marks', 'text'],
+      required: ['target', 'inline', 'text'],
     };
     const result = jsonSchemaToTypeSpec(schema, $defs) as {
       type: string;
@@ -83,7 +83,7 @@ describe('operation-params $ref resolution', () => {
     };
     expect(result.type).toBe('object');
     expect((result.properties.target as { type: string }).type).toBe('object');
-    expect((result.properties.marks as { type: string }).type).toBe('object');
+    expect((result.properties.inline as { type: string }).type).toBe('object');
     expect((result.properties.text as { type: string }).type).toBe('string');
   });
 

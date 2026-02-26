@@ -1,5 +1,6 @@
 import type { Receipt, TrackChangeInfo, TrackChangesListQuery, TrackChangesListResult } from '../types/index.js';
 import type { RevisionGuardOptions } from '../write/write.js';
+import { DocumentApiValidationError } from '../errors.js';
 
 export type TrackChangesListInput = TrackChangesListQuery;
 
@@ -20,7 +21,7 @@ export type TrackChangesAcceptAllInput = Record<string, never>;
 export type TrackChangesRejectAllInput = Record<string, never>;
 
 // ---------------------------------------------------------------------------
-// review.decide — canonical consolidated review operation (Phase 4 Wave 1)
+// trackChanges.decide — consolidated accept/reject operation
 // ---------------------------------------------------------------------------
 
 export type ReviewDecideInput =
@@ -44,10 +45,11 @@ export interface TrackChangesAdapter {
   rejectAll(input: TrackChangesRejectAllInput, options?: RevisionGuardOptions): Receipt;
 }
 
-/** Public read-only surface for trackChanges on DocumentApi. Mutations go through review.decide. */
+/** Public surface for trackChanges on DocumentApi. */
 export interface TrackChangesApi {
   list(input?: TrackChangesListInput): TrackChangesListResult;
   get(input: TrackChangesGetInput): TrackChangeInfo;
+  decide(input: ReviewDecideInput, options?: RevisionGuardOptions): Receipt;
 }
 
 /**
@@ -100,21 +102,59 @@ export function executeTrackChangesRejectAll(
 }
 
 /**
- * Executes the consolidated `review.decide` operation by routing to the
+ * Executes the consolidated `trackChanges.decide` operation by routing to the
  * appropriate adapter method based on the discriminated input.
  */
-export function executeReviewDecide(
+export function executeTrackChangesDecide(
   adapter: TrackChangesAdapter,
-  input: ReviewDecideInput,
+  rawInput: ReviewDecideInput,
   options?: RevisionGuardOptions,
 ): Receipt {
-  const isAll = 'scope' in input.target && input.target.scope === 'all';
+  // Dynamic invoke callers may pass arbitrary values — validate before narrowing.
+  const raw = rawInput as unknown;
+
+  if (typeof raw !== 'object' || raw == null) {
+    throw new DocumentApiValidationError('INVALID_INPUT', 'trackChanges.decide input must be a non-null object.', {
+      value: raw,
+    });
+  }
+
+  const input = raw as Record<string, unknown>;
+
+  if (input.decision !== 'accept' && input.decision !== 'reject') {
+    throw new DocumentApiValidationError(
+      'INVALID_INPUT',
+      `trackChanges.decide decision must be "accept" or "reject", got "${String(input.decision)}".`,
+      { field: 'decision', value: input.decision },
+    );
+  }
+
+  if (typeof input.target !== 'object' || input.target == null) {
+    throw new DocumentApiValidationError(
+      'INVALID_TARGET',
+      'trackChanges.decide target must be an object with { id: string } or { scope: "all" }.',
+      { field: 'target', value: input.target },
+    );
+  }
+
+  const target = input.target as Record<string, unknown>;
+  const isAll = target.scope === 'all';
+
+  if (!isAll) {
+    if (typeof target.id !== 'string' || target.id.length === 0) {
+      throw new DocumentApiValidationError(
+        'INVALID_TARGET',
+        'trackChanges.decide target must have { id: string } or { scope: "all" }.',
+        { field: 'target', value: input.target },
+      );
+    }
+  }
 
   if (input.decision === 'accept') {
     if (isAll) return adapter.acceptAll({} as TrackChangesAcceptAllInput, options);
-    return adapter.accept({ id: (input.target as { id: string }).id }, options);
+    return adapter.accept({ id: target.id as string }, options);
   }
 
   if (isAll) return adapter.rejectAll({} as TrackChangesRejectAllInput, options);
-  return adapter.reject({ id: (input.target as { id: string }).id }, options);
+  return adapter.reject({ id: target.id as string }, options);
 }

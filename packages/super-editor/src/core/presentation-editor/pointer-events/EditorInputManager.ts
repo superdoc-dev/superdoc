@@ -130,9 +130,17 @@ export type EditorInputCallbacks = {
   /** Emit event */
   emit?: (event: string, payload: unknown) => void;
   /** Normalize client point to layout coordinates */
-  normalizeClientPoint?: (clientX: number, clientY: number) => { x: number; y: number } | null;
+  normalizeClientPoint?: (
+    clientX: number,
+    clientY: number,
+  ) => { x: number; y: number; pageIndex?: number; pageLocalY?: number } | null;
   /** Hit test header/footer region */
-  hitTestHeaderFooterRegion?: (x: number, y: number) => HeaderFooterRegion | null;
+  hitTestHeaderFooterRegion?: (
+    x: number,
+    y: number,
+    pageIndex?: number,
+    pageLocalY?: number,
+  ) => HeaderFooterRegion | null;
   /** Exit header/footer mode */
   exitHeaderFooterMode?: () => void;
   /** Activate header/footer region */
@@ -851,12 +859,21 @@ export class EditorInputManager {
     // Check header/footer session state
     const sessionMode = this.#deps.getHeaderFooterSession()?.session?.mode ?? 'body';
     if (sessionMode !== 'body') {
-      if (this.#handleClickInHeaderFooterMode(event, x, y)) return;
+      if (this.#handleClickInHeaderFooterMode(event, x, y, normalizedPoint.pageIndex, normalizedPoint.pageLocalY))
+        return;
     }
 
     // Check for header/footer region hit
-    const headerFooterRegion = this.#callbacks.hitTestHeaderFooterRegion?.(x, y);
-    if (headerFooterRegion) return; // Will be handled by double-click
+    const headerFooterRegion = this.#callbacks.hitTestHeaderFooterRegion?.(
+      x,
+      y,
+      normalizedPoint.pageIndex,
+      normalizedPoint.pageLocalY,
+    );
+    if (headerFooterRegion) {
+      event.preventDefault(); // Prevent native selection before double-click handles it
+      return; // Will be handled by double-click
+    }
 
     // Get hit position
     const viewportHost = this.#deps.getViewportHost();
@@ -1165,16 +1182,15 @@ export class EditorInputManager {
     const layoutState = this.#deps.getLayoutState();
     if (!layoutState.layout) return;
 
-    const viewportHost = this.#deps.getViewportHost();
-    const visibleHost = this.#deps.getVisibleHost();
-    const zoom = this.#deps.getZoom();
-    const rect = viewportHost.getBoundingClientRect();
-    const scrollLeft = visibleHost.scrollLeft ?? 0;
-    const scrollTop = visibleHost.scrollTop ?? 0;
-    const x = (event.clientX - rect.left + scrollLeft) / zoom;
-    const y = (event.clientY - rect.top + scrollTop) / zoom;
+    const normalized = this.#callbacks.normalizeClientPoint?.(event.clientX, event.clientY);
+    if (!normalized) return;
 
-    const region = this.#callbacks.hitTestHeaderFooterRegion?.(x, y);
+    const region = this.#callbacks.hitTestHeaderFooterRegion?.(
+      normalized.x,
+      normalized.y,
+      normalized.pageIndex,
+      normalized.pageLocalY,
+    );
     if (region) {
       event.preventDefault();
       event.stopPropagation();
@@ -1474,7 +1490,13 @@ export class EditorInputManager {
     this.#focusEditorAtFirstPosition();
   }
 
-  #handleClickInHeaderFooterMode(event: PointerEvent, x: number, y: number): boolean {
+  #handleClickInHeaderFooterMode(
+    event: PointerEvent,
+    x: number,
+    y: number,
+    pageIndex?: number,
+    pageLocalY?: number,
+  ): boolean {
     const session = this.#deps?.getHeaderFooterSession();
     const activeEditorHost = session?.overlayManager?.getActiveEditorHost?.();
     const clickedInsideEditorHost =
@@ -1484,13 +1506,16 @@ export class EditorInputManager {
       return true; // Let editor handle it
     }
 
-    const headerFooterRegion = this.#callbacks.hitTestHeaderFooterRegion?.(x, y);
+    const headerFooterRegion = this.#callbacks.hitTestHeaderFooterRegion?.(x, y, pageIndex, pageLocalY);
     if (!headerFooterRegion) {
       this.#callbacks.exitHeaderFooterMode?.();
       return false; // Continue to body click handling
     }
 
-    return true; // In header/footer region
+    // Click is in a H/F region on a different page — don't consume the event.
+    // Let it fall through to the existing footer region check in #handlePointerDown
+    // which properly calls event.preventDefault() before the dblclick handler activates it.
+    return false;
   }
 
   #handleInlineImageClick(
@@ -1746,7 +1771,7 @@ export class EditorInputManager {
     }
   }
 
-  #handleHover(normalized: { x: number; y: number }): void {
+  #handleHover(normalized: { x: number; y: number; pageIndex?: number; pageLocalY?: number }): void {
     if (!this.#deps) return;
 
     const sessionMode = this.#deps.getHeaderFooterSession()?.session?.mode ?? 'body';
@@ -1760,7 +1785,12 @@ export class EditorInputManager {
       return;
     }
 
-    const region = this.#callbacks.hitTestHeaderFooterRegion?.(normalized.x, normalized.y);
+    const region = this.#callbacks.hitTestHeaderFooterRegion?.(
+      normalized.x,
+      normalized.y,
+      normalized.pageIndex,
+      normalized.pageLocalY,
+    );
     if (!region) {
       this.#callbacks.clearHoverRegion?.();
       return;

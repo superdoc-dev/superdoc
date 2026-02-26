@@ -1,5 +1,5 @@
 import type { Editor } from '../../core/Editor.js';
-import type { CommentInfo, CommentStatus, TextAddress } from '@superdoc/document-api';
+import type { CommentInfo, CommentStatus, TextTarget } from '@superdoc/document-api';
 
 const FALLBACK_STORE_KEY = '__documentApiComments';
 
@@ -185,8 +185,9 @@ export function isCommentResolved(entry: CommentEntityRecord): boolean {
 export function toCommentInfo(
   entry: CommentEntityRecord,
   options: {
-    target?: TextAddress;
+    target?: TextTarget;
     status?: CommentStatus;
+    anchoredText?: string;
   } = {},
 ): CommentInfo {
   const resolvedId = typeof entry.commentId === 'string' ? entry.commentId : String(entry.importedId ?? '');
@@ -205,6 +206,7 @@ export function toCommentInfo(
     isInternal: typeof entry.isInternal === 'boolean' ? entry.isInternal : undefined,
     status,
     target: options.target,
+    anchoredText: options.anchoredText,
     createdTime: typeof entry.createdTime === 'number' ? entry.createdTime : undefined,
     creatorName: typeof entry.creatorName === 'string' ? entry.creatorName : undefined,
     creatorEmail: typeof entry.creatorEmail === 'string' ? entry.creatorEmail : undefined,

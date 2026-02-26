@@ -2,7 +2,7 @@
  * Format helper methods for the Node SDK.
  *
  * These are hand-written convenience wrappers that call the canonical
- * `format.apply` operation with pre-filled marks. They are NOT generated
+ * `format.apply` operation with pre-filled inline styles. They are NOT generated
  * from the contract and will not be overwritten by `pnpm run generate:all`.
  *
  * Usage:
@@ -38,7 +38,7 @@ const FORMAT_APPLY_SPEC: OperationSpec = {
     { name: 'doc', kind: 'doc', type: 'string' },
     { name: 'sessionId', kind: 'doc', flag: 'session', type: 'string' },
     { name: 'target', kind: 'jsonFlag', type: 'json' },
-    { name: 'marks', kind: 'jsonFlag', type: 'json' },
+    { name: 'inline', kind: 'jsonFlag', type: 'json' },
     { name: 'dryRun', kind: 'flag', type: 'boolean' },
     { name: 'changeMode', kind: 'flag', type: 'string' },
     { name: 'expectedRevision', kind: 'flag', type: 'string' },
@@ -87,42 +87,42 @@ function normalizeFormatParams(params: FormatHelperParams): Record<string, unkno
   return params as Record<string, unknown>;
 }
 
-function mergeMarks(params: FormatHelperParams, marks: Record<string, boolean>): Record<string, unknown> {
-  return { ...normalizeFormatParams(params), marks };
+function mergeInlineStyles(params: FormatHelperParams, inline: Record<string, boolean>): Record<string, unknown> {
+  return { ...normalizeFormatParams(params), inline };
 }
 
 /**
  * Apply bold formatting to a text range.
  *
- * Equivalent to `format.apply` with `marks: { bold: true }`.
+ * Equivalent to `format.apply` with `inline: { bold: true }`.
  */
 export function formatBold(invoke: RuntimeInvokeFn, params: FormatHelperParams = {}, options?: InvokeOptions) {
-  return invoke(FORMAT_APPLY_SPEC, mergeMarks(params, { bold: true }), options);
+  return invoke(FORMAT_APPLY_SPEC, mergeInlineStyles(params, { bold: true }), options);
 }
 
 /**
  * Apply italic formatting to a text range.
  *
- * Equivalent to `format.apply` with `marks: { italic: true }`.
+ * Equivalent to `format.apply` with `inline: { italic: true }`.
  */
 export function formatItalic(invoke: RuntimeInvokeFn, params: FormatHelperParams = {}, options?: InvokeOptions) {
-  return invoke(FORMAT_APPLY_SPEC, mergeMarks(params, { italic: true }), options);
+  return invoke(FORMAT_APPLY_SPEC, mergeInlineStyles(params, { italic: true }), options);
 }
 
 /**
  * Apply underline formatting to a text range.
  *
- * Equivalent to `format.apply` with `marks: { underline: true }`.
+ * Equivalent to `format.apply` with `inline: { underline: true }`.
  */
 export function formatUnderline(invoke: RuntimeInvokeFn, params: FormatHelperParams = {}, options?: InvokeOptions) {
-  return invoke(FORMAT_APPLY_SPEC, mergeMarks(params, { underline: true }), options);
+  return invoke(FORMAT_APPLY_SPEC, mergeInlineStyles(params, { underline: true }), options);
 }
 
 /**
  * Apply strikethrough formatting to a text range.
  *
- * Equivalent to `format.apply` with `marks: { strike: true }`.
+ * Equivalent to `format.apply` with `inline: { strike: true }`.
  */
 export function formatStrikethrough(invoke: RuntimeInvokeFn, params: FormatHelperParams = {}, options?: InvokeOptions) {
-  return invoke(FORMAT_APPLY_SPEC, mergeMarks(params, { strike: true }), options);
+  return invoke(FORMAT_APPLY_SPEC, mergeInlineStyles(params, { strike: true }), options);
 }

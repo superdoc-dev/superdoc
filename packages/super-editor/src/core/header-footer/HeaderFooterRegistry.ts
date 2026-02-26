@@ -350,6 +350,10 @@ export class HeaderFooterEditorManager extends EventEmitter {
         }
         if (Object.keys(updateOptions).length > 0) {
           existing.editor.setOptions(updateOptions);
+          // Refresh page number display after option changes.
+          // NodeViews read editor.options but PM doesn't re-render them
+          // when only options change (no document transaction).
+          this.#refreshPageNumberDisplay(existing.editor);
         }
       }
 
@@ -393,6 +397,31 @@ export class HeaderFooterEditorManager extends EventEmitter {
 
     this.#pendingCreations.set(descriptor.id, creationPromise);
     return creationPromise;
+  }
+
+  /**
+   * Updates page number DOM elements to reflect current editor options.
+   * Called after setOptions to sync NodeViews that read editor.options.
+   */
+  #refreshPageNumberDisplay(editor: Editor): void {
+    const container = editor.view?.dom;
+    if (!container) return;
+
+    const opts = editor.options as Record<string, unknown>;
+    const parentEditor = opts.parentEditor as Record<string, unknown> | undefined;
+
+    const currentPage = String(opts.currentPageNumber || '1');
+    const totalPages = String(opts.totalPageCount || parentEditor?.currentTotalPages || '1');
+
+    const pageNumberEls = container.querySelectorAll('[data-id="auto-page-number"]');
+    const totalPagesEls = container.querySelectorAll('[data-id="auto-total-pages"]');
+
+    pageNumberEls.forEach((el) => {
+      if (el.textContent !== currentPage) el.textContent = currentPage;
+    });
+    totalPagesEls.forEach((el) => {
+      if (el.textContent !== totalPages) el.textContent = totalPages;
+    });
   }
 
   /**

@@ -11,6 +11,7 @@ import {
   OPERATION_IDS,
 } from '@superdoc/document-api';
 import { TrackFormatMarkName } from '../extensions/track-changes/constants.js';
+import { isCollaborationActive } from './collaboration-detection.js';
 
 type EditorCommandName = string;
 
@@ -18,6 +19,10 @@ type EditorCommandName = string;
 // they are backed by writeAdapter which is always available when the editor exists.
 // Read-only operations (find, getNode, getText, info, etc.) similarly need no commands.
 const REQUIRED_COMMANDS: Partial<Record<OperationId, readonly EditorCommandName[]>> = {
+  'format.fontSize': ['setTextSelection', 'setFontSize', 'unsetFontSize'],
+  'format.fontFamily': ['setTextSelection', 'setFontFamily', 'unsetFontFamily'],
+  'format.color': ['setTextSelection', 'setColor', 'unsetColor'],
+  'format.align': ['setTextSelection', 'setTextAlign', 'unsetTextAlign'],
   'create.paragraph': ['insertParagraphAt'],
   'create.heading': ['insertHeadingAt'],
   'lists.insert': ['insertListItemAt'],
@@ -26,15 +31,54 @@ const REQUIRED_COMMANDS: Partial<Record<OperationId, readonly EditorCommandName[
   'lists.outdent': ['setTextSelection', 'decreaseListIndent'],
   'lists.restart': ['setTextSelection', 'restartNumbering'],
   'lists.exit': ['exitListItemAt'],
+  'blocks.delete': ['deleteBlockNodeById'],
   'comments.create': ['addComment', 'setTextSelection', 'addCommentReply'],
   'comments.patch': ['editComment', 'moveComment', 'resolveComment', 'setCommentInternal'],
   'comments.delete': ['removeComment'],
-  'review.decide': [
+  'trackChanges.decide': [
     'acceptTrackedChangeById',
     'rejectTrackedChangeById',
     'acceptAllTrackedChanges',
     'rejectAllTrackedChanges',
   ],
+  // Table operations — implemented (insertTableAt proves the table extension is loaded):
+  'create.table': ['insertTableAt'],
+  'tables.delete': ['insertTableAt'],
+  'tables.clearContents': ['insertTableAt'],
+  'tables.move': ['insertTableAt'],
+  'tables.setLayout': ['insertTableAt'],
+  'tables.setAltText': ['insertTableAt'],
+  'tables.insertRow': ['insertTableAt'],
+  'tables.deleteRow': ['insertTableAt'],
+  'tables.setRowHeight': ['insertTableAt'],
+  'tables.distributeRows': ['insertTableAt'],
+  'tables.setRowOptions': ['insertTableAt'],
+  'tables.insertColumn': ['insertTableAt'],
+  'tables.deleteColumn': ['insertTableAt'],
+  'tables.setColumnWidth': ['insertTableAt'],
+  'tables.distributeColumns': ['insertTableAt'],
+  'tables.insertCell': ['insertTableAt'],
+  'tables.deleteCell': ['insertTableAt'],
+  'tables.mergeCells': ['insertTableAt'],
+  'tables.unmergeCells': ['insertTableAt'],
+  'tables.splitCell': ['insertTableAt'],
+  'tables.setCellProperties': ['insertTableAt'],
+  'tables.convertFromText': ['insertTableAt'],
+  'tables.split': ['insertTableAt'],
+  'tables.convertToText': ['insertTableAt'],
+  'tables.sort': ['insertTableAt'],
+  'tables.setStyle': ['insertTableAt'],
+  'tables.clearStyle': ['insertTableAt'],
+  'tables.setStyleOption': ['insertTableAt'],
+  'tables.setBorder': ['insertTableAt'],
+  'tables.clearBorder': ['insertTableAt'],
+  'tables.applyBorderPreset': ['insertTableAt'],
+  'tables.setShading': ['insertTableAt'],
+  'tables.clearShading': ['insertTableAt'],
+  'tables.setTablePadding': ['insertTableAt'],
+  'tables.setCellPadding': ['insertTableAt'],
+  'tables.setCellSpacing': ['insertTableAt'],
+  'tables.clearCellSpacing': ['insertTableAt'],
 };
 
 /** Runtime guard — ensures only canonical reason codes are emitted even if the set grows. */
@@ -48,6 +92,20 @@ function hasAllCommands(editor: Editor, operationId: OperationId): boolean {
   const required = REQUIRED_COMMANDS[operationId];
   if (!required || required.length === 0) return true;
   return required.every((command) => hasCommand(editor, command));
+}
+
+/**
+ * Operations that require specific editor helpers beyond commands.
+ * Each entry maps an operation to a predicate that checks helper availability.
+ */
+const REQUIRED_HELPERS: Partial<Record<OperationId, (editor: Editor) => boolean>> = {
+  'blocks.delete': (editor) => typeof (editor as any).helpers?.blockNode?.getBlockNodeById === 'function',
+};
+
+function hasRequiredHelpers(editor: Editor, operationId: OperationId): boolean {
+  const check = REQUIRED_HELPERS[operationId];
+  if (!check) return true;
+  return check(editor);
 }
 
 function hasMarkCapability(editor: Editor, markName: string): boolean {
@@ -66,6 +124,12 @@ const STYLE_MARK_SCHEMA_NAMES: Record<string, string> = {
 function isMarkBackedOperation(operationId: OperationId): boolean {
   return operationId === 'format.apply';
 }
+
+/**
+ * Inline value-format operations (fontSize, fontFamily, color) require the 'textStyle'
+ * mark in the schema — they apply values via `setMark('textStyle', ...)`.
+ */
+const INLINE_FORMAT_OPERATIONS = new Set<OperationId>(['format.fontSize', 'format.fontFamily', 'format.color']);
 
 function hasTrackedModeCapability(editor: Editor, operationId: OperationId): boolean {
   if (!hasCommand(editor, 'insertTrackedChange')) return false;
@@ -110,17 +174,58 @@ function pushReason(reasons: CapabilityReasonCode[], reason: CapabilityReasonCod
   if (!reasons.includes(reason)) reasons.push(reason);
 }
 
+/** Operations that determine availability through non-command mechanisms. */
+function isNonCommandBackedOperation(operationId: OperationId): boolean {
+  return operationId === 'format.apply' || operationId === 'styles.apply' || INLINE_FORMAT_OPERATIONS.has(operationId);
+}
+
+/** Checks whether the styles part has a valid w:styles root element. */
+function hasStylesRoot(stylesPart: unknown): boolean {
+  const part = stylesPart as { elements?: Array<{ name?: string }> } | undefined;
+  return part?.elements?.some((el) => el.name === 'w:styles') === true;
+}
+
+function isStylesApplyAvailable(editor: Editor): boolean {
+  const converter = (editor as unknown as { converter?: { convertedXml?: Record<string, unknown> } }).converter;
+  if (!converter?.convertedXml?.['word/styles.xml']) return false;
+  if (!hasStylesRoot(converter.convertedXml['word/styles.xml'])) return false;
+  if (isCollaborationActive(editor)) return false;
+  return true;
+}
+
+/**
+ * Returns the reason code when `styles.apply` is unavailable, or `undefined` if available.
+ */
+function getStylesApplyUnavailableReason(editor: Editor): CapabilityReasonCode | undefined {
+  const converter = (editor as unknown as { converter?: { convertedXml?: Record<string, unknown> } }).converter;
+  if (!converter) return 'OPERATION_UNAVAILABLE';
+  if (!converter.convertedXml?.['word/styles.xml']) return 'STYLES_PART_MISSING';
+  if (!hasStylesRoot(converter.convertedXml['word/styles.xml'])) return 'STYLES_PART_MISSING';
+  if (isCollaborationActive(editor)) return 'COLLABORATION_ACTIVE';
+  return undefined;
+}
+
 function isOperationAvailable(editor: Editor, operationId: OperationId): boolean {
   // format.apply is available if at least one mark type exists in the schema
   if (operationId === 'format.apply') {
     return MARK_KEYS.some((key) => hasMarkCapability(editor, STYLE_MARK_SCHEMA_NAMES[key] ?? key));
   }
 
-  return hasAllCommands(editor, operationId);
+  // Inline format ops (fontSize, fontFamily, color) require the textStyle mark in the schema
+  if (INLINE_FORMAT_OPERATIONS.has(operationId)) {
+    return hasAllCommands(editor, operationId) && hasMarkCapability(editor, 'textStyle');
+  }
+
+  // styles.apply requires converter + styles part + no collaboration
+  if (operationId === 'styles.apply') {
+    return isStylesApplyAvailable(editor);
+  }
+
+  return hasAllCommands(editor, operationId) && hasRequiredHelpers(editor, operationId);
 }
 
 function isCommandBackedAvailability(operationId: OperationId): boolean {
-  return !isMarkBackedOperation(operationId);
+  return !isNonCommandBackedOperation(operationId);
 }
 
 function buildOperationCapabilities(editor: Editor): DocumentApiCapabilities['operations'] {
@@ -135,8 +240,16 @@ function buildOperationCapabilities(editor: Editor): DocumentApiCapabilities['op
     const reasons: CapabilityReasonCode[] = [];
 
     if (!available) {
-      if (isCommandBackedAvailability(operationId)) {
-        pushReason(reasons, 'COMMAND_UNAVAILABLE');
+      if (operationId === 'styles.apply') {
+        const stylesReason = getStylesApplyUnavailableReason(editor);
+        if (stylesReason) pushReason(reasons, stylesReason);
+      } else if (isCommandBackedAvailability(operationId)) {
+        if (!hasAllCommands(editor, operationId)) {
+          pushReason(reasons, 'COMMAND_UNAVAILABLE');
+        }
+        if (!hasRequiredHelpers(editor, operationId)) {
+          pushReason(reasons, 'HELPER_UNAVAILABLE');
+        }
       }
       pushReason(reasons, 'OPERATION_UNAVAILABLE');
     }
@@ -172,6 +285,44 @@ const SUPPORTED_STEP_OPS = [
   'assert',
   'create.paragraph',
   'create.heading',
+  'domain.command',
+  'create.table',
+  'tables.delete',
+  'tables.clearContents',
+  'tables.move',
+  'tables.split',
+  'tables.convertFromText',
+  'tables.convertToText',
+  'tables.setLayout',
+  'tables.insertRow',
+  'tables.deleteRow',
+  'tables.setRowHeight',
+  'tables.distributeRows',
+  'tables.setRowOptions',
+  'tables.insertColumn',
+  'tables.deleteColumn',
+  'tables.setColumnWidth',
+  'tables.distributeColumns',
+  'tables.insertCell',
+  'tables.deleteCell',
+  'tables.mergeCells',
+  'tables.unmergeCells',
+  'tables.splitCell',
+  'tables.setCellProperties',
+  'tables.sort',
+  'tables.setAltText',
+  'tables.setStyle',
+  'tables.clearStyle',
+  'tables.setStyleOption',
+  'tables.setBorder',
+  'tables.clearBorder',
+  'tables.applyBorderPreset',
+  'tables.setShading',
+  'tables.clearShading',
+  'tables.setTablePadding',
+  'tables.setCellPadding',
+  'tables.setCellSpacing',
+  'tables.clearCellSpacing',
 ] as const;
 const SUPPORTED_NON_UNIFORM_STRATEGIES = ['error', 'useLeadingRun', 'majority', 'union'] as const;
 const SUPPORTED_SET_MARKS = ['bold', 'italic', 'underline', 'strike'] as const;

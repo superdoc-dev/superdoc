@@ -115,7 +115,7 @@ describe('getDocumentApiCapabilities', () => {
     expect(capabilities.operations.insert.dryRun).toBe(true);
     expect(capabilities.operations['lists.setType'].tracked).toBe(false);
     expect(capabilities.operations['lists.setType'].dryRun).toBe(true);
-    expect(capabilities.operations['review.decide'].dryRun).toBe(false);
+    expect(capabilities.operations['trackChanges.decide'].dryRun).toBe(false);
     expect(capabilities.operations['create.paragraph'].dryRun).toBe(true);
     expect(capabilities.operations['create.heading'].available).toBe(true);
     expect(capabilities.operations['create.heading'].tracked).toBe(true);
@@ -185,11 +185,11 @@ describe('getDocumentApiCapabilities', () => {
   it('does not emit unavailable reasons for modes that are unsupported by design', () => {
     const capabilities = getDocumentApiCapabilities(makeEditor());
     const setTypeReasons = capabilities.operations['lists.setType'].reasons ?? [];
-    const reviewDecideReasons = capabilities.operations['review.decide'].reasons ?? [];
+    const trackChangesDecideReasons = capabilities.operations['trackChanges.decide'].reasons ?? [];
 
     expect(setTypeReasons).not.toContain('TRACKED_MODE_UNAVAILABLE');
     expect(setTypeReasons).not.toContain('DRY_RUN_UNAVAILABLE');
-    expect(reviewDecideReasons).not.toContain('DRY_RUN_UNAVAILABLE');
+    expect(trackChangesDecideReasons).not.toContain('DRY_RUN_UNAVAILABLE');
   });
 
   it('handles an editor with undefined schema gracefully', () => {
@@ -209,6 +209,38 @@ describe('getDocumentApiCapabilities', () => {
     }
   });
 
+  it('marks blocks.delete as unavailable when blockNode helper is missing', () => {
+    const editor = makeEditor({
+      commands: {
+        deleteBlockNodeById: vi.fn(() => true),
+      } as unknown as Editor['commands'],
+    });
+    // editor has the command but no helpers.blockNode.getBlockNodeById
+    const capabilities = getDocumentApiCapabilities(editor);
+
+    expect(capabilities.operations['blocks.delete'].available).toBe(false);
+    expect(capabilities.operations['blocks.delete'].dryRun).toBe(false);
+    expect(capabilities.operations['blocks.delete'].reasons).toContain('HELPER_UNAVAILABLE');
+    expect(capabilities.operations['blocks.delete'].reasons).not.toContain('COMMAND_UNAVAILABLE');
+  });
+
+  it('marks blocks.delete as available when both command and helper are present', () => {
+    const editor = makeEditor({
+      commands: {
+        deleteBlockNodeById: vi.fn(() => true),
+      } as unknown as Editor['commands'],
+    });
+    // Add the required helper
+    (editor as any).helpers = {
+      blockNode: { getBlockNodeById: vi.fn(() => []) },
+    };
+    const capabilities = getDocumentApiCapabilities(editor);
+
+    expect(capabilities.operations['blocks.delete'].available).toBe(true);
+    expect(capabilities.operations['blocks.delete'].dryRun).toBe(true);
+    expect(capabilities.operations['blocks.delete'].tracked).toBe(false);
+  });
+
   it('uses OPERATION_UNAVAILABLE without COMMAND_UNAVAILABLE for non-command-backed availability failures', () => {
     const capabilities = getDocumentApiCapabilities(
       makeEditor({
@@ -224,5 +256,176 @@ describe('getDocumentApiCapabilities', () => {
     const styleReasons = capabilities.operations['format.apply'].reasons ?? [];
     expect(styleReasons).toContain('OPERATION_UNAVAILABLE');
     expect(styleReasons).not.toContain('COMMAND_UNAVAILABLE');
+  });
+
+  // ---------------------------------------------------------------------------
+  // format.fontSize / fontFamily / color / align capability reporting
+  // ---------------------------------------------------------------------------
+
+  describe('format value operations', () => {
+    function makeFormatEditor(overrides: { commands?: Record<string, unknown>; marks?: Record<string, unknown> } = {}) {
+      return makeEditor({
+        commands: {
+          setFontSize: vi.fn(() => true),
+          unsetFontSize: vi.fn(() => true),
+          setFontFamily: vi.fn(() => true),
+          unsetFontFamily: vi.fn(() => true),
+          setColor: vi.fn(() => true),
+          unsetColor: vi.fn(() => true),
+          setTextAlign: vi.fn(() => true),
+          unsetTextAlign: vi.fn(() => true),
+          ...overrides.commands,
+        } as unknown as Editor['commands'],
+        schema: {
+          marks: {
+            textStyle: { create: vi.fn(() => ({ type: 'textStyle' })) },
+            ...overrides.marks,
+          },
+        } as unknown as Editor['schema'],
+      });
+    }
+
+    it('reports inline format ops as available when commands and textStyle mark are present', () => {
+      const capabilities = getDocumentApiCapabilities(makeFormatEditor());
+
+      expect(capabilities.operations['format.fontSize'].available).toBe(true);
+      expect(capabilities.operations['format.fontFamily'].available).toBe(true);
+      expect(capabilities.operations['format.color'].available).toBe(true);
+    });
+
+    it('reports format.align as available when set and unset commands are present', () => {
+      const capabilities = getDocumentApiCapabilities(makeFormatEditor());
+
+      expect(capabilities.operations['format.align'].available).toBe(true);
+    });
+
+    it('reports inline format ops as unavailable when textStyle mark is missing', () => {
+      const capabilities = getDocumentApiCapabilities(makeFormatEditor({ marks: { textStyle: undefined } }));
+
+      expect(capabilities.operations['format.fontSize'].available).toBe(false);
+      expect(capabilities.operations['format.fontFamily'].available).toBe(false);
+      expect(capabilities.operations['format.color'].available).toBe(false);
+      // align is paragraph-level — it does not require the textStyle mark
+      expect(capabilities.operations['format.align'].available).toBe(true);
+    });
+
+    it('reports format.fontSize as unavailable when unsetFontSize command is missing', () => {
+      const capabilities = getDocumentApiCapabilities(makeFormatEditor({ commands: { unsetFontSize: undefined } }));
+
+      expect(capabilities.operations['format.fontSize'].available).toBe(false);
+      expect(capabilities.operations['format.fontSize'].reasons).toContain('OPERATION_UNAVAILABLE');
+    });
+
+    it('reports format.align as unavailable when unsetTextAlign command is missing', () => {
+      const capabilities = getDocumentApiCapabilities(makeFormatEditor({ commands: { unsetTextAlign: undefined } }));
+
+      expect(capabilities.operations['format.align'].available).toBe(false);
+      expect(capabilities.operations['format.align'].reasons).toContain('COMMAND_UNAVAILABLE');
+    });
+
+    it('uses OPERATION_UNAVAILABLE without COMMAND_UNAVAILABLE for inline format ops missing textStyle mark', () => {
+      const capabilities = getDocumentApiCapabilities(makeFormatEditor({ marks: { textStyle: undefined } }));
+
+      const fontSizeReasons = capabilities.operations['format.fontSize'].reasons ?? [];
+      expect(fontSizeReasons).toContain('OPERATION_UNAVAILABLE');
+      expect(fontSizeReasons).not.toContain('COMMAND_UNAVAILABLE');
+    });
+
+    it('reports all format value ops with dryRun support', () => {
+      const capabilities = getDocumentApiCapabilities(makeFormatEditor());
+
+      expect(capabilities.operations['format.fontSize'].dryRun).toBe(true);
+      expect(capabilities.operations['format.fontFamily'].dryRun).toBe(true);
+      expect(capabilities.operations['format.color'].dryRun).toBe(true);
+      expect(capabilities.operations['format.align'].dryRun).toBe(true);
+    });
+
+    it('reports all format value ops as direct-only (tracked = false)', () => {
+      const capabilities = getDocumentApiCapabilities(makeFormatEditor());
+
+      expect(capabilities.operations['format.fontSize'].tracked).toBe(false);
+      expect(capabilities.operations['format.fontFamily'].tracked).toBe(false);
+      expect(capabilities.operations['format.color'].tracked).toBe(false);
+      expect(capabilities.operations['format.align'].tracked).toBe(false);
+    });
+  });
+
+  // --- styles.apply capability tests ---
+
+  it('marks styles.apply as available when converter has a valid styles part', () => {
+    const editor = makeEditor();
+    (editor as unknown as Record<string, unknown>).converter = {
+      convertedXml: {
+        'word/styles.xml': { name: 'root', elements: [{ name: 'w:styles', elements: [] }] },
+      },
+    };
+
+    const capabilities = getDocumentApiCapabilities(editor);
+    expect(capabilities.operations['styles.apply'].available).toBe(true);
+    expect(capabilities.operations['styles.apply'].dryRun).toBe(true);
+    expect(capabilities.operations['styles.apply'].reasons).toBeUndefined();
+  });
+
+  it('marks styles.apply unavailable with OPERATION_UNAVAILABLE when converter is missing', () => {
+    const editor = makeEditor();
+    // No converter set on editor — default case
+
+    const capabilities = getDocumentApiCapabilities(editor);
+    const reasons = capabilities.operations['styles.apply'].reasons ?? [];
+    expect(capabilities.operations['styles.apply'].available).toBe(false);
+    expect(reasons).toContain('OPERATION_UNAVAILABLE');
+    expect(reasons).not.toContain('COMMAND_UNAVAILABLE');
+  });
+
+  it('reports STYLES_PART_MISSING when converter exists but word/styles.xml is absent', () => {
+    const editor = makeEditor();
+    (editor as unknown as Record<string, unknown>).converter = {
+      convertedXml: {},
+    };
+
+    const capabilities = getDocumentApiCapabilities(editor);
+    const reasons = capabilities.operations['styles.apply'].reasons ?? [];
+    expect(capabilities.operations['styles.apply'].available).toBe(false);
+    expect(reasons).toContain('STYLES_PART_MISSING');
+    expect(reasons).toContain('OPERATION_UNAVAILABLE');
+  });
+
+  it('reports STYLES_PART_MISSING when styles part has no w:styles root', () => {
+    const editor = makeEditor();
+    (editor as unknown as Record<string, unknown>).converter = {
+      convertedXml: {
+        'word/styles.xml': { name: 'root', elements: [{ name: 'w:other' }] },
+      },
+    };
+
+    const capabilities = getDocumentApiCapabilities(editor);
+    const reasons = capabilities.operations['styles.apply'].reasons ?? [];
+    expect(capabilities.operations['styles.apply'].available).toBe(false);
+    expect(reasons).toContain('STYLES_PART_MISSING');
+  });
+
+  it('reports COLLABORATION_ACTIVE when collaboration provider is synced', () => {
+    const editor = makeEditor();
+    (editor as unknown as Record<string, unknown>).converter = {
+      convertedXml: {
+        'word/styles.xml': { name: 'root', elements: [{ name: 'w:styles', elements: [] }] },
+      },
+    };
+    (editor as unknown as { options: Record<string, unknown> }).options.collaborationProvider = { synced: true };
+
+    const capabilities = getDocumentApiCapabilities(editor);
+    const reasons = capabilities.operations['styles.apply'].reasons ?? [];
+    expect(capabilities.operations['styles.apply'].available).toBe(false);
+    expect(reasons).toContain('COLLABORATION_ACTIVE');
+    expect(reasons).toContain('OPERATION_UNAVAILABLE');
+  });
+
+  it('styles.apply never reports COMMAND_UNAVAILABLE', () => {
+    const editor = makeEditor();
+    // No converter → unavailable, but should not use COMMAND_UNAVAILABLE
+
+    const capabilities = getDocumentApiCapabilities(editor);
+    const reasons = capabilities.operations['styles.apply'].reasons ?? [];
+    expect(reasons).not.toContain('COMMAND_UNAVAILABLE');
   });
 });

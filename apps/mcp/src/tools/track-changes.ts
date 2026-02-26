@@ -57,7 +57,10 @@ export function registerTrackChangesTools(server: McpServer, sessions: SessionMa
     async ({ session_id, id }) => {
       try {
         const { api } = sessions.get(session_id);
-        const result = api.invoke({ operationId: 'review.decide', input: { decision: 'accept', target: { id } } });
+        const result = api.invoke({
+          operationId: 'trackChanges.decide',
+          input: { decision: 'accept', target: { id } },
+        });
         return {
           content: [{ type: 'text' as const, text: JSON.stringify(result, null, 2) }],
         };
@@ -85,7 +88,10 @@ export function registerTrackChangesTools(server: McpServer, sessions: SessionMa
     async ({ session_id, id }) => {
       try {
         const { api } = sessions.get(session_id);
-        const result = api.invoke({ operationId: 'review.decide', input: { decision: 'reject', target: { id } } });
+        const result = api.invoke({
+          operationId: 'trackChanges.decide',
+          input: { decision: 'reject', target: { id } },
+        });
         return {
           content: [{ type: 'text' as const, text: JSON.stringify(result, null, 2) }],
         };
@@ -112,7 +118,7 @@ export function registerTrackChangesTools(server: McpServer, sessions: SessionMa
       try {
         const { api } = sessions.get(session_id);
         const result = api.invoke({
-          operationId: 'review.decide',
+          operationId: 'trackChanges.decide',
           input: { decision: 'accept', target: { scope: 'all' } },
         });
         return {
@@ -141,7 +147,7 @@ export function registerTrackChangesTools(server: McpServer, sessions: SessionMa
       try {
         const { api } = sessions.get(session_id);
         const result = api.invoke({
-          operationId: 'review.decide',
+          operationId: 'trackChanges.decide',
           input: { decision: 'reject', target: { scope: 'all' } },
         });
         return {

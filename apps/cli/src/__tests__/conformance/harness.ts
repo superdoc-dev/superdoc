@@ -335,6 +335,74 @@ export class ConformanceHarness {
     return { sessionId, docPath };
   }
 
+  /**
+   * Creates a doc with a 3x3 table and opens it in a session.
+   *
+   * Because sdBlockId is regenerated on each document open, nodeIds are only
+   * stable within a single session. This method creates the table, then opens
+   * the output doc in a persistent session and discovers the table nodeId via
+   * `find`. Subsequent commands must use `--session` to stay in the same
+   * address space.
+   */
+  async createTableFixture(
+    stateDir: string,
+    label: string,
+  ): Promise<{ docPath: string; tableNodeId: string; cellNodeId: string; sessionId: string }> {
+    const sourceDoc = await this.copyFixtureDoc(`${label}-source`);
+    const outDoc = this.createOutputPath(`${label}-with-table`);
+
+    const { result } = await this.runCli(
+      ['create', 'table', sourceDoc, '--rows', '3', '--columns', '3', '--out', outDoc],
+      stateDir,
+    );
+    if (result.code !== 0) {
+      throw new Error(`Failed to create table fixture for ${label}`);
+    }
+
+    // Open the output doc in a session so the nodeId stays stable
+    const sessionId = `table-${label}-session`;
+    const open = await this.runCli(['open', outDoc, '--session', sessionId], stateDir);
+    if (open.result.code !== 0) {
+      throw new Error(`Failed to open table session for ${label}`);
+    }
+
+    // Discover the table nodeId within the session
+    const { result: findResult, envelope: findEnvelope } = await this.runCli(
+      ['find', '--session', sessionId, '--type', 'node', '--node-type', 'table', '--limit', '1'],
+      stateDir,
+    );
+    if (findResult.code !== 0) {
+      throw new Error(`Unable to find table in session for ${label}`);
+    }
+    assertSuccessEnvelope(findEnvelope);
+    const data = findEnvelope.data as {
+      result?: { items?: Array<{ address?: { nodeId?: string } }> };
+    };
+    const tableNodeId = data.result?.items?.[0]?.address?.nodeId;
+    if (!tableNodeId) {
+      throw new Error(`No table found in session for ${label}`);
+    }
+
+    // Discover a cell nodeId within the same session
+    const { result: cellResult, envelope: cellEnvelope } = await this.runCli(
+      ['find', '--session', sessionId, '--type', 'node', '--node-type', 'tableCell', '--limit', '1'],
+      stateDir,
+    );
+    if (cellResult.code !== 0) {
+      throw new Error(`Unable to find table cell in session for ${label}`);
+    }
+    assertSuccessEnvelope(cellEnvelope);
+    const cellData = cellEnvelope.data as {
+      result?: { items?: Array<{ address?: { nodeId?: string } }> };
+    };
+    const cellNodeId = cellData.result?.items?.[0]?.address?.nodeId;
+    if (!cellNodeId) {
+      throw new Error(`No table cell found in session for ${label}`);
+    }
+
+    return { docPath: outDoc, tableNodeId, cellNodeId, sessionId };
+  }
+
   nextId(): string {
     this.#counter += 1;
     return String(this.#counter).padStart(4, '0');

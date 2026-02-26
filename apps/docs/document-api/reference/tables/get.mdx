@@ -1,0 +1,126 @@
+---
+title: tables.get
+sidebarTitle: tables.get
+description: Reference for tables.get
+---
+
+{/* GENERATED FILE: DO NOT EDIT. Regenerate via `pnpm run docapi:sync`. */}
+
+> Alpha: Document API is currently alpha and subject to breaking changes.
+
+## Summary
+
+- Operation ID: `tables.get`
+- API member path: `editor.doc.tables.get(...)`
+- Mutates document: `no`
+- Idempotency: `idempotent`
+- Supports tracked mode: `no`
+- Supports dry run: `no`
+- Deterministic target resolution: `yes`
+
+## Input fields
+
+| Field | Type | Required | Description |
+| --- | --- | --- | --- |
+| `nodeId` | string | no |  |
+| `target` | BlockNodeAddress | no | BlockNodeAddress |
+
+### Example request
+
+```json
+{}
+```
+
+## Output fields
+
+| Field | Type | Required | Description |
+| --- | --- | --- | --- |
+| `address` | BlockNodeAddress | yes | BlockNodeAddress |
+| `columns` | integer | yes |  |
+| `nodeId` | string | yes |  |
+| `rows` | integer | yes |  |
+
+### Example response
+
+```json
+{
+  "address": {
+    "kind": "block",
+    "nodeId": "node-def456",
+    "nodeType": "paragraph"
+  },
+  "columns": 1,
+  "nodeId": "node-def456",
+  "rows": 1
+}
+```
+
+## Pre-apply throws
+
+- `TARGET_NOT_FOUND`
+
+## Non-applied failure codes
+
+- None
+
+## Raw schemas
+
+<Accordion title="Raw input schema">
+```json
+{
+  "additionalProperties": false,
+  "oneOf": [
+    {
+      "required": [
+        "target"
+      ]
+    },
+    {
+      "required": [
+        "nodeId"
+      ]
+    }
+  ],
+  "properties": {
+    "nodeId": {
+      "type": "string"
+    },
+    "target": {
+      "$ref": "#/$defs/BlockNodeAddress"
+    }
+  },
+  "type": "object"
+}
+```
+</Accordion>
+
+<Accordion title="Raw output schema">
+```json
+{
+  "additionalProperties": false,
+  "properties": {
+    "address": {
+      "$ref": "#/$defs/BlockNodeAddress"
+    },
+    "columns": {
+      "minimum": 0,
+      "type": "integer"
+    },
+    "nodeId": {
+      "type": "string"
+    },
+    "rows": {
+      "minimum": 0,
+      "type": "integer"
+    }
+  },
+  "required": [
+    "nodeId",
+    "address",
+    "rows",
+    "columns"
+  ],
+  "type": "object"
+}
+```
+</Accordion>

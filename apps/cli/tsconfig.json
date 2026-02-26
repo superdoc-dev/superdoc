@@ -7,7 +7,10 @@
     "skipLibCheck": true,
     "types": ["bun"],
     "paths": {
-      "@superdoc/super-editor/document-api-adapters": ["../../packages/super-editor/src/document-api-adapters/index.ts"]
+      "@superdoc/super-editor/document-api-adapters": [
+        "../../packages/super-editor/src/document-api-adapters/index.ts"
+      ],
+      "@superdoc/super-editor/blank-docx": ["../../packages/super-editor/src/core/blank-docx.ts"]
     }
   },
   "include": ["src"]

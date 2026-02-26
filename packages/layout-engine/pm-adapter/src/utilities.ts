@@ -416,6 +416,25 @@ export function toBoxSpacing(spacing?: Record<string, unknown>): BoxSpacing | un
   return Object.keys(result).length > 0 ? result : undefined;
 }
 
+/** Minimum top/bottom cell padding (px) when imported value is in (0, 2). */
+const MIN_TOP_BOTTOM_CELL_PADDING_PX = 2;
+
+/**
+ * Normalizes top/bottom cell padding: values greater than 0 but less than 2px
+ * are raised to 2px so small imported values remain usable. Zero and values >= 2
+ * are unchanged.
+ */
+export function normalizeCellPaddingTopBottom(padding: BoxSpacing): BoxSpacing {
+  const out = { ...padding };
+  if (typeof out.top === 'number' && out.top > 0 && out.top < MIN_TOP_BOTTOM_CELL_PADDING_PX) {
+    out.top = MIN_TOP_BOTTOM_CELL_PADDING_PX;
+  }
+  if (typeof out.bottom === 'number' && out.bottom > 0 && out.bottom < MIN_TOP_BOTTOM_CELL_PADDING_PX) {
+    out.bottom = MIN_TOP_BOTTOM_CELL_PADDING_PX;
+  }
+  return out;
+}
+
 // ============================================================================
 // Position Map Building
 // ============================================================================

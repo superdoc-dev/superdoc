@@ -192,7 +192,7 @@ export async function executeOperation(request: ExecuteOperationRequest): Promis
         extraOptionSpecs: request.extraOptionSpecs,
       }),
     ) ?? {}) as Record<string, unknown>;
-    // Merge helper command defaults (e.g., marks: { bold: true } for `format bold`).
+    // Merge helper command defaults (e.g., inline: { bold: true } for `format bold`).
     // User-provided values take precedence over defaults.
     if (request.defaultInput) {
       input = { ...request.defaultInput, ...input };

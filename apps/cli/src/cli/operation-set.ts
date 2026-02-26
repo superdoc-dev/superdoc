@@ -94,9 +94,6 @@ function deriveCategoryFromDocApi(docApiId: OperationId): CliCategory {
     return COMMAND_CATALOG[docApiId].mutates ? 'mutation' : 'query';
   }
 
-  // Map 'review' reference group to 'trackChanges' CLI category
-  if (group === 'review') return 'trackChanges';
-
   return group as CliCategory;
 }
 

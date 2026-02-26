@@ -4,7 +4,7 @@
  *
  * Helper commands are NOT derived from OPERATION_DEFINITIONS. They exist
  * only in the CLI and SDK layers, providing familiar shortcuts like
- * `superdoc format bold` that route to `format.apply` with marks pre-filled.
+ * `superdoc format bold` that route to `format.apply` with inline styles pre-filled.
  *
  * Each entry maps CLI tokens → canonical OperationId + default args to merge.
  * Helper commands route through the standard doc operation dispatch (read/mutation
@@ -34,7 +34,7 @@ export interface CliHelperCommand {
   inputTransform?: (input: Record<string, unknown>) => Record<string, unknown>;
 }
 
-/** Maps a flat `--id` flag to the `target: { id }` shape expected by review.decide. */
+/** Maps a flat `--id` flag to the `target: { id }` shape expected by trackChanges.decide. */
 function mapIdToTarget(input: Record<string, unknown>): Record<string, unknown> {
   if (typeof input.id === 'string' && input.target === undefined) {
     const { id, ...rest } = input;
@@ -44,7 +44,7 @@ function mapIdToTarget(input: Record<string, unknown>): Record<string, unknown> 
 }
 
 /**
- * Format helper commands — map `format <mark>` to `format.apply` with pre-filled marks.
+ * Format helper commands — map `format <mark>` to `format.apply` with pre-filled inline styles.
  * These keep `superdoc format bold|italic|underline|strikethrough` as ergonomic
  * shortcuts over the canonical `format.apply` contract operation.
  */
@@ -53,7 +53,7 @@ export const CLI_HELPER_COMMANDS: readonly CliHelperCommand[] = [
   {
     tokens: ['format', 'bold'],
     canonicalOperationId: 'format.apply',
-    defaultInput: { marks: { bold: true } },
+    defaultInput: { inline: { bold: true } },
     description: 'Apply bold formatting to a text range.',
     category: 'format',
     mutates: true,
@@ -65,7 +65,7 @@ export const CLI_HELPER_COMMANDS: readonly CliHelperCommand[] = [
   {
     tokens: ['format', 'italic'],
     canonicalOperationId: 'format.apply',
-    defaultInput: { marks: { italic: true } },
+    defaultInput: { inline: { italic: true } },
     description: 'Apply italic formatting to a text range.',
     category: 'format',
     mutates: true,
@@ -74,7 +74,7 @@ export const CLI_HELPER_COMMANDS: readonly CliHelperCommand[] = [
   {
     tokens: ['format', 'underline'],
     canonicalOperationId: 'format.apply',
-    defaultInput: { marks: { underline: true } },
+    defaultInput: { inline: { underline: true } },
     description: 'Apply underline formatting to a text range.',
     category: 'format',
     mutates: true,
@@ -83,16 +83,16 @@ export const CLI_HELPER_COMMANDS: readonly CliHelperCommand[] = [
   {
     tokens: ['format', 'strikethrough'],
     canonicalOperationId: 'format.apply',
-    defaultInput: { marks: { strike: true } },
+    defaultInput: { inline: { strike: true } },
     description: 'Apply strikethrough formatting to a text range.',
     category: 'format',
     mutates: true,
     examples: ['superdoc format strikethrough --blockId p1 --start 0 --end 5'],
   },
-  // --- Track-changes review helpers (route to review.decide) ---
+  // --- Track-changes review helpers (route to trackChanges.decide) ---
   {
     tokens: ['track-changes', 'accept'],
-    canonicalOperationId: 'review.decide',
+    canonicalOperationId: 'trackChanges.decide',
     defaultInput: { decision: 'accept' },
     description: 'Accept a tracked change by ID.',
     category: 'trackChanges',
@@ -103,7 +103,7 @@ export const CLI_HELPER_COMMANDS: readonly CliHelperCommand[] = [
   },
   {
     tokens: ['track-changes', 'reject'],
-    canonicalOperationId: 'review.decide',
+    canonicalOperationId: 'trackChanges.decide',
     defaultInput: { decision: 'reject' },
     description: 'Reject a tracked change by ID.',
     category: 'trackChanges',
@@ -114,7 +114,7 @@ export const CLI_HELPER_COMMANDS: readonly CliHelperCommand[] = [
   },
   {
     tokens: ['track-changes', 'accept-all'],
-    canonicalOperationId: 'review.decide',
+    canonicalOperationId: 'trackChanges.decide',
     defaultInput: { decision: 'accept', target: { scope: 'all' } },
     description: 'Accept all tracked changes.',
     category: 'trackChanges',
@@ -123,7 +123,7 @@ export const CLI_HELPER_COMMANDS: readonly CliHelperCommand[] = [
   },
   {
     tokens: ['track-changes', 'reject-all'],
-    canonicalOperationId: 'review.decide',
+    canonicalOperationId: 'trackChanges.decide',
     defaultInput: { decision: 'reject', target: { scope: 'all' } },
     description: 'Reject all tracked changes.',
     category: 'trackChanges',

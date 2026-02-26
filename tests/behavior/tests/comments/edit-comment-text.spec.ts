@@ -1,6 +1,6 @@
 import { test, expect } from '../../fixtures/superdoc.js';
 import { assertDocumentApiReady, listComments } from '../../helpers/document-api.js';
-import { addCommentViaUI, activeCommentDialog } from '../../helpers/comments.js';
+import { addCommentViaUI, activateCommentDialog } from '../../helpers/comments.js';
 
 test.use({ config: { toolbar: 'full', comments: 'on' } });
 
@@ -13,13 +13,8 @@ test('editing a comment updates its text', async ({ superdoc }) => {
   // Add a comment on "comments" through the UI
   await addCommentViaUI(superdoc, { textToSelect: 'comments', commentText: 'original comment' });
 
-  // Click on the comment highlight to activate the floating dialog
-  await superdoc.clickOnCommentedText('comments');
-  await superdoc.waitForStable();
-
-  // The active dialog should show the submitted comment
-  const dialog = activeCommentDialog(superdoc.page);
-  await expect(dialog).toBeVisible({ timeout: 5_000 });
+  // Activate the comment dialog
+  const dialog = await activateCommentDialog(superdoc, 'comments');
   await expect(dialog.locator('.comment-body .comment').first()).toContainText('original comment');
 
   // Open the overflow "..." menu and click Edit

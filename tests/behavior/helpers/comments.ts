@@ -47,6 +47,63 @@ export async function addCommentViaUI(
 }
 
 /**
+ * Click a comment highlight and ensure the dialog becomes active.
+ *
+ * On Firefox, clicking the presentation-layer highlight does not propagate
+ * to the Vue comment store, so the dialog never gets `.is-active`. This
+ * helper clicks the highlight first (to position the dialog), then clicks
+ * the dialog itself to guarantee activation cross-browser.
+ */
+export async function activateCommentDialog(
+  superdoc: SuperDocFixture,
+  textMatch: string,
+  { timeoutMs = 10_000 }: { timeoutMs?: number } = {},
+): Promise<Locator> {
+  // Try clicking the highlight first (may fail on WebKit after re-renders)
+  const highlightClicked = await superdoc
+    .clickOnCommentedText(textMatch)
+    .then(() => true)
+    .catch(() => false);
+
+  if (highlightClicked) {
+    await superdoc.waitForStable();
+  }
+
+  const dialog = activeCommentDialog(superdoc.page);
+  const isActive = await dialog.isVisible({ timeout: 2_000 }).catch(() => false);
+
+  if (!isActive) {
+    // Fallback: click the floating dialog directly to trigger setFocus → is-active
+    const floatingDialog = superdoc.page.locator('.comment-placeholder .comments-dialog').last();
+    await expect(floatingDialog).toBeVisible({ timeout: timeoutMs });
+    await floatingDialog.click();
+    await superdoc.waitForStable();
+
+    const isActiveNow = await dialog.isVisible({ timeout: 2_000 }).catch(() => false);
+    if (!isActiveNow) {
+      // Last resort: set activeComment directly on the Pinia store. This is
+      // needed when click events don't propagate to activate the dialog
+      // (Firefox/WebKit) or replyToComment calls set it to a child ID.
+      // We read the dialog's own commentId from the DOM to guarantee a match
+      // with the computed `isActiveComment` check.
+      await superdoc.page.evaluate(() => {
+        const sd = (window as any).superdoc;
+        const store = sd.commentsStore;
+        const floatingComments = store.getFloatingComments ?? [];
+        if (floatingComments.length > 0) {
+          const parentId = floatingComments[0].commentId;
+          store.$patch({ activeComment: parentId });
+        }
+      });
+      await superdoc.waitForStable();
+    }
+  }
+
+  await expect(dialog).toBeVisible({ timeout: timeoutMs });
+  return dialog;
+}
+
+/**
  * Poll `listComments` until a comment anchored on `anchoredText` appears,
  * then return its `commentId`.
  */

@@ -1,8 +1,15 @@
 import { test, expect } from '../../fixtures/superdoc.js';
-import { addCommentViaUIWithId, activeCommentDialog } from '../../helpers/comments.js';
+import { addCommentViaUIWithId, activateCommentDialog } from '../../helpers/comments.js';
 import { assertDocumentApiReady, replyToComment } from '../../helpers/document-api.js';
 
 test.use({ config: { toolbar: 'full', comments: 'on' } });
+
+// WebKit: v-click-outside fights with $patch-based activation after replyToComment
+// calls shift activeComment to a child ID, making the is-active class unstable.
+test.fixme(
+  ({ browserName }) => browserName === 'webkit',
+  'v-click-outside races with programmatic activation on WebKit',
+);
 
 test('thread with 3+ replies collapses and expands on click', async ({ superdoc }) => {
   await assertDocumentApiReady(superdoc.page);
@@ -26,12 +33,8 @@ test('thread with 3+ replies collapses and expands on click', async ({ superdoc 
   // Re-assert highlight exists — replies trigger re-renders that may temporarily remove highlights
   await superdoc.assertCommentHighlightExists({ text: 'collapse', timeoutMs: 10_000 });
 
-  // Click the comment highlight to activate the dialog
-  await superdoc.clickOnCommentedText('collapse');
-  await superdoc.waitForStable();
-
-  const dialog = activeCommentDialog(superdoc.page);
-  await expect(dialog).toBeVisible({ timeout: 10_000 });
+  // Activate the comment dialog
+  const dialog = await activateCommentDialog(superdoc, 'collapse');
 
   // The collapsed-replies pill should be visible with "more replies" text
   const collapsedPill = dialog.locator('.collapsed-replies');

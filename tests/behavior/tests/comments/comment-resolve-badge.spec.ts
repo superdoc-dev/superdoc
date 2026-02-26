@@ -1,5 +1,5 @@
 import { test, expect } from '../../fixtures/superdoc.js';
-import { addCommentViaUIWithId, activeCommentDialog } from '../../helpers/comments.js';
+import { addCommentViaUIWithId, activateCommentDialog } from '../../helpers/comments.js';
 import { assertDocumentApiReady, listComments } from '../../helpers/document-api.js';
 
 test.use({ config: { toolbar: 'full', comments: 'on' } });
@@ -13,13 +13,8 @@ test('resolving a comment sets resolvedTime and the resolved badge renders', asy
 
   await addCommentViaUIWithId(superdoc, { textToSelect: 'resolve', commentText: 'comment to resolve' });
 
-  // Click the comment highlight to activate the dialog
-  await superdoc.waitForStable();
-  await superdoc.clickOnCommentedText('resolve');
-  await superdoc.waitForStable();
-
-  const dialog = activeCommentDialog(superdoc.page);
-  await expect(dialog).toBeVisible({ timeout: 10_000 });
+  // Activate the comment dialog
+  const dialog = await activateCommentDialog(superdoc, 'resolve');
 
   // Verify the dialog is NOT resolved before clicking
   await expect(dialog).not.toHaveClass(/is-resolved/);

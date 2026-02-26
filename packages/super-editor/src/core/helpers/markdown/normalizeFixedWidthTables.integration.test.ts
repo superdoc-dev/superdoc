@@ -68,6 +68,15 @@ describe('normalizer → remark-gfm AST integration', () => {
     expect(rowTexts(tables[0].children[1])).toEqual(['Term', 'Protection']);
   });
 
+  it('does not produce tables from 4-space indented code blocks', () => {
+    const raw = ['    Clause     Description', '    ---------- -----------', '    Term       Protection'].join('\n');
+
+    const normalized = normalizeFixedWidthTables(raw);
+    const ast = parseMarkdownToAst(normalized);
+    expect(findTables(ast)).toHaveLength(0);
+    expect(normalized).toBe(raw);
+  });
+
   it('Section 5 table (no borders): 3 columns, 3 data rows', () => {
     const raw = [
       '  Clause                 Description                       Duration',

@@ -281,6 +281,40 @@ describe('normalizeFixedWidthTables', () => {
     });
   });
 
+  describe('indented code blocks', () => {
+    it('does not transform tables inside 4-space indented code blocks', () => {
+      const input = ['    Name   Age', '    ------ ---', '    Alice  30'].join('\n');
+
+      const output = normalizeFixedWidthTables(input);
+
+      expect(extractPipeTable(output)).toHaveLength(0);
+      expect(output).toBe(input);
+    });
+
+    it('transforms tables before and after 4-space indented code blocks', () => {
+      const input = [
+        'A     B',
+        '----- -----',
+        '1     2',
+        '',
+        '    C     D',
+        '    ----- -----',
+        '    3     4',
+        '',
+        'E     F',
+        '----- -----',
+        '5     6',
+      ].join('\n');
+
+      const output = normalizeFixedWidthTables(input);
+      const tables = extractPipeTable(output);
+
+      expect(tables.filter((l) => l.startsWith('| A'))).toHaveLength(1);
+      expect(tables.filter((l) => l.startsWith('| E'))).toHaveLength(1);
+      expect(output).toContain('    C     D');
+    });
+  });
+
   // ---------------------------------------------------------------------------
   // Regression: indent mismatch must not corrupt cell text (Bug #1)
   // ---------------------------------------------------------------------------

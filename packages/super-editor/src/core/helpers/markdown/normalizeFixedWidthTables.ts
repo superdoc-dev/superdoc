@@ -25,7 +25,7 @@
  * In bordered tables, blank lines between data rows are treated as row separators.
  * In unbounded tables, a blank line terminates the table.
  *
- * Fenced code blocks are skipped entirely.
+ * Code blocks are skipped entirely (fenced and 4-space/tab-indented).
  */
 
 // ---------------------------------------------------------------------------
@@ -36,7 +36,7 @@
  * Detect pandoc-style fixed-width ASCII tables in a markdown string and
  * rewrite them as GFM pipe tables that remark-gfm can parse.
  *
- * Fenced code blocks are skipped. Bordered (top/bottom border) and
+ * Code blocks are skipped (fenced and 4-space/tab-indented). Bordered (top/bottom border) and
  * unbounded (header + guide only) layouts are both supported, including
  * continuation lines that wrap across multiple rows.
  *
@@ -52,6 +52,13 @@ export function normalizeFixedWidthTables(markdown: string): string {
   while (i < lines.length) {
     if (isFenceOpener(lines[i])) {
       const closeIdx = findFenceClose(lines, i);
+      for (let j = i; j <= closeIdx; j++) output.push(lines[j]);
+      i = closeIdx + 1;
+      continue;
+    }
+
+    if (isIndentedCodeOpener(lines[i])) {
+      const closeIdx = findIndentedCodeClose(lines, i);
       for (let j = i; j <= closeIdx; j++) output.push(lines[j]);
       i = closeIdx + 1;
       continue;
@@ -107,13 +114,18 @@ interface TableAnchors {
 }
 
 // ---------------------------------------------------------------------------
-// Fenced code block handling
+// Code block handling
 // ---------------------------------------------------------------------------
 
 const FENCE_OPEN_RE = /^( {0,3})(`{3,}|~{3,})/;
+const INDENTED_CODE_RE = /^(?: {4,}|\t)/;
 
 function isFenceOpener(line: string): boolean {
   return FENCE_OPEN_RE.test(line);
+}
+
+function isIndentedCodeOpener(line: string): boolean {
+  return INDENTED_CODE_RE.test(line);
 }
 
 function findFenceClose(lines: string[], openIdx: number): number {
@@ -128,6 +140,14 @@ function findFenceClose(lines: string[], openIdx: number): number {
     if (closeRe.test(lines[i])) return i;
   }
   return lines.length - 1; // unclosed fence: consume to end
+}
+
+function findIndentedCodeClose(lines: string[], openIdx: number): number {
+  for (let i = openIdx + 1; i < lines.length; i++) {
+    if (isBlank(lines[i])) continue;
+    if (!isIndentedCodeOpener(lines[i])) return i - 1;
+  }
+  return lines.length - 1;
 }
 
 // ---------------------------------------------------------------------------
@@ -360,6 +380,10 @@ function findBottomBorder(lines: string[], fromIdx: number): number | undefined 
   for (let i = fromIdx; i < limit; i++) {
     if (isFenceOpener(lines[i])) {
       i = findFenceClose(lines, i);
+      continue;
+    }
+    if (isIndentedCodeOpener(lines[i])) {
+      i = findIndentedCodeClose(lines, i);
       continue;
     }
     if (isSolidBorder(lines[i])) return i;

@@ -657,7 +657,13 @@ const onEditorCommentsUpdate = (params = {}) => {
   nextTick(() => {
     if (pendingComment.value) return;
     commentsStore.setActiveComment(proxy.$superdoc, activeCommentId);
+    // Briefly suppress click-outside so the same click that selected the comment
+    // highlight in the editor doesn't immediately deactivate it via the sidebar.
+    // Reset after the event loop settles so subsequent outside clicks work normally.
     isCommentHighlighted.value = true;
+    setTimeout(() => {
+      isCommentHighlighted.value = false;
+    }, 0);
   });
 
   // Bubble up the event to the user, if handled
@@ -1111,17 +1117,9 @@ const getPDFViewer = () => {
       </div>
 
       <div class="superdoc__right-sidebar right-sidebar" v-if="showCommentsSidebar">
-        <CommentDialog
-          v-if="pendingComment"
-          :comment="pendingComment"
-          :auto-focus="true"
-          :is-floating="true"
-          v-click-outside="cancelPendingComment"
-        />
-
         <div class="floating-comments">
           <FloatingComments
-            v-if="hasInitializedLocations && getFloatingComments.length > 0"
+            v-if="hasInitializedLocations && (getFloatingComments.length > 0 || pendingComment)"
             v-for="doc in documentsWithConverations"
             :parent="layers"
             :current-document="doc"

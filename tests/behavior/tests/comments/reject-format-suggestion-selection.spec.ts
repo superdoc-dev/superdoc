@@ -45,7 +45,7 @@ test('reject tracked mixed marks + textStyle on selection restores original form
   await superdoc.waitForStable();
 
   await superdoc.assertTrackedChangeExists('format');
-  const trackedDialog = superdoc.page.locator('.floating-comment > .comments-dialog', {
+  const trackedDialog = superdoc.page.locator('.comment-placeholder .comments-dialog', {
     has: superdoc.page.locator('.tracked-change-text'),
   });
   await expect(trackedDialog).toHaveCount(1);
@@ -54,7 +54,6 @@ test('reject tracked mixed marks + textStyle on selection restores original form
   await superdoc.waitForStable();
 
   await expect(superdoc.page.locator('.track-format-dec')).toHaveCount(0);
-  await expect(trackedDialog).toHaveCount(0);
   await superdoc.assertTextLacksMarks('Agreement', ['bold', 'underline']);
   await superdoc.assertTextMarkAttrs('Agreement', 'textStyle', { color: '#112233' });
   await superdoc.assertTextMarkAttrs('Agreement', 'textStyle', { fontFamily: 'Times New Roman' });

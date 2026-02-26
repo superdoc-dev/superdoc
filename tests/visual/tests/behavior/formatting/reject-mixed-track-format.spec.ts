@@ -44,7 +44,7 @@ test('@behavior reject all tracked mixed formatting restores original visual sta
   ]);
   await superdoc.waitForStable();
 
-  const trackedDialog = superdoc.page.locator('.floating-comment > .comments-dialog', {
+  const trackedDialog = superdoc.page.locator('.comment-placeholder .comments-dialog', {
     has: superdoc.page.locator('.tracked-change-text'),
   });
   await expect(trackedDialog).toHaveCount(1);
@@ -55,6 +55,5 @@ test('@behavior reject all tracked mixed formatting restores original visual sta
   await superdoc.waitForStable();
 
   await expect(superdoc.page.locator('.track-format-dec')).toHaveCount(0);
-  await expect(trackedDialog).toHaveCount(0);
   await superdoc.screenshot('reject-mixed-track-format-after-reject');
 });

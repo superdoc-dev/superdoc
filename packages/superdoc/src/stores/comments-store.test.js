@@ -163,6 +163,28 @@ describe('comments-store', () => {
     expect(store.activeComment).toBeNull();
   });
 
+  it('still syncs editor active comment when store was pre-updated by caller', () => {
+    const setActiveCommentSpy = vi.fn();
+    const superdoc = {
+      activeEditor: {
+        commands: {
+          setActiveComment: setActiveCommentSpy,
+        },
+      },
+    };
+
+    store.commentsList = [{ commentId: 'comment-3' }];
+
+    // Simulate UI flow that pre-updates store state before syncing editor/plugin state.
+    store.setActiveComment(undefined, 'comment-3');
+    expect(store.activeComment).toBe('comment-3');
+
+    store.setActiveComment(superdoc, 'comment-3');
+
+    expect(setActiveCommentSpy).toHaveBeenCalledTimes(1);
+    expect(setActiveCommentSpy).toHaveBeenCalledWith({ commentId: 'comment-3' });
+  });
+
   it('updates tracked change comments and emits events', () => {
     const superdoc = {
       emit: vi.fn(),

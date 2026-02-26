@@ -280,15 +280,12 @@ export const useCommentsStore = defineStore('comments', () => {
 
     // If no ID, we clear any focused comments
     if (id === undefined || id === null) {
-      if (activeComment.value === null) return;
       activeComment.value = null;
       activeEditor?.commands?.setActiveComment({ commentId: null });
       return;
     }
 
     const comment = getComment(id);
-    const newCommentId = comment ? comment.commentId : null;
-    if (activeComment.value === newCommentId) return;
     if (comment) activeComment.value = comment.commentId;
     activeEditor?.commands?.setActiveComment({ commentId: activeComment.value });
   };

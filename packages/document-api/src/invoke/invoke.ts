@@ -54,6 +54,9 @@ export function buildDispatchTable(api: DocumentApi): TypedDispatchTable {
     'format.color': (input, options) => api.format.color(input, options),
     'format.align': (input, options) => api.format.align(input, options),
 
+    // --- styles.* ---
+    'styles.apply': (input, options) => api.styles.apply(input, options),
+
     // --- create.* ---
     'create.paragraph': (input, options) => api.create.paragraph(input, options),
     'create.heading': (input, options) => api.create.heading(input, options),

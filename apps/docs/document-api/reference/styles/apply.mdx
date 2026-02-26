@@ -1,0 +1,407 @@
+---
+title: styles.apply
+sidebarTitle: styles.apply
+description: Reference for styles.apply
+---
+
+{/* GENERATED FILE: DO NOT EDIT. Regenerate via `pnpm run docapi:sync`. */}
+
+> Alpha: Document API is currently alpha and subject to breaking changes.
+
+## Summary
+
+- Operation ID: `styles.apply`
+- API member path: `editor.doc.styles.apply(...)`
+- Mutates document: `yes`
+- Idempotency: `idempotent`
+- Supports tracked mode: `no`
+- Supports dry run: `yes`
+- Deterministic target resolution: `yes`
+
+## Input fields
+
+| Field | Type | Required | Description |
+| --- | --- | --- | --- |
+| `patch` | object | yes |  |
+| `target` | object(scope="docDefaults") | yes |  |
+
+### Example request
+
+```json
+{
+  "patch": {
+    "bold": true
+  },
+  "target": {
+    "channel": "run",
+    "scope": "docDefaults"
+  }
+}
+```
+
+## Output fields
+
+_No fields._
+
+### Example response
+
+```json
+{
+  "after": {
+    "bold": "on"
+  },
+  "before": {
+    "bold": "on"
+  },
+  "changed": true,
+  "dryRun": true,
+  "resolution": {
+    "channel": "run",
+    "scope": "docDefaults",
+    "xmlPart": "word/styles.xml",
+    "xmlPath": "w:styles/w:docDefaults/w:rPrDefault/w:rPr"
+  },
+  "success": true
+}
+```
+
+## Pre-apply throws
+
+- `INVALID_TARGET`
+- `INVALID_INPUT`
+- `CAPABILITY_UNAVAILABLE`
+- `REVISION_MISMATCH`
+
+## Non-applied failure codes
+
+- None
+
+## Raw schemas
+
+<Accordion title="Raw input schema">
+```json
+{
+  "additionalProperties": false,
+  "properties": {
+    "patch": {
+      "additionalProperties": false,
+      "minProperties": 1,
+      "properties": {
+        "bold": {
+          "type": "boolean"
+        }
+      },
+      "type": "object"
+    },
+    "target": {
+      "additionalProperties": false,
+      "properties": {
+        "channel": {
+          "const": "run"
+        },
+        "scope": {
+          "const": "docDefaults"
+        }
+      },
+      "required": [
+        "scope",
+        "channel"
+      ],
+      "type": "object"
+    }
+  },
+  "required": [
+    "target",
+    "patch"
+  ],
+  "type": "object"
+}
+```
+</Accordion>
+
+<Accordion title="Raw output schema">
+```json
+{
+  "oneOf": [
+    {
+      "additionalProperties": false,
+      "properties": {
+        "after": {
+          "additionalProperties": false,
+          "properties": {
+            "bold": {
+              "enum": [
+                "on",
+                "off",
+                "inherit"
+              ]
+            }
+          },
+          "required": [
+            "bold"
+          ],
+          "type": "object"
+        },
+        "before": {
+          "additionalProperties": false,
+          "properties": {
+            "bold": {
+              "enum": [
+                "on",
+                "off",
+                "inherit"
+              ]
+            }
+          },
+          "required": [
+            "bold"
+          ],
+          "type": "object"
+        },
+        "changed": {
+          "type": "boolean"
+        },
+        "dryRun": {
+          "type": "boolean"
+        },
+        "resolution": {
+          "additionalProperties": false,
+          "properties": {
+            "channel": {
+              "const": "run"
+            },
+            "scope": {
+              "const": "docDefaults"
+            },
+            "xmlPart": {
+              "const": "word/styles.xml"
+            },
+            "xmlPath": {
+              "const": "w:styles/w:docDefaults/w:rPrDefault/w:rPr"
+            }
+          },
+          "required": [
+            "scope",
+            "channel",
+            "xmlPart",
+            "xmlPath"
+          ],
+          "type": "object"
+        },
+        "success": {
+          "const": true
+        }
+      },
+      "required": [
+        "success",
+        "changed",
+        "resolution",
+        "dryRun",
+        "before",
+        "after"
+      ],
+      "type": "object"
+    },
+    {
+      "additionalProperties": false,
+      "properties": {
+        "failure": {
+          "additionalProperties": false,
+          "properties": {
+            "code": {
+              "type": "string"
+            },
+            "details": {},
+            "message": {
+              "type": "string"
+            }
+          },
+          "required": [
+            "code",
+            "message"
+          ],
+          "type": "object"
+        },
+        "resolution": {
+          "additionalProperties": false,
+          "properties": {
+            "channel": {
+              "const": "run"
+            },
+            "scope": {
+              "const": "docDefaults"
+            },
+            "xmlPart": {
+              "const": "word/styles.xml"
+            },
+            "xmlPath": {
+              "const": "w:styles/w:docDefaults/w:rPrDefault/w:rPr"
+            }
+          },
+          "required": [
+            "scope",
+            "channel",
+            "xmlPart",
+            "xmlPath"
+          ],
+          "type": "object"
+        },
+        "success": {
+          "const": false
+        }
+      },
+      "required": [
+        "success",
+        "resolution",
+        "failure"
+      ],
+      "type": "object"
+    }
+  ]
+}
+```
+</Accordion>
+
+<Accordion title="Raw success schema">
+```json
+{
+  "additionalProperties": false,
+  "properties": {
+    "after": {
+      "additionalProperties": false,
+      "properties": {
+        "bold": {
+          "enum": [
+            "on",
+            "off",
+            "inherit"
+          ]
+        }
+      },
+      "required": [
+        "bold"
+      ],
+      "type": "object"
+    },
+    "before": {
+      "additionalProperties": false,
+      "properties": {
+        "bold": {
+          "enum": [
+            "on",
+            "off",
+            "inherit"
+          ]
+        }
+      },
+      "required": [
+        "bold"
+      ],
+      "type": "object"
+    },
+    "changed": {
+      "type": "boolean"
+    },
+    "dryRun": {
+      "type": "boolean"
+    },
+    "resolution": {
+      "additionalProperties": false,
+      "properties": {
+        "channel": {
+          "const": "run"
+        },
+        "scope": {
+          "const": "docDefaults"
+        },
+        "xmlPart": {
+          "const": "word/styles.xml"
+        },
+        "xmlPath": {
+          "const": "w:styles/w:docDefaults/w:rPrDefault/w:rPr"
+        }
+      },
+      "required": [
+        "scope",
+        "channel",
+        "xmlPart",
+        "xmlPath"
+      ],
+      "type": "object"
+    },
+    "success": {
+      "const": true
+    }
+  },
+  "required": [
+    "success",
+    "changed",
+    "resolution",
+    "dryRun",
+    "before",
+    "after"
+  ],
+  "type": "object"
+}
+```
+</Accordion>
+
+<Accordion title="Raw failure schema">
+```json
+{
+  "additionalProperties": false,
+  "properties": {
+    "failure": {
+      "additionalProperties": false,
+      "properties": {
+        "code": {
+          "type": "string"
+        },
+        "details": {},
+        "message": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "code",
+        "message"
+      ],
+      "type": "object"
+    },
+    "resolution": {
+      "additionalProperties": false,
+      "properties": {
+        "channel": {
+          "const": "run"
+        },
+        "scope": {
+          "const": "docDefaults"
+        },
+        "xmlPart": {
+          "const": "word/styles.xml"
+        },
+        "xmlPath": {
+          "const": "w:styles/w:docDefaults/w:rPrDefault/w:rPr"
+        }
+      },
+      "required": [
+        "scope",
+        "channel",
+        "xmlPart",
+        "xmlPath"
+      ],
+      "type": "object"
+    },
+    "success": {
+      "const": false
+    }
+  },
+  "required": [
+    "success",
+    "resolution",
+    "failure"
+  ],
+  "type": "object"
+}
+```
+</Accordion>

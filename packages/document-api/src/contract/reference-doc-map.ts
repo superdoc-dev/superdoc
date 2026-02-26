@@ -46,6 +46,11 @@ const GROUP_METADATA: Record<ReferenceGroupKey, { title: string; description: st
     description: 'Canonical formatting mutation with boolean patch semantics.',
     pagePath: 'format/index.mdx',
   },
+  styles: {
+    title: 'Styles',
+    description: 'Document-level stylesheet mutations (docDefaults, style definitions).',
+    pagePath: 'styles/index.mdx',
+  },
   lists: {
     title: 'Lists',
     description: 'List inspection and list mutations.',

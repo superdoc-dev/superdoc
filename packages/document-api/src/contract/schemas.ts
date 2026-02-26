@@ -815,6 +815,8 @@ const capabilityReasonCodeSchema: JsonSchema = {
     'TRACKED_MODE_UNAVAILABLE',
     'DRY_RUN_UNAVAILABLE',
     'NAMESPACE_UNAVAILABLE',
+    'STYLES_PART_MISSING',
+    'COLLABORATION_ACTIVE',
   ],
 };
 
@@ -1029,6 +1031,70 @@ const operationSchemas: Record<OperationId, OperationSchemaSet> = {
     ),
     failure: preApplyFailureResultSchemaFor('blocks.delete'),
   },
+  'styles.apply': (() => {
+    const stylesTargetResolutionSchema = objectSchema(
+      {
+        scope: { const: 'docDefaults' },
+        channel: { const: 'run' },
+        xmlPart: { const: 'word/styles.xml' },
+        xmlPath: { const: 'w:styles/w:docDefaults/w:rPrDefault/w:rPr' },
+      },
+      ['scope', 'channel', 'xmlPart', 'xmlPath'],
+    );
+    const stylesStateSchema = objectSchema({ bold: { enum: ['on', 'off', 'inherit'] } }, ['bold']);
+    const stylesSuccessSchema = objectSchema(
+      {
+        success: { const: true },
+        changed: { type: 'boolean' },
+        resolution: stylesTargetResolutionSchema,
+        dryRun: { type: 'boolean' },
+        before: stylesStateSchema,
+        after: stylesStateSchema,
+      },
+      ['success', 'changed', 'resolution', 'dryRun', 'before', 'after'],
+    );
+    const stylesFailureSchema = objectSchema(
+      {
+        success: { const: false },
+        resolution: stylesTargetResolutionSchema,
+        failure: objectSchema(
+          {
+            code: { type: 'string' },
+            message: { type: 'string' },
+            details: {},
+          },
+          ['code', 'message'],
+        ),
+      },
+      ['success', 'resolution', 'failure'],
+    );
+    return {
+      input: objectSchema(
+        {
+          target: objectSchema(
+            {
+              scope: { const: 'docDefaults' },
+              channel: { const: 'run' },
+            },
+            ['scope', 'channel'],
+          ),
+          patch: {
+            ...objectSchema(
+              {
+                bold: { type: 'boolean' },
+              },
+              [],
+            ),
+            minProperties: 1,
+          },
+        },
+        ['target', 'patch'],
+      ),
+      output: { oneOf: [stylesSuccessSchema, stylesFailureSchema] },
+      success: stylesSuccessSchema,
+      failure: stylesFailureSchema,
+    };
+  })(),
   'create.paragraph': {
     input: objectSchema({
       at: {

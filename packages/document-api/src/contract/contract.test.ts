@@ -104,6 +104,7 @@ describe('document-api contract catalog', () => {
       'capabilities',
       'create',
       'format',
+      'styles',
       'lists',
       'comments',
       'trackChanges',

@@ -120,7 +120,15 @@ function decodeRunPropertiesFromMarks(marks = []) {
       case 'link':
         runProperties.styleId = 'Hyperlink';
         break;
+      case 'styleId':
+        if (attrs.styleId != null) {
+          runProperties.styleId = attrs.styleId;
+        }
+        break;
       case 'textStyle':
+        if (attrs.styleId != null) {
+          runProperties.styleId = attrs.styleId;
+        }
         if (attrs.textTransform != null) {
           runProperties.textTransform = attrs.textTransform;
         }

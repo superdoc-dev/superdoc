@@ -278,7 +278,9 @@ function buildListPath(level, map) {
  * @param {HTMLElement} container
  */
 function convertStyledHeadings(container) {
-  const paragraphs = Array.from(container.querySelectorAll('p'));
+  const paragraphs = Array.from(container.querySelectorAll('p')).filter(
+    (p) => p.parentElement?.tagName?.toLowerCase() !== 'li',
+  );
 
   paragraphs.forEach((p) => {
     const { fontSize, isBold } = getHeadingStyleProps(p);
@@ -305,10 +307,16 @@ function convertStyledHeadings(container) {
  * @returns {{ fontSize: number|null, isBold: boolean }}
  */
 function getHeadingStyleProps(el) {
-  const span = el.querySelector('span');
-  const fontSize = parsePtValue(el.style.fontSize) ?? parsePtValue(span?.style.fontSize);
-  const isBold = boldWeightRegex.test(el.style.fontWeight || '') || boldWeightRegex.test(span?.style.fontWeight || '');
-  return { fontSize, isBold };
+  const fontSize = parsePtValue(el.style.fontSize);
+  const isBoldOnEl = boldWeightRegex.test(el.style.fontWeight || '');
+
+  const { children } = el;
+  const singleSpan = children.length === 1 && children[0].tagName?.toLowerCase() === 'span' ? children[0] : null;
+
+  return {
+    fontSize: fontSize ?? parsePtValue(singleSpan?.style.fontSize),
+    isBold: isBoldOnEl || boldWeightRegex.test(singleSpan?.style.fontWeight || ''),
+  };
 }
 
 /**

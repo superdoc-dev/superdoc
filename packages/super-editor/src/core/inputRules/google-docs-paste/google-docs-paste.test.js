@@ -156,6 +156,29 @@ describe('handleGoogleDocsHtml', () => {
       expect(dom.querySelector('h1')?.textContent?.trim()).toBe('Big Heading');
     });
 
+    it('does not convert a paragraph where only the first of multiple spans is bold', () => {
+      // Body paragraph with a bold opening word — must not become a heading.
+      const html = `
+        <p>
+          <span style="font-size:11pt;font-weight:700">Bold word</span>
+          <span style="font-size:11pt;">rest of text</span>
+        </p>
+      `;
+      const dom = parseHeadings(html);
+      expect(dom.querySelector('h1,h2,h3,h4,h5')).toBeNull();
+    });
+
+    it('does not convert <p> elements inside <li> to avoid corrupting list structure', () => {
+      const html = `
+        <ul>
+          <li><p style="font-size:20pt;font-weight:700">List item</p></li>
+        </ul>
+      `;
+      const dom = parseHeadings(html);
+      expect(dom.querySelector('h1')).toBeNull();
+      expect(dom.querySelector('p[data-num-id]')).not.toBeNull();
+    });
+
     it('converts when font-size is on <p> but font-weight is only on the child <span>', () => {
       const html = `
         <p style="font-size:20pt"><span style="font-weight:700">Split style heading</span></p>

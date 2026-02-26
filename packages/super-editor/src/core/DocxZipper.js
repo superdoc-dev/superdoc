@@ -63,7 +63,7 @@ class DocxZipper {
           const fileBase64 = await zipEntry.async('base64');
           const extension = this.getFileExtension(name)?.toLowerCase();
           // Only build data URIs for images; keep raw base64 for other binaries (e.g., xlsx)
-          const imageTypes = new Set(['png', 'jpg', 'jpeg', 'gif', 'bmp', 'tiff', 'emf', 'wmf', 'svg', 'webp']);
+          const imageTypes = new Set(['png', 'jpg', 'jpeg', 'gif', 'bmp', 'tiff', 'tif', 'emf', 'wmf', 'svg', 'webp']);
           if (imageTypes.has(extension)) {
             this.mediaFiles[name] = `data:image/${extension};base64,${fileBase64}`;
             const blob = await zipEntry.async('blob');
@@ -95,7 +95,7 @@ class DocxZipper {
    */
   async updateContentTypes(docx, media, fromJson, updatedDocs = {}) {
     const additionalPartNames = Object.keys(updatedDocs || {});
-    const imageExts = new Set(['png', 'jpg', 'jpeg', 'gif', 'bmp', 'tiff', 'emf', 'wmf', 'svg', 'webp']);
+    const imageExts = new Set(['png', 'jpg', 'jpeg', 'gif', 'bmp', 'tiff', 'tif', 'emf', 'wmf', 'svg', 'webp']);
     const newMediaTypes = Object.keys(media)
       .map((name) => this.getFileExtension(name))
       .filter((ext) => ext && imageExts.has(ext));

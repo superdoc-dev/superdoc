@@ -101,6 +101,7 @@
     "remark-gfm": "catalog:",
     "remark-stringify": "catalog:",
     "unified": "catalog:",
+    "utif2": "catalog:",
     "uuid": "catalog:",
     "vue": "catalog:",
     "xml-js": "catalog:"

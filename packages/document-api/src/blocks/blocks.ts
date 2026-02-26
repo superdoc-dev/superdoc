@@ -35,6 +35,12 @@ function validateBlocksDeleteInput(input: BlocksDeleteInput): void {
     });
   }
 
+  if (!input.target.nodeId || typeof input.target.nodeId !== 'string') {
+    throw new DocumentApiValidationError('INVALID_INPUT', 'blocks.delete target requires a nodeId string.', {
+      fields: ['target.nodeId'],
+    });
+  }
+
   const { nodeType } = input.target;
 
   if (REJECTED_DELETE_NODE_TYPES.has(nodeType)) {

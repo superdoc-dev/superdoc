@@ -35,6 +35,14 @@ describe('executeBlocksDelete', () => {
       ).toThrow(DocumentApiValidationError);
     });
 
+    it('rejects target without nodeId', () => {
+      expect(() =>
+        executeBlocksDelete(makeAdapter(), {
+          target: { kind: 'block', nodeType: 'paragraph' },
+        } as any),
+      ).toThrow(DocumentApiValidationError);
+    });
+
     it('rejects tableRow target', () => {
       try {
         executeBlocksDelete(makeAdapter(), makeInput('tableRow', 'tr1'));

@@ -162,6 +162,7 @@ function buildHelpText(): string {
     'mutation',
     'format',
     'create',
+    'blocks',
     'lists',
     'comments',
     'trackChanges',

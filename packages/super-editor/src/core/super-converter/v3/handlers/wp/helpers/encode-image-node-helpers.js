@@ -8,6 +8,7 @@ import {
   extractCustomGeometry,
 } from './vector-shape-helpers';
 import { convertMetafileToSvg, isMetafileExtension, setMetafileDomEnvironment } from './metafile-converter.js';
+import { convertTiffToPng, isTiffExtension, setTiffDomEnvironment } from './tiff-converter.js';
 import {
   collectTextBoxParagraphs,
   preProcessTextBoxContent,
@@ -405,6 +406,22 @@ export function handleImageNode(node, params, isAnchor) {
     }
   }
 
+  // Convert TIFF images to PNG for display (browsers cannot render TIFF natively)
+  if (!wasConverted && isTiffExtension(extension)) {
+    const mediaData = converter?.media?.[path];
+    if (mediaData) {
+      if (converter?.domEnvironment) {
+        setTiffDomEnvironment(converter.domEnvironment);
+      }
+      const conversionResult = convertTiffToPng(mediaData, size);
+      if (conversionResult?.dataUri) {
+        finalSrc = conversionResult.dataUri;
+        finalExtension = conversionResult.format || 'png';
+        wasConverted = true;
+      }
+    }
+  }
+
   // For converted metafile images (EMF+/WMF+ placeholders), we want them to render
   // as block-level images, not inline. We use the original wrap type if available,
   // otherwise default to the original wrap settings.
@@ -416,8 +433,8 @@ export function handleImageNode(node, params, isAnchor) {
     // originalXml: carbonCopy(node),
     src: finalSrc,
     alt:
-      isMetafileExtension(extension) && !wasConverted
-        ? 'Unable to render EMF/WMF image'
+      (isMetafileExtension(extension) || isTiffExtension(extension)) && !wasConverted
+        ? 'Unable to render image'
         : docPr?.attributes?.name || 'Image',
     extension: finalExtension,
     // Store original path and extension for potential round-tripping

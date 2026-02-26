@@ -105,6 +105,7 @@ catalog:
   typescript: ^5.9.2
   typescript-eslint: ^8.49.0
   unified: 11.0.5
+  utif2: ^4.1.0
   uuid: ^9.0.1
   verdaccio: ^6.1.6
   vite: ^7.2.7

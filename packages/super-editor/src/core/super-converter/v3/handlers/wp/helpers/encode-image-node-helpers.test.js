@@ -292,7 +292,7 @@ describe('handleImageNode', () => {
     const node = makeNode();
     const params = makeParams('media/pic.emf');
     const result = handleImageNode(node, params, false);
-    expect(result.attrs.alt).toBe('Unable to render EMF/WMF image');
+    expect(result.attrs.alt).toBe('Unable to render image');
     expect(result.attrs.extension).toBe('emf');
   });
 

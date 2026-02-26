@@ -79,6 +79,12 @@ const POINTS_TO_TWIPS = 20;
 const PIXELS_TO_TWIPS = 1440 / 96;
 const DEFAULT_TABLE_GRID_WIDTH_TWIPS = 1500;
 
+function generateParaId(): string {
+  return Array.from({ length: 8 }, () => Math.floor(Math.random() * 16).toString(16))
+    .join('')
+    .toUpperCase();
+}
+
 function notYetImplemented(operationName: string): never {
   throw new DocumentApiAdapterError('CAPABILITY_UNAVAILABLE', `${operationName} is not yet implemented.`, {
     reason: 'not_implemented',
@@ -1370,15 +1376,29 @@ export function tablesConvertFromTextAdapter(
         const text = cells[c] ?? '';
         const content = text ? schema.text(text) : undefined;
         const para = schema.nodes.paragraph.createAndFill(null, content)!;
-        tableCells.push(schema.nodes.tableCell.createAndFill(null, para)!);
+        tableCells.push(
+          schema.nodes.tableCell.createAndFill(
+            {
+              sdBlockId: uuidv4(),
+              paraId: generateParaId(),
+            },
+            para,
+          )!,
+        );
       }
-      tableRows.push(schema.nodes.tableRow.createAndFill(null, tableCells)!);
+      tableRows.push(
+        schema.nodes.tableRow.createAndFill(
+          {
+            sdBlockId: uuidv4(),
+            paraId: generateParaId(),
+          },
+          tableCells,
+        )!,
+      );
     }
 
     const tableId = uuidv4();
-    const tableParaId = Array.from({ length: 8 }, () => Math.floor(Math.random() * 16).toString(16))
-      .join('')
-      .toUpperCase();
+    const tableParaId = generateParaId();
     const tableNode = schema.nodes.table.create({ sdBlockId: tableId, paraId: tableParaId }, tableRows);
 
     // Replace the source paragraphs with the new table.
@@ -2804,9 +2824,7 @@ export function createTableAdapter(
 
   const tableId = uuidv4();
   // Generate a w14:paraId-compatible 8-char uppercase hex string for DOCX roundtrip stability.
-  const paraId = Array.from({ length: 8 }, () => Math.floor(Math.random() * 16).toString(16))
-    .join('')
-    .toUpperCase();
+  const paraId = generateParaId();
 
   const didApply = insertTableAt({
     pos: insertAt,
@@ -2912,7 +2930,9 @@ function resolvePreferredWidth(value: unknown): number | undefined {
 }
 
 function resolveCellNodeId(attrs: Record<string, unknown>): string {
-  const idFields = ['sdBlockId', 'blockId', 'id', 'paraId', 'uuid', 'nodeId'] as const;
+  // Keep precedence aligned with resolveBlockNodeId() for table cells so
+  // tables.getCells output round-trips into cell-targeting mutations.
+  const idFields = ['paraId', 'sdBlockId', 'blockId', 'id', 'uuid', 'nodeId'] as const;
   for (const field of idFields) {
     const value = attrs[field];
     if (typeof value === 'string' && value.length > 0) return value;
@@ -2935,36 +2955,43 @@ export function tablesGetAdapter(editor: Editor, input: TablesGetInput): TablesG
 export function tablesGetCellsAdapter(editor: Editor, input: TablesGetCellsInput): TablesGetCellsOutput {
   const resolved = resolveTableLocator(editor, input, 'tables.getCells');
   const tableNode = resolved.candidate.node;
+  const tablePos = resolved.candidate.pos;
+  const tableEnd = resolved.candidate.end;
   const tableStart = resolved.candidate.pos + 1;
   const map = TableMap.get(tableNode);
+  const index = getBlockIndex(editor);
   const cells: TableCellInfo[] = [];
 
-  // Track which cell offsets we've already visited (for merged cells).
-  const visited = new Set<number>();
+  // Derive cell identities from canonical block candidates, then map each
+  // candidate back to row/column using TableMap offsets.
+  for (const candidate of index.candidates) {
+    if (candidate.nodeType !== 'tableCell') continue;
+    if (candidate.pos <= tablePos || candidate.end > tableEnd) continue;
 
-  for (let row = 0; row < map.height; row++) {
-    if (input.rowIndex != null && row !== input.rowIndex) continue;
-    for (let col = 0; col < map.width; col++) {
-      if (input.columnIndex != null && col !== input.columnIndex) continue;
-
-      const cellOffset = map.map[row * map.width + col];
-      if (visited.has(cellOffset)) continue;
-      visited.add(cellOffset);
-
-      const cellPos = tableStart + cellOffset;
-      const cellNode = editor.state.doc.nodeAt(cellPos);
-      if (!cellNode) continue;
-
-      const attrs = cellNode.attrs as Record<string, unknown>;
-      cells.push({
-        nodeId: resolveCellNodeId(attrs),
-        rowIndex: row,
-        columnIndex: col,
-        colspan: typeof attrs.colspan === 'number' ? attrs.colspan : 1,
-        rowspan: typeof attrs.rowspan === 'number' ? attrs.rowspan : 1,
-      });
+    const offsets = [candidate.pos - tableStart, candidate.pos - tablePos];
+    let mapIndex = -1;
+    for (const offset of offsets) {
+      mapIndex = map.map.indexOf(offset);
+      if (mapIndex !== -1) break;
     }
+    if (mapIndex === -1) continue;
+
+    const row = Math.floor(mapIndex / map.width);
+    const col = mapIndex % map.width;
+    if (input.rowIndex != null && row !== input.rowIndex) continue;
+    if (input.columnIndex != null && col !== input.columnIndex) continue;
+
+    const attrs = candidate.node.attrs as Record<string, unknown>;
+    cells.push({
+      nodeId: candidate.nodeId || resolveCellNodeId(attrs),
+      rowIndex: row,
+      columnIndex: col,
+      colspan: typeof attrs.colspan === 'number' ? attrs.colspan : 1,
+      rowspan: typeof attrs.rowspan === 'number' ? attrs.rowspan : 1,
+    });
   }
+
+  cells.sort((a, b) => a.rowIndex - b.rowIndex || a.columnIndex - b.columnIndex);
 
   return {
     tableNodeId: resolved.candidate.nodeId,

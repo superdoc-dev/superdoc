@@ -3188,11 +3188,12 @@ export class DomPainter {
     contentContainer.style.width = `${innerWidth}px`;
     contentContainer.style.height = `${innerHeight}px`;
 
-    const svgMarkup = block.shapeKind ? this.tryCreatePresetSvg(block, innerWidth, innerHeight) : null;
-    // Try custom geometry when no preset shape is available
-    const customGeomSvg =
-      !svgMarkup && block.customGeometry ? this.tryCreateCustomGeometrySvg(block, innerWidth, innerHeight) : null;
-    const resolvedSvgMarkup = svgMarkup || customGeomSvg;
+    // Custom geometry takes priority — shapeKind may carry a schema default ('rect')
+    // even when the source shape only had a:custGeom and no a:prstGeom.
+    const customGeomSvg = block.customGeometry ? this.tryCreateCustomGeometrySvg(block, innerWidth, innerHeight) : null;
+    const svgMarkup =
+      !customGeomSvg && block.shapeKind ? this.tryCreatePresetSvg(block, innerWidth, innerHeight) : null;
+    const resolvedSvgMarkup = customGeomSvg || svgMarkup;
 
     if (resolvedSvgMarkup) {
       const svgElement = this.parseSafeSvg(resolvedSvgMarkup);
@@ -3350,17 +3351,6 @@ export class DomPainter {
     textDiv.style.fontSize = '12px';
     textDiv.style.lineHeight = '1.2';
 
-    // Apply counter-scaling to prevent text from being stretched by parent group transform
-    if (groupScaleX !== 1 || groupScaleY !== 1) {
-      const counterScaleX = 1 / groupScaleX;
-      const counterScaleY = 1 / groupScaleY;
-      textDiv.style.transform = `scale(${counterScaleX}, ${counterScaleY})`;
-      textDiv.style.transformOrigin = 'top left';
-      // Adjust dimensions to compensate for counter-scaling
-      textDiv.style.width = `${100 * groupScaleX}%`;
-      textDiv.style.height = `${100 * groupScaleY}%`;
-    }
-
     // Horizontal text alignment uses CSS text-align property
     // Note: justifyContent is already set above for vertical alignment
     if (textAlign === 'center') {
@@ -3501,7 +3491,10 @@ export class DomPainter {
     } else if (typeof block.fillColor === 'string') {
       fillColor = block.fillColor;
     } else {
-      fillColor = 'none';
+      // Gradient / solidWithAlpha: use a placeholder fill so that downstream
+      // applyGradientToSVG / applyAlphaToSVG (which skip fill="none") can
+      // target these elements and replace the fill.
+      fillColor = '#000000';
     }
     const strokeColor =
       block.strokeColor === null ? 'none' : typeof block.strokeColor === 'string' ? block.strokeColor : 'none';
@@ -3758,14 +3751,8 @@ export class DomPainter {
     const groupTransform = block.groupTransform;
     let contentContainer: HTMLElement = groupEl;
 
-    // Compute the group's non-uniform scale factors for text counter-scaling.
-    // The import pre-scales child positions/sizes from child coordinate space to visible space.
-    const childWidth = groupTransform?.childWidth ?? groupTransform?.width ?? block.geometry.width ?? 0;
-    const childHeight = groupTransform?.childHeight ?? groupTransform?.height ?? block.geometry.height ?? 0;
     const visibleWidth = groupTransform?.width ?? block.geometry.width ?? 0;
     const visibleHeight = groupTransform?.height ?? block.geometry.height ?? 0;
-    const groupScaleX = childWidth > 0 && visibleWidth > 0 ? visibleWidth / childWidth : 1;
-    const groupScaleY = childHeight > 0 && visibleHeight > 0 ? visibleHeight / childHeight : 1;
 
     if (groupTransform) {
       const inner = this.doc!.createElement('div');
@@ -3780,7 +3767,7 @@ export class DomPainter {
     }
 
     block.shapes.forEach((child) => {
-      const childContent = this.createGroupChildContent(child, groupScaleX, groupScaleY, context);
+      const childContent = this.createGroupChildContent(child, 1, 1, context);
       if (!childContent) return;
       const attrs = (child as ShapeGroupChild).attrs ?? {};
       const wrapper = this.doc!.createElement('div');

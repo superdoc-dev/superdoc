@@ -2467,6 +2467,7 @@ export class PresentationEditor extends EventEmitter {
     // otherwise the bridge applies the class to whole runs and highlights too much.
     const handleTransaction = (event?: { transaction?: Transaction }) => {
       const tr = event?.transaction;
+      this.#decorationBridge.recordTransaction(tr);
       const state = this.#editor?.view?.state;
       const decorationChanged = state && this.#decorationBridge.hasChanges(state);
       // Sync immediately whenever decorations changed so e.g. clearFocus removes

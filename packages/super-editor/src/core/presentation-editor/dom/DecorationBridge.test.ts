@@ -2,6 +2,7 @@ import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 import { DecorationSet } from 'prosemirror-view';
 import { PluginKey } from 'prosemirror-state';
 import type { EditorState, Plugin } from 'prosemirror-state';
+import type { Transaction } from 'prosemirror-state';
 
 import { DecorationBridge } from './DecorationBridge.js';
 import { DomPositionIndex } from './DomPositionIndex.js';
@@ -748,6 +749,43 @@ describe('DecorationBridge', () => {
 
       expect(span.classList.contains('highlight-selection')).toBe(false);
     });
+
+    it('does not restore stale coordinates when previous text no longer exists', () => {
+      const { index, addSpan, rebuild } = createIndex();
+      const span = addSpan(7, 12);
+      rebuild();
+
+      const { plugin, setDecorations } = mutableExternalPlugin('focus');
+      const state1 = mockStateWithDocText([plugin], 'Hello world.');
+      setDecorations([{ from: 7, to: 12, class: 'highlight-selection' }]);
+      bridge.collectDecorationRanges(state1);
+      bridge.sync(state1, index);
+      expect(span.classList.contains('highlight-selection')).toBe(true);
+
+      setDecorations([]);
+      const state2 = mockStateWithDocText([plugin], 'Hello planet.');
+      bridge.sync(state2, index);
+
+      expect(span.classList.contains('highlight-selection')).toBe(false);
+    });
+
+    it('does not restore when text resolves to the same coordinates', () => {
+      const { index, addSpan, rebuild } = createIndex();
+      const span = addSpan(7, 11);
+      rebuild();
+
+      const { plugin, setDecorations } = mutableExternalPlugin('focus');
+      const state = mockStateWithDocText([plugin], 'alpha beta gamma');
+      setDecorations([{ from: 7, to: 11, class: 'highlight-selection' }]);
+      bridge.collectDecorationRanges(state);
+      bridge.sync(state, index);
+      expect(span.classList.contains('highlight-selection')).toBe(true);
+
+      setDecorations([]);
+      bridge.sync(state, index);
+
+      expect(span.classList.contains('highlight-selection')).toBe(false);
+    });
   });
 
   // -----------------------------------------------------------------------
@@ -755,7 +793,7 @@ describe('DecorationBridge', () => {
   // -----------------------------------------------------------------------
 
   describe('collectDecorationRanges restore by text', () => {
-    it('stores and restores decoration range when plugin returns empty (same positions)', () => {
+    it('does not restore when text resolves to the same positions', () => {
       const fullText = 'Hello world.'; // extra char so end of "world" is not at doc end (avoids docSize return)
       const plugin = mutableExternalPlugin('focus');
       plugin.setDecorations([{ from: 7, to: 12, class: 'highlight-selection' }]);
@@ -767,8 +805,20 @@ describe('DecorationBridge', () => {
 
       plugin.setDecorations([]);
       const ranges2 = bridge.collectDecorationRanges(state);
-      expect(ranges2).toHaveLength(1);
-      expect(ranges2[0]).toMatchObject({ from: 7, to: 12, classes: ['highlight-selection'] });
+      expect(ranges2).toHaveLength(0);
+    });
+
+    it('does not restore when previous text cannot be found', () => {
+      const plugin = mutableExternalPlugin('focus');
+      plugin.setDecorations([{ from: 7, to: 12, class: 'highlight-selection' }]);
+      const state1 = mockStateWithDocText([plugin.plugin], 'Hello world');
+
+      bridge.collectDecorationRanges(state1);
+      plugin.setDecorations([]);
+
+      const state2 = mockStateWithDocText([plugin.plugin], 'Hello planet');
+      const ranges = bridge.collectDecorationRanges(state2);
+      expect(ranges).toHaveLength(0);
     });
 
     it('resolves restored range by text when text appears at different position', () => {
@@ -789,20 +839,153 @@ describe('DecorationBridge', () => {
       expect(doc2.textBetween(ranges[0].from, ranges[0].to)).toBe('world');
     });
 
-    it('prefers occurrence closest to hint when same text appears multiple times', () => {
+    it('prefers occurrence closest to hint when same text appears multiple times after movement', () => {
       const fullText = 'world and world';
       const plugin = mutableExternalPlugin('focus');
-      plugin.setDecorations([{ from: 10, to: 15, class: 'highlight-selection' }]);
+      plugin.setDecorations([{ from: 11, to: 16, class: 'highlight-selection' }]);
       const state1 = mockStateWithDocText([plugin.plugin], fullText);
 
       bridge.collectDecorationRanges(state1);
       plugin.setDecorations([]);
 
-      const state2 = mockStateWithDocText([plugin.plugin], fullText);
+      const state2 = mockStateWithDocText([plugin.plugin], `x ${fullText}`);
       const ranges = bridge.collectDecorationRanges(state2);
       expect(ranges).toHaveLength(1);
-      expect(ranges[0].from).toBe(10);
-      expect(ranges[0].to).toBe(15);
+      const doc2 = state2.doc as { textBetween: (a: number, b: number) => string };
+      expect(doc2.textBetween(ranges[0].from, ranges[0].to)).toBe('world');
+      expect(ranges[0].from).toBe(13);
+      expect(ranges[0].to).toBe(19);
+    });
+  });
+
+  // -----------------------------------------------------------------------
+  // Unchanged DecorationSet remapping (doc changes)
+  // -----------------------------------------------------------------------
+
+  describe('unchanged DecorationSet remapping', () => {
+    const mockReplaceMappingTransaction = (): Transaction =>
+      ({
+        docChanged: true,
+        mapping: {
+          map: (pos: number, assoc?: number) => {
+            if (pos <= 7) return pos;
+            if (pos >= 11) return pos + 2; // "beta"(4) -> "planet"(6)
+            return assoc === -1 ? 7 : 13;
+          },
+        },
+      }) as unknown as Transaction;
+
+    const mockReplaceWithSingleCharTransaction = (): Transaction =>
+      ({
+        docChanged: true,
+        mapping: {
+          map: (pos: number, assoc?: number) => {
+            if (pos <= 7) return pos;
+            if (pos >= 11) return pos - 3; // "beta"(4) -> "p"(1)
+            return assoc === -1 ? 7 : 8;
+          },
+        },
+      }) as unknown as Transaction;
+
+    const mockInsertAtTransaction = (insertPos: number): Transaction =>
+      ({
+        docChanged: true,
+        mapping: {
+          map: (pos: number, assoc?: number) => {
+            if (pos < insertPos) return pos;
+            if (pos > insertPos) return pos + 1;
+            return assoc === -1 ? insertPos : insertPos + 1;
+          },
+        },
+      }) as unknown as Transaction;
+
+    it('remaps unchanged plugin ranges for collectDecorationRanges after doc change', () => {
+      const { plugin, setDecorations } = mutableExternalPlugin('focus');
+      setDecorations([{ from: 7, to: 11, class: 'highlight-selection' }]);
+
+      const state1 = mockStateWithDocText([plugin], 'alpha beta gamma');
+      const initial = bridge.collectDecorationRanges(state1);
+      expect(initial).toHaveLength(1);
+      expect(initial[0]).toMatchObject({ from: 7, to: 11 });
+
+      bridge.recordTransaction(mockReplaceMappingTransaction());
+      const state2 = mockStateWithDocText([plugin], 'alpha planet gamma');
+      const remapped = bridge.collectDecorationRanges(state2);
+
+      expect(remapped).toHaveLength(1);
+      expect(remapped[0]).toMatchObject({ from: 7, to: 13 });
+      const doc2 = state2.doc as { textBetween: (a: number, b: number) => string };
+      expect(doc2.textBetween(remapped[0].from, remapped[0].to)).toBe('planet');
+    });
+
+    it('remaps unchanged plugin ranges for sync so full replacement span stays highlighted', () => {
+      const { index, addSpan, rebuild } = createIndex();
+      const planSpan = addSpan(7, 11, 'plan');
+      const etSpan = addSpan(11, 13, 'et');
+      rebuild();
+
+      const { plugin, setDecorations } = mutableExternalPlugin('focus');
+      setDecorations([{ from: 7, to: 11, class: 'highlight-selection' }]);
+
+      const state1 = mockStateWithDocText([plugin], 'alpha beta gamma');
+      bridge.collectDecorationRanges(state1);
+
+      bridge.recordTransaction(mockReplaceMappingTransaction());
+      const state2 = mockStateWithDocText([plugin], 'alpha planet gamma');
+      bridge.sync(state2, index);
+
+      expect(planSpan.classList.contains('highlight-selection')).toBe(true);
+      expect(etSpan.classList.contains('highlight-selection')).toBe(true);
+    });
+
+    it('keeps previous coordinates when mapping shrinks but previous text still matches', () => {
+      const plugin = mutableExternalPlugin('focus');
+      plugin.setDecorations([{ from: 7, to: 11, class: 'highlight-selection' }]);
+
+      const state = mockStateWithDocText([plugin.plugin], 'alpha beta gamma');
+      bridge.collectDecorationRanges(state);
+
+      bridge.recordTransaction({
+        docChanged: true,
+        mapping: {
+          map: (pos: number, assoc?: number) => {
+            if (pos === 7) return 7;
+            if (pos === 11) return assoc === -1 ? 9 : 9; // bogus split mapping
+            return pos;
+          },
+        },
+      } as unknown as Transaction);
+
+      const ranges = bridge.collectDecorationRanges(state);
+      expect(ranges).toHaveLength(1);
+      expect(ranges[0]).toMatchObject({ from: 7, to: 11 });
+      const doc = state.doc as { textBetween: (a: number, b: number) => string };
+      expect(doc.textBetween(ranges[0].from, ranges[0].to)).toBe('beta');
+    });
+
+    it('composes mappings across multiple transactions before collect', () => {
+      const { plugin, setDecorations } = mutableExternalPlugin('focus');
+      setDecorations([{ from: 7, to: 11, class: 'highlight-selection' }]);
+
+      const state1 = mockStateWithDocText([plugin], 'alpha beta gamma');
+      bridge.collectDecorationRanges(state1);
+
+      // Typing "planet" over "beta" can arrive as multiple doc-changing transactions:
+      // replace with "p", then insert "l", "a", "n", "e", "t".
+      bridge.recordTransaction(mockReplaceWithSingleCharTransaction());
+      bridge.recordTransaction(mockInsertAtTransaction(8));
+      bridge.recordTransaction(mockInsertAtTransaction(9));
+      bridge.recordTransaction(mockInsertAtTransaction(10));
+      bridge.recordTransaction(mockInsertAtTransaction(11));
+      bridge.recordTransaction(mockInsertAtTransaction(12));
+
+      const state2 = mockStateWithDocText([plugin], 'alpha planet gamma');
+      const remapped = bridge.collectDecorationRanges(state2);
+
+      expect(remapped).toHaveLength(1);
+      expect(remapped[0]).toMatchObject({ from: 7, to: 13 });
+      const doc2 = state2.doc as { textBetween: (a: number, b: number) => string };
+      expect(doc2.textBetween(remapped[0].from, remapped[0].to)).toBe('planet');
     });
   });
 

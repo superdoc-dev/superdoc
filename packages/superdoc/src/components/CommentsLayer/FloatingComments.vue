@@ -354,16 +354,31 @@ let prevPositionIds = new Set();
 watch(allPositions, (positions) => {
   const currentIds = new Set(positions.map((p) => p.id));
 
-  // Eagerly add new IDs to visibleIds so they render immediately.
-  // The IntersectionObserver will asynchronously prune far-away ones.
-  // This prevents the blank-on-initial-load issue where the async observer callback
-  // hasn't fired yet but allPositions already has data.
+  // Eagerly add new IDs near the viewport so they render immediately.
+  // The IntersectionObserver will asynchronously confirm/prune them.
+  // Without this, comments flash blank on initial load because the observer
+  // callback hasn't fired yet. We scope to nearby IDs to avoid mounting
+  // every dialog at once on documents with 100+ comments.
   const newVisible = new Set(visibleIds.value);
   let visibilityChanged = false;
+
+  let nearbyTop = -Infinity;
+  let nearbyBottom = Infinity;
+  const container = floatingCommentsContainer.value;
+  if (container) {
+    const rect = container.getBoundingClientRect();
+    nearbyTop = -rect.top - OBSERVER_MARGIN;
+    nearbyBottom = -rect.top + window.innerHeight + OBSERVER_MARGIN;
+  }
+
+  const positionById = new Map(positions.map((p) => [p.id, p]));
   for (const id of currentIds) {
     if (!newVisible.has(id)) {
-      newVisible.add(id);
-      visibilityChanged = true;
+      const pos = positionById.get(id);
+      if (!pos || (pos.top >= nearbyTop && pos.top <= nearbyBottom)) {
+        newVisible.add(id);
+        visibilityChanged = true;
+      }
     }
   }
   // Remove IDs no longer in allPositions

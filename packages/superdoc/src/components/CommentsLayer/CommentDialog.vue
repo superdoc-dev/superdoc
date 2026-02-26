@@ -258,6 +258,7 @@ const collapsedReplyAuthors = computed(() => {
 
 const expandThread = () => {
   threadExpanded.value = true;
+  setFocus();
   nextTick(() => emit('resize'));
 };
 

@@ -660,7 +660,7 @@ export const useCommentsStore = defineStore('comments', () => {
     commentsList.value = commentsList.value.filter((c) => !childCommentIds.includes(c.commentId));
 
     // Clear active state so floating layout doesn't reference a deleted comment
-    if (activeComment.value === commentId) {
+    if (activeComment.value === commentId || childCommentIds.includes(activeComment.value)) {
       activeComment.value = null;
     }
 

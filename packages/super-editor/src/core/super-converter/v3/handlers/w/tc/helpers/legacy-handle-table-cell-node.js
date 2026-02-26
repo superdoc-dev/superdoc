@@ -55,6 +55,7 @@ export function handleTableCellNode({
     isLastColumn,
     tableCellProperties,
     referencedStyles,
+    hasBorderSpacing: !!tableProperties?.tableCellSpacing,
   });
   // Colspan
   if (colspan > 1) attributes['colspan'] = colspan;
@@ -314,19 +315,20 @@ const processCellBorders = ({
   isLastColumn,
   tableCellProperties,
   referencedStyles,
+  hasBorderSpacing,
 }) => {
   let cellBorders = {};
   if (baseTableBorders) {
-    if (isFirstRow && baseTableBorders.top) {
+    if ((isFirstRow || hasBorderSpacing) && baseTableBorders.top) {
       cellBorders.top = baseTableBorders.top;
     }
-    if (isLastRow && baseTableBorders.bottom) {
+    if ((isLastRow || hasBorderSpacing) && baseTableBorders.bottom) {
       cellBorders.bottom = baseTableBorders.bottom;
     }
-    if (isFirstColumn && baseTableBorders.left) {
+    if ((isFirstColumn || hasBorderSpacing) && baseTableBorders.left) {
       cellBorders.left = baseTableBorders.left;
     }
-    if (isLastColumn && baseTableBorders.right) {
+    if ((isLastColumn || hasBorderSpacing) && baseTableBorders.right) {
       cellBorders.right = baseTableBorders.right;
     }
   }
@@ -397,6 +399,7 @@ const processCellBorders = ({
   // Process inline cell borders (cell-level overrides)
   const inlineBorders = processInlineCellBorders(tableCellProperties.borders, cellBorders);
   if (inlineBorders) cellBorders = Object.assign(cellBorders, inlineBorders);
+
   return cellBorders;
 };
 

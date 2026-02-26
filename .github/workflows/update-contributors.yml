@@ -33,13 +33,10 @@ jobs:
           if [[ "${{ github.event_name }}" == "workflow_dispatch" ]]; then
             PR_NUMBER="${{ inputs.pr_number }}"
             AUTHOR=$(gh api "repos/${{ github.repository }}/pulls/$PR_NUMBER" --jq '.user.login')
-            ASSOCIATION=$(gh api "repos/${{ github.repository }}/pulls/$PR_NUMBER" --jq '.author_association')
           else
             AUTHOR="${{ github.event.pull_request.user.login }}"
-            ASSOCIATION="${{ github.event.pull_request.author_association }}"
           fi
           echo "author=$AUTHOR" >> "$GITHUB_OUTPUT"
-          echo "association=$ASSOCIATION" >> "$GITHUB_OUTPUT"
 
       - name: Check if author is a bot
         id: check-bot
@@ -54,10 +51,10 @@ jobs:
         if: steps.check-bot.outputs.skip == 'false'
         id: check-excluded
         env:
+          GH_TOKEN: ${{ steps.generate_token.outputs.token }}
           EXCLUDED_CONTRIBUTORS: ${{ vars.EXCLUDED_CONTRIBUTORS }}
         run: |
           AUTHOR="${{ steps.resolve.outputs.author }}"
-          ASSOCIATION="${{ steps.resolve.outputs.association }}"
 
           # Check if author is in the exclusion list (comma-separated GitHub variable)
           if [[ -n "$EXCLUDED_CONTRIBUTORS" ]] && echo ",$EXCLUDED_CONTRIBUTORS," | grep -qi ",$AUTHOR,"; then
@@ -66,15 +63,15 @@ jobs:
             exit 0
           fi
 
-          # Check if author is a repo member/collaborator via PR author_association
-          # MEMBER = org member, OWNER = repo/org owner, COLLABORATOR = direct collaborator
-          if [[ "$ASSOCIATION" == "MEMBER" || "$ASSOCIATION" == "OWNER" || "$ASSOCIATION" == "COLLABORATOR" ]]; then
-            echo "$AUTHOR is a $ASSOCIATION (skipping)"
+          # Check if author has write access to the repo (more reliable than author_association)
+          PERMISSION=$(gh api "repos/${{ github.repository }}/collaborators/$AUTHOR/permission" --jq '.permission' 2>/dev/null || echo "none")
+          if [[ "$PERMISSION" == "admin" || "$PERMISSION" == "maintain" || "$PERMISSION" == "write" ]]; then
+            echo "$AUTHOR has $PERMISSION access (skipping)"
             echo "skip=true" >> "$GITHUB_OUTPUT"
             exit 0
           fi
 
-          echo "$AUTHOR is a $ASSOCIATION (not excluded)"
+          echo "$AUTHOR has $PERMISSION access (not excluded)"
           echo "skip=false" >> "$GITHUB_OUTPUT"
 
       - name: Checkout

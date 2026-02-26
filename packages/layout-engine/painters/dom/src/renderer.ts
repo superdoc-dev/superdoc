@@ -76,6 +76,7 @@ import {
   type SdtBoundaryOptions,
 } from './utils/sdt-helpers.js';
 import { SdtGroupedHover } from './utils/sdt-hover.js';
+import { computeTabWidth } from './utils/marker-helpers.js';
 import { generateRulerDefinitionFromPx, createRulerElement, ensureRulerStyles } from './ruler/index.js';
 import { toCssFontFamily } from '@superdoc/font-utils';
 import {
@@ -573,12 +574,6 @@ function collectLineTabsForSnapshot(lineEl: HTMLElement): PaintSnapshotTabStyle[
 
 const LIST_MARKER_GAP = 8;
 /**
- * Default tab interval in pixels (0.5 inch at 96 DPI).
- * Used when calculating tab stops for list markers that extend past the implicit tab stop.
- * This matches Microsoft Word's default tab interval behavior.
- */
-const DEFAULT_TAB_INTERVAL_PX = 48;
-/**
  * Default page height in pixels (11 inches at 96 DPI).
  * Used as a fallback when page size information is not available for ruler rendering.
  */
@@ -589,6 +584,7 @@ const COMMENT_EXTERNAL_COLOR = '#B1124B';
 const COMMENT_INTERNAL_COLOR = '#078383';
 const COMMENT_INACTIVE_ALPHA = '40'; // ~25% for inactive
 const COMMENT_ACTIVE_ALPHA = '66'; // ~40% for active/selected
+const COMMENT_FADED_ALPHA = '20'; // ~12% for non-selected when another comment is active
 
 type LinkRenderData = {
   href?: string;
@@ -683,6 +679,7 @@ const TRACK_CHANGE_BASE_CLASS: Record<TrackedChangeKind, string> = {
   delete: 'track-delete-dec',
   format: 'track-format-dec',
 };
+const TRACK_CHANGE_FOCUSED_CLASS = 'track-change-focused';
 
 const TRACK_CHANGE_MODIFIER_CLASS: Record<TrackedChangeKind, Record<TrackedChangesMode, string | undefined>> = {
   insert: {
@@ -3036,10 +3033,51 @@ export class DomPainter {
       applyImageClipPath(img, imageClipPath, { clipContainer: fragmentEl });
       img.style.display = block.display === 'inline' ? 'inline-block' : 'block';
 
+      // Apply rotation and flip transforms from OOXML a:xfrm
+      const transforms: string[] = [];
+
+      // Calculate translation offset to keep top-left corner fixed when rotating
+      if (block.rotation != null && block.rotation !== 0) {
+        const angleRad = (block.rotation * Math.PI) / 180;
+        const w = block.width ?? fragment.width;
+        const h = block.height ?? fragment.height;
+
+        // Calculate how much the top-left corner moves when rotating around center
+        // Top-left corner starts at (0, 0) in element space
+        // Center is at (w/2, h/2)
+        // After rotation, we need to translate to keep top-left at (0, 0)
+        const cosA = Math.cos(angleRad);
+        const sinA = Math.sin(angleRad);
+
+        // Position of top-left corner after rotation (relative to original top-left)
+        const newTopLeftX = (w / 2) * (1 - cosA) + (h / 2) * sinA;
+        const newTopLeftY = (w / 2) * sinA + (h / 2) * (1 - cosA);
+
+        transforms.push(`translate(${-newTopLeftX}px, ${-newTopLeftY}px)`);
+        transforms.push(`rotate(${block.rotation}deg)`);
+      }
+      if (block.flipH) {
+        transforms.push('scaleX(-1)');
+      }
+      if (block.flipV) {
+        transforms.push('scaleY(-1)');
+      }
+
+      if (transforms.length > 0) {
+        img.style.transform = transforms.join(' ');
+        img.style.transformOrigin = 'center';
+      }
+
       // Apply VML image adjustments (gain/blacklevel) as CSS filters for watermark effects
       // conversion formulas calculated based on Libreoffice vml reader
       // https://github.com/LibreOffice/core/blob/951a74d047cfddff78014225f55ecb2bbdcd9c4c/oox/source/vml/vmlshapecontext.cxx#L465C13-L493C1
       const filters: string[] = [];
+
+      // Apply OOXML grayscale effect
+      if (block.grayscale) {
+        filters.push('grayscale(100%)');
+      }
+
       if (block.gain != null || block.blacklevel != null) {
         // Convert VML gain to CSS contrast
         // VML gain is a hex string like "19661f" - higher = more contrast
@@ -3058,10 +3096,10 @@ export class DomPainter {
             filters.push(`brightness(${brightness})`);
           }
         }
+      }
 
-        if (filters.length > 0) {
-          img.style.filter = filters.join(' ');
-        }
+      if (filters.length > 0) {
+        img.style.filter = filters.join(' ');
       }
       fragmentEl.appendChild(img);
 
@@ -4418,6 +4456,70 @@ export class DomPainter {
       img.style.zIndex = '1';
     }
 
+    // Apply rotation and flip transforms from OOXML a:xfrm
+    const transforms: string[] = [];
+
+    // Calculate translation offset to keep top-left corner fixed when rotating
+    if (run.rotation != null && run.rotation !== 0) {
+      const angleRad = (run.rotation * Math.PI) / 180;
+      const w = run.width;
+      const h = run.height;
+
+      // Calculate how much the top-left corner moves when rotating around center
+      // Top-left corner starts at (0, 0) in element space
+      // Center is at (w/2, h/2)
+      // After rotation, we need to translate to keep top-left at (0, 0)
+      const cosA = Math.cos(angleRad);
+      const sinA = Math.sin(angleRad);
+
+      // Position of top-left corner after rotation (relative to original top-left)
+      const newTopLeftX = (w / 2) * (1 - cosA) + (h / 2) * sinA;
+      const newTopLeftY = (w / 2) * sinA + (h / 2) * (1 - cosA);
+
+      transforms.push(`translate(${-newTopLeftX}px, ${-newTopLeftY}px)`);
+      transforms.push(`rotate(${run.rotation}deg)`);
+    }
+    if (run.flipH) {
+      transforms.push('scaleX(-1)');
+    }
+    if (run.flipV) {
+      transforms.push('scaleY(-1)');
+    }
+    if (transforms.length > 0) {
+      img.style.transform = transforms.join(' ');
+      img.style.transformOrigin = 'center';
+    }
+
+    // Apply image effects (grayscale, VML adjustments for watermarks)
+    const filters: string[] = [];
+
+    // Apply OOXML grayscale effect
+    if (run.grayscale) {
+      filters.push('grayscale(100%)');
+    }
+
+    if (run.gain != null || run.blacklevel != null) {
+      // Convert VML gain to CSS contrast
+      if (run.gain && typeof run.gain === 'string' && run.gain.endsWith('f')) {
+        const contrast = Math.max(0, parseInt(run.gain) / 65536) * (2 / 3);
+        if (contrast > 0) {
+          filters.push(`contrast(${contrast})`);
+        }
+      }
+
+      // Convert VML blacklevel to CSS brightness
+      if (run.blacklevel && typeof run.blacklevel === 'string' && run.blacklevel.endsWith('f')) {
+        const brightness = Math.max(0, 1 + parseInt(run.blacklevel) / 327 / 100) * 1.3;
+        if (brightness > 0) {
+          filters.push(`brightness(${brightness})`);
+        }
+      }
+    }
+
+    if (filters.length > 0) {
+      img.style.filter = filters.join(' ');
+    }
+
     // Assert PM positions are present for cursor fallback
     assertPmPositions(run, 'inline image run');
 
@@ -5537,6 +5639,9 @@ export class DomPainter {
     if (meta.date) {
       elem.dataset.trackChangeDate = meta.date;
     }
+    if (this.activeCommentId && meta.id === this.activeCommentId) {
+      elem.classList.add(TRACK_CHANGE_FOCUSED_CLASS);
+    }
   }
 
   /**
@@ -6465,7 +6570,15 @@ const deriveBlockVersion = (block: FlowBlock): string => {
         hash = hashString(hash, tblAttrs.borderCollapse);
       }
       if (tblAttrs.cellSpacing !== undefined) {
-        hash = hashNumber(hash, tblAttrs.cellSpacing);
+        const cs = tblAttrs.cellSpacing;
+        if (typeof cs === 'number') {
+          hash = hashNumber(hash, cs);
+        } else {
+          // Stable key: value and type only (avoid JSON.stringify key-order variance)
+          const v = (cs as { value?: number; type?: string }).value ?? 0;
+          const t = (cs as { value?: number; type?: string }).type ?? 'px';
+          hash = hashString(hash, `cs:${v}:${t}`);
+        }
       }
       // Include SDT metadata so lock-mode changes invalidate the cache.
       if (tblAttrs.sdt) {
@@ -6594,8 +6707,10 @@ const getCommentHighlight = (run: TextRun, activeCommentId: string | null): Comm
         hasNestedComments: nestedComments.length > 0,
       };
     }
-    // Active comment is set but this run does not belong to it - do not highlight.
-    return {};
+    // Active comment is set but this run does not belong to it - show faded highlight.
+    const fadedPrimary = comments[0];
+    const fadedBase = fadedPrimary.internal ? COMMENT_INTERNAL_COLOR : COMMENT_EXTERNAL_COLOR;
+    return { color: `${fadedBase}${COMMENT_FADED_ALPHA}` };
   }
 
   // No active comment - show uniform light highlight (like Word/Google Docs)
@@ -6957,58 +7072,4 @@ const resolveRunText = (run: Run, context: FragmentRenderContext): string => {
     return context.totalPages ? String(context.totalPages) : (run.text ?? '');
   }
   return run.text ?? '';
-};
-
-const computeTabWidth = (
-  currentPos: number,
-  justification: string,
-  tabs: number[] | undefined,
-  hangingIndent: number | undefined,
-  firstLineIndent: number | undefined,
-  leftIndent: number,
-): number => {
-  const nextDefaultTabStop = currentPos + DEFAULT_TAB_INTERVAL_PX - (currentPos % DEFAULT_TAB_INTERVAL_PX);
-  let tabWidth: number;
-  if ((justification ?? 'left') === 'left') {
-    // Check for explicit tab stops past current position
-    const explicitTabs = [...(tabs ?? [])];
-    if (hangingIndent && hangingIndent > 0) {
-      // Account for hanging indent by adding an implicit tab stop at (left + hanging)
-      const implicitTabPos = leftIndent; // paraIndentLeft already accounts for hanging
-      explicitTabs.push(implicitTabPos);
-      // Sort tab stops to maintain order
-      explicitTabs.sort((a, b) => {
-        if (typeof a === 'number' && typeof b === 'number') {
-          return a - b;
-        }
-        return 0;
-      });
-    }
-    let targetTabStop: number | undefined;
-
-    if (Array.isArray(explicitTabs) && explicitTabs.length > 0) {
-      // Find the first tab stop that's past the current position
-      for (const tab of explicitTabs) {
-        if (typeof tab === 'number' && tab > currentPos) {
-          targetTabStop = tab;
-          break;
-        }
-      }
-    }
-
-    if (targetTabStop === undefined) {
-      // advance to next default 48px tab interval, matching Word behavior.
-      targetTabStop = nextDefaultTabStop;
-    }
-    tabWidth = targetTabStop - currentPos;
-  } else if (justification === 'right') {
-    if (firstLineIndent != null && firstLineIndent > 0) {
-      tabWidth = nextDefaultTabStop - currentPos;
-    } else {
-      tabWidth = hangingIndent ?? 0;
-    }
-  } else {
-    tabWidth = nextDefaultTabStop - currentPos;
-  }
-  return tabWidth;
 };

@@ -37,10 +37,10 @@ type FormatContext = { revision: number };
 function formatCommentList(result: unknown, ctx: FormatContext): string {
   const record = asRecord(result);
   const total = safeNumber(record?.total, 0);
-  const rows = asArray(record?.matches).map((entry) => {
+  const rows = asArray(record?.items).map((entry) => {
     const comment = asRecord(entry) ?? {};
     const status = hasNonEmptyString(comment.status) ? comment.status : 'unknown';
-    const commentId = hasNonEmptyString(comment.commentId) ? comment.commentId : '<unknown>';
+    const commentId = hasNonEmptyString(comment.id) ? comment.id : '<unknown>';
     const creatorName = hasNonEmptyString(comment.creatorName) ? comment.creatorName : '';
     const creatorEmail = hasNonEmptyString(comment.creatorEmail) ? comment.creatorEmail : '';
     const author = creatorName || creatorEmail || 'unknown';
@@ -107,39 +107,26 @@ function formatListResult(result: unknown, ctx: FormatContext): string {
 function formatTrackChangeList(result: unknown, ctx: FormatContext): string {
   const record = asRecord(result);
   const total = safeNumber(record?.total, 0);
-  const changes = asArray(record?.changes);
 
-  const rows =
-    changes.length > 0
-      ? changes.map((entry) => {
-          const change = asRecord(entry) ?? {};
-          const address = asRecord(change.address);
-          const type = hasNonEmptyString(change.type) ? change.type : 'change';
-          const id = hasNonEmptyString(change.id)
-            ? change.id
-            : hasNonEmptyString(address?.entityId)
-              ? String(address?.entityId)
-              : '<unknown>';
-          const authorName = hasNonEmptyString(change.author) ? change.author : '';
-          const authorEmail = hasNonEmptyString(change.authorEmail) ? change.authorEmail : '';
-          const excerpt = hasNonEmptyString(change.excerpt) ? change.excerpt : '';
-          return {
-            type,
-            id,
-            author: authorName || authorEmail || 'unknown',
-            excerpt,
-          };
-        })
-      : asArray(record?.matches).map((entry) => {
-          const match = asRecord(entry) ?? {};
-          const id = hasNonEmptyString(match.entityId) ? match.entityId : '<unknown>';
-          return {
-            type: 'change',
-            id,
-            author: 'unknown',
-            excerpt: '',
-          };
-        });
+  const rows = asArray(record?.items).map((entry) => {
+    const item = asRecord(entry) ?? {};
+    const address = asRecord(item.address);
+    const type = hasNonEmptyString(item.type) ? item.type : 'change';
+    const id = hasNonEmptyString(item.id)
+      ? item.id
+      : hasNonEmptyString(address?.entityId)
+        ? String(address?.entityId)
+        : '<unknown>';
+    const authorName = hasNonEmptyString(item.author) ? item.author : '';
+    const authorEmail = hasNonEmptyString(item.authorEmail) ? item.authorEmail : '';
+    const excerpt = hasNonEmptyString(item.excerpt) ? item.excerpt : '';
+    return {
+      type,
+      id,
+      author: authorName || authorEmail || 'unknown',
+      excerpt,
+    };
+  });
 
   const lines: string[] = [`Revision ${ctx.revision}: ${total} tracked changes`];
   if (rows.length === 0) return lines[0];

@@ -193,18 +193,24 @@ export function rescaleColumnWidths(
   return scaled;
 }
 
-/**
- * Calculate minimum width for a table column.
- *
- * Uses a conservative minimum of 10px per column to match PM's
- * columnResizing behavior.
- *
- * @returns Minimum width in pixels (10px)
- */
-function calculateColumnMinWidth(): number {
-  const DEFAULT_MIN_WIDTH = 10; // Minimum usable column width in pixels
+const COLUMN_MIN_WIDTH_PX = 25;
+const COLUMN_MAX_WIDTH_PX = 200;
 
-  return DEFAULT_MIN_WIDTH;
+/**
+ * Calculate minimum width for a table column from its measured width.
+ *
+ * Clamps the measured width to [COLUMN_MIN_WIDTH_PX, COLUMN_MAX_WIDTH_PX]
+ * so that resize handles enforce a sensible range (min 25px, max 200px).
+ * Invalid/negative/zero measured widths are treated as the minimum.
+ *
+ * @param measuredWidth - Measured width in pixels (may be invalid)
+ * @returns Clamped minimum width in pixels
+ */
+function calculateColumnMinWidth(measuredWidth: number): number {
+  if (!Number.isFinite(measuredWidth) || measuredWidth <= 0) {
+    return COLUMN_MIN_WIDTH_PX;
+  }
+  return Math.max(COLUMN_MIN_WIDTH_PX, Math.min(COLUMN_MAX_WIDTH_PX, measuredWidth));
 }
 
 /**
@@ -230,12 +236,13 @@ function calculateColumnMinWidth(): number {
  */
 function generateColumnBoundaries(measure: TableMeasure, effectiveWidths?: number[]): TableColumnBoundary[] {
   const boundaries: TableColumnBoundary[] = [];
-  let xPosition = 0;
+  const cellSpacingPx = measure.cellSpacingPx ?? 0;
+  let xPosition = cellSpacingPx; // space before first column
   const widths = effectiveWidths ?? measure.columnWidths;
 
   for (let i = 0; i < widths.length; i++) {
     const width = widths[i];
-    const minWidth = calculateColumnMinWidth();
+    const minWidth = calculateColumnMinWidth(width);
 
     const boundary = {
       index: i,
@@ -247,7 +254,8 @@ function generateColumnBoundaries(measure: TableMeasure, effectiveWidths?: numbe
 
     boundaries.push(boundary);
 
-    xPosition += width;
+    // Next boundary is after this column plus spacing (border-spacing between columns)
+    xPosition += width + cellSpacingPx;
   }
 
   return boundaries;
@@ -309,17 +317,59 @@ function calculateFragmentHeight(
   fragment: Pick<TableFragment, 'fromRow' | 'toRow' | 'repeatHeaderCount'>,
   measure: TableMeasure,
   _headerCount: number,
+  borderCollapse?: 'collapse' | 'separate',
 ): number {
   let height = 0;
+  let rowCount = 0;
 
   // Add header height if continuation with repeated headers
   if (fragment.repeatHeaderCount && fragment.repeatHeaderCount > 0) {
     height += sumRowHeights(measure.rows, 0, fragment.repeatHeaderCount);
+    rowCount += fragment.repeatHeaderCount;
   }
 
   // Add body row heights (fromRow to toRow, exclusive)
+  const bodyRowCount = fragment.toRow - fragment.fromRow;
   height += sumRowHeights(measure.rows, fragment.fromRow, fragment.toRow);
+  rowCount += bodyRowCount;
 
+  // Add vertical gaps: space before first row, between rows, after last row (outer spacing)
+  const cellSpacingPx = measure.cellSpacingPx ?? 0;
+  if (rowCount > 0 && cellSpacingPx > 0) {
+    height += (rowCount + 1) * cellSpacingPx;
+  }
+  // Only add outer border height when border-collapse is separate (DOM paints container-level borders only then)
+  if (rowCount > 0 && measure.tableBorderWidths && borderCollapse === 'separate') {
+    const borderWidthV = measure.tableBorderWidths.top + measure.tableBorderWidths.bottom;
+    height += borderWidthV;
+  }
+
+  return height;
+}
+
+/**
+ * Height of a body-only fragment (rows fromRow..toRow) including vertical spacing and borders.
+ * Must match the body portion of calculateFragmentHeight so findSplitPoint's fit check
+ * agrees with the actual rendered fragment height. Borders only included when borderCollapse === 'separate'.
+ */
+function calculateBodyFragmentHeight(
+  measure: TableMeasure,
+  fromRow: number,
+  toRow: number,
+  borderCollapse?: 'collapse' | 'separate',
+): number {
+  const rowCount = toRow - fromRow;
+  if (rowCount <= 0) {
+    return 0;
+  }
+  let height = sumRowHeights(measure.rows, fromRow, toRow);
+  const cellSpacingPx = measure.cellSpacingPx ?? 0;
+  if (cellSpacingPx > 0) {
+    height += (rowCount + 1) * cellSpacingPx;
+  }
+  if (measure.tableBorderWidths && borderCollapse === 'separate') {
+    height += measure.tableBorderWidths.top + measure.tableBorderWidths.bottom;
+  }
   return height;
 }
 
@@ -942,8 +992,8 @@ function findSplitPoint(
   fullPageHeight?: number,
   _pendingPartialRow?: PartialRowInfo | null,
 ): SplitPointResult {
-  let accumulatedHeight = 0;
-  let lastFitRow = startRow; // Last row that fit completely
+  let lastFitRow = startRow; // Last row that fit completely (exclusive end index)
+  const borderCollapse = block.attrs?.borderCollapse ?? (block.attrs?.cellSpacing != null ? 'separate' : 'collapse');
 
   // Rowspan-aware splitting: track the farthest row reached by any active rowspan
   // and the last boundary where no rowspan crosses (a "clean" break point).
@@ -971,10 +1021,10 @@ function findSplitPoint(
       }
     }
 
-    // Check if this row fits completely
-    if (accumulatedHeight + rowHeight <= availableHeight) {
+    // Check if this row fits: use full fragment height (rows + spacing + borders) so pagination matches render
+    const fragmentHeightWithRow = calculateBodyFragmentHeight(measure, startRow, i + 1, borderCollapse);
+    if (fragmentHeightWithRow <= availableHeight) {
       // Row fits completely
-      accumulatedHeight += rowHeight;
       lastFitRow = i + 1; // Next row index (exclusive)
 
       // A boundary is "clean" if no active rowspan crosses it
@@ -982,8 +1032,18 @@ function findSplitPoint(
         lastCleanFitRow = i + 1;
       }
     } else {
-      // Row doesn't fit completely
-      const remainingHeight = availableHeight - accumulatedHeight;
+      // Row doesn't fit completely; remaining space after last full row set.
+      // When lastFitRow === startRow (first row doesn't fit), no rows have been placed yet, so
+      // we must subtract the vertical space that appears before the first row (top spacing + top border)
+      // instead of using calculateBodyFragmentHeight(startRow, startRow) which is 0.
+      let remainingHeight =
+        availableHeight - calculateBodyFragmentHeight(measure, startRow, lastFitRow, borderCollapse);
+      if (lastFitRow === startRow) {
+        const cellSpacingPx = measure.cellSpacingPx ?? 0;
+        const topBorderPx =
+          borderCollapse === 'separate' && measure.tableBorderWidths ? measure.tableBorderWidths.top : 0;
+        remainingHeight = availableHeight - cellSpacingPx - topBorderPx;
+      }
 
       // Check if this is an over-tall row (exceeds full page height) - force split regardless of cantSplit
       // This handles edge case where a row is taller than an entire page
@@ -1251,6 +1311,9 @@ export function layoutTableBlock({
     return;
   }
 
+  // Resolve border-collapse for fragment height (match measuring/render: only add borders when separate)
+  const borderCollapse = block.attrs?.borderCollapse ?? (block.attrs?.cellSpacing != null ? 'separate' : 'collapse');
+
   // 4. Loop until all rows processed (including pending partial rows)
   while (currentRow < block.rows.length || pendingPartialRow !== null) {
     state = ensurePage();
@@ -1445,6 +1508,7 @@ export function layoutTableBlock({
         { fromRow: bodyStartRow, toRow: endRow, repeatHeaderCount },
         measure,
         headerCount,
+        borderCollapse,
       );
     }
 

@@ -84,6 +84,12 @@ type TableRowRenderDependencies = {
    * only a portion of the row's content.
    */
   partialRow?: PartialRowInfo;
+
+  /**
+   * Cell spacing in pixels (border-spacing between cells).
+   * Applied to cell x positions and row y advancement.
+   */
+  cellSpacingPx?: number;
 };
 
 /**
@@ -142,14 +148,15 @@ export const renderTableRow = (deps: TableRowRenderDependencies): void => {
     continuesFromPrev,
     continuesOnNext,
     partialRow,
+    cellSpacingPx = 0,
   } = deps;
 
   /**
    * Calculates the horizontal position (x-coordinate) for a cell based on its grid column index.
    *
-   * Sums the widths of all columns preceding the given column index to determine
-   * the left edge position of a cell. This handles both normal cells and cells
-   * offset by rowspans from previous rows.
+   * Sums the widths of all columns preceding the given column index plus spacing between
+   * columns (border-spacing). When cellSpacingPx > 0, each column after the first is
+   * offset by one spacing unit, so x = sum(columnWidths[0..gridColumnStart-1]) + gridColumnStart * cellSpacingPx.
    *
    * **Bounds Safety:**
    * Loop terminates at the minimum of `gridColumnStart` and `columnWidths.length`
@@ -160,17 +167,15 @@ export const renderTableRow = (deps: TableRowRenderDependencies): void => {
    *
    * @example
    * ```typescript
-   * // columnWidths = [100, 150, 200]
-   * calculateXPosition(0) // Returns: 0 (first column)
-   * calculateXPosition(1) // Returns: 100 (after first column)
-   * calculateXPosition(2) // Returns: 250 (after first two columns)
-   * calculateXPosition(10) // Returns: 450 (safe - stops at array length)
+   * // columnWidths = [100, 150, 200], cellSpacingPx = 4
+   * calculateXPosition(0) // Returns: cellSpacingPx (space before first column)
+   * calculateXPosition(1) // Returns: cellSpacingPx + columnWidths[0] + cellSpacingPx
    * ```
    */
   const calculateXPosition = (gridColumnStart: number): number => {
-    let x = 0;
+    let x = cellSpacingPx; // space before first column
     for (let i = 0; i < gridColumnStart && i < columnWidths.length; i++) {
-      x += columnWidths[i];
+      x += columnWidths[i] + cellSpacingPx;
     }
     return x;
   };

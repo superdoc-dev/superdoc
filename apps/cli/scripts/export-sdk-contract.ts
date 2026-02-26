@@ -58,10 +58,13 @@ const INTENT_NAMES = {
   'doc.insert': 'insert_content',
   'doc.replace': 'replace_content',
   'doc.delete': 'delete_content',
-  'doc.format.bold': 'format_bold',
-  'doc.format.italic': 'format_italic',
-  'doc.format.underline': 'format_underline',
-  'doc.format.strikethrough': 'format_strikethrough',
+  'doc.blocks.delete': 'delete_block',
+  'doc.format.apply': 'format_apply',
+  'doc.format.fontSize': 'format_font_size',
+  'doc.format.fontFamily': 'format_font_family',
+  'doc.format.color': 'format_color',
+  'doc.format.align': 'format_align',
+  'doc.styles.apply': 'styles_apply',
   'doc.create.paragraph': 'create_paragraph',
   'doc.create.heading': 'create_heading',
   'doc.lists.list': 'list_lists',
@@ -72,26 +75,57 @@ const INTENT_NAMES = {
   'doc.lists.outdent': 'outdent_list',
   'doc.lists.restart': 'restart_list_numbering',
   'doc.lists.exit': 'exit_list',
-  'doc.comments.add': 'add_comment',
-  'doc.comments.edit': 'edit_comment',
-  'doc.comments.reply': 'reply_to_comment',
-  'doc.comments.move': 'move_comment',
-  'doc.comments.resolve': 'resolve_comment',
-  'doc.comments.remove': 'remove_comment',
-  'doc.comments.setInternal': 'set_comment_internal',
-  'doc.comments.setActive': 'set_comment_active',
-  'doc.comments.goTo': 'go_to_comment',
+  'doc.comments.create': 'create_comment',
+  'doc.comments.patch': 'patch_comment',
+  'doc.comments.delete': 'delete_comment',
   'doc.comments.get': 'get_comment',
   'doc.comments.list': 'list_comments',
   'doc.trackChanges.list': 'list_tracked_changes',
   'doc.trackChanges.get': 'get_tracked_change',
-  'doc.trackChanges.accept': 'accept_tracked_change',
-  'doc.trackChanges.reject': 'reject_tracked_change',
-  'doc.trackChanges.acceptAll': 'accept_all_tracked_changes',
-  'doc.trackChanges.rejectAll': 'reject_all_tracked_changes',
+  'doc.trackChanges.decide': 'decide_tracked_change',
   'doc.query.match': 'query_match',
   'doc.mutations.preview': 'preview_mutations',
   'doc.mutations.apply': 'apply_mutations',
+  'doc.create.table': 'create_table',
+  'doc.tables.convertFromText': 'convert_text_to_table',
+  'doc.tables.delete': 'delete_table',
+  'doc.tables.clearContents': 'clear_table_contents',
+  'doc.tables.move': 'move_table',
+  'doc.tables.split': 'split_table',
+  'doc.tables.convertToText': 'convert_table_to_text',
+  'doc.tables.setLayout': 'set_table_layout',
+  'doc.tables.insertRow': 'insert_table_row',
+  'doc.tables.deleteRow': 'delete_table_row',
+  'doc.tables.setRowHeight': 'set_table_row_height',
+  'doc.tables.distributeRows': 'distribute_table_rows',
+  'doc.tables.setRowOptions': 'set_table_row_options',
+  'doc.tables.insertColumn': 'insert_table_column',
+  'doc.tables.deleteColumn': 'delete_table_column',
+  'doc.tables.setColumnWidth': 'set_table_column_width',
+  'doc.tables.distributeColumns': 'distribute_table_columns',
+  'doc.tables.insertCell': 'insert_table_cell',
+  'doc.tables.deleteCell': 'delete_table_cell',
+  'doc.tables.mergeCells': 'merge_table_cells',
+  'doc.tables.unmergeCells': 'unmerge_table_cells',
+  'doc.tables.splitCell': 'split_table_cell',
+  'doc.tables.setCellProperties': 'set_table_cell_properties',
+  'doc.tables.sort': 'sort_table',
+  'doc.tables.setAltText': 'set_table_alt_text',
+  'doc.tables.setStyle': 'set_table_style',
+  'doc.tables.clearStyle': 'clear_table_style',
+  'doc.tables.setStyleOption': 'set_table_style_option',
+  'doc.tables.setBorder': 'set_table_border',
+  'doc.tables.clearBorder': 'clear_table_border',
+  'doc.tables.applyBorderPreset': 'apply_table_border_preset',
+  'doc.tables.setShading': 'set_table_shading',
+  'doc.tables.clearShading': 'clear_table_shading',
+  'doc.tables.setTablePadding': 'set_table_padding',
+  'doc.tables.setCellPadding': 'set_table_cell_padding',
+  'doc.tables.setCellSpacing': 'set_table_cell_spacing',
+  'doc.tables.clearCellSpacing': 'clear_table_cell_spacing',
+  'doc.tables.get': 'get_table',
+  'doc.tables.getCells': 'get_table_cells',
+  'doc.tables.getProperties': 'get_table_properties',
 } as const satisfies Record<DocBackedCliOpId, string>;
 
 // ---------------------------------------------------------------------------
@@ -100,6 +134,7 @@ const INTENT_NAMES = {
 
 function loadDocApiContract(): {
   contractVersion: string;
+  $defs?: Record<string, unknown>;
   operations: Record<string, Record<string, unknown>>;
 } {
   const raw = readFileSync(CONTRACT_JSON_PATH, 'utf-8');
@@ -200,6 +235,7 @@ function buildSdkContract() {
   return {
     contractVersion: docApiContract.contractVersion,
     sourceHash,
+    ...(docApiContract.$defs ? { $defs: docApiContract.$defs } : {}),
     cli: {
       package: cliPkg.name,
       // Envelope meta.version is contract-version-based today, so minVersion must match that domain.
@@ -228,9 +264,13 @@ function main() {
     let existing: string;
     try {
       existing = readFileSync(OUTPUT_PATH, 'utf-8');
-    } catch {
-      console.error(`--check: ${OUTPUT_PATH} does not exist. Run without --check to generate.`);
-      process.exit(1);
+    } catch (error) {
+      const fsError = error as NodeJS.ErrnoException;
+      if (fsError?.code === 'ENOENT') {
+        console.error(`--check: ${OUTPUT_PATH} does not exist. Run without --check to generate.`);
+        process.exit(1);
+      }
+      throw error;
     }
 
     if (existing === json) {

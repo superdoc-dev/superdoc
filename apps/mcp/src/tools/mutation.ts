@@ -12,14 +12,14 @@ export function registerMutationTools(server: McpServer, sessions: SessionManage
     {
       title: 'Insert Text',
       description:
-        "Insert text at a target position in the document. Use superdoc_find first, then pass a TextAddress from the result's context[].textRanges as the target. Set suggest=true to insert as a tracked change (suggestion) instead of a direct edit.",
+        'Insert text at a target position in the document. Use superdoc_find first, then pass a TextAddress from items[].context.textRanges as the target. Set suggest=true to insert as a tracked change (suggestion) instead of a direct edit.',
       inputSchema: {
         session_id: z.string().describe('Session ID from superdoc_open.'),
         text: z.string().describe('The text content to insert.'),
         target: z
           .string()
           .describe(
-            'JSON-encoded TextAddress: {"kind":"text","blockId":"...","range":{"start":N,"end":N}}. Get this from superdoc_find context[].textRanges, NOT from matches[].',
+            'JSON-encoded TextAddress: {"kind":"text","blockId":"...","range":{"start":N,"end":N}}. Get this from superdoc_find items[].context.textRanges.',
           ),
         suggest: z
           .boolean()
@@ -56,14 +56,14 @@ export function registerMutationTools(server: McpServer, sessions: SessionManage
     {
       title: 'Replace Text',
       description:
-        "Replace content at a target range with new text. Use superdoc_find with a text pattern first, then pass a TextAddress from the result's context[].textRanges as the target. Set suggest=true to make the replacement a tracked change (suggestion).",
+        'Replace content at a target range with new text. Use superdoc_find with a text pattern first, then pass a TextAddress from items[].context.textRanges as the target. Set suggest=true to make the replacement a tracked change (suggestion).',
       inputSchema: {
         session_id: z.string().describe('Session ID from superdoc_open.'),
         text: z.string().describe('The replacement text.'),
         target: z
           .string()
           .describe(
-            'JSON-encoded TextAddress: {"kind":"text","blockId":"...","range":{"start":N,"end":N}}. Get this from superdoc_find context[].textRanges, NOT from matches[].',
+            'JSON-encoded TextAddress: {"kind":"text","blockId":"...","range":{"start":N,"end":N}}. Get this from superdoc_find items[].context.textRanges.',
           ),
         suggest: z
           .boolean()
@@ -100,13 +100,13 @@ export function registerMutationTools(server: McpServer, sessions: SessionManage
     {
       title: 'Delete Content',
       description:
-        "Delete content at a target range. Use superdoc_find with a text pattern first, then pass a TextAddress from the result's context[].textRanges as the target. Set suggest=true to delete as a tracked change (suggestion).",
+        'Delete content at a target range. Use superdoc_find with a text pattern first, then pass a TextAddress from items[].context.textRanges as the target. Set suggest=true to delete as a tracked change (suggestion).',
       inputSchema: {
         session_id: z.string().describe('Session ID from superdoc_open.'),
         target: z
           .string()
           .describe(
-            'JSON-encoded TextAddress: {"kind":"text","blockId":"...","range":{"start":N,"end":N}}. Get this from superdoc_find context[].textRanges, NOT from matches[].',
+            'JSON-encoded TextAddress: {"kind":"text","blockId":"...","range":{"start":N,"end":N}}. Get this from superdoc_find items[].context.textRanges.',
           ),
         suggest: z
           .boolean()

@@ -105,6 +105,20 @@ describe('tableFallbackHelpers', () => {
     expect(result).toBeNull();
   });
 
+  it('defaults to page content width when no width info available', () => {
+    const rows = [createRow([1, 1, 1])];
+
+    const result = buildFallbackGridForTable({ ...baseParams, rows });
+
+    expect(result).not.toBeNull();
+    const totalTwips = result.grid.reduce((sum, col) => sum + col.col, 0);
+    expect(totalTwips).toBeCloseTo(DEFAULT_CONTENT_WIDTH_TWIPS, 0);
+    // 3 equal columns spanning page width
+    result.columnWidths.forEach((widthPx) => {
+      expect(widthPx).toBeCloseTo((totalTwips / 3 / 1440) * 96, 0);
+    });
+  });
+
   it('resolves measurement width from dxa values', () => {
     const measurement = { value: 1440, type: 'dxa' }; // 1"
     expect(resolveMeasurementWidthPx(measurement)).toBeCloseTo(96, 3);

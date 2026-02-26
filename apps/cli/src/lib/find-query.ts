@@ -2,7 +2,7 @@ import { getNumberOption, getOptionalBooleanOption, getStringOption, resolveJson
 import { CliError } from './errors';
 import { PRETTY_ROW_LIMIT, moreLine, padCol, safeNumber, toSingleLine, truncate } from './pretty-helpers';
 import { validateQuery } from './validate';
-import type { Query, QueryResult } from './types';
+import type { Query, FindOutput } from './types';
 
 const FLAT_FIND_FLAGS = [
   'type',
@@ -123,36 +123,36 @@ export async function resolveFindQuery(parsed: ParsedArgs): Promise<Query> {
   return validateQuery(finalDraft, 'query');
 }
 
-function resolveMatchLabel(match: QueryResult['matches'][number], maxTypeLength: number): string {
-  const nodeId = match.kind === 'block' ? match.nodeId : 'inline';
-  return `[${padCol(match.nodeType, maxTypeLength)} ${nodeId}]`;
+function resolveMatchLabel(address: FindOutput['items'][number]['address'], maxTypeLength: number): string {
+  const nodeId = address.kind === 'block' ? address.nodeId : 'inline';
+  return `[${padCol(address.nodeType, maxTypeLength)} ${nodeId}]`;
 }
 
-function resolveNodeText(result: QueryResult, index: number): string | null {
-  const snippet = result.context?.[index]?.snippet;
+function resolveNodeText(item: FindOutput['items'][number]): string | null {
+  const snippet = item.context?.snippet;
   if (typeof snippet === 'string' && snippet.length > 0) return snippet;
 
-  const node = result.nodes?.[index];
+  const node = item.node;
   if (typeof node !== 'object' || node == null) return null;
   const text = (node as { text?: unknown }).text;
   if (typeof text === 'string' && text.length > 0) return text;
   return null;
 }
 
-export function formatFindPretty(result: QueryResult, revision: number): string {
-  const total = safeNumber(result.total, result.matches.length);
-  const suffix = result.matches.length !== total ? ` (${total} total)` : '';
-  const lines: string[] = [`Revision ${revision}: ${result.matches.length} matches${suffix}`];
-  if (result.matches.length === 0) return lines[0];
+export function formatFindPretty(result: FindOutput, revision: number): string {
+  const total = safeNumber(result.total, result.items.length);
+  const suffix = result.items.length !== total ? ` (${total} total)` : '';
+  const lines: string[] = [`Revision ${revision}: ${result.items.length} matches${suffix}`];
+  if (result.items.length === 0) return lines[0];
 
   lines.push('');
-  const shownCount = Math.min(result.matches.length, PRETTY_ROW_LIMIT);
-  const shownMatches = result.matches.slice(0, shownCount);
-  const maxTypeLength = Math.max(1, ...shownMatches.map((match) => match.nodeType.length));
+  const shownCount = Math.min(result.items.length, PRETTY_ROW_LIMIT);
+  const shownItems = result.items.slice(0, shownCount);
+  const maxTypeLength = Math.max(1, ...shownItems.map((item) => item.address.nodeType.length));
 
-  for (let index = 0; index < shownMatches.length; index += 1) {
-    const label = resolveMatchLabel(shownMatches[index], maxTypeLength);
-    const snippet = resolveNodeText(result, index);
+  for (const item of shownItems) {
+    const label = resolveMatchLabel(item.address, maxTypeLength);
+    const snippet = resolveNodeText(item);
     if (!snippet) {
       lines.push(label);
       continue;
@@ -160,7 +160,7 @@ export function formatFindPretty(result: QueryResult, revision: number): string 
     lines.push(`${label}  "${truncate(toSingleLine(snippet), 50)}"`);
   }
 
-  const remaining = moreLine(shownMatches.length, Math.max(total, result.matches.length));
+  const remaining = moreLine(shownItems.length, Math.max(total, result.items.length));
   if (remaining) lines.push(remaining);
   return lines.join('\n');
 }

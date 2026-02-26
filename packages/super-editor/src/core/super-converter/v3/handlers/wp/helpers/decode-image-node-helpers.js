@@ -207,6 +207,11 @@ export const translateImageNode = (params) => {
                         attributes: {
                           'r:embed': imageId,
                         },
+                        ...(attrs.grayscale
+                          ? {
+                              elements: [{ name: 'a:grayscl' }],
+                            }
+                          : {}),
                       },
                       ...(rawSrcRect ? [rawSrcRect] : []),
                       {

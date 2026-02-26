@@ -69,6 +69,10 @@ export async function parseWrapperOperationInput(
   operationId: CliOperationId,
   tokens: string[],
   commandName: string,
+  options?: {
+    skipConstraints?: boolean;
+    extraOptionSpecs?: readonly { name: string; type: 'string' | 'boolean' | 'number' }[];
+  },
 ): Promise<Record<string, unknown>> {
   if (operationId === 'doc.find') {
     const { parsed, args } = parseOperationArgs('doc.find', tokens, {
@@ -177,6 +181,24 @@ export async function parseWrapperOperationInput(
     });
   }
 
-  const { args } = parseOperationArgs(operationId, tokens, { commandName });
-  return stripUndefinedFields(args as Record<string, unknown>);
+  const { parsed, args } = parseOperationArgs(operationId, tokens, {
+    commandName,
+    skipConstraints: options?.skipConstraints,
+    extraOptionSpecs: options?.extraOptionSpecs as import('./args').OptionSpec[] | undefined,
+  });
+  const result = args as Record<string, unknown>;
+
+  // Extract extra option values that aren't in the canonical operation params.
+  // These are used by helper commands (e.g., --id for track-changes accept/reject).
+  if (options?.extraOptionSpecs) {
+    for (const spec of options.extraOptionSpecs) {
+      if (result[spec.name] !== undefined) continue;
+      const value = parsed.options[spec.name];
+      if (value != null) {
+        result[spec.name] = value;
+      }
+    }
+  }
+
+  return stripUndefinedFields(result);
 }

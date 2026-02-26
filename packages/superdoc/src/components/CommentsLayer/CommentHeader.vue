@@ -28,6 +28,10 @@ const props = defineProps({
     required: false,
     default: false,
   },
+  isActive: {
+    type: Boolean,
+    default: false,
+  },
 });
 
 const { proxy } = getCurrentInstance();
@@ -128,9 +132,21 @@ const handleResolve = () => emit('resolve');
 const handleReject = () => emit('reject');
 const handleSelect = (value) => emit('overflow-select', value);
 
+// Imported comments have `origin` set (e.g. 'word'); imported tracked changes
+// don't carry `origin` but do carry `importedAuthor` from the mark attributes.
+const isImported = computed(() => {
+  return props.comment.origin != null || !!props.comment.importedAuthor?.name;
+});
+
 const getCurrentUser = computed(() => {
   if (props.isPendingInput) return proxy.$superdoc.config.user;
-  return props.comment.getCommentUser();
+  const user = props.comment.getCommentUser();
+  // Strip "(imported)" qualifier from display name — the imported tag handles origin indication
+  if (user?.name) {
+    const cleaned = user.name.replace(/\s*\(imported\)\s*/gi, '').trim();
+    if (cleaned) return { ...user, name: cleaned };
+  }
+  return user;
 });
 </script>
 
@@ -139,13 +155,15 @@ const getCurrentUser = computed(() => {
     <div class="comment-header-left">
       <Avatar :user="getCurrentUser" class="avatar" />
       <div class="user-info">
-        <div class="user-name">{{ getCurrentUser.name }}</div>
+        <div class="user-name">
+          {{ getCurrentUser.name }}<span v-if="isImported" class="imported-tag">IMPORTED</span>
+        </div>
         <div class="user-timestamp" v-if="props.comment.createdTime">{{ formatDate(props.comment.createdTime) }}</div>
       </div>
     </div>
 
-    <!-- Regular comments options -->
-    <div class="overflow-menu">
+    <!-- Action buttons — visible on card hover and when active -->
+    <div class="overflow-menu" :class="{ 'is-visible': props.isActive }">
       <div
         v-if="allowResolve"
         class="overflow-menu__icon"
@@ -180,36 +198,56 @@ const getCurrentUser = computed(() => {
   display: flex;
   align-items: center;
   justify-content: space-between;
-  margin-bottom: 10px;
+  margin-bottom: 6px;
 }
 .comment-header-left {
   display: flex;
-  justify-content: space-between;
   align-items: center;
-}
-.avatar {
-  margin-right: 10px;
+  gap: 8px;
 }
 .user-info {
   display: flex;
   flex-direction: column;
-  font-size: 12px;
 }
 .user-name {
-  font-weight: 600;
+  font-size: var(--sd-comment-author-size, 14px);
+  font-weight: var(--sd-comment-author-weight, 600);
+  color: var(--sd-comment-author-color, #212121);
   line-height: 1.2em;
+}
+.imported-tag {
+  display: inline-block;
+  font-size: 9px;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  color: var(--sd-comment-imported-tag-color, var(--sd-color-gray-600, #888888));
+  background: var(--sd-comment-imported-tag-bg, var(--sd-color-gray-200, #f2f2f2));
+  border-radius: 3px;
+  padding: 1px 4px;
+  margin-left: 6px;
+  vertical-align: middle;
+  line-height: 1.4;
 }
 .user-timestamp {
   line-height: 1.2em;
-  font-size: 12px;
-  color: #999;
+  font-size: var(--sd-comment-time-size, 12px);
+  color: var(--sd-comment-time-color, #888888);
 }
 .overflow-menu {
   flex-shrink: 1;
   display: flex;
   gap: 6px;
+  opacity: 0;
+  pointer-events: none;
+  transition: opacity 150ms ease;
+}
+.overflow-menu.is-visible {
+  opacity: 1;
+  pointer-events: auto;
 }
 .overflow-menu__icon {
+  display: flex;
   box-sizing: content-box;
   justify-content: center;
   align-items: center;
@@ -222,7 +260,7 @@ const getCurrentUser = computed(() => {
   transition: all 250ms ease;
 }
 .overflow-menu__icon:hover {
-  background-color: #dbdbdb;
+  background-color: var(--sd-comment-separator, #dbdbdb);
 }
 .overflow-menu__icon :deep(svg) {
   width: 100%;

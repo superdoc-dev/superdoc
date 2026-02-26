@@ -2403,6 +2403,14 @@ export class PresentationEditor extends EventEmitter {
         if (ySyncMeta?.isChangeOrigin && transaction.docChanged) {
           this.#flowBlockCache?.setHasExternalChanges(true);
         }
+        // History undo/redo can restore prior paragraph content while preserving/reusing
+        // sdBlockRev values, which makes the cache's fast revision check unsafe.
+        // Force JSON comparison for this render cycle to avoid stale paragraph reuse.
+        const inputType = transaction.getMeta?.('inputType');
+        const isHistoryType = inputType === 'historyUndo' || inputType === 'historyRedo';
+        if (isHistoryType && transaction.docChanged) {
+          this.#flowBlockCache?.setHasExternalChanges(true);
+        }
       }
       if (trackedChangesChanged || transaction?.docChanged) {
         this.#pendingDocChange = true;
@@ -2479,6 +2487,19 @@ export class PresentationEditor extends EventEmitter {
     this.#editorListeners.push({
       event: 'pageStyleUpdate',
       handler: handlePageStyleUpdate as (...args: unknown[]) => void,
+    });
+
+    // Listen for stylesheet default changes (e.g., styles.apply mutations to docDefaults).
+    // These changes mutate translatedLinkedStyles directly and need a full re-render
+    // so the style-engine picks up the updated default properties.
+    const handleStylesDefaultsChanged = () => {
+      this.#pendingDocChange = true;
+      this.#scheduleRerender();
+    };
+    this.#editor.on('stylesDefaultsChanged', handleStylesDefaultsChanged);
+    this.#editorListeners.push({
+      event: 'stylesDefaultsChanged',
+      handler: handleStylesDefaultsChanged as (...args: unknown[]) => void,
     });
 
     const handleCollaborationReady = (payload: unknown) => {
@@ -2641,7 +2662,8 @@ export class PresentationEditor extends EventEmitter {
       goToAnchor: (href: string) => this.goToAnchor(href),
       emit: (event: string, payload: unknown) => this.emit(event, payload),
       normalizeClientPoint: (clientX: number, clientY: number) => this.#normalizeClientPoint(clientX, clientY),
-      hitTestHeaderFooterRegion: (x: number, y: number) => this.#hitTestHeaderFooterRegion(x, y),
+      hitTestHeaderFooterRegion: (x: number, y: number, pageIndex?: number, pageLocalY?: number) =>
+        this.#hitTestHeaderFooterRegion(x, y, pageIndex, pageLocalY),
       exitHeaderFooterMode: () => this.#exitHeaderFooterMode(),
       activateHeaderFooterRegion: (region) => this.#activateHeaderFooterRegion(region),
       createDefaultHeaderFooter: (region) => this.#createDefaultHeaderFooter(region),
@@ -2830,6 +2852,7 @@ export class PresentationEditor extends EventEmitter {
       setPendingDocChange: () => {
         this.#pendingDocChange = true;
       },
+      getBodyPageCount: () => this.#layoutState?.layout?.pages?.length ?? 1,
     });
 
     // Set up callbacks
@@ -4226,8 +4249,8 @@ export class PresentationEditor extends EventEmitter {
    * Hit test for header/footer regions at a given point.
    * Delegates to HeaderFooterSessionManager which manages region tracking.
    */
-  #hitTestHeaderFooterRegion(x: number, y: number): HeaderFooterRegion | null {
-    return this.#headerFooterSession?.hitTestRegion(x, y, this.#layoutState.layout) ?? null;
+  #hitTestHeaderFooterRegion(x: number, y: number, pageIndex?: number, pageLocalY?: number): HeaderFooterRegion | null {
+    return this.#headerFooterSession?.hitTestRegion(x, y, this.#layoutState.layout, pageIndex, pageLocalY) ?? null;
   }
 
   #activateHeaderFooterRegion(region: HeaderFooterRegion) {
@@ -4992,7 +5015,10 @@ export class PresentationEditor extends EventEmitter {
     );
   }
 
-  #normalizeClientPoint(clientX: number, clientY: number): { x: number; y: number } | null {
+  #normalizeClientPoint(
+    clientX: number,
+    clientY: number,
+  ): { x: number; y: number; pageIndex?: number; pageLocalY?: number } | null {
     return normalizeClientPointFromPointer(
       {
         viewportHost: this.#viewportHost,

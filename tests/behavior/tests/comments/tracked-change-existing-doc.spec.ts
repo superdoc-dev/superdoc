@@ -44,18 +44,17 @@ test('tracked change replacement in existing document', async ({ superdoc }) => 
     .toBeGreaterThanOrEqual(1);
 
   // The floating comment dialog for our change should appear with tracked change details.
-  // Scope to .floating-comment > .comments-dialog to skip the measurement-layer duplicate.
-  const dialog = superdoc.page.locator('.floating-comment > .comments-dialog', {
+  const dialog = superdoc.page.locator('.comment-placeholder .comments-dialog', {
     has: superdoc.page.locator('.tracked-change-text', { hasText: 'programmatically inserted' }),
   });
   await expect(dialog).toBeVisible({ timeout: 5_000 });
 
-  // It should show the "Added:" label with the new content
-  await expect(dialog.locator('.change-type', { hasText: 'Added' }).first()).toBeVisible();
-  await expect(dialog.locator('.tracked-change-text', { hasText: 'programmatically inserted' })).toBeVisible();
-
-  // It should show the "Deleted:" label with the original content
-  await expect(dialog.locator('.change-type', { hasText: 'Deleted' }).first()).toBeVisible();
+  // It should show the replacement summary with both old and new content
+  await expect(dialog.locator('.change-type', { hasText: 'Replaced' }).first()).toBeVisible();
+  await expect(
+    dialog.locator('.tracked-change-text.is-inserted', { hasText: 'programmatically inserted' }),
+  ).toBeVisible();
+  await expect(dialog.locator('.tracked-change-text.is-deleted').first()).toBeVisible();
 
   await superdoc.snapshot('tracked change replacement in existing doc');
 });

@@ -51,7 +51,7 @@ import { COMMENT_FILE_BASENAMES } from '@core/super-converter/constants.js';
 import { isHeadless } from '../utils/headless-helpers.js';
 import { canUseDOM } from '../utils/canUseDOM.js';
 import { buildSchemaSummary } from './schema-summary.js';
-import { PresentationEditor } from './presentation-editor/index.js';
+import type { PresentationEditor } from './presentation-editor/index.js';
 import type { EditorRenderer } from './renderers/EditorRenderer.js';
 import { ProseMirrorRenderer } from './renderers/ProseMirrorRenderer.js';
 import { BLANK_DOCX_DATA_URI } from './blank-docx.js';

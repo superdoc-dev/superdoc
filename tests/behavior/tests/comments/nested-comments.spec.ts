@@ -33,7 +33,7 @@ test.describe('nested comments from Google Docs', () => {
     await superdoc.clickOnCommentedText('Licensee');
     await superdoc.waitForStable();
 
-    const licenseeDialog = superdoc.page.locator('.floating-comment > .comments-dialog.is-active').last();
+    const licenseeDialog = superdoc.page.locator('.comment-placeholder .comments-dialog.is-active').last();
     await expect(licenseeDialog).toBeVisible({ timeout: 5_000 });
     const licenseeComments = licenseeDialog.locator('.comment-body .comment');
     await expect(licenseeComments).toHaveCount(2);
@@ -44,7 +44,7 @@ test.describe('nested comments from Google Docs', () => {
     await superdoc.clickOnCommentedText('proprietary');
     await superdoc.waitForStable();
 
-    const proprietaryDialog = superdoc.page.locator('.floating-comment > .comments-dialog.is-active').last();
+    const proprietaryDialog = superdoc.page.locator('.comment-placeholder .comments-dialog.is-active').last();
     await expect(proprietaryDialog).toBeVisible({ timeout: 5_000 });
     await expect(proprietaryDialog.locator('.comment-body .comment').first()).toContainText('proprietary notices');
 
@@ -52,7 +52,7 @@ test.describe('nested comments from Google Docs', () => {
     await superdoc.clickOnCommentedText('labels');
     await superdoc.waitForStable();
 
-    const labelsDialog = superdoc.page.locator('.floating-comment > .comments-dialog.is-active').last();
+    const labelsDialog = superdoc.page.locator('.comment-placeholder .comments-dialog.is-active').last();
     await expect(labelsDialog).toBeVisible({ timeout: 5_000 });
     const labelsComments = labelsDialog.locator('.comment-body .comment');
     await expect(labelsComments).toHaveCount(2);
@@ -62,7 +62,7 @@ test.describe('nested comments from Google Docs', () => {
     // Click away to deselect — no active dialog
     await superdoc.clickOnLine(1, 50);
     await superdoc.waitForStable();
-    await expect(superdoc.page.locator('.floating-comment > .comments-dialog.is-active')).toHaveCount(0);
+    await expect(superdoc.page.locator('.comment-placeholder .comments-dialog.is-active')).toHaveCount(0);
 
     await superdoc.snapshot('nested-comments-gdocs');
   });
@@ -91,7 +91,7 @@ test.describe('nested comments from MS Word', () => {
     await superdoc.clickOnCommentedText('modify');
     await superdoc.waitForStable();
 
-    const modifyDialog = superdoc.page.locator('.floating-comment > .comments-dialog.is-active').last();
+    const modifyDialog = superdoc.page.locator('.comment-placeholder .comments-dialog.is-active').last();
     await expect(modifyDialog).toBeVisible({ timeout: 5_000 });
     await expect(modifyDialog.locator('.comment-body .comment').first()).toContainText('comment on modify');
 
@@ -99,7 +99,7 @@ test.describe('nested comments from MS Word', () => {
     await superdoc.clickOnCommentedText('Licensee');
     await superdoc.waitForStable();
 
-    const licenseeDialog = superdoc.page.locator('.floating-comment > .comments-dialog.is-active').last();
+    const licenseeDialog = superdoc.page.locator('.comment-placeholder .comments-dialog.is-active').last();
     await expect(licenseeDialog).toBeVisible({ timeout: 5_000 });
     await expect(licenseeDialog.locator('.comment-body .comment').first()).toContainText(
       'comment from licensee to distribute',
@@ -109,7 +109,7 @@ test.describe('nested comments from MS Word', () => {
     await superdoc.clickOnCommentedText('proprietary');
     await superdoc.waitForStable();
 
-    const proprietaryDialog = superdoc.page.locator('.floating-comment > .comments-dialog.is-active').last();
+    const proprietaryDialog = superdoc.page.locator('.comment-placeholder .comments-dialog.is-active').last();
     await expect(proprietaryDialog).toBeVisible({ timeout: 5_000 });
     await expect(proprietaryDialog.locator('.comment-body .comment').first()).toContainText('proprietary notices');
 
@@ -117,7 +117,7 @@ test.describe('nested comments from MS Word', () => {
     await superdoc.clickOnCommentedText('labels');
     await superdoc.waitForStable();
 
-    const labelsDialog = superdoc.page.locator('.floating-comment > .comments-dialog.is-active').last();
+    const labelsDialog = superdoc.page.locator('.comment-placeholder .comments-dialog.is-active').last();
     await expect(labelsDialog).toBeVisible({ timeout: 5_000 });
     const labelsComments = labelsDialog.locator('.comment-body .comment');
     await expect(labelsComments).toHaveCount(2);
@@ -127,7 +127,7 @@ test.describe('nested comments from MS Word', () => {
     // Click away to deselect — no active dialog
     await superdoc.clickOnLine(1, 50);
     await superdoc.waitForStable();
-    await expect(superdoc.page.locator('.floating-comment > .comments-dialog.is-active')).toHaveCount(0);
+    await expect(superdoc.page.locator('.comment-placeholder .comments-dialog.is-active')).toHaveCount(0);
 
     await superdoc.snapshot('nested-comments-word');
   });

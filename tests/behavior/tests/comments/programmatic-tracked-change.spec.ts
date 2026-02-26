@@ -96,7 +96,7 @@ test('direct insert via document-api', async ({ superdoc }) => {
     },
   };
 
-  const receipt = await insertText(superdoc.page, { text: 'Beautiful ', target: insertionTarget });
+  const receipt = await insertText(superdoc.page, { value: 'Beautiful ', target: insertionTarget });
   assertMutationSucceeded('insertText', receipt);
   await superdoc.waitForStable();
 

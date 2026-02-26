@@ -27,6 +27,108 @@ function genericInvalidArgumentFailure(operationId: CliOperationId) {
   });
 }
 
+// ---------------------------------------------------------------------------
+// Table scenario helpers (DRY builders for the 40 table operations)
+// ---------------------------------------------------------------------------
+
+/** Creates a table in a session and runs a table mutation operation on it. */
+function tableMutationScenario(
+  op: string,
+  extraArgs: string[],
+): (harness: ConformanceHarness) => Promise<ScenarioInvocation> {
+  return async (harness) => {
+    const label = `table-${op.replace(/\./g, '-')}`;
+    const stateDir = await harness.createStateDir(`${label}-success`);
+    const { tableNodeId, sessionId } = await harness.createTableFixture(stateDir, label);
+    return {
+      stateDir,
+      args: [
+        ...commandTokens(`doc.${op}` as CliOperationId),
+        '--session',
+        sessionId,
+        '--node-id',
+        tableNodeId,
+        ...extraArgs,
+        '--out',
+        harness.createOutputPath(`${label}-out`),
+      ],
+    };
+  };
+}
+
+/** Creates a table in a session and runs a table read operation on it. */
+function tableReadScenario(
+  op: string,
+  extraArgs: string[] = [],
+): (harness: ConformanceHarness) => Promise<ScenarioInvocation> {
+  return async (harness) => {
+    const label = `table-${op.replace(/\./g, '-')}`;
+    const stateDir = await harness.createStateDir(`${label}-success`);
+    const { tableNodeId, sessionId } = await harness.createTableFixture(stateDir, label);
+    return {
+      stateDir,
+      args: [
+        ...commandTokens(`doc.${op}` as CliOperationId),
+        '--session',
+        sessionId,
+        '--node-id',
+        tableNodeId,
+        ...extraArgs,
+      ],
+    };
+  };
+}
+
+/** Creates a table in a session and runs a cell-level mutation on it using --node-id with cellNodeId. */
+function cellMutationScenario(
+  op: string,
+  extraArgs: string[],
+): (harness: ConformanceHarness) => Promise<ScenarioInvocation> {
+  return async (harness) => {
+    const label = `table-${op.replace(/\./g, '-')}`;
+    const stateDir = await harness.createStateDir(`${label}-success`);
+    const { cellNodeId, sessionId } = await harness.createTableFixture(stateDir, label);
+    return {
+      stateDir,
+      args: [
+        ...commandTokens(`doc.${op}` as CliOperationId),
+        '--session',
+        sessionId,
+        '--node-id',
+        cellNodeId,
+        ...extraArgs,
+        '--out',
+        harness.createOutputPath(`${label}-out`),
+      ],
+    };
+  };
+}
+
+/** Table-scoped mutation in a session: uses --table-node-id instead of --node-id. */
+function tableScopedMutationScenario(
+  op: string,
+  extraArgs: string[],
+): (harness: ConformanceHarness) => Promise<ScenarioInvocation> {
+  return async (harness) => {
+    const label = `table-${op.replace(/\./g, '-')}`;
+    const stateDir = await harness.createStateDir(`${label}-success`);
+    const { tableNodeId, sessionId } = await harness.createTableFixture(stateDir, label);
+    return {
+      stateDir,
+      args: [
+        ...commandTokens(`doc.${op}` as CliOperationId),
+        '--session',
+        sessionId,
+        '--table-node-id',
+        tableNodeId,
+        ...extraArgs,
+        '--out',
+        harness.createOutputPath(`${label}-out`),
+      ],
+    };
+  };
+}
+
 export const SUCCESS_SCENARIOS = {
   'doc.open': async (harness: ConformanceHarness): Promise<ScenarioInvocation> => {
     const stateDir = await harness.createStateDir('doc-open-success');
@@ -92,144 +194,57 @@ export const SUCCESS_SCENARIOS = {
       args: ['get-node-by-id', docPath, '--id', match.nodeId, '--node-type', match.nodeType],
     };
   },
-  'doc.comments.add': async (harness: ConformanceHarness): Promise<ScenarioInvocation> => {
-    const stateDir = await harness.createStateDir('doc-comments-add-success');
+  'doc.comments.create': async (harness: ConformanceHarness): Promise<ScenarioInvocation> => {
+    const stateDir = await harness.createStateDir('doc-comments-create-success');
     const docPath = await harness.copyFixtureDoc('doc-comments-add');
     const target = await harness.firstTextRange(docPath, stateDir);
     return {
       stateDir,
       args: [
         'comments',
-        'add',
+        'create',
         docPath,
         '--target-json',
         JSON.stringify(target),
         '--text',
-        'Conformance add comment',
+        'Conformance create comment',
         '--out',
-        harness.createOutputPath('doc-comments-add-output'),
+        harness.createOutputPath('doc-comments-create-output'),
       ],
     };
   },
-  'doc.comments.edit': async (harness: ConformanceHarness): Promise<ScenarioInvocation> => {
-    const stateDir = await harness.createStateDir('doc-comments-edit-success');
-    const fixture = await harness.addCommentFixture(stateDir, 'doc-comments-edit');
+  'doc.comments.patch': async (harness: ConformanceHarness): Promise<ScenarioInvocation> => {
+    const stateDir = await harness.createStateDir('doc-comments-patch-success');
+    const fixture = await harness.addCommentFixture(stateDir, 'doc-comments-patch');
     return {
       stateDir,
       args: [
         'comments',
-        'edit',
+        'patch',
         fixture.docPath,
         '--id',
         fixture.commentId,
         '--text',
-        'Conformance edited comment',
+        'Conformance patched comment',
         '--out',
-        harness.createOutputPath('doc-comments-edit-output'),
+        harness.createOutputPath('doc-comments-patch-output'),
       ],
     };
   },
-  'doc.comments.reply': async (harness: ConformanceHarness): Promise<ScenarioInvocation> => {
-    const stateDir = await harness.createStateDir('doc-comments-reply-success');
-    const fixture = await harness.addCommentFixture(stateDir, 'doc-comments-reply');
+  'doc.comments.delete': async (harness: ConformanceHarness): Promise<ScenarioInvocation> => {
+    const stateDir = await harness.createStateDir('doc-comments-delete-success');
+    const fixture = await harness.addCommentFixture(stateDir, 'doc-comments-delete');
     return {
       stateDir,
       args: [
         'comments',
-        'reply',
-        fixture.docPath,
-        '--parent-id',
-        fixture.commentId,
-        '--text',
-        'Conformance reply',
-        '--out',
-        harness.createOutputPath('doc-comments-reply-output'),
-      ],
-    };
-  },
-  'doc.comments.move': async (harness: ConformanceHarness): Promise<ScenarioInvocation> => {
-    const stateDir = await harness.createStateDir('doc-comments-move-success');
-    const fixture = await harness.addCommentFixture(stateDir, 'doc-comments-move');
-    const moveTarget = await harness.firstTextRange(fixture.docPath, stateDir, 'overflow');
-    return {
-      stateDir,
-      args: [
-        'comments',
-        'move',
-        fixture.docPath,
-        '--id',
-        fixture.commentId,
-        '--target-json',
-        JSON.stringify(moveTarget),
-        '--out',
-        harness.createOutputPath('doc-comments-move-output'),
-      ],
-    };
-  },
-  'doc.comments.resolve': async (harness: ConformanceHarness): Promise<ScenarioInvocation> => {
-    const stateDir = await harness.createStateDir('doc-comments-resolve-success');
-    const fixture = await harness.addCommentFixture(stateDir, 'doc-comments-resolve');
-    return {
-      stateDir,
-      args: [
-        'comments',
-        'resolve',
+        'delete',
         fixture.docPath,
         '--id',
         fixture.commentId,
         '--out',
-        harness.createOutputPath('doc-comments-resolve-output'),
+        harness.createOutputPath('doc-comments-delete-output'),
       ],
-    };
-  },
-  'doc.comments.remove': async (harness: ConformanceHarness): Promise<ScenarioInvocation> => {
-    const stateDir = await harness.createStateDir('doc-comments-remove-success');
-    const fixture = await harness.addCommentFixture(stateDir, 'doc-comments-remove');
-    return {
-      stateDir,
-      args: [
-        'comments',
-        'remove',
-        fixture.docPath,
-        '--id',
-        fixture.commentId,
-        '--out',
-        harness.createOutputPath('doc-comments-remove-output'),
-      ],
-    };
-  },
-  'doc.comments.setInternal': async (harness: ConformanceHarness): Promise<ScenarioInvocation> => {
-    const stateDir = await harness.createStateDir('doc-comments-set-internal-success');
-    const fixture = await harness.addCommentFixture(stateDir, 'doc-comments-set-internal');
-    return {
-      stateDir,
-      args: [
-        'comments',
-        'set-internal',
-        fixture.docPath,
-        '--id',
-        fixture.commentId,
-        '--is-internal',
-        'true',
-        '--out',
-        harness.createOutputPath('doc-comments-set-internal-output'),
-      ],
-    };
-  },
-  'doc.comments.setActive': async (harness: ConformanceHarness): Promise<ScenarioInvocation> => {
-    const stateDir = await harness.createStateDir('doc-comments-set-active-success');
-    const fixture = await harness.addCommentFixture(stateDir, 'doc-comments-set-active');
-    return {
-      stateDir,
-      args: ['comments', 'set-active', fixture.docPath, '--id', fixture.commentId],
-    };
-  },
-  'doc.comments.goTo': async (harness: ConformanceHarness): Promise<ScenarioInvocation> => {
-    const stateDir = await harness.createStateDir('doc-comments-go-to-success');
-    const fixture = await harness.addCommentFixture(stateDir, 'doc-comments-go-to');
-    return {
-      stateDir,
-      args: ['comments', 'go-to', fixture.docPath, '--id', fixture.commentId],
     };
   },
   'doc.comments.get': async (harness: ConformanceHarness): Promise<ScenarioInvocation> => {
@@ -375,6 +390,23 @@ export const SUCCESS_SCENARIOS = {
         JSON.stringify({ text: 'Conformance paragraph text' }),
         '--out',
         harness.createOutputPath('doc-create-paragraph-output'),
+      ],
+    };
+  },
+  'doc.blocks.delete': async (harness: ConformanceHarness): Promise<ScenarioInvocation> => {
+    const stateDir = await harness.createStateDir('doc-blocks-delete-success');
+    const docPath = await harness.copyFixtureDoc('doc-blocks-delete');
+    const block = await harness.firstBlockMatch(docPath, stateDir);
+    return {
+      stateDir,
+      args: [
+        'blocks',
+        'delete',
+        docPath,
+        '--target-json',
+        JSON.stringify({ kind: 'block', nodeType: block.nodeType, nodeId: block.nodeId }),
+        '--out',
+        harness.createOutputPath('doc-blocks-delete-output'),
       ],
     };
   },
@@ -548,7 +580,7 @@ export const SUCCESS_SCENARIOS = {
         docPath,
         '--target-json',
         JSON.stringify(collapsed),
-        '--text',
+        '--value',
         'CONFORMANCE_INSERT',
         '--out',
         harness.createOutputPath('doc-insert-output'),
@@ -589,71 +621,116 @@ export const SUCCESS_SCENARIOS = {
       ],
     };
   },
-  'doc.format.bold': async (harness: ConformanceHarness): Promise<ScenarioInvocation> => {
-    const stateDir = await harness.createStateDir('doc-format-bold-success');
-    const docPath = await harness.copyFixtureDoc('doc-format-bold');
+  'doc.format.apply': async (harness: ConformanceHarness): Promise<ScenarioInvocation> => {
+    const stateDir = await harness.createStateDir('doc-style-apply-success');
+    const docPath = await harness.copyFixtureDoc('doc-style-apply');
     const target = await harness.firstTextRange(docPath, stateDir);
     return {
       stateDir,
       args: [
         'format',
-        'bold',
+        'apply',
         docPath,
         '--target-json',
         JSON.stringify(target),
+        '--inline-json',
+        JSON.stringify({ bold: true }),
         '--out',
-        harness.createOutputPath('doc-format-bold-output'),
+        harness.createOutputPath('doc-style-apply-output'),
       ],
     };
   },
-  'doc.format.italic': async (harness: ConformanceHarness): Promise<ScenarioInvocation> => {
-    const stateDir = await harness.createStateDir('doc-format-italic-success');
-    const docPath = await harness.copyFixtureDoc('doc-format-italic');
+  'doc.format.fontSize': async (harness: ConformanceHarness): Promise<ScenarioInvocation> => {
+    const stateDir = await harness.createStateDir('doc-format-font-size-success');
+    const docPath = await harness.copyFixtureDoc('doc-format-font-size');
     const target = await harness.firstTextRange(docPath, stateDir);
     return {
       stateDir,
       args: [
         'format',
-        'italic',
+        'font-size',
         docPath,
         '--target-json',
         JSON.stringify(target),
+        '--value-json',
+        JSON.stringify('14pt'),
         '--out',
-        harness.createOutputPath('doc-format-italic-output'),
+        harness.createOutputPath('doc-format-font-size-output'),
       ],
     };
   },
-  'doc.format.underline': async (harness: ConformanceHarness): Promise<ScenarioInvocation> => {
-    const stateDir = await harness.createStateDir('doc-format-underline-success');
-    const docPath = await harness.copyFixtureDoc('doc-format-underline');
+  'doc.format.fontFamily': async (harness: ConformanceHarness): Promise<ScenarioInvocation> => {
+    const stateDir = await harness.createStateDir('doc-format-font-family-success');
+    const docPath = await harness.copyFixtureDoc('doc-format-font-family');
     const target = await harness.firstTextRange(docPath, stateDir);
     return {
       stateDir,
       args: [
         'format',
-        'underline',
+        'font-family',
         docPath,
         '--target-json',
         JSON.stringify(target),
+        '--value-json',
+        JSON.stringify('Arial'),
         '--out',
-        harness.createOutputPath('doc-format-underline-output'),
+        harness.createOutputPath('doc-format-font-family-output'),
       ],
     };
   },
-  'doc.format.strikethrough': async (harness: ConformanceHarness): Promise<ScenarioInvocation> => {
-    const stateDir = await harness.createStateDir('doc-format-strikethrough-success');
-    const docPath = await harness.copyFixtureDoc('doc-format-strikethrough');
+  'doc.format.color': async (harness: ConformanceHarness): Promise<ScenarioInvocation> => {
+    const stateDir = await harness.createStateDir('doc-format-color-success');
+    const docPath = await harness.copyFixtureDoc('doc-format-color');
     const target = await harness.firstTextRange(docPath, stateDir);
     return {
       stateDir,
       args: [
         'format',
-        'strikethrough',
+        'color',
         docPath,
         '--target-json',
         JSON.stringify(target),
+        '--value-json',
+        JSON.stringify('#ff0000'),
         '--out',
-        harness.createOutputPath('doc-format-strikethrough-output'),
+        harness.createOutputPath('doc-format-color-output'),
+      ],
+    };
+  },
+  'doc.format.align': async (harness: ConformanceHarness): Promise<ScenarioInvocation> => {
+    const stateDir = await harness.createStateDir('doc-format-align-success');
+    const docPath = await harness.copyFixtureDoc('doc-format-align');
+    const target = await harness.firstTextRange(docPath, stateDir);
+    return {
+      stateDir,
+      args: [
+        'format',
+        'align',
+        docPath,
+        '--target-json',
+        JSON.stringify(target),
+        '--alignment-json',
+        JSON.stringify('center'),
+        '--out',
+        harness.createOutputPath('doc-format-align-output'),
+      ],
+    };
+  },
+  'doc.styles.apply': async (harness: ConformanceHarness): Promise<ScenarioInvocation> => {
+    const stateDir = await harness.createStateDir('doc-styles-apply-success');
+    const docPath = await harness.copyFixtureDoc('doc-styles-apply');
+    return {
+      stateDir,
+      args: [
+        'styles',
+        'apply',
+        docPath,
+        '--target-json',
+        JSON.stringify({ scope: 'docDefaults', channel: 'run' }),
+        '--patch-json',
+        JSON.stringify({ bold: true }),
+        '--out',
+        harness.createOutputPath('doc-styles-apply-output'),
       ],
     };
   },
@@ -673,63 +750,21 @@ export const SUCCESS_SCENARIOS = {
       args: ['track-changes', 'get', fixture.docPath, '--id', fixture.changeId],
     };
   },
-  'doc.trackChanges.accept': async (harness: ConformanceHarness): Promise<ScenarioInvocation> => {
-    const stateDir = await harness.createStateDir('doc-track-changes-accept-success');
-    const fixture = await harness.addTrackedChangeFixture(stateDir, 'doc-track-changes-accept');
+  'doc.trackChanges.decide': async (harness: ConformanceHarness): Promise<ScenarioInvocation> => {
+    const stateDir = await harness.createStateDir('doc-trackChanges-decide-success');
+    const fixture = await harness.addTrackedChangeFixture(stateDir, 'doc-trackChanges-decide');
     return {
       stateDir,
       args: [
         'track-changes',
+        'decide',
+        fixture.docPath,
+        '--decision',
         'accept',
-        fixture.docPath,
-        '--id',
-        fixture.changeId,
+        '--target-json',
+        JSON.stringify({ id: fixture.changeId }),
         '--out',
-        harness.createOutputPath('doc-track-changes-accept-output'),
-      ],
-    };
-  },
-  'doc.trackChanges.reject': async (harness: ConformanceHarness): Promise<ScenarioInvocation> => {
-    const stateDir = await harness.createStateDir('doc-track-changes-reject-success');
-    const fixture = await harness.addTrackedChangeFixture(stateDir, 'doc-track-changes-reject');
-    return {
-      stateDir,
-      args: [
-        'track-changes',
-        'reject',
-        fixture.docPath,
-        '--id',
-        fixture.changeId,
-        '--out',
-        harness.createOutputPath('doc-track-changes-reject-output'),
-      ],
-    };
-  },
-  'doc.trackChanges.acceptAll': async (harness: ConformanceHarness): Promise<ScenarioInvocation> => {
-    const stateDir = await harness.createStateDir('doc-track-changes-accept-all-success');
-    const fixture = await harness.addTrackedChangeFixture(stateDir, 'doc-track-changes-accept-all');
-    return {
-      stateDir,
-      args: [
-        'track-changes',
-        'accept-all',
-        fixture.docPath,
-        '--out',
-        harness.createOutputPath('doc-track-changes-accept-all-output'),
-      ],
-    };
-  },
-  'doc.trackChanges.rejectAll': async (harness: ConformanceHarness): Promise<ScenarioInvocation> => {
-    const stateDir = await harness.createStateDir('doc-track-changes-reject-all-success');
-    const fixture = await harness.addTrackedChangeFixture(stateDir, 'doc-track-changes-reject-all');
-    return {
-      stateDir,
-      args: [
-        'track-changes',
-        'reject-all',
-        fixture.docPath,
-        '--out',
-        harness.createOutputPath('doc-track-changes-reject-all-output'),
+        harness.createOutputPath('doc-trackChanges-decide-output'),
       ],
     };
   },
@@ -772,6 +807,156 @@ export const SUCCESS_SCENARIOS = {
       args: ['session', 'set-default', '--session', 'session-default-success'],
     };
   },
+
+  // ---------------------------------------------------------------------------
+  // Table operations
+  // ---------------------------------------------------------------------------
+
+  'doc.create.table': async (harness: ConformanceHarness): Promise<ScenarioInvocation> => {
+    const stateDir = await harness.createStateDir('create-table-success');
+    const docPath = await harness.copyFixtureDoc('create-table');
+    return {
+      stateDir,
+      args: [
+        'create',
+        'table',
+        docPath,
+        '--rows',
+        '3',
+        '--columns',
+        '3',
+        '--out',
+        harness.createOutputPath('create-table-out'),
+      ],
+    };
+  },
+  'doc.tables.convertFromText': async (harness: ConformanceHarness): Promise<ScenarioInvocation> => {
+    const label = 'table-convertFromText';
+    const stateDir = await harness.createStateDir(`${label}-success`);
+    const { sessionId } = await harness.createTableFixture(stateDir, label);
+    // convertFromText targets a paragraph, not a table — find the first paragraph in the session
+    const { result, envelope } = await harness.runCli(
+      ['find', '--session', sessionId, '--type', 'node', '--node-type', 'paragraph', '--limit', '1'],
+      stateDir,
+    );
+    if (result.code !== 0 || envelope.ok !== true) {
+      throw new Error('Failed to find paragraph for convertFromText conformance scenario.');
+    }
+    const paraNodeId = (envelope.data as { result?: { items?: Array<{ address?: { nodeId?: string } }> } }).result
+      ?.items?.[0]?.address?.nodeId;
+    if (!paraNodeId) throw new Error('No paragraph found for convertFromText scenario.');
+    return {
+      stateDir,
+      args: [
+        ...commandTokens('doc.tables.convertFromText'),
+        '--session',
+        sessionId,
+        '--node-id',
+        paraNodeId,
+        '--delimiter-json',
+        JSON.stringify('tab'),
+        '--out',
+        harness.createOutputPath(`${label}-out`),
+      ],
+    };
+  },
+  'doc.tables.delete': tableMutationScenario('tables.delete', []),
+  'doc.tables.clearContents': tableMutationScenario('tables.clearContents', []),
+  'doc.tables.move': tableMutationScenario('tables.move', [
+    '--destination-json',
+    JSON.stringify({ kind: 'documentEnd' }),
+  ]),
+  'doc.tables.split': tableMutationScenario('tables.split', ['--at-row-index', '1']),
+  'doc.tables.convertToText': tableMutationScenario('tables.convertToText', ['--delimiter', 'tab']),
+  'doc.tables.setLayout': tableMutationScenario('tables.setLayout', ['--alignment', 'center']),
+  'doc.tables.insertRow': tableScopedMutationScenario('tables.insertRow', ['--row-index', '0', '--position', 'below']),
+  'doc.tables.deleteRow': tableScopedMutationScenario('tables.deleteRow', ['--row-index', '0']),
+  'doc.tables.setRowHeight': tableScopedMutationScenario('tables.setRowHeight', [
+    '--row-index',
+    '0',
+    '--height-pt',
+    '36',
+    '--rule',
+    'atLeast',
+  ]),
+  'doc.tables.distributeRows': tableMutationScenario('tables.distributeRows', []),
+  'doc.tables.setRowOptions': tableScopedMutationScenario('tables.setRowOptions', [
+    '--row-index',
+    '0',
+    '--allow-break-across-pages',
+  ]),
+  'doc.tables.insertColumn': tableScopedMutationScenario('tables.insertColumn', [
+    '--column-index',
+    '0',
+    '--position',
+    'right',
+  ]),
+  'doc.tables.deleteColumn': tableScopedMutationScenario('tables.deleteColumn', ['--column-index', '0']),
+  'doc.tables.setColumnWidth': tableScopedMutationScenario('tables.setColumnWidth', [
+    '--column-index',
+    '0',
+    '--width-pt',
+    '72',
+  ]),
+  'doc.tables.distributeColumns': tableMutationScenario('tables.distributeColumns', []),
+  'doc.tables.insertCell': cellMutationScenario('tables.insertCell', ['--mode', 'shiftRight']),
+  'doc.tables.deleteCell': cellMutationScenario('tables.deleteCell', ['--mode', 'shiftLeft']),
+  'doc.tables.mergeCells': tableScopedMutationScenario('tables.mergeCells', [
+    '--start-json',
+    JSON.stringify({ rowIndex: 0, columnIndex: 0 }),
+    '--end-json',
+    JSON.stringify({ rowIndex: 0, columnIndex: 1 }),
+  ]),
+  'doc.tables.unmergeCells': cellMutationScenario('tables.unmergeCells', []),
+  'doc.tables.splitCell': cellMutationScenario('tables.splitCell', ['--rows', '2', '--columns', '1']),
+  'doc.tables.setCellProperties': cellMutationScenario('tables.setCellProperties', ['--vertical-align', 'center']),
+  'doc.tables.sort': tableMutationScenario('tables.sort', [
+    '--keys-json',
+    JSON.stringify([{ columnIndex: 0, direction: 'ascending', type: 'text' }]),
+  ]),
+  'doc.tables.setAltText': tableMutationScenario('tables.setAltText', ['--title', 'Test Table']),
+  'doc.tables.setStyle': tableMutationScenario('tables.setStyle', ['--style-id', 'TableGrid']),
+  'doc.tables.clearStyle': tableMutationScenario('tables.clearStyle', []),
+  'doc.tables.setStyleOption': tableMutationScenario('tables.setStyleOption', ['--flag', 'headerRow', '--enabled']),
+  'doc.tables.setBorder': tableMutationScenario('tables.setBorder', [
+    '--edge',
+    'top',
+    '--line-style',
+    'single',
+    '--line-weight-pt',
+    '1',
+    '--color',
+    '000000',
+  ]),
+  'doc.tables.clearBorder': tableMutationScenario('tables.clearBorder', ['--edge', 'top']),
+  'doc.tables.applyBorderPreset': tableMutationScenario('tables.applyBorderPreset', ['--preset', 'all']),
+  'doc.tables.setShading': tableMutationScenario('tables.setShading', ['--color', 'FF0000']),
+  'doc.tables.clearShading': tableMutationScenario('tables.clearShading', []),
+  'doc.tables.setTablePadding': tableMutationScenario('tables.setTablePadding', [
+    '--top-pt',
+    '5',
+    '--right-pt',
+    '5',
+    '--bottom-pt',
+    '5',
+    '--left-pt',
+    '5',
+  ]),
+  'doc.tables.setCellPadding': cellMutationScenario('tables.setCellPadding', [
+    '--top-pt',
+    '5',
+    '--right-pt',
+    '5',
+    '--bottom-pt',
+    '5',
+    '--left-pt',
+    '5',
+  ]),
+  'doc.tables.setCellSpacing': tableMutationScenario('tables.setCellSpacing', ['--spacing-pt', '2']),
+  'doc.tables.clearCellSpacing': tableMutationScenario('tables.clearCellSpacing', []),
+  'doc.tables.get': tableReadScenario('tables.get'),
+  'doc.tables.getCells': tableReadScenario('tables.getCells'),
+  'doc.tables.getProperties': tableReadScenario('tables.getProperties'),
 } as const satisfies Record<CliOperationId, (harness: ConformanceHarness) => Promise<ScenarioInvocation>>;
 
 export const OPERATION_SCENARIOS = (Object.keys(SUCCESS_SCENARIOS) as CliOperationId[]).map((operationId) => {

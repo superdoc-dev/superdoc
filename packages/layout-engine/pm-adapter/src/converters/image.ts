@@ -272,6 +272,11 @@ export function imageNodeToBlock(
   const zIndexFromRelativeHeight = normalizeZIndex(attrs.originalAttributes as Record<string, unknown> | undefined);
   const zIndex = resolveFloatingZIndex(anchor?.behindDoc === true, zIndexFromRelativeHeight);
 
+  // Extract rotation/flip transforms from transformData
+  const transformData = isPlainObject(attrs.transformData) ? attrs.transformData : undefined;
+  const rotation = typeof transformData?.rotation === 'number' ? transformData.rotation : undefined;
+  const flipH = typeof transformData?.horizontalFlip === 'boolean' ? transformData.horizontalFlip : undefined;
+  const flipV = typeof transformData?.verticalFlip === 'boolean' ? transformData.verticalFlip : undefined;
   return {
     kind: 'image',
     id: nextBlockId('image'),
@@ -292,6 +297,12 @@ export function imageNodeToBlock(
     gain: typeof attrs.gain === 'string' || typeof attrs.gain === 'number' ? attrs.gain : undefined,
     blacklevel:
       typeof attrs.blacklevel === 'string' || typeof attrs.blacklevel === 'number' ? attrs.blacklevel : undefined,
+    // OOXML image effects (grayscale, etc.)
+    grayscale: typeof attrs.grayscale === 'boolean' ? attrs.grayscale : undefined,
+    // Image transformations from OOXML a:xfrm
+    ...(rotation !== undefined && { rotation }),
+    ...(flipH !== undefined && { flipH }),
+    ...(flipV !== undefined && { flipV }),
   };
 }
 

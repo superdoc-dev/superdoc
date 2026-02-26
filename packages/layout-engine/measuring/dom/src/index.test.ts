@@ -2993,6 +2993,7 @@ describe('measureBlock', () => {
 
       expect(measure.kind).toBe('table');
       if (measure.kind !== 'table') throw new Error('expected table measure');
+      // Auto layout preserves explicit w:tblGrid widths (no scale-up)
       expect(measure.columnWidths).toEqual([100, 150, 200]);
       expect(measure.totalWidth).toBe(450);
     });
@@ -3238,6 +3239,7 @@ describe('measureBlock', () => {
       expect(measure.kind).toBe('table');
       if (measure.kind !== 'table') throw new Error('expected table measure');
       expect(measure.columnWidths).toHaveLength(2);
+      // Truncated to [100, 150] — auto-layout preserves widths (no scale-up)
       expect(measure.columnWidths).toEqual([100, 150]);
     });
   });
@@ -3506,6 +3508,7 @@ describe('measureBlock', () => {
       if (measure.kind !== 'table') throw new Error('expected table measure');
 
       // All 4 column widths should be preserved (not truncated to 3)
+      // Auto-layout preserves explicit widths (no scale-up)
       expect(measure.columnWidths).toHaveLength(4);
       expect(measure.columnWidths).toEqual([172, 13, 128, 310]);
       expect(measure.totalWidth).toBe(623);
@@ -3554,7 +3557,8 @@ describe('measureBlock', () => {
       expect(measure.rows[0].cells).toHaveLength(2);
       expect(measure.rows[1].cells).toHaveLength(2);
 
-      // Cell widths should correctly sum their spanned columns
+      // Cell widths sum their spanned columns (auto-layout preserves widths, no scale-up)
+      // Columns: [100, 50, 100, 300]
       // Row 0 cell 0: cols 0+1 = 100+50 = 150
       expect(measure.rows[0].cells[0].width).toBe(150);
       // Row 0 cell 1: cols 2+3 = 100+300 = 400
@@ -3592,7 +3596,7 @@ describe('measureBlock', () => {
 
       expect(measure.columnWidths).toHaveLength(4);
 
-      // Full-span row: 1 cell spanning all 4 columns
+      // Full-span row: 1 cell spanning all 4 columns (auto-layout preserves widths)
       expect(measure.rows[0].cells).toHaveLength(1);
       expect(measure.rows[0].cells[0].width).toBe(550); // 100+50+100+300
 
@@ -3698,7 +3702,7 @@ describe('measureBlock', () => {
       expect(measure.kind).toBe('table');
       if (measure.kind !== 'table') throw new Error('expected table measure');
 
-      // Should not scale - widths are within target
+      // Auto layout preserves explicit widths (no scale-up)
       expect(measure.columnWidths).toEqual([50, 50]);
       expect(measure.totalWidth).toBe(100);
     });
@@ -4327,8 +4331,7 @@ describe('measureBlock', () => {
       expect(measure.kind).toBe('table');
       if (measure.kind !== 'table') throw new Error('expected table measure');
 
-      // Zero percentage is invalid - should fall back to auto layout
-      // Auto layout without explicit width means column widths used as-is
+      // Zero percentage is invalid - auto layout preserves column widths
       expect(measure.totalWidth).toBe(100);
       expect(measure.columnWidths[0]).toBe(100);
     });
@@ -4365,7 +4368,7 @@ describe('measureBlock', () => {
       expect(measure.kind).toBe('table');
       if (measure.kind !== 'table') throw new Error('expected table measure');
 
-      // Negative percentage is invalid - should fall back to auto layout
+      // Negative percentage is invalid - auto layout preserves column widths
       expect(measure.totalWidth).toBe(150);
       expect(measure.columnWidths[0]).toBe(150);
     });
@@ -4402,7 +4405,7 @@ describe('measureBlock', () => {
       expect(measure.kind).toBe('table');
       if (measure.kind !== 'table') throw new Error('expected table measure');
 
-      // NaN is invalid - should fall back to auto layout
+      // NaN is invalid - auto layout preserves column widths
       expect(measure.totalWidth).toBe(200);
       expect(measure.columnWidths[0]).toBe(200);
     });
@@ -4439,7 +4442,7 @@ describe('measureBlock', () => {
       expect(measure.kind).toBe('table');
       if (measure.kind !== 'table') throw new Error('expected table measure');
 
-      // Infinity is invalid - should fall back to auto layout
+      // Infinity is invalid - auto layout preserves column widths
       expect(measure.totalWidth).toBe(175);
       expect(measure.columnWidths[0]).toBe(175);
     });
@@ -4476,7 +4479,7 @@ describe('measureBlock', () => {
       expect(measure.kind).toBe('table');
       if (measure.kind !== 'table') throw new Error('expected table measure');
 
-      // Missing value is invalid - should fall back to auto layout
+      // Missing value is invalid - auto layout preserves column widths
       expect(measure.totalWidth).toBe(120);
       expect(measure.columnWidths[0]).toBe(120);
     });
@@ -4513,7 +4516,7 @@ describe('measureBlock', () => {
       expect(measure.kind).toBe('table');
       if (measure.kind !== 'table') throw new Error('expected table measure');
 
-      // NaN pixel width is invalid - should fall back to auto layout
+      // NaN pixel width is invalid - auto layout preserves column widths
       expect(measure.totalWidth).toBe(130);
       expect(measure.columnWidths[0]).toBe(130);
     });
@@ -4548,7 +4551,7 @@ describe('measureBlock', () => {
       expect(measure.kind).toBe('table');
       if (measure.kind !== 'table') throw new Error('expected table measure');
 
-      // No tableWidth - auto layout uses column widths as-is
+      // No tableWidth - auto layout preserves column widths
       expect(measure.totalWidth).toBe(140);
       expect(measure.columnWidths[0]).toBe(140);
     });

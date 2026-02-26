@@ -8,7 +8,7 @@
 
 import type { OperationId } from './types.js';
 
-import type { NodeAddress, NodeInfo, QueryResult, Selector, Query } from '../types/index.js';
+import type { NodeAddress, NodeInfo, FindOutput, Selector, Query } from '../types/index.js';
 import type { TextMutationReceipt, Receipt } from '../types/receipt.js';
 import type { DocumentInfo } from '../types/info.types.js';
 import type {
@@ -17,6 +17,7 @@ import type {
   CreateHeadingInput,
   CreateHeadingResult,
 } from '../types/create.types.js';
+import type { BlocksDeleteInput, BlocksDeleteResult } from '../types/blocks.types.js';
 
 import type { FindOptions } from '../find/find.js';
 import type { GetNodeByIdInput } from '../get-node/get-node.js';
@@ -27,32 +28,21 @@ import type { ReplaceInput } from '../replace/replace.js';
 import type { DeleteInput } from '../delete/delete.js';
 import type { MutationOptions, RevisionGuardOptions } from '../write/write.js';
 import type {
-  FormatBoldInput,
-  FormatItalicInput,
-  FormatUnderlineInput,
-  FormatStrikethroughInput,
+  StyleApplyInput,
+  FormatFontSizeInput,
+  FormatFontFamilyInput,
+  FormatColorInput,
+  FormatAlignInput,
 } from '../format/format.js';
+import type { StylesApplyInput, StylesApplyOptions, StylesApplyReceipt } from '../styles/styles.js';
 import type {
-  AddCommentInput,
-  EditCommentInput,
-  ReplyToCommentInput,
-  MoveCommentInput,
-  ResolveCommentInput,
-  RemoveCommentInput,
-  SetCommentInternalInput,
-  SetCommentActiveInput,
-  GoToCommentInput,
+  CommentsCreateInput,
+  CommentsPatchInput,
+  CommentsDeleteInput,
   GetCommentInput,
 } from '../comments/comments.js';
 import type { CommentInfo, CommentsListQuery, CommentsListResult } from '../comments/comments.types.js';
-import type {
-  TrackChangesListInput,
-  TrackChangesGetInput,
-  TrackChangesAcceptInput,
-  TrackChangesRejectInput,
-  TrackChangesAcceptAllInput,
-  TrackChangesRejectAllInput,
-} from '../track-changes/track-changes.js';
+import type { TrackChangesListInput, TrackChangesGetInput, ReviewDecideInput } from '../track-changes/track-changes.js';
 import type { TrackChangeInfo, TrackChangesListResult } from '../types/track-changes.types.js';
 import type { DocumentApiCapabilities } from '../capabilities/capabilities.js';
 import type {
@@ -74,10 +64,56 @@ import type {
   MutationsPreviewOutput,
   PlanReceipt,
 } from '../types/mutation-plan.types.js';
+import type {
+  CreateTableInput,
+  CreateTableResult,
+  TablesConvertFromTextInput,
+  TableLocator,
+  TablesMoveInput,
+  TablesSplitInput,
+  TablesConvertToTextInput,
+  TablesSetLayoutInput,
+  TablesInsertRowInput,
+  TablesDeleteRowInput,
+  TablesSetRowHeightInput,
+  TablesDistributeRowsInput,
+  TablesSetRowOptionsInput,
+  TablesInsertColumnInput,
+  TablesDeleteColumnInput,
+  TablesSetColumnWidthInput,
+  TablesDistributeColumnsInput,
+  TablesInsertCellInput,
+  TablesDeleteCellInput,
+  TablesMergeCellsInput,
+  TablesUnmergeCellsInput,
+  TablesSplitCellInput,
+  TablesSetCellPropertiesInput,
+  TablesSortInput,
+  TablesSetAltTextInput,
+  TablesSetStyleInput,
+  TablesClearStyleInput,
+  TablesSetStyleOptionInput,
+  TablesSetBorderInput,
+  TablesClearBorderInput,
+  TablesApplyBorderPresetInput,
+  TablesSetShadingInput,
+  TablesClearShadingInput,
+  TablesSetTablePaddingInput,
+  TablesSetCellPaddingInput,
+  TablesSetCellSpacingInput,
+  TablesClearCellSpacingInput,
+  TableMutationResult,
+  TablesGetInput,
+  TablesGetOutput,
+  TablesGetCellsInput,
+  TablesGetCellsOutput,
+  TablesGetPropertiesInput,
+  TablesGetPropertiesOutput,
+} from '../types/table-operations.types.js';
 
 export interface OperationRegistry {
   // --- Singleton reads ---
-  find: { input: Selector | Query; options: FindOptions; output: QueryResult };
+  find: { input: Selector | Query; options: FindOptions; output: FindOutput };
   getNode: { input: NodeAddress; options: never; output: NodeInfo };
   getNodeById: { input: GetNodeByIdInput; options: never; output: NodeInfo };
   getText: { input: GetTextInput; options: never; output: string };
@@ -88,11 +124,18 @@ export interface OperationRegistry {
   replace: { input: ReplaceInput; options: MutationOptions; output: TextMutationReceipt };
   delete: { input: DeleteInput; options: MutationOptions; output: TextMutationReceipt };
 
+  // --- blocks.* ---
+  'blocks.delete': { input: BlocksDeleteInput; options: MutationOptions; output: BlocksDeleteResult };
+
   // --- format.* ---
-  'format.bold': { input: FormatBoldInput; options: MutationOptions; output: TextMutationReceipt };
-  'format.italic': { input: FormatItalicInput; options: MutationOptions; output: TextMutationReceipt };
-  'format.underline': { input: FormatUnderlineInput; options: MutationOptions; output: TextMutationReceipt };
-  'format.strikethrough': { input: FormatStrikethroughInput; options: MutationOptions; output: TextMutationReceipt };
+  'format.apply': { input: StyleApplyInput; options: MutationOptions; output: TextMutationReceipt };
+  'format.fontSize': { input: FormatFontSizeInput; options: MutationOptions; output: TextMutationReceipt };
+  'format.fontFamily': { input: FormatFontFamilyInput; options: MutationOptions; output: TextMutationReceipt };
+  'format.color': { input: FormatColorInput; options: MutationOptions; output: TextMutationReceipt };
+  'format.align': { input: FormatAlignInput; options: MutationOptions; output: TextMutationReceipt };
+
+  // --- styles.* ---
+  'styles.apply': { input: StylesApplyInput; options: StylesApplyOptions; output: StylesApplyReceipt };
 
   // --- create.* ---
   'create.paragraph': { input: CreateParagraphInput; options: MutationOptions; output: CreateParagraphResult };
@@ -109,25 +152,16 @@ export interface OperationRegistry {
   'lists.exit': { input: ListTargetInput; options: MutationOptions; output: ListsExitResult };
 
   // --- comments.* ---
-  'comments.add': { input: AddCommentInput; options: RevisionGuardOptions; output: Receipt };
-  'comments.edit': { input: EditCommentInput; options: RevisionGuardOptions; output: Receipt };
-  'comments.reply': { input: ReplyToCommentInput; options: RevisionGuardOptions; output: Receipt };
-  'comments.move': { input: MoveCommentInput; options: RevisionGuardOptions; output: Receipt };
-  'comments.resolve': { input: ResolveCommentInput; options: RevisionGuardOptions; output: Receipt };
-  'comments.remove': { input: RemoveCommentInput; options: RevisionGuardOptions; output: Receipt };
-  'comments.setInternal': { input: SetCommentInternalInput; options: RevisionGuardOptions; output: Receipt };
-  'comments.setActive': { input: SetCommentActiveInput; options: RevisionGuardOptions; output: Receipt };
-  'comments.goTo': { input: GoToCommentInput; options: never; output: Receipt };
+  'comments.create': { input: CommentsCreateInput; options: RevisionGuardOptions; output: Receipt };
+  'comments.patch': { input: CommentsPatchInput; options: RevisionGuardOptions; output: Receipt };
+  'comments.delete': { input: CommentsDeleteInput; options: RevisionGuardOptions; output: Receipt };
   'comments.get': { input: GetCommentInput; options: never; output: CommentInfo };
   'comments.list': { input: CommentsListQuery | undefined; options: never; output: CommentsListResult };
 
   // --- trackChanges.* ---
   'trackChanges.list': { input: TrackChangesListInput | undefined; options: never; output: TrackChangesListResult };
   'trackChanges.get': { input: TrackChangesGetInput; options: never; output: TrackChangeInfo };
-  'trackChanges.accept': { input: TrackChangesAcceptInput; options: RevisionGuardOptions; output: Receipt };
-  'trackChanges.reject': { input: TrackChangesRejectInput; options: RevisionGuardOptions; output: Receipt };
-  'trackChanges.acceptAll': { input: TrackChangesAcceptAllInput; options: RevisionGuardOptions; output: Receipt };
-  'trackChanges.rejectAll': { input: TrackChangesRejectAllInput; options: RevisionGuardOptions; output: Receipt };
+  'trackChanges.decide': { input: ReviewDecideInput; options: RevisionGuardOptions; output: Receipt };
 
   // --- query.* ---
   'query.match': { input: QueryMatchInput; options: never; output: QueryMatchOutput };
@@ -138,6 +172,76 @@ export interface OperationRegistry {
 
   // --- capabilities ---
   'capabilities.get': { input: undefined; options: never; output: DocumentApiCapabilities };
+
+  // --- create.table ---
+  'create.table': { input: CreateTableInput; options: MutationOptions; output: CreateTableResult };
+
+  // --- tables.* ---
+  'tables.convertFromText': {
+    input: TablesConvertFromTextInput;
+    options: MutationOptions;
+    output: TableMutationResult;
+  };
+  'tables.delete': { input: TableLocator; options: MutationOptions; output: TableMutationResult };
+  'tables.clearContents': { input: TableLocator; options: MutationOptions; output: TableMutationResult };
+  'tables.move': { input: TablesMoveInput; options: MutationOptions; output: TableMutationResult };
+  'tables.split': { input: TablesSplitInput; options: MutationOptions; output: TableMutationResult };
+  'tables.convertToText': { input: TablesConvertToTextInput; options: MutationOptions; output: TableMutationResult };
+  'tables.setLayout': { input: TablesSetLayoutInput; options: MutationOptions; output: TableMutationResult };
+  'tables.insertRow': { input: TablesInsertRowInput; options: MutationOptions; output: TableMutationResult };
+  'tables.deleteRow': { input: TablesDeleteRowInput; options: MutationOptions; output: TableMutationResult };
+  'tables.setRowHeight': { input: TablesSetRowHeightInput; options: MutationOptions; output: TableMutationResult };
+  'tables.distributeRows': { input: TablesDistributeRowsInput; options: MutationOptions; output: TableMutationResult };
+  'tables.setRowOptions': { input: TablesSetRowOptionsInput; options: MutationOptions; output: TableMutationResult };
+  'tables.insertColumn': { input: TablesInsertColumnInput; options: MutationOptions; output: TableMutationResult };
+  'tables.deleteColumn': { input: TablesDeleteColumnInput; options: MutationOptions; output: TableMutationResult };
+  'tables.setColumnWidth': { input: TablesSetColumnWidthInput; options: MutationOptions; output: TableMutationResult };
+  'tables.distributeColumns': {
+    input: TablesDistributeColumnsInput;
+    options: MutationOptions;
+    output: TableMutationResult;
+  };
+  'tables.insertCell': { input: TablesInsertCellInput; options: MutationOptions; output: TableMutationResult };
+  'tables.deleteCell': { input: TablesDeleteCellInput; options: MutationOptions; output: TableMutationResult };
+  'tables.mergeCells': { input: TablesMergeCellsInput; options: MutationOptions; output: TableMutationResult };
+  'tables.unmergeCells': { input: TablesUnmergeCellsInput; options: MutationOptions; output: TableMutationResult };
+  'tables.splitCell': { input: TablesSplitCellInput; options: MutationOptions; output: TableMutationResult };
+  'tables.setCellProperties': {
+    input: TablesSetCellPropertiesInput;
+    options: MutationOptions;
+    output: TableMutationResult;
+  };
+  'tables.sort': { input: TablesSortInput; options: MutationOptions; output: TableMutationResult };
+  'tables.setAltText': { input: TablesSetAltTextInput; options: MutationOptions; output: TableMutationResult };
+  'tables.setStyle': { input: TablesSetStyleInput; options: MutationOptions; output: TableMutationResult };
+  'tables.clearStyle': { input: TablesClearStyleInput; options: MutationOptions; output: TableMutationResult };
+  'tables.setStyleOption': { input: TablesSetStyleOptionInput; options: MutationOptions; output: TableMutationResult };
+  'tables.setBorder': { input: TablesSetBorderInput; options: MutationOptions; output: TableMutationResult };
+  'tables.clearBorder': { input: TablesClearBorderInput; options: MutationOptions; output: TableMutationResult };
+  'tables.applyBorderPreset': {
+    input: TablesApplyBorderPresetInput;
+    options: MutationOptions;
+    output: TableMutationResult;
+  };
+  'tables.setShading': { input: TablesSetShadingInput; options: MutationOptions; output: TableMutationResult };
+  'tables.clearShading': { input: TablesClearShadingInput; options: MutationOptions; output: TableMutationResult };
+  'tables.setTablePadding': {
+    input: TablesSetTablePaddingInput;
+    options: MutationOptions;
+    output: TableMutationResult;
+  };
+  'tables.setCellPadding': { input: TablesSetCellPaddingInput; options: MutationOptions; output: TableMutationResult };
+  'tables.setCellSpacing': { input: TablesSetCellSpacingInput; options: MutationOptions; output: TableMutationResult };
+  'tables.clearCellSpacing': {
+    input: TablesClearCellSpacingInput;
+    options: MutationOptions;
+    output: TableMutationResult;
+  };
+
+  // --- tables.* reads ---
+  'tables.get': { input: TablesGetInput; options: never; output: TablesGetOutput };
+  'tables.getCells': { input: TablesGetCellsInput; options: never; output: TablesGetCellsOutput };
+  'tables.getProperties': { input: TablesGetPropertiesInput; options: never; output: TablesGetPropertiesOutput };
 }
 
 // --- Bidirectional completeness checks ---

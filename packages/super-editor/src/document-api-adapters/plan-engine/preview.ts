@@ -3,7 +3,8 @@
  * without dispatching it. Reports what would happen.
  *
  * Runs the full two-phase evaluation (compile + execute) on an ephemeral
- * transaction that is never dispatched.
+ * transaction that is never dispatched. Supports both single-block (range)
+ * and cross-block (span) target resolutions in preview output.
  */
 
 import type {
@@ -19,9 +20,7 @@ import { runMutationsOnTransaction } from './executor.js';
 import { planError, PlanError } from './errors.js';
 
 export function previewPlan(editor: Editor, input: MutationsPreviewInput): MutationsPreviewOutput {
-  const evaluatedRevision = getRevision(editor);
-
-  // Revision guard
+  // Revision guard (before compile)
   checkRevision(editor, input.expectedRevision);
 
   if (!input.steps?.length) {
@@ -31,10 +30,13 @@ export function previewPlan(editor: Editor, input: MutationsPreviewInput): Mutat
   const failures: PreviewFailure[] = [];
   const stepPreviews: StepPreview[] = [];
   let currentPhase: 'compile' | 'execute' = 'compile';
+  // Will be set from compiled plan — single source of truth (D3)
+  let evaluatedRevision = getRevision(editor);
 
   try {
     // Phase 1: Compile — resolve selectors against pre-mutation snapshot
     const compiled = compilePlan(editor, input.steps);
+    evaluatedRevision = compiled.compiledRevision;
     currentPhase = 'execute';
 
     // Phase 2: Execute on ephemeral transaction (never dispatched)
@@ -43,6 +45,8 @@ export function previewPlan(editor: Editor, input: MutationsPreviewInput): Mutat
     // Run mutations without throwing on assert failure — collect failures instead
     const { stepOutcomes, assertFailures } = runMutationsOnTransaction(editor, tr, compiled, {
       throwOnAssertFailure: false,
+      changeMode: input.changeMode ?? 'direct',
+      isPreview: true,
     });
 
     // Build step previews from outcomes
@@ -54,6 +58,10 @@ export function previewPlan(editor: Editor, input: MutationsPreviewInput): Mutat
 
       if (outcome.data && 'resolutions' in outcome.data && outcome.data.domain === 'text') {
         preview.resolutions = outcome.data.resolutions;
+
+        if ('spanResolutions' in outcome.data && outcome.data.spanResolutions?.length) {
+          preview.spanResolutions = outcome.data.spanResolutions;
+        }
       }
 
       stepPreviews.push(preview);

@@ -1,35 +1,38 @@
 import { executeWrite, type MutationOptions, type WriteAdapter } from '../write/write.js';
 import type { TextAddress, TextMutationReceipt } from '../types/index.js';
 import { DocumentApiValidationError } from '../errors.js';
-import { isRecord, isTextAddress, assertNoUnknownFields, assertNonNegativeInteger } from '../validation-primitives.js';
+import { isRecord, isTextAddress, assertNoUnknownFields } from '../validation-primitives.js';
 
+/** Content format for the insert operation payload. */
+export type InsertContentType = 'text' | 'markdown' | 'html';
+
+/** Input payload for the `doc.insert` operation. */
 export interface InsertInput {
+  /** Optional insertion target. When omitted, adapters resolve a default insertion point. */
   target?: TextAddress;
-  text: string;
-  /** Block ID for block-relative targeting. When provided without `offset`, offset defaults to 0. */
-  blockId?: string;
-  /** Character offset within the block identified by `blockId`. Requires `blockId`. Must be a non-negative integer. */
-  offset?: number;
+  /** The content to insert. Interpreted according to {@link InsertInput.type}. */
+  value: string;
+  /** Content format. Defaults to `'text'` when omitted. */
+  type?: InsertContentType;
 }
 
 /**
  * Strict top-level allowlist for InsertInput fields.
  * Any key not in this list is rejected as an unknown field.
- * PR B adds 'pos' to this list.
  */
-const INSERT_INPUT_ALLOWED_KEYS = new Set(['text', 'target', 'blockId', 'offset']);
+const INSERT_INPUT_ALLOWED_KEYS = new Set(['value', 'type', 'target']);
+
+const VALID_INSERT_TYPES: ReadonlySet<string> = new Set(['text', 'markdown', 'html']);
 
 /**
  * Validates InsertInput and throws DocumentApiValidationError on violations.
  *
  * Validation order:
  * 0. Input shape guard (must be non-null plain object)
- * 1. `pos` runtime rejection (PR A: not yet supported)
- * 2. Unknown field rejection (strict allowlist)
- * 3. Target/type checks (target shape, text and blockId types)
- * 4. Mode exclusivity (at most one locator mode)
- * 5. Required-pair checks (offset requires blockId)
- * 6. Numeric bounds (offset >= 0, integer)
+ * 1. Unknown field rejection (strict allowlist)
+ * 2. Target type check (target shape)
+ * 3. Value type check (must be non-empty string)
+ * 4. Type enum check (must be valid content type)
  */
 function validateInsertInput(input: unknown): asserts input is InsertInput {
   // Step 0: Input shape guard
@@ -37,69 +40,37 @@ function validateInsertInput(input: unknown): asserts input is InsertInput {
     throw new DocumentApiValidationError('INVALID_TARGET', 'Insert input must be a non-null object.');
   }
 
-  // Step 1: pos runtime rejection (PR A — pos is not yet supported)
-  if ('pos' in input) {
-    throw new DocumentApiValidationError('INVALID_TARGET', 'pos locator is not yet supported.', {
-      field: 'pos',
-    });
-  }
-
-  // Step 2: Unknown field rejection (strict allowlist)
+  // Step 1: Unknown field rejection (strict allowlist)
   assertNoUnknownFields(input, INSERT_INPUT_ALLOWED_KEYS, 'insert');
 
-  const { target, text, blockId, offset } = input;
-  const hasTarget = target !== undefined;
-  const hasBlockId = blockId !== undefined;
-  const hasOffset = offset !== undefined;
+  const { target, value, type } = input;
 
-  // Step 3: Target/type checks
-  if (hasTarget && !isTextAddress(target)) {
+  // Step 2: Target type check
+  if (target !== undefined && !isTextAddress(target)) {
     throw new DocumentApiValidationError('INVALID_TARGET', 'target must be a text address object.', {
       field: 'target',
       value: target,
     });
   }
 
-  if (typeof text !== 'string') {
-    throw new DocumentApiValidationError('INVALID_TARGET', `text must be a string, got ${typeof text}.`, {
-      field: 'text',
-      value: text,
+  // Step 3: Value type check
+  if (typeof value !== 'string') {
+    throw new DocumentApiValidationError('INVALID_TARGET', `value must be a string, got ${typeof value}.`, {
+      field: 'value',
+      value,
     });
   }
 
-  if (hasBlockId && typeof blockId !== 'string') {
-    throw new DocumentApiValidationError('INVALID_TARGET', `blockId must be a string, got ${typeof blockId}.`, {
-      field: 'blockId',
-      value: blockId,
-    });
-  }
-
-  // Step 4: Mode exclusivity — at most one locator mode
-  if (hasTarget && hasBlockId) {
+  // Step 4: Type enum check
+  if (type !== undefined && (typeof type !== 'string' || !VALID_INSERT_TYPES.has(type))) {
     throw new DocumentApiValidationError(
       'INVALID_TARGET',
-      'Cannot combine target with blockId. Use exactly one locator mode.',
-      { fields: ['target', 'blockId'] },
+      `type must be one of: text, markdown, html. Got "${type}".`,
+      {
+        field: 'type',
+        value: type,
+      },
     );
-  }
-  if (hasTarget && hasOffset) {
-    throw new DocumentApiValidationError(
-      'INVALID_TARGET',
-      'Cannot combine target with offset. Use exactly one locator mode.',
-      { fields: ['target', 'offset'] },
-    );
-  }
-
-  // Step 5: Required-pair checks — offset requires blockId
-  if (hasOffset && !hasBlockId) {
-    throw new DocumentApiValidationError('INVALID_TARGET', 'offset requires blockId.', {
-      fields: ['offset', 'blockId'],
-    });
-  }
-
-  // Step 6: Numeric bounds — offset must be a non-negative integer
-  if (hasOffset) {
-    assertNonNegativeInteger(offset, 'offset');
   }
 }
 
@@ -110,16 +81,17 @@ export function executeInsert(
 ): TextMutationReceipt {
   validateInsertInput(input);
 
-  const { target, blockId, offset, text } = input;
+  const { target, value } = input;
+  const contentType = input.type ?? 'text';
 
-  // Pass friendly locator fields through to the adapter for normalization.
-  // The adapter is responsible for converting blockId + offset into a canonical TextAddress.
-  if (blockId !== undefined) {
-    return executeWrite(adapter, { kind: 'insert', blockId, offset, text }, options);
+  // For non-text content types, delegate to the adapter's structured insert path.
+  // The adapter (plan-wrappers) handles markdown/html conversion and block insertion.
+  if (contentType !== 'text') {
+    return adapter.insertStructured(input, options);
   }
 
-  // Canonical target or no-target (default insertion point)
-  const request = target ? { kind: 'insert' as const, target, text } : { kind: 'insert' as const, text };
+  // Text path: use the existing write pipeline
+  const request = target ? { kind: 'insert' as const, target, text: value } : { kind: 'insert' as const, text: value };
 
   return executeWrite(adapter, request, options);
 }

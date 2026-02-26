@@ -11,6 +11,7 @@ const REPO_ROOT = path.resolve(__dirname, '../../../');
 
 const SDK_WORKSPACE_PACKAGE = path.join(REPO_ROOT, 'packages/sdk/package.json');
 const NODE_PACKAGE = path.join(REPO_ROOT, 'packages/sdk/langs/node/package.json');
+const NODE_PLATFORMS_ROOT = path.join(REPO_ROOT, 'packages/sdk/langs/node/platforms');
 const PYPROJECT_FILE = path.join(REPO_ROOT, 'packages/sdk/langs/python/pyproject.toml');
 const LEGACY_VERSION_FILE = path.join(REPO_ROOT, 'packages/sdk/version.json');
 const PYTHON_PLATFORMS_ROOT = path.join(REPO_ROOT, 'packages/sdk/langs/python/platforms');
@@ -22,6 +23,7 @@ const OPTIONAL_PLATFORM_PACKAGES = [
   '@superdoc-dev/sdk-linux-x64',
   '@superdoc-dev/sdk-windows-x64',
 ];
+const OPTIONAL_PLATFORM_DEP_SPEC = 'workspace:*';
 
 const SEMVER_RE = /^\d+\.\d+\.\d+(?:-[0-9A-Za-z.-]+)?(?:\+[0-9A-Za-z.-]+)?$/;
 
@@ -38,7 +40,13 @@ const PEP440_PRERELEASE_MAP = {
 /**
  * Convert semver to PEP 440 canonical form.
  *
- * Allowed prerelease channels: alpha, beta, rc. All others throw.
+ * Allowed prerelease channels: alpha, beta, rc, next. All others throw.
+ * - alpha/beta/rc map to PEP 440 pre-release segments (a/b/rc)
+ * - next maps to PEP 440 dev releases (.devN) — used for main-branch prereleases
+ *
+ * Note: .devN sorts BEFORE the release in PEP 440 (1.0.0.dev1 < 1.0.0),
+ * which is correct prerelease semantics.
+ *
  * Build metadata (+build) is rejected — PEP 440 local versions have
  * different semantics and must not be generated silently.
  */
@@ -50,16 +58,17 @@ export function semverToPep440(version) {
     );
   }
 
-  const match = version.match(/^(\d+\.\d+\.\d+)(?:-(alpha|beta|rc)\.(\d+))?$/);
+  const match = version.match(/^(\d+\.\d+\.\d+)(?:-(alpha|beta|rc|next)\.(\d+))?$/);
   if (!match) {
     throw new Error(
       `semverToPep440: unsupported version format "${version}". ` +
-        'Expected X.Y.Z or X.Y.Z-(alpha|beta|rc).N',
+        'Expected X.Y.Z or X.Y.Z-(alpha|beta|rc|next).N',
     );
   }
 
   const [, core, channel, pre] = match;
   if (!channel) return core;
+  if (channel === 'next') return `${core}.dev${pre}`;
   return `${core}${PEP440_PRERELEASE_MAP[channel]}${pre}`;
 }
 
@@ -117,12 +126,42 @@ async function syncNodePackage(version) {
   for (const packageName of OPTIONAL_PLATFORM_PACKAGES) {
     const optionalDepRe = new RegExp(`("${escapeRegExp(packageName)}"\\s*:\\s*")([^"]*)(")`);
     if (optionalDepRe.test(next)) {
-      next = next.replace(optionalDepRe, `$1${version}$3`);
+      next = next.replace(optionalDepRe, `$1${OPTIONAL_PLATFORM_DEP_SPEC}$3`);
     }
   }
 
   if (next !== raw) {
     await writeFile(NODE_PACKAGE, next, 'utf8');
+  }
+}
+
+// ---------------------------------------------------------------------------
+// Node SDK — platform package.json files
+// ---------------------------------------------------------------------------
+
+const NODE_PLATFORM_DIRS = [
+  'sdk-darwin-arm64',
+  'sdk-darwin-x64',
+  'sdk-linux-x64',
+  'sdk-linux-arm64',
+  'sdk-windows-x64',
+];
+
+async function syncNodePlatformPackages(version) {
+  for (const dir of NODE_PLATFORM_DIRS) {
+    const pkgPath = path.join(NODE_PLATFORMS_ROOT, dir, 'package.json');
+    try {
+      const raw = await readFile(pkgPath, 'utf8');
+      const versionRe = /("version"\s*:\s*")([^"]*)(")/;
+      if (!versionRe.test(raw)) continue;
+
+      const next = raw.replace(versionRe, `$1${version}$3`);
+      if (next !== raw) {
+        await writeFile(pkgPath, next, 'utf8');
+      }
+    } catch {
+      // Platform package.json may not exist yet — not fatal
+    }
   }
 }
 
@@ -217,6 +256,7 @@ async function main() {
   }
 
   await syncNodePackage(version);
+  await syncNodePlatformPackages(version);
   await syncPythonPackage(pepVersion);
   await syncCompanionPyprojectVersions(pepVersion);
   await syncLegacyVersionFile(version);

@@ -40,7 +40,8 @@ export interface CliOnlyOperationDefinition {
 export const CLI_ONLY_OPERATION_DEFINITIONS: Record<CliOnlyOperation, CliOnlyOperationDefinition> = {
   open: {
     category: 'lifecycle',
-    description: 'Open a document and create a persistent editing session.',
+    description:
+      'Open a document and create a persistent editing session. Optionally override the document body with contentOverride + overrideType (markdown, html, or text).',
     requiresDocumentContext: false,
     intentName: 'open_document',
     sdkMetadata: { mutates: false, idempotency: 'non-idempotent', supportsTrackedMode: false, supportsDryRun: false },

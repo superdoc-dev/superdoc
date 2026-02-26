@@ -8,8 +8,16 @@ const props = defineProps({
 
 const getInitials = (name, email) => {
   if (!name && !email) return;
-  const firstLetter = name?.substring(0, 1) || email?.substring(0, 1) || null;
-  return firstLetter;
+  if (name) {
+    // Filter to only words that start with a letter (skip parenthesized qualifiers like "(imported)")
+    const parts = name
+      .trim()
+      .split(/\s+/)
+      .filter((p) => /^[a-zA-Z]/.test(p));
+    if (parts.length >= 2) return (parts[0][0] + parts[parts.length - 1][0]).toUpperCase();
+    if (parts.length === 1) return parts[0][0].toUpperCase();
+  }
+  return email?.substring(0, 1)?.toUpperCase() || null;
 };
 </script>
 
@@ -27,13 +35,14 @@ const getInitials = (name, email) => {
 <style scoped>
 .user-container {
   border-radius: 50%;
-  border: 2px solid #333;
-  font-size: 15px;
-  color: #fff;
-  background-color: #00000098;
+  font-size: var(--sd-comment-avatar-font-size, 11px);
+  font-weight: 600;
+  color: var(--sd-comment-avatar-color, #1355ff);
+  background-color: var(--sd-comment-avatar-bg, #ebf0ff);
 
-  width: 30px;
-  height: 30px;
+  width: var(--sd-comment-avatar-size, 28px);
+  height: var(--sd-comment-avatar-size, 28px);
+  flex-shrink: 0;
 
   display: flex;
   align-items: center;
@@ -45,9 +54,5 @@ img {
   border-radius: 50%;
   width: 100%;
   background-color: transparent;
-}
-
-span {
-  font-weight: 300;
 }
 </style>

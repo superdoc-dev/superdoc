@@ -483,6 +483,17 @@ const init = async () => {
     onEditorCreate,
     onContentError,
     // handleImageUpload: async (file) => url,
+
+    // Tracked change bubble button handlers - replace default accept/reject behavior
+    // Only fires from bubble buttons, not toolbar or context menu
+    // onTrackedChangeBubbleAccept: (comment, editor) => {
+    //   console.log('Custom accept handler', comment);
+    //   editor.commands.acceptTrackedChangeById(comment.commentId);
+    // },
+    // onTrackedChangeBubbleReject: (comment, editor) => {
+    //   console.log('Custom reject handler', comment);
+    //   editor.commands.rejectTrackedChangeById(comment.commentId);
+    // },
     // Override icons.
     toolbarIcons: {},
     onCommentsUpdate,

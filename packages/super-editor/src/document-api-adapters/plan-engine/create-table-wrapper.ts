@@ -10,7 +10,7 @@ import type { CreateTableInput, CreateTableResult, MutationOptions, MutationStep
 import type { Editor } from '../../core/Editor.js';
 import type { CompiledPlan } from './compiler.js';
 import { executeCompiledPlan } from './executor.js';
-import { checkRevision } from './revision-tracker.js';
+import { checkRevision, getRevision } from './revision-tracker.js';
 import { STUB_WHERE } from './plan-wrappers.js';
 import { createTableAdapter } from '../tables-adapter.js';
 
@@ -39,7 +39,11 @@ export function createTableWrapper(
     },
   } as unknown as MutationStep;
 
-  const compiled: CompiledPlan = { mutationSteps: [{ step, targets: [] }], assertSteps: [] };
+  const compiled: CompiledPlan = {
+    mutationSteps: [{ step, targets: [] }],
+    assertSteps: [],
+    compiledRevision: getRevision(editor),
+  };
 
   executeCompiledPlan(editor, compiled, {
     expectedRevision: options?.expectedRevision,

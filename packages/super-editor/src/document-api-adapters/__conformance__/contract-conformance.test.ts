@@ -2345,6 +2345,8 @@ const dryRunVectors: Partial<Record<OperationId, () => unknown>> = {
     );
     // dryRun should not mark the document as modified
     expect((editor as unknown as { converter: { documentModified: boolean } }).converter.documentModified).toBe(false);
+    return result;
+  },
 
   // -------------------------------------------------------------------------
   // Table operations — dryRun vectors

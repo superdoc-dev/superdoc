@@ -59,6 +59,22 @@ describe('tiff-converter', () => {
       const result = convertTiffToPng('data:image/png;base64,iVBORw0KGgoAAAANSUhEUg==');
       expect(result).toBeNull();
     });
+
+    it('returns null for TIFF with dimensions exceeding pixel limit', () => {
+      // Mock utif2 to return oversized dimensions (100k × 10k = 1 billion pixels)
+      vi.doMock('utif2', () => ({
+        decode: () => [{ width: 100_000, height: 10_000 }],
+        decodeImage: () => undefined,
+        toRGBA8: () => new Uint8Array(4),
+      }));
+
+      // Re-import to pick up the mock
+      return import('./tiff-converter.js?oversized').then(({ convertTiffToPng: fn }) => {
+        const result = fn(new Uint8Array([0x49, 0x49, 0x2a, 0x00]));
+        expect(result).toBeNull();
+        vi.doUnmock('utif2');
+      });
+    });
   });
 
   describe('setTiffDomEnvironment', () => {

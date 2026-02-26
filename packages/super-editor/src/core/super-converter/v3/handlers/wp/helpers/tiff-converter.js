@@ -14,6 +14,11 @@ import { base64ToUint8Array } from '../../../../helpers.js';
 // Optional DOM environment provided by callers (e.g., JSDOM in Node)
 let domEnvironment = null;
 
+// Safety limit: reject TIFF images whose decoded RGBA buffer would exceed this
+// pixel count. 100 million pixels ≈ 400 MB of RGBA data — well above any
+// realistic document image while still preventing DoS from malicious dimensions.
+const MAX_PIXEL_COUNT = 100_000_000;
+
 /**
  * Configure a DOM environment that can be used when running in Node.
  *
@@ -91,7 +96,7 @@ export function convertTiffToPng(data) {
     if (!rgba || rgba.length === 0) return null;
 
     const { width, height } = ifds[0];
-    if (!width || !height) return null;
+    if (!width || !height || width * height > MAX_PIXEL_COUNT) return null;
 
     // Render to canvas and export as PNG
     const canvas = createCanvas();

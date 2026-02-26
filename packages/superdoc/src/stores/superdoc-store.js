@@ -1,5 +1,6 @@
 import { defineStore } from 'pinia';
 import { ref, reactive, computed } from 'vue';
+import { v4 as uuidv4 } from 'uuid';
 import { useCommentsStore } from './comments-store';
 import { getFileObject, DOCX, PDF } from '@superdoc/common';
 import { normalizeDocumentEntry } from '@superdoc/core/helpers/file.js';
@@ -78,6 +79,7 @@ export const useSuperdocStore = defineStore('superdoc', () => {
     if (!configDocs?.length && !config.modules.collaboration) {
       const newDoc = await getFileObject(BlankDOCX, 'blank.docx', DOCX);
       const newDocConfig = {
+        id: uuidv4(),
         type: DOCX,
         data: newDoc,
         name: 'blank.docx',

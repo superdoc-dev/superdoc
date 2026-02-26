@@ -403,7 +403,7 @@ export const useCommentsStore = defineStore('comments', () => {
       superdocStore.selectionPosition.source = 'super-editor';
     }
 
-    activeComment.value = pendingComment.value.commentID;
+    activeComment.value = pendingComment.value.commentId;
   };
 
   /**

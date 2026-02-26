@@ -272,6 +272,13 @@ const onEditorReady = ({ editor, presentationEditor }) => {
     // Map PM positions to visual layout coordinates
     const mappedPositions = presentationEditor.getCommentBounds(positions, layers.value);
     handleEditorLocationsUpdate(mappedPositions);
+
+    // Ensure floating comments can render once the layout engine starts emitting positions.
+    // For DOCX, handleDocumentReady doesn't fire (it's wired to PDFViewer), so this is
+    // the primary trigger for hasInitializedLocations in editor-based documents.
+    if (!hasInitializedLocations.value) {
+      hasInitializedLocations.value = true;
+    }
   });
 };
 

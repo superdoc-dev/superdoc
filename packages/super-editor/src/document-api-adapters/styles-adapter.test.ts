@@ -323,6 +323,28 @@ describe('styles adapter: dryRun', () => {
     stylesApplyAdapter(editor, VALID_INPUT, options);
     expect(converter.documentModified).toBe(false);
   });
+
+  it('does not create scaffolding nodes when docDefaults path is absent', () => {
+    const editor = createMockEditor({ stylesXml: makeMinimalStylesXml() });
+    const options: NormalizedStylesApplyOptions = { dryRun: true, expectedRevision: undefined };
+    const result = stylesApplyAdapter(editor, VALID_INPUT, options);
+
+    expect(result.success).toBe(true);
+    if (result.success) {
+      expect(result.dryRun).toBe(true);
+      expect(result.before.bold).toBe('inherit');
+      expect(result.after.bold).toBe('on');
+      expect(result.changed).toBe(true);
+    }
+
+    // The XML tree must remain untouched — no w:docDefaults should have been created.
+    const converter = (editor as unknown as { converter: { convertedXml: Record<string, XmlElement> } }).converter;
+    const stylesRoot = converter.convertedXml['word/styles.xml'].elements?.find(
+      (el: XmlElement) => el.name === 'w:styles',
+    );
+    const docDefaults = stylesRoot?.elements?.find((el: XmlElement) => el.name === 'w:docDefaults');
+    expect(docDefaults).toBeUndefined();
+  });
 });
 
 // ---------------------------------------------------------------------------

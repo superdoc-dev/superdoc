@@ -127,6 +127,11 @@ function findOrCreateChild(parent: XmlElement, childName: string): XmlElement {
   return child;
 }
 
+/** Finds a direct child element by name, returning `undefined` if missing. */
+function findChild(parent: XmlElement, childName: string): XmlElement | undefined {
+  return parent.elements?.find((el) => el.name === childName);
+}
+
 /**
  * Resolves the `w:rPr` element inside `w:styles/w:docDefaults/w:rPrDefault`,
  * creating intermediate nodes as needed within the existing styles part.
@@ -135,6 +140,18 @@ function resolveDocDefaultsRunProperties(stylesRoot: XmlElement): XmlElement {
   const docDefaults = findOrCreateChild(stylesRoot, 'w:docDefaults');
   const rPrDefault = findOrCreateChild(docDefaults, 'w:rPrDefault');
   return findOrCreateChild(rPrDefault, 'w:rPr');
+}
+
+/**
+ * Read-only traversal of `w:styles/w:docDefaults/w:rPrDefault/w:rPr`.
+ * Returns `undefined` when any node in the path is absent — no mutation.
+ */
+function findDocDefaultsRunProperties(stylesRoot: XmlElement): XmlElement | undefined {
+  const docDefaults = findChild(stylesRoot, 'w:docDefaults');
+  if (!docDefaults) return undefined;
+  const rPrDefault = findChild(docDefaults, 'w:rPrDefault');
+  if (!rPrDefault) return undefined;
+  return findChild(rPrDefault, 'w:rPr');
 }
 
 // ---------------------------------------------------------------------------
@@ -190,10 +207,10 @@ export function stylesApplyAdapter(
   return executeOutOfBandMutation<StylesApplyReceipt>(
     editor,
     (dryRun) => {
-      const rPr = resolveDocDefaultsRunProperties(stylesRoot);
-
-      // Read before-state
-      const beforeBold = readBooleanState(rPr, 'w:b');
+      // Read before-state.  Use the non-mutating traversal so dry-run
+      // never creates scaffolding nodes in the XML tree.
+      const existingRPr = findDocDefaultsRunProperties(stylesRoot);
+      const beforeBold = existingRPr ? readBooleanState(existingRPr, 'w:b') : 'inherit';
       const before = { bold: beforeBold };
 
       // Compute after-state from patch
@@ -204,6 +221,8 @@ export function stylesApplyAdapter(
 
       // Apply mutation (skip on dryRun or no-op)
       if (changed && !dryRun) {
+        // Only now create scaffolding — we know a real write will follow.
+        const rPr = resolveDocDefaultsRunProperties(stylesRoot);
         if (input.patch.bold !== undefined) {
           writeBooleanProperty(rPr, 'w:b', input.patch.bold);
         }

@@ -61,9 +61,10 @@ describe('tiff-converter', () => {
     });
 
     it('returns null for TIFF with dimensions exceeding pixel limit', () => {
-      // Mock utif2 to return oversized dimensions (100k × 10k = 1 billion pixels)
+      // Mock utif2 to return oversized dimensions via raw IFD tags
+      // (t256=ImageWidth, t257=ImageLength — 100k × 10k = 1 billion pixels)
       vi.doMock('utif2', () => ({
-        decode: () => [{ width: 100_000, height: 10_000 }],
+        decode: () => [{ t256: [100_000], t257: [10_000] }],
         decodeImage: () => undefined,
         toRGBA8: () => new Uint8Array(4),
       }));

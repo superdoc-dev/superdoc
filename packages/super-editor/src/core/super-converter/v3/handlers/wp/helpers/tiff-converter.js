@@ -90,14 +90,19 @@ export function convertTiffToPng(data) {
     const ifds = UTIF.decode(buffer);
     if (!ifds || ifds.length === 0) return null;
 
-    // Validate dimensions from IFD metadata before decoding pixel data
-    const { width, height } = ifds[0];
-    if (!width || !height || width * height > MAX_PIXEL_COUNT) return null;
+    // Validate dimensions from raw IFD tags before decoding pixel data.
+    // UTIF.decode populates tag entries (t256=ImageWidth, t257=ImageLength)
+    // but .width/.height are only set after decodeImage.
+    const ifdWidth = ifds[0].t256?.[0];
+    const ifdHeight = ifds[0].t257?.[0];
+    if (!ifdWidth || !ifdHeight || ifdWidth * ifdHeight > MAX_PIXEL_COUNT) return null;
 
     // Decode pixel data for the first page
     UTIF.decodeImage(buffer, ifds[0]);
     const rgba = UTIF.toRGBA8(ifds[0]);
     if (!rgba || rgba.length === 0) return null;
+
+    const { width, height } = ifds[0];
 
     // Render to canvas and export as PNG
     const canvas = createCanvas();

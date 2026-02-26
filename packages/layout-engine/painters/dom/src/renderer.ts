@@ -78,6 +78,7 @@ import {
 } from './utils/sdt-helpers.js';
 import { SdtGroupedHover } from './utils/sdt-hover.js';
 import { computeTabWidth } from './utils/marker-helpers.js';
+import { createCustomGeometrySvg } from './utils/custom-geometry-svg.js';
 import { generateRulerDefinitionFromPx, createRulerElement, ensureRulerStyles } from './ruler/index.js';
 import { toCssFontFamily } from '@superdoc/font-utils';
 import {
@@ -3190,7 +3191,7 @@ export class DomPainter {
     // customGeometry takes precedence: a:custGeom shapes have kind='rect' as their PM default,
     // but the actual shape is defined by the custom path data, not the preset.
     const svgMarkup = block.customGeometry
-      ? this.createCustomGeometrySvg(block, innerWidth, innerHeight)
+      ? createCustomGeometrySvg(block, innerWidth, innerHeight)
       : block.shapeKind
         ? this.tryCreatePresetSvg(block, innerWidth, innerHeight)
         : null;
@@ -3484,51 +3485,6 @@ export class DomPainter {
       console.warn(`[DomPainter] Unable to render preset shape "${block.shapeKind}":`, error);
       return null;
     }
-  }
-
-  /**
-   * Generates SVG markup from custom geometry path data (a:custGeom).
-   * Converts stored OOXML path commands (already converted to SVG d-strings) into a full SVG element.
-   */
-  private createCustomGeometrySvg(
-    block: VectorShapeDrawingWithEffects,
-    widthOverride?: number,
-    heightOverride?: number,
-  ): string | null {
-    const geom = block.customGeometry;
-    if (!geom || !geom.paths.length) return null;
-
-    const width = widthOverride ?? block.geometry.width;
-    const height = heightOverride ?? block.geometry.height;
-
-    // Resolve fill color — null means "no fill" (a:noFill), use 'none'
-    let fillColor: string;
-    if (block.fillColor === null) {
-      fillColor = 'none';
-    } else if (typeof block.fillColor === 'string') {
-      fillColor = block.fillColor;
-    } else {
-      fillColor = 'none';
-    }
-
-    const strokeColor =
-      block.strokeColor === null ? 'none' : typeof block.strokeColor === 'string' ? block.strokeColor : 'none';
-    const strokeWidth = block.strokeWidth ?? 0;
-
-    // Build SVG paths — scale the path coordinate space to the actual display dimensions via viewBox
-    const pathElements = geom.paths
-      .map((p) => {
-        const pathFill = p.fill === 'none' ? 'none' : fillColor;
-        // Per-path stroke: a:path stroke="0" suppresses the outline for that path
-        const pathStroke = p.stroke === false ? 'none' : strokeColor;
-        const pathStrokeWidth = p.stroke === false ? 0 : strokeWidth;
-        // Sanitize d attribute — only allow SVG path commands and numbers
-        const safeD = p.d.replace(/[^MmLlHhVvCcSsQqTtAaZz0-9.,\s\-+eE]/g, '');
-        return `<path d="${safeD}" fill="${pathFill}" stroke="${pathStroke}" stroke-width="${pathStrokeWidth}" />`;
-      })
-      .join('');
-
-    return `<svg xmlns="http://www.w3.org/2000/svg" width="${width}" height="${height}" viewBox="0 0 ${geom.width} ${geom.height}" preserveAspectRatio="none">${pathElements}</svg>`;
   }
 
   private parseSafeSvg(markup: string): SVGElement | null {

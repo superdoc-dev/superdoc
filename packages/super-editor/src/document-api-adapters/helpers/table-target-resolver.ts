@@ -115,6 +115,20 @@ export interface ResolvedRow {
 }
 
 /**
+ * Backwards-compatible alternative to Array.prototype.findLast.
+ */
+function findLastCandidate(
+  candidates: readonly BlockCandidate[],
+  predicate: (candidate: BlockCandidate) => boolean,
+): BlockCandidate | undefined {
+  for (let i = candidates.length - 1; i >= 0; i--) {
+    const candidate = candidates[i];
+    if (predicate(candidate)) return candidate;
+  }
+  return undefined;
+}
+
+/**
  * Resolves a row within a table using the mixed locator pattern shared by
  * most row operations.
  *
@@ -226,7 +240,12 @@ function findParentTable(
   rowCandidate: BlockCandidate,
 ): BlockCandidate | undefined {
   // The table's pos must be less than the row's pos, and its end must be >= row's end.
-  return index.candidates.find((c) => c.nodeType === 'table' && c.pos < rowCandidate.pos && c.end >= rowCandidate.end);
+  // Scan from the end so nested tables (which appear later in depth-first traversal)
+  // are preferred over outer tables.
+  return findLastCandidate(
+    index.candidates,
+    (c) => c.nodeType === 'table' && c.pos < rowCandidate.pos && c.end >= rowCandidate.end,
+  );
 }
 
 /**
@@ -308,8 +327,10 @@ export function resolveCellLocator(
     );
   }
 
-  // Find the parent table.
-  const tableCandidate = index.candidates.find(
+  // Find the parent table by scanning from the end so nested tables (which
+  // appear later in depth-first traversal) are preferred over outer tables.
+  const tableCandidate = findLastCandidate(
+    index.candidates,
     (c) => c.nodeType === 'table' && c.pos < candidate!.pos && c.end >= candidate!.end,
   );
 

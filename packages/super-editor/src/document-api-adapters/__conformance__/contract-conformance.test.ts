@@ -1162,7 +1162,14 @@ const mutationVectors: Partial<Record<OperationId, MutationVector>> = {
         { changeMode: 'direct' },
       );
     },
-    // No failureCase — align allows collapsed ranges (paragraph-level operation)
+    failureCase: () => {
+      const { editor } = makeTextEditor('Hello', { commands: { setTextAlign: vi.fn(() => false) } });
+      return formatAlignWrapper(
+        editor,
+        { target: { kind: 'text', blockId: 'p1', range: { start: 0, end: 5 } }, alignment: 'center' },
+        { changeMode: 'direct' },
+      );
+    },
     applyCase: () => {
       const { editor } = makeTextEditor();
       return formatAlignWrapper(

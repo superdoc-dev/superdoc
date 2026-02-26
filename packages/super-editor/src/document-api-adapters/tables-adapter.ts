@@ -74,6 +74,11 @@ import { twipsToPixels } from '../core/super-converter/helpers.js';
 // Helpers
 // ---------------------------------------------------------------------------
 
+const POINTS_TO_PIXELS = 96 / 72;
+const POINTS_TO_TWIPS = 20;
+const PIXELS_TO_TWIPS = 1440 / 96;
+const DEFAULT_TABLE_GRID_WIDTH_TWIPS = 1500;
+
 function notYetImplemented(operationName: string): never {
   throw new DocumentApiAdapterError('CAPABILITY_UNAVAILABLE', `${operationName} is not yet implemented.`, {
     reason: 'not_implemented',
@@ -112,6 +117,7 @@ function syncExtractedTableAttrs(tp: Record<string, unknown>): Record<string, un
   extracted.tableStyleId = tp.tableStyleId ?? null;
   extracted.justification = tp.justification ?? null;
   extracted.tableLayout = tp.tableLayout ?? null;
+  extracted.borders = tp.borders ?? null;
 
   // tableIndent — importer converts twips→pixels (line 89)
   const indent = tp.tableIndent as { value?: number; type?: string } | undefined;
@@ -155,6 +161,227 @@ function syncExtractedTableAttrs(tp: Record<string, unknown>): Record<string, un
   }
 
   return extracted;
+}
+
+function normalizeGridWidth(width: unknown): { col: number } {
+  if (typeof width === 'number' && Number.isFinite(width)) {
+    return { col: Math.round(width) };
+  }
+
+  if (width && typeof width === 'object') {
+    const col = (width as { col?: unknown }).col;
+    if (typeof col === 'number' && Number.isFinite(col)) {
+      return { col: Math.round(col) };
+    }
+  }
+
+  return { col: DEFAULT_TABLE_GRID_WIDTH_TWIPS };
+}
+
+function normalizeGridColumns(grid: unknown): { columns: { col: number }[]; format: 'array' | 'object' } | null {
+  if (Array.isArray(grid)) {
+    if (grid.length === 0) return null;
+    return { columns: grid.map((width) => normalizeGridWidth(width)), format: 'array' };
+  }
+
+  if (grid && typeof grid === 'object') {
+    const rawColWidths = (grid as { colWidths?: unknown }).colWidths;
+    if (Array.isArray(rawColWidths) && rawColWidths.length > 0) {
+      return { columns: rawColWidths.map((width) => normalizeGridWidth(width)), format: 'object' };
+    }
+  }
+
+  return null;
+}
+
+function serializeGridColumns(
+  originalGrid: unknown,
+  normalized: { columns: { col: number }[]; format: 'array' | 'object' },
+): unknown {
+  if (normalized.format === 'array') {
+    return normalized.columns;
+  }
+  return { ...(originalGrid as Record<string, unknown>), colWidths: normalized.columns };
+}
+
+function insertGridColumnWidth(grid: unknown, insertIndex: number): unknown | null {
+  const normalized = normalizeGridColumns(grid);
+  if (!normalized) return null;
+
+  const colWidths = normalized.columns.slice();
+  const boundedIndex = Math.max(0, Math.min(insertIndex, colWidths.length));
+  const template =
+    colWidths[Math.min(boundedIndex, colWidths.length - 1)] ??
+    colWidths[colWidths.length - 1] ??
+    normalizeGridWidth(null);
+
+  colWidths.splice(boundedIndex, 0, { ...template });
+  return serializeGridColumns(grid, { ...normalized, columns: colWidths });
+}
+
+function removeGridColumnWidth(grid: unknown, deleteIndex: number): unknown | null {
+  const normalized = normalizeGridColumns(grid);
+  if (!normalized || normalized.columns.length <= 1) return null;
+
+  const colWidths = normalized.columns.slice();
+  const boundedIndex = Math.max(0, Math.min(deleteIndex, colWidths.length - 1));
+  colWidths.splice(boundedIndex, 1);
+
+  return serializeGridColumns(grid, { ...normalized, columns: colWidths });
+}
+
+type TableBorderEdgeForCells = 'top' | 'bottom' | 'left' | 'right' | 'insideH' | 'insideV';
+type CellBorderSide = 'top' | 'bottom' | 'left' | 'right';
+
+function isBoundaryEdge(edge: string): edge is TableBorderEdgeForCells {
+  return (
+    edge === 'top' ||
+    edge === 'bottom' ||
+    edge === 'left' ||
+    edge === 'right' ||
+    edge === 'insideH' ||
+    edge === 'insideV'
+  );
+}
+
+function cellSidesForEdge(
+  edge: TableBorderEdgeForCells,
+  row: number,
+  col: number,
+  lastRow: number,
+  lastCol: number,
+): CellBorderSide[] {
+  switch (edge) {
+    case 'top':
+      return row === 0 ? ['top'] : [];
+    case 'bottom':
+      return row === lastRow ? ['bottom'] : [];
+    case 'left':
+      return col === 0 ? ['left'] : [];
+    case 'right':
+      return col === lastCol ? ['right'] : [];
+    case 'insideH':
+      return [row < lastRow ? 'bottom' : null, row > 0 ? 'top' : null].filter(
+        (side): side is CellBorderSide => side != null,
+      );
+    case 'insideV':
+      return [col < lastCol ? 'right' : null, col > 0 ? 'left' : null].filter(
+        (side): side is CellBorderSide => side != null,
+      );
+    default:
+      return [];
+  }
+}
+
+function tableBorderToCellBorder(border: Record<string, unknown>): Record<string, unknown> {
+  const val = typeof border.val === 'string' ? border.val : 'single';
+  const color = typeof border.color === 'string' ? border.color : 'auto';
+  const sizeEighthPoints = typeof border.size === 'number' ? border.size : 0;
+  const sizePx = val === 'none' || val === 'nil' ? 0 : (sizeEighthPoints / 8) * POINTS_TO_PIXELS;
+
+  return {
+    val,
+    color,
+    size: sizePx,
+    space: 0,
+  };
+}
+
+function applyTableEdgeToCellBorders(
+  tr: Transaction,
+  tablePos: number,
+  tableNode: import('prosemirror-model').Node,
+  edge: TableBorderEdgeForCells,
+  borderSpec: Record<string, unknown>,
+): void {
+  const map = TableMap.get(tableNode);
+  const tableStart = tablePos + 1;
+  const seen = new Set<number>();
+  const mapFrom = tr.mapping.maps.length;
+  const lastRow = map.height - 1;
+  const lastCol = map.width - 1;
+  const cellBorder = tableBorderToCellBorder(borderSpec);
+
+  for (let row = 0; row < map.height; row++) {
+    for (let col = 0; col < map.width; col++) {
+      const relPos = map.map[row * map.width + col]!;
+      if (seen.has(relPos)) continue;
+      seen.add(relPos);
+
+      const targetSides = cellSidesForEdge(edge, row, col, lastRow, lastCol);
+      if (targetSides.length === 0) continue;
+
+      const cellNode = tableNode.nodeAt(relPos);
+      if (!cellNode) continue;
+
+      const cellAttrs = cellNode.attrs as Record<string, unknown>;
+      const borders = { ...((cellAttrs.borders ?? {}) as Record<string, unknown>) };
+      for (const side of targetSides) {
+        borders[side] = { ...cellBorder };
+      }
+
+      tr.setNodeMarkup(tr.mapping.slice(mapFrom).map(tableStart + relPos), null, {
+        ...cellAttrs,
+        borders,
+      });
+    }
+  }
+}
+
+function applyTableBorderPresetToCellBorders(
+  tr: Transaction,
+  tablePos: number,
+  tableNode: import('prosemirror-model').Node,
+  preset: 'none' | 'box' | 'all' | 'grid' | 'custom',
+): void {
+  if (preset === 'custom') return;
+
+  const map = TableMap.get(tableNode);
+  const tableStart = tablePos + 1;
+  const seen = new Set<number>();
+  const mapFrom = tr.mapping.maps.length;
+  const lastRow = map.height - 1;
+  const lastCol = map.width - 1;
+
+  const noneBorder = tableBorderToCellBorder({ val: 'none', color: 'auto', size: 0 });
+  const singleBorder = tableBorderToCellBorder({ val: 'single', color: '000000', size: 4 });
+
+  for (let row = 0; row < map.height; row++) {
+    for (let col = 0; col < map.width; col++) {
+      const relPos = map.map[row * map.width + col]!;
+      if (seen.has(relPos)) continue;
+      seen.add(relPos);
+
+      const cellNode = tableNode.nodeAt(relPos);
+      if (!cellNode) continue;
+
+      const cellAttrs = cellNode.attrs as Record<string, unknown>;
+      const borders = { ...((cellAttrs.borders ?? {}) as Record<string, unknown>) };
+
+      if (preset === 'none') {
+        borders.top = { ...noneBorder };
+        borders.bottom = { ...noneBorder };
+        borders.left = { ...noneBorder };
+        borders.right = { ...noneBorder };
+      } else if (preset === 'box') {
+        borders.top = row === 0 ? { ...singleBorder } : { ...noneBorder };
+        borders.bottom = row === lastRow ? { ...singleBorder } : { ...noneBorder };
+        borders.left = col === 0 ? { ...singleBorder } : { ...noneBorder };
+        borders.right = col === lastCol ? { ...singleBorder } : { ...noneBorder };
+      } else {
+        // 'all' | 'grid'
+        borders.top = { ...singleBorder };
+        borders.bottom = { ...singleBorder };
+        borders.left = { ...singleBorder };
+        borders.right = { ...singleBorder };
+      }
+
+      tr.setNodeMarkup(tr.mapping.slice(mapFrom).map(tableStart + relPos), null, {
+        ...cellAttrs,
+        borders,
+      });
+    }
+  }
 }
 
 /** Flattened row locator shape accepted by {@link resolveRowLocator}. */
@@ -650,7 +877,8 @@ export function tablesSetRowHeightAdapter(
     const currentAttrs = rowNode.attrs as Record<string, unknown>;
     const currentRowProps = (currentAttrs.tableRowProperties ?? {}) as Record<string, unknown>;
 
-    const heightTwips = Math.round(input.heightPt * 20); // points → twips
+    const heightTwips = Math.round(input.heightPt * POINTS_TO_TWIPS); // points → twips
+    const heightPx = Math.round(input.heightPt * POINTS_TO_PIXELS); // points → px
     const updatedRowProps = {
       ...currentRowProps,
       rowHeight: { value: heightTwips, rule: input.rule },
@@ -658,7 +886,7 @@ export function tablesSetRowHeightAdapter(
 
     const newAttrs = {
       ...currentAttrs,
-      rowHeight: input.heightPt,
+      rowHeight: heightPx,
       tableRowProperties: updatedRowProps,
     };
 
@@ -716,7 +944,7 @@ export function tablesDistributeRowsAdapter(
       const currentAttrs = row.attrs as Record<string, unknown>;
       const currentRowProps = (currentAttrs.tableRowProperties ?? {}) as Record<string, unknown>;
 
-      const heightTwips = Math.round(avgHeight * 20);
+      const heightTwips = Math.round(avgHeight * PIXELS_TO_TWIPS); // px → twips
       tr.setNodeMarkup(rowPos, null, {
         ...currentAttrs,
         rowHeight: avgHeight,
@@ -817,10 +1045,23 @@ export function tablesInsertColumnAdapter(
     const tr = editor.state.tr;
     const tablePos = table.candidate.pos;
     const count = input.count ?? 1;
+    let updatedGrid = (table.candidate.node.attrs as Record<string, unknown>).grid;
 
     for (let c = 0; c < count; c++) {
       const insertCol = input.position === 'left' ? columnIndex + c : columnIndex + 1 + c;
       addColumnToTable(tr, tablePos, insertCol);
+      updatedGrid = insertGridColumnWidth(updatedGrid, insertCol) ?? updatedGrid;
+    }
+
+    if (updatedGrid) {
+      const currentTableNode = tr.doc.nodeAt(tablePos);
+      if (currentTableNode && currentTableNode.type.name === 'table') {
+        tr.setNodeMarkup(tablePos, null, {
+          ...(currentTableNode.attrs as Record<string, unknown>),
+          grid: updatedGrid,
+          userEdited: true,
+        });
+      }
     }
 
     if (mode === 'tracked') applyTrackedMutationMeta(tr);
@@ -860,7 +1101,20 @@ export function tablesDeleteColumnAdapter(
 
   try {
     const tr = editor.state.tr;
+    let updatedGrid = (table.candidate.node.attrs as Record<string, unknown>).grid;
     removeColumnFromTable(tr, table.candidate.pos, columnIndex);
+    updatedGrid = removeGridColumnWidth(updatedGrid, columnIndex) ?? updatedGrid;
+
+    if (updatedGrid) {
+      const currentTableNode = tr.doc.nodeAt(table.candidate.pos);
+      if (currentTableNode && currentTableNode.type.name === 'table') {
+        tr.setNodeMarkup(table.candidate.pos, null, {
+          ...(currentTableNode.attrs as Record<string, unknown>),
+          grid: updatedGrid,
+          userEdited: true,
+        });
+      }
+    }
 
     if (mode === 'tracked') applyTrackedMutationMeta(tr);
     else applyDirectMutationMeta(tr);
@@ -922,13 +1176,13 @@ export function tablesSetColumnWidthAdapter(
 
     // Also update the table grid if present.
     const tableAttrs = tableNode.attrs as Record<string, unknown>;
-    const grid = tableAttrs.grid as { colWidths?: { col: number }[] } | null;
-    if (grid?.colWidths && columnIndex < grid.colWidths.length) {
-      const newColWidths = grid.colWidths.slice();
-      newColWidths[columnIndex] = { col: Math.round(input.widthPt * 20) }; // Points → twips
+    const normalizedGrid = normalizeGridColumns(tableAttrs.grid);
+    if (normalizedGrid && columnIndex < normalizedGrid.columns.length) {
+      const newColumns = normalizedGrid.columns.slice();
+      newColumns[columnIndex] = { col: Math.round(input.widthPt * POINTS_TO_TWIPS) }; // points → twips
       tr.setNodeMarkup(tablePos, null, {
         ...tableAttrs,
-        grid: { ...grid, colWidths: newColWidths },
+        grid: serializeGridColumns(tableAttrs.grid, { ...normalizedGrid, columns: newColumns }),
         userEdited: true,
       });
     }
@@ -1121,7 +1375,11 @@ export function tablesConvertFromTextAdapter(
       tableRows.push(schema.nodes.tableRow.createAndFill(null, tableCells)!);
     }
 
-    const tableNode = schema.nodes.table.create(null, tableRows);
+    const tableId = uuidv4();
+    const tableParaId = Array.from({ length: 8 }, () => Math.floor(Math.random() * 16).toString(16))
+      .join('')
+      .toUpperCase();
+    const tableNode = schema.nodes.table.create({ sdBlockId: tableId, paraId: tableParaId }, tableRows);
 
     // Replace the source paragraphs with the new table.
     const startPos = paragraphs[0].pos;
@@ -1132,7 +1390,12 @@ export function tablesConvertFromTextAdapter(
     applyDirectMutationMeta(tr);
     editor.dispatch(tr);
     clearIndexCache(editor);
-    return buildTableSuccess();
+
+    // Resolve the inserted table so callers can chain follow-up table ops.
+    const insertedTable = getBlockIndex(editor).candidates.find(
+      (block) => block.nodeType === 'table' && block.pos === startPos,
+    );
+    return buildTableSuccess(insertedTable ? toBlockAddress(insertedTable) : undefined);
   } catch {
     return toTableFailure('INVALID_TARGET', 'Text-to-table conversion could not be applied.');
   }
@@ -1192,6 +1455,8 @@ export function tablesSplitAdapter(
     // Build the new table with the same attributes.
     const newTableAttrs = { ...(tableNode.attrs as Record<string, unknown>) };
     delete newTableAttrs.sdBlockId; // Each table needs a unique ID — let PM assign one.
+    delete newTableAttrs.paraId; // Avoid duplicate w14:paraId after split.
+    delete newTableAttrs.textId; // Avoid duplicate w14:textId after split.
     const newTable = schema.nodes.table.create(newTableAttrs, secondTableRows);
 
     // Insert the new table after the original.
@@ -1549,21 +1814,44 @@ export function tablesUnmergeCellsAdapter(
     const map = TableMap.get(tableNode);
     const schema = editor.state.schema;
 
-    // Replace the merged cell with a single-span cell keeping original content.
-    const unmergedAttrs = { ...attrs, colspan: 1, rowspan: 1 };
-    tr.setNodeMarkup(cellPos, null, unmergedAttrs);
+    // Replace the merged cell with a 1x1 cell while preserving content.
+    const currentColwidth = Array.isArray(attrs.colwidth) ? (attrs.colwidth as number[]) : null;
+    const tableCellProperties = {
+      ...((attrs.tableCellProperties ?? {}) as Record<string, unknown>),
+    };
+    delete tableCellProperties.gridSpan;
+    delete tableCellProperties.vMerge;
 
-    // Insert empty cells for the rest of the spanned range.
-    // Process rows from bottom to top to avoid position invalidation.
+    const resetCell = cellNode.type.create(
+      {
+        ...attrs,
+        colspan: 1,
+        rowspan: 1,
+        colwidth: currentColwidth && currentColwidth.length > 0 ? [currentColwidth[0] ?? 0] : currentColwidth,
+        tableCellProperties,
+      },
+      cellNode.content,
+    );
+    tr.replaceWith(cellPos, cellPos + cellNode.nodeSize, resetCell);
+
+    // Fill the previously spanned area with empty cells.
     const mapFrom = tr.mapping.maps.length;
-
     for (let row = rowIndex + rowspan - 1; row >= rowIndex; row--) {
       for (let col = columnIndex + colspan - 1; col >= columnIndex; col--) {
-        if (row === rowIndex && col === columnIndex) continue; // Skip the original cell.
+        if (row === rowIndex && col === columnIndex) continue;
 
         const newCell = schema.nodes.tableCell.createAndFill()!;
-        const insertPos = map.positionAt(row, col, tableNode);
-        tr.insert(tr.mapping.slice(mapFrom).map(tableStart + insertPos), newCell);
+
+        let insertRelPos: number;
+        if (row === rowIndex) {
+          // For the top row, insert after the original cell so it stays top-left.
+          const baseRelPos = map.positionAt(rowIndex, columnIndex, tableNode);
+          insertRelPos = baseRelPos + resetCell.nodeSize;
+        } else {
+          insertRelPos = map.positionAt(row, col, tableNode);
+        }
+
+        tr.insert(tr.mapping.slice(mapFrom).map(tableStart + insertRelPos), newCell);
       }
     }
 
@@ -1600,6 +1888,10 @@ export function tablesSplitCellAdapter(
   const attrs = cellNode.attrs as Record<string, unknown>;
   const currentColspan = (attrs.colspan as number) || 1;
   const currentRowspan = (attrs.rowspan as number) || 1;
+
+  if ((currentColspan > 1 || currentRowspan > 1) && input.rows === currentRowspan && input.columns === currentColspan) {
+    return tablesUnmergeCellsAdapter(editor, input, options);
+  }
 
   if (input.rows === 1 && input.columns === 1 && currentColspan === 1 && currentRowspan === 1) {
     return toTableFailure('NO_OP', 'Cell is already a single cell and split target is 1×1.');
@@ -2023,6 +2315,17 @@ export function tablesSetBorderAdapter(
     currentProps.borders = currentBorders;
     const syncAttrs = resolved.scope === 'table' ? syncExtractedTableAttrs(currentProps) : {};
     tr.setNodeMarkup(resolved.pos, null, { ...currentAttrs, [propsKey]: currentProps, ...syncAttrs });
+
+    if (resolved.scope === 'table' && isBoundaryEdge(input.edge)) {
+      applyTableEdgeToCellBorders(
+        tr,
+        resolved.pos,
+        resolved.node,
+        input.edge,
+        currentBorders[input.edge] as Record<string, unknown>,
+      );
+    }
+
     applyDirectMutationMeta(tr);
     editor.dispatch(tr);
     clearIndexCache(editor);
@@ -2059,11 +2362,22 @@ export function tablesClearBorderAdapter(
     const currentProps = { ...((currentAttrs[propsKey] ?? {}) as Record<string, unknown>) };
     const currentBorders = { ...((currentProps.borders ?? {}) as Record<string, unknown>) };
 
-    currentBorders[input.edge] = { val: 'none', size: 0, color: 'auto' };
+    currentBorders[input.edge] = { val: 'nil', size: 0, color: 'auto' };
 
     currentProps.borders = currentBorders;
     const syncAttrs = resolved.scope === 'table' ? syncExtractedTableAttrs(currentProps) : {};
     tr.setNodeMarkup(resolved.pos, null, { ...currentAttrs, [propsKey]: currentProps, ...syncAttrs });
+
+    if (resolved.scope === 'table' && isBoundaryEdge(input.edge)) {
+      applyTableEdgeToCellBorders(
+        tr,
+        resolved.pos,
+        resolved.node,
+        input.edge,
+        currentBorders[input.edge] as Record<string, unknown>,
+      );
+    }
+
     applyDirectMutationMeta(tr);
     editor.dispatch(tr);
     clearIndexCache(editor);
@@ -2120,6 +2434,9 @@ export function tablesApplyBorderPresetAdapter(
       tableProperties: currentTableProps,
       ...syncExtractedTableAttrs(currentTableProps),
     });
+
+    applyTableBorderPresetToCellBorders(tr, candidate.pos, candidate.node, input.preset);
+
     applyDirectMutationMeta(tr);
     editor.dispatch(tr);
     clearIndexCache(editor);
@@ -2193,9 +2510,39 @@ export function tablesClearShadingAdapter(
     const propsKey = resolved.scope === 'table' ? 'tableProperties' : 'tableCellProperties';
     const currentProps = { ...((currentAttrs[propsKey] ?? {}) as Record<string, unknown>) };
 
-    currentProps.shading = { fill: 'auto', val: 'clear', color: 'auto' };
+    delete currentProps.shading;
     const syncAttrs = resolved.scope === 'table' ? syncExtractedTableAttrs(currentProps) : {};
     tr.setNodeMarkup(resolved.pos, null, { ...currentAttrs, [propsKey]: currentProps, ...syncAttrs });
+
+    if (resolved.scope === 'table') {
+      const tableNode = resolved.node;
+      const tableStart = resolved.pos + 1;
+      const map = TableMap.get(tableNode);
+      const seen = new Set<number>();
+      const mapFrom = tr.mapping.maps.length;
+
+      for (let i = 0; i < map.map.length; i++) {
+        const relPos = map.map[i]!;
+        if (seen.has(relPos)) continue;
+        seen.add(relPos);
+
+        const cellNode = tableNode.nodeAt(relPos);
+        if (!cellNode) continue;
+
+        const cellAttrs = cellNode.attrs as Record<string, unknown>;
+        const cellProps = { ...((cellAttrs.tableCellProperties ?? {}) as Record<string, unknown>) };
+        delete cellProps.shading;
+
+        const nextCellAttrs: Record<string, unknown> = {
+          ...cellAttrs,
+          tableCellProperties: cellProps,
+        };
+        delete nextCellAttrs.background;
+
+        tr.setNodeMarkup(tr.mapping.slice(mapFrom).map(tableStart + relPos), null, nextCellAttrs);
+      }
+    }
+
     applyDirectMutationMeta(tr);
     editor.dispatch(tr);
     clearIndexCache(editor);
@@ -2231,11 +2578,11 @@ export function tablesSetTablePaddingAdapter(
     const currentTableProps = { ...((currentAttrs.tableProperties ?? {}) as Record<string, unknown>) };
 
     // OOXML stores default cell margins at tblPr/tblCellMar in twips.
-    currentTableProps.tblCellMar = {
-      top: { w: Math.round(input.topPt * 20), type: 'dxa' },
-      right: { w: Math.round(input.rightPt * 20), type: 'dxa' },
-      bottom: { w: Math.round(input.bottomPt * 20), type: 'dxa' },
-      left: { w: Math.round(input.leftPt * 20), type: 'dxa' },
+    currentTableProps.cellMargins = {
+      marginTop: { value: Math.round(input.topPt * POINTS_TO_TWIPS), type: 'dxa' },
+      marginRight: { value: Math.round(input.rightPt * POINTS_TO_TWIPS), type: 'dxa' },
+      marginBottom: { value: Math.round(input.bottomPt * POINTS_TO_TWIPS), type: 'dxa' },
+      marginLeft: { value: Math.round(input.leftPt * POINTS_TO_TWIPS), type: 'dxa' },
     };
 
     tr.setNodeMarkup(candidate.pos, null, {

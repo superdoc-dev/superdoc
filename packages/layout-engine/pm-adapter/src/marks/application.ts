@@ -58,12 +58,21 @@ const MAX_RUN_MARK_ARRAY_LENGTH = 100;
  * Protects against stack overflow from deeply nested structures.
  */
 const MAX_RUN_MARK_DEPTH = 5;
+const RANDOM_ID_LENGTH = 9;
 
 type CommentAnnotation = {
   commentId: string;
   importedId?: string;
   internal?: boolean;
   trackedChange?: boolean;
+};
+
+const generateRandomBase36Id = (length: number): string => {
+  let randomId = '';
+  while (randomId.length < length) {
+    randomId += Math.random().toString(36).slice(2);
+  }
+  return randomId.slice(0, length);
 };
 
 /**
@@ -469,7 +478,7 @@ const deriveTrackedChangeId = (kind: TrackedChangeKind, attrs: Record<string, un
   const authorEmail = attrs && typeof attrs.authorEmail === 'string' ? attrs.authorEmail : 'unknown';
   const date = attrs && typeof attrs.date === 'string' ? attrs.date : 'unknown';
   // Add timestamp and random component to ensure uniqueness when author/date are missing
-  const unique = `${Date.now()}-${Math.random().toString(36).substring(2, 11)}`;
+  const unique = `${Date.now()}-${generateRandomBase36Id(RANDOM_ID_LENGTH)}`;
   return `${kind}-${authorEmail}-${date}-${unique}`;
 };
 

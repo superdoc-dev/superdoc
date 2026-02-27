@@ -6,6 +6,7 @@ import {
   tablesClearBorderAdapter,
   tablesClearShadingAdapter,
   tablesDeleteCellAdapter,
+  tablesDistributeColumnsAdapter,
   tablesInsertCellAdapter,
   tablesSetBorderAdapter,
   tablesSetShadingAdapter,
@@ -21,7 +22,7 @@ vi.mock('prosemirror-tables', () => ({
       // Row 1: cell-3 at pos 21, cell-4 at pos 29
       map: [1, 10, 21, 29],
       positionAt: vi.fn((row: number, col: number) => [1, 10, 21, 29][row * 2 + col] ?? 1),
-      colCount: vi.fn(() => 0),
+      colCount: vi.fn((pos: number) => (pos === 10 || pos === 29 ? 1 : 0)),
     })),
   },
 }));
@@ -143,22 +144,22 @@ function makeTableEditor(): Editor {
   });
 
   const cell1 = createNode('tableCell', [paragraph1], {
-    attrs: { sdBlockId: 'cell-1', colspan: 1, rowspan: 1 },
+    attrs: { sdBlockId: 'cell-1', colspan: 1, rowspan: 1, colwidth: [100] },
     isBlock: true,
     inlineContent: false,
   });
   const cell2 = createNode('tableCell', [paragraph2], {
-    attrs: { sdBlockId: 'cell-2', colspan: 1, rowspan: 1 },
+    attrs: { sdBlockId: 'cell-2', colspan: 1, rowspan: 1, colwidth: [200] },
     isBlock: true,
     inlineContent: false,
   });
   const cell3 = createNode('tableCell', [paragraph3], {
-    attrs: { sdBlockId: 'cell-3', colspan: 1, rowspan: 1 },
+    attrs: { sdBlockId: 'cell-3', colspan: 1, rowspan: 1, colwidth: [100] },
     isBlock: true,
     inlineContent: false,
   });
   const cell4 = createNode('tableCell', [paragraph4], {
-    attrs: { sdBlockId: 'cell-4', colspan: 1, rowspan: 1 },
+    attrs: { sdBlockId: 'cell-4', colspan: 1, rowspan: 1, colwidth: [200] },
     isBlock: true,
     inlineContent: false,
   });
@@ -175,7 +176,12 @@ function makeTableEditor(): Editor {
   });
 
   const table = createNode('table', [row1, row2], {
-    attrs: { sdBlockId: 'table-1', tableProperties: {}, tableGrid: [5000, 5000] },
+    attrs: {
+      sdBlockId: 'table-1',
+      tableProperties: {},
+      tableGrid: [5000, 5000],
+      grid: [{ col: 1200 }, { col: 3000 }],
+    },
     isBlock: true,
     inlineContent: false,
   });
@@ -224,6 +230,13 @@ function makeTableEditor(): Editor {
     schema: { marks: {}, nodes: {} },
     options: {},
   } as unknown as Editor;
+}
+
+function getTableGridUpdateAttrs(tr: { setNodeMarkup: ReturnType<typeof vi.fn> }): Record<string, unknown> | undefined {
+  const tableUpdateCall = tr.setNodeMarkup.mock.calls.find(
+    (call) => call[0] === 0 && typeof call[2] === 'object' && call[2] != null && 'grid' in call[2],
+  );
+  return tableUpdateCall?.[2] as Record<string, unknown> | undefined;
 }
 
 describe('tables-adapter regressions', () => {
@@ -342,6 +355,63 @@ describe('tables-adapter regressions', () => {
     expect(result.success).toBe(true);
     expect(tr.insert).toHaveBeenCalledWith(expect.any(Number), expect.anything());
     expect(tr.setNodeMarkup).not.toHaveBeenCalled();
+  });
+
+  it('keeps table grid widths in sync when distributing columns', () => {
+    const editor = makeTableEditor();
+    const tr = editor.state.tr as unknown as { setNodeMarkup: ReturnType<typeof vi.fn> };
+
+    const result = tablesDistributeColumnsAdapter(editor, {
+      nodeId: 'table-1',
+      columnRange: { start: 0, end: 1 },
+    });
+
+    expect(result.success).toBe(true);
+
+    expect(getTableGridUpdateAttrs(tr)).toMatchObject({
+      userEdited: true,
+      grid: [{ col: 2250 }, { col: 2250 }],
+    });
+  });
+
+  it('updates object-shaped grid colWidths when distributing columns', () => {
+    const editor = makeTableEditor();
+    const tr = editor.state.tr as unknown as { setNodeMarkup: ReturnType<typeof vi.fn> };
+    const tableNode = editor.state.doc.nodeAt(0) as ProseMirrorNode;
+    (tableNode.attrs as Record<string, unknown>).grid = {
+      source: 'ooxml',
+      colWidths: [{ col: 1200 }, { col: 3000 }],
+    };
+
+    const result = tablesDistributeColumnsAdapter(editor, {
+      nodeId: 'table-1',
+      columnRange: { start: 0, end: 1 },
+    });
+
+    expect(result.success).toBe(true);
+    expect(getTableGridUpdateAttrs(tr)).toMatchObject({
+      userEdited: true,
+      grid: {
+        source: 'ooxml',
+        colWidths: [{ col: 2250 }, { col: 2250 }],
+      },
+    });
+  });
+
+  it('only updates grid columns inside the requested range', () => {
+    const editor = makeTableEditor();
+    const tr = editor.state.tr as unknown as { setNodeMarkup: ReturnType<typeof vi.fn> };
+
+    const result = tablesDistributeColumnsAdapter(editor, {
+      nodeId: 'table-1',
+      columnRange: { start: 0, end: 0 },
+    });
+
+    expect(result.success).toBe(true);
+    expect(getTableGridUpdateAttrs(tr)).toMatchObject({
+      userEdited: true,
+      grid: [{ col: 1500 }, { col: 3000 }],
+    });
   });
 
   it('rejects paragraph targets for tables.setBorder', () => {

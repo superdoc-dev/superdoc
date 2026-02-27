@@ -173,7 +173,7 @@ export async function listComments(
 
 export async function insertText(
   page: Page,
-  input: { text: string; target?: TextAddress },
+  input: { value: string; target?: TextAddress; type?: 'text' | 'markdown' | 'html' },
   options: { changeMode?: ChangeMode; dryRun?: boolean } = {},
 ): Promise<TextMutationReceipt> {
   return page.evaluate(({ payload, opts }) => (window as any).editor.doc.insert(payload, opts), {

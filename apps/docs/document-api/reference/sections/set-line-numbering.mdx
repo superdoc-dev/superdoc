@@ -1,0 +1,241 @@
+---
+title: sections.setLineNumbering
+sidebarTitle: sections.setLineNumbering
+description: Enable or configure line numbering for a section.
+---
+
+{/* GENERATED FILE: DO NOT EDIT. Regenerate via `pnpm run docapi:sync`. */}
+
+> Alpha: Document API is currently alpha and subject to breaking changes.
+
+## Summary
+
+Enable or configure line numbering for a section.
+
+- Operation ID: `sections.setLineNumbering`
+- API member path: `editor.doc.sections.setLineNumbering(...)`
+- Mutates document: `yes`
+- Idempotency: `conditional`
+- Supports tracked mode: `no`
+- Supports dry run: `yes`
+- Deterministic target resolution: `yes`
+
+## Expected result
+
+Returns a SectionMutationResult receipt; reports NO_OP if line numbering settings already match.
+
+## Input fields
+
+| Field | Type | Required | Description |
+| --- | --- | --- | --- |
+| `countBy` | integer | no |  |
+| `distance` | number | no |  |
+| `enabled` | boolean | yes |  |
+| `restart` | enum | no | `"continuous"`, `"newPage"`, `"newSection"` |
+| `start` | integer | no |  |
+| `target` | SectionAddress | yes | SectionAddress |
+
+### Example request
+
+```json
+{
+  "countBy": 1,
+  "enabled": true,
+  "start": 1,
+  "target": {
+    "kind": "section",
+    "sectionId": "example"
+  }
+}
+```
+
+## Output fields
+
+_No fields._
+
+### Example response
+
+```json
+{
+  "section": {
+    "kind": "section",
+    "sectionId": "example"
+  },
+  "success": true
+}
+```
+
+## Pre-apply throws
+
+- `TARGET_NOT_FOUND`
+- `INVALID_TARGET`
+- `INVALID_INPUT`
+- `CAPABILITY_UNAVAILABLE`
+- `INTERNAL_ERROR`
+
+## Non-applied failure codes
+
+- `NO_OP`
+- `INVALID_TARGET`
+- `CAPABILITY_UNAVAILABLE`
+
+## Raw schemas
+
+<Accordion title="Raw input schema">
+```json
+{
+  "additionalProperties": false,
+  "properties": {
+    "countBy": {
+      "minimum": 1,
+      "type": "integer"
+    },
+    "distance": {
+      "minimum": 0,
+      "type": "number"
+    },
+    "enabled": {
+      "type": "boolean"
+    },
+    "restart": {
+      "enum": [
+        "continuous",
+        "newPage",
+        "newSection"
+      ]
+    },
+    "start": {
+      "minimum": 1,
+      "type": "integer"
+    },
+    "target": {
+      "$ref": "#/$defs/SectionAddress"
+    }
+  },
+  "required": [
+    "target",
+    "enabled"
+  ],
+  "type": "object"
+}
+```
+</Accordion>
+
+<Accordion title="Raw output schema">
+```json
+{
+  "oneOf": [
+    {
+      "additionalProperties": false,
+      "properties": {
+        "section": {
+          "$ref": "#/$defs/SectionAddress"
+        },
+        "success": {
+          "const": true
+        }
+      },
+      "required": [
+        "success",
+        "section"
+      ],
+      "type": "object"
+    },
+    {
+      "additionalProperties": false,
+      "properties": {
+        "failure": {
+          "additionalProperties": false,
+          "properties": {
+            "code": {
+              "enum": [
+                "NO_OP",
+                "INVALID_TARGET",
+                "CAPABILITY_UNAVAILABLE"
+              ]
+            },
+            "details": {},
+            "message": {
+              "type": "string"
+            }
+          },
+          "required": [
+            "code",
+            "message"
+          ],
+          "type": "object"
+        },
+        "success": {
+          "const": false
+        }
+      },
+      "required": [
+        "success",
+        "failure"
+      ],
+      "type": "object"
+    }
+  ]
+}
+```
+</Accordion>
+
+<Accordion title="Raw success schema">
+```json
+{
+  "additionalProperties": false,
+  "properties": {
+    "section": {
+      "$ref": "#/$defs/SectionAddress"
+    },
+    "success": {
+      "const": true
+    }
+  },
+  "required": [
+    "success",
+    "section"
+  ],
+  "type": "object"
+}
+```
+</Accordion>
+
+<Accordion title="Raw failure schema">
+```json
+{
+  "additionalProperties": false,
+  "properties": {
+    "failure": {
+      "additionalProperties": false,
+      "properties": {
+        "code": {
+          "enum": [
+            "NO_OP",
+            "INVALID_TARGET",
+            "CAPABILITY_UNAVAILABLE"
+          ]
+        },
+        "details": {},
+        "message": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "code",
+        "message"
+      ],
+      "type": "object"
+    },
+    "success": {
+      "const": false
+    }
+  },
+  "required": [
+    "success",
+    "failure"
+  ],
+  "type": "object"
+}
+```
+</Accordion>

@@ -1,0 +1,236 @@
+---
+title: sections.setHeaderFooterRef
+sidebarTitle: sections.setHeaderFooterRef
+description: Set or replace a section header/footer reference for a variant.
+---
+
+{/* GENERATED FILE: DO NOT EDIT. Regenerate via `pnpm run docapi:sync`. */}
+
+> Alpha: Document API is currently alpha and subject to breaking changes.
+
+## Summary
+
+Set or replace a section header/footer reference for a variant.
+
+- Operation ID: `sections.setHeaderFooterRef`
+- API member path: `editor.doc.sections.setHeaderFooterRef(...)`
+- Mutates document: `yes`
+- Idempotency: `conditional`
+- Supports tracked mode: `no`
+- Supports dry run: `yes`
+- Deterministic target resolution: `yes`
+
+## Expected result
+
+Returns a SectionMutationResult receipt; reports NO_OP if the header/footer reference already matches.
+
+## Input fields
+
+| Field | Type | Required | Description |
+| --- | --- | --- | --- |
+| `kind` | enum | yes | `"header"`, `"footer"` |
+| `refId` | string | yes |  |
+| `target` | SectionAddress | yes | SectionAddress |
+| `variant` | enum | yes | `"default"`, `"first"`, `"even"` |
+
+### Example request
+
+```json
+{
+  "kind": "header",
+  "refId": "example",
+  "target": {
+    "kind": "section",
+    "sectionId": "example"
+  },
+  "variant": "default"
+}
+```
+
+## Output fields
+
+_No fields._
+
+### Example response
+
+```json
+{
+  "section": {
+    "kind": "section",
+    "sectionId": "example"
+  },
+  "success": true
+}
+```
+
+## Pre-apply throws
+
+- `TARGET_NOT_FOUND`
+- `INVALID_TARGET`
+- `INVALID_INPUT`
+- `CAPABILITY_UNAVAILABLE`
+- `INTERNAL_ERROR`
+
+## Non-applied failure codes
+
+- `NO_OP`
+- `INVALID_TARGET`
+- `CAPABILITY_UNAVAILABLE`
+
+## Raw schemas
+
+<Accordion title="Raw input schema">
+```json
+{
+  "additionalProperties": false,
+  "properties": {
+    "kind": {
+      "enum": [
+        "header",
+        "footer"
+      ]
+    },
+    "refId": {
+      "minLength": 1,
+      "type": "string"
+    },
+    "target": {
+      "$ref": "#/$defs/SectionAddress"
+    },
+    "variant": {
+      "enum": [
+        "default",
+        "first",
+        "even"
+      ]
+    }
+  },
+  "required": [
+    "target",
+    "kind",
+    "variant",
+    "refId"
+  ],
+  "type": "object"
+}
+```
+</Accordion>
+
+<Accordion title="Raw output schema">
+```json
+{
+  "oneOf": [
+    {
+      "additionalProperties": false,
+      "properties": {
+        "section": {
+          "$ref": "#/$defs/SectionAddress"
+        },
+        "success": {
+          "const": true
+        }
+      },
+      "required": [
+        "success",
+        "section"
+      ],
+      "type": "object"
+    },
+    {
+      "additionalProperties": false,
+      "properties": {
+        "failure": {
+          "additionalProperties": false,
+          "properties": {
+            "code": {
+              "enum": [
+                "NO_OP",
+                "INVALID_TARGET",
+                "CAPABILITY_UNAVAILABLE"
+              ]
+            },
+            "details": {},
+            "message": {
+              "type": "string"
+            }
+          },
+          "required": [
+            "code",
+            "message"
+          ],
+          "type": "object"
+        },
+        "success": {
+          "const": false
+        }
+      },
+      "required": [
+        "success",
+        "failure"
+      ],
+      "type": "object"
+    }
+  ]
+}
+```
+</Accordion>
+
+<Accordion title="Raw success schema">
+```json
+{
+  "additionalProperties": false,
+  "properties": {
+    "section": {
+      "$ref": "#/$defs/SectionAddress"
+    },
+    "success": {
+      "const": true
+    }
+  },
+  "required": [
+    "success",
+    "section"
+  ],
+  "type": "object"
+}
+```
+</Accordion>
+
+<Accordion title="Raw failure schema">
+```json
+{
+  "additionalProperties": false,
+  "properties": {
+    "failure": {
+      "additionalProperties": false,
+      "properties": {
+        "code": {
+          "enum": [
+            "NO_OP",
+            "INVALID_TARGET",
+            "CAPABILITY_UNAVAILABLE"
+          ]
+        },
+        "details": {},
+        "message": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "code",
+        "message"
+      ],
+      "type": "object"
+    },
+    "success": {
+      "const": false
+    }
+  },
+  "required": [
+    "success",
+    "failure"
+  ],
+  "type": "object"
+}
+```
+</Accordion>

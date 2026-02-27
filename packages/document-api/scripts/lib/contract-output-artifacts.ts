@@ -1,5 +1,6 @@
 import { buildContractSnapshot } from './contract-snapshot.js';
 import { stableStringify, type GeneratedFile } from './generation-utils.js';
+import { OPERATION_EXPECTED_RESULT_MAP } from '../../src/index.js';
 
 const GENERATED_FILE_HEADER = 'GENERATED FILE: DO NOT EDIT. Regenerate via `pnpm run docapi:sync`.\n';
 
@@ -71,6 +72,7 @@ export function buildToolManifestArtifacts(): GeneratedFile[] {
     name: operationId,
     memberPath: operation.memberPath,
     description: toToolDescription(operationId, operation.metadata.mutates),
+    expectedResult: OPERATION_EXPECTED_RESULT_MAP[operationId as keyof typeof OPERATION_EXPECTED_RESULT_MAP],
     mutates: operation.metadata.mutates,
     idempotency: operation.metadata.idempotency,
     supportsTrackedMode: operation.metadata.supportsTrackedMode,

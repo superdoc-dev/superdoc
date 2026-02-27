@@ -146,6 +146,72 @@ describe('TrackChanges extension commands', () => {
     expect(markPresent(restoredState.doc, TrackDeleteMarkName)).toBe(false);
   });
 
+  it('rejectTrackedChangesBetween emits tracked-change resolve events for rejected IDs', () => {
+    const insertMark = schema.marks[TrackInsertMarkName].create({ id: 'ins-resolve-1' });
+    const doc = createDoc('Pending', [insertMark]);
+    const state = createState(doc);
+    const emit = vi.fn();
+
+    commands.rejectTrackedChangesBetween(
+      1,
+      doc.content.size,
+    )({
+      state,
+      dispatch: (tr) => state.apply(tr),
+      editor: {
+        emit,
+        options: { user: { email: 'reviewer@example.com', name: 'Reviewer' } },
+      },
+    });
+
+    expect(emit).toHaveBeenCalledWith(
+      'commentsUpdate',
+      expect.objectContaining({
+        type: 'trackedChange',
+        event: 'resolve',
+        changeId: 'ins-resolve-1',
+        resolvedByEmail: 'reviewer@example.com',
+        resolvedByName: 'Reviewer',
+      }),
+    );
+  });
+
+  it('rejectTrackedChangesBetween expands partial selection to reject the full tracked-change ID', () => {
+    const changeId = 'ins-partial-still-present';
+    const insertMark = schema.marks[TrackInsertMarkName].create({ id: changeId });
+    const doc = createDoc('Pending', [insertMark]);
+    const state = createState(doc);
+    const emit = vi.fn();
+
+    let nextState;
+    commands.rejectTrackedChangesBetween(
+      1,
+      3,
+    )({
+      state,
+      dispatch: (tr) => {
+        nextState = state.apply(tr);
+      },
+      editor: {
+        emit,
+        options: { user: { email: 'reviewer@example.com', name: 'Reviewer' } },
+      },
+    });
+
+    expect(nextState).toBeDefined();
+    expect(nextState.doc.textContent).toBe('');
+
+    const resolveEventsForId = emit.mock.calls.filter(([eventName, payload]) => {
+      return (
+        eventName === 'commentsUpdate' &&
+        payload?.type === 'trackedChange' &&
+        payload?.event === 'resolve' &&
+        payload?.changeId === changeId
+      );
+    });
+    expect(resolveEventsForId).toHaveLength(1);
+  });
+
   it('blocks rejecting tracked changes when permissionResolver denies access', () => {
     const deleteMark = schema.marks[TrackDeleteMarkName].create({ id: 'del-guard', authorEmail: 'author@example.com' });
     const doc = createDoc('Legacy', [deleteMark]);
@@ -209,6 +275,59 @@ describe('TrackChanges extension commands', () => {
     expect(markPresent(afterReject.doc, TrackFormatMarkName)).toBe(false);
     expect(markPresent(afterReject.doc, 'bold')).toBe(true);
     expect(markPresent(afterReject.doc, 'italic')).toBe(false);
+  });
+
+  it('acceptTrackedChangesBetween bulk-accepts all format/style changes in range', () => {
+    const bold = schema.marks.bold.create();
+    const italic = schema.marks.italic.create();
+    const fmt1 = schema.marks[TrackFormatMarkName].create({
+      id: 'fmt-bulk-1',
+      before: [],
+      after: [{ type: 'bold', attrs: {} }],
+    });
+    const fmt2 = schema.marks[TrackFormatMarkName].create({
+      id: 'fmt-bulk-2',
+      before: [{ type: 'bold', attrs: {} }],
+      after: [{ type: 'italic', attrs: {} }],
+    });
+    const paragraph = schema.nodes.paragraph.create(null, [
+      schema.text('One', [bold, fmt1]),
+      schema.text(' two ', []),
+      schema.text('three', [italic, fmt2]),
+    ]);
+    const doc = schema.nodes.doc.create(null, paragraph);
+    const state = createState(doc);
+
+    let afterAccept;
+    commands.acceptTrackedChangesBetween(
+      0,
+      doc.content.size,
+    )({
+      state,
+      dispatch: (tr) => {
+        afterAccept = state.apply(tr);
+      },
+    });
+
+    expect(afterAccept).toBeDefined();
+    expect(afterAccept.doc.textContent).toBe('One two three');
+
+    let formatMarkCount = 0;
+    afterAccept.doc.descendants((node) => {
+      if (node.marks.some((m) => m.type.name === TrackFormatMarkName)) formatMarkCount += 1;
+    });
+    expect(formatMarkCount).toBe(0);
+
+    const firstRange = getFirstTextRange(afterAccept.doc);
+    const firstMarks = afterAccept.doc.nodeAt(firstRange.from)?.marks ?? [];
+    expect(firstMarks.some((m) => m.type.name === 'bold')).toBe(true);
+
+    afterAccept.doc.descendants((node, pos) => {
+      if (!node.isText || node.textContent !== 'three') return;
+      const marks = afterAccept.doc.nodeAt(pos)?.marks ?? [];
+      expect(marks.some((m) => m.type.name === 'italic')).toBe(true);
+      return false;
+    });
   });
 
   it('rejectTrackedChangesBetween restores imported textStyle attrs for color suggestions', () => {
@@ -455,6 +574,54 @@ describe('TrackChanges extension commands', () => {
       expect(marks.some((mark) => mark.type.name === 'bold')).toBe(false);
       expect(marks.some((mark) => mark.type.name === 'underline')).toBe(false);
       expect(textStyle?.attrs?.color).not.toBe('#FF00AA');
+      expect(textStyle?.attrs?.fontFamily).toBe('Times New Roman, serif');
+    } finally {
+      interactionEditor.destroy();
+    }
+  });
+
+  it('interaction: rejectTrackedChangeOnSelection reverts mixed marks + textStyle in suggesting mode', () => {
+    const { editor: interactionEditor } = initTestEditor({
+      mode: 'text',
+      content: '<p>Agreement signed by both parties</p>',
+      user: { name: 'Track Tester', email: 'track@example.com' },
+    });
+
+    try {
+      const textRange = getFirstTextRange(interactionEditor.state.doc);
+      expect(textRange).toBeDefined();
+
+      interactionEditor.view.dispatch(
+        interactionEditor.state.tr.setSelection(
+          TextSelection.create(interactionEditor.state.doc, textRange.from, textRange.to),
+        ),
+      );
+      interactionEditor.commands.setFontFamily('Times New Roman, serif');
+      interactionEditor.commands.setColor('#112233');
+      interactionEditor.setDocumentMode('suggesting');
+
+      const selectionRange = getFirstTextRange(interactionEditor.state.doc);
+      interactionEditor.view.dispatch(
+        interactionEditor.state.tr.setSelection(
+          TextSelection.create(interactionEditor.state.doc, selectionRange.from, selectionRange.to),
+        ),
+      );
+      interactionEditor.commands.toggleBold();
+      interactionEditor.commands.toggleUnderline();
+      interactionEditor.commands.setColor('#FF00AA');
+      interactionEditor.commands.setFontFamily('Arial, sans-serif');
+
+      interactionEditor.commands.rejectTrackedChangeOnSelection();
+
+      const textPos = getFirstTextRange(interactionEditor.state.doc);
+      const textNode = interactionEditor.state.doc.nodeAt(textPos.from);
+      const marks = textNode?.marks || [];
+      const textStyle = marks.find((mark) => mark.type.name === 'textStyle');
+
+      expect(marks.some((mark) => mark.type.name === TrackFormatMarkName)).toBe(false);
+      expect(marks.some((mark) => mark.type.name === 'bold')).toBe(false);
+      expect(marks.some((mark) => mark.type.name === 'underline')).toBe(false);
+      expect(textStyle?.attrs?.color).toBe('#112233');
       expect(textStyle?.attrs?.fontFamily).toBe('Times New Roman, serif');
     } finally {
       interactionEditor.destroy();

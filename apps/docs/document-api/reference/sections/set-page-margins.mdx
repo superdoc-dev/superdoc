@@ -1,0 +1,270 @@
+---
+title: sections.setPageMargins
+sidebarTitle: sections.setPageMargins
+description: Set page-edge margins for a section.
+---
+
+{/* GENERATED FILE: DO NOT EDIT. Regenerate via `pnpm run docapi:sync`. */}
+
+> Alpha: Document API is currently alpha and subject to breaking changes.
+
+## Summary
+
+Set page-edge margins for a section.
+
+- Operation ID: `sections.setPageMargins`
+- API member path: `editor.doc.sections.setPageMargins(...)`
+- Mutates document: `yes`
+- Idempotency: `conditional`
+- Supports tracked mode: `no`
+- Supports dry run: `yes`
+- Deterministic target resolution: `yes`
+
+## Expected result
+
+Returns a SectionMutationResult receipt; reports NO_OP if margins already match the requested values.
+
+## Input fields
+
+| Field | Type | Required | Description |
+| --- | --- | --- | --- |
+| `bottom` | number | no |  |
+| `gutter` | number | no |  |
+| `left` | number | no |  |
+| `right` | number | no |  |
+| `target` | SectionAddress | yes | SectionAddress |
+| `top` | number | no |  |
+
+### Example request
+
+```json
+{
+  "bottom": 12.5,
+  "right": 12.5,
+  "target": {
+    "kind": "section",
+    "sectionId": "example"
+  },
+  "top": 12.5
+}
+```
+
+## Output fields
+
+_No fields._
+
+### Example response
+
+```json
+{
+  "section": {
+    "kind": "section",
+    "sectionId": "example"
+  },
+  "success": true
+}
+```
+
+## Pre-apply throws
+
+- `TARGET_NOT_FOUND`
+- `INVALID_TARGET`
+- `INVALID_INPUT`
+- `CAPABILITY_UNAVAILABLE`
+- `INTERNAL_ERROR`
+
+## Non-applied failure codes
+
+- `NO_OP`
+- `INVALID_TARGET`
+- `CAPABILITY_UNAVAILABLE`
+
+## Raw schemas
+
+<Accordion title="Raw input schema">
+```json
+{
+  "additionalProperties": false,
+  "oneOf": [
+    {
+      "required": [
+        "target",
+        "top"
+      ]
+    },
+    {
+      "required": [
+        "target",
+        "right"
+      ]
+    },
+    {
+      "required": [
+        "target",
+        "bottom"
+      ]
+    },
+    {
+      "required": [
+        "target",
+        "left"
+      ]
+    },
+    {
+      "required": [
+        "target",
+        "gutter"
+      ]
+    }
+  ],
+  "properties": {
+    "bottom": {
+      "minimum": 0,
+      "type": "number"
+    },
+    "gutter": {
+      "minimum": 0,
+      "type": "number"
+    },
+    "left": {
+      "minimum": 0,
+      "type": "number"
+    },
+    "right": {
+      "minimum": 0,
+      "type": "number"
+    },
+    "target": {
+      "$ref": "#/$defs/SectionAddress"
+    },
+    "top": {
+      "minimum": 0,
+      "type": "number"
+    }
+  },
+  "required": [
+    "target"
+  ],
+  "type": "object"
+}
+```
+</Accordion>
+
+<Accordion title="Raw output schema">
+```json
+{
+  "oneOf": [
+    {
+      "additionalProperties": false,
+      "properties": {
+        "section": {
+          "$ref": "#/$defs/SectionAddress"
+        },
+        "success": {
+          "const": true
+        }
+      },
+      "required": [
+        "success",
+        "section"
+      ],
+      "type": "object"
+    },
+    {
+      "additionalProperties": false,
+      "properties": {
+        "failure": {
+          "additionalProperties": false,
+          "properties": {
+            "code": {
+              "enum": [
+                "NO_OP",
+                "INVALID_TARGET",
+                "CAPABILITY_UNAVAILABLE"
+              ]
+            },
+            "details": {},
+            "message": {
+              "type": "string"
+            }
+          },
+          "required": [
+            "code",
+            "message"
+          ],
+          "type": "object"
+        },
+        "success": {
+          "const": false
+        }
+      },
+      "required": [
+        "success",
+        "failure"
+      ],
+      "type": "object"
+    }
+  ]
+}
+```
+</Accordion>
+
+<Accordion title="Raw success schema">
+```json
+{
+  "additionalProperties": false,
+  "properties": {
+    "section": {
+      "$ref": "#/$defs/SectionAddress"
+    },
+    "success": {
+      "const": true
+    }
+  },
+  "required": [
+    "success",
+    "section"
+  ],
+  "type": "object"
+}
+```
+</Accordion>
+
+<Accordion title="Raw failure schema">
+```json
+{
+  "additionalProperties": false,
+  "properties": {
+    "failure": {
+      "additionalProperties": false,
+      "properties": {
+        "code": {
+          "enum": [
+            "NO_OP",
+            "INVALID_TARGET",
+            "CAPABILITY_UNAVAILABLE"
+          ]
+        },
+        "details": {},
+        "message": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "code",
+        "message"
+      ],
+      "type": "object"
+    },
+    "success": {
+      "const": false
+    }
+  },
+  "required": [
+    "success",
+    "failure"
+  ],
+  "type": "object"
+}
+```
+</Accordion>

@@ -18,6 +18,7 @@ vi.mock('./vector-shape-helpers.js', () => ({
   extractStrokeColor: vi.fn(),
   extractStrokeWidth: vi.fn(),
   extractLineEnds: vi.fn(),
+  extractCustomGeometry: vi.fn(),
 }));
 
 describe('handleImageNode', () => {
@@ -1001,6 +1002,32 @@ describe('handleImageNode', () => {
       expect(result.attrs.shouldCover).toBe(false);
     });
   });
+
+  it('extracts grayscale effect from a:blip element', () => {
+    const node = makeNode();
+    // Add grayscale effect to blip
+    const graphic = node.elements.find((el) => el.name === 'a:graphic');
+    const graphicData = graphic.elements[0];
+    const pic = graphicData.elements[0];
+    const blipFill = pic.elements[0];
+    const blip = blipFill.elements[0];
+
+    // Add grayscale element as child of blip
+    blip.elements = [{ name: 'a:grayscl' }];
+
+    const result = handleImageNode(node, makeParams(), false);
+
+    expect(result).not.toBeNull();
+    expect(result.attrs.grayscale).toBe(true);
+  });
+
+  it('does not set grayscale when effect is not present', () => {
+    const node = makeNode();
+    const result = handleImageNode(node, makeParams(), false);
+
+    expect(result).not.toBeNull();
+    expect(result.attrs.grayscale).toBeUndefined();
+  });
 });
 
 describe('getVectorShape', () => {
@@ -1198,17 +1225,13 @@ describe('getVectorShape', () => {
     expect(result.attrs.drawingContent).toBe(drawingNode);
   });
 
-  it('handles missing shape kind with warning', () => {
-    const consoleWarnSpy = vi.spyOn(console, 'warn').mockImplementation(() => {});
+  it('handles missing shape kind by trying custom geometry extraction', () => {
     const graphicData = makeGraphicData();
     graphicData.elements[0].elements[0].elements[0].attributes = {}; // No prst
 
     const result = getVectorShape({ params: makeParams(), node: {}, graphicData, size: { width: 72, height: 72 } });
 
-    expect(consoleWarnSpy).toHaveBeenCalledWith('Shape kind not found');
     expect(result.attrs.kind).toBeUndefined();
-
-    consoleWarnSpy.mockRestore();
   });
 
   it('correctly prioritizes wp:extent over a:xfrm/a:ext for dimensions', () => {

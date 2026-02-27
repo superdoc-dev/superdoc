@@ -67,6 +67,11 @@ export const VectorShape = Node.create({
         },
       },
 
+      customGeometry: {
+        default: null,
+        rendered: false,
+      },
+
       lineEnds: {
         default: null,
         rendered: false,

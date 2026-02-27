@@ -69,15 +69,15 @@ function makeInfoAdapter() {
 }
 
 function makeWriteAdapter() {
-  return { write: vi.fn(() => makeTextMutationReceipt()) };
+  return {
+    write: vi.fn(() => makeTextMutationReceipt()),
+    insertStructured: vi.fn(() => makeTextMutationReceipt()),
+  };
 }
 
 function makeFormatAdapter() {
   return {
     apply: vi.fn(() => makeTextMutationReceipt()),
-    fontSize: vi.fn(() => makeTextMutationReceipt()),
-    fontFamily: vi.fn(() => makeTextMutationReceipt()),
-    color: vi.fn(() => makeTextMutationReceipt()),
     align: vi.fn(() => makeTextMutationReceipt()),
   };
 }
@@ -206,7 +206,7 @@ function makeCapabilitiesAdapter(): { get: ReturnType<typeof vi.fn> } {
       lists: { enabled: true },
       dryRun: { enabled: true },
     },
-    format: { supportedMarks: ['bold', 'italic', 'underline', 'strike'] },
+    format: { supportedInlineProperties: {} as DocumentApiCapabilities['format']['supportedInlineProperties'] },
     operations: Object.fromEntries(
       [
         'find',
@@ -437,7 +437,7 @@ describe('overview.mdx examples', () => {
     it('insert text with changeMode tracked', () => {
       const doc = makeApi();
 
-      const receipt = doc.insert({ text: 'new content' }, { changeMode: 'tracked' });
+      const receipt = doc.insert({ value: 'new content' }, { changeMode: 'tracked' });
 
       expect(receipt.resolution).toBeDefined();
       expect(receipt.resolution.target).toBeDefined();
@@ -457,7 +457,7 @@ describe('overview.mdx examples', () => {
       }
 
       if (caps.global.trackChanges.enabled) {
-        doc.insert({ text: 'tracked' }, { changeMode: 'tracked' });
+        doc.insert({ value: 'tracked' }, { changeMode: 'tracked' });
       }
 
       // Both branches should execute with our fully-capable mock
@@ -472,7 +472,7 @@ describe('overview.mdx examples', () => {
       const doc = makeApi();
       const target = TEXT_TARGET;
 
-      const preview = doc.insert({ target, text: 'hello' }, { dryRun: true });
+      const preview = doc.insert({ target, value: 'hello' }, { dryRun: true });
       // preview.success tells you whether the insert would succeed
       // preview.resolution shows the resolved target range
 
@@ -509,7 +509,7 @@ describe('src/README.md workflow examples', () => {
     it('insert in tracked mode and access receipt properties', () => {
       const doc = makeApi();
 
-      const receipt = doc.insert({ text: 'new content' }, { changeMode: 'tracked' });
+      const receipt = doc.insert({ value: 'new content' }, { changeMode: 'tracked' });
       // receipt.resolution.target contains the resolved insertion point
       // receipt.inserted contains TrackedChangeAddress entries for the new change
 
@@ -571,7 +571,7 @@ describe('src/README.md workflow examples', () => {
         doc.format.apply({ target, inline: { bold: true } });
       }
       if (caps.global.trackChanges.enabled) {
-        doc.insert({ text: 'tracked' }, { changeMode: 'tracked' });
+        doc.insert({ value: 'tracked' }, { changeMode: 'tracked' });
       }
       if (caps.operations['create.heading'].dryRun) {
         const preview = doc.create.heading({ level: 2, text: 'Preview' }, { dryRun: true });

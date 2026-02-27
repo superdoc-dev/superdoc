@@ -43,6 +43,7 @@ import type {
   TableAttrs,
   TableCellAttrs,
   PositionMapping,
+  CustomGeometryData,
 } from '@superdoc/contracts';
 import { calculateJustifySpacing, computeLinePmRange, shouldApplyJustify, SPACE_CHARS } from '@superdoc/contracts';
 import { getPresetShapeSvg } from '@superdoc/preset-geometry';
@@ -584,6 +585,7 @@ const COMMENT_EXTERNAL_COLOR = '#B1124B';
 const COMMENT_INTERNAL_COLOR = '#078383';
 const COMMENT_INACTIVE_ALPHA = '40'; // ~25% for inactive
 const COMMENT_ACTIVE_ALPHA = '66'; // ~40% for active/selected
+const COMMENT_FADED_ALPHA = '20'; // ~12% for non-selected when another comment is active
 
 type LinkRenderData = {
   href?: string;
@@ -3032,10 +3034,51 @@ export class DomPainter {
       applyImageClipPath(img, imageClipPath, { clipContainer: fragmentEl });
       img.style.display = block.display === 'inline' ? 'inline-block' : 'block';
 
+      // Apply rotation and flip transforms from OOXML a:xfrm
+      const transforms: string[] = [];
+
+      // Calculate translation offset to keep top-left corner fixed when rotating
+      if (block.rotation != null && block.rotation !== 0) {
+        const angleRad = (block.rotation * Math.PI) / 180;
+        const w = block.width ?? fragment.width;
+        const h = block.height ?? fragment.height;
+
+        // Calculate how much the top-left corner moves when rotating around center
+        // Top-left corner starts at (0, 0) in element space
+        // Center is at (w/2, h/2)
+        // After rotation, we need to translate to keep top-left at (0, 0)
+        const cosA = Math.cos(angleRad);
+        const sinA = Math.sin(angleRad);
+
+        // Position of top-left corner after rotation (relative to original top-left)
+        const newTopLeftX = (w / 2) * (1 - cosA) + (h / 2) * sinA;
+        const newTopLeftY = (w / 2) * sinA + (h / 2) * (1 - cosA);
+
+        transforms.push(`translate(${-newTopLeftX}px, ${-newTopLeftY}px)`);
+        transforms.push(`rotate(${block.rotation}deg)`);
+      }
+      if (block.flipH) {
+        transforms.push('scaleX(-1)');
+      }
+      if (block.flipV) {
+        transforms.push('scaleY(-1)');
+      }
+
+      if (transforms.length > 0) {
+        img.style.transform = transforms.join(' ');
+        img.style.transformOrigin = 'center';
+      }
+
       // Apply VML image adjustments (gain/blacklevel) as CSS filters for watermark effects
       // conversion formulas calculated based on Libreoffice vml reader
       // https://github.com/LibreOffice/core/blob/951a74d047cfddff78014225f55ecb2bbdcd9c4c/oox/source/vml/vmlshapecontext.cxx#L465C13-L493C1
       const filters: string[] = [];
+
+      // Apply OOXML grayscale effect
+      if (block.grayscale) {
+        filters.push('grayscale(100%)');
+      }
+
       if (block.gain != null || block.blacklevel != null) {
         // Convert VML gain to CSS contrast
         // VML gain is a hex string like "19661f" - higher = more contrast
@@ -3054,10 +3097,10 @@ export class DomPainter {
             filters.push(`brightness(${brightness})`);
           }
         }
+      }
 
-        if (filters.length > 0) {
-          img.style.filter = filters.join(' ');
-        }
+      if (filters.length > 0) {
+        img.style.filter = filters.join(' ');
       }
       fragmentEl.appendChild(img);
 
@@ -3186,9 +3229,15 @@ export class DomPainter {
     contentContainer.style.width = `${innerWidth}px`;
     contentContainer.style.height = `${innerHeight}px`;
 
-    const svgMarkup = block.shapeKind ? this.tryCreatePresetSvg(block, innerWidth, innerHeight) : null;
-    if (svgMarkup) {
-      const svgElement = this.parseSafeSvg(svgMarkup);
+    // Custom geometry takes priority — shapeKind may carry a schema default ('rect')
+    // even when the source shape only had a:custGeom and no a:prstGeom.
+    const customGeomSvg = block.customGeometry ? this.tryCreateCustomGeometrySvg(block, innerWidth, innerHeight) : null;
+    const svgMarkup =
+      !customGeomSvg && block.shapeKind ? this.tryCreatePresetSvg(block, innerWidth, innerHeight) : null;
+    const resolvedSvgMarkup = customGeomSvg || svgMarkup;
+
+    if (resolvedSvgMarkup) {
+      const svgElement = this.parseSafeSvg(resolvedSvgMarkup);
       if (svgElement) {
         svgElement.setAttribute('width', '100%');
         svgElement.setAttribute('height', '100%');
@@ -3343,17 +3392,6 @@ export class DomPainter {
     textDiv.style.fontSize = '12px';
     textDiv.style.lineHeight = '1.2';
 
-    // Apply counter-scaling to prevent text from being stretched by parent group transform
-    if (groupScaleX !== 1 || groupScaleY !== 1) {
-      const counterScaleX = 1 / groupScaleX;
-      const counterScaleY = 1 / groupScaleY;
-      textDiv.style.transform = `scale(${counterScaleX}, ${counterScaleY})`;
-      textDiv.style.transformOrigin = 'top left';
-      // Adjust dimensions to compensate for counter-scaling
-      textDiv.style.width = `${100 * groupScaleX}%`;
-      textDiv.style.height = `${100 * groupScaleY}%`;
-    }
-
     // Horizontal text alignment uses CSS text-align property
     // Note: justifyContent is already set above for vertical alignment
     if (textAlign === 'center') {
@@ -3477,6 +3515,67 @@ export class DomPainter {
       console.warn(`[DomPainter] Unable to render preset shape "${block.shapeKind}":`, error);
       return null;
     }
+  }
+
+  /**
+   * Creates an SVG string from custom geometry path data (a:custGeom).
+   * Each path in the custom geometry has its own coordinate space (w × h) which is
+   * mapped to the shape's actual dimensions via the SVG viewBox.
+   */
+  private tryCreateCustomGeometrySvg(block: VectorShapeDrawing, width: number, height: number): string | null {
+    const custGeom = block.customGeometry;
+    if (!custGeom?.paths?.length) return null;
+
+    let fillColor: string;
+    if (block.fillColor === null) {
+      fillColor = 'none';
+    } else if (typeof block.fillColor === 'string') {
+      fillColor = block.fillColor;
+    } else {
+      // Gradient / solidWithAlpha: use a placeholder fill so that downstream
+      // applyGradientToSVG / applyAlphaToSVG (which skip fill="none") can
+      // target these elements and replace the fill.
+      fillColor = '#000000';
+    }
+    const strokeColor =
+      block.strokeColor === null ? 'none' : typeof block.strokeColor === 'string' ? block.strokeColor : 'none';
+    const strokeWidth = block.strokeColor === null ? 0 : (block.strokeWidth ?? 0);
+
+    // Build SVG paths. Each path has its own coordinate space (w × h).
+    // Use the first path's coordinate space for the viewBox, and scale subsequent paths if needed.
+    const firstPath = custGeom.paths[0];
+    const viewW = firstPath.w || width;
+    const viewH = firstPath.h || height;
+
+    // Degenerate: zero-dimension viewBox is invalid SVG — skip rendering.
+    if (viewW === 0 || viewH === 0) return null;
+
+    // When the SVG viewBox maps to a non-uniform aspect ratio (common with group transforms),
+    // thin fill borders can become sub-pixel on one axis. Add a hairline stroke matching the
+    // fill color with vector-effect="non-scaling-stroke" so edges remain at least 0.5px visible.
+    const needsEdgeStroke = fillColor !== 'none' && strokeColor === 'none';
+    const edgeStroke = needsEdgeStroke
+      ? ` stroke="${fillColor}" stroke-width="0.5" vector-effect="non-scaling-stroke"`
+      : '';
+
+    const pathElements = custGeom.paths
+      .map((p) => {
+        // If this path has a different coordinate space, apply a transform to map it
+        const pathW = p.w || viewW;
+        const pathH = p.h || viewH;
+        const needsTransform = pathW !== viewW || pathH !== viewH;
+        const scaleX = viewW / pathW;
+        const scaleY = viewH / pathH;
+        const transform = needsTransform ? ` transform="scale(${scaleX}, ${scaleY})"` : '';
+        const strokeAttr =
+          strokeColor !== 'none' ? ` stroke="${strokeColor}" stroke-width="${strokeWidth}"` : edgeStroke;
+        return `<path d="${p.d}" fill="${fillColor}" fill-rule="evenodd"${strokeAttr}${transform} />`;
+      })
+      .join('\n  ');
+
+    return `<svg xmlns="http://www.w3.org/2000/svg" width="${width}" height="${height}" viewBox="0 0 ${viewW} ${viewH}" preserveAspectRatio="none">
+  ${pathElements}
+</svg>`;
   }
 
   private parseSafeSvg(markup: string): SVGElement | null {
@@ -3693,46 +3792,38 @@ export class DomPainter {
     const groupTransform = block.groupTransform;
     let contentContainer: HTMLElement = groupEl;
 
-    // Calculate scale factors for counter-scaling text
-    const groupScaleX = 1;
-    const groupScaleY = 1;
+    const visibleWidth = groupTransform?.width ?? block.geometry.width ?? 0;
+    const visibleHeight = groupTransform?.height ?? block.geometry.height ?? 0;
 
     if (groupTransform) {
       const inner = this.doc!.createElement('div');
       inner.style.position = 'absolute';
       inner.style.left = '0';
       inner.style.top = '0';
-      const childWidth = groupTransform.childWidth ?? groupTransform.width ?? block.geometry.width ?? 0;
-      const childHeight = groupTransform.childHeight ?? groupTransform.height ?? block.geometry.height ?? 0;
-      inner.style.width = `${Math.max(1, childWidth)}px`;
-      inner.style.height = `${Math.max(1, childHeight)}px`;
-      const transforms: string[] = [];
-      const offsetX = groupTransform.childX ?? 0;
-      const offsetY = groupTransform.childY ?? 0;
-      if (offsetX || offsetY) {
-        transforms.push(`translate(${-offsetX}px, ${-offsetY}px)`);
-      }
-      if (transforms.length > 0) {
-        inner.style.transformOrigin = 'top left';
-        inner.style.transform = transforms.join(' ');
-      }
+      // Container at visible dimensions. Children use pre-scaled positions/sizes.
+      inner.style.width = `${Math.max(1, visibleWidth)}px`;
+      inner.style.height = `${Math.max(1, visibleHeight)}px`;
       groupEl.appendChild(inner);
       contentContainer = inner;
     }
 
     block.shapes.forEach((child) => {
-      const childContent = this.createGroupChildContent(child, groupScaleX, groupScaleY, context);
+      const childContent = this.createGroupChildContent(child, 1, 1, context);
       if (!childContent) return;
       const attrs = (child as ShapeGroupChild).attrs ?? {};
       const wrapper = this.doc!.createElement('div');
       wrapper.classList.add('superdoc-shape-group__child');
       wrapper.style.position = 'absolute';
-      wrapper.style.left = `${attrs.x ?? 0}px`;
-      wrapper.style.top = `${attrs.y ?? 0}px`;
-      const childWidthValue = typeof attrs.width === 'number' ? attrs.width : block.geometry.width;
-      const childHeightValue = typeof attrs.height === 'number' ? attrs.height : block.geometry.height;
-      wrapper.style.width = `${Math.max(1, childWidthValue)}px`;
-      wrapper.style.height = `${Math.max(1, childHeightValue)}px`;
+
+      // Children use pre-scaled (visual-space) positions/sizes from import.
+      wrapper.style.left = `${Number(attrs.x ?? 0)}px`;
+      wrapper.style.top = `${Number(attrs.y ?? 0)}px`;
+
+      const childW = typeof attrs.width === 'number' ? attrs.width : block.geometry.width;
+      const childH = typeof attrs.height === 'number' ? attrs.height : block.geometry.height;
+      wrapper.style.width = `${Math.max(1, childW)}px`;
+      wrapper.style.height = `${Math.max(1, childH)}px`;
+
       wrapper.style.transformOrigin = 'center';
       const transforms: string[] = [];
       if (attrs.rotation) {
@@ -3768,6 +3859,7 @@ export class DomPainter {
       const attrs = child.attrs as PositionedDrawingGeometry &
         VectorShapeStyle & {
           kind?: string;
+          customGeometry?: CustomGeometryData;
           shapeId?: string;
           shapeName?: string;
           textContent?: ShapeTextContent;
@@ -3794,6 +3886,7 @@ export class DomPainter {
         drawingContentId: undefined,
         drawingContent: undefined,
         shapeKind: attrs.kind,
+        customGeometry: attrs.customGeometry,
         fillColor: attrs.fillColor,
         strokeColor: attrs.strokeColor,
         strokeWidth: attrs.strokeWidth,
@@ -4412,6 +4505,70 @@ export class DomPainter {
       // Position and z-index on the image only (not the line) so resize overlay can stack above.
       img.style.position = 'relative';
       img.style.zIndex = '1';
+    }
+
+    // Apply rotation and flip transforms from OOXML a:xfrm
+    const transforms: string[] = [];
+
+    // Calculate translation offset to keep top-left corner fixed when rotating
+    if (run.rotation != null && run.rotation !== 0) {
+      const angleRad = (run.rotation * Math.PI) / 180;
+      const w = run.width;
+      const h = run.height;
+
+      // Calculate how much the top-left corner moves when rotating around center
+      // Top-left corner starts at (0, 0) in element space
+      // Center is at (w/2, h/2)
+      // After rotation, we need to translate to keep top-left at (0, 0)
+      const cosA = Math.cos(angleRad);
+      const sinA = Math.sin(angleRad);
+
+      // Position of top-left corner after rotation (relative to original top-left)
+      const newTopLeftX = (w / 2) * (1 - cosA) + (h / 2) * sinA;
+      const newTopLeftY = (w / 2) * sinA + (h / 2) * (1 - cosA);
+
+      transforms.push(`translate(${-newTopLeftX}px, ${-newTopLeftY}px)`);
+      transforms.push(`rotate(${run.rotation}deg)`);
+    }
+    if (run.flipH) {
+      transforms.push('scaleX(-1)');
+    }
+    if (run.flipV) {
+      transforms.push('scaleY(-1)');
+    }
+    if (transforms.length > 0) {
+      img.style.transform = transforms.join(' ');
+      img.style.transformOrigin = 'center';
+    }
+
+    // Apply image effects (grayscale, VML adjustments for watermarks)
+    const filters: string[] = [];
+
+    // Apply OOXML grayscale effect
+    if (run.grayscale) {
+      filters.push('grayscale(100%)');
+    }
+
+    if (run.gain != null || run.blacklevel != null) {
+      // Convert VML gain to CSS contrast
+      if (run.gain && typeof run.gain === 'string' && run.gain.endsWith('f')) {
+        const contrast = Math.max(0, parseInt(run.gain) / 65536) * (2 / 3);
+        if (contrast > 0) {
+          filters.push(`contrast(${contrast})`);
+        }
+      }
+
+      // Convert VML blacklevel to CSS brightness
+      if (run.blacklevel && typeof run.blacklevel === 'string' && run.blacklevel.endsWith('f')) {
+        const brightness = Math.max(0, 1 + parseInt(run.blacklevel) / 327 / 100) * 1.3;
+        if (brightness > 0) {
+          filters.push(`brightness(${brightness})`);
+        }
+      }
+    }
+
+    if (filters.length > 0) {
+      img.style.filter = filters.join(' ');
     }
 
     // Assert PM positions are present for cursor fallback
@@ -6464,7 +6621,15 @@ const deriveBlockVersion = (block: FlowBlock): string => {
         hash = hashString(hash, tblAttrs.borderCollapse);
       }
       if (tblAttrs.cellSpacing !== undefined) {
-        hash = hashNumber(hash, tblAttrs.cellSpacing);
+        const cs = tblAttrs.cellSpacing;
+        if (typeof cs === 'number') {
+          hash = hashNumber(hash, cs);
+        } else {
+          // Stable key: value and type only (avoid JSON.stringify key-order variance)
+          const v = (cs as { value?: number; type?: string }).value ?? 0;
+          const t = (cs as { value?: number; type?: string }).type ?? 'px';
+          hash = hashString(hash, `cs:${v}:${t}`);
+        }
       }
       // Include SDT metadata so lock-mode changes invalidate the cache.
       if (tblAttrs.sdt) {
@@ -6593,8 +6758,10 @@ const getCommentHighlight = (run: TextRun, activeCommentId: string | null): Comm
         hasNestedComments: nestedComments.length > 0,
       };
     }
-    // Active comment is set but this run does not belong to it - do not highlight.
-    return {};
+    // Active comment is set but this run does not belong to it - show faded highlight.
+    const fadedPrimary = comments[0];
+    const fadedBase = fadedPrimary.internal ? COMMENT_INTERNAL_COLOR : COMMENT_EXTERNAL_COLOR;
+    return { color: `${fadedBase}${COMMENT_FADED_ALPHA}` };
   }
 
   // No active comment - show uniform light highlight (like Word/Google Docs)

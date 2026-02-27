@@ -69,24 +69,30 @@
   --sd-action-primary-hover: var(--sd-color-blue-600);
 
   /* ─── Component: Comment Dialog ─── */
-  --sd-comment-bg: #f3f6fd;
+  --sd-comment-bg: var(--sd-color-gray-100);
+  --sd-comment-bg-hover: var(--sd-surface-hover);
   --sd-comment-bg-active: var(--sd-surface-card);
   --sd-comment-bg-resolved: #f0f0f0;
+  --sd-comment-border-active: var(--sd-border-subtle);
   --sd-comment-radius: var(--sd-radius-lg);
-  --sd-comment-padding: 10px 15px;
-  --sd-comment-shadow: 0px 4px 12px 0px rgba(50, 50, 50, 0.15);
+  --sd-comment-padding: 16px;
+  --sd-comment-shadow: 0 4px 20px rgba(15, 23, 42, 0.08);
   --sd-comment-max-width: 300px;
   --sd-comment-min-width: 200px;
-  --sd-comment-separator: var(--sd-border-default);
-  --sd-comment-transition: background-color 250ms ease;
+  --sd-comment-separator: var(--sd-border-subtle);
+  --sd-comment-transition: all 200ms ease;
 
   /* Comment: author & timestamp */
   --sd-comment-author-color: var(--sd-text-primary);
-  --sd-comment-author-size: 16px;
+  --sd-comment-author-size: 14px;
   --sd-comment-author-weight: 600;
   --sd-comment-time-color: var(--sd-text-muted);
   --sd-comment-time-size: 12px;
-  --sd-comment-body-size: 13px;
+  --sd-comment-body-size: 14px;
+
+  /* Comment: tracked change text colors */
+  --sd-comment-tc-insert-color: var(--sd-color-green-500);
+  --sd-comment-tc-delete-color: var(--sd-color-rose-500);
 
   /* Comment: document highlights */
   --sd-comment-highlight-internal: #078383;

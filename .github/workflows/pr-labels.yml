@@ -1,4 +1,4 @@
-name: PR Risk Label
+name: PR Labels
 
 on:
   pull_request:
@@ -85,3 +85,28 @@ jobs:
                 labels: [LABELS[level].name],
               });
             }
+
+      - name: Add community label
+        if: >-
+          github.event.action == 'opened' &&
+          github.event.pull_request.author_association != 'MEMBER' &&
+          github.event.pull_request.author_association != 'OWNER'
+        uses: actions/github-script@v7
+        with:
+          script: |
+            const owner = context.repo.owner;
+            const repo = context.repo.repo;
+            const label = { name: 'community', color: '7057ff' };
+
+            try {
+              await github.rest.issues.getLabel({ owner, repo, name: label.name });
+            } catch {
+              await github.rest.issues.createLabel({ owner, repo, ...label });
+            }
+
+            await github.rest.issues.addLabels({
+              owner,
+              repo,
+              issue_number: context.issue.number,
+              labels: [label.name],
+            });

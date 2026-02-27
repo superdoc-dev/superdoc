@@ -1,0 +1,219 @@
+---
+title: sections.setSectionDirection
+sidebarTitle: sections.setSectionDirection
+description: Set section text flow direction (LTR/RTL).
+---
+
+{/* GENERATED FILE: DO NOT EDIT. Regenerate via `pnpm run docapi:sync`. */}
+
+> Alpha: Document API is currently alpha and subject to breaking changes.
+
+## Summary
+
+Set section text flow direction (LTR/RTL).
+
+- Operation ID: `sections.setSectionDirection`
+- API member path: `editor.doc.sections.setSectionDirection(...)`
+- Mutates document: `yes`
+- Idempotency: `conditional`
+- Supports tracked mode: `no`
+- Supports dry run: `yes`
+- Deterministic target resolution: `yes`
+
+## Expected result
+
+Returns a SectionMutationResult receipt; reports NO_OP if text direction already matches.
+
+## Input fields
+
+| Field | Type | Required | Description |
+| --- | --- | --- | --- |
+| `direction` | enum | yes | `"ltr"`, `"rtl"` |
+| `target` | SectionAddress | yes | SectionAddress |
+
+### Example request
+
+```json
+{
+  "direction": "ltr",
+  "target": {
+    "kind": "section",
+    "sectionId": "example"
+  }
+}
+```
+
+## Output fields
+
+_No fields._
+
+### Example response
+
+```json
+{
+  "section": {
+    "kind": "section",
+    "sectionId": "example"
+  },
+  "success": true
+}
+```
+
+## Pre-apply throws
+
+- `TARGET_NOT_FOUND`
+- `INVALID_TARGET`
+- `INVALID_INPUT`
+- `CAPABILITY_UNAVAILABLE`
+- `INTERNAL_ERROR`
+
+## Non-applied failure codes
+
+- `NO_OP`
+- `INVALID_TARGET`
+- `CAPABILITY_UNAVAILABLE`
+
+## Raw schemas
+
+<Accordion title="Raw input schema">
+```json
+{
+  "additionalProperties": false,
+  "properties": {
+    "direction": {
+      "enum": [
+        "ltr",
+        "rtl"
+      ]
+    },
+    "target": {
+      "$ref": "#/$defs/SectionAddress"
+    }
+  },
+  "required": [
+    "target",
+    "direction"
+  ],
+  "type": "object"
+}
+```
+</Accordion>
+
+<Accordion title="Raw output schema">
+```json
+{
+  "oneOf": [
+    {
+      "additionalProperties": false,
+      "properties": {
+        "section": {
+          "$ref": "#/$defs/SectionAddress"
+        },
+        "success": {
+          "const": true
+        }
+      },
+      "required": [
+        "success",
+        "section"
+      ],
+      "type": "object"
+    },
+    {
+      "additionalProperties": false,
+      "properties": {
+        "failure": {
+          "additionalProperties": false,
+          "properties": {
+            "code": {
+              "enum": [
+                "NO_OP",
+                "INVALID_TARGET",
+                "CAPABILITY_UNAVAILABLE"
+              ]
+            },
+            "details": {},
+            "message": {
+              "type": "string"
+            }
+          },
+          "required": [
+            "code",
+            "message"
+          ],
+          "type": "object"
+        },
+        "success": {
+          "const": false
+        }
+      },
+      "required": [
+        "success",
+        "failure"
+      ],
+      "type": "object"
+    }
+  ]
+}
+```
+</Accordion>
+
+<Accordion title="Raw success schema">
+```json
+{
+  "additionalProperties": false,
+  "properties": {
+    "section": {
+      "$ref": "#/$defs/SectionAddress"
+    },
+    "success": {
+      "const": true
+    }
+  },
+  "required": [
+    "success",
+    "section"
+  ],
+  "type": "object"
+}
+```
+</Accordion>
+
+<Accordion title="Raw failure schema">
+```json
+{
+  "additionalProperties": false,
+  "properties": {
+    "failure": {
+      "additionalProperties": false,
+      "properties": {
+        "code": {
+          "enum": [
+            "NO_OP",
+            "INVALID_TARGET",
+            "CAPABILITY_UNAVAILABLE"
+          ]
+        },
+        "details": {},
+        "message": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "code",
+        "message"
+      ],
+      "type": "object"
+    },
+    "success": {
+      "const": false
+    }
+  },
+  "required": [
+    "success",
+    "failure"
+  ],
+  "type": "object"
+}
+```
+</Accordion>

@@ -14,8 +14,7 @@ import { unwrap, useStoryHarness } from '../harness';
  * blockId returned by `insert` remains valid for subsequent operations.
  *
  * Covered operations:
- *   format.apply  — bold, italic, underline, strike (boolean mark patches)
- *   format.fontSize, format.fontFamily, format.color (value-based inline marks)
+ *   format.apply  — boolean marks and value/object inline run patches
  *   format.align  — paragraph-level alignment (center, right, justify)
  */
 describe('document-api story: inline formatting', () => {
@@ -39,7 +38,7 @@ describe('document-api story: inline formatting', () => {
 
     // Insert text into the blank doc's single paragraph.
     // Without an explicit target, insert uses the first paragraph.
-    const insertResult = unwrap<any>(await client.doc.insert({ sessionId, text }));
+    const insertResult = unwrap<any>(await client.doc.insert({ sessionId, value: text }));
     expect(insertResult.receipt?.success).toBe(true);
 
     // The receipt's hoisted target contains the paragraph's stable blockId.
@@ -115,49 +114,52 @@ describe('document-api story: inline formatting', () => {
   });
 
   // ---------------------------------------------------------------------------
-  // format.fontSize
+  // format.apply — value/object inline patches
   // ---------------------------------------------------------------------------
 
   it('fontSize: sets a numeric point size', async () => {
     const sid = `fontSize-num-${Date.now()}`;
     const target = await setupFormattableText(sid, 'This text should be 24pt');
 
-    const result = unwrap<any>(await client.doc.format.fontSize({ sessionId: sid, target, value: 24 }));
+    const result = unwrap<any>(await client.doc.format.apply({ sessionId: sid, target, inline: { fontSize: 24 } }));
     expect(result.receipt?.success).toBe(true);
     await saveResult(sid, 'fontSize-num.docx');
   });
 
-  it('fontSize: sets a string size value', async () => {
-    const sid = `fontSize-str-${Date.now()}`;
-    const target = await setupFormattableText(sid, 'This text should be 14pt');
+  it('fontSize: clears an existing point size', async () => {
+    const sid = `fontSize-clear-${Date.now()}`;
+    const target = await setupFormattableText(sid, 'This text should reset font size');
 
-    const result = unwrap<any>(await client.doc.format.fontSize({ sessionId: sid, target, value: '14pt' }));
+    const setResult = unwrap<any>(await client.doc.format.apply({ sessionId: sid, target, inline: { fontSize: 14 } }));
+    expect(setResult.receipt?.success).toBe(true);
+
+    const result = unwrap<any>(await client.doc.format.apply({ sessionId: sid, target, inline: { fontSize: null } }));
     expect(result.receipt?.success).toBe(true);
-    await saveResult(sid, 'fontSize-str.docx');
+    await saveResult(sid, 'fontSize-clear.docx');
   });
 
-  // ---------------------------------------------------------------------------
-  // format.fontFamily
-  // ---------------------------------------------------------------------------
-
-  it('fontFamily: sets a font family', async () => {
+  it('rFonts: sets run font family attributes', async () => {
     const sid = `fontFamily-${Date.now()}`;
     const target = await setupFormattableText(sid, 'This text should be Courier New');
 
-    const result = unwrap<any>(await client.doc.format.fontFamily({ sessionId: sid, target, value: 'Courier New' }));
+    const result = unwrap<any>(
+      await client.doc.format.apply({
+        sessionId: sid,
+        target,
+        inline: {
+          rFonts: { ascii: 'Courier New', hAnsi: 'Courier New' },
+        },
+      }),
+    );
     expect(result.receipt?.success).toBe(true);
     await saveResult(sid, 'fontFamily.docx');
   });
-
-  // ---------------------------------------------------------------------------
-  // format.color
-  // ---------------------------------------------------------------------------
 
   it('color: sets a hex color', async () => {
     const sid = `color-${Date.now()}`;
     const target = await setupFormattableText(sid, 'This text should be red');
 
-    const result = unwrap<any>(await client.doc.format.color({ sessionId: sid, target, value: '#FF0000' }));
+    const result = unwrap<any>(await client.doc.format.apply({ sessionId: sid, target, inline: { color: '#FF0000' } }));
     expect(result.receipt?.success).toBe(true);
     await saveResult(sid, 'color.docx');
   });
@@ -197,21 +199,25 @@ describe('document-api story: inline formatting', () => {
   });
 
   // ---------------------------------------------------------------------------
-  // Combined: multiple value formats on the same range
+  // Combined: multiple inline run patches on the same range
   // ---------------------------------------------------------------------------
 
-  it('combined: fontSize + fontFamily + color on the same text', async () => {
+  it('combined: fontSize + rFonts + color on the same text', async () => {
     const sid = `combined-${Date.now()}`;
     const target = await setupFormattableText(sid, 'This text should be 18pt Georgia in blue');
 
-    const sizeResult = unwrap<any>(await client.doc.format.fontSize({ sessionId: sid, target, value: 18 }));
-    expect(sizeResult.receipt?.success).toBe(true);
-
-    const familyResult = unwrap<any>(await client.doc.format.fontFamily({ sessionId: sid, target, value: 'Georgia' }));
-    expect(familyResult.receipt?.success).toBe(true);
-
-    const colorResult = unwrap<any>(await client.doc.format.color({ sessionId: sid, target, value: '#0000FF' }));
-    expect(colorResult.receipt?.success).toBe(true);
+    const result = unwrap<any>(
+      await client.doc.format.apply({
+        sessionId: sid,
+        target,
+        inline: {
+          fontSize: 18,
+          color: '#0000FF',
+          rFonts: { ascii: 'Georgia', hAnsi: 'Georgia' },
+        },
+      }),
+    );
+    expect(result.receipt?.success).toBe(true);
     await saveResult(sid, 'combined.docx');
   });
 
@@ -232,5 +238,6 @@ describe('document-api story: inline formatting', () => {
       }),
     );
     expect(result.receipt?.success).toBe(true);
+    await saveResult(sid, 'dryRun.docx');
   });
 });

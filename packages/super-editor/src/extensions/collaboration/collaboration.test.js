@@ -207,6 +207,39 @@ describe('collaboration helpers', () => {
     expect(optionsYdoc._maps.metas.set).not.toHaveBeenCalled();
   });
 
+  it('updates each target ydoc when concurrent calls use the same editor', async () => {
+    const optionsYdoc = createYDocStub();
+    const explicitYdoc = createYDocStub();
+    optionsYdoc._maps.metas.store.set('docx', [{ name: 'word/document.xml', content: '<old options />' }]);
+    explicitYdoc._maps.metas.store.set('docx', [{ name: 'word/document.xml', content: '<old explicit />' }]);
+
+    let resolveFirstExport;
+    const firstExport = new Promise((resolve) => {
+      resolveFirstExport = resolve;
+    });
+
+    const editor = {
+      options: { ydoc: optionsYdoc, user: { id: 'user-concurrent' } },
+      exportDocx: vi
+        .fn()
+        .mockReturnValueOnce(firstExport)
+        .mockResolvedValueOnce({ 'word/document.xml': '<new explicit />' }),
+    };
+
+    const optionsUpdate = updateYdocDocxData(editor);
+    const explicitUpdate = updateYdocDocxData(editor, explicitYdoc);
+
+    resolveFirstExport({ 'word/document.xml': '<new options />' });
+    await Promise.all([optionsUpdate, explicitUpdate]);
+
+    expect(optionsYdoc._maps.metas.set).toHaveBeenCalledWith('docx', [
+      { name: 'word/document.xml', content: '<new options />' },
+    ]);
+    expect(explicitYdoc._maps.metas.set).toHaveBeenCalledWith('docx', [
+      { name: 'word/document.xml', content: '<new explicit />' },
+    ]);
+  });
+
   it('skips transaction when docx content has not changed', async () => {
     const existingDocx = [
       { name: 'word/document.xml', content: '<same />' },

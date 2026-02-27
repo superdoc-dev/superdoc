@@ -3,6 +3,7 @@ import { createHash } from 'node:crypto';
 import { Editor } from 'superdoc/super-editor';
 import { BLANK_DOCX_BASE64 } from '@superdoc/super-editor/blank-docx';
 import { getDocumentApiAdapters } from '@superdoc/super-editor/document-api-adapters';
+import { markdownToPmDoc } from '@superdoc/super-editor/markdown';
 
 import { createDocumentApi, type DocumentApi } from '@superdoc/document-api';
 import type { CollaborationProfile } from './collaboration';
@@ -27,6 +28,8 @@ interface OpenDocumentOptions {
   documentId?: string;
   ydoc?: unknown;
   collaborationProvider?: unknown;
+  /** Options passed through to Editor.open() (e.g., markdown/html/plainText for content override). */
+  editorOpenOptions?: Record<string, string>;
 }
 
 export interface FileOutputMeta {
@@ -98,6 +101,26 @@ export async function openDocument(
     meta = { source: 'blank', byteLength: source.byteLength };
   }
 
+  // Separate content overrides from options passed to Editor.open().
+  // The Editor's built-in markdown/html init paths (in the dist bundle) route
+  // through an HTML-based pipeline that requires DOM. In headless CLI mode
+  // there is no DOM, so we intercept them here:
+  //   - markdown: applied post-init via the AST-based markdownToPmDoc pipeline (DOM-free)
+  //   - html: rejected with a clear error (no DOM-free HTML pipeline exists)
+  const {
+    markdown: markdownOverride,
+    html: htmlOverride,
+    plainText: plainTextOverride,
+    ...passThroughEditorOpts
+  } = options.editorOpenOptions ?? {};
+
+  if (htmlOverride != null) {
+    throw new CliError(
+      'UNSUPPORTED_FORMAT',
+      'HTML content override is not supported in headless CLI mode (requires DOM). Use --override-type markdown instead.',
+    );
+  }
+
   let editor: Editor;
   try {
     const isTest = process.env.NODE_ENV === 'test';
@@ -107,6 +130,7 @@ export async function openDocument(
       ...(isTest ? { telemetry: { enabled: false } } : {}),
       ydoc: options.ydoc,
       ...(options.collaborationProvider != null ? { collaborationProvider: options.collaborationProvider } : {}),
+      ...passThroughEditorOpts,
     });
   } catch (error) {
     const message = error instanceof Error ? error.message : String(error);
@@ -114,6 +138,45 @@ export async function openDocument(
       message,
       source: meta,
     });
+  }
+
+  // Apply content override post-init.
+  //   - markdown: DOM-free AST pipeline
+  //   - plainText: builds PM paragraphs directly, preserving all whitespace
+  if (markdownOverride != null) {
+    try {
+      const { doc: newDoc } = markdownToPmDoc(markdownOverride, editor);
+      const tr = editor.state.tr;
+      // The PM Fragment type is opaque at the CLI boundary — cast through unknown.
+      tr.replaceWith(0, editor.state.doc.content.size, newDoc.content as any);
+      editor.dispatch(tr);
+    } catch (error) {
+      editor.destroy();
+      const message = error instanceof Error ? error.message : String(error);
+      throw new CliError('DOCUMENT_OPEN_FAILED', 'Failed to apply content override.', {
+        message,
+        source: meta,
+      });
+    }
+  } else if (plainTextOverride != null) {
+    try {
+      const schema = editor.state.schema;
+      const lines = plainTextOverride.split('\n');
+      const paragraphs = lines.map((line) => {
+        const content = line.length > 0 ? [schema.text(line)] : undefined;
+        return schema.nodes.paragraph.create(null, content);
+      });
+      const tr = editor.state.tr;
+      tr.replaceWith(0, editor.state.doc.content.size, paragraphs);
+      editor.dispatch(tr);
+    } catch (error) {
+      editor.destroy();
+      const message = error instanceof Error ? error.message : String(error);
+      throw new CliError('DOCUMENT_OPEN_FAILED', 'Failed to apply text content override.', {
+        message,
+        source: meta,
+      });
+    }
   }
 
   const adapters = getDocumentApiAdapters(editor);

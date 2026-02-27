@@ -67,7 +67,7 @@ const props = defineProps({
 const superdocStore = useSuperdocStore();
 const commentsStore = useCommentsStore();
 
-const { getFloatingComments, activeComment, editorCommentPositions } = storeToRefs(commentsStore);
+const { getFloatingComments, activeComment, editorCommentPositions, pendingComment } = storeToRefs(commentsStore);
 const { activeZoom } = storeToRefs(superdocStore);
 
 const floatingCommentsContainer = ref(null);
@@ -93,6 +93,8 @@ const visibleIds = ref(new Set());
 const placeholderRefs = ref({});
 
 let observer = null;
+// Track which DOM elements are currently being observed (avoids disconnect/re-observe cycle)
+const observedElements = new Set();
 
 // Compute anchor position for a comment from editor position data
 const getAnchorTop = (comment) => {
@@ -107,10 +109,25 @@ const getAnchorTop = (comment) => {
   return positionEntry?.bounds?.top;
 };
 
+// Compute anchor position for the pending (new) comment.
+// For editor docs, uses the 'pending' mark position from editorCommentPositions.
+// For PDF docs, falls back to selection bounds (same as getAnchorTop).
+const getPendingAnchorTop = () => {
+  if (props.currentDocument.type === 'application/pdf') {
+    const zoom = (activeZoom.value ?? 100) / 100;
+    const top = Number(pendingComment.value?.selection?.selectionBounds?.top);
+    return isNaN(top) ? null : top * zoom;
+  }
+
+  const positionEntry = editorCommentPositions.value['pending'];
+  return positionEntry?.bounds?.top ?? null;
+};
+
 // Pre-compute all positions with collision avoidance
 const allPositions = computed(() => {
   const comments = getFloatingComments.value;
-  if (!comments.length) return [];
+  const hasPending = pendingComment.value && pendingComment.value.fileId === props.currentDocument.id;
+  if (!comments.length && !hasPending) return [];
 
   const positions = [];
   for (const comment of comments) {
@@ -127,9 +144,24 @@ const allPositions = computed(() => {
     });
   }
 
+  // Include pending (new) comment in the layout
+  if (hasPending) {
+    const pendingTop = getPendingAnchorTop();
+    if (typeof pendingTop === 'number' && !isNaN(pendingTop)) {
+      positions.push({
+        id: 'pending',
+        anchorTop: pendingTop,
+        top: pendingTop,
+        height: measuredHeights.value['pending'] || ESTIMATED_HEIGHT,
+        commentRef: pendingComment.value,
+      });
+    }
+  }
+
   positions.sort((a, b) => a.anchorTop - b.anchorTop);
 
-  const activeKey = activeCommentKey.value;
+  // Pending comment is always treated as active for collision avoidance
+  const activeKey = hasPending ? 'pending' : activeCommentKey.value;
   const activeIndex = activeKey ? positions.findIndex((p) => p.id === activeKey) : -1;
   resolveCollisions(positions, activeIndex, 15);
 
@@ -171,14 +203,29 @@ const setupObserver = () => {
   );
 };
 
-// Observe/unobserve placeholder elements when positions change
+// Observe/unobserve placeholder elements when positions change.
+// Uses differential observation to avoid disconnect() which cancels pending callbacks
+// and causes a gap where visibleIds is stale (comments flash in/out).
 const observePlaceholders = () => {
   if (!observer) return;
-  observer.disconnect();
 
+  const currentElements = new Set();
   for (const pos of allPositions.value) {
     const el = placeholderRefs.value[pos.id];
-    if (el) observer.observe(el);
+    if (!el) continue;
+    currentElements.add(el);
+    if (!observedElements.has(el)) {
+      observer.observe(el);
+      observedElements.add(el);
+    }
+  }
+
+  // Unobserve elements that are no longer in allPositions
+  for (const el of observedElements) {
+    if (!currentElements.has(el)) {
+      observer.unobserve(el);
+      observedElements.delete(el);
+    }
   }
 };
 
@@ -204,12 +251,33 @@ const handleDialog = (dialog) => {
   });
 };
 
+// Re-measure a specific comment dialog when it signals a resize (e.g. text truncation toggle)
+const handleResize = (comment) => {
+  const key = commentsStore.getCommentPositionKey(comment);
+  if (!key) return;
+  nextTick(() => {
+    const el = placeholderRefs.value[key];
+    if (!el) return;
+    const dialog = el.querySelector('.comments-dialog');
+    if (!dialog) return;
+    storeHeight(key, dialog.getBoundingClientRect().height);
+  });
+};
+
 // Store placeholder ref by comment ID
 const setPlaceholderRef = (id, el) => {
   if (el) {
     placeholderRefs.value[id] = el;
-    if (observer) observer.observe(el);
+    if (observer && !observedElements.has(el)) {
+      observer.observe(el);
+      observedElements.add(el);
+    }
   } else {
+    const prev = placeholderRefs.value[id];
+    if (prev && observer) {
+      observer.unobserve(prev);
+      observedElements.delete(prev);
+    }
     delete placeholderRefs.value[id];
   }
 };
@@ -279,8 +347,83 @@ watch(activeZoom, () => {
   }
 });
 
-// Re-observe when positions change
-watch(allPositions, () => {
+// Track positioned IDs so we can detect additions/removals
+let prevPositionIds = new Set();
+
+// Re-observe when positions change; clean up stale heights and remeasure on add/remove
+watch(allPositions, (positions) => {
+  const currentIds = new Set(positions.map((p) => p.id));
+
+  // Eagerly add new IDs near the viewport so they render immediately.
+  // The IntersectionObserver will asynchronously confirm/prune them.
+  // Without this, comments flash blank on initial load because the observer
+  // callback hasn't fired yet. We scope to nearby IDs to avoid mounting
+  // every dialog at once on documents with 100+ comments.
+  const newVisible = new Set(visibleIds.value);
+  let visibilityChanged = false;
+
+  let nearbyTop = -Infinity;
+  let nearbyBottom = Infinity;
+  const container = floatingCommentsContainer.value;
+  if (container) {
+    const rect = container.getBoundingClientRect();
+    nearbyTop = -rect.top - OBSERVER_MARGIN;
+    nearbyBottom = -rect.top + window.innerHeight + OBSERVER_MARGIN;
+  }
+
+  const positionById = new Map(positions.map((p) => [p.id, p]));
+  for (const id of currentIds) {
+    if (!newVisible.has(id)) {
+      const pos = positionById.get(id);
+      if (!pos || (pos.top >= nearbyTop && pos.top <= nearbyBottom)) {
+        newVisible.add(id);
+        visibilityChanged = true;
+      }
+    }
+  }
+  // Remove IDs no longer in allPositions
+  for (const id of newVisible) {
+    if (!currentIds.has(id)) {
+      newVisible.delete(id);
+      visibilityChanged = true;
+    }
+  }
+  if (visibilityChanged) {
+    visibleIds.value = newVisible;
+  }
+
+  // Clean up cached heights for removed comments
+  for (const id of prevPositionIds) {
+    if (!currentIds.has(id)) {
+      delete _heightsCache[id];
+    }
+  }
+
+  // If the set of IDs changed (comment added, deleted, or resolved), remeasure
+  // remaining comments — their heights may have changed (e.g. parent card after
+  // a child reply was deleted becomes shorter).
+  const setChanged = prevPositionIds.size !== currentIds.size || [...prevPositionIds].some((id) => !currentIds.has(id));
+  if (setChanged) {
+    // Remove stale heights so allPositions recomputes with ESTIMATED_HEIGHT
+    // for the next cycle, then measure actual heights after DOM settles.
+    const cleaned = {};
+    for (const id of currentIds) {
+      if (_heightsCache[id]) cleaned[id] = _heightsCache[id];
+    }
+    measuredHeights.value = cleaned;
+
+    nextTick(() => {
+      for (const pos of positions) {
+        const el = placeholderRefs.value[pos.id];
+        if (!el) continue;
+        const dialog = el.querySelector('.comments-dialog');
+        if (!dialog) continue;
+        storeHeight(pos.id, dialog.getBoundingClientRect().height);
+      }
+    });
+  }
+
+  prevPositionIds = currentIds;
   nextTick(observePlaceholders);
 });
 
@@ -293,6 +436,7 @@ onBeforeUnmount(() => {
   if (observer) {
     observer.disconnect();
     observer = null;
+    observedElements.clear();
   }
   // NOTE: Do NOT clear _heightsCache here. The module-level cache is designed to
   // survive remounts caused by hasInitializedLocations toggle in SuperDoc.vue.
@@ -316,9 +460,10 @@ onBeforeUnmount(() => {
       >
         <!-- Only mount the heavy CommentDialog when near the viewport -->
         <CommentDialog
-          v-if="visibleIds.has(pos.id) || pos.id === activeCommentKey"
+          v-if="visibleIds.has(pos.id) || pos.id === activeCommentKey || pos.id === 'pending'"
           :key="pos.id + commentsRenderKey"
           @ready="handleDialog"
+          @resize="handleResize(pos.commentRef)"
           class="floating-comment"
           :parent="parent"
           :comment="pos.commentRef"

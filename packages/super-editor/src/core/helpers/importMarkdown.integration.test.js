@@ -1,5 +1,55 @@
-import { describe, it, expect } from 'vitest';
-import { convertMarkdownToHTML } from './importMarkdown.js';
+import { beforeAll, beforeEach, afterEach, describe, it, expect } from 'vitest';
+import { createDocFromMarkdown } from './importMarkdown.js';
+import { initTestEditor, loadTestDataForEditorTests } from '@tests/helpers/helpers.js';
+
+let docData;
+
+beforeAll(async () => {
+  docData = await loadTestDataForEditorTests('blank-doc.docx');
+});
+
+let editor;
+
+beforeEach(() => {
+  ({ editor } = initTestEditor({
+    content: docData.docx,
+    media: docData.media,
+    mediaFiles: docData.mediaFiles,
+    fonts: docData.fonts,
+  }));
+});
+
+afterEach(() => {
+  editor?.destroy();
+  editor = null;
+});
+
+function collectNodeTypes(doc) {
+  const types = [];
+  doc.descendants((node) => {
+    types.push(node.type.name);
+    return true;
+  });
+  return types;
+}
+
+function collectTopLevelParagraphs(doc) {
+  const paragraphs = [];
+  doc.forEach((node) => {
+    if (node.type.name === 'paragraph') {
+      paragraphs.push(node);
+    }
+  });
+  return paragraphs;
+}
+
+function hasNumbering(node) {
+  return Boolean(node.attrs?.paragraphProperties?.numberingProperties);
+}
+
+function paragraphByText(paragraphs, expectedText) {
+  return paragraphs.find((node) => node.textContent.trim() === expectedText);
+}
 
 describe('markdown to DOCX integration', () => {
   it('converts complete markdown document with headings and lists', () => {
@@ -17,16 +67,63 @@ More text here.
 1. Numbered item
 2. Second item`;
 
-    const html = convertMarkdownToHTML(markdown);
+    const doc = createDocFromMarkdown(markdown, editor);
 
-    // Verify all elements are converted
-    expect(html).toContain('<h1>Main Title</h1>');
-    expect(html).toContain('<h2>Section 2</h2>');
-    expect(html).toContain('<ul>');
-    expect(html).toContain('<ol>');
+    expect(doc).toBeDefined();
+    expect(doc.type.name).toBe('doc');
 
-    // Verify spacing is added between paragraphs and lists
-    expect(html).toContain('</p>\n<p>&nbsp;</p>\n<ul>');
-    expect(html).toContain('</p>\n<p>&nbsp;</p>\n<ol>');
+    const types = collectNodeTypes(doc);
+    expect(types).toContain('paragraph');
+    expect(types).toContain('run');
+  });
+
+  it('keeps a multi-paragraph bullet item as one logical list entry', () => {
+    const markdown = `- first paragraph
+
+  continuation paragraph
+- second bullet`;
+
+    const doc = createDocFromMarkdown(markdown, editor);
+    const paragraphs = collectTopLevelParagraphs(doc);
+
+    const first = paragraphByText(paragraphs, 'first paragraph');
+    const continuation = paragraphByText(paragraphs, 'continuation paragraph');
+    const second = paragraphByText(paragraphs, 'second bullet');
+
+    expect(first).toBeTruthy();
+    expect(continuation).toBeTruthy();
+    expect(second).toBeTruthy();
+
+    expect(hasNumbering(first)).toBe(true);
+    expect(hasNumbering(continuation)).toBe(false);
+    expect(hasNumbering(second)).toBe(true);
+
+    const numberedParagraphs = paragraphs.filter(hasNumbering);
+    expect(numberedParagraphs).toHaveLength(2);
+  });
+
+  it('keeps a multi-paragraph ordered item as one numbered entry', () => {
+    const markdown = `1. first numbered paragraph
+
+   continuation paragraph
+2. second numbered item`;
+
+    const doc = createDocFromMarkdown(markdown, editor);
+    const paragraphs = collectTopLevelParagraphs(doc);
+
+    const first = paragraphByText(paragraphs, 'first numbered paragraph');
+    const continuation = paragraphByText(paragraphs, 'continuation paragraph');
+    const second = paragraphByText(paragraphs, 'second numbered item');
+
+    expect(first).toBeTruthy();
+    expect(continuation).toBeTruthy();
+    expect(second).toBeTruthy();
+
+    expect(hasNumbering(first)).toBe(true);
+    expect(hasNumbering(continuation)).toBe(false);
+    expect(hasNumbering(second)).toBe(true);
+
+    const numberedParagraphs = paragraphs.filter(hasNumbering);
+    expect(numberedParagraphs).toHaveLength(2);
   });
 });

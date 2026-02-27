@@ -1,4 +1,5 @@
 import type { OperationId } from '../contract/types.js';
+import type { InlinePropertyStorage, InlinePropertyType, InlineRunPatchKey } from '../format/inline-run-patch.js';
 
 export const CAPABILITY_REASON_CODES = [
   'COMMAND_UNAVAILABLE',
@@ -7,6 +8,8 @@ export const CAPABILITY_REASON_CODES = [
   'TRACKED_MODE_UNAVAILABLE',
   'DRY_RUN_UNAVAILABLE',
   'NAMESPACE_UNAVAILABLE',
+  'STYLES_PART_MISSING',
+  'COLLABORATION_ACTIVE',
 ] as const;
 
 export type CapabilityReasonCode = (typeof CAPABILITY_REASON_CODES)[number];
@@ -52,10 +55,22 @@ export interface PlanEngineCapabilities {
  * `operations` contains per-operation availability details keyed by {@link OperationId}.
  * `planEngine` describes plan engine capabilities (step ops, style strategies, limits).
  */
-/** Format capability snapshot — advertises which boolean mark keys this editor supports. */
+/** Per-inline-property runtime capability for `format.apply`. */
+export interface InlinePropertyCapability {
+  /** Whether this specific property is currently executable. */
+  available: boolean;
+  /** Whether this property supports tracked mode. */
+  tracked: boolean;
+  /** API value shape for this property. */
+  type: InlinePropertyType;
+  /** Runtime storage path used by the editor (mark or runAttribute). */
+  storage: InlinePropertyStorage;
+}
+
+/** Format capability snapshot — advertises per-property support for `format.apply`. */
 export interface FormatCapabilities {
-  /** Mark keys that `format.apply` can set/unset (derived from the shared mark registry). */
-  supportedMarks: readonly string[];
+  /** Capability entry per canonical inline patch key. */
+  supportedInlineProperties: Record<InlineRunPatchKey, InlinePropertyCapability>;
 }
 
 export interface DocumentApiCapabilities {

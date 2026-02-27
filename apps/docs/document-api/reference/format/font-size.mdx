@@ -1,7 +1,7 @@
 ---
 title: format.fontSize
 sidebarTitle: format.fontSize
-description: Reference for format.fontSize
+description: "Set or clear the `fontSize` inline run property on the target text range."
 ---
 
 {/* GENERATED FILE: DO NOT EDIT. Regenerate via `pnpm run docapi:sync`. */}
@@ -10,20 +10,26 @@ description: Reference for format.fontSize
 
 ## Summary
 
+Set or clear the `fontSize` inline run property on the target text range.
+
 - Operation ID: `format.fontSize`
 - API member path: `editor.doc.format.fontSize(...)`
 - Mutates document: `yes`
 - Idempotency: `conditional`
-- Supports tracked mode: `no`
+- Supports tracked mode: `yes`
 - Supports dry run: `yes`
 - Deterministic target resolution: `yes`
+
+## Expected result
+
+Returns a TextMutationReceipt confirming the inline run property patch was applied to the target range.
 
 ## Input fields
 
 | Field | Type | Required | Description |
 | --- | --- | --- | --- |
 | `target` | TextAddress | yes | TextAddress |
-| `value` | string \\| number \\| null | yes | One of: string, number, null |
+| `value` | number \\| null | yes | One of: number, null |
 
 ### Example request
 
@@ -37,7 +43,7 @@ description: Reference for format.fontSize
       "start": 0
     }
   },
-  "value": "example"
+  "value": 12.5
 }
 ```
 
@@ -100,7 +106,6 @@ _No fields._
 ## Non-applied failure codes
 
 - `INVALID_TARGET`
-- `NO_OP`
 
 ## Raw schemas
 
@@ -114,10 +119,6 @@ _No fields._
     },
     "value": {
       "oneOf": [
-        {
-          "minLength": 1,
-          "type": "string"
-        },
         {
           "type": "number"
         },
@@ -151,8 +152,7 @@ _No fields._
           "properties": {
             "code": {
               "enum": [
-                "INVALID_TARGET",
-                "NO_OP"
+                "INVALID_TARGET"
               ]
             },
             "details": {},
@@ -203,8 +203,7 @@ _No fields._
       "properties": {
         "code": {
           "enum": [
-            "INVALID_TARGET",
-            "NO_OP"
+            "INVALID_TARGET"
           ]
         },
         "details": {},

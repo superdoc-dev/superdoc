@@ -198,11 +198,13 @@ describe('queryMatchAdapter — blocks/runs output', () => {
 
     // First run: bold
     expect(block.runs[0].range).toEqual({ start: 0, end: 6 });
-    expect(block.runs[0].styles.bold).toBe(true);
+    expect(block.runs[0].styles.direct.bold).toBe('on');
+    expect(block.runs[0].styles.effective.bold).toBe(true);
 
     // Second run: plain
     expect(block.runs[1].range).toEqual({ start: 6, end: 20 });
-    expect(block.runs[1].styles.bold).toBe(false);
+    expect(block.runs[1].styles.direct.bold).toBe('clear');
+    expect(block.runs[1].styles.effective.bold).toBe(false);
 
     // Runs tile block range
     expect(block.runs[0].range.start).toBe(block.range.start);
@@ -245,11 +247,13 @@ describe('queryMatchAdapter — blocks/runs output', () => {
 
     expect(match.blocks[0].blockId).toBe('p1');
     expect(match.blocks[0].runs).toHaveLength(1);
-    expect(match.blocks[0].runs[0].styles.bold).toBe(true);
+    expect(match.blocks[0].runs[0].styles.direct.bold).toBe('on');
+    expect(match.blocks[0].runs[0].styles.effective.bold).toBe(true);
 
     expect(match.blocks[1].blockId).toBe('p2');
     expect(match.blocks[1].runs).toHaveLength(1);
-    expect(match.blocks[1].runs[0].styles.italic).toBe(true);
+    expect(match.blocks[1].runs[0].styles.direct.italic).toBe('on');
+    expect(match.blocks[1].runs[0].styles.effective.italic).toBe(true);
   });
 
   it('does not throw when a text match spans an inline placeholder offset', () => {
@@ -672,6 +676,116 @@ describe('queryMatchAdapter — snippet assembly', () => {
     const match = result.items[0] as any;
     expect(match.snippet.length).toBe(SNIPPET_MAX_LENGTH);
     expect(match.highlightRange).toEqual({ start: 0, end: SNIPPET_MAX_LENGTH });
+  });
+});
+
+// ---------------------------------------------------------------------------
+// Tests: meta.effectiveResolved (Phase 4C)
+// ---------------------------------------------------------------------------
+
+describe('queryMatchAdapter — meta.effectiveResolved', () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+    mockedDeps.getRevision.mockReturnValue('rev-1');
+  });
+
+  it('returns effectiveResolved: false when editor has no converter context', () => {
+    const candidates = [{ nodeId: 'p1', pos: 0, end: 7, text: 'hello' }];
+    const editor = makeEditorWithBlocks(candidates);
+    setupBlockIndex(candidates.map(({ nodeId, pos, end }) => ({ nodeId, pos, end })));
+    setupFindResult({
+      matches: [{ kind: 'text', blockId: 'p1' }],
+      context: [{ textRanges: [{ kind: 'text', blockId: 'p1', range: { start: 0, end: 5 } }] }],
+      total: 1,
+    });
+    mockedDeps.captureRunsInRange.mockReturnValue(captured([capturedRun(0, 5, [])]));
+
+    const result = queryMatchAdapter(editor, {
+      select: { type: 'text', pattern: 'hello' },
+    });
+
+    expect(result.meta.effectiveResolved).toBe(false);
+  });
+
+  it('returns effectiveResolved: true when editor has converter with translatedLinkedStyles.styles', () => {
+    const candidates = [{ nodeId: 'p1', pos: 0, end: 7, text: 'hello' }];
+    const editor = makeEditorWithBlocks(candidates);
+    // Attach converter context with styles
+    (editor as any).converter = {
+      translatedLinkedStyles: { styles: { Normal: {} } },
+      translatedNumbering: {},
+    };
+    setupBlockIndex(candidates.map(({ nodeId, pos, end }) => ({ nodeId, pos, end })));
+    setupFindResult({
+      matches: [{ kind: 'text', blockId: 'p1' }],
+      context: [{ textRanges: [{ kind: 'text', blockId: 'p1', range: { start: 0, end: 5 } }] }],
+      total: 1,
+    });
+    mockedDeps.captureRunsInRange.mockReturnValue(captured([capturedRun(0, 5, [])]));
+
+    const result = queryMatchAdapter(editor, {
+      select: { type: 'text', pattern: 'hello' },
+    });
+
+    expect(result.meta.effectiveResolved).toBe(true);
+  });
+
+  it('returns effectiveResolved: false when converter lacks translatedLinkedStyles.styles', () => {
+    const candidates = [{ nodeId: 'p1', pos: 0, end: 7, text: 'hello' }];
+    const editor = makeEditorWithBlocks(candidates);
+    (editor as any).converter = {
+      translatedLinkedStyles: {}, // no .styles
+      translatedNumbering: {},
+    };
+    setupBlockIndex(candidates.map(({ nodeId, pos, end }) => ({ nodeId, pos, end })));
+    setupFindResult({
+      matches: [{ kind: 'text', blockId: 'p1' }],
+      context: [{ textRanges: [{ kind: 'text', blockId: 'p1', range: { start: 0, end: 5 } }] }],
+      total: 1,
+    });
+    mockedDeps.captureRunsInRange.mockReturnValue(captured([capturedRun(0, 5, [])]));
+
+    const result = queryMatchAdapter(editor, {
+      select: { type: 'text', pattern: 'hello' },
+    });
+
+    expect(result.meta.effectiveResolved).toBe(false);
+  });
+
+  it('returns effectiveResolved: false for node-selector matches without converter', () => {
+    setupFindResult({
+      matches: [{ kind: 'block', nodeId: 'p1' }],
+      context: [{}],
+      total: 1,
+    });
+    const dummyEditor = {} as any;
+
+    const result = queryMatchAdapter(dummyEditor, {
+      select: { type: 'node', nodeType: 'paragraph' },
+    });
+
+    expect(result.meta.effectiveResolved).toBe(false);
+  });
+
+  it('returns effectiveResolved: false for node-selector even with converter cascade available', () => {
+    setupFindResult({
+      matches: [{ kind: 'block', nodeId: 'p1' }],
+      context: [{}],
+      total: 1,
+    });
+    const dummyEditor = {
+      converter: {
+        translatedLinkedStyles: { styles: { Normal: {} } },
+        translatedNumbering: {},
+      },
+    } as any;
+
+    const result = queryMatchAdapter(dummyEditor, {
+      select: { type: 'node', nodeType: 'paragraph' },
+    });
+
+    // Node matches don't produce run-level style data, so effectiveResolved must be false
+    expect(result.meta.effectiveResolved).toBe(false);
   });
 });
 

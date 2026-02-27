@@ -34,10 +34,10 @@ test('comment thread on tracked change shows both the change and replies', async
   });
   await expect(dialog).toBeVisible({ timeout: 5_000 });
 
-  // The tracked change should show "Added:" and "Deleted:" labels
-  await expect(dialog.locator('.change-type', { hasText: 'Added' }).first()).toBeVisible();
-  await expect(dialog.locator('.tracked-change-text', { hasText: 'new text' })).toBeVisible();
-  await expect(dialog.locator('.change-type', { hasText: 'Deleted' }).first()).toBeVisible();
+  // Replacement tracked changes should show "Replaced <old> with <new>"
+  await expect(dialog.locator('.change-type', { hasText: 'Replaced' }).first()).toBeVisible();
+  await expect(dialog.locator('.tracked-change-text.is-inserted', { hasText: 'new text' })).toBeVisible();
+  await expect(dialog.locator('.tracked-change-text.is-deleted').first()).toBeVisible();
 
   // The threaded comment replies should be visible below the tracked change
   const commentBodies = dialog.locator('.comment-body .comment');

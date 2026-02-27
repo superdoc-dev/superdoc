@@ -1,7 +1,7 @@
 ---
 title: getNode
 sidebarTitle: getNode
-description: Reference for getNode
+description: Retrieve a single node by target position.
 ---
 
 {/* GENERATED FILE: DO NOT EDIT. Regenerate via `pnpm run docapi:sync`. */}
@@ -10,6 +10,8 @@ description: Reference for getNode
 
 ## Summary
 
+Retrieve a single node by target position.
+
 - Operation ID: `getNode`
 - API member path: `editor.doc.getNode(...)`
 - Mutates document: `no`
@@ -17,6 +19,10 @@ description: Reference for getNode
 - Supports tracked mode: `no`
 - Supports dry run: `no`
 - Deterministic target resolution: `yes`
+
+## Expected result
+
+Returns a NodeInfo object with the node type, address, content, and typed properties.
 
 ## Input fields
 

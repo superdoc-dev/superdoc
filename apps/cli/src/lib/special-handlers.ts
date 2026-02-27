@@ -9,7 +9,7 @@
  */
 
 import { createHash } from 'node:crypto';
-import type { CliExposedOperationId } from '../cli/operation-set.js';
+import { CLI_DOC_OPERATIONS, type CliExposedOperationId } from '../cli/operation-set.js';
 import type { EditorWithDoc } from './document.js';
 
 // ---------------------------------------------------------------------------
@@ -24,6 +24,10 @@ type HookContext = {
 type PreInvokeHook = (input: unknown, context: HookContext) => unknown;
 
 type PostInvokeHook = (result: unknown, context: HookContext) => unknown;
+
+const FORMAT_OPERATION_IDS = CLI_DOC_OPERATIONS.filter((operationId): operationId is CliExposedOperationId =>
+  operationId.startsWith('format.'),
+);
 
 // ---------------------------------------------------------------------------
 // Track-changes stable-ID helpers
@@ -226,6 +230,10 @@ const flattenTextMutationReceipt: PostInvokeHook = (result) => {
   };
 };
 
+const FORMAT_POST_INVOKE_HOOKS: Partial<Record<CliExposedOperationId, PostInvokeHook>> = Object.fromEntries(
+  FORMAT_OPERATION_IDS.map((operationId) => [operationId, flattenTextMutationReceipt]),
+) as Partial<Record<CliExposedOperationId, PostInvokeHook>>;
+
 /** Pre-invoke: custom input resolution before calling editor.doc.invoke(). */
 export const PRE_INVOKE_HOOKS: Partial<Record<CliExposedOperationId, PreInvokeHook>> = {
   // Track-changes get needs stable-ID → raw-ID translation
@@ -243,11 +251,7 @@ export const POST_INVOKE_HOOKS: Partial<Record<CliExposedOperationId, PostInvoke
   insert: flattenTextMutationReceipt,
   replace: flattenTextMutationReceipt,
   delete: flattenTextMutationReceipt,
-  'format.apply': flattenTextMutationReceipt,
-  'format.fontSize': flattenTextMutationReceipt,
-  'format.fontFamily': flattenTextMutationReceipt,
-  'format.color': flattenTextMutationReceipt,
-  'format.align': flattenTextMutationReceipt,
+  ...FORMAT_POST_INVOKE_HOOKS,
   // getNodeById: merge nodeId from input into result for pretty output
   getNodeById: (result, context) => {
     const record = asRecord(result);

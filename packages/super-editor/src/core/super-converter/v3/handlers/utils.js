@@ -1,4 +1,6 @@
 import { NodeTranslator } from '../node-translator/index.js';
+import { ST_ON_OFF_ON_VALUES, ST_ON_OFF_OFF_VALUES } from '@superdoc/document-api';
+import { pushDiagnostic } from './import-diagnostics.js';
 
 /**
  * Generates a handler entity for a given node translator.
@@ -72,6 +74,93 @@ export function createSingleBooleanPropertyHandler(xmlName, sdName = null) {
     decode: ({ node }) => {
       if (node.attrs[sdName] == null) return undefined;
       return node.attrs[sdName] ? { attributes: {} } : { attributes: { 'w:val': '0' } };
+    },
+  };
+}
+
+// ---------------------------------------------------------------------------
+// Strict ST_OnOff token sets — delegated to the shared semantic layer
+// (@superdoc/document-api inline-semantics/token-sets).
+// ---------------------------------------------------------------------------
+
+/**
+ * Strict ST_OnOff parser for core-4 toggle properties.
+ *
+ * Returns:
+ * - `true`      — ON (bare element or valid ON token).
+ * - `false`     — OFF (valid OFF token).
+ * - `undefined` — CLEAR (absent element or invalid token → treated as absent).
+ *
+ * Invalid tokens push a structured `INVALID_INLINE_TOKEN` diagnostic to the
+ * centralized import-diagnostics collector when `property` is provided.
+ *
+ * @param {string|null|undefined} val The `w:val` attribute value, or null/undefined for bare element.
+ * @param {string} [property] The property name for diagnostics (e.g., 'bold'). Omit to skip diagnostic collection.
+ * @param {string} [xmlName] The XML element name for diagnostics (e.g., 'w:b'). Defaults to `w:<property>`.
+ * @param {number} [importDiagnosticsCollectionId] Collection id returned by `startCollection`.
+ * @returns {boolean|undefined}
+ */
+export function parseStrictStOnOff(val, property, xmlName, importDiagnosticsCollectionId) {
+  // Bare element (absent w:val) normalizes to ON
+  if (val == null) return true;
+
+  const str = String(val);
+  if (ST_ON_OFF_ON_VALUES.has(str)) return true;
+  if (ST_ON_OFF_OFF_VALUES.has(str)) return false;
+
+  // Invalid token — push structured diagnostic, then treat as absent/clear.
+  if (property) {
+    const element = xmlName ?? `w:${property}`;
+    pushDiagnostic(
+      {
+        code: 'INVALID_INLINE_TOKEN',
+        property,
+        attribute: 'val',
+        token: str,
+        xpath: `${element}/@w:val`,
+      },
+      importDiagnosticsCollectionId,
+    );
+  }
+  return undefined;
+}
+
+/**
+ * Creates a strict tri-state property handler for ST_OnOff elements (bold, italic, strike).
+ *
+ * Preserves the on/off/clear distinction:
+ * - ON tokens (true, 1, on, absent w:val) → mark present with default attrs.
+ * - OFF tokens (false, 0, off) → mark present with `value: '0'`.
+ * - Invalid tokens → mark absent (CLEAR) + structured diagnostic pushed.
+ * - Element absent → mark absent (CLEAR).
+ *
+ * Export produces canonical OOXML forms:
+ * - ON → `<w:b/>` (bare element, no w:val).
+ * - OFF → `<w:b w:val="0"/>` (canonical OFF token).
+ * - CLEAR → no element emitted.
+ *
+ * @param {string} xmlName The XML element name (e.g., 'w:b').
+ * @param {string|null} sdName The PM attribute name (e.g., 'bold'). Derived from xmlName if null.
+ * @returns {import('@translator').NodeTranslatorConfig}
+ */
+export function createStrictTogglePropertyHandler(xmlName, sdName = null) {
+  if (!sdName) sdName = xmlName.split(':')[1];
+  return {
+    xmlName,
+    sdNodeOrKeyName: sdName,
+    encode: ({ nodes, extraParams }) => {
+      const val = nodes[0]?.attributes?.['w:val'];
+      const importDiagnosticsCollectionId = extraParams?.importDiagnosticsCollectionId;
+      return parseStrictStOnOff(val, sdName, xmlName, importDiagnosticsCollectionId);
+    },
+    decode: ({ node }) => {
+      const val = node.attrs[sdName];
+      // CLEAR — no element
+      if (val == null) return undefined;
+      // OFF — canonical `w:val="0"`
+      if (val === false || val === '0') return { attributes: { 'w:val': '0' } };
+      // ON — bare element (no w:val attribute)
+      return { attributes: {} };
     },
   };
 }

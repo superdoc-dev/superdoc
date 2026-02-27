@@ -11,8 +11,15 @@
       "types": "./src/index.ts",
       "default": "./src/index.ts"
     },
+    "./*.js": {
+      "types": "./src/*.ts",
+      "source": "./src/*.ts",
+      "default": "./src/*.ts"
+    },
     "./*": {
-      "source": "./src/*"
+      "types": "./src/*",
+      "source": "./src/*",
+      "default": "./src/*"
     }
   },
   "scripts": {

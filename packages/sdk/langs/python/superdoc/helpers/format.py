@@ -2,25 +2,25 @@
 Format helper functions for the SuperDoc Python SDK.
 
 These are hand-written convenience wrappers that call the canonical
-``format.apply`` operation with pre-filled inline styles.  They are NOT generated
+``format.apply`` operation with pre-filled inline directives.  They are NOT generated
 from the contract and will not be overwritten by ``pnpm run generate:all``.
 
 Usage::
 
     from superdoc import SuperDocClient
-    from superdoc.helpers import format_bold, format_italic
+    from superdoc.helpers import format_bold, unformat_bold, clear_bold
 
     client = SuperDocClient()
     client.connect()
 
-    # Canonical form:
-    result = client.doc.format_apply(
-        target={"kind": "text", "blockId": "p1", "range": {"start": 0, "end": 5}},
-        inline={"bold": True},
-    )
-
-    # Flat-flag shorthand (normalized before dispatch):
+    # Apply bold ON:
     result = format_bold(client.doc, block_id="p1", start=0, end=5)
+
+    # Apply explicit bold OFF (override style inheritance):
+    result = unformat_bold(client.doc, block_id="p1", start=0, end=5)
+
+    # Clear direct bold formatting (inherit from style cascade):
+    result = clear_bold(client.doc, block_id="p1", start=0, end=5)
 """
 
 from __future__ import annotations
@@ -64,7 +64,7 @@ def _normalize_target(
 
 def _format_inline(
     doc: DocApi,
-    inline: dict[str, bool],
+    inline: dict[str, str],
     *,
     target: Optional[dict[str, Any]] = None,
     block_id: Optional[str] = None,
@@ -98,21 +98,76 @@ def _format_inline(
     return doc.format_apply(**kwargs)
 
 
+# ---------------------------------------------------------------------------
+# format_* helpers — apply ON directive
+# ---------------------------------------------------------------------------
+
+
 def format_bold(doc: DocApi, **kwargs: Any) -> Any:
-    """Apply bold formatting.  Equivalent to ``format.apply(inline={"bold": True})``."""
-    return _format_inline(doc, {"bold": True}, **kwargs)
+    """Apply bold ON.  Equivalent to ``format.apply(inline={"bold": "on"})``."""
+    return _format_inline(doc, {"bold": "on"}, **kwargs)
 
 
 def format_italic(doc: DocApi, **kwargs: Any) -> Any:
-    """Apply italic formatting.  Equivalent to ``format.apply(inline={"italic": True})``."""
-    return _format_inline(doc, {"italic": True}, **kwargs)
+    """Apply italic ON.  Equivalent to ``format.apply(inline={"italic": "on"})``."""
+    return _format_inline(doc, {"italic": "on"}, **kwargs)
 
 
 def format_underline(doc: DocApi, **kwargs: Any) -> Any:
-    """Apply underline formatting.  Equivalent to ``format.apply(inline={"underline": True})``."""
-    return _format_inline(doc, {"underline": True}, **kwargs)
+    """Apply underline ON.  Equivalent to ``format.apply(inline={"underline": "on"})``."""
+    return _format_inline(doc, {"underline": "on"}, **kwargs)
 
 
 def format_strikethrough(doc: DocApi, **kwargs: Any) -> Any:
-    """Apply strikethrough formatting.  Equivalent to ``format.apply(inline={"strike": True})``."""
-    return _format_inline(doc, {"strike": True}, **kwargs)
+    """Apply strikethrough ON.  Equivalent to ``format.apply(inline={"strike": "on"})``."""
+    return _format_inline(doc, {"strike": "on"}, **kwargs)
+
+
+# ---------------------------------------------------------------------------
+# unformat_* helpers — apply explicit OFF directive (style override)
+# ---------------------------------------------------------------------------
+
+
+def unformat_bold(doc: DocApi, **kwargs: Any) -> Any:
+    """Apply bold OFF.  Equivalent to ``format.apply(inline={"bold": "off"})``."""
+    return _format_inline(doc, {"bold": "off"}, **kwargs)
+
+
+def unformat_italic(doc: DocApi, **kwargs: Any) -> Any:
+    """Apply italic OFF.  Equivalent to ``format.apply(inline={"italic": "off"})``."""
+    return _format_inline(doc, {"italic": "off"}, **kwargs)
+
+
+def unformat_underline(doc: DocApi, **kwargs: Any) -> Any:
+    """Apply underline OFF.  Equivalent to ``format.apply(inline={"underline": "off"})``."""
+    return _format_inline(doc, {"underline": "off"}, **kwargs)
+
+
+def unformat_strikethrough(doc: DocApi, **kwargs: Any) -> Any:
+    """Apply strikethrough OFF.  Equivalent to ``format.apply(inline={"strike": "off"})``."""
+    return _format_inline(doc, {"strike": "off"}, **kwargs)
+
+
+# ---------------------------------------------------------------------------
+# clear_* helpers — remove direct formatting (inherit from style cascade)
+# ---------------------------------------------------------------------------
+
+
+def clear_bold(doc: DocApi, **kwargs: Any) -> Any:
+    """Clear bold formatting.  Equivalent to ``format.apply(inline={"bold": "clear"})``."""
+    return _format_inline(doc, {"bold": "clear"}, **kwargs)
+
+
+def clear_italic(doc: DocApi, **kwargs: Any) -> Any:
+    """Clear italic formatting.  Equivalent to ``format.apply(inline={"italic": "clear"})``."""
+    return _format_inline(doc, {"italic": "clear"}, **kwargs)
+
+
+def clear_underline(doc: DocApi, **kwargs: Any) -> Any:
+    """Clear underline formatting.  Equivalent to ``format.apply(inline={"underline": "clear"})``."""
+    return _format_inline(doc, {"underline": "clear"}, **kwargs)
+
+
+def clear_strikethrough(doc: DocApi, **kwargs: Any) -> Any:
+    """Clear strikethrough formatting.  Equivalent to ``format.apply(inline={"strike": "clear"})``."""
+    return _format_inline(doc, {"strike": "clear"}, **kwargs)

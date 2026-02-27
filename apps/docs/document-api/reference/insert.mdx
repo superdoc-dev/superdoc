@@ -1,7 +1,7 @@
 ---
 title: insert
 sidebarTitle: insert
-description: Reference for insert
+description: "Insert content at a target position. Supports text (default), markdown, and html content types via the `type` field."
 ---
 
 {/* GENERATED FILE: DO NOT EDIT. Regenerate via `pnpm run docapi:sync`. */}
@@ -9,6 +9,8 @@ description: Reference for insert
 > Alpha: Document API is currently alpha and subject to breaking changes.
 
 ## Summary
+
+Insert content at a target position. Supports text (default), markdown, and html content types via the `type` field.
 
 - Operation ID: `insert`
 - API member path: `editor.doc.insert(...)`
@@ -18,12 +20,17 @@ description: Reference for insert
 - Supports dry run: `yes`
 - Deterministic target resolution: `yes`
 
+## Expected result
+
+Returns a TextMutationReceipt with applied status; receipt reports NO_OP if the insertion point is invalid or content is empty.
+
 ## Input fields
 
 | Field | Type | Required | Description |
 | --- | --- | --- | --- |
 | `target` | TextAddress | no | TextAddress |
-| `text` | string | yes |  |
+| `type` | enum | no | `"text"`, `"markdown"`, `"html"` |
+| `value` | string | yes |  |
 
 ### Example request
 
@@ -37,7 +44,8 @@ description: Reference for insert
       "start": 0
     }
   },
-  "text": "Hello, world."
+  "type": "text",
+  "value": "example"
 }
 ```
 
@@ -100,6 +108,8 @@ _No fields._
 
 - `INVALID_TARGET`
 - `NO_OP`
+- `CAPABILITY_UNAVAILABLE`
+- `UNSUPPORTED_ENVIRONMENT`
 
 ## Raw schemas
 
@@ -111,12 +121,20 @@ _No fields._
     "target": {
       "$ref": "#/$defs/TextAddress"
     },
-    "text": {
+    "type": {
+      "enum": [
+        "text",
+        "markdown",
+        "html"
+      ],
+      "type": "string"
+    },
+    "value": {
       "type": "string"
     }
   },
   "required": [
-    "text"
+    "value"
   ],
   "type": "object"
 }
@@ -139,7 +157,9 @@ _No fields._
             "code": {
               "enum": [
                 "INVALID_TARGET",
-                "NO_OP"
+                "NO_OP",
+                "CAPABILITY_UNAVAILABLE",
+                "UNSUPPORTED_ENVIRONMENT"
               ]
             },
             "details": {},
@@ -191,7 +211,9 @@ _No fields._
         "code": {
           "enum": [
             "INVALID_TARGET",
-            "NO_OP"
+            "NO_OP",
+            "CAPABILITY_UNAVAILABLE",
+            "UNSUPPORTED_ENVIRONMENT"
           ]
         },
         "details": {},

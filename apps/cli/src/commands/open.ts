@@ -16,6 +16,8 @@ import { parseOperationArgs } from '../lib/operation-args';
 import { generateSessionId } from '../lib/session';
 import type { CommandContext, CommandExecution } from '../lib/types';
 
+const VALID_OVERRIDE_TYPES = new Set(['markdown', 'html', 'text']);
+
 export async function runOpen(tokens: string[], context: CommandContext): Promise<CommandExecution> {
   const { parsed, help } = parseOperationArgs('doc.open', tokens, {
     commandName: 'open',
@@ -28,12 +30,14 @@ export async function runOpen(tokens: string[], context: CommandContext): Promis
       data: {
         usage: [
           'superdoc open [doc] [--session <id>]',
+          'superdoc open [doc] --content-override <content> --override-type <markdown|html|text>',
           'superdoc open [doc] --collaboration-json "{...}" [--session <id>]',
         ],
       },
       pretty: [
         'Usage:',
         '  superdoc open [doc] [--session <id>]',
+        '  superdoc open [doc] --content-override <content> --override-type <markdown|html|text>',
         '  superdoc open [doc] --collaboration-json "{...}" [--session <id>]',
       ].join('\n'),
     };
@@ -45,11 +49,36 @@ export async function runOpen(tokens: string[], context: CommandContext): Promis
   const collaborationPayload = await resolveJsonInput(parsed, 'collaboration');
   const collabUrl = getStringOption(parsed, 'collab-url');
   const collabDocumentId = getStringOption(parsed, 'collab-document-id');
+  const contentOverride = getStringOption(parsed, 'content-override');
+  const overrideType = getStringOption(parsed, 'override-type');
+
+  // Validate contentOverride / overrideType co-requirement.
+  // Use != null checks so that intentional empty-string overrides are honored.
+  if (contentOverride != null && !overrideType) {
+    throw new CliError('INVALID_ARGUMENT', 'open: --content-override requires --override-type.');
+  }
+  if (overrideType && contentOverride == null) {
+    throw new CliError('INVALID_ARGUMENT', 'open: --override-type requires --content-override.');
+  }
+  if (overrideType && !VALID_OVERRIDE_TYPES.has(overrideType)) {
+    throw new CliError(
+      'INVALID_ARGUMENT',
+      `open: --override-type must be one of: markdown, html, text. Got "${overrideType}".`,
+    );
+  }
 
   if (collaborationPayload != null && (collabUrl || collabDocumentId)) {
     throw new CliError(
       'INVALID_ARGUMENT',
       'open: do not combine --collaboration-json with --collab-url / --collab-document-id.',
+    );
+  }
+
+  // Content override is incompatible with collaboration mode
+  if (contentOverride != null && (collaborationPayload != null || collabUrl)) {
+    throw new CliError(
+      'INVALID_ARGUMENT',
+      'open: --content-override is incompatible with collaboration mode. Content override is a template-initialization operation.',
     );
   }
 
@@ -68,6 +97,20 @@ export async function runOpen(tokens: string[], context: CommandContext): Promis
 
   const collaboration = collaborationInput ? resolveCollaborationProfile(collaborationInput, sessionId) : undefined;
   const sessionType = collaboration ? 'collab' : 'local';
+
+  // Build editor open options from override params
+  const editorOpenOptions: Record<string, string> = {};
+  if (contentOverride != null && overrideType) {
+    if (overrideType === 'markdown') {
+      editorOpenOptions.markdown = contentOverride;
+    } else if (overrideType === 'html') {
+      editorOpenOptions.html = contentOverride;
+    } else if (overrideType === 'text') {
+      // Plain text bypass — handed off to document.ts which builds PM
+      // paragraphs directly, preserving all whitespace without markdown parsing.
+      editorOpenOptions.plainText = contentOverride;
+    }
+  }
 
   return withContextLock(
     context.io,
@@ -104,7 +147,7 @@ export async function runOpen(tokens: string[], context: CommandContext): Promis
 
       const opened = collaboration
         ? await openCollaborativeDocument(doc!, context.io, collaboration)
-        : await openDocument(doc, context.io);
+        : await openDocument(doc, context.io, { editorOpenOptions });
       let adoptedToHostPool = false;
       try {
         const output = await exportToPath(opened.editor, paths.workingDocPath, true);

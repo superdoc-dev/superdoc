@@ -25,6 +25,7 @@ export type CliErrorCode =
   | 'TRACK_CHANGE_COMMAND_UNAVAILABLE'
   | 'TRACK_CHANGE_CONFLICT'
   | 'COMMAND_FAILED'
+  | 'UNSUPPORTED_FORMAT'
   | 'TIMEOUT'
   // Plan-engine error codes — passed through from document-api adapters
   | 'REVISION_CHANGED_SINCE_COMPILE'

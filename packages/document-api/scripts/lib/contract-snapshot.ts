@@ -2,6 +2,8 @@ import {
   COMMAND_CATALOG,
   CONTRACT_VERSION,
   JSON_SCHEMA_DIALECT,
+  OPERATION_DESCRIPTION_MAP,
+  OPERATION_EXPECTED_RESULT_MAP,
   OPERATION_IDS,
   OPERATION_MEMBER_PATH_MAP,
   buildInternalContractSchemas,
@@ -44,6 +46,8 @@ export function buildContractSnapshot(): ContractSnapshot {
     schemaDialect: JSON_SCHEMA_DIALECT,
     operationCatalog: COMMAND_CATALOG,
     operationMap: OPERATION_MEMBER_PATH_MAP,
+    operationDescriptions: OPERATION_DESCRIPTION_MAP,
+    operationExpectedResults: OPERATION_EXPECTED_RESULT_MAP,
     schemas: internalSchemas.operations,
   };
 

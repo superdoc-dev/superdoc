@@ -1,7 +1,7 @@
 ---
 title: delete
 sidebarTitle: delete
-description: Reference for delete
+description: Delete content at a target position.
 ---
 
 {/* GENERATED FILE: DO NOT EDIT. Regenerate via `pnpm run docapi:sync`. */}
@@ -10,6 +10,8 @@ description: Reference for delete
 
 ## Summary
 
+Delete content at a target position.
+
 - Operation ID: `delete`
 - API member path: `editor.doc.delete(...)`
 - Mutates document: `yes`
@@ -17,6 +19,10 @@ description: Reference for delete
 - Supports tracked mode: `yes`
 - Supports dry run: `yes`
 - Deterministic target resolution: `yes`
+
+## Expected result
+
+Returns a TextMutationReceipt with applied status; receipt reports NO_OP if the target range is already empty.
 
 ## Input fields
 

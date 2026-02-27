@@ -1,13 +1,16 @@
 import { beforeAll, beforeEach, describe, expect, it, vi } from 'vitest';
 import type { Editor } from '../../core/Editor.js';
-import type { TextRewriteStep, StyleApplyStep, AssertStep } from '@superdoc/document-api';
+import type { TextRewriteStep, TextInsertStep, StyleApplyStep, AssertStep } from '@superdoc/document-api';
 import type { CompiledTarget } from './executor-registry.types.js';
 import type { CompiledPlan } from './compiler.js';
 import {
   executeCompiledPlan,
   executeCreateStep,
+  executeTextInsert,
   executeSpanTextDelete,
   executeSpanTextRewrite,
+  executeStyleApply,
+  executeSpanStyleApply,
   runMutationsOnTransaction,
 } from './executor.js';
 import { registerBuiltInExecutors } from './register-executors.js';
@@ -184,6 +187,98 @@ function setupResolveTextRange(from: number, to: number) {
   mockedDeps.resolveTextRangeInBlock.mockReturnValue({ from, to });
 }
 
+function createTestMark(name: string, attrs: Record<string, unknown> = {}) {
+  return {
+    type: {
+      name,
+      create: (nextAttrs?: Record<string, unknown> | null) =>
+        createTestMark(name, (nextAttrs ?? {}) as Record<string, unknown>),
+    },
+    attrs,
+    eq: (other: any) => other?.type?.name === name,
+  };
+}
+
+describe('executeTextInsert: setMarks tri-state directives', () => {
+  it('maps on/off/clear to canonical mark emission', () => {
+    const boldCreate = vi.fn((attrs?: Record<string, unknown> | null) =>
+      createTestMark('bold', (attrs ?? {}) as Record<string, unknown>),
+    );
+    const italicCreate = vi.fn((attrs?: Record<string, unknown> | null) =>
+      createTestMark('italic', (attrs ?? {}) as Record<string, unknown>),
+    );
+    const underlineCreate = vi.fn((attrs?: Record<string, unknown> | null) =>
+      createTestMark('underline', (attrs ?? {}) as Record<string, unknown>),
+    );
+    const strikeCreate = vi.fn((attrs?: Record<string, unknown> | null) =>
+      createTestMark('strike', (attrs ?? {}) as Record<string, unknown>),
+    );
+
+    const text = vi.fn((value: string, marks?: unknown[]) => ({
+      type: { name: 'text' },
+      text: value,
+      marks: marks ?? [],
+    }));
+
+    const editor = {
+      state: {
+        schema: {
+          marks: {
+            bold: { create: boldCreate },
+            italic: { create: italicCreate },
+            underline: { create: underlineCreate },
+            strike: { create: strikeCreate },
+          },
+          text,
+        },
+      },
+    } as unknown as Editor;
+
+    const tr = {
+      doc: {
+        resolve: vi.fn(() => ({ marks: () => [] })),
+      },
+      insert: vi.fn(),
+    };
+
+    const target = makeTarget({ op: 'text.insert' as any, absFrom: 3, absTo: 3 }) as any;
+    const step: TextInsertStep = {
+      id: 'insert-tristate',
+      op: 'text.insert',
+      where: { by: 'select', select: { type: 'text', pattern: 'x' }, require: 'first' },
+      args: {
+        position: 'before',
+        content: { text: 'hello' },
+        style: {
+          inline: {
+            mode: 'set',
+            setMarks: {
+              bold: 'off',
+              italic: 'on',
+              underline: 'off',
+              strike: 'clear',
+            },
+          },
+        },
+      },
+    } as any;
+
+    const outcome = executeTextInsert(editor, tr as any, target, step, { map: (pos: number) => pos } as any);
+
+    expect(outcome).toEqual({ changed: true });
+    expect(boldCreate).toHaveBeenCalledWith({ value: '0' });
+    expect(italicCreate).toHaveBeenCalledTimes(1);
+    expect(underlineCreate).toHaveBeenCalledWith({ underlineType: 'none' });
+    expect(strikeCreate).not.toHaveBeenCalled();
+
+    const insertedNode = tr.insert.mock.calls[0][1];
+    const insertedMarks = insertedNode.marks as Array<{ type: { name: string }; attrs: Record<string, unknown> }>;
+    expect(insertedMarks.map((mark) => mark.type.name)).toEqual(['bold', 'italic', 'underline']);
+    expect(insertedMarks.find((mark) => mark.type.name === 'bold')?.attrs).toEqual({ value: '0' });
+    expect(insertedMarks.find((mark) => mark.type.name === 'underline')?.attrs).toEqual({ underlineType: 'none' });
+  });
+});
+
 // ---------------------------------------------------------------------------
 // text.rewrite — style preservation behavioral tests
 // ---------------------------------------------------------------------------
@@ -261,7 +356,7 @@ describe('executeCompiledPlan: text.rewrite style behavior', () => {
       args: {
         replacement: { text: 'World' },
         style: {
-          inline: { mode: 'set', setMarks: { italic: true } },
+          inline: { mode: 'set', setMarks: { italic: 'on' } },
           paragraph: { mode: 'preserve' },
         },
       },
@@ -289,7 +384,7 @@ describe('executeCompiledPlan: text.rewrite style behavior', () => {
     expect(mockedDeps.resolveInlineStyle).toHaveBeenCalledWith(
       editor,
       capturedStyle,
-      { mode: 'set', setMarks: { italic: true } },
+      { mode: 'set', setMarks: { italic: 'on' } },
       'step-2',
     );
   });
@@ -1818,5 +1913,88 @@ describe('executeCompiledPlan: atomic rollback on failure', () => {
 
     expect(() => executeCompiledPlan(editor, compiled)).toThrow();
     expect(dispatch).not.toHaveBeenCalled();
+  });
+});
+
+// ---------------------------------------------------------------------------
+// Collapsed-range guard — executeStyleApply (single-block)
+// ---------------------------------------------------------------------------
+
+describe('executeStyleApply: collapsed-range no-op guard', () => {
+  it('returns { changed: false } without modifying the transaction when absFrom === absTo', () => {
+    const { editor, tr } = makeEditor();
+    const target = makeTarget({
+      op: 'style.apply' as any,
+      absFrom: 5,
+      absTo: 5, // collapsed
+    }) as any;
+
+    const step: StyleApplyStep = {
+      op: 'style.apply',
+      id: 'step-1',
+      ref: 'test-ref',
+      args: { inline: { bold: 'on' } },
+    };
+
+    const mapping = { map: (pos: number) => pos };
+    const result = executeStyleApply(editor, tr as any, target, step, mapping as any);
+
+    expect(result).toEqual({ changed: false });
+    expect(tr.addMark).not.toHaveBeenCalled();
+    expect(tr.removeMark).not.toHaveBeenCalled();
+  });
+
+  it('returns { changed: false } when mapping collapses a non-empty range', () => {
+    const { editor, tr } = makeEditor();
+    const target = makeTarget({
+      op: 'style.apply' as any,
+      absFrom: 1,
+      absTo: 6,
+    }) as any;
+
+    const step: StyleApplyStep = {
+      op: 'style.apply',
+      id: 'step-1',
+      ref: 'test-ref',
+      args: { inline: { bold: 'on' } },
+    };
+
+    // Mapping collapses the range to the same position
+    const mapping = { map: () => 10 };
+    const result = executeStyleApply(editor, tr as any, target, step, mapping as any);
+
+    expect(result).toEqual({ changed: false });
+    expect(tr.addMark).not.toHaveBeenCalled();
+  });
+});
+
+// ---------------------------------------------------------------------------
+// Collapsed-range guard — executeSpanStyleApply (cross-block)
+// ---------------------------------------------------------------------------
+
+describe('executeSpanStyleApply: collapsed-range no-op guard', () => {
+  it('returns { changed: false } when span range collapses to zero width', () => {
+    const { editor, tr } = makeEditor();
+    const target = {
+      kind: 'span' as const,
+      stepId: 'step-1',
+      op: 'style.apply',
+      segments: [{ blockId: 'p1', from: 0, to: 5, absFrom: 5, absTo: 5 }],
+    };
+
+    const step: StyleApplyStep = {
+      op: 'style.apply',
+      id: 'step-1',
+      ref: 'test-ref',
+      args: { inline: { italic: 'on' } },
+    };
+
+    // Mapping collapses everything to position 5
+    const mapping = { map: () => 5 };
+    const result = executeSpanStyleApply(editor, tr as any, target as any, step, mapping as any);
+
+    expect(result).toEqual({ changed: false });
+    expect(tr.addMark).not.toHaveBeenCalled();
+    expect(tr.removeMark).not.toHaveBeenCalled();
   });
 });

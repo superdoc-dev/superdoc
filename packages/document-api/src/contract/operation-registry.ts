@@ -27,13 +27,9 @@ import type { InsertInput } from '../insert/insert.js';
 import type { ReplaceInput } from '../replace/replace.js';
 import type { DeleteInput } from '../delete/delete.js';
 import type { MutationOptions, RevisionGuardOptions } from '../write/write.js';
-import type {
-  StyleApplyInput,
-  FormatFontSizeInput,
-  FormatFontFamilyInput,
-  FormatColorInput,
-  FormatAlignInput,
-} from '../format/format.js';
+import type { FormatInlineAliasInput, StyleApplyInput, FormatAlignInput } from '../format/format.js';
+import type { InlineRunPatchKey } from '../format/inline-run-patch.js';
+import type { StylesApplyInput, StylesApplyOptions, StylesApplyReceipt } from '../styles/styles.js';
 import type {
   CommentsCreateInput,
   CommentsPatchInput,
@@ -56,6 +52,32 @@ import type {
   ListTargetInput,
   ListsExitResult,
 } from '../lists/lists.types.js';
+import type {
+  CreateSectionBreakInput,
+  CreateSectionBreakResult,
+  DocumentMutationResult,
+  SectionInfo,
+  SectionMutationResult,
+  SectionsClearHeaderFooterRefInput,
+  SectionsClearPageBordersInput,
+  SectionsGetInput,
+  SectionsListQuery,
+  SectionsListResult,
+  SectionsSetBreakTypeInput,
+  SectionsSetColumnsInput,
+  SectionsSetHeaderFooterMarginsInput,
+  SectionsSetHeaderFooterRefInput,
+  SectionsSetLineNumberingInput,
+  SectionsSetLinkToPreviousInput,
+  SectionsSetOddEvenHeadersFootersInput,
+  SectionsSetPageBordersInput,
+  SectionsSetPageMarginsInput,
+  SectionsSetPageNumberingInput,
+  SectionsSetPageSetupInput,
+  SectionsSetSectionDirectionInput,
+  SectionsSetTitlePageInput,
+  SectionsSetVerticalAlignInput,
+} from '../sections/sections.types.js';
 import type { QueryMatchInput, QueryMatchOutput } from '../types/query-match.types.js';
 import type {
   MutationsApplyInput,
@@ -63,8 +85,62 @@ import type {
   MutationsPreviewOutput,
   PlanReceipt,
 } from '../types/mutation-plan.types.js';
+import type {
+  CreateTableInput,
+  CreateTableResult,
+  TablesConvertFromTextInput,
+  TableLocator,
+  TablesMoveInput,
+  TablesSplitInput,
+  TablesConvertToTextInput,
+  TablesSetLayoutInput,
+  TablesInsertRowInput,
+  TablesDeleteRowInput,
+  TablesSetRowHeightInput,
+  TablesDistributeRowsInput,
+  TablesSetRowOptionsInput,
+  TablesInsertColumnInput,
+  TablesDeleteColumnInput,
+  TablesSetColumnWidthInput,
+  TablesDistributeColumnsInput,
+  TablesInsertCellInput,
+  TablesDeleteCellInput,
+  TablesMergeCellsInput,
+  TablesUnmergeCellsInput,
+  TablesSplitCellInput,
+  TablesSetCellPropertiesInput,
+  TablesSortInput,
+  TablesSetAltTextInput,
+  TablesSetStyleInput,
+  TablesClearStyleInput,
+  TablesSetStyleOptionInput,
+  TablesSetBorderInput,
+  TablesClearBorderInput,
+  TablesApplyBorderPresetInput,
+  TablesSetShadingInput,
+  TablesClearShadingInput,
+  TablesSetTablePaddingInput,
+  TablesSetCellPaddingInput,
+  TablesSetCellSpacingInput,
+  TablesClearCellSpacingInput,
+  TableMutationResult,
+  TablesGetInput,
+  TablesGetOutput,
+  TablesGetCellsInput,
+  TablesGetCellsOutput,
+  TablesGetPropertiesInput,
+  TablesGetPropertiesOutput,
+} from '../types/table-operations.types.js';
 
-export interface OperationRegistry {
+type FormatInlineAliasOperationRegistry = {
+  [K in InlineRunPatchKey as `format.${K}`]: {
+    input: FormatInlineAliasInput<K>;
+    options: MutationOptions;
+    output: TextMutationReceipt;
+  };
+};
+
+export interface OperationRegistry extends FormatInlineAliasOperationRegistry {
   // --- Singleton reads ---
   find: { input: Selector | Query; options: FindOptions; output: FindOutput };
   getNode: { input: NodeAddress; options: never; output: NodeInfo };
@@ -82,14 +158,15 @@ export interface OperationRegistry {
 
   // --- format.* ---
   'format.apply': { input: StyleApplyInput; options: MutationOptions; output: TextMutationReceipt };
-  'format.fontSize': { input: FormatFontSizeInput; options: MutationOptions; output: TextMutationReceipt };
-  'format.fontFamily': { input: FormatFontFamilyInput; options: MutationOptions; output: TextMutationReceipt };
-  'format.color': { input: FormatColorInput; options: MutationOptions; output: TextMutationReceipt };
   'format.align': { input: FormatAlignInput; options: MutationOptions; output: TextMutationReceipt };
+
+  // --- styles.* ---
+  'styles.apply': { input: StylesApplyInput; options: StylesApplyOptions; output: StylesApplyReceipt };
 
   // --- create.* ---
   'create.paragraph': { input: CreateParagraphInput; options: MutationOptions; output: CreateParagraphResult };
   'create.heading': { input: CreateHeadingInput; options: MutationOptions; output: CreateHeadingResult };
+  'create.sectionBreak': { input: CreateSectionBreakInput; options: MutationOptions; output: CreateSectionBreakResult };
 
   // --- lists.* ---
   'lists.list': { input: ListsListQuery | undefined; options: never; output: ListsListResult };
@@ -100,6 +177,86 @@ export interface OperationRegistry {
   'lists.outdent': { input: ListTargetInput; options: MutationOptions; output: ListsMutateItemResult };
   'lists.restart': { input: ListTargetInput; options: MutationOptions; output: ListsMutateItemResult };
   'lists.exit': { input: ListTargetInput; options: MutationOptions; output: ListsExitResult };
+
+  // --- sections.* ---
+  'sections.list': { input: SectionsListQuery | undefined; options: never; output: SectionsListResult };
+  'sections.get': { input: SectionsGetInput; options: never; output: SectionInfo };
+  'sections.setBreakType': {
+    input: SectionsSetBreakTypeInput;
+    options: MutationOptions;
+    output: SectionMutationResult;
+  };
+  'sections.setPageMargins': {
+    input: SectionsSetPageMarginsInput;
+    options: MutationOptions;
+    output: SectionMutationResult;
+  };
+  'sections.setHeaderFooterMargins': {
+    input: SectionsSetHeaderFooterMarginsInput;
+    options: MutationOptions;
+    output: SectionMutationResult;
+  };
+  'sections.setPageSetup': {
+    input: SectionsSetPageSetupInput;
+    options: MutationOptions;
+    output: SectionMutationResult;
+  };
+  'sections.setColumns': { input: SectionsSetColumnsInput; options: MutationOptions; output: SectionMutationResult };
+  'sections.setLineNumbering': {
+    input: SectionsSetLineNumberingInput;
+    options: MutationOptions;
+    output: SectionMutationResult;
+  };
+  'sections.setPageNumbering': {
+    input: SectionsSetPageNumberingInput;
+    options: MutationOptions;
+    output: SectionMutationResult;
+  };
+  'sections.setTitlePage': {
+    input: SectionsSetTitlePageInput;
+    options: MutationOptions;
+    output: SectionMutationResult;
+  };
+  'sections.setOddEvenHeadersFooters': {
+    input: SectionsSetOddEvenHeadersFootersInput;
+    options: MutationOptions;
+    output: DocumentMutationResult;
+  };
+  'sections.setVerticalAlign': {
+    input: SectionsSetVerticalAlignInput;
+    options: MutationOptions;
+    output: SectionMutationResult;
+  };
+  'sections.setSectionDirection': {
+    input: SectionsSetSectionDirectionInput;
+    options: MutationOptions;
+    output: SectionMutationResult;
+  };
+  'sections.setHeaderFooterRef': {
+    input: SectionsSetHeaderFooterRefInput;
+    options: MutationOptions;
+    output: SectionMutationResult;
+  };
+  'sections.clearHeaderFooterRef': {
+    input: SectionsClearHeaderFooterRefInput;
+    options: MutationOptions;
+    output: SectionMutationResult;
+  };
+  'sections.setLinkToPrevious': {
+    input: SectionsSetLinkToPreviousInput;
+    options: MutationOptions;
+    output: SectionMutationResult;
+  };
+  'sections.setPageBorders': {
+    input: SectionsSetPageBordersInput;
+    options: MutationOptions;
+    output: SectionMutationResult;
+  };
+  'sections.clearPageBorders': {
+    input: SectionsClearPageBordersInput;
+    options: MutationOptions;
+    output: SectionMutationResult;
+  };
 
   // --- comments.* ---
   'comments.create': { input: CommentsCreateInput; options: RevisionGuardOptions; output: Receipt };
@@ -122,6 +279,76 @@ export interface OperationRegistry {
 
   // --- capabilities ---
   'capabilities.get': { input: undefined; options: never; output: DocumentApiCapabilities };
+
+  // --- create.table ---
+  'create.table': { input: CreateTableInput; options: MutationOptions; output: CreateTableResult };
+
+  // --- tables.* ---
+  'tables.convertFromText': {
+    input: TablesConvertFromTextInput;
+    options: MutationOptions;
+    output: TableMutationResult;
+  };
+  'tables.delete': { input: TableLocator; options: MutationOptions; output: TableMutationResult };
+  'tables.clearContents': { input: TableLocator; options: MutationOptions; output: TableMutationResult };
+  'tables.move': { input: TablesMoveInput; options: MutationOptions; output: TableMutationResult };
+  'tables.split': { input: TablesSplitInput; options: MutationOptions; output: TableMutationResult };
+  'tables.convertToText': { input: TablesConvertToTextInput; options: MutationOptions; output: TableMutationResult };
+  'tables.setLayout': { input: TablesSetLayoutInput; options: MutationOptions; output: TableMutationResult };
+  'tables.insertRow': { input: TablesInsertRowInput; options: MutationOptions; output: TableMutationResult };
+  'tables.deleteRow': { input: TablesDeleteRowInput; options: MutationOptions; output: TableMutationResult };
+  'tables.setRowHeight': { input: TablesSetRowHeightInput; options: MutationOptions; output: TableMutationResult };
+  'tables.distributeRows': { input: TablesDistributeRowsInput; options: MutationOptions; output: TableMutationResult };
+  'tables.setRowOptions': { input: TablesSetRowOptionsInput; options: MutationOptions; output: TableMutationResult };
+  'tables.insertColumn': { input: TablesInsertColumnInput; options: MutationOptions; output: TableMutationResult };
+  'tables.deleteColumn': { input: TablesDeleteColumnInput; options: MutationOptions; output: TableMutationResult };
+  'tables.setColumnWidth': { input: TablesSetColumnWidthInput; options: MutationOptions; output: TableMutationResult };
+  'tables.distributeColumns': {
+    input: TablesDistributeColumnsInput;
+    options: MutationOptions;
+    output: TableMutationResult;
+  };
+  'tables.insertCell': { input: TablesInsertCellInput; options: MutationOptions; output: TableMutationResult };
+  'tables.deleteCell': { input: TablesDeleteCellInput; options: MutationOptions; output: TableMutationResult };
+  'tables.mergeCells': { input: TablesMergeCellsInput; options: MutationOptions; output: TableMutationResult };
+  'tables.unmergeCells': { input: TablesUnmergeCellsInput; options: MutationOptions; output: TableMutationResult };
+  'tables.splitCell': { input: TablesSplitCellInput; options: MutationOptions; output: TableMutationResult };
+  'tables.setCellProperties': {
+    input: TablesSetCellPropertiesInput;
+    options: MutationOptions;
+    output: TableMutationResult;
+  };
+  'tables.sort': { input: TablesSortInput; options: MutationOptions; output: TableMutationResult };
+  'tables.setAltText': { input: TablesSetAltTextInput; options: MutationOptions; output: TableMutationResult };
+  'tables.setStyle': { input: TablesSetStyleInput; options: MutationOptions; output: TableMutationResult };
+  'tables.clearStyle': { input: TablesClearStyleInput; options: MutationOptions; output: TableMutationResult };
+  'tables.setStyleOption': { input: TablesSetStyleOptionInput; options: MutationOptions; output: TableMutationResult };
+  'tables.setBorder': { input: TablesSetBorderInput; options: MutationOptions; output: TableMutationResult };
+  'tables.clearBorder': { input: TablesClearBorderInput; options: MutationOptions; output: TableMutationResult };
+  'tables.applyBorderPreset': {
+    input: TablesApplyBorderPresetInput;
+    options: MutationOptions;
+    output: TableMutationResult;
+  };
+  'tables.setShading': { input: TablesSetShadingInput; options: MutationOptions; output: TableMutationResult };
+  'tables.clearShading': { input: TablesClearShadingInput; options: MutationOptions; output: TableMutationResult };
+  'tables.setTablePadding': {
+    input: TablesSetTablePaddingInput;
+    options: MutationOptions;
+    output: TableMutationResult;
+  };
+  'tables.setCellPadding': { input: TablesSetCellPaddingInput; options: MutationOptions; output: TableMutationResult };
+  'tables.setCellSpacing': { input: TablesSetCellSpacingInput; options: MutationOptions; output: TableMutationResult };
+  'tables.clearCellSpacing': {
+    input: TablesClearCellSpacingInput;
+    options: MutationOptions;
+    output: TableMutationResult;
+  };
+
+  // --- tables.* reads ---
+  'tables.get': { input: TablesGetInput; options: never; output: TablesGetOutput };
+  'tables.getCells': { input: TablesGetCellsInput; options: never; output: TablesGetCellsOutput };
+  'tables.getProperties': { input: TablesGetPropertiesInput; options: never; output: TablesGetPropertiesOutput };
 }
 
 // --- Bidirectional completeness checks ---

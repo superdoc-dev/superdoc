@@ -41,10 +41,20 @@ const GROUP_METADATA: Record<ReferenceGroupKey, { title: string; description: st
     description: 'Structured creation helpers.',
     pagePath: 'create/index.mdx',
   },
+  sections: {
+    title: 'Sections',
+    description: 'Section structure and page-setup operations.',
+    pagePath: 'sections/index.mdx',
+  },
   format: {
     title: 'Format',
-    description: 'Canonical formatting mutation with boolean patch semantics.',
+    description: "Canonical formatting mutation with directive semantics ('on', 'off', 'clear').",
     pagePath: 'format/index.mdx',
+  },
+  styles: {
+    title: 'Styles',
+    description: 'Document-level stylesheet mutations (docDefaults, style definitions).',
+    pagePath: 'styles/index.mdx',
   },
   lists: {
     title: 'Lists',
@@ -70,6 +80,11 @@ const GROUP_METADATA: Record<ReferenceGroupKey, { title: string; description: st
     title: 'Mutations',
     description: 'Atomic mutation plan preview and execution.',
     pagePath: 'mutations/index.mdx',
+  },
+  tables: {
+    title: 'Tables',
+    description: 'Table structure, layout, styling, and cell operations.',
+    pagePath: 'tables/index.mdx',
   },
 };
 

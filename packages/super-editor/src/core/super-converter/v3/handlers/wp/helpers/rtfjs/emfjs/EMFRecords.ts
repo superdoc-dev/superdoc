@@ -27,6 +27,7 @@ SOFTWARE.
 */
 
 import { Blob } from './Blob';
+import { DIBitmap } from './Bitmap';
 import { GDIContext } from './GDIContext';
 import { EMFJSError, Helper } from './Helper';
 import { PointL, PointS, RectL, SizeL } from './Primitives';
@@ -115,6 +116,10 @@ class EmfHeader {
         this.displayDevCyUm = reader.readUint32(); // in micrometers
       }
     }
+  }
+
+  public getBounds(): RectL {
+    return this.bounds;
   }
 
   public toString(): string {
@@ -242,11 +247,11 @@ export class EMFRecords {
           const cbBits = reader.readUint32();
           const pen = new Pen(reader, {
             header: {
-              off: offBmi,
+              off: curpos + offBmi,
               size: cbBmi,
             },
             data: {
-              off: offBits,
+              off: curpos + offBits,
               size: cbBits,
             },
           });
@@ -494,6 +499,39 @@ export class EMFRecords {
           });
           break;
         }
+        case Helper.GDI.RecordType.EMR_STRETCHDIBITS: {
+          const bounds = new RectL(reader);
+          const xDest = reader.readInt32();
+          const yDest = reader.readInt32();
+          const xSrc = reader.readInt32();
+          const ySrc = reader.readInt32();
+          const cxSrc = reader.readInt32();
+          const cySrc = reader.readInt32();
+          const offBmiSrc = reader.readUint32();
+          const cbBmiSrc = reader.readUint32();
+          const offBitsSrc = reader.readUint32();
+          const cbBitsSrc = reader.readUint32();
+          const iUsageSrc = reader.readUint32();
+          const dwRop = reader.readUint32();
+          const cxDest = reader.readInt32();
+          const cyDest = reader.readInt32();
+
+          const dib = new DIBitmap(reader, {
+            header: {
+              off: curpos + offBmiSrc,
+              size: cbBmiSrc,
+            },
+            data: {
+              off: curpos + offBitsSrc,
+              size: cbBitsSrc,
+            },
+          });
+
+          this._records.push((gdi) => {
+            gdi.stretchDibBits(xSrc, ySrc, cxSrc, cySrc, xDest, yDest, cxDest, cyDest, dwRop, iUsageSrc, dib);
+          });
+          break;
+        }
         case Helper.GDI.RecordType.EMR_POLYLINE:
         case Helper.GDI.RecordType.EMR_POLYLINETO:
         case Helper.GDI.RecordType.EMR_POLYPOLYLINE:
@@ -536,7 +574,6 @@ export class EMFRecords {
         case Helper.GDI.RecordType.EMR_MASKBLT:
         case Helper.GDI.RecordType.EMR_PLGBLT:
         case Helper.GDI.RecordType.EMR_SETDIBITSTODEVICE:
-        case Helper.GDI.RecordType.EMR_STRETCHDIBITS:
         case Helper.GDI.RecordType.EMR_EXTCREATEFONTINDIRECTW:
         case Helper.GDI.RecordType.EMR_EXTTEXTOUTA:
         case Helper.GDI.RecordType.EMR_EXTTEXTOUTW:
@@ -599,6 +636,10 @@ export class EMFRecords {
     if (!all) {
       throw new EMFJSError('Could not read all records');
     }
+  }
+
+  public getBounds(): RectL {
+    return this._header.getBounds();
   }
 
   public play(gdi: GDIContext): void {

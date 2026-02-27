@@ -1,7 +1,7 @@
 ---
-title: format.fontFamily
-sidebarTitle: format.fontFamily
-description: Reference for format.fontFamily
+title: tables.deleteColumn
+sidebarTitle: tables.deleteColumn
+description: Delete a column from the target table.
 ---
 
 {/* GENERATED FILE: DO NOT EDIT. Regenerate via `pnpm run docapi:sync`. */}
@@ -10,34 +10,39 @@ description: Reference for format.fontFamily
 
 ## Summary
 
-- Operation ID: `format.fontFamily`
-- API member path: `editor.doc.format.fontFamily(...)`
+Delete a column from the target table.
+
+- Operation ID: `tables.deleteColumn`
+- API member path: `editor.doc.tables.deleteColumn(...)`
 - Mutates document: `yes`
 - Idempotency: `conditional`
-- Supports tracked mode: `no`
+- Supports tracked mode: `yes`
 - Supports dry run: `yes`
 - Deterministic target resolution: `yes`
+
+## Expected result
+
+Returns a TableMutationResult receipt; reports NO_OP if the target column does not exist.
 
 ## Input fields
 
 | Field | Type | Required | Description |
 | --- | --- | --- | --- |
-| `target` | TextAddress | yes | TextAddress |
-| `value` | string \\| null | yes | One of: string, null |
+| `columnIndex` | integer | yes |  |
+| `tableNodeId` | string | no |  |
+| `tableTarget` | BlockNodeAddress | no | BlockNodeAddress |
 
 ### Example request
 
 ```json
 {
-  "target": {
-    "blockId": "block-abc123",
-    "kind": "text",
-    "range": {
-      "end": 10,
-      "start": 0
-    }
-  },
-  "value": "example"
+  "columnIndex": 1,
+  "tableNodeId": "example",
+  "tableTarget": {
+    "kind": "block",
+    "nodeId": "node-def456",
+    "nodeType": "paragraph"
+  }
 }
 ```
 
@@ -49,38 +54,13 @@ _No fields._
 
 ```json
 {
-  "inserted": [
-    {
-      "entityId": "entity-789",
-      "entityType": "comment",
-      "kind": "entity"
-    }
-  ],
-  "resolution": {
-    "range": {
-      "from": 0,
-      "to": 10
-    },
-    "requestedTarget": {
-      "blockId": "block-abc123",
-      "kind": "text",
-      "range": {
-        "end": 10,
-        "start": 0
-      }
-    },
-    "target": {
-      "blockId": "block-abc123",
-      "kind": "text",
-      "range": {
-        "end": 10,
-        "start": 0
-      }
-    },
-    "text": "Hello, world."
-  },
   "success": true,
-  "updated": [
+  "table": {
+    "kind": "block",
+    "nodeId": "node-def456",
+    "nodeType": "paragraph"
+  },
+  "trackedChangeRefs": [
     {
       "entityId": "entity-789",
       "entityType": "comment",
@@ -93,9 +73,9 @@ _No fields._
 ## Pre-apply throws
 
 - `TARGET_NOT_FOUND`
+- `INVALID_TARGET`
 - `CAPABILITY_UNAVAILABLE`
 - `INVALID_TARGET`
-- `INVALID_INPUT`
 
 ## Non-applied failure codes
 
@@ -108,25 +88,32 @@ _No fields._
 ```json
 {
   "additionalProperties": false,
-  "properties": {
-    "target": {
-      "$ref": "#/$defs/TextAddress"
-    },
-    "value": {
-      "oneOf": [
-        {
-          "minLength": 1,
-          "type": "string"
-        },
-        {
-          "type": "null"
-        }
+  "oneOf": [
+    {
+      "required": [
+        "tableTarget"
       ]
+    },
+    {
+      "required": [
+        "tableNodeId"
+      ]
+    }
+  ],
+  "properties": {
+    "columnIndex": {
+      "minimum": 0,
+      "type": "integer"
+    },
+    "tableNodeId": {
+      "type": "string"
+    },
+    "tableTarget": {
+      "$ref": "#/$defs/BlockNodeAddress"
     }
   },
   "required": [
-    "target",
-    "value"
+    "columnIndex"
   ],
   "type": "object"
 }
@@ -138,7 +125,25 @@ _No fields._
 {
   "oneOf": [
     {
-      "$ref": "#/$defs/TextMutationSuccess"
+      "additionalProperties": false,
+      "properties": {
+        "success": {
+          "const": true
+        },
+        "table": {
+          "$ref": "#/$defs/BlockNodeAddress"
+        },
+        "trackedChangeRefs": {
+          "items": {
+            "$ref": "#/$defs/EntityAddress"
+          },
+          "type": "array"
+        }
+      },
+      "required": [
+        "success"
+      ],
+      "type": "object"
     },
     {
       "additionalProperties": false,
@@ -148,8 +153,10 @@ _No fields._
           "properties": {
             "code": {
               "enum": [
+                "NO_OP",
                 "INVALID_TARGET",
-                "NO_OP"
+                "TARGET_NOT_FOUND",
+                "CAPABILITY_UNAVAILABLE"
               ]
             },
             "details": {},
@@ -163,17 +170,13 @@ _No fields._
           ],
           "type": "object"
         },
-        "resolution": {
-          "$ref": "#/$defs/TextMutationResolution"
-        },
         "success": {
           "const": false
         }
       },
       "required": [
         "success",
-        "failure",
-        "resolution"
+        "failure"
       ],
       "type": "object"
     }
@@ -185,7 +188,25 @@ _No fields._
 <Accordion title="Raw success schema">
 ```json
 {
-  "$ref": "#/$defs/TextMutationSuccess"
+  "additionalProperties": false,
+  "properties": {
+    "success": {
+      "const": true
+    },
+    "table": {
+      "$ref": "#/$defs/BlockNodeAddress"
+    },
+    "trackedChangeRefs": {
+      "items": {
+        "$ref": "#/$defs/EntityAddress"
+      },
+      "type": "array"
+    }
+  },
+  "required": [
+    "success"
+  ],
+  "type": "object"
 }
 ```
 </Accordion>
@@ -200,8 +221,10 @@ _No fields._
       "properties": {
         "code": {
           "enum": [
+            "NO_OP",
             "INVALID_TARGET",
-            "NO_OP"
+            "TARGET_NOT_FOUND",
+            "CAPABILITY_UNAVAILABLE"
           ]
         },
         "details": {},
@@ -215,17 +238,13 @@ _No fields._
       ],
       "type": "object"
     },
-    "resolution": {
-      "$ref": "#/$defs/TextMutationResolution"
-    },
     "success": {
       "const": false
     }
   },
   "required": [
     "success",
-    "failure",
-    "resolution"
+    "failure"
   ],
   "type": "object"
 }

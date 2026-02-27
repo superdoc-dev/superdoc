@@ -1,7 +1,7 @@
 ---
 title: mutations.preview
 sidebarTitle: mutations.preview
-description: Reference for mutations.preview
+description: Dry-run a mutation plan, returning resolved targets without applying changes.
 ---
 
 {/* GENERATED FILE: DO NOT EDIT. Regenerate via `pnpm run docapi:sync`. */}
@@ -10,6 +10,8 @@ description: Reference for mutations.preview
 
 ## Summary
 
+Dry-run a mutation plan, returning resolved targets without applying changes.
+
 - Operation ID: `mutations.preview`
 - API member path: `editor.doc.mutations.preview(...)`
 - Mutates document: `no`
@@ -17,6 +19,10 @@ description: Reference for mutations.preview
 - Supports tracked mode: `no`
 - Supports dry run: `no`
 - Deterministic target resolution: `yes`
+
+## Expected result
+
+Returns a MutationsPreviewOutput with resolved targets and step details without applying changes.
 
 ## Input fields
 

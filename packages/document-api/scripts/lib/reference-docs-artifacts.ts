@@ -10,6 +10,7 @@ import {
 } from './generation-utils.js';
 import {
   OPERATION_DESCRIPTION_MAP,
+  OPERATION_EXPECTED_RESULT_MAP,
   OPERATION_REFERENCE_DOC_PATH_MAP,
   REFERENCE_OPERATION_ALIASES,
   REFERENCE_OPERATION_GROUPS,
@@ -54,6 +55,18 @@ function toRelativeDocHref(fromPath: string, toPath: string): string {
 
 function toPublicDocHref(path: string): string {
   return `/${path.replace(/^apps\/docs\//u, '').replace(/\.mdx$/u, '')}`;
+}
+
+/**
+ * Quote a string for safe use as a YAML frontmatter value.
+ * Wraps in double quotes when the value contains characters that would
+ * break unquoted YAML scalars (colons, hash signs, brackets, etc.).
+ */
+function yamlQuote(value: string): string {
+  if (/[:#\[\]{}&*!|>'"%@`]/u.test(value)) {
+    return `"${value.replace(/\\/gu, '\\\\').replace(/"/gu, '\\"')}"`;
+  }
+  return value;
 }
 
 function renderList(values: readonly string[]): string {
@@ -310,6 +323,28 @@ const INTEGER_EXAMPLES: Record<string, number> = {
   listLevel: 0,
 };
 
+function applyNumericBounds(value: number, schema: JsonSchema, type: 'integer' | 'number'): number {
+  let bounded = value;
+
+  const minimum = typeof schema.minimum === 'number' ? schema.minimum : undefined;
+  const maximum = typeof schema.maximum === 'number' ? schema.maximum : undefined;
+  const exclusiveMinimum = typeof schema.exclusiveMinimum === 'number' ? schema.exclusiveMinimum : undefined;
+  const exclusiveMaximum = typeof schema.exclusiveMaximum === 'number' ? schema.exclusiveMaximum : undefined;
+
+  if (minimum !== undefined && bounded < minimum) bounded = minimum;
+  if (exclusiveMinimum !== undefined && bounded <= exclusiveMinimum) {
+    bounded = type === 'integer' ? Math.floor(exclusiveMinimum) + 1 : exclusiveMinimum + 0.1;
+  }
+
+  if (maximum !== undefined && bounded > maximum) bounded = maximum;
+  if (exclusiveMaximum !== undefined && bounded >= exclusiveMaximum) {
+    bounded = type === 'integer' ? Math.ceil(exclusiveMaximum) - 1 : exclusiveMaximum - 0.1;
+  }
+
+  if (!Number.isFinite(bounded)) return type === 'integer' ? 1 : 12.5;
+  return type === 'integer' ? Math.trunc(bounded) : bounded;
+}
+
 /**
  * Generate a deterministic example value from a JSON Schema node.
  * `fieldName` is used to pick contextual string/integer values.
@@ -330,14 +365,6 @@ function generateExample(schema: JsonSchema, $defs: Defs, fieldName?: string, de
     return generateExample(resolved, $defs, fieldName, depth);
   }
 
-  // oneOf / anyOf — first variant
-  for (const keyword of ['oneOf', 'anyOf'] as const) {
-    const variants = schema[keyword];
-    if (Array.isArray(variants) && variants.length > 0) {
-      return generateExample(variants[0] as JsonSchema, $defs, fieldName, depth);
-    }
-  }
-
   // array — single item
   if (schema.type === 'array') {
     const items = schema.items as JsonSchema | undefined;
@@ -350,6 +377,17 @@ function generateExample(schema: JsonSchema, $defs: Defs, fieldName?: string, de
   if (schema.type === 'object' && schema.properties) {
     const properties = schema.properties as Record<string, JsonSchema>;
     const requiredSet = new Set<string>(Array.isArray(schema.required) ? (schema.required as string[]) : []);
+    for (const keyword of ['oneOf', 'anyOf'] as const) {
+      const variants = schema[keyword];
+      if (!Array.isArray(variants) || variants.length === 0) continue;
+      const firstVariant = variants[0] as JsonSchema;
+      if (Array.isArray(firstVariant.required)) {
+        for (const requiredField of firstVariant.required as string[]) {
+          requiredSet.add(requiredField);
+        }
+      }
+      break;
+    }
 
     const result: Record<string, unknown> = {};
     const keys = Object.keys(properties);
@@ -366,18 +404,26 @@ function generateExample(schema: JsonSchema, $defs: Defs, fieldName?: string, de
     return result;
   }
 
+  // oneOf / anyOf — first variant (non-object union fallback)
+  for (const keyword of ['oneOf', 'anyOf'] as const) {
+    const variants = schema[keyword];
+    if (Array.isArray(variants) && variants.length > 0) {
+      return generateExample(variants[0] as JsonSchema, $defs, fieldName, depth);
+    }
+  }
+
   // primitives
   if (schema.type === 'string') {
     if (fieldName && STRING_EXAMPLES[fieldName] !== undefined) return STRING_EXAMPLES[fieldName];
     return 'example';
   }
   if (schema.type === 'integer') {
-    if (fieldName && INTEGER_EXAMPLES[fieldName] !== undefined) return INTEGER_EXAMPLES[fieldName];
-    return 1;
+    const base = fieldName && INTEGER_EXAMPLES[fieldName] !== undefined ? INTEGER_EXAMPLES[fieldName] : 1;
+    return applyNumericBounds(base, schema, 'integer');
   }
   if (schema.type === 'number') {
-    if (fieldName && INTEGER_EXAMPLES[fieldName] !== undefined) return INTEGER_EXAMPLES[fieldName];
-    return 12.5;
+    const base = fieldName && INTEGER_EXAMPLES[fieldName] !== undefined ? INTEGER_EXAMPLES[fieldName] : 12.5;
+    return applyNumericBounds(base, schema, 'number');
   }
   if (schema.type === 'boolean') return true;
 
@@ -436,6 +482,8 @@ function buildOperationGroups(operations: ContractOperationSnapshot[]): Operatio
 function renderOperationPage(operation: ContractOperationSnapshot, $defs: Defs): string {
   const title = operation.operationId;
   const metadata = operation.metadata;
+  const description = OPERATION_DESCRIPTION_MAP[operation.operationId];
+  const expectedResult = OPERATION_EXPECTED_RESULT_MAP[operation.operationId];
 
   const inputRows = buildFieldRows(operation.schemas.input, $defs);
   const outputRows = buildFieldRows(operation.schemas.output, $defs);
@@ -457,7 +505,7 @@ function renderOperationPage(operation: ContractOperationSnapshot, $defs: Defs):
   return `---
 title: ${title}
 sidebarTitle: ${title}
-description: Reference for ${title}
+description: ${yamlQuote(description)}
 ---
 
 ${GENERATED_MARKER}
@@ -466,6 +514,8 @@ ${GENERATED_MARKER}
 
 ## Summary
 
+${description}
+
 - Operation ID: \`${operation.operationId}\`
 - API member path: \`${formatMemberPath(operation.memberPath)}\`
 - Mutates document: \`${metadata.mutates ? 'yes' : 'no'}\`
@@ -473,6 +523,10 @@ ${GENERATED_MARKER}
 - Supports tracked mode: \`${metadata.supportsTrackedMode ? 'yes' : 'no'}\`
 - Supports dry run: \`${metadata.supportsDryRun ? 'yes' : 'no'}\`
 - Deterministic target resolution: \`${metadata.deterministicTargetResolution ? 'yes' : 'no'}\`
+
+## Expected result
+
+${expectedResult}
 
 ## Input fields
 
@@ -751,9 +805,30 @@ export function buildReferenceDocsArtifacts(): GeneratedFile[] {
 }
 
 /**
- * Checks that generated `.mdx` files contain the generated marker and that
- * the overview doc's API-surface block is up to date. Skips files already
- * present in {@link existingIssuePaths} to avoid duplicate reports.
+ * Validate that YAML frontmatter values don't contain unquoted special characters.
+ * Returns an array of field names with invalid values.
+ */
+function validateFrontmatter(content: string): string[] {
+  const match = /^---\n([\s\S]*?)\n---/u.exec(content);
+  if (!match) return [];
+
+  const invalid: string[] = [];
+  for (const line of match[1].split('\n')) {
+    const kvMatch = /^(\w+):\s+(.+)$/u.exec(line);
+    if (!kvMatch) continue;
+    const [, key, value] = kvMatch;
+    // Unquoted values containing colons break YAML parsing
+    if (!value.startsWith('"') && !value.startsWith("'") && /:/u.test(value)) {
+      invalid.push(key);
+    }
+  }
+  return invalid;
+}
+
+/**
+ * Checks that generated `.mdx` files contain the generated marker, have valid
+ * YAML frontmatter, and that the overview doc's API-surface block is up to date.
+ * Skips files already present in {@link existingIssuePaths} to avoid duplicate reports.
  */
 export async function checkReferenceDocsExtras(files: GeneratedFile[], issues: GeneratedCheckIssue[]): Promise<void> {
   const existingIssuePaths = new Set(issues.map((issue) => issue.path));
@@ -762,6 +837,11 @@ export async function checkReferenceDocsExtras(files: GeneratedFile[], issues: G
     if (!file.path.endsWith('.mdx') || existingIssuePaths.has(file.path)) continue;
     const content = await readFile(resolveWorkspacePath(file.path), 'utf8').catch(() => null);
     if (content == null || !content.includes(GENERATED_MARKER)) {
+      issues.push({ kind: 'content', path: file.path });
+      continue;
+    }
+    const invalidFields = validateFrontmatter(content);
+    if (invalidFields.length > 0) {
       issues.push({ kind: 'content', path: file.path });
     }
   }

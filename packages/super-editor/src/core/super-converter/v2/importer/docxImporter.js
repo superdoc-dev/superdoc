@@ -32,12 +32,14 @@ import { ensureNumberingCache } from './numberingCache.js';
 import { commentRangeStartHandlerEntity, commentRangeEndHandlerEntity } from './commentRangeImporter.js';
 import { permStartHandlerEntity } from './permStartImporter.js';
 import { permEndHandlerEntity } from './permEndImporter.js';
+import { normalizeDuplicateBlockIdentitiesInContent } from './normalizeDuplicateBlockIdentitiesInContent.js';
 import bookmarkStartAttrConfigs from '@converter/v3/handlers/w/bookmark-start/attributes/index.js';
 import bookmarkEndAttrConfigs from '@converter/v3/handlers/w/bookmark-end/attributes/index.js';
 import { translator as wStylesTranslator } from '@converter/v3/handlers/w/styles/index.js';
 import { translator as wNumberingTranslator } from '@converter/v3/handlers/w/numbering/index.js';
 import { baseNumbering } from '@converter/v2/exporter/helpers/base-list.definitions.js';
 import { patchNumberingDefinitions } from './patchNumberingDefinitions.js';
+import { startCollection, drainDiagnostics } from '@converter/v3/handlers/import-diagnostics.js';
 
 /**
  * @typedef {import()} XmlNode
@@ -151,6 +153,7 @@ export const createDocumentJson = (docx, converter, editor) => {
     const translatedLinkedStyles = translateStyleDefinitions(docx);
     const translatedNumbering = translateNumberingDefinitions(docx);
 
+    const importDiagnosticsCollectionId = startCollection();
     let parsedContent = nodeListHandler.handler({
       nodes: content,
       nodeListHandler,
@@ -163,12 +166,15 @@ export const createDocumentJson = (docx, converter, editor) => {
       inlineDocumentFonts,
       lists,
       path: [],
+      extraParams: { importDiagnosticsCollectionId },
     });
+    const importDiagnostics = drainDiagnostics(importDiagnosticsCollectionId);
 
     // Safety: drop any inline-only nodes that accidentally landed at the doc root
     parsedContent = filterOutRootInlineNodes(parsedContent);
     parsedContent = normalizeTableBookmarksInContent(parsedContent, editor);
     collapseWhitespaceNextToInlinePassthrough(parsedContent);
+    parsedContent = normalizeDuplicateBlockIdentitiesInContent(parsedContent);
 
     const result = {
       type: 'doc',
@@ -200,6 +206,7 @@ export const createDocumentJson = (docx, converter, editor) => {
       numbering: getNumberingDefinitions(docx, converter),
       translatedNumbering,
       themeColors: getThemeColorPalette(docx),
+      importDiagnostics,
     };
   }
   return null;
@@ -688,6 +695,7 @@ const importHeadersFooters = (docx, converter, mainEditor, numbering, translated
 
     // Safety: drop inline-only nodes at the root of header docs
     schema = filterOutRootInlineNodes(schema);
+    schema = normalizeDuplicateBlockIdentitiesInContent(schema);
 
     if (!converter.headerIds.ids) converter.headerIds.ids = [];
     converter.headerIds.ids.push(rId);
@@ -727,6 +735,7 @@ const importHeadersFooters = (docx, converter, mainEditor, numbering, translated
 
     // Safety: drop inline-only nodes at the root of footer docs
     schema = filterOutRootInlineNodes(schema);
+    schema = normalizeDuplicateBlockIdentitiesInContent(schema);
 
     if (!converter.footerIds.ids) converter.footerIds.ids = [];
     converter.footerIds.ids.push(rId);

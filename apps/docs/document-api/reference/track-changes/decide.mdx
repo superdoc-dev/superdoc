@@ -1,7 +1,7 @@
 ---
 title: trackChanges.decide
 sidebarTitle: trackChanges.decide
-description: Reference for trackChanges.decide
+description: "Accept or reject a tracked change (by ID or scope: all)."
 ---
 
 {/* GENERATED FILE: DO NOT EDIT. Regenerate via `pnpm run docapi:sync`. */}
@@ -10,6 +10,8 @@ description: Reference for trackChanges.decide
 
 ## Summary
 
+Accept or reject a tracked change (by ID or scope: all).
+
 - Operation ID: `trackChanges.decide`
 - API member path: `editor.doc.trackChanges.decide(...)`
 - Mutates document: `yes`
@@ -17,6 +19,10 @@ description: Reference for trackChanges.decide
 - Supports tracked mode: `no`
 - Supports dry run: `no`
 - Deterministic target resolution: `yes`
+
+## Expected result
+
+Returns a Receipt confirming the decision was applied; reports NO_OP if the change was already resolved.
 
 ## Input fields
 

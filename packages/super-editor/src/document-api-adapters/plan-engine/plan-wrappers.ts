@@ -10,15 +10,18 @@ import { v4 as uuidv4 } from 'uuid';
 import type {
   MutationOptions,
   MutationStep,
+  InsertInput,
   TextAddress,
   TextMutationReceipt,
   TextMutationResolution,
   WriteRequest,
   StyleApplyInput,
-  SetMarks,
+  FormatAlignInput,
+  InlineRunPatchKey,
   PlanReceipt,
   ReceiptFailure,
 } from '@superdoc/document-api';
+import { INLINE_PROPERTY_BY_KEY } from '@superdoc/document-api';
 import type { Editor } from '../../core/Editor.js';
 import type { CompiledPlan } from './compiler.js';
 import type { CompiledTarget } from './executor-registry.types.js';
@@ -27,8 +30,15 @@ import { getRevision } from './revision-tracker.js';
 import { DocumentApiAdapterError } from '../errors.js';
 import { resolveDefaultInsertTarget, resolveTextTarget, type ResolvedTextTarget } from '../helpers/adapter-utils.js';
 import { buildTextMutationResolution, readTextAtResolvedRange } from '../helpers/text-mutation-resolution.js';
-import { ensureTrackedCapability, requireSchemaMark } from '../helpers/mutation-helpers.js';
+import {
+  ensureTrackedCapability,
+  requireEditorCommand,
+  requireSchemaMark,
+  rejectTrackedMode,
+} from '../helpers/mutation-helpers.js';
 import { TrackFormatMarkName } from '../../extensions/track-changes/constants.js';
+import { markdownToPmFragment } from '../../core/helpers/markdown/markdownToPmContent.js';
+import { processContent } from '../../core/helpers/contentProcessor.js';
 
 // ---------------------------------------------------------------------------
 // Locator normalization (same validation as the old adapters)
@@ -358,13 +368,75 @@ export function writeWrapper(editor: Editor, request: WriteRequest, options?: Mu
 // Canonical format.apply wrapper (multi-style inline patch semantics)
 // ---------------------------------------------------------------------------
 
-/** Map from mark key to editor schema mark name. */
-const MARK_KEY_TO_SCHEMA_NAME: Record<string, string> = {
-  bold: 'bold',
-  italic: 'italic',
-  underline: 'underline',
-  strike: 'strike',
-};
+interface ResolvedFormatTarget {
+  target: TextAddress;
+  range: ResolvedTextTarget;
+  resolution: TextMutationResolution;
+}
+
+function resolveFormatTarget(editor: Editor, target: TextAddress, operation: string): ResolvedFormatTarget {
+  const range = resolveTextTarget(editor, target);
+  if (!range) {
+    throw new DocumentApiAdapterError('TARGET_NOT_FOUND', `${operation} target could not be resolved.`, { target });
+  }
+  const resolution = buildTextMutationResolution({
+    requestedTarget: target,
+    target,
+    range,
+    text: readTextAtResolvedRange(editor, range),
+  });
+  return { target, range, resolution };
+}
+
+function noOpFailure(resolution: TextMutationResolution, operation: string): TextMutationReceipt {
+  return {
+    success: false,
+    resolution,
+    failure: { code: 'NO_OP', message: `${operation} produced no change.` },
+  };
+}
+
+function ensureInlinePropertyCapabilities(editor: Editor, keys: readonly InlineRunPatchKey[]): void {
+  let requiresTextStyle = false;
+  let requiresRunNode = false;
+
+  for (const key of keys) {
+    const entry = INLINE_PROPERTY_BY_KEY[key];
+    if (!entry) continue;
+
+    if (entry.storage === 'mark') {
+      const carrier = entry.carrier;
+      if (carrier.storage !== 'mark') continue;
+      if (carrier.markName === 'textStyle') {
+        requiresTextStyle = true;
+        continue;
+      }
+      requireSchemaMark(editor, carrier.markName, 'format.apply');
+      continue;
+    }
+
+    requiresRunNode = true;
+  }
+
+  if (requiresTextStyle) {
+    requireSchemaMark(editor, 'textStyle', 'format.apply');
+  }
+
+  if (requiresRunNode && !editor.state.schema.nodes.run) {
+    throw new DocumentApiAdapterError('CAPABILITY_UNAVAILABLE', 'format.apply requires a run node in the schema.');
+  }
+}
+
+function ensureTrackedInlinePropertySupport(keys: readonly InlineRunPatchKey[]): void {
+  const unsupportedTrackedKeys = keys.filter((key) => INLINE_PROPERTY_BY_KEY[key]?.tracked === false);
+  if (unsupportedTrackedKeys.length === 0) return;
+
+  throw new DocumentApiAdapterError(
+    'CAPABILITY_UNAVAILABLE',
+    `format.apply tracked mode is not available for: ${unsupportedTrackedKeys.join(', ')}`,
+    { keys: unsupportedTrackedKeys, changeMode: 'tracked' },
+  );
+}
 
 export function styleApplyWrapper(
   editor: Editor,
@@ -372,44 +444,27 @@ export function styleApplyWrapper(
   options?: MutationOptions,
 ): TextMutationReceipt {
   const normalizedInput = normalizeFormatLocator(input);
-  const range = resolveTextTarget(editor, normalizedInput.target!);
-  if (!range) {
-    throw new DocumentApiAdapterError('TARGET_NOT_FOUND', 'format.apply target could not be resolved.', {
-      target: normalizedInput.target,
-    });
-  }
+  const resolved = resolveFormatTarget(editor, normalizedInput.target!, 'format.apply');
 
-  const resolution = buildTextMutationResolution({
-    requestedTarget: input.target,
-    target: normalizedInput.target!,
-    range,
-    text: readTextAtResolvedRange(editor, range),
-  });
-
-  if (range.from === range.to) {
+  if (resolved.range.from === resolved.range.to) {
     return {
       success: false,
-      resolution,
+      resolution: resolved.resolution,
       failure: { code: 'INVALID_TARGET', message: 'format.apply requires a non-collapsed target range.' },
     };
   }
 
-  // Validate that at least one requested inline style exists in the schema
-  const markKeys = Object.keys(input.inline).filter((k) => input.inline[k as keyof SetMarks] !== undefined);
-  for (const key of markKeys) {
-    const schemaName = MARK_KEY_TO_SCHEMA_NAME[key];
-    if (schemaName) {
-      requireSchemaMark(editor, schemaName, 'format.apply');
-    }
-  }
+  const inlineKeys = Object.keys(input.inline) as InlineRunPatchKey[];
+  ensureInlinePropertyCapabilities(editor, inlineKeys);
 
   const mode = options?.changeMode ?? 'direct';
   if (mode === 'tracked') {
+    ensureTrackedInlinePropertySupport(inlineKeys);
     ensureTrackedCapability(editor, { operation: 'format.apply', requireMarks: [TrackFormatMarkName] });
   }
 
   if (options?.dryRun) {
-    return { success: true, resolution };
+    return { success: true, resolution: resolved.resolution };
   }
 
   // Build single-step compiled plan using the full inline payload
@@ -428,9 +483,9 @@ export function styleApplyWrapper(
     blockId: normalizedInput.target!.blockId,
     from: normalizedInput.target!.range.start,
     to: normalizedInput.target!.range.end,
-    absFrom: range.from,
-    absTo: range.to,
-    text: resolution.text,
+    absFrom: resolved.range.from,
+    absTo: resolved.range.to,
+    text: resolved.resolution.text,
     marks: [],
   };
 
@@ -445,5 +500,290 @@ export function styleApplyWrapper(
     expectedRevision: options?.expectedRevision,
   });
 
-  return mapPlanReceiptToTextReceipt(receipt, resolution);
+  return mapPlanReceiptToTextReceipt(receipt, resolved.resolution);
+}
+
+export function formatAlignWrapper(
+  editor: Editor,
+  input: FormatAlignInput,
+  options?: MutationOptions,
+): TextMutationReceipt {
+  const operation = 'format.align';
+  rejectTrackedMode(operation, options);
+
+  const normalizedInput = normalizeFormatLocator(input);
+  const resolved = resolveFormatTarget(editor, normalizedInput.target!, operation);
+
+  const setTextSelection = requireEditorCommand(
+    editor.commands?.setTextSelection as ((range: { from: number; to: number }) => boolean) | undefined,
+    `${operation} (setTextSelection)`,
+  );
+
+  if (input.alignment !== null) {
+    requireEditorCommand(
+      editor.commands?.setTextAlign as ((alignment: string) => boolean) | undefined,
+      `${operation} (setTextAlign)`,
+    );
+  } else {
+    requireEditorCommand(
+      editor.commands?.unsetTextAlign as (() => boolean) | undefined,
+      `${operation} (unsetTextAlign)`,
+    );
+  }
+
+  if (options?.dryRun) {
+    return { success: true, resolution: resolved.resolution };
+  }
+
+  const receipt = executeDomainCommand(
+    editor,
+    () => {
+      setTextSelection({ from: resolved.range.from, to: resolved.range.to });
+      if (input.alignment !== null) {
+        return (editor.commands as Record<string, (value: string) => boolean>).setTextAlign(input.alignment);
+      }
+      return (editor.commands as Record<string, () => boolean>).unsetTextAlign();
+    },
+    { expectedRevision: options?.expectedRevision },
+  );
+
+  if (receipt.steps[0]?.effect !== 'changed') {
+    return noOpFailure(resolved.resolution, operation);
+  }
+
+  return { success: true, resolution: resolved.resolution };
+}
+
+// ---------------------------------------------------------------------------
+// Structured content insertion (markdown / html)
+// ---------------------------------------------------------------------------
+
+/**
+ * Insert structured content (markdown or html) at a target position.
+ *
+ * Routes through `executeDomainCommand` to enforce the revision guard.
+ * Conversion (markdown → AST → PM, or html → processContent → PM) happens
+ * inside the handler, so list-definition side effects only occur after the
+ * revision check passes. HTML content goes through the canonical
+ * `processContent` pipeline, matching the `insertContent` command path.
+ *
+ * Tracked mode is explicitly rejected for structured content in this implementation.
+ */
+export function insertStructuredWrapper(
+  editor: Editor,
+  input: InsertInput,
+  options?: MutationOptions,
+): TextMutationReceipt {
+  const contentType = input.type ?? 'text';
+  const { value, target } = input;
+
+  // Tracked mode not supported for structured content
+  const mode = options?.changeMode ?? 'direct';
+  if (mode === 'tracked') {
+    throw new DocumentApiAdapterError(
+      'CAPABILITY_UNAVAILABLE',
+      `Tracked mode is not supported for type: '${contentType}' insert operations.`,
+    );
+  }
+
+  // Resolve target position
+  let resolvedRange: ResolvedTextTarget;
+  let effectiveTarget: TextAddress;
+
+  if (target) {
+    const range = resolveTextTarget(editor, target);
+    if (!range) {
+      throw new DocumentApiAdapterError('TARGET_NOT_FOUND', 'Structured insert target could not be resolved.', {
+        target,
+      });
+    }
+    resolvedRange = range;
+    effectiveTarget = target;
+  } else {
+    const fallback = resolveDefaultInsertTarget(editor);
+    if (!fallback) {
+      throw new DocumentApiAdapterError('TARGET_NOT_FOUND', 'No default insertion point available.');
+    }
+    resolvedRange = fallback.range;
+    effectiveTarget = fallback.target;
+  }
+
+  const resolution = buildTextMutationResolution({
+    requestedTarget: target,
+    target: effectiveTarget,
+    range: resolvedRange,
+    text: readTextAtResolvedRange(editor, resolvedRange),
+  });
+
+  const { from, to } = resolvedRange;
+
+  // Insert semantics are point-only for doc.insert, regardless of content type.
+  if (from !== to) {
+    return {
+      success: false,
+      resolution,
+      failure: { code: 'INVALID_TARGET', message: 'Insert operations require a collapsed target range.' },
+    };
+  }
+
+  // Dry-run: parse + validate but do not mutate
+  if (options?.dryRun) {
+    if (contentType === 'markdown') {
+      // Parse to validate structure (side-effect-free with dryRun: true)
+      const { fragment } = markdownToPmFragment(value, editor, { dryRun: true });
+      if (fragment.childCount === 0) {
+        return {
+          success: false,
+          resolution,
+          failure: { code: 'NO_OP', message: 'Markdown produced no content to insert.' },
+        };
+      }
+    } else if (contentType === 'html') {
+      // NOTE: processContent has no dryRun flag — this runs the full HTML
+      // pipeline (DOM creation, wrapTextsInRuns) minus the final insertContentAt.
+      // Snapshot numbering state so we can roll back after the dry-run, since
+      // HTML list parsing allocates IDs/definitions on editor.converter.
+      const converter = (editor as any).converter;
+      const numberingSnapshot = converter?.numbering ? JSON.parse(JSON.stringify(converter.numbering)) : undefined;
+      const translatedNumberingSnapshot = converter?.translatedNumbering
+        ? JSON.parse(JSON.stringify(converter.translatedNumbering))
+        : undefined;
+      try {
+        const processedDoc = processContent({ content: value, type: 'html', editor });
+        if (!processedDoc || typeof (processedDoc as { toJSON?: unknown }).toJSON !== 'function') {
+          return {
+            success: false,
+            resolution,
+            failure: {
+              code: 'INVALID_TARGET',
+              message: 'HTML processing did not produce a valid document node.',
+            },
+          };
+        }
+      } catch (err) {
+        const message = err instanceof Error ? err.message : String(err);
+        return {
+          success: false,
+          resolution,
+          failure: {
+            code: 'UNSUPPORTED_ENVIRONMENT',
+            message: `HTML structured insert requires a DOM environment. ${message}`,
+          },
+        };
+      } finally {
+        // Roll back numbering mutations from the dry-run HTML pipeline.
+        if (converter && numberingSnapshot !== undefined) {
+          converter.numbering = numberingSnapshot;
+        }
+        if (converter && translatedNumberingSnapshot !== undefined) {
+          converter.translatedNumbering = translatedNumberingSnapshot;
+        }
+      }
+    }
+    return { success: true, resolution };
+  }
+
+  // Convert and insert inside executeDomainCommand so the revision guard
+  // runs before any conversion side effects (e.g. list numbering allocation).
+  let insertFailure: ReceiptFailure | undefined;
+
+  // Snapshot numbering state so we can roll back if the insert fails.
+  // List conversion allocates IDs and definitions on editor.converter — these
+  // mutations sit outside the ProseMirror transaction and aren't auto-reverted.
+  const converter = (editor as any).converter;
+  const numberingSnapshot = converter?.numbering ? JSON.parse(JSON.stringify(converter.numbering)) : undefined;
+  const translatedNumberingSnapshot = converter?.translatedNumbering
+    ? JSON.parse(JSON.stringify(converter.translatedNumbering))
+    : undefined;
+
+  const receipt = executeDomainCommand(
+    editor,
+    (): boolean => {
+      if (contentType === 'markdown') {
+        const { fragment } = markdownToPmFragment(value, editor);
+
+        if (fragment.childCount === 0) {
+          insertFailure = { code: 'NO_OP', message: 'Markdown produced no content to insert.' };
+          return false;
+        }
+
+        // Convert Fragment to a JSON array — insertContentAt routes arrays
+        // through Fragment.fromArray(content.map(schema.nodeFromJSON)), which
+        // correctly materializes the nodes. Passing a Fragment directly fails
+        // because createNodeFromContent treats it as a single JSON object.
+        const jsonNodes: Record<string, unknown>[] = [];
+        fragment.forEach((node) => jsonNodes.push(node.toJSON()));
+
+        const ok = Boolean(editor.commands.insertContentAt({ from, to }, jsonNodes));
+        if (!ok) {
+          insertFailure = {
+            code: 'INVALID_TARGET',
+            message: 'Structured content could not be inserted at the target position.',
+          };
+        }
+        return ok;
+      } else if (contentType === 'html') {
+        // Route through processContent for the canonical HTML pipeline
+        // (createDocFromHTML + wrapTextsInRuns), matching insertContent command behavior.
+        // processContent requires a DOM; in headless environments this will throw.
+        try {
+          const processedDoc = processContent({ content: value, type: 'html', editor });
+          if (!processedDoc || typeof (processedDoc as { toJSON?: unknown }).toJSON !== 'function') {
+            insertFailure = {
+              code: 'INVALID_TARGET',
+              message: 'HTML processing did not produce a valid document node.',
+            };
+            return false;
+          }
+          const jsonContent = (processedDoc as { toJSON(): Record<string, unknown> }).toJSON();
+
+          const ok = Boolean(editor.commands.insertContentAt({ from, to }, jsonContent));
+          if (!ok) {
+            insertFailure = {
+              code: 'INVALID_TARGET',
+              message: 'HTML content could not be inserted at the target position.',
+            };
+          }
+          return ok;
+        } catch (err) {
+          const message = err instanceof Error ? err.message : String(err);
+          insertFailure = {
+            code: 'UNSUPPORTED_ENVIRONMENT',
+            message: `HTML structured insert requires a DOM environment. ${message}`,
+          };
+          return false;
+        }
+      }
+      return false;
+    },
+    { expectedRevision: options?.expectedRevision },
+  );
+
+  const commandSucceeded = receipt.steps[0]?.effect === 'changed';
+
+  // Roll back numbering side effects if the insert failed.
+  // The ProseMirror transaction is only dispatched on success, but list ID
+  // allocations mutate converter state directly and need manual rollback.
+  if (!commandSucceeded && converter) {
+    if (numberingSnapshot !== undefined) converter.numbering = numberingSnapshot;
+    if (translatedNumberingSnapshot !== undefined) converter.translatedNumbering = translatedNumberingSnapshot;
+  }
+
+  // Schedule list migration after successful html/markdown insert,
+  // matching the insertContent command's post-insert hook.
+  if (commandSucceeded) {
+    Promise.resolve()
+      .then(() => (editor as any).migrateListsToV2?.())
+      .catch(() => {});
+  }
+
+  if (!commandSucceeded) {
+    return {
+      success: false,
+      resolution,
+      failure: insertFailure ?? { code: 'INVALID_TARGET', message: 'Structured insert failed.' },
+    };
+  }
+
+  return { success: true, resolution };
 }

@@ -4,7 +4,7 @@
   "type": "module",
   "scripts": {
     "pretest": "pnpm --silent --dir ../.. corpus:pull && rm -rf results",
-    "test": "pnpm --silent --prefix ../../apps/cli run build && pnpm --silent --prefix ../../packages/sdk/langs/node run build && vitest run --config ./vitest.config.ts"
+    "test": "pnpm --silent --prefix ../../packages/sdk run generate && pnpm --silent --prefix ../../apps/cli run build && pnpm --silent --prefix ../../packages/sdk/langs/node run build && vitest run --config ./vitest.config.ts"
   },
   "dependencies": {
     "@superdoc-dev/sdk": "file:../../packages/sdk/langs/node"

@@ -84,6 +84,19 @@ function generateParaId(): string {
     .toUpperCase();
 }
 
+function createSeparatorParagraph(schema: Editor['state']['schema']): import('prosemirror-model').Node | null {
+  const paragraphType = schema.nodes.paragraph;
+  if (!paragraphType) return null;
+
+  // Keep separator paragraphs addressable/stable for downstream DOCX roundtrip.
+  const separatorAttrs = {
+    sdBlockId: uuidv4(),
+    paraId: generateParaId(),
+  };
+
+  return paragraphType.createAndFill(separatorAttrs) ?? paragraphType.createAndFill();
+}
+
 function notYetImplemented(operationName: string): never {
   throw new DocumentApiAdapterError('CAPABILITY_UNAVAILABLE', `${operationName} is not yet implemented.`, {
     reason: 'not_implemented',
@@ -1811,10 +1824,16 @@ export function tablesSplitAdapter(
     delete newTableAttrs.paraId; // Avoid duplicate w14:paraId after split.
     delete newTableAttrs.textId; // Avoid duplicate w14:textId after split.
     const newTable = schema.nodes.table.create(newTableAttrs, secondTableRows);
+    const separatorParagraph = createSeparatorParagraph(schema);
+    if (!separatorParagraph) {
+      return toTableFailure('INVALID_TARGET', 'Table split could not create a separator paragraph.');
+    }
 
-    // Insert the new table after the original.
+    // Insert an empty paragraph between tables. Without this block separator,
+    // Word merges adjacent <w:tbl> nodes into one visual table.
     const insertPos = tr.mapping.slice(mapFrom).map(tablePos + tableNode.nodeSize);
-    tr.insert(insertPos, newTable);
+    tr.insert(insertPos, separatorParagraph);
+    tr.insert(insertPos + separatorParagraph.nodeSize, newTable);
 
     applyDirectMutationMeta(tr);
     editor.dispatch(tr);
@@ -3013,6 +3032,38 @@ export function tablesSetShadingAdapter(
     currentProps.shading = { fill: input.color, val: 'clear', color: 'auto' };
     const syncAttrs = resolved.scope === 'table' ? syncExtractedTableAttrs(currentProps) : {};
     tr.setNodeMarkup(resolved.pos, null, { ...currentAttrs, [propsKey]: currentProps, ...syncAttrs });
+
+    if (resolved.scope === 'table') {
+      const tableNode = resolved.node;
+      const tableStart = resolved.pos + 1;
+      const map = TableMap.get(tableNode);
+      const seen = new Set<number>();
+      const mapFrom = tr.mapping.maps.length;
+
+      for (let i = 0; i < map.map.length; i++) {
+        const relPos = map.map[i]!;
+        if (seen.has(relPos)) continue;
+        seen.add(relPos);
+
+        const cellNode = tableNode.nodeAt(relPos);
+        if (!cellNode) continue;
+
+        const cellAttrs = cellNode.attrs as Record<string, unknown>;
+        const cellProps = { ...((cellAttrs.tableCellProperties ?? {}) as Record<string, unknown>) };
+        cellProps.shading = { fill: input.color, val: 'clear', color: 'auto' };
+
+        const nextCellAttrs: Record<string, unknown> = {
+          ...cellAttrs,
+          tableCellProperties: cellProps,
+        };
+
+        if (input.color === 'auto') delete nextCellAttrs.background;
+        else nextCellAttrs.background = { color: input.color };
+
+        tr.setNodeMarkup(tr.mapping.slice(mapFrom).map(tableStart + relPos), null, nextCellAttrs);
+      }
+    }
+
     applyDirectMutationMeta(tr);
     editor.dispatch(tr);
     clearIndexCache(editor);

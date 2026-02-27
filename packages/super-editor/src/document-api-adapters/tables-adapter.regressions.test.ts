@@ -11,6 +11,7 @@ import {
   tablesSetBorderAdapter,
   tablesSetShadingAdapter,
   tablesSplitCellAdapter,
+  tablesSplitAdapter,
 } from './tables-adapter.js';
 
 vi.mock('prosemirror-tables', () => ({
@@ -238,7 +239,7 @@ function makeTableEditor(options: TableEditorOptions = {}): Editor {
                   ? ([content] as ProseMirrorNode[])
                   : [];
               return createNode('paragraph', children, {
-                attrs,
+                attrs: { paragraphProperties: {}, ...attrs },
                 isBlock: true,
                 inlineContent: true,
               });
@@ -359,6 +360,27 @@ describe('tables-adapter regressions', () => {
     const result = tablesDeleteCellAdapter(editor, { nodeId: 'cell-1', mode: 'shiftUp' });
     expect(result.success).toBe(true);
     expect(tr.insert).toHaveBeenCalledWith(expectedInsertPos, expect.anything());
+  });
+
+  it('inserts a separator paragraph before the split-off table', () => {
+    const editor = makeTableEditor();
+    const tr = editor.state.tr as unknown as { insert: ReturnType<typeof vi.fn> };
+    const tableNode = editor.state.doc.nodeAt(0) as ProseMirrorNode;
+    const expectedInsertPos = tableNode.nodeSize;
+
+    const result = tablesSplitAdapter(editor, { nodeId: 'table-1', atRowIndex: 1 });
+    expect(result.success).toBe(true);
+    expect(tr.insert).toHaveBeenCalledTimes(2);
+
+    const firstInsertCall = tr.insert.mock.calls[0] as [number, ProseMirrorNode];
+    const secondInsertCall = tr.insert.mock.calls[1] as [number, ProseMirrorNode];
+    const insertedSeparator = firstInsertCall[1];
+    const insertedTable = secondInsertCall[1];
+
+    expect(firstInsertCall[0]).toBe(expectedInsertPos);
+    expect(insertedSeparator.type.name).toBe('paragraph');
+    expect(secondInsertCall[0]).toBe(expectedInsertPos + insertedSeparator.nodeSize);
+    expect(insertedTable.type.name).toBe('table');
   });
 
   it('deletes shiftLeft cells without appending a trailing replacement cell', () => {
@@ -632,6 +654,56 @@ describe('tables-adapter regressions', () => {
       success: false,
       failure: { code: 'INVALID_TARGET' },
     });
+  });
+
+  it('applies table shading to all cells when target is a table', () => {
+    const editor = makeTableEditor();
+    const tr = editor.state.tr as unknown as { setNodeMarkup: ReturnType<typeof vi.fn> };
+
+    const result = tablesSetShadingAdapter(editor, {
+      nodeId: 'table-1',
+      color: 'FFFF00',
+    });
+
+    expect(result.success).toBe(true);
+
+    const cellUpdates = tr.setNodeMarkup.mock.calls.filter(
+      (call) =>
+        typeof call[2] === 'object' &&
+        call[2] != null &&
+        (call[2] as { tableCellProperties?: { shading?: { fill?: string } } }).tableCellProperties?.shading?.fill ===
+          'FFFF00',
+    );
+
+    expect(cellUpdates).toHaveLength(4);
+    for (const call of cellUpdates) {
+      expect((call[2] as { background?: { color?: string } }).background).toEqual({ color: 'FFFF00' });
+    }
+  });
+
+  it('does not write cell background when table shading color is auto', () => {
+    const editor = makeTableEditor();
+    const tr = editor.state.tr as unknown as { setNodeMarkup: ReturnType<typeof vi.fn> };
+
+    const result = tablesSetShadingAdapter(editor, {
+      nodeId: 'table-1',
+      color: 'auto',
+    });
+
+    expect(result.success).toBe(true);
+
+    const cellUpdates = tr.setNodeMarkup.mock.calls.filter(
+      (call) =>
+        typeof call[2] === 'object' &&
+        call[2] != null &&
+        (call[2] as { tableCellProperties?: { shading?: { fill?: string } } }).tableCellProperties?.shading?.fill ===
+          'auto',
+    );
+
+    expect(cellUpdates).toHaveLength(4);
+    for (const call of cellUpdates) {
+      expect((call[2] as { background?: unknown }).background).toBeUndefined();
+    }
   });
 
   it.each([

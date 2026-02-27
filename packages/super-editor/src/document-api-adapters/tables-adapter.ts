@@ -1276,9 +1276,25 @@ export function tablesDistributeColumnsAdapter(
       }
     }
 
-    // Mark table as user-edited.
+    // Keep table grid in sync with distributed column widths so DOCX export
+    // emits uniform <w:gridCol> values rather than stale grid widths.
     const tableAttrs = tableNode.attrs as Record<string, unknown>;
-    tr.setNodeMarkup(tablePos, null, { ...tableAttrs, userEdited: true });
+    const normalizedGrid = normalizeGridColumns(tableAttrs.grid);
+    const tableAttrUpdates: Record<string, unknown> = { ...tableAttrs, userEdited: true };
+
+    if (normalizedGrid) {
+      const newColumns = normalizedGrid.columns.slice();
+      const evenWidthTwips = Math.max(1, Math.round(evenWidth * PIXELS_TO_TWIPS));
+      const maxColumn = Math.min(rangeEnd, newColumns.length - 1);
+
+      for (let col = Math.max(rangeStart, 0); col <= maxColumn; col++) {
+        newColumns[col] = { col: evenWidthTwips };
+      }
+
+      tableAttrUpdates.grid = serializeGridColumns(tableAttrs.grid, { ...normalizedGrid, columns: newColumns });
+    }
+
+    tr.setNodeMarkup(tablePos, null, tableAttrUpdates);
 
     applyDirectMutationMeta(tr);
     editor.dispatch(tr);

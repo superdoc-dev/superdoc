@@ -19,10 +19,8 @@ export default defineConfig(({ command }) => {
       conditions: ['source'],
     },
     build: {
+      ...(process.argv.includes('--watch') && { watch: { buildDelay: 300 } }),
       emptyOutDir: false,
-      watch: {
-        buildDelay: 300,
-      },
       target: 'es2022',
       cssCodeSplit: false,
       lib: {

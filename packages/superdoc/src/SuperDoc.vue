@@ -282,7 +282,7 @@ const onEditorReady = ({ editor, presentationEditor }) => {
   });
 
   presentationEditor.on('paginationUpdate', ({ layout }) => {
-    const totalPages = layout?.pages?.length ?? 0;
+    const totalPages = layout.pages.length;
     proxy.$superdoc.emit('pagination-update', { totalPages, superdoc: proxy.$superdoc });
   });
 };

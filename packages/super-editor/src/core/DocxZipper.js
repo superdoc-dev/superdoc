@@ -1,6 +1,6 @@
 import * as xmljs from 'xml-js';
 import JSZip from 'jszip';
-import { getContentTypesFromXml, base64ToUint8Array } from './super-converter/helpers.js';
+import { getContentTypesFromXml, base64ToUint8Array, detectImageType } from './super-converter/helpers.js';
 import { ensureXmlString, isXmlLike } from './encoding-helpers.js';
 import { DOCX } from '@superdoc/common';
 import { COMMENT_FILE_BASENAMES } from './super-converter/constants.js';
@@ -61,9 +61,19 @@ class DocxZipper {
           this.mediaFiles[name] = fileBase64;
         } else {
           const fileBase64 = await zipEntry.async('base64');
-          const extension = this.getFileExtension(name)?.toLowerCase();
+          let extension = this.getFileExtension(name)?.toLowerCase();
           // Only build data URIs for images; keep raw base64 for other binaries (e.g., xlsx)
           const imageTypes = new Set(['png', 'jpg', 'jpeg', 'gif', 'bmp', 'tiff', 'emf', 'wmf', 'svg', 'webp']);
+
+          // For unknown extensions (like .tmp), try to detect the image type from content
+          let detectedType = null;
+          if (!imageTypes.has(extension) || extension === 'tmp') {
+            detectedType = detectImageType(fileBase64);
+            if (detectedType) {
+              extension = detectedType;
+            }
+          }
+
           if (imageTypes.has(extension)) {
             this.mediaFiles[name] = `data:image/${extension};base64,${fileBase64}`;
             const blob = await zipEntry.async('blob');

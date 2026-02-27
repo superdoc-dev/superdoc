@@ -1,7 +1,7 @@
 ---
 title: info
 sidebarTitle: info
-description: Generated reference for info
+description: Return document metadata including revision, node count, and capabilities.
 ---
 
 {/* GENERATED FILE: DO NOT EDIT. Regenerate via `pnpm run docapi:sync`. */}
@@ -9,6 +9,8 @@ description: Generated reference for info
 > Alpha: Document API is currently alpha and subject to breaking changes.
 
 ## Summary
+
+Return document metadata including revision, node count, and capabilities.
 
 - Operation ID: `info`
 - API member path: `editor.doc.info(...)`
@@ -18,6 +20,58 @@ description: Generated reference for info
 - Supports dry run: `no`
 - Deterministic target resolution: `yes`
 
+## Expected result
+
+Returns a DocumentInfo object with revision, word/paragraph/heading counts, and capability flags.
+
+## Input fields
+
+_No fields._
+
+### Example request
+
+```json
+{}
+```
+
+## Output fields
+
+| Field | Type | Required | Description |
+| --- | --- | --- | --- |
+| `capabilities` | object | yes |  |
+| `counts` | object | yes |  |
+| `outline` | object[] | yes |  |
+| `revision` | string | yes |  |
+
+### Example response
+
+```json
+{
+  "capabilities": {
+    "canComment": true,
+    "canFind": true,
+    "canGetNode": true,
+    "canReplace": true
+  },
+  "counts": {
+    "comments": 0,
+    "headings": 3,
+    "images": 2,
+    "paragraphs": 12,
+    "tables": 1,
+    "words": 250
+  },
+  "outline": [
+    {
+      "level": 1,
+      "nodeId": "node-def456",
+      "text": "Hello, world."
+    }
+  ],
+  "revision": "example"
+}
+```
+
 ## Pre-apply throws
 
 - None
@@ -26,8 +80,9 @@ description: Generated reference for info
 
 - None
 
-## Input schema
+## Raw schemas
 
+<Accordion title="Raw input schema">
 ```json
 {
   "additionalProperties": false,
@@ -35,9 +90,9 @@ description: Generated reference for info
   "type": "object"
 }
 ```
+</Accordion>
 
-## Output schema
-
+<Accordion title="Raw output schema">
 ```json
 {
   "additionalProperties": false,
@@ -120,13 +175,18 @@ description: Generated reference for info
         "type": "object"
       },
       "type": "array"
+    },
+    "revision": {
+      "type": "string"
     }
   },
   "required": [
     "counts",
     "outline",
-    "capabilities"
+    "capabilities",
+    "revision"
   ],
   "type": "object"
 }
 ```
+</Accordion>

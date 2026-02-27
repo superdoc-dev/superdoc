@@ -132,25 +132,7 @@ function isRestartNoOp(editor: Editor, item: ListItemProjection): boolean {
 }
 
 function withListTarget(editor: Editor, input: ListTargetInput): ListItemProjection {
-  if (input.target) return resolveListItem(editor, input.target);
-
-  const nodeId = input.nodeId!;
-  const index = getBlockIndex(editor);
-
-  const listMatch = index.candidates.find((c) => c.nodeType === 'listItem' && c.nodeId === nodeId);
-  if (listMatch) {
-    return resolveListItem(editor, { kind: 'block', nodeType: 'listItem', nodeId });
-  }
-
-  const anyMatch = index.candidates.find((c) => c.nodeId === nodeId);
-  if (anyMatch) {
-    throw new DocumentApiAdapterError('INVALID_TARGET', `Node "${nodeId}" is a ${anyMatch.nodeType}, not a listItem.`, {
-      nodeId,
-      actualNodeType: anyMatch.nodeType,
-    });
-  }
-
-  throw new DocumentApiAdapterError('TARGET_NOT_FOUND', 'List item target was not found.', { nodeId });
+  return resolveListItem(editor, input.target);
 }
 
 // ---------------------------------------------------------------------------

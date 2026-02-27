@@ -354,32 +354,42 @@ describe('buildBlockIndex', () => {
     });
   });
 
-  describe('alias registration — non-eligible types', () => {
-    it('does NOT register sdBlockId alias for table nodes', () => {
+  describe('alias registration — table nodes', () => {
+    it('registers sdBlockId as alias for table nodes with paraId primary', () => {
       const index = indexFromNodes({
         typeName: 'table',
-        attrs: { sdBlockId: 'sd-t1', blockId: 'b1' },
+        attrs: { sdBlockId: 'sd-t1', paraId: 'p1' },
         offset: 0,
       });
       expect(index.candidates[0].nodeType).toBe('table');
-      expect(index.candidates[0].nodeId).toBe('b1');
-      expect(index.byId.get('table:b1')).toBeDefined();
-      // sdBlockId should NOT be registered as alias for non-eligible types
-      expect(index.byId.get('table:sd-t1')).toBeUndefined();
+      expect(index.candidates[0].nodeId).toBe('p1');
+      expect(index.byId.get('table:p1')).toBeDefined();
+      // sdBlockId should be registered as alias for table nodes
+      expect(index.byId.get('table:sd-t1')).toBeDefined();
+    });
+
+    it('does not register alias when sdBlockId is the primary (no paraId)', () => {
+      const index = indexFromNodes({
+        typeName: 'table',
+        attrs: { sdBlockId: 'sd-t1' },
+        offset: 0,
+      });
+      expect(index.candidates[0].nodeId).toBe('sd-t1');
+      expect(index.byId.get('table:sd-t1')).toBeDefined();
     });
   });
 
   describe('ID resolution — non-paragraph nodes', () => {
-    it('prefers imported IDs over sdBlockId when both are present', () => {
+    it('prefers paraId over sdBlockId for table nodes (DOCX roundtrip stability)', () => {
       const index = indexFromNodes({
         typeName: 'table',
         attrs: { sdBlockId: 'sd1', blockId: 'b1', id: 'i1', paraId: 'p1', uuid: 'u1' },
         offset: 0,
       });
-      expect(index.candidates[0].nodeId).toBe('b1');
+      expect(index.candidates[0].nodeId).toBe('p1');
     });
 
-    it('uses sdBlockId when imported IDs are absent', () => {
+    it('uses sdBlockId when paraId is absent', () => {
       const index = indexFromNodes({
         typeName: 'table',
         attrs: { sdBlockId: 'sd1' },
@@ -388,7 +398,7 @@ describe('buildBlockIndex', () => {
       expect(index.candidates[0].nodeId).toBe('sd1');
     });
 
-    it('falls back to blockId', () => {
+    it('falls back to blockId when paraId and sdBlockId are absent', () => {
       const index = indexFromNodes({
         typeName: 'table',
         attrs: { blockId: 'b1', id: 'i1' },
@@ -397,16 +407,16 @@ describe('buildBlockIndex', () => {
       expect(index.candidates[0].nodeId).toBe('b1');
     });
 
-    it('falls back to id', () => {
+    it('falls back to id when paraId, sdBlockId, and blockId are absent', () => {
       const index = indexFromNodes({
         typeName: 'table',
-        attrs: { id: 'i1', paraId: 'p1' },
+        attrs: { id: 'i1' },
         offset: 0,
       });
       expect(index.candidates[0].nodeId).toBe('i1');
     });
 
-    it('falls back to paraId', () => {
+    it('prefers paraId over uuid', () => {
       const index = indexFromNodes({
         typeName: 'table',
         attrs: { paraId: 'p1', uuid: 'u1' },

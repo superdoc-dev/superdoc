@@ -1,0 +1,15 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>SuperDoc — Laravel</title>
+    @vite('resources/js/app.js')
+</head>
+<body>
+    <div style="padding: 1rem; background: #f5f5f5">
+        <input type="file" id="file-input" accept=".docx" />
+    </div>
+    <div id="editor" style="height: calc(100vh - 60px)"></div>
+</body>
+</html>

@@ -21,7 +21,7 @@ import { extractInvokeInput } from './invoke-input.js';
 
 type DocumentPayload = {
   path?: string;
-  source: 'path' | 'stdin';
+  source: 'path' | 'stdin' | 'blank';
   byteLength: number;
   revision: number;
 };

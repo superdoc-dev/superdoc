@@ -17,6 +17,8 @@ describe('w:rPr translator (attribute aggregator)', () => {
       { name: 'w:color', attributes: { 'w:val': 'FF0000' } },
       { name: 'w:lang', attributes: { 'w:val': 'en-US' } },
       { name: 'w:shd', attributes: { 'w:fill': 'CCCCCC', 'w:val': 'clear' } },
+      { name: 'w14:ligatures', attributes: { 'w14:val': 'standardContextual' } },
+      { name: 'w14:cntxtAlts', attributes: { 'w14:val': '0' } },
     ]);
 
     const result = translator.encode(params);
@@ -33,6 +35,8 @@ describe('w:rPr translator (attribute aggregator)', () => {
         fill: 'CCCCCC',
         val: 'clear',
       },
+      ligatures: 'standardContextual',
+      contextualAlternates: false,
     });
   });
 

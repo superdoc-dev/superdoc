@@ -52,9 +52,26 @@ export class Renderer {
   public render(info: IRendererSettings): SVGElement {
     const svgElement = document.createElementNS('http://www.w3.org/2000/svg', 'svg');
 
-    this._render(new SVG(svgElement), info.mapMode, info.wExt, info.hExt, info.xExt, info.yExt);
-    svgElement.setAttribute('viewBox', [0, 0, info.xExt, info.yExt].join(' '));
-    svgElement.setAttribute('preserveAspectRatio', 'none'); // TODO: MM_ISOTROPIC vs MM_ANISOTROPIC
+    // Get the actual bounds from the EMF file
+    const emfBounds = this._img.getBounds();
+
+    const gdi = this._render(
+      new SVG(svgElement),
+      info.mapMode,
+      emfBounds.width,
+      emfBounds.height,
+      emfBounds.width,
+      emfBounds.height,
+    );
+    svgElement.setAttribute('viewBox', [0, 0, emfBounds.width, emfBounds.height].join(' '));
+
+    // Set preserveAspectRatio based on the final map mode after rendering:
+    // - MM_ANISOTROPIC (8): allows independent X/Y scaling (no aspect ratio preservation)
+    // - All other modes (including MM_ISOTROPIC): preserve aspect ratio
+    const finalMapMode = gdi.getMapMode();
+    const preserveAspectRatio = finalMapMode === Helper.GDI.MapMode.MM_ANISOTROPIC ? 'none' : 'xMidYMid meet';
+    svgElement.setAttribute('preserveAspectRatio', preserveAspectRatio);
+
     svgElement.setAttribute('width', info.width);
     svgElement.setAttribute('height', info.height);
     return svgElement;
@@ -81,7 +98,7 @@ export class Renderer {
     }
   }
 
-  private _render(svg: SVG, mapMode: number, w: number, h: number, xExt: number, yExt: number) {
+  private _render(svg: SVG, mapMode: number, w: number, h: number, xExt: number, yExt: number): GDIContext {
     const gdi = new GDIContext(svg);
     gdi.setWindowExtEx(w, h);
     gdi.setViewportExtEx(xExt, yExt);
@@ -89,6 +106,7 @@ export class Renderer {
     Helper.log('[EMF] BEGIN RENDERING --->');
     this._img.render(gdi);
     Helper.log('[EMF] <--- DONE RENDERING');
+    return gdi;
   }
 }
 
@@ -103,5 +121,13 @@ class EMF {
 
   public render(gdi: GDIContext): void {
     this._records.play(gdi);
+  }
+
+  public getBounds(): { width: number; height: number } {
+    const bounds = this._records.getBounds();
+    return {
+      width: bounds.right - bounds.left,
+      height: bounds.bottom - bounds.top,
+    };
   }
 }

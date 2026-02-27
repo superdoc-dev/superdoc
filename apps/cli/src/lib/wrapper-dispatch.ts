@@ -47,5 +47,8 @@ export async function runCommandWrapper(
     commandName: commandKey,
     tokens,
     context,
+    defaultInput: spec.defaultInput,
+    extraOptionSpecs: spec.extraOptionSpecs,
+    inputTransform: spec.inputTransform,
   });
 }

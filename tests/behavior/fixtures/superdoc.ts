@@ -147,10 +147,34 @@ function createFixture(page: Page, editor: Locator, modKey: string) {
           throw new Error('Document API is unavailable: expected editor.doc.find().');
         }
 
+        const getAddresses = (result: any): Array<any> => {
+          const discoveryItems = Array.isArray(result?.items) ? result.items : [];
+          if (discoveryItems.length > 0) {
+            return discoveryItems.map((item: any) => item?.address ?? null);
+          }
+          return Array.isArray(result?.matches) ? result.matches : [];
+        };
+
+        const getNodes = (result: any): Array<any> => {
+          const discoveryItems = Array.isArray(result?.items) ? result.items : [];
+          if (discoveryItems.length > 0) {
+            return discoveryItems.map((item: any) => item?.node ?? null);
+          }
+          return Array.isArray(result?.nodes) ? result.nodes : [];
+        };
+
+        const getContexts = (result: any): Array<any> => {
+          const discoveryItems = Array.isArray(result?.items) ? result.items : [];
+          if (discoveryItems.length > 0) {
+            return discoveryItems.map((item: any) => item?.context ?? null);
+          }
+          return Array.isArray(result?.context) ? result.context : [];
+        };
+
         const textResult = docApi.find({
           select: { type: 'text', pattern: searchText, mode: 'contains', caseSensitive: true },
         });
-        const context = textResult?.context?.[matchIndex];
+        const context = getContexts(textResult)[matchIndex];
         if (!context?.address) return null;
 
         const ranges = (context.textRanges ?? []).map((range: any) => ({
@@ -161,7 +185,7 @@ function createFixture(page: Page, editor: Locator, modKey: string) {
         if (!ranges.length) return null;
 
         const toInlineSpans = (result: any): InlineSpan[] =>
-          (result?.matches ?? [])
+          getAddresses(result)
             .map((address: any, i: number) => {
               if (address?.kind !== 'inline') return null;
               const { start, end } = address.anchor ?? {};
@@ -170,7 +194,7 @@ function createFixture(page: Page, editor: Locator, modKey: string) {
                 blockId: start.blockId,
                 start: start.offset,
                 end: end.offset,
-                properties: result.nodes?.[i]?.properties ?? {},
+                properties: getNodes(result)?.[i]?.properties ?? {},
               };
             })
             .filter(Boolean);
@@ -325,28 +349,86 @@ function createFixture(page: Page, editor: Locator, modKey: string) {
     },
 
     async clickOnCommentedText(textMatch: string) {
-      const highlights = page.locator('.superdoc-comment-highlight');
-      const count = await highlights.count();
-      let bestIndex = -1;
-      let bestArea = Infinity;
+      const deadline = Date.now() + 10_000;
+      let sawMatchText = false;
 
-      for (let i = 0; i < count; i++) {
-        const hl = highlights.nth(i);
-        const text = await hl.textContent();
-        if (text && text.includes(textMatch)) {
+      while (Date.now() < deadline) {
+        const highlights = page.locator('.superdoc-comment-highlight');
+        const count = await highlights.count();
+        let bestIndex = -1;
+        let fallbackIndex = -1;
+        let bestArea = Infinity;
+
+        for (let i = 0; i < count; i++) {
+          const hl = highlights.nth(i);
+          const text = await hl.textContent();
+          if (!text || !text.includes(textMatch)) continue;
+
+          sawMatchText = true;
+          if (fallbackIndex === -1) fallbackIndex = i;
+
           const box = await hl.boundingBox();
-          if (box) {
-            const area = box.width * box.height;
-            if (area < bestArea) {
-              bestArea = area;
-              bestIndex = i;
+          if (!box || box.width <= 0 || box.height <= 0) continue;
+
+          const area = box.width * box.height;
+          if (area < bestArea) {
+            bestArea = area;
+            bestIndex = i;
+          }
+        }
+
+        const targetIndex = bestIndex !== -1 ? bestIndex : fallbackIndex;
+        if (targetIndex !== -1) {
+          const target = highlights.nth(targetIndex);
+          const targetCommentIds = ((await target.getAttribute('data-comment-ids')) ?? '')
+            .split(/[\s,]+/)
+            .filter(Boolean);
+
+          const ensureActiveDialog = async () => {
+            // Most browsers activate on highlight click. Firefox can occasionally
+            // miss this state transition, so we fall back to activating the
+            // corresponding floating dialog directly.
+            const activeDialogs = page.locator('.comment-placeholder .comments-dialog.is-active');
+            if ((await activeDialogs.count()) > 0) return;
+
+            for (const id of targetCommentIds) {
+              const dialogForId = page
+                .locator(`.comment-placeholder[data-comment-id="${id}"] .comments-dialog`)
+                .first();
+              if ((await dialogForId.count()) === 0) continue;
+              await dialogForId.click({ timeout: 500 });
+              if ((await activeDialogs.count()) > 0) return;
+            }
+
+            const fallbackDialog = page.locator('.comment-placeholder .comments-dialog').last();
+            if ((await fallbackDialog.count()) > 0) {
+              await fallbackDialog.click({ timeout: 500 });
+            }
+          };
+
+          try {
+            await target.click({ timeout: 500 });
+            await ensureActiveDialog();
+            return;
+          } catch {
+            try {
+              await target.click({ timeout: 500, force: true });
+              await ensureActiveDialog();
+              return;
+            } catch {
+              // The highlight likely re-rendered between lookup and click.
             }
           }
         }
+
+        await page.waitForTimeout(100);
       }
 
-      if (bestIndex === -1) throw new Error(`No comment highlight found for "${textMatch}"`);
-      await highlights.nth(bestIndex).click();
+      if (sawMatchText) {
+        throw new Error(`Found comment highlight text for "${textMatch}" but could not click it`);
+      }
+
+      throw new Error(`No comment highlight found for "${textMatch}"`);
     },
 
     async pressTimes(key: string, count: number) {
@@ -503,15 +585,23 @@ function createFixture(page: Page, editor: Locator, modKey: string) {
                 throw new Error('Document API is unavailable: expected editor.doc.find().');
               }
 
+              const getAddresses = (result: any): any[] => {
+                const discoveryItems = Array.isArray(result?.items) ? result.items : [];
+                if (discoveryItems.length > 0) {
+                  return discoveryItems.map((item: any) => item?.address).filter(Boolean);
+                }
+                return Array.isArray(result?.matches) ? result.matches : [];
+              };
+
               const tableResult = docApi.find({ select: { type: 'node', nodeType: 'table' }, limit: 1 });
-              const tableAddress = tableResult?.matches?.[0];
+              const tableAddress = getAddresses(tableResult)[0];
               if (!tableAddress) return 'no table found in document';
 
               if (expectedRows !== undefined && expectedCols !== undefined) {
                 const expectedCellCount = expectedRows * expectedCols;
 
                 const rowResult = docApi.find({ select: { type: 'node', nodeType: 'tableRow' }, within: tableAddress });
-                const rowCount = rowResult?.matches?.length ?? 0;
+                const rowCount = getAddresses(rowResult).length;
 
                 // Only validate row count when the adapter exposes row-level querying.
                 if (rowCount > 0 && rowCount !== expectedRows) {
@@ -522,13 +612,13 @@ function createFixture(page: Page, editor: Locator, modKey: string) {
                   select: { type: 'node', nodeType: 'tableCell' },
                   within: tableAddress,
                 });
-                let cellCount = cellResult?.matches?.length ?? 0;
+                let cellCount = getAddresses(cellResult).length;
                 try {
                   const headerResult = docApi.find({
                     select: { type: 'node', nodeType: 'tableHeader' },
                     within: tableAddress,
                   });
-                  cellCount += headerResult?.matches?.length ?? 0;
+                  cellCount += getAddresses(headerResult).length;
                 } catch {
                   /* tableHeader may not be queryable */
                 }
@@ -539,7 +629,7 @@ function createFixture(page: Page, editor: Locator, modKey: string) {
                     select: { type: 'node', nodeType: 'paragraph' },
                     within: tableAddress,
                   });
-                  cellCount = paragraphResult?.matches?.length ?? 0;
+                  cellCount = getAddresses(paragraphResult).length;
                 }
 
                 if (cellCount !== expectedCellCount) {
@@ -700,10 +790,18 @@ function createFixture(page: Page, editor: Locator, modKey: string) {
                 throw new Error('Document API is unavailable: expected editor.doc.find/getNode.');
               }
 
+              const getContexts = (result: any): any[] => {
+                const discoveryItems = Array.isArray(result?.items) ? result.items : [];
+                if (discoveryItems.length > 0) {
+                  return discoveryItems.map((item: any) => item?.context).filter(Boolean);
+                }
+                return Array.isArray(result?.context) ? result.context : [];
+              };
+
               const textResult = docApi.find({
                 select: { type: 'text', pattern: searchText, mode: 'contains', caseSensitive: true },
               });
-              const contexts = Array.isArray(textResult?.context) ? textResult.context : [];
+              const contexts = getContexts(textResult);
               const context = contexts[matchIndex];
               if (!context?.address) return null;
 

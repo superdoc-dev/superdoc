@@ -76,78 +76,108 @@ export const TrackChanges = Extension.create({
       rejectTrackedChangesBetween:
         (from, to) =>
         ({ state, dispatch, editor }) => {
-          const trackedChanges = collectTrackedChanges({ state, from, to });
+          const trackedChangesInSelection = collectTrackedChanges({ state, from, to });
+          const trackedChangesById = getTrackedChangesByTouchedIds(state, trackedChangesInSelection);
+          const trackedChangesWithoutId = trackedChangesInSelection.filter(({ mark }) => !mark?.attrs?.id);
+          const trackedChanges = dedupeTrackedChangeRanges([...trackedChangesById, ...trackedChangesWithoutId]);
           if (!isTrackedChangeActionAllowed({ editor, action: 'reject', trackedChanges })) return false;
 
           const { tr, doc } = state;
+          // Keep the IDs rejected in this transaction so the comments layer can
+          // resolve/hide the corresponding tracked-change bubbles in one path.
+          const rejectedChangeIds = new Set();
 
           // tr.setMeta('acceptReject', true);
           tr.setMeta('inputType', 'acceptReject');
 
           const map = new Mapping();
 
-          doc.nodesBetween(from, to, (node, pos) => {
-            if (node.marks && node.marks.find((mark) => mark.type.name === TrackDeleteMarkName)) {
-              const deletionMark = node.marks.find((mark) => mark.type.name === TrackDeleteMarkName);
+          trackedChanges.forEach(({ from: rangeFrom, to: rangeTo }) => {
+            doc.nodesBetween(rangeFrom, rangeTo, (node, pos) => {
+              if (node.marks && node.marks.find((mark) => mark.type.name === TrackDeleteMarkName)) {
+                const deletionMark = node.marks.find((mark) => mark.type.name === TrackDeleteMarkName);
+                if (deletionMark?.attrs?.id) rejectedChangeIds.add(deletionMark.attrs.id);
 
-              tr.step(
-                new RemoveMarkStep(
-                  map.map(Math.max(pos, from)),
-                  map.map(Math.min(pos + node.nodeSize, to)),
-                  deletionMark,
-                ),
-              );
-            } else if (node.marks && node.marks.find((mark) => mark.type.name === TrackInsertMarkName)) {
-              const deletionStep = new ReplaceStep(
-                map.map(Math.max(pos, from)),
-                map.map(Math.min(pos + node.nodeSize, to)),
-                Slice.empty,
-              );
-
-              tr.step(deletionStep);
-              map.appendMap(deletionStep.getMap());
-            } else if (node.marks && node.marks.find((mark) => mark.type.name === TrackFormatMarkName)) {
-              const formatChangeMark = node.marks.find((mark) => mark.type.name === TrackFormatMarkName);
-
-              formatChangeMark.attrs.before.forEach((oldMark) => {
                 tr.step(
-                  new AddMarkStep(
-                    map.map(Math.max(pos, from)),
-                    map.map(Math.min(pos + node.nodeSize, to)),
-                    state.schema.marks[oldMark.type].create(oldMark.attrs),
+                  new RemoveMarkStep(
+                    map.map(Math.max(pos, rangeFrom)),
+                    map.map(Math.min(pos + node.nodeSize, rangeTo)),
+                    deletionMark,
                   ),
                 );
-              });
+              } else if (node.marks && node.marks.find((mark) => mark.type.name === TrackInsertMarkName)) {
+                const insertionMark = node.marks.find((mark) => mark.type.name === TrackInsertMarkName);
+                if (insertionMark?.attrs?.id) rejectedChangeIds.add(insertionMark.attrs.id);
 
-              formatChangeMark.attrs.after.forEach((newMark) => {
-                const mappedFrom = map.map(Math.max(pos, from));
-                const mappedTo = map.map(Math.min(pos + node.nodeSize, to));
-                const liveMark = findMarkInRangeBySnapshot({
-                  doc: tr.doc,
-                  from: mappedFrom,
-                  to: mappedTo,
-                  snapshot: newMark,
+                const deletionStep = new ReplaceStep(
+                  map.map(Math.max(pos, rangeFrom)),
+                  map.map(Math.min(pos + node.nodeSize, rangeTo)),
+                  Slice.empty,
+                );
+
+                tr.step(deletionStep);
+                map.appendMap(deletionStep.getMap());
+              } else if (node.marks && node.marks.find((mark) => mark.type.name === TrackFormatMarkName)) {
+                const formatChangeMark = node.marks.find((mark) => mark.type.name === TrackFormatMarkName);
+                if (formatChangeMark?.attrs?.id) rejectedChangeIds.add(formatChangeMark.attrs.id);
+
+                formatChangeMark.attrs.before.forEach((oldMark) => {
+                  tr.step(
+                    new AddMarkStep(
+                      map.map(Math.max(pos, rangeFrom)),
+                      map.map(Math.min(pos + node.nodeSize, rangeTo)),
+                      state.schema.marks[oldMark.type].create(oldMark.attrs),
+                    ),
+                  );
                 });
 
-                if (!liveMark) {
-                  return;
-                }
+                formatChangeMark.attrs.after.forEach((newMark) => {
+                  const mappedFrom = map.map(Math.max(pos, rangeFrom));
+                  const mappedTo = map.map(Math.min(pos + node.nodeSize, rangeTo));
+                  const liveMark = findMarkInRangeBySnapshot({
+                    doc: tr.doc,
+                    from: mappedFrom,
+                    to: mappedTo,
+                    snapshot: newMark,
+                  });
 
-                tr.step(new RemoveMarkStep(mappedFrom, mappedTo, liveMark));
-              });
+                  if (!liveMark) {
+                    return;
+                  }
 
-              tr.step(
-                new RemoveMarkStep(
-                  map.map(Math.max(pos, from)),
-                  map.map(Math.min(pos + node.nodeSize, to)),
-                  formatChangeMark,
-                ),
-              );
-            }
+                  tr.step(new RemoveMarkStep(mappedFrom, mappedTo, liveMark));
+                });
+
+                tr.step(
+                  new RemoveMarkStep(
+                    map.map(Math.max(pos, rangeFrom)),
+                    map.map(Math.min(pos + node.nodeSize, rangeTo)),
+                    formatChangeMark,
+                  ),
+                );
+              }
+            });
           });
 
           if (tr.steps.length) {
             dispatch(tr);
+
+            if (editor?.emit && rejectedChangeIds.size) {
+              const resolvedByEmail = editor.options?.user?.email;
+              const resolvedByName = editor.options?.user?.name;
+
+              // Bubble reject-by-selection/reject-all through the same
+              // tracked-change comment resolution channel used by bubble actions.
+              rejectedChangeIds.forEach((changeId) => {
+                editor.emit('commentsUpdate', {
+                  type: 'trackedChange',
+                  event: 'resolve',
+                  changeId,
+                  resolvedByEmail,
+                  resolvedByName,
+                });
+              });
+            }
           }
 
           return true;
@@ -487,6 +517,38 @@ export const TrackChanges = Extension.create({
 //     editor.emit('trackedChangesUpdate', { action, id });
 //   }
 // };
+
+const dedupeTrackedChangeRanges = (changes = []) => {
+  const byKey = new Map();
+  changes.forEach((change) => {
+    if (!change || typeof change.from !== 'number' || typeof change.to !== 'number') {
+      return;
+    }
+
+    const type = change.mark?.type?.name || '';
+    const id = change.mark?.attrs?.id || '';
+    const key = `${change.from}:${change.to}:${type}:${id}`;
+    if (!byKey.has(key)) {
+      byKey.set(key, change);
+    }
+  });
+
+  return Array.from(byKey.values()).sort((left, right) => {
+    if (left.from !== right.from) {
+      return left.from - right.from;
+    }
+    return left.to - right.to;
+  });
+};
+
+const getTrackedChangesByTouchedIds = (state, trackedChanges = []) => {
+  const touchedIds = new Set(trackedChanges.map(({ mark }) => mark?.attrs?.id).filter(Boolean));
+  if (!touchedIds.size) {
+    return trackedChanges;
+  }
+
+  return Array.from(touchedIds).flatMap((id) => getChangesByIdToResolve(state, id) || []);
+};
 
 const getChangesByIdToResolve = (state, id) => {
   const trackedChanges = getTrackChanges(state);

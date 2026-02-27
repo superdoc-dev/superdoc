@@ -1,4 +1,4 @@
-import type { NodeAddress, NodeSelector, Query, QueryResult, Selector, TextSelector } from '../types/index.js';
+import type { NodeAddress, NodeSelector, Query, FindOutput, Selector, TextSelector } from '../types/index.js';
 
 /**
  * Options for the `find` method when using a selector shorthand.
@@ -10,6 +10,8 @@ export interface FindOptions {
   offset?: number;
   /** Constrain the search to descendants of the specified node. */
   within?: NodeAddress;
+  /** Cardinality requirement for the result set. */
+  require?: Query['require'];
   /** Whether to hydrate `result.nodes` for matched addresses. */
   includeNodes?: Query['includeNodes'];
   /** Whether to include unknown/unsupported nodes in diagnostics. */
@@ -18,15 +20,17 @@ export interface FindOptions {
 
 /**
  * Engine-specific adapter that the find API delegates to.
+ *
+ * Adapters return a standardized `FindOutput` (discovery envelope).
  */
 export interface FindAdapter {
   /**
    * Execute a normalized query against the document.
    *
    * @param query - The normalized query to execute.
-   * @returns The query result containing matches and metadata.
+   * @returns The query result as a discovery envelope.
    */
-  find(query: Query): QueryResult;
+  find(query: Query): FindOutput;
 }
 
 /** Normalizes a selector shorthand into its canonical discriminated-union form.
@@ -75,6 +79,7 @@ export function normalizeFindQuery(selectorOrQuery: Selector | Query, options?: 
     limit: options?.limit,
     offset: options?.offset,
     within: options?.within,
+    require: options?.require,
     includeNodes: options?.includeNodes,
     includeUnknown: options?.includeUnknown,
   };
@@ -86,13 +91,13 @@ export function normalizeFindQuery(selectorOrQuery: Selector | Query, options?: 
  * @param adapter - The engine-specific find adapter.
  * @param selectorOrQuery - A selector shorthand or a full query object.
  * @param options - Options applied when `selectorOrQuery` is a selector.
- * @returns The query result from the adapter.
+ * @returns A standardized `FindOutput` discovery envelope.
  */
 export function executeFind(
   adapter: FindAdapter,
   selectorOrQuery: Selector | Query,
   options?: FindOptions,
-): QueryResult {
+): FindOutput {
   const query = normalizeFindQuery(selectorOrQuery, options);
   return adapter.find(query);
 }

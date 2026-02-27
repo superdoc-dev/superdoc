@@ -8,7 +8,8 @@
 import type { NodeAddress } from './base.js';
 import type { TextAddress, TrackedChangeAddress } from './address.js';
 import type { TextSelector, NodeSelector } from './query.js';
-import type { InsertStylePolicy, StylePolicy, SetMarks } from './style-policy.types.js';
+import type { InsertStylePolicy, StylePolicy } from './style-policy.types.js';
+import type { InlineRunPatch } from '../format/inline-run-patch.js';
 
 // ---------------------------------------------------------------------------
 // Universal targeting model
@@ -25,7 +26,6 @@ export type RefWhere = {
   by: 'ref';
   ref: string;
   within?: NodeAddress;
-  require: 'first' | 'exactlyOne' | 'all';
 };
 
 export type StepWhere = SelectWhere | RefWhere;
@@ -37,15 +37,43 @@ export type AssertWhere = {
 };
 
 // ---------------------------------------------------------------------------
+// Replacement content model
+// ---------------------------------------------------------------------------
+
+/**
+ * A single replacement block for structured multi-paragraph replacements.
+ * In this workstream, per-block inline style overrides are not supported;
+ * step-level `style` policy applies uniformly to all replacement blocks.
+ */
+export type ReplacementBlock = {
+  text: string;
+};
+
+/**
+ * Replacement payload for text.rewrite steps.
+ *
+ * - `{ text }` — flat string. For single-block (range) targets, used as-is.
+ *   For cross-block (span) targets, normalized via deterministic paragraph
+ *   boundary detection (\n\n+).
+ * - `{ blocks }` — structured multi-paragraph payload, authoritative when provided.
+ *   Use this for explicit control over paragraph structure.
+ *
+ * Exactly one of `text` or `blocks` must be provided.
+ */
+export type ReplacementPayload =
+  | { text: string; blocks?: undefined }
+  | { text?: undefined; blocks: ReplacementBlock[] };
+
+// ---------------------------------------------------------------------------
 // Step types (first registered step family)
 // ---------------------------------------------------------------------------
 
 export type TextRewriteStep = {
   id: string;
   op: 'text.rewrite';
-  where: SelectWhere;
+  where: StepWhere;
   args: {
-    replacement: { text: string };
+    replacement: ReplacementPayload;
     /**
      * Style policy for the replacement text.
      * When omitted, defaults to preserve mode:
@@ -75,16 +103,16 @@ export type TextInsertStep = {
 export type TextDeleteStep = {
   id: string;
   op: 'text.delete';
-  where: SelectWhere;
+  where: StepWhere;
   args: Record<string, never>;
 };
 
 export type StyleApplyStep = {
   id: string;
-  op: 'style.apply';
-  where: SelectWhere;
+  op: 'format.apply';
+  where: StepWhere;
   args: {
-    marks: SetMarks;
+    inline: InlineRunPatch;
   };
 };
 
@@ -130,17 +158,40 @@ export type MutationsPreviewInput = {
 // Plan output — receipts
 // ---------------------------------------------------------------------------
 
-export type StepEffect = 'changed' | 'noop' | 'assert_passed' | 'assert_failed';
+// ---------------------------------------------------------------------------
+// Plan limits
+// ---------------------------------------------------------------------------
 
+/** Maximum number of steps per mutation plan. */
+export const MAX_PLAN_STEPS = 200;
+
+/** Maximum total resolved targets across all steps in a plan. */
+export const MAX_PLAN_RESOLVED_TARGETS = 500;
+
+// ---------------------------------------------------------------------------
+// Plan output — receipts
+// ---------------------------------------------------------------------------
+
+export type StepEffect = 'changed' | 'noop' | 'error' | 'assert_passed' | 'assert_failed';
+
+/** Resolution for a single-block (range) target. */
 export type TextStepResolution = {
   target: TextAddress;
   range: { from: number; to: number };
   text: string;
 };
 
+/** Resolution for a cross-block (span) target. */
+export type SpanStepResolution = {
+  targets: TextAddress[];
+  matchId: string;
+  text: string;
+};
+
 export type TextStepData = {
   domain: 'text';
   resolutions: TextStepResolution[];
+  spanResolutions?: SpanStepResolution[];
 };
 
 export type AssertStepData = {
@@ -151,7 +202,15 @@ export type AssertStepData = {
 
 export type DomainStepData = { domain: 'command'; commandDispatched: boolean };
 
-export type StepOutcomeData = TextStepData | AssertStepData | DomainStepData;
+export type TableStepData = {
+  domain: 'table';
+  tableId: string;
+  affectedRows?: string[];
+  affectedCells?: string[];
+  affectedColumns?: number[];
+};
+
+export type StepOutcomeData = TextStepData | AssertStepData | DomainStepData | TableStepData;
 
 export type StepOutcome = {
   stepId: string;
@@ -193,6 +252,7 @@ export type StepPreview = {
   stepId: string;
   op: string;
   resolutions?: TextStepResolution[];
+  spanResolutions?: SpanStepResolution[];
   style?: unknown;
 };
 

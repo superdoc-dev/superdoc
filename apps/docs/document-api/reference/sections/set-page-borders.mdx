@@ -1,0 +1,511 @@
+---
+title: sections.setPageBorders
+sidebarTitle: sections.setPageBorders
+description: Set page border configuration for a section.
+---
+
+{/* GENERATED FILE: DO NOT EDIT. Regenerate via `pnpm run docapi:sync`. */}
+
+> Alpha: Document API is currently alpha and subject to breaking changes.
+
+## Summary
+
+Set page border configuration for a section.
+
+- Operation ID: `sections.setPageBorders`
+- API member path: `editor.doc.sections.setPageBorders(...)`
+- Mutates document: `yes`
+- Idempotency: `conditional`
+- Supports tracked mode: `no`
+- Supports dry run: `yes`
+- Deterministic target resolution: `yes`
+
+## Expected result
+
+Returns a SectionMutationResult receipt; reports NO_OP if page border configuration already matches.
+
+## Input fields
+
+| Field | Type | Required | Description |
+| --- | --- | --- | --- |
+| `borders` | any \\| any \\| any \\| any \\| any \\| any \\| any | yes | One of: any, any, any, any, any, any, any |
+| `target` | SectionAddress | yes | SectionAddress |
+
+### Example request
+
+```json
+{
+  "borders": {
+    "display": "allPages",
+    "offsetFrom": "page",
+    "zOrder": "front"
+  },
+  "target": {
+    "kind": "section",
+    "sectionId": "example"
+  }
+}
+```
+
+## Output fields
+
+_No fields._
+
+### Example response
+
+```json
+{
+  "section": {
+    "kind": "section",
+    "sectionId": "example"
+  },
+  "success": true
+}
+```
+
+## Pre-apply throws
+
+- `TARGET_NOT_FOUND`
+- `INVALID_TARGET`
+- `INVALID_INPUT`
+- `CAPABILITY_UNAVAILABLE`
+- `INTERNAL_ERROR`
+
+## Non-applied failure codes
+
+- `NO_OP`
+- `INVALID_TARGET`
+- `CAPABILITY_UNAVAILABLE`
+
+## Raw schemas
+
+<Accordion title="Raw input schema">
+```json
+{
+  "additionalProperties": false,
+  "properties": {
+    "borders": {
+      "additionalProperties": false,
+      "oneOf": [
+        {
+          "required": [
+            "display"
+          ]
+        },
+        {
+          "required": [
+            "offsetFrom"
+          ]
+        },
+        {
+          "required": [
+            "zOrder"
+          ]
+        },
+        {
+          "required": [
+            "top"
+          ]
+        },
+        {
+          "required": [
+            "right"
+          ]
+        },
+        {
+          "required": [
+            "bottom"
+          ]
+        },
+        {
+          "required": [
+            "left"
+          ]
+        }
+      ],
+      "properties": {
+        "bottom": {
+          "additionalProperties": false,
+          "oneOf": [
+            {
+              "required": [
+                "style"
+              ]
+            },
+            {
+              "required": [
+                "size"
+              ]
+            },
+            {
+              "required": [
+                "space"
+              ]
+            },
+            {
+              "required": [
+                "color"
+              ]
+            },
+            {
+              "required": [
+                "shadow"
+              ]
+            },
+            {
+              "required": [
+                "frame"
+              ]
+            }
+          ],
+          "properties": {
+            "color": {
+              "type": "string"
+            },
+            "frame": {
+              "type": "boolean"
+            },
+            "shadow": {
+              "type": "boolean"
+            },
+            "size": {
+              "minimum": 0,
+              "type": "number"
+            },
+            "space": {
+              "minimum": 0,
+              "type": "number"
+            },
+            "style": {
+              "type": "string"
+            }
+          },
+          "type": "object"
+        },
+        "display": {
+          "enum": [
+            "allPages",
+            "firstPage",
+            "notFirstPage"
+          ]
+        },
+        "left": {
+          "additionalProperties": false,
+          "oneOf": [
+            {
+              "required": [
+                "style"
+              ]
+            },
+            {
+              "required": [
+                "size"
+              ]
+            },
+            {
+              "required": [
+                "space"
+              ]
+            },
+            {
+              "required": [
+                "color"
+              ]
+            },
+            {
+              "required": [
+                "shadow"
+              ]
+            },
+            {
+              "required": [
+                "frame"
+              ]
+            }
+          ],
+          "properties": {
+            "color": {
+              "type": "string"
+            },
+            "frame": {
+              "type": "boolean"
+            },
+            "shadow": {
+              "type": "boolean"
+            },
+            "size": {
+              "minimum": 0,
+              "type": "number"
+            },
+            "space": {
+              "minimum": 0,
+              "type": "number"
+            },
+            "style": {
+              "type": "string"
+            }
+          },
+          "type": "object"
+        },
+        "offsetFrom": {
+          "enum": [
+            "page",
+            "text"
+          ]
+        },
+        "right": {
+          "additionalProperties": false,
+          "oneOf": [
+            {
+              "required": [
+                "style"
+              ]
+            },
+            {
+              "required": [
+                "size"
+              ]
+            },
+            {
+              "required": [
+                "space"
+              ]
+            },
+            {
+              "required": [
+                "color"
+              ]
+            },
+            {
+              "required": [
+                "shadow"
+              ]
+            },
+            {
+              "required": [
+                "frame"
+              ]
+            }
+          ],
+          "properties": {
+            "color": {
+              "type": "string"
+            },
+            "frame": {
+              "type": "boolean"
+            },
+            "shadow": {
+              "type": "boolean"
+            },
+            "size": {
+              "minimum": 0,
+              "type": "number"
+            },
+            "space": {
+              "minimum": 0,
+              "type": "number"
+            },
+            "style": {
+              "type": "string"
+            }
+          },
+          "type": "object"
+        },
+        "top": {
+          "additionalProperties": false,
+          "oneOf": [
+            {
+              "required": [
+                "style"
+              ]
+            },
+            {
+              "required": [
+                "size"
+              ]
+            },
+            {
+              "required": [
+                "space"
+              ]
+            },
+            {
+              "required": [
+                "color"
+              ]
+            },
+            {
+              "required": [
+                "shadow"
+              ]
+            },
+            {
+              "required": [
+                "frame"
+              ]
+            }
+          ],
+          "properties": {
+            "color": {
+              "type": "string"
+            },
+            "frame": {
+              "type": "boolean"
+            },
+            "shadow": {
+              "type": "boolean"
+            },
+            "size": {
+              "minimum": 0,
+              "type": "number"
+            },
+            "space": {
+              "minimum": 0,
+              "type": "number"
+            },
+            "style": {
+              "type": "string"
+            }
+          },
+          "type": "object"
+        },
+        "zOrder": {
+          "enum": [
+            "front",
+            "back"
+          ]
+        }
+      },
+      "type": "object"
+    },
+    "target": {
+      "$ref": "#/$defs/SectionAddress"
+    }
+  },
+  "required": [
+    "target",
+    "borders"
+  ],
+  "type": "object"
+}
+```
+</Accordion>
+
+<Accordion title="Raw output schema">
+```json
+{
+  "oneOf": [
+    {
+      "additionalProperties": false,
+      "properties": {
+        "section": {
+          "$ref": "#/$defs/SectionAddress"
+        },
+        "success": {
+          "const": true
+        }
+      },
+      "required": [
+        "success",
+        "section"
+      ],
+      "type": "object"
+    },
+    {
+      "additionalProperties": false,
+      "properties": {
+        "failure": {
+          "additionalProperties": false,
+          "properties": {
+            "code": {
+              "enum": [
+                "NO_OP",
+                "INVALID_TARGET",
+                "CAPABILITY_UNAVAILABLE"
+              ]
+            },
+            "details": {},
+            "message": {
+              "type": "string"
+            }
+          },
+          "required": [
+            "code",
+            "message"
+          ],
+          "type": "object"
+        },
+        "success": {
+          "const": false
+        }
+      },
+      "required": [
+        "success",
+        "failure"
+      ],
+      "type": "object"
+    }
+  ]
+}
+```
+</Accordion>
+
+<Accordion title="Raw success schema">
+```json
+{
+  "additionalProperties": false,
+  "properties": {
+    "section": {
+      "$ref": "#/$defs/SectionAddress"
+    },
+    "success": {
+      "const": true
+    }
+  },
+  "required": [
+    "success",
+    "section"
+  ],
+  "type": "object"
+}
+```
+</Accordion>
+
+<Accordion title="Raw failure schema">
+```json
+{
+  "additionalProperties": false,
+  "properties": {
+    "failure": {
+      "additionalProperties": false,
+      "properties": {
+        "code": {
+          "enum": [
+            "NO_OP",
+            "INVALID_TARGET",
+            "CAPABILITY_UNAVAILABLE"
+          ]
+        },
+        "details": {},
+        "message": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "code",
+        "message"
+      ],
+      "type": "object"
+    },
+    "success": {
+      "const": false
+    }
+  },
+  "required": [
+    "success",
+    "failure"
+  ],
+  "type": "object"
+}
+```
+</Accordion>

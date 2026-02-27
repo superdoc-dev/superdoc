@@ -53,6 +53,9 @@ export * from './deleteSkipEmptyRun.js';
 export * from './deleteNextToRun.js';
 export * from './skipTab.js';
 
+// Tables
+export * from './insertTableAt.js';
+
 // Lists
 export * from './toggleList.js';
 export * from './increaseListIndent.js';

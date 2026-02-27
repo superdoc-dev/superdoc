@@ -1,4 +1,5 @@
 import type {
+  CellSpacing,
   DrawingBlock,
   Fragment,
   Line,
@@ -8,6 +9,7 @@ import type {
   TableFragment,
   TableMeasure,
 } from '@superdoc/contracts';
+import { getCellSpacingPx } from '@superdoc/measuring-dom';
 import { CLASS_NAMES, fragmentStyles } from '../styles.js';
 import { DOM_CLASS_NAMES } from '../constants.js';
 import type { FragmentRenderContext, BlockLookup } from '../renderer.js';
@@ -16,7 +18,6 @@ import { applySdtContainerStyling, type SdtBoundaryOptions } from '../utils/sdt-
 import { applyBorder, borderValueToSpec } from './border-utils.js';
 
 type ApplyStylesFn = (el: HTMLElement, styles: Partial<CSSStyleDeclaration>) => void;
-
 /**
  * Dependencies required for rendering a table fragment.
  *
@@ -190,11 +191,22 @@ export const renderTableFragment = (deps: TableRenderDependencies): HTMLElement 
   applySdtDataset(container, block.attrs?.sdt);
   applyContainerSdtDataset?.(container, block.attrs?.containerSdt);
 
+  // Outer table border widths: reserve space so border is inside fragment size; content is offset
+  const tableBorderWidths = measure.tableBorderWidths;
+  if (tableBorderWidths) {
+    container.style.boxSizing = 'border-box';
+  }
+  const contentLeft = tableBorderWidths?.left ?? 0;
+  const contentTop = tableBorderWidths?.top ?? 0;
+
   // Apply SDT container styling (document sections, structured content blocks)
   applySdtContainerStyling(doc, container, block.attrs?.sdt, block.attrs?.containerSdt, sdtBoundary);
 
   // Add table-specific class for resize overlay targeting and click mapping
   container.classList.add(DOM_CLASS_NAMES.TABLE_FRAGMENT);
+
+  // Cell spacing in px (border-spacing). Use measure when present, else resolve from block attrs (e.g. stale/cached measure).
+  const cellSpacingPx = measure.cellSpacingPx ?? getCellSpacingPx(block.attrs?.cellSpacing);
 
   // Add metadata for interactive table resizing
   if (fragment.metadata?.columnBoundaries) {
@@ -236,7 +248,8 @@ export const renderTableFragment = (deps: TableRenderDependencies): HTMLElement 
 
     // For each rendered row, determine which grid columns have cell boundaries
     // A boundary exists at column X if there's a cell that ENDS at column X (gridColumnStart + colSpan = X)
-    let rowY = 0;
+    // rowY includes outer spacing (before first row, between rows, after last) so segment positions match rendered cells
+    let rowY = cellSpacingPx;
     for (let i = 0; i < renderedRows.length; i++) {
       const { rowIndex, height } = renderedRows[i];
       const rowMeasure = measure.rows[rowIndex];
@@ -281,13 +294,13 @@ export const renderTableFragment = (deps: TableRenderDependencies): HTMLElement 
         }
       }
 
-      rowY += height;
+      rowY += height + cellSpacingPx;
     }
 
     const metadata = {
       columns: fragment.metadata.columnBoundaries.map((boundary) => ({
         i: boundary.index,
-        x: boundary.x,
+        x: boundary.x + contentLeft,
         w: boundary.width,
         min: boundary.minWidth,
         r: boundary.resizable ? 1 : 0,
@@ -296,7 +309,7 @@ export const renderTableFragment = (deps: TableRenderDependencies): HTMLElement 
       segments: boundarySegments.map((segs, colIndex) =>
         segs.map((seg) => ({
           c: colIndex, // column index
-          y: seg.y, // y position
+          y: seg.y + contentTop, // y position (relative to table container)
           h: seg.height, // height of segment
         })),
       ),
@@ -310,9 +323,12 @@ export const renderTableFragment = (deps: TableRenderDependencies): HTMLElement 
     container.setAttribute('data-sd-block-id', block.id);
   }
 
-  const borderCollapse = block.attrs?.borderCollapse || 'collapse';
-  if (borderCollapse === 'separate' && block.attrs?.cellSpacing) {
-    container.style.borderSpacing = `${block.attrs.cellSpacing}px`;
+  const borderCollapse = block.attrs?.borderCollapse ?? (block.attrs?.cellSpacing != null ? 'separate' : 'collapse');
+  if (borderCollapse === 'separate' && block.attrs?.cellSpacing && tableBorders) {
+    applyBorder(container, 'Top', borderValueToSpec(tableBorders.top));
+    applyBorder(container, 'Right', borderValueToSpec(tableBorders.right));
+    applyBorder(container, 'Bottom', borderValueToSpec(tableBorders.bottom));
+    applyBorder(container, 'Left', borderValueToSpec(tableBorders.left));
   }
 
   // Pre-calculate all row heights for rowspan calculations
@@ -327,7 +343,8 @@ export const renderTableFragment = (deps: TableRenderDependencies): HTMLElement 
     return r?.height ?? 0;
   });
 
-  let y = 0;
+  // First row starts after space before table content (space between table border and first row)
+  let y = cellSpacingPx;
 
   // If this is a continuation fragment with repeated headers, render headers first.
   // NOTE: This header-then-body iteration must stay in sync with the metadata
@@ -357,8 +374,10 @@ export const renderTableFragment = (deps: TableRenderDependencies): HTMLElement 
         // Headers are always rendered as-is (no border suppression)
         continuesFromPrev: false,
         continuesOnNext: false,
+        cellSpacingPx,
       });
-      y += rowMeasure.height;
+      // Add row height + spacing after every row (including last) for outer spacing after last row
+      y += rowMeasure.height + cellSpacingPx;
     }
   }
 
@@ -501,8 +520,10 @@ export const renderTableFragment = (deps: TableRenderDependencies): HTMLElement 
       continuesOnNext: isLastRenderedBodyRow && fragment.continuesOnNext === true,
       // Pass partial row data for mid-row splits
       partialRow: partialRowData,
+      cellSpacingPx,
     });
-    y += actualRowHeight;
+    // Add row height + spacing after every row (including last) for outer spacing after last row
+    y += actualRowHeight + cellSpacingPx;
   }
 
   return container;

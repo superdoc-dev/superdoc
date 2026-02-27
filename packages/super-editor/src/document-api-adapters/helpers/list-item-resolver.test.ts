@@ -103,10 +103,13 @@ describe('list-item-resolver', () => {
 
     const result = listListItems(editor);
     expect(result.total).toBe(2);
-    expect(result.matches.map((match) => match.nodeId)).toEqual(['li-1', 'li-2']);
+    expect(result.items.map((item) => item.id)).toEqual(['li-1', 'li-2']);
     expect(result.items[0]?.kind).toBe('ordered');
     expect(result.items[0]?.ordinal).toBe(1);
     expect(result.items[1]?.ordinal).toBe(2);
+    expect(result.items[0]?.handle.ref).toBe('li-1');
+    expect(result.items[0]?.handle.targetKind).toBe('list');
+    expect(result.page.returned).toBe(2);
   });
 
   it('applies inclusive within scope when within itself is a list item', () => {
@@ -136,7 +139,7 @@ describe('list-item-resolver', () => {
     });
 
     expect(result.total).toBe(1);
-    expect(result.matches[0]?.nodeId).toBe('li-1');
+    expect(result.items[0]?.id).toBe('li-1');
   });
 
   it('throws TARGET_NOT_FOUND when resolving a stale list address', () => {

@@ -82,7 +82,6 @@
     "he": "catalog:",
     "jszip": "catalog:",
     "lodash": "^4.17.21",
-    "marked": "catalog:",
     "prosemirror-commands": "catalog:",
     "prosemirror-dropcursor": "catalog:",
     "prosemirror-gapcursor": "catalog:",
@@ -99,6 +98,7 @@
     "rehype-parse": "catalog:",
     "rehype-remark": "catalog:",
     "remark-gfm": "catalog:",
+    "remark-parse": "catalog:",
     "remark-stringify": "catalog:",
     "unified": "catalog:",
     "uuid": "catalog:",
@@ -114,6 +114,7 @@
   },
   "devDependencies": {
     "@floating-ui/dom": "catalog:",
+    "@types/mdast": "catalog:",
     "@superdoc/common": "workspace:*",
     "@superdoc/document-api": "workspace:*",
     "@superdoc/contracts": "workspace:*",

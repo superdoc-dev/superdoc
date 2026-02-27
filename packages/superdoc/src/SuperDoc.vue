@@ -272,6 +272,13 @@ const onEditorReady = ({ editor, presentationEditor }) => {
     // Map PM positions to visual layout coordinates
     const mappedPositions = presentationEditor.getCommentBounds(positions, layers.value);
     handleEditorLocationsUpdate(mappedPositions);
+
+    // Ensure floating comments can render once the layout engine starts emitting positions.
+    // For DOCX, handleDocumentReady doesn't fire (it's wired to PDFViewer), so this is
+    // the primary trigger for hasInitializedLocations in editor-based documents.
+    if (!hasInitializedLocations.value) {
+      hasInitializedLocations.value = true;
+    }
   });
 };
 
@@ -657,7 +664,13 @@ const onEditorCommentsUpdate = (params = {}) => {
   nextTick(() => {
     if (pendingComment.value) return;
     commentsStore.setActiveComment(proxy.$superdoc, activeCommentId);
+    // Briefly suppress click-outside so the same click that selected the comment
+    // highlight in the editor doesn't immediately deactivate it via the sidebar.
+    // Reset after the event loop settles so subsequent outside clicks work normally.
     isCommentHighlighted.value = true;
+    setTimeout(() => {
+      isCommentHighlighted.value = false;
+    }, 0);
   });
 
   // Bubble up the event to the user, if handled
@@ -956,11 +969,13 @@ watch(
   },
 );
 
+// Ensure hasInitializedLocations is set when comments arrive (backup for cases
+// where handleDocumentReady hasn't fired yet). Never toggle false→true→false —
+// the virtualized FloatingComments reacts to comment changes via computed properties.
 watch(getFloatingComments, () => {
-  hasInitializedLocations.value = false;
-  nextTick(() => {
+  if (!hasInitializedLocations.value) {
     hasInitializedLocations.value = true;
-  });
+  }
 });
 
 const {
@@ -1109,17 +1124,9 @@ const getPDFViewer = () => {
       </div>
 
       <div class="superdoc__right-sidebar right-sidebar" v-if="showCommentsSidebar">
-        <CommentDialog
-          v-if="pendingComment"
-          :comment="pendingComment"
-          :auto-focus="true"
-          :is-floating="true"
-          v-click-outside="cancelPendingComment"
-        />
-
         <div class="floating-comments">
           <FloatingComments
-            v-if="hasInitializedLocations && getFloatingComments.length > 0"
+            v-if="hasInitializedLocations && (getFloatingComments.length > 0 || pendingComment)"
             v-for="doc in documentsWithConverations"
             :parent="layers"
             :current-document="doc"

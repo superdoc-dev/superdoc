@@ -1,0 +1,137 @@
+---
+title: Laravel Integration
+sidebarTitle: Laravel
+keywords: "laravel docx editor, laravel word component, superdoc laravel, laravel document editor, blade superdoc"
+---
+
+SuperDoc works with Laravel + Blade + Vite. Laravel serves the Blade template with PHP, while Vite bundles the SuperDoc JavaScript.
+
+## Install
+
+```bash
+composer require laravel/framework
+npm install superdoc laravel-vite-plugin vite
+```
+
+## Vite config
+
+```text vite.config.js
+import { defineConfig } from 'vite';
+import laravel from 'laravel-vite-plugin';
+
+export default defineConfig({
+    plugins: [
+        laravel({
+            input: ['resources/js/app.js'],
+            refresh: true,
+        }),
+    ],
+});
+```
+
+## Blade template
+
+Create a Blade view that loads the Vite-bundled script and mounts the editor:
+
+```html resources/views/editor.blade.php
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>SuperDoc — Laravel</title>
+    @vite('resources/js/app.js')
+</head>
+<body>
+    <div style="padding: 1rem; background: #f5f5f5">
+        <input type="file" id="file-input" accept=".docx" />
+    </div>
+    <div id="editor" style="height: calc(100vh - 60px)"></div>
+</body>
+</html>
+```
+
+## JavaScript entry point
+
+```js resources/js/app.js
+import { SuperDoc } from 'superdoc';
+import 'superdoc/style.css';
+
+let superdoc = new SuperDoc({ selector: '#editor' });
+
+document.getElementById('file-input').addEventListener('change', (e) => {
+    const file = e.target.files[0];
+    if (!file) return;
+
+    superdoc?.destroy();
+    superdoc = new SuperDoc({
+        selector: '#editor',
+        document: file,
+    });
+});
+```
+
+## Route
+
+```php routes/web.php
+Route::get('/', fn () => view('editor'));
+```
+
+## File upload handling
+
+To load documents from a backend upload instead of the browser file picker, use a Laravel controller:
+
+```php app/Http/Controllers/DocumentController.php
+namespace App\Http\Controllers;
+
+use Illuminate\Http\Request;
+
+class DocumentController extends Controller
+{
+    public function upload(Request $request)
+    {
+        $request->validate(['file' => 'required|file|mimes:docx']);
+        $path = $request->file('file')->store('documents');
+
+        return response()->json(['url' => asset("storage/$path")]);
+    }
+}
+```
+
+Then fetch the document URL in your JavaScript and pass it to SuperDoc:
+
+```js
+const superdoc = new SuperDoc({
+    selector: '#editor',
+    document: '/storage/documents/your-file.docx',
+});
+```
+
+## Run
+
+```bash
+# Install dependencies
+composer install && npm install
+
+# Start both servers
+npm run dev
+```
+
+This runs `php artisan serve` (port 8000) and Vite's dev server together. Open [http://localhost:8000](http://localhost:8000).
+
+## Next steps
+
+<CardGroup cols={2}>
+<Card title="Vanilla JS Integration" icon="js" href="/getting-started/frameworks/vanilla-js">
+  Plain JavaScript setup and patterns
+</Card>
+<Card title="Configuration" icon="gear" href="/core/superdoc/configuration">
+  All configuration options
+</Card>
+<Card title="Laravel Example" icon="github" href="https://github.com/superdoc-dev/superdoc/tree/main/examples/getting-started/laravel">
+  Working Laravel example on GitHub
+</Card>
+<Card title="Collaboration" icon="users" href="/modules/collaboration/overview">
+  Real-time collaboration
+</Card>
+</CardGroup>

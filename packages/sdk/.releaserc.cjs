@@ -40,6 +40,7 @@ const config = {
         prepareCmd: [
           'node scripts/sync-sdk-version.mjs --set ${nextRelease.version}',
           'pnpm -w run generate:all',
+          'pnpm --prefix langs/node run build',
           'node scripts/sdk-validate.mjs',
         ].join(' && '),
         // Publish: build artifacts + publish npm packages (PyPI handled by workflow)

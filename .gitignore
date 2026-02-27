@@ -83,6 +83,8 @@ devtools/visual-testing/pnpm-lock.yaml
 __pycache__/
 *.pyc
 *.pyo
+# Generated platform companion build metadata (do not commit)
+packages/sdk/langs/python/platforms/**/*.egg-info/
 
 # Generated artifacts — run `pnpm run generate:all` to produce
 packages/document-api/generated/

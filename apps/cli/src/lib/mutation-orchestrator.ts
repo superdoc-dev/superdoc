@@ -29,11 +29,11 @@ import { extractInvokeInput } from './invoke-input.js';
  * Mutations that do NOT require --out in stateless mode.
  * These are state-only operations that don't produce document changes worth exporting.
  */
-const STATELESS_OUT_EXEMPT = new Set<CliExposedOperationId>(['comments.setActive']);
+const STATELESS_OUT_EXEMPT = new Set<CliExposedOperationId>([]);
 
 type DocumentPayload = {
   path?: string;
-  source: 'path' | 'stdin';
+  source: 'path' | 'stdin' | 'blank';
   byteLength: number;
   revision: number;
 };

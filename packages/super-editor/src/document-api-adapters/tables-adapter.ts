@@ -2670,11 +2670,15 @@ export function tablesSetShadingAdapter(
         const cellProps = { ...((cellAttrs.tableCellProperties ?? {}) as Record<string, unknown>) };
         cellProps.shading = { fill: input.color, val: 'clear', color: 'auto' };
 
-        tr.setNodeMarkup(tr.mapping.slice(mapFrom).map(tableStart + relPos), null, {
+        const nextCellAttrs: Record<string, unknown> = {
           ...cellAttrs,
           tableCellProperties: cellProps,
-          background: { color: input.color },
-        });
+        };
+
+        if (input.color === 'auto') delete nextCellAttrs.background;
+        else nextCellAttrs.background = { color: input.color };
+
+        tr.setNodeMarkup(tr.mapping.slice(mapFrom).map(tableStart + relPos), null, nextCellAttrs);
       }
     }
 

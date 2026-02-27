@@ -559,6 +559,31 @@ describe('tables-adapter regressions', () => {
     }
   });
 
+  it('does not write cell background when table shading color is auto', () => {
+    const editor = makeTableEditor();
+    const tr = editor.state.tr as unknown as { setNodeMarkup: ReturnType<typeof vi.fn> };
+
+    const result = tablesSetShadingAdapter(editor, {
+      nodeId: 'table-1',
+      color: 'auto',
+    });
+
+    expect(result.success).toBe(true);
+
+    const cellUpdates = tr.setNodeMarkup.mock.calls.filter(
+      (call) =>
+        typeof call[2] === 'object' &&
+        call[2] != null &&
+        (call[2] as { tableCellProperties?: { shading?: { fill?: string } } }).tableCellProperties?.shading?.fill ===
+          'auto',
+    );
+
+    expect(cellUpdates).toHaveLength(4);
+    for (const call of cellUpdates) {
+      expect((call[2] as { background?: unknown }).background).toBeUndefined();
+    }
+  });
+
   it.each([
     {
       name: 'tables.setBorder',

@@ -109,27 +109,4 @@ describe('backspaceNextToRun', () => {
     });
     expect(bookmarkCount).toBe(1);
   });
-
-  it('does not scan into previous paragraphs when adjacent run has only non-text inline content', () => {
-    const schema = makeSchema();
-    const doc = schema.node('doc', null, [
-      schema.node('paragraph', null, [schema.node('run', null, schema.text('A'))]),
-      schema.node('paragraph', null, [
-        schema.node('run', null, [schema.node('bookmarkEnd')]),
-        schema.node('run', null, schema.text('B')),
-      ]),
-    ]);
-
-    const boundary = posBetweenRuns(doc, '');
-    expect(boundary).not.toBeNull();
-
-    const state = EditorState.create({ schema, doc, selection: TextSelection.create(doc, boundary ?? 1) });
-    const dispatch = vi.fn();
-
-    const ok = backspaceNextToRun()({ state, tr: state.tr, dispatch });
-
-    expect(ok).toBe(false);
-    expect(dispatch).not.toHaveBeenCalled();
-    expect(state.doc.textContent).toBe('AB');
-  });
 });

@@ -79,6 +79,7 @@ describe('document-api story: all table commands', () => {
   const insertCellTableBySession = new Map<string, string>();
   const insertCellInitialRowsBySession = new Map<string, number>();
   const deleteCellBySession = new Map<string, string>();
+  const deleteCellTableBySession = new Map<string, string>();
 
   function makeSessionId(prefix: string): string {
     return `${prefix}-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
@@ -690,20 +691,54 @@ describe('document-api story: all table commands', () => {
         }
 
         const cellsResult = unwrap<any>(await api.doc.tables.getCells({ sessionId, nodeId: tableNodeId }));
+        const firstRowBefore = Array.isArray(cellsResult?.cells)
+          ? cellsResult.cells.filter((cell: any) => cell?.rowIndex === 0)
+          : [];
+        if (firstRowBefore.length !== 3) {
+          throw new Error(`tables.deleteCell setup expected 3 cells in first row, received ${firstRowBefore.length}.`);
+        }
         const firstCellNodeId = cellsResult?.cells?.[0]?.nodeId;
         if (!firstCellNodeId) {
           throw new Error('tables.deleteCell setup failed: no table cell was returned from getCells.');
         }
 
         deleteCellBySession.set(sessionId, firstCellNodeId);
+        deleteCellTableBySession.set(sessionId, tableNodeId);
       },
       run: async (sessionId) => {
         const cellNodeId = deleteCellBySession.get(sessionId);
+        const tableNodeId = deleteCellTableBySession.get(sessionId);
         if (!cellNodeId) {
           throw new Error('tables.deleteCell setup failed: prepared cell nodeId was not found.');
         }
+        if (!tableNodeId) {
+          throw new Error('tables.deleteCell setup failed: prepared table nodeId was not found.');
+        }
         deleteCellBySession.delete(sessionId);
-        return unwrap<any>(await api.doc.tables.deleteCell({ sessionId, nodeId: cellNodeId, mode: 'shiftLeft' }));
+        deleteCellTableBySession.delete(sessionId);
+
+        const result = unwrap<any>(
+          await api.doc.tables.deleteCell({ sessionId, nodeId: cellNodeId, mode: 'shiftLeft' }),
+        );
+        assertMutationSuccess('tables.deleteCell', result);
+
+        const postCells = unwrap<any>(await api.doc.tables.getCells({ sessionId, nodeId: tableNodeId, rowIndex: 0 }));
+        const firstRowAfter = Array.isArray(postCells?.cells)
+          ? postCells.cells.filter((cell: any) => cell?.rowIndex === 0)
+          : [];
+        if (firstRowAfter.length !== 2) {
+          throw new Error(
+            `tables.deleteCell expected first-row cell count to be 2 after shiftLeft, received ${firstRowAfter.length}.`,
+          );
+        }
+        const firstRowColumns = firstRowAfter.map((cell: any) => Number(cell?.columnIndex)).sort((a, b) => a - b);
+        if (firstRowColumns.join(',') !== '0,1') {
+          throw new Error(
+            `tables.deleteCell expected first-row column indexes [0,1] after shiftLeft, received [${firstRowColumns.join(',')}].`,
+          );
+        }
+
+        return result;
       },
     },
     {

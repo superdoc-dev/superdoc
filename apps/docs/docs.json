@@ -110,6 +110,7 @@
                 ]
               },
               "document-engine/sdks",
+              "document-engine/sdk-collaboration-sessions",
               "document-engine/cli",
               "document-engine/mcp"
             ]

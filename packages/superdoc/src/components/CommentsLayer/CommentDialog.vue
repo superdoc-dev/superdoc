@@ -363,6 +363,8 @@ const handleReject = () => {
     commentsStore.deleteComment({ superdoc: proxy.$superdoc, commentId: props.comment.commentId });
   }
 
+  // Always resolve tracked changes so resolvedTime is set and the bubble
+  // disappears from getFloatingComments — even when a custom handler is used (SD-2049).
   if (props.comment.trackedChange) {
     props.comment.resolveComment({
       email: superdocStore.user.email,
@@ -390,6 +392,8 @@ const handleResolve = () => {
     }
   }
 
+  // Always resolve so resolvedTime is set and the bubble disappears
+  // from getFloatingComments — even when a custom handler is used (SD-2049).
   props.comment.resolveComment({
     email: superdocStore.user.email,
     name: superdocStore.user.name,

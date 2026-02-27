@@ -85,6 +85,19 @@ function generateParaId(): string {
     .toUpperCase();
 }
 
+function createSeparatorParagraph(schema: Editor['state']['schema']): import('prosemirror-model').Node | null {
+  const paragraphType = schema.nodes.paragraph;
+  if (!paragraphType) return null;
+
+  // Keep separator paragraphs addressable/stable for downstream DOCX roundtrip.
+  const separatorAttrs = {
+    sdBlockId: uuidv4(),
+    paraId: generateParaId(),
+  };
+
+  return paragraphType.createAndFill(separatorAttrs) ?? paragraphType.createAndFill();
+}
+
 function notYetImplemented(operationName: string): never {
   throw new DocumentApiAdapterError('CAPABILITY_UNAVAILABLE', `${operationName} is not yet implemented.`, {
     reason: 'not_implemented',
@@ -1494,10 +1507,16 @@ export function tablesSplitAdapter(
     delete newTableAttrs.paraId; // Avoid duplicate w14:paraId after split.
     delete newTableAttrs.textId; // Avoid duplicate w14:textId after split.
     const newTable = schema.nodes.table.create(newTableAttrs, secondTableRows);
+    const separatorParagraph = createSeparatorParagraph(schema);
+    if (!separatorParagraph) {
+      return toTableFailure('INVALID_TARGET', 'Table split could not create a separator paragraph.');
+    }
 
-    // Insert the new table after the original.
+    // Insert an empty paragraph between tables. Without this block separator,
+    // Word merges adjacent <w:tbl> nodes into one visual table.
     const insertPos = tr.mapping.slice(mapFrom).map(tablePos + tableNode.nodeSize);
-    tr.insert(insertPos, newTable);
+    tr.insert(insertPos, separatorParagraph);
+    tr.insert(insertPos + separatorParagraph.nodeSize, newTable);
 
     applyDirectMutationMeta(tr);
     editor.dispatch(tr);

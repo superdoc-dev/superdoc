@@ -10,6 +10,7 @@ import {
   tablesInsertCellAdapter,
   tablesSetBorderAdapter,
   tablesSetShadingAdapter,
+  tablesSplitAdapter,
 } from './tables-adapter.js';
 
 vi.mock('prosemirror-tables', () => ({
@@ -213,6 +214,20 @@ function makeTableEditor(): Editor {
       tr,
       schema: {
         nodes: {
+          paragraph: {
+            createAndFill: vi.fn((attrs: Record<string, unknown> = {}, content?: unknown) => {
+              const children = Array.isArray(content)
+                ? (content as ProseMirrorNode[])
+                : content
+                  ? ([content] as ProseMirrorNode[])
+                  : [];
+              return createNode('paragraph', children, {
+                attrs: { paragraphProperties: {}, ...attrs },
+                isBlock: true,
+                inlineContent: true,
+              });
+            }),
+          },
           tableCell: {
             createAndFill: vi.fn((attrs: Record<string, unknown> = {}, content?: unknown) => {
               const children = Array.isArray(content)
@@ -328,6 +343,27 @@ describe('tables-adapter regressions', () => {
     const result = tablesDeleteCellAdapter(editor, { nodeId: 'cell-1', mode: 'shiftUp' });
     expect(result.success).toBe(true);
     expect(tr.insert).toHaveBeenCalledWith(expectedInsertPos, expect.anything());
+  });
+
+  it('inserts a separator paragraph before the split-off table', () => {
+    const editor = makeTableEditor();
+    const tr = editor.state.tr as unknown as { insert: ReturnType<typeof vi.fn> };
+    const tableNode = editor.state.doc.nodeAt(0) as ProseMirrorNode;
+    const expectedInsertPos = tableNode.nodeSize;
+
+    const result = tablesSplitAdapter(editor, { nodeId: 'table-1', atRowIndex: 1 });
+    expect(result.success).toBe(true);
+    expect(tr.insert).toHaveBeenCalledTimes(2);
+
+    const firstInsertCall = tr.insert.mock.calls[0] as [number, ProseMirrorNode];
+    const secondInsertCall = tr.insert.mock.calls[1] as [number, ProseMirrorNode];
+    const insertedSeparator = firstInsertCall[1];
+    const insertedTable = secondInsertCall[1];
+
+    expect(firstInsertCall[0]).toBe(expectedInsertPos);
+    expect(insertedSeparator.type.name).toBe('paragraph');
+    expect(secondInsertCall[0]).toBe(expectedInsertPos + insertedSeparator.nodeSize);
+    expect(insertedTable.type.name).toBe('table');
   });
 
   it('keeps table grid widths in sync when distributing columns', () => {

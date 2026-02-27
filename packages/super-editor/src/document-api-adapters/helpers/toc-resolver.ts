@@ -7,6 +7,7 @@ import type { TocAddress, TocDomain, DiscoveryItem, TocInfo } from '@superdoc/do
 import { buildDiscoveryItem, buildResolvedHandle } from '@superdoc/document-api';
 import { parseTocInstruction } from '../../core/super-converter/field-references/shared/toc-switches.js';
 import { DocumentApiAdapterError } from '../errors.js';
+import { resolvePublicTocNodeId } from './toc-node-id.js';
 
 // ---------------------------------------------------------------------------
 // Node resolution
@@ -21,20 +22,6 @@ export interface ResolvedTocNode {
   commandNodeId?: string;
 }
 
-function stableHash(input: string): string {
-  let hash = 2166136261;
-  for (let index = 0; index < input.length; index += 1) {
-    hash ^= input.charCodeAt(index);
-    hash = Math.imul(hash, 16777619);
-  }
-  return (hash >>> 0).toString(16).padStart(8, '0');
-}
-
-function fallbackTocNodeId(node: ProseMirrorNode, pos: number): string {
-  const instruction = typeof node.attrs?.instruction === 'string' ? node.attrs.instruction : '';
-  return `toc-auto-${stableHash(`${pos}:${instruction}`)}`;
-}
-
 /**
  * Finds all tableOfContents nodes in document order.
  */
@@ -43,11 +30,7 @@ export function findAllTocNodes(doc: ProseMirrorNode): ResolvedTocNode[] {
   doc.descendants((node, pos) => {
     if (node.type.name === 'tableOfContents') {
       const sdBlockId = node.attrs?.sdBlockId as string | undefined;
-      // Public TOC IDs must survive independent document loads in separate CLI
-      // invocations. sdBlockId is regenerated for imported block nodes, so use a
-      // deterministic fallback for the public address and keep sdBlockId as a
-      // command-only alias.
-      const nodeId = fallbackTocNodeId(node, pos);
+      const nodeId = resolvePublicTocNodeId(node, pos);
       const commandNodeId = sdBlockId;
       results.push({ node, pos, nodeId, commandNodeId });
       return false; // don't descend into TOC children
@@ -75,9 +58,10 @@ export function resolveTocTarget(doc: ProseMirrorNode, target: TocAddress): Reso
 
 /**
  * Re-resolves a TOC node by its sdBlockId in the post-mutation document and
- * returns the current deterministic public nodeId. Use this after mutations
- * that change the instruction or insert a new node, since the deterministic
- * ID (which hashes pos + instruction) will have changed.
+ * returns the current public nodeId.
+ *
+ * Public IDs prefer sdBlockId (when present) and otherwise fall back to a
+ * deterministic ID derived from node position + instruction.
  *
  * Falls back to the sdBlockId itself when the node is not discoverable in the
  * post-mutation doc (e.g. dispatch did not synchronously update state). The

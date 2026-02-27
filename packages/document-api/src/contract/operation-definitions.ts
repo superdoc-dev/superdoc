@@ -1639,6 +1639,7 @@ export const OPERATION_DEFINITIONS = {
   'create.tableOfContents': {
     memberPath: 'create.tableOfContents',
     description: 'Insert a new table of contents at the target position.',
+    expectedResult: 'Returns a CreateTableOfContentsResult with the new TOC block address.',
     requiresDocumentContext: true,
     metadata: mutationOperation({
       idempotency: 'non-idempotent',
@@ -1658,6 +1659,7 @@ export const OPERATION_DEFINITIONS = {
   'toc.list': {
     memberPath: 'toc.list',
     description: 'List all tables of contents in the document.',
+    expectedResult: 'Returns a TocListResult with an array of TOC discovery items and pagination metadata.',
     requiresDocumentContext: true,
     metadata: readOperation({
       idempotency: 'idempotent',
@@ -1668,6 +1670,7 @@ export const OPERATION_DEFINITIONS = {
   'toc.get': {
     memberPath: 'toc.get',
     description: 'Retrieve details of a specific table of contents.',
+    expectedResult: 'Returns a TocInfo object with the instruction, source/display configuration, and entry count.',
     requiresDocumentContext: true,
     metadata: readOperation({
       idempotency: 'idempotent',
@@ -1679,6 +1682,7 @@ export const OPERATION_DEFINITIONS = {
   'toc.configure': {
     memberPath: 'toc.configure',
     description: 'Update the configuration switches of a table of contents.',
+    expectedResult: 'Returns a TocMutationResult with the updated TOC address on success, or a failure code on no-op.',
     requiresDocumentContext: true,
     metadata: mutationOperation({
       idempotency: 'conditional',
@@ -1693,6 +1697,8 @@ export const OPERATION_DEFINITIONS = {
   'toc.update': {
     memberPath: 'toc.update',
     description: 'Rebuild the materialized content of a table of contents.',
+    expectedResult:
+      'Returns a TocMutationResult with the TOC address on success, or a failure code if content is unchanged.',
     requiresDocumentContext: true,
     metadata: mutationOperation({
       idempotency: 'conditional',
@@ -1707,6 +1713,7 @@ export const OPERATION_DEFINITIONS = {
   'toc.remove': {
     memberPath: 'toc.remove',
     description: 'Remove a table of contents from the document.',
+    expectedResult: 'Returns a TocMutationResult with the removed TOC address on success, or a failure code on no-op.',
     requiresDocumentContext: true,
     metadata: mutationOperation({
       idempotency: 'conditional',

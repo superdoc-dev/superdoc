@@ -57,10 +57,15 @@ export const TableOfContents = Node.create({
           const materializedContent = normalizeTocContent(content, state.schema) ?? defaultContent;
           const tocNode = tocType.create({ instruction, sdBlockId }, materializedContent);
 
-          if (dispatch) {
-            tr.insert(pos, tocNode);
+          try {
+            if (dispatch) {
+              tr.insert(pos, tocNode);
+            }
+            return true;
+          } catch (error) {
+            if (error instanceof RangeError) return false;
+            throw error;
           }
-          return true;
         },
 
       /**

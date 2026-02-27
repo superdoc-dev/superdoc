@@ -44,7 +44,7 @@ import {
 import { paginate } from '../helpers/adapter-utils.js';
 import { getRevision } from './revision-tracker.js';
 import { executeDomainCommand } from './plan-wrappers.js';
-import { requireEditorCommand } from '../helpers/mutation-helpers.js';
+import { requireEditorCommand, rejectTrackedMode } from '../helpers/mutation-helpers.js';
 import { clearIndexCache } from '../helpers/index-cache.js';
 import { resolveBlockInsertionPos } from './create-insertion.js';
 
@@ -182,6 +182,7 @@ export function tocConfigureWrapper(
   input: TocConfigureInput,
   options?: MutationOptions,
 ): TocMutationResult {
+  rejectTrackedMode('toc.configure', options);
   const command = requireEditorCommand(editor.commands?.setTableOfContentsInstructionById, 'toc.configure');
 
   const resolved = resolveTocTarget(editor.state.doc, input.target);
@@ -214,9 +215,8 @@ export function tocConfigureWrapper(
     return tocFailure('NO_OP', 'Configuration change could not be applied.');
   }
 
-  // Re-resolve after mutation: the deterministic ID hashes pos + instruction,
-  // so the pre-mutation nodeId is now stale. Look up the node by its sdBlockId
-  // (which survives the instruction change) to get the current public ID.
+  // Re-resolve after mutation to return the current public TOC id.
+  // We look up by sdBlockId because instruction updates may change fallback IDs.
   const postMutationId = resolvePostMutationTocId(editor.state.doc, commandNodeId);
   return tocSuccess(postMutationId);
 }
@@ -226,6 +226,7 @@ export function tocConfigureWrapper(
 // ---------------------------------------------------------------------------
 
 export function tocUpdateWrapper(editor: Editor, input: TocUpdateInput, options?: MutationOptions): TocMutationResult {
+  rejectTrackedMode('toc.update', options);
   const command = requireEditorCommand(editor.commands?.replaceTableOfContentsContentById, 'toc.update');
 
   const resolved = resolveTocTarget(editor.state.doc, input.target);
@@ -261,6 +262,7 @@ export function tocUpdateWrapper(editor: Editor, input: TocUpdateInput, options?
 // ---------------------------------------------------------------------------
 
 export function tocRemoveWrapper(editor: Editor, input: TocRemoveInput, options?: MutationOptions): TocMutationResult {
+  rejectTrackedMode('toc.remove', options);
   const command = requireEditorCommand(editor.commands?.deleteTableOfContentsById, 'toc.remove');
 
   const resolved = resolveTocTarget(editor.state.doc, input.target);
@@ -290,6 +292,7 @@ export function createTableOfContentsWrapper(
   input: CreateTableOfContentsInput,
   options?: MutationOptions,
 ): CreateTableOfContentsResult {
+  rejectTrackedMode('create.tableOfContents', options);
   const command = requireEditorCommand(editor.commands?.insertTableOfContentsAt, 'create.tableOfContents');
 
   // Resolve insertion position
@@ -336,8 +339,7 @@ export function createTableOfContentsWrapper(
     };
   }
 
-  // Return the deterministic public ID (not the transient sdBlockId) so the
-  // address survives across document reloads and matches what toc.list exposes.
+  // Re-resolve and return the public TOC id exposed by toc.list/toc.get.
   const postMutationId = resolvePostMutationTocId(editor.state.doc, sdBlockId);
   return { success: true, toc: buildTocAddress(postMutationId) };
 }

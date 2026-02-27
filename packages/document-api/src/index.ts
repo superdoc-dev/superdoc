@@ -101,6 +101,7 @@ import {
   executeCreateHeading,
   executeCreateTable,
   executeCreateSectionBreak,
+  executeCreateTableOfContents,
 } from './create/create.js';
 import type { BlocksAdapter, BlocksApi } from './blocks/blocks.js';
 import { executeBlocksDelete } from './blocks/blocks.js';
@@ -221,6 +222,20 @@ import {
   executeSectionsSetTitlePage,
   executeSectionsSetVerticalAlign,
 } from './sections/sections.js';
+import type { TocApi, TocAdapter } from './toc/toc.js';
+import { executeTocList, executeTocGet, executeTocConfigure, executeTocUpdate, executeTocRemove } from './toc/toc.js';
+import type {
+  CreateTableOfContentsInput,
+  CreateTableOfContentsResult,
+  TocGetInput,
+  TocInfo,
+  TocConfigureInput,
+  TocUpdateInput,
+  TocRemoveInput,
+  TocMutationResult,
+  TocListQuery,
+  TocListResult,
+} from './toc/toc.types.js';
 
 export type { FindAdapter, FindOptions } from './find/find.js';
 export type { GetNodeAdapter, GetNodeByIdInput } from './get-node/get-node.js';
@@ -300,6 +315,31 @@ export type {
   ReviewDecideInput,
 } from './track-changes/track-changes.js';
 export type { BlocksAdapter } from './blocks/blocks.js';
+export type { TocApi, TocAdapter } from './toc/toc.js';
+export type {
+  TocAddress,
+  TocSourceConfig,
+  TocDisplayConfig,
+  TocPreservedSwitches,
+  TocConfigurePatch,
+  TocSwitchConfig,
+  TocDomain,
+  TocListQuery,
+  TocListResult,
+  TocGetInput,
+  TocInfo,
+  TocConfigureInput,
+  TocUpdateInput,
+  TocRemoveInput,
+  TocMutationResult,
+  TocMutationSuccess,
+  TocMutationFailure,
+  TocCreateLocation,
+  CreateTableOfContentsInput,
+  CreateTableOfContentsResult,
+  CreateTableOfContentsSuccess,
+  CreateTableOfContentsFailure,
+} from './toc/toc.types.js';
 export type { ListsAdapter } from './lists/lists.js';
 export type { SectionsAdapter } from './sections/sections.js';
 export type {
@@ -547,6 +587,10 @@ export interface DocumentApi {
    */
   tables: TablesApi;
   /**
+   * Table of contents operations.
+   */
+  toc: TocApi;
+  /**
    * Selector-based query with cardinality contracts for mutation targeting.
    */
   query: QueryApi;
@@ -591,6 +635,7 @@ export interface DocumentApiAdapters {
   lists: ListsAdapter;
   sections: SectionsAdapter;
   tables: TablesAdapter;
+  toc: TocAdapter;
   query: QueryAdapter;
   mutations: MutationsAdapter;
 }
@@ -714,6 +759,9 @@ export function createDocumentApi(adapters: DocumentApiAdapters): DocumentApi {
       },
       sectionBreak(input: CreateSectionBreakInput, options?: MutationOptions): CreateSectionBreakResult {
         return executeCreateSectionBreak(adapters.create, input, options);
+      },
+      tableOfContents(input: CreateTableOfContentsInput, options?: MutationOptions): CreateTableOfContentsResult {
+        return executeCreateTableOfContents(adapters.create, input, options);
       },
     },
     capabilities,
@@ -1077,6 +1125,23 @@ export function createDocumentApi(adapters: DocumentApiAdapters): DocumentApi {
       },
       getProperties(input) {
         return adapters.tables.getProperties(input);
+      },
+    },
+    toc: {
+      list(query?: TocListQuery): TocListResult {
+        return executeTocList(adapters.toc, query);
+      },
+      get(input: TocGetInput): TocInfo {
+        return executeTocGet(adapters.toc, input);
+      },
+      configure(input: TocConfigureInput, options?: MutationOptions): TocMutationResult {
+        return executeTocConfigure(adapters.toc, input, options);
+      },
+      update(input: TocUpdateInput, options?: MutationOptions): TocMutationResult {
+        return executeTocUpdate(adapters.toc, input, options);
+      },
+      remove(input: TocRemoveInput, options?: MutationOptions): TocMutationResult {
+        return executeTocRemove(adapters.toc, input, options);
       },
     },
     query: {

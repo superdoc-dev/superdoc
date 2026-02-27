@@ -419,6 +419,76 @@ describe('getDocumentApiCapabilities', () => {
     });
   });
 
+  // --- TOC capability tests ---
+
+  describe('TOC operations', () => {
+    function makeTocEditor(overrides: { commands?: Record<string, unknown> } = {}) {
+      return makeEditor({
+        commands: {
+          insertTableOfContentsAt: vi.fn(() => true),
+          setTableOfContentsInstructionById: vi.fn(() => true),
+          replaceTableOfContentsContentById: vi.fn(() => true),
+          deleteTableOfContentsById: vi.fn(() => true),
+          ...overrides.commands,
+        } as unknown as Editor['commands'],
+      });
+    }
+
+    it('marks TOC operations as available when all required commands are present', () => {
+      const capabilities = getDocumentApiCapabilities(makeTocEditor());
+
+      expect(capabilities.operations['create.tableOfContents'].available).toBe(true);
+      expect(capabilities.operations['toc.configure'].available).toBe(true);
+      expect(capabilities.operations['toc.update'].available).toBe(true);
+      expect(capabilities.operations['toc.remove'].available).toBe(true);
+    });
+
+    it('marks create.tableOfContents as unavailable when insertTableOfContentsAt is missing', () => {
+      const capabilities = getDocumentApiCapabilities(
+        makeTocEditor({ commands: { insertTableOfContentsAt: undefined } }),
+      );
+
+      expect(capabilities.operations['create.tableOfContents'].available).toBe(false);
+      expect(capabilities.operations['create.tableOfContents'].reasons).toContain('COMMAND_UNAVAILABLE');
+    });
+
+    it('marks toc.configure as unavailable when setTableOfContentsInstructionById is missing', () => {
+      const capabilities = getDocumentApiCapabilities(
+        makeTocEditor({ commands: { setTableOfContentsInstructionById: undefined } }),
+      );
+
+      expect(capabilities.operations['toc.configure'].available).toBe(false);
+      expect(capabilities.operations['toc.configure'].reasons).toContain('COMMAND_UNAVAILABLE');
+    });
+
+    it('marks toc.update as unavailable when replaceTableOfContentsContentById is missing', () => {
+      const capabilities = getDocumentApiCapabilities(
+        makeTocEditor({ commands: { replaceTableOfContentsContentById: undefined } }),
+      );
+
+      expect(capabilities.operations['toc.update'].available).toBe(false);
+      expect(capabilities.operations['toc.update'].reasons).toContain('COMMAND_UNAVAILABLE');
+    });
+
+    it('marks toc.remove as unavailable when deleteTableOfContentsById is missing', () => {
+      const capabilities = getDocumentApiCapabilities(
+        makeTocEditor({ commands: { deleteTableOfContentsById: undefined } }),
+      );
+
+      expect(capabilities.operations['toc.remove'].available).toBe(false);
+      expect(capabilities.operations['toc.remove'].reasons).toContain('COMMAND_UNAVAILABLE');
+    });
+
+    it('reports dryRun support for TOC mutation operations', () => {
+      const capabilities = getDocumentApiCapabilities(makeTocEditor());
+
+      expect(capabilities.operations['create.tableOfContents'].dryRun).toBe(true);
+      expect(capabilities.operations['toc.configure'].dryRun).toBe(true);
+      expect(capabilities.operations['toc.update'].dryRun).toBe(true);
+      expect(capabilities.operations['toc.remove'].dryRun).toBe(true);
+    });
+  });
+
   // --- styles.apply capability tests ---
 
   it('marks styles.apply as available when converter has a valid styles part', () => {

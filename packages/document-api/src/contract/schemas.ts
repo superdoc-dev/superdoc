@@ -72,6 +72,7 @@ const knownTargetKindValues = [
   'trackedChange',
   'table',
   'tableCell',
+  'tableOfContents',
   'section',
   'sdt',
   'field',
@@ -1319,6 +1320,54 @@ const formatInlineAliasOperationSchemas: Record<FormatInlineAliasOperationId, Op
     return [operationId, schema];
   }),
 ) as Record<FormatInlineAliasOperationId, OperationSchemaSet>;
+// ---------------------------------------------------------------------------
+// TOC schema helpers
+// ---------------------------------------------------------------------------
+
+function tocAddressSchema(): JsonSchema {
+  return objectSchema(
+    {
+      kind: { const: 'block' },
+      nodeType: { const: 'tableOfContents' },
+      nodeId: { type: 'string' },
+    },
+    ['kind', 'nodeType', 'nodeId'],
+  );
+}
+
+const tocMutationFailureCodes = [
+  'NO_OP',
+  'INVALID_TARGET',
+  'TARGET_NOT_FOUND',
+  'CAPABILITY_UNAVAILABLE',
+  'INVALID_INSERTION_CONTEXT',
+] as const;
+
+const tocMutationFailureSchema: JsonSchema = objectSchema(
+  {
+    success: { const: false },
+    failure: objectSchema(
+      {
+        code: { enum: [...tocMutationFailureCodes] },
+        message: { type: 'string' },
+        details: {},
+      },
+      ['code', 'message'],
+    ),
+  },
+  ['success', 'failure'],
+);
+
+const tocMutationSuccessSchema: JsonSchema = objectSchema({ success: { const: true }, toc: tocAddressSchema() }, [
+  'success',
+  'toc',
+]);
+
+function tocMutationResultSchema(): JsonSchema {
+  return {
+    oneOf: [tocMutationSuccessSchema, tocMutationFailureSchema],
+  };
+}
 
 const operationSchemas: Record<OperationId, OperationSchemaSet> = {
   find: {
@@ -2823,6 +2872,119 @@ const operationSchemas: Record<OperationId, OperationSchemaSet> = {
       },
       ['nodeId'],
     ),
+  },
+
+  // -------------------------------------------------------------------------
+  // TOC schemas
+  // -------------------------------------------------------------------------
+
+  'create.tableOfContents': {
+    input: objectSchema({
+      at: {
+        oneOf: [
+          objectSchema({ kind: { const: 'documentStart' } }, ['kind']),
+          objectSchema({ kind: { const: 'documentEnd' } }, ['kind']),
+          objectSchema({ kind: { const: 'before' }, target: blockNodeAddressSchema }, ['kind', 'target']),
+          objectSchema({ kind: { const: 'after' }, target: blockNodeAddressSchema }, ['kind', 'target']),
+        ],
+      },
+      config: objectSchema({
+        outlineLevels: objectSchema({ from: { type: 'integer' }, to: { type: 'integer' } }, ['from', 'to']),
+        useAppliedOutlineLevel: { type: 'boolean' },
+        hyperlinks: { type: 'boolean' },
+        hideInWebView: { type: 'boolean' },
+        omitPageNumberLevels: objectSchema({ from: { type: 'integer' }, to: { type: 'integer' } }, ['from', 'to']),
+        separator: { type: 'string' },
+      }),
+    }),
+    output: tocMutationResultSchema(),
+    success: tocMutationSuccessSchema,
+    failure: tocMutationFailureSchema,
+  },
+  'toc.list': {
+    input: objectSchema({
+      limit: { type: 'integer' },
+      offset: { type: 'integer' },
+    }),
+    output: objectSchema(
+      {
+        evaluatedRevision: { type: 'string' },
+        total: { type: 'integer' },
+        items: arraySchema(
+          objectSchema(
+            {
+              id: { type: 'string' },
+              handle: ref('ResolvedHandle'),
+              address: tocAddressSchema(),
+              instruction: { type: 'string' },
+              sourceConfig: { type: 'object' },
+              displayConfig: { type: 'object' },
+              preserved: { type: 'object' },
+              entryCount: { type: 'integer' },
+            },
+            ['id', 'handle', 'address', 'instruction', 'entryCount'],
+          ),
+        ),
+        page: ref('PageInfo'),
+      },
+      ['evaluatedRevision', 'total', 'items', 'page'],
+    ),
+  },
+  'toc.get': {
+    input: objectSchema({ target: tocAddressSchema() }, ['target']),
+    output: objectSchema(
+      {
+        nodeType: { const: 'tableOfContents' },
+        kind: { const: 'block' },
+        properties: objectSchema(
+          {
+            instruction: { type: 'string' },
+            sourceConfig: { type: 'object' },
+            displayConfig: { type: 'object' },
+            preservedSwitches: { type: 'object' },
+            entryCount: { type: 'integer' },
+          },
+          ['instruction', 'entryCount'],
+        ),
+      },
+      ['nodeType', 'kind', 'properties'],
+    ),
+  },
+  'toc.configure': {
+    input: objectSchema(
+      {
+        target: tocAddressSchema(),
+        patch: objectSchema({
+          outlineLevels: objectSchema({ from: { type: 'integer' }, to: { type: 'integer' } }, ['from', 'to']),
+          useAppliedOutlineLevel: { type: 'boolean' },
+          hyperlinks: { type: 'boolean' },
+          hideInWebView: { type: 'boolean' },
+          omitPageNumberLevels: objectSchema({ from: { type: 'integer' }, to: { type: 'integer' } }, ['from', 'to']),
+          separator: { type: 'string' },
+        }),
+      },
+      ['target', 'patch'],
+    ),
+    output: tocMutationResultSchema(),
+    success: tocMutationSuccessSchema,
+    failure: tocMutationFailureSchema,
+  },
+  'toc.update': {
+    input: objectSchema(
+      {
+        target: tocAddressSchema(),
+      },
+      ['target'],
+    ),
+    output: tocMutationResultSchema(),
+    success: tocMutationSuccessSchema,
+    failure: tocMutationFailureSchema,
+  },
+  'toc.remove': {
+    input: objectSchema({ target: tocAddressSchema() }, ['target']),
+    output: tocMutationResultSchema(),
+    success: tocMutationSuccessSchema,
+    failure: tocMutationFailureSchema,
   },
 };
 

@@ -29,7 +29,7 @@ Returns a NodeInfo object with the node type, address, content, and typed proper
 | Field | Type | Required | Description |
 | --- | --- | --- | --- |
 | `nodeId` | string | yes |  |
-| `nodeType` | enum | no | `"paragraph"`, `"heading"`, `"listItem"`, `"table"`, `"tableRow"`, `"tableCell"`, `"image"`, `"sdt"` |
+| `nodeType` | enum | no | `"paragraph"`, `"heading"`, `"listItem"`, `"table"`, `"tableRow"`, `"tableCell"`, `"tableOfContents"`, `"image"`, `"sdt"` |
 
 ### Example request
 
@@ -47,7 +47,7 @@ Returns a NodeInfo object with the node type, address, content, and typed proper
 | `bodyNodes` | object[] | no |  |
 | `bodyText` | string | no |  |
 | `kind` | enum | yes | `"block"`, `"inline"` |
-| `nodeType` | enum | yes | `"paragraph"`, `"heading"`, `"listItem"`, `"table"`, `"tableRow"`, `"tableCell"`, `"image"`, `"sdt"`, `"run"`, `"bookmark"`, `"comment"`, `"hyperlink"`, `"footnoteRef"`, `"tab"`, `"lineBreak"` |
+| `nodeType` | enum | yes | `"paragraph"`, `"heading"`, `"listItem"`, `"table"`, `"tableRow"`, `"tableCell"`, `"tableOfContents"`, `"image"`, `"sdt"`, `"run"`, `"bookmark"`, `"comment"`, `"hyperlink"`, `"footnoteRef"`, `"tab"`, `"lineBreak"` |
 | `nodes` | object[] | no |  |
 | `properties` | object | no |  |
 | `summary` | object | no |  |
@@ -93,6 +93,7 @@ Returns a NodeInfo object with the node type, address, content, and typed proper
         "table",
         "tableRow",
         "tableCell",
+        "tableOfContents",
         "image",
         "sdt"
       ]
@@ -140,6 +141,7 @@ Returns a NodeInfo object with the node type, address, content, and typed proper
         "table",
         "tableRow",
         "tableCell",
+        "tableOfContents",
         "image",
         "sdt",
         "run",

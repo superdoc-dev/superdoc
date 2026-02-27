@@ -15,6 +15,7 @@ import type {
   SectionBreakCreateLocation,
   SectionBreakType,
 } from '../sections/sections.types.js';
+import type { CreateTableOfContentsInput, CreateTableOfContentsResult, TocCreateLocation } from '../toc/toc.types.js';
 import { DocumentApiValidationError } from '../errors.js';
 
 export interface CreateApi {
@@ -22,6 +23,7 @@ export interface CreateApi {
   heading(input: CreateHeadingInput, options?: MutationOptions): CreateHeadingResult;
   table(input: CreateTableInput, options?: MutationOptions): CreateTableResult;
   sectionBreak(input: CreateSectionBreakInput, options?: MutationOptions): CreateSectionBreakResult;
+  tableOfContents(input: CreateTableOfContentsInput, options?: MutationOptions): CreateTableOfContentsResult;
 }
 
 export type CreateAdapter = CreateApi;
@@ -206,4 +208,37 @@ export function executeCreateSectionBreak(
   validateTargetOnlyCreateLocation(normalized.at!, 'create.sectionBreak');
   validateCreateSectionBreakInput(normalized);
   return adapter.sectionBreak(normalized, normalizeMutationOptions(options));
+}
+
+function normalizeTocCreateLocation(location?: TocCreateLocation): TocCreateLocation {
+  return location ?? { kind: 'documentEnd' };
+}
+
+export function normalizeCreateTableOfContentsInput(input: CreateTableOfContentsInput): CreateTableOfContentsInput {
+  return {
+    at: normalizeTocCreateLocation(input.at),
+    config: input.config,
+  };
+}
+
+export function executeCreateTableOfContents(
+  adapter: CreateAdapter,
+  input: CreateTableOfContentsInput,
+  options?: MutationOptions,
+): CreateTableOfContentsResult {
+  const normalized = normalizeCreateTableOfContentsInput(input);
+  const at = normalized.at!;
+
+  // TocCreateLocation only supports the `target` form, not the legacy `nodeId` form.
+  // Reject `nodeId` explicitly when callers send untyped payloads.
+  if ((at.kind === 'before' || at.kind === 'after') && 'nodeId' in at) {
+    throw new DocumentApiValidationError(
+      'INVALID_TARGET',
+      'create.tableOfContents requires at.target for before/after positioning. The nodeId form is not supported.',
+      { fields: ['at.nodeId'] },
+    );
+  }
+
+  validateTargetOnlyCreateLocation(at, 'create.tableOfContents');
+  return adapter.tableOfContents(normalized, normalizeMutationOptions(options));
 }

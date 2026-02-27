@@ -23,7 +23,7 @@ Document API is currently alpha and subject to breaking changes.
 | Core | 8 | 0 | 8 | [Open](/document-api/reference/core/index) |
 | Blocks | 1 | 0 | 1 | [Open](/document-api/reference/blocks/index) |
 | Capabilities | 1 | 0 | 1 | [Open](/document-api/reference/capabilities/index) |
-| Create | 4 | 0 | 4 | [Open](/document-api/reference/create/index) |
+| Create | 5 | 0 | 5 | [Open](/document-api/reference/create/index) |
 | Sections | 18 | 0 | 18 | [Open](/document-api/reference/sections/index) |
 | Format | 44 | 1 | 45 | [Open](/document-api/reference/format/index) |
 | Styles | 1 | 0 | 1 | [Open](/document-api/reference/styles/index) |
@@ -33,6 +33,7 @@ Document API is currently alpha and subject to breaking changes.
 | Query | 1 | 0 | 1 | [Open](/document-api/reference/query/index) |
 | Mutations | 2 | 0 | 2 | [Open](/document-api/reference/mutations/index) |
 | Tables | 39 | 0 | 39 | [Open](/document-api/reference/tables/index) |
+| Table of Contents | 5 | 0 | 5 | [Open](/document-api/reference/toc/index) |
 
 ## Available operations
 
@@ -71,6 +72,7 @@ The tables below are grouped by namespace.
 | <span style={{ whiteSpace: 'nowrap', wordBreak: 'normal', overflowWrap: 'normal' }}><a href="/document-api/reference/create/heading"><code>create.heading</code></a></span> | <span style={{ whiteSpace: 'nowrap', wordBreak: 'normal', overflowWrap: 'normal' }}><code>editor.doc.create.heading(...)</code></span> | Create a new heading at the target position. |
 | <span style={{ whiteSpace: 'nowrap', wordBreak: 'normal', overflowWrap: 'normal' }}><a href="/document-api/reference/create/section-break"><code>create.sectionBreak</code></a></span> | <span style={{ whiteSpace: 'nowrap', wordBreak: 'normal', overflowWrap: 'normal' }}><code>editor.doc.create.sectionBreak(...)</code></span> | Create a section break at the target location with optional initial section properties. |
 | <span style={{ whiteSpace: 'nowrap', wordBreak: 'normal', overflowWrap: 'normal' }}><a href="/document-api/reference/create/table"><code>create.table</code></a></span> | <span style={{ whiteSpace: 'nowrap', wordBreak: 'normal', overflowWrap: 'normal' }}><code>editor.doc.create.table(...)</code></span> | Create a new table at the target position. |
+| <span style={{ whiteSpace: 'nowrap', wordBreak: 'normal', overflowWrap: 'normal' }}><a href="/document-api/reference/create/table-of-contents"><code>create.tableOfContents</code></a></span> | <span style={{ whiteSpace: 'nowrap', wordBreak: 'normal', overflowWrap: 'normal' }}><code>editor.doc.create.tableOfContents(...)</code></span> | Insert a new table of contents at the target position. |
 
 #### Sections
 
@@ -238,3 +240,13 @@ The tables below are grouped by namespace.
 | <span style={{ whiteSpace: 'nowrap', wordBreak: 'normal', overflowWrap: 'normal' }}><a href="/document-api/reference/tables/get"><code>tables.get</code></a></span> | <span style={{ whiteSpace: 'nowrap', wordBreak: 'normal', overflowWrap: 'normal' }}><code>editor.doc.tables.get(...)</code></span> | Retrieve table structure and dimensions by locator. |
 | <span style={{ whiteSpace: 'nowrap', wordBreak: 'normal', overflowWrap: 'normal' }}><a href="/document-api/reference/tables/get-cells"><code>tables.getCells</code></a></span> | <span style={{ whiteSpace: 'nowrap', wordBreak: 'normal', overflowWrap: 'normal' }}><code>editor.doc.tables.getCells(...)</code></span> | Retrieve cell information for a table, optionally filtered by row or column. |
 | <span style={{ whiteSpace: 'nowrap', wordBreak: 'normal', overflowWrap: 'normal' }}><a href="/document-api/reference/tables/get-properties"><code>tables.getProperties</code></a></span> | <span style={{ whiteSpace: 'nowrap', wordBreak: 'normal', overflowWrap: 'normal' }}><code>editor.doc.tables.getProperties(...)</code></span> | Retrieve layout and style properties of a table. |
+
+#### Table of Contents
+
+| Operation | API member path | Description |
+| --- | --- | --- |
+| <span style={{ whiteSpace: 'nowrap', wordBreak: 'normal', overflowWrap: 'normal' }}><a href="/document-api/reference/toc/list"><code>toc.list</code></a></span> | <span style={{ whiteSpace: 'nowrap', wordBreak: 'normal', overflowWrap: 'normal' }}><code>editor.doc.toc.list(...)</code></span> | List all tables of contents in the document. |
+| <span style={{ whiteSpace: 'nowrap', wordBreak: 'normal', overflowWrap: 'normal' }}><a href="/document-api/reference/toc/get"><code>toc.get</code></a></span> | <span style={{ whiteSpace: 'nowrap', wordBreak: 'normal', overflowWrap: 'normal' }}><code>editor.doc.toc.get(...)</code></span> | Retrieve details of a specific table of contents. |
+| <span style={{ whiteSpace: 'nowrap', wordBreak: 'normal', overflowWrap: 'normal' }}><a href="/document-api/reference/toc/configure"><code>toc.configure</code></a></span> | <span style={{ whiteSpace: 'nowrap', wordBreak: 'normal', overflowWrap: 'normal' }}><code>editor.doc.toc.configure(...)</code></span> | Update the configuration switches of a table of contents. |
+| <span style={{ whiteSpace: 'nowrap', wordBreak: 'normal', overflowWrap: 'normal' }}><a href="/document-api/reference/toc/update"><code>toc.update</code></a></span> | <span style={{ whiteSpace: 'nowrap', wordBreak: 'normal', overflowWrap: 'normal' }}><code>editor.doc.toc.update(...)</code></span> | Rebuild the materialized content of a table of contents. |
+| <span style={{ whiteSpace: 'nowrap', wordBreak: 'normal', overflowWrap: 'normal' }}><a href="/document-api/reference/toc/remove"><code>toc.remove</code></a></span> | <span style={{ whiteSpace: 'nowrap', wordBreak: 'normal', overflowWrap: 'normal' }}><code>editor.doc.toc.remove(...)</code></span> | Remove a table of contents from the document. |

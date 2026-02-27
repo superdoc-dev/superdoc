@@ -43,6 +43,7 @@ const SUPPORTED_BLOCK_NODE_TYPES: ReadonlySet<BlockNodeType> = new Set<BlockNode
   'table',
   'tableRow',
   'tableCell',
+  'tableOfContents',
   'image',
   'sdt',
 ]);
@@ -98,6 +99,8 @@ export function mapBlockNodeType(node: ProseMirrorNode): BlockNodeType | undefin
       return 'tableCell';
     case 'image':
       return 'image';
+    case 'tableOfContents':
+      return 'tableOfContents';
     case 'structuredContentBlock':
     case 'sdt':
       return 'sdt';

@@ -86,6 +86,18 @@ import type {
   PlanReceipt,
 } from '../types/mutation-plan.types.js';
 import type {
+  CreateTableOfContentsInput,
+  CreateTableOfContentsResult,
+  TocListQuery,
+  TocListResult,
+  TocGetInput,
+  TocInfo,
+  TocConfigureInput,
+  TocUpdateInput,
+  TocRemoveInput,
+  TocMutationResult,
+} from '../toc/toc.types.js';
+import type {
   CreateTableInput,
   CreateTableResult,
   TablesConvertFromTextInput,
@@ -349,6 +361,20 @@ export interface OperationRegistry extends FormatInlineAliasOperationRegistry {
   'tables.get': { input: TablesGetInput; options: never; output: TablesGetOutput };
   'tables.getCells': { input: TablesGetCellsInput; options: never; output: TablesGetCellsOutput };
   'tables.getProperties': { input: TablesGetPropertiesInput; options: never; output: TablesGetPropertiesOutput };
+
+  // --- create.tableOfContents ---
+  'create.tableOfContents': {
+    input: CreateTableOfContentsInput;
+    options: MutationOptions;
+    output: CreateTableOfContentsResult;
+  };
+
+  // --- toc.* ---
+  'toc.list': { input: TocListQuery | undefined; options: never; output: TocListResult };
+  'toc.get': { input: TocGetInput; options: never; output: TocInfo };
+  'toc.configure': { input: TocConfigureInput; options: MutationOptions; output: TocMutationResult };
+  'toc.update': { input: TocUpdateInput; options: MutationOptions; output: TocMutationResult };
+  'toc.remove': { input: TocRemoveInput; options: MutationOptions; output: TocMutationResult };
 }
 
 // --- Bidirectional completeness checks ---

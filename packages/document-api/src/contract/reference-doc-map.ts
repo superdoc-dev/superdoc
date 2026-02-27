@@ -86,6 +86,11 @@ const GROUP_METADATA: Record<ReferenceGroupKey, { title: string; description: st
     description: 'Table structure, layout, styling, and cell operations.',
     pagePath: 'tables/index.mdx',
   },
+  toc: {
+    title: 'Table of Contents',
+    description: 'Table of contents lifecycle and configuration.',
+    pagePath: 'toc/index.mdx',
+  },
 };
 
 export const REFERENCE_OPERATION_GROUPS: readonly ReferenceOperationGroupDefinition[] = (

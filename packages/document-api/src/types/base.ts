@@ -20,6 +20,7 @@ export type NodeType =
   | 'table'
   | 'tableRow'
   | 'tableCell'
+  | 'tableOfContents'
   // Inline-level
   | 'run'
   | 'bookmark'
@@ -40,6 +41,7 @@ export const NODE_TYPES = [
   'table',
   'tableRow',
   'tableCell',
+  'tableOfContents',
   'image',
   'sdt',
   'run',
@@ -57,7 +59,7 @@ export const NODE_TYPES = [
  */
 export type BlockNodeType = Extract<
   NodeType,
-  'paragraph' | 'heading' | 'listItem' | 'table' | 'tableRow' | 'tableCell' | 'image' | 'sdt'
+  'paragraph' | 'heading' | 'listItem' | 'table' | 'tableRow' | 'tableCell' | 'tableOfContents' | 'image' | 'sdt'
 >;
 
 export const BLOCK_NODE_TYPES = [
@@ -67,6 +69,7 @@ export const BLOCK_NODE_TYPES = [
   'table',
   'tableRow',
   'tableCell',
+  'tableOfContents',
   'image',
   'sdt',
 ] as const satisfies readonly BlockNodeType[];
@@ -77,7 +80,7 @@ export const BLOCK_NODE_TYPES = [
  * Excludes `image` — the ProseMirror image node is inline, so the adapter
  * cannot resolve block-level image targets.
  */
-export type DeletableBlockNodeType = Exclude<BlockNodeType, 'tableRow' | 'tableCell' | 'image'>;
+export type DeletableBlockNodeType = Exclude<BlockNodeType, 'tableRow' | 'tableCell' | 'image' | 'tableOfContents'>;
 
 export const DELETABLE_BLOCK_NODE_TYPES = [
   'paragraph',

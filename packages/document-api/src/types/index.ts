@@ -20,3 +20,4 @@ export * from './query-match.types.js';
 export * from './step-manifest.types.js';
 export * from './discovery.js';
 export * from './blocks.types.js';
+export * from './toc.types.js';

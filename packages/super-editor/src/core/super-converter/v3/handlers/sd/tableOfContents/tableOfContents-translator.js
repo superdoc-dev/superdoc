@@ -39,8 +39,8 @@ const encode = (params) => {
  */
 const decode = (params) => {
   const { node } = params;
-
-  const contentNodes = node.content.map((n) => exportSchemaToJson({ ...params, node: n }));
+  const tocContent = Array.isArray(node.content) ? node.content : [];
+  const contentNodes = tocContent.map((n) => exportSchemaToJson({ ...params, node: n }));
 
   // Inject the fldChar begin, instrText and fldChar separate into the first child (after any existing pPr)
   const tocBeginElements = [

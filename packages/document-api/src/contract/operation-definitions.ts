@@ -45,7 +45,8 @@ export type ReferenceGroupKey =
   | 'trackChanges'
   | 'query'
   | 'mutations'
-  | 'tables';
+  | 'tables'
+  | 'toc';
 
 // ---------------------------------------------------------------------------
 // Entry shape
@@ -1629,6 +1630,93 @@ export const OPERATION_DEFINITIONS = {
     }),
     referenceDocPath: 'tables/get-properties.mdx',
     referenceGroup: 'tables',
+  },
+
+  // -------------------------------------------------------------------------
+  // Create: table of contents
+  // -------------------------------------------------------------------------
+
+  'create.tableOfContents': {
+    memberPath: 'create.tableOfContents',
+    description: 'Insert a new table of contents at the target position.',
+    requiresDocumentContext: true,
+    metadata: mutationOperation({
+      idempotency: 'non-idempotent',
+      supportsDryRun: true,
+      supportsTrackedMode: false,
+      possibleFailureCodes: ['NO_OP', 'INVALID_INSERTION_CONTEXT'],
+      throws: ['INVALID_TARGET', 'TARGET_NOT_FOUND', 'CAPABILITY_UNAVAILABLE'],
+    }),
+    referenceDocPath: 'create/table-of-contents.mdx',
+    referenceGroup: 'create',
+  },
+
+  // -------------------------------------------------------------------------
+  // TOC: lifecycle + configuration
+  // -------------------------------------------------------------------------
+
+  'toc.list': {
+    memberPath: 'toc.list',
+    description: 'List all tables of contents in the document.',
+    requiresDocumentContext: true,
+    metadata: readOperation({
+      idempotency: 'idempotent',
+    }),
+    referenceDocPath: 'toc/list.mdx',
+    referenceGroup: 'toc',
+  },
+  'toc.get': {
+    memberPath: 'toc.get',
+    description: 'Retrieve details of a specific table of contents.',
+    requiresDocumentContext: true,
+    metadata: readOperation({
+      idempotency: 'idempotent',
+      throws: T_NOT_FOUND,
+    }),
+    referenceDocPath: 'toc/get.mdx',
+    referenceGroup: 'toc',
+  },
+  'toc.configure': {
+    memberPath: 'toc.configure',
+    description: 'Update the configuration switches of a table of contents.',
+    requiresDocumentContext: true,
+    metadata: mutationOperation({
+      idempotency: 'conditional',
+      supportsDryRun: true,
+      supportsTrackedMode: false,
+      possibleFailureCodes: ['NO_OP'],
+      throws: ['TARGET_NOT_FOUND', 'INVALID_TARGET', 'CAPABILITY_UNAVAILABLE'],
+    }),
+    referenceDocPath: 'toc/configure.mdx',
+    referenceGroup: 'toc',
+  },
+  'toc.update': {
+    memberPath: 'toc.update',
+    description: 'Rebuild the materialized content of a table of contents.',
+    requiresDocumentContext: true,
+    metadata: mutationOperation({
+      idempotency: 'conditional',
+      supportsDryRun: true,
+      supportsTrackedMode: false,
+      possibleFailureCodes: ['NO_OP'],
+      throws: ['TARGET_NOT_FOUND', 'INVALID_TARGET', 'CAPABILITY_UNAVAILABLE'],
+    }),
+    referenceDocPath: 'toc/update.mdx',
+    referenceGroup: 'toc',
+  },
+  'toc.remove': {
+    memberPath: 'toc.remove',
+    description: 'Remove a table of contents from the document.',
+    requiresDocumentContext: true,
+    metadata: mutationOperation({
+      idempotency: 'conditional',
+      supportsDryRun: true,
+      supportsTrackedMode: false,
+      possibleFailureCodes: ['NO_OP'],
+      throws: ['TARGET_NOT_FOUND', 'INVALID_TARGET', 'CAPABILITY_UNAVAILABLE'],
+    }),
+    referenceDocPath: 'toc/remove.mdx',
+    referenceGroup: 'toc',
   },
 } as const satisfies Record<string, OperationDefinitionEntry>;
 

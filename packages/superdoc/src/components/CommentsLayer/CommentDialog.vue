@@ -954,19 +954,11 @@ watch(editingCommentId, (commentId) => {
   color: var(--sd-color-gray-900, #212121);
 }
 .reply-btn-primary {
-  background: var(--sd-action-primary, #1355ff);
-  border: none;
-  font-size: 13px;
-  font-weight: 600;
-  color: #ffffff;
-  cursor: pointer;
   padding: 6px 16px;
   border-radius: 9999px;
+  font-size: 13px;
   font-family: inherit;
   transition: background 150ms;
-}
-.reply-btn-primary:hover {
-  background: var(--sd-color-blue-600, #0f44cc);
 }
 .reply-btn-primary.is-disabled {
   background: var(--sd-color-gray-400, #dbdbdb);

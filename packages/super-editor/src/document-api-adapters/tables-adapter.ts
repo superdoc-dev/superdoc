@@ -1718,7 +1718,7 @@ export function tablesDeleteCellAdapter(
         // Extending a vertically merged cell can overlap cells in lower rows.
         let rowEndPos = tablePos + 1;
         for (let i = 0; i <= rowIndex; i++) rowEndPos += currentTableNode.child(i).nodeSize;
-        const mappedRowEnd = tr.mapping.map(rowEndPos - 1); // -1 to stay inside the row.
+        const mappedRowEnd = rowEndPos - 1; // -1 to stay inside the row. No mapping needed — rowEndPos is already in post-delete doc space.
         const newCell = schema.nodes.tableCell.createAndFill()!;
         tr.insert(mappedRowEnd, newCell);
       } else {

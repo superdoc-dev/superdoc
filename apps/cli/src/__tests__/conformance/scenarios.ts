@@ -341,7 +341,7 @@ function tocMutationScenario(
   return async (harness) => {
     const label = `toc-${op.replace(/\./g, '-')}`;
     const stateDir = await harness.createStateDir(`${label}-success`);
-    const docPath = await harness.copyTocFixtureDoc(`${label}-source`);
+    const docPath = await harness.copyTocFixtureDoc(`${label}-source`, stateDir);
     const tocTarget = await harness.firstTocAddress(docPath, stateDir);
     return {
       stateDir,
@@ -362,7 +362,7 @@ function tocReadWithTargetScenario(op: string): (harness: ConformanceHarness) =>
   return async (harness) => {
     const label = `toc-${op.replace(/\./g, '-')}`;
     const stateDir = await harness.createStateDir(`${label}-success`);
-    const docPath = await harness.copyTocFixtureDoc(`${label}-source`);
+    const docPath = await harness.copyTocFixtureDoc(`${label}-source`, stateDir);
     const tocTarget = await harness.firstTocAddress(docPath, stateDir);
     return {
       stateDir,
@@ -1216,7 +1216,7 @@ export const SUCCESS_SCENARIOS = {
   },
   'doc.toc.list': async (harness: ConformanceHarness): Promise<ScenarioInvocation> => {
     const stateDir = await harness.createStateDir('doc-toc-list-success');
-    const docPath = await harness.copyTocFixtureDoc('doc-toc-list');
+    const docPath = await harness.copyTocFixtureDoc('doc-toc-list', stateDir);
     return {
       stateDir,
       args: [...commandTokens('doc.toc.list'), docPath, '--limit', '1'],

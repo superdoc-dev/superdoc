@@ -125,10 +125,34 @@ export class ConformanceHarness {
     return filePath;
   }
 
-  async copyTocFixtureDoc(label: string): Promise<string> {
+  async copyTocFixtureDoc(label: string, stateDir: string): Promise<string> {
     const filePath = path.join(this.docsDir, `${this.nextId()}-${label}.docx`);
-    await copyFile(await resolveTocDocFixture(), filePath);
-    return filePath;
+
+    try {
+      await copyFile(await resolveTocDocFixture(), filePath);
+      const probe = await this.runCli(['toc', 'list', filePath, '--limit', '1'], stateDir);
+      if (probe.result.code === 0) {
+        return filePath;
+      }
+    } catch {
+      // Fall back to creating a TOC fixture from the generic source doc.
+    }
+
+    const sourceDoc = await this.copyFixtureDoc(`${label}-seed`);
+    const seededPath = path.join(this.docsDir, `${this.nextId()}-${label}-seeded.docx`);
+    const { result, envelope } = await this.runCli(
+      ['create', 'table-of-contents', sourceDoc, '--out', seededPath],
+      stateDir,
+    );
+
+    if (result.code !== 0 || envelope.ok !== true) {
+      const details = envelope.ok
+        ? 'unexpected non-success envelope'
+        : `${envelope.error.code}: ${envelope.error.message}`;
+      throw new Error(`Unable to seed TOC fixture for ${label}: ${details}`);
+    }
+
+    return seededPath;
   }
 
   createOutputPath(label: string): string {

@@ -3950,6 +3950,10 @@ export class PresentationEditor extends EventEmitter {
     // tokens at a mark boundary), the DOM Range produces no visible rects. Preserve
     // the last overlay to prevent flicker during drag selection across mark boundaries.
     if (domRects.length === 0 && from !== to) {
+      debugLog('warn', '[drawSelection] zero rects for non-collapsed selection — preserving last overlay', {
+        from,
+        to,
+      });
       return;
     }
 

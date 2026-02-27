@@ -343,7 +343,7 @@ export class DomPositionIndex {
    * Finds all DOM elements whose position ranges overlap with the given range.
    *
    * @param from - The start of the query range (inclusive)
-   * @param to - The end of the query range (inclusive)
+   * @param to - The end of the query range (exclusive)
    * @returns Array of DOM elements that overlap the range, in index order
    *
    * @remarks

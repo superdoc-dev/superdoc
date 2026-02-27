@@ -330,6 +330,137 @@ describe('tables-adapter regressions', () => {
     expect(tr.insert).toHaveBeenCalledWith(expectedInsertPos, expect.anything());
   });
 
+  it('deletes shiftLeft cells without appending a trailing replacement cell', () => {
+    const editor = makeTableEditor();
+    const tr = editor.state.tr as unknown as {
+      delete: ReturnType<typeof vi.fn>;
+      insert: ReturnType<typeof vi.fn>;
+      setNodeMarkup: ReturnType<typeof vi.fn>;
+    };
+    const tableNode = editor.state.doc.nodeAt(0) as ProseMirrorNode;
+    const targetCellOffset = TableMap.get(tableNode).map[0]!;
+    const targetCellNode = tableNode.nodeAt(targetCellOffset) as ProseMirrorNode;
+    const expectedStart = 1 + targetCellOffset;
+    const expectedEnd = expectedStart + targetCellNode.nodeSize;
+
+    const result = tablesDeleteCellAdapter(editor, { nodeId: 'cell-1', mode: 'shiftLeft' });
+    expect(result.success).toBe(true);
+    expect(tr.delete).toHaveBeenCalledWith(expectedStart, expectedEnd);
+    expect(tr.insert).not.toHaveBeenCalled();
+    expect(tr.setNodeMarkup).toHaveBeenCalledWith(
+      expect.any(Number),
+      null,
+      expect.objectContaining({
+        colspan: 2,
+      }),
+    );
+  });
+
+  it('deletes the row trailing cell for shiftLeft without appending a replacement cell', () => {
+    const editor = makeTableEditor();
+    const tr = editor.state.tr as unknown as {
+      delete: ReturnType<typeof vi.fn>;
+      insert: ReturnType<typeof vi.fn>;
+      setNodeMarkup: ReturnType<typeof vi.fn>;
+    };
+    const tableNode = editor.state.doc.nodeAt(0) as ProseMirrorNode;
+    const targetCellOffset = TableMap.get(tableNode).map[1]!;
+    const targetCellNode = tableNode.nodeAt(targetCellOffset) as ProseMirrorNode;
+    const expectedStart = 1 + targetCellOffset;
+    const expectedEnd = expectedStart + targetCellNode.nodeSize;
+
+    const result = tablesDeleteCellAdapter(editor, { nodeId: 'cell-2', mode: 'shiftLeft' });
+    expect(result.success).toBe(true);
+    expect(tr.delete).toHaveBeenCalledWith(expectedStart, expectedEnd);
+    expect(tr.insert).not.toHaveBeenCalled();
+    expect(tr.setNodeMarkup).toHaveBeenCalledWith(
+      expect.any(Number),
+      null,
+      expect.objectContaining({
+        colspan: 2,
+      }),
+    );
+  });
+
+  it('falls back to trailing replacement cell when shiftLeft would widen a vertically merged trailing cell', () => {
+    const editor = makeTableEditor();
+    const tr = editor.state.tr as unknown as {
+      delete: ReturnType<typeof vi.fn>;
+      insert: ReturnType<typeof vi.fn>;
+      setNodeMarkup: ReturnType<typeof vi.fn>;
+    };
+    const tableNode = editor.state.doc.nodeAt(0) as ProseMirrorNode;
+    const firstRow = tableNode.child(0) as ProseMirrorNode;
+    const trailingCell = firstRow.child(1) as unknown as { attrs: Record<string, unknown> };
+    trailingCell.attrs.rowspan = 2;
+    trailingCell.attrs.tableCellProperties = { vMerge: 'restart' };
+
+    const result = tablesDeleteCellAdapter(editor, { nodeId: 'cell-1', mode: 'shiftLeft' });
+    expect(result.success).toBe(true);
+    expect(tr.insert).toHaveBeenCalledWith(expect.any(Number), expect.anything());
+    expect(tr.setNodeMarkup).not.toHaveBeenCalled();
+  });
+
+  it('shiftLeft vMerge fallback inserts at the post-delete row end without double-mapping', () => {
+    // Regression: rowEndPos was computed from the post-delete doc (tr.doc) but then
+    // passed through tr.mapping.map() which maps old→new, double-shifting the position.
+    const editor = makeTableEditor();
+
+    const tableNode = editor.state.doc.nodeAt(0) as ProseMirrorNode;
+    const firstRow = tableNode.child(0) as ProseMirrorNode;
+    const trailingCell = firstRow.child(1) as unknown as { attrs: Record<string, unknown> };
+    trailingCell.attrs.rowspan = 2;
+    trailingCell.attrs.tableCellProperties = { vMerge: 'restart' };
+
+    const cell1 = firstRow.child(0);
+    const deletionStart = 2; // absolute position of cell-1
+    const deletionSize = cell1.nodeSize; // 9
+
+    // Build post-delete table: row 0 only contains the vMerge cell.
+    const postDeleteRow0 = createNode('tableRow', [firstRow.child(1)], {
+      attrs: { ...(firstRow.attrs as Record<string, unknown>) },
+      isBlock: true,
+      inlineContent: false,
+    });
+    const postDeleteTable = createNode('table', [postDeleteRow0, tableNode.child(1)], {
+      attrs: { ...(tableNode.attrs as Record<string, unknown>) },
+      isBlock: true,
+      inlineContent: false,
+    });
+    const postDeleteDoc = createNode('doc', [postDeleteTable], { isBlock: false });
+
+    const trObj = editor.state.tr as unknown as {
+      delete: ReturnType<typeof vi.fn>;
+      insert: ReturnType<typeof vi.fn>;
+      mapping: { map: (p: number) => number; maps: unknown[]; slice: () => { map: (p: number) => number } };
+      doc: ProseMirrorNode;
+    };
+
+    // Swap tr.doc to the post-delete document when delete is called.
+    trObj.delete = vi.fn(() => {
+      trObj.doc = postDeleteDoc;
+      return trObj;
+    });
+
+    // Simulate real deletion mapping: positions at or after the deleted range shift left.
+    trObj.mapping.map = (pos: number) => {
+      if (pos < deletionStart) return pos;
+      if (pos < deletionStart + deletionSize) return deletionStart;
+      return pos - deletionSize;
+    };
+
+    const result = tablesDeleteCellAdapter(editor, { nodeId: 'cell-1', mode: 'shiftLeft' });
+    expect(result.success).toBe(true);
+    expect(trObj.insert).toHaveBeenCalled();
+
+    // Post-delete row 0 nodeSize = 2 + cell-2 size (9) = 11.
+    // rowEndPos = tablePos(0) + 1 + 11 = 12.
+    // Correct insert = 12 - 1 = 11 (just inside the row).
+    // Old buggy code: tr.mapping.map(11) = 11 - 9 = 2 — wrong position!
+    const insertPos = trObj.insert.mock.calls[0]![0];
+    expect(insertPos).toBe(11);
+  });
+
   it('keeps table grid widths in sync when distributing columns', () => {
     const editor = makeTableEditor();
     const tr = editor.state.tr as unknown as { setNodeMarkup: ReturnType<typeof vi.fn> };

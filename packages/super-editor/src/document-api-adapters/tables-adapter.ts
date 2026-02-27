@@ -1742,8 +1742,9 @@ export function tablesInsertCellAdapter(
 /**
  * tables.deleteCell — delete a cell at a resolved position, shifting remaining cells.
  *
- * `shiftLeft`: removes the target cell and appends a new empty cell at the end of
- * the row to maintain column count.
+ * `shiftLeft`: removes the target cell and shifts remaining cells in the row left.
+ * This reduces the row cell count by one and avoids a synthetic trailing cell unless
+ * widening the remaining trailing cell would conflict with vertical merges.
  *
  * `shiftUp`: removes the target cell and appends a new empty cell at the same column
  * in the last row to maintain row count.
@@ -1757,6 +1758,15 @@ export function tablesDeleteCellAdapter(
 
   const resolved = resolveCellLocator(editor, input, 'tables.deleteCell');
   const { table, cellPos, cellNode, rowIndex, columnIndex } = resolved;
+  const row = table.candidate.node.child(rowIndex);
+  const deletedColspan = Math.max(1, ((cellNode.attrs as Record<string, unknown>).colspan as number) || 1);
+  const deletedColwidth = Array.isArray((cellNode.attrs as Record<string, unknown>).colwidth)
+    ? [...((cellNode.attrs as Record<string, unknown>).colwidth as number[])]
+    : null;
+
+  if (input.mode === 'shiftLeft' && row.childCount <= 1) {
+    return toTableFailure('NO_OP', 'Cannot shift-left delete the last remaining cell in a row.');
+  }
 
   if (options?.dryRun) {
     return buildTableSuccess(table.address);
@@ -1774,17 +1784,61 @@ export function tablesDeleteCellAdapter(
     tr.delete(cellPos, cellPos + cellNode.nodeSize);
 
     if (input.mode === 'shiftLeft') {
-      // Append a new empty cell at the end of this row.
-      const row = tableNode.child(rowIndex);
-      const rowEnd = tr.mapping.map(tableStart + map.positionAt(rowIndex, map.width - 1, tableNode));
-      const lastCell = row.child(row.childCount - 1);
-      const insertPos = tr.mapping.map(cellPos + cellNode.nodeSize + lastCell.nodeSize - cellNode.nodeSize);
-      // Find the end of the row in the mapped doc — simpler: compute row end position.
-      let rowEndPos = table.candidate.pos + 1;
-      for (let i = 0; i <= rowIndex; i++) rowEndPos += tableNode.child(i).nodeSize;
-      const mappedRowEnd = tr.mapping.map(rowEndPos - 1); // -1 to be inside the row closing tag
-      const newCell = schema.nodes.tableCell.createAndFill()!;
-      tr.insert(mappedRowEnd, newCell);
+      // Prefer preserving fewer visual cells by widening the new trailing cell.
+      // Fall back to a trailing replacement cell when merged geometry would become invalid.
+      const currentTableNode = tr.doc.nodeAt(tablePos);
+      if (!currentTableNode || currentTableNode.type.name !== 'table') {
+        return toTableFailure('INVALID_TARGET', 'Cell deletion could not locate the updated table.');
+      }
+
+      const currentRow = currentTableNode.child(rowIndex);
+      const lastCellIndex = currentRow.childCount - 1;
+      const lastCell = currentRow.child(lastCellIndex);
+      const lastAttrs = lastCell.attrs as Record<string, unknown>;
+      const tableCellProperties = (lastAttrs.tableCellProperties ?? {}) as Record<string, unknown>;
+      const lastRowspan = Math.max(1, (lastAttrs.rowspan as number) || 1);
+      const hasVerticalMerge = tableCellProperties.vMerge != null;
+
+      if (lastRowspan > 1 || hasVerticalMerge) {
+        // Extending a vertically merged cell can overlap cells in lower rows.
+        let rowEndPos = tablePos + 1;
+        for (let i = 0; i <= rowIndex; i++) rowEndPos += currentTableNode.child(i).nodeSize;
+        const mappedRowEnd = rowEndPos - 1; // -1 to stay inside the row. No mapping needed — rowEndPos is already in post-delete doc space.
+        const newCell = schema.nodes.tableCell.createAndFill()!;
+        tr.insert(mappedRowEnd, newCell);
+      } else {
+        const lastColspan = Math.max(1, (lastAttrs.colspan as number) || 1);
+        const nextColspan = lastColspan + deletedColspan;
+
+        const nextTableCellProps = {
+          ...tableCellProperties,
+        };
+        if (nextColspan > 1) nextTableCellProps.gridSpan = nextColspan;
+        else delete nextTableCellProps.gridSpan;
+
+        const nextColwidth = Array.isArray(lastAttrs.colwidth) ? [...(lastAttrs.colwidth as number[])] : null;
+        if (nextColwidth) {
+          if (deletedColwidth) {
+            for (const width of deletedColwidth) {
+              if (nextColwidth.length >= nextColspan) break;
+              nextColwidth.push(typeof width === 'number' ? width : 0);
+            }
+          }
+          while (nextColwidth.length < nextColspan) nextColwidth.push(0);
+        }
+
+        let rowOffset = 0;
+        for (let i = 0; i < rowIndex; i++) rowOffset += currentTableNode.child(i).nodeSize;
+        let lastCellOffset = rowOffset + 1;
+        for (let i = 0; i < lastCellIndex; i++) lastCellOffset += currentRow.child(i).nodeSize;
+
+        tr.setNodeMarkup(tableStart + lastCellOffset, null, {
+          ...lastAttrs,
+          colspan: nextColspan,
+          colwidth: nextColwidth,
+          tableCellProperties: nextTableCellProps,
+        });
+      }
     } else {
       // shiftUp: insert a new empty cell at the same column in the last row.
       const lastRowIndex = map.height - 1;

@@ -16,7 +16,7 @@ import { resolve, dirname } from 'node:path';
 import { createHash } from 'node:crypto';
 import { tmpdir } from 'node:os';
 
-import { COMMAND_CATALOG } from '@superdoc/document-api';
+import { COMMAND_CATALOG, INLINE_PROPERTY_REGISTRY } from '@superdoc/document-api';
 
 import { CLI_OPERATION_METADATA } from '../src/cli/operation-params';
 import {
@@ -60,9 +60,12 @@ const INTENT_NAMES = {
   'doc.delete': 'delete_content',
   'doc.blocks.delete': 'delete_block',
   'doc.format.apply': 'format_apply',
-  'doc.format.fontSize': 'format_font_size',
-  'doc.format.fontFamily': 'format_font_family',
-  'doc.format.color': 'format_color',
+  ...Object.fromEntries(
+    INLINE_PROPERTY_REGISTRY.map((entry) => [
+      `doc.format.${entry.key}`,
+      `format_${entry.key.replace(/[A-Z]/g, (char) => `_${char.toLowerCase()}`)}`,
+    ]),
+  ),
   'doc.format.align': 'format_align',
   'doc.styles.apply': 'styles_apply',
   'doc.create.paragraph': 'create_paragraph',

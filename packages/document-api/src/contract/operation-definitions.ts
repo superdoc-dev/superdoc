@@ -26,6 +26,7 @@
 
 import type { ReceiptFailureCode } from '../types/receipt.js';
 import type { CommandStaticMetadata, OperationIdempotency, PreApplyThrowCode } from './metadata-types.js';
+import { INLINE_PROPERTY_REGISTRY, type InlineRunPatchKey } from '../format/inline-run-patch.js';
 
 // ---------------------------------------------------------------------------
 // Reference group key
@@ -161,6 +162,40 @@ const T_SECTION_MUTATION = [
   'INTERNAL_ERROR',
 ] as const;
 const T_SECTION_SETTINGS_MUTATION = ['INVALID_INPUT', 'CAPABILITY_UNAVAILABLE', 'INTERNAL_ERROR'] as const;
+
+type FormatInlineAliasOperationId = `format.${InlineRunPatchKey}`;
+
+function camelToKebab(value: string): string {
+  return value.replace(/[A-Z]/g, (char) => `-${char.toLowerCase()}`);
+}
+
+function formatInlineAliasDescription(key: InlineRunPatchKey): string {
+  return `Set or clear the \`${key}\` inline run property on the target text range.`;
+}
+
+const FORMAT_INLINE_ALIAS_OPERATION_DEFINITIONS: Record<FormatInlineAliasOperationId, OperationDefinitionEntry> =
+  Object.fromEntries(
+    INLINE_PROPERTY_REGISTRY.map((entry) => {
+      const operationId = `format.${entry.key}` as FormatInlineAliasOperationId;
+      const definition: OperationDefinitionEntry = {
+        memberPath: operationId,
+        description: formatInlineAliasDescription(entry.key),
+        expectedResult:
+          'Returns a TextMutationReceipt confirming the inline run property patch was applied to the target range.',
+        requiresDocumentContext: true,
+        metadata: mutationOperation({
+          idempotency: 'conditional',
+          supportsDryRun: true,
+          supportsTrackedMode: entry.tracked,
+          possibleFailureCodes: ['INVALID_TARGET'],
+          throws: [...T_NOT_FOUND_CAPABLE, 'INVALID_TARGET', 'INVALID_INPUT'],
+        }),
+        referenceDocPath: `format/${camelToKebab(entry.key)}.mdx`,
+        referenceGroup: 'format',
+      };
+      return [operationId, definition];
+    }),
+  ) as Record<FormatInlineAliasOperationId, OperationDefinitionEntry>;
 
 // ---------------------------------------------------------------------------
 // Canonical definitions
@@ -299,8 +334,7 @@ export const OPERATION_DEFINITIONS = {
 
   'format.apply': {
     memberPath: 'format.apply',
-    description:
-      "Apply explicit inline style changes (bold, italic, underline, strike) to the target range using directive semantics ('on', 'off', 'clear').",
+    description: 'Apply inline run-property patch changes to the target range with explicit set/clear semantics.',
     expectedResult: 'Returns a TextMutationReceipt confirming inline styles were applied to the target range.',
     requiresDocumentContext: true,
     metadata: mutationOperation({
@@ -313,54 +347,7 @@ export const OPERATION_DEFINITIONS = {
     referenceDocPath: 'format/apply.mdx',
     referenceGroup: 'format',
   },
-  'format.fontSize': {
-    memberPath: 'format.fontSize',
-    description: 'Set or unset the font size on the target text range. Pass null to remove.',
-    expectedResult:
-      'Returns a TextMutationReceipt; receipt reports NO_OP if the target already has the requested font size.',
-    requiresDocumentContext: true,
-    metadata: mutationOperation({
-      idempotency: 'conditional',
-      supportsDryRun: true,
-      supportsTrackedMode: false,
-      possibleFailureCodes: ['INVALID_TARGET', 'NO_OP'],
-      throws: [...T_NOT_FOUND_CAPABLE, 'INVALID_TARGET', 'INVALID_INPUT'],
-    }),
-    referenceDocPath: 'format/font-size.mdx',
-    referenceGroup: 'format',
-  },
-  'format.fontFamily': {
-    memberPath: 'format.fontFamily',
-    description: 'Set or unset the font family on the target text range. Pass null to remove.',
-    expectedResult:
-      'Returns a TextMutationReceipt; receipt reports NO_OP if the target already has the requested font family.',
-    requiresDocumentContext: true,
-    metadata: mutationOperation({
-      idempotency: 'conditional',
-      supportsDryRun: true,
-      supportsTrackedMode: false,
-      possibleFailureCodes: ['INVALID_TARGET', 'NO_OP'],
-      throws: [...T_NOT_FOUND_CAPABLE, 'INVALID_TARGET', 'INVALID_INPUT'],
-    }),
-    referenceDocPath: 'format/font-family.mdx',
-    referenceGroup: 'format',
-  },
-  'format.color': {
-    memberPath: 'format.color',
-    description: 'Set or unset the text color on the target text range. Pass null to remove.',
-    expectedResult:
-      'Returns a TextMutationReceipt; receipt reports NO_OP if the target already has the requested color.',
-    requiresDocumentContext: true,
-    metadata: mutationOperation({
-      idempotency: 'conditional',
-      supportsDryRun: true,
-      supportsTrackedMode: false,
-      possibleFailureCodes: ['INVALID_TARGET', 'NO_OP'],
-      throws: [...T_NOT_FOUND_CAPABLE, 'INVALID_TARGET', 'INVALID_INPUT'],
-    }),
-    referenceDocPath: 'format/color.mdx',
-    referenceGroup: 'format',
-  },
+  ...FORMAT_INLINE_ALIAS_OPERATION_DEFINITIONS,
   'format.align': {
     memberPath: 'format.align',
     description: 'Set or unset paragraph alignment on the block containing the target. Pass null to reset to default.',

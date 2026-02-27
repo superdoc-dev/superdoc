@@ -8,6 +8,7 @@
 import type { OperationId } from '../contract/types.js';
 import type { OperationRegistry } from '../contract/operation-registry.js';
 import type { DocumentApi } from '../index.js';
+import { INLINE_PROPERTY_REGISTRY } from '../format/inline-run-patch.js';
 
 // ---------------------------------------------------------------------------
 // TypedDispatchTable — compile-time contract between registry and dispatch
@@ -21,6 +22,29 @@ export type TypedDispatchTable = {
   [K in OperationId]: TypedDispatchHandler<K>;
 };
 
+type FormatInlineAliasOperationId = `format.${(typeof INLINE_PROPERTY_REGISTRY)[number]['key']}`;
+
+function buildFormatInlineAliasDispatch(api: DocumentApi): Pick<TypedDispatchTable, FormatInlineAliasOperationId> {
+  return Object.fromEntries(
+    INLINE_PROPERTY_REGISTRY.map((entry) => {
+      const operationId = `format.${entry.key}` as FormatInlineAliasOperationId;
+      return [
+        operationId,
+        (
+          input: OperationRegistry[typeof operationId]['input'],
+          options?: OperationRegistry[typeof operationId]['options'],
+        ) =>
+          (
+            api.format[entry.key] as (
+              input: OperationRegistry[typeof operationId]['input'],
+              options?: OperationRegistry[typeof operationId]['options'],
+            ) => OperationRegistry[typeof operationId]['output']
+          )(input, options),
+      ];
+    }),
+  ) as Pick<TypedDispatchTable, FormatInlineAliasOperationId>;
+}
+
 /**
  * Builds a dispatch table that maps every OperationId to the corresponding
  * direct method call on the given DocumentApi instance.
@@ -30,6 +54,8 @@ export type TypedDispatchTable = {
  * time that each handler conforms to the {@link OperationRegistry} contract.
  */
 export function buildDispatchTable(api: DocumentApi): TypedDispatchTable {
+  const formatInlineAliasDispatch = buildFormatInlineAliasDispatch(api);
+
   return {
     // --- Singleton reads ---
     find: (input, options) =>
@@ -49,9 +75,7 @@ export function buildDispatchTable(api: DocumentApi): TypedDispatchTable {
 
     // --- format.* ---
     'format.apply': (input, options) => api.format.apply(input, options),
-    'format.fontSize': (input, options) => api.format.fontSize(input, options),
-    'format.fontFamily': (input, options) => api.format.fontFamily(input, options),
-    'format.color': (input, options) => api.format.color(input, options),
+    ...formatInlineAliasDispatch,
     'format.align': (input, options) => api.format.align(input, options),
 
     // --- styles.* ---

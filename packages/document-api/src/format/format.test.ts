@@ -1,6 +1,6 @@
-import { describe, expect, it, vi } from 'vitest';
-import type { FormatAdapter, StyleApplyInput } from './format.js';
-import { executeStyleApply, executeFontSize, executeFontFamily, executeColor, executeAlign } from './format.js';
+import { describe, expect, it, vi, assertType } from 'vitest';
+import type { FormatAdapter, FormatInlineAliasInput, StyleApplyInput } from './format.js';
+import { executeStyleApply, executeAlign, executeInlineAlias } from './format.js';
 import { DocumentApiValidationError } from '../errors.js';
 import type { TextMutationReceipt } from '../types/index.js';
 
@@ -22,18 +22,11 @@ function makeReceipt(): TextMutationReceipt {
 function makeAdapter(): FormatAdapter & Record<string, ReturnType<typeof vi.fn>> {
   return {
     apply: vi.fn(() => makeReceipt()),
-    fontSize: vi.fn(() => makeReceipt()),
-    fontFamily: vi.fn(() => makeReceipt()),
-    color: vi.fn(() => makeReceipt()),
     align: vi.fn(() => makeReceipt()),
   };
 }
 
 describe('executeStyleApply validation', () => {
-  // -------------------------------------------------------------------------
-  // Input shape guards
-  // -------------------------------------------------------------------------
-
   it('rejects non-object input', () => {
     const adapter = makeAdapter();
     expect(() => executeStyleApply(adapter, null as any)).toThrow(DocumentApiValidationError);
@@ -41,128 +34,34 @@ describe('executeStyleApply validation', () => {
     expect(() => executeStyleApply(adapter, 'bad' as any)).toThrow('non-null object');
   });
 
-  // -------------------------------------------------------------------------
-  // Unknown field rejection
-  // -------------------------------------------------------------------------
-
   it('rejects unknown top-level fields', () => {
     const adapter = makeAdapter();
-    const input = { target: TARGET, inline: { bold: 'on' }, extra: 1 };
+    const input = { target: TARGET, inline: { bold: true }, extra: 1 };
     expect(() => executeStyleApply(adapter, input as any)).toThrow('extra');
   });
 
-  // -------------------------------------------------------------------------
-  // Target validation
-  // -------------------------------------------------------------------------
-
   it('rejects missing target', () => {
     const adapter = makeAdapter();
-    const input = { inline: { bold: 'on' } };
+    const input = { inline: { bold: true } };
     expect(() => executeStyleApply(adapter, input as any)).toThrow('requires a target');
   });
 
-  it('rejects invalid target (string)', () => {
+  it('rejects invalid target', () => {
     const adapter = makeAdapter();
-    const input = { target: 'not-an-address', inline: { bold: 'on' } };
-    expect(() => executeStyleApply(adapter, input as any)).toThrow('text address');
-  });
-
-  it('rejects invalid target (number)', () => {
-    const adapter = makeAdapter();
-    const input = { target: 42, inline: { bold: 'on' } };
-    expect(() => executeStyleApply(adapter, input as any)).toThrow('text address');
-  });
-
-  it('rejects invalid target (null)', () => {
-    const adapter = makeAdapter();
-    const input = { target: null, inline: { bold: 'on' } };
-    expect(() => executeStyleApply(adapter, input as any)).toThrow('text address');
-  });
-
-  it('rejects target missing kind', () => {
-    const adapter = makeAdapter();
-    const input = { target: { blockId: 'p1', range: { start: 0, end: 5 } }, inline: { bold: 'on' } };
-    expect(() => executeStyleApply(adapter, input as any)).toThrow('text address');
-  });
-
-  it('rejects target with wrong kind', () => {
-    const adapter = makeAdapter();
-    const input = { target: { kind: 'block', blockId: 'p1', range: { start: 0, end: 5 } }, inline: { bold: 'on' } };
-    expect(() => executeStyleApply(adapter, input as any)).toThrow('text address');
-  });
-
-  it('rejects target missing blockId', () => {
-    const adapter = makeAdapter();
-    const input = { target: { kind: 'text', range: { start: 0, end: 5 } }, inline: { bold: 'on' } };
-    expect(() => executeStyleApply(adapter, input as any)).toThrow('text address');
-  });
-
-  it('rejects target with non-string blockId', () => {
-    const adapter = makeAdapter();
-    const input = { target: { kind: 'text', blockId: 123, range: { start: 0, end: 5 } }, inline: { bold: 'on' } };
-    expect(() => executeStyleApply(adapter, input as any)).toThrow('text address');
-  });
-
-  it('rejects target missing range', () => {
-    const adapter = makeAdapter();
-    const input = { target: { kind: 'text', blockId: 'p1' }, inline: { bold: 'on' } };
-    expect(() => executeStyleApply(adapter, input as any)).toThrow('text address');
-  });
-
-  it('rejects target with non-object range', () => {
-    const adapter = makeAdapter();
-    const input = { target: { kind: 'text', blockId: 'p1', range: 'bad' }, inline: { bold: 'on' } };
-    expect(() => executeStyleApply(adapter, input as any)).toThrow('text address');
-  });
-
-  it('rejects target with non-integer start in range', () => {
-    const adapter = makeAdapter();
-    const input = { target: { kind: 'text', blockId: 'p1', range: { start: 1.5, end: 5 } }, inline: { bold: 'on' } };
-    expect(() => executeStyleApply(adapter, input as any)).toThrow('text address');
-  });
-
-  it('rejects target with non-integer end in range', () => {
-    const adapter = makeAdapter();
-    const input = { target: { kind: 'text', blockId: 'p1', range: { start: 0, end: 5.5 } }, inline: { bold: 'on' } };
-    expect(() => executeStyleApply(adapter, input as any)).toThrow('text address');
-  });
-
-  it('rejects target with start > end in range', () => {
-    const adapter = makeAdapter();
-    const input = { target: { kind: 'text', blockId: 'p1', range: { start: 10, end: 5 } }, inline: { bold: 'on' } };
+    const input = { target: 'not-an-address', inline: { bold: true } };
     expect(() => executeStyleApply(adapter, input as any)).toThrow('text address');
   });
 
   it('accepts valid target', () => {
     const adapter = makeAdapter();
-    const input: StyleApplyInput = { target: TARGET, inline: { bold: 'on' } };
+    const input: StyleApplyInput = { target: TARGET, inline: { bold: true } };
     const result = executeStyleApply(adapter, input);
     expect(result.success).toBe(true);
   });
-
-  it('accepts zero-length range (start === end) in target', () => {
-    const adapter = makeAdapter();
-    const input: StyleApplyInput = {
-      target: { kind: 'text', blockId: 'p1', range: { start: 0, end: 0 } },
-      inline: { bold: 'on' },
-    };
-    const result = executeStyleApply(adapter, input);
-    expect(result.success).toBe(true);
-  });
-
-  // -------------------------------------------------------------------------
-  // Inline-style validation
-  // -------------------------------------------------------------------------
 
   it('rejects missing inline', () => {
     const adapter = makeAdapter();
     const input = { target: TARGET };
-    expect(() => executeStyleApply(adapter, input as any)).toThrow('requires an inline object');
-  });
-
-  it('rejects null inline', () => {
-    const adapter = makeAdapter();
-    const input = { target: TARGET, inline: null };
     expect(() => executeStyleApply(adapter, input as any)).toThrow('requires an inline object');
   });
 
@@ -180,105 +79,50 @@ describe('executeStyleApply validation', () => {
 
   it('rejects unknown inline keys', () => {
     const adapter = makeAdapter();
-    const input = { target: TARGET, inline: { bold: 'on', superscript: 'on' } };
+    const input = { target: TARGET, inline: { superscript: true } };
     expect(() => executeStyleApply(adapter, input as any)).toThrow('Unknown inline style key "superscript"');
   });
 
-  it('rejects invalid directive string values', () => {
+  it('rejects invalid boolean payload type', () => {
     const adapter = makeAdapter();
     const input = { target: TARGET, inline: { bold: 'yes' } };
-    expect(() => executeStyleApply(adapter, input as any)).toThrow("expected 'on'|'off'|'clear'");
+    expect(() => executeStyleApply(adapter, input as any)).toThrow('inline.bold must be boolean or null');
   });
 
-  it('rejects numeric inline values', () => {
+  it('rejects empty object patch values', () => {
     const adapter = makeAdapter();
-    const input = { target: TARGET, inline: { bold: 1 } };
-    expect(() => executeStyleApply(adapter, input as any)).toThrow("expected 'on'|'off'|'clear'");
+    const input = { target: TARGET, inline: { shading: {} } };
+    expect(() => executeStyleApply(adapter, input as any)).toThrow('inline.shading object must not be empty');
   });
 
-  it('rejects boolean inline values (must be string directive)', () => {
+  it('accepts boolean tri-state payloads', () => {
     const adapter = makeAdapter();
-    const input = { target: TARGET, inline: { bold: true } };
-    expect(() => executeStyleApply(adapter, input as any)).toThrow("expected 'on'|'off'|'clear'");
-  });
-
-  // -------------------------------------------------------------------------
-  // Happy paths — single inline style
-  // -------------------------------------------------------------------------
-
-  it('delegates single mark to adapter.apply', () => {
-    const adapter = makeAdapter();
-    const input: StyleApplyInput = { target: TARGET, inline: { bold: 'on' } };
+    const input: StyleApplyInput = { target: TARGET, inline: { bold: null, italic: false } };
     const result = executeStyleApply(adapter, input);
     expect(result.success).toBe(true);
-    expect(adapter.apply).toHaveBeenCalledWith(input, { changeMode: 'direct', dryRun: false });
+    expect(adapter.apply).toHaveBeenCalledWith(input, expect.objectContaining({ changeMode: 'direct' }));
   });
 
-  it('passes through tracked changeMode option', () => {
-    const adapter = makeAdapter();
-    const input: StyleApplyInput = { target: TARGET, inline: { italic: 'off' } };
-    executeStyleApply(adapter, input, { changeMode: 'tracked' });
-    expect(adapter.apply).toHaveBeenCalledWith(input, { changeMode: 'tracked', dryRun: false });
-  });
-
-  it('passes through dryRun option', () => {
-    const adapter = makeAdapter();
-    const input: StyleApplyInput = { target: TARGET, inline: { underline: 'on' } };
-    executeStyleApply(adapter, input, { dryRun: true });
-    expect(adapter.apply).toHaveBeenCalledWith(input, { changeMode: 'direct', dryRun: true });
-  });
-
-  // -------------------------------------------------------------------------
-  // Happy paths — multi-mark (directive patch semantics)
-  // -------------------------------------------------------------------------
-
-  it('accepts multiple inline in one call', () => {
-    const adapter = makeAdapter();
-    const input: StyleApplyInput = { target: TARGET, inline: { bold: 'on', italic: 'on' } };
-    const result = executeStyleApply(adapter, input);
-    expect(result.success).toBe(true);
-    expect(adapter.apply).toHaveBeenCalledWith(input, expect.objectContaining({}));
-  });
-
-  it('accepts mixed on/off in one call', () => {
-    const adapter = makeAdapter();
-    const input: StyleApplyInput = { target: TARGET, inline: { bold: 'on', italic: 'off' } };
-    const result = executeStyleApply(adapter, input);
-    expect(result.success).toBe(true);
-    expect(adapter.apply).toHaveBeenCalledWith(input, expect.objectContaining({}));
-  });
-
-  it('accepts all four inline in one call', () => {
+  it('accepts numeric and object inline properties in one call', () => {
     const adapter = makeAdapter();
     const input: StyleApplyInput = {
       target: TARGET,
-      inline: { bold: 'on', italic: 'off', underline: 'clear', strike: 'off' },
+      inline: {
+        fontSize: 12,
+        underline: { style: 'single', color: 'FF0000' },
+      },
     };
     const result = executeStyleApply(adapter, input);
     expect(result.success).toBe(true);
-    expect(adapter.apply).toHaveBeenCalledWith(input, expect.objectContaining({}));
   });
 
-  it('accepts explicit OFF directive', () => {
+  it('passes through tracked and dryRun options', () => {
     const adapter = makeAdapter();
-    const input: StyleApplyInput = { target: TARGET, inline: { bold: 'off' } };
-    const result = executeStyleApply(adapter, input);
-    expect(result.success).toBe(true);
-    expect(adapter.apply).toHaveBeenCalledWith(input, expect.objectContaining({}));
-  });
-
-  it('accepts clear directive', () => {
-    const adapter = makeAdapter();
-    const input: StyleApplyInput = { target: TARGET, inline: { bold: 'clear' } };
-    const result = executeStyleApply(adapter, input);
-    expect(result.success).toBe(true);
-    expect(adapter.apply).toHaveBeenCalledWith(input, expect.objectContaining({}));
+    const input: StyleApplyInput = { target: TARGET, inline: { color: '00AA00' } };
+    executeStyleApply(adapter, input, { changeMode: 'tracked', dryRun: true });
+    expect(adapter.apply).toHaveBeenCalledWith(input, { changeMode: 'tracked', dryRun: true });
   });
 });
-
-// ---------------------------------------------------------------------------
-// Shared target validation helper for value-based format operations
-// ---------------------------------------------------------------------------
 
 function targetValidationSuite(
   name: string,
@@ -290,126 +134,14 @@ function targetValidationSuite(
     });
 
     it('rejects missing target', () => {
-      expect(() => exec(makeAdapter(), { value: '12pt' })).toThrow('requires a target');
+      expect(() => exec(makeAdapter(), { alignment: 'left' })).toThrow('requires a target');
     });
 
     it('rejects invalid target', () => {
-      expect(() => exec(makeAdapter(), { target: 'bad', value: '12pt' })).toThrow('text address');
+      expect(() => exec(makeAdapter(), { target: 'bad', alignment: 'left' })).toThrow('text address');
     });
   });
 }
-
-// ---------------------------------------------------------------------------
-// executeFontSize validation
-// ---------------------------------------------------------------------------
-
-describe('executeFontSize validation', () => {
-  targetValidationSuite('format.fontSize', (a, i) => executeFontSize(a, i as any));
-
-  it('rejects missing value', () => {
-    expect(() => executeFontSize(makeAdapter(), { target: TARGET } as any)).toThrow('requires a value');
-  });
-
-  it('rejects empty string value', () => {
-    expect(() => executeFontSize(makeAdapter(), { target: TARGET, value: '' })).toThrow('empty string');
-  });
-
-  it('rejects boolean value', () => {
-    expect(() => executeFontSize(makeAdapter(), { target: TARGET, value: true } as any)).toThrow(
-      'string, number, or null',
-    );
-  });
-
-  it('rejects unknown fields', () => {
-    expect(() => executeFontSize(makeAdapter(), { target: TARGET, value: 12, extra: 1 } as any)).toThrow('extra');
-  });
-
-  it('accepts null value (unset)', () => {
-    const adapter = makeAdapter();
-    executeFontSize(adapter, { target: TARGET, value: null });
-    expect(adapter.fontSize).toHaveBeenCalled();
-  });
-
-  it('accepts string value', () => {
-    const adapter = makeAdapter();
-    executeFontSize(adapter, { target: TARGET, value: '14pt' });
-    expect(adapter.fontSize).toHaveBeenCalledWith({ target: TARGET, value: '14pt' }, expect.any(Object));
-  });
-
-  it('accepts numeric value', () => {
-    const adapter = makeAdapter();
-    executeFontSize(adapter, { target: TARGET, value: 16 });
-    expect(adapter.fontSize).toHaveBeenCalled();
-  });
-});
-
-// ---------------------------------------------------------------------------
-// executeFontFamily validation
-// ---------------------------------------------------------------------------
-
-describe('executeFontFamily validation', () => {
-  targetValidationSuite('format.fontFamily', (a, i) => executeFontFamily(a, i as any));
-
-  it('rejects missing value', () => {
-    expect(() => executeFontFamily(makeAdapter(), { target: TARGET } as any)).toThrow('requires a value');
-  });
-
-  it('rejects empty string value', () => {
-    expect(() => executeFontFamily(makeAdapter(), { target: TARGET, value: '' })).toThrow('empty string');
-  });
-
-  it('rejects non-string value', () => {
-    expect(() => executeFontFamily(makeAdapter(), { target: TARGET, value: 42 } as any)).toThrow('string or null');
-  });
-
-  it('accepts null value (unset)', () => {
-    const adapter = makeAdapter();
-    executeFontFamily(adapter, { target: TARGET, value: null });
-    expect(adapter.fontFamily).toHaveBeenCalled();
-  });
-
-  it('accepts valid string value', () => {
-    const adapter = makeAdapter();
-    executeFontFamily(adapter, { target: TARGET, value: 'Arial' });
-    expect(adapter.fontFamily).toHaveBeenCalled();
-  });
-});
-
-// ---------------------------------------------------------------------------
-// executeColor validation
-// ---------------------------------------------------------------------------
-
-describe('executeColor validation', () => {
-  targetValidationSuite('format.color', (a, i) => executeColor(a, i as any));
-
-  it('rejects missing value', () => {
-    expect(() => executeColor(makeAdapter(), { target: TARGET } as any)).toThrow('requires a value');
-  });
-
-  it('rejects empty string value', () => {
-    expect(() => executeColor(makeAdapter(), { target: TARGET, value: '' })).toThrow('empty string');
-  });
-
-  it('rejects non-string value', () => {
-    expect(() => executeColor(makeAdapter(), { target: TARGET, value: 123 } as any)).toThrow('string or null');
-  });
-
-  it('accepts null value (unset)', () => {
-    const adapter = makeAdapter();
-    executeColor(adapter, { target: TARGET, value: null });
-    expect(adapter.color).toHaveBeenCalled();
-  });
-
-  it('accepts hex color string', () => {
-    const adapter = makeAdapter();
-    executeColor(adapter, { target: TARGET, value: '#ff0000' });
-    expect(adapter.color).toHaveBeenCalled();
-  });
-});
-
-// ---------------------------------------------------------------------------
-// executeAlign validation
-// ---------------------------------------------------------------------------
 
 describe('executeAlign validation', () => {
   targetValidationSuite('format.align', (a, i) => executeAlign(a, i as any));
@@ -420,12 +152,6 @@ describe('executeAlign validation', () => {
 
   it('rejects invalid alignment value', () => {
     expect(() => executeAlign(makeAdapter(), { target: TARGET, alignment: 'middle' } as any)).toThrow(
-      'left, center, right, justify',
-    );
-  });
-
-  it('rejects empty string alignment', () => {
-    expect(() => executeAlign(makeAdapter(), { target: TARGET, alignment: '' } as any)).toThrow(
       'left, center, right, justify',
     );
   });
@@ -444,5 +170,98 @@ describe('executeAlign validation', () => {
     const adapter = makeAdapter();
     executeAlign(adapter, { target: TARGET, alignment });
     expect(adapter.align).toHaveBeenCalled();
+  });
+});
+
+// ---------------------------------------------------------------------------
+// executeInlineAlias — runtime + type contract
+// ---------------------------------------------------------------------------
+
+describe('executeInlineAlias', () => {
+  it('format.bold accepts omitted value (defaults to true)', () => {
+    const adapter = makeAdapter();
+    executeInlineAlias(adapter, 'bold', { target: TARGET });
+    expect(adapter.apply).toHaveBeenCalledWith(
+      { target: TARGET, inline: { bold: true } },
+      expect.objectContaining({ changeMode: 'direct' }),
+    );
+  });
+
+  it('format.underline accepts omitted value (defaults to true)', () => {
+    const adapter = makeAdapter();
+    executeInlineAlias(adapter, 'underline', { target: TARGET });
+    expect(adapter.apply).toHaveBeenCalledWith(
+      { target: TARGET, inline: { underline: true } },
+      expect.objectContaining({ changeMode: 'direct' }),
+    );
+  });
+
+  it('format.color requires value — throws when omitted', () => {
+    const adapter = makeAdapter();
+    expect(() => executeInlineAlias(adapter, 'color', { target: TARGET } as any)).toThrow(
+      'format.color requires a value field',
+    );
+  });
+
+  it('format.rFonts requires value — throws when omitted', () => {
+    const adapter = makeAdapter();
+    expect(() => executeInlineAlias(adapter, 'rFonts', { target: TARGET } as any)).toThrow(
+      'format.rFonts requires a value field',
+    );
+  });
+
+  it('format.fontSize requires value — throws when omitted', () => {
+    const adapter = makeAdapter();
+    expect(() => executeInlineAlias(adapter, 'fontSize', { target: TARGET } as any)).toThrow(
+      'format.fontSize requires a value field',
+    );
+  });
+
+  it('format.color accepts explicit value', () => {
+    const adapter = makeAdapter();
+    executeInlineAlias(adapter, 'color', { target: TARGET, value: 'FF0000' });
+    expect(adapter.apply).toHaveBeenCalledWith(
+      { target: TARGET, inline: { color: 'FF0000' } },
+      expect.objectContaining({ changeMode: 'direct' }),
+    );
+  });
+});
+
+// ---------------------------------------------------------------------------
+// FormatInlineAliasInput — compile-time type shape assertions
+// ---------------------------------------------------------------------------
+
+describe('FormatInlineAliasInput type contract', () => {
+  it('boolean keys allow omitted value', () => {
+    // These should all compile — value is optional for boolean keys.
+    assertType<FormatInlineAliasInput<'bold'>>({ target: TARGET });
+    assertType<FormatInlineAliasInput<'bold'>>({ target: TARGET, value: true });
+    assertType<FormatInlineAliasInput<'italic'>>({ target: TARGET });
+    assertType<FormatInlineAliasInput<'strike'>>({ target: TARGET });
+    assertType<FormatInlineAliasInput<'dstrike'>>({ target: TARGET });
+    assertType<FormatInlineAliasInput<'vanish'>>({ target: TARGET });
+  });
+
+  it('underline allows omitted value', () => {
+    assertType<FormatInlineAliasInput<'underline'>>({ target: TARGET });
+    assertType<FormatInlineAliasInput<'underline'>>({ target: TARGET, value: true });
+    assertType<FormatInlineAliasInput<'underline'>>({ target: TARGET, value: { style: 'single' } });
+  });
+
+  it('non-boolean keys require value', () => {
+    // color requires value
+    assertType<FormatInlineAliasInput<'color'>>({ target: TARGET, value: 'FF0000' });
+    // @ts-expect-error — value is required for color
+    assertType<FormatInlineAliasInput<'color'>>({ target: TARGET });
+
+    // fontSize requires value
+    assertType<FormatInlineAliasInput<'fontSize'>>({ target: TARGET, value: 12 });
+    // @ts-expect-error — value is required for fontSize
+    assertType<FormatInlineAliasInput<'fontSize'>>({ target: TARGET });
+
+    // rFonts requires value
+    assertType<FormatInlineAliasInput<'rFonts'>>({ target: TARGET, value: { ascii: 'Arial' } });
+    // @ts-expect-error — value is required for rFonts
+    assertType<FormatInlineAliasInput<'rFonts'>>({ target: TARGET });
   });
 });

@@ -16,10 +16,12 @@ import type {
   TextMutationResolution,
   WriteRequest,
   StyleApplyInput,
-  SetMarks,
+  FormatAlignInput,
+  InlineRunPatchKey,
   PlanReceipt,
   ReceiptFailure,
 } from '@superdoc/document-api';
+import { INLINE_PROPERTY_BY_KEY } from '@superdoc/document-api';
 import type { Editor } from '../../core/Editor.js';
 import type { CompiledPlan } from './compiler.js';
 import type { CompiledTarget } from './executor-registry.types.js';
@@ -28,7 +30,12 @@ import { getRevision } from './revision-tracker.js';
 import { DocumentApiAdapterError } from '../errors.js';
 import { resolveDefaultInsertTarget, resolveTextTarget, type ResolvedTextTarget } from '../helpers/adapter-utils.js';
 import { buildTextMutationResolution, readTextAtResolvedRange } from '../helpers/text-mutation-resolution.js';
-import { ensureTrackedCapability, requireSchemaMark } from '../helpers/mutation-helpers.js';
+import {
+  ensureTrackedCapability,
+  requireEditorCommand,
+  requireSchemaMark,
+  rejectTrackedMode,
+} from '../helpers/mutation-helpers.js';
 import { TrackFormatMarkName } from '../../extensions/track-changes/constants.js';
 import { markdownToPmFragment } from '../../core/helpers/markdown/markdownToPmContent.js';
 import { processContent } from '../../core/helpers/contentProcessor.js';
@@ -361,13 +368,75 @@ export function writeWrapper(editor: Editor, request: WriteRequest, options?: Mu
 // Canonical format.apply wrapper (multi-style inline patch semantics)
 // ---------------------------------------------------------------------------
 
-/** Map from mark key to editor schema mark name. */
-const MARK_KEY_TO_SCHEMA_NAME: Record<string, string> = {
-  bold: 'bold',
-  italic: 'italic',
-  underline: 'underline',
-  strike: 'strike',
-};
+interface ResolvedFormatTarget {
+  target: TextAddress;
+  range: ResolvedTextTarget;
+  resolution: TextMutationResolution;
+}
+
+function resolveFormatTarget(editor: Editor, target: TextAddress, operation: string): ResolvedFormatTarget {
+  const range = resolveTextTarget(editor, target);
+  if (!range) {
+    throw new DocumentApiAdapterError('TARGET_NOT_FOUND', `${operation} target could not be resolved.`, { target });
+  }
+  const resolution = buildTextMutationResolution({
+    requestedTarget: target,
+    target,
+    range,
+    text: readTextAtResolvedRange(editor, range),
+  });
+  return { target, range, resolution };
+}
+
+function noOpFailure(resolution: TextMutationResolution, operation: string): TextMutationReceipt {
+  return {
+    success: false,
+    resolution,
+    failure: { code: 'NO_OP', message: `${operation} produced no change.` },
+  };
+}
+
+function ensureInlinePropertyCapabilities(editor: Editor, keys: readonly InlineRunPatchKey[]): void {
+  let requiresTextStyle = false;
+  let requiresRunNode = false;
+
+  for (const key of keys) {
+    const entry = INLINE_PROPERTY_BY_KEY[key];
+    if (!entry) continue;
+
+    if (entry.storage === 'mark') {
+      const carrier = entry.carrier;
+      if (carrier.storage !== 'mark') continue;
+      if (carrier.markName === 'textStyle') {
+        requiresTextStyle = true;
+        continue;
+      }
+      requireSchemaMark(editor, carrier.markName, 'format.apply');
+      continue;
+    }
+
+    requiresRunNode = true;
+  }
+
+  if (requiresTextStyle) {
+    requireSchemaMark(editor, 'textStyle', 'format.apply');
+  }
+
+  if (requiresRunNode && !editor.state.schema.nodes.run) {
+    throw new DocumentApiAdapterError('CAPABILITY_UNAVAILABLE', 'format.apply requires a run node in the schema.');
+  }
+}
+
+function ensureTrackedInlinePropertySupport(keys: readonly InlineRunPatchKey[]): void {
+  const unsupportedTrackedKeys = keys.filter((key) => INLINE_PROPERTY_BY_KEY[key]?.tracked === false);
+  if (unsupportedTrackedKeys.length === 0) return;
+
+  throw new DocumentApiAdapterError(
+    'CAPABILITY_UNAVAILABLE',
+    `format.apply tracked mode is not available for: ${unsupportedTrackedKeys.join(', ')}`,
+    { keys: unsupportedTrackedKeys, changeMode: 'tracked' },
+  );
+}
 
 export function styleApplyWrapper(
   editor: Editor,
@@ -375,44 +444,27 @@ export function styleApplyWrapper(
   options?: MutationOptions,
 ): TextMutationReceipt {
   const normalizedInput = normalizeFormatLocator(input);
-  const range = resolveTextTarget(editor, normalizedInput.target!);
-  if (!range) {
-    throw new DocumentApiAdapterError('TARGET_NOT_FOUND', 'format.apply target could not be resolved.', {
-      target: normalizedInput.target,
-    });
-  }
+  const resolved = resolveFormatTarget(editor, normalizedInput.target!, 'format.apply');
 
-  const resolution = buildTextMutationResolution({
-    requestedTarget: input.target,
-    target: normalizedInput.target!,
-    range,
-    text: readTextAtResolvedRange(editor, range),
-  });
-
-  if (range.from === range.to) {
+  if (resolved.range.from === resolved.range.to) {
     return {
       success: false,
-      resolution,
+      resolution: resolved.resolution,
       failure: { code: 'INVALID_TARGET', message: 'format.apply requires a non-collapsed target range.' },
     };
   }
 
-  // Validate that at least one requested inline style exists in the schema
-  const markKeys = Object.keys(input.inline).filter((k) => input.inline[k as keyof SetMarks] !== undefined);
-  for (const key of markKeys) {
-    const schemaName = MARK_KEY_TO_SCHEMA_NAME[key];
-    if (schemaName) {
-      requireSchemaMark(editor, schemaName, 'format.apply');
-    }
-  }
+  const inlineKeys = Object.keys(input.inline) as InlineRunPatchKey[];
+  ensureInlinePropertyCapabilities(editor, inlineKeys);
 
   const mode = options?.changeMode ?? 'direct';
   if (mode === 'tracked') {
+    ensureTrackedInlinePropertySupport(inlineKeys);
     ensureTrackedCapability(editor, { operation: 'format.apply', requireMarks: [TrackFormatMarkName] });
   }
 
   if (options?.dryRun) {
-    return { success: true, resolution };
+    return { success: true, resolution: resolved.resolution };
   }
 
   // Build single-step compiled plan using the full inline payload
@@ -431,9 +483,9 @@ export function styleApplyWrapper(
     blockId: normalizedInput.target!.blockId,
     from: normalizedInput.target!.range.start,
     to: normalizedInput.target!.range.end,
-    absFrom: range.from,
-    absTo: range.to,
-    text: resolution.text,
+    absFrom: resolved.range.from,
+    absTo: resolved.range.to,
+    text: resolved.resolution.text,
     marks: [],
   };
 
@@ -448,7 +500,58 @@ export function styleApplyWrapper(
     expectedRevision: options?.expectedRevision,
   });
 
-  return mapPlanReceiptToTextReceipt(receipt, resolution);
+  return mapPlanReceiptToTextReceipt(receipt, resolved.resolution);
+}
+
+export function formatAlignWrapper(
+  editor: Editor,
+  input: FormatAlignInput,
+  options?: MutationOptions,
+): TextMutationReceipt {
+  const operation = 'format.align';
+  rejectTrackedMode(operation, options);
+
+  const normalizedInput = normalizeFormatLocator(input);
+  const resolved = resolveFormatTarget(editor, normalizedInput.target!, operation);
+
+  const setTextSelection = requireEditorCommand(
+    editor.commands?.setTextSelection as ((range: { from: number; to: number }) => boolean) | undefined,
+    `${operation} (setTextSelection)`,
+  );
+
+  if (input.alignment !== null) {
+    requireEditorCommand(
+      editor.commands?.setTextAlign as ((alignment: string) => boolean) | undefined,
+      `${operation} (setTextAlign)`,
+    );
+  } else {
+    requireEditorCommand(
+      editor.commands?.unsetTextAlign as (() => boolean) | undefined,
+      `${operation} (unsetTextAlign)`,
+    );
+  }
+
+  if (options?.dryRun) {
+    return { success: true, resolution: resolved.resolution };
+  }
+
+  const receipt = executeDomainCommand(
+    editor,
+    () => {
+      setTextSelection({ from: resolved.range.from, to: resolved.range.to });
+      if (input.alignment !== null) {
+        return (editor.commands as Record<string, (value: string) => boolean>).setTextAlign(input.alignment);
+      }
+      return (editor.commands as Record<string, () => boolean>).unsetTextAlign();
+    },
+    { expectedRevision: options?.expectedRevision },
+  );
+
+  if (receipt.steps[0]?.effect !== 'changed') {
+    return noOpFailure(resolved.resolution, operation);
+  }
+
+  return { success: true, resolution: resolved.resolution };
 }
 
 // ---------------------------------------------------------------------------

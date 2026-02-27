@@ -19,7 +19,7 @@ Use the tables below to see what operations are available and where each one is 
 | Comments | 5 | 0 | 5 | [Reference](/document-api/reference/comments/index) |
 | Core | 8 | 0 | 8 | [Reference](/document-api/reference/core/index) |
 | Create | 4 | 0 | 4 | [Reference](/document-api/reference/create/index) |
-| Format | 5 | 4 | 9 | [Reference](/document-api/reference/format/index) |
+| Format | 44 | 1 | 45 | [Reference](/document-api/reference/format/index) |
 | Lists | 8 | 0 | 8 | [Reference](/document-api/reference/lists/index) |
 | Mutations | 2 | 0 | 2 | [Reference](/document-api/reference/mutations/index) |
 | Query | 1 | 0 | 1 | [Reference](/document-api/reference/query/index) |
@@ -50,14 +50,50 @@ Use the tables below to see what operations are available and where each one is 
 | <span style={{ whiteSpace: 'nowrap', wordBreak: 'normal', overflowWrap: 'normal' }}><code>editor.doc.create.sectionBreak(...)</code></span> | [`create.sectionBreak`](/document-api/reference/create/section-break) |
 | <span style={{ whiteSpace: 'nowrap', wordBreak: 'normal', overflowWrap: 'normal' }}><code>editor.doc.create.table(...)</code></span> | [`create.table`](/document-api/reference/create/table) |
 | <span style={{ whiteSpace: 'nowrap', wordBreak: 'normal', overflowWrap: 'normal' }}><code>editor.doc.format.apply(...)</code></span> | [`format.apply`](/document-api/reference/format/apply) |
-| <span style={{ whiteSpace: 'nowrap', wordBreak: 'normal', overflowWrap: 'normal' }}><code>editor.doc.format.fontSize(...)</code></span> | [`format.fontSize`](/document-api/reference/format/font-size) |
-| <span style={{ whiteSpace: 'nowrap', wordBreak: 'normal', overflowWrap: 'normal' }}><code>editor.doc.format.fontFamily(...)</code></span> | [`format.fontFamily`](/document-api/reference/format/font-family) |
+| <span style={{ whiteSpace: 'nowrap', wordBreak: 'normal', overflowWrap: 'normal' }}><code>editor.doc.format.bold(...)</code></span> | [`format.bold`](/document-api/reference/format/bold) |
+| <span style={{ whiteSpace: 'nowrap', wordBreak: 'normal', overflowWrap: 'normal' }}><code>editor.doc.format.italic(...)</code></span> | [`format.italic`](/document-api/reference/format/italic) |
+| <span style={{ whiteSpace: 'nowrap', wordBreak: 'normal', overflowWrap: 'normal' }}><code>editor.doc.format.strike(...)</code></span> | [`format.strike`](/document-api/reference/format/strike) |
+| <span style={{ whiteSpace: 'nowrap', wordBreak: 'normal', overflowWrap: 'normal' }}><code>editor.doc.format.underline(...)</code></span> | [`format.underline`](/document-api/reference/format/underline) |
+| <span style={{ whiteSpace: 'nowrap', wordBreak: 'normal', overflowWrap: 'normal' }}><code>editor.doc.format.highlight(...)</code></span> | [`format.highlight`](/document-api/reference/format/highlight) |
 | <span style={{ whiteSpace: 'nowrap', wordBreak: 'normal', overflowWrap: 'normal' }}><code>editor.doc.format.color(...)</code></span> | [`format.color`](/document-api/reference/format/color) |
+| <span style={{ whiteSpace: 'nowrap', wordBreak: 'normal', overflowWrap: 'normal' }}><code>editor.doc.format.fontSize(...)</code></span> | [`format.fontSize`](/document-api/reference/format/font-size) |
+| <span style={{ whiteSpace: 'nowrap', wordBreak: 'normal', overflowWrap: 'normal' }}><code>editor.doc.format.letterSpacing(...)</code></span> | [`format.letterSpacing`](/document-api/reference/format/letter-spacing) |
+| <span style={{ whiteSpace: 'nowrap', wordBreak: 'normal', overflowWrap: 'normal' }}><code>editor.doc.format.vertAlign(...)</code></span> | [`format.vertAlign`](/document-api/reference/format/vert-align) |
+| <span style={{ whiteSpace: 'nowrap', wordBreak: 'normal', overflowWrap: 'normal' }}><code>editor.doc.format.position(...)</code></span> | [`format.position`](/document-api/reference/format/position) |
+| <span style={{ whiteSpace: 'nowrap', wordBreak: 'normal', overflowWrap: 'normal' }}><code>editor.doc.format.dstrike(...)</code></span> | [`format.dstrike`](/document-api/reference/format/dstrike) |
+| <span style={{ whiteSpace: 'nowrap', wordBreak: 'normal', overflowWrap: 'normal' }}><code>editor.doc.format.smallCaps(...)</code></span> | [`format.smallCaps`](/document-api/reference/format/small-caps) |
+| <span style={{ whiteSpace: 'nowrap', wordBreak: 'normal', overflowWrap: 'normal' }}><code>editor.doc.format.caps(...)</code></span> | [`format.caps`](/document-api/reference/format/caps) |
+| <span style={{ whiteSpace: 'nowrap', wordBreak: 'normal', overflowWrap: 'normal' }}><code>editor.doc.format.shading(...)</code></span> | [`format.shading`](/document-api/reference/format/shading) |
+| <span style={{ whiteSpace: 'nowrap', wordBreak: 'normal', overflowWrap: 'normal' }}><code>editor.doc.format.border(...)</code></span> | [`format.border`](/document-api/reference/format/border) |
+| <span style={{ whiteSpace: 'nowrap', wordBreak: 'normal', overflowWrap: 'normal' }}><code>editor.doc.format.outline(...)</code></span> | [`format.outline`](/document-api/reference/format/outline) |
+| <span style={{ whiteSpace: 'nowrap', wordBreak: 'normal', overflowWrap: 'normal' }}><code>editor.doc.format.shadow(...)</code></span> | [`format.shadow`](/document-api/reference/format/shadow) |
+| <span style={{ whiteSpace: 'nowrap', wordBreak: 'normal', overflowWrap: 'normal' }}><code>editor.doc.format.emboss(...)</code></span> | [`format.emboss`](/document-api/reference/format/emboss) |
+| <span style={{ whiteSpace: 'nowrap', wordBreak: 'normal', overflowWrap: 'normal' }}><code>editor.doc.format.imprint(...)</code></span> | [`format.imprint`](/document-api/reference/format/imprint) |
+| <span style={{ whiteSpace: 'nowrap', wordBreak: 'normal', overflowWrap: 'normal' }}><code>editor.doc.format.charScale(...)</code></span> | [`format.charScale`](/document-api/reference/format/char-scale) |
+| <span style={{ whiteSpace: 'nowrap', wordBreak: 'normal', overflowWrap: 'normal' }}><code>editor.doc.format.kerning(...)</code></span> | [`format.kerning`](/document-api/reference/format/kerning) |
+| <span style={{ whiteSpace: 'nowrap', wordBreak: 'normal', overflowWrap: 'normal' }}><code>editor.doc.format.vanish(...)</code></span> | [`format.vanish`](/document-api/reference/format/vanish) |
+| <span style={{ whiteSpace: 'nowrap', wordBreak: 'normal', overflowWrap: 'normal' }}><code>editor.doc.format.webHidden(...)</code></span> | [`format.webHidden`](/document-api/reference/format/web-hidden) |
+| <span style={{ whiteSpace: 'nowrap', wordBreak: 'normal', overflowWrap: 'normal' }}><code>editor.doc.format.specVanish(...)</code></span> | [`format.specVanish`](/document-api/reference/format/spec-vanish) |
+| <span style={{ whiteSpace: 'nowrap', wordBreak: 'normal', overflowWrap: 'normal' }}><code>editor.doc.format.rtl(...)</code></span> | [`format.rtl`](/document-api/reference/format/rtl) |
+| <span style={{ whiteSpace: 'nowrap', wordBreak: 'normal', overflowWrap: 'normal' }}><code>editor.doc.format.cs(...)</code></span> | [`format.cs`](/document-api/reference/format/cs) |
+| <span style={{ whiteSpace: 'nowrap', wordBreak: 'normal', overflowWrap: 'normal' }}><code>editor.doc.format.bCs(...)</code></span> | [`format.bCs`](/document-api/reference/format/b-cs) |
+| <span style={{ whiteSpace: 'nowrap', wordBreak: 'normal', overflowWrap: 'normal' }}><code>editor.doc.format.iCs(...)</code></span> | [`format.iCs`](/document-api/reference/format/i-cs) |
+| <span style={{ whiteSpace: 'nowrap', wordBreak: 'normal', overflowWrap: 'normal' }}><code>editor.doc.format.eastAsianLayout(...)</code></span> | [`format.eastAsianLayout`](/document-api/reference/format/east-asian-layout) |
+| <span style={{ whiteSpace: 'nowrap', wordBreak: 'normal', overflowWrap: 'normal' }}><code>editor.doc.format.em(...)</code></span> | [`format.em`](/document-api/reference/format/em) |
+| <span style={{ whiteSpace: 'nowrap', wordBreak: 'normal', overflowWrap: 'normal' }}><code>editor.doc.format.fitText(...)</code></span> | [`format.fitText`](/document-api/reference/format/fit-text) |
+| <span style={{ whiteSpace: 'nowrap', wordBreak: 'normal', overflowWrap: 'normal' }}><code>editor.doc.format.snapToGrid(...)</code></span> | [`format.snapToGrid`](/document-api/reference/format/snap-to-grid) |
+| <span style={{ whiteSpace: 'nowrap', wordBreak: 'normal', overflowWrap: 'normal' }}><code>editor.doc.format.lang(...)</code></span> | [`format.lang`](/document-api/reference/format/lang) |
+| <span style={{ whiteSpace: 'nowrap', wordBreak: 'normal', overflowWrap: 'normal' }}><code>editor.doc.format.oMath(...)</code></span> | [`format.oMath`](/document-api/reference/format/o-math) |
+| <span style={{ whiteSpace: 'nowrap', wordBreak: 'normal', overflowWrap: 'normal' }}><code>editor.doc.format.rStyle(...)</code></span> | [`format.rStyle`](/document-api/reference/format/r-style) |
+| <span style={{ whiteSpace: 'nowrap', wordBreak: 'normal', overflowWrap: 'normal' }}><code>editor.doc.format.rFonts(...)</code></span> | [`format.rFonts`](/document-api/reference/format/r-fonts) |
+| <span style={{ whiteSpace: 'nowrap', wordBreak: 'normal', overflowWrap: 'normal' }}><code>editor.doc.format.fontSizeCs(...)</code></span> | [`format.fontSizeCs`](/document-api/reference/format/font-size-cs) |
+| <span style={{ whiteSpace: 'nowrap', wordBreak: 'normal', overflowWrap: 'normal' }}><code>editor.doc.format.ligatures(...)</code></span> | [`format.ligatures`](/document-api/reference/format/ligatures) |
+| <span style={{ whiteSpace: 'nowrap', wordBreak: 'normal', overflowWrap: 'normal' }}><code>editor.doc.format.numForm(...)</code></span> | [`format.numForm`](/document-api/reference/format/num-form) |
+| <span style={{ whiteSpace: 'nowrap', wordBreak: 'normal', overflowWrap: 'normal' }}><code>editor.doc.format.numSpacing(...)</code></span> | [`format.numSpacing`](/document-api/reference/format/num-spacing) |
+| <span style={{ whiteSpace: 'nowrap', wordBreak: 'normal', overflowWrap: 'normal' }}><code>editor.doc.format.stylisticSets(...)</code></span> | [`format.stylisticSets`](/document-api/reference/format/stylistic-sets) |
+| <span style={{ whiteSpace: 'nowrap', wordBreak: 'normal', overflowWrap: 'normal' }}><code>editor.doc.format.contextualAlternates(...)</code></span> | [`format.contextualAlternates`](/document-api/reference/format/contextual-alternates) |
 | <span style={{ whiteSpace: 'nowrap', wordBreak: 'normal', overflowWrap: 'normal' }}><code>editor.doc.format.align(...)</code></span> | [`format.align`](/document-api/reference/format/align) |
-| <span style={{ whiteSpace: 'nowrap', wordBreak: 'normal', overflowWrap: 'normal' }}><code>editor.doc.format.bold(...)</code></span> | [`format.apply`](/document-api/reference/format/apply) |
-| <span style={{ whiteSpace: 'nowrap', wordBreak: 'normal', overflowWrap: 'normal' }}><code>editor.doc.format.italic(...)</code></span> | [`format.apply`](/document-api/reference/format/apply) |
-| <span style={{ whiteSpace: 'nowrap', wordBreak: 'normal', overflowWrap: 'normal' }}><code>editor.doc.format.underline(...)</code></span> | [`format.apply`](/document-api/reference/format/apply) |
-| <span style={{ whiteSpace: 'nowrap', wordBreak: 'normal', overflowWrap: 'normal' }}><code>editor.doc.format.strikethrough(...)</code></span> | [`format.apply`](/document-api/reference/format/apply) |
+| <span style={{ whiteSpace: 'nowrap', wordBreak: 'normal', overflowWrap: 'normal' }}><code>editor.doc.format.strikethrough(...)</code></span> | [`format.strike`](/document-api/reference/format/strike) |
 | <span style={{ whiteSpace: 'nowrap', wordBreak: 'normal', overflowWrap: 'normal' }}><code>editor.doc.lists.list(...)</code></span> | [`lists.list`](/document-api/reference/lists/list) |
 | <span style={{ whiteSpace: 'nowrap', wordBreak: 'normal', overflowWrap: 'normal' }}><code>editor.doc.lists.get(...)</code></span> | [`lists.get`](/document-api/reference/lists/get) |
 | <span style={{ whiteSpace: 'nowrap', wordBreak: 'normal', overflowWrap: 'normal' }}><code>editor.doc.lists.insert(...)</code></span> | [`lists.insert`](/document-api/reference/lists/insert) |

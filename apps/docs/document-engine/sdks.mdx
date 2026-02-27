@@ -209,10 +209,49 @@ The SDKs expose all operations from the [Document API](/document-api/overview) p
 
 | Operation | CLI command | Description |
 | --- | --- | --- |
-| `doc.format.apply` | `format apply` | Apply explicit inline style changes (bold, italic, underline, strike) to the target range using directive semantics ('on', 'off', 'clear'). |
-| `doc.format.fontSize` | `format font-size` | Set or unset the font size on the target text range. Pass null to remove. |
-| `doc.format.fontFamily` | `format font-family` | Set or unset the font family on the target text range. Pass null to remove. |
-| `doc.format.color` | `format color` | Set or unset the text color on the target text range. Pass null to remove. |
+| `doc.format.apply` | `format apply` | Apply inline run-property patch changes to the target range with explicit set/clear semantics. |
+| `doc.format.bold` | `format bold` | Set or clear the `bold` inline run property on the target text range. |
+| `doc.format.italic` | `format italic` | Set or clear the `italic` inline run property on the target text range. |
+| `doc.format.strike` | `format strike` | Set or clear the `strike` inline run property on the target text range. |
+| `doc.format.underline` | `format underline` | Set or clear the `underline` inline run property on the target text range. |
+| `doc.format.highlight` | `format highlight` | Set or clear the `highlight` inline run property on the target text range. |
+| `doc.format.color` | `format color` | Set or clear the `color` inline run property on the target text range. |
+| `doc.format.fontSize` | `format font-size` | Set or clear the `fontSize` inline run property on the target text range. |
+| `doc.format.letterSpacing` | `format letter-spacing` | Set or clear the `letterSpacing` inline run property on the target text range. |
+| `doc.format.vertAlign` | `format vert-align` | Set or clear the `vertAlign` inline run property on the target text range. |
+| `doc.format.position` | `format position` | Set or clear the `position` inline run property on the target text range. |
+| `doc.format.dstrike` | `format dstrike` | Set or clear the `dstrike` inline run property on the target text range. |
+| `doc.format.smallCaps` | `format small-caps` | Set or clear the `smallCaps` inline run property on the target text range. |
+| `doc.format.caps` | `format caps` | Set or clear the `caps` inline run property on the target text range. |
+| `doc.format.shading` | `format shading` | Set or clear the `shading` inline run property on the target text range. |
+| `doc.format.border` | `format border` | Set or clear the `border` inline run property on the target text range. |
+| `doc.format.outline` | `format outline` | Set or clear the `outline` inline run property on the target text range. |
+| `doc.format.shadow` | `format shadow` | Set or clear the `shadow` inline run property on the target text range. |
+| `doc.format.emboss` | `format emboss` | Set or clear the `emboss` inline run property on the target text range. |
+| `doc.format.imprint` | `format imprint` | Set or clear the `imprint` inline run property on the target text range. |
+| `doc.format.charScale` | `format char-scale` | Set or clear the `charScale` inline run property on the target text range. |
+| `doc.format.kerning` | `format kerning` | Set or clear the `kerning` inline run property on the target text range. |
+| `doc.format.vanish` | `format vanish` | Set or clear the `vanish` inline run property on the target text range. |
+| `doc.format.webHidden` | `format web-hidden` | Set or clear the `webHidden` inline run property on the target text range. |
+| `doc.format.specVanish` | `format spec-vanish` | Set or clear the `specVanish` inline run property on the target text range. |
+| `doc.format.rtl` | `format rtl` | Set or clear the `rtl` inline run property on the target text range. |
+| `doc.format.cs` | `format cs` | Set or clear the `cs` inline run property on the target text range. |
+| `doc.format.bCs` | `format b-cs` | Set or clear the `bCs` inline run property on the target text range. |
+| `doc.format.iCs` | `format i-cs` | Set or clear the `iCs` inline run property on the target text range. |
+| `doc.format.eastAsianLayout` | `format east-asian-layout` | Set or clear the `eastAsianLayout` inline run property on the target text range. |
+| `doc.format.em` | `format em` | Set or clear the `em` inline run property on the target text range. |
+| `doc.format.fitText` | `format fit-text` | Set or clear the `fitText` inline run property on the target text range. |
+| `doc.format.snapToGrid` | `format snap-to-grid` | Set or clear the `snapToGrid` inline run property on the target text range. |
+| `doc.format.lang` | `format lang` | Set or clear the `lang` inline run property on the target text range. |
+| `doc.format.oMath` | `format o-math` | Set or clear the `oMath` inline run property on the target text range. |
+| `doc.format.rStyle` | `format r-style` | Set or clear the `rStyle` inline run property on the target text range. |
+| `doc.format.rFonts` | `format r-fonts` | Set or clear the `rFonts` inline run property on the target text range. |
+| `doc.format.fontSizeCs` | `format font-size-cs` | Set or clear the `fontSizeCs` inline run property on the target text range. |
+| `doc.format.ligatures` | `format ligatures` | Set or clear the `ligatures` inline run property on the target text range. |
+| `doc.format.numForm` | `format num-form` | Set or clear the `numForm` inline run property on the target text range. |
+| `doc.format.numSpacing` | `format num-spacing` | Set or clear the `numSpacing` inline run property on the target text range. |
+| `doc.format.stylisticSets` | `format stylistic-sets` | Set or clear the `stylisticSets` inline run property on the target text range. |
+| `doc.format.contextualAlternates` | `format contextual-alternates` | Set or clear the `contextualAlternates` inline run property on the target text range. |
 | `doc.format.align` | `format align` | Set or unset paragraph alignment on the block containing the target. Pass null to reset to default. |
 
 #### Create

@@ -78,9 +78,6 @@ function makeWriteAdapter() {
 function makeFormatAdapter() {
   return {
     apply: vi.fn(() => makeTextMutationReceipt()),
-    fontSize: vi.fn(() => makeTextMutationReceipt()),
-    fontFamily: vi.fn(() => makeTextMutationReceipt()),
-    color: vi.fn(() => makeTextMutationReceipt()),
     align: vi.fn(() => makeTextMutationReceipt()),
   };
 }
@@ -209,14 +206,7 @@ function makeCapabilitiesAdapter(): { get: ReturnType<typeof vi.fn> } {
       lists: { enabled: true },
       dryRun: { enabled: true },
     },
-    format: {
-      properties: {
-        bold: { kind: 'toggle', directives: ['on', 'off', 'clear'] },
-        italic: { kind: 'toggle', directives: ['on', 'off', 'clear'] },
-        underline: { kind: 'toggle', directives: ['on', 'off', 'clear'] },
-        strike: { kind: 'toggle', directives: ['on', 'off', 'clear'] },
-      },
-    },
+    format: { supportedInlineProperties: {} as DocumentApiCapabilities['format']['supportedInlineProperties'] },
     operations: Object.fromEntries(
       [
         'find',
@@ -307,8 +297,10 @@ function makeApi() {
                     range: { start: 0, end: 3 },
                     text: 'foo',
                     styles: {
-                      direct: { bold: 'clear', italic: 'clear', underline: 'clear', strike: 'clear' },
-                      effective: { bold: false, italic: false, underline: false, strike: false },
+                      bold: false,
+                      italic: false,
+                      underline: false,
+                      strike: false,
                     },
                     ref: 'ref:run-1',
                   },
@@ -405,7 +397,7 @@ describe('overview.mdx examples', () => {
             id: 'style-terms',
             op: 'format.apply',
             where: { by: 'ref' as const, ref },
-            args: { inline: { bold: 'on' } },
+            args: { inline: { bold: true } },
           },
         ],
       };
@@ -461,7 +453,7 @@ describe('overview.mdx examples', () => {
       const target = { kind: 'text', blockId: 'p1', range: { start: 0, end: 3 } };
 
       if (caps.operations['format.apply'].available) {
-        doc.format.apply({ target, inline: { bold: 'on' } });
+        doc.format.apply({ target, inline: { bold: true } });
       }
 
       if (caps.global.trackChanges.enabled) {
@@ -576,7 +568,7 @@ describe('src/README.md workflow examples', () => {
 
       const caps = doc.capabilities();
       if (caps.operations['format.apply'].available) {
-        doc.format.apply({ target, inline: { bold: 'on' } });
+        doc.format.apply({ target, inline: { bold: true } });
       }
       if (caps.global.trackChanges.enabled) {
         doc.insert({ value: 'tracked' }, { changeMode: 'tracked' });

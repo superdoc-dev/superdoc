@@ -27,13 +27,8 @@ import type { InsertInput } from '../insert/insert.js';
 import type { ReplaceInput } from '../replace/replace.js';
 import type { DeleteInput } from '../delete/delete.js';
 import type { MutationOptions, RevisionGuardOptions } from '../write/write.js';
-import type {
-  StyleApplyInput,
-  FormatFontSizeInput,
-  FormatFontFamilyInput,
-  FormatColorInput,
-  FormatAlignInput,
-} from '../format/format.js';
+import type { FormatInlineAliasInput, StyleApplyInput, FormatAlignInput } from '../format/format.js';
+import type { InlineRunPatchKey } from '../format/inline-run-patch.js';
 import type { StylesApplyInput, StylesApplyOptions, StylesApplyReceipt } from '../styles/styles.js';
 import type {
   CommentsCreateInput,
@@ -137,7 +132,15 @@ import type {
   TablesGetPropertiesOutput,
 } from '../types/table-operations.types.js';
 
-export interface OperationRegistry {
+type FormatInlineAliasOperationRegistry = {
+  [K in InlineRunPatchKey as `format.${K}`]: {
+    input: FormatInlineAliasInput<K>;
+    options: MutationOptions;
+    output: TextMutationReceipt;
+  };
+};
+
+export interface OperationRegistry extends FormatInlineAliasOperationRegistry {
   // --- Singleton reads ---
   find: { input: Selector | Query; options: FindOptions; output: FindOutput };
   getNode: { input: NodeAddress; options: never; output: NodeInfo };
@@ -155,9 +158,6 @@ export interface OperationRegistry {
 
   // --- format.* ---
   'format.apply': { input: StyleApplyInput; options: MutationOptions; output: TextMutationReceipt };
-  'format.fontSize': { input: FormatFontSizeInput; options: MutationOptions; output: TextMutationReceipt };
-  'format.fontFamily': { input: FormatFontFamilyInput; options: MutationOptions; output: TextMutationReceipt };
-  'format.color': { input: FormatColorInput; options: MutationOptions; output: TextMutationReceipt };
   'format.align': { input: FormatAlignInput; options: MutationOptions; output: TextMutationReceipt };
 
   // --- styles.* ---

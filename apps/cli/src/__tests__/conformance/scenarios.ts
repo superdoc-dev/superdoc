@@ -1,6 +1,7 @@
 import type { CliOperationId } from '../../cli';
 import { CLI_OPERATION_COMMAND_KEYS } from '../../cli';
 import type { ConformanceHarness } from './harness';
+import { INLINE_PROPERTY_REGISTRY } from '@superdoc/document-api';
 
 export type ScenarioInvocation = {
   stateDir: string;
@@ -138,6 +139,99 @@ function sectionMutationScenario(
   };
 }
 
+type InlineAliasKey = (typeof INLINE_PROPERTY_REGISTRY)[number]['key'];
+type FormatInlineAliasCliOperationId = `doc.format.${InlineAliasKey}`;
+
+function sampleInlineAliasValue(key: InlineAliasKey): unknown {
+  switch (key) {
+    case 'underline':
+      return true;
+    case 'vertAlign':
+      return 'superscript';
+    case 'shading':
+      return { fill: 'FFFF00' };
+    case 'border':
+      return { val: 'single' };
+    case 'fitText':
+      return { val: 12 };
+    case 'lang':
+      return { val: 'en-US' };
+    case 'rFonts':
+      return { ascii: 'Calibri', hAnsi: 'Calibri' };
+    case 'eastAsianLayout':
+      return { vert: true };
+    case 'stylisticSets':
+      return [{ id: 1, val: true }];
+    case 'rStyle':
+      return 'DefaultParagraphFont';
+    case 'color':
+      return '#FF0000';
+    case 'highlight':
+      return 'yellow';
+    case 'em':
+      return 'dot';
+    case 'ligatures':
+      return 'standard';
+    case 'numForm':
+      return 'lining';
+    case 'numSpacing':
+      return 'proportional';
+    case 'fontSize':
+    case 'fontSizeCs':
+      return 14;
+    case 'letterSpacing':
+      return 0.5;
+    case 'position':
+      return 1;
+    case 'charScale':
+      return 100;
+    case 'kerning':
+      return 8;
+    default: {
+      const entry = INLINE_PROPERTY_REGISTRY.find((candidate) => candidate.key === key);
+      if (!entry) throw new Error(`Unknown inline alias key: ${key}`);
+      if (entry.type === 'boolean') return true;
+      if (entry.type === 'number') return 1;
+      if (entry.type === 'string') return 'on';
+      if (entry.type === 'array') return [{ id: 1, val: true }];
+      return { val: 'on' };
+    }
+  }
+}
+
+function formatInlineAliasSuccessScenario(
+  operationId: FormatInlineAliasCliOperationId,
+): (harness: ConformanceHarness) => Promise<ScenarioInvocation> {
+  return async (harness: ConformanceHarness): Promise<ScenarioInvocation> => {
+    const key = operationId.slice('doc.format.'.length) as InlineAliasKey;
+    const stateDir = await harness.createStateDir(`${operationId.replace(/\./g, '-')}-success`);
+    const docPath = await harness.copyFixtureDoc(`${operationId.replace(/\./g, '-')}`);
+    const target = await harness.firstTextRange(docPath, stateDir);
+    return {
+      stateDir,
+      args: [
+        ...commandTokens(operationId),
+        docPath,
+        '--target-json',
+        JSON.stringify(target),
+        '--value-json',
+        JSON.stringify(sampleInlineAliasValue(key)),
+        '--out',
+        harness.createOutputPath(`${operationId.replace(/\./g, '-')}-output`),
+      ],
+    };
+  };
+}
+
+const FORMAT_INLINE_ALIAS_SUCCESS_SCENARIOS: Record<
+  FormatInlineAliasCliOperationId,
+  (harness: ConformanceHarness) => Promise<ScenarioInvocation>
+> = Object.fromEntries(
+  INLINE_PROPERTY_REGISTRY.map((entry) => {
+    const operationId = `doc.format.${entry.key}` as FormatInlineAliasCliOperationId;
+    return [operationId, formatInlineAliasSuccessScenario(operationId)];
+  }),
+) as Record<FormatInlineAliasCliOperationId, (harness: ConformanceHarness) => Promise<ScenarioInvocation>>;
 // ---------------------------------------------------------------------------
 // Table scenario helpers (DRY builders for the 40 table operations)
 // ---------------------------------------------------------------------------
@@ -994,63 +1088,7 @@ export const SUCCESS_SCENARIOS = {
       ],
     };
   },
-  'doc.format.fontSize': async (harness: ConformanceHarness): Promise<ScenarioInvocation> => {
-    const stateDir = await harness.createStateDir('doc-format-font-size-success');
-    const docPath = await harness.copyFixtureDoc('doc-format-font-size');
-    const target = await harness.firstTextRange(docPath, stateDir);
-    return {
-      stateDir,
-      args: [
-        'format',
-        'font-size',
-        docPath,
-        '--target-json',
-        JSON.stringify(target),
-        '--value-json',
-        JSON.stringify('14pt'),
-        '--out',
-        harness.createOutputPath('doc-format-font-size-output'),
-      ],
-    };
-  },
-  'doc.format.fontFamily': async (harness: ConformanceHarness): Promise<ScenarioInvocation> => {
-    const stateDir = await harness.createStateDir('doc-format-font-family-success');
-    const docPath = await harness.copyFixtureDoc('doc-format-font-family');
-    const target = await harness.firstTextRange(docPath, stateDir);
-    return {
-      stateDir,
-      args: [
-        'format',
-        'font-family',
-        docPath,
-        '--target-json',
-        JSON.stringify(target),
-        '--value-json',
-        JSON.stringify('Arial'),
-        '--out',
-        harness.createOutputPath('doc-format-font-family-output'),
-      ],
-    };
-  },
-  'doc.format.color': async (harness: ConformanceHarness): Promise<ScenarioInvocation> => {
-    const stateDir = await harness.createStateDir('doc-format-color-success');
-    const docPath = await harness.copyFixtureDoc('doc-format-color');
-    const target = await harness.firstTextRange(docPath, stateDir);
-    return {
-      stateDir,
-      args: [
-        'format',
-        'color',
-        docPath,
-        '--target-json',
-        JSON.stringify(target),
-        '--value-json',
-        JSON.stringify('#ff0000'),
-        '--out',
-        harness.createOutputPath('doc-format-color-output'),
-      ],
-    };
-  },
+  ...FORMAT_INLINE_ALIAS_SUCCESS_SCENARIOS,
   'doc.format.align': async (harness: ConformanceHarness): Promise<ScenarioInvocation> => {
     const stateDir = await harness.createStateDir('doc-format-align-success');
     const docPath = await harness.copyFixtureDoc('doc-format-align');

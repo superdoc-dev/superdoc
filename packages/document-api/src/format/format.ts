@@ -1,8 +1,9 @@
 import { normalizeMutationOptions, type MutationOptions } from '../write/write.js';
-import type { TextAddress, TextMutationReceipt, SetMarks } from '../types/index.js';
-import { MARK_KEY_SET, INLINE_DIRECTIVE_SET } from '../types/style-policy.types.js';
+import type { TextAddress, TextMutationReceipt } from '../types/index.js';
 import { DocumentApiValidationError } from '../errors.js';
 import { isRecord, isTextAddress, assertNoUnknownFields } from '../validation-primitives.js';
+import type { InlineRunPatch, InlineRunPatchKey } from './inline-run-patch.js';
+import { INLINE_PROPERTY_BY_KEY, validateInlineRunPatch } from './inline-run-patch.js';
 
 // ---------------------------------------------------------------------------
 // Alignment enum
@@ -14,72 +15,59 @@ export type Alignment = (typeof ALIGNMENTS)[number];
 const ALIGNMENT_SET: ReadonlySet<string> = new Set(ALIGNMENTS);
 
 // ---------------------------------------------------------------------------
-// Input types — boolean toggle marks (existing)
+// Input types
 // ---------------------------------------------------------------------------
 
-/**
- * Input payload for `format.bold`.
- */
-export interface FormatBoldInput {
-  target: TextAddress;
-}
+/** Input payload for `format.bold`. */
+export type FormatBoldInput = FormatInlineAliasInput<'bold'>;
 
-/**
- * Input payload for `format.italic`.
- */
-export interface FormatItalicInput {
-  target: TextAddress;
-}
+/** Input payload for `format.italic`. */
+export type FormatItalicInput = FormatInlineAliasInput<'italic'>;
 
-/**
- * Input payload for `format.underline`.
- */
-export interface FormatUnderlineInput {
-  target: TextAddress;
-}
+/** Input payload for `format.underline`. */
+export type FormatUnderlineInput = FormatInlineAliasInput<'underline'>;
 
-/**
- * Input payload for `format.strikethrough`.
- */
+/** Input payload for `format.strikethrough`. */
 export interface FormatStrikethroughInput {
   target: TextAddress;
 }
 
 /**
+ * Keys where `value` may be omitted — booleans (defaults to `true`) and
+ * `underline` (defaults to `true` for simple on/off).
+ */
+type ImplicitTrueKey =
+  | {
+      [K in InlineRunPatchKey]: InlineRunPatch[K] extends boolean | null | undefined ? K : never;
+    }[InlineRunPatchKey]
+  | 'underline';
+
+/**
+ * Input payload for direct per-property aliases (`format.<inlineKey>`).
+ *
+ * `value` is optional only for boolean-like keys (including `underline`), where
+ * omission defaults to `true` for ergonomic "turn on" calls.
+ * For all other keys the caller must supply a value.
+ */
+export type FormatInlineAliasInput<K extends InlineRunPatchKey> = K extends ImplicitTrueKey
+  ? { target: TextAddress; value?: InlineRunPatch[K] }
+  : { target: TextAddress; value: InlineRunPatch[K] };
+
+/**
  * Input payload for `format.apply`.
  *
- * `inline` uses tri-state directive semantics: `'on'` sets, `'off'` overrides to OFF, `'clear'` removes direct formatting.
+ * `inline` uses explicit patch semantics:
+ * - omitted key: unchanged
+ * - concrete value: set
+ * - `null`: clear
  */
 export interface StyleApplyInput {
   target: TextAddress;
-  /** Tri-state inline directive patch — at least one known key required. */
-  inline: SetMarks;
+  inline: InlineRunPatch;
 }
 
 /** Options for `format.apply` — same shape as all other mutations. */
 export type StyleApplyOptions = MutationOptions;
-
-// ---------------------------------------------------------------------------
-// Input types — value-based format operations (new)
-// ---------------------------------------------------------------------------
-
-/** Input payload for `format.fontSize`. Pass `null` to unset. */
-export interface FormatFontSizeInput {
-  target: TextAddress;
-  value: string | number | null;
-}
-
-/** Input payload for `format.fontFamily`. Pass `null` to unset. */
-export interface FormatFontFamilyInput {
-  target: TextAddress;
-  value: string | null;
-}
-
-/** Input payload for `format.color`. Pass `null` to unset. */
-export interface FormatColorInput {
-  target: TextAddress;
-  value: string | null;
-}
 
 /** Input payload for `format.align`. Pass `null` to unset (reset to default). */
 export interface FormatAlignInput {
@@ -91,18 +79,9 @@ export interface FormatAlignInput {
 // Adapter interface
 // ---------------------------------------------------------------------------
 
-/**
- * Engine-specific adapter for format operations.
- *
- * `apply()` handles inline toggle marks via tri-state directives.
- * Value-based methods handle fontSize, fontFamily, color, and paragraph alignment.
- */
+/** Engine-specific adapter for format operations. */
 export interface FormatAdapter {
-  /** Apply explicit inline-style changes using tri-state directive semantics. */
   apply(input: StyleApplyInput, options?: MutationOptions): TextMutationReceipt;
-  fontSize(input: FormatFontSizeInput, options?: MutationOptions): TextMutationReceipt;
-  fontFamily(input: FormatFontFamilyInput, options?: MutationOptions): TextMutationReceipt;
-  color(input: FormatColorInput, options?: MutationOptions): TextMutationReceipt;
   align(input: FormatAlignInput, options?: MutationOptions): TextMutationReceipt;
 }
 
@@ -110,19 +89,15 @@ export interface FormatAdapter {
 // Public API surface
 // ---------------------------------------------------------------------------
 
-/**
- * Public helper surface exposed on `DocumentApi.format`.
- * Per-mark helpers route through `executeStyleApply` internally.
- */
-export interface FormatApi {
-  bold(input: FormatBoldInput, options?: MutationOptions): TextMutationReceipt;
-  italic(input: FormatItalicInput, options?: MutationOptions): TextMutationReceipt;
-  underline(input: FormatUnderlineInput, options?: MutationOptions): TextMutationReceipt;
+/** Direct alias methods (`format.<inlineKey>`) that route to `format.apply`. */
+export type FormatInlineAliasApi = {
+  [K in InlineRunPatchKey]: (input: FormatInlineAliasInput<K>, options?: MutationOptions) => TextMutationReceipt;
+};
+
+/** Public helper surface exposed on `DocumentApi.format`. */
+export interface FormatApi extends FormatInlineAliasApi {
   strikethrough(input: FormatStrikethroughInput, options?: MutationOptions): TextMutationReceipt;
   apply(input: StyleApplyInput, options?: MutationOptions): TextMutationReceipt;
-  fontSize(input: FormatFontSizeInput, options?: MutationOptions): TextMutationReceipt;
-  fontFamily(input: FormatFontFamilyInput, options?: MutationOptions): TextMutationReceipt;
-  color(input: FormatColorInput, options?: MutationOptions): TextMutationReceipt;
   align(input: FormatAlignInput, options?: MutationOptions): TextMutationReceipt;
 }
 
@@ -132,18 +107,6 @@ export interface FormatApi {
 
 const STYLE_APPLY_INPUT_ALLOWED_KEYS = new Set(['target', 'inline']);
 
-/**
- * Validates a `format.apply` input and throws on violations.
- *
- * Validation order:
- * 0. Input shape guard
- * 1. Unknown field rejection
- * 2. Locator validation (same rules as format operations)
- * 3. `inline` presence and type
- * 4. At least one known inline key
- * 5. No unknown inline keys
- * 6. All inline values are valid directives ('on' | 'off' | 'clear')
- */
 function validateStyleApplyInput(input: unknown): asserts input is StyleApplyInput {
   if (!isRecord(input)) {
     throw new DocumentApiValidationError('INVALID_INPUT', 'format.apply input must be a non-null object.');
@@ -151,70 +114,28 @@ function validateStyleApplyInput(input: unknown): asserts input is StyleApplyInp
 
   assertNoUnknownFields(input, STYLE_APPLY_INPUT_ALLOWED_KEYS, 'format.apply');
 
-  // --- Locator validation ---
-  const { target, inline } = input;
-
-  if (target === undefined) {
+  if (input.target === undefined) {
     throw new DocumentApiValidationError('INVALID_TARGET', 'format.apply requires a target.');
   }
 
-  if (!isTextAddress(target)) {
+  if (!isTextAddress(input.target)) {
     throw new DocumentApiValidationError('INVALID_TARGET', 'target must be a text address object.', {
       field: 'target',
-      value: target,
+      value: input.target,
     });
   }
 
-  // --- Inline-style validation ---
-  if (inline === undefined || inline === null) {
+  if (input.inline === undefined || input.inline === null) {
     throw new DocumentApiValidationError('INVALID_INPUT', 'format.apply requires an inline object.');
   }
 
-  if (!isRecord(inline)) {
-    throw new DocumentApiValidationError('INVALID_INPUT', 'inline must be a non-null object.', {
-      field: 'inline',
-      value: inline,
-    });
-  }
-
-  const inlineKeys = Object.keys(inline);
-
-  if (inlineKeys.length === 0) {
-    throw new DocumentApiValidationError('INVALID_INPUT', 'inline must include at least one known key.');
-  }
-
-  for (const key of inlineKeys) {
-    if (!MARK_KEY_SET.has(key)) {
-      throw new DocumentApiValidationError(
-        'INVALID_INPUT',
-        `Unknown inline style key "${key}". Known keys: bold, italic, underline, strike.`,
-        {
-          field: 'inline',
-          key,
-        },
-      );
-    }
-    const value = inline[key];
-    if (typeof value !== 'string' || !INLINE_DIRECTIVE_SET.has(value)) {
-      throw new DocumentApiValidationError(
-        'INVALID_INPUT',
-        `inline.${key}: expected 'on'|'off'|'clear', got ${typeof value === 'string' ? `'${value}'` : typeof value} ${JSON.stringify(value)}.`,
-        {
-          field: 'inline',
-          key,
-          value,
-        },
-      );
-    }
-  }
+  validateInlineRunPatch(input.inline);
 }
 
 /**
  * Executes `format.apply` using the provided adapter.
  *
- * Validates input (locator + inline), then delegates to the adapter's `apply()` method.
- * Inline styles use tri-state directive semantics: `'on'` sets, `'off'` overrides, `'clear'` removes direct formatting.
- * All inline changes within one call are applied in a single ProseMirror transaction.
+ * Validates the target and inline patch payload, then delegates to adapter `apply`.
  */
 export function executeStyleApply(
   adapter: FormatAdapter,
@@ -223,6 +144,59 @@ export function executeStyleApply(
 ): TextMutationReceipt {
   validateStyleApplyInput(input);
   return adapter.apply(input, normalizeMutationOptions(options));
+}
+
+// ---------------------------------------------------------------------------
+// format.<inlineKey> aliases — normalize to format.apply payloads
+// ---------------------------------------------------------------------------
+
+const INLINE_ALIAS_INPUT_ALLOWED_KEYS = new Set(['target', 'value']);
+
+function acceptsImplicitTrue(key: InlineRunPatchKey): boolean {
+  return INLINE_PROPERTY_BY_KEY[key].type === 'boolean' || key === 'underline';
+}
+
+function normalizeInlineAliasValue<K extends InlineRunPatchKey>(
+  key: K,
+  value: InlineRunPatch[K] | undefined,
+): InlineRunPatch[K] {
+  if (value !== undefined) return value;
+  if (acceptsImplicitTrue(key)) {
+    return true as InlineRunPatch[K];
+  }
+  throw new DocumentApiValidationError('INVALID_INPUT', `format.${key} requires a value field.`);
+}
+
+function validateInlineAliasInput<K extends InlineRunPatchKey>(
+  key: K,
+  input: unknown,
+): asserts input is FormatInlineAliasInput<K> {
+  const operation = `format.${key}`;
+  // Preserve historical input semantics for direct aliases:
+  // - null / primitive input behaves like "{}" and fails with missing target.
+  // - unknown top-level fields are reported before target validation.
+  const candidate = isRecord(input) ? input : {};
+  assertNoUnknownFields(candidate, INLINE_ALIAS_INPUT_ALLOWED_KEYS, operation);
+  validateTarget(candidate, operation);
+}
+
+/**
+ * Executes a direct alias operation (`format.<inlineKey>`) by translating it
+ * into a single-key `format.apply` payload.
+ */
+export function executeInlineAlias<K extends InlineRunPatchKey>(
+  adapter: FormatAdapter,
+  key: K,
+  input: FormatInlineAliasInput<K>,
+  options?: MutationOptions,
+): TextMutationReceipt {
+  validateInlineAliasInput(key, input);
+  // `input.value` is typed as required or optional depending on K; at runtime
+  // `normalizeInlineAliasValue` handles both branches uniformly.
+  const value = normalizeInlineAliasValue(key, (input as { value?: InlineRunPatch[K] }).value);
+  const inline = { [key]: value } as InlineRunPatch;
+  validateInlineRunPatch(inline);
+  return adapter.apply({ target: input.target, inline }, normalizeMutationOptions(options));
 }
 
 // ---------------------------------------------------------------------------
@@ -242,114 +216,6 @@ function validateTarget(input: unknown, operation: string): asserts input is { t
       value: input.target,
     });
   }
-}
-
-// ---------------------------------------------------------------------------
-// format.fontSize — validation and execution
-// ---------------------------------------------------------------------------
-
-const FONT_SIZE_ALLOWED_KEYS = new Set(['target', 'value']);
-
-function validateFontSizeInput(input: unknown): asserts input is FormatFontSizeInput {
-  validateTarget(input, 'format.fontSize');
-  assertNoUnknownFields(input as Record<string, unknown>, FONT_SIZE_ALLOWED_KEYS, 'format.fontSize');
-
-  const { value } = input as Record<string, unknown>;
-  if (value === undefined) {
-    throw new DocumentApiValidationError('INVALID_INPUT', 'format.fontSize requires a value field.');
-  }
-  if (value !== null && typeof value !== 'string' && typeof value !== 'number') {
-    throw new DocumentApiValidationError('INVALID_INPUT', `format.fontSize value must be a string, number, or null.`, {
-      field: 'value',
-      value,
-    });
-  }
-  if (typeof value === 'string' && value.length === 0) {
-    throw new DocumentApiValidationError('INVALID_INPUT', 'format.fontSize value must not be an empty string.', {
-      field: 'value',
-    });
-  }
-}
-
-export function executeFontSize(
-  adapter: FormatAdapter,
-  input: FormatFontSizeInput,
-  options?: MutationOptions,
-): TextMutationReceipt {
-  validateFontSizeInput(input);
-  return adapter.fontSize(input, normalizeMutationOptions(options));
-}
-
-// ---------------------------------------------------------------------------
-// format.fontFamily — validation and execution
-// ---------------------------------------------------------------------------
-
-const FONT_FAMILY_ALLOWED_KEYS = new Set(['target', 'value']);
-
-function validateFontFamilyInput(input: unknown): asserts input is FormatFontFamilyInput {
-  validateTarget(input, 'format.fontFamily');
-  assertNoUnknownFields(input as Record<string, unknown>, FONT_FAMILY_ALLOWED_KEYS, 'format.fontFamily');
-
-  const { value } = input as Record<string, unknown>;
-  if (value === undefined) {
-    throw new DocumentApiValidationError('INVALID_INPUT', 'format.fontFamily requires a value field.');
-  }
-  if (value !== null && typeof value !== 'string') {
-    throw new DocumentApiValidationError('INVALID_INPUT', 'format.fontFamily value must be a string or null.', {
-      field: 'value',
-      value,
-    });
-  }
-  if (typeof value === 'string' && value.length === 0) {
-    throw new DocumentApiValidationError('INVALID_INPUT', 'format.fontFamily value must not be an empty string.', {
-      field: 'value',
-    });
-  }
-}
-
-export function executeFontFamily(
-  adapter: FormatAdapter,
-  input: FormatFontFamilyInput,
-  options?: MutationOptions,
-): TextMutationReceipt {
-  validateFontFamilyInput(input);
-  return adapter.fontFamily(input, normalizeMutationOptions(options));
-}
-
-// ---------------------------------------------------------------------------
-// format.color — validation and execution
-// ---------------------------------------------------------------------------
-
-const COLOR_ALLOWED_KEYS = new Set(['target', 'value']);
-
-function validateColorInput(input: unknown): asserts input is FormatColorInput {
-  validateTarget(input, 'format.color');
-  assertNoUnknownFields(input as Record<string, unknown>, COLOR_ALLOWED_KEYS, 'format.color');
-
-  const { value } = input as Record<string, unknown>;
-  if (value === undefined) {
-    throw new DocumentApiValidationError('INVALID_INPUT', 'format.color requires a value field.');
-  }
-  if (value !== null && typeof value !== 'string') {
-    throw new DocumentApiValidationError('INVALID_INPUT', 'format.color value must be a string or null.', {
-      field: 'value',
-      value,
-    });
-  }
-  if (typeof value === 'string' && value.length === 0) {
-    throw new DocumentApiValidationError('INVALID_INPUT', 'format.color value must not be an empty string.', {
-      field: 'value',
-    });
-  }
-}
-
-export function executeColor(
-  adapter: FormatAdapter,
-  input: FormatColorInput,
-  options?: MutationOptions,
-): TextMutationReceipt {
-  validateColorInput(input);
-  return adapter.color(input, normalizeMutationOptions(options));
 }
 
 // ---------------------------------------------------------------------------

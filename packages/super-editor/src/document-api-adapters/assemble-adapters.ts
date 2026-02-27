@@ -6,14 +6,13 @@ import { getTextAdapter } from './get-text-adapter.js';
 import { infoAdapter } from './info-adapter.js';
 import { getDocumentApiCapabilities } from './capabilities-adapter.js';
 import { createCommentsWrapper } from './plan-engine/comments-wrappers.js';
-import { writeWrapper, insertStructuredWrapper, styleApplyWrapper } from './plan-engine/plan-wrappers.js';
-import { stylesApplyAdapter } from './styles-adapter.js';
 import {
-  formatFontSizeWrapper,
-  formatFontFamilyWrapper,
-  formatColorWrapper,
+  writeWrapper,
+  insertStructuredWrapper,
+  styleApplyWrapper,
   formatAlignWrapper,
-} from './plan-engine/format-value-wrappers.js';
+} from './plan-engine/plan-wrappers.js';
+import { stylesApplyAdapter } from './styles-adapter.js';
 import {
   trackChangesListWrapper,
   trackChangesGetWrapper,
@@ -136,9 +135,6 @@ export function assembleDocumentApiAdapters(editor: Editor): DocumentApiAdapters
     },
     format: {
       apply: (input, options) => styleApplyWrapper(editor, input, options),
-      fontSize: (input, options) => formatFontSizeWrapper(editor, input, options),
-      fontFamily: (input, options) => formatFontFamilyWrapper(editor, input, options),
-      color: (input, options) => formatColorWrapper(editor, input, options),
       align: (input, options) => formatAlignWrapper(editor, input, options),
     },
     styles: {

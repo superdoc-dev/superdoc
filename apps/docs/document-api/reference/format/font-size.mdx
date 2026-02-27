@@ -16,7 +16,7 @@ Set or unset the font size on the target text range. Pass null to remove.
 - API member path: `editor.doc.format.fontSize(...)`
 - Mutates document: `yes`
 - Idempotency: `conditional`
-- Supports tracked mode: `no`
+- Supports tracked mode: `yes`
 - Supports dry run: `yes`
 - Deterministic target resolution: `yes`
 
@@ -29,7 +29,7 @@ Returns a TextMutationReceipt; receipt reports NO_OP if the target already has t
 | Field | Type | Required | Description |
 | --- | --- | --- | --- |
 | `target` | TextAddress | yes | TextAddress |
-| `value` | string \\| number \\| null | yes | One of: string, number, null |
+| `value` | number \\| null | yes | One of: number, null |
 
 ### Example request
 
@@ -43,7 +43,7 @@ Returns a TextMutationReceipt; receipt reports NO_OP if the target already has t
       "start": 0
     }
   },
-  "value": "example"
+  "value": 12.5
 }
 ```
 
@@ -106,7 +106,6 @@ _No fields._
 ## Non-applied failure codes
 
 - `INVALID_TARGET`
-- `NO_OP`
 
 ## Raw schemas
 
@@ -120,10 +119,6 @@ _No fields._
     },
     "value": {
       "oneOf": [
-        {
-          "minLength": 1,
-          "type": "string"
-        },
         {
           "type": "number"
         },
@@ -157,8 +152,7 @@ _No fields._
           "properties": {
             "code": {
               "enum": [
-                "INVALID_TARGET",
-                "NO_OP"
+                "INVALID_TARGET"
               ]
             },
             "details": {},
@@ -209,8 +203,7 @@ _No fields._
       "properties": {
         "code": {
           "enum": [
-            "INVALID_TARGET",
-            "NO_OP"
+            "INVALID_TARGET"
           ]
         },
         "details": {},

@@ -8,7 +8,8 @@
 import type { NodeAddress } from './base.js';
 import type { TextAddress, TrackedChangeAddress } from './address.js';
 import type { TextSelector, NodeSelector } from './query.js';
-import type { InsertStylePolicy, StylePolicy, SetMarks } from './style-policy.types.js';
+import type { InsertStylePolicy, StylePolicy } from './style-policy.types.js';
+import type { InlineRunPatch } from '../format/inline-run-patch.js';
 
 // ---------------------------------------------------------------------------
 // Universal targeting model
@@ -111,7 +112,7 @@ export type StyleApplyStep = {
   op: 'format.apply';
   where: StepWhere;
   args: {
-    inline: SetMarks;
+    inline: InlineRunPatch;
   };
 };
 

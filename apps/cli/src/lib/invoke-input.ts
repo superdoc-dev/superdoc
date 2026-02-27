@@ -12,7 +12,7 @@
  * receives the correct input shape.
  */
 
-import type { CliExposedOperationId } from '../cli/operation-set.js';
+import { CLI_DOC_OPERATIONS, type CliExposedOperationId } from '../cli/operation-set.js';
 
 /**
  * Operations whose API input is wrapped in a named field on the CLI input object.
@@ -59,6 +59,10 @@ const CLI_LEVEL_KEYS = new Set(['doc', 'sessionId', 'out', 'dryRun', 'force', 'e
  */
 const CHANGEMODE_IN_INPUT = new Set<CliExposedOperationId>(['mutations.apply', 'mutations.preview']);
 
+const FORMAT_TARGET_OPERATIONS = CLI_DOC_OPERATIONS.filter((operationId): operationId is CliExposedOperationId =>
+  operationId.startsWith('format.'),
+);
+
 // ---------------------------------------------------------------------------
 // Flat-flag → canonical target normalization
 // ---------------------------------------------------------------------------
@@ -73,11 +77,7 @@ const CHANGEMODE_IN_INPUT = new Set<CliExposedOperationId>(['mutations.apply', '
 const TEXT_TARGET_OPERATIONS = new Set<CliExposedOperationId>([
   'replace',
   'delete',
-  'format.apply',
-  'format.fontSize',
-  'format.fontFamily',
-  'format.color',
-  'format.align',
+  ...FORMAT_TARGET_OPERATIONS,
   'comments.create',
   'comments.patch',
 ]);

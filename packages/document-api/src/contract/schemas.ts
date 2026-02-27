@@ -1,8 +1,8 @@
 import { COMMAND_CATALOG } from './command-catalog.js';
 import { CONTRACT_VERSION, JSON_SCHEMA_DIALECT, OPERATION_IDS, type OperationId } from './types.js';
 import { NODE_TYPES, BLOCK_NODE_TYPES, DELETABLE_BLOCK_NODE_TYPES, INLINE_NODE_TYPES } from '../types/base.js';
-import { MARK_KEYS, INLINE_DIRECTIVES } from '../types/style-policy.types.js';
 import { ALIGNMENTS } from '../format/format.js';
+import { INLINE_PROPERTY_REGISTRY, buildInlineRunPatchSchema } from '../format/inline-run-patch.js';
 
 type JsonSchema = Record<string, unknown>;
 
@@ -273,30 +273,16 @@ const SHARED_DEFS: Record<string, JsonSchema> = {
       styleId: { type: 'string' },
       styles: objectSchema(
         {
-          direct: objectSchema(
-            {
-              bold: { enum: [...INLINE_DIRECTIVES] },
-              italic: { enum: [...INLINE_DIRECTIVES] },
-              underline: { enum: [...INLINE_DIRECTIVES] },
-              strike: { enum: [...INLINE_DIRECTIVES] },
-            },
-            ['bold', 'italic', 'underline', 'strike'],
-          ),
-          effective: objectSchema(
-            {
-              bold: { type: 'boolean' },
-              italic: { type: 'boolean' },
-              underline: { type: 'boolean' },
-              strike: { type: 'boolean' },
-            },
-            ['bold', 'italic', 'underline', 'strike'],
-          ),
+          bold: { type: 'boolean' },
+          italic: { type: 'boolean' },
+          underline: { type: 'boolean' },
+          strike: { type: 'boolean' },
           color: { type: 'string' },
           highlight: { type: 'string' },
           fontFamily: { type: 'string' },
           fontSizePt: { type: 'number' },
         },
-        ['direct', 'effective'],
+        ['bold', 'italic', 'underline', 'strike'],
       ),
       ref: { type: 'string' },
     },
@@ -365,23 +351,17 @@ void matchRunSchema;
 
 /**
  * Builds a DiscoveryResult schema wrapping the given item schema.
- * When `metaSchema` is provided, the result includes a required `meta` field.
  */
-function discoveryResultSchema(itemSchema: JsonSchema, metaSchema?: JsonSchema): JsonSchema {
-  const properties: Record<string, JsonSchema> = {
-    evaluatedRevision: { type: 'string' },
-    total: { type: 'integer', minimum: 0 },
-    items: arraySchema(itemSchema),
-    page: pageInfoSchema,
-  };
-  const required = ['evaluatedRevision', 'total', 'items', 'page'];
-
-  if (metaSchema) {
-    properties.meta = metaSchema;
-    required.push('meta');
-  }
-
-  return objectSchema(properties, required);
+function discoveryResultSchema(itemSchema: JsonSchema): JsonSchema {
+  return objectSchema(
+    {
+      evaluatedRevision: { type: 'string' },
+      total: { type: 'integer', minimum: 0 },
+      items: arraySchema(itemSchema),
+      page: pageInfoSchema,
+    },
+    ['evaluatedRevision', 'total', 'items', 'page'],
+  );
 }
 
 /**
@@ -1103,21 +1083,29 @@ const operationCapabilitiesSchema = objectSchema(
   OPERATION_IDS,
 );
 
-const formatPropertyCapabilitySchema = objectSchema(
+const inlinePropertyCapabilitySchema = objectSchema(
   {
-    kind: { type: 'string' },
-    directives: arraySchema({ type: 'string' }),
+    available: { type: 'boolean' },
+    tracked: { type: 'boolean' },
+    type: { enum: ['boolean', 'string', 'number', 'object', 'array'] },
+    storage: { enum: ['mark', 'runAttribute'] },
   },
-  ['kind', 'directives'],
+  ['available', 'tracked', 'type', 'storage'],
+);
+
+const inlinePropertyCapabilitiesByKeySchema = objectSchema(
+  Object.fromEntries(INLINE_PROPERTY_REGISTRY.map((entry) => [entry.key, inlinePropertyCapabilitySchema])) as Record<
+    string,
+    JsonSchema
+  >,
+  INLINE_PROPERTY_REGISTRY.map((entry) => entry.key),
 );
 
 const formatCapabilitiesSchema = objectSchema(
   {
-    properties: objectSchema(
-      Object.fromEntries(MARK_KEYS.map((key) => [key, formatPropertyCapabilitySchema])) as Record<string, JsonSchema>,
-    ),
+    supportedInlineProperties: inlinePropertyCapabilitiesByKeySchema,
   },
-  ['properties'],
+  ['supportedInlineProperties'],
 );
 
 const planEngineCapabilitiesSchema = objectSchema(
@@ -1282,6 +1270,35 @@ const createTableResultSchema: JsonSchema = {
   oneOf: [createTableSuccessSchema, tableMutationFailureSchema],
 };
 
+type FormatInlineAliasOperationId = `format.${(typeof INLINE_PROPERTY_REGISTRY)[number]['key']}`;
+
+function supportsImplicitTrueValue(operationId: FormatInlineAliasOperationId): boolean {
+  const key = operationId.slice('format.'.length);
+  const entry = INLINE_PROPERTY_REGISTRY.find((candidate) => candidate.key === key);
+  if (!entry) return false;
+  return entry.type === 'boolean' || key === 'underline';
+}
+
+const formatInlineAliasOperationSchemas: Record<FormatInlineAliasOperationId, OperationSchemaSet> = Object.fromEntries(
+  INLINE_PROPERTY_REGISTRY.map((entry) => {
+    const operationId = `format.${entry.key}` as FormatInlineAliasOperationId;
+    const requiredFields = supportsImplicitTrueValue(operationId) ? ['target'] : ['target', 'value'];
+    const schema: OperationSchemaSet = {
+      input: objectSchema(
+        {
+          target: textAddressSchema,
+          value: entry.schema,
+        },
+        requiredFields,
+      ),
+      output: textMutationResultSchemaFor(operationId),
+      success: textMutationSuccessSchema,
+      failure: textMutationFailureSchemaFor(operationId),
+    };
+    return [operationId, schema];
+  }),
+) as Record<FormatInlineAliasOperationId, OperationSchemaSet>;
+
 const operationSchemas: Record<OperationId, OperationSchemaSet> = {
   find: {
     input: findInputSchema,
@@ -1342,19 +1359,7 @@ const operationSchemas: Record<OperationId, OperationSchemaSet> = {
     input: objectSchema(
       {
         target: textAddressSchema,
-        inline: (() => {
-          const directiveSchema: JsonSchema = { enum: [...INLINE_DIRECTIVES] };
-          const markProperties = Object.fromEntries(MARK_KEYS.map((key) => [key, directiveSchema])) as Record<
-            string,
-            JsonSchema
-          >;
-          return {
-            type: 'object',
-            properties: markProperties,
-            additionalProperties: false,
-            minProperties: 1,
-          } as JsonSchema;
-        })(),
+        inline: buildInlineRunPatchSchema(),
       },
       ['target', 'inline'],
     ),
@@ -1362,42 +1367,7 @@ const operationSchemas: Record<OperationId, OperationSchemaSet> = {
     success: textMutationSuccessSchema,
     failure: textMutationFailureSchemaFor('format.apply'),
   },
-  'format.fontSize': {
-    input: objectSchema(
-      {
-        target: textAddressSchema,
-        value: { oneOf: [{ type: 'string', minLength: 1 }, { type: 'number' }, { type: 'null' }] },
-      },
-      ['target', 'value'],
-    ),
-    output: textMutationResultSchemaFor('format.fontSize'),
-    success: textMutationSuccessSchema,
-    failure: textMutationFailureSchemaFor('format.fontSize'),
-  },
-  'format.fontFamily': {
-    input: objectSchema(
-      {
-        target: textAddressSchema,
-        value: { oneOf: [{ type: 'string', minLength: 1 }, { type: 'null' }] },
-      },
-      ['target', 'value'],
-    ),
-    output: textMutationResultSchemaFor('format.fontFamily'),
-    success: textMutationSuccessSchema,
-    failure: textMutationFailureSchemaFor('format.fontFamily'),
-  },
-  'format.color': {
-    input: objectSchema(
-      {
-        target: textAddressSchema,
-        value: { oneOf: [{ type: 'string', minLength: 1 }, { type: 'null' }] },
-      },
-      ['target', 'value'],
-    ),
-    output: textMutationResultSchemaFor('format.color'),
-    success: textMutationSuccessSchema,
-    failure: textMutationFailureSchemaFor('format.color'),
-  },
+  ...formatInlineAliasOperationSchemas,
   'format.align': {
     input: objectSchema(
       {
@@ -2146,10 +2116,7 @@ const operationSchemas: Record<OperationId, OperationSchemaSet> = {
         ['matchKind', 'address', 'blocks'],
       );
 
-      // query.match meta schema — effectiveResolved is required.
-      const queryMatchMetaSchema = objectSchema({ effectiveResolved: { type: 'boolean' } }, ['effectiveResolved']);
-
-      return discoveryResultSchema({ oneOf: [textMatchItemSchema, nodeMatchItemSchema] }, queryMatchMetaSchema);
+      return discoveryResultSchema({ oneOf: [textMatchItemSchema, nodeMatchItemSchema] });
     })(),
   },
   'mutations.preview': {

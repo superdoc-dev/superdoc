@@ -329,6 +329,10 @@ const LIST_TARGET_FLAT_PARAMS: CliOperationParamSpec[] = [
   { name: 'nodeId', kind: 'flag', flag: 'node-id', type: 'string' },
 ];
 
+const FORMAT_OPERATION_IDS = CLI_DOC_OPERATIONS.filter((operationId): operationId is OperationId =>
+  operationId.startsWith('format.'),
+);
+
 const EXTRA_CLI_PARAMS: Partial<Record<string, CliOperationParamSpec[]>> = {
   'doc.find': [
     { name: 'type', kind: 'flag', type: 'string' },
@@ -346,11 +350,6 @@ const EXTRA_CLI_PARAMS: Partial<Record<string, CliOperationParamSpec[]>> = {
   'doc.insert': [...INSERT_FLAT_PARAMS],
   'doc.replace': [...TEXT_TARGET_FLAT_PARAMS],
   'doc.delete': [...TEXT_TARGET_FLAT_PARAMS],
-  'doc.format.apply': [...TEXT_TARGET_FLAT_PARAMS],
-  'doc.format.fontSize': [...TEXT_TARGET_FLAT_PARAMS],
-  'doc.format.fontFamily': [...TEXT_TARGET_FLAT_PARAMS],
-  'doc.format.color': [...TEXT_TARGET_FLAT_PARAMS],
-  'doc.format.align': [...TEXT_TARGET_FLAT_PARAMS],
   'doc.styles.apply': [
     { name: 'target', kind: 'jsonFlag', flag: 'target-json', type: 'json' },
     { name: 'patch', kind: 'jsonFlag', flag: 'patch-json', type: 'json' },
@@ -386,6 +385,10 @@ const EXTRA_CLI_PARAMS: Partial<Record<string, CliOperationParamSpec[]>> = {
   'doc.create.paragraph': [{ name: 'input', kind: 'jsonFlag', flag: 'input-json', type: 'json' }],
   'doc.create.heading': [{ name: 'input', kind: 'jsonFlag', flag: 'input-json', type: 'json' }],
 };
+
+for (const operationId of FORMAT_OPERATION_IDS) {
+  EXTRA_CLI_PARAMS[`doc.${operationId}`] = [...TEXT_TARGET_FLAT_PARAMS];
+}
 
 // ---------------------------------------------------------------------------
 // Doc requirement derivation

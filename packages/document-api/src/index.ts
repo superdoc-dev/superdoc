@@ -5,7 +5,6 @@
 export * from './types/index.js';
 export * from './contract/index.js';
 export * from './capabilities/capabilities.js';
-export * from './inline-semantics/index.js';
 
 import type {
   CreateParagraphInput,
@@ -48,17 +47,14 @@ import { executeFind, type FindAdapter, type FindOptions } from './find/find.js'
 import type {
   FormatAdapter,
   FormatApi,
-  FormatBoldInput,
-  FormatItalicInput,
-  FormatUnderlineInput,
+  FormatInlineAliasApi,
+  FormatInlineAliasInput,
   FormatStrikethroughInput,
   StyleApplyInput,
-  FormatFontSizeInput,
-  FormatFontFamilyInput,
-  FormatColorInput,
   FormatAlignInput,
 } from './format/format.js';
-import { executeStyleApply, executeFontSize, executeFontFamily, executeColor, executeAlign } from './format/format.js';
+import { executeStyleApply, executeInlineAlias, executeAlign } from './format/format.js';
+import { INLINE_PROPERTY_REGISTRY, type InlineRunPatchKey } from './format/inline-run-patch.js';
 import type {
   StylesAdapter,
   StylesApi,
@@ -232,18 +228,41 @@ export type { InfoAdapter, InfoInput } from './info/info.js';
 export type { WriteAdapter, WriteRequest } from './write/write.js';
 export type {
   FormatAdapter,
+  FormatInlineAliasApi,
+  FormatInlineAliasInput,
   FormatBoldInput,
   FormatItalicInput,
   FormatUnderlineInput,
   FormatStrikethroughInput,
   StyleApplyInput,
   StyleApplyOptions,
-  FormatFontSizeInput,
-  FormatFontFamilyInput,
-  FormatColorInput,
   FormatAlignInput,
 } from './format/format.js';
 export { ALIGNMENTS, type Alignment } from './format/format.js';
+export type {
+  InlineRunPatch,
+  InlineRunPatchKey,
+  InlinePropertyStorage,
+  InlinePropertyType,
+  InlinePropertyCarrier,
+  InlinePropertyRegistryEntry,
+  UnderlinePatch,
+  ShadingPatch,
+  BorderPatch,
+  FitTextPatch,
+  LangPatch,
+  RFontsPatch,
+  EastAsianLayoutPatch,
+  StylisticSetPatch,
+} from './format/inline-run-patch.js';
+export {
+  INLINE_PROPERTY_REGISTRY,
+  INLINE_PROPERTY_KEY_SET,
+  INLINE_PROPERTY_BY_KEY,
+  INLINE_PROPERTY_KEYS_BY_STORAGE,
+  validateInlineRunPatch,
+  buildInlineRunPatchSchema,
+} from './format/inline-run-patch.js';
 export { PROPERTY_REGISTRY } from './styles/styles.js';
 export type {
   PropertyDefinition,
@@ -591,9 +610,21 @@ export interface DocumentApiAdapters {
  * }
  * ```
  */
+function buildFormatInlineAliasApi(adapter: FormatAdapter): FormatInlineAliasApi {
+  return Object.fromEntries(
+    INLINE_PROPERTY_REGISTRY.map((entry) => {
+      const key = entry.key as InlineRunPatchKey;
+      const handler = (input: FormatInlineAliasInput<typeof key>, options?: MutationOptions) =>
+        executeInlineAlias(adapter, key, input, options);
+      return [key, handler];
+    }),
+  ) as FormatInlineAliasApi;
+}
+
 export function createDocumentApi(adapters: DocumentApiAdapters): DocumentApi {
   const capFn = () => executeCapabilities(adapters.capabilities);
   const capabilities: CapabilitiesApi = Object.assign(capFn, { get: capFn });
+  const inlineAliasApi = buildFormatInlineAliasApi(adapters.format);
 
   const api: DocumentApi = {
     find(selectorOrQuery: Selector | Query, options?: FindOptions): FindOutput {
@@ -638,29 +669,12 @@ export function createDocumentApi(adapters: DocumentApiAdapters): DocumentApi {
       return executeDelete(adapters.write, input, options);
     },
     format: {
-      bold(input: FormatBoldInput, options?: MutationOptions): TextMutationReceipt {
-        return executeStyleApply(adapters.format, { ...input, inline: { bold: 'on' } }, options);
-      },
-      italic(input: FormatItalicInput, options?: MutationOptions): TextMutationReceipt {
-        return executeStyleApply(adapters.format, { ...input, inline: { italic: 'on' } }, options);
-      },
-      underline(input: FormatUnderlineInput, options?: MutationOptions): TextMutationReceipt {
-        return executeStyleApply(adapters.format, { ...input, inline: { underline: 'on' } }, options);
-      },
+      ...inlineAliasApi,
       strikethrough(input: FormatStrikethroughInput, options?: MutationOptions): TextMutationReceipt {
-        return executeStyleApply(adapters.format, { ...input, inline: { strike: 'on' } }, options);
+        return executeInlineAlias(adapters.format, 'strike', { ...input, value: true }, options);
       },
       apply(input: StyleApplyInput, options?: MutationOptions): TextMutationReceipt {
         return executeStyleApply(adapters.format, input, options);
-      },
-      fontSize(input: FormatFontSizeInput, options?: MutationOptions): TextMutationReceipt {
-        return executeFontSize(adapters.format, input, options);
-      },
-      fontFamily(input: FormatFontFamilyInput, options?: MutationOptions): TextMutationReceipt {
-        return executeFontFamily(adapters.format, input, options);
-      },
-      color(input: FormatColorInput, options?: MutationOptions): TextMutationReceipt {
-        return executeColor(adapters.format, input, options);
       },
       align(input: FormatAlignInput, options?: MutationOptions): TextMutationReceipt {
         return executeAlign(adapters.format, input, options);

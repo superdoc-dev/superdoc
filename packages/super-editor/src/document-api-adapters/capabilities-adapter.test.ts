@@ -1,6 +1,6 @@
 import { describe, expect, it, vi } from 'vitest';
 import type { Editor } from '../core/Editor.js';
-import { OPERATION_IDS } from '@superdoc/document-api';
+import { INLINE_PROPERTY_REGISTRY, OPERATION_IDS } from '@superdoc/document-api';
 import { TrackFormatMarkName } from '../extensions/track-changes/constants.js';
 import { getDocumentApiCapabilities } from './capabilities-adapter.js';
 
@@ -259,94 +259,163 @@ describe('getDocumentApiCapabilities', () => {
   });
 
   // ---------------------------------------------------------------------------
-  // format.fontSize / fontFamily / color / align capability reporting
+  // format.apply / format.align capability reporting
   // ---------------------------------------------------------------------------
 
-  describe('format value operations', () => {
-    function makeFormatEditor(overrides: { commands?: Record<string, unknown>; marks?: Record<string, unknown> } = {}) {
+  describe('format capabilities', () => {
+    function makeFormatEditor(
+      overrides: {
+        commands?: Record<string, unknown>;
+        marks?: Record<string, unknown>;
+        nodes?: Record<string, unknown>;
+      } = {},
+    ) {
       return makeEditor({
         commands: {
-          setFontSize: vi.fn(() => true),
-          unsetFontSize: vi.fn(() => true),
-          setFontFamily: vi.fn(() => true),
-          unsetFontFamily: vi.fn(() => true),
-          setColor: vi.fn(() => true),
-          unsetColor: vi.fn(() => true),
           setTextAlign: vi.fn(() => true),
           unsetTextAlign: vi.fn(() => true),
           ...overrides.commands,
         } as unknown as Editor['commands'],
         schema: {
           marks: {
+            bold: { create: vi.fn(() => ({ type: 'bold' })) },
+            italic: { create: vi.fn(() => ({ type: 'italic' })) },
+            underline: { create: vi.fn(() => ({ type: 'underline' })) },
+            strike: { create: vi.fn(() => ({ type: 'strike' })) },
+            highlight: { create: vi.fn(() => ({ type: 'highlight' })) },
             textStyle: { create: vi.fn(() => ({ type: 'textStyle' })) },
+            [TrackFormatMarkName]: { create: vi.fn(() => ({ type: TrackFormatMarkName })) },
             ...overrides.marks,
+          },
+          nodes: {
+            run: { name: 'run' },
+            ...overrides.nodes,
           },
         } as unknown as Editor['schema'],
       });
     }
 
-    it('reports inline format ops as available when commands and textStyle mark are present', () => {
-      const capabilities = getDocumentApiCapabilities(makeFormatEditor());
+    it('reports format.apply as available when at least one inline property is supported', () => {
+      const capabilities = getDocumentApiCapabilities(makeFormatEditor({ marks: { bold: undefined } }));
+      expect(capabilities.operations['format.apply'].available).toBe(true);
+    });
 
-      expect(capabilities.operations['format.fontSize'].available).toBe(true);
-      expect(capabilities.operations['format.fontFamily'].available).toBe(true);
-      expect(capabilities.operations['format.color'].available).toBe(true);
+    it('reports a capability entry for every inline property registry key', () => {
+      const capabilities = getDocumentApiCapabilities(makeFormatEditor());
+      const propertyKeys = Object.keys(capabilities.format.supportedInlineProperties).sort();
+      const registryKeys = INLINE_PROPERTY_REGISTRY.map((entry) => entry.key).sort();
+      expect(propertyKeys).toEqual(registryKeys);
+    });
+
+    it('reports textStyle-backed properties as unavailable when textStyle mark is missing', () => {
+      const capabilities = getDocumentApiCapabilities(makeFormatEditor({ marks: { textStyle: undefined } }));
+      expect(capabilities.format.supportedInlineProperties.fontSize.available).toBe(false);
+      expect(capabilities.format.supportedInlineProperties.color.available).toBe(false);
+      expect(capabilities.format.supportedInlineProperties.bold.available).toBe(true);
+    });
+
+    it('reports run-attribute properties as unavailable when the run node is missing', () => {
+      const capabilities = getDocumentApiCapabilities(makeFormatEditor({ nodes: { run: undefined } }));
+      expect(capabilities.format.supportedInlineProperties.rFonts.available).toBe(false);
+      expect(capabilities.format.supportedInlineProperties.lang.available).toBe(false);
+      expect(capabilities.format.supportedInlineProperties.bold.available).toBe(true);
+    });
+
+    it('reports tracked support only for tracked inline properties', () => {
+      const capabilities = getDocumentApiCapabilities(makeFormatEditor());
+      expect(capabilities.format.supportedInlineProperties.bold.tracked).toBe(true);
+      expect(capabilities.format.supportedInlineProperties.rFonts.tracked).toBe(false);
+    });
+
+    it('reports format.apply tracked=false when only non-tracked (run-attribute) properties are available', () => {
+      // Editor has: run node, TrackFormatMarkName, insertTrackedChange, user
+      // But NO mark-backed inline properties (bold, italic, etc.) — only run-attribute ones
+      const capabilities = getDocumentApiCapabilities(
+        makeFormatEditor({
+          marks: {
+            bold: undefined,
+            italic: undefined,
+            underline: undefined,
+            strike: undefined,
+            highlight: undefined,
+            textStyle: undefined,
+          },
+        }),
+      );
+      // format.apply is available because run-attribute properties exist
+      expect(capabilities.operations['format.apply'].available).toBe(true);
+      // But tracked should be false — no tracked property is available
+      expect(capabilities.operations['format.apply'].tracked).toBe(false);
     });
 
     it('reports format.align as available when set and unset commands are present', () => {
       const capabilities = getDocumentApiCapabilities(makeFormatEditor());
-
       expect(capabilities.operations['format.align'].available).toBe(true);
-    });
-
-    it('reports inline format ops as unavailable when textStyle mark is missing', () => {
-      const capabilities = getDocumentApiCapabilities(makeFormatEditor({ marks: { textStyle: undefined } }));
-
-      expect(capabilities.operations['format.fontSize'].available).toBe(false);
-      expect(capabilities.operations['format.fontFamily'].available).toBe(false);
-      expect(capabilities.operations['format.color'].available).toBe(false);
-      // align is paragraph-level — it does not require the textStyle mark
-      expect(capabilities.operations['format.align'].available).toBe(true);
-    });
-
-    it('reports format.fontSize as unavailable when unsetFontSize command is missing', () => {
-      const capabilities = getDocumentApiCapabilities(makeFormatEditor({ commands: { unsetFontSize: undefined } }));
-
-      expect(capabilities.operations['format.fontSize'].available).toBe(false);
-      expect(capabilities.operations['format.fontSize'].reasons).toContain('OPERATION_UNAVAILABLE');
+      expect(capabilities.operations['format.align'].dryRun).toBe(true);
+      expect(capabilities.operations['format.align'].tracked).toBe(false);
     });
 
     it('reports format.align as unavailable when unsetTextAlign command is missing', () => {
       const capabilities = getDocumentApiCapabilities(makeFormatEditor({ commands: { unsetTextAlign: undefined } }));
-
       expect(capabilities.operations['format.align'].available).toBe(false);
       expect(capabilities.operations['format.align'].reasons).toContain('COMMAND_UNAVAILABLE');
     });
 
-    it('uses OPERATION_UNAVAILABLE without COMMAND_UNAVAILABLE for inline format ops missing textStyle mark', () => {
-      const capabilities = getDocumentApiCapabilities(makeFormatEditor({ marks: { textStyle: undefined } }));
+    // -----------------------------------------------------------------------
+    // format.<inlineKey> operation-level capability parity
+    // -----------------------------------------------------------------------
 
-      const fontSizeReasons = capabilities.operations['format.fontSize'].reasons ?? [];
-      expect(fontSizeReasons).toContain('OPERATION_UNAVAILABLE');
-      expect(fontSizeReasons).not.toContain('COMMAND_UNAVAILABLE');
+    it('reports operations["format.bold"] as unavailable when bold mark is missing', () => {
+      const capabilities = getDocumentApiCapabilities(makeFormatEditor({ marks: { bold: undefined } }));
+      expect(capabilities.operations['format.bold'].available).toBe(false);
+      expect(capabilities.operations['format.bold'].reasons).toContain('OPERATION_UNAVAILABLE');
+      expect(capabilities.operations['format.bold'].reasons).not.toContain('COMMAND_UNAVAILABLE');
     });
 
-    it('reports all format value ops with dryRun support', () => {
-      const capabilities = getDocumentApiCapabilities(makeFormatEditor());
-
-      expect(capabilities.operations['format.fontSize'].dryRun).toBe(true);
-      expect(capabilities.operations['format.fontFamily'].dryRun).toBe(true);
-      expect(capabilities.operations['format.color'].dryRun).toBe(true);
-      expect(capabilities.operations['format.align'].dryRun).toBe(true);
-    });
-
-    it('reports all format value ops as direct-only (tracked = false)', () => {
-      const capabilities = getDocumentApiCapabilities(makeFormatEditor());
-
-      expect(capabilities.operations['format.fontSize'].tracked).toBe(false);
-      expect(capabilities.operations['format.fontFamily'].tracked).toBe(false);
+    it('reports operations["format.color"] tracked=false when TrackFormatMarkName is missing', () => {
+      const capabilities = getDocumentApiCapabilities(
+        makeFormatEditor({ marks: { [TrackFormatMarkName]: undefined } }),
+      );
+      // color is textStyle-backed → still available
+      expect(capabilities.operations['format.color'].available).toBe(true);
       expect(capabilities.operations['format.color'].tracked).toBe(false);
-      expect(capabilities.operations['format.align'].tracked).toBe(false);
+    });
+
+    it('reports operations["format.rFonts"] as unavailable when run node is missing', () => {
+      const capabilities = getDocumentApiCapabilities(makeFormatEditor({ nodes: { run: undefined } }));
+      expect(capabilities.operations['format.rFonts'].available).toBe(false);
+      expect(capabilities.operations['format.rFonts'].reasons).toContain('OPERATION_UNAVAILABLE');
+    });
+
+    it('reports operations["format.rFonts"] tracked=false because run-attribute properties are not tracked', () => {
+      const capabilities = getDocumentApiCapabilities(makeFormatEditor());
+      expect(capabilities.operations['format.rFonts'].available).toBe(true);
+      expect(capabilities.operations['format.rFonts'].tracked).toBe(false);
+    });
+
+    it('ensures every format.<inlineKey> operation matches its supportedInlineProperties entry', () => {
+      const capabilities = getDocumentApiCapabilities(makeFormatEditor());
+      for (const entry of INLINE_PROPERTY_REGISTRY) {
+        const operationId = `format.${entry.key}` as `format.${typeof entry.key}`;
+        const operation = capabilities.operations[operationId];
+        const property = capabilities.format.supportedInlineProperties[entry.key];
+        expect(operation.available, `${operationId} available mismatch`).toBe(property.available);
+        expect(operation.tracked, `${operationId} tracked mismatch`).toBe(property.tracked);
+      }
+    });
+
+    it('ensures parity holds when marks/nodes are partially missing', () => {
+      // Remove textStyle (affects color, fontSize, etc.) and run node (affects rFonts, lang, etc.)
+      const capabilities = getDocumentApiCapabilities(
+        makeFormatEditor({ marks: { textStyle: undefined }, nodes: { run: undefined } }),
+      );
+      for (const entry of INLINE_PROPERTY_REGISTRY) {
+        const operationId = `format.${entry.key}` as `format.${typeof entry.key}`;
+        const operation = capabilities.operations[operationId];
+        const property = capabilities.format.supportedInlineProperties[entry.key];
+        expect(operation.available, `${operationId} available mismatch`).toBe(property.available);
+        expect(operation.tracked, `${operationId} tracked mismatch`).toBe(property.tracked);
+      }
     });
   });
 

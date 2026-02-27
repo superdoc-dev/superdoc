@@ -1,65 +1,19 @@
+import fs from 'node:fs';
+import path from 'node:path';
+import { fileURLToPath } from 'node:url';
 import { test, expect } from '../../fixtures/superdoc.js';
-import { assertDocumentApiReady } from '../../helpers/document-api.js';
 
 test.use({ config: { toolbar: 'full', comments: 'off', trackChanges: true } });
 
-const BOOKMARK_ID = '5000';
-const BOOKMARK_NAME = 'annotmark;id=69c65e86-20bc-42d1-83f1-37019fb7d173;data={};';
+const __dirname = path.dirname(fileURLToPath(import.meta.url));
+const DOC_PATH = path.resolve(__dirname, '../../test-data/comments-tcs/redline-full-paragraph.docx');
 
-const seedBookmarkWrappedRunsWithTerminalPeriod = async (superdoc: any) => {
-  await assertDocumentApiReady(superdoc.page);
+test.skip(!fs.existsSync(DOC_PATH), 'Test document not available — run pnpm corpus:pull');
 
-  await superdoc.page.evaluate(
-    ({ bookmarkId, bookmarkName }) => {
-      const editor = (window as any).editor;
-      const schema = editor.state.schema;
-
-      const bookmarkStart = (id: string, name: string) => schema.nodes.bookmarkStart.create({ id, name });
-      const bookmarkEnd = (id: string) => schema.nodes.bookmarkEnd.create({ id });
-      const runAttrs = { rsidR: '00551B40', rsidRPr: '0043097F' };
-
-      // Mirrors the OOXML run structure:
-      // <w:r><w:bookmarkStart/><w:t>...</w:t><w:bookmarkEnd/></w:r>
-      // <w:r><w:bookmarkStart/><w:t xml:space="preserve"> ...</w:t><w:bookmarkEnd/></w:r>
-      // <w:r><w:t>.</w:t></w:r>
-      const paragraph = schema.nodes.paragraph.create({}, [
-        schema.nodes.run.create(runAttrs, [
-          bookmarkStart(bookmarkId, bookmarkName),
-          schema.text('any and all'),
-          bookmarkEnd(bookmarkId),
-        ]),
-        schema.nodes.run.create(runAttrs, [
-          bookmarkStart(bookmarkId, bookmarkName),
-          schema.text(' such Confidential Material'),
-          bookmarkEnd(bookmarkId),
-        ]),
-        schema.nodes.run.create(runAttrs, [schema.text('.')]),
-      ]);
-
-      const doc = schema.nodes.doc.create({}, [paragraph]);
-      editor.view.dispatch(editor.state.tr.replaceWith(0, editor.state.doc.content.size, doc.content));
-      editor.setOptions({ user: { name: 'Guest Reviewer', email: 'track@example.com' } });
-    },
-    { bookmarkId: BOOKMARK_ID, bookmarkName: BOOKMARK_NAME },
-  );
-  await superdoc.waitForStable();
-};
-
-test('two backspaces track period and l for bookmark-wrapped runs', async ({ superdoc }) => {
-  await seedBookmarkWrappedRunsWithTerminalPeriod(superdoc);
-  await superdoc.setDocumentMode('suggesting');
-  await superdoc.waitForStable();
-
-  const periodPos = await superdoc.findTextPos('.');
-  await superdoc.setTextSelection(periodPos + 1);
-  await superdoc.press('Backspace');
-  await superdoc.waitForStable();
-  await superdoc.press('Backspace');
-  await superdoc.waitForStable();
-
-  const snapshot = await superdoc.page.evaluate(() => {
+const snapshotTrackDeletesAndBookmarks = async (superdoc: any) =>
+  superdoc.page.evaluate(() => {
     const editor = (window as any).editor;
-    const deletedText: string[] = [];
+    const deleteById: Record<string, string> = {};
     let bookmarkStartCount = 0;
     let bookmarkEndCount = 0;
 
@@ -69,17 +23,83 @@ test('two backspaces track period and l for bookmark-wrapped runs', async ({ sup
       if (!node.isText || !node.text) return;
       for (const mark of node.marks ?? []) {
         if (mark.type?.name !== 'trackDelete') continue;
-        deletedText.push(node.text);
+        const id = String(mark.attrs?.id ?? '');
+        if (!id) continue;
+        deleteById[id] = (deleteById[id] ?? '') + node.text;
       }
     });
-    return {
-      deletedCombined: deletedText.join(''),
-      bookmarkStartCount,
-      bookmarkEndCount,
-    };
+
+    return { deleteById, bookmarkStartCount, bookmarkEndCount };
   });
 
-  expect(snapshot.deletedCombined).toBe('l.');
-  expect(snapshot.bookmarkStartCount).toBe(2);
-  expect(snapshot.bookmarkEndCount).toBe(2);
+test('two backspaces track period and l for bookmark-wrapped runs', async ({ superdoc }) => {
+  await superdoc.loadDocument(DOC_PATH);
+  await superdoc.waitForStable();
+  await superdoc.page.evaluate(() => {
+    const editor = (window as any).editor;
+    editor.setOptions({ user: { name: 'Guest Reviewer', email: 'track@example.com' } });
+  });
+
+  await superdoc.setDocumentMode('suggesting');
+  await superdoc.waitForStable();
+
+  const before = await snapshotTrackDeletesAndBookmarks(superdoc);
+  const targetMarker = await superdoc.page.evaluate(() => {
+    const editor = (window as any).editor;
+    const { doc } = editor.state;
+    let marker: string | null = null;
+
+    doc.descendants((node: any) => {
+      if (node.type?.name !== 'paragraph') return;
+      const normalized = String(node.textContent ?? '')
+        .replace(/\s+/g, ' ')
+        .trim();
+      if (!normalized.includes('any and all such Confidential Material.')) return;
+      marker = String(node.attrs?.listRendering?.markerText ?? '').trim();
+      return false;
+    });
+
+    if (!marker) {
+      throw new Error('Target numbered paragraph not found');
+    }
+    return marker;
+  });
+  expect(targetMarker).toBe('1.');
+
+  const periodPos = await superdoc.page.evaluate(() => {
+    const editor = (window as any).editor;
+    const { doc } = editor.state;
+    let matchPos = -1;
+
+    doc.descendants((node: any, pos: number) => {
+      if (!node.isText || node.text !== '.') return;
+      const left = doc.textBetween(Math.max(0, pos - 80), pos, '', '');
+      if (left.endsWith('any and all such Confidential Material')) {
+        matchPos = pos;
+        return false;
+      }
+      return;
+    });
+
+    if (matchPos === -1) {
+      throw new Error('Terminal period for Confidential Material sentence not found');
+    }
+    return matchPos;
+  });
+  await superdoc.setTextSelection(periodPos + 1);
+  await superdoc.press('Backspace');
+  await superdoc.waitForStable();
+  await superdoc.press('Backspace');
+  await superdoc.waitForStable();
+
+  const snapshot = await snapshotTrackDeletesAndBookmarks(superdoc);
+
+  const newDeletedCombined = Object.entries(snapshot.deleteById)
+    .filter(([id]) => !before.deleteById[id])
+    .map(([, text]) => text)
+    .join('');
+
+  expect(newDeletedCombined).toBe('l.');
+  expect(snapshot.bookmarkStartCount).toBe(before.bookmarkStartCount);
+  expect(snapshot.bookmarkEndCount).toBe(before.bookmarkEndCount);
 });

@@ -1,7 +1,7 @@
 ---
 title: sections.setColumns
 sidebarTitle: sections.setColumns
-description: Reference for sections.setColumns
+description: Set column configuration for a section.
 ---
 
 {/* GENERATED FILE: DO NOT EDIT. Regenerate via `pnpm run docapi:sync`. */}
@@ -10,6 +10,8 @@ description: Reference for sections.setColumns
 
 ## Summary
 
+Set column configuration for a section.
+
 - Operation ID: `sections.setColumns`
 - API member path: `editor.doc.sections.setColumns(...)`
 - Mutates document: `yes`
@@ -17,6 +19,10 @@ description: Reference for sections.setColumns
 - Supports tracked mode: `no`
 - Supports dry run: `yes`
 - Deterministic target resolution: `yes`
+
+## Expected result
+
+Returns a SectionMutationResult receipt; reports NO_OP if column configuration already matches.
 
 ## Input fields
 

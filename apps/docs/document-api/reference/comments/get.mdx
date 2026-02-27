@@ -1,7 +1,7 @@
 ---
 title: comments.get
 sidebarTitle: comments.get
-description: Reference for comments.get
+description: Retrieve a single comment thread by ID.
 ---
 
 {/* GENERATED FILE: DO NOT EDIT. Regenerate via `pnpm run docapi:sync`. */}
@@ -10,6 +10,8 @@ description: Reference for comments.get
 
 ## Summary
 
+Retrieve a single comment thread by ID.
+
 - Operation ID: `comments.get`
 - API member path: `editor.doc.comments.get(...)`
 - Mutates document: `no`
@@ -17,6 +19,10 @@ description: Reference for comments.get
 - Supports tracked mode: `no`
 - Supports dry run: `no`
 - Deterministic target resolution: `yes`
+
+## Expected result
+
+Returns a CommentInfo object with the comment text, author, date, and thread metadata.
 
 ## Input fields
 

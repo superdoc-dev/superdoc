@@ -1,7 +1,7 @@
 ---
 title: format.align
 sidebarTitle: format.align
-description: Reference for format.align
+description: Set or unset paragraph alignment on the block containing the target. Pass null to reset to default.
 ---
 
 {/* GENERATED FILE: DO NOT EDIT. Regenerate via `pnpm run docapi:sync`. */}
@@ -10,6 +10,8 @@ description: Reference for format.align
 
 ## Summary
 
+Set or unset paragraph alignment on the block containing the target. Pass null to reset to default.
+
 - Operation ID: `format.align`
 - API member path: `editor.doc.format.align(...)`
 - Mutates document: `yes`
@@ -17,6 +19,10 @@ description: Reference for format.align
 - Supports tracked mode: `no`
 - Supports dry run: `yes`
 - Deterministic target resolution: `yes`
+
+## Expected result
+
+Returns a TextMutationReceipt; receipt reports NO_OP if the block already has the requested alignment.
 
 ## Input fields
 

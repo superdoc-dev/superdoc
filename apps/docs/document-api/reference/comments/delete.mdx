@@ -1,7 +1,7 @@
 ---
 title: comments.delete
 sidebarTitle: comments.delete
-description: Reference for comments.delete
+description: Remove a comment or reply by ID.
 ---
 
 {/* GENERATED FILE: DO NOT EDIT. Regenerate via `pnpm run docapi:sync`. */}
@@ -10,6 +10,8 @@ description: Reference for comments.delete
 
 ## Summary
 
+Remove a comment or reply by ID.
+
 - Operation ID: `comments.delete`
 - API member path: `editor.doc.comments.delete(...)`
 - Mutates document: `yes`
@@ -17,6 +19,10 @@ description: Reference for comments.delete
 - Supports tracked mode: `no`
 - Supports dry run: `no`
 - Deterministic target resolution: `yes`
+
+## Expected result
+
+Returns a Receipt confirming the comment was removed; reports NO_OP if the comment was already deleted.
 
 ## Input fields
 

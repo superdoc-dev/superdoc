@@ -1,7 +1,7 @@
 ---
 title: tables.unmergeCells
 sidebarTitle: tables.unmergeCells
-description: Reference for tables.unmergeCells
+description: Unmerge a previously merged table cell.
 ---
 
 {/* GENERATED FILE: DO NOT EDIT. Regenerate via `pnpm run docapi:sync`. */}
@@ -10,6 +10,8 @@ description: Reference for tables.unmergeCells
 
 ## Summary
 
+Unmerge a previously merged table cell.
+
 - Operation ID: `tables.unmergeCells`
 - API member path: `editor.doc.tables.unmergeCells(...)`
 - Mutates document: `yes`
@@ -17,6 +19,10 @@ description: Reference for tables.unmergeCells
 - Supports tracked mode: `no`
 - Supports dry run: `yes`
 - Deterministic target resolution: `yes`
+
+## Expected result
+
+Returns a TableMutationResult receipt; reports NO_OP if the cell is not merged.
 
 ## Input fields
 

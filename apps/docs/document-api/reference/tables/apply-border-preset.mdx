@@ -1,7 +1,7 @@
 ---
 title: tables.applyBorderPreset
 sidebarTitle: tables.applyBorderPreset
-description: Reference for tables.applyBorderPreset
+description: Apply a border preset (e.g. all borders, outside only) to a table.
 ---
 
 {/* GENERATED FILE: DO NOT EDIT. Regenerate via `pnpm run docapi:sync`. */}
@@ -10,6 +10,8 @@ description: Reference for tables.applyBorderPreset
 
 ## Summary
 
+Apply a border preset (e.g. all borders, outside only) to a table.
+
 - Operation ID: `tables.applyBorderPreset`
 - API member path: `editor.doc.tables.applyBorderPreset(...)`
 - Mutates document: `yes`
@@ -17,6 +19,10 @@ description: Reference for tables.applyBorderPreset
 - Supports tracked mode: `no`
 - Supports dry run: `yes`
 - Deterministic target resolution: `yes`
+
+## Expected result
+
+Returns a TableMutationResult receipt; reports NO_OP if the preset is already applied.
 
 ## Input fields
 

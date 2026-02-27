@@ -1,7 +1,7 @@
 ---
 title: sections.clearHeaderFooterRef
 sidebarTitle: sections.clearHeaderFooterRef
-description: Reference for sections.clearHeaderFooterRef
+description: Clear a section header/footer reference for a specific variant.
 ---
 
 {/* GENERATED FILE: DO NOT EDIT. Regenerate via `pnpm run docapi:sync`. */}
@@ -10,6 +10,8 @@ description: Reference for sections.clearHeaderFooterRef
 
 ## Summary
 
+Clear a section header/footer reference for a specific variant.
+
 - Operation ID: `sections.clearHeaderFooterRef`
 - API member path: `editor.doc.sections.clearHeaderFooterRef(...)`
 - Mutates document: `yes`
@@ -17,6 +19,10 @@ description: Reference for sections.clearHeaderFooterRef
 - Supports tracked mode: `no`
 - Supports dry run: `yes`
 - Deterministic target resolution: `yes`
+
+## Expected result
+
+Returns a SectionMutationResult receipt; reports NO_OP if no reference exists for the specified variant.
 
 ## Input fields
 

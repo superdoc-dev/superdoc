@@ -1,7 +1,7 @@
 ---
 title: info
 sidebarTitle: info
-description: Reference for info
+description: Return document metadata including revision, node count, and capabilities.
 ---
 
 {/* GENERATED FILE: DO NOT EDIT. Regenerate via `pnpm run docapi:sync`. */}
@@ -10,6 +10,8 @@ description: Reference for info
 
 ## Summary
 
+Return document metadata including revision, node count, and capabilities.
+
 - Operation ID: `info`
 - API member path: `editor.doc.info(...)`
 - Mutates document: `no`
@@ -17,6 +19,10 @@ description: Reference for info
 - Supports tracked mode: `no`
 - Supports dry run: `no`
 - Deterministic target resolution: `yes`
+
+## Expected result
+
+Returns a DocumentInfo object with revision, word/paragraph/heading counts, and capability flags.
 
 ## Input fields
 

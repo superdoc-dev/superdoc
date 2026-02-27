@@ -1,7 +1,7 @@
 ---
 title: lists.exit
 sidebarTitle: lists.exit
-description: Reference for lists.exit
+description: Exit a list context, converting the target item to a paragraph.
 ---
 
 {/* GENERATED FILE: DO NOT EDIT. Regenerate via `pnpm run docapi:sync`. */}
@@ -10,6 +10,8 @@ description: Reference for lists.exit
 
 ## Summary
 
+Exit a list context, converting the target item to a paragraph.
+
 - Operation ID: `lists.exit`
 - API member path: `editor.doc.lists.exit(...)`
 - Mutates document: `yes`
@@ -17,6 +19,10 @@ description: Reference for lists.exit
 - Supports tracked mode: `no`
 - Supports dry run: `yes`
 - Deterministic target resolution: `yes`
+
+## Expected result
+
+Returns a ListsExitResult confirming the item was converted to a plain paragraph.
 
 ## Input fields
 

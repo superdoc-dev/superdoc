@@ -1,7 +1,7 @@
 ---
 title: tables.setCellProperties
 sidebarTitle: tables.setCellProperties
-description: Reference for tables.setCellProperties
+description: Set properties on a table cell such as vertical alignment or text direction.
 ---
 
 {/* GENERATED FILE: DO NOT EDIT. Regenerate via `pnpm run docapi:sync`. */}
@@ -10,6 +10,8 @@ description: Reference for tables.setCellProperties
 
 ## Summary
 
+Set properties on a table cell such as vertical alignment or text direction.
+
 - Operation ID: `tables.setCellProperties`
 - API member path: `editor.doc.tables.setCellProperties(...)`
 - Mutates document: `yes`
@@ -17,6 +19,10 @@ description: Reference for tables.setCellProperties
 - Supports tracked mode: `no`
 - Supports dry run: `yes`
 - Deterministic target resolution: `yes`
+
+## Expected result
+
+Returns a TableMutationResult receipt; reports NO_OP if cell properties already match.
 
 ## Input fields
 

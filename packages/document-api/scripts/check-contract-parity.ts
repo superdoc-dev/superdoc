@@ -8,6 +8,8 @@
 import {
   COMMAND_CATALOG,
   DOCUMENT_API_MEMBER_PATHS,
+  OPERATION_DESCRIPTION_MAP,
+  OPERATION_EXPECTED_RESULT_MAP,
   OPERATION_IDS,
   OPERATION_MEMBER_PATH_MAP,
   REFERENCE_OPERATION_ALIASES,
@@ -288,6 +290,12 @@ function run(): void {
     }
     if (OPERATION_REFERENCE_DOC_PATH_MAP[id] !== defEntry.referenceDocPath) {
       errors.push(`OPERATION_REFERENCE_DOC_PATH_MAP['${id}'] !== OPERATION_DEFINITIONS['${id}'].referenceDocPath`);
+    }
+    if (OPERATION_DESCRIPTION_MAP[id] !== defEntry.description) {
+      errors.push(`OPERATION_DESCRIPTION_MAP['${id}'] !== OPERATION_DEFINITIONS['${id}'].description`);
+    }
+    if (OPERATION_EXPECTED_RESULT_MAP[id] !== defEntry.expectedResult) {
+      errors.push(`OPERATION_EXPECTED_RESULT_MAP['${id}'] !== OPERATION_DEFINITIONS['${id}'].expectedResult`);
     }
   }
 

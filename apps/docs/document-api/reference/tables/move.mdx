@@ -1,7 +1,7 @@
 ---
 title: tables.move
 sidebarTitle: tables.move
-description: Reference for tables.move
+description: Move a table to a new position in the document.
 ---
 
 {/* GENERATED FILE: DO NOT EDIT. Regenerate via `pnpm run docapi:sync`. */}
@@ -10,6 +10,8 @@ description: Reference for tables.move
 
 ## Summary
 
+Move a table to a new position in the document.
+
 - Operation ID: `tables.move`
 - API member path: `editor.doc.tables.move(...)`
 - Mutates document: `yes`
@@ -17,6 +19,10 @@ description: Reference for tables.move
 - Supports tracked mode: `no`
 - Supports dry run: `yes`
 - Deterministic target resolution: `yes`
+
+## Expected result
+
+Returns a TableMutationResult receipt; reports NO_OP if the table is already at the target position.
 
 ## Input fields
 

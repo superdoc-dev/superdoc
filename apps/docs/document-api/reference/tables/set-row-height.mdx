@@ -1,7 +1,7 @@
 ---
 title: tables.setRowHeight
 sidebarTitle: tables.setRowHeight
-description: Reference for tables.setRowHeight
+description: Set the height of a table row.
 ---
 
 {/* GENERATED FILE: DO NOT EDIT. Regenerate via `pnpm run docapi:sync`. */}
@@ -10,6 +10,8 @@ description: Reference for tables.setRowHeight
 
 ## Summary
 
+Set the height of a table row.
+
 - Operation ID: `tables.setRowHeight`
 - API member path: `editor.doc.tables.setRowHeight(...)`
 - Mutates document: `yes`
@@ -17,6 +19,10 @@ description: Reference for tables.setRowHeight
 - Supports tracked mode: `no`
 - Supports dry run: `yes`
 - Deterministic target resolution: `yes`
+
+## Expected result
+
+Returns a TableMutationResult receipt; reports NO_OP if the row height already matches.
 
 ## Input fields
 

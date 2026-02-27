@@ -1,7 +1,7 @@
 ---
 title: tables.distributeColumns
 sidebarTitle: tables.distributeColumns
-description: Reference for tables.distributeColumns
+description: Distribute column widths evenly across the target table.
 ---
 
 {/* GENERATED FILE: DO NOT EDIT. Regenerate via `pnpm run docapi:sync`. */}
@@ -10,6 +10,8 @@ description: Reference for tables.distributeColumns
 
 ## Summary
 
+Distribute column widths evenly across the target table.
+
 - Operation ID: `tables.distributeColumns`
 - API member path: `editor.doc.tables.distributeColumns(...)`
 - Mutates document: `yes`
@@ -17,6 +19,10 @@ description: Reference for tables.distributeColumns
 - Supports tracked mode: `no`
 - Supports dry run: `yes`
 - Deterministic target resolution: `yes`
+
+## Expected result
+
+Returns a TableMutationResult receipt; reports NO_OP if column widths are already equal.
 
 ## Input fields
 

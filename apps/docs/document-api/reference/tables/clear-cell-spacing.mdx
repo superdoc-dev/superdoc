@@ -1,7 +1,7 @@
 ---
 title: tables.clearCellSpacing
 sidebarTitle: tables.clearCellSpacing
-description: Reference for tables.clearCellSpacing
+description: Remove custom cell spacing from the target table.
 ---
 
 {/* GENERATED FILE: DO NOT EDIT. Regenerate via `pnpm run docapi:sync`. */}
@@ -10,6 +10,8 @@ description: Reference for tables.clearCellSpacing
 
 ## Summary
 
+Remove custom cell spacing from the target table.
+
 - Operation ID: `tables.clearCellSpacing`
 - API member path: `editor.doc.tables.clearCellSpacing(...)`
 - Mutates document: `yes`
@@ -17,6 +19,10 @@ description: Reference for tables.clearCellSpacing
 - Supports tracked mode: `no`
 - Supports dry run: `yes`
 - Deterministic target resolution: `yes`
+
+## Expected result
+
+Returns a TableMutationResult receipt; reports NO_OP if no custom cell spacing is set.
 
 ## Input fields
 

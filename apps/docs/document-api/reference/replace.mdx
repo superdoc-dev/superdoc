@@ -1,7 +1,7 @@
 ---
 title: replace
 sidebarTitle: replace
-description: Reference for replace
+description: Replace content at a target position with new text or inline content.
 ---
 
 {/* GENERATED FILE: DO NOT EDIT. Regenerate via `pnpm run docapi:sync`. */}
@@ -10,6 +10,8 @@ description: Reference for replace
 
 ## Summary
 
+Replace content at a target position with new text or inline content.
+
 - Operation ID: `replace`
 - API member path: `editor.doc.replace(...)`
 - Mutates document: `yes`
@@ -17,6 +19,10 @@ description: Reference for replace
 - Supports tracked mode: `yes`
 - Supports dry run: `yes`
 - Deterministic target resolution: `yes`
+
+## Expected result
+
+Returns a TextMutationReceipt with applied status; receipt reports NO_OP if the target range already contains identical content.
 
 ## Input fields
 

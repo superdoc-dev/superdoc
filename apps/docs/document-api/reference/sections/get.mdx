@@ -1,7 +1,7 @@
 ---
 title: sections.get
 sidebarTitle: sections.get
-description: Reference for sections.get
+description: Retrieve full section information by section address.
 ---
 
 {/* GENERATED FILE: DO NOT EDIT. Regenerate via `pnpm run docapi:sync`. */}
@@ -10,6 +10,8 @@ description: Reference for sections.get
 
 ## Summary
 
+Retrieve full section information by section address.
+
 - Operation ID: `sections.get`
 - API member path: `editor.doc.sections.get(...)`
 - Mutates document: `no`
@@ -17,6 +19,10 @@ description: Reference for sections.get
 - Supports tracked mode: `no`
 - Supports dry run: `no`
 - Deterministic target resolution: `yes`
+
+## Expected result
+
+Returns a SectionInfo object with full section properties including margins, columns, and header/footer refs.
 
 ## Input fields
 

@@ -1,7 +1,7 @@
 ---
 title: sections.setHeaderFooterRef
 sidebarTitle: sections.setHeaderFooterRef
-description: Reference for sections.setHeaderFooterRef
+description: Set or replace a section header/footer reference for a variant.
 ---
 
 {/* GENERATED FILE: DO NOT EDIT. Regenerate via `pnpm run docapi:sync`. */}
@@ -10,6 +10,8 @@ description: Reference for sections.setHeaderFooterRef
 
 ## Summary
 
+Set or replace a section header/footer reference for a variant.
+
 - Operation ID: `sections.setHeaderFooterRef`
 - API member path: `editor.doc.sections.setHeaderFooterRef(...)`
 - Mutates document: `yes`
@@ -17,6 +19,10 @@ description: Reference for sections.setHeaderFooterRef
 - Supports tracked mode: `no`
 - Supports dry run: `yes`
 - Deterministic target resolution: `yes`
+
+## Expected result
+
+Returns a SectionMutationResult receipt; reports NO_OP if the header/footer reference already matches.
 
 ## Input fields
 

@@ -1,7 +1,7 @@
 ---
 title: tables.setAltText
 sidebarTitle: tables.setAltText
-description: Reference for tables.setAltText
+description: Set the alternative text description for a table.
 ---
 
 {/* GENERATED FILE: DO NOT EDIT. Regenerate via `pnpm run docapi:sync`. */}
@@ -10,6 +10,8 @@ description: Reference for tables.setAltText
 
 ## Summary
 
+Set the alternative text description for a table.
+
 - Operation ID: `tables.setAltText`
 - API member path: `editor.doc.tables.setAltText(...)`
 - Mutates document: `yes`
@@ -17,6 +19,10 @@ description: Reference for tables.setAltText
 - Supports tracked mode: `no`
 - Supports dry run: `yes`
 - Deterministic target resolution: `yes`
+
+## Expected result
+
+Returns a TableMutationResult receipt; reports NO_OP if alt text already matches.
 
 ## Input fields
 

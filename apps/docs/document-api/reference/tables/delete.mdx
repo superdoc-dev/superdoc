@@ -1,7 +1,7 @@
 ---
 title: tables.delete
 sidebarTitle: tables.delete
-description: Reference for tables.delete
+description: Delete the target table from the document.
 ---
 
 {/* GENERATED FILE: DO NOT EDIT. Regenerate via `pnpm run docapi:sync`. */}
@@ -10,6 +10,8 @@ description: Reference for tables.delete
 
 ## Summary
 
+Delete the target table from the document.
+
 - Operation ID: `tables.delete`
 - API member path: `editor.doc.tables.delete(...)`
 - Mutates document: `yes`
@@ -17,6 +19,10 @@ description: Reference for tables.delete
 - Supports tracked mode: `yes`
 - Supports dry run: `yes`
 - Deterministic target resolution: `yes`
+
+## Expected result
+
+Returns a TableMutationResult receipt; reports NO_OP if the table was already removed.
 
 ## Input fields
 

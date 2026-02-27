@@ -1,7 +1,7 @@
 ---
 title: tables.get
 sidebarTitle: tables.get
-description: Reference for tables.get
+description: Retrieve table structure and dimensions by locator.
 ---
 
 {/* GENERATED FILE: DO NOT EDIT. Regenerate via `pnpm run docapi:sync`. */}
@@ -10,6 +10,8 @@ description: Reference for tables.get
 
 ## Summary
 
+Retrieve table structure and dimensions by locator.
+
 - Operation ID: `tables.get`
 - API member path: `editor.doc.tables.get(...)`
 - Mutates document: `no`
@@ -17,6 +19,10 @@ description: Reference for tables.get
 - Supports tracked mode: `no`
 - Supports dry run: `no`
 - Deterministic target resolution: `yes`
+
+## Expected result
+
+Returns a TablesGetOutput with the table row count, column count, and structural metadata.
 
 ## Input fields
 

@@ -1,7 +1,7 @@
 ---
 title: format.fontFamily
 sidebarTitle: format.fontFamily
-description: Reference for format.fontFamily
+description: Set or unset the font family on the target text range. Pass null to remove.
 ---
 
 {/* GENERATED FILE: DO NOT EDIT. Regenerate via `pnpm run docapi:sync`. */}
@@ -10,6 +10,8 @@ description: Reference for format.fontFamily
 
 ## Summary
 
+Set or unset the font family on the target text range. Pass null to remove.
+
 - Operation ID: `format.fontFamily`
 - API member path: `editor.doc.format.fontFamily(...)`
 - Mutates document: `yes`
@@ -17,6 +19,10 @@ description: Reference for format.fontFamily
 - Supports tracked mode: `no`
 - Supports dry run: `yes`
 - Deterministic target resolution: `yes`
+
+## Expected result
+
+Returns a TextMutationReceipt; receipt reports NO_OP if the target already has the requested font family.
 
 ## Input fields
 

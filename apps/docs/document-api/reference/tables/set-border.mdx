@@ -1,7 +1,7 @@
 ---
 title: tables.setBorder
 sidebarTitle: tables.setBorder
-description: Reference for tables.setBorder
+description: Set border properties on a table or cell range.
 ---
 
 {/* GENERATED FILE: DO NOT EDIT. Regenerate via `pnpm run docapi:sync`. */}
@@ -10,6 +10,8 @@ description: Reference for tables.setBorder
 
 ## Summary
 
+Set border properties on a table or cell range.
+
 - Operation ID: `tables.setBorder`
 - API member path: `editor.doc.tables.setBorder(...)`
 - Mutates document: `yes`
@@ -17,6 +19,10 @@ description: Reference for tables.setBorder
 - Supports tracked mode: `no`
 - Supports dry run: `yes`
 - Deterministic target resolution: `yes`
+
+## Expected result
+
+Returns a TableMutationResult receipt; reports NO_OP if border properties already match.
 
 ## Input fields
 

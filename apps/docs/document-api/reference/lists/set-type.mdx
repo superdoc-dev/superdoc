@@ -1,7 +1,7 @@
 ---
 title: lists.setType
 sidebarTitle: lists.setType
-description: Reference for lists.setType
+description: Change the list type (ordered, unordered) of a target list.
 ---
 
 {/* GENERATED FILE: DO NOT EDIT. Regenerate via `pnpm run docapi:sync`. */}
@@ -10,6 +10,8 @@ description: Reference for lists.setType
 
 ## Summary
 
+Change the list type (ordered, unordered) of a target list.
+
 - Operation ID: `lists.setType`
 - API member path: `editor.doc.lists.setType(...)`
 - Mutates document: `yes`
@@ -17,6 +19,10 @@ description: Reference for lists.setType
 - Supports tracked mode: `no`
 - Supports dry run: `yes`
 - Deterministic target resolution: `yes`
+
+## Expected result
+
+Returns a ListsMutateItemResult receipt; reports NO_OP if the list already has the requested type.
 
 ## Input fields
 

@@ -1,7 +1,7 @@
 ---
 title: tables.setCellPadding
 sidebarTitle: tables.setCellPadding
-description: Reference for tables.setCellPadding
+description: Set padding on a specific table cell or cell range.
 ---
 
 {/* GENERATED FILE: DO NOT EDIT. Regenerate via `pnpm run docapi:sync`. */}
@@ -10,6 +10,8 @@ description: Reference for tables.setCellPadding
 
 ## Summary
 
+Set padding on a specific table cell or cell range.
+
 - Operation ID: `tables.setCellPadding`
 - API member path: `editor.doc.tables.setCellPadding(...)`
 - Mutates document: `yes`
@@ -17,6 +19,10 @@ description: Reference for tables.setCellPadding
 - Supports tracked mode: `no`
 - Supports dry run: `yes`
 - Deterministic target resolution: `yes`
+
+## Expected result
+
+Returns a TableMutationResult receipt; reports NO_OP if cell padding already matches.
 
 ## Input fields
 

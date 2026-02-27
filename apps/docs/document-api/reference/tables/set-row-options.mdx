@@ -1,7 +1,7 @@
 ---
 title: tables.setRowOptions
 sidebarTitle: tables.setRowOptions
-description: Reference for tables.setRowOptions
+description: Set options on a table row such as header repeat or page break.
 ---
 
 {/* GENERATED FILE: DO NOT EDIT. Regenerate via `pnpm run docapi:sync`. */}
@@ -10,6 +10,8 @@ description: Reference for tables.setRowOptions
 
 ## Summary
 
+Set options on a table row such as header repeat or page break.
+
 - Operation ID: `tables.setRowOptions`
 - API member path: `editor.doc.tables.setRowOptions(...)`
 - Mutates document: `yes`
@@ -17,6 +19,10 @@ description: Reference for tables.setRowOptions
 - Supports tracked mode: `no`
 - Supports dry run: `yes`
 - Deterministic target resolution: `yes`
+
+## Expected result
+
+Returns a TableMutationResult receipt; reports NO_OP if row options already match.
 
 ## Input fields
 

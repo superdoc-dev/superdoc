@@ -1,7 +1,7 @@
 ---
 title: lists.outdent
 sidebarTitle: lists.outdent
-description: Reference for lists.outdent
+description: Decrease the indentation level of a list item.
 ---
 
 {/* GENERATED FILE: DO NOT EDIT. Regenerate via `pnpm run docapi:sync`. */}
@@ -10,6 +10,8 @@ description: Reference for lists.outdent
 
 ## Summary
 
+Decrease the indentation level of a list item.
+
 - Operation ID: `lists.outdent`
 - API member path: `editor.doc.lists.outdent(...)`
 - Mutates document: `yes`
@@ -17,6 +19,10 @@ description: Reference for lists.outdent
 - Supports tracked mode: `no`
 - Supports dry run: `yes`
 - Deterministic target resolution: `yes`
+
+## Expected result
+
+Returns a ListsMutateItemResult receipt; reports NO_OP if the item is already at the root level.
 
 ## Input fields
 

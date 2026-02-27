@@ -1,7 +1,7 @@
 ---
 title: styles.apply
 sidebarTitle: styles.apply
-description: Reference for styles.apply
+description: Apply document-level default style changes to the stylesheet (word/styles.xml). Targets docDefaults run properties with boolean patch semantics.
 ---
 
 {/* GENERATED FILE: DO NOT EDIT. Regenerate via `pnpm run docapi:sync`. */}
@@ -10,6 +10,8 @@ description: Reference for styles.apply
 
 ## Summary
 
+Apply document-level default style changes to the stylesheet (word/styles.xml). Targets docDefaults run properties with boolean patch semantics.
+
 - Operation ID: `styles.apply`
 - API member path: `editor.doc.styles.apply(...)`
 - Mutates document: `yes`
@@ -17,6 +19,10 @@ description: Reference for styles.apply
 - Supports tracked mode: `no`
 - Supports dry run: `yes`
 - Deterministic target resolution: `yes`
+
+## Expected result
+
+Returns a StylesApplyReceipt with per-channel success/failure details for each property change.
 
 ## Input fields
 

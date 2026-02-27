@@ -1,7 +1,7 @@
 ---
 title: blocks.delete
 sidebarTitle: blocks.delete
-description: Reference for blocks.delete
+description: Delete an entire block node (paragraph, heading, list item, table, image, or sdt) deterministically.
 ---
 
 {/* GENERATED FILE: DO NOT EDIT. Regenerate via `pnpm run docapi:sync`. */}
@@ -10,6 +10,8 @@ description: Reference for blocks.delete
 
 ## Summary
 
+Delete an entire block node (paragraph, heading, list item, table, image, or sdt) deterministically.
+
 - Operation ID: `blocks.delete`
 - API member path: `editor.doc.blocks.delete(...)`
 - Mutates document: `yes`
@@ -17,6 +19,10 @@ description: Reference for blocks.delete
 - Supports tracked mode: `no`
 - Supports dry run: `yes`
 - Deterministic target resolution: `yes`
+
+## Expected result
+
+Returns a BlocksDeleteResult receipt confirming the block was removed from the document.
 
 ## Input fields
 

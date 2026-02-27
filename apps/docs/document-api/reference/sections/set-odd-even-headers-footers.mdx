@@ -1,7 +1,7 @@
 ---
 title: sections.setOddEvenHeadersFooters
 sidebarTitle: sections.setOddEvenHeadersFooters
-description: Reference for sections.setOddEvenHeadersFooters
+description: Enable or disable odd/even header-footer mode in document settings.
 ---
 
 {/* GENERATED FILE: DO NOT EDIT. Regenerate via `pnpm run docapi:sync`. */}
@@ -10,6 +10,8 @@ description: Reference for sections.setOddEvenHeadersFooters
 
 ## Summary
 
+Enable or disable odd/even header-footer mode in document settings.
+
 - Operation ID: `sections.setOddEvenHeadersFooters`
 - API member path: `editor.doc.sections.setOddEvenHeadersFooters(...)`
 - Mutates document: `yes`
@@ -17,6 +19,10 @@ description: Reference for sections.setOddEvenHeadersFooters
 - Supports tracked mode: `no`
 - Supports dry run: `yes`
 - Deterministic target resolution: `yes`
+
+## Expected result
+
+Returns a DocumentMutationResult receipt; reports NO_OP if the odd/even setting already matches.
 
 ## Input fields
 

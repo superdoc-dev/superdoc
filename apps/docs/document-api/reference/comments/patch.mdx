@@ -1,7 +1,7 @@
 ---
 title: comments.patch
 sidebarTitle: comments.patch
-description: Reference for comments.patch
+description: Patch fields on an existing comment (text, target, status, or isInternal).
 ---
 
 {/* GENERATED FILE: DO NOT EDIT. Regenerate via `pnpm run docapi:sync`. */}
@@ -10,6 +10,8 @@ description: Reference for comments.patch
 
 ## Summary
 
+Patch fields on an existing comment (text, target, status, or isInternal).
+
 - Operation ID: `comments.patch`
 - API member path: `editor.doc.comments.patch(...)`
 - Mutates document: `yes`
@@ -17,6 +19,10 @@ description: Reference for comments.patch
 - Supports tracked mode: `no`
 - Supports dry run: `no`
 - Deterministic target resolution: `yes`
+
+## Expected result
+
+Returns a Receipt confirming the comment was updated; reports NO_OP if no fields changed.
 
 ## Input fields
 

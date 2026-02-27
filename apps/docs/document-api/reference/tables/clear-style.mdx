@@ -1,7 +1,7 @@
 ---
 title: tables.clearStyle
 sidebarTitle: tables.clearStyle
-description: Reference for tables.clearStyle
+description: Remove the applied table style, reverting to defaults.
 ---
 
 {/* GENERATED FILE: DO NOT EDIT. Regenerate via `pnpm run docapi:sync`. */}
@@ -10,6 +10,8 @@ description: Reference for tables.clearStyle
 
 ## Summary
 
+Remove the applied table style, reverting to defaults.
+
 - Operation ID: `tables.clearStyle`
 - API member path: `editor.doc.tables.clearStyle(...)`
 - Mutates document: `yes`
@@ -17,6 +19,10 @@ description: Reference for tables.clearStyle
 - Supports tracked mode: `no`
 - Supports dry run: `yes`
 - Deterministic target resolution: `yes`
+
+## Expected result
+
+Returns a TableMutationResult receipt; reports NO_OP if no table style is applied.
 
 ## Input fields
 

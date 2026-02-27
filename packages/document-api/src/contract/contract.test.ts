@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { COMMAND_CATALOG } from './command-catalog.js';
+import { COMMAND_CATALOG, OPERATION_DESCRIPTION_MAP, OPERATION_EXPECTED_RESULT_MAP } from './command-catalog.js';
 import { OPERATION_DEFINITIONS, type ReferenceGroupKey } from './operation-definitions.js';
 import { DOCUMENT_API_MEMBER_PATHS, OPERATION_MEMBER_PATH_MAP, memberPathForOperation } from './operation-map.js';
 import { OPERATION_REFERENCE_DOC_PATH_MAP, REFERENCE_OPERATION_GROUPS } from './reference-doc-map.js';
@@ -151,6 +151,27 @@ describe('document-api contract catalog', () => {
   it('projects reference doc paths that match OPERATION_DEFINITIONS', () => {
     for (const id of OPERATION_IDS) {
       expect(OPERATION_REFERENCE_DOC_PATH_MAP[id]).toBe(OPERATION_DEFINITIONS[id].referenceDocPath);
+    }
+  });
+
+  it('projects descriptions that match OPERATION_DEFINITIONS', () => {
+    for (const id of OPERATION_IDS) {
+      expect(OPERATION_DESCRIPTION_MAP[id]).toBe(OPERATION_DEFINITIONS[id].description);
+    }
+  });
+
+  it('projects expected results that match OPERATION_DEFINITIONS', () => {
+    for (const id of OPERATION_IDS) {
+      expect(OPERATION_EXPECTED_RESULT_MAP[id]).toBe(OPERATION_DEFINITIONS[id].expectedResult);
+    }
+  });
+
+  it('ensures every operation has a non-empty expectedResult', () => {
+    for (const id of OPERATION_IDS) {
+      const expectedResult = OPERATION_DEFINITIONS[id].expectedResult;
+      expect(expectedResult, `${id} has empty expectedResult`).toBeTruthy();
+      expect(typeof expectedResult).toBe('string');
+      expect(expectedResult.length, `${id} expectedResult is too short`).toBeGreaterThan(10);
     }
   });
 });

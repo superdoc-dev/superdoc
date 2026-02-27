@@ -1,7 +1,7 @@
 ---
 title: lists.list
 sidebarTitle: lists.list
-description: Reference for lists.list
+description: List all list nodes in the document, optionally filtered by scope.
 ---
 
 {/* GENERATED FILE: DO NOT EDIT. Regenerate via `pnpm run docapi:sync`. */}
@@ -10,6 +10,8 @@ description: Reference for lists.list
 
 ## Summary
 
+List all list nodes in the document, optionally filtered by scope.
+
 - Operation ID: `lists.list`
 - API member path: `editor.doc.lists.list(...)`
 - Mutates document: `no`
@@ -17,6 +19,10 @@ description: Reference for lists.list
 - Supports tracked mode: `no`
 - Supports dry run: `no`
 - Deterministic target resolution: `yes`
+
+## Expected result
+
+Returns a ListsListResult with an array of list item summaries and total count.
 
 ## Input fields
 

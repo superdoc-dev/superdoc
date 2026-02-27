@@ -1,7 +1,7 @@
 ---
 title: tables.setTablePadding
 sidebarTitle: tables.setTablePadding
-description: Reference for tables.setTablePadding
+description: Set default cell padding for the entire table.
 ---
 
 {/* GENERATED FILE: DO NOT EDIT. Regenerate via `pnpm run docapi:sync`. */}
@@ -10,6 +10,8 @@ description: Reference for tables.setTablePadding
 
 ## Summary
 
+Set default cell padding for the entire table.
+
 - Operation ID: `tables.setTablePadding`
 - API member path: `editor.doc.tables.setTablePadding(...)`
 - Mutates document: `yes`
@@ -17,6 +19,10 @@ description: Reference for tables.setTablePadding
 - Supports tracked mode: `no`
 - Supports dry run: `yes`
 - Deterministic target resolution: `yes`
+
+## Expected result
+
+Returns a TableMutationResult receipt; reports NO_OP if table padding already matches.
 
 ## Input fields
 

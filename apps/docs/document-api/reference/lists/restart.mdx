@@ -1,7 +1,7 @@
 ---
 title: lists.restart
 sidebarTitle: lists.restart
-description: Reference for lists.restart
+description: Restart numbering of an ordered list at the target item.
 ---
 
 {/* GENERATED FILE: DO NOT EDIT. Regenerate via `pnpm run docapi:sync`. */}
@@ -10,6 +10,8 @@ description: Reference for lists.restart
 
 ## Summary
 
+Restart numbering of an ordered list at the target item.
+
 - Operation ID: `lists.restart`
 - API member path: `editor.doc.lists.restart(...)`
 - Mutates document: `yes`
@@ -17,6 +19,10 @@ description: Reference for lists.restart
 - Supports tracked mode: `no`
 - Supports dry run: `yes`
 - Deterministic target resolution: `yes`
+
+## Expected result
+
+Returns a ListsMutateItemResult receipt; reports NO_OP if numbering already restarts at the target item.
 
 ## Input fields
 

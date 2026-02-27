@@ -1,7 +1,7 @@
 ---
 title: tables.setShading
 sidebarTitle: tables.setShading
-description: Reference for tables.setShading
+description: Set the background shading color on a table or cell range.
 ---
 
 {/* GENERATED FILE: DO NOT EDIT. Regenerate via `pnpm run docapi:sync`. */}
@@ -10,6 +10,8 @@ description: Reference for tables.setShading
 
 ## Summary
 
+Set the background shading color on a table or cell range.
+
 - Operation ID: `tables.setShading`
 - API member path: `editor.doc.tables.setShading(...)`
 - Mutates document: `yes`
@@ -17,6 +19,10 @@ description: Reference for tables.setShading
 - Supports tracked mode: `no`
 - Supports dry run: `yes`
 - Deterministic target resolution: `yes`
+
+## Expected result
+
+Returns a TableMutationResult receipt; reports NO_OP if shading already matches.
 
 ## Input fields
 

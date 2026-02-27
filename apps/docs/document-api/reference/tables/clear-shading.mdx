@@ -1,7 +1,7 @@
 ---
 title: tables.clearShading
 sidebarTitle: tables.clearShading
-description: Reference for tables.clearShading
+description: Remove shading from a table or cell range.
 ---
 
 {/* GENERATED FILE: DO NOT EDIT. Regenerate via `pnpm run docapi:sync`. */}
@@ -10,6 +10,8 @@ description: Reference for tables.clearShading
 
 ## Summary
 
+Remove shading from a table or cell range.
+
 - Operation ID: `tables.clearShading`
 - API member path: `editor.doc.tables.clearShading(...)`
 - Mutates document: `yes`
@@ -17,6 +19,10 @@ description: Reference for tables.clearShading
 - Supports tracked mode: `no`
 - Supports dry run: `yes`
 - Deterministic target resolution: `yes`
+
+## Expected result
+
+Returns a TableMutationResult receipt; reports NO_OP if no shading is set.
 
 ## Input fields
 

@@ -1,7 +1,7 @@
 ---
 title: lists.indent
 sidebarTitle: lists.indent
-description: Reference for lists.indent
+description: Increase the indentation level of a list item.
 ---
 
 {/* GENERATED FILE: DO NOT EDIT. Regenerate via `pnpm run docapi:sync`. */}
@@ -10,6 +10,8 @@ description: Reference for lists.indent
 
 ## Summary
 
+Increase the indentation level of a list item.
+
 - Operation ID: `lists.indent`
 - API member path: `editor.doc.lists.indent(...)`
 - Mutates document: `yes`
@@ -17,6 +19,10 @@ description: Reference for lists.indent
 - Supports tracked mode: `no`
 - Supports dry run: `yes`
 - Deterministic target resolution: `yes`
+
+## Expected result
+
+Returns a ListsMutateItemResult receipt; reports NO_OP if the item is already at maximum indent level.
 
 ## Input fields
 

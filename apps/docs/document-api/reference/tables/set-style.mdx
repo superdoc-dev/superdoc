@@ -1,7 +1,7 @@
 ---
 title: tables.setStyle
 sidebarTitle: tables.setStyle
-description: Reference for tables.setStyle
+description: Apply a named table style to the target table.
 ---
 
 {/* GENERATED FILE: DO NOT EDIT. Regenerate via `pnpm run docapi:sync`. */}
@@ -10,6 +10,8 @@ description: Reference for tables.setStyle
 
 ## Summary
 
+Apply a named table style to the target table.
+
 - Operation ID: `tables.setStyle`
 - API member path: `editor.doc.tables.setStyle(...)`
 - Mutates document: `yes`
@@ -17,6 +19,10 @@ description: Reference for tables.setStyle
 - Supports tracked mode: `no`
 - Supports dry run: `yes`
 - Deterministic target resolution: `yes`
+
+## Expected result
+
+Returns a TableMutationResult receipt; reports NO_OP if the table already uses the requested style.
 
 ## Input fields
 

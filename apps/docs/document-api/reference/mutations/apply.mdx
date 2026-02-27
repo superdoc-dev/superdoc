@@ -1,7 +1,7 @@
 ---
 title: mutations.apply
 sidebarTitle: mutations.apply
-description: Reference for mutations.apply
+description: Execute a mutation plan atomically against the document.
 ---
 
 {/* GENERATED FILE: DO NOT EDIT. Regenerate via `pnpm run docapi:sync`. */}
@@ -10,6 +10,8 @@ description: Reference for mutations.apply
 
 ## Summary
 
+Execute a mutation plan atomically against the document.
+
 - Operation ID: `mutations.apply`
 - API member path: `editor.doc.mutations.apply(...)`
 - Mutates document: `yes`
@@ -17,6 +19,10 @@ description: Reference for mutations.apply
 - Supports tracked mode: `yes`
 - Supports dry run: `no`
 - Deterministic target resolution: `yes`
+
+## Expected result
+
+Returns a PlanReceipt with per-step results for the atomically applied mutation plan.
 
 ## Input fields
 

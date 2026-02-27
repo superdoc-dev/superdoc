@@ -1,7 +1,7 @@
 ---
 title: tables.clearBorder
 sidebarTitle: tables.clearBorder
-description: Reference for tables.clearBorder
+description: Remove border formatting from a table or cell range.
 ---
 
 {/* GENERATED FILE: DO NOT EDIT. Regenerate via `pnpm run docapi:sync`. */}
@@ -10,6 +10,8 @@ description: Reference for tables.clearBorder
 
 ## Summary
 
+Remove border formatting from a table or cell range.
+
 - Operation ID: `tables.clearBorder`
 - API member path: `editor.doc.tables.clearBorder(...)`
 - Mutates document: `yes`
@@ -17,6 +19,10 @@ description: Reference for tables.clearBorder
 - Supports tracked mode: `no`
 - Supports dry run: `yes`
 - Deterministic target resolution: `yes`
+
+## Expected result
+
+Returns a TableMutationResult receipt; reports NO_OP if no borders are set.
 
 ## Input fields
 

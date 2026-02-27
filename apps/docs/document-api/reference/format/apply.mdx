@@ -1,7 +1,7 @@
 ---
 title: format.apply
 sidebarTitle: format.apply
-description: Reference for format.apply
+description: "Apply explicit inline style changes (bold, italic, underline, strike) to the target range using directive semantics ('on', 'off', 'clear')."
 ---
 
 {/* GENERATED FILE: DO NOT EDIT. Regenerate via `pnpm run docapi:sync`. */}
@@ -10,6 +10,8 @@ description: Reference for format.apply
 
 ## Summary
 
+Apply explicit inline style changes (bold, italic, underline, strike) to the target range using directive semantics ('on', 'off', 'clear').
+
 - Operation ID: `format.apply`
 - API member path: `editor.doc.format.apply(...)`
 - Mutates document: `yes`
@@ -17,6 +19,10 @@ description: Reference for format.apply
 - Supports tracked mode: `yes`
 - Supports dry run: `yes`
 - Deterministic target resolution: `yes`
+
+## Expected result
+
+Returns a TextMutationReceipt confirming inline styles were applied to the target range.
 
 ## Input fields
 

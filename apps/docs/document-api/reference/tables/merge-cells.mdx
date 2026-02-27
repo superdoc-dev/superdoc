@@ -1,7 +1,7 @@
 ---
 title: tables.mergeCells
 sidebarTitle: tables.mergeCells
-description: Reference for tables.mergeCells
+description: Merge a range of table cells into one.
 ---
 
 {/* GENERATED FILE: DO NOT EDIT. Regenerate via `pnpm run docapi:sync`. */}
@@ -10,6 +10,8 @@ description: Reference for tables.mergeCells
 
 ## Summary
 
+Merge a range of table cells into one.
+
 - Operation ID: `tables.mergeCells`
 - API member path: `editor.doc.tables.mergeCells(...)`
 - Mutates document: `yes`
@@ -17,6 +19,10 @@ description: Reference for tables.mergeCells
 - Supports tracked mode: `no`
 - Supports dry run: `yes`
 - Deterministic target resolution: `yes`
+
+## Expected result
+
+Returns a TableMutationResult receipt; reports NO_OP if the cells are already merged.
 
 ## Input fields
 

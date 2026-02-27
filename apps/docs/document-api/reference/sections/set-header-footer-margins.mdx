@@ -1,7 +1,7 @@
 ---
 title: sections.setHeaderFooterMargins
 sidebarTitle: sections.setHeaderFooterMargins
-description: Reference for sections.setHeaderFooterMargins
+description: Set header/footer margin distances for a section.
 ---
 
 {/* GENERATED FILE: DO NOT EDIT. Regenerate via `pnpm run docapi:sync`. */}
@@ -10,6 +10,8 @@ description: Reference for sections.setHeaderFooterMargins
 
 ## Summary
 
+Set header/footer margin distances for a section.
+
 - Operation ID: `sections.setHeaderFooterMargins`
 - API member path: `editor.doc.sections.setHeaderFooterMargins(...)`
 - Mutates document: `yes`
@@ -17,6 +19,10 @@ description: Reference for sections.setHeaderFooterMargins
 - Supports tracked mode: `no`
 - Supports dry run: `yes`
 - Deterministic target resolution: `yes`
+
+## Expected result
+
+Returns a SectionMutationResult receipt; reports NO_OP if header/footer margins already match the requested values.
 
 ## Input fields
 

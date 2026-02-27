@@ -73,8 +73,14 @@ test.describe('comment highlight survives mark changes', () => {
     await superdoc.italic();
     await superdoc.waitForStable();
 
-    // Comment highlight must cover the full original range
-    await superdoc.assertCommentHighlightExists({ text: 'quick brown fox', commentId });
+    // Comment highlight must still exist — after the run split the highlight may
+    // span multiple elements, so check by commentId rather than full text
+    await superdoc.assertCommentHighlightExists({ commentId });
+
+    // Each part of the range should still carry the highlight
+    await superdoc.assertCommentHighlightExists({ text: 'quick' });
+    await superdoc.assertCommentHighlightExists({ text: 'brown' });
+    await superdoc.assertCommentHighlightExists({ text: 'fox' });
 
     // Italic applied to "brown"
     await superdoc.assertTextHasMarks('brown', ['italic']);

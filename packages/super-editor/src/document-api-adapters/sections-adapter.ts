@@ -37,6 +37,7 @@ import { rejectTrackedMode } from './helpers/mutation-helpers.js';
 import { executeOutOfBandMutation } from './out-of-band-mutation.js';
 import {
   ensureSettingsRoot,
+  readSettingsRoot,
   hasOddEvenHeadersFooters,
   setOddEvenHeadersFooters as setOddEvenHeadersInSettings,
   type ConverterWithDocumentSettings,
@@ -254,6 +255,7 @@ function sectionMutationBySectPr<TInput extends { target: SectionAddress }>(
     sectPr: XmlElement,
     projection: SectionProjection,
     sections: SectionProjection[],
+    dryRun: boolean,
   ) => SectionMutationResult | void,
 ): SectionMutationResult {
   rejectTrackedMode(operationName, options);
@@ -265,10 +267,12 @@ function sectionMutationBySectPr<TInput extends { target: SectionAddress }>(
     throw new DocumentApiAdapterError('TARGET_NOT_FOUND', 'Section target was not found.', { target: input.target });
   }
 
+  const dryRun = options?.dryRun === true;
+
   const currentSectPr = readTargetSectPr(editor, projection);
   const nextSectPr = ensureSectPrElement(currentSectPr);
   const before = JSON.stringify(nextSectPr);
-  const earlyResult = mutate(nextSectPr, projection, sections);
+  const earlyResult = mutate(nextSectPr, projection, sections, dryRun);
   if (earlyResult) return earlyResult;
 
   const changed = before !== JSON.stringify(nextSectPr);
@@ -508,8 +512,9 @@ export function sectionsSetOddEvenHeadersFootersAdapter(
   return executeOutOfBandMutation<DocumentMutationResult>(
     editor,
     (dryRun) => {
-      const settingsRoot = ensureSettingsRoot(converter);
-      const before = hasOddEvenHeadersFooters(settingsRoot);
+      // Read-only check first — avoids creating word/settings.xml on dry-run or NO_OP paths.
+      const existingRoot = readSettingsRoot(converter);
+      const before = existingRoot ? hasOddEvenHeadersFooters(existingRoot) : false;
       const changed = before !== input.enabled;
 
       if (!changed) {
@@ -523,6 +528,8 @@ export function sectionsSetOddEvenHeadersFootersAdapter(
       }
 
       if (!dryRun) {
+        // Only now create the settings part if needed.
+        const settingsRoot = ensureSettingsRoot(converter);
         setOddEvenHeadersInSettings(settingsRoot, input.enabled);
         if (!converter.pageStyles) converter.pageStyles = {};
         converter.pageStyles.alternateHeaders = input.enabled;
@@ -613,7 +620,7 @@ export function sectionsSetLinkToPreviousAdapter(
     input,
     options,
     'sections.setLinkToPrevious',
-    (sectPr, projection, sections) => {
+    (sectPr, projection, sections, dryRun) => {
       if (projection.range.sectionIndex === 0) {
         return toSectionFailure('INVALID_TARGET', 'sections.setLinkToPrevious cannot target the first section.');
       }
@@ -643,6 +650,14 @@ export function sectionsSetLinkToPreviousAdapter(
 
       const refs = readSectPrHeaderFooterRefs(previousSectPr, input.kind);
       const inheritedRef = refs?.[input.variant] ?? refs?.default;
+
+      // During dry-run, skip part allocation to avoid mutating converter state.
+      // Use a sentinel ref ID so the sectPr change is still detected.
+      if (dryRun) {
+        setSectPrHeaderFooterRef(sectPr, input.kind, input.variant, '(dry-run)');
+        return;
+      }
+
       const explicitRefId = createExplicitHeaderFooterReference(editor, {
         kind: input.kind,
         variant: input.variant,

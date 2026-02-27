@@ -34,6 +34,16 @@ function ensureSettingsRootElements(settingsRoot: XmlElement): XmlElement[] {
   return settingsRoot.elements;
 }
 
+/**
+ * Read-only lookup: returns the existing settings root without creating parts.
+ * Returns null when word/settings.xml is absent.
+ */
+export function readSettingsRoot(converter: ConverterWithDocumentSettings): XmlElement | null {
+  const part = converter.convertedXml?.[SETTINGS_PART_PATH] as XmlElement | undefined;
+  if (!part) return null;
+  return findSettingsRoot(part);
+}
+
 export function ensureSettingsRoot(converter: ConverterWithDocumentSettings): XmlElement {
   if (!converter.convertedXml) converter.convertedXml = {};
 

@@ -193,6 +193,100 @@ describe('sections adapter DOCX integration', () => {
     expect(refIdMatches?.length ?? 0).toBe(1);
   });
 
+  it('dry-run setLinkToPrevious does not allocate header/footer parts or relationships', () => {
+    ({ editor } = initTestEditor({
+      content: docData.docx,
+      media: docData.media,
+      mediaFiles: docData.mediaFiles,
+      fonts: docData.fonts,
+      useImmediateSetTimeout: false,
+    }));
+
+    const sectionBreakResult = createSectionBreakAdapter(
+      editor,
+      { at: { kind: 'documentEnd' }, breakType: 'nextPage' },
+      DIRECT_MUTATION_OPTIONS,
+    );
+    expect(sectionBreakResult.success).toBe(true);
+
+    const converter = (editor as unknown as { converter?: { convertedXml?: Record<string, unknown> } }).converter!;
+    const xmlKeysBefore = Object.keys(converter.convertedXml ?? {}).sort();
+    const relsBefore = JSON.stringify(converter.convertedXml?.['word/_rels/document.xml.rels']);
+
+    const targetSection = getSectionAddressByIndex(editor, 1);
+    const dryRunResult = sectionsSetLinkToPreviousAdapter(
+      editor,
+      {
+        target: targetSection,
+        kind: 'header',
+        variant: 'default',
+        linked: false,
+      },
+      { ...DIRECT_MUTATION_OPTIONS, dryRun: true },
+    );
+    expect(dryRunResult.success).toBe(true);
+
+    // Converter state must be untouched — no new parts, no new relationships.
+    const xmlKeysAfter = Object.keys(converter.convertedXml ?? {}).sort();
+    const relsAfter = JSON.stringify(converter.convertedXml?.['word/_rels/document.xml.rels']);
+    expect(xmlKeysAfter).toEqual(xmlKeysBefore);
+    expect(relsAfter).toEqual(relsBefore);
+  });
+
+  it('dry-run setOddEvenHeadersFooters does not create word/settings.xml when absent', () => {
+    ({ editor } = initTestEditor({
+      content: docData.docx,
+      media: docData.media,
+      mediaFiles: docData.mediaFiles,
+      fonts: docData.fonts,
+      useImmediateSetTimeout: false,
+    }));
+
+    const converter = (editor as unknown as { converter?: { convertedXml?: Record<string, unknown> } }).converter!;
+
+    // Remove word/settings.xml if it exists so we can verify it is not re-created.
+    if (converter.convertedXml) {
+      delete converter.convertedXml['word/settings.xml'];
+    }
+
+    const dryRunResult = sectionsSetOddEvenHeadersFootersAdapter(
+      editor,
+      { enabled: true },
+      { ...DIRECT_MUTATION_OPTIONS, dryRun: true },
+    );
+    expect(dryRunResult.success).toBe(true);
+
+    // settings.xml must NOT have been created during dry-run.
+    expect(converter.convertedXml?.['word/settings.xml']).toBeUndefined();
+  });
+
+  it('NO_OP setOddEvenHeadersFooters does not create word/settings.xml when absent', () => {
+    ({ editor } = initTestEditor({
+      content: docData.docx,
+      media: docData.media,
+      mediaFiles: docData.mediaFiles,
+      fonts: docData.fonts,
+      useImmediateSetTimeout: false,
+    }));
+
+    const converter = (editor as unknown as { converter?: { convertedXml?: Record<string, unknown> } }).converter!;
+
+    // Remove word/settings.xml so the NO_OP path (enabled: false when already false) is tested.
+    if (converter.convertedXml) {
+      delete converter.convertedXml['word/settings.xml'];
+    }
+
+    // Odd/even is already false (absent), requesting false → NO_OP.
+    const noOpResult = sectionsSetOddEvenHeadersFootersAdapter(editor, { enabled: false }, DIRECT_MUTATION_OPTIONS);
+    expect(noOpResult.success).toBe(false);
+    if (!noOpResult.success) {
+      expect(noOpResult.failure.code).toBe('NO_OP');
+    }
+
+    // settings.xml must NOT have been created for a NO_OP.
+    expect(converter.convertedXml?.['word/settings.xml']).toBeUndefined();
+  });
+
   it('rejects header/footer refs that are missing from document relationships', () => {
     ({ editor } = initTestEditor({
       content: docData.docx,

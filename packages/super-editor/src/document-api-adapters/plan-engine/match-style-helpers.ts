@@ -15,7 +15,7 @@ import { resolveRunProperties } from '@superdoc/style-engine/ooxml';
 import type { OoxmlResolverParams, RunProperties, ParagraphProperties } from '@superdoc/style-engine/ooxml';
 import type { CapturedRun } from './style-resolver.js';
 import { planError } from './errors.js';
-import { deriveToggleState } from './mark-directives.js';
+import { deriveToggleState, isSimpleToggleOffValue } from './mark-directives.js';
 
 /** A PM mark as visible on CapturedRun.marks — minimal shape for style extraction. */
 type PmMark = CapturedRun['marks'][number];
@@ -43,13 +43,13 @@ function buildInlineRpr(marks: readonly PmMark[]): RunProperties {
   for (const mark of marks) {
     switch (mark.type.name) {
       case 'bold':
-        rpr.bold = mark.attrs.value !== '0';
+        rpr.bold = !isSimpleToggleOffValue(mark.attrs.value);
         break;
       case 'italic':
-        rpr.italic = mark.attrs.value !== '0';
+        rpr.italic = !isSimpleToggleOffValue(mark.attrs.value);
         break;
       case 'strike':
-        rpr.strike = mark.attrs.value !== '0';
+        rpr.strike = !isSimpleToggleOffValue(mark.attrs.value);
         break;
       case 'underline': {
         const ut = mark.attrs.underlineType;

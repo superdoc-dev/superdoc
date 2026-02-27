@@ -340,6 +340,32 @@ describe('toMatchStyle — cascade resolution', () => {
     expect(inlineRpr.bold).toBe(true);
     expect(inlineRpr.styleId).toBe('Emphasis');
   });
+
+  it('passes boolean false toggle marks as false in inline run properties', () => {
+    resolveRunPropertiesMock.mockClear();
+    resolveRunPropertiesMock.mockReturnValue({});
+
+    // bold OFF is explicit, while others are clear (which triggers cascade resolution)
+    const marks = [mockMark('bold', { value: false })];
+    toMatchStyle(marks as any, baseCascadeContext);
+
+    expect(resolveRunPropertiesMock).toHaveBeenCalledTimes(1);
+    const [, inlineRpr] = resolveRunPropertiesMock.mock.calls[0];
+    expect(inlineRpr.bold).toBe(false);
+  });
+
+  it('passes numeric 0 toggle marks as false in inline run properties', () => {
+    resolveRunPropertiesMock.mockClear();
+    resolveRunPropertiesMock.mockReturnValue({});
+
+    // bold OFF is explicit, while others are clear (which triggers cascade resolution)
+    const marks = [mockMark('bold', { value: 0 })];
+    toMatchStyle(marks as any, baseCascadeContext);
+
+    expect(resolveRunPropertiesMock).toHaveBeenCalledTimes(1);
+    const [, inlineRpr] = resolveRunPropertiesMock.mock.calls[0];
+    expect(inlineRpr.bold).toBe(false);
+  });
 });
 
 // ---------------------------------------------------------------------------

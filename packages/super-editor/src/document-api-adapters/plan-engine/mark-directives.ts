@@ -33,8 +33,18 @@ interface ToggleMarkSpec {
   createOn: (markType: PmMarkType, existingMark?: PmMark) => PmMark;
 }
 
+/**
+ * Core-4 toggle OFF values seen across import paths:
+ * - canonical string token: `'0'`
+ * - legacy/strict parser boolean token: `false`
+ * - numeric token from permissive decoders: `0`
+ */
+export function isSimpleToggleOffValue(value: unknown): boolean {
+  return value === '0' || value === false || value === 0;
+}
+
 function isSimpleToggleOff(mark: PmMark): boolean {
-  return mark.attrs.value === '0';
+  return isSimpleToggleOffValue(mark.attrs.value);
 }
 
 function isSimpleToggleOn(mark: PmMark): boolean {

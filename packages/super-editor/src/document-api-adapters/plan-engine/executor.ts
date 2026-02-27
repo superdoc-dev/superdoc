@@ -277,7 +277,7 @@ function mergeUnderlineAttrs(currentAttrs: Record<string, unknown>, patchValue: 
   const next = { ...currentAttrs };
 
   if (patchValue === true) {
-    if (!next.underlineType) next.underlineType = 'single';
+    if (!next.underlineType || next.underlineType === 'none') next.underlineType = 'single';
     return compactAttrs(next);
   }
 

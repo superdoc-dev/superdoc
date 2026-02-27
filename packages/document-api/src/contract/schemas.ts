@@ -3,6 +3,7 @@ import { CONTRACT_VERSION, JSON_SCHEMA_DIALECT, OPERATION_IDS, type OperationId 
 import { NODE_TYPES, BLOCK_NODE_TYPES, DELETABLE_BLOCK_NODE_TYPES, INLINE_NODE_TYPES } from '../types/base.js';
 import { ALIGNMENTS } from '../format/format.js';
 import { INLINE_PROPERTY_REGISTRY, buildInlineRunPatchSchema } from '../format/inline-run-patch.js';
+import { INLINE_DIRECTIVES } from '../types/style-policy.types.js';
 
 type JsonSchema = Record<string, unknown>;
 
@@ -273,16 +274,30 @@ const SHARED_DEFS: Record<string, JsonSchema> = {
       styleId: { type: 'string' },
       styles: objectSchema(
         {
-          bold: { type: 'boolean' },
-          italic: { type: 'boolean' },
-          underline: { type: 'boolean' },
-          strike: { type: 'boolean' },
+          direct: objectSchema(
+            {
+              bold: { enum: [...INLINE_DIRECTIVES] },
+              italic: { enum: [...INLINE_DIRECTIVES] },
+              underline: { enum: [...INLINE_DIRECTIVES] },
+              strike: { enum: [...INLINE_DIRECTIVES] },
+            },
+            ['bold', 'italic', 'underline', 'strike'],
+          ),
+          effective: objectSchema(
+            {
+              bold: { type: 'boolean' },
+              italic: { type: 'boolean' },
+              underline: { type: 'boolean' },
+              strike: { type: 'boolean' },
+            },
+            ['bold', 'italic', 'underline', 'strike'],
+          ),
           color: { type: 'string' },
           highlight: { type: 'string' },
           fontFamily: { type: 'string' },
           fontSizePt: { type: 'number' },
         },
-        ['bold', 'italic', 'underline', 'strike'],
+        ['direct', 'effective'],
       ),
       ref: { type: 'string' },
     },
@@ -351,17 +366,23 @@ void matchRunSchema;
 
 /**
  * Builds a DiscoveryResult schema wrapping the given item schema.
+ * When `metaSchema` is provided, a required `meta` field is added to the envelope.
  */
-function discoveryResultSchema(itemSchema: JsonSchema): JsonSchema {
-  return objectSchema(
-    {
-      evaluatedRevision: { type: 'string' },
-      total: { type: 'integer', minimum: 0 },
-      items: arraySchema(itemSchema),
-      page: pageInfoSchema,
-    },
-    ['evaluatedRevision', 'total', 'items', 'page'],
-  );
+function discoveryResultSchema(itemSchema: JsonSchema, metaSchema?: JsonSchema): JsonSchema {
+  const properties: Record<string, JsonSchema> = {
+    evaluatedRevision: { type: 'string' },
+    total: { type: 'integer', minimum: 0 },
+    items: arraySchema(itemSchema),
+    page: pageInfoSchema,
+  };
+  const required = ['evaluatedRevision', 'total', 'items', 'page'];
+
+  if (metaSchema) {
+    properties.meta = metaSchema;
+    required.push('meta');
+  }
+
+  return objectSchema(properties, required);
 }
 
 /**
@@ -2116,7 +2137,10 @@ const operationSchemas: Record<OperationId, OperationSchemaSet> = {
         ['matchKind', 'address', 'blocks'],
       );
 
-      return discoveryResultSchema({ oneOf: [textMatchItemSchema, nodeMatchItemSchema] });
+      // query.match meta schema — effectiveResolved is required.
+      const queryMatchMetaSchema = objectSchema({ effectiveResolved: { type: 'boolean' } }, ['effectiveResolved']);
+
+      return discoveryResultSchema({ oneOf: [textMatchItemSchema, nodeMatchItemSchema] }, queryMatchMetaSchema);
     })(),
   },
   'mutations.preview': {

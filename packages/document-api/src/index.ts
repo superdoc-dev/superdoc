@@ -5,6 +5,7 @@
 export * from './types/index.js';
 export * from './contract/index.js';
 export * from './capabilities/capabilities.js';
+export * from './inline-semantics/index.js';
 
 import type {
   CreateParagraphInput,

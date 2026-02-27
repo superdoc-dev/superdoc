@@ -45,6 +45,7 @@ import { getBlockIndex } from '../helpers/index-cache.js';
 import { resolveBlockInsertionPos } from './create-insertion.js';
 import { applyDirectMutationMeta, applyTrackedMutationMeta } from '../helpers/transaction-meta.js';
 import { captureRunsInRange, resolveInlineStyle } from './style-resolver.js';
+import { TOGGLE_MARK_SPECS } from './mark-directives.js';
 import { mapBlockNodeType } from '../helpers/node-address-resolver.js';
 import { resolveWithinScope, scopeByRange } from '../helpers/adapter-utils.js';
 import { normalizeReplacementText } from './replacement-normalizer.js';
@@ -62,6 +63,7 @@ const DEFAULT_INLINE_POLICY: import('@superdoc/document-api').InlineStylePolicy 
   mode: 'preserve',
   onNonUniform: 'majority',
 };
+const CORE_SET_MARK_KEYS = ['bold', 'italic', 'underline', 'strike'] as const;
 
 function asProseMirrorMarks(marks: readonly unknown[]): readonly ProseMirrorMark[] {
   return marks as readonly ProseMirrorMark[];
@@ -90,10 +92,25 @@ function buildMarksFromSetMarks(editor: Editor, setMarks?: SetMarks): readonly P
   if (!setMarks) return [];
   const { schema } = editor.state;
   const marks: ProseMirrorMark[] = [];
-  if (setMarks.bold && schema.marks.bold) marks.push(schema.marks.bold.create());
-  if (setMarks.italic && schema.marks.italic) marks.push(schema.marks.italic.create());
-  if (setMarks.underline && schema.marks.underline) marks.push(schema.marks.underline.create());
-  if (setMarks.strike && schema.marks.strike) marks.push(schema.marks.strike.create());
+
+  for (const key of CORE_SET_MARK_KEYS) {
+    const directive = setMarks[key];
+    if (!directive) continue;
+
+    const spec = TOGGLE_MARK_SPECS[key];
+    const markType = schema.marks[spec.schemaName];
+    if (!markType) continue;
+
+    if (directive === 'on') {
+      marks.push(spec.createOn(markType as unknown as { create: MarkType['create'] }) as unknown as ProseMirrorMark);
+      continue;
+    }
+    if (directive === 'off') {
+      marks.push(markType.create(spec.offAttrs));
+    }
+    // `clear` intentionally emits no mark.
+  }
+
   return marks;
 }
 

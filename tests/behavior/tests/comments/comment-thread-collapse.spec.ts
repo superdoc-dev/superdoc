@@ -23,7 +23,7 @@ test('thread with 3+ replies collapses and expands on click', async ({ superdoc 
     commentText: 'parent comment',
   });
 
-  // Add 4 replies to trigger collapse (threshold is childComments.length >= 3)
+  // Add 4 replies to trigger collapse (threshold is childComments.length >= 2)
   await replyToComment(superdoc.page, { parentCommentId: commentId, text: 'reply one' });
   await replyToComment(superdoc.page, { parentCommentId: commentId, text: 'reply two' });
   await replyToComment(superdoc.page, { parentCommentId: commentId, text: 'reply three' });
@@ -41,8 +41,8 @@ test('thread with 3+ replies collapses and expands on click', async ({ superdoc 
   await expect(collapsedPill).toBeVisible({ timeout: 5_000 });
   await expect(collapsedPill).toContainText('more replies');
 
-  // In collapsed state: parent + first reply + last reply = 3 visible conversation items
-  await expect(dialog.locator('.conversation-item')).toHaveCount(3);
+  // In collapsed state: parent + last reply = 2 visible conversation items
+  await expect(dialog.locator('.conversation-item')).toHaveCount(2);
 
   // Click the collapsed pill to expand all replies
   await collapsedPill.click();

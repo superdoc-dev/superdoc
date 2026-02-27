@@ -985,7 +985,7 @@ watch(editingCommentId, (commentId) => {
   justify-content: flex-end;
   width: 100%;
 }
-.sd-button {
+.comment-footer .sd-button {
   font-size: 12px;
   margin-left: 5px;
 }

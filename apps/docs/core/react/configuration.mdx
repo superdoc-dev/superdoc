@@ -1,0 +1,163 @@
+---
+title: Configuration
+keywords: "superdoc react props, react editor configuration, superdoc component props, react docx settings"
+---
+
+All props are passed directly to the `<SuperDocEditor>` component. Only `document` is required.
+
+## Quick start
+
+```jsx
+<SuperDocEditor
+  document={file}
+  documentMode="editing"
+  user={{ name: 'Jane', email: 'jane@company.com' }}
+  onReady={({ superdoc }) => console.log('Ready', superdoc)}
+/>
+```
+
+## Document props
+
+<ParamField path="document" type="File | Blob | string | object" required>
+  Document to load. Accepts a `File`, `Blob`, URL string, or config object.
+
+  <Expandable title="Config object format">
+    ```json
+    {
+      "id": "doc-123",
+      "type": "docx",
+      "data": File,
+      "url": "https://example.com/doc.docx"
+    }
+    ```
+    Use `data` for local files and `url` for remote files.
+  </Expandable>
+</ParamField>
+
+<ParamField path="documentMode" type="'editing' | 'viewing' | 'suggesting'" default="'editing'">
+  Initial editing mode.
+
+  | Mode | Description |
+  |------|-------------|
+  | `editing` | Full editing capabilities |
+  | `viewing` | Read-only presentation |
+  | `suggesting` | Track changes mode |
+
+  <Tip>
+  Changing `documentMode` via props is efficient — the component calls `setDocumentMode()` internally without rebuilding.
+  </Tip>
+</ParamField>
+
+<ParamField path="role" type="'editor' | 'viewer' | 'suggester'" default="'editor'">
+  User's permission level.
+
+  | Role | Can Edit | Can Suggest | Can View |
+  |------|----------|-------------|----------|
+  | `editor` | Yes | Yes | Yes |
+  | `suggester` | No | Yes | Yes |
+  | `viewer` | No | No | Yes |
+</ParamField>
+
+## User props
+
+<ParamField path="user" type="{ name: string, email: string, image?: string }">
+  Current user information.
+</ParamField>
+
+<ParamField path="users" type="Array<{ name: string, email: string, image?: string }>">
+  All users (used for @-mentions).
+</ParamField>
+
+## UI props
+
+<ParamField path="id" type="string">
+  Custom container ID. Auto-generated if not provided.
+</ParamField>
+
+<ParamField path="hideToolbar" type="boolean" default="false">
+  Hide the toolbar.
+</ParamField>
+
+<ParamField path="rulers" type="boolean">
+  Show or hide rulers. Uses SuperDoc default if not set.
+</ParamField>
+
+<ParamField path="className" type="string">
+  CSS class for the wrapper element.
+</ParamField>
+
+<ParamField path="style" type="CSSProperties">
+  Inline styles for the wrapper element.
+</ParamField>
+
+<ParamField path="renderLoading" type="() => ReactNode">
+  Custom loading UI rendered while SuperDoc initializes.
+
+  ```jsx
+  <SuperDocEditor
+    document={file}
+    renderLoading={() => <div className="spinner">Loading...</div>}
+  />
+  ```
+</ParamField>
+
+## Event callbacks
+
+<ParamField path="onReady" type="({ superdoc }) => void">
+  Fires when the editor is initialized and ready.
+</ParamField>
+
+<ParamField path="onEditorCreate" type="({ editor }) => void">
+  Fires when the ProseMirror editor instance is created.
+</ParamField>
+
+<ParamField path="onEditorDestroy" type="() => void">
+  Fires when the editor is destroyed.
+</ParamField>
+
+<ParamField path="onEditorUpdate" type="({ editor }) => void">
+  Fires when the document content changes.
+</ParamField>
+
+<ParamField path="onContentError" type="({ error, editor, documentId, file }) => void">
+  Fires on document parsing errors.
+</ParamField>
+
+<ParamField path="onException" type="({ error }) => void">
+  Fires on runtime errors.
+</ParamField>
+
+## Advanced props
+
+<ParamField path="modules" type="object">
+  Configure collaboration, AI, comments, PDF, whiteboard, and other modules.
+
+  ```jsx
+  <SuperDocEditor
+    document={file}
+    modules={{
+      collaboration: { ydoc, provider },
+      whiteboard: { enabled: true },
+    }}
+  />
+  ```
+</ParamField>
+
+<Note>
+The component extends `SuperDocConfig` — any option from the [core configuration](/core/superdoc/configuration) can be passed as a prop.
+</Note>
+
+## Props that trigger rebuild
+
+These props trigger a full instance rebuild when changed:
+
+| Prop | Reason |
+|------|--------|
+| `document` | New document to load |
+| `user` | User identity changed |
+| `users` | Users list changed |
+| `modules` | Module configuration changed |
+| `role` | Permission level changed |
+| `hideToolbar` | Toolbar visibility changed |
+
+Other props like `documentMode` and callbacks are handled efficiently without rebuild.

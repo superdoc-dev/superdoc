@@ -88,6 +88,10 @@
                   "core/supereditor/methods",
                   "core/supereditor/events"
                 ]
+              },
+              {
+                "group": "React",
+                "pages": ["core/react/overview", "core/react/configuration", "core/react/methods", "core/react/types"]
               }
             ]
           },

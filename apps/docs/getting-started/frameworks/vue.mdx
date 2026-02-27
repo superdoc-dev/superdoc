@@ -36,7 +36,7 @@ onMounted(() => {
 });
 
 onBeforeUnmount(() => {
-  superdoc = null;
+  superdoc?.destroy();
 });
 </script>
 ```
@@ -58,7 +58,7 @@ export default {
     });
   },
   beforeUnmount() {
-    this.superdoc = null;
+    this.superdoc?.destroy();
   }
 };
 </script>
@@ -164,7 +164,6 @@ const handleFile = (event) => {
 <script setup lang="ts">
 import { ref, onMounted } from 'vue';
 import { SuperDoc } from 'superdoc';
-import type { SuperDocConfig } from 'superdoc';
 
 interface Props {
   document: string | File | Blob;
@@ -178,17 +177,15 @@ let superdoc: SuperDoc | null = null;
 
 onMounted(() => {
   if (!container.value) return;
-  
-  const config: SuperDocConfig = {
+
+  superdoc = new SuperDoc({
     selector: container.value,
     document: props.document,
     user: {
       name: props.userId,
       email: `${props.userId}@company.com`
-    }
-  };
-  
-  superdoc = new SuperDoc(config);
+    },
+  });
 });
 
 defineExpose({

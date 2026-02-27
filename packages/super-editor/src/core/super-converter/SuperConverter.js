@@ -188,6 +188,7 @@ class SuperConverter {
     this.comments = [];
     this.footnotes = [];
     this.footnoteProperties = null;
+    this.viewSetting = null;
     this.inlineDocumentFonts = [];
     this.commentThreadingProfile = null;
 

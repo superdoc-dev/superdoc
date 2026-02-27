@@ -3946,10 +3946,12 @@ export class PresentationEditor extends EventEmitter {
       return;
     }
 
-    // When a non-empty selection spans only structural tokens (e.g., run open/close
-    // tokens at a mark boundary), the DOM Range produces no visible rects. Preserve
-    // the last overlay to prevent flicker during drag selection across mark boundaries.
-    if (domRects.length === 0 && from !== to) {
+    // When dragging across mark boundaries, the selection can briefly land in the
+    // 2-position structural gap between adjacent runs, producing zero DOM rects for
+    // one frame. Preserve the last overlay only during active drag to prevent flicker.
+    // Outside drag (scroll, programmatic changes), zero rects means the DOM is stale
+    // or virtualized — clearing the overlay is the safer default.
+    if (domRects.length === 0 && from !== to && this.#editorInputManager?.isDragging) {
       debugLog('warn', '[drawSelection] zero rects for non-collapsed selection — preserving last overlay', {
         from,
         to,

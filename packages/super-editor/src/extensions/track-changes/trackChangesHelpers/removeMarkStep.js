@@ -52,6 +52,10 @@ export const removeMarkStep = ({ state, step, newTr, doc, user, date }) => {
           after = [
             ...formatChangeMark.attrs.after.filter((mark) => !markSnapshotMatchesStepMark(mark, step.mark, true)),
           ];
+          if (after.length === 0) {
+            newTr.removeMark(Math.max(step.from, pos), Math.min(step.to, pos + node.nodeSize), formatChangeMark);
+            return;
+          }
           before = [...formatChangeMark.attrs.before];
         } else {
           after = [...formatChangeMark.attrs.after];

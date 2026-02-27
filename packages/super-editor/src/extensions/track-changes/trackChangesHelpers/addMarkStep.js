@@ -93,11 +93,7 @@ export const addMarkStep = ({ state, step, newTr, doc, user, date }) => {
           before,
           after,
         });
-        newTr.addMark(
-          step.from, // Math.max(step.from, pos)
-          step.to, // Math.min(step.to, pos + node.nodeSize),
-          newFormatMark,
-        );
+        newTr.addMark(Math.max(step.from, pos), Math.min(step.to, pos + node.nodeSize), newFormatMark);
 
         meta.formatMark = newFormatMark;
         meta.step = step;

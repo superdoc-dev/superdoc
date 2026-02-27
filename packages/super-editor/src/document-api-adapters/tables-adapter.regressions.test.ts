@@ -232,6 +232,13 @@ function makeTableEditor(): Editor {
   } as unknown as Editor;
 }
 
+function getTableGridUpdateAttrs(tr: { setNodeMarkup: ReturnType<typeof vi.fn> }): Record<string, unknown> | undefined {
+  const tableUpdateCall = tr.setNodeMarkup.mock.calls.find(
+    (call) => call[0] === 0 && typeof call[2] === 'object' && call[2] != null && 'grid' in call[2],
+  );
+  return tableUpdateCall?.[2] as Record<string, unknown> | undefined;
+}
+
 describe('tables-adapter regressions', () => {
   it('uses target-cell row coordinates for shiftRight insert on non-first cells', () => {
     const editor = makeTableEditor();
@@ -290,14 +297,49 @@ describe('tables-adapter regressions', () => {
 
     expect(result.success).toBe(true);
 
-    const tableUpdateCall = tr.setNodeMarkup.mock.calls.find(
-      (call) => call[0] === 0 && typeof call[2] === 'object' && call[2] != null && 'grid' in call[2],
-    );
-
-    expect(tableUpdateCall).toBeDefined();
-    expect(tableUpdateCall?.[2]).toMatchObject({
+    expect(getTableGridUpdateAttrs(tr)).toMatchObject({
       userEdited: true,
       grid: [{ col: 2250 }, { col: 2250 }],
+    });
+  });
+
+  it('updates object-shaped grid colWidths when distributing columns', () => {
+    const editor = makeTableEditor();
+    const tr = editor.state.tr as unknown as { setNodeMarkup: ReturnType<typeof vi.fn> };
+    const tableNode = editor.state.doc.nodeAt(0) as ProseMirrorNode;
+    (tableNode.attrs as Record<string, unknown>).grid = {
+      source: 'ooxml',
+      colWidths: [{ col: 1200 }, { col: 3000 }],
+    };
+
+    const result = tablesDistributeColumnsAdapter(editor, {
+      nodeId: 'table-1',
+      columnRange: { start: 0, end: 1 },
+    });
+
+    expect(result.success).toBe(true);
+    expect(getTableGridUpdateAttrs(tr)).toMatchObject({
+      userEdited: true,
+      grid: {
+        source: 'ooxml',
+        colWidths: [{ col: 2250 }, { col: 2250 }],
+      },
+    });
+  });
+
+  it('only updates grid columns inside the requested range', () => {
+    const editor = makeTableEditor();
+    const tr = editor.state.tr as unknown as { setNodeMarkup: ReturnType<typeof vi.fn> };
+
+    const result = tablesDistributeColumnsAdapter(editor, {
+      nodeId: 'table-1',
+      columnRange: { start: 0, end: 0 },
+    });
+
+    expect(result.success).toBe(true);
+    expect(getTableGridUpdateAttrs(tr)).toMatchObject({
+      userEdited: true,
+      grid: [{ col: 1500 }, { col: 3000 }],
     });
   });
 

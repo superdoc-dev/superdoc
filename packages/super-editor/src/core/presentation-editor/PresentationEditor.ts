@@ -261,6 +261,8 @@ export class PresentationEditor extends EventEmitter {
   }
 
   #options: PresentationEditorOptions;
+  /** Key used to register this instance in the static registry. Separate from options.documentId to avoid mutating caller's object. */
+  #registryKey: string | null = null;
   #editor: Editor;
   #visibleHost: HTMLElement;
   #viewportHost: HTMLElement;
@@ -611,11 +613,10 @@ export class PresentationEditor extends EventEmitter {
       this.#syncTrackedChangesPreferences();
 
       // Register this instance in the static registry.
-      // Generate a fallback ID when documentId is not provided (e.g., blank documents)
-      // so that setGlobalZoom() can always find and update all instances.
-      const registryKey = options.documentId || `__anonymous_${Date.now()}_${Math.random().toString(36).slice(2)}`;
-      this.#options.documentId = registryKey;
-      PresentationEditor.#instances.set(registryKey, this);
+      // Use a separate field to avoid mutating the caller's options object and to keep
+      // the registry key consistent with the overlay ID set earlier (line ~453).
+      this.#registryKey = options.documentId || `__anonymous_${Date.now()}_${Math.random().toString(36).slice(2)}`;
+      PresentationEditor.#instances.set(this.#registryKey, this);
 
       this.#pendingDocChange = true;
       this.#scheduleRerender();
@@ -2302,8 +2303,9 @@ export class PresentationEditor extends EventEmitter {
     }
 
     // Unregister from static registry
-    if (this.#options?.documentId) {
-      PresentationEditor.#instances.delete(this.#options.documentId);
+    if (this.#registryKey) {
+      PresentationEditor.#instances.delete(this.#registryKey);
+      this.#registryKey = null;
     }
 
     // Clean up header/footer session manager
@@ -4881,13 +4883,17 @@ export class PresentationEditor extends EventEmitter {
 
       this.#viewportHost.style.width = `${scaledWidth}px`;
       this.#viewportHost.style.minWidth = `${scaledWidth}px`;
-      this.#viewportHost.style.minHeight = '';
-      this.#viewportHost.style.height = `${scaledHeight}px`;
-      this.#viewportHost.style.overflow = 'hidden';
+      this.#viewportHost.style.minHeight = `${scaledHeight}px`;
+      this.#viewportHost.style.height = '';
+      this.#viewportHost.style.overflow = '';
       this.#viewportHost.style.transform = '';
 
       this.#painterHost.style.width = `${totalWidth}px`;
       this.#painterHost.style.minHeight = `${maxHeight}px`;
+      // Negative margin compensates for the CSS box overflow from transform: scale().
+      // At zoom < 1 the unscaled CSS box is larger than the visual; this pulls the
+      // bottom edge up to match, without clipping overlays (e.g., cursor labels).
+      this.#painterHost.style.marginBottom = zoom !== 1 ? `${maxHeight * zoom - maxHeight}px` : '';
       this.#painterHost.style.transformOrigin = 'top left';
       this.#painterHost.style.transform = zoom === 1 ? '' : `scale(${zoom})`;
 
@@ -4907,29 +4913,29 @@ export class PresentationEditor extends EventEmitter {
     // This ensures the scroll container sees the correct scaled content size while
     // the transform provides visual scaling.
     //
-    // IMPORTANT: CSS transform: scale() does NOT change the element's CSS box dimensions.
+    // CSS transform: scale() does NOT change the element's CSS box dimensions.
     // At zoom < 1, painterHost's CSS box stays at the full unscaled height while its
-    // visual size is smaller. Without overflow: hidden, the CSS box would push viewportHost
-    // taller than intended, creating extra scrollable space at the bottom.
-    // Using explicit height + overflow: hidden ensures the scroll container sees only
-    // the scaled visual size.
+    // visual size is smaller. A negative margin-bottom on painterHost compensates for
+    // the difference, so the scroll container sees the correct scaled size without
+    // clipping overlays (e.g., collaboration cursor labels that extend above their caret).
     const scaledWidth = maxWidth * zoom;
     const scaledHeight = totalHeight * zoom;
 
-    // Set viewport to scaled dimensions for scroll container.
-    // Use explicit height (not just minHeight) with overflow: hidden to prevent
-    // painterHost's unscaled CSS box from inflating the scroll range.
     this.#viewportHost.style.width = `${scaledWidth}px`;
     this.#viewportHost.style.minWidth = `${scaledWidth}px`;
-    this.#viewportHost.style.minHeight = '';
-    this.#viewportHost.style.height = `${scaledHeight}px`;
-    this.#viewportHost.style.overflow = 'hidden';
+    this.#viewportHost.style.minHeight = `${scaledHeight}px`;
+    this.#viewportHost.style.height = '';
+    this.#viewportHost.style.overflow = '';
     this.#viewportHost.style.transform = '';
 
-    // Set painterHost to UNSCALED dimensions and apply transform
-    // This way: 816px * scale(1.5) = 1224px visual = matches viewport
+    // Set painterHost to UNSCALED dimensions and apply transform.
+    // Negative margin compensates for the CSS box overflow from transform: scale().
+    // At zoom < 1: totalHeight=74304 with scale(0.75) → visual 55728px but CSS box stays 74304px.
+    // marginBottom = totalHeight * zoom - totalHeight = 74304 * 0.75 - 74304 = -18576px
+    // This shrinks the layout contribution to match the visual size.
     this.#painterHost.style.width = `${maxWidth}px`;
     this.#painterHost.style.minHeight = `${totalHeight}px`;
+    this.#painterHost.style.marginBottom = zoom !== 1 ? `${totalHeight * zoom - totalHeight}px` : '';
     this.#painterHost.style.transformOrigin = 'top left';
     this.#painterHost.style.transform = zoom === 1 ? '' : `scale(${zoom})`;
 

@@ -3946,6 +3946,13 @@ export class PresentationEditor extends EventEmitter {
       return;
     }
 
+    // When a non-empty selection spans only structural tokens (e.g., run open/close
+    // tokens at a mark boundary), the DOM Range produces no visible rects. Preserve
+    // the last overlay to prevent flicker during drag selection across mark boundaries.
+    if (domRects.length === 0 && from !== to) {
+      return;
+    }
+
     try {
       this.#localSelectionLayer.innerHTML = '';
       const isFieldAnnotationSelection =

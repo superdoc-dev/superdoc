@@ -403,7 +403,7 @@ export function handleImageNode(node, params, isAnchor) {
       if (converter?.domEnvironment) {
         setTiffDomEnvironment(converter.domEnvironment);
       }
-      const conversionResult = convertTiffToPng(mediaData, size);
+      const conversionResult = convertTiffToPng(mediaData);
       if (conversionResult?.dataUri) {
         finalSrc = conversionResult.dataUri;
         finalExtension = conversionResult.format || 'png';

@@ -25,15 +25,16 @@ export function buildFallbackTocNodeId(node: ProseMirrorNode, pos: number): stri
 /**
  * Public TOC id used across discovery and block targeting.
  *
- * Prefers sdBlockId when present (stable within session and command-compatible),
- * otherwise falls back to a deterministic id derived from position and instruction.
+ * Must be stable across stateless re-opens of the same document so IDs returned
+ * by `toc.list` can be reused by `toc.get/configure/update/remove`.
+ *
+ * Do not use sdBlockId here: it is runtime-generated and can change every time a
+ * document is loaded.
  *
  * @param node - The tableOfContents ProseMirror node.
  * @param pos - The node's absolute position in the document.
- * @returns The sdBlockId if present, otherwise a deterministic fallback id.
+ * @returns A deterministic id derived from position + instruction.
  */
 export function resolvePublicTocNodeId(node: ProseMirrorNode, pos: number): string {
-  const sdBlockId = node.attrs?.sdBlockId;
-  if (typeof sdBlockId === 'string' && sdBlockId.length > 0) return sdBlockId;
   return buildFallbackTocNodeId(node, pos);
 }

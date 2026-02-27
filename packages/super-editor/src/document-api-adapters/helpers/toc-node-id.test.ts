@@ -45,22 +45,23 @@ describe('buildFallbackTocNodeId', () => {
 });
 
 describe('resolvePublicTocNodeId', () => {
-  it('returns sdBlockId when present', () => {
-    const node = fakeNode({ sdBlockId: 'my-block-id', instruction: 'TOC \\o "1-3"' });
-    expect(resolvePublicTocNodeId(node, 0)).toBe('my-block-id');
+  it('ignores sdBlockId so ids stay stable across stateless re-opens', () => {
+    const a = resolvePublicTocNodeId(fakeNode({ sdBlockId: 'runtime-a', instruction: 'TOC \\o "1-3"' }), 7);
+    const b = resolvePublicTocNodeId(fakeNode({ sdBlockId: 'runtime-b', instruction: 'TOC \\o "1-3"' }), 7);
+    expect(a).toBe(b);
   });
 
-  it('falls back to deterministic id when sdBlockId is missing', () => {
+  it('returns deterministic id when sdBlockId is missing', () => {
     const node = fakeNode({ instruction: 'TOC \\o "1-3"' });
     expect(resolvePublicTocNodeId(node, 0)).toMatch(/^toc-auto-/);
   });
 
-  it('falls back to deterministic id when sdBlockId is empty string', () => {
+  it('returns deterministic id when sdBlockId is empty string', () => {
     const node = fakeNode({ sdBlockId: '', instruction: 'TOC \\o "1-3"' });
     expect(resolvePublicTocNodeId(node, 0)).toMatch(/^toc-auto-/);
   });
 
-  it('falls back to deterministic id when sdBlockId is null', () => {
+  it('returns deterministic id when sdBlockId is null', () => {
     const node = fakeNode({ sdBlockId: null, instruction: 'TOC \\o "1-3"' });
     expect(resolvePublicTocNodeId(node, 0)).toMatch(/^toc-auto-/);
   });

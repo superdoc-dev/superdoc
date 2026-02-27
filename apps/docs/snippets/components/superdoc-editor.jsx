@@ -78,13 +78,17 @@ export const SuperDocEditor = ({
     let cancelled = false;
 
     const boot = async () => {
-      const baseUrl = await getBaseUrl();
-      ensureStyle(baseUrl);
-      await loadSuperDocLibrary(baseUrl);
-      if (!cancelled) initEditor();
+      try {
+        const baseUrl = await getBaseUrl();
+        ensureStyle(baseUrl);
+        await loadSuperDocLibrary(baseUrl);
+        if (!cancelled) initEditor();
+      } catch (error) {
+        console.error('Failed to boot SuperDoc:', error);
+      }
     };
 
-    void boot();
+    boot();
 
     return () => {
       cancelled = true;

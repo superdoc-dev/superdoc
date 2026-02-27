@@ -152,14 +152,26 @@ function findRangeByText(doc: ProseMirrorNode, text: string, hintFrom?: number):
     i = idx + 1;
   }
   if (matches.length === 0) return null;
-  const charOffsetFrom = matches.reduce((best, idx) => {
-    if (hintFrom == null) return matches[0];
-    const pos = charOffsetToPosition(doc, idx, TEXT_RANGE_BLOCK_SEP, TEXT_RANGE_LEAF_SEP);
-    const bestPos = charOffsetToPosition(doc, best, TEXT_RANGE_BLOCK_SEP, TEXT_RANGE_LEAF_SEP);
-    return Math.abs(pos - hintFrom) < Math.abs(bestPos - hintFrom) ? idx : best;
-  }, matches[0]);
-  const from = charOffsetToPosition(doc, charOffsetFrom, TEXT_RANGE_BLOCK_SEP, TEXT_RANGE_LEAF_SEP);
-  const to = charOffsetToPosition(doc, charOffsetFrom + text.length, TEXT_RANGE_BLOCK_SEP, TEXT_RANGE_LEAF_SEP);
+
+  const toPos = (charOffset: number) =>
+    charOffsetToPosition(doc, charOffset, TEXT_RANGE_BLOCK_SEP, TEXT_RANGE_LEAF_SEP);
+  const initial = matches[0];
+  let charOffsetFrom: number;
+  if (hintFrom == null) {
+    charOffsetFrom = initial;
+  } else {
+    const closest = matches.reduce(
+      (acc, idx) => {
+        const pos = toPos(idx);
+        const isCloser = Math.abs(pos - hintFrom) < Math.abs(acc.bestPos - hintFrom);
+        return isCloser ? { best: idx, bestPos: pos } : acc;
+      },
+      { best: initial, bestPos: toPos(initial) },
+    );
+    charOffsetFrom = closest.best;
+  }
+  const from = toPos(charOffsetFrom);
+  const to = toPos(charOffsetFrom + text.length);
   return from < to ? { from, to } : null;
 }
 
@@ -374,6 +386,8 @@ export class DecorationBridge {
           const attrs = this.#extractSafeAttrs(decoration);
           // Only include decorations that have visual styling (classes or inline style)
           if (attrs.classes.length === 0 && attrs.styleEntries.length === 0) continue;
+          // Collapsed or invalid range must not enter the cache or restore breaks
+          if (decoration.from >= decoration.to) continue;
 
           const dataAttrs: Record<string, string> = {};
           for (const [key, value] of attrs.dataEntries) dataAttrs[key] = value;

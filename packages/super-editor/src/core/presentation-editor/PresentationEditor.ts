@@ -2354,7 +2354,13 @@ export class PresentationEditor extends EventEmitter {
     const state = this.#editor?.view?.state;
     if (!state) return;
 
-    this.#decorationBridge.sync(state, this.#domPositionIndex);
+    try {
+      this.#decorationBridge.sync(state, this.#domPositionIndex);
+    } catch (error) {
+      // Sync can call findRangeByText and other doc-dependent logic; if it throws
+      // (e.g. edge-case doc state), avoid breaking the RAF or observer sync loop.
+      console.warn('[PresentationEditor] Decoration sync failed:', error);
+    }
   }
 
   /**
@@ -2477,8 +2483,10 @@ export class PresentationEditor extends EventEmitter {
         this.#decorationBridge.sync(state!, this.#domPositionIndex, {
           restoreEmptyDecorations: restoreEmpty,
         });
+      } else {
+        // No immediate sync; schedule coalesced sync on next frame.
+        this.#scheduleDecorationSync();
       }
-      this.#scheduleDecorationSync();
       if (decorationChanged) {
         this.#pendingDocChange = true;
         this.#selectionSync.onLayoutStart();

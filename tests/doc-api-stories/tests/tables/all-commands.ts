@@ -75,6 +75,9 @@ describe('document-api story: all table commands', () => {
   const clearContentsTableBySession = new Map<string, string>();
   const clearStyleTableBySession = new Map<string, string>();
   const convertToTextTableBySession = new Map<string, string>();
+  const insertCellBySession = new Map<string, string>();
+  const insertCellTableBySession = new Map<string, string>();
+  const insertCellInitialRowsBySession = new Map<string, number>();
   const deleteCellBySession = new Map<string, string>();
 
   function makeSessionId(prefix: string): string {
@@ -557,10 +560,98 @@ describe('document-api story: all table commands', () => {
     },
     {
       operationId: 'tables.insertCell',
-      setup: 'table',
-      run: async (sessionId, fixture) => {
-        const f = requireFixture('tables.insertCell', fixture);
-        return unwrap<any>(await api.doc.tables.insertCell({ sessionId, nodeId: f.cellNodeId, mode: 'shiftRight' }));
+      setup: 'blank',
+      prepare: async (sessionId) => {
+        await api.doc.insert({ sessionId, value: 'Apple\tBanana\tMango' });
+
+        for (const rowText of ['Orange\tGrape\tKiwi', 'Pear\tPeach\tPlum']) {
+          const createRowResult = unwrap<any>(
+            await api.doc.create.paragraph({
+              sessionId,
+              at: { kind: 'documentEnd' },
+              text: rowText,
+            }),
+          );
+          if (createRowResult?.success !== true) {
+            const code = createRowResult?.failure?.code ?? 'UNKNOWN';
+            throw new Error(`tables.insertCell setup failed while creating row paragraph (code: ${code}).`);
+          }
+        }
+
+        const paragraphNodeId = await firstNodeId(sessionId, 'paragraph');
+        const convertResult = unwrap<any>(
+          await api.doc.tables.convertFromText({
+            sessionId,
+            nodeId: paragraphNodeId,
+            delimiter: 'tab',
+          }),
+        );
+        assertMutationSuccess('tables.convertFromText', convertResult);
+
+        const tableNodeId = convertResult?.table?.nodeId;
+        if (!tableNodeId) {
+          throw new Error('tables.insertCell setup failed: converted table nodeId was not returned.');
+        }
+
+        const cellsResult = unwrap<any>(await api.doc.tables.getCells({ sessionId, nodeId: tableNodeId, rowIndex: 0 }));
+        const firstCellNodeId = cellsResult?.cells?.find(
+          (cell: any) => cell?.rowIndex === 0 && cell?.columnIndex === 0,
+        )?.nodeId;
+        if (!firstCellNodeId) {
+          throw new Error('tables.insertCell setup failed: first-row first-column cell was not found.');
+        }
+
+        const tableInfo = unwrap<any>(await api.doc.tables.get({ sessionId, nodeId: tableNodeId }));
+        if (typeof tableInfo?.rows !== 'number' || tableInfo.rows < 1) {
+          throw new Error('tables.insertCell setup failed: initial table row count could not be determined.');
+        }
+
+        insertCellBySession.set(sessionId, firstCellNodeId);
+        insertCellTableBySession.set(sessionId, tableNodeId);
+        insertCellInitialRowsBySession.set(sessionId, tableInfo.rows);
+      },
+      run: async (sessionId) => {
+        const cellNodeId = insertCellBySession.get(sessionId);
+        const tableNodeId = insertCellTableBySession.get(sessionId);
+        const initialRows = insertCellInitialRowsBySession.get(sessionId);
+        if (!cellNodeId) {
+          throw new Error('tables.insertCell setup failed: prepared cell nodeId was not found.');
+        }
+        if (!tableNodeId) {
+          throw new Error('tables.insertCell setup failed: prepared table nodeId was not found.');
+        }
+        if (typeof initialRows !== 'number') {
+          throw new Error('tables.insertCell setup failed: prepared initial row count was not found.');
+        }
+        insertCellBySession.delete(sessionId);
+        insertCellTableBySession.delete(sessionId);
+        insertCellInitialRowsBySession.delete(sessionId);
+
+        const result = unwrap<any>(
+          await api.doc.tables.insertCell({ sessionId, nodeId: cellNodeId, mode: 'shiftRight' }),
+        );
+        assertMutationSuccess('tables.insertCell', result);
+
+        const tableResult = unwrap<any>(await api.doc.tables.get({ sessionId, nodeId: tableNodeId }));
+        if (tableResult?.rows !== initialRows + 1) {
+          throw new Error(
+            `tables.insertCell expected row count to grow by 1 after overflow-preserving shiftRight, received ${tableResult?.rows} from initial ${initialRows}.`,
+          );
+        }
+
+        const mangoResult = unwrap<any>(
+          await api.doc.query.match({
+            sessionId,
+            select: { type: 'text', pattern: 'Mango', caseSensitive: true },
+            require: 'first',
+          }),
+        );
+        const mangoMatch = mangoResult?.items?.[0];
+        if (!mangoMatch) {
+          throw new Error('tables.insertCell expected to preserve rightmost cell content "Mango" after shiftRight.');
+        }
+
+        return result;
       },
     },
     {

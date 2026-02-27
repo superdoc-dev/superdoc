@@ -196,6 +196,7 @@ function makeTableEditor(): Editor {
   const tr = {
     delete: vi.fn().mockReturnThis(),
     insert: vi.fn().mockReturnThis(),
+    replaceWith: vi.fn().mockReturnThis(),
     setNodeMarkup: vi.fn().mockReturnThis(),
     setMeta: vi.fn().mockReturnThis(),
     mapping: {
@@ -213,13 +214,58 @@ function makeTableEditor(): Editor {
       schema: {
         nodes: {
           tableCell: {
-            createAndFill: vi.fn(() =>
-              createNode('tableCell', [mockParagraph], {
-                attrs: { colspan: 1, rowspan: 1 },
+            createAndFill: vi.fn((attrs: Record<string, unknown> = {}, content?: unknown) => {
+              const children = Array.isArray(content)
+                ? (content as ProseMirrorNode[])
+                : content
+                  ? ([content] as ProseMirrorNode[])
+                  : [mockParagraph];
+              return createNode('tableCell', children, {
+                attrs: { colspan: 1, rowspan: 1, ...attrs },
                 isBlock: true,
                 inlineContent: false,
-              }),
-            ),
+              });
+            }),
+          },
+          tableRow: {
+            createAndFill: vi.fn((attrs: Record<string, unknown> = {}, content?: unknown) => {
+              const children = Array.isArray(content)
+                ? (content as ProseMirrorNode[])
+                : content
+                  ? ([content] as ProseMirrorNode[])
+                  : [];
+              return createNode('tableRow', children, {
+                attrs,
+                isBlock: true,
+                inlineContent: false,
+              });
+            }),
+            create: vi.fn((attrs: Record<string, unknown> = {}, content?: unknown) => {
+              const children = Array.isArray(content)
+                ? (content as ProseMirrorNode[])
+                : content
+                  ? ([content] as ProseMirrorNode[])
+                  : [];
+              return createNode('tableRow', children, {
+                attrs,
+                isBlock: true,
+                inlineContent: false,
+              });
+            }),
+          },
+          table: {
+            create: vi.fn((attrs: Record<string, unknown> = {}, content?: unknown) => {
+              const children = Array.isArray(content)
+                ? (content as ProseMirrorNode[])
+                : content
+                  ? ([content] as ProseMirrorNode[])
+                  : [];
+              return createNode('table', children, {
+                attrs,
+                isBlock: true,
+                inlineContent: false,
+              });
+            }),
           },
         },
       },
@@ -240,21 +286,19 @@ function getTableGridUpdateAttrs(tr: { setNodeMarkup: ReturnType<typeof vi.fn> }
 }
 
 describe('tables-adapter regressions', () => {
-  it('uses target-cell row coordinates for shiftRight insert on non-first cells', () => {
+  it('preserves shiftRight data by rebuilding the table instead of deleting the row tail cell', () => {
     const editor = makeTableEditor();
-    const tr = editor.state.tr as unknown as { delete: ReturnType<typeof vi.fn> };
+    const tr = editor.state.tr as unknown as {
+      delete: ReturnType<typeof vi.fn>;
+      replaceWith: ReturnType<typeof vi.fn>;
+    };
     const tableNode = editor.state.doc.nodeAt(0) as ProseMirrorNode;
-    const map = TableMap.get(tableNode);
-
-    const targetRowIndex = 1;
-    const lastCellInRowOffset = map.map[targetRowIndex * map.width + (map.width - 1)]!;
-    const lastCellNode = tableNode.nodeAt(lastCellInRowOffset) as ProseMirrorNode;
-    const expectedStart = 1 + lastCellInRowOffset;
-    const expectedEnd = expectedStart + lastCellNode.nodeSize;
 
     const result = tablesInsertCellAdapter(editor, { nodeId: 'cell-4', mode: 'shiftRight' });
     expect(result.success).toBe(true);
-    expect(tr.delete).toHaveBeenCalledWith(expectedStart, expectedEnd);
+    expect(tr.delete).not.toHaveBeenCalled();
+    expect(tr.insert).toHaveBeenCalled();
+    expect(tr.replaceWith).toHaveBeenCalledWith(0, expect.any(Number), expect.anything());
   });
 
   it('inserts shiftDown cells in the same column of the next row', () => {

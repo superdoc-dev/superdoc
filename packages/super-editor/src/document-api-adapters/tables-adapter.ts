@@ -1584,8 +1584,9 @@ export function tablesConvertToTextAdapter(
 /**
  * tables.insertCell — insert a cell at a resolved position, shifting existing cells.
  *
- * `shiftRight`: inserts a new cell before the target cell in its row; the last cell
- * in that row is removed to maintain column count.
+ * `shiftRight`: inserts a new cell before the target and cascades overflow cells to
+ * subsequent rows in row-major order. If needed, appends a new trailing row so
+ * existing cell content is preserved without dropping the rightmost value.
  *
  * `shiftDown`: inserts a new cell at the same column in the row below (creating a row
  * if needed). The last cell of the target column is removed to maintain row count.
@@ -1613,18 +1614,102 @@ export function tablesInsertCellAdapter(
     const schema = editor.state.schema;
 
     if (input.mode === 'shiftRight') {
-      // Remove the last cell in this row, then insert a new cell before the target cell.
-      const lastColIdx = rowIndex * map.width + (map.width - 1);
-      const lastCellPos = map.map[lastColIdx];
-      const lastCell = tableNode.nodeAt(lastCellPos);
-      if (lastCell) {
-        tr.delete(tableStart + lastCellPos, tableStart + lastCellPos + lastCell.nodeSize);
+      const slotCount = map.width * map.height;
+      const uniqueOffsets = new Set(map.map);
+      if (uniqueOffsets.size !== slotCount) {
+        return toTableFailure(
+          'INVALID_TARGET',
+          'Cell insertion with shiftRight is not supported for merged cells in this version.',
+        );
       }
 
-      // Insert new empty cell at the target position (mapped after deletion).
-      const newCell = schema.nodes.tableCell.createAndFill()!;
-      const mappedCellPos = tr.mapping.map(cellPos);
-      tr.insert(mappedCellPos, newCell);
+      const makeEmptyCell = (preferHeader: boolean = false): import('prosemirror-model').Node => {
+        const candidateType = preferHeader
+          ? (schema.nodes.tableHeader ?? schema.nodes.tableCell)
+          : schema.nodes.tableCell;
+        return (
+          candidateType.createAndFill({
+            sdBlockId: uuidv4(),
+            paraId: generateParaId(),
+          }) ?? candidateType.createAndFill()!
+        );
+      };
+
+      // Append one empty overflow row first so we can shift without dropping
+      // the row-tail content.
+      const overflowRowCells: import('prosemirror-model').Node[] = [];
+      for (let col = 0; col < map.width; col++) {
+        const templateOffset = map.map[(map.height - 1) * map.width + col]!;
+        const templateCell = tableNode.nodeAt(templateOffset);
+        overflowRowCells.push(makeEmptyCell(templateCell?.type.name === 'tableHeader'));
+      }
+
+      const templateRowAttrs = (tableNode.child(Math.max(0, map.height - 1)).attrs as Record<string, unknown>) ?? {};
+      const overflowRowAttrs = {
+        ...templateRowAttrs,
+        sdBlockId: uuidv4(),
+        paraId: generateParaId(),
+      };
+      const overflowRow =
+        schema.nodes.tableRow.createAndFill(overflowRowAttrs, overflowRowCells) ??
+        schema.nodes.tableRow.create(overflowRowAttrs, overflowRowCells);
+      if (!overflowRow) {
+        return toTableFailure('INVALID_TARGET', 'Cell insertion could not construct an overflow row.');
+      }
+
+      tr.insert(tablePos + tableNode.nodeSize - 1, overflowRow);
+
+      const expandedTableNode = tr.doc.nodeAt(tablePos);
+      if (!expandedTableNode || expandedTableNode.type.name !== 'table') {
+        return toTableFailure('INVALID_TARGET', 'Cell insertion could not locate expanded table state.');
+      }
+
+      const expandedMap = TableMap.get(expandedTableNode);
+      const expandedSlotCount = expandedMap.width * expandedMap.height;
+      if (new Set(expandedMap.map).size !== expandedSlotCount) {
+        return toTableFailure(
+          'INVALID_TARGET',
+          'Cell insertion with shiftRight produced an unsupported merged-table shape.',
+        );
+      }
+
+      const rowMajorCells: import('prosemirror-model').Node[] = [];
+      for (let i = 0; i < expandedSlotCount; i++) {
+        const offset = expandedMap.map[i]!;
+        const cell = expandedTableNode.nodeAt(offset);
+        if (!cell) {
+          return toTableFailure('INVALID_TARGET', 'Cell insertion could not resolve expanded table cells.');
+        }
+        rowMajorCells.push(cell);
+      }
+
+      const targetLinearIndex = rowIndex * expandedMap.width + columnIndex;
+      const targetOffset = expandedMap.map[targetLinearIndex]!;
+      const targetCell = expandedTableNode.nodeAt(targetOffset);
+
+      rowMajorCells.splice(targetLinearIndex, 0, makeEmptyCell(targetCell?.type.name === 'tableHeader'));
+      rowMajorCells.pop();
+
+      const rebuiltRows: import('prosemirror-model').Node[] = [];
+      const rebuiltRowCount = rowMajorCells.length / expandedMap.width;
+      for (let rebuiltRowIndex = 0; rebuiltRowIndex < rebuiltRowCount; rebuiltRowIndex++) {
+        const sourceRow = expandedTableNode.child(rebuiltRowIndex);
+        const rowAttrs = ((sourceRow.attrs as Record<string, unknown>) ?? {}) as Record<string, unknown>;
+
+        const rowCells = rowMajorCells.slice(
+          rebuiltRowIndex * expandedMap.width,
+          (rebuiltRowIndex + 1) * expandedMap.width,
+        );
+        const rebuiltRow =
+          schema.nodes.tableRow.createAndFill(rowAttrs, rowCells) ?? schema.nodes.tableRow.create(rowAttrs, rowCells);
+        if (!rebuiltRow) {
+          return toTableFailure('INVALID_TARGET', 'Cell insertion could not construct a replacement row.');
+        }
+        rebuiltRows.push(rebuiltRow);
+      }
+
+      const rebuiltTable = schema.nodes.table.create(expandedTableNode.attrs, rebuiltRows);
+      tr.replaceWith(tablePos, tablePos + expandedTableNode.nodeSize, rebuiltTable);
     } else {
       // shiftDown: remove the last cell in this column, insert new cell at the same
       // column in the row below the target so cells shift downward within the column.

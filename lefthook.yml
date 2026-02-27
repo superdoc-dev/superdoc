@@ -1,6 +1,9 @@
 pre-commit:
   parallel: true
   commands:
+    install-deps:
+      run: pnpm install
+      stage_fixed: true
     typecheck:
       glob: "*.{ts,tsx,vue}"
       run: pnpm run type-check
@@ -10,7 +13,7 @@ pre-commit:
       stage_fixed: true
     lint:
       glob: "*.{js,jsx,ts,tsx}"
-      run: pnpm exec eslint --fix {staged_files}
+      run: pnpm exec eslint --fix --no-warn-ignored {staged_files}
       stage_fixed: true
     cli-build:
       root: "apps/cli/"
@@ -28,6 +31,17 @@ pre-commit:
       root: "apps/vscode-ext/"
       glob: "apps/vscode-ext/**/*.{ts,js}"
       run: pnpm run lint
+    docs-check-imports:
+      root: "apps/docs/"
+      glob: "apps/docs/**/*.mdx"
+      run: pnpm run check:imports
+    docs-test-examples:
+      root: "apps/docs/"
+      glob: "apps/docs/**/*.mdx"
+      run: pnpm run test:examples
+    docapi-overview-sync:
+      glob: "{packages/document-api/src/contract,packages/document-api/scripts}/**"
+      run: pnpm run docapi:sync && git add apps/docs/document-api/reference apps/docs/document-api/overview.mdx
 
 commit-msg:
   commands:

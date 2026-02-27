@@ -15,7 +15,7 @@ import type {
 } from '@superdoc/contracts';
 import { computeLinePmRange as computeLinePmRangeUnified } from '@superdoc/contracts';
 import { charOffsetToPm, findCharacterAtX, measureCharacterX } from './text-measurement.js';
-import { clickToPositionDom } from './dom-mapping.js';
+import { clickToPositionDom, findPageElement } from './dom-mapping.js';
 import {
   isListItem,
   getWordLayoutConfig,
@@ -56,7 +56,7 @@ export type { HeaderFooterLayoutResult, IncrementalLayoutResult } from './increm
 export { computeDisplayPageNumber, type DisplayPageInfo } from '@superdoc/layout-engine';
 export { remeasureParagraph } from './remeasure';
 export { measureCharacterX } from './text-measurement';
-export { clickToPositionDom } from './dom-mapping';
+export { clickToPositionDom, findPageElement } from './dom-mapping';
 export { isListItem, getWordLayoutConfig, calculateTextStartIndent, extractParagraphIndent } from './list-indent-utils';
 export type { TextIndentCalculationParams } from './list-indent-utils';
 export { LayoutVersionManager } from './layout-version-manager';
@@ -221,6 +221,73 @@ type AtomicFragment = DrawingFragment | ImageFragment;
 const isAtomicFragment = (fragment: Fragment): fragment is AtomicFragment => {
   return fragment.kind === 'drawing' || fragment.kind === 'image';
 };
+
+/**
+ * Finds the nearest paragraph or atomic fragment to a point on a page.
+ *
+ * When a click lands in whitespace (no fragment hit), this snaps to the closest
+ * fragment by vertical distance. Used as a fallback when hitTestFragment misses.
+ */
+function snapToNearestFragment(
+  pageHit: PageHit,
+  blocks: FlowBlock[],
+  measures: Measure[],
+  pageRelativePoint: Point,
+): FragmentHit | null {
+  const fragments = pageHit.page.fragments.filter(
+    (f: Fragment | undefined): f is Fragment => f != null && typeof f === 'object',
+  );
+  let nearestHit: FragmentHit | null = null;
+  let nearestDist = Infinity;
+
+  for (const frag of fragments) {
+    const isPara = frag.kind === 'para';
+    const isAtomic = isAtomicFragment(frag);
+    if (!isPara && !isAtomic) continue;
+
+    const blockIndex = findBlockIndexByFragmentId(blocks, frag.blockId);
+    if (blockIndex === -1) continue;
+    const block = blocks[blockIndex];
+    const measure = measures[blockIndex];
+    if (!block || !measure) continue;
+
+    let fragHeight = 0;
+    if (isAtomic) {
+      fragHeight = frag.height;
+    } else if (isPara && block.kind === 'paragraph' && measure.kind === 'paragraph') {
+      fragHeight = measure.lines
+        .slice(frag.fromLine, frag.toLine)
+        .reduce((sum: number, line: Line) => sum + line.lineHeight, 0);
+    } else {
+      continue;
+    }
+
+    const top = frag.y;
+    const bottom = frag.y + fragHeight;
+    let dist: number;
+    if (pageRelativePoint.y < top) {
+      dist = top - pageRelativePoint.y;
+    } else if (pageRelativePoint.y > bottom) {
+      dist = pageRelativePoint.y - bottom;
+    } else {
+      dist = 0;
+    }
+
+    if (dist < nearestDist) {
+      nearestDist = dist;
+      const pageY = Math.max(0, Math.min(pageRelativePoint.y - top, fragHeight));
+      nearestHit = {
+        fragment: frag,
+        block,
+        measure,
+        pageIndex: pageHit.pageIndex,
+        pageY,
+      };
+    }
+  }
+
+  return nearestHit;
+}
 
 const logClickStage = (_level: 'log' | 'warn' | 'error', _stage: string, _payload: Record<string, unknown>) => {
   // No-op in production. Enable for debugging click-to-position mapping.
@@ -579,7 +646,18 @@ export const hitTestTableFragment = (
     if (!rowMeasure || !row) continue;
 
     // Find the column at localX using column widths
+    // IMPORTANT: For rows with rowspan cells from above, the first cell may not start at grid column 0.
+    // We need to calculate the X offset for columns occupied by rowspans.
+    const firstCellGridStart = rowMeasure.cells[0]?.gridColumnStart ?? 0;
     let colX = 0;
+    // Calculate X offset for columns before the first cell (occupied by rowspans from above)
+    if (firstCellGridStart > 0 && tableMeasure.columnWidths) {
+      for (let col = 0; col < firstCellGridStart && col < tableMeasure.columnWidths.length; col++) {
+        colX += tableMeasure.columnWidths[col];
+      }
+    }
+    const initialColX = colX;
+
     let colIndex = -1;
     // Bounds check: skip if row has no cells
     if (rowMeasure.cells.length === 0 || row.cells.length === 0) continue;
@@ -593,8 +671,13 @@ export const hitTestTableFragment = (
     }
 
     if (colIndex === -1) {
-      // Click is to the right of all columns, use the last column
-      colIndex = rowMeasure.cells.length - 1;
+      if (localX < initialColX) {
+        // Click is in a rowspanned area (left of all cells in this row) - use first cell
+        colIndex = 0;
+      } else {
+        // Click is to the right of all columns - use last cell
+        colIndex = rowMeasure.cells.length - 1;
+      }
       if (colIndex < 0) continue;
     }
 
@@ -635,9 +718,9 @@ export const hitTestTableFragment = (
       const blockEndY = blockStartY + blockHeight;
 
       // Calculate position within the cell (accounting for cell padding)
-      const padding = cell.attrs?.padding ?? { top: 2, left: 4, right: 4, bottom: 2 };
+      const padding = cell.attrs?.padding ?? { top: 0, left: 4, right: 4, bottom: 0 };
       const cellLocalX = localX - colX - (padding.left ?? 4);
-      const cellLocalY = localY - rowY - (padding.top ?? 2);
+      const cellLocalY = localY - rowY - (padding.top ?? 0);
       const paragraphBlock = cellBlock as ParagraphBlock;
       const paragraphMeasure = cellBlockMeasure as ParagraphMeasure;
 
@@ -653,7 +736,7 @@ export const hitTestTableFragment = (
           measure: tableMeasure,
           pageIndex: pageHit.pageIndex,
           cellRowIndex: rowIndex,
-          cellColIndex: colIndex,
+          cellColIndex: colIndex, // Use cell array index for PM selection (not gridColIndex)
           cellBlock: paragraphBlock,
           cellMeasure: paragraphMeasure,
           localX: Math.max(0, cellLocalX),
@@ -873,7 +956,32 @@ export function clickToPosition(
 
   // Fallback to geometry-based mapping
   logClickStage('log', 'geometry-attempt', { trying: 'geometry-based mapping' });
-  const pageHit = hitTestPage(layout, containerPoint, geometryHelper);
+
+  // When normalizeClientPoint produces containerPoint, it adjusts Y by the page's DOM
+  // offset, making containerPoint page-relative rather than container-space. On page 1
+  // the offset is ~0 so it doesn't matter, but on page 2+ this causes hitTestPage to
+  // find the wrong page and pageRelativePoint to be doubly subtracted.
+  //
+  // Fix: when DOM info is available, determine the page from elementsFromPoint (same
+  // technique normalizeClientPoint uses) and treat containerPoint as already page-relative.
+  let pageHit: PageHit | null = null;
+  let isContainerPointPageRelative = false;
+
+  if (domContainer != null && clientX != null && clientY != null) {
+    const pageEl = findPageElement(domContainer, clientX, clientY);
+    if (pageEl) {
+      const domPageIndex = Number(pageEl.dataset.pageIndex ?? 'NaN');
+      if (Number.isFinite(domPageIndex) && domPageIndex >= 0 && domPageIndex < layout.pages.length) {
+        pageHit = { pageIndex: domPageIndex, page: layout.pages[domPageIndex] };
+        isContainerPointPageRelative = true;
+      }
+    }
+  }
+
+  if (!pageHit) {
+    pageHit = hitTestPage(layout, containerPoint, geometryHelper);
+  }
+
   if (!pageHit) {
     logClickStage('warn', 'no-page', {
       point: containerPoint,
@@ -881,15 +989,22 @@ export function clickToPosition(
     return null;
   }
 
-  // Account for gaps between pages when calculating page-relative Y
-  // Calculate cumulative Y offset to this page
-  const pageTopY = geometryHelper
-    ? geometryHelper.getPageTop(pageHit.pageIndex)
-    : calculatePageTopFallback(layout, pageHit.pageIndex);
-  const pageRelativePoint: Point = {
-    x: containerPoint.x,
-    y: containerPoint.y - pageTopY,
-  };
+  // Calculate page-relative point
+  let pageRelativePoint: Point;
+  if (isContainerPointPageRelative) {
+    // containerPoint is already page-relative (normalizeClientPoint adjusted Y by page offset)
+    pageRelativePoint = containerPoint;
+  } else {
+    // containerPoint is in container-space, subtract page top to get page-relative
+    const pageTopY = geometryHelper
+      ? geometryHelper.getPageTop(pageHit.pageIndex)
+      : calculatePageTopFallback(layout, pageHit.pageIndex);
+    pageRelativePoint = {
+      x: containerPoint.x,
+      y: containerPoint.y - pageTopY,
+    };
+  }
+
   logClickStage('log', 'page-hit', {
     pageIndex: pageHit.pageIndex,
     pageRelativePoint,
@@ -898,61 +1013,24 @@ export function clickToPosition(
   let fragmentHit = hitTestFragment(layout, pageHit, blocks, measures, pageRelativePoint);
 
   // If no fragment was hit (e.g., whitespace), snap to nearest hit-testable fragment on the page.
+  // But skip snap-to-nearest when the click is within a table fragment — otherwise the snap
+  // picks a nearby paragraph and returns its position, preventing clicks in empty table cell
+  // space (below text lines) from reaching hitTestTableFragment below.
   if (!fragmentHit) {
-    const page = pageHit.page;
-    const fragments = page.fragments.filter(
-      (f: Fragment | undefined): f is Fragment => f != null && typeof f === 'object',
-    );
-    let nearestHit: FragmentHit | null = null;
-    let nearestDist = Infinity;
-
-    for (const frag of fragments) {
-      const isPara = frag.kind === 'para';
-      const isAtomic = isAtomicFragment(frag);
-      if (!isPara && !isAtomic) continue;
-
-      const blockIndex = findBlockIndexByFragmentId(blocks, frag.blockId);
-      if (blockIndex === -1) continue;
-      const block = blocks[blockIndex];
-      const measure = measures[blockIndex];
-      if (!block || !measure) continue;
-
-      let fragHeight = 0;
-      if (isAtomic) {
-        fragHeight = frag.height;
-      } else if (isPara && block.kind === 'paragraph' && measure.kind === 'paragraph') {
-        fragHeight = measure.lines
-          .slice(frag.fromLine, frag.toLine)
-          .reduce((sum: number, line: Line) => sum + line.lineHeight, 0);
-      } else {
-        continue;
-      }
-
-      const top = frag.y;
-      const bottom = frag.y + fragHeight;
-      let dist: number;
-      if (pageRelativePoint.y < top) {
-        dist = top - pageRelativePoint.y;
-      } else if (pageRelativePoint.y > bottom) {
-        dist = pageRelativePoint.y - bottom;
-      } else {
-        dist = 0;
-      }
-
-      if (dist < nearestDist) {
-        nearestDist = dist;
-        const pageY = Math.max(0, Math.min(pageRelativePoint.y - top, fragHeight));
-        nearestHit = {
-          fragment: frag,
-          block,
-          measure,
-          pageIndex: pageHit.pageIndex,
-          pageY,
-        };
-      }
+    const isWithinTableFragment = pageHit.page.fragments
+      .filter((f) => f.kind === 'table')
+      .some((f) => {
+        const tf = f as TableFragment;
+        return (
+          pageRelativePoint.x >= tf.x &&
+          pageRelativePoint.x <= tf.x + tf.width &&
+          pageRelativePoint.y >= tf.y &&
+          pageRelativePoint.y <= tf.y + tf.height
+        );
+      });
+    if (!isWithinTableFragment) {
+      fragmentHit = snapToNearestFragment(pageHit, blocks, measures, pageRelativePoint);
     }
-
-    fragmentHit = nearestHit;
   }
 
   if (fragmentHit) {
@@ -1282,7 +1360,7 @@ type TableRowBlock = TableBlock['rows'][number];
 type TableCellBlock = TableRowBlock['cells'][number];
 type TableCellMeasure = TableMeasure['rows'][number]['cells'][number];
 
-const DEFAULT_CELL_PADDING = { top: 2, bottom: 2, left: 4, right: 4 };
+const DEFAULT_CELL_PADDING = { top: 0, bottom: 0, left: 4, right: 4 };
 
 const getCellPaddingFromRow = (cellIdx: number, row?: TableRowBlock) => {
   const padding = row?.cells?.[cellIdx]?.attrs?.padding ?? {};

@@ -53,6 +53,10 @@ export function createLiteralReplaceTool(actions: AIToolActions): AIToolDefiniti
       const replaceText = replaceTextProvided ? (args.replace as string) : '';
       const caseSensitive = Boolean(args.caseSensitive);
       const trackChanges = Boolean(args.trackChanges);
+      const contentType =
+        args.contentType === 'html' || args.contentType === 'markdown' || args.contentType === 'text'
+          ? args.contentType
+          : undefined;
 
       if (!findText.trim()) {
         return {
@@ -79,6 +83,7 @@ export function createLiteralReplaceTool(actions: AIToolActions): AIToolDefiniti
       const result: Result = await action(findText, replaceText, {
         caseSensitive,
         trackChanges,
+        contentType,
       });
 
       return {

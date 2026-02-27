@@ -1,0 +1,24 @@
+{
+  "compilerOptions": {
+    "target": "ESNext",
+    "module": "ESNext",
+    "moduleResolution": "bundler",
+    "allowJs": true,
+    "checkJs": false,
+    "noEmit": true,
+    "baseUrl": "../../..",
+    "paths": {
+      "@core/*": ["packages/super-editor/src/core/*"],
+      "@extensions/*": ["packages/super-editor/src/extensions/*"],
+      "@features/*": ["packages/super-editor/src/features/*"],
+      "@components/*": ["packages/super-editor/src/components/*"],
+      "@helpers/*": ["packages/super-editor/src/core/helpers/*"],
+      "@converter/*": ["packages/super-editor/src/core/super-converter/*"],
+      "@tests/*": ["packages/super-editor/src/tests/*"],
+      "@translator": ["packages/super-editor/src/core/super-converter/v3/node-translator/index.js"],
+      "@utils/*": ["packages/super-editor/src/utils/*"],
+      "@shared/*": ["shared/*"]
+    }
+  },
+  "include": ["./**/*.ts"]
+}

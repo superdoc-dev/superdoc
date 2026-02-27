@@ -1,0 +1,439 @@
+---
+title: comments.reply
+sidebarTitle: comments.reply
+description: Generated reference for comments.reply
+---
+
+{/* GENERATED FILE: DO NOT EDIT. Regenerate via `pnpm run docapi:sync`. */}
+
+> Alpha: Document API is currently alpha and subject to breaking changes.
+
+## Summary
+
+- Operation ID: `comments.reply`
+- API member path: `editor.doc.comments.reply(...)`
+- Mutates document: `yes`
+- Idempotency: `non-idempotent`
+- Supports tracked mode: `no`
+- Supports dry run: `no`
+- Deterministic target resolution: `yes`
+
+## Pre-apply throws
+
+- `TARGET_NOT_FOUND`
+- `COMMAND_UNAVAILABLE`
+- `CAPABILITY_UNAVAILABLE`
+
+## Non-applied failure codes
+
+- `INVALID_TARGET`
+
+## Input schema
+
+```json
+{
+  "additionalProperties": false,
+  "properties": {
+    "parentCommentId": {
+      "type": "string"
+    },
+    "text": {
+      "type": "string"
+    }
+  },
+  "required": [
+    "parentCommentId",
+    "text"
+  ],
+  "type": "object"
+}
+```
+
+## Output schema
+
+```json
+{
+  "oneOf": [
+    {
+      "additionalProperties": false,
+      "properties": {
+        "inserted": {
+          "items": {
+            "oneOf": [
+              {
+                "additionalProperties": false,
+                "properties": {
+                  "entityId": {
+                    "type": "string"
+                  },
+                  "entityType": {
+                    "const": "comment"
+                  },
+                  "kind": {
+                    "const": "entity"
+                  }
+                },
+                "required": [
+                  "kind",
+                  "entityType",
+                  "entityId"
+                ],
+                "type": "object"
+              },
+              {
+                "additionalProperties": false,
+                "properties": {
+                  "entityId": {
+                    "type": "string"
+                  },
+                  "entityType": {
+                    "const": "trackedChange"
+                  },
+                  "kind": {
+                    "const": "entity"
+                  }
+                },
+                "required": [
+                  "kind",
+                  "entityType",
+                  "entityId"
+                ],
+                "type": "object"
+              }
+            ]
+          },
+          "type": "array"
+        },
+        "removed": {
+          "items": {
+            "oneOf": [
+              {
+                "additionalProperties": false,
+                "properties": {
+                  "entityId": {
+                    "type": "string"
+                  },
+                  "entityType": {
+                    "const": "comment"
+                  },
+                  "kind": {
+                    "const": "entity"
+                  }
+                },
+                "required": [
+                  "kind",
+                  "entityType",
+                  "entityId"
+                ],
+                "type": "object"
+              },
+              {
+                "additionalProperties": false,
+                "properties": {
+                  "entityId": {
+                    "type": "string"
+                  },
+                  "entityType": {
+                    "const": "trackedChange"
+                  },
+                  "kind": {
+                    "const": "entity"
+                  }
+                },
+                "required": [
+                  "kind",
+                  "entityType",
+                  "entityId"
+                ],
+                "type": "object"
+              }
+            ]
+          },
+          "type": "array"
+        },
+        "success": {
+          "const": true
+        },
+        "updated": {
+          "items": {
+            "oneOf": [
+              {
+                "additionalProperties": false,
+                "properties": {
+                  "entityId": {
+                    "type": "string"
+                  },
+                  "entityType": {
+                    "const": "comment"
+                  },
+                  "kind": {
+                    "const": "entity"
+                  }
+                },
+                "required": [
+                  "kind",
+                  "entityType",
+                  "entityId"
+                ],
+                "type": "object"
+              },
+              {
+                "additionalProperties": false,
+                "properties": {
+                  "entityId": {
+                    "type": "string"
+                  },
+                  "entityType": {
+                    "const": "trackedChange"
+                  },
+                  "kind": {
+                    "const": "entity"
+                  }
+                },
+                "required": [
+                  "kind",
+                  "entityType",
+                  "entityId"
+                ],
+                "type": "object"
+              }
+            ]
+          },
+          "type": "array"
+        }
+      },
+      "required": [
+        "success"
+      ],
+      "type": "object"
+    },
+    {
+      "additionalProperties": false,
+      "properties": {
+        "failure": {
+          "additionalProperties": false,
+          "properties": {
+            "code": {
+              "enum": [
+                "INVALID_TARGET"
+              ]
+            },
+            "details": {},
+            "message": {
+              "type": "string"
+            }
+          },
+          "required": [
+            "code",
+            "message"
+          ],
+          "type": "object"
+        },
+        "success": {
+          "const": false
+        }
+      },
+      "required": [
+        "success",
+        "failure"
+      ],
+      "type": "object"
+    }
+  ]
+}
+```
+
+## Success schema
+
+```json
+{
+  "additionalProperties": false,
+  "properties": {
+    "inserted": {
+      "items": {
+        "oneOf": [
+          {
+            "additionalProperties": false,
+            "properties": {
+              "entityId": {
+                "type": "string"
+              },
+              "entityType": {
+                "const": "comment"
+              },
+              "kind": {
+                "const": "entity"
+              }
+            },
+            "required": [
+              "kind",
+              "entityType",
+              "entityId"
+            ],
+            "type": "object"
+          },
+          {
+            "additionalProperties": false,
+            "properties": {
+              "entityId": {
+                "type": "string"
+              },
+              "entityType": {
+                "const": "trackedChange"
+              },
+              "kind": {
+                "const": "entity"
+              }
+            },
+            "required": [
+              "kind",
+              "entityType",
+              "entityId"
+            ],
+            "type": "object"
+          }
+        ]
+      },
+      "type": "array"
+    },
+    "removed": {
+      "items": {
+        "oneOf": [
+          {
+            "additionalProperties": false,
+            "properties": {
+              "entityId": {
+                "type": "string"
+              },
+              "entityType": {
+                "const": "comment"
+              },
+              "kind": {
+                "const": "entity"
+              }
+            },
+            "required": [
+              "kind",
+              "entityType",
+              "entityId"
+            ],
+            "type": "object"
+          },
+          {
+            "additionalProperties": false,
+            "properties": {
+              "entityId": {
+                "type": "string"
+              },
+              "entityType": {
+                "const": "trackedChange"
+              },
+              "kind": {
+                "const": "entity"
+              }
+            },
+            "required": [
+              "kind",
+              "entityType",
+              "entityId"
+            ],
+            "type": "object"
+          }
+        ]
+      },
+      "type": "array"
+    },
+    "success": {
+      "const": true
+    },
+    "updated": {
+      "items": {
+        "oneOf": [
+          {
+            "additionalProperties": false,
+            "properties": {
+              "entityId": {
+                "type": "string"
+              },
+              "entityType": {
+                "const": "comment"
+              },
+              "kind": {
+                "const": "entity"
+              }
+            },
+            "required": [
+              "kind",
+              "entityType",
+              "entityId"
+            ],
+            "type": "object"
+          },
+          {
+            "additionalProperties": false,
+            "properties": {
+              "entityId": {
+                "type": "string"
+              },
+              "entityType": {
+                "const": "trackedChange"
+              },
+              "kind": {
+                "const": "entity"
+              }
+            },
+            "required": [
+              "kind",
+              "entityType",
+              "entityId"
+            ],
+            "type": "object"
+          }
+        ]
+      },
+      "type": "array"
+    }
+  },
+  "required": [
+    "success"
+  ],
+  "type": "object"
+}
+```
+
+## Failure schema
+
+```json
+{
+  "additionalProperties": false,
+  "properties": {
+    "failure": {
+      "additionalProperties": false,
+      "properties": {
+        "code": {
+          "enum": [
+            "INVALID_TARGET"
+          ]
+        },
+        "details": {},
+        "message": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "code",
+        "message"
+      ],
+      "type": "object"
+    },
+    "success": {
+      "const": false
+    }
+  },
+  "required": [
+    "success",
+    "failure"
+  ],
+  "type": "object"
+}
+```

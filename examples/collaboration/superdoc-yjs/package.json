@@ -1,0 +1,28 @@
+{
+  "name": "superdoc-yjs-collaboration",
+  "private": true,
+  "version": "0.0.0",
+  "type": "module",
+  "scripts": {
+    "dev": "concurrently \"npm run dev:server\" \"npm run dev:client\"",
+    "dev:client": "vite",
+    "dev:server": "tsx watch server.ts",
+    "build": "vite build"
+  },
+  "dependencies": {
+    "superdoc": "latest",
+    "vue": "^3.5.13",
+    "@superdoc-dev/superdoc-yjs-collaboration": "^1.0.0",
+    "@fastify/websocket": "^11.1.0",
+    "fastify": "^5.3.3",
+    "y-protocols": "^1.0.6",
+    "y-websocket": "^3.0.0",
+    "yjs": "13.6.19"
+  },
+  "devDependencies": {
+    "@vitejs/plugin-vue": "^5.2.2",
+    "concurrently": "^9.0.0",
+    "tsx": "^4.20.6",
+    "vite": "^6.0.0"
+  }
+}

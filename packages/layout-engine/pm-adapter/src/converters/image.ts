@@ -8,7 +8,7 @@ import type { ImageBlock, BoxSpacing, ImageAnchor } from '@superdoc/contracts';
 import type { PMNode, BlockIdGenerator, PositionMap, NodeHandlerContext, TrackedChangesConfig } from '../types.js';
 import { collectTrackedChangeFromMarks } from '../marks/index.js';
 import { shouldHideTrackedNode, annotateBlockWithTrackedChange } from '../tracked-changes.js';
-import { isFiniteNumber, pickNumber } from '../utilities.js';
+import { isFiniteNumber, pickNumber, normalizeZIndex, resolveFloatingZIndex } from '../utilities.js';
 
 // ============================================================================
 // Constants
@@ -268,6 +268,10 @@ export function imageNodeToBlock(
           ? 'contain'
           : 'contain';
 
+  // Same z-index as editor: from OOXML relativeHeight (Math.max(0, relativeHeight - OOXML_Z_INDEX_BASE))
+  const zIndexFromRelativeHeight = normalizeZIndex(attrs.originalAttributes as Record<string, unknown> | undefined);
+  const zIndex = resolveFloatingZIndex(anchor?.behindDoc === true, zIndexFromRelativeHeight);
+
   return {
     kind: 'image',
     id: nextBlockId('image'),
@@ -282,6 +286,7 @@ export function imageNodeToBlock(
     margin: toBoxSpacing(attrs.marginOffset as Record<string, unknown> | undefined),
     anchor,
     wrap: normalizedWrap,
+    ...(zIndex !== undefined && { zIndex }),
     attrs: attrsWithPm,
     // VML image adjustments for watermark effects
     gain: typeof attrs.gain === 'string' || typeof attrs.gain === 'number' ? attrs.gain : undefined,

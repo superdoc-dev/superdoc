@@ -1,14 +1,13 @@
 import express from 'express';
 import cors from 'cors';
-import dotenv from 'dotenv';
+import { config as dotenvConfig } from 'dotenv';
 
-dotenv.config();
+dotenvConfig();
 
 const app = express();
 const PORT = process.env.PORT || 3001;
 const SUPERDOC_SERVICES_API_KEY = process.env.SUPERDOC_SERVICES_API_KEY;
-const SUPERDOC_SERVICES_BASE_URL =
-  process.env.SUPERDOC_SERVICES_BASE_URL || 'https://api.superdoc.dev';
+const SUPERDOC_SERVICES_BASE_URL = process.env.SUPERDOC_SERVICES_BASE_URL || 'https://api.superdoc.dev';
 const CONSENT_FIELD_IDS = new Set(['consent_agreement', 'terms', 'email', '406948812']);
 const SIGNATURE_FIELD_ID = '789012';
 const IP_ADDRESS = '127.0.0.1'; // Replace with real client IP once available
@@ -85,8 +84,7 @@ const sendPdfBuffer = (res, base64, fileName, contentType = 'application/pdf') =
 
 app.post('/v1/download', async (req, res) => {
   try {
-    const { document, fields = {}, fileName = 'document.pdf', signatureMode = 'annotate' } =
-      req.body || {};
+    const { document, fields = {}, fileName = 'document.pdf', signatureMode = 'annotate' } = req.body || {};
 
     if (!SUPERDOC_SERVICES_API_KEY) {
       return res.status(500).json({ error: 'Missing SUPERDOC_SERVICES_API_KEY on the server' });

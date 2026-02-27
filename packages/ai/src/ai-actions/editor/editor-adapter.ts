@@ -604,8 +604,8 @@ export class EditorAdapter {
    * @private
    */
   private applyPatch(from: number, to: number, suggestedText: string): void {
-    const { state, view } = this.editor;
-    if (!state || !view) {
+    const { state } = this.editor;
+    if (!state) {
       return;
     }
 
@@ -638,7 +638,8 @@ export class EditorAdapter {
       tr.insert(insertPos, node);
       insertPos += node.nodeSize;
     }
-    view.dispatch(tr);
+
+    this.editor.dispatch(tr);
   }
 
   /**
@@ -675,6 +676,7 @@ export class EditorAdapter {
         this.editor.commands.disableTrackChanges();
       }
     }
+
     return changeId;
   }
 
@@ -741,5 +743,50 @@ export class EditorAdapter {
     }
 
     this.applyPatch(from, to, suggestedText);
+  }
+
+  /**
+   * Inserts content with optional format parsing (HTML, markdown).
+   * When contentType is 'html' or 'markdown', delegates to the editor's
+   * insertContent command which parses the content through ProseMirror's DOMParser,
+   * creating proper marks (e.g., link marks for <a> tags).
+   * When contentType is 'text' or omitted, falls back to plain-text insertText.
+   *
+   * @param content - The content to insert
+   * @param options
+   */
+  insertFormattedContent(
+    content: string,
+    options?: { position?: 'before' | 'after' | 'replace'; contentType?: 'html' | 'markdown' | 'text' },
+  ): void {
+    const contentType = options?.contentType;
+
+    if (contentType && contentType !== 'text') {
+      const position = this.getSelectionRange();
+      if (!position) return;
+
+      const mode = options?.position ?? 'replace';
+      let from = position.from;
+      let to = position.to;
+
+      if (mode === 'before') {
+        to = from;
+      } else if (mode === 'after') {
+        from = to;
+      }
+
+      // Set selection to the target range before inserting
+      this.editor.commands?.setTextSelection?.({ from, to });
+      const commands = this.editor.commands as
+        | {
+            insertContent?: (value: string, config?: { contentType?: 'html' | 'markdown' | 'text' }) => unknown;
+          }
+        | undefined;
+      commands?.insertContent?.(content, { contentType });
+      return;
+    }
+
+    // Fall back to plain-text path
+    this.insertText(content, options);
   }
 }

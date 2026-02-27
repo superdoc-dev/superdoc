@@ -1,10 +1,11 @@
 // @ts-nocheck
 import { Extension } from '@core/Extension.js';
 import { helpers } from '@core/index.js';
-import { mergeRanges, clampRange } from '@core/helpers/rangeUtils.js';
+import { mergeRanges, clampRange } from '@utils/rangeUtils.js';
 import { Plugin, PluginKey } from 'prosemirror-state';
 import { ReplaceStep, ReplaceAroundStep, AddMarkStep, RemoveMarkStep } from 'prosemirror-transform';
 import { v4 as uuidv4 } from 'uuid';
+import { ySyncPluginKey } from 'y-prosemirror';
 
 const { findChildren } = helpers;
 const SD_BLOCK_ID_ATTRIBUTE_NAME = 'sdBlockId';
@@ -242,6 +243,26 @@ export const BlockNode = Extension.create({
       tr.setNodeMarkup(pos, undefined, nextAttrs, node.marks);
     };
 
+    /**
+     * Ensures a block node has a unique sdBlockId, assigning a new UUID if the
+     * current ID is missing or already seen. Tracks seen IDs in the provided Set
+     * to detect duplicates (e.g., when tr.split() copies the original paragraph's ID).
+     * @param {ProseMirrorNode} node - The node to check.
+     * @param {Object} nextAttrs - Mutable attrs object to update.
+     * @param {Set<string>} seenIds - Set of IDs already encountered in this traversal.
+     * @returns {boolean} True if the sdBlockId was changed.
+     */
+    const ensureUniqueSdBlockId = (node, nextAttrs, seenIds) => {
+      const currentId = node.attrs?.sdBlockId;
+      let changed = false;
+      if (nodeAllowsSdBlockIdAttr(node) && (nodeNeedsSdBlockId(node) || seenIds.has(currentId))) {
+        nextAttrs.sdBlockId = uuidv4();
+        changed = true;
+      }
+      if (currentId) seenIds.add(currentId);
+      return changed;
+    };
+
     return [
       new Plugin({
         key: BlockNodePluginKey,
@@ -256,16 +277,23 @@ export const BlockNode = Extension.create({
           let changed = false;
           const updatedPositions = new Set();
 
+          // Skip sdBlockRev increment for Y.js-origin transactions to prevent
+          // an infinite feedback loop in collaboration: Tab A increments rev →
+          // syncs to Y.js → Tab B receives → blockNode increments rev again →
+          // syncs back → Tab A increments again → forever.
+          // Still ensure unique sdBlockIds (split dedup) for all transactions.
+          const isYjsOrigin = transactions.some((transaction) => {
+            const meta = transaction.getMeta(ySyncPluginKey);
+            return meta?.isChangeOrigin;
+          });
+
           if (!hasInitialized) {
             // Initial pass: assign IDs to all block nodes in document
+            const seenIds = new Set();
             newState.doc.descendants((node, pos) => {
               if (!nodeAllowsSdBlockIdAttr(node) && !nodeAllowsSdBlockRevAttr(node)) return;
               const nextAttrs = { ...node.attrs };
-              let nodeChanged = false;
-              if (nodeAllowsSdBlockIdAttr(node) && nodeNeedsSdBlockId(node)) {
-                nextAttrs.sdBlockId = uuidv4();
-                nodeChanged = true;
-              }
+              let nodeChanged = ensureUniqueSdBlockId(node, nextAttrs, seenIds);
               if (nodeAllowsSdBlockRevAttr(node)) {
                 const rev = ensureBlockRev(node);
                 if (nextAttrs.sdBlockRev !== rev) {
@@ -291,18 +319,18 @@ export const BlockNode = Extension.create({
                   stepMap.forEach((_oldStart, _oldEnd, newStart, newEnd) => {
                     if (newEnd <= newStart) {
                       // Deletions often yield zero-length ranges; still update the surrounding block.
-                      stepRanges.push([newStart, newStart + 1]);
+                      stepRanges.push({ from: newStart, to: newStart + 1 });
                       return;
                     }
-                    stepRanges.push([newStart, newEnd]);
+                    stepRanges.push({ from: newStart, to: newEnd });
                   });
                 } else if (step instanceof AddMarkStep || step instanceof RemoveMarkStep) {
                   if (step.to > step.from) {
-                    stepRanges.push([step.from, step.to]);
+                    stepRanges.push({ from: step.from, to: step.to });
                   }
                 }
 
-                stepRanges.forEach(([rangeStartRaw, rangeEndRaw]) => {
+                stepRanges.forEach(({ from: rangeStartRaw, to: rangeEndRaw }) => {
                   let rangeStart = rangeStartRaw;
                   let rangeEnd = rangeEndRaw;
 
@@ -324,34 +352,33 @@ export const BlockNode = Extension.create({
                     rangeEnd = rangeStart + 1;
                   }
 
-                  rangesToCheck.push([rangeStart, rangeEnd]);
+                  rangesToCheck.push({ from: rangeStart, to: rangeEnd });
                 });
               });
             });
 
-            const mergedRanges = mergeRanges(rangesToCheck);
+            const docSize = newState.doc.content.size;
+            const mergedRanges = mergeRanges(rangesToCheck, docSize);
+            // Track seen sdBlockIds across all ranges to detect duplicates
+            // (e.g., when tr.split() copies the original paragraph's sdBlockId to the new one).
+            const seenBlockIds = new Set();
 
-            for (const [start, end] of mergedRanges) {
-              const docSize = newState.doc.content.size;
-              const clampedRange = clampRange(start, end, docSize);
+            for (const { from, to } of mergedRanges) {
+              const clampedRange = clampRange(from, to, docSize);
 
               if (!clampedRange) {
                 continue;
               }
 
-              const [safeStart, safeEnd] = clampedRange;
+              const { start: safeStart, end: safeEnd } = clampedRange;
 
               try {
                 newState.doc.nodesBetween(safeStart, safeEnd, (node, pos) => {
                   if (!nodeAllowsSdBlockIdAttr(node) && !nodeAllowsSdBlockRevAttr(node)) return;
                   if (updatedPositions.has(pos)) return;
                   const nextAttrs = { ...node.attrs };
-                  let nodeChanged = false;
-                  if (nodeAllowsSdBlockIdAttr(node) && nodeNeedsSdBlockId(node)) {
-                    nextAttrs.sdBlockId = uuidv4();
-                    nodeChanged = true;
-                  }
-                  if (nodeAllowsSdBlockRevAttr(node)) {
+                  let nodeChanged = ensureUniqueSdBlockId(node, nextAttrs, seenBlockIds);
+                  if (!isYjsOrigin && nodeAllowsSdBlockRevAttr(node)) {
                     nextAttrs.sdBlockRev = getNextBlockRev(node);
                     nodeChanged = true;
                   }
@@ -369,15 +396,12 @@ export const BlockNode = Extension.create({
             }
 
             if (shouldFallbackToFullTraversal) {
+              const fallbackSeenIds = new Set();
               newState.doc.descendants((node, pos) => {
                 if (!nodeAllowsSdBlockIdAttr(node) && !nodeAllowsSdBlockRevAttr(node)) return;
                 const nextAttrs = { ...node.attrs };
-                let nodeChanged = false;
-                if (nodeAllowsSdBlockIdAttr(node) && nodeNeedsSdBlockId(node)) {
-                  nextAttrs.sdBlockId = uuidv4();
-                  nodeChanged = true;
-                }
-                if (nodeAllowsSdBlockRevAttr(node)) {
+                let nodeChanged = ensureUniqueSdBlockId(node, nextAttrs, fallbackSeenIds);
+                if (!isYjsOrigin && nodeAllowsSdBlockRevAttr(node)) {
                   nextAttrs.sdBlockRev = getNextBlockRev(node);
                   nodeChanged = true;
                 }
@@ -389,9 +413,11 @@ export const BlockNode = Extension.create({
             }
           }
 
-          if (changed && !hasInitialized) {
+          if (!hasInitialized) {
             hasInitialized = true;
-            tr.setMeta('blockNodeInitialUpdate', true);
+            if (changed) {
+              tr.setMeta('blockNodeInitialUpdate', true);
+            }
           }
 
           // Restore marks since setNodeMarkup resets them

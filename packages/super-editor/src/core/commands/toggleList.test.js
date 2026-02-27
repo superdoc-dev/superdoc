@@ -140,7 +140,7 @@ describe('toggleList', () => {
     const state = createState(paragraphs);
     const handler = toggleList('orderedList');
 
-    const result = handler({ editor, state, tr, dispatch: undefined });
+    const result = handler({ editor, state, tr, dispatch });
 
     expect(result).toBe(true);
     expect(updateNumberingProperties).toHaveBeenCalledTimes(1);
@@ -153,6 +153,7 @@ describe('toggleList', () => {
       editor,
       tr,
     );
+    expect(dispatch).toHaveBeenCalledWith(tr);
   });
 
   it('creates a new list definition when no matching list exists in or before the selection', () => {
@@ -164,7 +165,7 @@ describe('toggleList', () => {
     const state = createState(paragraphs);
     const handler = toggleList('orderedList');
 
-    const result = handler({ editor, state, tr, dispatch: undefined });
+    const result = handler({ editor, state, tr, dispatch });
 
     expect(result).toBe(true);
     expect(ListHelpers.getNewListId).toHaveBeenCalledWith(editor);
@@ -177,6 +178,7 @@ describe('toggleList', () => {
     for (const [index, { node, pos }] of paragraphs.entries()) {
       expect(updateNumberingProperties).toHaveBeenNthCalledWith(index + 1, expectedNumbering, node, pos, editor, tr);
     }
+    expect(dispatch).toHaveBeenCalledWith(tr);
   });
 
   it('borrows numbering from the previous list paragraph when selection lacks one', () => {
@@ -195,7 +197,7 @@ describe('toggleList', () => {
     const state = createState(paragraphs, { beforeNode, parentIndex: 1 });
     const handler = toggleList('orderedList');
 
-    const result = handler({ editor, state, tr, dispatch: undefined });
+    const result = handler({ editor, state, tr, dispatch });
 
     expect(result).toBe(true);
     expect(ListHelpers.getNewListId).not.toHaveBeenCalled();
@@ -204,5 +206,61 @@ describe('toggleList', () => {
     for (const [index, { node, pos }] of paragraphs.entries()) {
       expect(updateNumberingProperties).toHaveBeenNthCalledWith(index + 1, expectedNumbering, node, pos, editor, tr);
     }
+    expect(dispatch).toHaveBeenCalledWith(tr);
+  });
+
+  it('is side-effect-free when dispatch is not provided (create mode)', () => {
+    ListHelpers.getNewListId.mockReturnValue('42');
+    const paragraphs = [createParagraph({ paragraphProperties: {} }, 3)];
+    const state = createState(paragraphs);
+    const handler = toggleList('orderedList');
+
+    const result = handler({ editor, state, tr, dispatch: undefined });
+
+    expect(result).toBe(true);
+    expect(ListHelpers.getNewListId).not.toHaveBeenCalled();
+    expect(ListHelpers.generateNewListDefinition).not.toHaveBeenCalled();
+    expect(updateNumberingProperties).not.toHaveBeenCalled();
+  });
+
+  it('is side-effect-free when dispatch is not provided (remove mode)', () => {
+    const paragraphs = [
+      createParagraph(
+        {
+          paragraphProperties: { numberingProperties: { numId: 5, ilvl: 0 } },
+          listRendering: { numberingType: 'bullet' },
+        },
+        1,
+      ),
+    ];
+    const state = createState(paragraphs);
+    const handler = toggleList('bulletList');
+
+    const result = handler({ editor, state, tr, dispatch: undefined });
+
+    expect(result).toBe(true);
+    expect(updateNumberingProperties).not.toHaveBeenCalled();
+    expect(ListHelpers.generateNewListDefinition).not.toHaveBeenCalled();
+  });
+
+  it('is side-effect-free when dispatch is not provided (reuse mode)', () => {
+    const paragraphs = [
+      createParagraph(
+        {
+          paragraphProperties: { numberingProperties: { numId: 12, ilvl: 0 } },
+          listRendering: { numberingType: 'decimal' },
+        },
+        2,
+      ),
+      createParagraph({ paragraphProperties: {} }, 6),
+    ];
+    const state = createState(paragraphs);
+    const handler = toggleList('orderedList');
+
+    const result = handler({ editor, state, tr, dispatch: undefined });
+
+    expect(result).toBe(true);
+    expect(updateNumberingProperties).not.toHaveBeenCalled();
+    expect(ListHelpers.generateNewListDefinition).not.toHaveBeenCalled();
   });
 });

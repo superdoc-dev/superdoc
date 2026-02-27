@@ -165,17 +165,20 @@ export function exportSchemaToJson(params) {
     table: wTblNodeTranslator,
     tableRow: wTrNodeTranslator,
     tableCell: wTcNodeTranslator,
+    tableHeader: wTcNodeTranslator,
     bookmarkStart: wBookmarkStartTranslator,
     bookmarkEnd: wBookmarkEndTranslator,
     fieldAnnotation: wSdtNodeTranslator,
     tab: wTabNodeTranslator,
-    image: wDrawingNodeTranslator,
+    image: [wDrawingNodeTranslator, pictTranslator],
     hardBreak: wBrNodeTranslator,
     commentRangeStart: wCommentRangeStartTranslator,
     commentRangeEnd: wCommentRangeEndTranslator,
     permStart: wPermStartTranslator,
     permEnd: wPermEndTranslator,
-    commentReference: () => null,
+    permStartBlock: wPermStartTranslator,
+    permEndBlock: wPermEndTranslator,
+    commentReference: [],
     footnoteReference: wFootnoteReferenceTranslator,
     shapeContainer: pictTranslator,
     shapeTextbox: pictTranslator,
@@ -196,22 +199,31 @@ export function exportSchemaToJson(params) {
     passthroughInline: translatePassthroughNode,
   };
 
-  let handler = router[type];
+  const entry = router[type];
 
-  // For import/export v3 we use the translator directly
-  if (handler && 'decode' in handler && typeof handler.decode === 'function') {
-    return handler.decode(params);
-  }
-
-  if (!handler) {
+  if (!entry) {
     console.error('No translation function found for node type:', type);
     return null;
   }
-  // Call the handler for this node type
-  return handler(params);
+
+  const handlers = Array.isArray(entry) ? entry : [entry];
+  for (const handler of handlers) {
+    let result;
+    if (handler && 'decode' in handler && typeof handler.decode === 'function') {
+      result = handler.decode(params);
+    } else if (typeof handler === 'function') {
+      result = handler(params);
+    }
+
+    if (result) {
+      return result;
+    }
+  }
+
+  return null;
 }
 
-function translatePassthroughNode(params) {
+export function translatePassthroughNode(params) {
   const original = params?.node?.attrs?.originalXml;
   if (!original) return null;
   return carbonCopy(original);
@@ -611,6 +623,14 @@ export class DocxExporter {
     if (!node) return null;
     let { name } = node;
     const { elements, attributes } = node;
+
+    // Normalize w:delInstrText → w:instrText. During import, w:del wrappers around
+    // field character runs lose their trackDelete marks (only text content gets marked),
+    // so on export the w:del wrapper is absent. Per ECMA-376 §17.16.13, w:delInstrText
+    // outside w:del is non-conformant — renaming to w:instrText keeps the field valid.
+    if (name === 'w:delInstrText') {
+      name = 'w:instrText';
+    }
 
     let tag = `<${name}`;
 

@@ -1,0 +1,185 @@
+---
+title: mutations.apply
+sidebarTitle: mutations.apply
+description: Generated reference for mutations.apply
+---
+
+{/* GENERATED FILE: DO NOT EDIT. Regenerate via `pnpm run docapi:sync`. */}
+
+> Alpha: Document API is currently alpha and subject to breaking changes.
+
+## Summary
+
+- Operation ID: `mutations.apply`
+- API member path: `editor.doc.mutations.apply(...)`
+- Mutates document: `yes`
+- Idempotency: `non-idempotent`
+- Supports tracked mode: `yes`
+- Supports dry run: `no`
+- Deterministic target resolution: `yes`
+
+## Pre-apply throws
+
+- `REVISION_MISMATCH`
+- `MATCH_NOT_FOUND`
+- `AMBIGUOUS_MATCH`
+- `STYLE_CONFLICT`
+- `PRECONDITION_FAILED`
+- `INVALID_INPUT`
+- `CROSS_BLOCK_MATCH`
+- `PLAN_CONFLICT_OVERLAP`
+- `INVALID_STEP_COMBINATION`
+- `CAPABILITY_UNAVAILABLE`
+
+## Non-applied failure codes
+
+- None
+
+## Input schema
+
+```json
+{
+  "additionalProperties": false,
+  "properties": {
+    "atomic": {
+      "const": true
+    },
+    "changeMode": {
+      "enum": [
+        "direct",
+        "tracked"
+      ]
+    },
+    "expectedRevision": {
+      "type": "string"
+    },
+    "steps": {
+      "items": {
+        "type": "object"
+      },
+      "type": "array"
+    }
+  },
+  "required": [
+    "expectedRevision",
+    "atomic",
+    "changeMode",
+    "steps"
+  ],
+  "type": "object"
+}
+```
+
+## Output schema
+
+```json
+{
+  "additionalProperties": false,
+  "properties": {
+    "revision": {
+      "additionalProperties": false,
+      "properties": {
+        "after": {
+          "type": "string"
+        },
+        "before": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "before",
+        "after"
+      ],
+      "type": "object"
+    },
+    "steps": {
+      "items": {
+        "type": "object"
+      },
+      "type": "array"
+    },
+    "success": {
+      "const": true
+    },
+    "timing": {
+      "additionalProperties": false,
+      "properties": {
+        "totalMs": {
+          "type": "number"
+        }
+      },
+      "required": [
+        "totalMs"
+      ],
+      "type": "object"
+    },
+    "trackedChanges": {
+      "items": {
+        "type": "object"
+      },
+      "type": "array"
+    }
+  },
+  "required": [
+    "success",
+    "revision",
+    "steps",
+    "timing"
+  ],
+  "type": "object"
+}
+```
+
+## Success schema
+
+```json
+{
+  "additionalProperties": false,
+  "properties": {
+    "revision": {
+      "additionalProperties": false,
+      "properties": {
+        "after": {
+          "type": "string"
+        },
+        "before": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "before",
+        "after"
+      ],
+      "type": "object"
+    },
+    "steps": {
+      "items": {
+        "type": "object"
+      },
+      "type": "array"
+    },
+    "success": {
+      "const": true
+    },
+    "timing": {
+      "additionalProperties": false,
+      "properties": {
+        "totalMs": {
+          "type": "number"
+        }
+      },
+      "required": [
+        "totalMs"
+      ],
+      "type": "object"
+    }
+  },
+  "required": [
+    "success",
+    "revision",
+    "steps",
+    "timing"
+  ],
+  "type": "object"
+}
+```

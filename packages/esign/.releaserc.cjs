@@ -8,6 +8,7 @@ const config = {
   ],
   tagFormat: 'esign-v${version}',
   plugins: [
+    'semantic-release-commit-filter',
     '@semantic-release/commit-analyzer',
     '@semantic-release/release-notes-generator',
     ['@semantic-release/npm', { npmPublish: true }],
@@ -40,7 +41,7 @@ config.plugins.push(['semantic-release-linear-app', {
 config.plugins.push([
   '@semantic-release/github',
   {
-    successComment: ':tada: This ${issue.pull_request ? "PR" : "issue"} is included in **esign** v${nextRelease.version}\n\nThe release is available on [GitHub release](<github_release_url>)',
+    successComment: ':tada: This ${issue.pull_request ? "PR" : "issue"} is included in **esign** v${nextRelease.version}\n\nThe release is available on [GitHub release](https://github.com/superdoc-dev/superdoc/releases/tag/${nextRelease.gitTag})',
   }
 ]);
 

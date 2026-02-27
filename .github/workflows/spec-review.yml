@@ -22,10 +22,10 @@ jobs:
 
     steps:
       - name: Checkout
-        uses: actions/checkout@v4 # shallow-clone as default
+        uses: actions/checkout@v6 # shallow-clone as default
 
       - name: Setup Node.js
-        uses: actions/setup-node@v4
+        uses: actions/setup-node@v6
         with:
           node-version: '20'
 
@@ -62,7 +62,9 @@ jobs:
           gh pr diff ${{ github.event.pull_request.number }} > /tmp/pr-diff.txt
 
           # Run Claude Code review
-          REVIEW=$(claude --print "Review this PR for OOXML spec compliance.
+          REVIEW=$(claude --print \
+            --allowedTools "mcp__ecma-spec__search_ecma_spec,mcp__ecma-spec__get_section,mcp__ecma-spec__list_parts" \
+            "Review this PR for OOXML spec compliance.
 
           Context: These are OOXML element handlers (XML ↔ ProseMirror JSON converters).
 

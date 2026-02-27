@@ -1,4 +1,216 @@
 /**
+ * Converts a preset color name (a:prstClr) to its hex value.
+ * Per ECMA-376 Part 1, Section 20.1.10.47 (ST_PresetColorVal).
+ * @param {string} name - The preset color name (e.g., 'black', 'white', 'red')
+ * @returns {string|null} Hex color value, or null if not recognized
+ */
+export function getPresetColor(name) {
+  const colors = {
+    aliceBlue: '#f0f8ff',
+    antiqueWhite: '#faebd7',
+    aqua: '#00ffff',
+    aquamarine: '#7fffd4',
+    azure: '#f0ffff',
+    beige: '#f5f5dc',
+    bisque: '#ffe4c4',
+    black: '#000000',
+    blanchedAlmond: '#ffebcd',
+    blue: '#0000ff',
+    blueViolet: '#8a2be2',
+    brown: '#a52a2a',
+    burlyWood: '#deb887',
+    cadetBlue: '#5f9ea0',
+    chartreuse: '#7fff00',
+    chocolate: '#d2691e',
+    coral: '#ff7f50',
+    cornflowerBlue: '#6495ed',
+    cornsilk: '#fff8dc',
+    crimson: '#dc143c',
+    cyan: '#00ffff',
+    dkBlue: '#00008b',
+    dkCyan: '#008b8b',
+    dkGoldenrod: '#b8860b',
+    dkGray: '#a9a9a9',
+    dkGreen: '#006400',
+    dkKhaki: '#bdb76b',
+    dkMagenta: '#8b008b',
+    dkOliveGreen: '#556b2f',
+    dkOrange: '#ff8c00',
+    dkOrchid: '#9932cc',
+    dkRed: '#8b0000',
+    dkSalmon: '#e9967a',
+    dkSeaGreen: '#8fbc8f',
+    dkSlateBlue: '#483d8b',
+    dkSlateGray: '#2f4f4f',
+    dkTurquoise: '#00ced1',
+    dkViolet: '#9400d3',
+    deepPink: '#ff1493',
+    deepSkyBlue: '#00bfff',
+    dimGray: '#696969',
+    dodgerBlue: '#1e90ff',
+    firebrick: '#b22222',
+    floralWhite: '#fffaf0',
+    forestGreen: '#228b22',
+    fuchsia: '#ff00ff',
+    gainsboro: '#dcdcdc',
+    ghostWhite: '#f8f8ff',
+    gold: '#ffd700',
+    goldenrod: '#daa520',
+    gray: '#808080',
+    green: '#008000',
+    greenYellow: '#adff2f',
+    honeydew: '#f0fff0',
+    hotPink: '#ff69b4',
+    indianRed: '#cd5c5c',
+    indigo: '#4b0082',
+    ivory: '#fffff0',
+    khaki: '#f0e68c',
+    lavender: '#e6e6fa',
+    lavenderBlush: '#fff0f5',
+    lawnGreen: '#7cfc00',
+    lemonChiffon: '#fffacd',
+    ltBlue: '#add8e6',
+    ltCoral: '#f08080',
+    ltCyan: '#e0ffff',
+    ltGoldenrodYellow: '#fafad2',
+    ltGray: '#d3d3d3',
+    ltGreen: '#90ee90',
+    ltPink: '#ffb6c1',
+    ltSalmon: '#ffa07a',
+    ltSeaGreen: '#20b2aa',
+    ltSkyBlue: '#87cefa',
+    ltSlateGray: '#778899',
+    ltSteelBlue: '#b0c4de',
+    ltYellow: '#ffffe0',
+    lime: '#00ff00',
+    limeGreen: '#32cd32',
+    linen: '#faf0e6',
+    magenta: '#ff00ff',
+    maroon: '#800000',
+    medAquamarine: '#66cdaa',
+    medBlue: '#0000cd',
+    medOrchid: '#ba55d3',
+    medPurple: '#9370db',
+    medSeaGreen: '#3cb371',
+    medSlateBlue: '#7b68ee',
+    medSpringGreen: '#00fa9a',
+    medTurquoise: '#48d1cc',
+    medVioletRed: '#c71585',
+    midnightBlue: '#191970',
+    mintCream: '#f5fffa',
+    mistyRose: '#ffe4e1',
+    moccasin: '#ffe4b5',
+    navajoWhite: '#ffdead',
+    navy: '#000080',
+    oldLace: '#fdf5e6',
+    olive: '#808000',
+    oliveDrab: '#6b8e23',
+    orange: '#ffa500',
+    orangeRed: '#ff4500',
+    orchid: '#da70d6',
+    paleGoldenrod: '#eee8aa',
+    paleGreen: '#98fb98',
+    paleTurquoise: '#afeeee',
+    paleVioletRed: '#db7093',
+    papayaWhip: '#ffefd5',
+    peachPuff: '#ffdab9',
+    peru: '#cd853f',
+    pink: '#ffc0cb',
+    plum: '#dda0dd',
+    powderBlue: '#b0e0e6',
+    purple: '#800080',
+    red: '#ff0000',
+    rosyBrown: '#bc8f8f',
+    royalBlue: '#4169e1',
+    saddleBrown: '#8b4513',
+    salmon: '#fa8072',
+    sandyBrown: '#f4a460',
+    seaGreen: '#2e8b57',
+    seaShell: '#fff5ee',
+    sienna: '#a0522d',
+    silver: '#c0c0c0',
+    skyBlue: '#87ceeb',
+    slateBlue: '#6a5acd',
+    slateGray: '#708090',
+    snow: '#fffafa',
+    springGreen: '#00ff7f',
+    steelBlue: '#4682b4',
+    tan: '#d2b48c',
+    teal: '#008080',
+    thistle: '#d8bfd8',
+    tomato: '#ff6347',
+    turquoise: '#40e0d0',
+    violet: '#ee82ee',
+    wheat: '#f5deb3',
+    white: '#ffffff',
+    whiteSmoke: '#f5f5f5',
+    yellow: '#ffff00',
+    yellowGreen: '#9acd32',
+  };
+  return colors[name] ?? null;
+}
+
+/**
+ * Applies color modifiers (shade, tint, lumMod, lumOff) and extracts alpha from
+ * a color element's child modifier elements.
+ * @param {string} color - The base hex color
+ * @param {Array} elements - Child elements of the color node (e.g., a:shade, a:alpha)
+ * @returns {{ color: string, alpha: number|null }}
+ */
+function applyModifiersAndAlpha(color, elements) {
+  let alpha = null;
+  const modifiers = elements || [];
+  modifiers.forEach((mod) => {
+    if (mod.name === 'a:shade') {
+      color = applyColorModifier(color, 'shade', mod.attributes['val']);
+    } else if (mod.name === 'a:tint') {
+      color = applyColorModifier(color, 'tint', mod.attributes['val']);
+    } else if (mod.name === 'a:lumMod') {
+      color = applyColorModifier(color, 'lumMod', mod.attributes['val']);
+    } else if (mod.name === 'a:lumOff') {
+      color = applyColorModifier(color, 'lumOff', mod.attributes['val']);
+    } else if (mod.name === 'a:alpha') {
+      alpha = parseInt(mod.attributes['val']) / 100000;
+    }
+  });
+  return { color, alpha };
+}
+
+/**
+ * Extracts color and alpha from an element containing a color child
+ * (a:schemeClr, a:srgbClr, or a:prstClr). Works with a:solidFill, style
+ * reference elements (a:lnRef, a:fillRef), or any parent that hosts a color child.
+ * @param {Object} element - The parent element (e.g., a:solidFill, a:lnRef, a:fillRef)
+ * @returns {{ color: string, alpha: number|null }|null} Color and optional alpha, or null if no color found
+ */
+function extractColorFromElement(element) {
+  if (!element?.elements) return null;
+
+  const schemeClr = element.elements.find((el) => el.name === 'a:schemeClr');
+  if (schemeClr) {
+    const themeName = schemeClr.attributes?.['val'];
+    const baseColor = getThemeColor(themeName);
+    return applyModifiersAndAlpha(baseColor, schemeClr.elements);
+  }
+
+  const srgbClr = element.elements.find((el) => el.name === 'a:srgbClr');
+  if (srgbClr) {
+    const baseColor = '#' + srgbClr.attributes?.['val'];
+    return applyModifiersAndAlpha(baseColor, srgbClr.elements);
+  }
+
+  const prstClr = element.elements.find((el) => el.name === 'a:prstClr');
+  if (prstClr) {
+    const presetName = prstClr.attributes?.['val'];
+    const baseColor = getPresetColor(presetName);
+    if (!baseColor) return null;
+    return applyModifiersAndAlpha(baseColor, prstClr.elements);
+  }
+
+  return null;
+}
+
+/**
  * Converts a theme color name to its corresponding hex color value.
  * Uses the default Office theme color palette.
  * @param {string} name - The theme color name
@@ -72,18 +284,27 @@ export function applyColorModifier(hexColor, modifier, value) {
 
 /**
  * Extracts the stroke width from a shape's properties (spPr).
+ * In OOXML, a:ln w="0" means "hairline" (thinnest visible line), not invisible.
+ * Word renders hairline strokes at approximately 0.75px.
  * @param {Object} spPr - The shape properties element
  * @returns {number} The stroke width in pixels, or 1 if not found
  */
 export function extractStrokeWidth(spPr) {
   const ln = spPr?.elements?.find((el) => el.name === 'a:ln');
-  const w = ln?.attributes?.['w'];
-  if (!w) return 1;
+  if (!ln) return 1;
+
+  const w = ln.attributes?.['w'];
+  if (w == null) return 1;
 
   // Convert EMUs to pixels for stroke width using 72 DPI to match Word's rendering
   // Word appears to use 72 DPI for stroke widths rather than the standard 96 DPI
   // This gives us: 19050 EMUs * 72 / 914400 = 1.5 pixels (renders closer to 1px in browsers)
   const emu = typeof w === 'string' ? parseFloat(w) : w;
+
+  // w="0" in OOXML means "hairline" — the thinnest visible stroke.
+  // Word renders this as roughly 0.75pt (~1px). Use 0.75 as minimum.
+  if (emu === 0) return 0.75;
+
   const STROKE_DPI = 72;
   return (emu * STROKE_DPI) / 914400;
 }
@@ -133,29 +354,8 @@ export function extractStrokeColor(spPr, style) {
 
     const solidFill = ln.elements?.find((el) => el.name === 'a:solidFill');
     if (solidFill) {
-      const schemeClr = solidFill.elements?.find((el) => el.name === 'a:schemeClr');
-
-      if (schemeClr) {
-        const themeName = schemeClr.attributes?.['val'];
-        let color = getThemeColor(themeName);
-
-        const modifiers = schemeClr.elements || [];
-        modifiers.forEach((mod) => {
-          if (mod.name === 'a:shade') {
-            color = applyColorModifier(color, 'shade', mod.attributes['val']);
-          } else if (mod.name === 'a:tint') {
-            color = applyColorModifier(color, 'tint', mod.attributes['val']);
-          } else if (mod.name === 'a:lumMod') {
-            color = applyColorModifier(color, 'lumMod', mod.attributes['val']);
-          }
-        });
-        return color;
-      }
-
-      const srgbClr = solidFill.elements?.find((el) => el.name === 'a:srgbClr');
-      if (srgbClr) {
-        return '#' + srgbClr.attributes?.['val'];
-      }
+      const result = extractColorFromElement(solidFill);
+      if (result) return result.color;
     }
   }
 
@@ -177,29 +377,11 @@ export function extractStrokeColor(spPr, style) {
     return null;
   }
 
-  const schemeClr = lnRef.elements?.find((el) => el.name === 'a:schemeClr');
-  if (!schemeClr) {
-    // No schemeClr in lnRef - return null rather than default black
-    return null;
-  }
+  // Try extracting color from the lnRef element using the shared helper
+  const lnRefResult = extractColorFromElement(lnRef);
+  if (lnRefResult) return lnRefResult.color;
 
-  const themeName = schemeClr.attributes?.['val'];
-  let color = getThemeColor(themeName);
-
-  const modifiers = schemeClr.elements || [];
-  modifiers.forEach((mod) => {
-    if (mod.name === 'a:shade') {
-      color = applyColorModifier(color, 'shade', mod.attributes['val']);
-    } else if (mod.name === 'a:tint') {
-      color = applyColorModifier(color, 'tint', mod.attributes['val']);
-    } else if (mod.name === 'a:lumMod') {
-      color = applyColorModifier(color, 'lumMod', mod.attributes['val']);
-    } else if (mod.name === 'a:lumOff') {
-      color = applyColorModifier(color, 'lumOff', mod.attributes['val']);
-    }
-  });
-
-  return color;
+  return null;
 }
 
 /**
@@ -217,48 +399,12 @@ export function extractFillColor(spPr, style) {
 
   const solidFill = spPr?.elements?.find((el) => el.name === 'a:solidFill');
   if (solidFill) {
-    const schemeClr = solidFill.elements?.find((el) => el.name === 'a:schemeClr');
-
-    if (schemeClr) {
-      const themeName = schemeClr.attributes?.['val'];
-      let color = getThemeColor(themeName);
-      let alpha = null;
-
-      const modifiers = schemeClr.elements || [];
-      modifiers.forEach((mod) => {
-        if (mod.name === 'a:shade') {
-          color = applyColorModifier(color, 'shade', mod.attributes['val']);
-        } else if (mod.name === 'a:tint') {
-          color = applyColorModifier(color, 'tint', mod.attributes['val']);
-        } else if (mod.name === 'a:lumMod') {
-          color = applyColorModifier(color, 'lumMod', mod.attributes['val']);
-        } else if (mod.name === 'a:lumOff') {
-          color = applyColorModifier(color, 'lumOff', mod.attributes['val']);
-        } else if (mod.name === 'a:alpha') {
-          alpha = parseInt(mod.attributes['val']) / 100000;
-        }
-      });
-
-      // Return object with alpha if present, otherwise just the color string
-      if (alpha !== null && alpha < 1) {
-        return { type: 'solidWithAlpha', color, alpha };
+    const result = extractColorFromElement(solidFill);
+    if (result) {
+      if (result.alpha !== null && result.alpha < 1) {
+        return { type: 'solidWithAlpha', color: result.color, alpha: result.alpha };
       }
-      return color;
-    }
-
-    const srgbClr = solidFill.elements?.find((el) => el.name === 'a:srgbClr');
-    if (srgbClr) {
-      let alpha = null;
-      const alphaEl = srgbClr.elements?.find((el) => el.name === 'a:alpha');
-      if (alphaEl) {
-        alpha = parseInt(alphaEl.attributes?.['val'] || '100000', 10) / 100000;
-      }
-
-      const color = '#' + srgbClr.attributes?.['val'];
-      if (alpha !== null && alpha < 1) {
-        return { type: 'solidWithAlpha', color, alpha };
-      }
-      return color;
+      return result.color;
     }
   }
 
@@ -291,27 +437,16 @@ export function extractFillColor(spPr, style) {
     return null;
   }
 
-  const schemeClr = fillRef.elements?.find((el) => el.name === 'a:schemeClr');
-  if (!schemeClr) {
-    // No schemeClr in fillRef - return transparent rather than default blue
-    return null;
+  // Try extracting color from the fillRef element using the shared helper
+  const fillRefResult = extractColorFromElement(fillRef);
+  if (fillRefResult) {
+    if (fillRefResult.alpha !== null && fillRefResult.alpha < 1) {
+      return { type: 'solidWithAlpha', color: fillRefResult.color, alpha: fillRefResult.alpha };
+    }
+    return fillRefResult.color;
   }
 
-  const themeName = schemeClr.attributes?.['val'];
-  let color = getThemeColor(themeName);
-
-  const modifiers = schemeClr.elements || [];
-  modifiers.forEach((mod) => {
-    if (mod.name === 'a:shade') {
-      color = applyColorModifier(color, 'shade', mod.attributes['val']);
-    } else if (mod.name === 'a:tint') {
-      color = applyColorModifier(color, 'tint', mod.attributes['val']);
-    } else if (mod.name === 'a:lumMod') {
-      color = applyColorModifier(color, 'lumMod', mod.attributes['val']);
-    }
-  });
-
-  return color;
+  return null;
 }
 
 /**

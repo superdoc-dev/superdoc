@@ -28,6 +28,7 @@ import {
   normalizeTextVerticalAlign,
   normalizeTextInsets,
   normalizeZIndex,
+  resolveFloatingZIndex,
 } from '../utilities.js';
 
 // ============================================================================
@@ -337,9 +338,10 @@ export const buildDrawingBlock = (
     attrsWithPm.pmEnd = pos.end;
   }
 
+  const behindDoc = baseAnchor?.behindDoc === true || normalizedWrap?.behindDoc === true;
   // Try to get zIndex from relativeHeight first, fallback to direct zIndex attribute
   const zIndexFromRelativeHeight = normalizeZIndex(rawAttrs.originalAttributes);
-  const finalZIndex = zIndexFromRelativeHeight ?? coerceNumber(rawAttrs.zIndex);
+  const resolvedZIndex = resolveFloatingZIndex(behindDoc, zIndexFromRelativeHeight, coerceNumber(rawAttrs.zIndex) ?? 1);
 
   return {
     kind: 'drawing',
@@ -351,7 +353,7 @@ export const buildDrawingBlock = (
       toBoxSpacing(rawAttrs.margin as Record<string, unknown> | undefined),
     anchor: baseAnchor,
     wrap: normalizedWrap,
-    zIndex: finalZIndex,
+    zIndex: resolvedZIndex,
     drawingContentId: typeof rawAttrs.drawingContentId === 'string' ? rawAttrs.drawingContentId : undefined,
     drawingContent: toDrawingContentSnapshot(rawAttrs.drawingContent),
     attrs: attrsWithPm,

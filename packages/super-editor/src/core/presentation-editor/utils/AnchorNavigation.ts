@@ -1,6 +1,7 @@
 import { selectionToRects, type PageGeometryHelper } from '@superdoc/layout-bridge';
 import type { FlowBlock, Layout, Measure } from '@superdoc/contracts';
 import type { Editor } from '../../Editor.js';
+import { getPageElementByIndex } from '../dom/PageDom.js';
 
 /**
  * Build an anchor map (bookmark name -> page index) using fragment PM ranges.
@@ -160,7 +161,7 @@ export async function goToAnchor({
   await waitForPageMount(pageIndex, timeoutMs);
 
   // Scroll the page element into view
-  const pageEl = painterHost.querySelector(`[data-page-index="${pageIndex}"]`) as HTMLElement | null;
+  const pageEl = getPageElementByIndex(painterHost, pageIndex);
   if (pageEl) {
     pageEl.scrollIntoView({ behavior: 'instant', block: 'start' });
   }

@@ -23,7 +23,9 @@ import { Node, Attribute } from '@core/index.js';
 import { Extension } from '@core/Extension.js';
 import { Plugin, PluginKey } from 'prosemirror-state';
 import { Mark } from '@core/Mark.js';
-import SlashMenu from './components/slash-menu/SlashMenu.vue';
+import ContextMenu from './components/context-menu/ContextMenu.vue';
+/** @deprecated Use ContextMenu instead */
+const SlashMenu = ContextMenu;
 import BasicUpload from '@superdoc/common/components/BasicUpload.vue';
 
 import SuperEditor from './components/SuperEditor.vue';
@@ -55,44 +57,57 @@ const Extensions = {
  * Exported classes and components.
  * @module exports
  * @see SuperConverter
- * @see DocxZipper
  * @see SuperEditor
  * @see Toolbar
  * @see AIWriter
  */
 export {
   // Classes
+  /** @internal */
   SuperConverter,
+  /** @internal */
   DocxZipper,
   SuperToolbar,
   Editor,
+  /** @internal */
   PresentationEditor,
 
   // Components
   SuperEditor,
+  /** @internal */
   SuperInput,
+  /** @internal */
   BasicUpload,
   Toolbar,
   AIWriter,
+  ContextMenu,
   SlashMenu,
 
   // Helpers
   helpers,
   fieldAnnotationHelpers,
   trackChangesHelpers,
+  /** @internal */
   AnnotatorHelpers,
   SectionHelpers,
+  /** @internal */
   getMarksFromSelection,
+  /** @internal */
   getActiveFormatting,
   getStarterExtensions,
+  /** @internal */
   getRichTextExtensions,
   createZip,
+  /** @internal */
   getAllowedImageDimensions,
+  /** @internal */
   registeredHandlers,
 
   // External extensions classes
   Extensions,
+  /** @internal */
   TrackChangesBasePluginKey,
+  /** @internal */
   CommentsPluginKey,
 
   // Type guards and extension helpers

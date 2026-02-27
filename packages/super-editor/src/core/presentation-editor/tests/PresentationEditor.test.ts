@@ -160,7 +160,14 @@ vi.mock('../../Editor', () => {
       getJSON: vi.fn(() => ({ type: 'doc', content: [] })),
       isEditable: true,
       state: {
-        selection: { from: 0, to: 0 },
+        selection: {
+          from: 0,
+          to: 0,
+          $from: {
+            depth: 0,
+            node: vi.fn(),
+          },
+        },
         doc: {
           nodeSize: 100,
           content: {
@@ -379,6 +386,203 @@ describe('PresentationEditor', () => {
       expect(didScroll).toBe(true);
       expect(pageEl.scrollIntoView).toHaveBeenCalled();
     });
+  });
+
+  describe('scrollToPage', () => {
+    const buildMixedPageLayout = () => ({
+      layout: {
+        pageSize: { w: 612, h: 600 },
+        pageGap: 10,
+        pages: [
+          {
+            number: 1,
+            size: { w: 612, h: 600 },
+            fragments: [],
+          },
+          {
+            number: 2,
+            size: { w: 612, h: 1200 },
+            fragments: [],
+          },
+          {
+            number: 3,
+            size: { w: 612, h: 400 },
+            fragments: [],
+          },
+        ],
+      },
+      measures: [],
+    });
+
+    it('mounts and scrolls to virtualized pages using cumulative mixed-height offsets', async () => {
+      mockIncrementalLayout.mockResolvedValueOnce(buildMixedPageLayout());
+
+      editor = new PresentationEditor({
+        element: container,
+        documentId: 'test-scroll-to-page-mixed-heights',
+        content: { type: 'doc', content: [{ type: 'paragraph' }] },
+        mode: 'docx',
+        layoutEngineOptions: {
+          virtualization: { enabled: true, gap: 10, window: 1, overscan: 0 },
+        },
+      });
+
+      await vi.waitFor(() => expect(mockIncrementalLayout).toHaveBeenCalled());
+
+      const pagesHost = container.querySelector('.presentation-editor__pages') as HTMLElement;
+      const expectedPageTop = 600 + 10 + 1200 + 10;
+      let mountedPageEl: HTMLElement | null = null;
+      let scrollTopValue = 0;
+      Object.defineProperty(container, 'scrollTop', {
+        get: () => scrollTopValue,
+        set: (next) => {
+          scrollTopValue = Number(next);
+          if (!mountedPageEl && Math.abs(scrollTopValue - expectedPageTop) < 0.5) {
+            mountedPageEl = document.createElement('div');
+            mountedPageEl.setAttribute('data-page-index', '2');
+            Object.defineProperty(mountedPageEl, 'scrollIntoView', {
+              value: vi.fn(),
+              configurable: true,
+            });
+            pagesHost.appendChild(mountedPageEl);
+          }
+        },
+        configurable: true,
+      });
+
+      let now = 0;
+      const performanceNowSpy = vi.spyOn(performance, 'now').mockImplementation(() => now);
+      const rafSpy = vi.spyOn(window, 'requestAnimationFrame').mockImplementation((cb: FrameRequestCallback) => {
+        now += 100;
+        cb(now);
+        return 1;
+      });
+
+      try {
+        const didScroll = await editor.scrollToPage(3, 'auto');
+
+        expect(didScroll).toBe(true);
+        expect(mountedPageEl).not.toBeNull();
+        expect(mountedPageEl!.scrollIntoView).toHaveBeenCalledWith({
+          block: 'start',
+          inline: 'nearest',
+          behavior: 'auto',
+        });
+      } finally {
+        rafSpy.mockRestore();
+        performanceNowSpy.mockRestore();
+      }
+    });
+
+    it('uses effective virtualization default gap when pre-scrolling to unmounted pages', async () => {
+      mockIncrementalLayout.mockResolvedValueOnce(buildMixedPageLayout());
+
+      editor = new PresentationEditor({
+        element: container,
+        documentId: 'test-scroll-to-page-default-virtual-gap',
+        content: { type: 'doc', content: [{ type: 'paragraph' }] },
+        mode: 'docx',
+        layoutEngineOptions: {
+          // Intentionally omit `gap` so editor must rely on the effective default.
+          virtualization: { enabled: true, window: 1, overscan: 0 },
+        },
+      });
+
+      await vi.waitFor(() => expect(mockIncrementalLayout).toHaveBeenCalled());
+
+      const pagesHost = container.querySelector('.presentation-editor__pages') as HTMLElement;
+      const layoutGap = editor.getLayoutSnapshot().layout?.pageGap ?? 0;
+      const expectedPageTop = 600 + layoutGap + 1200 + layoutGap;
+      let mountedPageEl: HTMLElement | null = null;
+      let scrollTopValue = 0;
+      Object.defineProperty(container, 'scrollTop', {
+        get: () => scrollTopValue,
+        set: (next) => {
+          scrollTopValue = Number(next);
+          if (!mountedPageEl && Math.abs(scrollTopValue - expectedPageTop) < 0.5) {
+            mountedPageEl = document.createElement('div');
+            mountedPageEl.setAttribute('data-page-index', '2');
+            Object.defineProperty(mountedPageEl, 'scrollIntoView', {
+              value: vi.fn(),
+              configurable: true,
+            });
+            pagesHost.appendChild(mountedPageEl);
+          }
+        },
+        configurable: true,
+      });
+
+      let now = 0;
+      const performanceNowSpy = vi.spyOn(performance, 'now').mockImplementation(() => now);
+      const rafSpy = vi.spyOn(window, 'requestAnimationFrame').mockImplementation((cb: FrameRequestCallback) => {
+        now += 100;
+        cb(now);
+        return 1;
+      });
+
+      try {
+        const didScroll = await editor.scrollToPage(3, 'auto');
+
+        expect(didScroll).toBe(true);
+        expect(mountedPageEl).not.toBeNull();
+        expect(mountedPageEl!.scrollIntoView).toHaveBeenCalledWith({
+          block: 'start',
+          inline: 'nearest',
+          behavior: 'auto',
+        });
+      } finally {
+        rafSpy.mockRestore();
+        performanceNowSpy.mockRestore();
+      }
+    });
+
+    it.each([Number.NaN, 1.5])(
+      'rejects invalid pageNumber %p before attempting pre-scroll or mount polling',
+      async (invalidPageNumber) => {
+        mockIncrementalLayout.mockResolvedValueOnce(buildMixedPageLayout());
+
+        editor = new PresentationEditor({
+          element: container,
+          documentId: 'test-scroll-to-page-invalid-input',
+          content: { type: 'doc', content: [{ type: 'paragraph' }] },
+          mode: 'docx',
+          layoutEngineOptions: {
+            virtualization: { enabled: true, gap: 10, window: 1, overscan: 0 },
+          },
+        });
+
+        await vi.waitFor(() => expect(mockIncrementalLayout).toHaveBeenCalled());
+
+        let scrollTopValue = 0;
+        let scrollWrites = 0;
+        Object.defineProperty(container, 'scrollTop', {
+          get: () => scrollTopValue,
+          set: (next) => {
+            scrollWrites += 1;
+            scrollTopValue = Number(next);
+          },
+          configurable: true,
+        });
+
+        let now = 0;
+        const performanceNowSpy = vi.spyOn(performance, 'now').mockImplementation(() => now);
+        const rafSpy = vi.spyOn(window, 'requestAnimationFrame').mockImplementation((cb: FrameRequestCallback) => {
+          now += 2500;
+          cb(now);
+          return 1;
+        });
+
+        try {
+          const didScroll = await editor.scrollToPage(invalidPageNumber, 'auto');
+          expect(didScroll).toBe(false);
+          expect(scrollWrites).toBe(0);
+          expect(rafSpy).not.toHaveBeenCalled();
+        } finally {
+          rafSpy.mockRestore();
+          performanceNowSpy.mockRestore();
+        }
+      },
+    );
   });
 
   describe('setDocumentMode', () => {
@@ -2266,7 +2470,7 @@ describe('PresentationEditor', () => {
 
   describe('Selection update mechanisms', () => {
     describe('#scheduleSelectionUpdate race condition guards', () => {
-      it('should skip scheduling when already scheduled', async () => {
+      it('should render synchronously with immediate mode when safe', async () => {
         const layoutResult = {
           layout: { pages: [] },
           measures: [],
@@ -2294,12 +2498,13 @@ describe('PresentationEditor', () => {
         expect(selectionUpdateCall).toBeDefined();
         const handleSelection = selectionUpdateCall![1] as () => void;
 
-        // Call twice - should only schedule once
+        // Call twice - with immediate mode, renders synchronously when safe
+        // so no RAF scheduling is needed
         handleSelection();
         handleSelection();
 
-        // Should only call requestAnimationFrame once (second call is deduplicated)
-        expect(rafSpy).toHaveBeenCalledTimes(1);
+        // Should NOT use RAF because immediate rendering handles it synchronously
+        expect(rafSpy).not.toHaveBeenCalled();
 
         rafSpy.mockRestore();
       });
@@ -2388,7 +2593,7 @@ describe('PresentationEditor', () => {
         rafSpy.mockRestore();
       });
 
-      it('should successfully schedule when no guards are active', async () => {
+      it('should render synchronously when no guards are active', async () => {
         const layoutResult = {
           layout: { pages: [] },
           measures: [],
@@ -2417,11 +2622,12 @@ describe('PresentationEditor', () => {
         // Clear RAF spy to track new calls
         rafSpy.mockClear();
 
-        // Schedule selection update with no guards active
+        // Selection update with no guards active — renders synchronously via
+        // immediate mode, bypassing RAF
         handleSelection();
 
-        // Should schedule RAF successfully
-        expect(rafSpy).toHaveBeenCalledTimes(1);
+        // Should NOT use RAF because immediate rendering handles it synchronously
+        expect(rafSpy).not.toHaveBeenCalled();
 
         rafSpy.mockRestore();
       });
@@ -2968,7 +3174,14 @@ describe('PresentationEditor', () => {
         // Wait for initial render to complete so timers/RAF have settled.
         await new Promise((resolve) => setTimeout(resolve, 100));
 
-        mockEditorInstance.state.selection = { from: 5, to: 5 };
+        mockEditorInstance.state.selection = {
+          from: 5,
+          to: 5,
+          $from: {
+            depth: 0,
+            node: vi.fn(),
+          },
+        };
 
         const onCalls = mockEditorInstance.on as unknown as Mock;
         const selectionUpdateCall = onCalls.mock.calls.find((call) => call[0] === 'selectionUpdate');
@@ -3001,7 +3214,14 @@ describe('PresentationEditor', () => {
 
         await new Promise((resolve) => setTimeout(resolve, 100));
 
-        mockEditorInstance.state.selection = { from: 1, to: 6 };
+        mockEditorInstance.state.selection = {
+          from: 1,
+          to: 6,
+          $from: {
+            depth: 0,
+            node: vi.fn(),
+          },
+        };
         (mockEditorInstance.state.doc as unknown as { textBetween?: () => string }).textBetween = () => 'Hello world';
 
         const onCalls = mockEditorInstance.on as unknown as Mock;

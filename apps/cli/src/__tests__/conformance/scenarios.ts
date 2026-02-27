@@ -27,6 +27,117 @@ function genericInvalidArgumentFailure(operationId: CliOperationId) {
   });
 }
 
+function extractDiscoveryItems(data: unknown): Record<string, unknown>[] {
+  if (!data || typeof data !== 'object') return [];
+
+  for (const value of Object.values(data as Record<string, unknown>)) {
+    if (!value || typeof value !== 'object') continue;
+
+    const asContainer = value as {
+      items?: unknown;
+      result?: {
+        items?: unknown;
+      };
+    };
+    const maybeItems = Array.isArray(asContainer.items)
+      ? asContainer.items
+      : Array.isArray(asContainer.result?.items)
+        ? asContainer.result.items
+        : null;
+
+    if (Array.isArray(maybeItems)) {
+      return maybeItems.filter((entry): entry is Record<string, unknown> => !!entry && typeof entry === 'object');
+    }
+  }
+
+  return [];
+}
+
+function requireSectionAddress(item: Record<string, unknown>, context: string): Record<string, unknown> {
+  const address = item.address;
+  if (!address || typeof address !== 'object') {
+    throw new Error(`Missing section address for ${context}.`);
+  }
+  return address as Record<string, unknown>;
+}
+
+async function resolveFirstSection(
+  harness: ConformanceHarness,
+  stateDir: string,
+  docPath: string,
+  context: string,
+): Promise<{ item: Record<string, unknown>; address: Record<string, unknown> }> {
+  const listed = await harness.runCli([...commandTokens('doc.sections.list'), docPath, '--limit', '10'], stateDir);
+  if (listed.result.code !== 0 || listed.envelope.ok !== true) {
+    throw new Error(`Failed to list sections for ${context}.`);
+  }
+
+  const items = extractDiscoveryItems(listed.envelope.data);
+  const first = items[0];
+  if (!first) {
+    throw new Error(`No sections available for ${context}.`);
+  }
+
+  return {
+    item: first,
+    address: requireSectionAddress(first, context),
+  };
+}
+
+async function createDocWithSecondSection(
+  harness: ConformanceHarness,
+  stateDir: string,
+  label: string,
+): Promise<{ docPath: string; first: Record<string, unknown>; second: Record<string, unknown> }> {
+  const sourceDoc = await harness.copyFixtureDoc(`${label}-source`);
+  const withBreakDoc = harness.createOutputPath(`${label}-with-break`);
+  const created = await harness.runCli(
+    [...commandTokens('doc.create.sectionBreak'), sourceDoc, '--break-type', 'nextPage', '--out', withBreakDoc],
+    stateDir,
+  );
+  if (created.result.code !== 0 || created.envelope.ok !== true) {
+    throw new Error(`Failed to create second section for ${label}.`);
+  }
+
+  const listed = await harness.runCli([...commandTokens('doc.sections.list'), withBreakDoc, '--limit', '10'], stateDir);
+  if (listed.result.code !== 0 || listed.envelope.ok !== true) {
+    throw new Error(`Failed to list sections after break creation for ${label}.`);
+  }
+
+  const items = extractDiscoveryItems(listed.envelope.data);
+  const first = items[0];
+  const second = items[1];
+  if (!first || !second) {
+    throw new Error(`Expected at least 2 sections for ${label}.`);
+  }
+
+  return { docPath: withBreakDoc, first, second };
+}
+
+function sectionMutationScenario(
+  operationId: CliOperationId,
+  label: string,
+  extraArgs: string[],
+): (harness: ConformanceHarness) => Promise<ScenarioInvocation> {
+  return async (harness) => {
+    const stateDir = await harness.createStateDir(`${label}-success`);
+    const docPath = await harness.copyFixtureDoc(`${label}-source`);
+    const { address } = await resolveFirstSection(harness, stateDir, docPath, label);
+    return {
+      stateDir,
+      args: [
+        ...commandTokens(operationId),
+        docPath,
+        '--target-json',
+        JSON.stringify(address),
+        ...extraArgs,
+        '--out',
+        harness.createOutputPath(`${label}-output`),
+      ],
+    };
+  };
+}
+
 // ---------------------------------------------------------------------------
 // Table scenario helpers (DRY builders for the 40 table operations)
 // ---------------------------------------------------------------------------
@@ -390,6 +501,249 @@ export const SUCCESS_SCENARIOS = {
         JSON.stringify({ text: 'Conformance paragraph text' }),
         '--out',
         harness.createOutputPath('doc-create-paragraph-output'),
+      ],
+    };
+  },
+  'doc.create.sectionBreak': async (harness: ConformanceHarness): Promise<ScenarioInvocation> => {
+    const stateDir = await harness.createStateDir('doc-create-section-break-success');
+    const docPath = await harness.copyFixtureDoc('doc-create-section-break');
+    return {
+      stateDir,
+      args: [
+        ...commandTokens('doc.create.sectionBreak'),
+        docPath,
+        '--break-type',
+        'nextPage',
+        '--out',
+        harness.createOutputPath('doc-create-section-break-output'),
+      ],
+    };
+  },
+  'doc.sections.list': async (harness: ConformanceHarness): Promise<ScenarioInvocation> => {
+    const stateDir = await harness.createStateDir('doc-sections-list-success');
+    const docPath = await harness.copyFixtureDoc('doc-sections-list');
+    return {
+      stateDir,
+      args: [...commandTokens('doc.sections.list'), docPath, '--limit', '10'],
+    };
+  },
+  'doc.sections.get': async (harness: ConformanceHarness): Promise<ScenarioInvocation> => {
+    const stateDir = await harness.createStateDir('doc-sections-get-success');
+    const docPath = await harness.copyFixtureDoc('doc-sections-get');
+    const { address } = await resolveFirstSection(harness, stateDir, docPath, 'doc.sections.get');
+    return {
+      stateDir,
+      args: [...commandTokens('doc.sections.get'), docPath, '--address-json', JSON.stringify(address)],
+    };
+  },
+  'doc.sections.setBreakType': sectionMutationScenario('doc.sections.setBreakType', 'doc-sections-set-break-type', [
+    '--break-type',
+    'continuous',
+  ]),
+  'doc.sections.setPageMargins': sectionMutationScenario(
+    'doc.sections.setPageMargins',
+    'doc-sections-set-page-margins',
+    ['--top', '1.1', '--right', '1.2', '--bottom', '1.3', '--left', '1.4'],
+  ),
+  'doc.sections.setHeaderFooterMargins': sectionMutationScenario(
+    'doc.sections.setHeaderFooterMargins',
+    'doc-sections-set-header-footer-margins',
+    ['--header', '0.6', '--footer', '0.8'],
+  ),
+  'doc.sections.setPageSetup': sectionMutationScenario('doc.sections.setPageSetup', 'doc-sections-set-page-setup', [
+    '--orientation',
+    'landscape',
+  ]),
+  'doc.sections.setColumns': sectionMutationScenario('doc.sections.setColumns', 'doc-sections-set-columns', [
+    '--count',
+    '2',
+    '--gap',
+    '0.8',
+    '--equal-width',
+    'true',
+  ]),
+  'doc.sections.setLineNumbering': sectionMutationScenario(
+    'doc.sections.setLineNumbering',
+    'doc-sections-set-line-numbering',
+    ['--enabled', 'true', '--count-by', '2', '--start', '1', '--distance', '0.25', '--restart', 'newSection'],
+  ),
+  'doc.sections.setPageNumbering': sectionMutationScenario(
+    'doc.sections.setPageNumbering',
+    'doc-sections-set-page-numbering',
+    ['--start', '5', '--format', 'decimal'],
+  ),
+  'doc.sections.setTitlePage': sectionMutationScenario('doc.sections.setTitlePage', 'doc-sections-set-title-page', [
+    '--enabled',
+    'true',
+  ]),
+  'doc.sections.setOddEvenHeadersFooters': async (harness: ConformanceHarness): Promise<ScenarioInvocation> => {
+    const stateDir = await harness.createStateDir('doc-sections-set-odd-even-success');
+    const docPath = await harness.copyFixtureDoc('doc-sections-set-odd-even');
+    return {
+      stateDir,
+      args: [
+        ...commandTokens('doc.sections.setOddEvenHeadersFooters'),
+        docPath,
+        '--enabled',
+        'true',
+        '--out',
+        harness.createOutputPath('doc-sections-set-odd-even-output'),
+      ],
+    };
+  },
+  'doc.sections.setVerticalAlign': sectionMutationScenario(
+    'doc.sections.setVerticalAlign',
+    'doc-sections-set-vertical-align',
+    ['--value', 'center'],
+  ),
+  'doc.sections.setSectionDirection': sectionMutationScenario(
+    'doc.sections.setSectionDirection',
+    'doc-sections-set-direction',
+    ['--direction', 'rtl'],
+  ),
+  'doc.sections.setHeaderFooterRef': async (harness: ConformanceHarness): Promise<ScenarioInvocation> => {
+    const stateDir = await harness.createStateDir('doc-sections-set-header-footer-ref-success');
+    const docPath = await harness.copyFixtureDoc('doc-sections-set-header-footer-ref');
+    const { item, address } = await resolveFirstSection(harness, stateDir, docPath, 'doc.sections.setHeaderFooterRef');
+    const footerRefs = item.footerRefs as Record<string, unknown> | undefined;
+    const refId =
+      (typeof footerRefs?.default === 'string' ? footerRefs.default : undefined) ??
+      (typeof footerRefs?.even === 'string' ? footerRefs.even : undefined);
+    if (!refId) {
+      throw new Error('No footer relationship id available for doc.sections.setHeaderFooterRef.');
+    }
+    return {
+      stateDir,
+      args: [
+        ...commandTokens('doc.sections.setHeaderFooterRef'),
+        docPath,
+        '--target-json',
+        JSON.stringify(address),
+        '--kind',
+        'footer',
+        '--variant',
+        'first',
+        '--ref-id',
+        refId,
+        '--out',
+        harness.createOutputPath('doc-sections-set-header-footer-ref-output'),
+      ],
+    };
+  },
+  'doc.sections.clearHeaderFooterRef': async (harness: ConformanceHarness): Promise<ScenarioInvocation> => {
+    const stateDir = await harness.createStateDir('doc-sections-clear-header-footer-ref-success');
+    const sourceDoc = await harness.copyFixtureDoc('doc-sections-clear-header-footer-ref');
+    const { item, address } = await resolveFirstSection(
+      harness,
+      stateDir,
+      sourceDoc,
+      'doc.sections.clearHeaderFooterRef:prepare',
+    );
+    const footerRefs = item.footerRefs as Record<string, unknown> | undefined;
+    const refId =
+      (typeof footerRefs?.default === 'string' ? footerRefs.default : undefined) ??
+      (typeof footerRefs?.even === 'string' ? footerRefs.even : undefined);
+    if (!refId) {
+      throw new Error('No footer relationship id available for doc.sections.clearHeaderFooterRef.');
+    }
+
+    const preparedDoc = harness.createOutputPath('doc-sections-clear-header-footer-ref-prepared');
+    const prepared = await harness.runCli(
+      [
+        ...commandTokens('doc.sections.setHeaderFooterRef'),
+        sourceDoc,
+        '--target-json',
+        JSON.stringify(address),
+        '--kind',
+        'footer',
+        '--variant',
+        'first',
+        '--ref-id',
+        refId,
+        '--out',
+        preparedDoc,
+      ],
+      stateDir,
+    );
+    if (prepared.result.code !== 0 || prepared.envelope.ok !== true) {
+      throw new Error('Failed to prepare explicit header/footer ref for clear scenario.');
+    }
+
+    return {
+      stateDir,
+      args: [
+        ...commandTokens('doc.sections.clearHeaderFooterRef'),
+        preparedDoc,
+        '--target-json',
+        JSON.stringify(address),
+        '--kind',
+        'footer',
+        '--variant',
+        'first',
+        '--out',
+        harness.createOutputPath('doc-sections-clear-header-footer-ref-output'),
+      ],
+    };
+  },
+  'doc.sections.setLinkToPrevious': async (harness: ConformanceHarness): Promise<ScenarioInvocation> => {
+    const stateDir = await harness.createStateDir('doc-sections-set-link-to-previous-success');
+    const fixture = await createDocWithSecondSection(harness, stateDir, 'doc-sections-set-link-to-previous');
+    const secondAddress = requireSectionAddress(fixture.second, 'doc.sections.setLinkToPrevious');
+    return {
+      stateDir,
+      args: [
+        ...commandTokens('doc.sections.setLinkToPrevious'),
+        fixture.docPath,
+        '--target-json',
+        JSON.stringify(secondAddress),
+        '--kind',
+        'header',
+        '--variant',
+        'default',
+        '--linked',
+        'false',
+        '--out',
+        harness.createOutputPath('doc-sections-set-link-to-previous-output'),
+      ],
+    };
+  },
+  'doc.sections.setPageBorders': sectionMutationScenario(
+    'doc.sections.setPageBorders',
+    'doc-sections-set-page-borders',
+    ['--borders-json', JSON.stringify({ top: { style: 'single', size: 8, color: '000000' } })],
+  ),
+  'doc.sections.clearPageBorders': async (harness: ConformanceHarness): Promise<ScenarioInvocation> => {
+    const stateDir = await harness.createStateDir('doc-sections-clear-page-borders-success');
+    const sourceDoc = await harness.copyFixtureDoc('doc-sections-clear-page-borders');
+    const { address } = await resolveFirstSection(harness, stateDir, sourceDoc, 'doc.sections.clearPageBorders');
+
+    const withBordersDoc = harness.createOutputPath('doc-sections-clear-page-borders-prepared');
+    const prepared = await harness.runCli(
+      [
+        ...commandTokens('doc.sections.setPageBorders'),
+        sourceDoc,
+        '--target-json',
+        JSON.stringify(address),
+        '--borders-json',
+        JSON.stringify({ top: { style: 'single', size: 8, color: '000000' } }),
+        '--out',
+        withBordersDoc,
+      ],
+      stateDir,
+    );
+    if (prepared.result.code !== 0 || prepared.envelope.ok !== true) {
+      throw new Error('Failed to prepare page borders for clear-page-borders scenario.');
+    }
+
+    return {
+      stateDir,
+      args: [
+        ...commandTokens('doc.sections.clearPageBorders'),
+        withBordersDoc,
+        '--target-json',
+        JSON.stringify(address),
+        '--out',
+        harness.createOutputPath('doc-sections-clear-page-borders-output'),
       ],
     };
   },

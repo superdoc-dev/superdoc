@@ -422,6 +422,9 @@ importers:
       '@superdoc/document-api':
         specifier: workspace:*
         version: link:../../packages/document-api
+      '@superdoc/pm-adapter':
+        specifier: workspace:*
+        version: link:../../packages/layout-engine/pm-adapter
       '@superdoc/super-editor':
         specifier: workspace:*
         version: link:../../packages/super-editor

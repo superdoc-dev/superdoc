@@ -273,6 +273,77 @@ describe('tables-adapter regressions', () => {
     expect(tr.insert).toHaveBeenCalledWith(expectedInsertPos, expect.anything());
   });
 
+  it('deletes shiftLeft cells without appending a trailing replacement cell', () => {
+    const editor = makeTableEditor();
+    const tr = editor.state.tr as unknown as {
+      delete: ReturnType<typeof vi.fn>;
+      insert: ReturnType<typeof vi.fn>;
+      setNodeMarkup: ReturnType<typeof vi.fn>;
+    };
+    const tableNode = editor.state.doc.nodeAt(0) as ProseMirrorNode;
+    const targetCellOffset = TableMap.get(tableNode).map[0]!;
+    const targetCellNode = tableNode.nodeAt(targetCellOffset) as ProseMirrorNode;
+    const expectedStart = 1 + targetCellOffset;
+    const expectedEnd = expectedStart + targetCellNode.nodeSize;
+
+    const result = tablesDeleteCellAdapter(editor, { nodeId: 'cell-1', mode: 'shiftLeft' });
+    expect(result.success).toBe(true);
+    expect(tr.delete).toHaveBeenCalledWith(expectedStart, expectedEnd);
+    expect(tr.insert).not.toHaveBeenCalled();
+    expect(tr.setNodeMarkup).toHaveBeenCalledWith(
+      expect.any(Number),
+      null,
+      expect.objectContaining({
+        colspan: 2,
+      }),
+    );
+  });
+
+  it('deletes the row trailing cell for shiftLeft without appending a replacement cell', () => {
+    const editor = makeTableEditor();
+    const tr = editor.state.tr as unknown as {
+      delete: ReturnType<typeof vi.fn>;
+      insert: ReturnType<typeof vi.fn>;
+      setNodeMarkup: ReturnType<typeof vi.fn>;
+    };
+    const tableNode = editor.state.doc.nodeAt(0) as ProseMirrorNode;
+    const targetCellOffset = TableMap.get(tableNode).map[1]!;
+    const targetCellNode = tableNode.nodeAt(targetCellOffset) as ProseMirrorNode;
+    const expectedStart = 1 + targetCellOffset;
+    const expectedEnd = expectedStart + targetCellNode.nodeSize;
+
+    const result = tablesDeleteCellAdapter(editor, { nodeId: 'cell-2', mode: 'shiftLeft' });
+    expect(result.success).toBe(true);
+    expect(tr.delete).toHaveBeenCalledWith(expectedStart, expectedEnd);
+    expect(tr.insert).not.toHaveBeenCalled();
+    expect(tr.setNodeMarkup).toHaveBeenCalledWith(
+      expect.any(Number),
+      null,
+      expect.objectContaining({
+        colspan: 2,
+      }),
+    );
+  });
+
+  it('falls back to trailing replacement cell when shiftLeft would widen a vertically merged trailing cell', () => {
+    const editor = makeTableEditor();
+    const tr = editor.state.tr as unknown as {
+      delete: ReturnType<typeof vi.fn>;
+      insert: ReturnType<typeof vi.fn>;
+      setNodeMarkup: ReturnType<typeof vi.fn>;
+    };
+    const tableNode = editor.state.doc.nodeAt(0) as ProseMirrorNode;
+    const firstRow = tableNode.child(0) as ProseMirrorNode;
+    const trailingCell = firstRow.child(1) as unknown as { attrs: Record<string, unknown> };
+    trailingCell.attrs.rowspan = 2;
+    trailingCell.attrs.tableCellProperties = { vMerge: 'restart' };
+
+    const result = tablesDeleteCellAdapter(editor, { nodeId: 'cell-1', mode: 'shiftLeft' });
+    expect(result.success).toBe(true);
+    expect(tr.insert).toHaveBeenCalledWith(expect.any(Number), expect.anything());
+    expect(tr.setNodeMarkup).not.toHaveBeenCalled();
+  });
+
   it('rejects paragraph targets for tables.setBorder', () => {
     const editor = makeTableEditor();
     const result = tablesSetBorderAdapter(editor, {

@@ -87,6 +87,11 @@ const REQUIRED_COMMANDS: Partial<Record<OperationId, readonly EditorCommandName[
   'tables.setCellPadding': ['insertTableAt'],
   'tables.setCellSpacing': ['insertTableAt'],
   'tables.clearCellSpacing': ['insertTableAt'],
+  // TOC operations — insertTableOfContentsAt proves the TOC extension is loaded:
+  'create.tableOfContents': ['insertTableOfContentsAt'],
+  'toc.configure': ['setTableOfContentsInstructionById'],
+  'toc.update': ['replaceTableOfContentsContentById'],
+  'toc.remove': ['deleteTableOfContentsById'],
 };
 
 /** Runtime guard — ensures only canonical reason codes are emitted even if the set grows. */

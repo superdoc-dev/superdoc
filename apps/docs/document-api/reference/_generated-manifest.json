@@ -16,6 +16,7 @@
     "apps/docs/document-api/reference/create/index.mdx",
     "apps/docs/document-api/reference/create/paragraph.mdx",
     "apps/docs/document-api/reference/create/section-break.mdx",
+    "apps/docs/document-api/reference/create/table-of-contents.mdx",
     "apps/docs/document-api/reference/create/table.mdx",
     "apps/docs/document-api/reference/delete.mdx",
     "apps/docs/document-api/reference/find.mdx",
@@ -146,6 +147,12 @@
     "apps/docs/document-api/reference/tables/split-cell.mdx",
     "apps/docs/document-api/reference/tables/split.mdx",
     "apps/docs/document-api/reference/tables/unmerge-cells.mdx",
+    "apps/docs/document-api/reference/toc/configure.mdx",
+    "apps/docs/document-api/reference/toc/get.mdx",
+    "apps/docs/document-api/reference/toc/index.mdx",
+    "apps/docs/document-api/reference/toc/list.mdx",
+    "apps/docs/document-api/reference/toc/remove.mdx",
+    "apps/docs/document-api/reference/toc/update.mdx",
     "apps/docs/document-api/reference/track-changes/decide.mdx",
     "apps/docs/document-api/reference/track-changes/get.mdx",
     "apps/docs/document-api/reference/track-changes/index.mdx",
@@ -177,7 +184,13 @@
     {
       "aliasMemberPaths": [],
       "key": "create",
-      "operationIds": ["create.paragraph", "create.heading", "create.sectionBreak", "create.table"],
+      "operationIds": [
+        "create.paragraph",
+        "create.heading",
+        "create.sectionBreak",
+        "create.table",
+        "create.tableOfContents"
+      ],
       "pagePath": "apps/docs/document-api/reference/create/index.mdx",
       "title": "Create"
     },
@@ -356,8 +369,15 @@
       ],
       "pagePath": "apps/docs/document-api/reference/tables/index.mdx",
       "title": "Tables"
+    },
+    {
+      "aliasMemberPaths": [],
+      "key": "toc",
+      "operationIds": ["toc.list", "toc.get", "toc.configure", "toc.update", "toc.remove"],
+      "pagePath": "apps/docs/document-api/reference/toc/index.mdx",
+      "title": "Table of Contents"
     }
   ],
   "marker": "{/* GENERATED FILE: DO NOT EDIT. Regenerate via `pnpm run docapi:sync`. */}",
-  "sourceHash": "90dd475da0e7c62926d20b97256f58cbbab20b6decc1740a629bb960e5780a7d"
+  "sourceHash": "b347a10d2f82fe516ca8eacd8770c036dabb5b9faf176f7373dd8328aaa4ef98"
 }

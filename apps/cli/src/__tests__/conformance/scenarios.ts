@@ -334,6 +334,43 @@ function tableScopedMutationScenario(
   };
 }
 
+function tocMutationScenario(
+  op: string,
+  extraArgs: string[],
+): (harness: ConformanceHarness) => Promise<ScenarioInvocation> {
+  return async (harness) => {
+    const label = `toc-${op.replace(/\./g, '-')}`;
+    const stateDir = await harness.createStateDir(`${label}-success`);
+    const docPath = await harness.copyTocFixtureDoc(`${label}-source`, stateDir);
+    const tocTarget = await harness.firstTocAddress(docPath, stateDir);
+    return {
+      stateDir,
+      args: [
+        ...commandTokens(`doc.${op}` as CliOperationId),
+        docPath,
+        '--target-json',
+        JSON.stringify(tocTarget),
+        ...extraArgs,
+        '--out',
+        harness.createOutputPath(`${label}-out`),
+      ],
+    };
+  };
+}
+
+function tocReadWithTargetScenario(op: string): (harness: ConformanceHarness) => Promise<ScenarioInvocation> {
+  return async (harness) => {
+    const label = `toc-${op.replace(/\./g, '-')}`;
+    const stateDir = await harness.createStateDir(`${label}-success`);
+    const docPath = await harness.copyTocFixtureDoc(`${label}-source`, stateDir);
+    const tocTarget = await harness.firstTocAddress(docPath, stateDir);
+    return {
+      stateDir,
+      args: [...commandTokens(`doc.${op}` as CliOperationId), docPath, '--target-json', JSON.stringify(tocTarget)],
+    };
+  };
+}
+
 export const SUCCESS_SCENARIOS = {
   'doc.open': async (harness: ConformanceHarness): Promise<ScenarioInvocation> => {
     const stateDir = await harness.createStateDir('doc-open-success');
@@ -579,6 +616,23 @@ export const SUCCESS_SCENARIOS = {
         JSON.stringify({ level: 1, text: 'Conformance heading text' }),
         '--out',
         harness.createOutputPath('doc-create-heading-output'),
+      ],
+    };
+  },
+  'doc.create.tableOfContents': async (harness: ConformanceHarness): Promise<ScenarioInvocation> => {
+    const stateDir = await harness.createStateDir('doc-create-toc-success');
+    const docPath = await harness.copyFixtureDoc('doc-create-toc');
+    return {
+      stateDir,
+      args: [
+        ...commandTokens('doc.create.tableOfContents'),
+        docPath,
+        '--at-json',
+        JSON.stringify({ kind: 'documentStart' }),
+        '--config-json',
+        JSON.stringify({ hyperlinks: true, outlineLevels: { from: 1, to: 3 } }),
+        '--out',
+        harness.createOutputPath('doc-create-toc-output'),
       ],
     };
   },
@@ -1160,6 +1214,18 @@ export const SUCCESS_SCENARIOS = {
       ],
     };
   },
+  'doc.toc.list': async (harness: ConformanceHarness): Promise<ScenarioInvocation> => {
+    const stateDir = await harness.createStateDir('doc-toc-list-success');
+    const docPath = await harness.copyTocFixtureDoc('doc-toc-list', stateDir);
+    return {
+      stateDir,
+      args: [...commandTokens('doc.toc.list'), docPath, '--limit', '1'],
+    };
+  },
+  'doc.toc.get': tocReadWithTargetScenario('toc.get'),
+  'doc.toc.configure': tocMutationScenario('toc.configure', ['--patch-json', JSON.stringify({ hyperlinks: false })]),
+  'doc.toc.update': tocMutationScenario('toc.update', []),
+  'doc.toc.remove': tocMutationScenario('toc.remove', []),
   'doc.session.list': async (harness: ConformanceHarness): Promise<ScenarioInvocation> => {
     const stateDir = await harness.createStateDir('doc-session-list-success');
     await harness.openSessionFixture(stateDir, 'doc-session-list', 'session-list-success');

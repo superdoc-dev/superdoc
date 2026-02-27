@@ -1,0 +1,165 @@
+---
+title: Nuxt Integration
+sidebarTitle: Nuxt
+keywords: "nuxt docx editor, nuxt word component, superdoc nuxt, nuxt document editor, nuxt 4 superdoc"
+---
+
+SuperDoc works with Nuxt 4+ as a client-side Vue component. Set `ssr: false` in your Nuxt config — SuperDoc manipulates the DOM directly and doesn't run server-side.
+
+## Install
+
+```bash
+npm install superdoc
+```
+
+## Configure Nuxt
+
+```ts nuxt.config.ts
+export default defineNuxtConfig({
+  ssr: false,
+  css: ['superdoc/style.css'],
+  compatibilityDate: '2025-07-15',
+})
+```
+
+<Note>
+`ssr: false` is required. SuperDoc renders documents in the browser using DOM APIs that aren't available server-side.
+</Note>
+
+## Basic setup
+
+Nuxt auto-imports Vue's `ref`, `watch`, and lifecycle hooks — no manual imports needed.
+
+```vue app/pages/index.vue
+<script setup lang="ts">
+import { SuperDoc } from 'superdoc';
+
+const container = ref<HTMLDivElement | null>(null);
+const file = ref<File | null>(null);
+
+let superdoc: SuperDoc | null = null;
+
+const handleFile = (e: Event) => {
+  const input = e.target as HTMLInputElement;
+  if (input.files?.[0]) file.value = input.files[0];
+};
+
+const initEditor = () => {
+  if (!container.value || !file.value) return;
+  superdoc?.destroy();
+  superdoc = new SuperDoc({
+    selector: container.value,
+    document: file.value,
+  });
+};
+
+watch(file, initEditor);
+onBeforeUnmount(() => superdoc?.destroy());
+</script>
+
+<template>
+  <div>
+    <div style="padding: 1rem; background: #f5f5f5">
+      <input type="file" accept=".docx" @change="handleFile" />
+    </div>
+    <div ref="container" style="height: calc(100vh - 60px)" />
+  </div>
+</template>
+```
+
+## Full component
+
+Build a reusable DOCX editor component with controls:
+
+```vue app/components/DocEditor.vue
+<script setup lang="ts">
+import { SuperDoc } from 'superdoc';
+
+const props = defineProps<{
+  document: string | File | Blob;
+}>();
+
+const editor = ref<HTMLDivElement | null>(null);
+let superdoc: SuperDoc | null = null;
+
+onMounted(() => {
+  if (!editor.value) return;
+  superdoc = new SuperDoc({
+    selector: editor.value,
+    document: props.document,
+    documentMode: 'editing',
+  });
+});
+
+onBeforeUnmount(() => superdoc?.destroy());
+
+const setMode = (mode: 'editing' | 'suggesting' | 'viewing') => {
+  superdoc?.setDocumentMode(mode);
+};
+
+const exportFinal = async () => {
+  await superdoc?.export({ isFinalDoc: true });
+};
+</script>
+
+<template>
+  <div>
+    <div class="controls">
+      <button @click="setMode('editing')">Edit</button>
+      <button @click="setMode('suggesting')">Review</button>
+      <button @click="setMode('viewing')">View</button>
+      <button @click="exportFinal">Export Final</button>
+    </div>
+    <div ref="editor" class="editor-container" />
+  </div>
+</template>
+
+<style scoped>
+.editor-container {
+  height: 700px;
+  border: 1px solid #e2e8f0;
+}
+.controls {
+  padding: 1rem;
+  display: flex;
+  gap: 0.5rem;
+}
+</style>
+```
+
+Then use it in a page:
+
+```vue app/pages/index.vue
+<script setup lang="ts">
+const file = ref<File | null>(null);
+
+const handleFile = (e: Event) => {
+  const input = e.target as HTMLInputElement;
+  if (input.files?.[0]) file.value = input.files[0];
+};
+</script>
+
+<template>
+  <div>
+    <input type="file" accept=".docx" @change="handleFile" />
+    <DocEditor v-if="file" :document="file" />
+  </div>
+</template>
+```
+
+## Next steps
+
+<CardGroup cols={2}>
+<Card title="Vue Integration" icon="vuejs" href="/getting-started/frameworks/vue">
+  Full Vue setup and patterns
+</Card>
+<Card title="Configuration" icon="gear" href="/core/superdoc/configuration">
+  All configuration options
+</Card>
+<Card title="Nuxt Example" icon="github" href="https://github.com/superdoc-dev/superdoc/tree/main/examples/getting-started/nuxt">
+  Working Nuxt example on GitHub
+</Card>
+<Card title="Collaboration" icon="users" href="/modules/collaboration/overview">
+  Real-time collaboration
+</Card>
+</CardGroup>

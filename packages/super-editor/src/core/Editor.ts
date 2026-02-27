@@ -225,6 +225,19 @@ export class Editor extends EventEmitter<EditorEventMap> {
   presentationEditor: PresentationEditor | null = null;
 
   /**
+   * Returns the current total number of pages when pagination is active.
+   * Delegates to the PresentationEditor's layout state.
+   * Returns `undefined` before the first layout completes or when pagination is off.
+   */
+  get currentTotalPages(): number | undefined {
+    if (this.presentationEditor) {
+      const pages = this.presentationEditor.getPages();
+      return pages.length > 0 ? pages.length : undefined;
+    }
+    return undefined;
+  }
+
+  /**
    * Whether the editor currently has focus
    */
   isFocused: boolean = false;

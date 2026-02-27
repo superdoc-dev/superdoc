@@ -62,6 +62,12 @@ import {
 } from '../plan-engine/tables-wrappers.js';
 import { getDocumentApiCapabilities } from '../capabilities-adapter.js';
 import {
+  tocConfigureWrapper,
+  tocUpdateWrapper,
+  tocRemoveWrapper,
+  createTableOfContentsWrapper,
+} from '../plan-engine/toc-wrappers.js';
+import {
   listsInsertWrapper,
   listsSetTypeWrapper,
   listsIndentWrapper,
@@ -1286,6 +1292,56 @@ const formatInlineDryRunVectors = Object.fromEntries(
     ];
   }),
 ) as Partial<Record<OperationId, () => unknown>>;
+
+function makeTocEditor(commandOverrides: Record<string, unknown> = {}): Editor {
+  const tocParagraph = createNode('paragraph', [createNode('text', [], { text: 'TOC entry' })], {
+    attrs: { sdBlockId: 'toc-entry-p1' },
+    isBlock: true,
+    inlineContent: true,
+  });
+  const tocNode = createNode('tableOfContents', [tocParagraph], {
+    attrs: { sdBlockId: 'toc-1', instruction: 'TOC \\o "1-3" \\h \\u \\z' },
+    isBlock: true,
+  });
+  const heading = createNode('paragraph', [createNode('text', [], { text: 'Heading 1' })], {
+    attrs: {
+      sdBlockId: 'h-1',
+      paragraphProperties: { styleId: 'Heading1' },
+    },
+    isBlock: true,
+    inlineContent: true,
+  });
+  const doc = createNode('doc', [tocNode, heading], { isBlock: false });
+
+  const dispatch = vi.fn();
+  const tr = {
+    insertText: vi.fn().mockReturnThis(),
+    delete: vi.fn().mockReturnThis(),
+    insert: vi.fn().mockReturnThis(),
+    setNodeMarkup: vi.fn().mockReturnThis(),
+    replaceWith: vi.fn().mockReturnThis(),
+    setMeta: vi.fn().mockReturnThis(),
+    mapping: { map: (pos: number) => pos },
+    docChanged: true,
+    steps: [{}],
+    doc,
+  };
+
+  return {
+    state: { doc, tr, schema: { nodes: { paragraph: { create: vi.fn() }, tableOfContents: {} } } },
+    dispatch,
+    commands: {
+      insertTableOfContentsAt: vi.fn(() => true),
+      setTableOfContentsInstructionById: vi.fn(() => true),
+      replaceTableOfContentsContentById: vi.fn(() => true),
+      deleteTableOfContentsById: vi.fn(() => true),
+      ...commandOverrides,
+    },
+    schema: { marks: {} },
+    options: {},
+    on: () => {},
+  } as unknown as Editor;
+}
 
 const mutationVectors: Partial<Record<OperationId, MutationVector>> = {
   'blocks.delete': {
@@ -2888,6 +2944,104 @@ const mutationVectors: Partial<Record<OperationId, MutationVector>> = {
       );
     },
   },
+
+  // -------------------------------------------------------------------------
+  // TOC operations
+  // -------------------------------------------------------------------------
+  'create.tableOfContents': {
+    throwCase: () => {
+      const editor = makeTocEditor({ insertTableOfContentsAt: undefined });
+      return createTableOfContentsWrapper(editor, {}, { changeMode: 'direct' });
+    },
+    failureCase: () => {
+      const editor = makeTocEditor({ insertTableOfContentsAt: vi.fn(() => false) });
+      return createTableOfContentsWrapper(editor, { at: { kind: 'documentEnd' } }, { changeMode: 'direct' });
+    },
+    applyCase: () => {
+      const editor = makeTocEditor();
+      return createTableOfContentsWrapper(editor, { at: { kind: 'documentEnd' } }, { changeMode: 'direct' });
+    },
+  },
+  'toc.configure': {
+    throwCase: () => {
+      const editor = makeTocEditor();
+      return tocConfigureWrapper(
+        editor,
+        { target: { kind: 'block', nodeType: 'tableOfContents', nodeId: 'missing' }, patch: { hyperlinks: false } },
+        { changeMode: 'direct' },
+      );
+    },
+    failureCase: () => {
+      // Patch produces no change → NO_OP
+      const editor = makeTocEditor();
+      return tocConfigureWrapper(
+        editor,
+        { target: { kind: 'block', nodeType: 'tableOfContents', nodeId: 'toc-1' }, patch: {} },
+        { changeMode: 'direct' },
+      );
+    },
+    applyCase: () => {
+      const editor = makeTocEditor();
+      return tocConfigureWrapper(
+        editor,
+        { target: { kind: 'block', nodeType: 'tableOfContents', nodeId: 'toc-1' }, patch: { hyperlinks: false } },
+        { changeMode: 'direct' },
+      );
+    },
+  },
+  'toc.update': {
+    throwCase: () => {
+      const editor = makeTocEditor();
+      return tocUpdateWrapper(
+        editor,
+        { target: { kind: 'block', nodeType: 'tableOfContents', nodeId: 'missing' } },
+        { changeMode: 'direct' },
+      );
+    },
+    failureCase: () => {
+      // Update with no heading sources and command returns false
+      const editor = makeTocEditor({ replaceTableOfContentsContentById: vi.fn(() => false) });
+      return tocUpdateWrapper(
+        editor,
+        { target: { kind: 'block', nodeType: 'tableOfContents', nodeId: 'toc-1' } },
+        { changeMode: 'direct' },
+      );
+    },
+    applyCase: () => {
+      const editor = makeTocEditor();
+      return tocUpdateWrapper(
+        editor,
+        { target: { kind: 'block', nodeType: 'tableOfContents', nodeId: 'toc-1' } },
+        { changeMode: 'direct' },
+      );
+    },
+  },
+  'toc.remove': {
+    throwCase: () => {
+      const editor = makeTocEditor();
+      return tocRemoveWrapper(
+        editor,
+        { target: { kind: 'block', nodeType: 'tableOfContents', nodeId: 'missing' } },
+        { changeMode: 'direct' },
+      );
+    },
+    failureCase: () => {
+      const editor = makeTocEditor({ deleteTableOfContentsById: vi.fn(() => false) });
+      return tocRemoveWrapper(
+        editor,
+        { target: { kind: 'block', nodeType: 'tableOfContents', nodeId: 'toc-1' } },
+        { changeMode: 'direct' },
+      );
+    },
+    applyCase: () => {
+      const editor = makeTocEditor();
+      return tocRemoveWrapper(
+        editor,
+        { target: { kind: 'block', nodeType: 'tableOfContents', nodeId: 'toc-1' } },
+        { changeMode: 'direct' },
+      );
+    },
+  },
 };
 
 const dryRunVectors: Partial<Record<OperationId, () => unknown>> = {
@@ -3643,6 +3797,54 @@ const dryRunVectors: Partial<Record<OperationId, () => unknown>> = {
     const dispatch = (editor as unknown as { dispatch: ReturnType<typeof vi.fn> }).dispatch;
     const result = tablesClearCellSpacingWrapper(editor, { nodeId: 'table-1' }, { changeMode: 'direct', dryRun: true });
     expect(dispatch).not.toHaveBeenCalled();
+    return result;
+  },
+
+  // -------------------------------------------------------------------------
+  // TOC operations — dryRun vectors
+  // -------------------------------------------------------------------------
+  'create.tableOfContents': () => {
+    const insertTableOfContentsAt = vi.fn(() => true);
+    const editor = makeTocEditor({ insertTableOfContentsAt });
+    const result = createTableOfContentsWrapper(
+      editor,
+      { at: { kind: 'documentEnd' } },
+      { changeMode: 'direct', dryRun: true },
+    );
+    expect(insertTableOfContentsAt).not.toHaveBeenCalled();
+    return result;
+  },
+  'toc.configure': () => {
+    const setInstr = vi.fn(() => true);
+    const editor = makeTocEditor({ setTableOfContentsInstructionById: setInstr });
+    const result = tocConfigureWrapper(
+      editor,
+      { target: { kind: 'block', nodeType: 'tableOfContents', nodeId: 'toc-1' }, patch: { hyperlinks: false } },
+      { changeMode: 'direct', dryRun: true },
+    );
+    expect(setInstr).not.toHaveBeenCalled();
+    return result;
+  },
+  'toc.update': () => {
+    const replaceContent = vi.fn(() => true);
+    const editor = makeTocEditor({ replaceTableOfContentsContentById: replaceContent });
+    const result = tocUpdateWrapper(
+      editor,
+      { target: { kind: 'block', nodeType: 'tableOfContents', nodeId: 'toc-1' } },
+      { changeMode: 'direct', dryRun: true },
+    );
+    expect(replaceContent).not.toHaveBeenCalled();
+    return result;
+  },
+  'toc.remove': () => {
+    const deleteById = vi.fn(() => true);
+    const editor = makeTocEditor({ deleteTableOfContentsById: deleteById });
+    const result = tocRemoveWrapper(
+      editor,
+      { target: { kind: 'block', nodeType: 'tableOfContents', nodeId: 'toc-1' } },
+      { changeMode: 'direct', dryRun: true },
+    );
+    expect(deleteById).not.toHaveBeenCalled();
     return result;
   },
 };

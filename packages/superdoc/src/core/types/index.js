@@ -184,6 +184,7 @@
  * @property {(params: { editor: Editor }) => void} [onEditorUpdate] Callback when document is updated
  * @property {(params: { error: Error }) => void} [onException] Callback when an exception is thrown
  * @property {(params: { isRendered: boolean }) => void} [onCommentsListChange] Callback when the comments list is rendered
+ * @property {(params: { totalPages: number, superdoc: SuperDoc }) => void} [onPaginationUpdate] Callback when pagination layout updates (fires after each layout pass with the current page count)
  * @property {(params: {})} [onListDefinitionsChange] Callback when the list definitions change
  * @property {string} [format] The format of the document (docx, pdf, html)
  * @property {Object[]} [editorExtensions] The extensions to load for the editor

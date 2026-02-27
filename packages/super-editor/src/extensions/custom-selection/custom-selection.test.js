@@ -267,6 +267,47 @@ describe('CustomSelection plugin', () => {
     expect(firstDeco?.to).toBe(6);
   });
 
+  it('maps preserved selection through replacement edits (keeps inserted text highlighted)', () => {
+    const { plugin, view } = createEnvironment();
+
+    view.dispatch(
+      view.state.tr.setMeta(CustomSelectionPluginKey, {
+        focused: true,
+        preservedSelection: view.state.selection,
+        showVisualSelection: true,
+      }),
+    );
+
+    const { from, to } = view.state.selection;
+    view.dispatch(view.state.tr.insertText('planet', from, to));
+
+    const decorations = plugin.props.decorations(view.state);
+    expect(decorations).toBeInstanceOf(DecorationSet);
+    const [firstDeco] = decorations.find();
+    expect(firstDeco).toBeDefined();
+    expect(view.state.doc.textBetween(firstDeco.from, firstDeco.to)).toBe('planet');
+  });
+
+  it('clears preserved visual selection when mapped range collapses', () => {
+    const { plugin, view } = createEnvironment();
+
+    view.dispatch(
+      view.state.tr.setMeta(CustomSelectionPluginKey, {
+        focused: true,
+        preservedSelection: view.state.selection,
+        showVisualSelection: true,
+      }),
+    );
+
+    const { from, to } = view.state.selection;
+    view.dispatch(view.state.tr.delete(from, to));
+
+    const focusState = CustomSelectionPluginKey.getState(view.state);
+    expect(focusState.preservedSelection).toBeNull();
+    expect(focusState.showVisualSelection).toBe(false);
+    expect(plugin.props.decorations(view.state)).toBeNull();
+  });
+
   it('does not call preventDefault on right-click mousedown to preserve Firefox selection', () => {
     const { plugin, view, editor } = createEnvironment();
 

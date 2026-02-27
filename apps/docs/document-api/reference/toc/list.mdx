@@ -1,0 +1,193 @@
+---
+title: toc.list
+sidebarTitle: toc.list
+description: List all tables of contents in the document.
+---
+
+{/* GENERATED FILE: DO NOT EDIT. Regenerate via `pnpm run docapi:sync`. */}
+
+> Alpha: Document API is currently alpha and subject to breaking changes.
+
+## Summary
+
+List all tables of contents in the document.
+
+- Operation ID: `toc.list`
+- API member path: `editor.doc.toc.list(...)`
+- Mutates document: `no`
+- Idempotency: `idempotent`
+- Supports tracked mode: `no`
+- Supports dry run: `no`
+- Deterministic target resolution: `yes`
+
+## Expected result
+
+Returns a TocListResult with an array of TOC discovery items and pagination metadata.
+
+## Input fields
+
+| Field | Type | Required | Description |
+| --- | --- | --- | --- |
+| `limit` | integer | no |  |
+| `offset` | integer | no |  |
+
+### Example request
+
+```json
+{
+  "limit": 50,
+  "offset": 0
+}
+```
+
+## Output fields
+
+| Field | Type | Required | Description |
+| --- | --- | --- | --- |
+| `evaluatedRevision` | string | yes |  |
+| `items` | object[] | yes |  |
+| `page` | PageInfo | yes | PageInfo |
+| `total` | integer | yes |  |
+
+### Example response
+
+```json
+{
+  "evaluatedRevision": "rev-001",
+  "items": [
+    {
+      "address": {
+        "kind": "block",
+        "nodeId": "node-def456",
+        "nodeType": "tableOfContents"
+      },
+      "displayConfig": {},
+      "entryCount": 1,
+      "handle": {
+        "ref": "handle:abc123",
+        "refStability": "stable",
+        "targetKind": "text"
+      },
+      "id": "id-001",
+      "instruction": "example",
+      "sourceConfig": {}
+    }
+  ],
+  "page": {
+    "limit": 50,
+    "offset": 0,
+    "returned": 1
+  },
+  "total": 1
+}
+```
+
+## Pre-apply throws
+
+- None
+
+## Non-applied failure codes
+
+- None
+
+## Raw schemas
+
+<Accordion title="Raw input schema">
+```json
+{
+  "additionalProperties": false,
+  "properties": {
+    "limit": {
+      "type": "integer"
+    },
+    "offset": {
+      "type": "integer"
+    }
+  },
+  "type": "object"
+}
+```
+</Accordion>
+
+<Accordion title="Raw output schema">
+```json
+{
+  "additionalProperties": false,
+  "properties": {
+    "evaluatedRevision": {
+      "type": "string"
+    },
+    "items": {
+      "items": {
+        "additionalProperties": false,
+        "properties": {
+          "address": {
+            "additionalProperties": false,
+            "properties": {
+              "kind": {
+                "const": "block"
+              },
+              "nodeId": {
+                "type": "string"
+              },
+              "nodeType": {
+                "const": "tableOfContents"
+              }
+            },
+            "required": [
+              "kind",
+              "nodeType",
+              "nodeId"
+            ],
+            "type": "object"
+          },
+          "displayConfig": {
+            "type": "object"
+          },
+          "entryCount": {
+            "type": "integer"
+          },
+          "handle": {
+            "$ref": "#/$defs/ResolvedHandle"
+          },
+          "id": {
+            "type": "string"
+          },
+          "instruction": {
+            "type": "string"
+          },
+          "preserved": {
+            "type": "object"
+          },
+          "sourceConfig": {
+            "type": "object"
+          }
+        },
+        "required": [
+          "id",
+          "handle",
+          "address",
+          "instruction",
+          "entryCount"
+        ],
+        "type": "object"
+      },
+      "type": "array"
+    },
+    "page": {
+      "$ref": "#/$defs/PageInfo"
+    },
+    "total": {
+      "type": "integer"
+    }
+  },
+  "required": [
+    "evaluatedRevision",
+    "total",
+    "items",
+    "page"
+  ],
+  "type": "object"
+}
+```
+</Accordion>

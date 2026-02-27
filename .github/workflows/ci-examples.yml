@@ -12,14 +12,30 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        example: [react, vue, vanilla, cdn, angular]
+        example: [react, vue, vanilla, cdn, angular, nuxt, laravel]
     steps:
       - uses: actions/checkout@v6
+
+      - name: Setup PHP
+        if: matrix.example == 'laravel'
+        uses: shivammathur/setup-php@v2
+        with:
+          php-version: '8.2'
 
       - name: Setup Node.js
         uses: actions/setup-node@v6
         with:
           node-version: '20'
+
+      - name: Install Composer dependencies
+        if: matrix.example == 'laravel'
+        working-directory: examples/getting-started/laravel
+        run: composer install --no-interaction --prefer-dist
+
+      - name: Prepare Laravel environment
+        if: matrix.example == 'laravel'
+        working-directory: examples/getting-started/laravel
+        run: cp .env.example .env && php artisan key:generate
 
       - name: Install example dependencies
         if: matrix.example != 'cdn'

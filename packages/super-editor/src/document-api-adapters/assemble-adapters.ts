@@ -99,6 +99,14 @@ import {
   tablesClearCellSpacingWrapper,
 } from './plan-engine/tables-wrappers.js';
 import { tablesGetAdapter, tablesGetCellsAdapter, tablesGetPropertiesAdapter } from './tables-adapter.js';
+import {
+  tocListWrapper,
+  tocGetWrapper,
+  tocConfigureWrapper,
+  tocUpdateWrapper,
+  tocRemoveWrapper,
+  createTableOfContentsWrapper,
+} from './plan-engine/toc-wrappers.js';
 
 /**
  * Assembles all document-api adapters for the given editor instance.
@@ -156,6 +164,7 @@ export function assembleDocumentApiAdapters(editor: Editor): DocumentApiAdapters
       heading: (input, options) => createHeadingWrapper(editor, input, options),
       table: (input, options) => createTableWrapper(editor, input, options),
       sectionBreak: (input, options) => createSectionBreakAdapter(editor, input, options),
+      tableOfContents: (input, options) => createTableOfContentsWrapper(editor, input, options),
     },
     lists: {
       list: (query) => listsListWrapper(editor, query),
@@ -227,6 +236,13 @@ export function assembleDocumentApiAdapters(editor: Editor): DocumentApiAdapters
       get: (input) => tablesGetAdapter(editor, input),
       getCells: (input) => tablesGetCellsAdapter(editor, input),
       getProperties: (input) => tablesGetPropertiesAdapter(editor, input),
+    },
+    toc: {
+      list: (query) => tocListWrapper(editor, query),
+      get: (input) => tocGetWrapper(editor, input),
+      configure: (input, options) => tocConfigureWrapper(editor, input, options),
+      update: (input, options) => tocUpdateWrapper(editor, input, options),
+      remove: (input, options) => tocRemoveWrapper(editor, input, options),
     },
     query: {
       match: (input) => queryMatchAdapter(editor, input),

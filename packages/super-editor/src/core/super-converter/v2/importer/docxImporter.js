@@ -115,6 +115,7 @@ export const createDocumentJson = (docx, converter, editor) => {
 
   if (converter) {
     importFootnotePropertiesFromSettings(docx, converter);
+    importViewSettingFromSettings(docx, converter);
     converter.documentOrigin = detectDocumentOrigin(docx);
     converter.commentThreadingProfile = detectCommentThreadingProfile(docx);
   }
@@ -435,6 +436,17 @@ function importFootnotePropertiesFromSettings(docx, converter) {
   const footnotePr = elements.find((el) => el?.name === 'w:footnotePr');
   if (!footnotePr) return;
   converter.footnoteProperties = parseFootnoteProperties(footnotePr, 'settings');
+}
+
+function importViewSettingFromSettings(docx, converter) {
+  if (!docx || !converter) return;
+  converter.viewSetting = null;
+  const settings = docx['word/settings.xml'];
+  const settingsRoot = settings?.elements?.[0];
+  const elements = Array.isArray(settingsRoot?.elements) ? settingsRoot.elements : [];
+  const viewEl = elements.find((el) => el?.name === 'w:view');
+  if (!viewEl) return;
+  converter.viewSetting = { val: viewEl.attributes?.['w:val'] ?? null, originalXml: carbonCopy(viewEl) };
 }
 
 /**

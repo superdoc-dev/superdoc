@@ -183,5 +183,15 @@ export function buildDispatchTable(api: DocumentApi): TypedDispatchTable {
     'tables.get': (input) => api.tables.get(input),
     'tables.getCells': (input) => api.tables.getCells(input),
     'tables.getProperties': (input) => api.tables.getProperties(input),
+
+    // --- create.tableOfContents ---
+    'create.tableOfContents': (input, options) => api.create.tableOfContents(input, options),
+
+    // --- toc.* ---
+    'toc.list': (input) => api.toc.list(input),
+    'toc.get': (input) => api.toc.get(input),
+    'toc.configure': (input, options) => api.toc.configure(input, options),
+    'toc.update': (input, options) => api.toc.update(input, options),
+    'toc.remove': (input, options) => api.toc.remove(input, options),
   };
 }

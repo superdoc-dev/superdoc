@@ -15,8 +15,15 @@ const LIST_SOURCE_DOC_CANDIDATES = [
   path.join(REPO_ROOT, 'e2e-tests/test-data/basic-documents/lists-complex-items.docx'),
 ];
 
+const TOC_SOURCE_DOC_CANDIDATES = [
+  path.join(REPO_ROOT, 'test-corpus/basic/table-of-contents.docx'),
+  path.join(REPO_ROOT, 'test-corpus/basic/table-of-contents-sdt.docx'),
+  path.join(REPO_ROOT, 'test-corpus/layout/toc-with-heading2.docx'),
+];
+
 let resolvedSourceDoc: string | null = null;
 let resolvedListSourceDoc: string | null = null;
+let resolvedTocSourceDoc: string | null = null;
 
 async function resolveFixture(candidates: string[], fixtureLabel: string): Promise<string> {
   for (const candidate of candidates) {
@@ -41,4 +48,10 @@ export async function resolveListDocFixture(): Promise<string> {
   if (resolvedListSourceDoc != null) return resolvedListSourceDoc;
   resolvedListSourceDoc = await resolveFixture(LIST_SOURCE_DOC_CANDIDATES, 'list');
   return resolvedListSourceDoc;
+}
+
+export async function resolveTocDocFixture(): Promise<string> {
+  if (resolvedTocSourceDoc != null) return resolvedTocSourceDoc;
+  resolvedTocSourceDoc = await resolveFixture(TOC_SOURCE_DOC_CANDIDATES, 'table-of-contents');
+  return resolvedTocSourceDoc;
 }

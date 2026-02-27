@@ -2,7 +2,7 @@ import { copyFile, mkdtemp, mkdir, rm } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import path from 'node:path';
 import { run } from '../../index';
-import { resolveListDocFixture, resolveSourceDocFixture } from '../fixtures';
+import { resolveListDocFixture, resolveSourceDocFixture, resolveTocDocFixture } from '../fixtures';
 
 type RunResult = {
   code: number;
@@ -45,6 +45,12 @@ export type TextRangeAddress = {
 export type ListItemAddress = {
   kind: 'block';
   nodeType: 'listItem';
+  nodeId: string;
+};
+
+export type TocAddress = {
+  kind: 'block';
+  nodeType: 'tableOfContents';
   nodeId: string;
 };
 
@@ -117,6 +123,36 @@ export class ConformanceHarness {
     const filePath = path.join(this.docsDir, `${this.nextId()}-${label}.docx`);
     await copyFile(await resolveListDocFixture(), filePath);
     return filePath;
+  }
+
+  async copyTocFixtureDoc(label: string, stateDir: string): Promise<string> {
+    const filePath = path.join(this.docsDir, `${this.nextId()}-${label}.docx`);
+
+    try {
+      await copyFile(await resolveTocDocFixture(), filePath);
+      const probe = await this.runCli(['toc', 'list', filePath, '--limit', '1'], stateDir);
+      if (probe.result.code === 0) {
+        return filePath;
+      }
+    } catch {
+      // Fall back to creating a TOC fixture from the generic source doc.
+    }
+
+    const sourceDoc = await this.copyFixtureDoc(`${label}-seed`);
+    const seededPath = path.join(this.docsDir, `${this.nextId()}-${label}-seeded.docx`);
+    const { result, envelope } = await this.runCli(
+      ['create', 'table-of-contents', sourceDoc, '--out', seededPath],
+      stateDir,
+    );
+
+    if (result.code !== 0 || envelope.ok !== true) {
+      const details = envelope.ok
+        ? 'unexpected non-success envelope'
+        : `${envelope.error.code}: ${envelope.error.message}`;
+      throw new Error(`Unable to seed TOC fixture for ${label}: ${details}`);
+    }
+
+    return seededPath;
   }
 
   createOutputPath(label: string): string {
@@ -232,6 +268,27 @@ export class ConformanceHarness {
     const address = data.result?.items?.[0]?.address;
     if (!address) {
       throw new Error(`No list item address found in ${docPath}`);
+    }
+    return address;
+  }
+
+  async firstTocAddress(docPath: string, stateDir: string): Promise<TocAddress> {
+    const { result, envelope } = await this.runCli(['toc', 'list', docPath, '--limit', '1'], stateDir);
+    if (result.code !== 0) {
+      throw new Error(`Unable to resolve first table of contents for ${docPath}`);
+    }
+
+    assertSuccessEnvelope(envelope);
+    const data = envelope.data as {
+      result?: {
+        items?: Array<{
+          address?: TocAddress;
+        }>;
+      };
+    };
+    const address = data.result?.items?.[0]?.address;
+    if (!address) {
+      throw new Error(`No table of contents address found in ${docPath}`);
     }
     return address;
   }

@@ -403,6 +403,31 @@ describe('tables-adapter regressions', () => {
     });
   });
 
+  it('applies table shading to all cells when target is a table', () => {
+    const editor = makeTableEditor();
+    const tr = editor.state.tr as unknown as { setNodeMarkup: ReturnType<typeof vi.fn> };
+
+    const result = tablesSetShadingAdapter(editor, {
+      nodeId: 'table-1',
+      color: 'FFFF00',
+    });
+
+    expect(result.success).toBe(true);
+
+    const cellUpdates = tr.setNodeMarkup.mock.calls.filter(
+      (call) =>
+        typeof call[2] === 'object' &&
+        call[2] != null &&
+        (call[2] as { tableCellProperties?: { shading?: { fill?: string } } }).tableCellProperties?.shading?.fill ===
+          'FFFF00',
+    );
+
+    expect(cellUpdates).toHaveLength(4);
+    for (const call of cellUpdates) {
+      expect((call[2] as { background?: { color?: string } }).background).toEqual({ color: 'FFFF00' });
+    }
+  });
+
   it.each([
     {
       name: 'tables.setBorder',

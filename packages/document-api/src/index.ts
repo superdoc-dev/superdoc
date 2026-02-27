@@ -56,9 +56,8 @@ import type {
   FormatFontSizeInput,
   FormatFontFamilyInput,
   FormatColorInput,
-  FormatAlignInput,
 } from './format/format.js';
-import { executeStyleApply, executeFontSize, executeFontFamily, executeColor, executeAlign } from './format/format.js';
+import { executeStyleApply, executeFontSize, executeFontFamily, executeColor } from './format/format.js';
 import type {
   StylesAdapter,
   StylesApi,
@@ -177,6 +176,52 @@ import type { OperationId } from './contract/types.js';
 import type { DynamicInvokeRequest, InvokeRequest, InvokeResult } from './contract/operation-registry.js';
 import { buildDispatchTable } from './invoke/invoke.js';
 import { executeTableOperation } from './tables/tables.js';
+import type {
+  ParagraphsAdapter,
+  ParagraphFormatApi,
+  ParagraphStylesApi,
+  ParagraphsSetStyleInput,
+  ParagraphsClearStyleInput,
+  ParagraphsResetDirectFormattingInput,
+  ParagraphsSetAlignmentInput,
+  ParagraphsClearAlignmentInput,
+  ParagraphsSetIndentationInput,
+  ParagraphsClearIndentationInput,
+  ParagraphsSetSpacingInput,
+  ParagraphsClearSpacingInput,
+  ParagraphsSetKeepOptionsInput,
+  ParagraphsSetOutlineLevelInput,
+  ParagraphsSetFlowOptionsInput,
+  ParagraphsSetTabStopInput,
+  ParagraphsClearTabStopInput,
+  ParagraphsClearAllTabStopsInput,
+  ParagraphsSetBorderInput,
+  ParagraphsClearBorderInput,
+  ParagraphsSetShadingInput,
+  ParagraphsClearShadingInput,
+  ParagraphMutationResult,
+} from './paragraphs/paragraphs.js';
+import {
+  executeParagraphsSetStyle,
+  executeParagraphsClearStyle,
+  executeParagraphsResetDirectFormatting,
+  executeParagraphsSetAlignment,
+  executeParagraphsClearAlignment,
+  executeParagraphsSetIndentation,
+  executeParagraphsClearIndentation,
+  executeParagraphsSetSpacing,
+  executeParagraphsClearSpacing,
+  executeParagraphsSetKeepOptions,
+  executeParagraphsSetOutlineLevel,
+  executeParagraphsSetFlowOptions,
+  executeParagraphsSetTabStop,
+  executeParagraphsClearTabStop,
+  executeParagraphsClearAllTabStops,
+  executeParagraphsSetBorder,
+  executeParagraphsClearBorder,
+  executeParagraphsSetShading,
+  executeParagraphsClearShading,
+} from './paragraphs/paragraphs.js';
 import type { SectionsAdapter, SectionsApi } from './sections/sections.js';
 import type {
   CreateSectionBreakInput,
@@ -241,9 +286,7 @@ export type {
   FormatFontSizeInput,
   FormatFontFamilyInput,
   FormatColorInput,
-  FormatAlignInput,
 } from './format/format.js';
-export { ALIGNMENTS, type Alignment } from './format/format.js';
 export { PROPERTY_REGISTRY } from './styles/styles.js';
 export type {
   PropertyDefinition,
@@ -282,6 +325,48 @@ export type {
 export type { BlocksAdapter } from './blocks/blocks.js';
 export type { ListsAdapter } from './lists/lists.js';
 export type { SectionsAdapter } from './sections/sections.js';
+export type { ParagraphsAdapter, ParagraphFormatApi, ParagraphStylesApi } from './paragraphs/paragraphs.js';
+export type {
+  ParagraphTarget,
+  ParagraphBlockType,
+  ParagraphMutationResult,
+  ParagraphMutationSuccess,
+  ParagraphMutationFailure,
+  MutationResolution,
+  ParagraphAlignment,
+  TabStopAlignment,
+  TabStopLeader,
+  BorderSide,
+  ClearBorderSide,
+  LineRule,
+  ParagraphsSetStyleInput,
+  ParagraphsClearStyleInput,
+  ParagraphsResetDirectFormattingInput,
+  ParagraphsSetAlignmentInput,
+  ParagraphsClearAlignmentInput,
+  ParagraphsSetIndentationInput,
+  ParagraphsClearIndentationInput,
+  ParagraphsSetSpacingInput,
+  ParagraphsClearSpacingInput,
+  ParagraphsSetKeepOptionsInput,
+  ParagraphsSetOutlineLevelInput,
+  ParagraphsSetFlowOptionsInput,
+  ParagraphsSetTabStopInput,
+  ParagraphsClearTabStopInput,
+  ParagraphsClearAllTabStopsInput,
+  ParagraphsSetBorderInput,
+  ParagraphsClearBorderInput,
+  ParagraphsSetShadingInput,
+  ParagraphsClearShadingInput,
+} from './paragraphs/paragraphs.js';
+export {
+  PARAGRAPH_ALIGNMENTS,
+  TAB_STOP_ALIGNMENTS,
+  TAB_STOP_LEADERS,
+  BORDER_SIDES,
+  CLEAR_BORDER_SIDES,
+  LINE_RULES,
+} from './paragraphs/paragraphs.js';
 export type {
   ListInsertInput,
   ListItemAddress,
@@ -495,13 +580,13 @@ export interface DocumentApi {
    */
   delete(input: DeleteInput, options?: MutationOptions): TextMutationReceipt;
   /**
-   * Formatting operations.
+   * Formatting operations (inline and paragraph direct formatting).
    */
-  format: FormatApi;
+  format: FormatApi & { paragraph: ParagraphFormatApi };
   /**
-   * Stylesheet operations (docDefaults, style definitions).
+   * Stylesheet operations (docDefaults, style definitions, paragraph style references).
    */
-  styles: StylesApi;
+  styles: StylesApi & { paragraph: ParagraphStylesApi };
   /**
    * Tracked-change operations (list, get, decide).
    */
@@ -570,6 +655,7 @@ export interface DocumentApiAdapters {
   blocks: BlocksAdapter;
   lists: ListsAdapter;
   sections: SectionsAdapter;
+  paragraphs: ParagraphsAdapter;
   tables: TablesAdapter;
   query: QueryAdapter;
   mutations: MutationsAdapter;
@@ -662,13 +748,74 @@ export function createDocumentApi(adapters: DocumentApiAdapters): DocumentApi {
       color(input: FormatColorInput, options?: MutationOptions): TextMutationReceipt {
         return executeColor(adapters.format, input, options);
       },
-      align(input: FormatAlignInput, options?: MutationOptions): TextMutationReceipt {
-        return executeAlign(adapters.format, input, options);
+      paragraph: {
+        resetDirectFormatting(
+          input: ParagraphsResetDirectFormattingInput,
+          options?: MutationOptions,
+        ): ParagraphMutationResult {
+          return executeParagraphsResetDirectFormatting(adapters.paragraphs, input, options);
+        },
+        setAlignment(input: ParagraphsSetAlignmentInput, options?: MutationOptions): ParagraphMutationResult {
+          return executeParagraphsSetAlignment(adapters.paragraphs, input, options);
+        },
+        clearAlignment(input: ParagraphsClearAlignmentInput, options?: MutationOptions): ParagraphMutationResult {
+          return executeParagraphsClearAlignment(adapters.paragraphs, input, options);
+        },
+        setIndentation(input: ParagraphsSetIndentationInput, options?: MutationOptions): ParagraphMutationResult {
+          return executeParagraphsSetIndentation(adapters.paragraphs, input, options);
+        },
+        clearIndentation(input: ParagraphsClearIndentationInput, options?: MutationOptions): ParagraphMutationResult {
+          return executeParagraphsClearIndentation(adapters.paragraphs, input, options);
+        },
+        setSpacing(input: ParagraphsSetSpacingInput, options?: MutationOptions): ParagraphMutationResult {
+          return executeParagraphsSetSpacing(adapters.paragraphs, input, options);
+        },
+        clearSpacing(input: ParagraphsClearSpacingInput, options?: MutationOptions): ParagraphMutationResult {
+          return executeParagraphsClearSpacing(adapters.paragraphs, input, options);
+        },
+        setKeepOptions(input: ParagraphsSetKeepOptionsInput, options?: MutationOptions): ParagraphMutationResult {
+          return executeParagraphsSetKeepOptions(adapters.paragraphs, input, options);
+        },
+        setOutlineLevel(input: ParagraphsSetOutlineLevelInput, options?: MutationOptions): ParagraphMutationResult {
+          return executeParagraphsSetOutlineLevel(adapters.paragraphs, input, options);
+        },
+        setFlowOptions(input: ParagraphsSetFlowOptionsInput, options?: MutationOptions): ParagraphMutationResult {
+          return executeParagraphsSetFlowOptions(adapters.paragraphs, input, options);
+        },
+        setTabStop(input: ParagraphsSetTabStopInput, options?: MutationOptions): ParagraphMutationResult {
+          return executeParagraphsSetTabStop(adapters.paragraphs, input, options);
+        },
+        clearTabStop(input: ParagraphsClearTabStopInput, options?: MutationOptions): ParagraphMutationResult {
+          return executeParagraphsClearTabStop(adapters.paragraphs, input, options);
+        },
+        clearAllTabStops(input: ParagraphsClearAllTabStopsInput, options?: MutationOptions): ParagraphMutationResult {
+          return executeParagraphsClearAllTabStops(adapters.paragraphs, input, options);
+        },
+        setBorder(input: ParagraphsSetBorderInput, options?: MutationOptions): ParagraphMutationResult {
+          return executeParagraphsSetBorder(adapters.paragraphs, input, options);
+        },
+        clearBorder(input: ParagraphsClearBorderInput, options?: MutationOptions): ParagraphMutationResult {
+          return executeParagraphsClearBorder(adapters.paragraphs, input, options);
+        },
+        setShading(input: ParagraphsSetShadingInput, options?: MutationOptions): ParagraphMutationResult {
+          return executeParagraphsSetShading(adapters.paragraphs, input, options);
+        },
+        clearShading(input: ParagraphsClearShadingInput, options?: MutationOptions): ParagraphMutationResult {
+          return executeParagraphsClearShading(adapters.paragraphs, input, options);
+        },
       },
     },
     styles: {
       apply(input: StylesApplyInput, options?: StylesApplyOptions): StylesApplyReceipt {
         return executeStylesApply(adapters.styles, input, options);
+      },
+      paragraph: {
+        setStyle(input: ParagraphsSetStyleInput, options?: MutationOptions): ParagraphMutationResult {
+          return executeParagraphsSetStyle(adapters.paragraphs, input, options);
+        },
+        clearStyle(input: ParagraphsClearStyleInput, options?: MutationOptions): ParagraphMutationResult {
+          return executeParagraphsClearStyle(adapters.paragraphs, input, options);
+        },
       },
     },
     trackChanges: {

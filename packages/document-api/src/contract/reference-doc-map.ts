@@ -81,6 +81,16 @@ const GROUP_METADATA: Record<ReferenceGroupKey, { title: string; description: st
     description: 'Atomic mutation plan preview and execution.',
     pagePath: 'mutations/index.mdx',
   },
+  'format.paragraph': {
+    title: 'Paragraph Formatting',
+    description: 'Paragraph-level direct formatting: alignment, indentation, spacing, borders, shading, and more.',
+    pagePath: 'format/paragraph/index.mdx',
+  },
+  'styles.paragraph': {
+    title: 'Paragraph Styles',
+    description: 'Paragraph style reference operations (set/clear w:pStyle).',
+    pagePath: 'styles/paragraph/index.mdx',
+  },
   tables: {
     title: 'Tables',
     description: 'Table structure, layout, styling, and cell operations.',

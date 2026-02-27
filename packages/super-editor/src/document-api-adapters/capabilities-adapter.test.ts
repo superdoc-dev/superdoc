@@ -259,7 +259,7 @@ describe('getDocumentApiCapabilities', () => {
   });
 
   // ---------------------------------------------------------------------------
-  // format.fontSize / fontFamily / color / align capability reporting
+  // format.fontSize / fontFamily / color capability reporting
   // ---------------------------------------------------------------------------
 
   describe('format value operations', () => {
@@ -272,8 +272,6 @@ describe('getDocumentApiCapabilities', () => {
           unsetFontFamily: vi.fn(() => true),
           setColor: vi.fn(() => true),
           unsetColor: vi.fn(() => true),
-          setTextAlign: vi.fn(() => true),
-          unsetTextAlign: vi.fn(() => true),
           ...overrides.commands,
         } as unknown as Editor['commands'],
         schema: {
@@ -293,20 +291,12 @@ describe('getDocumentApiCapabilities', () => {
       expect(capabilities.operations['format.color'].available).toBe(true);
     });
 
-    it('reports format.align as available when set and unset commands are present', () => {
-      const capabilities = getDocumentApiCapabilities(makeFormatEditor());
-
-      expect(capabilities.operations['format.align'].available).toBe(true);
-    });
-
     it('reports inline format ops as unavailable when textStyle mark is missing', () => {
       const capabilities = getDocumentApiCapabilities(makeFormatEditor({ marks: { textStyle: undefined } }));
 
       expect(capabilities.operations['format.fontSize'].available).toBe(false);
       expect(capabilities.operations['format.fontFamily'].available).toBe(false);
       expect(capabilities.operations['format.color'].available).toBe(false);
-      // align is paragraph-level — it does not require the textStyle mark
-      expect(capabilities.operations['format.align'].available).toBe(true);
     });
 
     it('reports format.fontSize as unavailable when unsetFontSize command is missing', () => {
@@ -314,13 +304,6 @@ describe('getDocumentApiCapabilities', () => {
 
       expect(capabilities.operations['format.fontSize'].available).toBe(false);
       expect(capabilities.operations['format.fontSize'].reasons).toContain('OPERATION_UNAVAILABLE');
-    });
-
-    it('reports format.align as unavailable when unsetTextAlign command is missing', () => {
-      const capabilities = getDocumentApiCapabilities(makeFormatEditor({ commands: { unsetTextAlign: undefined } }));
-
-      expect(capabilities.operations['format.align'].available).toBe(false);
-      expect(capabilities.operations['format.align'].reasons).toContain('COMMAND_UNAVAILABLE');
     });
 
     it('uses OPERATION_UNAVAILABLE without COMMAND_UNAVAILABLE for inline format ops missing textStyle mark', () => {
@@ -337,7 +320,6 @@ describe('getDocumentApiCapabilities', () => {
       expect(capabilities.operations['format.fontSize'].dryRun).toBe(true);
       expect(capabilities.operations['format.fontFamily'].dryRun).toBe(true);
       expect(capabilities.operations['format.color'].dryRun).toBe(true);
-      expect(capabilities.operations['format.align'].dryRun).toBe(true);
     });
 
     it('reports all format value ops as direct-only (tracked = false)', () => {
@@ -346,7 +328,6 @@ describe('getDocumentApiCapabilities', () => {
       expect(capabilities.operations['format.fontSize'].tracked).toBe(false);
       expect(capabilities.operations['format.fontFamily'].tracked).toBe(false);
       expect(capabilities.operations['format.color'].tracked).toBe(false);
-      expect(capabilities.operations['format.align'].tracked).toBe(false);
     });
   });
 

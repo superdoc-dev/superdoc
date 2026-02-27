@@ -19,12 +19,29 @@
     "apps/docs/document-api/reference/create/table.mdx",
     "apps/docs/document-api/reference/delete.mdx",
     "apps/docs/document-api/reference/find.mdx",
-    "apps/docs/document-api/reference/format/align.mdx",
     "apps/docs/document-api/reference/format/apply.mdx",
     "apps/docs/document-api/reference/format/color.mdx",
     "apps/docs/document-api/reference/format/font-family.mdx",
     "apps/docs/document-api/reference/format/font-size.mdx",
     "apps/docs/document-api/reference/format/index.mdx",
+    "apps/docs/document-api/reference/format/paragraph/clear-alignment.mdx",
+    "apps/docs/document-api/reference/format/paragraph/clear-all-tab-stops.mdx",
+    "apps/docs/document-api/reference/format/paragraph/clear-border.mdx",
+    "apps/docs/document-api/reference/format/paragraph/clear-indentation.mdx",
+    "apps/docs/document-api/reference/format/paragraph/clear-shading.mdx",
+    "apps/docs/document-api/reference/format/paragraph/clear-spacing.mdx",
+    "apps/docs/document-api/reference/format/paragraph/clear-tab-stop.mdx",
+    "apps/docs/document-api/reference/format/paragraph/index.mdx",
+    "apps/docs/document-api/reference/format/paragraph/reset-direct-formatting.mdx",
+    "apps/docs/document-api/reference/format/paragraph/set-alignment.mdx",
+    "apps/docs/document-api/reference/format/paragraph/set-border.mdx",
+    "apps/docs/document-api/reference/format/paragraph/set-flow-options.mdx",
+    "apps/docs/document-api/reference/format/paragraph/set-indentation.mdx",
+    "apps/docs/document-api/reference/format/paragraph/set-keep-options.mdx",
+    "apps/docs/document-api/reference/format/paragraph/set-outline-level.mdx",
+    "apps/docs/document-api/reference/format/paragraph/set-shading.mdx",
+    "apps/docs/document-api/reference/format/paragraph/set-spacing.mdx",
+    "apps/docs/document-api/reference/format/paragraph/set-tab-stop.mdx",
     "apps/docs/document-api/reference/get-node-by-id.mdx",
     "apps/docs/document-api/reference/get-node.mdx",
     "apps/docs/document-api/reference/get-text.mdx",
@@ -67,6 +84,9 @@
     "apps/docs/document-api/reference/sections/set-vertical-align.mdx",
     "apps/docs/document-api/reference/styles/apply.mdx",
     "apps/docs/document-api/reference/styles/index.mdx",
+    "apps/docs/document-api/reference/styles/paragraph/clear-style.mdx",
+    "apps/docs/document-api/reference/styles/paragraph/index.mdx",
+    "apps/docs/document-api/reference/styles/paragraph/set-style.mdx",
     "apps/docs/document-api/reference/tables/apply-border-preset.mdx",
     "apps/docs/document-api/reference/tables/clear-border.mdx",
     "apps/docs/document-api/reference/tables/clear-cell-spacing.mdx",
@@ -171,7 +191,7 @@
     {
       "aliasMemberPaths": ["format.bold", "format.italic", "format.underline", "format.strikethrough"],
       "key": "format",
-      "operationIds": ["format.apply", "format.fontSize", "format.fontFamily", "format.color", "format.align"],
+      "operationIds": ["format.apply", "format.fontSize", "format.fontFamily", "format.color"],
       "pagePath": "apps/docs/document-api/reference/format/index.mdx",
       "title": "Format"
     },
@@ -228,6 +248,38 @@
     },
     {
       "aliasMemberPaths": [],
+      "key": "format.paragraph",
+      "operationIds": [
+        "format.paragraph.resetDirectFormatting",
+        "format.paragraph.setAlignment",
+        "format.paragraph.clearAlignment",
+        "format.paragraph.setIndentation",
+        "format.paragraph.clearIndentation",
+        "format.paragraph.setSpacing",
+        "format.paragraph.clearSpacing",
+        "format.paragraph.setKeepOptions",
+        "format.paragraph.setOutlineLevel",
+        "format.paragraph.setFlowOptions",
+        "format.paragraph.setTabStop",
+        "format.paragraph.clearTabStop",
+        "format.paragraph.clearAllTabStops",
+        "format.paragraph.setBorder",
+        "format.paragraph.clearBorder",
+        "format.paragraph.setShading",
+        "format.paragraph.clearShading"
+      ],
+      "pagePath": "apps/docs/document-api/reference/format/paragraph/index.mdx",
+      "title": "Paragraph Formatting"
+    },
+    {
+      "aliasMemberPaths": [],
+      "key": "styles.paragraph",
+      "operationIds": ["styles.paragraph.setStyle", "styles.paragraph.clearStyle"],
+      "pagePath": "apps/docs/document-api/reference/styles/paragraph/index.mdx",
+      "title": "Paragraph Styles"
+    },
+    {
+      "aliasMemberPaths": [],
       "key": "tables",
       "operationIds": [
         "tables.convertFromText",
@@ -275,5 +327,5 @@
     }
   ],
   "marker": "{/* GENERATED FILE: DO NOT EDIT. Regenerate via `pnpm run docapi:sync`. */}",
-  "sourceHash": "8b0c27a3eff9d8548a4de7b931f4a577774027635048dc42492f0500d00963b1"
+  "sourceHash": "84c0ed0bd327fcc839d8e96cc05e9461f3ac16ac599e13bc82b380bbd9b3b36a"
 }

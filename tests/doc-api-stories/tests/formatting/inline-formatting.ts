@@ -271,47 +271,7 @@ describe('document-api story: inline formatting', () => {
     await saveResult(sessionId, 'color.docx');
   });
 
-  it('align center: centers paragraph', async () => {
-    const sessionId = sid('align-center');
-    const { target } = await seedBlankFormattableRange(
-      sessionId,
-      'align-center-source.docx',
-      'This paragraph should be centered.',
-    );
-
-    const result = unwrap<any>(await client.doc.format.align({ sessionId, target, alignment: 'center' }));
-    assertMutationSuccess(result);
-
-    await saveResult(sessionId, 'align-center.docx');
-  });
-
-  it('align right: right-aligns paragraph', async () => {
-    const sessionId = sid('align-right');
-    const { target } = await seedBlankFormattableRange(
-      sessionId,
-      'align-right-source.docx',
-      'This paragraph should be right aligned.',
-    );
-
-    const result = unwrap<any>(await client.doc.format.align({ sessionId, target, alignment: 'right' }));
-    assertMutationSuccess(result);
-
-    await saveResult(sessionId, 'align-right.docx');
-  });
-
-  it('align justify: justifies paragraph', async () => {
-    const sessionId = sid('align-justify');
-    const { target } = await seedBlankFormattableRange(
-      sessionId,
-      'align-justify-source.docx',
-      'This paragraph should be fully justified across multiple wrapped lines so the alignment difference is visually obvious in exported output.',
-    );
-
-    const result = unwrap<any>(await client.doc.format.align({ sessionId, target, alignment: 'justify' }));
-    assertMutationSuccess(result);
-
-    await saveResult(sessionId, 'align-justify.docx');
-  });
+  // Alignment tests moved to format.paragraph.setAlignment — see paragraph-formatting stories.
 
   it('combined value formats: fontSize + fontFamily + color on same range', async () => {
     const sessionId = sid('combined-values');

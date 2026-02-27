@@ -12,7 +12,6 @@ import {
   formatFontSizeWrapper,
   formatFontFamilyWrapper,
   formatColorWrapper,
-  formatAlignWrapper,
 } from './plan-engine/format-value-wrappers.js';
 import {
   trackChangesListWrapper,
@@ -100,6 +99,27 @@ import {
   tablesClearCellSpacingWrapper,
 } from './plan-engine/tables-wrappers.js';
 import { tablesGetAdapter, tablesGetCellsAdapter, tablesGetPropertiesAdapter } from './tables-adapter.js';
+import {
+  paragraphsSetStyleWrapper,
+  paragraphsClearStyleWrapper,
+  paragraphsResetDirectFormattingWrapper,
+  paragraphsSetAlignmentWrapper,
+  paragraphsClearAlignmentWrapper,
+  paragraphsSetIndentationWrapper,
+  paragraphsClearIndentationWrapper,
+  paragraphsSetSpacingWrapper,
+  paragraphsClearSpacingWrapper,
+  paragraphsSetKeepOptionsWrapper,
+  paragraphsSetOutlineLevelWrapper,
+  paragraphsSetFlowOptionsWrapper,
+  paragraphsSetTabStopWrapper,
+  paragraphsClearTabStopWrapper,
+  paragraphsClearAllTabStopsWrapper,
+  paragraphsSetBorderWrapper,
+  paragraphsClearBorderWrapper,
+  paragraphsSetShadingWrapper,
+  paragraphsClearShadingWrapper,
+} from './plan-engine/paragraphs-wrappers.js';
 
 /**
  * Assembles all document-api adapters for the given editor instance.
@@ -139,7 +159,6 @@ export function assembleDocumentApiAdapters(editor: Editor): DocumentApiAdapters
       fontSize: (input, options) => formatFontSizeWrapper(editor, input, options),
       fontFamily: (input, options) => formatFontFamilyWrapper(editor, input, options),
       color: (input, options) => formatColorWrapper(editor, input, options),
-      align: (input, options) => formatAlignWrapper(editor, input, options),
     },
     styles: {
       apply: (input, options) => stylesApplyAdapter(editor, input, options),
@@ -191,6 +210,29 @@ export function assembleDocumentApiAdapters(editor: Editor): DocumentApiAdapters
       setPageBorders: (input, options) => sectionsSetPageBordersAdapter(editor, input, options),
       clearPageBorders: (input, options) => sectionsClearPageBordersAdapter(editor, input, options),
     },
+    paragraphs: {
+      setStyle: (input, options) => paragraphsSetStyleWrapper(editor, input, options),
+      clearStyle: (input, options) => paragraphsClearStyleWrapper(editor, input, options),
+      resetDirectFormatting: (input, options) => paragraphsResetDirectFormattingWrapper(editor, input, options),
+      setAlignment: (input, options) => paragraphsSetAlignmentWrapper(editor, input, options),
+      clearAlignment: (input, options) => paragraphsClearAlignmentWrapper(editor, input, options),
+      setIndentation: (input, options) => paragraphsSetIndentationWrapper(editor, input, options),
+      clearIndentation: (input, options) => paragraphsClearIndentationWrapper(editor, input, options),
+      setSpacing: (input, options) => paragraphsSetSpacingWrapper(editor, input, options),
+      clearSpacing: (input, options) => paragraphsClearSpacingWrapper(editor, input, options),
+      setKeepOptions: (input, options) => paragraphsSetKeepOptionsWrapper(editor, input, options),
+      setOutlineLevel: (input, options) => paragraphsSetOutlineLevelWrapper(editor, input, options),
+      setFlowOptions: (input, options) => paragraphsSetFlowOptionsWrapper(editor, input, options),
+      setTabStop: (input, options) => paragraphsSetTabStopWrapper(editor, input, options),
+      clearTabStop: (input, options) => paragraphsClearTabStopWrapper(editor, input, options),
+      clearAllTabStops: (input, options) => paragraphsClearAllTabStopsWrapper(editor, input, options),
+      setBorder: (input, options) => paragraphsSetBorderWrapper(editor, input, options),
+      clearBorder: (input, options) => paragraphsClearBorderWrapper(editor, input, options),
+      setShading: (input, options) => paragraphsSetShadingWrapper(editor, input, options),
+      clearShading: (input, options) => paragraphsClearShadingWrapper(editor, input, options),
+    },
+    // Note: paragraphs adapter is flat — DocumentApiAdapters keeps it as `paragraphs: ParagraphsAdapter`.
+    // The document-api index.ts splits it into `format.paragraph.*` and `styles.paragraph.*` on the public surface.
     tables: {
       convertFromText: (input, options) => tablesConvertFromTextWrapper(editor, input, options),
       delete: (input, options) => tablesDeleteWrapper(editor, input, options),

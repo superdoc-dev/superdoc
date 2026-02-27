@@ -148,15 +148,15 @@ export interface ParagraphProperties {
   styleId?: string;
   numberingProperties?: NumberingProperties;
   justification?: 'left' | 'center' | 'right' | 'both' | 'start' | 'end';
-  indentation?: IndentationProperties;
+  indent?: IndentationProperties;
   spacing?: SpacingProperties;
-  outlineLevel?: number;
+  outlineLvl?: number;
   keepNext?: boolean;
   keepLines?: boolean;
   pageBreakBefore?: boolean;
   widowControl?: boolean;
   textDirection?: 'lrTb' | 'tbRl' | 'btLr';
-  tabs?: Array<{ val: string; pos: number }>;
+  tabStops?: Array<{ tab: { tabType: string; pos: number; leader?: string } }>;
   suppressAutoHyphens?: boolean;
   contextualSpacing?: boolean;
 }

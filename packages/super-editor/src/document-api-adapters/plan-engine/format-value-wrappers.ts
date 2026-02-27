@@ -12,7 +12,6 @@ import type {
   FormatFontSizeInput,
   FormatFontFamilyInput,
   FormatColorInput,
-  FormatAlignInput,
   MutationOptions,
   TextAddress,
   TextMutationReceipt,
@@ -165,60 +164,4 @@ export function formatColorWrapper(
     setCommand: 'setColor',
     unsetCommand: 'unsetColor',
   });
-}
-
-// ---------------------------------------------------------------------------
-// format.align (paragraph-level — different execution path)
-// ---------------------------------------------------------------------------
-
-export function formatAlignWrapper(
-  editor: Editor,
-  input: FormatAlignInput,
-  options?: MutationOptions,
-): TextMutationReceipt {
-  const operation = 'format.align';
-  rejectTrackedMode(operation, options);
-
-  const resolved = resolveFormatTarget(editor, input.target, operation);
-  // Align allows collapsed targets — a cursor identifies the containing paragraph.
-
-  const setTextSelection = requireEditorCommand(
-    editor.commands?.setTextSelection as ((range: { from: number; to: number }) => boolean) | undefined,
-    `${operation} (setTextSelection)`,
-  );
-
-  if (input.alignment !== null) {
-    requireEditorCommand(
-      editor.commands?.setTextAlign as ((alignment: string) => boolean) | undefined,
-      `${operation} (setTextAlign)`,
-    );
-  } else {
-    requireEditorCommand(
-      editor.commands?.unsetTextAlign as (() => boolean) | undefined,
-      `${operation} (unsetTextAlign)`,
-    );
-  }
-
-  if (options?.dryRun) {
-    return { success: true, resolution: resolved.resolution };
-  }
-
-  const receipt = executeDomainCommand(
-    editor,
-    () => {
-      setTextSelection({ from: resolved.from, to: resolved.to });
-
-      if (input.alignment !== null) {
-        return (editor.commands as Record<string, (v: string) => boolean>).setTextAlign(input.alignment);
-      }
-      return (editor.commands as Record<string, () => boolean>).unsetTextAlign();
-    },
-    { expectedRevision: options?.expectedRevision },
-  );
-
-  if (receipt.steps[0]?.effect !== 'changed') {
-    return noOpFailure(resolved.resolution, operation);
-  }
-
-  return { success: true, resolution: resolved.resolution };
 }

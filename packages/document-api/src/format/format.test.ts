@@ -1,6 +1,6 @@
 import { describe, expect, it, vi } from 'vitest';
 import type { FormatAdapter, StyleApplyInput } from './format.js';
-import { executeStyleApply, executeFontSize, executeFontFamily, executeColor, executeAlign } from './format.js';
+import { executeStyleApply, executeFontSize, executeFontFamily, executeColor } from './format.js';
 import { DocumentApiValidationError } from '../errors.js';
 import type { TextMutationReceipt } from '../types/index.js';
 
@@ -25,7 +25,6 @@ function makeAdapter(): FormatAdapter & Record<string, ReturnType<typeof vi.fn>>
     fontSize: vi.fn(() => makeReceipt()),
     fontFamily: vi.fn(() => makeReceipt()),
     color: vi.fn(() => makeReceipt()),
-    align: vi.fn(() => makeReceipt()),
   };
 }
 
@@ -404,45 +403,5 @@ describe('executeColor validation', () => {
     const adapter = makeAdapter();
     executeColor(adapter, { target: TARGET, value: '#ff0000' });
     expect(adapter.color).toHaveBeenCalled();
-  });
-});
-
-// ---------------------------------------------------------------------------
-// executeAlign validation
-// ---------------------------------------------------------------------------
-
-describe('executeAlign validation', () => {
-  targetValidationSuite('format.align', (a, i) => executeAlign(a, i as any));
-
-  it('rejects missing alignment', () => {
-    expect(() => executeAlign(makeAdapter(), { target: TARGET } as any)).toThrow('requires an alignment');
-  });
-
-  it('rejects invalid alignment value', () => {
-    expect(() => executeAlign(makeAdapter(), { target: TARGET, alignment: 'middle' } as any)).toThrow(
-      'left, center, right, justify',
-    );
-  });
-
-  it('rejects empty string alignment', () => {
-    expect(() => executeAlign(makeAdapter(), { target: TARGET, alignment: '' } as any)).toThrow(
-      'left, center, right, justify',
-    );
-  });
-
-  it('rejects unknown fields', () => {
-    expect(() => executeAlign(makeAdapter(), { target: TARGET, alignment: 'left', extra: 1 } as any)).toThrow('extra');
-  });
-
-  it('accepts null alignment (unset)', () => {
-    const adapter = makeAdapter();
-    executeAlign(adapter, { target: TARGET, alignment: null });
-    expect(adapter.align).toHaveBeenCalled();
-  });
-
-  it.each(['left', 'center', 'right', 'justify'] as const)('accepts alignment "%s"', (alignment) => {
-    const adapter = makeAdapter();
-    executeAlign(adapter, { target: TARGET, alignment });
-    expect(adapter.align).toHaveBeenCalled();
   });
 });

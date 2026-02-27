@@ -350,7 +350,6 @@ const EXTRA_CLI_PARAMS: Partial<Record<string, CliOperationParamSpec[]>> = {
   'doc.format.fontSize': [...TEXT_TARGET_FLAT_PARAMS],
   'doc.format.fontFamily': [...TEXT_TARGET_FLAT_PARAMS],
   'doc.format.color': [...TEXT_TARGET_FLAT_PARAMS],
-  'doc.format.align': [...TEXT_TARGET_FLAT_PARAMS],
   'doc.styles.apply': [
     { name: 'target', kind: 'jsonFlag', flag: 'target-json', type: 'json' },
     { name: 'patch', kind: 'jsonFlag', flag: 'patch-json', type: 'json' },

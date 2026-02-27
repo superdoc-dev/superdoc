@@ -27,7 +27,6 @@ describe('assembleDocumentApiAdapters', () => {
     expect(adapters).toHaveProperty('format.fontSize');
     expect(adapters).toHaveProperty('format.fontFamily');
     expect(adapters).toHaveProperty('format.color');
-    expect(adapters).toHaveProperty('format.align');
     expect(adapters).toHaveProperty('trackChanges.list');
     expect(adapters).toHaveProperty('trackChanges.get');
     expect(adapters).toHaveProperty('trackChanges.accept');
@@ -66,6 +65,25 @@ describe('assembleDocumentApiAdapters', () => {
     expect(adapters).toHaveProperty('tables.get');
     expect(adapters).toHaveProperty('tables.getCells');
     expect(adapters).toHaveProperty('tables.getProperties');
+    expect(adapters).toHaveProperty('paragraphs.setStyle');
+    expect(adapters).toHaveProperty('paragraphs.clearStyle');
+    expect(adapters).toHaveProperty('paragraphs.resetDirectFormatting');
+    expect(adapters).toHaveProperty('paragraphs.setAlignment');
+    expect(adapters).toHaveProperty('paragraphs.clearAlignment');
+    expect(adapters).toHaveProperty('paragraphs.setIndentation');
+    expect(adapters).toHaveProperty('paragraphs.clearIndentation');
+    expect(adapters).toHaveProperty('paragraphs.setSpacing');
+    expect(adapters).toHaveProperty('paragraphs.clearSpacing');
+    expect(adapters).toHaveProperty('paragraphs.setKeepOptions');
+    expect(adapters).toHaveProperty('paragraphs.setOutlineLevel');
+    expect(adapters).toHaveProperty('paragraphs.setFlowOptions');
+    expect(adapters).toHaveProperty('paragraphs.setTabStop');
+    expect(adapters).toHaveProperty('paragraphs.clearTabStop');
+    expect(adapters).toHaveProperty('paragraphs.clearAllTabStops');
+    expect(adapters).toHaveProperty('paragraphs.setBorder');
+    expect(adapters).toHaveProperty('paragraphs.clearBorder');
+    expect(adapters).toHaveProperty('paragraphs.setShading');
+    expect(adapters).toHaveProperty('paragraphs.clearShading');
   });
 
   it('returns functions for all adapter methods', () => {
@@ -77,7 +95,6 @@ describe('assembleDocumentApiAdapters', () => {
     expect(typeof adapters.format.fontSize).toBe('function');
     expect(typeof adapters.format.fontFamily).toBe('function');
     expect(typeof adapters.format.color).toBe('function');
-    expect(typeof adapters.format.align).toBe('function');
     expect(typeof adapters.create.paragraph).toBe('function');
     expect(typeof adapters.create.heading).toBe('function');
     expect(typeof adapters.create.sectionBreak).toBe('function');

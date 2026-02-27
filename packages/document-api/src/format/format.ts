@@ -5,15 +5,6 @@ import { DocumentApiValidationError } from '../errors.js';
 import { isRecord, isTextAddress, assertNoUnknownFields } from '../validation-primitives.js';
 
 // ---------------------------------------------------------------------------
-// Alignment enum
-// ---------------------------------------------------------------------------
-
-/** Valid paragraph alignment values. */
-export const ALIGNMENTS = ['left', 'center', 'right', 'justify'] as const;
-export type Alignment = (typeof ALIGNMENTS)[number];
-const ALIGNMENT_SET: ReadonlySet<string> = new Set(ALIGNMENTS);
-
-// ---------------------------------------------------------------------------
 // Input types — boolean toggle marks (existing)
 // ---------------------------------------------------------------------------
 
@@ -81,12 +72,6 @@ export interface FormatColorInput {
   value: string | null;
 }
 
-/** Input payload for `format.align`. Pass `null` to unset (reset to default). */
-export interface FormatAlignInput {
-  target: TextAddress;
-  alignment: Alignment | null;
-}
-
 // ---------------------------------------------------------------------------
 // Adapter interface
 // ---------------------------------------------------------------------------
@@ -103,7 +88,6 @@ export interface FormatAdapter {
   fontSize(input: FormatFontSizeInput, options?: MutationOptions): TextMutationReceipt;
   fontFamily(input: FormatFontFamilyInput, options?: MutationOptions): TextMutationReceipt;
   color(input: FormatColorInput, options?: MutationOptions): TextMutationReceipt;
-  align(input: FormatAlignInput, options?: MutationOptions): TextMutationReceipt;
 }
 
 // ---------------------------------------------------------------------------
@@ -123,7 +107,6 @@ export interface FormatApi {
   fontSize(input: FormatFontSizeInput, options?: MutationOptions): TextMutationReceipt;
   fontFamily(input: FormatFontFamilyInput, options?: MutationOptions): TextMutationReceipt;
   color(input: FormatColorInput, options?: MutationOptions): TextMutationReceipt;
-  align(input: FormatAlignInput, options?: MutationOptions): TextMutationReceipt;
 }
 
 // ---------------------------------------------------------------------------
@@ -350,36 +333,4 @@ export function executeColor(
 ): TextMutationReceipt {
   validateColorInput(input);
   return adapter.color(input, normalizeMutationOptions(options));
-}
-
-// ---------------------------------------------------------------------------
-// format.align — validation and execution
-// ---------------------------------------------------------------------------
-
-const ALIGN_ALLOWED_KEYS = new Set(['target', 'alignment']);
-
-function validateAlignInput(input: unknown): asserts input is FormatAlignInput {
-  validateTarget(input, 'format.align');
-  assertNoUnknownFields(input as Record<string, unknown>, ALIGN_ALLOWED_KEYS, 'format.align');
-
-  const { alignment } = input as Record<string, unknown>;
-  if (alignment === undefined) {
-    throw new DocumentApiValidationError('INVALID_INPUT', 'format.align requires an alignment field.');
-  }
-  if (alignment !== null && (typeof alignment !== 'string' || !ALIGNMENT_SET.has(alignment))) {
-    throw new DocumentApiValidationError(
-      'INVALID_INPUT',
-      `format.align alignment must be one of ${ALIGNMENTS.join(', ')}, or null.`,
-      { field: 'alignment', value: alignment },
-    );
-  }
-}
-
-export function executeAlign(
-  adapter: FormatAdapter,
-  input: FormatAlignInput,
-  options?: MutationOptions,
-): TextMutationReceipt {
-  validateAlignInput(input);
-  return adapter.align(input, normalizeMutationOptions(options));
 }

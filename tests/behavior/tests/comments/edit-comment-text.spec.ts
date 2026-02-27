@@ -1,5 +1,6 @@
 import { test, expect } from '../../fixtures/superdoc.js';
 import { assertDocumentApiReady, listComments } from '../../helpers/document-api.js';
+import { addCommentViaUI, activateCommentDialog } from '../../helpers/comments.js';
 
 test.use({ config: { toolbar: 'full', comments: 'on' } });
 
@@ -9,34 +10,15 @@ test('editing a comment updates its text', async ({ superdoc }) => {
   await superdoc.type('hello comments');
   await superdoc.waitForStable();
 
-  // Select "comments" and add an initial comment through the UI.
-  const pos = await superdoc.findTextPos('comments');
-  await superdoc.setTextSelection(pos, pos + 'comments'.length);
-  await superdoc.waitForStable();
+  // Add a comment on "comments" through the UI
+  await addCommentViaUI(superdoc, { textToSelect: 'comments', commentText: 'original comment' });
 
-  const bubble = superdoc.page.locator('.superdoc__tools');
-  await expect(bubble).toBeVisible({ timeout: 5_000 });
-  await bubble.locator('[data-id="is-tool"]').click();
-  await superdoc.waitForStable();
-
-  const pendingDialog = superdoc.page.locator('.comments-dialog').first();
-  await pendingDialog.locator('.comment-entry .editor-element').first().click();
-  await superdoc.page.keyboard.type('original comment');
-  await superdoc.waitForStable();
-  await pendingDialog.locator('.sd-button.primary', { hasText: 'Comment' }).first().click();
-  await superdoc.waitForStable();
-
-  // Click on the comment highlight to activate the floating dialog
-  await superdoc.clickOnCommentedText('comments');
-  await superdoc.waitForStable();
-
-  // The active dialog should show the submitted comment (use .last() to skip measure layer)
-  const activeDialog = superdoc.page.locator('.comments-dialog.is-active').last();
-  await expect(activeDialog).toBeVisible({ timeout: 5_000 });
-  await expect(activeDialog.locator('.comment-body .comment').first()).toContainText('original comment');
+  // Activate the comment dialog
+  const dialog = await activateCommentDialog(superdoc, 'comments');
+  await expect(dialog.locator('.comment-body .comment').first()).toContainText('original comment');
 
   // Open the overflow "..." menu and click Edit
-  await activeDialog.locator('.overflow-icon').click();
+  await dialog.locator('.overflow-icon').click();
   await superdoc.waitForStable();
 
   const editOption = superdoc.page.locator('.n-dropdown-option-body__label', { hasText: 'Edit' });
@@ -45,7 +27,7 @@ test('editing a comment updates its text', async ({ superdoc }) => {
   await superdoc.waitForStable();
 
   // The comment should now be in edit mode
-  const editInput = activeDialog.locator('.comment-editing .editor-element');
+  const editInput = dialog.locator('.comment-editing .superdoc-field');
   await expect(editInput).toBeVisible({ timeout: 5_000 });
 
   // Select all text in the edit input, then type the replacement
@@ -55,7 +37,7 @@ test('editing a comment updates its text', async ({ superdoc }) => {
   await superdoc.waitForStable();
 
   // Click Update
-  await activeDialog.locator('.comment-editing .sd-button.primary', { hasText: 'Update' }).click();
+  await dialog.locator('.comment-editing .sd-button.primary', { hasText: 'Update' }).click();
   await superdoc.waitForStable();
 
   // After update the dialog loses is-active; verify the text changed via the visible sidebar dialog

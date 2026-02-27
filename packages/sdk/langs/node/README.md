@@ -20,6 +20,16 @@ The package automatically installs a native CLI binary for your platform via opt
 
 ## Quick Start
 
+Both ESM and CommonJS are supported.
+
+```ts
+// ESM
+import { createSuperDocClient } from '@superdoc-dev/sdk';
+
+// CJS
+const { createSuperDocClient } = require('@superdoc-dev/sdk');
+```
+
 ```ts
 import { createSuperDocClient } from '@superdoc-dev/sdk';
 

@@ -267,9 +267,15 @@ export const replaceStep = ({ state, tr, step, newTr, map, user, date, originalS
   }
 
   // We didn't apply the original step in its original place. We adjust the map accordingly.
+  // When stepWasNormalized is true, `step` is already in the mapped position space
+  // (originalStep.map(map) was applied before entering replaceStep). Calling .map(map)
+  // again would double-map positions and corrupt subsequent step/selection mapping
+  // in multi-step transactions.
   const invertSourceStep = stepWasNormalized ? step : originalStep;
   const invertSourceDoc = stepWasNormalized ? docBeforeCondensedStep : tr.docs[originalStepIndex];
-  const invertStep = invertSourceStep.invert(invertSourceDoc).map(map);
+  const invertStep = stepWasNormalized
+    ? invertSourceStep.invert(invertSourceDoc)
+    : invertSourceStep.invert(invertSourceDoc).map(map);
   map.appendMap(invertStep.getMap());
   const mirrorIndex = map.maps.length - 1;
   map.appendMap(condensedStep.getMap(), mirrorIndex);

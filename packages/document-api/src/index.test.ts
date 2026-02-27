@@ -16,6 +16,7 @@ import type { CommentInfo, CommentsListQuery, CommentsListResult } from './comme
 import type { CreateAdapter } from './create/create.js';
 import type { ListsAdapter } from './lists/lists.js';
 import type { CapabilitiesAdapter, DocumentApiCapabilities } from './capabilities/capabilities.js';
+import type { TablesAdapter } from './index.js';
 
 function makeFindAdapter(result: FindOutput): FindAdapter {
   return { find: vi.fn(() => result) };
@@ -156,6 +157,10 @@ function makeCreateAdapter(): CreateAdapter {
       heading: { kind: 'block' as const, nodeType: 'heading' as const, nodeId: 'new-h' },
       insertionPoint: { kind: 'text' as const, blockId: 'new-h', range: { start: 0, end: 0 } },
     })),
+    table: vi.fn(() => ({
+      success: true as const,
+      table: { kind: 'block' as const, nodeType: 'table' as const, nodeId: 'new-t' },
+    })),
   };
 }
 
@@ -192,6 +197,68 @@ function makeListsAdapter(): ListsAdapter {
     exit: vi.fn(() => ({
       success: true as const,
       paragraph: { kind: 'block' as const, nodeType: 'paragraph' as const, nodeId: 'p1' },
+    })),
+  };
+}
+
+const TABLE_MUTATION_RESULT = {
+  success: true as const,
+  table: { kind: 'block' as const, nodeType: 'table' as const, nodeId: 't1' },
+};
+
+function makeTablesAdapter(): TablesAdapter {
+  const mutation = vi.fn(() => ({ ...TABLE_MUTATION_RESULT }));
+  return {
+    convertFromText: mutation,
+    delete: mutation,
+    clearContents: mutation,
+    move: mutation,
+    split: mutation,
+    convertToText: mutation,
+    setLayout: mutation,
+    insertRow: mutation,
+    deleteRow: mutation,
+    setRowHeight: mutation,
+    distributeRows: mutation,
+    setRowOptions: mutation,
+    insertColumn: mutation,
+    deleteColumn: mutation,
+    setColumnWidth: mutation,
+    distributeColumns: mutation,
+    insertCell: mutation,
+    deleteCell: mutation,
+    mergeCells: mutation,
+    unmergeCells: mutation,
+    splitCell: mutation,
+    setCellProperties: mutation,
+    sort: mutation,
+    setAltText: mutation,
+    setStyle: mutation,
+    clearStyle: mutation,
+    setStyleOption: mutation,
+    setBorder: mutation,
+    clearBorder: mutation,
+    applyBorderPreset: mutation,
+    setShading: mutation,
+    clearShading: mutation,
+    setTablePadding: mutation,
+    setCellPadding: mutation,
+    setCellSpacing: mutation,
+    clearCellSpacing: mutation,
+    get: vi.fn(() => ({
+      nodeId: 't1',
+      address: { kind: 'block' as const, nodeType: 'table' as const, nodeId: 't1' },
+      rows: 3,
+      columns: 3,
+    })),
+    getCells: vi.fn(() => ({
+      tableNodeId: 't1',
+      cells: [{ nodeId: 'c1', rowIndex: 0, columnIndex: 0, colspan: 1, rowspan: 1 }],
+    })),
+    getProperties: vi.fn(() => ({
+      nodeId: 't1',
+      styleId: 'TableGrid',
+      alignment: 'left' as const,
     })),
   };
 }
@@ -2005,6 +2072,241 @@ describe('createDocumentApi', () => {
 
       api.lists.indent({ target });
       expect(listsAdpt.indent).toHaveBeenCalledWith({ target }, { changeMode: 'direct', dryRun: false });
+    });
+  });
+
+  // ---------------------------------------------------------------------------
+  // tables namespace
+  // ---------------------------------------------------------------------------
+
+  describe('tables.* delegation', () => {
+    it('delegates table mutations with normalized options', () => {
+      const tablesAdpt = makeTablesAdapter();
+      const api = createDocumentApi({
+        find: makeFindAdapter(QUERY_RESULT),
+        getNode: makeGetNodeAdapter(PARAGRAPH_INFO),
+        getText: makeGetTextAdapter(),
+        info: makeInfoAdapter(),
+        comments: makeCommentsAdapter(),
+        write: makeWriteAdapter(),
+        format: makeFormatAdapter(),
+        trackChanges: makeTrackChangesAdapter(),
+        create: makeCreateAdapter(),
+        lists: makeListsAdapter(),
+        tables: tablesAdpt,
+      });
+
+      const target = { kind: 'block' as const, nodeType: 'table' as const, nodeId: 't1' };
+
+      // setLayout — representative table-locator mutation
+      const layoutResult = api.tables.setLayout({ target, alignment: 'center' }, { changeMode: 'tracked' });
+      expect(layoutResult.success).toBe(true);
+      expect(tablesAdpt.setLayout).toHaveBeenCalledWith(
+        { target, alignment: 'center' },
+        { changeMode: 'tracked', dryRun: false },
+      );
+
+      // delete — no explicit options → defaults
+      const deleteResult = api.tables.delete({ target });
+      expect(deleteResult.success).toBe(true);
+      expect(tablesAdpt.delete).toHaveBeenCalledWith({ target }, { changeMode: 'direct', dryRun: false });
+
+      // setStyle — another representative mutation
+      const styleResult = api.tables.setStyle({ target, styleId: 'TableGrid' });
+      expect(styleResult.success).toBe(true);
+    });
+
+    it('delegates table reads directly without options normalization', () => {
+      const tablesAdpt = makeTablesAdapter();
+      const api = createDocumentApi({
+        find: makeFindAdapter(QUERY_RESULT),
+        getNode: makeGetNodeAdapter(PARAGRAPH_INFO),
+        getText: makeGetTextAdapter(),
+        info: makeInfoAdapter(),
+        comments: makeCommentsAdapter(),
+        write: makeWriteAdapter(),
+        format: makeFormatAdapter(),
+        trackChanges: makeTrackChangesAdapter(),
+        create: makeCreateAdapter(),
+        lists: makeListsAdapter(),
+        tables: tablesAdpt,
+      });
+
+      const target = { kind: 'block' as const, nodeType: 'table' as const, nodeId: 't1' };
+
+      const getResult = api.tables.get({ target });
+      expect(getResult.rows).toBe(3);
+      expect(getResult.columns).toBe(3);
+
+      const cellsResult = api.tables.getCells({ target });
+      expect(cellsResult.tableNodeId).toBe('t1');
+      expect(cellsResult.cells).toHaveLength(1);
+
+      const propsResult = api.tables.getProperties({ target });
+      expect(propsResult.nodeId).toBe('t1');
+      expect(propsResult.styleId).toBe('TableGrid');
+    });
+
+    it('delegates create.table with at defaulting to documentEnd', () => {
+      const createAdpt = makeCreateAdapter();
+      const api = createDocumentApi({
+        find: makeFindAdapter(QUERY_RESULT),
+        getNode: makeGetNodeAdapter(PARAGRAPH_INFO),
+        getText: makeGetTextAdapter(),
+        info: makeInfoAdapter(),
+        comments: makeCommentsAdapter(),
+        write: makeWriteAdapter(),
+        format: makeFormatAdapter(),
+        trackChanges: makeTrackChangesAdapter(),
+        create: createAdpt,
+        lists: makeListsAdapter(),
+        tables: makeTablesAdapter(),
+      });
+
+      const result = api.create.table({ rows: 3, columns: 4 });
+      expect(result.success).toBe(true);
+      expect(createAdpt.table).toHaveBeenCalledWith(
+        { rows: 3, columns: 4, at: { kind: 'documentEnd' } },
+        { changeMode: 'direct', dryRun: false },
+      );
+    });
+
+    it('delegates create.table with explicit at location', () => {
+      const createAdpt = makeCreateAdapter();
+      const api = createDocumentApi({
+        find: makeFindAdapter(QUERY_RESULT),
+        getNode: makeGetNodeAdapter(PARAGRAPH_INFO),
+        getText: makeGetTextAdapter(),
+        info: makeInfoAdapter(),
+        comments: makeCommentsAdapter(),
+        write: makeWriteAdapter(),
+        format: makeFormatAdapter(),
+        trackChanges: makeTrackChangesAdapter(),
+        create: createAdpt,
+        lists: makeListsAdapter(),
+        tables: makeTablesAdapter(),
+      });
+
+      const at = { kind: 'after' as const, nodeId: 'p1' };
+      api.create.table({ rows: 2, columns: 2, at });
+      expect(createAdpt.table).toHaveBeenCalledWith(
+        { rows: 2, columns: 2, at },
+        { changeMode: 'direct', dryRun: false },
+      );
+    });
+  });
+
+  describe('tables.* locator validation', () => {
+    function makeApi() {
+      return createDocumentApi({
+        find: makeFindAdapter(QUERY_RESULT),
+        getNode: makeGetNodeAdapter(PARAGRAPH_INFO),
+        getText: makeGetTextAdapter(),
+        info: makeInfoAdapter(),
+        capabilities: makeCapabilitiesAdapter(),
+        comments: makeCommentsAdapter(),
+        write: makeWriteAdapter(),
+        format: makeFormatAdapter(),
+        trackChanges: makeTrackChangesAdapter(),
+        create: makeCreateAdapter(),
+        lists: makeListsAdapter(),
+        tables: makeTablesAdapter(),
+      });
+    }
+
+    // -- table-locator operations (target/nodeId) --
+
+    it('accepts target for table-locator operations', () => {
+      const api = makeApi();
+      const target = { kind: 'block' as const, nodeType: 'table' as const, nodeId: 't1' };
+
+      expect(() => api.tables.setLayout({ target, alignment: 'center' })).not.toThrow();
+      expect(() => api.tables.get({ target })).not.toThrow();
+      expect(() => api.tables.getCells({ target })).not.toThrow();
+      expect(() => api.tables.getProperties({ target })).not.toThrow();
+    });
+
+    it('accepts nodeId for table-locator operations', () => {
+      const api = makeApi();
+      expect(() => api.tables.setLayout({ nodeId: 't1', alignment: 'center' })).not.toThrow();
+      expect(() => api.tables.get({ nodeId: 't1' })).not.toThrow();
+    });
+
+    it('rejects both target + nodeId for table-locator operations', () => {
+      const api = makeApi();
+      const target = { kind: 'block' as const, nodeType: 'table' as const, nodeId: 't1' };
+      expect(() => api.tables.setLayout({ target, nodeId: 't1' } as any)).toThrow(/Cannot combine/);
+    });
+
+    it('rejects neither target nor nodeId for table-locator operations', () => {
+      const api = makeApi();
+      expect(() => api.tables.setLayout({ alignment: 'center' } as any)).toThrow(/requires a target/);
+    });
+
+    // -- row-locator operations (direct OR table-scoped) --
+
+    it('accepts direct target for row-locator operations', () => {
+      const api = makeApi();
+      const target = { kind: 'block' as const, nodeType: 'tableRow' as const, nodeId: 'r1' };
+      expect(() => api.tables.insertRow({ target, position: 'after' })).not.toThrow();
+      expect(() => api.tables.deleteRow({ target })).not.toThrow();
+    });
+
+    it('accepts table-scoped locator for row-locator operations', () => {
+      const api = makeApi();
+      const tableTarget = { kind: 'block' as const, nodeType: 'table' as const, nodeId: 't1' };
+      expect(() => api.tables.insertRow({ tableTarget, rowIndex: 0, position: 'after' })).not.toThrow();
+    });
+
+    it('rejects both direct + table-scoped for row-locator operations', () => {
+      const api = makeApi();
+      const target = { kind: 'block' as const, nodeType: 'tableRow' as const, nodeId: 'r1' };
+      const tableTarget = { kind: 'block' as const, nodeType: 'table' as const, nodeId: 't1' };
+      expect(() => api.tables.insertRow({ target, tableTarget, rowIndex: 0, position: 'after' } as any)).toThrow(
+        /Cannot combine/,
+      );
+    });
+
+    // -- column-locator operations (tableTarget/tableNodeId) --
+
+    it('accepts tableTarget for column-locator operations', () => {
+      const api = makeApi();
+      const tableTarget = { kind: 'block' as const, nodeType: 'table' as const, nodeId: 't1' };
+      expect(() => api.tables.insertColumn({ tableTarget, columnIndex: 0, position: 'after' })).not.toThrow();
+      expect(() => api.tables.deleteColumn({ tableTarget, columnIndex: 0 })).not.toThrow();
+    });
+
+    it('accepts tableNodeId for column-locator operations', () => {
+      const api = makeApi();
+      expect(() => api.tables.insertColumn({ tableNodeId: 't1', columnIndex: 0, position: 'after' })).not.toThrow();
+    });
+
+    it('rejects both tableTarget + tableNodeId for column-locator operations', () => {
+      const api = makeApi();
+      const tableTarget = { kind: 'block' as const, nodeType: 'table' as const, nodeId: 't1' };
+      expect(() =>
+        api.tables.insertColumn({ tableTarget, tableNodeId: 't1', columnIndex: 0, position: 'after' } as any),
+      ).toThrow(/Cannot combine/);
+    });
+
+    // -- merge range locator (tableTarget/tableNodeId) --
+
+    it('accepts tableTarget for merge range operations', () => {
+      const api = makeApi();
+      const tableTarget = { kind: 'block' as const, nodeType: 'table' as const, nodeId: 't1' };
+      expect(() =>
+        api.tables.mergeCells({ tableTarget, startRow: 0, startColumn: 0, endRow: 1, endColumn: 1 }),
+      ).not.toThrow();
+    });
+
+    // -- create.table locator validation --
+
+    it('rejects ambiguous create.table at locator (both target + nodeId)', () => {
+      const api = makeApi();
+      const target = { kind: 'block' as const, nodeType: 'paragraph' as const, nodeId: 'p1' };
+      expect(() =>
+        api.create.table({ rows: 2, columns: 2, at: { kind: 'after', target, nodeId: 'p1' } as any }),
+      ).toThrow(/Cannot combine/);
     });
   });
 });

@@ -4,10 +4,17 @@ import { preProcessVerticalMergeCells } from '@core/super-converter/export-helpe
 import { eighthPointsToPixels, halfPointToPoints, twipsToPixels } from '@core/super-converter/helpers.js';
 import { buildFallbackGridForTable } from '@core/super-converter/helpers/tableFallbackHelpers.js';
 import { translateChildNodes } from '@core/super-converter/v2/exporter/helpers/index.js';
+import { createAttributeHandler } from '@converter/v3/handlers/utils.js';
 import { NodeTranslator } from '@translator';
 import { translator as tblGridTranslator } from '../tblGrid';
 import { translator as tblPrTranslator } from '../tblPr';
 import { translator as trTranslator } from '../tr';
+
+/**
+ * Attributes preserved across DOCX roundtrip for table identity.
+ * @type {import('@translator').AttrConfig[]}
+ */
+const validXmlAttributes = ['w14:paraId', 'w14:textId'].map((xmlName) => createAttributeHandler(xmlName));
 
 /** @type {import('@translator').XmlNodeName} */
 const XML_NODE_NAME = 'w:tbl';
@@ -450,7 +457,7 @@ export const config = {
   type: NodeTranslator.translatorTypes.NODE,
   encode,
   decode,
-  attributes: [],
+  attributes: validXmlAttributes,
 };
 
 /**

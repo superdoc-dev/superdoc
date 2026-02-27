@@ -328,15 +328,11 @@ describe('comment helpers', () => {
       after: [{ type: 'italic' }, { type: 'textStyle', attrs: { fontSize: '14px', color: '#222' } }],
     });
 
-    expect(message).toContain('Removed formatting: bold');
-    expect(message).toContain('Added formatting: italic');
-    expect(message).toContain('Modified text style');
-    expect(message).toContain('Changed font size from 12px to 14px');
-    expect(message).toContain('Changed color');
+    expect(message).toBe('italic, removed bold, font size 14px, color');
   });
 
   it('returns default message when no formatting changes', () => {
-    expect(translateFormatChangesToEnglish()).toBe('No formatting changes.');
+    expect(translateFormatChangesToEnglish()).toBe('formatting');
   });
 
   it('computes highlight color from plugin state', () => {

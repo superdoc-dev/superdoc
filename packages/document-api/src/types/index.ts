@@ -12,6 +12,7 @@ export * from './comments.types.js';
 export * from './references.types.js';
 export * from './track-changes.types.js';
 export * from './create.types.js';
+export * from './table-operations.types.js';
 export * from './info.types.js';
 export * from './style-policy.types.js';
 export * from './mutation-plan.types.js';

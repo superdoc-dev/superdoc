@@ -64,6 +64,52 @@ import type {
   MutationsPreviewOutput,
   PlanReceipt,
 } from '../types/mutation-plan.types.js';
+import type {
+  CreateTableInput,
+  CreateTableResult,
+  TablesConvertFromTextInput,
+  TableLocator,
+  TablesMoveInput,
+  TablesSplitInput,
+  TablesConvertToTextInput,
+  TablesSetLayoutInput,
+  TablesInsertRowInput,
+  TablesDeleteRowInput,
+  TablesSetRowHeightInput,
+  TablesDistributeRowsInput,
+  TablesSetRowOptionsInput,
+  TablesInsertColumnInput,
+  TablesDeleteColumnInput,
+  TablesSetColumnWidthInput,
+  TablesDistributeColumnsInput,
+  TablesInsertCellInput,
+  TablesDeleteCellInput,
+  TablesMergeCellsInput,
+  TablesUnmergeCellsInput,
+  TablesSplitCellInput,
+  TablesSetCellPropertiesInput,
+  TablesSortInput,
+  TablesSetAltTextInput,
+  TablesSetStyleInput,
+  TablesClearStyleInput,
+  TablesSetStyleOptionInput,
+  TablesSetBorderInput,
+  TablesClearBorderInput,
+  TablesApplyBorderPresetInput,
+  TablesSetShadingInput,
+  TablesClearShadingInput,
+  TablesSetTablePaddingInput,
+  TablesSetCellPaddingInput,
+  TablesSetCellSpacingInput,
+  TablesClearCellSpacingInput,
+  TableMutationResult,
+  TablesGetInput,
+  TablesGetOutput,
+  TablesGetCellsInput,
+  TablesGetCellsOutput,
+  TablesGetPropertiesInput,
+  TablesGetPropertiesOutput,
+} from '../types/table-operations.types.js';
 
 export interface OperationRegistry {
   // --- Singleton reads ---
@@ -126,6 +172,76 @@ export interface OperationRegistry {
 
   // --- capabilities ---
   'capabilities.get': { input: undefined; options: never; output: DocumentApiCapabilities };
+
+  // --- create.table ---
+  'create.table': { input: CreateTableInput; options: MutationOptions; output: CreateTableResult };
+
+  // --- tables.* ---
+  'tables.convertFromText': {
+    input: TablesConvertFromTextInput;
+    options: MutationOptions;
+    output: TableMutationResult;
+  };
+  'tables.delete': { input: TableLocator; options: MutationOptions; output: TableMutationResult };
+  'tables.clearContents': { input: TableLocator; options: MutationOptions; output: TableMutationResult };
+  'tables.move': { input: TablesMoveInput; options: MutationOptions; output: TableMutationResult };
+  'tables.split': { input: TablesSplitInput; options: MutationOptions; output: TableMutationResult };
+  'tables.convertToText': { input: TablesConvertToTextInput; options: MutationOptions; output: TableMutationResult };
+  'tables.setLayout': { input: TablesSetLayoutInput; options: MutationOptions; output: TableMutationResult };
+  'tables.insertRow': { input: TablesInsertRowInput; options: MutationOptions; output: TableMutationResult };
+  'tables.deleteRow': { input: TablesDeleteRowInput; options: MutationOptions; output: TableMutationResult };
+  'tables.setRowHeight': { input: TablesSetRowHeightInput; options: MutationOptions; output: TableMutationResult };
+  'tables.distributeRows': { input: TablesDistributeRowsInput; options: MutationOptions; output: TableMutationResult };
+  'tables.setRowOptions': { input: TablesSetRowOptionsInput; options: MutationOptions; output: TableMutationResult };
+  'tables.insertColumn': { input: TablesInsertColumnInput; options: MutationOptions; output: TableMutationResult };
+  'tables.deleteColumn': { input: TablesDeleteColumnInput; options: MutationOptions; output: TableMutationResult };
+  'tables.setColumnWidth': { input: TablesSetColumnWidthInput; options: MutationOptions; output: TableMutationResult };
+  'tables.distributeColumns': {
+    input: TablesDistributeColumnsInput;
+    options: MutationOptions;
+    output: TableMutationResult;
+  };
+  'tables.insertCell': { input: TablesInsertCellInput; options: MutationOptions; output: TableMutationResult };
+  'tables.deleteCell': { input: TablesDeleteCellInput; options: MutationOptions; output: TableMutationResult };
+  'tables.mergeCells': { input: TablesMergeCellsInput; options: MutationOptions; output: TableMutationResult };
+  'tables.unmergeCells': { input: TablesUnmergeCellsInput; options: MutationOptions; output: TableMutationResult };
+  'tables.splitCell': { input: TablesSplitCellInput; options: MutationOptions; output: TableMutationResult };
+  'tables.setCellProperties': {
+    input: TablesSetCellPropertiesInput;
+    options: MutationOptions;
+    output: TableMutationResult;
+  };
+  'tables.sort': { input: TablesSortInput; options: MutationOptions; output: TableMutationResult };
+  'tables.setAltText': { input: TablesSetAltTextInput; options: MutationOptions; output: TableMutationResult };
+  'tables.setStyle': { input: TablesSetStyleInput; options: MutationOptions; output: TableMutationResult };
+  'tables.clearStyle': { input: TablesClearStyleInput; options: MutationOptions; output: TableMutationResult };
+  'tables.setStyleOption': { input: TablesSetStyleOptionInput; options: MutationOptions; output: TableMutationResult };
+  'tables.setBorder': { input: TablesSetBorderInput; options: MutationOptions; output: TableMutationResult };
+  'tables.clearBorder': { input: TablesClearBorderInput; options: MutationOptions; output: TableMutationResult };
+  'tables.applyBorderPreset': {
+    input: TablesApplyBorderPresetInput;
+    options: MutationOptions;
+    output: TableMutationResult;
+  };
+  'tables.setShading': { input: TablesSetShadingInput; options: MutationOptions; output: TableMutationResult };
+  'tables.clearShading': { input: TablesClearShadingInput; options: MutationOptions; output: TableMutationResult };
+  'tables.setTablePadding': {
+    input: TablesSetTablePaddingInput;
+    options: MutationOptions;
+    output: TableMutationResult;
+  };
+  'tables.setCellPadding': { input: TablesSetCellPaddingInput; options: MutationOptions; output: TableMutationResult };
+  'tables.setCellSpacing': { input: TablesSetCellSpacingInput; options: MutationOptions; output: TableMutationResult };
+  'tables.clearCellSpacing': {
+    input: TablesClearCellSpacingInput;
+    options: MutationOptions;
+    output: TableMutationResult;
+  };
+
+  // --- tables.* reads ---
+  'tables.get': { input: TablesGetInput; options: never; output: TablesGetOutput };
+  'tables.getCells': { input: TablesGetCellsInput; options: never; output: TablesGetCellsOutput };
+  'tables.getProperties': { input: TablesGetPropertiesInput; options: never; output: TablesGetPropertiesOutput };
 }
 
 // --- Bidirectional completeness checks ---

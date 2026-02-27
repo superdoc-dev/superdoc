@@ -216,6 +216,9 @@ catalogs:
     remark-stringify:
       specifier: ^11.0.0
       version: 11.0.0
+    rollup:
+      specifier: ^4.31.0
+      version: 4.57.1
     rollup-plugin-copy:
       specifier: ^3.5.0
       version: 3.5.0
@@ -989,6 +992,9 @@ importers:
       '@types/node':
         specifier: 'catalog:'
         version: 22.19.2
+      rollup:
+        specifier: 'catalog:'
+        version: 4.57.1
       typescript:
         specifier: 'catalog:'
         version: 5.9.3

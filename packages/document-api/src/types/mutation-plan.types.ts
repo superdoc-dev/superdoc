@@ -171,7 +171,7 @@ export const MAX_PLAN_RESOLVED_TARGETS = 500;
 // Plan output — receipts
 // ---------------------------------------------------------------------------
 
-export type StepEffect = 'changed' | 'noop' | 'assert_passed' | 'assert_failed';
+export type StepEffect = 'changed' | 'noop' | 'error' | 'assert_passed' | 'assert_failed';
 
 /** Resolution for a single-block (range) target. */
 export type TextStepResolution = {
@@ -201,7 +201,15 @@ export type AssertStepData = {
 
 export type DomainStepData = { domain: 'command'; commandDispatched: boolean };
 
-export type StepOutcomeData = TextStepData | AssertStepData | DomainStepData;
+export type TableStepData = {
+  domain: 'table';
+  tableId: string;
+  affectedRows?: string[];
+  affectedCells?: string[];
+  affectedColumns?: number[];
+};
+
+export type StepOutcomeData = TextStepData | AssertStepData | DomainStepData | TableStepData;
 
 export type StepOutcome = {
   stepId: string;

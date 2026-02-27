@@ -27,6 +27,108 @@ function genericInvalidArgumentFailure(operationId: CliOperationId) {
   });
 }
 
+// ---------------------------------------------------------------------------
+// Table scenario helpers (DRY builders for the 40 table operations)
+// ---------------------------------------------------------------------------
+
+/** Creates a table in a session and runs a table mutation operation on it. */
+function tableMutationScenario(
+  op: string,
+  extraArgs: string[],
+): (harness: ConformanceHarness) => Promise<ScenarioInvocation> {
+  return async (harness) => {
+    const label = `table-${op.replace(/\./g, '-')}`;
+    const stateDir = await harness.createStateDir(`${label}-success`);
+    const { tableNodeId, sessionId } = await harness.createTableFixture(stateDir, label);
+    return {
+      stateDir,
+      args: [
+        ...commandTokens(`doc.${op}` as CliOperationId),
+        '--session',
+        sessionId,
+        '--node-id',
+        tableNodeId,
+        ...extraArgs,
+        '--out',
+        harness.createOutputPath(`${label}-out`),
+      ],
+    };
+  };
+}
+
+/** Creates a table in a session and runs a table read operation on it. */
+function tableReadScenario(
+  op: string,
+  extraArgs: string[] = [],
+): (harness: ConformanceHarness) => Promise<ScenarioInvocation> {
+  return async (harness) => {
+    const label = `table-${op.replace(/\./g, '-')}`;
+    const stateDir = await harness.createStateDir(`${label}-success`);
+    const { tableNodeId, sessionId } = await harness.createTableFixture(stateDir, label);
+    return {
+      stateDir,
+      args: [
+        ...commandTokens(`doc.${op}` as CliOperationId),
+        '--session',
+        sessionId,
+        '--node-id',
+        tableNodeId,
+        ...extraArgs,
+      ],
+    };
+  };
+}
+
+/** Creates a table in a session and runs a cell-level mutation on it using --node-id with cellNodeId. */
+function cellMutationScenario(
+  op: string,
+  extraArgs: string[],
+): (harness: ConformanceHarness) => Promise<ScenarioInvocation> {
+  return async (harness) => {
+    const label = `table-${op.replace(/\./g, '-')}`;
+    const stateDir = await harness.createStateDir(`${label}-success`);
+    const { cellNodeId, sessionId } = await harness.createTableFixture(stateDir, label);
+    return {
+      stateDir,
+      args: [
+        ...commandTokens(`doc.${op}` as CliOperationId),
+        '--session',
+        sessionId,
+        '--node-id',
+        cellNodeId,
+        ...extraArgs,
+        '--out',
+        harness.createOutputPath(`${label}-out`),
+      ],
+    };
+  };
+}
+
+/** Table-scoped mutation in a session: uses --table-node-id instead of --node-id. */
+function tableScopedMutationScenario(
+  op: string,
+  extraArgs: string[],
+): (harness: ConformanceHarness) => Promise<ScenarioInvocation> {
+  return async (harness) => {
+    const label = `table-${op.replace(/\./g, '-')}`;
+    const stateDir = await harness.createStateDir(`${label}-success`);
+    const { tableNodeId, sessionId } = await harness.createTableFixture(stateDir, label);
+    return {
+      stateDir,
+      args: [
+        ...commandTokens(`doc.${op}` as CliOperationId),
+        '--session',
+        sessionId,
+        '--table-node-id',
+        tableNodeId,
+        ...extraArgs,
+        '--out',
+        harness.createOutputPath(`${label}-out`),
+      ],
+    };
+  };
+}
+
 export const SUCCESS_SCENARIOS = {
   'doc.open': async (harness: ConformanceHarness): Promise<ScenarioInvocation> => {
     const stateDir = await harness.createStateDir('doc-open-success');
@@ -705,6 +807,156 @@ export const SUCCESS_SCENARIOS = {
       args: ['session', 'set-default', '--session', 'session-default-success'],
     };
   },
+
+  // ---------------------------------------------------------------------------
+  // Table operations
+  // ---------------------------------------------------------------------------
+
+  'doc.create.table': async (harness: ConformanceHarness): Promise<ScenarioInvocation> => {
+    const stateDir = await harness.createStateDir('create-table-success');
+    const docPath = await harness.copyFixtureDoc('create-table');
+    return {
+      stateDir,
+      args: [
+        'create',
+        'table',
+        docPath,
+        '--rows',
+        '3',
+        '--columns',
+        '3',
+        '--out',
+        harness.createOutputPath('create-table-out'),
+      ],
+    };
+  },
+  'doc.tables.convertFromText': async (harness: ConformanceHarness): Promise<ScenarioInvocation> => {
+    const label = 'table-convertFromText';
+    const stateDir = await harness.createStateDir(`${label}-success`);
+    const { sessionId } = await harness.createTableFixture(stateDir, label);
+    // convertFromText targets a paragraph, not a table — find the first paragraph in the session
+    const { result, envelope } = await harness.runCli(
+      ['find', '--session', sessionId, '--type', 'node', '--node-type', 'paragraph', '--limit', '1'],
+      stateDir,
+    );
+    if (result.code !== 0 || envelope.ok !== true) {
+      throw new Error('Failed to find paragraph for convertFromText conformance scenario.');
+    }
+    const paraNodeId = (envelope.data as { result?: { items?: Array<{ address?: { nodeId?: string } }> } }).result
+      ?.items?.[0]?.address?.nodeId;
+    if (!paraNodeId) throw new Error('No paragraph found for convertFromText scenario.');
+    return {
+      stateDir,
+      args: [
+        ...commandTokens('doc.tables.convertFromText'),
+        '--session',
+        sessionId,
+        '--node-id',
+        paraNodeId,
+        '--delimiter-json',
+        JSON.stringify('tab'),
+        '--out',
+        harness.createOutputPath(`${label}-out`),
+      ],
+    };
+  },
+  'doc.tables.delete': tableMutationScenario('tables.delete', []),
+  'doc.tables.clearContents': tableMutationScenario('tables.clearContents', []),
+  'doc.tables.move': tableMutationScenario('tables.move', [
+    '--destination-json',
+    JSON.stringify({ kind: 'documentEnd' }),
+  ]),
+  'doc.tables.split': tableMutationScenario('tables.split', ['--at-row-index', '1']),
+  'doc.tables.convertToText': tableMutationScenario('tables.convertToText', ['--delimiter', 'tab']),
+  'doc.tables.setLayout': tableMutationScenario('tables.setLayout', ['--alignment', 'center']),
+  'doc.tables.insertRow': tableScopedMutationScenario('tables.insertRow', ['--row-index', '0', '--position', 'below']),
+  'doc.tables.deleteRow': tableScopedMutationScenario('tables.deleteRow', ['--row-index', '0']),
+  'doc.tables.setRowHeight': tableScopedMutationScenario('tables.setRowHeight', [
+    '--row-index',
+    '0',
+    '--height-pt',
+    '36',
+    '--rule',
+    'atLeast',
+  ]),
+  'doc.tables.distributeRows': tableMutationScenario('tables.distributeRows', []),
+  'doc.tables.setRowOptions': tableScopedMutationScenario('tables.setRowOptions', [
+    '--row-index',
+    '0',
+    '--allow-break-across-pages',
+  ]),
+  'doc.tables.insertColumn': tableScopedMutationScenario('tables.insertColumn', [
+    '--column-index',
+    '0',
+    '--position',
+    'right',
+  ]),
+  'doc.tables.deleteColumn': tableScopedMutationScenario('tables.deleteColumn', ['--column-index', '0']),
+  'doc.tables.setColumnWidth': tableScopedMutationScenario('tables.setColumnWidth', [
+    '--column-index',
+    '0',
+    '--width-pt',
+    '72',
+  ]),
+  'doc.tables.distributeColumns': tableMutationScenario('tables.distributeColumns', []),
+  'doc.tables.insertCell': cellMutationScenario('tables.insertCell', ['--mode', 'shiftRight']),
+  'doc.tables.deleteCell': cellMutationScenario('tables.deleteCell', ['--mode', 'shiftLeft']),
+  'doc.tables.mergeCells': tableScopedMutationScenario('tables.mergeCells', [
+    '--start-json',
+    JSON.stringify({ rowIndex: 0, columnIndex: 0 }),
+    '--end-json',
+    JSON.stringify({ rowIndex: 0, columnIndex: 1 }),
+  ]),
+  'doc.tables.unmergeCells': cellMutationScenario('tables.unmergeCells', []),
+  'doc.tables.splitCell': cellMutationScenario('tables.splitCell', ['--rows', '2', '--columns', '1']),
+  'doc.tables.setCellProperties': cellMutationScenario('tables.setCellProperties', ['--vertical-align', 'center']),
+  'doc.tables.sort': tableMutationScenario('tables.sort', [
+    '--keys-json',
+    JSON.stringify([{ columnIndex: 0, direction: 'ascending', type: 'text' }]),
+  ]),
+  'doc.tables.setAltText': tableMutationScenario('tables.setAltText', ['--title', 'Test Table']),
+  'doc.tables.setStyle': tableMutationScenario('tables.setStyle', ['--style-id', 'TableGrid']),
+  'doc.tables.clearStyle': tableMutationScenario('tables.clearStyle', []),
+  'doc.tables.setStyleOption': tableMutationScenario('tables.setStyleOption', ['--flag', 'headerRow', '--enabled']),
+  'doc.tables.setBorder': tableMutationScenario('tables.setBorder', [
+    '--edge',
+    'top',
+    '--line-style',
+    'single',
+    '--line-weight-pt',
+    '1',
+    '--color',
+    '000000',
+  ]),
+  'doc.tables.clearBorder': tableMutationScenario('tables.clearBorder', ['--edge', 'top']),
+  'doc.tables.applyBorderPreset': tableMutationScenario('tables.applyBorderPreset', ['--preset', 'all']),
+  'doc.tables.setShading': tableMutationScenario('tables.setShading', ['--color', 'FF0000']),
+  'doc.tables.clearShading': tableMutationScenario('tables.clearShading', []),
+  'doc.tables.setTablePadding': tableMutationScenario('tables.setTablePadding', [
+    '--top-pt',
+    '5',
+    '--right-pt',
+    '5',
+    '--bottom-pt',
+    '5',
+    '--left-pt',
+    '5',
+  ]),
+  'doc.tables.setCellPadding': cellMutationScenario('tables.setCellPadding', [
+    '--top-pt',
+    '5',
+    '--right-pt',
+    '5',
+    '--bottom-pt',
+    '5',
+    '--left-pt',
+    '5',
+  ]),
+  'doc.tables.setCellSpacing': tableMutationScenario('tables.setCellSpacing', ['--spacing-pt', '2']),
+  'doc.tables.clearCellSpacing': tableMutationScenario('tables.clearCellSpacing', []),
+  'doc.tables.get': tableReadScenario('tables.get'),
+  'doc.tables.getCells': tableReadScenario('tables.getCells'),
+  'doc.tables.getProperties': tableReadScenario('tables.getProperties'),
 } as const satisfies Record<CliOperationId, (harness: ConformanceHarness) => Promise<ScenarioInvocation>>;
 
 export const OPERATION_SCENARIOS = (Object.keys(SUCCESS_SCENARIOS) as CliOperationId[]).map((operationId) => {

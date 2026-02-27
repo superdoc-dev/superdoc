@@ -18,12 +18,13 @@ Use the tables below to see what operations are available and where each one is 
 | Capabilities | 1 | 0 | 1 | [Reference](/document-api/reference/capabilities/index) |
 | Comments | 5 | 0 | 5 | [Reference](/document-api/reference/comments/index) |
 | Core | 8 | 0 | 8 | [Reference](/document-api/reference/core/index) |
-| Create | 2 | 0 | 2 | [Reference](/document-api/reference/create/index) |
+| Create | 3 | 0 | 3 | [Reference](/document-api/reference/create/index) |
 | Format | 5 | 4 | 9 | [Reference](/document-api/reference/format/index) |
 | Lists | 8 | 0 | 8 | [Reference](/document-api/reference/lists/index) |
 | Mutations | 2 | 0 | 2 | [Reference](/document-api/reference/mutations/index) |
 | Query | 1 | 0 | 1 | [Reference](/document-api/reference/query/index) |
 | Styles | 1 | 0 | 1 | [Reference](/document-api/reference/styles/index) |
+| Tables | 39 | 0 | 39 | [Reference](/document-api/reference/tables/index) |
 | Track Changes | 3 | 0 | 3 | [Reference](/document-api/reference/track-changes/index) |
 
 | Editor method | Operation |
@@ -45,6 +46,7 @@ Use the tables below to see what operations are available and where each one is 
 | <span style={{ whiteSpace: 'nowrap', wordBreak: 'normal', overflowWrap: 'normal' }}><code>editor.doc.delete(...)</code></span> | [`delete`](/document-api/reference/delete) |
 | <span style={{ whiteSpace: 'nowrap', wordBreak: 'normal', overflowWrap: 'normal' }}><code>editor.doc.create.paragraph(...)</code></span> | [`create.paragraph`](/document-api/reference/create/paragraph) |
 | <span style={{ whiteSpace: 'nowrap', wordBreak: 'normal', overflowWrap: 'normal' }}><code>editor.doc.create.heading(...)</code></span> | [`create.heading`](/document-api/reference/create/heading) |
+| <span style={{ whiteSpace: 'nowrap', wordBreak: 'normal', overflowWrap: 'normal' }}><code>editor.doc.create.table(...)</code></span> | [`create.table`](/document-api/reference/create/table) |
 | <span style={{ whiteSpace: 'nowrap', wordBreak: 'normal', overflowWrap: 'normal' }}><code>editor.doc.format.apply(...)</code></span> | [`format.apply`](/document-api/reference/format/apply) |
 | <span style={{ whiteSpace: 'nowrap', wordBreak: 'normal', overflowWrap: 'normal' }}><code>editor.doc.format.fontSize(...)</code></span> | [`format.fontSize`](/document-api/reference/format/font-size) |
 | <span style={{ whiteSpace: 'nowrap', wordBreak: 'normal', overflowWrap: 'normal' }}><code>editor.doc.format.fontFamily(...)</code></span> | [`format.fontFamily`](/document-api/reference/format/font-family) |
@@ -66,6 +68,45 @@ Use the tables below to see what operations are available and where each one is 
 | <span style={{ whiteSpace: 'nowrap', wordBreak: 'normal', overflowWrap: 'normal' }}><code>editor.doc.mutations.apply(...)</code></span> | [`mutations.apply`](/document-api/reference/mutations/apply) |
 | <span style={{ whiteSpace: 'nowrap', wordBreak: 'normal', overflowWrap: 'normal' }}><code>editor.doc.query.match(...)</code></span> | [`query.match`](/document-api/reference/query/match) |
 | <span style={{ whiteSpace: 'nowrap', wordBreak: 'normal', overflowWrap: 'normal' }}><code>editor.doc.styles.apply(...)</code></span> | [`styles.apply`](/document-api/reference/styles/apply) |
+| <span style={{ whiteSpace: 'nowrap', wordBreak: 'normal', overflowWrap: 'normal' }}><code>editor.doc.tables.convertFromText(...)</code></span> | [`tables.convertFromText`](/document-api/reference/tables/convert-from-text) |
+| <span style={{ whiteSpace: 'nowrap', wordBreak: 'normal', overflowWrap: 'normal' }}><code>editor.doc.tables.delete(...)</code></span> | [`tables.delete`](/document-api/reference/tables/delete) |
+| <span style={{ whiteSpace: 'nowrap', wordBreak: 'normal', overflowWrap: 'normal' }}><code>editor.doc.tables.clearContents(...)</code></span> | [`tables.clearContents`](/document-api/reference/tables/clear-contents) |
+| <span style={{ whiteSpace: 'nowrap', wordBreak: 'normal', overflowWrap: 'normal' }}><code>editor.doc.tables.move(...)</code></span> | [`tables.move`](/document-api/reference/tables/move) |
+| <span style={{ whiteSpace: 'nowrap', wordBreak: 'normal', overflowWrap: 'normal' }}><code>editor.doc.tables.split(...)</code></span> | [`tables.split`](/document-api/reference/tables/split) |
+| <span style={{ whiteSpace: 'nowrap', wordBreak: 'normal', overflowWrap: 'normal' }}><code>editor.doc.tables.convertToText(...)</code></span> | [`tables.convertToText`](/document-api/reference/tables/convert-to-text) |
+| <span style={{ whiteSpace: 'nowrap', wordBreak: 'normal', overflowWrap: 'normal' }}><code>editor.doc.tables.setLayout(...)</code></span> | [`tables.setLayout`](/document-api/reference/tables/set-layout) |
+| <span style={{ whiteSpace: 'nowrap', wordBreak: 'normal', overflowWrap: 'normal' }}><code>editor.doc.tables.insertRow(...)</code></span> | [`tables.insertRow`](/document-api/reference/tables/insert-row) |
+| <span style={{ whiteSpace: 'nowrap', wordBreak: 'normal', overflowWrap: 'normal' }}><code>editor.doc.tables.deleteRow(...)</code></span> | [`tables.deleteRow`](/document-api/reference/tables/delete-row) |
+| <span style={{ whiteSpace: 'nowrap', wordBreak: 'normal', overflowWrap: 'normal' }}><code>editor.doc.tables.setRowHeight(...)</code></span> | [`tables.setRowHeight`](/document-api/reference/tables/set-row-height) |
+| <span style={{ whiteSpace: 'nowrap', wordBreak: 'normal', overflowWrap: 'normal' }}><code>editor.doc.tables.distributeRows(...)</code></span> | [`tables.distributeRows`](/document-api/reference/tables/distribute-rows) |
+| <span style={{ whiteSpace: 'nowrap', wordBreak: 'normal', overflowWrap: 'normal' }}><code>editor.doc.tables.setRowOptions(...)</code></span> | [`tables.setRowOptions`](/document-api/reference/tables/set-row-options) |
+| <span style={{ whiteSpace: 'nowrap', wordBreak: 'normal', overflowWrap: 'normal' }}><code>editor.doc.tables.insertColumn(...)</code></span> | [`tables.insertColumn`](/document-api/reference/tables/insert-column) |
+| <span style={{ whiteSpace: 'nowrap', wordBreak: 'normal', overflowWrap: 'normal' }}><code>editor.doc.tables.deleteColumn(...)</code></span> | [`tables.deleteColumn`](/document-api/reference/tables/delete-column) |
+| <span style={{ whiteSpace: 'nowrap', wordBreak: 'normal', overflowWrap: 'normal' }}><code>editor.doc.tables.setColumnWidth(...)</code></span> | [`tables.setColumnWidth`](/document-api/reference/tables/set-column-width) |
+| <span style={{ whiteSpace: 'nowrap', wordBreak: 'normal', overflowWrap: 'normal' }}><code>editor.doc.tables.distributeColumns(...)</code></span> | [`tables.distributeColumns`](/document-api/reference/tables/distribute-columns) |
+| <span style={{ whiteSpace: 'nowrap', wordBreak: 'normal', overflowWrap: 'normal' }}><code>editor.doc.tables.insertCell(...)</code></span> | [`tables.insertCell`](/document-api/reference/tables/insert-cell) |
+| <span style={{ whiteSpace: 'nowrap', wordBreak: 'normal', overflowWrap: 'normal' }}><code>editor.doc.tables.deleteCell(...)</code></span> | [`tables.deleteCell`](/document-api/reference/tables/delete-cell) |
+| <span style={{ whiteSpace: 'nowrap', wordBreak: 'normal', overflowWrap: 'normal' }}><code>editor.doc.tables.mergeCells(...)</code></span> | [`tables.mergeCells`](/document-api/reference/tables/merge-cells) |
+| <span style={{ whiteSpace: 'nowrap', wordBreak: 'normal', overflowWrap: 'normal' }}><code>editor.doc.tables.unmergeCells(...)</code></span> | [`tables.unmergeCells`](/document-api/reference/tables/unmerge-cells) |
+| <span style={{ whiteSpace: 'nowrap', wordBreak: 'normal', overflowWrap: 'normal' }}><code>editor.doc.tables.splitCell(...)</code></span> | [`tables.splitCell`](/document-api/reference/tables/split-cell) |
+| <span style={{ whiteSpace: 'nowrap', wordBreak: 'normal', overflowWrap: 'normal' }}><code>editor.doc.tables.setCellProperties(...)</code></span> | [`tables.setCellProperties`](/document-api/reference/tables/set-cell-properties) |
+| <span style={{ whiteSpace: 'nowrap', wordBreak: 'normal', overflowWrap: 'normal' }}><code>editor.doc.tables.sort(...)</code></span> | [`tables.sort`](/document-api/reference/tables/sort) |
+| <span style={{ whiteSpace: 'nowrap', wordBreak: 'normal', overflowWrap: 'normal' }}><code>editor.doc.tables.setAltText(...)</code></span> | [`tables.setAltText`](/document-api/reference/tables/set-alt-text) |
+| <span style={{ whiteSpace: 'nowrap', wordBreak: 'normal', overflowWrap: 'normal' }}><code>editor.doc.tables.setStyle(...)</code></span> | [`tables.setStyle`](/document-api/reference/tables/set-style) |
+| <span style={{ whiteSpace: 'nowrap', wordBreak: 'normal', overflowWrap: 'normal' }}><code>editor.doc.tables.clearStyle(...)</code></span> | [`tables.clearStyle`](/document-api/reference/tables/clear-style) |
+| <span style={{ whiteSpace: 'nowrap', wordBreak: 'normal', overflowWrap: 'normal' }}><code>editor.doc.tables.setStyleOption(...)</code></span> | [`tables.setStyleOption`](/document-api/reference/tables/set-style-option) |
+| <span style={{ whiteSpace: 'nowrap', wordBreak: 'normal', overflowWrap: 'normal' }}><code>editor.doc.tables.setBorder(...)</code></span> | [`tables.setBorder`](/document-api/reference/tables/set-border) |
+| <span style={{ whiteSpace: 'nowrap', wordBreak: 'normal', overflowWrap: 'normal' }}><code>editor.doc.tables.clearBorder(...)</code></span> | [`tables.clearBorder`](/document-api/reference/tables/clear-border) |
+| <span style={{ whiteSpace: 'nowrap', wordBreak: 'normal', overflowWrap: 'normal' }}><code>editor.doc.tables.applyBorderPreset(...)</code></span> | [`tables.applyBorderPreset`](/document-api/reference/tables/apply-border-preset) |
+| <span style={{ whiteSpace: 'nowrap', wordBreak: 'normal', overflowWrap: 'normal' }}><code>editor.doc.tables.setShading(...)</code></span> | [`tables.setShading`](/document-api/reference/tables/set-shading) |
+| <span style={{ whiteSpace: 'nowrap', wordBreak: 'normal', overflowWrap: 'normal' }}><code>editor.doc.tables.clearShading(...)</code></span> | [`tables.clearShading`](/document-api/reference/tables/clear-shading) |
+| <span style={{ whiteSpace: 'nowrap', wordBreak: 'normal', overflowWrap: 'normal' }}><code>editor.doc.tables.setTablePadding(...)</code></span> | [`tables.setTablePadding`](/document-api/reference/tables/set-table-padding) |
+| <span style={{ whiteSpace: 'nowrap', wordBreak: 'normal', overflowWrap: 'normal' }}><code>editor.doc.tables.setCellPadding(...)</code></span> | [`tables.setCellPadding`](/document-api/reference/tables/set-cell-padding) |
+| <span style={{ whiteSpace: 'nowrap', wordBreak: 'normal', overflowWrap: 'normal' }}><code>editor.doc.tables.setCellSpacing(...)</code></span> | [`tables.setCellSpacing`](/document-api/reference/tables/set-cell-spacing) |
+| <span style={{ whiteSpace: 'nowrap', wordBreak: 'normal', overflowWrap: 'normal' }}><code>editor.doc.tables.clearCellSpacing(...)</code></span> | [`tables.clearCellSpacing`](/document-api/reference/tables/clear-cell-spacing) |
+| <span style={{ whiteSpace: 'nowrap', wordBreak: 'normal', overflowWrap: 'normal' }}><code>editor.doc.tables.get(...)</code></span> | [`tables.get`](/document-api/reference/tables/get) |
+| <span style={{ whiteSpace: 'nowrap', wordBreak: 'normal', overflowWrap: 'normal' }}><code>editor.doc.tables.getCells(...)</code></span> | [`tables.getCells`](/document-api/reference/tables/get-cells) |
+| <span style={{ whiteSpace: 'nowrap', wordBreak: 'normal', overflowWrap: 'normal' }}><code>editor.doc.tables.getProperties(...)</code></span> | [`tables.getProperties`](/document-api/reference/tables/get-properties) |
 | <span style={{ whiteSpace: 'nowrap', wordBreak: 'normal', overflowWrap: 'normal' }}><code>editor.doc.trackChanges.list(...)</code></span> | [`trackChanges.list`](/document-api/reference/track-changes/list) |
 | <span style={{ whiteSpace: 'nowrap', wordBreak: 'normal', overflowWrap: 'normal' }}><code>editor.doc.trackChanges.get(...)</code></span> | [`trackChanges.get`](/document-api/reference/track-changes/get) |
 | <span style={{ whiteSpace: 'nowrap', wordBreak: 'normal', overflowWrap: 'normal' }}><code>editor.doc.trackChanges.decide(...)</code></span> | [`trackChanges.decide`](/document-api/reference/track-changes/decide) |

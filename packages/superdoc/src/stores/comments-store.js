@@ -145,13 +145,6 @@ export const useCommentsStore = defineStore('comments', () => {
     return source === 'super-editor';
   };
 
-  /**
-   * Check if a comment is part of a tracked-change thread.
-   * Returns true for tracked-change comments or replies to tracked changes.
-   *
-   * @param {Object} comment - The comment to check
-   * @returns {boolean} True if the comment is a tracked-change thread
-   */
   const isTrackedChangeThread = (comment) => Boolean(comment?.trackedChange) || Boolean(comment?.trackedChangeParentId);
 
   const syncResolvedCommentsWithDocument = () => {
@@ -164,6 +157,7 @@ export const useCommentsStore = defineStore('comments', () => {
       if (!key) return;
 
       const hasActiveAnchor = activeKeys.has(String(key));
+
       if (
         hasActiveAnchor &&
         comment.resolvedTime &&
@@ -416,7 +410,7 @@ export const useCommentsStore = defineStore('comments', () => {
       superdocStore.selectionPosition.source = 'super-editor';
     }
 
-    activeComment.value = pendingComment.value.commentID;
+    activeComment.value = pendingComment.value.commentId;
   };
 
   /**
@@ -664,6 +658,11 @@ export const useCommentsStore = defineStore('comments', () => {
       .filter((c) => c.parentCommentId === commentId)
       .map((c) => c.commentId || c.importedId);
     commentsList.value = commentsList.value.filter((c) => !childCommentIds.includes(c.commentId));
+
+    // Clear active state so floating layout doesn't reference a deleted comment
+    if (activeComment.value === commentId || childCommentIds.includes(activeComment.value)) {
+      activeComment.value = null;
+    }
 
     const event = {
       type: COMMENT_EVENTS.DELETED,

@@ -109,7 +109,7 @@
  * @property {TableMeasurement} [tableCellSpacing] - Cell spacing
  * @property {TableMeasurement} [tableIndent] - Table indentation
  * @property {"fixed" | "autofit"} [tableLayout] - Table layout algorithm
- * @property {TableLook} [tableLook] - Various boolean flags that affect the rendering of the table
+ * @property {TableLook} [tblLook] - Various boolean flags that affect the rendering of the table
  * @property {"never" | "overlap"} [overlap] - Specifies whether the current table should allow other floating tables to overlap its extents when the tables are displayed in a document
  * @property {string} [tableStyleId] - Reference to table style ID
  * @property {number} [tableStyleColBandSize] - Number of columns for which the table style is applied
@@ -342,6 +342,30 @@ export const Table = Node.create({
         renderDOM: (attrs) => {
           return attrs.sdBlockId ? { 'data-sd-block-id': attrs.sdBlockId } : {};
         },
+      },
+
+      /**
+       * @private
+       * @category Attribute
+       * @param {string} [paraId] - OOXML paragraph/element identifier (w14:paraId), preserved across DOCX roundtrips
+       */
+      paraId: {
+        default: null,
+        keepOnSplit: false,
+        parseDOM: () => null,
+        renderDOM: () => ({}),
+      },
+
+      /**
+       * @private
+       * @category Attribute
+       * @param {string} [textId] - OOXML text identifier (w14:textId), preserved across DOCX roundtrips
+       */
+      textId: {
+        default: null,
+        keepOnSplit: false,
+        parseDOM: () => null,
+        renderDOM: () => ({}),
       },
 
       /**
@@ -606,6 +630,65 @@ export const Table = Node.create({
           }
 
           return true;
+        },
+
+      /**
+       * Insert a table at a specific document position.
+       * Used by the document API's create.table operation.
+       *
+       * Mirrors the logic of `core/commands/insertTableAt.js` but adapted
+       * for the extension command interface (shared `tr`, `dispatch` as gate).
+       *
+       * @category Command
+       * @param {Object} options
+       * @param {number} options.pos - Absolute document position to insert at
+       * @param {number} options.rows - Number of rows
+       * @param {number} options.columns - Number of columns
+       * @param {string} [options.sdBlockId] - Stable block ID for the created table
+       * @param {string} [options.paraId] - OOXML-compatible identifier (w14:paraId) that survives DOCX roundtrips
+       * @param {boolean} [options.tracked] - When true, sets forceTrackChanges meta; when false, sets skipTrackChanges meta
+       */
+      insertTableAt:
+        ({ pos, rows, columns, sdBlockId, paraId, tracked } = {}) =>
+        ({ tr, state, dispatch }) => {
+          const tableType = state.schema.nodes.table;
+          const tableRowType = state.schema.nodes.tableRow;
+          const tableCellType = state.schema.nodes.tableCell;
+          if (!tableType || !tableRowType || !tableCellType) return false;
+          if (!Number.isInteger(pos) || pos < 0 || pos > state.doc.content.size) return false;
+          if (!Number.isInteger(rows) || rows < 1) return false;
+          if (!Number.isInteger(columns) || columns < 1) return false;
+
+          try {
+            const genParaId = () =>
+              Array.from({ length: 8 }, () => Math.floor(Math.random() * 16).toString(16))
+                .join('')
+                .toUpperCase();
+            const rowNodes = [];
+            for (let r = 0; r < rows; r++) {
+              const cellNodes = [];
+              for (let c = 0; c < columns; c++) {
+                const cell = tableCellType.createAndFill({ paraId: genParaId() });
+                if (!cell) return false;
+                cellNodes.push(cell);
+              }
+              const row = tableRowType.createChecked(null, cellNodes);
+              rowNodes.push(row);
+            }
+            const tableAttrs =
+              sdBlockId || paraId ? { ...(sdBlockId ? { sdBlockId } : {}), ...(paraId ? { paraId } : {}) } : undefined;
+            const tableNode = tableType.createChecked(tableAttrs, rowNodes);
+
+            if (dispatch) {
+              tr.insert(pos, tableNode);
+              tr.setMeta('inputType', 'programmatic');
+              if (tracked === true) tr.setMeta('forceTrackChanges', true);
+              else if (tracked === false) tr.setMeta('skipTrackChanges', true);
+            }
+            return true;
+          } catch {
+            return false;
+          }
         },
 
       /**

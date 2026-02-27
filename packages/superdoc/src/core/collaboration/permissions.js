@@ -24,7 +24,7 @@ const PERMISSION_MATRIX = Object.freeze({
   },
   [PERMISSIONS.RESOLVE_OTHER]: {
     internal: [ROLES.EDITOR],
-    external: [],
+    external: [ROLES.EDITOR],
   },
   [PERMISSIONS.REJECT_OWN]: {
     internal: [ROLES.EDITOR, ROLES.SUGGESTER],
@@ -32,7 +32,7 @@ const PERMISSION_MATRIX = Object.freeze({
   },
   [PERMISSIONS.REJECT_OTHER]: {
     internal: [ROLES.EDITOR],
-    external: [],
+    external: [ROLES.EDITOR],
   },
   [PERMISSIONS.COMMENTS_OVERFLOW_OWN]: {
     internal: [ROLES.EDITOR, ROLES.SUGGESTER],
@@ -40,7 +40,7 @@ const PERMISSION_MATRIX = Object.freeze({
   },
   [PERMISSIONS.COMMENTS_OVERFLOW_OTHER]: {
     internal: [ROLES.EDITOR],
-    external: [],
+    external: [ROLES.EDITOR],
   },
   [PERMISSIONS.COMMENTS_DELETE_OWN]: {
     internal: [ROLES.EDITOR, ROLES.SUGGESTER],
@@ -48,7 +48,7 @@ const PERMISSION_MATRIX = Object.freeze({
   },
   [PERMISSIONS.COMMENTS_DELETE_OTHER]: {
     internal: [ROLES.EDITOR],
-    external: [],
+    external: [ROLES.EDITOR],
   },
   [PERMISSIONS.UPLOAD_VERSION]: {
     internal: [ROLES.EDITOR],

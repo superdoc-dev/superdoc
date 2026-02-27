@@ -14,6 +14,7 @@
     "test:superdoc": "vitest run --root ./packages/superdoc",
     "test:doc-api-stories": "pnpm --silent --filter @superdoc-testing/doc-api-stories test",
     "test:cov": "node scripts/test-cov.mjs",
+    "pretest:behavior": "node scripts/free-port.mjs 9990",
     "test:behavior": "pnpm --filter @superdoc-testing/behavior test",
     "test:behavior:trace": "pnpm --filter @superdoc-testing/behavior test:trace",
     "test:behavior:screenshots": "pnpm --filter @superdoc-testing/behavior test:screenshots",

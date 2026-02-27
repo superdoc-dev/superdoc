@@ -92,5 +92,51 @@ export function buildDispatchTable(api: DocumentApi): TypedDispatchTable {
 
     // --- capabilities ---
     'capabilities.get': () => api.capabilities(),
+
+    // --- create.table ---
+    'create.table': (input, options) => api.create.table(input, options),
+
+    // --- tables.* ---
+    'tables.convertFromText': (input, options) => api.tables.convertFromText(input, options),
+    'tables.delete': (input, options) => api.tables.delete(input, options),
+    'tables.clearContents': (input, options) => api.tables.clearContents(input, options),
+    'tables.move': (input, options) => api.tables.move(input, options),
+    'tables.split': (input, options) => api.tables.split(input, options),
+    'tables.convertToText': (input, options) => api.tables.convertToText(input, options),
+    'tables.setLayout': (input, options) => api.tables.setLayout(input, options),
+    'tables.insertRow': (input, options) => api.tables.insertRow(input, options),
+    'tables.deleteRow': (input, options) => api.tables.deleteRow(input, options),
+    'tables.setRowHeight': (input, options) => api.tables.setRowHeight(input, options),
+    'tables.distributeRows': (input, options) => api.tables.distributeRows(input, options),
+    'tables.setRowOptions': (input, options) => api.tables.setRowOptions(input, options),
+    'tables.insertColumn': (input, options) => api.tables.insertColumn(input, options),
+    'tables.deleteColumn': (input, options) => api.tables.deleteColumn(input, options),
+    'tables.setColumnWidth': (input, options) => api.tables.setColumnWidth(input, options),
+    'tables.distributeColumns': (input, options) => api.tables.distributeColumns(input, options),
+    'tables.insertCell': (input, options) => api.tables.insertCell(input, options),
+    'tables.deleteCell': (input, options) => api.tables.deleteCell(input, options),
+    'tables.mergeCells': (input, options) => api.tables.mergeCells(input, options),
+    'tables.unmergeCells': (input, options) => api.tables.unmergeCells(input, options),
+    'tables.splitCell': (input, options) => api.tables.splitCell(input, options),
+    'tables.setCellProperties': (input, options) => api.tables.setCellProperties(input, options),
+    'tables.sort': (input, options) => api.tables.sort(input, options),
+    'tables.setAltText': (input, options) => api.tables.setAltText(input, options),
+    'tables.setStyle': (input, options) => api.tables.setStyle(input, options),
+    'tables.clearStyle': (input, options) => api.tables.clearStyle(input, options),
+    'tables.setStyleOption': (input, options) => api.tables.setStyleOption(input, options),
+    'tables.setBorder': (input, options) => api.tables.setBorder(input, options),
+    'tables.clearBorder': (input, options) => api.tables.clearBorder(input, options),
+    'tables.applyBorderPreset': (input, options) => api.tables.applyBorderPreset(input, options),
+    'tables.setShading': (input, options) => api.tables.setShading(input, options),
+    'tables.clearShading': (input, options) => api.tables.clearShading(input, options),
+    'tables.setTablePadding': (input, options) => api.tables.setTablePadding(input, options),
+    'tables.setCellPadding': (input, options) => api.tables.setCellPadding(input, options),
+    'tables.setCellSpacing': (input, options) => api.tables.setCellSpacing(input, options),
+    'tables.clearCellSpacing': (input, options) => api.tables.clearCellSpacing(input, options),
+
+    // --- tables.* reads ---
+    'tables.get': (input) => api.tables.get(input),
+    'tables.getCells': (input) => api.tables.getCells(input),
+    'tables.getProperties': (input) => api.tables.getProperties(input),
   };
 }

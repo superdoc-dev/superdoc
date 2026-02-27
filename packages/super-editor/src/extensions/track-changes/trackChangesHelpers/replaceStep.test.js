@@ -1,6 +1,7 @@
 import { beforeEach, afterEach, describe, expect, it, vi } from 'vitest';
 import { EditorState, TextSelection } from 'prosemirror-state';
 import { DOMParser as PMDOMParser, Slice } from 'prosemirror-model';
+import { ReplaceStep } from 'prosemirror-transform';
 import { trackedTransaction, documentHelpers } from './index.js';
 import { TrackInsertMarkName, TrackDeleteMarkName } from '../constants.js';
 import { TrackChangesBasePluginKey } from '../plugins/trackChangesBasePlugin.js';
@@ -505,6 +506,44 @@ describe('trackChangesHelpers replaceStep', () => {
     expect(text).toContain('Paste One');
     expect(text).toContain('Paste Two');
     expect(text).not.toContain('Flattened Fallback');
+  });
+
+  it('does not re-map the inverse of a normalized replace step when prior maps already exist', () => {
+    const paragraphOne = schema.nodes.paragraph.create({}, [schema.nodes.run.create({}, [schema.text('Prefix')])]);
+    const paragraphTwo = schema.nodes.paragraph.create({}, [
+      schema.nodes.run.create({}, [schema.text('Current sentence old redline.')]),
+    ]);
+    const state = createState(schema.nodes.doc.create({}, [paragraphOne, paragraphTwo]));
+
+    const inverseMapInputSizes = [];
+    const originalInvert = ReplaceStep.prototype.invert;
+    vi.spyOn(ReplaceStep.prototype, 'invert').mockImplementation(function invertSpy(docNode) {
+      const inverseStep = originalInvert.call(this, docNode);
+      const isSingleCharDelete = this.slice.content.size === 0 && this.to - this.from === 1;
+      if (!isSingleCharDelete) return inverseStep;
+      const originalMap = inverseStep.map.bind(inverseStep);
+      inverseStep.map = (mapping) => {
+        inverseMapInputSizes.push(mapping.maps.length);
+        return originalMap(mapping);
+      };
+      return inverseStep;
+    });
+
+    const prefixPos = findTextPos(state.doc, 'Prefix');
+    expect(prefixPos).toBeTypeOf('number');
+    let tr = state.tr.insertText('!', prefixPos + 'Prefix'.length);
+
+    const secondParagraphRange = getParagraphRange(tr.doc, 1);
+    expect(secondParagraphRange).toBeTruthy();
+    const replacementParagraph = schema.nodes.paragraph.create({}, [
+      schema.nodes.run.create({}, [schema.text('Current sentence old redline')]),
+    ]);
+    tr = tr.replace(secondParagraphRange.from, secondParagraphRange.to, new Slice(replacementParagraph.content, 0, 0));
+    tr.setMeta('inputType', 'insertText');
+
+    trackedTransaction({ tr, state, user });
+
+    expect(inverseMapInputSizes).toHaveLength(0);
   });
 
   it('deletes empty paragraph on Backspace in suggesting mode', () => {

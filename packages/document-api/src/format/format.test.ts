@@ -47,7 +47,7 @@ describe('executeStyleApply validation', () => {
 
   it('rejects unknown top-level fields', () => {
     const adapter = makeAdapter();
-    const input = { target: TARGET, inline: { bold: true }, extra: 1 };
+    const input = { target: TARGET, inline: { bold: 'on' }, extra: 1 };
     expect(() => executeStyleApply(adapter, input as any)).toThrow('extra');
   });
 
@@ -57,85 +57,85 @@ describe('executeStyleApply validation', () => {
 
   it('rejects missing target', () => {
     const adapter = makeAdapter();
-    const input = { inline: { bold: true } };
+    const input = { inline: { bold: 'on' } };
     expect(() => executeStyleApply(adapter, input as any)).toThrow('requires a target');
   });
 
   it('rejects invalid target (string)', () => {
     const adapter = makeAdapter();
-    const input = { target: 'not-an-address', inline: { bold: true } };
+    const input = { target: 'not-an-address', inline: { bold: 'on' } };
     expect(() => executeStyleApply(adapter, input as any)).toThrow('text address');
   });
 
   it('rejects invalid target (number)', () => {
     const adapter = makeAdapter();
-    const input = { target: 42, inline: { bold: true } };
+    const input = { target: 42, inline: { bold: 'on' } };
     expect(() => executeStyleApply(adapter, input as any)).toThrow('text address');
   });
 
   it('rejects invalid target (null)', () => {
     const adapter = makeAdapter();
-    const input = { target: null, inline: { bold: true } };
+    const input = { target: null, inline: { bold: 'on' } };
     expect(() => executeStyleApply(adapter, input as any)).toThrow('text address');
   });
 
   it('rejects target missing kind', () => {
     const adapter = makeAdapter();
-    const input = { target: { blockId: 'p1', range: { start: 0, end: 5 } }, inline: { bold: true } };
+    const input = { target: { blockId: 'p1', range: { start: 0, end: 5 } }, inline: { bold: 'on' } };
     expect(() => executeStyleApply(adapter, input as any)).toThrow('text address');
   });
 
   it('rejects target with wrong kind', () => {
     const adapter = makeAdapter();
-    const input = { target: { kind: 'block', blockId: 'p1', range: { start: 0, end: 5 } }, inline: { bold: true } };
+    const input = { target: { kind: 'block', blockId: 'p1', range: { start: 0, end: 5 } }, inline: { bold: 'on' } };
     expect(() => executeStyleApply(adapter, input as any)).toThrow('text address');
   });
 
   it('rejects target missing blockId', () => {
     const adapter = makeAdapter();
-    const input = { target: { kind: 'text', range: { start: 0, end: 5 } }, inline: { bold: true } };
+    const input = { target: { kind: 'text', range: { start: 0, end: 5 } }, inline: { bold: 'on' } };
     expect(() => executeStyleApply(adapter, input as any)).toThrow('text address');
   });
 
   it('rejects target with non-string blockId', () => {
     const adapter = makeAdapter();
-    const input = { target: { kind: 'text', blockId: 123, range: { start: 0, end: 5 } }, inline: { bold: true } };
+    const input = { target: { kind: 'text', blockId: 123, range: { start: 0, end: 5 } }, inline: { bold: 'on' } };
     expect(() => executeStyleApply(adapter, input as any)).toThrow('text address');
   });
 
   it('rejects target missing range', () => {
     const adapter = makeAdapter();
-    const input = { target: { kind: 'text', blockId: 'p1' }, inline: { bold: true } };
+    const input = { target: { kind: 'text', blockId: 'p1' }, inline: { bold: 'on' } };
     expect(() => executeStyleApply(adapter, input as any)).toThrow('text address');
   });
 
   it('rejects target with non-object range', () => {
     const adapter = makeAdapter();
-    const input = { target: { kind: 'text', blockId: 'p1', range: 'bad' }, inline: { bold: true } };
+    const input = { target: { kind: 'text', blockId: 'p1', range: 'bad' }, inline: { bold: 'on' } };
     expect(() => executeStyleApply(adapter, input as any)).toThrow('text address');
   });
 
   it('rejects target with non-integer start in range', () => {
     const adapter = makeAdapter();
-    const input = { target: { kind: 'text', blockId: 'p1', range: { start: 1.5, end: 5 } }, inline: { bold: true } };
+    const input = { target: { kind: 'text', blockId: 'p1', range: { start: 1.5, end: 5 } }, inline: { bold: 'on' } };
     expect(() => executeStyleApply(adapter, input as any)).toThrow('text address');
   });
 
   it('rejects target with non-integer end in range', () => {
     const adapter = makeAdapter();
-    const input = { target: { kind: 'text', blockId: 'p1', range: { start: 0, end: 5.5 } }, inline: { bold: true } };
+    const input = { target: { kind: 'text', blockId: 'p1', range: { start: 0, end: 5.5 } }, inline: { bold: 'on' } };
     expect(() => executeStyleApply(adapter, input as any)).toThrow('text address');
   });
 
   it('rejects target with start > end in range', () => {
     const adapter = makeAdapter();
-    const input = { target: { kind: 'text', blockId: 'p1', range: { start: 10, end: 5 } }, inline: { bold: true } };
+    const input = { target: { kind: 'text', blockId: 'p1', range: { start: 10, end: 5 } }, inline: { bold: 'on' } };
     expect(() => executeStyleApply(adapter, input as any)).toThrow('text address');
   });
 
   it('accepts valid target', () => {
     const adapter = makeAdapter();
-    const input: StyleApplyInput = { target: TARGET, inline: { bold: true } };
+    const input: StyleApplyInput = { target: TARGET, inline: { bold: 'on' } };
     const result = executeStyleApply(adapter, input);
     expect(result.success).toBe(true);
   });
@@ -144,7 +144,7 @@ describe('executeStyleApply validation', () => {
     const adapter = makeAdapter();
     const input: StyleApplyInput = {
       target: { kind: 'text', blockId: 'p1', range: { start: 0, end: 0 } },
-      inline: { bold: true },
+      inline: { bold: 'on' },
     };
     const result = executeStyleApply(adapter, input);
     expect(result.success).toBe(true);
@@ -180,20 +180,26 @@ describe('executeStyleApply validation', () => {
 
   it('rejects unknown inline keys', () => {
     const adapter = makeAdapter();
-    const input = { target: TARGET, inline: { bold: true, superscript: true } };
+    const input = { target: TARGET, inline: { bold: 'on', superscript: 'on' } };
     expect(() => executeStyleApply(adapter, input as any)).toThrow('Unknown inline style key "superscript"');
   });
 
-  it('rejects non-boolean inline values', () => {
+  it('rejects invalid directive string values', () => {
     const adapter = makeAdapter();
     const input = { target: TARGET, inline: { bold: 'yes' } };
-    expect(() => executeStyleApply(adapter, input as any)).toThrow('must be a boolean');
+    expect(() => executeStyleApply(adapter, input as any)).toThrow("expected 'on'|'off'|'clear'");
   });
 
   it('rejects numeric inline values', () => {
     const adapter = makeAdapter();
     const input = { target: TARGET, inline: { bold: 1 } };
-    expect(() => executeStyleApply(adapter, input as any)).toThrow('must be a boolean');
+    expect(() => executeStyleApply(adapter, input as any)).toThrow("expected 'on'|'off'|'clear'");
+  });
+
+  it('rejects boolean inline values (must be string directive)', () => {
+    const adapter = makeAdapter();
+    const input = { target: TARGET, inline: { bold: true } };
+    expect(() => executeStyleApply(adapter, input as any)).toThrow("expected 'on'|'off'|'clear'");
   });
 
   // -------------------------------------------------------------------------
@@ -202,7 +208,7 @@ describe('executeStyleApply validation', () => {
 
   it('delegates single mark to adapter.apply', () => {
     const adapter = makeAdapter();
-    const input: StyleApplyInput = { target: TARGET, inline: { bold: true } };
+    const input: StyleApplyInput = { target: TARGET, inline: { bold: 'on' } };
     const result = executeStyleApply(adapter, input);
     expect(result.success).toBe(true);
     expect(adapter.apply).toHaveBeenCalledWith(input, { changeMode: 'direct', dryRun: false });
@@ -210,33 +216,33 @@ describe('executeStyleApply validation', () => {
 
   it('passes through tracked changeMode option', () => {
     const adapter = makeAdapter();
-    const input: StyleApplyInput = { target: TARGET, inline: { italic: false } };
+    const input: StyleApplyInput = { target: TARGET, inline: { italic: 'off' } };
     executeStyleApply(adapter, input, { changeMode: 'tracked' });
     expect(adapter.apply).toHaveBeenCalledWith(input, { changeMode: 'tracked', dryRun: false });
   });
 
   it('passes through dryRun option', () => {
     const adapter = makeAdapter();
-    const input: StyleApplyInput = { target: TARGET, inline: { underline: true } };
+    const input: StyleApplyInput = { target: TARGET, inline: { underline: 'on' } };
     executeStyleApply(adapter, input, { dryRun: true });
     expect(adapter.apply).toHaveBeenCalledWith(input, { changeMode: 'direct', dryRun: true });
   });
 
   // -------------------------------------------------------------------------
-  // Happy paths — multi-mark (boolean patch semantics)
+  // Happy paths — multi-mark (directive patch semantics)
   // -------------------------------------------------------------------------
 
   it('accepts multiple inline in one call', () => {
     const adapter = makeAdapter();
-    const input: StyleApplyInput = { target: TARGET, inline: { bold: true, italic: true } };
+    const input: StyleApplyInput = { target: TARGET, inline: { bold: 'on', italic: 'on' } };
     const result = executeStyleApply(adapter, input);
     expect(result.success).toBe(true);
     expect(adapter.apply).toHaveBeenCalledWith(input, expect.objectContaining({}));
   });
 
-  it('accepts mixed set/unset in one call', () => {
+  it('accepts mixed on/off in one call', () => {
     const adapter = makeAdapter();
-    const input: StyleApplyInput = { target: TARGET, inline: { bold: true, italic: false } };
+    const input: StyleApplyInput = { target: TARGET, inline: { bold: 'on', italic: 'off' } };
     const result = executeStyleApply(adapter, input);
     expect(result.success).toBe(true);
     expect(adapter.apply).toHaveBeenCalledWith(input, expect.objectContaining({}));
@@ -246,16 +252,24 @@ describe('executeStyleApply validation', () => {
     const adapter = makeAdapter();
     const input: StyleApplyInput = {
       target: TARGET,
-      inline: { bold: true, italic: false, underline: true, strike: false },
+      inline: { bold: 'on', italic: 'off', underline: 'clear', strike: 'off' },
     };
     const result = executeStyleApply(adapter, input);
     expect(result.success).toBe(true);
     expect(adapter.apply).toHaveBeenCalledWith(input, expect.objectContaining({}));
   });
 
-  it('accepts mark removal (false)', () => {
+  it('accepts explicit OFF directive', () => {
     const adapter = makeAdapter();
-    const input: StyleApplyInput = { target: TARGET, inline: { bold: false } };
+    const input: StyleApplyInput = { target: TARGET, inline: { bold: 'off' } };
+    const result = executeStyleApply(adapter, input);
+    expect(result.success).toBe(true);
+    expect(adapter.apply).toHaveBeenCalledWith(input, expect.objectContaining({}));
+  });
+
+  it('accepts clear directive', () => {
+    const adapter = makeAdapter();
+    const input: StyleApplyInput = { target: TARGET, inline: { bold: 'clear' } };
     const result = executeStyleApply(adapter, input);
     expect(result.success).toBe(true);
     expect(adapter.apply).toHaveBeenCalledWith(input, expect.objectContaining({}));

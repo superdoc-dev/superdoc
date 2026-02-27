@@ -70,7 +70,7 @@ const plan = {
       op: 'format.apply',
       where: { by: 'ref', ref },
       args: {
-        marks: { bold: true },
+        inline: { bold: 'on' },
       },
     },
   ],
@@ -122,7 +122,7 @@ const target = { kind: 'text', blockId: 'p1', range: { start: 0, end: 3 } };
 if (caps.operations['format.apply'].available) {
   editor.doc.format.apply({
     target,
-    marks: { bold: true },
+    inline: { bold: 'on' },
   });
 }
 

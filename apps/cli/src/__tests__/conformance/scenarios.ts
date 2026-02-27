@@ -634,7 +634,7 @@ export const SUCCESS_SCENARIOS = {
         '--target-json',
         JSON.stringify(target),
         '--inline-json',
-        JSON.stringify({ bold: true }),
+        JSON.stringify({ bold: 'on' }),
         '--out',
         harness.createOutputPath('doc-style-apply-output'),
       ],

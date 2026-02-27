@@ -10,7 +10,8 @@
 
 import type { BlockNodeType, NodeAddress } from './base.js';
 import type { TextSelector, NodeSelector } from './query.js';
-import type { DiscoveryItem, DiscoveryOutput } from './discovery.js';
+import type { DiscoveryItem, DiscoveryOutput, DiscoveryResult } from './discovery.js';
+import type { InlineToggleDirective } from './style-policy.types.js';
 
 export type CardinalityRequirement = 'any' | 'first' | 'exactlyOne' | 'all';
 
@@ -40,18 +41,32 @@ export interface HighlightRange {
 // Match styles (D1, D15)
 // ---------------------------------------------------------------------------
 
-/**
- * Inline style state for a single run.
- *
- * Core-4 booleans are always present. Optional presentational fields are
- * emitted only when the source document provides them (omit-not-undefined).
- * See D15 for normalization rules.
- */
-export interface MatchStyle {
+/** Direct toggle states — what the run explicitly declares at run level. */
+export interface MatchDirectStyles {
+  bold: InlineToggleDirective;
+  italic: InlineToggleDirective;
+  underline: InlineToggleDirective;
+  strike: InlineToggleDirective;
+}
+
+/** Effective visual states — what the user sees after style cascade resolution. */
+export interface MatchEffectiveStyles {
   bold: boolean;
   italic: boolean;
   underline: boolean;
   strike: boolean;
+}
+
+/**
+ * Two-layer inline style state for a single run.
+ *
+ * - `direct`: tri-state directives reflecting the run's explicit formatting.
+ * - `effective`: boolean visual state after style cascade resolution.
+ * - Non-toggle properties remain at top level.
+ */
+export interface MatchStyle {
+  direct: MatchDirectStyles;
+  effective: MatchEffectiveStyles;
   /** 6-digit lowercase hex with `#` prefix (e.g., `#ff0000`). */
   color?: string;
   /** 6-digit lowercase hex with `#` prefix. */
@@ -176,6 +191,22 @@ export type TextMatchItem = DiscoveryItem<TextMatchDomain>;
 export type NodeMatchItem = DiscoveryItem<NodeMatchDomain>;
 
 // ---------------------------------------------------------------------------
+// Query-level metadata (§4.3)
+// ---------------------------------------------------------------------------
+
+/**
+ * Metadata for `query.match` — always present on the output envelope.
+ *
+ * - `effectiveResolved: true` — converter context was available; `styles.effective`
+ *   on every run reflects full cascade resolution.
+ * - `effectiveResolved: false` — converter context was unavailable (headless/non-DOCX);
+ *   `styles.effective` is derived from `direct` only.
+ */
+export interface QueryMatchMeta {
+  effectiveResolved: boolean;
+}
+
+// ---------------------------------------------------------------------------
 // Input / Output
 // ---------------------------------------------------------------------------
 
@@ -193,9 +224,15 @@ export interface QueryMatchInput {
 /**
  * Standardized discovery output for `query.match`.
  *
+ * Narrows the shared `DiscoveryResult` envelope so that `meta: QueryMatchMeta`
+ * is **required** (not optional). SDK/client code consuming `query.match` gets
+ * `output.meta.effectiveResolved` as a non-optional boolean.
+ *
  * Items are `DiscoveryItem<TextMatchDomain | NodeMatchDomain>`:
  * - `id`: deterministic identity, revision-scoped (format: `m:<index>`, D7)
  * - `handle`: mutation-ready `ResolvedHandle` with `ref`, `refStability`, `targetKind`
  * - Plus domain fields (`address`, `blocks`, `snippet`, `highlightRange`)
  */
-export type QueryMatchOutput = DiscoveryOutput<QueryMatchDomain>;
+export type QueryMatchOutput = Omit<DiscoveryResult<DiscoveryItem<QueryMatchDomain>, QueryMatchMeta>, 'meta'> & {
+  meta: QueryMatchMeta;
+};

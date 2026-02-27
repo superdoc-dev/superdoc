@@ -273,7 +273,7 @@ function makeCapabilitiesAdapter(overrides?: Partial<DocumentApiCapabilities>): 
       lists: { enabled: false },
       dryRun: { enabled: false },
     },
-    format: { supportedMarks: [] },
+    format: { properties: {} },
     operations: {} as DocumentApiCapabilities['operations'],
     planEngine: {
       supportedStepOps: [],
@@ -584,7 +584,7 @@ describe('createDocumentApi', () => {
     const target = { kind: 'text', blockId: 'p1', range: { start: 0, end: 2 } } as const;
     api.format.bold({ target }, { changeMode: 'tracked' });
     expect(formatAdpt.apply).toHaveBeenCalledWith(
-      { target, inline: { bold: true } },
+      { target, inline: { bold: 'on' } },
       { changeMode: 'tracked', dryRun: false },
     );
   });
@@ -607,7 +607,7 @@ describe('createDocumentApi', () => {
     const target = { kind: 'text', blockId: 'p1', range: { start: 0, end: 2 } } as const;
     api.format.italic({ target }, { changeMode: 'direct' });
     expect(formatAdpt.apply).toHaveBeenCalledWith(
-      { target, inline: { italic: true } },
+      { target, inline: { italic: 'on' } },
       { changeMode: 'direct', dryRun: false },
     );
   });
@@ -630,7 +630,7 @@ describe('createDocumentApi', () => {
     const target = { kind: 'text', blockId: 'p1', range: { start: 0, end: 2 } } as const;
     api.format.underline({ target }, { changeMode: 'direct' });
     expect(formatAdpt.apply).toHaveBeenCalledWith(
-      { target, inline: { underline: true } },
+      { target, inline: { underline: 'on' } },
       { changeMode: 'direct', dryRun: false },
     );
   });
@@ -653,7 +653,7 @@ describe('createDocumentApi', () => {
     const target = { kind: 'text', blockId: 'p1', range: { start: 0, end: 2 } } as const;
     api.format.strikethrough({ target }, { changeMode: 'tracked' });
     expect(formatAdpt.apply).toHaveBeenCalledWith(
-      { target, inline: { strike: true } },
+      { target, inline: { strike: 'on' } },
       { changeMode: 'tracked', dryRun: false },
     );
   });
@@ -1664,7 +1664,7 @@ describe('createDocumentApi', () => {
       const target = { kind: 'text', blockId: 'p1', range: { start: 0, end: 2 } } as const;
       api.format.bold({ target });
       expect(formatAdpt.apply).toHaveBeenCalledWith(
-        { target, inline: { bold: true } },
+        { target, inline: { bold: 'on' } },
         { changeMode: 'direct', dryRun: false },
       );
     });

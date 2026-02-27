@@ -55,6 +55,7 @@ description: Reference for query.match
 | --- | --- | --- | --- |
 | `evaluatedRevision` | string | yes |  |
 | `items` | object(matchKind="text") \\| object(matchKind="node")[] | yes |  |
+| `meta` | object | yes |  |
 | `page` | PageInfo | yes | PageInfo |
 | `total` | integer | yes |  |
 
@@ -92,12 +93,20 @@ description: Reference for query.match
               "ref": "handle:abc123",
               "styleId": "style-001",
               "styles": {
-                "bold": true,
                 "color": "example",
-                "highlight": "example",
-                "italic": true,
-                "strike": true,
-                "underline": true
+                "direct": {
+                  "bold": "on",
+                  "italic": "on",
+                  "strike": "on",
+                  "underline": "on"
+                },
+                "effective": {
+                  "bold": true,
+                  "italic": true,
+                  "strike": true,
+                  "underline": true
+                },
+                "highlight": "example"
               },
               "text": "Hello, world."
             }
@@ -119,6 +128,9 @@ description: Reference for query.match
       "snippet": "...the quick brown fox..."
     }
   ],
+  "meta": {
+    "effectiveResolved": true
+  },
   "page": {
     "limit": 50,
     "offset": 0,
@@ -336,6 +348,18 @@ description: Reference for query.match
       },
       "type": "array"
     },
+    "meta": {
+      "additionalProperties": false,
+      "properties": {
+        "effectiveResolved": {
+          "type": "boolean"
+        }
+      },
+      "required": [
+        "effectiveResolved"
+      ],
+      "type": "object"
+    },
     "page": {
       "$ref": "#/$defs/PageInfo"
     },
@@ -348,7 +372,8 @@ description: Reference for query.match
     "evaluatedRevision",
     "total",
     "items",
-    "page"
+    "page",
+    "meta"
   ],
   "type": "object"
 }

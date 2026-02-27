@@ -268,7 +268,7 @@ export const OPERATION_DEFINITIONS = {
   'format.apply': {
     memberPath: 'format.apply',
     description:
-      'Apply explicit inline style changes (bold, italic, underline, strike) to the target range using boolean patch semantics.',
+      "Apply explicit inline style changes (bold, italic, underline, strike) to the target range using directive semantics ('on', 'off', 'clear').",
     requiresDocumentContext: true,
     metadata: mutationOperation({
       idempotency: 'conditional',

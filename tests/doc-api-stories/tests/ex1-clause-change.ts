@@ -46,7 +46,9 @@ describe('document-api story: ex1 clause change', () => {
       expect(block.runs.length).toBeGreaterThan(0);
       for (const run of block.runs) {
         expect(run.styles).toBeDefined();
-        expect(typeof run.styles.bold).toBe('boolean');
+        expect(run.styles.direct).toBeDefined();
+        expect(run.styles.effective).toBeDefined();
+        expect(typeof run.styles.effective.bold).toBe('boolean');
         expect(run.ref).toBeDefined();
       }
     }

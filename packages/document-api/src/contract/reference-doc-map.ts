@@ -43,7 +43,7 @@ const GROUP_METADATA: Record<ReferenceGroupKey, { title: string; description: st
   },
   format: {
     title: 'Format',
-    description: 'Canonical formatting mutation with boolean patch semantics.',
+    description: "Canonical formatting mutation with directive semantics ('on', 'off', 'clear').",
     pagePath: 'format/index.mdx',
   },
   styles: {

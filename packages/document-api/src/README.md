@@ -144,7 +144,7 @@ Check what the editor supports before attempting mutations:
 ```ts
 const caps = editor.doc.capabilities();
 if (caps.operations['format.apply'].available) {
-  editor.doc.format.apply({ target, inline: { bold: true } });
+  editor.doc.format.apply({ target, inline: { bold: 'on' } });
 }
 if (caps.global.trackChanges.enabled) {
   editor.doc.insert({ value: 'tracked' }, { changeMode: 'tracked' });
@@ -293,7 +293,7 @@ Insert a new heading node at a specified location with a given level (1-6). Retu
 
 ### `format.apply`
 
-Apply explicit inline style changes (bold, italic, underline, strike) to a `TextAddress` range using boolean patch semantics. Supports dry-run and tracked mode. Availability depends on the corresponding marks being registered in the editor schema.
+Apply explicit inline style changes (bold, italic, underline, strike) to a `TextAddress` range using directive semantics (`'on'`, `'off'`, `'clear'`). Supports dry-run and tracked mode. Availability depends on the corresponding marks being registered in the editor schema.
 
 - **Input**: `StyleApplyInput` (`{ target, inline: { bold?, italic?, underline?, strike? } }`)
 - **Options**: `MutationOptions` (`{ changeMode?, dryRun? }`)

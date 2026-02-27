@@ -1079,6 +1079,7 @@ class SuperConverter {
       this.translatedNumbering = result.translatedNumbering;
       this.inlineDocumentFonts = result.inlineDocumentFonts;
       this.themeColors = result.themeColors ?? null;
+      this.importDiagnostics = result.importDiagnostics ?? [];
 
       return result.pmDoc;
     } else {

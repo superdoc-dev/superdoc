@@ -1057,7 +1057,7 @@ const mutationVectors: Partial<Record<OperationId, MutationVector>> = {
       const { editor } = makeTextEditor();
       return styleApplyWrapper(
         editor,
-        { target: { kind: 'text', blockId: 'missing', range: { start: 0, end: 1 } }, inline: { bold: true } },
+        { target: { kind: 'text', blockId: 'missing', range: { start: 0, end: 1 } }, inline: { bold: 'on' } },
         { changeMode: 'direct' },
       );
     },
@@ -1065,7 +1065,7 @@ const mutationVectors: Partial<Record<OperationId, MutationVector>> = {
       const { editor } = makeTextEditor();
       return styleApplyWrapper(
         editor,
-        { target: { kind: 'text', blockId: 'p1', range: { start: 2, end: 2 } }, inline: { bold: true } },
+        { target: { kind: 'text', blockId: 'p1', range: { start: 2, end: 2 } }, inline: { bold: 'on' } },
         { changeMode: 'direct' },
       );
     },
@@ -1073,7 +1073,7 @@ const mutationVectors: Partial<Record<OperationId, MutationVector>> = {
       const { editor } = makeTextEditor();
       return styleApplyWrapper(
         editor,
-        { target: { kind: 'text', blockId: 'p1', range: { start: 0, end: 5 } }, inline: { bold: true } },
+        { target: { kind: 'text', blockId: 'p1', range: { start: 0, end: 5 } }, inline: { bold: 'on', italic: 'off' } },
         { changeMode: 'direct' },
       );
     },
@@ -2199,7 +2199,7 @@ const dryRunVectors: Partial<Record<OperationId, () => unknown>> = {
     const { editor, dispatch, tr } = makeTextEditor();
     const result = styleApplyWrapper(
       editor,
-      { target: { kind: 'text', blockId: 'p1', range: { start: 0, end: 5 } }, inline: { bold: true } },
+      { target: { kind: 'text', blockId: 'p1', range: { start: 0, end: 5 } }, inline: { bold: 'on' } },
       { changeMode: 'direct', dryRun: true },
     );
     expect(dispatch).not.toHaveBeenCalled();

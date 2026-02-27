@@ -78,8 +78,11 @@ export type DiscoveryItem<TDomain> = {
  * Standard discovery result envelope returned by all discovery operations.
  *
  * Provides revision tracking, total count, paginated items, and page metadata.
+ * The optional `TMeta` type parameter allows operation-specific metadata
+ * (e.g., `query.match` uses it for `effectiveResolved`). Defaults to `undefined`
+ * for operations that don't use it — backwards compatible.
  */
-export interface DiscoveryResult<TItem> {
+export interface DiscoveryResult<TItem, TMeta = undefined> {
   /** Document revision at which the query was evaluated. */
   evaluatedRevision: string;
   /** Total number of matching entities (before pagination). */
@@ -88,6 +91,8 @@ export interface DiscoveryResult<TItem> {
   items: TItem[];
   /** Pagination metadata. Invariant: `page.returned === items.length`. */
   page: PageInfo;
+  /** Operation-specific metadata. Present only when `TMeta` is specified. */
+  meta?: TMeta;
 }
 
 /**
@@ -95,7 +100,7 @@ export interface DiscoveryResult<TItem> {
  *
  * This is the return type of every standardized discovery operation.
  */
-export type DiscoveryOutput<TDomain> = DiscoveryResult<DiscoveryItem<TDomain>>;
+export type DiscoveryOutput<TDomain, TMeta = undefined> = DiscoveryResult<DiscoveryItem<TDomain>, TMeta>;
 
 // ---------------------------------------------------------------------------
 // Builder helpers
@@ -124,23 +129,28 @@ export function buildDiscoveryItem<TDomain>(
  *
  * @throws {Error} if `page.returned !== items.length`
  */
-export function buildDiscoveryResult<TItem>(params: {
+export function buildDiscoveryResult<TItem, TMeta = undefined>(params: {
   evaluatedRevision: string;
   total: number;
   items: TItem[];
   page: PageInfo;
-}): DiscoveryResult<TItem> {
+  meta?: TMeta;
+}): DiscoveryResult<TItem, TMeta> {
   if (params.page.returned !== params.items.length) {
     throw new Error(
       `DiscoveryResult invariant violated: page.returned (${params.page.returned}) !== items.length (${params.items.length})`,
     );
   }
-  return {
+  const result: DiscoveryResult<TItem, TMeta> = {
     evaluatedRevision: params.evaluatedRevision,
     total: params.total,
     items: params.items,
     page: params.page,
   };
+  if (params.meta !== undefined) {
+    result.meta = params.meta;
+  }
+  return result;
 }
 
 /**

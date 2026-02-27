@@ -30,8 +30,8 @@ description: Reference for format.apply
 ```json
 {
   "inline": {
-    "bold": true,
-    "italic": true
+    "bold": "on",
+    "italic": "on"
   },
   "target": {
     "blockId": "block-abc123",
@@ -116,16 +116,32 @@ _No fields._
       "minProperties": 1,
       "properties": {
         "bold": {
-          "type": "boolean"
+          "enum": [
+            "on",
+            "off",
+            "clear"
+          ]
         },
         "italic": {
-          "type": "boolean"
+          "enum": [
+            "on",
+            "off",
+            "clear"
+          ]
         },
         "strike": {
-          "type": "boolean"
+          "enum": [
+            "on",
+            "off",
+            "clear"
+          ]
         },
         "underline": {
-          "type": "boolean"
+          "enum": [
+            "on",
+            "off",
+            "clear"
+          ]
         }
       },
       "type": "object"

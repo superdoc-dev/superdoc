@@ -38,7 +38,7 @@ function makeAdapters() {
           lists: { enabled: false },
           dryRun: { enabled: false },
         },
-        format: { supportedMarks: [] },
+        format: { properties: {} },
         operations: {} as DocumentApiCapabilities['operations'],
         planEngine: {
           supportedStepOps: [],
@@ -304,7 +304,7 @@ describe('invoke', () => {
       const api = createDocumentApi(adapters);
       const input = {
         target: { kind: 'text' as const, blockId: 'p1', range: { start: 0, end: 2 } },
-        inline: { bold: true },
+        inline: { bold: 'on' },
       };
       const direct = api.format.apply(input);
       const invoked = api.invoke({ operationId: 'format.apply', input });

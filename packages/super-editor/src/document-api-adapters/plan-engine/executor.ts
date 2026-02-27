@@ -22,7 +22,11 @@ import type {
   SetMarks,
   ReplacementPayload,
   Query,
+  MarkKey,
+  InlineToggleDirective,
 } from '@superdoc/document-api';
+import { MARK_KEYS } from '@superdoc/document-api';
+import { TOGGLE_MARK_SPECS } from './mark-directives.js';
 import type { Editor } from '../../core/Editor.js';
 import type { CompiledPlan } from './compiler.js';
 import type {
@@ -84,10 +88,22 @@ function buildMarksFromSetMarks(editor: Editor, setMarks?: SetMarks): readonly P
   if (!setMarks) return [];
   const { schema } = editor.state;
   const marks: ProseMirrorMark[] = [];
-  if (setMarks.bold && schema.marks.bold) marks.push(schema.marks.bold.create());
-  if (setMarks.italic && schema.marks.italic) marks.push(schema.marks.italic.create());
-  if (setMarks.underline && schema.marks.underline) marks.push(schema.marks.underline.create());
-  if (setMarks.strike && schema.marks.strike) marks.push(schema.marks.strike.create());
+
+  for (const key of MARK_KEYS) {
+    const directive = setMarks[key];
+    if (!directive) continue;
+    const markType = schema.marks[TOGGLE_MARK_SPECS[key].schemaName];
+    if (!markType) continue;
+
+    const spec = TOGGLE_MARK_SPECS[key];
+    if (directive === 'on') {
+      marks.push(spec.createOn(markType) as unknown as ProseMirrorMark);
+    } else if (directive === 'off') {
+      marks.push(markType.create(spec.offAttrs) as unknown as ProseMirrorMark);
+    }
+    // 'clear' → skip (no mark)
+  }
+
   return marks;
 }
 
@@ -95,7 +111,7 @@ function buildMarksFromSetMarks(editor: Editor, setMarks?: SetMarks): readonly P
 // Shared inline style patch — applies boolean mark patches to a range
 // ---------------------------------------------------------------------------
 
-/** Applies boolean inline mark patches (bold, italic, underline, strike) to a document range. */
+/** Applies inline mark directives (bold, italic, underline, strike) to a document range. */
 function applyInlineMarkPatches(
   editor: Editor,
   tr: Transaction,
@@ -106,21 +122,17 @@ function applyInlineMarkPatches(
   const { schema } = editor.state;
   let changed = false;
 
-  const markEntries: Array<[boolean | undefined, MarkType | undefined]> = [
-    [inline.bold, schema.marks.bold],
-    [inline.italic, schema.marks.italic],
-    [inline.underline, schema.marks.underline],
-    [inline.strike, schema.marks.strike],
-  ];
+  for (const key of MARK_KEYS) {
+    const directive = inline[key] as InlineToggleDirective | undefined;
+    if (!directive) continue;
 
-  for (const [value, markType] of markEntries) {
-    if (value === undefined || !markType) continue;
-    if (value) {
-      tr.addMark(absFrom, absTo, markType.create());
-    } else {
-      tr.removeMark(absFrom, absTo, markType);
+    const spec = TOGGLE_MARK_SPECS[key];
+    const markType = schema.marks[spec.schemaName] as MarkType | undefined;
+    if (!markType) continue;
+
+    if (applyDirectiveToTransaction(tr, absFrom, absTo, markType, spec, directive)) {
+      changed = true;
     }
-    changed = true;
   }
 
   return changed;
@@ -224,6 +236,82 @@ export function executeTextDelete(
   return { changed: true };
 }
 
+/**
+ * Collects sub-ranges within [from, to) where the mark is NOT already in ON
+ * form. Nodes already ON are skipped so their rich attrs (e.g. wavy underline)
+ * are preserved. Returns the sub-ranges in reverse document order for safe
+ * sequential application without position-shift concerns.
+ *
+ * Falls back to the full range if `doc.nodesBetween` is unavailable (mocks).
+ */
+function collectNonOnSubRanges(
+  doc: ProseMirrorNode,
+  from: number,
+  to: number,
+  markType: MarkType,
+  spec: (typeof TOGGLE_MARK_SPECS)[MarkKey],
+): Array<{ from: number; to: number }> {
+  if (from === to) return [];
+  if (typeof doc.nodesBetween !== 'function') return [{ from, to }];
+
+  const ranges: Array<{ from: number; to: number }> = [];
+  doc.nodesBetween(from, to, (node, pos) => {
+    if (!node.isText) return;
+    const mark = node.marks.find((m) => m.type === markType);
+    if (mark && spec.isOn(mark as unknown as Parameters<typeof spec.isOn>[0])) return;
+    // Node is absent or OFF — needs conversion to ON
+    ranges.push({
+      from: Math.max(pos, from),
+      to: Math.min(pos + node.nodeSize, to),
+    });
+  });
+
+  // Reverse for safe back-to-front application
+  ranges.reverse();
+  return ranges;
+}
+
+/**
+ * Applies a single inline toggle directive to a transaction range.
+ * Shared by both range and span style-apply executors.
+ *
+ * Returns true if any transaction steps were actually emitted.
+ */
+function applyDirectiveToTransaction(
+  tr: Transaction,
+  absFrom: number,
+  absTo: number,
+  markType: MarkType,
+  spec: (typeof TOGGLE_MARK_SPECS)[MarkKey],
+  directive: InlineToggleDirective,
+): boolean {
+  const stepsBefore = tr.steps?.length ?? 0;
+
+  switch (directive) {
+    case 'on': {
+      // Apply ON only to sub-ranges that aren't already ON, preserving rich
+      // attrs (e.g. wavy/colored underline) on nodes that already have them.
+      const subRanges = collectNonOnSubRanges(tr.doc, absFrom, absTo, markType, spec);
+      for (const r of subRanges) {
+        tr.removeMark(r.from, r.to, markType);
+        tr.addMark(r.from, r.to, spec.createOn(markType) as unknown as ProseMirrorMark);
+      }
+      break;
+    }
+    case 'off':
+      // Remove any existing, then add canonical OFF
+      tr.removeMark(absFrom, absTo, markType);
+      tr.addMark(absFrom, absTo, markType.create(spec.offAttrs));
+      break;
+    case 'clear':
+      // Remove mark entirely
+      tr.removeMark(absFrom, absTo, markType);
+      break;
+  }
+
+  return (tr.steps?.length ?? 0) > stepsBefore;
+}
+
 export function executeStyleApply(
   editor: Editor,
   tr: Transaction,
@@ -233,6 +321,10 @@ export function executeStyleApply(
 ): { changed: boolean } {
   const absFrom = mapping.map(target.absFrom);
   const absTo = mapping.map(target.absTo);
+
+  // Collapsed-range rule: silent no-op — no error, no document change.
+  if (absFrom === absTo) return { changed: false };
+
   return { changed: applyInlineMarkPatches(editor, tr, absFrom, absTo, step.args.inline) };
 }
 
@@ -370,12 +462,13 @@ export function executeSpanStyleApply(
   mapping: Mapping,
 ): { changed: boolean } {
   validateMappedSpanContiguity(target, mapping, step.id);
-
-  // Apply marks uniformly across the full span
   const firstSeg = target.segments[0];
   const lastSeg = target.segments[target.segments.length - 1];
   const absFrom = mapping.map(firstSeg.absFrom, 1);
   const absTo = mapping.map(lastSeg.absTo, -1);
+
+  // Collapsed-range rule: silent no-op — no error, no document change.
+  if (absFrom === absTo) return { changed: false };
 
   return { changed: applyInlineMarkPatches(editor, tr, absFrom, absTo, step.args.inline) };
 }

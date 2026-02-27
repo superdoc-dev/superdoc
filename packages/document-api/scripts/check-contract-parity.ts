@@ -69,7 +69,7 @@ function createNoopAdapters(): DocumentApiAdapters {
           lists: { enabled: false },
           dryRun: { enabled: false },
         },
-        format: { supportedMarks: [] },
+        format: { properties: {} },
         operations: {} as ReturnType<DocumentApiAdapters['capabilities']['get']>['operations'],
         planEngine: {
           supportedStepOps: [],

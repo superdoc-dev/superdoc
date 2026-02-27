@@ -5,6 +5,7 @@
 export * from './types/index.js';
 export * from './contract/index.js';
 export * from './capabilities/capabilities.js';
+export * from './inline-semantics/index.js';
 
 import type {
   CreateParagraphInput,
@@ -532,16 +533,16 @@ export function createDocumentApi(adapters: DocumentApiAdapters): DocumentApi {
     },
     format: {
       bold(input: FormatBoldInput, options?: MutationOptions): TextMutationReceipt {
-        return executeStyleApply(adapters.format, { ...input, inline: { bold: true } }, options);
+        return executeStyleApply(adapters.format, { ...input, inline: { bold: 'on' } }, options);
       },
       italic(input: FormatItalicInput, options?: MutationOptions): TextMutationReceipt {
-        return executeStyleApply(adapters.format, { ...input, inline: { italic: true } }, options);
+        return executeStyleApply(adapters.format, { ...input, inline: { italic: 'on' } }, options);
       },
       underline(input: FormatUnderlineInput, options?: MutationOptions): TextMutationReceipt {
-        return executeStyleApply(adapters.format, { ...input, inline: { underline: true } }, options);
+        return executeStyleApply(adapters.format, { ...input, inline: { underline: 'on' } }, options);
       },
       strikethrough(input: FormatStrikethroughInput, options?: MutationOptions): TextMutationReceipt {
-        return executeStyleApply(adapters.format, { ...input, inline: { strike: true } }, options);
+        return executeStyleApply(adapters.format, { ...input, inline: { strike: 'on' } }, options);
       },
       apply(input: StyleApplyInput, options?: MutationOptions): TextMutationReceipt {
         return executeStyleApply(adapters.format, input, options);

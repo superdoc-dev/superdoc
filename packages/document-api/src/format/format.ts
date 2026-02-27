@@ -1,6 +1,6 @@
 import { normalizeMutationOptions, type MutationOptions } from '../write/write.js';
 import type { TextAddress, TextMutationReceipt, SetMarks } from '../types/index.js';
-import { MARK_KEY_SET } from '../types/style-policy.types.js';
+import { MARK_KEY_SET, INLINE_DIRECTIVE_SET } from '../types/style-policy.types.js';
 import { DocumentApiValidationError } from '../errors.js';
 import { isRecord, isTextAddress, assertNoUnknownFields } from '../validation-primitives.js';
 
@@ -48,11 +48,11 @@ export interface FormatStrikethroughInput {
 /**
  * Input payload for `format.apply`.
  *
- * `inline` uses boolean patch semantics: `true` sets, `false` removes, omitted leaves unchanged.
+ * `inline` uses tri-state directive semantics: `'on'` sets, `'off'` overrides to OFF, `'clear'` removes direct formatting.
  */
 export interface StyleApplyInput {
   target: TextAddress;
-  /** Boolean inline-style patch — at least one known key required. */
+  /** Tri-state inline directive patch — at least one known key required. */
   inline: SetMarks;
 }
 
@@ -94,10 +94,11 @@ export interface FormatAlignInput {
 /**
  * Engine-specific adapter for format operations.
  *
- * `apply()` handles boolean toggle marks.
+ * `apply()` handles inline toggle marks via tri-state directives.
  * Value-based methods handle fontSize, fontFamily, color, and paragraph alignment.
  */
 export interface FormatAdapter {
+  /** Apply explicit inline-style changes using tri-state directive semantics. */
   apply(input: StyleApplyInput, options?: MutationOptions): TextMutationReceipt;
   fontSize(input: FormatFontSizeInput, options?: MutationOptions): TextMutationReceipt;
   fontFamily(input: FormatFontFamilyInput, options?: MutationOptions): TextMutationReceipt;
@@ -141,7 +142,7 @@ const STYLE_APPLY_INPUT_ALLOWED_KEYS = new Set(['target', 'inline']);
  * 3. `inline` presence and type
  * 4. At least one known inline key
  * 5. No unknown inline keys
- * 6. All inline values are booleans
+ * 6. All inline values are valid directives ('on' | 'off' | 'clear')
  */
 function validateStyleApplyInput(input: unknown): asserts input is StyleApplyInput {
   if (!isRecord(input)) {
@@ -194,10 +195,10 @@ function validateStyleApplyInput(input: unknown): asserts input is StyleApplyInp
       );
     }
     const value = inline[key];
-    if (typeof value !== 'boolean') {
+    if (typeof value !== 'string' || !INLINE_DIRECTIVE_SET.has(value)) {
       throw new DocumentApiValidationError(
         'INVALID_INPUT',
-        `Inline style "${key}" must be a boolean, got ${typeof value}.`,
+        `inline.${key}: expected 'on'|'off'|'clear', got ${typeof value === 'string' ? `'${value}'` : typeof value} ${JSON.stringify(value)}.`,
         {
           field: 'inline',
           key,
@@ -212,7 +213,7 @@ function validateStyleApplyInput(input: unknown): asserts input is StyleApplyInp
  * Executes `format.apply` using the provided adapter.
  *
  * Validates input (locator + inline), then delegates to the adapter's `apply()` method.
- * Inline styles use boolean patch semantics: `true` sets a style, `false` removes it, omitted keys are unchanged.
+ * Inline styles use tri-state directive semantics: `'on'` sets, `'off'` overrides, `'clear'` removes direct formatting.
  * All inline changes within one call are applied in a single ProseMirror transaction.
  */
 export function executeStyleApply(

@@ -53,7 +53,7 @@ export const CLI_HELPER_COMMANDS: readonly CliHelperCommand[] = [
   {
     tokens: ['format', 'bold'],
     canonicalOperationId: 'format.apply',
-    defaultInput: { inline: { bold: true } },
+    defaultInput: { inline: { bold: 'on' } },
     description: 'Apply bold formatting to a text range.',
     category: 'format',
     mutates: true,
@@ -65,7 +65,7 @@ export const CLI_HELPER_COMMANDS: readonly CliHelperCommand[] = [
   {
     tokens: ['format', 'italic'],
     canonicalOperationId: 'format.apply',
-    defaultInput: { inline: { italic: true } },
+    defaultInput: { inline: { italic: 'on' } },
     description: 'Apply italic formatting to a text range.',
     category: 'format',
     mutates: true,
@@ -74,7 +74,7 @@ export const CLI_HELPER_COMMANDS: readonly CliHelperCommand[] = [
   {
     tokens: ['format', 'underline'],
     canonicalOperationId: 'format.apply',
-    defaultInput: { inline: { underline: true } },
+    defaultInput: { inline: { underline: 'on' } },
     description: 'Apply underline formatting to a text range.',
     category: 'format',
     mutates: true,
@@ -83,7 +83,7 @@ export const CLI_HELPER_COMMANDS: readonly CliHelperCommand[] = [
   {
     tokens: ['format', 'strikethrough'],
     canonicalOperationId: 'format.apply',
-    defaultInput: { inline: { strike: true } },
+    defaultInput: { inline: { strike: 'on' } },
     description: 'Apply strikethrough formatting to a text range.',
     category: 'format',
     mutates: true,

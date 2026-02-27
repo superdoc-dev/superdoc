@@ -4,10 +4,10 @@ import type { SessionManager } from '../session-manager.js';
 
 const STYLES = ['bold', 'italic', 'underline', 'strikethrough'] as const;
 const INLINE_BY_STYLE = {
-  bold: { bold: true },
-  italic: { italic: true },
-  underline: { underline: true },
-  strikethrough: { strike: true },
+  bold: { bold: 'on' },
+  italic: { italic: 'on' },
+  underline: { underline: 'on' },
+  strikethrough: { strike: 'on' },
 } as const;
 
 export function registerFormatTools(server: McpServer, sessions: SessionManager): void {

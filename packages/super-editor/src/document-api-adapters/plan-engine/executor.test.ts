@@ -8,6 +8,8 @@ import {
   executeCreateStep,
   executeSpanTextDelete,
   executeSpanTextRewrite,
+  executeStyleApply,
+  executeSpanStyleApply,
   runMutationsOnTransaction,
 } from './executor.js';
 import { registerBuiltInExecutors } from './register-executors.js';
@@ -261,7 +263,7 @@ describe('executeCompiledPlan: text.rewrite style behavior', () => {
       args: {
         replacement: { text: 'World' },
         style: {
-          inline: { mode: 'set', setMarks: { italic: true } },
+          inline: { mode: 'set', setMarks: { italic: 'on' } },
           paragraph: { mode: 'preserve' },
         },
       },
@@ -289,7 +291,7 @@ describe('executeCompiledPlan: text.rewrite style behavior', () => {
     expect(mockedDeps.resolveInlineStyle).toHaveBeenCalledWith(
       editor,
       capturedStyle,
-      { mode: 'set', setMarks: { italic: true } },
+      { mode: 'set', setMarks: { italic: 'on' } },
       'step-2',
     );
   });
@@ -1818,5 +1820,88 @@ describe('executeCompiledPlan: atomic rollback on failure', () => {
 
     expect(() => executeCompiledPlan(editor, compiled)).toThrow();
     expect(dispatch).not.toHaveBeenCalled();
+  });
+});
+
+// ---------------------------------------------------------------------------
+// Collapsed-range guard — executeStyleApply (single-block)
+// ---------------------------------------------------------------------------
+
+describe('executeStyleApply: collapsed-range no-op guard', () => {
+  it('returns { changed: false } without modifying the transaction when absFrom === absTo', () => {
+    const { editor, tr } = makeEditor();
+    const target = makeTarget({
+      op: 'style.apply' as any,
+      absFrom: 5,
+      absTo: 5, // collapsed
+    }) as any;
+
+    const step: StyleApplyStep = {
+      op: 'style.apply',
+      id: 'step-1',
+      ref: 'test-ref',
+      args: { inline: { bold: 'on' } },
+    };
+
+    const mapping = { map: (pos: number) => pos };
+    const result = executeStyleApply(editor, tr as any, target, step, mapping as any);
+
+    expect(result).toEqual({ changed: false });
+    expect(tr.addMark).not.toHaveBeenCalled();
+    expect(tr.removeMark).not.toHaveBeenCalled();
+  });
+
+  it('returns { changed: false } when mapping collapses a non-empty range', () => {
+    const { editor, tr } = makeEditor();
+    const target = makeTarget({
+      op: 'style.apply' as any,
+      absFrom: 1,
+      absTo: 6,
+    }) as any;
+
+    const step: StyleApplyStep = {
+      op: 'style.apply',
+      id: 'step-1',
+      ref: 'test-ref',
+      args: { inline: { bold: 'on' } },
+    };
+
+    // Mapping collapses the range to the same position
+    const mapping = { map: () => 10 };
+    const result = executeStyleApply(editor, tr as any, target, step, mapping as any);
+
+    expect(result).toEqual({ changed: false });
+    expect(tr.addMark).not.toHaveBeenCalled();
+  });
+});
+
+// ---------------------------------------------------------------------------
+// Collapsed-range guard — executeSpanStyleApply (cross-block)
+// ---------------------------------------------------------------------------
+
+describe('executeSpanStyleApply: collapsed-range no-op guard', () => {
+  it('returns { changed: false } when span range collapses to zero width', () => {
+    const { editor, tr } = makeEditor();
+    const target = {
+      kind: 'span' as const,
+      stepId: 'step-1',
+      op: 'style.apply',
+      segments: [{ blockId: 'p1', from: 0, to: 5, absFrom: 5, absTo: 5 }],
+    };
+
+    const step: StyleApplyStep = {
+      op: 'style.apply',
+      id: 'step-1',
+      ref: 'test-ref',
+      args: { inline: { italic: 'on' } },
+    };
+
+    // Mapping collapses everything to position 5
+    const mapping = { map: () => 5 };
+    const result = executeSpanStyleApply(editor, tr as any, target as any, step, mapping as any);
+
+    expect(result).toEqual({ changed: false });
+    expect(tr.addMark).not.toHaveBeenCalled();
+    expect(tr.removeMark).not.toHaveBeenCalled();
   });
 });

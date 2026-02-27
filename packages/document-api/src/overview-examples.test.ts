@@ -209,7 +209,14 @@ function makeCapabilitiesAdapter(): { get: ReturnType<typeof vi.fn> } {
       lists: { enabled: true },
       dryRun: { enabled: true },
     },
-    format: { supportedMarks: ['bold', 'italic', 'underline', 'strike'] },
+    format: {
+      properties: {
+        bold: { kind: 'toggle', directives: ['on', 'off', 'clear'] },
+        italic: { kind: 'toggle', directives: ['on', 'off', 'clear'] },
+        underline: { kind: 'toggle', directives: ['on', 'off', 'clear'] },
+        strike: { kind: 'toggle', directives: ['on', 'off', 'clear'] },
+      },
+    },
     operations: Object.fromEntries(
       [
         'find',
@@ -300,10 +307,8 @@ function makeApi() {
                     range: { start: 0, end: 3 },
                     text: 'foo',
                     styles: {
-                      bold: false,
-                      italic: false,
-                      underline: false,
-                      strike: false,
+                      direct: { bold: 'clear', italic: 'clear', underline: 'clear', strike: 'clear' },
+                      effective: { bold: false, italic: false, underline: false, strike: false },
                     },
                     ref: 'ref:run-1',
                   },
@@ -400,7 +405,7 @@ describe('overview.mdx examples', () => {
             id: 'style-terms',
             op: 'format.apply',
             where: { by: 'ref' as const, ref },
-            args: { inline: { bold: true } },
+            args: { inline: { bold: 'on' } },
           },
         ],
       };
@@ -456,7 +461,7 @@ describe('overview.mdx examples', () => {
       const target = { kind: 'text', blockId: 'p1', range: { start: 0, end: 3 } };
 
       if (caps.operations['format.apply'].available) {
-        doc.format.apply({ target, inline: { bold: true } });
+        doc.format.apply({ target, inline: { bold: 'on' } });
       }
 
       if (caps.global.trackChanges.enabled) {
@@ -571,7 +576,7 @@ describe('src/README.md workflow examples', () => {
 
       const caps = doc.capabilities();
       if (caps.operations['format.apply'].available) {
-        doc.format.apply({ target, inline: { bold: true } });
+        doc.format.apply({ target, inline: { bold: 'on' } });
       }
       if (caps.global.trackChanges.enabled) {
         doc.insert({ value: 'tracked' }, { changeMode: 'tracked' });

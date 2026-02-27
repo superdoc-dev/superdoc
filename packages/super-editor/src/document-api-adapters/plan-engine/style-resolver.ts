@@ -5,9 +5,11 @@
  * Phase 7: Style capture and style-aware rewrite.
  */
 
-import type { InlineStylePolicy, SetMarks } from '@superdoc/document-api';
+import type { InlineStylePolicy, SetMarks, MarkKey, InlineToggleDirective } from '@superdoc/document-api';
+import { MARK_KEYS } from '@superdoc/document-api';
 import type { Editor } from '../../core/Editor.js';
 import { planError } from './errors.js';
+import { TOGGLE_MARK_SPECS, applyDirectiveToMarks } from './mark-directives.js';
 
 // ---------------------------------------------------------------------------
 // Run types — describes contiguous spans sharing identical marks within a block
@@ -44,7 +46,9 @@ export interface CapturedStyle {
 // Core mark names — the four marks that setMarks can override
 // ---------------------------------------------------------------------------
 
-const CORE_MARK_NAMES = new Set(['bold', 'italic', 'underline', 'strike']);
+const CORE_MARK_KEYS = ['bold', 'italic', 'underline', 'strike'] as const;
+type CoreMarkName = (typeof CORE_MARK_KEYS)[number];
+const CORE_MARK_NAMES = new Set<CoreMarkName>(CORE_MARK_KEYS);
 
 /** Mark names that are metadata (never affected by style policy). */
 const METADATA_MARK_NAMES = new Set([
@@ -160,6 +164,74 @@ function marksEqual(a: readonly PmMark[], b: readonly PmMark[]): boolean {
   return true;
 }
 
+function isCoreMarkName(markName: string): markName is CoreMarkName {
+  return CORE_MARK_NAMES.has(markName as CoreMarkName);
+}
+
+function deriveCoreMarkDirective(run: CapturedRun, markName: CoreMarkName): InlineToggleDirective {
+  const spec = TOGGLE_MARK_SPECS[markName];
+  const mark = run.marks.find((m) => m.type.name === spec.schemaName);
+  if (!mark) return 'clear';
+  return spec.isOff(mark) ? 'off' : 'on';
+}
+
+function findCoreMarkInState(
+  runs: CapturedRun[],
+  markName: CoreMarkName,
+  directive: Exclude<InlineToggleDirective, 'clear'>,
+): PmMark | undefined {
+  for (const run of runs) {
+    const state = deriveCoreMarkDirective(run, markName);
+    if (state !== directive) continue;
+
+    const spec = TOGGLE_MARK_SPECS[markName];
+    const found = run.marks.find((m) => m.type.name === spec.schemaName);
+    if (found) return found;
+  }
+  return undefined;
+}
+
+function createCoreMarkFromState(
+  editor: Editor,
+  markName: CoreMarkName,
+  directive: Exclude<InlineToggleDirective, 'clear'>,
+): PmMark | undefined {
+  const spec = TOGGLE_MARK_SPECS[markName];
+  const markType = editor.state.schema.marks[spec.schemaName];
+  if (!markType) return undefined;
+
+  if (directive === 'on') {
+    return spec.createOn(markType) as unknown as PmMark;
+  }
+  return markType.create(spec.offAttrs) as unknown as PmMark;
+}
+
+function resolveMajorityDirectiveForCoreMark(runs: CapturedRun[], markName: CoreMarkName): InlineToggleDirective {
+  const tally: Record<InlineToggleDirective, { chars: number; firstRunIdx: number }> = {
+    on: { chars: 0, firstRunIdx: Number.POSITIVE_INFINITY },
+    off: { chars: 0, firstRunIdx: Number.POSITIVE_INFINITY },
+    clear: { chars: 0, firstRunIdx: Number.POSITIVE_INFINITY },
+  };
+
+  for (let i = 0; i < runs.length; i++) {
+    const directive = deriveCoreMarkDirective(runs[i], markName);
+    tally[directive].chars += runs[i].charCount;
+    if (i < tally[directive].firstRunIdx) {
+      tally[directive].firstRunIdx = i;
+    }
+  }
+
+  let winner: InlineToggleDirective = 'clear';
+  for (const directive of ['on', 'off', 'clear'] as const) {
+    const current = tally[directive];
+    const best = tally[winner];
+    if (current.chars > best.chars || (current.chars === best.chars && current.firstRunIdx < best.firstRunIdx)) {
+      winner = directive;
+    }
+  }
+  return winner;
+}
+
 // ---------------------------------------------------------------------------
 // Resolution — resolve non-uniform styles using strategies
 // ---------------------------------------------------------------------------
@@ -250,9 +322,10 @@ function resolveUseLeadingRun(runs: CapturedRun[]): readonly PmMark[] {
 }
 
 /**
- * Per-mark character-weighted voting. A mark is included if it covers strictly
- * more than half the total characters. For value-bearing attributes, the value
- * covering the most characters wins; ties go to the first run's value.
+ * Per-mark character-weighted voting.
+ * - Core toggle marks (bold/italic/underline/strike): vote over tri-state
+ *   directives (`on` | `off` | `clear`), with ties broken by first run.
+ * - Value-bearing marks: vote each attribute independently by covered chars.
  */
 function resolveMajority(editor: Editor, runs: CapturedRun[]): readonly PmMark[] {
   const totalChars = runs.reduce((sum, r) => sum + r.charCount, 0);
@@ -269,25 +342,18 @@ function resolveMajority(editor: Editor, runs: CapturedRun[]): readonly PmMark[]
   const resultMarks: PmMark[] = [];
 
   for (const markName of allMarkNames) {
-    if (CORE_MARK_NAMES.has(markName)) {
-      // Boolean mark — include if active chars > totalChars / 2 (strict majority)
-      let activeChars = 0;
-      for (const run of runs) {
-        if (run.marks.some((m) => m.type.name === markName)) {
-          activeChars += run.charCount;
-        }
+    if (isCoreMarkName(markName)) {
+      const winningDirective = resolveMajorityDirectiveForCoreMark(runs, markName);
+      if (winningDirective === 'clear') {
+        continue;
       }
-      if (activeChars > totalChars / 2) {
-        // Find the mark instance from any run
-        for (const run of runs) {
-          const found = run.marks.find((m) => m.type.name === markName);
-          if (found) {
-            resultMarks.push(found);
-            break;
-          }
-        }
+
+      const resolvedMark =
+        findCoreMarkInState(runs, markName, winningDirective) ??
+        createCoreMarkFromState(editor, markName, winningDirective);
+      if (resolvedMark) {
+        resultMarks.push(resolvedMark);
       }
-      // Tie (exactly 50/50) → excluded
     } else {
       // Value-bearing mark (e.g., textStyle) — per-attribute majority voting
       resolveValueBearingMarkMajority(runs, markName, totalChars, resultMarks);
@@ -385,8 +451,10 @@ function resolveValueBearingMarkMajority(
 }
 
 /**
- * Include a mark if it appears on any run. For value-bearing attributes, use
- * the value from the first run that has the attribute.
+ * Union strategy for non-uniform marks.
+ * - Core toggle marks: prefer ON if present on any run; otherwise OFF if present;
+ *   otherwise CLEAR (omitted).
+ * - Value-bearing marks: use the first run instance that has the mark.
  */
 function resolveUnion(editor: Editor, runs: CapturedRun[]): readonly PmMark[] {
   // Collect all unique mark type names
@@ -400,14 +468,19 @@ function resolveUnion(editor: Editor, runs: CapturedRun[]): readonly PmMark[] {
   const resultMarks: PmMark[] = [];
 
   for (const markName of allMarkNames) {
-    if (CORE_MARK_NAMES.has(markName)) {
-      // Boolean mark — include if present on any run
-      for (const run of runs) {
-        const found = run.marks.find((m) => m.type.name === markName);
-        if (found) {
-          resultMarks.push(found);
-          break;
-        }
+    if (isCoreMarkName(markName)) {
+      const hasOn = runs.some((run) => deriveCoreMarkDirective(run, markName) === 'on');
+      const hasOff = !hasOn && runs.some((run) => deriveCoreMarkDirective(run, markName) === 'off');
+      const unionDirective: InlineToggleDirective = hasOn ? 'on' : hasOff ? 'off' : 'clear';
+      if (unionDirective === 'clear') {
+        continue;
+      }
+
+      const resolvedMark =
+        findCoreMarkInState(runs, markName, unionDirective) ??
+        createCoreMarkFromState(editor, markName, unionDirective);
+      if (resolvedMark) {
+        resultMarks.push(resolvedMark);
       }
     } else {
       // Value-bearing mark — use first run's instance that has it
@@ -425,49 +498,55 @@ function resolveUnion(editor: Editor, runs: CapturedRun[]): readonly PmMark[] {
 }
 
 // ---------------------------------------------------------------------------
-// setMarks override helpers
+// setMarks override helpers — tri-state directive model
 // ---------------------------------------------------------------------------
 
 /**
  * Build PM marks from a SetMarks declaration (for mode: 'set').
+ * Used when building marks from scratch (no existing marks to preserve).
  */
 function buildMarksFromPolicy(editor: Editor, setMarks?: SetMarks): PmMark[] {
   if (!setMarks) return [];
   const { schema } = editor.state;
   const marks: PmMark[] = [];
 
-  if (setMarks.bold && schema.marks.bold) marks.push(schema.marks.bold.create() as unknown as PmMark);
-  if (setMarks.italic && schema.marks.italic) marks.push(schema.marks.italic.create() as unknown as PmMark);
-  if (setMarks.underline && schema.marks.underline) marks.push(schema.marks.underline.create() as unknown as PmMark);
-  if (setMarks.strike && schema.marks.strike) marks.push(schema.marks.strike.create() as unknown as PmMark);
+  for (const key of MARK_KEYS) {
+    const directive = setMarks[key as MarkKey] as InlineToggleDirective | undefined;
+    if (!directive) continue;
+
+    const spec = TOGGLE_MARK_SPECS[key as MarkKey];
+    const markType = schema.marks[spec.schemaName];
+    if (!markType) continue;
+
+    if (directive === 'on') {
+      marks.push(spec.createOn(markType) as unknown as PmMark);
+    } else if (directive === 'off') {
+      marks.push(markType.create(spec.offAttrs) as unknown as PmMark);
+    }
+    // 'clear' → skip (no mark)
+  }
 
   return marks;
 }
 
 /**
  * Apply setMarks overrides to an existing resolved mark set.
- * setMarks acts as a patch: true adds, false removes, undefined leaves untouched.
+ * Uses the shared `applyDirectiveToMarks` helper for correct ON-preservation
+ * semantics (e.g., underline ON preserves rich attrs).
  */
 function applySetMarksToResolved(editor: Editor, existingMarks: readonly PmMark[], setMarks: SetMarks): PmMark[] {
   const { schema } = editor.state;
   let marks = [...existingMarks];
 
-  const overrides: Array<[boolean | undefined, unknown]> = [
-    [setMarks.bold, schema.marks.bold],
-    [setMarks.italic, schema.marks.italic],
-    [setMarks.underline, schema.marks.underline],
-    [setMarks.strike, schema.marks.strike],
-  ];
+  for (const key of MARK_KEYS) {
+    const directive = setMarks[key as MarkKey] as InlineToggleDirective | undefined;
+    if (!directive) continue;
 
-  for (const [value, markType] of overrides) {
-    if (value === undefined || !markType) continue;
-    if (value) {
-      if (!marks.some((m) => m.type === (markType as any))) {
-        marks.push((markType as any).create() as PmMark);
-      }
-    } else {
-      marks = marks.filter((m) => m.type !== (markType as any));
-    }
+    const spec = TOGGLE_MARK_SPECS[key as MarkKey];
+    const markType = schema.marks[spec.schemaName];
+    if (!markType) continue;
+
+    marks = applyDirectiveToMarks(marks, key as MarkKey, directive, markType);
   }
 
   return marks;

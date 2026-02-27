@@ -10,7 +10,7 @@ description: Format operation reference from the canonical Document API contract
 
 [Back to full reference](../index)
 
-Canonical formatting mutation with boolean patch semantics.
+Canonical formatting mutation with directive semantics ('on', 'off', 'clear').
 
 | Operation | Member path | Mutates | Idempotency | Tracked | Dry run |
 | --- | --- | --- | --- | --- | --- |
@@ -25,8 +25,8 @@ Canonical formatting mutation with boolean patch semantics.
 
 | Alias method | Canonical operation | Behavior |
 | --- | --- | --- |
-| `editor.doc.format.bold(...)` | <span style={{ whiteSpace: 'nowrap', wordBreak: 'normal', overflowWrap: 'normal' }}><a href="/document-api/reference/format/apply"><code>format.apply</code></a></span> | Convenience alias for `format.apply` with `inline.bold: true`. |
-| `editor.doc.format.italic(...)` | <span style={{ whiteSpace: 'nowrap', wordBreak: 'normal', overflowWrap: 'normal' }}><a href="/document-api/reference/format/apply"><code>format.apply</code></a></span> | Convenience alias for `format.apply` with `inline.italic: true`. |
-| `editor.doc.format.underline(...)` | <span style={{ whiteSpace: 'nowrap', wordBreak: 'normal', overflowWrap: 'normal' }}><a href="/document-api/reference/format/apply"><code>format.apply</code></a></span> | Convenience alias for `format.apply` with `inline.underline: true`. |
-| `editor.doc.format.strikethrough(...)` | <span style={{ whiteSpace: 'nowrap', wordBreak: 'normal', overflowWrap: 'normal' }}><a href="/document-api/reference/format/apply"><code>format.apply</code></a></span> | Convenience alias for `format.apply` with `inline.strike: true`. |
+| `editor.doc.format.bold(...)` | <span style={{ whiteSpace: 'nowrap', wordBreak: 'normal', overflowWrap: 'normal' }}><a href="/document-api/reference/format/apply"><code>format.apply</code></a></span> | Convenience alias for `format.apply` with `inline.bold: 'on'`. |
+| `editor.doc.format.italic(...)` | <span style={{ whiteSpace: 'nowrap', wordBreak: 'normal', overflowWrap: 'normal' }}><a href="/document-api/reference/format/apply"><code>format.apply</code></a></span> | Convenience alias for `format.apply` with `inline.italic: 'on'`. |
+| `editor.doc.format.underline(...)` | <span style={{ whiteSpace: 'nowrap', wordBreak: 'normal', overflowWrap: 'normal' }}><a href="/document-api/reference/format/apply"><code>format.apply</code></a></span> | Convenience alias for `format.apply` with `inline.underline: 'on'`. |
+| `editor.doc.format.strikethrough(...)` | <span style={{ whiteSpace: 'nowrap', wordBreak: 'normal', overflowWrap: 'normal' }}><a href="/document-api/reference/format/apply"><code>format.apply</code></a></span> | Convenience alias for `format.apply` with `inline.strike: 'on'`. |
 

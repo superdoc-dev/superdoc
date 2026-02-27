@@ -1,7 +1,7 @@
 import { COMMAND_CATALOG } from './command-catalog.js';
 import { CONTRACT_VERSION, JSON_SCHEMA_DIALECT, OPERATION_IDS, type OperationId } from './types.js';
 import { NODE_TYPES, BLOCK_NODE_TYPES, DELETABLE_BLOCK_NODE_TYPES, INLINE_NODE_TYPES } from '../types/base.js';
-import { MARK_KEYS } from '../types/style-policy.types.js';
+import { MARK_KEYS, INLINE_DIRECTIVES } from '../types/style-policy.types.js';
 import { ALIGNMENTS } from '../format/format.js';
 
 type JsonSchema = Record<string, unknown>;
@@ -266,16 +266,30 @@ const SHARED_DEFS: Record<string, JsonSchema> = {
       styleId: { type: 'string' },
       styles: objectSchema(
         {
-          bold: { type: 'boolean' },
-          italic: { type: 'boolean' },
-          underline: { type: 'boolean' },
-          strike: { type: 'boolean' },
+          direct: objectSchema(
+            {
+              bold: { enum: [...INLINE_DIRECTIVES] },
+              italic: { enum: [...INLINE_DIRECTIVES] },
+              underline: { enum: [...INLINE_DIRECTIVES] },
+              strike: { enum: [...INLINE_DIRECTIVES] },
+            },
+            ['bold', 'italic', 'underline', 'strike'],
+          ),
+          effective: objectSchema(
+            {
+              bold: { type: 'boolean' },
+              italic: { type: 'boolean' },
+              underline: { type: 'boolean' },
+              strike: { type: 'boolean' },
+            },
+            ['bold', 'italic', 'underline', 'strike'],
+          ),
           color: { type: 'string' },
           highlight: { type: 'string' },
           fontFamily: { type: 'string' },
           fontSizePt: { type: 'number' },
         },
-        ['bold', 'italic', 'underline', 'strike'],
+        ['direct', 'effective'],
       ),
       ref: { type: 'string' },
     },
@@ -343,17 +357,23 @@ void matchRunSchema;
 
 /**
  * Builds a DiscoveryResult schema wrapping the given item schema.
+ * When `metaSchema` is provided, the result includes a required `meta` field.
  */
-function discoveryResultSchema(itemSchema: JsonSchema): JsonSchema {
-  return objectSchema(
-    {
-      evaluatedRevision: { type: 'string' },
-      total: { type: 'integer', minimum: 0 },
-      items: arraySchema(itemSchema),
-      page: pageInfoSchema,
-    },
-    ['evaluatedRevision', 'total', 'items', 'page'],
-  );
+function discoveryResultSchema(itemSchema: JsonSchema, metaSchema?: JsonSchema): JsonSchema {
+  const properties: Record<string, JsonSchema> = {
+    evaluatedRevision: { type: 'string' },
+    total: { type: 'integer', minimum: 0 },
+    items: arraySchema(itemSchema),
+    page: pageInfoSchema,
+  };
+  const required = ['evaluatedRevision', 'total', 'items', 'page'];
+
+  if (metaSchema) {
+    properties.meta = metaSchema;
+    required.push('meta');
+  }
+
+  return objectSchema(properties, required);
 }
 
 /**
@@ -849,11 +869,21 @@ const operationCapabilitiesSchema = objectSchema(
   OPERATION_IDS,
 );
 
+const formatPropertyCapabilitySchema = objectSchema(
+  {
+    kind: { type: 'string' },
+    directives: arraySchema({ type: 'string' }),
+  },
+  ['kind', 'directives'],
+);
+
 const formatCapabilitiesSchema = objectSchema(
   {
-    supportedMarks: arraySchema({ type: 'string', enum: [...MARK_KEYS] }),
+    properties: objectSchema(
+      Object.fromEntries(MARK_KEYS.map((key) => [key, formatPropertyCapabilitySchema])) as Record<string, JsonSchema>,
+    ),
   },
-  ['supportedMarks'],
+  ['properties'],
 );
 
 const planEngineCapabilitiesSchema = objectSchema(
@@ -1079,9 +1109,11 @@ const operationSchemas: Record<OperationId, OperationSchemaSet> = {
       {
         target: textAddressSchema,
         inline: (() => {
-          const markProperties = Object.fromEntries(
-            MARK_KEYS.map((key) => [key, { type: 'boolean' } as JsonSchema]),
-          ) as Record<string, JsonSchema>;
+          const directiveSchema: JsonSchema = { enum: [...INLINE_DIRECTIVES] };
+          const markProperties = Object.fromEntries(MARK_KEYS.map((key) => [key, directiveSchema])) as Record<
+            string,
+            JsonSchema
+          >;
           return {
             type: 'object',
             properties: markProperties,
@@ -1609,7 +1641,10 @@ const operationSchemas: Record<OperationId, OperationSchemaSet> = {
         ['matchKind', 'address', 'blocks'],
       );
 
-      return discoveryResultSchema({ oneOf: [textMatchItemSchema, nodeMatchItemSchema] });
+      // query.match meta schema — effectiveResolved is required.
+      const queryMatchMetaSchema = objectSchema({ effectiveResolved: { type: 'boolean' } }, ['effectiveResolved']);
+
+      return discoveryResultSchema({ oneOf: [textMatchItemSchema, nodeMatchItemSchema] }, queryMatchMetaSchema);
     })(),
   },
   'mutations.preview': {

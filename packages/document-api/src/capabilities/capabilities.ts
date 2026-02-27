@@ -54,10 +54,16 @@ export interface PlanEngineCapabilities {
  * `operations` contains per-operation availability details keyed by {@link OperationId}.
  * `planEngine` describes plan engine capabilities (step ops, style strategies, limits).
  */
-/** Format capability snapshot — advertises which boolean mark keys this editor supports. */
+/** Per-property capability describing the interaction model and accepted directives. */
+export interface FormatPropertyCapability {
+  kind: 'toggle' | 'value' | 'composite';
+  directives: readonly string[];
+}
+
+/** Format capability snapshot — advertises per-property capability objects. */
 export interface FormatCapabilities {
-  /** Mark keys that `format.apply` can set/unset (derived from the shared mark registry). */
-  supportedMarks: readonly string[];
+  /** Per-property capability objects keyed by mark name. */
+  properties: Partial<Record<string, FormatPropertyCapability>>;
 }
 
 export interface DocumentApiCapabilities {

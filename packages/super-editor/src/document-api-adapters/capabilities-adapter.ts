@@ -3,10 +3,13 @@ import {
   CAPABILITY_REASON_CODES,
   COMMAND_CATALOG,
   MARK_KEYS,
+  INLINE_DIRECTIVES,
+  CORE_TOGGLE_PROPERTY_ID_SET,
   type CapabilityReasonCode,
   type DocumentApiCapabilities,
   type PlanEngineCapabilities,
   type FormatCapabilities,
+  type FormatPropertyCapability,
   type OperationId,
   OPERATION_IDS,
 } from '@superdoc/document-api';
@@ -329,8 +332,15 @@ const SUPPORTED_SET_MARKS = ['bold', 'italic', 'underline', 'strike'] as const;
 const REGEX_MAX_PATTERN_LENGTH = 1024;
 
 function buildFormatCapabilities(editor: Editor): FormatCapabilities {
-  const supportedMarks = MARK_KEYS.filter((key) => hasMarkCapability(editor, STYLE_MARK_SCHEMA_NAMES[key] ?? key));
-  return { supportedMarks };
+  const properties: Record<string, FormatPropertyCapability> = {};
+  for (const key of MARK_KEYS) {
+    if (hasMarkCapability(editor, STYLE_MARK_SCHEMA_NAMES[key] ?? key)) {
+      // Classify from registry: pure toggles vs composite (underline has rich attrs)
+      const kind = CORE_TOGGLE_PROPERTY_ID_SET.has(key) ? 'toggle' : 'composite';
+      properties[key] = { kind, directives: [...INLINE_DIRECTIVES] };
+    }
+  }
+  return { properties };
 }
 
 function buildPlanEngineCapabilities(): PlanEngineCapabilities {

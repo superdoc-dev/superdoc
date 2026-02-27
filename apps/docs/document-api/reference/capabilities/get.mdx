@@ -42,9 +42,20 @@ _No fields._
 ```json
 {
   "format": {
-    "supportedMarks": [
-      "bold"
-    ]
+    "properties": {
+      "bold": {
+        "directives": [
+          "example"
+        ],
+        "kind": "example"
+      },
+      "italic": {
+        "directives": [
+          "example"
+        ],
+        "kind": "example"
+      }
+    }
   },
   "global": {
     "comments": {
@@ -735,21 +746,91 @@ _No fields._
     "format": {
       "additionalProperties": false,
       "properties": {
-        "supportedMarks": {
-          "items": {
-            "enum": [
-              "bold",
-              "italic",
-              "underline",
-              "strike"
-            ],
-            "type": "string"
+        "properties": {
+          "additionalProperties": false,
+          "properties": {
+            "bold": {
+              "additionalProperties": false,
+              "properties": {
+                "directives": {
+                  "items": {
+                    "type": "string"
+                  },
+                  "type": "array"
+                },
+                "kind": {
+                  "type": "string"
+                }
+              },
+              "required": [
+                "kind",
+                "directives"
+              ],
+              "type": "object"
+            },
+            "italic": {
+              "additionalProperties": false,
+              "properties": {
+                "directives": {
+                  "items": {
+                    "type": "string"
+                  },
+                  "type": "array"
+                },
+                "kind": {
+                  "type": "string"
+                }
+              },
+              "required": [
+                "kind",
+                "directives"
+              ],
+              "type": "object"
+            },
+            "strike": {
+              "additionalProperties": false,
+              "properties": {
+                "directives": {
+                  "items": {
+                    "type": "string"
+                  },
+                  "type": "array"
+                },
+                "kind": {
+                  "type": "string"
+                }
+              },
+              "required": [
+                "kind",
+                "directives"
+              ],
+              "type": "object"
+            },
+            "underline": {
+              "additionalProperties": false,
+              "properties": {
+                "directives": {
+                  "items": {
+                    "type": "string"
+                  },
+                  "type": "array"
+                },
+                "kind": {
+                  "type": "string"
+                }
+              },
+              "required": [
+                "kind",
+                "directives"
+              ],
+              "type": "object"
+            }
           },
-          "type": "array"
+          "type": "object"
         }
       },
       "required": [
-        "supportedMarks"
+        "properties"
       ],
       "type": "object"
     },

@@ -176,13 +176,14 @@ function findRangeByText(doc: ProseMirrorNode, text: string, hintFrom?: number):
 }
 
 /**
- * Resolves a previous range by its stored text and returns a valid moved range.
+ * Resolves a previous range by its stored text and returns a valid range.
  * Returns null when:
  * - text lookup fails
- * - lookup resolves to the same coordinates (no movement)
  * - resolved coordinates are invalid/out of bounds
  *
- * This intentionally avoids falling back to stale `from`/`to` coordinates.
+ * Same-position (no movement) is allowed so that mark-only changes (e.g. applying
+ * bold inside a highlighted span) still get the range restored when the plugin
+ * temporarily reports empty. Explicit clear is handled via restoreEmptyDecorations: false.
  */
 function resolveMovedRangeFromPrevious(
   doc: ProseMirrorNode,
@@ -192,7 +193,6 @@ function resolveMovedRangeFromPrevious(
   if (!prev.text) return null;
   const resolved = findRangeByText(doc, prev.text, prev.from);
   if (!resolved) return null;
-  if (resolved.from === prev.from && resolved.to === prev.to) return null;
   if (resolved.from < 0 || resolved.to <= resolved.from || resolved.to > docSize) return null;
   return resolved;
 }
@@ -616,6 +616,7 @@ export class DecorationBridge {
       }
       if (!restoreEmptyDecorations) {
         this.#setPreviousRanges(plugin, []);
+        this.#prevDecorationSets.set(plugin, decorationSet);
         continue;
       }
       const previousPluginRanges = this.#previousRanges.get(plugin);

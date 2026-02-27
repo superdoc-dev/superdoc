@@ -769,7 +769,7 @@ describe('DecorationBridge', () => {
       expect(span.classList.contains('highlight-selection')).toBe(false);
     });
 
-    it('does not restore when text resolves to the same coordinates', () => {
+    it('restores highlight when plugin reports empty and text is at same position (e.g. bold inside span)', () => {
       const { index, addSpan, rebuild } = createIndex();
       const span = addSpan(7, 11);
       rebuild();
@@ -784,7 +784,7 @@ describe('DecorationBridge', () => {
       setDecorations([]);
       bridge.sync(state, index);
 
-      expect(span.classList.contains('highlight-selection')).toBe(false);
+      expect(span.classList.contains('highlight-selection')).toBe(true);
     });
   });
 
@@ -793,7 +793,7 @@ describe('DecorationBridge', () => {
   // -----------------------------------------------------------------------
 
   describe('collectDecorationRanges restore by text', () => {
-    it('does not restore when text resolves to the same positions', () => {
+    it('restores when plugin reports empty and text is at same positions (e.g. mark-only change)', () => {
       const fullText = 'Hello world.'; // extra char so end of "world" is not at doc end (avoids docSize return)
       const plugin = mutableExternalPlugin('focus');
       plugin.setDecorations([{ from: 7, to: 12, class: 'highlight-selection' }]);
@@ -805,7 +805,8 @@ describe('DecorationBridge', () => {
 
       plugin.setDecorations([]);
       const ranges2 = bridge.collectDecorationRanges(state);
-      expect(ranges2).toHaveLength(0);
+      expect(ranges2).toHaveLength(1);
+      expect(ranges2[0]).toMatchObject({ from: 7, to: 12, classes: ['highlight-selection'] });
     });
 
     it('does not restore when previous text cannot be found', () => {
@@ -819,6 +820,22 @@ describe('DecorationBridge', () => {
       const state2 = mockStateWithDocText([plugin.plugin], 'Hello planet');
       const ranges = bridge.collectDecorationRanges(state2);
       expect(ranges).toHaveLength(0);
+    });
+
+    it('restores highlight when mark applied inside span (e.g. apply bold inside highlighted range)', () => {
+      const fullText = 'Hello world';
+      const plugin = mutableExternalPlugin('focus');
+      plugin.setDecorations([{ from: 7, to: 12, class: 'highlight-selection' }]);
+      const state = mockStateWithDocText([plugin.plugin], fullText);
+
+      const ranges1 = bridge.collectDecorationRanges(state);
+      expect(ranges1).toHaveLength(1);
+      expect(ranges1[0]).toMatchObject({ from: 7, to: 12, classes: ['highlight-selection'] });
+
+      plugin.setDecorations([]);
+      const ranges2 = bridge.collectDecorationRanges(state);
+      expect(ranges2).toHaveLength(1);
+      expect(ranges2[0].classes).toContain('highlight-selection');
     });
 
     it('resolves restored range by text when text appears at different position', () => {
@@ -1011,6 +1028,25 @@ describe('DecorationBridge', () => {
 
       const rangesAfterClear = bridge.collectDecorationRanges(state);
       expect(rangesAfterClear).toHaveLength(0);
+    });
+
+    it('updates DecorationSet cache when restore is skipped so hasChanges does not stay true', () => {
+      const fullText = 'Hello world';
+      const { plugin, setDecorations } = mutableExternalPlugin('focus');
+      setDecorations([{ from: 7, to: 12, class: 'highlight-selection' }]);
+      const state = mockStateWithDocText([plugin], fullText);
+      const { index, addSpan, rebuild } = createIndex();
+      addSpan(7, 12);
+      rebuild();
+
+      bridge.sync(state, index);
+      expect(bridge.hasChanges(state)).toBe(false);
+
+      setDecorations([]);
+      expect(bridge.hasChanges(state)).toBe(true);
+
+      bridge.sync(state, index, { restoreEmptyDecorations: false });
+      expect(bridge.hasChanges(state)).toBe(false);
     });
 
     it('restores again on subsequent collect after skip-restore was consumed', () => {

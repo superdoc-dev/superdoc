@@ -73,6 +73,23 @@ export function resolveTocTarget(doc: ProseMirrorNode, target: TocAddress): Reso
   return found;
 }
 
+/**
+ * Re-resolves a TOC node by its sdBlockId in the post-mutation document and
+ * returns the current deterministic public nodeId. Use this after mutations
+ * that change the instruction or insert a new node, since the deterministic
+ * ID (which hashes pos + instruction) will have changed.
+ *
+ * Falls back to the sdBlockId itself when the node is not discoverable in the
+ * post-mutation doc (e.g. dispatch did not synchronously update state). The
+ * sdBlockId is still resolvable within the same session via commandNodeId
+ * matching in resolveTocTarget.
+ */
+export function resolvePostMutationTocId(doc: ProseMirrorNode, sdBlockId: string): string {
+  const all = findAllTocNodes(doc);
+  const found = all.find((t) => t.commandNodeId === sdBlockId);
+  return found?.nodeId ?? sdBlockId;
+}
+
 // ---------------------------------------------------------------------------
 // Info extraction
 // ---------------------------------------------------------------------------

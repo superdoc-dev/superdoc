@@ -29,7 +29,13 @@ import {
   areTocConfigsEqual,
   DEFAULT_TOC_CONFIG,
 } from '../../core/super-converter/field-references/shared/toc-switches.js';
-import { findAllTocNodes, resolveTocTarget, extractTocInfo, buildTocDiscoveryItem } from '../helpers/toc-resolver.js';
+import {
+  findAllTocNodes,
+  resolveTocTarget,
+  resolvePostMutationTocId,
+  extractTocInfo,
+  buildTocDiscoveryItem,
+} from '../helpers/toc-resolver.js';
 import {
   collectHeadingSources,
   buildTocEntryParagraphs,
@@ -204,9 +210,15 @@ export function tocConfigureWrapper(
     options?.expectedRevision,
   );
 
-  return receiptApplied(receipt)
-    ? tocSuccess(resolved.nodeId)
-    : tocFailure('NO_OP', 'Configuration change could not be applied.');
+  if (!receiptApplied(receipt)) {
+    return tocFailure('NO_OP', 'Configuration change could not be applied.');
+  }
+
+  // Re-resolve after mutation: the deterministic ID hashes pos + instruction,
+  // so the pre-mutation nodeId is now stale. Look up the node by its sdBlockId
+  // (which survives the instruction change) to get the current public ID.
+  const postMutationId = resolvePostMutationTocId(editor.state.doc, commandNodeId);
+  return tocSuccess(postMutationId);
 }
 
 // ---------------------------------------------------------------------------
@@ -324,5 +336,8 @@ export function createTableOfContentsWrapper(
     };
   }
 
-  return { success: true, toc: buildTocAddress(sdBlockId) };
+  // Return the deterministic public ID (not the transient sdBlockId) so the
+  // address survives across document reloads and matches what toc.list exposes.
+  const postMutationId = resolvePostMutationTocId(editor.state.doc, sdBlockId);
+  return { success: true, toc: buildTocAddress(postMutationId) };
 }

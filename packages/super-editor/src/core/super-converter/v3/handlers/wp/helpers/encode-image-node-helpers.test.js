@@ -2,6 +2,7 @@ import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { handleImageNode, getVectorShape } from './encode-image-node-helpers.js';
 import { emuToPixels, polygonToObj, rotToDegrees } from '@converter/helpers.js';
 import { extractFillColor, extractStrokeColor, extractStrokeWidth, extractLineEnds } from './vector-shape-helpers.js';
+import { convertTiffToPng } from './tiff-converter.js';
 
 vi.mock('@converter/helpers.js', async (importOriginal) => {
   const actual = await importOriginal();
@@ -20,6 +21,14 @@ vi.mock('./vector-shape-helpers.js', () => ({
   extractLineEnds: vi.fn(),
   extractCustomGeometry: vi.fn(),
 }));
+
+vi.mock('./tiff-converter.js', async (importOriginal) => {
+  const actual = await importOriginal();
+  return {
+    ...actual,
+    convertTiffToPng: vi.fn(actual.convertTiffToPng),
+  };
+});
 
 describe('handleImageNode', () => {
   beforeEach(() => {
@@ -219,6 +228,20 @@ describe('handleImageNode', () => {
     expect(result.attrs.title).toBe('Alt text');
     expect(result.attrs.isAnchor).toBe(true);
     expect(result.attrs.size).toEqual({ width: 5, height: 6 }); // emuToPixels mocked
+  });
+
+  it('calls convertTiffToPng for .tif images', () => {
+    convertTiffToPng.mockReturnValue({ dataUri: 'data:image/png;base64,fake', format: 'png' });
+    const node = makeNode();
+    const params = {
+      ...makeParams('media/photo.tif'),
+      converter: { media: { 'word/media/photo.tif': 'data:image/tiff;base64,AAAA' } },
+    };
+    const result = handleImageNode(node, params, false);
+
+    expect(convertTiffToPng).toHaveBeenCalledWith('data:image/tiff;base64,AAAA');
+    expect(result.attrs.src).toBe('data:image/png;base64,fake');
+    expect(result.attrs.extension).toBe('png');
   });
 
   it('captures unhandled drawing children for passthrough preservation', () => {

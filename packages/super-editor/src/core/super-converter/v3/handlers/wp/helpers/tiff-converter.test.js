@@ -83,7 +83,8 @@ describe('tiff-converter', () => {
       const spy = vi.spyOn(document, 'createElement').mockReturnValue(mockCanvas);
 
       return import('./tiff-converter.js?happy').then(({ convertTiffToPng: fn }) => {
-        const result = fn(new Uint8Array([0x49, 0x49, 0x2a, 0x00]));
+        // Pass base64-encoded string (the only input type the call site uses)
+        const result = fn('SU8qAA==');
         expect(result).toEqual({ dataUri: 'data:image/png;base64,iVBORw0KGgo=', format: 'png' });
 
         spy.mockRestore();
@@ -102,7 +103,7 @@ describe('tiff-converter', () => {
 
       // Re-import to pick up the mock
       return import('./tiff-converter.js?oversized').then(({ convertTiffToPng: fn }) => {
-        const result = fn(new Uint8Array([0x49, 0x49, 0x2a, 0x00]));
+        const result = fn('SU8qAA==');
         expect(result).toBeNull();
         vi.doUnmock('utif2');
       });

@@ -66,23 +66,16 @@ function createCanvas() {
  */
 export function convertTiffToPng(data) {
   try {
+    if (typeof data !== 'string') return null;
+
     // Parse input — accept data URI or raw base64
-    let bytes;
-    if (typeof data === 'string') {
-      let base64 = data;
-      if (data.startsWith('data:')) {
-        const commaIndex = data.indexOf(',');
-        if (commaIndex === -1) return null;
-        base64 = data.substring(commaIndex + 1);
-      }
-      bytes = base64ToUint8Array(base64);
-    } else if (data instanceof Uint8Array) {
-      bytes = data;
-    } else if (ArrayBuffer.isView(data)) {
-      bytes = new Uint8Array(data.buffer, data.byteOffset, data.byteLength);
-    } else {
-      return null;
+    let base64 = data;
+    if (data.startsWith('data:')) {
+      const commaIndex = data.indexOf(',');
+      if (commaIndex === -1) return null;
+      base64 = data.substring(commaIndex + 1);
     }
+    const bytes = base64ToUint8Array(base64);
 
     const buffer = bytes.buffer.slice(bytes.byteOffset, bytes.byteOffset + bytes.byteLength);
 

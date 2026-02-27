@@ -66,7 +66,7 @@ import type {
   StylesApplyOptions,
   StylesApplyReceipt,
 } from './styles/styles.js';
-import { executeStylesApply, PROPERTY_REGISTRY } from './styles/styles.js';
+import { executeStylesApply } from './styles/styles.js';
 import type { GetNodeAdapter, GetNodeByIdInput } from './get-node/get-node.js';
 import { executeGetNode, executeGetNodeById } from './get-node/get-node.js';
 import { executeGetText, type GetTextAdapter, type GetTextInput } from './get-text/get-text.js';
@@ -99,7 +99,12 @@ import {
 } from './lists/lists.js';
 import { executeReplace, type ReplaceInput } from './replace/replace.js';
 import type { CreateAdapter, CreateApi } from './create/create.js';
-import { executeCreateParagraph, executeCreateHeading, executeCreateTable } from './create/create.js';
+import {
+  executeCreateParagraph,
+  executeCreateHeading,
+  executeCreateTable,
+  executeCreateSectionBreak,
+} from './create/create.js';
 import type { BlocksAdapter, BlocksApi } from './blocks/blocks.js';
 import { executeBlocksDelete } from './blocks/blocks.js';
 import type { BlocksDeleteInput, BlocksDeleteResult } from './types/blocks.types.js';
@@ -172,6 +177,53 @@ import type { OperationId } from './contract/types.js';
 import type { DynamicInvokeRequest, InvokeRequest, InvokeResult } from './contract/operation-registry.js';
 import { buildDispatchTable } from './invoke/invoke.js';
 import { executeTableOperation } from './tables/tables.js';
+import type { SectionsAdapter, SectionsApi } from './sections/sections.js';
+import type {
+  CreateSectionBreakInput,
+  CreateSectionBreakResult,
+  DocumentMutationResult,
+  SectionInfo,
+  SectionsClearHeaderFooterRefInput,
+  SectionsClearPageBordersInput,
+  SectionsGetInput,
+  SectionsListQuery,
+  SectionsListResult,
+  SectionsSetBreakTypeInput,
+  SectionsSetColumnsInput,
+  SectionsSetHeaderFooterMarginsInput,
+  SectionsSetHeaderFooterRefInput,
+  SectionsSetLineNumberingInput,
+  SectionsSetLinkToPreviousInput,
+  SectionsSetOddEvenHeadersFootersInput,
+  SectionsSetPageBordersInput,
+  SectionsSetPageMarginsInput,
+  SectionsSetPageNumberingInput,
+  SectionsSetPageSetupInput,
+  SectionsSetSectionDirectionInput,
+  SectionsSetTitlePageInput,
+  SectionsSetVerticalAlignInput,
+  SectionMutationResult,
+} from './sections/sections.types.js';
+import {
+  executeSectionsClearHeaderFooterRef,
+  executeSectionsClearPageBorders,
+  executeSectionsGet,
+  executeSectionsList,
+  executeSectionsSetBreakType,
+  executeSectionsSetColumns,
+  executeSectionsSetHeaderFooterMargins,
+  executeSectionsSetHeaderFooterRef,
+  executeSectionsSetLineNumbering,
+  executeSectionsSetLinkToPrevious,
+  executeSectionsSetOddEvenHeadersFooters,
+  executeSectionsSetPageBorders,
+  executeSectionsSetPageMargins,
+  executeSectionsSetPageNumbering,
+  executeSectionsSetPageSetup,
+  executeSectionsSetSectionDirection,
+  executeSectionsSetTitlePage,
+  executeSectionsSetVerticalAlign,
+} from './sections/sections.js';
 
 export type { FindAdapter, FindOptions } from './find/find.js';
 export type { GetNodeAdapter, GetNodeByIdInput } from './get-node/get-node.js';
@@ -229,6 +281,7 @@ export type {
 } from './track-changes/track-changes.js';
 export type { BlocksAdapter } from './blocks/blocks.js';
 export type { ListsAdapter } from './lists/lists.js';
+export type { SectionsAdapter } from './sections/sections.js';
 export type {
   ListInsertInput,
   ListItemAddress,
@@ -244,6 +297,54 @@ export type {
   ListTargetInput,
 } from './lists/lists.types.js';
 export { LIST_KINDS, LIST_INSERT_POSITIONS } from './lists/lists.types.js';
+export type {
+  CreateSectionBreakInput,
+  CreateSectionBreakResult,
+  DocumentMutationResult,
+  SectionAddress,
+  SectionBorderSpec,
+  SectionBreakCreateLocation,
+  SectionBreakType,
+  SectionColumns,
+  SectionDirection,
+  SectionDomain,
+  SectionHeaderFooterKind,
+  SectionHeaderFooterMargins,
+  SectionHeaderFooterRefs,
+  SectionHeaderFooterVariant,
+  SectionInfo,
+  SectionLineNumbering,
+  SectionLineNumberRestart,
+  SectionMutationResult,
+  SectionOrientation,
+  SectionPageBorders,
+  SectionPageMargins,
+  SectionPageNumbering,
+  SectionPageNumberingFormat,
+  SectionPageSetup,
+  SectionRangeDomain,
+  SectionTargetInput,
+  SectionVerticalAlign,
+  SectionsClearHeaderFooterRefInput,
+  SectionsClearPageBordersInput,
+  SectionsGetInput,
+  SectionsListQuery,
+  SectionsListResult,
+  SectionsSetBreakTypeInput,
+  SectionsSetColumnsInput,
+  SectionsSetHeaderFooterMarginsInput,
+  SectionsSetHeaderFooterRefInput,
+  SectionsSetLineNumberingInput,
+  SectionsSetLinkToPreviousInput,
+  SectionsSetOddEvenHeadersFootersInput,
+  SectionsSetPageBordersInput,
+  SectionsSetPageMarginsInput,
+  SectionsSetPageNumberingInput,
+  SectionsSetPageSetupInput,
+  SectionsSetSectionDirectionInput,
+  SectionsSetTitlePageInput,
+  SectionsSetVerticalAlignInput,
+} from './sections/sections.types.js';
 export type {
   CommentsCreateInput,
   CommentsPatchInput,
@@ -418,6 +519,10 @@ export interface DocumentApi {
    */
   lists: ListsApi;
   /**
+   * Section structure and page setup operations.
+   */
+  sections: SectionsApi;
+  /**
    * Table operations.
    */
   tables: TablesApi;
@@ -464,6 +569,7 @@ export interface DocumentApiAdapters {
   create: CreateAdapter;
   blocks: BlocksAdapter;
   lists: ListsAdapter;
+  sections: SectionsAdapter;
   tables: TablesAdapter;
   query: QueryAdapter;
   mutations: MutationsAdapter;
@@ -591,6 +697,9 @@ export function createDocumentApi(adapters: DocumentApiAdapters): DocumentApi {
       table(input: CreateTableInput, options?: MutationOptions): CreateTableResult {
         return executeCreateTable(adapters.create, input, options);
       },
+      sectionBreak(input: CreateSectionBreakInput, options?: MutationOptions): CreateSectionBreakResult {
+        return executeCreateSectionBreak(adapters.create, input, options);
+      },
     },
     capabilities,
     lists: {
@@ -617,6 +726,68 @@ export function createDocumentApi(adapters: DocumentApiAdapters): DocumentApi {
       },
       exit(input: ListTargetInput, options?: MutationOptions): ListsExitResult {
         return executeListsExit(adapters.lists, input, options);
+      },
+    },
+    sections: {
+      list(query?: SectionsListQuery): SectionsListResult {
+        return executeSectionsList(adapters.sections, query);
+      },
+      get(input: SectionsGetInput): SectionInfo {
+        return executeSectionsGet(adapters.sections, input);
+      },
+      setBreakType(input: SectionsSetBreakTypeInput, options?: MutationOptions): SectionMutationResult {
+        return executeSectionsSetBreakType(adapters.sections, input, options);
+      },
+      setPageMargins(input: SectionsSetPageMarginsInput, options?: MutationOptions): SectionMutationResult {
+        return executeSectionsSetPageMargins(adapters.sections, input, options);
+      },
+      setHeaderFooterMargins(
+        input: SectionsSetHeaderFooterMarginsInput,
+        options?: MutationOptions,
+      ): SectionMutationResult {
+        return executeSectionsSetHeaderFooterMargins(adapters.sections, input, options);
+      },
+      setPageSetup(input: SectionsSetPageSetupInput, options?: MutationOptions): SectionMutationResult {
+        return executeSectionsSetPageSetup(adapters.sections, input, options);
+      },
+      setColumns(input: SectionsSetColumnsInput, options?: MutationOptions): SectionMutationResult {
+        return executeSectionsSetColumns(adapters.sections, input, options);
+      },
+      setLineNumbering(input: SectionsSetLineNumberingInput, options?: MutationOptions): SectionMutationResult {
+        return executeSectionsSetLineNumbering(adapters.sections, input, options);
+      },
+      setPageNumbering(input: SectionsSetPageNumberingInput, options?: MutationOptions): SectionMutationResult {
+        return executeSectionsSetPageNumbering(adapters.sections, input, options);
+      },
+      setTitlePage(input: SectionsSetTitlePageInput, options?: MutationOptions): SectionMutationResult {
+        return executeSectionsSetTitlePage(adapters.sections, input, options);
+      },
+      setOddEvenHeadersFooters(
+        input: SectionsSetOddEvenHeadersFootersInput,
+        options?: MutationOptions,
+      ): DocumentMutationResult {
+        return executeSectionsSetOddEvenHeadersFooters(adapters.sections, input, options);
+      },
+      setVerticalAlign(input: SectionsSetVerticalAlignInput, options?: MutationOptions): SectionMutationResult {
+        return executeSectionsSetVerticalAlign(adapters.sections, input, options);
+      },
+      setSectionDirection(input: SectionsSetSectionDirectionInput, options?: MutationOptions): SectionMutationResult {
+        return executeSectionsSetSectionDirection(adapters.sections, input, options);
+      },
+      setHeaderFooterRef(input: SectionsSetHeaderFooterRefInput, options?: MutationOptions): SectionMutationResult {
+        return executeSectionsSetHeaderFooterRef(adapters.sections, input, options);
+      },
+      clearHeaderFooterRef(input: SectionsClearHeaderFooterRefInput, options?: MutationOptions): SectionMutationResult {
+        return executeSectionsClearHeaderFooterRef(adapters.sections, input, options);
+      },
+      setLinkToPrevious(input: SectionsSetLinkToPreviousInput, options?: MutationOptions): SectionMutationResult {
+        return executeSectionsSetLinkToPrevious(adapters.sections, input, options);
+      },
+      setPageBorders(input: SectionsSetPageBordersInput, options?: MutationOptions): SectionMutationResult {
+        return executeSectionsSetPageBorders(adapters.sections, input, options);
+      },
+      clearPageBorders(input: SectionsClearPageBordersInput, options?: MutationOptions): SectionMutationResult {
+        return executeSectionsClearPageBorders(adapters.sections, input, options);
       },
     },
     tables: {

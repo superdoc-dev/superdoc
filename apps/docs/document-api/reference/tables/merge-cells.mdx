@@ -30,7 +30,22 @@ description: Reference for tables.mergeCells
 ### Example request
 
 ```json
-{}
+{
+  "end": {
+    "columnIndex": 1,
+    "rowIndex": 1
+  },
+  "start": {
+    "columnIndex": 1,
+    "rowIndex": 1
+  },
+  "tableNodeId": "example",
+  "tableTarget": {
+    "kind": "block",
+    "nodeId": "node-def456",
+    "nodeType": "paragraph"
+  }
+}
 ```
 
 ## Output fields

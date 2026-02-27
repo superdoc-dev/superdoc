@@ -29,7 +29,21 @@ description: Reference for tables.sort
 ### Example request
 
 ```json
-{}
+{
+  "keys": [
+    {
+      "columnIndex": 1,
+      "direction": "ascending",
+      "type": "text"
+    }
+  ],
+  "nodeId": "node-def456",
+  "target": {
+    "kind": "block",
+    "nodeId": "node-def456",
+    "nodeType": "paragraph"
+  }
+}
 ```
 
 ## Output fields

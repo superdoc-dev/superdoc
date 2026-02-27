@@ -60,6 +60,7 @@ export function buildDispatchTable(api: DocumentApi): TypedDispatchTable {
     // --- create.* ---
     'create.paragraph': (input, options) => api.create.paragraph(input, options),
     'create.heading': (input, options) => api.create.heading(input, options),
+    'create.sectionBreak': (input, options) => api.create.sectionBreak(input, options),
 
     // --- lists.* ---
     'lists.list': (input) => api.lists.list(input),
@@ -70,6 +71,26 @@ export function buildDispatchTable(api: DocumentApi): TypedDispatchTable {
     'lists.outdent': (input, options) => api.lists.outdent(input, options),
     'lists.restart': (input, options) => api.lists.restart(input, options),
     'lists.exit': (input, options) => api.lists.exit(input, options),
+
+    // --- sections.* ---
+    'sections.list': (input) => api.sections.list(input),
+    'sections.get': (input) => api.sections.get(input),
+    'sections.setBreakType': (input, options) => api.sections.setBreakType(input, options),
+    'sections.setPageMargins': (input, options) => api.sections.setPageMargins(input, options),
+    'sections.setHeaderFooterMargins': (input, options) => api.sections.setHeaderFooterMargins(input, options),
+    'sections.setPageSetup': (input, options) => api.sections.setPageSetup(input, options),
+    'sections.setColumns': (input, options) => api.sections.setColumns(input, options),
+    'sections.setLineNumbering': (input, options) => api.sections.setLineNumbering(input, options),
+    'sections.setPageNumbering': (input, options) => api.sections.setPageNumbering(input, options),
+    'sections.setTitlePage': (input, options) => api.sections.setTitlePage(input, options),
+    'sections.setOddEvenHeadersFooters': (input, options) => api.sections.setOddEvenHeadersFooters(input, options),
+    'sections.setVerticalAlign': (input, options) => api.sections.setVerticalAlign(input, options),
+    'sections.setSectionDirection': (input, options) => api.sections.setSectionDirection(input, options),
+    'sections.setHeaderFooterRef': (input, options) => api.sections.setHeaderFooterRef(input, options),
+    'sections.clearHeaderFooterRef': (input, options) => api.sections.clearHeaderFooterRef(input, options),
+    'sections.setLinkToPrevious': (input, options) => api.sections.setLinkToPrevious(input, options),
+    'sections.setPageBorders': (input, options) => api.sections.setPageBorders(input, options),
+    'sections.clearPageBorders': (input, options) => api.sections.clearPageBorders(input, options),
 
     // --- comments.* ---
     'comments.create': (input, options) => api.comments.create(input, options),

@@ -30,7 +30,16 @@ description: Reference for tables.setColumnWidth
 ### Example request
 
 ```json
-{}
+{
+  "columnIndex": 1,
+  "tableNodeId": "example",
+  "tableTarget": {
+    "kind": "block",
+    "nodeId": "node-def456",
+    "nodeType": "paragraph"
+  },
+  "widthPt": 12.5
+}
 ```
 
 ## Output fields

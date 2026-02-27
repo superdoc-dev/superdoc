@@ -310,6 +310,28 @@ const INTEGER_EXAMPLES: Record<string, number> = {
   listLevel: 0,
 };
 
+function applyNumericBounds(value: number, schema: JsonSchema, type: 'integer' | 'number'): number {
+  let bounded = value;
+
+  const minimum = typeof schema.minimum === 'number' ? schema.minimum : undefined;
+  const maximum = typeof schema.maximum === 'number' ? schema.maximum : undefined;
+  const exclusiveMinimum = typeof schema.exclusiveMinimum === 'number' ? schema.exclusiveMinimum : undefined;
+  const exclusiveMaximum = typeof schema.exclusiveMaximum === 'number' ? schema.exclusiveMaximum : undefined;
+
+  if (minimum !== undefined && bounded < minimum) bounded = minimum;
+  if (exclusiveMinimum !== undefined && bounded <= exclusiveMinimum) {
+    bounded = type === 'integer' ? Math.floor(exclusiveMinimum) + 1 : exclusiveMinimum + 0.1;
+  }
+
+  if (maximum !== undefined && bounded > maximum) bounded = maximum;
+  if (exclusiveMaximum !== undefined && bounded >= exclusiveMaximum) {
+    bounded = type === 'integer' ? Math.ceil(exclusiveMaximum) - 1 : exclusiveMaximum - 0.1;
+  }
+
+  if (!Number.isFinite(bounded)) return type === 'integer' ? 1 : 12.5;
+  return type === 'integer' ? Math.trunc(bounded) : bounded;
+}
+
 /**
  * Generate a deterministic example value from a JSON Schema node.
  * `fieldName` is used to pick contextual string/integer values.
@@ -330,14 +352,6 @@ function generateExample(schema: JsonSchema, $defs: Defs, fieldName?: string, de
     return generateExample(resolved, $defs, fieldName, depth);
   }
 
-  // oneOf / anyOf — first variant
-  for (const keyword of ['oneOf', 'anyOf'] as const) {
-    const variants = schema[keyword];
-    if (Array.isArray(variants) && variants.length > 0) {
-      return generateExample(variants[0] as JsonSchema, $defs, fieldName, depth);
-    }
-  }
-
   // array — single item
   if (schema.type === 'array') {
     const items = schema.items as JsonSchema | undefined;
@@ -350,6 +364,17 @@ function generateExample(schema: JsonSchema, $defs: Defs, fieldName?: string, de
   if (schema.type === 'object' && schema.properties) {
     const properties = schema.properties as Record<string, JsonSchema>;
     const requiredSet = new Set<string>(Array.isArray(schema.required) ? (schema.required as string[]) : []);
+    for (const keyword of ['oneOf', 'anyOf'] as const) {
+      const variants = schema[keyword];
+      if (!Array.isArray(variants) || variants.length === 0) continue;
+      const firstVariant = variants[0] as JsonSchema;
+      if (Array.isArray(firstVariant.required)) {
+        for (const requiredField of firstVariant.required as string[]) {
+          requiredSet.add(requiredField);
+        }
+      }
+      break;
+    }
 
     const result: Record<string, unknown> = {};
     const keys = Object.keys(properties);
@@ -366,18 +391,26 @@ function generateExample(schema: JsonSchema, $defs: Defs, fieldName?: string, de
     return result;
   }
 
+  // oneOf / anyOf — first variant (non-object union fallback)
+  for (const keyword of ['oneOf', 'anyOf'] as const) {
+    const variants = schema[keyword];
+    if (Array.isArray(variants) && variants.length > 0) {
+      return generateExample(variants[0] as JsonSchema, $defs, fieldName, depth);
+    }
+  }
+
   // primitives
   if (schema.type === 'string') {
     if (fieldName && STRING_EXAMPLES[fieldName] !== undefined) return STRING_EXAMPLES[fieldName];
     return 'example';
   }
   if (schema.type === 'integer') {
-    if (fieldName && INTEGER_EXAMPLES[fieldName] !== undefined) return INTEGER_EXAMPLES[fieldName];
-    return 1;
+    const base = fieldName && INTEGER_EXAMPLES[fieldName] !== undefined ? INTEGER_EXAMPLES[fieldName] : 1;
+    return applyNumericBounds(base, schema, 'integer');
   }
   if (schema.type === 'number') {
-    if (fieldName && INTEGER_EXAMPLES[fieldName] !== undefined) return INTEGER_EXAMPLES[fieldName];
-    return 12.5;
+    const base = fieldName && INTEGER_EXAMPLES[fieldName] !== undefined ? INTEGER_EXAMPLES[fieldName] : 12.5;
+    return applyNumericBounds(base, schema, 'number');
   }
   if (schema.type === 'boolean') return true;
 

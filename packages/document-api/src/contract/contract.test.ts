@@ -121,6 +121,7 @@ describe('document-api contract catalog', () => {
       'blocks',
       'capabilities',
       'create',
+      'sections',
       'format',
       'styles',
       'lists',

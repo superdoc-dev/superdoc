@@ -29,7 +29,15 @@ description: Reference for tables.deleteColumn
 ### Example request
 
 ```json
-{}
+{
+  "columnIndex": 1,
+  "tableNodeId": "example",
+  "tableTarget": {
+    "kind": "block",
+    "nodeId": "node-def456",
+    "nodeType": "paragraph"
+  }
+}
 ```
 
 ## Output fields

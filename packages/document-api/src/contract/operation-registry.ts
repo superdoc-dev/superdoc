@@ -57,6 +57,32 @@ import type {
   ListTargetInput,
   ListsExitResult,
 } from '../lists/lists.types.js';
+import type {
+  CreateSectionBreakInput,
+  CreateSectionBreakResult,
+  DocumentMutationResult,
+  SectionInfo,
+  SectionMutationResult,
+  SectionsClearHeaderFooterRefInput,
+  SectionsClearPageBordersInput,
+  SectionsGetInput,
+  SectionsListQuery,
+  SectionsListResult,
+  SectionsSetBreakTypeInput,
+  SectionsSetColumnsInput,
+  SectionsSetHeaderFooterMarginsInput,
+  SectionsSetHeaderFooterRefInput,
+  SectionsSetLineNumberingInput,
+  SectionsSetLinkToPreviousInput,
+  SectionsSetOddEvenHeadersFootersInput,
+  SectionsSetPageBordersInput,
+  SectionsSetPageMarginsInput,
+  SectionsSetPageNumberingInput,
+  SectionsSetPageSetupInput,
+  SectionsSetSectionDirectionInput,
+  SectionsSetTitlePageInput,
+  SectionsSetVerticalAlignInput,
+} from '../sections/sections.types.js';
 import type { QueryMatchInput, QueryMatchOutput } from '../types/query-match.types.js';
 import type {
   MutationsApplyInput,
@@ -140,6 +166,7 @@ export interface OperationRegistry {
   // --- create.* ---
   'create.paragraph': { input: CreateParagraphInput; options: MutationOptions; output: CreateParagraphResult };
   'create.heading': { input: CreateHeadingInput; options: MutationOptions; output: CreateHeadingResult };
+  'create.sectionBreak': { input: CreateSectionBreakInput; options: MutationOptions; output: CreateSectionBreakResult };
 
   // --- lists.* ---
   'lists.list': { input: ListsListQuery | undefined; options: never; output: ListsListResult };
@@ -150,6 +177,86 @@ export interface OperationRegistry {
   'lists.outdent': { input: ListTargetInput; options: MutationOptions; output: ListsMutateItemResult };
   'lists.restart': { input: ListTargetInput; options: MutationOptions; output: ListsMutateItemResult };
   'lists.exit': { input: ListTargetInput; options: MutationOptions; output: ListsExitResult };
+
+  // --- sections.* ---
+  'sections.list': { input: SectionsListQuery | undefined; options: never; output: SectionsListResult };
+  'sections.get': { input: SectionsGetInput; options: never; output: SectionInfo };
+  'sections.setBreakType': {
+    input: SectionsSetBreakTypeInput;
+    options: MutationOptions;
+    output: SectionMutationResult;
+  };
+  'sections.setPageMargins': {
+    input: SectionsSetPageMarginsInput;
+    options: MutationOptions;
+    output: SectionMutationResult;
+  };
+  'sections.setHeaderFooterMargins': {
+    input: SectionsSetHeaderFooterMarginsInput;
+    options: MutationOptions;
+    output: SectionMutationResult;
+  };
+  'sections.setPageSetup': {
+    input: SectionsSetPageSetupInput;
+    options: MutationOptions;
+    output: SectionMutationResult;
+  };
+  'sections.setColumns': { input: SectionsSetColumnsInput; options: MutationOptions; output: SectionMutationResult };
+  'sections.setLineNumbering': {
+    input: SectionsSetLineNumberingInput;
+    options: MutationOptions;
+    output: SectionMutationResult;
+  };
+  'sections.setPageNumbering': {
+    input: SectionsSetPageNumberingInput;
+    options: MutationOptions;
+    output: SectionMutationResult;
+  };
+  'sections.setTitlePage': {
+    input: SectionsSetTitlePageInput;
+    options: MutationOptions;
+    output: SectionMutationResult;
+  };
+  'sections.setOddEvenHeadersFooters': {
+    input: SectionsSetOddEvenHeadersFootersInput;
+    options: MutationOptions;
+    output: DocumentMutationResult;
+  };
+  'sections.setVerticalAlign': {
+    input: SectionsSetVerticalAlignInput;
+    options: MutationOptions;
+    output: SectionMutationResult;
+  };
+  'sections.setSectionDirection': {
+    input: SectionsSetSectionDirectionInput;
+    options: MutationOptions;
+    output: SectionMutationResult;
+  };
+  'sections.setHeaderFooterRef': {
+    input: SectionsSetHeaderFooterRefInput;
+    options: MutationOptions;
+    output: SectionMutationResult;
+  };
+  'sections.clearHeaderFooterRef': {
+    input: SectionsClearHeaderFooterRefInput;
+    options: MutationOptions;
+    output: SectionMutationResult;
+  };
+  'sections.setLinkToPrevious': {
+    input: SectionsSetLinkToPreviousInput;
+    options: MutationOptions;
+    output: SectionMutationResult;
+  };
+  'sections.setPageBorders': {
+    input: SectionsSetPageBordersInput;
+    options: MutationOptions;
+    output: SectionMutationResult;
+  };
+  'sections.clearPageBorders': {
+    input: SectionsClearPageBordersInput;
+    options: MutationOptions;
+    output: SectionMutationResult;
+  };
 
   // --- comments.* ---
   'comments.create': { input: CommentsCreateInput; options: RevisionGuardOptions; output: Receipt };

@@ -33,7 +33,20 @@ description: Reference for tables.insertRow
 ### Example request
 
 ```json
-{}
+{
+  "nodeId": "node-def456",
+  "position": "above",
+  "tableTarget": {
+    "kind": "block",
+    "nodeId": "node-def456",
+    "nodeType": "paragraph"
+  },
+  "target": {
+    "kind": "block",
+    "nodeId": "node-def456",
+    "nodeType": "paragraph"
+  }
+}
 ```
 
 ## Output fields

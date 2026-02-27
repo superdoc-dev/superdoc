@@ -33,7 +33,21 @@ description: Reference for tables.setRowHeight
 ### Example request
 
 ```json
-{}
+{
+  "heightPt": 12.5,
+  "nodeId": "node-def456",
+  "rule": "atLeast",
+  "tableTarget": {
+    "kind": "block",
+    "nodeId": "node-def456",
+    "nodeType": "paragraph"
+  },
+  "target": {
+    "kind": "block",
+    "nodeId": "node-def456",
+    "nodeType": "paragraph"
+  }
+}
 ```
 
 ## Output fields

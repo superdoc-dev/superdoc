@@ -428,4 +428,42 @@ describe('getDocumentApiCapabilities', () => {
     const reasons = capabilities.operations['styles.apply'].reasons ?? [];
     expect(reasons).not.toContain('COMMAND_UNAVAILABLE');
   });
+
+  it('marks sections.setOddEvenHeadersFooters as unavailable when converter is missing', () => {
+    const capabilities = getDocumentApiCapabilities(makeEditor());
+    const reasons = capabilities.operations['sections.setOddEvenHeadersFooters'].reasons ?? [];
+
+    expect(capabilities.operations['sections.setOddEvenHeadersFooters'].available).toBe(false);
+    expect(reasons).toContain('HELPER_UNAVAILABLE');
+    expect(reasons).toContain('OPERATION_UNAVAILABLE');
+  });
+
+  it('marks sections.setOddEvenHeadersFooters as available when converter is present', () => {
+    const editor = makeEditor();
+    (editor as unknown as Record<string, unknown>).converter = { convertedXml: {} };
+
+    const capabilities = getDocumentApiCapabilities(editor);
+    expect(capabilities.operations['sections.setOddEvenHeadersFooters'].available).toBe(true);
+    expect(capabilities.operations['sections.setOddEvenHeadersFooters'].dryRun).toBe(true);
+    expect(capabilities.operations['sections.setOddEvenHeadersFooters'].tracked).toBe(false);
+  });
+
+  it('marks sections.setHeaderFooterRef as unavailable when converter is missing', () => {
+    const capabilities = getDocumentApiCapabilities(makeEditor());
+    const reasons = capabilities.operations['sections.setHeaderFooterRef'].reasons ?? [];
+
+    expect(capabilities.operations['sections.setHeaderFooterRef'].available).toBe(false);
+    expect(reasons).toContain('HELPER_UNAVAILABLE');
+    expect(reasons).toContain('OPERATION_UNAVAILABLE');
+  });
+
+  it('marks sections.setHeaderFooterRef as available when converter is present', () => {
+    const editor = makeEditor();
+    (editor as unknown as Record<string, unknown>).converter = { convertedXml: {} };
+
+    const capabilities = getDocumentApiCapabilities(editor);
+    expect(capabilities.operations['sections.setHeaderFooterRef'].available).toBe(true);
+    expect(capabilities.operations['sections.setHeaderFooterRef'].dryRun).toBe(true);
+    expect(capabilities.operations['sections.setHeaderFooterRef'].tracked).toBe(false);
+  });
 });

@@ -29,7 +29,15 @@ description: Reference for tables.applyBorderPreset
 ### Example request
 
 ```json
-{}
+{
+  "nodeId": "node-def456",
+  "preset": "box",
+  "target": {
+    "kind": "block",
+    "nodeId": "node-def456",
+    "nodeType": "paragraph"
+  }
+}
 ```
 
 ## Output fields

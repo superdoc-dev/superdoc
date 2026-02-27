@@ -32,7 +32,18 @@ description: Reference for tables.setTablePadding
 ### Example request
 
 ```json
-{}
+{
+  "bottomPt": 12.5,
+  "leftPt": 12.5,
+  "nodeId": "node-def456",
+  "rightPt": 12.5,
+  "target": {
+    "kind": "block",
+    "nodeId": "node-def456",
+    "nodeType": "paragraph"
+  },
+  "topPt": 12.5
+}
 ```
 
 ## Output fields

@@ -36,6 +36,7 @@ export type ReferenceGroupKey =
   | 'blocks'
   | 'capabilities'
   | 'create'
+  | 'sections'
   | 'format'
   | 'styles'
   | 'lists'
@@ -142,6 +143,23 @@ const T_NOT_FOUND_COMMAND = ['TARGET_NOT_FOUND', 'INVALID_TARGET', 'CAPABILITY_U
 const T_NOT_FOUND_COMMAND_TRACKED = [...T_NOT_FOUND_COMMAND] as const;
 
 const T_QUERY_MATCH = ['MATCH_NOT_FOUND', 'AMBIGUOUS_MATCH', 'INVALID_INPUT', 'INTERNAL_ERROR'] as const;
+const T_SECTION_CREATE = [
+  'TARGET_NOT_FOUND',
+  'INVALID_TARGET',
+  'AMBIGUOUS_TARGET',
+  'INVALID_INPUT',
+  'CAPABILITY_UNAVAILABLE',
+  'INTERNAL_ERROR',
+] as const;
+const T_SECTION_READ = ['TARGET_NOT_FOUND', 'INVALID_TARGET', 'INVALID_INPUT', 'CAPABILITY_UNAVAILABLE'] as const;
+const T_SECTION_MUTATION = [
+  'TARGET_NOT_FOUND',
+  'INVALID_TARGET',
+  'INVALID_INPUT',
+  'CAPABILITY_UNAVAILABLE',
+  'INTERNAL_ERROR',
+] as const;
+const T_SECTION_SETTINGS_MUTATION = ['INVALID_INPUT', 'CAPABILITY_UNAVAILABLE', 'INTERNAL_ERROR'] as const;
 
 // ---------------------------------------------------------------------------
 // Canonical definitions
@@ -380,6 +398,267 @@ export const OPERATION_DEFINITIONS = {
     }),
     referenceDocPath: 'create/heading.mdx',
     referenceGroup: 'create',
+  },
+  'create.sectionBreak': {
+    memberPath: 'create.sectionBreak',
+    description: 'Create a section break at the target location with optional initial section properties.',
+    requiresDocumentContext: true,
+    metadata: mutationOperation({
+      idempotency: 'non-idempotent',
+      supportsDryRun: true,
+      supportsTrackedMode: false,
+      possibleFailureCodes: ['INVALID_TARGET', 'CAPABILITY_UNAVAILABLE'],
+      throws: T_SECTION_CREATE,
+    }),
+    referenceDocPath: 'create/section-break.mdx',
+    referenceGroup: 'create',
+  },
+
+  'sections.list': {
+    memberPath: 'sections.list',
+    description: 'List sections in deterministic order with section-target handles.',
+    requiresDocumentContext: true,
+    metadata: readOperation({
+      idempotency: 'idempotent',
+      throws: ['INVALID_INPUT', 'CAPABILITY_UNAVAILABLE'],
+    }),
+    referenceDocPath: 'sections/list.mdx',
+    referenceGroup: 'sections',
+  },
+  'sections.get': {
+    memberPath: 'sections.get',
+    description: 'Retrieve full section information by section address.',
+    requiresDocumentContext: true,
+    metadata: readOperation({
+      idempotency: 'idempotent',
+      throws: T_SECTION_READ,
+    }),
+    referenceDocPath: 'sections/get.mdx',
+    referenceGroup: 'sections',
+  },
+  'sections.setBreakType': {
+    memberPath: 'sections.setBreakType',
+    description: 'Set the section break type.',
+    requiresDocumentContext: true,
+    metadata: mutationOperation({
+      idempotency: 'conditional',
+      supportsDryRun: true,
+      supportsTrackedMode: false,
+      possibleFailureCodes: ['NO_OP', 'INVALID_TARGET', 'CAPABILITY_UNAVAILABLE'],
+      throws: T_SECTION_MUTATION,
+    }),
+    referenceDocPath: 'sections/set-break-type.mdx',
+    referenceGroup: 'sections',
+  },
+  'sections.setPageMargins': {
+    memberPath: 'sections.setPageMargins',
+    description: 'Set page-edge margins for a section.',
+    requiresDocumentContext: true,
+    metadata: mutationOperation({
+      idempotency: 'conditional',
+      supportsDryRun: true,
+      supportsTrackedMode: false,
+      possibleFailureCodes: ['NO_OP', 'INVALID_TARGET', 'CAPABILITY_UNAVAILABLE'],
+      throws: T_SECTION_MUTATION,
+    }),
+    referenceDocPath: 'sections/set-page-margins.mdx',
+    referenceGroup: 'sections',
+  },
+  'sections.setHeaderFooterMargins': {
+    memberPath: 'sections.setHeaderFooterMargins',
+    description: 'Set header/footer margin distances for a section.',
+    requiresDocumentContext: true,
+    metadata: mutationOperation({
+      idempotency: 'conditional',
+      supportsDryRun: true,
+      supportsTrackedMode: false,
+      possibleFailureCodes: ['NO_OP', 'INVALID_TARGET', 'CAPABILITY_UNAVAILABLE'],
+      throws: T_SECTION_MUTATION,
+    }),
+    referenceDocPath: 'sections/set-header-footer-margins.mdx',
+    referenceGroup: 'sections',
+  },
+  'sections.setPageSetup': {
+    memberPath: 'sections.setPageSetup',
+    description: 'Set page size/orientation properties for a section.',
+    requiresDocumentContext: true,
+    metadata: mutationOperation({
+      idempotency: 'conditional',
+      supportsDryRun: true,
+      supportsTrackedMode: false,
+      possibleFailureCodes: ['NO_OP', 'INVALID_TARGET', 'CAPABILITY_UNAVAILABLE'],
+      throws: T_SECTION_MUTATION,
+    }),
+    referenceDocPath: 'sections/set-page-setup.mdx',
+    referenceGroup: 'sections',
+  },
+  'sections.setColumns': {
+    memberPath: 'sections.setColumns',
+    description: 'Set column configuration for a section.',
+    requiresDocumentContext: true,
+    metadata: mutationOperation({
+      idempotency: 'conditional',
+      supportsDryRun: true,
+      supportsTrackedMode: false,
+      possibleFailureCodes: ['NO_OP', 'INVALID_TARGET', 'CAPABILITY_UNAVAILABLE'],
+      throws: T_SECTION_MUTATION,
+    }),
+    referenceDocPath: 'sections/set-columns.mdx',
+    referenceGroup: 'sections',
+  },
+  'sections.setLineNumbering': {
+    memberPath: 'sections.setLineNumbering',
+    description: 'Enable or configure line numbering for a section.',
+    requiresDocumentContext: true,
+    metadata: mutationOperation({
+      idempotency: 'conditional',
+      supportsDryRun: true,
+      supportsTrackedMode: false,
+      possibleFailureCodes: ['NO_OP', 'INVALID_TARGET', 'CAPABILITY_UNAVAILABLE'],
+      throws: T_SECTION_MUTATION,
+    }),
+    referenceDocPath: 'sections/set-line-numbering.mdx',
+    referenceGroup: 'sections',
+  },
+  'sections.setPageNumbering': {
+    memberPath: 'sections.setPageNumbering',
+    description: 'Set page numbering format/start for a section.',
+    requiresDocumentContext: true,
+    metadata: mutationOperation({
+      idempotency: 'conditional',
+      supportsDryRun: true,
+      supportsTrackedMode: false,
+      possibleFailureCodes: ['NO_OP', 'INVALID_TARGET', 'CAPABILITY_UNAVAILABLE'],
+      throws: T_SECTION_MUTATION,
+    }),
+    referenceDocPath: 'sections/set-page-numbering.mdx',
+    referenceGroup: 'sections',
+  },
+  'sections.setTitlePage': {
+    memberPath: 'sections.setTitlePage',
+    description: 'Enable or disable title-page behavior for a section.',
+    requiresDocumentContext: true,
+    metadata: mutationOperation({
+      idempotency: 'conditional',
+      supportsDryRun: true,
+      supportsTrackedMode: false,
+      possibleFailureCodes: ['NO_OP', 'INVALID_TARGET', 'CAPABILITY_UNAVAILABLE'],
+      throws: T_SECTION_MUTATION,
+    }),
+    referenceDocPath: 'sections/set-title-page.mdx',
+    referenceGroup: 'sections',
+  },
+  'sections.setOddEvenHeadersFooters': {
+    memberPath: 'sections.setOddEvenHeadersFooters',
+    description: 'Enable or disable odd/even header-footer mode in document settings.',
+    requiresDocumentContext: true,
+    metadata: mutationOperation({
+      idempotency: 'conditional',
+      supportsDryRun: true,
+      supportsTrackedMode: false,
+      possibleFailureCodes: ['NO_OP', 'CAPABILITY_UNAVAILABLE'],
+      throws: T_SECTION_SETTINGS_MUTATION,
+    }),
+    referenceDocPath: 'sections/set-odd-even-headers-footers.mdx',
+    referenceGroup: 'sections',
+  },
+  'sections.setVerticalAlign': {
+    memberPath: 'sections.setVerticalAlign',
+    description: 'Set vertical page alignment for a section.',
+    requiresDocumentContext: true,
+    metadata: mutationOperation({
+      idempotency: 'conditional',
+      supportsDryRun: true,
+      supportsTrackedMode: false,
+      possibleFailureCodes: ['NO_OP', 'INVALID_TARGET', 'CAPABILITY_UNAVAILABLE'],
+      throws: T_SECTION_MUTATION,
+    }),
+    referenceDocPath: 'sections/set-vertical-align.mdx',
+    referenceGroup: 'sections',
+  },
+  'sections.setSectionDirection': {
+    memberPath: 'sections.setSectionDirection',
+    description: 'Set section text flow direction (LTR/RTL).',
+    requiresDocumentContext: true,
+    metadata: mutationOperation({
+      idempotency: 'conditional',
+      supportsDryRun: true,
+      supportsTrackedMode: false,
+      possibleFailureCodes: ['NO_OP', 'INVALID_TARGET', 'CAPABILITY_UNAVAILABLE'],
+      throws: T_SECTION_MUTATION,
+    }),
+    referenceDocPath: 'sections/set-section-direction.mdx',
+    referenceGroup: 'sections',
+  },
+  'sections.setHeaderFooterRef': {
+    memberPath: 'sections.setHeaderFooterRef',
+    description: 'Set or replace a section header/footer reference for a variant.',
+    requiresDocumentContext: true,
+    metadata: mutationOperation({
+      idempotency: 'conditional',
+      supportsDryRun: true,
+      supportsTrackedMode: false,
+      possibleFailureCodes: ['NO_OP', 'INVALID_TARGET', 'CAPABILITY_UNAVAILABLE'],
+      throws: T_SECTION_MUTATION,
+    }),
+    referenceDocPath: 'sections/set-header-footer-ref.mdx',
+    referenceGroup: 'sections',
+  },
+  'sections.clearHeaderFooterRef': {
+    memberPath: 'sections.clearHeaderFooterRef',
+    description: 'Clear a section header/footer reference for a specific variant.',
+    requiresDocumentContext: true,
+    metadata: mutationOperation({
+      idempotency: 'conditional',
+      supportsDryRun: true,
+      supportsTrackedMode: false,
+      possibleFailureCodes: ['NO_OP', 'INVALID_TARGET', 'CAPABILITY_UNAVAILABLE'],
+      throws: T_SECTION_MUTATION,
+    }),
+    referenceDocPath: 'sections/clear-header-footer-ref.mdx',
+    referenceGroup: 'sections',
+  },
+  'sections.setLinkToPrevious': {
+    memberPath: 'sections.setLinkToPrevious',
+    description: 'Set or clear link-to-previous behavior for a header/footer variant.',
+    requiresDocumentContext: true,
+    metadata: mutationOperation({
+      idempotency: 'conditional',
+      supportsDryRun: true,
+      supportsTrackedMode: false,
+      possibleFailureCodes: ['NO_OP', 'INVALID_TARGET', 'CAPABILITY_UNAVAILABLE'],
+      throws: T_SECTION_MUTATION,
+    }),
+    referenceDocPath: 'sections/set-link-to-previous.mdx',
+    referenceGroup: 'sections',
+  },
+  'sections.setPageBorders': {
+    memberPath: 'sections.setPageBorders',
+    description: 'Set page border configuration for a section.',
+    requiresDocumentContext: true,
+    metadata: mutationOperation({
+      idempotency: 'conditional',
+      supportsDryRun: true,
+      supportsTrackedMode: false,
+      possibleFailureCodes: ['NO_OP', 'INVALID_TARGET', 'CAPABILITY_UNAVAILABLE'],
+      throws: T_SECTION_MUTATION,
+    }),
+    referenceDocPath: 'sections/set-page-borders.mdx',
+    referenceGroup: 'sections',
+  },
+  'sections.clearPageBorders': {
+    memberPath: 'sections.clearPageBorders',
+    description: 'Clear page border configuration for a section.',
+    requiresDocumentContext: true,
+    metadata: mutationOperation({
+      idempotency: 'conditional',
+      supportsDryRun: true,
+      supportsTrackedMode: false,
+      possibleFailureCodes: ['NO_OP', 'INVALID_TARGET', 'CAPABILITY_UNAVAILABLE'],
+      throws: T_SECTION_MUTATION,
+    }),
+    referenceDocPath: 'sections/clear-page-borders.mdx',
+    referenceGroup: 'sections',
   },
 
   'lists.list': {

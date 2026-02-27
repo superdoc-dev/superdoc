@@ -17,6 +17,13 @@ import { TrackFormatMarkName } from '../extensions/track-changes/constants.js';
 import { isCollaborationActive } from './collaboration-detection.js';
 
 type EditorCommandName = string;
+type EditorWithBlockNodeHelper = Editor & {
+  helpers?: {
+    blockNode?: {
+      getBlockNodeById?: unknown;
+    };
+  };
+};
 
 // Singleton write operations (insert, replace, delete) have no entry here because
 // they are backed by writeAdapter which is always available when the editor exists.
@@ -102,7 +109,10 @@ function hasAllCommands(editor: Editor, operationId: OperationId): boolean {
  * Each entry maps an operation to a predicate that checks helper availability.
  */
 const REQUIRED_HELPERS: Partial<Record<OperationId, (editor: Editor) => boolean>> = {
-  'blocks.delete': (editor) => typeof (editor as any).helpers?.blockNode?.getBlockNodeById === 'function',
+  'blocks.delete': (editor) =>
+    typeof (editor as unknown as EditorWithBlockNodeHelper).helpers?.blockNode?.getBlockNodeById === 'function',
+  'sections.setOddEvenHeadersFooters': (editor) => Boolean((editor as unknown as { converter?: unknown }).converter),
+  'sections.setHeaderFooterRef': (editor) => Boolean((editor as unknown as { converter?: unknown }).converter),
 };
 
 function hasRequiredHelpers(editor: Editor, operationId: OperationId): boolean {
@@ -288,7 +298,24 @@ const SUPPORTED_STEP_OPS = [
   'assert',
   'create.paragraph',
   'create.heading',
+  'create.sectionBreak',
   'domain.command',
+  'sections.setBreakType',
+  'sections.setPageMargins',
+  'sections.setHeaderFooterMargins',
+  'sections.setPageSetup',
+  'sections.setColumns',
+  'sections.setLineNumbering',
+  'sections.setPageNumbering',
+  'sections.setTitlePage',
+  'sections.setOddEvenHeadersFooters',
+  'sections.setVerticalAlign',
+  'sections.setSectionDirection',
+  'sections.setHeaderFooterRef',
+  'sections.clearHeaderFooterRef',
+  'sections.setLinkToPrevious',
+  'sections.setPageBorders',
+  'sections.clearPageBorders',
   'create.table',
   'tables.delete',
   'tables.clearContents',

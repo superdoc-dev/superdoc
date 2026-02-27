@@ -18,11 +18,12 @@ Use the tables below to see what operations are available and where each one is 
 | Capabilities | 1 | 0 | 1 | [Reference](/document-api/reference/capabilities/index) |
 | Comments | 5 | 0 | 5 | [Reference](/document-api/reference/comments/index) |
 | Core | 8 | 0 | 8 | [Reference](/document-api/reference/core/index) |
-| Create | 3 | 0 | 3 | [Reference](/document-api/reference/create/index) |
+| Create | 4 | 0 | 4 | [Reference](/document-api/reference/create/index) |
 | Format | 5 | 4 | 9 | [Reference](/document-api/reference/format/index) |
 | Lists | 8 | 0 | 8 | [Reference](/document-api/reference/lists/index) |
 | Mutations | 2 | 0 | 2 | [Reference](/document-api/reference/mutations/index) |
 | Query | 1 | 0 | 1 | [Reference](/document-api/reference/query/index) |
+| Sections | 18 | 0 | 18 | [Reference](/document-api/reference/sections/index) |
 | Styles | 1 | 0 | 1 | [Reference](/document-api/reference/styles/index) |
 | Tables | 39 | 0 | 39 | [Reference](/document-api/reference/tables/index) |
 | Track Changes | 3 | 0 | 3 | [Reference](/document-api/reference/track-changes/index) |
@@ -46,6 +47,7 @@ Use the tables below to see what operations are available and where each one is 
 | <span style={{ whiteSpace: 'nowrap', wordBreak: 'normal', overflowWrap: 'normal' }}><code>editor.doc.delete(...)</code></span> | [`delete`](/document-api/reference/delete) |
 | <span style={{ whiteSpace: 'nowrap', wordBreak: 'normal', overflowWrap: 'normal' }}><code>editor.doc.create.paragraph(...)</code></span> | [`create.paragraph`](/document-api/reference/create/paragraph) |
 | <span style={{ whiteSpace: 'nowrap', wordBreak: 'normal', overflowWrap: 'normal' }}><code>editor.doc.create.heading(...)</code></span> | [`create.heading`](/document-api/reference/create/heading) |
+| <span style={{ whiteSpace: 'nowrap', wordBreak: 'normal', overflowWrap: 'normal' }}><code>editor.doc.create.sectionBreak(...)</code></span> | [`create.sectionBreak`](/document-api/reference/create/section-break) |
 | <span style={{ whiteSpace: 'nowrap', wordBreak: 'normal', overflowWrap: 'normal' }}><code>editor.doc.create.table(...)</code></span> | [`create.table`](/document-api/reference/create/table) |
 | <span style={{ whiteSpace: 'nowrap', wordBreak: 'normal', overflowWrap: 'normal' }}><code>editor.doc.format.apply(...)</code></span> | [`format.apply`](/document-api/reference/format/apply) |
 | <span style={{ whiteSpace: 'nowrap', wordBreak: 'normal', overflowWrap: 'normal' }}><code>editor.doc.format.fontSize(...)</code></span> | [`format.fontSize`](/document-api/reference/format/font-size) |
@@ -67,6 +69,24 @@ Use the tables below to see what operations are available and where each one is 
 | <span style={{ whiteSpace: 'nowrap', wordBreak: 'normal', overflowWrap: 'normal' }}><code>editor.doc.mutations.preview(...)</code></span> | [`mutations.preview`](/document-api/reference/mutations/preview) |
 | <span style={{ whiteSpace: 'nowrap', wordBreak: 'normal', overflowWrap: 'normal' }}><code>editor.doc.mutations.apply(...)</code></span> | [`mutations.apply`](/document-api/reference/mutations/apply) |
 | <span style={{ whiteSpace: 'nowrap', wordBreak: 'normal', overflowWrap: 'normal' }}><code>editor.doc.query.match(...)</code></span> | [`query.match`](/document-api/reference/query/match) |
+| <span style={{ whiteSpace: 'nowrap', wordBreak: 'normal', overflowWrap: 'normal' }}><code>editor.doc.sections.list(...)</code></span> | [`sections.list`](/document-api/reference/sections/list) |
+| <span style={{ whiteSpace: 'nowrap', wordBreak: 'normal', overflowWrap: 'normal' }}><code>editor.doc.sections.get(...)</code></span> | [`sections.get`](/document-api/reference/sections/get) |
+| <span style={{ whiteSpace: 'nowrap', wordBreak: 'normal', overflowWrap: 'normal' }}><code>editor.doc.sections.setBreakType(...)</code></span> | [`sections.setBreakType`](/document-api/reference/sections/set-break-type) |
+| <span style={{ whiteSpace: 'nowrap', wordBreak: 'normal', overflowWrap: 'normal' }}><code>editor.doc.sections.setPageMargins(...)</code></span> | [`sections.setPageMargins`](/document-api/reference/sections/set-page-margins) |
+| <span style={{ whiteSpace: 'nowrap', wordBreak: 'normal', overflowWrap: 'normal' }}><code>editor.doc.sections.setHeaderFooterMargins(...)</code></span> | [`sections.setHeaderFooterMargins`](/document-api/reference/sections/set-header-footer-margins) |
+| <span style={{ whiteSpace: 'nowrap', wordBreak: 'normal', overflowWrap: 'normal' }}><code>editor.doc.sections.setPageSetup(...)</code></span> | [`sections.setPageSetup`](/document-api/reference/sections/set-page-setup) |
+| <span style={{ whiteSpace: 'nowrap', wordBreak: 'normal', overflowWrap: 'normal' }}><code>editor.doc.sections.setColumns(...)</code></span> | [`sections.setColumns`](/document-api/reference/sections/set-columns) |
+| <span style={{ whiteSpace: 'nowrap', wordBreak: 'normal', overflowWrap: 'normal' }}><code>editor.doc.sections.setLineNumbering(...)</code></span> | [`sections.setLineNumbering`](/document-api/reference/sections/set-line-numbering) |
+| <span style={{ whiteSpace: 'nowrap', wordBreak: 'normal', overflowWrap: 'normal' }}><code>editor.doc.sections.setPageNumbering(...)</code></span> | [`sections.setPageNumbering`](/document-api/reference/sections/set-page-numbering) |
+| <span style={{ whiteSpace: 'nowrap', wordBreak: 'normal', overflowWrap: 'normal' }}><code>editor.doc.sections.setTitlePage(...)</code></span> | [`sections.setTitlePage`](/document-api/reference/sections/set-title-page) |
+| <span style={{ whiteSpace: 'nowrap', wordBreak: 'normal', overflowWrap: 'normal' }}><code>editor.doc.sections.setOddEvenHeadersFooters(...)</code></span> | [`sections.setOddEvenHeadersFooters`](/document-api/reference/sections/set-odd-even-headers-footers) |
+| <span style={{ whiteSpace: 'nowrap', wordBreak: 'normal', overflowWrap: 'normal' }}><code>editor.doc.sections.setVerticalAlign(...)</code></span> | [`sections.setVerticalAlign`](/document-api/reference/sections/set-vertical-align) |
+| <span style={{ whiteSpace: 'nowrap', wordBreak: 'normal', overflowWrap: 'normal' }}><code>editor.doc.sections.setSectionDirection(...)</code></span> | [`sections.setSectionDirection`](/document-api/reference/sections/set-section-direction) |
+| <span style={{ whiteSpace: 'nowrap', wordBreak: 'normal', overflowWrap: 'normal' }}><code>editor.doc.sections.setHeaderFooterRef(...)</code></span> | [`sections.setHeaderFooterRef`](/document-api/reference/sections/set-header-footer-ref) |
+| <span style={{ whiteSpace: 'nowrap', wordBreak: 'normal', overflowWrap: 'normal' }}><code>editor.doc.sections.clearHeaderFooterRef(...)</code></span> | [`sections.clearHeaderFooterRef`](/document-api/reference/sections/clear-header-footer-ref) |
+| <span style={{ whiteSpace: 'nowrap', wordBreak: 'normal', overflowWrap: 'normal' }}><code>editor.doc.sections.setLinkToPrevious(...)</code></span> | [`sections.setLinkToPrevious`](/document-api/reference/sections/set-link-to-previous) |
+| <span style={{ whiteSpace: 'nowrap', wordBreak: 'normal', overflowWrap: 'normal' }}><code>editor.doc.sections.setPageBorders(...)</code></span> | [`sections.setPageBorders`](/document-api/reference/sections/set-page-borders) |
+| <span style={{ whiteSpace: 'nowrap', wordBreak: 'normal', overflowWrap: 'normal' }}><code>editor.doc.sections.clearPageBorders(...)</code></span> | [`sections.clearPageBorders`](/document-api/reference/sections/clear-page-borders) |
 | <span style={{ whiteSpace: 'nowrap', wordBreak: 'normal', overflowWrap: 'normal' }}><code>editor.doc.styles.apply(...)</code></span> | [`styles.apply`](/document-api/reference/styles/apply) |
 | <span style={{ whiteSpace: 'nowrap', wordBreak: 'normal', overflowWrap: 'normal' }}><code>editor.doc.tables.convertFromText(...)</code></span> | [`tables.convertFromText`](/document-api/reference/tables/convert-from-text) |
 | <span style={{ whiteSpace: 'nowrap', wordBreak: 'normal', overflowWrap: 'normal' }}><code>editor.doc.tables.delete(...)</code></span> | [`tables.delete`](/document-api/reference/tables/delete) |

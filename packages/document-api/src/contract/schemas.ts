@@ -172,6 +172,13 @@ const SHARED_DEFS: Record<string, JsonSchema> = {
     },
     ['kind', 'nodeType', 'nodeId'],
   ),
+  SectionAddress: objectSchema(
+    {
+      kind: { const: 'section' },
+      sectionId: { type: 'string' },
+    },
+    ['kind', 'sectionId'],
+  ),
   InlineNodeAddress: objectSchema(
     {
       kind: { const: 'inline' },
@@ -328,6 +335,7 @@ const deletableBlockNodeAddressSchema = ref('DeletableBlockNodeAddress');
 const paragraphAddressSchema = ref('ParagraphAddress');
 const headingAddressSchema = ref('HeadingAddress');
 const listItemAddressSchema = ref('ListItemAddress');
+const sectionAddressSchema = ref('SectionAddress');
 const inlineNodeAddressSchema = ref('InlineNodeAddress');
 const nodeAddressSchema = ref('NodeAddress');
 const commentAddressSchema = ref('CommentAddress');
@@ -762,6 +770,232 @@ const listItemDomainItemSchema = discoveryItemSchema(
 
 const listsListResultSchema = discoveryResultSchema(listItemDomainItemSchema);
 
+const sectionBreakTypeSchema: JsonSchema = { enum: ['continuous', 'nextPage', 'evenPage', 'oddPage'] };
+const sectionOrientationSchema: JsonSchema = { enum: ['portrait', 'landscape'] };
+const sectionVerticalAlignSchema: JsonSchema = { enum: ['top', 'center', 'bottom', 'both'] };
+const sectionDirectionSchema: JsonSchema = { enum: ['ltr', 'rtl'] };
+const sectionHeaderFooterKindSchema: JsonSchema = { enum: ['header', 'footer'] };
+const sectionHeaderFooterVariantSchema: JsonSchema = { enum: ['default', 'first', 'even'] };
+const sectionLineNumberRestartSchema: JsonSchema = { enum: ['continuous', 'newPage', 'newSection'] };
+const sectionPageNumberFormatSchema: JsonSchema = {
+  enum: ['decimal', 'lowerLetter', 'upperLetter', 'lowerRoman', 'upperRoman', 'numberInDash'],
+};
+
+const sectionRangeDomainSchema = objectSchema(
+  {
+    startParagraphIndex: { type: 'integer', minimum: 0 },
+    endParagraphIndex: { type: 'integer', minimum: 0 },
+  },
+  ['startParagraphIndex', 'endParagraphIndex'],
+);
+
+const sectionPageMarginsSchema = objectSchema({
+  top: { type: 'number', minimum: 0 },
+  right: { type: 'number', minimum: 0 },
+  bottom: { type: 'number', minimum: 0 },
+  left: { type: 'number', minimum: 0 },
+  gutter: { type: 'number', minimum: 0 },
+});
+
+const sectionHeaderFooterMarginsSchema = objectSchema({
+  header: { type: 'number', minimum: 0 },
+  footer: { type: 'number', minimum: 0 },
+});
+
+const sectionPageSetupSchema = objectSchema({
+  width: { type: 'number', minimum: 0 },
+  height: { type: 'number', minimum: 0 },
+  orientation: sectionOrientationSchema,
+  paperSize: { type: 'string' },
+});
+
+const sectionColumnsSchema = objectSchema({
+  count: { type: 'integer', minimum: 1 },
+  gap: { type: 'number', minimum: 0 },
+  equalWidth: { type: 'boolean' },
+});
+
+const sectionLineNumberingSchema = objectSchema(
+  {
+    enabled: { type: 'boolean' },
+    countBy: { type: 'integer', minimum: 1 },
+    start: { type: 'integer', minimum: 1 },
+    distance: { type: 'number', minimum: 0 },
+    restart: sectionLineNumberRestartSchema,
+  },
+  ['enabled'],
+);
+
+const sectionPageNumberingSchema = objectSchema({
+  start: { type: 'integer', minimum: 1 },
+  format: sectionPageNumberFormatSchema,
+});
+
+const sectionHeaderFooterRefsSchema = objectSchema({
+  default: { type: 'string' },
+  first: { type: 'string' },
+  even: { type: 'string' },
+});
+
+const sectionBorderSpecSchema = objectSchema({
+  style: { type: 'string' },
+  size: { type: 'number', minimum: 0 },
+  space: { type: 'number', minimum: 0 },
+  color: { type: 'string' },
+  shadow: { type: 'boolean' },
+  frame: { type: 'boolean' },
+});
+
+sectionBorderSpecSchema.oneOf = [
+  { required: ['style'] },
+  { required: ['size'] },
+  { required: ['space'] },
+  { required: ['color'] },
+  { required: ['shadow'] },
+  { required: ['frame'] },
+];
+
+const sectionPageBordersSchema = objectSchema({
+  display: { enum: ['allPages', 'firstPage', 'notFirstPage'] },
+  offsetFrom: { enum: ['page', 'text'] },
+  zOrder: { enum: ['front', 'back'] },
+  top: sectionBorderSpecSchema,
+  right: sectionBorderSpecSchema,
+  bottom: sectionBorderSpecSchema,
+  left: sectionBorderSpecSchema,
+});
+
+sectionPageBordersSchema.oneOf = [
+  { required: ['display'] },
+  { required: ['offsetFrom'] },
+  { required: ['zOrder'] },
+  { required: ['top'] },
+  { required: ['right'] },
+  { required: ['bottom'] },
+  { required: ['left'] },
+];
+
+const sectionInfoSchema = objectSchema(
+  {
+    address: sectionAddressSchema,
+    index: { type: 'integer', minimum: 0 },
+    range: sectionRangeDomainSchema,
+    breakType: sectionBreakTypeSchema,
+    pageSetup: sectionPageSetupSchema,
+    margins: sectionPageMarginsSchema,
+    headerFooterMargins: sectionHeaderFooterMarginsSchema,
+    columns: sectionColumnsSchema,
+    lineNumbering: sectionLineNumberingSchema,
+    pageNumbering: sectionPageNumberingSchema,
+    titlePage: { type: 'boolean' },
+    oddEvenHeadersFooters: { type: 'boolean' },
+    verticalAlign: sectionVerticalAlignSchema,
+    sectionDirection: sectionDirectionSchema,
+    headerRefs: sectionHeaderFooterRefsSchema,
+    footerRefs: sectionHeaderFooterRefsSchema,
+    pageBorders: sectionPageBordersSchema,
+  },
+  ['address', 'index', 'range'],
+);
+
+const sectionResolvedHandleSchema = objectSchema(
+  {
+    ref: { type: 'string' },
+    refStability: { const: 'ephemeral' },
+    targetKind: { const: 'section' },
+  },
+  ['ref', 'refStability', 'targetKind'],
+);
+
+const sectionDomainItemSchema = objectSchema(
+  {
+    id: { type: 'string' },
+    handle: sectionResolvedHandleSchema,
+    address: sectionAddressSchema,
+    index: { type: 'integer', minimum: 0 },
+    range: sectionRangeDomainSchema,
+    breakType: sectionBreakTypeSchema,
+    pageSetup: sectionPageSetupSchema,
+    margins: sectionPageMarginsSchema,
+    headerFooterMargins: sectionHeaderFooterMarginsSchema,
+    columns: sectionColumnsSchema,
+    lineNumbering: sectionLineNumberingSchema,
+    pageNumbering: sectionPageNumberingSchema,
+    titlePage: { type: 'boolean' },
+    oddEvenHeadersFooters: { type: 'boolean' },
+    verticalAlign: sectionVerticalAlignSchema,
+    sectionDirection: sectionDirectionSchema,
+    headerRefs: sectionHeaderFooterRefsSchema,
+    footerRefs: sectionHeaderFooterRefsSchema,
+    pageBorders: sectionPageBordersSchema,
+  },
+  ['id', 'handle', 'address', 'index', 'range'],
+);
+
+const sectionsListResultSchema = discoveryResultSchema(sectionDomainItemSchema);
+
+const sectionMutationSuccessSchema = objectSchema(
+  {
+    success: { const: true },
+    section: sectionAddressSchema,
+  },
+  ['success', 'section'],
+);
+
+function sectionMutationFailureSchemaFor(operationId: OperationId): JsonSchema {
+  return objectSchema(
+    {
+      success: { const: false },
+      failure: receiptFailureSchemaFor(operationId),
+    },
+    ['success', 'failure'],
+  );
+}
+
+function sectionMutationResultSchemaFor(operationId: OperationId): JsonSchema {
+  return {
+    oneOf: [sectionMutationSuccessSchema, sectionMutationFailureSchemaFor(operationId)],
+  };
+}
+
+const documentMutationSuccessSchema = objectSchema(
+  {
+    success: { const: true },
+  },
+  ['success'],
+);
+
+function documentMutationResultSchemaFor(operationId: OperationId): JsonSchema {
+  return {
+    oneOf: [documentMutationSuccessSchema, sectionMutationFailureSchemaFor(operationId)],
+  };
+}
+
+const createSectionBreakSuccessSchema = objectSchema(
+  {
+    success: { const: true },
+    section: sectionAddressSchema,
+    breakParagraph: blockNodeAddressSchema,
+  },
+  ['success', 'section'],
+);
+
+function createSectionBreakFailureSchemaFor(operationId: OperationId): JsonSchema {
+  return objectSchema(
+    {
+      success: { const: false },
+      failure: receiptFailureSchemaFor(operationId),
+    },
+    ['success', 'failure'],
+  );
+}
+
+function createSectionBreakResultSchemaFor(operationId: OperationId): JsonSchema {
+  return {
+    oneOf: [createSectionBreakSuccessSchema, createSectionBreakFailureSchemaFor(operationId)],
+  };
+}
+
 const commentInfoSchema = objectSchema(
   {
     address: commentAddressSchema,
@@ -942,7 +1176,7 @@ const tableLocatorSchema: JsonSchema = {
   oneOf: [{ required: ['target'] }, { required: ['nodeId'] }],
 };
 
-const tableScopedRowLocatorSchema: JsonSchema = {
+const _tableScopedRowLocatorSchema: JsonSchema = {
   ...objectSchema({
     tableTarget: blockNodeAddressSchema,
     tableNodeId: { type: 'string' },
@@ -951,7 +1185,7 @@ const tableScopedRowLocatorSchema: JsonSchema = {
   oneOf: [{ required: ['tableTarget'] }, { required: ['tableNodeId'] }],
 };
 
-const tableScopedColumnLocatorSchema: JsonSchema = {
+const _tableScopedColumnLocatorSchema: JsonSchema = {
   ...objectSchema(
     {
       tableTarget: blockNodeAddressSchema,
@@ -1439,6 +1673,277 @@ const operationSchemas: Record<OperationId, OperationSchemaSet> = {
     output: createHeadingResultSchemaFor('create.heading'),
     success: createHeadingSuccessSchema,
     failure: createHeadingFailureSchemaFor('create.heading'),
+  },
+  'create.sectionBreak': {
+    input: objectSchema({
+      at: {
+        oneOf: [
+          objectSchema({ kind: { const: 'documentStart' } }, ['kind']),
+          objectSchema({ kind: { const: 'documentEnd' } }, ['kind']),
+          objectSchema(
+            {
+              kind: { const: 'before' },
+              target: blockNodeAddressSchema,
+            },
+            ['kind', 'target'],
+          ),
+          objectSchema(
+            {
+              kind: { const: 'after' },
+              target: blockNodeAddressSchema,
+            },
+            ['kind', 'target'],
+          ),
+        ],
+      },
+      breakType: sectionBreakTypeSchema,
+      pageMargins: sectionPageMarginsSchema,
+      headerFooterMargins: sectionHeaderFooterMarginsSchema,
+    }),
+    output: createSectionBreakResultSchemaFor('create.sectionBreak'),
+    success: createSectionBreakSuccessSchema,
+    failure: createSectionBreakFailureSchemaFor('create.sectionBreak'),
+  },
+  'sections.list': {
+    input: objectSchema({
+      limit: { type: 'integer', minimum: 1 },
+      offset: { type: 'integer', minimum: 0 },
+    }),
+    output: sectionsListResultSchema,
+  },
+  'sections.get': {
+    input: objectSchema({ address: sectionAddressSchema }, ['address']),
+    output: sectionInfoSchema,
+  },
+  'sections.setBreakType': {
+    input: objectSchema(
+      {
+        target: sectionAddressSchema,
+        breakType: sectionBreakTypeSchema,
+      },
+      ['target', 'breakType'],
+    ),
+    output: sectionMutationResultSchemaFor('sections.setBreakType'),
+    success: sectionMutationSuccessSchema,
+    failure: sectionMutationFailureSchemaFor('sections.setBreakType'),
+  },
+  'sections.setPageMargins': {
+    input: {
+      ...objectSchema(
+        {
+          target: sectionAddressSchema,
+          top: { type: 'number', minimum: 0 },
+          right: { type: 'number', minimum: 0 },
+          bottom: { type: 'number', minimum: 0 },
+          left: { type: 'number', minimum: 0 },
+          gutter: { type: 'number', minimum: 0 },
+        },
+        ['target'],
+      ),
+      oneOf: [
+        { required: ['target', 'top'] },
+        { required: ['target', 'right'] },
+        { required: ['target', 'bottom'] },
+        { required: ['target', 'left'] },
+        { required: ['target', 'gutter'] },
+      ],
+    },
+    output: sectionMutationResultSchemaFor('sections.setPageMargins'),
+    success: sectionMutationSuccessSchema,
+    failure: sectionMutationFailureSchemaFor('sections.setPageMargins'),
+  },
+  'sections.setHeaderFooterMargins': {
+    input: {
+      ...objectSchema(
+        {
+          target: sectionAddressSchema,
+          header: { type: 'number', minimum: 0 },
+          footer: { type: 'number', minimum: 0 },
+        },
+        ['target'],
+      ),
+      oneOf: [{ required: ['target', 'header'] }, { required: ['target', 'footer'] }],
+    },
+    output: sectionMutationResultSchemaFor('sections.setHeaderFooterMargins'),
+    success: sectionMutationSuccessSchema,
+    failure: sectionMutationFailureSchemaFor('sections.setHeaderFooterMargins'),
+  },
+  'sections.setPageSetup': {
+    input: {
+      ...objectSchema(
+        {
+          target: sectionAddressSchema,
+          width: { type: 'number', minimum: 0 },
+          height: { type: 'number', minimum: 0 },
+          orientation: sectionOrientationSchema,
+          paperSize: { type: 'string', minLength: 1 },
+        },
+        ['target'],
+      ),
+      oneOf: [
+        { required: ['target', 'width'] },
+        { required: ['target', 'height'] },
+        { required: ['target', 'orientation'] },
+        { required: ['target', 'paperSize'] },
+      ],
+    },
+    output: sectionMutationResultSchemaFor('sections.setPageSetup'),
+    success: sectionMutationSuccessSchema,
+    failure: sectionMutationFailureSchemaFor('sections.setPageSetup'),
+  },
+  'sections.setColumns': {
+    input: {
+      ...objectSchema(
+        {
+          target: sectionAddressSchema,
+          count: { type: 'integer', minimum: 1 },
+          gap: { type: 'number', minimum: 0 },
+          equalWidth: { type: 'boolean' },
+        },
+        ['target'],
+      ),
+      oneOf: [
+        { required: ['target', 'count'] },
+        { required: ['target', 'gap'] },
+        { required: ['target', 'equalWidth'] },
+      ],
+    },
+    output: sectionMutationResultSchemaFor('sections.setColumns'),
+    success: sectionMutationSuccessSchema,
+    failure: sectionMutationFailureSchemaFor('sections.setColumns'),
+  },
+  'sections.setLineNumbering': {
+    input: objectSchema(
+      {
+        target: sectionAddressSchema,
+        enabled: { type: 'boolean' },
+        countBy: { type: 'integer', minimum: 1 },
+        start: { type: 'integer', minimum: 1 },
+        distance: { type: 'number', minimum: 0 },
+        restart: sectionLineNumberRestartSchema,
+      },
+      ['target', 'enabled'],
+    ),
+    output: sectionMutationResultSchemaFor('sections.setLineNumbering'),
+    success: sectionMutationSuccessSchema,
+    failure: sectionMutationFailureSchemaFor('sections.setLineNumbering'),
+  },
+  'sections.setPageNumbering': {
+    input: {
+      ...objectSchema(
+        {
+          target: sectionAddressSchema,
+          start: { type: 'integer', minimum: 1 },
+          format: sectionPageNumberFormatSchema,
+        },
+        ['target'],
+      ),
+      oneOf: [{ required: ['target', 'start'] }, { required: ['target', 'format'] }],
+    },
+    output: sectionMutationResultSchemaFor('sections.setPageNumbering'),
+    success: sectionMutationSuccessSchema,
+    failure: sectionMutationFailureSchemaFor('sections.setPageNumbering'),
+  },
+  'sections.setTitlePage': {
+    input: objectSchema(
+      {
+        target: sectionAddressSchema,
+        enabled: { type: 'boolean' },
+      },
+      ['target', 'enabled'],
+    ),
+    output: sectionMutationResultSchemaFor('sections.setTitlePage'),
+    success: sectionMutationSuccessSchema,
+    failure: sectionMutationFailureSchemaFor('sections.setTitlePage'),
+  },
+  'sections.setOddEvenHeadersFooters': {
+    input: objectSchema({ enabled: { type: 'boolean' } }, ['enabled']),
+    output: documentMutationResultSchemaFor('sections.setOddEvenHeadersFooters'),
+    success: documentMutationSuccessSchema,
+    failure: sectionMutationFailureSchemaFor('sections.setOddEvenHeadersFooters'),
+  },
+  'sections.setVerticalAlign': {
+    input: objectSchema(
+      {
+        target: sectionAddressSchema,
+        value: sectionVerticalAlignSchema,
+      },
+      ['target', 'value'],
+    ),
+    output: sectionMutationResultSchemaFor('sections.setVerticalAlign'),
+    success: sectionMutationSuccessSchema,
+    failure: sectionMutationFailureSchemaFor('sections.setVerticalAlign'),
+  },
+  'sections.setSectionDirection': {
+    input: objectSchema(
+      {
+        target: sectionAddressSchema,
+        direction: sectionDirectionSchema,
+      },
+      ['target', 'direction'],
+    ),
+    output: sectionMutationResultSchemaFor('sections.setSectionDirection'),
+    success: sectionMutationSuccessSchema,
+    failure: sectionMutationFailureSchemaFor('sections.setSectionDirection'),
+  },
+  'sections.setHeaderFooterRef': {
+    input: objectSchema(
+      {
+        target: sectionAddressSchema,
+        kind: sectionHeaderFooterKindSchema,
+        variant: sectionHeaderFooterVariantSchema,
+        refId: { type: 'string', minLength: 1 },
+      },
+      ['target', 'kind', 'variant', 'refId'],
+    ),
+    output: sectionMutationResultSchemaFor('sections.setHeaderFooterRef'),
+    success: sectionMutationSuccessSchema,
+    failure: sectionMutationFailureSchemaFor('sections.setHeaderFooterRef'),
+  },
+  'sections.clearHeaderFooterRef': {
+    input: objectSchema(
+      {
+        target: sectionAddressSchema,
+        kind: sectionHeaderFooterKindSchema,
+        variant: sectionHeaderFooterVariantSchema,
+      },
+      ['target', 'kind', 'variant'],
+    ),
+    output: sectionMutationResultSchemaFor('sections.clearHeaderFooterRef'),
+    success: sectionMutationSuccessSchema,
+    failure: sectionMutationFailureSchemaFor('sections.clearHeaderFooterRef'),
+  },
+  'sections.setLinkToPrevious': {
+    input: objectSchema(
+      {
+        target: sectionAddressSchema,
+        kind: sectionHeaderFooterKindSchema,
+        variant: sectionHeaderFooterVariantSchema,
+        linked: { type: 'boolean' },
+      },
+      ['target', 'kind', 'variant', 'linked'],
+    ),
+    output: sectionMutationResultSchemaFor('sections.setLinkToPrevious'),
+    success: sectionMutationSuccessSchema,
+    failure: sectionMutationFailureSchemaFor('sections.setLinkToPrevious'),
+  },
+  'sections.setPageBorders': {
+    input: objectSchema(
+      {
+        target: sectionAddressSchema,
+        borders: sectionPageBordersSchema,
+      },
+      ['target', 'borders'],
+    ),
+    output: sectionMutationResultSchemaFor('sections.setPageBorders'),
+    success: sectionMutationSuccessSchema,
+    failure: sectionMutationFailureSchemaFor('sections.setPageBorders'),
+  },
+  'sections.clearPageBorders': {
+    input: objectSchema({ target: sectionAddressSchema }, ['target']),
+    output: sectionMutationResultSchemaFor('sections.clearPageBorders'),
+    success: sectionMutationSuccessSchema,
+    failure: sectionMutationFailureSchemaFor('sections.clearPageBorders'),
   },
   'lists.list': {
     input: objectSchema({

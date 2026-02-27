@@ -80,6 +80,25 @@ import { executePlan } from '../plan-engine/executor.js';
 import { toCanonicalTrackedChangeId } from '../helpers/tracked-change-resolver.js';
 import { writeAdapter } from '../write-adapter.js';
 import { tablesGetCellsAdapter, tablesGetPropertiesAdapter } from '../tables-adapter.js';
+import {
+  createSectionBreakAdapter,
+  sectionsSetBreakTypeAdapter,
+  sectionsSetPageMarginsAdapter,
+  sectionsSetHeaderFooterMarginsAdapter,
+  sectionsSetPageSetupAdapter,
+  sectionsSetColumnsAdapter,
+  sectionsSetLineNumberingAdapter,
+  sectionsSetPageNumberingAdapter,
+  sectionsSetTitlePageAdapter,
+  sectionsSetOddEvenHeadersFootersAdapter,
+  sectionsSetVerticalAlignAdapter,
+  sectionsSetSectionDirectionAdapter,
+  sectionsSetHeaderFooterRefAdapter,
+  sectionsClearHeaderFooterRefAdapter,
+  sectionsSetLinkToPreviousAdapter,
+  sectionsSetPageBordersAdapter,
+  sectionsClearPageBordersAdapter,
+} from '../sections-adapter.js';
 import { validateJsonSchema } from './schema-validator.js';
 
 const mockedDeps = vi.hoisted(() => ({
@@ -857,6 +876,247 @@ function makeTableEditor(
   } as unknown as Editor;
 }
 
+type SectionEditorOptions = {
+  bodySectPr?: Record<string, unknown> | null;
+  paragraphSectPr?: Record<string, unknown> | null;
+  includeConverter?: boolean;
+  throwOnInsert?: boolean;
+  includeParagraphNodeType?: boolean;
+};
+
+const BASE_SECTION_BODY_SECT_PR: Record<string, unknown> = {
+  type: 'element',
+  name: 'w:sectPr',
+  elements: [
+    { type: 'element', name: 'w:type', attributes: { 'w:val': 'continuous' } },
+    {
+      type: 'element',
+      name: 'w:pgMar',
+      attributes: {
+        'w:top': '1440',
+        'w:right': '1440',
+        'w:bottom': '1440',
+        'w:left': '1440',
+        'w:gutter': '0',
+        'w:header': '720',
+        'w:footer': '720',
+      },
+    },
+    {
+      type: 'element',
+      name: 'w:pgSz',
+      attributes: {
+        'w:w': '12240',
+        'w:h': '15840',
+        'w:orient': 'portrait',
+        'w:code': '1',
+      },
+    },
+    {
+      type: 'element',
+      name: 'w:cols',
+      attributes: { 'w:num': '1', 'w:space': '720', 'w:equalWidth': '1' },
+    },
+    {
+      type: 'element',
+      name: 'w:lnNumType',
+      attributes: { 'w:countBy': '1', 'w:start': '1', 'w:distance': '720', 'w:restart': 'continuous' },
+    },
+    {
+      type: 'element',
+      name: 'w:pgNumType',
+      attributes: { 'w:start': '1', 'w:fmt': 'decimal' },
+    },
+    { type: 'element', name: 'w:titlePg', elements: [] },
+    { type: 'element', name: 'w:vAlign', attributes: { 'w:val': 'top' } },
+    {
+      type: 'element',
+      name: 'w:headerReference',
+      attributes: { 'w:type': 'default', 'r:id': 'rIdHeaderDefault' },
+    },
+    {
+      type: 'element',
+      name: 'w:footerReference',
+      attributes: { 'w:type': 'default', 'r:id': 'rIdFooterDefault' },
+    },
+    {
+      type: 'element',
+      name: 'w:pgBorders',
+      attributes: { 'w:display': 'allPages', 'w:offsetFrom': 'page', 'w:zOrder': 'front' },
+      elements: [
+        {
+          type: 'element',
+          name: 'w:top',
+          attributes: { 'w:val': 'single', 'w:sz': '8', 'w:space': '0', 'w:color': '000000' },
+        },
+      ],
+    },
+  ],
+};
+
+const PREVIOUS_SECTION_SECT_PR: Record<string, unknown> = {
+  type: 'element',
+  name: 'w:sectPr',
+  elements: [
+    { type: 'element', name: 'w:type', attributes: { 'w:val': 'nextPage' } },
+    {
+      type: 'element',
+      name: 'w:headerReference',
+      attributes: { 'w:type': 'default', 'r:id': 'rIdPrevHeader' },
+    },
+    {
+      type: 'element',
+      name: 'w:footerReference',
+      attributes: { 'w:type': 'default', 'r:id': 'rIdPrevFooter' },
+    },
+  ],
+};
+
+function clone<T>(value: T): T {
+  return JSON.parse(JSON.stringify(value)) as T;
+}
+
+function makeSectionsEditor(options: SectionEditorOptions = {}): Editor {
+  const {
+    bodySectPr = BASE_SECTION_BODY_SECT_PR,
+    paragraphSectPr = null,
+    includeConverter = true,
+    throwOnInsert = false,
+    includeParagraphNodeType = true,
+  } = options;
+
+  const paragraphAttrs: Record<string, unknown> = {
+    sdBlockId: 'p1',
+    paraId: 'p1',
+    paragraphProperties: paragraphSectPr ? { sectPr: clone(paragraphSectPr) } : {},
+  };
+  const paragraphNode = createNode('paragraph', [createNode('text', [], { text: 'Section text' })], {
+    attrs: paragraphAttrs,
+    isBlock: true,
+    inlineContent: true,
+  });
+
+  const docAttrs: Record<string, unknown> = {};
+  if (bodySectPr) {
+    docAttrs.bodySectPr = clone(bodySectPr);
+  }
+
+  const doc = createNode('doc', [paragraphNode], {
+    attrs: docAttrs,
+    isBlock: false,
+  }) as unknown as ProseMirrorNode & { toJSON?: () => unknown };
+
+  const docJson = {
+    type: 'doc',
+    attrs: docAttrs,
+    content: [
+      {
+        type: 'paragraph',
+        attrs: paragraphAttrs,
+      },
+    ],
+  };
+  doc.toJSON = () => clone(docJson);
+
+  const tr = {
+    insert: vi.fn(function insert() {
+      if (throwOnInsert) {
+        throw new Error('insert failed');
+      }
+      return tr;
+    }),
+    setNodeMarkup: vi.fn(() => tr),
+    setMeta: vi.fn(() => tr),
+    mapping: {
+      maps: [] as unknown[],
+      map: (position: number) => position,
+      slice: () => ({ map: (position: number) => position }),
+    },
+    doc,
+  };
+
+  const schemaNodes = includeParagraphNodeType
+    ? {
+        paragraph: {
+          createAndFill: vi.fn((attrs?: Record<string, unknown>) =>
+            createNode('paragraph', [], { attrs: attrs ?? {}, isBlock: true, inlineContent: true }),
+          ),
+          create: vi.fn((attrs?: Record<string, unknown>) =>
+            createNode('paragraph', [], { attrs: attrs ?? {}, isBlock: true, inlineContent: true }),
+          ),
+        },
+      }
+    : {};
+
+  const editor = {
+    state: {
+      doc,
+      tr,
+      schema: {
+        nodes: schemaNodes,
+      },
+    },
+    dispatch: vi.fn(),
+    commands: {},
+    schema: { marks: {}, nodes: schemaNodes },
+    options: {},
+  } as unknown as Editor;
+
+  if (includeConverter) {
+    (editor as unknown as { converter?: Record<string, unknown> }).converter = {
+      bodySectPr: bodySectPr ? clone(bodySectPr) : undefined,
+      convertedXml: {
+        'word/settings.xml': {
+          type: 'element',
+          name: 'document',
+          elements: [{ type: 'element', name: 'w:settings', elements: [] }],
+        },
+        'word/_rels/document.xml.rels': {
+          elements: [
+            {
+              type: 'element',
+              name: 'Relationships',
+              attributes: { xmlns: 'http://schemas.openxmlformats.org/package/2006/relationships' },
+              elements: [
+                {
+                  type: 'element',
+                  name: 'Relationship',
+                  attributes: {
+                    Id: 'rIdHeaderDefault',
+                    Type: 'http://schemas.openxmlformats.org/officeDocument/2006/relationships/header',
+                    Target: 'header1.xml',
+                  },
+                },
+                {
+                  type: 'element',
+                  name: 'Relationship',
+                  attributes: {
+                    Id: 'rIdFooterDefault',
+                    Type: 'http://schemas.openxmlformats.org/officeDocument/2006/relationships/footer',
+                    Target: 'footer1.xml',
+                  },
+                },
+                {
+                  type: 'element',
+                  name: 'Relationship',
+                  attributes: {
+                    Id: 'rIdHeaderAlt',
+                    Type: 'http://schemas.openxmlformats.org/officeDocument/2006/relationships/header',
+                    Target: 'header2.xml',
+                  },
+                },
+              ],
+            },
+          ],
+        },
+      },
+      pageStyles: {},
+    };
+  }
+
+  return editor;
+}
+
 /** Table operation IDs that are actually implemented (not stubs). */
 const IMPLEMENTED_TABLE_OPS: ReadonlySet<OperationId> = new Set([
   'create.table',
@@ -1218,6 +1478,491 @@ const mutationVectors: Partial<Record<OperationId, MutationVector>> = {
       return createHeadingWrapper(
         editor,
         { level: 2, at: { kind: 'documentEnd' }, text: 'X' },
+        { changeMode: 'direct' },
+      );
+    },
+  },
+  'create.sectionBreak': {
+    throwCase: () => {
+      const editor = makeSectionsEditor({ includeParagraphNodeType: false });
+      return createSectionBreakAdapter(editor, { at: { kind: 'documentEnd' } }, { changeMode: 'direct' });
+    },
+    failureCase: () => {
+      const editor = makeSectionsEditor({ throwOnInsert: true });
+      return createSectionBreakAdapter(
+        editor,
+        { at: { kind: 'documentEnd' }, breakType: 'nextPage' },
+        { changeMode: 'direct' },
+      );
+    },
+    applyCase: () => {
+      const editor = makeSectionsEditor();
+      return createSectionBreakAdapter(
+        editor,
+        { at: { kind: 'documentEnd' }, breakType: 'nextPage' },
+        { changeMode: 'direct' },
+      );
+    },
+  },
+  'sections.setBreakType': {
+    throwCase: () => {
+      const editor = makeSectionsEditor();
+      return sectionsSetBreakTypeAdapter(
+        editor,
+        { target: { kind: 'section', sectionId: 'section-missing' }, breakType: 'continuous' },
+        { changeMode: 'direct' },
+      );
+    },
+    failureCase: () => {
+      const editor = makeSectionsEditor();
+      return sectionsSetBreakTypeAdapter(
+        editor,
+        { target: { kind: 'section', sectionId: 'section-0' }, breakType: 'continuous' },
+        { changeMode: 'direct' },
+      );
+    },
+    applyCase: () => {
+      const editor = makeSectionsEditor();
+      return sectionsSetBreakTypeAdapter(
+        editor,
+        { target: { kind: 'section', sectionId: 'section-0' }, breakType: 'nextPage' },
+        { changeMode: 'direct' },
+      );
+    },
+  },
+  'sections.setPageMargins': {
+    throwCase: () => {
+      const editor = makeSectionsEditor();
+      return sectionsSetPageMarginsAdapter(
+        editor,
+        { target: { kind: 'section', sectionId: 'section-missing' }, top: 1 },
+        { changeMode: 'direct' },
+      );
+    },
+    failureCase: () => {
+      const editor = makeSectionsEditor();
+      return sectionsSetPageMarginsAdapter(
+        editor,
+        {
+          target: { kind: 'section', sectionId: 'section-0' },
+          top: 1,
+          right: 1,
+          bottom: 1,
+          left: 1,
+          gutter: 0,
+        },
+        { changeMode: 'direct' },
+      );
+    },
+    applyCase: () => {
+      const editor = makeSectionsEditor();
+      return sectionsSetPageMarginsAdapter(
+        editor,
+        { target: { kind: 'section', sectionId: 'section-0' }, top: 1.25 },
+        { changeMode: 'direct' },
+      );
+    },
+  },
+  'sections.setHeaderFooterMargins': {
+    throwCase: () => {
+      const editor = makeSectionsEditor();
+      return sectionsSetHeaderFooterMarginsAdapter(
+        editor,
+        { target: { kind: 'section', sectionId: 'section-missing' }, header: 0.5 },
+        { changeMode: 'direct' },
+      );
+    },
+    failureCase: () => {
+      const editor = makeSectionsEditor();
+      return sectionsSetHeaderFooterMarginsAdapter(
+        editor,
+        { target: { kind: 'section', sectionId: 'section-0' }, header: 0.5, footer: 0.5 },
+        { changeMode: 'direct' },
+      );
+    },
+    applyCase: () => {
+      const editor = makeSectionsEditor();
+      return sectionsSetHeaderFooterMarginsAdapter(
+        editor,
+        { target: { kind: 'section', sectionId: 'section-0' }, header: 0.75 },
+        { changeMode: 'direct' },
+      );
+    },
+  },
+  'sections.setPageSetup': {
+    throwCase: () => {
+      const editor = makeSectionsEditor();
+      return sectionsSetPageSetupAdapter(
+        editor,
+        { target: { kind: 'section', sectionId: 'section-missing' }, orientation: 'portrait' },
+        { changeMode: 'direct' },
+      );
+    },
+    failureCase: () => {
+      const editor = makeSectionsEditor();
+      return sectionsSetPageSetupAdapter(
+        editor,
+        {
+          target: { kind: 'section', sectionId: 'section-0' },
+          width: 8.5,
+          height: 11,
+          orientation: 'portrait',
+          paperSize: '1',
+        },
+        { changeMode: 'direct' },
+      );
+    },
+    applyCase: () => {
+      const editor = makeSectionsEditor();
+      return sectionsSetPageSetupAdapter(
+        editor,
+        { target: { kind: 'section', sectionId: 'section-0' }, orientation: 'landscape' },
+        { changeMode: 'direct' },
+      );
+    },
+  },
+  'sections.setColumns': {
+    throwCase: () => {
+      const editor = makeSectionsEditor();
+      return sectionsSetColumnsAdapter(
+        editor,
+        { target: { kind: 'section', sectionId: 'section-missing' }, count: 1 },
+        { changeMode: 'direct' },
+      );
+    },
+    failureCase: () => {
+      const editor = makeSectionsEditor();
+      return sectionsSetColumnsAdapter(
+        editor,
+        { target: { kind: 'section', sectionId: 'section-0' }, count: 1, gap: 0.5, equalWidth: true },
+        { changeMode: 'direct' },
+      );
+    },
+    applyCase: () => {
+      const editor = makeSectionsEditor();
+      return sectionsSetColumnsAdapter(
+        editor,
+        { target: { kind: 'section', sectionId: 'section-0' }, count: 2 },
+        { changeMode: 'direct' },
+      );
+    },
+  },
+  'sections.setLineNumbering': {
+    throwCase: () => {
+      const editor = makeSectionsEditor();
+      return sectionsSetLineNumberingAdapter(
+        editor,
+        { target: { kind: 'section', sectionId: 'section-missing' }, enabled: true },
+        { changeMode: 'direct' },
+      );
+    },
+    failureCase: () => {
+      const editor = makeSectionsEditor();
+      return sectionsSetLineNumberingAdapter(
+        editor,
+        {
+          target: { kind: 'section', sectionId: 'section-0' },
+          enabled: true,
+          countBy: 1,
+          start: 1,
+          distance: 0.5,
+          restart: 'continuous',
+        },
+        { changeMode: 'direct' },
+      );
+    },
+    applyCase: () => {
+      const editor = makeSectionsEditor();
+      return sectionsSetLineNumberingAdapter(
+        editor,
+        { target: { kind: 'section', sectionId: 'section-0' }, enabled: false },
+        { changeMode: 'direct' },
+      );
+    },
+  },
+  'sections.setPageNumbering': {
+    throwCase: () => {
+      const editor = makeSectionsEditor();
+      return sectionsSetPageNumberingAdapter(
+        editor,
+        { target: { kind: 'section', sectionId: 'section-missing' }, start: 1 },
+        { changeMode: 'direct' },
+      );
+    },
+    failureCase: () => {
+      const editor = makeSectionsEditor();
+      return sectionsSetPageNumberingAdapter(
+        editor,
+        { target: { kind: 'section', sectionId: 'section-0' }, start: 1, format: 'decimal' },
+        { changeMode: 'direct' },
+      );
+    },
+    applyCase: () => {
+      const editor = makeSectionsEditor();
+      return sectionsSetPageNumberingAdapter(
+        editor,
+        { target: { kind: 'section', sectionId: 'section-0' }, start: 2 },
+        { changeMode: 'direct' },
+      );
+    },
+  },
+  'sections.setTitlePage': {
+    throwCase: () => {
+      const editor = makeSectionsEditor();
+      return sectionsSetTitlePageAdapter(
+        editor,
+        { target: { kind: 'section', sectionId: 'section-missing' }, enabled: true },
+        { changeMode: 'direct' },
+      );
+    },
+    failureCase: () => {
+      const editor = makeSectionsEditor();
+      return sectionsSetTitlePageAdapter(
+        editor,
+        { target: { kind: 'section', sectionId: 'section-0' }, enabled: true },
+        { changeMode: 'direct' },
+      );
+    },
+    applyCase: () => {
+      const editor = makeSectionsEditor();
+      return sectionsSetTitlePageAdapter(
+        editor,
+        { target: { kind: 'section', sectionId: 'section-0' }, enabled: false },
+        { changeMode: 'direct' },
+      );
+    },
+  },
+  'sections.setOddEvenHeadersFooters': {
+    throwCase: () => {
+      const editor = makeSectionsEditor({ includeConverter: false });
+      return sectionsSetOddEvenHeadersFootersAdapter(editor, { enabled: true }, { changeMode: 'direct' });
+    },
+    failureCase: () => {
+      const editor = makeSectionsEditor();
+      return sectionsSetOddEvenHeadersFootersAdapter(editor, { enabled: false }, { changeMode: 'direct' });
+    },
+    applyCase: () => {
+      const editor = makeSectionsEditor();
+      return sectionsSetOddEvenHeadersFootersAdapter(editor, { enabled: true }, { changeMode: 'direct' });
+    },
+  },
+  'sections.setVerticalAlign': {
+    throwCase: () => {
+      const editor = makeSectionsEditor();
+      return sectionsSetVerticalAlignAdapter(
+        editor,
+        { target: { kind: 'section', sectionId: 'section-missing' }, value: 'top' },
+        { changeMode: 'direct' },
+      );
+    },
+    failureCase: () => {
+      const editor = makeSectionsEditor();
+      return sectionsSetVerticalAlignAdapter(
+        editor,
+        { target: { kind: 'section', sectionId: 'section-0' }, value: 'top' },
+        { changeMode: 'direct' },
+      );
+    },
+    applyCase: () => {
+      const editor = makeSectionsEditor();
+      return sectionsSetVerticalAlignAdapter(
+        editor,
+        { target: { kind: 'section', sectionId: 'section-0' }, value: 'center' },
+        { changeMode: 'direct' },
+      );
+    },
+  },
+  'sections.setSectionDirection': {
+    throwCase: () => {
+      const editor = makeSectionsEditor();
+      return sectionsSetSectionDirectionAdapter(
+        editor,
+        { target: { kind: 'section', sectionId: 'section-missing' }, direction: 'ltr' },
+        { changeMode: 'direct' },
+      );
+    },
+    failureCase: () => {
+      const editor = makeSectionsEditor();
+      return sectionsSetSectionDirectionAdapter(
+        editor,
+        { target: { kind: 'section', sectionId: 'section-0' }, direction: 'ltr' },
+        { changeMode: 'direct' },
+      );
+    },
+    applyCase: () => {
+      const editor = makeSectionsEditor();
+      return sectionsSetSectionDirectionAdapter(
+        editor,
+        { target: { kind: 'section', sectionId: 'section-0' }, direction: 'rtl' },
+        { changeMode: 'direct' },
+      );
+    },
+  },
+  'sections.setHeaderFooterRef': {
+    throwCase: () => {
+      const editor = makeSectionsEditor();
+      return sectionsSetHeaderFooterRefAdapter(
+        editor,
+        { target: { kind: 'section', sectionId: 'section-missing' }, kind: 'header', variant: 'default', refId: 'x' },
+        { changeMode: 'direct' },
+      );
+    },
+    failureCase: () => {
+      const editor = makeSectionsEditor();
+      return sectionsSetHeaderFooterRefAdapter(
+        editor,
+        {
+          target: { kind: 'section', sectionId: 'section-0' },
+          kind: 'header',
+          variant: 'default',
+          refId: 'rIdHeaderDefault',
+        },
+        { changeMode: 'direct' },
+      );
+    },
+    applyCase: () => {
+      const editor = makeSectionsEditor();
+      return sectionsSetHeaderFooterRefAdapter(
+        editor,
+        {
+          target: { kind: 'section', sectionId: 'section-0' },
+          kind: 'header',
+          variant: 'default',
+          refId: 'rIdHeaderAlt',
+        },
+        { changeMode: 'direct' },
+      );
+    },
+  },
+  'sections.clearHeaderFooterRef': {
+    throwCase: () => {
+      const editor = makeSectionsEditor();
+      return sectionsClearHeaderFooterRefAdapter(
+        editor,
+        { target: { kind: 'section', sectionId: 'section-missing' }, kind: 'header', variant: 'default' },
+        { changeMode: 'direct' },
+      );
+    },
+    failureCase: () => {
+      const editor = makeSectionsEditor();
+      return sectionsClearHeaderFooterRefAdapter(
+        editor,
+        { target: { kind: 'section', sectionId: 'section-0' }, kind: 'header', variant: 'even' },
+        { changeMode: 'direct' },
+      );
+    },
+    applyCase: () => {
+      const editor = makeSectionsEditor();
+      return sectionsClearHeaderFooterRefAdapter(
+        editor,
+        { target: { kind: 'section', sectionId: 'section-0' }, kind: 'header', variant: 'default' },
+        { changeMode: 'direct' },
+      );
+    },
+  },
+  'sections.setLinkToPrevious': {
+    throwCase: () => {
+      const editor = makeSectionsEditor();
+      return sectionsSetLinkToPreviousAdapter(
+        editor,
+        { target: { kind: 'section', sectionId: 'section-missing' }, kind: 'header', variant: 'default', linked: true },
+        { changeMode: 'direct' },
+      );
+    },
+    failureCase: () => {
+      const editor = makeSectionsEditor();
+      return sectionsSetLinkToPreviousAdapter(
+        editor,
+        { target: { kind: 'section', sectionId: 'section-0' }, kind: 'header', variant: 'default', linked: true },
+        { changeMode: 'direct' },
+      );
+    },
+    applyCase: () => {
+      const bodyWithoutRefs = clone(BASE_SECTION_BODY_SECT_PR);
+      const filteredBodyElements = ((bodyWithoutRefs.elements ?? []) as Array<{ name?: string }>).filter(
+        (element) => element.name !== 'w:headerReference' && element.name !== 'w:footerReference',
+      );
+      bodyWithoutRefs.elements = filteredBodyElements as unknown as Record<string, unknown>[];
+
+      const editor = makeSectionsEditor({
+        paragraphSectPr: PREVIOUS_SECTION_SECT_PR,
+        bodySectPr: bodyWithoutRefs,
+      });
+      return sectionsSetLinkToPreviousAdapter(
+        editor,
+        { target: { kind: 'section', sectionId: 'section-1' }, kind: 'header', variant: 'default', linked: false },
+        { changeMode: 'direct' },
+      );
+    },
+  },
+  'sections.setPageBorders': {
+    throwCase: () => {
+      const editor = makeSectionsEditor();
+      return sectionsSetPageBordersAdapter(
+        editor,
+        { target: { kind: 'section', sectionId: 'section-missing' }, borders: {} },
+        { changeMode: 'direct' },
+      );
+    },
+    failureCase: () => {
+      const editor = makeSectionsEditor();
+      return sectionsSetPageBordersAdapter(
+        editor,
+        {
+          target: { kind: 'section', sectionId: 'section-0' },
+          borders: {
+            display: 'allPages',
+            offsetFrom: 'page',
+            zOrder: 'front',
+            top: { style: 'single', size: 8, space: 0, color: '000000' },
+          },
+        },
+        { changeMode: 'direct' },
+      );
+    },
+    applyCase: () => {
+      const editor = makeSectionsEditor();
+      return sectionsSetPageBordersAdapter(
+        editor,
+        {
+          target: { kind: 'section', sectionId: 'section-0' },
+          borders: {
+            display: 'allPages',
+            offsetFrom: 'page',
+            zOrder: 'front',
+            top: { style: 'double', size: 12, space: 0, color: '000000' },
+          },
+        },
+        { changeMode: 'direct' },
+      );
+    },
+  },
+  'sections.clearPageBorders': {
+    throwCase: () => {
+      const editor = makeSectionsEditor();
+      return sectionsClearPageBordersAdapter(
+        editor,
+        { target: { kind: 'section', sectionId: 'section-missing' } },
+        { changeMode: 'direct' },
+      );
+    },
+    failureCase: () => {
+      const bodyWithoutBorders = clone(BASE_SECTION_BODY_SECT_PR);
+      bodyWithoutBorders.elements = ((bodyWithoutBorders.elements ?? []) as Array<{ name?: string }>).filter(
+        (element) => element.name !== 'w:pgBorders',
+      ) as unknown as Record<string, unknown>[];
+      const editor = makeSectionsEditor({ bodySectPr: bodyWithoutBorders });
+      return sectionsClearPageBordersAdapter(
+        editor,
+        { target: { kind: 'section', sectionId: 'section-0' } },
+        { changeMode: 'direct' },
+      );
+    },
+    applyCase: () => {
+      const editor = makeSectionsEditor();
+      return sectionsClearPageBordersAdapter(
+        editor,
+        { target: { kind: 'section', sectionId: 'section-0' } },
         { changeMode: 'direct' },
       );
     },
@@ -2266,6 +3011,213 @@ const dryRunVectors: Partial<Record<OperationId, () => unknown>> = {
       { changeMode: 'direct', dryRun: true },
     );
     expect(insertHeadingAt).not.toHaveBeenCalled();
+    return result;
+  },
+  'create.sectionBreak': () => {
+    const editor = makeSectionsEditor();
+    const dispatch = (editor as unknown as { dispatch: ReturnType<typeof vi.fn> }).dispatch;
+    const result = createSectionBreakAdapter(
+      editor,
+      { at: { kind: 'documentEnd' }, breakType: 'nextPage' },
+      { changeMode: 'direct', dryRun: true },
+    );
+    expect(dispatch).not.toHaveBeenCalled();
+    return result;
+  },
+  'sections.setBreakType': () => {
+    const editor = makeSectionsEditor();
+    const dispatch = (editor as unknown as { dispatch: ReturnType<typeof vi.fn> }).dispatch;
+    const result = sectionsSetBreakTypeAdapter(
+      editor,
+      { target: { kind: 'section', sectionId: 'section-0' }, breakType: 'nextPage' },
+      { changeMode: 'direct', dryRun: true },
+    );
+    expect(dispatch).not.toHaveBeenCalled();
+    return result;
+  },
+  'sections.setPageMargins': () => {
+    const editor = makeSectionsEditor();
+    const dispatch = (editor as unknown as { dispatch: ReturnType<typeof vi.fn> }).dispatch;
+    const result = sectionsSetPageMarginsAdapter(
+      editor,
+      { target: { kind: 'section', sectionId: 'section-0' }, top: 1.25 },
+      { changeMode: 'direct', dryRun: true },
+    );
+    expect(dispatch).not.toHaveBeenCalled();
+    return result;
+  },
+  'sections.setHeaderFooterMargins': () => {
+    const editor = makeSectionsEditor();
+    const dispatch = (editor as unknown as { dispatch: ReturnType<typeof vi.fn> }).dispatch;
+    const result = sectionsSetHeaderFooterMarginsAdapter(
+      editor,
+      { target: { kind: 'section', sectionId: 'section-0' }, header: 0.75 },
+      { changeMode: 'direct', dryRun: true },
+    );
+    expect(dispatch).not.toHaveBeenCalled();
+    return result;
+  },
+  'sections.setPageSetup': () => {
+    const editor = makeSectionsEditor();
+    const dispatch = (editor as unknown as { dispatch: ReturnType<typeof vi.fn> }).dispatch;
+    const result = sectionsSetPageSetupAdapter(
+      editor,
+      { target: { kind: 'section', sectionId: 'section-0' }, orientation: 'landscape' },
+      { changeMode: 'direct', dryRun: true },
+    );
+    expect(dispatch).not.toHaveBeenCalled();
+    return result;
+  },
+  'sections.setColumns': () => {
+    const editor = makeSectionsEditor();
+    const dispatch = (editor as unknown as { dispatch: ReturnType<typeof vi.fn> }).dispatch;
+    const result = sectionsSetColumnsAdapter(
+      editor,
+      { target: { kind: 'section', sectionId: 'section-0' }, count: 2 },
+      { changeMode: 'direct', dryRun: true },
+    );
+    expect(dispatch).not.toHaveBeenCalled();
+    return result;
+  },
+  'sections.setLineNumbering': () => {
+    const editor = makeSectionsEditor();
+    const dispatch = (editor as unknown as { dispatch: ReturnType<typeof vi.fn> }).dispatch;
+    const result = sectionsSetLineNumberingAdapter(
+      editor,
+      { target: { kind: 'section', sectionId: 'section-0' }, enabled: false },
+      { changeMode: 'direct', dryRun: true },
+    );
+    expect(dispatch).not.toHaveBeenCalled();
+    return result;
+  },
+  'sections.setPageNumbering': () => {
+    const editor = makeSectionsEditor();
+    const dispatch = (editor as unknown as { dispatch: ReturnType<typeof vi.fn> }).dispatch;
+    const result = sectionsSetPageNumberingAdapter(
+      editor,
+      { target: { kind: 'section', sectionId: 'section-0' }, start: 2 },
+      { changeMode: 'direct', dryRun: true },
+    );
+    expect(dispatch).not.toHaveBeenCalled();
+    return result;
+  },
+  'sections.setTitlePage': () => {
+    const editor = makeSectionsEditor();
+    const dispatch = (editor as unknown as { dispatch: ReturnType<typeof vi.fn> }).dispatch;
+    const result = sectionsSetTitlePageAdapter(
+      editor,
+      { target: { kind: 'section', sectionId: 'section-0' }, enabled: false },
+      { changeMode: 'direct', dryRun: true },
+    );
+    expect(dispatch).not.toHaveBeenCalled();
+    return result;
+  },
+  'sections.setOddEvenHeadersFooters': () => {
+    const editor = makeSectionsEditor();
+    const dispatch = (editor as unknown as { dispatch: ReturnType<typeof vi.fn> }).dispatch;
+    const result = sectionsSetOddEvenHeadersFootersAdapter(
+      editor,
+      { enabled: true },
+      { changeMode: 'direct', dryRun: true },
+    );
+    expect(dispatch).not.toHaveBeenCalled();
+    return result;
+  },
+  'sections.setVerticalAlign': () => {
+    const editor = makeSectionsEditor();
+    const dispatch = (editor as unknown as { dispatch: ReturnType<typeof vi.fn> }).dispatch;
+    const result = sectionsSetVerticalAlignAdapter(
+      editor,
+      { target: { kind: 'section', sectionId: 'section-0' }, value: 'center' },
+      { changeMode: 'direct', dryRun: true },
+    );
+    expect(dispatch).not.toHaveBeenCalled();
+    return result;
+  },
+  'sections.setSectionDirection': () => {
+    const editor = makeSectionsEditor();
+    const dispatch = (editor as unknown as { dispatch: ReturnType<typeof vi.fn> }).dispatch;
+    const result = sectionsSetSectionDirectionAdapter(
+      editor,
+      { target: { kind: 'section', sectionId: 'section-0' }, direction: 'rtl' },
+      { changeMode: 'direct', dryRun: true },
+    );
+    expect(dispatch).not.toHaveBeenCalled();
+    return result;
+  },
+  'sections.setHeaderFooterRef': () => {
+    const editor = makeSectionsEditor();
+    const dispatch = (editor as unknown as { dispatch: ReturnType<typeof vi.fn> }).dispatch;
+    const result = sectionsSetHeaderFooterRefAdapter(
+      editor,
+      {
+        target: { kind: 'section', sectionId: 'section-0' },
+        kind: 'header',
+        variant: 'default',
+        refId: 'rIdHeaderAlt',
+      },
+      { changeMode: 'direct', dryRun: true },
+    );
+    expect(dispatch).not.toHaveBeenCalled();
+    return result;
+  },
+  'sections.clearHeaderFooterRef': () => {
+    const editor = makeSectionsEditor();
+    const dispatch = (editor as unknown as { dispatch: ReturnType<typeof vi.fn> }).dispatch;
+    const result = sectionsClearHeaderFooterRefAdapter(
+      editor,
+      { target: { kind: 'section', sectionId: 'section-0' }, kind: 'header', variant: 'default' },
+      { changeMode: 'direct', dryRun: true },
+    );
+    expect(dispatch).not.toHaveBeenCalled();
+    return result;
+  },
+  'sections.setLinkToPrevious': () => {
+    const bodyWithoutRefs = clone(BASE_SECTION_BODY_SECT_PR);
+    bodyWithoutRefs.elements = ((bodyWithoutRefs.elements ?? []) as Array<{ name?: string }>).filter(
+      (element) => element.name !== 'w:headerReference' && element.name !== 'w:footerReference',
+    ) as unknown as Record<string, unknown>[];
+    const editor = makeSectionsEditor({
+      paragraphSectPr: PREVIOUS_SECTION_SECT_PR,
+      bodySectPr: bodyWithoutRefs,
+    });
+    const dispatch = (editor as unknown as { dispatch: ReturnType<typeof vi.fn> }).dispatch;
+    const result = sectionsSetLinkToPreviousAdapter(
+      editor,
+      { target: { kind: 'section', sectionId: 'section-1' }, kind: 'header', variant: 'default', linked: false },
+      { changeMode: 'direct', dryRun: true },
+    );
+    expect(dispatch).not.toHaveBeenCalled();
+    return result;
+  },
+  'sections.setPageBorders': () => {
+    const editor = makeSectionsEditor();
+    const dispatch = (editor as unknown as { dispatch: ReturnType<typeof vi.fn> }).dispatch;
+    const result = sectionsSetPageBordersAdapter(
+      editor,
+      {
+        target: { kind: 'section', sectionId: 'section-0' },
+        borders: {
+          display: 'allPages',
+          offsetFrom: 'page',
+          zOrder: 'front',
+          top: { style: 'double', size: 12, space: 0, color: '000000' },
+        },
+      },
+      { changeMode: 'direct', dryRun: true },
+    );
+    expect(dispatch).not.toHaveBeenCalled();
+    return result;
+  },
+  'sections.clearPageBorders': () => {
+    const editor = makeSectionsEditor();
+    const dispatch = (editor as unknown as { dispatch: ReturnType<typeof vi.fn> }).dispatch;
+    const result = sectionsClearPageBordersAdapter(
+      editor,
+      { target: { kind: 'section', sectionId: 'section-0' } },
+      { changeMode: 'direct', dryRun: true },
+    );
+    expect(dispatch).not.toHaveBeenCalled();
     return result;
   },
   'lists.insert': () => {

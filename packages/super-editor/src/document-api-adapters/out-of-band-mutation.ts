@@ -20,7 +20,7 @@ import { checkRevision, incrementRevision } from './plan-engine/revision-tracker
 interface ConverterForMutation {
   documentModified: boolean;
   documentGuid: string | null;
-  promoteToGuid(): string;
+  promoteToGuid?: () => string;
 }
 
 /** Result returned by the mutation function passed to `executeOutOfBandMutation`. */
@@ -62,7 +62,7 @@ export function executeOutOfBandMutation<T>(
     const converter = (editor as unknown as { converter?: ConverterForMutation }).converter;
     if (converter) {
       converter.documentModified = true;
-      if (!converter.documentGuid) {
+      if (!converter.documentGuid && typeof converter.promoteToGuid === 'function') {
         converter.promoteToGuid();
       }
     }

@@ -31,7 +31,17 @@ description: Reference for tables.insertColumn
 ### Example request
 
 ```json
-{}
+{
+  "columnIndex": 1,
+  "count": 1,
+  "position": "left",
+  "tableNodeId": "example",
+  "tableTarget": {
+    "kind": "block",
+    "nodeId": "node-def456",
+    "nodeType": "paragraph"
+  }
+}
 ```
 
 ## Output fields

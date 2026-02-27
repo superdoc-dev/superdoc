@@ -15,6 +15,7 @@
     "apps/docs/document-api/reference/create/heading.mdx",
     "apps/docs/document-api/reference/create/index.mdx",
     "apps/docs/document-api/reference/create/paragraph.mdx",
+    "apps/docs/document-api/reference/create/section-break.mdx",
     "apps/docs/document-api/reference/create/table.mdx",
     "apps/docs/document-api/reference/delete.mdx",
     "apps/docs/document-api/reference/find.mdx",
@@ -45,6 +46,25 @@
     "apps/docs/document-api/reference/query/index.mdx",
     "apps/docs/document-api/reference/query/match.mdx",
     "apps/docs/document-api/reference/replace.mdx",
+    "apps/docs/document-api/reference/sections/clear-header-footer-ref.mdx",
+    "apps/docs/document-api/reference/sections/clear-page-borders.mdx",
+    "apps/docs/document-api/reference/sections/get.mdx",
+    "apps/docs/document-api/reference/sections/index.mdx",
+    "apps/docs/document-api/reference/sections/list.mdx",
+    "apps/docs/document-api/reference/sections/set-break-type.mdx",
+    "apps/docs/document-api/reference/sections/set-columns.mdx",
+    "apps/docs/document-api/reference/sections/set-header-footer-margins.mdx",
+    "apps/docs/document-api/reference/sections/set-header-footer-ref.mdx",
+    "apps/docs/document-api/reference/sections/set-line-numbering.mdx",
+    "apps/docs/document-api/reference/sections/set-link-to-previous.mdx",
+    "apps/docs/document-api/reference/sections/set-odd-even-headers-footers.mdx",
+    "apps/docs/document-api/reference/sections/set-page-borders.mdx",
+    "apps/docs/document-api/reference/sections/set-page-margins.mdx",
+    "apps/docs/document-api/reference/sections/set-page-numbering.mdx",
+    "apps/docs/document-api/reference/sections/set-page-setup.mdx",
+    "apps/docs/document-api/reference/sections/set-section-direction.mdx",
+    "apps/docs/document-api/reference/sections/set-title-page.mdx",
+    "apps/docs/document-api/reference/sections/set-vertical-align.mdx",
     "apps/docs/document-api/reference/styles/apply.mdx",
     "apps/docs/document-api/reference/styles/index.mdx",
     "apps/docs/document-api/reference/tables/apply-border-preset.mdx",
@@ -118,9 +138,35 @@
     {
       "aliasMemberPaths": [],
       "key": "create",
-      "operationIds": ["create.paragraph", "create.heading", "create.table"],
+      "operationIds": ["create.paragraph", "create.heading", "create.sectionBreak", "create.table"],
       "pagePath": "apps/docs/document-api/reference/create/index.mdx",
       "title": "Create"
+    },
+    {
+      "aliasMemberPaths": [],
+      "key": "sections",
+      "operationIds": [
+        "sections.list",
+        "sections.get",
+        "sections.setBreakType",
+        "sections.setPageMargins",
+        "sections.setHeaderFooterMargins",
+        "sections.setPageSetup",
+        "sections.setColumns",
+        "sections.setLineNumbering",
+        "sections.setPageNumbering",
+        "sections.setTitlePage",
+        "sections.setOddEvenHeadersFooters",
+        "sections.setVerticalAlign",
+        "sections.setSectionDirection",
+        "sections.setHeaderFooterRef",
+        "sections.clearHeaderFooterRef",
+        "sections.setLinkToPrevious",
+        "sections.setPageBorders",
+        "sections.clearPageBorders"
+      ],
+      "pagePath": "apps/docs/document-api/reference/sections/index.mdx",
+      "title": "Sections"
     },
     {
       "aliasMemberPaths": ["format.bold", "format.italic", "format.underline", "format.strikethrough"],
@@ -229,5 +275,5 @@
     }
   ],
   "marker": "{/* GENERATED FILE: DO NOT EDIT. Regenerate via `pnpm run docapi:sync`. */}",
-  "sourceHash": "5454f771b591f831325cc10903af71f01a064277b44a8c252b71855ff2b98a7d"
+  "sourceHash": "69decdc341fb6d3a3858c5a0ec7b933a176dfa6fbfd58bff4c4e8772938353ff"
 }

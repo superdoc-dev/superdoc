@@ -29,7 +29,18 @@ description: Reference for tables.distributeColumns
 ### Example request
 
 ```json
-{}
+{
+  "columnRange": {
+    "end": 10,
+    "start": 0
+  },
+  "nodeId": "node-def456",
+  "target": {
+    "kind": "block",
+    "nodeId": "node-def456",
+    "nodeType": "paragraph"
+  }
+}
 ```
 
 ## Output fields

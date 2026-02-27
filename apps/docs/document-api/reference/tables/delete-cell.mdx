@@ -29,7 +29,15 @@ description: Reference for tables.deleteCell
 ### Example request
 
 ```json
-{}
+{
+  "mode": "shiftLeft",
+  "nodeId": "node-def456",
+  "target": {
+    "kind": "block",
+    "nodeId": "node-def456",
+    "nodeType": "paragraph"
+  }
+}
 ```
 
 ## Output fields

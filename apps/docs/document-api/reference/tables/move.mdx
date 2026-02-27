@@ -29,7 +29,17 @@ description: Reference for tables.move
 ### Example request
 
 ```json
-{}
+{
+  "destination": {
+    "kind": "documentStart"
+  },
+  "nodeId": "node-def456",
+  "target": {
+    "kind": "block",
+    "nodeId": "node-def456",
+    "nodeType": "paragraph"
+  }
+}
 ```
 
 ## Output fields

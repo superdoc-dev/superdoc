@@ -41,6 +41,11 @@ const GROUP_METADATA: Record<ReferenceGroupKey, { title: string; description: st
     description: 'Structured creation helpers.',
     pagePath: 'create/index.mdx',
   },
+  sections: {
+    title: 'Sections',
+    description: 'Section structure and page-setup operations.',
+    pagePath: 'sections/index.mdx',
+  },
   format: {
     title: 'Format',
     description: "Canonical formatting mutation with directive semantics ('on', 'off', 'clear').",

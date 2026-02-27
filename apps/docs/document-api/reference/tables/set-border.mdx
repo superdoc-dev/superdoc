@@ -32,7 +32,18 @@ description: Reference for tables.setBorder
 ### Example request
 
 ```json
-{}
+{
+  "color": "example",
+  "edge": "top",
+  "lineStyle": "example",
+  "lineWeightPt": 12.5,
+  "nodeId": "node-def456",
+  "target": {
+    "kind": "block",
+    "nodeId": "node-def456",
+    "nodeType": "paragraph"
+  }
+}
 ```
 
 ## Output fields

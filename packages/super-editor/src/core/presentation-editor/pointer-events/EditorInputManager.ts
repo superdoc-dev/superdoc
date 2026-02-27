@@ -520,15 +520,23 @@ export class EditorInputManager {
 
     try {
       const $head = doc.resolve(head);
+      // Find the outermost isolating ancestor. Walk from innermost to outermost,
+      // tracking the shallowest isolating depth. Using the outermost ensures that
+      // we clamp to just before/after the entire table, not to a boundary between
+      // cells within the same table.
+      let isolatingDepth = -1;
       for (let d = $head.depth; d > 0; d--) {
         const node = $head.node(d);
         if (node.type.spec.isolating || node.type.spec.tableRole === 'table') {
-          // Head is inside an isolating node — clamp to just before/after it
-          const boundary = forward ? $head.before(d) : $head.after(d);
-          const near = Selection.near(doc.resolve(boundary), forward ? -1 : 1);
-          if (near instanceof TextSelection) return near.head;
-          return anchor;
+          isolatingDepth = d;
         }
+      }
+
+      if (isolatingDepth > 0) {
+        const boundary = forward ? $head.before(isolatingDepth) : $head.after(isolatingDepth);
+        const near = Selection.near(doc.resolve(boundary), forward ? -1 : 1);
+        if (near instanceof TextSelection) return near.head;
+        return anchor;
       }
     } catch {
       /* position resolution failed */

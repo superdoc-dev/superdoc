@@ -253,6 +253,24 @@ function normalizeCellAttrsForSingleCell(attrs: Record<string, unknown>): Record
   };
 }
 
+function normalizeClonedRowInsertCellAttrs(
+  sourceAttrs: Record<string, unknown>,
+  fromHeaderToBody: boolean,
+): Record<string, unknown> {
+  const normalizedAttrs: Record<string, unknown> = {
+    ...sourceAttrs,
+    rowspan: 1,
+  };
+
+  // Header rows can carry explicit `borders: null` to suppress drawing.
+  // Drop that sentinel when cloning into body cells so tableCell defaults apply.
+  if (fromHeaderToBody && normalizedAttrs.borders == null) {
+    delete normalizedAttrs.borders;
+  }
+
+  return normalizedAttrs;
+}
+
 type ExpandMergedCellParams = {
   tr: Transaction;
   tablePos: number;
@@ -617,16 +635,158 @@ function insertRowInTable(
     }
 
     const colspan = ((sourceCell.attrs as Record<string, unknown>).colspan as number) || 1;
-    const targetCellType = sourceCell.type.name === 'tableHeader' ? defaultCellType : sourceCell.type;
-    const newCell = targetCellType.createAndFill({
-      ...(sourceCell.attrs as Record<string, unknown>),
-      rowspan: 1,
-    });
+    const fromHeaderToBody = sourceCell.type.name === 'tableHeader';
+    const targetCellType = fromHeaderToBody ? defaultCellType : sourceCell.type;
+    const newCell = targetCellType.createAndFill(
+      normalizeClonedRowInsertCellAttrs(sourceCell.attrs as Record<string, unknown>, fromHeaderToBody),
+    );
     if (newCell) newCells.push(newCell);
     col += colspan;
   }
 
   for (const { pos, attrs } of cellsToExtend) {
+    tr.setNodeMarkup(pos, null, attrs);
+  }
+
+  if (newCells.length === 0) return true;
+
+  const newRow = rowType.createAndFill(null, newCells);
+  if (!newRow) return false;
+
+  let insertPos = tablePos + 1;
+  for (let row = 0; row < boundedInsertIndex; row++) {
+    insertPos += tableNode.child(row).nodeSize;
+  }
+  tr.insert(insertPos, newRow);
+  return true;
+}
+
+function addColumnToTableForSplit(
+  tr: Transaction,
+  tablePos: number,
+  col: number,
+  splitRowStart: number,
+  splitRowEnd: number,
+): void {
+  const tableNode = tr.doc.nodeAt(tablePos);
+  if (!tableNode || tableNode.type.name !== 'table') return;
+  const map = TableMap.get(tableNode);
+  const tableStart = tablePos + 1;
+  const mapStart = tr.mapping.maps.length;
+  const widenedOutsideSplit = new Set<number>();
+
+  for (let row = 0; row < map.height; row++) {
+    const index = row * map.width + col;
+    const pos = map.map[index];
+    const cell = tableNode.nodeAt(pos);
+    if (!cell) continue;
+
+    const inSplitRows = row >= splitRowStart && row < splitRowEnd;
+    if (!inSplitRows && col > 0) {
+      const leftPos = map.map[index - 1]!;
+      const leftCell = tableNode.nodeAt(leftPos);
+      if (leftCell && !widenedOutsideSplit.has(leftPos)) {
+        tr.setNodeMarkup(
+          tr.mapping.slice(mapStart).map(tableStart + leftPos),
+          null,
+          addColSpan(leftCell.attrs as Record<string, unknown>, col - map.colCount(leftPos)),
+        );
+        widenedOutsideSplit.add(leftPos);
+      }
+      row += ((cell.attrs?.rowspan as number) || 1) - 1;
+      continue;
+    }
+
+    if (col > 0 && map.map[index - 1] === pos) {
+      tr.setNodeMarkup(
+        tr.mapping.slice(mapStart).map(tableStart + pos),
+        null,
+        addColSpan(cell.attrs as Record<string, unknown>, col - map.colCount(pos)),
+      );
+      row += (((cell.attrs as Record<string, unknown>).rowspan as number) || 1) - 1;
+    } else {
+      const refType = col > 0 ? (tableNode.nodeAt(map.map[index - 1])?.type ?? cell.type) : cell.type;
+      const cellPos = map.positionAt(row, col, tableNode);
+      tr.insert(tr.mapping.slice(mapStart).map(tableStart + cellPos), refType.createAndFill()!);
+      row += ((cell.attrs?.rowspan as number) || 1) - 1;
+    }
+  }
+}
+
+function insertRowInTableForSplit(
+  tr: Transaction,
+  tablePos: number,
+  sourceRowIndex: number,
+  insertIndex: number,
+  splitColStart: number,
+  splitColEnd: number,
+  schema: Editor['state']['schema'],
+): boolean {
+  const tableNode = tr.doc.nodeAt(tablePos);
+  if (!tableNode || tableNode.type.name !== 'table') return false;
+
+  const rowCount = tableNode.childCount;
+  if (rowCount === 0) return false;
+
+  const map = TableMap.get(tableNode);
+  const boundedInsertIndex = Math.max(0, Math.min(insertIndex, rowCount));
+  const boundedSourceRowIndex = Math.max(0, Math.min(sourceRowIndex, rowCount - 1));
+  const sourceRow = tableNode.child(boundedSourceRowIndex);
+  if (!sourceRow) return false;
+
+  const rowType = schema.nodes.tableRow;
+  const defaultCellType = schema.nodes.tableCell;
+  if (!rowType || !defaultCellType) return false;
+
+  const newCells: import('prosemirror-model').Node[] = [];
+  const cellsToExtend = new Map<number, Record<string, unknown>>();
+
+  for (let col = 0; col < map.width; ) {
+    if (boundedInsertIndex > 0 && boundedInsertIndex < map.height) {
+      const indexAbove = (boundedInsertIndex - 1) * map.width + col;
+      const indexAtInsert = boundedInsertIndex * map.width + col;
+
+      if (map.map[indexAbove] === map.map[indexAtInsert]) {
+        const spanningPos = map.map[indexAbove];
+        const spanningCell = tableNode.nodeAt(spanningPos);
+        if (spanningCell) {
+          const spanningAttrs = spanningCell.attrs as Record<string, unknown>;
+          const rowspan = (spanningAttrs.rowspan as number) || 1;
+          const colspan = (spanningAttrs.colspan as number) || 1;
+          cellsToExtend.set(tablePos + 1 + spanningPos, { ...spanningAttrs, rowspan: rowspan + 1 });
+          col += colspan;
+          continue;
+        }
+      }
+    }
+
+    const sourceMapIndex = boundedSourceRowIndex * map.width + col;
+    const sourceCellPos = map.map[sourceMapIndex];
+    const sourceCell = tableNode.nodeAt(sourceCellPos) ?? sourceRow.firstChild;
+    if (!sourceCell) {
+      col += 1;
+      continue;
+    }
+
+    const sourceAttrs = sourceCell.attrs as Record<string, unknown>;
+    const colspan = (sourceAttrs.colspan as number) || 1;
+    const overlapsSplitRange = col < splitColEnd && col + colspan > splitColStart;
+
+    if (!overlapsSplitRange) {
+      const sourceRowspan = (sourceAttrs.rowspan as number) || 1;
+      cellsToExtend.set(tablePos + 1 + sourceCellPos, { ...sourceAttrs, rowspan: sourceRowspan + 1 });
+      col += colspan;
+      continue;
+    }
+
+    const fromHeaderToBody = sourceCell.type.name === 'tableHeader';
+    const targetCellType = fromHeaderToBody ? defaultCellType : sourceCell.type;
+    const newCell = targetCellType.createAndFill(normalizeClonedRowInsertCellAttrs(sourceAttrs, fromHeaderToBody));
+    if (newCell) newCells.push(newCell);
+    col += colspan;
+  }
+
+  for (const [pos, attrs] of cellsToExtend.entries()) {
     tr.setNodeMarkup(pos, null, attrs);
   }
 
@@ -2241,7 +2401,7 @@ export function tablesSplitCellAdapter(
 
     for (let columnOffset = 0; columnOffset < additionalColumns; columnOffset++) {
       const insertColumnIndex = columnIndex + currentColspan + columnOffset;
-      addColumnToTable(tr, tablePos, insertColumnIndex);
+      addColumnToTableForSplit(tr, tablePos, insertColumnIndex, rowIndex, rowIndex + targetRows);
       updatedGrid = insertGridColumnWidth(updatedGrid, insertColumnIndex) ?? updatedGrid;
     }
 
@@ -2254,7 +2414,15 @@ export function tablesSplitCellAdapter(
       const insertIndex = rowIndex + currentRowspan + rowOffset;
       const boundedInsertIndex = Math.max(0, Math.min(insertIndex, currentTableNode.childCount));
       const sourceRowIndex = Math.max(0, Math.min(boundedInsertIndex - 1, currentTableNode.childCount - 1));
-      const didInsertRow = insertRowInTable(tr, tablePos, sourceRowIndex, boundedInsertIndex, schema);
+      const didInsertRow = insertRowInTableForSplit(
+        tr,
+        tablePos,
+        sourceRowIndex,
+        boundedInsertIndex,
+        columnIndex,
+        columnIndex + targetColumns,
+        schema,
+      );
 
       if (!didInsertRow) {
         return toTableFailure('INVALID_TARGET', 'Cell split could not insert required rows.');

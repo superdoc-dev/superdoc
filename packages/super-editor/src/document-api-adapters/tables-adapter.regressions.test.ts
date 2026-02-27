@@ -38,6 +38,11 @@ type NodeOptions = {
   nodeSize?: number;
 };
 
+type TableEditorOptions = {
+  firstRowAsHeaders?: boolean;
+  firstRowBorders?: Record<string, unknown> | null;
+};
+
 function createNode(typeName: string, children: ProseMirrorNode[] = [], options: NodeOptions = {}): ProseMirrorNode {
   const attrs = options.attrs ?? {};
   const text = options.text ?? '';
@@ -122,7 +127,15 @@ function createNode(typeName: string, children: ProseMirrorNode[] = [], options:
   return node as unknown as ProseMirrorNode;
 }
 
-function makeTableEditor(): Editor {
+function makeTableEditor(options: TableEditorOptions = {}): Editor {
+  const firstRowAsHeaders = options.firstRowAsHeaders ?? false;
+  const firstRowType = firstRowAsHeaders ? 'tableHeader' : 'tableCell';
+  const firstRowAttrs =
+    options.firstRowBorders === undefined
+      ? {}
+      : {
+          borders: options.firstRowBorders,
+        };
   const paragraph1 = createNode('paragraph', [createNode('text', [], { text: 'Hello' })], {
     attrs: { sdBlockId: 'p1', paraId: 'p1', paragraphProperties: {} },
     isBlock: true,
@@ -144,13 +157,13 @@ function makeTableEditor(): Editor {
     inlineContent: true,
   });
 
-  const cell1 = createNode('tableCell', [paragraph1], {
-    attrs: { sdBlockId: 'cell-1', colspan: 1, rowspan: 1, colwidth: [100] },
+  const cell1 = createNode(firstRowType, [paragraph1], {
+    attrs: { sdBlockId: 'cell-1', colspan: 1, rowspan: 1, colwidth: [100], ...firstRowAttrs },
     isBlock: true,
     inlineContent: false,
   });
-  const cell2 = createNode('tableCell', [paragraph2], {
-    attrs: { sdBlockId: 'cell-2', colspan: 1, rowspan: 1, colwidth: [200] },
+  const cell2 = createNode(firstRowType, [paragraph2], {
+    attrs: { sdBlockId: 'cell-2', colspan: 1, rowspan: 1, colwidth: [200], ...firstRowAttrs },
     isBlock: true,
     inlineContent: false,
   });
@@ -557,6 +570,52 @@ describe('tables-adapter regressions', () => {
       userEdited: true,
       grid: [{ col: 1200 }, { col: 3000 }, { col: 3000 }],
     });
+  });
+
+  it('does not copy header-only null borders when split inserts a body row from a header source row', () => {
+    const editor = makeTableEditor({ firstRowAsHeaders: true, firstRowBorders: null });
+    const tr = editor.state.tr as unknown as { insert: ReturnType<typeof vi.fn> };
+
+    const result = tablesSplitCellAdapter(editor, {
+      nodeId: 'cell-1',
+      rows: 2,
+      columns: 1,
+    });
+
+    expect(result.success).toBe(true);
+
+    const insertedRow = tr.insert.mock.calls.find(([, node]) => node?.type?.name === 'tableRow')?.[1] as
+      | ProseMirrorNode
+      | undefined;
+    expect(insertedRow).toBeDefined();
+
+    const insertedCells = ((insertedRow as unknown as { _children?: ProseMirrorNode[] })._children ?? []).filter(
+      (node) => node.type.name === 'tableCell',
+    );
+    expect(insertedCells.length).toBeGreaterThan(0);
+    for (const cell of insertedCells) {
+      expect((cell.attrs as Record<string, unknown>).borders).toBeUndefined();
+    }
+  });
+
+  it('preserves non-target rows when split inserts columns by widening adjacent cells', () => {
+    const editor = makeTableEditor();
+    const tr = editor.state.tr as unknown as { setNodeMarkup: ReturnType<typeof vi.fn> };
+
+    const result = tablesSplitCellAdapter(editor, {
+      nodeId: 'cell-1',
+      rows: 1,
+      columns: 2,
+    });
+
+    expect(result.success).toBe(true);
+    expect(tr.setNodeMarkup).toHaveBeenCalledWith(
+      expect.any(Number),
+      null,
+      expect.objectContaining({
+        colspan: 2,
+      }),
+    );
   });
 
   it('rejects paragraph targets for tables.setBorder', () => {

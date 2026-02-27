@@ -64,6 +64,7 @@ class DocxZipper {
           let extension = this.getFileExtension(name)?.toLowerCase();
           // Only build data URIs for images; keep raw base64 for other binaries (e.g., xlsx)
           const imageTypes = new Set(['png', 'jpg', 'jpeg', 'gif', 'bmp', 'tiff', 'tif', 'emf', 'wmf', 'svg', 'webp']);
+          const mimeTypeForExt = { tif: 'tiff' };
 
           // For unknown extensions (like .tmp), try to detect the image type from content
           let detectedType = null;
@@ -75,7 +76,8 @@ class DocxZipper {
           }
 
           if (imageTypes.has(extension)) {
-            this.mediaFiles[name] = `data:image/${extension};base64,${fileBase64}`;
+            const mimeSubtype = mimeTypeForExt[extension] || extension;
+            this.mediaFiles[name] = `data:image/${mimeSubtype};base64,${fileBase64}`;
             const blob = await zipEntry.async('blob');
             const fileObj = new File([blob], name, { type: blob.type });
             const imageUrl = URL.createObjectURL(fileObj);

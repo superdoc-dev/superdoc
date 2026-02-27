@@ -523,7 +523,7 @@ export function sanitizeHref(raw, config = {}) {
 
   // Relative paths have no protocol to validate
   // resolve against page origin instead
-  if (trimmed.startsWith('/')) {
+  if (trimmed.startsWith('/') || trimmed.startsWith('.')) {
     return sanitizeRelativePath(trimmed, blocklist);
   }
 

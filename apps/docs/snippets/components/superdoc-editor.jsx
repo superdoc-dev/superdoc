@@ -42,6 +42,8 @@ export const SuperDocEditor = ({
     const existingScript = document.querySelector(`script[src="${scriptSrc}"]`);
 
     if (existingScript) {
+      if (window.SuperDocLibrary) return Promise.resolve();
+
       return new Promise((resolve) => {
         existingScript.addEventListener('load', resolve, { once: true });
       });

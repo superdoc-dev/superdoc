@@ -10,6 +10,7 @@ import {
   tablesInsertCellAdapter,
   tablesSetBorderAdapter,
   tablesSetShadingAdapter,
+  tablesSplitCellAdapter,
 } from './tables-adapter.js';
 
 vi.mock('prosemirror-tables', () => ({
@@ -198,6 +199,8 @@ function makeTableEditor(): Editor {
     insert: vi.fn().mockReturnThis(),
     replaceWith: vi.fn().mockReturnThis(),
     setNodeMarkup: vi.fn().mockReturnThis(),
+    setSelection: vi.fn().mockReturnThis(),
+    setStoredMarks: vi.fn().mockReturnThis(),
     setMeta: vi.fn().mockReturnThis(),
     mapping: {
       maps: [] as unknown[],
@@ -212,7 +215,22 @@ function makeTableEditor(): Editor {
       doc,
       tr,
       schema: {
+        text: (text: string) => createNode('text', [], { text }),
         nodes: {
+          paragraph: {
+            createAndFill: vi.fn((attrs: Record<string, unknown> = {}, content?: unknown) => {
+              const children = Array.isArray(content)
+                ? (content as ProseMirrorNode[])
+                : content
+                  ? ([content] as ProseMirrorNode[])
+                  : [];
+              return createNode('paragraph', children, {
+                attrs,
+                isBlock: true,
+                inlineContent: true,
+              });
+            }),
+          },
           tableCell: {
             createAndFill: vi.fn((attrs: Record<string, unknown> = {}, content?: unknown) => {
               const children = Array.isArray(content)
@@ -384,6 +402,29 @@ describe('tables-adapter regressions', () => {
     expect(getTableGridUpdateAttrs(tr)).toMatchObject({
       userEdited: true,
       grid: [{ col: 1500 }, { col: 3000 }],
+    });
+  });
+
+  it('splits a cell by structural row/column expansion without deleting neighboring cells', () => {
+    const editor = makeTableEditor();
+    const tr = editor.state.tr as unknown as {
+      delete: ReturnType<typeof vi.fn>;
+      insert: ReturnType<typeof vi.fn>;
+      setNodeMarkup: ReturnType<typeof vi.fn>;
+    };
+
+    const result = tablesSplitCellAdapter(editor, {
+      nodeId: 'cell-1',
+      rows: 2,
+      columns: 2,
+    });
+
+    expect(result.success).toBe(true);
+    expect(tr.delete).not.toHaveBeenCalled();
+    expect(tr.insert).toHaveBeenCalled();
+    expect(getTableGridUpdateAttrs(tr)).toMatchObject({
+      userEdited: true,
+      grid: [{ col: 1200 }, { col: 3000 }, { col: 3000 }],
     });
   });
 

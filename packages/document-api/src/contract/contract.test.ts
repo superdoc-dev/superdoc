@@ -130,6 +130,7 @@ describe('document-api contract catalog', () => {
       'query',
       'mutations',
       'tables',
+      'history',
     ];
     for (const id of OPERATION_IDS) {
       expect(validGroups, `${id} has invalid referenceGroup`).toContain(OPERATION_DEFINITIONS[id].referenceGroup);
@@ -172,6 +173,28 @@ describe('document-api contract catalog', () => {
       expect(expectedResult, `${id} has empty expectedResult`).toBeTruthy();
       expect(typeof expectedResult).toBe('string');
       expect(expectedResult.length, `${id} expectedResult is too short`).toBeGreaterThan(10);
+    }
+  });
+
+  it('marks exactly the out-of-band mutation operations as historyUnsafe', () => {
+    const historyUnsafeOps = OPERATION_IDS.filter((id) => COMMAND_CATALOG[id].historyUnsafe === true).sort();
+
+    // styles.apply + all sections.set* / sections.clear* mutations
+    expect(historyUnsafeOps).toContain('styles.apply');
+    for (const id of historyUnsafeOps) {
+      expect(id.startsWith('sections.') || id === 'styles.apply', `unexpected historyUnsafe: ${id}`).toBe(true);
+    }
+
+    // All section mutations (set*/clear*) should be marked
+    const sectionMutations = OPERATION_IDS.filter((id) => id.startsWith('sections.') && COMMAND_CATALOG[id].mutates);
+    for (const id of sectionMutations) {
+      expect(COMMAND_CATALOG[id].historyUnsafe, `${id} should be historyUnsafe`).toBe(true);
+    }
+
+    // Non-mutating and non-out-of-band operations should NOT be historyUnsafe
+    for (const id of OPERATION_IDS) {
+      if (!COMMAND_CATALOG[id].mutates || historyUnsafeOps.includes(id)) continue;
+      expect(COMMAND_CATALOG[id].historyUnsafe, `${id} should not be historyUnsafe`).toBeFalsy();
     }
   });
 });

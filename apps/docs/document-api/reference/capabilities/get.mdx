@@ -258,6 +258,30 @@ _No fields._
       ],
       "tracked": true
     },
+    "history.get": {
+      "available": true,
+      "dryRun": true,
+      "reasons": [
+        "COMMAND_UNAVAILABLE"
+      ],
+      "tracked": true
+    },
+    "history.redo": {
+      "available": true,
+      "dryRun": true,
+      "reasons": [
+        "COMMAND_UNAVAILABLE"
+      ],
+      "tracked": true
+    },
+    "history.undo": {
+      "available": true,
+      "dryRun": true,
+      "reasons": [
+        "COMMAND_UNAVAILABLE"
+      ],
+      "tracked": true
+    },
     "info": {
       "available": true,
       "dryRun": true,
@@ -1816,6 +1840,111 @@ _No fields._
           "type": "object"
         },
         "getText": {
+          "additionalProperties": false,
+          "properties": {
+            "available": {
+              "type": "boolean"
+            },
+            "dryRun": {
+              "type": "boolean"
+            },
+            "reasons": {
+              "items": {
+                "enum": [
+                  "COMMAND_UNAVAILABLE",
+                  "HELPER_UNAVAILABLE",
+                  "OPERATION_UNAVAILABLE",
+                  "TRACKED_MODE_UNAVAILABLE",
+                  "DRY_RUN_UNAVAILABLE",
+                  "NAMESPACE_UNAVAILABLE",
+                  "STYLES_PART_MISSING",
+                  "COLLABORATION_ACTIVE"
+                ]
+              },
+              "type": "array"
+            },
+            "tracked": {
+              "type": "boolean"
+            }
+          },
+          "required": [
+            "available",
+            "tracked",
+            "dryRun"
+          ],
+          "type": "object"
+        },
+        "history.get": {
+          "additionalProperties": false,
+          "properties": {
+            "available": {
+              "type": "boolean"
+            },
+            "dryRun": {
+              "type": "boolean"
+            },
+            "reasons": {
+              "items": {
+                "enum": [
+                  "COMMAND_UNAVAILABLE",
+                  "HELPER_UNAVAILABLE",
+                  "OPERATION_UNAVAILABLE",
+                  "TRACKED_MODE_UNAVAILABLE",
+                  "DRY_RUN_UNAVAILABLE",
+                  "NAMESPACE_UNAVAILABLE",
+                  "STYLES_PART_MISSING",
+                  "COLLABORATION_ACTIVE"
+                ]
+              },
+              "type": "array"
+            },
+            "tracked": {
+              "type": "boolean"
+            }
+          },
+          "required": [
+            "available",
+            "tracked",
+            "dryRun"
+          ],
+          "type": "object"
+        },
+        "history.redo": {
+          "additionalProperties": false,
+          "properties": {
+            "available": {
+              "type": "boolean"
+            },
+            "dryRun": {
+              "type": "boolean"
+            },
+            "reasons": {
+              "items": {
+                "enum": [
+                  "COMMAND_UNAVAILABLE",
+                  "HELPER_UNAVAILABLE",
+                  "OPERATION_UNAVAILABLE",
+                  "TRACKED_MODE_UNAVAILABLE",
+                  "DRY_RUN_UNAVAILABLE",
+                  "NAMESPACE_UNAVAILABLE",
+                  "STYLES_PART_MISSING",
+                  "COLLABORATION_ACTIVE"
+                ]
+              },
+              "type": "array"
+            },
+            "tracked": {
+              "type": "boolean"
+            }
+          },
+          "required": [
+            "available",
+            "tracked",
+            "dryRun"
+          ],
+          "type": "object"
+        },
+        "history.undo": {
           "additionalProperties": false,
           "properties": {
             "available": {
@@ -4572,7 +4701,10 @@ _No fields._
         "tables.clearCellSpacing",
         "tables.get",
         "tables.getCells",
-        "tables.getProperties"
+        "tables.getProperties",
+        "history.get",
+        "history.undo",
+        "history.redo"
       ],
       "type": "object"
     },

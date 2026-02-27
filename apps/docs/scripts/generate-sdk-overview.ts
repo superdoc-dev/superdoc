@@ -72,6 +72,7 @@ const CATEGORY_ORDER = [
   'lists',
   'comments',
   'trackChanges',
+  'history',
   'session',
   'introspection',
 ] as const;
@@ -86,6 +87,7 @@ const CATEGORY_LABELS: Record<string, string> = {
   lists: 'Lists',
   comments: 'Comments',
   trackChanges: 'Track changes',
+  history: 'History',
   session: 'Session',
   introspection: 'Introspection',
 };

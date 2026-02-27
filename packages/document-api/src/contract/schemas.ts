@@ -2833,6 +2833,53 @@ const operationSchemas: Record<OperationId, OperationSchemaSet> = {
       ['nodeId'],
     ),
   },
+
+  // --- history.* ---
+  'history.get': {
+    input: strictEmptyObjectSchema,
+    output: objectSchema(
+      {
+        undoDepth: { type: 'integer', minimum: 0 },
+        redoDepth: { type: 'integer', minimum: 0 },
+        canUndo: { type: 'boolean' },
+        canRedo: { type: 'boolean' },
+        historyUnsafeOperations: { type: 'array', items: { type: 'string' } },
+      },
+      ['undoDepth', 'redoDepth', 'canUndo', 'canRedo', 'historyUnsafeOperations'],
+    ),
+  },
+  'history.undo': {
+    input: strictEmptyObjectSchema,
+    output: objectSchema(
+      {
+        noop: { type: 'boolean' },
+        revision: objectSchema(
+          {
+            before: { type: 'string' },
+            after: { type: 'string' },
+          },
+          ['before', 'after'],
+        ),
+      },
+      ['noop', 'revision'],
+    ),
+  },
+  'history.redo': {
+    input: strictEmptyObjectSchema,
+    output: objectSchema(
+      {
+        noop: { type: 'boolean' },
+        revision: objectSchema(
+          {
+            before: { type: 'string' },
+            after: { type: 'string' },
+          },
+          ['before', 'after'],
+        ),
+      },
+      ['noop', 'revision'],
+    ),
+  },
 };
 
 /**

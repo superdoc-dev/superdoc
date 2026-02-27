@@ -51,6 +51,8 @@ const REQUIRED_COMMANDS: Partial<Record<OperationId, readonly EditorCommandName[
     'acceptAllTrackedChanges',
     'rejectAllTrackedChanges',
   ],
+  'history.undo': ['undo'],
+  'history.redo': ['redo'],
   // Table operations — implemented (insertTableAt proves the table extension is loaded):
   'create.table': ['insertTableAt'],
   'tables.delete': ['insertTableAt'],
@@ -166,6 +168,10 @@ function isCommentsNamespaceEnabled(editor: Editor): boolean {
 
 function isListsNamespaceEnabled(editor: Editor): boolean {
   return getNamespaceOperationIds('lists').every((id) => hasAllCommands(editor, id));
+}
+
+function isHistoryNamespaceEnabled(editor: Editor): boolean {
+  return hasCommand(editor, 'undo') && hasCommand(editor, 'redo');
 }
 
 function isTrackChangesEnabled(editor: Editor): boolean {
@@ -393,6 +399,7 @@ export function getDocumentApiCapabilities(editor: Editor): DocumentApiCapabilit
   const commentsEnabled = isCommentsNamespaceEnabled(editor);
   const listsEnabled = isListsNamespaceEnabled(editor);
   const trackChangesEnabled = isTrackChangesEnabled(editor);
+  const historyEnabled = isHistoryNamespaceEnabled(editor);
   const dryRunEnabled = OPERATION_IDS.some((operationId) => operations[operationId].dryRun);
 
   return {
@@ -412,6 +419,10 @@ export function getDocumentApiCapabilities(editor: Editor): DocumentApiCapabilit
       dryRun: {
         enabled: dryRunEnabled,
         reasons: dryRunEnabled ? undefined : ['DRY_RUN_UNAVAILABLE'],
+      },
+      history: {
+        enabled: historyEnabled,
+        reasons: getNamespaceReason(historyEnabled),
       },
     },
     format: buildFormatCapabilities(editor),

@@ -124,6 +124,7 @@ export type CliCategory =
   | 'comments'
   | 'trackChanges'
   | 'capabilities'
+  | 'history'
   | 'lifecycle'
   | 'session'
   | 'introspection';

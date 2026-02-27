@@ -197,6 +197,24 @@ function resolveMovedRangeFromPrevious(
   return resolved;
 }
 
+/**
+ * Resolves each previous range by text and returns the list of ranges with updated from/to.
+ * Shared by collectDecorationRanges and #collectDesiredState so restore logic lives in one place.
+ */
+function restoreRangesFromPrevious(
+  doc: ProseMirrorNode,
+  docSize: number,
+  previousRanges: PreviousRange[],
+): PreviousRange[] {
+  const out: PreviousRange[] = [];
+  for (const prev of previousRanges) {
+    const resolved = resolveMovedRangeFromPrevious(doc, docSize, prev);
+    if (!resolved) continue;
+    out.push({ ...prev, from: resolved.from, to: resolved.to });
+  }
+  return out;
+}
+
 // ---------------------------------------------------------------------------
 // DecorationBridge
 // ---------------------------------------------------------------------------
@@ -418,18 +436,7 @@ export class DecorationBridge {
       const mayRestoreEmpty =
         !this.#skipRestoreEmptyOnNextCollect && previousPluginRanges && previousPluginRanges.length > 0;
       if (pluginRanges.length === 0 && mayRestoreEmpty) {
-        for (const prevRange of previousPluginRanges) {
-          const resolved = resolveMovedRangeFromPrevious(state.doc, docSize, prevRange);
-          if (!resolved) continue;
-          pluginRanges.push({
-            from: resolved.from,
-            to: resolved.to,
-            classes: prevRange.classes,
-            style: prevRange.style,
-            dataAttrs: prevRange.dataAttrs,
-            text: prevRange.text,
-          });
-        }
+        pluginRanges.push(...restoreRangesFromPrevious(state.doc, docSize, previousPluginRanges));
       }
 
       // Store current ranges for next comparison. When we restored from previous,
@@ -613,12 +620,7 @@ export class DecorationBridge {
       }
       const previousPluginRanges = this.#previousRanges.get(plugin);
       if (previousPluginRanges?.length) {
-        const restoredRanges: PreviousRange[] = [];
-        for (const prev of previousPluginRanges) {
-          const resolved = resolveMovedRangeFromPrevious(state.doc, docSize, prev);
-          if (!resolved) continue;
-          restoredRanges.push({ ...prev, from: resolved.from, to: resolved.to });
-        }
+        const restoredRanges = restoreRangesFromPrevious(state.doc, docSize, previousPluginRanges);
         this.#applyRangesToDesired(desired, domIndex, restoredRanges);
       }
       this.#prevDecorationSets.set(plugin, decorationSet);

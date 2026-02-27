@@ -356,17 +356,19 @@ const handleReject = () => {
   const customHandler = proxy.$superdoc.config.onTrackedChangeBubbleReject;
 
   if (props.comment.trackedChange && typeof customHandler === 'function') {
-    // Custom handler replaces default behavior
     customHandler(props.comment, proxy.$superdoc.activeEditor);
   } else if (props.comment.trackedChange) {
+    proxy.$superdoc.activeEditor.commands.rejectTrackedChangeById(props.comment.commentId);
+  } else {
+    commentsStore.deleteComment({ superdoc: proxy.$superdoc, commentId: props.comment.commentId });
+  }
+
+  if (props.comment.trackedChange) {
     props.comment.resolveComment({
       email: superdocStore.user.email,
       name: superdocStore.user.name,
       superdoc: proxy.$superdoc,
     });
-    proxy.$superdoc.activeEditor.commands.rejectTrackedChangeById(props.comment.commentId);
-  } else {
-    commentsStore.deleteComment({ superdoc: proxy.$superdoc, commentId: props.comment.commentId });
   }
 
   // Always cleanup the dialog state
@@ -381,19 +383,18 @@ const handleResolve = () => {
   const customHandler = proxy.$superdoc.config.onTrackedChangeBubbleAccept;
 
   if (props.comment.trackedChange && typeof customHandler === 'function') {
-    // Custom handler replaces default behavior
     customHandler(props.comment, proxy.$superdoc.activeEditor);
   } else {
     if (props.comment.trackedChange) {
       proxy.$superdoc.activeEditor.commands.acceptTrackedChangeById(props.comment.commentId);
     }
-
-    props.comment.resolveComment({
-      email: superdocStore.user.email,
-      name: superdocStore.user.name,
-      superdoc: proxy.$superdoc,
-    });
   }
+
+  props.comment.resolveComment({
+    email: superdocStore.user.email,
+    name: superdocStore.user.name,
+    superdoc: proxy.$superdoc,
+  });
 
   // Always cleanup the dialog state
   nextTick(() => {

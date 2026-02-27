@@ -890,4 +890,61 @@ describe('comments-store', () => {
       expect(comment.resolvedByName).toBe('User');
     });
   });
+
+  describe('getFloatingComments filters resolved tracked changes', () => {
+    it('includes unresolved tracked changes that have position keys', () => {
+      store.commentsList = [
+        { commentId: 'tc-1', trackedChange: true, resolvedTime: null, createdTime: 1 },
+        { commentId: 'tc-2', trackedChange: true, resolvedTime: null, createdTime: 2 },
+      ];
+      store.editorCommentPositions = {
+        'tc-1': { start: 1, end: 5, bounds: { top: 0, left: 0 } },
+        'tc-2': { start: 10, end: 15, bounds: { top: 0, left: 0 } },
+      };
+
+      const floating = store.getFloatingComments;
+      expect(floating.map((c) => c.commentId)).toEqual(['tc-1', 'tc-2']);
+    });
+
+    it('excludes tracked changes once resolvedTime is set', () => {
+      store.commentsList = [
+        { commentId: 'tc-1', trackedChange: true, resolvedTime: Date.now(), createdTime: 1 },
+        { commentId: 'tc-2', trackedChange: true, resolvedTime: null, createdTime: 2 },
+      ];
+      store.editorCommentPositions = {
+        'tc-1': { start: 1, end: 5, bounds: { top: 0, left: 0 } },
+        'tc-2': { start: 10, end: 15, bounds: { top: 0, left: 0 } },
+      };
+
+      const floating = store.getFloatingComments;
+      expect(floating.map((c) => c.commentId)).toEqual(['tc-2']);
+    });
+
+    it('excludes the last tracked change when resolved (regression: SD-2049)', () => {
+      store.commentsList = [{ commentId: 'tc-only', trackedChange: true, resolvedTime: Date.now(), createdTime: 1 }];
+      // Position key still present (editor doesn't fire update for last mark removal)
+      store.editorCommentPositions = {
+        'tc-only': { start: 1, end: 5, bounds: { top: 0, left: 0 } },
+      };
+
+      const floating = store.getFloatingComments;
+      expect(floating).toEqual([]);
+    });
+
+    it('returns empty when all tracked changes are resolved', () => {
+      store.commentsList = [
+        { commentId: 'tc-1', trackedChange: true, resolvedTime: Date.now(), createdTime: 1 },
+        { commentId: 'tc-2', trackedChange: true, resolvedTime: Date.now(), createdTime: 2 },
+        { commentId: 'tc-3', trackedChange: true, resolvedTime: Date.now(), createdTime: 3 },
+      ];
+      store.editorCommentPositions = {
+        'tc-1': { start: 1, end: 5, bounds: { top: 0, left: 0 } },
+        'tc-2': { start: 10, end: 15, bounds: { top: 0, left: 0 } },
+        'tc-3': { start: 20, end: 25, bounds: { top: 0, left: 0 } },
+      };
+
+      const floating = store.getFloatingComments;
+      expect(floating).toEqual([]);
+    });
+  });
 });

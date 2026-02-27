@@ -162,20 +162,19 @@ new SuperDoc({
 <ParamField path="modules.collaboration" type="Object">
   Real-time collaboration settings
   <Expandable title="properties" defaultOpen>
-    <ParamField path="url" type="string" required>
-      WebSocket server URL
+    <ParamField path="modules.collaboration.ydoc" type="Y.Doc" required>
+      Shared Yjs document instance for this collaborative session.
     </ParamField>
-    <ParamField path="providerType" type="string" default="'hocuspocus'">
-      Provider implementation
-    </ParamField>
-    <ParamField path="token" type="string">
-      Authentication token
-    </ParamField>
-    <ParamField path="params" type="Object">
-      Additional connection parameters
+    <ParamField path="modules.collaboration.provider" type="Object" required>
+      Yjs-compatible provider instance (for example LiveblocksYjsProvider or WebsocketProvider from y-websocket).
     </ParamField>
   </Expandable>
 </ParamField>
+
+<Note>
+  SuperDoc uses a provider-agnostic collaboration contract: `modules.collaboration = { ydoc, provider }`.
+  Provider setup remains in your app code. See [Collaboration configuration](/modules/collaboration/configuration) and [Collaboration guides](/modules/collaboration/overview).
+</Note>
 
 ### Comments module
 

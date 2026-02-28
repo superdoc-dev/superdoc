@@ -86,6 +86,10 @@
     "apps/docs/document-api/reference/get-node-by-id.mdx",
     "apps/docs/document-api/reference/get-node.mdx",
     "apps/docs/document-api/reference/get-text.mdx",
+    "apps/docs/document-api/reference/history/get.mdx",
+    "apps/docs/document-api/reference/history/index.mdx",
+    "apps/docs/document-api/reference/history/redo.mdx",
+    "apps/docs/document-api/reference/history/undo.mdx",
     "apps/docs/document-api/reference/index.mdx",
     "apps/docs/document-api/reference/info.mdx",
     "apps/docs/document-api/reference/insert.mdx",
@@ -430,6 +434,13 @@
     },
     {
       "aliasMemberPaths": [],
+      "key": "history",
+      "operationIds": ["history.get", "history.undo", "history.redo"],
+      "pagePath": "apps/docs/document-api/reference/history/index.mdx",
+      "title": "History"
+    },
+    {
+      "aliasMemberPaths": [],
       "key": "toc",
       "operationIds": [
         "toc.list",
@@ -448,5 +459,5 @@
     }
   ],
   "marker": "{/* GENERATED FILE: DO NOT EDIT. Regenerate via `pnpm run docapi:sync`. */}",
-  "sourceHash": "ac3f3d41bf0c3d95a9fe4aa13505c2341d369f61c20857576e4fde3ddd93fb33"
+  "sourceHash": "510c744b41dd56592b2996c8f76683a2277c8a8025087fe107401a1277bf68ea"
 }

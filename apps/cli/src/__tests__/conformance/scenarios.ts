@@ -1696,6 +1696,26 @@ export const SUCCESS_SCENARIOS = {
   'doc.tables.get': tableReadScenario('tables.get'),
   'doc.tables.getCells': tableReadScenario('tables.getCells'),
   'doc.tables.getProperties': tableReadScenario('tables.getProperties'),
+
+  // ---------------------------------------------------------------------------
+  // History operations
+  // ---------------------------------------------------------------------------
+
+  'doc.history.get': async (harness: ConformanceHarness): Promise<ScenarioInvocation> => {
+    const stateDir = await harness.createStateDir('doc-history-get-success');
+    await harness.openSessionFixture(stateDir, 'doc-history-get', 'history-get-session');
+    return { stateDir, args: ['history', 'get', '--session', 'history-get-session'] };
+  },
+  'doc.history.undo': async (harness: ConformanceHarness): Promise<ScenarioInvocation> => {
+    const stateDir = await harness.createStateDir('doc-history-undo-success');
+    await harness.openSessionFixture(stateDir, 'doc-history-undo', 'history-undo-session');
+    return { stateDir, args: ['history', 'undo', '--session', 'history-undo-session'] };
+  },
+  'doc.history.redo': async (harness: ConformanceHarness): Promise<ScenarioInvocation> => {
+    const stateDir = await harness.createStateDir('doc-history-redo-success');
+    await harness.openSessionFixture(stateDir, 'doc-history-redo', 'history-redo-session');
+    return { stateDir, args: ['history', 'redo', '--session', 'history-redo-session'] };
+  },
 } as const satisfies Record<CliOperationId, (harness: ConformanceHarness) => Promise<ScenarioInvocation>>;
 
 const RUNTIME_CONFORMANCE_SKIP = new Set<CliOperationId>([

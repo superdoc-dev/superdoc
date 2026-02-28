@@ -79,6 +79,7 @@ export interface DocumentApiCapabilities {
     comments: CapabilityFlag;
     lists: CapabilityFlag;
     dryRun: CapabilityFlag;
+    history: CapabilityFlag;
   };
   /** Format capability discovery for `format.apply`. */
   format: FormatCapabilities;

@@ -40,6 +40,7 @@ import type { CommentInfo, CommentsListQuery, CommentsListResult } from '../comm
 import type { TrackChangesListInput, TrackChangesGetInput, ReviewDecideInput } from '../track-changes/track-changes.js';
 import type { TrackChangeInfo, TrackChangesListResult } from '../types/track-changes.types.js';
 import type { DocumentApiCapabilities } from '../capabilities/capabilities.js';
+import type { HistoryState, HistoryActionResult } from '../history/history.types.js';
 import type {
   ListsListQuery,
   ListsListResult,
@@ -418,6 +419,11 @@ export interface OperationRegistry extends FormatInlineAliasOperationRegistry {
 
   // --- capabilities ---
   'capabilities.get': { input: undefined; options: never; output: DocumentApiCapabilities };
+
+  // --- history.* ---
+  'history.get': { input: undefined; options: never; output: HistoryState };
+  'history.undo': { input: undefined; options: never; output: HistoryActionResult };
+  'history.redo': { input: undefined; options: never; output: HistoryActionResult };
 
   // --- create.table ---
   'create.table': { input: CreateTableInput; options: MutationOptions; output: CreateTableResult };

@@ -301,6 +301,14 @@ The SDKs expose all operations from the [Document API](/document-api/overview) p
 | `doc.trackChanges.get` | `track-changes get` | Retrieve a single tracked change by ID. |
 | `doc.trackChanges.decide` | `track-changes decide` | Accept or reject a tracked change (by ID or scope: all). |
 
+#### History
+
+| Operation | CLI command | Description |
+| --- | --- | --- |
+| `doc.history.get` | `history get` | Query the current undo/redo history state of the active editor. |
+| `doc.history.undo` | `history undo` | Undo the most recent history-safe mutation in the active editor. |
+| `doc.history.redo` | `history redo` | Redo the most recently undone action in the active editor. |
+
 #### Session
 
 | Operation | CLI command | Description |

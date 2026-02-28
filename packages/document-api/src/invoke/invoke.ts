@@ -160,6 +160,11 @@ export function buildDispatchTable(api: DocumentApi): TypedDispatchTable {
     // --- capabilities ---
     'capabilities.get': () => api.capabilities(),
 
+    // --- history.* ---
+    'history.get': () => api.history.get(),
+    'history.undo': () => api.history.undo(),
+    'history.redo': () => api.history.redo(),
+
     // --- create.table ---
     'create.table': (input, options) => api.create.table(input, options),
 

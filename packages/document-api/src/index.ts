@@ -6,6 +6,8 @@ export * from './types/index.js';
 export * from './contract/index.js';
 export * from './capabilities/capabilities.js';
 export * from './inline-semantics/index.js';
+export type { HistoryAdapter, HistoryApi } from './history/history.js';
+export type { HistoryState, HistoryActionResult } from './history/history.types.js';
 
 import type {
   CreateParagraphInput,
@@ -173,6 +175,9 @@ import {
 import type { OperationId } from './contract/types.js';
 import type { DynamicInvokeRequest, InvokeRequest, InvokeResult } from './contract/operation-registry.js';
 import { buildDispatchTable } from './invoke/invoke.js';
+import type { HistoryAdapter, HistoryApi } from './history/history.js';
+import type { HistoryState, HistoryActionResult } from './history/history.types.js';
+import { executeHistoryGet, executeHistoryUndo, executeHistoryRedo } from './history/history.js';
 import { executeTableOperation } from './tables/tables.js';
 import type {
   ParagraphsAdapter,
@@ -718,6 +723,11 @@ export interface DocumentApi {
    */
   mutations: MutationsApi;
   /**
+   * History operations (undo/redo) scoped to the active editor instance.
+   * Session-scoped — reflects the runtime undo/redo stack, not persistent state.
+   */
+  history: HistoryApi;
+  /**
    * Runtime capability introspection.
    *
    * Callable directly (`capabilities()`) or via `.get()`.
@@ -758,6 +768,7 @@ export interface DocumentApiAdapters {
   toc: TocAdapter;
   query: QueryAdapter;
   mutations: MutationsAdapter;
+  history: HistoryAdapter;
 }
 
 /**
@@ -1351,6 +1362,17 @@ export function createDocumentApi(adapters: DocumentApiAdapters): DocumentApi {
       },
       apply(input: MutationsApplyInput): PlanReceipt {
         return adapters.mutations.apply(input);
+      },
+    },
+    history: {
+      get(): HistoryState {
+        return executeHistoryGet(adapters.history);
+      },
+      undo(): HistoryActionResult {
+        return executeHistoryUndo(adapters.history);
+      },
+      redo(): HistoryActionResult {
+        return executeHistoryRedo(adapters.history);
       },
     },
     invoke(request: DynamicInvokeRequest): unknown {

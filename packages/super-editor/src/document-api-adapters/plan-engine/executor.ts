@@ -39,6 +39,8 @@ import type {
 } from './executor-registry.types.js';
 import { getStepExecutor } from './executor-registry.js';
 import { planError } from './errors.js';
+import { closeHistory } from 'prosemirror-history';
+import { yUndoPluginKey } from 'y-prosemirror';
 import { checkRevision, getRevision } from './revision-tracker.js';
 import { compilePlan } from './compiler.js';
 import { getBlockIndex } from '../helpers/index-cache.js';
@@ -1367,6 +1369,24 @@ export function executeCompiledPlan(
   const revisionBefore = getRevision(editor);
 
   checkRevision(editor, options.expectedRevision);
+
+  // Close the current undo group so this API mutation becomes its own undo step,
+  // preventing PM's newGroupDelay from merging sequential API calls.
+  // The collab-history path requires both collaborationProvider AND ydoc (matching
+  // the History extension guard at history.js:34); ydoc-without-provider uses PM history.
+  if (editor.options?.collaborationProvider && editor.options?.ydoc) {
+    try {
+      yUndoPluginKey.getState(editor.state)?.undoManager?.stopCapturing();
+    } catch {
+      // yUndoPlugin may not be loaded — safe to ignore.
+    }
+  } else {
+    try {
+      editor.view?.dispatch?.(closeHistory(editor.state.tr));
+    } catch {
+      // History plugin may not be loaded — safe to ignore.
+    }
+  }
 
   // D3: Detect revision drift between compile and execute
   if (compiled.compiledRevision !== revisionBefore) {

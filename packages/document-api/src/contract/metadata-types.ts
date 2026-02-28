@@ -48,4 +48,6 @@ export interface CommandStaticMetadata {
   throws: CommandThrowPolicy;
   deterministicTargetResolution: boolean;
   remediationHints?: readonly string[];
+  /** When true, this operation bypasses PM transaction history (out-of-band XML mutation). */
+  historyUnsafe?: boolean;
 }

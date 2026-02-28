@@ -35,6 +35,7 @@ Document API is currently alpha and subject to breaking changes.
 | Paragraph Formatting | 17 | 0 | 17 | [Open](/document-api/reference/format/paragraph/index) |
 | Paragraph Styles | 2 | 0 | 2 | [Open](/document-api/reference/styles/paragraph/index) |
 | Tables | 39 | 0 | 39 | [Open](/document-api/reference/tables/index) |
+| History | 3 | 0 | 3 | [Open](/document-api/reference/history/index) |
 | Table of Contents | 10 | 0 | 10 | [Open](/document-api/reference/toc/index) |
 
 ## Available operations
@@ -271,6 +272,14 @@ The tables below are grouped by namespace.
 | <span style={{ whiteSpace: 'nowrap', wordBreak: 'normal', overflowWrap: 'normal' }}><a href="/document-api/reference/tables/get"><code>tables.get</code></a></span> | <span style={{ whiteSpace: 'nowrap', wordBreak: 'normal', overflowWrap: 'normal' }}><code>editor.doc.tables.get(...)</code></span> | Retrieve table structure and dimensions by locator. |
 | <span style={{ whiteSpace: 'nowrap', wordBreak: 'normal', overflowWrap: 'normal' }}><a href="/document-api/reference/tables/get-cells"><code>tables.getCells</code></a></span> | <span style={{ whiteSpace: 'nowrap', wordBreak: 'normal', overflowWrap: 'normal' }}><code>editor.doc.tables.getCells(...)</code></span> | Retrieve cell information for a table, optionally filtered by row or column. |
 | <span style={{ whiteSpace: 'nowrap', wordBreak: 'normal', overflowWrap: 'normal' }}><a href="/document-api/reference/tables/get-properties"><code>tables.getProperties</code></a></span> | <span style={{ whiteSpace: 'nowrap', wordBreak: 'normal', overflowWrap: 'normal' }}><code>editor.doc.tables.getProperties(...)</code></span> | Retrieve layout and style properties of a table. |
+
+#### History
+
+| Operation | API member path | Description |
+| --- | --- | --- |
+| <span style={{ whiteSpace: 'nowrap', wordBreak: 'normal', overflowWrap: 'normal' }}><a href="/document-api/reference/history/get"><code>history.get</code></a></span> | <span style={{ whiteSpace: 'nowrap', wordBreak: 'normal', overflowWrap: 'normal' }}><code>editor.doc.history.get(...)</code></span> | Query the current undo/redo history state of the active editor. |
+| <span style={{ whiteSpace: 'nowrap', wordBreak: 'normal', overflowWrap: 'normal' }}><a href="/document-api/reference/history/undo"><code>history.undo</code></a></span> | <span style={{ whiteSpace: 'nowrap', wordBreak: 'normal', overflowWrap: 'normal' }}><code>editor.doc.history.undo(...)</code></span> | Undo the most recent history-safe mutation in the active editor. |
+| <span style={{ whiteSpace: 'nowrap', wordBreak: 'normal', overflowWrap: 'normal' }}><a href="/document-api/reference/history/redo"><code>history.redo</code></a></span> | <span style={{ whiteSpace: 'nowrap', wordBreak: 'normal', overflowWrap: 'normal' }}><code>editor.doc.history.redo(...)</code></span> | Redo the most recently undone action in the active editor. |
 
 #### Table of Contents
 

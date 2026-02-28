@@ -115,6 +115,7 @@ import {
   tablesClearCellSpacingWrapper,
 } from './plan-engine/tables-wrappers.js';
 import { tablesGetAdapter, tablesGetCellsAdapter, tablesGetPropertiesAdapter } from './tables-adapter.js';
+import { createHistoryAdapter } from './history-adapter.js';
 import {
   tocListWrapper,
   tocGetWrapper,
@@ -299,5 +300,6 @@ export function assembleDocumentApiAdapters(editor: Editor): DocumentApiAdapters
       preview: (input) => previewPlan(editor, input),
       apply: (input) => executePlan(editor, input),
     },
+    history: createHistoryAdapter(editor),
   };
 }

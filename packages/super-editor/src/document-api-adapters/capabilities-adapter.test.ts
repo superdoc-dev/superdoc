@@ -102,10 +102,32 @@ describe('getDocumentApiCapabilities', () => {
     expect(capabilities.global.comments.enabled).toBe(false);
     expect(capabilities.global.lists.enabled).toBe(false);
     expect(capabilities.global.trackChanges.enabled).toBe(false);
+    expect(capabilities.global.history.enabled).toBe(false);
     expect(capabilities.operations['comments.create'].available).toBe(false);
     expect(capabilities.operations['lists.setType'].available).toBe(false);
     expect(capabilities.operations.insert.tracked).toBe(false);
     expect(capabilities.operations['format.apply'].available).toBe(false);
+  });
+
+  it('reports history namespace enabled only when undo/redo commands are both present', () => {
+    const fullCapabilities = getDocumentApiCapabilities(
+      makeEditor({
+        commands: {
+          undo: vi.fn(() => true),
+          redo: vi.fn(() => true),
+        } as unknown as Editor['commands'],
+      }),
+    );
+    expect(fullCapabilities.global.history.enabled).toBe(true);
+
+    const missingRedoCapabilities = getDocumentApiCapabilities(
+      makeEditor({
+        commands: {
+          redo: undefined,
+        } as unknown as Editor['commands'],
+      }),
+    );
+    expect(missingRedoCapabilities.global.history.enabled).toBe(false);
   });
 
   it('exposes tracked + dryRun flags in line with command catalog capabilities', () => {

@@ -48,6 +48,7 @@ export type ReferenceGroupKey =
   | 'query'
   | 'mutations'
   | 'tables'
+  | 'history'
   | 'toc';
 
 // ---------------------------------------------------------------------------
@@ -102,6 +103,7 @@ function mutationOperation(options: {
   throws: readonly PreApplyThrowCode[];
   deterministicTargetResolution?: boolean;
   remediationHints?: readonly string[];
+  historyUnsafe?: boolean;
 }): CommandStaticMetadata {
   return {
     mutates: true,
@@ -115,6 +117,7 @@ function mutationOperation(options: {
     },
     deterministicTargetResolution: options.deterministicTargetResolution ?? true,
     remediationHints: options.remediationHints,
+    historyUnsafe: options.historyUnsafe,
   };
 }
 
@@ -365,6 +368,7 @@ export const OPERATION_DEFINITIONS = {
       supportsTrackedMode: false,
       possibleFailureCodes: NONE_FAILURES,
       throws: ['INVALID_TARGET', 'INVALID_INPUT', 'CAPABILITY_UNAVAILABLE', 'REVISION_MISMATCH'],
+      historyUnsafe: true,
     }),
     referenceDocPath: 'styles/apply.mdx',
     referenceGroup: 'styles',
@@ -453,6 +457,7 @@ export const OPERATION_DEFINITIONS = {
       supportsTrackedMode: false,
       possibleFailureCodes: ['NO_OP', 'INVALID_TARGET', 'CAPABILITY_UNAVAILABLE'],
       throws: T_SECTION_MUTATION,
+      historyUnsafe: true,
     }),
     referenceDocPath: 'sections/set-break-type.mdx',
     referenceGroup: 'sections',
@@ -469,6 +474,7 @@ export const OPERATION_DEFINITIONS = {
       supportsTrackedMode: false,
       possibleFailureCodes: ['NO_OP', 'INVALID_TARGET', 'CAPABILITY_UNAVAILABLE'],
       throws: T_SECTION_MUTATION,
+      historyUnsafe: true,
     }),
     referenceDocPath: 'sections/set-page-margins.mdx',
     referenceGroup: 'sections',
@@ -485,6 +491,7 @@ export const OPERATION_DEFINITIONS = {
       supportsTrackedMode: false,
       possibleFailureCodes: ['NO_OP', 'INVALID_TARGET', 'CAPABILITY_UNAVAILABLE'],
       throws: T_SECTION_MUTATION,
+      historyUnsafe: true,
     }),
     referenceDocPath: 'sections/set-header-footer-margins.mdx',
     referenceGroup: 'sections',
@@ -501,6 +508,7 @@ export const OPERATION_DEFINITIONS = {
       supportsTrackedMode: false,
       possibleFailureCodes: ['NO_OP', 'INVALID_TARGET', 'CAPABILITY_UNAVAILABLE'],
       throws: T_SECTION_MUTATION,
+      historyUnsafe: true,
     }),
     referenceDocPath: 'sections/set-page-setup.mdx',
     referenceGroup: 'sections',
@@ -516,6 +524,7 @@ export const OPERATION_DEFINITIONS = {
       supportsTrackedMode: false,
       possibleFailureCodes: ['NO_OP', 'INVALID_TARGET', 'CAPABILITY_UNAVAILABLE'],
       throws: T_SECTION_MUTATION,
+      historyUnsafe: true,
     }),
     referenceDocPath: 'sections/set-columns.mdx',
     referenceGroup: 'sections',
@@ -531,6 +540,7 @@ export const OPERATION_DEFINITIONS = {
       supportsTrackedMode: false,
       possibleFailureCodes: ['NO_OP', 'INVALID_TARGET', 'CAPABILITY_UNAVAILABLE'],
       throws: T_SECTION_MUTATION,
+      historyUnsafe: true,
     }),
     referenceDocPath: 'sections/set-line-numbering.mdx',
     referenceGroup: 'sections',
@@ -546,6 +556,7 @@ export const OPERATION_DEFINITIONS = {
       supportsTrackedMode: false,
       possibleFailureCodes: ['NO_OP', 'INVALID_TARGET', 'CAPABILITY_UNAVAILABLE'],
       throws: T_SECTION_MUTATION,
+      historyUnsafe: true,
     }),
     referenceDocPath: 'sections/set-page-numbering.mdx',
     referenceGroup: 'sections',
@@ -561,6 +572,7 @@ export const OPERATION_DEFINITIONS = {
       supportsTrackedMode: false,
       possibleFailureCodes: ['NO_OP', 'INVALID_TARGET', 'CAPABILITY_UNAVAILABLE'],
       throws: T_SECTION_MUTATION,
+      historyUnsafe: true,
     }),
     referenceDocPath: 'sections/set-title-page.mdx',
     referenceGroup: 'sections',
@@ -576,6 +588,7 @@ export const OPERATION_DEFINITIONS = {
       supportsTrackedMode: false,
       possibleFailureCodes: ['NO_OP', 'CAPABILITY_UNAVAILABLE'],
       throws: T_SECTION_SETTINGS_MUTATION,
+      historyUnsafe: true,
     }),
     referenceDocPath: 'sections/set-odd-even-headers-footers.mdx',
     referenceGroup: 'sections',
@@ -591,6 +604,7 @@ export const OPERATION_DEFINITIONS = {
       supportsTrackedMode: false,
       possibleFailureCodes: ['NO_OP', 'INVALID_TARGET', 'CAPABILITY_UNAVAILABLE'],
       throws: T_SECTION_MUTATION,
+      historyUnsafe: true,
     }),
     referenceDocPath: 'sections/set-vertical-align.mdx',
     referenceGroup: 'sections',
@@ -606,6 +620,7 @@ export const OPERATION_DEFINITIONS = {
       supportsTrackedMode: false,
       possibleFailureCodes: ['NO_OP', 'INVALID_TARGET', 'CAPABILITY_UNAVAILABLE'],
       throws: T_SECTION_MUTATION,
+      historyUnsafe: true,
     }),
     referenceDocPath: 'sections/set-section-direction.mdx',
     referenceGroup: 'sections',
@@ -622,6 +637,7 @@ export const OPERATION_DEFINITIONS = {
       supportsTrackedMode: false,
       possibleFailureCodes: ['NO_OP', 'INVALID_TARGET', 'CAPABILITY_UNAVAILABLE'],
       throws: T_SECTION_MUTATION,
+      historyUnsafe: true,
     }),
     referenceDocPath: 'sections/set-header-footer-ref.mdx',
     referenceGroup: 'sections',
@@ -638,6 +654,7 @@ export const OPERATION_DEFINITIONS = {
       supportsTrackedMode: false,
       possibleFailureCodes: ['NO_OP', 'INVALID_TARGET', 'CAPABILITY_UNAVAILABLE'],
       throws: T_SECTION_MUTATION,
+      historyUnsafe: true,
     }),
     referenceDocPath: 'sections/clear-header-footer-ref.mdx',
     referenceGroup: 'sections',
@@ -654,6 +671,7 @@ export const OPERATION_DEFINITIONS = {
       supportsTrackedMode: false,
       possibleFailureCodes: ['NO_OP', 'INVALID_TARGET', 'CAPABILITY_UNAVAILABLE'],
       throws: T_SECTION_MUTATION,
+      historyUnsafe: true,
     }),
     referenceDocPath: 'sections/set-link-to-previous.mdx',
     referenceGroup: 'sections',
@@ -670,6 +688,7 @@ export const OPERATION_DEFINITIONS = {
       supportsTrackedMode: false,
       possibleFailureCodes: ['NO_OP', 'INVALID_TARGET', 'CAPABILITY_UNAVAILABLE'],
       throws: T_SECTION_MUTATION,
+      historyUnsafe: true,
     }),
     referenceDocPath: 'sections/set-page-borders.mdx',
     referenceGroup: 'sections',
@@ -686,6 +705,7 @@ export const OPERATION_DEFINITIONS = {
       supportsTrackedMode: false,
       possibleFailureCodes: ['NO_OP', 'INVALID_TARGET', 'CAPABILITY_UNAVAILABLE'],
       throws: T_SECTION_MUTATION,
+      historyUnsafe: true,
     }),
     referenceDocPath: 'sections/clear-page-borders.mdx',
     referenceGroup: 'sections',
@@ -1910,7 +1930,6 @@ export const OPERATION_DEFINITIONS = {
     referenceDocPath: 'tables/get-properties.mdx',
     referenceGroup: 'tables',
   },
-
   // -------------------------------------------------------------------------
   // Create: table of contents
   // -------------------------------------------------------------------------
@@ -2077,6 +2096,57 @@ export const OPERATION_DEFINITIONS = {
     }),
     referenceDocPath: 'toc/edit-entry.mdx',
     referenceGroup: 'toc',
+  },
+
+  // -------------------------------------------------------------------------
+  // History
+  // -------------------------------------------------------------------------
+
+  'history.get': {
+    memberPath: 'history.get',
+    description: 'Query the current undo/redo history state of the active editor.',
+    expectedResult:
+      'Returns a HistoryState object with undoDepth, redoDepth, canUndo, canRedo, and a list of history-unsafe operations.',
+    requiresDocumentContext: true,
+    metadata: readOperation({
+      idempotency: 'idempotent',
+    }),
+    referenceDocPath: 'history/get.mdx',
+    referenceGroup: 'history',
+  },
+
+  'history.undo': {
+    memberPath: 'history.undo',
+    description: 'Undo the most recent history-safe mutation in the active editor.',
+    expectedResult:
+      'Returns a HistoryActionResult with noop flag and revision before/after; noop is true when the undo stack is empty.',
+    requiresDocumentContext: true,
+    metadata: mutationOperation({
+      idempotency: 'non-idempotent',
+      supportsDryRun: false,
+      supportsTrackedMode: false,
+      possibleFailureCodes: NONE_FAILURES,
+      throws: ['CAPABILITY_UNAVAILABLE'],
+    }),
+    referenceDocPath: 'history/undo.mdx',
+    referenceGroup: 'history',
+  },
+
+  'history.redo': {
+    memberPath: 'history.redo',
+    description: 'Redo the most recently undone action in the active editor.',
+    expectedResult:
+      'Returns a HistoryActionResult with noop flag and revision before/after; noop is true when the redo stack is empty.',
+    requiresDocumentContext: true,
+    metadata: mutationOperation({
+      idempotency: 'non-idempotent',
+      supportsDryRun: false,
+      supportsTrackedMode: false,
+      possibleFailureCodes: NONE_FAILURES,
+      throws: ['CAPABILITY_UNAVAILABLE'],
+    }),
+    referenceDocPath: 'history/redo.mdx',
+    referenceGroup: 'history',
   },
 } as const satisfies Record<string, OperationDefinitionEntry>;
 

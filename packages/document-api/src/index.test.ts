@@ -16,6 +16,7 @@ import type { CommentInfo, CommentsListQuery, CommentsListResult } from './comme
 import type { CreateAdapter } from './create/create.js';
 import type { ListsAdapter } from './lists/lists.js';
 import type { CapabilitiesAdapter, DocumentApiCapabilities } from './capabilities/capabilities.js';
+import type { HistoryAdapter } from './history/history.js';
 import type { TablesAdapter } from './index.js';
 
 function makeFindAdapter(result: FindOutput): FindAdapter {
@@ -261,6 +262,20 @@ function makeTablesAdapter(): TablesAdapter {
   };
 }
 
+function makeHistoryAdapter(): HistoryAdapter {
+  return {
+    get: vi.fn(() => ({
+      undoDepth: 0,
+      redoDepth: 0,
+      canUndo: false,
+      canRedo: false,
+      historyUnsafeOperations: [],
+    })),
+    undo: vi.fn(() => ({ noop: true, revision: { before: '0', after: '0' } })),
+    redo: vi.fn(() => ({ noop: true, revision: { before: '0', after: '0' } })),
+  };
+}
+
 function makeCapabilitiesAdapter(overrides?: Partial<DocumentApiCapabilities>): CapabilitiesAdapter {
   const defaultCapabilities: DocumentApiCapabilities = {
     global: {
@@ -268,6 +283,7 @@ function makeCapabilitiesAdapter(overrides?: Partial<DocumentApiCapabilities>): 
       comments: { enabled: false },
       lists: { enabled: false },
       dryRun: { enabled: false },
+      history: { enabled: false },
     },
     format: { supportedInlineProperties: {} as DocumentApiCapabilities['format']['supportedInlineProperties'] },
     operations: {} as DocumentApiCapabilities['operations'],
@@ -729,6 +745,59 @@ describe('createDocumentApi', () => {
     expect(trackAdpt.reject).toHaveBeenCalledWith({ id: 'tc-1' }, undefined);
     expect(trackAdpt.acceptAll).toHaveBeenCalledWith({}, undefined);
     expect(trackAdpt.rejectAll).toHaveBeenCalledWith({}, undefined);
+  });
+
+  it('delegates history.get to the history adapter', () => {
+    const historyAdpt = makeHistoryAdapter();
+    const api = createDocumentApi({
+      find: makeFindAdapter(QUERY_RESULT),
+      getNode: makeGetNodeAdapter(PARAGRAPH_INFO),
+      getText: makeGetTextAdapter(),
+      info: makeInfoAdapter(),
+      comments: makeCommentsAdapter(),
+      write: makeWriteAdapter(),
+      format: makeFormatAdapter(),
+      trackChanges: makeTrackChangesAdapter(),
+      create: makeCreateAdapter(),
+      lists: makeListsAdapter(),
+      history: historyAdpt,
+    } as any);
+
+    const result = api.history.get();
+
+    expect(historyAdpt.get).toHaveBeenCalledOnce();
+    expect(result).toEqual({
+      undoDepth: 0,
+      redoDepth: 0,
+      canUndo: false,
+      canRedo: false,
+      historyUnsafeOperations: [],
+    });
+  });
+
+  it('delegates history.undo and history.redo to the history adapter', () => {
+    const historyAdpt = makeHistoryAdapter();
+    const api = createDocumentApi({
+      find: makeFindAdapter(QUERY_RESULT),
+      getNode: makeGetNodeAdapter(PARAGRAPH_INFO),
+      getText: makeGetTextAdapter(),
+      info: makeInfoAdapter(),
+      comments: makeCommentsAdapter(),
+      write: makeWriteAdapter(),
+      format: makeFormatAdapter(),
+      trackChanges: makeTrackChangesAdapter(),
+      create: makeCreateAdapter(),
+      lists: makeListsAdapter(),
+      history: historyAdpt,
+    } as any);
+
+    const undoResult = api.history.undo();
+    const redoResult = api.history.redo();
+
+    expect(historyAdpt.undo).toHaveBeenCalledOnce();
+    expect(historyAdpt.redo).toHaveBeenCalledOnce();
+    expect(undoResult).toEqual({ noop: true, revision: { before: '0', after: '0' } });
+    expect(redoResult).toEqual({ noop: true, revision: { before: '0', after: '0' } });
   });
 
   describe('trackChanges.decide input validation', () => {

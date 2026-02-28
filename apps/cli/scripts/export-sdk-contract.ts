@@ -177,6 +177,9 @@ const INTENT_NAMES = {
   'doc.tables.get': 'get_table',
   'doc.tables.getCells': 'get_table_cells',
   'doc.tables.getProperties': 'get_table_properties',
+  'doc.history.get': 'get_history',
+  'doc.history.undo': 'undo',
+  'doc.history.redo': 'redo',
 } as const satisfies Record<DocBackedCliOpId, string>;
 
 // ---------------------------------------------------------------------------

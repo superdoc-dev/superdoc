@@ -1195,8 +1195,9 @@ const capabilitiesOutputSchema = objectSchema(
         comments: capabilityFlagSchema,
         lists: capabilityFlagSchema,
         dryRun: capabilityFlagSchema,
+        history: capabilityFlagSchema,
       },
-      ['trackChanges', 'comments', 'lists', 'dryRun'],
+      ['trackChanges', 'comments', 'lists', 'dryRun', 'history'],
     ),
     format: formatCapabilitiesSchema,
     operations: operationCapabilitiesSchema,
@@ -1333,6 +1334,35 @@ const tableMutationResultSchema: JsonSchema = {
 const createTableResultSchema: JsonSchema = {
   oneOf: [createTableSuccessSchema, tableMutationFailureSchema],
 };
+
+const historyActionSuccessSchema: JsonSchema = objectSchema(
+  {
+    noop: { type: 'boolean' },
+    revision: objectSchema(
+      {
+        before: { type: 'string' },
+        after: { type: 'string' },
+      },
+      ['before', 'after'],
+    ),
+  },
+  ['noop', 'revision'],
+);
+
+const historyActionFailureSchema: JsonSchema = objectSchema(
+  {
+    success: { const: false },
+    failure: objectSchema(
+      {
+        code: { enum: ['CAPABILITY_UNAVAILABLE'] },
+        message: { type: 'string' },
+        details: {},
+      },
+      ['code', 'message'],
+    ),
+  },
+  ['success', 'failure'],
+);
 
 type FormatInlineAliasOperationId = `format.${(typeof INLINE_PROPERTY_REGISTRY)[number]['key']}`;
 
@@ -3189,6 +3219,32 @@ const operationSchemas: Record<OperationId, OperationSchemaSet> = {
     ),
   },
 
+  // --- history.* ---
+  'history.get': {
+    input: strictEmptyObjectSchema,
+    output: objectSchema(
+      {
+        undoDepth: { type: 'integer', minimum: 0 },
+        redoDepth: { type: 'integer', minimum: 0 },
+        canUndo: { type: 'boolean' },
+        canRedo: { type: 'boolean' },
+        historyUnsafeOperations: { type: 'array', items: { type: 'string' } },
+      },
+      ['undoDepth', 'redoDepth', 'canUndo', 'canRedo', 'historyUnsafeOperations'],
+    ),
+  },
+  'history.undo': {
+    input: strictEmptyObjectSchema,
+    output: historyActionSuccessSchema,
+    success: historyActionSuccessSchema,
+    failure: historyActionFailureSchema,
+  },
+  'history.redo': {
+    input: strictEmptyObjectSchema,
+    output: historyActionSuccessSchema,
+    success: historyActionSuccessSchema,
+    failure: historyActionFailureSchema,
+  },
   // -------------------------------------------------------------------------
   // TOC schemas
   // -------------------------------------------------------------------------

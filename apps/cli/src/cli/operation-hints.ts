@@ -159,6 +159,9 @@ export const SUCCESS_VERB: Record<CliExposedOperationId, string> = {
   'tables.get': 'resolved table',
   'tables.getCells': 'listed cells',
   'tables.getProperties': 'resolved table properties',
+  'history.get': 'retrieved history state',
+  'history.undo': 'undid last change',
+  'history.redo': 'redid last change',
 };
 
 // ---------------------------------------------------------------------------
@@ -277,6 +280,9 @@ export const OUTPUT_FORMAT: Record<CliExposedOperationId, OutputFormat> = {
   'tables.get': 'tableInfo',
   'tables.getCells': 'tableCellList',
   'tables.getProperties': 'tablePropertiesInfo',
+  'history.get': 'plain',
+  'history.undo': 'plain',
+  'history.redo': 'plain',
 };
 
 // ---------------------------------------------------------------------------
@@ -379,6 +385,9 @@ export const RESPONSE_ENVELOPE_KEY: Record<CliExposedOperationId, string | null>
   'tables.get': 'result',
   'tables.getCells': 'result',
   'tables.getProperties': 'result',
+  'history.get': 'result',
+  'history.undo': 'result',
+  'history.redo': 'result',
 };
 
 // ---------------------------------------------------------------------------
@@ -509,4 +518,7 @@ export const OPERATION_FAMILY: Record<CliExposedOperationId, OperationFamily> = 
   'tables.get': 'tables',
   'tables.getCells': 'tables',
   'tables.getProperties': 'tables',
+  'history.get': 'query',
+  'history.undo': 'general',
+  'history.redo': 'general',
 };

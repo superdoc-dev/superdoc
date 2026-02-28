@@ -138,15 +138,16 @@ export const replaceAroundStep = ({
     const ourDate = trackMeta.deletionMark.attrs.date;
     const searchTo = Math.min(newTr.doc.content.size, deleteFrom + 20);
 
+    let contiguous = true;
     newTr.doc.nodesBetween(deleteFrom, searchTo, (node, pos) => {
+      if (!contiguous) return false;
       if (!node.isText) return;
       const delMark = node.marks.find((m) => m.type.name === TrackDeleteMarkName);
-      if (
-        delMark &&
-        delMark.attrs.id !== ourId &&
-        delMark.attrs.authorEmail === ourEmail &&
-        delMark.attrs.date === ourDate
-      ) {
+      if (!delMark) {
+        contiguous = false; // Live text — stop, deletions are no longer contiguous.
+        return;
+      }
+      if (delMark.attrs.id !== ourId && delMark.attrs.authorEmail === ourEmail && delMark.attrs.date === ourDate) {
         const markType = state.schema.marks[TrackDeleteMarkName];
         const merged = markType.create({ ...delMark.attrs, id: ourId });
         newTr.removeMark(pos, pos + node.nodeSize, delMark);

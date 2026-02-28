@@ -384,6 +384,57 @@ describe('replaceAroundStep handler', () => {
 
       expect(periodMarkId).toBe('other-author-del');
     });
+
+    it('does not merge non-contiguous marks separated by live text', () => {
+      // "Material" (live) + "." (deleted, same author) + "end" (live) + "!" (deleted, same author)
+      // Only "." should be merged with the new deletion; "!" should keep its own ID
+      // because "end" (live text) breaks contiguity.
+      const deleteMark1 = schema.marks[TrackDeleteMarkName].create({
+        id: 'period-del',
+        author: user.name,
+        authorEmail: user.email,
+        date,
+      });
+      const deleteMark2 = schema.marks[TrackDeleteMarkName].create({
+        id: 'excl-del',
+        author: user.name,
+        authorEmail: user.email,
+        date,
+      });
+
+      const doc = schema.nodes.doc.create(
+        {},
+        schema.nodes.paragraph.create({}, [
+          schema.nodes.run.create({}, [schema.text('Material')]),
+          schema.nodes.run.create({}, [schema.text('.', [deleteMark1])]),
+          schema.nodes.run.create({}, [schema.text('end')]),
+          schema.nodes.run.create({}, [schema.text('!', [deleteMark2])]),
+        ]),
+      );
+      let state = createState(doc);
+
+      const textPos = findTextPos(state.doc, 'Material');
+      const cursorPos = textPos + 8;
+      state = state.apply(state.tr.setSelection(TextSelection.create(state.doc, cursorPos)));
+
+      const newTr = invokeHandler({ state });
+      const trackMeta = newTr.getMeta(TrackChangesBasePluginKey);
+      const newId = trackMeta?.deletionMark?.attrs?.id;
+
+      // "." should be merged (same ID as new deletion)
+      let periodMarkId = null;
+      let exclMarkId = null;
+      newTr.doc.descendants((node) => {
+        if (!node.isText) return;
+        const delMark = node.marks.find((m) => m.type.name === TrackDeleteMarkName);
+        if (!delMark) return;
+        if (node.text === '.') periodMarkId = delMark.attrs.id;
+        if (node.text === '!') exclMarkId = delMark.attrs.id;
+      });
+
+      expect(periodMarkId).toBe(newId); // Adjacent — merged
+      expect(exclMarkId).toBe('excl-del'); // Non-contiguous — NOT merged
+    });
   });
 
   describe('selectionPos in trackedTransaction', () => {

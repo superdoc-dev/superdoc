@@ -1,6 +1,6 @@
 import { describe, expect, it, vi, assertType } from 'vitest';
 import type { FormatAdapter, FormatInlineAliasInput, StyleApplyInput } from './format.js';
-import { executeStyleApply, executeAlign, executeInlineAlias } from './format.js';
+import { executeStyleApply, executeInlineAlias } from './format.js';
 import { DocumentApiValidationError } from '../errors.js';
 import type { TextMutationReceipt } from '../types/index.js';
 
@@ -22,7 +22,6 @@ function makeReceipt(): TextMutationReceipt {
 function makeAdapter(): FormatAdapter & Record<string, ReturnType<typeof vi.fn>> {
   return {
     apply: vi.fn(() => makeReceipt()),
-    align: vi.fn(() => makeReceipt()),
   };
 }
 
@@ -124,56 +123,6 @@ describe('executeStyleApply validation', () => {
   });
 });
 
-function targetValidationSuite(
-  name: string,
-  exec: (adapter: ReturnType<typeof makeAdapter>, input: unknown, options?: unknown) => unknown,
-) {
-  describe(`${name} target validation`, () => {
-    it('rejects non-object input', () => {
-      expect(() => exec(makeAdapter(), null)).toThrow(DocumentApiValidationError);
-    });
-
-    it('rejects missing target', () => {
-      expect(() => exec(makeAdapter(), { alignment: 'left' })).toThrow('requires a target');
-    });
-
-    it('rejects invalid target', () => {
-      expect(() => exec(makeAdapter(), { target: 'bad', alignment: 'left' })).toThrow('text address');
-    });
-  });
-}
-
-describe('executeAlign validation', () => {
-  targetValidationSuite('format.align', (a, i) => executeAlign(a, i as any));
-
-  it('rejects missing alignment', () => {
-    expect(() => executeAlign(makeAdapter(), { target: TARGET } as any)).toThrow('requires an alignment');
-  });
-
-  it('rejects invalid alignment value', () => {
-    expect(() => executeAlign(makeAdapter(), { target: TARGET, alignment: 'middle' } as any)).toThrow(
-      'left, center, right, justify',
-    );
-  });
-
-  it('rejects unknown fields', () => {
-    expect(() => executeAlign(makeAdapter(), { target: TARGET, alignment: 'left', extra: 1 } as any)).toThrow('extra');
-  });
-
-  it('accepts null alignment (unset)', () => {
-    const adapter = makeAdapter();
-    executeAlign(adapter, { target: TARGET, alignment: null });
-    expect(adapter.align).toHaveBeenCalled();
-  });
-
-  it.each(['left', 'center', 'right', 'justify'] as const)('accepts alignment "%s"', (alignment) => {
-    const adapter = makeAdapter();
-    executeAlign(adapter, { target: TARGET, alignment });
-    expect(adapter.align).toHaveBeenCalled();
-  });
-});
-
-// ---------------------------------------------------------------------------
 // executeInlineAlias — runtime + type contract
 // ---------------------------------------------------------------------------
 

@@ -9,20 +9,49 @@
  * OPERATION_DEFINITIONS, the CLI requires only a one-line entry in each table.
  */
 
-import { COMMAND_CATALOG } from '@superdoc/document-api';
+import { COMMAND_CATALOG, INLINE_PROPERTY_REGISTRY, type InlineRunPatchKey } from '@superdoc/document-api';
 import type { CliExposedOperationId } from './operation-set.js';
 
-type FormatOperationId = Extract<CliExposedOperationId, `format.${string}`>;
-type FormatInlineAliasOperationId = Exclude<FormatOperationId, 'format.apply' | 'format.align'>;
+type FormatInlineAliasOperationId = `format.${InlineRunPatchKey}`;
 
-const FORMAT_INLINE_ALIAS_OPERATION_IDS = (Object.keys(COMMAND_CATALOG) as CliExposedOperationId[]).filter(
-  (operationId): operationId is FormatInlineAliasOperationId =>
-    operationId.startsWith('format.') && operationId !== 'format.apply' && operationId !== 'format.align',
+const FORMAT_INLINE_ALIAS_OPERATION_IDS = INLINE_PROPERTY_REGISTRY.map(
+  (entry) => `format.${entry.key}` as FormatInlineAliasOperationId,
 );
 
 function buildFormatInlineAliasRecord<T>(value: T): Record<FormatInlineAliasOperationId, T> {
   return Object.fromEntries(FORMAT_INLINE_ALIAS_OPERATION_IDS.map((operationId) => [operationId, value])) as Record<
     FormatInlineAliasOperationId,
+    T
+  >;
+}
+
+const PARAGRAPH_OPERATION_IDS = [
+  'styles.paragraph.setStyle',
+  'styles.paragraph.clearStyle',
+  'format.paragraph.resetDirectFormatting',
+  'format.paragraph.setAlignment',
+  'format.paragraph.clearAlignment',
+  'format.paragraph.setIndentation',
+  'format.paragraph.clearIndentation',
+  'format.paragraph.setSpacing',
+  'format.paragraph.clearSpacing',
+  'format.paragraph.setKeepOptions',
+  'format.paragraph.setOutlineLevel',
+  'format.paragraph.setFlowOptions',
+  'format.paragraph.setTabStop',
+  'format.paragraph.clearTabStop',
+  'format.paragraph.clearAllTabStops',
+  'format.paragraph.setBorder',
+  'format.paragraph.clearBorder',
+  'format.paragraph.setShading',
+  'format.paragraph.clearShading',
+] as const satisfies readonly CliExposedOperationId[];
+
+type ParagraphOperationId = (typeof PARAGRAPH_OPERATION_IDS)[number];
+
+function buildParagraphRecord<T>(value: T): Record<ParagraphOperationId, T> {
+  return Object.fromEntries(PARAGRAPH_OPERATION_IDS.map((operationId) => [operationId, value])) as Record<
+    ParagraphOperationId,
     T
   >;
 }
@@ -52,8 +81,8 @@ export const SUCCESS_VERB: Record<CliExposedOperationId, string> = {
   delete: 'deleted text',
   'blocks.delete': 'deleted block',
   'format.apply': 'applied style',
-  'format.align': 'set alignment',
   ...buildFormatInlineAliasRecord('applied style'),
+  ...buildParagraphRecord('updated paragraph formatting'),
   'styles.apply': 'applied stylesheet defaults',
   'create.paragraph': 'created paragraph',
   'create.heading': 'created heading',
@@ -168,8 +197,8 @@ export const OUTPUT_FORMAT: Record<CliExposedOperationId, OutputFormat> = {
   delete: 'mutationReceipt',
   'blocks.delete': 'plain',
   'format.apply': 'mutationReceipt',
-  'format.align': 'mutationReceipt',
   ...buildFormatInlineAliasRecord('mutationReceipt'),
+  ...buildParagraphRecord('plain'),
   'styles.apply': 'receipt',
   'create.paragraph': 'createResult',
   'create.heading': 'createResult',
@@ -268,8 +297,8 @@ export const RESPONSE_ENVELOPE_KEY: Record<CliExposedOperationId, string | null>
   delete: null,
   'blocks.delete': 'result',
   'format.apply': null,
-  'format.align': null,
   ...buildFormatInlineAliasRecord(null),
+  ...buildParagraphRecord('result'),
   'styles.apply': 'receipt',
   'create.paragraph': 'result',
   'create.heading': 'result',
@@ -362,7 +391,6 @@ export const RESPONSE_VALIDATION_KEY: Partial<Record<CliExposedOperationId, stri
   replace: 'receipt',
   delete: 'receipt',
   'format.apply': 'receipt',
-  'format.align': 'receipt',
   ...buildFormatInlineAliasRecord('receipt'),
 };
 
@@ -397,8 +425,8 @@ export const OPERATION_FAMILY: Record<CliExposedOperationId, OperationFamily> = 
   delete: 'textMutation',
   'blocks.delete': 'blocks',
   'format.apply': 'textMutation',
-  'format.align': 'textMutation',
   ...buildFormatInlineAliasRecord('textMutation'),
+  ...buildParagraphRecord('textMutation'),
   'styles.apply': 'general',
   'create.paragraph': 'create',
   'create.heading': 'create',

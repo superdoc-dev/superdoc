@@ -94,7 +94,6 @@ function makeAdapters() {
   });
   const formatAdapter: FormatAdapter = {
     apply: vi.fn(formatReceipt),
-    align: vi.fn(formatReceipt),
   };
   const stylesAdapter: StylesAdapter = {
     apply: vi.fn(() => ({
@@ -308,15 +307,15 @@ describe('invoke', () => {
       expect(invoked).toEqual(direct);
     });
 
-    it('format.align: invoke returns same result as direct call', () => {
+    it('format.fontFamily: invoke returns same result as direct call', () => {
       const { adapters } = makeAdapters();
       const api = createDocumentApi(adapters);
       const input = {
         target: { kind: 'text' as const, blockId: 'p1', range: { start: 0, end: 2 } },
-        alignment: 'center' as const,
+        value: 'Arial',
       };
-      const direct = api.format.align(input);
-      const invoked = api.invoke({ operationId: 'format.align', input });
+      const direct = api.format.fontFamily(input);
+      const invoked = api.invoke({ operationId: 'format.fontFamily', input });
       expect(invoked).toEqual(direct);
     });
 

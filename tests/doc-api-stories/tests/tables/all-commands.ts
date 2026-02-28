@@ -80,6 +80,8 @@ describe('document-api story: all table commands', () => {
   const insertCellInitialRowsBySession = new Map<string, number>();
   const deleteCellBySession = new Map<string, string>();
   const deleteCellTableBySession = new Map<string, string>();
+  const splitCellBySession = new Map<string, { tableNodeId: string; cellNodeId: string }>();
+  const splitTableBySession = new Map<string, string>();
 
   function makeSessionId(prefix: string): string {
     return `${prefix}-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
@@ -337,10 +339,58 @@ describe('document-api story: all table commands', () => {
     },
     {
       operationId: 'tables.split',
-      setup: 'table',
-      run: async (sessionId, fixture) => {
-        const f = requireFixture('tables.split', fixture);
-        return unwrap<any>(await api.doc.tables.split({ sessionId, nodeId: f.tableNodeId, atRowIndex: 1 }));
+      setup: 'blank',
+      prepare: async (sessionId) => {
+        await api.doc.insert({ sessionId, value: 'a\tb\tc' });
+
+        const secondRowResult = unwrap<any>(
+          await api.doc.create.paragraph({
+            sessionId,
+            at: { kind: 'documentEnd' },
+            text: 'c\td\te',
+          }),
+        );
+        if (secondRowResult?.success !== true) {
+          const code = secondRowResult?.failure?.code ?? 'UNKNOWN';
+          throw new Error(`tables.split setup failed while creating second row paragraph (code: ${code}).`);
+        }
+
+        const thirdRowResult = unwrap<any>(
+          await api.doc.create.paragraph({
+            sessionId,
+            at: { kind: 'documentEnd' },
+            text: 'f\tg\th',
+          }),
+        );
+        if (thirdRowResult?.success !== true) {
+          const code = thirdRowResult?.failure?.code ?? 'UNKNOWN';
+          throw new Error(`tables.split setup failed while creating third row paragraph (code: ${code}).`);
+        }
+
+        const paragraphNodeId = await firstNodeId(sessionId, 'paragraph');
+        const convertResult = unwrap<any>(
+          await api.doc.tables.convertFromText({
+            sessionId,
+            nodeId: paragraphNodeId,
+            delimiter: 'tab',
+          }),
+        );
+        assertMutationSuccess('tables.convertFromText', convertResult);
+
+        const tableNodeId = convertResult?.table?.nodeId;
+        if (!tableNodeId) {
+          throw new Error('tables.split setup failed: converted table nodeId was not returned.');
+        }
+        splitTableBySession.set(sessionId, tableNodeId);
+      },
+      run: async (sessionId) => {
+        const tableNodeId = splitTableBySession.get(sessionId);
+        if (!tableNodeId) {
+          throw new Error('tables.split setup failed: prepared table nodeId was not found.');
+        }
+        splitTableBySession.delete(sessionId);
+
+        return unwrap<any>(await api.doc.tables.split({ sessionId, nodeId: tableNodeId, atRowIndex: 1 }));
       },
     },
     {
@@ -778,29 +828,99 @@ describe('document-api story: all table commands', () => {
     },
     {
       operationId: 'tables.splitCell',
-      setup: 'table',
-      prepare: async (sessionId, fixture) => {
-        const f = requireFixture('tables.splitCell', fixture);
-        const mergeResult = unwrap<any>(
-          await api.doc.tables.mergeCells({
+      setup: 'blank',
+      prepare: async (sessionId) => {
+        await api.doc.insert({ sessionId, value: 'a\tb\tc' });
+
+        const secondRowResult = unwrap<any>(
+          await api.doc.create.paragraph({
             sessionId,
-            tableNodeId: f.tableNodeId,
-            start: { rowIndex: 0, columnIndex: 0 },
-            end: { rowIndex: 0, columnIndex: 1 },
+            at: { kind: 'documentEnd' },
+            text: 'c\td\te',
           }),
         );
-        assertMutationSuccess('tables.mergeCells', mergeResult);
+        if (secondRowResult?.success !== true) {
+          const code = secondRowResult?.failure?.code ?? 'UNKNOWN';
+          throw new Error(`tables.splitCell setup failed while creating second row paragraph (code: ${code}).`);
+        }
+
+        const thirdRowResult = unwrap<any>(
+          await api.doc.create.paragraph({
+            sessionId,
+            at: { kind: 'documentEnd' },
+            text: 'f\tg\th',
+          }),
+        );
+        if (thirdRowResult?.success !== true) {
+          const code = thirdRowResult?.failure?.code ?? 'UNKNOWN';
+          throw new Error(`tables.splitCell setup failed while creating third row paragraph (code: ${code}).`);
+        }
+
+        const paragraphNodeId = await firstNodeId(sessionId, 'paragraph');
+        const convertResult = unwrap<any>(
+          await api.doc.tables.convertFromText({
+            sessionId,
+            nodeId: paragraphNodeId,
+            delimiter: 'tab',
+          }),
+        );
+        assertMutationSuccess('tables.convertFromText', convertResult);
+
+        const tableNodeId = convertResult?.table?.nodeId;
+        if (!tableNodeId) {
+          throw new Error('tables.splitCell setup failed: converted table nodeId was not returned.');
+        }
+
+        const cellsResult = unwrap<any>(
+          await api.doc.tables.getCells({
+            sessionId,
+            nodeId: tableNodeId,
+            rowIndex: 0,
+          }),
+        );
+        const firstCell = Array.isArray(cellsResult?.cells)
+          ? cellsResult.cells.find((cell: any) => cell?.rowIndex === 0 && cell?.columnIndex === 0)
+          : null;
+        const cellNodeId = firstCell?.nodeId;
+        if (!cellNodeId) {
+          throw new Error('tables.splitCell setup failed: first cell nodeId was not found.');
+        }
+
+        splitCellBySession.set(sessionId, { tableNodeId, cellNodeId });
       },
-      run: async (sessionId, fixture) => {
-        const f = requireFixture('tables.splitCell', fixture);
-        return unwrap<any>(
+      run: async (sessionId) => {
+        const prepared = splitCellBySession.get(sessionId);
+        if (!prepared) {
+          throw new Error('tables.splitCell setup failed: prepared target cell was not found.');
+        }
+        splitCellBySession.delete(sessionId);
+
+        const result = unwrap<any>(
           await api.doc.tables.splitCell({
             sessionId,
-            nodeId: f.cellNodeId,
-            rows: 1,
+            nodeId: prepared.cellNodeId,
+            rows: 2,
             columns: 2,
           }),
         );
+
+        assertMutationSuccess('tables.splitCell', result);
+
+        const tableAfter = unwrap<any>(
+          await api.doc.tables.get({
+            sessionId,
+            nodeId: prepared.tableNodeId,
+          }),
+        );
+        const rows = Number(tableAfter?.rows ?? 0);
+        const columns = Number(tableAfter?.columns ?? 0);
+        if (rows !== 4 || columns !== 4) {
+          throw new Error(
+            `tables.splitCell postcondition failed: expected 4x4 after split, received ${rows}x${columns}.`,
+          );
+        }
+
+        return result;
       },
     },
     {

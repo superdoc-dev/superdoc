@@ -9,7 +9,8 @@
  */
 
 import { createHash } from 'node:crypto';
-import { CLI_DOC_OPERATIONS, type CliExposedOperationId } from '../cli/operation-set.js';
+import { INLINE_PROPERTY_REGISTRY } from '@superdoc/document-api';
+import type { CliExposedOperationId } from '../cli/operation-set.js';
 import type { EditorWithDoc } from './document.js';
 
 // ---------------------------------------------------------------------------
@@ -25,9 +26,10 @@ type PreInvokeHook = (input: unknown, context: HookContext) => unknown;
 
 type PostInvokeHook = (result: unknown, context: HookContext) => unknown;
 
-const FORMAT_OPERATION_IDS = CLI_DOC_OPERATIONS.filter((operationId): operationId is CliExposedOperationId =>
-  operationId.startsWith('format.'),
-);
+const FORMAT_RECEIPT_OPERATION_IDS: readonly CliExposedOperationId[] = [
+  'format.apply',
+  ...INLINE_PROPERTY_REGISTRY.map((entry) => `format.${entry.key}` as CliExposedOperationId),
+];
 
 // ---------------------------------------------------------------------------
 // Track-changes stable-ID helpers
@@ -231,7 +233,7 @@ const flattenTextMutationReceipt: PostInvokeHook = (result) => {
 };
 
 const FORMAT_POST_INVOKE_HOOKS: Partial<Record<CliExposedOperationId, PostInvokeHook>> = Object.fromEntries(
-  FORMAT_OPERATION_IDS.map((operationId) => [operationId, flattenTextMutationReceipt]),
+  FORMAT_RECEIPT_OPERATION_IDS.map((operationId) => [operationId, flattenTextMutationReceipt]),
 ) as Partial<Record<CliExposedOperationId, PostInvokeHook>>;
 
 /** Pre-invoke: custom input resolution before calling editor.doc.invoke(). */

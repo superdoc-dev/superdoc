@@ -96,7 +96,7 @@ describe('document-api story: all toc commands', () => {
   }
 
   async function seedHeadingContent(sessionId: string): Promise<void> {
-    const insertResult = unwrap<any>(await api.doc.insert({ sessionId, text: 'TOC story seed paragraph.' }));
+    const insertResult = unwrap<any>(await api.doc.insert({ sessionId, value: 'TOC story seed paragraph.' }));
     expect(insertResult?.receipt?.success).toBe(true);
 
     const h1 = unwrap<any>(

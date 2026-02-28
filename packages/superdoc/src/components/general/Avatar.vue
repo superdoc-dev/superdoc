@@ -35,10 +35,11 @@ const getInitials = (name, email) => {
 <style scoped>
 .user-container {
   border-radius: 50%;
+  border: var(--sd-comment-avatar-border, 2px solid #333);
   font-size: var(--sd-comment-avatar-font-size, 11px);
   font-weight: 600;
-  color: var(--sd-comment-avatar-color, #1355ff);
-  background-color: var(--sd-comment-avatar-bg, #ebf0ff);
+  color: var(--sd-comment-avatar-color, #fff);
+  background-color: var(--sd-comment-avatar-bg, #00000098);
 
   width: var(--sd-comment-avatar-size, 28px);
   height: var(--sd-comment-avatar-size, 28px);

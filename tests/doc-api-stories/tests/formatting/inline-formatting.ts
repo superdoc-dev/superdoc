@@ -15,7 +15,7 @@ import { unwrap, useStoryHarness } from '../harness';
  *
  * Covered operations:
  *   format.apply  — boolean marks and value/object inline run patches
- *   format.align  — paragraph-level alignment (center, right, justify)
+ *   format.paragraph.setAlignment — paragraph-level alignment (center, right, justify)
  */
 describe('document-api story: inline formatting', () => {
   const { client, outPath } = useStoryHarness('formatting/inline-formatting', {
@@ -50,6 +50,16 @@ describe('document-api story: inline formatting', () => {
       kind: 'text' as const,
       blockId,
       range: { start: 0, end: text.length },
+    };
+  }
+
+  /** Resolves the paragraph target associated with the inserted text range. */
+  async function setupFormattableParagraph(sessionId: string, text: string) {
+    const textTarget = await setupFormattableText(sessionId, text);
+    return {
+      kind: 'block' as const,
+      nodeType: 'paragraph' as const,
+      nodeId: textTarget.blockId,
     };
   }
 
@@ -165,35 +175,41 @@ describe('document-api story: inline formatting', () => {
   });
 
   // ---------------------------------------------------------------------------
-  // format.align (paragraph-level)
+  // format.paragraph.setAlignment (paragraph-level)
   // ---------------------------------------------------------------------------
 
   it('align center: centers the paragraph', async () => {
     const sid = `align-center-${Date.now()}`;
-    const target = await setupFormattableText(sid, 'This paragraph should be centered');
+    const target = await setupFormattableParagraph(sid, 'This paragraph should be centered');
 
-    const result = unwrap<any>(await client.doc.format.align({ sessionId: sid, target, alignment: 'center' }));
+    const result = unwrap<any>(
+      await client.doc.format.paragraph.setAlignment({ sessionId: sid, target, alignment: 'center' }),
+    );
     expect(result.receipt?.success).toBe(true);
     await saveResult(sid, 'align-center.docx');
   });
 
   it('align right: right-aligns the paragraph', async () => {
     const sid = `align-right-${Date.now()}`;
-    const target = await setupFormattableText(sid, 'This paragraph should be right-aligned');
+    const target = await setupFormattableParagraph(sid, 'This paragraph should be right-aligned');
 
-    const result = unwrap<any>(await client.doc.format.align({ sessionId: sid, target, alignment: 'right' }));
+    const result = unwrap<any>(
+      await client.doc.format.paragraph.setAlignment({ sessionId: sid, target, alignment: 'right' }),
+    );
     expect(result.receipt?.success).toBe(true);
     await saveResult(sid, 'align-right.docx');
   });
 
   it('align justify: justifies the paragraph', async () => {
     const sid = `align-justify-${Date.now()}`;
-    const target = await setupFormattableText(
+    const target = await setupFormattableParagraph(
       sid,
       'This paragraph should be fully justified so that both the left and right edges align neatly. When the text is long enough to wrap across several lines, justified alignment becomes visually obvious because each line stretches to fill the full width of the page, distributing extra space evenly between words.',
     );
 
-    const result = unwrap<any>(await client.doc.format.align({ sessionId: sid, target, alignment: 'justify' }));
+    const result = unwrap<any>(
+      await client.doc.format.paragraph.setAlignment({ sessionId: sid, target, alignment: 'justify' }),
+    );
     expect(result.receipt?.success).toBe(true);
     await saveResult(sid, 'align-justify.docx');
   });

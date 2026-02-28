@@ -1,7 +1,7 @@
 ---
-title: format.align
-sidebarTitle: format.align
-description: Set or unset paragraph alignment on the block containing the target. Pass null to reset to default.
+title: format.fontFamily
+sidebarTitle: format.fontFamily
+description: "Set or clear the `fontFamily` inline run property on the target text range."
 ---
 
 {/* GENERATED FILE: DO NOT EDIT. Regenerate via `pnpm run docapi:sync`. */}
@@ -10,32 +10,31 @@ description: Set or unset paragraph alignment on the block containing the target
 
 ## Summary
 
-Set or unset paragraph alignment on the block containing the target. Pass null to reset to default.
+Set or clear the `fontFamily` inline run property on the target text range.
 
-- Operation ID: `format.align`
-- API member path: `editor.doc.format.align(...)`
+- Operation ID: `format.fontFamily`
+- API member path: `editor.doc.format.fontFamily(...)`
 - Mutates document: `yes`
 - Idempotency: `conditional`
-- Supports tracked mode: `no`
+- Supports tracked mode: `yes`
 - Supports dry run: `yes`
 - Deterministic target resolution: `yes`
 
 ## Expected result
 
-Returns a TextMutationReceipt; receipt reports NO_OP if the block already has the requested alignment.
+Returns a TextMutationReceipt confirming the inline run property patch was applied to the target range.
 
 ## Input fields
 
 | Field | Type | Required | Description |
 | --- | --- | --- | --- |
-| `alignment` | enum \\| null | yes | One of: enum, null |
 | `target` | TextAddress | yes | TextAddress |
+| `value` | string \\| null | yes | One of: string, null |
 
 ### Example request
 
 ```json
 {
-  "alignment": "left",
   "target": {
     "blockId": "block-abc123",
     "kind": "text",
@@ -43,7 +42,8 @@ Returns a TextMutationReceipt; receipt reports NO_OP if the block already has th
       "end": 10,
       "start": 0
     }
-  }
+  },
+  "value": "example"
 }
 ```
 
@@ -106,7 +106,6 @@ _No fields._
 ## Non-applied failure codes
 
 - `INVALID_TARGET`
-- `NO_OP`
 
 ## Raw schemas
 
@@ -115,28 +114,24 @@ _No fields._
 {
   "additionalProperties": false,
   "properties": {
-    "alignment": {
+    "target": {
+      "$ref": "#/$defs/TextAddress"
+    },
+    "value": {
       "oneOf": [
         {
-          "enum": [
-            "left",
-            "center",
-            "right",
-            "justify"
-          ]
+          "minLength": 1,
+          "type": "string"
         },
         {
           "type": "null"
         }
       ]
-    },
-    "target": {
-      "$ref": "#/$defs/TextAddress"
     }
   },
   "required": [
     "target",
-    "alignment"
+    "value"
   ],
   "type": "object"
 }
@@ -158,8 +153,7 @@ _No fields._
           "properties": {
             "code": {
               "enum": [
-                "INVALID_TARGET",
-                "NO_OP"
+                "INVALID_TARGET"
               ]
             },
             "details": {},
@@ -210,8 +204,7 @@ _No fields._
       "properties": {
         "code": {
           "enum": [
-            "INVALID_TARGET",
-            "NO_OP"
+            "INVALID_TARGET"
           ]
         },
         "details": {},

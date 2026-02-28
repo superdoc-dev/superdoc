@@ -232,6 +232,56 @@ const FORMAT_INLINE_ALIAS_SUCCESS_SCENARIOS: Record<
     return [operationId, formatInlineAliasSuccessScenario(operationId)];
   }),
 ) as Record<FormatInlineAliasCliOperationId, (harness: ConformanceHarness) => Promise<ScenarioInvocation>>;
+
+function paragraphMutationScenario(
+  operationId: CliOperationId,
+  label: string,
+  extraArgs: string[],
+  prepare: Array<{ operationId: CliOperationId; extraArgs: string[] }> = [],
+): (harness: ConformanceHarness) => Promise<ScenarioInvocation> {
+  return async (harness) => {
+    const stateDir = await harness.createStateDir(`${label}-success`);
+    let docPath = await harness.copyFixtureDoc(`${label}-source`);
+    let block = await harness.firstBlockMatch(docPath, stateDir);
+
+    for (let index = 0; index < prepare.length; index += 1) {
+      const step = prepare[index];
+      const preparedOut = harness.createOutputPath(`${label}-prepare-${index + 1}`);
+      const prepared = await harness.runCli(
+        [
+          ...commandTokens(step.operationId),
+          docPath,
+          '--target-json',
+          JSON.stringify({ kind: 'block', nodeType: 'paragraph', nodeId: block.nodeId }),
+          ...step.extraArgs,
+          '--out',
+          preparedOut,
+        ],
+        stateDir,
+      );
+
+      if (prepared.result.code !== 0 || prepared.envelope.ok !== true) {
+        throw new Error(`Failed to prepare paragraph scenario ${label} with ${step.operationId}.`);
+      }
+
+      docPath = preparedOut;
+      block = await harness.firstBlockMatch(docPath, stateDir);
+    }
+
+    return {
+      stateDir,
+      args: [
+        ...commandTokens(operationId),
+        docPath,
+        '--target-json',
+        JSON.stringify({ kind: 'block', nodeType: 'paragraph', nodeId: block.nodeId }),
+        ...extraArgs,
+        '--out',
+        harness.createOutputPath(`${label}-output`),
+      ],
+    };
+  };
+}
 // ---------------------------------------------------------------------------
 // Table scenario helpers (DRY builders for the 40 table operations)
 // ---------------------------------------------------------------------------
@@ -1143,25 +1193,113 @@ export const SUCCESS_SCENARIOS = {
     };
   },
   ...FORMAT_INLINE_ALIAS_SUCCESS_SCENARIOS,
-  'doc.format.align': async (harness: ConformanceHarness): Promise<ScenarioInvocation> => {
-    const stateDir = await harness.createStateDir('doc-format-align-success');
-    const docPath = await harness.copyFixtureDoc('doc-format-align');
-    const target = await harness.firstTextRange(docPath, stateDir);
-    return {
-      stateDir,
-      args: [
-        'format',
-        'align',
-        docPath,
-        '--target-json',
-        JSON.stringify(target),
-        '--alignment-json',
-        JSON.stringify('center'),
-        '--out',
-        harness.createOutputPath('doc-format-align-output'),
-      ],
-    };
-  },
+  'doc.styles.paragraph.setStyle': paragraphMutationScenario('doc.styles.paragraph.setStyle', 'styles-paragraph-set', [
+    '--style-id',
+    'Normal',
+  ]),
+  'doc.styles.paragraph.clearStyle': paragraphMutationScenario(
+    'doc.styles.paragraph.clearStyle',
+    'styles-paragraph-clear',
+    [],
+    [{ operationId: 'doc.styles.paragraph.setStyle', extraArgs: ['--style-id', '__ConformanceTmpStyle__'] }],
+  ),
+  'doc.format.paragraph.resetDirectFormatting': paragraphMutationScenario(
+    'doc.format.paragraph.resetDirectFormatting',
+    'format-paragraph-reset',
+    [],
+  ),
+  'doc.format.paragraph.setAlignment': paragraphMutationScenario(
+    'doc.format.paragraph.setAlignment',
+    'format-paragraph-set-alignment',
+    ['--alignment', 'center'],
+    [{ operationId: 'doc.format.paragraph.setAlignment', extraArgs: ['--alignment', 'left'] }],
+  ),
+  'doc.format.paragraph.clearAlignment': paragraphMutationScenario(
+    'doc.format.paragraph.clearAlignment',
+    'format-paragraph-clear-alignment',
+    [],
+  ),
+  'doc.format.paragraph.setIndentation': paragraphMutationScenario(
+    'doc.format.paragraph.setIndentation',
+    'format-paragraph-set-indentation',
+    ['--left', '720'],
+  ),
+  'doc.format.paragraph.clearIndentation': paragraphMutationScenario(
+    'doc.format.paragraph.clearIndentation',
+    'format-paragraph-clear-indentation',
+    [],
+    [{ operationId: 'doc.format.paragraph.setIndentation', extraArgs: ['--left', '720'] }],
+  ),
+  'doc.format.paragraph.setSpacing': paragraphMutationScenario(
+    'doc.format.paragraph.setSpacing',
+    'format-paragraph-set-spacing',
+    ['--before', '120', '--after', '120'],
+  ),
+  'doc.format.paragraph.clearSpacing': paragraphMutationScenario(
+    'doc.format.paragraph.clearSpacing',
+    'format-paragraph-clear-spacing',
+    [],
+    [{ operationId: 'doc.format.paragraph.setSpacing', extraArgs: ['--before', '120', '--after', '120'] }],
+  ),
+  'doc.format.paragraph.setKeepOptions': paragraphMutationScenario(
+    'doc.format.paragraph.setKeepOptions',
+    'format-paragraph-set-keep-options',
+    ['--keep-next', 'true'],
+  ),
+  'doc.format.paragraph.setOutlineLevel': paragraphMutationScenario(
+    'doc.format.paragraph.setOutlineLevel',
+    'format-paragraph-set-outline',
+    ['--outline-level-json', '1'],
+  ),
+  'doc.format.paragraph.setFlowOptions': paragraphMutationScenario(
+    'doc.format.paragraph.setFlowOptions',
+    'format-paragraph-set-flow',
+    ['--contextual-spacing', 'true'],
+  ),
+  'doc.format.paragraph.setTabStop': paragraphMutationScenario(
+    'doc.format.paragraph.setTabStop',
+    'format-paragraph-set-tab-stop',
+    ['--position', '720', '--alignment', 'left'],
+  ),
+  'doc.format.paragraph.clearTabStop': paragraphMutationScenario(
+    'doc.format.paragraph.clearTabStop',
+    'format-paragraph-clear-tab-stop',
+    ['--position', '720'],
+    [{ operationId: 'doc.format.paragraph.setTabStop', extraArgs: ['--position', '720', '--alignment', 'left'] }],
+  ),
+  'doc.format.paragraph.clearAllTabStops': paragraphMutationScenario(
+    'doc.format.paragraph.clearAllTabStops',
+    'format-paragraph-clear-all-tab-stops',
+    [],
+    [{ operationId: 'doc.format.paragraph.setTabStop', extraArgs: ['--position', '720', '--alignment', 'left'] }],
+  ),
+  'doc.format.paragraph.setBorder': paragraphMutationScenario(
+    'doc.format.paragraph.setBorder',
+    'format-paragraph-set-border',
+    ['--side', 'top', '--style', 'single', '--color', '000000'],
+  ),
+  'doc.format.paragraph.clearBorder': paragraphMutationScenario(
+    'doc.format.paragraph.clearBorder',
+    'format-paragraph-clear-border',
+    ['--side', 'top'],
+    [
+      {
+        operationId: 'doc.format.paragraph.setBorder',
+        extraArgs: ['--side', 'top', '--style', 'single', '--color', '000000'],
+      },
+    ],
+  ),
+  'doc.format.paragraph.setShading': paragraphMutationScenario(
+    'doc.format.paragraph.setShading',
+    'format-paragraph-set-shading',
+    ['--fill', 'FFFF00'],
+  ),
+  'doc.format.paragraph.clearShading': paragraphMutationScenario(
+    'doc.format.paragraph.clearShading',
+    'format-paragraph-clear-shading',
+    [],
+    [{ operationId: 'doc.format.paragraph.setShading', extraArgs: ['--fill', 'FFFF00'] }],
+  ),
   'doc.styles.apply': async (harness: ConformanceHarness): Promise<ScenarioInvocation> => {
     const stateDir = await harness.createStateDir('doc-styles-apply-success');
     const docPath = await harness.copyFixtureDoc('doc-styles-apply');

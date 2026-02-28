@@ -14,6 +14,12 @@ describe('isValidOperationIdFormat', () => {
     expect(isValidOperationIdFormat('lists.setType')).toBe(true);
   });
 
+  it('accepts three-segment identifiers (group.subgroup.camelCase)', () => {
+    expect(isValidOperationIdFormat('format.paragraph.setAlignment')).toBe(true);
+    expect(isValidOperationIdFormat('styles.paragraph.setStyle')).toBe(true);
+    expect(isValidOperationIdFormat('a.b.c')).toBe(true);
+  });
+
   it('rejects empty strings', () => {
     expect(isValidOperationIdFormat('')).toBe(false);
   });
@@ -23,8 +29,8 @@ describe('isValidOperationIdFormat', () => {
     expect(isValidOperationIdFormat('Comments.add')).toBe(false);
   });
 
-  it('rejects identifiers with multiple dots', () => {
-    expect(isValidOperationIdFormat('a.b.c')).toBe(false);
+  it('rejects identifiers with four or more segments', () => {
+    expect(isValidOperationIdFormat('a.b.c.d')).toBe(false);
   });
 
   it('rejects identifiers with special characters', () => {

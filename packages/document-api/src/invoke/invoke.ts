@@ -76,7 +76,29 @@ export function buildDispatchTable(api: DocumentApi): TypedDispatchTable {
     // --- format.* ---
     'format.apply': (input, options) => api.format.apply(input, options),
     ...formatInlineAliasDispatch,
-    'format.align': (input, options) => api.format.align(input, options),
+    // --- styles.paragraph.* ---
+    'styles.paragraph.setStyle': (input, options) => api.styles.paragraph.setStyle(input, options),
+    'styles.paragraph.clearStyle': (input, options) => api.styles.paragraph.clearStyle(input, options),
+
+    // --- format.paragraph.* ---
+    'format.paragraph.resetDirectFormatting': (input, options) =>
+      api.format.paragraph.resetDirectFormatting(input, options),
+    'format.paragraph.setAlignment': (input, options) => api.format.paragraph.setAlignment(input, options),
+    'format.paragraph.clearAlignment': (input, options) => api.format.paragraph.clearAlignment(input, options),
+    'format.paragraph.setIndentation': (input, options) => api.format.paragraph.setIndentation(input, options),
+    'format.paragraph.clearIndentation': (input, options) => api.format.paragraph.clearIndentation(input, options),
+    'format.paragraph.setSpacing': (input, options) => api.format.paragraph.setSpacing(input, options),
+    'format.paragraph.clearSpacing': (input, options) => api.format.paragraph.clearSpacing(input, options),
+    'format.paragraph.setKeepOptions': (input, options) => api.format.paragraph.setKeepOptions(input, options),
+    'format.paragraph.setOutlineLevel': (input, options) => api.format.paragraph.setOutlineLevel(input, options),
+    'format.paragraph.setFlowOptions': (input, options) => api.format.paragraph.setFlowOptions(input, options),
+    'format.paragraph.setTabStop': (input, options) => api.format.paragraph.setTabStop(input, options),
+    'format.paragraph.clearTabStop': (input, options) => api.format.paragraph.clearTabStop(input, options),
+    'format.paragraph.clearAllTabStops': (input, options) => api.format.paragraph.clearAllTabStops(input, options),
+    'format.paragraph.setBorder': (input, options) => api.format.paragraph.setBorder(input, options),
+    'format.paragraph.clearBorder': (input, options) => api.format.paragraph.clearBorder(input, options),
+    'format.paragraph.setShading': (input, options) => api.format.paragraph.setShading(input, options),
+    'format.paragraph.clearShading': (input, options) => api.format.paragraph.clearShading(input, options),
 
     // --- styles.* ---
     'styles.apply': (input, options) => api.styles.apply(input, options),

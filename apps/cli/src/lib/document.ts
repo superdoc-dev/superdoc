@@ -1,6 +1,6 @@
 import { readFile, writeFile } from 'node:fs/promises';
 import { createHash } from 'node:crypto';
-import { Editor } from 'superdoc/super-editor';
+import type { Editor } from 'superdoc/super-editor';
 import { BLANK_DOCX_BASE64 } from '@superdoc/super-editor/blank-docx';
 import { getDocumentApiAdapters } from '@superdoc/super-editor/document-api-adapters';
 import { markdownToPmDoc } from '@superdoc/super-editor/markdown';
@@ -35,6 +35,38 @@ interface OpenDocumentOptions {
 export interface FileOutputMeta {
   path: string;
   byteLength: number;
+}
+
+type EditorModule = {
+  Editor: {
+    open(source: Buffer, options: Record<string, unknown>): Promise<Editor>;
+  };
+};
+
+const EDITOR_IMPORT_CANDIDATES = ['@superdoc/super-editor', 'superdoc/super-editor'] as const;
+let cachedEditorModule: EditorModule | null = null;
+
+async function loadEditorModule(): Promise<EditorModule> {
+  if (cachedEditorModule) return cachedEditorModule;
+
+  const errors: string[] = [];
+  for (const specifier of EDITOR_IMPORT_CANDIDATES) {
+    try {
+      const module = (await import(specifier)) as Partial<EditorModule>;
+      if (module.Editor && typeof module.Editor.open === 'function') {
+        cachedEditorModule = module as EditorModule;
+        return cachedEditorModule;
+      }
+      errors.push(`${specifier}: module loaded but Editor.open is unavailable`);
+    } catch (error) {
+      errors.push(`${specifier}: ${error instanceof Error ? error.message : String(error)}`);
+    }
+  }
+
+  throw new CliError('DOCUMENT_OPEN_FAILED', 'Failed to load editor runtime module.', {
+    candidates: [...EDITOR_IMPORT_CANDIDATES],
+    errors,
+  });
 }
 
 function toUint8Array(data: unknown): Uint8Array {
@@ -122,9 +154,10 @@ export async function openDocument(
   }
 
   let editor: Editor;
+  const { Editor: EditorRuntime } = await loadEditorModule();
   try {
     const isTest = process.env.NODE_ENV === 'test';
-    editor = await Editor.open(Buffer.from(source), {
+    editor = await EditorRuntime.open(Buffer.from(source), {
       documentId: options.documentId ?? meta.path ?? 'blank.docx',
       user: { id: 'cli', name: 'CLI' },
       ...(isTest ? { telemetry: { enabled: false } } : {}),

@@ -67,7 +67,6 @@ import { collectTrackInsertRefsInRange } from './helpers/tracked-change-refs.js'
 import { applyDirectMutationMeta, applyTrackedMutationMeta } from './helpers/transaction-meta.js';
 import { DocumentApiAdapterError } from './errors.js';
 import { toBlockAddress, findBlockById, findBlockByNodeIdOnly } from './helpers/node-address-resolver.js';
-import { insertRowAtIndex } from '../extensions/table/tableHelpers/appendRows.js';
 import { twipsToPixels } from '../core/super-converter/helpers.js';
 
 // ---------------------------------------------------------------------------
@@ -247,6 +246,96 @@ function removeGridColumnWidth(grid: unknown, deleteIndex: number): unknown | nu
   colWidths.splice(boundedIndex, 1);
 
   return serializeGridColumns(grid, { ...normalized, columns: colWidths });
+}
+
+function normalizeCellAttrsForSingleCell(attrs: Record<string, unknown>): Record<string, unknown> {
+  const currentColwidth = Array.isArray(attrs.colwidth) ? (attrs.colwidth as number[]) : null;
+  const tableCellProperties = {
+    ...((attrs.tableCellProperties ?? {}) as Record<string, unknown>),
+  };
+
+  delete tableCellProperties.gridSpan;
+  delete tableCellProperties.vMerge;
+
+  return {
+    ...attrs,
+    colspan: 1,
+    rowspan: 1,
+    colwidth: currentColwidth && currentColwidth.length > 0 ? [currentColwidth[0] ?? 0] : currentColwidth,
+    tableCellProperties,
+  };
+}
+
+function normalizeClonedRowInsertCellAttrs(
+  sourceAttrs: Record<string, unknown>,
+  fromHeaderToBody: boolean,
+): Record<string, unknown> {
+  const normalizedAttrs: Record<string, unknown> = {
+    ...sourceAttrs,
+    rowspan: 1,
+  };
+
+  // Header rows can carry explicit `borders: null` to suppress drawing.
+  // Drop that sentinel when cloning into body cells so tableCell defaults apply.
+  if (fromHeaderToBody && normalizedAttrs.borders == null) {
+    delete normalizedAttrs.borders;
+  }
+
+  return normalizedAttrs;
+}
+
+type ExpandMergedCellParams = {
+  tr: Transaction;
+  tablePos: number;
+  tableNode: import('prosemirror-model').Node;
+  cellPos: number;
+  cellNode: import('prosemirror-model').Node;
+  rowIndex: number;
+  columnIndex: number;
+  rowspan: number;
+  colspan: number;
+  schema: Editor['state']['schema'];
+};
+
+function expandMergedCellIntoSingles({
+  tr,
+  tablePos,
+  tableNode,
+  cellPos,
+  cellNode,
+  rowIndex,
+  columnIndex,
+  rowspan,
+  colspan,
+  schema,
+}: ExpandMergedCellParams): void {
+  const tableStart = tablePos + 1;
+  const map = TableMap.get(tableNode);
+  const resetCell = cellNode.type.create(
+    normalizeCellAttrsForSingleCell(cellNode.attrs as Record<string, unknown>),
+    cellNode.content,
+  );
+  tr.replaceWith(cellPos, cellPos + cellNode.nodeSize, resetCell);
+
+  // Fill the previously merged region with empty cells, preserving top-left content cell.
+  const mapFrom = tr.mapping.maps.length;
+  for (let row = rowIndex + rowspan - 1; row >= rowIndex; row--) {
+    for (let col = columnIndex + colspan - 1; col >= columnIndex; col--) {
+      if (row === rowIndex && col === columnIndex) continue;
+
+      const newCell = schema.nodes.tableCell.createAndFill()!;
+
+      let insertRelPos: number;
+      if (row === rowIndex) {
+        const baseRelPos = map.positionAt(rowIndex, columnIndex, tableNode);
+        insertRelPos = baseRelPos + resetCell.nodeSize;
+      } else {
+        insertRelPos = map.positionAt(row, col, tableNode);
+      }
+
+      tr.insert(tr.mapping.slice(mapFrom).map(tableStart + insertRelPos), newCell);
+    }
+  }
 }
 
 type TableBorderEdgeForCells = 'top' | 'bottom' | 'left' | 'right' | 'insideH' | 'insideV';
@@ -499,6 +588,232 @@ function removeColumnFromTable(tr: Transaction, tablePos: number, col: number): 
     }
     row += rowspan;
   }
+}
+
+/** Inserts a row at `insertIndex`, cloning cell structure from `sourceRowIndex` and preserving rowspan integrity. */
+function insertRowInTable(
+  tr: Transaction,
+  tablePos: number,
+  sourceRowIndex: number,
+  insertIndex: number,
+  schema: Editor['state']['schema'],
+): boolean {
+  const tableNode = tr.doc.nodeAt(tablePos);
+  if (!tableNode || tableNode.type.name !== 'table') return false;
+
+  const rowCount = tableNode.childCount;
+  if (rowCount === 0) return false;
+
+  const map = TableMap.get(tableNode);
+  const boundedInsertIndex = Math.max(0, Math.min(insertIndex, rowCount));
+  const boundedSourceRowIndex = Math.max(0, Math.min(sourceRowIndex, rowCount - 1));
+  const sourceRow = tableNode.child(boundedSourceRowIndex);
+  if (!sourceRow) return false;
+
+  const rowType = schema.nodes.tableRow;
+  const defaultCellType = schema.nodes.tableCell;
+  if (!rowType || !defaultCellType) return false;
+
+  const newCells: import('prosemirror-model').Node[] = [];
+  const cellsToExtend: Array<{ pos: number; attrs: Record<string, unknown> }> = [];
+
+  for (let col = 0; col < map.width; ) {
+    if (boundedInsertIndex > 0 && boundedInsertIndex < map.height) {
+      const indexAbove = (boundedInsertIndex - 1) * map.width + col;
+      const indexAtInsert = boundedInsertIndex * map.width + col;
+
+      if (map.map[indexAbove] === map.map[indexAtInsert]) {
+        const spanningPos = map.map[indexAbove];
+        const spanningCell = tableNode.nodeAt(spanningPos);
+        if (spanningCell) {
+          const spanningAttrs = spanningCell.attrs as Record<string, unknown>;
+          const rowspan = (spanningAttrs.rowspan as number) || 1;
+          const colspan = (spanningAttrs.colspan as number) || 1;
+          cellsToExtend.push({
+            pos: tablePos + 1 + spanningPos,
+            attrs: { ...spanningAttrs, rowspan: rowspan + 1 },
+          });
+          col += colspan;
+          continue;
+        }
+      }
+    }
+
+    const sourceMapIndex = boundedSourceRowIndex * map.width + col;
+    const sourceCellPos = map.map[sourceMapIndex];
+    const sourceCell = tableNode.nodeAt(sourceCellPos) ?? sourceRow.firstChild;
+    if (!sourceCell) {
+      col += 1;
+      continue;
+    }
+
+    const colspan = ((sourceCell.attrs as Record<string, unknown>).colspan as number) || 1;
+    const fromHeaderToBody = sourceCell.type.name === 'tableHeader';
+    const targetCellType = fromHeaderToBody ? defaultCellType : sourceCell.type;
+    const newCell = targetCellType.createAndFill(
+      normalizeClonedRowInsertCellAttrs(sourceCell.attrs as Record<string, unknown>, fromHeaderToBody),
+    );
+    if (newCell) newCells.push(newCell);
+    col += colspan;
+  }
+
+  for (const { pos, attrs } of cellsToExtend) {
+    tr.setNodeMarkup(pos, null, attrs);
+  }
+
+  if (newCells.length === 0) return true;
+
+  const newRow = rowType.createAndFill(null, newCells);
+  if (!newRow) return false;
+
+  let insertPos = tablePos + 1;
+  for (let row = 0; row < boundedInsertIndex; row++) {
+    insertPos += tableNode.child(row).nodeSize;
+  }
+  tr.insert(insertPos, newRow);
+  return true;
+}
+
+function addColumnToTableForSplit(
+  tr: Transaction,
+  tablePos: number,
+  col: number,
+  splitRowStart: number,
+  splitRowEnd: number,
+): void {
+  const tableNode = tr.doc.nodeAt(tablePos);
+  if (!tableNode || tableNode.type.name !== 'table') return;
+  const map = TableMap.get(tableNode);
+  const tableStart = tablePos + 1;
+  const mapStart = tr.mapping.maps.length;
+  const widenedOutsideSplit = new Set<number>();
+
+  for (let row = 0; row < map.height; row++) {
+    const index = row * map.width + col;
+    const pos = map.map[index];
+    const cell = tableNode.nodeAt(pos);
+    if (!cell) continue;
+
+    const inSplitRows = row >= splitRowStart && row < splitRowEnd;
+    if (!inSplitRows && col > 0) {
+      const leftPos = map.map[index - 1]!;
+      const leftCell = tableNode.nodeAt(leftPos);
+      if (leftCell && !widenedOutsideSplit.has(leftPos)) {
+        tr.setNodeMarkup(
+          tr.mapping.slice(mapStart).map(tableStart + leftPos),
+          null,
+          addColSpan(leftCell.attrs as Record<string, unknown>, col - map.colCount(leftPos)),
+        );
+        widenedOutsideSplit.add(leftPos);
+      }
+      row += ((cell.attrs?.rowspan as number) || 1) - 1;
+      continue;
+    }
+
+    if (col > 0 && map.map[index - 1] === pos) {
+      tr.setNodeMarkup(
+        tr.mapping.slice(mapStart).map(tableStart + pos),
+        null,
+        addColSpan(cell.attrs as Record<string, unknown>, col - map.colCount(pos)),
+      );
+      row += (((cell.attrs as Record<string, unknown>).rowspan as number) || 1) - 1;
+    } else {
+      const refType = col > 0 ? (tableNode.nodeAt(map.map[index - 1])?.type ?? cell.type) : cell.type;
+      const cellPos = map.positionAt(row, col, tableNode);
+      tr.insert(tr.mapping.slice(mapStart).map(tableStart + cellPos), refType.createAndFill()!);
+      row += ((cell.attrs?.rowspan as number) || 1) - 1;
+    }
+  }
+}
+
+function insertRowInTableForSplit(
+  tr: Transaction,
+  tablePos: number,
+  sourceRowIndex: number,
+  insertIndex: number,
+  splitColStart: number,
+  splitColEnd: number,
+  schema: Editor['state']['schema'],
+): boolean {
+  const tableNode = tr.doc.nodeAt(tablePos);
+  if (!tableNode || tableNode.type.name !== 'table') return false;
+
+  const rowCount = tableNode.childCount;
+  if (rowCount === 0) return false;
+
+  const map = TableMap.get(tableNode);
+  const boundedInsertIndex = Math.max(0, Math.min(insertIndex, rowCount));
+  const boundedSourceRowIndex = Math.max(0, Math.min(sourceRowIndex, rowCount - 1));
+  const sourceRow = tableNode.child(boundedSourceRowIndex);
+  if (!sourceRow) return false;
+
+  const rowType = schema.nodes.tableRow;
+  const defaultCellType = schema.nodes.tableCell;
+  if (!rowType || !defaultCellType) return false;
+
+  const newCells: import('prosemirror-model').Node[] = [];
+  const cellsToExtend = new Map<number, Record<string, unknown>>();
+
+  for (let col = 0; col < map.width; ) {
+    if (boundedInsertIndex > 0 && boundedInsertIndex < map.height) {
+      const indexAbove = (boundedInsertIndex - 1) * map.width + col;
+      const indexAtInsert = boundedInsertIndex * map.width + col;
+
+      if (map.map[indexAbove] === map.map[indexAtInsert]) {
+        const spanningPos = map.map[indexAbove];
+        const spanningCell = tableNode.nodeAt(spanningPos);
+        if (spanningCell) {
+          const spanningAttrs = spanningCell.attrs as Record<string, unknown>;
+          const rowspan = (spanningAttrs.rowspan as number) || 1;
+          const colspan = (spanningAttrs.colspan as number) || 1;
+          cellsToExtend.set(tablePos + 1 + spanningPos, { ...spanningAttrs, rowspan: rowspan + 1 });
+          col += colspan;
+          continue;
+        }
+      }
+    }
+
+    const sourceMapIndex = boundedSourceRowIndex * map.width + col;
+    const sourceCellPos = map.map[sourceMapIndex];
+    const sourceCell = tableNode.nodeAt(sourceCellPos) ?? sourceRow.firstChild;
+    if (!sourceCell) {
+      col += 1;
+      continue;
+    }
+
+    const sourceAttrs = sourceCell.attrs as Record<string, unknown>;
+    const colspan = (sourceAttrs.colspan as number) || 1;
+    const overlapsSplitRange = col < splitColEnd && col + colspan > splitColStart;
+
+    if (!overlapsSplitRange) {
+      const sourceRowspan = (sourceAttrs.rowspan as number) || 1;
+      cellsToExtend.set(tablePos + 1 + sourceCellPos, { ...sourceAttrs, rowspan: sourceRowspan + 1 });
+      col += colspan;
+      continue;
+    }
+
+    const fromHeaderToBody = sourceCell.type.name === 'tableHeader';
+    const targetCellType = fromHeaderToBody ? defaultCellType : sourceCell.type;
+    const newCell = targetCellType.createAndFill(normalizeClonedRowInsertCellAttrs(sourceAttrs, fromHeaderToBody));
+    if (newCell) newCells.push(newCell);
+    col += colspan;
+  }
+
+  for (const [pos, attrs] of cellsToExtend.entries()) {
+    tr.setNodeMarkup(pos, null, attrs);
+  }
+
+  if (newCells.length === 0) return true;
+
+  const newRow = rowType.createAndFill(null, newCells);
+  if (!newRow) return false;
+
+  let insertPos = tablePos + 1;
+  for (let row = 0; row < boundedInsertIndex; row++) {
+    insertPos += tableNode.child(row).nodeSize;
+  }
+  tr.insert(insertPos, newRow);
+  return true;
 }
 
 // ---------------------------------------------------------------------------
@@ -781,14 +1096,16 @@ export function tablesInsertRowAdapter(
       const insertIdx = input.position === 'above' ? rowIndex + i : rowIndex + 1 + i;
       const sourceIdx = input.position === 'above' ? rowIndex + i : rowIndex;
 
-      insertRowAtIndex({
+      const didInsertRow = insertRowInTable(
         tr,
         tablePos,
-        tableNode: currentTableNode,
-        sourceRowIndex: Math.min(sourceIdx, currentTableNode.childCount - 1),
-        insertIndex: Math.min(insertIdx, currentTableNode.childCount),
+        Math.min(sourceIdx, currentTableNode.childCount - 1),
+        Math.min(insertIdx, currentTableNode.childCount),
         schema,
-      });
+      );
+      if (!didInsertRow) {
+        return toTableFailure('INVALID_TARGET', 'Row insertion could not be applied.');
+      }
     }
 
     if (mode === 'tracked') applyTrackedMutationMeta(tr);
@@ -2003,51 +2320,20 @@ export function tablesUnmergeCellsAdapter(
   try {
     const tr = editor.state.tr;
     const tablePos = table.candidate.pos;
-    const tableStart = tablePos + 1;
     const tableNode = table.candidate.node;
-    const map = TableMap.get(tableNode);
     const schema = editor.state.schema;
-
-    // Replace the merged cell with a 1x1 cell while preserving content.
-    const currentColwidth = Array.isArray(attrs.colwidth) ? (attrs.colwidth as number[]) : null;
-    const tableCellProperties = {
-      ...((attrs.tableCellProperties ?? {}) as Record<string, unknown>),
-    };
-    delete tableCellProperties.gridSpan;
-    delete tableCellProperties.vMerge;
-
-    const resetCell = cellNode.type.create(
-      {
-        ...attrs,
-        colspan: 1,
-        rowspan: 1,
-        colwidth: currentColwidth && currentColwidth.length > 0 ? [currentColwidth[0] ?? 0] : currentColwidth,
-        tableCellProperties,
-      },
-      cellNode.content,
-    );
-    tr.replaceWith(cellPos, cellPos + cellNode.nodeSize, resetCell);
-
-    // Fill the previously spanned area with empty cells.
-    const mapFrom = tr.mapping.maps.length;
-    for (let row = rowIndex + rowspan - 1; row >= rowIndex; row--) {
-      for (let col = columnIndex + colspan - 1; col >= columnIndex; col--) {
-        if (row === rowIndex && col === columnIndex) continue;
-
-        const newCell = schema.nodes.tableCell.createAndFill()!;
-
-        let insertRelPos: number;
-        if (row === rowIndex) {
-          // For the top row, insert after the original cell so it stays top-left.
-          const baseRelPos = map.positionAt(rowIndex, columnIndex, tableNode);
-          insertRelPos = baseRelPos + resetCell.nodeSize;
-        } else {
-          insertRelPos = map.positionAt(row, col, tableNode);
-        }
-
-        tr.insert(tr.mapping.slice(mapFrom).map(tableStart + insertRelPos), newCell);
-      }
-    }
+    expandMergedCellIntoSingles({
+      tr,
+      tablePos,
+      tableNode,
+      cellPos,
+      cellNode,
+      rowIndex,
+      columnIndex,
+      rowspan,
+      colspan,
+      schema,
+    });
 
     applyDirectMutationMeta(tr);
     editor.dispatch(tr);
@@ -2083,10 +2369,6 @@ export function tablesSplitCellAdapter(
   const currentColspan = (attrs.colspan as number) || 1;
   const currentRowspan = (attrs.rowspan as number) || 1;
 
-  if ((currentColspan > 1 || currentRowspan > 1) && input.rows === currentRowspan && input.columns === currentColspan) {
-    return tablesUnmergeCellsAdapter(editor, input, options);
-  }
-
   if (input.rows === 1 && input.columns === 1 && currentColspan === 1 && currentRowspan === 1) {
     return toTableFailure('NO_OP', 'Cell is already a single cell and split target is 1×1.');
   }
@@ -2098,33 +2380,114 @@ export function tablesSplitCellAdapter(
   try {
     const tr = editor.state.tr;
     const tablePos = table.candidate.pos;
-    const tableStart = tablePos + 1;
-    const tableNode = table.candidate.node;
-    const map = TableMap.get(tableNode);
     const schema = editor.state.schema;
+    const targetColumns = Math.max(input.columns, currentColspan);
+    const targetRows = Math.max(input.rows, currentRowspan);
+    const additionalColumns = Math.max(0, targetColumns - currentColspan);
+    const additionalRows = Math.max(0, targetRows - currentRowspan);
+    let updatedGrid = (table.candidate.node.attrs as Record<string, unknown>).grid;
 
-    // Target span: if the cell already spans more than requested, we reduce.
-    // If the cell spans less, the split creates sub-cells within the current span.
-    const targetColspan = Math.max(input.columns, currentColspan);
-    const targetRowspan = Math.max(input.rows, currentRowspan);
-
-    // Replace the original cell with a 1×1 cell keeping the content.
-    const splitAttrs = { ...attrs, colspan: 1, rowspan: 1 };
-    tr.setNodeMarkup(cellPos, null, splitAttrs);
-
-    // Insert empty cells for the rest of the grid.
-    const mapFrom = tr.mapping.maps.length;
-    for (let row = rowIndex + targetRowspan - 1; row >= rowIndex; row--) {
-      for (let col = columnIndex + targetColspan - 1; col >= columnIndex; col--) {
-        if (row === rowIndex && col === columnIndex) continue;
-
-        const newCell = schema.nodes.tableCell.createAndFill()!;
-        // Use positionAt if within original map bounds, otherwise insert at row end.
-        if (row < map.height && col < map.width) {
-          const insertPos = map.positionAt(row, col, tableNode);
-          tr.insert(tr.mapping.slice(mapFrom).map(tableStart + insertPos), newCell);
-        }
+    // If the target is already merged, first normalize it to single cells in its current span.
+    // This preserves all non-target cells while creating a stable base region to expand from.
+    if (currentColspan > 1 || currentRowspan > 1) {
+      const currentTableNode = tr.doc.nodeAt(tablePos);
+      if (!currentTableNode || currentTableNode.type.name !== 'table') {
+        return toTableFailure('INVALID_TARGET', 'Cell split target table is unavailable.');
       }
+
+      const currentCellPos = tr.mapping.map(cellPos, 1);
+      const currentCellNode = tr.doc.nodeAt(currentCellPos);
+      if (
+        !currentCellNode ||
+        (currentCellNode.type.name !== 'tableCell' && currentCellNode.type.name !== 'tableHeader')
+      ) {
+        return toTableFailure('INVALID_TARGET', 'Split target cell is unavailable.');
+      }
+
+      expandMergedCellIntoSingles({
+        tr,
+        tablePos,
+        tableNode: currentTableNode,
+        cellPos: currentCellPos,
+        cellNode: currentCellNode,
+        rowIndex,
+        columnIndex,
+        rowspan: currentRowspan,
+        colspan: currentColspan,
+        schema,
+      });
+    }
+
+    for (let columnOffset = 0; columnOffset < additionalColumns; columnOffset++) {
+      const insertColumnIndex = columnIndex + currentColspan + columnOffset;
+      addColumnToTableForSplit(tr, tablePos, insertColumnIndex, rowIndex, rowIndex + targetRows);
+      updatedGrid = insertGridColumnWidth(updatedGrid, insertColumnIndex) ?? updatedGrid;
+    }
+
+    for (let rowOffset = 0; rowOffset < additionalRows; rowOffset++) {
+      const currentTableNode = tr.doc.nodeAt(tablePos);
+      if (!currentTableNode || currentTableNode.type.name !== 'table') {
+        return toTableFailure('INVALID_TARGET', 'Cell split target table is unavailable.');
+      }
+
+      const insertIndex = rowIndex + currentRowspan + rowOffset;
+      const boundedInsertIndex = Math.max(0, Math.min(insertIndex, currentTableNode.childCount));
+      const sourceRowIndex = Math.max(0, Math.min(boundedInsertIndex - 1, currentTableNode.childCount - 1));
+      const didInsertRow = insertRowInTableForSplit(
+        tr,
+        tablePos,
+        sourceRowIndex,
+        boundedInsertIndex,
+        columnIndex,
+        columnIndex + targetColumns,
+        schema,
+      );
+
+      if (!didInsertRow) {
+        return toTableFailure('INVALID_TARGET', 'Cell split could not insert required rows.');
+      }
+    }
+
+    const finalTableNode = tr.doc.nodeAt(tablePos);
+    if (!finalTableNode || finalTableNode.type.name !== 'table') {
+      return toTableFailure('INVALID_TARGET', 'Cell split target table is unavailable.');
+    }
+
+    const mappedTargetCellPos = tr.mapping.map(cellPos, 1);
+    let finalTargetCellPos = mappedTargetCellPos;
+    let finalTargetCell = tr.doc.nodeAt(finalTargetCellPos);
+
+    if (
+      !finalTargetCell ||
+      (finalTargetCell.type.name !== 'tableCell' && finalTargetCell.type.name !== 'tableHeader')
+    ) {
+      const tableStart = tablePos + 1;
+      const finalMap = TableMap.get(finalTableNode);
+      const finalTargetRelPos = finalMap.positionAt(rowIndex, columnIndex, finalTableNode);
+      finalTargetCellPos = tableStart + finalTargetRelPos;
+      finalTargetCell = tr.doc.nodeAt(finalTargetCellPos);
+    }
+
+    if (
+      !finalTargetCell ||
+      (finalTargetCell.type.name !== 'tableCell' && finalTargetCell.type.name !== 'tableHeader')
+    ) {
+      return toTableFailure('INVALID_TARGET', 'Split target cell is unavailable.');
+    }
+
+    tr.setNodeMarkup(
+      finalTargetCellPos,
+      null,
+      normalizeCellAttrsForSingleCell(finalTargetCell.attrs as Record<string, unknown>),
+    );
+
+    if (updatedGrid) {
+      const currentTableAttrs = finalTableNode.attrs as Record<string, unknown>;
+      tr.setNodeMarkup(tablePos, null, {
+        ...currentTableAttrs,
+        grid: updatedGrid,
+        userEdited: true,
+      });
     }
 
     applyDirectMutationMeta(tr);

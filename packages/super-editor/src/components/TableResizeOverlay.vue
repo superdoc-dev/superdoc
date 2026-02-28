@@ -85,6 +85,27 @@ const overlayRect = ref(null);
 const tableMetadata = ref(null);
 
 /**
+ * Normalize metadata-provided minimum width so resize remains possible.
+ * Some imported tables report min == current width (e.g. 100/100), which
+ * clamps drag delta to zero and makes columns feel "stuck".
+ *
+ * @param {number} width - Current column width in layout pixels
+ * @param {number} rawMin - Raw minimum width from metadata
+ * @returns {number}
+ */
+function normalizeColumnMinWidth(width, rawMin) {
+  const safeWidth = Math.max(1, Number(width) || 1);
+  const safeMin = Math.max(1, Number(rawMin) || 1);
+  if (safeMin < safeWidth) return safeMin;
+
+  // Keep at least a practical shrink budget while guaranteeing min < width.
+  if (safeWidth <= 2) return 1;
+
+  const candidate = Math.max(1, Math.max(25, Math.floor(safeWidth * 0.5)));
+  return Math.min(safeWidth - 1, candidate);
+}
+
+/**
  * Get the editor's zoom level for coordinate transformations.
  *
  * Retrieves the current zoom multiplier from the editor instance. Zoom is centrally
@@ -648,10 +669,10 @@ function parseTableMetadata() {
         );
       })
       .map((col) => ({
+        w: Math.max(1, col.w),
+        min: normalizeColumnMinWidth(col.w, col.min),
         i: col.i,
         x: Math.max(0, col.x),
-        w: Math.max(1, col.w),
-        min: Math.max(1, col.min),
         r: col.r,
       }));
 

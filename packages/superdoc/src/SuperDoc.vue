@@ -564,6 +564,7 @@ const editorOptions = (doc) => {
     disableContextMenu: proxy.$superdoc.config.disableContextMenu,
     jsonOverride: proxy.$superdoc.config.jsonOverride,
     viewOptions: proxy.$superdoc.config.viewOptions,
+    linkPopoverResolver: proxy.$superdoc.config.modules?.links?.popoverResolver,
     layoutEngineOptions: useLayoutEngine
       ? {
           ...(proxy.$superdoc.config.layoutEngineOptions || {}),

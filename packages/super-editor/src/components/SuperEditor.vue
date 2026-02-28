@@ -1104,6 +1104,7 @@ onBeforeUnmount(() => {
         :openPopover="openPopover"
         :closePopover="closePopover"
         :popoverVisible="popoverControls.visible"
+        :linkPopoverResolver="props.options.linkPopoverResolver"
       />
       <!-- Table resize overlay for interactive column resizing -->
       <TableResizeOverlay

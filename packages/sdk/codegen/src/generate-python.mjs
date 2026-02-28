@@ -4,6 +4,7 @@ import {
   createOperationTree,
   loadContract,
   pascalCase,
+  resolveRef,
   REPO_ROOT,
   sanitizeOperationId,
   writeGeneratedFile,
@@ -40,8 +41,9 @@ function toPythonLiteral(value) {
   return 'None';
 }
 
-function toPythonType(typeSpec, classNameBase, generatedClasses, classBlocks) {
+function toPythonType(typeSpec, classNameBase, generatedClasses, classBlocks, $defs = undefined) {
   if (!typeSpec) return 'Any';
+  typeSpec = resolveRef(typeSpec, $defs);
 
   if (Object.prototype.hasOwnProperty.call(typeSpec, 'const')) {
     return `Literal[${toPythonLiteral(typeSpec.const)}]`;
@@ -49,7 +51,7 @@ function toPythonType(typeSpec, classNameBase, generatedClasses, classBlocks) {
 
   if (Array.isArray(typeSpec.oneOf)) {
     const variants = typeSpec.oneOf.map((v, i) =>
-      toPythonType(v, `${classNameBase}Variant${i + 1}`, generatedClasses, classBlocks),
+      toPythonType(v, `${classNameBase}Variant${i + 1}`, generatedClasses, classBlocks, $defs),
     );
     return variants.join(' | ');
   }
@@ -71,7 +73,7 @@ function toPythonType(typeSpec, classNameBase, generatedClasses, classBlocks) {
     case 'json':
       return 'Any';
     case 'array':
-      return `list[${toPythonType(typeSpec.items, `${classNameBase}Item`, generatedClasses, classBlocks)}]`;
+      return `list[${toPythonType(typeSpec.items, `${classNameBase}Item`, generatedClasses, classBlocks, $defs)}]`;
     case 'object': {
       const className = classNameBase;
       if (!generatedClasses.has(className)) {
@@ -89,6 +91,7 @@ function toPythonType(typeSpec, classNameBase, generatedClasses, classBlocks) {
               `${className}${pascalCase(name)}`,
               generatedClasses,
               classBlocks,
+              $defs,
             );
             lines.push(`        ${JSON.stringify(name)}: ${propType},`);
           }
@@ -134,7 +137,7 @@ function buildParamsObjectSpec(operation) {
 // Response and param type generation
 // ---------------------------------------------------------------------------
 
-function generateResponseTypes(operations, generatedClasses, classBlocks) {
+function generateResponseTypes(operations, generatedClasses, classBlocks, $defs) {
   const map = new Map();
 
   for (const [operationId, operation] of Object.entries(operations)) {
@@ -143,13 +146,13 @@ function generateResponseTypes(operations, generatedClasses, classBlocks) {
     if (!schema) {
       throw new Error(`Operation ${operationId} missing both successSchema and outputSchema`);
     }
-    map.set(operationId, toPythonType(schema, resultClassName, generatedClasses, classBlocks));
+    map.set(operationId, toPythonType(schema, resultClassName, generatedClasses, classBlocks, $defs));
   }
 
   return map;
 }
 
-function generateParamTypes(operations, generatedClasses, classBlocks) {
+function generateParamTypes(operations, generatedClasses, classBlocks, $defs) {
   const map = new Map();
 
   for (const [operationId, operation] of Object.entries(operations)) {
@@ -159,6 +162,7 @@ function generateParamTypes(operations, generatedClasses, classBlocks) {
       paramsClassName,
       generatedClasses,
       classBlocks,
+      $defs,
     );
     map.set(operationId, paramsType);
   }
@@ -233,11 +237,12 @@ function renderAllClasses(treeNode, pathParts, asyncMode, resultTypeMap, paramTy
 // ---------------------------------------------------------------------------
 
 function generateClientPy(contract) {
+  const $defs = contract.$defs;
   const tree = createOperationTree(contract.operations);
   const generatedClasses = new Set();
   const classBlocks = [];
-  const resultTypeMap = generateResponseTypes(contract.operations, generatedClasses, classBlocks);
-  const paramTypeMap = generateParamTypes(contract.operations, generatedClasses, classBlocks);
+  const resultTypeMap = generateResponseTypes(contract.operations, generatedClasses, classBlocks, $defs);
+  const paramTypeMap = generateParamTypes(contract.operations, generatedClasses, classBlocks, $defs);
   const sharedTypes = classBlocks.join('\n\n');
   const syncClasses = renderAllClasses(tree, ['doc'], false, resultTypeMap, paramTypeMap);
   const asyncClasses = renderAllClasses(tree, ['doc'], true, resultTypeMap, paramTypeMap);

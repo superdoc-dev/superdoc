@@ -43,12 +43,13 @@ import { ShapeContainer } from './shape-container/index.js';
 import { ShapeTextbox } from './shape-textbox/index.js';
 import { ContentBlock } from './content-block/index.js';
 import { BlockNode } from './block-node/index.js';
-import { TableOfContents } from './table-of-contents/index.js';
+import { TableOfContents, TocPageNumber } from './table-of-contents/index.js';
 import { DocumentIndex } from './document-index/index.js';
 import { VectorShape } from './vector-shape/index.js';
 import { ShapeGroup } from './shape-group/index.js';
 import { PassthroughBlock, PassthroughInline } from '@extensions/passthrough/index.js';
 import { IndexEntry } from './index-entry/index.js';
+import { TableOfContentsEntry } from './table-of-contents-entry/index.js';
 
 // Marks extensions
 import { TextStyle } from './text-style/text-style.js';
@@ -91,6 +92,8 @@ const getRichTextExtensions = () => {
     Italic,
     Link,
     Paragraph,
+    TableOfContents,
+    DocumentIndex,
     Strike,
     Text,
     TextAlign,
@@ -143,6 +146,7 @@ const getStarterExtensions = () => {
     Strike,
     TabNode,
     TableOfContents,
+    TocPageNumber,
     DocumentIndex,
     Text,
     TextAlign,
@@ -178,6 +182,7 @@ const getStarterExtensions = () => {
     TotalPageCount,
     PageReference,
     IndexEntry,
+    TableOfContentsEntry,
     ShapeContainer,
     ShapeTextbox,
     ContentBlock,
@@ -236,6 +241,8 @@ export {
   TableHeader,
   DocumentIndex,
   IndexEntry,
+  TableOfContentsEntry,
+  TocPageNumber,
   Placeholder,
   DropCursor,
   BlockNode,

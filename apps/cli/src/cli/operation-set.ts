@@ -131,7 +131,7 @@ export function cliRequiresDocumentContext(cliOpId: CliOperationId): boolean {
 
 /**
  * Derives CLI command tokens from a doc-api member path.
- * E.g. "comments.add" → ["comments", "add"], "find" → ["find"]
+ * E.g. "comments.create" → ["comments", "create"], "find" → ["find"]
  *
  * For CLI-only ops, converts camelCase to kebab-case:
  * E.g. "session.setDefault" → ["session", "set-default"]

@@ -1,21 +1,21 @@
-import { Plugin, PluginKey, TextSelection } from 'prosemirror-state';
 import { Extension } from '@core/Extension.js';
+import { Plugin, PluginKey, TextSelection } from 'prosemirror-state';
 import { Decoration, DecorationSet } from 'prosemirror-view';
+import { CommentMarkName } from './comments-constants.js';
 import {
+  getHighlightColor,
   removeCommentsById,
   resolveCommentById,
-  getHighlightColor,
   translateFormatChangesToEnglish,
 } from './comments-helpers.js';
-import { CommentMarkName } from './comments-constants.js';
 
 // Example tracked-change keys, if needed
-import { TrackInsertMarkName, TrackDeleteMarkName, TrackFormatMarkName } from '../track-changes/constants.js';
+import { comments_module_events } from '@superdoc/common';
+import { v4 as uuidv4 } from 'uuid';
+import { TrackDeleteMarkName, TrackFormatMarkName, TrackInsertMarkName } from '../track-changes/constants.js';
 import { TrackChangesBasePluginKey } from '../track-changes/plugins/index.js';
 import { getTrackChanges } from '../track-changes/trackChangesHelpers/getTrackChanges.js';
-import { comments_module_events } from '@superdoc/common';
 import { normalizeCommentEventPayload, updatePosition } from './helpers/index.js';
-import { v4 as uuidv4 } from 'uuid';
 
 const TRACK_CHANGE_MARKS = [TrackInsertMarkName, TrackDeleteMarkName, TrackFormatMarkName];
 
@@ -510,11 +510,6 @@ export const CommentsPlugin = Extension.create({
 
               shouldUpdate = true;
               editor.emit('commentsUpdate', update);
-
-              const { tr: newTr } = editor.view.state;
-              const { dispatch } = editor.view;
-              newTr.setMeta(CommentsPluginKey, { type: 'force' });
-              dispatch(newTr);
             }
           }
 
@@ -564,9 +559,7 @@ export const CommentsPlugin = Extension.create({
             prevDoc = doc;
             shouldUpdate = false;
 
-            if (layoutEngineActive) {
-              return;
-            }
+            if (layoutEngineActive) return;
 
             const decorations = [];
             // Always rebuild positions fresh from the current document to avoid stale PM offsets
@@ -993,7 +986,15 @@ const getTrackedChangeText = ({ nodes, mark, trackedChangeType, isDeletionInsert
   };
 };
 
-const createOrUpdateTrackedChangeComment = ({ event, marks, deletionNodes, nodes, newEditorState, documentId }) => {
+const createOrUpdateTrackedChangeComment = ({
+  event,
+  marks,
+  deletionNodes,
+  nodes,
+  newEditorState,
+  documentId,
+  trackedChangesForId,
+}) => {
   const trackedMark = marks.insertedMark || marks.deletionMark || marks.formatMark;
   const { type, attrs } = trackedMark;
 
@@ -1002,9 +1003,9 @@ const createOrUpdateTrackedChangeComment = ({ event, marks, deletionNodes, nodes
   const id = attrs.id;
 
   const node = nodes[0];
-  // Use getTrackChanges to find all tracked changes with the matching ID
-  // This will find both insertion and deletion marks if they exist with the same ID
-  const trackedChangesWithId = getTrackChanges(newEditorState, id);
+  // Use pre-computed tracked changes when available (batch import path),
+  // otherwise scan the document (real-time edit path).
+  const trackedChangesWithId = trackedChangesForId || getTrackChanges(newEditorState, id);
 
   // Check metadata first - this should be set correctly by groupChanges() in createCommentForTrackChanges
   // for both newly created and imported tracked changes
@@ -1132,6 +1133,8 @@ function findRangeById(doc, id) {
   });
   return from !== null && to !== null ? { from, to } : null;
 }
+
+export { createOrUpdateTrackedChangeComment };
 
 export const __test__ = {
   getActiveCommentId,

@@ -1,0 +1,56 @@
+---
+title: Tables operations
+sidebarTitle: Tables
+description: Tables operation reference from the canonical Document API contract.
+---
+
+{/* GENERATED FILE: DO NOT EDIT. Regenerate via `pnpm run docapi:sync`. */}
+
+> Alpha: Document API is currently alpha and subject to breaking changes.
+
+[Back to full reference](../index)
+
+Table structure, layout, styling, and cell operations.
+
+| Operation | Member path | Mutates | Idempotency | Tracked | Dry run |
+| --- | --- | --- | --- | --- | --- |
+| <span style={{ whiteSpace: 'nowrap', wordBreak: 'normal', overflowWrap: 'normal' }}><a href="/document-api/reference/tables/convert-from-text"><code>tables.convertFromText</code></a></span> | `tables.convertFromText` | Yes | `non-idempotent` | No | Yes |
+| <span style={{ whiteSpace: 'nowrap', wordBreak: 'normal', overflowWrap: 'normal' }}><a href="/document-api/reference/tables/delete"><code>tables.delete</code></a></span> | `tables.delete` | Yes | `conditional` | Yes | Yes |
+| <span style={{ whiteSpace: 'nowrap', wordBreak: 'normal', overflowWrap: 'normal' }}><a href="/document-api/reference/tables/clear-contents"><code>tables.clearContents</code></a></span> | `tables.clearContents` | Yes | `conditional` | No | Yes |
+| <span style={{ whiteSpace: 'nowrap', wordBreak: 'normal', overflowWrap: 'normal' }}><a href="/document-api/reference/tables/move"><code>tables.move</code></a></span> | `tables.move` | Yes | `conditional` | No | Yes |
+| <span style={{ whiteSpace: 'nowrap', wordBreak: 'normal', overflowWrap: 'normal' }}><a href="/document-api/reference/tables/split"><code>tables.split</code></a></span> | `tables.split` | Yes | `non-idempotent` | No | Yes |
+| <span style={{ whiteSpace: 'nowrap', wordBreak: 'normal', overflowWrap: 'normal' }}><a href="/document-api/reference/tables/convert-to-text"><code>tables.convertToText</code></a></span> | `tables.convertToText` | Yes | `conditional` | No | Yes |
+| <span style={{ whiteSpace: 'nowrap', wordBreak: 'normal', overflowWrap: 'normal' }}><a href="/document-api/reference/tables/set-layout"><code>tables.setLayout</code></a></span> | `tables.setLayout` | Yes | `idempotent` | No | Yes |
+| <span style={{ whiteSpace: 'nowrap', wordBreak: 'normal', overflowWrap: 'normal' }}><a href="/document-api/reference/tables/insert-row"><code>tables.insertRow</code></a></span> | `tables.insertRow` | Yes | `non-idempotent` | Yes | Yes |
+| <span style={{ whiteSpace: 'nowrap', wordBreak: 'normal', overflowWrap: 'normal' }}><a href="/document-api/reference/tables/delete-row"><code>tables.deleteRow</code></a></span> | `tables.deleteRow` | Yes | `conditional` | Yes | Yes |
+| <span style={{ whiteSpace: 'nowrap', wordBreak: 'normal', overflowWrap: 'normal' }}><a href="/document-api/reference/tables/set-row-height"><code>tables.setRowHeight</code></a></span> | `tables.setRowHeight` | Yes | `idempotent` | No | Yes |
+| <span style={{ whiteSpace: 'nowrap', wordBreak: 'normal', overflowWrap: 'normal' }}><a href="/document-api/reference/tables/distribute-rows"><code>tables.distributeRows</code></a></span> | `tables.distributeRows` | Yes | `conditional` | No | Yes |
+| <span style={{ whiteSpace: 'nowrap', wordBreak: 'normal', overflowWrap: 'normal' }}><a href="/document-api/reference/tables/set-row-options"><code>tables.setRowOptions</code></a></span> | `tables.setRowOptions` | Yes | `idempotent` | No | Yes |
+| <span style={{ whiteSpace: 'nowrap', wordBreak: 'normal', overflowWrap: 'normal' }}><a href="/document-api/reference/tables/insert-column"><code>tables.insertColumn</code></a></span> | `tables.insertColumn` | Yes | `non-idempotent` | Yes | Yes |
+| <span style={{ whiteSpace: 'nowrap', wordBreak: 'normal', overflowWrap: 'normal' }}><a href="/document-api/reference/tables/delete-column"><code>tables.deleteColumn</code></a></span> | `tables.deleteColumn` | Yes | `conditional` | Yes | Yes |
+| <span style={{ whiteSpace: 'nowrap', wordBreak: 'normal', overflowWrap: 'normal' }}><a href="/document-api/reference/tables/set-column-width"><code>tables.setColumnWidth</code></a></span> | `tables.setColumnWidth` | Yes | `idempotent` | No | Yes |
+| <span style={{ whiteSpace: 'nowrap', wordBreak: 'normal', overflowWrap: 'normal' }}><a href="/document-api/reference/tables/distribute-columns"><code>tables.distributeColumns</code></a></span> | `tables.distributeColumns` | Yes | `conditional` | No | Yes |
+| <span style={{ whiteSpace: 'nowrap', wordBreak: 'normal', overflowWrap: 'normal' }}><a href="/document-api/reference/tables/insert-cell"><code>tables.insertCell</code></a></span> | `tables.insertCell` | Yes | `non-idempotent` | No | Yes |
+| <span style={{ whiteSpace: 'nowrap', wordBreak: 'normal', overflowWrap: 'normal' }}><a href="/document-api/reference/tables/delete-cell"><code>tables.deleteCell</code></a></span> | `tables.deleteCell` | Yes | `conditional` | No | Yes |
+| <span style={{ whiteSpace: 'nowrap', wordBreak: 'normal', overflowWrap: 'normal' }}><a href="/document-api/reference/tables/merge-cells"><code>tables.mergeCells</code></a></span> | `tables.mergeCells` | Yes | `conditional` | No | Yes |
+| <span style={{ whiteSpace: 'nowrap', wordBreak: 'normal', overflowWrap: 'normal' }}><a href="/document-api/reference/tables/unmerge-cells"><code>tables.unmergeCells</code></a></span> | `tables.unmergeCells` | Yes | `conditional` | No | Yes |
+| <span style={{ whiteSpace: 'nowrap', wordBreak: 'normal', overflowWrap: 'normal' }}><a href="/document-api/reference/tables/split-cell"><code>tables.splitCell</code></a></span> | `tables.splitCell` | Yes | `non-idempotent` | No | Yes |
+| <span style={{ whiteSpace: 'nowrap', wordBreak: 'normal', overflowWrap: 'normal' }}><a href="/document-api/reference/tables/set-cell-properties"><code>tables.setCellProperties</code></a></span> | `tables.setCellProperties` | Yes | `idempotent` | No | Yes |
+| <span style={{ whiteSpace: 'nowrap', wordBreak: 'normal', overflowWrap: 'normal' }}><a href="/document-api/reference/tables/sort"><code>tables.sort</code></a></span> | `tables.sort` | Yes | `non-idempotent` | No | Yes |
+| <span style={{ whiteSpace: 'nowrap', wordBreak: 'normal', overflowWrap: 'normal' }}><a href="/document-api/reference/tables/set-alt-text"><code>tables.setAltText</code></a></span> | `tables.setAltText` | Yes | `idempotent` | No | Yes |
+| <span style={{ whiteSpace: 'nowrap', wordBreak: 'normal', overflowWrap: 'normal' }}><a href="/document-api/reference/tables/set-style"><code>tables.setStyle</code></a></span> | `tables.setStyle` | Yes | `idempotent` | No | Yes |
+| <span style={{ whiteSpace: 'nowrap', wordBreak: 'normal', overflowWrap: 'normal' }}><a href="/document-api/reference/tables/clear-style"><code>tables.clearStyle</code></a></span> | `tables.clearStyle` | Yes | `conditional` | No | Yes |
+| <span style={{ whiteSpace: 'nowrap', wordBreak: 'normal', overflowWrap: 'normal' }}><a href="/document-api/reference/tables/set-style-option"><code>tables.setStyleOption</code></a></span> | `tables.setStyleOption` | Yes | `idempotent` | No | Yes |
+| <span style={{ whiteSpace: 'nowrap', wordBreak: 'normal', overflowWrap: 'normal' }}><a href="/document-api/reference/tables/set-border"><code>tables.setBorder</code></a></span> | `tables.setBorder` | Yes | `idempotent` | No | Yes |
+| <span style={{ whiteSpace: 'nowrap', wordBreak: 'normal', overflowWrap: 'normal' }}><a href="/document-api/reference/tables/clear-border"><code>tables.clearBorder</code></a></span> | `tables.clearBorder` | Yes | `conditional` | No | Yes |
+| <span style={{ whiteSpace: 'nowrap', wordBreak: 'normal', overflowWrap: 'normal' }}><a href="/document-api/reference/tables/apply-border-preset"><code>tables.applyBorderPreset</code></a></span> | `tables.applyBorderPreset` | Yes | `idempotent` | No | Yes |
+| <span style={{ whiteSpace: 'nowrap', wordBreak: 'normal', overflowWrap: 'normal' }}><a href="/document-api/reference/tables/set-shading"><code>tables.setShading</code></a></span> | `tables.setShading` | Yes | `idempotent` | No | Yes |
+| <span style={{ whiteSpace: 'nowrap', wordBreak: 'normal', overflowWrap: 'normal' }}><a href="/document-api/reference/tables/clear-shading"><code>tables.clearShading</code></a></span> | `tables.clearShading` | Yes | `conditional` | No | Yes |
+| <span style={{ whiteSpace: 'nowrap', wordBreak: 'normal', overflowWrap: 'normal' }}><a href="/document-api/reference/tables/set-table-padding"><code>tables.setTablePadding</code></a></span> | `tables.setTablePadding` | Yes | `idempotent` | No | Yes |
+| <span style={{ whiteSpace: 'nowrap', wordBreak: 'normal', overflowWrap: 'normal' }}><a href="/document-api/reference/tables/set-cell-padding"><code>tables.setCellPadding</code></a></span> | `tables.setCellPadding` | Yes | `idempotent` | No | Yes |
+| <span style={{ whiteSpace: 'nowrap', wordBreak: 'normal', overflowWrap: 'normal' }}><a href="/document-api/reference/tables/set-cell-spacing"><code>tables.setCellSpacing</code></a></span> | `tables.setCellSpacing` | Yes | `idempotent` | No | Yes |
+| <span style={{ whiteSpace: 'nowrap', wordBreak: 'normal', overflowWrap: 'normal' }}><a href="/document-api/reference/tables/clear-cell-spacing"><code>tables.clearCellSpacing</code></a></span> | `tables.clearCellSpacing` | Yes | `conditional` | No | Yes |
+| <span style={{ whiteSpace: 'nowrap', wordBreak: 'normal', overflowWrap: 'normal' }}><a href="/document-api/reference/tables/get"><code>tables.get</code></a></span> | `tables.get` | No | `idempotent` | No | No |
+| <span style={{ whiteSpace: 'nowrap', wordBreak: 'normal', overflowWrap: 'normal' }}><a href="/document-api/reference/tables/get-cells"><code>tables.getCells</code></a></span> | `tables.getCells` | No | `idempotent` | No | No |
+| <span style={{ whiteSpace: 'nowrap', wordBreak: 'normal', overflowWrap: 'normal' }}><a href="/document-api/reference/tables/get-properties"><code>tables.getProperties</code></a></span> | `tables.getProperties` | No | `idempotent` | No | No |
+

@@ -16,6 +16,11 @@ export const OPERATION_REQUIRES_DOCUMENT_CONTEXT_MAP: Record<OperationId, boolea
   (_id, entry) => entry.requiresDocumentContext,
 );
 
+/** Maps each operation to its expected-result description. */
+export const OPERATION_EXPECTED_RESULT_MAP: Record<OperationId, string> = projectFromDefinitions(
+  (_id, entry) => entry.expectedResult,
+);
+
 /**
  * Returns the static metadata for a given operation.
  *

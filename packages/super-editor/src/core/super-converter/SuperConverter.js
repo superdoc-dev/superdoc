@@ -188,6 +188,7 @@ class SuperConverter {
     this.comments = [];
     this.footnotes = [];
     this.footnoteProperties = null;
+    this.viewSetting = null;
     this.inlineDocumentFonts = [];
     this.commentThreadingProfile = null;
 
@@ -1079,6 +1080,7 @@ class SuperConverter {
       this.translatedNumbering = result.translatedNumbering;
       this.inlineDocumentFonts = result.inlineDocumentFonts;
       this.themeColors = result.themeColors ?? null;
+      this.importDiagnostics = result.importDiagnostics ?? [];
 
       return result.pmDoc;
     } else {

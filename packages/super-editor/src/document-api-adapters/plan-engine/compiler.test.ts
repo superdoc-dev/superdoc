@@ -1,5 +1,5 @@
 import type { TextAddress } from '@superdoc/document-api';
-import { normalizeMatchRanges } from './compiler.js';
+import { normalizeMatchRanges, normalizeMatchSpan } from './compiler.js';
 import { PlanError } from './errors.js';
 
 // ---------------------------------------------------------------------------
@@ -199,5 +199,96 @@ describe('TextRewriteStep type contract', () => {
 
     expect(step.args.style).toBeDefined();
     expect(step.args.style!.inline.mode).toBe('preserve');
+  });
+});
+
+// ---------------------------------------------------------------------------
+// normalizeMatchSpan — unit tests
+// ---------------------------------------------------------------------------
+
+describe('normalizeMatchSpan', () => {
+  const stepId = 'step-span';
+
+  // --- Single range → single-block span ---
+
+  it('returns single-block span for a single range', () => {
+    const result = normalizeMatchSpan(stepId, [addr('p1', 5, 10)]);
+    expect(result).toEqual({ kind: 'single-block', blockId: 'p1', from: 5, to: 10 });
+  });
+
+  // --- Coalesced same-block ranges → single-block span ---
+
+  it('coalesces adjacent same-block ranges into a single-block span', () => {
+    const result = normalizeMatchSpan(stepId, [addr('p1', 0, 5), addr('p1', 5, 12)]);
+    expect(result).toEqual({ kind: 'single-block', blockId: 'p1', from: 0, to: 12 });
+  });
+
+  // --- Two blocks → cross-block span ---
+
+  it('returns cross-block span with two segments for ranges in two blocks', () => {
+    const result = normalizeMatchSpan(stepId, [addr('p1', 0, 5), addr('p2', 0, 8)]);
+    expect(result).toEqual({
+      kind: 'cross-block',
+      segments: [
+        { blockId: 'p1', from: 0, to: 5 },
+        { blockId: 'p2', from: 0, to: 8 },
+      ],
+    });
+  });
+
+  // --- Three blocks → cross-block span, ordered ---
+
+  it('returns cross-block span with three segments in encounter order', () => {
+    const result = normalizeMatchSpan(stepId, [addr('p1', 3, 10), addr('p2', 0, 7), addr('p3', 0, 4)]);
+    expect(result).toEqual({
+      kind: 'cross-block',
+      segments: [
+        { blockId: 'p1', from: 3, to: 10 },
+        { blockId: 'p2', from: 0, to: 7 },
+        { blockId: 'p3', from: 0, to: 4 },
+      ],
+    });
+  });
+
+  // --- Empty ranges → throws INVALID_INPUT ---
+
+  it('throws INVALID_INPUT for empty ranges array', () => {
+    expect(() => normalizeMatchSpan(stepId, [])).toThrow(PlanError);
+
+    try {
+      normalizeMatchSpan(stepId, []);
+    } catch (e) {
+      expect(e).toBeInstanceOf(PlanError);
+      expect((e as PlanError).code).toBe('INVALID_INPUT');
+      expect((e as PlanError).stepId).toBe(stepId);
+    }
+  });
+
+  // --- Negative start → throws INVALID_INPUT ---
+
+  it('throws INVALID_INPUT for negative start offset', () => {
+    try {
+      normalizeMatchSpan(stepId, [addr('p1', -2, 5)]);
+    } catch (e) {
+      expect(e).toBeInstanceOf(PlanError);
+      expect((e as PlanError).code).toBe('INVALID_INPUT');
+      expect((e as PlanError).message).toContain('invalid range bounds');
+      return;
+    }
+    throw new Error('expected PlanError');
+  });
+
+  // --- Discontiguous same-block ranges → throws INVALID_INPUT ---
+
+  it('throws INVALID_INPUT for discontiguous ranges within the same block', () => {
+    try {
+      normalizeMatchSpan(stepId, [addr('p1', 0, 5), addr('p1', 10, 15)]);
+    } catch (e) {
+      expect(e).toBeInstanceOf(PlanError);
+      expect((e as PlanError).code).toBe('INVALID_INPUT');
+      expect((e as PlanError).message).toContain('discontiguous');
+      return;
+    }
+    throw new Error('expected PlanError');
   });
 });

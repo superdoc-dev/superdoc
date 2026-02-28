@@ -162,6 +162,18 @@ https://github.com/ProseMirror/prosemirror-tables/blob/master/demo/index.html
   /* width: 100%; */
 }
 
+/* Header/footer editors: constrain table to the editor's available width.
+   Raw DOCX grid <col> widths may exceed the section's content area.
+   table-layout:auto treats col widths as preferred (not hard) constraints,
+   so the browser can redistribute columns to fit within width:100%.
+   !important overrides inline styles set by TableView.updateTable()
+   which resets styles via table.style.cssText. */
+.sd-editor-scoped .ProseMirror.sd-header-footer table {
+  table-layout: auto !important;
+  width: 100% !important;
+  max-width: 100% !important;
+}
+
 .sd-editor-scoped .ProseMirror tr {
   position: relative;
 }

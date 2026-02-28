@@ -23,6 +23,7 @@ import type {
   TabNodeInfo,
   TableCellNodeInfo,
   TableNodeInfo,
+  TableOfContentsNodeInfo,
   TableRowNodeInfo,
 } from '@superdoc/document-api';
 import type {
@@ -33,6 +34,7 @@ import type {
   TableCellAttrs,
   TableMeasurement,
 } from '../../extensions/types/node-attributes.js';
+import { parseTocInstruction } from '../../core/super-converter/field-references/shared/toc-switches.js';
 
 function resolveMeasurement(value: number | TableMeasurement | null | undefined): number | undefined {
   if (typeof value === 'number') return value;
@@ -41,7 +43,7 @@ function resolveMeasurement(value: number | TableMeasurement | null | undefined)
 }
 
 function mapTableAlignment(
-  justification: TableAttrs['tableProperties'] extends { justification?: infer J } ? J : never,
+  justification: NonNullable<TableAttrs['tableProperties']>['justification'],
 ): TableNodeInfo['properties']['alignment'] {
   switch (justification) {
     case 'start':
@@ -59,12 +61,12 @@ function mapTableAlignment(
 
 function mapParagraphProperties(attrs: ParagraphAttrs | null | undefined): ParagraphProperties {
   const props = attrs?.paragraphProperties ?? undefined;
-  const indentation = props?.indentation
+  const indentation = props?.indent
     ? {
-        left: props.indentation.left,
-        right: props.indentation.right,
-        firstLine: props.indentation.firstLine,
-        hanging: props.indentation.hanging,
+        left: props.indent.left,
+        right: props.indent.right,
+        firstLine: props.indent.firstLine,
+        hanging: props.indent.hanging,
       }
     : undefined;
 
@@ -92,7 +94,7 @@ function mapParagraphProperties(attrs: ParagraphAttrs | null | undefined): Parag
     indentation,
     spacing,
     keepWithNext: props?.keepNext ?? undefined,
-    outlineLevel: props?.outlineLevel ?? undefined,
+    outlineLevel: props?.outlineLvl ?? undefined,
     paragraphNumbering,
   };
 }
@@ -208,6 +210,25 @@ function mapTableCellNode(candidate: BlockCandidate): TableCellNodeInfo {
     nodeType: 'tableCell',
     kind: 'block',
     properties,
+  };
+}
+
+function mapTableOfContentsNode(candidate: BlockCandidate): TableOfContentsNodeInfo {
+  const node = candidate.node;
+  const instruction: string = node.attrs?.instruction ?? '';
+  const config = parseTocInstruction(instruction);
+  const entryCount = node.childCount;
+
+  return {
+    nodeType: 'tableOfContents',
+    kind: 'block',
+    properties: {
+      instruction,
+      sourceConfig: config.source,
+      displayConfig: config.display,
+      preservedSwitches: config.preserved,
+      entryCount,
+    },
   };
 }
 
@@ -486,6 +507,10 @@ export function mapNodeInfo(candidate: BlockCandidate | InlineCandidate, overrid
       const attrs = candidate.node?.attrs as StructuredContentBlockAttrs | undefined;
       return buildSdtInfo(attrs, kind);
     }
+    case 'tableOfContents':
+      if (kind !== 'block')
+        throw new DocumentApiAdapterError('INVALID_TARGET', 'TableOfContents nodes can only be resolved as blocks.');
+      return mapTableOfContentsNode(candidate as BlockCandidate);
     case 'hyperlink':
       if (!isInlineCandidate(candidate))
         throw new DocumentApiAdapterError('INVALID_TARGET', 'Hyperlink nodes can only be resolved inline.');

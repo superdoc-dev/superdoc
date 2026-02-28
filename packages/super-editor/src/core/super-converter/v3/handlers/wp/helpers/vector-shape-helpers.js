@@ -450,6 +450,94 @@ export function extractFillColor(spPr, style) {
 }
 
 /**
+ * Extracts custom geometry path data from a:custGeom element and converts it to SVG paths.
+ * Per ECMA-376, a:custGeom contains a:pathLst with path commands (moveTo, lnTo, cubicBezTo,
+ * quadBezTo, close) in a coordinate space defined by the path's w/h attributes.
+ * Note: arcTo is not currently translated (no SVG arc equivalent is emitted; it is skipped).
+ * @param {Object} spPr - The shape properties element (a:spPr or wps:spPr)
+ * @returns {{ paths: Array<{ d: string, w: number, h: number }> } | null}
+ */
+export function extractCustomGeometry(spPr) {
+  const custGeom = spPr?.elements?.find((el) => el.name === 'a:custGeom');
+  if (!custGeom) return null;
+
+  const pathLst = custGeom.elements?.find((el) => el.name === 'a:pathLst');
+  if (!pathLst?.elements) return null;
+
+  const paths = pathLst.elements
+    .filter((el) => el.name === 'a:path')
+    .map((pathEl) => {
+      const w = parseInt(pathEl.attributes?.['w'] || '0', 10);
+      const h = parseInt(pathEl.attributes?.['h'] || '0', 10);
+      const d = convertDrawingMLPathToSvg(pathEl);
+      return { d, w, h };
+    })
+    .filter((p) => p.d);
+
+  if (paths.length === 0) return null;
+  return { paths };
+}
+
+/**
+ * Converts a DrawingML a:path element's child commands to an SVG path d attribute.
+ * Supports: moveTo→M, lnTo→L, cubicBezTo→C, quadBezTo→Q, close→Z
+ * Unsupported commands (e.g. arcTo) are intentionally skipped — they produce no output.
+ * @param {Object} pathEl - The a:path element
+ * @returns {string} SVG path d attribute
+ */
+function convertDrawingMLPathToSvg(pathEl) {
+  if (!pathEl?.elements) return '';
+
+  const parts = [];
+  for (const cmd of pathEl.elements) {
+    switch (cmd.name) {
+      case 'a:moveTo': {
+        const pt = cmd.elements?.find((el) => el.name === 'a:pt');
+        if (pt) {
+          parts.push(`M ${pt.attributes?.['x'] || 0} ${pt.attributes?.['y'] || 0}`);
+        }
+        break;
+      }
+      case 'a:lnTo': {
+        const pt = cmd.elements?.find((el) => el.name === 'a:pt');
+        if (pt) {
+          parts.push(`L ${pt.attributes?.['x'] || 0} ${pt.attributes?.['y'] || 0}`);
+        }
+        break;
+      }
+      case 'a:cubicBezTo': {
+        const pts = cmd.elements?.filter((el) => el.name === 'a:pt') || [];
+        if (pts.length === 3) {
+          parts.push(
+            `C ${pts[0].attributes?.['x'] || 0} ${pts[0].attributes?.['y'] || 0} ` +
+              `${pts[1].attributes?.['x'] || 0} ${pts[1].attributes?.['y'] || 0} ` +
+              `${pts[2].attributes?.['x'] || 0} ${pts[2].attributes?.['y'] || 0}`,
+          );
+        }
+        break;
+      }
+      case 'a:quadBezTo': {
+        const pts = cmd.elements?.filter((el) => el.name === 'a:pt') || [];
+        if (pts.length === 2) {
+          parts.push(
+            `Q ${pts[0].attributes?.['x'] || 0} ${pts[0].attributes?.['y'] || 0} ` +
+              `${pts[1].attributes?.['x'] || 0} ${pts[1].attributes?.['y'] || 0}`,
+          );
+        }
+        break;
+      }
+      case 'a:close':
+        parts.push('Z');
+        break;
+      default:
+        // Unknown DrawingML path commands (e.g. arcTo) are skipped — no SVG equivalent is emitted.
+        break;
+    }
+  }
+  return parts.join(' ');
+}
+
+/**
  * Extracts gradient fill information from a:gradFill element
  * @param {Object} gradFill - The a:gradFill element
  * @returns {Object} Gradient fill data with type, stops, and angle

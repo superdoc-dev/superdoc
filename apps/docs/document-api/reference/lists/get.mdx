@@ -1,7 +1,7 @@
 ---
 title: lists.get
 sidebarTitle: lists.get
-description: Generated reference for lists.get
+description: Retrieve a specific list node by target.
 ---
 
 {/* GENERATED FILE: DO NOT EDIT. Regenerate via `pnpm run docapi:sync`. */}
@@ -9,6 +9,8 @@ description: Generated reference for lists.get
 > Alpha: Document API is currently alpha and subject to breaking changes.
 
 ## Summary
+
+Retrieve a specific list node by target.
 
 - Operation ID: `lists.get`
 - API member path: `editor.doc.lists.get(...)`
@@ -18,6 +20,54 @@ description: Generated reference for lists.get
 - Supports dry run: `no`
 - Deterministic target resolution: `yes`
 
+## Expected result
+
+Returns a ListItemInfo object with the item kind, level, marker, and address.
+
+## Input fields
+
+| Field | Type | Required | Description |
+| --- | --- | --- | --- |
+| `address` | ListItemAddress | yes | ListItemAddress |
+
+### Example request
+
+```json
+{
+  "address": {
+    "kind": "block",
+    "nodeId": "node-def456",
+    "nodeType": "listItem"
+  }
+}
+```
+
+## Output fields
+
+| Field | Type | Required | Description |
+| --- | --- | --- | --- |
+| `address` | ListItemAddress | yes | ListItemAddress |
+| `kind` | enum | no | `"ordered"`, `"bullet"` |
+| `level` | integer | no |  |
+| `marker` | string | no |  |
+| `ordinal` | integer | no |  |
+| `path` | integer[] | no |  |
+| `text` | string | no |  |
+
+### Example response
+
+```json
+{
+  "address": {
+    "kind": "block",
+    "nodeId": "node-def456",
+    "nodeType": "listItem"
+  },
+  "marker": "1.",
+  "ordinal": 1
+}
+```
+
 ## Pre-apply throws
 
 - `TARGET_NOT_FOUND`
@@ -26,31 +76,15 @@ description: Generated reference for lists.get
 
 - None
 
-## Input schema
+## Raw schemas
 
+<Accordion title="Raw input schema">
 ```json
 {
   "additionalProperties": false,
   "properties": {
     "address": {
-      "additionalProperties": false,
-      "properties": {
-        "kind": {
-          "const": "block"
-        },
-        "nodeId": {
-          "type": "string"
-        },
-        "nodeType": {
-          "const": "listItem"
-        }
-      },
-      "required": [
-        "kind",
-        "nodeType",
-        "nodeId"
-      ],
-      "type": "object"
+      "$ref": "#/$defs/ListItemAddress"
     }
   },
   "required": [
@@ -59,32 +93,15 @@ description: Generated reference for lists.get
   "type": "object"
 }
 ```
+</Accordion>
 
-## Output schema
-
+<Accordion title="Raw output schema">
 ```json
 {
   "additionalProperties": false,
   "properties": {
     "address": {
-      "additionalProperties": false,
-      "properties": {
-        "kind": {
-          "const": "block"
-        },
-        "nodeId": {
-          "type": "string"
-        },
-        "nodeType": {
-          "const": "listItem"
-        }
-      },
-      "required": [
-        "kind",
-        "nodeType",
-        "nodeId"
-      ],
-      "type": "object"
+      "$ref": "#/$defs/ListItemAddress"
     },
     "kind": {
       "enum": [
@@ -117,3 +134,4 @@ description: Generated reference for lists.get
   "type": "object"
 }
 ```
+</Accordion>

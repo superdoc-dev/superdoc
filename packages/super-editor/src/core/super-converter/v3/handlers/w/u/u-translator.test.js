@@ -38,7 +38,7 @@ describe('w:u translator (attribute)', () => {
         ],
       };
       const out = config.encode(params, {
-        underline: 'wavy',
+        underline: 'wave',
         color: '00FF00',
         themeTint: '33',
       });
@@ -47,7 +47,7 @@ describe('w:u translator (attribute)', () => {
         xmlName: 'w:u',
         sdNodeOrKeyName: 'underline',
         attributes: {
-          'w:val': 'wavy',
+          'w:val': 'wave',
           'w:color': '00FF00',
           'w:themeColor': 'accent1',
           'w:themeTint': '33',

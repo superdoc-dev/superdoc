@@ -1,11 +1,15 @@
 import type { OperationId } from '../contract/types.js';
+import type { InlinePropertyStorage, InlinePropertyType, InlineRunPatchKey } from '../format/inline-run-patch.js';
 
 export const CAPABILITY_REASON_CODES = [
   'COMMAND_UNAVAILABLE',
+  'HELPER_UNAVAILABLE',
   'OPERATION_UNAVAILABLE',
   'TRACKED_MODE_UNAVAILABLE',
   'DRY_RUN_UNAVAILABLE',
   'NAMESPACE_UNAVAILABLE',
+  'STYLES_PART_MISSING',
+  'COLLABORATION_ACTIVE',
 ] as const;
 
 export type CapabilityReasonCode = (typeof CAPABILITY_REASON_CODES)[number];
@@ -31,7 +35,7 @@ export type OperationCapabilities = Record<OperationId, OperationRuntimeCapabili
 
 /** Runtime capabilities exposed by the plan engine (mutations.apply / mutations.preview). */
 export interface PlanEngineCapabilities {
-  /** Step op codes the engine can execute (e.g., 'text.rewrite', 'style.apply'). */
+  /** Step op codes the engine can execute (e.g., 'text.rewrite', 'format.apply'). */
   supportedStepOps: readonly string[];
   /** Non-uniform style resolution strategies available for `onNonUniform`. */
   supportedNonUniformStrategies: readonly string[];
@@ -51,13 +55,34 @@ export interface PlanEngineCapabilities {
  * `operations` contains per-operation availability details keyed by {@link OperationId}.
  * `planEngine` describes plan engine capabilities (step ops, style strategies, limits).
  */
+/** Per-inline-property runtime capability for `format.apply`. */
+export interface InlinePropertyCapability {
+  /** Whether this specific property is currently executable. */
+  available: boolean;
+  /** Whether this property supports tracked mode. */
+  tracked: boolean;
+  /** API value shape for this property. */
+  type: InlinePropertyType;
+  /** Runtime storage path used by the editor (mark or runAttribute). */
+  storage: InlinePropertyStorage;
+}
+
+/** Format capability snapshot — advertises per-property support for `format.apply`. */
+export interface FormatCapabilities {
+  /** Capability entry per canonical inline patch key. */
+  supportedInlineProperties: Record<InlineRunPatchKey, InlinePropertyCapability>;
+}
+
 export interface DocumentApiCapabilities {
   global: {
     trackChanges: CapabilityFlag;
     comments: CapabilityFlag;
     lists: CapabilityFlag;
     dryRun: CapabilityFlag;
+    history: CapabilityFlag;
   };
+  /** Format capability discovery for `format.apply`. */
+  format: FormatCapabilities;
   operations: OperationCapabilities;
   planEngine: PlanEngineCapabilities;
 }

@@ -1,0 +1,220 @@
+---
+title: toc.listEntries
+sidebarTitle: toc.listEntries
+description: List all TC (table of contents entry) fields in the document body.
+---
+
+{/* GENERATED FILE: DO NOT EDIT. Regenerate via `pnpm run docapi:sync`. */}
+
+> Alpha: Document API is currently alpha and subject to breaking changes.
+
+## Summary
+
+List all TC (table of contents entry) fields in the document body.
+
+- Operation ID: `toc.listEntries`
+- API member path: `editor.doc.toc.listEntries(...)`
+- Mutates document: `no`
+- Idempotency: `idempotent`
+- Supports tracked mode: `no`
+- Supports dry run: `no`
+- Deterministic target resolution: `yes`
+
+## Expected result
+
+Returns a TocListEntriesResult with an array of TC entry discovery items and pagination metadata.
+
+## Input fields
+
+| Field | Type | Required | Description |
+| --- | --- | --- | --- |
+| `levelRange` | object | no |  |
+| `limit` | integer | no |  |
+| `offset` | integer | no |  |
+| `tableIdentifier` | string | no |  |
+
+### Example request
+
+```json
+{
+  "levelRange": {
+    "from": 0,
+    "to": 10
+  },
+  "tableIdentifier": "example"
+}
+```
+
+## Output fields
+
+| Field | Type | Required | Description |
+| --- | --- | --- | --- |
+| `evaluatedRevision` | string | yes |  |
+| `items` | object[] | yes |  |
+| `page` | PageInfo | yes | PageInfo |
+| `total` | integer | yes |  |
+
+### Example response
+
+```json
+{
+  "evaluatedRevision": "rev-001",
+  "items": [
+    {
+      "address": {
+        "kind": "inline",
+        "nodeId": "node-def456",
+        "nodeType": "tableOfContentsEntry"
+      },
+      "handle": {
+        "ref": "handle:abc123",
+        "refStability": "stable",
+        "targetKind": "text"
+      },
+      "id": "id-001",
+      "instruction": "example",
+      "level": 1,
+      "omitPageNumber": true,
+      "tableIdentifier": "example",
+      "text": "Hello, world."
+    }
+  ],
+  "page": {
+    "limit": 50,
+    "offset": 0,
+    "returned": 1
+  },
+  "total": 1
+}
+```
+
+## Pre-apply throws
+
+- None
+
+## Non-applied failure codes
+
+- None
+
+## Raw schemas
+
+<Accordion title="Raw input schema">
+```json
+{
+  "additionalProperties": false,
+  "properties": {
+    "levelRange": {
+      "additionalProperties": false,
+      "properties": {
+        "from": {
+          "type": "integer"
+        },
+        "to": {
+          "type": "integer"
+        }
+      },
+      "required": [
+        "from",
+        "to"
+      ],
+      "type": "object"
+    },
+    "limit": {
+      "type": "integer"
+    },
+    "offset": {
+      "type": "integer"
+    },
+    "tableIdentifier": {
+      "type": "string"
+    }
+  },
+  "type": "object"
+}
+```
+</Accordion>
+
+<Accordion title="Raw output schema">
+```json
+{
+  "additionalProperties": false,
+  "properties": {
+    "evaluatedRevision": {
+      "type": "string"
+    },
+    "items": {
+      "items": {
+        "additionalProperties": false,
+        "properties": {
+          "address": {
+            "additionalProperties": false,
+            "properties": {
+              "kind": {
+                "const": "inline"
+              },
+              "nodeId": {
+                "type": "string"
+              },
+              "nodeType": {
+                "const": "tableOfContentsEntry"
+              }
+            },
+            "required": [
+              "kind",
+              "nodeType",
+              "nodeId"
+            ],
+            "type": "object"
+          },
+          "handle": {
+            "$ref": "#/$defs/ResolvedHandle"
+          },
+          "id": {
+            "type": "string"
+          },
+          "instruction": {
+            "type": "string"
+          },
+          "level": {
+            "type": "integer"
+          },
+          "omitPageNumber": {
+            "type": "boolean"
+          },
+          "tableIdentifier": {
+            "type": "string"
+          },
+          "text": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "id",
+          "handle",
+          "address",
+          "instruction",
+          "text",
+          "level",
+          "omitPageNumber"
+        ],
+        "type": "object"
+      },
+      "type": "array"
+    },
+    "page": {
+      "$ref": "#/$defs/PageInfo"
+    },
+    "total": {
+      "type": "integer"
+    }
+  },
+  "required": [
+    "evaluatedRevision",
+    "total",
+    "items",
+    "page"
+  ],
+  "type": "object"
+}
+```
+</Accordion>

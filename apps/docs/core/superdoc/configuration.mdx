@@ -134,8 +134,8 @@ new SuperDoc({
 </ParamField>
 
 <ParamField path="permissionResolver" type="function">
-  Override permission checks for comments and tracked changes
-  
+  Override permission checks for comments and tracked changes. By default, editors can resolve, edit, and delete any user's comments and tracked changes. Use this to restrict actions.
+
   ```javascript
   const superdoc = new SuperDoc({
     user: { name: 'Alex Editor', email: 'alex@example.com' },
@@ -147,8 +147,8 @@ new SuperDoc({
     },
   });
   ```
-  
-  <Note>Return `false` to block an action. Return `true` or `undefined` to fall back to the built-in permission matrix.</Note>
+
+  <Note>Return `false` to block an action. Return `true` or `undefined` to fall back to the built-in permission matrix. See [Comments > Permission resolver](/modules/comments#permission-resolver) for the full list of permission types.</Note>
 </ParamField>
 
 ## Modules
@@ -162,20 +162,19 @@ new SuperDoc({
 <ParamField path="modules.collaboration" type="Object">
   Real-time collaboration settings
   <Expandable title="properties" defaultOpen>
-    <ParamField path="url" type="string" required>
-      WebSocket server URL
+    <ParamField path="modules.collaboration.ydoc" type="Y.Doc" required>
+      Shared Yjs document instance for this collaborative session.
     </ParamField>
-    <ParamField path="providerType" type="string" default="'hocuspocus'">
-      Provider implementation
-    </ParamField>
-    <ParamField path="token" type="string">
-      Authentication token
-    </ParamField>
-    <ParamField path="params" type="Object">
-      Additional connection parameters
+    <ParamField path="modules.collaboration.provider" type="Object" required>
+      Yjs-compatible provider instance (for example LiveblocksYjsProvider or WebsocketProvider from y-websocket).
     </ParamField>
   </Expandable>
 </ParamField>
+
+<Note>
+  SuperDoc uses a provider-agnostic collaboration contract: `modules.collaboration = { ydoc, provider }`.
+  Provider setup remains in your app code. See [Collaboration configuration](/modules/collaboration/configuration) and [Collaboration guides](/modules/collaboration/overview).
+</Note>
 
 ### Comments module
 
@@ -374,12 +373,44 @@ All handlers are optional functions in the configuration:
 
 <ParamField path="onEditorUpdate" type="function">
   Called on content changes
-  
+
   ```javascript
   onEditorUpdate: ({ editor }) => {
     autoSave(editor.getJSON());
   }
   ```
+</ParamField>
+
+<ParamField path="onTrackedChangeBubbleAccept" type="function">
+  Custom handler for accepting tracked changes from comment bubbles. Replaces default accept behavior when provided.
+
+  ```javascript
+  onTrackedChangeBubbleAccept: (comment, editor) => {
+    // Custom logic before accepting
+    editor.commands.acceptTrackedChangeById(comment.commentId);
+    saveDocument(); // e.g., trigger auto-save after accept
+  }
+  ```
+
+  <Note>Only fires from bubble buttons, not toolbar or context menu. The dialog cleanup (closing the bubble) happens automatically after your handler runs.</Note>
+
+  <Warning>When using a custom handler, you are responsible for calling `editor.commands.acceptTrackedChangeById()` if you want the change accepted. The default behavior is fully replaced.</Warning>
+</ParamField>
+
+<ParamField path="onTrackedChangeBubbleReject" type="function">
+  Custom handler for rejecting tracked changes from comment bubbles. Replaces default reject behavior when provided.
+
+  ```javascript
+  onTrackedChangeBubbleReject: (comment, editor) => {
+    // Custom logic before rejecting
+    editor.commands.rejectTrackedChangeById(comment.commentId);
+    logRejection(comment); // e.g., track rejections
+  }
+  ```
+
+  <Note>Only fires from bubble buttons, not toolbar or context menu. The dialog cleanup (closing the bubble) happens automatically after your handler runs.</Note>
+
+  <Warning>When using a custom handler, you are responsible for calling `editor.commands.rejectTrackedChangeById()` if you want the change rejected. The default behavior is fully replaced.</Warning>
 </ParamField>
 
 <ParamField path="onSidebarToggle" type="function">

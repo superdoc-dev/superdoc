@@ -15,6 +15,76 @@ import type {
 import type { ProseMirrorJSON } from './EditorTypes.js';
 
 /**
+ * Context provided to a link popover resolver when a link is clicked.
+ * Contains all information needed to decide which popover to show.
+ */
+export interface LinkPopoverContext {
+  /** The editor instance */
+  editor: Editor;
+  /** The href attribute of the clicked link */
+  href: string;
+  /** The target attribute of the clicked link */
+  target: string | null;
+  /** The rel attribute of the clicked link */
+  rel: string | null;
+  /** The title/tooltip attribute of the clicked link */
+  tooltip: string | null;
+  /** The clicked anchor DOM element */
+  element: HTMLAnchorElement;
+  /** X coordinate of the click */
+  clientX: number;
+  /** Y coordinate of the click */
+  clientY: number;
+  /** Whether this is an anchor link (href starts with #) */
+  isAnchorLink: boolean;
+  /** Current document mode ('editing', 'viewing', 'suggesting') */
+  documentMode: string;
+  /** Computed popover position relative to editor surface */
+  position: { left: string; top: string };
+  /** Close the popover programmatically */
+  closePopover: () => void;
+}
+
+/**
+ * Context passed to an external (framework-agnostic) popover renderer.
+ * The `render` function receives a raw DOM container and is responsible for
+ * mounting its own UI (React, Svelte, vanilla JS, etc.).
+ */
+export interface ExternalPopoverRenderContext {
+  /** Empty DOM container positioned where the popover should appear */
+  container: HTMLElement;
+  /** Call to close the popover and clean up */
+  closePopover: () => void;
+  /** The editor instance */
+  editor: Editor;
+  /** The href of the clicked link */
+  href: string;
+}
+
+/**
+ * Resolution returned by a link popover resolver.
+ * - `{ type: 'default' }` — use the built-in LinkInput popover.
+ * - `{ type: 'none' }` — suppress the popover entirely (resolver can perform side effects like navigation).
+ * - `{ type: 'custom', component, props }` — render a Vue component in the popover.
+ *   `editor` and `closePopover` are auto-injected into props.
+ * - `{ type: 'external', render }` — mount framework-agnostic UI into a raw DOM container.
+ *   Return `{ destroy }` for cleanup when the popover closes.
+ */
+export type LinkPopoverResolution =
+  | { type: 'default' }
+  | { type: 'none' }
+  | { type: 'custom'; component: unknown; props?: Record<string, unknown> }
+  | { type: 'external'; render: (ctx: ExternalPopoverRenderContext) => { destroy?: () => void } | void };
+
+/**
+ * Resolver function for customizing the link click popover.
+ * Must be synchronous — do not return a Promise.
+ *
+ * @returns A resolution object, or `null`/`undefined` to use the default popover.
+ */
+export type LinkPopoverResolver = (ctx: LinkPopoverContext) => LinkPopoverResolution | null | undefined;
+
+/**
  * User information for collaboration
  */
 export interface User {
@@ -415,6 +485,13 @@ export interface EditorOptions {
 
   /** Host-provided permission hook */
   permissionResolver?: ((params: PermissionParams) => boolean | undefined) | null;
+
+  /**
+   * Custom resolver for the link click popover.
+   * Called when a user clicks a link to determine which popover to show.
+   * Must be synchronous.
+   */
+  linkPopoverResolver?: LinkPopoverResolver;
 
   /**
    * When true, defers document initialization until open() is called.

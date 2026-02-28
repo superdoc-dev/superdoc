@@ -45,8 +45,8 @@ jobs:
       - name: Generate all artifacts
         run: pnpm run generate:all
 
-      - name: Validate SDK
-        run: node packages/sdk/scripts/sdk-validate.mjs
-
       - name: Build Node SDK
         run: pnpm --prefix packages/sdk/langs/node run build
+
+      - name: Validate SDK
+        run: node packages/sdk/scripts/sdk-validate.mjs

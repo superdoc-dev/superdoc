@@ -11,9 +11,6 @@ importers:
       '@aws-sdk/client-s3':
         specifier: ^3.500.0
         version: 3.983.0
-      '@superdoc-testing/helpers':
-        specifier: workspace:*
-        version: link:packages/test-helpers
       dotenv:
         specifier: ^17.2.4
         version: 17.2.4
@@ -2072,8 +2069,8 @@ packages:
     resolution: {integrity: sha512-l63NF9y/cLROq/yqKXSLtcMeeyOfnSQlfMSlzFt/K73oIaD8DGaQWd7Z34X9GPiKqP5rbSh84Hl4bOlLcjiSrQ==}
 
   superdoc@file:../../packages/superdoc/superdoc.tgz:
-    resolution: {integrity: sha512-C+FnGjvFUyXpEASvhLJCuFuD9gtD9Smfa+zwi++GU4qzEFvWxaxiEmG7oI+AB+N1fpuBqzK93u1TdYNJCSaRWQ==, tarball: file:../../packages/superdoc/superdoc.tgz}
-    version: 1.14.1
+    resolution: {integrity: sha512-vasgfL+tW8P8X8kQEa5rOtsv83xKc6BHfo/I2V1S0BKbaGb3T86oHTi4biYLGnpFOdOIKHg3Gw/NfPCPMU7jvQ==, tarball: file:../../packages/superdoc/superdoc.tgz}
+    version: 1.16.0
     peerDependencies:
       '@hocuspocus/provider': ^2.13.6
       pdfjs-dist: ^5.4.296
@@ -3844,7 +3841,7 @@ snapshots:
 
   agent-base@6.0.2:
     dependencies:
-      debug: 4.4.3(supports-color@7.2.0)
+      debug: 4.4.3
     transitivePeerDependencies:
       - supports-color
     optional: true
@@ -3986,6 +3983,10 @@ snapshots:
       date-fns: 4.1.0
 
   date-fns@4.1.0: {}
+
+  debug@4.4.3:
+    dependencies:
+      ms: 2.1.3
 
   debug@4.4.3(supports-color@7.2.0):
     dependencies:
@@ -4303,14 +4304,14 @@ snapshots:
   http-proxy-agent@7.0.2:
     dependencies:
       agent-base: 7.1.4
-      debug: 4.4.3(supports-color@7.2.0)
+      debug: 4.4.3
     transitivePeerDependencies:
       - supports-color
 
   https-proxy-agent@5.0.1:
     dependencies:
       agent-base: 6.0.2
-      debug: 4.4.3(supports-color@7.2.0)
+      debug: 4.4.3
     transitivePeerDependencies:
       - supports-color
     optional: true
@@ -4318,7 +4319,7 @@ snapshots:
   https-proxy-agent@7.0.6:
     dependencies:
       agent-base: 7.1.4
-      debug: 4.4.3(supports-color@7.2.0)
+      debug: 4.4.3
     transitivePeerDependencies:
       - supports-color
 
@@ -4897,7 +4898,7 @@ snapshots:
   vite-node@3.2.4(@types/node@22.19.9)(tsx@4.21.0):
     dependencies:
       cac: 6.7.14
-      debug: 4.4.3(supports-color@7.2.0)
+      debug: 4.4.3
       es-module-lexer: 1.7.0
       pathe: 2.0.3
       vite: 6.4.1(@types/node@22.19.9)(tsx@4.21.0)
@@ -4939,7 +4940,7 @@ snapshots:
       '@vitest/spy': 3.2.4
       '@vitest/utils': 3.2.4
       chai: 5.3.3
-      debug: 4.4.3(supports-color@7.2.0)
+      debug: 4.4.3
       expect-type: 1.3.0
       magic-string: 0.30.21
       pathe: 2.0.3

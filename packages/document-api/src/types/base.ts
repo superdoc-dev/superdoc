@@ -20,6 +20,7 @@ export type NodeType =
   | 'table'
   | 'tableRow'
   | 'tableCell'
+  | 'tableOfContents'
   // Inline-level
   | 'run'
   | 'bookmark'
@@ -40,6 +41,7 @@ export const NODE_TYPES = [
   'table',
   'tableRow',
   'tableCell',
+  'tableOfContents',
   'image',
   'sdt',
   'run',
@@ -57,7 +59,7 @@ export const NODE_TYPES = [
  */
 export type BlockNodeType = Extract<
   NodeType,
-  'paragraph' | 'heading' | 'listItem' | 'table' | 'tableRow' | 'tableCell' | 'image' | 'sdt'
+  'paragraph' | 'heading' | 'listItem' | 'table' | 'tableRow' | 'tableCell' | 'tableOfContents' | 'image' | 'sdt'
 >;
 
 export const BLOCK_NODE_TYPES = [
@@ -67,9 +69,26 @@ export const BLOCK_NODE_TYPES = [
   'table',
   'tableRow',
   'tableCell',
+  'tableOfContents',
   'image',
   'sdt',
 ] as const satisfies readonly BlockNodeType[];
+
+/**
+ * Block node types that `blocks.delete` can target in this release.
+ * Excludes `tableRow` and `tableCell` (row/column semantics are out of scope).
+ * Excludes `image` — the ProseMirror image node is inline, so the adapter
+ * cannot resolve block-level image targets.
+ */
+export type DeletableBlockNodeType = Exclude<BlockNodeType, 'tableRow' | 'tableCell' | 'image' | 'tableOfContents'>;
+
+export const DELETABLE_BLOCK_NODE_TYPES = [
+  'paragraph',
+  'heading',
+  'listItem',
+  'table',
+  'sdt',
+] as const satisfies readonly DeletableBlockNodeType[];
 
 /**
  * Node types that can appear in inline context.
@@ -112,6 +131,12 @@ export type InlineAnchor = {
 export type BlockNodeAddress = {
   kind: 'block';
   nodeType: BlockNodeType;
+  nodeId: string;
+};
+
+export type DeletableBlockNodeAddress = {
+  kind: 'block';
+  nodeType: DeletableBlockNodeType;
   nodeId: string;
 };
 

@@ -37,7 +37,7 @@ export const renderColorOptions = (superToolbar, button, customIcons = [], hasNo
   ]);
 };
 
-const icons = [
+export const icons = [
   [
     makeColorOption('#111111', 'black'),
     makeColorOption('#333333', 'dark gray'),

@@ -67,8 +67,22 @@ const EXPECTED_REVISION_PARAM: CliOperationParamSpec = {
 // ---------------------------------------------------------------------------
 
 type JsonSchema = Record<string, unknown>;
+const AGENT_HIDDEN_PARAM_NAMES = new Set(['out', 'expectedRevision', 'changeMode', 'dryRun']);
 
-function schemaToParamType(schema: JsonSchema): CliOperationParamSpec['type'] {
+function resolveRef(schema: JsonSchema, $defs?: Record<string, JsonSchema>): JsonSchema {
+  if (schema.$ref && $defs) {
+    const prefix = '#/$defs/';
+    if (typeof schema.$ref === 'string' && schema.$ref.startsWith(prefix)) {
+      const name = schema.$ref.slice(prefix.length);
+      const resolved = $defs[name];
+      if (resolved) return resolveRef(resolved, $defs);
+    }
+  }
+  return schema;
+}
+
+function schemaToParamType(schema: JsonSchema, $defs?: Record<string, JsonSchema>): CliOperationParamSpec['type'] {
+  schema = resolveRef(schema, $defs);
   if (schema.type === 'string') return 'string';
   if (schema.type === 'number' || schema.type === 'integer') return 'number';
   if (schema.type === 'boolean') return 'boolean';
@@ -80,7 +94,8 @@ function schemaToParamType(schema: JsonSchema): CliOperationParamSpec['type'] {
   return 'json';
 }
 
-function isSimpleType(schema: JsonSchema): boolean {
+function isSimpleType(schema: JsonSchema, $defs?: Record<string, JsonSchema>): boolean {
+  schema = resolveRef(schema, $defs);
   const t = schema.type;
   if (t === 'string' || t === 'number' || t === 'integer' || t === 'boolean') return true;
   // Enums without explicit type are string enums
@@ -93,12 +108,14 @@ function isSimpleType(schema: JsonSchema): boolean {
   return false;
 }
 
-function jsonSchemaToTypeSpec(schema: JsonSchema): CliTypeSpec {
+function jsonSchemaToTypeSpec(schema: JsonSchema, $defs?: Record<string, JsonSchema>): CliTypeSpec {
+  schema = resolveRef(schema, $defs);
+
   if ('const' in schema) return { const: schema.const } as CliTypeSpec;
 
   if (schema.oneOf) {
     return {
-      oneOf: (schema.oneOf as JsonSchema[]).map(jsonSchemaToTypeSpec),
+      oneOf: (schema.oneOf as JsonSchema[]).map((s) => jsonSchemaToTypeSpec(s, $defs)),
     } as CliTypeSpec;
   }
 
@@ -114,13 +131,13 @@ function jsonSchemaToTypeSpec(schema: JsonSchema): CliTypeSpec {
 
   if (schema.type === 'array') {
     const items = (schema.items as JsonSchema) ?? {};
-    return { type: 'array', items: jsonSchemaToTypeSpec(items) } as CliTypeSpec;
+    return { type: 'array', items: jsonSchemaToTypeSpec(items, $defs) } as CliTypeSpec;
   }
 
   if (schema.type === 'object') {
     const properties: Record<string, CliTypeSpec> = {};
     for (const [key, propSchema] of Object.entries((schema.properties as Record<string, JsonSchema>) ?? {})) {
-      properties[key] = jsonSchemaToTypeSpec(propSchema);
+      properties[key] = jsonSchemaToTypeSpec(propSchema, $defs);
     }
     const result: CliTypeSpec = { type: 'object', properties } as CliTypeSpec;
     if (schema.required && Array.isArray(schema.required)) {
@@ -132,7 +149,10 @@ function jsonSchemaToTypeSpec(schema: JsonSchema): CliTypeSpec {
   return { type: 'json' } as CliTypeSpec;
 }
 
-function deriveParamsFromInputSchema(inputSchema: JsonSchema): {
+function deriveParamsFromInputSchema(
+  inputSchema: JsonSchema,
+  $defs?: Record<string, JsonSchema>,
+): {
   params: CliOperationParamSpec[];
   positionalParams: string[];
 } {
@@ -141,9 +161,10 @@ function deriveParamsFromInputSchema(inputSchema: JsonSchema): {
   const properties = (inputSchema.properties ?? {}) as Record<string, JsonSchema>;
   const required = new Set<string>((inputSchema.required as string[]) ?? []);
 
-  for (const [name, propSchema] of Object.entries(properties)) {
-    const paramType = schemaToParamType(propSchema);
-    const isComplex = !isSimpleType(propSchema) && paramType === 'json';
+  for (const [name, rawPropSchema] of Object.entries(properties)) {
+    const propSchema = resolveRef(rawPropSchema, $defs);
+    const paramType = schemaToParamType(propSchema, $defs);
+    const isComplex = !isSimpleType(propSchema, $defs) && paramType === 'json';
 
     const flagBase = camelToKebab(name);
     const param: CliOperationParamSpec = {
@@ -154,13 +175,17 @@ function deriveParamsFromInputSchema(inputSchema: JsonSchema): {
       required: required.has(name),
     };
 
-    if (isComplex || (!isSimpleType(propSchema) && paramType !== 'json')) {
-      param.schema = jsonSchemaToTypeSpec(propSchema);
+    if (AGENT_HIDDEN_PARAM_NAMES.has(name)) {
+      param.agentVisible = false;
+    }
+
+    if (isComplex || (!isSimpleType(propSchema, $defs) && paramType !== 'json')) {
+      param.schema = jsonSchemaToTypeSpec(propSchema, $defs);
     }
 
     // Attach enum schema for simple string params with oneOf/enum
     if (paramType === 'string' && (propSchema.oneOf || propSchema.enum)) {
-      param.schema = jsonSchemaToTypeSpec(propSchema);
+      param.schema = jsonSchemaToTypeSpec(propSchema, $defs);
     }
 
     params.push(param);
@@ -208,10 +233,6 @@ const OPERATION_CONSTRAINTS: Partial<Record<string, CliOperationConstraints>> = 
     requiresOneOf: [['type', 'query']],
     mutuallyExclusive: [['type', 'query']],
   },
-  'doc.comments.setActive': {
-    requiresOneOf: [['id', 'clear']],
-    mutuallyExclusive: [['id', 'clear']],
-  },
   'doc.lists.list': {
     mutuallyExclusive: [
       ['query', 'within'],
@@ -235,28 +256,13 @@ const PARAM_FLAG_OVERRIDES: Partial<Record<string, Record<string, { name?: strin
   'doc.getNodeById': {
     nodeId: { name: 'id', flag: 'id' },
   },
-  'doc.comments.add': {
-    commentId: { name: 'id', flag: 'id' },
-  },
-  'doc.comments.edit': {
-    commentId: { name: 'id', flag: 'id' },
-  },
-  'doc.comments.reply': {
+  'doc.comments.create': {
     parentCommentId: { name: 'parentId', flag: 'parent-id' },
   },
-  'doc.comments.move': {
+  'doc.comments.patch': {
     commentId: { name: 'id', flag: 'id' },
   },
-  'doc.comments.resolve': {
-    commentId: { name: 'id', flag: 'id' },
-  },
-  'doc.comments.remove': {
-    commentId: { name: 'id', flag: 'id' },
-  },
-  'doc.comments.setInternal': {
-    commentId: { name: 'id', flag: 'id' },
-  },
-  'doc.comments.goTo': {
+  'doc.comments.delete': {
     commentId: { name: 'id', flag: 'id' },
   },
   'doc.comments.get': {
@@ -305,6 +311,28 @@ const PARAM_EXCLUSIONS: Partial<Record<string, ReadonlySet<string>>> = {
 // schema-derived and envelope params.
 // ---------------------------------------------------------------------------
 
+// Flat-flag shortcut params for text-range target normalization.
+// These are convenience alternatives to --target-json; invoke-input.ts
+// normalizes them into canonical target objects before dispatch.
+const TEXT_TARGET_FLAT_PARAMS: CliOperationParamSpec[] = [
+  { name: 'blockId', kind: 'flag', flag: 'block-id', type: 'string' },
+  { name: 'start', kind: 'flag', type: 'number' },
+  { name: 'end', kind: 'flag', type: 'number' },
+];
+
+const INSERT_FLAT_PARAMS: CliOperationParamSpec[] = [
+  { name: 'blockId', kind: 'flag', flag: 'block-id', type: 'string' },
+  { name: 'offset', kind: 'flag', type: 'number' },
+];
+
+const LIST_TARGET_FLAT_PARAMS: CliOperationParamSpec[] = [
+  { name: 'nodeId', kind: 'flag', flag: 'node-id', type: 'string' },
+];
+
+const FORMAT_OPERATION_IDS = CLI_DOC_OPERATIONS.filter((operationId): operationId is OperationId =>
+  operationId.startsWith('format.'),
+);
+
 const EXTRA_CLI_PARAMS: Partial<Record<string, CliOperationParamSpec[]>> = {
   'doc.find': [
     { name: 'type', kind: 'flag', type: 'string' },
@@ -318,19 +346,49 @@ const EXTRA_CLI_PARAMS: Partial<Record<string, CliOperationParamSpec[]>> = {
   ],
   'doc.lists.list': [{ name: 'query', kind: 'jsonFlag', flag: 'query-json', type: 'json' }],
   'doc.getNode': [{ name: 'address', kind: 'jsonFlag', flag: 'address-json', type: 'json' }],
-  'doc.comments.setActive': [
-    { name: 'id', kind: 'flag', type: 'string' },
-    { name: 'clear', kind: 'flag', type: 'boolean' },
+  // Text-range operations: flat flags (--block-id, --start, --end) as shortcuts for --target-json
+  'doc.insert': [...INSERT_FLAT_PARAMS],
+  'doc.replace': [...TEXT_TARGET_FLAT_PARAMS],
+  'doc.delete': [...TEXT_TARGET_FLAT_PARAMS],
+  'doc.styles.apply': [
+    { name: 'target', kind: 'jsonFlag', flag: 'target-json', type: 'json' },
+    { name: 'patch', kind: 'jsonFlag', flag: 'patch-json', type: 'json' },
   ],
-  'doc.lists.insert': [{ name: 'input', kind: 'jsonFlag', flag: 'input-json', type: 'json' }],
-  'doc.lists.setType': [{ name: 'input', kind: 'jsonFlag', flag: 'input-json', type: 'json' }],
-  'doc.lists.indent': [{ name: 'input', kind: 'jsonFlag', flag: 'input-json', type: 'json' }],
-  'doc.lists.outdent': [{ name: 'input', kind: 'jsonFlag', flag: 'input-json', type: 'json' }],
-  'doc.lists.restart': [{ name: 'input', kind: 'jsonFlag', flag: 'input-json', type: 'json' }],
-  'doc.lists.exit': [{ name: 'input', kind: 'jsonFlag', flag: 'input-json', type: 'json' }],
+  'doc.comments.create': [...TEXT_TARGET_FLAT_PARAMS],
+  'doc.comments.patch': [...TEXT_TARGET_FLAT_PARAMS],
+  // List operations: flat flag (--node-id) as shortcut for --target-json, plus --input-json
+  'doc.lists.insert': [
+    { name: 'input', kind: 'jsonFlag', flag: 'input-json', type: 'json' },
+    ...LIST_TARGET_FLAT_PARAMS,
+  ],
+  'doc.lists.setType': [
+    { name: 'input', kind: 'jsonFlag', flag: 'input-json', type: 'json' },
+    ...LIST_TARGET_FLAT_PARAMS,
+  ],
+  'doc.lists.indent': [
+    { name: 'input', kind: 'jsonFlag', flag: 'input-json', type: 'json' },
+    ...LIST_TARGET_FLAT_PARAMS,
+  ],
+  'doc.lists.outdent': [
+    { name: 'input', kind: 'jsonFlag', flag: 'input-json', type: 'json' },
+    ...LIST_TARGET_FLAT_PARAMS,
+  ],
+  'doc.lists.restart': [
+    { name: 'input', kind: 'jsonFlag', flag: 'input-json', type: 'json' },
+    ...LIST_TARGET_FLAT_PARAMS,
+  ],
+  'doc.lists.exit': [{ name: 'input', kind: 'jsonFlag', flag: 'input-json', type: 'json' }, ...LIST_TARGET_FLAT_PARAMS],
+  'doc.blocks.delete': [
+    { name: 'nodeType', kind: 'flag', flag: 'node-type', type: 'string' },
+    { name: 'nodeId', kind: 'flag', flag: 'node-id', type: 'string' },
+  ],
   'doc.create.paragraph': [{ name: 'input', kind: 'jsonFlag', flag: 'input-json', type: 'json' }],
   'doc.create.heading': [{ name: 'input', kind: 'jsonFlag', flag: 'input-json', type: 'json' }],
 };
+
+for (const operationId of FORMAT_OPERATION_IDS) {
+  EXTRA_CLI_PARAMS[`doc.${operationId}`] = [...TEXT_TARGET_FLAT_PARAMS];
+}
 
 // ---------------------------------------------------------------------------
 // Doc requirement derivation
@@ -355,13 +413,15 @@ const CLI_ONLY_METADATA: Record<CliOnlyOperationId, CliOperationMetadata> = {
   'doc.open': {
     command: 'open',
     positionalParams: ['doc'],
-    docRequirement: 'required',
+    docRequirement: 'none',
     params: [
-      { name: 'doc', kind: 'doc', type: 'string', required: true },
+      { name: 'doc', kind: 'doc', type: 'string' },
       SESSION_PARAM,
       { name: 'collaboration', kind: 'jsonFlag', flag: 'collaboration-json', type: 'json' },
       { name: 'collabDocumentId', kind: 'flag', flag: 'collab-document-id', type: 'string' },
       { name: 'collabUrl', kind: 'flag', flag: 'collab-url', type: 'string' },
+      { name: 'contentOverride', kind: 'flag', flag: 'content-override', type: 'string' },
+      { name: 'overrideType', kind: 'flag', flag: 'override-type', type: 'string' },
     ],
     constraints: null,
   },
@@ -449,6 +509,7 @@ const CLI_ONLY_METADATA: Record<CliOnlyOperationId, CliOperationMetadata> = {
 
 function buildDocBackedMetadata(): Record<DocBackedCliOpId, CliOperationMetadata> {
   const schemas = buildInternalContractSchemas();
+  const $defs = schemas.$defs as Record<string, JsonSchema> | undefined;
   const result = {} as Record<DocBackedCliOpId, CliOperationMetadata>;
 
   for (const docApiId of CLI_DOC_OPERATIONS) {
@@ -456,7 +517,7 @@ function buildDocBackedMetadata(): Record<DocBackedCliOpId, CliOperationMetadata
     const schemaSet = schemas.operations[docApiId];
     const inputSchema = schemaSet.input as JsonSchema;
 
-    const { params: schemaParams } = deriveParamsFromInputSchema(inputSchema);
+    const { params: schemaParams } = deriveParamsFromInputSchema(inputSchema, $defs);
     const envelope = envelopeParams(docApiId);
 
     // Merge: envelope params first, then schema-derived params (skip duplicates)
@@ -573,3 +634,6 @@ function deriveOptionSpecs(params: readonly CliOperationParamSpec[]): CliOperati
 export const CLI_OPERATION_OPTION_SPECS: Record<CliOperationId, CliOperationOptionSpec[]> = Object.fromEntries(
   CLI_OPERATION_IDS.map((operationId) => [operationId, deriveOptionSpecs(CLI_OPERATION_METADATA[operationId].params)]),
 ) as Record<CliOperationId, CliOperationOptionSpec[]>;
+
+// Exposed for unit testing $ref resolution only
+export const _testExports = { jsonSchemaToTypeSpec, deriveParamsFromInputSchema } as const;

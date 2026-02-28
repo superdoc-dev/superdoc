@@ -35,7 +35,7 @@ import AIWriter from './components/toolbar/AIWriter.vue';
 import * as fieldAnnotationHelpers from './extensions/field-annotation/fieldAnnotationHelpers/index.js';
 import * as trackChangesHelpers from './extensions/track-changes/trackChangesHelpers/index.js';
 import { TrackChangesBasePluginKey } from './extensions/track-changes/plugins/index.js';
-import { CommentsPluginKey } from './extensions/comment/comments-plugin.js';
+import { CommentsPluginKey, createOrUpdateTrackedChangeComment } from './extensions/comment/comments-plugin.js';
 import { AnnotatorHelpers } from '@helpers/annotator.js';
 import { SectionHelpers } from '@extensions/structured-content/document-section/index.js';
 import { registeredHandlers } from './core/super-converter/v3/handlers/index.js';
@@ -109,6 +109,8 @@ export {
   TrackChangesBasePluginKey,
   /** @internal */
   CommentsPluginKey,
+  /** @internal */
+  createOrUpdateTrackedChangeComment,
 
   // Type guards and extension helpers
   isNodeType,

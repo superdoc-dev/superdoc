@@ -8,6 +8,8 @@ type JsonSchema = {
   enum?: unknown[];
   oneOf?: JsonSchema[];
   anyOf?: JsonSchema[];
+  $ref?: string;
+  $defs?: Record<string, JsonSchema>;
 };
 
 const SUPPORTED_SCHEMA_KEYWORDS = new Set([
@@ -20,6 +22,8 @@ const SUPPORTED_SCHEMA_KEYWORDS = new Set([
   'enum',
   'oneOf',
   'anyOf',
+  '$ref',
+  '$defs',
 ]);
 
 export interface SchemaValidationResult {
@@ -48,7 +52,32 @@ function isType(value: unknown, expectedType: string): boolean {
   }
 }
 
-function validateInternal(schema: JsonSchema, value: unknown, path: string, errors: string[]): void {
+function resolveRef(ref: string, $defs?: Record<string, JsonSchema>): JsonSchema | null {
+  if (!$defs) return null;
+  const prefix = '#/$defs/';
+  if (!ref.startsWith(prefix)) return null;
+  const name = ref.slice(prefix.length);
+  return $defs[name] ?? null;
+}
+
+function validateInternal(
+  schema: JsonSchema,
+  value: unknown,
+  path: string,
+  errors: string[],
+  $defs?: Record<string, JsonSchema>,
+): void {
+  // Resolve $ref before any validation
+  if (schema.$ref) {
+    const resolved = resolveRef(schema.$ref, $defs);
+    if (!resolved) {
+      errors.push(`${path}: unresolved $ref "${schema.$ref}"`);
+      return;
+    }
+    validateInternal(resolved, value, path, errors, $defs);
+    return;
+  }
+
   let hasUnsupportedKeyword = false;
   for (const key of Object.keys(schema)) {
     if (SUPPORTED_SCHEMA_KEYWORDS.has(key)) continue;
@@ -72,7 +101,7 @@ function validateInternal(schema: JsonSchema, value: unknown, path: string, erro
     let matchCount = 0;
     for (const nested of schema.oneOf) {
       const nestedErrors: string[] = [];
-      validateInternal(nested, value, path, nestedErrors);
+      validateInternal(nested, value, path, nestedErrors, $defs);
       if (nestedErrors.length === 0) matchCount += 1;
     }
     if (matchCount !== 1) {
@@ -85,7 +114,7 @@ function validateInternal(schema: JsonSchema, value: unknown, path: string, erro
     let matched = false;
     for (const nested of schema.anyOf) {
       const nestedErrors: string[] = [];
-      validateInternal(nested, value, path, nestedErrors);
+      validateInternal(nested, value, path, nestedErrors, $defs);
       if (nestedErrors.length === 0) {
         matched = true;
         break;
@@ -109,7 +138,7 @@ function validateInternal(schema: JsonSchema, value: unknown, path: string, erro
   const types = Array.isArray(schema.type) ? schema.type : schema.type ? [schema.type] : [];
   if (types.includes('array') && schema.items && Array.isArray(value)) {
     value.forEach((item, index) => {
-      validateInternal(schema.items as JsonSchema, item, `${path}[${index}]`, errors);
+      validateInternal(schema.items as JsonSchema, item, `${path}[${index}]`, errors, $defs);
     });
     return;
   }
@@ -129,7 +158,7 @@ function validateInternal(schema: JsonSchema, value: unknown, path: string, erro
   if (schema.properties) {
     for (const [key, nestedSchema] of Object.entries(schema.properties)) {
       if (!(key in objectValue) || objectValue[key] === undefined) continue;
-      validateInternal(nestedSchema, objectValue[key], `${path}.${key}`, errors);
+      validateInternal(nestedSchema, objectValue[key], `${path}.${key}`, errors, $defs);
     }
   }
 
@@ -143,8 +172,12 @@ function validateInternal(schema: JsonSchema, value: unknown, path: string, erro
   }
 }
 
-export function validateJsonSchema(schema: JsonSchema, value: unknown): SchemaValidationResult {
+export function validateJsonSchema(
+  schema: JsonSchema,
+  value: unknown,
+  $defs?: Record<string, JsonSchema>,
+): SchemaValidationResult {
   const errors: string[] = [];
-  validateInternal(schema, value, '$', errors);
+  validateInternal(schema, value, '$', errors, $defs);
   return { valid: errors.length === 0, errors };
 }

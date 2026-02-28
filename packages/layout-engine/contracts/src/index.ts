@@ -305,6 +305,17 @@ export type ImageRun = {
    * Custom data attributes propagated from ProseMirror marks (keys must be data-*).
    */
   dataAttrs?: Record<string, string>;
+
+  // Image transformations from OOXML a:xfrm (applies to inline images)
+  rotation?: number; // Rotation angle in degrees
+  flipH?: boolean; // Horizontal flip
+  flipV?: boolean; // Vertical flip
+
+  // VML image adjustments for watermark effects
+  gain?: string | number; // Brightness/washout (VML hex string or number)
+  blacklevel?: string | number; // Contrast adjustment (VML hex string or number)
+  // OOXML image effects
+  grayscale?: boolean; // Apply grayscale filter to image
 };
 
 export type BreakRun = {
@@ -461,7 +472,7 @@ export type TableCellAttrs = {
 export type TableAttrs = {
   borders?: TableBorders;
   borderCollapse?: 'collapse' | 'separate';
-  cellSpacing?: number;
+  cellSpacing?: CellSpacing;
   sdt?: SdtMetadata;
   containerSdt?: SdtMetadata;
   [key: string]: unknown;
@@ -548,6 +559,12 @@ export type ImageBlock = {
   // VML image adjustments for watermark effects
   gain?: string | number; // Brightness/washout (VML hex string or number)
   blacklevel?: string | number; // Contrast adjustment (VML hex string or number)
+  // OOXML image effects
+  grayscale?: boolean; // Apply grayscale filter to image
+  // Image transformations from OOXML a:xfrm (applies to both inline and anchored images)
+  rotation?: number; // Rotation angle in degrees
+  flipH?: boolean; // Horizontal flip
+  flipV?: boolean; // Vertical flip
 };
 
 export type DrawingKind = 'image' | 'vectorShape' | 'shapeGroup';
@@ -701,6 +718,7 @@ export type ShapeGroupVectorChild = {
   attrs: PositionedDrawingGeometry &
     VectorShapeStyle & {
       kind?: string;
+      customGeometry?: CustomGeometryData;
       shapeId?: string;
       shapeName?: string;
     };
@@ -738,10 +756,26 @@ export type DrawingBlockBase = {
   attrs?: Record<string, unknown>;
 };
 
+/**
+ * Custom geometry path data extracted from a:custGeom/a:pathLst.
+ * Each path has an SVG `d` attribute and its own coordinate space (w × h).
+ */
+export type CustomGeometryData = {
+  paths: Array<{
+    /** SVG path d attribute (M, L, C, Q, Z commands) */
+    d: string;
+    /** Coordinate space width for this path */
+    w: number;
+    /** Coordinate space height for this path */
+    h: number;
+  }>;
+};
+
 export type VectorShapeDrawing = DrawingBlockBase & {
   drawingKind: 'vectorShape';
   geometry: DrawingGeometry;
   shapeKind?: string;
+  customGeometry?: CustomGeometryData;
   fillColor?: FillColor;
   strokeColor?: StrokeColor;
   strokeWidth?: number;
@@ -859,6 +893,17 @@ export type SectionMetadata = {
   titlePg?: boolean;
   /** Vertical alignment of content within this section's pages */
   vAlign?: SectionVerticalAlign;
+  /** Section page margins in CSS px */
+  margins?: {
+    top?: number;
+    right?: number;
+    bottom?: number;
+    left?: number;
+    header?: number;
+    footer?: number;
+  } | null;
+  /** Section page size in CSS px */
+  pageSize?: { w: number; h: number } | null;
 };
 
 export type PageBreakBlock = {
@@ -1421,12 +1466,34 @@ export type TableRowMeasure = {
   height: number;
 };
 
+/** Outer table border widths in pixels (top, right, bottom, left). Used for total dimensions and content offset. */
+export type TableBorderWidths = {
+  top: number;
+  right: number;
+  bottom: number;
+  left: number;
+};
+
 export type TableMeasure = {
   kind: 'table';
   rows: TableRowMeasure[];
   columnWidths: number[];
   totalWidth: number;
   totalHeight: number;
+  /**
+   * Cell spacing in pixels (border-spacing between cells).
+   * Used for total table dimensions and cell x/y positioning when border-collapse is 'separate'.
+   */
+  cellSpacingPx?: number;
+  /**
+   * Outer table border widths in pixels. Included in totalWidth/totalHeight; content is offset by (left, top).
+   */
+  tableBorderWidths?: TableBorderWidths;
+};
+
+export type CellSpacing = {
+  type: 'dxa' | 'px';
+  value: number;
 };
 
 export type SectionBreakMeasure = {
@@ -1551,6 +1618,8 @@ export type TableRowBoundary = {
   index: number;
   y: number;
   height: number;
+  minHeight: number;
+  resizable: boolean;
 };
 
 export type TableFragmentMetadata = {

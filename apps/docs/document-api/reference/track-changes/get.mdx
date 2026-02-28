@@ -1,7 +1,7 @@
 ---
 title: trackChanges.get
 sidebarTitle: trackChanges.get
-description: Generated reference for trackChanges.get
+description: Retrieve a single tracked change by ID.
 ---
 
 {/* GENERATED FILE: DO NOT EDIT. Regenerate via `pnpm run docapi:sync`. */}
@@ -9,6 +9,8 @@ description: Generated reference for trackChanges.get
 > Alpha: Document API is currently alpha and subject to breaking changes.
 
 ## Summary
+
+Retrieve a single tracked change by ID.
 
 - Operation ID: `trackChanges.get`
 - API member path: `editor.doc.trackChanges.get(...)`
@@ -18,6 +20,53 @@ description: Generated reference for trackChanges.get
 - Supports dry run: `no`
 - Deterministic target resolution: `yes`
 
+## Expected result
+
+Returns a TrackChangeInfo object with the change type, author, date, and affected content.
+
+## Input fields
+
+| Field | Type | Required | Description |
+| --- | --- | --- | --- |
+| `id` | string | yes |  |
+
+### Example request
+
+```json
+{
+  "id": "id-001"
+}
+```
+
+## Output fields
+
+| Field | Type | Required | Description |
+| --- | --- | --- | --- |
+| `address` | TrackedChangeAddress | yes | TrackedChangeAddress |
+| `author` | string | no |  |
+| `authorEmail` | string | no |  |
+| `authorImage` | string | no |  |
+| `date` | string | no |  |
+| `excerpt` | string | no |  |
+| `id` | string | yes |  |
+| `type` | enum | yes | `"insert"`, `"delete"`, `"format"` |
+
+### Example response
+
+```json
+{
+  "address": {
+    "entityId": "entity-789",
+    "entityType": "trackedChange",
+    "kind": "entity"
+  },
+  "author": "Jane Doe",
+  "authorEmail": "jane@example.com",
+  "id": "id-001",
+  "type": "insert"
+}
+```
+
 ## Pre-apply throws
 
 - `TARGET_NOT_FOUND`
@@ -26,8 +75,9 @@ description: Generated reference for trackChanges.get
 
 - None
 
-## Input schema
+## Raw schemas
 
+<Accordion title="Raw input schema">
 ```json
 {
   "additionalProperties": false,
@@ -42,32 +92,15 @@ description: Generated reference for trackChanges.get
   "type": "object"
 }
 ```
+</Accordion>
 
-## Output schema
-
+<Accordion title="Raw output schema">
 ```json
 {
   "additionalProperties": false,
   "properties": {
     "address": {
-      "additionalProperties": false,
-      "properties": {
-        "entityId": {
-          "type": "string"
-        },
-        "entityType": {
-          "const": "trackedChange"
-        },
-        "kind": {
-          "const": "entity"
-        }
-      },
-      "required": [
-        "kind",
-        "entityType",
-        "entityId"
-      ],
-      "type": "object"
+      "$ref": "#/$defs/TrackedChangeAddress"
     },
     "author": {
       "type": "string"
@@ -103,3 +136,4 @@ description: Generated reference for trackChanges.get
   "type": "object"
 }
 ```
+</Accordion>

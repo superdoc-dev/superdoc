@@ -265,13 +265,24 @@ export class DomPositionIndex {
    * Finds all index entries whose position ranges overlap with the given range.
    *
    * @param from - The start of the query range (inclusive)
-   * @param to - The end of the query range (exclusive)
+   * @param to - The end of the query range (exclusive by default, inclusive with `boundaryInclusive`)
+   * @param options - Options controlling boundary behavior
    * @returns Array of entries that overlap the range, in index order
    *
    * @remarks
-   * An entry overlaps the query range [start, end) if:
+   * By default, an entry overlaps the query range [start, end) if:
    * - entry.pmStart < end (entry starts before query range ends)
    * - entry.pmEnd > start (entry ends after query range starts)
+   *
+   * When `boundaryInclusive` is true, the overlap condition becomes [start, end]:
+   * - entry.pmStart <= end (entry starts at or before query range ends)
+   * - entry.pmEnd >= start (entry ends at or after query range starts)
+   *
+   * Use `boundaryInclusive: true` for selection overlay rendering where positions at
+   * run boundaries (e.g., between two adjacent text runs with different marks) need to
+   * resolve to adjacent DOM entries. ProseMirror run nodes create a 2-position gap
+   * between adjacent text spans; inclusive boundaries ensure entries touching the gap
+   * are found.
    *
    * The algorithm:
    * 1. Normalizes the range (swaps from/to if necessary)
@@ -290,7 +301,7 @@ export class DomPositionIndex {
    * - Zero-length ranges (from === to) return empty array
    * - Reversed ranges are automatically normalized (from > to is handled)
    */
-  findEntriesInRange(from: number, to: number): DomPositionIndexEntry[] {
+  findEntriesInRange(from: number, to: number, options?: { boundaryInclusive?: boolean }): DomPositionIndexEntry[] {
     if (!Number.isFinite(from) || !Number.isFinite(to)) return [];
     const start = Math.min(from, to);
     const end = Math.max(from, to);
@@ -298,6 +309,8 @@ export class DomPositionIndex {
 
     const entries = this.#entries;
     if (entries.length === 0) return [];
+
+    const inclusive = options?.boundaryInclusive === true;
 
     // Find first entry whose pmStart <= start, then adjust forward if it ends before start.
     let lo = 0;
@@ -319,8 +332,8 @@ export class DomPositionIndex {
     const out: DomPositionIndexEntry[] = [];
     for (let i = idx; i < entries.length; i += 1) {
       const entry = entries[i];
-      if (entry.pmStart >= end) break;
-      if (entry.pmEnd <= start) continue;
+      if (inclusive ? entry.pmStart > end : entry.pmStart >= end) break;
+      if (inclusive ? entry.pmEnd < start : entry.pmEnd <= start) continue;
       out.push(entry);
     }
     return out;

@@ -33,7 +33,7 @@ async def main():
     print(info["counts"])
 
     results = await client.doc.find({"type": "text", "pattern": "termination"})
-    target = results["context"][0]["textRanges"][0]
+    target = results["items"][0]["context"]["textRanges"][0]
 
     await client.doc.replace({"target": target, "text": "expiration"})
     await client.doc.save({"inPlace": True})
@@ -71,8 +71,8 @@ await client.doc.insert(params)
 | **Format** | `format.bold`, `format.italic`, `format.underline`, `format.strikethrough` |
 | **Create** | `create.paragraph` |
 | **Lists** | `lists.list`, `lists.get`, `lists.insert`, `lists.set_type`, `lists.indent`, `lists.outdent`, `lists.restart`, `lists.exit` |
-| **Comments** | `comments.add`, `comments.edit`, `comments.reply`, `comments.move`, `comments.resolve`, `comments.remove`, `comments.set_internal`, `comments.set_active`, `comments.go_to`, `comments.get`, `comments.list` |
-| **Track Changes** | `track_changes.list`, `track_changes.get`, `track_changes.accept`, `track_changes.reject`, `track_changes.accept_all`, `track_changes.reject_all` |
+| **Comments** | `comments.create`, `comments.patch`, `comments.delete`, `comments.get`, `comments.list` |
+| **Track Changes** | `track_changes.list`, `track_changes.get`, `track_changes.decide` |
 | **Lifecycle** | `open`, `save`, `close` |
 | **Session** | `session.list`, `session.save`, `session.close`, `session.set_default` |
 | **Introspection** | `status`, `describe`, `describe_command` |

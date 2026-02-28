@@ -175,6 +175,8 @@ export function createMockContext(options = {}) {
     activeMarks: [],
     isTrackedChange: false,
     trackedChanges: [],
+    isCellSelection: false,
+    tableSelectionKind: null,
     documentMode: 'editing',
     canUndo: false,
     canRedo: false,

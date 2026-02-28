@@ -68,9 +68,11 @@ const CATEGORY_ORDER = [
   'mutation',
   'format',
   'create',
+  'blocks',
   'lists',
   'comments',
   'trackChanges',
+  'history',
   'session',
   'introspection',
 ] as const;
@@ -81,9 +83,11 @@ const CATEGORY_LABELS: Record<string, string> = {
   mutation: 'Mutation',
   format: 'Format',
   create: 'Create',
+  blocks: 'Blocks',
   lists: 'Lists',
   comments: 'Comments',
   trackChanges: 'Track changes',
+  history: 'History',
   session: 'Session',
   introspection: 'Introspection',
 };

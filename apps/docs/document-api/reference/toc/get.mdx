@@ -1,0 +1,157 @@
+---
+title: toc.get
+sidebarTitle: toc.get
+description: Retrieve details of a specific table of contents.
+---
+
+{/* GENERATED FILE: DO NOT EDIT. Regenerate via `pnpm run docapi:sync`. */}
+
+> Alpha: Document API is currently alpha and subject to breaking changes.
+
+## Summary
+
+Retrieve details of a specific table of contents.
+
+- Operation ID: `toc.get`
+- API member path: `editor.doc.toc.get(...)`
+- Mutates document: `no`
+- Idempotency: `idempotent`
+- Supports tracked mode: `no`
+- Supports dry run: `no`
+- Deterministic target resolution: `yes`
+
+## Expected result
+
+Returns a TocInfo object with the instruction, source/display configuration, and entry count.
+
+## Input fields
+
+| Field | Type | Required | Description |
+| --- | --- | --- | --- |
+| `target` | object(kind="block") | yes |  |
+
+### Example request
+
+```json
+{
+  "target": {
+    "kind": "block",
+    "nodeId": "node-def456",
+    "nodeType": "tableOfContents"
+  }
+}
+```
+
+## Output fields
+
+| Field | Type | Required | Description |
+| --- | --- | --- | --- |
+| `kind` | `"block"` | yes | Constant: `"block"` |
+| `nodeType` | `"tableOfContents"` | yes | Constant: `"tableOfContents"` |
+| `properties` | object | yes |  |
+
+### Example response
+
+```json
+{
+  "kind": "block",
+  "nodeType": "tableOfContents",
+  "properties": {
+    "displayConfig": {},
+    "entryCount": 1,
+    "instruction": "example",
+    "sourceConfig": {}
+  }
+}
+```
+
+## Pre-apply throws
+
+- `TARGET_NOT_FOUND`
+
+## Non-applied failure codes
+
+- None
+
+## Raw schemas
+
+<Accordion title="Raw input schema">
+```json
+{
+  "additionalProperties": false,
+  "properties": {
+    "target": {
+      "additionalProperties": false,
+      "properties": {
+        "kind": {
+          "const": "block"
+        },
+        "nodeId": {
+          "type": "string"
+        },
+        "nodeType": {
+          "const": "tableOfContents"
+        }
+      },
+      "required": [
+        "kind",
+        "nodeType",
+        "nodeId"
+      ],
+      "type": "object"
+    }
+  },
+  "required": [
+    "target"
+  ],
+  "type": "object"
+}
+```
+</Accordion>
+
+<Accordion title="Raw output schema">
+```json
+{
+  "additionalProperties": false,
+  "properties": {
+    "kind": {
+      "const": "block"
+    },
+    "nodeType": {
+      "const": "tableOfContents"
+    },
+    "properties": {
+      "additionalProperties": false,
+      "properties": {
+        "displayConfig": {
+          "type": "object"
+        },
+        "entryCount": {
+          "type": "integer"
+        },
+        "instruction": {
+          "type": "string"
+        },
+        "preservedSwitches": {
+          "type": "object"
+        },
+        "sourceConfig": {
+          "type": "object"
+        }
+      },
+      "required": [
+        "instruction",
+        "entryCount"
+      ],
+      "type": "object"
+    }
+  },
+  "required": [
+    "nodeType",
+    "kind",
+    "properties"
+  ],
+  "type": "object"
+}
+```
+</Accordion>

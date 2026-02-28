@@ -1,7 +1,9 @@
 import { readFile, writeFile } from 'node:fs/promises';
 import { createHash } from 'node:crypto';
-import { Editor } from 'superdoc/super-editor';
+import type { Editor } from 'superdoc/super-editor';
+import { BLANK_DOCX_BASE64 } from '@superdoc/super-editor/blank-docx';
 import { getDocumentApiAdapters } from '@superdoc/super-editor/document-api-adapters';
+import { markdownToPmDoc } from '@superdoc/super-editor/markdown';
 
 import { createDocumentApi, type DocumentApi } from '@superdoc/document-api';
 import type { CollaborationProfile } from './collaboration';
@@ -26,11 +28,45 @@ interface OpenDocumentOptions {
   documentId?: string;
   ydoc?: unknown;
   collaborationProvider?: unknown;
+  /** Options passed through to Editor.open() (e.g., markdown/html/plainText for content override). */
+  editorOpenOptions?: Record<string, string>;
 }
 
 export interface FileOutputMeta {
   path: string;
   byteLength: number;
+}
+
+type EditorModule = {
+  Editor: {
+    open(source: Buffer, options: Record<string, unknown>): Promise<Editor>;
+  };
+};
+
+const EDITOR_IMPORT_CANDIDATES = ['@superdoc/super-editor', 'superdoc/super-editor'] as const;
+let cachedEditorModule: EditorModule | null = null;
+
+async function loadEditorModule(): Promise<EditorModule> {
+  if (cachedEditorModule) return cachedEditorModule;
+
+  const errors: string[] = [];
+  for (const specifier of EDITOR_IMPORT_CANDIDATES) {
+    try {
+      const module = (await import(specifier)) as Partial<EditorModule>;
+      if (module.Editor && typeof module.Editor.open === 'function') {
+        cachedEditorModule = module as EditorModule;
+        return cachedEditorModule;
+      }
+      errors.push(`${specifier}: module loaded but Editor.open is unavailable`);
+    } catch (error) {
+      errors.push(`${specifier}: ${error instanceof Error ? error.message : String(error)}`);
+    }
+  }
+
+  throw new CliError('DOCUMENT_OPEN_FAILED', 'Failed to load editor runtime module.', {
+    candidates: [...EDITOR_IMPORT_CANDIDATES],
+    errors,
+  });
 }
 
 function toUint8Array(data: unknown): Uint8Array {
@@ -80,18 +116,54 @@ async function readDocumentSource(doc: string, io: CliIO): Promise<{ bytes: Uint
   };
 }
 
-export async function openDocument(doc: string, io: CliIO, options: OpenDocumentOptions = {}): Promise<OpenedDocument> {
-  const { bytes, meta } = await readDocumentSource(doc, io);
+export async function openDocument(
+  doc: string | undefined,
+  io: CliIO,
+  options: OpenDocumentOptions = {},
+): Promise<OpenedDocument> {
+  let source: Uint8Array;
+  let meta: DocumentSourceMeta;
+
+  if (doc != null) {
+    const result = await readDocumentSource(doc, io);
+    source = result.bytes;
+    meta = result.meta;
+  } else {
+    source = Buffer.from(BLANK_DOCX_BASE64, 'base64');
+    meta = { source: 'blank', byteLength: source.byteLength };
+  }
+
+  // Separate content overrides from options passed to Editor.open().
+  // The Editor's built-in markdown/html init paths (in the dist bundle) route
+  // through an HTML-based pipeline that requires DOM. In headless CLI mode
+  // there is no DOM, so we intercept them here:
+  //   - markdown: applied post-init via the AST-based markdownToPmDoc pipeline (DOM-free)
+  //   - html: rejected with a clear error (no DOM-free HTML pipeline exists)
+  const {
+    markdown: markdownOverride,
+    html: htmlOverride,
+    plainText: plainTextOverride,
+    ...passThroughEditorOpts
+  } = options.editorOpenOptions ?? {};
+
+  if (htmlOverride != null) {
+    throw new CliError(
+      'UNSUPPORTED_FORMAT',
+      'HTML content override is not supported in headless CLI mode (requires DOM). Use --override-type markdown instead.',
+    );
+  }
 
   let editor: Editor;
+  const { Editor: EditorRuntime } = await loadEditorModule();
   try {
     const isTest = process.env.NODE_ENV === 'test';
-    editor = await Editor.open(Buffer.from(bytes), {
-      documentId: options.documentId ?? meta.path ?? 'stdin.docx',
+    editor = await EditorRuntime.open(Buffer.from(source), {
+      documentId: options.documentId ?? meta.path ?? 'blank.docx',
       user: { id: 'cli', name: 'CLI' },
       ...(isTest ? { telemetry: { enabled: false } } : {}),
       ydoc: options.ydoc,
       ...(options.collaborationProvider != null ? { collaborationProvider: options.collaborationProvider } : {}),
+      ...passThroughEditorOpts,
     });
   } catch (error) {
     const message = error instanceof Error ? error.message : String(error);
@@ -99,6 +171,45 @@ export async function openDocument(doc: string, io: CliIO, options: OpenDocument
       message,
       source: meta,
     });
+  }
+
+  // Apply content override post-init.
+  //   - markdown: DOM-free AST pipeline
+  //   - plainText: builds PM paragraphs directly, preserving all whitespace
+  if (markdownOverride != null) {
+    try {
+      const { doc: newDoc } = markdownToPmDoc(markdownOverride, editor);
+      const tr = editor.state.tr;
+      // The PM Fragment type is opaque at the CLI boundary — cast through unknown.
+      tr.replaceWith(0, editor.state.doc.content.size, newDoc.content as any);
+      editor.dispatch(tr);
+    } catch (error) {
+      editor.destroy();
+      const message = error instanceof Error ? error.message : String(error);
+      throw new CliError('DOCUMENT_OPEN_FAILED', 'Failed to apply content override.', {
+        message,
+        source: meta,
+      });
+    }
+  } else if (plainTextOverride != null) {
+    try {
+      const schema = editor.state.schema;
+      const lines = plainTextOverride.split('\n');
+      const paragraphs = lines.map((line) => {
+        const content = line.length > 0 ? [schema.text(line)] : undefined;
+        return schema.nodes.paragraph.create(null, content);
+      });
+      const tr = editor.state.tr;
+      tr.replaceWith(0, editor.state.doc.content.size, paragraphs);
+      editor.dispatch(tr);
+    } catch (error) {
+      editor.destroy();
+      const message = error instanceof Error ? error.message : String(error);
+      throw new CliError('DOCUMENT_OPEN_FAILED', 'Failed to apply text content override.', {
+        message,
+        source: meta,
+      });
+    }
   }
 
   const adapters = getDocumentApiAdapters(editor);

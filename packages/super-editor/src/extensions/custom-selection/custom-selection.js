@@ -100,6 +100,30 @@ function getFocusState(state) {
 }
 
 /**
+ * Map a preserved selection through a document-changing transaction.
+ * Uses inclusive mapping so inserted text at either boundary stays highlighted.
+ *
+ * @private
+ * @param {Object|null} selection - Previous preserved selection-like object
+ * @param {Object} tr - Transaction
+ * @returns {Object|null} Remapped TextSelection or null if range collapsed/invalid
+ */
+function mapPreservedSelection(selection, tr) {
+  if (!selection || !tr.docChanged) return selection;
+  if (typeof selection.from !== 'number' || typeof selection.to !== 'number') return null;
+
+  const from = tr.mapping.map(selection.from, -1);
+  const to = tr.mapping.map(selection.to, 1);
+  if (from >= to) return null;
+
+  try {
+    return TextSelection.create(tr.doc, from, to);
+  } catch {
+    return null;
+  }
+}
+
+/**
  * Check if target is a toolbar input
  * @private
  * @param {Element} target - DOM element
@@ -135,10 +159,22 @@ export const CustomSelection = Extension.create({
         init: () => ({ ...DEFAULT_SELECTION_STATE }),
         apply: (tr, value) => {
           const meta = getFocusMeta(tr);
-          if (meta !== undefined) {
-            return { ...value, ...meta };
+          const nextState = meta !== undefined ? normalizeSelectionState({ ...value, ...meta }) : value;
+          if (!nextState?.preservedSelection) return nextState;
+          if (!tr.docChanged) return nextState;
+
+          const mappedSelection = mapPreservedSelection(nextState.preservedSelection, tr);
+          if (!mappedSelection) {
+            return {
+              ...nextState,
+              preservedSelection: null,
+              showVisualSelection: false,
+            };
           }
-          return value;
+          return {
+            ...nextState,
+            preservedSelection: mappedSelection,
+          };
         },
       },
       view: () => {

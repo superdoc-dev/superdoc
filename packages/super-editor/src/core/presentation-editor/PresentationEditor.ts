@@ -65,6 +65,7 @@ import {
   shouldUseCellSelection as shouldUseCellSelectionFromHelper,
 } from './tables/TableSelectionUtilities.js';
 import { DragDropManager } from './input/DragDropManager.js';
+import { processAndInsertImageFile } from '@extensions/image/imageHelpers/processAndInsertImageFile.js';
 import { HeaderFooterSessionManager } from './header-footer/HeaderFooterSessionManager.js';
 import { decodeRPrFromMarks } from '../super-converter/styles.js';
 import { halfPointToPoints } from '../super-converter/helpers.js';
@@ -110,6 +111,7 @@ import { ySyncPluginKey } from 'y-prosemirror';
 import type * as Y from 'yjs';
 import type { HeaderFooterDescriptor } from '../header-footer/HeaderFooterRegistry.js';
 import { isInRegisteredSurface } from './utils/uiSurfaceRegistry.js';
+import { splitRunsAtDecorationBoundaries } from './layout/SplitRunsAtDecorationBoundaries.js';
 
 // Types
 import type {
@@ -2435,8 +2437,10 @@ export class PresentationEditor extends EventEmitter {
   }
 
   /**
-   * Runs a full decoration bridge sync: reads external plugin decorations and
-   * reconciles them onto painted DOM elements (add/update/remove).
+   * Runs a full decoration sync: applies external plugin decoration classes
+   * and styles to the painted DOM elements via DecorationBridge. Runs are
+   * split at decoration boundaries during layout so only the selected portion
+   * gets the background (like the highlight mark, without applying a mark).
    *
    * Called synchronously from post-paint and observer-rebuild paths where the
    * DOM index is guaranteed to be fresh.
@@ -2448,7 +2452,9 @@ export class PresentationEditor extends EventEmitter {
     try {
       this.#decorationBridge.sync(state, this.#domPositionIndex);
     } catch (error) {
-      debugLog('warn', 'Decoration bridge sync failed', { error: String(error) });
+      // Sync can call findRangeByText and other doc-dependent logic; if it throws
+      // (e.g. edge-case doc state), avoid breaking the RAF or observer sync loop.
+      console.warn('[PresentationEditor] Decoration sync failed:', error);
     }
   }
 
@@ -2495,6 +2501,14 @@ export class PresentationEditor extends EventEmitter {
         // cannot be trusted — signal it to fall through to JSON comparison.
         const ySyncMeta = transaction.getMeta?.(ySyncPluginKey);
         if (ySyncMeta?.isChangeOrigin && transaction.docChanged) {
+          this.#flowBlockCache?.setHasExternalChanges(true);
+        }
+        // History undo/redo can restore prior paragraph content while preserving/reusing
+        // sdBlockRev values, which makes the cache's fast revision check unsafe.
+        // Force JSON comparison for this render cycle to avoid stale paragraph reuse.
+        const inputType = transaction.getMeta?.('inputType');
+        const isHistoryType = inputType === 'historyUndo' || inputType === 'historyRedo';
+        if (isHistoryType && transaction.docChanged) {
           this.#flowBlockCache?.setHasExternalChanges(true);
         }
       }
@@ -2549,8 +2563,30 @@ export class PresentationEditor extends EventEmitter {
     // We listen on 'transaction' so the decoration bridge picks up changes
     // from any transaction type. The bridge's own identity check + RAF
     // coalescing prevent unnecessary work.
-    const handleTransaction = () => {
-      this.#scheduleDecorationSync();
+    // When decoration state changes without a doc change (e.g. setFocus), we must
+    // still run a full rerender so runs are split at the new decoration boundaries;
+    // otherwise the bridge applies the class to whole runs and highlights too much.
+    const handleTransaction = (event?: { transaction?: Transaction }) => {
+      const tr = event?.transaction;
+      this.#decorationBridge.recordTransaction(tr);
+      const state = this.#editor?.view?.state;
+      const decorationChanged = state && this.#decorationBridge.hasChanges(state);
+      // Sync immediately whenever decorations changed so e.g. clearFocus removes
+      // highlight-selection in the same tick. Only restore when we had a doc change.
+      if (decorationChanged) {
+        const restoreEmpty = tr ? tr.docChanged === true : false;
+        this.#decorationBridge.sync(state!, this.#domPositionIndex, {
+          restoreEmptyDecorations: restoreEmpty,
+        });
+      } else {
+        // No immediate sync; schedule coalesced sync on next frame.
+        this.#scheduleDecorationSync();
+      }
+      if (decorationChanged) {
+        this.#pendingDocChange = true;
+        this.#selectionSync.onLayoutStart();
+        this.#scheduleRerender();
+      }
     };
 
     this.#editor.on('update', handleUpdate);
@@ -2573,6 +2609,19 @@ export class PresentationEditor extends EventEmitter {
     this.#editorListeners.push({
       event: 'pageStyleUpdate',
       handler: handlePageStyleUpdate as (...args: unknown[]) => void,
+    });
+
+    // Listen for stylesheet default changes (e.g., styles.apply mutations to docDefaults).
+    // These changes mutate translatedLinkedStyles directly and need a full re-render
+    // so the style-engine picks up the updated default properties.
+    const handleStylesDefaultsChanged = () => {
+      this.#pendingDocChange = true;
+      this.#scheduleRerender();
+    };
+    this.#editor.on('stylesDefaultsChanged', handleStylesDefaultsChanged);
+    this.#editorListeners.push({
+      event: 'stylesDefaultsChanged',
+      handler: handleStylesDefaultsChanged as (...args: unknown[]) => void,
     });
 
     const handleCollaborationReady = (payload: unknown) => {
@@ -2735,7 +2784,8 @@ export class PresentationEditor extends EventEmitter {
       goToAnchor: (href: string) => this.goToAnchor(href),
       emit: (event: string, payload: unknown) => this.emit(event, payload),
       normalizeClientPoint: (clientX: number, clientY: number) => this.#normalizeClientPoint(clientX, clientY),
-      hitTestHeaderFooterRegion: (x: number, y: number) => this.#hitTestHeaderFooterRegion(x, y),
+      hitTestHeaderFooterRegion: (x: number, y: number, pageIndex?: number, pageLocalY?: number) =>
+        this.#hitTestHeaderFooterRegion(x, y, pageIndex, pageLocalY),
       exitHeaderFooterMode: () => this.#exitHeaderFooterMode(),
       activateHeaderFooterRegion: (region) => this.#activateHeaderFooterRegion(region),
       createDefaultHeaderFooter: (region) => this.#createDefaultHeaderFooter(region),
@@ -2809,7 +2859,7 @@ export class PresentationEditor extends EventEmitter {
   }
 
   /**
-   * Sets up drag and drop handlers for field annotations.
+   * Sets up drag and drop handlers for field annotations and image files.
    */
   #setupDragHandlers() {
     // Clean up any existing manager
@@ -2822,6 +2872,7 @@ export class PresentationEditor extends EventEmitter {
       scheduleSelectionUpdate: () => this.#scheduleSelectionUpdate(),
       getViewportHost: () => this.#viewportHost,
       getPainterHost: () => this.#painterHost,
+      insertImageFile: (params) => processAndInsertImageFile(params),
     });
     this.#dragDropManager.bind();
   }
@@ -2924,6 +2975,7 @@ export class PresentationEditor extends EventEmitter {
       setPendingDocChange: () => {
         this.#pendingDocChange = true;
       },
+      getBodyPageCount: () => this.#layoutState?.layout?.pages?.length ?? 1,
     });
 
     // Set up callbacks
@@ -3231,6 +3283,17 @@ export class PresentationEditor extends EventEmitter {
         return;
       }
 
+      // Split runs at decoration boundaries so bridge sync applies background only to the
+      // selected portion (like highlight mark) without adding a document mark.
+      const state = this.#editor?.view?.state;
+      const decorationRanges = state ? this.#decorationBridge.collectDecorationRanges(state) : [];
+      if (decorationRanges.length > 0) {
+        blocks = splitRunsAtDecorationBoundaries(
+          blocks,
+          decorationRanges.map((r) => ({ from: r.from, to: r.to })),
+        );
+      }
+
       this.#applyHtmlAnnotationMeasurements(blocks);
 
       const baseLayoutOptions = this.#resolveLayoutOptions(blocks, sectionMetadata);
@@ -3309,6 +3372,29 @@ export class PresentationEditor extends EventEmitter {
       }
       const anchorMap = computeAnchorMapFromHelper(bookmarks, layout, blocks);
       this.#layoutState = { blocks, measures, layout, bookmarks, anchorMap };
+
+      // Build blockId → pageNumber map for TOC page-number resolution.
+      // Stored on editor.storage so the document-api adapter layer can read it
+      // when toc.update({ mode: 'pageNumbers' }) is called.
+      // pageMapDoc is the doc snapshot this map was derived from — the adapter
+      // layer compares it against editor.state.doc to reject stale maps.
+      const tocStorage = (
+        this.#editor as unknown as { storage?: Record<string, { pageMap?: Map<string, number>; pageMapDoc?: unknown }> }
+      ).storage?.tableOfContents;
+      if (tocStorage) {
+        const pageMap = new Map<string, number>();
+        for (const page of layout.pages) {
+          for (const fragment of page.fragments) {
+            // First occurrence wins — use the page where the block first appears
+            if (!pageMap.has(fragment.blockId)) {
+              pageMap.set(fragment.blockId, page.number);
+            }
+          }
+        }
+        tocStorage.pageMap = pageMap;
+        tocStorage.pageMapDoc = this.#editor.state.doc;
+      }
+
       if (this.#headerFooterSession) {
         this.#headerFooterSession.headerLayoutResults = headerLayouts ?? null;
         this.#headerFooterSession.footerLayoutResults = footerLayouts ?? null;
@@ -4017,6 +4103,19 @@ export class PresentationEditor extends EventEmitter {
       return;
     }
 
+    // When dragging across mark boundaries, the selection can briefly land in the
+    // 2-position structural gap between adjacent runs, producing zero DOM rects for
+    // one frame. Preserve the last overlay only during active drag to prevent flicker.
+    // Outside drag (scroll, programmatic changes), zero rects means the DOM is stale
+    // or virtualized — clearing the overlay is the safer default.
+    if (domRects.length === 0 && from !== to && this.#editorInputManager?.isDragging) {
+      debugLog('warn', '[drawSelection] zero rects for non-collapsed selection — preserving last overlay', {
+        from,
+        to,
+      });
+      return;
+    }
+
     try {
       this.#localSelectionLayer.innerHTML = '';
       const isFieldAnnotationSelection =
@@ -4320,8 +4419,8 @@ export class PresentationEditor extends EventEmitter {
    * Hit test for header/footer regions at a given point.
    * Delegates to HeaderFooterSessionManager which manages region tracking.
    */
-  #hitTestHeaderFooterRegion(x: number, y: number): HeaderFooterRegion | null {
-    return this.#headerFooterSession?.hitTestRegion(x, y, this.#layoutState.layout) ?? null;
+  #hitTestHeaderFooterRegion(x: number, y: number, pageIndex?: number, pageLocalY?: number): HeaderFooterRegion | null {
+    return this.#headerFooterSession?.hitTestRegion(x, y, this.#layoutState.layout, pageIndex, pageLocalY) ?? null;
   }
 
   #activateHeaderFooterRegion(region: HeaderFooterRegion) {
@@ -5086,7 +5185,10 @@ export class PresentationEditor extends EventEmitter {
     );
   }
 
-  #normalizeClientPoint(clientX: number, clientY: number): { x: number; y: number } | null {
+  #normalizeClientPoint(
+    clientX: number,
+    clientY: number,
+  ): { x: number; y: number; pageIndex?: number; pageLocalY?: number } | null {
     return normalizeClientPointFromPointer(
       {
         viewportHost: this.#viewportHost,

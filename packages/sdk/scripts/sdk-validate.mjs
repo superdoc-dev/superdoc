@@ -5,20 +5,23 @@
  *
  * Checks:
  *  1. CLI export contract is current (--check)
- *  2. Contract JSON loads and has required structure
- *  3. All operations have outputSchema
- *  4. Node SDK typechecks (tsc --noEmit)
- *  5. Python SDK imports successfully
- *  6. Tool catalog operation count matches contract
- *  7. Tool name map covers all operations
- *  8. Provider bundles are consistent
- *  9. Node/Python parity — both generated clients expose same operations
- * 10. Catalog input schemas present and required params match contract
- * 11. Skill files only reference existing operations (fails on unknown refs)
- * 12. Provider tool name extraction smoke test
- * 13. Node npm pack includes required tools/*.json assets
- * 14. SDK release scripts test suite passes
- * 15. SDK test suite passes (contract-integrity + cross-lang parity)
+ *  2. SDK/codegen artifacts are regenerated from current contract
+ *  3. Contract JSON loads and has required structure
+ *  4. All operations have outputSchema
+ *  5. Node SDK typechecks (tsc --noEmit)
+ *  6. Python SDK imports successfully
+ *  7. Tool catalog operation count matches contract
+ *  8. Tool name map covers all operations
+ *  9. Provider bundles are consistent
+ * 10. Node/Python parity — both generated clients expose same operations
+ * 11. Catalog input schemas present and required params match contract
+ * 12. Skill files only reference existing operations (fails on unknown refs)
+ * 13. Provider tool name extraction smoke test
+ * 14. Node npm pack includes required tools/*.json, skills/*.md, and CJS artifacts
+ * 15. SDK release scripts test suite passes
+ * 16. SDK test suite passes (contract-integrity + cross-lang parity)
+ * 17. Node SDK platform package manifests exist and are well-formed
+ * 18. Node SDK optionalDependencies reference all expected platform packages
  */
 
 import { execFile } from 'node:child_process';
@@ -68,7 +71,12 @@ async function main() {
     ]);
   });
 
-  // 2. Load contract and verify structure
+  // 2. Regenerate SDK artifacts from current contract
+  await check('SDK/codegen artifacts are current', async () => {
+    await run('node', [path.join(REPO_ROOT, 'packages/sdk/codegen/src/generate-all.mjs')]);
+  });
+
+  // 3. Load contract and verify structure
   const contractPath = path.join(REPO_ROOT, 'apps/cli/generated/sdk-contract.json');
   let contract;
   await check('Contract JSON loads and has operations', async () => {
@@ -80,21 +88,21 @@ async function main() {
     if (!contract.protocol) throw new Error('Missing protocol metadata');
   });
 
-  // 3. All operations have outputSchema
+  // 4. All operations have outputSchema
   await check('All operations have outputSchema', async () => {
     for (const [id, op] of Object.entries(contract.operations)) {
       if (!op.outputSchema) throw new Error(`${id} missing outputSchema`);
     }
   });
 
-  // 4. Node SDK typecheck
+  // 5. Node SDK typecheck
   await check('Node SDK typechecks (tsc --noEmit)', async () => {
     await run('npx', ['tsc', '--noEmit'], {
       cwd: path.join(REPO_ROOT, 'packages/sdk/langs/node'),
     });
   });
 
-  // 5. Python SDK imports
+  // 6. Python SDK imports
   await check('Python SDK imports successfully', async () => {
     await run('python3', [
       '-c',
@@ -104,7 +112,7 @@ async function main() {
     });
   });
 
-  // 6. Tool catalog integrity
+  // 7. Tool catalog integrity
   await check('Tool catalog operation count matches contract', async () => {
     const catalog = await readJson(path.join(REPO_ROOT, 'packages/sdk/tools/catalog.json'));
     const contractOpCount = Object.keys(contract.operations).length;
@@ -119,7 +127,7 @@ async function main() {
     }
   });
 
-  // 7. Tool name map covers all operations
+  // 8. Tool name map covers all operations
   await check('Tool name map covers all operations', async () => {
     const nameMap = await readJson(path.join(REPO_ROOT, 'packages/sdk/tools/tool-name-map.json'));
     const contractOps = new Set(Object.keys(contract.operations));
@@ -132,7 +140,7 @@ async function main() {
     }
   });
 
-  // 8. Provider bundles exist and have correct profile counts
+  // 9. Provider bundles exist and have correct profile counts
   await check('Provider bundles are consistent', async () => {
     const providers = ['openai', 'anthropic', 'vercel', 'generic'];
     const contractOpCount = Object.keys(contract.operations).length;
@@ -151,7 +159,7 @@ async function main() {
     }
   });
 
-  // 9. Node/Python parity — generated clients expose same operations
+  // 10. Node/Python parity — generated clients expose same operations
   await check('Node/Python generated clients have matching operation counts', async () => {
     const nodeContract = await readFile(
       path.join(REPO_ROOT, 'packages/sdk/langs/node/src/generated/contract.ts'),
@@ -175,7 +183,7 @@ async function main() {
     }
   });
 
-  // 10. All catalog tools have input schemas and required params match contract
+  // 11. All catalog tools have input schemas and required params match contract
   await check('Catalog input schemas present and required params match contract', async () => {
     const catalog = await readJson(path.join(REPO_ROOT, 'packages/sdk/tools/catalog.json'));
 
@@ -208,7 +216,7 @@ async function main() {
     }
   });
 
-  // 11. Skill files only reference existing operations
+  // 12. Skill files only reference existing operations
   await check('Skill files reference valid operations', async () => {
     const skillDirs = [
       path.join(REPO_ROOT, 'packages/sdk/langs/node/skills'),
@@ -246,7 +254,7 @@ async function main() {
     }
   });
 
-  // 12. Provider tool name extraction smoke test
+  // 13. Provider tool name extraction smoke test
   await check('OpenAI/Vercel tools have extractable names', async () => {
     const openaiBundle = await readJson(path.join(REPO_ROOT, 'packages/sdk/tools/tools.openai.json'));
     const nameMap = await readJson(path.join(REPO_ROOT, 'packages/sdk/tools/tool-name-map.json'));
@@ -262,8 +270,8 @@ async function main() {
     }
   });
 
-  // 13. Node package tarball includes required tools/*.json assets
-  await check('Node npm pack includes tools/*.json assets', async () => {
+  // 14. Node package tarball includes required tools/*.json, skills/*.md, and CJS artifacts
+  await check('Node npm pack includes tools/*.json, skills/*.md, and CJS artifacts', async () => {
     const npmCacheDir = path.join(REPO_ROOT, '.cache', 'npm');
     const { stdout } = await execFileAsync('npm', ['pack', '--dry-run', '--json'], {
       cwd: path.join(REPO_ROOT, 'packages/sdk/langs/node'),
@@ -272,21 +280,79 @@ async function main() {
     const packOutput = JSON.parse(stdout);
     const files = (packOutput[0]?.files ?? []).map((f) => f.path);
 
-    const requiredTools = ['catalog.json', 'tool-name-map.json', 'tools.openai.json', 'tools.anthropic.json', 'tools.vercel.json', 'tools.generic.json'];
-    const missing = requiredTools.filter((name) => !files.some((f) => f === `tools/${name}`));
-    if (missing.length > 0) {
-      throw new Error(`Node tarball missing tools: ${missing.join(', ')}. Check symlinks and prepack script.`);
+    const requiredTools = [
+      'catalog.json',
+      'tool-name-map.json',
+      'tools-policy.json',
+      'tools.openai.json',
+      'tools.anthropic.json',
+      'tools.vercel.json',
+      'tools.generic.json',
+    ];
+    const missingTools = requiredTools.filter((name) => !files.some((f) => f === `tools/${name}`));
+    if (missingTools.length > 0) {
+      throw new Error(`Node tarball missing tools: ${missingTools.join(', ')}. Check symlinks and prepack script.`);
+    }
+
+    const hasPublishedSkills = files.some((filePath) => /^skills\/.+\.md$/.test(filePath));
+    if (!hasPublishedSkills) {
+      throw new Error('Node tarball missing skills/*.md artifacts.');
+    }
+
+    // Dual-package CJS artifacts: entry point + key runtime modules
+    const requiredCjs = ['dist/index.cjs', 'dist/runtime/embedded-cli.cjs', 'dist/tools.cjs', 'dist/skills.cjs'];
+    const missingCjs = requiredCjs.filter((name) => !files.some((f) => f === name));
+    if (missingCjs.length > 0) {
+      throw new Error(`Node tarball missing CJS artifacts: ${missingCjs.join(', ')}. Run "pnpm run build" in packages/sdk/langs/node.`);
     }
   });
 
-  // 14. Run SDK release script tests
+  // 15. Run SDK release script tests
   await check('SDK release scripts tests pass', async () => {
     await run('pnpm', ['--prefix', path.join(REPO_ROOT, 'packages/sdk'), 'run', 'test:scripts']);
   });
 
-  // 15. Run SDK codegen test suite (contract-integrity + cross-lang parity)
+  // 16. Run SDK codegen test suite (contract-integrity + cross-lang parity)
   await check('SDK test suite passes (bun test)', async () => {
     await run('bun', ['test', path.join(REPO_ROOT, 'packages/sdk/codegen/src/__tests__/')]);
+  });
+
+  // 17. Node SDK platform package manifests exist and are well-formed
+  const EXPECTED_NODE_PLATFORMS = [
+    { name: '@superdoc-dev/sdk-darwin-arm64', dir: 'sdk-darwin-arm64', os: 'darwin', cpu: 'arm64' },
+    { name: '@superdoc-dev/sdk-darwin-x64', dir: 'sdk-darwin-x64', os: 'darwin', cpu: 'x64' },
+    { name: '@superdoc-dev/sdk-linux-x64', dir: 'sdk-linux-x64', os: 'linux', cpu: 'x64' },
+    { name: '@superdoc-dev/sdk-linux-arm64', dir: 'sdk-linux-arm64', os: 'linux', cpu: 'arm64' },
+    { name: '@superdoc-dev/sdk-windows-x64', dir: 'sdk-windows-x64', os: 'win32', cpu: 'x64' },
+  ];
+
+  await check('Node SDK platform package manifests exist and are well-formed', async () => {
+    for (const platform of EXPECTED_NODE_PLATFORMS) {
+      const pkgPath = path.join(REPO_ROOT, 'packages/sdk/langs/node/platforms', platform.dir, 'package.json');
+      const pkg = await readJson(pkgPath);
+      if (pkg.name !== platform.name) {
+        throw new Error(`${platform.dir}: expected name "${platform.name}", got "${pkg.name}"`);
+      }
+      if (!pkg.os?.includes(platform.os)) {
+        throw new Error(`${platform.dir}: missing os constraint "${platform.os}"`);
+      }
+      if (!pkg.cpu?.includes(platform.cpu)) {
+        throw new Error(`${platform.dir}: missing cpu constraint "${platform.cpu}"`);
+      }
+      if (!pkg.bin) {
+        throw new Error(`${platform.dir}: missing bin entry`);
+      }
+    }
+  });
+
+  // 18. Node SDK optionalDependencies reference all expected platform packages
+  await check('Node SDK optionalDependencies reference all platform packages', async () => {
+    const nodePkg = await readJson(path.join(REPO_ROOT, 'packages/sdk/langs/node/package.json'));
+    const optDeps = nodePkg.optionalDependencies ?? {};
+    const missing = EXPECTED_NODE_PLATFORMS.filter((p) => !(p.name in optDeps));
+    if (missing.length > 0) {
+      throw new Error(`Node SDK missing optionalDependencies: ${missing.map((p) => p.name).join(', ')}`);
+    }
   });
 
   console.log(`\n${passes} passed, ${failures} failed`);

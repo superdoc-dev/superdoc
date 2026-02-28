@@ -151,6 +151,65 @@ async function nthListAddress(
   return address;
 }
 
+function readNestedBoolean(data: unknown, key: 'canContinue' | 'canJoin'): boolean | undefined {
+  if (!data || typeof data !== 'object') return undefined;
+
+  const direct = data as Record<string, unknown>;
+  if (typeof direct[key] === 'boolean') return direct[key] as boolean;
+
+  const result = direct.result;
+  if (result && typeof result === 'object') {
+    const nested = result as Record<string, unknown>;
+    if (typeof nested[key] === 'boolean') return nested[key] as boolean;
+  }
+
+  return undefined;
+}
+
+async function findFirstContinuableListAddress(
+  harness: ConformanceHarness,
+  stateDir: string,
+  docPath: string,
+): Promise<Record<string, unknown> | null> {
+  const items = await listDiscoveryItems(harness, stateDir, docPath, 50);
+  for (const item of items) {
+    const address = item.address;
+    if (!address || typeof address !== 'object') continue;
+
+    const probe = await harness.runCli(
+      ['lists', 'can-continue-previous', docPath, '--target-json', JSON.stringify(address)],
+      stateDir,
+    );
+    if (probe.result.code !== 0 || probe.envelope.ok !== true) continue;
+    if (readNestedBoolean(probe.envelope.data, 'canContinue') === true) {
+      return address;
+    }
+  }
+  return null;
+}
+
+async function findFirstJoinableWithPreviousAddress(
+  harness: ConformanceHarness,
+  stateDir: string,
+  docPath: string,
+): Promise<Record<string, unknown> | null> {
+  const items = await listDiscoveryItems(harness, stateDir, docPath, 50);
+  for (const item of items) {
+    const address = item.address;
+    if (!address || typeof address !== 'object') continue;
+
+    const probe = await harness.runCli(
+      ['lists', 'can-join', docPath, '--input-json', JSON.stringify({ target: address, direction: 'withPrevious' })],
+      stateDir,
+    );
+    if (probe.result.code !== 0 || probe.envelope.ok !== true) continue;
+    if (readNestedBoolean(probe.envelope.data, 'canJoin') === true) {
+      return address;
+    }
+  }
+  return null;
+}
+
 function sectionMutationScenario(
   operationId: CliOperationId,
   label: string,
@@ -1247,9 +1306,11 @@ export const SUCCESS_SCENARIOS = {
     if (separate.result.code !== 0) {
       throw new Error('Failed to prepare continue-previous conformance fixture via lists separate.');
     }
-    // Resolve target from the prepared document to avoid stale nodeId usage
-    // when list-item ids are regenerated across write/reload boundaries.
-    const preparedSecondItem = await nthListAddress(harness, stateDir, preparedDoc, 1);
+    // Resolve a list item that can actually continue the previous sequence.
+    // This avoids positional assumptions across environments/serialization.
+    const preparedSecondItem =
+      (await findFirstContinuableListAddress(harness, stateDir, preparedDoc)) ??
+      (await nthListAddress(harness, stateDir, preparedDoc, 1));
     return {
       stateDir,
       args: [
@@ -1337,9 +1398,11 @@ export const SUCCESS_SCENARIOS = {
     if (separate.result.code !== 0) {
       throw new Error('Failed to prepare join conformance fixture via lists separate.');
     }
-    // Resolve target from the prepared document to avoid stale nodeId usage
-    // when list-item ids are regenerated across write/reload boundaries.
-    const preparedSecondItem = await nthListAddress(harness, stateDir, preparedDoc, 1);
+    // Resolve a list item that can actually join with the previous sequence.
+    // This avoids positional assumptions across environments/serialization.
+    const preparedSecondItem =
+      (await findFirstJoinableWithPreviousAddress(harness, stateDir, preparedDoc)) ??
+      (await nthListAddress(harness, stateDir, preparedDoc, 1));
     return {
       stateDir,
       args: [

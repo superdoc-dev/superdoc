@@ -82,7 +82,7 @@ export const TableOfContentsEntry = Node.create({
           if (!node || node.type.name !== 'tableOfContentsEntry') return false;
 
           if (dispatch) {
-            tr.setNodeMarkup(pos, undefined, { ...node.attrs, instruction });
+            tr.setNodeMarkup(pos, undefined, { ...node.attrs, instruction, instructionTokens: null });
           }
           return true;
         },

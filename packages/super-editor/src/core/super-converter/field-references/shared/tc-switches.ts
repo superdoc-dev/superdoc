@@ -65,8 +65,8 @@ function extractEntryText(instruction: string): { text: string; rest: string } {
   return { text: withoutPrefix.slice(0, switchStart).trim(), rest: withoutPrefix.slice(switchStart) };
 }
 
-/** Regex to match a switch and its optional quoted argument. */
-const SWITCH_PATTERN = /\\([a-z])\s*(?:"([^"]*)")?/gi;
+/** Regex to match a switch and its optional argument (quoted or unquoted). */
+const SWITCH_PATTERN = /\\([a-z])(?:\s*(?:"([^"]*)"|([^\s\\]+)))?/gi;
 
 export function parseTcInstruction(instruction: string): TcSwitchConfig {
   const { text, rest } = extractEntryText(instruction);
@@ -80,7 +80,7 @@ export function parseTcInstruction(instruction: string): TcSwitchConfig {
   SWITCH_PATTERN.lastIndex = 0;
   while ((match = SWITCH_PATTERN.exec(rest)) !== null) {
     const switchChar = match[1].toLowerCase();
-    const arg = match[2] ?? '';
+    const arg = match[2] ?? match[3] ?? '';
 
     switch (switchChar) {
       case 'f':

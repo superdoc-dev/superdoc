@@ -18,6 +18,13 @@ describe('parseTcInstruction', () => {
     expect(config.omitPageNumber).toBe(true);
   });
 
+  it('parses unquoted switch arguments', () => {
+    const config = parseTcInstruction('TC "Entry" \\f A \\l 3 \\n');
+    expect(config.tableIdentifier).toBe('A');
+    expect(config.level).toBe(3);
+    expect(config.omitPageNumber).toBe(true);
+  });
+
   it('defaults level to 1 when \\l is absent', () => {
     const config = parseTcInstruction('TC "Hello"');
     expect(config.level).toBe(1);
@@ -32,6 +39,12 @@ describe('parseTcInstruction', () => {
     const config = parseTcInstruction('TC My Text \\l "2"');
     expect(config.text).toBe('My Text');
     expect(config.level).toBe(2);
+  });
+
+  it('accepts mixed quoted and unquoted switch arguments', () => {
+    const config = parseTcInstruction('TC "Entry" \\f "A" \\l 3');
+    expect(config.tableIdentifier).toBe('A');
+    expect(config.level).toBe(3);
   });
 });
 

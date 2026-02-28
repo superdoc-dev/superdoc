@@ -314,7 +314,7 @@ describe('layoutTableBlock', () => {
       });
     });
 
-    it('should not include rowBoundaries metadata (Phase 1 scope)', () => {
+    it('should include rowBoundaries metadata', () => {
       const block = createMockTableBlock(3);
       const measure = createMockTableMeasure([100, 150], [20, 25, 30]);
 
@@ -336,7 +336,123 @@ describe('layoutTableBlock', () => {
       });
 
       const fragment = fragments[0];
-      expect(fragment.metadata?.rowBoundaries).toBeUndefined();
+      const rowBoundaries = fragment.metadata?.rowBoundaries;
+      expect(rowBoundaries).toBeDefined();
+      expect(rowBoundaries).toHaveLength(3);
+
+      // Each boundary should have required fields
+      expect(rowBoundaries![0]).toMatchObject({
+        index: 0,
+        y: 0,
+        height: 20,
+        resizable: true,
+      });
+      expect(rowBoundaries![1]).toMatchObject({
+        index: 1,
+        y: 20,
+        height: 25,
+        resizable: true,
+      });
+      expect(rowBoundaries![2]).toMatchObject({
+        index: 2,
+        y: 45,
+        height: 30,
+        resizable: true,
+      });
+
+      // minHeight should be at least ROW_MIN_HEIGHT_PX (10)
+      rowBoundaries!.forEach((rb) => {
+        expect(rb.minHeight).toBeGreaterThanOrEqual(10);
+      });
+    });
+
+    it('uses partial row height in rowBoundaries and marks it non-resizable', () => {
+      const block = createMockTableBlock(1, [{ cantSplit: false }]);
+      const measure = createMockTableMeasure([100], [200], [[10, 10, 10, 10, 10, 10]]);
+
+      const fragments: TableFragment[] = [];
+      let cursorY = 0;
+      let contentBottom = 40; // Force a partial-row first fragment
+
+      layoutTableBlock({
+        block,
+        measure,
+        columnWidth: 100,
+        ensurePage: () => ({
+          page: { fragments },
+          columnIndex: 0,
+          cursorY,
+          contentBottom,
+        }),
+        advanceColumn: () => {
+          cursorY = 0;
+          contentBottom = 300;
+          return {
+            page: { fragments },
+            columnIndex: 0,
+            cursorY,
+            contentBottom,
+          };
+        },
+        columnX: () => 0,
+      });
+
+      const partialFragment = fragments.find((fragment) => fragment.partialRow != null);
+      expect(partialFragment).toBeDefined();
+      expect(partialFragment!.partialRow).toBeTruthy();
+
+      const rowBoundaries = partialFragment!.metadata?.rowBoundaries;
+      expect(rowBoundaries).toHaveLength(1);
+      expect(rowBoundaries![0].height).toBe(partialFragment!.partialRow!.partialHeight);
+      expect(rowBoundaries![0].resizable).toBe(false);
+      expect(rowBoundaries![0].minHeight).toBe(partialFragment!.partialRow!.partialHeight);
+    });
+
+    it('marks repeated header row boundaries as non-resizable on continuation fragments', () => {
+      const block = createMockTableBlock(4, [
+        { repeatHeader: true },
+        { repeatHeader: false },
+        { repeatHeader: false },
+        { repeatHeader: false },
+      ]);
+      const measure = createMockTableMeasure([100], [20, 20, 20, 20]);
+
+      const fragments: TableFragment[] = [];
+      let cursorY = 0;
+      let contentBottom = 60; // First page fits 3 rows; continuation should repeat header
+
+      layoutTableBlock({
+        block,
+        measure,
+        columnWidth: 100,
+        ensurePage: () => ({
+          page: { fragments },
+          columnIndex: 0,
+          cursorY,
+          contentBottom,
+        }),
+        advanceColumn: () => {
+          cursorY = 0;
+          contentBottom = 60;
+          return {
+            page: { fragments },
+            columnIndex: 0,
+            cursorY,
+            contentBottom,
+          };
+        },
+        columnX: () => 0,
+      });
+
+      const continuation = fragments.find((fragment) => (fragment.repeatHeaderCount ?? 0) > 0);
+      expect(continuation).toBeDefined();
+
+      const rowBoundaries = continuation!.metadata?.rowBoundaries;
+      expect(rowBoundaries).toBeDefined();
+      expect(rowBoundaries!.length).toBeGreaterThanOrEqual(2);
+      expect(rowBoundaries![0].index).toBe(0);
+      expect(rowBoundaries![0].resizable).toBe(false);
+      expect(rowBoundaries![1].resizable).toBe(true);
     });
   });
 

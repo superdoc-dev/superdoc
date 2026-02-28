@@ -94,10 +94,15 @@ export type TableRenderDependencies = {
  *   "columns": [
  *     {"i": 0, "x": 0, "w": 100, "min": 25, "r": 1},
  *     {"i": 1, "x": 100, "w": 150, "min": 30, "r": 1}
+ *   ],
+ *   "rows": [
+ *     {"i": 0, "y": 0, "h": 30, "min": 10, "r": 1},
+ *     {"i": 1, "y": 34, "h": 25, "min": 10, "r": 1}
  *   ]
  * }
  * ```
- * Where: i=index, x=position, w=width, min=minWidth, r=resizable(0/1)
+ * Where for columns: i=index, x=position, w=width, min=minWidth, r=resizable(0/1)
+ * Where for rows: i=index, y=position, h=height, min=minHeight, r=resizable(0/1)
  *
  * **Edge Cases:**
  * - Missing metadata: Element created without data-table-boundaries attribute
@@ -297,7 +302,7 @@ export const renderTableFragment = (deps: TableRenderDependencies): HTMLElement 
       rowY += height + cellSpacingPx;
     }
 
-    const metadata = {
+    const metadata: Record<string, unknown> = {
       columns: fragment.metadata.columnBoundaries.map((boundary) => ({
         i: boundary.index,
         x: boundary.x + contentLeft,
@@ -314,6 +319,18 @@ export const renderTableFragment = (deps: TableRenderDependencies): HTMLElement 
         })),
       ),
     };
+
+    // Add row boundary metadata for interactive row resizing
+    // Where: i=index, y=position, h=height, min=minHeight, r=resizable(0/1)
+    if (fragment.metadata.rowBoundaries && fragment.metadata.rowBoundaries.length > 0) {
+      metadata.rows = fragment.metadata.rowBoundaries.map((rb) => ({
+        i: rb.index,
+        y: rb.y + contentTop,
+        h: rb.height,
+        min: rb.minHeight,
+        r: rb.resizable ? 1 : 0,
+      }));
+    }
 
     container.setAttribute('data-table-boundaries', JSON.stringify(metadata));
   }

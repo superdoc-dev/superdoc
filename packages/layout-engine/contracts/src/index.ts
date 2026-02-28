@@ -1618,6 +1618,8 @@ export type TableRowBoundary = {
   index: number;
   y: number;
   height: number;
+  minHeight: number;
+  resizable: boolean;
 };
 
 export type TableFragmentMetadata = {

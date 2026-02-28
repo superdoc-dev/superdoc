@@ -29,10 +29,31 @@ export interface FindAdapter {
   find(query: Query): QueryResult;
 }
 
-/** Normalizes a selector shorthand into its canonical discriminated-union form. */
+/** Normalizes a selector shorthand into its canonical discriminated-union form.
+ *  Strips any non-selector properties so callers that pass an object with extra
+ *  fields (e.g. SDK-shaped flat params) don't pollute the select object. */
 function normalizeSelector(selector: Selector): NodeSelector | TextSelector {
   if ('type' in selector) {
-    return selector;
+    if (selector.type === 'text') {
+      const text = selector as TextSelector;
+      return {
+        type: 'text',
+        pattern: text.pattern,
+        ...(text.mode != null && { mode: text.mode }),
+        ...(text.caseSensitive != null && { caseSensitive: text.caseSensitive }),
+      };
+    }
+    if (selector.type === 'node') {
+      const node = selector as NodeSelector;
+      return {
+        type: 'node',
+        ...(node.nodeType != null && { nodeType: node.nodeType }),
+        ...(node.kind != null && { kind: node.kind }),
+      };
+    }
+    // Pass through unrecognised type values so downstream validation can
+    // reject them with a clear error instead of silently coercing to 'node'.
+    return selector as NodeSelector | TextSelector;
   }
   return { type: 'node', nodeType: selector.nodeType };
 }

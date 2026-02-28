@@ -1,4 +1,5 @@
 import type { Receipt, TrackChangeInfo, TrackChangesListQuery, TrackChangesListResult } from '../types/index.js';
+import type { RevisionGuardOptions } from '../write/write.js';
 
 export type TrackChangesListInput = TrackChangesListQuery;
 
@@ -24,13 +25,13 @@ export interface TrackChangesAdapter {
   /** Retrieve full information for a single tracked change. */
   get(input: TrackChangesGetInput): TrackChangeInfo;
   /** Accept a tracked change, applying it to the document. */
-  accept(input: TrackChangesAcceptInput): Receipt;
+  accept(input: TrackChangesAcceptInput, options?: RevisionGuardOptions): Receipt;
   /** Reject a tracked change, reverting it from the document. */
-  reject(input: TrackChangesRejectInput): Receipt;
+  reject(input: TrackChangesRejectInput, options?: RevisionGuardOptions): Receipt;
   /** Accept all tracked changes in the document. */
-  acceptAll(input: TrackChangesAcceptAllInput): Receipt;
+  acceptAll(input: TrackChangesAcceptAllInput, options?: RevisionGuardOptions): Receipt;
   /** Reject all tracked changes in the document. */
-  rejectAll(input: TrackChangesRejectAllInput): Receipt;
+  rejectAll(input: TrackChangesRejectAllInput, options?: RevisionGuardOptions): Receipt;
 }
 
 export type TrackChangesApi = TrackChangesAdapter;
@@ -52,18 +53,34 @@ export function executeTrackChangesGet(adapter: TrackChangesAdapter, input: Trac
   return adapter.get(input);
 }
 
-export function executeTrackChangesAccept(adapter: TrackChangesAdapter, input: TrackChangesAcceptInput): Receipt {
-  return adapter.accept(input);
+export function executeTrackChangesAccept(
+  adapter: TrackChangesAdapter,
+  input: TrackChangesAcceptInput,
+  options?: RevisionGuardOptions,
+): Receipt {
+  return adapter.accept(input, options);
 }
 
-export function executeTrackChangesReject(adapter: TrackChangesAdapter, input: TrackChangesRejectInput): Receipt {
-  return adapter.reject(input);
+export function executeTrackChangesReject(
+  adapter: TrackChangesAdapter,
+  input: TrackChangesRejectInput,
+  options?: RevisionGuardOptions,
+): Receipt {
+  return adapter.reject(input, options);
 }
 
-export function executeTrackChangesAcceptAll(adapter: TrackChangesAdapter, input: TrackChangesAcceptAllInput): Receipt {
-  return adapter.acceptAll(input);
+export function executeTrackChangesAcceptAll(
+  adapter: TrackChangesAdapter,
+  input: TrackChangesAcceptAllInput,
+  options?: RevisionGuardOptions,
+): Receipt {
+  return adapter.acceptAll(input, options);
 }
 
-export function executeTrackChangesRejectAll(adapter: TrackChangesAdapter, input: TrackChangesRejectAllInput): Receipt {
-  return adapter.rejectAll(input);
+export function executeTrackChangesRejectAll(
+  adapter: TrackChangesAdapter,
+  input: TrackChangesRejectAllInput,
+  options?: RevisionGuardOptions,
+): Receipt {
+  return adapter.rejectAll(input, options);
 }

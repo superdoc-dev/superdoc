@@ -11,7 +11,7 @@ export const BASELINES_PREFIX = 'baselines';
 export const DOCUMENTS_PREFIX = 'documents';
 
 const ACCOUNT_ID = 'afc2655a510195709ae6fa06772d73f2';
-const BUCKET = 'superdoc-visual-testing';
+const BUCKET = process.env.SD_VISUAL_TESTING_R2_BUCKET || 'superdoc-visual-testing';
 
 export interface R2Client {
   listObjects(prefix: string): Promise<string[]>;

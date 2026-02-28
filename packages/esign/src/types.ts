@@ -56,6 +56,14 @@ export interface SubmitConfig {
   component?: React.ComponentType<SubmitButtonProps>;
 }
 
+export interface PdfModuleConfig {
+  pdfLib: any;
+  workerSrc?: string;
+  setWorker?: boolean;
+  textLayer?: boolean;
+  outputScale?: number;
+}
+
 export interface LayoutMargins {
   top?: number;
   bottom?: number;
@@ -111,6 +119,13 @@ export interface SuperDocESignProps {
   onStateChange?: (state: SigningState) => void;
   onFieldChange?: (field: FieldChange) => void;
   onFieldsDiscovered?: (fields: FieldInfo[]) => void;
+
+  pdf?: PdfModuleConfig;
+
+  /** Telemetry configuration for SuperDoc */
+  telemetry?: { enabled: boolean; metadata?: Record<string, any> };
+  /** License key for SuperDoc */
+  licenseKey?: string;
 
   isDisabled?: boolean;
   className?: string;

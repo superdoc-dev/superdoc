@@ -36,6 +36,12 @@ function makeAdapters() {
           dryRun: { enabled: false },
         },
         operations: {} as DocumentApiCapabilities['operations'],
+        planEngine: {
+          supportedStepOps: [],
+          supportedNonUniformStrategies: [],
+          supportedSetMarks: [],
+          regex: { maxPatternLength: 1024, maxExecutionMs: 100 },
+        },
       }),
     ),
   };

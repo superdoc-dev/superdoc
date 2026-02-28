@@ -56,6 +56,16 @@ const GROUP_METADATA: Record<ReferenceGroupKey, { title: string; description: st
     description: 'Tracked-change inspection and review operations.',
     pagePath: 'track-changes/index.mdx',
   },
+  query: {
+    title: 'Query',
+    description: 'Deterministic selector-based queries for mutation targeting.',
+    pagePath: 'query/index.mdx',
+  },
+  mutations: {
+    title: 'Mutations',
+    description: 'Atomic mutation plan preview and execution.',
+    pagePath: 'mutations/index.mdx',
+  },
 };
 
 export const REFERENCE_OPERATION_GROUPS: readonly ReferenceOperationGroupDefinition[] = (

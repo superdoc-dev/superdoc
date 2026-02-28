@@ -230,7 +230,7 @@ function resolveBaselineCacheRoot(cacheRoot?: string): string {
 /**
  * Get the local root directory for a baseline prefix.
  *
- * @param prefix - Baseline prefix (e.g., 'baselines' or 'baselines-interactions')
+ * @param prefix - Baseline prefix (e.g., 'baselines')
  * @param cacheRoot - Optional custom cache root
  * @returns Local directory path for the baseline
  */

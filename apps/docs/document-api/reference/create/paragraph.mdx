@@ -24,6 +24,8 @@ description: Generated reference for create.paragraph
 - `COMMAND_UNAVAILABLE`
 - `TRACK_CHANGE_COMMAND_UNAVAILABLE`
 - `CAPABILITY_UNAVAILABLE`
+- `INVALID_TARGET`
+- `AMBIGUOUS_TARGET`
 
 ## Non-applied failure codes
 
@@ -63,9 +65,25 @@ description: Generated reference for create.paragraph
         },
         {
           "additionalProperties": false,
+          "oneOf": [
+            {
+              "required": [
+                "target"
+              ]
+            },
+            {
+              "required": [
+                "nodeId"
+              ]
+            }
+          ],
           "properties": {
             "kind": {
               "const": "before"
+            },
+            "nodeId": {
+              "description": "Node ID shorthand — adapter resolves to a full BlockNodeAddress.",
+              "type": "string"
             },
             "target": {
               "additionalProperties": false,
@@ -98,16 +116,31 @@ description: Generated reference for create.paragraph
             }
           },
           "required": [
-            "kind",
-            "target"
+            "kind"
           ],
           "type": "object"
         },
         {
           "additionalProperties": false,
+          "oneOf": [
+            {
+              "required": [
+                "target"
+              ]
+            },
+            {
+              "required": [
+                "nodeId"
+              ]
+            }
+          ],
           "properties": {
             "kind": {
               "const": "after"
+            },
+            "nodeId": {
+              "description": "Node ID shorthand — adapter resolves to a full BlockNodeAddress.",
+              "type": "string"
             },
             "target": {
               "additionalProperties": false,
@@ -140,8 +173,7 @@ description: Generated reference for create.paragraph
             }
           },
           "required": [
-            "kind",
-            "target"
+            "kind"
           ],
           "type": "object"
         }

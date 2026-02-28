@@ -2,6 +2,7 @@ import type { DocumentInfo, InfoInput, NodeInfo, NodeType, QueryResult } from '@
 import type { Editor } from '../core/Editor.js';
 import { findAdapter } from './find-adapter.js';
 import { getTextAdapter } from './get-text-adapter.js';
+import { getRevision } from './plan-engine/revision-tracker.js';
 
 type HeadingNodeInfo = Extract<NodeInfo, { nodeType: 'heading' }>;
 type CommentNodeInfo = Extract<NodeInfo, { nodeType: 'comment' }>;
@@ -104,5 +105,6 @@ export function infoAdapter(editor: Editor, _input: InfoInput): DocumentInfo {
       canComment: true,
       canReplace: true,
     },
+    revision: getRevision(editor),
   };
 }

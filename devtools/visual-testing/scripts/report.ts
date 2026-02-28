@@ -14,8 +14,8 @@ import type { ComparisonReport } from './compare.js';
 export interface HtmlReportOptions {
   /** Include passing results in the report (default: false, diffs only) */
   showAll?: boolean;
-  /** Report mode: 'visual' for document screenshots, 'interactions' for interaction stories */
-  mode?: 'visual' | 'interactions';
+  /** Report mode */
+  mode?: 'visual';
   /** Output filename (default: 'report.html') */
   reportFileName?: string;
   /** Prefix to trim from displayed paths */
@@ -75,7 +75,7 @@ export function writeHtmlReport(
   const showAll = options.showAll ?? false;
   const reportFileName = options.reportFileName ?? 'report.html';
   const trimPrefix = options.trimPrefix ?? '';
-  const reportTitle = mode === 'interactions' ? 'Interaction Diff Report' : 'Visual Diff Report';
+  const reportTitle = 'Visual Diff Report';
 
   const html = `<!doctype html>
 <html lang="en">
@@ -858,8 +858,6 @@ export function writeHtmlReport(
       const resultsFolderName = (report.resultsFolder || '').replace(/\\\\/g, '/');
       const resultsPrefix = resultsFolderName ? resultsFolderName + '/' : '';
       const trimPrefix = ${JSON.stringify(trimPrefix)};
-      const reportMode = ${JSON.stringify(mode)};
-      const isInteractions = reportMode === 'interactions';
       const reportQueryParams = new URLSearchParams(window.location.search);
       const wordBaselineServiceUrl =
         reportQueryParams.get('wordOverlayService') ||
@@ -868,12 +866,6 @@ export function writeHtmlReport(
       const WORD_OVERLAY_BLEND_MODES = ['difference', 'normal', 'multiply', 'screen', 'overlay'];
       const DEFAULT_WORD_OVERLAY_OPACITY = 0.45;
       const DEFAULT_WORD_OVERLAY_BLEND_MODE = 'difference';
-
-      function formatMilestoneLabel(baseName) {
-        const stripped = baseName.replace(/^\\d+[-_]?/, '');
-        const cleaned = stripped.replace(/[-_]+/g, ' ').trim();
-        return cleaned || baseName;
-      }
 
       function clampWordOverlayOpacity(value) {
         if (!Number.isFinite(value)) return DEFAULT_WORD_OVERLAY_OPACITY;
@@ -1284,14 +1276,7 @@ export function writeHtmlReport(
         }
 
         const reason = item.passed ? 'passed' : (item.reason || 'pixel_diff');
-        const interaction = item.interaction || null;
-        const storyName = interaction ? (interaction.storyName || '') : '';
-        const storyDescription = interaction ? (interaction.storyDescription || '') : '';
-        const milestoneDescription = interaction ? (interaction.milestoneDescription || '') : '';
-        const fallbackLabel = interaction && interaction.milestoneLabel
-          ? interaction.milestoneLabel
-          : (isInteractions ? formatMilestoneLabel(assetBaseName) : '');
-        const milestoneLabel = milestoneDescription || fallbackLabel;
+        const milestoneLabel = '';
 
         groupMap.get(displayDir).push({
           relPath: displayPath,
@@ -1305,9 +1290,6 @@ export function writeHtmlReport(
           word: item.word || null,
           sourceDoc: item.sourceDoc || null,
           milestoneLabel,
-          storyName,
-          storyDescription,
-          milestoneDescription,
         });
       });
 
@@ -1495,14 +1477,6 @@ export function writeHtmlReport(
         title.textContent = dir === '.' ? '(root)' : dir;
         titleWrap.appendChild(title);
 
-        const storyDescription = items.find((item) => item.storyDescription)?.storyDescription;
-        if (storyDescription) {
-          const desc = document.createElement('div');
-          desc.className = 'group-description';
-          desc.textContent = storyDescription;
-          titleWrap.appendChild(desc);
-        }
-
         const count = document.createElement('div');
         count.className = 'group-count';
         if (showAll) {
@@ -1516,46 +1490,44 @@ export function writeHtmlReport(
         actionWrap.className = 'summary-actions';
         let wordOverlayController = null;
 
-        if (!isInteractions) {
-          const wordBtn = document.createElement('button');
-          wordBtn.type = 'button';
-          wordBtn.className = 'word-btn';
-          wordBtn.textContent = 'Open in Word';
+        const wordBtn = document.createElement('button');
+        wordBtn.type = 'button';
+        wordBtn.className = 'word-btn';
+        wordBtn.textContent = 'Open in Word';
 
-          if (sourceDoc && sourceDoc.wordUrl) {
-            wordBtn.dataset.wordUrl = sourceDoc.wordUrl;
-            wordBtn.title = sourceDoc.relativePath
-              ? 'Open ' + sourceDoc.relativePath + ' in Word'
-              : 'Open in Word';
-          } else {
-            wordBtn.disabled = true;
-            wordBtn.title =
-              sourceDoc && sourceDoc.localPath
-                ? 'Open in Word is available on macOS only.'
-                : 'Doc not available locally.';
-          }
-
-          actionWrap.appendChild(wordBtn);
-
-          const copyPathBtn = document.createElement('button');
-          copyPathBtn.type = 'button';
-          copyPathBtn.className = 'copy-path-btn';
-          copyPathBtn.textContent = 'Copy doc path';
-          copyPathBtn.dataset.defaultText = 'Copy doc path';
-          const copyDocPath =
-            (sourceDoc && sourceDoc.originalLocalPath) || (sourceDoc && sourceDoc.localPath) || '';
-          if (copyDocPath) {
-            copyPathBtn.dataset.docPath = copyDocPath;
-            copyPathBtn.title = 'Copy full local path to clipboard';
-          } else {
-            copyPathBtn.disabled = true;
-            copyPathBtn.title = 'Doc path not available locally.';
-          }
-          actionWrap.appendChild(copyPathBtn);
-
-          wordOverlayController = createWordOverlayController(sourceDoc);
-          actionWrap.appendChild(wordOverlayController.button);
+        if (sourceDoc && sourceDoc.wordUrl) {
+          wordBtn.dataset.wordUrl = sourceDoc.wordUrl;
+          wordBtn.title = sourceDoc.relativePath
+            ? 'Open ' + sourceDoc.relativePath + ' in Word'
+            : 'Open in Word';
+        } else {
+          wordBtn.disabled = true;
+          wordBtn.title =
+            sourceDoc && sourceDoc.localPath
+              ? 'Open in Word is available on macOS only.'
+              : 'Doc not available locally.';
         }
+
+        actionWrap.appendChild(wordBtn);
+
+        const copyPathBtn = document.createElement('button');
+        copyPathBtn.type = 'button';
+        copyPathBtn.className = 'copy-path-btn';
+        copyPathBtn.textContent = 'Copy doc path';
+        copyPathBtn.dataset.defaultText = 'Copy doc path';
+        const copyDocPath =
+          (sourceDoc && sourceDoc.originalLocalPath) || (sourceDoc && sourceDoc.localPath) || '';
+        if (copyDocPath) {
+          copyPathBtn.dataset.docPath = copyDocPath;
+          copyPathBtn.title = 'Copy full local path to clipboard';
+        } else {
+          copyPathBtn.disabled = true;
+          copyPathBtn.title = 'Doc path not available locally.';
+        }
+        actionWrap.appendChild(copyPathBtn);
+
+        wordOverlayController = createWordOverlayController(sourceDoc);
+        actionWrap.appendChild(wordOverlayController.button);
 
         const approveBtn = document.createElement('button');
         approveBtn.type = 'button';

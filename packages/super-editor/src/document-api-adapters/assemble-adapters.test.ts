@@ -8,6 +8,7 @@ function makeEditor(): Editor {
     commands: {},
     schema: { marks: {} },
     options: {},
+    on: () => {},
   } as unknown as Editor;
 }
 

@@ -361,6 +361,67 @@ const superdoc = new SuperDoc({
 
 </ParamField>
 
+### `getZoom`
+
+Get the current zoom level as a percentage.
+
+**Returns:** `number` - Current zoom level (e.g., `100`, `150`, `200`). Defaults to `100`.
+
+<CodeGroup>
+
+```javascript Usage
+const zoom = superdoc.getZoom();
+```
+
+```javascript Full Example
+import { SuperDoc } from 'superdoc';
+import 'superdoc/style.css';
+
+const superdoc = new SuperDoc({
+  selector: '#editor',
+  document: yourFile,
+  onReady: (superdoc) => {
+    const zoom = superdoc.getZoom();
+    console.log(`Current zoom: ${zoom}%`);
+  },
+});
+```
+
+</CodeGroup>
+
+### `setZoom`
+
+Set the zoom level for all documents. Propagates to all presentation editors, PDF viewers, and whiteboard layers.
+
+<ParamField path="percent" type="number" required>
+  Zoom level as a percentage (e.g., `100`, `150`, `200`). Must be a positive finite number.
+</ParamField>
+
+<CodeGroup>
+
+```javascript Usage
+superdoc.setZoom(150);
+```
+
+```javascript Full Example
+import { SuperDoc } from 'superdoc';
+import 'superdoc/style.css';
+
+const superdoc = new SuperDoc({
+  selector: '#editor',
+  document: yourFile,
+  onReady: (superdoc) => {
+    superdoc.setZoom(150);
+
+    superdoc.on('zoomChange', ({ zoom }) => {
+      console.log(`Zoom changed to ${zoom}%`);
+    });
+  },
+});
+```
+
+</CodeGroup>
+
 ### `focus`
 
 Focus the active editor or first available.

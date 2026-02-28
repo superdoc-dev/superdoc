@@ -12,7 +12,7 @@
  * - measuring/dom/src/index.ts (full typography measurement)
  */
 
-import { LIST_MARKER_GAP, SPACE_SUFFIX_GAP_PX } from './layout-constants.js';
+import { LIST_MARKER_GAP, SPACE_SUFFIX_GAP_PX, DEFAULT_TAB_INTERVAL_PX } from './layout-constants.js';
 
 /**
  * Minimal marker run formatting information for text measurement.
@@ -326,6 +326,24 @@ export function resolveListTextStartPx(
       : LIST_MARKER_GAP;
   const currentPosStandard = markerStartPos + markerWidthEffective;
 
+  // Check for explicit tab stops past the marker position.
+  // The renderer uses these to position the tab after the list marker, so the measurer
+  // must also account for them to avoid a width mismatch that causes extreme negative word-spacing.
+  let explicitTabStop: number | undefined;
+  if (Array.isArray(wordLayout?.tabsPx)) {
+    for (const tab of wordLayout.tabsPx) {
+      if (typeof tab === 'number' && tab > currentPosStandard) {
+        explicitTabStop = tab;
+        break;
+      }
+    }
+  }
+
+  if (explicitTabStop !== undefined) {
+    // Use the explicit tab stop — this matches the renderer's computeTabWidth() behavior
+    return explicitTabStop;
+  }
+
   if (textStartTarget !== undefined) {
     const gap = Math.max(textStartTarget - currentPosStandard, gutterWidth);
     return currentPosStandard + gap;
@@ -334,12 +352,15 @@ export function resolveListTextStartPx(
   const textStart = indentLeft + firstLine;
   let tabWidth = textStart - currentPosStandard;
 
-  // Hanging-overflow safeguard: marker overruns the hanging space, use minimum gutter gap
+  // Hanging-overflow safeguard: marker overruns the hanging space.
+  // Advance to the next default tab stop, matching the renderer's computeTabWidth() behavior.
+  // The renderer advances to the next 48px-aligned position when no explicit tab stop
+  // is found past the marker. Using LIST_MARKER_GAP instead would create a measurer/renderer
+  // width mismatch that causes incorrect negative word-spacing on justified lines.
   if (tabWidth <= 0) {
-    tabWidth = gutterWidth;
-  } else if (tabWidth < LIST_MARKER_GAP) {
-    // Enforce minimum gap (use gutter if larger)
-    tabWidth = Math.max(tabWidth, gutterWidth);
+    const nextDefaultTab =
+      currentPosStandard + DEFAULT_TAB_INTERVAL_PX - (currentPosStandard % DEFAULT_TAB_INTERVAL_PX);
+    tabWidth = nextDefaultTab - currentPosStandard;
   }
 
   return currentPosStandard + tabWidth;

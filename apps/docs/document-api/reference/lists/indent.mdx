@@ -24,6 +24,7 @@ description: Generated reference for lists.indent
 - `COMMAND_UNAVAILABLE`
 - `TRACK_CHANGE_COMMAND_UNAVAILABLE`
 - `CAPABILITY_UNAVAILABLE`
+- `INVALID_TARGET`
 
 ## Non-applied failure codes
 
@@ -35,7 +36,23 @@ description: Generated reference for lists.indent
 ```json
 {
   "additionalProperties": false,
+  "oneOf": [
+    {
+      "required": [
+        "target"
+      ]
+    },
+    {
+      "required": [
+        "nodeId"
+      ]
+    }
+  ],
   "properties": {
+    "nodeId": {
+      "description": "Node ID shorthand — adapter resolves to a ListItemAddress.",
+      "type": "string"
+    },
     "target": {
       "additionalProperties": false,
       "properties": {
@@ -57,9 +74,6 @@ description: Generated reference for lists.indent
       "type": "object"
     }
   },
-  "required": [
-    "target"
-  ],
   "type": "object"
 }
 ```

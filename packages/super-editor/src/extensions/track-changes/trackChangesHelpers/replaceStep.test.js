@@ -5,6 +5,7 @@ import { trackedTransaction, documentHelpers } from './index.js';
 import { TrackInsertMarkName, TrackDeleteMarkName } from '../constants.js';
 import { TrackChangesBasePluginKey } from '../plugins/trackChangesBasePlugin.js';
 import { initTestEditor } from '@tests/helpers/helpers.js';
+import { findTextPos } from './testUtils.js';
 
 describe('trackChangesHelpers replaceStep', () => {
   let editor;
@@ -32,15 +33,25 @@ describe('trackChangesHelpers replaceStep', () => {
       plugins: basePlugins,
     });
 
-  const findTextPos = (docNode, exactText) => {
-    let found = null;
-    docNode.descendants((node, pos) => {
-      if (found) return false;
-      if (!node.isText) return;
-      if (node.text !== exactText) return;
-      found = pos;
+  const getParagraphRange = (docNode, index) => {
+    let range = null;
+    docNode.forEach((node, offset, childIndex) => {
+      if (childIndex !== index) return;
+      range = { from: offset + 1, to: offset + node.nodeSize - 1 };
     });
-    return found;
+    return range;
+  };
+
+  const getTrackedTextById = (docNode, id, markName) => {
+    let text = '';
+    docNode.descendants((node) => {
+      if (!node.isText) return;
+      const hasMark = node.marks.some((mark) => mark.type.name === markName && mark.attrs.id === id);
+      if (hasMark) {
+        text += node.text;
+      }
+    });
+    return text;
   };
 
   it('types characters in correct order after fully deleting content (SD-1624)', () => {
@@ -492,5 +503,130 @@ describe('trackChangesHelpers replaceStep', () => {
     expect(inlineNodes.some(({ node }) => node.marks.some((mark) => mark.type.name === TrackDeleteMarkName))).toBe(
       true,
     );
+  });
+
+  it('supersedes tracked changes across multiple paragraphs with one replacement ID', () => {
+    const line1 = 'Line one base';
+    const line2 = 'Line two base';
+    const tail = 'Tail line';
+
+    const doc = schema.nodes.doc.create({}, [
+      schema.nodes.paragraph.create({}, schema.nodes.run.create({}, [schema.text(line1)])),
+      schema.nodes.paragraph.create({}, schema.nodes.run.create({}, [schema.text(line2)])),
+      schema.nodes.paragraph.create({}, schema.nodes.run.create({}, [schema.text(tail)])),
+    ]);
+    let state = createState(doc);
+
+    const applyTrackedReplace = ({ from, to, text }) => {
+      let tr = state.tr.replaceWith(from, to, schema.text(text));
+      tr.setSelection(TextSelection.create(tr.doc, from + text.length));
+      tr.setMeta('inputType', 'insertText');
+      const tracked = trackedTransaction({ tr, state, user });
+      state = state.apply(tracked);
+    };
+
+    const line1Pos = findTextPos(state.doc, line1);
+    expect(line1Pos).toBeTypeOf('number');
+    applyTrackedReplace({ from: line1Pos, to: line1Pos + line1.length, text: 'Line one change' });
+
+    const line2Pos = findTextPos(state.doc, line2);
+    expect(line2Pos).toBeTypeOf('number');
+    applyTrackedReplace({ from: line2Pos, to: line2Pos + line2.length, text: 'Line two change' });
+
+    const para1 = getParagraphRange(state.doc, 0);
+    const para2 = getParagraphRange(state.doc, 1);
+    expect(para1).toBeTruthy();
+    expect(para2).toBeTruthy();
+
+    state = state.apply(state.tr.setSelection(TextSelection.create(state.doc, para1.from, para2.to)));
+    let tr = state.tr.replaceWith(para1.from, para2.to, schema.text('Merged suggestion'));
+    tr.setSelection(TextSelection.create(tr.doc, tr.selection.from));
+    tr.setMeta('inputType', 'insertText');
+
+    const tracked = trackedTransaction({ tr, state, user });
+    const meta = tracked.getMeta(TrackChangesBasePluginKey);
+    const finalState = state.apply(tracked);
+
+    expect(meta?.insertedMark).toBeDefined();
+    expect(meta?.deletionMark).toBeDefined();
+    expect(meta.insertedMark.attrs.id).toBe(meta.deletionMark.attrs.id);
+
+    const replacementId = meta.insertedMark.attrs.id;
+    const insertedText = getTrackedTextById(finalState.doc, replacementId, TrackInsertMarkName);
+    const deletedText = getTrackedTextById(finalState.doc, replacementId, TrackDeleteMarkName);
+    expect(insertedText).toContain('Merged suggestion');
+    expect(deletedText).toContain(line1);
+    expect(deletedText).toContain(line2);
+    expect(deletedText).not.toContain('Line one change');
+    expect(deletedText).not.toContain('Line two change');
+
+    const insertIds = new Set();
+    finalState.doc.descendants((node) => {
+      if (!node.isText) return;
+      node.marks.forEach((mark) => {
+        if (mark.type.name === TrackInsertMarkName) {
+          insertIds.add(mark.attrs.id);
+        }
+      });
+    });
+    expect(insertIds.size).toBe(1);
+  });
+
+  it('keeps caret stable after superseding multi-paragraph tracked changes', () => {
+    const line1 = 'Alpha base';
+    const line2 = 'Beta base';
+    const tail = 'Tail text';
+
+    const doc = schema.nodes.doc.create({}, [
+      schema.nodes.paragraph.create({}, schema.nodes.run.create({}, [schema.text(line1)])),
+      schema.nodes.paragraph.create({}, schema.nodes.run.create({}, [schema.text(line2)])),
+      schema.nodes.paragraph.create({}, schema.nodes.run.create({}, [schema.text(tail)])),
+    ]);
+    let state = createState(doc);
+
+    const applyTrackedReplace = ({ from, to, text }) => {
+      let tr = state.tr.replaceWith(from, to, schema.text(text));
+      tr.setSelection(TextSelection.create(tr.doc, from + text.length));
+      tr.setMeta('inputType', 'insertText');
+      const tracked = trackedTransaction({ tr, state, user });
+      state = state.apply(tracked);
+    };
+
+    const line1Pos = findTextPos(state.doc, line1);
+    applyTrackedReplace({ from: line1Pos, to: line1Pos + line1.length, text: 'Alpha change' });
+
+    const line2Pos = findTextPos(state.doc, line2);
+    applyTrackedReplace({ from: line2Pos, to: line2Pos + line2.length, text: 'Beta change' });
+
+    const para1 = getParagraphRange(state.doc, 0);
+    const para2 = getParagraphRange(state.doc, 1);
+    state = state.apply(state.tr.setSelection(TextSelection.create(state.doc, para1.from, para2.to)));
+    let tr = state.tr.replaceWith(para1.from, para2.to, schema.text('Merged'));
+    tr.setSelection(TextSelection.create(tr.doc, tr.selection.from));
+    tr.setMeta('inputType', 'insertText');
+    state = state.apply(trackedTransaction({ tr, state, user }));
+
+    ['X', 'Y', 'Z'].forEach((char) => {
+      const prevSelection = state.selection.from;
+      let typingTr = state.tr.replaceWith(state.selection.from, state.selection.from, schema.text(char));
+      typingTr.setSelection(TextSelection.create(typingTr.doc, typingTr.selection.from));
+      typingTr.setMeta('inputType', 'insertText');
+      state = state.apply(trackedTransaction({ tr: typingTr, state, user }));
+
+      expect(state.selection.from).toBe(prevSelection + 1);
+      const tailPos = findTextPos(state.doc, tail);
+      expect(tailPos).toBeTypeOf('number');
+      expect(state.selection.from).toBeLessThanOrEqual(tailPos);
+    });
+
+    const insertedText = [];
+    state.doc.descendants((node) => {
+      if (!node.isText) return;
+      if (node.marks.some((mark) => mark.type.name === TrackInsertMarkName)) {
+        insertedText.push(node.text);
+      }
+    });
+
+    expect(insertedText.join('')).toContain('MergedXYZ');
   });
 });

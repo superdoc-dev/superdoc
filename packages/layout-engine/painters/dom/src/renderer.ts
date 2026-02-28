@@ -1932,6 +1932,21 @@ export class DomPainter {
     this.renderDecorationSection(pageEl, page, pageIndex, 'footer');
   }
 
+  private isPageRelativeVerticalAnchorFragment(fragment: Fragment): boolean {
+    if (fragment.kind !== 'image' && fragment.kind !== 'drawing') {
+      return false;
+    }
+    const lookup = this.blockLookup.get(fragment.blockId);
+    if (!lookup) {
+      return false;
+    }
+    const block = lookup.block;
+    if (block.kind !== 'image' && block.kind !== 'drawing') {
+      return false;
+    }
+    return block.anchor?.vRelativeFrom === 'page';
+  }
+
   private renderDecorationSection(pageEl: HTMLElement, page: Page, pageIndex: number, kind: 'header' | 'footer'): void {
     if (!this.doc) return;
     const provider = kind === 'header' ? this.headerProvider : this.footerProvider;
@@ -2041,8 +2056,12 @@ export class DomPainter {
     // which also has z-index values but comes later in DOM order.
     behindDocFragments.forEach((fragment) => {
       const fragEl = this.renderFragment(fragment, context);
-      // Adjust position: fragment.y is relative to header container, we need page-relative
-      const pageY = effectiveOffset + fragment.y + (kind === 'footer' ? footerYOffset : 0);
+      const isPageRelativeVertical = this.isPageRelativeVerticalAnchorFragment(fragment);
+      // Page-relative anchors already carry absolute page Y coordinates. Adding decoration
+      // container offsets would shift them twice and can push header art into body content.
+      const pageY = isPageRelativeVertical
+        ? fragment.y
+        : effectiveOffset + fragment.y + (kind === 'footer' ? footerYOffset : 0);
       fragEl.style.top = `${pageY}px`;
       fragEl.style.left = `${marginLeft + fragment.x}px`;
       fragEl.style.zIndex = '0'; // Same level as page, but inserted first so renders behind
@@ -2054,8 +2073,14 @@ export class DomPainter {
     // Render normal fragments in the header/footer container
     normalFragments.forEach((fragment) => {
       const fragEl = this.renderFragment(fragment, context);
+      const isPageRelativeVertical = this.isPageRelativeVerticalAnchorFragment(fragment);
+      if (isPageRelativeVertical) {
+        // Convert absolute page Y back to decoration-container local coordinates.
+        // Container top is applied separately, so we subtract it here to avoid a second offset.
+        fragEl.style.top = `${fragment.y - effectiveOffset}px`;
+      }
       // Apply footer offset to push content to bottom
-      if (footerYOffset > 0) {
+      if (footerYOffset > 0 && !isPageRelativeVertical) {
         const currentTop = parseFloat(fragEl.style.top) || fragment.y;
         fragEl.style.top = `${currentTop + footerYOffset}px`;
       }
@@ -3397,6 +3422,9 @@ export class DomPainter {
           if (part.formatting.fontSize) {
             span.style.fontSize = `${part.formatting.fontSize}px`;
           }
+          if (part.formatting.letterSpacing != null) {
+            span.style.letterSpacing = `${part.formatting.letterSpacing}px`;
+          }
         }
         currentParagraph.appendChild(span);
       }
@@ -4019,7 +4047,7 @@ export class DomPainter {
     const descId = `link-desc-${linkId}`;
     const descElem = this.doc.createElement('span');
     descElem.id = descId;
-    descElem.className = 'sr-only'; // Screen reader only class
+    descElem.className = 'superdoc-sr-only'; // Screen reader only class
     descElem.textContent = tooltip;
 
     // Insert description element after the link

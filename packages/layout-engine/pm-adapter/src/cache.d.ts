@@ -41,8 +41,14 @@ export declare class FlowBlockCache {
   begin(): void;
 
   /**
+   * Signal that external changes (e.g. Y.js collaboration) may have modified
+   * document content without updating sdBlockRev.
+   */
+  setHasExternalChanges(value: boolean): void;
+
+  /**
    * Look up cached blocks for a paragraph by its stable ID.
-   * Returns the cached entry only if the node content matches (via JSON comparison).
+   * Returns the cached entry only if the node content matches.
    *
    * @param id - Stable paragraph ID (sdBlockId or paraId)
    * @param node - Current PM node (JSON object) to compare against cached version

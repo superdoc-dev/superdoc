@@ -47,13 +47,17 @@ export interface ListsListResult {
 }
 
 export interface ListInsertInput {
-  target: ListItemAddress;
+  target?: ListItemAddress;
+  /** Node ID shorthand — resolves to a ListItemAddress by the adapter. */
+  nodeId?: string;
   position: ListInsertPosition;
   text?: string;
 }
 
 export interface ListTargetInput {
-  target: ListItemAddress;
+  target?: ListItemAddress;
+  /** Node ID shorthand — resolves to a ListItemAddress by the adapter. */
+  nodeId?: string;
 }
 
 export interface ListSetTypeInput extends ListTargetInput {

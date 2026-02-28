@@ -250,7 +250,8 @@ describe('measureBlock', () => {
       const measure = expectParagraphMeasure(await measureBlock(block, maxWidth));
       // Standard mode resolution is governed by resolveListTextStartPx (Step 8),
       // which computes text start from indent/marker geometry when textStartPx is absent.
-      expect(measure.lines[0].maxWidth).toBe(120);
+      // Marker overflows hanging space, so advances to next default tab stop (96px).
+      expect(measure.lines[0].maxWidth).toBe(104);
     });
 
     it('prefers shared resolved text start over top-level textStartPx when both exist', async () => {

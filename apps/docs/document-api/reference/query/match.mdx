@@ -1,0 +1,443 @@
+---
+title: query.match
+sidebarTitle: query.match
+description: Generated reference for query.match
+---
+
+{/* GENERATED FILE: DO NOT EDIT. Regenerate via `pnpm run docapi:sync`. */}
+
+> Alpha: Document API is currently alpha and subject to breaking changes.
+
+## Summary
+
+- Operation ID: `query.match`
+- API member path: `editor.doc.query.match(...)`
+- Mutates document: `no`
+- Idempotency: `idempotent`
+- Supports tracked mode: `no`
+- Supports dry run: `no`
+- Deterministic target resolution: `yes`
+
+## Pre-apply throws
+
+- `MATCH_NOT_FOUND`
+- `AMBIGUOUS_MATCH`
+- `INVALID_INPUT`
+
+## Non-applied failure codes
+
+- None
+
+## Input schema
+
+```json
+{
+  "additionalProperties": false,
+  "properties": {
+    "includeNodes": {
+      "type": "boolean"
+    },
+    "includeStyle": {
+      "type": "boolean"
+    },
+    "limit": {
+      "minimum": 1,
+      "type": "integer"
+    },
+    "offset": {
+      "minimum": 0,
+      "type": "integer"
+    },
+    "require": {
+      "enum": [
+        "any",
+        "first",
+        "exactlyOne",
+        "all"
+      ]
+    },
+    "select": {
+      "oneOf": [
+        {
+          "additionalProperties": false,
+          "properties": {
+            "caseSensitive": {
+              "type": "boolean"
+            },
+            "mode": {
+              "enum": [
+                "contains",
+                "regex"
+              ]
+            },
+            "pattern": {
+              "type": "string"
+            },
+            "type": {
+              "const": "text"
+            }
+          },
+          "required": [
+            "type",
+            "pattern"
+          ],
+          "type": "object"
+        },
+        {
+          "additionalProperties": false,
+          "properties": {
+            "kind": {
+              "enum": [
+                "block",
+                "inline"
+              ]
+            },
+            "nodeType": {
+              "enum": [
+                "paragraph",
+                "heading",
+                "listItem",
+                "table",
+                "tableRow",
+                "tableCell",
+                "image",
+                "sdt",
+                "run",
+                "bookmark",
+                "comment",
+                "hyperlink",
+                "footnoteRef",
+                "tab",
+                "lineBreak"
+              ]
+            },
+            "type": {
+              "const": "node"
+            }
+          },
+          "required": [
+            "type"
+          ],
+          "type": "object"
+        }
+      ]
+    },
+    "within": {
+      "oneOf": [
+        {
+          "additionalProperties": false,
+          "properties": {
+            "kind": {
+              "const": "block"
+            },
+            "nodeId": {
+              "type": "string"
+            },
+            "nodeType": {
+              "enum": [
+                "paragraph",
+                "heading",
+                "listItem",
+                "table",
+                "tableRow",
+                "tableCell",
+                "image",
+                "sdt"
+              ]
+            }
+          },
+          "required": [
+            "kind",
+            "nodeType",
+            "nodeId"
+          ],
+          "type": "object"
+        },
+        {
+          "additionalProperties": false,
+          "properties": {
+            "anchor": {
+              "additionalProperties": false,
+              "properties": {
+                "end": {
+                  "additionalProperties": false,
+                  "properties": {
+                    "blockId": {
+                      "type": "string"
+                    },
+                    "offset": {
+                      "type": "integer"
+                    }
+                  },
+                  "required": [
+                    "blockId",
+                    "offset"
+                  ],
+                  "type": "object"
+                },
+                "start": {
+                  "additionalProperties": false,
+                  "properties": {
+                    "blockId": {
+                      "type": "string"
+                    },
+                    "offset": {
+                      "type": "integer"
+                    }
+                  },
+                  "required": [
+                    "blockId",
+                    "offset"
+                  ],
+                  "type": "object"
+                }
+              },
+              "required": [
+                "start",
+                "end"
+              ],
+              "type": "object"
+            },
+            "kind": {
+              "const": "inline"
+            },
+            "nodeType": {
+              "enum": [
+                "run",
+                "bookmark",
+                "comment",
+                "hyperlink",
+                "sdt",
+                "image",
+                "footnoteRef",
+                "tab",
+                "lineBreak"
+              ]
+            }
+          },
+          "required": [
+            "kind",
+            "nodeType",
+            "anchor"
+          ],
+          "type": "object"
+        }
+      ]
+    }
+  },
+  "required": [
+    "select"
+  ],
+  "type": "object"
+}
+```
+
+## Output schema
+
+```json
+{
+  "additionalProperties": false,
+  "properties": {
+    "evaluatedRevision": {
+      "type": "string"
+    },
+    "matches": {
+      "items": {
+        "additionalProperties": false,
+        "properties": {
+          "address": {
+            "oneOf": [
+              {
+                "additionalProperties": false,
+                "properties": {
+                  "kind": {
+                    "const": "block"
+                  },
+                  "nodeId": {
+                    "type": "string"
+                  },
+                  "nodeType": {
+                    "enum": [
+                      "paragraph",
+                      "heading",
+                      "listItem",
+                      "table",
+                      "tableRow",
+                      "tableCell",
+                      "image",
+                      "sdt"
+                    ]
+                  }
+                },
+                "required": [
+                  "kind",
+                  "nodeType",
+                  "nodeId"
+                ],
+                "type": "object"
+              },
+              {
+                "additionalProperties": false,
+                "properties": {
+                  "anchor": {
+                    "additionalProperties": false,
+                    "properties": {
+                      "end": {
+                        "additionalProperties": false,
+                        "properties": {
+                          "blockId": {
+                            "type": "string"
+                          },
+                          "offset": {
+                            "type": "integer"
+                          }
+                        },
+                        "required": [
+                          "blockId",
+                          "offset"
+                        ],
+                        "type": "object"
+                      },
+                      "start": {
+                        "additionalProperties": false,
+                        "properties": {
+                          "blockId": {
+                            "type": "string"
+                          },
+                          "offset": {
+                            "type": "integer"
+                          }
+                        },
+                        "required": [
+                          "blockId",
+                          "offset"
+                        ],
+                        "type": "object"
+                      }
+                    },
+                    "required": [
+                      "start",
+                      "end"
+                    ],
+                    "type": "object"
+                  },
+                  "kind": {
+                    "const": "inline"
+                  },
+                  "nodeType": {
+                    "enum": [
+                      "run",
+                      "bookmark",
+                      "comment",
+                      "hyperlink",
+                      "sdt",
+                      "image",
+                      "footnoteRef",
+                      "tab",
+                      "lineBreak"
+                    ]
+                  }
+                },
+                "required": [
+                  "kind",
+                  "nodeType",
+                  "anchor"
+                ],
+                "type": "object"
+              }
+            ]
+          },
+          "ref": {
+            "type": "string"
+          },
+          "refStability": {
+            "enum": [
+              "ephemeral",
+              "stable"
+            ]
+          },
+          "style": {
+            "additionalProperties": false,
+            "properties": {
+              "isUniform": {
+                "type": "boolean"
+              },
+              "marks": {
+                "additionalProperties": false,
+                "properties": {
+                  "bold": {
+                    "type": "boolean"
+                  },
+                  "italic": {
+                    "type": "boolean"
+                  },
+                  "strike": {
+                    "type": "boolean"
+                  },
+                  "underline": {
+                    "type": "boolean"
+                  }
+                },
+                "type": "object"
+              }
+            },
+            "required": [
+              "marks",
+              "isUniform"
+            ],
+            "type": "object"
+          },
+          "textRanges": {
+            "items": {
+              "additionalProperties": false,
+              "properties": {
+                "blockId": {
+                  "type": "string"
+                },
+                "kind": {
+                  "const": "text"
+                },
+                "range": {
+                  "additionalProperties": false,
+                  "properties": {
+                    "end": {
+                      "type": "integer"
+                    },
+                    "start": {
+                      "type": "integer"
+                    }
+                  },
+                  "required": [
+                    "start",
+                    "end"
+                  ],
+                  "type": "object"
+                }
+              },
+              "required": [
+                "kind",
+                "blockId",
+                "range"
+              ],
+              "type": "object"
+            },
+            "type": "array"
+          }
+        },
+        "type": "object"
+      },
+      "type": "array"
+    },
+    "totalMatches": {
+      "minimum": 0,
+      "type": "integer"
+    }
+  },
+  "required": [
+    "evaluatedRevision",
+    "matches",
+    "totalMatches"
+  ],
+  "type": "object"
+}
+```

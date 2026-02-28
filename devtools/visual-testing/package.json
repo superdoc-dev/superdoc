@@ -14,13 +14,10 @@
     "superdoc:version": "node -p \"require('./packages/harness/node_modules/superdoc/package.json').version\"",
     "generate": "tsx --import dotenv/config scripts/generate-all.ts",
     "generate:visual": "tsx --import dotenv/config scripts/generate-refs.ts",
-    "generate:interactions": "tsx --import dotenv/config scripts/generate-interactions.ts",
     "baseline": "tsx --import dotenv/config scripts/baseline-all.ts",
     "baseline:visual": "tsx --import dotenv/config scripts/baseline-visual.ts",
-    "baseline:interactions": "tsx --import dotenv/config scripts/baseline-interactions.ts",
     "compare": "tsx --import dotenv/config scripts/compare-all.ts",
     "compare:visual": "tsx --import dotenv/config scripts/compare.ts",
-    "compare:interactions": "tsx --import dotenv/config scripts/compare-interactions.ts",
     "upload-corpus": "tsx --import dotenv/config scripts/upload-corpus.ts",
     "get-corpus": "tsx --import dotenv/config scripts/get-corpus.ts",
     "get-docx": "tsx --import dotenv/config scripts/get-docx.ts",
@@ -28,7 +25,7 @@
     "r2:upload": "wrangler r2 object put",
     "r2:sync-registry": "bash scripts/r2-sync-registry.sh",
     "filters": "tsx scripts/list-filters.ts",
-    "clear:all": "read -p 'This will delete all baselines, screenshots, and results. Are you sure? (y/N) ' confirm && [ \"$confirm\" = 'y' ] && rm -rf baselines baselines-interactions screenshots results && echo 'Cleared!' || echo 'Aborted.'",
+    "clear:all": "read -p 'This will delete all baselines, screenshots, and results. Are you sure? (y/N) ' confirm && [ \"$confirm\" = 'y' ] && rm -rf baselines screenshots results && echo 'Cleared!' || echo 'Aborted.'",
     "test": "vitest",
     "test:run": "vitest run",
     "test:coverage": "vitest run --coverage"
@@ -49,7 +46,6 @@
   },
   "dependencies": {
     "@aws-sdk/client-s3": "^3.500.0",
-    "@superdoc-testing/helpers": "workspace:*",
     "dotenv": "^17.2.4",
     "kleur": "^4.1.5"
   }

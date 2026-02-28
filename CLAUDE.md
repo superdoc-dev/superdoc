@@ -109,3 +109,21 @@ Many packages use `.js` files with JSDoc `@typedef` for type definitions (e.g., 
 - `pnpm build` - Build all packages
 - `pnpm test` - Run tests
 - `pnpm dev` - Start dev server (from examples/)
+- `pnpm run generate:all` - Generate all derived artifacts (schemas, SDK clients, tool catalogs, reference docs)
+
+## Generated Artifacts
+
+These directories are produced by `pnpm run generate:all`:
+
+| Directory | In git? | What it contains |
+|-----------|---------|-----------------|
+| `packages/document-api/generated/` | No (gitignored) | Agent tool schemas, JSON schemas, manifest |
+| `apps/cli/generated/` | No (gitignored) | SDK contract JSON exported from CLI metadata |
+| `packages/sdk/langs/node/src/generated/` | No (gitignored) | Node SDK generated client code |
+| `packages/sdk/langs/python/superdoc/generated/` | No (gitignored) | Python SDK generated client code |
+| `packages/sdk/tools/*.json` | No (gitignored) | Tool catalogs for all providers (catalog.json, tools.openai.json, etc.) |
+| `apps/docs/document-api/reference/` | Yes (Mintlify deploys from git) | Reference doc pages generated from contract |
+
+After a fresh clone, run `pnpm run generate:all` before working on SDK, CLI, or doc-api code.
+
+Note: `packages/sdk/tools/__init__.py` is a manual file (Python package marker) and stays committed.

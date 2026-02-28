@@ -458,16 +458,20 @@ export const Search = Extension.create({
           if (dispatch) dispatch(tr);
 
           const presentationEditor = editor.presentationEditor;
-          const scrollFn = presentationEditor?.scrollToPositionAsync ?? presentationEditor?.scrollToPosition;
-          if (typeof scrollFn === 'function') {
-            // Fire-and-forget: async version handles virtualized pages, sync is fallback
-            scrollFn.call(presentationEditor, from, { block: 'center' });
-            return true;
-          }
+          // Try sync scroll first — returns true when the page is mounted and in body mode.
+          const scrolled = presentationEditor?.scrollToPosition?.(from, { block: 'center' }) ?? false;
 
-          const { node } = editor.view.domAtPos(from);
-          if (node?.scrollIntoView) {
-            node.scrollIntoView({ block: 'center', inline: 'nearest' });
+          if (!scrolled) {
+            // Async version handles virtualized (un-mounted) pages; fire-and-forget
+            // because it will scroll once the target page mounts.
+            Promise.resolve(presentationEditor?.scrollToPositionAsync?.(from, { block: 'center' })).catch(() => {});
+
+            // DOM fallback for non-presentation contexts or when presentation
+            // scroll cannot run (e.g. header/footer mode, no layout).
+            const { node } = editor.view.domAtPos(from);
+            if (node?.scrollIntoView) {
+              node.scrollIntoView({ block: 'center', inline: 'nearest' });
+            }
           }
 
           return true;

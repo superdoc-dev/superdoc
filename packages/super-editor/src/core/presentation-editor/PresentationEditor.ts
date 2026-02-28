@@ -2068,6 +2068,10 @@ export class PresentationEditor extends EventEmitter {
 
     for (const el of elements) {
       const htmlEl = el as HTMLElement;
+      // Skip header/footer fragments — their PM positions come from a separate
+      // document and can overlap with body positions, causing incorrect matches.
+      if (htmlEl.closest('.superdoc-page-header, .superdoc-page-footer')) continue;
+
       const start = Number(htmlEl.dataset.pmStart);
       const end = Number(htmlEl.dataset.pmEnd);
       if (!Number.isFinite(start) || !Number.isFinite(end)) continue;

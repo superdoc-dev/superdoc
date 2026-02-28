@@ -372,6 +372,7 @@ describe('PresentationEditor - scrollToPosition', () => {
 
       // Create mock page element
       const pagesHost = container.querySelector('.presentation-editor__pages') as HTMLElement;
+      expect(pagesHost).toBeTruthy();
       if (pagesHost) {
         const mockPage = document.createElement('div');
         mockPage.setAttribute('data-page-index', '0');
@@ -394,6 +395,7 @@ describe('PresentationEditor - scrollToPosition', () => {
 
       // Create mock page with text element containing position data
       const pagesHost = container.querySelector('.presentation-editor__pages') as HTMLElement;
+      expect(pagesHost).toBeTruthy();
       if (pagesHost) {
         const mockPage = document.createElement('div');
         mockPage.setAttribute('data-page-index', '0');
@@ -430,6 +432,7 @@ describe('PresentationEditor - scrollToPosition', () => {
       await new Promise((resolve) => setTimeout(resolve, 50));
 
       const pagesHost = container.querySelector('.presentation-editor__pages') as HTMLElement;
+      expect(pagesHost).toBeTruthy();
       if (pagesHost) {
         const mockPage = document.createElement('div');
         mockPage.setAttribute('data-page-index', '0');
@@ -459,6 +462,61 @@ describe('PresentationEditor - scrollToPosition', () => {
       }
     });
 
+    it('should skip header/footer elements when finding scroll target', async () => {
+      editor = new PresentationEditor({
+        element: container,
+        documentId: 'test-doc',
+      });
+
+      await vi.waitFor(() => expect(mockIncrementalLayout).toHaveBeenCalled());
+      await new Promise((resolve) => setTimeout(resolve, 50));
+
+      const pagesHost = container.querySelector('.presentation-editor__pages') as HTMLElement;
+      expect(pagesHost).toBeTruthy();
+      if (pagesHost) {
+        const mockPage = document.createElement('div');
+        mockPage.setAttribute('data-page-index', '0');
+        mockPage.scrollIntoView = vi.fn();
+
+        // Header element with overlapping PM positions (from separate PM doc)
+        const header = document.createElement('div');
+        header.className = 'superdoc-page-header';
+        const headerSpan = document.createElement('span');
+        headerSpan.dataset.pmStart = '48';
+        headerSpan.dataset.pmEnd = '52';
+        headerSpan.scrollIntoView = vi.fn();
+        header.appendChild(headerSpan);
+        mockPage.appendChild(header);
+
+        // Body element with wider range
+        const bodySpan = document.createElement('span');
+        bodySpan.dataset.pmStart = '40';
+        bodySpan.dataset.pmEnd = '60';
+        bodySpan.scrollIntoView = vi.fn();
+        mockPage.appendChild(bodySpan);
+
+        // Footer element with overlapping PM positions
+        const footer = document.createElement('div');
+        footer.className = 'superdoc-page-footer';
+        const footerSpan = document.createElement('span');
+        footerSpan.dataset.pmStart = '49';
+        footerSpan.dataset.pmEnd = '51';
+        footerSpan.scrollIntoView = vi.fn();
+        footer.appendChild(footerSpan);
+        mockPage.appendChild(footer);
+
+        pagesHost.appendChild(mockPage);
+
+        const result = editor.scrollToPosition(50);
+        expect(result).toBe(true);
+        // Should scroll the body element, not the header/footer elements
+        // (even though header/footer have smaller ranges)
+        expect(bodySpan.scrollIntoView).toHaveBeenCalled();
+        expect(headerSpan.scrollIntoView).not.toHaveBeenCalled();
+        expect(footerSpan.scrollIntoView).not.toHaveBeenCalled();
+      }
+    });
+
     it('should use provided block option', async () => {
       editor = new PresentationEditor({
         element: container,
@@ -469,6 +527,7 @@ describe('PresentationEditor - scrollToPosition', () => {
       await new Promise((resolve) => setTimeout(resolve, 50));
 
       const pagesHost = container.querySelector('.presentation-editor__pages') as HTMLElement;
+      expect(pagesHost).toBeTruthy();
       if (pagesHost) {
         const mockPage = document.createElement('div');
         mockPage.setAttribute('data-page-index', '0');
@@ -494,6 +553,7 @@ describe('PresentationEditor - scrollToPosition', () => {
       await new Promise((resolve) => setTimeout(resolve, 50));
 
       const pagesHost = container.querySelector('.presentation-editor__pages') as HTMLElement;
+      expect(pagesHost).toBeTruthy();
       if (pagesHost) {
         const mockPage = document.createElement('div');
         mockPage.setAttribute('data-page-index', '0');
@@ -519,6 +579,7 @@ describe('PresentationEditor - scrollToPosition', () => {
       await new Promise((resolve) => setTimeout(resolve, 50));
 
       const pagesHost = container.querySelector('.presentation-editor__pages') as HTMLElement;
+      expect(pagesHost).toBeTruthy();
       if (pagesHost) {
         const mockPage = document.createElement('div');
         mockPage.setAttribute('data-page-index', '0');
@@ -565,6 +626,7 @@ describe('PresentationEditor - scrollToPosition', () => {
       await new Promise((resolve) => setTimeout(resolve, 50));
 
       const pagesHost = container.querySelector('.presentation-editor__pages') as HTMLElement;
+      expect(pagesHost).toBeTruthy();
 
       // Start with no page mounted
       // Simulate page mounting after a delay
@@ -599,11 +661,8 @@ describe('PresentationEditor - scrollToPosition', () => {
       const result = await editor.scrollToPositionAsync(150);
 
       // The page never mounted, so it should fail
-      // However, due to the test setup, the page might already exist
-      // This test verifies the warning path when timeout occurs
-      if (!result) {
-        expect(consoleWarnSpy).toHaveBeenCalledWith(expect.stringContaining('failed to mount within timeout'));
-      }
+      expect(result).toBe(false);
+      expect(consoleWarnSpy).toHaveBeenCalledWith(expect.stringContaining('failed to mount within timeout'));
 
       consoleWarnSpy.mockRestore();
     });

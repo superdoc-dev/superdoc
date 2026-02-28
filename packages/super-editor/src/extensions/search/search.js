@@ -458,9 +458,11 @@ export const Search = Extension.create({
           if (dispatch) dispatch(tr);
 
           const presentationEditor = editor.presentationEditor;
-          if (presentationEditor && typeof presentationEditor.scrollToPosition === 'function') {
-            const didScroll = presentationEditor.scrollToPosition(from, { block: 'center' });
-            if (didScroll) return true;
+          const scrollFn = presentationEditor?.scrollToPositionAsync ?? presentationEditor?.scrollToPosition;
+          if (typeof scrollFn === 'function') {
+            // Fire-and-forget: async version handles virtualized pages, sync is fallback
+            scrollFn.call(presentationEditor, from, { block: 'center' });
+            return true;
           }
 
           const { node } = editor.view.domAtPos(from);

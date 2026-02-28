@@ -155,6 +155,25 @@ function mergeDefinedFields(existing: PPr | undefined, patch: Record<string, unk
   return result;
 }
 
+/**
+ * Merges indentation fields while enforcing OOXML exclusivity:
+ * `firstLine` and `hanging` cannot co-exist on the same paragraph.
+ */
+function mergeIndentationFields(existing: PPr | undefined, patch: Record<string, unknown>): PPr {
+  const result = mergeDefinedFields(existing, patch);
+  const firstLineWasUpdated = patch.firstLine !== undefined;
+  const hangingWasUpdated = patch.hanging !== undefined;
+
+  if (firstLineWasUpdated && !hangingWasUpdated) {
+    delete result.hanging;
+  }
+  if (hangingWasUpdated && !firstLineWasUpdated) {
+    delete result.firstLine;
+  }
+
+  return result;
+}
+
 /** Remove a key from an object, returning undefined if the object is now empty. */
 function deleteKey(obj: PPr, key: string): PPr | undefined {
   const result = { ...obj };
@@ -304,7 +323,7 @@ export function paragraphsSetIndentationWrapper(
     input.target,
     (pPr) => ({
       ...pPr,
-      indent: mergeDefinedFields(pPr.indent as PPr | undefined, {
+      indent: mergeIndentationFields(pPr.indent as PPr | undefined, {
         left: input.left,
         right: input.right,
         firstLine: input.firstLine,

@@ -417,7 +417,7 @@ export const OPERATION_FAMILY: Record<CliExposedOperationId, OperationFamily> = 
   'blocks.delete': 'blocks',
   'format.apply': 'textMutation',
   ...buildFormatInlineAliasRecord('textMutation'),
-  ...buildParagraphRecord('general'),
+  ...buildParagraphRecord('textMutation'),
   'styles.apply': 'general',
   'create.paragraph': 'create',
   'create.heading': 'create',

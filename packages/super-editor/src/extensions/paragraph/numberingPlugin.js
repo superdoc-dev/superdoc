@@ -5,6 +5,7 @@ import { ListHelpers } from '@helpers/list-numbering-helpers.js';
 import { generateOrderedListIndex } from '@helpers/orderedListUtils.js';
 import { docxNumberingHelpers } from '@core/super-converter/v2/importer/listImporter.js';
 import { calculateResolvedParagraphProperties } from './resolvedPropertiesCache.js';
+import { ySyncPluginKey } from 'y-prosemirror';
 
 /**
  * Create a ProseMirror plugin that keeps `listRendering` data in sync with the
@@ -136,7 +137,17 @@ export function createNumberingPlugin(editor) {
       const isFromPlugin = transactions.some((tr) => tr.getMeta('orderedListSync'));
       const forcePluginPass = transactions.some((tr) => tr.getMeta('forcePluginPass'));
       const hasDocChanges = transactions.some((tr) => tr.docChanged);
-      if (isFromPlugin || (!forcePluginPass && !forceFullRecompute && !hasDocChanges)) {
+
+      // Skip when Y.js echoes back attribute changes we made (listRendering,
+      // sdBlockRev). Without this guard, y-prosemirror syncs our setNodeAttribute
+      // calls to the Y.XmlFragment, then fires a change event that dispatches a
+      // new transaction back to PM — creating an infinite appendTransaction loop.
+      const isFromYjsSync = transactions.some((tr) => {
+        const meta = tr.getMeta(ySyncPluginKey);
+        return meta?.isChangeOrigin;
+      });
+
+      if (isFromPlugin || isFromYjsSync || (!forcePluginPass && !forceFullRecompute && !hasDocChanges)) {
         return null;
       }
       if (!forcePluginPass && !forceFullRecompute) {
@@ -253,7 +264,10 @@ export function createNumberingPlugin(editor) {
             numberingType: listNumberingType,
           };
 
-          if (JSON.stringify(node.attrs.listRendering) !== JSON.stringify(newListRendering)) {
+          const oldRendering = node.attrs.listRendering;
+          const oldStr = JSON.stringify(oldRendering);
+          const newStr = JSON.stringify(newListRendering);
+          if (oldStr !== newStr) {
             // Updating rendering attrs for node view usage
             tr.setNodeAttribute(pos, 'listRendering', newListRendering);
             bumpBlockRev(node, pos);

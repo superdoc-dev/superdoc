@@ -5,6 +5,7 @@ import { createNumberingManager } from './NumberingManager.js';
 import { ListHelpers } from '@helpers/list-numbering-helpers.js';
 import { generateOrderedListIndex } from '@helpers/orderedListUtils.js';
 import { docxNumberingHelpers } from '@core/super-converter/v2/importer/listImporter.js';
+import { ySyncPluginKey } from 'y-prosemirror';
 
 vi.mock('prosemirror-state', () => ({
   Plugin: class {
@@ -17,6 +18,10 @@ vi.mock('prosemirror-state', () => ({
       this.key = name;
     }
   },
+}));
+
+vi.mock('y-prosemirror', () => ({
+  ySyncPluginKey: { key: 'ySync$' },
 }));
 
 vi.mock('./NumberingManager.js', () => ({
@@ -301,6 +306,74 @@ describe('numberingPlugin', () => {
 
     expect(result).toBeNull();
     expect(tr.setMeta).not.toHaveBeenCalled();
+  });
+
+  it('returns null when the transaction originates from Y.js sync (prevents infinite loop)', () => {
+    const editor = createEditor();
+    const plugin = createNumberingPlugin(editor);
+    const { appendTransaction } = plugin.spec;
+
+    const transactions = [
+      {
+        docChanged: true,
+        getMeta: vi.fn((key) => {
+          if (key === ySyncPluginKey) return { isChangeOrigin: true };
+          return false;
+        }),
+      },
+    ];
+    const doc = makeDoc([]);
+    const tr = createTransaction();
+
+    const result = appendTransaction(transactions, {}, { doc, tr });
+
+    expect(result).toBeNull();
+    expect(tr.setMeta).not.toHaveBeenCalled();
+  });
+
+  it('processes transactions normally when Y.js sync meta is present but isChangeOrigin is false', () => {
+    const editor = createEditor();
+    const plugin = createNumberingPlugin(editor);
+    const { appendTransaction } = plugin.spec;
+
+    const targetParagraph = {
+      type: { name: 'paragraph' },
+      attrs: {
+        paragraphProperties: {
+          numberingProperties: { numId: 1, ilvl: 0 },
+        },
+      },
+    };
+    const doc = makeDoc([{ node: targetParagraph, pos: 5 }]);
+
+    const tr = createTransaction();
+    const transactions = [
+      {
+        docChanged: true,
+        getMeta: vi.fn((key) => {
+          if (key === ySyncPluginKey) return { isChangeOrigin: false };
+          return false;
+        }),
+      },
+    ];
+    const newState = { doc, tr };
+
+    numberingManager.calculateCounter.mockReturnValue(1);
+    numberingManager.calculatePath.mockReturnValue([1]);
+    generateOrderedListIndex.mockReturnValue('1.');
+    ListHelpers.getListDefinitionDetails.mockReturnValue({
+      lvlText: '%1.',
+      customFormat: null,
+      listNumberingType: 'decimal',
+      suffix: '.',
+      justification: 'left',
+      abstractId: 'a1',
+    });
+
+    const result = appendTransaction(transactions, {}, newState);
+
+    expect(tr.setMeta).toHaveBeenCalledWith('orderedListSync', true);
+    expect(result).toBe(tr);
   });
 
   describe('bumpBlockRev', () => {

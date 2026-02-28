@@ -132,6 +132,7 @@ export const Collaboration = Extension.create({
 
 export const createSyncPlugin = (ydoc, editor) => {
   const fragment = ydoc.getXmlFragment('supereditor');
+
   const onFirstRender = () => {
     if (!editor.options.isNewFile) return;
     initializeMetaMap(ydoc, editor);
@@ -257,6 +258,7 @@ const initSyncListener = (ydoc, editor, extension) => {
   const emit = () => {
     extension.options.isReady = true;
     provider.off('synced', emit);
+
     editor.emit('collaborationReady', { editor, ydoc });
   };
 

@@ -295,6 +295,19 @@ describe('insertContent (integration) list export', () => {
     });
   });
 
+  it('defaults imported markdown tables to 100% width', async () => {
+    const editor = await setupEditor();
+    editor.commands.insertContent('| Query | Assessment |\n| --- | --- |\n| A | B |', { contentType: 'markdown' });
+    await Promise.resolve();
+
+    const tableNode = (editor.getJSON().content || []).find((node) => node.type === 'table');
+    expect(tableNode).toBeTruthy();
+    expect(tableNode.attrs?.tableProperties?.tableWidth).toEqual({
+      value: 5000,
+      type: 'pct',
+    });
+  });
+
   it('normalizes imported HTML table header borders for render and export parity', async () => {
     const editor = await setupEditor();
     editor.commands.insertContent(

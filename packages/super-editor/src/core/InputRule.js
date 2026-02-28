@@ -265,6 +265,64 @@ function findParagraphAncestor($from) {
 }
 
 /**
+ * @param {import('prosemirror-model').Node} tableRow
+ * @returns {string}
+ */
+function getTableRowSignature(tableRow) {
+  const parts = [];
+  tableRow.forEach((cell) => {
+    parts.push(`${cell.attrs?.colspan ?? 1}:${cell.attrs?.rowspan ?? 1}`);
+  });
+  return parts.join('|');
+}
+
+/**
+ * Browser "highlight copy" can emit table-like HTML where each visual row
+ * becomes an independent table element. Merge adjacent compatible tables back
+ * into one table so table editing features (cell selection, resizing) work.
+ *
+ * @param {import('prosemirror-model').Node} doc
+ * @returns {import('prosemirror-model').Node}
+ */
+function mergeAdjacentTableFragments(doc) {
+  if (!doc?.childCount) return doc;
+
+  /** @type {import('prosemirror-model').Node[]} */
+  const mergedChildren = [];
+
+  doc.forEach((child) => {
+    const previous = mergedChildren[mergedChildren.length - 1];
+
+    if (child.type.name !== 'table' || previous?.type.name !== 'table') {
+      mergedChildren.push(child);
+      return;
+    }
+
+    const previousFirstRow = previous.firstChild;
+    const currentFirstRow = child.firstChild;
+    if (!previousFirstRow || !currentFirstRow) {
+      mergedChildren.push(child);
+      return;
+    }
+
+    const previousColumnShape = getTableRowSignature(previousFirstRow);
+    const currentColumnShape = getTableRowSignature(currentFirstRow);
+    if (previousColumnShape !== currentColumnShape) {
+      mergedChildren.push(child);
+      return;
+    }
+
+    const combinedRows = [];
+    previous.forEach((row) => combinedRows.push(row));
+    child.forEach((row) => combinedRows.push(row));
+
+    mergedChildren[mergedChildren.length - 1] = previous.type.create(previous.attrs, combinedRows, previous.marks);
+  });
+
+  return doc.copy(Fragment.fromArray(mergedChildren));
+}
+
+/**
  * Handle HTML paste events.
  *
  * @param {String} html The HTML string to be pasted.
@@ -277,7 +335,14 @@ export function handleHtmlPaste(html, editor, source) {
   if (source === 'google-docs') cleanedHtml = handleGoogleDocsHtml(html, editor);
   else cleanedHtml = htmlHandler(html, editor);
 
+  // Mark pasted HTML as import content so table parseDOM rules can apply
+  // import defaults (e.g., default table width to 100%).
+  if (cleanedHtml?.dataset) {
+    cleanedHtml.dataset.superdocImport = 'true';
+  }
+
   let doc = PMDOMParser.fromSchema(editor.schema).parse(cleanedHtml);
+  doc = mergeAdjacentTableFragments(doc);
 
   doc = wrapTextsInRuns(doc);
 

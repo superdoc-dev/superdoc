@@ -126,4 +126,19 @@ More text here.
     const numberedParagraphs = paragraphs.filter(hasNumbering);
     expect(numberedParagraphs).toHaveLength(2);
   });
+
+  it('defaults markdown tables to 100% width', () => {
+    const markdown = `| Query | Assessment |
+| --- | --- |
+| A | B |`;
+
+    const doc = createDocFromMarkdown(markdown, editor);
+    const firstTable = doc.content.content.find((node) => node.type.name === 'table');
+
+    expect(firstTable).toBeTruthy();
+    expect(firstTable?.attrs?.tableProperties?.tableWidth).toEqual({
+      value: 5000,
+      type: 'pct',
+    });
+  });
 });

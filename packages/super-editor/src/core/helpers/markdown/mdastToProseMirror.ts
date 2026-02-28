@@ -64,6 +64,10 @@ interface JsonMark {
   attrs?: Record<string, unknown>;
 }
 
+// OOXML stores percentages in fiftieths of a percent.
+// 5000 = 100% table width.
+const FULL_WIDTH_TABLE_PCT = 5000;
+
 // ---------------------------------------------------------------------------
 // Block-level converters
 // ---------------------------------------------------------------------------
@@ -299,6 +303,14 @@ function convertTable(node: MdastTable, ctx: MdastConversionContext): JsonNode {
 
   return {
     type: 'table',
+    attrs: {
+      tableProperties: {
+        tableWidth: {
+          value: FULL_WIDTH_TABLE_PCT,
+          type: 'pct',
+        },
+      },
+    },
     content: rows,
   };
 }

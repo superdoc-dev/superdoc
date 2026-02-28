@@ -1,7 +1,8 @@
 import { COMMAND_CATALOG } from './command-catalog.js';
 import { CONTRACT_VERSION, JSON_SCHEMA_DIALECT, OPERATION_IDS, type OperationId } from './types.js';
 import { NODE_TYPES, BLOCK_NODE_TYPES, DELETABLE_BLOCK_NODE_TYPES, INLINE_NODE_TYPES } from '../types/base.js';
-import { MARK_KEYS, INLINE_DIRECTIVES } from '../types/style-policy.types.js';
+import { INLINE_PROPERTY_REGISTRY, buildInlineRunPatchSchema } from '../format/inline-run-patch.js';
+import { INLINE_DIRECTIVES } from '../types/style-policy.types.js';
 import {
   PARAGRAPH_ALIGNMENTS,
   TAB_STOP_ALIGNMENTS,
@@ -78,6 +79,7 @@ const knownTargetKindValues = [
   'trackedChange',
   'table',
   'tableCell',
+  'tableOfContents',
   'section',
   'sdt',
   'field',
@@ -375,7 +377,7 @@ void matchRunSchema;
 
 /**
  * Builds a DiscoveryResult schema wrapping the given item schema.
- * When `metaSchema` is provided, the result includes a required `meta` field.
+ * When `metaSchema` is provided, a required `meta` field is added to the envelope.
  */
 function discoveryResultSchema(itemSchema: JsonSchema, metaSchema?: JsonSchema): JsonSchema {
   const properties: Record<string, JsonSchema> = {
@@ -1145,21 +1147,29 @@ const operationCapabilitiesSchema = objectSchema(
   OPERATION_IDS,
 );
 
-const formatPropertyCapabilitySchema = objectSchema(
+const inlinePropertyCapabilitySchema = objectSchema(
   {
-    kind: { type: 'string' },
-    directives: arraySchema({ type: 'string' }),
+    available: { type: 'boolean' },
+    tracked: { type: 'boolean' },
+    type: { enum: ['boolean', 'string', 'number', 'object', 'array'] },
+    storage: { enum: ['mark', 'runAttribute'] },
   },
-  ['kind', 'directives'],
+  ['available', 'tracked', 'type', 'storage'],
+);
+
+const inlinePropertyCapabilitiesByKeySchema = objectSchema(
+  Object.fromEntries(INLINE_PROPERTY_REGISTRY.map((entry) => [entry.key, inlinePropertyCapabilitySchema])) as Record<
+    string,
+    JsonSchema
+  >,
+  INLINE_PROPERTY_REGISTRY.map((entry) => entry.key),
 );
 
 const formatCapabilitiesSchema = objectSchema(
   {
-    properties: objectSchema(
-      Object.fromEntries(MARK_KEYS.map((key) => [key, formatPropertyCapabilitySchema])) as Record<string, JsonSchema>,
-    ),
+    supportedInlineProperties: inlinePropertyCapabilitiesByKeySchema,
   },
-  ['properties'],
+  ['supportedInlineProperties'],
 );
 
 const planEngineCapabilitiesSchema = objectSchema(
@@ -1324,6 +1334,83 @@ const createTableResultSchema: JsonSchema = {
   oneOf: [createTableSuccessSchema, tableMutationFailureSchema],
 };
 
+type FormatInlineAliasOperationId = `format.${(typeof INLINE_PROPERTY_REGISTRY)[number]['key']}`;
+
+function supportsImplicitTrueValue(operationId: FormatInlineAliasOperationId): boolean {
+  const key = operationId.slice('format.'.length);
+  const entry = INLINE_PROPERTY_REGISTRY.find((candidate) => candidate.key === key);
+  if (!entry) return false;
+  return entry.type === 'boolean' || key === 'underline';
+}
+
+const formatInlineAliasOperationSchemas: Record<FormatInlineAliasOperationId, OperationSchemaSet> = Object.fromEntries(
+  INLINE_PROPERTY_REGISTRY.map((entry) => {
+    const operationId = `format.${entry.key}` as FormatInlineAliasOperationId;
+    const requiredFields = supportsImplicitTrueValue(operationId) ? ['target'] : ['target', 'value'];
+    const schema: OperationSchemaSet = {
+      input: objectSchema(
+        {
+          target: textAddressSchema,
+          value: entry.schema,
+        },
+        requiredFields,
+      ),
+      output: textMutationResultSchemaFor(operationId),
+      success: textMutationSuccessSchema,
+      failure: textMutationFailureSchemaFor(operationId),
+    };
+    return [operationId, schema];
+  }),
+) as Record<FormatInlineAliasOperationId, OperationSchemaSet>;
+// ---------------------------------------------------------------------------
+// TOC schema helpers
+// ---------------------------------------------------------------------------
+
+function tocAddressSchema(): JsonSchema {
+  return objectSchema(
+    {
+      kind: { const: 'block' },
+      nodeType: { const: 'tableOfContents' },
+      nodeId: { type: 'string' },
+    },
+    ['kind', 'nodeType', 'nodeId'],
+  );
+}
+
+const tocMutationFailureCodes = [
+  'NO_OP',
+  'INVALID_TARGET',
+  'TARGET_NOT_FOUND',
+  'CAPABILITY_UNAVAILABLE',
+  'INVALID_INSERTION_CONTEXT',
+] as const;
+
+const tocMutationFailureSchema: JsonSchema = objectSchema(
+  {
+    success: { const: false },
+    failure: objectSchema(
+      {
+        code: { enum: [...tocMutationFailureCodes] },
+        message: { type: 'string' },
+        details: {},
+      },
+      ['code', 'message'],
+    ),
+  },
+  ['success', 'failure'],
+);
+
+const tocMutationSuccessSchema: JsonSchema = objectSchema({ success: { const: true }, toc: tocAddressSchema() }, [
+  'success',
+  'toc',
+]);
+
+function tocMutationResultSchema(): JsonSchema {
+  return {
+    oneOf: [tocMutationSuccessSchema, tocMutationFailureSchema],
+  };
+}
+
 const operationSchemas: Record<OperationId, OperationSchemaSet> = {
   find: {
     input: findInputSchema,
@@ -1384,19 +1471,7 @@ const operationSchemas: Record<OperationId, OperationSchemaSet> = {
     input: objectSchema(
       {
         target: textAddressSchema,
-        inline: (() => {
-          const directiveSchema: JsonSchema = { enum: [...INLINE_DIRECTIVES] };
-          const markProperties = Object.fromEntries(MARK_KEYS.map((key) => [key, directiveSchema])) as Record<
-            string,
-            JsonSchema
-          >;
-          return {
-            type: 'object',
-            properties: markProperties,
-            additionalProperties: false,
-            minProperties: 1,
-          } as JsonSchema;
-        })(),
+        inline: buildInlineRunPatchSchema(),
       },
       ['target', 'inline'],
     ),
@@ -1404,42 +1479,7 @@ const operationSchemas: Record<OperationId, OperationSchemaSet> = {
     success: textMutationSuccessSchema,
     failure: textMutationFailureSchemaFor('format.apply'),
   },
-  'format.fontSize': {
-    input: objectSchema(
-      {
-        target: textAddressSchema,
-        value: { oneOf: [{ type: 'string', minLength: 1 }, { type: 'number' }, { type: 'null' }] },
-      },
-      ['target', 'value'],
-    ),
-    output: textMutationResultSchemaFor('format.fontSize'),
-    success: textMutationSuccessSchema,
-    failure: textMutationFailureSchemaFor('format.fontSize'),
-  },
-  'format.fontFamily': {
-    input: objectSchema(
-      {
-        target: textAddressSchema,
-        value: { oneOf: [{ type: 'string', minLength: 1 }, { type: 'null' }] },
-      },
-      ['target', 'value'],
-    ),
-    output: textMutationResultSchemaFor('format.fontFamily'),
-    success: textMutationSuccessSchema,
-    failure: textMutationFailureSchemaFor('format.fontFamily'),
-  },
-  'format.color': {
-    input: objectSchema(
-      {
-        target: textAddressSchema,
-        value: { oneOf: [{ type: 'string', minLength: 1 }, { type: 'null' }] },
-      },
-      ['target', 'value'],
-    ),
-    output: textMutationResultSchemaFor('format.color'),
-    success: textMutationSuccessSchema,
-    failure: textMutationFailureSchemaFor('format.color'),
-  },
+  ...formatInlineAliasOperationSchemas,
   'blocks.delete': {
     input: objectSchema(
       {
@@ -1682,7 +1722,6 @@ const operationSchemas: Record<OperationId, OperationSchemaSet> = {
     success: paragraphMutationSuccessSchema,
     failure: paragraphMutationFailureSchemaFor('format.paragraph.clearShading'),
   },
-
   'styles.apply': (() => {
     // --- Sub-schemas for object properties (all require minProperties: 1) ---
     const fontFamilySchema = {
@@ -3082,6 +3121,119 @@ const operationSchemas: Record<OperationId, OperationSchemaSet> = {
       },
       ['nodeId'],
     ),
+  },
+
+  // -------------------------------------------------------------------------
+  // TOC schemas
+  // -------------------------------------------------------------------------
+
+  'create.tableOfContents': {
+    input: objectSchema({
+      at: {
+        oneOf: [
+          objectSchema({ kind: { const: 'documentStart' } }, ['kind']),
+          objectSchema({ kind: { const: 'documentEnd' } }, ['kind']),
+          objectSchema({ kind: { const: 'before' }, target: blockNodeAddressSchema }, ['kind', 'target']),
+          objectSchema({ kind: { const: 'after' }, target: blockNodeAddressSchema }, ['kind', 'target']),
+        ],
+      },
+      config: objectSchema({
+        outlineLevels: objectSchema({ from: { type: 'integer' }, to: { type: 'integer' } }, ['from', 'to']),
+        useAppliedOutlineLevel: { type: 'boolean' },
+        hyperlinks: { type: 'boolean' },
+        hideInWebView: { type: 'boolean' },
+        omitPageNumberLevels: objectSchema({ from: { type: 'integer' }, to: { type: 'integer' } }, ['from', 'to']),
+        separator: { type: 'string' },
+      }),
+    }),
+    output: tocMutationResultSchema(),
+    success: tocMutationSuccessSchema,
+    failure: tocMutationFailureSchema,
+  },
+  'toc.list': {
+    input: objectSchema({
+      limit: { type: 'integer' },
+      offset: { type: 'integer' },
+    }),
+    output: objectSchema(
+      {
+        evaluatedRevision: { type: 'string' },
+        total: { type: 'integer' },
+        items: arraySchema(
+          objectSchema(
+            {
+              id: { type: 'string' },
+              handle: ref('ResolvedHandle'),
+              address: tocAddressSchema(),
+              instruction: { type: 'string' },
+              sourceConfig: { type: 'object' },
+              displayConfig: { type: 'object' },
+              preserved: { type: 'object' },
+              entryCount: { type: 'integer' },
+            },
+            ['id', 'handle', 'address', 'instruction', 'entryCount'],
+          ),
+        ),
+        page: ref('PageInfo'),
+      },
+      ['evaluatedRevision', 'total', 'items', 'page'],
+    ),
+  },
+  'toc.get': {
+    input: objectSchema({ target: tocAddressSchema() }, ['target']),
+    output: objectSchema(
+      {
+        nodeType: { const: 'tableOfContents' },
+        kind: { const: 'block' },
+        properties: objectSchema(
+          {
+            instruction: { type: 'string' },
+            sourceConfig: { type: 'object' },
+            displayConfig: { type: 'object' },
+            preservedSwitches: { type: 'object' },
+            entryCount: { type: 'integer' },
+          },
+          ['instruction', 'entryCount'],
+        ),
+      },
+      ['nodeType', 'kind', 'properties'],
+    ),
+  },
+  'toc.configure': {
+    input: objectSchema(
+      {
+        target: tocAddressSchema(),
+        patch: objectSchema({
+          outlineLevels: objectSchema({ from: { type: 'integer' }, to: { type: 'integer' } }, ['from', 'to']),
+          useAppliedOutlineLevel: { type: 'boolean' },
+          hyperlinks: { type: 'boolean' },
+          hideInWebView: { type: 'boolean' },
+          omitPageNumberLevels: objectSchema({ from: { type: 'integer' }, to: { type: 'integer' } }, ['from', 'to']),
+          separator: { type: 'string' },
+        }),
+      },
+      ['target', 'patch'],
+    ),
+    output: tocMutationResultSchema(),
+    success: tocMutationSuccessSchema,
+    failure: tocMutationFailureSchema,
+  },
+  'toc.update': {
+    input: objectSchema(
+      {
+        target: tocAddressSchema(),
+      },
+      ['target'],
+    ),
+    output: tocMutationResultSchema(),
+    success: tocMutationSuccessSchema,
+    failure: tocMutationFailureSchema,
+  },
+  'toc.remove': {
+    input: objectSchema({ target: tocAddressSchema() }, ['target']),
+    output: tocMutationResultSchema(),
+    success: tocMutationSuccessSchema,
+    failure: tocMutationFailureSchema,
   },
 };
 

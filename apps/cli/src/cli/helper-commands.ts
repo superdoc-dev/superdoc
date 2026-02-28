@@ -44,46 +44,14 @@ function mapIdToTarget(input: Record<string, unknown>): Record<string, unknown> 
 }
 
 /**
- * Format helper commands — map `format <mark>` to `format.apply` with pre-filled inline styles.
- * These keep `superdoc format bold|italic|underline|strikethrough` as ergonomic
- * shortcuts over the canonical `format.apply` contract operation.
+ * Helper commands for compatibility/ergonomics where no direct canonical key exists.
  */
 export const CLI_HELPER_COMMANDS: readonly CliHelperCommand[] = [
-  // --- Format helpers (route to format.apply) ---
-  {
-    tokens: ['format', 'bold'],
-    canonicalOperationId: 'format.apply',
-    defaultInput: { inline: { bold: 'on' } },
-    description: 'Apply bold formatting to a text range.',
-    category: 'format',
-    mutates: true,
-    examples: [
-      'superdoc format bold --blockId p1 --start 0 --end 5',
-      'superdoc format bold --target \'{"kind":"text","blockId":"p1","range":{"start":0,"end":5}}\'',
-    ],
-  },
-  {
-    tokens: ['format', 'italic'],
-    canonicalOperationId: 'format.apply',
-    defaultInput: { inline: { italic: 'on' } },
-    description: 'Apply italic formatting to a text range.',
-    category: 'format',
-    mutates: true,
-    examples: ['superdoc format italic --blockId p1 --start 0 --end 5'],
-  },
-  {
-    tokens: ['format', 'underline'],
-    canonicalOperationId: 'format.apply',
-    defaultInput: { inline: { underline: 'on' } },
-    description: 'Apply underline formatting to a text range.',
-    category: 'format',
-    mutates: true,
-    examples: ['superdoc format underline --blockId p1 --start 0 --end 5'],
-  },
+  // --- Format helper ---
   {
     tokens: ['format', 'strikethrough'],
-    canonicalOperationId: 'format.apply',
-    defaultInput: { inline: { strike: 'on' } },
+    canonicalOperationId: 'format.strike',
+    defaultInput: { value: true },
     description: 'Apply strikethrough formatting to a text range.',
     category: 'format',
     mutates: true,

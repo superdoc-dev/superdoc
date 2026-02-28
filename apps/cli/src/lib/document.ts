@@ -1,6 +1,6 @@
 import { readFile, writeFile } from 'node:fs/promises';
 import { createHash } from 'node:crypto';
-import { Editor } from 'superdoc/super-editor';
+import { Editor } from '@superdoc/super-editor';
 import { BLANK_DOCX_BASE64 } from '@superdoc/super-editor/blank-docx';
 import { getDocumentApiAdapters } from '@superdoc/super-editor/document-api-adapters';
 import { markdownToPmDoc } from '@superdoc/super-editor/markdown';

@@ -1,6 +1,7 @@
 import type { CliOperationId } from '../../cli';
 import { CLI_OPERATION_COMMAND_KEYS } from '../../cli';
 import type { ConformanceHarness } from './harness';
+import { INLINE_PROPERTY_REGISTRY } from '@superdoc/document-api';
 
 export type ScenarioInvocation = {
   stateDir: string;
@@ -138,26 +139,142 @@ function sectionMutationScenario(
   };
 }
 
-// ---------------------------------------------------------------------------
-// Paragraph scenario helpers (DRY builder for format.paragraph.* / styles.paragraph.*)
-// ---------------------------------------------------------------------------
+type InlineAliasKey = (typeof INLINE_PROPERTY_REGISTRY)[number]['key'];
+type FormatInlineAliasCliOperationId = `doc.format.${InlineAliasKey}`;
 
-function paragraphMutationScenario(
-  operationId: CliOperationId,
-  label: string,
-  extraArgs: string[],
+function sampleInlineAliasValue(key: InlineAliasKey): unknown {
+  switch (key) {
+    case 'underline':
+      return true;
+    case 'vertAlign':
+      return 'superscript';
+    case 'shading':
+      return { fill: 'FFFF00' };
+    case 'border':
+      return { val: 'single' };
+    case 'fitText':
+      return { val: 12 };
+    case 'lang':
+      return { val: 'en-US' };
+    case 'rFonts':
+      return { ascii: 'Calibri', hAnsi: 'Calibri' };
+    case 'eastAsianLayout':
+      return { vert: true };
+    case 'stylisticSets':
+      return [{ id: 1, val: true }];
+    case 'rStyle':
+      return 'DefaultParagraphFont';
+    case 'color':
+      return '#FF0000';
+    case 'highlight':
+      return 'yellow';
+    case 'em':
+      return 'dot';
+    case 'ligatures':
+      return 'standard';
+    case 'numForm':
+      return 'lining';
+    case 'numSpacing':
+      return 'proportional';
+    case 'fontSize':
+    case 'fontSizeCs':
+      return 14;
+    case 'letterSpacing':
+      return 0.5;
+    case 'position':
+      return 1;
+    case 'charScale':
+      return 100;
+    case 'kerning':
+      return 8;
+    default: {
+      const entry = INLINE_PROPERTY_REGISTRY.find((candidate) => candidate.key === key);
+      if (!entry) throw new Error(`Unknown inline alias key: ${key}`);
+      if (entry.type === 'boolean') return true;
+      if (entry.type === 'number') return 1;
+      if (entry.type === 'string') return 'on';
+      if (entry.type === 'array') return [{ id: 1, val: true }];
+      return { val: 'on' };
+    }
+  }
+}
+
+function formatInlineAliasSuccessScenario(
+  operationId: FormatInlineAliasCliOperationId,
 ): (harness: ConformanceHarness) => Promise<ScenarioInvocation> {
-  return async (harness) => {
-    const stateDir = await harness.createStateDir(`${label}-success`);
-    const docPath = await harness.copyFixtureDoc(label);
-    const { address } = await harness.firstBlockMatch(docPath, stateDir);
+  return async (harness: ConformanceHarness): Promise<ScenarioInvocation> => {
+    const key = operationId.slice('doc.format.'.length) as InlineAliasKey;
+    const stateDir = await harness.createStateDir(`${operationId.replace(/\./g, '-')}-success`);
+    const docPath = await harness.copyFixtureDoc(`${operationId.replace(/\./g, '-')}`);
+    const target = await harness.firstTextRange(docPath, stateDir);
     return {
       stateDir,
       args: [
         ...commandTokens(operationId),
         docPath,
         '--target-json',
-        JSON.stringify(address),
+        JSON.stringify(target),
+        '--value-json',
+        JSON.stringify(sampleInlineAliasValue(key)),
+        '--out',
+        harness.createOutputPath(`${operationId.replace(/\./g, '-')}-output`),
+      ],
+    };
+  };
+}
+
+const FORMAT_INLINE_ALIAS_SUCCESS_SCENARIOS: Record<
+  FormatInlineAliasCliOperationId,
+  (harness: ConformanceHarness) => Promise<ScenarioInvocation>
+> = Object.fromEntries(
+  INLINE_PROPERTY_REGISTRY.map((entry) => {
+    const operationId = `doc.format.${entry.key}` as FormatInlineAliasCliOperationId;
+    return [operationId, formatInlineAliasSuccessScenario(operationId)];
+  }),
+) as Record<FormatInlineAliasCliOperationId, (harness: ConformanceHarness) => Promise<ScenarioInvocation>>;
+
+function paragraphMutationScenario(
+  operationId: CliOperationId,
+  label: string,
+  extraArgs: string[],
+  prepare: Array<{ operationId: CliOperationId; extraArgs: string[] }> = [],
+): (harness: ConformanceHarness) => Promise<ScenarioInvocation> {
+  return async (harness) => {
+    const stateDir = await harness.createStateDir(`${label}-success`);
+    let docPath = await harness.copyFixtureDoc(`${label}-source`);
+    let block = await harness.firstBlockMatch(docPath, stateDir);
+
+    for (let index = 0; index < prepare.length; index += 1) {
+      const step = prepare[index];
+      const preparedOut = harness.createOutputPath(`${label}-prepare-${index + 1}`);
+      const prepared = await harness.runCli(
+        [
+          ...commandTokens(step.operationId),
+          docPath,
+          '--target-json',
+          JSON.stringify({ kind: 'block', nodeType: 'paragraph', nodeId: block.nodeId }),
+          ...step.extraArgs,
+          '--out',
+          preparedOut,
+        ],
+        stateDir,
+      );
+
+      if (prepared.result.code !== 0 || prepared.envelope.ok !== true) {
+        throw new Error(`Failed to prepare paragraph scenario ${label} with ${step.operationId}.`);
+      }
+
+      docPath = preparedOut;
+      block = await harness.firstBlockMatch(docPath, stateDir);
+    }
+
+    return {
+      stateDir,
+      args: [
+        ...commandTokens(operationId),
+        docPath,
+        '--target-json',
+        JSON.stringify({ kind: 'block', nodeType: 'paragraph', nodeId: block.nodeId }),
         ...extraArgs,
         '--out',
         harness.createOutputPath(`${label}-output`),
@@ -165,62 +282,6 @@ function paragraphMutationScenario(
     };
   };
 }
-
-/**
- * Clear-style paragraph scenario: pre-seeds the target paragraph with a "set"
- * operation so the subsequent "clear" actually removes something (not a NO_OP).
- *
- * After seeding we re-discover the block address because the output doc may
- * assign new node IDs after serialization.
- */
-function paragraphClearScenario(
-  operationId: CliOperationId,
-  label: string,
-  clearArgs: string[],
-  seedOperationId: CliOperationId,
-  seedArgs: string[],
-): (harness: ConformanceHarness) => Promise<ScenarioInvocation> {
-  return async (harness) => {
-    const stateDir = await harness.createStateDir(`${label}-success`);
-    const sourceDoc = await harness.copyFixtureDoc(`${label}-source`);
-    const { address } = await harness.firstBlockMatch(sourceDoc, stateDir);
-
-    // Pre-seed: run a set operation so there is something to clear.
-    const seededDoc = harness.createOutputPath(`${label}-seeded`);
-    const seed = await harness.runCli(
-      [
-        ...commandTokens(seedOperationId),
-        sourceDoc,
-        '--target-json',
-        JSON.stringify(address),
-        ...seedArgs,
-        '--out',
-        seededDoc,
-      ],
-      stateDir,
-    );
-    if (seed.result.code !== 0) {
-      throw new Error(`Pre-seed failed for ${label}: ${seed.result.stderr}`);
-    }
-
-    // Re-discover target in the seeded doc (node IDs may change after export).
-    const { address: seededAddress } = await harness.firstBlockMatch(seededDoc, stateDir);
-
-    return {
-      stateDir,
-      args: [
-        ...commandTokens(operationId),
-        seededDoc,
-        '--target-json',
-        JSON.stringify(seededAddress),
-        ...clearArgs,
-        '--out',
-        harness.createOutputPath(`${label}-output`),
-      ],
-    };
-  };
-}
-
 // ---------------------------------------------------------------------------
 // Table scenario helpers (DRY builders for the 40 table operations)
 // ---------------------------------------------------------------------------
@@ -319,6 +380,43 @@ function tableScopedMutationScenario(
         '--out',
         harness.createOutputPath(`${label}-out`),
       ],
+    };
+  };
+}
+
+function tocMutationScenario(
+  op: string,
+  extraArgs: string[],
+): (harness: ConformanceHarness) => Promise<ScenarioInvocation> {
+  return async (harness) => {
+    const label = `toc-${op.replace(/\./g, '-')}`;
+    const stateDir = await harness.createStateDir(`${label}-success`);
+    const docPath = await harness.copyTocFixtureDoc(`${label}-source`, stateDir);
+    const tocTarget = await harness.firstTocAddress(docPath, stateDir);
+    return {
+      stateDir,
+      args: [
+        ...commandTokens(`doc.${op}` as CliOperationId),
+        docPath,
+        '--target-json',
+        JSON.stringify(tocTarget),
+        ...extraArgs,
+        '--out',
+        harness.createOutputPath(`${label}-out`),
+      ],
+    };
+  };
+}
+
+function tocReadWithTargetScenario(op: string): (harness: ConformanceHarness) => Promise<ScenarioInvocation> {
+  return async (harness) => {
+    const label = `toc-${op.replace(/\./g, '-')}`;
+    const stateDir = await harness.createStateDir(`${label}-success`);
+    const docPath = await harness.copyTocFixtureDoc(`${label}-source`, stateDir);
+    const tocTarget = await harness.firstTocAddress(docPath, stateDir);
+    return {
+      stateDir,
+      args: [...commandTokens(`doc.${op}` as CliOperationId), docPath, '--target-json', JSON.stringify(tocTarget)],
     };
   };
 }
@@ -568,6 +666,23 @@ export const SUCCESS_SCENARIOS = {
         JSON.stringify({ level: 1, text: 'Conformance heading text' }),
         '--out',
         harness.createOutputPath('doc-create-heading-output'),
+      ],
+    };
+  },
+  'doc.create.tableOfContents': async (harness: ConformanceHarness): Promise<ScenarioInvocation> => {
+    const stateDir = await harness.createStateDir('doc-create-toc-success');
+    const docPath = await harness.copyFixtureDoc('doc-create-toc');
+    return {
+      stateDir,
+      args: [
+        ...commandTokens('doc.create.tableOfContents'),
+        docPath,
+        '--at-json',
+        JSON.stringify({ kind: 'documentStart' }),
+        '--config-json',
+        JSON.stringify({ hyperlinks: true, outlineLevels: { from: 1, to: 3 } }),
+        '--out',
+        harness.createOutputPath('doc-create-toc-output'),
       ],
     };
   },
@@ -1071,69 +1186,120 @@ export const SUCCESS_SCENARIOS = {
         '--target-json',
         JSON.stringify(target),
         '--inline-json',
-        JSON.stringify({ bold: 'on' }),
+        JSON.stringify({ bold: true }),
         '--out',
         harness.createOutputPath('doc-style-apply-output'),
       ],
     };
   },
-  'doc.format.fontSize': async (harness: ConformanceHarness): Promise<ScenarioInvocation> => {
-    const stateDir = await harness.createStateDir('doc-format-font-size-success');
-    const docPath = await harness.copyFixtureDoc('doc-format-font-size');
-    const target = await harness.firstTextRange(docPath, stateDir);
-    return {
-      stateDir,
-      args: [
-        'format',
-        'font-size',
-        docPath,
-        '--target-json',
-        JSON.stringify(target),
-        '--value-json',
-        JSON.stringify('14pt'),
-        '--out',
-        harness.createOutputPath('doc-format-font-size-output'),
-      ],
-    };
-  },
-  'doc.format.fontFamily': async (harness: ConformanceHarness): Promise<ScenarioInvocation> => {
-    const stateDir = await harness.createStateDir('doc-format-font-family-success');
-    const docPath = await harness.copyFixtureDoc('doc-format-font-family');
-    const target = await harness.firstTextRange(docPath, stateDir);
-    return {
-      stateDir,
-      args: [
-        'format',
-        'font-family',
-        docPath,
-        '--target-json',
-        JSON.stringify(target),
-        '--value-json',
-        JSON.stringify('Arial'),
-        '--out',
-        harness.createOutputPath('doc-format-font-family-output'),
-      ],
-    };
-  },
-  'doc.format.color': async (harness: ConformanceHarness): Promise<ScenarioInvocation> => {
-    const stateDir = await harness.createStateDir('doc-format-color-success');
-    const docPath = await harness.copyFixtureDoc('doc-format-color');
-    const target = await harness.firstTextRange(docPath, stateDir);
-    return {
-      stateDir,
-      args: [
-        'format',
-        'color',
-        docPath,
-        '--target-json',
-        JSON.stringify(target),
-        '--value-json',
-        JSON.stringify('#ff0000'),
-        '--out',
-        harness.createOutputPath('doc-format-color-output'),
-      ],
-    };
-  },
+  ...FORMAT_INLINE_ALIAS_SUCCESS_SCENARIOS,
+  'doc.styles.paragraph.setStyle': paragraphMutationScenario('doc.styles.paragraph.setStyle', 'styles-paragraph-set', [
+    '--style-id',
+    'Normal',
+  ]),
+  'doc.styles.paragraph.clearStyle': paragraphMutationScenario(
+    'doc.styles.paragraph.clearStyle',
+    'styles-paragraph-clear',
+    [],
+    [{ operationId: 'doc.styles.paragraph.setStyle', extraArgs: ['--style-id', '__ConformanceTmpStyle__'] }],
+  ),
+  'doc.format.paragraph.resetDirectFormatting': paragraphMutationScenario(
+    'doc.format.paragraph.resetDirectFormatting',
+    'format-paragraph-reset',
+    [],
+  ),
+  'doc.format.paragraph.setAlignment': paragraphMutationScenario(
+    'doc.format.paragraph.setAlignment',
+    'format-paragraph-set-alignment',
+    ['--alignment', 'center'],
+    [{ operationId: 'doc.format.paragraph.setAlignment', extraArgs: ['--alignment', 'left'] }],
+  ),
+  'doc.format.paragraph.clearAlignment': paragraphMutationScenario(
+    'doc.format.paragraph.clearAlignment',
+    'format-paragraph-clear-alignment',
+    [],
+  ),
+  'doc.format.paragraph.setIndentation': paragraphMutationScenario(
+    'doc.format.paragraph.setIndentation',
+    'format-paragraph-set-indentation',
+    ['--left', '720'],
+  ),
+  'doc.format.paragraph.clearIndentation': paragraphMutationScenario(
+    'doc.format.paragraph.clearIndentation',
+    'format-paragraph-clear-indentation',
+    [],
+    [{ operationId: 'doc.format.paragraph.setIndentation', extraArgs: ['--left', '720'] }],
+  ),
+  'doc.format.paragraph.setSpacing': paragraphMutationScenario(
+    'doc.format.paragraph.setSpacing',
+    'format-paragraph-set-spacing',
+    ['--before', '120', '--after', '120'],
+  ),
+  'doc.format.paragraph.clearSpacing': paragraphMutationScenario(
+    'doc.format.paragraph.clearSpacing',
+    'format-paragraph-clear-spacing',
+    [],
+    [{ operationId: 'doc.format.paragraph.setSpacing', extraArgs: ['--before', '120', '--after', '120'] }],
+  ),
+  'doc.format.paragraph.setKeepOptions': paragraphMutationScenario(
+    'doc.format.paragraph.setKeepOptions',
+    'format-paragraph-set-keep-options',
+    ['--keep-next', 'true'],
+  ),
+  'doc.format.paragraph.setOutlineLevel': paragraphMutationScenario(
+    'doc.format.paragraph.setOutlineLevel',
+    'format-paragraph-set-outline',
+    ['--outline-level-json', '1'],
+  ),
+  'doc.format.paragraph.setFlowOptions': paragraphMutationScenario(
+    'doc.format.paragraph.setFlowOptions',
+    'format-paragraph-set-flow',
+    ['--contextual-spacing', 'true'],
+  ),
+  'doc.format.paragraph.setTabStop': paragraphMutationScenario(
+    'doc.format.paragraph.setTabStop',
+    'format-paragraph-set-tab-stop',
+    ['--position', '720', '--alignment', 'left'],
+  ),
+  'doc.format.paragraph.clearTabStop': paragraphMutationScenario(
+    'doc.format.paragraph.clearTabStop',
+    'format-paragraph-clear-tab-stop',
+    ['--position', '720'],
+    [{ operationId: 'doc.format.paragraph.setTabStop', extraArgs: ['--position', '720', '--alignment', 'left'] }],
+  ),
+  'doc.format.paragraph.clearAllTabStops': paragraphMutationScenario(
+    'doc.format.paragraph.clearAllTabStops',
+    'format-paragraph-clear-all-tab-stops',
+    [],
+    [{ operationId: 'doc.format.paragraph.setTabStop', extraArgs: ['--position', '720', '--alignment', 'left'] }],
+  ),
+  'doc.format.paragraph.setBorder': paragraphMutationScenario(
+    'doc.format.paragraph.setBorder',
+    'format-paragraph-set-border',
+    ['--side', 'top', '--style', 'single', '--color', '000000'],
+  ),
+  'doc.format.paragraph.clearBorder': paragraphMutationScenario(
+    'doc.format.paragraph.clearBorder',
+    'format-paragraph-clear-border',
+    ['--side', 'top'],
+    [
+      {
+        operationId: 'doc.format.paragraph.setBorder',
+        extraArgs: ['--side', 'top', '--style', 'single', '--color', '000000'],
+      },
+    ],
+  ),
+  'doc.format.paragraph.setShading': paragraphMutationScenario(
+    'doc.format.paragraph.setShading',
+    'format-paragraph-set-shading',
+    ['--fill', 'FFFF00'],
+  ),
+  'doc.format.paragraph.clearShading': paragraphMutationScenario(
+    'doc.format.paragraph.clearShading',
+    'format-paragraph-clear-shading',
+    [],
+    [{ operationId: 'doc.format.paragraph.setShading', extraArgs: ['--fill', 'FFFF00'] }],
+  ),
   'doc.styles.apply': async (harness: ConformanceHarness): Promise<ScenarioInvocation> => {
     const stateDir = await harness.createStateDir('doc-styles-apply-success');
     const docPath = await harness.copyFixtureDoc('doc-styles-apply');
@@ -1186,6 +1352,18 @@ export const SUCCESS_SCENARIOS = {
       ],
     };
   },
+  'doc.toc.list': async (harness: ConformanceHarness): Promise<ScenarioInvocation> => {
+    const stateDir = await harness.createStateDir('doc-toc-list-success');
+    const docPath = await harness.copyTocFixtureDoc('doc-toc-list', stateDir);
+    return {
+      stateDir,
+      args: [...commandTokens('doc.toc.list'), docPath, '--limit', '1'],
+    };
+  },
+  'doc.toc.get': tocReadWithTargetScenario('toc.get'),
+  'doc.toc.configure': tocMutationScenario('toc.configure', ['--patch-json', JSON.stringify({ hyperlinks: false })]),
+  'doc.toc.update': tocMutationScenario('toc.update', []),
+  'doc.toc.remove': tocMutationScenario('toc.remove', []),
   'doc.session.list': async (harness: ConformanceHarness): Promise<ScenarioInvocation> => {
     const stateDir = await harness.createStateDir('doc-session-list-success');
     await harness.openSessionFixture(stateDir, 'doc-session-list', 'session-list-success');
@@ -1375,143 +1553,6 @@ export const SUCCESS_SCENARIOS = {
   'doc.tables.get': tableReadScenario('tables.get'),
   'doc.tables.getCells': tableReadScenario('tables.getCells'),
   'doc.tables.getProperties': tableReadScenario('tables.getProperties'),
-
-  // Paragraphs — styles.paragraph.*
-  'doc.styles.paragraph.setStyle': paragraphMutationScenario('doc.styles.paragraph.setStyle', 'para-set-style', [
-    '--style-id',
-    'Normal',
-  ]),
-  'doc.styles.paragraph.clearStyle': async (harness) => {
-    // Target a heading node (which natively carries a styleId) rather than
-    // pre-seeding, because styleId doesn't survive the export round-trip.
-    const label = 'para-clear-style';
-    const stateDir = await harness.createStateDir(`${label}-success`);
-    const docPath = await harness.copyFixtureDoc(`${label}-source`);
-    const { result, envelope } = await harness.runCli(
-      ['find', docPath, '--type', 'node', '--node-type', 'heading', '--limit', '1'],
-      stateDir,
-    );
-    if (result.code !== 0 || !envelope.ok) {
-      throw new Error(`No heading found for ${label}`);
-    }
-    const address = (envelope.data as { result?: { items?: Array<{ address?: Record<string, unknown> }> } }).result
-      ?.items?.[0]?.address;
-    if (!address) throw new Error(`No heading address for ${label}`);
-    return {
-      stateDir,
-      args: [
-        ...commandTokens('doc.styles.paragraph.clearStyle'),
-        docPath,
-        '--target-json',
-        JSON.stringify(address),
-        '--out',
-        harness.createOutputPath(`${label}-output`),
-      ],
-    };
-  },
-
-  // Paragraphs — format.paragraph.*
-  'doc.format.paragraph.resetDirectFormatting': paragraphClearScenario(
-    'doc.format.paragraph.resetDirectFormatting',
-    'para-reset-direct',
-    [],
-    'doc.format.paragraph.setAlignment',
-    ['--alignment', 'right'],
-  ),
-  'doc.format.paragraph.setAlignment': paragraphMutationScenario(
-    'doc.format.paragraph.setAlignment',
-    'para-set-alignment',
-    ['--alignment', 'right'],
-  ),
-  'doc.format.paragraph.clearAlignment': paragraphClearScenario(
-    'doc.format.paragraph.clearAlignment',
-    'para-clear-alignment',
-    [],
-    'doc.format.paragraph.setAlignment',
-    ['--alignment', 'right'],
-  ),
-  'doc.format.paragraph.setIndentation': paragraphMutationScenario(
-    'doc.format.paragraph.setIndentation',
-    'para-set-indent',
-    ['--left', '720'],
-  ),
-  'doc.format.paragraph.clearIndentation': paragraphClearScenario(
-    'doc.format.paragraph.clearIndentation',
-    'para-clear-indent',
-    [],
-    'doc.format.paragraph.setIndentation',
-    ['--left', '720'],
-  ),
-  'doc.format.paragraph.setSpacing': paragraphMutationScenario('doc.format.paragraph.setSpacing', 'para-set-spacing', [
-    '--before',
-    '240',
-  ]),
-  'doc.format.paragraph.clearSpacing': paragraphClearScenario(
-    'doc.format.paragraph.clearSpacing',
-    'para-clear-spacing',
-    [],
-    'doc.format.paragraph.setSpacing',
-    ['--before', '240'],
-  ),
-  'doc.format.paragraph.setKeepOptions': paragraphMutationScenario(
-    'doc.format.paragraph.setKeepOptions',
-    'para-set-keep',
-    ['--keep-next', 'true'],
-  ),
-  'doc.format.paragraph.setOutlineLevel': paragraphMutationScenario(
-    'doc.format.paragraph.setOutlineLevel',
-    'para-set-outline',
-    ['--outline-level-json', '1'],
-  ),
-  'doc.format.paragraph.setFlowOptions': paragraphMutationScenario(
-    'doc.format.paragraph.setFlowOptions',
-    'para-set-flow',
-    ['--page-break-before', 'true'],
-  ),
-  'doc.format.paragraph.setTabStop': paragraphMutationScenario('doc.format.paragraph.setTabStop', 'para-set-tab', [
-    '--position',
-    '720',
-    '--alignment',
-    'left',
-  ]),
-  'doc.format.paragraph.clearTabStop': paragraphClearScenario(
-    'doc.format.paragraph.clearTabStop',
-    'para-clear-tab',
-    ['--position', '720'],
-    'doc.format.paragraph.setTabStop',
-    ['--position', '720', '--alignment', 'left'],
-  ),
-  'doc.format.paragraph.clearAllTabStops': paragraphClearScenario(
-    'doc.format.paragraph.clearAllTabStops',
-    'para-clear-all-tabs',
-    [],
-    'doc.format.paragraph.setTabStop',
-    ['--position', '720', '--alignment', 'left'],
-  ),
-  'doc.format.paragraph.setBorder': paragraphMutationScenario('doc.format.paragraph.setBorder', 'para-set-border', [
-    '--side',
-    'top',
-    '--style',
-    'single',
-  ]),
-  'doc.format.paragraph.clearBorder': paragraphClearScenario(
-    'doc.format.paragraph.clearBorder',
-    'para-clear-border',
-    ['--side', 'all'],
-    'doc.format.paragraph.setBorder',
-    ['--side', 'top', '--style', 'single'],
-  ),
-  'doc.format.paragraph.setShading': paragraphMutationScenario('doc.format.paragraph.setShading', 'para-set-shading', [
-    '--fill',
-    'FF0000',
-  ]),
-  'doc.format.paragraph.clearShading': paragraphClearScenario(
-    'doc.format.paragraph.clearShading',
-    'para-clear-shading',
-    [],
-    'doc.format.paragraph.setShading',
-    ['--fill', 'FF0000'],
-  ),
 } as const satisfies Record<CliOperationId, (harness: ConformanceHarness) => Promise<ScenarioInvocation>>;
 
 export const OPERATION_SCENARIOS = (Object.keys(SUCCESS_SCENARIOS) as CliOperationId[]).map((operationId) => {

@@ -110,6 +110,7 @@ import { ySyncPluginKey } from 'y-prosemirror';
 import type * as Y from 'yjs';
 import type { HeaderFooterDescriptor } from '../header-footer/HeaderFooterRegistry.js';
 import { isInRegisteredSurface } from './utils/uiSurfaceRegistry.js';
+import { splitRunsAtDecorationBoundaries } from './layout/SplitRunsAtDecorationBoundaries.js';
 
 // Types
 import type {
@@ -2341,8 +2342,10 @@ export class PresentationEditor extends EventEmitter {
   }
 
   /**
-   * Runs a full decoration bridge sync: reads external plugin decorations and
-   * reconciles them onto painted DOM elements (add/update/remove).
+   * Runs a full decoration sync: applies external plugin decoration classes
+   * and styles to the painted DOM elements via DecorationBridge. Runs are
+   * split at decoration boundaries during layout so only the selected portion
+   * gets the background (like the highlight mark, without applying a mark).
    *
    * Called synchronously from post-paint and observer-rebuild paths where the
    * DOM index is guaranteed to be fresh.
@@ -2354,7 +2357,9 @@ export class PresentationEditor extends EventEmitter {
     try {
       this.#decorationBridge.sync(state, this.#domPositionIndex);
     } catch (error) {
-      debugLog('warn', 'Decoration bridge sync failed', { error: String(error) });
+      // Sync can call findRangeByText and other doc-dependent logic; if it throws
+      // (e.g. edge-case doc state), avoid breaking the RAF or observer sync loop.
+      console.warn('[PresentationEditor] Decoration sync failed:', error);
     }
   }
 
@@ -2463,8 +2468,30 @@ export class PresentationEditor extends EventEmitter {
     // We listen on 'transaction' so the decoration bridge picks up changes
     // from any transaction type. The bridge's own identity check + RAF
     // coalescing prevent unnecessary work.
-    const handleTransaction = () => {
-      this.#scheduleDecorationSync();
+    // When decoration state changes without a doc change (e.g. setFocus), we must
+    // still run a full rerender so runs are split at the new decoration boundaries;
+    // otherwise the bridge applies the class to whole runs and highlights too much.
+    const handleTransaction = (event?: { transaction?: Transaction }) => {
+      const tr = event?.transaction;
+      this.#decorationBridge.recordTransaction(tr);
+      const state = this.#editor?.view?.state;
+      const decorationChanged = state && this.#decorationBridge.hasChanges(state);
+      // Sync immediately whenever decorations changed so e.g. clearFocus removes
+      // highlight-selection in the same tick. Only restore when we had a doc change.
+      if (decorationChanged) {
+        const restoreEmpty = tr ? tr.docChanged === true : false;
+        this.#decorationBridge.sync(state!, this.#domPositionIndex, {
+          restoreEmptyDecorations: restoreEmpty,
+        });
+      } else {
+        // No immediate sync; schedule coalesced sync on next frame.
+        this.#scheduleDecorationSync();
+      }
+      if (decorationChanged) {
+        this.#pendingDocChange = true;
+        this.#selectionSync.onLayoutStart();
+        this.#scheduleRerender();
+      }
     };
 
     this.#editor.on('update', handleUpdate);
@@ -3158,6 +3185,17 @@ export class PresentationEditor extends EventEmitter {
       if (!blocks) {
         this.#handleLayoutError('render', new Error('toFlowBlocks returned undefined blocks'));
         return;
+      }
+
+      // Split runs at decoration boundaries so bridge sync applies background only to the
+      // selected portion (like highlight mark) without adding a document mark.
+      const state = this.#editor?.view?.state;
+      const decorationRanges = state ? this.#decorationBridge.collectDecorationRanges(state) : [];
+      if (decorationRanges.length > 0) {
+        blocks = splitRunsAtDecorationBoundaries(
+          blocks,
+          decorationRanges.map((r) => ({ from: r.from, to: r.to })),
+        );
       }
 
       this.#applyHtmlAnnotationMeasurements(blocks);

@@ -16,7 +16,7 @@ import { resolve, dirname } from 'node:path';
 import { createHash } from 'node:crypto';
 import { tmpdir } from 'node:os';
 
-import { COMMAND_CATALOG } from '@superdoc/document-api';
+import { COMMAND_CATALOG, INLINE_PROPERTY_REGISTRY } from '@superdoc/document-api';
 
 import { CLI_OPERATION_METADATA } from '../src/cli/operation-params';
 import {
@@ -60,9 +60,31 @@ const INTENT_NAMES = {
   'doc.delete': 'delete_content',
   'doc.blocks.delete': 'delete_block',
   'doc.format.apply': 'format_apply',
-  'doc.format.fontSize': 'format_font_size',
-  'doc.format.fontFamily': 'format_font_family',
-  'doc.format.color': 'format_color',
+  ...Object.fromEntries(
+    INLINE_PROPERTY_REGISTRY.map((entry) => [
+      `doc.format.${entry.key}`,
+      `format_${entry.key.replace(/[A-Z]/g, (char) => `_${char.toLowerCase()}`)}`,
+    ]),
+  ),
+  'doc.styles.paragraph.setStyle': 'set_paragraph_style',
+  'doc.styles.paragraph.clearStyle': 'clear_paragraph_style',
+  'doc.format.paragraph.resetDirectFormatting': 'reset_paragraph_direct_formatting',
+  'doc.format.paragraph.setAlignment': 'set_paragraph_alignment',
+  'doc.format.paragraph.clearAlignment': 'clear_paragraph_alignment',
+  'doc.format.paragraph.setIndentation': 'set_paragraph_indentation',
+  'doc.format.paragraph.clearIndentation': 'clear_paragraph_indentation',
+  'doc.format.paragraph.setSpacing': 'set_paragraph_spacing',
+  'doc.format.paragraph.clearSpacing': 'clear_paragraph_spacing',
+  'doc.format.paragraph.setKeepOptions': 'set_paragraph_keep_options',
+  'doc.format.paragraph.setOutlineLevel': 'set_paragraph_outline_level',
+  'doc.format.paragraph.setFlowOptions': 'set_paragraph_flow_options',
+  'doc.format.paragraph.setTabStop': 'set_paragraph_tab_stop',
+  'doc.format.paragraph.clearTabStop': 'clear_paragraph_tab_stop',
+  'doc.format.paragraph.clearAllTabStops': 'clear_all_paragraph_tab_stops',
+  'doc.format.paragraph.setBorder': 'set_paragraph_border',
+  'doc.format.paragraph.clearBorder': 'clear_paragraph_border',
+  'doc.format.paragraph.setShading': 'set_paragraph_shading',
+  'doc.format.paragraph.clearShading': 'clear_paragraph_shading',
   'doc.styles.apply': 'styles_apply',
   'doc.create.paragraph': 'create_paragraph',
   'doc.create.heading': 'create_heading',
@@ -85,6 +107,7 @@ const INTENT_NAMES = {
   'doc.sections.setLinkToPrevious': 'set_section_link_to_previous',
   'doc.sections.setPageBorders': 'set_section_page_borders',
   'doc.sections.clearPageBorders': 'clear_section_page_borders',
+  'doc.create.tableOfContents': 'create_table_of_contents',
   'doc.lists.list': 'list_lists',
   'doc.lists.get': 'get_list',
   'doc.lists.insert': 'insert_list',
@@ -101,6 +124,11 @@ const INTENT_NAMES = {
   'doc.trackChanges.list': 'list_tracked_changes',
   'doc.trackChanges.get': 'get_tracked_change',
   'doc.trackChanges.decide': 'decide_tracked_change',
+  'doc.toc.list': 'list_table_of_contents',
+  'doc.toc.get': 'get_table_of_contents',
+  'doc.toc.configure': 'configure_table_of_contents',
+  'doc.toc.update': 'update_table_of_contents',
+  'doc.toc.remove': 'remove_table_of_contents',
   'doc.query.match': 'query_match',
   'doc.mutations.preview': 'preview_mutations',
   'doc.mutations.apply': 'apply_mutations',

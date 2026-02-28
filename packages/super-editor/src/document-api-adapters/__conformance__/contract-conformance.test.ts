@@ -3,9 +3,11 @@ import { beforeEach, describe, expect, it, vi } from 'vitest';
 import type { Editor } from '../../core/Editor.js';
 import {
   COMMAND_CATALOG,
+  INLINE_PROPERTY_REGISTRY,
   MUTATING_OPERATION_IDS,
   OPERATION_IDS,
   buildInternalContractSchemas,
+  type InlineRunPatchKey,
   type OperationId,
 } from '@superdoc/document-api';
 import {
@@ -19,10 +21,26 @@ import { createParagraphWrapper, createHeadingWrapper } from '../plan-engine/cre
 import { blocksDeleteWrapper } from '../plan-engine/blocks-wrappers.js';
 import { styleApplyWrapper } from '../plan-engine/plan-wrappers.js';
 import {
-  formatFontSizeWrapper,
-  formatFontFamilyWrapper,
-  formatColorWrapper,
-} from '../plan-engine/format-value-wrappers.js';
+  paragraphsSetStyleWrapper,
+  paragraphsClearStyleWrapper,
+  paragraphsResetDirectFormattingWrapper,
+  paragraphsSetAlignmentWrapper,
+  paragraphsClearAlignmentWrapper,
+  paragraphsSetIndentationWrapper,
+  paragraphsClearIndentationWrapper,
+  paragraphsSetSpacingWrapper,
+  paragraphsClearSpacingWrapper,
+  paragraphsSetKeepOptionsWrapper,
+  paragraphsSetOutlineLevelWrapper,
+  paragraphsSetFlowOptionsWrapper,
+  paragraphsSetTabStopWrapper,
+  paragraphsClearTabStopWrapper,
+  paragraphsClearAllTabStopsWrapper,
+  paragraphsSetBorderWrapper,
+  paragraphsClearBorderWrapper,
+  paragraphsSetShadingWrapper,
+  paragraphsClearShadingWrapper,
+} from '../plan-engine/paragraphs-wrappers.js';
 import { stylesApplyAdapter } from '../styles-adapter.js';
 import { createTableWrapper } from '../plan-engine/create-table-wrapper.js';
 import {
@@ -65,6 +83,12 @@ import {
 } from '../plan-engine/tables-wrappers.js';
 import { getDocumentApiCapabilities } from '../capabilities-adapter.js';
 import {
+  tocConfigureWrapper,
+  tocUpdateWrapper,
+  tocRemoveWrapper,
+  createTableOfContentsWrapper,
+} from '../plan-engine/toc-wrappers.js';
+import {
   listsInsertWrapper,
   listsSetTypeWrapper,
   listsIndentWrapper,
@@ -98,27 +122,6 @@ import {
   sectionsSetPageBordersAdapter,
   sectionsClearPageBordersAdapter,
 } from '../sections-adapter.js';
-import {
-  paragraphsSetStyleWrapper,
-  paragraphsClearStyleWrapper,
-  paragraphsResetDirectFormattingWrapper,
-  paragraphsSetAlignmentWrapper,
-  paragraphsClearAlignmentWrapper,
-  paragraphsSetIndentationWrapper,
-  paragraphsClearIndentationWrapper,
-  paragraphsSetSpacingWrapper,
-  paragraphsClearSpacingWrapper,
-  paragraphsSetKeepOptionsWrapper,
-  paragraphsSetOutlineLevelWrapper,
-  paragraphsSetFlowOptionsWrapper,
-  paragraphsSetTabStopWrapper,
-  paragraphsClearTabStopWrapper,
-  paragraphsClearAllTabStopsWrapper,
-  paragraphsSetBorderWrapper,
-  paragraphsClearBorderWrapper,
-  paragraphsSetShadingWrapper,
-  paragraphsClearShadingWrapper,
-} from '../plan-engine/paragraphs-wrappers.js';
 import { validateJsonSchema } from './schema-validator.js';
 
 const mockedDeps = vi.hoisted(() => ({
@@ -447,49 +450,6 @@ function makeTextEditor(
   } as unknown as Editor;
 
   return { editor, dispatch, tr };
-}
-
-// ---------------------------------------------------------------------------
-// Paragraph mutation test helpers
-// ---------------------------------------------------------------------------
-
-const P_TARGET = { kind: 'block' as const, nodeType: 'paragraph' as const, nodeId: 'p1' };
-const P_TARGET_MISSING = { kind: 'block' as const, nodeType: 'paragraph' as const, nodeId: 'missing' };
-
-/** Pre-populated properties so both "set" and "clear" applyCase tests produce a real change. */
-const MOCK_PARAGRAPH_PROPERTIES = {
-  styleId: 'Heading1',
-  justification: 'right',
-  indent: { left: 360 },
-  spacing: { before: 60 },
-  keepNext: false,
-  outlineLvl: 0,
-  pageBreakBefore: false,
-  tabStops: [{ tab: { pos: 720, tabType: 'center' } }],
-  borders: { bottom: { val: 'double' } },
-  shading: { fill: '00FF00' },
-};
-
-function makeParagraphEditor(overrides: { nodeAtReturnsNull?: boolean } = {}) {
-  const { editor, dispatch, tr } = makeTextEditor();
-  // paragraphs-wrappers uses setNodeMarkup on the transaction
-  (tr as Record<string, unknown>).setNodeMarkup = vi.fn().mockReturnValue(tr);
-  if (overrides.nodeAtReturnsNull) {
-    editor.state.doc.nodeAt = vi.fn(() => null) as unknown as typeof editor.state.doc.nodeAt;
-  } else {
-    // Wrap nodeAt so the handler sees pre-populated paragraphProperties while
-    // the original descendants() (used by buildBlockIndex) remains untouched.
-    const realNodeAt = editor.state.doc.nodeAt.bind(editor.state.doc);
-    const pProps = { ...MOCK_PARAGRAPH_PROPERTIES };
-    (editor.state.doc as Record<string, unknown>).nodeAt = (pos: number) => {
-      const node = realNodeAt(pos);
-      if (node && (node.type as { name: string }).name === 'paragraph') {
-        return { ...node, attrs: { ...node.attrs, paragraphProperties: pProps } };
-      }
-      return node;
-    };
-  }
-  return { editor, dispatch };
 }
 
 function makeListParagraph(options: {
@@ -1278,6 +1238,626 @@ function expectThrowCode(operationId: OperationId, run: () => unknown): void {
   expect(COMMAND_CATALOG[operationId].throws.preApply).toContain(capturedCode);
 }
 
+function buildFormatInlinePatch(key: InlineRunPatchKey): Record<string, unknown> {
+  // Conformance vectors verify operation-level contract semantics (throw/failure/success)
+  // across all format aliases; a stable patch keeps mock-editor dependencies minimal.
+  if (!INLINE_PROPERTY_REGISTRY.some((entry) => entry.key === key)) {
+    throw new Error(`Unknown inline property key "${key}"`);
+  }
+  return { bold: true };
+}
+
+function buildFormatInlineMutationVector(key: InlineRunPatchKey): MutationVector {
+  return {
+    throwCase: () => {
+      const { editor } = makeTextEditor();
+      return styleApplyWrapper(
+        editor,
+        {
+          target: { kind: 'text', blockId: 'missing', range: { start: 0, end: 1 } },
+          inline: buildFormatInlinePatch(key),
+        } as any,
+        { changeMode: 'direct' },
+      );
+    },
+    failureCase: () => {
+      const { editor } = makeTextEditor();
+      return styleApplyWrapper(
+        editor,
+        {
+          target: { kind: 'text', blockId: 'p1', range: { start: 2, end: 2 } },
+          inline: buildFormatInlinePatch(key),
+        } as any,
+        { changeMode: 'direct' },
+      );
+    },
+    applyCase: () => {
+      const { editor } = makeTextEditor();
+      return styleApplyWrapper(
+        editor,
+        {
+          target: { kind: 'text', blockId: 'p1', range: { start: 0, end: 5 } },
+          inline: buildFormatInlinePatch(key),
+        } as any,
+        { changeMode: 'direct' },
+      );
+    },
+  };
+}
+
+const formatInlineMutationVectors = Object.fromEntries(
+  INLINE_PROPERTY_REGISTRY.map((entry) => {
+    const operationId = `format.${entry.key}` as OperationId;
+    return [operationId, buildFormatInlineMutationVector(entry.key)];
+  }),
+) as Partial<Record<OperationId, MutationVector>>;
+
+const formatInlineDryRunVectors = Object.fromEntries(
+  INLINE_PROPERTY_REGISTRY.map((entry) => {
+    const operationId = `format.${entry.key}` as OperationId;
+    return [
+      operationId,
+      () => {
+        const { editor, dispatch } = makeTextEditor();
+        const result = styleApplyWrapper(
+          editor,
+          {
+            target: { kind: 'text', blockId: 'p1', range: { start: 0, end: 5 } },
+            inline: buildFormatInlinePatch(entry.key),
+          } as any,
+          { changeMode: 'direct', dryRun: true },
+        );
+        expect(dispatch).not.toHaveBeenCalled();
+        return result;
+      },
+    ];
+  }),
+) as Partial<Record<OperationId, () => unknown>>;
+
+const PARAGRAPH_TARGET = { kind: 'block', nodeType: 'paragraph', nodeId: 'p1' } as const;
+const MISSING_PARAGRAPH_TARGET = { kind: 'block', nodeType: 'paragraph', nodeId: 'missing' } as const;
+
+function makeParagraphEditor(paragraphProperties: Record<string, unknown> = {}) {
+  const { editor, dispatch, tr } = makeTextEditor();
+  const transaction = tr as unknown as { setNodeMarkup?: ReturnType<typeof vi.fn> };
+  transaction.setNodeMarkup = vi.fn().mockReturnValue(tr);
+
+  const paragraphNode = {
+    attrs: {
+      sdBlockId: 'p1',
+      paragraphProperties,
+    },
+  };
+
+  (
+    editor.state.doc as unknown as {
+      nodeAt: ReturnType<typeof vi.fn>;
+    }
+  ).nodeAt = vi.fn((pos: number) => (pos === 0 ? paragraphNode : null));
+
+  return { editor, dispatch };
+}
+
+const paragraphMutationVectors: Partial<Record<OperationId, MutationVector>> = {
+  'styles.paragraph.setStyle': {
+    throwCase: () => {
+      const { editor } = makeParagraphEditor();
+      return paragraphsSetStyleWrapper(editor, { target: MISSING_PARAGRAPH_TARGET, styleId: 'Normal' });
+    },
+    failureCase: () => {
+      const { editor } = makeParagraphEditor({ styleId: 'Normal' });
+      return paragraphsSetStyleWrapper(editor, { target: PARAGRAPH_TARGET, styleId: 'Normal' });
+    },
+    applyCase: () => {
+      const { editor } = makeParagraphEditor();
+      return paragraphsSetStyleWrapper(editor, { target: PARAGRAPH_TARGET, styleId: 'Normal' });
+    },
+  },
+  'styles.paragraph.clearStyle': {
+    throwCase: () => {
+      const { editor } = makeParagraphEditor();
+      return paragraphsClearStyleWrapper(editor, { target: MISSING_PARAGRAPH_TARGET });
+    },
+    failureCase: () => {
+      const { editor } = makeParagraphEditor();
+      return paragraphsClearStyleWrapper(editor, { target: PARAGRAPH_TARGET });
+    },
+    applyCase: () => {
+      const { editor } = makeParagraphEditor({ styleId: 'Normal' });
+      return paragraphsClearStyleWrapper(editor, { target: PARAGRAPH_TARGET });
+    },
+  },
+  'format.paragraph.resetDirectFormatting': {
+    throwCase: () => {
+      const { editor } = makeParagraphEditor();
+      return paragraphsResetDirectFormattingWrapper(editor, { target: MISSING_PARAGRAPH_TARGET });
+    },
+    failureCase: () => {
+      const { editor } = makeParagraphEditor();
+      return paragraphsResetDirectFormattingWrapper(editor, { target: PARAGRAPH_TARGET });
+    },
+    applyCase: () => {
+      const { editor } = makeParagraphEditor({ justification: 'center', styleId: 'Normal' });
+      return paragraphsResetDirectFormattingWrapper(editor, { target: PARAGRAPH_TARGET });
+    },
+  },
+  'format.paragraph.setAlignment': {
+    throwCase: () => {
+      const { editor } = makeParagraphEditor();
+      return paragraphsSetAlignmentWrapper(editor, { target: MISSING_PARAGRAPH_TARGET, alignment: 'center' });
+    },
+    failureCase: () => {
+      const { editor } = makeParagraphEditor({ justification: 'center' });
+      return paragraphsSetAlignmentWrapper(editor, { target: PARAGRAPH_TARGET, alignment: 'center' });
+    },
+    applyCase: () => {
+      const { editor } = makeParagraphEditor();
+      return paragraphsSetAlignmentWrapper(editor, { target: PARAGRAPH_TARGET, alignment: 'center' });
+    },
+  },
+  'format.paragraph.clearAlignment': {
+    throwCase: () => {
+      const { editor } = makeParagraphEditor();
+      return paragraphsClearAlignmentWrapper(editor, { target: MISSING_PARAGRAPH_TARGET });
+    },
+    failureCase: () => {
+      const { editor } = makeParagraphEditor();
+      return paragraphsClearAlignmentWrapper(editor, { target: PARAGRAPH_TARGET });
+    },
+    applyCase: () => {
+      const { editor } = makeParagraphEditor({ justification: 'right' });
+      return paragraphsClearAlignmentWrapper(editor, { target: PARAGRAPH_TARGET });
+    },
+  },
+  'format.paragraph.setIndentation': {
+    throwCase: () => {
+      const { editor } = makeParagraphEditor();
+      return paragraphsSetIndentationWrapper(editor, { target: MISSING_PARAGRAPH_TARGET, left: 720 });
+    },
+    failureCase: () => {
+      const { editor } = makeParagraphEditor({ indent: { left: 720 } });
+      return paragraphsSetIndentationWrapper(editor, { target: PARAGRAPH_TARGET, left: 720 });
+    },
+    applyCase: () => {
+      const { editor } = makeParagraphEditor();
+      return paragraphsSetIndentationWrapper(editor, { target: PARAGRAPH_TARGET, left: 720 });
+    },
+  },
+  'format.paragraph.clearIndentation': {
+    throwCase: () => {
+      const { editor } = makeParagraphEditor();
+      return paragraphsClearIndentationWrapper(editor, { target: MISSING_PARAGRAPH_TARGET });
+    },
+    failureCase: () => {
+      const { editor } = makeParagraphEditor();
+      return paragraphsClearIndentationWrapper(editor, { target: PARAGRAPH_TARGET });
+    },
+    applyCase: () => {
+      const { editor } = makeParagraphEditor({ indent: { left: 720 } });
+      return paragraphsClearIndentationWrapper(editor, { target: PARAGRAPH_TARGET });
+    },
+  },
+  'format.paragraph.setSpacing': {
+    throwCase: () => {
+      const { editor } = makeParagraphEditor();
+      return paragraphsSetSpacingWrapper(editor, { target: MISSING_PARAGRAPH_TARGET, before: 120 });
+    },
+    failureCase: () => {
+      const { editor } = makeParagraphEditor({ spacing: { before: 120 } });
+      return paragraphsSetSpacingWrapper(editor, { target: PARAGRAPH_TARGET, before: 120 });
+    },
+    applyCase: () => {
+      const { editor } = makeParagraphEditor();
+      return paragraphsSetSpacingWrapper(editor, { target: PARAGRAPH_TARGET, before: 120, after: 120 });
+    },
+  },
+  'format.paragraph.clearSpacing': {
+    throwCase: () => {
+      const { editor } = makeParagraphEditor();
+      return paragraphsClearSpacingWrapper(editor, { target: MISSING_PARAGRAPH_TARGET });
+    },
+    failureCase: () => {
+      const { editor } = makeParagraphEditor();
+      return paragraphsClearSpacingWrapper(editor, { target: PARAGRAPH_TARGET });
+    },
+    applyCase: () => {
+      const { editor } = makeParagraphEditor({ spacing: { before: 120 } });
+      return paragraphsClearSpacingWrapper(editor, { target: PARAGRAPH_TARGET });
+    },
+  },
+  'format.paragraph.setKeepOptions': {
+    throwCase: () => {
+      const { editor } = makeParagraphEditor();
+      return paragraphsSetKeepOptionsWrapper(editor, { target: MISSING_PARAGRAPH_TARGET, keepNext: true });
+    },
+    failureCase: () => {
+      const { editor } = makeParagraphEditor({ keepNext: true });
+      return paragraphsSetKeepOptionsWrapper(editor, { target: PARAGRAPH_TARGET, keepNext: true });
+    },
+    applyCase: () => {
+      const { editor } = makeParagraphEditor();
+      return paragraphsSetKeepOptionsWrapper(editor, { target: PARAGRAPH_TARGET, keepNext: true });
+    },
+  },
+  'format.paragraph.setOutlineLevel': {
+    throwCase: () => {
+      const { editor } = makeParagraphEditor();
+      return paragraphsSetOutlineLevelWrapper(editor, { target: MISSING_PARAGRAPH_TARGET, outlineLevel: 2 });
+    },
+    failureCase: () => {
+      const { editor } = makeParagraphEditor({ outlineLvl: 2 });
+      return paragraphsSetOutlineLevelWrapper(editor, { target: PARAGRAPH_TARGET, outlineLevel: 2 });
+    },
+    applyCase: () => {
+      const { editor } = makeParagraphEditor();
+      return paragraphsSetOutlineLevelWrapper(editor, { target: PARAGRAPH_TARGET, outlineLevel: 2 });
+    },
+  },
+  'format.paragraph.setFlowOptions': {
+    throwCase: () => {
+      const { editor } = makeParagraphEditor();
+      return paragraphsSetFlowOptionsWrapper(editor, { target: MISSING_PARAGRAPH_TARGET, contextualSpacing: true });
+    },
+    failureCase: () => {
+      const { editor } = makeParagraphEditor({ contextualSpacing: true });
+      return paragraphsSetFlowOptionsWrapper(editor, { target: PARAGRAPH_TARGET, contextualSpacing: true });
+    },
+    applyCase: () => {
+      const { editor } = makeParagraphEditor();
+      return paragraphsSetFlowOptionsWrapper(editor, { target: PARAGRAPH_TARGET, contextualSpacing: true });
+    },
+  },
+  'format.paragraph.setTabStop': {
+    throwCase: () => {
+      const { editor } = makeParagraphEditor();
+      return paragraphsSetTabStopWrapper(editor, {
+        target: MISSING_PARAGRAPH_TARGET,
+        position: 720,
+        alignment: 'left',
+      });
+    },
+    failureCase: () => {
+      const { editor } = makeParagraphEditor({ tabStops: [{ tab: { pos: 720, tabType: 'left' } }] });
+      return paragraphsSetTabStopWrapper(editor, { target: PARAGRAPH_TARGET, position: 720, alignment: 'left' });
+    },
+    applyCase: () => {
+      const { editor } = makeParagraphEditor();
+      return paragraphsSetTabStopWrapper(editor, { target: PARAGRAPH_TARGET, position: 720, alignment: 'left' });
+    },
+  },
+  'format.paragraph.clearTabStop': {
+    throwCase: () => {
+      const { editor } = makeParagraphEditor();
+      return paragraphsClearTabStopWrapper(editor, { target: MISSING_PARAGRAPH_TARGET, position: 720 });
+    },
+    failureCase: () => {
+      const { editor } = makeParagraphEditor();
+      return paragraphsClearTabStopWrapper(editor, { target: PARAGRAPH_TARGET, position: 720 });
+    },
+    applyCase: () => {
+      const { editor } = makeParagraphEditor({ tabStops: [{ tab: { pos: 720, tabType: 'left' } }] });
+      return paragraphsClearTabStopWrapper(editor, { target: PARAGRAPH_TARGET, position: 720 });
+    },
+  },
+  'format.paragraph.clearAllTabStops': {
+    throwCase: () => {
+      const { editor } = makeParagraphEditor();
+      return paragraphsClearAllTabStopsWrapper(editor, { target: MISSING_PARAGRAPH_TARGET });
+    },
+    failureCase: () => {
+      const { editor } = makeParagraphEditor();
+      return paragraphsClearAllTabStopsWrapper(editor, { target: PARAGRAPH_TARGET });
+    },
+    applyCase: () => {
+      const { editor } = makeParagraphEditor({ tabStops: [{ tab: { pos: 720, tabType: 'left' } }] });
+      return paragraphsClearAllTabStopsWrapper(editor, { target: PARAGRAPH_TARGET });
+    },
+  },
+  'format.paragraph.setBorder': {
+    throwCase: () => {
+      const { editor } = makeParagraphEditor();
+      return paragraphsSetBorderWrapper(editor, {
+        target: MISSING_PARAGRAPH_TARGET,
+        side: 'top',
+        style: 'single',
+      });
+    },
+    failureCase: () => {
+      const { editor } = makeParagraphEditor({ borders: { top: { val: 'single' } } });
+      return paragraphsSetBorderWrapper(editor, { target: PARAGRAPH_TARGET, side: 'top', style: 'single' });
+    },
+    applyCase: () => {
+      const { editor } = makeParagraphEditor();
+      return paragraphsSetBorderWrapper(editor, { target: PARAGRAPH_TARGET, side: 'top', style: 'single' });
+    },
+  },
+  'format.paragraph.clearBorder': {
+    throwCase: () => {
+      const { editor } = makeParagraphEditor();
+      return paragraphsClearBorderWrapper(editor, { target: MISSING_PARAGRAPH_TARGET, side: 'top' });
+    },
+    failureCase: () => {
+      const { editor } = makeParagraphEditor();
+      return paragraphsClearBorderWrapper(editor, { target: PARAGRAPH_TARGET, side: 'top' });
+    },
+    applyCase: () => {
+      const { editor } = makeParagraphEditor({ borders: { top: { val: 'single' } } });
+      return paragraphsClearBorderWrapper(editor, { target: PARAGRAPH_TARGET, side: 'top' });
+    },
+  },
+  'format.paragraph.setShading': {
+    throwCase: () => {
+      const { editor } = makeParagraphEditor();
+      return paragraphsSetShadingWrapper(editor, { target: MISSING_PARAGRAPH_TARGET, fill: 'FFFF00' });
+    },
+    failureCase: () => {
+      const { editor } = makeParagraphEditor({ shading: { fill: 'FFFF00' } });
+      return paragraphsSetShadingWrapper(editor, { target: PARAGRAPH_TARGET, fill: 'FFFF00' });
+    },
+    applyCase: () => {
+      const { editor } = makeParagraphEditor();
+      return paragraphsSetShadingWrapper(editor, { target: PARAGRAPH_TARGET, fill: 'FFFF00' });
+    },
+  },
+  'format.paragraph.clearShading': {
+    throwCase: () => {
+      const { editor } = makeParagraphEditor();
+      return paragraphsClearShadingWrapper(editor, { target: MISSING_PARAGRAPH_TARGET });
+    },
+    failureCase: () => {
+      const { editor } = makeParagraphEditor();
+      return paragraphsClearShadingWrapper(editor, { target: PARAGRAPH_TARGET });
+    },
+    applyCase: () => {
+      const { editor } = makeParagraphEditor({ shading: { fill: 'FFFF00' } });
+      return paragraphsClearShadingWrapper(editor, { target: PARAGRAPH_TARGET });
+    },
+  },
+};
+
+const paragraphDryRunVectors: Partial<Record<OperationId, () => unknown>> = {
+  'styles.paragraph.setStyle': () => {
+    const { editor, dispatch } = makeParagraphEditor();
+    const result = paragraphsSetStyleWrapper(
+      editor,
+      { target: PARAGRAPH_TARGET, styleId: 'Normal' },
+      { changeMode: 'direct', dryRun: true },
+    );
+    expect(dispatch).not.toHaveBeenCalled();
+    return result;
+  },
+  'styles.paragraph.clearStyle': () => {
+    const { editor, dispatch } = makeParagraphEditor({ styleId: 'Normal' });
+    const result = paragraphsClearStyleWrapper(
+      editor,
+      { target: PARAGRAPH_TARGET },
+      { changeMode: 'direct', dryRun: true },
+    );
+    expect(dispatch).not.toHaveBeenCalled();
+    return result;
+  },
+  'format.paragraph.resetDirectFormatting': () => {
+    const { editor, dispatch } = makeParagraphEditor({ styleId: 'Normal', justification: 'center' });
+    const result = paragraphsResetDirectFormattingWrapper(
+      editor,
+      { target: PARAGRAPH_TARGET },
+      { changeMode: 'direct', dryRun: true },
+    );
+    expect(dispatch).not.toHaveBeenCalled();
+    return result;
+  },
+  'format.paragraph.setAlignment': () => {
+    const { editor, dispatch } = makeParagraphEditor();
+    const result = paragraphsSetAlignmentWrapper(
+      editor,
+      { target: PARAGRAPH_TARGET, alignment: 'center' },
+      { changeMode: 'direct', dryRun: true },
+    );
+    expect(dispatch).not.toHaveBeenCalled();
+    return result;
+  },
+  'format.paragraph.clearAlignment': () => {
+    const { editor, dispatch } = makeParagraphEditor({ justification: 'right' });
+    const result = paragraphsClearAlignmentWrapper(
+      editor,
+      { target: PARAGRAPH_TARGET },
+      { changeMode: 'direct', dryRun: true },
+    );
+    expect(dispatch).not.toHaveBeenCalled();
+    return result;
+  },
+  'format.paragraph.setIndentation': () => {
+    const { editor, dispatch } = makeParagraphEditor();
+    const result = paragraphsSetIndentationWrapper(
+      editor,
+      { target: PARAGRAPH_TARGET, left: 720 },
+      { changeMode: 'direct', dryRun: true },
+    );
+    expect(dispatch).not.toHaveBeenCalled();
+    return result;
+  },
+  'format.paragraph.clearIndentation': () => {
+    const { editor, dispatch } = makeParagraphEditor({ indent: { left: 720 } });
+    const result = paragraphsClearIndentationWrapper(
+      editor,
+      { target: PARAGRAPH_TARGET },
+      { changeMode: 'direct', dryRun: true },
+    );
+    expect(dispatch).not.toHaveBeenCalled();
+    return result;
+  },
+  'format.paragraph.setSpacing': () => {
+    const { editor, dispatch } = makeParagraphEditor();
+    const result = paragraphsSetSpacingWrapper(
+      editor,
+      { target: PARAGRAPH_TARGET, before: 120 },
+      { changeMode: 'direct', dryRun: true },
+    );
+    expect(dispatch).not.toHaveBeenCalled();
+    return result;
+  },
+  'format.paragraph.clearSpacing': () => {
+    const { editor, dispatch } = makeParagraphEditor({ spacing: { before: 120 } });
+    const result = paragraphsClearSpacingWrapper(
+      editor,
+      { target: PARAGRAPH_TARGET },
+      { changeMode: 'direct', dryRun: true },
+    );
+    expect(dispatch).not.toHaveBeenCalled();
+    return result;
+  },
+  'format.paragraph.setKeepOptions': () => {
+    const { editor, dispatch } = makeParagraphEditor();
+    const result = paragraphsSetKeepOptionsWrapper(
+      editor,
+      { target: PARAGRAPH_TARGET, keepNext: true },
+      { changeMode: 'direct', dryRun: true },
+    );
+    expect(dispatch).not.toHaveBeenCalled();
+    return result;
+  },
+  'format.paragraph.setOutlineLevel': () => {
+    const { editor, dispatch } = makeParagraphEditor();
+    const result = paragraphsSetOutlineLevelWrapper(
+      editor,
+      { target: PARAGRAPH_TARGET, outlineLevel: 2 },
+      { changeMode: 'direct', dryRun: true },
+    );
+    expect(dispatch).not.toHaveBeenCalled();
+    return result;
+  },
+  'format.paragraph.setFlowOptions': () => {
+    const { editor, dispatch } = makeParagraphEditor();
+    const result = paragraphsSetFlowOptionsWrapper(
+      editor,
+      { target: PARAGRAPH_TARGET, contextualSpacing: true },
+      { changeMode: 'direct', dryRun: true },
+    );
+    expect(dispatch).not.toHaveBeenCalled();
+    return result;
+  },
+  'format.paragraph.setTabStop': () => {
+    const { editor, dispatch } = makeParagraphEditor();
+    const result = paragraphsSetTabStopWrapper(
+      editor,
+      { target: PARAGRAPH_TARGET, position: 720, alignment: 'left' },
+      { changeMode: 'direct', dryRun: true },
+    );
+    expect(dispatch).not.toHaveBeenCalled();
+    return result;
+  },
+  'format.paragraph.clearTabStop': () => {
+    const { editor, dispatch } = makeParagraphEditor({ tabStops: [{ tab: { pos: 720, tabType: 'left' } }] });
+    const result = paragraphsClearTabStopWrapper(
+      editor,
+      { target: PARAGRAPH_TARGET, position: 720 },
+      { changeMode: 'direct', dryRun: true },
+    );
+    expect(dispatch).not.toHaveBeenCalled();
+    return result;
+  },
+  'format.paragraph.clearAllTabStops': () => {
+    const { editor, dispatch } = makeParagraphEditor({ tabStops: [{ tab: { pos: 720, tabType: 'left' } }] });
+    const result = paragraphsClearAllTabStopsWrapper(
+      editor,
+      { target: PARAGRAPH_TARGET },
+      { changeMode: 'direct', dryRun: true },
+    );
+    expect(dispatch).not.toHaveBeenCalled();
+    return result;
+  },
+  'format.paragraph.setBorder': () => {
+    const { editor, dispatch } = makeParagraphEditor();
+    const result = paragraphsSetBorderWrapper(
+      editor,
+      { target: PARAGRAPH_TARGET, side: 'top', style: 'single' },
+      { changeMode: 'direct', dryRun: true },
+    );
+    expect(dispatch).not.toHaveBeenCalled();
+    return result;
+  },
+  'format.paragraph.clearBorder': () => {
+    const { editor, dispatch } = makeParagraphEditor({ borders: { top: { val: 'single' } } });
+    const result = paragraphsClearBorderWrapper(
+      editor,
+      { target: PARAGRAPH_TARGET, side: 'top' },
+      { changeMode: 'direct', dryRun: true },
+    );
+    expect(dispatch).not.toHaveBeenCalled();
+    return result;
+  },
+  'format.paragraph.setShading': () => {
+    const { editor, dispatch } = makeParagraphEditor();
+    const result = paragraphsSetShadingWrapper(
+      editor,
+      { target: PARAGRAPH_TARGET, fill: 'FFFF00' },
+      { changeMode: 'direct', dryRun: true },
+    );
+    expect(dispatch).not.toHaveBeenCalled();
+    return result;
+  },
+  'format.paragraph.clearShading': () => {
+    const { editor, dispatch } = makeParagraphEditor({ shading: { fill: 'FFFF00' } });
+    const result = paragraphsClearShadingWrapper(
+      editor,
+      { target: PARAGRAPH_TARGET },
+      { changeMode: 'direct', dryRun: true },
+    );
+    expect(dispatch).not.toHaveBeenCalled();
+    return result;
+  },
+};
+
+function makeTocEditor(commandOverrides: Record<string, unknown> = {}): Editor {
+  const tocParagraph = createNode('paragraph', [createNode('text', [], { text: 'TOC entry' })], {
+    attrs: { sdBlockId: 'toc-entry-p1' },
+    isBlock: true,
+    inlineContent: true,
+  });
+  const tocNode = createNode('tableOfContents', [tocParagraph], {
+    attrs: { sdBlockId: 'toc-1', instruction: 'TOC \\o "1-3" \\h \\u \\z' },
+    isBlock: true,
+  });
+  const heading = createNode('paragraph', [createNode('text', [], { text: 'Heading 1' })], {
+    attrs: {
+      sdBlockId: 'h-1',
+      paragraphProperties: { styleId: 'Heading1' },
+    },
+    isBlock: true,
+    inlineContent: true,
+  });
+  const doc = createNode('doc', [tocNode, heading], { isBlock: false });
+
+  const dispatch = vi.fn();
+  const tr = {
+    insertText: vi.fn().mockReturnThis(),
+    delete: vi.fn().mockReturnThis(),
+    insert: vi.fn().mockReturnThis(),
+    setNodeMarkup: vi.fn().mockReturnThis(),
+    replaceWith: vi.fn().mockReturnThis(),
+    setMeta: vi.fn().mockReturnThis(),
+    mapping: { map: (pos: number) => pos },
+    docChanged: true,
+    steps: [{}],
+    doc,
+  };
+
+  return {
+    state: { doc, tr, schema: { nodes: { paragraph: { create: vi.fn() }, tableOfContents: {} } } },
+    dispatch,
+    commands: {
+      insertTableOfContentsAt: vi.fn(() => true),
+      setTableOfContentsInstructionById: vi.fn(() => true),
+      replaceTableOfContentsContentById: vi.fn(() => true),
+      deleteTableOfContentsById: vi.fn(() => true),
+      ...commandOverrides,
+    },
+    schema: { marks: {} },
+    options: {},
+    on: () => {},
+  } as unknown as Editor;
+}
+
 const mutationVectors: Partial<Record<OperationId, MutationVector>> = {
   'blocks.delete': {
     throwCase: () => {
@@ -1401,84 +1981,8 @@ const mutationVectors: Partial<Record<OperationId, MutationVector>> = {
       );
     },
   },
-  'format.fontSize': {
-    throwCase: () => {
-      const { editor } = makeTextEditor();
-      return formatFontSizeWrapper(
-        editor,
-        { target: { kind: 'text', blockId: 'missing', range: { start: 0, end: 1 } }, value: '14pt' },
-        { changeMode: 'direct' },
-      );
-    },
-    failureCase: () => {
-      const { editor } = makeTextEditor();
-      return formatFontSizeWrapper(
-        editor,
-        { target: { kind: 'text', blockId: 'p1', range: { start: 2, end: 2 } }, value: '14pt' },
-        { changeMode: 'direct' },
-      );
-    },
-    applyCase: () => {
-      const { editor } = makeTextEditor();
-      return formatFontSizeWrapper(
-        editor,
-        { target: { kind: 'text', blockId: 'p1', range: { start: 0, end: 5 } }, value: '14pt' },
-        { changeMode: 'direct' },
-      );
-    },
-  },
-  'format.fontFamily': {
-    throwCase: () => {
-      const { editor } = makeTextEditor();
-      return formatFontFamilyWrapper(
-        editor,
-        { target: { kind: 'text', blockId: 'missing', range: { start: 0, end: 1 } }, value: 'Arial' },
-        { changeMode: 'direct' },
-      );
-    },
-    failureCase: () => {
-      const { editor } = makeTextEditor();
-      return formatFontFamilyWrapper(
-        editor,
-        { target: { kind: 'text', blockId: 'p1', range: { start: 2, end: 2 } }, value: 'Arial' },
-        { changeMode: 'direct' },
-      );
-    },
-    applyCase: () => {
-      const { editor } = makeTextEditor();
-      return formatFontFamilyWrapper(
-        editor,
-        { target: { kind: 'text', blockId: 'p1', range: { start: 0, end: 5 } }, value: 'Arial' },
-        { changeMode: 'direct' },
-      );
-    },
-  },
-  'format.color': {
-    throwCase: () => {
-      const { editor } = makeTextEditor();
-      return formatColorWrapper(
-        editor,
-        { target: { kind: 'text', blockId: 'missing', range: { start: 0, end: 1 } }, value: '#ff0000' },
-        { changeMode: 'direct' },
-      );
-    },
-    failureCase: () => {
-      const { editor } = makeTextEditor();
-      return formatColorWrapper(
-        editor,
-        { target: { kind: 'text', blockId: 'p1', range: { start: 2, end: 2 } }, value: '#ff0000' },
-        { changeMode: 'direct' },
-      );
-    },
-    applyCase: () => {
-      const { editor } = makeTextEditor();
-      return formatColorWrapper(
-        editor,
-        { target: { kind: 'text', blockId: 'p1', range: { start: 0, end: 5 } }, value: '#ff0000' },
-        { changeMode: 'direct' },
-      );
-    },
-  },
+  ...formatInlineMutationVectors,
+  ...paragraphMutationVectors,
   'create.paragraph': {
     throwCase: () => {
       const { editor } = makeTextEditor('Hello', { commands: { insertParagraphAt: undefined } });
@@ -2930,333 +3434,102 @@ const mutationVectors: Partial<Record<OperationId, MutationVector>> = {
       );
     },
   },
-  // ---------------------------------------------------------------------------
-  // Paragraph property mutations
-  // ---------------------------------------------------------------------------
-  'styles.paragraph.setStyle': {
+
+  // -------------------------------------------------------------------------
+  // TOC operations
+  // -------------------------------------------------------------------------
+  'create.tableOfContents': {
     throwCase: () => {
-      const { editor } = makeParagraphEditor();
-      return paragraphsSetStyleWrapper(
+      const editor = makeTocEditor({ insertTableOfContentsAt: undefined });
+      return createTableOfContentsWrapper(editor, {}, { changeMode: 'direct' });
+    },
+    failureCase: () => {
+      const editor = makeTocEditor({ insertTableOfContentsAt: vi.fn(() => false) });
+      return createTableOfContentsWrapper(editor, { at: { kind: 'documentEnd' } }, { changeMode: 'direct' });
+    },
+    applyCase: () => {
+      const editor = makeTocEditor();
+      return createTableOfContentsWrapper(editor, { at: { kind: 'documentEnd' } }, { changeMode: 'direct' });
+    },
+  },
+  'toc.configure': {
+    throwCase: () => {
+      const editor = makeTocEditor();
+      return tocConfigureWrapper(
         editor,
-        { target: P_TARGET_MISSING, styleId: 'Normal' },
+        { target: { kind: 'block', nodeType: 'tableOfContents', nodeId: 'missing' }, patch: { hyperlinks: false } },
         { changeMode: 'direct' },
       );
     },
     failureCase: () => {
-      const { editor } = makeParagraphEditor({ nodeAtReturnsNull: true });
-      return paragraphsSetStyleWrapper(editor, { target: P_TARGET, styleId: 'Normal' }, { changeMode: 'direct' });
-    },
-    applyCase: () => {
-      const { editor } = makeParagraphEditor();
-      return paragraphsSetStyleWrapper(editor, { target: P_TARGET, styleId: 'Normal' }, { changeMode: 'direct' });
-    },
-  },
-  'styles.paragraph.clearStyle': {
-    throwCase: () => {
-      const { editor } = makeParagraphEditor();
-      return paragraphsClearStyleWrapper(editor, { target: P_TARGET_MISSING }, { changeMode: 'direct' });
-    },
-    failureCase: () => {
-      const { editor } = makeParagraphEditor({ nodeAtReturnsNull: true });
-      return paragraphsClearStyleWrapper(editor, { target: P_TARGET }, { changeMode: 'direct' });
-    },
-    applyCase: () => {
-      const { editor } = makeParagraphEditor();
-      return paragraphsClearStyleWrapper(editor, { target: P_TARGET }, { changeMode: 'direct' });
-    },
-  },
-  'format.paragraph.resetDirectFormatting': {
-    throwCase: () => {
-      const { editor } = makeParagraphEditor();
-      return paragraphsResetDirectFormattingWrapper(editor, { target: P_TARGET_MISSING }, { changeMode: 'direct' });
-    },
-    failureCase: () => {
-      const { editor } = makeParagraphEditor({ nodeAtReturnsNull: true });
-      return paragraphsResetDirectFormattingWrapper(editor, { target: P_TARGET }, { changeMode: 'direct' });
-    },
-    applyCase: () => {
-      const { editor } = makeParagraphEditor();
-      return paragraphsResetDirectFormattingWrapper(editor, { target: P_TARGET }, { changeMode: 'direct' });
-    },
-  },
-  'format.paragraph.setAlignment': {
-    throwCase: () => {
-      const { editor } = makeParagraphEditor();
-      return paragraphsSetAlignmentWrapper(
+      // Patch produces no change → NO_OP
+      const editor = makeTocEditor();
+      return tocConfigureWrapper(
         editor,
-        { target: P_TARGET_MISSING, alignment: 'center' },
-        { changeMode: 'direct' },
-      );
-    },
-    failureCase: () => {
-      const { editor } = makeParagraphEditor({ nodeAtReturnsNull: true });
-      return paragraphsSetAlignmentWrapper(editor, { target: P_TARGET, alignment: 'center' }, { changeMode: 'direct' });
-    },
-    applyCase: () => {
-      const { editor } = makeParagraphEditor();
-      return paragraphsSetAlignmentWrapper(editor, { target: P_TARGET, alignment: 'center' }, { changeMode: 'direct' });
-    },
-  },
-  'format.paragraph.clearAlignment': {
-    throwCase: () => {
-      const { editor } = makeParagraphEditor();
-      return paragraphsClearAlignmentWrapper(editor, { target: P_TARGET_MISSING }, { changeMode: 'direct' });
-    },
-    failureCase: () => {
-      const { editor } = makeParagraphEditor({ nodeAtReturnsNull: true });
-      return paragraphsClearAlignmentWrapper(editor, { target: P_TARGET }, { changeMode: 'direct' });
-    },
-    applyCase: () => {
-      const { editor } = makeParagraphEditor();
-      return paragraphsClearAlignmentWrapper(editor, { target: P_TARGET }, { changeMode: 'direct' });
-    },
-  },
-  'format.paragraph.setIndentation': {
-    throwCase: () => {
-      const { editor } = makeParagraphEditor();
-      return paragraphsSetIndentationWrapper(editor, { target: P_TARGET_MISSING, left: 720 }, { changeMode: 'direct' });
-    },
-    failureCase: () => {
-      const { editor } = makeParagraphEditor({ nodeAtReturnsNull: true });
-      return paragraphsSetIndentationWrapper(editor, { target: P_TARGET, left: 720 }, { changeMode: 'direct' });
-    },
-    applyCase: () => {
-      const { editor } = makeParagraphEditor();
-      return paragraphsSetIndentationWrapper(editor, { target: P_TARGET, left: 720 }, { changeMode: 'direct' });
-    },
-  },
-  'format.paragraph.clearIndentation': {
-    throwCase: () => {
-      const { editor } = makeParagraphEditor();
-      return paragraphsClearIndentationWrapper(editor, { target: P_TARGET_MISSING }, { changeMode: 'direct' });
-    },
-    failureCase: () => {
-      const { editor } = makeParagraphEditor({ nodeAtReturnsNull: true });
-      return paragraphsClearIndentationWrapper(editor, { target: P_TARGET }, { changeMode: 'direct' });
-    },
-    applyCase: () => {
-      const { editor } = makeParagraphEditor();
-      return paragraphsClearIndentationWrapper(editor, { target: P_TARGET }, { changeMode: 'direct' });
-    },
-  },
-  'format.paragraph.setSpacing': {
-    throwCase: () => {
-      const { editor } = makeParagraphEditor();
-      return paragraphsSetSpacingWrapper(editor, { target: P_TARGET_MISSING, before: 120 }, { changeMode: 'direct' });
-    },
-    failureCase: () => {
-      const { editor } = makeParagraphEditor({ nodeAtReturnsNull: true });
-      return paragraphsSetSpacingWrapper(editor, { target: P_TARGET, before: 120 }, { changeMode: 'direct' });
-    },
-    applyCase: () => {
-      const { editor } = makeParagraphEditor();
-      return paragraphsSetSpacingWrapper(editor, { target: P_TARGET, before: 120 }, { changeMode: 'direct' });
-    },
-  },
-  'format.paragraph.clearSpacing': {
-    throwCase: () => {
-      const { editor } = makeParagraphEditor();
-      return paragraphsClearSpacingWrapper(editor, { target: P_TARGET_MISSING }, { changeMode: 'direct' });
-    },
-    failureCase: () => {
-      const { editor } = makeParagraphEditor({ nodeAtReturnsNull: true });
-      return paragraphsClearSpacingWrapper(editor, { target: P_TARGET }, { changeMode: 'direct' });
-    },
-    applyCase: () => {
-      const { editor } = makeParagraphEditor();
-      return paragraphsClearSpacingWrapper(editor, { target: P_TARGET }, { changeMode: 'direct' });
-    },
-  },
-  'format.paragraph.setKeepOptions': {
-    throwCase: () => {
-      const { editor } = makeParagraphEditor();
-      return paragraphsSetKeepOptionsWrapper(
-        editor,
-        { target: P_TARGET_MISSING, keepNext: true },
-        { changeMode: 'direct' },
-      );
-    },
-    failureCase: () => {
-      const { editor } = makeParagraphEditor({ nodeAtReturnsNull: true });
-      return paragraphsSetKeepOptionsWrapper(editor, { target: P_TARGET, keepNext: true }, { changeMode: 'direct' });
-    },
-    applyCase: () => {
-      const { editor } = makeParagraphEditor();
-      return paragraphsSetKeepOptionsWrapper(editor, { target: P_TARGET, keepNext: true }, { changeMode: 'direct' });
-    },
-  },
-  'format.paragraph.setOutlineLevel': {
-    throwCase: () => {
-      const { editor } = makeParagraphEditor();
-      return paragraphsSetOutlineLevelWrapper(
-        editor,
-        { target: P_TARGET_MISSING, outlineLevel: 1 },
-        { changeMode: 'direct' },
-      );
-    },
-    failureCase: () => {
-      const { editor } = makeParagraphEditor({ nodeAtReturnsNull: true });
-      return paragraphsSetOutlineLevelWrapper(editor, { target: P_TARGET, outlineLevel: 1 }, { changeMode: 'direct' });
-    },
-    applyCase: () => {
-      const { editor } = makeParagraphEditor();
-      return paragraphsSetOutlineLevelWrapper(editor, { target: P_TARGET, outlineLevel: 1 }, { changeMode: 'direct' });
-    },
-  },
-  'format.paragraph.setFlowOptions': {
-    throwCase: () => {
-      const { editor } = makeParagraphEditor();
-      return paragraphsSetFlowOptionsWrapper(
-        editor,
-        { target: P_TARGET_MISSING, pageBreakBefore: true },
-        { changeMode: 'direct' },
-      );
-    },
-    failureCase: () => {
-      const { editor } = makeParagraphEditor({ nodeAtReturnsNull: true });
-      return paragraphsSetFlowOptionsWrapper(
-        editor,
-        { target: P_TARGET, pageBreakBefore: true },
+        { target: { kind: 'block', nodeType: 'tableOfContents', nodeId: 'toc-1' }, patch: {} },
         { changeMode: 'direct' },
       );
     },
     applyCase: () => {
-      const { editor } = makeParagraphEditor();
-      return paragraphsSetFlowOptionsWrapper(
+      const editor = makeTocEditor();
+      return tocConfigureWrapper(
         editor,
-        { target: P_TARGET, pageBreakBefore: true },
+        { target: { kind: 'block', nodeType: 'tableOfContents', nodeId: 'toc-1' }, patch: { hyperlinks: false } },
         { changeMode: 'direct' },
       );
     },
   },
-  'format.paragraph.setTabStop': {
+  'toc.update': {
     throwCase: () => {
-      const { editor } = makeParagraphEditor();
-      return paragraphsSetTabStopWrapper(
+      const editor = makeTocEditor();
+      return tocUpdateWrapper(
         editor,
-        { target: P_TARGET_MISSING, position: 720, alignment: 'left' },
+        { target: { kind: 'block', nodeType: 'tableOfContents', nodeId: 'missing' } },
         { changeMode: 'direct' },
       );
     },
     failureCase: () => {
-      const { editor } = makeParagraphEditor({ nodeAtReturnsNull: true });
-      return paragraphsSetTabStopWrapper(
+      // Update with no heading sources and command returns false
+      const editor = makeTocEditor({ replaceTableOfContentsContentById: vi.fn(() => false) });
+      return tocUpdateWrapper(
         editor,
-        { target: P_TARGET, position: 720, alignment: 'left' },
+        { target: { kind: 'block', nodeType: 'tableOfContents', nodeId: 'toc-1' } },
         { changeMode: 'direct' },
       );
     },
     applyCase: () => {
-      const { editor } = makeParagraphEditor();
-      return paragraphsSetTabStopWrapper(
+      const editor = makeTocEditor();
+      return tocUpdateWrapper(
         editor,
-        { target: P_TARGET, position: 720, alignment: 'left' },
+        { target: { kind: 'block', nodeType: 'tableOfContents', nodeId: 'toc-1' } },
         { changeMode: 'direct' },
       );
     },
   },
-  'format.paragraph.clearTabStop': {
+  'toc.remove': {
     throwCase: () => {
-      const { editor } = makeParagraphEditor();
-      return paragraphsClearTabStopWrapper(
+      const editor = makeTocEditor();
+      return tocRemoveWrapper(
         editor,
-        { target: P_TARGET_MISSING, position: 720 },
+        { target: { kind: 'block', nodeType: 'tableOfContents', nodeId: 'missing' } },
         { changeMode: 'direct' },
       );
     },
     failureCase: () => {
-      const { editor } = makeParagraphEditor({ nodeAtReturnsNull: true });
-      return paragraphsClearTabStopWrapper(editor, { target: P_TARGET, position: 720 }, { changeMode: 'direct' });
-    },
-    applyCase: () => {
-      const { editor } = makeParagraphEditor();
-      return paragraphsClearTabStopWrapper(editor, { target: P_TARGET, position: 720 }, { changeMode: 'direct' });
-    },
-  },
-  'format.paragraph.clearAllTabStops': {
-    throwCase: () => {
-      const { editor } = makeParagraphEditor();
-      return paragraphsClearAllTabStopsWrapper(editor, { target: P_TARGET_MISSING }, { changeMode: 'direct' });
-    },
-    failureCase: () => {
-      const { editor } = makeParagraphEditor({ nodeAtReturnsNull: true });
-      return paragraphsClearAllTabStopsWrapper(editor, { target: P_TARGET }, { changeMode: 'direct' });
-    },
-    applyCase: () => {
-      const { editor } = makeParagraphEditor();
-      return paragraphsClearAllTabStopsWrapper(editor, { target: P_TARGET }, { changeMode: 'direct' });
-    },
-  },
-  'format.paragraph.setBorder': {
-    throwCase: () => {
-      const { editor } = makeParagraphEditor();
-      return paragraphsSetBorderWrapper(
+      const editor = makeTocEditor({ deleteTableOfContentsById: vi.fn(() => false) });
+      return tocRemoveWrapper(
         editor,
-        { target: P_TARGET_MISSING, side: 'top', style: 'single' },
-        { changeMode: 'direct' },
-      );
-    },
-    failureCase: () => {
-      const { editor } = makeParagraphEditor({ nodeAtReturnsNull: true });
-      return paragraphsSetBorderWrapper(
-        editor,
-        { target: P_TARGET, side: 'top', style: 'single' },
+        { target: { kind: 'block', nodeType: 'tableOfContents', nodeId: 'toc-1' } },
         { changeMode: 'direct' },
       );
     },
     applyCase: () => {
-      const { editor } = makeParagraphEditor();
-      return paragraphsSetBorderWrapper(
+      const editor = makeTocEditor();
+      return tocRemoveWrapper(
         editor,
-        { target: P_TARGET, side: 'top', style: 'single' },
+        { target: { kind: 'block', nodeType: 'tableOfContents', nodeId: 'toc-1' } },
         { changeMode: 'direct' },
       );
-    },
-  },
-  'format.paragraph.clearBorder': {
-    throwCase: () => {
-      const { editor } = makeParagraphEditor();
-      return paragraphsClearBorderWrapper(editor, { target: P_TARGET_MISSING, side: 'all' }, { changeMode: 'direct' });
-    },
-    failureCase: () => {
-      const { editor } = makeParagraphEditor({ nodeAtReturnsNull: true });
-      return paragraphsClearBorderWrapper(editor, { target: P_TARGET, side: 'all' }, { changeMode: 'direct' });
-    },
-    applyCase: () => {
-      const { editor } = makeParagraphEditor();
-      return paragraphsClearBorderWrapper(editor, { target: P_TARGET, side: 'all' }, { changeMode: 'direct' });
-    },
-  },
-  'format.paragraph.setShading': {
-    throwCase: () => {
-      const { editor } = makeParagraphEditor();
-      return paragraphsSetShadingWrapper(
-        editor,
-        { target: P_TARGET_MISSING, fill: 'FF0000' },
-        { changeMode: 'direct' },
-      );
-    },
-    failureCase: () => {
-      const { editor } = makeParagraphEditor({ nodeAtReturnsNull: true });
-      return paragraphsSetShadingWrapper(editor, { target: P_TARGET, fill: 'FF0000' }, { changeMode: 'direct' });
-    },
-    applyCase: () => {
-      const { editor } = makeParagraphEditor();
-      return paragraphsSetShadingWrapper(editor, { target: P_TARGET, fill: 'FF0000' }, { changeMode: 'direct' });
-    },
-  },
-  'format.paragraph.clearShading': {
-    throwCase: () => {
-      const { editor } = makeParagraphEditor();
-      return paragraphsClearShadingWrapper(editor, { target: P_TARGET_MISSING }, { changeMode: 'direct' });
-    },
-    failureCase: () => {
-      const { editor } = makeParagraphEditor({ nodeAtReturnsNull: true });
-      return paragraphsClearShadingWrapper(editor, { target: P_TARGET }, { changeMode: 'direct' });
-    },
-    applyCase: () => {
-      const { editor } = makeParagraphEditor();
-      return paragraphsClearShadingWrapper(editor, { target: P_TARGET }, { changeMode: 'direct' });
     },
   },
 };
@@ -3317,36 +3590,8 @@ const dryRunVectors: Partial<Record<OperationId, () => unknown>> = {
     expect(tr.addMark).not.toHaveBeenCalled();
     return result;
   },
-  'format.fontSize': () => {
-    const { editor, dispatch } = makeTextEditor();
-    const result = formatFontSizeWrapper(
-      editor,
-      { target: { kind: 'text', blockId: 'p1', range: { start: 0, end: 5 } }, value: '14pt' },
-      { changeMode: 'direct', dryRun: true },
-    );
-    expect(dispatch).not.toHaveBeenCalled();
-    return result;
-  },
-  'format.fontFamily': () => {
-    const { editor, dispatch } = makeTextEditor();
-    const result = formatFontFamilyWrapper(
-      editor,
-      { target: { kind: 'text', blockId: 'p1', range: { start: 0, end: 5 } }, value: 'Arial' },
-      { changeMode: 'direct', dryRun: true },
-    );
-    expect(dispatch).not.toHaveBeenCalled();
-    return result;
-  },
-  'format.color': () => {
-    const { editor, dispatch } = makeTextEditor();
-    const result = formatColorWrapper(
-      editor,
-      { target: { kind: 'text', blockId: 'p1', range: { start: 0, end: 5 } }, value: '#ff0000' },
-      { changeMode: 'direct', dryRun: true },
-    );
-    expect(dispatch).not.toHaveBeenCalled();
-    return result;
-  },
+  ...formatInlineDryRunVectors,
+  ...paragraphDryRunVectors,
   'create.paragraph': () => {
     const insertParagraphAt = vi.fn(() => true);
     const { editor } = makeTextEditor('Hello', { commands: { insertParagraphAt } });
@@ -4035,183 +4280,52 @@ const dryRunVectors: Partial<Record<OperationId, () => unknown>> = {
     expect(dispatch).not.toHaveBeenCalled();
     return result;
   },
-  // Paragraph property mutations
-  'styles.paragraph.setStyle': () => {
-    const { editor, dispatch } = makeParagraphEditor();
-    const result = paragraphsSetStyleWrapper(
+
+  // -------------------------------------------------------------------------
+  // TOC operations — dryRun vectors
+  // -------------------------------------------------------------------------
+  'create.tableOfContents': () => {
+    const insertTableOfContentsAt = vi.fn(() => true);
+    const editor = makeTocEditor({ insertTableOfContentsAt });
+    const result = createTableOfContentsWrapper(
       editor,
-      { target: P_TARGET, styleId: 'Normal' },
+      { at: { kind: 'documentEnd' } },
       { changeMode: 'direct', dryRun: true },
     );
-    expect(dispatch).not.toHaveBeenCalled();
+    expect(insertTableOfContentsAt).not.toHaveBeenCalled();
     return result;
   },
-  'styles.paragraph.clearStyle': () => {
-    const { editor, dispatch } = makeParagraphEditor();
-    const result = paragraphsClearStyleWrapper(editor, { target: P_TARGET }, { changeMode: 'direct', dryRun: true });
-    expect(dispatch).not.toHaveBeenCalled();
-    return result;
-  },
-  'format.paragraph.resetDirectFormatting': () => {
-    const { editor, dispatch } = makeParagraphEditor();
-    const result = paragraphsResetDirectFormattingWrapper(
+  'toc.configure': () => {
+    const setInstr = vi.fn(() => true);
+    const editor = makeTocEditor({ setTableOfContentsInstructionById: setInstr });
+    const result = tocConfigureWrapper(
       editor,
-      { target: P_TARGET },
+      { target: { kind: 'block', nodeType: 'tableOfContents', nodeId: 'toc-1' }, patch: { hyperlinks: false } },
       { changeMode: 'direct', dryRun: true },
     );
-    expect(dispatch).not.toHaveBeenCalled();
+    expect(setInstr).not.toHaveBeenCalled();
     return result;
   },
-  'format.paragraph.setAlignment': () => {
-    const { editor, dispatch } = makeParagraphEditor();
-    const result = paragraphsSetAlignmentWrapper(
+  'toc.update': () => {
+    const replaceContent = vi.fn(() => true);
+    const editor = makeTocEditor({ replaceTableOfContentsContentById: replaceContent });
+    const result = tocUpdateWrapper(
       editor,
-      { target: P_TARGET, alignment: 'center' },
+      { target: { kind: 'block', nodeType: 'tableOfContents', nodeId: 'toc-1' } },
       { changeMode: 'direct', dryRun: true },
     );
-    expect(dispatch).not.toHaveBeenCalled();
+    expect(replaceContent).not.toHaveBeenCalled();
     return result;
   },
-  'format.paragraph.clearAlignment': () => {
-    const { editor, dispatch } = makeParagraphEditor();
-    const result = paragraphsClearAlignmentWrapper(
+  'toc.remove': () => {
+    const deleteById = vi.fn(() => true);
+    const editor = makeTocEditor({ deleteTableOfContentsById: deleteById });
+    const result = tocRemoveWrapper(
       editor,
-      { target: P_TARGET },
+      { target: { kind: 'block', nodeType: 'tableOfContents', nodeId: 'toc-1' } },
       { changeMode: 'direct', dryRun: true },
     );
-    expect(dispatch).not.toHaveBeenCalled();
-    return result;
-  },
-  'format.paragraph.setIndentation': () => {
-    const { editor, dispatch } = makeParagraphEditor();
-    const result = paragraphsSetIndentationWrapper(
-      editor,
-      { target: P_TARGET, left: 720 },
-      { changeMode: 'direct', dryRun: true },
-    );
-    expect(dispatch).not.toHaveBeenCalled();
-    return result;
-  },
-  'format.paragraph.clearIndentation': () => {
-    const { editor, dispatch } = makeParagraphEditor();
-    const result = paragraphsClearIndentationWrapper(
-      editor,
-      { target: P_TARGET },
-      { changeMode: 'direct', dryRun: true },
-    );
-    expect(dispatch).not.toHaveBeenCalled();
-    return result;
-  },
-  'format.paragraph.setSpacing': () => {
-    const { editor, dispatch } = makeParagraphEditor();
-    const result = paragraphsSetSpacingWrapper(
-      editor,
-      { target: P_TARGET, before: 120 },
-      { changeMode: 'direct', dryRun: true },
-    );
-    expect(dispatch).not.toHaveBeenCalled();
-    return result;
-  },
-  'format.paragraph.clearSpacing': () => {
-    const { editor, dispatch } = makeParagraphEditor();
-    const result = paragraphsClearSpacingWrapper(editor, { target: P_TARGET }, { changeMode: 'direct', dryRun: true });
-    expect(dispatch).not.toHaveBeenCalled();
-    return result;
-  },
-  'format.paragraph.setKeepOptions': () => {
-    const { editor, dispatch } = makeParagraphEditor();
-    const result = paragraphsSetKeepOptionsWrapper(
-      editor,
-      { target: P_TARGET, keepNext: true },
-      { changeMode: 'direct', dryRun: true },
-    );
-    expect(dispatch).not.toHaveBeenCalled();
-    return result;
-  },
-  'format.paragraph.setOutlineLevel': () => {
-    const { editor, dispatch } = makeParagraphEditor();
-    const result = paragraphsSetOutlineLevelWrapper(
-      editor,
-      { target: P_TARGET, outlineLevel: 1 },
-      { changeMode: 'direct', dryRun: true },
-    );
-    expect(dispatch).not.toHaveBeenCalled();
-    return result;
-  },
-  'format.paragraph.setFlowOptions': () => {
-    const { editor, dispatch } = makeParagraphEditor();
-    const result = paragraphsSetFlowOptionsWrapper(
-      editor,
-      { target: P_TARGET, pageBreakBefore: true },
-      { changeMode: 'direct', dryRun: true },
-    );
-    expect(dispatch).not.toHaveBeenCalled();
-    return result;
-  },
-  'format.paragraph.setTabStop': () => {
-    const { editor, dispatch } = makeParagraphEditor();
-    const result = paragraphsSetTabStopWrapper(
-      editor,
-      { target: P_TARGET, position: 720, alignment: 'left' },
-      { changeMode: 'direct', dryRun: true },
-    );
-    expect(dispatch).not.toHaveBeenCalled();
-    return result;
-  },
-  'format.paragraph.clearTabStop': () => {
-    const { editor, dispatch } = makeParagraphEditor();
-    const result = paragraphsClearTabStopWrapper(
-      editor,
-      { target: P_TARGET, position: 720 },
-      { changeMode: 'direct', dryRun: true },
-    );
-    expect(dispatch).not.toHaveBeenCalled();
-    return result;
-  },
-  'format.paragraph.clearAllTabStops': () => {
-    const { editor, dispatch } = makeParagraphEditor();
-    const result = paragraphsClearAllTabStopsWrapper(
-      editor,
-      { target: P_TARGET },
-      { changeMode: 'direct', dryRun: true },
-    );
-    expect(dispatch).not.toHaveBeenCalled();
-    return result;
-  },
-  'format.paragraph.setBorder': () => {
-    const { editor, dispatch } = makeParagraphEditor();
-    const result = paragraphsSetBorderWrapper(
-      editor,
-      { target: P_TARGET, side: 'top', style: 'single' },
-      { changeMode: 'direct', dryRun: true },
-    );
-    expect(dispatch).not.toHaveBeenCalled();
-    return result;
-  },
-  'format.paragraph.clearBorder': () => {
-    const { editor, dispatch } = makeParagraphEditor();
-    const result = paragraphsClearBorderWrapper(
-      editor,
-      { target: P_TARGET, side: 'all' },
-      { changeMode: 'direct', dryRun: true },
-    );
-    expect(dispatch).not.toHaveBeenCalled();
-    return result;
-  },
-  'format.paragraph.setShading': () => {
-    const { editor, dispatch } = makeParagraphEditor();
-    const result = paragraphsSetShadingWrapper(
-      editor,
-      { target: P_TARGET, fill: 'FF0000' },
-      { changeMode: 'direct', dryRun: true },
-    );
-    expect(dispatch).not.toHaveBeenCalled();
-    return result;
-  },
-  'format.paragraph.clearShading': () => {
-    const { editor, dispatch } = makeParagraphEditor();
-    const result = paragraphsClearShadingWrapper(editor, { target: P_TARGET }, { changeMode: 'direct', dryRun: true });
-    expect(dispatch).not.toHaveBeenCalled();
+    expect(deleteById).not.toHaveBeenCalled();
     return result;
   },
 };
@@ -4299,7 +4413,7 @@ describe('document-api adapter conformance', () => {
       const vector = mutationVectors[operationId];
       expect(typeof vector?.failureCase, `${operationId} is missing failureCase`).toBe('function');
       const result = vector!.failureCase!() as { success?: boolean; failure?: { code: string } };
-      expect(result.success).toBe(false);
+      expect(result.success, `${operationId} failureCase should return success=false`).toBe(false);
       if (result.success !== false || !result.failure) continue;
       expect(COMMAND_CATALOG[operationId].possibleFailureCodes).toContain(result.failure.code);
       assertSchema(operationId, 'output', result);

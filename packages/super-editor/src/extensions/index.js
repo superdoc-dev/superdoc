@@ -91,6 +91,8 @@ const getRichTextExtensions = () => {
     Italic,
     Link,
     Paragraph,
+    TableOfContents,
+    DocumentIndex,
     Strike,
     Text,
     TextAlign,

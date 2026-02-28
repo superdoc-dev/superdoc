@@ -48,16 +48,13 @@ import { executeFind, type FindAdapter, type FindOptions } from './find/find.js'
 import type {
   FormatAdapter,
   FormatApi,
-  FormatBoldInput,
-  FormatItalicInput,
-  FormatUnderlineInput,
+  FormatInlineAliasApi,
+  FormatInlineAliasInput,
   FormatStrikethroughInput,
   StyleApplyInput,
-  FormatFontSizeInput,
-  FormatFontFamilyInput,
-  FormatColorInput,
 } from './format/format.js';
-import { executeStyleApply, executeFontSize, executeFontFamily, executeColor } from './format/format.js';
+import { executeStyleApply, executeInlineAlias } from './format/format.js';
+import { INLINE_PROPERTY_REGISTRY, type InlineRunPatchKey } from './format/inline-run-patch.js';
 import type {
   StylesAdapter,
   StylesApi,
@@ -103,6 +100,7 @@ import {
   executeCreateHeading,
   executeCreateTable,
   executeCreateSectionBreak,
+  executeCreateTableOfContents,
 } from './create/create.js';
 import type { BlocksAdapter, BlocksApi } from './blocks/blocks.js';
 import { executeBlocksDelete } from './blocks/blocks.js';
@@ -269,6 +267,20 @@ import {
   executeSectionsSetTitlePage,
   executeSectionsSetVerticalAlign,
 } from './sections/sections.js';
+import type { TocApi, TocAdapter } from './toc/toc.js';
+import { executeTocList, executeTocGet, executeTocConfigure, executeTocUpdate, executeTocRemove } from './toc/toc.js';
+import type {
+  CreateTableOfContentsInput,
+  CreateTableOfContentsResult,
+  TocGetInput,
+  TocInfo,
+  TocConfigureInput,
+  TocUpdateInput,
+  TocRemoveInput,
+  TocMutationResult,
+  TocListQuery,
+  TocListResult,
+} from './toc/toc.types.js';
 
 export type { FindAdapter, FindOptions } from './find/find.js';
 export type { GetNodeAdapter, GetNodeByIdInput } from './get-node/get-node.js';
@@ -277,16 +289,39 @@ export type { InfoAdapter, InfoInput } from './info/info.js';
 export type { WriteAdapter, WriteRequest } from './write/write.js';
 export type {
   FormatAdapter,
+  FormatInlineAliasApi,
+  FormatInlineAliasInput,
   FormatBoldInput,
   FormatItalicInput,
   FormatUnderlineInput,
   FormatStrikethroughInput,
   StyleApplyInput,
   StyleApplyOptions,
-  FormatFontSizeInput,
-  FormatFontFamilyInput,
-  FormatColorInput,
 } from './format/format.js';
+export type {
+  InlineRunPatch,
+  InlineRunPatchKey,
+  InlinePropertyStorage,
+  InlinePropertyType,
+  InlinePropertyCarrier,
+  InlinePropertyRegistryEntry,
+  UnderlinePatch,
+  ShadingPatch,
+  BorderPatch,
+  FitTextPatch,
+  LangPatch,
+  RFontsPatch,
+  EastAsianLayoutPatch,
+  StylisticSetPatch,
+} from './format/inline-run-patch.js';
+export {
+  INLINE_PROPERTY_REGISTRY,
+  INLINE_PROPERTY_KEY_SET,
+  INLINE_PROPERTY_BY_KEY,
+  INLINE_PROPERTY_KEYS_BY_STORAGE,
+  validateInlineRunPatch,
+  buildInlineRunPatchSchema,
+} from './format/inline-run-patch.js';
 export { PROPERTY_REGISTRY } from './styles/styles.js';
 export type {
   PropertyDefinition,
@@ -323,6 +358,31 @@ export type {
   ReviewDecideInput,
 } from './track-changes/track-changes.js';
 export type { BlocksAdapter } from './blocks/blocks.js';
+export type { TocApi, TocAdapter } from './toc/toc.js';
+export type {
+  TocAddress,
+  TocSourceConfig,
+  TocDisplayConfig,
+  TocPreservedSwitches,
+  TocConfigurePatch,
+  TocSwitchConfig,
+  TocDomain,
+  TocListQuery,
+  TocListResult,
+  TocGetInput,
+  TocInfo,
+  TocConfigureInput,
+  TocUpdateInput,
+  TocRemoveInput,
+  TocMutationResult,
+  TocMutationSuccess,
+  TocMutationFailure,
+  TocCreateLocation,
+  CreateTableOfContentsInput,
+  CreateTableOfContentsResult,
+  CreateTableOfContentsSuccess,
+  CreateTableOfContentsFailure,
+} from './toc/toc.types.js';
 export type { ListsAdapter } from './lists/lists.js';
 export type { SectionsAdapter } from './sections/sections.js';
 export type { ParagraphsAdapter, ParagraphFormatApi, ParagraphStylesApi } from './paragraphs/paragraphs.js';
@@ -612,6 +672,10 @@ export interface DocumentApi {
    */
   tables: TablesApi;
   /**
+   * Table of contents operations.
+   */
+  toc: TocApi;
+  /**
    * Selector-based query with cardinality contracts for mutation targeting.
    */
   query: QueryApi;
@@ -657,6 +721,7 @@ export interface DocumentApiAdapters {
   sections: SectionsAdapter;
   paragraphs: ParagraphsAdapter;
   tables: TablesAdapter;
+  toc: TocAdapter;
   query: QueryAdapter;
   mutations: MutationsAdapter;
 }
@@ -677,9 +742,21 @@ export interface DocumentApiAdapters {
  * }
  * ```
  */
+function buildFormatInlineAliasApi(adapter: FormatAdapter): FormatInlineAliasApi {
+  return Object.fromEntries(
+    INLINE_PROPERTY_REGISTRY.map((entry) => {
+      const key = entry.key as InlineRunPatchKey;
+      const handler = (input: FormatInlineAliasInput<typeof key>, options?: MutationOptions) =>
+        executeInlineAlias(adapter, key, input, options);
+      return [key, handler];
+    }),
+  ) as FormatInlineAliasApi;
+}
+
 export function createDocumentApi(adapters: DocumentApiAdapters): DocumentApi {
   const capFn = () => executeCapabilities(adapters.capabilities);
   const capabilities: CapabilitiesApi = Object.assign(capFn, { get: capFn });
+  const inlineAliasApi = buildFormatInlineAliasApi(adapters.format);
 
   const api: DocumentApi = {
     find(selectorOrQuery: Selector | Query, options?: FindOptions): FindOutput {
@@ -724,29 +801,12 @@ export function createDocumentApi(adapters: DocumentApiAdapters): DocumentApi {
       return executeDelete(adapters.write, input, options);
     },
     format: {
-      bold(input: FormatBoldInput, options?: MutationOptions): TextMutationReceipt {
-        return executeStyleApply(adapters.format, { ...input, inline: { bold: 'on' } }, options);
-      },
-      italic(input: FormatItalicInput, options?: MutationOptions): TextMutationReceipt {
-        return executeStyleApply(adapters.format, { ...input, inline: { italic: 'on' } }, options);
-      },
-      underline(input: FormatUnderlineInput, options?: MutationOptions): TextMutationReceipt {
-        return executeStyleApply(adapters.format, { ...input, inline: { underline: 'on' } }, options);
-      },
+      ...inlineAliasApi,
       strikethrough(input: FormatStrikethroughInput, options?: MutationOptions): TextMutationReceipt {
-        return executeStyleApply(adapters.format, { ...input, inline: { strike: 'on' } }, options);
+        return executeInlineAlias(adapters.format, 'strike', { ...input, value: true }, options);
       },
       apply(input: StyleApplyInput, options?: MutationOptions): TextMutationReceipt {
         return executeStyleApply(adapters.format, input, options);
-      },
-      fontSize(input: FormatFontSizeInput, options?: MutationOptions): TextMutationReceipt {
-        return executeFontSize(adapters.format, input, options);
-      },
-      fontFamily(input: FormatFontFamilyInput, options?: MutationOptions): TextMutationReceipt {
-        return executeFontFamily(adapters.format, input, options);
-      },
-      color(input: FormatColorInput, options?: MutationOptions): TextMutationReceipt {
-        return executeColor(adapters.format, input, options);
       },
       paragraph: {
         resetDirectFormatting(
@@ -846,6 +906,9 @@ export function createDocumentApi(adapters: DocumentApiAdapters): DocumentApi {
       },
       sectionBreak(input: CreateSectionBreakInput, options?: MutationOptions): CreateSectionBreakResult {
         return executeCreateSectionBreak(adapters.create, input, options);
+      },
+      tableOfContents(input: CreateTableOfContentsInput, options?: MutationOptions): CreateTableOfContentsResult {
+        return executeCreateTableOfContents(adapters.create, input, options);
       },
     },
     capabilities,
@@ -1209,6 +1272,23 @@ export function createDocumentApi(adapters: DocumentApiAdapters): DocumentApi {
       },
       getProperties(input) {
         return adapters.tables.getProperties(input);
+      },
+    },
+    toc: {
+      list(query?: TocListQuery): TocListResult {
+        return executeTocList(adapters.toc, query);
+      },
+      get(input: TocGetInput): TocInfo {
+        return executeTocGet(adapters.toc, input);
+      },
+      configure(input: TocConfigureInput, options?: MutationOptions): TocMutationResult {
+        return executeTocConfigure(adapters.toc, input, options);
+      },
+      update(input: TocUpdateInput, options?: MutationOptions): TocMutationResult {
+        return executeTocUpdate(adapters.toc, input, options);
+      },
+      remove(input: TocRemoveInput, options?: MutationOptions): TocMutationResult {
+        return executeTocRemove(adapters.toc, input, options);
       },
     },
     query: {

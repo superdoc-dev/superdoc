@@ -860,4 +860,5 @@ editor.commands.goToSearchResult(results[0]);
 | `isDestroyed` | `boolean` | Whether editor has been destroyed |
 | `isFocused` | `boolean` | Whether editor has focus |
 | `docChanged` | `boolean` | Whether any edits have been made |
+| `currentTotalPages` | `number \| undefined` | Page count after the first layout completes. `undefined` until then. Use the `pagination-update` event to know when it's available. |
 | `sourcePath` | `string \| null` | Source file path (null if opened from Blob) |

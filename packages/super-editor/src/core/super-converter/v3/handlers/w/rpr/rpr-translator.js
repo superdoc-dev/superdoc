@@ -39,6 +39,11 @@ import { translator as rtlTranslator } from '../rtl/rtl-translator.js';
 import { translator as csTranslator } from '../cs/cs-translator.js';
 import { translator as iCsTranslator } from '../iCs/iCs-translator.js';
 import { translator as webHiddenTranslator } from '../webHidden/webHidden-translator.js';
+import { translator as ligaturesTranslator } from '../w14-ligatures/ligatures-translator.js';
+import { translator as numFormTranslator } from '../w14-numForm/numForm-translator.js';
+import { translator as numSpacingTranslator } from '../w14-numSpacing/numSpacing-translator.js';
+import { translator as stylisticSetsTranslator } from '../w14-stylisticSets/stylisticSets-translator.js';
+import { translator as cntxtAltsTranslator } from '../w14-cntxtAlts/cntxtAlts-translator.js';
 
 // Property translators for w:rPr child elements
 // Each translator handles a specific property of the run properties
@@ -81,6 +86,11 @@ export const propertyTranslators = [
   underlineTranslator,
   vanishTranslator,
   vertAlignTranslator,
+  ligaturesTranslator,
+  numFormTranslator,
+  numSpacingTranslator,
+  stylisticSetsTranslator,
+  cntxtAltsTranslator,
   webHiddenTranslator,
   wTranslator,
 ];

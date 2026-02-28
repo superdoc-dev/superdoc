@@ -78,10 +78,36 @@ function makeWriteAdapter() {
 function makeFormatAdapter() {
   return {
     apply: vi.fn(() => makeTextMutationReceipt()),
-    fontSize: vi.fn(() => makeTextMutationReceipt()),
-    fontFamily: vi.fn(() => makeTextMutationReceipt()),
-    color: vi.fn(() => makeTextMutationReceipt()),
-    align: vi.fn(() => makeTextMutationReceipt()),
+  };
+}
+
+function makeParagraphsAdapter() {
+  const ok = () => ({
+    success: true as const,
+    target: { kind: 'block' as const, nodeType: 'paragraph' as const, nodeId: 'p1' },
+    resolution: { target: { kind: 'block' as const, nodeType: 'paragraph' as const, nodeId: 'p1' } },
+  });
+
+  return {
+    setStyle: vi.fn(ok),
+    clearStyle: vi.fn(ok),
+    resetDirectFormatting: vi.fn(ok),
+    setAlignment: vi.fn(ok),
+    clearAlignment: vi.fn(ok),
+    setIndentation: vi.fn(ok),
+    clearIndentation: vi.fn(ok),
+    setSpacing: vi.fn(ok),
+    clearSpacing: vi.fn(ok),
+    setKeepOptions: vi.fn(ok),
+    setOutlineLevel: vi.fn(ok),
+    setFlowOptions: vi.fn(ok),
+    setTabStop: vi.fn(ok),
+    clearTabStop: vi.fn(ok),
+    clearAllTabStops: vi.fn(ok),
+    setBorder: vi.fn(ok),
+    clearBorder: vi.fn(ok),
+    setShading: vi.fn(ok),
+    clearShading: vi.fn(ok),
   };
 }
 
@@ -209,14 +235,7 @@ function makeCapabilitiesAdapter(): { get: ReturnType<typeof vi.fn> } {
       lists: { enabled: true },
       dryRun: { enabled: true },
     },
-    format: {
-      properties: {
-        bold: { kind: 'toggle', directives: ['on', 'off', 'clear'] },
-        italic: { kind: 'toggle', directives: ['on', 'off', 'clear'] },
-        underline: { kind: 'toggle', directives: ['on', 'off', 'clear'] },
-        strike: { kind: 'toggle', directives: ['on', 'off', 'clear'] },
-      },
-    },
+    format: { supportedInlineProperties: {} as DocumentApiCapabilities['format']['supportedInlineProperties'] },
     operations: Object.fromEntries(
       [
         'find',
@@ -272,6 +291,7 @@ function makeApi() {
     comments: makeCommentsAdapter(),
     write: makeWriteAdapter(),
     format: makeFormatAdapter(),
+    paragraphs: makeParagraphsAdapter(),
     trackChanges: makeTrackChangesAdapter(),
     create: makeCreateAdapter(),
     lists: makeListsAdapter(),
@@ -307,8 +327,10 @@ function makeApi() {
                     range: { start: 0, end: 3 },
                     text: 'foo',
                     styles: {
-                      direct: { bold: 'clear', italic: 'clear', underline: 'clear', strike: 'clear' },
-                      effective: { bold: false, italic: false, underline: false, strike: false },
+                      bold: false,
+                      italic: false,
+                      underline: false,
+                      strike: false,
                     },
                     ref: 'ref:run-1',
                   },
@@ -405,7 +427,7 @@ describe('overview.mdx examples', () => {
             id: 'style-terms',
             op: 'format.apply',
             where: { by: 'ref' as const, ref },
-            args: { inline: { bold: 'on' } },
+            args: { inline: { bold: true } },
           },
         ],
       };
@@ -461,7 +483,7 @@ describe('overview.mdx examples', () => {
       const target = { kind: 'text', blockId: 'p1', range: { start: 0, end: 3 } };
 
       if (caps.operations['format.apply'].available) {
-        doc.format.apply({ target, inline: { bold: 'on' } });
+        doc.format.apply({ target, inline: { bold: true } });
       }
 
       if (caps.global.trackChanges.enabled) {
@@ -576,7 +598,7 @@ describe('src/README.md workflow examples', () => {
 
       const caps = doc.capabilities();
       if (caps.operations['format.apply'].available) {
-        doc.format.apply({ target, inline: { bold: 'on' } });
+        doc.format.apply({ target, inline: { bold: true } });
       }
       if (caps.global.trackChanges.enabled) {
         doc.insert({ value: 'tracked' }, { changeMode: 'tracked' });

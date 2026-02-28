@@ -9,10 +9,26 @@ import { createCommentsWrapper } from './plan-engine/comments-wrappers.js';
 import { writeWrapper, insertStructuredWrapper, styleApplyWrapper } from './plan-engine/plan-wrappers.js';
 import { stylesApplyAdapter } from './styles-adapter.js';
 import {
-  formatFontSizeWrapper,
-  formatFontFamilyWrapper,
-  formatColorWrapper,
-} from './plan-engine/format-value-wrappers.js';
+  paragraphsSetStyleWrapper,
+  paragraphsClearStyleWrapper,
+  paragraphsResetDirectFormattingWrapper,
+  paragraphsSetAlignmentWrapper,
+  paragraphsClearAlignmentWrapper,
+  paragraphsSetIndentationWrapper,
+  paragraphsClearIndentationWrapper,
+  paragraphsSetSpacingWrapper,
+  paragraphsClearSpacingWrapper,
+  paragraphsSetKeepOptionsWrapper,
+  paragraphsSetOutlineLevelWrapper,
+  paragraphsSetFlowOptionsWrapper,
+  paragraphsSetTabStopWrapper,
+  paragraphsClearTabStopWrapper,
+  paragraphsClearAllTabStopsWrapper,
+  paragraphsSetBorderWrapper,
+  paragraphsClearBorderWrapper,
+  paragraphsSetShadingWrapper,
+  paragraphsClearShadingWrapper,
+} from './plan-engine/paragraphs-wrappers.js';
 import {
   trackChangesListWrapper,
   trackChangesGetWrapper,
@@ -100,26 +116,13 @@ import {
 } from './plan-engine/tables-wrappers.js';
 import { tablesGetAdapter, tablesGetCellsAdapter, tablesGetPropertiesAdapter } from './tables-adapter.js';
 import {
-  paragraphsSetStyleWrapper,
-  paragraphsClearStyleWrapper,
-  paragraphsResetDirectFormattingWrapper,
-  paragraphsSetAlignmentWrapper,
-  paragraphsClearAlignmentWrapper,
-  paragraphsSetIndentationWrapper,
-  paragraphsClearIndentationWrapper,
-  paragraphsSetSpacingWrapper,
-  paragraphsClearSpacingWrapper,
-  paragraphsSetKeepOptionsWrapper,
-  paragraphsSetOutlineLevelWrapper,
-  paragraphsSetFlowOptionsWrapper,
-  paragraphsSetTabStopWrapper,
-  paragraphsClearTabStopWrapper,
-  paragraphsClearAllTabStopsWrapper,
-  paragraphsSetBorderWrapper,
-  paragraphsClearBorderWrapper,
-  paragraphsSetShadingWrapper,
-  paragraphsClearShadingWrapper,
-} from './plan-engine/paragraphs-wrappers.js';
+  tocListWrapper,
+  tocGetWrapper,
+  tocConfigureWrapper,
+  tocUpdateWrapper,
+  tocRemoveWrapper,
+  createTableOfContentsWrapper,
+} from './plan-engine/toc-wrappers.js';
 
 /**
  * Assembles all document-api adapters for the given editor instance.
@@ -156,12 +159,30 @@ export function assembleDocumentApiAdapters(editor: Editor): DocumentApiAdapters
     },
     format: {
       apply: (input, options) => styleApplyWrapper(editor, input, options),
-      fontSize: (input, options) => formatFontSizeWrapper(editor, input, options),
-      fontFamily: (input, options) => formatFontFamilyWrapper(editor, input, options),
-      color: (input, options) => formatColorWrapper(editor, input, options),
     },
     styles: {
       apply: (input, options) => stylesApplyAdapter(editor, input, options),
+    },
+    paragraphs: {
+      setStyle: (input, options) => paragraphsSetStyleWrapper(editor, input, options),
+      clearStyle: (input, options) => paragraphsClearStyleWrapper(editor, input, options),
+      resetDirectFormatting: (input, options) => paragraphsResetDirectFormattingWrapper(editor, input, options),
+      setAlignment: (input, options) => paragraphsSetAlignmentWrapper(editor, input, options),
+      clearAlignment: (input, options) => paragraphsClearAlignmentWrapper(editor, input, options),
+      setIndentation: (input, options) => paragraphsSetIndentationWrapper(editor, input, options),
+      clearIndentation: (input, options) => paragraphsClearIndentationWrapper(editor, input, options),
+      setSpacing: (input, options) => paragraphsSetSpacingWrapper(editor, input, options),
+      clearSpacing: (input, options) => paragraphsClearSpacingWrapper(editor, input, options),
+      setKeepOptions: (input, options) => paragraphsSetKeepOptionsWrapper(editor, input, options),
+      setOutlineLevel: (input, options) => paragraphsSetOutlineLevelWrapper(editor, input, options),
+      setFlowOptions: (input, options) => paragraphsSetFlowOptionsWrapper(editor, input, options),
+      setTabStop: (input, options) => paragraphsSetTabStopWrapper(editor, input, options),
+      clearTabStop: (input, options) => paragraphsClearTabStopWrapper(editor, input, options),
+      clearAllTabStops: (input, options) => paragraphsClearAllTabStopsWrapper(editor, input, options),
+      setBorder: (input, options) => paragraphsSetBorderWrapper(editor, input, options),
+      clearBorder: (input, options) => paragraphsClearBorderWrapper(editor, input, options),
+      setShading: (input, options) => paragraphsSetShadingWrapper(editor, input, options),
+      clearShading: (input, options) => paragraphsClearShadingWrapper(editor, input, options),
     },
     trackChanges: {
       list: (input) => trackChangesListWrapper(editor, input),
@@ -179,6 +200,7 @@ export function assembleDocumentApiAdapters(editor: Editor): DocumentApiAdapters
       heading: (input, options) => createHeadingWrapper(editor, input, options),
       table: (input, options) => createTableWrapper(editor, input, options),
       sectionBreak: (input, options) => createSectionBreakAdapter(editor, input, options),
+      tableOfContents: (input, options) => createTableOfContentsWrapper(editor, input, options),
     },
     lists: {
       list: (query) => listsListWrapper(editor, query),
@@ -210,29 +232,6 @@ export function assembleDocumentApiAdapters(editor: Editor): DocumentApiAdapters
       setPageBorders: (input, options) => sectionsSetPageBordersAdapter(editor, input, options),
       clearPageBorders: (input, options) => sectionsClearPageBordersAdapter(editor, input, options),
     },
-    paragraphs: {
-      setStyle: (input, options) => paragraphsSetStyleWrapper(editor, input, options),
-      clearStyle: (input, options) => paragraphsClearStyleWrapper(editor, input, options),
-      resetDirectFormatting: (input, options) => paragraphsResetDirectFormattingWrapper(editor, input, options),
-      setAlignment: (input, options) => paragraphsSetAlignmentWrapper(editor, input, options),
-      clearAlignment: (input, options) => paragraphsClearAlignmentWrapper(editor, input, options),
-      setIndentation: (input, options) => paragraphsSetIndentationWrapper(editor, input, options),
-      clearIndentation: (input, options) => paragraphsClearIndentationWrapper(editor, input, options),
-      setSpacing: (input, options) => paragraphsSetSpacingWrapper(editor, input, options),
-      clearSpacing: (input, options) => paragraphsClearSpacingWrapper(editor, input, options),
-      setKeepOptions: (input, options) => paragraphsSetKeepOptionsWrapper(editor, input, options),
-      setOutlineLevel: (input, options) => paragraphsSetOutlineLevelWrapper(editor, input, options),
-      setFlowOptions: (input, options) => paragraphsSetFlowOptionsWrapper(editor, input, options),
-      setTabStop: (input, options) => paragraphsSetTabStopWrapper(editor, input, options),
-      clearTabStop: (input, options) => paragraphsClearTabStopWrapper(editor, input, options),
-      clearAllTabStops: (input, options) => paragraphsClearAllTabStopsWrapper(editor, input, options),
-      setBorder: (input, options) => paragraphsSetBorderWrapper(editor, input, options),
-      clearBorder: (input, options) => paragraphsClearBorderWrapper(editor, input, options),
-      setShading: (input, options) => paragraphsSetShadingWrapper(editor, input, options),
-      clearShading: (input, options) => paragraphsClearShadingWrapper(editor, input, options),
-    },
-    // Note: paragraphs adapter is flat — DocumentApiAdapters keeps it as `paragraphs: ParagraphsAdapter`.
-    // The document-api index.ts splits it into `format.paragraph.*` and `styles.paragraph.*` on the public surface.
     tables: {
       convertFromText: (input, options) => tablesConvertFromTextWrapper(editor, input, options),
       delete: (input, options) => tablesDeleteWrapper(editor, input, options),
@@ -273,6 +272,13 @@ export function assembleDocumentApiAdapters(editor: Editor): DocumentApiAdapters
       get: (input) => tablesGetAdapter(editor, input),
       getCells: (input) => tablesGetCellsAdapter(editor, input),
       getProperties: (input) => tablesGetPropertiesAdapter(editor, input),
+    },
+    toc: {
+      list: (query) => tocListWrapper(editor, query),
+      get: (input) => tocGetWrapper(editor, input),
+      configure: (input, options) => tocConfigureWrapper(editor, input, options),
+      update: (input, options) => tocUpdateWrapper(editor, input, options),
+      remove: (input, options) => tocRemoveWrapper(editor, input, options),
     },
     query: {
       match: (input) => queryMatchAdapter(editor, input),

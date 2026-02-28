@@ -21,6 +21,7 @@ export type KnownTargetKind =
   | 'trackedChange'
   | 'table'
   | 'tableCell'
+  | 'tableOfContents'
   | 'section'
   | 'sdt'
   | 'field';

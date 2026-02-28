@@ -813,7 +813,6 @@ const zoomOut = () => {
   currentZoom.value = next;
   superdoc.value?.setZoom(next);
 };
-
 const showExportMenu = ref(false);
 const closeExportMenu = () => {
   showExportMenu.value = false;

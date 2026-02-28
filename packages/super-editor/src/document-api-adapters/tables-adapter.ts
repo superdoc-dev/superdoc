@@ -85,6 +85,19 @@ function generateParaId(): string {
     .toUpperCase();
 }
 
+function createSeparatorParagraph(schema: Editor['state']['schema']): import('prosemirror-model').Node | null {
+  const paragraphType = schema.nodes.paragraph;
+  if (!paragraphType) return null;
+
+  // Keep separator paragraphs addressable/stable for downstream DOCX roundtrip.
+  const separatorAttrs = {
+    sdBlockId: uuidv4(),
+    paraId: generateParaId(),
+  };
+
+  return paragraphType.createAndFill(separatorAttrs) ?? paragraphType.createAndFill();
+}
+
 function notYetImplemented(operationName: string): never {
   throw new DocumentApiAdapterError('CAPABILITY_UNAVAILABLE', `${operationName} is not yet implemented.`, {
     reason: 'not_implemented',
@@ -1276,9 +1289,25 @@ export function tablesDistributeColumnsAdapter(
       }
     }
 
-    // Mark table as user-edited.
+    // Keep table grid in sync with distributed column widths so DOCX export
+    // emits uniform <w:gridCol> values rather than stale grid widths.
     const tableAttrs = tableNode.attrs as Record<string, unknown>;
-    tr.setNodeMarkup(tablePos, null, { ...tableAttrs, userEdited: true });
+    const normalizedGrid = normalizeGridColumns(tableAttrs.grid);
+    const tableAttrUpdates: Record<string, unknown> = { ...tableAttrs, userEdited: true };
+
+    if (normalizedGrid) {
+      const newColumns = normalizedGrid.columns.slice();
+      const evenWidthTwips = Math.max(1, Math.round(evenWidth * PIXELS_TO_TWIPS));
+      const maxColumn = Math.min(rangeEnd, newColumns.length - 1);
+
+      for (let col = Math.max(rangeStart, 0); col <= maxColumn; col++) {
+        newColumns[col] = { col: evenWidthTwips };
+      }
+
+      tableAttrUpdates.grid = serializeGridColumns(tableAttrs.grid, { ...normalizedGrid, columns: newColumns });
+    }
+
+    tr.setNodeMarkup(tablePos, null, tableAttrUpdates);
 
     applyDirectMutationMeta(tr);
     editor.dispatch(tr);
@@ -1478,10 +1507,16 @@ export function tablesSplitAdapter(
     delete newTableAttrs.paraId; // Avoid duplicate w14:paraId after split.
     delete newTableAttrs.textId; // Avoid duplicate w14:textId after split.
     const newTable = schema.nodes.table.create(newTableAttrs, secondTableRows);
+    const separatorParagraph = createSeparatorParagraph(schema);
+    if (!separatorParagraph) {
+      return toTableFailure('INVALID_TARGET', 'Table split could not create a separator paragraph.');
+    }
 
-    // Insert the new table after the original.
+    // Insert an empty paragraph between tables. Without this block separator,
+    // Word merges adjacent <w:tbl> nodes into one visual table.
     const insertPos = tr.mapping.slice(mapFrom).map(tablePos + tableNode.nodeSize);
-    tr.insert(insertPos, newTable);
+    tr.insert(insertPos, separatorParagraph);
+    tr.insert(insertPos + separatorParagraph.nodeSize, newTable);
 
     applyDirectMutationMeta(tr);
     editor.dispatch(tr);
@@ -1568,8 +1603,9 @@ export function tablesConvertToTextAdapter(
 /**
  * tables.insertCell — insert a cell at a resolved position, shifting existing cells.
  *
- * `shiftRight`: inserts a new cell before the target cell in its row; the last cell
- * in that row is removed to maintain column count.
+ * `shiftRight`: inserts a new cell before the target and cascades overflow cells to
+ * subsequent rows in row-major order. If needed, appends a new trailing row so
+ * existing cell content is preserved without dropping the rightmost value.
  *
  * `shiftDown`: inserts a new cell at the same column in the row below (creating a row
  * if needed). The last cell of the target column is removed to maintain row count.
@@ -1597,18 +1633,102 @@ export function tablesInsertCellAdapter(
     const schema = editor.state.schema;
 
     if (input.mode === 'shiftRight') {
-      // Remove the last cell in this row, then insert a new cell before the target cell.
-      const lastColIdx = rowIndex * map.width + (map.width - 1);
-      const lastCellPos = map.map[lastColIdx];
-      const lastCell = tableNode.nodeAt(lastCellPos);
-      if (lastCell) {
-        tr.delete(tableStart + lastCellPos, tableStart + lastCellPos + lastCell.nodeSize);
+      const slotCount = map.width * map.height;
+      const uniqueOffsets = new Set(map.map);
+      if (uniqueOffsets.size !== slotCount) {
+        return toTableFailure(
+          'INVALID_TARGET',
+          'Cell insertion with shiftRight is not supported for merged cells in this version.',
+        );
       }
 
-      // Insert new empty cell at the target position (mapped after deletion).
-      const newCell = schema.nodes.tableCell.createAndFill()!;
-      const mappedCellPos = tr.mapping.map(cellPos);
-      tr.insert(mappedCellPos, newCell);
+      const makeEmptyCell = (preferHeader: boolean = false): import('prosemirror-model').Node => {
+        const candidateType = preferHeader
+          ? (schema.nodes.tableHeader ?? schema.nodes.tableCell)
+          : schema.nodes.tableCell;
+        return (
+          candidateType.createAndFill({
+            sdBlockId: uuidv4(),
+            paraId: generateParaId(),
+          }) ?? candidateType.createAndFill()!
+        );
+      };
+
+      // Append one empty overflow row first so we can shift without dropping
+      // the row-tail content.
+      const overflowRowCells: import('prosemirror-model').Node[] = [];
+      for (let col = 0; col < map.width; col++) {
+        const templateOffset = map.map[(map.height - 1) * map.width + col]!;
+        const templateCell = tableNode.nodeAt(templateOffset);
+        overflowRowCells.push(makeEmptyCell(templateCell?.type.name === 'tableHeader'));
+      }
+
+      const templateRowAttrs = (tableNode.child(Math.max(0, map.height - 1)).attrs as Record<string, unknown>) ?? {};
+      const overflowRowAttrs = {
+        ...templateRowAttrs,
+        sdBlockId: uuidv4(),
+        paraId: generateParaId(),
+      };
+      const overflowRow =
+        schema.nodes.tableRow.createAndFill(overflowRowAttrs, overflowRowCells) ??
+        schema.nodes.tableRow.create(overflowRowAttrs, overflowRowCells);
+      if (!overflowRow) {
+        return toTableFailure('INVALID_TARGET', 'Cell insertion could not construct an overflow row.');
+      }
+
+      tr.insert(tablePos + tableNode.nodeSize - 1, overflowRow);
+
+      const expandedTableNode = tr.doc.nodeAt(tablePos);
+      if (!expandedTableNode || expandedTableNode.type.name !== 'table') {
+        return toTableFailure('INVALID_TARGET', 'Cell insertion could not locate expanded table state.');
+      }
+
+      const expandedMap = TableMap.get(expandedTableNode);
+      const expandedSlotCount = expandedMap.width * expandedMap.height;
+      if (new Set(expandedMap.map).size !== expandedSlotCount) {
+        return toTableFailure(
+          'INVALID_TARGET',
+          'Cell insertion with shiftRight produced an unsupported merged-table shape.',
+        );
+      }
+
+      const rowMajorCells: import('prosemirror-model').Node[] = [];
+      for (let i = 0; i < expandedSlotCount; i++) {
+        const offset = expandedMap.map[i]!;
+        const cell = expandedTableNode.nodeAt(offset);
+        if (!cell) {
+          return toTableFailure('INVALID_TARGET', 'Cell insertion could not resolve expanded table cells.');
+        }
+        rowMajorCells.push(cell);
+      }
+
+      const targetLinearIndex = rowIndex * expandedMap.width + columnIndex;
+      const targetOffset = expandedMap.map[targetLinearIndex]!;
+      const targetCell = expandedTableNode.nodeAt(targetOffset);
+
+      rowMajorCells.splice(targetLinearIndex, 0, makeEmptyCell(targetCell?.type.name === 'tableHeader'));
+      rowMajorCells.pop();
+
+      const rebuiltRows: import('prosemirror-model').Node[] = [];
+      const rebuiltRowCount = rowMajorCells.length / expandedMap.width;
+      for (let rebuiltRowIndex = 0; rebuiltRowIndex < rebuiltRowCount; rebuiltRowIndex++) {
+        const sourceRow = expandedTableNode.child(rebuiltRowIndex);
+        const rowAttrs = ((sourceRow.attrs as Record<string, unknown>) ?? {}) as Record<string, unknown>;
+
+        const rowCells = rowMajorCells.slice(
+          rebuiltRowIndex * expandedMap.width,
+          (rebuiltRowIndex + 1) * expandedMap.width,
+        );
+        const rebuiltRow =
+          schema.nodes.tableRow.createAndFill(rowAttrs, rowCells) ?? schema.nodes.tableRow.create(rowAttrs, rowCells);
+        if (!rebuiltRow) {
+          return toTableFailure('INVALID_TARGET', 'Cell insertion could not construct a replacement row.');
+        }
+        rebuiltRows.push(rebuiltRow);
+      }
+
+      const rebuiltTable = schema.nodes.table.create(expandedTableNode.attrs, rebuiltRows);
+      tr.replaceWith(tablePos, tablePos + expandedTableNode.nodeSize, rebuiltTable);
     } else {
       // shiftDown: remove the last cell in this column, insert new cell at the same
       // column in the row below the target so cells shift downward within the column.
@@ -1641,8 +1761,9 @@ export function tablesInsertCellAdapter(
 /**
  * tables.deleteCell — delete a cell at a resolved position, shifting remaining cells.
  *
- * `shiftLeft`: removes the target cell and appends a new empty cell at the end of
- * the row to maintain column count.
+ * `shiftLeft`: removes the target cell and shifts remaining cells in the row left.
+ * This reduces the row cell count by one and avoids a synthetic trailing cell unless
+ * widening the remaining trailing cell would conflict with vertical merges.
  *
  * `shiftUp`: removes the target cell and appends a new empty cell at the same column
  * in the last row to maintain row count.
@@ -1656,6 +1777,15 @@ export function tablesDeleteCellAdapter(
 
   const resolved = resolveCellLocator(editor, input, 'tables.deleteCell');
   const { table, cellPos, cellNode, rowIndex, columnIndex } = resolved;
+  const row = table.candidate.node.child(rowIndex);
+  const deletedColspan = Math.max(1, ((cellNode.attrs as Record<string, unknown>).colspan as number) || 1);
+  const deletedColwidth = Array.isArray((cellNode.attrs as Record<string, unknown>).colwidth)
+    ? [...((cellNode.attrs as Record<string, unknown>).colwidth as number[])]
+    : null;
+
+  if (input.mode === 'shiftLeft' && row.childCount <= 1) {
+    return toTableFailure('NO_OP', 'Cannot shift-left delete the last remaining cell in a row.');
+  }
 
   if (options?.dryRun) {
     return buildTableSuccess(table.address);
@@ -1673,17 +1803,61 @@ export function tablesDeleteCellAdapter(
     tr.delete(cellPos, cellPos + cellNode.nodeSize);
 
     if (input.mode === 'shiftLeft') {
-      // Append a new empty cell at the end of this row.
-      const row = tableNode.child(rowIndex);
-      const rowEnd = tr.mapping.map(tableStart + map.positionAt(rowIndex, map.width - 1, tableNode));
-      const lastCell = row.child(row.childCount - 1);
-      const insertPos = tr.mapping.map(cellPos + cellNode.nodeSize + lastCell.nodeSize - cellNode.nodeSize);
-      // Find the end of the row in the mapped doc — simpler: compute row end position.
-      let rowEndPos = table.candidate.pos + 1;
-      for (let i = 0; i <= rowIndex; i++) rowEndPos += tableNode.child(i).nodeSize;
-      const mappedRowEnd = tr.mapping.map(rowEndPos - 1); // -1 to be inside the row closing tag
-      const newCell = schema.nodes.tableCell.createAndFill()!;
-      tr.insert(mappedRowEnd, newCell);
+      // Prefer preserving fewer visual cells by widening the new trailing cell.
+      // Fall back to a trailing replacement cell when merged geometry would become invalid.
+      const currentTableNode = tr.doc.nodeAt(tablePos);
+      if (!currentTableNode || currentTableNode.type.name !== 'table') {
+        return toTableFailure('INVALID_TARGET', 'Cell deletion could not locate the updated table.');
+      }
+
+      const currentRow = currentTableNode.child(rowIndex);
+      const lastCellIndex = currentRow.childCount - 1;
+      const lastCell = currentRow.child(lastCellIndex);
+      const lastAttrs = lastCell.attrs as Record<string, unknown>;
+      const tableCellProperties = (lastAttrs.tableCellProperties ?? {}) as Record<string, unknown>;
+      const lastRowspan = Math.max(1, (lastAttrs.rowspan as number) || 1);
+      const hasVerticalMerge = tableCellProperties.vMerge != null;
+
+      if (lastRowspan > 1 || hasVerticalMerge) {
+        // Extending a vertically merged cell can overlap cells in lower rows.
+        let rowEndPos = tablePos + 1;
+        for (let i = 0; i <= rowIndex; i++) rowEndPos += currentTableNode.child(i).nodeSize;
+        const mappedRowEnd = rowEndPos - 1; // -1 to stay inside the row. No mapping needed — rowEndPos is already in post-delete doc space.
+        const newCell = schema.nodes.tableCell.createAndFill()!;
+        tr.insert(mappedRowEnd, newCell);
+      } else {
+        const lastColspan = Math.max(1, (lastAttrs.colspan as number) || 1);
+        const nextColspan = lastColspan + deletedColspan;
+
+        const nextTableCellProps = {
+          ...tableCellProperties,
+        };
+        if (nextColspan > 1) nextTableCellProps.gridSpan = nextColspan;
+        else delete nextTableCellProps.gridSpan;
+
+        const nextColwidth = Array.isArray(lastAttrs.colwidth) ? [...(lastAttrs.colwidth as number[])] : null;
+        if (nextColwidth) {
+          if (deletedColwidth) {
+            for (const width of deletedColwidth) {
+              if (nextColwidth.length >= nextColspan) break;
+              nextColwidth.push(typeof width === 'number' ? width : 0);
+            }
+          }
+          while (nextColwidth.length < nextColspan) nextColwidth.push(0);
+        }
+
+        let rowOffset = 0;
+        for (let i = 0; i < rowIndex; i++) rowOffset += currentTableNode.child(i).nodeSize;
+        let lastCellOffset = rowOffset + 1;
+        for (let i = 0; i < lastCellIndex; i++) lastCellOffset += currentRow.child(i).nodeSize;
+
+        tr.setNodeMarkup(tableStart + lastCellOffset, null, {
+          ...lastAttrs,
+          colspan: nextColspan,
+          colwidth: nextColwidth,
+          tableCellProperties: nextTableCellProps,
+        });
+      }
     } else {
       // shiftUp: insert a new empty cell at the same column in the last row.
       const lastRowIndex = map.height - 1;
@@ -2495,6 +2669,38 @@ export function tablesSetShadingAdapter(
     currentProps.shading = { fill: input.color, val: 'clear', color: 'auto' };
     const syncAttrs = resolved.scope === 'table' ? syncExtractedTableAttrs(currentProps) : {};
     tr.setNodeMarkup(resolved.pos, null, { ...currentAttrs, [propsKey]: currentProps, ...syncAttrs });
+
+    if (resolved.scope === 'table') {
+      const tableNode = resolved.node;
+      const tableStart = resolved.pos + 1;
+      const map = TableMap.get(tableNode);
+      const seen = new Set<number>();
+      const mapFrom = tr.mapping.maps.length;
+
+      for (let i = 0; i < map.map.length; i++) {
+        const relPos = map.map[i]!;
+        if (seen.has(relPos)) continue;
+        seen.add(relPos);
+
+        const cellNode = tableNode.nodeAt(relPos);
+        if (!cellNode) continue;
+
+        const cellAttrs = cellNode.attrs as Record<string, unknown>;
+        const cellProps = { ...((cellAttrs.tableCellProperties ?? {}) as Record<string, unknown>) };
+        cellProps.shading = { fill: input.color, val: 'clear', color: 'auto' };
+
+        const nextCellAttrs: Record<string, unknown> = {
+          ...cellAttrs,
+          tableCellProperties: cellProps,
+        };
+
+        if (input.color === 'auto') delete nextCellAttrs.background;
+        else nextCellAttrs.background = { color: input.color };
+
+        tr.setNodeMarkup(tr.mapping.slice(mapFrom).map(tableStart + relPos), null, nextCellAttrs);
+      }
+    }
+
     applyDirectMutationMeta(tr);
     editor.dispatch(tr);
     clearIndexCache(editor);

@@ -22,11 +22,13 @@ import type {
   SetMarks,
   ReplacementPayload,
   Query,
-  MarkKey,
-  InlineToggleDirective,
+  InlineRunPatchKey,
+  UnderlinePatch,
+  RFontsPatch,
+  BorderPatch,
+  StyleApplyInput,
 } from '@superdoc/document-api';
-import { MARK_KEYS } from '@superdoc/document-api';
-import { TOGGLE_MARK_SPECS } from './mark-directives.js';
+import { INLINE_PROPERTY_BY_KEY } from '@superdoc/document-api';
 import type { Editor } from '../../core/Editor.js';
 import type { CompiledPlan } from './compiler.js';
 import type {
@@ -43,11 +45,12 @@ import { getBlockIndex } from '../helpers/index-cache.js';
 import { resolveBlockInsertionPos } from './create-insertion.js';
 import { applyDirectMutationMeta, applyTrackedMutationMeta } from '../helpers/transaction-meta.js';
 import { captureRunsInRange, resolveInlineStyle } from './style-resolver.js';
+import { TOGGLE_MARK_SPECS } from './mark-directives.js';
 import { mapBlockNodeType } from '../helpers/node-address-resolver.js';
 import { resolveWithinScope, scopeByRange } from '../helpers/adapter-utils.js';
 import { normalizeReplacementText } from './replacement-normalizer.js';
 import { Fragment, Slice } from 'prosemirror-model';
-import type { Mark as ProseMirrorMark, MarkType, Node as ProseMirrorNode } from 'prosemirror-model';
+import type { Mark as ProseMirrorMark, MarkType, Node as ProseMirrorNode, NodeType } from 'prosemirror-model';
 import type { Transaction } from 'prosemirror-state';
 import type { Mapping } from 'prosemirror-transform';
 
@@ -60,6 +63,7 @@ const DEFAULT_INLINE_POLICY: import('@superdoc/document-api').InlineStylePolicy 
   mode: 'preserve',
   onNonUniform: 'majority',
 };
+const CORE_SET_MARK_KEYS = ['bold', 'italic', 'underline', 'strike'] as const;
 
 function asProseMirrorMarks(marks: readonly unknown[]): readonly ProseMirrorMark[] {
   return marks as readonly ProseMirrorMark[];
@@ -89,50 +93,531 @@ function buildMarksFromSetMarks(editor: Editor, setMarks?: SetMarks): readonly P
   const { schema } = editor.state;
   const marks: ProseMirrorMark[] = [];
 
-  for (const key of MARK_KEYS) {
+  for (const key of CORE_SET_MARK_KEYS) {
     const directive = setMarks[key];
     if (!directive) continue;
-    const markType = schema.marks[TOGGLE_MARK_SPECS[key].schemaName];
-    if (!markType) continue;
 
     const spec = TOGGLE_MARK_SPECS[key];
+    const markType = schema.marks[spec.schemaName];
+    if (!markType) continue;
+
     if (directive === 'on') {
-      marks.push(spec.createOn(markType) as unknown as ProseMirrorMark);
-    } else if (directive === 'off') {
-      marks.push(markType.create(spec.offAttrs) as unknown as ProseMirrorMark);
+      marks.push(spec.createOn(markType as unknown as { create: MarkType['create'] }) as unknown as ProseMirrorMark);
+      continue;
     }
-    // 'clear' → skip (no mark)
+    if (directive === 'off') {
+      marks.push(markType.create(spec.offAttrs));
+    }
+    // `clear` intentionally emits no mark.
   }
 
   return marks;
 }
 
 // ---------------------------------------------------------------------------
-// Shared inline style patch — applies boolean mark patches to a range
+// Shared inline style patch — registry-driven mark + runAttribute mutation
 // ---------------------------------------------------------------------------
 
-/** Applies inline mark directives (bold, italic, underline, strike) to a document range. */
-function applyInlineMarkPatches(
+type InlineRunPatch = StyleApplyInput['inline'];
+type TextStylePatchKey = 'color' | 'fontSize' | 'letterSpacing' | 'vertAlign' | 'position';
+type TextStylePatch = Partial<Pick<InlineRunPatch, TextStylePatchKey>>;
+
+interface InlineTextSegment {
+  from: number;
+  to: number;
+  marks: readonly ProseMirrorMark[];
+}
+
+interface OverlappingRun {
+  pos: number;
+}
+
+const BOOLEAN_INLINE_MARK_KEYS = ['bold', 'italic', 'strike'] as const;
+const TEXT_STYLE_KEYS = ['color', 'fontSize', 'letterSpacing', 'vertAlign', 'position'] as const;
+const PRESERVE_RUN_PROPERTIES_META_KEY = 'sdPreserveRunPropertiesKeys';
+
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return value !== null && typeof value === 'object' && !Array.isArray(value);
+}
+
+function isDeepEqual(left: unknown, right: unknown): boolean {
+  return JSON.stringify(left) === JSON.stringify(right);
+}
+
+function normalizeHexColor(color: string): string {
+  const trimmed = color.trim();
+  if (trimmed.startsWith('#')) return trimmed;
+  if (/^[0-9a-fA-F]{3,8}$/.test(trimmed)) return `#${trimmed}`;
+  return trimmed;
+}
+
+function toPointString(value: number): string {
+  return `${value}pt`;
+}
+
+function toHalfPoints(value: number): number {
+  return Math.round(value * 2);
+}
+
+function collectInlineTextSegments(doc: ProseMirrorNode, absFrom: number, absTo: number): InlineTextSegment[] {
+  const segments: InlineTextSegment[] = [];
+
+  doc.nodesBetween(absFrom, absTo, (node, pos) => {
+    if (!node.isText) return;
+
+    const from = Math.max(absFrom, pos);
+    const to = Math.min(absTo, pos + node.nodeSize);
+    if (from >= to) return;
+
+    segments.push({
+      from,
+      to,
+      marks: (node.marks ?? []) as readonly ProseMirrorMark[],
+    });
+  });
+
+  return segments;
+}
+
+function findMark(marks: readonly ProseMirrorMark[], markTypeName: string): ProseMirrorMark | undefined {
+  return marks.find((mark) => mark.type.name === markTypeName);
+}
+
+function compactAttrs(attrs: Record<string, unknown>): Record<string, unknown> {
+  return Object.fromEntries(Object.entries(attrs).filter(([, value]) => value !== null && value !== undefined));
+}
+
+function applyTriStateMarkPatch(
+  tr: Transaction,
+  markType: MarkType | undefined,
+  absFrom: number,
+  absTo: number,
+  value: boolean | null | undefined,
+): boolean {
+  if (value === undefined || !markType) return false;
+
+  if (value === null) {
+    tr.removeMark(absFrom, absTo, markType);
+    return true;
+  }
+
+  if (value === true) {
+    tr.addMark(absFrom, absTo, markType.create());
+    return true;
+  }
+
+  tr.addMark(absFrom, absTo, markType.create({ value: '0' }));
+  return true;
+}
+
+function applyHighlightPatch(
+  tr: Transaction,
+  markType: MarkType | undefined,
+  absFrom: number,
+  absTo: number,
+  value: string | null | undefined,
+): boolean {
+  if (value === undefined || !markType) return false;
+
+  if (value === null) {
+    tr.removeMark(absFrom, absTo, markType);
+    return true;
+  }
+
+  tr.addMark(absFrom, absTo, markType.create({ color: value }));
+  return true;
+}
+
+function mergeTextStyleAttrs(currentAttrs: Record<string, unknown>, patch: TextStylePatch): Record<string, unknown> {
+  const next = { ...currentAttrs };
+
+  for (const key of TEXT_STYLE_KEYS) {
+    const value = patch[key];
+    if (value === undefined) continue;
+
+    if (value === null) {
+      delete next[key];
+      continue;
+    }
+
+    if (key === 'color' && typeof value === 'string') {
+      next.color = normalizeHexColor(value);
+      continue;
+    }
+    if ((key === 'fontSize' || key === 'letterSpacing' || key === 'position') && typeof value === 'number') {
+      next[key] = toPointString(value);
+      continue;
+    }
+
+    next[key] = value as string;
+  }
+
+  return compactAttrs(next);
+}
+
+function applyTextStylePatch(
+  tr: Transaction,
+  markType: MarkType | undefined,
+  absFrom: number,
+  absTo: number,
+  patch: TextStylePatch,
+): boolean {
+  if (!markType) return false;
+  if (Object.keys(patch).length === 0) return false;
+
+  const segments = collectInlineTextSegments(tr.doc, absFrom, absTo);
+  let changed = false;
+
+  for (const segment of segments) {
+    const existingMark = findMark(segment.marks, markType.name);
+    const existingAttrs = (existingMark?.attrs ?? {}) as Record<string, unknown>;
+    const nextAttrs = mergeTextStyleAttrs(existingAttrs, patch);
+    const hadMark = Boolean(existingMark);
+    const shouldKeepMark = Object.keys(nextAttrs).length > 0;
+
+    if (!hadMark && !shouldKeepMark) continue;
+    if (hadMark && shouldKeepMark && isDeepEqual(existingAttrs, nextAttrs)) continue;
+
+    tr.removeMark(segment.from, segment.to, markType);
+    if (shouldKeepMark) {
+      tr.addMark(segment.from, segment.to, markType.create(nextAttrs));
+    }
+    changed = true;
+  }
+
+  return changed;
+}
+
+function mergeUnderlineAttrs(currentAttrs: Record<string, unknown>, patchValue: InlineRunPatch['underline']) {
+  if (patchValue === null) return null;
+
+  const next = { ...currentAttrs };
+
+  if (patchValue === true) {
+    if (!next.underlineType || next.underlineType === 'none') next.underlineType = 'single';
+    return compactAttrs(next);
+  }
+
+  if (patchValue === false) {
+    next.underlineType = 'none';
+    return compactAttrs(next);
+  }
+
+  const patch = patchValue as UnderlinePatch;
+
+  if (patch.style !== undefined) {
+    if (patch.style === null) delete next.underlineType;
+    else next.underlineType = patch.style;
+  }
+  if (patch.color !== undefined) {
+    if (patch.color === null) delete next.underlineColor;
+    else next.underlineColor = normalizeHexColor(patch.color);
+  }
+  if (patch.themeColor !== undefined) {
+    if (patch.themeColor === null) delete next.underlineThemeColor;
+    else next.underlineThemeColor = patch.themeColor;
+  }
+
+  if (!next.underlineType && (next.underlineColor || next.underlineThemeColor)) {
+    next.underlineType = 'single';
+  }
+
+  const compacted = compactAttrs(next);
+  return Object.keys(compacted).length > 0 ? compacted : null;
+}
+
+function applyUnderlinePatch(
+  tr: Transaction,
+  markType: MarkType | undefined,
+  absFrom: number,
+  absTo: number,
+  patchValue: InlineRunPatch['underline'],
+): boolean {
+  if (patchValue === undefined || !markType) return false;
+
+  const segments = collectInlineTextSegments(tr.doc, absFrom, absTo);
+  let changed = false;
+
+  for (const segment of segments) {
+    const existingMark = findMark(segment.marks, markType.name);
+    const existingAttrs = (existingMark?.attrs ?? {}) as Record<string, unknown>;
+    const nextAttrs = mergeUnderlineAttrs(existingAttrs, patchValue);
+    const hadMark = Boolean(existingMark);
+
+    if (!hadMark && nextAttrs === null) continue;
+    if (hadMark && nextAttrs !== null && isDeepEqual(existingAttrs, nextAttrs)) continue;
+
+    tr.removeMark(segment.from, segment.to, markType);
+    if (nextAttrs !== null) {
+      tr.addMark(segment.from, segment.to, markType.create(nextAttrs));
+    }
+    changed = true;
+  }
+
+  return changed;
+}
+
+function collectOverlappingRuns(
+  doc: ProseMirrorNode,
+  runType: NodeType,
+  absFrom: number,
+  absTo: number,
+): OverlappingRun[] {
+  const runs: OverlappingRun[] = [];
+
+  doc.nodesBetween(absFrom, absTo, (node, pos) => {
+    if (node.type !== runType) return true;
+
+    const runFrom = pos + 1;
+    const runTo = pos + node.nodeSize - 1;
+    if (Math.max(absFrom, runFrom) < Math.min(absTo, runTo)) {
+      runs.push({ pos });
+    }
+    return false;
+  });
+
+  return runs;
+}
+
+function normalizeRFontsPatch(patch: RFontsPatch): Record<string, unknown> {
+  const next: Record<string, unknown> = {};
+
+  for (const [key, value] of Object.entries(patch)) {
+    if (key === 'csTheme') {
+      next.cstheme = value;
+      continue;
+    }
+    next[key] = value;
+  }
+
+  return next;
+}
+
+function normalizeBorderPatch(patch: BorderPatch): Record<string, unknown> {
+  const next: Record<string, unknown> = {};
+
+  if (patch.val !== undefined) next.val = patch.val;
+  if (patch.sz !== undefined) next.size = patch.sz;
+  if (patch.color !== undefined) next.color = patch.color;
+  if (patch.space !== undefined) next.space = patch.space;
+
+  return next;
+}
+
+function normalizeRunAttributePatchValue(key: InlineRunPatchKey, value: unknown): unknown {
+  if (value === null) return null;
+
+  switch (key) {
+    case 'border':
+      return normalizeBorderPatch(value as BorderPatch);
+    case 'rFonts':
+      return normalizeRFontsPatch(value as RFontsPatch);
+    case 'fontSizeCs':
+      return toHalfPoints(value as number);
+    case 'kerning':
+      return toHalfPoints(value as number);
+    case 'stylisticSets':
+      return Array.isArray(value) ? value.map((entry) => ({ ...entry })) : value;
+    default:
+      return value;
+  }
+}
+
+function mergeRunAttributeValue(currentValue: unknown, patchValue: unknown): { changed: boolean; nextValue?: unknown } {
+  if (patchValue === null) {
+    return { changed: currentValue !== undefined };
+  }
+
+  if (Array.isArray(patchValue)) {
+    if (isDeepEqual(currentValue, patchValue)) return { changed: false, nextValue: currentValue };
+    return { changed: true, nextValue: patchValue };
+  }
+
+  if (isRecord(patchValue)) {
+    const merged = isRecord(currentValue) ? { ...currentValue } : {};
+    for (const [key, value] of Object.entries(patchValue)) {
+      if (value === null || value === undefined) delete merged[key];
+      else merged[key] = value;
+    }
+    if (Object.keys(merged).length === 0) {
+      return { changed: currentValue !== undefined };
+    }
+    if (isDeepEqual(currentValue, merged)) return { changed: false, nextValue: currentValue };
+    return { changed: true, nextValue: merged };
+  }
+
+  if (Object.is(currentValue, patchValue)) return { changed: false, nextValue: currentValue };
+  return { changed: true, nextValue: patchValue };
+}
+
+function buildRunAttributeUpdates(inline: InlineRunPatch): Record<string, unknown> {
+  const updates: Record<string, unknown> = {};
+  const keys = Object.keys(inline) as InlineRunPatchKey[];
+
+  for (const key of keys) {
+    const entry = INLINE_PROPERTY_BY_KEY[key];
+    if (!entry || entry.storage !== 'runAttribute') continue;
+
+    const value = inline[key];
+    if (value === undefined) continue;
+
+    const carrier = entry.carrier;
+    const runPropertyKey =
+      carrier.storage === 'runAttribute'
+        ? carrier.runPropertyKey
+        : (() => {
+            throw planError('INTERNAL_ERROR', `Invalid carrier for runAttribute key "${key}"`);
+          })();
+
+    updates[runPropertyKey] = normalizeRunAttributePatchValue(key, value);
+  }
+
+  return updates;
+}
+
+function applyRunAttributePatch(
+  tr: Transaction,
+  runType: NodeType | undefined,
+  absFrom: number,
+  absTo: number,
+  updates: Record<string, unknown>,
+): boolean {
+  if (!runType) return false;
+  if (Object.keys(updates).length === 0) return false;
+
+  const overlappingRuns = collectOverlappingRuns(tr.doc, runType, absFrom, absTo).sort(
+    (left, right) => right.pos - left.pos,
+  );
+  if (overlappingRuns.length === 0) return false;
+
+  if (Object.prototype.hasOwnProperty.call(updates, 'fontFamily')) {
+    tr.setMeta(PRESERVE_RUN_PROPERTIES_META_KEY, ['fontFamily']);
+  }
+
+  let changed = false;
+
+  for (const run of overlappingRuns) {
+    const runPos = tr.mapping.map(run.pos, 1);
+    const runNode = tr.doc.nodeAt(runPos);
+    if (!runNode || runNode.type !== runType) continue;
+
+    const mappedFrom = tr.mapping.map(absFrom, 1);
+    const mappedTo = tr.mapping.map(absTo, -1);
+    const runContentFrom = runPos + 1;
+    const runContentTo = runPos + runNode.nodeSize - 1;
+
+    const patchFrom = Math.max(mappedFrom, runContentFrom);
+    const patchTo = Math.min(mappedTo, runContentTo);
+    if (patchFrom >= patchTo) continue;
+
+    const currentRunProperties = isRecord(runNode.attrs?.runProperties)
+      ? { ...(runNode.attrs.runProperties as Record<string, unknown>) }
+      : {};
+
+    const nextRunProperties = { ...currentRunProperties };
+    let runChanged = false;
+
+    for (const [runPropertyKey, patchValue] of Object.entries(updates)) {
+      const existingValue = nextRunProperties[runPropertyKey];
+      const mergeResult = mergeRunAttributeValue(existingValue, patchValue);
+      if (!mergeResult.changed) continue;
+
+      if (mergeResult.nextValue === undefined) {
+        delete nextRunProperties[runPropertyKey];
+      } else {
+        nextRunProperties[runPropertyKey] = mergeResult.nextValue;
+      }
+
+      runChanged = true;
+    }
+
+    if (!runChanged) continue;
+
+    const normalizedNextRunProperties = Object.keys(nextRunProperties).length > 0 ? nextRunProperties : null;
+    const fullRunSelected = patchFrom === runContentFrom && patchTo === runContentTo;
+
+    if (fullRunSelected) {
+      tr.setNodeMarkup(
+        runPos,
+        runNode.type,
+        { ...runNode.attrs, runProperties: normalizedNextRunProperties },
+        runNode.marks,
+      );
+      changed = true;
+      continue;
+    }
+
+    const relativeFrom = patchFrom - runContentFrom;
+    const relativeTo = patchTo - runContentFrom;
+    if (relativeFrom === relativeTo) continue;
+
+    const replacementRuns: ProseMirrorNode[] = [];
+
+    if (relativeFrom > 0) {
+      const leftContent = runNode.content.cut(0, relativeFrom);
+      replacementRuns.push(runType.create(runNode.attrs, leftContent, runNode.marks));
+    }
+
+    const middleContent = runNode.content.cut(relativeFrom, relativeTo);
+    replacementRuns.push(
+      runType.create({ ...runNode.attrs, runProperties: normalizedNextRunProperties }, middleContent, runNode.marks),
+    );
+
+    if (relativeTo < runNode.content.size) {
+      const rightContent = runNode.content.cut(relativeTo, runNode.content.size);
+      replacementRuns.push(runType.create(runNode.attrs, rightContent, runNode.marks));
+    }
+
+    // Pass node array directly so the transaction builds Fragment using its own
+    // prosemirror-model instance (avoids cross-instance Fragment errors).
+    tr.replaceWith(runPos, runPos + runNode.nodeSize, replacementRuns);
+    changed = true;
+  }
+
+  return changed;
+}
+
+function applyInlinePatchToRange(
   editor: Editor,
   tr: Transaction,
   absFrom: number,
   absTo: number,
-  inline: StyleApplyStep['args']['inline'],
+  inline: InlineRunPatch,
 ): boolean {
+  if (absFrom >= absTo) return false;
+
   const { schema } = editor.state;
   let changed = false;
 
-  for (const key of MARK_KEYS) {
-    const directive = inline[key] as InlineToggleDirective | undefined;
-    if (!directive) continue;
-
-    const spec = TOGGLE_MARK_SPECS[key];
-    const markType = schema.marks[spec.schemaName] as MarkType | undefined;
-    if (!markType) continue;
-
-    if (applyDirectiveToTransaction(tr, absFrom, absTo, markType, spec, directive)) {
+  for (const key of BOOLEAN_INLINE_MARK_KEYS) {
+    const markType = schema.marks[key];
+    const value = inline[key] as boolean | null | undefined;
+    if (applyTriStateMarkPatch(tr, markType, absFrom, absTo, value)) {
       changed = true;
     }
+  }
+
+  if (applyUnderlinePatch(tr, schema.marks.underline, absFrom, absTo, inline.underline)) {
+    changed = true;
+  }
+
+  if (applyHighlightPatch(tr, schema.marks.highlight, absFrom, absTo, inline.highlight)) {
+    changed = true;
+  }
+
+  const textStylePatch: TextStylePatch = {};
+  for (const key of TEXT_STYLE_KEYS) {
+    if (inline[key] !== undefined) {
+      (textStylePatch as Record<string, unknown>)[key] = inline[key];
+    }
+  }
+  if (applyTextStylePatch(tr, schema.marks.textStyle, absFrom, absTo, textStylePatch)) {
+    changed = true;
+  }
+
+  const runAttributeUpdates = buildRunAttributeUpdates(inline);
+  if (applyRunAttributePatch(tr, schema.nodes?.run, absFrom, absTo, runAttributeUpdates)) {
+    changed = true;
   }
 
   return changed;
@@ -236,82 +721,6 @@ export function executeTextDelete(
   return { changed: true };
 }
 
-/**
- * Collects sub-ranges within [from, to) where the mark is NOT already in ON
- * form. Nodes already ON are skipped so their rich attrs (e.g. wavy underline)
- * are preserved. Returns the sub-ranges in reverse document order for safe
- * sequential application without position-shift concerns.
- *
- * Falls back to the full range if `doc.nodesBetween` is unavailable (mocks).
- */
-function collectNonOnSubRanges(
-  doc: ProseMirrorNode,
-  from: number,
-  to: number,
-  markType: MarkType,
-  spec: (typeof TOGGLE_MARK_SPECS)[MarkKey],
-): Array<{ from: number; to: number }> {
-  if (from === to) return [];
-  if (typeof doc.nodesBetween !== 'function') return [{ from, to }];
-
-  const ranges: Array<{ from: number; to: number }> = [];
-  doc.nodesBetween(from, to, (node, pos) => {
-    if (!node.isText) return;
-    const mark = node.marks.find((m) => m.type === markType);
-    if (mark && spec.isOn(mark as unknown as Parameters<typeof spec.isOn>[0])) return;
-    // Node is absent or OFF — needs conversion to ON
-    ranges.push({
-      from: Math.max(pos, from),
-      to: Math.min(pos + node.nodeSize, to),
-    });
-  });
-
-  // Reverse for safe back-to-front application
-  ranges.reverse();
-  return ranges;
-}
-
-/**
- * Applies a single inline toggle directive to a transaction range.
- * Shared by both range and span style-apply executors.
- *
- * Returns true if any transaction steps were actually emitted.
- */
-function applyDirectiveToTransaction(
-  tr: Transaction,
-  absFrom: number,
-  absTo: number,
-  markType: MarkType,
-  spec: (typeof TOGGLE_MARK_SPECS)[MarkKey],
-  directive: InlineToggleDirective,
-): boolean {
-  const stepsBefore = tr.steps?.length ?? 0;
-
-  switch (directive) {
-    case 'on': {
-      // Apply ON only to sub-ranges that aren't already ON, preserving rich
-      // attrs (e.g. wavy/colored underline) on nodes that already have them.
-      const subRanges = collectNonOnSubRanges(tr.doc, absFrom, absTo, markType, spec);
-      for (const r of subRanges) {
-        tr.removeMark(r.from, r.to, markType);
-        tr.addMark(r.from, r.to, spec.createOn(markType) as unknown as ProseMirrorMark);
-      }
-      break;
-    }
-    case 'off':
-      // Remove any existing, then add canonical OFF
-      tr.removeMark(absFrom, absTo, markType);
-      tr.addMark(absFrom, absTo, markType.create(spec.offAttrs));
-      break;
-    case 'clear':
-      // Remove mark entirely
-      tr.removeMark(absFrom, absTo, markType);
-      break;
-  }
-
-  return (tr.steps?.length ?? 0) > stepsBefore;
-}
-
 export function executeStyleApply(
   editor: Editor,
   tr: Transaction,
@@ -321,11 +730,7 @@ export function executeStyleApply(
 ): { changed: boolean } {
   const absFrom = mapping.map(target.absFrom);
   const absTo = mapping.map(target.absTo);
-
-  // Collapsed-range rule: silent no-op — no error, no document change.
-  if (absFrom === absTo) return { changed: false };
-
-  return { changed: applyInlineMarkPatches(editor, tr, absFrom, absTo, step.args.inline) };
+  return { changed: applyInlinePatchToRange(editor, tr, absFrom, absTo, step.args.inline) };
 }
 
 // ---------------------------------------------------------------------------
@@ -462,15 +867,14 @@ export function executeSpanStyleApply(
   mapping: Mapping,
 ): { changed: boolean } {
   validateMappedSpanContiguity(target, mapping, step.id);
+
+  // Apply marks uniformly across the full span
   const firstSeg = target.segments[0];
   const lastSeg = target.segments[target.segments.length - 1];
   const absFrom = mapping.map(firstSeg.absFrom, 1);
   const absTo = mapping.map(lastSeg.absTo, -1);
 
-  // Collapsed-range rule: silent no-op — no error, no document change.
-  if (absFrom === absTo) return { changed: false };
-
-  return { changed: applyInlineMarkPatches(editor, tr, absFrom, absTo, step.args.inline) };
+  return { changed: applyInlinePatchToRange(editor, tr, absFrom, absTo, step.args.inline) };
 }
 
 // ---------------------------------------------------------------------------

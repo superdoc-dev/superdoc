@@ -4,6 +4,8 @@ import { ref } from 'vue';
 const query = ref('');
 const results = ref([]);
 const hasSearched = ref(false);
+const links = ref([]);
+const hasScannedLinks = ref(false);
 
 const emit = defineEmits(['close']);
 
@@ -31,6 +33,61 @@ const goToResult = (match) => {
     editor.commands.goToSearchResult(match);
     return;
   }
+};
+
+const getLinkLabel = (item, index) => {
+  const href = item?.node?.properties?.href;
+  const anchor = item?.node?.properties?.anchor;
+  if (typeof href === 'string' && href.length > 0) return href;
+  if (typeof anchor === 'string' && anchor.length > 0) return `#${anchor}`;
+  return `Link ${index + 1}`;
+};
+
+const findLinks = () => {
+  const editor = window.editor;
+  const find = editor?.doc?.find;
+  if (typeof find !== 'function') {
+    links.value = [];
+    hasScannedLinks.value = true;
+    return;
+  }
+
+  const findResult = find({
+    select: { type: 'node', nodeType: 'hyperlink', kind: 'inline' },
+    includeNodes: true,
+    limit: 1000,
+  });
+  const items = Array.isArray(findResult?.items) ? findResult.items : [];
+
+  links.value = items.map((item, index) => ({
+    id: item?.id ?? `link-${index}`,
+    label: getLinkLabel(item, index),
+    item,
+    trackerId: editor?.positionTracker?.trackNode?.(item, {
+      type: 'sidebar-link',
+      metadata: { source: 'superdoc-dev-links', index },
+    }),
+  }));
+  hasScannedLinks.value = true;
+};
+
+const goToLink = (link) => {
+  const editor = window.editor;
+  if (!editor) return;
+
+  const tracker = editor?.positionTracker;
+  if (typeof tracker?.goToTracked !== 'function') return;
+
+  let trackerId = link?.trackerId ?? null;
+  if (!trackerId && typeof tracker.trackNode === 'function' && link?.item) {
+    trackerId = tracker.trackNode(link.item, {
+      type: 'sidebar-link',
+      metadata: { source: 'superdoc-dev-links' },
+    });
+  }
+  if (!trackerId) return;
+
+  tracker.goToTracked(trackerId);
 };
 </script>
 
@@ -68,6 +125,27 @@ const goToResult = (match) => {
           <span class="dev-sidebar__result-text">{{ result.text }}</span>
         </button>
       </div>
+
+      <section class="dev-sidebar__section">
+        <div class="dev-sidebar__section-header">
+          <h4 class="dev-sidebar__section-title">Links</h4>
+          <button class="dev-sidebar__button" type="button" @click="findLinks">Find links</button>
+        </div>
+        <div class="dev-sidebar__results">
+          <p v-if="!hasScannedLinks" class="dev-sidebar__hint">Run "Find links" to list hyperlink nodes.</p>
+          <p v-else-if="links.length === 0" class="dev-sidebar__hint">No links found.</p>
+          <button
+            v-for="(link, index) in links"
+            :key="link.id"
+            class="dev-sidebar__result"
+            type="button"
+            @click="goToLink(link)"
+          >
+            <span class="dev-sidebar__result-index">{{ index + 1 }}.</span>
+            <span class="dev-sidebar__result-text">{{ link.label }}</span>
+          </button>
+        </div>
+      </section>
     </div>
   </div>
 </template>
@@ -171,6 +249,25 @@ const goToResult = (match) => {
 .dev-sidebar__results {
   display: grid;
   gap: 8px;
+}
+
+.dev-sidebar__section {
+  display: grid;
+  gap: 8px;
+}
+
+.dev-sidebar__section-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+}
+
+.dev-sidebar__section-title {
+  margin: 0;
+  font-size: 13px;
+  font-weight: 700;
+  color: #334155;
 }
 
 .dev-sidebar__result {

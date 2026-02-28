@@ -58,6 +58,7 @@ function createEditorContext(overrides = {}) {
   const doc = {
     content: { size: 200 },
     nodeSize: 200,
+    textBetween: vi.fn(() => 'hello'),
     resolve: vi.fn(() => ({
       node: vi.fn(() => null),
       parent: { type: { name: 'paragraph' } },
@@ -83,7 +84,7 @@ function createEditorContext(overrides = {}) {
         domAtPos: vi.fn(() => ({ node: mockNode })),
       },
       presentationEditor: overrides.presentationEditor ?? null,
-      positionTracker: { resolve: vi.fn(() => null) },
+      positionTracker: overrides.positionTracker ?? { resolve: vi.fn(() => null) },
       storage: { positionTracker: { tracker: null } },
     },
     // Expose the mock node for assertions
@@ -186,5 +187,79 @@ describe('goToSearchResult — scroll behavior', () => {
     expect(scrollToPositionAsync).toHaveBeenCalledWith(10, { block: 'center' });
     // DOM fallback should also fire since sync didn't succeed
     expect(ctx._domNode.scrollIntoView).toHaveBeenCalled();
+  });
+
+  it('resolves tracked positions when stored match positions are stale', () => {
+    const positionTracker = {
+      resolve: vi.fn(() => ({ from: 60, to: 65 })),
+    };
+    const ctx = createEditorContext({ presentationEditor: null, positionTracker });
+
+    const staleMatch = {
+      from: 10,
+      to: 15,
+      text: 'hello',
+      id: 'old-id',
+      ranges: [{ from: 10, to: 15 }],
+      trackerIds: ['tracked-id'],
+    };
+
+    const result = goToSearchResultFactory(staleMatch)(ctx);
+
+    expect(result).toBe(true);
+    expect(positionTracker.resolve).toHaveBeenCalledWith('tracked-id');
+    expect(ctx.state.tr.setSelection).toHaveBeenCalled();
+  });
+});
+
+describe('search command — position tracking', () => {
+  let searchCommandFactory;
+
+  beforeEach(() => {
+    const searchIndex = {
+      ensureValid: vi.fn(),
+      search: vi.fn(() => [{ start: 0, end: 5 }]),
+      offsetRangeToDocRanges: vi.fn(() => [{ from: 10, to: 15 }]),
+    };
+    const ext = Search.config;
+    const commands = ext.addCommands.call({
+      editor: null,
+      storage: {
+        searchResults: [],
+        highlightEnabled: true,
+        searchIndex,
+      },
+    });
+    searchCommandFactory = commands.search;
+  });
+
+  it('tracks result ranges and uses tracker id as match id', () => {
+    const positionTracker = {
+      untrackByType: vi.fn(),
+      trackMany: vi.fn(() => ['tracked-match-id']),
+      resolve: vi.fn(() => null),
+    };
+    const ctx = createEditorContext({ positionTracker });
+
+    const results = searchCommandFactory('hello')({
+      state: ctx.state,
+      dispatch: ctx.dispatch,
+      editor: ctx.editor,
+    });
+
+    expect(positionTracker.untrackByType).toHaveBeenCalledWith('search-match');
+    expect(positionTracker.trackMany).toHaveBeenCalledWith([
+      {
+        from: 10,
+        to: 15,
+        spec: {
+          type: 'search-match',
+          metadata: { rangeIndex: 0 },
+        },
+      },
+    ]);
+    expect(results).toHaveLength(1);
+    expect(results[0].trackerIds).toEqual(['tracked-match-id']);
+    expect(results[0].id).toBe('tracked-match-id');
   });
 });

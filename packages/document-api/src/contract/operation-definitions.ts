@@ -1646,7 +1646,7 @@ export const OPERATION_DEFINITIONS = {
       supportsDryRun: true,
       supportsTrackedMode: false,
       possibleFailureCodes: ['NO_OP', 'INVALID_INSERTION_CONTEXT'],
-      throws: ['INVALID_TARGET', 'TARGET_NOT_FOUND', 'CAPABILITY_UNAVAILABLE'],
+      throws: ['INVALID_TARGET', 'TARGET_NOT_FOUND', 'INVALID_INPUT', 'CAPABILITY_UNAVAILABLE'],
     }),
     referenceDocPath: 'create/table-of-contents.mdx',
     referenceGroup: 'create',
@@ -1689,22 +1689,22 @@ export const OPERATION_DEFINITIONS = {
       supportsDryRun: true,
       supportsTrackedMode: false,
       possibleFailureCodes: ['NO_OP'],
-      throws: ['TARGET_NOT_FOUND', 'INVALID_TARGET', 'CAPABILITY_UNAVAILABLE'],
+      throws: ['TARGET_NOT_FOUND', 'INVALID_TARGET', 'INVALID_INPUT', 'CAPABILITY_UNAVAILABLE'],
     }),
     referenceDocPath: 'toc/configure.mdx',
     referenceGroup: 'toc',
   },
   'toc.update': {
     memberPath: 'toc.update',
-    description: 'Rebuild the materialized content of a table of contents.',
+    description: 'Rebuild or refresh the materialized content of a table of contents.',
     expectedResult:
-      'Returns a TocMutationResult with the TOC address on success, or a failure code if content is unchanged.',
+      'Returns a TocMutationResult with the TOC address on success, or a failure code if content is unchanged or page numbers cannot be resolved.',
     requiresDocumentContext: true,
     metadata: mutationOperation({
       idempotency: 'conditional',
       supportsDryRun: true,
       supportsTrackedMode: false,
-      possibleFailureCodes: ['NO_OP'],
+      possibleFailureCodes: ['NO_OP', 'PAGE_NUMBERS_NOT_MATERIALIZED', 'CAPABILITY_UNAVAILABLE'],
       throws: ['TARGET_NOT_FOUND', 'INVALID_TARGET', 'CAPABILITY_UNAVAILABLE'],
     }),
     referenceDocPath: 'toc/update.mdx',
@@ -1723,6 +1723,80 @@ export const OPERATION_DEFINITIONS = {
       throws: ['TARGET_NOT_FOUND', 'INVALID_TARGET', 'CAPABILITY_UNAVAILABLE'],
     }),
     referenceDocPath: 'toc/remove.mdx',
+    referenceGroup: 'toc',
+  },
+
+  // -------------------------------------------------------------------------
+  // TOC: TC entry management (SD-1977)
+  // -------------------------------------------------------------------------
+
+  'toc.markEntry': {
+    memberPath: 'toc.markEntry',
+    description: 'Insert a TC (table of contents entry) field at the target paragraph.',
+    expectedResult: 'Returns a TocEntryMutationResult with the created entry address on success.',
+    requiresDocumentContext: true,
+    metadata: mutationOperation({
+      idempotency: 'non-idempotent',
+      supportsDryRun: true,
+      supportsTrackedMode: false,
+      possibleFailureCodes: ['NO_OP', 'INVALID_INSERTION_CONTEXT'],
+      throws: ['TARGET_NOT_FOUND', 'INVALID_TARGET', 'INVALID_INPUT', 'CAPABILITY_UNAVAILABLE'],
+    }),
+    referenceDocPath: 'toc/mark-entry.mdx',
+    referenceGroup: 'toc',
+  },
+  'toc.unmarkEntry': {
+    memberPath: 'toc.unmarkEntry',
+    description: 'Remove a TC (table of contents entry) field from the document.',
+    expectedResult: 'Returns a TocEntryMutationResult with the removed entry address on success.',
+    requiresDocumentContext: true,
+    metadata: mutationOperation({
+      idempotency: 'conditional',
+      supportsDryRun: true,
+      supportsTrackedMode: false,
+      possibleFailureCodes: ['NO_OP'],
+      throws: ['TARGET_NOT_FOUND', 'INVALID_TARGET', 'CAPABILITY_UNAVAILABLE'],
+    }),
+    referenceDocPath: 'toc/unmark-entry.mdx',
+    referenceGroup: 'toc',
+  },
+  'toc.listEntries': {
+    memberPath: 'toc.listEntries',
+    description: 'List all TC (table of contents entry) fields in the document body.',
+    expectedResult: 'Returns a TocListEntriesResult with an array of TC entry discovery items and pagination metadata.',
+    requiresDocumentContext: true,
+    metadata: readOperation({
+      idempotency: 'idempotent',
+    }),
+    referenceDocPath: 'toc/list-entries.mdx',
+    referenceGroup: 'toc',
+  },
+  'toc.getEntry': {
+    memberPath: 'toc.getEntry',
+    description: 'Retrieve details of a specific TC (table of contents entry) field.',
+    expectedResult: 'Returns a TocEntryInfo object with the instruction, text, level, and switch configuration.',
+    requiresDocumentContext: true,
+    metadata: readOperation({
+      idempotency: 'idempotent',
+      throws: T_NOT_FOUND,
+    }),
+    referenceDocPath: 'toc/get-entry.mdx',
+    referenceGroup: 'toc',
+  },
+  'toc.editEntry': {
+    memberPath: 'toc.editEntry',
+    description: 'Update the properties of a TC (table of contents entry) field.',
+    expectedResult:
+      'Returns a TocEntryMutationResult with the updated entry address on success, or NO_OP if no change.',
+    requiresDocumentContext: true,
+    metadata: mutationOperation({
+      idempotency: 'conditional',
+      supportsDryRun: true,
+      supportsTrackedMode: false,
+      possibleFailureCodes: ['NO_OP'],
+      throws: ['TARGET_NOT_FOUND', 'INVALID_TARGET', 'INVALID_INPUT', 'CAPABILITY_UNAVAILABLE'],
+    }),
+    referenceDocPath: 'toc/edit-entry.mdx',
     referenceGroup: 'toc',
   },
 } as const satisfies Record<string, OperationDefinitionEntry>;

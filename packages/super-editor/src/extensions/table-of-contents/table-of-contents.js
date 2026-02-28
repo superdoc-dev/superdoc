@@ -9,6 +9,17 @@ export const TableOfContents = Node.create({
 
   inline: false,
 
+  addStorage() {
+    return {
+      /**
+       * Maps sdBlockId → page number. Set by PresentationEditor after each
+       * layout cycle. Read by toc.update({ mode: 'pageNumbers' }) wrapper.
+       * @type {Map<string, number> | null}
+       */
+      pageMap: null,
+    };
+  },
+
   addOptions() {
     return {
       htmlAttributes: {
@@ -41,12 +52,12 @@ export const TableOfContents = Node.create({
     return {
       /**
        * Insert a tableOfContents node at the given document position.
-       * @param {{ pos: number, instruction?: string, sdBlockId?: string, content?: object[] }} options
+       * @param {{ pos: number, instruction?: string, sdBlockId?: string, content?: object[], rightAlignPageNumbers?: boolean }} options
        */
       insertTableOfContentsAt:
         (options) =>
         ({ tr, dispatch, state }) => {
-          const { pos, instruction = '', sdBlockId = null, content } = options;
+          const { pos, instruction = '', sdBlockId = null, content, rightAlignPageNumbers } = options;
           const tocType = this.editor.schema.nodes.tableOfContents;
           if (!tocType) return false;
 
@@ -55,7 +66,9 @@ export const TableOfContents = Node.create({
             paragraphType.create({}, this.editor.schema.text('Update table of contents to populate entries.')),
           ];
           const materializedContent = normalizeTocContent(content, state.schema) ?? defaultContent;
-          const tocNode = tocType.create({ instruction, sdBlockId }, materializedContent);
+          const attrs = { instruction, sdBlockId };
+          if (rightAlignPageNumbers !== undefined) attrs.rightAlignPageNumbers = rightAlignPageNumbers;
+          const tocNode = tocType.create(attrs, materializedContent);
 
           try {
             if (dispatch) {
@@ -71,18 +84,20 @@ export const TableOfContents = Node.create({
       /**
        * Update the instruction attribute of a tableOfContents node by sdBlockId.
        * Optionally replaces the materialized TOC content in the same transaction.
-       * @param {{ sdBlockId: string, instruction: string, content?: object[] }} options
+       * @param {{ sdBlockId: string, instruction: string, content?: object[], rightAlignPageNumbers?: boolean }} options
        */
       setTableOfContentsInstructionById:
         (options) =>
         ({ tr, dispatch, state }) => {
-          const { sdBlockId, instruction, content } = options;
+          const { sdBlockId, instruction, content, rightAlignPageNumbers } = options;
           let found = false;
           state.doc.descendants((node, pos) => {
             if (found) return false;
             if (node.type.name === 'tableOfContents' && node.attrs.sdBlockId === sdBlockId) {
               if (dispatch) {
-                tr.setNodeMarkup(pos, undefined, { ...node.attrs, instruction });
+                const nextAttrs = { ...node.attrs, instruction };
+                if (rightAlignPageNumbers !== undefined) nextAttrs.rightAlignPageNumbers = rightAlignPageNumbers;
+                tr.setNodeMarkup(pos, undefined, nextAttrs);
                 const fragment = normalizeTocContent(content, state.schema);
                 if (fragment) {
                   const from = pos + 1;
@@ -167,6 +182,15 @@ export const TableOfContents = Node.create({
         renderDOM: (attrs) => {
           return attrs.sdBlockId ? { 'data-sd-block-id': attrs.sdBlockId } : {};
         },
+      },
+      /**
+       * Whether TOC entry page numbers use right-aligned tab stops.
+       * Persisted as a PM node attribute (no OOXML switch equivalent).
+       * Derived on DOCX import from the first entry paragraph's tab stop properties.
+       */
+      rightAlignPageNumbers: {
+        default: true,
+        rendered: false,
       },
     };
   },

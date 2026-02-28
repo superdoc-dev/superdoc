@@ -48,9 +48,47 @@ describe('sd:tableOfContents translator', () => {
       });
       expect(result).toEqual({
         type: 'tableOfContents',
-        attrs: { instruction: 'TOC \\o "1-3"' },
+        attrs: { instruction: 'TOC \\o "1-3"', rightAlignPageNumbers: true },
         content: [{ type: 'paragraph', content: [] }],
       });
+    });
+
+    it('derives rightAlignPageNumbers true from right-aligned tab stops', () => {
+      const mockNodeListHandler = {
+        handler: vi.fn(() => [
+          {
+            type: 'paragraph',
+            attrs: { paragraphProperties: { tabStops: [{ tab: { tabType: 'right', pos: 9350 } }] } },
+            content: [],
+          },
+        ]),
+      };
+      const params = {
+        nodes: [{ name: 'sd:tableOfContents', attributes: { instruction: 'TOC \\o "1-3"' }, elements: [] }],
+        nodeListHandler: mockNodeListHandler,
+      };
+
+      const result = config.encode(params);
+      expect(result.attrs.rightAlignPageNumbers).toBe(true);
+    });
+
+    it('derives rightAlignPageNumbers false when no right-aligned tab stops', () => {
+      const mockNodeListHandler = {
+        handler: vi.fn(() => [
+          {
+            type: 'paragraph',
+            attrs: { paragraphProperties: { tabStops: [{ tab: { tabType: 'left', pos: 100 } }] } },
+            content: [],
+          },
+        ]),
+      };
+      const params = {
+        nodes: [{ name: 'sd:tableOfContents', attributes: { instruction: 'TOC \\o "1-3"' }, elements: [] }],
+        nodeListHandler: mockNodeListHandler,
+      };
+
+      const result = config.encode(params);
+      expect(result.attrs.rightAlignPageNumbers).toBe(false);
     });
   });
 

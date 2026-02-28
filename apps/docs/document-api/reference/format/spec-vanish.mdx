@@ -1,7 +1,7 @@
 ---
 title: format.specVanish
 sidebarTitle: format.specVanish
-description: Reference for format.specVanish
+description: "Set or clear the `specVanish` inline run property on the target text range."
 ---
 
 {/* GENERATED FILE: DO NOT EDIT. Regenerate via `pnpm run docapi:sync`. */}
@@ -10,6 +10,8 @@ description: Reference for format.specVanish
 
 ## Summary
 
+Set or clear the `specVanish` inline run property on the target text range.
+
 - Operation ID: `format.specVanish`
 - API member path: `editor.doc.format.specVanish(...)`
 - Mutates document: `yes`
@@ -17,6 +19,10 @@ description: Reference for format.specVanish
 - Supports tracked mode: `no`
 - Supports dry run: `yes`
 - Deterministic target resolution: `yes`
+
+## Expected result
+
+Returns a TextMutationReceipt confirming the inline run property patch was applied to the target range.
 
 ## Input fields
 

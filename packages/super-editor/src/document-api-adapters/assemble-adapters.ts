@@ -107,6 +107,13 @@ import {
   tocRemoveWrapper,
   createTableOfContentsWrapper,
 } from './plan-engine/toc-wrappers.js';
+import {
+  tocListEntriesWrapper,
+  tocGetEntryWrapper,
+  tocMarkEntryWrapper,
+  tocUnmarkEntryWrapper,
+  tocEditEntryWrapper,
+} from './plan-engine/toc-entry-wrappers.js';
 
 /**
  * Assembles all document-api adapters for the given editor instance.
@@ -243,6 +250,11 @@ export function assembleDocumentApiAdapters(editor: Editor): DocumentApiAdapters
       configure: (input, options) => tocConfigureWrapper(editor, input, options),
       update: (input, options) => tocUpdateWrapper(editor, input, options),
       remove: (input, options) => tocRemoveWrapper(editor, input, options),
+      markEntry: (input, options) => tocMarkEntryWrapper(editor, input, options),
+      unmarkEntry: (input, options) => tocUnmarkEntryWrapper(editor, input, options),
+      listEntries: (query) => tocListEntriesWrapper(editor, query),
+      getEntry: (input) => tocGetEntryWrapper(editor, input),
+      editEntry: (input, options) => tocEditEntryWrapper(editor, input, options),
     },
     query: {
       match: (input) => queryMatchAdapter(editor, input),

@@ -96,6 +96,14 @@ import type {
   TocUpdateInput,
   TocRemoveInput,
   TocMutationResult,
+  TocMarkEntryInput,
+  TocUnmarkEntryInput,
+  TocListEntriesQuery,
+  TocListEntriesResult,
+  TocGetEntryInput,
+  TocEntryInfo,
+  TocEditEntryInput,
+  TocEntryMutationResult,
 } from '../toc/toc.types.js';
 import type {
   CreateTableInput,
@@ -375,6 +383,13 @@ export interface OperationRegistry extends FormatInlineAliasOperationRegistry {
   'toc.configure': { input: TocConfigureInput; options: MutationOptions; output: TocMutationResult };
   'toc.update': { input: TocUpdateInput; options: MutationOptions; output: TocMutationResult };
   'toc.remove': { input: TocRemoveInput; options: MutationOptions; output: TocMutationResult };
+
+  // --- toc entry (TC field) operations ---
+  'toc.markEntry': { input: TocMarkEntryInput; options: MutationOptions; output: TocEntryMutationResult };
+  'toc.unmarkEntry': { input: TocUnmarkEntryInput; options: MutationOptions; output: TocEntryMutationResult };
+  'toc.listEntries': { input: TocListEntriesQuery | undefined; options: never; output: TocListEntriesResult };
+  'toc.getEntry': { input: TocGetEntryInput; options: never; output: TocEntryInfo };
+  'toc.editEntry': { input: TocEditEntryInput; options: MutationOptions; output: TocEntryMutationResult };
 }
 
 // --- Bidirectional completeness checks ---

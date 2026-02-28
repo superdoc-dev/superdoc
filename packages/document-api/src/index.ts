@@ -223,7 +223,18 @@ import {
   executeSectionsSetVerticalAlign,
 } from './sections/sections.js';
 import type { TocApi, TocAdapter } from './toc/toc.js';
-import { executeTocList, executeTocGet, executeTocConfigure, executeTocUpdate, executeTocRemove } from './toc/toc.js';
+import {
+  executeTocList,
+  executeTocGet,
+  executeTocConfigure,
+  executeTocUpdate,
+  executeTocRemove,
+  executeTocMarkEntry,
+  executeTocUnmarkEntry,
+  executeTocListEntries,
+  executeTocGetEntry,
+  executeTocEditEntry,
+} from './toc/toc.js';
 import type {
   CreateTableOfContentsInput,
   CreateTableOfContentsResult,
@@ -235,6 +246,14 @@ import type {
   TocMutationResult,
   TocListQuery,
   TocListResult,
+  TocMarkEntryInput,
+  TocUnmarkEntryInput,
+  TocListEntriesQuery,
+  TocListEntriesResult,
+  TocGetEntryInput,
+  TocEntryInfo,
+  TocEditEntryInput,
+  TocEntryMutationResult,
 } from './toc/toc.types.js';
 
 export type { FindAdapter, FindOptions } from './find/find.js';
@@ -339,6 +358,21 @@ export type {
   CreateTableOfContentsResult,
   CreateTableOfContentsSuccess,
   CreateTableOfContentsFailure,
+  // TC entry types
+  TocEntryAddress,
+  TocEntryInsertionTarget,
+  TocMarkEntryInput,
+  TocUnmarkEntryInput,
+  TocListEntriesQuery,
+  TocListEntriesResult,
+  TocGetEntryInput,
+  TocEntryInfo,
+  TocEditEntryInput,
+  TocEntryMutationResult,
+  TocEntryMutationSuccess,
+  TocEntryMutationFailure,
+  TocEntryDomain,
+  TocEntryProperties,
 } from './toc/toc.types.js';
 export type { ListsAdapter } from './lists/lists.js';
 export type { SectionsAdapter } from './sections/sections.js';
@@ -1142,6 +1176,21 @@ export function createDocumentApi(adapters: DocumentApiAdapters): DocumentApi {
       },
       remove(input: TocRemoveInput, options?: MutationOptions): TocMutationResult {
         return executeTocRemove(adapters.toc, input, options);
+      },
+      markEntry(input: TocMarkEntryInput, options?: MutationOptions): TocEntryMutationResult {
+        return executeTocMarkEntry(adapters.toc, input, options);
+      },
+      unmarkEntry(input: TocUnmarkEntryInput, options?: MutationOptions): TocEntryMutationResult {
+        return executeTocUnmarkEntry(adapters.toc, input, options);
+      },
+      listEntries(query?: TocListEntriesQuery): TocListEntriesResult {
+        return executeTocListEntries(adapters.toc, query);
+      },
+      getEntry(input: TocGetEntryInput): TocEntryInfo {
+        return executeTocGetEntry(adapters.toc, input);
+      },
+      editEntry(input: TocEditEntryInput, options?: MutationOptions): TocEntryMutationResult {
+        return executeTocEditEntry(adapters.toc, input, options);
       },
     },
     query: {

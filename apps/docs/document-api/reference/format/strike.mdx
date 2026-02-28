@@ -1,7 +1,7 @@
 ---
 title: format.strike
 sidebarTitle: format.strike
-description: Reference for format.strike
+description: "Set or clear the `strike` inline run property on the target text range."
 ---
 
 {/* GENERATED FILE: DO NOT EDIT. Regenerate via `pnpm run docapi:sync`. */}
@@ -10,6 +10,8 @@ description: Reference for format.strike
 
 ## Summary
 
+Set or clear the `strike` inline run property on the target text range.
+
 - Operation ID: `format.strike`
 - API member path: `editor.doc.format.strike(...)`
 - Mutates document: `yes`
@@ -17,6 +19,10 @@ description: Reference for format.strike
 - Supports tracked mode: `yes`
 - Supports dry run: `yes`
 - Deterministic target resolution: `yes`
+
+## Expected result
+
+Returns a TextMutationReceipt confirming the inline run property patch was applied to the target range.
 
 ## Input fields
 

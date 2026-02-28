@@ -71,6 +71,7 @@ _No fields._
 
 - `TARGET_NOT_FOUND`
 - `INVALID_TARGET`
+- `INVALID_INPUT`
 - `CAPABILITY_UNAVAILABLE`
 
 ## Non-applied failure codes
@@ -91,6 +92,9 @@ _No fields._
           "type": "boolean"
         },
         "hyperlinks": {
+          "type": "boolean"
+        },
+        "includePageNumbers": {
           "type": "boolean"
         },
         "omitPageNumberLevels": {
@@ -125,8 +129,39 @@ _No fields._
           ],
           "type": "object"
         },
+        "rightAlignPageNumbers": {
+          "type": "boolean"
+        },
         "separator": {
           "type": "string"
+        },
+        "tabLeader": {
+          "enum": [
+            "none",
+            "dot",
+            "hyphen",
+            "underscore",
+            "middleDot"
+          ]
+        },
+        "tcFieldIdentifier": {
+          "type": "string"
+        },
+        "tcFieldLevels": {
+          "additionalProperties": false,
+          "properties": {
+            "from": {
+              "type": "integer"
+            },
+            "to": {
+              "type": "integer"
+            }
+          },
+          "required": [
+            "from",
+            "to"
+          ],
+          "type": "object"
         },
         "useAppliedOutlineLevel": {
           "type": "boolean"
@@ -213,7 +248,8 @@ _No fields._
                 "INVALID_TARGET",
                 "TARGET_NOT_FOUND",
                 "CAPABILITY_UNAVAILABLE",
-                "INVALID_INSERTION_CONTEXT"
+                "INVALID_INSERTION_CONTEXT",
+                "PAGE_NUMBERS_NOT_MATERIALIZED"
               ]
             },
             "details": {},
@@ -294,7 +330,8 @@ _No fields._
             "INVALID_TARGET",
             "TARGET_NOT_FOUND",
             "CAPABILITY_UNAVAILABLE",
-            "INVALID_INSERTION_CONTEXT"
+            "INVALID_INSERTION_CONTEXT",
+            "PAGE_NUMBERS_NOT_MATERIALIZED"
           ]
         },
         "details": {},

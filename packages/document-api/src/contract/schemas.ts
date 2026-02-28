@@ -1341,6 +1341,7 @@ const tocMutationFailureCodes = [
   'TARGET_NOT_FOUND',
   'CAPABILITY_UNAVAILABLE',
   'INVALID_INSERTION_CONTEXT',
+  'PAGE_NUMBERS_NOT_MATERIALIZED',
 ] as const;
 
 const tocMutationFailureSchema: JsonSchema = objectSchema(
@@ -1366,6 +1367,71 @@ const tocMutationSuccessSchema: JsonSchema = objectSchema({ success: { const: tr
 function tocMutationResultSchema(): JsonSchema {
   return {
     oneOf: [tocMutationSuccessSchema, tocMutationFailureSchema],
+  };
+}
+
+// --- TC entry schemas ---
+
+function tocEntryAddressSchema(): JsonSchema {
+  return objectSchema(
+    {
+      kind: { const: 'inline' },
+      nodeType: { const: 'tableOfContentsEntry' },
+      nodeId: { type: 'string' },
+    },
+    ['kind', 'nodeType', 'nodeId'],
+  );
+}
+
+function tocEntryInsertionTargetSchema(): JsonSchema {
+  return objectSchema(
+    {
+      kind: { const: 'inline-insert' },
+      anchor: objectSchema(
+        {
+          nodeType: { const: 'paragraph' },
+          nodeId: { type: 'string' },
+        },
+        ['nodeType', 'nodeId'],
+      ),
+      position: { enum: ['start', 'end'] },
+    },
+    ['kind', 'anchor'],
+  );
+}
+
+const tocEntryMutationFailureCodes = [
+  'NO_OP',
+  'INVALID_TARGET',
+  'TARGET_NOT_FOUND',
+  'CAPABILITY_UNAVAILABLE',
+  'INVALID_INSERTION_CONTEXT',
+  'INVALID_INPUT',
+] as const;
+
+const tocEntryMutationFailureSchema: JsonSchema = objectSchema(
+  {
+    success: { const: false },
+    failure: objectSchema(
+      {
+        code: { enum: [...tocEntryMutationFailureCodes] },
+        message: { type: 'string' },
+        details: {},
+      },
+      ['code', 'message'],
+    ),
+  },
+  ['success', 'failure'],
+);
+
+const tocEntryMutationSuccessSchema: JsonSchema = objectSchema(
+  { success: { const: true }, entry: tocEntryAddressSchema() },
+  ['success', 'entry'],
+);
+
+function tocEntryMutationResultSchema(): JsonSchema {
+  return {
+    oneOf: [tocEntryMutationSuccessSchema, tocEntryMutationFailureSchema],
   };
 }
 
@@ -2891,10 +2957,15 @@ const operationSchemas: Record<OperationId, OperationSchemaSet> = {
       config: objectSchema({
         outlineLevels: objectSchema({ from: { type: 'integer' }, to: { type: 'integer' } }, ['from', 'to']),
         useAppliedOutlineLevel: { type: 'boolean' },
+        tcFieldIdentifier: { type: 'string' },
+        tcFieldLevels: objectSchema({ from: { type: 'integer' }, to: { type: 'integer' } }, ['from', 'to']),
         hyperlinks: { type: 'boolean' },
         hideInWebView: { type: 'boolean' },
         omitPageNumberLevels: objectSchema({ from: { type: 'integer' }, to: { type: 'integer' } }, ['from', 'to']),
         separator: { type: 'string' },
+        includePageNumbers: { type: 'boolean' },
+        tabLeader: { enum: ['none', 'dot', 'hyphen', 'underscore', 'middleDot'] },
+        rightAlignPageNumbers: { type: 'boolean' },
       }),
     }),
     output: tocMutationResultSchema(),
@@ -2957,10 +3028,15 @@ const operationSchemas: Record<OperationId, OperationSchemaSet> = {
         patch: objectSchema({
           outlineLevels: objectSchema({ from: { type: 'integer' }, to: { type: 'integer' } }, ['from', 'to']),
           useAppliedOutlineLevel: { type: 'boolean' },
+          tcFieldIdentifier: { type: 'string' },
+          tcFieldLevels: objectSchema({ from: { type: 'integer' }, to: { type: 'integer' } }, ['from', 'to']),
           hyperlinks: { type: 'boolean' },
           hideInWebView: { type: 'boolean' },
           omitPageNumberLevels: objectSchema({ from: { type: 'integer' }, to: { type: 'integer' } }, ['from', 'to']),
           separator: { type: 'string' },
+          includePageNumbers: { type: 'boolean' },
+          tabLeader: { enum: ['none', 'dot', 'hyphen', 'underscore', 'middleDot'] },
+          rightAlignPageNumbers: { type: 'boolean' },
         }),
       },
       ['target', 'patch'],
@@ -2973,6 +3049,7 @@ const operationSchemas: Record<OperationId, OperationSchemaSet> = {
     input: objectSchema(
       {
         target: tocAddressSchema(),
+        mode: { enum: ['all', 'pageNumbers'] },
       },
       ['target'],
     ),
@@ -2985,6 +3062,95 @@ const operationSchemas: Record<OperationId, OperationSchemaSet> = {
     output: tocMutationResultSchema(),
     success: tocMutationSuccessSchema,
     failure: tocMutationFailureSchema,
+  },
+  'toc.markEntry': {
+    input: objectSchema(
+      {
+        target: tocEntryInsertionTargetSchema(),
+        text: { type: 'string' },
+        level: { type: 'integer', minimum: 1, maximum: 9 },
+        tableIdentifier: { type: 'string' },
+        omitPageNumber: { type: 'boolean' },
+      },
+      ['target', 'text'],
+    ),
+    output: tocEntryMutationResultSchema(),
+    success: tocEntryMutationSuccessSchema,
+    failure: tocEntryMutationFailureSchema,
+  },
+  'toc.unmarkEntry': {
+    input: objectSchema({ target: tocEntryAddressSchema() }, ['target']),
+    output: tocEntryMutationResultSchema(),
+    success: tocEntryMutationSuccessSchema,
+    failure: tocEntryMutationFailureSchema,
+  },
+  'toc.listEntries': {
+    input: objectSchema({
+      tableIdentifier: { type: 'string' },
+      levelRange: objectSchema({ from: { type: 'integer' }, to: { type: 'integer' } }, ['from', 'to']),
+      limit: { type: 'integer' },
+      offset: { type: 'integer' },
+    }),
+    output: objectSchema(
+      {
+        evaluatedRevision: { type: 'string' },
+        total: { type: 'integer' },
+        items: arraySchema(
+          objectSchema(
+            {
+              id: { type: 'string' },
+              handle: ref('ResolvedHandle'),
+              address: tocEntryAddressSchema(),
+              instruction: { type: 'string' },
+              text: { type: 'string' },
+              level: { type: 'integer' },
+              tableIdentifier: { type: 'string' },
+              omitPageNumber: { type: 'boolean' },
+            },
+            ['id', 'handle', 'address', 'instruction', 'text', 'level', 'omitPageNumber'],
+          ),
+        ),
+        page: ref('PageInfo'),
+      },
+      ['evaluatedRevision', 'total', 'items', 'page'],
+    ),
+  },
+  'toc.getEntry': {
+    input: objectSchema({ target: tocEntryAddressSchema() }, ['target']),
+    output: objectSchema(
+      {
+        nodeType: { const: 'tableOfContentsEntry' },
+        kind: { const: 'inline' },
+        properties: objectSchema(
+          {
+            instruction: { type: 'string' },
+            text: { type: 'string' },
+            level: { type: 'integer' },
+            tableIdentifier: { type: 'string' },
+            omitPageNumber: { type: 'boolean' },
+          },
+          ['instruction', 'text', 'level', 'omitPageNumber'],
+        ),
+      },
+      ['nodeType', 'kind', 'properties'],
+    ),
+  },
+  'toc.editEntry': {
+    input: objectSchema(
+      {
+        target: tocEntryAddressSchema(),
+        patch: objectSchema({
+          text: { type: 'string' },
+          level: { type: 'integer', minimum: 1, maximum: 9 },
+          tableIdentifier: { type: 'string' },
+          omitPageNumber: { type: 'boolean' },
+        }),
+      },
+      ['target', 'patch'],
+    ),
+    output: tocEntryMutationResultSchema(),
+    success: tocEntryMutationSuccessSchema,
+    failure: tocEntryMutationFailureSchema,
   },
 };
 

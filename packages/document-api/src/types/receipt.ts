@@ -23,7 +23,8 @@ export type ReceiptFailureCode =
   | 'INVALID_INSERTION_CONTEXT'
   | 'DOCUMENT_IDENTITY_CONFLICT'
   | 'UNSUPPORTED_ENVIRONMENT'
-  | 'INTERNAL_ERROR';
+  | 'INTERNAL_ERROR'
+  | 'PAGE_NUMBERS_NOT_MATERIALIZED';
 
 export type ReceiptFailure = {
   code: ReceiptFailureCode;

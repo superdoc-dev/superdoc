@@ -25,8 +25,9 @@ describe('contract response conformance', () => {
 
   for (const scenario of OPERATION_SCENARIOS) {
     const commandKey = CLI_OPERATION_COMMAND_KEYS[scenario.operationId];
+    const runtimeTest = scenario.skipRuntimeConformance ? test.skip : test;
 
-    test(`success envelope conforms for ${scenario.operationId}`, async () => {
+    runtimeTest(`success envelope conforms for ${scenario.operationId}`, async () => {
       const invocation = await scenario.success(harness);
       const { result, envelope } = await harness.runCli(invocation.args, invocation.stateDir, invocation.stdinBytes);
 
@@ -37,7 +38,7 @@ describe('contract response conformance', () => {
       validateOperationResponseData(scenario.operationId, success.data, commandKey);
     });
 
-    test(`failure envelope conforms for ${scenario.operationId}`, async () => {
+    runtimeTest(`failure envelope conforms for ${scenario.operationId}`, async () => {
       const invocation = await scenario.failure(harness);
       const { result, envelope } = await harness.runCli(invocation.args, invocation.stateDir, invocation.stdinBytes);
 

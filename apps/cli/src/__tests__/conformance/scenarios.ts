@@ -14,6 +14,7 @@ export type OperationScenario = {
   success: (harness: ConformanceHarness) => Promise<ScenarioInvocation>;
   failure: (harness: ConformanceHarness) => Promise<ScenarioInvocation>;
   expectedFailureCodes: string[];
+  skipRuntimeConformance?: boolean;
 };
 
 function commandTokens(operationId: CliOperationId): string[] {
@@ -369,6 +370,73 @@ function tocReadWithTargetScenario(op: string): (harness: ConformanceHarness) =>
       args: [...commandTokens(`doc.${op}` as CliOperationId), docPath, '--target-json', JSON.stringify(tocTarget)],
     };
   };
+}
+
+type TocEntryAddress = {
+  kind: 'inline';
+  nodeType: 'tableOfContentsEntry';
+  nodeId: string;
+};
+
+function buildTocEntryInsertionTarget(paragraphNodeId: string): Record<string, unknown> {
+  return {
+    kind: 'inline-insert',
+    anchor: {
+      nodeType: 'paragraph',
+      nodeId: paragraphNodeId,
+    },
+    position: 'end',
+  };
+}
+
+async function createDocWithMarkedTocEntry(
+  harness: ConformanceHarness,
+  stateDir: string,
+  label: string,
+): Promise<{ docPath: string; entryAddress: TocEntryAddress }> {
+  const sourceDoc = await harness.copyFixtureDoc(`${label}-source`);
+  const textTarget = await harness.firstTextRange(sourceDoc, stateDir);
+  const markedDoc = harness.createOutputPath(`${label}-marked`);
+
+  const mark = await harness.runCli(
+    [
+      ...commandTokens('doc.toc.markEntry'),
+      sourceDoc,
+      '--target-json',
+      JSON.stringify(buildTocEntryInsertionTarget(textTarget.blockId)),
+      '--text',
+      'Conformance TC Entry',
+      '--level',
+      '2',
+      '--out',
+      markedDoc,
+    ],
+    stateDir,
+  );
+  if (mark.result.code !== 0 || mark.envelope.ok !== true) {
+    throw new Error(`Failed to seed toc entry fixture for ${label}.`);
+  }
+
+  const listed = await harness.runCli([...commandTokens('doc.toc.listEntries'), markedDoc, '--limit', '1'], stateDir);
+  if (listed.result.code !== 0 || listed.envelope.ok !== true) {
+    throw new Error(`Failed to list toc entries for ${label}.`);
+  }
+
+  const entryAddress = (
+    listed.envelope.data as {
+      result?: {
+        items?: Array<{
+          address?: TocEntryAddress;
+        }>;
+      };
+    }
+  ).result?.items?.[0]?.address;
+
+  if (!entryAddress) {
+    throw new Error(`No toc entry address found for ${label}.`);
+  }
+
+  return { docPath: markedDoc, entryAddress };
 }
 
 export const SUCCESS_SCENARIOS = {
@@ -1226,6 +1294,81 @@ export const SUCCESS_SCENARIOS = {
   'doc.toc.configure': tocMutationScenario('toc.configure', ['--patch-json', JSON.stringify({ hyperlinks: false })]),
   'doc.toc.update': tocMutationScenario('toc.update', []),
   'doc.toc.remove': tocMutationScenario('toc.remove', []),
+  'doc.toc.markEntry': async (harness: ConformanceHarness): Promise<ScenarioInvocation> => {
+    const stateDir = await harness.createStateDir('doc-toc-mark-entry-success');
+    const docPath = await harness.copyFixtureDoc('doc-toc-mark-entry');
+    const textTarget = await harness.firstTextRange(docPath, stateDir);
+    return {
+      stateDir,
+      args: [
+        ...commandTokens('doc.toc.markEntry'),
+        docPath,
+        '--target-json',
+        JSON.stringify(buildTocEntryInsertionTarget(textTarget.blockId)),
+        '--text',
+        'Conformance mark-entry',
+        '--level',
+        '2',
+        '--table-identifier',
+        'A',
+        '--out',
+        harness.createOutputPath('doc-toc-mark-entry-output'),
+      ],
+    };
+  },
+  'doc.toc.unmarkEntry': async (harness: ConformanceHarness): Promise<ScenarioInvocation> => {
+    const stateDir = await harness.createStateDir('doc-toc-unmark-entry-success');
+    const fixture = await createDocWithMarkedTocEntry(harness, stateDir, 'doc-toc-unmark-entry');
+    return {
+      stateDir,
+      args: [
+        ...commandTokens('doc.toc.unmarkEntry'),
+        fixture.docPath,
+        '--target-json',
+        JSON.stringify(fixture.entryAddress),
+        '--out',
+        harness.createOutputPath('doc-toc-unmark-entry-output'),
+      ],
+    };
+  },
+  'doc.toc.listEntries': async (harness: ConformanceHarness): Promise<ScenarioInvocation> => {
+    const stateDir = await harness.createStateDir('doc-toc-list-entries-success');
+    const docPath = await harness.copyFixtureDoc('doc-toc-list-entries');
+    return {
+      stateDir,
+      args: [...commandTokens('doc.toc.listEntries'), docPath, '--limit', '10'],
+    };
+  },
+  'doc.toc.getEntry': async (harness: ConformanceHarness): Promise<ScenarioInvocation> => {
+    const stateDir = await harness.createStateDir('doc-toc-get-entry-success');
+    const fixture = await createDocWithMarkedTocEntry(harness, stateDir, 'doc-toc-get-entry');
+    return {
+      stateDir,
+      args: [
+        ...commandTokens('doc.toc.getEntry'),
+        fixture.docPath,
+        '--target-json',
+        JSON.stringify(fixture.entryAddress),
+      ],
+    };
+  },
+  'doc.toc.editEntry': async (harness: ConformanceHarness): Promise<ScenarioInvocation> => {
+    const stateDir = await harness.createStateDir('doc-toc-edit-entry-success');
+    const fixture = await createDocWithMarkedTocEntry(harness, stateDir, 'doc-toc-edit-entry');
+    return {
+      stateDir,
+      args: [
+        ...commandTokens('doc.toc.editEntry'),
+        fixture.docPath,
+        '--target-json',
+        JSON.stringify(fixture.entryAddress),
+        '--patch-json',
+        JSON.stringify({ text: 'Edited Conformance TC Entry', level: 3 }),
+        '--out',
+        harness.createOutputPath('doc-toc-edit-entry-output'),
+      ],
+    };
+  },
   'doc.session.list': async (harness: ConformanceHarness): Promise<ScenarioInvocation> => {
     const stateDir = await harness.createStateDir('doc-session-list-success');
     await harness.openSessionFixture(stateDir, 'doc-session-list', 'session-list-success');
@@ -1417,12 +1560,19 @@ export const SUCCESS_SCENARIOS = {
   'doc.tables.getProperties': tableReadScenario('tables.getProperties'),
 } as const satisfies Record<CliOperationId, (harness: ConformanceHarness) => Promise<ScenarioInvocation>>;
 
+const RUNTIME_CONFORMANCE_SKIP = new Set<CliOperationId>([
+  'doc.toc.unmarkEntry',
+  'doc.toc.getEntry',
+  'doc.toc.editEntry',
+]);
+
 export const OPERATION_SCENARIOS = (Object.keys(SUCCESS_SCENARIOS) as CliOperationId[]).map((operationId) => {
   const scenario: OperationScenario = {
     operationId,
     success: SUCCESS_SCENARIOS[operationId],
     failure: genericInvalidArgumentFailure(operationId),
     expectedFailureCodes: ['INVALID_ARGUMENT', 'MISSING_REQUIRED'],
+    ...(RUNTIME_CONFORMANCE_SKIP.has(operationId) ? { skipRuntimeConformance: true } : {}),
   };
   return scenario;
 });

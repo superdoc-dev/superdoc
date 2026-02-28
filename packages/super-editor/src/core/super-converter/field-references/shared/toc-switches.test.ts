@@ -49,8 +49,9 @@ describe('parseTocInstruction', () => {
     expect(config.preserved.bookmarkName).toBe('Bm1');
     expect(config.preserved.seqFieldIdentifier).toBe('SEQ');
     expect(config.preserved.chapterSeparator).toBe('.');
-    expect(config.preserved.tcFieldIdentifier).toBe('F');
-    expect(config.preserved.tcFieldLevels).toEqual({ from: 1, to: 3 });
+    // \f and \l are promoted to source config
+    expect(config.source.tcFieldIdentifier).toBe('F');
+    expect(config.source.tcFieldLevels).toEqual({ from: 1, to: 3 });
     expect(config.preserved.chapterNumberSource).toBe('Heading1');
     expect(config.preserved.preserveTabEntries).toBe(true);
   });
@@ -58,7 +59,8 @@ describe('parseTocInstruction', () => {
   it('handles empty instruction', () => {
     const config = parseTocInstruction('TOC');
     expect(config.source).toEqual({});
-    expect(config.display).toEqual({});
+    // Convenience projections are derived even for bare TOC instructions
+    expect(config.display).toEqual({ includePageNumbers: true, tabLeader: 'none' });
     expect(config.preserved).toEqual({});
   });
 });
@@ -139,6 +141,58 @@ describe('applyTocPatch', () => {
     const patched = applyTocPatch(existing, { outlineLevels: { from: 1, to: 5 } });
     expect(patched.preserved.customStyles).toEqual([{ styleName: 'H1', level: 1 }]);
     expect(patched.preserved.bookmarkName).toBe('BM');
+  });
+
+  it('includePageNumbers: false sets \\n to cover \\o range', () => {
+    const existing = parseTocInstruction('TOC \\o "1-3" \\h');
+    const patched = applyTocPatch(existing, { includePageNumbers: false });
+    expect(patched.display.includePageNumbers).toBe(false);
+    expect(patched.display.omitPageNumberLevels).toEqual({ from: 1, to: 3 });
+  });
+
+  it('includePageNumbers: true removes \\n', () => {
+    const existing = parseTocInstruction('TOC \\o "1-3" \\n "1-3"');
+    const patched = applyTocPatch(existing, { includePageNumbers: true });
+    expect(patched.display.includePageNumbers).toBe(true);
+    expect(patched.display.omitPageNumberLevels).toBeUndefined();
+  });
+
+  it('tabLeader: dot sets \\p separator', () => {
+    const existing = parseTocInstruction('TOC \\o "1-3"');
+    const patched = applyTocPatch(existing, { tabLeader: 'dot' });
+    expect(patched.display.tabLeader).toBe('dot');
+    expect(patched.display.separator).toBe('.');
+  });
+
+  it('tabLeader: none removes separator', () => {
+    const existing = parseTocInstruction('TOC \\o "1-3" \\p "."');
+    const patched = applyTocPatch(existing, { tabLeader: 'none' });
+    expect(patched.display.tabLeader).toBe('none');
+    expect(patched.display.separator).toBeUndefined();
+  });
+
+  it('throws on tabLeader + separator conflict', () => {
+    const existing = parseTocInstruction('TOC \\o "1-3"');
+    expect(() => applyTocPatch(existing, { tabLeader: 'dot', separator: '-' })).toThrow('INVALID_INPUT');
+  });
+
+  it('throws on includePageNumbers + omitPageNumberLevels conflict', () => {
+    const existing = parseTocInstruction('TOC \\o "1-3"');
+    expect(() =>
+      applyTocPatch(existing, { includePageNumbers: false, omitPageNumberLevels: { from: 1, to: 2 } }),
+    ).toThrow('INVALID_INPUT');
+  });
+
+  it('patches tcFieldIdentifier on source config', () => {
+    const existing = parseTocInstruction('TOC \\o "1-3"');
+    const patched = applyTocPatch(existing, { tcFieldIdentifier: 'A' });
+    expect(patched.source.tcFieldIdentifier).toBe('A');
+  });
+
+  it('patches tcFieldLevels on source config', () => {
+    const existing = parseTocInstruction('TOC \\o "1-3"');
+    const patched = applyTocPatch(existing, { tcFieldLevels: { from: 1, to: 5 } });
+    expect(patched.source.tcFieldLevels).toEqual({ from: 1, to: 5 });
   });
 });
 

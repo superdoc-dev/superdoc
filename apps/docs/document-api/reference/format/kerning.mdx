@@ -1,7 +1,7 @@
 ---
 title: format.kerning
 sidebarTitle: format.kerning
-description: Reference for format.kerning
+description: "Set or clear the `kerning` inline run property on the target text range."
 ---
 
 {/* GENERATED FILE: DO NOT EDIT. Regenerate via `pnpm run docapi:sync`. */}
@@ -10,6 +10,8 @@ description: Reference for format.kerning
 
 ## Summary
 
+Set or clear the `kerning` inline run property on the target text range.
+
 - Operation ID: `format.kerning`
 - API member path: `editor.doc.format.kerning(...)`
 - Mutates document: `yes`
@@ -17,6 +19,10 @@ description: Reference for format.kerning
 - Supports tracked mode: `no`
 - Supports dry run: `yes`
 - Deterministic target resolution: `yes`
+
+## Expected result
+
+Returns a TextMutationReceipt confirming the inline run property patch was applied to the target range.
 
 ## Input fields
 

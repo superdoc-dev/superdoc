@@ -40,6 +40,7 @@ type NodeOptions = {
   isLeaf?: boolean;
   inlineContent?: boolean;
   nodeSize?: number;
+  marks?: Array<{ type: string | { name: string } }>;
 };
 
 function createNode(typeName: string, children: ProseMirrorNode[] = [], options: NodeOptions = {}): ProseMirrorNode {
@@ -54,9 +55,12 @@ function createNode(typeName: string, children: ProseMirrorNode[] = [], options:
   const contentSize = children.reduce((sum, child) => sum + child.nodeSize, 0);
   const nodeSize = isText ? text.length : options.nodeSize != null ? options.nodeSize : isLeaf ? 1 : contentSize + 2;
 
+  const marks = options.marks ?? [];
+
   const node = {
     type: { name: typeName },
     attrs,
+    marks,
     text: isText ? text : undefined,
     content: { size: contentSize },
     nodeSize,
@@ -69,6 +73,24 @@ function createNode(typeName: string, children: ProseMirrorNode[] = [], options:
     childCount: children.length,
     child(index: number) {
       return children[index]!;
+    },
+    forEach(callback: (node: ProseMirrorNode, offset: number, index: number) => void) {
+      let offset = 0;
+      for (let i = 0; i < children.length; i++) {
+        callback(children[i]!, offset, i);
+        offset += children[i]!.nodeSize;
+      }
+    },
+    toJSON(): Record<string, unknown> {
+      const json: Record<string, unknown> = { type: typeName };
+      if (Object.keys(attrs).length > 0) json.attrs = attrs;
+      if (isText && text) json.text = text;
+      if (marks.length > 0)
+        json.marks = marks.map((m) => (typeof m.type === 'string' ? { type: m.type } : { type: m.type.name }));
+      if (children.length > 0) {
+        json.content = children.map((c) => (c as unknown as { toJSON: () => Record<string, unknown> }).toJSON());
+      }
+      return json;
     },
     descendants(callback: (node: ProseMirrorNode, pos: number) => boolean | void) {
       function walk(nodes: ProseMirrorNode[], baseOffset: number): void {
@@ -206,6 +228,219 @@ describe('toc wrappers', () => {
 
     expectTrackedModeUnsupported(() => {
       tocRemoveWrapper(editor, { target: tocTarget }, { changeMode: 'tracked' });
+    });
+  });
+
+  // ---------------------------------------------------------------------------
+  // toc.update mode: 'pageNumbers'
+  // ---------------------------------------------------------------------------
+
+  describe('tocUpdateWrapper mode: pageNumbers', () => {
+    /**
+     * Builds an editor whose TOC has materialized entry paragraphs with tocPageNumber marks.
+     * Optionally attaches a pageMap to editor.storage.tableOfContents.
+     */
+    function makePageNumberEditor(
+      opts: {
+        instruction?: string;
+        pageMap?: Map<string, number> | null;
+        entryPageText?: string;
+      } = {},
+    ) {
+      const instruction = opts.instruction ?? 'TOC \\o "1-3" \\h \\z';
+      const entryPageText = opts.entryPageText ?? '0';
+
+      // Build a TOC with one entry paragraph that has a tocPageNumber mark
+      const entryTextNode = createNode('text', [], { text: 'Heading 1' });
+      const tabNode = createNode('text', [], { text: '\t' });
+      const pageNumNode = createNode('text', [], {
+        text: entryPageText,
+        marks: [{ type: 'tocPageNumber' }],
+      });
+      const entryParagraph = createNode('paragraph', [entryTextNode, tabNode, pageNumNode], {
+        attrs: {
+          sdBlockId: 'toc-entry-p1',
+          paragraphProperties: { styleId: 'TOC1' },
+          tocSourceId: 'h-1',
+        },
+        isBlock: true,
+        inlineContent: true,
+      });
+
+      const tocNode = createNode('tableOfContents', [entryParagraph], {
+        attrs: { sdBlockId: 'toc-1', instruction },
+        isBlock: true,
+      });
+      const heading = createNode('paragraph', [createNode('text', [], { text: 'Heading 1' })], {
+        attrs: {
+          sdBlockId: 'h-1',
+          paragraphProperties: { styleId: 'Heading1' },
+        },
+        isBlock: true,
+        inlineContent: true,
+      });
+      const doc = createNode('doc', [tocNode, heading], { isBlock: false });
+
+      const commands = {
+        insertTableOfContentsAt: vi.fn(() => true),
+        setTableOfContentsInstructionById: vi.fn(() => true),
+        replaceTableOfContentsContentById: vi.fn(() => true),
+        deleteTableOfContentsById: vi.fn(() => true),
+      };
+
+      const storage: Record<string, unknown> = {};
+      if (opts.pageMap !== null) {
+        storage.tableOfContents = {
+          pageMap: opts.pageMap ?? new Map([['h-1', 5]]),
+          pageMapDoc: doc, // Match the current doc so the freshness check passes
+        };
+      }
+
+      const editor = {
+        state: { doc, schema: { nodes: { paragraph: { create: vi.fn() }, tableOfContents: {} } } },
+        commands,
+        schema: { marks: {} },
+        options: {},
+        storage,
+        on: () => {},
+      } as unknown as Editor;
+
+      return { editor, commands, doc };
+    }
+
+    const tocTarget = { kind: 'block', nodeType: 'tableOfContents', nodeId: 'toc-1' } as const;
+
+    it('updates page numbers when page map is available and values changed', () => {
+      const { editor, commands } = makePageNumberEditor({ pageMap: new Map([['h-1', 5]]) });
+      const result = tocUpdateWrapper(editor, { target: tocTarget, mode: 'pageNumbers' }, { changeMode: 'direct' });
+
+      expect(result.success).toBe(true);
+      expect(commands.replaceTableOfContentsContentById).toHaveBeenCalledTimes(1);
+    });
+
+    it('returns NO_OP when page numbers are already up to date', () => {
+      const { editor, commands } = makePageNumberEditor({
+        pageMap: new Map([['h-1', 5]]),
+        entryPageText: '5',
+      });
+      const result = tocUpdateWrapper(editor, { target: tocTarget, mode: 'pageNumbers' }, { changeMode: 'direct' });
+
+      expect(result.success).toBe(false);
+      if (!result.success) {
+        expect(result.failure.code).toBe('NO_OP');
+      }
+      expect(commands.replaceTableOfContentsContentById).not.toHaveBeenCalled();
+    });
+
+    it('returns CAPABILITY_UNAVAILABLE when no page map exists', () => {
+      const { editor } = makePageNumberEditor({ pageMap: null });
+      const result = tocUpdateWrapper(editor, { target: tocTarget, mode: 'pageNumbers' }, { changeMode: 'direct' });
+
+      expect(result.success).toBe(false);
+      if (!result.success) {
+        expect(result.failure.code).toBe('CAPABILITY_UNAVAILABLE');
+      }
+    });
+
+    it('returns NO_OP when config excludes page numbers', () => {
+      // \\n "1-9" omits page numbers for levels 1-9 — i.e. all levels
+      const { editor } = makePageNumberEditor({ instruction: 'TOC \\o "1-3" \\n "1-9"' });
+      const result = tocUpdateWrapper(editor, { target: tocTarget, mode: 'pageNumbers' }, { changeMode: 'direct' });
+
+      expect(result.success).toBe(false);
+      if (!result.success) {
+        expect(result.failure.code).toBe('NO_OP');
+      }
+    });
+
+    it('supports dryRun', () => {
+      const { editor, commands } = makePageNumberEditor({ pageMap: new Map([['h-1', 5]]) });
+      const result = tocUpdateWrapper(editor, { target: tocTarget, mode: 'pageNumbers' }, { dryRun: true });
+
+      expect(result.success).toBe(true);
+      expect(commands.replaceTableOfContentsContentById).not.toHaveBeenCalled();
+    });
+
+    it('returns PAGE_NUMBERS_NOT_MATERIALIZED when TOC has no tocPageNumber marks', () => {
+      // Build a TOC without any tocPageNumber marks
+      const entryText = createNode('text', [], { text: 'Heading 1' });
+      const entryParagraph = createNode('paragraph', [entryText], {
+        attrs: {
+          sdBlockId: 'toc-entry-p1',
+          paragraphProperties: { styleId: 'TOC1' },
+          tocSourceId: 'h-1',
+        },
+        isBlock: true,
+        inlineContent: true,
+      });
+      const tocNode = createNode('tableOfContents', [entryParagraph], {
+        attrs: { sdBlockId: 'toc-1', instruction: 'TOC \\o "1-3" \\h \\z' },
+        isBlock: true,
+      });
+      const heading = createNode('paragraph', [createNode('text', [], { text: 'Heading 1' })], {
+        attrs: { sdBlockId: 'h-1', paragraphProperties: { styleId: 'Heading1' } },
+        isBlock: true,
+        inlineContent: true,
+      });
+      const doc = createNode('doc', [tocNode, heading], { isBlock: false });
+
+      const editor = {
+        state: { doc, schema: { nodes: { paragraph: { create: vi.fn() }, tableOfContents: {} } } },
+        commands: {
+          insertTableOfContentsAt: vi.fn(() => true),
+          setTableOfContentsInstructionById: vi.fn(() => true),
+          replaceTableOfContentsContentById: vi.fn(() => true),
+          deleteTableOfContentsById: vi.fn(() => true),
+        },
+        schema: { marks: {} },
+        options: {},
+        storage: { tableOfContents: { pageMap: new Map([['h-1', 5]]), pageMapDoc: doc } },
+        on: () => {},
+      } as unknown as Editor;
+
+      const result = tocUpdateWrapper(editor, { target: tocTarget, mode: 'pageNumbers' }, { changeMode: 'direct' });
+
+      expect(result.success).toBe(false);
+      if (!result.success) {
+        expect(result.failure.code).toBe('PAGE_NUMBERS_NOT_MATERIALIZED');
+      }
+    });
+
+    it('returns CAPABILITY_UNAVAILABLE when page map is stale (doc changed since last layout)', () => {
+      const { editor, doc } = makePageNumberEditor({ pageMap: new Map([['h-1', 5]]) });
+
+      // Simulate a doc change after layout: create a new doc with the same
+      // TOC structure but a different object identity (as ProseMirror does on
+      // every document-changing transaction).
+      const entryTextNode = createNode('text', [], { text: 'Heading 1' });
+      const tabNode = createNode('text', [], { text: '\t' });
+      const pageNumNode = createNode('text', [], { text: '0', marks: [{ type: 'tocPageNumber' }] });
+      const entryParagraph = createNode('paragraph', [entryTextNode, tabNode, pageNumNode], {
+        attrs: { sdBlockId: 'toc-entry-p1', paragraphProperties: { styleId: 'TOC1' }, tocSourceId: 'h-1' },
+        isBlock: true,
+        inlineContent: true,
+      });
+      const tocNode = createNode('tableOfContents', [entryParagraph], {
+        attrs: { sdBlockId: 'toc-1', instruction: 'TOC \\o "1-3" \\h \\z' },
+        isBlock: true,
+      });
+      const heading = createNode('paragraph', [createNode('text', [], { text: 'Heading 1' })], {
+        attrs: { sdBlockId: 'h-1', paragraphProperties: { styleId: 'Heading1' } },
+        isBlock: true,
+        inlineContent: true,
+      });
+      const newDoc = createNode('doc', [tocNode, heading], { isBlock: false });
+
+      // Replace the doc reference — pageMapDoc still points to the old doc
+      (editor.state as unknown as { doc: unknown }).doc = newDoc;
+      expect(newDoc).not.toBe(doc); // Sanity: different object identity
+
+      const result = tocUpdateWrapper(editor, { target: tocTarget, mode: 'pageNumbers' }, { changeMode: 'direct' });
+
+      expect(result.success).toBe(false);
+      if (!result.success) {
+        expect(result.failure.code).toBe('CAPABILITY_UNAVAILABLE');
+      }
     });
   });
 });

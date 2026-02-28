@@ -2,9 +2,14 @@
  * Shared TOC instruction parser/serializer — single source of truth.
  *
  * Handles all OOXML TOC field switches:
- * - "Ship now" switches: \o, \u, \h, \z, \n, \p (configurable via toc.configure)
- * - "Parse-preserve" switches: \t, \b, \f, \l, \a, \c, \d, \s, \w (round-tripped, not configurable)
+ * - Configurable source switches: \o, \u, \f, \l (via toc.configure)
+ * - Configurable display switches: \h, \z, \n, \p (via toc.configure)
+ * - Preserved switches: \t, \b, \a, \c, \d, \s, \w (round-tripped, not configurable)
  * - Unrecognized switches: stored in rawExtensions for lossless round-trip
+ *
+ * Note: `includePageNumbers` and `tabLeader` are convenience projections derived
+ * from \n and \p respectively. `rightAlignPageNumbers` is NOT handled here — it
+ * is stored as a PM node attribute on the tableOfContents node.
  */
 
 import type {
@@ -14,6 +19,24 @@ import type {
   TocPreservedSwitches,
   TocConfigurePatch,
 } from '@superdoc/document-api';
+
+// ---------------------------------------------------------------------------
+// Tab leader mapping
+// ---------------------------------------------------------------------------
+
+const TAB_LEADER_TO_SEPARATOR: Record<string, string> = {
+  dot: '.',
+  hyphen: '-',
+  underscore: '_',
+  middleDot: '·',
+};
+
+const SEPARATOR_TO_TAB_LEADER: Record<string, string> = {
+  '.': 'dot',
+  '-': 'hyphen',
+  _: 'underscore',
+  '·': 'middleDot',
+};
 
 // ---------------------------------------------------------------------------
 // Defaults
@@ -64,6 +87,34 @@ function parseCustomStyles(value: string): Array<{ styleName: string; level: num
   return entries;
 }
 
+/**
+ * Derives the `includePageNumbers` boolean from the parsed \n and \o switches.
+ *
+ * - \n absent → true (page numbers included)
+ * - \n present and fully covers \o range (or "1-9" when \o absent) → false
+ * - \n present but only partially covers → true (partial is not "no page numbers")
+ */
+export function deriveIncludePageNumbers(
+  omitRange: { from: number; to: number } | undefined,
+  outlineLevels: { from: number; to: number } | undefined,
+): boolean {
+  if (!omitRange) return true;
+
+  const effectiveRange = outlineLevels ?? { from: 1, to: 9 };
+  const fullyCovered = omitRange.from <= effectiveRange.from && omitRange.to >= effectiveRange.to;
+  return !fullyCovered;
+}
+
+/**
+ * Derives the `tabLeader` value from the raw \p separator string.
+ * Returns undefined if the separator doesn't match a known leader pattern.
+ */
+function deriveTabLeader(separator: string | undefined): TocDisplayConfig['tabLeader'] | undefined {
+  if (!separator) return 'none';
+  const leader = SEPARATOR_TO_TAB_LEADER[separator];
+  return leader as TocDisplayConfig['tabLeader'] | undefined;
+}
+
 export function parseTocInstruction(instruction: string): TocSwitchConfig {
   const source: TocSourceConfig = {};
   const display: TocDisplayConfig = {};
@@ -71,12 +122,13 @@ export function parseTocInstruction(instruction: string): TocSwitchConfig {
   const rawExtensions: string[] = [];
 
   let match: RegExpExecArray | null;
+  SWITCH_PATTERN.lastIndex = 0;
   while ((match = SWITCH_PATTERN.exec(instruction)) !== null) {
     const switchChar = match[1].toLowerCase();
     const arg = match[2] ?? '';
 
     switch (switchChar) {
-      // Ship-now source switches
+      // Configurable source switches
       case 'o': {
         const range = parseLevelRange(arg);
         if (range) source.outlineLevels = range;
@@ -85,8 +137,16 @@ export function parseTocInstruction(instruction: string): TocSwitchConfig {
       case 'u':
         source.useAppliedOutlineLevel = true;
         break;
+      case 'f':
+        if (arg) source.tcFieldIdentifier = arg;
+        break;
+      case 'l': {
+        const range = parseLevelRange(arg);
+        if (range) source.tcFieldLevels = range;
+        break;
+      }
 
-      // Ship-now display switches
+      // Configurable display switches
       case 'h':
         display.hyperlinks = true;
         break;
@@ -102,21 +162,13 @@ export function parseTocInstruction(instruction: string): TocSwitchConfig {
         if (arg) display.separator = arg;
         break;
 
-      // Parse-preserve switches
+      // Preserved switches
       case 't':
         if (arg) preserved.customStyles = parseCustomStyles(arg);
         break;
       case 'b':
         if (arg) preserved.bookmarkName = arg;
         break;
-      case 'f':
-        if (arg) preserved.tcFieldIdentifier = arg;
-        break;
-      case 'l': {
-        const range = parseLevelRange(arg);
-        if (range) preserved.tcFieldLevels = range;
-        break;
-      }
       case 'a':
         if (arg) preserved.captionType = arg;
         break;
@@ -144,6 +196,13 @@ export function parseTocInstruction(instruction: string): TocSwitchConfig {
     preserved.rawExtensions = rawExtensions;
   }
 
+  // Derive convenience projections
+  display.includePageNumbers = deriveIncludePageNumbers(display.omitPageNumberLevels, source.outlineLevels);
+  const tabLeader = deriveTabLeader(display.separator);
+  if (tabLeader !== undefined) {
+    display.tabLeader = tabLeader;
+  }
+
   return { source, display, preserved };
 }
 
@@ -155,8 +214,13 @@ export function parseTocInstruction(instruction: string): TocSwitchConfig {
  * Serializes a TocSwitchConfig back to a canonical instruction string.
  *
  * Switch order is deterministic:
- * \o, \u, \t, \h, \z, \n, \p, then preserved (\a, \b, \c, \d, \f, \l, \s, \w),
+ * \o, \u, \f, \l, \t, \h, \z, \n, \p, then preserved (\a, \b, \c, \d, \s, \w),
  * then rawExtensions in original order.
+ *
+ * Note: `includePageNumbers`, `tabLeader`, and `rightAlignPageNumbers` are NOT
+ * serialized here. `includePageNumbers` controls \n (handled via omitPageNumberLevels).
+ * `tabLeader` controls \p (handled via separator). `rightAlignPageNumbers` is a
+ * PM node attribute, not a field switch.
  */
 export function serializeTocInstruction(config: TocSwitchConfig): string {
   const parts: string[] = ['TOC'];
@@ -170,6 +234,16 @@ export function serializeTocInstruction(config: TocSwitchConfig): string {
   // \u — use applied outline level
   if (source.useAppliedOutlineLevel) {
     parts.push('\\u');
+  }
+
+  // \f — TC field identifier (promoted from preserved to source)
+  if (source.tcFieldIdentifier) {
+    parts.push(`\\f "${source.tcFieldIdentifier}"`);
+  }
+
+  // \l — TC field levels (promoted from preserved to source)
+  if (source.tcFieldLevels) {
+    parts.push(`\\l "${source.tcFieldLevels.from}-${source.tcFieldLevels.to}"`);
   }
 
   // \t — custom styles (preserved)
@@ -198,7 +272,7 @@ export function serializeTocInstruction(config: TocSwitchConfig): string {
     parts.push(`\\p "${display.separator}"`);
   }
 
-  // Preserved switches in alphabetical order: \a, \b, \c, \d, \f, \l, \s, \w
+  // Preserved switches in alphabetical order: \a, \b, \c, \d, \s, \w
   if (preserved.captionType) {
     parts.push(`\\a "${preserved.captionType}"`);
   }
@@ -210,12 +284,6 @@ export function serializeTocInstruction(config: TocSwitchConfig): string {
   }
   if (preserved.chapterSeparator) {
     parts.push(`\\d "${preserved.chapterSeparator}"`);
-  }
-  if (preserved.tcFieldIdentifier) {
-    parts.push(`\\f "${preserved.tcFieldIdentifier}"`);
-  }
-  if (preserved.tcFieldLevels) {
-    parts.push(`\\l "${preserved.tcFieldLevels.from}-${preserved.tcFieldLevels.to}"`);
   }
   if (preserved.chapterNumberSource) {
     parts.push(`\\s "${preserved.chapterNumberSource}"`);
@@ -237,24 +305,87 @@ export function serializeTocInstruction(config: TocSwitchConfig): string {
 // ---------------------------------------------------------------------------
 
 /**
+ * Computes the \n switch value for `includePageNumbers: false`.
+ *
+ * Uses the \o range when present, falls back to "1-9" (full OOXML range).
+ */
+function computeOmitPageNumberRange(source: TocSourceConfig): { from: number; to: number } {
+  return source.outlineLevels ?? { from: 1, to: 9 };
+}
+
+/**
  * Merges a TocConfigurePatch into an existing TocSwitchConfig.
- * Only configurable fields (source + display) are patchable.
- * Preserved switches are carried through untouched.
+ *
+ * Handles conflict validation:
+ * - `tabLeader` + `separator` in the same patch → Error
+ * - `includePageNumbers` + `omitPageNumberLevels` in the same patch → Error
+ * - `includePageNumbers: true` → removes \n switch
+ * - `includePageNumbers: false` → sets \n to match \o range
+ * - `tabLeader` → sets \p via mapping
  */
 export function applyTocPatch(existing: TocSwitchConfig, patch: TocConfigurePatch): TocSwitchConfig {
+  // Conflict: tabLeader vs separator
+  if (patch.tabLeader !== undefined && patch.separator !== undefined) {
+    throw new Error('INVALID_INPUT: cannot set both tabLeader and separator in the same patch');
+  }
+
+  // Conflict: includePageNumbers vs omitPageNumberLevels
+  if (patch.includePageNumbers !== undefined && patch.omitPageNumberLevels !== undefined) {
+    throw new Error('INVALID_INPUT: cannot set both includePageNumbers and omitPageNumberLevels in the same patch');
+  }
+
+  const newSource: TocSourceConfig = {
+    ...existing.source,
+    ...(patch.outlineLevels !== undefined && { outlineLevels: patch.outlineLevels }),
+    ...(patch.useAppliedOutlineLevel !== undefined && { useAppliedOutlineLevel: patch.useAppliedOutlineLevel }),
+    ...(patch.tcFieldIdentifier !== undefined && { tcFieldIdentifier: patch.tcFieldIdentifier }),
+    ...(patch.tcFieldLevels !== undefined && { tcFieldLevels: patch.tcFieldLevels }),
+  };
+
+  const newDisplay: TocDisplayConfig = {
+    ...existing.display,
+    ...(patch.hyperlinks !== undefined && { hyperlinks: patch.hyperlinks }),
+    ...(patch.hideInWebView !== undefined && { hideInWebView: patch.hideInWebView }),
+  };
+
+  // Handle includePageNumbers → \n switch mapping
+  if (patch.includePageNumbers !== undefined) {
+    if (patch.includePageNumbers) {
+      // Remove \n entirely
+      delete newDisplay.omitPageNumberLevels;
+    } else {
+      // Set \n to cover the effective range
+      newDisplay.omitPageNumberLevels = computeOmitPageNumberRange(newSource);
+    }
+    newDisplay.includePageNumbers = patch.includePageNumbers;
+  } else if (patch.omitPageNumberLevels !== undefined) {
+    newDisplay.omitPageNumberLevels = patch.omitPageNumberLevels;
+    // Re-derive includePageNumbers from the new omit range
+    newDisplay.includePageNumbers = deriveIncludePageNumbers(patch.omitPageNumberLevels, newSource.outlineLevels);
+  }
+
+  // Handle tabLeader → \p switch mapping
+  if (patch.tabLeader !== undefined) {
+    if (patch.tabLeader === 'none') {
+      delete newDisplay.separator;
+    } else {
+      newDisplay.separator = TAB_LEADER_TO_SEPARATOR[patch.tabLeader];
+    }
+    newDisplay.tabLeader = patch.tabLeader;
+  } else if (patch.separator !== undefined) {
+    newDisplay.separator = patch.separator;
+    // Re-derive tabLeader from new separator
+    const derived = deriveTabLeader(patch.separator);
+    if (derived !== undefined) {
+      newDisplay.tabLeader = derived;
+    } else {
+      delete newDisplay.tabLeader;
+    }
+  }
+
   return {
-    source: {
-      ...existing.source,
-      ...(patch.outlineLevels !== undefined && { outlineLevels: patch.outlineLevels }),
-      ...(patch.useAppliedOutlineLevel !== undefined && { useAppliedOutlineLevel: patch.useAppliedOutlineLevel }),
-    },
-    display: {
-      ...existing.display,
-      ...(patch.hyperlinks !== undefined && { hyperlinks: patch.hyperlinks }),
-      ...(patch.hideInWebView !== undefined && { hideInWebView: patch.hideInWebView }),
-      ...(patch.omitPageNumberLevels !== undefined && { omitPageNumberLevels: patch.omitPageNumberLevels }),
-      ...(patch.separator !== undefined && { separator: patch.separator }),
-    },
+    source: newSource,
+    display: newDisplay,
     preserved: { ...existing.preserved },
   };
 }

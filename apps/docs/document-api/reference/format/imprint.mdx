@@ -1,7 +1,7 @@
 ---
 title: format.imprint
 sidebarTitle: format.imprint
-description: Reference for format.imprint
+description: "Set or clear the `imprint` inline run property on the target text range."
 ---
 
 {/* GENERATED FILE: DO NOT EDIT. Regenerate via `pnpm run docapi:sync`. */}
@@ -10,6 +10,8 @@ description: Reference for format.imprint
 
 ## Summary
 
+Set or clear the `imprint` inline run property on the target text range.
+
 - Operation ID: `format.imprint`
 - API member path: `editor.doc.format.imprint(...)`
 - Mutates document: `yes`
@@ -17,6 +19,10 @@ description: Reference for format.imprint
 - Supports tracked mode: `no`
 - Supports dry run: `yes`
 - Deterministic target resolution: `yes`
+
+## Expected result
+
+Returns a TextMutationReceipt confirming the inline run property patch was applied to the target range.
 
 ## Input fields
 

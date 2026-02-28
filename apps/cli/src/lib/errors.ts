@@ -37,7 +37,9 @@ export type CliErrorCode =
   | 'MATCH_NOT_FOUND'
   | 'PRECONDITION_FAILED'
   | 'CROSS_BLOCK_MATCH'
-  | 'SPAN_FRAGMENTED';
+  | 'SPAN_FRAGMENTED'
+  | 'PAGE_NUMBERS_NOT_MATERIALIZED'
+  | 'CAPABILITY_UNAVAILABLE';
 
 /**
  * Intersection type for errors thrown by document-api adapter operations.

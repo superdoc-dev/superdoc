@@ -81,6 +81,7 @@ export function resolvePostMutationTocId(doc: ProseMirrorNode, sdBlockId: string
 export function extractTocInfo(node: ProseMirrorNode): TocInfo {
   const instruction: string = node.attrs?.instruction ?? '';
   const config = parseTocInstruction(instruction);
+  const rightAlign = node.attrs?.rightAlignPageNumbers;
 
   return {
     nodeType: 'tableOfContents',
@@ -88,7 +89,10 @@ export function extractTocInfo(node: ProseMirrorNode): TocInfo {
     properties: {
       instruction,
       sourceConfig: config.source,
-      displayConfig: config.display,
+      displayConfig: {
+        ...config.display,
+        ...(rightAlign !== undefined && { rightAlignPageNumbers: rightAlign }),
+      },
       preservedSwitches: config.preserved,
       entryCount: node.childCount,
     },
@@ -111,11 +115,15 @@ export function buildTocDiscoveryItem(resolved: ResolvedTocNode, evaluatedRevisi
 
   const handle = buildResolvedHandle(resolved.nodeId, 'stable', 'tableOfContents');
 
+  const rightAlign = resolved.node.attrs?.rightAlignPageNumbers;
   const domain: TocDomain = {
     address,
     instruction,
     sourceConfig: config.source,
-    displayConfig: config.display,
+    displayConfig: {
+      ...config.display,
+      ...(rightAlign !== undefined && { rightAlignPageNumbers: rightAlign }),
+    },
     preserved: config.preserved,
     entryCount: resolved.node.childCount,
   };

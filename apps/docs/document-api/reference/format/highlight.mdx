@@ -1,7 +1,7 @@
 ---
 title: format.highlight
 sidebarTitle: format.highlight
-description: Reference for format.highlight
+description: "Set or clear the `highlight` inline run property on the target text range."
 ---
 
 {/* GENERATED FILE: DO NOT EDIT. Regenerate via `pnpm run docapi:sync`. */}
@@ -10,6 +10,8 @@ description: Reference for format.highlight
 
 ## Summary
 
+Set or clear the `highlight` inline run property on the target text range.
+
 - Operation ID: `format.highlight`
 - API member path: `editor.doc.format.highlight(...)`
 - Mutates document: `yes`
@@ -17,6 +19,10 @@ description: Reference for format.highlight
 - Supports tracked mode: `yes`
 - Supports dry run: `yes`
 - Deterministic target resolution: `yes`
+
+## Expected result
+
+Returns a TextMutationReceipt confirming the inline run property patch was applied to the target range.
 
 ## Input fields
 

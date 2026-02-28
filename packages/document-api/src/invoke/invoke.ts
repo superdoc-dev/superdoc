@@ -193,5 +193,12 @@ export function buildDispatchTable(api: DocumentApi): TypedDispatchTable {
     'toc.configure': (input, options) => api.toc.configure(input, options),
     'toc.update': (input, options) => api.toc.update(input, options),
     'toc.remove': (input, options) => api.toc.remove(input, options),
+
+    // --- toc entry (TC field) operations ---
+    'toc.markEntry': (input, options) => api.toc.markEntry(input, options),
+    'toc.unmarkEntry': (input, options) => api.toc.unmarkEntry(input, options),
+    'toc.listEntries': (input) => api.toc.listEntries(input),
+    'toc.getEntry': (input) => api.toc.getEntry(input),
+    'toc.editEntry': (input, options) => api.toc.editEntry(input, options),
   };
 }

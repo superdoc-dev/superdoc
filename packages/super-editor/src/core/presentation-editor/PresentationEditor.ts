@@ -3238,6 +3238,29 @@ export class PresentationEditor extends EventEmitter {
       }
       const anchorMap = computeAnchorMapFromHelper(bookmarks, layout, blocks);
       this.#layoutState = { blocks, measures, layout, bookmarks, anchorMap };
+
+      // Build blockId → pageNumber map for TOC page-number resolution.
+      // Stored on editor.storage so the document-api adapter layer can read it
+      // when toc.update({ mode: 'pageNumbers' }) is called.
+      // pageMapDoc is the doc snapshot this map was derived from — the adapter
+      // layer compares it against editor.state.doc to reject stale maps.
+      const tocStorage = (
+        this.#editor as unknown as { storage?: Record<string, { pageMap?: Map<string, number>; pageMapDoc?: unknown }> }
+      ).storage?.tableOfContents;
+      if (tocStorage) {
+        const pageMap = new Map<string, number>();
+        for (const page of layout.pages) {
+          for (const fragment of page.fragments) {
+            // First occurrence wins — use the page where the block first appears
+            if (!pageMap.has(fragment.blockId)) {
+              pageMap.set(fragment.blockId, page.number);
+            }
+          }
+        }
+        tocStorage.pageMap = pageMap;
+        tocStorage.pageMapDoc = this.#editor.state.doc;
+      }
+
       if (this.#headerFooterSession) {
         this.#headerFooterSession.headerLayoutResults = headerLayouts ?? null;
         this.#headerFooterSession.footerLayoutResults = footerLayouts ?? null;

@@ -225,6 +225,14 @@ function mapTocError(operationId: CliExposedOperationId, error: unknown, code: s
     return new CliError('INVALID_ARGUMENT', message, { operationId, details });
   }
 
+  if (code === 'INVALID_INPUT') {
+    return new CliError('INVALID_INPUT', message, { operationId, details });
+  }
+
+  if (code === 'CAPABILITY_UNAVAILABLE') {
+    return new CliError('CAPABILITY_UNAVAILABLE', message, { operationId, details });
+  }
+
   if (code === 'COMMAND_UNAVAILABLE') {
     return new CliError('COMMAND_FAILED', message, { operationId, details });
   }
@@ -442,6 +450,12 @@ export function mapFailedReceipt(operationId: CliExposedOperationId, result: unk
     }
     if (failureCode === 'INVALID_TARGET') {
       return new CliError('INVALID_ARGUMENT', failureMessage, { operationId, failure });
+    }
+    if (failureCode === 'PAGE_NUMBERS_NOT_MATERIALIZED') {
+      return new CliError('PAGE_NUMBERS_NOT_MATERIALIZED', failureMessage, { operationId, failure });
+    }
+    if (failureCode === 'CAPABILITY_UNAVAILABLE') {
+      return new CliError('CAPABILITY_UNAVAILABLE', failureMessage, { operationId, failure });
     }
     return new CliError('COMMAND_FAILED', failureMessage, { operationId, failure });
   }

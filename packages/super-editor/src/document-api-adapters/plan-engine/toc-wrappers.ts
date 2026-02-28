@@ -21,12 +21,13 @@ import type {
   ReceiptFailureCode,
   TocSwitchConfig,
 } from '@superdoc/document-api';
-import { buildDiscoveryResult } from '@superdoc/document-api';
+import { buildDiscoveryResult, DocumentApiValidationError } from '@superdoc/document-api';
 import {
   parseTocInstruction,
   serializeTocInstruction,
   applyTocPatch,
   areTocConfigsEqual,
+  deriveIncludePageNumbers,
   DEFAULT_TOC_CONFIG,
 } from '../../core/super-converter/field-references/shared/toc-switches.js';
 import {
@@ -36,17 +37,32 @@ import {
   extractTocInfo,
   buildTocDiscoveryItem,
 } from '../helpers/toc-resolver.js';
-import {
-  collectHeadingSources,
-  buildTocEntryParagraphs,
-  type EntryParagraphJson,
-} from '../helpers/toc-entry-builder.js';
+import { collectTocSources, buildTocEntryParagraphs, type EntryParagraphJson } from '../helpers/toc-entry-builder.js';
 import { paginate } from '../helpers/adapter-utils.js';
 import { getRevision } from './revision-tracker.js';
 import { executeDomainCommand } from './plan-wrappers.js';
 import { requireEditorCommand, rejectTrackedMode } from '../helpers/mutation-helpers.js';
 import { clearIndexCache } from '../helpers/index-cache.js';
 import { resolveBlockInsertionPos } from './create-insertion.js';
+
+// ---------------------------------------------------------------------------
+// Typed patch helper
+// ---------------------------------------------------------------------------
+
+/**
+ * Wraps `applyTocPatch` and re-throws raw `INVALID_INPUT:` errors as
+ * `DocumentApiValidationError` so callers get structured error codes.
+ */
+function applyTocPatchTyped(...args: Parameters<typeof applyTocPatch>): ReturnType<typeof applyTocPatch> {
+  try {
+    return applyTocPatch(...args);
+  } catch (err) {
+    if (err instanceof Error && err.message.startsWith('INVALID_INPUT:')) {
+      throw new DocumentApiValidationError('INVALID_INPUT', err.message.slice('INVALID_INPUT: '.length));
+    }
+    throw err;
+  }
+}
 
 // ---------------------------------------------------------------------------
 // Reads
@@ -167,9 +183,18 @@ function isTocContentUnchanged(existingNode: ProseMirrorNode, newContent: unknow
   return JSON.stringify(existingEntries) === JSON.stringify(normalized);
 }
 
+/**
+ * Merges rightAlignPageNumbers (a PM node attr, not a field switch) into the
+ * config's display so that entry materialization can branch on it.
+ */
+function withRightAlign(config: TocSwitchConfig, rightAlignPageNumbers: boolean | undefined): TocSwitchConfig {
+  if (rightAlignPageNumbers === undefined) return config;
+  return { ...config, display: { ...config.display, rightAlignPageNumbers } };
+}
+
 function materializeTocContent(doc: ProseMirrorNode, config: TocSwitchConfig): EntryParagraphJson[] {
-  const headingSources = collectHeadingSources(doc, config);
-  const entryParagraphs = buildTocEntryParagraphs(headingSources, config);
+  const sources = collectTocSources(doc, config);
+  const entryParagraphs = buildTocEntryParagraphs(sources, config);
   return entryParagraphs.length > 0 ? entryParagraphs : NO_ENTRIES_PLACEHOLDER;
 }
 
@@ -187,10 +212,20 @@ export function tocConfigureWrapper(
 
   const resolved = resolveTocTarget(editor.state.doc, input.target);
   const currentConfig = parseTocInstruction(resolved.node.attrs?.instruction ?? '');
-  const patched = applyTocPatch(currentConfig, input.patch);
-  const nextContent = materializeTocContent(editor.state.doc, patched);
+  const patched = applyTocPatchTyped(currentConfig, input.patch);
 
-  if (areTocConfigsEqual(currentConfig, patched)) {
+  // rightAlignPageNumbers is a PM node attr, not an instruction switch
+  const rightAlignChanged =
+    input.patch.rightAlignPageNumbers !== undefined &&
+    input.patch.rightAlignPageNumbers !== resolved.node.attrs?.rightAlignPageNumbers;
+
+  // Merge rightAlignPageNumbers into config for entry materialization.
+  // Patch value takes priority; fall back to existing node attr.
+  const effectiveRightAlign =
+    input.patch.rightAlignPageNumbers ?? (resolved.node.attrs?.rightAlignPageNumbers as boolean | undefined);
+  const nextContent = materializeTocContent(editor.state.doc, withRightAlign(patched, effectiveRightAlign));
+
+  if (areTocConfigsEqual(currentConfig, patched) && !rightAlignChanged) {
     return tocFailure('NO_OP', 'Configuration patch produced no change.');
   }
 
@@ -207,6 +242,7 @@ export function tocConfigureWrapper(
       sdBlockId: commandNodeId,
       instruction: serializeTocInstruction(patched),
       ...(shouldRefreshContent ? { content: nextContent } : {}),
+      ...(rightAlignChanged ? { rightAlignPageNumbers: input.patch.rightAlignPageNumbers } : {}),
     },
     options?.expectedRevision,
   );
@@ -227,11 +263,26 @@ export function tocConfigureWrapper(
 
 export function tocUpdateWrapper(editor: Editor, input: TocUpdateInput, options?: MutationOptions): TocMutationResult {
   rejectTrackedMode('toc.update', options);
+  const mode = input.mode ?? 'all';
+
+  if (mode === 'pageNumbers') {
+    return tocUpdatePageNumbers(editor, input, options);
+  }
+
+  return tocUpdateAll(editor, input, options);
+}
+
+/**
+ * Mode 'all' — full rebuild from configured sources (headings + TC fields).
+ * This is the original toc.update behavior.
+ */
+function tocUpdateAll(editor: Editor, input: TocUpdateInput, options?: MutationOptions): TocMutationResult {
   const command = requireEditorCommand(editor.commands?.replaceTableOfContentsContentById, 'toc.update');
 
   const resolved = resolveTocTarget(editor.state.doc, input.target);
   const config = parseTocInstruction(resolved.node.attrs?.instruction ?? '');
-  const content = materializeTocContent(editor.state.doc, config);
+  const rightAlign = resolved.node.attrs?.rightAlignPageNumbers as boolean | undefined;
+  const content = materializeTocContent(editor.state.doc, withRightAlign(config, rightAlign));
 
   // NO_OP detection: compare new content against existing before executing.
   // The PM command returns "found" (not "content changed"), so receipt-based
@@ -255,6 +306,158 @@ export function tocUpdateWrapper(editor: Editor, input: TocUpdateInput, options?
   );
 
   return receiptApplied(receipt) ? tocSuccess(resolved.nodeId) : tocFailure('NO_OP', 'TOC update produced no change.');
+}
+
+// ---------------------------------------------------------------------------
+// toc.update mode: 'pageNumbers'
+// ---------------------------------------------------------------------------
+
+/**
+ * Extracts the page map from the editor if it is fresh.
+ *
+ * The page map is set by PresentationEditor after each render cycle. It maps
+ * sdBlockId → page number for every anchored block in the rendered layout.
+ *
+ * Returns null when:
+ * - No layout has been computed (headless mode, or before first render).
+ * - The stored map is stale (the document changed since the last layout cycle).
+ *   Staleness is detected by comparing the doc snapshot stored alongside the map
+ *   against the current editor.state.doc (ProseMirror creates a new doc object
+ *   on every document-changing transaction).
+ */
+function getPageMap(editor: Editor): Map<string, number> | null {
+  const storage = (editor as unknown as { storage?: Record<string, unknown> }).storage;
+  if (!storage) return null;
+
+  const tocStorage = storage.tableOfContents as { pageMap?: Map<string, number>; pageMapDoc?: unknown } | undefined;
+  if (!tocStorage?.pageMap) return null;
+
+  // Reject stale maps — the doc must match the snapshot from the last layout cycle
+  if (tocStorage.pageMapDoc !== undefined && tocStorage.pageMapDoc !== editor.state.doc) {
+    return null;
+  }
+
+  return tocStorage.pageMap;
+}
+
+/**
+ * Mode 'pageNumbers' — surgical page number update without rebuilding entries.
+ *
+ * Decision tree:
+ * 1. Config says no page numbers → NO_OP
+ * 2. No page map available → CAPABILITY_UNAVAILABLE
+ * 3. No tocPageNumber marks found → PAGE_NUMBERS_NOT_MATERIALIZED
+ * 4. Marks found, page map available → update each marked run, success
+ */
+function tocUpdatePageNumbers(editor: Editor, input: TocUpdateInput, options?: MutationOptions): TocMutationResult {
+  const command = requireEditorCommand(editor.commands?.replaceTableOfContentsContentById, 'toc.update');
+
+  const resolved = resolveTocTarget(editor.state.doc, input.target);
+  const config = parseTocInstruction(resolved.node.attrs?.instruction ?? '');
+
+  // 1. Config says no page numbers → NO_OP
+  if (deriveIncludePageNumbers(config.display.omitPageNumberLevels, config.source.outlineLevels) === false) {
+    return tocFailure('NO_OP', 'TOC configuration excludes page numbers. Nothing to update.');
+  }
+
+  // 2. Get page map
+  const pageMap = getPageMap(editor);
+  if (!pageMap) {
+    return tocFailure(
+      'CAPABILITY_UNAVAILABLE',
+      'Page number resolution requires a completed layout. Trigger a render cycle and retry, or use mode "all".',
+    );
+  }
+
+  // 3. Walk TOC children and build updated content with resolved page numbers
+  const { updatedContent, hasPageNumberMarks, anyChanged } = buildPageNumberUpdatedContent(resolved.node, pageMap);
+
+  if (!hasPageNumberMarks) {
+    return tocFailure(
+      'PAGE_NUMBERS_NOT_MATERIALIZED',
+      'TOC entries do not contain tagged page number runs. Run toc.update with mode "all" first.',
+    );
+  }
+
+  if (!anyChanged) {
+    return tocFailure('NO_OP', 'Page numbers are already up to date.');
+  }
+
+  if (options?.dryRun) {
+    return tocSuccess(resolved.nodeId);
+  }
+
+  const receipt = runTocCommand(
+    editor,
+    command,
+    {
+      sdBlockId: resolved.commandNodeId ?? resolved.nodeId,
+      content: updatedContent,
+    },
+    options?.expectedRevision,
+  );
+
+  return receiptApplied(receipt)
+    ? tocSuccess(resolved.nodeId)
+    : tocFailure('NO_OP', 'Page number update produced no change.');
+}
+
+/**
+ * Walks the TOC node's children and produces updated paragraph JSON where
+ * tocPageNumber-marked text runs are replaced with resolved page numbers.
+ */
+function buildPageNumberUpdatedContent(
+  tocNode: ProseMirrorNode,
+  pageMap: Map<string, number>,
+): { updatedContent: EntryParagraphJson[]; hasPageNumberMarks: boolean; anyChanged: boolean } {
+  const updatedContent: EntryParagraphJson[] = [];
+  let hasPageNumberMarks = false;
+  let anyChanged = false;
+
+  tocNode.forEach((child) => {
+    if (child.type.name !== 'paragraph') {
+      // Non-paragraph children: serialize as-is
+      updatedContent.push(child.toJSON() as EntryParagraphJson);
+      return;
+    }
+
+    const tocSourceId = child.attrs?.tocSourceId as string | undefined;
+    const childJson = child.toJSON() as EntryParagraphJson;
+    const content = childJson.content ?? [];
+
+    let paragraphChanged = false;
+
+    const updatedContentArray = content.map((node: Record<string, unknown>) => {
+      const marks = node.marks as Array<{ type: string }> | undefined;
+      const hasTocPageNumberMark = marks?.some((m) => m.type === 'tocPageNumber');
+
+      if (!hasTocPageNumberMark) return node;
+
+      hasPageNumberMarks = true;
+
+      // Skip entries without tocSourceId — no anchor for page map lookup
+      if (!tocSourceId) return node;
+
+      const pageNumber = pageMap.get(tocSourceId);
+      const newText = pageNumber !== undefined ? String(pageNumber) : '??';
+
+      if (node.text !== newText) {
+        paragraphChanged = true;
+        return { ...node, text: newText };
+      }
+
+      return node;
+    });
+
+    if (paragraphChanged) {
+      anyChanged = true;
+      updatedContent.push({ ...childJson, content: updatedContentArray });
+    } else {
+      updatedContent.push(childJson);
+    }
+  });
+
+  return { updatedContent, hasPageNumberMarks, anyChanged };
 }
 
 // ---------------------------------------------------------------------------
@@ -307,9 +510,9 @@ export function createTableOfContentsWrapper(
   }
 
   // Build instruction from config patch or use defaults
-  const config = input.config ? applyTocPatch(DEFAULT_TOC_CONFIG, input.config) : DEFAULT_TOC_CONFIG;
+  const config = input.config ? applyTocPatchTyped(DEFAULT_TOC_CONFIG, input.config) : DEFAULT_TOC_CONFIG;
   const instruction = serializeTocInstruction(config);
-  const content = materializeTocContent(editor.state.doc, config);
+  const content = materializeTocContent(editor.state.doc, withRightAlign(config, input.config?.rightAlignPageNumbers));
 
   const sdBlockId = uuidv4();
 
@@ -325,6 +528,9 @@ export function createTableOfContentsWrapper(
       instruction,
       sdBlockId,
       content,
+      ...(input.config?.rightAlignPageNumbers !== undefined
+        ? { rightAlignPageNumbers: input.config.rightAlignPageNumbers }
+        : {}),
     },
     options?.expectedRevision,
   );

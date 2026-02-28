@@ -13,6 +13,22 @@ const SD_NODE_NAME = 'tableOfContents';
  * @param {import('@translator').SCEncoderConfig} [params]
  * @returns {import('@translator').SCEncoderResult}
  */
+/**
+ * Derives rightAlignPageNumbers from the first entry paragraph's tab stops.
+ * Returns true if any tab stop has tabType 'right', false otherwise.
+ * @param {Array<{attrs?: {paragraphProperties?: {tabStops?: Array<{tab?: {tabType?: string}}>}}}>} content
+ * @returns {boolean}
+ */
+function deriveRightAlignPageNumbers(content) {
+  for (const para of content) {
+    const tabStops = para?.attrs?.paragraphProperties?.tabStops;
+    if (!Array.isArray(tabStops) || tabStops.length === 0) continue;
+    return tabStops.some((ts) => ts?.tab?.tabType === 'right');
+  }
+  // No entry paragraphs with tab stops — default true matches Word's typical behavior
+  return true;
+}
+
 const encode = (params) => {
   const { nodes = [], nodeListHandler } = params || {};
   const node = nodes[0];
@@ -25,6 +41,7 @@ const encode = (params) => {
     type: 'tableOfContents',
     attrs: {
       instruction: node.attributes?.instruction || '',
+      rightAlignPageNumbers: deriveRightAlignPageNumbers(processedContent),
     },
     content: processedContent,
   };

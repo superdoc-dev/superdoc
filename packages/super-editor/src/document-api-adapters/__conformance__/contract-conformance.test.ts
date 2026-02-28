@@ -68,6 +68,12 @@ import {
   createTableOfContentsWrapper,
 } from '../plan-engine/toc-wrappers.js';
 import {
+  tocListEntriesWrapper,
+  tocMarkEntryWrapper,
+  tocUnmarkEntryWrapper,
+  tocEditEntryWrapper,
+} from '../plan-engine/toc-entry-wrappers.js';
+import {
   listsInsertWrapper,
   listsSetTypeWrapper,
   listsIndentWrapper,
@@ -1311,7 +1317,17 @@ function makeTocEditor(commandOverrides: Record<string, unknown> = {}): Editor {
     isBlock: true,
     inlineContent: true,
   });
-  const doc = createNode('doc', [tocNode, heading], { isBlock: false });
+  const tcEntry = createNode('tableOfContentsEntry', [], {
+    attrs: { instruction: 'TC "Chapter One" \\f "A" \\l "2"' },
+    isInline: true,
+    isLeaf: true,
+  });
+  const sourceParagraph = createNode('paragraph', [createNode('text', [], { text: 'Body text' }), tcEntry], {
+    attrs: { sdBlockId: 'p-1' },
+    isBlock: true,
+    inlineContent: true,
+  });
+  const doc = createNode('doc', [tocNode, heading, sourceParagraph], { isBlock: false });
 
   const dispatch = vi.fn();
   const tr = {
@@ -1335,12 +1351,26 @@ function makeTocEditor(commandOverrides: Record<string, unknown> = {}): Editor {
       setTableOfContentsInstructionById: vi.fn(() => true),
       replaceTableOfContentsContentById: vi.fn(() => true),
       deleteTableOfContentsById: vi.fn(() => true),
+      insertTableOfContentsEntryAt: vi.fn(() => true),
+      deleteTableOfContentsEntryAt: vi.fn(() => true),
+      updateTableOfContentsEntryAt: vi.fn(() => true),
       ...commandOverrides,
     },
     schema: { marks: {} },
     options: {},
     on: () => {},
   } as unknown as Editor;
+}
+
+function getFirstTocEntryAddress(editor: Editor): { kind: 'inline'; nodeType: 'tableOfContentsEntry'; nodeId: string } {
+  const list = tocListEntriesWrapper(editor);
+  const first = list.items[0];
+  expect(first).toBeDefined();
+  return {
+    kind: 'inline',
+    nodeType: 'tableOfContentsEntry',
+    nodeId: first!.address.nodeId,
+  };
 }
 
 const mutationVectors: Partial<Record<OperationId, MutationVector>> = {
@@ -3042,6 +3072,82 @@ const mutationVectors: Partial<Record<OperationId, MutationVector>> = {
       );
     },
   },
+  'toc.markEntry': {
+    throwCase: () => {
+      const editor = makeTocEditor();
+      return tocMarkEntryWrapper(
+        editor,
+        { target: { kind: 'inline-insert', anchor: { nodeType: 'paragraph', nodeId: 'missing' } }, text: 'Marked' },
+        { changeMode: 'direct' },
+      );
+    },
+    failureCase: () => {
+      const editor = makeTocEditor({ insertTableOfContentsEntryAt: vi.fn(() => false) });
+      return tocMarkEntryWrapper(
+        editor,
+        { target: { kind: 'inline-insert', anchor: { nodeType: 'paragraph', nodeId: 'p-1' } }, text: 'Marked' },
+        { changeMode: 'direct' },
+      );
+    },
+    applyCase: () => {
+      const editor = makeTocEditor();
+      return tocMarkEntryWrapper(
+        editor,
+        { target: { kind: 'inline-insert', anchor: { nodeType: 'paragraph', nodeId: 'p-1' } }, text: 'Marked' },
+        { changeMode: 'direct' },
+      );
+    },
+  },
+  'toc.unmarkEntry': {
+    throwCase: () => {
+      const editor = makeTocEditor();
+      return tocUnmarkEntryWrapper(
+        editor,
+        { target: { kind: 'inline', nodeType: 'tableOfContentsEntry', nodeId: 'missing' } },
+        { changeMode: 'direct' },
+      );
+    },
+    failureCase: () => {
+      const editor = makeTocEditor({ deleteTableOfContentsEntryAt: vi.fn(() => false) });
+      return tocUnmarkEntryWrapper(editor, { target: getFirstTocEntryAddress(editor) }, { changeMode: 'direct' });
+    },
+    applyCase: () => {
+      const editor = makeTocEditor();
+      return tocUnmarkEntryWrapper(editor, { target: getFirstTocEntryAddress(editor) }, { changeMode: 'direct' });
+    },
+  },
+  'toc.editEntry': {
+    throwCase: () => {
+      const editor = makeTocEditor();
+      return tocEditEntryWrapper(
+        editor,
+        {
+          target: { kind: 'inline', nodeType: 'tableOfContentsEntry', nodeId: 'missing' },
+          patch: { text: 'Updated' },
+        },
+        { changeMode: 'direct' },
+      );
+    },
+    failureCase: () => {
+      const editor = makeTocEditor();
+      return tocEditEntryWrapper(
+        editor,
+        {
+          target: getFirstTocEntryAddress(editor),
+          patch: { text: 'Chapter One', level: 2, tableIdentifier: 'A', omitPageNumber: false },
+        },
+        { changeMode: 'direct' },
+      );
+    },
+    applyCase: () => {
+      const editor = makeTocEditor();
+      return tocEditEntryWrapper(
+        editor,
+        { target: getFirstTocEntryAddress(editor), patch: { text: 'Updated Chapter' } },
+        { changeMode: 'direct' },
+      );
+    },
+  },
 };
 
 const dryRunVectors: Partial<Record<OperationId, () => unknown>> = {
@@ -3845,6 +3951,39 @@ const dryRunVectors: Partial<Record<OperationId, () => unknown>> = {
       { changeMode: 'direct', dryRun: true },
     );
     expect(deleteById).not.toHaveBeenCalled();
+    return result;
+  },
+  'toc.markEntry': () => {
+    const insertEntry = vi.fn(() => true);
+    const editor = makeTocEditor({ insertTableOfContentsEntryAt: insertEntry });
+    const result = tocMarkEntryWrapper(
+      editor,
+      { target: { kind: 'inline-insert', anchor: { nodeType: 'paragraph', nodeId: 'p-1' } }, text: 'Dry mark' },
+      { changeMode: 'direct', dryRun: true },
+    );
+    expect(insertEntry).not.toHaveBeenCalled();
+    return result;
+  },
+  'toc.unmarkEntry': () => {
+    const deleteEntry = vi.fn(() => true);
+    const editor = makeTocEditor({ deleteTableOfContentsEntryAt: deleteEntry });
+    const result = tocUnmarkEntryWrapper(
+      editor,
+      { target: getFirstTocEntryAddress(editor) },
+      { changeMode: 'direct', dryRun: true },
+    );
+    expect(deleteEntry).not.toHaveBeenCalled();
+    return result;
+  },
+  'toc.editEntry': () => {
+    const updateEntry = vi.fn(() => true);
+    const editor = makeTocEditor({ updateTableOfContentsEntryAt: updateEntry });
+    const result = tocEditEntryWrapper(
+      editor,
+      { target: getFirstTocEntryAddress(editor), patch: { text: 'Dry edit' } },
+      { changeMode: 'direct', dryRun: true },
+    );
+    expect(updateEntry).not.toHaveBeenCalled();
     return result;
   },
 };

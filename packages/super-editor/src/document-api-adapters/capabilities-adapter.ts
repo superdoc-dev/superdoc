@@ -92,6 +92,10 @@ const REQUIRED_COMMANDS: Partial<Record<OperationId, readonly EditorCommandName[
   'toc.configure': ['setTableOfContentsInstructionById'],
   'toc.update': ['replaceTableOfContentsContentById'],
   'toc.remove': ['deleteTableOfContentsById'],
+  // TC entry operations — insertTableOfContentsEntryAt proves the TC entry extension is loaded:
+  'toc.markEntry': ['insertTableOfContentsEntryAt'],
+  'toc.unmarkEntry': ['deleteTableOfContentsEntryAt'],
+  'toc.editEntry': ['updateTableOfContentsEntryAt'],
 };
 
 /** Runtime guard — ensures only canonical reason codes are emitted even if the set grows. */

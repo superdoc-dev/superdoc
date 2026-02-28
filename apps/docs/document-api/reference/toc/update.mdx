@@ -1,7 +1,7 @@
 ---
 title: toc.update
 sidebarTitle: toc.update
-description: Rebuild the materialized content of a table of contents.
+description: Rebuild or refresh the materialized content of a table of contents.
 ---
 
 {/* GENERATED FILE: DO NOT EDIT. Regenerate via `pnpm run docapi:sync`. */}
@@ -10,7 +10,7 @@ description: Rebuild the materialized content of a table of contents.
 
 ## Summary
 
-Rebuild the materialized content of a table of contents.
+Rebuild or refresh the materialized content of a table of contents.
 
 - Operation ID: `toc.update`
 - API member path: `editor.doc.toc.update(...)`
@@ -22,18 +22,20 @@ Rebuild the materialized content of a table of contents.
 
 ## Expected result
 
-Returns a TocMutationResult with the TOC address on success, or a failure code if content is unchanged.
+Returns a TocMutationResult with the TOC address on success, or a failure code if content is unchanged or page numbers cannot be resolved.
 
 ## Input fields
 
 | Field | Type | Required | Description |
 | --- | --- | --- | --- |
+| `mode` | enum | no | `"all"`, `"pageNumbers"` |
 | `target` | object(kind="block") | yes |  |
 
 ### Example request
 
 ```json
 {
+  "mode": "all",
   "target": {
     "kind": "block",
     "nodeId": "node-def456",
@@ -68,6 +70,8 @@ _No fields._
 ## Non-applied failure codes
 
 - `NO_OP`
+- `PAGE_NUMBERS_NOT_MATERIALIZED`
+- `CAPABILITY_UNAVAILABLE`
 
 ## Raw schemas
 
@@ -76,6 +80,12 @@ _No fields._
 {
   "additionalProperties": false,
   "properties": {
+    "mode": {
+      "enum": [
+        "all",
+        "pageNumbers"
+      ]
+    },
     "target": {
       "additionalProperties": false,
       "properties": {
@@ -154,7 +164,8 @@ _No fields._
                 "INVALID_TARGET",
                 "TARGET_NOT_FOUND",
                 "CAPABILITY_UNAVAILABLE",
-                "INVALID_INSERTION_CONTEXT"
+                "INVALID_INSERTION_CONTEXT",
+                "PAGE_NUMBERS_NOT_MATERIALIZED"
               ]
             },
             "details": {},
@@ -235,7 +246,8 @@ _No fields._
             "INVALID_TARGET",
             "TARGET_NOT_FOUND",
             "CAPABILITY_UNAVAILABLE",
-            "INVALID_INSERTION_CONTEXT"
+            "INVALID_INSERTION_CONTEXT",
+            "PAGE_NUMBERS_NOT_MATERIALIZED"
           ]
         },
         "details": {},

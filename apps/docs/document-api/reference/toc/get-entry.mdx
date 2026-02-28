@@ -1,0 +1,160 @@
+---
+title: toc.getEntry
+sidebarTitle: toc.getEntry
+description: Retrieve details of a specific TC (table of contents entry) field.
+---
+
+{/* GENERATED FILE: DO NOT EDIT. Regenerate via `pnpm run docapi:sync`. */}
+
+> Alpha: Document API is currently alpha and subject to breaking changes.
+
+## Summary
+
+Retrieve details of a specific TC (table of contents entry) field.
+
+- Operation ID: `toc.getEntry`
+- API member path: `editor.doc.toc.getEntry(...)`
+- Mutates document: `no`
+- Idempotency: `idempotent`
+- Supports tracked mode: `no`
+- Supports dry run: `no`
+- Deterministic target resolution: `yes`
+
+## Expected result
+
+Returns a TocEntryInfo object with the instruction, text, level, and switch configuration.
+
+## Input fields
+
+| Field | Type | Required | Description |
+| --- | --- | --- | --- |
+| `target` | object(kind="inline") | yes |  |
+
+### Example request
+
+```json
+{
+  "target": {
+    "kind": "inline",
+    "nodeId": "node-def456",
+    "nodeType": "tableOfContentsEntry"
+  }
+}
+```
+
+## Output fields
+
+| Field | Type | Required | Description |
+| --- | --- | --- | --- |
+| `kind` | `"inline"` | yes | Constant: `"inline"` |
+| `nodeType` | `"tableOfContentsEntry"` | yes | Constant: `"tableOfContentsEntry"` |
+| `properties` | object | yes |  |
+
+### Example response
+
+```json
+{
+  "kind": "inline",
+  "nodeType": "tableOfContentsEntry",
+  "properties": {
+    "instruction": "example",
+    "level": 1,
+    "omitPageNumber": true,
+    "tableIdentifier": "example",
+    "text": "Hello, world."
+  }
+}
+```
+
+## Pre-apply throws
+
+- `TARGET_NOT_FOUND`
+
+## Non-applied failure codes
+
+- None
+
+## Raw schemas
+
+<Accordion title="Raw input schema">
+```json
+{
+  "additionalProperties": false,
+  "properties": {
+    "target": {
+      "additionalProperties": false,
+      "properties": {
+        "kind": {
+          "const": "inline"
+        },
+        "nodeId": {
+          "type": "string"
+        },
+        "nodeType": {
+          "const": "tableOfContentsEntry"
+        }
+      },
+      "required": [
+        "kind",
+        "nodeType",
+        "nodeId"
+      ],
+      "type": "object"
+    }
+  },
+  "required": [
+    "target"
+  ],
+  "type": "object"
+}
+```
+</Accordion>
+
+<Accordion title="Raw output schema">
+```json
+{
+  "additionalProperties": false,
+  "properties": {
+    "kind": {
+      "const": "inline"
+    },
+    "nodeType": {
+      "const": "tableOfContentsEntry"
+    },
+    "properties": {
+      "additionalProperties": false,
+      "properties": {
+        "instruction": {
+          "type": "string"
+        },
+        "level": {
+          "type": "integer"
+        },
+        "omitPageNumber": {
+          "type": "boolean"
+        },
+        "tableIdentifier": {
+          "type": "string"
+        },
+        "text": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "instruction",
+        "text",
+        "level",
+        "omitPageNumber"
+      ],
+      "type": "object"
+    }
+  },
+  "required": [
+    "nodeType",
+    "kind",
+    "properties"
+  ],
+  "type": "object"
+}
+```
+</Accordion>

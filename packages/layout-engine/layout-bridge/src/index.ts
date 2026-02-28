@@ -957,15 +957,11 @@ export function clickToPosition(
   // Fallback to geometry-based mapping
   logClickStage('log', 'geometry-attempt', { trying: 'geometry-based mapping' });
 
-  // When normalizeClientPoint produces containerPoint, it adjusts Y by the page's DOM
-  // offset, making containerPoint page-relative rather than container-space. On page 1
-  // the offset is ~0 so it doesn't matter, but on page 2+ this causes hitTestPage to
-  // find the wrong page and pageRelativePoint to be doubly subtracted.
-  //
-  // Fix: when DOM info is available, determine the page from elementsFromPoint (same
-  // technique normalizeClientPoint uses) and treat containerPoint as already page-relative.
+  // Use DOM-based page detection when available. elementsFromPoint accurately identifies
+  // the page element under the pointer, even in edge cases where the geometry-based
+  // hitTestPage may return the wrong page (e.g., due to virtualization or gaps).
   let pageHit: PageHit | null = null;
-  let isContainerPointPageRelative = false;
+  let domPageRelativeY: number | undefined;
 
   if (domContainer != null && clientX != null && clientY != null) {
     const pageEl = findPageElement(domContainer, clientX, clientY);
@@ -973,7 +969,15 @@ export function clickToPosition(
       const domPageIndex = Number(pageEl.dataset.pageIndex ?? 'NaN');
       if (Number.isFinite(domPageIndex) && domPageIndex >= 0 && domPageIndex < layout.pages.length) {
         pageHit = { pageIndex: domPageIndex, page: layout.pages[domPageIndex] };
-        isContainerPointPageRelative = true;
+        // Compute page-relative Y directly from the page element's DOM position.
+        // containerPoint.y is in container-space (global layout Y) and cannot be used
+        // as page-relative Y — subtracting geometry page-top may not match the actual
+        // DOM page position due to viewport padding, margins, or virtualization offsets.
+        const pageRect = pageEl.getBoundingClientRect();
+        const layoutPageHeight = pageHit.page.size?.h ?? layout.pageSize.h;
+        const domPageHeight = pageRect.height;
+        const effectiveZoom = domPageHeight > 0 && layoutPageHeight > 0 ? domPageHeight / layoutPageHeight : 1;
+        domPageRelativeY = (clientY - pageRect.top) / effectiveZoom;
       }
     }
   }
@@ -989,21 +993,15 @@ export function clickToPosition(
     return null;
   }
 
-  // Calculate page-relative point
-  let pageRelativePoint: Point;
-  if (isContainerPointPageRelative) {
-    // containerPoint is already page-relative (normalizeClientPoint adjusted Y by page offset)
-    pageRelativePoint = containerPoint;
-  } else {
-    // containerPoint is in container-space, subtract page top to get page-relative
-    const pageTopY = geometryHelper
-      ? geometryHelper.getPageTop(pageHit.pageIndex)
-      : calculatePageTopFallback(layout, pageHit.pageIndex);
-    pageRelativePoint = {
-      x: containerPoint.x,
-      y: containerPoint.y - pageTopY,
-    };
-  }
+  // Calculate page-relative point. Prefer DOM-derived Y when available (accurate
+  // regardless of viewport offsets), fall back to geometry subtraction.
+  const pageTopY = geometryHelper
+    ? geometryHelper.getPageTop(pageHit.pageIndex)
+    : calculatePageTopFallback(layout, pageHit.pageIndex);
+  const pageRelativePoint: Point = {
+    x: containerPoint.x,
+    y: domPageRelativeY ?? containerPoint.y - pageTopY,
+  };
 
   logClickStage('log', 'page-hit', {
     pageIndex: pageHit.pageIndex,

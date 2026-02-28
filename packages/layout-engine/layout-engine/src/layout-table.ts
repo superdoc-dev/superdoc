@@ -303,23 +303,25 @@ function generateRowBoundaries(
     renderedRows.push({ rowIndex: r, isRepeatedHeader: false });
   }
 
-  // Build a set of ABSOLUTE row boundaries blocked by rowspan cells.
-  // A boundary after absolute row N is blocked if any cell starting at row N
-  // has a rowSpan that extends beyond row N.
+  // Build a set of ABSOLUTE row indices whose bottom boundary is blocked by rowspan cells.
+  // A boundary after absolute row N is blocked if any cell's rowSpan crosses it.
+  //
+  // We must scan ALL table rows, not just renderedRows, because a rowspan that
+  // starts before fromRow can extend into this fragment's rendered range.
+  // Example: row 1 has rowSpan=4, fragment renders rows 3-5. The boundary after
+  // row 3 is blocked because the span from row 1 crosses it.
   const blockedBoundaries = new Set<number>();
-  for (let ri = 0; ri < renderedRows.length; ri++) {
-    const { rowIndex } = renderedRows[ri];
-    const rowMeasure = measure.rows[rowIndex];
+  for (let r = 0; r < measure.rows.length; r++) {
+    const rowMeasure = measure.rows[r];
     if (!rowMeasure) continue;
 
     for (const cellMeasure of rowMeasure.cells) {
       const rowSpan = cellMeasure.rowSpan ?? 1;
       if (rowSpan <= 1) continue;
 
-      // This cell spans from rowIndex to rowIndex + rowSpan - 1.
-      // Block absolute boundaries between the start row and end row.
-      // Example: rowIndex=2, rowSpan=3 blocks boundaries after rows 2 and 3.
-      for (let boundaryRow = rowIndex; boundaryRow < rowIndex + rowSpan - 1; boundaryRow++) {
+      // This cell spans from row r to r + rowSpan - 1.
+      // Block boundaries after rows r through r + rowSpan - 2.
+      for (let boundaryRow = r; boundaryRow < r + rowSpan - 1; boundaryRow++) {
         blockedBoundaries.add(boundaryRow);
       }
     }

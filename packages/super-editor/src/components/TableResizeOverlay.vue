@@ -33,7 +33,7 @@
     <!-- Resize handles for each row boundary -->
     <div
       v-for="(rowBoundary, rowBoundaryIndex) in resizableRowBoundaries"
-      :key="`row-handle-${rowBoundary.index}`"
+      :key="`row-handle-${rowBoundary.i}`"
       class="resize-handle resize-handle--row"
       :class="{
         'resize-handle--active': rowDragState && rowDragState.rowBoundaryIndex === rowBoundaryIndex,

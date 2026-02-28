@@ -454,6 +454,67 @@ describe('layoutTableBlock', () => {
       expect(rowBoundaries![0].resizable).toBe(false);
       expect(rowBoundaries![1].resizable).toBe(true);
     });
+
+    it('marks row boundaries as non-resizable when a rowspan from a prior fragment crosses them', () => {
+      // 5 rows, 2 columns. First cell in row 0 has rowSpan=4, covering rows 0-3.
+      // When the table splits so a continuation fragment renders rows 2-4,
+      // the boundary after row 2 must be blocked because the span from row 0
+      // still extends through it (the span covers rows 0,1,2,3).
+      // The boundary after row 3 (end of span) and row 4 should be resizable.
+      const block = createMockTableBlock(5);
+      const measure = createMockTableMeasure([100, 100], [30, 30, 30, 30, 30]);
+
+      // Inject rowSpan=4 on the first cell of row 0
+      (measure.rows[0].cells[0] as any).rowSpan = 4;
+
+      const fragments: TableFragment[] = [];
+      let cursorY = 0;
+      let contentBottom = 65; // Fits rows 0-1 (30+30=60 < 65), forces split before row 2
+
+      layoutTableBlock({
+        block,
+        measure,
+        columnWidth: 200,
+        ensurePage: () => ({
+          page: { fragments },
+          columnIndex: 0,
+          cursorY,
+          contentBottom,
+        }),
+        advanceColumn: () => {
+          cursorY = 0;
+          contentBottom = 200; // continuation page has room for remaining rows
+          return {
+            page: { fragments },
+            columnIndex: 0,
+            cursorY,
+            contentBottom,
+          };
+        },
+        columnX: () => 0,
+      });
+
+      // Collect all row boundaries across continuation fragments (fromRow >= 2)
+      const continuationFragments = fragments.filter((f) => f.fromRow >= 2);
+      expect(continuationFragments.length).toBeGreaterThan(0);
+
+      const allRowBoundaries = continuationFragments.flatMap((f) => f.metadata?.rowBoundaries ?? []);
+
+      // Row 2 boundary should be blocked (rowSpan from row 0 extends through row 3)
+      const row2 = allRowBoundaries.find((rb) => rb.index === 2);
+      expect(row2).toBeDefined();
+      expect(row2!.resizable).toBe(false);
+
+      // Row 3 is the last row of the span — its bottom boundary is NOT blocked
+      const row3 = allRowBoundaries.find((rb) => rb.index === 3);
+      expect(row3).toBeDefined();
+      expect(row3!.resizable).toBe(true);
+
+      // Row 4 is entirely outside the span (may be in a later fragment)
+      const row4 = allRowBoundaries.find((rb) => rb.index === 4);
+      expect(row4).toBeDefined();
+      expect(row4!.resizable).toBe(true);
+    });
   });
 
   describe('cellSpacing', () => {

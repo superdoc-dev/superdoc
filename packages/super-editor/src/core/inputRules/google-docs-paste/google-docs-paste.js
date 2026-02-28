@@ -278,9 +278,7 @@ function buildListPath(level, map) {
  * @param {HTMLElement} container
  */
 function convertStyledHeadings(container) {
-  const paragraphs = Array.from(container.querySelectorAll('p')).filter(
-    (p) => p.parentElement?.tagName?.toLowerCase() !== 'li',
-  );
+  const paragraphs = Array.from(container.querySelectorAll('p')).filter((p) => !p.closest('li'));
 
   paragraphs.forEach((p) => {
     const { fontSize, isBold } = getHeadingStyleProps(p);
@@ -300,23 +298,42 @@ function convertStyledHeadings(container) {
 
 /**
  * Reads font-size (in pt) and bold status from an element's inline style.
- * Checks both the element itself and its first child <span> to cover both
- * Google Docs style placements (style on <p> vs. style on inner <span>).
+ * When font-size is on the <p>, bold is accepted from the <p> or all child
+ * spans. When font-size is only on child spans, all spans must share the same
+ * size; bold status is reported as whether all spans are bold.
  *
  * @param {HTMLElement} el
  * @returns {{ fontSize: number|null, isBold: boolean }}
  */
 function getHeadingStyleProps(el) {
-  const fontSize = parsePtValue(el.style.fontSize);
-  const isBoldOnEl = boldWeightRegex.test(el.style.fontWeight || '');
+  const elFontSize = parsePtValue(el.style.fontSize);
+  const spans = Array.from(el.querySelectorAll('span'));
+  const allSpansBold = spans.every((span) => boldWeightRegex.test(span.style.fontWeight || ''));
+  const notHeading = { fontSize: null, isBold: false };
 
-  const { children } = el;
-  const singleSpan = children.length === 1 && children[0].tagName?.toLowerCase() === 'span' ? children[0] : null;
+  // font-size declared on <p>: bold from <p> itself or if all child spans are bold
+  const fromElement = () => ({
+    fontSize: elFontSize,
+    isBold: boldWeightRegex.test(el.style.fontWeight || '') || (spans.length > 0 && allSpansBold),
+  });
 
-  return {
-    fontSize: fontSize ?? parsePtValue(singleSpan?.style.fontSize),
-    isBold: isBoldOnEl || boldWeightRegex.test(singleSpan?.style.fontWeight || ''),
+  // font-size only on child spans: all must be same size and bold
+  const fromSpans = () => {
+    // no span children, size is indeterminate
+    if (spans.length === 0) return notHeading;
+
+    // if not all spans declare a font-size, not a heading
+    const sizes = spans.map((span) => parsePtValue(span.style.fontSize));
+    if (sizes.some((size) => size === null)) return notHeading;
+
+    // if inconsistent sizes, mixed body text, not a heading
+    const [firstSpanSize] = sizes;
+    if (sizes.some((size) => size !== firstSpanSize)) return notHeading;
+
+    return { fontSize: firstSpanSize, isBold: allSpansBold };
   };
+
+  return elFontSize !== null ? fromElement() : fromSpans();
 }
 
 /**

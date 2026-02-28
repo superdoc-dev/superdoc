@@ -187,6 +187,18 @@ describe('handleGoogleDocsHtml', () => {
       expect(dom.querySelector('h1')?.textContent?.trim()).toBe('Split style heading');
     });
 
+    it('converts a heading with multiple child spans (e.g. text + anchor)', () => {
+      const html = `
+        <p>
+          <span style="font-size:20pt;font-weight:700">Heading with </span>
+          <a href="#"><span style="font-size:20pt;font-weight:700">a link</span></a>
+        </p>
+      `;
+      const dom = parseHeadings(html);
+      expect(dom.querySelector('h1')?.textContent?.replace(/\s+/g, ' ').trim()).toBe('Heading with a link');
+      expect(dom.querySelector('p')).toBeNull();
+    });
+
     it('preserves attributes from the original <p> on the new heading element', () => {
       const html = `<p style="font-size:20pt;font-weight:700" data-custom="yes">With attr</p>`;
       const dom = parseHeadings(html);

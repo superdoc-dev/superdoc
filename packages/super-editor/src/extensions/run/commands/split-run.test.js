@@ -170,6 +170,15 @@ describe('splitRunToParagraph command', () => {
 
     expect(handled).toBe(false);
   });
+
+  it('returns false for splitRunAtCursor when cursor is not in a run node', () => {
+    loadDoc(PLAIN_PARAGRAPH_DOC);
+    updateSelection(1);
+
+    const handled = editor.commands.splitRunAtCursor();
+
+    expect(handled).toBe(false);
+  });
 });
 
 describe('splitRunToParagraph with style marks', () => {
@@ -310,6 +319,37 @@ describe('splitRunToParagraph with style marks', () => {
 
     const paragraphTexts = getParagraphTexts(editor.view.state.doc);
     expect(paragraphTexts).toEqual(['Heading', ' Text']);
+  });
+
+  it('clears heading style on the leading empty paragraph when splitting at heading start', () => {
+    const mockConverter = {
+      convertedXml: {},
+      numbering: {},
+      translatedNumbering: {},
+      translatedLinkedStyles: {},
+      documentGuid: 'test-guid-123',
+      promoteToGuid: vi.fn(),
+    };
+
+    editor.converter = mockConverter;
+    loadDoc(STYLED_PARAGRAPH_DOC);
+
+    const start = findTextPos('Heading Text');
+    expect(start).not.toBeNull();
+    updateSelection(start ?? 0);
+
+    const handled = editor.commands.splitRunToParagraph();
+    expect(handled).toBe(true);
+
+    const paragraphs = [];
+    editor.view.state.doc.descendants((node) => {
+      if (node.type.name === 'paragraph') paragraphs.push(node);
+    });
+
+    expect(paragraphs).toHaveLength(2);
+    expect(paragraphs[0].textContent).toBe('');
+    expect(paragraphs[0].attrs?.paragraphProperties?.styleId).toBeUndefined();
+    expect(paragraphs[1].attrs?.paragraphProperties?.styleId).toBe('Heading1');
   });
 
   it('handles missing converter gracefully during split', () => {

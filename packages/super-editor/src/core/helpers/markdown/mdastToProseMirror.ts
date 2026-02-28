@@ -44,7 +44,7 @@ import type { MdastConversionContext, MarkdownDiagnostic } from './types.js';
  * suitable for constructing a full doc or a fragment.
  */
 export function convertMdastToBlocks(root: Root, ctx: MdastConversionContext): JsonNode[] {
-  return flatMapChildren(root, ctx);
+  return flatMapRootChildrenPreserveBlankLines(root, ctx);
 }
 
 // ---------------------------------------------------------------------------
@@ -68,6 +68,26 @@ interface JsonMark {
 // Block-level converters
 // ---------------------------------------------------------------------------
 
+function flatMapRootChildrenPreserveBlankLines(root: Root, ctx: MdastConversionContext): JsonNode[] {
+  const children = root.children ?? [];
+  const blocks: JsonNode[] = [];
+
+  for (let i = 0; i < children.length; i += 1) {
+    const child = children[i];
+    blocks.push(...convertBlockNode(child, ctx));
+
+    const next = children[i + 1];
+    if (!next) continue;
+
+    const blankLines = countBlankLinesBetweenSiblings(child, next);
+    for (let j = 0; j < blankLines; j += 1) {
+      blocks.push(makeParagraph([]));
+    }
+  }
+
+  return blocks;
+}
+
 function flatMapChildren(parent: MdastNode & { children?: MdastNode[] }, ctx: MdastConversionContext): JsonNode[] {
   if (!parent.children) return [];
   const blocks: JsonNode[] = [];
@@ -75,6 +95,20 @@ function flatMapChildren(parent: MdastNode & { children?: MdastNode[] }, ctx: Md
     blocks.push(...convertBlockNode(child, ctx));
   }
   return blocks;
+}
+
+function countBlankLinesBetweenSiblings(previous: MdastNode, next: MdastNode): number {
+  const previousEndLine = previous.position?.end?.line;
+  const nextStartLine = next.position?.start?.line;
+
+  if (typeof previousEndLine !== 'number' || typeof nextStartLine !== 'number') {
+    return 0;
+  }
+
+  // mdast line numbers are 1-based and inclusive:
+  //   previous ends on line A, next starts on line B.
+  // Lines strictly between them are explicit blank lines in the source.
+  return Math.max(0, nextStartLine - previousEndLine - 1);
 }
 
 function convertBlockNode(node: MdastNode, ctx: MdastConversionContext): JsonNode[] {

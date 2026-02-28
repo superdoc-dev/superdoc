@@ -5,6 +5,25 @@ import { defaultBlockAt } from '@core/helpers/defaultBlockAt.js';
 import { resolveRunProperties, encodeMarksFromRPr } from '@core/super-converter/styles.js';
 import { extractTableInfo } from '../calculateInlineRunPropertiesPlugin.js';
 
+function isHeadingStyleId(styleId) {
+  return typeof styleId === 'string' && /^heading\s*[1-6]$/i.test(styleId.trim());
+}
+
+function clearHeadingStyleId(attrs) {
+  if (!attrs || typeof attrs !== 'object') return attrs;
+  const paragraphProperties = attrs.paragraphProperties;
+  const styleId = paragraphProperties?.styleId;
+  if (!isHeadingStyleId(styleId)) return attrs;
+
+  const nextParagraphProperties = { ...paragraphProperties };
+  delete nextParagraphProperties.styleId;
+
+  return {
+    ...attrs,
+    paragraphProperties: nextParagraphProperties,
+  };
+}
+
 /**
  * Splits a run node at the current selection into two paragraphs.
  * @returns {import('@core/commands/types').Command}
@@ -99,11 +118,21 @@ export function splitBlockPatch(state, dispatch, editor) {
   }
   if (!can) return false;
   tr.split(splitPos, types.length, types);
-  if (!atEnd && atStart && $from.node(splitDepth).type != deflt) {
-    let first = tr.mapping.map($from.before(splitDepth)),
-      $first = tr.doc.resolve(first);
-    if (deflt && $from.node(splitDepth - 1).canReplaceWith($first.index(), $first.index() + 1, deflt))
-      tr.setNodeMarkup(tr.mapping.map($from.before(splitDepth)), deflt);
+  if (!atEnd && atStart) {
+    const first = tr.mapping.map($from.before(splitDepth));
+    const $first = tr.doc.resolve(first);
+    const sourceNode = $from.node(splitDepth);
+    const shouldChangeType = sourceNode.type != deflt;
+    const normalizedAttrs = clearHeadingStyleId(sourceNode.attrs);
+    const shouldNormalizeAttrs = normalizedAttrs !== sourceNode.attrs;
+
+    if (
+      deflt &&
+      $from.node(splitDepth - 1).canReplaceWith($first.index(), $first.index() + 1, deflt) &&
+      (shouldChangeType || shouldNormalizeAttrs)
+    ) {
+      tr.setNodeMarkup(first, deflt, normalizedAttrs);
+    }
   }
 
   applyStyleMarks(state, tr, editor, paragraphAttrs, tableInfo);
@@ -195,6 +224,10 @@ function applyStyleMarks(state, tr, editor, paragraphAttrs, tableInfo) {
   }
 }
 
+/**
+ * Splits the current run node into two sibling runs at the cursor position.
+ * @returns {import('@core/commands/types').Command}
+ */
 export const splitRunAtCursor = () => (props) => {
   let { state, dispatch, tr } = props;
   const sel = state.selection;

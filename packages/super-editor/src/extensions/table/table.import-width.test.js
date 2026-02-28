@@ -5,6 +5,10 @@ import { Table } from './table.js';
 describe('Table import width defaults', () => {
   const attributes = Table.config.addAttributes.call(Table);
 
+  it('keeps tableProperties as non-rendered metadata', () => {
+    expect(attributes.tableProperties.rendered).toBe(false);
+  });
+
   it('defaults imported HTML tables to 100% width', () => {
     const tableElement = {
       closest: (selector) => (selector === '[data-superdoc-import="true"]' ? {} : null),

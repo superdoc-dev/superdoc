@@ -301,10 +301,12 @@ export const renderTableRow = (deps: TableRowRenderDependencies): void => {
         const isLastRow = rowIndex === totalRows - 1;
         const isFirstCol = gridColIndex === 0;
         const isLastCol = gridColIndex === totalCols - 1;
+        const treatAsFirstRow = isFirstRow || continuesFromPrev;
+        const treatAsLastRow = isLastRow || continuesOnNext;
 
         resolvedBorders = {
-          top: !isFirstRow ? borderValueToSpec(tableBorders.insideH) : undefined,
-          bottom: !isLastRow ? borderValueToSpec(tableBorders.insideH) : undefined,
+          top: !treatAsFirstRow ? borderValueToSpec(tableBorders.insideH) : undefined,
+          bottom: !treatAsLastRow ? borderValueToSpec(tableBorders.insideH) : undefined,
           left: !isFirstCol ? borderValueToSpec(tableBorders.insideV) : undefined,
           right: !isLastCol ? borderValueToSpec(tableBorders.insideV) : undefined,
         };

@@ -472,6 +472,7 @@ export const Table = Node.create({
             type: 'auto',
           },
         },
+        rendered: false,
         parseDOM: (element) => {
           if (!isImportedTableElement(element)) return undefined;
 

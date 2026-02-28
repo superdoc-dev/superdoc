@@ -316,6 +316,12 @@ _No fields._
         "COMMAND_UNAVAILABLE"
       ]
     },
+    "history": {
+      "enabled": true,
+      "reasons": [
+        "COMMAND_UNAVAILABLE"
+      ]
+    },
     "lists": {
       "enabled": true,
       "reasons": [
@@ -3027,6 +3033,33 @@ _No fields._
           ],
           "type": "object"
         },
+        "history": {
+          "additionalProperties": false,
+          "properties": {
+            "enabled": {
+              "type": "boolean"
+            },
+            "reasons": {
+              "items": {
+                "enum": [
+                  "COMMAND_UNAVAILABLE",
+                  "HELPER_UNAVAILABLE",
+                  "OPERATION_UNAVAILABLE",
+                  "TRACKED_MODE_UNAVAILABLE",
+                  "DRY_RUN_UNAVAILABLE",
+                  "NAMESPACE_UNAVAILABLE",
+                  "STYLES_PART_MISSING",
+                  "COLLABORATION_ACTIVE"
+                ]
+              },
+              "type": "array"
+            }
+          },
+          "required": [
+            "enabled"
+          ],
+          "type": "object"
+        },
         "lists": {
           "additionalProperties": false,
           "properties": {
@@ -3086,7 +3119,8 @@ _No fields._
         "trackChanges",
         "comments",
         "lists",
-        "dryRun"
+        "dryRun",
+        "history"
       ],
       "type": "object"
     },

@@ -35,6 +35,14 @@ describe('contract response conformance', () => {
 
       const success = envelope as SuccessEnvelope;
       validateOperationResponseData(scenario.operationId, success.data, commandKey);
+
+      // Regression guard: history operations must serialize payload under `result`,
+      // never under an "undefined" key from missing envelope metadata.
+      if (scenario.operationId.startsWith('doc.history.')) {
+        const data = success.data as Record<string, unknown>;
+        expect(Object.prototype.hasOwnProperty.call(data, 'result')).toBe(true);
+        expect(Object.prototype.hasOwnProperty.call(data, 'undefined')).toBe(false);
+      }
     });
 
     test(`failure envelope conforms for ${scenario.operationId}`, async () => {

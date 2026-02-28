@@ -109,6 +109,21 @@ describe('document-api contract catalog', () => {
     expect(insertFailureSchema.properties?.failure?.properties?.code?.enum).toContain('UNSUPPORTED_ENVIRONMENT');
   });
 
+  it('includes global.history in capabilities.get output schema', () => {
+    const schemas = buildInternalContractSchemas();
+    const capabilitiesOutput = schemas.operations['capabilities.get'].output as {
+      properties?: {
+        global?: {
+          properties?: Record<string, unknown>;
+          required?: string[];
+        };
+      };
+    };
+
+    expect(capabilitiesOutput.properties?.global?.properties).toHaveProperty('history');
+    expect(capabilitiesOutput.properties?.global?.required).toContain('history');
+  });
+
   it('derives OPERATION_IDS from OPERATION_DEFINITIONS keys', () => {
     const definitionKeys = Object.keys(OPERATION_DEFINITIONS).sort();
     const operationIds = [...OPERATION_IDS].sort();

@@ -637,10 +637,26 @@ describe('lists-wrappers', () => {
     it('removes override when value is null', () => {
       const proj = makeProjection({ numId: 1, level: 0 });
       vi.mocked(resolveListItem).mockReturnValueOnce(proj);
+      editor.converter.numbering.definitions[1] = {
+        elements: [{ name: 'w:lvlOverride', attributes: { 'w:ilvl': '0' } }],
+      };
 
       const result = listsSetValueWrapper(editor, { target: proj.address, value: null });
       expect(result.success).toBe(true);
       expect(ListHelpers.removeLvlOverride).toHaveBeenCalledWith(editor, 1, 0);
+    });
+
+    it('returns NO_OP when removing an absent override', () => {
+      const proj = makeProjection({ numId: 1, level: 0 });
+      vi.mocked(resolveListItem).mockReturnValueOnce(proj);
+      editor.converter.numbering.definitions[1] = {
+        elements: [{ name: 'w:abstractNumId', attributes: { 'w:val': '10' } }],
+      };
+
+      const result = listsSetValueWrapper(editor, { target: proj.address, value: null });
+      expect(result.success).toBe(false);
+      expect((result as any).failure.code).toBe('NO_OP');
+      expect(ListHelpers.removeLvlOverride).not.toHaveBeenCalled();
     });
 
     it('returns dry-run result', () => {

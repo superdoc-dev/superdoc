@@ -192,20 +192,22 @@ export function listListItems(editor: Editor, query?: ListsListQuery): ListsList
 
   const index = getBlockIndex(editor);
   const scope = resolveBlockScopeRange(index, query?.within as BlockNodeAddress | undefined);
-  const candidates = listItemCandidatesInScope(index, scope);
+  const allCandidates = index.candidates.filter((candidate) => candidate.nodeType === 'listItem');
+  const allProjections = allCandidates.map((candidate) => projectListItemCandidate(editor, candidate));
+  const projections = allProjections.filter((projection) => isWithinScope(projection.candidate, scope));
   const safeOffset = query?.offset ?? 0;
   const safeLimit = query?.limit ?? Number.POSITIVE_INFINITY;
   const pageEnd = safeOffset + safeLimit;
   const evaluatedRevision = getRevision(editor);
 
-  // Project all items first so sequence IDs can be computed in a single pass.
-  const allProjections = candidates.map((c) => projectListItemCandidate(editor, c));
+  // Compute sequence IDs from document-wide projections so list identity is
+  // stable across scoped queries.
   const sequenceIds = computeSequenceIdMap(allProjections);
 
   let total = 0;
   const items: ListsListResult['items'] = [];
 
-  for (const projection of allProjections) {
+  for (const projection of projections) {
     if (!matchesListQuery(projection, query)) continue;
 
     const currentIndex = total;

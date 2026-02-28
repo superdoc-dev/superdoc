@@ -132,6 +132,23 @@ function withListTarget(editor: Editor, input: ListTargetInput): ListItemProject
   return resolveListItem(editor, input.target);
 }
 
+function hasLevelOverride(editor: Editor, numId: number, level: number): boolean {
+  const converter = editor as unknown as {
+    converter?: {
+      numbering?: {
+        definitions?: Record<number, { elements?: Array<{ name?: string; attributes?: Record<string, unknown> }> }>;
+      };
+    };
+  };
+  const definition = converter.converter?.numbering?.definitions?.[numId];
+  const ilvl = String(level);
+  return (
+    definition?.elements?.some(
+      (element) => element.name === 'w:lvlOverride' && element.attributes?.['w:ilvl'] === ilvl,
+    ) ?? false
+  );
+}
+
 /**
  * Shared core of setLevel, indent, and outdent.
  * Validates preconditions and performs the level change.
@@ -723,6 +740,10 @@ export function listsSetValueWrapper(
 
   // Remove override
   if (input.value === null) {
+    if (!hasLevelOverride(editor, target.numId, level)) {
+      return toListsFailure('NO_OP', 'No startOverride to remove.', { target: input.target });
+    }
+
     const receipt = executeDomainCommand(
       editor,
       () => {

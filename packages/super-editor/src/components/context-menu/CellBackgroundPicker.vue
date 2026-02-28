@@ -31,9 +31,12 @@ const ensureCellSelection = () => {
 };
 
 const handleSelect = (color) => {
-  const value = color === 'none' ? null : color;
   ensureCellSelection();
-  props.editor.commands.setCellBackground(value);
+  if (color === 'none') {
+    props.editor.commands.setCellAttr('background', null);
+  } else {
+    props.editor.commands.setCellBackground(color);
+  }
   props.closePopover();
 };
 </script>

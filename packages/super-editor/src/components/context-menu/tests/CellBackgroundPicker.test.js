@@ -42,6 +42,7 @@ describe('CellBackgroundPicker', () => {
       commands: {
         setCellSelection: vi.fn(),
         setCellBackground: vi.fn(),
+        setCellAttr: vi.fn(),
       },
     };
   });
@@ -91,12 +92,14 @@ describe('CellBackgroundPicker', () => {
     expect(closePopover).toHaveBeenCalled();
   });
 
-  it('should map "none" to null for removing background', () => {
+  it('should map "none" to setCellAttr(background, null) for removing background', () => {
     isCellSelection.mockReturnValue(true);
 
     const wrapper = mountPicker();
     wrapper.findComponent({ name: 'IconGrid' }).vm.$emit('select', 'none');
 
-    expect(mockEditor.commands.setCellBackground).toHaveBeenCalledWith(null);
+    expect(mockEditor.commands.setCellBackground).not.toHaveBeenCalled();
+    expect(mockEditor.commands.setCellAttr).toHaveBeenCalledWith('background', null);
+    expect(closePopover).toHaveBeenCalled();
   });
 });

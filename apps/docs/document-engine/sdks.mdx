@@ -361,11 +361,20 @@ The SDKs expose all operations from the [Document API](/document-api/overview) p
 | `doc.lists.list` | `lists list` | List all list nodes in the document, optionally filtered by scope. |
 | `doc.lists.get` | `lists get` | Retrieve a specific list node by target. |
 | `doc.lists.insert` | `lists insert` | Insert a new list at the target position. |
-| `doc.lists.setType` | `lists set-type` | Change the list type (ordered, unordered) of a target list. |
+| `doc.lists.create` | `lists create` | Create a new list from one or more paragraphs, or convert existing paragraphs into a new list. |
+| `doc.lists.attach` | `lists attach` | Convert non-list paragraphs to list items under an existing list sequence. |
+| `doc.lists.detach` | `lists detach` | Remove numbering properties from list items, converting them to plain paragraphs. |
 | `doc.lists.indent` | `lists indent` | Increase the indentation level of a list item. |
 | `doc.lists.outdent` | `lists outdent` | Decrease the indentation level of a list item. |
-| `doc.lists.restart` | `lists restart` | Restart numbering of an ordered list at the target item. |
-| `doc.lists.exit` | `lists exit` | Exit a list context, converting the target item to a paragraph. |
+| `doc.lists.join` | `lists join` | Merge two adjacent list sequences into one. |
+| `doc.lists.canJoin` | `lists can-join` | Check whether two adjacent list sequences can be joined. |
+| `doc.lists.separate` | `lists separate` | Split a list sequence at the target item, creating a new sequence from that point forward. |
+| `doc.lists.setLevel` | `lists set-level` | Set the absolute nesting level (0..8) of a list item. |
+| `doc.lists.setValue` | `lists set-value` | Set an explicit numbering value at the target item. Mid-sequence targets are atomically separated first. |
+| `doc.lists.continuePrevious` | `lists continue-previous` | Continue numbering from the nearest compatible previous list sequence. |
+| `doc.lists.canContinuePrevious` | `lists can-continue-previous` | Check whether the target sequence can continue numbering from a previous compatible sequence. |
+| `doc.lists.setLevelRestart` | `lists set-level-restart` | Set the restart behavior for a specific list level. |
+| `doc.lists.convertToText` | `lists convert-to-text` | Convert list items to plain paragraphs, optionally prepending the rendered marker text. |
 
 #### Comments
 

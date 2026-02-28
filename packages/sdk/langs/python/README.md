@@ -131,7 +131,7 @@ client.doc.insert(params)
 | **Mutation** | `insert`, `replace`, `delete` |
 | **Format** | `format.bold`, `format.italic`, `format.underline`, `format.strikethrough` |
 | **Create** | `create.paragraph` |
-| **Lists** | `lists.list`, `lists.get`, `lists.insert`, `lists.set_type`, `lists.indent`, `lists.outdent`, `lists.restart`, `lists.exit` |
+| **Lists** | `lists.list`, `lists.get`, `lists.insert`, `lists.create`, `lists.attach`, `lists.detach`, `lists.indent`, `lists.outdent`, `lists.join`, `lists.separate`, `lists.set_level`, `lists.set_value`, `lists.continue_previous`, `lists.set_level_restart`, `lists.convert_to_text`, `lists.can_join`, `lists.can_continue_previous` |
 | **Comments** | `comments.create`, `comments.patch`, `comments.delete`, `comments.get`, `comments.list` |
 | **Track Changes** | `track_changes.list`, `track_changes.get`, `track_changes.decide` |
 | **Lifecycle** | `open`, `save`, `close` |

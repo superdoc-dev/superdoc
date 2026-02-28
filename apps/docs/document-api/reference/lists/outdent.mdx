@@ -90,6 +90,7 @@ Returns a ListsMutateItemResult receipt; reports NO_OP if the item is already at
 
 - `NO_OP`
 - `INVALID_TARGET`
+- `LEVEL_OUT_OF_RANGE`
 
 ## Raw schemas
 
@@ -139,7 +140,8 @@ Returns a ListsMutateItemResult receipt; reports NO_OP if the item is already at
             "code": {
               "enum": [
                 "NO_OP",
-                "INVALID_TARGET"
+                "INVALID_TARGET",
+                "LEVEL_OUT_OF_RANGE"
               ]
             },
             "details": {},
@@ -200,7 +202,8 @@ Returns a ListsMutateItemResult receipt; reports NO_OP if the item is already at
         "code": {
           "enum": [
             "NO_OP",
-            "INVALID_TARGET"
+            "INVALID_TARGET",
+            "LEVEL_OUT_OF_RANGE"
           ]
         },
         "details": {},

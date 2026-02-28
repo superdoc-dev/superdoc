@@ -1172,28 +1172,26 @@ describe('superdoc CLI', () => {
     expect(closeResult.code).toBe(0);
   });
 
-  test('lists set-type tracked mode maps to TRACK_CHANGE_COMMAND_UNAVAILABLE', async () => {
-    const source = join(TEST_DIR, 'lists-set-type-source.docx');
-    const out = join(TEST_DIR, 'lists-set-type-out.docx');
+  test('lists detach tracked mode maps to TRACK_CHANGE_COMMAND_UNAVAILABLE', async () => {
+    const source = join(TEST_DIR, 'lists-detach-source.docx');
+    const out = join(TEST_DIR, 'lists-detach-out.docx');
     await copyFile(LIST_SAMPLE_DOC, source);
 
     const target = await firstListItemAddress(['lists', 'list', source, '--limit', '1']);
-    const setTypeResult = await runCli([
+    const detachResult = await runCli([
       'lists',
-      'set-type',
+      'detach',
       source,
       '--target-json',
       JSON.stringify(target),
-      '--kind',
-      'bullet',
       '--change-mode',
       'tracked',
       '--out',
       out,
     ]);
 
-    expect(setTypeResult.code).toBe(1);
-    const envelope = parseJsonOutput<ErrorEnvelope>(setTypeResult);
+    expect(detachResult.code).toBe(1);
+    const envelope = parseJsonOutput<ErrorEnvelope>(detachResult);
     expect(envelope.error.code).toBe('TRACK_CHANGE_COMMAND_UNAVAILABLE');
   });
 

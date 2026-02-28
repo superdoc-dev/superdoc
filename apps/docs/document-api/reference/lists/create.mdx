@@ -1,7 +1,7 @@
 ---
-title: lists.restart
-sidebarTitle: lists.restart
-description: Restart numbering of an ordered list at the target item.
+title: lists.create
+sidebarTitle: lists.create
+description: Create a new list from one or more paragraphs, or convert existing paragraphs into a new list.
 ---
 
 {/* GENERATED FILE: DO NOT EDIT. Regenerate via `pnpm run docapi:sync`. */}
@@ -10,62 +10,52 @@ description: Restart numbering of an ordered list at the target item.
 
 ## Summary
 
-Restart numbering of an ordered list at the target item.
+Create a new list from one or more paragraphs, or convert existing paragraphs into a new list.
 
-- Operation ID: `lists.restart`
-- API member path: `editor.doc.lists.restart(...)`
+- Operation ID: `lists.create`
+- API member path: `editor.doc.lists.create(...)`
 - Mutates document: `yes`
-- Idempotency: `conditional`
+- Idempotency: `non-idempotent`
 - Supports tracked mode: `no`
 - Supports dry run: `yes`
 - Deterministic target resolution: `yes`
 
 ## Expected result
 
-Returns a ListsMutateItemResult receipt; reports NO_OP if numbering already restarts at the target item.
+Returns a ListsCreateResult with the new listId and the first item address.
 
 ## Input fields
 
 | Field | Type | Required | Description |
 | --- | --- | --- | --- |
-| `target` | ListItemAddress | yes | ListItemAddress |
-| `target.kind` | `"block"` | yes | Constant: `"block"` |
-| `target.nodeId` | string | yes |  |
-| `target.nodeType` | `"listItem"` | yes | Constant: `"listItem"` |
+| `at` | BlockAddress | no | BlockAddress |
+| `kind` | enum | yes | `"ordered"`, `"bullet"` |
+| `level` | integer | no |  |
+| `mode` | enum | yes | `"empty"`, `"fromParagraphs"` |
+| `target` | BlockAddressOrRange | no | BlockAddressOrRange |
 
 ### Example request
 
 ```json
 {
+  "at": {
+    "kind": "block",
+    "nodeId": "node-def456",
+    "nodeType": "paragraph"
+  },
+  "kind": "ordered",
+  "mode": "empty",
   "target": {
     "kind": "block",
     "nodeId": "node-def456",
-    "nodeType": "listItem"
+    "nodeType": "paragraph"
   }
 }
 ```
 
 ## Output fields
 
-### Variant 1 (item.kind="block")
-
-| Field | Type | Required | Description |
-| --- | --- | --- | --- |
-| `item` | ListItemAddress | yes | ListItemAddress |
-| `item.kind` | `"block"` | yes | Constant: `"block"` |
-| `item.nodeId` | string | yes |  |
-| `item.nodeType` | `"listItem"` | yes | Constant: `"listItem"` |
-| `success` | `true` | yes | Constant: `true` |
-
-### Variant 2 (success=false)
-
-| Field | Type | Required | Description |
-| --- | --- | --- | --- |
-| `failure` | object | yes |  |
-| `failure.code` | enum | yes | `"NO_OP"`, `"INVALID_TARGET"` |
-| `failure.details` | any | no |  |
-| `failure.message` | string | yes |  |
-| `success` | `false` | yes | Constant: `false` |
+_No fields._
 
 ### Example response
 
@@ -76,6 +66,7 @@ Returns a ListsMutateItemResult receipt; reports NO_OP if numbering already rest
     "nodeId": "node-def456",
     "nodeType": "listItem"
   },
+  "listId": "example",
   "success": true
 }
 ```
@@ -88,8 +79,8 @@ Returns a ListsMutateItemResult receipt; reports NO_OP if numbering already rest
 
 ## Non-applied failure codes
 
-- `NO_OP`
 - `INVALID_TARGET`
+- `LEVEL_OUT_OF_RANGE`
 
 ## Raw schemas
 
@@ -97,14 +88,56 @@ Returns a ListsMutateItemResult receipt; reports NO_OP if numbering already rest
 ```json
 {
   "additionalProperties": false,
+  "else": {
+    "required": [
+      "mode",
+      "kind",
+      "target"
+    ]
+  },
+  "if": {
+    "properties": {
+      "mode": {
+        "const": "empty"
+      }
+    }
+  },
   "properties": {
+    "at": {
+      "$ref": "#/$defs/BlockAddress"
+    },
+    "kind": {
+      "enum": [
+        "ordered",
+        "bullet"
+      ]
+    },
+    "level": {
+      "maximum": 8,
+      "minimum": 0,
+      "type": "integer"
+    },
+    "mode": {
+      "enum": [
+        "empty",
+        "fromParagraphs"
+      ]
+    },
     "target": {
-      "$ref": "#/$defs/ListItemAddress"
+      "$ref": "#/$defs/BlockAddressOrRange"
     }
   },
   "required": [
-    "target"
+    "mode",
+    "kind"
   ],
+  "then": {
+    "required": [
+      "mode",
+      "kind",
+      "at"
+    ]
+  },
   "type": "object"
 }
 ```
@@ -120,12 +153,16 @@ Returns a ListsMutateItemResult receipt; reports NO_OP if numbering already rest
         "item": {
           "$ref": "#/$defs/ListItemAddress"
         },
+        "listId": {
+          "type": "string"
+        },
         "success": {
           "const": true
         }
       },
       "required": [
         "success",
+        "listId",
         "item"
       ],
       "type": "object"
@@ -138,8 +175,8 @@ Returns a ListsMutateItemResult receipt; reports NO_OP if numbering already rest
           "properties": {
             "code": {
               "enum": [
-                "NO_OP",
-                "INVALID_TARGET"
+                "INVALID_TARGET",
+                "LEVEL_OUT_OF_RANGE"
               ]
             },
             "details": {},
@@ -176,12 +213,16 @@ Returns a ListsMutateItemResult receipt; reports NO_OP if numbering already rest
     "item": {
       "$ref": "#/$defs/ListItemAddress"
     },
+    "listId": {
+      "type": "string"
+    },
     "success": {
       "const": true
     }
   },
   "required": [
     "success",
+    "listId",
     "item"
   ],
   "type": "object"
@@ -199,8 +240,8 @@ Returns a ListsMutateItemResult receipt; reports NO_OP if numbering already rest
       "properties": {
         "code": {
           "enum": [
-            "NO_OP",
-            "INVALID_TARGET"
+            "INVALID_TARGET",
+            "LEVEL_OUT_OF_RANGE"
           ]
         },
         "details": {},

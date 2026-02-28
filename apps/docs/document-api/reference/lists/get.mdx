@@ -55,6 +55,7 @@ Returns a ListItemInfo object with the item kind, level, marker, and address.
 | `address.nodeType` | `"listItem"` | yes | Constant: `"listItem"` |
 | `kind` | enum | no | `"ordered"`, `"bullet"` |
 | `level` | integer | no |  |
+| `listId` | string | yes |  |
 | `marker` | string | no |  |
 | `ordinal` | integer | no |  |
 | `path` | integer[] | no |  |
@@ -69,6 +70,7 @@ Returns a ListItemInfo object with the item kind, level, marker, and address.
     "nodeId": "node-def456",
     "nodeType": "listItem"
   },
+  "listId": "example",
   "marker": "1.",
   "ordinal": 1
 }
@@ -118,6 +120,9 @@ Returns a ListItemInfo object with the item kind, level, marker, and address.
     "level": {
       "type": "integer"
     },
+    "listId": {
+      "type": "string"
+    },
     "marker": {
       "type": "string"
     },
@@ -135,7 +140,8 @@ Returns a ListItemInfo object with the item kind, level, marker, and address.
     }
   },
   "required": [
-    "address"
+    "address",
+    "listId"
   ],
   "type": "object"
 }

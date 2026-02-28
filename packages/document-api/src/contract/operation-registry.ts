@@ -48,10 +48,27 @@ import type {
   ListItemInfo,
   ListInsertInput,
   ListsInsertResult,
-  ListSetTypeInput,
   ListsMutateItemResult,
   ListTargetInput,
-  ListsExitResult,
+  ListsCreateInput,
+  ListsCreateResult,
+  ListsAttachInput,
+  ListsDetachInput,
+  ListsDetachResult,
+  ListsJoinInput,
+  ListsJoinResult,
+  ListsCanJoinInput,
+  ListsCanJoinResult,
+  ListsSeparateInput,
+  ListsSeparateResult,
+  ListsSetLevelInput,
+  ListsSetValueInput,
+  ListsContinuePreviousInput,
+  ListsCanContinuePreviousInput,
+  ListsCanContinuePreviousResult,
+  ListsSetLevelRestartInput,
+  ListsConvertToTextInput,
+  ListsConvertToTextResult,
 } from '../lists/lists.types.js';
 import type {
   ParagraphMutationResult,
@@ -312,11 +329,32 @@ export interface OperationRegistry extends FormatInlineAliasOperationRegistry {
   'lists.list': { input: ListsListQuery | undefined; options: never; output: ListsListResult };
   'lists.get': { input: ListsGetInput; options: never; output: ListItemInfo };
   'lists.insert': { input: ListInsertInput; options: MutationOptions; output: ListsInsertResult };
-  'lists.setType': { input: ListSetTypeInput; options: MutationOptions; output: ListsMutateItemResult };
+  'lists.create': { input: ListsCreateInput; options: MutationOptions; output: ListsCreateResult };
+  'lists.attach': { input: ListsAttachInput; options: MutationOptions; output: ListsMutateItemResult };
+  'lists.detach': { input: ListsDetachInput; options: MutationOptions; output: ListsDetachResult };
   'lists.indent': { input: ListTargetInput; options: MutationOptions; output: ListsMutateItemResult };
   'lists.outdent': { input: ListTargetInput; options: MutationOptions; output: ListsMutateItemResult };
-  'lists.restart': { input: ListTargetInput; options: MutationOptions; output: ListsMutateItemResult };
-  'lists.exit': { input: ListTargetInput; options: MutationOptions; output: ListsExitResult };
+  'lists.join': { input: ListsJoinInput; options: MutationOptions; output: ListsJoinResult };
+  'lists.canJoin': { input: ListsCanJoinInput; options: never; output: ListsCanJoinResult };
+  'lists.separate': { input: ListsSeparateInput; options: MutationOptions; output: ListsSeparateResult };
+  'lists.setLevel': { input: ListsSetLevelInput; options: MutationOptions; output: ListsMutateItemResult };
+  'lists.setValue': { input: ListsSetValueInput; options: MutationOptions; output: ListsMutateItemResult };
+  'lists.continuePrevious': {
+    input: ListsContinuePreviousInput;
+    options: MutationOptions;
+    output: ListsMutateItemResult;
+  };
+  'lists.canContinuePrevious': {
+    input: ListsCanContinuePreviousInput;
+    options: never;
+    output: ListsCanContinuePreviousResult;
+  };
+  'lists.setLevelRestart': {
+    input: ListsSetLevelRestartInput;
+    options: MutationOptions;
+    output: ListsMutateItemResult;
+  };
+  'lists.convertToText': { input: ListsConvertToTextInput; options: MutationOptions; output: ListsConvertToTextResult };
 
   // --- sections.* ---
   'sections.list': { input: SectionsListQuery | undefined; options: never; output: SectionsListResult };

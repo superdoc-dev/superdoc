@@ -252,11 +252,11 @@ function makeCapabilitiesAdapter(): { get: ReturnType<typeof vi.fn> } {
         'lists.list',
         'lists.get',
         'lists.insert',
-        'lists.setType',
+        'lists.create',
         'lists.indent',
         'lists.outdent',
-        'lists.restart',
-        'lists.exit',
+        'lists.detach',
+        'lists.attach',
         'comments.create',
         'comments.patch',
         'comments.delete',
@@ -579,7 +579,6 @@ describe('src/README.md workflow examples', () => {
       const firstItem = lists.items[0].address;
       const insertResult = doc.lists.insert({ target: firstItem, position: 'after', text: 'New item' });
       if (insertResult.success) {
-        doc.lists.setType({ target: insertResult.item, kind: 'ordered' });
         doc.lists.indent({ target: insertResult.item });
       }
 

@@ -81,6 +81,7 @@ Returns a ListsListResult with an array of list item summaries and total count.
         "targetKind": "text"
       },
       "id": "id-001",
+      "listId": "example",
       "marker": "1.",
       "ordinal": 1
     }
@@ -168,6 +169,9 @@ Returns a ListsListResult with an array of list item summaries and total count.
           "level": {
             "type": "integer"
           },
+          "listId": {
+            "type": "string"
+          },
           "marker": {
             "type": "string"
           },
@@ -187,7 +191,8 @@ Returns a ListsListResult with an array of list item summaries and total count.
         "required": [
           "id",
           "handle",
-          "address"
+          "address",
+          "listId"
         ],
         "type": "object"
       },

@@ -116,6 +116,41 @@ async function createDocWithSecondSection(
   return { docPath: withBreakDoc, first, second };
 }
 
+type ListDiscoveryItem = {
+  address?: Record<string, unknown>;
+};
+
+async function listDiscoveryItems(
+  harness: ConformanceHarness,
+  stateDir: string,
+  docPath: string,
+  limit: number,
+): Promise<ListDiscoveryItem[]> {
+  const listed = await harness.runCli(['lists', 'list', docPath, '--limit', String(limit)], stateDir);
+  if (listed.result.code !== 0 || listed.envelope.ok !== true) {
+    throw new Error(`Failed to list list items for ${docPath}.`);
+  }
+
+  const items = ((listed.envelope.data as { result?: { items?: ListDiscoveryItem[] } }).result?.items ?? []).filter(
+    (item) => !!item,
+  );
+  return items;
+}
+
+async function nthListAddress(
+  harness: ConformanceHarness,
+  stateDir: string,
+  docPath: string,
+  index: number,
+): Promise<Record<string, unknown>> {
+  const items = await listDiscoveryItems(harness, stateDir, docPath, Math.max(index + 1, 2));
+  const address = items[index]?.address;
+  if (!address || typeof address !== 'object') {
+    throw new Error(`Missing list address at index ${index} for ${docPath}.`);
+  }
+  return address;
+}
+
 function sectionMutationScenario(
   operationId: CliOperationId,
   label: string,
@@ -1068,32 +1103,75 @@ export const SUCCESS_SCENARIOS = {
       ],
     };
   },
-  'doc.lists.setType': async (harness: ConformanceHarness): Promise<ScenarioInvocation> => {
-    const stateDir = await harness.createStateDir('doc-lists-set-type-success');
-    const docPath = await harness.copyListFixtureDoc('doc-lists-set-type');
-    const target = await harness.firstListItemAddress(docPath, stateDir);
-    const getResult = await harness.runCli(
-      ['lists', 'get', docPath, '--address-json', JSON.stringify(target)],
-      stateDir,
-    );
-    if (getResult.result.code !== 0 || getResult.envelope.ok !== true) {
-      throw new Error('Failed to resolve list item kind for set-type conformance scenario.');
-    }
-    const currentKind = (getResult.envelope.data as { item?: { kind?: string } }).item?.kind;
-    const requestedKind = currentKind === 'ordered' ? 'bullet' : 'ordered';
-
+  'doc.lists.create': async (harness: ConformanceHarness): Promise<ScenarioInvocation> => {
+    const stateDir = await harness.createStateDir('doc-lists-create-success');
+    const docPath = await harness.copyFixtureDoc('doc-lists-create');
+    const at = await harness.firstBlockMatch(docPath, stateDir);
     return {
       stateDir,
       args: [
         'lists',
-        'set-type',
+        'create',
+        docPath,
+        '--input-json',
+        JSON.stringify({
+          mode: 'empty',
+          at: { kind: 'block', nodeType: at.nodeType, nodeId: at.nodeId },
+          kind: 'ordered',
+        }),
+        '--out',
+        harness.createOutputPath('doc-lists-create-output'),
+      ],
+    };
+  },
+  'doc.lists.detach': async (harness: ConformanceHarness): Promise<ScenarioInvocation> => {
+    const stateDir = await harness.createStateDir('doc-lists-detach-success');
+    const docPath = await harness.copyListFixtureDoc('doc-lists-detach');
+    const target = await harness.firstListItemAddress(docPath, stateDir);
+    return {
+      stateDir,
+      args: [
+        'lists',
+        'detach',
         docPath,
         '--target-json',
         JSON.stringify(target),
-        '--kind',
-        requestedKind,
         '--out',
-        harness.createOutputPath('doc-lists-set-type-output'),
+        harness.createOutputPath('doc-lists-detach-output'),
+      ],
+    };
+  },
+  'doc.lists.setLevel': async (harness: ConformanceHarness): Promise<ScenarioInvocation> => {
+    const stateDir = await harness.createStateDir('doc-lists-set-level-success');
+    const docPath = await harness.copyListFixtureDoc('doc-lists-set-level');
+    const target = await harness.firstListItemAddress(docPath, stateDir);
+    return {
+      stateDir,
+      args: [
+        'lists',
+        'set-level',
+        docPath,
+        '--input-json',
+        JSON.stringify({ target, level: 1 }),
+        '--out',
+        harness.createOutputPath('doc-lists-set-level-output'),
+      ],
+    };
+  },
+  'doc.lists.convertToText': async (harness: ConformanceHarness): Promise<ScenarioInvocation> => {
+    const stateDir = await harness.createStateDir('doc-lists-convert-to-text-success');
+    const docPath = await harness.copyListFixtureDoc('doc-lists-convert-to-text');
+    const target = await harness.firstListItemAddress(docPath, stateDir);
+    return {
+      stateDir,
+      args: [
+        'lists',
+        'convert-to-text',
+        docPath,
+        '--target-json',
+        JSON.stringify(target),
+        '--out',
+        harness.createOutputPath('doc-lists-convert-to-text-output'),
       ],
     };
   },
@@ -1140,51 +1218,166 @@ export const SUCCESS_SCENARIOS = {
       ],
     };
   },
-  'doc.lists.restart': async (harness: ConformanceHarness): Promise<ScenarioInvocation> => {
-    const stateDir = await harness.createStateDir('doc-lists-restart-success');
-    const docPath = await harness.copyListFixtureDoc('doc-lists-restart');
-    const listed = await harness.runCli(['lists', 'list', docPath, '--limit', '50'], stateDir);
-    if (listed.result.code !== 0 || listed.envelope.ok !== true) {
-      throw new Error('Failed to list list items for restart conformance scenario.');
-    }
-    const restartTarget = (
-      (
-        listed.envelope.data as {
-          result?: { items?: Array<{ ordinal?: number; address?: Record<string, unknown> }> };
-        }
-      ).result?.items ?? []
-    ).find((item) => typeof item.ordinal === 'number' && item.ordinal > 1)?.address;
-    if (!restartTarget) {
-      throw new Error('Restart conformance scenario requires a list item with ordinal > 1.');
-    }
-
-    return {
-      stateDir,
-      args: [
-        'lists',
-        'restart',
-        docPath,
-        '--target-json',
-        JSON.stringify(restartTarget),
-        '--out',
-        harness.createOutputPath('doc-lists-restart-output'),
-      ],
-    };
-  },
-  'doc.lists.exit': async (harness: ConformanceHarness): Promise<ScenarioInvocation> => {
-    const stateDir = await harness.createStateDir('doc-lists-exit-success');
-    const docPath = await harness.copyListFixtureDoc('doc-lists-exit');
+  'doc.lists.setValue': async (harness: ConformanceHarness): Promise<ScenarioInvocation> => {
+    const stateDir = await harness.createStateDir('doc-lists-set-value-success');
+    const docPath = await harness.copyListFixtureDoc('doc-lists-set-value');
     const target = await harness.firstListItemAddress(docPath, stateDir);
     return {
       stateDir,
       args: [
         'lists',
-        'exit',
+        'set-value',
+        docPath,
+        '--input-json',
+        JSON.stringify({ target, value: 5 }),
+        '--out',
+        harness.createOutputPath('doc-lists-set-value-output'),
+      ],
+    };
+  },
+  'doc.lists.continuePrevious': async (harness: ConformanceHarness): Promise<ScenarioInvocation> => {
+    const stateDir = await harness.createStateDir('doc-lists-continue-previous-success');
+    const docPath = await harness.copyListFixtureDoc('doc-lists-continue-previous');
+    const secondItem = await nthListAddress(harness, stateDir, docPath, 1);
+    const preparedDoc = harness.createOutputPath('doc-lists-continue-previous-prepared');
+    const separate = await harness.runCli(
+      ['lists', 'separate', docPath, '--target-json', JSON.stringify(secondItem), '--out', preparedDoc],
+      stateDir,
+    );
+    if (separate.result.code !== 0) {
+      throw new Error('Failed to prepare continue-previous conformance fixture via lists separate.');
+    }
+    return {
+      stateDir,
+      args: [
+        'lists',
+        'continue-previous',
+        preparedDoc,
+        '--target-json',
+        JSON.stringify(secondItem),
+        '--out',
+        harness.createOutputPath('doc-lists-continue-previous-output'),
+      ],
+    };
+  },
+  'doc.lists.canJoin': async (harness: ConformanceHarness): Promise<ScenarioInvocation> => {
+    const stateDir = await harness.createStateDir('doc-lists-can-join-success');
+    const docPath = await harness.copyListFixtureDoc('doc-lists-can-join');
+    const target = await harness.firstListItemAddress(docPath, stateDir);
+    return {
+      stateDir,
+      args: ['lists', 'can-join', docPath, '--input-json', JSON.stringify({ target, direction: 'withNext' })],
+    };
+  },
+  'doc.lists.canContinuePrevious': async (harness: ConformanceHarness): Promise<ScenarioInvocation> => {
+    const stateDir = await harness.createStateDir('doc-lists-can-continue-previous-success');
+    const docPath = await harness.copyListFixtureDoc('doc-lists-can-continue-previous');
+    const target = await harness.firstListItemAddress(docPath, stateDir);
+    return {
+      stateDir,
+      args: ['lists', 'can-continue-previous', docPath, '--target-json', JSON.stringify(target)],
+    };
+  },
+  'doc.lists.attach': async (harness: ConformanceHarness): Promise<ScenarioInvocation> => {
+    const stateDir = await harness.createStateDir('doc-lists-attach-success');
+    const docPath = await harness.copyFixtureDoc('doc-lists-attach');
+    const listSeedTarget = await harness.firstBlockMatch(docPath, stateDir);
+    const seededDoc = harness.createOutputPath('doc-lists-attach-seeded');
+    const create = await harness.runCli(
+      [
+        'lists',
+        'create',
+        docPath,
+        '--input-json',
+        JSON.stringify({
+          mode: 'empty',
+          at: { kind: 'block', nodeType: listSeedTarget.nodeType, nodeId: listSeedTarget.nodeId },
+          kind: 'ordered',
+        }),
+        '--out',
+        seededDoc,
+      ],
+      stateDir,
+    );
+    if (create.result.code !== 0) {
+      throw new Error('Failed to prepare attach conformance fixture via lists create.');
+    }
+
+    const attachTo = await harness.firstListItemAddress(seededDoc, stateDir);
+    const target = await harness.firstBlockMatch(seededDoc, stateDir);
+
+    return {
+      stateDir,
+      args: [
+        'lists',
+        'attach',
+        seededDoc,
+        '--input-json',
+        JSON.stringify({
+          target: { kind: 'block', nodeType: target.nodeType, nodeId: target.nodeId },
+          attachTo,
+        }),
+        '--out',
+        harness.createOutputPath('doc-lists-attach-output'),
+      ],
+    };
+  },
+  'doc.lists.join': async (harness: ConformanceHarness): Promise<ScenarioInvocation> => {
+    const stateDir = await harness.createStateDir('doc-lists-join-success');
+    const docPath = await harness.copyListFixtureDoc('doc-lists-join');
+    const secondItem = await nthListAddress(harness, stateDir, docPath, 1);
+    const preparedDoc = harness.createOutputPath('doc-lists-join-prepared');
+    const separate = await harness.runCli(
+      ['lists', 'separate', docPath, '--target-json', JSON.stringify(secondItem), '--out', preparedDoc],
+      stateDir,
+    );
+    if (separate.result.code !== 0) {
+      throw new Error('Failed to prepare join conformance fixture via lists separate.');
+    }
+    return {
+      stateDir,
+      args: [
+        'lists',
+        'join',
+        preparedDoc,
+        '--input-json',
+        JSON.stringify({ target: secondItem, direction: 'withPrevious' }),
+        '--out',
+        harness.createOutputPath('doc-lists-join-output'),
+      ],
+    };
+  },
+  'doc.lists.separate': async (harness: ConformanceHarness): Promise<ScenarioInvocation> => {
+    const stateDir = await harness.createStateDir('doc-lists-separate-success');
+    const docPath = await harness.copyListFixtureDoc('doc-lists-separate');
+    const target = await nthListAddress(harness, stateDir, docPath, 1);
+    return {
+      stateDir,
+      args: [
+        'lists',
+        'separate',
         docPath,
         '--target-json',
         JSON.stringify(target),
         '--out',
-        harness.createOutputPath('doc-lists-exit-output'),
+        harness.createOutputPath('doc-lists-separate-output'),
+      ],
+    };
+  },
+  'doc.lists.setLevelRestart': async (harness: ConformanceHarness): Promise<ScenarioInvocation> => {
+    const stateDir = await harness.createStateDir('doc-lists-set-level-restart-success');
+    const docPath = await harness.copyListFixtureDoc('doc-lists-set-level-restart');
+    const target = await harness.firstListItemAddress(docPath, stateDir);
+    return {
+      stateDir,
+      args: [
+        'lists',
+        'set-level-restart',
+        docPath,
+        '--input-json',
+        JSON.stringify({ target, level: 1, restartAfterLevel: 0 }),
+        '--out',
+        harness.createOutputPath('doc-lists-set-level-restart-output'),
       ],
     };
   },

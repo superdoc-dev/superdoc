@@ -327,6 +327,26 @@ const SHARED_DEFS: Record<string, JsonSchema> = {
     },
     ['blockId', 'nodeType', 'range', 'text', 'ref', 'runs'],
   ),
+
+  // -- Block-level address types (lists) --
+  BlockAddress: objectSchema(
+    {
+      kind: { const: 'block' },
+      nodeType: { const: 'paragraph' },
+      nodeId: { type: 'string' },
+    },
+    ['kind', 'nodeType', 'nodeId'],
+  ),
+  BlockRange: objectSchema(
+    {
+      from: ref('BlockAddress'),
+      to: ref('BlockAddress'),
+    },
+    ['from', 'to'],
+  ),
+  BlockAddressOrRange: {
+    oneOf: [ref('BlockAddress'), ref('BlockRange')],
+  },
 };
 
 // ---------------------------------------------------------------------------
@@ -757,6 +777,7 @@ const listInsertPositionSchema: JsonSchema = { enum: ['before', 'after'] };
 const listItemInfoSchema = objectSchema(
   {
     address: listItemAddressSchema,
+    listId: { type: 'string' },
     marker: { type: 'string' },
     ordinal: { type: 'integer' },
     path: arraySchema({ type: 'integer' }),
@@ -764,12 +785,13 @@ const listItemInfoSchema = objectSchema(
     kind: listKindSchema,
     text: { type: 'string' },
   },
-  ['address'],
+  ['address', 'listId'],
 );
 
 const listItemDomainItemSchema = discoveryItemSchema(
   {
     address: listItemAddressSchema,
+    listId: { type: 'string' },
     marker: { type: 'string' },
     ordinal: { type: 'integer' },
     path: arraySchema({ type: 'integer' }),
@@ -777,7 +799,7 @@ const listItemDomainItemSchema = discoveryItemSchema(
     kind: listKindSchema,
     text: { type: 'string' },
   },
-  ['address'],
+  ['address', 'listId'],
 );
 
 const listsListResultSchema = discoveryResultSchema(listItemDomainItemSchema);
@@ -2358,17 +2380,67 @@ const operationSchemas: Record<OperationId, OperationSchemaSet> = {
     success: listsInsertSuccessSchema,
     failure: listsFailureSchemaFor('lists.insert'),
   },
-  'lists.setType': {
+  'lists.create': {
+    input: {
+      type: 'object',
+      properties: {
+        mode: { enum: ['empty', 'fromParagraphs'] },
+        at: ref('BlockAddress'),
+        target: ref('BlockAddressOrRange'),
+        kind: listKindSchema,
+        level: { type: 'integer', minimum: 0, maximum: 8 },
+      },
+      required: ['mode', 'kind'],
+      additionalProperties: false,
+      if: { properties: { mode: { const: 'empty' } } },
+      then: { required: ['mode', 'kind', 'at'] },
+      else: { required: ['mode', 'kind', 'target'] },
+    },
+    output: {
+      oneOf: [
+        objectSchema({ success: { const: true }, listId: { type: 'string' }, item: listItemAddressSchema }, [
+          'success',
+          'listId',
+          'item',
+        ]),
+        listsFailureSchemaFor('lists.create'),
+      ],
+    },
+    success: objectSchema({ success: { const: true }, listId: { type: 'string' }, item: listItemAddressSchema }, [
+      'success',
+      'listId',
+      'item',
+    ]),
+    failure: listsFailureSchemaFor('lists.create'),
+  },
+  'lists.attach': {
+    input: objectSchema(
+      {
+        target: ref('BlockAddressOrRange'),
+        attachTo: listItemAddressSchema,
+        level: { type: 'integer', minimum: 0, maximum: 8 },
+      },
+      ['target', 'attachTo'],
+    ),
+    output: listsMutateItemResultSchemaFor('lists.attach'),
+    success: listsMutateItemSuccessSchema,
+    failure: listsFailureSchemaFor('lists.attach'),
+  },
+  'lists.detach': {
     input: objectSchema(
       {
         target: listItemAddressSchema,
-        kind: listKindSchema,
       },
-      ['target', 'kind'],
+      ['target'],
     ),
-    output: listsMutateItemResultSchemaFor('lists.setType'),
-    success: listsMutateItemSuccessSchema,
-    failure: listsFailureSchemaFor('lists.setType'),
+    output: {
+      oneOf: [
+        objectSchema({ success: { const: true }, paragraph: ref('ParagraphAddress') }, ['success', 'paragraph']),
+        listsFailureSchemaFor('lists.detach'),
+      ],
+    },
+    success: objectSchema({ success: { const: true }, paragraph: ref('ParagraphAddress') }, ['success', 'paragraph']),
+    failure: listsFailureSchemaFor('lists.detach'),
   },
   'lists.indent': {
     input: objectSchema(
@@ -2392,27 +2464,146 @@ const operationSchemas: Record<OperationId, OperationSchemaSet> = {
     success: listsMutateItemSuccessSchema,
     failure: listsFailureSchemaFor('lists.outdent'),
   },
-  'lists.restart': {
+  'lists.join': {
     input: objectSchema(
       {
         target: listItemAddressSchema,
+        direction: { enum: ['withPrevious', 'withNext'] },
       },
-      ['target'],
+      ['target', 'direction'],
     ),
-    output: listsMutateItemResultSchemaFor('lists.restart'),
-    success: listsMutateItemSuccessSchema,
-    failure: listsFailureSchemaFor('lists.restart'),
+    output: {
+      oneOf: [
+        objectSchema({ success: { const: true }, listId: { type: 'string' } }, ['success', 'listId']),
+        listsFailureSchemaFor('lists.join'),
+      ],
+    },
+    success: objectSchema({ success: { const: true }, listId: { type: 'string' } }, ['success', 'listId']),
+    failure: listsFailureSchemaFor('lists.join'),
   },
-  'lists.exit': {
+  'lists.canJoin': {
+    input: objectSchema(
+      {
+        target: listItemAddressSchema,
+        direction: { enum: ['withPrevious', 'withNext'] },
+      },
+      ['target', 'direction'],
+    ),
+    output: objectSchema(
+      {
+        canJoin: { type: 'boolean' },
+        reason: { enum: ['NO_ADJACENT_SEQUENCE', 'INCOMPATIBLE_DEFINITIONS', 'ALREADY_SAME_SEQUENCE'] },
+        adjacentListId: { type: 'string' },
+      },
+      ['canJoin'],
+    ),
+  },
+  'lists.separate': {
+    input: objectSchema(
+      {
+        target: listItemAddressSchema,
+        copyOverrides: { type: 'boolean' },
+      },
+      ['target'],
+    ),
+    output: {
+      oneOf: [
+        objectSchema({ success: { const: true }, listId: { type: 'string' }, numId: { type: 'integer' } }, [
+          'success',
+          'listId',
+          'numId',
+        ]),
+        listsFailureSchemaFor('lists.separate'),
+      ],
+    },
+    success: objectSchema({ success: { const: true }, listId: { type: 'string' }, numId: { type: 'integer' } }, [
+      'success',
+      'listId',
+      'numId',
+    ]),
+    failure: listsFailureSchemaFor('lists.separate'),
+  },
+  'lists.setLevel': {
+    input: objectSchema(
+      {
+        target: listItemAddressSchema,
+        level: { type: 'integer', minimum: 0, maximum: 8 },
+      },
+      ['target', 'level'],
+    ),
+    output: listsMutateItemResultSchemaFor('lists.setLevel'),
+    success: listsMutateItemSuccessSchema,
+    failure: listsFailureSchemaFor('lists.setLevel'),
+  },
+  'lists.setValue': {
+    input: objectSchema(
+      {
+        target: listItemAddressSchema,
+        value: { type: ['integer', 'null'] },
+      },
+      ['target', 'value'],
+    ),
+    output: listsMutateItemResultSchemaFor('lists.setValue'),
+    success: listsMutateItemSuccessSchema,
+    failure: listsFailureSchemaFor('lists.setValue'),
+  },
+  'lists.continuePrevious': {
     input: objectSchema(
       {
         target: listItemAddressSchema,
       },
       ['target'],
     ),
-    output: listsExitResultSchemaFor('lists.exit'),
-    success: listsExitSuccessSchema,
-    failure: listsFailureSchemaFor('lists.exit'),
+    output: listsMutateItemResultSchemaFor('lists.continuePrevious'),
+    success: listsMutateItemSuccessSchema,
+    failure: listsFailureSchemaFor('lists.continuePrevious'),
+  },
+  'lists.canContinuePrevious': {
+    input: objectSchema(
+      {
+        target: listItemAddressSchema,
+      },
+      ['target'],
+    ),
+    output: objectSchema(
+      {
+        canContinue: { type: 'boolean' },
+        reason: { enum: ['NO_PREVIOUS_LIST', 'INCOMPATIBLE_DEFINITIONS', 'ALREADY_CONTINUOUS'] },
+        previousListId: { type: 'string' },
+      },
+      ['canContinue'],
+    ),
+  },
+  'lists.setLevelRestart': {
+    input: objectSchema(
+      {
+        target: listItemAddressSchema,
+        level: { type: 'integer', minimum: 0, maximum: 8 },
+        restartAfterLevel: { type: ['integer', 'null'] },
+        scope: { enum: ['definition', 'instance'] },
+      },
+      ['target', 'level', 'restartAfterLevel'],
+    ),
+    output: listsMutateItemResultSchemaFor('lists.setLevelRestart'),
+    success: listsMutateItemSuccessSchema,
+    failure: listsFailureSchemaFor('lists.setLevelRestart'),
+  },
+  'lists.convertToText': {
+    input: objectSchema(
+      {
+        target: listItemAddressSchema,
+        includeMarker: { type: 'boolean' },
+      },
+      ['target'],
+    ),
+    output: {
+      oneOf: [
+        objectSchema({ success: { const: true }, paragraph: ref('ParagraphAddress') }, ['success', 'paragraph']),
+        listsFailureSchemaFor('lists.convertToText'),
+      ],
+    },
+    success: objectSchema({ success: { const: true }, paragraph: ref('ParagraphAddress') }, ['success', 'paragraph']),
+    failure: listsFailureSchemaFor('lists.convertToText'),
   },
   'comments.create': {
     input: objectSchema(

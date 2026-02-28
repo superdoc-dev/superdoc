@@ -21,7 +21,7 @@ Use the tables below to see what operations are available and where each one is 
 | Create | 5 | 0 | 5 | [Reference](/document-api/reference/create/index) |
 | Format | 44 | 1 | 45 | [Reference](/document-api/reference/format/index) |
 | History | 3 | 0 | 3 | [Reference](/document-api/reference/history/index) |
-| Lists | 8 | 0 | 8 | [Reference](/document-api/reference/lists/index) |
+| Lists | 17 | 0 | 17 | [Reference](/document-api/reference/lists/index) |
 | Mutations | 2 | 0 | 2 | [Reference](/document-api/reference/mutations/index) |
 | Paragraph Formatting | 17 | 0 | 17 | [Reference](/document-api/reference/format/paragraph/index) |
 | Paragraph Styles | 2 | 0 | 2 | [Reference](/document-api/reference/styles/paragraph/index) |
@@ -105,11 +105,20 @@ Use the tables below to see what operations are available and where each one is 
 | <span style={{ whiteSpace: 'nowrap', wordBreak: 'normal', overflowWrap: 'normal' }}><code>editor.doc.lists.list(...)</code></span> | [`lists.list`](/document-api/reference/lists/list) |
 | <span style={{ whiteSpace: 'nowrap', wordBreak: 'normal', overflowWrap: 'normal' }}><code>editor.doc.lists.get(...)</code></span> | [`lists.get`](/document-api/reference/lists/get) |
 | <span style={{ whiteSpace: 'nowrap', wordBreak: 'normal', overflowWrap: 'normal' }}><code>editor.doc.lists.insert(...)</code></span> | [`lists.insert`](/document-api/reference/lists/insert) |
-| <span style={{ whiteSpace: 'nowrap', wordBreak: 'normal', overflowWrap: 'normal' }}><code>editor.doc.lists.setType(...)</code></span> | [`lists.setType`](/document-api/reference/lists/set-type) |
+| <span style={{ whiteSpace: 'nowrap', wordBreak: 'normal', overflowWrap: 'normal' }}><code>editor.doc.lists.create(...)</code></span> | [`lists.create`](/document-api/reference/lists/create) |
+| <span style={{ whiteSpace: 'nowrap', wordBreak: 'normal', overflowWrap: 'normal' }}><code>editor.doc.lists.attach(...)</code></span> | [`lists.attach`](/document-api/reference/lists/attach) |
+| <span style={{ whiteSpace: 'nowrap', wordBreak: 'normal', overflowWrap: 'normal' }}><code>editor.doc.lists.detach(...)</code></span> | [`lists.detach`](/document-api/reference/lists/detach) |
 | <span style={{ whiteSpace: 'nowrap', wordBreak: 'normal', overflowWrap: 'normal' }}><code>editor.doc.lists.indent(...)</code></span> | [`lists.indent`](/document-api/reference/lists/indent) |
 | <span style={{ whiteSpace: 'nowrap', wordBreak: 'normal', overflowWrap: 'normal' }}><code>editor.doc.lists.outdent(...)</code></span> | [`lists.outdent`](/document-api/reference/lists/outdent) |
-| <span style={{ whiteSpace: 'nowrap', wordBreak: 'normal', overflowWrap: 'normal' }}><code>editor.doc.lists.restart(...)</code></span> | [`lists.restart`](/document-api/reference/lists/restart) |
-| <span style={{ whiteSpace: 'nowrap', wordBreak: 'normal', overflowWrap: 'normal' }}><code>editor.doc.lists.exit(...)</code></span> | [`lists.exit`](/document-api/reference/lists/exit) |
+| <span style={{ whiteSpace: 'nowrap', wordBreak: 'normal', overflowWrap: 'normal' }}><code>editor.doc.lists.join(...)</code></span> | [`lists.join`](/document-api/reference/lists/join) |
+| <span style={{ whiteSpace: 'nowrap', wordBreak: 'normal', overflowWrap: 'normal' }}><code>editor.doc.lists.canJoin(...)</code></span> | [`lists.canJoin`](/document-api/reference/lists/can-join) |
+| <span style={{ whiteSpace: 'nowrap', wordBreak: 'normal', overflowWrap: 'normal' }}><code>editor.doc.lists.separate(...)</code></span> | [`lists.separate`](/document-api/reference/lists/separate) |
+| <span style={{ whiteSpace: 'nowrap', wordBreak: 'normal', overflowWrap: 'normal' }}><code>editor.doc.lists.setLevel(...)</code></span> | [`lists.setLevel`](/document-api/reference/lists/set-level) |
+| <span style={{ whiteSpace: 'nowrap', wordBreak: 'normal', overflowWrap: 'normal' }}><code>editor.doc.lists.setValue(...)</code></span> | [`lists.setValue`](/document-api/reference/lists/set-value) |
+| <span style={{ whiteSpace: 'nowrap', wordBreak: 'normal', overflowWrap: 'normal' }}><code>editor.doc.lists.continuePrevious(...)</code></span> | [`lists.continuePrevious`](/document-api/reference/lists/continue-previous) |
+| <span style={{ whiteSpace: 'nowrap', wordBreak: 'normal', overflowWrap: 'normal' }}><code>editor.doc.lists.canContinuePrevious(...)</code></span> | [`lists.canContinuePrevious`](/document-api/reference/lists/can-continue-previous) |
+| <span style={{ whiteSpace: 'nowrap', wordBreak: 'normal', overflowWrap: 'normal' }}><code>editor.doc.lists.setLevelRestart(...)</code></span> | [`lists.setLevelRestart`](/document-api/reference/lists/set-level-restart) |
+| <span style={{ whiteSpace: 'nowrap', wordBreak: 'normal', overflowWrap: 'normal' }}><code>editor.doc.lists.convertToText(...)</code></span> | [`lists.convertToText`](/document-api/reference/lists/convert-to-text) |
 | <span style={{ whiteSpace: 'nowrap', wordBreak: 'normal', overflowWrap: 'normal' }}><code>editor.doc.mutations.preview(...)</code></span> | [`mutations.preview`](/document-api/reference/mutations/preview) |
 | <span style={{ whiteSpace: 'nowrap', wordBreak: 'normal', overflowWrap: 'normal' }}><code>editor.doc.mutations.apply(...)</code></span> | [`mutations.apply`](/document-api/reference/mutations/apply) |
 | <span style={{ whiteSpace: 'nowrap', wordBreak: 'normal', overflowWrap: 'normal' }}><code>editor.doc.format.paragraph.resetDirectFormatting(...)</code></span> | [`format.paragraph.resetDirectFormatting`](/document-api/reference/format/paragraph/reset-direct-formatting) |

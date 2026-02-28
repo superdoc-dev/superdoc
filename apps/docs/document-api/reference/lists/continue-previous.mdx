@@ -1,7 +1,7 @@
 ---
-title: lists.setType
-sidebarTitle: lists.setType
-description: Change the list type (ordered, unordered) of a target list.
+title: lists.continuePrevious
+sidebarTitle: lists.continuePrevious
+description: Continue numbering from the nearest compatible previous list sequence.
 ---
 
 {/* GENERATED FILE: DO NOT EDIT. Regenerate via `pnpm run docapi:sync`. */}
@@ -10,10 +10,10 @@ description: Change the list type (ordered, unordered) of a target list.
 
 ## Summary
 
-Change the list type (ordered, unordered) of a target list.
+Continue numbering from the nearest compatible previous list sequence.
 
-- Operation ID: `lists.setType`
-- API member path: `editor.doc.lists.setType(...)`
+- Operation ID: `lists.continuePrevious`
+- API member path: `editor.doc.lists.continuePrevious(...)`
 - Mutates document: `yes`
 - Idempotency: `conditional`
 - Supports tracked mode: `no`
@@ -22,13 +22,12 @@ Change the list type (ordered, unordered) of a target list.
 
 ## Expected result
 
-Returns a ListsMutateItemResult receipt; reports NO_OP if the list already has the requested type.
+Returns a ListsMutateItemResult receipt.
 
 ## Input fields
 
 | Field | Type | Required | Description |
 | --- | --- | --- | --- |
-| `kind` | enum | yes | `"ordered"`, `"bullet"` |
 | `target` | ListItemAddress | yes | ListItemAddress |
 | `target.kind` | `"block"` | yes | Constant: `"block"` |
 | `target.nodeId` | string | yes |  |
@@ -38,7 +37,6 @@ Returns a ListsMutateItemResult receipt; reports NO_OP if the list already has t
 
 ```json
 {
-  "kind": "ordered",
   "target": {
     "kind": "block",
     "nodeId": "node-def456",
@@ -90,8 +88,9 @@ Returns a ListsMutateItemResult receipt; reports NO_OP if the list already has t
 
 ## Non-applied failure codes
 
-- `NO_OP`
 - `INVALID_TARGET`
+- `NO_COMPATIBLE_PREVIOUS`
+- `ALREADY_CONTINUOUS`
 
 ## Raw schemas
 
@@ -100,19 +99,12 @@ Returns a ListsMutateItemResult receipt; reports NO_OP if the list already has t
 {
   "additionalProperties": false,
   "properties": {
-    "kind": {
-      "enum": [
-        "ordered",
-        "bullet"
-      ]
-    },
     "target": {
       "$ref": "#/$defs/ListItemAddress"
     }
   },
   "required": [
-    "target",
-    "kind"
+    "target"
   ],
   "type": "object"
 }
@@ -147,8 +139,9 @@ Returns a ListsMutateItemResult receipt; reports NO_OP if the list already has t
           "properties": {
             "code": {
               "enum": [
-                "NO_OP",
-                "INVALID_TARGET"
+                "INVALID_TARGET",
+                "NO_COMPATIBLE_PREVIOUS",
+                "ALREADY_CONTINUOUS"
               ]
             },
             "details": {},
@@ -208,8 +201,9 @@ Returns a ListsMutateItemResult receipt; reports NO_OP if the list already has t
       "properties": {
         "code": {
           "enum": [
-            "NO_OP",
-            "INVALID_TARGET"
+            "INVALID_TARGET",
+            "NO_COMPATIBLE_PREVIOUS",
+            "ALREADY_CONTINUOUS"
           ]
         },
         "details": {},

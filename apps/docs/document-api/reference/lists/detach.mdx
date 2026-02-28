@@ -1,7 +1,7 @@
 ---
-title: lists.indent
-sidebarTitle: lists.indent
-description: Increase the indentation level of a list item.
+title: lists.detach
+sidebarTitle: lists.detach
+description: Remove numbering properties from list items, converting them to plain paragraphs.
 ---
 
 {/* GENERATED FILE: DO NOT EDIT. Regenerate via `pnpm run docapi:sync`. */}
@@ -10,10 +10,10 @@ description: Increase the indentation level of a list item.
 
 ## Summary
 
-Increase the indentation level of a list item.
+Remove numbering properties from list items, converting them to plain paragraphs.
 
-- Operation ID: `lists.indent`
-- API member path: `editor.doc.lists.indent(...)`
+- Operation ID: `lists.detach`
+- API member path: `editor.doc.lists.detach(...)`
 - Mutates document: `yes`
 - Idempotency: `conditional`
 - Supports tracked mode: `no`
@@ -22,7 +22,7 @@ Increase the indentation level of a list item.
 
 ## Expected result
 
-Returns a ListsMutateItemResult receipt; reports NO_OP if the item is already at maximum indent level.
+Returns a ListsDetachResult confirming the item was converted to a plain paragraph.
 
 ## Input fields
 
@@ -47,14 +47,14 @@ Returns a ListsMutateItemResult receipt; reports NO_OP if the item is already at
 
 ## Output fields
 
-### Variant 1 (item.kind="block")
+### Variant 1 (paragraph.kind="block")
 
 | Field | Type | Required | Description |
 | --- | --- | --- | --- |
-| `item` | ListItemAddress | yes | ListItemAddress |
-| `item.kind` | `"block"` | yes | Constant: `"block"` |
-| `item.nodeId` | string | yes |  |
-| `item.nodeType` | `"listItem"` | yes | Constant: `"listItem"` |
+| `paragraph` | ParagraphAddress | yes | ParagraphAddress |
+| `paragraph.kind` | `"block"` | yes | Constant: `"block"` |
+| `paragraph.nodeId` | string | yes |  |
+| `paragraph.nodeType` | `"paragraph"` | yes | Constant: `"paragraph"` |
 | `success` | `true` | yes | Constant: `true` |
 
 ### Variant 2 (success=false)
@@ -62,7 +62,7 @@ Returns a ListsMutateItemResult receipt; reports NO_OP if the item is already at
 | Field | Type | Required | Description |
 | --- | --- | --- | --- |
 | `failure` | object | yes |  |
-| `failure.code` | enum | yes | `"NO_OP"`, `"INVALID_TARGET"` |
+| `failure.code` | enum | yes | `"INVALID_TARGET"` |
 | `failure.details` | any | no |  |
 | `failure.message` | string | yes |  |
 | `success` | `false` | yes | Constant: `false` |
@@ -71,10 +71,10 @@ Returns a ListsMutateItemResult receipt; reports NO_OP if the item is already at
 
 ```json
 {
-  "item": {
+  "paragraph": {
     "kind": "block",
     "nodeId": "node-def456",
-    "nodeType": "listItem"
+    "nodeType": "paragraph"
   },
   "success": true
 }
@@ -88,9 +88,7 @@ Returns a ListsMutateItemResult receipt; reports NO_OP if the item is already at
 
 ## Non-applied failure codes
 
-- `NO_OP`
 - `INVALID_TARGET`
-- `LEVEL_OUT_OF_RANGE`
 
 ## Raw schemas
 
@@ -118,8 +116,8 @@ Returns a ListsMutateItemResult receipt; reports NO_OP if the item is already at
     {
       "additionalProperties": false,
       "properties": {
-        "item": {
-          "$ref": "#/$defs/ListItemAddress"
+        "paragraph": {
+          "$ref": "#/$defs/ParagraphAddress"
         },
         "success": {
           "const": true
@@ -127,7 +125,7 @@ Returns a ListsMutateItemResult receipt; reports NO_OP if the item is already at
       },
       "required": [
         "success",
-        "item"
+        "paragraph"
       ],
       "type": "object"
     },
@@ -139,9 +137,7 @@ Returns a ListsMutateItemResult receipt; reports NO_OP if the item is already at
           "properties": {
             "code": {
               "enum": [
-                "NO_OP",
-                "INVALID_TARGET",
-                "LEVEL_OUT_OF_RANGE"
+                "INVALID_TARGET"
               ]
             },
             "details": {},
@@ -175,8 +171,8 @@ Returns a ListsMutateItemResult receipt; reports NO_OP if the item is already at
 {
   "additionalProperties": false,
   "properties": {
-    "item": {
-      "$ref": "#/$defs/ListItemAddress"
+    "paragraph": {
+      "$ref": "#/$defs/ParagraphAddress"
     },
     "success": {
       "const": true
@@ -184,7 +180,7 @@ Returns a ListsMutateItemResult receipt; reports NO_OP if the item is already at
   },
   "required": [
     "success",
-    "item"
+    "paragraph"
   ],
   "type": "object"
 }
@@ -201,9 +197,7 @@ Returns a ListsMutateItemResult receipt; reports NO_OP if the item is already at
       "properties": {
         "code": {
           "enum": [
-            "NO_OP",
-            "INVALID_TARGET",
-            "LEVEL_OUT_OF_RANGE"
+            "INVALID_TARGET"
           ]
         },
         "details": {},

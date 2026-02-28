@@ -1,0 +1,15 @@
+{
+  "name": "superdoc-laravel-example",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "build": "vite build",
+    "dev": "concurrently \"php artisan serve\" \"vite\""
+  },
+  "dependencies": {
+    "concurrently": "^9.0.0",
+    "laravel-vite-plugin": "^2.0",
+    "superdoc": "latest",
+    "vite": "^7.0.4"
+  }
+}

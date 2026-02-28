@@ -280,6 +280,11 @@ const onEditorReady = ({ editor, presentationEditor }) => {
       hasInitializedLocations.value = true;
     }
   });
+
+  presentationEditor.on('paginationUpdate', ({ layout }) => {
+    const totalPages = layout.pages.length;
+    proxy.$superdoc.emit('pagination-update', { totalPages, superdoc: proxy.$superdoc });
+  });
 };
 
 const onEditorDestroy = () => {

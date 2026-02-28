@@ -3,9 +3,11 @@ import { beforeEach, describe, expect, it, vi } from 'vitest';
 import type { Editor } from '../../core/Editor.js';
 import {
   COMMAND_CATALOG,
+  INLINE_PROPERTY_REGISTRY,
   MUTATING_OPERATION_IDS,
   OPERATION_IDS,
   buildInternalContractSchemas,
+  type InlineRunPatchKey,
   type OperationId,
 } from '@superdoc/document-api';
 import {
@@ -17,13 +19,7 @@ import { ListHelpers } from '../../core/helpers/list-numbering-helpers.js';
 import { createCommentsWrapper } from '../plan-engine/comments-wrappers.js';
 import { createParagraphWrapper, createHeadingWrapper } from '../plan-engine/create-wrappers.js';
 import { blocksDeleteWrapper } from '../plan-engine/blocks-wrappers.js';
-import { styleApplyWrapper } from '../plan-engine/plan-wrappers.js';
-import {
-  formatFontSizeWrapper,
-  formatFontFamilyWrapper,
-  formatColorWrapper,
-  formatAlignWrapper,
-} from '../plan-engine/format-value-wrappers.js';
+import { styleApplyWrapper, formatAlignWrapper } from '../plan-engine/plan-wrappers.js';
 import { stylesApplyAdapter } from '../styles-adapter.js';
 import { createTableWrapper } from '../plan-engine/create-table-wrapper.js';
 import {
@@ -65,6 +61,12 @@ import {
   tablesClearCellSpacingWrapper,
 } from '../plan-engine/tables-wrappers.js';
 import { getDocumentApiCapabilities } from '../capabilities-adapter.js';
+import {
+  tocConfigureWrapper,
+  tocUpdateWrapper,
+  tocRemoveWrapper,
+  createTableOfContentsWrapper,
+} from '../plan-engine/toc-wrappers.js';
 import {
   listsInsertWrapper,
   listsSetTypeWrapper,
@@ -1166,6 +1168,7 @@ const STUB_TABLE_OPS: ReadonlySet<OperationId> = new Set([] as OperationId[]);
  * pattern. mutations.apply returns PlanReceipt (always success: true) or throws.
  */
 const PLAN_ENGINE_META_OPS: ReadonlySet<OperationId> = new Set(['mutations.apply'] as OperationId[]);
+const NON_RECEIPT_MUTATION_OPS: ReadonlySet<OperationId> = new Set(['history.undo', 'history.redo'] as OperationId[]);
 const HAS_STRUCTURED_FAILURE_RESULT = (operationId: OperationId): boolean =>
   COMMAND_CATALOG[operationId].possibleFailureCodes.length > 0;
 
@@ -1213,6 +1216,132 @@ function expectThrowCode(operationId: OperationId, run: () => unknown): void {
 
   expect(capturedCode).toBeTruthy();
   expect(COMMAND_CATALOG[operationId].throws.preApply).toContain(capturedCode);
+}
+
+function buildFormatInlinePatch(key: InlineRunPatchKey): Record<string, unknown> {
+  // Conformance vectors verify operation-level contract semantics (throw/failure/success)
+  // across all format aliases; a stable patch keeps mock-editor dependencies minimal.
+  if (!INLINE_PROPERTY_REGISTRY.some((entry) => entry.key === key)) {
+    throw new Error(`Unknown inline property key "${key}"`);
+  }
+  return { bold: true };
+}
+
+function buildFormatInlineMutationVector(key: InlineRunPatchKey): MutationVector {
+  return {
+    throwCase: () => {
+      const { editor } = makeTextEditor();
+      return styleApplyWrapper(
+        editor,
+        {
+          target: { kind: 'text', blockId: 'missing', range: { start: 0, end: 1 } },
+          inline: buildFormatInlinePatch(key),
+        } as any,
+        { changeMode: 'direct' },
+      );
+    },
+    failureCase: () => {
+      const { editor } = makeTextEditor();
+      return styleApplyWrapper(
+        editor,
+        {
+          target: { kind: 'text', blockId: 'p1', range: { start: 2, end: 2 } },
+          inline: buildFormatInlinePatch(key),
+        } as any,
+        { changeMode: 'direct' },
+      );
+    },
+    applyCase: () => {
+      const { editor } = makeTextEditor();
+      return styleApplyWrapper(
+        editor,
+        {
+          target: { kind: 'text', blockId: 'p1', range: { start: 0, end: 5 } },
+          inline: buildFormatInlinePatch(key),
+        } as any,
+        { changeMode: 'direct' },
+      );
+    },
+  };
+}
+
+const formatInlineMutationVectors = Object.fromEntries(
+  INLINE_PROPERTY_REGISTRY.map((entry) => {
+    const operationId = `format.${entry.key}` as OperationId;
+    return [operationId, buildFormatInlineMutationVector(entry.key)];
+  }),
+) as Partial<Record<OperationId, MutationVector>>;
+
+const formatInlineDryRunVectors = Object.fromEntries(
+  INLINE_PROPERTY_REGISTRY.map((entry) => {
+    const operationId = `format.${entry.key}` as OperationId;
+    return [
+      operationId,
+      () => {
+        const { editor, dispatch } = makeTextEditor();
+        const result = styleApplyWrapper(
+          editor,
+          {
+            target: { kind: 'text', blockId: 'p1', range: { start: 0, end: 5 } },
+            inline: buildFormatInlinePatch(entry.key),
+          } as any,
+          { changeMode: 'direct', dryRun: true },
+        );
+        expect(dispatch).not.toHaveBeenCalled();
+        return result;
+      },
+    ];
+  }),
+) as Partial<Record<OperationId, () => unknown>>;
+
+function makeTocEditor(commandOverrides: Record<string, unknown> = {}): Editor {
+  const tocParagraph = createNode('paragraph', [createNode('text', [], { text: 'TOC entry' })], {
+    attrs: { sdBlockId: 'toc-entry-p1' },
+    isBlock: true,
+    inlineContent: true,
+  });
+  const tocNode = createNode('tableOfContents', [tocParagraph], {
+    attrs: { sdBlockId: 'toc-1', instruction: 'TOC \\o "1-3" \\h \\u \\z' },
+    isBlock: true,
+  });
+  const heading = createNode('paragraph', [createNode('text', [], { text: 'Heading 1' })], {
+    attrs: {
+      sdBlockId: 'h-1',
+      paragraphProperties: { styleId: 'Heading1' },
+    },
+    isBlock: true,
+    inlineContent: true,
+  });
+  const doc = createNode('doc', [tocNode, heading], { isBlock: false });
+
+  const dispatch = vi.fn();
+  const tr = {
+    insertText: vi.fn().mockReturnThis(),
+    delete: vi.fn().mockReturnThis(),
+    insert: vi.fn().mockReturnThis(),
+    setNodeMarkup: vi.fn().mockReturnThis(),
+    replaceWith: vi.fn().mockReturnThis(),
+    setMeta: vi.fn().mockReturnThis(),
+    mapping: { map: (pos: number) => pos },
+    docChanged: true,
+    steps: [{}],
+    doc,
+  };
+
+  return {
+    state: { doc, tr, schema: { nodes: { paragraph: { create: vi.fn() }, tableOfContents: {} } } },
+    dispatch,
+    commands: {
+      insertTableOfContentsAt: vi.fn(() => true),
+      setTableOfContentsInstructionById: vi.fn(() => true),
+      replaceTableOfContentsContentById: vi.fn(() => true),
+      deleteTableOfContentsById: vi.fn(() => true),
+      ...commandOverrides,
+    },
+    schema: { marks: {} },
+    options: {},
+    on: () => {},
+  } as unknown as Editor;
 }
 
 const mutationVectors: Partial<Record<OperationId, MutationVector>> = {
@@ -1338,84 +1467,7 @@ const mutationVectors: Partial<Record<OperationId, MutationVector>> = {
       );
     },
   },
-  'format.fontSize': {
-    throwCase: () => {
-      const { editor } = makeTextEditor();
-      return formatFontSizeWrapper(
-        editor,
-        { target: { kind: 'text', blockId: 'missing', range: { start: 0, end: 1 } }, value: '14pt' },
-        { changeMode: 'direct' },
-      );
-    },
-    failureCase: () => {
-      const { editor } = makeTextEditor();
-      return formatFontSizeWrapper(
-        editor,
-        { target: { kind: 'text', blockId: 'p1', range: { start: 2, end: 2 } }, value: '14pt' },
-        { changeMode: 'direct' },
-      );
-    },
-    applyCase: () => {
-      const { editor } = makeTextEditor();
-      return formatFontSizeWrapper(
-        editor,
-        { target: { kind: 'text', blockId: 'p1', range: { start: 0, end: 5 } }, value: '14pt' },
-        { changeMode: 'direct' },
-      );
-    },
-  },
-  'format.fontFamily': {
-    throwCase: () => {
-      const { editor } = makeTextEditor();
-      return formatFontFamilyWrapper(
-        editor,
-        { target: { kind: 'text', blockId: 'missing', range: { start: 0, end: 1 } }, value: 'Arial' },
-        { changeMode: 'direct' },
-      );
-    },
-    failureCase: () => {
-      const { editor } = makeTextEditor();
-      return formatFontFamilyWrapper(
-        editor,
-        { target: { kind: 'text', blockId: 'p1', range: { start: 2, end: 2 } }, value: 'Arial' },
-        { changeMode: 'direct' },
-      );
-    },
-    applyCase: () => {
-      const { editor } = makeTextEditor();
-      return formatFontFamilyWrapper(
-        editor,
-        { target: { kind: 'text', blockId: 'p1', range: { start: 0, end: 5 } }, value: 'Arial' },
-        { changeMode: 'direct' },
-      );
-    },
-  },
-  'format.color': {
-    throwCase: () => {
-      const { editor } = makeTextEditor();
-      return formatColorWrapper(
-        editor,
-        { target: { kind: 'text', blockId: 'missing', range: { start: 0, end: 1 } }, value: '#ff0000' },
-        { changeMode: 'direct' },
-      );
-    },
-    failureCase: () => {
-      const { editor } = makeTextEditor();
-      return formatColorWrapper(
-        editor,
-        { target: { kind: 'text', blockId: 'p1', range: { start: 2, end: 2 } }, value: '#ff0000' },
-        { changeMode: 'direct' },
-      );
-    },
-    applyCase: () => {
-      const { editor } = makeTextEditor();
-      return formatColorWrapper(
-        editor,
-        { target: { kind: 'text', blockId: 'p1', range: { start: 0, end: 5 } }, value: '#ff0000' },
-        { changeMode: 'direct' },
-      );
-    },
-  },
+  ...formatInlineMutationVectors,
   'format.align': {
     throwCase: () => {
       const { editor } = makeTextEditor();
@@ -2893,6 +2945,104 @@ const mutationVectors: Partial<Record<OperationId, MutationVector>> = {
       );
     },
   },
+
+  // -------------------------------------------------------------------------
+  // TOC operations
+  // -------------------------------------------------------------------------
+  'create.tableOfContents': {
+    throwCase: () => {
+      const editor = makeTocEditor({ insertTableOfContentsAt: undefined });
+      return createTableOfContentsWrapper(editor, {}, { changeMode: 'direct' });
+    },
+    failureCase: () => {
+      const editor = makeTocEditor({ insertTableOfContentsAt: vi.fn(() => false) });
+      return createTableOfContentsWrapper(editor, { at: { kind: 'documentEnd' } }, { changeMode: 'direct' });
+    },
+    applyCase: () => {
+      const editor = makeTocEditor();
+      return createTableOfContentsWrapper(editor, { at: { kind: 'documentEnd' } }, { changeMode: 'direct' });
+    },
+  },
+  'toc.configure': {
+    throwCase: () => {
+      const editor = makeTocEditor();
+      return tocConfigureWrapper(
+        editor,
+        { target: { kind: 'block', nodeType: 'tableOfContents', nodeId: 'missing' }, patch: { hyperlinks: false } },
+        { changeMode: 'direct' },
+      );
+    },
+    failureCase: () => {
+      // Patch produces no change → NO_OP
+      const editor = makeTocEditor();
+      return tocConfigureWrapper(
+        editor,
+        { target: { kind: 'block', nodeType: 'tableOfContents', nodeId: 'toc-1' }, patch: {} },
+        { changeMode: 'direct' },
+      );
+    },
+    applyCase: () => {
+      const editor = makeTocEditor();
+      return tocConfigureWrapper(
+        editor,
+        { target: { kind: 'block', nodeType: 'tableOfContents', nodeId: 'toc-1' }, patch: { hyperlinks: false } },
+        { changeMode: 'direct' },
+      );
+    },
+  },
+  'toc.update': {
+    throwCase: () => {
+      const editor = makeTocEditor();
+      return tocUpdateWrapper(
+        editor,
+        { target: { kind: 'block', nodeType: 'tableOfContents', nodeId: 'missing' } },
+        { changeMode: 'direct' },
+      );
+    },
+    failureCase: () => {
+      // Update with no heading sources and command returns false
+      const editor = makeTocEditor({ replaceTableOfContentsContentById: vi.fn(() => false) });
+      return tocUpdateWrapper(
+        editor,
+        { target: { kind: 'block', nodeType: 'tableOfContents', nodeId: 'toc-1' } },
+        { changeMode: 'direct' },
+      );
+    },
+    applyCase: () => {
+      const editor = makeTocEditor();
+      return tocUpdateWrapper(
+        editor,
+        { target: { kind: 'block', nodeType: 'tableOfContents', nodeId: 'toc-1' } },
+        { changeMode: 'direct' },
+      );
+    },
+  },
+  'toc.remove': {
+    throwCase: () => {
+      const editor = makeTocEditor();
+      return tocRemoveWrapper(
+        editor,
+        { target: { kind: 'block', nodeType: 'tableOfContents', nodeId: 'missing' } },
+        { changeMode: 'direct' },
+      );
+    },
+    failureCase: () => {
+      const editor = makeTocEditor({ deleteTableOfContentsById: vi.fn(() => false) });
+      return tocRemoveWrapper(
+        editor,
+        { target: { kind: 'block', nodeType: 'tableOfContents', nodeId: 'toc-1' } },
+        { changeMode: 'direct' },
+      );
+    },
+    applyCase: () => {
+      const editor = makeTocEditor();
+      return tocRemoveWrapper(
+        editor,
+        { target: { kind: 'block', nodeType: 'tableOfContents', nodeId: 'toc-1' } },
+        { changeMode: 'direct' },
+      );
+    },
+  },
 };
 
 const dryRunVectors: Partial<Record<OperationId, () => unknown>> = {
@@ -2951,36 +3101,7 @@ const dryRunVectors: Partial<Record<OperationId, () => unknown>> = {
     expect(tr.addMark).not.toHaveBeenCalled();
     return result;
   },
-  'format.fontSize': () => {
-    const { editor, dispatch } = makeTextEditor();
-    const result = formatFontSizeWrapper(
-      editor,
-      { target: { kind: 'text', blockId: 'p1', range: { start: 0, end: 5 } }, value: '14pt' },
-      { changeMode: 'direct', dryRun: true },
-    );
-    expect(dispatch).not.toHaveBeenCalled();
-    return result;
-  },
-  'format.fontFamily': () => {
-    const { editor, dispatch } = makeTextEditor();
-    const result = formatFontFamilyWrapper(
-      editor,
-      { target: { kind: 'text', blockId: 'p1', range: { start: 0, end: 5 } }, value: 'Arial' },
-      { changeMode: 'direct', dryRun: true },
-    );
-    expect(dispatch).not.toHaveBeenCalled();
-    return result;
-  },
-  'format.color': () => {
-    const { editor, dispatch } = makeTextEditor();
-    const result = formatColorWrapper(
-      editor,
-      { target: { kind: 'text', blockId: 'p1', range: { start: 0, end: 5 } }, value: '#ff0000' },
-      { changeMode: 'direct', dryRun: true },
-    );
-    expect(dispatch).not.toHaveBeenCalled();
-    return result;
-  },
+  ...formatInlineDryRunVectors,
   'format.align': () => {
     const { editor, dispatch } = makeTextEditor();
     const result = formatAlignWrapper(
@@ -3679,6 +3800,54 @@ const dryRunVectors: Partial<Record<OperationId, () => unknown>> = {
     expect(dispatch).not.toHaveBeenCalled();
     return result;
   },
+
+  // -------------------------------------------------------------------------
+  // TOC operations — dryRun vectors
+  // -------------------------------------------------------------------------
+  'create.tableOfContents': () => {
+    const insertTableOfContentsAt = vi.fn(() => true);
+    const editor = makeTocEditor({ insertTableOfContentsAt });
+    const result = createTableOfContentsWrapper(
+      editor,
+      { at: { kind: 'documentEnd' } },
+      { changeMode: 'direct', dryRun: true },
+    );
+    expect(insertTableOfContentsAt).not.toHaveBeenCalled();
+    return result;
+  },
+  'toc.configure': () => {
+    const setInstr = vi.fn(() => true);
+    const editor = makeTocEditor({ setTableOfContentsInstructionById: setInstr });
+    const result = tocConfigureWrapper(
+      editor,
+      { target: { kind: 'block', nodeType: 'tableOfContents', nodeId: 'toc-1' }, patch: { hyperlinks: false } },
+      { changeMode: 'direct', dryRun: true },
+    );
+    expect(setInstr).not.toHaveBeenCalled();
+    return result;
+  },
+  'toc.update': () => {
+    const replaceContent = vi.fn(() => true);
+    const editor = makeTocEditor({ replaceTableOfContentsContentById: replaceContent });
+    const result = tocUpdateWrapper(
+      editor,
+      { target: { kind: 'block', nodeType: 'tableOfContents', nodeId: 'toc-1' } },
+      { changeMode: 'direct', dryRun: true },
+    );
+    expect(replaceContent).not.toHaveBeenCalled();
+    return result;
+  },
+  'toc.remove': () => {
+    const deleteById = vi.fn(() => true);
+    const editor = makeTocEditor({ deleteTableOfContentsById: deleteById });
+    const result = tocRemoveWrapper(
+      editor,
+      { target: { kind: 'block', nodeType: 'tableOfContents', nodeId: 'toc-1' } },
+      { changeMode: 'direct', dryRun: true },
+    );
+    expect(deleteById).not.toHaveBeenCalled();
+    return result;
+  },
 };
 
 beforeEach(() => {
@@ -3702,9 +3871,11 @@ describe('document-api adapter conformance', () => {
 
       if (!COMMAND_CATALOG[operationId].mutates) continue;
       expect(COMMAND_CATALOG[operationId].throws.postApplyForbidden).toBe(true);
-      expect(schema.success).toBeDefined();
+      if (!NON_RECEIPT_MUTATION_OPS.has(operationId)) {
+        expect(schema.success).toBeDefined();
+      }
       // Plan-engine meta-ops (mutations.apply) return PlanReceipt (always success) or throw — no failure schema.
-      if (!PLAN_ENGINE_META_OPS.has(operationId)) {
+      if (!PLAN_ENGINE_META_OPS.has(operationId) && !NON_RECEIPT_MUTATION_OPS.has(operationId)) {
         expect(schema.failure).toBeDefined();
       }
     }
@@ -3713,7 +3884,7 @@ describe('document-api adapter conformance', () => {
   it('covers every implemented mutating operation with throw/failure/apply vectors', () => {
     const vectorKeys = Object.keys(mutationVectors).sort();
     const expectedKeys = [...MUTATING_OPERATION_IDS]
-      .filter((id) => !STUB_TABLE_OPS.has(id) && !PLAN_ENGINE_META_OPS.has(id))
+      .filter((id) => !STUB_TABLE_OPS.has(id) && !PLAN_ENGINE_META_OPS.has(id) && !NON_RECEIPT_MUTATION_OPS.has(id))
       .sort();
     expect(vectorKeys).toEqual(expectedKeys);
 
@@ -3747,7 +3918,7 @@ describe('document-api adapter conformance', () => {
 
   it('enforces pre-apply throw behavior for every mutating operation', () => {
     const implementedMutatingOps = MUTATING_OPERATION_IDS.filter(
-      (id) => !STUB_TABLE_OPS.has(id) && !PLAN_ENGINE_META_OPS.has(id),
+      (id) => !STUB_TABLE_OPS.has(id) && !PLAN_ENGINE_META_OPS.has(id) && !NON_RECEIPT_MUTATION_OPS.has(id),
     );
     for (const operationId of implementedMutatingOps) {
       const vector = mutationVectors[operationId];
@@ -3758,7 +3929,11 @@ describe('document-api adapter conformance', () => {
 
   it('enforces structured non-applied outcomes for every mutating operation', () => {
     const implementedMutatingOps = MUTATING_OPERATION_IDS.filter(
-      (id) => !STUB_TABLE_OPS.has(id) && !PLAN_ENGINE_META_OPS.has(id) && HAS_STRUCTURED_FAILURE_RESULT(id),
+      (id) =>
+        !STUB_TABLE_OPS.has(id) &&
+        !PLAN_ENGINE_META_OPS.has(id) &&
+        !NON_RECEIPT_MUTATION_OPS.has(id) &&
+        HAS_STRUCTURED_FAILURE_RESULT(id),
     );
     for (const operationId of implementedMutatingOps) {
       const vector = mutationVectors[operationId];
@@ -3774,7 +3949,7 @@ describe('document-api adapter conformance', () => {
 
   it('enforces no post-apply throws across every mutating operation', () => {
     const implementedMutatingOps = MUTATING_OPERATION_IDS.filter(
-      (id) => !STUB_TABLE_OPS.has(id) && !PLAN_ENGINE_META_OPS.has(id),
+      (id) => !STUB_TABLE_OPS.has(id) && !PLAN_ENGINE_META_OPS.has(id) && !NON_RECEIPT_MUTATION_OPS.has(id),
     );
     for (const operationId of implementedMutatingOps) {
       const vector = mutationVectors[operationId]!;

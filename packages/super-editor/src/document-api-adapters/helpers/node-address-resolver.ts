@@ -4,6 +4,7 @@ import type { BlockNodeAttributes } from '../../core/types/NodeCategories.js';
 import type { BlockNodeAddress, BlockNodeType, NodeAddress, NodeType } from '@superdoc/document-api';
 import type { ParagraphAttrs } from '../../extensions/types/node-attributes.js';
 import { toId } from './value-utils.js';
+import { resolvePublicTocNodeId } from './toc-node-id.js';
 import { DocumentApiAdapterError } from '../errors.js';
 
 /** Superset of all possible ID attributes across block node types. */
@@ -43,6 +44,7 @@ const SUPPORTED_BLOCK_NODE_TYPES: ReadonlySet<BlockNodeType> = new Set<BlockNode
   'table',
   'tableRow',
   'tableCell',
+  'tableOfContents',
   'image',
   'sdt',
 ]);
@@ -98,6 +100,8 @@ export function mapBlockNodeType(node: ProseMirrorNode): BlockNodeType | undefin
       return 'tableCell';
     case 'image':
       return 'image';
+    case 'tableOfContents':
+      return 'tableOfContents';
     case 'structuredContentBlock':
     case 'sdt':
       return 'sdt';
@@ -106,13 +110,17 @@ export function mapBlockNodeType(node: ProseMirrorNode): BlockNodeType | undefin
   }
 }
 
-function resolveBlockNodeId(node: ProseMirrorNode): string | undefined {
+function resolveBlockNodeId(node: ProseMirrorNode, pos: number, nodeType: BlockNodeType): string | undefined {
   if (node.type.name === 'paragraph') {
     const attrs = node.attrs as ParagraphAttrs | undefined;
     // paraId (imported from DOCX) is the primary identity for paragraphs. This
     // preserves historical IDs across DOCX round-trips, while sdBlockId remains
     // a fallback for freshly created nodes.
     return toId(attrs?.paraId) ?? toId(attrs?.sdBlockId);
+  }
+
+  if (nodeType === 'tableOfContents') {
+    return resolvePublicTocNodeId(node, pos);
   }
 
   const attrs = (node.attrs ?? {}) as BlockIdAttrs;
@@ -201,7 +209,7 @@ export function buildBlockIndex(editor: Editor): BlockIndex {
   editor.state.doc.descendants((node, pos) => {
     const nodeType = mapBlockNodeType(node);
     if (!nodeType) return;
-    const nodeId = resolveBlockNodeId(node);
+    const nodeId = resolveBlockNodeId(node, pos, nodeType);
     if (!nodeId) return;
 
     const candidate: BlockCandidate = {

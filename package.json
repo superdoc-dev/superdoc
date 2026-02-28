@@ -12,6 +12,7 @@
     "test:all": "vitest run",
     "test:editor": "vitest run --root ./packages/super-editor",
     "test:superdoc": "vitest run --root ./packages/superdoc",
+    "pretest:doc-api-stories": "pnpm run generate:all",
     "test:doc-api-stories": "pnpm --silent --filter @superdoc-testing/doc-api-stories test",
     "test:cov": "node scripts/test-cov.mjs",
     "pretest:behavior": "node scripts/free-port.mjs 9990",

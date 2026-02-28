@@ -1037,7 +1037,11 @@ export function clickToPosition(
     const { fragment, block, measure, pageIndex, pageY } = fragmentHit;
     // Handle paragraph fragments
     if (fragment.kind === 'para' && measure.kind === 'paragraph' && block.kind === 'paragraph') {
-      const lineIndex = findLineIndexAtY(measure, pageY, fragment.fromLine, fragment.toLine);
+      // Use fragment-specific lines when available (remeasured for column width),
+      // otherwise slice from measure.lines for this fragment's range.
+      const lines = fragment.lines ?? measure.lines.slice(fragment.fromLine, fragment.toLine);
+
+      const lineIndex = findLineIndexAtY(lines, pageY, 0, lines.length);
       if (lineIndex == null) {
         logClickStage('warn', 'no-line', {
           blockId: fragment.blockId,
@@ -1046,7 +1050,8 @@ export function clickToPosition(
         });
         return null;
       }
-      const line = measure.lines[lineIndex];
+
+      const line = lines[lineIndex];
 
       const isRTL = isRtlBlock(block);
       // Type guard: Validate indent structure and ensure numeric values
@@ -1155,7 +1160,7 @@ export function clickToPosition(
     const { cellBlock, cellMeasure, localX, localY, pageIndex } = tableHit;
 
     // Find the line at the local Y position within the cell paragraph
-    const lineIndex = findLineIndexAtY(cellMeasure, localY, 0, cellMeasure.lines.length);
+    const lineIndex = findLineIndexAtY(cellMeasure.lines, localY, 0, cellMeasure.lines.length);
     if (lineIndex != null) {
       const line = cellMeasure.lines[lineIndex];
       const isRTL = isRtlBlock(cellBlock);
@@ -2151,13 +2156,13 @@ const determineColumn = (layout: Layout, fragmentX: number): number => {
 };
 
 /**
- * Finds the line index at a given Y offset within a paragraph measure.
+ * Finds the line index at a given Y offset within a set of lines.
  *
  * This function searches within a specified range of lines to determine which line
  * contains the given Y coordinate. It validates bounds to prevent out-of-bounds
  * access in case of corrupted layout data.
  *
- * @param measure - The paragraph measure containing line data
+ * @param lines - The array of lines to search through
  * @param offsetY - The Y offset in pixels to search for
  * @param fromLine - The starting line index (inclusive)
  * @param toLine - The ending line index (exclusive)
@@ -2165,29 +2170,29 @@ const determineColumn = (layout: Layout, fragmentX: number): number => {
  *
  * @throws Never throws - returns null for invalid inputs
  */
-const findLineIndexAtY = (measure: Measure, offsetY: number, fromLine: number, toLine: number): number | null => {
-  if (measure.kind !== 'paragraph') return null;
+const findLineIndexAtY = (lines: Line[], offsetY: number, fromLine: number, toLine: number): number | null => {
+  if (!lines || lines.length === 0) return null;
 
   // Validate bounds to prevent out-of-bounds access
-  const lineCount = measure.lines.length;
+  const lineCount = lines.length;
   if (fromLine < 0 || toLine > lineCount || fromLine >= toLine) {
     return null;
   }
 
   let cursor = 0;
-  // Only search within the fragment's line range
+  // Only search within the specified line range
   for (let i = fromLine; i < toLine; i += 1) {
-    const line = measure.lines[i];
+    const line = lines[i];
     // Guard against undefined lines (defensive check for corrupted data)
     if (!line) return null;
 
     const next = cursor + line.lineHeight;
     if (offsetY >= cursor && offsetY < next) {
-      return i; // Return absolute line index within measure
+      return i; // Return line index within the array
     }
     cursor = next;
   }
-  // If beyond all lines, return the last line in the fragment
+  // If beyond all lines, return the last line in the range
   return toLine - 1;
 };
 

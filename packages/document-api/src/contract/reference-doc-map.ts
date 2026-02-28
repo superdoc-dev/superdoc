@@ -91,6 +91,11 @@ const GROUP_METADATA: Record<ReferenceGroupKey, { title: string; description: st
     description: 'Undo/redo history state and navigation.',
     pagePath: 'history/index.mdx',
   },
+  toc: {
+    title: 'Table of Contents',
+    description: 'Table of contents lifecycle and configuration.',
+    pagePath: 'toc/index.mdx',
+  },
 };
 
 export const REFERENCE_OPERATION_GROUPS: readonly ReferenceOperationGroupDefinition[] = (

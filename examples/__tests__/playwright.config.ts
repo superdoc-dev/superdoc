@@ -21,11 +21,14 @@ const examplePath = isGettingStarted
 const useConcurrently = [
   'collaboration/hocuspocus',
   'collaboration/superdoc-yjs',
+  'laravel',
 ];
 
 // Port mapping — must match vite.config or server defaults
 const portMap: Record<string, number> = {
   cdn: 3000,
+  nuxt: 3000,
+  laravel: 8000,
   'collaboration/hocuspocus': 3000,
 };
 const port = portMap[example] ?? 5173;

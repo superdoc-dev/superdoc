@@ -16,7 +16,7 @@ import { resolve, dirname } from 'node:path';
 import { createHash } from 'node:crypto';
 import { tmpdir } from 'node:os';
 
-import { COMMAND_CATALOG } from '@superdoc/document-api';
+import { COMMAND_CATALOG, INLINE_PROPERTY_REGISTRY } from '@superdoc/document-api';
 
 import { CLI_OPERATION_METADATA } from '../src/cli/operation-params';
 import {
@@ -60,9 +60,12 @@ const INTENT_NAMES = {
   'doc.delete': 'delete_content',
   'doc.blocks.delete': 'delete_block',
   'doc.format.apply': 'format_apply',
-  'doc.format.fontSize': 'format_font_size',
-  'doc.format.fontFamily': 'format_font_family',
-  'doc.format.color': 'format_color',
+  ...Object.fromEntries(
+    INLINE_PROPERTY_REGISTRY.map((entry) => [
+      `doc.format.${entry.key}`,
+      `format_${entry.key.replace(/[A-Z]/g, (char) => `_${char.toLowerCase()}`)}`,
+    ]),
+  ),
   'doc.format.align': 'format_align',
   'doc.styles.apply': 'styles_apply',
   'doc.create.paragraph': 'create_paragraph',
@@ -86,6 +89,7 @@ const INTENT_NAMES = {
   'doc.sections.setLinkToPrevious': 'set_section_link_to_previous',
   'doc.sections.setPageBorders': 'set_section_page_borders',
   'doc.sections.clearPageBorders': 'clear_section_page_borders',
+  'doc.create.tableOfContents': 'create_table_of_contents',
   'doc.lists.list': 'list_lists',
   'doc.lists.get': 'get_list',
   'doc.lists.insert': 'insert_list',
@@ -102,6 +106,11 @@ const INTENT_NAMES = {
   'doc.trackChanges.list': 'list_tracked_changes',
   'doc.trackChanges.get': 'get_tracked_change',
   'doc.trackChanges.decide': 'decide_tracked_change',
+  'doc.toc.list': 'list_table_of_contents',
+  'doc.toc.get': 'get_table_of_contents',
+  'doc.toc.configure': 'configure_table_of_contents',
+  'doc.toc.update': 'update_table_of_contents',
+  'doc.toc.remove': 'remove_table_of_contents',
   'doc.query.match': 'query_match',
   'doc.mutations.preview': 'preview_mutations',
   'doc.mutations.apply': 'apply_mutations',

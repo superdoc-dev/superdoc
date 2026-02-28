@@ -1,6 +1,7 @@
 import type { CliOperationId } from '../../cli';
 import { CLI_OPERATION_COMMAND_KEYS } from '../../cli';
 import type { ConformanceHarness } from './harness';
+import { INLINE_PROPERTY_REGISTRY } from '@superdoc/document-api';
 
 export type ScenarioInvocation = {
   stateDir: string;
@@ -138,6 +139,99 @@ function sectionMutationScenario(
   };
 }
 
+type InlineAliasKey = (typeof INLINE_PROPERTY_REGISTRY)[number]['key'];
+type FormatInlineAliasCliOperationId = `doc.format.${InlineAliasKey}`;
+
+function sampleInlineAliasValue(key: InlineAliasKey): unknown {
+  switch (key) {
+    case 'underline':
+      return true;
+    case 'vertAlign':
+      return 'superscript';
+    case 'shading':
+      return { fill: 'FFFF00' };
+    case 'border':
+      return { val: 'single' };
+    case 'fitText':
+      return { val: 12 };
+    case 'lang':
+      return { val: 'en-US' };
+    case 'rFonts':
+      return { ascii: 'Calibri', hAnsi: 'Calibri' };
+    case 'eastAsianLayout':
+      return { vert: true };
+    case 'stylisticSets':
+      return [{ id: 1, val: true }];
+    case 'rStyle':
+      return 'DefaultParagraphFont';
+    case 'color':
+      return '#FF0000';
+    case 'highlight':
+      return 'yellow';
+    case 'em':
+      return 'dot';
+    case 'ligatures':
+      return 'standard';
+    case 'numForm':
+      return 'lining';
+    case 'numSpacing':
+      return 'proportional';
+    case 'fontSize':
+    case 'fontSizeCs':
+      return 14;
+    case 'letterSpacing':
+      return 0.5;
+    case 'position':
+      return 1;
+    case 'charScale':
+      return 100;
+    case 'kerning':
+      return 8;
+    default: {
+      const entry = INLINE_PROPERTY_REGISTRY.find((candidate) => candidate.key === key);
+      if (!entry) throw new Error(`Unknown inline alias key: ${key}`);
+      if (entry.type === 'boolean') return true;
+      if (entry.type === 'number') return 1;
+      if (entry.type === 'string') return 'on';
+      if (entry.type === 'array') return [{ id: 1, val: true }];
+      return { val: 'on' };
+    }
+  }
+}
+
+function formatInlineAliasSuccessScenario(
+  operationId: FormatInlineAliasCliOperationId,
+): (harness: ConformanceHarness) => Promise<ScenarioInvocation> {
+  return async (harness: ConformanceHarness): Promise<ScenarioInvocation> => {
+    const key = operationId.slice('doc.format.'.length) as InlineAliasKey;
+    const stateDir = await harness.createStateDir(`${operationId.replace(/\./g, '-')}-success`);
+    const docPath = await harness.copyFixtureDoc(`${operationId.replace(/\./g, '-')}`);
+    const target = await harness.firstTextRange(docPath, stateDir);
+    return {
+      stateDir,
+      args: [
+        ...commandTokens(operationId),
+        docPath,
+        '--target-json',
+        JSON.stringify(target),
+        '--value-json',
+        JSON.stringify(sampleInlineAliasValue(key)),
+        '--out',
+        harness.createOutputPath(`${operationId.replace(/\./g, '-')}-output`),
+      ],
+    };
+  };
+}
+
+const FORMAT_INLINE_ALIAS_SUCCESS_SCENARIOS: Record<
+  FormatInlineAliasCliOperationId,
+  (harness: ConformanceHarness) => Promise<ScenarioInvocation>
+> = Object.fromEntries(
+  INLINE_PROPERTY_REGISTRY.map((entry) => {
+    const operationId = `doc.format.${entry.key}` as FormatInlineAliasCliOperationId;
+    return [operationId, formatInlineAliasSuccessScenario(operationId)];
+  }),
+) as Record<FormatInlineAliasCliOperationId, (harness: ConformanceHarness) => Promise<ScenarioInvocation>>;
 // ---------------------------------------------------------------------------
 // Table scenario helpers (DRY builders for the 40 table operations)
 // ---------------------------------------------------------------------------
@@ -236,6 +330,43 @@ function tableScopedMutationScenario(
         '--out',
         harness.createOutputPath(`${label}-out`),
       ],
+    };
+  };
+}
+
+function tocMutationScenario(
+  op: string,
+  extraArgs: string[],
+): (harness: ConformanceHarness) => Promise<ScenarioInvocation> {
+  return async (harness) => {
+    const label = `toc-${op.replace(/\./g, '-')}`;
+    const stateDir = await harness.createStateDir(`${label}-success`);
+    const docPath = await harness.copyTocFixtureDoc(`${label}-source`, stateDir);
+    const tocTarget = await harness.firstTocAddress(docPath, stateDir);
+    return {
+      stateDir,
+      args: [
+        ...commandTokens(`doc.${op}` as CliOperationId),
+        docPath,
+        '--target-json',
+        JSON.stringify(tocTarget),
+        ...extraArgs,
+        '--out',
+        harness.createOutputPath(`${label}-out`),
+      ],
+    };
+  };
+}
+
+function tocReadWithTargetScenario(op: string): (harness: ConformanceHarness) => Promise<ScenarioInvocation> {
+  return async (harness) => {
+    const label = `toc-${op.replace(/\./g, '-')}`;
+    const stateDir = await harness.createStateDir(`${label}-success`);
+    const docPath = await harness.copyTocFixtureDoc(`${label}-source`, stateDir);
+    const tocTarget = await harness.firstTocAddress(docPath, stateDir);
+    return {
+      stateDir,
+      args: [...commandTokens(`doc.${op}` as CliOperationId), docPath, '--target-json', JSON.stringify(tocTarget)],
     };
   };
 }
@@ -485,6 +616,23 @@ export const SUCCESS_SCENARIOS = {
         JSON.stringify({ level: 1, text: 'Conformance heading text' }),
         '--out',
         harness.createOutputPath('doc-create-heading-output'),
+      ],
+    };
+  },
+  'doc.create.tableOfContents': async (harness: ConformanceHarness): Promise<ScenarioInvocation> => {
+    const stateDir = await harness.createStateDir('doc-create-toc-success');
+    const docPath = await harness.copyFixtureDoc('doc-create-toc');
+    return {
+      stateDir,
+      args: [
+        ...commandTokens('doc.create.tableOfContents'),
+        docPath,
+        '--at-json',
+        JSON.stringify({ kind: 'documentStart' }),
+        '--config-json',
+        JSON.stringify({ hyperlinks: true, outlineLevels: { from: 1, to: 3 } }),
+        '--out',
+        harness.createOutputPath('doc-create-toc-output'),
       ],
     };
   },
@@ -988,69 +1136,13 @@ export const SUCCESS_SCENARIOS = {
         '--target-json',
         JSON.stringify(target),
         '--inline-json',
-        JSON.stringify({ bold: 'on' }),
+        JSON.stringify({ bold: true }),
         '--out',
         harness.createOutputPath('doc-style-apply-output'),
       ],
     };
   },
-  'doc.format.fontSize': async (harness: ConformanceHarness): Promise<ScenarioInvocation> => {
-    const stateDir = await harness.createStateDir('doc-format-font-size-success');
-    const docPath = await harness.copyFixtureDoc('doc-format-font-size');
-    const target = await harness.firstTextRange(docPath, stateDir);
-    return {
-      stateDir,
-      args: [
-        'format',
-        'font-size',
-        docPath,
-        '--target-json',
-        JSON.stringify(target),
-        '--value-json',
-        JSON.stringify('14pt'),
-        '--out',
-        harness.createOutputPath('doc-format-font-size-output'),
-      ],
-    };
-  },
-  'doc.format.fontFamily': async (harness: ConformanceHarness): Promise<ScenarioInvocation> => {
-    const stateDir = await harness.createStateDir('doc-format-font-family-success');
-    const docPath = await harness.copyFixtureDoc('doc-format-font-family');
-    const target = await harness.firstTextRange(docPath, stateDir);
-    return {
-      stateDir,
-      args: [
-        'format',
-        'font-family',
-        docPath,
-        '--target-json',
-        JSON.stringify(target),
-        '--value-json',
-        JSON.stringify('Arial'),
-        '--out',
-        harness.createOutputPath('doc-format-font-family-output'),
-      ],
-    };
-  },
-  'doc.format.color': async (harness: ConformanceHarness): Promise<ScenarioInvocation> => {
-    const stateDir = await harness.createStateDir('doc-format-color-success');
-    const docPath = await harness.copyFixtureDoc('doc-format-color');
-    const target = await harness.firstTextRange(docPath, stateDir);
-    return {
-      stateDir,
-      args: [
-        'format',
-        'color',
-        docPath,
-        '--target-json',
-        JSON.stringify(target),
-        '--value-json',
-        JSON.stringify('#ff0000'),
-        '--out',
-        harness.createOutputPath('doc-format-color-output'),
-      ],
-    };
-  },
+  ...FORMAT_INLINE_ALIAS_SUCCESS_SCENARIOS,
   'doc.format.align': async (harness: ConformanceHarness): Promise<ScenarioInvocation> => {
     const stateDir = await harness.createStateDir('doc-format-align-success');
     const docPath = await harness.copyFixtureDoc('doc-format-align');
@@ -1122,6 +1214,18 @@ export const SUCCESS_SCENARIOS = {
       ],
     };
   },
+  'doc.toc.list': async (harness: ConformanceHarness): Promise<ScenarioInvocation> => {
+    const stateDir = await harness.createStateDir('doc-toc-list-success');
+    const docPath = await harness.copyTocFixtureDoc('doc-toc-list', stateDir);
+    return {
+      stateDir,
+      args: [...commandTokens('doc.toc.list'), docPath, '--limit', '1'],
+    };
+  },
+  'doc.toc.get': tocReadWithTargetScenario('toc.get'),
+  'doc.toc.configure': tocMutationScenario('toc.configure', ['--patch-json', JSON.stringify({ hyperlinks: false })]),
+  'doc.toc.update': tocMutationScenario('toc.update', []),
+  'doc.toc.remove': tocMutationScenario('toc.remove', []),
   'doc.session.list': async (harness: ConformanceHarness): Promise<ScenarioInvocation> => {
     const stateDir = await harness.createStateDir('doc-session-list-success');
     await harness.openSessionFixture(stateDir, 'doc-session-list', 'session-list-success');

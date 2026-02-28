@@ -12,6 +12,21 @@
 import { COMMAND_CATALOG } from '@superdoc/document-api';
 import type { CliExposedOperationId } from './operation-set.js';
 
+type FormatOperationId = Extract<CliExposedOperationId, `format.${string}`>;
+type FormatInlineAliasOperationId = Exclude<FormatOperationId, 'format.apply' | 'format.align'>;
+
+const FORMAT_INLINE_ALIAS_OPERATION_IDS = (Object.keys(COMMAND_CATALOG) as CliExposedOperationId[]).filter(
+  (operationId): operationId is FormatInlineAliasOperationId =>
+    operationId.startsWith('format.') && operationId !== 'format.apply' && operationId !== 'format.align',
+);
+
+function buildFormatInlineAliasRecord<T>(value: T): Record<FormatInlineAliasOperationId, T> {
+  return Object.fromEntries(FORMAT_INLINE_ALIAS_OPERATION_IDS.map((operationId) => [operationId, value])) as Record<
+    FormatInlineAliasOperationId,
+    T
+  >;
+}
+
 // ---------------------------------------------------------------------------
 // Orchestration kind (derived from COMMAND_CATALOG)
 // ---------------------------------------------------------------------------
@@ -37,13 +52,12 @@ export const SUCCESS_VERB: Record<CliExposedOperationId, string> = {
   delete: 'deleted text',
   'blocks.delete': 'deleted block',
   'format.apply': 'applied style',
-  'format.fontSize': 'set font size',
-  'format.fontFamily': 'set font family',
-  'format.color': 'set text color',
   'format.align': 'set alignment',
+  ...buildFormatInlineAliasRecord('applied style'),
   'styles.apply': 'applied stylesheet defaults',
   'create.paragraph': 'created paragraph',
   'create.heading': 'created heading',
+  'create.tableOfContents': 'created table of contents',
   'lists.list': 'listed items',
   'lists.get': 'resolved list item',
   'lists.insert': 'inserted list item',
@@ -60,6 +74,11 @@ export const SUCCESS_VERB: Record<CliExposedOperationId, string> = {
   'trackChanges.list': 'listed tracked changes',
   'trackChanges.get': 'resolved tracked change',
   'trackChanges.decide': 'reviewed tracked change',
+  'toc.list': 'listed tables of contents',
+  'toc.get': 'resolved table of contents',
+  'toc.configure': 'configured table of contents',
+  'toc.update': 'updated table of contents',
+  'toc.remove': 'removed table of contents',
   'query.match': 'matched selectors',
   'mutations.preview': 'previewed mutations',
   'mutations.apply': 'applied mutations',
@@ -146,13 +165,12 @@ export const OUTPUT_FORMAT: Record<CliExposedOperationId, OutputFormat> = {
   delete: 'mutationReceipt',
   'blocks.delete': 'plain',
   'format.apply': 'mutationReceipt',
-  'format.fontSize': 'mutationReceipt',
-  'format.fontFamily': 'mutationReceipt',
-  'format.color': 'mutationReceipt',
   'format.align': 'mutationReceipt',
+  ...buildFormatInlineAliasRecord('mutationReceipt'),
   'styles.apply': 'receipt',
   'create.paragraph': 'createResult',
   'create.heading': 'createResult',
+  'create.tableOfContents': 'createResult',
   'lists.list': 'listResult',
   'lists.get': 'listItemInfo',
   'lists.insert': 'listsMutationResult',
@@ -169,6 +187,11 @@ export const OUTPUT_FORMAT: Record<CliExposedOperationId, OutputFormat> = {
   'trackChanges.list': 'trackChangeList',
   'trackChanges.get': 'trackChangeInfo',
   'trackChanges.decide': 'trackChangeMutationReceipt',
+  'toc.list': 'plain',
+  'toc.get': 'plain',
+  'toc.configure': 'plain',
+  'toc.update': 'plain',
+  'toc.remove': 'plain',
   'query.match': 'plain',
   'mutations.preview': 'plain',
   'mutations.apply': 'plain',
@@ -239,13 +262,12 @@ export const RESPONSE_ENVELOPE_KEY: Record<CliExposedOperationId, string | null>
   delete: null,
   'blocks.delete': 'result',
   'format.apply': null,
-  'format.fontSize': null,
-  'format.fontFamily': null,
-  'format.color': null,
   'format.align': null,
+  ...buildFormatInlineAliasRecord(null),
   'styles.apply': 'receipt',
   'create.paragraph': 'result',
   'create.heading': 'result',
+  'create.tableOfContents': 'result',
   'lists.list': 'result',
   'lists.get': 'item',
   'lists.insert': 'result',
@@ -262,6 +284,11 @@ export const RESPONSE_ENVELOPE_KEY: Record<CliExposedOperationId, string | null>
   'trackChanges.list': 'result',
   'trackChanges.get': 'change',
   'trackChanges.decide': 'receipt',
+  'toc.list': 'result',
+  'toc.get': 'result',
+  'toc.configure': 'result',
+  'toc.update': 'result',
+  'toc.remove': 'result',
   'query.match': 'result',
   'mutations.preview': 'result',
   'mutations.apply': 'result',
@@ -326,10 +353,8 @@ export const RESPONSE_VALIDATION_KEY: Partial<Record<CliExposedOperationId, stri
   replace: 'receipt',
   delete: 'receipt',
   'format.apply': 'receipt',
-  'format.fontSize': 'receipt',
-  'format.fontFamily': 'receipt',
-  'format.color': 'receipt',
   'format.align': 'receipt',
+  ...buildFormatInlineAliasRecord('receipt'),
 };
 
 // ---------------------------------------------------------------------------
@@ -345,6 +370,7 @@ export type OperationFamily =
   | 'comments'
   | 'lists'
   | 'tables'
+  | 'toc'
   | 'textMutation'
   | 'create'
   | 'blocks'
@@ -362,13 +388,12 @@ export const OPERATION_FAMILY: Record<CliExposedOperationId, OperationFamily> = 
   delete: 'textMutation',
   'blocks.delete': 'blocks',
   'format.apply': 'textMutation',
-  'format.fontSize': 'textMutation',
-  'format.fontFamily': 'textMutation',
-  'format.color': 'textMutation',
   'format.align': 'textMutation',
+  ...buildFormatInlineAliasRecord('textMutation'),
   'styles.apply': 'general',
   'create.paragraph': 'create',
   'create.heading': 'create',
+  'create.tableOfContents': 'create',
   'lists.list': 'lists',
   'lists.get': 'lists',
   'lists.insert': 'lists',
@@ -385,6 +410,11 @@ export const OPERATION_FAMILY: Record<CliExposedOperationId, OperationFamily> = 
   'trackChanges.list': 'trackChanges',
   'trackChanges.get': 'trackChanges',
   'trackChanges.decide': 'trackChanges',
+  'toc.list': 'query',
+  'toc.get': 'query',
+  'toc.configure': 'toc',
+  'toc.update': 'toc',
+  'toc.remove': 'toc',
   'query.match': 'query',
   'mutations.preview': 'general',
   'mutations.apply': 'general',

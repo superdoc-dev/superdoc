@@ -71,7 +71,11 @@ function createNoopAdapters(): DocumentApiAdapters {
           lists: { enabled: false },
           dryRun: { enabled: false },
         },
-        format: { properties: {} },
+        format: {
+          supportedInlineProperties: {} as ReturnType<
+            DocumentApiAdapters['capabilities']['get']
+          >['format']['supportedInlineProperties'],
+        },
         operations: {} as ReturnType<DocumentApiAdapters['capabilities']['get']>['operations'],
         planEngine: {
           supportedStepOps: [],

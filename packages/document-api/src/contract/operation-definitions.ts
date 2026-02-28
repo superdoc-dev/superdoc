@@ -26,6 +26,7 @@
 
 import type { ReceiptFailureCode } from '../types/receipt.js';
 import type { CommandStaticMetadata, OperationIdempotency, PreApplyThrowCode } from './metadata-types.js';
+import { INLINE_PROPERTY_REGISTRY, type InlineRunPatchKey } from '../format/inline-run-patch.js';
 
 // ---------------------------------------------------------------------------
 // Reference group key
@@ -45,7 +46,8 @@ export type ReferenceGroupKey =
   | 'query'
   | 'mutations'
   | 'tables'
-  | 'history';
+  | 'history'
+  | 'toc';
 
 // ---------------------------------------------------------------------------
 // Entry shape
@@ -164,6 +166,40 @@ const T_SECTION_MUTATION = [
   'INTERNAL_ERROR',
 ] as const;
 const T_SECTION_SETTINGS_MUTATION = ['INVALID_INPUT', 'CAPABILITY_UNAVAILABLE', 'INTERNAL_ERROR'] as const;
+
+type FormatInlineAliasOperationId = `format.${InlineRunPatchKey}`;
+
+function camelToKebab(value: string): string {
+  return value.replace(/[A-Z]/g, (char) => `-${char.toLowerCase()}`);
+}
+
+function formatInlineAliasDescription(key: InlineRunPatchKey): string {
+  return `Set or clear the \`${key}\` inline run property on the target text range.`;
+}
+
+const FORMAT_INLINE_ALIAS_OPERATION_DEFINITIONS: Record<FormatInlineAliasOperationId, OperationDefinitionEntry> =
+  Object.fromEntries(
+    INLINE_PROPERTY_REGISTRY.map((entry) => {
+      const operationId = `format.${entry.key}` as FormatInlineAliasOperationId;
+      const definition: OperationDefinitionEntry = {
+        memberPath: operationId,
+        description: formatInlineAliasDescription(entry.key),
+        expectedResult:
+          'Returns a TextMutationReceipt confirming the inline run property patch was applied to the target range.',
+        requiresDocumentContext: true,
+        metadata: mutationOperation({
+          idempotency: 'conditional',
+          supportsDryRun: true,
+          supportsTrackedMode: entry.tracked,
+          possibleFailureCodes: ['INVALID_TARGET'],
+          throws: [...T_NOT_FOUND_CAPABLE, 'INVALID_TARGET', 'INVALID_INPUT'],
+        }),
+        referenceDocPath: `format/${camelToKebab(entry.key)}.mdx`,
+        referenceGroup: 'format',
+      };
+      return [operationId, definition];
+    }),
+  ) as Record<FormatInlineAliasOperationId, OperationDefinitionEntry>;
 
 // ---------------------------------------------------------------------------
 // Canonical definitions
@@ -302,8 +338,7 @@ export const OPERATION_DEFINITIONS = {
 
   'format.apply': {
     memberPath: 'format.apply',
-    description:
-      "Apply explicit inline style changes (bold, italic, underline, strike) to the target range using directive semantics ('on', 'off', 'clear').",
+    description: 'Apply inline run-property patch changes to the target range with explicit set/clear semantics.',
     expectedResult: 'Returns a TextMutationReceipt confirming inline styles were applied to the target range.',
     requiresDocumentContext: true,
     metadata: mutationOperation({
@@ -316,54 +351,7 @@ export const OPERATION_DEFINITIONS = {
     referenceDocPath: 'format/apply.mdx',
     referenceGroup: 'format',
   },
-  'format.fontSize': {
-    memberPath: 'format.fontSize',
-    description: 'Set or unset the font size on the target text range. Pass null to remove.',
-    expectedResult:
-      'Returns a TextMutationReceipt; receipt reports NO_OP if the target already has the requested font size.',
-    requiresDocumentContext: true,
-    metadata: mutationOperation({
-      idempotency: 'conditional',
-      supportsDryRun: true,
-      supportsTrackedMode: false,
-      possibleFailureCodes: ['INVALID_TARGET', 'NO_OP'],
-      throws: [...T_NOT_FOUND_CAPABLE, 'INVALID_TARGET', 'INVALID_INPUT'],
-    }),
-    referenceDocPath: 'format/font-size.mdx',
-    referenceGroup: 'format',
-  },
-  'format.fontFamily': {
-    memberPath: 'format.fontFamily',
-    description: 'Set or unset the font family on the target text range. Pass null to remove.',
-    expectedResult:
-      'Returns a TextMutationReceipt; receipt reports NO_OP if the target already has the requested font family.',
-    requiresDocumentContext: true,
-    metadata: mutationOperation({
-      idempotency: 'conditional',
-      supportsDryRun: true,
-      supportsTrackedMode: false,
-      possibleFailureCodes: ['INVALID_TARGET', 'NO_OP'],
-      throws: [...T_NOT_FOUND_CAPABLE, 'INVALID_TARGET', 'INVALID_INPUT'],
-    }),
-    referenceDocPath: 'format/font-family.mdx',
-    referenceGroup: 'format',
-  },
-  'format.color': {
-    memberPath: 'format.color',
-    description: 'Set or unset the text color on the target text range. Pass null to remove.',
-    expectedResult:
-      'Returns a TextMutationReceipt; receipt reports NO_OP if the target already has the requested color.',
-    requiresDocumentContext: true,
-    metadata: mutationOperation({
-      idempotency: 'conditional',
-      supportsDryRun: true,
-      supportsTrackedMode: false,
-      possibleFailureCodes: ['INVALID_TARGET', 'NO_OP'],
-      throws: [...T_NOT_FOUND_CAPABLE, 'INVALID_TARGET', 'INVALID_INPUT'],
-    }),
-    referenceDocPath: 'format/color.mdx',
-    referenceGroup: 'format',
-  },
+  ...FORMAT_INLINE_ALIAS_OPERATION_DEFINITIONS,
   'format.align': {
     memberPath: 'format.align',
     description: 'Set or unset paragraph alignment on the block containing the target. Pass null to reset to default.',
@@ -1663,6 +1651,100 @@ export const OPERATION_DEFINITIONS = {
     referenceDocPath: 'tables/get-properties.mdx',
     referenceGroup: 'tables',
   },
+  // -------------------------------------------------------------------------
+  // Create: table of contents
+  // -------------------------------------------------------------------------
+
+  'create.tableOfContents': {
+    memberPath: 'create.tableOfContents',
+    description: 'Insert a new table of contents at the target position.',
+    expectedResult: 'Returns a CreateTableOfContentsResult with the new TOC block address.',
+    requiresDocumentContext: true,
+    metadata: mutationOperation({
+      idempotency: 'non-idempotent',
+      supportsDryRun: true,
+      supportsTrackedMode: false,
+      possibleFailureCodes: ['NO_OP', 'INVALID_INSERTION_CONTEXT'],
+      throws: ['INVALID_TARGET', 'TARGET_NOT_FOUND', 'CAPABILITY_UNAVAILABLE'],
+    }),
+    referenceDocPath: 'create/table-of-contents.mdx',
+    referenceGroup: 'create',
+  },
+
+  // -------------------------------------------------------------------------
+  // TOC: lifecycle + configuration
+  // -------------------------------------------------------------------------
+
+  'toc.list': {
+    memberPath: 'toc.list',
+    description: 'List all tables of contents in the document.',
+    expectedResult: 'Returns a TocListResult with an array of TOC discovery items and pagination metadata.',
+    requiresDocumentContext: true,
+    metadata: readOperation({
+      idempotency: 'idempotent',
+    }),
+    referenceDocPath: 'toc/list.mdx',
+    referenceGroup: 'toc',
+  },
+  'toc.get': {
+    memberPath: 'toc.get',
+    description: 'Retrieve details of a specific table of contents.',
+    expectedResult: 'Returns a TocInfo object with the instruction, source/display configuration, and entry count.',
+    requiresDocumentContext: true,
+    metadata: readOperation({
+      idempotency: 'idempotent',
+      throws: T_NOT_FOUND,
+    }),
+    referenceDocPath: 'toc/get.mdx',
+    referenceGroup: 'toc',
+  },
+  'toc.configure': {
+    memberPath: 'toc.configure',
+    description: 'Update the configuration switches of a table of contents.',
+    expectedResult: 'Returns a TocMutationResult with the updated TOC address on success, or a failure code on no-op.',
+    requiresDocumentContext: true,
+    metadata: mutationOperation({
+      idempotency: 'conditional',
+      supportsDryRun: true,
+      supportsTrackedMode: false,
+      possibleFailureCodes: ['NO_OP'],
+      throws: ['TARGET_NOT_FOUND', 'INVALID_TARGET', 'CAPABILITY_UNAVAILABLE'],
+    }),
+    referenceDocPath: 'toc/configure.mdx',
+    referenceGroup: 'toc',
+  },
+  'toc.update': {
+    memberPath: 'toc.update',
+    description: 'Rebuild the materialized content of a table of contents.',
+    expectedResult:
+      'Returns a TocMutationResult with the TOC address on success, or a failure code if content is unchanged.',
+    requiresDocumentContext: true,
+    metadata: mutationOperation({
+      idempotency: 'conditional',
+      supportsDryRun: true,
+      supportsTrackedMode: false,
+      possibleFailureCodes: ['NO_OP'],
+      throws: ['TARGET_NOT_FOUND', 'INVALID_TARGET', 'CAPABILITY_UNAVAILABLE'],
+    }),
+    referenceDocPath: 'toc/update.mdx',
+    referenceGroup: 'toc',
+  },
+  'toc.remove': {
+    memberPath: 'toc.remove',
+    description: 'Remove a table of contents from the document.',
+    expectedResult: 'Returns a TocMutationResult with the removed TOC address on success, or a failure code on no-op.',
+    requiresDocumentContext: true,
+    metadata: mutationOperation({
+      idempotency: 'conditional',
+      supportsDryRun: true,
+      supportsTrackedMode: false,
+      possibleFailureCodes: ['NO_OP'],
+      throws: ['TARGET_NOT_FOUND', 'INVALID_TARGET', 'CAPABILITY_UNAVAILABLE'],
+    }),
+    referenceDocPath: 'toc/remove.mdx',
+    referenceGroup: 'toc',
+  },
+
   // -------------------------------------------------------------------------
   // History
   // -------------------------------------------------------------------------

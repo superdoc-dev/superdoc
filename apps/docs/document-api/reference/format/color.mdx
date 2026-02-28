@@ -1,7 +1,7 @@
 ---
 title: format.color
 sidebarTitle: format.color
-description: Set or unset the text color on the target text range. Pass null to remove.
+description: "Set or clear the `color` inline run property on the target text range."
 ---
 
 {/* GENERATED FILE: DO NOT EDIT. Regenerate via `pnpm run docapi:sync`. */}
@@ -10,19 +10,19 @@ description: Set or unset the text color on the target text range. Pass null to 
 
 ## Summary
 
-Set or unset the text color on the target text range. Pass null to remove.
+Set or clear the `color` inline run property on the target text range.
 
 - Operation ID: `format.color`
 - API member path: `editor.doc.format.color(...)`
 - Mutates document: `yes`
 - Idempotency: `conditional`
-- Supports tracked mode: `no`
+- Supports tracked mode: `yes`
 - Supports dry run: `yes`
 - Deterministic target resolution: `yes`
 
 ## Expected result
 
-Returns a TextMutationReceipt; receipt reports NO_OP if the target already has the requested color.
+Returns a TextMutationReceipt confirming the inline run property patch was applied to the target range.
 
 ## Input fields
 
@@ -106,7 +106,6 @@ _No fields._
 ## Non-applied failure codes
 
 - `INVALID_TARGET`
-- `NO_OP`
 
 ## Raw schemas
 
@@ -154,8 +153,7 @@ _No fields._
           "properties": {
             "code": {
               "enum": [
-                "INVALID_TARGET",
-                "NO_OP"
+                "INVALID_TARGET"
               ]
             },
             "details": {},
@@ -206,8 +204,7 @@ _No fields._
       "properties": {
         "code": {
           "enum": [
-            "INVALID_TARGET",
-            "NO_OP"
+            "INVALID_TARGET"
           ]
         },
         "details": {},

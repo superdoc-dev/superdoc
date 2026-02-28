@@ -122,5 +122,17 @@ describe('sd:tableOfContents translator', () => {
       // Should contain both begin and end elements
       expect(result[0].elements).toEqual([...expectedBeginElements, ...expectedEndElements]);
     });
+
+    it('should handle missing content by creating a TOC field paragraph', () => {
+      const noContentParams = { ...mockParams, node: { ...mockParams.node } };
+      delete noContentParams.node.content;
+      vi.mocked(exportSchemaToJson).mockReturnValue([]);
+
+      const result = config.decode(noContentParams);
+
+      expect(result).toHaveLength(1);
+      expect(result[0].name).toBe('w:p');
+      expect(result[0].elements).toEqual([...expectedBeginElements, ...expectedEndElements]);
+    });
   });
 });

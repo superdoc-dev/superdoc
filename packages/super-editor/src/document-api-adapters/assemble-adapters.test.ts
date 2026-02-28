@@ -24,9 +24,6 @@ describe('assembleDocumentApiAdapters', () => {
     expect(adapters).toHaveProperty('comments');
     expect(adapters).toHaveProperty('write.write');
     expect(adapters).toHaveProperty('format.apply');
-    expect(adapters).toHaveProperty('format.fontSize');
-    expect(adapters).toHaveProperty('format.fontFamily');
-    expect(adapters).toHaveProperty('format.color');
     expect(adapters).toHaveProperty('format.align');
     expect(adapters).toHaveProperty('trackChanges.list');
     expect(adapters).toHaveProperty('trackChanges.get');
@@ -66,6 +63,12 @@ describe('assembleDocumentApiAdapters', () => {
     expect(adapters).toHaveProperty('tables.get');
     expect(adapters).toHaveProperty('tables.getCells');
     expect(adapters).toHaveProperty('tables.getProperties');
+    expect(adapters).toHaveProperty('create.tableOfContents');
+    expect(adapters).toHaveProperty('toc.list');
+    expect(adapters).toHaveProperty('toc.get');
+    expect(adapters).toHaveProperty('toc.configure');
+    expect(adapters).toHaveProperty('toc.update');
+    expect(adapters).toHaveProperty('toc.remove');
   });
 
   it('returns functions for all adapter methods', () => {
@@ -74,13 +77,11 @@ describe('assembleDocumentApiAdapters', () => {
     expect(typeof adapters.find.find).toBe('function');
     expect(typeof adapters.write.write).toBe('function');
     expect(typeof adapters.format.apply).toBe('function');
-    expect(typeof adapters.format.fontSize).toBe('function');
-    expect(typeof adapters.format.fontFamily).toBe('function');
-    expect(typeof adapters.format.color).toBe('function');
     expect(typeof adapters.format.align).toBe('function');
     expect(typeof adapters.create.paragraph).toBe('function');
     expect(typeof adapters.create.heading).toBe('function');
     expect(typeof adapters.create.sectionBreak).toBe('function');
+    expect(typeof adapters.create.tableOfContents).toBe('function');
     expect(typeof adapters.lists.insert).toBe('function');
     expect(typeof adapters.sections.list).toBe('function');
     expect(typeof adapters.sections.setBreakType).toBe('function');
@@ -88,5 +89,10 @@ describe('assembleDocumentApiAdapters', () => {
     expect(typeof adapters.tables.get).toBe('function');
     expect(typeof adapters.tables.getCells).toBe('function');
     expect(typeof adapters.tables.getProperties).toBe('function');
+    expect(typeof adapters.toc.list).toBe('function');
+    expect(typeof adapters.toc.get).toBe('function');
+    expect(typeof adapters.toc.configure).toBe('function');
+    expect(typeof adapters.toc.update).toBe('function');
+    expect(typeof adapters.toc.remove).toBe('function');
   });
 });

@@ -1,7 +1,7 @@
 ---
-title: format.fontFamily
-sidebarTitle: format.fontFamily
-description: Set or unset the font family on the target text range. Pass null to remove.
+title: format.cs
+sidebarTitle: format.cs
+description: "Set or clear the `cs` inline run property on the target text range."
 ---
 
 {/* GENERATED FILE: DO NOT EDIT. Regenerate via `pnpm run docapi:sync`. */}
@@ -10,10 +10,10 @@ description: Set or unset the font family on the target text range. Pass null to
 
 ## Summary
 
-Set or unset the font family on the target text range. Pass null to remove.
+Set or clear the `cs` inline run property on the target text range.
 
-- Operation ID: `format.fontFamily`
-- API member path: `editor.doc.format.fontFamily(...)`
+- Operation ID: `format.cs`
+- API member path: `editor.doc.format.cs(...)`
 - Mutates document: `yes`
 - Idempotency: `conditional`
 - Supports tracked mode: `no`
@@ -22,14 +22,14 @@ Set or unset the font family on the target text range. Pass null to remove.
 
 ## Expected result
 
-Returns a TextMutationReceipt; receipt reports NO_OP if the target already has the requested font family.
+Returns a TextMutationReceipt confirming the inline run property patch was applied to the target range.
 
 ## Input fields
 
 | Field | Type | Required | Description |
 | --- | --- | --- | --- |
 | `target` | TextAddress | yes | TextAddress |
-| `value` | string \\| null | yes | One of: string, null |
+| `value` | boolean \\| null | no | One of: boolean, null |
 
 ### Example request
 
@@ -43,7 +43,7 @@ Returns a TextMutationReceipt; receipt reports NO_OP if the target already has t
       "start": 0
     }
   },
-  "value": "example"
+  "value": true
 }
 ```
 
@@ -106,7 +106,6 @@ _No fields._
 ## Non-applied failure codes
 
 - `INVALID_TARGET`
-- `NO_OP`
 
 ## Raw schemas
 
@@ -121,8 +120,7 @@ _No fields._
     "value": {
       "oneOf": [
         {
-          "minLength": 1,
-          "type": "string"
+          "type": "boolean"
         },
         {
           "type": "null"
@@ -131,8 +129,7 @@ _No fields._
     }
   },
   "required": [
-    "target",
-    "value"
+    "target"
   ],
   "type": "object"
 }
@@ -154,8 +151,7 @@ _No fields._
           "properties": {
             "code": {
               "enum": [
-                "INVALID_TARGET",
-                "NO_OP"
+                "INVALID_TARGET"
               ]
             },
             "details": {},
@@ -206,8 +202,7 @@ _No fields._
       "properties": {
         "code": {
           "enum": [
-            "INVALID_TARGET",
-            "NO_OP"
+            "INVALID_TARGET"
           ]
         },
         "details": {},

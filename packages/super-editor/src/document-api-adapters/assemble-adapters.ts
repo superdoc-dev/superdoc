@@ -6,14 +6,13 @@ import { getTextAdapter } from './get-text-adapter.js';
 import { infoAdapter } from './info-adapter.js';
 import { getDocumentApiCapabilities } from './capabilities-adapter.js';
 import { createCommentsWrapper } from './plan-engine/comments-wrappers.js';
-import { writeWrapper, insertStructuredWrapper, styleApplyWrapper } from './plan-engine/plan-wrappers.js';
-import { stylesApplyAdapter } from './styles-adapter.js';
 import {
-  formatFontSizeWrapper,
-  formatFontFamilyWrapper,
-  formatColorWrapper,
+  writeWrapper,
+  insertStructuredWrapper,
+  styleApplyWrapper,
   formatAlignWrapper,
-} from './plan-engine/format-value-wrappers.js';
+} from './plan-engine/plan-wrappers.js';
+import { stylesApplyAdapter } from './styles-adapter.js';
 import {
   trackChangesListWrapper,
   trackChangesGetWrapper,
@@ -101,6 +100,14 @@ import {
 } from './plan-engine/tables-wrappers.js';
 import { tablesGetAdapter, tablesGetCellsAdapter, tablesGetPropertiesAdapter } from './tables-adapter.js';
 import { createHistoryAdapter } from './history-adapter.js';
+import {
+  tocListWrapper,
+  tocGetWrapper,
+  tocConfigureWrapper,
+  tocUpdateWrapper,
+  tocRemoveWrapper,
+  createTableOfContentsWrapper,
+} from './plan-engine/toc-wrappers.js';
 
 /**
  * Assembles all document-api adapters for the given editor instance.
@@ -137,9 +144,6 @@ export function assembleDocumentApiAdapters(editor: Editor): DocumentApiAdapters
     },
     format: {
       apply: (input, options) => styleApplyWrapper(editor, input, options),
-      fontSize: (input, options) => formatFontSizeWrapper(editor, input, options),
-      fontFamily: (input, options) => formatFontFamilyWrapper(editor, input, options),
-      color: (input, options) => formatColorWrapper(editor, input, options),
       align: (input, options) => formatAlignWrapper(editor, input, options),
     },
     styles: {
@@ -161,6 +165,7 @@ export function assembleDocumentApiAdapters(editor: Editor): DocumentApiAdapters
       heading: (input, options) => createHeadingWrapper(editor, input, options),
       table: (input, options) => createTableWrapper(editor, input, options),
       sectionBreak: (input, options) => createSectionBreakAdapter(editor, input, options),
+      tableOfContents: (input, options) => createTableOfContentsWrapper(editor, input, options),
     },
     lists: {
       list: (query) => listsListWrapper(editor, query),
@@ -232,6 +237,13 @@ export function assembleDocumentApiAdapters(editor: Editor): DocumentApiAdapters
       get: (input) => tablesGetAdapter(editor, input),
       getCells: (input) => tablesGetCellsAdapter(editor, input),
       getProperties: (input) => tablesGetPropertiesAdapter(editor, input),
+    },
+    toc: {
+      list: (query) => tocListWrapper(editor, query),
+      get: (input) => tocGetWrapper(editor, input),
+      configure: (input, options) => tocConfigureWrapper(editor, input, options),
+      update: (input, options) => tocUpdateWrapper(editor, input, options),
+      remove: (input, options) => tocRemoveWrapper(editor, input, options),
     },
     query: {
       match: (input) => queryMatchAdapter(editor, input),

@@ -83,6 +83,8 @@ type ParseTableCellArgs = {
   context: TableParserDependencies;
   defaultCellPadding?: BoxSpacing;
   tableProperties?: TableProperties;
+  /** When true, table-level borders exist (from hydrated style or inline) so schema-default cell borders can be skipped. */
+  hasTableLevelBorders?: boolean;
 };
 
 type ParseTableRowArgs = {
@@ -93,6 +95,8 @@ type ParseTableRowArgs = {
   defaultCellPadding?: BoxSpacing;
   /** Table style to pass to paragraph converter for style cascade */
   tableProperties?: TableProperties;
+  /** When true, table-level borders exist so schema-default cell borders can be skipped. */
+  hasTableLevelBorders?: boolean;
 };
 
 const isTableRowNode = (node: PMNode): boolean => node.type === 'tableRow' || node.type === 'table_row';
@@ -195,7 +199,17 @@ const normalizeRowHeight = (rowProps?: Record<string, unknown>): NormalizedRowHe
  * // Returns: null
  */
 const parseTableCell = (args: ParseTableCellArgs): TableCell | null => {
-  const { cellNode, rowIndex, cellIndex, numCells, numRows, context, defaultCellPadding, tableProperties } = args;
+  const {
+    cellNode,
+    rowIndex,
+    cellIndex,
+    numCells,
+    numRows,
+    context,
+    defaultCellPadding,
+    tableProperties,
+    hasTableLevelBorders,
+  } = args;
   if (!isTableCellNode(cellNode) || !Array.isArray(cellNode.content)) {
     return null;
   }
@@ -430,8 +444,25 @@ const parseTableCell = (args: ParseTableCellArgs): TableCell | null => {
 
   const cellAttrs: TableCellAttrs = {};
 
-  const borders = extractCellBorders(cellNode.attrs ?? {});
-  if (borders) cellAttrs.borders = borders;
+  // Schema-default cell borders (from createCellBorders) have { size, color } without a `val`
+  // property, while OOXML-imported borders always include `val` (e.g., 'single', 'none').
+  // When table-level borders exist (from a hydrated style like TableGrid), skip schema defaults
+  // so the painter's resolveTableCellBorders can distribute table borders to cells properly.
+  // When NO table-level borders exist, keep schema defaults as the fallback (matching Word's
+  // default behavior of showing single black borders on new tables).
+  const rawBorders = cellNode.attrs?.borders as Record<string, Record<string, unknown>> | undefined;
+  const isSchemaDefaultBorders =
+    rawBorders &&
+    typeof rawBorders === 'object' &&
+    ['top', 'right', 'bottom', 'left'].every((side) => {
+      const b = rawBorders[side];
+      return b && typeof b === 'object' && !('val' in b);
+    });
+
+  if (!(isSchemaDefaultBorders && hasTableLevelBorders)) {
+    const borders = extractCellBorders(cellNode.attrs ?? {});
+    if (borders) cellAttrs.borders = borders;
+  }
 
   const padding =
     extractCellPadding(cellNode.attrs ?? {}) ?? (defaultCellPadding ? { ...defaultCellPadding } : undefined);
@@ -510,7 +541,7 @@ const parseTableCell = (args: ParseTableCellArgs): TableCell | null => {
  * // Returns: null
  */
 const parseTableRow = (args: ParseTableRowArgs): TableRow | null => {
-  const { rowNode, rowIndex, context, defaultCellPadding, tableProperties, numRows } = args;
+  const { rowNode, rowIndex, context, defaultCellPadding, tableProperties, numRows, hasTableLevelBorders } = args;
   if (!isTableRowNode(rowNode) || !Array.isArray(rowNode.content)) {
     return null;
   }
@@ -526,6 +557,7 @@ const parseTableRow = (args: ParseTableRowArgs): TableRow | null => {
       tableProperties,
       numCells: rowNode?.content?.length || 1,
       numRows,
+      hasTableLevelBorders,
     });
     if (parsedCell) {
       cells.push(parsedCell);
@@ -722,6 +754,22 @@ export function tableNodeToBlock(
   const hydratedTableStyle = hydrateTableStyleAttrs(node, converterContext);
   const defaultCellPadding = hydratedTableStyle?.cellPadding;
 
+  // Pre-compute whether table-level borders exist (from inline or hydrated style).
+  // When they do, schema-default cell borders can be safely skipped so the painter's
+  // resolveTableCellBorders distributes table borders to cells.
+  // When they don't, cell schema defaults are kept as fallback.
+  const inlineBorders = node.attrs?.borders;
+  const hasInlineBorders =
+    inlineBorders &&
+    typeof inlineBorders === 'object' &&
+    inlineBorders !== null &&
+    Object.keys(inlineBorders as Record<string, unknown>).length > 0;
+  const hasHydratedBorders =
+    hydratedTableStyle?.borders &&
+    typeof hydratedTableStyle.borders === 'object' &&
+    Object.keys(hydratedTableStyle.borders).length > 0;
+  const hasTableLevelBorders = !!(hasInlineBorders || hasHydratedBorders);
+
   const rows: TableRow[] = [];
   node.content.forEach((rowNode, rowIndex) => {
     const parsedRow = parseTableRow({
@@ -731,6 +779,7 @@ export function tableNodeToBlock(
       context: parserDeps,
       defaultCellPadding,
       tableProperties: node.attrs?.tableProperties as TableProperties | undefined,
+      hasTableLevelBorders,
     });
     if (parsedRow) {
       rows.push(parsedRow);
@@ -741,7 +790,12 @@ export function tableNodeToBlock(
 
   const tableAttrs: Record<string, unknown> = {};
   const getBorderSource = (): Record<string, unknown> | undefined => {
-    if (node.attrs?.borders && typeof node.attrs.borders === 'object' && node.attrs.borders !== null) {
+    if (
+      node.attrs?.borders &&
+      typeof node.attrs.borders === 'object' &&
+      node.attrs.borders !== null &&
+      Object.keys(node.attrs.borders as Record<string, unknown>).length > 0
+    ) {
       return node.attrs.borders as Record<string, unknown>;
     }
     if (
@@ -763,6 +817,12 @@ export function tableNodeToBlock(
 
   if (node.attrs?.tableCellSpacing !== undefined && node.attrs?.tableCellSpacing !== null) {
     tableAttrs.cellSpacing = normalizeCellSpacing(node.attrs.tableCellSpacing);
+  } else if (hydratedTableStyle?.tableCellSpacing) {
+    tableAttrs.cellSpacing = normalizeCellSpacing(hydratedTableStyle.tableCellSpacing);
+    // Cell spacing requires border-collapse: separate
+    if (!tableAttrs.borderCollapse) {
+      tableAttrs.borderCollapse = 'separate';
+    }
   }
 
   if (node.attrs?.justification) {

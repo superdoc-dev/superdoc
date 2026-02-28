@@ -340,6 +340,7 @@ function convertTable(node: MdastTable, ctx: MdastConversionContext): JsonNode {
   return {
     type: 'table',
     attrs: {
+      tableStyleId: 'TableGrid',
       tableProperties: {
         tableWidth: {
           value: FULL_WIDTH_TABLE_PCT,

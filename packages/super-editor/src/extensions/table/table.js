@@ -270,7 +270,7 @@ const isImportedTableElement = (element) => Boolean(element?.closest?.(IMPORT_CO
  * @property {import("./tableHelpers/createTableBorders.js").TableBorders} [borders] - Border styling for this table
  * @property {string} [borderCollapse='collapse'] - CSS border-collapse property
  * @property {string} [justification] - Table alignment ('left', 'center', 'right')
- * @property {number} [tableCellSpacing] - Cell spacing in pixels for this table
+ * @property {TableMeasurement} [tableCellSpacing] - Cell spacing for this table
  * @property {string} [sdBlockId] @internal - Internal block tracking ID
  * @property {string} [tableStyleId] @internal - Internal reference to table style
  * @property {string} [tableLayout] @internal - CSS table-layout property (advanced usage)
@@ -440,15 +440,6 @@ export const Table = Node.create({
       /**
        * @private
        * @category Attribute
-       * @param {string} [tableStyleId] - Internal reference to table style (not user-configurable)
-       */
-      tableStyleId: {
-        rendered: false,
-      },
-
-      /**
-       * @private
-       * @category Attribute
        * @param {string} [tableLayout] - CSS table-layout property (advanced usage)
        */
       tableLayout: {
@@ -457,7 +448,7 @@ export const Table = Node.create({
 
       /**
        * @category Attribute
-       * @param {number} [tableCellSpacing] - Cell spacing in pixels for this table
+       * @param {TableMeasurement} [tableCellSpacing] - Cell spacing for this table
        */
       tableCellSpacing: {
         default: null,
@@ -492,6 +483,17 @@ export const Table = Node.create({
               type: 'pct',
             },
           };
+        },
+      },
+
+      /**
+       * Ensure HTML-parsed tables get the default TableGrid style, matching
+       * Word's behavior of stamping every new table with this style reference.
+       */
+      tableStyleId: {
+        parseDOM: (element) => {
+          if (!isImportedTableElement(element)) return undefined;
+          return 'TableGrid';
         },
         rendered: false,
       },
@@ -675,8 +677,11 @@ export const Table = Node.create({
               const row = tableRowType.createChecked(null, cellNodes);
               rowNodes.push(row);
             }
-            const tableAttrs =
-              sdBlockId || paraId ? { ...(sdBlockId ? { sdBlockId } : {}), ...(paraId ? { paraId } : {}) } : undefined;
+            const tableAttrs = {
+              tableStyleId: 'TableGrid',
+              ...(sdBlockId ? { sdBlockId } : {}),
+              ...(paraId ? { paraId } : {}),
+            };
             const tableNode = tableType.createChecked(tableAttrs, rowNodes);
 
             if (dispatch) {

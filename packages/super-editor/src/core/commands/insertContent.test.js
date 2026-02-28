@@ -55,11 +55,7 @@ describe('insertContent', () => {
       editor: mockEditor,
     });
 
-    expect(mockCommands.insertContentAt).toHaveBeenCalledWith(
-      { from: 0, to: 10 },
-      { type: 'doc', content: [] },
-      { contentType: 'html' },
-    );
+    expect(mockCommands.insertContentAt).toHaveBeenCalledWith({ from: 0, to: 10 }, [], { contentType: 'html' });
 
     // Should trigger list migration for HTML (microtask)
     expect(mockEditor.migrateListsToV2).toHaveBeenCalledTimes(1);
@@ -263,6 +259,24 @@ describe('insertContent (integration) list export', () => {
     const first = getNumPrVals(listParas[0]);
     expect(first.numId).toBeDefined();
     expect(first.ilvl).toBe('0');
+  });
+
+  it('inserts markdown heading + bold text without creating a table', async () => {
+    const editor = await setupEditor();
+
+    editor.commands.insertContent('# Hello\n\nSome **bold** text', { contentType: 'markdown' });
+    await Promise.resolve();
+
+    const doc = editor.getJSON();
+    const tableNode = (doc.content || []).find((node) => node?.type === 'table');
+
+    expect(tableNode).toBeUndefined();
+    expect(
+      doc.content?.some(
+        (node) => node?.type === 'paragraph' && node?.attrs?.paragraphProperties?.styleId === 'Heading1',
+      ),
+    ).toBe(true);
+    expect(doc.content?.some((node) => node?.type === 'paragraph')).toBe(true);
   });
 
   it('exports unordered list from HTML with numId/ilvl', async () => {

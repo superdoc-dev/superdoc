@@ -53,5 +53,5 @@ export const createTable = (schema, rowsCount, colsCount, withHeaderRow, cellCon
 
   const tableBorders = createTableBorders();
 
-  return types.table.createChecked({ borders: tableBorders }, rows);
+  return types.table.createChecked({ borders: tableBorders, tableStyleId: 'TableGrid' }, rows);
 };

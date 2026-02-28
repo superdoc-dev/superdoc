@@ -176,6 +176,7 @@ describe('tableHelpers', () => {
     expect(table.type.name).toBe('table');
     expect(table.firstChild.childCount).toBe(3);
     expect(table.attrs.borders.top).toBeDefined();
+    expect(table.attrs.tableStyleId).toBe('TableGrid');
     const headerCell = table.firstChild.firstChild;
     expect(headerCell.type.name).toBe('tableHeader');
   });

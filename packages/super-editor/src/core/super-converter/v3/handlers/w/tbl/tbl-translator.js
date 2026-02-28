@@ -352,7 +352,7 @@ export function _processTableBorders(rawBorders) {
 }
 
 /**
- * @typedef {{borders?: {}, name?: *, justification?: *, fonts?: {}, fontSize?: *, rowBorders?: {}, cellMargins?: {}}} TableStyles
+ * @typedef {{borders?: {}, name?: *, justification?: *, fonts?: {}, fontSize?: *, rowBorders?: {}, cellMargins?: {}, tableCellSpacing?: {value?: number, type?: string}}} TableStyles
  */
 
 /**
@@ -426,6 +426,10 @@ export function _getReferencedTableStyles(tableStyleReference, params) {
         }
       });
       if (Object.keys(cellMargins).length) stylesToReturn.cellMargins = cellMargins;
+
+      if (tableProperties.tableCellSpacing) {
+        stylesToReturn.tableCellSpacing = tableProperties.tableCellSpacing;
+      }
     }
   }
 

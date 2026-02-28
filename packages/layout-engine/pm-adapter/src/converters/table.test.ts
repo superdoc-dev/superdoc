@@ -777,6 +777,97 @@ describe('table converter', () => {
       expect(result.rows[0].cells[0]).toBeDefined();
     });
 
+    it('skips schema-default cell borders when table-level borders exist', () => {
+      const schemaDefaultBorders = {
+        top: { size: 8, color: '000000' },
+        right: { size: 8, color: '000000' },
+        bottom: { size: 8, color: '000000' },
+        left: { size: 8, color: '000000' },
+      };
+
+      const node: PMNode = {
+        type: 'table',
+        attrs: {
+          borders: {
+            top: { val: 'single', size: 8, color: '000000' },
+            right: { val: 'single', size: 8, color: '000000' },
+            bottom: { val: 'single', size: 8, color: '000000' },
+            left: { val: 'single', size: 8, color: '000000' },
+          },
+        },
+        content: [
+          {
+            type: 'tableRow',
+            content: [
+              {
+                type: 'tableCell',
+                attrs: { borders: schemaDefaultBorders },
+                content: [{ type: 'paragraph', content: [{ type: 'text', text: 'Cell' }] }],
+              },
+            ],
+          },
+        ],
+      };
+
+      const result = tableNodeToBlock(
+        node,
+        mockBlockIdGenerator,
+        mockPositionMap,
+        'Arial',
+        16,
+        undefined,
+        undefined,
+        undefined,
+        undefined,
+        mockParagraphConverter,
+      ) as TableBlock;
+
+      expect(result.rows[0].cells[0].attrs?.borders).toBeUndefined();
+    });
+
+    it('keeps schema-default cell borders when no table-level borders exist', () => {
+      const schemaDefaultBorders = {
+        top: { size: 8, color: '000000' },
+        right: { size: 8, color: '000000' },
+        bottom: { size: 8, color: '000000' },
+        left: { size: 8, color: '000000' },
+      };
+
+      const node: PMNode = {
+        type: 'table',
+        content: [
+          {
+            type: 'tableRow',
+            content: [
+              {
+                type: 'tableCell',
+                attrs: { borders: schemaDefaultBorders },
+                content: [{ type: 'paragraph', content: [{ type: 'text', text: 'Cell' }] }],
+              },
+            ],
+          },
+        ],
+      };
+
+      const result = tableNodeToBlock(
+        node,
+        mockBlockIdGenerator,
+        mockPositionMap,
+        'Arial',
+        16,
+        undefined,
+        undefined,
+        undefined,
+        undefined,
+        mockParagraphConverter,
+      ) as TableBlock;
+
+      expect(result.rows[0].cells[0].attrs?.borders).toBeDefined();
+      expect(result.rows[0].cells[0].attrs?.borders?.top).toEqual(
+        expect.objectContaining({ style: 'single', color: '#000000' }),
+      );
+    });
+
     it('extracts cell padding when present', () => {
       const node: PMNode = {
         type: 'table',

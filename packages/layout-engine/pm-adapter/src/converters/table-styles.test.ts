@@ -36,6 +36,7 @@ describe('hydrateTableStyleAttrs', () => {
       borders: { top: { val: 'single', size: 8 } },
       cellMargins: { left: { value: 72, type: 'dxa' } },
       justification: 'center',
+      tableCellSpacing: { value: 24, type: 'dxa' },
     });
 
     const table = {
@@ -51,6 +52,7 @@ describe('hydrateTableStyleAttrs', () => {
     expect(result?.borders).toEqual({ top: { val: 'single', size: 8 } });
     expect(result?.justification).toBe('center');
     expect(result?.cellPadding?.left).toBeCloseTo((72 / 1440) * 96);
+    expect(result?.tableCellSpacing).toEqual({ value: 24, type: 'dxa' });
     expect(result?.tableWidth).toEqual({ width: 500, type: 'px' });
   });
 

@@ -16,6 +16,7 @@ describe('Table import width defaults', () => {
         type: 'pct',
       },
     });
+    expect(attributes.tableStyleId.parseDOM(tableElement)).toBe('TableGrid');
   });
 
   it('leaves non-imported tables unchanged', () => {
@@ -24,5 +25,6 @@ describe('Table import width defaults', () => {
     };
 
     expect(attributes.tableProperties.parseDOM(tableElement)).toBeUndefined();
+    expect(attributes.tableStyleId.parseDOM(tableElement)).toBeUndefined();
   });
 });

@@ -11,6 +11,7 @@ export type TableStyleHydration = {
   cellPadding?: BoxSpacing;
   justification?: string;
   tableWidth?: { width?: number; type?: string };
+  tableCellSpacing?: { value?: number; type?: string };
   /**
    * Paragraph properties from the table style's w:pPr element.
    * Per OOXML spec, these should apply to all paragraphs inside the table
@@ -61,6 +62,9 @@ export const hydrateTableStyleAttrs = (tableNode: PMNode, context?: ConverterCon
       }
       if (!hydration.justification && referenced.justification) {
         hydration.justification = referenced.justification;
+      }
+      if (referenced.tableCellSpacing) {
+        hydration.tableCellSpacing = referenced.tableCellSpacing as { value?: number; type?: string };
       }
     }
 

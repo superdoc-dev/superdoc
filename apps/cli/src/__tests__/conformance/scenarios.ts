@@ -1247,6 +1247,9 @@ export const SUCCESS_SCENARIOS = {
     if (separate.result.code !== 0) {
       throw new Error('Failed to prepare continue-previous conformance fixture via lists separate.');
     }
+    // Resolve target from the prepared document to avoid stale nodeId usage
+    // when list-item ids are regenerated across write/reload boundaries.
+    const preparedSecondItem = await nthListAddress(harness, stateDir, preparedDoc, 1);
     return {
       stateDir,
       args: [
@@ -1254,7 +1257,7 @@ export const SUCCESS_SCENARIOS = {
         'continue-previous',
         preparedDoc,
         '--target-json',
-        JSON.stringify(secondItem),
+        JSON.stringify(preparedSecondItem),
         '--out',
         harness.createOutputPath('doc-lists-continue-previous-output'),
       ],
@@ -1334,6 +1337,9 @@ export const SUCCESS_SCENARIOS = {
     if (separate.result.code !== 0) {
       throw new Error('Failed to prepare join conformance fixture via lists separate.');
     }
+    // Resolve target from the prepared document to avoid stale nodeId usage
+    // when list-item ids are regenerated across write/reload boundaries.
+    const preparedSecondItem = await nthListAddress(harness, stateDir, preparedDoc, 1);
     return {
       stateDir,
       args: [
@@ -1341,7 +1347,7 @@ export const SUCCESS_SCENARIOS = {
         'join',
         preparedDoc,
         '--input-json',
-        JSON.stringify({ target: secondItem, direction: 'withPrevious' }),
+        JSON.stringify({ target: preparedSecondItem, direction: 'withPrevious' }),
         '--out',
         harness.createOutputPath('doc-lists-join-output'),
       ],

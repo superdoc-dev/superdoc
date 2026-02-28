@@ -16,7 +16,6 @@ import type {
   TextMutationResolution,
   WriteRequest,
   StyleApplyInput,
-  FormatAlignInput,
   InlineRunPatchKey,
   PlanReceipt,
   ReceiptFailure,
@@ -501,57 +500,6 @@ export function styleApplyWrapper(
   });
 
   return mapPlanReceiptToTextReceipt(receipt, resolved.resolution);
-}
-
-export function formatAlignWrapper(
-  editor: Editor,
-  input: FormatAlignInput,
-  options?: MutationOptions,
-): TextMutationReceipt {
-  const operation = 'format.align';
-  rejectTrackedMode(operation, options);
-
-  const normalizedInput = normalizeFormatLocator(input);
-  const resolved = resolveFormatTarget(editor, normalizedInput.target!, operation);
-
-  const setTextSelection = requireEditorCommand(
-    editor.commands?.setTextSelection as ((range: { from: number; to: number }) => boolean) | undefined,
-    `${operation} (setTextSelection)`,
-  );
-
-  if (input.alignment !== null) {
-    requireEditorCommand(
-      editor.commands?.setTextAlign as ((alignment: string) => boolean) | undefined,
-      `${operation} (setTextAlign)`,
-    );
-  } else {
-    requireEditorCommand(
-      editor.commands?.unsetTextAlign as (() => boolean) | undefined,
-      `${operation} (unsetTextAlign)`,
-    );
-  }
-
-  if (options?.dryRun) {
-    return { success: true, resolution: resolved.resolution };
-  }
-
-  const receipt = executeDomainCommand(
-    editor,
-    () => {
-      setTextSelection({ from: resolved.range.from, to: resolved.range.to });
-      if (input.alignment !== null) {
-        return (editor.commands as Record<string, (value: string) => boolean>).setTextAlign(input.alignment);
-      }
-      return (editor.commands as Record<string, () => boolean>).unsetTextAlign();
-    },
-    { expectedRevision: options?.expectedRevision },
-  );
-
-  if (receipt.steps[0]?.effect !== 'changed') {
-    return noOpFailure(resolved.resolution, operation);
-  }
-
-  return { success: true, resolution: resolved.resolution };
 }
 
 // ---------------------------------------------------------------------------

@@ -78,7 +78,36 @@ function makeWriteAdapter() {
 function makeFormatAdapter() {
   return {
     apply: vi.fn(() => makeTextMutationReceipt()),
-    align: vi.fn(() => makeTextMutationReceipt()),
+  };
+}
+
+function makeParagraphsAdapter() {
+  const ok = () => ({
+    success: true as const,
+    target: { kind: 'block' as const, nodeType: 'paragraph' as const, nodeId: 'p1' },
+    resolution: { target: { kind: 'block' as const, nodeType: 'paragraph' as const, nodeId: 'p1' } },
+  });
+
+  return {
+    setStyle: vi.fn(ok),
+    clearStyle: vi.fn(ok),
+    resetDirectFormatting: vi.fn(ok),
+    setAlignment: vi.fn(ok),
+    clearAlignment: vi.fn(ok),
+    setIndentation: vi.fn(ok),
+    clearIndentation: vi.fn(ok),
+    setSpacing: vi.fn(ok),
+    clearSpacing: vi.fn(ok),
+    setKeepOptions: vi.fn(ok),
+    setOutlineLevel: vi.fn(ok),
+    setFlowOptions: vi.fn(ok),
+    setTabStop: vi.fn(ok),
+    clearTabStop: vi.fn(ok),
+    clearAllTabStops: vi.fn(ok),
+    setBorder: vi.fn(ok),
+    clearBorder: vi.fn(ok),
+    setShading: vi.fn(ok),
+    clearShading: vi.fn(ok),
   };
 }
 
@@ -262,6 +291,7 @@ function makeApi() {
     comments: makeCommentsAdapter(),
     write: makeWriteAdapter(),
     format: makeFormatAdapter(),
+    paragraphs: makeParagraphsAdapter(),
     trackChanges: makeTrackChangesAdapter(),
     create: makeCreateAdapter(),
     lists: makeListsAdapter(),

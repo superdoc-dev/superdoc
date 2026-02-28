@@ -43,7 +43,7 @@ function resolveMeasurement(value: number | TableMeasurement | null | undefined)
 }
 
 function mapTableAlignment(
-  justification: TableAttrs['tableProperties'] extends { justification?: infer J } ? J : never,
+  justification: NonNullable<TableAttrs['tableProperties']>['justification'],
 ): TableNodeInfo['properties']['alignment'] {
   switch (justification) {
     case 'start':
@@ -61,12 +61,12 @@ function mapTableAlignment(
 
 function mapParagraphProperties(attrs: ParagraphAttrs | null | undefined): ParagraphProperties {
   const props = attrs?.paragraphProperties ?? undefined;
-  const indentation = props?.indentation
+  const indentation = props?.indent
     ? {
-        left: props.indentation.left,
-        right: props.indentation.right,
-        firstLine: props.indentation.firstLine,
-        hanging: props.indentation.hanging,
+        left: props.indent.left,
+        right: props.indent.right,
+        firstLine: props.indent.firstLine,
+        hanging: props.indent.hanging,
       }
     : undefined;
 
@@ -94,7 +94,7 @@ function mapParagraphProperties(attrs: ParagraphAttrs | null | undefined): Parag
     indentation,
     spacing,
     keepWithNext: props?.keepNext ?? undefined,
-    outlineLevel: props?.outlineLevel ?? undefined,
+    outlineLevel: props?.outlineLvl ?? undefined,
     paragraphNumbering,
   };
 }

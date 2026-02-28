@@ -259,7 +259,7 @@ describe('getDocumentApiCapabilities', () => {
   });
 
   // ---------------------------------------------------------------------------
-  // format.apply / format.align capability reporting
+  // format.apply / format.<inlineKey> capability reporting
   // ---------------------------------------------------------------------------
 
   describe('format capabilities', () => {
@@ -272,8 +272,6 @@ describe('getDocumentApiCapabilities', () => {
     ) {
       return makeEditor({
         commands: {
-          setTextAlign: vi.fn(() => true),
-          unsetTextAlign: vi.fn(() => true),
           ...overrides.commands,
         } as unknown as Editor['commands'],
         schema: {
@@ -346,19 +344,6 @@ describe('getDocumentApiCapabilities', () => {
       expect(capabilities.operations['format.apply'].available).toBe(true);
       // But tracked should be false — no tracked property is available
       expect(capabilities.operations['format.apply'].tracked).toBe(false);
-    });
-
-    it('reports format.align as available when set and unset commands are present', () => {
-      const capabilities = getDocumentApiCapabilities(makeFormatEditor());
-      expect(capabilities.operations['format.align'].available).toBe(true);
-      expect(capabilities.operations['format.align'].dryRun).toBe(true);
-      expect(capabilities.operations['format.align'].tracked).toBe(false);
-    });
-
-    it('reports format.align as unavailable when unsetTextAlign command is missing', () => {
-      const capabilities = getDocumentApiCapabilities(makeFormatEditor({ commands: { unsetTextAlign: undefined } }));
-      expect(capabilities.operations['format.align'].available).toBe(false);
-      expect(capabilities.operations['format.align'].reasons).toContain('COMMAND_UNAVAILABLE');
     });
 
     // -----------------------------------------------------------------------

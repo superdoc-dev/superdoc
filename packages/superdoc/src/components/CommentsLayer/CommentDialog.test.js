@@ -624,6 +624,13 @@ describe('CommentDialog.vue', () => {
     commentsStoreStub.activeComment.value = 'tc-parent';
     await nextTick();
 
+    // Expand the collapsed thread (>= 2 children triggers collapse)
+    const collapsedPill = wrapper.find('.collapsed-replies');
+    if (collapsedPill.exists()) {
+      await collapsedPill.trigger('click');
+      await nextTick();
+    }
+
     const headers = wrapper.findAllComponents(CommentHeaderStub);
     expect(headers).toHaveLength(3);
 
@@ -695,6 +702,13 @@ describe('CommentDialog.vue', () => {
     // Activate the comment so child replies become visible
     commentsStoreStub.activeComment.value = 'tc-parent';
     await nextTick();
+
+    // Expand the collapsed thread (>= 2 children triggers collapse)
+    const collapsedPill = wrapper.find('.collapsed-replies');
+    if (collapsedPill.exists()) {
+      await collapsedPill.trigger('click');
+      await nextTick();
+    }
 
     const headers = wrapper.findAllComponents(CommentHeaderStub);
     expect(headers).toHaveLength(3);

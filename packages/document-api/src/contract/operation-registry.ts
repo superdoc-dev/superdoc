@@ -27,7 +27,7 @@ import type { InsertInput } from '../insert/insert.js';
 import type { ReplaceInput } from '../replace/replace.js';
 import type { DeleteInput } from '../delete/delete.js';
 import type { MutationOptions, RevisionGuardOptions } from '../write/write.js';
-import type { FormatInlineAliasInput, StyleApplyInput, FormatAlignInput } from '../format/format.js';
+import type { FormatInlineAliasInput, StyleApplyInput } from '../format/format.js';
 import type { InlineRunPatchKey } from '../format/inline-run-patch.js';
 import type { StylesApplyInput, StylesApplyOptions, StylesApplyReceipt } from '../styles/styles.js';
 import type {
@@ -52,6 +52,28 @@ import type {
   ListTargetInput,
   ListsExitResult,
 } from '../lists/lists.types.js';
+import type {
+  ParagraphMutationResult,
+  ParagraphsSetStyleInput,
+  ParagraphsClearStyleInput,
+  ParagraphsResetDirectFormattingInput,
+  ParagraphsSetAlignmentInput,
+  ParagraphsClearAlignmentInput,
+  ParagraphsSetIndentationInput,
+  ParagraphsClearIndentationInput,
+  ParagraphsSetSpacingInput,
+  ParagraphsClearSpacingInput,
+  ParagraphsSetKeepOptionsInput,
+  ParagraphsSetOutlineLevelInput,
+  ParagraphsSetFlowOptionsInput,
+  ParagraphsSetTabStopInput,
+  ParagraphsClearTabStopInput,
+  ParagraphsClearAllTabStopsInput,
+  ParagraphsSetBorderInput,
+  ParagraphsClearBorderInput,
+  ParagraphsSetShadingInput,
+  ParagraphsClearShadingInput,
+} from '../paragraphs/paragraphs.js';
 import type {
   CreateSectionBreakInput,
   CreateSectionBreakResult,
@@ -178,7 +200,104 @@ export interface OperationRegistry extends FormatInlineAliasOperationRegistry {
 
   // --- format.* ---
   'format.apply': { input: StyleApplyInput; options: MutationOptions; output: TextMutationReceipt };
-  'format.align': { input: FormatAlignInput; options: MutationOptions; output: TextMutationReceipt };
+  // --- styles.paragraph.* ---
+  'styles.paragraph.setStyle': {
+    input: ParagraphsSetStyleInput;
+    options: MutationOptions;
+    output: ParagraphMutationResult;
+  };
+  'styles.paragraph.clearStyle': {
+    input: ParagraphsClearStyleInput;
+    options: MutationOptions;
+    output: ParagraphMutationResult;
+  };
+
+  // --- format.paragraph.* ---
+  'format.paragraph.resetDirectFormatting': {
+    input: ParagraphsResetDirectFormattingInput;
+    options: MutationOptions;
+    output: ParagraphMutationResult;
+  };
+  'format.paragraph.setAlignment': {
+    input: ParagraphsSetAlignmentInput;
+    options: MutationOptions;
+    output: ParagraphMutationResult;
+  };
+  'format.paragraph.clearAlignment': {
+    input: ParagraphsClearAlignmentInput;
+    options: MutationOptions;
+    output: ParagraphMutationResult;
+  };
+  'format.paragraph.setIndentation': {
+    input: ParagraphsSetIndentationInput;
+    options: MutationOptions;
+    output: ParagraphMutationResult;
+  };
+  'format.paragraph.clearIndentation': {
+    input: ParagraphsClearIndentationInput;
+    options: MutationOptions;
+    output: ParagraphMutationResult;
+  };
+  'format.paragraph.setSpacing': {
+    input: ParagraphsSetSpacingInput;
+    options: MutationOptions;
+    output: ParagraphMutationResult;
+  };
+  'format.paragraph.clearSpacing': {
+    input: ParagraphsClearSpacingInput;
+    options: MutationOptions;
+    output: ParagraphMutationResult;
+  };
+  'format.paragraph.setKeepOptions': {
+    input: ParagraphsSetKeepOptionsInput;
+    options: MutationOptions;
+    output: ParagraphMutationResult;
+  };
+  'format.paragraph.setOutlineLevel': {
+    input: ParagraphsSetOutlineLevelInput;
+    options: MutationOptions;
+    output: ParagraphMutationResult;
+  };
+  'format.paragraph.setFlowOptions': {
+    input: ParagraphsSetFlowOptionsInput;
+    options: MutationOptions;
+    output: ParagraphMutationResult;
+  };
+  'format.paragraph.setTabStop': {
+    input: ParagraphsSetTabStopInput;
+    options: MutationOptions;
+    output: ParagraphMutationResult;
+  };
+  'format.paragraph.clearTabStop': {
+    input: ParagraphsClearTabStopInput;
+    options: MutationOptions;
+    output: ParagraphMutationResult;
+  };
+  'format.paragraph.clearAllTabStops': {
+    input: ParagraphsClearAllTabStopsInput;
+    options: MutationOptions;
+    output: ParagraphMutationResult;
+  };
+  'format.paragraph.setBorder': {
+    input: ParagraphsSetBorderInput;
+    options: MutationOptions;
+    output: ParagraphMutationResult;
+  };
+  'format.paragraph.clearBorder': {
+    input: ParagraphsClearBorderInput;
+    options: MutationOptions;
+    output: ParagraphMutationResult;
+  };
+  'format.paragraph.setShading': {
+    input: ParagraphsSetShadingInput;
+    options: MutationOptions;
+    output: ParagraphMutationResult;
+  };
+  'format.paragraph.clearShading': {
+    input: ParagraphsClearShadingInput;
+    options: MutationOptions;
+    output: ParagraphMutationResult;
+  };
 
   // --- styles.* ---
   'styles.apply': { input: StylesApplyInput; options: StylesApplyOptions; output: StylesApplyReceipt };

@@ -39,7 +39,9 @@ export type ReferenceGroupKey =
   | 'create'
   | 'sections'
   | 'format'
+  | 'format.paragraph'
   | 'styles'
+  | 'styles.paragraph'
   | 'lists'
   | 'comments'
   | 'trackChanges'
@@ -155,6 +157,7 @@ const T_SECTION_CREATE = [
   'INTERNAL_ERROR',
 ] as const;
 const T_SECTION_READ = ['TARGET_NOT_FOUND', 'INVALID_TARGET', 'INVALID_INPUT', 'CAPABILITY_UNAVAILABLE'] as const;
+const T_PARAGRAPH_MUTATION = ['TARGET_NOT_FOUND', 'INVALID_TARGET', 'CAPABILITY_UNAVAILABLE'] as const;
 const T_SECTION_MUTATION = [
   'TARGET_NOT_FOUND',
   'INVALID_TARGET',
@@ -349,22 +352,6 @@ export const OPERATION_DEFINITIONS = {
     referenceGroup: 'format',
   },
   ...FORMAT_INLINE_ALIAS_OPERATION_DEFINITIONS,
-  'format.align': {
-    memberPath: 'format.align',
-    description: 'Set or unset paragraph alignment on the block containing the target. Pass null to reset to default.',
-    expectedResult:
-      'Returns a TextMutationReceipt; receipt reports NO_OP if the block already has the requested alignment.',
-    requiresDocumentContext: true,
-    metadata: mutationOperation({
-      idempotency: 'conditional',
-      supportsDryRun: true,
-      supportsTrackedMode: false,
-      possibleFailureCodes: ['INVALID_TARGET', 'NO_OP'],
-      throws: [...T_NOT_FOUND_CAPABLE, 'INVALID_TARGET', 'INVALID_INPUT'],
-    }),
-    referenceDocPath: 'format/align.mdx',
-    referenceGroup: 'format',
-  },
 
   'styles.apply': {
     memberPath: 'styles.apply',
@@ -702,6 +689,298 @@ export const OPERATION_DEFINITIONS = {
     }),
     referenceDocPath: 'sections/clear-page-borders.mdx',
     referenceGroup: 'sections',
+  },
+
+  // --- styles.paragraph.* ---
+
+  'styles.paragraph.setStyle': {
+    memberPath: 'styles.paragraph.setStyle',
+    description: 'Set the paragraph style reference (w:pStyle) on a paragraph-like block.',
+    expectedResult: 'Returns a ParagraphMutationResult; reports NO_OP if the style already matches.',
+    requiresDocumentContext: true,
+    metadata: mutationOperation({
+      idempotency: 'conditional',
+      supportsDryRun: true,
+      supportsTrackedMode: false,
+      possibleFailureCodes: ['NO_OP'],
+      throws: T_PARAGRAPH_MUTATION,
+    }),
+    referenceDocPath: 'styles/paragraph/set-style.mdx',
+    referenceGroup: 'styles.paragraph',
+  },
+  'styles.paragraph.clearStyle': {
+    memberPath: 'styles.paragraph.clearStyle',
+    description: 'Remove the paragraph style reference from a paragraph-like block.',
+    expectedResult: 'Returns a ParagraphMutationResult; reports NO_OP if no style is set.',
+    requiresDocumentContext: true,
+    metadata: mutationOperation({
+      idempotency: 'conditional',
+      supportsDryRun: true,
+      supportsTrackedMode: false,
+      possibleFailureCodes: ['NO_OP'],
+      throws: T_PARAGRAPH_MUTATION,
+    }),
+    referenceDocPath: 'styles/paragraph/clear-style.mdx',
+    referenceGroup: 'styles.paragraph',
+  },
+
+  // --- format.paragraph.* ---
+
+  'format.paragraph.resetDirectFormatting': {
+    memberPath: 'format.paragraph.resetDirectFormatting',
+    description:
+      'Strip all direct paragraph formatting while preserving style reference, numbering, and section metadata.',
+    expectedResult: 'Returns a ParagraphMutationResult; reports NO_OP if no direct formatting is present.',
+    requiresDocumentContext: true,
+    metadata: mutationOperation({
+      idempotency: 'conditional',
+      supportsDryRun: true,
+      supportsTrackedMode: false,
+      possibleFailureCodes: ['NO_OP'],
+      throws: T_PARAGRAPH_MUTATION,
+    }),
+    referenceDocPath: 'format/paragraph/reset-direct-formatting.mdx',
+    referenceGroup: 'format.paragraph',
+  },
+  'format.paragraph.setAlignment': {
+    memberPath: 'format.paragraph.setAlignment',
+    description: 'Set paragraph alignment (justification) on a paragraph-like block.',
+    expectedResult: 'Returns a ParagraphMutationResult; reports NO_OP if the alignment already matches.',
+    requiresDocumentContext: true,
+    metadata: mutationOperation({
+      idempotency: 'conditional',
+      supportsDryRun: true,
+      supportsTrackedMode: false,
+      possibleFailureCodes: ['NO_OP'],
+      throws: T_PARAGRAPH_MUTATION,
+    }),
+    referenceDocPath: 'format/paragraph/set-alignment.mdx',
+    referenceGroup: 'format.paragraph',
+  },
+  'format.paragraph.clearAlignment': {
+    memberPath: 'format.paragraph.clearAlignment',
+    description: 'Remove direct paragraph alignment, reverting to style-defined or default alignment.',
+    expectedResult: 'Returns a ParagraphMutationResult; reports NO_OP if no direct alignment is set.',
+    requiresDocumentContext: true,
+    metadata: mutationOperation({
+      idempotency: 'conditional',
+      supportsDryRun: true,
+      supportsTrackedMode: false,
+      possibleFailureCodes: ['NO_OP'],
+      throws: T_PARAGRAPH_MUTATION,
+    }),
+    referenceDocPath: 'format/paragraph/clear-alignment.mdx',
+    referenceGroup: 'format.paragraph',
+  },
+  'format.paragraph.setIndentation': {
+    memberPath: 'format.paragraph.setIndentation',
+    description: 'Set paragraph indentation properties (left, right, firstLine, hanging) in twips.',
+    expectedResult: 'Returns a ParagraphMutationResult; reports NO_OP if indentation already matches.',
+    requiresDocumentContext: true,
+    metadata: mutationOperation({
+      idempotency: 'conditional',
+      supportsDryRun: true,
+      supportsTrackedMode: false,
+      possibleFailureCodes: ['NO_OP'],
+      throws: T_PARAGRAPH_MUTATION,
+    }),
+    referenceDocPath: 'format/paragraph/set-indentation.mdx',
+    referenceGroup: 'format.paragraph',
+  },
+  'format.paragraph.clearIndentation': {
+    memberPath: 'format.paragraph.clearIndentation',
+    description: 'Remove all direct paragraph indentation.',
+    expectedResult: 'Returns a ParagraphMutationResult; reports NO_OP if no direct indentation is set.',
+    requiresDocumentContext: true,
+    metadata: mutationOperation({
+      idempotency: 'conditional',
+      supportsDryRun: true,
+      supportsTrackedMode: false,
+      possibleFailureCodes: ['NO_OP'],
+      throws: T_PARAGRAPH_MUTATION,
+    }),
+    referenceDocPath: 'format/paragraph/clear-indentation.mdx',
+    referenceGroup: 'format.paragraph',
+  },
+  'format.paragraph.setSpacing': {
+    memberPath: 'format.paragraph.setSpacing',
+    description: 'Set paragraph spacing properties (before, after, line, lineRule) in twips.',
+    expectedResult: 'Returns a ParagraphMutationResult; reports NO_OP if spacing already matches.',
+    requiresDocumentContext: true,
+    metadata: mutationOperation({
+      idempotency: 'conditional',
+      supportsDryRun: true,
+      supportsTrackedMode: false,
+      possibleFailureCodes: ['NO_OP'],
+      throws: T_PARAGRAPH_MUTATION,
+    }),
+    referenceDocPath: 'format/paragraph/set-spacing.mdx',
+    referenceGroup: 'format.paragraph',
+  },
+  'format.paragraph.clearSpacing': {
+    memberPath: 'format.paragraph.clearSpacing',
+    description: 'Remove all direct paragraph spacing.',
+    expectedResult: 'Returns a ParagraphMutationResult; reports NO_OP if no direct spacing is set.',
+    requiresDocumentContext: true,
+    metadata: mutationOperation({
+      idempotency: 'conditional',
+      supportsDryRun: true,
+      supportsTrackedMode: false,
+      possibleFailureCodes: ['NO_OP'],
+      throws: T_PARAGRAPH_MUTATION,
+    }),
+    referenceDocPath: 'format/paragraph/clear-spacing.mdx',
+    referenceGroup: 'format.paragraph',
+  },
+  'format.paragraph.setKeepOptions': {
+    memberPath: 'format.paragraph.setKeepOptions',
+    description: 'Set keep-with-next, keep-lines-together, and widow/orphan control flags.',
+    expectedResult: 'Returns a ParagraphMutationResult; reports NO_OP if all flags already match.',
+    requiresDocumentContext: true,
+    metadata: mutationOperation({
+      idempotency: 'conditional',
+      supportsDryRun: true,
+      supportsTrackedMode: false,
+      possibleFailureCodes: ['NO_OP'],
+      throws: T_PARAGRAPH_MUTATION,
+    }),
+    referenceDocPath: 'format/paragraph/set-keep-options.mdx',
+    referenceGroup: 'format.paragraph',
+  },
+  'format.paragraph.setOutlineLevel': {
+    memberPath: 'format.paragraph.setOutlineLevel',
+    description: 'Set the paragraph outline level (0–9) or null to clear.',
+    expectedResult: 'Returns a ParagraphMutationResult; reports NO_OP if outline level already matches.',
+    requiresDocumentContext: true,
+    metadata: mutationOperation({
+      idempotency: 'conditional',
+      supportsDryRun: true,
+      supportsTrackedMode: false,
+      possibleFailureCodes: ['NO_OP'],
+      throws: T_PARAGRAPH_MUTATION,
+    }),
+    referenceDocPath: 'format/paragraph/set-outline-level.mdx',
+    referenceGroup: 'format.paragraph',
+  },
+  'format.paragraph.setFlowOptions': {
+    memberPath: 'format.paragraph.setFlowOptions',
+    description: 'Set contextual spacing, page-break-before, and suppress-auto-hyphens flags.',
+    expectedResult: 'Returns a ParagraphMutationResult; reports NO_OP if all flags already match.',
+    requiresDocumentContext: true,
+    metadata: mutationOperation({
+      idempotency: 'conditional',
+      supportsDryRun: true,
+      supportsTrackedMode: false,
+      possibleFailureCodes: ['NO_OP'],
+      throws: T_PARAGRAPH_MUTATION,
+    }),
+    referenceDocPath: 'format/paragraph/set-flow-options.mdx',
+    referenceGroup: 'format.paragraph',
+  },
+  'format.paragraph.setTabStop': {
+    memberPath: 'format.paragraph.setTabStop',
+    description: 'Add or replace a tab stop at a given position.',
+    expectedResult: 'Returns a ParagraphMutationResult; reports NO_OP if an identical tab stop already exists.',
+    requiresDocumentContext: true,
+    metadata: mutationOperation({
+      idempotency: 'conditional',
+      supportsDryRun: true,
+      supportsTrackedMode: false,
+      possibleFailureCodes: ['NO_OP'],
+      throws: T_PARAGRAPH_MUTATION,
+    }),
+    referenceDocPath: 'format/paragraph/set-tab-stop.mdx',
+    referenceGroup: 'format.paragraph',
+  },
+  'format.paragraph.clearTabStop': {
+    memberPath: 'format.paragraph.clearTabStop',
+    description: 'Remove a tab stop at a given position.',
+    expectedResult: 'Returns a ParagraphMutationResult; reports NO_OP if no tab stop exists at that position.',
+    requiresDocumentContext: true,
+    metadata: mutationOperation({
+      idempotency: 'conditional',
+      supportsDryRun: true,
+      supportsTrackedMode: false,
+      possibleFailureCodes: ['NO_OP'],
+      throws: T_PARAGRAPH_MUTATION,
+    }),
+    referenceDocPath: 'format/paragraph/clear-tab-stop.mdx',
+    referenceGroup: 'format.paragraph',
+  },
+  'format.paragraph.clearAllTabStops': {
+    memberPath: 'format.paragraph.clearAllTabStops',
+    description: 'Remove all tab stops from a paragraph.',
+    expectedResult: 'Returns a ParagraphMutationResult; reports NO_OP if no tab stops exist.',
+    requiresDocumentContext: true,
+    metadata: mutationOperation({
+      idempotency: 'conditional',
+      supportsDryRun: true,
+      supportsTrackedMode: false,
+      possibleFailureCodes: ['NO_OP'],
+      throws: T_PARAGRAPH_MUTATION,
+    }),
+    referenceDocPath: 'format/paragraph/clear-all-tab-stops.mdx',
+    referenceGroup: 'format.paragraph',
+  },
+  'format.paragraph.setBorder': {
+    memberPath: 'format.paragraph.setBorder',
+    description: 'Set border properties for a specific side of a paragraph.',
+    expectedResult: 'Returns a ParagraphMutationResult; reports NO_OP if the border already matches.',
+    requiresDocumentContext: true,
+    metadata: mutationOperation({
+      idempotency: 'conditional',
+      supportsDryRun: true,
+      supportsTrackedMode: false,
+      possibleFailureCodes: ['NO_OP'],
+      throws: T_PARAGRAPH_MUTATION,
+    }),
+    referenceDocPath: 'format/paragraph/set-border.mdx',
+    referenceGroup: 'format.paragraph',
+  },
+  'format.paragraph.clearBorder': {
+    memberPath: 'format.paragraph.clearBorder',
+    description: 'Remove border for a specific side or all sides of a paragraph.',
+    expectedResult: 'Returns a ParagraphMutationResult; reports NO_OP if the border is already absent.',
+    requiresDocumentContext: true,
+    metadata: mutationOperation({
+      idempotency: 'conditional',
+      supportsDryRun: true,
+      supportsTrackedMode: false,
+      possibleFailureCodes: ['NO_OP'],
+      throws: T_PARAGRAPH_MUTATION,
+    }),
+    referenceDocPath: 'format/paragraph/clear-border.mdx',
+    referenceGroup: 'format.paragraph',
+  },
+  'format.paragraph.setShading': {
+    memberPath: 'format.paragraph.setShading',
+    description: 'Set paragraph shading (background fill, pattern color, pattern type).',
+    expectedResult: 'Returns a ParagraphMutationResult; reports NO_OP if the shading already matches.',
+    requiresDocumentContext: true,
+    metadata: mutationOperation({
+      idempotency: 'conditional',
+      supportsDryRun: true,
+      supportsTrackedMode: false,
+      possibleFailureCodes: ['NO_OP'],
+      throws: T_PARAGRAPH_MUTATION,
+    }),
+    referenceDocPath: 'format/paragraph/set-shading.mdx',
+    referenceGroup: 'format.paragraph',
+  },
+  'format.paragraph.clearShading': {
+    memberPath: 'format.paragraph.clearShading',
+    description: 'Remove all paragraph shading.',
+    expectedResult: 'Returns a ParagraphMutationResult; reports NO_OP if no shading is set.',
+    requiresDocumentContext: true,
+    metadata: mutationOperation({
+      idempotency: 'conditional',
+      supportsDryRun: true,
+      supportsTrackedMode: false,
+      possibleFailureCodes: ['NO_OP'],
+      throws: T_PARAGRAPH_MUTATION,
+    }),
+    referenceDocPath: 'format/paragraph/clear-shading.mdx',
+    referenceGroup: 'format.paragraph',
   },
 
   'lists.list': {

@@ -30,7 +30,6 @@ type EditorWithBlockNodeHelper = Editor & {
 // they are backed by writeAdapter which is always available when the editor exists.
 // Read-only operations (find, getNode, getText, info, etc.) similarly need no commands.
 const REQUIRED_COMMANDS: Partial<Record<OperationId, readonly EditorCommandName[]>> = {
-  'format.align': ['setTextSelection', 'setTextAlign', 'unsetTextAlign'],
   'create.paragraph': ['insertParagraphAt'],
   'create.heading': ['insertHeadingAt'],
   'lists.insert': ['insertListItemAt'],

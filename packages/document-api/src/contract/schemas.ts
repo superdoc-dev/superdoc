@@ -1,9 +1,16 @@
 import { COMMAND_CATALOG } from './command-catalog.js';
 import { CONTRACT_VERSION, JSON_SCHEMA_DIALECT, OPERATION_IDS, type OperationId } from './types.js';
 import { NODE_TYPES, BLOCK_NODE_TYPES, DELETABLE_BLOCK_NODE_TYPES, INLINE_NODE_TYPES } from '../types/base.js';
-import { ALIGNMENTS } from '../format/format.js';
 import { INLINE_PROPERTY_REGISTRY, buildInlineRunPatchSchema } from '../format/inline-run-patch.js';
 import { INLINE_DIRECTIVES } from '../types/style-policy.types.js';
+import {
+  PARAGRAPH_ALIGNMENTS,
+  TAB_STOP_ALIGNMENTS,
+  TAB_STOP_LEADERS,
+  BORDER_SIDES,
+  CLEAR_BORDER_SIDES,
+  LINE_RULES,
+} from '../paragraphs/paragraphs.js';
 
 type JsonSchema = Record<string, unknown>;
 
@@ -337,6 +344,9 @@ const deletableBlockNodeAddressSchema = ref('DeletableBlockNodeAddress');
 const paragraphAddressSchema = ref('ParagraphAddress');
 const headingAddressSchema = ref('HeadingAddress');
 const listItemAddressSchema = ref('ListItemAddress');
+const paragraphTargetSchema: JsonSchema = {
+  oneOf: [paragraphAddressSchema, headingAddressSchema, listItemAddressSchema],
+};
 const sectionAddressSchema = ref('SectionAddress');
 const inlineNodeAddressSchema = ref('InlineNodeAddress');
 const nodeAddressSchema = ref('NodeAddress');
@@ -973,6 +983,38 @@ function documentMutationResultSchemaFor(operationId: OperationId): JsonSchema {
   };
 }
 
+// ---------------------------------------------------------------------------
+// Paragraph mutation result schemas
+// ---------------------------------------------------------------------------
+
+const paragraphMutationTargetSchema = objectSchema({ target: paragraphTargetSchema }, ['target']);
+
+const paragraphMutationSuccessSchema = objectSchema(
+  {
+    success: { const: true },
+    target: paragraphTargetSchema,
+    resolution: paragraphMutationTargetSchema,
+  },
+  ['success', 'target', 'resolution'],
+);
+
+function paragraphMutationFailureSchemaFor(operationId: OperationId): JsonSchema {
+  return objectSchema(
+    {
+      success: { const: false },
+      failure: receiptFailureSchemaFor(operationId),
+      resolution: paragraphMutationTargetSchema,
+    },
+    ['success', 'failure'],
+  );
+}
+
+function paragraphMutationResultSchemaFor(operationId: OperationId): JsonSchema {
+  return {
+    oneOf: [paragraphMutationSuccessSchema, paragraphMutationFailureSchemaFor(operationId)],
+  };
+}
+
 const createSectionBreakSuccessSchema = objectSchema(
   {
     success: { const: true },
@@ -1504,18 +1546,6 @@ const operationSchemas: Record<OperationId, OperationSchemaSet> = {
     failure: textMutationFailureSchemaFor('format.apply'),
   },
   ...formatInlineAliasOperationSchemas,
-  'format.align': {
-    input: objectSchema(
-      {
-        target: textAddressSchema,
-        alignment: { oneOf: [{ enum: [...ALIGNMENTS] }, { type: 'null' }] },
-      },
-      ['target', 'alignment'],
-    ),
-    output: textMutationResultSchemaFor('format.align'),
-    success: textMutationSuccessSchema,
-    failure: textMutationFailureSchemaFor('format.align'),
-  },
   'blocks.delete': {
     input: objectSchema(
       {
@@ -1538,6 +1568,225 @@ const operationSchemas: Record<OperationId, OperationSchemaSet> = {
       ['success', 'deleted'],
     ),
     failure: preApplyFailureResultSchemaFor('blocks.delete'),
+  },
+
+  // --- styles.paragraph.* ---
+  'styles.paragraph.setStyle': {
+    input: objectSchema({ target: paragraphTargetSchema, styleId: { type: 'string', minLength: 1 } }, [
+      'target',
+      'styleId',
+    ]),
+    output: paragraphMutationResultSchemaFor('styles.paragraph.setStyle'),
+    success: paragraphMutationSuccessSchema,
+    failure: paragraphMutationFailureSchemaFor('styles.paragraph.setStyle'),
+  },
+  'styles.paragraph.clearStyle': {
+    input: objectSchema({ target: paragraphTargetSchema }, ['target']),
+    output: paragraphMutationResultSchemaFor('styles.paragraph.clearStyle'),
+    success: paragraphMutationSuccessSchema,
+    failure: paragraphMutationFailureSchemaFor('styles.paragraph.clearStyle'),
+  },
+
+  // --- format.paragraph.* ---
+  'format.paragraph.resetDirectFormatting': {
+    input: objectSchema({ target: paragraphTargetSchema }, ['target']),
+    output: paragraphMutationResultSchemaFor('format.paragraph.resetDirectFormatting'),
+    success: paragraphMutationSuccessSchema,
+    failure: paragraphMutationFailureSchemaFor('format.paragraph.resetDirectFormatting'),
+  },
+  'format.paragraph.setAlignment': {
+    input: objectSchema({ target: paragraphTargetSchema, alignment: { enum: [...PARAGRAPH_ALIGNMENTS] } }, [
+      'target',
+      'alignment',
+    ]),
+    output: paragraphMutationResultSchemaFor('format.paragraph.setAlignment'),
+    success: paragraphMutationSuccessSchema,
+    failure: paragraphMutationFailureSchemaFor('format.paragraph.setAlignment'),
+  },
+  'format.paragraph.clearAlignment': {
+    input: objectSchema({ target: paragraphTargetSchema }, ['target']),
+    output: paragraphMutationResultSchemaFor('format.paragraph.clearAlignment'),
+    success: paragraphMutationSuccessSchema,
+    failure: paragraphMutationFailureSchemaFor('format.paragraph.clearAlignment'),
+  },
+  'format.paragraph.setIndentation': {
+    input: {
+      ...objectSchema(
+        {
+          target: paragraphTargetSchema,
+          left: { type: 'integer', minimum: 0 },
+          right: { type: 'integer', minimum: 0 },
+          firstLine: { type: 'integer', minimum: 0 },
+          hanging: { type: 'integer', minimum: 0 },
+        },
+        ['target'],
+      ),
+      anyOf: [{ required: ['left'] }, { required: ['right'] }, { required: ['firstLine'] }, { required: ['hanging'] }],
+      not: { required: ['firstLine', 'hanging'] },
+    },
+    output: paragraphMutationResultSchemaFor('format.paragraph.setIndentation'),
+    success: paragraphMutationSuccessSchema,
+    failure: paragraphMutationFailureSchemaFor('format.paragraph.setIndentation'),
+  },
+  'format.paragraph.clearIndentation': {
+    input: objectSchema({ target: paragraphTargetSchema }, ['target']),
+    output: paragraphMutationResultSchemaFor('format.paragraph.clearIndentation'),
+    success: paragraphMutationSuccessSchema,
+    failure: paragraphMutationFailureSchemaFor('format.paragraph.clearIndentation'),
+  },
+  'format.paragraph.setSpacing': {
+    input: {
+      ...objectSchema(
+        {
+          target: paragraphTargetSchema,
+          before: { type: 'integer', minimum: 0 },
+          after: { type: 'integer', minimum: 0 },
+          line: { type: 'integer', minimum: 1 },
+          lineRule: { enum: [...LINE_RULES] },
+        },
+        ['target'],
+      ),
+      anyOf: [{ required: ['before'] }, { required: ['after'] }, { required: ['line'] }, { required: ['lineRule'] }],
+      if: { required: ['line'] },
+      then: { required: ['lineRule'] },
+    },
+    output: paragraphMutationResultSchemaFor('format.paragraph.setSpacing'),
+    success: paragraphMutationSuccessSchema,
+    failure: paragraphMutationFailureSchemaFor('format.paragraph.setSpacing'),
+  },
+  'format.paragraph.clearSpacing': {
+    input: objectSchema({ target: paragraphTargetSchema }, ['target']),
+    output: paragraphMutationResultSchemaFor('format.paragraph.clearSpacing'),
+    success: paragraphMutationSuccessSchema,
+    failure: paragraphMutationFailureSchemaFor('format.paragraph.clearSpacing'),
+  },
+  'format.paragraph.setKeepOptions': {
+    input: {
+      ...objectSchema(
+        {
+          target: paragraphTargetSchema,
+          keepNext: { type: 'boolean' },
+          keepLines: { type: 'boolean' },
+          widowControl: { type: 'boolean' },
+        },
+        ['target'],
+      ),
+      oneOf: [
+        { required: ['target', 'keepNext'] },
+        { required: ['target', 'keepLines'] },
+        { required: ['target', 'widowControl'] },
+      ],
+    },
+    output: paragraphMutationResultSchemaFor('format.paragraph.setKeepOptions'),
+    success: paragraphMutationSuccessSchema,
+    failure: paragraphMutationFailureSchemaFor('format.paragraph.setKeepOptions'),
+  },
+  'format.paragraph.setOutlineLevel': {
+    input: objectSchema(
+      {
+        target: paragraphTargetSchema,
+        outlineLevel: { oneOf: [{ type: 'integer', minimum: 0, maximum: 9 }, { type: 'null' }] },
+      },
+      ['target', 'outlineLevel'],
+    ),
+    output: paragraphMutationResultSchemaFor('format.paragraph.setOutlineLevel'),
+    success: paragraphMutationSuccessSchema,
+    failure: paragraphMutationFailureSchemaFor('format.paragraph.setOutlineLevel'),
+  },
+  'format.paragraph.setFlowOptions': {
+    input: {
+      ...objectSchema(
+        {
+          target: paragraphTargetSchema,
+          contextualSpacing: { type: 'boolean' },
+          pageBreakBefore: { type: 'boolean' },
+          suppressAutoHyphens: { type: 'boolean' },
+        },
+        ['target'],
+      ),
+      oneOf: [
+        { required: ['target', 'contextualSpacing'] },
+        { required: ['target', 'pageBreakBefore'] },
+        { required: ['target', 'suppressAutoHyphens'] },
+      ],
+    },
+    output: paragraphMutationResultSchemaFor('format.paragraph.setFlowOptions'),
+    success: paragraphMutationSuccessSchema,
+    failure: paragraphMutationFailureSchemaFor('format.paragraph.setFlowOptions'),
+  },
+  'format.paragraph.setTabStop': {
+    input: objectSchema(
+      {
+        target: paragraphTargetSchema,
+        position: { type: 'integer', minimum: 0 },
+        alignment: { enum: [...TAB_STOP_ALIGNMENTS] },
+        leader: { enum: [...TAB_STOP_LEADERS] },
+      },
+      ['target', 'position', 'alignment'],
+    ),
+    output: paragraphMutationResultSchemaFor('format.paragraph.setTabStop'),
+    success: paragraphMutationSuccessSchema,
+    failure: paragraphMutationFailureSchemaFor('format.paragraph.setTabStop'),
+  },
+  'format.paragraph.clearTabStop': {
+    input: objectSchema({ target: paragraphTargetSchema, position: { type: 'integer', minimum: 0 } }, [
+      'target',
+      'position',
+    ]),
+    output: paragraphMutationResultSchemaFor('format.paragraph.clearTabStop'),
+    success: paragraphMutationSuccessSchema,
+    failure: paragraphMutationFailureSchemaFor('format.paragraph.clearTabStop'),
+  },
+  'format.paragraph.clearAllTabStops': {
+    input: objectSchema({ target: paragraphTargetSchema }, ['target']),
+    output: paragraphMutationResultSchemaFor('format.paragraph.clearAllTabStops'),
+    success: paragraphMutationSuccessSchema,
+    failure: paragraphMutationFailureSchemaFor('format.paragraph.clearAllTabStops'),
+  },
+  'format.paragraph.setBorder': {
+    input: objectSchema(
+      {
+        target: paragraphTargetSchema,
+        side: { enum: [...BORDER_SIDES] },
+        style: { type: 'string', minLength: 1 },
+        color: { type: 'string', minLength: 1 },
+        size: { type: 'integer', minimum: 0 },
+        space: { type: 'integer', minimum: 0 },
+      },
+      ['target', 'side', 'style'],
+    ),
+    output: paragraphMutationResultSchemaFor('format.paragraph.setBorder'),
+    success: paragraphMutationSuccessSchema,
+    failure: paragraphMutationFailureSchemaFor('format.paragraph.setBorder'),
+  },
+  'format.paragraph.clearBorder': {
+    input: objectSchema({ target: paragraphTargetSchema, side: { enum: [...CLEAR_BORDER_SIDES] } }, ['target', 'side']),
+    output: paragraphMutationResultSchemaFor('format.paragraph.clearBorder'),
+    success: paragraphMutationSuccessSchema,
+    failure: paragraphMutationFailureSchemaFor('format.paragraph.clearBorder'),
+  },
+  'format.paragraph.setShading': {
+    input: {
+      ...objectSchema(
+        {
+          target: paragraphTargetSchema,
+          fill: { type: 'string', minLength: 1 },
+          color: { type: 'string', minLength: 1 },
+          pattern: { type: 'string', minLength: 1 },
+        },
+        ['target'],
+      ),
+      oneOf: [{ required: ['target', 'fill'] }, { required: ['target', 'color'] }, { required: ['target', 'pattern'] }],
+    },
+    output: paragraphMutationResultSchemaFor('format.paragraph.setShading'),
+    success: paragraphMutationSuccessSchema,
+    failure: paragraphMutationFailureSchemaFor('format.paragraph.setShading'),
+  },
+  'format.paragraph.clearShading': {
+    input: objectSchema({ target: paragraphTargetSchema }, ['target']),
+    output: paragraphMutationResultSchemaFor('format.paragraph.clearShading'),
+    success: paragraphMutationSuccessSchema,
+    failure: paragraphMutationFailureSchemaFor('format.paragraph.clearShading'),
   },
   'styles.apply': (() => {
     // --- Sub-schemas for object properties (all require minProperties: 1) ---

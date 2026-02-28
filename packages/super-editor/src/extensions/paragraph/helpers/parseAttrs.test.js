@@ -94,7 +94,7 @@ describe('parseAttrs', () => {
       const node = createMockNode({}, { marginTop: '16px' });
       const result = parseAttrs(node);
       // 16px / 1.333 = ~12pt, * 20 = ~240 twips
-      const expectedPt = 16 * 72 / 96;
+      const expectedPt = (16 * 72) / 96;
       expect(result.paragraphProperties.spacing.before).toBe(Math.round(expectedPt * 20));
     });
 
@@ -108,7 +108,7 @@ describe('parseAttrs', () => {
     it('extracts marginLeft in px and converts to twips', () => {
       const node = createMockNode({}, { marginLeft: '48px' });
       const result = parseAttrs(node);
-      const expectedPt = 48 * 72 / 96;
+      const expectedPt = (48 * 72) / 96;
       expect(result.paragraphProperties.indent.left).toBe(Math.round(expectedPt * 20));
     });
 
@@ -133,7 +133,7 @@ describe('parseAttrs', () => {
       const node = createMockNode({}, { lineHeight: '24px' });
       const result = parseAttrs(node);
       // 24px / 1.333 ≈ 18pt, * 20 = 360 twips
-      expect(result.paragraphProperties.spacing.line).toBe(Math.round((24 * 72 / 96) * 20));
+      expect(result.paragraphProperties.spacing.line).toBe(Math.round(((24 * 72) / 96) * 20));
       expect(result.paragraphProperties.spacing.lineRule).toBe('exact');
     });
 

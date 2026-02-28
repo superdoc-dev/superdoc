@@ -87,6 +87,7 @@ export interface InlineRunPatch {
   snapToGrid?: boolean | null;
   oMath?: boolean | null;
   fontSize?: number | null;
+  fontFamily?: string | null;
   fontSizeCs?: number | null;
   letterSpacing?: number | null;
   charScale?: number | null;
@@ -270,6 +271,7 @@ export const INLINE_PROPERTY_REGISTRY = [
   },
   markTextStyleValue('color', 'string', 'w:color', schemaStringOrNull()),
   markTextStyleValue('fontSize', 'number', 'w:sz', schemaNumberOrNull()),
+  markTextStyleValue('fontFamily', 'string', 'w:rFonts', schemaStringOrNull()),
   markTextStyleValue('letterSpacing', 'number', 'w:spacing', schemaNumberOrNull()),
   markTextStyleValue('vertAlign', 'string', 'w:vertAlign', {
     oneOf: [{ enum: ['superscript', 'subscript', 'baseline'] }, { type: 'null' }],
@@ -592,6 +594,7 @@ function validateInlineProperty(key: string, value: unknown): void {
       return;
     case 'highlight':
     case 'color':
+    case 'fontFamily':
     case 'rStyle':
     case 'em':
     case 'ligatures':

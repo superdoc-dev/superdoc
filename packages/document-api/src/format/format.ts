@@ -5,16 +5,6 @@ import { isRecord, isTextAddress, assertNoUnknownFields } from '../validation-pr
 import type { InlineRunPatch, InlineRunPatchKey } from './inline-run-patch.js';
 import { INLINE_PROPERTY_BY_KEY, validateInlineRunPatch } from './inline-run-patch.js';
 
-// ---------------------------------------------------------------------------
-// Alignment enum
-// ---------------------------------------------------------------------------
-
-/** Valid paragraph alignment values. */
-export const ALIGNMENTS = ['left', 'center', 'right', 'justify'] as const;
-export type Alignment = (typeof ALIGNMENTS)[number];
-const ALIGNMENT_SET: ReadonlySet<string> = new Set(ALIGNMENTS);
-
-// ---------------------------------------------------------------------------
 // Input types
 // ---------------------------------------------------------------------------
 
@@ -69,12 +59,6 @@ export interface StyleApplyInput {
 /** Options for `format.apply` — same shape as all other mutations. */
 export type StyleApplyOptions = MutationOptions;
 
-/** Input payload for `format.align`. Pass `null` to unset (reset to default). */
-export interface FormatAlignInput {
-  target: TextAddress;
-  alignment: Alignment | null;
-}
-
 // ---------------------------------------------------------------------------
 // Adapter interface
 // ---------------------------------------------------------------------------
@@ -82,7 +66,6 @@ export interface FormatAlignInput {
 /** Engine-specific adapter for format operations. */
 export interface FormatAdapter {
   apply(input: StyleApplyInput, options?: MutationOptions): TextMutationReceipt;
-  align(input: FormatAlignInput, options?: MutationOptions): TextMutationReceipt;
 }
 
 // ---------------------------------------------------------------------------
@@ -98,7 +81,6 @@ export type FormatInlineAliasApi = {
 export interface FormatApi extends FormatInlineAliasApi {
   strikethrough(input: FormatStrikethroughInput, options?: MutationOptions): TextMutationReceipt;
   apply(input: StyleApplyInput, options?: MutationOptions): TextMutationReceipt;
-  align(input: FormatAlignInput, options?: MutationOptions): TextMutationReceipt;
 }
 
 // ---------------------------------------------------------------------------
@@ -216,36 +198,4 @@ function validateTarget(input: unknown, operation: string): asserts input is { t
       value: input.target,
     });
   }
-}
-
-// ---------------------------------------------------------------------------
-// format.align — validation and execution
-// ---------------------------------------------------------------------------
-
-const ALIGN_ALLOWED_KEYS = new Set(['target', 'alignment']);
-
-function validateAlignInput(input: unknown): asserts input is FormatAlignInput {
-  validateTarget(input, 'format.align');
-  assertNoUnknownFields(input as Record<string, unknown>, ALIGN_ALLOWED_KEYS, 'format.align');
-
-  const { alignment } = input as Record<string, unknown>;
-  if (alignment === undefined) {
-    throw new DocumentApiValidationError('INVALID_INPUT', 'format.align requires an alignment field.');
-  }
-  if (alignment !== null && (typeof alignment !== 'string' || !ALIGNMENT_SET.has(alignment))) {
-    throw new DocumentApiValidationError(
-      'INVALID_INPUT',
-      `format.align alignment must be one of ${ALIGNMENTS.join(', ')}, or null.`,
-      { field: 'alignment', value: alignment },
-    );
-  }
-}
-
-export function executeAlign(
-  adapter: FormatAdapter,
-  input: FormatAlignInput,
-  options?: MutationOptions,
-): TextMutationReceipt {
-  validateAlignInput(input);
-  return adapter.align(input, normalizeMutationOptions(options));
 }

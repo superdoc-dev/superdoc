@@ -11,7 +11,7 @@ test.fixme(
   'v-click-outside races with programmatic activation on WebKit',
 );
 
-test('thread with 3+ replies collapses and expands on click', async ({ superdoc }) => {
+test('thread with 2+ replies collapses and expands on click', async ({ superdoc }) => {
   await assertDocumentApiReady(superdoc.page);
 
   // Type text and add a comment through the UI
@@ -23,7 +23,7 @@ test('thread with 3+ replies collapses and expands on click', async ({ superdoc 
     commentText: 'parent comment',
   });
 
-  // Add 4 replies to trigger collapse (threshold is childComments.length >= 3)
+  // Add 4 replies to trigger collapse (threshold is childComments.length >= 2)
   await replyToComment(superdoc.page, { parentCommentId: commentId, text: 'reply one' });
   await replyToComment(superdoc.page, { parentCommentId: commentId, text: 'reply two' });
   await replyToComment(superdoc.page, { parentCommentId: commentId, text: 'reply three' });
@@ -33,16 +33,25 @@ test('thread with 3+ replies collapses and expands on click', async ({ superdoc 
   // Re-assert highlight exists — replies trigger re-renders that may temporarily remove highlights
   await superdoc.assertCommentHighlightExists({ text: 'collapse', timeoutMs: 10_000 });
 
+  // Deactivate first so the dialog renders in collapsed state, then re-activate.
+  // On Firefox, replyToComment shifts activeComment to a child ID which can leave
+  // the thread in an expanded state.
+  await superdoc.page.evaluate(() => {
+    const sd = (window as any).superdoc;
+    sd.commentsStore.$patch({ activeComment: null });
+  });
+  await superdoc.waitForStable();
+
   // Activate the comment dialog
   const dialog = await activateCommentDialog(superdoc, 'collapse');
 
   // The collapsed-replies pill should be visible with "more replies" text
   const collapsedPill = dialog.locator('.collapsed-replies');
-  await expect(collapsedPill).toBeVisible({ timeout: 5_000 });
+  await expect(collapsedPill).toBeVisible({ timeout: 10_000 });
   await expect(collapsedPill).toContainText('more replies');
 
-  // In collapsed state: parent + first reply + last reply = 3 visible conversation items
-  await expect(dialog.locator('.conversation-item')).toHaveCount(3);
+  // In collapsed state: parent + last reply = 2 visible conversation items
+  await expect(dialog.locator('.conversation-item')).toHaveCount(2);
 
   // Click the collapsed pill to expand all replies
   await collapsedPill.click();

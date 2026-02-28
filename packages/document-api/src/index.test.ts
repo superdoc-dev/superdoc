@@ -120,7 +120,6 @@ function makeFormatReceipt() {
 function makeFormatAdapter(): FormatAdapter {
   return {
     apply: vi.fn(() => makeFormatReceipt()),
-    align: vi.fn(() => makeFormatReceipt()),
   };
 }
 
@@ -655,7 +654,7 @@ describe('createDocumentApi', () => {
     );
   });
 
-  it('delegates format.align to adapter.align', () => {
+  it('delegates format.fontFamily to adapter.apply with inline.fontFamily', () => {
     const formatAdpt = makeFormatAdapter();
     const api = createDocumentApi({
       find: makeFindAdapter(QUERY_RESULT),
@@ -671,9 +670,9 @@ describe('createDocumentApi', () => {
     });
 
     const target = { kind: 'text', blockId: 'p1', range: { start: 0, end: 2 } } as const;
-    api.format.align({ target, alignment: 'center' });
-    expect(formatAdpt.align).toHaveBeenCalledWith(
-      { target, alignment: 'center' },
+    api.format.fontFamily({ target, value: 'Arial' });
+    expect(formatAdpt.apply).toHaveBeenCalledWith(
+      { target, inline: { fontFamily: 'Arial' } },
       { changeMode: 'direct', dryRun: false },
     );
   });

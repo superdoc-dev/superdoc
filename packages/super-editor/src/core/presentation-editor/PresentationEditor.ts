@@ -65,6 +65,7 @@ import {
   shouldUseCellSelection as shouldUseCellSelectionFromHelper,
 } from './tables/TableSelectionUtilities.js';
 import { DragDropManager } from './input/DragDropManager.js';
+import { processAndInsertImageFile } from '@extensions/image/imageHelpers/processAndInsertImageFile.js';
 import { HeaderFooterSessionManager } from './header-footer/HeaderFooterSessionManager.js';
 import { decodeRPrFromMarks } from '../super-converter/styles.js';
 import { halfPointToPoints } from '../super-converter/helpers.js';
@@ -2764,7 +2765,7 @@ export class PresentationEditor extends EventEmitter {
   }
 
   /**
-   * Sets up drag and drop handlers for field annotations.
+   * Sets up drag and drop handlers for field annotations and image files.
    */
   #setupDragHandlers() {
     // Clean up any existing manager
@@ -2777,6 +2778,7 @@ export class PresentationEditor extends EventEmitter {
       scheduleSelectionUpdate: () => this.#scheduleSelectionUpdate(),
       getViewportHost: () => this.#viewportHost,
       getPainterHost: () => this.#painterHost,
+      insertImageFile: (params) => processAndInsertImageFile(params),
     });
     this.#dragDropManager.bind();
   }

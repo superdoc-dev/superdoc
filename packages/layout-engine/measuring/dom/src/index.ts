@@ -449,6 +449,26 @@ function calculateTypographyMetrics(
 }
 
 /**
+ * Wraps `calculateTypographyMetrics` and applies inline-image height override.
+ *
+ * Typography metrics (ascent, descent) stay text-based so the baseline doesn't
+ * shift. When the line contains an inline image taller than the text line height,
+ * lineHeight is expanded to the image height — matching Word's behaviour where
+ * the text baseline stays fixed and the image occupies exactly its own height.
+ */
+function finalizeLineMetrics(
+  line: { maxFontSize: number; maxFontInfo?: FontInfo; maxImageHeight?: number },
+  spacing?: ParagraphSpacing,
+): { ascent: number; descent: number; lineHeight: number } {
+  const metrics = calculateTypographyMetrics(line.maxFontSize, spacing, line.maxFontInfo);
+  const imageH = line.maxImageHeight ?? 0;
+  if (imageH > metrics.lineHeight) {
+    metrics.lineHeight = imageH;
+  }
+  return metrics;
+}
+
+/**
  * Calculates typography metrics for empty paragraphs.
  *
  * Empty paragraphs in Word use the font size as the base line height rather than
@@ -1048,6 +1068,8 @@ async function measureParagraphBlock(block: ParagraphBlock, maxWidth: number): P
     maxFontSize: number;
     /** Font info for the run with maxFontSize, used for accurate typography metrics */
     maxFontInfo?: FontInfo;
+    /** Tallest inline image on this line (pixels) */
+    maxImageHeight?: number;
     maxWidth: number;
     segments: Line['segments'];
     leaders?: Line['leaders'];
@@ -1275,7 +1297,7 @@ async function measureParagraphBlock(block: ParagraphBlock, maxWidth: number): P
 
     if ((run as Run).kind === 'break') {
       if (currentLine) {
-        const metrics = calculateTypographyMetrics(currentLine.maxFontSize, spacing, currentLine.maxFontInfo);
+        const metrics = finalizeLineMetrics(currentLine, spacing);
         const lineBase = currentLine;
         const completedLine: Line = { ...lineBase, ...metrics };
         addBarTabsToLine(completedLine);
@@ -1307,7 +1329,7 @@ async function measureParagraphBlock(block: ParagraphBlock, maxWidth: number): P
       // For leading line breaks (before any text), use fallback font info for accurate height calculation
       const lineBreakFontInfo = hasSeenTextRun ? undefined : fallbackFontInfo;
       if (currentLine) {
-        const metrics = calculateTypographyMetrics(currentLine.maxFontSize, spacing, currentLine.maxFontInfo);
+        const metrics = finalizeLineMetrics(currentLine, spacing);
         const completedLine: Line = {
           ...currentLine,
           ...metrics,
@@ -1489,7 +1511,8 @@ async function measureParagraphBlock(block: ParagraphBlock, maxWidth: number): P
           toRun: runIndex,
           toChar: 1, // Images are treated as single atomic units
           width: imageWidth,
-          maxFontSize: imageHeight, // Use image height for line height calculation
+          maxFontSize: 0,
+          maxImageHeight: imageHeight,
           maxWidth: getEffectiveWidth(lines.length === 0 ? initialAvailableWidth : bodyContentWidth),
           spaceCount: 0,
           segments: [
@@ -1518,7 +1541,7 @@ async function measureParagraphBlock(block: ParagraphBlock, maxWidth: number): P
       if (!skipFitCheck && currentLine.width + imageWidth > currentLine.maxWidth && currentLine.width > 0) {
         // Image doesn't fit - finish current line and start new line with image
         trimTrailingWrapSpaces(currentLine);
-        const metrics = calculateTypographyMetrics(currentLine.maxFontSize, spacing, currentLine.maxFontInfo);
+        const metrics = finalizeLineMetrics(currentLine, spacing);
         const lineBase = currentLine;
         const completedLine: Line = {
           ...lineBase,
@@ -1538,7 +1561,8 @@ async function measureParagraphBlock(block: ParagraphBlock, maxWidth: number): P
           toRun: runIndex,
           toChar: 1,
           width: imageWidth,
-          maxFontSize: imageHeight,
+          maxFontSize: 0,
+          maxImageHeight: imageHeight,
           maxWidth: getEffectiveWidth(bodyContentWidth),
           spaceCount: 0,
           segments: [
@@ -1555,7 +1579,7 @@ async function measureParagraphBlock(block: ParagraphBlock, maxWidth: number): P
         currentLine.toRun = runIndex;
         currentLine.toChar = 1;
         currentLine.width = roundValue(currentLine.width + imageWidth);
-        currentLine.maxFontSize = Math.max(currentLine.maxFontSize, imageHeight);
+        currentLine.maxImageHeight = Math.max(currentLine.maxImageHeight ?? 0, imageHeight);
         if (!currentLine.segments) currentLine.segments = [];
         currentLine.segments.push({
           runIndex,
@@ -1668,7 +1692,7 @@ async function measureParagraphBlock(block: ParagraphBlock, maxWidth: number): P
       if (currentLine.width + annotationWidth > currentLine.maxWidth && currentLine.width > 0) {
         // Doesn't fit - finish current line and start new one
         trimTrailingWrapSpaces(currentLine);
-        const metrics = calculateTypographyMetrics(currentLine.maxFontSize, spacing, currentLine.maxFontInfo);
+        const metrics = finalizeLineMetrics(currentLine, spacing);
         const lineBase = currentLine;
         const completedLine: Line = {
           ...lineBase,
@@ -1772,7 +1796,7 @@ async function measureParagraphBlock(block: ParagraphBlock, maxWidth: number): P
             currentLine.width > 0
           ) {
             trimTrailingWrapSpaces(currentLine);
-            const metrics = calculateTypographyMetrics(currentLine.maxFontSize, spacing, currentLine.maxFontInfo);
+            const metrics = finalizeLineMetrics(currentLine, spacing);
             const lineBase = currentLine;
             const completedLine: Line = {
               ...lineBase,
@@ -1886,7 +1910,7 @@ async function measureParagraphBlock(block: ParagraphBlock, maxWidth: number): P
             ) {
               // Space doesn't fit - finish current line and start new one with the space
               trimTrailingWrapSpaces(currentLine);
-              const metrics = calculateTypographyMetrics(currentLine.maxFontSize, spacing, currentLine.maxFontInfo);
+              const metrics = finalizeLineMetrics(currentLine, spacing);
               const lineBase = currentLine;
               const completedLine: Line = {
                 ...lineBase,
@@ -1969,7 +1993,7 @@ async function measureParagraphBlock(block: ParagraphBlock, maxWidth: number): P
           // long word can use the pending tab alignment.
           if (currentLine && currentLine.width > 0 && currentLine.segments && currentLine.segments.length > 0) {
             trimTrailingWrapSpaces(currentLine);
-            const metrics = calculateTypographyMetrics(currentLine.maxFontSize, spacing, currentLine.maxFontInfo);
+            const metrics = finalizeLineMetrics(currentLine, spacing);
             const lineBase = currentLine;
             const completedLine: Line = {
               ...lineBase,
@@ -2036,7 +2060,7 @@ async function measureParagraphBlock(block: ParagraphBlock, maxWidth: number): P
               } else {
                 // More chunks to come - finish this line and push it
                 trimTrailingWrapSpaces(currentLine);
-                const metrics = calculateTypographyMetrics(currentLine.maxFontSize, spacing, currentLine.maxFontInfo);
+                const metrics = finalizeLineMetrics(currentLine, spacing);
                 const lineBase = currentLine;
                 const completedLine: Line = {
                   ...lineBase,
@@ -2182,7 +2206,7 @@ async function measureParagraphBlock(block: ParagraphBlock, maxWidth: number): P
 
         if (shouldBreak) {
           trimTrailingWrapSpaces(currentLine);
-          const metrics = calculateTypographyMetrics(currentLine.maxFontSize, spacing, currentLine.maxFontInfo);
+          const metrics = finalizeLineMetrics(currentLine, spacing);
           const lineBase = currentLine;
           const completedLine: Line = {
             ...lineBase,
@@ -2247,7 +2271,7 @@ async function measureParagraphBlock(block: ParagraphBlock, maxWidth: number): P
             appendSegment(currentLine.segments, runIndex, wordStartChar, wordEndNoSpace, wordOnlyWidth, explicitXHere);
             // finish current line and start a new one on next iteration
             trimTrailingWrapSpaces(currentLine);
-            const metrics = calculateTypographyMetrics(currentLine.maxFontSize, spacing, currentLine.maxFontInfo);
+            const metrics = finalizeLineMetrics(currentLine, spacing);
             const lineBase = currentLine;
             const completedLine: Line = { ...lineBase, ...metrics };
             addBarTabsToLine(completedLine);
@@ -2386,7 +2410,7 @@ async function measureParagraphBlock(block: ParagraphBlock, maxWidth: number): P
   }
 
   if (currentLine) {
-    const metrics = calculateTypographyMetrics(currentLine.maxFontSize, spacing, currentLine.maxFontInfo);
+    const metrics = finalizeLineMetrics(currentLine, spacing);
     const lineBase = currentLine;
     const finalLine: Line = {
       ...lineBase,

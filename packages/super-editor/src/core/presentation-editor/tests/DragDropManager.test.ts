@@ -240,6 +240,29 @@ describe('Payload classification helpers', () => {
       const event = new MouseEvent('drop') as DragEvent;
       expect(getDroppedImageFiles(event)).toEqual([]);
     });
+
+    it('accepts image files with empty MIME type when extension is a known image format', () => {
+      const emptyMime = new File([new Uint8Array([1])], 'screenshot.png', { type: '' });
+      const jpgEmpty = new File([new Uint8Array([2])], 'photo.JPG', { type: '' });
+      const txtEmpty = new File([new Uint8Array([3])], 'notes.txt', { type: '' });
+      const noExt = new File([new Uint8Array([4])], 'noext', { type: '' });
+
+      const event = createImageDragEvent('drop', { files: [emptyMime, jpgEmpty, txtEmpty, noExt] });
+      const result = getDroppedImageFiles(event);
+
+      expect(result).toHaveLength(2);
+      expect(result[0].name).toBe('screenshot.png');
+      expect(result[1].name).toBe('photo.JPG');
+    });
+
+    it('does not use extension fallback when MIME type is a non-image type', () => {
+      const pdfWithImageExt = new File([new Uint8Array([1])], 'trick.png', { type: 'application/pdf' });
+
+      const event = createImageDragEvent('drop', { files: [pdfWithImageExt] });
+      const result = getDroppedImageFiles(event);
+
+      expect(result).toHaveLength(0);
+    });
   });
 });
 
@@ -493,6 +516,19 @@ describe('DragDropManager', () => {
 
       // No files to process, so insertImageFile should not be called
       await new Promise((r) => setTimeout(r, 10));
+      expect(insertImageFileMock).not.toHaveBeenCalled();
+    });
+
+    it('should not move caret when dropped files contain no images', async () => {
+      const pdfFile = new File([new Uint8Array([1])], 'doc.pdf', { type: 'application/pdf' });
+      const event = createImageDragEvent('drop', { files: [pdfFile] });
+
+      viewportHost.dispatchEvent(event);
+
+      await new Promise((r) => setTimeout(r, 10));
+
+      // Selection should NOT have been changed — no image means no state mutation
+      expect(mockEditor.state.tr.setSelection).not.toHaveBeenCalled();
       expect(insertImageFileMock).not.toHaveBeenCalled();
     });
 

@@ -210,6 +210,24 @@ export function hasPossibleFiles(event: DragEvent): boolean {
   return event.dataTransfer?.types?.includes('Files') ?? false;
 }
 
+/** Image extensions used as fallback when File.type is empty. */
+const IMAGE_EXTENSIONS = new Set(['.png', '.jpg', '.jpeg', '.gif', '.bmp', '.webp', '.svg', '.ico', '.tiff', '.tif']);
+
+/**
+ * Checks whether a File looks like an image by MIME type or, when the type
+ * is empty (some OS/browser drag sources omit it), by file extension.
+ */
+function looksLikeImage(file: File): boolean {
+  if (file.type.startsWith('image/')) return true;
+  if (file.type === '') {
+    const dotIndex = file.name.lastIndexOf('.');
+    if (dotIndex !== -1) {
+      return IMAGE_EXTENSIONS.has(file.name.slice(dotIndex).toLowerCase());
+    }
+  }
+  return false;
+}
+
 /**
  * Extracts image File objects from a drop event's dataTransfer.
  * Only usable on drop events — files are not accessible during dragover.
@@ -219,7 +237,7 @@ export function getDroppedImageFiles(event: DragEvent): File[] {
   if (!files) return [];
   const images: File[] = [];
   for (let i = 0; i < files.length; i++) {
-    if (files[i].type.startsWith('image/')) {
+    if (looksLikeImage(files[i])) {
       images.push(files[i]);
     }
   }
@@ -520,15 +538,15 @@ export class DragDropManager {
     const { state, view } = activeEditor;
     if (!state || !view) return;
 
+    const imageFiles = getDroppedImageFiles(event);
+    if (imageFiles.length === 0) return;
+
     // Resolve insertion position: hitTest → current selection → document end
     const dropPos = this.#resolveDropPosition(event.clientX, event.clientY);
     if (dropPos == null) return;
 
     // Set selection at drop position before inserting
     this.#setSelectionAt(dropPos);
-
-    const imageFiles = getDroppedImageFiles(event);
-    if (imageFiles.length === 0) return;
 
     // Process files sequentially for deterministic ordering.
     // Errors on individual files are caught so remaining files still insert.

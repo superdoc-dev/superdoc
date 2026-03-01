@@ -834,6 +834,25 @@ describe('remeasureParagraph', () => {
       expect(measure.totalHeight).toBeGreaterThan(0);
     });
 
+    it('keeps tab advance independent of paragraph left indent', () => {
+      const baseBlock = createBlock([textRun('Label'), tabRun(), textRun('Value')], { tabIntervalTwips: 720 });
+      const indentedBlock = createBlock([textRun('Label'), tabRun(), textRun('Value')], {
+        indent: { left: 288 },
+        tabIntervalTwips: 720,
+      });
+
+      const baseMeasure = remeasureParagraph(baseBlock, 500);
+      const indentedMeasure = remeasureParagraph(indentedBlock, 500);
+
+      expect(baseMeasure.lines.length).toBeGreaterThan(0);
+      expect(indentedMeasure.lines.length).toBeGreaterThan(0);
+
+      // The line widths should be equal — tab advance should not grow with indent
+      const baseWidth = baseMeasure.lines[0].width;
+      const indentedWidth = indentedMeasure.lines[0].width;
+      expect(Math.abs(baseWidth - indentedWidth)).toBeLessThan(1);
+    });
+
     it('handles multiple font sizes across multiple lines', () => {
       const block = createBlock([
         textRun('Small', { fontSize: 12 }),

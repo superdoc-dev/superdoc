@@ -8,6 +8,8 @@ import type {
   DrawingMeasure,
   DrawingBlock,
   TableMeasure,
+  TabRun,
+  ParagraphBlock,
 } from '@superdoc/contracts';
 
 const expectParagraphMeasure = (measure: Measure): ParagraphMeasure => {
@@ -1505,6 +1507,48 @@ describe('measureBlock', () => {
         // Width should move text to position near 200px
         expect(tabRun.width).toBeLessThan(200);
       }
+    });
+
+    it('keeps default tab width independent of paragraph left indent', async () => {
+      const contentWidth = 500;
+      const createBlock = (indentLeft?: number): FlowBlock => ({
+        kind: 'paragraph',
+        id: `tab-indent-${indentLeft ?? 0}`,
+        runs: [
+          {
+            text: 'Label',
+            fontFamily: 'Arial',
+            fontSize: 12,
+          },
+          {
+            kind: 'tab',
+            text: '\t',
+            tabIndex: 0,
+          } as TabRun,
+          {
+            text: 'Value goes here',
+            fontFamily: 'Arial',
+            fontSize: 12,
+          },
+        ],
+        attrs: {
+          ...(indentLeft != null ? { indent: { left: indentLeft } } : {}),
+          tabIntervalTwips: 720,
+        },
+      });
+
+      const baseBlock = createBlock(0) as ParagraphBlock;
+      const indentedBlock = createBlock(4320 / 15) as ParagraphBlock;
+
+      expectParagraphMeasure(await measureBlock(baseBlock, contentWidth));
+      expectParagraphMeasure(await measureBlock(indentedBlock, contentWidth));
+
+      const baseTab = baseBlock.runs[1] as TabRun;
+      const indentedTab = indentedBlock.runs[1] as TabRun;
+
+      expect(baseTab.width).toBeGreaterThan(0);
+      expect(indentedTab.width).toBeGreaterThan(0);
+      expect(Math.abs(indentedTab.width! - baseTab.width!)).toBeLessThan(0.001);
     });
 
     it('handles multiple tabs in a row', async () => {

@@ -16,6 +16,7 @@ import {
   DEFAULT_TAB_INTERVAL_PX as _DEFAULT_TAB_INTERVAL_PX,
 } from '@superdoc/common/layout-constants';
 import { resolveListTextStartPx } from '@superdoc/common/list-marker-utils';
+import { sanitizeIndent } from '@superdoc/measuring-dom';
 
 /**
  * Type definition for paragraph block attributes that include indentation and tab stops.
@@ -309,7 +310,7 @@ const pxToTwips = (px: number): number => Math.round(px * TWIPS_PER_PX);
  * @param value - The indent value to sanitize (may be undefined, non-finite, or negative)
  * @returns The original value if it's a positive finite number, otherwise 0
  */
-const sanitizeIndent = (value: number | undefined): number =>
+const sanitizePositiveIndent = (value: number | undefined): number =>
   typeof value === 'number' && Number.isFinite(value) ? Math.max(0, value) : 0;
 
 /**
@@ -441,11 +442,12 @@ const markerFontString = (run?: MarkerRun): string => {
  * ```
  */
 const buildTabStopsPx = (indent?: ParagraphIndent, tabs?: TabStop[], tabIntervalTwips?: number): TabStopPx[] => {
+  const indentLeftPx = sanitizeIndent(indent?.left);
   const paragraphIndentTwips = {
-    left: pxToTwips(sanitizeIndent(indent?.left)),
-    right: pxToTwips(sanitizeIndent(indent?.right)),
-    firstLine: pxToTwips(sanitizeIndent(indent?.firstLine)),
-    hanging: pxToTwips(sanitizeIndent(indent?.hanging)),
+    left: pxToTwips(indentLeftPx),
+    right: pxToTwips(sanitizePositiveIndent(indent?.right)),
+    firstLine: pxToTwips(sanitizePositiveIndent(indent?.firstLine)),
+    hanging: pxToTwips(sanitizePositiveIndent(indent?.hanging)),
   };
 
   const stops = Engines.computeTabStops({
@@ -454,8 +456,12 @@ const buildTabStopsPx = (indent?: ParagraphIndent, tabs?: TabStop[], tabInterval
     paragraphIndent: paragraphIndentTwips,
   });
 
+  // Shift tab stops to be relative to indentLeft so the measurement code can
+  // use line-local coordinates directly.
+  const leftShiftTwips = paragraphIndentTwips.left;
+
   return stops.map((stop: TabStop) => ({
-    pos: twipsToPx(stop.pos),
+    pos: twipsToPx(Math.max(0, stop.pos - leftShiftTwips)),
     val: stop.val,
     leader: stop.leader,
   }));

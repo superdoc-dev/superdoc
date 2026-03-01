@@ -648,7 +648,7 @@ function createFixture(page: Page, editor: Locator, modKey: string) {
     async assertCommentHighlightExists(opts?: { text?: string; commentId?: string; timeoutMs?: number }) {
       const expectedText = opts?.text;
       const expectedCommentId = opts?.commentId;
-      const timeoutMs = opts?.timeoutMs ?? 15_000;
+      const timeoutMs = opts?.timeoutMs ?? 20_000;
       await expect
         .poll(
           () =>

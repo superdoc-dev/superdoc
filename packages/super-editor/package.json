@@ -101,7 +101,7 @@
     "remark-parse": "catalog:",
     "remark-stringify": "catalog:",
     "unified": "catalog:",
-    "utif2": "catalog:",
+    "tiff": "catalog:",
     "uuid": "catalog:",
     "vue": "catalog:",
     "xml-js": "catalog:"

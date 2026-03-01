@@ -61,14 +61,9 @@ describe('tiff-converter', () => {
     });
 
     it('returns a PNG data URI for valid TIFF input', () => {
-      const fakeRgba = new Uint8Array(2 * 2 * 4); // 2x2 image, RGBA
-      vi.doMock('utif2', () => ({
-        decode: () => [{ t256: [2], t257: [2] }],
-        decodeImage: (_buf, ifd) => {
-          ifd.width = 2;
-          ifd.height = 2;
-        },
-        toRGBA8: () => fakeRgba,
+      const fakePixelData = new Uint8Array(2 * 2 * 3); // 2x2 RGB image
+      vi.doMock('tiff', () => ({
+        decode: () => [{ width: 2, height: 2, data: fakePixelData, samplesPerPixel: 3, alpha: false }],
       }));
 
       const mockCanvas = {
@@ -88,24 +83,21 @@ describe('tiff-converter', () => {
         expect(result).toEqual({ dataUri: 'data:image/png;base64,iVBORw0KGgo=', format: 'png' });
 
         spy.mockRestore();
-        vi.doUnmock('utif2');
+        vi.doUnmock('tiff');
       });
     });
 
     it('returns null for TIFF with dimensions exceeding pixel limit', () => {
-      // Mock utif2 to return oversized dimensions via raw IFD tags
-      // (t256=ImageWidth, t257=ImageLength — 100k × 10k = 1 billion pixels)
-      vi.doMock('utif2', () => ({
-        decode: () => [{ t256: [100_000], t257: [10_000] }],
-        decodeImage: () => undefined,
-        toRGBA8: () => new Uint8Array(4),
+      // Mock tiff to return oversized dimensions (100k × 10k = 1 billion pixels)
+      vi.doMock('tiff', () => ({
+        decode: () => [{ width: 100_000, height: 10_000, data: new Uint8Array(4), samplesPerPixel: 1, alpha: false }],
       }));
 
       // Re-import to pick up the mock
       return import('./tiff-converter.js?oversized').then(({ convertTiffToPng: fn }) => {
         const result = fn('SU8qAA==');
         expect(result).toBeNull();
-        vi.doUnmock('utif2');
+        vi.doUnmock('tiff');
       });
     });
   });

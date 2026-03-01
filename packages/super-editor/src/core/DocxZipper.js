@@ -5,6 +5,12 @@ import { ensureXmlString, isXmlLike } from './encoding-helpers.js';
 import { DOCX } from '@superdoc/common';
 import { COMMENT_FILE_BASENAMES } from './super-converter/constants.js';
 
+/** Image file extensions recognized during import and export. */
+const IMAGE_EXTS = new Set(['png', 'jpg', 'jpeg', 'gif', 'bmp', 'tiff', 'tif', 'emf', 'wmf', 'svg', 'webp']);
+
+/** Map file extensions to correct MIME sub-types where they differ. */
+const MIME_TYPE_FOR_EXT = { tif: 'tiff' };
+
 /**
  * Class to handle unzipping and zipping of docx files
  */
@@ -63,20 +69,17 @@ class DocxZipper {
           const fileBase64 = await zipEntry.async('base64');
           let extension = this.getFileExtension(name)?.toLowerCase();
           // Only build data URIs for images; keep raw base64 for other binaries (e.g., xlsx)
-          const imageTypes = new Set(['png', 'jpg', 'jpeg', 'gif', 'bmp', 'tiff', 'tif', 'emf', 'wmf', 'svg', 'webp']);
-          const mimeTypeForExt = { tif: 'tiff' };
-
           // For unknown extensions (like .tmp), try to detect the image type from content
           let detectedType = null;
-          if (!imageTypes.has(extension) || extension === 'tmp') {
+          if (!IMAGE_EXTS.has(extension) || extension === 'tmp') {
             detectedType = detectImageType(fileBase64);
             if (detectedType) {
               extension = detectedType;
             }
           }
 
-          if (imageTypes.has(extension)) {
-            const mimeSubtype = mimeTypeForExt[extension] || extension;
+          if (IMAGE_EXTS.has(extension)) {
+            const mimeSubtype = MIME_TYPE_FOR_EXT[extension] || extension;
             this.mediaFiles[name] = `data:image/${mimeSubtype};base64,${fileBase64}`;
             const blob = await zipEntry.async('blob');
             const fileObj = new File([blob], name, { type: blob.type });
@@ -107,11 +110,9 @@ class DocxZipper {
    */
   async updateContentTypes(docx, media, fromJson, updatedDocs = {}) {
     const additionalPartNames = Object.keys(updatedDocs || {});
-    const imageExts = new Set(['png', 'jpg', 'jpeg', 'gif', 'bmp', 'tiff', 'tif', 'emf', 'wmf', 'svg', 'webp']);
-    const mimeTypeForExt = { tif: 'tiff' };
     const newMediaTypes = Object.keys(media)
       .map((name) => this.getFileExtension(name))
-      .filter((ext) => ext && imageExts.has(ext));
+      .filter((ext) => ext && IMAGE_EXTS.has(ext));
 
     const contentTypesPath = '[Content_Types].xml';
     let contentTypesXml;
@@ -134,7 +135,7 @@ class DocxZipper {
       if (defaultMediaTypes.includes(type)) continue;
       if (seenTypes.has(type)) continue;
 
-      const mime = mimeTypeForExt[type] || type;
+      const mime = MIME_TYPE_FOR_EXT[type] || type;
       const newContentType = `<Default Extension="${type}" ContentType="image/${mime}"/>`;
       typesString += newContentType;
       seenTypes.add(type);

@@ -6,6 +6,7 @@ import { urlToFile, validateUrlAccessibility } from './handleUrl';
 import { checkAndProcessImage, uploadAndInsertImage } from './startImageUpload';
 import { buildMediaPath, ensureUniqueFileName } from './fileNameUtils.js';
 import { addImageRelationship } from '@extensions/image/imageHelpers/startImageUpload.js';
+import { isRelativeUrl } from '@superdoc/url-validation';
 const key = new PluginKey('ImageRegistration');
 
 /**
@@ -248,11 +249,9 @@ export const handleNodePath = (foundImages, editor, state) => {
  * @param {import('prosemirror-state').EditorState} state - The current editor state.
  * @returns {import('prosemirror-state').Transaction} - The updated transaction with image nodes replaced by placeholders and registration process initiated.
  */
-const isRelativePath = (src) => !src.startsWith('http') && !src.startsWith('data:') && !src.startsWith('blob:');
-
 const handleBrowserPath = (foundImages, editor, view, state) => {
   // Relative/absolute paths are resolved by the browser natively — leave them in the doc.
-  const imagesToProcess = foundImages.filter(({ node }) => !isRelativePath(node.attrs?.src));
+  const imagesToProcess = foundImages.filter(({ node }) => !isRelativeUrl(node.attrs?.src));
 
   if (imagesToProcess.length === 0) return null;
 

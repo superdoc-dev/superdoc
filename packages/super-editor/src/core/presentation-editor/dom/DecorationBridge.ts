@@ -215,6 +215,44 @@ function restoreRangesFromPrevious(
   return out;
 }
 
+/** Returns the union span of a list of ranges (min from, max to). */
+function rangeUnion(ranges: Array<{ from: number; to: number }>): { from: number; to: number } | null {
+  if (ranges.length === 0) return null;
+  let from = ranges[0].from;
+  let to = ranges[0].to;
+  for (let i = 1; i < ranges.length; i++) {
+    if (ranges[i].from < from) from = ranges[i].from;
+    if (ranges[i].to > to) to = ranges[i].to;
+  }
+  return { from, to };
+}
+
+/**
+ * When the plugin returns partial ranges (e.g. after applying a mark, mapping can collapse
+ * decoration ranges), prefer the full span restored by text so the highlight does not
+ * partially vanish. Returns restored ranges when they form a proper superset of current.
+ */
+function preferFullRestoredWhenPartial(
+  current: PreviousRange[],
+  previousRanges: PreviousRange[] | undefined,
+  doc: ProseMirrorNode,
+  docSize: number,
+): PreviousRange[] {
+  if (current.length === 0 || !previousRanges?.length) return current;
+  const restored = restoreRangesFromPrevious(doc, docSize, previousRanges);
+  if (restored.length === 0) return current;
+
+  const currentSpan = rangeUnion(current);
+  const restoredSpan = rangeUnion(restored);
+  if (!currentSpan || !restoredSpan) return current;
+  // Prefer restored only when it strictly contains current (plugin returned partial).
+  const contained =
+    currentSpan.from >= restoredSpan.from &&
+    currentSpan.to <= restoredSpan.to &&
+    restoredSpan.to - restoredSpan.from > currentSpan.to - currentSpan.from;
+  return contained ? restored : current;
+}
+
 // ---------------------------------------------------------------------------
 // DecorationBridge
 // ---------------------------------------------------------------------------
@@ -439,13 +477,20 @@ export class DecorationBridge {
         pluginRanges.push(...restoreRangesFromPrevious(state.doc, docSize, previousPluginRanges));
       }
 
+      // When plugin returns partial ranges (e.g. after applying a mark, mapping can collapse
+      // decoration ranges), prefer full span restored by text so highlight does not partially vanish.
+      const effectiveRanges =
+        mayRestoreEmpty && previousPluginRanges?.length
+          ? preferFullRestoredWhenPartial(pluginRanges, previousPluginRanges, state.doc, docSize)
+          : pluginRanges;
+
       // Store current ranges for next comparison. When we restored from previous,
       // keep that as the new previous so we don't clear on the next call.
-      this.#setPreviousRanges(plugin, pluginRanges.length > 0 ? [...pluginRanges] : []);
+      this.#setPreviousRanges(plugin, effectiveRanges.length > 0 ? [...effectiveRanges] : []);
       this.#prevDecorationSets.set(plugin, decorationSet);
 
       // Add to final output
-      ranges.push(...pluginRanges);
+      ranges.push(...effectiveRanges);
     }
 
     this.#clearSkipRestoreFlagIfSet();
@@ -604,13 +649,17 @@ export class DecorationBridge {
         }
       }
 
-      // Fallback: only when the plugin produced no valid current ranges (e.g. mapping cleared them).
-      // Restore only when we can relocate by text to a different valid range.
-      // Never fall back to stale coordinates.
-      // Do not restore when the plugin has current ranges but they are offscreen (not in domIndex);
-      // otherwise we would reapply previous ranges to wrong elements and cause highlight drift.
-      if (pluginHasCurrentRanges) {
-        this.#setPreviousRanges(plugin, currentRanges);
+      // When plugin returns partial ranges (e.g. after applying a mark), prefer full span
+      // restored by text so highlight does not partially vanish.
+      const previousPluginRanges = this.#previousRanges.get(plugin);
+      const effectiveRanges =
+        restoreEmptyDecorations && previousPluginRanges?.length
+          ? preferFullRestoredWhenPartial(currentRanges, previousPluginRanges, state.doc, docSize)
+          : currentRanges;
+
+      if (pluginHasCurrentRanges || effectiveRanges.length > 0) {
+        this.#applyRangesToDesired(desired, domIndex, effectiveRanges);
+        this.#setPreviousRanges(plugin, effectiveRanges.length > 0 ? [...effectiveRanges] : []);
         this.#prevDecorationSets.set(plugin, decorationSet);
         continue;
       }
@@ -619,7 +668,6 @@ export class DecorationBridge {
         this.#prevDecorationSets.set(plugin, decorationSet);
         continue;
       }
-      const previousPluginRanges = this.#previousRanges.get(plugin);
       if (previousPluginRanges?.length) {
         const restoredRanges = restoreRangesFromPrevious(state.doc, docSize, previousPluginRanges);
         this.#applyRangesToDesired(desired, domIndex, restoredRanges);

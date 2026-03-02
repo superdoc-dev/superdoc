@@ -873,6 +873,43 @@ describe('DecorationBridge', () => {
       expect(ranges[0].from).toBe(13);
       expect(ranges[0].to).toBe(19);
     });
+
+    it('prefers full restored span when plugin returns partial (e.g. after applying mark in long selection)', () => {
+      const fullText = 'Hello world';
+      const plugin = mutableExternalPlugin('focus');
+      plugin.setDecorations([{ from: 1, to: 12, class: 'highlight-selection' }]);
+      const state = mockStateWithDocText([plugin.plugin], fullText);
+
+      const ranges1 = bridge.collectDecorationRanges(state);
+      expect(ranges1).toHaveLength(1);
+      expect(ranges1[0].to - ranges1[0].from).toBe(fullText.length);
+
+      // Simulate plugin returning only a prefix after mapping (e.g. mark applied in middle)
+      plugin.setDecorations([{ from: 1, to: 6, class: 'highlight-selection' }]);
+      const ranges2 = bridge.collectDecorationRanges(state);
+      expect(ranges2).toHaveLength(1);
+      // Full span restored by text so highlight does not partially vanish (not just partial 5 chars)
+      expect(ranges2[0].to - ranges2[0].from).toBeGreaterThan(5);
+      expect(ranges2[0].classes).toContain('highlight-selection');
+    });
+
+    it('sync applies full span when plugin returns partial so highlight does not vanish', () => {
+      const { index, addSpan, rebuild } = createIndex();
+      addSpan(1, 6, 'Hello');
+      const worldSpan = addSpan(6, 12, ' world');
+      rebuild();
+
+      const { plugin, setDecorations } = mutableExternalPlugin('focus');
+      const state = mockStateWithDocText([plugin], 'Hello world');
+      setDecorations([{ from: 1, to: 12, class: 'highlight-selection' }]);
+      bridge.collectDecorationRanges(state);
+      bridge.sync(state, index);
+      expect(worldSpan.classList.contains('highlight-selection')).toBe(true);
+
+      setDecorations([{ from: 1, to: 6, class: 'highlight-selection' }]);
+      bridge.sync(state, index);
+      expect(worldSpan.classList.contains('highlight-selection')).toBe(true);
+    });
   });
 
   // -----------------------------------------------------------------------

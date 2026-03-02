@@ -2717,11 +2717,20 @@ async function measureTableBlock(block: TableBlock, constraints: MeasureConstrai
         // Add paragraph spacing.after/spacing.before to content height.
         // For the last paragraph, Word absorbs spacing.after into cell bottom padding —
         // so only add the excess beyond what the padding already provides.
+        // For the first paragraph, we treat spacing.before symmetrically: only add the excess
+        // beyond paddingTop (Word absorbs the first paragraph's spacing.before into cell top
+        // padding). Verify against a reference .docx if behavior needs to be confirmed.
+        const isFirstBlock = blockIndex === 0;
         const isLastBlock = blockIndex === cellBlocks.length - 1;
         if (block.kind === 'paragraph') {
           const spacingBefore = (block as ParagraphBlock).attrs?.spacing?.before;
           if (typeof spacingBefore === 'number' && spacingBefore > 0) {
-            contentHeight += spacingBefore;
+            if (isFirstBlock) {
+              const excess = Math.max(0, spacingBefore - paddingTop);
+              contentHeight += excess;
+            } else {
+              contentHeight += spacingBefore;
+            }
           }
           const spacingAfter = (block as ParagraphBlock).attrs?.spacing?.after;
           if (typeof spacingAfter === 'number' && spacingAfter > 0) {

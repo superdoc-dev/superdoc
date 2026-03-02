@@ -1695,9 +1695,18 @@ export function selectionToRects(
                 if (typeof totalHeight === 'number' && totalHeight > height) {
                   height = totalHeight;
                 }
+                const isFirstBlock = i === 0;
+                const isLastBlock = i === cellBlocks.length - 1;
+                const spacingBefore = (paraBlock.attrs as { spacing?: { before?: number } } | undefined)?.spacing
+                  ?.before;
+                if (typeof spacingBefore === 'number' && spacingBefore > 0) {
+                  // First paragraph: spacing.before absorbed by cell paddingTop (match measurer/renderer)
+                  height += isFirstBlock ? Math.max(0, spacingBefore - padding.top) : spacingBefore;
+                }
                 const spacingAfter = (paraBlock.attrs as { spacing?: { after?: number } } | undefined)?.spacing?.after;
                 if (typeof spacingAfter === 'number' && spacingAfter > 0) {
-                  height += spacingAfter;
+                  // Last paragraph: spacing.after absorbed by cell paddingBottom (match measurer/renderer)
+                  height += isLastBlock ? Math.max(0, spacingAfter - padding.bottom) : spacingAfter;
                 }
               }
 
@@ -1718,7 +1727,7 @@ export function selectionToRects(
 
             let blockTopCursor = padding.top + verticalOffset;
 
-            renderedBlocks.forEach((info) => {
+            renderedBlocks.forEach((info, blockIndex) => {
               const paragraphMarkerWidth = info.measure.marker?.markerWidth ?? 0;
               // List items in table cells are also rendered with left alignment
               const cellIsListItem = isListItem(paragraphMarkerWidth, info.block);
@@ -1730,6 +1739,17 @@ export function selectionToRects(
               const cellWordLayout = getWordLayoutConfig(info.block);
 
               const intersectingLines = findLinesIntersectingRange(info.block, info.measure, from, to);
+
+              // Match renderer: first paragraph's spacing.before is absorbed by cell paddingTop (renderTableCell.ts)
+              const rawSpacingBefore = (info.block.attrs as { spacing?: { before?: number } } | undefined)?.spacing
+                ?.before;
+              const isFirstBlock = blockIndex === 0;
+              const effectiveSpacingBeforePx =
+                typeof rawSpacingBefore === 'number' && rawSpacingBefore > 0
+                  ? isFirstBlock
+                    ? Math.max(0, rawSpacingBefore - padding.top)
+                    : rawSpacingBefore
+                  : 0;
 
               intersectingLines.forEach(({ line, index }) => {
                 if (index < info.startLine || index >= info.endLine) {
@@ -1768,7 +1788,8 @@ export function selectionToRects(
                 );
                 const lineOffset =
                   lineHeightBeforeIndex(info.measure, index) - lineHeightBeforeIndex(info.measure, info.startLine);
-                const rectY = fragment.y + contentOffsetY + rowOffset + blockTopCursor + lineOffset;
+                const rectY =
+                  fragment.y + contentOffsetY + rowOffset + blockTopCursor + effectiveSpacingBeforePx + lineOffset;
 
                 rects.push({
                   x: rectX,

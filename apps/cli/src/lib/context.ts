@@ -1,3 +1,4 @@
+import { AsyncLocalStorage } from 'node:async_hooks';
 import type { Dirent } from 'node:fs';
 import { copyFile, mkdir, open, readdir, readFile, rename, rm, stat, unlink, writeFile } from 'node:fs/promises';
 import { createHash } from 'node:crypto';
@@ -13,6 +14,7 @@ const CONTEXT_VERSION = 'v1';
 const ACTIVE_SESSION_FILENAME = 'active-session';
 const DEFAULT_LOCK_TIMEOUT_MS = 5_000;
 const LOCK_RETRY_INTERVAL_MS = 50;
+const STATE_DIR_OVERRIDE_STORAGE = new AsyncLocalStorage<string>();
 
 export type SourceSnapshot = {
   mtimeMs: number;
@@ -75,12 +77,25 @@ type LockMetadata = {
 };
 
 function getStateRoot(): string {
+  const scopedOverride = STATE_DIR_OVERRIDE_STORAGE.getStore();
+  if (scopedOverride && scopedOverride.length > 0) {
+    return scopedOverride;
+  }
+
   const override = process.env.SUPERDOC_CLI_STATE_DIR;
   if (override && override.length > 0) {
     return resolve(override);
   }
 
   return join(homedir(), '.superdoc-cli', 'state', CONTEXT_VERSION);
+}
+
+export async function withStateDirOverride<T>(stateDir: string | undefined, operation: () => Promise<T>): Promise<T> {
+  if (stateDir == null || stateDir.length === 0) {
+    return operation();
+  }
+
+  return STATE_DIR_OVERRIDE_STORAGE.run(resolve(stateDir), operation);
 }
 
 export function getContextPaths(contextId: string): ContextPaths {

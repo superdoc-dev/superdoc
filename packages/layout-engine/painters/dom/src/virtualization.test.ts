@@ -411,18 +411,13 @@ describe('DomPainter virtualization (vertical)', () => {
 
     painter.onScroll!();
 
-    // At layoutScrollY=5000, the anchor page should be around index 8-9
-    // (each page is 500+72=572px, so page 8 starts at 8*572=4576).
+    // At layoutScrollY=5000, the anchor page is index 8 (topOfIndex(8)=4576 <= 5000, topOfIndex(9)=5148 > 5000).
+    // With window=3, overscan=0, the window is centered around the anchor: pages [7, 8, 9].
+    // Without the zoom correction, scrollY would be 3750 (screen-space), giving anchor=6 and pages [5, 6, 7].
     const pages = mount.querySelectorAll('.superdoc-page');
     const indices = Array.from(pages).map((p) => Number((p as HTMLElement).dataset.pageIndex));
 
-    // The anchor page for scroll=5000 should be 8 (topOfIndex(9)=5148 > 5000, topOfIndex(8)=4576 <= 5000).
-    // With window=3, we expect pages around index 7-9 or 8-10.
-    expect(indices.some((i) => i >= 7 && i <= 10)).toBe(true);
-
-    // Verify the window doesn't include page 0 (would indicate uncorrected zoom — scrollY=3750 → page 6).
-    // With correct zoom handling, we shouldn't see early pages.
-    expect(indices.every((i) => i >= 5)).toBe(true);
+    expect(indices).toEqual([7, 8, 9]);
   });
 
   it('renders drawing fragments inside virtualized windows', () => {

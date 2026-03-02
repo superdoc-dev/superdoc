@@ -63,7 +63,7 @@ export const removeMarkStep = ({ state, step, newTr, doc, user, date }) => {
                 m.type.name !== step.mark.type.name,
             );
             const isNoop = formatChangeMark.attrs.before.every((snapshot) =>
-              remainingFormatMarks.some((m) => m.type.name === snapshot.type),
+              remainingFormatMarks.some((m) => markSnapshotMatchesStepMark(snapshot, m, true)),
             );
             if (isNoop) {
               newTr.removeMark(Math.max(step.from, pos), Math.min(step.to, pos + node.nodeSize), formatChangeMark);

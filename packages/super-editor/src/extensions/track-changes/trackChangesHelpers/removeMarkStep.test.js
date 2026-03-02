@@ -154,19 +154,13 @@ describe('removeMarkStep cancel logic', () => {
     const italic = schema.marks.italic.create();
     const doc = createDocWithRuns([{ text: 'Hello ' }, { text: 'world', marks: [italic] }]);
     const state = createState(doc);
-    const bold = schema.marks.bold.create();
 
-    // Add bold across both nodes
-    const addStep = new AddMarkStep(2, 13, bold);
-    const addTr = state.tr;
-    addMarkStep({ state, step: addStep, newTr: addTr, doc: state.doc, user, date });
-    const stateAfterAdd = state.apply(addTr);
-
-    // Remove bold across both nodes
-    const removeStep = new RemoveMarkStep(2, 13, bold);
-    const removeTr = stateAfterAdd.tr;
-    removeMarkStep({ state: stateAfterAdd, step: removeStep, newTr: removeTr, doc: stateAfterAdd.doc, user, date });
-    const stateAfterRemove = stateAfterAdd.apply(removeTr);
+    const { stateAfterRemove } = addThenRemoveMark({
+      state,
+      mark: schema.marks.bold.create(),
+      from: 2,
+      to: 13,
+    });
 
     // Neither node should have a TrackFormat mark
     expect(hasTrackFormatMark(stateAfterRemove.doc)).toBe(false);

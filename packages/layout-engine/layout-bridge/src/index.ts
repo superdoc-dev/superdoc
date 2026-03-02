@@ -1697,10 +1697,9 @@ export function selectionToRects(
                 }
                 const isFirstBlock = i === 0;
                 const isLastBlock = i === cellBlocks.length - 1;
-                const spacingBefore = (paraBlock.attrs as { spacing?: { before?: number } } | undefined)?.spacing
-                  ?.before;
+                const spacingBefore = (paraBlock as ParagraphBlock).attrs?.spacing?.before;
                 height += effectiveTableCellSpacing(spacingBefore, isFirstBlock, padding.top);
-                const spacingAfter = (paraBlock.attrs as { spacing?: { after?: number } } | undefined)?.spacing?.after;
+                const spacingAfter = (paraBlock as ParagraphBlock).attrs?.spacing?.after;
                 height += effectiveTableCellSpacing(spacingAfter, isLastBlock, padding.bottom);
               }
 
@@ -1735,8 +1734,7 @@ export function selectionToRects(
               const intersectingLines = findLinesIntersectingRange(info.block, info.measure, from, to);
 
               // Match renderer: spacing.before is only applied when rendering from the start of the block (startLine === 0).
-              const rawSpacingBefore = (info.block.attrs as { spacing?: { before?: number } } | undefined)?.spacing
-                ?.before;
+              const rawSpacingBefore = (info.block as ParagraphBlock).attrs?.spacing?.before;
               const effectiveSpacingBeforePx =
                 info.startLine === 0 ? effectiveTableCellSpacing(rawSpacingBefore, blockIndex === 0, padding.top) : 0;
 

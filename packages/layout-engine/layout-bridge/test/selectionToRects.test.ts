@@ -20,17 +20,23 @@ import {
   tableSpacingBeforeBlock,
   tableSpacingBeforeMeasure,
   tableSpacingBeforeLayout,
-  TABLE_SPACING_BEFORE_FRAGMENT_Y,
-  TABLE_SPACING_BEFORE_SPACING,
+  TABLE_SPACING_FRAGMENT_Y,
+  TABLE_SPACING_BEFORE,
   tableSpacingAbsorbedBlock,
   tableSpacingAbsorbedMeasure,
   tableSpacingAbsorbedLayout,
-  TABLE_ABSORBED_FRAGMENT_Y_EXPORT,
-  TABLE_ABSORBED_PADDING_TOP_EXPORT,
+  TABLE_ABSORBED_FRAGMENT_Y,
+  TABLE_ABSORBED_PADDING_TOP,
   tableSpacingPartialBlock,
   tableSpacingPartialMeasure,
   tableSpacingPartialLayout,
-  TABLE_PARTIAL_FRAGMENT_Y_EXPORT,
+  TABLE_PARTIAL_FRAGMENT_Y,
+  tableSpacingAfterBlock,
+  tableSpacingAfterMeasure,
+  tableSpacingAfterLayout,
+  TABLE_SPACING_AFTER,
+  TABLE_SPACING_AFTER_PADDING_BOTTOM,
+  TABLE_CELL_LINE_HEIGHT,
 } from './mock-data';
 import { PageGeometryHelper } from '../src/page-geometry-helper';
 
@@ -73,7 +79,7 @@ describe('selectionToRects', () => {
         9,
       );
       expect(rects).toHaveLength(1);
-      expect(rects[0].y).toBe(TABLE_SPACING_BEFORE_FRAGMENT_Y + TABLE_SPACING_BEFORE_SPACING);
+      expect(rects[0].y).toBe(TABLE_SPACING_FRAGMENT_Y + TABLE_SPACING_BEFORE);
     });
 
     it('uses only excess over paddingTop for first paragraph (Word absorption)', () => {
@@ -85,7 +91,7 @@ describe('selectionToRects', () => {
         5,
       );
       expect(rects).toHaveLength(1);
-      expect(rects[0].y).toBe(TABLE_ABSORBED_FRAGMENT_Y_EXPORT + TABLE_ABSORBED_PADDING_TOP_EXPORT);
+      expect(rects[0].y).toBe(TABLE_ABSORBED_FRAGMENT_Y + TABLE_ABSORBED_PADDING_TOP);
     });
 
     it('does not add spacing.before to rect Y when block starts mid-paragraph (startLine > 0)', () => {
@@ -97,7 +103,26 @@ describe('selectionToRects', () => {
         19,
       );
       expect(rects).toHaveLength(1);
-      expect(rects[0].y).toBe(TABLE_PARTIAL_FRAGMENT_Y_EXPORT);
+      expect(rects[0].y).toBe(TABLE_PARTIAL_FRAGMENT_Y);
+    });
+  });
+
+  describe('table cell spacing.after', () => {
+    it('offsets second paragraph rect Y by first paragraph full spacing.after (non-last block)', () => {
+      // Select text in p2 (pmStart: 7, pmEnd: 13)
+      const rects = selectionToRects(
+        tableSpacingAfterLayout,
+        [tableSpacingAfterBlock],
+        [tableSpacingAfterMeasure],
+        7,
+        13,
+      );
+      expect(rects).toHaveLength(1);
+      // p1 is NOT the last block, so full spacing.after is used (not absorbed)
+      // p2's rect Y = fragment.y + padding.top(0) + p1 height (lineHeight + full spacing.after)
+      const expectedY =
+        tableSpacingAfterLayout.pages[0].fragments[0].y + (TABLE_CELL_LINE_HEIGHT + TABLE_SPACING_AFTER);
+      expect(rects[0].y).toBe(expectedY);
     });
   });
 

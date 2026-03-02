@@ -192,7 +192,7 @@ export const drawingLayout: Layout = {
   ],
 };
 
-const TABLE_CELL_LINE_HEIGHT = 18;
+export const TABLE_CELL_LINE_HEIGHT = 18;
 
 const tableParagraph = {
   kind: 'paragraph',
@@ -276,8 +276,8 @@ export const tableLayout: Layout = {
 };
 
 // Table cell spacing.before — selectionToRects tests (effective spacing, absorption, partial row)
-const TABLE_SPACING_BEFORE = 12;
-const TABLE_SPACING_FRAGMENT_Y = 50;
+export const TABLE_SPACING_BEFORE = 12;
+export const TABLE_SPACING_FRAGMENT_Y = 50;
 
 export const tableSpacingBeforeBlock: FlowBlock = {
   ...tableBlock,
@@ -348,13 +348,10 @@ export const tableSpacingBeforeLayout: Layout = {
   ],
 };
 
-export const TABLE_SPACING_BEFORE_FRAGMENT_Y = TABLE_SPACING_FRAGMENT_Y;
-export const TABLE_SPACING_BEFORE_SPACING = TABLE_SPACING_BEFORE;
-
 // First paragraph absorption: paddingTop === spacing.before => effective 0
-const TABLE_ABSORBED_PADDING_TOP = 10;
-const TABLE_ABSORBED_SPACING = 10;
-const TABLE_ABSORBED_FRAGMENT_Y = 50;
+export const TABLE_ABSORBED_PADDING_TOP = 10;
+export const TABLE_ABSORBED_SPACING = 10;
+export const TABLE_ABSORBED_FRAGMENT_Y = 50;
 
 export const tableSpacingAbsorbedBlock: FlowBlock = {
   ...tableBlock,
@@ -425,12 +422,9 @@ export const tableSpacingAbsorbedLayout: Layout = {
   ],
 };
 
-export const TABLE_ABSORBED_FRAGMENT_Y_EXPORT = TABLE_ABSORBED_FRAGMENT_Y;
-export const TABLE_ABSORBED_PADDING_TOP_EXPORT = TABLE_ABSORBED_PADDING_TOP;
-
 // Partial row: startLine > 0 so spacing.before not applied
-const TABLE_PARTIAL_SPACING = 12;
-const TABLE_PARTIAL_FRAGMENT_Y = 40;
+export const TABLE_PARTIAL_SPACING = 12;
+export const TABLE_PARTIAL_FRAGMENT_Y = 40;
 
 export const tableSpacingPartialBlock: FlowBlock = {
   ...tableBlock,
@@ -524,7 +518,95 @@ export const tableSpacingPartialLayout: Layout = {
   ],
 };
 
-export const TABLE_PARTIAL_FRAGMENT_Y_EXPORT = TABLE_PARTIAL_FRAGMENT_Y;
+// Table cell spacing.after — selectionToRects test
+// Two paragraphs: p1 has spacing.after, p2 is the selection target.
+// Tests that p2's rect Y is offset by p1's effective spacing.after.
+export const TABLE_SPACING_AFTER = 15;
+export const TABLE_SPACING_AFTER_PADDING_BOTTOM = 10;
+const TABLE_SPACING_AFTER_FRAGMENT_Y = 50;
+const SPACING_AFTER_EFFECTIVE = TABLE_SPACING_AFTER - TABLE_SPACING_AFTER_PADDING_BOTTOM;
+
+export const tableSpacingAfterBlock: FlowBlock = {
+  ...tableBlock,
+  id: 'table-spacing-after',
+  rows: [
+    {
+      ...tableBlock.rows[0],
+      cells: [
+        {
+          ...tableBlock.rows[0].cells[0],
+          attrs: { padding: { top: 0, bottom: TABLE_SPACING_AFTER_PADDING_BOTTOM, left: 4, right: 4 } },
+          blocks: [
+            {
+              ...tableParagraph,
+              id: 'p1',
+              runs: [{ ...tableParagraph.runs[0], text: 'First', pmStart: 1, pmEnd: 6 }],
+              attrs: { spacing: { after: TABLE_SPACING_AFTER } },
+            },
+            {
+              ...tableParagraph,
+              id: 'p2',
+              runs: [{ ...tableParagraph.runs[0], text: 'Second', pmStart: 7, pmEnd: 13 }],
+            },
+          ],
+        },
+      ],
+    },
+  ],
+};
+
+const spacingAfterTotalHeight =
+  TABLE_CELL_LINE_HEIGHT * 2 + SPACING_AFTER_EFFECTIVE + TABLE_SPACING_AFTER_PADDING_BOTTOM;
+
+export const tableSpacingAfterMeasure: Measure = {
+  kind: 'table',
+  rows: [
+    {
+      height: spacingAfterTotalHeight,
+      cells: [
+        {
+          width: 100,
+          height: spacingAfterTotalHeight,
+          gridColumnStart: 0,
+          blocks: [
+            {
+              kind: 'paragraph',
+              lines: [{ ...tableParagraphLine, toChar: 5, width: 50, ascent: 12 }],
+              totalHeight: TABLE_CELL_LINE_HEIGHT,
+            },
+            {
+              kind: 'paragraph',
+              lines: [{ ...tableParagraphLine, fromRun: 0, fromChar: 0, toChar: 6, width: 55, ascent: 12 }],
+              totalHeight: TABLE_CELL_LINE_HEIGHT,
+            },
+          ],
+        },
+      ],
+    },
+  ],
+  columnWidths: [100],
+  totalWidth: 100,
+  totalHeight: spacingAfterTotalHeight,
+};
+
+export const tableSpacingAfterLayout: Layout = {
+  ...tableLayout,
+  pages: [
+    {
+      ...tableLayout.pages[0],
+      fragments: [
+        {
+          ...tablePageFragment,
+          blockId: 'table-spacing-after',
+          x: 20,
+          y: TABLE_SPACING_AFTER_FRAGMENT_Y,
+          width: 100,
+          height: spacingAfterTotalHeight,
+        },
+      ],
+    },
+  ],
+};
 
 // Mock data for table with rowspan (SD-1626 / IT-22)
 // Table structure:

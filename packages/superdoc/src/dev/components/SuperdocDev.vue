@@ -285,57 +285,6 @@ const handleCompareFile = async (event) => {
     const compareComments = compareEditor.converter?.comments ?? [];
     const diff = editor.commands.compareDocuments(compareDoc, compareComments);
     const userToApply = editor.options?.user ?? user;
-    const tr = editor.commands.replayDifferences(diff, { user: userToApply, applyTrackedChanges: true });
-    editor.view.dispatch(tr);
-  } finally {
-    compareEditor?.destroy?.();
-  }
-};
-
-/**
- * Triggers the compare file picker.
- * @returns {void}
- */
-const handleCompareClick = () => {
-  compareInput.value?.click?.();
-};
-
-/**
- * Loads a comparison DOCX file, computes diffs, and replays tracked changes.
- * @param {Event} event
- * @returns {Promise<void>}
- */
-const handleCompareFile = async (event) => {
-  const file = event?.target?.files?.[0];
-  if (!file) return;
-  event.target.value = '';
-
-  const editor = activeEditor.value;
-  if (!editor) return;
-
-  let compareEditor = null;
-  try {
-    const [docx, media, mediaFiles, fonts] = (await Editor.loadXmlData(file)) || [];
-    if (!docx) return;
-
-    compareEditor = new Editor({
-      isHeadless: true,
-      skipViewCreation: true,
-      extensions: getStarterExtensions(),
-      documentId: `compare-${Date.now()}`,
-      content: docx,
-      mode: 'docx',
-      media,
-      mediaFiles,
-      fonts,
-      annotations: true,
-    });
-
-    const compareDoc = compareEditor.state.doc;
-    const compareComments = compareEditor.converter?.comments ?? [];
-    const diff = editor.commands.compareDocuments(compareDoc, compareComments);
-    const userToApply = editor.options?.user ?? user;
-    console.log('diffs', JSON.stringify(diff, null, 2));
     editor.commands.replayDifferences(diff, { user: userToApply, applyTrackedChanges: true });
   } finally {
     compareEditor?.destroy?.();

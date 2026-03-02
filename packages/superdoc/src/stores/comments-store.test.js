@@ -862,7 +862,7 @@ describe('comments-store', () => {
       expect(ordered).toEqual(['c-2', 'c-3', 'c-1']);
     });
 
-    it('uses importedId over commentId when looking up positions', () => {
+    it('uses importedId when that is the available position key', () => {
       store.commentsList = [
         { commentId: 'uuid-1', importedId: 'imported-1', createdTime: 3 },
         { commentId: 'uuid-2', importedId: 'imported-2', createdTime: 1 },
@@ -1006,6 +1006,17 @@ describe('comments-store', () => {
 
       expect(store.getCommentPosition('uuid-1')).toEqual({ start: 20, end: 30 });
       expect(store.getCommentPosition(comment)).toEqual({ start: 20, end: 30 });
+    });
+
+    it('resolves imported-id lookups to commentId positions when only commentId is present', () => {
+      const comment = { commentId: 'uuid-1', importedId: 'imported-1', fileId: 'doc-1' };
+      store.commentsList = [comment];
+      store.editorCommentPositions = {
+        'uuid-1': { start: 22, end: 31 },
+      };
+
+      expect(store.getCommentPosition('imported-1')).toEqual({ start: 22, end: 31 });
+      expect(store.getCommentPosition(comment)).toEqual({ start: 22, end: 31 });
     });
 
     it('returns anchored text when editor and positions are available', () => {
@@ -1176,6 +1187,24 @@ describe('comments-store', () => {
   });
 
   describe('getFloatingComments filters resolved tracked changes', () => {
+    it('includes editor comments when commentId has positions but importedId does not', () => {
+      store.commentsList = [
+        {
+          commentId: 'uuid-1',
+          importedId: 'imported-1',
+          resolvedTime: null,
+          createdTime: 1,
+          selection: { source: 'super-editor' },
+        },
+      ];
+      store.editorCommentPositions = {
+        'uuid-1': { start: 1, end: 5, bounds: { top: 0, left: 0 } },
+      };
+
+      const floating = store.getFloatingComments;
+      expect(floating.map((c) => c.commentId)).toEqual(['uuid-1']);
+    });
+
     it('includes unresolved tracked changes that have position keys', () => {
       store.commentsList = [
         { commentId: 'tc-1', trackedChange: true, resolvedTime: null, createdTime: 1 },

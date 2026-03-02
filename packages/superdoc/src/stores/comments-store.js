@@ -111,17 +111,38 @@ export const useCommentsStore = defineStore('comments', () => {
 
   /**
    * Extract the position lookup key from a comment or comment ID.
-   * Prefers importedId for imported comments since editor marks retain the original ID.
+   * Prefers whichever key currently exists in editorCommentPositions.
    *
    * @param {Object | string | null | undefined} commentOrId The comment object or comment ID
-   * @returns {string | null} The position key (importedId or commentId)
+   * @returns {string | null} The position key
    */
   const getCommentPositionKey = (commentOrId) => {
     if (!commentOrId) return null;
-    if (typeof commentOrId === 'object') {
-      return commentOrId.importedId ?? commentOrId.commentId ?? null;
+
+    const positions = editorCommentPositions.value || {};
+
+    if (typeof commentOrId === 'string') {
+      if (positions[commentOrId]) {
+        return commentOrId;
+      }
+
+      const resolvedComment = getComment(commentOrId);
+      if (!resolvedComment) {
+        return commentOrId;
+      }
+
+      const commentId = resolvedComment.commentId ?? null;
+      const importedId = resolvedComment.importedId ?? null;
+      if (commentId && positions[commentId]) return commentId;
+      if (importedId && positions[importedId]) return importedId;
+      return commentId ?? importedId ?? null;
     }
-    return commentOrId;
+
+    const commentId = commentOrId.commentId ?? null;
+    const importedId = commentOrId.importedId ?? null;
+    if (commentId && positions[commentId]) return commentId;
+    if (importedId && positions[importedId]) return importedId;
+    return commentId ?? importedId ?? null;
   };
 
   const normalizeCommentId = (id) => (id === undefined || id === null ? null : String(id));

@@ -125,7 +125,7 @@ Every block-level node (paragraphs, headings, etc.) automatically receives a uni
 4. **Programmatic updates** - Update document structure via APIs
 
 <Warning>
-`sdBlockId` is regenerated on every document load. If you need stable block references across separate editor sessions (e.g., headless CLI pipelines, multi-step AI workflows), use the [Document API](/document-api/overview) instead. `editor.doc.find()` returns addresses with stable IDs derived from the DOCX-native `paraId`, which survives round-trips. See [Cross-session block addressing](/document-api/common-workflows#cross-session-block-addressing) for a worked example.
+`sdBlockId` is regenerated on every document load. If you need cross-session block references (e.g., headless CLI pipelines, multi-step AI workflows), use the [Document API](/document-api/overview) instead. `editor.doc.find()` returns addresses whose `nodeId` prefers DOCX-native `paraId` for imported blocks. This is best-effort stable, not a permanent global ID: Word or other tools can rewrite IDs during structural changes, and SuperDoc may rewrite duplicates on import.
 </Warning>
 
 ## Use case

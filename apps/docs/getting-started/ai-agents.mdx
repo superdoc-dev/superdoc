@@ -92,9 +92,9 @@ const result = editor.doc.find({
   includeNodes: true,
 });
 
-// Each item has an address with a stable nodeId
+// Each item has an address with a best-effort stable nodeId
 const blocks = result.items.map((item) => ({
-  id: item.address.nodeId,     // stable across loads for DOCX content
+  id: item.address.nodeId,     // usually stable across loads for unchanged DOCX content
   type: item.address.nodeType,
   text: item.node?.text,
 }));
@@ -115,9 +115,9 @@ const result = editor.doc.find({
   includeNodes: true,
 });
 
-// Each item has an address with a stable nodeId
+// Each item has an address with a best-effort stable nodeId
 const blocks = result.items.map((item) => ({
-  id: item.address.nodeId,     // stable across loads for DOCX content
+  id: item.address.nodeId,     // usually stable across loads for unchanged DOCX content
   type: item.address.nodeType,
   text: item.node?.text,
 }));
@@ -127,7 +127,7 @@ const blocks = result.items.map((item) => ({
 </CodeGroup>
 
 <Info>
-Block addresses from `doc.find()` use DOCX-native IDs that survive round-trips. Don't read `node.attrs.sdBlockId` directly — it's regenerated on every load. See [Cross-session block addressing](/document-api/common-workflows#cross-session-block-addressing) for the full pattern.
+Block addresses from `doc.find()` prefer DOCX-native IDs (`paraId`) for imported blocks. This is the best available cross-session anchor, but no ID is guaranteed to survive all Word round-trips. Don't read `node.attrs.sdBlockId` directly — it's regenerated on every load.
 </Info>
 
 ## LLM quick reference

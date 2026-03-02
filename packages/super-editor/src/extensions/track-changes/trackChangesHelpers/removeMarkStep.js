@@ -53,9 +53,22 @@ export const removeMarkStep = ({ state, step, newTr, doc, user, date }) => {
           after = [
             ...formatChangeMark.attrs.after.filter((mark) => !markSnapshotMatchesStepMark(mark, step.mark, true)),
           ];
-          if (after.length === 0 && formatChangeMark.attrs.before.length === 0) {
-            newTr.removeMark(Math.max(step.from, pos), Math.min(step.to, pos + node.nodeSize), formatChangeMark);
-            return;
+          if (after.length === 0) {
+            // All additions were canceled. Check if any marks in `before` were
+            // actually removed from the node. If they all still exist, the
+            // tracked change is a no-op — clean it up.
+            const remainingFormatMarks = liveMarksBeforeRemove.filter(
+              (m) =>
+                ![TrackDeleteMarkName, TrackFormatMarkName].includes(m.type.name) &&
+                m.type.name !== step.mark.type.name,
+            );
+            const isNoop = formatChangeMark.attrs.before.every((snapshot) =>
+              remainingFormatMarks.some((m) => m.type.name === snapshot.type),
+            );
+            if (isNoop) {
+              newTr.removeMark(Math.max(step.from, pos), Math.min(step.to, pos + node.nodeSize), formatChangeMark);
+              return;
+            }
           }
           before = [...formatChangeMark.attrs.before];
         } else {

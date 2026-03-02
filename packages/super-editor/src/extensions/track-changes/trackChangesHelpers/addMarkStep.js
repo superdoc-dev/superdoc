@@ -31,6 +31,7 @@ export const addMarkStep = ({ state, step, newTr, doc, user, date }) => {
 
     const rangeFrom = Math.max(step.from, pos);
     const rangeTo = Math.min(step.to, pos + node.nodeSize);
+
     const liveMarks = getLiveInlineMarksInRange({
       doc: newTr.doc,
       from: rangeFrom,

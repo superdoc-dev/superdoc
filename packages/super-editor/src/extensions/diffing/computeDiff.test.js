@@ -342,4 +342,27 @@ describe('Diff', () => {
     expect(addedComment).toBeDefined();
     expect(addedComment?.text).toBe('New comment');
   });
+
+  it('does not emit tracked-change mark diffs when ids only differ across imports', async () => {
+    const beforeA = await getDocument('diff_before11.docx');
+    const beforeB = await getDocument('diff_before11.docx');
+    const after = await getDocument('diff_after11.docx');
+
+    const sameDiff = computeDiff(beforeA.doc, beforeB.doc, beforeA.schema, beforeA.comments, beforeB.comments);
+    expect(sameDiff.docDiffs).toHaveLength(0);
+    expect(sameDiff.commentDiffs).toHaveLength(0);
+
+    const changedDiff = computeDiff(beforeA.doc, after.doc, beforeA.schema, beforeA.comments, after.comments);
+    expect(changedDiff.docDiffs.length).toBeGreaterThan(0);
+    expect(changedDiff.commentDiffs.length).toBeGreaterThan(0);
+
+    const trackedChangeMarkNames = new Set(['trackInsert', 'trackDelete', 'trackFormat']);
+    const trackedMarkDiffs = changedDiff.docDiffs
+      .flatMap((diff) => diff.contentDiff ?? [])
+      .filter((change) => change.kind === 'text' && change.marksDiff?.modified?.length)
+      .flatMap((change) => change.marksDiff.modified)
+      .filter((mark) => trackedChangeMarkNames.has(mark.name));
+
+    expect(trackedMarkDiffs).toHaveLength(0);
+  });
 });

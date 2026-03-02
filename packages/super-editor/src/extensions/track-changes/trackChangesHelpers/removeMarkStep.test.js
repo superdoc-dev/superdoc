@@ -150,6 +150,67 @@ describe('removeMarkStep cancel logic', () => {
     expect(trackFormatAttrs.before).toEqual(expect.arrayContaining([expect.objectContaining({ type: 'italic' })]));
   });
 
+  it('shares TrackFormat ID across nodes when addMarkStep spans multiple runs', () => {
+    const italic = schema.marks.italic.create();
+    const doc = createDocWithRuns([{ text: 'Hello ' }, { text: 'world', marks: [italic] }]);
+    const state = createState(doc);
+
+    const bold = schema.marks.bold.create();
+    const step = new AddMarkStep(2, 13, bold);
+    const tr = state.tr;
+    addMarkStep({ state, step, newTr: tr, doc: state.doc, user, date });
+    const result = state.apply(tr);
+
+    // Collect TrackFormat mark IDs from all inline nodes
+    const ids = [];
+    result.doc.descendants((node) => {
+      const mark = node.marks?.find((m) => m.type.name === TrackFormatMarkName);
+      if (mark) ids.push(mark.attrs.id);
+    });
+
+    expect(ids.length).toBe(2);
+    expect(ids[0]).toBe(ids[1]);
+  });
+
+  it('clamps TrackFormat mark to node boundaries, not step range', () => {
+    // doc > paragraph > run_1("Hello " at pos 2-7) + run_2("world" at pos 10-14)
+    // Run open/close tags add +1 offset each, so run_2 content starts at pos 10.
+    const doc = createDocWithRuns([{ text: 'Hello ' }, { text: 'world' }]);
+    const state = createState(doc);
+
+    // Apply bold from pos 5-11. Clamped per-node:
+    //   run_1 text [2,8): [max(5,2), min(11,8)] = [5,8] → "lo " (3 chars)
+    //   run_2 text [10,15): [max(5,10), min(11,15)] = [10,11] → "w" (1 char)
+    const bold = schema.marks.bold.create();
+    const step = new AddMarkStep(5, 11, bold);
+    const tr = state.tr;
+    addMarkStep({ state, step, newTr: tr, doc: state.doc, user, date });
+    const result = state.apply(tr);
+
+    // Collect TrackFormat marks — each should be scoped to its text portion
+    const trackMarks = [];
+    result.doc.descendants((node, pos) => {
+      const mark = node.marks?.find((m) => m.type.name === TrackFormatMarkName);
+      if (mark) trackMarks.push({ pos, size: node.nodeSize, text: node.text, id: mark.attrs.id });
+    });
+
+    // Two TrackFormat marks: one on "lo " (from first run) and one on "w" (from second run)
+    expect(trackMarks.length).toBe(2);
+    expect(trackMarks[0].text).toBe('lo ');
+    expect(trackMarks[1].text).toBe('w');
+    // Both should share the same ID (sharedWid)
+    expect(trackMarks[0].id).toBe(trackMarks[1].id);
+    // "Hel" and "orld" should NOT have TrackFormat (they were outside the step range)
+    const nonTrackedTexts = [];
+    result.doc.descendants((node) => {
+      if (node.isText && !node.marks?.some((m) => m.type.name === TrackFormatMarkName)) {
+        nonTrackedTexts.push(node.text);
+      }
+    });
+    expect(nonTrackedTexts).toContain('Hel');
+    expect(nonTrackedTexts).toContain('orld');
+  });
+
   it('removes TrackFormat for multi-node bold toggle (Hello plain + world italic)', () => {
     const italic = schema.marks.italic.create();
     const doc = createDocWithRuns([{ text: 'Hello ' }, { text: 'world', marks: [italic] }]);

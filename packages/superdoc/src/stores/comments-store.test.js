@@ -946,5 +946,24 @@ describe('comments-store', () => {
       const floating = store.getFloatingComments;
       expect(floating).toEqual([]);
     });
+
+    it('excludes unresolved tracked change when positions are cleared (regression: SD-2071)', () => {
+      store.commentsList = [
+        { commentId: 'tc-1', trackedChange: true, resolvedTime: null, createdTime: 1, selection: {} },
+      ];
+      // Undo removed the mark — positions are now empty
+      store.editorCommentPositions = {};
+
+      const floating = store.getFloatingComments;
+      expect(floating).toEqual([]);
+    });
+
+    it('keeps PDF comments visible when editor positions are empty (SD-2071)', () => {
+      store.commentsList = [{ commentId: 'pdf-1', createdTime: 1, selection: { source: 'pdf', selectionBounds: {} } }];
+      store.editorCommentPositions = {};
+
+      const floating = store.getFloatingComments;
+      expect(floating.map((c) => c.commentId)).toEqual(['pdf-1']);
+    });
   });
 });

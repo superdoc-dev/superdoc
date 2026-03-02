@@ -42,6 +42,11 @@ test('thread with 2+ replies collapses and expands on click', async ({ superdoc 
   });
   await superdoc.waitForStable();
 
+  // Wait for dialog to lose active state before re-activating — Firefox needs
+  // this gap so the component fully unmounts its expanded state.
+  const activeDialog = superdoc.page.locator('.comment-placeholder .comments-dialog.is-active');
+  await expect(activeDialog).toHaveCount(0, { timeout: 5_000 });
+
   // Activate the comment dialog
   const dialog = await activateCommentDialog(superdoc, 'collapse');
 

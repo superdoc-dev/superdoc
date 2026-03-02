@@ -3524,14 +3524,12 @@ export class PresentationEditor extends EventEmitter {
       this.emit('paginationUpdate', payload);
 
       // Emit fresh comment positions after layout completes.
-      // This ensures positions are always in sync with the current document and layout.
+      // Always emit — even when empty — so the store can clear stale positions
+      // (e.g. when undo removes the last tracked-change mark).
       const allowViewingCommentPositions = this.#layoutOptions.emitCommentPositionsInViewing === true;
       if (this.#documentMode !== 'viewing' || allowViewingCommentPositions) {
         const commentPositions = this.#collectCommentPositions();
-        const positionKeys = Object.keys(commentPositions);
-        if (positionKeys.length > 0) {
-          this.emit('commentPositions', { positions: commentPositions });
-        }
+        this.emit('commentPositions', { positions: commentPositions });
       }
 
       this.#selectionSync.requestRender({ immediate: true });

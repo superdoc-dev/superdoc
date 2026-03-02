@@ -16,6 +16,14 @@ export type ReplayDiffsResult = {
 import { replayDocDiffs } from './replay/replay-doc';
 import { replayComments } from './replay/replay-comments';
 
+type ReplayDiffsParams = {
+  tr: import('prosemirror-state').Transaction;
+  diff: import('./computeDiff').DiffResult;
+  schema: import('prosemirror-model').Schema;
+  comments?: import('./algorithm/comment-diffing').CommentInput[];
+  editor?: { emit?: (event: string, payload: unknown) => void };
+};
+
 /**
  * Replays a diff result over the current editor state.
  *
@@ -27,19 +35,7 @@ import { replayComments } from './replay/replay-comments';
  * @param params.editor Editor instance used to emit comment update events.
  * @returns Summary and transaction containing the replayed steps.
  */
-export function replayDiffs({
-  tr,
-  diff,
-  schema,
-  comments = [],
-  editor,
-}: {
-  tr: import('prosemirror-state').Transaction;
-  diff: import('./computeDiff').DiffResult;
-  schema: import('prosemirror-model').Schema;
-  comments?: import('./algorithm/comment-diffing').CommentInput[];
-  editor?: { emit?: (event: string, payload: unknown) => void };
-}): ReplayDiffsResult {
+export function replayDiffs({ tr, diff, schema, comments = [], editor }: ReplayDiffsParams): ReplayDiffsResult {
   const docReplay = replayDocDiffs({ tr, docDiffs: diff.docDiffs, schema });
   const commentsReplay = replayComments({ comments, commentDiffs: diff.commentDiffs, editor });
 

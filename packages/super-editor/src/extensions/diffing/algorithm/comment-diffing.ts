@@ -1,8 +1,8 @@
 import type { Schema } from 'prosemirror-model';
-import { diffNodes, type NodeDiff, type NodeInfo } from './generic-diffing.ts';
-import { getAttributesDiff, type AttributesDiff } from './attributes-diffing.ts';
-import { createParagraphSnapshot, type ParagraphNodeInfo } from './paragraph-diffing.ts';
-import { diffSequences } from './sequence-diffing.ts';
+import { diffNodes, type NodeDiff, type NodeInfo } from './generic-diffing';
+import { getAttributesDiff, type AttributesDiff } from './attributes-diffing';
+import { createParagraphSnapshot, type ParagraphNodeInfo } from './paragraph-diffing';
+import { diffSequences } from './sequence-diffing';
 
 /**
  * Raw comment data used for diffing comment content and metadata.
@@ -241,7 +241,7 @@ export function buildModifiedCommentDiff(
  * @param comment Comment payload to inspect.
  * @returns Resolved comment id or null when unavailable.
  */
-function resolveCommentId(comment: CommentInput): string | null {
+export function resolveCommentId(comment: CommentInput): string | null {
   return comment.importedId ?? comment.id ?? comment.commentId ?? null;
 }
 

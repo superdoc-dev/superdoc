@@ -1,8 +1,8 @@
 import type { Node as PMNode } from 'prosemirror-model';
-import { getInlineDiff, tokenizeInlineContent, type InlineDiffToken, type InlineDiffResult } from './inline-diffing.ts';
-import { getAttributesDiff, type AttributesDiff } from './attributes-diffing.ts';
-import { getInsertionPos } from './diff-utils.ts';
-import { levenshteinDistance } from './similarity.ts';
+import { getInlineDiff, tokenizeInlineContent, type InlineDiffToken, type InlineDiffResult } from './inline-diffing';
+import { getAttributesDiff, type AttributesDiff } from './attributes-diffing';
+import { getInsertionPos } from './diff-utils';
+import { levenshteinDistance } from './similarity';
 
 // Heuristics that prevent unrelated paragraphs from being paired as modifications.
 const SIMILARITY_THRESHOLD = 0.65;
@@ -32,7 +32,7 @@ interface ParagraphDiffBase<Action extends 'added' | 'deleted' | 'modified'> {
   /** Change type for this paragraph. */
   action: Action;
   /** Node type name (always `paragraph`). */
-  nodeType: string;
+  nodeType: 'paragraph';
   /** Anchor position in the old document for replaying diffs. */
   pos: number;
 }
@@ -135,7 +135,7 @@ export function buildAddedParagraphDiff(
 ): AddedParagraphDiff {
   return {
     action: 'added',
-    nodeType: paragraph.node.type.name,
+    nodeType: 'paragraph',
     nodeJSON: paragraph.node.toJSON(),
     text: paragraph.fullText,
     pos: getInsertionPos(paragraph.depth, previousOldNodeInfo),
@@ -148,7 +148,7 @@ export function buildAddedParagraphDiff(
 export function buildDeletedParagraphDiff(paragraph: ParagraphNodeInfo): DeletedParagraphDiff {
   return {
     action: 'deleted',
-    nodeType: paragraph.node.type.name,
+    nodeType: 'paragraph',
     nodeJSON: paragraph.node.toJSON(),
     oldText: paragraph.fullText,
     pos: paragraph.pos,
@@ -171,7 +171,7 @@ export function buildModifiedParagraphDiff(
 
   return {
     action: 'modified',
-    nodeType: oldParagraph.node.type.name,
+    nodeType: 'paragraph',
     oldNodeJSON: oldParagraph.node.toJSON(),
     newNodeJSON: newParagraph.node.toJSON(),
     oldText: oldParagraph.fullText,

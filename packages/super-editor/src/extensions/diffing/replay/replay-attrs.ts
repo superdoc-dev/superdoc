@@ -1,4 +1,4 @@
-import { AttributesDiff } from '../algorithm/attributes-diffing.ts';
+import { AttributesDiff } from '../algorithm/attributes-diffing';
 
 /**
  * Applies an attribute diff to an attributes object.

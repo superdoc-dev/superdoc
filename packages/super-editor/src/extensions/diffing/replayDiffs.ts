@@ -13,7 +13,7 @@ export type ReplayDiffsResult = {
   warnings: string[];
 };
 
-import { replayDocDiffs } from './replay/replay-doc.ts';
+import { replayDocDiffs } from './replay/replay-doc';
 
 /**
  * Replays a diff result over the current editor state.
@@ -30,7 +30,7 @@ export function replayDiffs({
   schema,
 }: {
   tr: import('prosemirror-state').Transaction;
-  diff: import('./computeDiff.ts').DiffResult;
+  diff: import('./computeDiff').DiffResult;
   schema: import('prosemirror-model').Schema;
 }): ReplayDiffsResult {
   const docReplay = replayDocDiffs({ tr, docDiffs: diff.docDiffs, schema });

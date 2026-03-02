@@ -1,8 +1,8 @@
 import { Fragment, Slice } from 'prosemirror-model';
 import { ReplaceStep } from 'prosemirror-transform';
 
-import { replayInlineDiff } from './replay-inline.ts';
-import { ReplayResult } from './replay-types.ts';
+import { replayInlineDiff } from './replay-inline';
+import { ReplayResult } from './replay-types';
 
 /**
  * Replays a paragraph diff into a transaction.
@@ -19,7 +19,7 @@ export function replayParagraphDiff({
   schema,
 }: {
   tr: import('prosemirror-state').Transaction;
-  diff: import('../algorithm/paragraph-diffing.ts').ParagraphDiff;
+  diff: import('../algorithm/paragraph-diffing').ParagraphDiff;
   schema: import('prosemirror-model').Schema;
 }): ReplayResult {
   const result: ReplayResult = {

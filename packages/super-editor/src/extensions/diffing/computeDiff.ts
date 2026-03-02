@@ -1,6 +1,6 @@
 import type { Node as PMNode, Schema } from 'prosemirror-model';
-import { diffComments, type CommentInput, type CommentDiff } from './algorithm/comment-diffing.ts';
-import { diffNodes, normalizeNodes, type NodeDiff } from './algorithm/generic-diffing.ts';
+import { diffComments, type CommentInput, type CommentDiff } from './algorithm/comment-diffing';
+import { diffNodes, normalizeNodes, type NodeDiff } from './algorithm/generic-diffing';
 
 /**
  * Result payload for document diffing.

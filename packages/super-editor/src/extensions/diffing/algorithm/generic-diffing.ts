@@ -9,10 +9,10 @@ import {
   buildModifiedParagraphDiff,
   type ParagraphDiff,
   type ParagraphNodeInfo,
-} from './paragraph-diffing.ts';
-import { diffSequences, reorderDiffOperations } from './sequence-diffing.ts';
-import { getAttributesDiff, type AttributesDiff } from './attributes-diffing.ts';
-import { getInsertionPos } from './diff-utils.ts';
+} from './paragraph-diffing';
+import { diffSequences, reorderDiffOperations } from './sequence-diffing';
+import { getAttributesDiff, type AttributesDiff } from './attributes-diffing';
+import { getInsertionPos } from './diff-utils';
 
 type NodeJSON = ReturnType<PMNode['toJSON']>;
 

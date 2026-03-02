@@ -1,4 +1,4 @@
-import { myersDiff, type MyersOperation } from './myers-diff.ts';
+import { myersDiff, type MyersOperation } from './myers-diff';
 
 /**
  * Comparator used to determine whether two sequence values are equal.

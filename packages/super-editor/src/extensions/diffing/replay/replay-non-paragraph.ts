@@ -4,7 +4,7 @@
 import { Fragment, Slice } from 'prosemirror-model';
 import { ReplaceStep } from 'prosemirror-transform';
 
-import { ReplayResult } from './replay-types.ts';
+import { ReplayResult } from './replay-types';
 
 /**
  * Replays a non-paragraph node diff into a transaction.
@@ -21,7 +21,7 @@ export function replayNonParagraphDiff({
   schema,
 }: {
   tr: import('prosemirror-state').Transaction;
-  diff: import('../algorithm/generic-diffing.ts').NodeDiff;
+  diff: import('../algorithm/generic-diffing').NodeDiff;
   schema: import('prosemirror-model').Schema;
 }): ReplayResult {
   const result: ReplayResult = {

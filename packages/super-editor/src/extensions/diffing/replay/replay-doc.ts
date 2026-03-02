@@ -1,6 +1,6 @@
-import { ReplayResult } from './replay-types.ts';
-import { replayNonParagraphDiff } from './replay-non-paragraph.ts';
-import { replayParagraphDiff } from './replay-paragraph.ts';
+import { ReplayResult } from './replay-types';
+import { replayNonParagraphDiff } from './replay-non-paragraph';
+import { replayParagraphDiff } from './replay-paragraph';
 
 /**
  * Orchestrates replay for document-level diffs.
@@ -17,7 +17,7 @@ export function replayDocDiffs({
   schema,
 }: {
   tr: import('prosemirror-state').Transaction;
-  docDiffs: import('../algorithm/generic-diffing.ts').NodeDiff[];
+  docDiffs: import('../algorithm/generic-diffing').NodeDiff[];
   schema: import('prosemirror-model').Schema;
 }): ReplayResult {
   const result: ReplayResult = {
@@ -30,7 +30,7 @@ export function replayDocDiffs({
     const diff = docDiffs[idx];
     const handlerResult =
       diff.nodeType === 'paragraph'
-        ? replayParagraphDiff({ tr, diff, schema })
+        ? replayParagraphDiff({ tr, diff: diff as import('../algorithm/paragraph-diffing').ParagraphDiff, schema })
         : replayNonParagraphDiff({ tr, diff, schema });
     result.applied += handlerResult.applied;
     result.skipped += handlerResult.skipped;

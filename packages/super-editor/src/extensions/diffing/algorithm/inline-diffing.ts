@@ -1,6 +1,6 @@
 import type { Node as PMNode } from 'prosemirror-model';
-import { getAttributesDiff, getMarksDiff, type AttributesDiff, type MarksDiff } from './attributes-diffing.ts';
-import { diffSequences } from './sequence-diffing.ts';
+import { getAttributesDiff, getMarksDiff, type AttributesDiff, type MarksDiff } from './attributes-diffing';
+import { diffSequences } from './sequence-diffing';
 
 type NodeJSON = ReturnType<PMNode['toJSON']>;
 type MarkJSON = { type: string; attrs?: Record<string, unknown> };
@@ -37,6 +37,16 @@ export type InlineNodeToken = {
  * Union of inline token kinds used as input for Myers diffing.
  */
 export type InlineDiffToken = InlineTextToken | InlineNodeToken;
+
+/**
+ * Narrow an inline token to an inline-node token.
+ *
+ * @param token Inline token candidate.
+ * @returns True when the token represents an inline node.
+ */
+function isInlineNodeToken(token: InlineDiffToken): token is InlineNodeToken {
+  return token.kind === 'inlineNode';
+}
 
 /**
  * Intermediate text diff emitted by `diffSequences`.
@@ -222,7 +232,7 @@ export function getInlineDiff(
     comparator: inlineComparator,
     shouldProcessEqualAsModification,
     canTreatAsModification: (oldToken, newToken) =>
-      oldToken.kind === newToken.kind && oldToken.kind !== 'text' && oldToken.node.type === newToken.node.type,
+      isInlineNodeToken(oldToken) && isInlineNodeToken(newToken) && oldToken.node.type === newToken.node.type,
     buildAdded: (token, oldIdx) => buildInlineDiff('added', token, oldIdx),
     buildDeleted: (token, oldIdx) => buildInlineDiff('deleted', token, oldIdx),
     buildModified: (oldToken, newToken, oldIdx) => {

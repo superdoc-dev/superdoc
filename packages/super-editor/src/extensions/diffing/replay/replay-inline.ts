@@ -1,9 +1,9 @@
 import { Fragment, Slice } from 'prosemirror-model';
 import { ReplaceStep, AddMarkStep, RemoveMarkStep } from 'prosemirror-transform';
 
-import { applyAttrsDiff } from './replay-attrs.ts';
-import { marksFromDiff } from './marks-from-diff.ts';
-import { ReplayResult } from './replay-types.ts';
+import { applyAttrsDiff } from './replay-attrs';
+import { marksFromDiff } from './marks-from-diff';
+import { ReplayResult } from './replay-types';
 
 /**
  * Replays a single inline diff into a transaction.
@@ -22,7 +22,7 @@ export function replayInlineDiff({
   paragraphEndPos,
 }: {
   tr: import('prosemirror-state').Transaction;
-  diff: import('../algorithm/inline-diffing.ts').InlineDiffResult;
+  diff: import('../algorithm/inline-diffing').InlineDiffResult;
   schema: import('prosemirror-model').Schema;
   paragraphEndPos: number;
 }): ReplayResult {
@@ -255,7 +255,7 @@ const getMarksAtPosition = (
 const applyRunAttrsDiff = (
   tr: import('prosemirror-state').Transaction,
   pos: number,
-  diff: import('../algorithm/attributes-diffing.ts').AttributesDiff,
+  diff: import('../algorithm/attributes-diffing').AttributesDiff,
 ): { applied: number; warning?: string } => {
   const resolved = tr.doc.resolve(pos);
   for (let depth = resolved.depth; depth > 0; depth -= 1) {

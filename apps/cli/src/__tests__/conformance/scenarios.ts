@@ -238,23 +238,39 @@ async function findFirstJoinableWithPreviousAddress(
   return null;
 }
 
-async function buildSeparatedListScenarioDoc(
+type ListTargetPreparation = {
+  docPath: string;
+  target: Record<string, unknown>;
+};
+
+async function prepareExecutableListTarget(
   harness: ConformanceHarness,
   stateDir: string,
   label: string,
-): Promise<string | null> {
+  resolver: (harness: ConformanceHarness, stateDir: string, docPath: string) => Promise<Record<string, unknown> | null>,
+): Promise<ListTargetPreparation | null> {
   const sourceDoc = await harness.copyListFixtureDoc(`${label}-source`);
+  const directTarget = await resolver(harness, stateDir, sourceDoc);
+  if (directTarget) {
+    return { docPath: sourceDoc, target: directTarget };
+  }
+
   const items = await listDiscoveryItems(harness, stateDir, sourceDoc, 50);
   for (const item of items) {
     const address = item.address;
     if (!address || typeof address !== 'object') continue;
+
     const separatedDoc = harness.createOutputPath(`${label}-separated`);
     const separated = await harness.runCli(
       ['lists', 'separate', sourceDoc, '--target-json', JSON.stringify(address), '--out', separatedDoc],
       stateDir,
     );
+
     if (separated.result.code === 0 && separated.envelope.ok === true) {
-      return separatedDoc;
+      const target = await resolver(harness, stateDir, separatedDoc);
+      if (target) {
+        return { docPath: separatedDoc, target };
+      }
     }
   }
   return null;
@@ -1346,31 +1362,26 @@ export const SUCCESS_SCENARIOS = {
   },
   'doc.lists.continuePrevious': async (harness: ConformanceHarness): Promise<ScenarioInvocation> => {
     const stateDir = await harness.createStateDir('doc-lists-continue-previous-success');
-    const docPath = await harness.copyListFixtureDoc('doc-lists-continue-previous');
-    let preparedDoc = docPath;
-    // Prefer direct executable targets in the fixture as-is.
-    let preparedSecondItem = await findFirstContinuableListAddress(harness, stateDir, preparedDoc);
-    // Fallback: create a separated variant by probing separable list items.
-    if (!preparedSecondItem) {
-      const separatedDoc = await buildSeparatedListScenarioDoc(harness, stateDir, 'doc-lists-continue-previous');
-      if (separatedDoc) {
-        preparedDoc = separatedDoc;
-        preparedSecondItem = await findFirstContinuableListAddress(harness, stateDir, preparedDoc);
-      }
-    }
-    if (!preparedSecondItem) {
+    const prepared = await prepareExecutableListTarget(
+      harness,
+      stateDir,
+      'doc-lists-continue-previous',
+      findFirstContinuableListAddress,
+    );
+    if (!prepared) {
       throw new Error(
         'Unable to find a continuable list item for continue-previous success conformance scenario after preparation.',
       );
     }
+
     return {
       stateDir,
       args: [
         'lists',
         'continue-previous',
-        preparedDoc,
+        prepared.docPath,
         '--target-json',
-        JSON.stringify(preparedSecondItem),
+        JSON.stringify(prepared.target),
         '--out',
         harness.createOutputPath('doc-lists-continue-previous-output'),
       ],
@@ -1440,29 +1451,24 @@ export const SUCCESS_SCENARIOS = {
   },
   'doc.lists.join': async (harness: ConformanceHarness): Promise<ScenarioInvocation> => {
     const stateDir = await harness.createStateDir('doc-lists-join-success');
-    const docPath = await harness.copyListFixtureDoc('doc-lists-join');
-    let preparedDoc = docPath;
-    // Prefer direct executable targets in the fixture as-is.
-    let preparedSecondItem = await findFirstJoinableWithPreviousAddress(harness, stateDir, preparedDoc);
-    // Fallback: create a separated variant by probing separable list items.
-    if (!preparedSecondItem) {
-      const separatedDoc = await buildSeparatedListScenarioDoc(harness, stateDir, 'doc-lists-join');
-      if (separatedDoc) {
-        preparedDoc = separatedDoc;
-        preparedSecondItem = await findFirstJoinableWithPreviousAddress(harness, stateDir, preparedDoc);
-      }
-    }
-    if (!preparedSecondItem) {
+    const prepared = await prepareExecutableListTarget(
+      harness,
+      stateDir,
+      'doc-lists-join',
+      findFirstJoinableWithPreviousAddress,
+    );
+    if (!prepared) {
       throw new Error('Unable to find a joinable list item for join success conformance scenario after preparation.');
     }
+
     return {
       stateDir,
       args: [
         'lists',
         'join',
-        preparedDoc,
+        prepared.docPath,
         '--input-json',
-        JSON.stringify({ target: preparedSecondItem, direction: 'withPrevious' }),
+        JSON.stringify({ target: prepared.target, direction: 'withPrevious' }),
         '--out',
         harness.createOutputPath('doc-lists-join-output'),
       ],

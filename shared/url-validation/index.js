@@ -521,9 +521,9 @@ export function sanitizeHref(raw, config = {}) {
   // Normalize redirect blocklist once and enforce across all URL forms
   const blocklist = normalizeBlocklist(config.redirectBlocklist);
 
-  // Relative paths have no protocol to validate
+  // Relative paths (/, ./, ../, bare paths) have no protocol to validate
   // resolve against page origin instead
-  if (trimmed.startsWith('/') || trimmed.startsWith('.')) {
+  if (isRelativeUrl(trimmed)) {
     return sanitizeRelativePath(trimmed, blocklist);
   }
 
@@ -679,6 +679,36 @@ export function encodeTooltip(raw, maxLength = DEFAULT_TOOLTIP_MAX_LENGTH) {
     text,
     wasTruncated,
   };
+}
+
+/**
+ * Determine whether a URL string is relative (no scheme, no protocol-relative prefix).
+ *
+ * Relative URLs include:
+ * - Absolute paths: `/path/to/file`
+ * - Dot-relative paths: `./file`, `../file`
+ * - Bare paths: `images/photo.png`
+ *
+ * NOT relative:
+ * - Anchors: `#section`
+ * - Protocol-relative: `//cdn.example.com`
+ * - Absolute URLs with scheme: `https://…`, `data:…`, `blob:…`
+ *
+ * @param {string} url - URL string to test
+ * @returns {boolean} true if the URL is relative
+ */
+export function isRelativeUrl(url) {
+  if (typeof url !== 'string') return false;
+  const trimmed = url.trim();
+  if (!trimmed) return false;
+  // Anchors are not relative paths
+  if (trimmed.startsWith('#')) return false;
+  // Protocol-relative URLs
+  if (trimmed.startsWith('//')) return false;
+  // Has a scheme (http:, data:, blob:, etc.) → absolute
+  if (/^[a-z][a-z0-9+.-]*:/i.test(trimmed)) return false;
+  // Everything else is relative (/, ./, ../, or bare path)
+  return true;
 }
 
 export const UrlValidationConstants = {

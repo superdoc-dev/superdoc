@@ -1,5 +1,5 @@
 import { describe, expect, it, beforeEach, afterEach, vi } from 'vitest';
-import { sanitizeHref, encodeTooltip, UrlValidationConstants, buildAllowedProtocols } from './index.js';
+import { sanitizeHref, encodeTooltip, UrlValidationConstants, buildAllowedProtocols, isRelativeUrl } from './index.js';
 
 describe('url-validation', () => {
   describe('sanitizeHref', () => {
@@ -164,6 +164,20 @@ describe('url-validation', () => {
           redirectBlocklist: ['https://localhost:3000/docs'],
         }),
       ).toBeNull();
+    });
+
+    it('resolves bare paths (no leading / or .)', () => {
+      const result = sanitizeHref('images/photo.png');
+      expect(result).toBeTruthy();
+      expect(result?.href).toBe(`${origin}/images/photo.png`);
+      expect(result?.protocol).toBeNull();
+      expect(result?.isExternal).toBe(false);
+    });
+
+    it('resolves bare nested paths', () => {
+      const result = sanitizeHref('assets/img/logo.svg');
+      expect(result).toBeTruthy();
+      expect(result?.href).toBe(`${origin}/assets/img/logo.svg`);
     });
   });
 
@@ -570,6 +584,45 @@ describe('url-validation', () => {
       const specialChars = '& < > " \' @ # $ % ^ * ( ) { } [ ] | \\ / ? + = ~ `';
       const result = encodeTooltip(specialChars);
       expect(result?.text).toBe(specialChars);
+    });
+  });
+
+  describe('isRelativeUrl', () => {
+    it('recognises absolute paths', () => {
+      expect(isRelativeUrl('/path/to/file')).toBe(true);
+    });
+
+    it('recognises dot-relative paths', () => {
+      expect(isRelativeUrl('./path')).toBe(true);
+      expect(isRelativeUrl('../path')).toBe(true);
+    });
+
+    it('recognises bare paths', () => {
+      expect(isRelativeUrl('images/photo.png')).toBe(true);
+      expect(isRelativeUrl('file.txt')).toBe(true);
+    });
+
+    it('rejects absolute URLs with scheme', () => {
+      expect(isRelativeUrl('https://example.com')).toBe(false);
+      expect(isRelativeUrl('http://example.com')).toBe(false);
+      expect(isRelativeUrl('data:image/png;base64,abc')).toBe(false);
+      expect(isRelativeUrl('blob:http://localhost/uuid')).toBe(false);
+    });
+
+    it('rejects anchors', () => {
+      expect(isRelativeUrl('#anchor')).toBe(false);
+    });
+
+    it('rejects protocol-relative URLs', () => {
+      expect(isRelativeUrl('//cdn.example.com')).toBe(false);
+    });
+
+    it('rejects non-string and empty inputs', () => {
+      expect(isRelativeUrl(null)).toBe(false);
+      expect(isRelativeUrl(undefined)).toBe(false);
+      expect(isRelativeUrl(123)).toBe(false);
+      expect(isRelativeUrl('')).toBe(false);
+      expect(isRelativeUrl('   ')).toBe(false);
     });
   });
 });

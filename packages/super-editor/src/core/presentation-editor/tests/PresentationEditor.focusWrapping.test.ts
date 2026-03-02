@@ -355,6 +355,22 @@ describe('PresentationEditor - Focus Wrapping (#wrapHiddenEditorFocus)', () => {
         editor.editor.view.focus();
       }).not.toThrow();
     });
+
+    it('schedules requestAnimationFrame as async scroll safety net', () => {
+      editor = new PresentationEditor({
+        element: container,
+        documentId: 'test-doc',
+        pageSize: { w: 612, h: 792 },
+      });
+
+      const rafSpy = vi.spyOn(window, 'requestAnimationFrame');
+
+      editor.editor.view.focus();
+
+      // RAF should be scheduled to catch async browser scroll after focus
+      expect(rafSpy).toHaveBeenCalledTimes(1);
+      expect(rafSpy).toHaveBeenCalledWith(expect.any(Function));
+    });
   });
 
   describe('mock detection', () => {

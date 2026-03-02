@@ -775,6 +775,15 @@ export class PresentationEditor extends EventEmitter {
       if (win.scrollX !== beforeX || win.scrollY !== beforeY) {
         win.scrollTo(beforeX, beforeY);
       }
+
+      // Safety net: the browser may asynchronously scroll after ProseMirror's
+      // selectionToDOM() modifies the DOM selection inside the hidden editor.
+      // A single requestAnimationFrame catches this post-layout scroll.
+      win.requestAnimationFrame(() => {
+        if (win.scrollX !== beforeX || win.scrollY !== beforeY) {
+          win.scrollTo(beforeX, beforeY);
+        }
+      });
     };
   }
 
@@ -2521,6 +2530,15 @@ export class PresentationEditor extends EventEmitter {
         win.cancelAnimationFrame(this.#rafHandle!);
         this.#rafHandle = null;
       }, 'Layout RAF');
+    }
+
+    // Cancel pending focus-scroll safety net RAF
+    if (this.#focusScrollRafId != null) {
+      safeCleanup(() => {
+        const win = this.#visibleHost?.ownerDocument?.defaultView ?? window;
+        win.cancelAnimationFrame(this.#focusScrollRafId!);
+        this.#focusScrollRafId = null;
+      }, 'Focus scroll RAF');
     }
 
     // Cancel pending decoration sync RAF

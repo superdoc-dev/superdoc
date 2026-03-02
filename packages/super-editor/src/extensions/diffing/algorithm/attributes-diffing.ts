@@ -1,4 +1,5 @@
 const IGNORED_ATTRIBUTE_KEYS = new Set(['sdBlockId']);
+const TRACK_CHANGE_MARK_NAMES = new Set(['trackInsert', 'trackDelete', 'trackFormat']);
 
 /**
  * Represents a single attribute change capturing the previous and next values.
@@ -76,13 +77,20 @@ export function getMarksDiff(
   marksA = marksA || [];
   marksB = marksB || [];
 
-  const normalizeMarkAttrs = (attrs?: Record<string, unknown>): Record<string, unknown> => {
+  const normalizeMarkAttrs = (markName: string, attrs?: Record<string, unknown>): Record<string, unknown> => {
     if (!attrs) {
       return {};
     }
+
+    const ignoredMarkKeys = new Set<string>();
+    if (TRACK_CHANGE_MARK_NAMES.has(markName)) {
+      // Track change ids are generated per import and are not semantic content changes.
+      ignoredMarkKeys.add('id');
+    }
+
     const normalized: Record<string, unknown> = {};
     for (const [key, value] of Object.entries(attrs)) {
-      if (IGNORED_ATTRIBUTE_KEYS.has(key)) {
+      if (IGNORED_ATTRIBUTE_KEYS.has(key) || ignoredMarkKeys.has(key)) {
         continue;
       }
       normalized[key] = value;
@@ -98,10 +106,10 @@ export function getMarksDiff(
   const marksMapB = new Map<string, Record<string, unknown>>();
 
   for (const mark of marksA) {
-    marksMapA.set(mark.type, normalizeMarkAttrs(mark.attrs));
+    marksMapA.set(mark.type, normalizeMarkAttrs(mark.type, mark.attrs));
   }
   for (const mark of marksB) {
-    marksMapB.set(mark.type, normalizeMarkAttrs(mark.attrs));
+    marksMapB.set(mark.type, normalizeMarkAttrs(mark.type, mark.attrs));
   }
 
   const markNames = new Set([...marksMapA.keys(), ...marksMapB.keys()]);

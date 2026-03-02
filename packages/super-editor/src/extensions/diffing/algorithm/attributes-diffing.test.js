@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { getAttributesDiff } from './attributes-diffing.ts';
+import { getAttributesDiff, getMarksDiff } from './attributes-diffing.ts';
 
 describe('getAttributesDiff', () => {
   it('detects nested additions, deletions, and modifications', () => {
@@ -162,5 +162,54 @@ describe('getAttributesDiff', () => {
 
     diff = getAttributesDiff(objectA, { ...objectA });
     expect(diff).toBeNull();
+  });
+});
+
+describe('getMarksDiff', () => {
+  it('detects mark additions, deletions, and modifications', () => {
+    const marksA = [
+      { type: 'bold', attrs: { level: 1 } },
+      { type: 'link', attrs: { href: 'https://before.example' } },
+    ];
+    const marksB = [
+      { type: 'link', attrs: { href: 'https://after.example' } },
+      { type: 'italic', attrs: {} },
+    ];
+
+    expect(getMarksDiff(marksA, marksB)).toEqual({
+      added: [{ name: 'italic', attrs: {} }],
+      deleted: [{ name: 'bold', attrs: { level: 1 } }],
+      modified: [
+        {
+          name: 'link',
+          oldAttrs: { href: 'https://before.example' },
+          newAttrs: { href: 'https://after.example' },
+        },
+      ],
+    });
+  });
+
+  it('ignores track change mark id-only differences', () => {
+    const marksA = [{ type: 'trackInsert', attrs: { id: 'import-a', author: 'Alice' } }];
+    const marksB = [{ type: 'trackInsert', attrs: { id: 'import-b', author: 'Alice' } }];
+
+    expect(getMarksDiff(marksA, marksB)).toBeNull();
+  });
+
+  it('does not ignore id changes for non-track-change marks', () => {
+    const marksA = [{ type: 'custom', attrs: { id: 'before' } }];
+    const marksB = [{ type: 'custom', attrs: { id: 'after' } }];
+
+    expect(getMarksDiff(marksA, marksB)).toEqual({
+      added: [],
+      deleted: [],
+      modified: [
+        {
+          name: 'custom',
+          oldAttrs: { id: 'before' },
+          newAttrs: { id: 'after' },
+        },
+      ],
+    });
   });
 });

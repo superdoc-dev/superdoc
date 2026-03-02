@@ -305,6 +305,15 @@ describe('getInlineDiff', () => {
     ]);
   });
 
+  it('ignores tracked-change id-only churn when computing mark diffs', () => {
+    const oldRuns = buildMarkedTextRuns('a', [{ type: 'trackInsert', attrs: { id: 'import-a', author: 'Alice' } }]);
+    const newRuns = buildMarkedTextRuns('a', [{ type: 'trackInsert', attrs: { id: 'import-b', author: 'Alice' } }]);
+
+    const diffs = getInlineDiff(oldRuns, newRuns, oldRuns.length);
+
+    expect(diffs).toEqual([]);
+  });
+
   it('surfaces attribute diffs for inline node modifications', () => {
     const sharedType = { name: 'link' };
     const oldNode = buildInlineNodeToken({ href: 'https://old.example', label: 'Example' }, sharedType, 3);

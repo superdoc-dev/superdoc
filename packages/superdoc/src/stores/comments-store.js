@@ -881,7 +881,7 @@ export const useCommentsStore = defineStore('comments', () => {
         // selection.source) must have a live position in the document.
         if (!isEditorBackedComment(c)) return true;
         const commentKey = c.commentId || c.importedId;
-        return Object.keys(editorCommentPositions.value).includes(commentKey);
+        return commentKey in editorCommentPositions.value;
       });
     return comments;
   });

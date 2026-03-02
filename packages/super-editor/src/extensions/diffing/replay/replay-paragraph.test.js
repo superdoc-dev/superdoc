@@ -121,13 +121,19 @@ const testParagraphInlineModify = () => {
     newNodeJSON: createParagraph(schema, 'Yello!').toJSON(),
     contentDiff: [
       {
-        action: 'modified',
+        action: 'deleted',
         kind: 'text',
         startPos: paragraphPos + 1,
+        endPos: paragraphPos + 1,
+        text: 'H',
+      },
+      {
+        action: 'added',
+        kind: 'text',
+        startPos: paragraphPos + 2,
         endPos: paragraphPos + 2,
-        oldText: 'H',
-        newText: 'Y',
-        marksDiff: null,
+        text: 'Y',
+        marks: [],
       },
       {
         action: 'added',
@@ -143,7 +149,7 @@ const testParagraphInlineModify = () => {
 
   const result = replayParagraphDiff({ tr, diff, schema });
 
-  expect(result.applied).toBe(2);
+  expect(result.applied).toBe(3);
   expect(tr.doc.textContent).toBe('Yello!');
 };
 

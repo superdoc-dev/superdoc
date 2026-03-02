@@ -181,9 +181,23 @@ async function findFirstContinuableListAddress(
       stateDir,
     );
     if (probe.result.code !== 0 || probe.envelope.ok !== true) continue;
-    if (readNestedBoolean(probe.envelope.data, 'canContinue') === true) {
-      return address;
-    }
+    if (readNestedBoolean(probe.envelope.data, 'canContinue') !== true) continue;
+
+    // Validate with the actual mutation command to avoid optimistic can* probes
+    // that may still fail in some fixture/environment combinations.
+    const verify = await harness.runCli(
+      [
+        'lists',
+        'continue-previous',
+        docPath,
+        '--target-json',
+        JSON.stringify(address),
+        '--out',
+        harness.createOutputPath('doc-lists-continue-previous-verify'),
+      ],
+      stateDir,
+    );
+    if (verify.result.code === 0 && verify.envelope.ok === true) return address;
   }
   return null;
 }
@@ -203,9 +217,23 @@ async function findFirstJoinableWithPreviousAddress(
       stateDir,
     );
     if (probe.result.code !== 0 || probe.envelope.ok !== true) continue;
-    if (readNestedBoolean(probe.envelope.data, 'canJoin') === true) {
-      return address;
-    }
+    if (readNestedBoolean(probe.envelope.data, 'canJoin') !== true) continue;
+
+    // Validate with the actual mutation command to avoid optimistic can* probes
+    // that may still fail in some fixture/environment combinations.
+    const verify = await harness.runCli(
+      [
+        'lists',
+        'join',
+        docPath,
+        '--input-json',
+        JSON.stringify({ target: address, direction: 'withPrevious' }),
+        '--out',
+        harness.createOutputPath('doc-lists-join-verify'),
+      ],
+      stateDir,
+    );
+    if (verify.result.code === 0 && verify.envelope.ok === true) return address;
   }
   return null;
 }

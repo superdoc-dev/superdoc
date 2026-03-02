@@ -44,8 +44,9 @@ export const SuperDocEditor = ({
     if (existingScript) {
       if (window.SuperDocLibrary) return Promise.resolve();
 
-      return new Promise((resolve) => {
+      return new Promise((resolve, reject) => {
         existingScript.addEventListener('load', resolve, { once: true });
+        existingScript.addEventListener('error', reject, { once: true });
       });
     }
 

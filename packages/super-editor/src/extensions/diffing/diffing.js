@@ -37,7 +37,7 @@ export const Diffing = Extension.create({
        * Replays a diff result onto the current document as tracked changes.
        *
        * @param {import('./computeDiff.ts').DiffResult} diff
-       * @param {{ user: import('@core/types/EditorConfig.js').User; applyTrackedChanges?: boolean }} options
+       * @param {{ applyTrackedChanges?: boolean }} options
        * @returns {import('prosemirror-state').Transaction}
        */
       replayDifferences:
@@ -48,6 +48,9 @@ export const Diffing = Extension.create({
               ? this.editor.converter.comments
               : (this.editor.converter.comments = [])
             : [];
+
+          const canApplyTrackedChanges = applyTrackedChanges && Boolean(this.editor.options.user);
+
           replayDiffs({
             tr: state.tr,
             diff,
@@ -55,10 +58,10 @@ export const Diffing = Extension.create({
             comments,
             editor: this.editor,
           });
-
-          if (applyTrackedChanges) {
+          if (canApplyTrackedChanges) {
             state.tr.setMeta('forceTrackChanges', true);
           }
+
           if (dispatch && state.tr.docChanged) {
             dispatch(state.tr);
           }

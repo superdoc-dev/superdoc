@@ -125,7 +125,7 @@ const testTextDeleteRange = () => {
 };
 
 /**
- * Verifies inline text modification replaces the specified range.
+ * Verifies inline text modification applies formatting only.
  * @returns {void}
  */
 const testTextModifyRange = () => {
@@ -145,15 +145,20 @@ const testTextModifyRange = () => {
     startPos,
     endPos,
     oldText: 'H',
-    newText: 'Y',
-    marks: [],
-    marksDiff: null,
+    newText: 'H',
+    marksDiff: {
+      added: [{ name: 'bold', attrs: { value: true } }],
+      deleted: [],
+      modified: [],
+    },
   };
 
   const result = replayInlineDiff({ tr, diff, schema, paragraphEndPos: endPos });
 
   expect(result.applied).toBe(1);
-  expect(tr.doc.textContent).toBe('Yello');
+  expect(tr.doc.textContent).toBe('Hello');
+  const firstTextNode = tr.doc.nodeAt(startPos);
+  expect(firstTextNode?.marks?.some((mark) => mark.type.name === 'bold')).toBe(true);
 };
 
 /**
@@ -249,7 +254,7 @@ const testInlineNodeModify = () => {
 const runInlineReplaySuite = () => {
   it('inserts text at paragraph end when startPos is null', testTextAddAtParagraphEnd);
   it('deletes a text range', testTextDeleteRange);
-  it('modifies a text range', testTextModifyRange);
+  it('applies formatting for a modified text range', testTextModifyRange);
   it('inserts an inline node', testInlineNodeAdd);
   it('deletes an inline node', testInlineNodeDelete);
   it('modifies an inline node', testInlineNodeModify);

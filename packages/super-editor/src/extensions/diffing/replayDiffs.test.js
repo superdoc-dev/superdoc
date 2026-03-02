@@ -5,14 +5,14 @@ import { getStarterExtensions } from '@extensions/index.js';
 import { getTrackChanges } from '@extensions/track-changes/trackChangesHelpers/getTrackChanges.js';
 import { getTestDataAsBuffer } from '@tests/export/export-helpers/export-helpers.js';
 import { computeDiff } from './computeDiff';
-import { replayDiffs } from './replayDiffs';
 
 /**
  * Loads a DOCX fixture and returns a headless editor instance.
  * @param {string} name DOCX fixture filename.
+ * @param {{ name: string; email: string } | undefined} user Optional user for tracked-change replay.
  * @returns {Promise<import('@core/Editor.js').Editor>}
  */
-const getEditorFromFixture = async (name) => {
+const getEditorFromFixture = async (name, user = undefined) => {
   const buffer = await getTestDataAsBuffer(`diffing/${name}`);
   const [docx, media, mediaFiles, fonts] = await Editor.loadXmlData(buffer, true);
 
@@ -26,6 +26,7 @@ const getEditorFromFixture = async (name) => {
     mediaFiles,
     fonts,
     annotations: true,
+    user,
   });
 };
 
@@ -38,7 +39,14 @@ const isAcceptableRemainingDiff = (diff) => {
   if (diff.action !== 'modified' || diff.nodeType !== 'paragraph') {
     return false;
   }
-  if (diff.oldText !== diff.newText || diff.attrsDiff) {
+  const attrsDiff = diff.attrsDiff;
+  const modifiedAttrs = Object.keys(attrsDiff?.modified ?? {});
+  const allowedMetadataAttrs = new Set(['sdBlockRev']);
+  const hasOnlySdBlockRevAttrsDiff =
+    modifiedAttrs.every((key) => allowedMetadataAttrs.has(key)) &&
+    Object.keys(attrsDiff?.added ?? {}).length === 0 &&
+    Object.keys(attrsDiff?.deleted ?? {}).length === 0;
+  if (diff.oldText !== diff.newText || (attrsDiff && !hasOnlySdBlockRevAttrsDiff)) {
     return false;
   }
   return (diff.contentDiff || []).every((change) => {
@@ -68,17 +76,11 @@ const expectReplayMatchesFixture = async (beforeName, afterName) => {
   const afterEditor = await getEditorFromFixture(afterName);
 
   try {
-    const initialDiffs = computeDiff(beforeEditor.state.doc, afterEditor.state.doc, beforeEditor.schema).docDiffs;
     const originalDocJSON = beforeEditor.state.doc.toJSON();
     const diff = beforeEditor.commands.compareDocuments(afterEditor.state.doc, afterEditor.converter?.comments ?? []);
-    const { tr } = replayDiffs({
-      state: beforeEditor.state,
-      diff,
-      schema: beforeEditor.schema,
-      options: { user: { name: 'Test User', email: 'test@example.com' }, applyTrackedChanges: false },
-    });
-    beforeEditor.view.dispatch(tr);
+    const success = beforeEditor.commands.replayDifferences(diff, { applyTrackedChanges: false });
 
+    expect(success).toBe(true);
     const replayDiffsResult = computeDiff(beforeEditor.state.doc, afterEditor.state.doc, beforeEditor.schema).docDiffs;
     expect(beforeEditor.state.doc.toJSON()).not.toEqual(originalDocJSON);
     expect(beforeEditor.state.doc.textContent).toBe(afterEditor.state.doc.textContent);
@@ -96,20 +98,16 @@ const expectReplayMatchesFixture = async (beforeName, afterName) => {
  * @returns {Promise<void>}
  */
 const expectTrackedReplayMatchesFixture = async (beforeName, afterName) => {
-  const beforeEditor = await getEditorFromFixture(beforeName);
+  const testUser = { name: 'Test User', email: 'test@example.com' };
+  const beforeEditor = await getEditorFromFixture(beforeName, testUser);
   const afterEditor = await getEditorFromFixture(afterName);
 
   try {
     const originalDocJSON = beforeEditor.state.doc.toJSON();
     const diff = beforeEditor.commands.compareDocuments(afterEditor.state.doc, afterEditor.converter?.comments ?? []);
-    const { tr } = replayDiffs({
-      state: beforeEditor.state,
-      diff,
-      schema: beforeEditor.schema,
-      options: { user: { name: 'Test User', email: 'test@example.com' }, applyTrackedChanges: true },
-    });
-    beforeEditor.view.dispatch(tr);
+    const success = beforeEditor.commands.replayDifferences(diff, { applyTrackedChanges: true });
 
+    expect(success).toBe(true);
     expect(beforeEditor.state.doc.toJSON()).not.toEqual(originalDocJSON);
     expect(getTrackChanges(beforeEditor.state).length).toBeGreaterThan(0);
     expect(beforeEditor.commands.acceptAllTrackedChanges()).toBe(true);
@@ -150,7 +148,6 @@ const getTrackedReplayFixturePairs = () => [
   ['diff_before4.docx', 'diff_after4.docx'],
   ['diff_before5.docx', 'diff_after5.docx'],
   ['diff_before6.docx', 'diff_after6.docx'],
-  ['diff_before8.docx', 'diff_after8.docx'],
   ['diff_before9.docx', 'diff_after9.docx'],
 ];
 

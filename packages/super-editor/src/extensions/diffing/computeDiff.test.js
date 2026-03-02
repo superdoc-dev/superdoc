@@ -236,7 +236,13 @@ describe('Diff', () => {
     const formattingDiff = diffs.find(
       (diff) => diff.action === 'modified' && diff.oldText === 'This paragraph formatting will change.',
     );
-    expect(formattingDiff?.contentDiff?.[0]?.runAttrsDiff?.added).toHaveProperty('runProperties.bold', true);
+    expect(formattingDiff?.contentDiff?.[0]?.runAttrsDiff?.modified).toHaveProperty('runProperties', {
+      from: null,
+      to: {
+        bold: true,
+        boldCs: true,
+      },
+    });
 
     const upgradedParagraph = diffs.find(
       (diff) => diff.action === 'modified' && diff.oldText === 'This paragraph will have words.',

@@ -18,6 +18,7 @@ import type {
   WrapExclusion,
   WrapTextMode,
 } from '@superdoc/contracts';
+import { effectiveTableCellSpacing } from '@superdoc/contracts';
 import { toCssFontFamily } from '@superdoc/font-utils';
 import { rescaleColumnWidths } from '@superdoc/layout-engine';
 import { normalizeZIndex } from '@superdoc/pm-adapter/utilities.js';
@@ -1344,12 +1345,10 @@ export const renderTableCell = (deps: TableCellRenderDependencies): TableCellRen
         applyParagraphShadingStyles(paraWrapper, block.attrs?.shading);
 
         // Apply paragraph spacing.before when rendering from the top of the paragraph.
-        // For the first paragraph in the cell, Word absorbs spacing.before into cell top padding —
-        // only apply the excess beyond paddingTop (mirrors last paragraph's spacing.after / paddingBottom).
+        // Word absorbs first paragraph's spacing.before into cell paddingTop (effectiveTableCellSpacing).
         const spacingBefore = (block as ParagraphBlock).attrs?.spacing?.before;
-        if (localStartLine === 0 && typeof spacingBefore === 'number' && spacingBefore > 0) {
-          const isFirstBlock = i === 0;
-          const effectiveBefore = isFirstBlock ? Math.max(0, spacingBefore - paddingTop) : spacingBefore;
+        if (localStartLine === 0) {
+          const effectiveBefore = effectiveTableCellSpacing(spacingBefore, i === 0, paddingTop);
           if (effectiveBefore > 0) {
             paraWrapper.style.marginTop = `${effectiveBefore}px`;
             flowCursorY += effectiveBefore;

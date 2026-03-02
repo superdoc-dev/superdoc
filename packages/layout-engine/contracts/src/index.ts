@@ -7,6 +7,8 @@ export type { TabStop };
 // Export table contracts
 export { OOXML_PCT_DIVISOR, type TableWidthAttr, type TableColumnSpec } from './engines/tables.js';
 
+export { effectiveTableCellSpacing } from './table-cell-spacing.js';
+
 // Export justify utilities
 export {
   shouldApplyJustify,

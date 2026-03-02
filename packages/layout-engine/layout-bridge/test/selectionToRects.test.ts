@@ -17,6 +17,20 @@ import {
   tableLayout,
   tableBlock,
   tableMeasure,
+  tableSpacingBeforeBlock,
+  tableSpacingBeforeMeasure,
+  tableSpacingBeforeLayout,
+  TABLE_SPACING_BEFORE_FRAGMENT_Y,
+  TABLE_SPACING_BEFORE_SPACING,
+  tableSpacingAbsorbedBlock,
+  tableSpacingAbsorbedMeasure,
+  tableSpacingAbsorbedLayout,
+  TABLE_ABSORBED_FRAGMENT_Y_EXPORT,
+  TABLE_ABSORBED_PADDING_TOP_EXPORT,
+  tableSpacingPartialBlock,
+  tableSpacingPartialMeasure,
+  tableSpacingPartialLayout,
+  TABLE_PARTIAL_FRAGMENT_Y_EXPORT,
 } from './mock-data';
 import { PageGeometryHelper } from '../src/page-geometry-helper';
 
@@ -47,6 +61,44 @@ describe('selectionToRects', () => {
     const rects = selectionToRects(tableLayout, [tableBlock], [tableMeasure], 2, 8);
     expect(rects.length).toBeGreaterThan(0);
     expect(rects[0].x).toBeGreaterThan(tableLayout.pages[0].fragments[0].x);
+  });
+
+  describe('table cell spacing.before', () => {
+    it('includes effective spacing.before in rect Y when paragraph has spacing.before', () => {
+      const rects = selectionToRects(
+        tableSpacingBeforeLayout,
+        [tableSpacingBeforeBlock],
+        [tableSpacingBeforeMeasure],
+        1,
+        9,
+      );
+      expect(rects).toHaveLength(1);
+      expect(rects[0].y).toBe(TABLE_SPACING_BEFORE_FRAGMENT_Y + TABLE_SPACING_BEFORE_SPACING);
+    });
+
+    it('uses only excess over paddingTop for first paragraph (Word absorption)', () => {
+      const rects = selectionToRects(
+        tableSpacingAbsorbedLayout,
+        [tableSpacingAbsorbedBlock],
+        [tableSpacingAbsorbedMeasure],
+        1,
+        5,
+      );
+      expect(rects).toHaveLength(1);
+      expect(rects[0].y).toBe(TABLE_ABSORBED_FRAGMENT_Y_EXPORT + TABLE_ABSORBED_PADDING_TOP_EXPORT);
+    });
+
+    it('does not add spacing.before to rect Y when block starts mid-paragraph (startLine > 0)', () => {
+      const rects = selectionToRects(
+        tableSpacingPartialLayout,
+        [tableSpacingPartialBlock],
+        [tableSpacingPartialMeasure],
+        7,
+        19,
+      );
+      expect(rects).toHaveLength(1);
+      expect(rects[0].y).toBe(TABLE_PARTIAL_FRAGMENT_Y_EXPORT);
+    });
   });
 
   describe('firstLineIndentMode integration', () => {

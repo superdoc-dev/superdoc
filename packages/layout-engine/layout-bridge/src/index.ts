@@ -13,7 +13,7 @@ import type {
   ParagraphBlock,
   ParagraphMeasure,
 } from '@superdoc/contracts';
-import { computeLinePmRange as computeLinePmRangeUnified } from '@superdoc/contracts';
+import { computeLinePmRange as computeLinePmRangeUnified, effectiveTableCellSpacing } from '@superdoc/contracts';
 import { charOffsetToPm, findCharacterAtX, measureCharacterX } from './text-measurement.js';
 import { clickToPositionDom, findPageElement } from './dom-mapping.js';
 import {
@@ -1699,15 +1699,9 @@ export function selectionToRects(
                 const isLastBlock = i === cellBlocks.length - 1;
                 const spacingBefore = (paraBlock.attrs as { spacing?: { before?: number } } | undefined)?.spacing
                   ?.before;
-                if (typeof spacingBefore === 'number' && spacingBefore > 0) {
-                  // First paragraph: spacing.before absorbed by cell paddingTop (match measurer/renderer)
-                  height += isFirstBlock ? Math.max(0, spacingBefore - padding.top) : spacingBefore;
-                }
+                height += effectiveTableCellSpacing(spacingBefore, isFirstBlock, padding.top);
                 const spacingAfter = (paraBlock.attrs as { spacing?: { after?: number } } | undefined)?.spacing?.after;
-                if (typeof spacingAfter === 'number' && spacingAfter > 0) {
-                  // Last paragraph: spacing.after absorbed by cell paddingBottom (match measurer/renderer)
-                  height += isLastBlock ? Math.max(0, spacingAfter - padding.bottom) : spacingAfter;
-                }
+                height += effectiveTableCellSpacing(spacingAfter, isLastBlock, padding.bottom);
               }
 
               renderedBlocks.push({ block: paraBlock, measure: paraMeasure, startLine, endLine, height });
@@ -1740,16 +1734,11 @@ export function selectionToRects(
 
               const intersectingLines = findLinesIntersectingRange(info.block, info.measure, from, to);
 
-              // Match renderer: first paragraph's spacing.before is absorbed by cell paddingTop (renderTableCell.ts)
+              // Match renderer: spacing.before is only applied when rendering from the start of the block (startLine === 0).
               const rawSpacingBefore = (info.block.attrs as { spacing?: { before?: number } } | undefined)?.spacing
                 ?.before;
-              const isFirstBlock = blockIndex === 0;
               const effectiveSpacingBeforePx =
-                typeof rawSpacingBefore === 'number' && rawSpacingBefore > 0
-                  ? isFirstBlock
-                    ? Math.max(0, rawSpacingBefore - padding.top)
-                    : rawSpacingBefore
-                  : 0;
+                info.startLine === 0 ? effectiveTableCellSpacing(rawSpacingBefore, blockIndex === 0, padding.top) : 0;
 
               intersectingLines.forEach(({ line, index }) => {
                 if (index < info.startLine || index >= info.endLine) {

@@ -127,16 +127,27 @@ export function convertTiffToPng(data) {
 
     const buffer = bytes.buffer.slice(bytes.byteOffset, bytes.byteOffset + bytes.byteLength);
 
-    // Decode TIFF — get Image File Directories (pages)
-    const ifds = decode(buffer);
-    if (!ifds || ifds.length === 0) return null;
+    // Read metadata first without decompressing pixel data so the size
+    // guard fires before a huge RGBA buffer is allocated.
+    const meta = decode(buffer, { ignoreImageData: true });
+    if (!meta || meta.length === 0) return null;
 
-    const ifd = ifds[0];
-    const { width, height } = ifd;
+    const { width, height } = meta[0];
     if (!width || !height || width * height > MAX_PIXEL_COUNT) return null;
 
-    const pixelData = ifd.data;
+    // Dimensions are safe — decode pixel data
+    const ifds = decode(buffer);
+    const ifd = ifds[0];
+
+    let pixelData = ifd.data;
     if (!pixelData || pixelData.length === 0) return null;
+
+    // Normalize higher bit-depth data to 8-bit for canvas
+    if (pixelData instanceof Uint16Array) {
+      pixelData = Uint8Array.from(pixelData, (v) => ((v + 128) / 257) | 0);
+    } else if (pixelData instanceof Float32Array) {
+      pixelData = Uint8Array.from(pixelData, (v) => (Math.min(Math.max(v, 0), 1) * 255 + 0.5) | 0);
+    }
 
     const samplesPerPixel = ifd.samplesPerPixel ?? (ifd.alpha ? 2 : 1);
     const rgba = toRGBA(pixelData, samplesPerPixel, ifd.alpha, width * height);

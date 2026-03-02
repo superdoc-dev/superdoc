@@ -63,7 +63,11 @@ describe('tiff-converter', () => {
     it('returns a PNG data URI for valid TIFF input', () => {
       const fakePixelData = new Uint8Array(2 * 2 * 3); // 2x2 RGB image
       vi.doMock('tiff', () => ({
-        decode: () => [{ width: 2, height: 2, data: fakePixelData, samplesPerPixel: 3, alpha: false }],
+        decode: (_buf, opts) => {
+          // First call with ignoreImageData returns metadata only
+          if (opts?.ignoreImageData) return [{ width: 2, height: 2 }];
+          return [{ width: 2, height: 2, data: fakePixelData, samplesPerPixel: 3, alpha: false }];
+        },
       }));
 
       const mockCanvas = {
@@ -78,7 +82,6 @@ describe('tiff-converter', () => {
       const spy = vi.spyOn(document, 'createElement').mockReturnValue(mockCanvas);
 
       return import('./tiff-converter.js?happy').then(({ convertTiffToPng: fn }) => {
-        // Pass base64-encoded string (the only input type the call site uses)
         const result = fn('SU8qAA==');
         expect(result).toEqual({ dataUri: 'data:image/png;base64,iVBORw0KGgo=', format: 'png' });
 
@@ -88,15 +91,21 @@ describe('tiff-converter', () => {
     });
 
     it('returns null for TIFF with dimensions exceeding pixel limit', () => {
-      // Mock tiff to return oversized dimensions (100k × 10k = 1 billion pixels)
+      // Mock tiff metadata-only decode to return oversized dimensions
+      // (100k × 10k = 1 billion pixels). The full decode should never be called.
+      const fullDecode = vi.fn();
       vi.doMock('tiff', () => ({
-        decode: () => [{ width: 100_000, height: 10_000, data: new Uint8Array(4), samplesPerPixel: 1, alpha: false }],
+        decode: (_buf, opts) => {
+          if (opts?.ignoreImageData) return [{ width: 100_000, height: 10_000 }];
+          fullDecode();
+          return [{ width: 100_000, height: 10_000, data: new Uint8Array(4), samplesPerPixel: 1, alpha: false }];
+        },
       }));
 
-      // Re-import to pick up the mock
       return import('./tiff-converter.js?oversized').then(({ convertTiffToPng: fn }) => {
         const result = fn('SU8qAA==');
         expect(result).toBeNull();
+        expect(fullDecode).not.toHaveBeenCalled();
         vi.doUnmock('tiff');
       });
     });

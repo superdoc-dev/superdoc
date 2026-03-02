@@ -16,6 +16,8 @@ export interface CommentInput {
   id?: string;
   /** ProseMirror-compatible JSON for the comment body (expected to be a paragraph node). */
   textJson?: unknown;
+  /** Structured ProseMirror-like nodes used by imported DOCX comments. */
+  elements?: unknown;
   /** Additional comment metadata fields. */
   [key: string]: unknown;
 }
@@ -88,6 +90,16 @@ export type CommentModifiedDiff = CommentDiffBase<'modified'> & {
 export type CommentDiff = CommentAddedDiff | CommentDeletedDiff | CommentModifiedDiff;
 
 /**
+ * Comment attributes ignored during metadata diffing.
+ *
+ * `trackedChangeParentId` is runtime-coupled to tracked-change mark ids, which
+ * may be regenerated between imports of the same DOCX. Treating it as a stable
+ * diffable attribute causes false-positive comment modifications that can break
+ * thread linkage on replay.
+ */
+const COMMENT_ATTRS_DIFF_IGNORED_KEYS = ['textJson', 'elements', 'commentId', 'trackedChangeParentId'];
+
+/**
  * Builds normalized tokens for diffing comment content.
  *
  * @param comments Comment payloads to normalize.
@@ -152,7 +164,7 @@ export function commentComparator(oldToken: CommentToken, newToken: CommentToken
  * @returns True when content or metadata differs.
  */
 export function shouldProcessEqualAsModification(oldToken: CommentToken, newToken: CommentToken): boolean {
-  const attrsDiff = getAttributesDiff(oldToken.commentJSON, newToken.commentJSON, ['textJson', 'commentId']);
+  const attrsDiff = getAttributesDiff(oldToken.commentJSON, newToken.commentJSON, COMMENT_ATTRS_DIFF_IGNORED_KEYS);
   if (attrsDiff) {
     return true;
   }
@@ -216,7 +228,7 @@ export function buildModifiedCommentDiff(
 ): CommentModifiedDiff | null {
   const contentDiff =
     oldComment.content && newComment.content ? diffNodes([oldComment.content], [newComment.content]) : [];
-  const attrsDiff = getAttributesDiff(oldComment.commentJSON, newComment.commentJSON, ['textJson', 'commentId']);
+  const attrsDiff = getAttributesDiff(oldComment.commentJSON, newComment.commentJSON, COMMENT_ATTRS_DIFF_IGNORED_KEYS);
 
   if (contentDiff.length === 0 && !attrsDiff) {
     return null;
@@ -259,22 +271,23 @@ function getCommentText(content: NodeInfo | null): string {
     const paragraphContent = content as ParagraphNodeInfo;
     return paragraphContent.fullText;
   }
-  return '';
+  return content.node.textContent ?? '';
 }
 
 /**
  * Tokenizes a comment body into inline tokens and a flattened text string.
  *
- * @param comment Comment payload containing `textJson`.
+ * @param comment Comment payload containing `textJson` and/or `elements`.
  * @param schema Schema used to build ProseMirror nodes.
  * @returns Tokenization output for the comment body.
  */
 function tokenizeCommentText(comment: CommentInput, schema: Schema): NodeInfo | null {
-  if (!comment.textJson) {
+  const nodeJson = resolveCommentBodyNodeJSON(comment);
+  if (!nodeJson) {
     return null;
   }
 
-  const node = schema.nodeFromJSON(comment.textJson as Record<string, unknown>);
+  const node = schema.nodeFromJSON(nodeJson);
   if (node.type.name !== 'paragraph') {
     return {
       node,
@@ -284,4 +297,34 @@ function tokenizeCommentText(comment: CommentInput, schema: Schema): NodeInfo | 
   }
 
   return createParagraphSnapshot(node, 0, 0);
+}
+
+/**
+ * Resolves the comment body to a ProseMirror node JSON payload.
+ *
+ * Priority:
+ * 1. `textJson` (legacy shape)
+ * 2. `elements` (DOCX-imported shape)
+ */
+function resolveCommentBodyNodeJSON(comment: CommentInput): Record<string, unknown> | null {
+  if (isRecord(comment.textJson)) {
+    return comment.textJson;
+  }
+
+  if (Array.isArray(comment.elements) && comment.elements.length > 0) {
+    if (comment.elements.length === 1 && isRecord(comment.elements[0])) {
+      return comment.elements[0];
+    }
+
+    return {
+      type: 'doc',
+      content: comment.elements,
+    };
+  }
+
+  return null;
+}
+
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return value !== null && typeof value === 'object' && !Array.isArray(value);
 }

@@ -38,6 +38,19 @@ const buildCommentTextJson = (text) => ({
 });
 
 /**
+ * Builds a DOCX-imported comment `elements` payload.
+ *
+ * @param {string} text Comment text content.
+ * @returns {Array<Record<string, unknown>>}
+ */
+const buildCommentElements = (text) => [
+  {
+    type: 'paragraph',
+    content: [{ type: 'text', text }],
+  },
+];
+
+/**
  * Returns the first token for convenience in tests.
  *
  * @param {Array<import('./comment-diffing.ts').CommentToken>} tokens
@@ -84,6 +97,19 @@ describe('buildCommentTokens', () => {
     const tokens = buildCommentTokens([comment], schema);
     expect(tokens).toHaveLength(1);
     expect(tokens[0]?.content).toBeNull();
+  });
+
+  it('builds tokens and text from elements when textJson is missing', () => {
+    const schema = createSchema();
+    const comment = {
+      commentId: 'c-elements',
+      elements: buildCommentElements('From elements'),
+    };
+
+    const tokens = buildCommentTokens([comment], schema);
+    expect(tokens).toHaveLength(1);
+    expect(tokens[0]?.commentId).toBe('c-elements');
+    expect(tokens[0]?.content?.fullText).toBe('From elements');
   });
 
   it('returns a base node info when the root node is not a paragraph', () => {
@@ -157,6 +183,36 @@ describe('comment diff helpers', () => {
     );
     const newToken = getFirstToken(
       buildCommentTokens([{ commentId: 'c-1', textJson: buildCommentTextJson('Same') }], schema),
+    );
+
+    expect(shouldProcessEqualAsModification(oldToken, newToken)).toBe(false);
+  });
+
+  it('ignores trackedChangeParentId-only differences', () => {
+    const schema = createSchema();
+    const oldToken = getFirstToken(
+      buildCommentTokens(
+        [
+          {
+            commentId: 'c-1',
+            textJson: buildCommentTextJson('Same'),
+            trackedChangeParentId: 'tc-old',
+          },
+        ],
+        schema,
+      ),
+    );
+    const newToken = getFirstToken(
+      buildCommentTokens(
+        [
+          {
+            commentId: 'c-1',
+            textJson: buildCommentTextJson('Same'),
+            trackedChangeParentId: 'tc-new',
+          },
+        ],
+        schema,
+      ),
     );
 
     expect(shouldProcessEqualAsModification(oldToken, newToken)).toBe(false);
@@ -260,11 +316,40 @@ describe('diffComments', () => {
     expect(diffs[0].contentDiff).not.toEqual([]);
   });
 
+  it('returns modified comment diffs for elements-based content changes', () => {
+    const schema = createSchema();
+    const diffs = diffComments(
+      [{ commentId: 'c-1', elements: buildCommentElements('Old') }],
+      [{ commentId: 'c-1', elements: buildCommentElements('New') }],
+      schema,
+    );
+
+    expect(diffs).toHaveLength(1);
+    expect(diffs[0]).toMatchObject({
+      action: 'modified',
+      nodeType: 'comment',
+      commentId: 'c-1',
+      oldText: 'Old',
+      newText: 'New',
+    });
+  });
+
   it('returns empty diffs for identical comments', () => {
     const schema = createSchema();
     const diffs = diffComments(
       [{ commentId: 'c-1', textJson: buildCommentTextJson('Same') }],
       [{ commentId: 'c-1', textJson: buildCommentTextJson('Same') }],
+      schema,
+    );
+
+    expect(diffs).toEqual([]);
+  });
+
+  it('returns empty diffs when only trackedChangeParentId differs', () => {
+    const schema = createSchema();
+    const diffs = diffComments(
+      [{ commentId: 'c-1', textJson: buildCommentTextJson('Same'), trackedChangeParentId: 'tc-old' }],
+      [{ commentId: 'c-1', textJson: buildCommentTextJson('Same'), trackedChangeParentId: 'tc-new' }],
       schema,
     );
 

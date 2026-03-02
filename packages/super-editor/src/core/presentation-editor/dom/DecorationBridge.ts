@@ -315,6 +315,13 @@ export class DecorationBridge {
    */
   #skipRestoreEmptyOnNextCollect = false;
 
+  /**
+   * Tracks whether the most recently observed transaction was doc-changing.
+   * Used to distinguish "mapping-induced partial ranges" (doc changes) from
+   * intentional range changes (meta-only, e.g. setFocus).
+   */
+  #lastTransactionWasDocChange = false;
+
   /** Monotonic token incremented per doc-changing transaction. */
   #lastDocChangeToken = 0;
 
@@ -362,6 +369,7 @@ export class DecorationBridge {
    * decoration sets when plugins don't update their ranges on doc changes.
    */
   recordTransaction(transaction?: Transaction): void {
+    this.#lastTransactionWasDocChange = Boolean(transaction?.docChanged);
     if (!transaction?.docChanged) return;
     this.#lastDocChangeToken += 1;
     this.#docChangeMappingsByToken.set(this.#lastDocChangeToken, transaction.mapping as unknown as PositionMapping);
@@ -480,13 +488,19 @@ export class DecorationBridge {
       // When plugin returns partial ranges (e.g. after applying a mark, mapping can collapse
       // decoration ranges), prefer full span restored by text so highlight does not partially vanish.
       const effectiveRanges =
-        mayRestoreEmpty && previousPluginRanges?.length
+        this.#lastTransactionWasDocChange && mayRestoreEmpty && previousPluginRanges?.length
           ? preferFullRestoredWhenPartial(pluginRanges, previousPluginRanges, state.doc, docSize)
           : pluginRanges;
 
-      // Store current ranges for next comparison. When we restored from previous,
-      // keep that as the new previous so we don't clear on the next call.
-      this.#setPreviousRanges(plugin, effectiveRanges.length > 0 ? [...effectiveRanges] : []);
+      // Store ranges for next comparison.
+      // - If plugin reported current ranges and we expanded them due to a doc change, store the expanded ones
+      //   so the highlight stays stable across subsequent syncs in the same update cycle.
+      // - Otherwise, store the plugin-reported current ranges so intentional narrowing is respected.
+      // - If plugin reported nothing, store the restored (if any).
+      const storeExpandedOnDocChange = this.#lastTransactionWasDocChange && effectiveRanges !== pluginRanges;
+      const rangesToStore =
+        pluginRanges.length > 0 ? (storeExpandedOnDocChange ? effectiveRanges : pluginRanges) : effectiveRanges;
+      this.#setPreviousRanges(plugin, rangesToStore.length > 0 ? [...rangesToStore] : []);
       this.#prevDecorationSets.set(plugin, decorationSet);
 
       // Add to final output
@@ -514,6 +528,7 @@ export class DecorationBridge {
     this.#previousRangesTokenByPlugin.clear();
     this.#hadEligiblePlugins = false;
     this.#skipRestoreEmptyOnNextCollect = false;
+    this.#lastTransactionWasDocChange = false;
     this.#lastDocChangeToken = 0;
     this.#docChangeMappingsByToken.clear();
     // WeakMap entries are garbage collected with their elements.
@@ -653,13 +668,16 @@ export class DecorationBridge {
       // restored by text so highlight does not partially vanish.
       const previousPluginRanges = this.#previousRanges.get(plugin);
       const effectiveRanges =
-        restoreEmptyDecorations && previousPluginRanges?.length
+        this.#lastTransactionWasDocChange && restoreEmptyDecorations && previousPluginRanges?.length
           ? preferFullRestoredWhenPartial(currentRanges, previousPluginRanges, state.doc, docSize)
           : currentRanges;
 
       if (pluginHasCurrentRanges || effectiveRanges.length > 0) {
         this.#applyRangesToDesired(desired, domIndex, effectiveRanges);
-        this.#setPreviousRanges(plugin, effectiveRanges.length > 0 ? [...effectiveRanges] : []);
+        const storeExpandedOnDocChange = this.#lastTransactionWasDocChange && effectiveRanges !== currentRanges;
+        const rangesToStore =
+          currentRanges.length > 0 ? (storeExpandedOnDocChange ? effectiveRanges : currentRanges) : effectiveRanges;
+        this.#setPreviousRanges(plugin, rangesToStore.length > 0 ? [...rangesToStore] : []);
         this.#prevDecorationSets.set(plugin, decorationSet);
         continue;
       }

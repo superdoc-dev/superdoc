@@ -884,6 +884,9 @@ describe('DecorationBridge', () => {
       expect(ranges1).toHaveLength(1);
       expect(ranges1[0].to - ranges1[0].from).toBe(fullText.length);
 
+      // This behavior is only expected right after a doc-changing transaction (e.g. applying a mark)
+      bridge.recordTransaction({ docChanged: true, mapping: { map: (pos: number) => pos } } as unknown as Transaction);
+
       // Simulate plugin returning only a prefix after mapping (e.g. mark applied in middle)
       plugin.setDecorations([{ from: 1, to: 6, class: 'highlight-selection' }]);
       const ranges2 = bridge.collectDecorationRanges(state);
@@ -905,6 +908,9 @@ describe('DecorationBridge', () => {
       bridge.collectDecorationRanges(state);
       bridge.sync(state, index);
       expect(worldSpan.classList.contains('highlight-selection')).toBe(true);
+
+      // Simulate mark application (doc change) that can cause mapping collapse for decorations
+      bridge.recordTransaction({ docChanged: true, mapping: { map: (pos: number) => pos } } as unknown as Transaction);
 
       setDecorations([{ from: 1, to: 6, class: 'highlight-selection' }]);
       bridge.sync(state, index);

@@ -1248,7 +1248,7 @@ function expectThrowCode(operationId: OperationId, run: () => unknown): void {
     capturedCode = (error as { code?: string }).code ?? null;
   }
 
-  expect(capturedCode).toBeTruthy();
+  expect(capturedCode, `${operationId} throwCase did not throw a coded pre-apply error`).toBeTruthy();
   expect(COMMAND_CATALOG[operationId].throws.preApply).toContain(capturedCode);
 }
 
@@ -3754,8 +3754,17 @@ const mutationVectors: Partial<Record<OperationId, MutationVector>> = {
   // -------------------------------------------------------------------------
   'create.tableOfContents': {
     throwCase: () => {
-      const editor = makeTocEditor({ insertTableOfContentsAt: undefined });
-      return createTableOfContentsWrapper(editor, {}, { changeMode: 'direct' });
+      const editor = makeTocEditor();
+      return createTableOfContentsWrapper(
+        editor,
+        {
+          at: {
+            kind: 'before',
+            target: { kind: 'block', nodeType: 'paragraph', nodeId: 'missing-block' },
+          },
+        } as any,
+        { changeMode: 'direct' },
+      );
     },
     failureCase: () => {
       const editor = makeTocEditor({ insertTableOfContentsAt: vi.fn(() => false) });

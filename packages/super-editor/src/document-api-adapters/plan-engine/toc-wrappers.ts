@@ -213,10 +213,44 @@ function withRightAlign(config: TocSwitchConfig, rightAlignPageNumbers: boolean 
   return { ...config, display: { ...config.display, rightAlignPageNumbers } };
 }
 
-function materializeTocContent(doc: ProseMirrorNode, config: TocSwitchConfig): EntryParagraphJson[] {
+/**
+ * Removes tocPageNumber marks when the active schema doesn't define that mark.
+ * Some headless/test schemas omit TOC-specific marks, and nodeFromJSON fails if
+ * unknown marks are present in generated TOC paragraph content.
+ */
+function sanitizeTocContentForSchema(content: EntryParagraphJson[], editor: Editor): EntryParagraphJson[] {
+  if (editor.state.schema?.marks?.tocPageNumber) return content;
+
+  return content.map((paragraph) => {
+    const paragraphContent = paragraph.content;
+    if (!Array.isArray(paragraphContent)) return paragraph;
+
+    let changed = false;
+    const sanitizedContent = paragraphContent.map((node) => {
+      if (!node || typeof node !== 'object') return node;
+      const typedNode = node as { marks?: Array<{ type?: string }> };
+      const marks = typedNode.marks;
+      if (!Array.isArray(marks)) return node;
+      const filteredMarks = marks.filter((mark) => mark?.type !== 'tocPageNumber');
+      if (filteredMarks.length === marks.length) return node;
+
+      changed = true;
+      if (filteredMarks.length === 0) {
+        const { marks: _removed, ...rest } = typedNode;
+        return rest as typeof node;
+      }
+      return { ...typedNode, marks: filteredMarks } as typeof node;
+    });
+
+    return changed ? ({ ...paragraph, content: sanitizedContent } as EntryParagraphJson) : paragraph;
+  });
+}
+
+function materializeTocContent(doc: ProseMirrorNode, config: TocSwitchConfig, editor: Editor): EntryParagraphJson[] {
   const sources = collectTocSources(doc, config);
   const entryParagraphs = buildTocEntryParagraphs(sources, config);
-  return entryParagraphs.length > 0 ? entryParagraphs : NO_ENTRIES_PLACEHOLDER;
+  const content = entryParagraphs.length > 0 ? entryParagraphs : NO_ENTRIES_PLACEHOLDER;
+  return sanitizeTocContentForSchema(content, editor);
 }
 
 // ---------------------------------------------------------------------------
@@ -244,7 +278,7 @@ export function tocConfigureWrapper(
   // Patch value takes priority; fall back to existing node attr.
   const effectiveRightAlign =
     input.patch.rightAlignPageNumbers ?? (resolved.node.attrs?.rightAlignPageNumbers as boolean | undefined);
-  const nextContent = materializeTocContent(editor.state.doc, withRightAlign(patched, effectiveRightAlign));
+  const nextContent = materializeTocContent(editor.state.doc, withRightAlign(patched, effectiveRightAlign), editor);
 
   if (areTocConfigsEqual(currentConfig, patched) && !rightAlignChanged) {
     return tocFailure('NO_OP', 'Configuration patch produced no change.');
@@ -327,7 +361,7 @@ function tocUpdateAll(editor: Editor, input: TocUpdateInput, options?: MutationO
   const resolved = resolveTocTarget(editor.state.doc, input.target);
   const config = parseTocInstruction(resolved.node.attrs?.instruction ?? '');
   const rightAlign = resolved.node.attrs?.rightAlignPageNumbers as boolean | undefined;
-  const content = materializeTocContent(editor.state.doc, withRightAlign(config, rightAlign));
+  const content = materializeTocContent(editor.state.doc, withRightAlign(config, rightAlign), editor);
 
   // NO_OP detection: compare new content against existing before executing.
   // The PM command returns "found" (not "content changed"), so receipt-based
@@ -608,7 +642,11 @@ export function createTableOfContentsWrapper(
   // Build instruction from config patch or use defaults
   const config = input.config ? applyTocPatchTyped(DEFAULT_TOC_CONFIG, input.config) : DEFAULT_TOC_CONFIG;
   const instruction = serializeTocInstruction(config);
-  const content = materializeTocContent(editor.state.doc, withRightAlign(config, input.config?.rightAlignPageNumbers));
+  const content = materializeTocContent(
+    editor.state.doc,
+    withRightAlign(config, input.config?.rightAlignPageNumbers),
+    editor,
+  );
 
   const sdBlockId = uuidv4();
 

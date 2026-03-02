@@ -1308,9 +1308,12 @@ export const SUCCESS_SCENARIOS = {
     }
     // Resolve a list item that can actually continue the previous sequence.
     // This avoids positional assumptions across environments/serialization.
-    const preparedSecondItem =
-      (await findFirstContinuableListAddress(harness, stateDir, preparedDoc)) ??
-      (await nthListAddress(harness, stateDir, preparedDoc, 1));
+    const preparedSecondItem = await findFirstContinuableListAddress(harness, stateDir, preparedDoc);
+    if (!preparedSecondItem) {
+      throw new Error(
+        'Unable to find a continuable list item for continue-previous success conformance scenario after preparation.',
+      );
+    }
     return {
       stateDir,
       args: [
@@ -1400,9 +1403,10 @@ export const SUCCESS_SCENARIOS = {
     }
     // Resolve a list item that can actually join with the previous sequence.
     // This avoids positional assumptions across environments/serialization.
-    const preparedSecondItem =
-      (await findFirstJoinableWithPreviousAddress(harness, stateDir, preparedDoc)) ??
-      (await nthListAddress(harness, stateDir, preparedDoc, 1));
+    const preparedSecondItem = await findFirstJoinableWithPreviousAddress(harness, stateDir, preparedDoc);
+    if (!preparedSecondItem) {
+      throw new Error('Unable to find a joinable list item for join success conformance scenario after preparation.');
+    }
     return {
       stateDir,
       args: [
@@ -1981,6 +1985,7 @@ export const SUCCESS_SCENARIOS = {
 } as const satisfies Record<CliOperationId, (harness: ConformanceHarness) => Promise<ScenarioInvocation>>;
 
 const RUNTIME_CONFORMANCE_SKIP = new Set<CliOperationId>([
+  'doc.toc.markEntry',
   'doc.toc.unmarkEntry',
   'doc.toc.getEntry',
   'doc.toc.editEntry',

@@ -17,3 +17,30 @@ Document API is in <strong>alpha</strong> and subject to breaking changes while 
 - Work with predictable inputs and outputs defined per operation.
 - Check capabilities up front and branch safely when features are unavailable.
 
+## Node addressing
+
+Every block in a document has a `nodeId` — a string that uniquely identifies it. When you call `find` or `getNodeById`, addresses use this ID:
+
+```json
+{
+  "kind": "block",
+  "nodeType": "paragraph",
+  "nodeId": "3A2B1C0D"
+}
+```
+
+### Stable IDs across loads
+
+For DOCX documents, `nodeId` is derived from the file's native `w14:paraId` attribute. This ID is part of the DOCX file itself, so it stays the same every time you open the document — even across separate editor sessions, different machines, or headless CLI pipelines.
+
+For nodes created at runtime (not imported from DOCX), `nodeId` falls back to `sdBlockId`, a UUID generated when the editor opens. This fallback is volatile — it changes on every load.
+
+| ID source | Stable across loads? | When used |
+|-----------|---------------------|-----------|
+| `paraId` (from DOCX) | Yes | Paragraphs, tables, rows, cells imported from DOCX |
+| `sdBlockId` (runtime) | No | Nodes created programmatically before first export |
+
+<Tip>
+If you need to reference blocks across separate editor sessions, use `editor.doc.find()` to get addresses — don't read `node.attrs.sdBlockId` directly. The Document API resolves the stable `paraId` automatically. See [Cross-session block addressing](/document-api/common-workflows#cross-session-block-addressing) for a worked example.
+</Tip>
+

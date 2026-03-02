@@ -124,6 +124,10 @@ Every block-level node (paragraphs, headings, etc.) automatically receives a uni
 3. **Collaborative editing** - Reference blocks consistently across clients
 4. **Programmatic updates** - Update document structure via APIs
 
+<Warning>
+`sdBlockId` is regenerated on every document load. If you need stable block references across separate editor sessions (e.g., headless CLI pipelines, multi-step AI workflows), use the [Document API](/document-api/overview) instead. `editor.doc.find()` returns addresses with stable IDs derived from the DOCX-native `paraId`, which survives round-trips. See [Cross-session block addressing](/document-api/common-workflows#cross-session-block-addressing) for a worked example.
+</Warning>
+
 ## Use case
 
 - **Document APIs** - Build REST APIs that manipulate specific blocks

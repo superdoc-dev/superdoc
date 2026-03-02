@@ -131,6 +131,48 @@ if (caps.global.trackChanges.enabled) {
 }
 ```
 
+## Cross-session block addressing
+
+When you load a DOCX, close the editor, and load the same file again, `sdBlockId` values change — they're regenerated on every open. The Document API's `find` operation returns addresses with stable IDs derived from the DOCX-native `paraId`, which survives round-trips.
+
+This pattern is common in headless pipelines: extract block references in one session, then apply edits in another.
+
+```ts
+import { Editor } from 'superdoc/super-editor';
+import { readFile, writeFile } from 'node:fs/promises';
+
+const docx = await readFile('./contract.docx');
+
+// Session 1: extract block addresses
+const editor1 = await Editor.open(docx);
+const result = editor1.doc.find({
+  select: { type: 'node', nodeType: 'paragraph' },
+  includeNodes: true,
+});
+
+// Save addresses — nodeId is the stable paraId from the DOCX file
+const addresses = result.items.map((item) => ({
+  address: item.address,
+  text: item.node?.text,
+}));
+await writeFile('./blocks.json', JSON.stringify(addresses));
+editor1.destroy();
+
+// Session 2: load the same file again and apply edits
+const editor2 = await Editor.open(docx);
+const saved = JSON.parse(await readFile('./blocks.json', 'utf-8'));
+
+// Addresses from session 1 still resolve — same DOCX, same paraId values
+for (const { address } of saved) {
+  const node = editor2.doc.getNode(address); // works across sessions
+}
+editor2.destroy();
+```
+
+<Info>
+`nodeId` stability depends on the ID source. For DOCX-imported content, `nodeId` comes from the file's `paraId` and is stable. For nodes created at runtime, it falls back to `sdBlockId` which is volatile. See [Node addressing](/document-api/overview#node-addressing) for details.
+</Info>
+
 ## Dry-run preview
 
 Pass `dryRun: true` to validate an operation without applying it:

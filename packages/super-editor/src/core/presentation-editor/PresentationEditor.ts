@@ -3165,12 +3165,33 @@ export class PresentationEditor extends EventEmitter {
     }
     this.#pendingDocChange = false;
     this.#isRerendering = true;
+
+    // Capture H/F editor focus state before rerender so we can restore it if
+    // a DOM mutation (e.g. page re-ordering in updateVirtualWindow) causes the
+    // browser to blur the active header/footer editor (SD-1993).
+    const sessionMode = this.#headerFooterSession?.session?.mode ?? 'body';
+    const activeHfEditor = sessionMode !== 'body' ? this.#headerFooterSession?.activeEditor : null;
+    const hadHfFocus = activeHfEditor?.view?.hasFocus?.() ?? false;
+
     try {
       await this.#rerender();
     } finally {
       this.#isRerendering = false;
       if (this.#pendingDocChange) {
         this.#scheduleRerender();
+      }
+
+      // Restore focus if the H/F editor lost it during rerender.
+      if (hadHfFocus && activeHfEditor?.view) {
+        const doc = this.#visibleHost.ownerDocument;
+        const editorDom = activeHfEditor.view.dom;
+        if (doc && !editorDom.contains(doc.activeElement)) {
+          try {
+            activeHfEditor.view.focus();
+          } catch {
+            // Ignore focus errors during recovery
+          }
+        }
       }
     }
   }

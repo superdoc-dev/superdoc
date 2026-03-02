@@ -49,7 +49,7 @@ export const Diffing = Extension.create({
             schema: state.schema,
           });
           if (applyTrackedChanges) {
-            state.tr.setMeta('trackChanges', true);
+            state.tr.setMeta('forceTrackChanges', true);
           }
           if (dispatch && state.tr.docChanged) {
             dispatch(state.tr);

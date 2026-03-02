@@ -179,6 +179,14 @@ describe('handleGoogleDocsHtml', () => {
       expect(dom.querySelector('p[data-num-id]')).not.toBeNull();
     });
 
+    it('converts when font-weight is on <p> but font-size is only on the child spans', () => {
+      const html = `
+        <p style="font-weight:700"><span style="font-size:20pt">Bold p, size on span</span></p>
+      `;
+      const dom = parseHeadings(html);
+      expect(dom.querySelector('h1')?.textContent?.trim()).toBe('Bold p, size on span');
+    });
+
     it('converts when font-size is on <p> but font-weight is only on the child <span>', () => {
       const html = `
         <p style="font-size:20pt"><span style="font-weight:700">Split style heading</span></p>

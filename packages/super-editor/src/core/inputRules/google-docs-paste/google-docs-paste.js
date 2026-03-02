@@ -298,26 +298,27 @@ function convertStyledHeadings(container) {
 
 /**
  * Reads font-size (in pt) and bold status from an element's inline style.
- * When font-size is on the <p>, bold is accepted from the <p> or all child
- * spans. When font-size is only on child spans, all spans must share the same
- * size; bold status is reported as whether all spans are bold.
+ * When font-size is on the root element, bold is accepted from the root or
+ * all child spans. When font-size is only on child spans, all spans must
+ * share the same size, and bold is from the root or all child spans.
  *
  * @param {HTMLElement} el
  * @returns {{ fontSize: number|null, isBold: boolean }}
  */
 function getHeadingStyleProps(el) {
   const elFontSize = parsePtValue(el.style.fontSize);
+  const elIsBold = boldWeightRegex.test(el.style.fontWeight || '');
   const spans = Array.from(el.querySelectorAll('span'));
-  const allSpansBold = spans.every((span) => boldWeightRegex.test(span.style.fontWeight || ''));
+  const spanIsBold = (span) => boldWeightRegex.test(span.style.fontWeight || '');
   const notHeading = { fontSize: null, isBold: false };
 
-  // font-size declared on <p>: bold from <p> itself or if all child spans are bold
-  const fromElement = () => ({
-    fontSize: elFontSize,
-    isBold: boldWeightRegex.test(el.style.fontWeight || '') || (spans.length > 0 && allSpansBold),
-  });
+  // font-size declared on root element: bold from itself or if all child spans are bold
+  const fromElement = () => {
+    const isBold = elIsBold || (spans.length > 0 && spans.every(spanIsBold));
+    return { fontSize: elFontSize, isBold };
+  };
 
-  // font-size only on child spans: all must be same size and bold
+  // font-size only on child spans: all must be same size, then bold from root or all spans
   const fromSpans = () => {
     // no span children, size is indeterminate
     if (spans.length === 0) return notHeading;
@@ -330,7 +331,9 @@ function getHeadingStyleProps(el) {
     const [firstSpanSize] = sizes;
     if (sizes.some((size) => size !== firstSpanSize)) return notHeading;
 
-    return { fontSize: firstSpanSize, isBold: allSpansBold };
+    // otherwise, first span size, and root element or all spans bold
+    const isBold = elIsBold || spans.every(spanIsBold);
+    return { fontSize: firstSpanSize, isBold };
   };
 
   return elFontSize !== null ? fromElement() : fromSpans();

@@ -244,6 +244,20 @@ describe('handleImageNode', () => {
     expect(result.attrs.extension).toBe('png');
   });
 
+  it('returns alt text when convertTiffToPng returns null', () => {
+    convertTiffToPng.mockReturnValue(null);
+    const node = makeNode();
+    const params = {
+      ...makeParams('media/photo.tif'),
+      converter: { media: { 'word/media/photo.tif': 'data:image/tiff;base64,AAAA' } },
+    };
+    const result = handleImageNode(node, params, false);
+
+    expect(convertTiffToPng).toHaveBeenCalledWith('data:image/tiff;base64,AAAA');
+    expect(result.attrs.alt).toBe('Unable to render image');
+    expect(result.attrs.extension).toBe('tif');
+  });
+
   it('captures unhandled drawing children for passthrough preservation', () => {
     const node = makeNode();
     node.elements.push({

@@ -5,18 +5,22 @@ import {
 import * as helpers from '@converter/helpers.js';
 import * as annotationHelpers from '@converter/v3/handlers/w/sdt/helpers/translate-field-annotation.js';
 
-vi.mock('@converter/helpers.js', () => ({
-  emuToPixels: vi.fn((v) => v / 9525), // 1 emu ≈ 1/9525 px
-  pixelsToEmu: vi.fn((v) => v * 9525),
-  getTextIndentExportValue: vi.fn((v) => v),
-  inchesToTwips: vi.fn((v) => v),
-  linesToTwips: vi.fn((v) => v),
-  pixelsToEightPoints: vi.fn((v) => v),
-  pixelsToTwips: vi.fn((v) => v),
-  ptToTwips: vi.fn((v) => v),
-  rgbToHex: vi.fn(() => '#000000'),
-  degreesToRot: vi.fn((v) => v),
-}));
+vi.mock('@converter/helpers.js', async (importOriginal) => {
+  const actual = await importOriginal();
+  return {
+    ...actual,
+    emuToPixels: vi.fn((v) => v / 9525), // 1 emu ≈ 1/9525 px
+    pixelsToEmu: vi.fn((v) => v * 9525),
+    getTextIndentExportValue: vi.fn((v) => v),
+    inchesToTwips: vi.fn((v) => v),
+    linesToTwips: vi.fn((v) => v),
+    pixelsToEightPoints: vi.fn((v) => v),
+    pixelsToTwips: vi.fn((v) => v),
+    ptToTwips: vi.fn((v) => v),
+    rgbToHex: vi.fn(() => '#000000'),
+    degreesToRot: vi.fn((v) => v),
+  };
+});
 
 vi.mock('@converter/v3/handlers/w/sdt/helpers/translate-field-annotation.js', () => ({
   prepareTextAnnotation: vi.fn(() => ({ type: 'text', text: 'annotation' })),

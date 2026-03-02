@@ -9,7 +9,7 @@
  */
 
 import { decode } from 'tiff';
-import { base64ToUint8Array } from '../../../../helpers.js';
+import { dataUriToArrayBuffer } from '../../../../helpers.js';
 
 // Optional DOM environment provided by callers (e.g., JSDOM in Node)
 let domEnvironment = null;
@@ -116,16 +116,7 @@ export function convertTiffToPng(data) {
   try {
     if (typeof data !== 'string') return null;
 
-    // Parse input — accept data URI or raw base64
-    let base64 = data;
-    if (data.startsWith('data:')) {
-      const commaIndex = data.indexOf(',');
-      if (commaIndex === -1) return null;
-      base64 = data.substring(commaIndex + 1);
-    }
-    const bytes = base64ToUint8Array(base64);
-
-    const buffer = bytes.buffer.slice(bytes.byteOffset, bytes.byteOffset + bytes.byteLength);
+    const buffer = dataUriToArrayBuffer(data);
 
     // Read metadata first without decompressing pixel data so the size
     // guard fires before a huge RGBA buffer is allocated.

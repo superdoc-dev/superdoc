@@ -43,17 +43,27 @@ export const Diffing = Extension.create({
       replayDifferences:
         (diff, { applyTrackedChanges = true }) =>
         ({ state, dispatch }) => {
+          const comments = this.editor.converter
+            ? Array.isArray(this.editor.converter.comments)
+              ? this.editor.converter.comments
+              : (this.editor.converter.comments = [])
+            : [];
           replayDiffs({
             tr: state.tr,
             diff,
             schema: state.schema,
+            comments,
+            editor: this.editor,
           });
+
           if (applyTrackedChanges) {
             state.tr.setMeta('forceTrackChanges', true);
           }
           if (dispatch && state.tr.docChanged) {
             dispatch(state.tr);
           }
+
+          this.editor.emit('commentsUpdate', { type: 'replayCompleted' });
           return true;
         },
     };

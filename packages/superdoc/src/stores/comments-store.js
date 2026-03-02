@@ -948,6 +948,22 @@ export const useCommentsStore = defineStore('comments', () => {
     editor.view.dispatch(tr);
   };
 
+  /**
+   * Rebuild tracked-change comments from the current editor state.
+   *
+   * Useful after bulk document transforms (like diff replay) where tracked-change
+   * marks may be remapped and incremental tracked-change events are not emitted.
+   *
+   * @param {Object} param0
+   * @param {Object} param0.superdoc The SuperDoc instance.
+   * @param {Object} param0.editor The active Super Editor instance.
+   * @returns {void}
+   */
+  const syncTrackedChangeComments = ({ superdoc, editor }) => {
+    if (!superdoc || !editor) return;
+    createCommentForTrackChanges(editor, superdoc);
+  };
+
   const normalizeDocxSchemaForExport = (value) => {
     if (!value) return [];
     const nodes = Array.isArray(value) ? value : [value];
@@ -1193,5 +1209,6 @@ export const useCommentsStore = defineStore('comments', () => {
     clearEditorCommentPositions,
     handleTrackedChangeUpdate,
     syncTrackedChangePositionsWithDocument,
+    syncTrackedChangeComments,
   };
 });

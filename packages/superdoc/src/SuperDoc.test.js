@@ -177,15 +177,23 @@ const buildCommentsStore = () => ({
   handleEditorLocationsUpdate: vi.fn(),
   clearEditorCommentPositions: vi.fn(),
   handleTrackedChangeUpdate: vi.fn(),
+  syncTrackedChangeComments: vi.fn(),
   removePendingComment: vi.fn(),
   setActiveComment: vi.fn(),
+  addComment: vi.fn(),
+  getComment: vi.fn(() => null),
+  COMMENT_EVENTS: {
+    ADD: 'add',
+    UPDATE: 'update',
+    DELETED: 'deleted',
+  },
   processLoadedDocxComments: vi.fn(),
   translateCommentsForExport: vi.fn(() => []),
   getPendingComment: vi.fn(() => ({ commentId: 'pending', selection: { getValues: () => ({}) } })),
   commentsParentElement: null,
   editorCommentIds: [],
   proxy: null,
-  commentsList: [],
+  commentsList: ref([]),
   lastUpdate: null,
   gesturePositions: ref([]),
   suppressInternalExternal: ref(false),
@@ -442,6 +450,43 @@ describe('SuperDoc.vue', () => {
 
     options.onException({ error: new Error('boom'), editor: editorMock });
     expect(superdocStub.emit).toHaveBeenCalledWith('exception', { error: expect.any(Error), editor: editorMock });
+  });
+
+  it('handles replay comment update/delete events and triggers tracked-change resync', async () => {
+    const superdocStub = createSuperdocStub();
+    const wrapper = await mountComponent(superdocStub);
+    await nextTick();
+
+    const options = wrapper.findComponent(SuperEditorStub).props('options');
+    const existingComment = { commentId: 'c-1', commentText: 'Old text' };
+
+    commentsStoreStub.getComment.mockImplementation((id) => (id === 'c-1' ? existingComment : null));
+    commentsStoreStub.commentsList.value = [
+      existingComment,
+      { commentId: 'c-2', parentCommentId: 'c-1', commentText: 'Reply' },
+      { commentId: 'tc-child', trackedChangeParentId: 'c-1', commentText: 'Tracked thread comment' },
+    ];
+    superdocStub.activeEditor = { options: { documentId: 'doc-1' } };
+
+    options.onCommentsUpdate({
+      type: 'update',
+      comment: { commentId: 'c-1', commentText: 'Updated text' },
+    });
+    expect(existingComment.commentText).toBe('Updated text');
+
+    options.onCommentsUpdate({
+      type: 'deleted',
+      comment: { commentId: 'c-1' },
+    });
+    expect(commentsStoreStub.commentsList.value).toEqual([
+      { commentId: 'tc-child', trackedChangeParentId: 'c-1', commentText: 'Tracked thread comment' },
+    ]);
+
+    options.onCommentsUpdate({ type: 'replayCompleted' });
+    expect(commentsStoreStub.syncTrackedChangeComments).toHaveBeenCalledWith({
+      superdoc: superdocStub,
+      editor: superdocStub.activeEditor,
+    });
   });
 
   it('passes slash menu and context menu options through to SuperEditor', async () => {

@@ -90,6 +90,7 @@ const {
   handleEditorLocationsUpdate,
   handleTrackedChangeUpdate,
   syncTrackedChangePositionsWithDocument,
+  syncTrackedChangeComments,
   addComment,
   getComment,
   COMMENT_EVENTS,
@@ -632,6 +633,11 @@ const onEditorCommentLocationsUpdate = (doc, { allCommentIds: activeThreadId, al
 const onEditorCommentsUpdate = (params = {}) => {
   // Set the active comment in the store
   let { activeCommentId, type, comment: commentPayload } = params;
+  const resolveCommentEventId = (payload) => payload?.commentId || payload?.importedId || null;
+
+  if (type === 'replayCompleted') {
+    syncTrackedChangeComments({ superdoc: proxy.$superdoc, editor: proxy.$superdoc?.activeEditor });
+  }
 
   if (COMMENT_EVENTS?.ADD && type === COMMENT_EVENTS.ADD && commentPayload) {
     if (!commentPayload.commentText && commentPayload.text) {
@@ -666,20 +672,69 @@ const onEditorCommentsUpdate = (params = {}) => {
     }
   }
 
+  if (COMMENT_EVENTS?.UPDATE && type === COMMENT_EVENTS.UPDATE && commentPayload) {
+    const id = resolveCommentEventId(commentPayload);
+    if (id) {
+      const existingComment = getComment(id);
+      const resolvedText = commentPayload.commentText || commentPayload.text;
+
+      if (existingComment) {
+        Object.assign(existingComment, commentPayload);
+        if (!existingComment.commentText && resolvedText) {
+          existingComment.commentText = resolvedText;
+        }
+      } else {
+        const normalizedPayload = { ...commentPayload };
+        if (!normalizedPayload.commentText && resolvedText) {
+          normalizedPayload.commentText = resolvedText;
+        }
+        const commentModel = useComment(normalizedPayload);
+        addComment({ superdoc: proxy.$superdoc, comment: commentModel, skipEditorUpdate: true });
+      }
+
+      if (!activeCommentId) {
+        activeCommentId = id;
+      }
+    }
+  }
+
+  if (COMMENT_EVENTS?.DELETED && type === COMMENT_EVENTS.DELETED && commentPayload) {
+    const id = resolveCommentEventId(commentPayload);
+    if (id) {
+      const targetId = String(id);
+      commentsList.value = commentsList.value.filter((comment) => {
+        const commentId = comment.commentId != null ? String(comment.commentId) : null;
+        const importedId = comment.importedId != null ? String(comment.importedId) : null;
+        const parentCommentId = comment.parentCommentId != null ? String(comment.parentCommentId) : null;
+        const isDeletedComment = commentId === targetId || importedId === targetId;
+        const isReplyToDeletedComment = parentCommentId === targetId;
+        return !isDeletedComment && !isReplyToDeletedComment;
+      });
+
+      if (activeComment.value != null && String(activeComment.value) === targetId) {
+        activeCommentId = null;
+      }
+    }
+  }
+
   if (type === 'trackedChange') {
     handleTrackedChangeUpdate({ superdoc: proxy.$superdoc, params });
   }
 
   nextTick(() => {
     if (pendingComment.value) return;
-    commentsStore.setActiveComment(proxy.$superdoc, activeCommentId);
+    if (activeCommentId !== undefined) {
+      commentsStore.setActiveComment(proxy.$superdoc, activeCommentId);
+    }
     // Briefly suppress click-outside so the same click that selected the comment
     // highlight in the editor doesn't immediately deactivate it via the sidebar.
     // Reset after the event loop settles so subsequent outside clicks work normally.
-    isCommentHighlighted.value = true;
-    setTimeout(() => {
-      isCommentHighlighted.value = false;
-    }, 0);
+    if (activeCommentId !== undefined) {
+      isCommentHighlighted.value = true;
+      setTimeout(() => {
+        isCommentHighlighted.value = false;
+      }, 0);
+    }
   });
 
   // Bubble up the event to the user, if handled

@@ -4,4 +4,5 @@ export * from './replay-paragraph';
 export * from './replay-inline';
 export * from './replay-attrs';
 export * from './marks-from-diff';
+export * from './replay-comments';
 export * from './replay-types';

@@ -2395,12 +2395,17 @@ export class PresentationEditor extends EventEmitter {
         this.#epochMapper.recordTransaction(transaction);
         this.#selectionSync.setDocEpoch(this.#epochMapper.getCurrentEpoch());
 
+        const inputType = transaction.getMeta?.('inputType');
         // Detect Y.js-origin transactions (remote collaboration changes).
         // These bypass the blockNodePlugin's sdBlockRev increment to prevent
         // feedback loops, so the FlowBlockCache's fast revision comparison
-        // cannot be trusted — signal it to fall through to JSON comparison.
+        // cannot be trusted. History undo/redo can also restore tracked-mark-only
+        // changes where visible text stays the same, so use the same JSON fallback.
         const ySyncMeta = transaction.getMeta?.(ySyncPluginKey);
-        if (ySyncMeta?.isChangeOrigin && transaction.docChanged) {
+        const shouldBypassFastRevision =
+          transaction.docChanged &&
+          (ySyncMeta?.isChangeOrigin || inputType === 'historyUndo' || inputType === 'historyRedo');
+        if (shouldBypassFastRevision) {
           this.#flowBlockCache?.setHasExternalChanges(true);
         }
       }

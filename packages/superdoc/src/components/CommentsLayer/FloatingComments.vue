@@ -1,6 +1,6 @@
 <script setup>
 import { storeToRefs } from 'pinia';
-import { ref, computed, watchEffect, nextTick, watch, onMounted, onBeforeUnmount } from 'vue';
+import { ref, computed, watchEffect, nextTick, watch, onBeforeUnmount } from 'vue';
 import { useCommentsStore } from '@superdoc/stores/comments-store';
 import { useSuperdocStore } from '@superdoc/stores/superdoc-store';
 import CommentDialog from '@superdoc/components/CommentsLayer/CommentDialog.vue';
@@ -18,9 +18,9 @@ const props = defineProps({
 
 const superdocStore = useSuperdocStore();
 const commentsStore = useCommentsStore();
+const { getCommentAliasIds, resolveCommentPositionEntry } = commentsStore;
 
-const { getFloatingComments, hasInitializedLocations, activeComment, commentsList, editorCommentPositions } =
-  storeToRefs(commentsStore);
+const { getFloatingComments, activeComment } = storeToRefs(commentsStore);
 const { activeZoom } = storeToRefs(superdocStore);
 
 const floatingCommentsContainer = ref(null);
@@ -38,18 +38,6 @@ const getCommentPosition = computed(() => (comment) => {
   return { top: `${comment.top}px` };
 });
 
-const getCommentAliasIds = (comment) =>
-  [comment?.importedId, comment?.commentId].filter((id) => id !== undefined && id !== null).map((id) => String(id));
-
-const resolvePositionEntry = (comment, preferredId) => {
-  const candidates = [preferredId, ...getCommentAliasIds(comment)];
-  for (const key of candidates) {
-    const entry = editorCommentPositions.value[key];
-    if (entry !== undefined) return { key, entry };
-  }
-  return { key: null, entry: null };
-};
-
 const handleDialog = (dialog) => {
   if (!dialog) return;
   const { elementRef, commentId } = dialog;
@@ -63,7 +51,7 @@ const handleDialog = (dialog) => {
     const comment = getFloatingComments.value.find((c) => getCommentAliasIds(c).includes(id));
     if (!comment) return;
 
-    const { entry: positionEntry } = resolvePositionEntry(comment, id);
+    const { entry: positionEntry } = resolveCommentPositionEntry(comment, id);
     const position = positionEntry?.bounds ? { ...positionEntry.bounds } : {};
 
     // If this is a PDF, set the position based on selection bounds

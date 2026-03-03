@@ -286,6 +286,25 @@ describe('comments-store', () => {
     expect(store.getFloatingComments).toHaveLength(1);
   });
 
+  it('keeps imported comments with both ids visible when the live anchor uses importedId', () => {
+    store.commentsList = [
+      {
+        commentId: 'comment-2a',
+        importedId: 'import-2a',
+        fileId: 'doc-1',
+        resolvedTime: null,
+        selection: { source: 'super-editor', selectionBounds: {} },
+      },
+    ];
+    store.editorCommentPositions = {
+      'import-2a': { start: 5, end: 8, bounds: { top: 10, left: 20 } },
+    };
+
+    expect(store.getFloatingComments).toEqual([
+      expect.objectContaining({ commentId: 'comment-2a', importedId: 'import-2a' }),
+    ]);
+  });
+
   it('removes stale tracked-change anchors when tracked marks no longer exist', () => {
     const trackedComment = {
       commentId: 'change-3',
@@ -786,6 +805,17 @@ describe('comments-store', () => {
       };
 
       expect(store.getCommentPosition('imported-1')).toEqual({ start: 20, end: 30 });
+      expect(store.getCommentPosition(comment)).toEqual({ start: 20, end: 30 });
+    });
+
+    it('returns comment position through imported aliases when the lookup uses commentId', () => {
+      const comment = { commentId: 'uuid-1', importedId: 'imported-1', fileId: 'doc-1' };
+      store.commentsList = [comment];
+      store.editorCommentPositions = {
+        'imported-1': { start: 20, end: 30 },
+      };
+
+      expect(store.getCommentPosition('uuid-1')).toEqual({ start: 20, end: 30 });
       expect(store.getCommentPosition(comment)).toEqual({ start: 20, end: 30 });
     });
 

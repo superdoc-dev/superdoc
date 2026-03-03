@@ -124,6 +124,46 @@ export const useCommentsStore = defineStore('comments', () => {
     return commentOrId;
   };
 
+  const normalizeCommentId = (id) => (id === undefined || id === null ? null : String(id));
+
+  // Comments can be referenced by the imported DOCX id, the internal commentId, or a raw id
+  // coming from UI/editor events. Normalize everything to strings and keep all aliases so every
+  // lookup path resolves against the same set of ids.
+  const getCommentAliasIds = (commentOrId) => {
+    if (commentOrId === undefined || commentOrId === null) return [];
+
+    const rawId = typeof commentOrId === 'object' ? null : commentOrId;
+    const comment = typeof commentOrId === 'object' ? commentOrId : getComment(commentOrId);
+    const seen = new Set();
+
+    return [rawId, getCommentPositionKey(comment), comment?.commentId, comment?.importedId]
+      .map((id) => normalizeCommentId(id))
+      .filter((id) => {
+        if (!id || seen.has(id)) return false;
+        seen.add(id);
+        return true;
+      });
+  };
+
+  const resolveCommentPositionEntry = (commentOrId, preferredId) => {
+    const currentPositions = editorCommentPositions.value || {};
+    const seen = new Set();
+
+    for (const key of [preferredId, ...getCommentAliasIds(commentOrId)]
+      .map((id) => normalizeCommentId(id))
+      .filter(Boolean)) {
+      if (seen.has(key)) continue;
+      seen.add(key);
+
+      const entry = currentPositions[key];
+      if (entry !== undefined) {
+        return { key, entry };
+      }
+    }
+
+    return { key: null, entry: null };
+  };
+
   const clearResolvedMetadata = (comment) => {
     if (!comment) return;
     // Sets the resolved state to null so it can be restored in the comments sidebar
@@ -161,12 +201,6 @@ export const useCommentsStore = defineStore('comments', () => {
 
     const currentPositions = editorCommentPositions.value || {};
     if (!Object.keys(currentPositions).length) return 0;
-
-    const toNormalizedId = (id) => (id === undefined || id === null ? null : String(id));
-    const getCommentAliasIds = (comment) =>
-      [getCommentPositionKey(comment), comment?.commentId, comment?.importedId]
-        .map((id) => toNormalizedId(id))
-        .filter(Boolean);
 
     // Which position key is currently in use (first alias present in currentPositions)
     const resolveExistingPositionKey = (aliasIds) =>
@@ -227,7 +261,7 @@ export const useCommentsStore = defineStore('comments', () => {
 
       // Extend staleness to replies / child comments that thread under a stale tracked-change root
       const parentKeys = [comment?.trackedChangeParentId, comment?.parentCommentId]
-        .map((id) => toNormalizedId(id))
+        .map((id) => normalizeCommentId(id))
         .filter(Boolean);
 
       if (parentKeys.some((id) => staleRootAliasIds.has(id))) {
@@ -243,14 +277,10 @@ export const useCommentsStore = defineStore('comments', () => {
 
     if (activeComment.value !== undefined && activeComment.value !== null) {
       const activeCommentModel = getComment(activeComment.value);
-      const activeAliases = new Set(
-        [activeComment.value, activeCommentModel?.commentId, activeCommentModel?.importedId]
-          .map((id) => toNormalizedId(id))
-          .filter(Boolean),
-      );
+      const activeAliases = new Set(getCommentAliasIds(activeCommentModel ?? activeComment.value));
       // If the active comment is part of a stale tracked-change thread, clear the active state
       const activeParentKeys = [activeCommentModel?.trackedChangeParentId, activeCommentModel?.parentCommentId]
-        .map((id) => toNormalizedId(id))
+        .map((id) => normalizeCommentId(id))
         .filter(Boolean);
 
       const isActiveStale = Array.from(activeAliases).some((id) => staleRootAliasIds.has(id));
@@ -268,10 +298,10 @@ export const useCommentsStore = defineStore('comments', () => {
     if (!activeKeys.size) return;
 
     commentsList.value.forEach((comment) => {
-      const key = getCommentPositionKey(comment);
+      const { key } = resolveCommentPositionEntry(comment);
       if (!key) return;
 
-      const hasActiveAnchor = activeKeys.has(String(key));
+      const hasActiveAnchor = activeKeys.has(key);
       if (
         hasActiveAnchor &&
         comment.resolvedTime &&
@@ -320,9 +350,7 @@ export const useCommentsStore = defineStore('comments', () => {
    * @returns {Object | null} The position data from editorCommentPositions
    */
   const getCommentPosition = (commentOrId) => {
-    const key = getCommentPositionKey(commentOrId);
-    if (!key) return null;
-    return editorCommentPositions.value?.[key] ?? null;
+    return resolveCommentPositionEntry(commentOrId).entry ?? null;
   };
 
   /**
@@ -335,13 +363,10 @@ export const useCommentsStore = defineStore('comments', () => {
    * @returns {string | null} The anchored text or null if unavailable
    */
   const getCommentAnchoredText = (commentOrId, options = {}) => {
-    const key = getCommentPositionKey(commentOrId);
-    if (!key) return null;
-
     const comment = typeof commentOrId === 'object' ? commentOrId : getComment(commentOrId);
     if (!comment) return null;
 
-    const position = editorCommentPositions.value?.[key] ?? null;
+    const position = resolveCommentPositionEntry(commentOrId).entry ?? null;
     const range = getCommentPositionRange(position);
     if (!range) return null;
 
@@ -523,9 +548,7 @@ export const useCommentsStore = defineStore('comments', () => {
    * @returns {number|null} The position value, or null if not found
    */
   const getPositionSortValue = (comment) => {
-    const key = getCommentPositionKey(comment);
-    if (!key) return null;
-    const position = editorCommentPositions.value?.[key];
+    const position = resolveCommentPositionEntry(comment).entry;
     if (!position) return null;
     // Check different position properties to handle various editor position schemas
     if (Number.isFinite(position.start)) return position.start;
@@ -946,11 +969,9 @@ export const useCommentsStore = defineStore('comments', () => {
     const comments = getGroupedComments.value?.parentComments
       .filter((c) => !c.resolvedTime)
       .filter((c) => {
-        const keys = Object.keys(editorCommentPositions.value);
         const isPdfComment = c.selection?.source !== 'super-editor';
         if (isPdfComment) return true;
-        const commentKey = c.commentId || c.importedId;
-        return keys.includes(commentKey);
+        return Boolean(resolveCommentPositionEntry(c).entry);
       });
     return comments;
   });
@@ -1103,9 +1124,11 @@ export const useCommentsStore = defineStore('comments', () => {
     getGroupedComments,
     getCommentsByPosition,
     getFloatingComments,
+    getCommentAliasIds,
     getCommentPosition,
     getCommentAnchoredText,
     getCommentAnchorData,
+    resolveCommentPositionEntry,
 
     // Actions
     init,

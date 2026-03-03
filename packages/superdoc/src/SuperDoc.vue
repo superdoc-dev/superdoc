@@ -726,16 +726,23 @@ const onEditorCommentsUpdate = (params = {}) => {
     const id = resolveCommentEventId(commentPayload);
     if (id) {
       const targetId = String(id);
+      const removedCommentIds = new Set();
       commentsList.value = commentsList.value.filter((comment) => {
         const commentId = comment.commentId != null ? String(comment.commentId) : null;
         const importedId = comment.importedId != null ? String(comment.importedId) : null;
         const parentCommentId = comment.parentCommentId != null ? String(comment.parentCommentId) : null;
         const isDeletedComment = commentId === targetId || importedId === targetId;
         const isReplyToDeletedComment = parentCommentId === targetId;
+
+        if (isDeletedComment || isReplyToDeletedComment) {
+          if (commentId) removedCommentIds.add(commentId);
+          if (importedId) removedCommentIds.add(importedId);
+        }
         return !isDeletedComment && !isReplyToDeletedComment;
       });
 
-      if (activeComment.value != null && String(activeComment.value) === targetId) {
+      const activeCommentKey = activeComment.value != null ? String(activeComment.value) : null;
+      if (activeCommentKey && (activeCommentKey === targetId || removedCommentIds.has(activeCommentKey))) {
         activeCommentId = null;
       }
     }

@@ -492,6 +492,29 @@ describe('SuperDoc.vue', () => {
     });
   });
 
+  it('clears active comment when replay deletion removes the active reply', async () => {
+    const superdocStub = createSuperdocStub();
+    const wrapper = await mountComponent(superdocStub);
+    await nextTick();
+
+    const options = wrapper.findComponent(SuperEditorStub).props('options');
+    commentsStoreStub.commentsList.value = [
+      { commentId: 'c-1', commentText: 'Parent' },
+      { commentId: 'c-2', parentCommentId: 'c-1', commentText: 'Reply' },
+    ];
+    commentsStoreStub.activeComment.value = 'c-2';
+    commentsStoreStub.setActiveComment.mockClear();
+
+    options.onCommentsUpdate({
+      type: 'deleted',
+      comment: { commentId: 'c-1' },
+    });
+
+    expect(commentsStoreStub.commentsList.value).toEqual([]);
+    await nextTick();
+    expect(commentsStoreStub.setActiveComment).toHaveBeenCalledWith(superdocStub, null);
+  });
+
   it('passes slash menu and context menu options through to SuperEditor', async () => {
     const superdocStub = createSuperdocStub();
     const slashMenuConfig = {

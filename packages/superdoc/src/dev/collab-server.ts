@@ -92,7 +92,7 @@ export function createCollabServer(): ReturnType<typeof createServer> {
     wss.handleUpgrade(request, socket, head, (ws) => {
       const collaborationSocket: CollaborationWebSocket = ws;
       const upgradeRequest = createUpgradeRequest(requestUrl, validation.documentId, request.headers);
-      collaboration.welcome(collaborationSocket, upgradeRequest).catch((error) => {
+      collaboration.welcome(collaborationSocket, upgradeRequest).catch((error: unknown) => {
         console.error('[collab] welcome failed:', error);
         try {
           ws.close(1011, 'collaboration init failed');

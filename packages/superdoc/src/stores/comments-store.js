@@ -969,20 +969,53 @@ export const useCommentsStore = defineStore('comments', () => {
     editor.view.dispatch(tr);
   };
 
+  const getCommentDocumentId = (comment) => {
+    if (!comment) return null;
+    if (comment.fileId != null) return String(comment.fileId);
+    if (comment.documentId != null) return String(comment.documentId);
+    if (comment.selection?.documentId != null) return String(comment.selection.documentId);
+    return null;
+  };
+
+  const belongsToDocument = (comment, activeDocumentId) => {
+    if (!activeDocumentId) return false;
+
+    const commentDocumentId = getCommentDocumentId(comment);
+    if (commentDocumentId) {
+      return commentDocumentId === activeDocumentId;
+    }
+
+    // Legacy fallback: in single-document sessions, comments may not carry explicit
+    // document metadata yet. Treat them as belonging to the only open document.
+    const docs = Array.isArray(superdocStore.documents) ? superdocStore.documents : superdocStore.documents?.value;
+    if (Array.isArray(docs) && docs.length === 1) {
+      const onlyDocumentId = docs[0]?.id != null ? String(docs[0].id) : null;
+      return onlyDocumentId === activeDocumentId;
+    }
+
+    return false;
+  };
+
   /**
    * Remove tracked-change comments that no longer have a corresponding mark in the editor.
    * Also removes any replies linked to those removed tracked-change threads.
    *
+   * Pruning is scoped to the active editor document so replay in one document does not
+   * delete tracked-change comments from other open documents.
+   *
    * @param {Set<string>} liveTrackedChangeIds IDs currently present in editor marks.
+   * @param {string | null} activeDocumentId Document currently being synced.
    * @returns {void}
    */
-  const pruneStaleTrackedChangeComments = (liveTrackedChangeIds) => {
-    if (!(liveTrackedChangeIds instanceof Set)) return;
+  const pruneStaleTrackedChangeComments = (liveTrackedChangeIds, activeDocumentId) => {
+    if (!(liveTrackedChangeIds instanceof Set) || !activeDocumentId) return;
 
     const removedIds = new Set();
+    const previousComments = [...commentsList.value];
 
     commentsList.value = commentsList.value.filter((comment) => {
       if (!comment?.trackedChange) return true;
+      if (!belongsToDocument(comment, activeDocumentId)) return true;
 
       const commentId = comment.commentId != null ? String(comment.commentId) : null;
       const importedId = comment.importedId != null ? String(comment.importedId) : null;
@@ -1001,6 +1034,8 @@ export const useCommentsStore = defineStore('comments', () => {
     while (didRemoveDescendants) {
       didRemoveDescendants = false;
       commentsList.value = commentsList.value.filter((comment) => {
+        if (!belongsToDocument(comment, activeDocumentId)) return true;
+
         const parentCommentId = comment.parentCommentId != null ? String(comment.parentCommentId) : null;
         const trackedChangeParentId =
           comment.trackedChangeParentId != null ? String(comment.trackedChangeParentId) : null;
@@ -1020,7 +1055,15 @@ export const useCommentsStore = defineStore('comments', () => {
     }
 
     const activeCommentId = activeComment.value != null ? String(activeComment.value) : null;
-    if (activeCommentId && removedIds.has(activeCommentId)) {
+    const activeCommentBelongsToActiveDocument = previousComments.some((comment) => {
+      const commentId = comment.commentId != null ? String(comment.commentId) : null;
+      const importedId = comment.importedId != null ? String(comment.importedId) : null;
+      return (
+        belongsToDocument(comment, activeDocumentId) &&
+        ((commentId && commentId === activeCommentId) || (importedId && importedId === activeCommentId))
+      );
+    });
+    if (activeCommentId && removedIds.has(activeCommentId) && activeCommentBelongsToActiveDocument) {
       activeComment.value = null;
     }
   };
@@ -1038,6 +1081,8 @@ export const useCommentsStore = defineStore('comments', () => {
    */
   const syncTrackedChangeComments = ({ superdoc, editor }) => {
     if (!superdoc || !editor) return;
+    const activeDocumentId = editor?.options?.documentId != null ? String(editor.options.documentId) : null;
+    if (!activeDocumentId) return;
 
     const trackedChanges = trackChangesHelpers.getTrackChanges(editor.state);
     const liveTrackedChangeIds = new Set();
@@ -1047,7 +1092,7 @@ export const useCommentsStore = defineStore('comments', () => {
       liveTrackedChangeIds.add(String(id));
     });
 
-    pruneStaleTrackedChangeComments(liveTrackedChangeIds);
+    pruneStaleTrackedChangeComments(liveTrackedChangeIds, activeDocumentId);
     createCommentForTrackChanges(editor, superdoc, trackedChanges);
   };
 

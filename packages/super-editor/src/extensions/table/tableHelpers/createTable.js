@@ -47,8 +47,10 @@ export const createTable = (schema, rowsCount, colsCount, withHeaderRow, cellCon
   const rows = [];
 
   for (let index = 0; index < rowsCount; index++) {
-    const cellsToInsert = withHeaderRow && index === 0 ? headerCells : cells;
-    rows.push(types.tableRow.createChecked(null, cellsToInsert));
+    const isHeader = withHeaderRow && index === 0;
+    const cellsToInsert = isHeader ? headerCells : cells;
+    const rowAttrs = isHeader ? { tableRowProperties: { repeatHeader: true } } : null;
+    rows.push(types.tableRow.createChecked(rowAttrs, cellsToInsert));
   }
 
   const tableBorders = createTableBorders();

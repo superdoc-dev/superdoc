@@ -207,6 +207,7 @@ import {
 } from 'prosemirror-tables';
 import { cellAround } from './tableHelpers/cellAround.js';
 import { cellWrapping } from './tableHelpers/cellWrapping.js';
+import { toggleHeaderRow as toggleHeaderRowCommand } from './tableHelpers/toggleHeaderRow.js';
 import {
   resolveTable,
   pickTemplateRowForAppend,
@@ -1059,7 +1060,14 @@ export const Table = Node.create({
         },
 
       /**
-       * Toggle the first row as header row
+       * Toggle header-row status on the row(s) under the cursor or CellSelection.
+       *
+       * Sets both the cell node type (`tableHeader` ↔ `tableCell`) **and** the
+       * OOXML repeat-header flag (`tableRowProperties.repeatHeader`) in a single
+       * transaction so that undo reverts both changes atomically.
+       *
+       * Does NOT modify `tblLook.firstRow` (first-row style option).
+       *
        * @category Command
        * @returns {Function} Command
        * @example
@@ -1068,7 +1076,7 @@ export const Table = Node.create({
       toggleHeaderRow:
         () =>
         ({ state, dispatch }) => {
-          return toggleHeader('row')(state, dispatch);
+          return toggleHeaderRowCommand(state, dispatch);
         },
 
       /**

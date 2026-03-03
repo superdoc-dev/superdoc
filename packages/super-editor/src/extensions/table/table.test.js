@@ -1,5 +1,6 @@
 import { describe, it, expect, beforeAll, beforeEach, afterEach } from 'vitest';
-import { EditorState } from 'prosemirror-state';
+import { EditorState, TextSelection } from 'prosemirror-state';
+import { CellSelection, TableMap } from 'prosemirror-tables';
 import { loadTestDataForEditorTests, initTestEditor } from '@tests/helpers/helpers.js';
 import { createTable } from './tableHelpers/createTable.js';
 import { promises as fs } from 'fs';
@@ -568,6 +569,275 @@ describe('Table commands', async () => {
       secondRow.forEach((cell) => {
         expect(cell.type.name).toBe('tableCell');
       });
+    });
+  });
+
+  describe('toggleHeaderRow sets repeatHeader and cell types atomically', async () => {
+    /** Set up a 3×2 table (3 rows, 2 cols) with cursor positioned inside the table. */
+    const setupPlainTable = async () => {
+      const { docx, media, mediaFiles, fonts } = cachedBlankDoc;
+      ({ editor } = initTestEditor({ content: docx, media, mediaFiles, fonts }));
+      ({ schema } = editor);
+
+      const table = createTable(schema, 3, 2, false);
+      const doc = schema.nodes.doc.create(null, [table]);
+      const nextState = EditorState.create({ schema, doc, plugins: editor.state.plugins });
+      editor.setState(nextState);
+    };
+
+    it('toggleHeaderRow sets repeatHeader on the target row', async () => {
+      await setupPlainTable();
+      const tablePos = findTablePos(editor.state.doc);
+
+      // Place cursor in the first row
+      editor.commands.setTextSelection(tablePos + 3);
+      const didToggle = editor.commands.toggleHeaderRow();
+      expect(didToggle).toBe(true);
+
+      const updatedTable = editor.state.doc.nodeAt(tablePos);
+      const firstRow = updatedTable.child(0);
+
+      // Cell types should be tableHeader
+      firstRow.forEach((cell) => expect(cell.type.name).toBe('tableHeader'));
+      // repeatHeader should be set
+      expect(firstRow.attrs.tableRowProperties?.repeatHeader).toBe(true);
+
+      // Other rows are unaffected
+      const secondRow = updatedTable.child(1);
+      secondRow.forEach((cell) => expect(cell.type.name).toBe('tableCell'));
+      expect(secondRow.attrs.tableRowProperties?.repeatHeader).toBeFalsy();
+    });
+
+    it('toggleHeaderRow un-toggles header back to body row', async () => {
+      await setupPlainTable();
+      const tablePos = findTablePos(editor.state.doc);
+
+      // Toggle on, then off
+      editor.commands.setTextSelection(tablePos + 3);
+      editor.commands.toggleHeaderRow();
+      editor.commands.toggleHeaderRow();
+
+      const updatedTable = editor.state.doc.nodeAt(tablePos);
+      const firstRow = updatedTable.child(0);
+      firstRow.forEach((cell) => expect(cell.type.name).toBe('tableCell'));
+      expect(firstRow.attrs.tableRowProperties?.repeatHeader).toBe(false);
+    });
+
+    it('undo reverts both cell types and repeatHeader in one step', async () => {
+      await setupPlainTable();
+      const tablePos = findTablePos(editor.state.doc);
+
+      editor.commands.setTextSelection(tablePos + 3);
+      editor.commands.toggleHeaderRow();
+
+      // Verify header is on
+      let table = editor.state.doc.nodeAt(tablePos);
+      expect(table.child(0).firstChild.type.name).toBe('tableHeader');
+      expect(table.child(0).attrs.tableRowProperties?.repeatHeader).toBe(true);
+
+      // Single undo should revert both
+      editor.commands.undo();
+      table = editor.state.doc.nodeAt(tablePos);
+      expect(table.child(0).firstChild.type.name).toBe('tableCell');
+      expect(table.child(0).attrs.tableRowProperties?.repeatHeader).toBeFalsy();
+    });
+
+    it('works on non-first rows', async () => {
+      await setupPlainTable();
+      const tablePos = findTablePos(editor.state.doc);
+      const table = editor.state.doc.nodeAt(tablePos);
+      const tableStart = tablePos + 1;
+      const map = TableMap.get(table);
+
+      // Position cursor in row 1, col 0 — use TableMap for reliable offset
+      const row1CellOffset = map.map[1 * map.width]; // first cell of row 1
+      const textPos = tableStart + row1CellOffset + 2; // +2: into cell, into paragraph
+      const sel = TextSelection.create(editor.state.doc, textPos);
+      editor.view.dispatch(editor.state.tr.setSelection(sel));
+
+      editor.commands.toggleHeaderRow();
+
+      const updatedTable = editor.state.doc.nodeAt(tablePos);
+      // Row 0 should be unaffected
+      expect(updatedTable.child(0).firstChild.type.name).toBe('tableCell');
+      expect(updatedTable.child(0).attrs.tableRowProperties?.repeatHeader).toBeFalsy();
+      // Row 1 should be toggled
+      expect(updatedTable.child(1).firstChild.type.name).toBe('tableHeader');
+      expect(updatedTable.child(1).attrs.tableRowProperties?.repeatHeader).toBe(true);
+    });
+
+    it('handles multi-row CellSelection', async () => {
+      await setupPlainTable();
+      const tablePos = findTablePos(editor.state.doc);
+      const table = editor.state.doc.nodeAt(tablePos);
+      const tableStart = tablePos + 1;
+      const map = TableMap.get(table);
+
+      // Select cells spanning rows 0 and 1
+      const firstCellOffset = map.map[0]; // row 0, col 0
+      const lastCellOffset = map.map[1 * map.width + (map.width - 1)]; // row 1, last col
+      const sel = CellSelection.create(editor.state.doc, tableStart + firstCellOffset, tableStart + lastCellOffset);
+      editor.view.dispatch(editor.state.tr.setSelection(sel));
+
+      editor.commands.toggleHeaderRow();
+
+      const updatedTable = editor.state.doc.nodeAt(tablePos);
+      // Rows 0 and 1 should be headers
+      for (const rowIdx of [0, 1]) {
+        const row = updatedTable.child(rowIdx);
+        row.forEach((cell) => expect(cell.type.name).toBe('tableHeader'));
+        expect(row.attrs.tableRowProperties?.repeatHeader).toBe(true);
+      }
+      // Row 2 should be unaffected
+      const row2 = updatedTable.child(2);
+      row2.forEach((cell) => expect(cell.type.name).toBe('tableCell'));
+      expect(row2.attrs.tableRowProperties?.repeatHeader).toBeFalsy();
+    });
+
+    it('preserves cell attributes during type conversion (IT-550 guardrail)', async () => {
+      const { docx, media, mediaFiles, fonts } = cachedBlankDoc;
+      ({ editor } = initTestEditor({ content: docx, media, mediaFiles, fonts }));
+      ({ schema } = editor);
+
+      const cellAttrs = {
+        colspan: 1,
+        rowspan: 1,
+        colwidth: [150],
+        widthUnit: 'px',
+        widthType: 'dxa',
+        background: { color: 'FF0000' },
+        tableCellProperties: { cellWidth: { value: 2250, type: 'dxa' } },
+      };
+
+      const makeCell = (text) =>
+        schema.nodes.tableCell.create(cellAttrs, schema.nodes.paragraph.create(null, schema.text(text)));
+      const row = schema.nodes.tableRow.create(null, [makeCell('A'), makeCell('B')]);
+      const bodyRow = schema.nodes.tableRow.create(null, [makeCell('C'), makeCell('D')]);
+      const table = schema.nodes.table.create(null, [row, bodyRow]);
+      const doc = schema.nodes.doc.create(null, [table]);
+      editor.setState(EditorState.create({ schema, doc, plugins: editor.state.plugins }));
+
+      const tablePos = findTablePos(editor.state.doc);
+      editor.commands.setTextSelection(tablePos + 3);
+      editor.commands.toggleHeaderRow();
+
+      const updatedRow = editor.state.doc.nodeAt(tablePos).child(0);
+      updatedRow.forEach((cell) => {
+        expect(cell.type.name).toBe('tableHeader');
+        expect(cell.attrs.colwidth).toEqual([150]);
+        expect(cell.attrs.widthUnit).toBe('px');
+        expect(cell.attrs.widthType).toBe('dxa');
+        expect(cell.attrs.background).toEqual({ color: 'FF0000' });
+        expect(cell.attrs.tableCellProperties).toEqual({ cellWidth: { value: 2250, type: 'dxa' } });
+      });
+    });
+
+    it('preserves header-column cells when toggling a header row off', async () => {
+      const { docx, media, mediaFiles, fonts } = cachedBlankDoc;
+      ({ editor } = initTestEditor({ content: docx, media, mediaFiles, fonts }));
+      ({ schema } = editor);
+
+      // Build a 2×2 table where column 0 is a header column and row 0 is a header row.
+      // Row 0: [tableHeader, tableHeader]  (header row + header column)
+      // Row 1: [tableHeader, tableCell]    (header column only)
+      const hCell = (text) =>
+        schema.nodes.tableHeader.create(null, schema.nodes.paragraph.create(null, schema.text(text)));
+      const bCell = (text) =>
+        schema.nodes.tableCell.create(null, schema.nodes.paragraph.create(null, schema.text(text)));
+      const row0 = schema.nodes.tableRow.create({ tableRowProperties: { repeatHeader: true } }, [
+        hCell('A'),
+        hCell('B'),
+      ]);
+      const row1 = schema.nodes.tableRow.create(null, [hCell('C'), bCell('D')]);
+      const table = schema.nodes.table.create(null, [row0, row1]);
+      const doc = schema.nodes.doc.create(null, [table]);
+      editor.setState(EditorState.create({ schema, doc, plugins: editor.state.plugins }));
+
+      const tablePos = findTablePos(editor.state.doc);
+      editor.commands.setTextSelection(tablePos + 3);
+
+      // Toggle row 0 OFF
+      editor.commands.toggleHeaderRow();
+
+      const updatedTable = editor.state.doc.nodeAt(tablePos);
+      const updatedRow0 = updatedTable.child(0);
+
+      // repeatHeader should be false
+      expect(updatedRow0.attrs.tableRowProperties?.repeatHeader).toBe(false);
+      // Column 0 (header column) should remain tableHeader
+      expect(updatedRow0.child(0).type.name).toBe('tableHeader');
+      // Column 1 should revert to tableCell
+      expect(updatedRow0.child(1).type.name).toBe('tableCell');
+
+      // Row 1 should be completely unaffected
+      expect(updatedTable.child(1).child(0).type.name).toBe('tableHeader');
+      expect(updatedTable.child(1).child(1).type.name).toBe('tableCell');
+    });
+
+    it('correctly toggles rows in tables with rowspan merges', async () => {
+      const { docx, media, mediaFiles, fonts } = cachedBlankDoc;
+      ({ editor } = initTestEditor({ content: docx, media, mediaFiles, fonts }));
+      ({ schema } = editor);
+
+      // Build a 3×2 table where cell A spans rows 0-1 (rowspan=2).
+      // Row 0: [A (rowspan=2), B]
+      // Row 1: [             , C]  (A continues)
+      // Row 2: [D,             E]
+      const cell = (text, attrs = {}) =>
+        schema.nodes.tableCell.create(
+          { colspan: 1, rowspan: 1, ...attrs },
+          schema.nodes.paragraph.create(null, schema.text(text)),
+        );
+      const row0 = schema.nodes.tableRow.create(null, [cell('A', { rowspan: 2 }), cell('B')]);
+      const row1 = schema.nodes.tableRow.create(null, [cell('C')]);
+      const row2 = schema.nodes.tableRow.create(null, [cell('D'), cell('E')]);
+      const table = schema.nodes.table.create(null, [row0, row1, row2]);
+      const doc = schema.nodes.doc.create(null, [table]);
+      editor.setState(EditorState.create({ schema, doc, plugins: editor.state.plugins }));
+
+      const tablePos = findTablePos(editor.state.doc);
+      const tableStart = tablePos + 1;
+      const tableNode = editor.state.doc.nodeAt(tablePos);
+      const map = TableMap.get(tableNode);
+
+      // Select cells spanning rows 0 and 1 (which includes the merged cell A)
+      const topLeft = map.map[0]; // row 0, col 0 — cell A
+      const bottomRight = map.map[1 * map.width + (map.width - 1)]; // row 1, last col — cell C
+      const sel = CellSelection.create(editor.state.doc, tableStart + topLeft, tableStart + bottomRight);
+      editor.view.dispatch(editor.state.tr.setSelection(sel));
+
+      editor.commands.toggleHeaderRow();
+
+      const updatedTable = editor.state.doc.nodeAt(tablePos);
+      // Both rows 0 and 1 should be toggled
+      expect(updatedTable.child(0).attrs.tableRowProperties?.repeatHeader).toBe(true);
+      expect(updatedTable.child(1).attrs.tableRowProperties?.repeatHeader).toBe(true);
+      // Row 2 should be unaffected
+      expect(updatedTable.child(2).attrs.tableRowProperties?.repeatHeader).toBeFalsy();
+    });
+  });
+
+  describe('createTable sets repeatHeader when withHeaderRow is true', () => {
+    beforeEach(async () => {
+      const { docx, media, mediaFiles, fonts } = cachedBlankDoc;
+      ({ editor } = initTestEditor({ content: docx, media, mediaFiles, fonts }));
+      ({ schema } = editor);
+    });
+
+    it('header row has repeatHeader: true', () => {
+      const table = createTable(schema, 3, 2, true);
+      const headerRow = table.child(0);
+      expect(headerRow.attrs.tableRowProperties?.repeatHeader).toBe(true);
+      // Body rows should not have repeatHeader
+      expect(table.child(1).attrs.tableRowProperties?.repeatHeader).toBeFalsy();
+      expect(table.child(2).attrs.tableRowProperties?.repeatHeader).toBeFalsy();
+    });
+
+    it('table without header row has no repeatHeader on any row', () => {
+      const table = createTable(schema, 2, 2, false);
+      for (let i = 0; i < table.childCount; i++) {
+        expect(table.child(i).attrs.tableRowProperties?.repeatHeader).toBeFalsy();
+      }
     });
   });
 

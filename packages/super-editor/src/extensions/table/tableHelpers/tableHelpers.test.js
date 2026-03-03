@@ -179,6 +179,11 @@ describe('tableHelpers', () => {
     expect(table.attrs.tableStyleId).toBe('TableGrid');
     const headerCell = table.firstChild.firstChild;
     expect(headerCell.type.name).toBe('tableHeader');
+
+    // Header row should have repeatHeader set
+    expect(table.firstChild.attrs.tableRowProperties?.repeatHeader).toBe(true);
+    // Body row should not
+    expect(table.child(1).attrs.tableRowProperties?.repeatHeader).toBeFalsy();
   });
 
   it('createTable applies column widths when provided', () => {

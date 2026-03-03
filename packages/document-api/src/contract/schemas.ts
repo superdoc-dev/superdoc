@@ -3409,6 +3409,55 @@ const operationSchemas: Record<OperationId, OperationSchemaSet> = {
       ['nodeId'],
     ),
   },
+  'tables.getStyles': {
+    input: strictEmptyObjectSchema,
+    output: objectSchema(
+      {
+        explicitDefaultStyleId: { type: ['string', 'null'] },
+        effectiveDefaultStyleId: { type: ['string', 'null'] },
+        effectiveDefaultSource: { type: 'string' },
+        styles: arraySchema(
+          objectSchema(
+            {
+              id: { type: 'string' },
+              name: { type: ['string', 'null'] },
+              basedOn: { type: ['string', 'null'] },
+              isDefault: { type: 'boolean' },
+              isCustom: { type: 'boolean' },
+              uiPriority: { type: ['integer', 'null'] },
+              hidden: { type: 'boolean' },
+              quickFormat: { type: 'boolean' },
+              conditionalRegions: arraySchema({ type: 'string' }),
+            },
+            [
+              'id',
+              'name',
+              'basedOn',
+              'isDefault',
+              'isCustom',
+              'uiPriority',
+              'hidden',
+              'quickFormat',
+              'conditionalRegions',
+            ],
+          ),
+        ),
+      },
+      ['explicitDefaultStyleId', 'effectiveDefaultStyleId', 'effectiveDefaultSource', 'styles'],
+    ),
+  },
+  'tables.setDefaultStyle': {
+    input: objectSchema({ styleId: { type: 'string' } }, ['styleId']),
+    output: documentMutationResultSchemaFor('tables.setDefaultStyle'),
+    success: documentMutationSuccessSchema,
+    failure: sectionMutationFailureSchemaFor('tables.setDefaultStyle'),
+  },
+  'tables.clearDefaultStyle': {
+    input: strictEmptyObjectSchema,
+    output: documentMutationResultSchemaFor('tables.clearDefaultStyle'),
+    success: documentMutationSuccessSchema,
+    failure: sectionMutationFailureSchemaFor('tables.clearDefaultStyle'),
+  },
 
   // --- history.* ---
   'history.get': {

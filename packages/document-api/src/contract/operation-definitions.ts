@@ -2063,6 +2063,47 @@ export const OPERATION_DEFINITIONS = {
     referenceDocPath: 'tables/get-properties.mdx',
     referenceGroup: 'tables',
   },
+  'tables.getStyles': {
+    memberPath: 'tables.getStyles',
+    description: 'List all table styles and the document-level default table style setting.',
+    expectedResult: 'Returns a TablesGetStylesOutput with the style catalog, explicit default, and effective default.',
+    requiresDocumentContext: true,
+    metadata: readOperation({ idempotency: 'idempotent' }),
+    referenceDocPath: 'tables/get-styles.mdx',
+    referenceGroup: 'tables',
+  },
+  'tables.setDefaultStyle': {
+    memberPath: 'tables.setDefaultStyle',
+    description: 'Set the document-level default table style (w:defaultTableStyle in settings.xml).',
+    expectedResult: 'Returns a DocumentMutationResult; reports NO_OP if the default already matches.',
+    requiresDocumentContext: true,
+    metadata: mutationOperation({
+      idempotency: 'idempotent',
+      supportsDryRun: true,
+      supportsTrackedMode: false,
+      possibleFailureCodes: ['NO_OP', 'INVALID_INPUT'],
+      throws: ['CAPABILITY_UNAVAILABLE', 'INVALID_INPUT'],
+      historyUnsafe: true,
+    }),
+    referenceDocPath: 'tables/set-default-style.mdx',
+    referenceGroup: 'tables',
+  },
+  'tables.clearDefaultStyle': {
+    memberPath: 'tables.clearDefaultStyle',
+    description: 'Remove the document-level default table style setting.',
+    expectedResult: 'Returns a DocumentMutationResult; reports NO_OP if no default is set.',
+    requiresDocumentContext: true,
+    metadata: mutationOperation({
+      idempotency: 'conditional',
+      supportsDryRun: true,
+      supportsTrackedMode: false,
+      possibleFailureCodes: ['NO_OP'],
+      throws: ['CAPABILITY_UNAVAILABLE'],
+      historyUnsafe: true,
+    }),
+    referenceDocPath: 'tables/clear-default-style.mdx',
+    referenceGroup: 'tables',
+  },
   // -------------------------------------------------------------------------
   // Create: table of contents
   // -------------------------------------------------------------------------

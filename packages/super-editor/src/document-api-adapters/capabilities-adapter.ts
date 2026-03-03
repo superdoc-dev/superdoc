@@ -128,6 +128,8 @@ const REQUIRED_HELPERS: Partial<Record<OperationId, (editor: Editor) => boolean>
     typeof (editor as unknown as EditorWithBlockNodeHelper).helpers?.blockNode?.getBlockNodeById === 'function',
   'sections.setOddEvenHeadersFooters': (editor) => Boolean((editor as unknown as { converter?: unknown }).converter),
   'sections.setHeaderFooterRef': (editor) => Boolean((editor as unknown as { converter?: unknown }).converter),
+  'tables.setDefaultStyle': (editor) => Boolean((editor as unknown as { converter?: unknown }).converter),
+  'tables.clearDefaultStyle': (editor) => Boolean((editor as unknown as { converter?: unknown }).converter),
 };
 
 function hasRequiredHelpers(editor: Editor, operationId: OperationId): boolean {

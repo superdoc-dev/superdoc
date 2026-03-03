@@ -179,6 +179,10 @@ import type {
   TablesGetCellsOutput,
   TablesGetPropertiesInput,
   TablesGetPropertiesOutput,
+  TablesGetStylesInput,
+  TablesGetStylesOutput,
+  TablesSetDefaultStyleInput,
+  TablesClearDefaultStyleInput,
 } from './types/table-operations.types.js';
 import type {
   TrackChangesAdapter,
@@ -642,6 +646,9 @@ export interface TablesApi {
   get(input: TablesGetInput): TablesGetOutput;
   getCells(input: TablesGetCellsInput): TablesGetCellsOutput;
   getProperties(input: TablesGetPropertiesInput): TablesGetPropertiesOutput;
+  getStyles(input?: TablesGetStylesInput): TablesGetStylesOutput;
+  setDefaultStyle(input: TablesSetDefaultStyleInput, options?: MutationOptions): DocumentMutationResult;
+  clearDefaultStyle(input?: TablesClearDefaultStyleInput, options?: MutationOptions): DocumentMutationResult;
 }
 
 export type TablesAdapter = TablesApi;
@@ -1394,6 +1401,15 @@ export function createDocumentApi(adapters: DocumentApiAdapters): DocumentApi {
       },
       getProperties(input) {
         return adapters.tables.getProperties(input);
+      },
+      getStyles(input?) {
+        return adapters.tables.getStyles(input);
+      },
+      setDefaultStyle(input: TablesSetDefaultStyleInput, options?: MutationOptions) {
+        return adapters.tables.setDefaultStyle(input, options);
+      },
+      clearDefaultStyle(input?: TablesClearDefaultStyleInput, options?: MutationOptions) {
+        return adapters.tables.clearDefaultStyle(input, options);
       },
     },
     toc: {

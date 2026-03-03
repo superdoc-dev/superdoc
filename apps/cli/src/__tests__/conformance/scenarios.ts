@@ -1908,6 +1908,57 @@ export const SUCCESS_SCENARIOS = {
   'doc.tables.get': tableReadScenario('tables.get'),
   'doc.tables.getCells': tableReadScenario('tables.getCells'),
   'doc.tables.getProperties': tableReadScenario('tables.getProperties'),
+  'doc.tables.getStyles': async (harness: ConformanceHarness): Promise<ScenarioInvocation> => {
+    const stateDir = await harness.createStateDir('table-getStyles-success');
+    const { sessionId } = await harness.createTableFixture(stateDir, 'table-getStyles');
+    return {
+      stateDir,
+      args: [...commandTokens('doc.tables.getStyles'), '--session', sessionId],
+    };
+  },
+  'doc.tables.setDefaultStyle': async (harness: ConformanceHarness): Promise<ScenarioInvocation> => {
+    const stateDir = await harness.createStateDir('table-setDefaultStyle-success');
+    const { sessionId } = await harness.createTableFixture(stateDir, 'table-setDefaultStyle');
+    return {
+      stateDir,
+      args: [
+        ...commandTokens('doc.tables.setDefaultStyle'),
+        '--session',
+        sessionId,
+        '--style-id',
+        'TableGrid',
+        '--out',
+        harness.createOutputPath('table-setDefaultStyle-out'),
+      ],
+    };
+  },
+  'doc.tables.clearDefaultStyle': async (harness: ConformanceHarness): Promise<ScenarioInvocation> => {
+    const stateDir = await harness.createStateDir('table-clearDefaultStyle-success');
+    const { sessionId } = await harness.createTableFixture(stateDir, 'table-clearDefaultStyle');
+    // First set a default so the clear actually has something to remove
+    await harness.runCli(
+      [
+        ...commandTokens('doc.tables.setDefaultStyle'),
+        '--session',
+        sessionId,
+        '--style-id',
+        'TableGrid',
+        '--out',
+        harness.createOutputPath('table-clearDefaultStyle-setup-out'),
+      ],
+      stateDir,
+    );
+    return {
+      stateDir,
+      args: [
+        ...commandTokens('doc.tables.clearDefaultStyle'),
+        '--session',
+        sessionId,
+        '--out',
+        harness.createOutputPath('table-clearDefaultStyle-out'),
+      ],
+    };
+  },
 
   // ---------------------------------------------------------------------------
   // History operations
@@ -1935,6 +1986,10 @@ const RUNTIME_CONFORMANCE_SKIP = new Set<CliOperationId>([
   'doc.toc.unmarkEntry',
   'doc.toc.getEntry',
   'doc.toc.editEntry',
+  // OOB table-style mutations require translatedLinkedStyles from the style-engine,
+  // which the CLI test harness fixture does not populate.
+  'doc.tables.setDefaultStyle',
+  'doc.tables.clearDefaultStyle',
 ]);
 
 export const OPERATION_SCENARIOS = (Object.keys(SUCCESS_SCENARIOS) as CliOperationId[]).map((operationId) => {

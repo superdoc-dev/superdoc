@@ -219,6 +219,9 @@ export function buildDispatchTable(api: DocumentApi): TypedDispatchTable {
     'tables.get': (input) => api.tables.get(input),
     'tables.getCells': (input) => api.tables.getCells(input),
     'tables.getProperties': (input) => api.tables.getProperties(input),
+    'tables.getStyles': (input) => api.tables.getStyles(input),
+    'tables.setDefaultStyle': (input, options) => api.tables.setDefaultStyle(input, options),
+    'tables.clearDefaultStyle': (input, options) => api.tables.clearDefaultStyle(input, options),
 
     // --- create.tableOfContents ---
     'create.tableOfContents': (input, options) => api.create.tableOfContents(input, options),

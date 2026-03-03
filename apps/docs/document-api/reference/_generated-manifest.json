@@ -145,6 +145,7 @@
     "apps/docs/document-api/reference/tables/clear-border.mdx",
     "apps/docs/document-api/reference/tables/clear-cell-spacing.mdx",
     "apps/docs/document-api/reference/tables/clear-contents.mdx",
+    "apps/docs/document-api/reference/tables/clear-default-style.mdx",
     "apps/docs/document-api/reference/tables/clear-shading.mdx",
     "apps/docs/document-api/reference/tables/clear-style.mdx",
     "apps/docs/document-api/reference/tables/convert-from-text.mdx",
@@ -157,6 +158,7 @@
     "apps/docs/document-api/reference/tables/distribute-rows.mdx",
     "apps/docs/document-api/reference/tables/get-cells.mdx",
     "apps/docs/document-api/reference/tables/get-properties.mdx",
+    "apps/docs/document-api/reference/tables/get-styles.mdx",
     "apps/docs/document-api/reference/tables/get.mdx",
     "apps/docs/document-api/reference/tables/index.mdx",
     "apps/docs/document-api/reference/tables/insert-cell.mdx",
@@ -170,6 +172,7 @@
     "apps/docs/document-api/reference/tables/set-cell-properties.mdx",
     "apps/docs/document-api/reference/tables/set-cell-spacing.mdx",
     "apps/docs/document-api/reference/tables/set-column-width.mdx",
+    "apps/docs/document-api/reference/tables/set-default-style.mdx",
     "apps/docs/document-api/reference/tables/set-layout.mdx",
     "apps/docs/document-api/reference/tables/set-row-height.mdx",
     "apps/docs/document-api/reference/tables/set-row-options.mdx",
@@ -445,7 +448,10 @@
         "tables.clearCellSpacing",
         "tables.get",
         "tables.getCells",
-        "tables.getProperties"
+        "tables.getProperties",
+        "tables.getStyles",
+        "tables.setDefaultStyle",
+        "tables.clearDefaultStyle"
       ],
       "pagePath": "apps/docs/document-api/reference/tables/index.mdx",
       "title": "Tables"
@@ -477,5 +483,5 @@
     }
   ],
   "marker": "{/* GENERATED FILE: DO NOT EDIT. Regenerate via `pnpm run docapi:sync`. */}",
-  "sourceHash": "f7276958e365ad87346f051a9dc2d6b1a6313353302531b6f669409cf97b3dcc"
+  "sourceHash": "f6a9d24400077e26e602241bee1ab5f4c0ea8e0d112b2c7425182458977c1885"
 }

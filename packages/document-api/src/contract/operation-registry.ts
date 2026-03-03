@@ -190,6 +190,10 @@ import type {
   TablesGetCellsOutput,
   TablesGetPropertiesInput,
   TablesGetPropertiesOutput,
+  TablesGetStylesInput,
+  TablesGetStylesOutput,
+  TablesSetDefaultStyleInput,
+  TablesClearDefaultStyleInput,
 } from '../types/table-operations.types.js';
 
 type FormatInlineAliasOperationRegistry = {
@@ -532,6 +536,17 @@ export interface OperationRegistry extends FormatInlineAliasOperationRegistry {
   'tables.get': { input: TablesGetInput; options: never; output: TablesGetOutput };
   'tables.getCells': { input: TablesGetCellsInput; options: never; output: TablesGetCellsOutput };
   'tables.getProperties': { input: TablesGetPropertiesInput; options: never; output: TablesGetPropertiesOutput };
+  'tables.getStyles': { input: TablesGetStylesInput | undefined; options: never; output: TablesGetStylesOutput };
+  'tables.setDefaultStyle': {
+    input: TablesSetDefaultStyleInput;
+    options: MutationOptions;
+    output: DocumentMutationResult;
+  };
+  'tables.clearDefaultStyle': {
+    input: TablesClearDefaultStyleInput | undefined;
+    options: MutationOptions;
+    output: DocumentMutationResult;
+  };
 
   // --- create.tableOfContents ---
   'create.tableOfContents': {

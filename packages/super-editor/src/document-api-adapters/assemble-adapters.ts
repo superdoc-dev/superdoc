@@ -123,7 +123,14 @@ import {
   tablesSetCellSpacingWrapper,
   tablesClearCellSpacingWrapper,
 } from './plan-engine/tables-wrappers.js';
-import { tablesGetAdapter, tablesGetCellsAdapter, tablesGetPropertiesAdapter } from './tables-adapter.js';
+import {
+  tablesGetAdapter,
+  tablesGetCellsAdapter,
+  tablesGetPropertiesAdapter,
+  tablesGetStylesAdapter,
+  tablesSetDefaultStyleAdapter,
+  tablesClearDefaultStyleAdapter,
+} from './tables-adapter.js';
 import { createHistoryAdapter } from './history-adapter.js';
 import {
   tocListWrapper,
@@ -298,6 +305,9 @@ export function assembleDocumentApiAdapters(editor: Editor): DocumentApiAdapters
       get: (input) => tablesGetAdapter(editor, input),
       getCells: (input) => tablesGetCellsAdapter(editor, input),
       getProperties: (input) => tablesGetPropertiesAdapter(editor, input),
+      getStyles: (input) => tablesGetStylesAdapter(editor, input),
+      setDefaultStyle: (input, options) => tablesSetDefaultStyleAdapter(editor, input, options),
+      clearDefaultStyle: (input, options) => tablesClearDefaultStyleAdapter(editor, input, options),
     },
     toc: {
       list: (query) => tocListWrapper(editor, query),

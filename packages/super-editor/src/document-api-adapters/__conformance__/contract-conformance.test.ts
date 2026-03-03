@@ -117,7 +117,13 @@ import { getRevision, initRevision } from '../plan-engine/revision-tracker.js';
 import { executePlan } from '../plan-engine/executor.js';
 import { toCanonicalTrackedChangeId } from '../helpers/tracked-change-resolver.js';
 import { writeAdapter } from '../write-adapter.js';
-import { tablesGetCellsAdapter, tablesGetPropertiesAdapter } from '../tables-adapter.js';
+import {
+  tablesGetCellsAdapter,
+  tablesGetPropertiesAdapter,
+  tablesGetStylesAdapter,
+  tablesSetDefaultStyleAdapter,
+  tablesClearDefaultStyleAdapter,
+} from '../tables-adapter.js';
 import {
   createSectionBreakAdapter,
   sectionsSetBreakTypeAdapter,
@@ -1192,6 +1198,9 @@ const IMPLEMENTED_TABLE_OPS: ReadonlySet<OperationId> = new Set([
   'tables.setCellPadding',
   'tables.setCellSpacing',
   'tables.clearCellSpacing',
+  'tables.getStyles',
+  'tables.setDefaultStyle',
+  'tables.clearDefaultStyle',
 ] as OperationId[]);
 
 /** Table stub ops that always throw CAPABILITY_UNAVAILABLE. */
@@ -3730,6 +3739,83 @@ const mutationVectors: Partial<Record<OperationId, MutationVector>> = {
       return tablesClearCellSpacingWrapper(editor, { nodeId: 'table-1' }, { changeMode: 'direct' });
     },
   },
+  'tables.setDefaultStyle': {
+    throwCase: () => {
+      // No converter → CAPABILITY_UNAVAILABLE
+      const editor = makeSectionsEditor({ includeConverter: false });
+      return tablesSetDefaultStyleAdapter(editor, { styleId: 'TableGrid' }, { changeMode: 'direct' });
+    },
+    failureCase: () => {
+      // Style already set → NO_OP
+      const editor = makeSectionsEditor();
+      const converter = (editor as unknown as { converter: Record<string, unknown> }).converter;
+      converter.translatedLinkedStyles = {
+        styles: { TableGrid: { type: 'table', name: 'Table Grid' } },
+        docDefaults: {},
+        latentStyles: {},
+      };
+      // Pre-set the default so the adapter sees it's already the same
+      const settingsRoot = (converter.convertedXml as Record<string, { elements?: Array<{ elements?: unknown[] }> }>)[
+        'word/settings.xml'
+      ];
+      const wSettings = settingsRoot?.elements?.find(
+        (el: { name?: string }) => (el as { name?: string }).name === 'w:settings',
+      ) as { elements?: unknown[] } | undefined;
+      if (wSettings) {
+        if (!wSettings.elements) wSettings.elements = [];
+        wSettings.elements.push({
+          type: 'element',
+          name: 'w:defaultTableStyle',
+          attributes: { 'w:val': 'TableGrid' },
+          elements: [],
+        });
+      }
+      return tablesSetDefaultStyleAdapter(editor, { styleId: 'TableGrid' }, { changeMode: 'direct' });
+    },
+    applyCase: () => {
+      const editor = makeSectionsEditor();
+      const converter = (editor as unknown as { converter: Record<string, unknown> }).converter;
+      converter.translatedLinkedStyles = {
+        styles: { TableGrid: { type: 'table', name: 'Table Grid' } },
+        docDefaults: {},
+        latentStyles: {},
+      };
+      return tablesSetDefaultStyleAdapter(editor, { styleId: 'TableGrid' }, { changeMode: 'direct' });
+    },
+  },
+  'tables.clearDefaultStyle': {
+    throwCase: () => {
+      // No converter → CAPABILITY_UNAVAILABLE
+      const editor = makeSectionsEditor({ includeConverter: false });
+      return tablesClearDefaultStyleAdapter(editor, {}, { changeMode: 'direct' });
+    },
+    failureCase: () => {
+      // No default set → NO_OP
+      const editor = makeSectionsEditor();
+      return tablesClearDefaultStyleAdapter(editor, {}, { changeMode: 'direct' });
+    },
+    applyCase: () => {
+      const editor = makeSectionsEditor();
+      const converter = (editor as unknown as { converter: Record<string, unknown> }).converter;
+      // Pre-set a default so clear actually has something to remove
+      const settingsRoot = (converter.convertedXml as Record<string, { elements?: Array<{ elements?: unknown[] }> }>)[
+        'word/settings.xml'
+      ];
+      const wSettings = settingsRoot?.elements?.find(
+        (el: { name?: string }) => (el as { name?: string }).name === 'w:settings',
+      ) as { elements?: unknown[] } | undefined;
+      if (wSettings) {
+        if (!wSettings.elements) wSettings.elements = [];
+        wSettings.elements.push({
+          type: 'element',
+          name: 'w:defaultTableStyle',
+          attributes: { 'w:val': 'TableGrid' },
+          elements: [],
+        });
+      }
+      return tablesClearDefaultStyleAdapter(editor, {}, { changeMode: 'direct' });
+    },
+  },
   'styles.apply': {
     throwCase: () => {
       const editor = makeStylesEditor({ hasConverter: false });
@@ -4761,6 +4847,46 @@ const dryRunVectors: Partial<Record<OperationId, () => unknown>> = {
     expect(dispatch).not.toHaveBeenCalled();
     return result;
   },
+  'tables.setDefaultStyle': () => {
+    const editor = makeSectionsEditor();
+    const converter = (editor as unknown as { converter: Record<string, unknown> }).converter;
+    converter.translatedLinkedStyles = {
+      styles: { TableGrid: { type: 'table', name: 'Table Grid' } },
+      docDefaults: {},
+      latentStyles: {},
+    };
+    const dispatch = (editor as unknown as { dispatch: ReturnType<typeof vi.fn> }).dispatch;
+    const result = tablesSetDefaultStyleAdapter(
+      editor,
+      { styleId: 'TableGrid' },
+      { changeMode: 'direct', dryRun: true },
+    );
+    expect(dispatch).not.toHaveBeenCalled();
+    return result;
+  },
+  'tables.clearDefaultStyle': () => {
+    const editor = makeSectionsEditor();
+    const converter = (editor as unknown as { converter: Record<string, unknown> }).converter;
+    const settingsRoot = (converter.convertedXml as Record<string, { elements?: Array<{ elements?: unknown[] }> }>)[
+      'word/settings.xml'
+    ];
+    const wSettings = settingsRoot?.elements?.find(
+      (el: { name?: string }) => (el as { name?: string }).name === 'w:settings',
+    ) as { elements?: unknown[] } | undefined;
+    if (wSettings) {
+      if (!wSettings.elements) wSettings.elements = [];
+      wSettings.elements.push({
+        type: 'element',
+        name: 'w:defaultTableStyle',
+        attributes: { 'w:val': 'TableGrid' },
+        elements: [],
+      });
+    }
+    const dispatch = (editor as unknown as { dispatch: ReturnType<typeof vi.fn> }).dispatch;
+    const result = tablesClearDefaultStyleAdapter(editor, {}, { changeMode: 'direct', dryRun: true });
+    expect(dispatch).not.toHaveBeenCalled();
+    return result;
+  },
 
   // -------------------------------------------------------------------------
   // TOC operations — dryRun vectors
@@ -5155,6 +5281,8 @@ describe('document-api adapter conformance', () => {
       'tables.clearCellSpacing',
       'tables.insertCell',
       'tables.deleteCell',
+      'tables.setDefaultStyle',
+      'tables.clearDefaultStyle',
     ] as OperationId[];
 
     for (const opId of nonTrackedTableOps) {
@@ -5217,6 +5345,40 @@ describe('document-api adapter conformance', () => {
       { changeMode: 'tracked' },
     );
     expect(deleteColResult.success).toBe(true);
+  });
+
+  // ---------------------------------------------------------------------------
+  // tables.getStyles: returns graceful empty result without converter
+  // ---------------------------------------------------------------------------
+  it('returns empty styles payload when no converter is available (tables.getStyles)', () => {
+    const editor = makeSectionsEditor({ includeConverter: false });
+    const result = tablesGetStylesAdapter(editor);
+    expect(result).toEqual({
+      explicitDefaultStyleId: null,
+      effectiveDefaultStyleId: null,
+      effectiveDefaultSource: 'none',
+      styles: [],
+    });
+  });
+
+  // ---------------------------------------------------------------------------
+  // tables.setDefaultStyle: throws INVALID_INPUT for unknown style id
+  // ---------------------------------------------------------------------------
+  it('throws INVALID_INPUT when styleId is not a known table style (tables.setDefaultStyle)', () => {
+    const editor = makeSectionsEditor();
+    const converter = (editor as unknown as { converter: Record<string, unknown> }).converter;
+    converter.translatedLinkedStyles = {
+      styles: { TableGrid: { type: 'table', name: 'Table Grid' } },
+      docDefaults: {},
+      latentStyles: {},
+    };
+    let capturedCode: string | null = null;
+    try {
+      tablesSetDefaultStyleAdapter(editor, { styleId: 'NonExistentStyle' }, { changeMode: 'direct' });
+    } catch (error) {
+      capturedCode = (error as { code?: string }).code ?? null;
+    }
+    expect(capturedCode).toBe('INVALID_INPUT');
   });
 
   // ---------------------------------------------------------------------------

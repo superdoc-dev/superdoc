@@ -917,6 +917,11 @@ _No fields._
 | `operations.tables.clearContents.dryRun` | boolean | yes |  |
 | `operations.tables.clearContents.reasons` | enum[] | no |  |
 | `operations.tables.clearContents.tracked` | boolean | yes |  |
+| `operations.tables.clearDefaultStyle` | object | yes |  |
+| `operations.tables.clearDefaultStyle.available` | boolean | yes |  |
+| `operations.tables.clearDefaultStyle.dryRun` | boolean | yes |  |
+| `operations.tables.clearDefaultStyle.reasons` | enum[] | no |  |
+| `operations.tables.clearDefaultStyle.tracked` | boolean | yes |  |
 | `operations.tables.clearShading` | object | yes |  |
 | `operations.tables.clearShading.available` | boolean | yes |  |
 | `operations.tables.clearShading.dryRun` | boolean | yes |  |
@@ -982,6 +987,11 @@ _No fields._
 | `operations.tables.getProperties.dryRun` | boolean | yes |  |
 | `operations.tables.getProperties.reasons` | enum[] | no |  |
 | `operations.tables.getProperties.tracked` | boolean | yes |  |
+| `operations.tables.getStyles` | object | yes |  |
+| `operations.tables.getStyles.available` | boolean | yes |  |
+| `operations.tables.getStyles.dryRun` | boolean | yes |  |
+| `operations.tables.getStyles.reasons` | enum[] | no |  |
+| `operations.tables.getStyles.tracked` | boolean | yes |  |
 | `operations.tables.insertCell` | object | yes |  |
 | `operations.tables.insertCell.available` | boolean | yes |  |
 | `operations.tables.insertCell.dryRun` | boolean | yes |  |
@@ -1037,6 +1047,11 @@ _No fields._
 | `operations.tables.setColumnWidth.dryRun` | boolean | yes |  |
 | `operations.tables.setColumnWidth.reasons` | enum[] | no |  |
 | `operations.tables.setColumnWidth.tracked` | boolean | yes |  |
+| `operations.tables.setDefaultStyle` | object | yes |  |
+| `operations.tables.setDefaultStyle.available` | boolean | yes |  |
+| `operations.tables.setDefaultStyle.dryRun` | boolean | yes |  |
+| `operations.tables.setDefaultStyle.reasons` | enum[] | no |  |
+| `operations.tables.setDefaultStyle.tracked` | boolean | yes |  |
 | `operations.tables.setLayout` | object | yes |  |
 | `operations.tables.setLayout.available` | boolean | yes |  |
 | `operations.tables.setLayout.dryRun` | boolean | yes |  |
@@ -2495,6 +2510,14 @@ _No fields._
       ],
       "tracked": true
     },
+    "tables.clearDefaultStyle": {
+      "available": true,
+      "dryRun": true,
+      "reasons": [
+        "COMMAND_UNAVAILABLE"
+      ],
+      "tracked": true
+    },
     "tables.clearShading": {
       "available": true,
       "dryRun": true,
@@ -2599,6 +2622,14 @@ _No fields._
       ],
       "tracked": true
     },
+    "tables.getStyles": {
+      "available": true,
+      "dryRun": true,
+      "reasons": [
+        "COMMAND_UNAVAILABLE"
+      ],
+      "tracked": true
+    },
     "tables.insertCell": {
       "available": true,
       "dryRun": true,
@@ -2680,6 +2711,14 @@ _No fields._
       "tracked": true
     },
     "tables.setColumnWidth": {
+      "available": true,
+      "dryRun": true,
+      "reasons": [
+        "COMMAND_UNAVAILABLE"
+      ],
+      "tracked": true
+    },
+    "tables.setDefaultStyle": {
       "available": true,
       "dryRun": true,
       "reasons": [
@@ -9067,6 +9106,41 @@ _No fields._
           ],
           "type": "object"
         },
+        "tables.clearDefaultStyle": {
+          "additionalProperties": false,
+          "properties": {
+            "available": {
+              "type": "boolean"
+            },
+            "dryRun": {
+              "type": "boolean"
+            },
+            "reasons": {
+              "items": {
+                "enum": [
+                  "COMMAND_UNAVAILABLE",
+                  "HELPER_UNAVAILABLE",
+                  "OPERATION_UNAVAILABLE",
+                  "TRACKED_MODE_UNAVAILABLE",
+                  "DRY_RUN_UNAVAILABLE",
+                  "NAMESPACE_UNAVAILABLE",
+                  "STYLES_PART_MISSING",
+                  "COLLABORATION_ACTIVE"
+                ]
+              },
+              "type": "array"
+            },
+            "tracked": {
+              "type": "boolean"
+            }
+          },
+          "required": [
+            "available",
+            "tracked",
+            "dryRun"
+          ],
+          "type": "object"
+        },
         "tables.clearShading": {
           "additionalProperties": false,
           "properties": {
@@ -9522,6 +9596,41 @@ _No fields._
           ],
           "type": "object"
         },
+        "tables.getStyles": {
+          "additionalProperties": false,
+          "properties": {
+            "available": {
+              "type": "boolean"
+            },
+            "dryRun": {
+              "type": "boolean"
+            },
+            "reasons": {
+              "items": {
+                "enum": [
+                  "COMMAND_UNAVAILABLE",
+                  "HELPER_UNAVAILABLE",
+                  "OPERATION_UNAVAILABLE",
+                  "TRACKED_MODE_UNAVAILABLE",
+                  "DRY_RUN_UNAVAILABLE",
+                  "NAMESPACE_UNAVAILABLE",
+                  "STYLES_PART_MISSING",
+                  "COLLABORATION_ACTIVE"
+                ]
+              },
+              "type": "array"
+            },
+            "tracked": {
+              "type": "boolean"
+            }
+          },
+          "required": [
+            "available",
+            "tracked",
+            "dryRun"
+          ],
+          "type": "object"
+        },
         "tables.insertCell": {
           "additionalProperties": false,
           "properties": {
@@ -9873,6 +9982,41 @@ _No fields._
           "type": "object"
         },
         "tables.setColumnWidth": {
+          "additionalProperties": false,
+          "properties": {
+            "available": {
+              "type": "boolean"
+            },
+            "dryRun": {
+              "type": "boolean"
+            },
+            "reasons": {
+              "items": {
+                "enum": [
+                  "COMMAND_UNAVAILABLE",
+                  "HELPER_UNAVAILABLE",
+                  "OPERATION_UNAVAILABLE",
+                  "TRACKED_MODE_UNAVAILABLE",
+                  "DRY_RUN_UNAVAILABLE",
+                  "NAMESPACE_UNAVAILABLE",
+                  "STYLES_PART_MISSING",
+                  "COLLABORATION_ACTIVE"
+                ]
+              },
+              "type": "array"
+            },
+            "tracked": {
+              "type": "boolean"
+            }
+          },
+          "required": [
+            "available",
+            "tracked",
+            "dryRun"
+          ],
+          "type": "object"
+        },
+        "tables.setDefaultStyle": {
           "additionalProperties": false,
           "properties": {
             "available": {
@@ -10912,6 +11056,9 @@ _No fields._
         "tables.get",
         "tables.getCells",
         "tables.getProperties",
+        "tables.getStyles",
+        "tables.setDefaultStyle",
+        "tables.clearDefaultStyle",
         "create.tableOfContents",
         "toc.list",
         "toc.get",

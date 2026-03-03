@@ -1,6 +1,6 @@
 import type { Page } from '@playwright/test';
 import { test, expect } from '../../fixtures/superdoc.js';
-import { assertDocumentApiReady, listTrackChanges } from '../../helpers/document-api.js';
+import { assertDocumentApiReady } from '../../helpers/document-api.js';
 
 test.use({ config: { toolbar: 'full', comments: 'on', trackChanges: true } });
 
@@ -10,6 +10,14 @@ async function runCommands(page: Page, commands: EditorCommand[]): Promise<void>
   for (const [name, ...args] of commands) {
     await page.evaluate(({ name, args }) => (window as any).editor.commands[name](...args), { name, args });
   }
+}
+
+async function expectTrackedFormatDialog(page: Page) {
+  const dialog = page.locator('.comment-placeholder .comments-dialog', {
+    has: page.locator('.tracked-change-text'),
+  });
+  await expect(dialog).toBeVisible({ timeout: 10_000 });
+  return dialog;
 }
 
 test.describe('SD-2077 tracked format change displays correct description', () => {
@@ -36,10 +44,7 @@ test.describe('SD-2077 tracked format change displays correct description', () =
     await superdoc.assertTrackedChangeExists('format');
 
     // Wait for the tracked change comment dialog to appear
-    const dialog = superdoc.page.locator('.comment-placeholder .comments-dialog', {
-      has: superdoc.page.locator('.tracked-change-text'),
-    });
-    await expect(dialog).toBeVisible({ timeout: 10_000 });
+    const dialog = await expectTrackedFormatDialog(superdoc.page);
 
     // The format description should mention bold but NOT mention highlight removal
     const formatText = dialog.locator('.tracked-change-text');
@@ -77,10 +82,7 @@ test.describe('SD-2077 tracked format change displays correct description', () =
     // Verify tracked format change exists
     await superdoc.assertTrackedChangeExists('format');
 
-    const dialog = superdoc.page.locator('.comment-placeholder .comments-dialog', {
-      has: superdoc.page.locator('.tracked-change-text'),
-    });
-    await expect(dialog).toBeVisible({ timeout: 10_000 });
+    const dialog = await expectTrackedFormatDialog(superdoc.page);
 
     // Should show italic addition, not bold removal
     const formatText = dialog.locator('.tracked-change-text');
@@ -118,10 +120,7 @@ test.describe('SD-2077 tracked format change displays correct description', () =
     // Verify tracked format change exists
     await superdoc.assertTrackedChangeExists('format');
 
-    const dialog = superdoc.page.locator('.comment-placeholder .comments-dialog', {
-      has: superdoc.page.locator('.tracked-change-text'),
-    });
-    await expect(dialog).toBeVisible({ timeout: 10_000 });
+    const dialog = await expectTrackedFormatDialog(superdoc.page);
 
     // Should show color change, not highlight removal
     const formatText = dialog.locator('.tracked-change-text');

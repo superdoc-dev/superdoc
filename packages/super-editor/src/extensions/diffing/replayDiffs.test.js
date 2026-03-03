@@ -307,14 +307,17 @@ describe('compareDocuments defaults', () => {
     const afterEditor = await getEditorFromFixture('diff_after8.docx');
 
     try {
+      const emitSpy = vi.spyOn(beforeEditor, 'emit');
       const omittedCommentsDiff = beforeEditor.commands.compareDocuments(afterEditor.state.doc);
       expect(omittedCommentsDiff.commentDiffs).toHaveLength(0);
+      expect(emitSpy).not.toHaveBeenCalledWith('transaction', expect.anything());
 
       const explicitCommentsDiff = beforeEditor.commands.compareDocuments(
         afterEditor.state.doc,
         afterEditor.converter?.comments ?? [],
       );
       expect(explicitCommentsDiff.commentDiffs.length).toBeGreaterThan(0);
+      expect(emitSpy).not.toHaveBeenCalledWith('transaction', expect.anything());
     } finally {
       beforeEditor.destroy?.();
       afterEditor.destroy?.();

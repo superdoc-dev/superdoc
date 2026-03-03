@@ -22,7 +22,8 @@ export const Diffing = Extension.create({
        */
       compareDocuments:
         (updatedDocument, updatedComments) =>
-        ({ state }) => {
+        ({ state, tr }) => {
+          tr.setMeta('preventDispatch', true);
           const currentComments = this.editor.converter?.comments ?? [];
           const nextComments = updatedComments === undefined ? currentComments : updatedComments;
           const diffs = computeDiff(state.doc, updatedDocument, state.schema, currentComments, nextComments);

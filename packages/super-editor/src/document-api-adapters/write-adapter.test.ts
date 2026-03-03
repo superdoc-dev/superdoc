@@ -707,8 +707,9 @@ describe('writeAdapter', () => {
     );
 
     expect(receipt.success).toBe(true);
-    // Structural-end: creates a paragraph at doc.content.size (2)
+    // Structural-end: creates a paragraph at doc.content.size (2) with direct meta
     expect(tr.insert).toHaveBeenCalledWith(2, expect.anything());
+    expect(tr.setMeta).toHaveBeenCalledWith('skipTrackChanges', true);
     expect(dispatch).toHaveBeenCalledTimes(1);
   });
 

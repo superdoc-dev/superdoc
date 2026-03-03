@@ -43,7 +43,7 @@ import {
   rejectTrackedMode,
 } from '../helpers/mutation-helpers.js';
 import { TrackFormatMarkName } from '../../extensions/track-changes/constants.js';
-import { applyTrackedMutationMeta } from '../helpers/transaction-meta.js';
+import { applyDirectMutationMeta, applyTrackedMutationMeta } from '../helpers/transaction-meta.js';
 import { markdownToPmFragment } from '../../core/helpers/markdown/markdownToPmContent.js';
 import { processContent } from '../../core/helpers/contentProcessor.js';
 
@@ -285,7 +285,8 @@ export function writeWrapper(editor: Editor, request: WriteRequest, options?: Mu
     const receipt = executeDomainCommand(
       editor,
       (): boolean => {
-        insertParagraphAtEnd(editor, insertPos, text, mode === 'tracked' ? applyTrackedMutationMeta : undefined);
+        const meta = mode === 'tracked' ? applyTrackedMutationMeta : applyDirectMutationMeta;
+        insertParagraphAtEnd(editor, insertPos, text, meta);
         return true;
       },
       { expectedRevision: options?.expectedRevision },

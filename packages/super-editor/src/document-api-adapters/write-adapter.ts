@@ -167,7 +167,7 @@ function applyDirectWrite(editor: Editor, request: WriteRequest, resolvedTarget:
   // Structural-end: create a paragraph at the document end, since raw
   // insertText cannot place text between block nodes.
   if (resolvedTarget.structuralEnd) {
-    insertParagraphAtEnd(editor, resolvedTarget.range.from, request.text ?? '');
+    insertParagraphAtEnd(editor, resolvedTarget.range.from, request.text ?? '', applyDirectMutationMeta);
     return { success: true, resolution: resolvedTarget.resolution };
   }
 

@@ -1,4 +1,4 @@
-import { describe, it, expect } from 'vitest';
+import { describe, it, expect, vi } from 'vitest';
 
 import { Editor } from '@core/Editor.js';
 import { getStarterExtensions } from '@extensions/index.js';
@@ -108,6 +108,35 @@ const expectReplayMatchesFixtureWithDefaultOptions = async (beforeName, afterNam
 
     expect(success).toBe(true);
     expect(beforeEditor.state.doc.textContent).toBe(afterEditor.state.doc.textContent);
+  } finally {
+    beforeEditor.destroy?.();
+    afterEditor.destroy?.();
+  }
+};
+
+/**
+ * Ensures `editor.can().replayDifferences(...)` is side-effect free.
+ *
+ * @param {string} beforeName DOCX fixture filename for the baseline.
+ * @param {string} afterName DOCX fixture filename for the updated doc.
+ * @returns {Promise<void>}
+ */
+const expectReplayCanHasNoSideEffects = async (beforeName, afterName) => {
+  const beforeEditor = await getEditorFromFixture(beforeName);
+  const afterEditor = await getEditorFromFixture(afterName);
+
+  try {
+    const originalDocJSON = beforeEditor.state.doc.toJSON();
+    const originalCommentsJSON = JSON.parse(JSON.stringify(beforeEditor.converter?.comments ?? []));
+    const emitSpy = vi.spyOn(beforeEditor, 'emit');
+
+    const diff = beforeEditor.commands.compareDocuments(afterEditor.state.doc, afterEditor.converter?.comments ?? []);
+    const canReplay = beforeEditor.can().replayDifferences(diff);
+
+    expect(canReplay).toBe(true);
+    expect(beforeEditor.state.doc.toJSON()).toEqual(originalDocJSON);
+    expect(beforeEditor.converter?.comments ?? []).toEqual(originalCommentsJSON);
+    expect(emitSpy).not.toHaveBeenCalledWith('commentsUpdate', { type: 'replayCompleted' });
   } finally {
     beforeEditor.destroy?.();
     afterEditor.destroy?.();
@@ -238,6 +267,11 @@ describe('replayDiffs', runReplayDiffsSuite);
 describe('replayDifferences options', () => {
   it('accepts omitted options object', async () => {
     await expectReplayMatchesFixtureWithDefaultOptions('diff_before.docx', 'diff_after.docx');
+  });
+});
+describe('replayDifferences can()', () => {
+  it('does not replay or emit when evaluated through can()', async () => {
+    await expectReplayCanHasNoSideEffects('diff_before8.docx', 'diff_after8.docx');
   });
 });
 describe('replayDiffs tracked changes', runTrackedReplayDiffsSuite);

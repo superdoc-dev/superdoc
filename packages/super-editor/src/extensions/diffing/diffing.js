@@ -43,6 +43,10 @@ export const Diffing = Extension.create({
       replayDifferences:
         (diff, { applyTrackedChanges = true } = {}) =>
         ({ state, dispatch }) => {
+          if (!dispatch) {
+            return true;
+          }
+
           const comments = this.editor.converter
             ? Array.isArray(this.editor.converter.comments)
               ? this.editor.converter.comments

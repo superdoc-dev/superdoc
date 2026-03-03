@@ -5,7 +5,9 @@
  */
 
 import type {
+  BorderStyle,
   BoxSpacing,
+  CellBorders,
   CellSpacing,
   FlowBlock,
   ParagraphBlock,
@@ -32,7 +34,7 @@ import type {
   NestedConverters,
   TableNodeToBlockParams,
 } from '../types.js';
-import { extractTableBorders, extractCellBorders, extractCellPadding } from '../attributes/index.js';
+import { extractTableBorders, extractCellPadding, convertBorderSpec } from '../attributes/index.js';
 import { pickNumber, twipsToPx } from '../utilities.js';
 import { hydrateTableStyleAttrs } from './table-styles.js';
 import { collectTrackedChangeFromMarks } from '../marks/index.js';
@@ -42,7 +44,11 @@ import {
   applySdtMetadataToParagraphBlocks,
   applySdtMetadataToTableBlock,
 } from '../sdt/index.js';
-import { TableProperties, resolveTableCellProperties } from '@superdoc/style-engine/ooxml';
+import {
+  TableProperties,
+  resolveTableCellProperties,
+  resolveExistingTableEffectiveStyleId,
+} from '@superdoc/style-engine/ooxml';
 
 /**
  * Normalizes tableCellSpacing from PM node to CellSpacing object format.
@@ -60,6 +66,36 @@ function normalizeCellSpacing(raw: number | { value?: number; type?: string } | 
   const t = (raw.type ?? 'px').toLowerCase();
   const type = t === 'dxa' ? 'dxa' : 'px';
   return { value, type };
+}
+
+function normalizeLegacyBorderStyle(value: string | undefined): BorderStyle {
+  switch ((value ?? '').trim().toLowerCase()) {
+    case 'none':
+    case 'nil':
+      return 'none';
+    case 'double':
+      return 'double';
+    case 'dashed':
+      return 'dashed';
+    case 'dotted':
+    case 'dot':
+      return 'dotted';
+    case 'thick':
+      return 'thick';
+    case 'triple':
+      return 'triple';
+    case 'dotdash':
+      return 'dotDash';
+    case 'dotdotdash':
+      return 'dotDotDash';
+    case 'wave':
+      return 'wave';
+    case 'doublewave':
+      return 'doubleWave';
+    case 'single':
+    default:
+      return 'single';
+  }
 }
 
 type TableParserDependencies = {
@@ -83,8 +119,6 @@ type ParseTableCellArgs = {
   context: TableParserDependencies;
   defaultCellPadding?: BoxSpacing;
   tableProperties?: TableProperties;
-  /** When true, table-level borders exist (from hydrated style or inline) so schema-default cell borders can be skipped. */
-  hasTableLevelBorders?: boolean;
 };
 
 type ParseTableRowArgs = {
@@ -95,8 +129,6 @@ type ParseTableRowArgs = {
   defaultCellPadding?: BoxSpacing;
   /** Table style to pass to paragraph converter for style cascade */
   tableProperties?: TableProperties;
-  /** When true, table-level borders exist so schema-default cell borders can be skipped. */
-  hasTableLevelBorders?: boolean;
 };
 
 const isTableRowNode = (node: PMNode): boolean => node.type === 'tableRow' || node.type === 'table_row';
@@ -199,17 +231,7 @@ const normalizeRowHeight = (rowProps?: Record<string, unknown>): NormalizedRowHe
  * // Returns: null
  */
 const parseTableCell = (args: ParseTableCellArgs): TableCell | null => {
-  const {
-    cellNode,
-    rowIndex,
-    cellIndex,
-    numCells,
-    numRows,
-    context,
-    defaultCellPadding,
-    tableProperties,
-    hasTableLevelBorders,
-  } = args;
+  const { cellNode, rowIndex, cellIndex, numCells, numRows, context, defaultCellPadding, tableProperties } = args;
   if (!isTableCellNode(cellNode) || !Array.isArray(cellNode.content)) {
     return null;
   }
@@ -444,24 +466,40 @@ const parseTableCell = (args: ParseTableCellArgs): TableCell | null => {
 
   const cellAttrs: TableCellAttrs = {};
 
-  // Schema-default cell borders (from createCellBorders) have { size, color } without a `val`
-  // property, while OOXML-imported borders always include `val` (e.g., 'single', 'none').
-  // When table-level borders exist (from a hydrated style like TableGrid), skip schema defaults
-  // so the painter's resolveTableCellBorders can distribute table borders to cells properly.
-  // When NO table-level borders exist, keep schema defaults as the fallback (matching Word's
-  // default behavior of showing single black borders on new tables).
-  const rawBorders = cellNode.attrs?.borders as Record<string, Record<string, unknown>> | undefined;
-  const isSchemaDefaultBorders =
-    rawBorders &&
-    typeof rawBorders === 'object' &&
-    ['top', 'right', 'bottom', 'left'].every((side) => {
-      const b = rawBorders[side];
-      return b && typeof b === 'object' && !('val' in b);
-    });
+  // Cell borders come from the style-engine cascade (resolvedTcProps.borders).
+  // Inline tableCellProperties.borders are already folded into resolvedTcProps
+  // by resolveTableCellProperties (inline wins over style cascade).
+  if (resolvedTcProps?.borders && typeof resolvedTcProps.borders === 'object') {
+    const resolvedBorders: CellBorders = {};
+    for (const side of ['top', 'right', 'bottom', 'left'] as const) {
+      const spec = convertBorderSpec((resolvedTcProps.borders as Record<string, unknown>)[side]);
+      if (spec) resolvedBorders[side] = spec;
+    }
+    if (Object.keys(resolvedBorders).length > 0) {
+      cellAttrs.borders = resolvedBorders;
+    }
+  }
 
-  if (!(isSchemaDefaultBorders && hasTableLevelBorders)) {
-    const borders = extractCellBorders(cellNode.attrs ?? {});
-    if (borders) cellAttrs.borders = borders;
+  // Fallback: older persisted docs may store cell borders in attrs.borders
+  // (pre-migration pixel format: { size: px, color: hex, val: string }).
+  // The transaction-based migration only runs when an edit touches the table
+  // range, so untouched legacy cells need this fallback for rendering.
+  // Only borders with a `val` property qualify — old schema defaults from
+  // createCellBorders() lack `val` and should be ignored (the style-engine
+  // resolves those from the table style cascade).
+  if (!cellAttrs.borders && cellNode.attrs?.borders && typeof cellNode.attrs.borders === 'object') {
+    const legacy = cellNode.attrs.borders as Record<string, { size?: number; color?: string; val?: string }>;
+    const fallback: CellBorders = {};
+    for (const side of ['top', 'right', 'bottom', 'left'] as const) {
+      const b = legacy[side];
+      if (b && b.val && typeof b.size === 'number' && b.size > 0) {
+        const color = b.color ? (b.color.startsWith('#') ? b.color : `#${b.color}`) : '#000000';
+        fallback[side] = { style: normalizeLegacyBorderStyle(b.val), width: b.size, color };
+      }
+    }
+    if (Object.keys(fallback).length > 0) {
+      cellAttrs.borders = fallback;
+    }
   }
 
   const padding =
@@ -541,7 +579,7 @@ const parseTableCell = (args: ParseTableCellArgs): TableCell | null => {
  * // Returns: null
  */
 const parseTableRow = (args: ParseTableRowArgs): TableRow | null => {
-  const { rowNode, rowIndex, context, defaultCellPadding, tableProperties, numRows, hasTableLevelBorders } = args;
+  const { rowNode, rowIndex, context, defaultCellPadding, tableProperties, numRows } = args;
   if (!isTableRowNode(rowNode) || !Array.isArray(rowNode.content)) {
     return null;
   }
@@ -557,7 +595,6 @@ const parseTableRow = (args: ParseTableRowArgs): TableRow | null => {
       tableProperties,
       numCells: rowNode?.content?.length || 1,
       numRows,
-      hasTableLevelBorders,
     });
     if (parsedCell) {
       cells.push(parsedCell);
@@ -751,24 +788,27 @@ export function tableNodeToBlock(
     enableComments,
   };
 
-  const hydratedTableStyle = hydrateTableStyleAttrs(node, converterContext);
+  // Compute the effective table style ID once per table. This single canonical
+  // style ID is used for both table-level hydration and cell/paragraph cascades.
+  const explicitStyleId = typeof node.attrs?.tableStyleId === 'string' ? node.attrs.tableStyleId : null;
+  const resolvedStyle = resolveExistingTableEffectiveStyleId(explicitStyleId, converterContext?.translatedLinkedStyles);
+  const effectiveStyleId = resolvedStyle.styleId;
+
+  const hydratedTableStyle = hydrateTableStyleAttrs(node, converterContext, effectiveStyleId);
   const defaultCellPadding = hydratedTableStyle?.cellPadding;
 
-  // Pre-compute whether table-level borders exist (from inline or hydrated style).
-  // When they do, schema-default cell borders can be safely skipped so the painter's
-  // resolveTableCellBorders distributes table borders to cells.
-  // When they don't, cell schema defaults are kept as fallback.
-  const inlineBorders = node.attrs?.borders;
-  const hasInlineBorders =
-    inlineBorders &&
-    typeof inlineBorders === 'object' &&
-    inlineBorders !== null &&
-    Object.keys(inlineBorders as Record<string, unknown>).length > 0;
-  const hasHydratedBorders =
-    hydratedTableStyle?.borders &&
-    typeof hydratedTableStyle.borders === 'object' &&
-    Object.keys(hydratedTableStyle.borders).length > 0;
-  const hasTableLevelBorders = !!(hasInlineBorders || hasHydratedBorders);
+  // Build tableProperties with the effective style ID for consistent cascade resolution.
+  // PM node attrs are never mutated — the effective ID lives only in this transient object.
+  // When effectiveStyleId is null (resolver found no style), strip any raw tableStyleId
+  // from the cascade object to prevent invalid IDs from influencing resolution.
+  const rawTableProperties = node.attrs?.tableProperties as TableProperties | undefined;
+  const tablePropertiesForCascade: TableProperties | undefined =
+    effectiveStyleId || rawTableProperties
+      ? {
+          ...rawTableProperties,
+          tableStyleId: effectiveStyleId ?? undefined,
+        }
+      : undefined;
 
   const rows: TableRow[] = [];
   node.content.forEach((rowNode, rowIndex) => {
@@ -778,8 +818,7 @@ export function tableNodeToBlock(
       numRows: node?.content?.length ?? 1,
       context: parserDeps,
       defaultCellPadding,
-      tableProperties: node.attrs?.tableProperties as TableProperties | undefined,
-      hasTableLevelBorders,
+      tableProperties: tablePropertiesForCascade,
     });
     if (parsedRow) {
       rows.push(parsedRow);

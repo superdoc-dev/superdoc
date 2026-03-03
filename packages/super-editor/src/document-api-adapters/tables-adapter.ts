@@ -384,13 +384,12 @@ function cellSidesForEdge(
 function tableBorderToCellBorder(border: Record<string, unknown>): Record<string, unknown> {
   const val = typeof border.val === 'string' ? border.val : 'single';
   const color = typeof border.color === 'string' ? border.color : 'auto';
-  const sizeEighthPoints = typeof border.size === 'number' ? border.size : 0;
-  const sizePx = val === 'none' || val === 'nil' ? 0 : (sizeEighthPoints / 8) * POINTS_TO_PIXELS;
+  const size = typeof border.size === 'number' ? border.size : 0;
 
   return {
     val,
     color,
-    size: sizePx,
+    size: val === 'none' || val === 'nil' ? 0 : size,
     space: 0,
   };
 }
@@ -423,14 +422,17 @@ function applyTableEdgeToCellBorders(
       if (!cellNode) continue;
 
       const cellAttrs = cellNode.attrs as Record<string, unknown>;
-      const borders = { ...((cellAttrs.borders ?? {}) as Record<string, unknown>) };
+      const tcp = { ...((cellAttrs.tableCellProperties ?? {}) as Record<string, unknown>) };
+      const borders = { ...((tcp.borders ?? {}) as Record<string, unknown>) };
       for (const side of targetSides) {
         borders[side] = { ...cellBorder };
       }
+      tcp.borders = borders;
 
       tr.setNodeMarkup(tr.mapping.slice(mapFrom).map(tableStart + relPos), null, {
         ...cellAttrs,
-        borders,
+        borders: null,
+        tableCellProperties: tcp,
       });
     }
   }
@@ -464,7 +466,8 @@ function applyTableBorderPresetToCellBorders(
       if (!cellNode) continue;
 
       const cellAttrs = cellNode.attrs as Record<string, unknown>;
-      const borders = { ...((cellAttrs.borders ?? {}) as Record<string, unknown>) };
+      const tcp = { ...((cellAttrs.tableCellProperties ?? {}) as Record<string, unknown>) };
+      const borders = { ...((tcp.borders ?? {}) as Record<string, unknown>) };
 
       if (preset === 'none') {
         borders.top = { ...noneBorder };
@@ -483,10 +486,12 @@ function applyTableBorderPresetToCellBorders(
         borders.left = { ...singleBorder };
         borders.right = { ...singleBorder };
       }
+      tcp.borders = borders;
 
       tr.setNodeMarkup(tr.mapping.slice(mapFrom).map(tableStart + relPos), null, {
         ...cellAttrs,
-        borders,
+        borders: null,
+        tableCellProperties: tcp,
       });
     }
   }
@@ -2871,7 +2876,8 @@ export function tablesSetBorderAdapter(
 
     currentProps.borders = currentBorders;
     const syncAttrs = resolved.scope === 'table' ? syncExtractedTableAttrs(currentProps) : {};
-    tr.setNodeMarkup(resolved.pos, null, { ...currentAttrs, [propsKey]: currentProps, ...syncAttrs });
+    const cellClear = resolved.scope === 'cell' ? { borders: null } : {};
+    tr.setNodeMarkup(resolved.pos, null, { ...currentAttrs, [propsKey]: currentProps, ...syncAttrs, ...cellClear });
 
     if (resolved.scope === 'table' && isBoundaryEdge(input.edge)) {
       applyTableEdgeToCellBorders(
@@ -2923,7 +2929,8 @@ export function tablesClearBorderAdapter(
 
     currentProps.borders = currentBorders;
     const syncAttrs = resolved.scope === 'table' ? syncExtractedTableAttrs(currentProps) : {};
-    tr.setNodeMarkup(resolved.pos, null, { ...currentAttrs, [propsKey]: currentProps, ...syncAttrs });
+    const cellClear = resolved.scope === 'cell' ? { borders: null } : {};
+    tr.setNodeMarkup(resolved.pos, null, { ...currentAttrs, [propsKey]: currentProps, ...syncAttrs, ...cellClear });
 
     if (resolved.scope === 'table' && isBoundaryEdge(input.edge)) {
       applyTableEdgeToCellBorders(

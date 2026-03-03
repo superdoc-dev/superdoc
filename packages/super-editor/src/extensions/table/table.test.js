@@ -8,6 +8,7 @@ import { promises as fs } from 'fs';
 // Cache DOCX data to avoid repeated file loading
 let cachedBlankDoc = null;
 let cachedBordersDoc = null;
+let cachedNoTableStyleDoc = null;
 
 /**
  * Find the first table position within the provided document.
@@ -38,6 +39,7 @@ describe('Table commands', async () => {
   beforeAll(async () => {
     cachedBlankDoc = await loadTestDataForEditorTests('blank-doc.docx');
     cachedBordersDoc = await loadTestDataForEditorTests('SD-978-remove-table-borders.docx');
+    cachedNoTableStyleDoc = await loadTestDataForEditorTests('ooxml-bold-rstyle-linked-combos-demo.docx');
   });
 
   const setupTestTable = async () => {
@@ -846,22 +848,23 @@ describe('Table commands', async () => {
 
     const sharedTests = async () => {
       it('removes all borders on the table', async () => {
-        // Expect table cell borders to be removed
+        const nilBorders = Object.assign(
+          {},
+          ...['top', 'left', 'bottom', 'right'].map((side) => ({
+            [side]: {
+              color: 'auto',
+              size: 0,
+              space: 0,
+              val: 'nil',
+            },
+          })),
+        );
+
+        // Expect cell borders cleared from attrs.borders, written to tableCellProperties.borders
         table.children.forEach((tableRow) => {
           tableRow.children.forEach((tableCell) => {
-            expect(tableCell.attrs.borders).toEqual(
-              Object.assign(
-                {},
-                ...['top', 'left', 'bottom', 'right'].map((side) => ({
-                  [side]: {
-                    color: 'auto',
-                    size: 0,
-                    space: 0,
-                    val: 'none',
-                  },
-                })),
-              ),
-            );
+            expect(tableCell.attrs.borders).toBeNull();
+            expect(tableCell.attrs.tableCellProperties?.borders).toEqual(nilBorders);
           });
         });
 
@@ -957,6 +960,23 @@ describe('Table commands', async () => {
       });
 
       sharedTests();
+    });
+  });
+
+  describe('table style normalization', async () => {
+    it('does not force TableGrid on imported DOCX tables that have OOXML table metadata', async () => {
+      const { docx, media, mediaFiles, fonts } = cachedNoTableStyleDoc;
+      ({ editor } = initTestEditor({ content: docx, media, mediaFiles, fonts }));
+
+      const tablePos = findTablePos(editor.state.doc);
+      expect(tablePos).not.toBeNull();
+
+      const tableNode = editor.state.doc.nodeAt(tablePos);
+      expect(tableNode?.type.name).toBe('table');
+      expect(tableNode?.attrs.tableStyleId).toBeNull();
+      expect(tableNode?.attrs.tableProperties?.tableStyleId).toBeUndefined();
+      expect(Array.isArray(tableNode?.attrs.grid) && tableNode.attrs.grid.length > 0).toBe(true);
+      expect(tableNode?.attrs.tableProperties?.tblLook).toBeDefined();
     });
   });
 });

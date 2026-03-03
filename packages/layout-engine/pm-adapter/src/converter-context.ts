@@ -44,6 +44,11 @@ export type ConverterContext = {
    * contrast with the cell background per WCAG guidelines.
    */
   backgroundColor?: string;
+  /**
+   * Default table style ID from `w:defaultTableStyle` in document settings.
+   * Used by table creation paths to determine which style to apply to new tables.
+   */
+  defaultTableStyleId?: string;
 };
 
 /**

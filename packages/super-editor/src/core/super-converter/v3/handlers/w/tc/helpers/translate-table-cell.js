@@ -1,12 +1,10 @@
-import {
-  pixelsToTwips,
-  inchesToTwips,
-  pixelsToEightPoints,
-  twipsToPixels,
-  eighthPointsToPixels,
-} from '@converter/helpers';
+import { pixelsToTwips, inchesToTwips, twipsToPixels } from '@converter/helpers';
 import { translateChildNodes } from '@converter/v2/exporter/helpers/index';
 import { translator as tcPrTranslator } from '../../tcPr';
+import {
+  isLegacySchemaDefaultBorders,
+  convertBordersToOoxmlFormat,
+} from '../../../../../../../extensions/table-cell/helpers/legacyBorderMigration.js';
 
 /**
  * Main translation function for a table cell.
@@ -34,7 +32,7 @@ export function translateTableCell(params) {
  * @returns {import('@converter/exporter').XmlReadyNode}
  */
 export function generateTableCellProperties(node) {
-  const tableCellProperties = { ...(node.attrs?.tableCellProperties || {}) };
+  let tableCellProperties = { ...(node.attrs?.tableCellProperties || {}) };
 
   const { attrs } = node;
 
@@ -112,35 +110,15 @@ export function generateTableCellProperties(node) {
     delete tableCellProperties.vMerge;
   }
 
-  const { borders = {} } = attrs;
-  if (!!borders && Object.keys(borders).length) {
-    ['top', 'bottom', 'left', 'right'].forEach((side) => {
-      if (borders[side]) {
-        let currentPropertyValue = tableCellProperties.borders?.[side];
-        let currentPropertySizePixels = eighthPointsToPixels(currentPropertyValue?.size);
-        let color = borders[side].color;
-        if (borders[side].color && color === '#000000') {
-          color = 'auto';
-        }
-        if (
-          currentPropertySizePixels !== borders[side].size ||
-          currentPropertyValue?.color !== color ||
-          borders[side].val !== currentPropertyValue?.val
-        ) {
-          if (!tableCellProperties.borders) tableCellProperties['borders'] = {};
-          tableCellProperties.borders[side] = {
-            size: pixelsToEightPoints(borders[side].size || 0),
-            color: color,
-            space: borders[side].space || 0,
-            val: borders[side].val || 'single',
-          };
-        }
-      } else if (tableCellProperties.borders?.[side]) {
-        delete tableCellProperties.borders[side];
-      }
-    });
-  } else if (tableCellProperties?.borders) {
-    delete tableCellProperties.borders;
+  // Legacy fallback: if tableCellProperties.borders is absent but attrs.borders
+  // has non-default values, migrate them on the fly for export (read-only, no node mutation).
+  if (!tableCellProperties?.borders && attrs.borders != null) {
+    if (!isLegacySchemaDefaultBorders(attrs.borders)) {
+      tableCellProperties = {
+        ...(tableCellProperties ?? {}),
+        borders: convertBordersToOoxmlFormat(attrs.borders),
+      };
+    }
   }
 
   const result = tcPrTranslator.decode({ node: { ...node, attrs: { ...node.attrs, tableCellProperties } } });

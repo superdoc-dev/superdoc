@@ -7,7 +7,6 @@ import { createCell } from './createCell.js';
 import { createColGroup } from './createColGroup.js';
 import { createTableBorders } from './createTableBorders.js';
 import { getColStyleDeclaration } from './getColStyleDeclaration.js';
-import { createCellBorders } from '../../table-cell/helpers/createCellBorders.js';
 import { deleteTableWhenSelected } from './deleteTableWhenSelected.js';
 import { isCellSelection } from './isCellSelection.js';
 import { cellAround } from './cellAround.js';
@@ -171,8 +170,9 @@ describe('tableHelpers', () => {
     expect(result.colgroupValues).toEqual([120, 150, 96]);
   });
 
-  it('createTable builds tables with rows, optional header, and borders', () => {
-    const table = createTable(schema, 2, 3, true);
+  it('createTable builds tables with rows, optional header, and custom attrs', () => {
+    const tableAttrs = { tableStyleId: 'TableGrid', borders: { top: { size: 1 } } };
+    const table = createTable(schema, 2, 3, true, null, null, tableAttrs);
     expect(table.type.name).toBe('table');
     expect(table.firstChild.childCount).toBe(3);
     expect(table.attrs.borders.top).toBeDefined();
@@ -184,6 +184,12 @@ describe('tableHelpers', () => {
     expect(table.firstChild.attrs.tableRowProperties?.repeatHeader).toBe(true);
     // Body row should not
     expect(table.child(1).attrs.tableRowProperties?.repeatHeader).toBeFalsy();
+  });
+
+  it('createTable builds tables without attrs when none provided', () => {
+    const table = createTable(schema, 2, 3, false);
+    expect(table.type.name).toBe('table');
+    expect(table.childCount).toBe(2);
   });
 
   it('createTable applies column widths when provided', () => {
@@ -465,7 +471,7 @@ describe('tableHelpers', () => {
       });
 
       expect(newRow?.content.content[0].type.name).toBe('tableCell');
-      expect(newRow?.content.content[0].attrs.borders).toEqual(createCellBorders());
+      expect(newRow?.content.content[0].attrs.borders).toBeNull();
     });
 
     it('buildRowFromTemplateRow copies style when copyRowStyle is true', () => {
@@ -550,7 +556,7 @@ describe('tableHelpers', () => {
       const updatedTable = tr.doc.nodeAt(tablePos);
       const insertedCell = updatedTable?.child(1)?.child(0);
       expect(insertedCell?.type.name).toBe('tableCell');
-      expect(insertedCell?.attrs.borders).toEqual(createCellBorders());
+      expect(insertedCell?.attrs.borders).toBeNull();
     });
   });
 });

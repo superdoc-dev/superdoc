@@ -825,7 +825,9 @@ describe('table converter', () => {
       expect(result.rows[0].cells[0].attrs?.borders).toBeUndefined();
     });
 
-    it('keeps schema-default cell borders when no table-level borders exist', () => {
+    it('ignores legacy schema-default cell borders (style-engine resolves borders)', () => {
+      // Old schema defaults have { size, color } without `val` — these are no longer
+      // read from attrs.borders. Cell borders now come from style-engine resolution.
       const schemaDefaultBorders = {
         top: { size: 8, color: '000000' },
         right: { size: 8, color: '000000' },
@@ -862,10 +864,9 @@ describe('table converter', () => {
         mockParagraphConverter,
       ) as TableBlock;
 
-      expect(result.rows[0].cells[0].attrs?.borders).toBeDefined();
-      expect(result.rows[0].cells[0].attrs?.borders?.top).toEqual(
-        expect.objectContaining({ style: 'single', color: '#000000' }),
-      );
+      // attrs.borders are ignored — style-engine-resolved borders (from resolveTableCellProperties)
+      // would provide borders, but this test has no style catalog so borders are undefined.
+      expect(result.rows[0].cells[0].attrs?.borders).toBeUndefined();
     });
 
     it('extracts cell padding when present', () => {

@@ -177,6 +177,7 @@ import { createTable } from './tableHelpers/createTable.js';
 import { createColGroup } from './tableHelpers/createColGroup.js';
 import { deleteTableWhenSelected } from './tableHelpers/deleteTableWhenSelected.js';
 import { normalizeNewTableAttrs } from './tableHelpers/normalizeNewTableAttrs.js';
+import { computeColumnWidths } from './tableHelpers/computeColumnWidths.js';
 import { createTableBorders } from './tableHelpers/createTableBorders.js';
 import {
   isLegacySchemaDefaultBorders,
@@ -622,21 +623,7 @@ export const Table = Node.create({
       insertTable:
         ({ rows = 3, cols = 3, withHeaderRow = false, columnWidths = null } = {}) =>
         ({ tr, dispatch, editor }) => {
-          let widths = columnWidths;
-
-          // If no widths provided, auto-calculate to fill available page width
-          if (!widths) {
-            const { pageSize = {}, pageMargins = {} } = editor.converter?.pageStyles ?? {};
-            const { width: pageWidth } = pageSize;
-            const { left = 0, right = 0 } = pageMargins;
-
-            if (pageWidth) {
-              // Page dimensions are in inches, convert to pixels (96 PPI)
-              const availableWidth = (pageWidth - left - right) * 96;
-              const columnWidth = Math.floor(availableWidth / cols);
-              widths = Array(cols).fill(columnWidth);
-            }
-          }
+          const widths = columnWidths ?? computeColumnWidths(editor, cols);
 
           const resolved = normalizeNewTableAttrs(editor);
           const tableAttrs = {
@@ -693,11 +680,13 @@ export const Table = Node.create({
               Array.from({ length: 8 }, () => Math.floor(Math.random() * 16).toString(16))
                 .join('')
                 .toUpperCase();
+            const widths = computeColumnWidths(editor, columns);
             const rowNodes = [];
             for (let r = 0; r < rows; r++) {
               const cellNodes = [];
               for (let c = 0; c < columns; c++) {
-                const cell = tableCellType.createAndFill({ paraId: genParaId() });
+                const cellAttrs = { paraId: genParaId(), ...(widths ? { colwidth: [widths[c]] } : {}) };
+                const cell = tableCellType.createAndFill(cellAttrs);
                 if (!cell) return false;
                 cellNodes.push(cell);
               }

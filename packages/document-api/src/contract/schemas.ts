@@ -1552,6 +1552,10 @@ const operationSchemas: Record<OperationId, OperationSchemaSet> = {
     input: strictEmptyObjectSchema,
     output: { type: 'string' },
   },
+  getMarkdown: {
+    input: strictEmptyObjectSchema,
+    output: { type: 'string' },
+  },
   info: {
     input: strictEmptyObjectSchema,
     output: documentInfoSchema,

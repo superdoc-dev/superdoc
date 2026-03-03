@@ -10,11 +10,11 @@
  * Examples:
  *   pnpm docs:upload ~/Downloads/bug-repro.docx
  */
-import { execSync, spawn } from 'node:child_process';
+import { spawn } from 'node:child_process';
 import fs from 'node:fs';
 import path from 'node:path';
 import process from 'node:process';
-import { intro, outro, text, confirm, cancel, isCancel, log } from '@clack/prompts';
+import { intro, outro, text, confirm, cancel, isCancel } from '@clack/prompts';
 
 const REPO_ROOT = path.resolve(import.meta.dirname, '../../..');
 
@@ -99,26 +99,10 @@ async function main() {
     throw new Error(`Corpus upload failed with exit code ${uploadExitCode}.`);
   }
 
-  // Trigger baseline generation if gh CLI is available
-  let triggered = false;
-  try {
-    execSync('gh auth status', { stdio: 'ignore' });
-    const trigger = exitIfCancelled(await confirm({ message: 'Trigger baseline generation in CI?' }));
-    if (trigger) {
-      execSync('gh workflow run visual-baseline.yml --repo superdoc-dev/superdoc', { stdio: 'inherit' });
-      triggered = true;
-    }
-  } catch {
-    log.info('Tip: run `gh auth login` to auto-trigger baseline generation after upload.');
-  }
-
   outro(
     `Uploaded! Next:\n` +
-      `  1. pnpm docs:download          # pull the new file locally\n` +
-      `  2. pnpm test                    # verify it loads and renders\n` +
-      (triggered
-        ? `  Baselines are being generated in CI from the stable branch.`
-        : `  Baselines: trigger manually via gh workflow run visual-baseline.yml`),
+      `  1. pnpm corpus:pull             # pull the new file locally\n` +
+      `  2. pnpm test:visual             # verify it renders correctly`,
   );
 }
 

@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import inspect
 import json
+import re
 from importlib import resources
 from typing import Any, Dict, List, Literal, Mapping, Optional, TypedDict, cast
 
@@ -464,15 +465,31 @@ def _resolve_doc_method(client: Any, operation_id: str) -> Any:
     if doc is None:
         raise SuperDocError('Client has no doc API.', code='TOOL_DISPATCH_NOT_FOUND', details={'operationId': operation_id})
 
+    def _snake_case(token: str) -> str:
+        token = re.sub(r'([A-Z]+)([A-Z][a-z])', r'\1_\2', token)
+        token = re.sub(r'([a-z0-9])([A-Z])', r'\1_\2', token)
+        return token.replace('-', '_').lower()
+
     cursor = doc
     for token in operation_id.split('.')[1:]:
-        if not hasattr(cursor, token):
+        candidates = [token]
+        snake_token = _snake_case(token)
+        if snake_token != token:
+            candidates.append(snake_token)
+
+        resolved = None
+        for candidate in candidates:
+            if hasattr(cursor, candidate):
+                resolved = getattr(cursor, candidate)
+                break
+
+        if resolved is None:
             raise SuperDocError(
                 'No SDK doc method found for operation.',
                 code='TOOL_DISPATCH_NOT_FOUND',
                 details={'operationId': operation_id, 'token': token},
             )
-        cursor = getattr(cursor, token)
+        cursor = resolved
 
     if not callable(cursor):
         raise SuperDocError(

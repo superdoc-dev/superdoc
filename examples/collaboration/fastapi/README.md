@@ -3,8 +3,9 @@
 Tiny demo focused on one thing: open a realtime collaboration session from Python and mutate it via HTTP.
 
 `main.py` is currently hardcoded for the local `@y/hub` server in `./yjs-hub`.
-It is also hardcoded to use the repo CLI at `apps/cli/src/index.ts` (via bun)
-and local state at `examples/collaboration/fastapi/.superdoc-state`.
+It uses the pip-installed `superdoc-sdk` CLI companion by default
+and the async Python SDK client (`AsyncSuperDocClient`)
+and writes `/download` output to `examples/collaboration/fastapi/.superdoc-state/download.docx`.
 
 ## 1) FastAPI setup
 
@@ -43,11 +44,19 @@ If you already run Redis/Postgres locally, use:
 ```
 
 The bundled `yjs-hub` demo is ephemeral by default (no persistence across server restarts).
+It now also requires a shared websocket token. This FastAPI example passes it via
+`collaboration.tokenEnv` (`YHUB_AUTH_TOKEN`) and defaults to `YOUR_PRIVATE_TOKEN`.
 
 This serves websocket rooms at:
 
 ```text
 ws://127.0.0.1:8081/v1/collaboration/:documentId
+```
+
+If you want a different token value, set this env var before starting:
+
+```bash
+export YHUB_AUTH_TOKEN="my-demo-token"
 ```
 
 ### Option B: Internal repo dev collab server
@@ -78,4 +87,5 @@ curl "http://127.0.0.1:8000/insert?text=hello%20world"
 - `GET /` returns open result + collab config.
 - `GET /status` returns current document/session status.
 - `GET /insert?text=...` inserts text into the live collaborative doc.
+- `GET /markdown` extracts the document content as Markdown and renders it in the browser.
 - `GET /download` exports the current session as `.docx` and downloads it.

@@ -63,6 +63,7 @@ export function buildDispatchTable(api: DocumentApi): TypedDispatchTable {
     getNode: (input) => api.getNode(input),
     getNodeById: (input) => api.getNodeById(input),
     getText: (input) => api.getText(input),
+    getMarkdown: (input) => api.getMarkdown(input),
     info: (input) => api.info(input),
 
     // --- Singleton mutations ---

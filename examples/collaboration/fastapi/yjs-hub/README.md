@@ -2,8 +2,8 @@
 
 Minimal local collaboration server using `@y/hub`.
 
-This is intentionally insecure and local-only:
-- no real auth (always read/write)
+This is intentionally local-only:
+- shared-token auth (query param `?token=...`)
 - no persistence (ephemeral mode)
 - local Redis + Postgres via Docker
 
@@ -20,6 +20,17 @@ pnpm run dev
 If Redis/Postgres are already running locally, skip `deps:up` and run `pnpm run dev`.
 
 Node.js 22+ is required by `@y/hub`.
+
+## Auth token
+
+WebSocket connections must provide `token` query param matching `YHUB_AUTH_TOKEN`.
+
+- default token: `YOUR_PRIVATE_TOKEN`
+- override: `YHUB_AUTH_TOKEN=<your-token> pnpm run dev`
+
+FastAPI example wiring:
+- `main.py` passes `collaboration.tokenEnv = "YHUB_AUTH_TOKEN"`
+- `main.py` sets `YHUB_AUTH_TOKEN=YOUR_PRIVATE_TOKEN` by default at startup
 
 ## Ephemeral behavior (default)
 
@@ -58,6 +69,7 @@ For the FastAPI sample (which passes `url` + `documentId` separately), use:
 
 The server logs:
 - websocket connect path + room + query hints (`onMissing`, `openMode`, or `seed` if present)
+- websocket token pass/fail (`token=ok` on accepted connections)
 - inferred room state at auth time: `existing | missing | unknown`
 - each incoming `ydoc:update` with update size and a rough seed/edit guess
 

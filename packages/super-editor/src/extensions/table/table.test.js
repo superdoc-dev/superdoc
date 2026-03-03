@@ -3,6 +3,8 @@ import { EditorState, TextSelection } from 'prosemirror-state';
 import { CellSelection, TableMap } from 'prosemirror-tables';
 import { loadTestDataForEditorTests, initTestEditor } from '@tests/helpers/helpers.js';
 import { createTable } from './tableHelpers/createTable.js';
+import { normalizeNewTableAttrs } from './tableHelpers/normalizeNewTableAttrs.js';
+import { DEFAULT_TBL_LOOK } from '@superdoc/style-engine/ooxml';
 import { promises as fs } from 'fs';
 
 // Cache DOCX data to avoid repeated file loading
@@ -977,6 +979,145 @@ describe('Table commands', async () => {
       expect(tableNode?.attrs.tableProperties?.tableStyleId).toBeUndefined();
       expect(Array.isArray(tableNode?.attrs.grid) && tableNode.attrs.grid.length > 0).toBe(true);
       expect(tableNode?.attrs.tableProperties?.tblLook).toBeDefined();
+    });
+  });
+
+  describe('column width computation (SD-2086)', async () => {
+    it('insertTableAt cells have computed colwidth when pageStyles available', async () => {
+      const { docx, media, mediaFiles, fonts } = cachedBlankDoc;
+      ({ editor } = initTestEditor({ content: docx, media, mediaFiles, fonts }));
+      ({ schema } = editor);
+
+      // Inject pageStyles so computeColumnWidths returns real widths
+      const originalConverter = editor.converter;
+      editor.converter = {
+        ...originalConverter,
+        pageStyles: {
+          ...originalConverter?.pageStyles,
+          pageSize: { width: 8.5 },
+          pageMargins: { left: 1, right: 1 },
+        },
+      };
+
+      // Insert at end of doc
+      const pos = editor.state.doc.content.size;
+      const didInsert = editor.commands.insertTableAt({ pos, rows: 2, columns: 3 });
+      expect(didInsert).toBe(true);
+
+      // Find the inserted table
+      const tablePos = findTablePos(editor.state.doc);
+      expect(tablePos).not.toBeNull();
+      const table = editor.state.doc.nodeAt(tablePos);
+
+      // Each cell should have colwidth [208] (= Math.floor((8.5 - 1 - 1) * 96 / 3))
+      table.forEach((row) => {
+        row.forEach((cell) => {
+          expect(cell.attrs.colwidth).toEqual([208]);
+        });
+      });
+
+      editor.converter = originalConverter;
+    });
+
+    it('insertTable auto-calc still works after refactor', async () => {
+      const { docx, media, mediaFiles, fonts } = cachedBlankDoc;
+      ({ editor } = initTestEditor({ content: docx, media, mediaFiles, fonts }));
+      ({ schema } = editor);
+
+      // Inject pageStyles
+      const originalConverter = editor.converter;
+      editor.converter = {
+        ...originalConverter,
+        pageStyles: {
+          ...originalConverter?.pageStyles,
+          pageSize: { width: 8.5 },
+          pageMargins: { left: 1, right: 1 },
+        },
+      };
+
+      const didInsert = editor.commands.insertTable({ rows: 2, cols: 3 });
+      expect(didInsert).toBe(true);
+
+      const tablePos = findTablePos(editor.state.doc);
+      const table = editor.state.doc.nodeAt(tablePos);
+
+      // Verify cells have computed widths
+      table.forEach((row) => {
+        row.forEach((cell) => {
+          expect(cell.attrs.colwidth).toEqual([208]);
+        });
+      });
+
+      editor.converter = originalConverter;
+    });
+
+    it('insertTable with explicit columnWidths bypasses auto-calc', async () => {
+      const { docx, media, mediaFiles, fonts } = cachedBlankDoc;
+      ({ editor } = initTestEditor({ content: docx, media, mediaFiles, fonts }));
+      ({ schema } = editor);
+
+      // Inject pageStyles (should be ignored since explicit widths are provided)
+      const originalConverter = editor.converter;
+      editor.converter = {
+        ...originalConverter,
+        pageStyles: {
+          ...originalConverter?.pageStyles,
+          pageSize: { width: 8.5 },
+          pageMargins: { left: 1, right: 1 },
+        },
+      };
+
+      const didInsert = editor.commands.insertTable({ rows: 2, cols: 3, columnWidths: [100, 200, 300] });
+      expect(didInsert).toBe(true);
+
+      const tablePos = findTablePos(editor.state.doc);
+      const table = editor.state.doc.nodeAt(tablePos);
+
+      table.forEach((row) => {
+        expect(row.child(0).attrs.colwidth).toEqual([100]);
+        expect(row.child(1).attrs.colwidth).toEqual([200]);
+        expect(row.child(2).attrs.colwidth).toEqual([300]);
+      });
+
+      editor.converter = originalConverter;
+    });
+  });
+
+  describe('normalizeNewTableAttrs tblLook (SD-2086)', async () => {
+    it('includes DEFAULT_TBL_LOOK in tableProperties when a style is resolved', async () => {
+      const { docx, media, mediaFiles, fonts } = cachedBlankDoc;
+      ({ editor } = initTestEditor({ content: docx, media, mediaFiles, fonts }));
+
+      // Inject a style catalog with TableGrid so the styled path is taken
+      const originalConverter = editor.converter;
+      editor.converter = {
+        ...originalConverter,
+        translatedLinkedStyles: {
+          styles: { TableGrid: { type: 'table' } },
+          docDefaults: {},
+          latentStyles: {},
+        },
+      };
+
+      const result = normalizeNewTableAttrs(editor);
+      expect(result.tableProperties?.tblLook).toEqual(DEFAULT_TBL_LOOK);
+
+      editor.converter = originalConverter;
+    });
+
+    it('does not include tblLook when source is "none" (unstyled table)', async () => {
+      const { docx, media, mediaFiles, fonts } = cachedBlankDoc;
+      ({ editor } = initTestEditor({ content: docx, media, mediaFiles, fonts }));
+
+      // Override converter to simulate no styles available
+      const originalConverter = editor.converter;
+      editor.converter = { translatedLinkedStyles: { styles: {} } };
+
+      const result = normalizeNewTableAttrs(editor);
+      expect(result.tableStyleId).toBeNull();
+      expect(result.tableProperties?.tblLook).toBeUndefined();
+
+      editor.converter = originalConverter;
     });
   });
 });

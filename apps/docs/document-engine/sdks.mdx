@@ -129,39 +129,40 @@ const { createSuperDocClient } = require('@superdoc-dev/sdk');
 
 
     async def main():
-        client = AsyncSuperDocClient(default_change_mode="tracked")
+        async with AsyncSuperDocClient(default_change_mode="tracked") as client:
+            # Open a document
+            await client.doc.open({"doc": "./contract.docx"})
 
-        # Open a document
-        await client.doc.open({"doc": "./contract.docx"})
-
-        # Find and replace text with query + mutation plan
-        match = await client.doc.query.match(
-            {
-                "select": {"type": "text", "pattern": "ACME Corp"},
-                "require": "first",
-            }
-        )
-
-        ref = match.get("items", [{}])[0].get("handle", {}).get("ref")
-        if ref:
-            await client.doc.mutations.apply(
+            # Find and replace text with query + mutation plan
+            match = await client.doc.query.match(
                 {
-                    "expectedRevision": match["evaluatedRevision"],
-                    "atomic": True,
-                    "steps": [
-                        {
-                            "id": "replace-acme",
-                            "op": "text.rewrite",
-                            "where": {"by": "ref", "ref": ref},
-                            "args": {"replacement": {"text": "NewCo Inc."}},
-                        }
-                    ],
+                    "select": {"type": "text", "pattern": "ACME Corp"},
+                    "require": "first",
                 }
             )
 
-        # Save and close
-        await client.doc.save({"inPlace": True})
-        await client.doc.close({})
+            items = match.get("items") or []
+            first_item = items[0] if items else {}
+            ref = first_item.get("handle", {}).get("ref")
+            if ref:
+                await client.doc.mutations.apply(
+                    {
+                        "expectedRevision": match["evaluatedRevision"],
+                        "atomic": True,
+                        "steps": [
+                            {
+                                "id": "replace-acme",
+                                "op": "text.rewrite",
+                                "where": {"by": "ref", "ref": ref},
+                                "args": {"replacement": {"text": "NewCo Inc."}},
+                            }
+                        ],
+                    }
+                )
+
+            # Save and close
+            await client.doc.save({"inPlace": True})
+            await client.doc.close({})
 
 
     asyncio.run(main())
@@ -170,6 +171,7 @@ const { createSuperDocClient } = require('@superdoc-dev/sdk');
 </Tabs>
 
 Set `defaultChangeMode: 'tracked'` (Node) or `default_change_mode='tracked'` (Python) to make mutations use tracked changes by default. If you pass `changeMode` on a specific call, that explicit value overrides the default.
+The Python SDK also exposes synchronous `SuperDocClient` with the same `doc.*` operations when you prefer non-async code paths.
 
 ## User identity
 
@@ -192,9 +194,13 @@ By default the SDK attributes edits to a generic "CLI" user. Set `user` on the c
 
 The `user` is injected into every `doc.open` call. If you pass `userName` or `userEmail` on a specific `doc.open`, those per-call values take precedence.
 
-## Real-time collaboration
+## Collaboration sessions
 
-Both SDKs can connect to a running Yjs collaboration session. Pass `collabUrl` (and optionally `collabDocumentId`) to `doc.open` — the SDK joins the session and edits the shared document state.
+Use this when your app already has a live collaboration room (Liveblocks, Hocuspocus, or SuperDoc Yjs).
+
+### Join an existing room
+
+Pass `collabUrl` and `collabDocumentId` to `doc.open`:
 
 <Tabs>
   <Tab title="Node.js">
@@ -204,21 +210,15 @@ Both SDKs can connect to a running Yjs collaboration session. Pass `collabUrl` (
     const client = new SuperDocClient();
     await client.connect();
 
-    // Join a Hocuspocus collaboration session
     await client.doc.open({
       collabUrl: 'ws://localhost:4000',
       collabDocumentId: 'my-doc-room',
     });
 
-    // Edits go through the shared Yjs document
     await client.doc.insert({
       target: { type: 'end' },
       content: 'Added by the SDK',
     });
-
-    await client.doc.save();
-    await client.doc.close();
-    await client.dispose();
     ```
   </Tab>
   <Tab title="Python">
@@ -230,20 +230,15 @@ Both SDKs can connect to a running Yjs collaboration session. Pass `collabUrl` (
 
     async def main():
         async with AsyncSuperDocClient() as client:
-            # Join a Hocuspocus collaboration session
             await client.doc.open({
                 "collabUrl": "ws://localhost:4000",
                 "collabDocumentId": "my-doc-room",
             })
 
-            # Edits go through the shared Yjs document
             await client.doc.insert({
                 "target": {"type": "end"},
                 "content": "Added by the SDK",
             })
-
-            await client.doc.save({"inPlace": True})
-            await client.doc.close({})
 
 
     asyncio.run(main())
@@ -251,9 +246,101 @@ Both SDKs can connect to a running Yjs collaboration session. Pass `collabUrl` (
   </Tab>
 </Tabs>
 
-No `doc` path is needed — the document state comes from the collaboration session. If you pass a `doc` path, it is used to seed the room when empty. When the room already has content, the local file is ignored.
+### Start an empty room from a local `.docx`
 
-See [SDK + Collaboration Sessions](/document-engine/sdk-collaboration-sessions) for more detail on how SDK sessions and collaboration sessions interact.
+If the room is empty, pass `doc` together with collaboration params:
+
+<Tabs>
+  <Tab title="Node.js">
+    ```typescript
+    await client.doc.open({
+      doc: './starting-template.docx',
+      collabUrl: 'ws://localhost:4000',
+      collabDocumentId: 'my-doc-room',
+    });
+    ```
+  </Tab>
+  <Tab title="Python">
+    ```python
+    await client.doc.open({
+        "doc": "./starting-template.docx",
+        "collabUrl": "ws://localhost:4000",
+        "collabDocumentId": "my-doc-room",
+    })
+    ```
+  </Tab>
+</Tabs>
+
+What happens when you pass `doc`:
+
+| Room state | Result |
+| --- | --- |
+| Room already has content | SDK joins the room. `doc` is ignored. |
+| Room is empty and `doc` is provided | SDK seeds the room from `doc`, then joins. |
+| Room is empty and no `doc` is provided | SDK starts a blank document. |
+
+### Control empty-room behavior
+
+| Parameter | Type | Default | Description |
+| --- | --- | --- | --- |
+| `collabUrl` | `string` | — | WebSocket URL for your collaboration provider. |
+| `collabDocumentId` | `string` | session ID | Room/document ID on the provider. |
+| `doc` | `string` | — | Local `.docx` used only when the room is empty. |
+| `onMissing` | `string` | `seedFromDoc` | `seedFromDoc`, `blank`, or `error`. |
+| `bootstrapSettlingMs` | `number` | `1500` | Wait time (ms) before seeding to avoid race conditions. |
+
+If you only want to join rooms that already exist, use `onMissing: 'error'`.
+
+<Tabs>
+  <Tab title="Node.js">
+    ```typescript
+    await client.doc.open({
+      collabUrl: 'ws://localhost:4000',
+      collabDocumentId: 'my-doc-room',
+      onMissing: 'error',
+    });
+    ```
+  </Tab>
+  <Tab title="Python">
+    ```python
+    await client.doc.open({
+        "collabUrl": "ws://localhost:4000",
+        "collabDocumentId": "my-doc-room",
+        "onMissing": "error",
+    })
+    ```
+  </Tab>
+</Tabs>
+
+### Check if the SDK seeded or joined
+
+`doc.open` returns bootstrap details in collaboration mode:
+
+<Tabs>
+  <Tab title="Node.js">
+    ```typescript
+    const result = await client.doc.open({
+      doc: './starting-template.docx',
+      collabUrl: 'ws://localhost:4000',
+      collabDocumentId: 'my-doc-room',
+    });
+
+    console.log(result.bootstrap);
+    // { roomState, bootstrapApplied, bootstrapSource }
+    ```
+  </Tab>
+  <Tab title="Python">
+    ```python
+    result = await client.doc.open({
+        "doc": "./starting-template.docx",
+        "collabUrl": "ws://localhost:4000",
+        "collabDocumentId": "my-doc-room",
+    })
+
+    print(result.get("bootstrap"))
+    ```
+  </Tab>
+</Tabs>
 
 {/* SDK_OPERATIONS_START */}
 ## Available operations
@@ -276,6 +363,7 @@ The SDKs expose all operations from the [Document API](/document-api/overview) p
 | `doc.getNode` | `get-node` | Retrieve a single node by target position. |
 | `doc.getNodeById` | `get-node-by-id` | Retrieve a single node by its unique ID. |
 | `doc.getText` | `get-text` | Extract the plain-text content of the document. |
+| `doc.getMarkdown` | `get-markdown` | Extract the document content as a Markdown string. |
 | `doc.info` | `info` | Return document metadata including revision, node count, and capabilities. |
 | `doc.query.match` | `query match` | Deterministic selector-based search with cardinality contracts for mutation targeting. |
 | `doc.mutations.preview` | `mutations preview` | Dry-run a mutation plan, returning resolved targets without applying changes. |
@@ -424,4 +512,4 @@ The SDKs expose all operations from the [Document API](/document-api/overview) p
 
 - [Document API](/document-api/overview) — the in-browser API that defines the operation set
 - [CLI](/document-engine/cli) — use the same operations from the terminal
-- [SDK + Collaboration Sessions](/document-engine/sdk-collaboration-sessions) — how SDK sessions relate to Yjs collaboration sessions
+- [Collaboration guides](/modules/collaboration/overview) — set up Liveblocks, Hocuspocus, or SuperDoc Yjs

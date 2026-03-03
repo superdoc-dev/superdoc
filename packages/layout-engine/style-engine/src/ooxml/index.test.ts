@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import {
+  DEFAULT_TBL_LOOK,
   resolveStyleChain,
   getNumberingProperties,
   resolveDocxFontFamily,
@@ -726,5 +727,419 @@ describe('ooxml - resolveTableProperties', () => {
     const result = resolveTableProperties('RTLTable', styles);
     expect(result.cellMargins?.marginStart).toEqual({ value: 100, type: 'dxa' });
     expect(result.cellMargins?.marginEnd).toEqual({ value: 200, type: 'dxa' });
+  });
+});
+
+// ──────────────────────────────────────────────────────────────────────────────
+// basedOn inheritance for tblStylePr (conditional table style properties)
+// ──────────────────────────────────────────────────────────────────────────────
+
+describe('ooxml - resolveTableCellProperties basedOn tblStylePr inheritance', () => {
+  it('inherits firstRow shading from base style when child has no firstRow entry', () => {
+    const styles = {
+      ...emptyStyles,
+      styles: {
+        BaseTable: {
+          type: 'table',
+          tableProperties: { tableStyleRowBandSize: 1 },
+          tableStyleProperties: {
+            firstRow: {
+              tableCellProperties: { shading: { val: 'clear', fill: 'AA0000' } },
+            },
+          },
+        },
+        ChildTable: {
+          type: 'table',
+          basedOn: 'BaseTable',
+          tableProperties: {},
+          tableStyleProperties: {
+            wholeTable: {
+              tableCellProperties: { shading: { val: 'clear', fill: 'EEEEEE' } },
+            },
+          },
+        },
+      },
+    };
+    const tableInfo = {
+      tableProperties: { tableStyleId: 'ChildTable', tblLook: { firstRow: true, noHBand: true, noVBand: true } },
+      rowIndex: 0,
+      cellIndex: 0,
+      numRows: 3,
+      numCells: 4,
+    };
+    const result = resolveTableCellProperties(null, tableInfo, styles);
+    expect(result.shading).toEqual({ val: 'clear', fill: 'AA0000' });
+  });
+
+  it('child tblStylePr overrides base tblStylePr for the same style type', () => {
+    const styles = {
+      ...emptyStyles,
+      styles: {
+        BaseTable: {
+          type: 'table',
+          tableProperties: {},
+          tableStyleProperties: {
+            band1Horz: {
+              tableCellProperties: { shading: { val: 'clear', fill: 'CCCCCC' } },
+            },
+          },
+        },
+        ChildTable: {
+          type: 'table',
+          basedOn: 'BaseTable',
+          tableProperties: {},
+          tableStyleProperties: {
+            band1Horz: {
+              tableCellProperties: { shading: { val: 'clear', fill: 'FF0000' } },
+            },
+          },
+        },
+      },
+    };
+    const tableInfo = {
+      tableProperties: { tableStyleId: 'ChildTable', tblLook: { noVBand: true } },
+      rowIndex: 0,
+      cellIndex: 0,
+      numRows: 3,
+      numCells: 4,
+    };
+    const result = resolveTableCellProperties(null, tableInfo, styles);
+    expect(result.shading).toEqual({ val: 'clear', fill: 'FF0000' });
+  });
+
+  it('follows a 3-level basedOn chain for tblStylePr', () => {
+    const styles = {
+      ...emptyStyles,
+      styles: {
+        Grandparent: {
+          type: 'table',
+          tableProperties: {},
+          tableStyleProperties: {
+            firstRow: {
+              tableCellProperties: { shading: { val: 'clear', fill: 'AAAAAA' } },
+            },
+          },
+        },
+        Parent: {
+          type: 'table',
+          basedOn: 'Grandparent',
+          tableProperties: {},
+          tableStyleProperties: {
+            firstRow: {
+              tableCellProperties: { shading: { val: 'clear', fill: 'BBBBBB' } },
+            },
+          },
+        },
+        Leaf: {
+          type: 'table',
+          basedOn: 'Parent',
+          tableProperties: {},
+        },
+      },
+    };
+    const tableInfo = {
+      tableProperties: { tableStyleId: 'Leaf', tblLook: { firstRow: true, noHBand: true, noVBand: true } },
+      rowIndex: 0,
+      cellIndex: 0,
+      numRows: 2,
+      numCells: 2,
+    };
+    const result = resolveTableCellProperties(null, tableInfo, styles);
+    // Parent overrides Grandparent; Leaf has no firstRow so Parent wins
+    expect(result.shading).toEqual({ val: 'clear', fill: 'BBBBBB' });
+  });
+
+  it('inherits band sizes from base style', () => {
+    const styles = {
+      ...emptyStyles,
+      styles: {
+        BaseTable: {
+          type: 'table',
+          tableProperties: { tableStyleRowBandSize: 2 },
+          tableStyleProperties: {
+            band1Horz: { tableCellProperties: { shading: { fill: 'AAA' } } },
+            band2Horz: { tableCellProperties: { shading: { fill: 'BBB' } } },
+          },
+        },
+        ChildTable: {
+          type: 'table',
+          basedOn: 'BaseTable',
+          tableProperties: {},
+        },
+      },
+    };
+    // With bandSize=2, rows 0-1 are band1, rows 2-3 are band2
+    const tableInfoRow2 = {
+      tableProperties: { tableStyleId: 'ChildTable', tblLook: { noVBand: true } },
+      rowIndex: 2,
+      cellIndex: 0,
+      numRows: 4,
+      numCells: 2,
+    };
+    const result = resolveTableCellProperties(null, tableInfoRow2, styles);
+    expect(result.shading).toEqual({ fill: 'BBB' });
+  });
+});
+
+// ──────────────────────────────────────────────────────────────────────────────
+// cnfStyle supplementing index-based conditional type detection
+// ──────────────────────────────────────────────────────────────────────────────
+
+describe('ooxml - resolveCellStyles cnfStyle flags', () => {
+  it('includes firstRow properties when cellCnfStyle.firstRow is true at non-zero rowIndex', () => {
+    const styles = {
+      ...emptyStyles,
+      styles: {
+        TestTable: {
+          type: 'table',
+          tableProperties: {},
+          tableStyleProperties: {
+            firstRow: { tableCellProperties: { shading: { fill: 'HEADER' } } },
+            wholeTable: { tableCellProperties: { shading: { fill: 'DEFAULT' } } },
+          },
+        },
+      },
+    };
+    const tableInfo = {
+      tableProperties: { tableStyleId: 'TestTable', tblLook: { firstRow: true, noHBand: true, noVBand: true } },
+      rowIndex: 2, // Not row 0, but cnfStyle says firstRow
+      cellIndex: 0,
+      numRows: 4,
+      numCells: 3,
+      cellCnfStyle: { firstRow: true },
+    };
+    const result = resolveCellStyles('tableCellProperties', tableInfo, styles);
+    // Should contain both wholeTable and firstRow (from cnfStyle)
+    expect(result).toEqual([{ shading: { fill: 'DEFAULT' } }, { shading: { fill: 'HEADER' } }]);
+  });
+
+  it('firstRow wins over cnfStyle-added band1Horz (ECMA-376 precedence)', () => {
+    // Regression: cnfStyle-added bands must not override row/corner types.
+    // ECMA-376 §17.7.6 precedence: wholeTable < bands < firstCol/lastCol < firstRow/lastRow < corners
+    const styles = {
+      ...emptyStyles,
+      styles: {
+        TestTable: {
+          type: 'table',
+          tableProperties: {},
+          tableStyleProperties: {
+            band1Horz: { tableCellProperties: { shading: { fill: 'BAND' } } },
+            firstRow: { tableCellProperties: { shading: { fill: 'HEADER' } } },
+            wholeTable: { tableCellProperties: { shading: { fill: 'DEFAULT' } } },
+          },
+        },
+      },
+    };
+    const tableInfo = {
+      tableProperties: {
+        tableStyleId: 'TestTable',
+        tblLook: { firstRow: true, noHBand: true, noVBand: true },
+      },
+      rowIndex: 0, // row 0 = firstRow
+      cellIndex: 0,
+      numRows: 4,
+      numCells: 3,
+      // cnfStyle adds band1Horz even though noHBand suppressed it from index logic
+      rowCnfStyle: { firstRow: true, oddHBand: true },
+    };
+    const result = resolveCellStyles('tableCellProperties', tableInfo, styles);
+    // Order must be: wholeTable → band1Horz → firstRow (last wins in combineProperties)
+    expect(result).toEqual([
+      { shading: { fill: 'DEFAULT' } },
+      { shading: { fill: 'BAND' } },
+      { shading: { fill: 'HEADER' } },
+    ]);
+  });
+
+  it('returns same result without cnfStyle (no regression)', () => {
+    const styles = {
+      ...emptyStyles,
+      styles: {
+        TestTable: {
+          type: 'table',
+          tableProperties: {},
+          tableStyleProperties: {
+            wholeTable: { tableCellProperties: { shading: { fill: 'DEFAULT' } } },
+          },
+        },
+      },
+    };
+    const tableInfo = {
+      tableProperties: { tableStyleId: 'TestTable', tblLook: { noHBand: true, noVBand: true } },
+      rowIndex: 1,
+      cellIndex: 0,
+      numRows: 3,
+      numCells: 3,
+    };
+    const result = resolveCellStyles('tableCellProperties', tableInfo, styles);
+    expect(result).toEqual([{ shading: { fill: 'DEFAULT' } }]);
+  });
+});
+
+// ──────────────────────────────────────────────────────────────────────────────
+// DEFAULT_TBL_LOOK fallback when tblLook is absent (SD-2086)
+// ──────────────────────────────────────────────────────────────────────────────
+
+describe('ooxml - DEFAULT_TBL_LOOK fallback when tblLook is absent', () => {
+  it('applies firstRow shading when tblLook is absent (SD-2086)', () => {
+    const styles = {
+      ...emptyStyles,
+      styles: {
+        GridTable4: {
+          type: 'table',
+          tableProperties: {},
+          tableStyleProperties: {
+            firstRow: {
+              tableCellProperties: { shading: { val: 'clear', fill: 'HEADER' } },
+            },
+            wholeTable: {
+              tableCellProperties: { shading: { val: 'clear', fill: 'DEFAULT' } },
+            },
+          },
+        },
+      },
+    };
+    const tableInfo = {
+      tableProperties: { tableStyleId: 'GridTable4', tblLook: undefined },
+      rowIndex: 0,
+      cellIndex: 0,
+      numRows: 3,
+      numCells: 4,
+    };
+    const result = resolveTableCellProperties(null, tableInfo, styles);
+    // DEFAULT_TBL_LOOK has firstRow: true, so row 0 gets firstRow shading
+    expect(result.shading).toEqual({ val: 'clear', fill: 'HEADER' });
+  });
+
+  it('explicit tblLook.firstRow: false still suppresses firstRow formatting', () => {
+    const styles = {
+      ...emptyStyles,
+      styles: {
+        GridTable4: {
+          type: 'table',
+          tableProperties: {},
+          tableStyleProperties: {
+            firstRow: {
+              tableCellProperties: { shading: { val: 'clear', fill: 'HEADER' } },
+            },
+            wholeTable: {
+              tableCellProperties: { shading: { val: 'clear', fill: 'DEFAULT' } },
+            },
+          },
+        },
+      },
+    };
+    const tableInfo = {
+      tableProperties: {
+        tableStyleId: 'GridTable4',
+        tblLook: { firstRow: false, noHBand: true, noVBand: true },
+      },
+      rowIndex: 0,
+      cellIndex: 0,
+      numRows: 3,
+      numCells: 4,
+    };
+    const result = resolveTableCellProperties(null, tableInfo, styles);
+    // Explicit tblLook overrides the default — firstRow is suppressed
+    expect(result.shading).toEqual({ val: 'clear', fill: 'DEFAULT' });
+  });
+
+  it('applies firstRow through basedOn chain when tblLook is absent', () => {
+    const styles = {
+      ...emptyStyles,
+      styles: {
+        BaseTable: {
+          type: 'table',
+          tableProperties: {},
+          tableStyleProperties: {
+            firstRow: {
+              tableCellProperties: { shading: { val: 'clear', fill: 'INHERITED_HEADER' } },
+            },
+          },
+        },
+        ChildTable: {
+          type: 'table',
+          basedOn: 'BaseTable',
+          tableProperties: {},
+          tableStyleProperties: {
+            wholeTable: {
+              tableCellProperties: { shading: { val: 'clear', fill: 'CHILD_DEFAULT' } },
+            },
+          },
+        },
+      },
+    };
+    const tableInfo = {
+      tableProperties: { tableStyleId: 'ChildTable', tblLook: undefined },
+      rowIndex: 0,
+      cellIndex: 0,
+      numRows: 3,
+      numCells: 4,
+    };
+    const result = resolveTableCellProperties(null, tableInfo, styles);
+    // firstRow inherited from BaseTable, enabled by DEFAULT_TBL_LOOK
+    expect(result.shading).toEqual({ val: 'clear', fill: 'INHERITED_HEADER' });
+  });
+
+  it('noVBand defaults to true — vertical banding is suppressed', () => {
+    const styles = {
+      ...emptyStyles,
+      styles: {
+        BandTable: {
+          type: 'table',
+          tableProperties: {},
+          tableStyleProperties: {
+            band1Vert: {
+              tableCellProperties: { shading: { val: 'clear', fill: 'VBAND' } },
+            },
+            wholeTable: {
+              tableCellProperties: { shading: { val: 'clear', fill: 'DEFAULT' } },
+            },
+          },
+        },
+      },
+    };
+    const tableInfo = {
+      tableProperties: { tableStyleId: 'BandTable', tblLook: undefined },
+      rowIndex: 1,
+      cellIndex: 1,
+      numRows: 3,
+      numCells: 4,
+    };
+    const result = resolveTableCellProperties(null, tableInfo, styles);
+    // DEFAULT_TBL_LOOK has noVBand: true, so band1Vert should NOT appear
+    expect(result.shading).toEqual({ val: 'clear', fill: 'DEFAULT' });
+  });
+
+  it('noHBand defaults to false — horizontal banding is enabled', () => {
+    const styles = {
+      ...emptyStyles,
+      styles: {
+        BandTable: {
+          type: 'table',
+          tableProperties: {},
+          tableStyleProperties: {
+            band1Horz: {
+              tableCellProperties: { shading: { val: 'clear', fill: 'HBAND' } },
+            },
+            wholeTable: {
+              tableCellProperties: { shading: { val: 'clear', fill: 'DEFAULT' } },
+            },
+          },
+        },
+      },
+    };
+    const tableInfo = {
+      tableProperties: { tableStyleId: 'BandTable', tblLook: undefined },
+      // Row 1 is the first data row (row 0 is firstRow with DEFAULT_TBL_LOOK).
+      // band1Horz applies to the first banding group after the header.
+      rowIndex: 1,
+      cellIndex: 0,
+      numRows: 4,
+      numCells: 4,
+    };
+    const result = resolveTableCellProperties(null, tableInfo, styles);
+    // DEFAULT_TBL_LOOK has noHBand: false, so band1Horz IS applied
+    expect(result.shading).toEqual({ val: 'clear', fill: 'HBAND' });
   });
 });

@@ -256,6 +256,15 @@ export const OPERATION_DEFINITIONS = {
     referenceDocPath: 'get-text.mdx',
     referenceGroup: 'core',
   },
+  getMarkdown: {
+    memberPath: 'getMarkdown',
+    description: 'Extract the document content as a Markdown string.',
+    expectedResult: 'Returns the full document content as a Markdown-formatted string.',
+    requiresDocumentContext: true,
+    metadata: readOperation(),
+    referenceDocPath: 'get-markdown.mdx',
+    referenceGroup: 'core',
+  },
   info: {
     memberPath: 'info',
     description: 'Return document metadata including revision, node count, and capabilities.',

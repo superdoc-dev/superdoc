@@ -1763,3 +1763,113 @@ describe('table converter', () => {
     });
   });
 });
+
+// ──────────────────────────────────────────────────────────────────────────────
+// Theme-based cell background resolution
+// ──────────────────────────────────────────────────────────────────────────────
+
+describe('parseTableCell - theme shading resolution', () => {
+  const mockBlockIdGenerator: BlockIdGenerator = vi.fn((kind: string) => `test-${kind}`);
+  const mockPositionMap: PositionMap = new Map();
+  const mockParagraphConverter = vi.fn((params: { para: PMNode }) => {
+    return [
+      {
+        kind: 'paragraph',
+        id: 'p1',
+        runs: [{ text: params.para.content?.[0]?.text || 'text', fontFamily: 'Arial', fontSize: 12 }],
+      } as ParagraphBlock,
+    ];
+  });
+
+  const themePalette: ThemeColorPalette = {
+    accent1: '#4F81BD',
+    dk1: '#000000',
+  };
+
+  const makeTableWithShading = (
+    shadingProps: Record<string, unknown>,
+    themeColors?: ThemeColorPalette,
+    tableStyleId?: string,
+  ) => {
+    const styles = tableStyleId
+      ? {
+          ...DEFAULT_CONVERTER_CONTEXT.translatedLinkedStyles!,
+          styles: {
+            [tableStyleId]: {
+              type: 'table',
+              tableProperties: {},
+              tableStyleProperties: {
+                wholeTable: {
+                  tableCellProperties: { shading: shadingProps },
+                },
+              },
+            },
+          },
+        }
+      : DEFAULT_CONVERTER_CONTEXT.translatedLinkedStyles!;
+
+    const node: PMNode = {
+      type: 'table',
+      attrs: tableStyleId
+        ? {
+            tableStyleId,
+            tableProperties: { tableStyleId, tblLook: { noHBand: true, noVBand: true } },
+          }
+        : undefined,
+      content: [
+        {
+          type: 'tableRow',
+          content: [
+            {
+              type: 'tableCell',
+              content: [{ type: 'paragraph', content: [{ type: 'text', text: 'Cell' }] }],
+            },
+          ],
+        },
+      ],
+    };
+
+    return tableNodeToBlock(
+      node,
+      mockBlockIdGenerator,
+      mockPositionMap,
+      'Arial',
+      16,
+      undefined,
+      undefined,
+      undefined,
+      themeColors,
+      mockParagraphConverter,
+      {
+        ...DEFAULT_CONVERTER_CONTEXT,
+        translatedLinkedStyles: styles,
+      },
+    ) as TableBlock;
+  };
+
+  it('resolves themeFill from theme palette when no literal fill is present', () => {
+    const result = makeTableWithShading({ themeFill: 'accent1' }, themePalette, 'ThemeTable');
+    expect(result.rows[0].cells[0].attrs?.background).toBe('#4F81BD');
+  });
+
+  it('applies themeFillTint to the resolved theme color', () => {
+    const result = makeTableWithShading({ themeFill: 'accent1', themeFillTint: '99' }, themePalette, 'ThemeTable');
+    // accent1 (#4F81BD) tinted by 0x99/255 ≈ 0.6 → lighter blue
+    expect(result.rows[0].cells[0].attrs?.background).toBe('#B9CDE5');
+  });
+
+  it('prefers literal fill over themeFill', () => {
+    const result = makeTableWithShading({ fill: 'FF0000', themeFill: 'accent1' }, themePalette, 'ThemeTable');
+    expect(result.rows[0].cells[0].attrs?.background).toBe('#FF0000');
+  });
+
+  it('uses themeFill when fill is auto', () => {
+    const result = makeTableWithShading({ fill: 'auto', themeFill: 'accent1' }, themePalette, 'ThemeTable');
+    expect(result.rows[0].cells[0].attrs?.background).toBe('#4F81BD');
+  });
+
+  it('returns no background when themeFill key is not in palette', () => {
+    const result = makeTableWithShading({ themeFill: 'missing' }, themePalette, 'ThemeTable');
+    expect(result.rows[0].cells[0].attrs?.background).toBeUndefined();
+  });
+});

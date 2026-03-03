@@ -3,6 +3,7 @@ import type { Editor } from '../core/Editor.js';
 import { findAdapter } from './find-adapter.js';
 import { getNodeAdapter, getNodeByIdAdapter } from './get-node-adapter.js';
 import { getTextAdapter } from './get-text-adapter.js';
+import { getMarkdownAdapter } from './get-markdown-adapter.js';
 import { infoAdapter } from './info-adapter.js';
 import { getDocumentApiCapabilities } from './capabilities-adapter.js';
 import { createCommentsWrapper } from './plan-engine/comments-wrappers.js';
@@ -169,6 +170,9 @@ export function assembleDocumentApiAdapters(editor: Editor): DocumentApiAdapters
     },
     getText: {
       getText: (input) => getTextAdapter(editor, input),
+    },
+    getMarkdown: {
+      getMarkdown: (input) => getMarkdownAdapter(editor, input),
     },
     info: {
       info: (input) => infoAdapter(editor, input),

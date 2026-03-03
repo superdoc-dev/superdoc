@@ -68,6 +68,7 @@ import { executeStylesApply } from './styles/styles.js';
 import type { GetNodeAdapter, GetNodeByIdInput } from './get-node/get-node.js';
 import { executeGetNode, executeGetNodeById } from './get-node/get-node.js';
 import { executeGetText, type GetTextAdapter, type GetTextInput } from './get-text/get-text.js';
+import { executeGetMarkdown, type GetMarkdownAdapter, type GetMarkdownInput } from './get-markdown/get-markdown.js';
 import { executeInfo, type InfoAdapter, type InfoInput } from './info/info.js';
 import type { InsertInput } from './insert/insert.js';
 import { executeDelete } from './delete/delete.js';
@@ -339,6 +340,7 @@ import type {
 export type { FindAdapter, FindOptions } from './find/find.js';
 export type { GetNodeAdapter, GetNodeByIdInput } from './get-node/get-node.js';
 export type { GetTextAdapter, GetTextInput } from './get-text/get-text.js';
+export type { GetMarkdownAdapter, GetMarkdownInput } from './get-markdown/get-markdown.js';
 export type { InfoAdapter, InfoInput } from './info/info.js';
 export type { WriteAdapter, WriteRequest } from './write/write.js';
 export type {
@@ -715,6 +717,10 @@ export interface DocumentApi {
    */
   getText(input: GetTextInput): string;
   /**
+   * Return the full document content as a Markdown string.
+   */
+  getMarkdown(input: GetMarkdownInput): string;
+  /**
    * Return document summary info used by `doc.info`.
    */
   info(input: InfoInput): DocumentInfo;
@@ -809,6 +815,7 @@ export interface DocumentApiAdapters {
   find: FindAdapter;
   getNode: GetNodeAdapter;
   getText: GetTextAdapter;
+  getMarkdown: GetMarkdownAdapter;
   info: InfoAdapter;
   capabilities: CapabilitiesAdapter;
   comments: CommentsAdapter;
@@ -872,6 +879,9 @@ export function createDocumentApi(adapters: DocumentApiAdapters): DocumentApi {
     },
     getText(input: GetTextInput): string {
       return executeGetText(adapters.getText, input);
+    },
+    getMarkdown(input: GetMarkdownInput): string {
+      return executeGetMarkdown(adapters.getMarkdown, input);
     },
     info(input: InfoInput): DocumentInfo {
       return executeInfo(adapters.info, input);

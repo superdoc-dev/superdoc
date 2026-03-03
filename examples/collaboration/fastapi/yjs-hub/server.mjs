@@ -15,6 +15,7 @@ const REDIS_PREFIX = process.env.REDIS_PREFIX ?? 'superdoc-fastapi';
 const POSTGRES_URL =
   process.env.POSTGRES_URL ?? 'postgres://postgres:postgres@127.0.0.1:5432/yhub';
 const EPHEMERAL = process.env.EPHEMERAL !== '0';
+const AUTH_TOKEN = process.env.YHUB_AUTH_TOKEN ?? 'YOUR_PRIVATE_TOKEN';
 
 const ORG = process.env.YHUB_ORG ?? 'superdoc';
 const EXAMPLE_DOC_ID = process.env.YHUB_DOC_ID ?? 'superdoc-dev-room';
@@ -673,7 +674,8 @@ function startPublicProxyServer() {
     console.log(`[yjs-hub] FastAPI settings: COLLAB_URL=ws://127.0.0.1:${PORT}${BASE_PATH} COLLAB_DOCUMENT_ID=${EXAMPLE_DOC_ID}`);
     console.log(`[yjs-hub] internal @y/hub ws target: ws://${YHUB_INTERNAL_HOST}:${YHUB_INTERNAL_PORT}/ws/${ORG}/:documentId`);
     console.log(`[yjs-hub] ephemeral mode=${EPHEMERAL ? 'on' : 'off'}`);
-    console.log('[yjs-hub] auth is intentionally wide open (local demo only)');
+    console.log('[yjs-hub] websocket auth requires query param token=*** (demo shared secret)');
+    console.log('[yjs-hub] auth token env: YHUB_AUTH_TOKEN (default value: YOUR_PRIVATE_TOKEN)');
     console.log('[yjs-hub] visibility logs enabled: connect params, inferred roomState, and update-size seed guesses');
   });
 }
@@ -683,6 +685,7 @@ const auth = createAuthPlugin({
     const org = safeGetParameter(req, 0) ?? 'unknown-org';
     const docid = safeGetParameter(req, 1) ?? 'unknown-doc';
     const branch = safeGetQuery(req, 'branch') ?? 'main';
+    const token = safeGetQuery(req, 'token');
     const userId =
       safeGetQuery(req, 'userId') ??
       safeGetQuery(req, 'userid') ??
@@ -696,13 +699,20 @@ const auth = createAuthPlugin({
     const gc = safeGetQuery(req, 'gc');
     const path = req.getUrl?.() ?? '/unknown';
 
+    if (token !== AUTH_TOKEN) {
+      console.log(
+        `[yjs-hub] reject path=${path} room=${org}/${docid}@${branch} reason=invalid-token tokenPresent=${token ? 'yes' : 'no'}`,
+      );
+      return null;
+    }
+
     console.log(
-      `[yjs-hub] connect path=${path} room=${org}/${docid}@${branch} userId=${userId} onMissing=${onMissing ?? 'not-provided'} gc=${gc ?? 'default'}`,
+      `[yjs-hub] connect path=${path} room=${org}/${docid}@${branch} userId=${userId} onMissing=${onMissing ?? 'not-provided'} gc=${gc ?? 'default'} token=ok`,
     );
 
     return {
       userid: userId,
-      _debug: { onMissing, userId },
+      _debug: { onMissing, userId, tokenValid: true },
     };
   },
   async getAccessType(authInfo, room) {

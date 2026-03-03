@@ -83,6 +83,7 @@
     "apps/docs/document-api/reference/format/vanish.mdx",
     "apps/docs/document-api/reference/format/vert-align.mdx",
     "apps/docs/document-api/reference/format/web-hidden.mdx",
+    "apps/docs/document-api/reference/get-markdown.mdx",
     "apps/docs/document-api/reference/get-node-by-id.mdx",
     "apps/docs/document-api/reference/get-node.mdx",
     "apps/docs/document-api/reference/get-text.mdx",
@@ -205,7 +206,17 @@
     {
       "aliasMemberPaths": [],
       "key": "core",
-      "operationIds": ["find", "getNode", "getNodeById", "getText", "info", "insert", "replace", "delete"],
+      "operationIds": [
+        "find",
+        "getNode",
+        "getNodeById",
+        "getText",
+        "getMarkdown",
+        "info",
+        "insert",
+        "replace",
+        "delete"
+      ],
       "pagePath": "apps/docs/document-api/reference/core/index.mdx",
       "title": "Core"
     },
@@ -483,5 +494,5 @@
     }
   ],
   "marker": "{/* GENERATED FILE: DO NOT EDIT. Regenerate via `pnpm run docapi:sync`. */}",
-  "sourceHash": "f6a9d24400077e26e602241bee1ab5f4c0ea8e0d112b2c7425182458977c1885"
+  "sourceHash": "f1dd7d6cb56f926499a024e1bdd02a3540e666cbbd102f025e7edc8ff85b83ac"
 }

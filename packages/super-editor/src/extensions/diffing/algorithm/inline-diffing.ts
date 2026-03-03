@@ -232,7 +232,7 @@ export function getInlineDiff(
     comparator: inlineComparator,
     shouldProcessEqualAsModification,
     canTreatAsModification: (oldToken, newToken) =>
-      isInlineNodeToken(oldToken) && isInlineNodeToken(newToken) && oldToken.node.type === newToken.node.type,
+      isInlineNodeToken(oldToken) && isInlineNodeToken(newToken) && oldToken.node.type.name === newToken.node.type.name,
     buildAdded: (token, oldIdx) => buildInlineDiff('added', token, oldIdx),
     buildDeleted: (token, oldIdx) => buildInlineDiff('deleted', token, oldIdx),
     buildModified: (oldToken, newToken, oldIdx) => {
@@ -281,7 +281,7 @@ function inlineComparator(a: InlineDiffToken, b: InlineDiffToken): boolean {
     return a.char === b.char;
   }
   if (a.kind === 'inlineNode' && b.kind === 'inlineNode') {
-    return a.node.type === b.node.type;
+    return a.node.type.name === b.node.type.name;
   }
   return false;
 }

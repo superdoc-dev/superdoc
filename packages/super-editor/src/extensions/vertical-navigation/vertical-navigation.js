@@ -394,7 +394,9 @@ function resolvePositionAtGoalX(editor, pmStart, pmEnd, goalX) {
   let bestPos = pmStart;
   let bestDist = Infinity;
 
-  // Binary search: characters within a single line have monotonically increasing X
+  // Binary search: characters within a single line have monotonically increasing X.
+  // NOTE: assumes LTR text. For RTL, X decreases with position so the search
+  // direction would be inverted. bestPos/bestDist tracking limits the impact.
   let lo = pmStart;
   let hi = pmEnd;
 
@@ -402,8 +404,11 @@ function resolvePositionAtGoalX(editor, pmStart, pmEnd, goalX) {
     const mid = Math.floor((lo + hi) / 2);
     const rect = presentationEditor.computeCaretLayoutRect(mid);
     if (!rect || !Number.isFinite(rect.x)) {
-      // Can't measure this position — fall back to pmStart
-      break;
+      // Can't measure this position (e.g. inline node boundary) — skip it
+      // and continue searching. Breaking here would fall back to pmStart,
+      // causing the caret to jump to the line start.
+      lo = mid + 1;
+      continue;
     }
 
     const dist = Math.abs(rect.x - goalX);

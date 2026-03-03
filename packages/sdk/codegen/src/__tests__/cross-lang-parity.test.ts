@@ -431,52 +431,32 @@ describe('Constraint validation parity', () => {
 });
 
 // --------------------------------------------------------------------------
-// Python session targeting and collab guard
+// Python collaboration support (collab params accepted, not rejected)
 // --------------------------------------------------------------------------
 
-describe('Python session targeting and collab guard', () => {
-  test('doc.session.setDefault is session-bound (derives sessionId)', async () => {
-    const result = await callPython({
-      action: 'isSessionBound',
-      operationId: 'doc.session.setDefault',
-    });
-    expect(result).toBe(true);
-  });
-
-  test('doc.open is NOT session-bound', async () => {
-    const result = await callPython({
-      action: 'isSessionBound',
-      operationId: 'doc.open',
-    });
-    expect(result).toBe(false);
-  });
-
-  test('all doc-backed session ops are session-bound', async () => {
-    const sessionOps = [
-      'doc.status',
-      'doc.save',
-      'doc.close',
-      'doc.info',
-      'doc.find',
-      'doc.session.save',
-      'doc.session.close',
-      'doc.session.setDefault',
-    ];
-    for (const opId of sessionOps) {
-      const result = await callPython({
-        action: 'isSessionBound',
-        operationId: opId,
-      });
-      expect(result).toBe(true);
-    }
-  });
-
-  test('collab session rejected for session-bound op', async () => {
+describe('Python collaboration support', () => {
+  test('doc.open accepts collabUrl and collabDocumentId params', async () => {
     const result = (await callPython({
-      action: 'assertCollabRejection',
-      operationId: 'doc.session.setDefault',
-      sessionId: 'test-collab-session',
-    })) as { rejected: boolean; code?: string };
-    expect(result).toEqual({ rejected: true, code: 'NOT_SUPPORTED' });
+      action: 'assertCollabAccepted',
+      operationId: 'doc.open',
+      params: {
+        doc: './test.docx',
+        collabUrl: 'ws://localhost:4000',
+        collabDocumentId: 'test-doc-id',
+      },
+    })) as { accepted: boolean; collabParamsPresent: boolean };
+
+    expect(result.accepted).toBe(true);
+    expect(result.collabParamsPresent).toBe(true);
+  });
+
+  test('doc.open accepts params without collab fields', async () => {
+    const result = (await callPython({
+      action: 'assertCollabAccepted',
+      operationId: 'doc.open',
+      params: { doc: './test.docx' },
+    })) as { accepted: boolean };
+
+    expect(result.accepted).toBe(true);
   });
 });

@@ -1,7 +1,7 @@
 import type { CollaborationProfile } from '../lib/collaboration';
 import { openCollaborativeDocument, type OpenedDocument } from '../lib/document';
 import { CliError } from '../lib/errors';
-import type { CliIO } from '../lib/types';
+import type { CliIO, UserIdentity } from '../lib/types';
 
 /** Metadata describing a document editing session and its optional collaboration configuration. */
 export interface CollaborationSessionMetadata {
@@ -10,6 +10,7 @@ export interface CollaborationSessionMetadata {
   collaboration?: CollaborationProfile;
   sourcePath?: string;
   workingDocPath: string;
+  user?: UserIdentity;
 }
 
 type SessionFingerprint = {
@@ -24,9 +25,10 @@ type PooledSessionHandle = {
 };
 
 type OpenCollaborativeDocumentFn = (
-  docPath: string,
+  docPath: string | undefined,
   io: CliIO,
   profile: CollaborationProfile,
+  options?: { user?: UserIdentity },
 ) => Promise<OpenedDocument>;
 
 function profileToKey(profile: CollaborationProfile): string {
@@ -36,6 +38,8 @@ function profileToKey(profile: CollaborationProfile): string {
     documentId: profile.documentId,
     tokenEnv: profile.tokenEnv ?? null,
     syncTimeoutMs: profile.syncTimeoutMs ?? null,
+    onMissing: profile.onMissing ?? null,
+    bootstrapSettlingMs: profile.bootstrapSettlingMs ?? null,
   });
 }
 
@@ -120,7 +124,7 @@ export class InMemoryCollaborationSessionPool implements CollaborationSessionPoo
     // Safe to assert: buildFingerprint above already validated metadata.collaboration
     const profile = metadata.collaboration!;
 
-    const opened = await this.openCollaborative(docPath, io, profile);
+    const opened = await this.openCollaborative(docPath, io, profile, { user: metadata.user });
     const created: PooledSessionHandle = {
       opened,
       fingerprint,

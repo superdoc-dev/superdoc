@@ -30,6 +30,9 @@ Returns a ListsInsertResult with the new list item address and block ID.
 | --- | --- | --- | --- |
 | `position` | enum | yes | `"before"`, `"after"` |
 | `target` | ListItemAddress | yes | ListItemAddress |
+| `target.kind` | `"block"` | yes | Constant: `"block"` |
+| `target.nodeId` | string | yes |  |
+| `target.nodeType` | `"listItem"` | yes | Constant: `"listItem"` |
 | `text` | string | no |  |
 
 ### Example request
@@ -48,7 +51,32 @@ Returns a ListsInsertResult with the new list item address and block ID.
 
 ## Output fields
 
-_No fields._
+### Variant 1 (item.kind="block")
+
+| Field | Type | Required | Description |
+| --- | --- | --- | --- |
+| `insertionPoint` | TextAddress | yes | TextAddress |
+| `insertionPoint.blockId` | string | yes |  |
+| `insertionPoint.kind` | `"text"` | yes | Constant: `"text"` |
+| `insertionPoint.range` | Range | yes | Range |
+| `insertionPoint.range.end` | integer | yes |  |
+| `insertionPoint.range.start` | integer | yes |  |
+| `item` | ListItemAddress | yes | ListItemAddress |
+| `item.kind` | `"block"` | yes | Constant: `"block"` |
+| `item.nodeId` | string | yes |  |
+| `item.nodeType` | `"listItem"` | yes | Constant: `"listItem"` |
+| `success` | `true` | yes | Constant: `true` |
+| `trackedChangeRefs` | TrackedChangeAddress[] | no |  |
+
+### Variant 2 (success=false)
+
+| Field | Type | Required | Description |
+| --- | --- | --- | --- |
+| `failure` | object | yes |  |
+| `failure.code` | enum | yes | `"INVALID_TARGET"` |
+| `failure.details` | any | no |  |
+| `failure.message` | string | yes |  |
+| `success` | `false` | yes | Constant: `false` |
 
 ### Example response
 

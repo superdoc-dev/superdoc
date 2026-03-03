@@ -88,6 +88,14 @@ jobs:
       - name: Build Node SDK
         run: pnpm --prefix packages/sdk/langs/node run build
 
+      - name: Build superdoc package for CLI native bundling
+        run: pnpm --prefix packages/superdoc run build:es
+
+      - name: Verify superdoc build output exists
+        run: |
+          test -f packages/superdoc/dist/super-editor.es.js \
+            || (echo "FATAL: packages/superdoc/dist/super-editor.es.js missing — build:es likely failed silently" && exit 1)
+
       - name: Validate SDK
         run: node packages/sdk/scripts/sdk-validate.mjs
 
@@ -106,14 +114,6 @@ jobs:
       # ---------------------------------------------------------------
       # Python SDK (main + 5 companion packages)
       # ---------------------------------------------------------------
-      - name: Build superdoc package for CLI native bundling
-        run: pnpm --prefix packages/superdoc run build:es
-
-      - name: Verify superdoc build output exists
-        run: |
-          test -f packages/superdoc/dist/super-editor.es.js \
-            || (echo "FATAL: packages/superdoc/dist/super-editor.es.js missing — build:es likely failed silently" && exit 1)
-
       - name: Build CLI platform artifacts
         run: |
           pnpm --prefix apps/cli run build:native:all

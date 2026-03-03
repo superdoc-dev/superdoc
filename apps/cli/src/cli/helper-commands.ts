@@ -47,6 +47,16 @@ function mapIdToTarget(input: Record<string, unknown>): Record<string, unknown> 
  * Helper commands for compatibility/ergonomics where no direct canonical key exists.
  */
 export const CLI_HELPER_COMMANDS: readonly CliHelperCommand[] = [
+  // --- Legacy list alias ---
+  {
+    tokens: ['lists', 'exit'],
+    canonicalOperationId: 'lists.detach',
+    defaultInput: {},
+    description: 'Alias for lists detach.',
+    category: 'lists',
+    mutates: true,
+    examples: ['superdoc lists exit --target-json \'{"kind":"block","nodeType":"listItem","nodeId":"p1"}\''],
+  },
   // --- Format helper ---
   {
     tokens: ['format', 'strikethrough'],

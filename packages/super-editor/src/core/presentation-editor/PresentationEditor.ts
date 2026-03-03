@@ -65,10 +65,12 @@ import {
   shouldUseCellSelection as shouldUseCellSelectionFromHelper,
 } from './tables/TableSelectionUtilities.js';
 import { DragDropManager } from './input/DragDropManager.js';
+import { processAndInsertImageFile } from '@extensions/image/imageHelpers/processAndInsertImageFile.js';
 import { HeaderFooterSessionManager } from './header-footer/HeaderFooterSessionManager.js';
 import { decodeRPrFromMarks } from '../super-converter/styles.js';
 import { halfPointToPoints } from '../super-converter/helpers.js';
 import { toFlowBlocks, ConverterContext, FlowBlockCache } from '@superdoc/pm-adapter';
+import { readSettingsRoot, readDefaultTableStyle } from '../../document-api-adapters/document-settings.js';
 import {
   incrementalLayout,
   selectionToRects,
@@ -262,6 +264,8 @@ export class PresentationEditor extends EventEmitter {
   }
 
   #options: PresentationEditorOptions;
+  /** Key used to register this instance in the static registry. Separate from options.documentId to avoid mutating caller's object. */
+  #registryKey: string | null = null;
   #editor: Editor;
   #visibleHost: HTMLElement;
   #viewportHost: HTMLElement;
@@ -611,10 +615,11 @@ export class PresentationEditor extends EventEmitter {
       this.#setupInputBridge();
       this.#syncTrackedChangesPreferences();
 
-      // Register this instance in the static registry
-      if (options.documentId) {
-        PresentationEditor.#instances.set(options.documentId, this);
-      }
+      // Register this instance in the static registry.
+      // Use a separate field to avoid mutating the caller's options object and to keep
+      // the registry key consistent with the overlay ID set earlier (line ~453).
+      this.#registryKey = options.documentId || `__anonymous_${Date.now()}_${Math.random().toString(36).slice(2)}`;
+      PresentationEditor.#instances.set(this.#registryKey, this);
 
       this.#pendingDocChange = true;
       this.#scheduleRerender();
@@ -2043,7 +2048,9 @@ export class PresentationEditor extends EventEmitter {
       if (pageIndex != null) {
         const pageEl = getPageElementByIndex(this.#viewportHost, pageIndex);
         if (pageEl) {
-          pageEl.scrollIntoView({ block, inline: 'nearest', behavior });
+          // Find the specific element containing this position for precise centering
+          const targetEl = this.#findElementAtPosition(pageEl, clampedPos);
+          (targetEl ?? pageEl).scrollIntoView({ block, inline: 'nearest', behavior });
           return true;
         }
       }
@@ -2052,6 +2059,102 @@ export class PresentationEditor extends EventEmitter {
     } else {
       return false;
     }
+  }
+
+  /**
+   * Find the DOM element containing a specific document position.
+   * Returns the most specific (smallest range) matching element.
+   */
+  #findElementAtPosition(pageEl: HTMLElement, pos: number): HTMLElement | null {
+    const elements = Array.from(pageEl.querySelectorAll('[data-pm-start][data-pm-end]'));
+    let bestMatch: HTMLElement | null = null;
+    let smallestRange = Infinity;
+
+    for (const el of elements) {
+      const htmlEl = el as HTMLElement;
+      // Skip header/footer fragments — their PM positions come from a separate
+      // document and can overlap with body positions, causing incorrect matches.
+      if (htmlEl.closest('.superdoc-page-header, .superdoc-page-footer')) continue;
+
+      const start = Number(htmlEl.dataset.pmStart);
+      const end = Number(htmlEl.dataset.pmEnd);
+      if (!Number.isFinite(start) || !Number.isFinite(end)) continue;
+
+      if (pos >= start && pos <= end) {
+        const range = end - start;
+        if (range < smallestRange) {
+          smallestRange = range;
+          bestMatch = htmlEl;
+        }
+      }
+    }
+    return bestMatch;
+  }
+
+  /**
+   * Async version of scrollToPosition that handles virtualized pages.
+   *
+   * When pages are virtualized (not mounted in the DOM), this method will:
+   * 1. Try the sync scroll first (fast path if page is already mounted)
+   * 2. If that fails, trigger virtualization to render the target page
+   * 3. Wait for the page to mount (up to 2000ms)
+   * 4. Retry the scroll
+   *
+   * Use this method when navigating to positions that may be on virtualized pages.
+   *
+   * @param pos - Document position in the active editor to scroll to
+   * @param options - Scrolling options
+   * @param options.block - Alignment within the viewport ('start' | 'center' | 'end' | 'nearest')
+   * @param options.behavior - Scroll behavior ('auto' | 'smooth')
+   * @returns Promise resolving to true if scrolling succeeded, false otherwise
+   */
+  async scrollToPositionAsync(
+    pos: number,
+    options: { block?: 'start' | 'center' | 'end' | 'nearest'; behavior?: ScrollBehavior } = {},
+  ): Promise<boolean> {
+    // Fast path: try sync scroll first (works if page already mounted)
+    if (this.scrollToPosition(pos, options)) {
+      return true;
+    }
+
+    // Page not mounted - find which page contains this position
+    const activeEditor = this.getActiveEditor();
+    const doc = activeEditor?.state?.doc;
+    if (!doc || !Number.isFinite(pos)) return false;
+
+    const clampedPos = Math.max(0, Math.min(pos, doc.content.size));
+    const layout = this.#layoutState.layout;
+    const sessionMode = this.#headerFooterSession?.session?.mode ?? 'body';
+    if (!layout || sessionMode !== 'body') return false;
+
+    let pageIndex: number | null = null;
+    for (let idx = 0; idx < layout.pages.length; idx++) {
+      const page = layout.pages[idx];
+      for (const fragment of page.fragments) {
+        const frag = fragment as { pmStart?: number; pmEnd?: number };
+        if (frag.pmStart != null && frag.pmEnd != null && clampedPos >= frag.pmStart && clampedPos <= frag.pmEnd) {
+          pageIndex = idx;
+          break;
+        }
+      }
+      if (pageIndex != null) break;
+    }
+    if (pageIndex == null) return false;
+
+    // Trigger virtualization to render the page
+    this.#scrollPageIntoView(pageIndex);
+
+    // Wait for page to mount in the DOM
+    const mounted = await this.#waitForPageMount(pageIndex, {
+      timeout: PresentationEditor.ANCHOR_NAV_TIMEOUT_MS,
+    });
+    if (!mounted) {
+      console.warn(`[PresentationEditor] scrollToPositionAsync: Page ${pageIndex} failed to mount within timeout`);
+      return false;
+    }
+
+    // Retry now that page is mounted
+    return this.scrollToPosition(pos, options);
   }
 
   /**
@@ -2214,6 +2317,8 @@ export class PresentationEditor extends EventEmitter {
     }
     this.#layoutOptions.zoom = zoom;
     this.#applyZoom();
+    // Notify DomPainter so virtualization accounts for the CSS transform scale
+    this.#domPainter?.setZoom?.(zoom);
     this.emit('zoomChange', { zoom });
     this.#scheduleSelectionUpdate();
     // Trigger cursor updates on zoom changes
@@ -2299,8 +2404,9 @@ export class PresentationEditor extends EventEmitter {
     }
 
     // Unregister from static registry
-    if (this.#options?.documentId) {
-      PresentationEditor.#instances.delete(this.#options.documentId);
+    if (this.#registryKey) {
+      PresentationEditor.#instances.delete(this.#registryKey);
+      this.#registryKey = null;
     }
 
     // Clean up header/footer session manager
@@ -2764,7 +2870,7 @@ export class PresentationEditor extends EventEmitter {
   }
 
   /**
-   * Sets up drag and drop handlers for field annotations.
+   * Sets up drag and drop handlers for field annotations and image files.
    */
   #setupDragHandlers() {
     // Clean up any existing manager
@@ -2777,6 +2883,7 @@ export class PresentationEditor extends EventEmitter {
       scheduleSelectionUpdate: () => this.#scheduleSelectionUpdate(),
       getViewportHost: () => this.#viewportHost,
       getPainterHost: () => this.#painterHost,
+      insertImageFile: (params) => processAndInsertImageFile(params),
     });
     this.#dragDropManager.bind();
   }
@@ -3140,12 +3247,21 @@ export class PresentationEditor extends EventEmitter {
           }
         } catch {}
 
+        let defaultTableStyleId: string | undefined;
+        if (converter) {
+          const settingsRoot = readSettingsRoot(converter);
+          if (settingsRoot) {
+            defaultTableStyleId = readDefaultTableStyle(settingsRoot) ?? undefined;
+          }
+        }
+
         converterContext = converter
           ? {
               docx: converter.convertedXml,
               ...(Object.keys(footnoteNumberById).length ? { footnoteNumberById } : {}),
               translatedLinkedStyles: converter.translatedLinkedStyles,
               translatedNumbering: converter.translatedNumbering,
+              ...(defaultTableStyleId ? { defaultTableStyleId } : {}),
             }
           : undefined;
         const atomNodeTypes = getAtomNodeTypesFromSchema(this.#editor?.schema ?? null);
@@ -3424,14 +3540,12 @@ export class PresentationEditor extends EventEmitter {
       this.emit('paginationUpdate', payload);
 
       // Emit fresh comment positions after layout completes.
-      // This ensures positions are always in sync with the current document and layout.
+      // Always emit — even when empty — so the store can clear stale positions
+      // (e.g. when undo removes the last tracked-change mark).
       const allowViewingCommentPositions = this.#layoutOptions.emitCommentPositionsInViewing === true;
       if (this.#documentMode !== 'viewing' || allowViewingCommentPositions) {
         const commentPositions = this.#collectCommentPositions();
-        const positionKeys = Object.keys(commentPositions);
-        if (positionKeys.length > 0) {
-          this.emit('commentPositions', { positions: commentPositions });
-        }
+        this.emit('commentPositions', { positions: commentPositions });
       }
 
       this.#selectionSync.requestRender({ immediate: true });
@@ -3453,17 +3567,30 @@ export class PresentationEditor extends EventEmitter {
 
   #ensurePainter(blocks: FlowBlock[], measures: Measure[]) {
     if (!this.#domPainter) {
+      // Ensure the virtualization gap matches the effective page gap so that
+      // DomPainter's spacer/offset math stays consistent with #applyZoom() height calculations.
+      const virtualization = this.#layoutOptions.virtualization;
+      const effectiveGap = this.#getEffectivePageGap();
+      const normalizedVirtualization = virtualization?.enabled
+        ? { ...virtualization, gap: virtualization.gap ?? effectiveGap }
+        : virtualization;
+
       this.#domPainter = createDomPainter({
         blocks,
         measures,
         layoutMode: this.#layoutOptions.layoutMode ?? 'vertical',
-        virtualization: this.#layoutOptions.virtualization,
+        virtualization: normalizedVirtualization,
         pageStyles: this.#layoutOptions.pageStyles,
         headerProvider: this.#headerFooterSession?.headerDecorationProvider,
         footerProvider: this.#headerFooterSession?.footerDecorationProvider,
         ruler: this.#layoutOptions.ruler,
-        pageGap: this.#layoutState.layout?.pageGap ?? this.#getEffectivePageGap(),
+        pageGap: this.#layoutState.layout?.pageGap ?? effectiveGap,
       });
+      // Pass the current zoom so virtualization accounts for the CSS transform scale
+      const currentZoom = this.#layoutOptions.zoom ?? 1;
+      if (currentZoom !== 1) {
+        this.#domPainter.setZoom(currentZoom);
+      }
     }
     return this.#domPainter;
   }
@@ -4939,10 +5066,16 @@ export class PresentationEditor extends EventEmitter {
       this.#viewportHost.style.width = `${scaledWidth}px`;
       this.#viewportHost.style.minWidth = `${scaledWidth}px`;
       this.#viewportHost.style.minHeight = `${scaledHeight}px`;
+      this.#viewportHost.style.height = '';
+      this.#viewportHost.style.overflow = '';
       this.#viewportHost.style.transform = '';
 
       this.#painterHost.style.width = `${totalWidth}px`;
       this.#painterHost.style.minHeight = `${maxHeight}px`;
+      // Negative margin compensates for the CSS box overflow from transform: scale().
+      // At zoom < 1 the unscaled CSS box is larger than the visual; this pulls the
+      // bottom edge up to match, without clipping overlays (e.g., cursor labels).
+      this.#painterHost.style.marginBottom = zoom !== 1 ? `${maxHeight * zoom - maxHeight}px` : '';
       this.#painterHost.style.transformOrigin = 'top left';
       this.#painterHost.style.transform = zoom === 1 ? '' : `scale(${zoom})`;
 
@@ -4961,19 +5094,30 @@ export class PresentationEditor extends EventEmitter {
     //
     // This ensures the scroll container sees the correct scaled content size while
     // the transform provides visual scaling.
+    //
+    // CSS transform: scale() does NOT change the element's CSS box dimensions.
+    // At zoom < 1, painterHost's CSS box stays at the full unscaled height while its
+    // visual size is smaller. A negative margin-bottom on painterHost compensates for
+    // the difference, so the scroll container sees the correct scaled size without
+    // clipping overlays (e.g., collaboration cursor labels that extend above their caret).
     const scaledWidth = maxWidth * zoom;
     const scaledHeight = totalHeight * zoom;
 
-    // Set viewport to scaled dimensions for scroll container
     this.#viewportHost.style.width = `${scaledWidth}px`;
     this.#viewportHost.style.minWidth = `${scaledWidth}px`;
     this.#viewportHost.style.minHeight = `${scaledHeight}px`;
+    this.#viewportHost.style.height = '';
+    this.#viewportHost.style.overflow = '';
     this.#viewportHost.style.transform = '';
 
-    // Set painterHost to UNSCALED dimensions and apply transform
-    // This way: 816px * scale(1.5) = 1224px visual = matches viewport
+    // Set painterHost to UNSCALED dimensions and apply transform.
+    // Negative margin compensates for the CSS box overflow from transform: scale().
+    // At zoom < 1: totalHeight=74304 with scale(0.75) → visual 55728px but CSS box stays 74304px.
+    // marginBottom = totalHeight * zoom - totalHeight = 74304 * 0.75 - 74304 = -18576px
+    // This shrinks the layout contribution to match the visual size.
     this.#painterHost.style.width = `${maxWidth}px`;
     this.#painterHost.style.minHeight = `${totalHeight}px`;
+    this.#painterHost.style.marginBottom = zoom !== 1 ? `${totalHeight * zoom - totalHeight}px` : '';
     this.#painterHost.style.transformOrigin = 'top left';
     this.#painterHost.style.transform = zoom === 1 ? '' : `scale(${zoom})`;
 

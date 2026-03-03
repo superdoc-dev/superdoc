@@ -26,7 +26,27 @@ Returns a NodeInfo object with the node type, address, content, and typed proper
 
 ## Input fields
 
-_No fields._
+### Variant 1 (kind="block")
+
+| Field | Type | Required | Description |
+| --- | --- | --- | --- |
+| `kind` | `"block"` | yes | Constant: `"block"` |
+| `nodeId` | string | yes |  |
+| `nodeType` | enum | yes | `"paragraph"`, `"heading"`, `"listItem"`, `"table"`, `"tableRow"`, `"tableCell"`, `"tableOfContents"`, `"image"`, `"sdt"` |
+
+### Variant 2 (kind="inline")
+
+| Field | Type | Required | Description |
+| --- | --- | --- | --- |
+| `anchor` | InlineAnchor | yes | InlineAnchor |
+| `anchor.end` | Position | yes | Position |
+| `anchor.end.blockId` | string | yes |  |
+| `anchor.end.offset` | integer | yes |  |
+| `anchor.start` | Position | yes | Position |
+| `anchor.start.blockId` | string | yes |  |
+| `anchor.start.offset` | integer | yes |  |
+| `kind` | `"inline"` | yes | Constant: `"inline"` |
+| `nodeType` | enum | yes | `"run"`, `"bookmark"`, `"comment"`, `"hyperlink"`, `"sdt"`, `"image"`, `"footnoteRef"`, `"tab"`, `"lineBreak"` |
 
 ### Example request
 
@@ -49,6 +69,8 @@ _No fields._
 | `nodes` | object[] | no |  |
 | `properties` | object | no |  |
 | `summary` | object | no |  |
+| `summary.label` | string | no |  |
+| `summary.text` | string | no |  |
 | `text` | string | no |  |
 
 ### Example response

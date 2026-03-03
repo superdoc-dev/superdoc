@@ -369,6 +369,57 @@ describe('DomPainter virtualization (vertical)', () => {
     expect(footerEl).toBeTruthy();
   });
 
+  it('corrects scroll position for zoom factor in non-scrollable container', () => {
+    // When the mount element has transform: scale(zoom), getBoundingClientRect() returns
+    // screen-space coordinates. The zoom factor divides rect.top to convert back to layout space.
+    // Without this correction, the virtual window drifts at non-100% zoom levels.
+    const zoom = 0.75;
+    const pageH = 500;
+    const gap = 72;
+    const pageCount = 20;
+
+    const painter = createDomPainter({
+      blocks: [block],
+      measures: [measure],
+      virtualization: { enabled: true, window: 3, overscan: 0, gap, paddingTop: 0 },
+    });
+
+    const layout = makeLayout(pageCount);
+    painter.paint(layout, mount);
+    painter.setZoom!(zoom);
+
+    // Simulate non-scrollable container: scrollHeight <= clientHeight so it uses getBoundingClientRect path
+    Object.defineProperty(mount, 'scrollHeight', { value: 100, configurable: true });
+    Object.defineProperty(mount, 'clientHeight', { value: 600, configurable: true });
+
+    // Simulate being scrolled to layout-space position ~5000px.
+    // In screen space (after zoom), rect.top = -5000 * zoom = -3750.
+    const layoutScrollY = 5000;
+    const screenTop = -layoutScrollY * zoom; // -3750
+    mount.getBoundingClientRect = () =>
+      ({
+        top: screenTop,
+        left: 0,
+        right: 400,
+        bottom: 600 + screenTop,
+        width: 400,
+        height: 600,
+        x: 0,
+        y: screenTop,
+        toJSON() {},
+      }) as DOMRect;
+
+    painter.onScroll!();
+
+    // At layoutScrollY=5000, the anchor page is index 8 (topOfIndex(8)=4576 <= 5000, topOfIndex(9)=5148 > 5000).
+    // With window=3, overscan=0, the window is centered around the anchor: pages [7, 8, 9].
+    // Without the zoom correction, scrollY would be 3750 (screen-space), giving anchor=6 and pages [5, 6, 7].
+    const pages = mount.querySelectorAll('.superdoc-page');
+    const indices = Array.from(pages).map((p) => Number((p as HTMLElement).dataset.pageIndex));
+
+    expect(indices).toEqual([7, 8, 9]);
+  });
+
   it('renders drawing fragments inside virtualized windows', () => {
     const painter = createDomPainter({
       blocks: [drawingBlock],

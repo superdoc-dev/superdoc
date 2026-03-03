@@ -227,6 +227,7 @@
             "group": "Guides",
             "pages": [
               "guides/general/storage",
+              "guides/general/stable-navigation",
               {
                 "group": "Collaboration",
                 "pages": [

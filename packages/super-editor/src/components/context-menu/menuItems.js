@@ -2,6 +2,7 @@ import TableGrid from '../toolbar/TableGrid.vue';
 import AIWriter from '../toolbar/AIWriter.vue';
 import TableActions from '../toolbar/TableActions.vue';
 import LinkInput from '../toolbar/LinkInput.vue';
+import CellBackgroundPicker from './CellBackgroundPicker.vue';
 import { TEXTS, ICONS, TRIGGERS } from './constants.js';
 import { isTrackedChangeActionAllowed } from '@extensions/track-changes/permission-helpers.js';
 import { readClipboardRaw } from '../../core/utilities/clipboardUtils.js';
@@ -107,6 +108,8 @@ export function getItems(context, customItems = [], includeDefaultItems = true) 
     isInTable: context.isInTable ?? false,
     isInSectionNode: context.isInSectionNode ?? false,
     isTrackedChange: context.isTrackedChange ?? false,
+    isCellSelection: context.isCellSelection ?? false,
+    tableSelectionKind: context.tableSelectionKind ?? null,
     clipboardContent: context.clipboardContent ?? { hasContent: false },
     selectedText: context.selectedText ?? '',
     hasSelection: context.hasSelection ?? Boolean(context.selectedText),
@@ -246,6 +249,16 @@ export function getItems(context, customItems = [], includeDefaultItems = true) 
             const { trigger, isInTable } = context;
             const allowedTriggers = [TRIGGERS.slash, TRIGGERS.click];
             return allowedTriggers.includes(trigger) && isInTable;
+          },
+        },
+        {
+          id: 'cell-background',
+          label: TEXTS.cellBackground,
+          icon: ICONS.cellBackground,
+          component: CellBackgroundPicker,
+          isDefault: true,
+          showWhen: (context) => {
+            return context.trigger === TRIGGERS.click && (context.isCellSelection || context.isInTable);
           },
         },
       ],

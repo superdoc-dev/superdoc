@@ -80,6 +80,56 @@ const redlined = await editor.exportDocx();
 ```
 </CodeGroup>
 
+## Programmatic block access
+
+For multi-step workflows — extract block references, send them to an LLM, then apply edits — use the [Document API](/document-api/overview). It returns stable block addresses that work across separate editor sessions:
+
+<CodeGroup>
+```javascript Usage
+// Find all paragraphs and their text
+const result = editor.doc.find({
+  select: { type: 'node', nodeType: 'paragraph' },
+  includeNodes: true,
+});
+
+// Each item has an address with a best-effort stable nodeId
+const blocks = result.items.map((item) => ({
+  id: item.address.nodeId,     // usually stable across loads for unchanged DOCX content
+  type: item.address.nodeType,
+  text: item.node?.text,
+}));
+
+// Send blocks to LLM, get back edits, apply them
+```
+
+```javascript Full Example
+import { readFile } from 'node:fs/promises';
+import { Editor } from 'superdoc/super-editor';
+
+const docx = await readFile('./contract.docx');
+const editor = await Editor.open(docx);
+
+// Find all paragraphs and their text
+const result = editor.doc.find({
+  select: { type: 'node', nodeType: 'paragraph' },
+  includeNodes: true,
+});
+
+// Each item has an address with a best-effort stable nodeId
+const blocks = result.items.map((item) => ({
+  id: item.address.nodeId,     // usually stable across loads for unchanged DOCX content
+  type: item.address.nodeType,
+  text: item.node?.text,
+}));
+
+// Send blocks to LLM, get back edits, apply them
+```
+</CodeGroup>
+
+<Info>
+Block addresses from `doc.find()` prefer DOCX-native IDs (`paraId`) for imported blocks. This is the best available cross-session anchor, but no ID is guaranteed to survive all Word round-trips. Don't read `node.attrs.sdBlockId` directly — it's regenerated on every load.
+</Info>
+
 ## LLM quick reference
 
 Point your AI assistant at these URLs for SuperDoc context:
@@ -92,6 +142,14 @@ https://docs.superdoc.dev/llms-full.txt   // Complete documentation
 ## Next steps
 
 <CardGroup cols={2}>
+  <Card
+    title="Document API"
+    icon="book"
+    href="/document-api/overview"
+  >
+    Stable block addressing, find/replace, and programmatic edits
+  </Card>
+
   <Card
     title="SuperEditor API"
     icon="code"
@@ -106,14 +164,6 @@ https://docs.superdoc.dev/llms-full.txt   // Complete documentation
     href="/getting-started/import-export"
   >
     Content formats, export options, and round-trip behavior
-  </Card>
-
-  <Card
-    title="AI Redlining (Browser)"
-    icon="github"
-    href="https://github.com/superdoc-dev/superdoc/tree/main/examples/features/ai-redlining"
-  >
-    React app: upload a DOCX, LLM reviews it, tracked changes in the UI
   </Card>
 
   <Card

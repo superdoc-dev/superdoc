@@ -655,26 +655,35 @@ function createFixture(page: Page, editor: Locator, modKey: string) {
             page.evaluate(
               ({ text, commentId }) => {
                 const normalize = (value: string) => value.replace(/\s+/g, ' ').trim();
-                const highlights = Array.from(document.querySelectorAll('.superdoc-comment-highlight'));
+                const highlights = Array.from(document.querySelectorAll('.superdoc-comment-highlight')).map((el) => ({
+                  text: normalize(el.textContent ?? ''),
+                  commentIds: (el.getAttribute('data-comment-ids') ?? '').split(/[\s,]+/).filter(Boolean),
+                }));
                 if (highlights.length === 0) return false;
 
-                if (text) {
-                  const expected = normalize(text);
-                  const hasTextMatch = highlights.some((el) => normalize(el.textContent ?? '').includes(expected));
-                  if (!hasTextMatch) return false;
-                }
+                const relevant = commentId
+                  ? highlights.filter((entry) => entry.commentIds.includes(commentId))
+                  : highlights;
+                if (relevant.length === 0) return false;
 
-                if (commentId) {
-                  const hasCommentId = highlights.some((el) =>
-                    (el.getAttribute('data-comment-ids') ?? '')
-                      .split(/[\s,]+/)
-                      .filter(Boolean)
-                      .includes(commentId),
-                  );
-                  if (!hasCommentId) return false;
-                }
+                if (!text) return true;
 
-                return true;
+                const expected = normalize(text);
+                if (expected.length === 0) return true;
+
+                const hasDirectTextMatch = relevant.some((entry) => entry.text.includes(expected));
+                if (hasDirectTextMatch) return true;
+
+                if (!commentId) return false;
+
+                // Highlights for the same comment may be split across multiple DOM nodes.
+                const aggregatedText = normalize(
+                  relevant
+                    .map((entry) => entry.text)
+                    .filter(Boolean)
+                    .join(' '),
+                );
+                return aggregatedText.includes(expected);
               },
               { text: expectedText, commentId: expectedCommentId },
             ),
@@ -780,7 +789,7 @@ function createFixture(page: Page, editor: Locator, modKey: string) {
       throw new Error(`assertTextMarkAttrs only supports "link" and "textStyle" via document-api; got "${markName}".`);
     },
 
-    async assertTextAlignment(text: string, expectedAlignment: string, occurrence = 0) {
+    async assertTextAlignment(text: string, expectedAlignment: string | null, occurrence = 0) {
       await expect
         .poll(() =>
           page.evaluate(

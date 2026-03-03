@@ -66,6 +66,55 @@ export function ensureSettingsRoot(converter: ConverterWithDocumentSettings): Xm
   return fallbackRoot;
 }
 
+// ──────────────────────────────────────────────────────────────────────────────
+// w:defaultTableStyle
+// ──────────────────────────────────────────────────────────────────────────────
+
+/**
+ * Reads `w:defaultTableStyle` from settings.xml.
+ * Returns the style ID (`w:val`) or null if not present.
+ */
+export function readDefaultTableStyle(settingsRoot: XmlElement): string | null {
+  const el = settingsRoot.elements?.find((entry) => entry.name === 'w:defaultTableStyle');
+  if (!el) return null;
+  const val = (el.attributes as Record<string, unknown> | undefined)?.['w:val'];
+  return typeof val === 'string' && val.length > 0 ? val : null;
+}
+
+/**
+ * Sets `w:defaultTableStyle` in settings.xml to the given style ID.
+ * Creates the element if absent, replaces it if already present.
+ */
+export function setDefaultTableStyle(settingsRoot: XmlElement, styleId: string): void {
+  const elements = ensureSettingsRootElements(settingsRoot);
+  const idx = elements.findIndex((entry) => entry.name === 'w:defaultTableStyle');
+
+  const newEl: XmlElement = {
+    type: 'element',
+    name: 'w:defaultTableStyle',
+    attributes: { 'w:val': styleId },
+    elements: [],
+  };
+
+  if (idx !== -1) {
+    elements[idx] = newEl;
+  } else {
+    elements.push(newEl);
+  }
+}
+
+/**
+ * Removes `w:defaultTableStyle` from settings.xml.
+ */
+export function removeDefaultTableStyle(settingsRoot: XmlElement): void {
+  const elements = ensureSettingsRootElements(settingsRoot);
+  settingsRoot.elements = elements.filter((entry) => entry.name !== 'w:defaultTableStyle');
+}
+
+// ──────────────────────────────────────────────────────────────────────────────
+// w:evenAndOddHeaders
+// ──────────────────────────────────────────────────────────────────────────────
+
 export function hasOddEvenHeadersFooters(settingsRoot: XmlElement): boolean {
   return settingsRoot.elements?.some((entry) => entry.name === 'w:evenAndOddHeaders') === true;
 }

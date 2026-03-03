@@ -8,6 +8,7 @@ import { spawn } from 'node:child_process';
 import readline from 'node:readline';
 import { fileURLToPath } from 'node:url';
 import { normalizeVersionLabel } from './shared.mjs';
+import { writeProgressBar } from '../../scripts/corpus/shared.mjs';
 
 const cloneDeep = typeof structuredClone === 'function'
   ? structuredClone
@@ -97,6 +98,7 @@ function safeLabel(value) {
 function pathToPosix(value) {
   return value.split(path.sep).join('/');
 }
+
 
 function formatPath(segments) {
   if (!Array.isArray(segments) || segments.length === 0) return '$';
@@ -439,9 +441,10 @@ async function runCommandCapture(command, commandArgs, options = {}) {
 }
 
 async function runCorpusPull() {
-  const exitCode = await runCommand('pnpm', ['corpus:pull'], { cwd: REPO_ROOT });
+  const exitCode = await runCommand('pnpm', ['--silent', 'corpus:pull', '--quiet'], { cwd: REPO_ROOT });
   if (exitCode !== 0) {
-    throw new Error(`Corpus pull failed with exit code ${exitCode}.`);
+    // corpus/pull.mjs already printed a user-facing message — exit without a stack trace
+    process.exit(exitCode);
   }
 }
 
@@ -451,17 +454,12 @@ async function ensureDefaultCorpusReady(args) {
   const corpusRoot = DEFAULT_INPUT_ROOT;
   const hasCorpus = await pathExists(corpusRoot);
 
-  if (!hasCorpus) {
-    console.log(`[layout-snapshots:compare] Corpus folder not found at ${corpusRoot}. Running pnpm corpus:pull...`);
-    await runCorpusPull();
-    if (!(await pathExists(corpusRoot))) {
-      throw new Error(`Corpus pull completed but folder not found: ${corpusRoot}`);
-    }
-    return;
-  }
-
-  console.log('[layout-snapshots:compare] Syncing corpus (downloading missing files)...');
+  console.log('[compare] Syncing corpus...');
   await runCorpusPull();
+
+  if (!hasCorpus && !(await pathExists(corpusRoot))) {
+    throw new Error(`Corpus pull completed but folder not found: ${corpusRoot}`);
+  }
 }
 
 async function listSnapshotFiles(rootPath) {
@@ -934,6 +932,16 @@ function groupDiffsByPage(diffEntries, blockPagesMap) {
   };
 }
 
+/**
+ * Normalize a formatted JSONPath for pattern grouping.
+ * Replaces numeric array indices with [*] so that e.g.
+ * "$.layoutSnapshot.blocks[0].rows[3]" and "$.layoutSnapshot.blocks[7].rows[1]"
+ * both become "$.layoutSnapshot.blocks[*].rows[*]".
+ */
+function normalizePathForPattern(formattedPath) {
+  return formattedPath.replace(/\[\d+]/g, '[*]');
+}
+
 async function readSnapshotGenerationSummary(summaryPath) {
   try {
     const raw = await fs.readFile(summaryPath, 'utf8');
@@ -1174,9 +1182,7 @@ async function ensureVisualTestingDependencies(visualWorkdir) {
     return;
   }
 
-  console.log(
-    `[layout-snapshots:compare] Missing visual testing dependencies at ${nodeModulesPath}. Running pnpm install...`,
-  );
+  console.log('[compare] Installing visual testing dependencies...');
 
   const exitCode = await runCommand('pnpm', ['install'], { cwd: visualWorkdir });
   if (exitCode !== 0) {
@@ -1211,10 +1217,7 @@ async function runVisualCompareForChangedDocs({ changedDocPaths, args }) {
     commandArgs.push('--doc', docPath);
   }
 
-  console.log(`[layout-snapshots:compare] Visual workdir:    ${visualWorkdir}`);
-  console.log(`[layout-snapshots:compare] Visual docs root:  ${visualDocsRoot}`);
-  console.log(`[layout-snapshots:compare] Visual reference:  ${visualReference}`);
-  console.log(`[layout-snapshots:compare] Visual docs count: ${changedDocPaths.length}`);
+  console.log(`[compare] Running visual comparison (${changedDocPaths.length} docs against ${visualReference})...`);
 
   const exitCode = await runCommand('pnpm', commandArgs, {
     cwd: visualWorkdir,
@@ -1257,6 +1260,10 @@ function buildReportMarkdown(summary) {
   lines.push(`- Reference docs: ${summary.referenceDocCount}`);
   lines.push(`- Matched docs: ${summary.matchedDocCount}`);
   lines.push(`- Changed docs: ${summary.changedDocCount}`);
+  if (typeof summary.uniqueChangeDocCount === 'number') {
+    lines.push(`  - Unique changes: ${summary.uniqueChangeDocCount}`);
+    lines.push(`  - Widespread-only: ${summary.widespreadOnlyDocCount}`);
+  }
   lines.push(`- Unchanged docs: ${summary.unchangedDocCount}`);
   lines.push(`- Missing in reference: ${summary.missingInReference.length}`);
   lines.push(`- Missing in candidate: ${summary.missingInCandidate.length}`);
@@ -1282,13 +1289,45 @@ function buildReportMarkdown(summary) {
     lines.push('');
   }
 
-  if (summary.changedDocs.length > 0) {
-    lines.push('## Changed Docs');
+  // Widespread changes
+  if (Array.isArray(summary.widespreadDiffs) && summary.widespreadDiffs.length > 0) {
+    lines.push('## Widespread Changes');
     lines.push('');
-    for (const item of summary.changedDocs) {
-      const pages = item.pagesChanged.length > 0 ? item.pagesChanged.join(', ') : 'global-only';
-      lines.push(`- ${item.path} | diffs: ${item.diffCount} | pages: ${pages}`);
+    lines.push('These diff patterns appear in 50%+ of changed docs. They typically represent schema evolution, not regressions.');
+    lines.push('');
+    for (const wd of summary.widespreadDiffs) {
+      lines.push(`- \`${wd.path}\` (${wd.kind}) — ${wd.docCount} docs`);
     }
+    lines.push('');
+  }
+
+  // Docs with unique changes (not all diffs are widespread)
+  const uniqueDocs = summary.changedDocs.filter((d) => !d.widespreadOnly);
+  const widespreadOnlyDocs = summary.changedDocs.filter((d) => d.widespreadOnly);
+
+  if (uniqueDocs.length > 0) {
+    lines.push(`## Docs With Unique Changes (${uniqueDocs.length})`);
+    lines.push('');
+    for (const item of uniqueDocs) {
+      const pages = item.pagesChanged.length > 0 ? item.pagesChanged.join(', ') : 'global-only';
+      const pageFlag = item.pageCountChanged ? ' | **PAGE COUNT CHANGED**' : '';
+      lines.push(`- ${item.path} | diffs: ${item.diffCount} | pages: ${pages}${pageFlag}`);
+    }
+    lines.push('');
+  }
+
+  // Widespread-only docs (collapsed)
+  if (widespreadOnlyDocs.length > 0) {
+    lines.push(`## Widespread-Only Docs (${widespreadOnlyDocs.length})`);
+    lines.push('');
+    lines.push('<details>');
+    lines.push('<summary>Click to expand — every diff in these docs is a widespread pattern</summary>');
+    lines.push('');
+    for (const item of widespreadOnlyDocs) {
+      lines.push(`- ${item.path} | diffs: ${item.diffCount}`);
+    }
+    lines.push('');
+    lines.push('</details>');
     lines.push('');
   }
 
@@ -1330,14 +1369,12 @@ async function main() {
   const referenceBase = path.resolve(args.referenceBase);
 
   if (!args.reference && !args.referenceRoot) {
-    console.log(
-      `[layout-snapshots:compare] No --reference provided. Resolving npm dist-tag "${DEFAULT_NPM_DIST_TAG}" for ${NPM_PACKAGE_NAME}...`,
-    );
+    process.stdout.write(`[compare] Resolving reference version (npm ${NPM_PACKAGE_NAME}@${DEFAULT_NPM_DIST_TAG})...`);
     args.reference = await resolveNpmDistTagVersion({
       packageName: NPM_PACKAGE_NAME,
       distTag: DEFAULT_NPM_DIST_TAG,
     });
-    console.log(`[layout-snapshots:compare] Resolved default reference: ${args.reference}`);
+    console.log(` ${args.reference}`);
   }
 
   let referenceRoot = args.referenceRoot ? path.resolve(args.referenceRoot) : null;
@@ -1352,7 +1389,7 @@ async function main() {
   }
 
   if (args.autoGenerateCandidate) {
-    process.stdout.write('[layout-snapshots:compare] Packing SuperDoc...');
+    process.stdout.write('[compare] Building SuperDoc...');
     const packResult = await runCommandCapture('pnpm', ['run', 'pack:es'], { cwd: REPO_ROOT });
     if (packResult.exitCode !== 0) {
       console.log(' FAILED');
@@ -1361,7 +1398,7 @@ async function main() {
     }
     console.log(' done');
 
-    console.log(`[layout-snapshots:compare] Refreshing candidate snapshots at ${candidateRoot}...`);
+    console.log('[compare] Generating candidate snapshots...');
     const candidateGeneration = await runCandidateGeneration({
       candidateRoot,
       args,
@@ -1386,7 +1423,7 @@ async function main() {
       throw new Error(`Reference root does not exist: ${referenceRoot}`);
     }
 
-    console.log(`[layout-snapshots:compare] Reference not found at ${referenceRoot}. Generating from npm...`);
+    console.log('[compare] Generating reference snapshots...');
     const referenceGeneration = await runNpmReferenceGeneration({
       referenceSpecifier: args.reference,
       args,
@@ -1444,9 +1481,7 @@ async function main() {
     !args.referenceRoot &&
     !referenceGenerated
   ) {
-    console.log(
-      `[layout-snapshots:compare] Reference exists but is incomplete (${relation.missingInReference.length} missing). Regenerating...`,
-    );
+    console.log(`[compare] Generating reference snapshots (${relation.missingInReference.length} missing)...`);
     const referenceGeneration = await runNpmReferenceGeneration({
       referenceSpecifier: args.reference,
       args,
@@ -1502,9 +1537,7 @@ async function main() {
     }
 
     if (refreshReasons.length > 0) {
-      console.log(
-        `[layout-snapshots:compare] Reference snapshots require refresh (${refreshReasons.join('; ')}). Regenerating reference snapshots...`,
-      );
+      console.log(`[compare] Refreshing reference snapshots (${refreshReasons.join('; ')})...`);
       const referenceGeneration = await runNpmReferenceGeneration({
         referenceSpecifier: args.reference,
         args,
@@ -1552,20 +1585,19 @@ async function main() {
   await fs.mkdir(reportDir, { recursive: true });
   await fs.mkdir(path.join(reportDir, 'docs'), { recursive: true });
 
-  console.log(`[layout-snapshots:compare] Candidate root: ${candidateRoot}`);
-  console.log(`[layout-snapshots:compare] Reference root: ${referenceRoot}`);
-  console.log(`[layout-snapshots:compare] Report dir:     ${reportDir}`);
-  if (hasMatchPatterns) {
-    console.log(`[layout-snapshots:compare] Match:          ${args.matches.join(', ')}`);
-  }
-  if (typeof args.limit === 'number') {
-    console.log(`[layout-snapshots:compare] Limit:          ${args.limit}`);
-  }
+  const matchLabel = hasMatchPatterns ? ` matching "${args.matches.join('", "')}"` : '';
+  const limitLabel = typeof args.limit === 'number' ? ` (limit ${args.limit})` : '';
+  console.log(`[compare] Comparing ${relation.matched.length} documents${matchLabel}${limitLabel}...`);
 
-  const changedDocs = [];
+  const pendingReports = [];
+  /** @type {Map<string, { kind: string, count: number }>} */
+  const diffPatternCounts = new Map();
   let unchangedDocCount = 0;
+  const isTTY = process.stdout.isTTY;
+  const totalToCompare = relation.matched.length;
+  const compareStartedAt = Date.now();
 
-  for (let i = 0; i < relation.matched.length; i += 1) {
+  for (let i = 0; i < totalToCompare; i += 1) {
     const relPath = relation.matched[i];
     const candidateFile = candidateFiles.get(relPath);
     const referenceFile = referenceFiles.get(relPath);
@@ -1577,22 +1609,17 @@ async function main() {
       referenceRaw = JSON.parse(await fs.readFile(referenceFile, 'utf8'));
     } catch (error) {
       const message = error instanceof Error ? error.message : String(error);
-      const report = {
+      const docReport = {
         path: relPath,
         parseError: message,
         candidateFile,
         referenceFile,
-      };
-      const reportPath = path.join(reportDir, 'docs', `${relPath}.diff.json`);
-      await fs.mkdir(path.dirname(reportPath), { recursive: true });
-      await fs.writeFile(reportPath, JSON.stringify(report, null, 2), 'utf8');
-      changedDocs.push({
-        path: relPath,
         diffCount: 1,
         pagesChanged: [],
-        reportFile: pathToPosix(path.relative(reportDir, reportPath)),
-      });
-      console.log(`[${i + 1}/${relation.matched.length}] CHANGED ${relPath} (parse error)`);
+      };
+      const reportPath = path.join(reportDir, 'docs', `${relPath}.diff.json`);
+      pendingReports.push({ docReport, reportPath, allDiffEntries: [] });
+      if (isTTY) writeProgressBar(i + 1, totalToCompare, compareStartedAt, { indent: '  ' });
       continue;
     }
 
@@ -1605,12 +1632,24 @@ async function main() {
 
     if (diffs.length === 0) {
       unchangedDocCount += 1;
+      if (isTTY) writeProgressBar(i + 1, totalToCompare, compareStartedAt, { indent: '  ' });
       continue;
     }
 
     const blockPagesMap = getPagesByBlockIndex(candidate);
     const grouped = groupDiffsByPage(diffs, blockPagesMap);
     const pagesChanged = [...grouped.perPage.keys()].sort((a, b) => a - b);
+
+    function mapDiffEntry(entry) {
+      const fp = formatPath(entry.pathSegments);
+      return {
+        path: fp,
+        kind: entry.kind,
+        reference: summarizeValue(entry.reference),
+        candidate: summarizeValue(entry.candidate),
+        ...(typeof entry.delta === 'number' ? { delta: entry.delta } : {}),
+      };
+    }
 
     const docReport = {
       path: relPath,
@@ -1627,44 +1666,94 @@ async function main() {
       diffCount: diffs.length,
       truncated,
       pagesChanged,
-      globalDiffs: grouped.global.map((entry) => ({
-        path: formatPath(entry.pathSegments),
-        kind: entry.kind,
-        reference: summarizeValue(entry.reference),
-        candidate: summarizeValue(entry.candidate),
-        ...(typeof entry.delta === 'number' ? { delta: entry.delta } : {}),
-      })),
+      globalDiffs: grouped.global.map(mapDiffEntry),
       pageDiffs: Object.fromEntries(
         [...grouped.perPage.entries()]
           .sort((a, b) => a[0] - b[0])
           .map(([pageNumber, entries]) => [
             String(pageNumber),
-            entries.map((entry) => ({
-              path: formatPath(entry.pathSegments),
-              kind: entry.kind,
-              reference: summarizeValue(entry.reference),
-              candidate: summarizeValue(entry.candidate),
-              ...(typeof entry.delta === 'number' ? { delta: entry.delta } : {}),
-            })),
+            entries.map(mapDiffEntry),
           ]),
       ),
     };
 
+    // Accumulate diff patterns for widespread detection
+    const docPatterns = new Set();
+    const allDiffEntries = [
+      ...docReport.globalDiffs,
+      ...Object.values(docReport.pageDiffs).flat(),
+    ];
+    for (const d of allDiffEntries) {
+      const normalized = normalizePathForPattern(d.path);
+      const key = `${normalized}||${d.kind}`;
+      if (!docPatterns.has(key)) {
+        docPatterns.add(key);
+        const existing = diffPatternCounts.get(key);
+        if (existing) {
+          existing.count += 1;
+        } else {
+          diffPatternCounts.set(key, { kind: d.kind, count: 1 });
+        }
+      }
+    }
+
     const reportPath = path.join(reportDir, 'docs', `${relPath}.diff.json`);
+    pendingReports.push({ docReport, reportPath, allDiffEntries });
+
+    if (isTTY) writeProgressBar(i + 1, totalToCompare, compareStartedAt, { indent: '  ' });
+  }
+
+  if (isTTY && totalToCompare > 0) process.stdout.write('\n');
+
+  // ---- Widespread diff detection ----
+  const totalChangedDocs = pendingReports.length;
+  const widespreadThreshold = Math.max(1, Math.floor(totalChangedDocs * 0.5));
+  /** @type {Array<{ path: string, kind: string, docCount: number }>} */
+  const widespreadDiffs = [];
+  const widespreadPathKeys = new Set();
+
+  for (const [key, { kind, count }] of diffPatternCounts) {
+    if (count >= widespreadThreshold && totalChangedDocs >= 4) {
+      const normalizedPath = key.split('||')[0];
+      widespreadDiffs.push({ path: normalizedPath, kind, docCount: count });
+      widespreadPathKeys.add(key);
+    }
+  }
+
+  // ---- Mark widespread diffs and write per-doc reports ----
+  const changedDocs = [];
+
+  for (const { docReport, reportPath, allDiffEntries } of pendingReports) {
+    // Mark each diff as widespread or not (factual, based on pattern frequency)
+    for (const d of allDiffEntries) {
+      const normalized = normalizePathForPattern(d.path);
+      const key = `${normalized}||${d.kind}`;
+      d.widespread = widespreadPathKeys.has(key);
+    }
+
+    // Flag page count changes
+    const pageCountChanged = docReport.pageCount.candidate !== docReport.pageCount.reference;
+    if (pageCountChanged) docReport.pageCountChanged = true;
+
+    // Write report
     await fs.mkdir(path.dirname(reportPath), { recursive: true });
     await fs.writeFile(reportPath, JSON.stringify(docReport, null, 2), 'utf8');
 
+    // A doc is "widespread-only" if every diff is a widespread pattern
+    const widespreadOnly = allDiffEntries.length > 0 && allDiffEntries.every((d) => d.widespread);
+
     changedDocs.push({
-      path: relPath,
-      diffCount: diffs.length,
-      pagesChanged,
+      path: docReport.path,
+      diffCount: docReport.diffCount,
+      pagesChanged: docReport.pagesChanged,
+      pageCountChanged,
+      widespreadOnly,
       reportFile: pathToPosix(path.relative(reportDir, reportPath)),
     });
-
-    console.log(
-      `[${i + 1}/${relation.matched.length}] CHANGED ${relPath} | diffs ${diffs.length}${pagesChanged.length ? ` | pages ${pagesChanged.join(',')}` : ''}`,
-    );
   }
+
+  const uniqueChangeDocs = changedDocs.filter((d) => !d.widespreadOnly);
+  const widespreadOnlyDocs = changedDocs.filter((d) => d.widespreadOnly);
 
   const changedDocPaths = collectChangedDocRelativePaths(changedDocs);
   const visualReference = args.visualReference ?? args.reference;
@@ -1694,9 +1783,6 @@ async function main() {
 
   if (visualEligible) {
     console.log('');
-    console.log(
-      `[layout-snapshots:compare] Changed docs detected (${changedDocPaths.length}). Running visual compare...`,
-    );
     try {
       const visualRun = await runVisualCompareForChangedDocs({
         changedDocPaths,
@@ -1718,7 +1804,7 @@ async function main() {
         reason: message,
         error: message,
       };
-      console.error(`[layout-snapshots:compare] Visual compare failed: ${message}`);
+      console.error(`[compare] Visual compare failed: ${message}`);
       process.exitCode = 1;
     }
   }
@@ -1737,7 +1823,10 @@ async function main() {
     referenceDocCount: referencePaths.length,
     matchedDocCount: relation.matched.length,
     changedDocCount: changedDocs.length,
+    uniqueChangeDocCount: uniqueChangeDocs.length,
+    widespreadOnlyDocCount: widespreadOnlyDocs.length,
     unchangedDocCount,
+    widespreadDiffs,
     missingInReference: relation.missingInReference,
     missingInCandidate: relation.missingInCandidate,
     changedDocs,
@@ -1750,32 +1839,37 @@ async function main() {
   await fs.writeFile(path.join(reportDir, 'summary.json'), JSON.stringify(summary, null, 2), 'utf8');
   await fs.writeFile(path.join(reportDir, 'summary.md'), buildReportMarkdown(summary), 'utf8');
 
-  console.log('');
-  console.log(`[layout-snapshots:compare] Matched docs:       ${relation.matched.length}`);
-  console.log(`[layout-snapshots:compare] Changed docs:       ${changedDocs.length}`);
-  console.log(`[layout-snapshots:compare] Unchanged docs:     ${unchangedDocCount}`);
-  console.log(`[layout-snapshots:compare] Missing reference:  ${relation.missingInReference.length}`);
-  console.log(`[layout-snapshots:compare] Missing candidate:  ${relation.missingInCandidate.length}`);
-  console.log(`[layout-snapshots:compare] Candidate gen warnings: ${uniqueCandidateGenerationFailures.length}`);
-  console.log(`[layout-snapshots:compare] Reference gen warnings: ${uniqueReferenceGenerationFailures.length}`);
-  if (visualComparison.executed || visualComparison.enabled) {
-    console.log(`[layout-snapshots:compare] Visual compare:    ${visualComparison.status}`);
-  }
-  console.log(`[layout-snapshots:compare] Report:             ${reportDir}`);
-
-  if (generationFailures.length > 0) {
-    console.warn('');
-    console.warn(
-      `[layout-snapshots:compare] Generation warnings: ${generationFailures.length} document(s) were skipped during snapshot generation; compare completed.`,
-    );
-    for (const failure of generationFailures) {
-      const elapsed =
-        typeof failure.elapsedMs === 'number' ? ` after ${(failure.elapsedMs / 1000).toFixed(2)}s` : '';
-      const displayPath = toDisplayDocPath(failure.path, args.inputRoot);
-      const warningMessage = normalizeGenerationWarningMessage(failure.message);
-      console.warn(`- [${failure.source}] ${displayPath}${elapsed}: skipped (${warningMessage})`);
+  // ---- Print per-doc changes (unique changes only, not widespread-only docs) ----
+  if (uniqueChangeDocs.length > 0) {
+    console.log('');
+    console.log('[compare] Changed documents:');
+    for (const doc of uniqueChangeDocs) {
+      const pages = doc.pagesChanged?.length ? ` | pages ${doc.pagesChanged.join(',')}` : '';
+      const pageFlag = doc.pageCountChanged ? ' | PAGE COUNT CHANGED' : '';
+      console.log(`[compare]   ${doc.path} (${doc.diffCount} diffs${pages}${pageFlag})`);
     }
   }
+
+  // ---- Results summary ----
+  console.log('');
+  console.log(`[compare] Changed:   ${changedDocs.length}`);
+  if (widespreadOnlyDocs.length > 0) {
+    console.log(`[compare]   Unique: ${uniqueChangeDocs.length}  Widespread-only: ${widespreadOnlyDocs.length}`);
+  }
+  console.log(`[compare] Unchanged: ${unchangedDocCount}`);
+  if (relation.missingInReference.length > 0) {
+    console.log(`[compare] Missing reference: ${relation.missingInReference.length}`);
+  }
+  if (relation.missingInCandidate.length > 0) {
+    console.log(`[compare] Missing candidate: ${relation.missingInCandidate.length}`);
+  }
+  if (visualComparison.executed || visualComparison.enabled) {
+    console.log(`[compare] Visual: ${visualComparison.status}`);
+  }
+  if (generationFailures.length > 0) {
+    console.log(`[compare] Generation warnings: ${generationFailures.length}`);
+  }
+  console.log(`[compare] Report: ${reportDir}`);
 
   const hasDiffs =
     changedDocs.length > 0 || relation.missingInReference.length > 0 || relation.missingInCandidate.length > 0;
@@ -1794,7 +1888,7 @@ export { normalizeGenerationWarningMessage, toDisplayDocPath };
 if (isDirectExecution()) {
   main().catch((error) => {
     const message = error instanceof Error ? error.stack ?? error.message : String(error);
-    console.error(`[layout-snapshots:compare] Fatal: ${message}`);
+    console.error(`[compare] Fatal: ${message}`);
     process.exit(1);
   });
 }

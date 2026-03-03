@@ -1,4 +1,30 @@
-# Layout Snapshot Exporter
+# Layout Snapshot Comparison
+
+## Quick Start
+
+```bash
+# One-time auth setup
+npx wrangler login
+
+# Run visual regression (interactive — handles everything)
+pnpm test:visual
+
+# Non-interactive with specific version
+pnpm test:visual -- --reference 1.16.0
+
+# Filter and limit for faster iteration
+pnpm test:visual -- --match tables --limit 5
+```
+
+`pnpm test:visual` checks auth, pulls corpus, builds your code, generates snapshots, and compares — all automatically. See `scripts/test-visual.mjs` for details.
+
+---
+
+## Lower-Level Commands
+
+The sections below document the underlying scripts that `pnpm test:visual` wraps. Use these for advanced workflows.
+
+### Layout Snapshot Exporter
 
 Exports layout JSON for every `.docx` under:
 

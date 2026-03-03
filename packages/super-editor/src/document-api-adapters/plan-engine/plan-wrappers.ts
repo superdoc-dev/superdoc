@@ -27,7 +27,14 @@ import type { CompiledTarget } from './executor-registry.types.js';
 import { executeCompiledPlan } from './executor.js';
 import { getRevision } from './revision-tracker.js';
 import { DocumentApiAdapterError } from '../errors.js';
-import { resolveDefaultInsertTarget, resolveTextTarget, type ResolvedTextTarget } from '../helpers/adapter-utils.js';
+import {
+  insertParagraphAtEnd,
+  resolveDefaultInsertTarget,
+  resolveTextTarget,
+  resolveWriteTarget,
+  type ResolvedTextTarget,
+  type ResolvedWrite,
+} from '../helpers/adapter-utils.js';
 import { buildTextMutationResolution, readTextAtResolvedRange } from '../helpers/text-mutation-resolution.js';
 import {
   ensureTrackedCapability,
@@ -36,6 +43,7 @@ import {
   rejectTrackedMode,
 } from '../helpers/mutation-helpers.js';
 import { TrackFormatMarkName } from '../../extensions/track-changes/constants.js';
+import { applyDirectMutationMeta, applyTrackedMutationMeta } from '../helpers/transaction-meta.js';
 import { markdownToPmFragment } from '../../core/helpers/markdown/markdownToPmContent.js';
 import { processContent } from '../../core/helpers/contentProcessor.js';
 
@@ -144,52 +152,6 @@ function normalizeFormatLocator(input: FormatOperationInput): FormatOperationInp
     range: { start: input.start!, end: input.end! },
   };
   return { target };
-}
-
-// ---------------------------------------------------------------------------
-// Resolution helpers
-// ---------------------------------------------------------------------------
-
-interface ResolvedWrite {
-  requestedTarget?: TextAddress;
-  effectiveTarget: TextAddress;
-  range: ResolvedTextTarget;
-  resolution: TextMutationResolution;
-}
-
-function resolveWriteTarget(editor: Editor, request: WriteRequest): ResolvedWrite | null {
-  const requestedTarget = request.target;
-
-  if (request.kind === 'insert' && !request.target) {
-    const fallback = resolveDefaultInsertTarget(editor);
-    if (!fallback) return null;
-    const text = readTextAtResolvedRange(editor, fallback.range);
-    return {
-      requestedTarget,
-      effectiveTarget: fallback.target,
-      range: fallback.range,
-      resolution: buildTextMutationResolution({
-        requestedTarget,
-        target: fallback.target,
-        range: fallback.range,
-        text,
-      }),
-    };
-  }
-
-  const target = request.target;
-  if (!target) return null;
-
-  const range = resolveTextTarget(editor, target);
-  if (!range) return null;
-
-  const text = readTextAtResolvedRange(editor, range);
-  return {
-    requestedTarget,
-    effectiveTarget: target,
-    range,
-    resolution: buildTextMutationResolution({ requestedTarget, target, range, text }),
-  };
 }
 
 // ---------------------------------------------------------------------------
@@ -312,6 +274,24 @@ export function writeWrapper(editor: Editor, request: WriteRequest, options?: Mu
 
   if (options?.dryRun) {
     return { success: true, resolution: resolved.resolution };
+  }
+
+  // Structural-end: the doc ends with non-text blocks. Create a paragraph
+  // containing the text at the structural document end via a domain command,
+  // since raw `tr.insert(pos, textNode)` cannot place text between blocks.
+  if (resolved.structuralEnd && normalizedRequest.kind === 'insert') {
+    const insertPos = resolved.range.from;
+    const text = normalizedRequest.text ?? '';
+    const receipt = executeDomainCommand(
+      editor,
+      (): boolean => {
+        const meta = mode === 'tracked' ? applyTrackedMutationMeta : applyDirectMutationMeta;
+        insertParagraphAtEnd(editor, insertPos, text, meta);
+        return true;
+      },
+      { expectedRevision: options?.expectedRevision },
+    );
+    return mapPlanReceiptToTextReceipt(receipt, resolved.resolution);
   }
 
   // Build single-step compiled plan with pre-resolved target.
@@ -552,8 +532,17 @@ export function insertStructuredWrapper(
     if (!fallback) {
       throw new DocumentApiAdapterError('TARGET_NOT_FOUND', 'No default insertion point available.');
     }
-    resolvedRange = fallback.range;
-    effectiveTarget = fallback.target;
+    if (fallback.kind === 'structural-end') {
+      // Doc ends with non-text blocks — insert structured content at the
+      // structural document end. Structured content (markdown/html) produces
+      // block-level nodes that ProseMirror can place between blocks.
+      const pos = fallback.insertPos;
+      resolvedRange = { from: pos, to: pos };
+      effectiveTarget = { kind: 'text', blockId: '', range: { start: 0, end: 0 } };
+    } else {
+      resolvedRange = fallback.range;
+      effectiveTarget = fallback.target;
+    }
   }
 
   const resolution = buildTextMutationResolution({

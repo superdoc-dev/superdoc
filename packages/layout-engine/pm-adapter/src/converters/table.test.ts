@@ -777,6 +777,98 @@ describe('table converter', () => {
       expect(result.rows[0].cells[0]).toBeDefined();
     });
 
+    it('skips schema-default cell borders when table-level borders exist', () => {
+      const schemaDefaultBorders = {
+        top: { size: 8, color: '000000' },
+        right: { size: 8, color: '000000' },
+        bottom: { size: 8, color: '000000' },
+        left: { size: 8, color: '000000' },
+      };
+
+      const node: PMNode = {
+        type: 'table',
+        attrs: {
+          borders: {
+            top: { val: 'single', size: 8, color: '000000' },
+            right: { val: 'single', size: 8, color: '000000' },
+            bottom: { val: 'single', size: 8, color: '000000' },
+            left: { val: 'single', size: 8, color: '000000' },
+          },
+        },
+        content: [
+          {
+            type: 'tableRow',
+            content: [
+              {
+                type: 'tableCell',
+                attrs: { borders: schemaDefaultBorders },
+                content: [{ type: 'paragraph', content: [{ type: 'text', text: 'Cell' }] }],
+              },
+            ],
+          },
+        ],
+      };
+
+      const result = tableNodeToBlock(
+        node,
+        mockBlockIdGenerator,
+        mockPositionMap,
+        'Arial',
+        16,
+        undefined,
+        undefined,
+        undefined,
+        undefined,
+        mockParagraphConverter,
+      ) as TableBlock;
+
+      expect(result.rows[0].cells[0].attrs?.borders).toBeUndefined();
+    });
+
+    it('ignores legacy schema-default cell borders (style-engine resolves borders)', () => {
+      // Old schema defaults have { size, color } without `val` — these are no longer
+      // read from attrs.borders. Cell borders now come from style-engine resolution.
+      const schemaDefaultBorders = {
+        top: { size: 8, color: '000000' },
+        right: { size: 8, color: '000000' },
+        bottom: { size: 8, color: '000000' },
+        left: { size: 8, color: '000000' },
+      };
+
+      const node: PMNode = {
+        type: 'table',
+        content: [
+          {
+            type: 'tableRow',
+            content: [
+              {
+                type: 'tableCell',
+                attrs: { borders: schemaDefaultBorders },
+                content: [{ type: 'paragraph', content: [{ type: 'text', text: 'Cell' }] }],
+              },
+            ],
+          },
+        ],
+      };
+
+      const result = tableNodeToBlock(
+        node,
+        mockBlockIdGenerator,
+        mockPositionMap,
+        'Arial',
+        16,
+        undefined,
+        undefined,
+        undefined,
+        undefined,
+        mockParagraphConverter,
+      ) as TableBlock;
+
+      // attrs.borders are ignored — style-engine-resolved borders (from resolveTableCellProperties)
+      // would provide borders, but this test has no style catalog so borders are undefined.
+      expect(result.rows[0].cells[0].attrs?.borders).toBeUndefined();
+    });
+
     it('extracts cell padding when present', () => {
       const node: PMNode = {
         type: 'table',

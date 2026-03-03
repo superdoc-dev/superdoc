@@ -293,26 +293,50 @@ export const renderTableRow = (deps: TableRowRenderDependencies): void => {
         right: cellBordersAttr.right,
       };
     } else if (tableBorders) {
-      // For continuation handling: treat split boundaries as table edges
-      const isFirstRow = rowIndex === 0;
-      const isLastRow = rowIndex === totalRows - 1;
-      const treatAsFirstRow = isFirstRow || continuesFromPrev;
-      const treatAsLastRow = isLastRow || continuesOnNext;
+      if (cellSpacingPx > 0) {
+        // With cell spacing (border-collapse: separate), the TABLE CONTAINER handles outer
+        // borders (top/right/bottom/left). Cells only render interior borders (insideH/insideV).
+        // This prevents double borders: one from the container and one from edge cells.
+        const isFirstRow = rowIndex === 0;
+        const isLastRow = rowIndex === totalRows - 1;
+        const isFirstCol = gridColIndex === 0;
+        const isLastCol = gridColIndex === totalCols - 1;
+        const treatAsFirstRow = isFirstRow || continuesFromPrev;
+        const treatAsLastRow = isLastRow || continuesOnNext;
 
-      // Get base borders, then override for continuations
-      const baseBorders = resolveTableCellBorders(tableBorders, rowIndex, gridColIndex, totalRows, totalCols);
-
-      if (baseBorders) {
         resolvedBorders = {
-          // If this is a continuation (continuesFromPrev), use table's top border
-          top: treatAsFirstRow ? borderValueToSpec(tableBorders.top) : baseBorders.top,
-          // If this continues on next (continuesOnNext), use table's bottom border
-          bottom: treatAsLastRow ? borderValueToSpec(tableBorders.bottom) : baseBorders.bottom,
-          left: baseBorders.left,
-          right: baseBorders.right,
+          top: !treatAsFirstRow ? borderValueToSpec(tableBorders.insideH) : undefined,
+          bottom: !treatAsLastRow ? borderValueToSpec(tableBorders.insideH) : undefined,
+          left: !isFirstCol ? borderValueToSpec(tableBorders.insideV) : undefined,
+          right: !isLastCol ? borderValueToSpec(tableBorders.insideV) : undefined,
         };
+
+        // If all sides are undefined, set resolvedBorders to undefined for cleanliness
+        if (!resolvedBorders.top && !resolvedBorders.bottom && !resolvedBorders.left && !resolvedBorders.right) {
+          resolvedBorders = undefined;
+        }
       } else {
-        resolvedBorders = undefined;
+        // For continuation handling: treat split boundaries as table edges
+        const isFirstRow = rowIndex === 0;
+        const isLastRow = rowIndex === totalRows - 1;
+        const treatAsFirstRow = isFirstRow || continuesFromPrev;
+        const treatAsLastRow = isLastRow || continuesOnNext;
+
+        // Get base borders, then override for continuations
+        const baseBorders = resolveTableCellBorders(tableBorders, rowIndex, gridColIndex, totalRows, totalCols);
+
+        if (baseBorders) {
+          resolvedBorders = {
+            // If this is a continuation (continuesFromPrev), use table's top border
+            top: treatAsFirstRow ? borderValueToSpec(tableBorders.top) : baseBorders.top,
+            // If this continues on next (continuesOnNext), use table's bottom border
+            bottom: treatAsLastRow ? borderValueToSpec(tableBorders.bottom) : baseBorders.bottom,
+            left: baseBorders.left,
+            right: baseBorders.right,
+          };
+        } else {
+          resolvedBorders = undefined;
+        }
       }
     } else {
       resolvedBorders = undefined;

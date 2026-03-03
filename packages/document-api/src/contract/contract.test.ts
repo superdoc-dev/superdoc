@@ -200,7 +200,13 @@ describe('document-api contract catalog', () => {
     // styles.apply + all sections.set* / sections.clear* mutations
     expect(historyUnsafeOps).toContain('styles.apply');
     for (const id of historyUnsafeOps) {
-      expect(id.startsWith('sections.') || id === 'styles.apply', `unexpected historyUnsafe: ${id}`).toBe(true);
+      expect(
+        id.startsWith('sections.') ||
+          id === 'styles.apply' ||
+          id === 'tables.setDefaultStyle' ||
+          id === 'tables.clearDefaultStyle',
+        `unexpected historyUnsafe: ${id}`,
+      ).toBe(true);
     }
 
     // All section mutations (set*/clear*) should be marked

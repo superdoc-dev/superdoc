@@ -1,9 +1,9 @@
 /**
  * DragDropManager - Consolidated drag and drop handling for PresentationEditor.
  *
- * This manager handles all drag/drop events for field annotations:
- * - Internal drags (moving annotations within the document)
- * - External drags (inserting annotations from external sources like palettes)
+ * This manager handles all drag/drop events for:
+ * - Field annotations (internal moves and external inserts)
+ * - Image files (drag from OS/other apps into the editor)
  * - Window-level fallback for drops on overlay elements
  */
 
@@ -24,6 +24,9 @@ export const FIELD_ANNOTATION_DATA_TYPE = 'fieldAnnotation' as const;
 // =============================================================================
 // Types
 // =============================================================================
+
+/** Classifies what kind of data a drag event carries. */
+export type DropPayloadKind = 'fieldAnnotation' | 'imageFiles' | 'none';
 
 /**
  * Attributes for a field annotation node.
@@ -67,6 +70,17 @@ export interface FieldAnnotationDragData {
 }
 
 /**
+ * Callback to process and insert a single image file into the editor.
+ */
+export type ImageInsertHandler = (params: {
+  file: File;
+  editor: Editor;
+  view: Editor['view'];
+  editorOptions: Editor['options'];
+  getMaxContentSize: () => { width?: number; height?: number };
+}) => Promise<'success' | 'skipped'>;
+
+/**
  * Dependencies injected from PresentationEditor.
  */
 export type DragDropDependencies = {
@@ -80,10 +94,12 @@ export type DragDropDependencies = {
   getViewportHost: () => HTMLElement;
   /** The painter host element (for internal drag detection) */
   getPainterHost: () => HTMLElement;
+  /** Handler for inserting a single dropped image file */
+  insertImageFile: ImageInsertHandler;
 };
 
 // =============================================================================
-// Helpers
+// Helpers — Field Annotations
 // =============================================================================
 
 /**
@@ -177,6 +193,74 @@ function extractDragData(event: DragEvent): FieldAnnotationDragData | null {
 }
 
 // =============================================================================
+// Helpers — Payload Classification
+// =============================================================================
+
+/**
+ * Checks if a drag event may contain files.
+ *
+ * During dragover, `dataTransfer.files` is empty due to browser security
+ * restrictions — only `dataTransfer.types` is available. This function checks
+ * the types array, which works for both dragover and drop events.
+ *
+ * Note: This cannot distinguish image files from other file types during
+ * dragover. Actual image filtering happens at drop time via `getDroppedImageFiles`.
+ */
+export function hasPossibleFiles(event: DragEvent): boolean {
+  return event.dataTransfer?.types?.includes('Files') ?? false;
+}
+
+/** Image extensions used as fallback when File.type is empty. */
+const IMAGE_EXTENSIONS = new Set(['.png', '.jpg', '.jpeg', '.gif', '.bmp', '.webp', '.svg', '.ico', '.tiff', '.tif']);
+
+/**
+ * Checks whether a File looks like an image by MIME type or, when the type
+ * is empty (some OS/browser drag sources omit it), by file extension.
+ */
+function looksLikeImage(file: File): boolean {
+  if (file.type.startsWith('image/')) return true;
+  if (file.type === '') {
+    const dotIndex = file.name.lastIndexOf('.');
+    if (dotIndex !== -1) {
+      return IMAGE_EXTENSIONS.has(file.name.slice(dotIndex).toLowerCase());
+    }
+  }
+  return false;
+}
+
+/**
+ * Extracts image File objects from a drop event's dataTransfer.
+ * Only usable on drop events — files are not accessible during dragover.
+ */
+export function getDroppedImageFiles(event: DragEvent): File[] {
+  const files = event.dataTransfer?.files;
+  if (!files) return [];
+  const images: File[] = [];
+  for (let i = 0; i < files.length; i++) {
+    if (looksLikeImage(files[i])) {
+      images.push(files[i]);
+    }
+  }
+  return images;
+}
+
+/**
+ * Classifies the drag payload kind. Evaluated in order — first match wins.
+ *
+ * Field annotations take precedence over files in mixed payloads,
+ * since they are an internal editor concept with stricter semantics.
+ *
+ * During dragover, this returns 'imageFiles' for any file drag (since we
+ * can't inspect file types yet). On drop, callers use `getDroppedImageFiles`
+ * to filter to actual images.
+ */
+export function getDropPayloadKind(event: DragEvent): DropPayloadKind {
+  if (hasFieldAnnotationData(event)) return 'fieldAnnotation';
+  if (hasPossibleFiles(event)) return 'imageFiles';
+  return 'none';
+}
+
+// =============================================================================
 // DragDropManager Class
 // =============================================================================
 
@@ -220,11 +304,11 @@ export class DragDropManager {
     // Attach listeners to painter host (for internal drags)
     painterHost.addEventListener('dragstart', this.#boundHandleDragStart);
     painterHost.addEventListener('dragend', this.#boundHandleDragEnd);
-    painterHost.addEventListener('dragleave', this.#boundHandleDragLeave);
 
-    // Attach listeners to viewport host (for all drags)
+    // Attach listeners to viewport host (for all drags including external image files)
     viewportHost.addEventListener('dragover', this.#boundHandleDragOver);
     viewportHost.addEventListener('drop', this.#boundHandleDrop);
+    viewportHost.addEventListener('dragleave', this.#boundHandleDragLeave);
 
     // Window-level listeners for overlay fallback
     window.addEventListener('dragover', this.#boundHandleWindowDragOver, false);
@@ -243,14 +327,14 @@ export class DragDropManager {
     if (this.#boundHandleDragEnd) {
       painterHost.removeEventListener('dragend', this.#boundHandleDragEnd);
     }
-    if (this.#boundHandleDragLeave) {
-      painterHost.removeEventListener('dragleave', this.#boundHandleDragLeave);
-    }
     if (this.#boundHandleDragOver) {
       viewportHost.removeEventListener('dragover', this.#boundHandleDragOver);
     }
     if (this.#boundHandleDrop) {
       viewportHost.removeEventListener('drop', this.#boundHandleDrop);
+    }
+    if (this.#boundHandleDragLeave) {
+      viewportHost.removeEventListener('dragleave', this.#boundHandleDragLeave);
     }
     if (this.#boundHandleWindowDragOver) {
       window.removeEventListener('dragover', this.#boundHandleWindowDragOver, false);
@@ -276,7 +360,7 @@ export class DragDropManager {
   }
 
   // ==========================================================================
-  // Event Handlers
+  // Event Handlers — Top-level entry points
   // ==========================================================================
 
   /**
@@ -308,23 +392,90 @@ export class DragDropManager {
   }
 
   /**
-   * Handle dragover - update cursor position to show drop location.
+   * Handle dragover - branch by payload kind and update cursor position.
    */
   #handleDragOver(event: DragEvent): void {
     if (!this.#deps) return;
-    if (!hasFieldAnnotationData(event)) return;
+
+    const kind = getDropPayloadKind(event);
+    if (kind === 'none') return;
 
     const activeEditor = this.#deps.getActiveEditor();
     if (!activeEditor?.isEditable) return;
 
     event.preventDefault();
+
     if (event.dataTransfer) {
-      event.dataTransfer.dropEffect = isInternalDrag(event) ? 'move' : 'copy';
+      if (kind === 'fieldAnnotation') {
+        event.dataTransfer.dropEffect = isInternalDrag(event) ? 'move' : 'copy';
+      } else {
+        event.dataTransfer.dropEffect = 'copy';
+      }
     }
 
     // Coalesce dragover selection updates to one per animation frame.
     this.#scheduleDragOverSelection(event.clientX, event.clientY);
   }
+
+  /**
+   * Handle drop - branch by payload kind and dispatch to the appropriate handler.
+   */
+  #handleDrop(event: DragEvent): void {
+    if (!this.#deps) return;
+
+    const kind = getDropPayloadKind(event);
+    if (kind === 'none') return;
+
+    event.preventDefault();
+    event.stopPropagation();
+    this.#cancelPendingDragOverSelection();
+
+    const activeEditor = this.#deps.getActiveEditor();
+    if (!activeEditor?.isEditable) return;
+
+    if (kind === 'imageFiles') {
+      this.#handleImageDrop(event);
+      return;
+    }
+
+    // Field annotation drop
+    const { state, view } = activeEditor;
+    if (!state || !view) return;
+
+    const hit = this.#deps.hitTest(event.clientX, event.clientY);
+    const fallbackPos = state.selection?.from ?? state.doc?.content.size ?? null;
+    const dropPos = hit?.pos ?? fallbackPos;
+    if (dropPos == null) return;
+
+    if (isInternalDrag(event)) {
+      this.#handleInternalDrop(event, dropPos);
+      return;
+    }
+
+    this.#handleExternalDrop(event, dropPos);
+  }
+
+  #handleDragEnd(_event: DragEvent): void {
+    this.#cancelPendingDragOverSelection();
+    this.#deps?.getPainterHost()?.classList.remove('drag-over');
+  }
+
+  #handleDragLeave(event: DragEvent): void {
+    const viewportHost = this.#deps?.getViewportHost();
+    if (!viewportHost) return;
+
+    // Only clean up when the drag truly leaves the viewport, not when
+    // crossing internal child element boundaries.
+    const relatedTarget = event.relatedTarget as Node | null;
+    if (relatedTarget && viewportHost.contains(relatedTarget)) return;
+
+    this.#cancelPendingDragOverSelection();
+    this.#deps?.getPainterHost()?.classList.remove('drag-over');
+  }
+
+  // ==========================================================================
+  // RAF Coalescing — Shared by all payload kinds during dragover
+  // ==========================================================================
 
   #scheduleDragOverSelection(clientX: number, clientY: number): void {
     if (!this.#deps) return;
@@ -373,39 +524,108 @@ export class DragDropManager {
     }
   }
 
+  // ==========================================================================
+  // Image Drop
+  // ==========================================================================
+
   /**
-   * Handle drop - either move internal annotation or insert external one.
+   * Handle drop of image files from the OS or another application.
    */
-  #handleDrop(event: DragEvent): void {
+  async #handleImageDrop(event: DragEvent): Promise<void> {
     if (!this.#deps) return;
-    if (!hasFieldAnnotationData(event)) return;
-
-    event.preventDefault();
-    event.stopPropagation();
-
-    this.#cancelPendingDragOverSelection();
 
     const activeEditor = this.#deps.getActiveEditor();
-    if (!activeEditor?.isEditable) return;
-
     const { state, view } = activeEditor;
     if (!state || !view) return;
 
-    // Get drop position
-    const hit = this.#deps.hitTest(event.clientX, event.clientY);
-    const fallbackPos = state.selection?.from ?? state.doc?.content.size ?? null;
-    const dropPos = hit?.pos ?? fallbackPos;
+    const imageFiles = getDroppedImageFiles(event);
+    if (imageFiles.length === 0) return;
+
+    // Resolve insertion position: hitTest → current selection → document end
+    const dropPos = this.#resolveDropPosition(event.clientX, event.clientY);
     if (dropPos == null) return;
 
-    // Handle internal drag (move existing annotation)
-    if (isInternalDrag(event)) {
-      this.#handleInternalDrop(event, dropPos);
-      return;
+    // Set selection at drop position before inserting
+    this.#setSelectionAt(dropPos);
+
+    // Process files sequentially for deterministic ordering.
+    // Errors on individual files are caught so remaining files still insert.
+    for (const file of imageFiles) {
+      try {
+        await this.#deps.insertImageFile({
+          file,
+          editor: activeEditor,
+          view: activeEditor.view,
+          editorOptions: activeEditor.options,
+          getMaxContentSize: () => activeEditor.getMaxContentSize(),
+        });
+      } catch {
+        // Skip failed file, continue with remaining
+      }
     }
 
-    // Handle external drag (insert new annotation)
-    this.#handleExternalDrop(event, dropPos);
+    // Focus editor and update selection overlay
+    this.#focusEditor();
+    this.#deps.scheduleSelectionUpdate();
   }
+
+  /**
+   * Resolves a drop position using the hitTest → selection → document-end fallback chain.
+   */
+  #resolveDropPosition(clientX: number, clientY: number): number | null {
+    if (!this.#deps) return null;
+
+    const activeEditor = this.#deps.getActiveEditor();
+    const { state } = activeEditor;
+    if (!state) return null;
+
+    const hit = this.#deps.hitTest(clientX, clientY);
+    if (hit?.pos != null) return hit.pos;
+
+    // Fallback: current PM selection position
+    if (state.selection?.from != null) return state.selection.from;
+
+    // Last resort: document end
+    return state.doc?.content.size ?? null;
+  }
+
+  /**
+   * Sets a text selection at the given position (clamped to document bounds).
+   */
+  #setSelectionAt(pos: number): void {
+    if (!this.#deps) return;
+
+    const activeEditor = this.#deps.getActiveEditor();
+    const doc = activeEditor.state?.doc;
+    if (!doc) return;
+
+    const clampedPos = Math.min(Math.max(pos, 1), doc.content.size);
+    try {
+      const tr = activeEditor.state.tr
+        .setSelection(TextSelection.create(doc, clampedPos))
+        .setMeta('addToHistory', false);
+      activeEditor.view?.dispatch(tr);
+    } catch {
+      // Position may be invalid during layout updates
+    }
+  }
+
+  /**
+   * Focuses the hidden ProseMirror editor after a drop.
+   */
+  #focusEditor(): void {
+    if (!this.#deps) return;
+    const activeEditor = this.#deps.getActiveEditor();
+    const editorDom = activeEditor.view?.dom as HTMLElement | undefined;
+    if (editorDom) {
+      editorDom.focus();
+      activeEditor.view?.focus();
+    }
+  }
+
+  // ==========================================================================
+  // Field Annotation Drop
+  // ==========================================================================
 
   /**
    * Handle internal drop - move field annotation within document.
@@ -504,35 +724,20 @@ export class DragDropManager {
       this.#deps.scheduleSelectionUpdate();
     }
 
-    // Focus editor
-    const editorDom = activeEditor.view?.dom as HTMLElement | undefined;
-    if (editorDom) {
-      editorDom.focus();
-      activeEditor.view?.focus();
-    }
+    this.#focusEditor();
   }
 
-  #handleDragEnd(_event: DragEvent): void {
-    this.#cancelPendingDragOverSelection();
-    // Remove visual feedback
-    this.#deps?.getPainterHost()?.classList.remove('drag-over');
-  }
-
-  #handleDragLeave(event: DragEvent): void {
-    const painterHost = this.#deps?.getPainterHost();
-    if (!painterHost) return;
-
-    const relatedTarget = event.relatedTarget as Node | null;
-    if (!relatedTarget || !painterHost.contains(relatedTarget)) {
-      painterHost.classList.remove('drag-over');
-    }
-  }
+  // ==========================================================================
+  // Window-level Fallback
+  // ==========================================================================
 
   /**
    * Window-level dragover to allow drops on overlay elements.
+   * Prevents browser default navigation for both field annotations and files.
    */
   #handleWindowDragOver(event: DragEvent): void {
-    if (!hasFieldAnnotationData(event)) return;
+    const kind = getDropPayloadKind(event);
+    if (kind === 'none') return;
 
     const viewportHost = this.#deps?.getViewportHost();
     const target = event.target as HTMLElement;
@@ -541,19 +746,24 @@ export class DragDropManager {
     if (viewportHost?.contains(target)) return;
 
     event.preventDefault();
-    if (event.dataTransfer) {
-      event.dataTransfer.dropEffect = isInternalDrag(event) ? 'move' : 'copy';
-    }
 
-    // Still update cursor position for overlay drops
-    this.#handleDragOver(event);
+    if (event.dataTransfer) {
+      if (kind === 'fieldAnnotation') {
+        event.dataTransfer.dropEffect = isInternalDrag(event) ? 'move' : 'copy';
+      } else {
+        event.dataTransfer.dropEffect = 'copy';
+      }
+    }
   }
 
   /**
    * Window-level drop to catch drops on overlay elements.
+   * Routes all recognized payloads through `#handleDrop` so images and
+   * field annotations both work when dropped on overlays.
    */
   #handleWindowDrop(event: DragEvent): void {
-    if (!hasFieldAnnotationData(event)) return;
+    const kind = getDropPayloadKind(event);
+    if (kind === 'none') return;
 
     const viewportHost = this.#deps?.getViewportHost();
     const target = event.target as HTMLElement;

@@ -127,6 +127,12 @@ export interface OpenOptions {
 
   /** Font data from docx */
   fonts?: Record<string, unknown>;
+
+  /**
+   * Optional override for "new file" semantics on this open call.
+   * When omitted, Editor infers the value from the source type.
+   */
+  isNewFile?: boolean;
 }
 
 /**
@@ -715,6 +721,7 @@ export class Editor extends EventEmitter<EditorEventMap> {
     try {
       // Merge options with defaults
       const resolvedMode = options?.mode ?? this.options.mode ?? 'docx';
+      const explicitIsNewFile = options?.isNewFile;
       const resolvedOptions = {
         ...this.options,
         mode: resolvedMode,
@@ -739,6 +746,7 @@ export class Editor extends EventEmitter<EditorEventMap> {
           resolvedOptions.mediaFiles = mediaFiles;
           resolvedOptions.fonts = fonts;
           resolvedOptions.fileSource = buffer;
+          resolvedOptions.isNewFile = explicitIsNewFile ?? false;
           this.#sourcePath = source;
         } else {
           // Browser: fetch the file
@@ -753,6 +761,7 @@ export class Editor extends EventEmitter<EditorEventMap> {
           resolvedOptions.mediaFiles = mediaFiles;
           resolvedOptions.fonts = fonts;
           resolvedOptions.fileSource = blob;
+          resolvedOptions.isNewFile = explicitIsNewFile ?? false;
           // In browser, path is just a suggested filename
           this.#sourcePath = source.split('/').pop() || null;
         }
@@ -773,6 +782,7 @@ export class Editor extends EventEmitter<EditorEventMap> {
           resolvedOptions.mediaFiles = mediaFiles;
           resolvedOptions.fonts = fonts;
           resolvedOptions.fileSource = source as File | Blob | Buffer;
+          resolvedOptions.isNewFile = explicitIsNewFile ?? false;
           this.#sourcePath = null;
         } else {
           // Unknown object type - try to load it anyway
@@ -781,6 +791,7 @@ export class Editor extends EventEmitter<EditorEventMap> {
           resolvedOptions.mediaFiles = mediaFiles;
           resolvedOptions.fonts = fonts;
           resolvedOptions.fileSource = source as File | Blob | Buffer;
+          resolvedOptions.isNewFile = explicitIsNewFile ?? false;
           this.#sourcePath = null;
         }
       } else {
@@ -809,7 +820,7 @@ export class Editor extends EventEmitter<EditorEventMap> {
           resolvedOptions.mediaFiles = mediaFiles;
           resolvedOptions.fonts = fonts;
           resolvedOptions.fileSource = fileSource;
-          resolvedOptions.isNewFile = true;
+          resolvedOptions.isNewFile = explicitIsNewFile ?? true;
           this.#sourcePath = null;
         } else {
           // Use pre-parsed content from options if provided, otherwise create minimal structure
@@ -817,7 +828,8 @@ export class Editor extends EventEmitter<EditorEventMap> {
           resolvedOptions.mediaFiles = options?.mediaFiles ?? {};
           resolvedOptions.fonts = options?.fonts ?? {};
           resolvedOptions.fileSource = null;
-          resolvedOptions.isNewFile = !options?.content; // Only mark as new if no content provided
+          // Pre-parsed content means "existing document", otherwise this is a new blank file.
+          resolvedOptions.isNewFile = explicitIsNewFile ?? !options?.content;
           this.#sourcePath = null;
         }
       }
@@ -2851,6 +2863,7 @@ export class Editor extends EventEmitter<EditorEventMap> {
       content,
       mediaFiles,
       fonts,
+      isNewFile,
       // Everything else is EditorOptions
       ...editorConfig
     } = resolvedConfig;
@@ -2865,6 +2878,7 @@ export class Editor extends EventEmitter<EditorEventMap> {
       content,
       mediaFiles,
       fonts,
+      isNewFile,
     };
 
     // Use new API mode for static factory

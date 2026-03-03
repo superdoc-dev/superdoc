@@ -234,4 +234,56 @@ describe('parseAttrs', () => {
       expect(result.paragraphProperties.indent).toBeUndefined();
     });
   });
+
+  describe('CSS text-align fallback (Google Docs paste)', () => {
+    it('extracts text-align: center as justification', () => {
+      const node = createMockNode({}, { textAlign: 'center' });
+      const result = parseAttrs(node);
+      expect(result.paragraphProperties.justification).toBe('center');
+    });
+
+    it('extracts text-align: right as justification', () => {
+      const node = createMockNode({}, { textAlign: 'right' });
+      const result = parseAttrs(node);
+      expect(result.paragraphProperties.justification).toBe('right');
+    });
+
+    it('extracts text-align: justify as justification', () => {
+      const node = createMockNode({}, { textAlign: 'justify' });
+      const result = parseAttrs(node);
+      expect(result.paragraphProperties.justification).toBe('justify');
+    });
+
+    it('skips text-align: left (default, avoids unnecessary direct formatting)', () => {
+      const node = createMockNode({}, { textAlign: 'left' });
+      const result = parseAttrs(node);
+      expect(result.paragraphProperties.justification).toBeUndefined();
+    });
+
+    it('skips text-align: start (maps to left, which is default)', () => {
+      const node = createMockNode({}, { textAlign: 'start' });
+      const result = parseAttrs(node);
+      expect(result.paragraphProperties.justification).toBeUndefined();
+    });
+
+    it('maps text-align: end to justification right', () => {
+      const node = createMockNode({}, { textAlign: 'end' });
+      const result = parseAttrs(node);
+      expect(result.paragraphProperties.justification).toBe('right');
+    });
+
+    it('ignores invalid text-align values', () => {
+      const node = createMockNode({}, { textAlign: 'middle' });
+      const result = parseAttrs(node);
+      expect(result.paragraphProperties.justification).toBeUndefined();
+    });
+
+    it('combines text-align with spacing and indent CSS fallbacks', () => {
+      const node = createMockNode({}, { textAlign: 'center', lineHeight: '1.5', marginLeft: '36pt' });
+      const result = parseAttrs(node);
+      expect(result.paragraphProperties.justification).toBe('center');
+      expect(result.paragraphProperties.spacing.line).toBe(Math.round((1.5 * 240) / 1.15));
+      expect(result.paragraphProperties.indent.left).toBe(720);
+    });
+  });
 });

@@ -61,16 +61,21 @@ lives in adapter layers that map engine behavior into discovery envelopes and ot
 - Tracking is operation-scoped (`changeMode: 'direct' | 'tracked'`), not global editor-mode state.
 - `insert`, `replace`, `delete`, `format.apply`, and `create.paragraph`, `create.heading` may run in tracked mode.
 - `trackChanges.*` (`list`, `get`, `decide`) is the review lifecycle namespace.
-- `lists.insert` may run in tracked mode; `lists.setType|indent|outdent|restart|exit` are direct-only.
+- `lists.insert` may run in tracked mode; all other `lists.*` mutations are direct-only.
 
 ## List Namespace Semantics
 
 - `lists.*` projects paragraph-based numbering into first-class `listItem` addresses.
 - `ListItemAddress.nodeId` reuses the underlying paragraph node id directly.
 - `lists.list({ within })` is inclusive when `within` itself is a list item.
-- `lists.setType` normalizes deterministically to canonical defaults (`ordered` decimal / `bullet` default bullet).
 - `lists.insert` returns `insertionPoint` at the inserted item start (`offset: 0`) even when text is provided.
-- `lists.restart` returns `NO_OP` only when target is already the first item of its contiguous run and effectively starts at `1`.
+- `lists.create` supports two modes: `empty` (convert a single paragraph) and `fromParagraphs` (convert a range).
+- `lists.attach` adds paragraphs to an existing list by inheriting the `attachTo` item's `numId`.
+- `lists.join` merges adjacent sequences sharing the same `abstractNumId`; fails with `INCOMPATIBLE_DEFINITIONS` otherwise.
+- `lists.separate` splits a sequence at the target, creating a new `numId` pointing to the same abstract.
+- `lists.setValue` on a mid-sequence target atomically separates then sets `startOverride`.
+- `lists.continuePrevious` merges the target's sequence into the nearest previous compatible sequence.
+- `lists.setLevelRestart` supports `scope: 'definition'` (mutates abstract) or `scope: 'instance'` (uses `lvlOverride`).
 
 Deterministic outcomes:
 - Unknown tracked-change ids must fail with `TARGET_NOT_FOUND` at adapter level.
@@ -125,14 +130,19 @@ editor.doc.comments.patch({ commentId: thread.id, status: 'resolved' });
 
 ### Workflow: List Manipulation
 
-Insert a list item, change its type, then indent it:
+Create a list, insert an item, then indent it:
 
 ```ts
+// Convert a paragraph into a new ordered list
+const paragraph = editor.doc.find({ type: 'node', nodeType: 'paragraph' });
+const target = paragraph.items[0]?.address;
+const createResult = editor.doc.lists.create({ mode: 'empty', at: target, kind: 'ordered' });
+
+// Insert a new item after the first
 const lists = editor.doc.lists.list();
 const firstItem = lists.items[0];
 const insertResult = editor.doc.lists.insert({ target: firstItem.address, position: 'after', text: 'New item' });
 if (insertResult.success) {
-  editor.doc.lists.setType({ target: insertResult.item, kind: 'ordered' });
   editor.doc.lists.indent({ target: insertResult.item });
 }
 ```
@@ -210,7 +220,7 @@ Return document summary metadata (block count, word count, character count).
 
 ### `insert`
 
-Insert text at a target location. When `target` is provided, inserts at that `TextAddress`. When omitted, the adapter resolves to the default insertion point (first paragraph start).
+Insert content at a target location. When `target` is provided, inserts at that `TextAddress`. When omitted, inserts at the end of the document.
 
 Supports dry-run and tracked mode.
 
@@ -333,57 +343,152 @@ Insert a new list item before or after a target item. Returns the new item's `Li
 - **Idempotency**: non-idempotent
 - **Failure codes**: `INVALID_TARGET`
 
-### `lists.setType`
+### `lists.create`
 
-Change a list item's kind (`ordered` or `bullet`). Returns `NO_OP` when the item already has the requested kind. Direct-only. Supports dry-run.
+Create a new list from one or more paragraphs. Two modes: `empty` (convert a single paragraph at `at`) or `fromParagraphs` (convert a `BlockAddress` or `BlockRange`). Creates a new `numId` + `abstractNum` definition for the requested `kind`. Direct-only. Supports dry-run.
 
-- **Input**: `ListSetTypeInput` (`{ target, kind }`)
+- **Input**: `ListsCreateInput` (`{ mode: 'empty', at, kind, level? } | { mode: 'fromParagraphs', target, kind, level? }`)
+- **Options**: `MutationOptions` (`{ dryRun? }`)
+- **Output**: `ListsCreateResult`
+- **Mutates**: Yes
+- **Idempotency**: non-idempotent
+- **Failure codes**: `INVALID_TARGET`
+
+### `lists.attach`
+
+Attach non-list paragraphs to an existing list. Target paragraphs inherit the `attachTo` item's `numId`. Direct-only. Supports dry-run.
+
+- **Input**: `ListsAttachInput` (`{ target, attachTo, level? }`)
+- **Options**: `MutationOptions` (`{ dryRun? }`)
+- **Output**: `ListsMutateItemResult`
+- **Mutates**: Yes
+- **Idempotency**: non-idempotent
+- **Failure codes**: `INVALID_TARGET`, `NO_OP`
+
+### `lists.detach`
+
+Remove numbering properties from targeted list items, converting them back to plain paragraphs. Preserves text and non-list formatting. Direct-only. Supports dry-run.
+
+- **Input**: `ListsDetachInput` (`{ target }`)
+- **Options**: `MutationOptions` (`{ dryRun? }`)
+- **Output**: `ListsDetachResult`
+- **Mutates**: Yes
+- **Idempotency**: conditional (re-detach is no-op)
+- **Failure codes**: `INVALID_TARGET`
+
+### `lists.join`
+
+Merge two adjacent list sequences. `withPrevious` merges the target's sequence into the preceding one; `withNext` merges the following sequence into the target's. Requires both sequences to share the same `abstractNumId`. Direct-only. Supports dry-run.
+
+- **Input**: `ListsJoinInput` (`{ target, direction: 'withPrevious' | 'withNext' }`)
+- **Options**: `MutationOptions` (`{ dryRun? }`)
+- **Output**: `ListsJoinResult`
+- **Mutates**: Yes
+- **Idempotency**: non-idempotent
+- **Failure codes**: `INVALID_TARGET`, `NO_ADJACENT_SEQUENCE`, `INCOMPATIBLE_DEFINITIONS`, `ALREADY_SAME_SEQUENCE`
+
+### `lists.canJoin`
+
+Read-only preflight check for `lists.join`. Returns whether two adjacent sequences can be joined.
+
+- **Input**: `ListsCanJoinInput` (`{ target, direction: 'withPrevious' | 'withNext' }`)
+- **Output**: `ListsCanJoinResult` (`{ canJoin, reason?, adjacentListId? }`)
+- **Mutates**: No
+- **Idempotency**: idempotent
+
+### `lists.separate`
+
+Split a list sequence at the target item. Creates a new `numId` pointing to the same `abstractNumId`. Items from target through end of sequence are reassigned to the new `numId`. Direct-only. Supports dry-run.
+
+- **Input**: `ListsSeparateInput` (`{ target, copyOverrides? }`)
+- **Options**: `MutationOptions` (`{ dryRun? }`)
+- **Output**: `ListsSeparateResult`
+- **Mutates**: Yes
+- **Idempotency**: non-idempotent
+- **Failure codes**: `INVALID_TARGET`, `NO_OP`
+
+### `lists.setLevel`
+
+Set the absolute indent level (0–8) of a list item. Direct-only. Supports dry-run.
+
+- **Input**: `ListsSetLevelInput` (`{ target, level }`)
 - **Options**: `MutationOptions` (`{ dryRun? }`)
 - **Output**: `ListsMutateItemResult`
 - **Mutates**: Yes
 - **Idempotency**: conditional
-- **Failure codes**: `NO_OP`, `INVALID_TARGET`
+- **Failure codes**: `INVALID_TARGET`, `LEVEL_OUT_OF_RANGE`, `NO_OP`
 
 ### `lists.indent`
 
-Increase the indent level of a list item. Returns `NO_OP` when already at maximum depth. Direct-only. Supports dry-run.
+Increase the indent level of a list item by one. Convenience wrapper for `setLevel(current + 1)`. Direct-only. Supports dry-run.
 
 - **Input**: `ListTargetInput` (`{ target }`)
 - **Options**: `MutationOptions` (`{ dryRun? }`)
 - **Output**: `ListsMutateItemResult`
 - **Mutates**: Yes
 - **Idempotency**: conditional
-- **Failure codes**: `NO_OP`, `INVALID_TARGET`
+- **Failure codes**: `NO_OP`, `INVALID_TARGET`, `LEVEL_OUT_OF_RANGE`
 
 ### `lists.outdent`
 
-Decrease the indent level of a list item. Returns `NO_OP` when already at top level. Direct-only. Supports dry-run.
+Decrease the indent level of a list item by one. Convenience wrapper for `setLevel(current - 1)`. Direct-only. Supports dry-run.
 
 - **Input**: `ListTargetInput` (`{ target }`)
 - **Options**: `MutationOptions` (`{ dryRun? }`)
 - **Output**: `ListsMutateItemResult`
 - **Mutates**: Yes
 - **Idempotency**: conditional
-- **Failure codes**: `NO_OP`, `INVALID_TARGET`
+- **Failure codes**: `NO_OP`, `INVALID_TARGET`, `LEVEL_OUT_OF_RANGE`
 
-### `lists.restart`
+### `lists.setValue`
 
-Restart numbering for an ordered list item. Returns `NO_OP` when the item already starts a new numbering sequence. Direct-only. Supports dry-run.
+Set the numbering start value at the target item's position. Pass `value: null` to remove a previously set override. Mid-sequence targets atomically separate then set `startOverride`. Direct-only. Supports dry-run.
 
-- **Input**: `ListTargetInput` (`{ target }`)
+- **Input**: `ListsSetValueInput` (`{ target, value: number | null }`)
 - **Options**: `MutationOptions` (`{ dryRun? }`)
 - **Output**: `ListsMutateItemResult`
 - **Mutates**: Yes
 - **Idempotency**: conditional
-- **Failure codes**: `NO_OP`, `INVALID_TARGET`
+- **Failure codes**: `INVALID_TARGET`, `NO_OP`
 
-### `lists.exit`
+### `lists.continuePrevious`
 
-Convert a list item back into a plain paragraph, exiting the list. Supports dry-run. Direct-only.
+Continue numbering from the nearest previous compatible list sequence (same `abstractNumId`). Merges the target's sequence into that previous sequence's `numId`. Direct-only. Supports dry-run.
 
-- **Input**: `ListTargetInput` (`{ target }`)
+- **Input**: `ListsContinuePreviousInput` (`{ target }`)
 - **Options**: `MutationOptions` (`{ dryRun? }`)
-- **Output**: `ListsExitResult`
+- **Output**: `ListsMutateItemResult`
+- **Mutates**: Yes
+- **Idempotency**: conditional
+- **Failure codes**: `INVALID_TARGET`, `NO_COMPATIBLE_PREVIOUS`, `ALREADY_CONTINUOUS`
+
+### `lists.canContinuePrevious`
+
+Read-only preflight check for `lists.continuePrevious`. Returns whether a compatible previous sequence exists.
+
+- **Input**: `ListsCanContinuePreviousInput` (`{ target }`)
+- **Output**: `ListsCanContinuePreviousResult` (`{ canContinue, reason?, previousListId? }`)
+- **Mutates**: No
+- **Idempotency**: idempotent
+
+### `lists.setLevelRestart`
+
+Set the `lvlRestart` behavior for a specified level. Controls when the level's counter resets. `scope: 'definition'` mutates the abstract (affects all instances); `scope: 'instance'` uses `lvlOverride` (affects only this `numId`). Direct-only. Supports dry-run.
+
+- **Input**: `ListsSetLevelRestartInput` (`{ target, level, restartAfterLevel: number | null, scope? }`)
+- **Options**: `MutationOptions` (`{ dryRun? }`)
+- **Output**: `ListsMutateItemResult`
+- **Mutates**: Yes
+- **Idempotency**: conditional
+- **Failure codes**: `INVALID_TARGET`, `LEVEL_OUT_OF_RANGE`
+
+### `lists.convertToText`
+
+Convert list items to plain paragraphs. When `includeMarker` is true, prepends the rendered marker text to paragraph content before clearing numbering properties. Direct-only. Supports dry-run.
+
+- **Input**: `ListsConvertToTextInput` (`{ target, includeMarker? }`)
+- **Options**: `MutationOptions` (`{ dryRun? }`)
+- **Output**: `ListsConvertToTextResult`
 - **Mutates**: Yes
 - **Idempotency**: conditional
 - **Failure codes**: `INVALID_TARGET`

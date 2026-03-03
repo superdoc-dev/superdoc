@@ -52,6 +52,35 @@ function paragraphByText(paragraphs, expectedText) {
 }
 
 describe('markdown to DOCX integration', () => {
+  it('does not create an empty paragraph for a single blank line between root blocks', () => {
+    const markdown = `# Title
+
+Paragraph`;
+
+    const doc = createDocFromMarkdown(markdown, editor);
+    const paragraphs = collectTopLevelParagraphs(doc);
+    const texts = paragraphs.map((node) => node.textContent);
+
+    expect(texts).toEqual(['Title', 'Paragraph']);
+  });
+
+  it('retains blank lines between root blocks as empty paragraphs', () => {
+    const markdown = `First paragraph.
+
+
+Second paragraph.
+
+
+
+Third paragraph.`;
+
+    const doc = createDocFromMarkdown(markdown, editor);
+    const paragraphs = collectTopLevelParagraphs(doc);
+    const texts = paragraphs.map((node) => node.textContent);
+
+    expect(texts).toEqual(['First paragraph.', '', 'Second paragraph.', '', '', 'Third paragraph.']);
+  });
+
   it('converts complete markdown document with headings and lists', () => {
     const markdown = `# Main Title
 
@@ -125,5 +154,20 @@ More text here.
 
     const numberedParagraphs = paragraphs.filter(hasNumbering);
     expect(numberedParagraphs).toHaveLength(2);
+  });
+
+  it('defaults markdown tables to 100% width', () => {
+    const markdown = `| Query | Assessment |
+| --- | --- |
+| A | B |`;
+
+    const doc = createDocFromMarkdown(markdown, editor);
+    const firstTable = doc.content.content.find((node) => node.type.name === 'table');
+
+    expect(firstTable).toBeTruthy();
+    expect(firstTable?.attrs?.tableProperties?.tableWidth).toEqual({
+      value: 5000,
+      type: 'pct',
+    });
   });
 });

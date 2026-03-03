@@ -876,11 +876,12 @@ export const useCommentsStore = defineStore('comments', () => {
     const comments = getGroupedComments.value?.parentComments
       .filter((c) => !c.resolvedTime)
       .filter((c) => {
-        const keys = Object.keys(editorCommentPositions.value);
-        const isPdfComment = c.selection?.source !== 'super-editor';
-        if (isPdfComment) return true;
+        // Non-editor comments (e.g. PDF) are always shown.
+        // Editor-backed comments (including tracked changes, which have no
+        // selection.source) must have a live position in the document.
+        if (!isEditorBackedComment(c)) return true;
         const commentKey = c.commentId || c.importedId;
-        return keys.includes(commentKey);
+        return commentKey in editorCommentPositions.value;
       });
     return comments;
   });

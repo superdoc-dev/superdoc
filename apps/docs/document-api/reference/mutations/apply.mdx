@@ -51,9 +51,12 @@ Returns a PlanReceipt with per-step results for the atomically applied mutation 
 | Field | Type | Required | Description |
 | --- | --- | --- | --- |
 | `revision` | object | yes |  |
+| `revision.after` | string | yes |  |
+| `revision.before` | string | yes |  |
 | `steps` | object[] | yes |  |
 | `success` | `true` | yes | Constant: `true` |
 | `timing` | object | yes |  |
+| `timing.totalMs` | number | yes |  |
 | `trackedChanges` | object[] | no |  |
 
 ### Example response

@@ -48,6 +48,12 @@ import type {
   TableCellInfo,
   TablesGetPropertiesInput,
   TablesGetPropertiesOutput,
+  TablesGetStylesInput,
+  TablesGetStylesOutput,
+  TableStyleInfo,
+  TablesSetDefaultStyleInput,
+  TablesClearDefaultStyleInput,
+  DocumentMutationResult,
 } from '@superdoc/document-api';
 import type { Transaction } from 'prosemirror-state';
 import { TableMap } from 'prosemirror-tables';
@@ -68,6 +74,20 @@ import { applyDirectMutationMeta, applyTrackedMutationMeta } from './helpers/tra
 import { DocumentApiAdapterError } from './errors.js';
 import { toBlockAddress, findBlockById, findBlockByNodeIdOnly } from './helpers/node-address-resolver.js';
 import { twipsToPixels } from '../core/super-converter/helpers.js';
+import {
+  resolvePreferredNewTableStyleId,
+  isKnownTableStyleId,
+  type StylesDocumentProperties,
+} from '@superdoc/style-engine/ooxml';
+import {
+  readSettingsRoot,
+  ensureSettingsRoot,
+  readDefaultTableStyle,
+  setDefaultTableStyle,
+  removeDefaultTableStyle,
+  type ConverterWithDocumentSettings,
+} from './document-settings.js';
+import { executeOutOfBandMutation } from './out-of-band-mutation.js';
 
 // ---------------------------------------------------------------------------
 // Helpers
@@ -384,13 +404,12 @@ function cellSidesForEdge(
 function tableBorderToCellBorder(border: Record<string, unknown>): Record<string, unknown> {
   const val = typeof border.val === 'string' ? border.val : 'single';
   const color = typeof border.color === 'string' ? border.color : 'auto';
-  const sizeEighthPoints = typeof border.size === 'number' ? border.size : 0;
-  const sizePx = val === 'none' || val === 'nil' ? 0 : (sizeEighthPoints / 8) * POINTS_TO_PIXELS;
+  const size = typeof border.size === 'number' ? border.size : 0;
 
   return {
     val,
     color,
-    size: sizePx,
+    size: val === 'none' || val === 'nil' ? 0 : size,
     space: 0,
   };
 }
@@ -423,14 +442,17 @@ function applyTableEdgeToCellBorders(
       if (!cellNode) continue;
 
       const cellAttrs = cellNode.attrs as Record<string, unknown>;
-      const borders = { ...((cellAttrs.borders ?? {}) as Record<string, unknown>) };
+      const tcp = { ...((cellAttrs.tableCellProperties ?? {}) as Record<string, unknown>) };
+      const borders = { ...((tcp.borders ?? {}) as Record<string, unknown>) };
       for (const side of targetSides) {
         borders[side] = { ...cellBorder };
       }
+      tcp.borders = borders;
 
       tr.setNodeMarkup(tr.mapping.slice(mapFrom).map(tableStart + relPos), null, {
         ...cellAttrs,
-        borders,
+        borders: null,
+        tableCellProperties: tcp,
       });
     }
   }
@@ -464,7 +486,8 @@ function applyTableBorderPresetToCellBorders(
       if (!cellNode) continue;
 
       const cellAttrs = cellNode.attrs as Record<string, unknown>;
-      const borders = { ...((cellAttrs.borders ?? {}) as Record<string, unknown>) };
+      const tcp = { ...((cellAttrs.tableCellProperties ?? {}) as Record<string, unknown>) };
+      const borders = { ...((tcp.borders ?? {}) as Record<string, unknown>) };
 
       if (preset === 'none') {
         borders.top = { ...noneBorder };
@@ -483,10 +506,12 @@ function applyTableBorderPresetToCellBorders(
         borders.left = { ...singleBorder };
         borders.right = { ...singleBorder };
       }
+      tcp.borders = borders;
 
       tr.setNodeMarkup(tr.mapping.slice(mapFrom).map(tableStart + relPos), null, {
         ...cellAttrs,
-        borders,
+        borders: null,
+        tableCellProperties: tcp,
       });
     }
   }
@@ -2871,7 +2896,8 @@ export function tablesSetBorderAdapter(
 
     currentProps.borders = currentBorders;
     const syncAttrs = resolved.scope === 'table' ? syncExtractedTableAttrs(currentProps) : {};
-    tr.setNodeMarkup(resolved.pos, null, { ...currentAttrs, [propsKey]: currentProps, ...syncAttrs });
+    const cellClear = resolved.scope === 'cell' ? { borders: null } : {};
+    tr.setNodeMarkup(resolved.pos, null, { ...currentAttrs, [propsKey]: currentProps, ...syncAttrs, ...cellClear });
 
     if (resolved.scope === 'table' && isBoundaryEdge(input.edge)) {
       applyTableEdgeToCellBorders(
@@ -2923,7 +2949,8 @@ export function tablesClearBorderAdapter(
 
     currentProps.borders = currentBorders;
     const syncAttrs = resolved.scope === 'table' ? syncExtractedTableAttrs(currentProps) : {};
-    tr.setNodeMarkup(resolved.pos, null, { ...currentAttrs, [propsKey]: currentProps, ...syncAttrs });
+    const cellClear = resolved.scope === 'cell' ? { borders: null } : {};
+    tr.setNodeMarkup(resolved.pos, null, { ...currentAttrs, [propsKey]: currentProps, ...syncAttrs, ...cellClear });
 
     if (resolved.scope === 'table' && isBoundaryEdge(input.edge)) {
       applyTableEdgeToCellBorders(
@@ -3610,4 +3637,180 @@ export function tablesGetPropertiesAdapter(editor: Editor, input: TablesGetPrope
   }
 
   return result;
+}
+
+// ---------------------------------------------------------------------------
+// Document-level table style operations
+// ---------------------------------------------------------------------------
+
+interface ConverterForTableStyles extends ConverterWithDocumentSettings {
+  translatedLinkedStyles?: StylesDocumentProperties | null;
+}
+
+function getConverterForStyles(editor: Editor): ConverterForTableStyles | undefined {
+  return (editor as unknown as { converter?: ConverterForTableStyles }).converter;
+}
+
+function toDocumentMutationFailure(code: 'NO_OP' | 'INVALID_INPUT', message: string): DocumentMutationResult {
+  return {
+    success: false,
+    failure: { code, message },
+  };
+}
+
+function toDocumentMutationSuccess(): DocumentMutationResult {
+  return { success: true };
+}
+
+export function tablesGetStylesAdapter(editor: Editor, _input?: TablesGetStylesInput): TablesGetStylesOutput {
+  const converter = getConverterForStyles(editor);
+  if (!converter) {
+    return {
+      explicitDefaultStyleId: null,
+      effectiveDefaultStyleId: null,
+      effectiveDefaultSource: 'none',
+      styles: [],
+    };
+  }
+
+  const translatedLinkedStyles = converter.translatedLinkedStyles ?? null;
+  const allStyles = translatedLinkedStyles?.styles ?? {};
+
+  // Collect table styles
+  const styles: TableStyleInfo[] = [];
+  for (const [id, def] of Object.entries(allStyles)) {
+    if (def.type !== 'table') continue;
+    styles.push({
+      id,
+      name: def.name ?? null,
+      basedOn: def.basedOn ?? null,
+      isDefault: def.default === true,
+      isCustom: def.customStyle === true,
+      uiPriority: def.uiPriority ?? null,
+      hidden: def.hidden === true || def.semiHidden === true,
+      quickFormat: def.qFormat === true,
+      conditionalRegions: def.tableStyleProperties ? Object.keys(def.tableStyleProperties) : [],
+    });
+  }
+
+  // Read explicit default from settings.xml
+  let explicitDefaultStyleId: string | null = null;
+  const settingsRoot = readSettingsRoot(converter);
+  if (settingsRoot) {
+    explicitDefaultStyleId = readDefaultTableStyle(settingsRoot);
+  }
+
+  // Resolve effective default
+  const resolved = resolvePreferredNewTableStyleId(explicitDefaultStyleId, translatedLinkedStyles);
+
+  return {
+    explicitDefaultStyleId,
+    effectiveDefaultStyleId: resolved.styleId,
+    effectiveDefaultSource: resolved.source,
+    styles,
+  };
+}
+
+export function tablesSetDefaultStyleAdapter(
+  editor: Editor,
+  input: TablesSetDefaultStyleInput,
+  options?: MutationOptions,
+): DocumentMutationResult {
+  rejectTrackedMode('tables.setDefaultStyle', options);
+
+  const converter = getConverterForStyles(editor);
+  if (!converter) {
+    throw new DocumentApiAdapterError(
+      'CAPABILITY_UNAVAILABLE',
+      'tables.setDefaultStyle requires an active document converter.',
+    );
+  }
+
+  // Validate styleId
+  if (!isKnownTableStyleId(input.styleId, converter.translatedLinkedStyles)) {
+    throw new DocumentApiAdapterError(
+      'INVALID_INPUT',
+      `tables.setDefaultStyle: "${input.styleId}" is not a known table style.`,
+    );
+  }
+
+  return executeOutOfBandMutation<DocumentMutationResult>(
+    editor,
+    (dryRun) => {
+      const existingRoot = readSettingsRoot(converter);
+      const current = existingRoot ? readDefaultTableStyle(existingRoot) : null;
+
+      if (current === input.styleId) {
+        return {
+          changed: false,
+          payload: toDocumentMutationFailure(
+            'NO_OP',
+            'tables.setDefaultStyle did not produce a document settings change.',
+          ),
+        };
+      }
+
+      if (!dryRun) {
+        const settingsRoot = ensureSettingsRoot(converter);
+        setDefaultTableStyle(settingsRoot, input.styleId);
+      }
+
+      return {
+        changed: true,
+        payload: toDocumentMutationSuccess(),
+      };
+    },
+    {
+      dryRun: options?.dryRun === true,
+      expectedRevision: options?.expectedRevision,
+    },
+  );
+}
+
+export function tablesClearDefaultStyleAdapter(
+  editor: Editor,
+  _input?: TablesClearDefaultStyleInput,
+  options?: MutationOptions,
+): DocumentMutationResult {
+  rejectTrackedMode('tables.clearDefaultStyle', options);
+
+  const converter = getConverterForStyles(editor);
+  if (!converter) {
+    throw new DocumentApiAdapterError(
+      'CAPABILITY_UNAVAILABLE',
+      'tables.clearDefaultStyle requires an active document converter.',
+    );
+  }
+
+  return executeOutOfBandMutation<DocumentMutationResult>(
+    editor,
+    (dryRun) => {
+      const existingRoot = readSettingsRoot(converter);
+      const current = existingRoot ? readDefaultTableStyle(existingRoot) : null;
+
+      if (current === null) {
+        return {
+          changed: false,
+          payload: toDocumentMutationFailure(
+            'NO_OP',
+            'tables.clearDefaultStyle did not produce a document settings change.',
+          ),
+        };
+      }
+
+      if (!dryRun) {
+        const settingsRoot = ensureSettingsRoot(converter);
+        removeDefaultTableStyle(settingsRoot);
+      }
+
+      return {
+        changed: true,
+        payload: toDocumentMutationSuccess(),
+      };
+    },
+    {
+      dryRun: options?.dryRun === true,
+      expectedRevision: options?.expectedRevision,
+    },
+  );
 }

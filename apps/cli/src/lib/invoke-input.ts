@@ -26,11 +26,20 @@ const WRAPPED_INPUT_KEY: Partial<Record<CliExposedOperationId, string>> = {
   getNode: 'address',
   'lists.list': 'query',
   'lists.insert': 'input',
-  'lists.setType': 'input',
   'lists.indent': 'input',
   'lists.outdent': 'input',
-  'lists.restart': 'input',
-  'lists.exit': 'input',
+  'lists.create': 'input',
+  'lists.attach': 'input',
+  'lists.detach': 'input',
+  'lists.join': 'input',
+  'lists.canJoin': 'input',
+  'lists.separate': 'input',
+  'lists.setLevel': 'input',
+  'lists.setValue': 'input',
+  'lists.continuePrevious': 'input',
+  'lists.canContinuePrevious': 'input',
+  'lists.setLevelRestart': 'input',
+  'lists.convertToText': 'input',
   'create.paragraph': 'input',
   'create.heading': 'input',
 };
@@ -94,11 +103,15 @@ const INSERT_OPERATION: CliExposedOperationId = 'insert';
  */
 const LIST_TARGET_OPERATIONS = new Set<CliExposedOperationId>([
   'lists.insert',
-  'lists.setType',
   'lists.indent',
   'lists.outdent',
-  'lists.restart',
-  'lists.exit',
+  'lists.detach',
+  'lists.separate',
+  'lists.setLevel',
+  'lists.setValue',
+  'lists.continuePrevious',
+  'lists.canContinuePrevious',
+  'lists.convertToText',
 ]);
 
 function isRecord(value: unknown): value is Record<string, unknown> {

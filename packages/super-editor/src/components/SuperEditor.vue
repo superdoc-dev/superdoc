@@ -499,8 +499,54 @@ const isNearColumnBoundary = (event, tableElement) => {
 };
 
 /**
+ * Check if mouse position is near any row boundary in the table.
+ * Returns true if within threshold of a resizable row boundary bottom edge.
+ *
+ * @param {MouseEvent} event - The mouse event containing clientX and clientY coordinates
+ * @param {HTMLElement} tableElement - The table DOM element with data-table-boundaries attribute
+ * @returns {boolean} True if the mouse is near a row boundary, false otherwise
+ */
+const isNearRowBoundary = (event, tableElement) => {
+  if (!event || typeof event.clientX !== 'number' || typeof event.clientY !== 'number') {
+    return false;
+  }
+  if (!tableElement || !(tableElement instanceof HTMLElement)) {
+    return false;
+  }
+
+  const boundariesAttr = tableElement.getAttribute('data-table-boundaries');
+  if (!boundariesAttr) return false;
+
+  try {
+    const metadata = JSON.parse(boundariesAttr);
+    if (!metadata.rows || !Array.isArray(metadata.rows)) return false;
+
+    const zoom = getEditorZoom();
+    const tableRect = tableElement.getBoundingClientRect();
+    const mouseYScreen = event.clientY - tableRect.top;
+
+    for (const row of metadata.rows) {
+      if (!row || typeof row.y !== 'number' || typeof row.h !== 'number') continue;
+      // Only check resizable boundaries
+      if (row.r !== 1) continue;
+
+      // The bottom edge of this row boundary in screen space
+      const boundaryYScreen = (row.y + row.h) * zoom;
+
+      if (Math.abs(mouseYScreen - boundaryYScreen) <= TABLE_RESIZE_HOVER_THRESHOLD) {
+        return true;
+      }
+    }
+
+    return false;
+  } catch {
+    return false;
+  }
+};
+
+/**
  * Update table resize overlay visibility based on mouse position.
- * Shows overlay only when hovering near column boundaries, not anywhere in the table.
+ * Shows overlay only when hovering near column or row boundaries, not anywhere in the table.
  * Throttled to run at most once per TABLE_RESIZE_THROTTLE_MS milliseconds.
  *
  * @param {MouseEvent} event - The mouse event containing target and coordinates
@@ -526,8 +572,8 @@ const updateTableResizeOverlay = (event) => {
     }
 
     if (target.classList?.contains('superdoc-table-fragment') && target.hasAttribute('data-table-boundaries')) {
-      // Only show overlay if mouse is near a column boundary
-      if (isNearColumnBoundary(event, target)) {
+      // Show overlay if mouse is near a column or row boundary
+      if (isNearColumnBoundary(event, target) || isNearRowBoundary(event, target)) {
         tableResizeState.visible = true;
         tableResizeState.tableElement = target;
       } else {

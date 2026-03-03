@@ -1,7 +1,7 @@
 ---
 title: styles.apply
 sidebarTitle: styles.apply
-description: Apply document-level default style changes to the stylesheet (word/styles.xml). Targets docDefaults run properties with boolean patch semantics.
+description: Apply document-level default style changes to the stylesheet (word/styles.xml). Targets docDefaults run and paragraph channels with set-style patch semantics.
 ---
 
 {/* GENERATED FILE: DO NOT EDIT. Regenerate via `pnpm run docapi:sync`. */}
@@ -10,7 +10,7 @@ description: Apply document-level default style changes to the stylesheet (word/
 
 ## Summary
 
-Apply document-level default style changes to the stylesheet (word/styles.xml). Targets docDefaults run properties with boolean patch semantics.
+Apply document-level default style changes to the stylesheet (word/styles.xml). Targets docDefaults run and paragraph channels with set-style patch semantics.
 
 - Operation ID: `styles.apply`
 - API member path: `editor.doc.styles.apply(...)`
@@ -26,7 +26,67 @@ Returns a StylesApplyReceipt with per-channel success/failure details for each p
 
 ## Input fields
 
-_No fields._
+### Variant 1 (target.channel="run")
+
+| Field | Type | Required | Description |
+| --- | --- | --- | --- |
+| `patch` | object | yes |  |
+| `patch.bold` | boolean | no |  |
+| `patch.color` | object | no |  |
+| `patch.color.themeColor` | string | no |  |
+| `patch.color.themeShade` | string | no |  |
+| `patch.color.themeTint` | string | no |  |
+| `patch.color.val` | string | no |  |
+| `patch.fontFamily` | object | no |  |
+| `patch.fontFamily.ascii` | string | no |  |
+| `patch.fontFamily.asciiTheme` | string | no |  |
+| `patch.fontFamily.cs` | string | no |  |
+| `patch.fontFamily.cstheme` | string | no |  |
+| `patch.fontFamily.eastAsia` | string | no |  |
+| `patch.fontFamily.eastAsiaTheme` | string | no |  |
+| `patch.fontFamily.hAnsi` | string | no |  |
+| `patch.fontFamily.hAnsiTheme` | string | no |  |
+| `patch.fontFamily.hint` | string | no |  |
+| `patch.fontFamily.val` | string | no |  |
+| `patch.fontSize` | integer | no |  |
+| `patch.fontSizeCs` | integer | no |  |
+| `patch.italic` | boolean | no |  |
+| `patch.letterSpacing` | integer | no |  |
+| `target` | object(scope="docDefaults") | yes |  |
+| `target.channel` | `"run"` | yes | Constant: `"run"` |
+| `target.scope` | `"docDefaults"` | yes | Constant: `"docDefaults"` |
+
+### Variant 2 (target.channel="paragraph")
+
+| Field | Type | Required | Description |
+| --- | --- | --- | --- |
+| `patch` | object | yes |  |
+| `patch.indent` | object | no |  |
+| `patch.indent.end` | integer | no |  |
+| `patch.indent.endChars` | integer | no |  |
+| `patch.indent.firstLine` | integer | no |  |
+| `patch.indent.firstLineChars` | integer | no |  |
+| `patch.indent.hanging` | integer | no |  |
+| `patch.indent.hangingChars` | integer | no |  |
+| `patch.indent.left` | integer | no |  |
+| `patch.indent.leftChars` | integer | no |  |
+| `patch.indent.right` | integer | no |  |
+| `patch.indent.rightChars` | integer | no |  |
+| `patch.indent.start` | integer | no |  |
+| `patch.indent.startChars` | integer | no |  |
+| `patch.justification` | enum | no | `"left"`, `"center"`, `"right"`, `"justify"`, `"distribute"` |
+| `patch.spacing` | object | no |  |
+| `patch.spacing.after` | integer | no |  |
+| `patch.spacing.afterAutospacing` | boolean | no |  |
+| `patch.spacing.afterLines` | integer | no |  |
+| `patch.spacing.before` | integer | no |  |
+| `patch.spacing.beforeAutospacing` | boolean | no |  |
+| `patch.spacing.beforeLines` | integer | no |  |
+| `patch.spacing.line` | integer | no |  |
+| `patch.spacing.lineRule` | enum | no | `"auto"`, `"exact"`, `"atLeast"` |
+| `target` | object(scope="docDefaults") | yes |  |
+| `target.channel` | `"paragraph"` | yes | Constant: `"paragraph"` |
+| `target.scope` | `"docDefaults"` | yes | Constant: `"docDefaults"` |
 
 ### Example request
 
@@ -45,7 +105,55 @@ _No fields._
 
 ## Output fields
 
-_No fields._
+### Variant 1 (success=true)
+
+| Field | Type | Required | Description |
+| --- | --- | --- | --- |
+| `after` | object | yes |  |
+| `after.bold` | enum | no | `"on"`, `"off"`, `"inherit"` |
+| `after.color` | object \\| `"inherit"` | no | One of: object, `"inherit"` |
+| `after.fontFamily` | object \\| `"inherit"` | no | One of: object, `"inherit"` |
+| `after.fontSize` | number \\| `"inherit"` | no | One of: number, `"inherit"` |
+| `after.fontSizeCs` | number \\| `"inherit"` | no | One of: number, `"inherit"` |
+| `after.indent` | object \\| `"inherit"` | no | One of: object, `"inherit"` |
+| `after.italic` | enum | no | `"on"`, `"off"`, `"inherit"` |
+| `after.justification` | string \\| `"inherit"` | no | One of: string, `"inherit"` |
+| `after.letterSpacing` | number \\| `"inherit"` | no | One of: number, `"inherit"` |
+| `after.spacing` | object \\| `"inherit"` | no | One of: object, `"inherit"` |
+| `before` | object | yes |  |
+| `before.bold` | enum | no | `"on"`, `"off"`, `"inherit"` |
+| `before.color` | object \\| `"inherit"` | no | One of: object, `"inherit"` |
+| `before.fontFamily` | object \\| `"inherit"` | no | One of: object, `"inherit"` |
+| `before.fontSize` | number \\| `"inherit"` | no | One of: number, `"inherit"` |
+| `before.fontSizeCs` | number \\| `"inherit"` | no | One of: number, `"inherit"` |
+| `before.indent` | object \\| `"inherit"` | no | One of: object, `"inherit"` |
+| `before.italic` | enum | no | `"on"`, `"off"`, `"inherit"` |
+| `before.justification` | string \\| `"inherit"` | no | One of: string, `"inherit"` |
+| `before.letterSpacing` | number \\| `"inherit"` | no | One of: number, `"inherit"` |
+| `before.spacing` | object \\| `"inherit"` | no | One of: object, `"inherit"` |
+| `changed` | boolean | yes |  |
+| `dryRun` | boolean | yes |  |
+| `resolution` | object(scope="docDefaults") | yes |  |
+| `resolution.channel` | enum | yes | `"run"`, `"paragraph"` |
+| `resolution.scope` | `"docDefaults"` | yes | Constant: `"docDefaults"` |
+| `resolution.xmlPart` | `"word/styles.xml"` | yes | Constant: `"word/styles.xml"` |
+| `resolution.xmlPath` | enum | yes | `"w:styles/w:docDefaults/w:rPrDefault/w:rPr"`, `"w:styles/w:docDefaults/w:pPrDefault/w:pPr"` |
+| `success` | `true` | yes | Constant: `true` |
+
+### Variant 2 (success=false)
+
+| Field | Type | Required | Description |
+| --- | --- | --- | --- |
+| `failure` | object | yes |  |
+| `failure.code` | string | yes |  |
+| `failure.details` | any | no |  |
+| `failure.message` | string | yes |  |
+| `resolution` | object(scope="docDefaults") | yes |  |
+| `resolution.channel` | enum | yes | `"run"`, `"paragraph"` |
+| `resolution.scope` | `"docDefaults"` | yes | Constant: `"docDefaults"` |
+| `resolution.xmlPart` | `"word/styles.xml"` | yes | Constant: `"word/styles.xml"` |
+| `resolution.xmlPath` | enum | yes | `"w:styles/w:docDefaults/w:rPrDefault/w:rPr"`, `"w:styles/w:docDefaults/w:pPrDefault/w:pPr"` |
+| `success` | `false` | yes | Constant: `false` |
 
 ### Example response
 

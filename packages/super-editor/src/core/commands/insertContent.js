@@ -37,7 +37,13 @@ export const insertContent =
         });
 
         const jsonContent = processedDoc.toJSON();
-        const ok = commands.insertContentAt({ from: tr.selection.from, to: tr.selection.to }, jsonContent, options);
+        const insertionContent =
+          jsonContent?.type === 'doc' && Array.isArray(jsonContent.content) ? jsonContent.content : jsonContent;
+        const ok = commands.insertContentAt(
+          { from: tr.selection.from, to: tr.selection.to },
+          insertionContent,
+          options,
+        );
 
         // Schedule list migration right after the insert transaction dispatches
         if (ok && (options.contentType === 'html' || options.contentType === 'markdown')) {

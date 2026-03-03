@@ -33,17 +33,34 @@ vi.mock('@core/commands/list-helpers', () => ({
   isList: vi.fn(() => false),
 }));
 
+vi.mock('@extensions/table/tableHelpers/isCellSelection.js', () => ({
+  isCellSelection: vi.fn(() => false),
+}));
+
+vi.mock('prosemirror-tables', () => ({
+  selectedRect: vi.fn(() => ({
+    top: 0,
+    bottom: 2,
+    left: 0,
+    right: 3,
+    map: { height: 4, width: 3 },
+  })),
+}));
+
 import {
   getEditorContext,
   getPropsByItemId,
   __getStructureFromResolvedPosForTest,
   __isCollaborationEnabledForTest,
+  __getCellSelectionInfoForTest,
 } from '../utils.js';
 import { isList } from '@core/commands/list-helpers';
 import { readFromClipboard } from '../../../core/utilities/clipboardUtils.js';
 import { selectionHasNodeOrMark } from '../../cursor-helpers.js';
 import { undoDepth, redoDepth } from 'prosemirror-history';
 import { yUndoPluginKey } from 'y-prosemirror';
+import { isCellSelection as isCellSelectionMock } from '@extensions/table/tableHelpers/isCellSelection.js';
+import { selectedRect as selectedRectMock } from 'prosemirror-tables';
 
 // Get the mocked functions
 const mockReadFromClipboard = vi.mocked(readFromClipboard);
@@ -103,6 +120,8 @@ describe('utils.js', () => {
         isInTable: false,
         isInList: false,
         isInSectionNode: false,
+        isCellSelection: false,
+        tableSelectionKind: null,
         currentNodeType: 'paragraph',
         activeMarks: [],
 
@@ -515,6 +534,104 @@ describe('utils.js', () => {
       // Should not throw
       expect(() => props.onSelect({ command: 'nonexistentCommand' })).not.toThrow();
       expect(mockProps.closePopover).toHaveBeenCalled();
+    });
+  });
+
+  describe('cell selection detection', () => {
+    beforeEach(() => {
+      isCellSelectionMock.mockReturnValue(false);
+      selectedRectMock.mockReturnValue({
+        top: 0,
+        bottom: 2,
+        left: 0,
+        right: 3,
+        map: { height: 4, width: 3 },
+      });
+    });
+
+    it('should return isCellSelection false for non-cell selection', () => {
+      isCellSelectionMock.mockReturnValue(false);
+
+      const result = __getCellSelectionInfoForTest(mockEditor.state);
+
+      expect(result).toEqual({ isCellSelection: false, tableSelectionKind: null });
+    });
+
+    it('should detect cells kind for partial cell selection', () => {
+      isCellSelectionMock.mockReturnValue(true);
+      selectedRectMock.mockReturnValue({
+        top: 0,
+        bottom: 1,
+        left: 0,
+        right: 2,
+        map: { height: 4, width: 3 },
+      });
+
+      const result = __getCellSelectionInfoForTest(mockEditor.state);
+
+      expect(result).toEqual({ isCellSelection: true, tableSelectionKind: 'cells' });
+    });
+
+    it('should detect row kind when all columns selected', () => {
+      isCellSelectionMock.mockReturnValue(true);
+      selectedRectMock.mockReturnValue({
+        top: 1,
+        bottom: 2,
+        left: 0,
+        right: 3,
+        map: { height: 4, width: 3 },
+      });
+
+      const result = __getCellSelectionInfoForTest(mockEditor.state);
+
+      expect(result).toEqual({ isCellSelection: true, tableSelectionKind: 'row' });
+    });
+
+    it('should detect column kind when all rows selected', () => {
+      isCellSelectionMock.mockReturnValue(true);
+      selectedRectMock.mockReturnValue({
+        top: 0,
+        bottom: 4,
+        left: 1,
+        right: 2,
+        map: { height: 4, width: 3 },
+      });
+
+      const result = __getCellSelectionInfoForTest(mockEditor.state);
+
+      expect(result).toEqual({ isCellSelection: true, tableSelectionKind: 'column' });
+    });
+
+    it('should detect table kind when all rows and columns selected', () => {
+      isCellSelectionMock.mockReturnValue(true);
+      selectedRectMock.mockReturnValue({
+        top: 0,
+        bottom: 4,
+        left: 0,
+        right: 3,
+        map: { height: 4, width: 3 },
+      });
+
+      const result = __getCellSelectionInfoForTest(mockEditor.state);
+
+      expect(result).toEqual({ isCellSelection: true, tableSelectionKind: 'table' });
+    });
+
+    it('should fall back to cells when selectedRect throws', () => {
+      isCellSelectionMock.mockReturnValue(true);
+      selectedRectMock.mockImplementation(() => {
+        throw new Error('no cell selection');
+      });
+      const warnSpy = vi.spyOn(console, 'warn').mockImplementation(() => {});
+
+      const result = __getCellSelectionInfoForTest(mockEditor.state);
+
+      expect(result).toEqual({ isCellSelection: true, tableSelectionKind: 'cells' });
+      expect(warnSpy).toHaveBeenCalledWith(
+        '[ContextMenu] Unable to resolve cell selection rectangle:',
+        expect.any(Error),
+      );
+      warnSpy.mockRestore();
     });
   });
 

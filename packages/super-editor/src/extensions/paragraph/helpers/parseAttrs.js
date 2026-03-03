@@ -1,4 +1,5 @@
 const CSS_LENGTH_TO_PT = { pt: 1, px: 72 / 96, in: 72, cm: 28.3465, mm: 2.83465 };
+const CSS_ALIGN_TO_OOXML = { center: 'center', right: 'right', justify: 'justify', end: 'right' };
 
 /**
  * Parse a CSS length value and return { points, unit }.
@@ -104,6 +105,17 @@ export function parseAttrs(node) {
     }
   }
 
+  // CSS inline style fallback for text-align (e.g. Google Docs paste)
+  // Skip 'left' — Google Docs sets text-align: left on every paragraph,
+  // and storing it would bake in unnecessary direct formatting on export.
+  let justification;
+  if (!justification && node.style) {
+    const textAlign = node.style.textAlign;
+    if (textAlign && CSS_ALIGN_TO_OOXML[textAlign]) {
+      justification = CSS_ALIGN_TO_OOXML[textAlign];
+    }
+  }
+
   let attrs = {
     paragraphProperties: {
       styleId: styleId || null,
@@ -117,6 +129,10 @@ export function parseAttrs(node) {
 
   if (spacing && Object.keys(spacing).length > 0) {
     attrs.paragraphProperties.spacing = spacing;
+  }
+
+  if (justification) {
+    attrs.paragraphProperties.justification = justification;
   }
 
   if (Object.keys(numberingProperties).length > 0) {

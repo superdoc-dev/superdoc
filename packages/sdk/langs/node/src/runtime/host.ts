@@ -7,6 +7,7 @@ import {
   type InvokeOptions,
   type OperationSpec,
   type SuperDocClientOptions,
+  type UserIdentity,
 } from './transport-common.js';
 import { SuperDocCliError } from './errors.js';
 
@@ -47,6 +48,7 @@ export class HostTransport {
   private readonly watchdogTimeoutMs: number;
   private readonly maxQueueDepth: number;
   private readonly defaultChangeMode?: ChangeMode;
+  private readonly user?: UserIdentity;
 
   private child: ChildProcessWithoutNullStreams | null = null;
   private stdoutReader: ReadlineInterface | null = null;
@@ -71,6 +73,7 @@ export class HostTransport {
       });
     }
     this.defaultChangeMode = options.defaultChangeMode;
+    this.user = options.user;
   }
 
   async connect(): Promise<void> {
@@ -112,7 +115,14 @@ export class HostTransport {
   ): Promise<TData> {
     await this.ensureConnected();
 
-    const argv = buildOperationArgv(operation, params, options, this.requestTimeoutMs, this.defaultChangeMode);
+    const argv = buildOperationArgv(
+      operation,
+      params,
+      options,
+      this.requestTimeoutMs,
+      this.defaultChangeMode,
+      this.user,
+    );
     const stdinBase64 = options.stdinBytes ? Buffer.from(options.stdinBytes).toString('base64') : '';
     const watchdogTimeout = this.resolveWatchdogTimeout(options.timeoutMs);
 

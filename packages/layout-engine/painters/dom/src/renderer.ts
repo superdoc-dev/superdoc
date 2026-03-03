@@ -1026,6 +1026,8 @@ export class DomPainter {
   private onScrollHandler: ((e: Event) => void) | null = null;
   private onWindowScrollHandler: ((e: Event) => void) | null = null;
   private onResizeHandler: ((e: Event) => void) | null = null;
+  /** CSS zoom/scale factor applied to the mount element via transform: scale(). Defaults to 1 (no zoom). */
+  private zoomFactor = 1;
   private sdtHover = new SdtGroupedHover();
   /** The currently active/selected comment ID for highlighting */
   private activeCommentId: string | null = null;
@@ -1080,6 +1082,26 @@ export class DomPainter {
     this.virtualPinnedPages = next;
     if (this.virtualEnabled && this.mount) {
       this.updateVirtualWindow();
+    }
+  }
+
+  /**
+   * Sets the CSS zoom/scale factor applied to the mount element.
+   *
+   * When the mount element has `transform: scale(zoom)`, getBoundingClientRect()
+   * returns screen-space coordinates (scaled), but internal layout offsets are in
+   * unscaled layout space. This factor is used to convert between the two spaces
+   * during virtualization window calculations.
+   *
+   * @param zoom - The zoom/scale factor (e.g., 0.75 for 75% zoom). Defaults to 1.
+   */
+  public setZoom(zoom: number): void {
+    const next = typeof zoom === 'number' && Number.isFinite(zoom) && zoom > 0 ? zoom : 1;
+    if (next !== this.zoomFactor) {
+      this.zoomFactor = next;
+      if (this.virtualEnabled && this.mount) {
+        this.updateVirtualWindow();
+      }
     }
   }
 
@@ -1612,16 +1634,21 @@ export class DomPainter {
       return;
     }
 
-    // Map scrollTop -> anchor page index via prefix sums
+    // Map scrollTop -> anchor page index via prefix sums.
+    // virtualOffsets are in layout (unscaled) space, so scrollY must also be in layout space.
+    // When the mount has transform: scale(zoom), getBoundingClientRect() returns
+    // screen-space values that must be divided by zoom to get layout-space coordinates.
     const paddingTop = this.getMountPaddingTopPx();
+    const zoom = this.zoomFactor;
     let scrollY: number;
     const isContainerScrollable = this.mount.scrollHeight > this.mount.clientHeight + 1;
     if (isContainerScrollable) {
       scrollY = Math.max(0, this.mount.scrollTop - paddingTop);
     } else {
       const rect = this.mount.getBoundingClientRect();
-      // Translate viewport scroll to content-space scroll offset
-      scrollY = Math.max(0, -rect.top - paddingTop);
+      // rect.top is in screen space (affected by CSS transform: scale).
+      // Divide by zoom to convert to layout space for comparison with virtualOffsets.
+      scrollY = Math.max(0, -rect.top / zoom - paddingTop);
     }
 
     // Binary search for anchor index such that topOfIndex(i) <= scrollY < topOfIndex(i+1)

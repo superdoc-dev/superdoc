@@ -128,6 +128,41 @@ After a fresh clone, run `pnpm run generate:all` before working on SDK, CLI, or 
 
 Note: `packages/sdk/tools/__init__.py` is a manual file (Python package marker) and stays committed.
 
+## Testing
+
+| What to verify | Command | Speed |
+|---|---|---|
+| Logic works? | `pnpm test` | seconds |
+| Editing works? | `pnpm test:behavior` | minutes |
+| Rendering regressed? | `pnpm test:visual` | ~10 min |
+
+### Unit Tests (Vitest)
+
+Co-located with source code as `feature.test.ts` next to `feature.ts`. Test pure logic, data transformations, and utilities in isolation.
+
+- Framework: **Vitest** (config at `vitest.config.mjs`)
+- Most coverage in `packages/super-editor/` (526 files) and `packages/layout-engine/` (150 files)
+- Run a single package: `pnpm --filter <package> test`
+
+### Behavior Tests (Playwright)
+
+End-to-end tests that exercise editing features through the browser. Located in `tests/behavior/`.
+
+- Framework: **Playwright** (Chromium, Firefox, WebKit)
+- Tests editing commands, formatting, tables, comments, tracked changes, lists, toolbar
+- Asserts on document state, not pixels — see `tests/behavior/README.md`
+
+### Visual Regression Tests (`pnpm test:visual`)
+
+Compares layout engine output (JSON structure) across ~382 test documents against a published npm version. This is the primary tool for catching rendering regressions.
+
+- Run: `pnpm test:visual` (interactive — prompts for reference version)
+- Flags: `--reference <version>`, `--match <pattern>`, `--limit <n>`
+- Handles auth, corpus download, build, and comparison automatically
+- Reports written to `tests/layout-snapshots/reports/`
+- Lower-level access: `pnpm layout:compare` (same engine, no interactive UX)
+- One-time setup: `npx wrangler login` (for corpus download from R2)
+
 ## Brand & Design System
 
 Brand guidelines, voice, and design tokens live in `brand/`. Token values are defined in `packages/superdoc/src/assets/styles/tokens.css`.

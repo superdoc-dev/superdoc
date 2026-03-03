@@ -29,6 +29,9 @@ Returns a TocInfo object with the instruction, source/display configuration, and
 | Field | Type | Required | Description |
 | --- | --- | --- | --- |
 | `target` | object(kind="block") | yes |  |
+| `target.kind` | `"block"` | yes | Constant: `"block"` |
+| `target.nodeId` | string | yes |  |
+| `target.nodeType` | `"tableOfContents"` | yes | Constant: `"tableOfContents"` |
 
 ### Example request
 
@@ -49,6 +52,11 @@ Returns a TocInfo object with the instruction, source/display configuration, and
 | `kind` | `"block"` | yes | Constant: `"block"` |
 | `nodeType` | `"tableOfContents"` | yes | Constant: `"tableOfContents"` |
 | `properties` | object | yes |  |
+| `properties.displayConfig` | object | no |  |
+| `properties.entryCount` | integer | yes |  |
+| `properties.instruction` | string | yes |  |
+| `properties.preservedSwitches` | object | no |  |
+| `properties.sourceConfig` | object | no |  |
 
 ### Example response
 

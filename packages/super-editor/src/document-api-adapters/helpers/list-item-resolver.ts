@@ -13,6 +13,7 @@ import { DocumentApiAdapterError } from '../errors.js';
 import { getRevision } from '../plan-engine/revision-tracker.js';
 import { getBlockIndex } from './index-cache.js';
 import { validatePaginationInput } from './adapter-utils.js';
+import { computeSequenceIdMap } from './list-sequence-helpers.js';
 import type { BlockCandidate, BlockIndex } from './node-address-resolver.js';
 import { toFiniteNumber } from './value-utils.js';
 
@@ -112,9 +113,10 @@ export function projectListItemCandidate(editor: Editor, candidate: BlockCandida
   };
 }
 
-export function listItemProjectionToInfo(projection: ListItemProjection): ListItemInfo {
+export function listItemProjectionToInfo(projection: ListItemProjection, listId: string): ListItemInfo {
   return {
     address: projection.address,
+    listId,
     marker: projection.marker,
     ordinal: projection.ordinal,
     path: projection.path,
@@ -190,27 +192,35 @@ export function listListItems(editor: Editor, query?: ListsListQuery): ListsList
 
   const index = getBlockIndex(editor);
   const scope = resolveBlockScopeRange(index, query?.within as BlockNodeAddress | undefined);
-  const candidates = listItemCandidatesInScope(index, scope);
+  const allCandidates = index.candidates.filter((candidate) => candidate.nodeType === 'listItem');
+  const allProjections = allCandidates.map((candidate) => projectListItemCandidate(editor, candidate));
+  const projections = allProjections.filter((projection) => isWithinScope(projection.candidate, scope));
   const safeOffset = query?.offset ?? 0;
   const safeLimit = query?.limit ?? Number.POSITIVE_INFINITY;
   const pageEnd = safeOffset + safeLimit;
   const evaluatedRevision = getRevision(editor);
 
+  // Compute sequence IDs from document-wide projections so list identity is
+  // stable across scoped queries.
+  const sequenceIds = computeSequenceIdMap(allProjections);
+
   let total = 0;
   const items: ListsListResult['items'] = [];
 
-  for (const candidate of candidates) {
-    const projection = projectListItemCandidate(editor, candidate);
+  for (const projection of projections) {
     if (!matchesListQuery(projection, query)) continue;
 
     const currentIndex = total;
     total += 1;
     if (currentIndex < safeOffset || currentIndex >= pageEnd) continue;
 
-    const info = listItemProjectionToInfo(projection);
+    const listId = sequenceIds.get(projection.address.nodeId) ?? '';
+    const info = listItemProjectionToInfo(projection, listId);
     const handle = buildResolvedHandle(info.address.nodeId, 'stable', 'list');
     const { address, marker, ordinal, path, level, kind, text } = info;
-    items.push(buildDiscoveryItem(info.address.nodeId, handle, { address, marker, ordinal, path, level, kind, text }));
+    items.push(
+      buildDiscoveryItem(info.address.nodeId, handle, { address, listId, marker, ordinal, path, level, kind, text }),
+    );
   }
 
   return buildDiscoveryResult({

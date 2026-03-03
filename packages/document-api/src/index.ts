@@ -76,24 +76,50 @@ import type { ListsAdapter, ListsApi } from './lists/lists.js';
 import type {
   ListItemInfo,
   ListInsertInput,
-  ListSetTypeInput,
-  ListsExitResult,
   ListsGetInput,
   ListsInsertResult,
   ListsListQuery,
   ListsListResult,
   ListsMutateItemResult,
   ListTargetInput,
+  ListsCreateInput,
+  ListsCreateResult,
+  ListsAttachInput,
+  ListsDetachInput,
+  ListsDetachResult,
+  ListsJoinInput,
+  ListsJoinResult,
+  ListsCanJoinInput,
+  ListsCanJoinResult,
+  ListsSeparateInput,
+  ListsSeparateResult,
+  ListsSetLevelInput,
+  ListsSetValueInput,
+  ListsContinuePreviousInput,
+  ListsCanContinuePreviousInput,
+  ListsCanContinuePreviousResult,
+  ListsSetLevelRestartInput,
+  ListsConvertToTextInput,
+  ListsConvertToTextResult,
 } from './lists/lists.types.js';
 import {
-  executeListsExit,
   executeListsGet,
   executeListsIndent,
   executeListsInsert,
   executeListsList,
   executeListsOutdent,
-  executeListsRestart,
-  executeListsSetType,
+  executeListsCreate,
+  executeListsAttach,
+  executeListsDetach,
+  executeListsJoin,
+  executeListsCanJoin,
+  executeListsSeparate,
+  executeListsSetLevel,
+  executeListsSetValue,
+  executeListsContinuePrevious,
+  executeListsCanContinuePrevious,
+  executeListsSetLevelRestart,
+  executeListsConvertToText,
 } from './lists/lists.js';
 import { executeReplace, type ReplaceInput } from './replace/replace.js';
 import type { CreateAdapter, CreateApi } from './create/create.js';
@@ -153,6 +179,10 @@ import type {
   TablesGetCellsOutput,
   TablesGetPropertiesInput,
   TablesGetPropertiesOutput,
+  TablesGetStylesInput,
+  TablesGetStylesOutput,
+  TablesSetDefaultStyleInput,
+  TablesClearDefaultStyleInput,
 } from './types/table-operations.types.js';
 import type {
   TrackChangesAdapter,
@@ -467,20 +497,44 @@ export {
   LINE_RULES,
 } from './paragraphs/paragraphs.js';
 export type {
+  BlockAddress,
+  BlockRange,
+  CanContinueReason,
+  CanJoinReason,
+  JoinDirection,
   ListInsertInput,
   ListItemAddress,
   ListItemInfo,
   ListKind,
-  ListsExitResult,
+  ListsAttachInput,
+  ListsCanContinuePreviousInput,
+  ListsCanContinuePreviousResult,
+  ListsCanJoinInput,
+  ListsCanJoinResult,
+  ListsConvertToTextInput,
+  ListsConvertToTextResult,
+  ListsContinuePreviousInput,
+  ListsCreateInput,
+  ListsCreateResult,
+  ListsDetachInput,
+  ListsDetachResult,
+  ListsFailureCode,
   ListsGetInput,
   ListsInsertResult,
+  ListsJoinInput,
+  ListsJoinResult,
   ListsListQuery,
   ListsListResult,
   ListsMutateItemResult,
-  ListSetTypeInput,
+  ListsSeparateInput,
+  ListsSeparateResult,
+  ListsSetLevelInput,
+  ListsSetLevelRestartInput,
+  ListsSetValueInput,
   ListTargetInput,
+  MutationScope,
 } from './lists/lists.types.js';
-export { LIST_KINDS, LIST_INSERT_POSITIONS } from './lists/lists.types.js';
+export { LIST_KINDS, LIST_INSERT_POSITIONS, JOIN_DIRECTIONS, MUTATION_SCOPES } from './lists/lists.types.js';
 export type {
   CreateSectionBreakInput,
   CreateSectionBreakResult,
@@ -592,6 +646,9 @@ export interface TablesApi {
   get(input: TablesGetInput): TablesGetOutput;
   getCells(input: TablesGetCellsInput): TablesGetCellsOutput;
   getProperties(input: TablesGetPropertiesInput): TablesGetPropertiesOutput;
+  getStyles(input?: TablesGetStylesInput): TablesGetStylesOutput;
+  setDefaultStyle(input: TablesSetDefaultStyleInput, options?: MutationOptions): DocumentMutationResult;
+  clearDefaultStyle(input?: TablesClearDefaultStyleInput, options?: MutationOptions): DocumentMutationResult;
 }
 
 export type TablesAdapter = TablesApi;
@@ -666,8 +723,8 @@ export interface DocumentApi {
    */
   comments: CommentsApi;
   /**
-   * Insert text at a target location.
-   * If target is omitted, adapters resolve a deterministic default insertion point.
+   * Insert content at a target location.
+   * If target is omitted, inserts at the end of the document.
    */
   insert(input: InsertInput, options?: MutationOptions): TextMutationReceipt;
   /**
@@ -967,8 +1024,14 @@ export function createDocumentApi(adapters: DocumentApiAdapters): DocumentApi {
       insert(input: ListInsertInput, options?: MutationOptions): ListsInsertResult {
         return executeListsInsert(adapters.lists, input, options);
       },
-      setType(input: ListSetTypeInput, options?: MutationOptions): ListsMutateItemResult {
-        return executeListsSetType(adapters.lists, input, options);
+      create(input: ListsCreateInput, options?: MutationOptions): ListsCreateResult {
+        return executeListsCreate(adapters.lists, input, options);
+      },
+      attach(input: ListsAttachInput, options?: MutationOptions): ListsMutateItemResult {
+        return executeListsAttach(adapters.lists, input, options);
+      },
+      detach(input: ListsDetachInput, options?: MutationOptions): ListsDetachResult {
+        return executeListsDetach(adapters.lists, input, options);
       },
       indent(input: ListTargetInput, options?: MutationOptions): ListsMutateItemResult {
         return executeListsIndent(adapters.lists, input, options);
@@ -976,11 +1039,32 @@ export function createDocumentApi(adapters: DocumentApiAdapters): DocumentApi {
       outdent(input: ListTargetInput, options?: MutationOptions): ListsMutateItemResult {
         return executeListsOutdent(adapters.lists, input, options);
       },
-      restart(input: ListTargetInput, options?: MutationOptions): ListsMutateItemResult {
-        return executeListsRestart(adapters.lists, input, options);
+      join(input: ListsJoinInput, options?: MutationOptions): ListsJoinResult {
+        return executeListsJoin(adapters.lists, input, options);
       },
-      exit(input: ListTargetInput, options?: MutationOptions): ListsExitResult {
-        return executeListsExit(adapters.lists, input, options);
+      canJoin(input: ListsCanJoinInput): ListsCanJoinResult {
+        return executeListsCanJoin(adapters.lists, input);
+      },
+      separate(input: ListsSeparateInput, options?: MutationOptions): ListsSeparateResult {
+        return executeListsSeparate(adapters.lists, input, options);
+      },
+      setLevel(input: ListsSetLevelInput, options?: MutationOptions): ListsMutateItemResult {
+        return executeListsSetLevel(adapters.lists, input, options);
+      },
+      setValue(input: ListsSetValueInput, options?: MutationOptions): ListsMutateItemResult {
+        return executeListsSetValue(adapters.lists, input, options);
+      },
+      continuePrevious(input: ListsContinuePreviousInput, options?: MutationOptions): ListsMutateItemResult {
+        return executeListsContinuePrevious(adapters.lists, input, options);
+      },
+      canContinuePrevious(input: ListsCanContinuePreviousInput): ListsCanContinuePreviousResult {
+        return executeListsCanContinuePrevious(adapters.lists, input);
+      },
+      setLevelRestart(input: ListsSetLevelRestartInput, options?: MutationOptions): ListsMutateItemResult {
+        return executeListsSetLevelRestart(adapters.lists, input, options);
+      },
+      convertToText(input: ListsConvertToTextInput, options?: MutationOptions): ListsConvertToTextResult {
+        return executeListsConvertToText(adapters.lists, input, options);
       },
     },
     sections: {
@@ -1317,6 +1401,15 @@ export function createDocumentApi(adapters: DocumentApiAdapters): DocumentApi {
       },
       getProperties(input) {
         return adapters.tables.getProperties(input);
+      },
+      getStyles(input?) {
+        return adapters.tables.getStyles(input);
+      },
+      setDefaultStyle(input: TablesSetDefaultStyleInput, options?: MutationOptions) {
+        return adapters.tables.setDefaultStyle(input, options);
+      },
+      clearDefaultStyle(input?: TablesClearDefaultStyleInput, options?: MutationOptions) {
+        return adapters.tables.clearDefaultStyle(input, options);
       },
     },
     toc: {

@@ -269,6 +269,26 @@ describe('replayDifferences options', () => {
     await expectReplayMatchesFixtureWithDefaultOptions('diff_before.docx', 'diff_after.docx');
   });
 });
+describe('compareDocuments defaults', () => {
+  it('does not emit comment delete diffs when updatedComments is omitted', async () => {
+    const beforeEditor = await getEditorFromFixture('diff_before8.docx');
+    const afterEditor = await getEditorFromFixture('diff_after8.docx');
+
+    try {
+      const omittedCommentsDiff = beforeEditor.commands.compareDocuments(afterEditor.state.doc);
+      expect(omittedCommentsDiff.commentDiffs).toHaveLength(0);
+
+      const explicitCommentsDiff = beforeEditor.commands.compareDocuments(
+        afterEditor.state.doc,
+        afterEditor.converter?.comments ?? [],
+      );
+      expect(explicitCommentsDiff.commentDiffs.length).toBeGreaterThan(0);
+    } finally {
+      beforeEditor.destroy?.();
+      afterEditor.destroy?.();
+    }
+  });
+});
 describe('replayDifferences can()', () => {
   it('does not replay or emit when evaluated through can()', async () => {
     await expectReplayCanHasNoSideEffects('diff_before8.docx', 'diff_after8.docx');

@@ -21,15 +21,11 @@ export const Diffing = Extension.create({
        * @returns {import('./computeDiff.ts').DiffResult}
        */
       compareDocuments:
-        (updatedDocument, updatedComments = []) =>
+        (updatedDocument, updatedComments) =>
         ({ state }) => {
-          const diffs = computeDiff(
-            state.doc,
-            updatedDocument,
-            state.schema,
-            this.editor.converter?.comments ?? [],
-            updatedComments,
-          );
+          const currentComments = this.editor.converter?.comments ?? [];
+          const nextComments = updatedComments === undefined ? currentComments : updatedComments;
+          const diffs = computeDiff(state.doc, updatedDocument, state.schema, currentComments, nextComments);
           return diffs;
         },
 

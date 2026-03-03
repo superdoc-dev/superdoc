@@ -37,11 +37,11 @@ export const Diffing = Extension.create({
        * Replays a diff result onto the current document as tracked changes.
        *
        * @param {import('./computeDiff.ts').DiffResult} diff
-       * @param {{ applyTrackedChanges?: boolean }} options
+       * @param {{ applyTrackedChanges?: boolean }} [options]
        * @returns {import('prosemirror-state').Transaction}
        */
       replayDifferences:
-        (diff, { applyTrackedChanges = true }) =>
+        (diff, { applyTrackedChanges = true } = {}) =>
         ({ state, dispatch }) => {
           const comments = this.editor.converter
             ? Array.isArray(this.editor.converter.comments)

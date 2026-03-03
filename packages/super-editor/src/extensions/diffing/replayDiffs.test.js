@@ -92,6 +92,29 @@ const expectReplayMatchesFixture = async (beforeName, afterName) => {
 };
 
 /**
+ * Replays diffs without providing replay options and asserts it does not throw.
+ *
+ * @param {string} beforeName DOCX fixture filename for the baseline.
+ * @param {string} afterName DOCX fixture filename for the updated doc.
+ * @returns {Promise<void>}
+ */
+const expectReplayMatchesFixtureWithDefaultOptions = async (beforeName, afterName) => {
+  const beforeEditor = await getEditorFromFixture(beforeName);
+  const afterEditor = await getEditorFromFixture(afterName);
+
+  try {
+    const diff = beforeEditor.commands.compareDocuments(afterEditor.state.doc, afterEditor.converter?.comments ?? []);
+    const success = beforeEditor.commands.replayDifferences(diff);
+
+    expect(success).toBe(true);
+    expect(beforeEditor.state.doc.textContent).toBe(afterEditor.state.doc.textContent);
+  } finally {
+    beforeEditor.destroy?.();
+    afterEditor.destroy?.();
+  }
+};
+
+/**
  * Replays diffs with tracked changes enabled and verifies acceptance matches the updated fixture.
  * @param {string} beforeName DOCX fixture filename for the baseline.
  * @param {string} afterName DOCX fixture filename for the updated doc.
@@ -212,6 +235,11 @@ const runTrackedReplayDiffsSuite = () => {
 };
 
 describe('replayDiffs', runReplayDiffsSuite);
+describe('replayDifferences options', () => {
+  it('accepts omitted options object', async () => {
+    await expectReplayMatchesFixtureWithDefaultOptions('diff_before.docx', 'diff_after.docx');
+  });
+});
 describe('replayDiffs tracked changes', runTrackedReplayDiffsSuite);
 describe('replayDiffs tracked-change ids', () => {
   it('keeps tracked mark ids populated for diff_before8 replay', async () => {

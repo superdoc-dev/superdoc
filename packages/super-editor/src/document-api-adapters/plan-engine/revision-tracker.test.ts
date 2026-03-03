@@ -52,7 +52,7 @@ describe('revision-tracker: core operations', () => {
     expect(() => checkRevision(editor, '0')).not.toThrow();
   });
 
-  it('checkRevision throws REVISION_MISMATCH when revision differs', () => {
+  it('checkRevision throws REVISION_MISMATCH with actionable remediation', () => {
     const editor = makeEditor();
     initRevision(editor);
 
@@ -61,7 +61,14 @@ describe('revision-tracker: core operations', () => {
       throw new Error('expected PlanError');
     } catch (e) {
       expect(e).toBeInstanceOf(PlanError);
-      expect((e as PlanError).code).toBe('REVISION_MISMATCH');
+      const err = e as PlanError;
+      expect(err.code).toBe('REVISION_MISMATCH');
+
+      const details = err.details as Record<string, unknown>;
+      expect(details.expectedRevision).toBe('5');
+      expect(details.currentRevision).toBe('0');
+      expect(details.refStability).toBe('ephemeral');
+      expect(details.remediation).toContain('query.match');
     }
   });
 

@@ -17,6 +17,7 @@ export const DEFAULT_CORPUS_ROOT = path.join(REPO_ROOT, 'test-corpus');
 export const REGISTRY_KEY = 'registry.json';
 export const DOCX_CONTENT_TYPE = 'application/vnd.openxmlformats-officedocument.wordprocessingml.document';
 export const CORPUS_BUCKET_NAME = 'docx-test-corpus';
+export const CORPUS_ACCOUNT_ID = 'afc2655a510195709ae6fa06772d73f2';
 
 const WRANGLER_CONFIG_PATHS =
   process.platform === 'darwin'
@@ -124,16 +125,11 @@ async function fetchCloudflareJson(url, token) {
   return parsed;
 }
 
-async function resolveAccountId(token) {
+async function resolveAccountId() {
   const explicit = firstEnv(ACCOUNT_ID_ENV_KEYS);
   if (explicit) return explicit;
 
-  const memberships = await fetchCloudflareJson('https://api.cloudflare.com/client/v4/memberships', token);
-  const accountId = memberships?.result?.[0]?.account?.id;
-  if (!accountId) {
-    throw new Error('Unable to resolve Cloudflare account ID from memberships. Set SUPERDOC_CORPUS_R2_ACCOUNT_ID.');
-  }
-  return accountId;
+  return CORPUS_ACCOUNT_ID;
 }
 
 async function resolveBucketName() {
@@ -141,15 +137,20 @@ async function resolveBucketName() {
 }
 
 function isMissingWranglerBinary(error) {
-  const message = error instanceof Error ? error.message : String(error);
-  return /ENOENT|not found|command not found/i.test(message);
+  // pnpm writes "Command not found" to stdout, not stderr, so check all.
+  const text = [
+    error instanceof Error ? error.message : String(error),
+    typeof error?.stderr === 'string' ? error.stderr : '',
+    typeof error?.stdout === 'string' ? error.stdout : '',
+  ].join('\n');
+  return /ENOENT|not found|command not found/i.test(text);
 }
 
 async function runWrangler(args, { accountId }) {
   const attempts = [
     { cmd: 'wrangler', args },
-    { cmd: 'pnpm', args: ['exec', 'wrangler', ...args] },
     { cmd: 'npx', args: ['wrangler', ...args] },
+    { cmd: 'pnpm', args: ['exec', 'wrangler', ...args] },
   ];
 
   let lastError = null;
@@ -165,11 +166,10 @@ async function runWrangler(args, { accountId }) {
       });
       return result.stdout;
     } catch (error) {
-      if (isMissingWranglerBinary(error)) {
-        lastError = error;
-        continue;
-      }
-      throw error;
+      lastError = error;
+      if (isMissingWranglerBinary(error)) continue;
+      // Wrangler found but command failed — still try next resolver
+      continue;
     }
   }
 
@@ -291,7 +291,7 @@ async function createS3R2Client(config) {
 
 async function createWranglerR2Client() {
   const token = assertWranglerToken();
-  const accountId = await resolveAccountId(token);
+  const accountId = await resolveAccountId();
   const bucketName = await resolveBucketName();
 
   const listObjects = async (prefix = '') => {
@@ -386,7 +386,9 @@ export async function loadRegistryOrNull(client) {
       throw new Error('Invalid registry.json format (missing docs array).');
     }
     return parsed;
-  } catch {
+  } catch (error) {
+    const message = error instanceof Error ? error.message : String(error);
+    console.error(`[corpus] Failed to load registry: ${message}`);
     return null;
   }
 }
@@ -456,6 +458,29 @@ export function printCorpusEnvHint() {
 
 export function formatDurationMs(ms) {
   return `${(ms / 1000).toFixed(2)}s`;
+}
+
+export function formatEta(ms) {
+  const seconds = Math.ceil(ms / 1000);
+  if (seconds < 60) return `${seconds}s`;
+  const minutes = Math.floor(seconds / 60);
+  const secs = seconds % 60;
+  return secs > 0 ? `${minutes}m ${secs}s` : `${minutes}m`;
+}
+
+export function writeProgressBar(current, total, startedAt, { indent = '' } = {}) {
+  const pct = Math.round((current / total) * 100);
+  const barLen = 25;
+  const filled = Math.floor(pct / (100 / barLen));
+  const bar = '\u2588'.repeat(filled) + '\u2591'.repeat(barLen - filled);
+  let eta = '';
+  if (startedAt && current > 0 && current < total) {
+    const remaining = ((Date.now() - startedAt) / current) * (total - current);
+    if (remaining > 2000) {
+      eta = ` ~ ${formatEta(remaining)} remaining`;
+    }
+  }
+  process.stdout.write(`\r${indent}${bar} ${pct}% (${current}/${total})${eta}    `);
 }
 
 export function sortRegistryDocs(docs) {

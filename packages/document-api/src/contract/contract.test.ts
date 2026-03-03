@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { COMMAND_CATALOG } from './command-catalog.js';
+import { COMMAND_CATALOG, OPERATION_DESCRIPTION_MAP, OPERATION_EXPECTED_RESULT_MAP } from './command-catalog.js';
 import { OPERATION_DEFINITIONS, type ReferenceGroupKey } from './operation-definitions.js';
 import { DOCUMENT_API_MEMBER_PATHS, OPERATION_MEMBER_PATH_MAP, memberPathForOperation } from './operation-map.js';
 import { OPERATION_REFERENCE_DOC_PATH_MAP, REFERENCE_OPERATION_GROUPS } from './reference-doc-map.js';
@@ -73,17 +73,55 @@ describe('document-api contract catalog', () => {
     }
   });
 
-  it('encodes insert locator pairing and exclusivity constraints in the input schema', () => {
+  it('uses simplified target-based insert input schema without locator constraints', () => {
     const schemas = buildInternalContractSchemas();
     const insertInputSchema = schemas.operations.insert.input as {
-      allOf?: Array<Record<string, unknown>>;
+      type?: string;
+      properties?: Record<string, unknown>;
+      required?: string[];
+      allOf?: unknown;
+      additionalProperties?: boolean;
     };
 
-    expect(insertInputSchema.allOf).toEqual([
-      { not: { required: ['target', 'blockId'] } },
-      { not: { required: ['target', 'offset'] } },
-      { if: { required: ['offset'] }, then: { required: ['blockId'] } },
-    ]);
+    // Simplified schema: target (optional) + value (required) + type (optional enum), no allOf constraints
+    expect(insertInputSchema.type).toBe('object');
+    expect(Object.keys(insertInputSchema.properties!).sort()).toEqual(['target', 'type', 'value']);
+    expect(insertInputSchema.required).toEqual(['value']);
+    expect(insertInputSchema.allOf).toBeUndefined();
+    expect(insertInputSchema.additionalProperties).toBe(false);
+  });
+
+  it('declares UNSUPPORTED_ENVIRONMENT for insert metadata and generated failure schema', () => {
+    const schemas = buildInternalContractSchemas();
+    const insertFailureSchema = schemas.operations.insert.failure as {
+      properties?: {
+        failure?: {
+          properties?: {
+            code?: {
+              enum?: string[];
+            };
+          };
+        };
+      };
+    };
+
+    expect(COMMAND_CATALOG.insert.possibleFailureCodes).toContain('UNSUPPORTED_ENVIRONMENT');
+    expect(insertFailureSchema.properties?.failure?.properties?.code?.enum).toContain('UNSUPPORTED_ENVIRONMENT');
+  });
+
+  it('includes global.history in capabilities.get output schema', () => {
+    const schemas = buildInternalContractSchemas();
+    const capabilitiesOutput = schemas.operations['capabilities.get'].output as {
+      properties?: {
+        global?: {
+          properties?: Record<string, unknown>;
+          required?: string[];
+        };
+      };
+    };
+
+    expect(capabilitiesOutput.properties?.global?.properties).toHaveProperty('history');
+    expect(capabilitiesOutput.properties?.global?.required).toContain('history');
   });
 
   it('derives OPERATION_IDS from OPERATION_DEFINITIONS keys', () => {
@@ -95,14 +133,22 @@ describe('document-api contract catalog', () => {
   it('ensures every definition entry has a valid referenceGroup', () => {
     const validGroups: readonly ReferenceGroupKey[] = [
       'core',
+      'blocks',
       'capabilities',
       'create',
+      'sections',
       'format',
+      'format.paragraph',
+      'styles',
+      'styles.paragraph',
       'lists',
       'comments',
       'trackChanges',
       'query',
       'mutations',
+      'tables',
+      'history',
+      'toc',
     ];
     for (const id of OPERATION_IDS) {
       expect(validGroups, `${id} has invalid referenceGroup`).toContain(OPERATION_DEFINITIONS[id].referenceGroup);
@@ -124,6 +170,55 @@ describe('document-api contract catalog', () => {
   it('projects reference doc paths that match OPERATION_DEFINITIONS', () => {
     for (const id of OPERATION_IDS) {
       expect(OPERATION_REFERENCE_DOC_PATH_MAP[id]).toBe(OPERATION_DEFINITIONS[id].referenceDocPath);
+    }
+  });
+
+  it('projects descriptions that match OPERATION_DEFINITIONS', () => {
+    for (const id of OPERATION_IDS) {
+      expect(OPERATION_DESCRIPTION_MAP[id]).toBe(OPERATION_DEFINITIONS[id].description);
+    }
+  });
+
+  it('projects expected results that match OPERATION_DEFINITIONS', () => {
+    for (const id of OPERATION_IDS) {
+      expect(OPERATION_EXPECTED_RESULT_MAP[id]).toBe(OPERATION_DEFINITIONS[id].expectedResult);
+    }
+  });
+
+  it('ensures every operation has a non-empty expectedResult', () => {
+    for (const id of OPERATION_IDS) {
+      const expectedResult = OPERATION_DEFINITIONS[id].expectedResult;
+      expect(expectedResult, `${id} has empty expectedResult`).toBeTruthy();
+      expect(typeof expectedResult).toBe('string');
+      expect(expectedResult.length, `${id} expectedResult is too short`).toBeGreaterThan(10);
+    }
+  });
+
+  it('marks exactly the out-of-band mutation operations as historyUnsafe', () => {
+    const historyUnsafeOps = OPERATION_IDS.filter((id) => COMMAND_CATALOG[id].historyUnsafe === true).sort();
+
+    // styles.apply + all sections.set* / sections.clear* mutations
+    expect(historyUnsafeOps).toContain('styles.apply');
+    for (const id of historyUnsafeOps) {
+      expect(
+        id.startsWith('sections.') ||
+          id === 'styles.apply' ||
+          id === 'tables.setDefaultStyle' ||
+          id === 'tables.clearDefaultStyle',
+        `unexpected historyUnsafe: ${id}`,
+      ).toBe(true);
+    }
+
+    // All section mutations (set*/clear*) should be marked
+    const sectionMutations = OPERATION_IDS.filter((id) => id.startsWith('sections.') && COMMAND_CATALOG[id].mutates);
+    for (const id of sectionMutations) {
+      expect(COMMAND_CATALOG[id].historyUnsafe, `${id} should be historyUnsafe`).toBe(true);
+    }
+
+    // Non-mutating and non-out-of-band operations should NOT be historyUnsafe
+    for (const id of OPERATION_IDS) {
+      if (!COMMAND_CATALOG[id].mutates || historyUnsafeOps.includes(id)) continue;
+      expect(COMMAND_CATALOG[id].historyUnsafe, `${id} should not be historyUnsafe`).toBeFalsy();
     }
   });
 });

@@ -21,10 +21,12 @@ import type {
   TrackChangeType,
   TrackChangesListResult,
 } from '@superdoc/document-api';
+import { buildResolvedHandle, buildDiscoveryItem, buildDiscoveryResult } from '@superdoc/document-api';
 import { DocumentApiAdapterError } from '../errors.js';
 import { requireEditorCommand } from '../helpers/mutation-helpers.js';
 import { executeDomainCommand } from './plan-wrappers.js';
-import { paginate } from '../helpers/adapter-utils.js';
+import { paginate, validatePaginationInput } from '../helpers/adapter-utils.js';
+import { getRevision } from './revision-tracker.js';
 import {
   groupTrackedChanges,
   resolveTrackedChange,
@@ -84,16 +86,24 @@ function toNoOpReceipt(message: string, details?: unknown): Receipt {
 
 export function trackChangesListWrapper(editor: Editor, input?: TrackChangesListInput): TrackChangesListResult {
   const query = input;
+  validatePaginationInput(query?.offset, query?.limit);
   const grouped = filterByType(groupTrackedChanges(editor), query?.type);
   const paged = paginate(grouped, query?.offset, query?.limit);
-  const changes = paged.items.map((item) => buildTrackChangeInfo(editor, item));
-  const matches = changes.map((change) => change.address);
+  const evaluatedRevision = getRevision(editor);
 
-  return {
-    matches,
+  const items = paged.items.map((change) => {
+    const info = buildTrackChangeInfo(editor, change);
+    const handle = buildResolvedHandle(`tc:${info.id}`, 'stable', 'trackedChange');
+    const { address, type, author, authorEmail, authorImage, date, excerpt } = info;
+    return buildDiscoveryItem(info.id, handle, { address, type, author, authorEmail, authorImage, date, excerpt });
+  });
+
+  return buildDiscoveryResult({
+    evaluatedRevision,
     total: paged.total,
-    changes: changes.length ? changes : undefined,
-  };
+    items,
+    page: { limit: query?.limit ?? paged.total, offset: query?.offset ?? 0, returned: items.length },
+  });
 }
 
 export function trackChangesGetWrapper(editor: Editor, input: TrackChangesGetInput): TrackChangeInfo {

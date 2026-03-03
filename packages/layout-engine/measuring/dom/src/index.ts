@@ -60,6 +60,10 @@ import {
   type DrawingGeometry,
   type DropCapDescriptor,
   type TableWidthAttr,
+  type CellSpacing,
+  type TableBorders,
+  type TableBorderValue,
+  effectiveTableCellSpacing,
 } from '@superdoc/contracts';
 import type { WordParagraphLayoutOutput } from '@superdoc/word-layout';
 import {
@@ -68,7 +72,6 @@ import {
   DEFAULT_LIST_INDENT_BASE_PX as DEFAULT_LIST_INDENT_BASE,
   DEFAULT_LIST_INDENT_STEP_PX as DEFAULT_LIST_INDENT_STEP,
   DEFAULT_LIST_HANGING_PX as DEFAULT_LIST_HANGING,
-  SPACE_SUFFIX_GAP_PX,
 } from '@superdoc/common/layout-constants';
 import { resolveListTextStartPx, type MinimalMarker } from '@superdoc/common/list-marker-utils';
 import { calculateRotatedBounds, normalizeRotation } from '@superdoc/geometry-utils';
@@ -146,6 +149,52 @@ const TWIPS_PER_PX = TWIPS_PER_INCH / PX_PER_INCH; // 15 twips per pixel
 const _PX_PER_PT = 96 / 72; // Reserved for future pt↔px conversions
 const twipsToPx = (twips: number): number => twips / TWIPS_PER_PX;
 const pxToTwips = (px: number): number => Math.round(px * TWIPS_PER_PX);
+
+/**
+ * Resolves table cell spacing to pixels (for border-spacing).
+ * Handles number (px) or { type, value }. The editor/DOCX decoder often stores value
+ * already in pixels (twipsToPixels), so we use value as px. If value is in twips (raw OOXML),
+ * type is 'dxa' and we convert; otherwise value is treated as px.
+ */
+export function getCellSpacingPx(cellSpacing: CellSpacing | number | null | undefined): number {
+  if (cellSpacing == null) return 0;
+  if (typeof cellSpacing === 'number') return Math.max(0, cellSpacing);
+  const v = cellSpacing.value;
+  if (typeof v !== 'number' || !Number.isFinite(v)) return 0;
+  const t = (cellSpacing.type ?? '').toLowerCase();
+  // Editor/store often has value already in px; raw OOXML has twips (dxa). Only convert when value looks like twips (large).
+  const asPx = t === 'dxa' && v >= 20 ? twipsToPx(v) : v;
+  return Math.max(0, asPx);
+}
+
+/**
+ * Returns the border width in pixels for a table border value (matches painter border-utils logic).
+ * Used so total table dimensions include outer border sizes and there is enough space for last row/column spacing.
+ */
+function getTableBorderWidthPx(value: TableBorderValue | null | undefined): number {
+  if (value == null) return 0;
+  if (typeof value === 'object' && 'none' in value && value.none) return 0;
+  const raw = value as { style?: string; width?: number; size?: number };
+  const w = typeof raw.width === 'number' ? raw.width : typeof raw.size === 'number' ? raw.size : 1;
+  const width = Math.max(0, w);
+  if (raw.style === 'none') return 0;
+  if (raw.style === 'thick') return Math.max(width * 2, 3);
+  return width;
+}
+
+/** Computes outer table border widths in px from table attrs (for total dimensions and content offset). */
+function getTableBorderWidths(borders: TableBorders | null | undefined): {
+  top: number;
+  right: number;
+  bottom: number;
+  left: number;
+} {
+  const top = getTableBorderWidthPx(borders?.top);
+  const right = getTableBorderWidthPx(borders?.right);
+  const bottom = getTableBorderWidthPx(borders?.bottom);
+  const left = getTableBorderWidthPx(borders?.left);
+  return { top, right, bottom, left };
+}
 
 const DEFAULT_TAB_INTERVAL_PX = twipsToPx(DEFAULT_TAB_INTERVAL_TWIPS);
 const TAB_EPSILON = 0.1;
@@ -398,6 +447,26 @@ function calculateTypographyMetrics(
     descent,
     lineHeight,
   };
+}
+
+/**
+ * Wraps `calculateTypographyMetrics` and applies inline-image height override.
+ *
+ * Typography metrics (ascent, descent) stay text-based so the baseline doesn't
+ * shift. When the line contains an inline image taller than the text line height,
+ * lineHeight is expanded to the image height — matching Word's behaviour where
+ * the text baseline stays fixed and the image occupies exactly its own height.
+ */
+function finalizeLineMetrics(
+  line: { maxFontSize: number; maxFontInfo?: FontInfo; maxImageHeight?: number },
+  spacing?: ParagraphSpacing,
+): { ascent: number; descent: number; lineHeight: number } {
+  const metrics = calculateTypographyMetrics(line.maxFontSize, spacing, line.maxFontInfo);
+  const imageH = line.maxImageHeight ?? 0;
+  if (imageH > metrics.lineHeight) {
+    metrics.lineHeight = imageH;
+  }
+  return metrics;
 }
 
 /**
@@ -1000,6 +1069,8 @@ async function measureParagraphBlock(block: ParagraphBlock, maxWidth: number): P
     maxFontSize: number;
     /** Font info for the run with maxFontSize, used for accurate typography metrics */
     maxFontInfo?: FontInfo;
+    /** Tallest inline image on this line (pixels) */
+    maxImageHeight?: number;
     maxWidth: number;
     segments: Line['segments'];
     leaders?: Line['leaders'];
@@ -1227,7 +1298,7 @@ async function measureParagraphBlock(block: ParagraphBlock, maxWidth: number): P
 
     if ((run as Run).kind === 'break') {
       if (currentLine) {
-        const metrics = calculateTypographyMetrics(currentLine.maxFontSize, spacing, currentLine.maxFontInfo);
+        const metrics = finalizeLineMetrics(currentLine, spacing);
         const lineBase = currentLine;
         const completedLine: Line = { ...lineBase, ...metrics };
         addBarTabsToLine(completedLine);
@@ -1259,7 +1330,7 @@ async function measureParagraphBlock(block: ParagraphBlock, maxWidth: number): P
       // For leading line breaks (before any text), use fallback font info for accurate height calculation
       const lineBreakFontInfo = hasSeenTextRun ? undefined : fallbackFontInfo;
       if (currentLine) {
-        const metrics = calculateTypographyMetrics(currentLine.maxFontSize, spacing, currentLine.maxFontInfo);
+        const metrics = finalizeLineMetrics(currentLine, spacing);
         const completedLine: Line = {
           ...currentLine,
           ...metrics,
@@ -1441,7 +1512,8 @@ async function measureParagraphBlock(block: ParagraphBlock, maxWidth: number): P
           toRun: runIndex,
           toChar: 1, // Images are treated as single atomic units
           width: imageWidth,
-          maxFontSize: imageHeight, // Use image height for line height calculation
+          maxFontSize: 0,
+          maxImageHeight: imageHeight,
           maxWidth: getEffectiveWidth(lines.length === 0 ? initialAvailableWidth : bodyContentWidth),
           spaceCount: 0,
           segments: [
@@ -1470,7 +1542,7 @@ async function measureParagraphBlock(block: ParagraphBlock, maxWidth: number): P
       if (!skipFitCheck && currentLine.width + imageWidth > currentLine.maxWidth && currentLine.width > 0) {
         // Image doesn't fit - finish current line and start new line with image
         trimTrailingWrapSpaces(currentLine);
-        const metrics = calculateTypographyMetrics(currentLine.maxFontSize, spacing, currentLine.maxFontInfo);
+        const metrics = finalizeLineMetrics(currentLine, spacing);
         const lineBase = currentLine;
         const completedLine: Line = {
           ...lineBase,
@@ -1490,7 +1562,8 @@ async function measureParagraphBlock(block: ParagraphBlock, maxWidth: number): P
           toRun: runIndex,
           toChar: 1,
           width: imageWidth,
-          maxFontSize: imageHeight,
+          maxFontSize: 0,
+          maxImageHeight: imageHeight,
           maxWidth: getEffectiveWidth(bodyContentWidth),
           spaceCount: 0,
           segments: [
@@ -1507,7 +1580,7 @@ async function measureParagraphBlock(block: ParagraphBlock, maxWidth: number): P
         currentLine.toRun = runIndex;
         currentLine.toChar = 1;
         currentLine.width = roundValue(currentLine.width + imageWidth);
-        currentLine.maxFontSize = Math.max(currentLine.maxFontSize, imageHeight);
+        currentLine.maxImageHeight = Math.max(currentLine.maxImageHeight ?? 0, imageHeight);
         if (!currentLine.segments) currentLine.segments = [];
         currentLine.segments.push({
           runIndex,
@@ -1620,7 +1693,7 @@ async function measureParagraphBlock(block: ParagraphBlock, maxWidth: number): P
       if (currentLine.width + annotationWidth > currentLine.maxWidth && currentLine.width > 0) {
         // Doesn't fit - finish current line and start new one
         trimTrailingWrapSpaces(currentLine);
-        const metrics = calculateTypographyMetrics(currentLine.maxFontSize, spacing, currentLine.maxFontInfo);
+        const metrics = finalizeLineMetrics(currentLine, spacing);
         const lineBase = currentLine;
         const completedLine: Line = {
           ...lineBase,
@@ -1724,7 +1797,7 @@ async function measureParagraphBlock(block: ParagraphBlock, maxWidth: number): P
             currentLine.width > 0
           ) {
             trimTrailingWrapSpaces(currentLine);
-            const metrics = calculateTypographyMetrics(currentLine.maxFontSize, spacing, currentLine.maxFontInfo);
+            const metrics = finalizeLineMetrics(currentLine, spacing);
             const lineBase = currentLine;
             const completedLine: Line = {
               ...lineBase,
@@ -1838,7 +1911,7 @@ async function measureParagraphBlock(block: ParagraphBlock, maxWidth: number): P
             ) {
               // Space doesn't fit - finish current line and start new one with the space
               trimTrailingWrapSpaces(currentLine);
-              const metrics = calculateTypographyMetrics(currentLine.maxFontSize, spacing, currentLine.maxFontInfo);
+              const metrics = finalizeLineMetrics(currentLine, spacing);
               const lineBase = currentLine;
               const completedLine: Line = {
                 ...lineBase,
@@ -1921,7 +1994,7 @@ async function measureParagraphBlock(block: ParagraphBlock, maxWidth: number): P
           // long word can use the pending tab alignment.
           if (currentLine && currentLine.width > 0 && currentLine.segments && currentLine.segments.length > 0) {
             trimTrailingWrapSpaces(currentLine);
-            const metrics = calculateTypographyMetrics(currentLine.maxFontSize, spacing, currentLine.maxFontInfo);
+            const metrics = finalizeLineMetrics(currentLine, spacing);
             const lineBase = currentLine;
             const completedLine: Line = {
               ...lineBase,
@@ -1988,7 +2061,7 @@ async function measureParagraphBlock(block: ParagraphBlock, maxWidth: number): P
               } else {
                 // More chunks to come - finish this line and push it
                 trimTrailingWrapSpaces(currentLine);
-                const metrics = calculateTypographyMetrics(currentLine.maxFontSize, spacing, currentLine.maxFontInfo);
+                const metrics = finalizeLineMetrics(currentLine, spacing);
                 const lineBase = currentLine;
                 const completedLine: Line = {
                   ...lineBase,
@@ -2134,7 +2207,7 @@ async function measureParagraphBlock(block: ParagraphBlock, maxWidth: number): P
 
         if (shouldBreak) {
           trimTrailingWrapSpaces(currentLine);
-          const metrics = calculateTypographyMetrics(currentLine.maxFontSize, spacing, currentLine.maxFontInfo);
+          const metrics = finalizeLineMetrics(currentLine, spacing);
           const lineBase = currentLine;
           const completedLine: Line = {
             ...lineBase,
@@ -2199,7 +2272,7 @@ async function measureParagraphBlock(block: ParagraphBlock, maxWidth: number): P
             appendSegment(currentLine.segments, runIndex, wordStartChar, wordEndNoSpace, wordOnlyWidth, explicitXHere);
             // finish current line and start a new one on next iteration
             trimTrailingWrapSpaces(currentLine);
-            const metrics = calculateTypographyMetrics(currentLine.maxFontSize, spacing, currentLine.maxFontInfo);
+            const metrics = finalizeLineMetrics(currentLine, spacing);
             const lineBase = currentLine;
             const completedLine: Line = { ...lineBase, ...metrics };
             addBarTabsToLine(completedLine);
@@ -2338,7 +2411,7 @@ async function measureParagraphBlock(block: ParagraphBlock, maxWidth: number): P
   }
 
   if (currentLine) {
-    const metrics = calculateTypographyMetrics(currentLine.maxFontSize, spacing, currentLine.maxFontInfo);
+    const metrics = finalizeLineMetrics(currentLine, spacing);
     const lineBase = currentLine;
     const finalLine: Line = {
       ...lineBase,
@@ -2437,8 +2510,9 @@ function resolveTableWidth(attrs: TableBlock['attrs'], maxWidth: number): number
     // Convert OOXML percentage to pixels
     // OOXML_PCT_DIVISOR (5000) = 100%
     return Math.round(maxWidth * (validValue / OOXML_PCT_DIVISOR));
-  } else if (typedAttr.type === 'px' || typedAttr.type === 'pixel') {
+  } else if (typedAttr.type === 'px' || typedAttr.type === 'pixel' || typedAttr.type === 'dxa') {
     // Explicit pixel width - use directly
+    // Note: 'dxa' values are already converted to pixels by tbl-translator during import
     return validValue;
   }
 
@@ -2452,70 +2526,6 @@ async function measureTableBlock(block: TableBlock, constraints: MeasureConstrai
 
   let columnWidths: number[];
 
-  /**
-   * Scales column widths proportionally to fit within a target width.
-   *
-   * This function is used when table column widths exceed the available page width.
-   * It proportionally reduces all columns to fit the constraint while maintaining
-   * their relative proportions.
-   *
-   * Rounding Adjustment Logic:
-   * - Initial scaling uses Math.round() for each column, which can cause the sum
-   *   to deviate from the target due to accumulated rounding errors
-   * - After scaling, the function adjusts columns one-by-one to reach the exact target
-   * - For excess width (sum > target): decrements columns starting from index 0
-   * - For deficit width (sum < target): increments columns starting from index 0
-   * - Ensures no column goes below 1px minimum width
-   * - Distributes adjustments cyclically to avoid bias toward any single column
-   *
-   * @param widths - Array of column widths in pixels
-   * @param targetWidth - Maximum total width in pixels
-   * @returns Scaled column widths that sum exactly to targetWidth (or original widths if already fit)
-   *
-   * @example
-   * ```typescript
-   * scaleColumnWidths([100, 200, 100], 300)
-   * // Returns: [75, 150, 75] (scaled from 400px down to 300px, maintaining 1:2:1 ratio)
-   *
-   * scaleColumnWidths([50, 50], 200)
-   * // Returns: [50, 50] (already within target, no scaling needed)
-   *
-   * scaleColumnWidths([33, 33, 33], 100)
-   * // Returns: [34, 33, 33] (sum adjusted from 99 to exactly 100)
-   * ```
-   */
-  const scaleColumnWidths = (widths: number[], targetWidth: number): number[] => {
-    const totalWidth = widths.reduce((a, b) => a + b, 0);
-    if (totalWidth <= targetWidth || widths.length === 0) return widths;
-
-    const scale = targetWidth / totalWidth;
-    const scaled = widths.map((w) => Math.max(1, Math.round(w * scale)));
-    const sum = scaled.reduce((a, b) => a + b, 0);
-
-    // Normalize to the exact target to avoid overflows from rounding.
-    if (sum !== targetWidth) {
-      const adjust = (delta: number): void => {
-        let idx = 0;
-        const direction = delta > 0 ? 1 : -1;
-        delta = Math.abs(delta);
-        while (delta > 0 && scaled.length > 0) {
-          const i = idx % scaled.length;
-          if (direction > 0) {
-            scaled[i] += 1;
-            delta -= 1;
-          } else if (scaled[i] > 1) {
-            scaled[i] -= 1;
-            delta -= 1;
-          }
-          idx += 1;
-          if (idx > scaled.length * 2 && delta > 0) break;
-        }
-      };
-      adjust(targetWidth - sum);
-    }
-
-    return scaled;
-  };
   // Determine actual column count from table structure (accounting for colspan)
   const maxCellCount = Math.max(
     1,
@@ -2572,13 +2582,19 @@ async function measureTableBlock(block: TableBlock, constraints: MeasureConstrai
         columnWidths = columnWidths.slice(0, maxCellCount);
       }
 
-      // Scale down if total width exceeds available space (prevent overflow).
-      // Auto-width tables (w:tblW type="auto") size to their grid/content in Word.
-      // Do NOT scale up — tables that fill the page do so because their grid columns
-      // already sum to the page width, not because of scaling.
+      // Auto-layout: only scale DOWN if columns exceed available width.
+      // Do NOT scale up — explicit w:tblGrid column widths are authoritative.
+      // Tables without w:tblGrid already arrive with page-width columns via
+      // the fallback grid builder in tableFallbackHelpers.
       const totalWidth = columnWidths.reduce((a, b) => a + b, 0);
-      if (totalWidth > effectiveTargetWidth) {
-        columnWidths = scaleColumnWidths(columnWidths, effectiveTargetWidth);
+      if (totalWidth > effectiveTargetWidth && effectiveTargetWidth > 0) {
+        const scale = effectiveTargetWidth / totalWidth;
+        columnWidths = columnWidths.map((w) => Math.max(1, Math.round(w * scale)));
+        const scaledSum = columnWidths.reduce((a, b) => a + b, 0);
+        if (scaledSum !== effectiveTargetWidth && columnWidths.length > 0) {
+          const diff = effectiveTargetWidth - scaledSum;
+          columnWidths[columnWidths.length - 1] = Math.max(1, columnWidths[columnWidths.length - 1] + diff);
+        }
       }
     }
   } else {
@@ -2699,21 +2715,15 @@ async function measureTableBlock(block: TableBlock, constraints: MeasureConstrai
 
         contentHeight += blockHeight;
 
-        // Add paragraph spacing.after to content height.
-        // For the last paragraph, Word absorbs spacing.after into cell bottom padding —
-        // so only add the excess beyond what the padding already provides.
+        // Add paragraph spacing.after/spacing.before to content height.
+        // Word absorbs first paragraph's spacing.before into paddingTop and last's spacing.after into paddingBottom.
+        const isFirstBlock = blockIndex === 0;
         const isLastBlock = blockIndex === cellBlocks.length - 1;
         if (block.kind === 'paragraph') {
+          const spacingBefore = (block as ParagraphBlock).attrs?.spacing?.before;
+          contentHeight += effectiveTableCellSpacing(spacingBefore, isFirstBlock, paddingTop);
           const spacingAfter = (block as ParagraphBlock).attrs?.spacing?.after;
-          if (typeof spacingAfter === 'number' && spacingAfter > 0) {
-            if (isLastBlock) {
-              // Only add the portion not absorbed by cell bottom padding
-              const excess = Math.max(0, spacingAfter - paddingBottom);
-              contentHeight += excess;
-            } else {
-              contentHeight += spacingAfter;
-            }
-          }
+          contentHeight += effectiveTableCellSpacing(spacingAfter, isLastBlock, paddingBottom);
         }
       }
 
@@ -2787,14 +2797,39 @@ async function measureTableBlock(block: TableBlock, constraints: MeasureConstrai
     rows[i].height = Math.max(0, rowHeights[i]);
   }
 
-  const totalHeight = rowHeights.reduce((sum, h) => sum + h, 0);
-  const totalWidth = columnWidths.reduce((a, b) => a + b, 0);
+  const contentHeight = rowHeights.reduce((sum, h) => sum + h, 0);
+  const contentWidth = columnWidths.reduce((a, b) => a + b, 0);
+
+  // Cell margins (OOXML cellMargins) are applied as cell padding (attrs.padding) and are already
+  // included in row heights and content width: row height = content + paddingTop + paddingBottom,
+  // and content width per cell = cellWidth - paddingLeft - paddingRight.
+
+  // Cell spacing (border-spacing): gaps between cells plus space before first and after last row/column
+  const cellSpacingPx = getCellSpacingPx(block.attrs?.cellSpacing);
+  const numRows = block.rows.length;
+  const horizontalGaps = gridColumnCount > 0 ? (gridColumnCount + 1) * cellSpacingPx : 0;
+  const verticalGaps = numRows > 0 ? (numRows + 1) * cellSpacingPx : 0;
+
+  // Outer table border widths: only add to total dimensions when borderCollapse === 'separate',
+  // since the DOM renderer only paints container-level outer borders in that path. For collapsed
+  // (default), borders are on cells and don't grow the table container, so including them would
+  // overstate size and cause premature wrapping/page breaks or alignment drift.
+  const tableBorderWidths = getTableBorderWidths(block.attrs?.borders);
+  const borderWidthH = tableBorderWidths.left + tableBorderWidths.right;
+  const borderWidthV = tableBorderWidths.top + tableBorderWidths.bottom;
+  const borderCollapse = block.attrs?.borderCollapse ?? (block.attrs?.cellSpacing != null ? 'separate' : 'collapse');
+  const includeOuterBordersInTotal = borderCollapse === 'separate';
+  const totalWidth = contentWidth + horizontalGaps + (includeOuterBordersInTotal ? borderWidthH : 0);
+  const totalHeight = contentHeight + verticalGaps + (includeOuterBordersInTotal ? borderWidthV : 0);
+
   return {
     kind: 'table',
     rows,
     columnWidths,
     totalWidth,
     totalHeight,
+    cellSpacingPx: cellSpacingPx > 0 ? cellSpacingPx : undefined,
+    tableBorderWidths: borderWidthH > 0 || borderWidthV > 0 ? tableBorderWidths : undefined,
   };
 }
 
@@ -2921,7 +2956,10 @@ async function measureDrawingBlock(block: DrawingBlock, constraints: MeasureCons
   const naturalWidth = Math.max(1, rotatedBounds.width);
   const naturalHeight = Math.max(1, rotatedBounds.height);
 
-  const maxWidth = fullWidthMax ?? (constraints.maxWidth > 0 ? constraints.maxWidth : naturalWidth);
+  // For floating drawings (wrapNone), don't constrain to the content area width.
+  // These drawings are positioned independently and can extend to page edges.
+  const isFloating = block.wrap?.type === 'None';
+  const maxWidth = fullWidthMax ?? (constraints.maxWidth > 0 && !isFloating ? constraints.maxWidth : naturalWidth);
 
   // For anchored drawings with negative vertical positioning (designed to overflow their container),
   // bypass the height constraint. This is common for footer/header graphics that extend beyond

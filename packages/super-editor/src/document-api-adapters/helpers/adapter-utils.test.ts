@@ -33,19 +33,16 @@ describe('paginate', () => {
     expect(result).toEqual({ total: 5, items: [] });
   });
 
-  it('returns empty for limit 0', () => {
-    const result = paginate(items, 0, 0);
-    expect(result).toEqual({ total: 5, items: [] });
+  it('throws INVALID_INPUT for limit 0', () => {
+    expect(() => paginate(items, 0, 0)).toThrow(/limit must be > 0/);
   });
 
-  it('clamps negative offset to 0', () => {
-    const result = paginate(items, -5, 2);
-    expect(result).toEqual({ total: 5, items: ['a', 'b'] });
+  it('throws INVALID_INPUT for negative offset', () => {
+    expect(() => paginate(items, -5, 2)).toThrow(/offset must be >= 0/);
   });
 
-  it('clamps negative limit to 0', () => {
-    const result = paginate(items, 0, -1);
-    expect(result).toEqual({ total: 5, items: [] });
+  it('throws INVALID_INPUT for negative limit', () => {
+    expect(() => paginate(items, 0, -1)).toThrow(/limit must be > 0/);
   });
 
   it('handles empty array', () => {

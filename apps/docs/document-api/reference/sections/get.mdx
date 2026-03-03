@@ -1,0 +1,703 @@
+---
+title: sections.get
+sidebarTitle: sections.get
+description: Retrieve full section information by section address.
+---
+
+{/* GENERATED FILE: DO NOT EDIT. Regenerate via `pnpm run docapi:sync`. */}
+
+> Alpha: Document API is currently alpha and subject to breaking changes.
+
+## Summary
+
+Retrieve full section information by section address.
+
+- Operation ID: `sections.get`
+- API member path: `editor.doc.sections.get(...)`
+- Mutates document: `no`
+- Idempotency: `idempotent`
+- Supports tracked mode: `no`
+- Supports dry run: `no`
+- Deterministic target resolution: `yes`
+
+## Expected result
+
+Returns a SectionInfo object with full section properties including margins, columns, and header/footer refs.
+
+## Input fields
+
+| Field | Type | Required | Description |
+| --- | --- | --- | --- |
+| `address` | SectionAddress | yes | SectionAddress |
+| `address.kind` | `"section"` | yes | Constant: `"section"` |
+| `address.sectionId` | string | yes |  |
+
+### Example request
+
+```json
+{
+  "address": {
+    "kind": "section",
+    "sectionId": "example"
+  }
+}
+```
+
+## Output fields
+
+| Field | Type | Required | Description |
+| --- | --- | --- | --- |
+| `address` | SectionAddress | yes | SectionAddress |
+| `address.kind` | `"section"` | yes | Constant: `"section"` |
+| `address.sectionId` | string | yes |  |
+| `breakType` | enum | no | `"continuous"`, `"nextPage"`, `"evenPage"`, `"oddPage"` |
+| `columns` | object | no |  |
+| `columns.count` | integer | no |  |
+| `columns.equalWidth` | boolean | no |  |
+| `columns.gap` | number | no |  |
+| `footerRefs` | object | no |  |
+| `footerRefs.default` | string | no |  |
+| `footerRefs.even` | string | no |  |
+| `footerRefs.first` | string | no |  |
+| `headerFooterMargins` | object | no |  |
+| `headerFooterMargins.footer` | number | no |  |
+| `headerFooterMargins.header` | number | no |  |
+| `headerRefs` | object | no |  |
+| `headerRefs.default` | string | no |  |
+| `headerRefs.even` | string | no |  |
+| `headerRefs.first` | string | no |  |
+| `index` | integer | yes |  |
+| `lineNumbering` | object | no |  |
+| `lineNumbering.countBy` | integer | no |  |
+| `lineNumbering.distance` | number | no |  |
+| `lineNumbering.enabled` | boolean | no |  |
+| `lineNumbering.restart` | enum | no | `"continuous"`, `"newPage"`, `"newSection"` |
+| `lineNumbering.start` | integer | no |  |
+| `margins` | object | no |  |
+| `margins.bottom` | number | no |  |
+| `margins.gutter` | number | no |  |
+| `margins.left` | number | no |  |
+| `margins.right` | number | no |  |
+| `margins.top` | number | no |  |
+| `oddEvenHeadersFooters` | boolean | no |  |
+| `pageBorders` | any \\| any \\| any \\| any \\| any \\| any \\| any | no | One of: any, any, any, any, any, any, any |
+| `pageBorders.bottom` | any \\| any \\| any \\| any \\| any \\| any | no | One of: any, any, any, any, any, any |
+| `pageBorders.bottom.color` | string | no |  |
+| `pageBorders.bottom.frame` | boolean | no |  |
+| `pageBorders.bottom.shadow` | boolean | no |  |
+| `pageBorders.bottom.size` | number | no |  |
+| `pageBorders.bottom.space` | number | no |  |
+| `pageBorders.bottom.style` | string | no |  |
+| `pageBorders.display` | enum | no | `"allPages"`, `"firstPage"`, `"notFirstPage"` |
+| `pageBorders.left` | any \\| any \\| any \\| any \\| any \\| any | no | One of: any, any, any, any, any, any |
+| `pageBorders.left.color` | string | no |  |
+| `pageBorders.left.frame` | boolean | no |  |
+| `pageBorders.left.shadow` | boolean | no |  |
+| `pageBorders.left.size` | number | no |  |
+| `pageBorders.left.space` | number | no |  |
+| `pageBorders.left.style` | string | no |  |
+| `pageBorders.offsetFrom` | enum | no | `"page"`, `"text"` |
+| `pageBorders.right` | any \\| any \\| any \\| any \\| any \\| any | no | One of: any, any, any, any, any, any |
+| `pageBorders.right.color` | string | no |  |
+| `pageBorders.right.frame` | boolean | no |  |
+| `pageBorders.right.shadow` | boolean | no |  |
+| `pageBorders.right.size` | number | no |  |
+| `pageBorders.right.space` | number | no |  |
+| `pageBorders.right.style` | string | no |  |
+| `pageBorders.top` | any \\| any \\| any \\| any \\| any \\| any | no | One of: any, any, any, any, any, any |
+| `pageBorders.top.color` | string | no |  |
+| `pageBorders.top.frame` | boolean | no |  |
+| `pageBorders.top.shadow` | boolean | no |  |
+| `pageBorders.top.size` | number | no |  |
+| `pageBorders.top.space` | number | no |  |
+| `pageBorders.top.style` | string | no |  |
+| `pageBorders.zOrder` | enum | no | `"front"`, `"back"` |
+| `pageNumbering` | object | no |  |
+| `pageNumbering.format` | enum | no | `"decimal"`, `"lowerLetter"`, `"upperLetter"`, `"lowerRoman"`, `"upperRoman"`, `"numberInDash"` |
+| `pageNumbering.start` | integer | no |  |
+| `pageSetup` | object | no |  |
+| `pageSetup.height` | number | no |  |
+| `pageSetup.orientation` | enum | no | `"portrait"`, `"landscape"` |
+| `pageSetup.paperSize` | string | no |  |
+| `pageSetup.width` | number | no |  |
+| `range` | object | yes |  |
+| `range.endParagraphIndex` | integer | yes |  |
+| `range.startParagraphIndex` | integer | yes |  |
+| `sectionDirection` | enum | no | `"ltr"`, `"rtl"` |
+| `titlePage` | boolean | no |  |
+| `verticalAlign` | enum | no | `"top"`, `"center"`, `"bottom"`, `"both"` |
+
+### Example response
+
+```json
+{
+  "address": {
+    "kind": "section",
+    "sectionId": "example"
+  },
+  "breakType": "continuous",
+  "index": 1,
+  "pageSetup": {
+    "height": 12.5,
+    "width": 12.5
+  },
+  "range": {
+    "endParagraphIndex": 1,
+    "startParagraphIndex": 1
+  }
+}
+```
+
+## Pre-apply throws
+
+- `TARGET_NOT_FOUND`
+- `INVALID_TARGET`
+- `INVALID_INPUT`
+- `CAPABILITY_UNAVAILABLE`
+
+## Non-applied failure codes
+
+- None
+
+## Raw schemas
+
+<Accordion title="Raw input schema">
+```json
+{
+  "additionalProperties": false,
+  "properties": {
+    "address": {
+      "$ref": "#/$defs/SectionAddress"
+    }
+  },
+  "required": [
+    "address"
+  ],
+  "type": "object"
+}
+```
+</Accordion>
+
+<Accordion title="Raw output schema">
+```json
+{
+  "additionalProperties": false,
+  "properties": {
+    "address": {
+      "$ref": "#/$defs/SectionAddress"
+    },
+    "breakType": {
+      "enum": [
+        "continuous",
+        "nextPage",
+        "evenPage",
+        "oddPage"
+      ]
+    },
+    "columns": {
+      "additionalProperties": false,
+      "properties": {
+        "count": {
+          "minimum": 1,
+          "type": "integer"
+        },
+        "equalWidth": {
+          "type": "boolean"
+        },
+        "gap": {
+          "minimum": 0,
+          "type": "number"
+        }
+      },
+      "type": "object"
+    },
+    "footerRefs": {
+      "additionalProperties": false,
+      "properties": {
+        "default": {
+          "type": "string"
+        },
+        "even": {
+          "type": "string"
+        },
+        "first": {
+          "type": "string"
+        }
+      },
+      "type": "object"
+    },
+    "headerFooterMargins": {
+      "additionalProperties": false,
+      "properties": {
+        "footer": {
+          "minimum": 0,
+          "type": "number"
+        },
+        "header": {
+          "minimum": 0,
+          "type": "number"
+        }
+      },
+      "type": "object"
+    },
+    "headerRefs": {
+      "additionalProperties": false,
+      "properties": {
+        "default": {
+          "type": "string"
+        },
+        "even": {
+          "type": "string"
+        },
+        "first": {
+          "type": "string"
+        }
+      },
+      "type": "object"
+    },
+    "index": {
+      "minimum": 0,
+      "type": "integer"
+    },
+    "lineNumbering": {
+      "additionalProperties": false,
+      "properties": {
+        "countBy": {
+          "minimum": 1,
+          "type": "integer"
+        },
+        "distance": {
+          "minimum": 0,
+          "type": "number"
+        },
+        "enabled": {
+          "type": "boolean"
+        },
+        "restart": {
+          "enum": [
+            "continuous",
+            "newPage",
+            "newSection"
+          ]
+        },
+        "start": {
+          "minimum": 1,
+          "type": "integer"
+        }
+      },
+      "required": [
+        "enabled"
+      ],
+      "type": "object"
+    },
+    "margins": {
+      "additionalProperties": false,
+      "properties": {
+        "bottom": {
+          "minimum": 0,
+          "type": "number"
+        },
+        "gutter": {
+          "minimum": 0,
+          "type": "number"
+        },
+        "left": {
+          "minimum": 0,
+          "type": "number"
+        },
+        "right": {
+          "minimum": 0,
+          "type": "number"
+        },
+        "top": {
+          "minimum": 0,
+          "type": "number"
+        }
+      },
+      "type": "object"
+    },
+    "oddEvenHeadersFooters": {
+      "type": "boolean"
+    },
+    "pageBorders": {
+      "additionalProperties": false,
+      "oneOf": [
+        {
+          "required": [
+            "display"
+          ]
+        },
+        {
+          "required": [
+            "offsetFrom"
+          ]
+        },
+        {
+          "required": [
+            "zOrder"
+          ]
+        },
+        {
+          "required": [
+            "top"
+          ]
+        },
+        {
+          "required": [
+            "right"
+          ]
+        },
+        {
+          "required": [
+            "bottom"
+          ]
+        },
+        {
+          "required": [
+            "left"
+          ]
+        }
+      ],
+      "properties": {
+        "bottom": {
+          "additionalProperties": false,
+          "oneOf": [
+            {
+              "required": [
+                "style"
+              ]
+            },
+            {
+              "required": [
+                "size"
+              ]
+            },
+            {
+              "required": [
+                "space"
+              ]
+            },
+            {
+              "required": [
+                "color"
+              ]
+            },
+            {
+              "required": [
+                "shadow"
+              ]
+            },
+            {
+              "required": [
+                "frame"
+              ]
+            }
+          ],
+          "properties": {
+            "color": {
+              "type": "string"
+            },
+            "frame": {
+              "type": "boolean"
+            },
+            "shadow": {
+              "type": "boolean"
+            },
+            "size": {
+              "minimum": 0,
+              "type": "number"
+            },
+            "space": {
+              "minimum": 0,
+              "type": "number"
+            },
+            "style": {
+              "type": "string"
+            }
+          },
+          "type": "object"
+        },
+        "display": {
+          "enum": [
+            "allPages",
+            "firstPage",
+            "notFirstPage"
+          ]
+        },
+        "left": {
+          "additionalProperties": false,
+          "oneOf": [
+            {
+              "required": [
+                "style"
+              ]
+            },
+            {
+              "required": [
+                "size"
+              ]
+            },
+            {
+              "required": [
+                "space"
+              ]
+            },
+            {
+              "required": [
+                "color"
+              ]
+            },
+            {
+              "required": [
+                "shadow"
+              ]
+            },
+            {
+              "required": [
+                "frame"
+              ]
+            }
+          ],
+          "properties": {
+            "color": {
+              "type": "string"
+            },
+            "frame": {
+              "type": "boolean"
+            },
+            "shadow": {
+              "type": "boolean"
+            },
+            "size": {
+              "minimum": 0,
+              "type": "number"
+            },
+            "space": {
+              "minimum": 0,
+              "type": "number"
+            },
+            "style": {
+              "type": "string"
+            }
+          },
+          "type": "object"
+        },
+        "offsetFrom": {
+          "enum": [
+            "page",
+            "text"
+          ]
+        },
+        "right": {
+          "additionalProperties": false,
+          "oneOf": [
+            {
+              "required": [
+                "style"
+              ]
+            },
+            {
+              "required": [
+                "size"
+              ]
+            },
+            {
+              "required": [
+                "space"
+              ]
+            },
+            {
+              "required": [
+                "color"
+              ]
+            },
+            {
+              "required": [
+                "shadow"
+              ]
+            },
+            {
+              "required": [
+                "frame"
+              ]
+            }
+          ],
+          "properties": {
+            "color": {
+              "type": "string"
+            },
+            "frame": {
+              "type": "boolean"
+            },
+            "shadow": {
+              "type": "boolean"
+            },
+            "size": {
+              "minimum": 0,
+              "type": "number"
+            },
+            "space": {
+              "minimum": 0,
+              "type": "number"
+            },
+            "style": {
+              "type": "string"
+            }
+          },
+          "type": "object"
+        },
+        "top": {
+          "additionalProperties": false,
+          "oneOf": [
+            {
+              "required": [
+                "style"
+              ]
+            },
+            {
+              "required": [
+                "size"
+              ]
+            },
+            {
+              "required": [
+                "space"
+              ]
+            },
+            {
+              "required": [
+                "color"
+              ]
+            },
+            {
+              "required": [
+                "shadow"
+              ]
+            },
+            {
+              "required": [
+                "frame"
+              ]
+            }
+          ],
+          "properties": {
+            "color": {
+              "type": "string"
+            },
+            "frame": {
+              "type": "boolean"
+            },
+            "shadow": {
+              "type": "boolean"
+            },
+            "size": {
+              "minimum": 0,
+              "type": "number"
+            },
+            "space": {
+              "minimum": 0,
+              "type": "number"
+            },
+            "style": {
+              "type": "string"
+            }
+          },
+          "type": "object"
+        },
+        "zOrder": {
+          "enum": [
+            "front",
+            "back"
+          ]
+        }
+      },
+      "type": "object"
+    },
+    "pageNumbering": {
+      "additionalProperties": false,
+      "properties": {
+        "format": {
+          "enum": [
+            "decimal",
+            "lowerLetter",
+            "upperLetter",
+            "lowerRoman",
+            "upperRoman",
+            "numberInDash"
+          ]
+        },
+        "start": {
+          "minimum": 1,
+          "type": "integer"
+        }
+      },
+      "type": "object"
+    },
+    "pageSetup": {
+      "additionalProperties": false,
+      "properties": {
+        "height": {
+          "minimum": 0,
+          "type": "number"
+        },
+        "orientation": {
+          "enum": [
+            "portrait",
+            "landscape"
+          ]
+        },
+        "paperSize": {
+          "type": "string"
+        },
+        "width": {
+          "minimum": 0,
+          "type": "number"
+        }
+      },
+      "type": "object"
+    },
+    "range": {
+      "additionalProperties": false,
+      "properties": {
+        "endParagraphIndex": {
+          "minimum": 0,
+          "type": "integer"
+        },
+        "startParagraphIndex": {
+          "minimum": 0,
+          "type": "integer"
+        }
+      },
+      "required": [
+        "startParagraphIndex",
+        "endParagraphIndex"
+      ],
+      "type": "object"
+    },
+    "sectionDirection": {
+      "enum": [
+        "ltr",
+        "rtl"
+      ]
+    },
+    "titlePage": {
+      "type": "boolean"
+    },
+    "verticalAlign": {
+      "enum": [
+        "top",
+        "center",
+        "bottom",
+        "both"
+      ]
+    }
+  },
+  "required": [
+    "address",
+    "index",
+    "range"
+  ],
+  "type": "object"
+}
+```
+</Accordion>

@@ -10,6 +10,7 @@ import type { ImageNodeInfo } from './media.types.js';
 import type { BookmarkNodeInfo, HyperlinkNodeInfo, SdtNodeInfo } from './structured.types.js';
 import type { CommentNodeInfo } from './comments.types.js';
 import type { FootnoteRefNodeInfo } from './references.types.js';
+import type { TableOfContentsNodeInfo } from '../toc/toc.types.js';
 
 export type NodeInfo =
   | ParagraphNodeInfo
@@ -18,6 +19,7 @@ export type NodeInfo =
   | TableNodeInfo
   | TableRowNodeInfo
   | TableCellNodeInfo
+  | TableOfContentsNodeInfo
   | ImageNodeInfo
   | SdtNodeInfo
   | RunNodeInfo

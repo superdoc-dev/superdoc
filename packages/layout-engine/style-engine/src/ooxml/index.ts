@@ -22,6 +22,18 @@ export type { PropertyObject };
 export type * from './types.ts';
 export type * from './numbering-types.ts';
 export type * from './styles-types.ts';
+export {
+  TABLE_STYLE_ID_TABLE_GRID,
+  TABLE_STYLE_ID_TABLE_NORMAL,
+  TABLE_FALLBACK_BORDER,
+  TABLE_FALLBACK_BORDERS,
+  TABLE_FALLBACK_CELL_PADDING,
+  isKnownTableStyleId,
+  findTypeDefaultTableStyleId,
+  resolveExistingTableEffectiveStyleId,
+  resolvePreferredNewTableStyleId,
+} from './table-style-selection.js';
+export type { ResolvedStyle, ResolvedStyleSource } from './table-style-selection.js';
 
 export interface OoxmlResolverParams {
   translatedNumbering: NumberingProperties | null | undefined;
@@ -249,7 +261,7 @@ export function resolveParagraphProperties(
 }
 
 export function resolveStyleChain<T extends PropertyObject>(
-  propertyType: 'paragraphProperties' | 'runProperties',
+  propertyType: 'paragraphProperties' | 'runProperties' | 'tableProperties',
   params: OoxmlResolverParams,
   styleId: string | undefined,
   followBasedOnChain = true,
@@ -263,13 +275,13 @@ export function resolveStyleChain<T extends PropertyObject>(
   const basedOn = styleDef.basedOn;
 
   let styleChain: T[] = [styleProps];
-  const seenStyles = new Set<string>();
+  const seenStyles = new Set<string>([styleId]);
   let nextBasedOn = basedOn;
   while (followBasedOnChain && nextBasedOn) {
     if (seenStyles.has(nextBasedOn as string)) {
       break;
     }
-    seenStyles.add(basedOn as string);
+    seenStyles.add(nextBasedOn as string);
     const basedOnStyleDef = params.translatedLinkedStyles?.styles?.[nextBasedOn];
     const basedOnProps = basedOnStyleDef?.[propertyType as keyof typeof basedOnStyleDef] as T;
 
@@ -336,6 +348,30 @@ export function getNumberingProperties<T extends ParagraphProperties | RunProper
 
   propertiesChain.reverse();
   return combineProperties(propertiesChain);
+}
+
+/**
+ * Resolves table-level properties (borders, cellMargins, justification,
+ * tableWidth, tableCellSpacing) by walking the full basedOn chain.
+ *
+ * Returns raw OOXML-translated shapes exactly as stored in
+ * `translatedLinkedStyles`. Conversion to layout units (px, pt)
+ * remains in the pm-adapter hydrator.
+ */
+export function resolveTableProperties(
+  tableStyleId: string | null | undefined,
+  translatedLinkedStyles: StylesDocumentProperties | null | undefined,
+): TableProperties {
+  if (!tableStyleId || !translatedLinkedStyles?.styles) {
+    return {} as TableProperties;
+  }
+
+  const params: OoxmlResolverParams = {
+    translatedLinkedStyles,
+    translatedNumbering: null,
+  };
+
+  return resolveStyleChain<TableProperties>('tableProperties', params, tableStyleId);
 }
 
 export function resolveDocxFontFamily(

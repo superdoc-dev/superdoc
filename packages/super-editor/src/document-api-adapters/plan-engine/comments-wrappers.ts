@@ -25,13 +25,17 @@ import type {
   RevisionGuardOptions,
   SetCommentActiveInput,
   SetCommentInternalInput,
+  TextSegment,
+  TextTarget,
 } from '@superdoc/document-api';
+import { buildResolvedHandle, buildDiscoveryItem, buildDiscoveryResult } from '@superdoc/document-api';
 import { TextSelection } from 'prosemirror-state';
 import { v4 as uuidv4 } from 'uuid';
 import { DocumentApiAdapterError } from '../errors.js';
 import { requireEditorCommand } from '../helpers/mutation-helpers.js';
 import { clearIndexCache } from '../helpers/index-cache.js';
-import { resolveTextTarget } from '../helpers/adapter-utils.js';
+import { getRevision } from './revision-tracker.js';
+import { resolveTextTarget, paginate, validatePaginationInput } from '../helpers/adapter-utils.js';
 import { executeDomainCommand } from './plan-wrappers.js';
 import {
   buildCommentJsonFromText,
@@ -44,7 +48,7 @@ import {
   upsertCommentEntity,
 } from '../helpers/comment-entity-store.js';
 import { listCommentAnchors, resolveCommentAnchorsById } from '../helpers/comment-target-resolver.js';
-import { toNonEmptyString } from '../helpers/value-utils.js';
+import { normalizeExcerpt, toNonEmptyString } from '../helpers/value-utils.js';
 
 // ---------------------------------------------------------------------------
 // Internal helpers
@@ -154,7 +158,116 @@ function resolveCommentIdentity(
   };
 }
 
-function mergeAnchorData(infosById: Map<string, CommentInfo>, anchors: ReturnType<typeof listCommentAnchors>): void {
+/**
+ * A canonicalized anchor with merged same-block overlapping/adjacent ranges.
+ * Carries both block-relative segment data (for TextTarget output) and
+ * absolute PM positions (for text extraction).
+ */
+type CanonicalAnchor = {
+  blockId: string;
+  range: { start: number; end: number };
+  pos: number;
+  end: number;
+};
+
+/**
+ * Merges same-block adjacent/overlapping anchors into canonical segments.
+ *
+ * Anchors MUST be pre-sorted in document order (by pos, then end).
+ * Two same-block anchors merge when `next.range.start <= current.range.end`
+ * (covers both overlap and adjacency). Cross-block anchors are always kept
+ * as separate segments.
+ */
+function canonicalizeAnchors(sorted: ReturnType<typeof listCommentAnchors>): CanonicalAnchor[] {
+  if (sorted.length === 0) return [];
+
+  const result: CanonicalAnchor[] = [];
+  let current: CanonicalAnchor = {
+    blockId: sorted[0].target.blockId,
+    range: { start: sorted[0].target.range.start, end: sorted[0].target.range.end },
+    pos: sorted[0].pos,
+    end: sorted[0].end,
+  };
+
+  for (let i = 1; i < sorted.length; i++) {
+    const anchor = sorted[i];
+    const sameBlock = anchor.target.blockId === current.blockId;
+    const overlapsOrAdjacent = anchor.target.range.start <= current.range.end;
+
+    if (sameBlock && overlapsOrAdjacent) {
+      current.range.end = Math.max(current.range.end, anchor.target.range.end);
+      current.end = Math.max(current.end, anchor.end);
+    } else {
+      result.push(current);
+      current = {
+        blockId: anchor.target.blockId,
+        range: { start: anchor.target.range.start, end: anchor.target.range.end },
+        pos: anchor.pos,
+        end: anchor.end,
+      };
+    }
+  }
+
+  result.push(current);
+  return result;
+}
+
+/**
+ * Extracts and normalizes text for a single canonical anchor span.
+ * Strips object-replacement characters (\ufffc) emitted for atom nodes
+ * (e.g. commentRangeStart/commentRangeEnd).
+ */
+function extractSegmentText(editor: Editor, pos: number, end: number): string | undefined {
+  try {
+    const raw = editor.state.doc.textBetween(pos, end, ' ', '\ufffc');
+    const cleaned = raw.replace(/\ufffc/g, '').trim();
+    return cleaned.length > 0 ? cleaned : undefined;
+  } catch {
+    return undefined;
+  }
+}
+
+/**
+ * Builds anchoredText from canonicalized anchors, joining segment texts
+ * with spaces and normalizing the combined result.
+ */
+function buildAnchoredText(editor: Editor, canonical: CanonicalAnchor[]): string | undefined {
+  const parts: string[] = [];
+  for (const anchor of canonical) {
+    const text = extractSegmentText(editor, anchor.pos, anchor.end);
+    if (text) parts.push(text);
+  }
+  return parts.length > 0 ? normalizeExcerpt(parts.join(' ')) : undefined;
+}
+
+/**
+ * Converts canonicalized anchors into a TextTarget with segments
+ * in document order.
+ */
+function buildTextTarget(canonical: CanonicalAnchor[]): TextTarget | undefined {
+  if (canonical.length === 0) return undefined;
+
+  const segments: TextSegment[] = canonical.map((a) => ({
+    blockId: a.blockId,
+    range: { start: a.range.start, end: a.range.end },
+  }));
+
+  return { kind: 'text', segments: segments as [TextSegment, ...TextSegment[]] };
+}
+
+/**
+ * Groups all comment anchors by commentId, then merges anchor data (target,
+ * anchoredText, status) into the corresponding CommentInfo records.
+ *
+ * Unlike the single-anchor approach, this collects ALL anchors per comment
+ * into a multi-segment TextTarget, preserving cross-block and discontinuous
+ * anchor fidelity.
+ */
+function mergeAnchorData(
+  editor: Editor,
+  infosById: Map<string, CommentInfo>,
+  anchors: ReturnType<typeof listCommentAnchors>,
+): void {
   const grouped = new Map<string, typeof anchors>();
   for (const anchor of anchors) {
     const group = grouped.get(anchor.commentId) ?? [];
@@ -164,15 +277,19 @@ function mergeAnchorData(infosById: Map<string, CommentInfo>, anchors: ReturnTyp
 
   for (const [commentId, commentAnchors] of grouped.entries()) {
     const sorted = [...commentAnchors].sort((a, b) => (a.pos === b.pos ? a.end - b.end : a.pos - b.pos));
-    const primary = sorted[0];
+    const firstAnchor = sorted[0];
     const status = sorted.every((anchor) => anchor.status === 'resolved') ? 'resolved' : 'open';
+    const canonical = canonicalizeAnchors(sorted);
+    const target = buildTextTarget(canonical);
+    const anchoredText = buildAnchoredText(editor, canonical);
     const existing = infosById.get(commentId);
 
     if (existing) {
-      if (!existing.target) existing.target = primary.target;
-      if (!existing.importedId && primary.importedId) existing.importedId = primary.importedId;
-      if (existing.isInternal == null && primary.isInternal != null) existing.isInternal = primary.isInternal;
+      if (!existing.target && target) existing.target = target;
+      if (!existing.importedId && firstAnchor.importedId) existing.importedId = firstAnchor.importedId;
+      if (existing.isInternal == null && firstAnchor.isInternal != null) existing.isInternal = firstAnchor.isInternal;
       if (status === 'open') existing.status = 'open';
+      if (existing.anchoredText == null && anchoredText != null) existing.anchoredText = anchoredText;
       continue;
     }
 
@@ -181,13 +298,14 @@ function mergeAnchorData(infosById: Map<string, CommentInfo>, anchors: ReturnTyp
       toCommentInfo(
         {
           commentId,
-          importedId: primary.importedId,
-          isInternal: primary.isInternal,
+          importedId: firstAnchor.importedId,
+          isInternal: firstAnchor.isInternal,
           isDone: status === 'resolved',
         },
         {
-          target: primary.target,
+          target,
           status,
+          anchoredText,
         },
       ),
     );
@@ -204,7 +322,25 @@ function buildCommentInfos(editor: Editor): CommentInfo[] {
     infosById.set(commentId, toCommentInfo({ ...entry, commentId }));
   }
 
-  mergeAnchorData(infosById, listCommentAnchorsSafe(editor));
+  mergeAnchorData(editor, infosById, listCommentAnchorsSafe(editor));
+
+  // Inherit target + anchoredText from nearest anchored ancestor for replies.
+  // Walks up the parent chain so deep threads resolve regardless of iteration order.
+  for (const info of infosById.values()) {
+    if ((info.target != null && info.anchoredText != null) || !info.parentCommentId) continue;
+    const visited = new Set<string>();
+    let cursor: CommentInfo | undefined = info;
+    while (cursor?.parentCommentId && !visited.has(cursor.parentCommentId)) {
+      visited.add(cursor.parentCommentId);
+      const ancestor = infosById.get(cursor.parentCommentId);
+      if (ancestor?.target != null) {
+        if (info.target == null) info.target = ancestor.target;
+        if (info.anchoredText == null && ancestor.anchoredText != null) info.anchoredText = ancestor.anchoredText;
+        break;
+      }
+      cursor = ancestor;
+    }
+  }
 
   const infos = Array.from(infosById.values());
   infos.sort((left, right) => {
@@ -212,8 +348,8 @@ function buildCommentInfos(editor: Editor): CommentInfo[] {
     const rightCreated = right.createdTime ?? 0;
     if (leftCreated !== rightCreated) return leftCreated - rightCreated;
 
-    const leftStart = left.target?.range.start ?? Number.MAX_SAFE_INTEGER;
-    const rightStart = right.target?.range.start ?? Number.MAX_SAFE_INTEGER;
+    const leftStart = left.target?.segments[0]?.range.start ?? Number.MAX_SAFE_INTEGER;
+    const rightStart = right.target?.segments[0]?.range.start ?? Number.MAX_SAFE_INTEGER;
     if (leftStart !== rightStart) return leftStart - rightStart;
 
     return left.commentId.localeCompare(right.commentId);
@@ -227,7 +363,7 @@ function buildCommentInfos(editor: Editor): CommentInfo[] {
 // ---------------------------------------------------------------------------
 
 function addCommentHandler(editor: Editor, input: AddCommentInput, options?: RevisionGuardOptions): Receipt {
-  requireEditorCommand(editor.commands?.addComment, 'comments.add (addComment)');
+  requireEditorCommand(editor.commands?.addComment, 'comments.create (addComment)');
 
   if (input.target.range.start === input.target.range.end) {
     return {
@@ -271,7 +407,7 @@ function addCommentHandler(editor: Editor, input: AddCommentInput, options?: Rev
   const receipt = executeDomainCommand(
     editor,
     () => {
-      const addComment = requireEditorCommand(editor.commands?.addComment, 'comments.add (addComment)');
+      const addComment = requireEditorCommand(editor.commands?.addComment, 'comments.create (addComment)');
       const didInsert = addComment({ content: input.text, isInternal: false, commentId }) === true;
       if (didInsert) {
         clearIndexCache(editor);
@@ -309,7 +445,7 @@ function addCommentHandler(editor: Editor, input: AddCommentInput, options?: Rev
 }
 
 function editCommentHandler(editor: Editor, input: EditCommentInput, options?: RevisionGuardOptions): Receipt {
-  const editComment = requireEditorCommand(editor.commands?.editComment, 'comments.edit (editComment)');
+  const editComment = requireEditorCommand(editor.commands?.editComment, 'comments.patch (editComment)');
 
   const store = getCommentEntityStore(editor);
   const identity = resolveCommentIdentity(editor, input.commentId);
@@ -353,7 +489,7 @@ function editCommentHandler(editor: Editor, input: EditCommentInput, options?: R
 }
 
 function replyToCommentHandler(editor: Editor, input: ReplyToCommentInput, options?: RevisionGuardOptions): Receipt {
-  const addCommentReply = requireEditorCommand(editor.commands?.addCommentReply, 'comments.reply (addCommentReply)');
+  const addCommentReply = requireEditorCommand(editor.commands?.addCommentReply, 'comments.create (addCommentReply)');
 
   if (!input.parentCommentId) {
     return {
@@ -411,7 +547,7 @@ function replyToCommentHandler(editor: Editor, input: ReplyToCommentInput, optio
 }
 
 function moveCommentHandler(editor: Editor, input: MoveCommentInput, options?: RevisionGuardOptions): Receipt {
-  const moveComment = requireEditorCommand(editor.commands?.moveComment, 'comments.move (moveComment)');
+  const moveComment = requireEditorCommand(editor.commands?.moveComment, 'comments.patch (moveComment)');
 
   if (input.target.range.start === input.target.range.end) {
     return {
@@ -474,7 +610,7 @@ function moveCommentHandler(editor: Editor, input: MoveCommentInput, options?: R
 }
 
 function resolveCommentHandler(editor: Editor, input: ResolveCommentInput, options?: RevisionGuardOptions): Receipt {
-  const resolveComment = requireEditorCommand(editor.commands?.resolveComment, 'comments.resolve (resolveComment)');
+  const resolveComment = requireEditorCommand(editor.commands?.resolveComment, 'comments.patch (resolveComment)');
 
   const store = getCommentEntityStore(editor);
   const identity = resolveCommentIdentity(editor, input.commentId);
@@ -688,14 +824,51 @@ function getCommentHandler(editor: Editor, input: GetCommentInput): CommentInfo 
 }
 
 function listCommentsHandler(editor: Editor, query?: CommentsListQuery): CommentsListResult {
+  validatePaginationInput(query?.offset, query?.limit);
+
   const comments = buildCommentInfos(editor);
   const includeResolved = query?.includeResolved ?? true;
-  const matches = includeResolved ? comments : comments.filter((comment) => comment.status !== 'resolved');
+  const filtered = includeResolved ? comments : comments.filter((comment) => comment.status !== 'resolved');
+  const evaluatedRevision = getRevision(editor);
 
-  return {
-    matches,
-    total: matches.length,
-  };
+  const paged = paginate(filtered, query?.offset, query?.limit);
+
+  const items = paged.items.map((comment) => {
+    const handle = buildResolvedHandle(`comment:${comment.commentId}`, 'stable', 'comment');
+    const {
+      importedId,
+      parentCommentId,
+      text,
+      isInternal,
+      status,
+      target,
+      anchoredText,
+      createdTime,
+      creatorName,
+      creatorEmail,
+      address,
+    } = comment;
+    return buildDiscoveryItem(comment.commentId, handle, {
+      address,
+      importedId,
+      parentCommentId,
+      text,
+      isInternal,
+      status,
+      target,
+      anchoredText,
+      createdTime,
+      creatorName,
+      creatorEmail,
+    });
+  });
+
+  return buildDiscoveryResult({
+    evaluatedRevision,
+    total: paged.total,
+    items,
+    page: { limit: query?.limit ?? paged.total, offset: query?.offset ?? 0, returned: items.length },
+  });
 }
 
 // ---------------------------------------------------------------------------

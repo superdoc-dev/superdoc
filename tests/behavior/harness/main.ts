@@ -4,12 +4,18 @@ import { SuperDoc } from 'superdoc';
 type SuperDocConfig = ConstructorParameters<typeof SuperDoc>[0];
 type SuperDocInstance = InstanceType<typeof SuperDoc>;
 type SuperDocReadyPayload = Parameters<NonNullable<SuperDocConfig['onReady']>>[0];
+type OverrideType = 'markdown' | 'html' | 'text';
+type ContentOverrideInput = {
+  contentOverride?: string;
+  overrideType?: OverrideType;
+};
 
 type HarnessWindow = Window &
   typeof globalThis & {
     superdocReady?: boolean;
     superdoc?: SuperDocInstance;
     editor?: unknown;
+    behaviorHarnessInit?: (input?: ContentOverrideInput) => void;
   };
 
 const harnessWindow = window as HarnessWindow;
@@ -21,6 +27,8 @@ const showSelection = params.get('showSelection') === '1';
 const toolbar = params.get('toolbar');
 const comments = params.get('comments');
 const trackChanges = params.get('trackChanges') === '1';
+const contentOverride = params.get('contentOverride') ?? undefined;
+const overrideType = (params.get('overrideType') as OverrideType | null) ?? undefined;
 
 if (!showCaret) {
   document.documentElement.style.setProperty('caret-color', 'transparent', 'important');
@@ -28,7 +36,27 @@ if (!showCaret) {
 
 let instance: SuperDocInstance | null = null;
 
-function init(file?: File) {
+function applyContentOverride(config: SuperDocConfig, input?: ContentOverrideInput) {
+  if (!input?.contentOverride || !input?.overrideType) return;
+
+  if (input.overrideType === 'markdown') {
+    config.markdown = input.contentOverride;
+    return;
+  }
+
+  if (input.overrideType === 'html') {
+    config.html = input.contentOverride;
+    return;
+  }
+
+  // SuperDoc config does not expose a plain-text bootstrap field directly.
+  // Use markdown as a lossless text carrier for behavior harness purposes.
+  if (input.overrideType === 'text') {
+    config.markdown = input.contentOverride;
+  }
+}
+
+function init(file?: File, content?: ContentOverrideInput) {
   if (instance) {
     instance.destroy();
     instance = null;
@@ -52,6 +80,8 @@ function init(file?: File) {
 
   if (file) {
     config.document = file;
+  } else {
+    applyContentOverride(config, content);
   }
 
   // Toolbar — pass selector string, not DOM element
@@ -94,4 +124,8 @@ fileInput.addEventListener('change', (e) => {
   if (file) init(file);
 });
 
-init();
+harnessWindow.behaviorHarnessInit = (input?: ContentOverrideInput) => {
+  init(undefined, input);
+};
+
+init(undefined, { contentOverride, overrideType });

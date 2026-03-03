@@ -2993,6 +2993,7 @@ describe('measureBlock', () => {
 
       expect(measure.kind).toBe('table');
       if (measure.kind !== 'table') throw new Error('expected table measure');
+      // Auto layout preserves explicit w:tblGrid widths (no scale-up)
       expect(measure.columnWidths).toEqual([100, 150, 200]);
       expect(measure.totalWidth).toBe(450);
     });
@@ -3238,6 +3239,7 @@ describe('measureBlock', () => {
       expect(measure.kind).toBe('table');
       if (measure.kind !== 'table') throw new Error('expected table measure');
       expect(measure.columnWidths).toHaveLength(2);
+      // Truncated to [100, 150] — auto-layout preserves widths (no scale-up)
       expect(measure.columnWidths).toEqual([100, 150]);
     });
   });
@@ -3506,6 +3508,7 @@ describe('measureBlock', () => {
       if (measure.kind !== 'table') throw new Error('expected table measure');
 
       // All 4 column widths should be preserved (not truncated to 3)
+      // Auto-layout preserves explicit widths (no scale-up)
       expect(measure.columnWidths).toHaveLength(4);
       expect(measure.columnWidths).toEqual([172, 13, 128, 310]);
       expect(measure.totalWidth).toBe(623);
@@ -3554,7 +3557,8 @@ describe('measureBlock', () => {
       expect(measure.rows[0].cells).toHaveLength(2);
       expect(measure.rows[1].cells).toHaveLength(2);
 
-      // Cell widths should correctly sum their spanned columns
+      // Cell widths sum their spanned columns (auto-layout preserves widths, no scale-up)
+      // Columns: [100, 50, 100, 300]
       // Row 0 cell 0: cols 0+1 = 100+50 = 150
       expect(measure.rows[0].cells[0].width).toBe(150);
       // Row 0 cell 1: cols 2+3 = 100+300 = 400
@@ -3592,7 +3596,7 @@ describe('measureBlock', () => {
 
       expect(measure.columnWidths).toHaveLength(4);
 
-      // Full-span row: 1 cell spanning all 4 columns
+      // Full-span row: 1 cell spanning all 4 columns (auto-layout preserves widths)
       expect(measure.rows[0].cells).toHaveLength(1);
       expect(measure.rows[0].cells[0].width).toBe(550); // 100+50+100+300
 
@@ -3698,7 +3702,7 @@ describe('measureBlock', () => {
       expect(measure.kind).toBe('table');
       if (measure.kind !== 'table') throw new Error('expected table measure');
 
-      // Should not scale - widths are within target
+      // Auto layout preserves explicit widths (no scale-up)
       expect(measure.columnWidths).toEqual([50, 50]);
       expect(measure.totalWidth).toBe(100);
     });
@@ -4327,8 +4331,7 @@ describe('measureBlock', () => {
       expect(measure.kind).toBe('table');
       if (measure.kind !== 'table') throw new Error('expected table measure');
 
-      // Zero percentage is invalid - should fall back to auto layout
-      // Auto layout without explicit width means column widths used as-is
+      // Zero percentage is invalid - auto layout preserves column widths
       expect(measure.totalWidth).toBe(100);
       expect(measure.columnWidths[0]).toBe(100);
     });
@@ -4365,7 +4368,7 @@ describe('measureBlock', () => {
       expect(measure.kind).toBe('table');
       if (measure.kind !== 'table') throw new Error('expected table measure');
 
-      // Negative percentage is invalid - should fall back to auto layout
+      // Negative percentage is invalid - auto layout preserves column widths
       expect(measure.totalWidth).toBe(150);
       expect(measure.columnWidths[0]).toBe(150);
     });
@@ -4402,7 +4405,7 @@ describe('measureBlock', () => {
       expect(measure.kind).toBe('table');
       if (measure.kind !== 'table') throw new Error('expected table measure');
 
-      // NaN is invalid - should fall back to auto layout
+      // NaN is invalid - auto layout preserves column widths
       expect(measure.totalWidth).toBe(200);
       expect(measure.columnWidths[0]).toBe(200);
     });
@@ -4439,7 +4442,7 @@ describe('measureBlock', () => {
       expect(measure.kind).toBe('table');
       if (measure.kind !== 'table') throw new Error('expected table measure');
 
-      // Infinity is invalid - should fall back to auto layout
+      // Infinity is invalid - auto layout preserves column widths
       expect(measure.totalWidth).toBe(175);
       expect(measure.columnWidths[0]).toBe(175);
     });
@@ -4476,7 +4479,7 @@ describe('measureBlock', () => {
       expect(measure.kind).toBe('table');
       if (measure.kind !== 'table') throw new Error('expected table measure');
 
-      // Missing value is invalid - should fall back to auto layout
+      // Missing value is invalid - auto layout preserves column widths
       expect(measure.totalWidth).toBe(120);
       expect(measure.columnWidths[0]).toBe(120);
     });
@@ -4513,7 +4516,7 @@ describe('measureBlock', () => {
       expect(measure.kind).toBe('table');
       if (measure.kind !== 'table') throw new Error('expected table measure');
 
-      // NaN pixel width is invalid - should fall back to auto layout
+      // NaN pixel width is invalid - auto layout preserves column widths
       expect(measure.totalWidth).toBe(130);
       expect(measure.columnWidths[0]).toBe(130);
     });
@@ -4548,7 +4551,7 @@ describe('measureBlock', () => {
       expect(measure.kind).toBe('table');
       if (measure.kind !== 'table') throw new Error('expected table measure');
 
-      // No tableWidth - auto layout uses column widths as-is
+      // No tableWidth - auto layout preserves column widths
       expect(measure.totalWidth).toBe(140);
       expect(measure.columnWidths[0]).toBe(140);
     });
@@ -5026,6 +5029,168 @@ describe('measureBlock', () => {
 
       // Cell height = para0 + 10 + image + para1 + 5
       const expectedCellHeight = para0Height + 10 + imageHeight + para1Height + 5;
+      expect(cellMeasure.height).toBe(expectedCellHeight);
+    });
+  });
+
+  describe('table cell measurement with spacing.before', () => {
+    it('should add spacing.before to content height for each paragraph', async () => {
+      const table: FlowBlock = {
+        kind: 'table',
+        id: 'table-spacing-before',
+        attrs: {},
+        rows: [
+          {
+            id: 'row-0',
+            cells: [
+              {
+                id: 'cell-0-0',
+                attrs: {},
+                blocks: [
+                  {
+                    kind: 'paragraph',
+                    id: 'para-0',
+                    runs: [{ text: 'First paragraph', fontFamily: 'Arial', fontSize: 16 }],
+                    attrs: { spacing: { before: 10 } },
+                  },
+                  {
+                    kind: 'paragraph',
+                    id: 'para-1',
+                    runs: [{ text: 'Second paragraph', fontFamily: 'Arial', fontSize: 16 }],
+                    attrs: { spacing: { before: 20 } },
+                  },
+                ],
+              },
+            ],
+          },
+        ],
+      };
+
+      const measure = await measureBlock(table, 1000);
+      expect(measure.kind).toBe('table');
+      if (measure.kind !== 'table') throw new Error('expected table measure');
+
+      const cellMeasure = measure.rows[0].cells[0];
+      const block0Measure = cellMeasure.blocks[0];
+      const block1Measure = cellMeasure.blocks[1];
+
+      expect(block0Measure.kind).toBe('paragraph');
+      expect(block1Measure.kind).toBe('paragraph');
+
+      const para0Height = block0Measure.kind === 'paragraph' ? block0Measure.totalHeight : 0;
+      const para1Height = block1Measure.kind === 'paragraph' ? block1Measure.totalHeight : 0;
+
+      // Cell height includes: 10 (spacing.before para-0) + para0Height + 20 (spacing.before para-1) + para1Height
+      const expectedCellHeight = 10 + para0Height + 20 + para1Height;
+      expect(cellMeasure.height).toBe(expectedCellHeight);
+    });
+
+    it('should only add positive spacing.before', async () => {
+      const table: FlowBlock = {
+        kind: 'table',
+        id: 'table-spacing-before-zero',
+        attrs: {},
+        rows: [
+          {
+            id: 'row-0',
+            cells: [
+              {
+                id: 'cell-0-0',
+                attrs: {},
+                blocks: [
+                  {
+                    kind: 'paragraph',
+                    id: 'para-0',
+                    runs: [{ text: 'With before', fontFamily: 'Arial', fontSize: 16 }],
+                    attrs: { spacing: { before: 12 } },
+                  },
+                  {
+                    kind: 'paragraph',
+                    id: 'para-1',
+                    runs: [{ text: 'Zero before', fontFamily: 'Arial', fontSize: 16 }],
+                    attrs: { spacing: { before: 0 } },
+                  },
+                  {
+                    kind: 'paragraph',
+                    id: 'para-2',
+                    runs: [{ text: 'Negative before', fontFamily: 'Arial', fontSize: 16 }],
+                    attrs: { spacing: { before: -5 } },
+                  },
+                ],
+              },
+            ],
+          },
+        ],
+      };
+
+      const measure = await measureBlock(table, 1000);
+      expect(measure.kind).toBe('table');
+      if (measure.kind !== 'table') throw new Error('expected table measure');
+
+      const cellMeasure = measure.rows[0].cells[0];
+      const block0 = cellMeasure.blocks[0];
+      const block1 = cellMeasure.blocks[1];
+      const block2 = cellMeasure.blocks[2];
+
+      const para0Height = block0.kind === 'paragraph' ? block0.totalHeight : 0;
+      const para1Height = block1.kind === 'paragraph' ? block1.totalHeight : 0;
+      const para2Height = block2.kind === 'paragraph' ? block2.totalHeight : 0;
+
+      // Only positive spacing.before (12) is added; 0 and negative are ignored
+      const expectedCellHeight = 12 + para0Height + para1Height + para2Height;
+      expect(cellMeasure.height).toBe(expectedCellHeight);
+    });
+
+    it('should absorb first paragraph spacing.before into cell paddingTop (Word semantics)', async () => {
+      // Word absorbs the first paragraph's spacing.before into the cell's top padding,
+      // same as last paragraph's spacing.after and paddingBottom. Only the excess is added.
+      const paddingTop = 10;
+      const paddingBottom = 0;
+      const table: FlowBlock = {
+        kind: 'table',
+        id: 'table-spacing-before-absorbed',
+        attrs: {},
+        rows: [
+          {
+            id: 'row-0',
+            cells: [
+              {
+                id: 'cell-0-0',
+                attrs: { padding: { top: paddingTop, left: 4, right: 4, bottom: paddingBottom } },
+                blocks: [
+                  {
+                    kind: 'paragraph',
+                    id: 'para-0',
+                    runs: [{ text: 'First in cell', fontFamily: 'Arial', fontSize: 16 }],
+                    attrs: { spacing: { before: 10 } }, // same as paddingTop → excess 0
+                  },
+                  {
+                    kind: 'paragraph',
+                    id: 'para-1',
+                    runs: [{ text: 'Second in cell', fontFamily: 'Arial', fontSize: 16 }],
+                    attrs: { spacing: { before: 20 } }, // not first → full 20
+                  },
+                ],
+              },
+            ],
+          },
+        ],
+      };
+
+      const measure = await measureBlock(table, 1000);
+      expect(measure.kind).toBe('table');
+      if (measure.kind !== 'table') throw new Error('expected table measure');
+
+      const cellMeasure = measure.rows[0].cells[0];
+      const block0 = cellMeasure.blocks[0];
+      const block1 = cellMeasure.blocks[1];
+
+      const para0Height = block0.kind === 'paragraph' ? block0.totalHeight : 0;
+      const para1Height = block1.kind === 'paragraph' ? block1.totalHeight : 0;
+
+      // First para: spacing.before 10, paddingTop 10 → excess 0. Second para: full 20.
+      // Cell height = paddingTop + 0 + para0Height + 20 + para1Height + paddingBottom
+      const expectedCellHeight = paddingTop + 0 + para0Height + 20 + para1Height + paddingBottom;
       expect(cellMeasure.height).toBe(expectedCellHeight);
     });
   });

@@ -7,6 +7,7 @@ import {
   resolveParagraphProperties,
   resolveCellStyles,
   resolveTableCellProperties,
+  resolveTableProperties,
   type OoxmlResolverParams,
 } from './index.js';
 
@@ -541,5 +542,189 @@ describe('ooxml - resolveTableCellProperties', () => {
     // firstRow style provides top border, inline provides bottom border - both should be present
     expect(result.borders?.top).toEqual({ val: 'single', color: '156082', size: 4 });
     expect(result.borders?.bottom).toEqual({ val: 'double', color: '000000', size: 8 });
+  });
+});
+
+// ──────────────────────────────────────────────────────────────────────────────
+// resolveStyleChain – cycle detection
+// ──────────────────────────────────────────────────────────────────────────────
+
+describe('ooxml - resolveStyleChain cycle detection', () => {
+  it('handles direct cycle: A → B → A', () => {
+    const params = buildParams({
+      translatedLinkedStyles: {
+        ...emptyStyles,
+        styles: {
+          A: { basedOn: 'B', runProperties: { bold: true } },
+          B: { basedOn: 'A', runProperties: { italic: true } },
+        },
+      },
+    });
+    // Should not infinite loop — returns combined properties from the partial chain
+    const result = resolveStyleChain('runProperties', params, 'A');
+    expect(result).toEqual({ bold: true, italic: true });
+  });
+
+  it('handles indirect cycle: A → B → C → B', () => {
+    const params = buildParams({
+      translatedLinkedStyles: {
+        ...emptyStyles,
+        styles: {
+          A: { basedOn: 'B', runProperties: { bold: true } },
+          B: { basedOn: 'C', runProperties: { italic: true } },
+          C: { basedOn: 'B', runProperties: { fontSize: 24 } },
+        },
+      },
+    });
+    const result = resolveStyleChain('runProperties', params, 'A');
+    expect(result.bold).toBe(true);
+    expect(result.italic).toBe(true);
+    expect(result.fontSize).toBe(24);
+  });
+
+  it('handles self-referencing cycle: A → A', () => {
+    const params = buildParams({
+      translatedLinkedStyles: {
+        ...emptyStyles,
+        styles: {
+          A: { basedOn: 'A', runProperties: { bold: true } },
+        },
+      },
+    });
+    const result = resolveStyleChain('runProperties', params, 'A');
+    expect(result).toEqual({ bold: true });
+  });
+});
+
+// ──────────────────────────────────────────────────────────────────────────────
+// resolveTableProperties
+// ──────────────────────────────────────────────────────────────────────────────
+
+describe('ooxml - resolveTableProperties', () => {
+  it('returns empty object for null/undefined style ID', () => {
+    expect(resolveTableProperties(null, emptyStyles)).toEqual({});
+    expect(resolveTableProperties(undefined, emptyStyles)).toEqual({});
+  });
+
+  it('returns empty object when style does not exist', () => {
+    expect(resolveTableProperties('MissingStyle', emptyStyles)).toEqual({});
+  });
+
+  it('resolves table properties from a single style', () => {
+    const styles = {
+      ...emptyStyles,
+      styles: {
+        TableGrid: {
+          type: 'table',
+          tableProperties: {
+            borders: { top: { val: 'single', size: 4, color: '000000' } },
+            justification: 'center',
+          },
+        },
+      },
+    };
+    const result = resolveTableProperties('TableGrid', styles);
+    expect(result.borders).toEqual({ top: { val: 'single', size: 4, color: '000000' } });
+    expect(result.justification).toBe('center');
+  });
+
+  it('follows basedOn chain for table properties (single level)', () => {
+    const styles = {
+      ...emptyStyles,
+      styles: {
+        TableNormal: {
+          type: 'table',
+          tableProperties: {
+            cellMargins: { marginLeft: { value: 108, type: 'dxa' } },
+            justification: 'left',
+          },
+        },
+        TableGrid: {
+          type: 'table',
+          basedOn: 'TableNormal',
+          tableProperties: {
+            borders: { top: { val: 'single', size: 4 } },
+          },
+        },
+      },
+    };
+    const result = resolveTableProperties('TableGrid', styles);
+    // From TableGrid
+    expect(result.borders).toEqual({ top: { val: 'single', size: 4 } });
+    // Inherited from TableNormal
+    expect(result.cellMargins).toEqual({ marginLeft: { value: 108, type: 'dxa' } });
+    expect(result.justification).toBe('left');
+  });
+
+  it('follows multi-level basedOn chain', () => {
+    const styles = {
+      ...emptyStyles,
+      styles: {
+        Base: {
+          type: 'table',
+          tableProperties: { justification: 'left' },
+        },
+        Mid: {
+          type: 'table',
+          basedOn: 'Base',
+          tableProperties: { cellMargins: { marginTop: { value: 50, type: 'dxa' } } },
+        },
+        Derived: {
+          type: 'table',
+          basedOn: 'Mid',
+          tableProperties: { borders: { top: { val: 'single' } } },
+        },
+      },
+    };
+    const result = resolveTableProperties('Derived', styles);
+    expect(result.borders).toEqual({ top: { val: 'single' } });
+    expect(result.cellMargins).toEqual({ marginTop: { value: 50, type: 'dxa' } });
+    expect(result.justification).toBe('left');
+  });
+
+  it('derived properties override base properties', () => {
+    const styles = {
+      ...emptyStyles,
+      styles: {
+        Base: {
+          type: 'table',
+          tableProperties: { justification: 'left', tableCellSpacing: { value: 10, type: 'dxa' } },
+        },
+        Derived: {
+          type: 'table',
+          basedOn: 'Base',
+          tableProperties: { justification: 'center' },
+        },
+      },
+    };
+    const result = resolveTableProperties('Derived', styles);
+    // Overridden
+    expect(result.justification).toBe('center');
+    // Inherited
+    expect(result.tableCellSpacing).toEqual({ value: 10, type: 'dxa' });
+  });
+
+  it('returns empty object when translatedLinkedStyles is null', () => {
+    expect(resolveTableProperties('TableGrid', null)).toEqual({});
+  });
+
+  it('handles marginStart/marginEnd in cellMargins', () => {
+    const styles = {
+      ...emptyStyles,
+      styles: {
+        RTLTable: {
+          type: 'table',
+          tableProperties: {
+            cellMargins: {
+              marginStart: { value: 100, type: 'dxa' },
+              marginEnd: { value: 200, type: 'dxa' },
+            },
+          },
+        },
+      },
+    };
+    const result = resolveTableProperties('RTLTable', styles);
+    expect(result.cellMargins?.marginStart).toEqual({ value: 100, type: 'dxa' });
+    expect(result.cellMargins?.marginEnd).toEqual({ value: 200, type: 'dxa' });
   });
 });

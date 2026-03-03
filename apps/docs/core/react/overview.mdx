@@ -1,0 +1,55 @@
+---
+title: React API
+sidebarTitle: Overview
+keywords: "superdoc react, react docx editor, @superdoc-dev/react, react word component, react document editor"
+---
+
+`@superdoc-dev/react` is a first-party React wrapper for SuperDoc. It handles lifecycle management, SSR safety, and React Strict Mode compatibility so you can drop a DOCX editor into any React app.
+
+## Installation
+
+```bash
+npm install @superdoc-dev/react
+```
+
+<Note>
+`superdoc` is included as a dependency — no need to install it separately.
+</Note>
+
+## Quick start
+
+```jsx
+import { SuperDocEditor } from '@superdoc-dev/react';
+import '@superdoc-dev/react/style.css';
+
+function App() {
+  return (
+    <SuperDocEditor
+      document={file}
+      documentMode="editing"
+      onReady={() => console.log('Editor ready!')}
+    />
+  );
+}
+```
+
+## What the component handles
+
+- **Mounting** — Creates a SuperDoc instance when the component mounts
+- **Updates** — Rebuilds automatically when the `document` prop changes
+- **Cleanup** — Destroys the instance on unmount
+- **SSR** — Renders container structure on server, initializes SuperDoc after hydration
+- **Strict Mode** — Internal cleanup flag prevents issues from React 18 double-invocation
+
+## Requirements
+
+| Requirement | Version |
+|-------------|---------|
+| React | 16.8.0+ |
+| Node.js | 16+ |
+
+## API structure
+
+- **[Configuration](/core/react/configuration)** — All props reference
+- **[Methods](/core/react/methods)** — Ref API, instance methods, and patterns
+- **[Types](/core/react/types)** — TypeScript types, framework integration, troubleshooting

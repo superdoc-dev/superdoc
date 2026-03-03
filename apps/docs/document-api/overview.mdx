@@ -1,6 +1,6 @@
 ---
 title: Document API
-sidebarTitle: Document API
+sidebarTitle: Overview
 description: A stable, engine-agnostic interface for programmatic document access
 keywords: "document api, programmatic access, query documents, document manipulation, headless docx"
 ---
@@ -17,144 +17,33 @@ Document API is in <strong>alpha</strong> and subject to breaking changes while 
 - Work with predictable inputs and outputs defined per operation.
 - Check capabilities up front and branch safely when features are unavailable.
 
-## Reference
+## Node addressing
 
-- Full operation reference: [/document-api/reference/index](/document-api/reference/index)
-- Machine-readable files are available for automation use (contract schema, tool manifest, and agent compatibility artifacts).
+Every block in a document has a `nodeId` — a string that uniquely identifies it. When you call `find` or `getNodeById`, addresses use this ID:
 
-{/* DOC_API_OPERATIONS_START */}
-### Available operations
-
-Use the tables below to see what operations are available and where each one is documented.
-
-| Namespace | Operations | Reference |
-| --- | --- | --- |
-| Core | 8 | [Reference](/document-api/reference/core/index) |
-| Capabilities | 1 | [Reference](/document-api/reference/capabilities/index) |
-| Create | 2 | [Reference](/document-api/reference/create/index) |
-| Format | 4 | [Reference](/document-api/reference/format/index) |
-| Lists | 8 | [Reference](/document-api/reference/lists/index) |
-| Comments | 11 | [Reference](/document-api/reference/comments/index) |
-| Track Changes | 6 | [Reference](/document-api/reference/track-changes/index) |
-| Query | 1 | [Reference](/document-api/reference/query/index) |
-| Mutations | 2 | [Reference](/document-api/reference/mutations/index) |
-
-| Editor method | Operation ID |
-| --- | --- |
-| `editor.doc.find(...)` | [`find`](/document-api/reference/find) |
-| `editor.doc.getNode(...)` | [`getNode`](/document-api/reference/get-node) |
-| `editor.doc.getNodeById(...)` | [`getNodeById`](/document-api/reference/get-node-by-id) |
-| `editor.doc.getText(...)` | [`getText`](/document-api/reference/get-text) |
-| `editor.doc.info(...)` | [`info`](/document-api/reference/info) |
-| `editor.doc.insert(...)` | [`insert`](/document-api/reference/insert) |
-| `editor.doc.replace(...)` | [`replace`](/document-api/reference/replace) |
-| `editor.doc.delete(...)` | [`delete`](/document-api/reference/delete) |
-| `editor.doc.format.bold(...)` | [`format.bold`](/document-api/reference/format/bold) |
-| `editor.doc.format.italic(...)` | [`format.italic`](/document-api/reference/format/italic) |
-| `editor.doc.format.underline(...)` | [`format.underline`](/document-api/reference/format/underline) |
-| `editor.doc.format.strikethrough(...)` | [`format.strikethrough`](/document-api/reference/format/strikethrough) |
-| `editor.doc.create.paragraph(...)` | [`create.paragraph`](/document-api/reference/create/paragraph) |
-| `editor.doc.create.heading(...)` | [`create.heading`](/document-api/reference/create/heading) |
-| `editor.doc.lists.list(...)` | [`lists.list`](/document-api/reference/lists/list) |
-| `editor.doc.lists.get(...)` | [`lists.get`](/document-api/reference/lists/get) |
-| `editor.doc.lists.insert(...)` | [`lists.insert`](/document-api/reference/lists/insert) |
-| `editor.doc.lists.setType(...)` | [`lists.setType`](/document-api/reference/lists/set-type) |
-| `editor.doc.lists.indent(...)` | [`lists.indent`](/document-api/reference/lists/indent) |
-| `editor.doc.lists.outdent(...)` | [`lists.outdent`](/document-api/reference/lists/outdent) |
-| `editor.doc.lists.restart(...)` | [`lists.restart`](/document-api/reference/lists/restart) |
-| `editor.doc.lists.exit(...)` | [`lists.exit`](/document-api/reference/lists/exit) |
-| `editor.doc.comments.add(...)` | [`comments.add`](/document-api/reference/comments/add) |
-| `editor.doc.comments.edit(...)` | [`comments.edit`](/document-api/reference/comments/edit) |
-| `editor.doc.comments.reply(...)` | [`comments.reply`](/document-api/reference/comments/reply) |
-| `editor.doc.comments.move(...)` | [`comments.move`](/document-api/reference/comments/move) |
-| `editor.doc.comments.resolve(...)` | [`comments.resolve`](/document-api/reference/comments/resolve) |
-| `editor.doc.comments.remove(...)` | [`comments.remove`](/document-api/reference/comments/remove) |
-| `editor.doc.comments.setInternal(...)` | [`comments.setInternal`](/document-api/reference/comments/set-internal) |
-| `editor.doc.comments.setActive(...)` | [`comments.setActive`](/document-api/reference/comments/set-active) |
-| `editor.doc.comments.goTo(...)` | [`comments.goTo`](/document-api/reference/comments/go-to) |
-| `editor.doc.comments.get(...)` | [`comments.get`](/document-api/reference/comments/get) |
-| `editor.doc.comments.list(...)` | [`comments.list`](/document-api/reference/comments/list) |
-| `editor.doc.trackChanges.list(...)` | [`trackChanges.list`](/document-api/reference/track-changes/list) |
-| `editor.doc.trackChanges.get(...)` | [`trackChanges.get`](/document-api/reference/track-changes/get) |
-| `editor.doc.trackChanges.accept(...)` | [`trackChanges.accept`](/document-api/reference/track-changes/accept) |
-| `editor.doc.trackChanges.reject(...)` | [`trackChanges.reject`](/document-api/reference/track-changes/reject) |
-| `editor.doc.trackChanges.acceptAll(...)` | [`trackChanges.acceptAll`](/document-api/reference/track-changes/accept-all) |
-| `editor.doc.trackChanges.rejectAll(...)` | [`trackChanges.rejectAll`](/document-api/reference/track-changes/reject-all) |
-| `editor.doc.query.match(...)` | [`query.match`](/document-api/reference/query/match) |
-| `editor.doc.mutations.preview(...)` | [`mutations.preview`](/document-api/reference/mutations/preview) |
-| `editor.doc.mutations.apply(...)` | [`mutations.apply`](/document-api/reference/mutations/apply) |
-| `editor.doc.capabilities()` | [`capabilities.get`](/document-api/reference/capabilities/get) |
-{/* DOC_API_OPERATIONS_END */}
-
-## Common workflows
-
-These patterns show how operations compose to cover typical tasks.
-
-### Find and mutate
-
-Locate text in the document, then replace it:
-
-```ts
-const result = editor.doc.find({ type: 'text', text: 'foo' });
-const target = result.context?.[0]?.textRanges?.[0];
-if (target) {
-  editor.doc.replace({ target, text: 'bar' });
+```json
+{
+  "kind": "block",
+  "nodeType": "paragraph",
+  "nodeId": "3A2B1C0D"
 }
 ```
 
-### Tracked-mode insert
+### Stable IDs across loads
 
-Insert text as a tracked change so reviewers can accept or reject it:
+For DOCX documents, `nodeId` is derived from the file's native `w14:paraId` attribute. In practice, this is usually stable when you reopen the same unchanged DOCX across separate editor sessions, machines, or headless CLI pipelines.
 
-```ts
-const receipt = editor.doc.insert(
-  { text: 'new content' },
-  { changeMode: 'tracked' },
-);
-```
+For nodes created at runtime (not imported from DOCX), `nodeId` falls back to `sdBlockId`, a UUID generated when the editor opens. This fallback is volatile and changes on every load.
 
-The receipt includes a `resolution` with the resolved insertion point and `inserted` entries with tracked-change IDs.
+| ID source | Stable across loads? | When used |
+|-----------|---------------------|-----------|
+| `paraId` (from DOCX) | Best effort (usually stable for unchanged DOCX blocks) | Paragraphs, tables, rows, cells imported from DOCX |
+| `sdBlockId` (runtime) | No (session-scoped) | Nodes created programmatically before first export |
 
-### Check capabilities before acting
+<Tip>
+If you need to reference blocks across separate editor sessions, use `editor.doc.find()` to get addresses — don't read `node.attrs.sdBlockId` directly. The Document API resolves `paraId` first for DOCX-imported content.
+</Tip>
 
-Use `capabilities()` to branch on what the editor supports:
-
-```ts
-const caps = editor.doc.capabilities();
-
-if (caps.operations['format.bold'].available) {
-  editor.doc.format.bold({ target });
-}
-
-if (caps.global.trackChanges.enabled) {
-  editor.doc.insert({ text: 'tracked' }, { changeMode: 'tracked' });
-}
-```
-
-### Dry-run preview
-
-Pass `dryRun: true` to validate an operation without applying it:
-
-```ts
-const preview = editor.doc.insert(
-  { target, text: 'hello' },
-  { dryRun: true },
-);
-// preview.success tells you whether the insert would succeed
-// preview.resolution shows the resolved target range
-```
-
-## Programmatic invocation
-
-Every operation is also available through a dynamic `invoke` method on the Document API instance. It accepts an `operationId` string and dispatches to the corresponding method. This is useful when the operation to run is determined at runtime (for example, from a tool-use payload).
-
-```ts
-// doc is the DocumentApi instance (editor.doc)
-const result = doc.invoke({
-  operationId: 'insert',
-  input: { text: 'hello' },
-  options: { changeMode: 'tracked' },
-});
-```
-
-`invoke` delegates to the same direct methods — there is no separate execution path. Type safety is available through `InvokeRequest<T>` for callers who know the operation at compile time, and `DynamicInvokeRequest` for dynamic dispatch.
+<Warning>
+No block ID is guaranteed to survive all Microsoft Word round-trips or external document rewrites. Word and other tools may regenerate `w14:paraId` during structural changes (for example split/merge/rebuild operations), and SuperDoc may rewrite duplicate IDs on import to keep block targeting deterministic.
+</Warning>

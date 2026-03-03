@@ -1,7 +1,6 @@
 // @ts-nocheck
 
 import { Node, Attribute } from '@core/index.js';
-import { createCellBorders } from '../table-cell/helpers/createCellBorders.js';
 import { renderCellBorderStyle } from '../table-cell/helpers/renderCellBorderStyle.js';
 
 /**
@@ -51,6 +50,16 @@ export const TableHeader = Node.create({
 
   addAttributes() {
     return {
+      /** @private */
+      sdBlockId: {
+        default: null,
+        keepOnSplit: false,
+        parseDOM: (elem) => elem.getAttribute('data-sd-block-id'),
+        renderDOM: (attrs) => {
+          return attrs.sdBlockId ? { 'data-sd-block-id': attrs.sdBlockId } : {};
+        },
+      },
+
       colspan: {
         default: 1,
       },
@@ -112,8 +121,11 @@ export const TableHeader = Node.create({
       },
 
       borders: {
-        default: () => createCellBorders(),
-        renderDOM: ({ borders }) => renderCellBorderStyle(borders),
+        default: null,
+        renderDOM: ({ borders }) => {
+          if (!borders) return {};
+          return renderCellBorderStyle(borders);
+        },
       },
 
       widthType: {

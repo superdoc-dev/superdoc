@@ -204,6 +204,8 @@ export function publishSectionMetadata(sectionRanges: SectionRange[], options?: 
       numbering: section.numbering,
       titlePg: section.titlePg,
       vAlign: section.vAlign,
+      margins: section.margins,
+      pageSize: section.pageSize,
     });
   });
 }

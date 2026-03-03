@@ -7,6 +7,7 @@ import {
   getArrayBufferFromUrl,
   computeCrc32Hex,
   base64ToUint8Array,
+  detectImageType,
 } from './helpers.js';
 
 describe('polygonToObj', () => {
@@ -381,5 +382,84 @@ describe('base64ToUint8Array', () => {
     // Bytes [0, 1, 255] → base64 "AAH/"
     const result = base64ToUint8Array('AAH/');
     expect(Array.from(result)).toEqual([0, 1, 255]);
+  });
+});
+
+describe('detectImageType', () => {
+  it('detects PNG from magic bytes', () => {
+    // PNG signature: 89 50 4E 47 0D 0A 1A 0A
+    const pngBytes = new Uint8Array([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a, 0, 0, 0, 0]);
+    expect(detectImageType(pngBytes)).toBe('png');
+  });
+
+  it('detects JPEG from magic bytes', () => {
+    // JPEG signature: FF D8 FF
+    const jpegBytes = new Uint8Array([0xff, 0xd8, 0xff, 0xe0, 0, 0, 0, 0, 0, 0, 0, 0]);
+    expect(detectImageType(jpegBytes)).toBe('jpeg');
+  });
+
+  it('detects GIF from magic bytes', () => {
+    // GIF signature: 47 49 46 38 (GIF8)
+    const gifBytes = new Uint8Array([0x47, 0x49, 0x46, 0x38, 0x39, 0x61, 0, 0, 0, 0, 0, 0]);
+    expect(detectImageType(gifBytes)).toBe('gif');
+  });
+
+  it('detects BMP from magic bytes', () => {
+    // BMP signature: 42 4D (BM)
+    const bmpBytes = new Uint8Array([0x42, 0x4d, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0]);
+    expect(detectImageType(bmpBytes)).toBe('bmp');
+  });
+
+  it('detects TIFF little-endian from magic bytes', () => {
+    // TIFF little-endian: 49 49 2A 00
+    const tiffBytes = new Uint8Array([0x49, 0x49, 0x2a, 0x00, 0, 0, 0, 0, 0, 0, 0, 0]);
+    expect(detectImageType(tiffBytes)).toBe('tiff');
+  });
+
+  it('detects TIFF big-endian from magic bytes', () => {
+    // TIFF big-endian: 4D 4D 00 2A
+    const tiffBytes = new Uint8Array([0x4d, 0x4d, 0x00, 0x2a, 0, 0, 0, 0, 0, 0, 0, 0]);
+    expect(detectImageType(tiffBytes)).toBe('tiff');
+  });
+
+  it('detects WEBP from magic bytes', () => {
+    // WEBP signature: 52 49 46 46 ... 57 45 42 50 (RIFF....WEBP)
+    const webpBytes = new Uint8Array([0x52, 0x49, 0x46, 0x46, 0, 0, 0, 0, 0x57, 0x45, 0x42, 0x50]);
+    expect(detectImageType(webpBytes)).toBe('webp');
+  });
+
+  it('detects PNG from base64 string', () => {
+    // PNG signature in base64
+    const pngBase64 =
+      'iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNk+M9QDwADhgGAWjR9awAAAABJRU5ErkJggg==';
+    expect(detectImageType(pngBase64)).toBe('png');
+  });
+
+  it('detects JPEG from base64 string', () => {
+    // JPEG signature in base64 (starts with /9j/)
+    const jpegBase64 =
+      '/9j/4AAQSkZJRgABAQAAAQABAAD/2wBDAAEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQH/2wBDAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQH/wAARCAABAAEDASIAAhEBAxEB/8QAFQABAQAAAAAAAAAAAAAAAAAAAAv/xAAUEAEAAAAAAAAAAAAAAAAAAAAA/8QAFQEBAQAAAAAAAAAAAAAAAAAAAAX/xAAUEQEAAAAAAAAAAAAAAAAAAAAA/9oADAMBAAIRAxEAPwA/gA==';
+    expect(detectImageType(jpegBase64)).toBe('jpeg');
+  });
+
+  it('returns null for non-image data', () => {
+    const nonImageBytes = new Uint8Array([0x50, 0x4b, 0x03, 0x04, 0, 0, 0, 0, 0, 0, 0, 0]); // ZIP signature
+    expect(detectImageType(nonImageBytes)).toBe(null);
+  });
+
+  it('returns null for data that is too short', () => {
+    const shortBytes = new Uint8Array([0x89, 0x50]); // Only 2 bytes
+    expect(detectImageType(shortBytes)).toBe(null);
+  });
+
+  it('returns null for invalid input types', () => {
+    expect(detectImageType(null)).toBe(null);
+    expect(detectImageType(undefined)).toBe(null);
+    expect(detectImageType(12345)).toBe(null);
+    expect(detectImageType({})).toBe(null);
+  });
+
+  it('returns null for invalid base64 string', () => {
+    expect(detectImageType('not-valid-base64!!!')).toBe(null);
   });
 });

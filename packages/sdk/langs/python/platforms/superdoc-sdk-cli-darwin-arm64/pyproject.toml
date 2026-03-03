@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "superdoc-sdk-cli-darwin-arm64"
-version = "1.0.0a6"
+version = "1.0.0a19"
 description = "SuperDoc CLI binary for macOS ARM64 (Apple Silicon)"
 readme = "README.md"
 requires-python = ">=3.9"

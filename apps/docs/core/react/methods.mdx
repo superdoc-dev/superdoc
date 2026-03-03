@@ -1,0 +1,189 @@
+---
+title: Methods
+keywords: "superdoc react ref, react editor methods, getInstance, superdoc ref api, react programmatic control"
+---
+
+Use a ref to access the SuperDoc instance and call methods programmatically.
+
+## Ref API
+
+```jsx
+import { useRef } from 'react';
+import { SuperDocEditor } from '@superdoc-dev/react';
+import '@superdoc-dev/react/style.css';
+
+function App() {
+  const editorRef = useRef(null);
+
+  const handleExport = async () => {
+    await editorRef.current?.getInstance()?.export({ triggerDownload: true });
+  };
+
+  return (
+    <>
+      <button onClick={handleExport}>Download DOCX</button>
+      <SuperDocEditor
+        ref={editorRef}
+        document={file}
+        onReady={({ superdoc }) => console.log('Ready', superdoc)}
+      />
+    </>
+  );
+}
+```
+
+### `getInstance()`
+
+Returns the underlying SuperDoc instance, or `null` before the editor is ready.
+
+```jsx
+const instance = editorRef.current?.getInstance();
+```
+
+<Note>
+Use optional chaining (`?.`) for safe access — `getInstance()` returns `null` until `onReady` fires.
+</Note>
+
+## Available instance methods
+
+Once you have the SuperDoc instance, you can call any [SuperDoc method](/core/superdoc/methods):
+
+| Method | Returns | Description |
+|--------|---------|-------------|
+| `setDocumentMode(mode)` | `void` | Change mode without rebuild |
+| `export(options?)` | `Promise<Blob \| void>` | Export document as DOCX |
+| `getHTML(options?)` | `string[]` | Get document as HTML |
+| `focus()` | `void` | Focus the editor |
+| `search(text)` | `SearchResult[]` | Search document content |
+| `goToSearchResult(match)` | `void` | Navigate to a search result |
+| `setLocked(locked)` | `void` | Lock/unlock editing |
+| `toggleRuler()` | `void` | Toggle ruler visibility |
+| `save()` | `Promise<void[]>` | Save (in collaboration mode) |
+
+## Common patterns
+
+### PDF setup
+
+Use `pdfjs-dist` with `modules.pdf` for predictable PDF rendering.
+
+```jsx
+import { useMemo } from 'react';
+import { SuperDocEditor } from '@superdoc-dev/react';
+import '@superdoc-dev/react/style.css';
+import * as pdfjsLib from 'pdfjs-dist/build/pdf.mjs';
+
+const workerSrc = new URL('pdfjs-dist/build/pdf.worker.min.mjs', import.meta.url).toString();
+
+function PdfEditor({ document }) {
+  const modules = useMemo(
+    () => ({
+      pdf: {
+        pdfLib: pdfjsLib,
+        setWorker: true,
+        workerSrc,
+        textLayer: true,
+      },
+    }),
+    [],
+  );
+
+  return (
+    <SuperDocEditor
+      document={document}
+      modules={modules}
+      onPdfDocumentReady={() => console.log('PDF ready')}
+    />
+  );
+}
+```
+
+<Tip>
+Use `document.data` for local `File`/`Blob` and `document.url` for remote URLs.
+</Tip>
+
+### Whiteboard stickers (PDF)
+
+Register stickers when the whiteboard instance is available and pass the sticker id via `application/sticker`.
+
+```jsx
+const STICKERS = [
+  { id: 'cite-source', src: '/stickers/cite-source.svg', width: 52, height: 52 },
+];
+
+const onStickerDragStart = (event, stickerId) => {
+  event.dataTransfer.setData('application/sticker', stickerId);
+  event.dataTransfer.setData('text/plain', '');
+};
+
+<SuperDocEditor
+  document={file}
+  modules={{ whiteboard: { enabled: true } }}
+  onReady={({ superdoc }) => {
+    const register = (whiteboard) => whiteboard?.register('stickers', STICKERS);
+    superdoc.on('whiteboard:init', ({ whiteboard }) => register(whiteboard));
+    register(superdoc.whiteboard);
+  }}
+/>
+```
+
+<Tip>
+For drop placement, switch whiteboard to `select` mode before dragging stickers.
+</Tip>
+
+### Search and navigate
+
+```jsx
+const editorRef = useRef(null);
+
+const handleSearch = (query) => {
+  const instance = editorRef.current?.getInstance();
+  const results = instance?.search(query);
+  if (results?.length) {
+    instance?.goToSearchResult(results[0]);
+  }
+};
+```
+
+### Export to HTML
+
+```jsx
+const editorRef = useRef(null);
+
+const getHtmlContent = () => {
+  const htmlArray = editorRef.current?.getInstance()?.getHTML();
+  console.log(htmlArray); // Array of HTML strings per section
+};
+```
+
+### Real-time collaboration
+
+```jsx
+import * as Y from 'yjs';
+import { WebsocketProvider } from 'y-websocket';
+
+function CollaborativeEditor() {
+  const ydoc = useMemo(() => new Y.Doc(), []);
+  const provider = useMemo(
+    () => new WebsocketProvider('wss://your-server.com', 'doc-id', ydoc),
+    [ydoc]
+  );
+
+  return (
+    <SuperDocEditor
+      document={file}
+      modules={{
+        collaboration: {
+          ydoc,
+          provider,
+        },
+      }}
+    />
+  );
+}
+```
+
+<CardGroup cols={1}>
+<Card title="Collaboration guide" icon="users" href="/modules/collaboration/overview">
+  Full setup for real-time collaboration
+</Card>
+</CardGroup>

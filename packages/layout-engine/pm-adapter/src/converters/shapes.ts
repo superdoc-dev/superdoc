@@ -5,7 +5,14 @@
  * to DrawingBlocks
  */
 
-import type { DrawingBlock, ImageBlock, VectorShapeDrawing, ShapeGroupDrawing, ImageAnchor } from '@superdoc/contracts';
+import type {
+  DrawingBlock,
+  ImageBlock,
+  VectorShapeDrawing,
+  ShapeGroupDrawing,
+  ImageAnchor,
+  CustomGeometryData,
+} from '@superdoc/contracts';
 import type { PMNode, NodeHandlerContext, BlockIdGenerator, PositionMap } from '../types.js';
 import type { EffectExtent, LineEnds } from '../utilities.js';
 import {
@@ -359,6 +366,7 @@ export const buildDrawingBlock = (
     attrs: attrsWithPm,
     geometry,
     shapeKind: typeof rawAttrs.kind === 'string' ? rawAttrs.kind : undefined,
+    customGeometry: rawAttrs.customGeometry != null ? (rawAttrs.customGeometry as CustomGeometryData) : undefined,
     fillColor: normalizeFillColor(rawAttrs.fillColor),
     strokeColor: normalizeStrokeColor(rawAttrs.strokeColor),
     strokeWidth: coerceNumber(rawAttrs.strokeWidth),

@@ -199,6 +199,36 @@ export const Image = Node.create({
 
       /**
        * @category Attribute
+       * @param {boolean} [grayscale] - Apply grayscale filter to image (OOXML effect)
+       * @private
+       */
+      grayscale: {
+        default: false,
+        rendered: false,
+      },
+
+      /**
+       * @category Attribute
+       * @param {string|number} [gain] - VML gain for brightness/washout (watermark effect)
+       * @private
+       */
+      gain: {
+        default: null,
+        rendered: false,
+      },
+
+      /**
+       * @category Attribute
+       * @param {string|number} [blacklevel] - VML blacklevel for contrast adjustment (watermark effect)
+       * @private
+       */
+      blacklevel: {
+        default: null,
+        rendered: false,
+      },
+
+      /**
+       * @category Attribute
        * @param {boolean} [simplePos] - Simple positioning flag
        * @private
        */

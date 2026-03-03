@@ -146,7 +146,7 @@ describe('findAdapter — block selectors', () => {
     const result = findAdapter(editor, query);
 
     expect(result.total).toBe(2);
-    expect(result.matches).toEqual([
+    expect(result.items.map((i) => i.address)).toEqual([
       { kind: 'block', nodeType: 'paragraph', nodeId: 'p1' },
       { kind: 'block', nodeType: 'paragraph', nodeId: 'p2' },
     ]);
@@ -164,7 +164,7 @@ describe('findAdapter — block selectors', () => {
     const result = findAdapter(editor, query);
 
     expect(result.total).toBe(1);
-    expect(result.matches[0]).toEqual({ kind: 'block', nodeType: 'heading', nodeId: 'h1' });
+    expect(result.items[0].address).toEqual({ kind: 'block', nodeType: 'heading', nodeId: 'h1' });
   });
 
   it('uses node selector with kind filter', () => {
@@ -191,7 +191,7 @@ describe('findAdapter — block selectors', () => {
     const result = findAdapter(editor, query);
 
     expect(result.total).toBe(1);
-    expect(result.matches[0].nodeId).toBe('t1');
+    expect(result.items[0].address.nodeId).toBe('t1');
   });
 
   it('emits diagnostic for includeUnknown', () => {
@@ -204,7 +204,7 @@ describe('findAdapter — block selectors', () => {
 
     const result = findAdapter(editor, query);
 
-    expect(result.matches).toEqual([{ kind: 'block', nodeType: 'paragraph', nodeId: 'p1' }]);
+    expect(result.items.map((i) => i.address)).toEqual([{ kind: 'block', nodeType: 'paragraph', nodeId: 'p1' }]);
     expect(result.total).toBe(1);
     expect(result.diagnostics).toBeDefined();
     expect(result.diagnostics![0].message).toContain('Unknown block node type');
@@ -254,7 +254,7 @@ describe('findAdapter — within scope', () => {
     const result = findAdapter(editor, query);
 
     expect(result.total).toBe(1);
-    expect(result.matches[0].nodeId).toBe('p-inside');
+    expect(result.items[0].address.nodeId).toBe('p-inside');
   });
 
   it('returns empty when within target is not found', () => {
@@ -267,7 +267,7 @@ describe('findAdapter — within scope', () => {
 
     const result = findAdapter(editor, query);
 
-    expect(result.matches).toEqual([]);
+    expect(result.items).toEqual([]);
     expect(result.diagnostics).toBeDefined();
     expect(result.diagnostics![0].message).toContain('was not found');
   });
@@ -286,7 +286,7 @@ describe('findAdapter — within scope', () => {
 
     const result = findAdapter(editor, query);
 
-    expect(result.matches).toEqual([]);
+    expect(result.items).toEqual([]);
     expect(result.diagnostics![0].message).toContain('Inline');
   });
 });
@@ -311,9 +311,9 @@ describe('findAdapter — pagination', () => {
     const result = findAdapter(editor, query);
 
     expect(result.total).toBe(3);
-    expect(result.matches).toHaveLength(2);
-    expect(result.matches[0].nodeId).toBe('a');
-    expect(result.matches[1].nodeId).toBe('b');
+    expect(result.items).toHaveLength(2);
+    expect(result.items[0].address.nodeId).toBe('a');
+    expect(result.items[1].address.nodeId).toBe('b');
   });
 
   it('skips results with offset', () => {
@@ -323,8 +323,8 @@ describe('findAdapter — pagination', () => {
     const result = findAdapter(editor, query);
 
     expect(result.total).toBe(3);
-    expect(result.matches).toHaveLength(2);
-    expect(result.matches[0].nodeId).toBe('b');
+    expect(result.items).toHaveLength(2);
+    expect(result.items[0].address.nodeId).toBe('b');
   });
 
   it('combines offset and limit', () => {
@@ -334,8 +334,8 @@ describe('findAdapter — pagination', () => {
     const result = findAdapter(editor, query);
 
     expect(result.total).toBe(3);
-    expect(result.matches).toHaveLength(1);
-    expect(result.matches[0].nodeId).toBe('b');
+    expect(result.items).toHaveLength(1);
+    expect(result.items[0].address.nodeId).toBe('b');
   });
 });
 
@@ -354,7 +354,7 @@ describe('findAdapter — inline selectors', () => {
     const result = findAdapter(editor, { select: { type: 'node', nodeType: 'run' } });
 
     expect(result.total).toBe(1);
-    expect(result.matches[0]).toEqual({
+    expect(result.items[0].address).toEqual({
       kind: 'inline',
       nodeType: 'run',
       anchor: { start: { blockId: 'p-run', offset: 0 }, end: { blockId: 'p-run', offset: 2 } },
@@ -378,7 +378,7 @@ describe('findAdapter — inline selectors', () => {
     const result = findAdapter(editor, { select: { type: 'node', nodeType: 'hyperlink' } });
 
     expect(result.total).toBe(1);
-    expect(result.matches[0]).toEqual({
+    expect(result.items[0].address).toEqual({
       kind: 'inline',
       nodeType: 'hyperlink',
       anchor: { start: { blockId: 'p1', offset: 0 }, end: { blockId: 'p1', offset: 2 } },
@@ -398,7 +398,7 @@ describe('findAdapter — inline selectors', () => {
     const result = findAdapter(editor, { select: { type: 'node', nodeType: 'image' } });
 
     expect(result.total).toBe(1);
-    expect(result.matches[0]).toEqual({
+    expect(result.items[0].address).toEqual({
       kind: 'inline',
       nodeType: 'image',
       anchor: { start: { blockId: 'p2', offset: 2 }, end: { blockId: 'p2', offset: 3 } },
@@ -417,7 +417,7 @@ describe('findAdapter — inline selectors', () => {
 
     const shorthand = findAdapter(editor, { select: { type: 'node', nodeType: 'sdt' } });
     expect(shorthand.total).toBe(2);
-    expect(shorthand.matches).toEqual(
+    expect(shorthand.items.map((i) => i.address)).toEqual(
       expect.arrayContaining([
         { kind: 'block', nodeType: 'sdt', nodeId: 'sdt-block' },
         {
@@ -430,7 +430,7 @@ describe('findAdapter — inline selectors', () => {
 
     const nodeSelector = findAdapter(editor, { select: { type: 'node', nodeType: 'sdt' } });
     expect(nodeSelector.total).toBe(2);
-    expect(nodeSelector.matches).toEqual(
+    expect(nodeSelector.items.map((i) => i.address)).toEqual(
       expect.arrayContaining([
         { kind: 'block', nodeType: 'sdt', nodeId: 'sdt-block' },
         {
@@ -454,11 +454,11 @@ describe('findAdapter — inline selectors', () => {
 
     const blockResult = findAdapter(editor, { select: { type: 'node', kind: 'block', nodeType: 'sdt' } });
     expect(blockResult.total).toBe(1);
-    expect(blockResult.matches[0]).toEqual({ kind: 'block', nodeType: 'sdt', nodeId: 'sdt-block' });
+    expect(blockResult.items[0].address).toEqual({ kind: 'block', nodeType: 'sdt', nodeId: 'sdt-block' });
 
     const inlineResult = findAdapter(editor, { select: { type: 'node', kind: 'inline', nodeType: 'sdt' } });
     expect(inlineResult.total).toBe(1);
-    expect(inlineResult.matches[0]).toEqual({
+    expect(inlineResult.items[0].address).toEqual({
       kind: 'inline',
       nodeType: 'sdt',
       anchor: { start: { blockId: 'p-sdt', offset: 0 }, end: { blockId: 'p-sdt', offset: 1 } },
@@ -475,8 +475,8 @@ describe('findAdapter — inline selectors', () => {
     const result = findAdapter(editor, { select: { type: 'node', nodeType: 'run' }, includeNodes: true });
 
     expect(result.total).toBe(1);
-    expect(result.nodes).toHaveLength(1);
-    expect(result.nodes![0]).toMatchObject({
+    expect(result.items).toHaveLength(1);
+    expect(result.items[0].node).toMatchObject({
       nodeType: 'run',
       kind: 'inline',
       properties: { bold: true },
@@ -514,10 +514,10 @@ describe('findAdapter — text selectors', () => {
     const result = findAdapter(editor, query);
 
     expect(result.total).toBe(1);
-    expect(result.matches[0]).toEqual({ kind: 'block', nodeType: 'paragraph', nodeId: 'p1' });
-    expect(result.context).toBeDefined();
-    expect(result.context![0].snippet).toContain('hello');
-    expect(result.context![0].textRanges).toEqual([{ kind: 'text', blockId: 'p1', range: { start: 4, end: 9 } }]);
+    expect(result.items[0].address).toEqual({ kind: 'block', nodeType: 'paragraph', nodeId: 'p1' });
+    expect(result.items[0].context).toBeDefined();
+    expect(result.items[0].context!.snippet).toContain('hello');
+    expect(result.items[0].context!.textRanges).toEqual([{ kind: 'text', blockId: 'p1', range: { start: 4, end: 9 } }]);
   });
 
   it('maps matches to their containing blocks', () => {
@@ -530,8 +530,8 @@ describe('findAdapter — text selectors', () => {
     const result = findAdapter(editor, query);
 
     expect(result.total).toBe(2);
-    expect(result.matches[0].nodeId).toBe('p1');
-    expect(result.matches[1].nodeId).toBe('p2');
+    expect(result.items[0].address.nodeId).toBe('p1');
+    expect(result.items[1].address.nodeId).toBe('p2');
   });
 
   it('returns empty with diagnostic for empty pattern', () => {
@@ -540,7 +540,7 @@ describe('findAdapter — text selectors', () => {
 
     const result = findAdapter(editor, query);
 
-    expect(result.matches).toEqual([]);
+    expect(result.items).toEqual([]);
     expect(result.diagnostics).toBeDefined();
     expect(result.diagnostics![0].message).toContain('non-empty');
   });
@@ -551,7 +551,7 @@ describe('findAdapter — text selectors', () => {
 
     const result = findAdapter(editor, query);
 
-    expect(result.matches).toEqual([]);
+    expect(result.items).toEqual([]);
     expect(result.diagnostics).toBeDefined();
     expect(result.diagnostics![0].message).toContain('Invalid text query regex');
   });
@@ -649,8 +649,8 @@ describe('findAdapter — text selectors', () => {
     const result = findAdapter(editor, query);
 
     expect(result.total).toBe(1);
-    expect(result.context).toBeDefined();
-    const context = result.context![0];
+    expect(result.items[0].context).toBeDefined();
+    const context = result.items[0].context!;
     expect(context.snippet.slice(context.highlightRange.start, context.highlightRange.end)).toBe('/foo/');
   });
 
@@ -722,10 +722,10 @@ describe('findAdapter — text selectors', () => {
     const result = findAdapter(editor, query);
 
     expect(result.total).toBe(3);
-    expect(result.matches).toHaveLength(1);
-    expect(result.context).toHaveLength(1);
+    expect(result.items).toHaveLength(1);
     // The second match (from 15-20) should be the one returned
-    expect(result.context![0].snippet).toBeDefined();
+    expect(result.items[0].context).toBeDefined();
+    expect(result.items[0].context!.snippet).toBeDefined();
   });
 
   it('reports true total for paginated text queries (not capped by page window)', () => {
@@ -751,7 +751,7 @@ describe('findAdapter — text selectors', () => {
 
     const result = findAdapter(editor, query);
 
-    expect(result.matches).toHaveLength(2);
+    expect(result.items).toHaveLength(2);
     expect(result.total).toBe(5); // must be 5, not 2
   });
 
@@ -781,7 +781,7 @@ describe('findAdapter — text selectors', () => {
     const result = findAdapter(editor, query);
 
     expect(result.total).toBe(totalMatches);
-    expect(result.matches).toHaveLength(2);
+    expect(result.items).toHaveLength(2);
   });
 
   it('supports paginating beyond 1000 matches when search default max is applied', () => {
@@ -811,7 +811,7 @@ describe('findAdapter — text selectors', () => {
     const result = findAdapter(editor, query);
 
     expect(result.total).toBe(totalMatches);
-    expect(result.matches).toHaveLength(2);
+    expect(result.items).toHaveLength(2);
   });
 
   it('applies within filtering to the full text match set (not only the first 1000)', () => {
@@ -845,8 +845,8 @@ describe('findAdapter — text selectors', () => {
     const result = findAdapter(editor, query);
 
     expect(result.total).toBe(2);
-    expect(result.matches).toHaveLength(2);
-    expect(result.matches.every((match) => match.nodeId === 'p-in')).toBe(true);
+    expect(result.items).toHaveLength(2);
+    expect(result.items.every((item) => item.address.nodeId === 'p-in')).toBe(true);
   });
 
   it('filters text matches by within scope', () => {
@@ -869,7 +869,7 @@ describe('findAdapter — text selectors', () => {
     const result = findAdapter(editor, query);
 
     expect(result.total).toBe(1);
-    expect(result.matches[0].nodeId).toBe('p-in');
+    expect(result.items[0].address.nodeId).toBe('p-in');
   });
 
   it('skips matches whose position does not resolve to a block', () => {
@@ -890,7 +890,7 @@ describe('findAdapter — text selectors', () => {
     const result = findAdapter(editor, query);
 
     expect(result.total).toBe(1);
-    expect(result.matches[0].nodeId).toBe('p1');
+    expect(result.items[0].address.nodeId).toBe('p1');
   });
 });
 
@@ -909,8 +909,8 @@ describe('findAdapter — snippet context', () => {
 
     const result = findAdapter(editor, query);
 
-    expect(result.context).toBeDefined();
-    const ctx = result.context![0];
+    expect(result.items[0].context).toBeDefined();
+    const ctx = result.items[0].context!;
     // The snippet should contain the match, and the highlight range should point to it
     expect(ctx.snippet.slice(ctx.highlightRange.start, ctx.highlightRange.end)).toBe('hello');
   });

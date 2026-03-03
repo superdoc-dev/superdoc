@@ -122,6 +122,7 @@ export const createDomPainter = (
   getActiveComment?: () => string | null;
   getPaintSnapshot?: () => PaintSnapshot | null;
   onScroll?: () => void;
+  setZoom?: (zoom: number) => void;
 } => {
   const painter = new DomPainter(options.blocks, options.measures, {
     pageStyles: options.pageStyles,
@@ -166,6 +167,10 @@ export const createDomPainter = (
     // Trigger virtualization update when scroll container is external to the painter
     onScroll() {
       painter.onScroll();
+    },
+    // Notify painter of CSS transform scale so virtualization maps scroll correctly
+    setZoom(zoom: number) {
+      painter.setZoom(zoom);
     },
   };
 };

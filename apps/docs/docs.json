@@ -58,7 +58,9 @@
                 "pages": [
                   "getting-started/frameworks/react",
                   "getting-started/frameworks/vue",
+                  "getting-started/frameworks/nuxt",
                   "getting-started/frameworks/angular",
+                  "getting-started/frameworks/laravel",
                   "getting-started/frameworks/vanilla-js"
                 ]
               },
@@ -86,6 +88,10 @@
                   "core/supereditor/methods",
                   "core/supereditor/events"
                 ]
+              },
+              {
+                "group": "React",
+                "pages": ["core/react/overview", "core/react/configuration", "core/react/methods", "core/react/types"]
               }
             ]
           },
@@ -94,13 +100,19 @@
             "tag": "ALPHA",
             "pages": [
               "document-engine/overview",
-              "document-api/overview",
-              "document-engine/sdks",
-              "document-engine/cli",
               {
-                "page": "document-engine/mcp",
-                "tag": "NEW"
-              }
+                "group": "Document API",
+                "pages": [
+                  "document-api/overview",
+                  "document-api/reference/index",
+                  "document-api/common-workflows",
+                  "document-api/available-operations"
+                ]
+              },
+              "document-engine/sdks",
+              "document-engine/sdk-collaboration-sessions",
+              "document-engine/cli",
+              "document-engine/mcp"
             ]
           },
           {
@@ -117,6 +129,7 @@
               },
               "modules/comments",
               "modules/toolbar",
+              "modules/links",
               "modules/context-menu",
               "modules/pdf",
               "modules/whiteboard"
@@ -214,6 +227,7 @@
             "group": "Guides",
             "pages": [
               "guides/general/storage",
+              "guides/general/stable-navigation",
               {
                 "group": "Collaboration",
                 "pages": [

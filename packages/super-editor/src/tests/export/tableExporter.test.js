@@ -244,3 +244,78 @@ describe('tableHeader export', () => {
     expect(bodyTcW.attributes['w:w']).toBe(expectedTwips);
   });
 });
+
+describe('repeatHeader → w:tblHeader export', () => {
+  /** Helper: find w:tblHeader inside w:trPr for a given w:tr element. */
+  const findTblHeader = (trElement) => {
+    const trPr = trElement.elements?.find((el) => el.name === 'w:trPr');
+    return trPr?.elements?.find((el) => el.name === 'w:tblHeader');
+  };
+
+  it('emits w:tblHeader when repeatHeader is true on the row', async () => {
+    const table = {
+      type: 'table',
+      attrs: { grid: [{ col: 1500 }], tableProperties: {} },
+      content: [
+        {
+          type: 'tableRow',
+          attrs: { tableRowProperties: { repeatHeader: true } },
+          content: [
+            {
+              type: 'tableCell',
+              attrs: { colspan: 1, rowspan: 1, colwidth: [100] },
+              content: [{ type: 'paragraph', attrs: {}, content: [] }],
+            },
+          ],
+        },
+        {
+          type: 'tableRow',
+          attrs: {},
+          content: [
+            {
+              type: 'tableCell',
+              attrs: { colspan: 1, rowspan: 1, colwidth: [100] },
+              content: [{ type: 'paragraph', attrs: {}, content: [] }],
+            },
+          ],
+        },
+      ],
+    };
+
+    const result = await getExportedResultWithDocContent([table]);
+    const body = result.elements.find((el) => el.name === 'w:body');
+    const tbl = body.elements.find((el) => el.name === 'w:tbl');
+    const rows = tbl.elements.filter((el) => el.name === 'w:tr');
+
+    expect(findTblHeader(rows[0])).toBeDefined();
+    expect(findTblHeader(rows[1])).toBeUndefined();
+  });
+
+  it('does NOT emit w:tblHeader for tableHeader cells without repeatHeader', async () => {
+    const table = {
+      type: 'table',
+      attrs: { grid: [{ col: 1500 }], tableProperties: {} },
+      content: [
+        {
+          type: 'tableRow',
+          attrs: {}, // no repeatHeader
+          content: [
+            {
+              type: 'tableHeader', // cell type is header, but row has no repeatHeader
+              attrs: { colspan: 1, rowspan: 1, colwidth: [100] },
+              content: [{ type: 'paragraph', attrs: {}, content: [] }],
+            },
+          ],
+        },
+      ],
+    };
+
+    const result = await getExportedResultWithDocContent([table]);
+    const body = result.elements.find((el) => el.name === 'w:body');
+    const tbl = body.elements.find((el) => el.name === 'w:tbl');
+    const rows = tbl.elements.filter((el) => el.name === 'w:tr');
+
+    // tableHeader cell type alone should NOT produce w:tblHeader
+    expect(findTblHeader(rows[0])).toBeUndefined();
+  });
+});

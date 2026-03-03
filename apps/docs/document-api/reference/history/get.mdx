@@ -1,0 +1,117 @@
+---
+title: history.get
+sidebarTitle: history.get
+description: Query the current undo/redo history state of the active editor.
+---
+
+{/* GENERATED FILE: DO NOT EDIT. Regenerate via `pnpm run docapi:sync`. */}
+
+> Alpha: Document API is currently alpha and subject to breaking changes.
+
+## Summary
+
+Query the current undo/redo history state of the active editor.
+
+- Operation ID: `history.get`
+- API member path: `editor.doc.history.get(...)`
+- Mutates document: `no`
+- Idempotency: `idempotent`
+- Supports tracked mode: `no`
+- Supports dry run: `no`
+- Deterministic target resolution: `yes`
+
+## Expected result
+
+Returns a HistoryState object with undoDepth, redoDepth, canUndo, canRedo, and a list of history-unsafe operations.
+
+## Input fields
+
+_No fields._
+
+### Example request
+
+```json
+{}
+```
+
+## Output fields
+
+| Field | Type | Required | Description |
+| --- | --- | --- | --- |
+| `canRedo` | boolean | yes |  |
+| `canUndo` | boolean | yes |  |
+| `historyUnsafeOperations` | string[] | yes |  |
+| `redoDepth` | integer | yes |  |
+| `undoDepth` | integer | yes |  |
+
+### Example response
+
+```json
+{
+  "canRedo": true,
+  "canUndo": true,
+  "historyUnsafeOperations": [
+    "example"
+  ],
+  "redoDepth": 1,
+  "undoDepth": 1
+}
+```
+
+## Pre-apply throws
+
+- None
+
+## Non-applied failure codes
+
+- None
+
+## Raw schemas
+
+<Accordion title="Raw input schema">
+```json
+{
+  "additionalProperties": false,
+  "properties": {},
+  "type": "object"
+}
+```
+</Accordion>
+
+<Accordion title="Raw output schema">
+```json
+{
+  "additionalProperties": false,
+  "properties": {
+    "canRedo": {
+      "type": "boolean"
+    },
+    "canUndo": {
+      "type": "boolean"
+    },
+    "historyUnsafeOperations": {
+      "items": {
+        "type": "string"
+      },
+      "type": "array"
+    },
+    "redoDepth": {
+      "minimum": 0,
+      "type": "integer"
+    },
+    "undoDepth": {
+      "minimum": 0,
+      "type": "integer"
+    }
+  },
+  "required": [
+    "undoDepth",
+    "redoDepth",
+    "canUndo",
+    "canRedo",
+    "historyUnsafeOperations"
+  ],
+  "type": "object"
+}
+```
+</Accordion>

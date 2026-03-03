@@ -1444,4 +1444,36 @@ describe('SuperDoc core', () => {
       warnSpy.mockRestore();
     });
   });
+
+  describe('pagination-update event', () => {
+    it('registers onPaginationUpdate listener during init', async () => {
+      createAppHarness();
+      const onPaginationUpdate = vi.fn();
+
+      const instance = new SuperDoc({
+        selector: '#host',
+        document: 'https://example.com/doc.docx',
+        onPaginationUpdate,
+      });
+      await flushMicrotasks();
+
+      instance.emit('pagination-update', { totalPages: 5, superdoc: instance });
+      expect(onPaginationUpdate).toHaveBeenCalledWith({ totalPages: 5, superdoc: instance });
+    });
+
+    it('defaults onPaginationUpdate to a no-op', async () => {
+      createAppHarness();
+
+      const instance = new SuperDoc({
+        selector: '#host',
+        document: 'https://example.com/doc.docx',
+      });
+      await flushMicrotasks();
+
+      // Should not throw when emitting without a user callback
+      expect(() => {
+        instance.emit('pagination-update', { totalPages: 3, superdoc: instance });
+      }).not.toThrow();
+    });
+  });
 });

@@ -11,6 +11,14 @@
  */
 const RANDOM_ID_LENGTH = 9;
 
+const generateRandomBase36Id = (length: number): string => {
+  let randomId = '';
+  while (randomId.length < length) {
+    randomId += Math.random().toString(36).slice(2);
+  }
+  return randomId.slice(0, length);
+};
+
 import type {
   Run,
   TextRun,
@@ -194,9 +202,7 @@ export const deriveTrackedChangeId = (kind: TrackedChangeKind, attrs: Record<str
   const authorEmail = attrs && typeof attrs.authorEmail === 'string' ? attrs.authorEmail : 'unknown';
   const date = attrs && typeof attrs.date === 'string' ? attrs.date : 'unknown';
   // Add timestamp and random component to ensure uniqueness when author/date are missing
-  const unique = `${Date.now()}-${Math.random()
-    .toString(36)
-    .substring(2, 2 + RANDOM_ID_LENGTH)}`;
+  const unique = `${Date.now()}-${generateRandomBase36Id(RANDOM_ID_LENGTH)}`;
   return `${kind}-${authorEmail}-${date}-${unique}`;
 };
 

@@ -1,270 +1,201 @@
 import { normalizeMutationOptions, type MutationOptions } from '../write/write.js';
 import type { TextAddress, TextMutationReceipt } from '../types/index.js';
 import { DocumentApiValidationError } from '../errors.js';
-import { isRecord, isTextAddress, assertNoUnknownFields, assertNonNegativeInteger } from '../validation-primitives.js';
+import { isRecord, isTextAddress, assertNoUnknownFields } from '../validation-primitives.js';
+import type { InlineRunPatch, InlineRunPatchKey } from './inline-run-patch.js';
+import { INLINE_PROPERTY_BY_KEY, validateInlineRunPatch } from './inline-run-patch.js';
 
-/**
- * Input payload for `format.bold`.
- */
-export interface FormatBoldInput {
-  target?: TextAddress;
-  /** Block ID for block-relative range targeting. Requires `start` and `end`. */
-  blockId?: string;
-  /** Start offset within the block. Requires `blockId` and `end`. Non-negative integer. */
-  start?: number;
-  /** End offset within the block. Requires `blockId` and `start`. Non-negative integer, >= start. */
-  end?: number;
-}
+// Input types
+// ---------------------------------------------------------------------------
 
-/**
- * Input payload for `format.italic`.
- */
-export interface FormatItalicInput {
-  target?: TextAddress;
-  /** Block ID for block-relative range targeting. Requires `start` and `end`. */
-  blockId?: string;
-  /** Start offset within the block. Requires `blockId` and `end`. Non-negative integer. */
-  start?: number;
-  /** End offset within the block. Requires `blockId` and `start`. Non-negative integer, >= start. */
-  end?: number;
-}
+/** Input payload for `format.bold`. */
+export type FormatBoldInput = FormatInlineAliasInput<'bold'>;
 
-/**
- * Input payload for `format.underline`.
- */
-export interface FormatUnderlineInput {
-  target?: TextAddress;
-  /** Block ID for block-relative range targeting. Requires `start` and `end`. */
-  blockId?: string;
-  /** Start offset within the block. Requires `blockId` and `end`. Non-negative integer. */
-  start?: number;
-  /** End offset within the block. Requires `blockId` and `start`. Non-negative integer, >= start. */
-  end?: number;
-}
+/** Input payload for `format.italic`. */
+export type FormatItalicInput = FormatInlineAliasInput<'italic'>;
 
-/**
- * Input payload for `format.strikethrough`.
- */
+/** Input payload for `format.underline`. */
+export type FormatUnderlineInput = FormatInlineAliasInput<'underline'>;
+
+/** Input payload for `format.strikethrough`. */
 export interface FormatStrikethroughInput {
-  target?: TextAddress;
-  /** Block ID for block-relative range targeting. Requires `start` and `end`. */
-  blockId?: string;
-  /** Start offset within the block. Requires `blockId` and `end`. Non-negative integer. */
-  start?: number;
-  /** End offset within the block. Requires `blockId` and `start`. Non-negative integer, >= start. */
-  end?: number;
+  target: TextAddress;
 }
 
-const FORMAT_INPUT_ALLOWED_KEYS = new Set(['target', 'blockId', 'start', 'end']);
+/**
+ * Keys where `value` may be omitted — booleans (defaults to `true`) and
+ * `underline` (defaults to `true` for simple on/off).
+ */
+type ImplicitTrueKey =
+  | {
+      [K in InlineRunPatchKey]: InlineRunPatch[K] extends boolean | null | undefined ? K : never;
+    }[InlineRunPatchKey]
+  | 'underline';
 
 /**
- * Validates a format operation input and throws DocumentApiValidationError on violations.
+ * Input payload for direct per-property aliases (`format.<inlineKey>`).
  *
- * Validation order:
- * 0. Input shape guard
- * 1. Unknown field rejection
- * 2. Type checks (target shape, blockId type)
- * 3. At least one locator mode required
- * 4. Mode exclusivity (target vs blockId+start+end)
- * 5. Range completeness (blockId requires start+end)
- * 6. Orphaned start/end without blockId
- * 7. Numeric bounds (start/end >= 0, integer, start <= end)
+ * `value` is optional only for boolean-like keys (including `underline`), where
+ * omission defaults to `true` for ergonomic "turn on" calls.
+ * For all other keys the caller must supply a value.
  */
-function validateFormatInput(input: unknown, operationName: string): asserts input is FormatBoldInput {
+export type FormatInlineAliasInput<K extends InlineRunPatchKey> = K extends ImplicitTrueKey
+  ? { target: TextAddress; value?: InlineRunPatch[K] }
+  : { target: TextAddress; value: InlineRunPatch[K] };
+
+/**
+ * Input payload for `format.apply`.
+ *
+ * `inline` uses explicit patch semantics:
+ * - omitted key: unchanged
+ * - concrete value: set
+ * - `null`: clear
+ */
+export interface StyleApplyInput {
+  target: TextAddress;
+  inline: InlineRunPatch;
+}
+
+/** Options for `format.apply` — same shape as all other mutations. */
+export type StyleApplyOptions = MutationOptions;
+
+// ---------------------------------------------------------------------------
+// Adapter interface
+// ---------------------------------------------------------------------------
+
+/** Engine-specific adapter for format operations. */
+export interface FormatAdapter {
+  apply(input: StyleApplyInput, options?: MutationOptions): TextMutationReceipt;
+}
+
+// ---------------------------------------------------------------------------
+// Public API surface
+// ---------------------------------------------------------------------------
+
+/** Direct alias methods (`format.<inlineKey>`) that route to `format.apply`. */
+export type FormatInlineAliasApi = {
+  [K in InlineRunPatchKey]: (input: FormatInlineAliasInput<K>, options?: MutationOptions) => TextMutationReceipt;
+};
+
+/** Public helper surface exposed on `DocumentApi.format`. */
+export interface FormatApi extends FormatInlineAliasApi {
+  strikethrough(input: FormatStrikethroughInput, options?: MutationOptions): TextMutationReceipt;
+  apply(input: StyleApplyInput, options?: MutationOptions): TextMutationReceipt;
+}
+
+// ---------------------------------------------------------------------------
+// format.apply — validation and execution
+// ---------------------------------------------------------------------------
+
+const STYLE_APPLY_INPUT_ALLOWED_KEYS = new Set(['target', 'inline']);
+
+function validateStyleApplyInput(input: unknown): asserts input is StyleApplyInput {
   if (!isRecord(input)) {
-    throw new DocumentApiValidationError('INVALID_TARGET', `${operationName} input must be a non-null object.`);
+    throw new DocumentApiValidationError('INVALID_INPUT', 'format.apply input must be a non-null object.');
   }
 
-  assertNoUnknownFields(input, FORMAT_INPUT_ALLOWED_KEYS, operationName);
+  assertNoUnknownFields(input, STYLE_APPLY_INPUT_ALLOWED_KEYS, 'format.apply');
 
-  const { target, blockId, start, end } = input;
-  const hasTarget = target !== undefined;
-  const hasBlockId = blockId !== undefined;
-  const hasStart = start !== undefined;
-  const hasEnd = end !== undefined;
+  if (input.target === undefined) {
+    throw new DocumentApiValidationError('INVALID_TARGET', 'format.apply requires a target.');
+  }
 
-  // Type checks
-  if (hasTarget && !isTextAddress(target)) {
+  if (!isTextAddress(input.target)) {
     throw new DocumentApiValidationError('INVALID_TARGET', 'target must be a text address object.', {
       field: 'target',
-      value: target,
+      value: input.target,
     });
   }
 
-  if (hasBlockId && typeof blockId !== 'string') {
-    throw new DocumentApiValidationError('INVALID_TARGET', `blockId must be a string, got ${typeof blockId}.`, {
-      field: 'blockId',
-      value: blockId,
+  if (input.inline === undefined || input.inline === null) {
+    throw new DocumentApiValidationError('INVALID_INPUT', 'format.apply requires an inline object.');
+  }
+
+  validateInlineRunPatch(input.inline);
+}
+
+/**
+ * Executes `format.apply` using the provided adapter.
+ *
+ * Validates the target and inline patch payload, then delegates to adapter `apply`.
+ */
+export function executeStyleApply(
+  adapter: FormatAdapter,
+  input: StyleApplyInput,
+  options?: MutationOptions,
+): TextMutationReceipt {
+  validateStyleApplyInput(input);
+  return adapter.apply(input, normalizeMutationOptions(options));
+}
+
+// ---------------------------------------------------------------------------
+// format.<inlineKey> aliases — normalize to format.apply payloads
+// ---------------------------------------------------------------------------
+
+const INLINE_ALIAS_INPUT_ALLOWED_KEYS = new Set(['target', 'value']);
+
+function acceptsImplicitTrue(key: InlineRunPatchKey): boolean {
+  return INLINE_PROPERTY_BY_KEY[key].type === 'boolean' || key === 'underline';
+}
+
+function normalizeInlineAliasValue<K extends InlineRunPatchKey>(
+  key: K,
+  value: InlineRunPatch[K] | undefined,
+): InlineRunPatch[K] {
+  if (value !== undefined) return value;
+  if (acceptsImplicitTrue(key)) {
+    return true as InlineRunPatch[K];
+  }
+  throw new DocumentApiValidationError('INVALID_INPUT', `format.${key} requires a value field.`);
+}
+
+function validateInlineAliasInput<K extends InlineRunPatchKey>(
+  key: K,
+  input: unknown,
+): asserts input is FormatInlineAliasInput<K> {
+  const operation = `format.${key}`;
+  // Preserve historical input semantics for direct aliases:
+  // - null / primitive input behaves like "{}" and fails with missing target.
+  // - unknown top-level fields are reported before target validation.
+  const candidate = isRecord(input) ? input : {};
+  assertNoUnknownFields(candidate, INLINE_ALIAS_INPUT_ALLOWED_KEYS, operation);
+  validateTarget(candidate, operation);
+}
+
+/**
+ * Executes a direct alias operation (`format.<inlineKey>`) by translating it
+ * into a single-key `format.apply` payload.
+ */
+export function executeInlineAlias<K extends InlineRunPatchKey>(
+  adapter: FormatAdapter,
+  key: K,
+  input: FormatInlineAliasInput<K>,
+  options?: MutationOptions,
+): TextMutationReceipt {
+  validateInlineAliasInput(key, input);
+  // `input.value` is typed as required or optional depending on K; at runtime
+  // `normalizeInlineAliasValue` handles both branches uniformly.
+  const value = normalizeInlineAliasValue(key, (input as { value?: InlineRunPatch[K] }).value);
+  const inline = { [key]: value } as InlineRunPatch;
+  validateInlineRunPatch(inline);
+  return adapter.apply({ target: input.target, inline }, normalizeMutationOptions(options));
+}
+
+// ---------------------------------------------------------------------------
+// Shared validation: target field
+// ---------------------------------------------------------------------------
+
+function validateTarget(input: unknown, operation: string): asserts input is { target: TextAddress } {
+  if (!isRecord(input)) {
+    throw new DocumentApiValidationError('INVALID_INPUT', `${operation} input must be a non-null object.`);
+  }
+  if (input.target === undefined) {
+    throw new DocumentApiValidationError('INVALID_TARGET', `${operation} requires a target.`);
+  }
+  if (!isTextAddress(input.target)) {
+    throw new DocumentApiValidationError('INVALID_TARGET', 'target must be a text address object.', {
+      field: 'target',
+      value: input.target,
     });
   }
-
-  // At least one locator mode required
-  if (!hasTarget && !hasBlockId && !hasStart && !hasEnd) {
-    throw new DocumentApiValidationError(
-      'INVALID_TARGET',
-      `${operationName} requires a target. Provide either target or blockId + start + end.`,
-    );
-  }
-
-  // Mode exclusivity — target vs blockId/start/end
-  if (hasTarget && (hasBlockId || hasStart || hasEnd)) {
-    throw new DocumentApiValidationError(
-      'INVALID_TARGET',
-      'Cannot combine target with blockId/start/end. Use exactly one locator mode.',
-      {
-        fields: [
-          'target',
-          ...(hasBlockId ? ['blockId'] : []),
-          ...(hasStart ? ['start'] : []),
-          ...(hasEnd ? ['end'] : []),
-        ],
-      },
-    );
-  }
-
-  // Orphaned start/end without blockId
-  if (!hasBlockId && (hasStart || hasEnd)) {
-    throw new DocumentApiValidationError('INVALID_TARGET', 'start/end require blockId.', {
-      fields: ['blockId', ...(hasStart ? ['start'] : []), ...(hasEnd ? ['end'] : [])],
-    });
-  }
-
-  // Range completeness — blockId requires start+end
-  if (hasBlockId && !hasTarget) {
-    if (!hasStart || !hasEnd) {
-      throw new DocumentApiValidationError(
-        'INVALID_TARGET',
-        `blockId requires both start and end for ${operationName}.`,
-        { fields: ['blockId', 'start', 'end'] },
-      );
-    }
-  }
-
-  // Numeric bounds
-  if (hasStart) {
-    assertNonNegativeInteger(start, 'start');
-  }
-  if (hasEnd) {
-    assertNonNegativeInteger(end, 'end');
-  }
-  if (hasStart && hasEnd && (start as number) > (end as number)) {
-    throw new DocumentApiValidationError('INVALID_TARGET', `start must be <= end, got start=${start}, end=${end}.`, {
-      fields: ['start', 'end'],
-      start,
-      end,
-    });
-  }
-}
-
-export interface FormatAdapter {
-  /** Apply or toggle bold formatting on the target text range. */
-  bold(input: FormatBoldInput, options?: MutationOptions): TextMutationReceipt;
-  /** Apply or toggle italic formatting on the target text range. */
-  italic(input: FormatItalicInput, options?: MutationOptions): TextMutationReceipt;
-  /** Apply or toggle underline formatting on the target text range. */
-  underline(input: FormatUnderlineInput, options?: MutationOptions): TextMutationReceipt;
-  /** Apply or toggle strikethrough formatting on the target text range. */
-  strikethrough(input: FormatStrikethroughInput, options?: MutationOptions): TextMutationReceipt;
-}
-
-export type FormatApi = FormatAdapter;
-
-/**
- * Executes `format.bold` using the provided adapter.
- *
- * @param adapter - Adapter implementation that performs format mutations.
- * @param input - Text target payload for the bold mutation.
- * @param options - Optional mutation execution options.
- * @returns The mutation receipt produced by the adapter.
- * @throws {Error} Propagates adapter errors when the target or capabilities are invalid.
- *
- * @example
- * ```ts
- * const receipt = executeFormatBold(adapter, {
- *   target: { kind: 'text', blockId: 'p1', range: { start: 0, end: 5 } },
- * });
- * ```
- */
-export function executeFormatBold(
-  adapter: FormatAdapter,
-  input: FormatBoldInput,
-  options?: MutationOptions,
-): TextMutationReceipt {
-  validateFormatInput(input, 'format.bold');
-  return adapter.bold(input, normalizeMutationOptions(options));
-}
-
-/**
- * Executes `format.italic` using the provided adapter.
- *
- * @param adapter - Adapter implementation that performs format mutations.
- * @param input - Text target payload for the italic mutation.
- * @param options - Optional mutation execution options.
- * @returns The mutation receipt produced by the adapter.
- * @throws {Error} Propagates adapter errors when the target or capabilities are invalid.
- *
- * @example
- * ```ts
- * const receipt = executeFormatItalic(adapter, {
- *   target: { kind: 'text', blockId: 'p1', range: { start: 0, end: 5 } },
- * });
- * ```
- */
-export function executeFormatItalic(
-  adapter: FormatAdapter,
-  input: FormatItalicInput,
-  options?: MutationOptions,
-): TextMutationReceipt {
-  validateFormatInput(input, 'format.italic');
-  return adapter.italic(input, normalizeMutationOptions(options));
-}
-
-/**
- * Executes `format.underline` using the provided adapter.
- *
- * @param adapter - Adapter implementation that performs format mutations.
- * @param input - Text target payload for the underline mutation.
- * @param options - Optional mutation execution options.
- * @returns The mutation receipt produced by the adapter.
- * @throws {Error} Propagates adapter errors when the target or capabilities are invalid.
- *
- * @example
- * ```ts
- * const receipt = executeFormatUnderline(adapter, {
- *   target: { kind: 'text', blockId: 'p1', range: { start: 0, end: 5 } },
- * });
- * ```
- */
-export function executeFormatUnderline(
-  adapter: FormatAdapter,
-  input: FormatUnderlineInput,
-  options?: MutationOptions,
-): TextMutationReceipt {
-  validateFormatInput(input, 'format.underline');
-  return adapter.underline(input, normalizeMutationOptions(options));
-}
-
-/**
- * Executes `format.strikethrough` using the provided adapter.
- *
- * @param adapter - Adapter implementation that performs format mutations.
- * @param input - Text target payload for the strikethrough mutation.
- * @param options - Optional mutation execution options.
- * @returns The mutation receipt produced by the adapter.
- * @throws {Error} Propagates adapter errors when the target or capabilities are invalid.
- *
- * @example
- * ```ts
- * const receipt = executeFormatStrikethrough(adapter, {
- *   target: { kind: 'text', blockId: 'p1', range: { start: 0, end: 5 } },
- * });
- * ```
- */
-export function executeFormatStrikethrough(
-  adapter: FormatAdapter,
-  input: FormatStrikethroughInput,
-  options?: MutationOptions,
-): TextMutationReceipt {
-  validateFormatInput(input, 'format.strikethrough');
-  return adapter.strikethrough(input, normalizeMutationOptions(options));
 }

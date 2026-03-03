@@ -8,6 +8,8 @@ import {
   collectTrackedChangesForContext,
 } from '@extensions/track-changes/permission-helpers.js';
 import { isList } from '@core/commands/list-helpers';
+import { isCellSelection } from '@extensions/table/tableHelpers/isCellSelection.js';
+import { selectedRect } from 'prosemirror-tables';
 /**
  * Get props by item id
  *
@@ -122,6 +124,8 @@ export async function getEditorContext(editor, event) {
     selectionHasNodeOrMark(state, 'documentSection', { requireEnds: true });
   const currentNodeType = node?.type?.name || null;
 
+  const cellSelectionInfo = getCellSelectionInfo(state);
+
   const activeMarks = [];
   let trackedChangeId = null;
 
@@ -185,6 +189,8 @@ export async function getEditorContext(editor, event) {
     isInTable,
     isInList,
     isInSectionNode,
+    isCellSelection: cellSelectionInfo.isCellSelection,
+    tableSelectionKind: cellSelectionInfo.tableSelectionKind,
     currentNodeType,
     activeMarks,
     isTrackedChange,
@@ -294,6 +300,36 @@ function selectionIncludesListParagraph(state) {
   return found;
 }
 
+function getCellSelectionInfo(state) {
+  if (!isCellSelection(state.selection)) {
+    return { isCellSelection: false, tableSelectionKind: null };
+  }
+
+  let tableSelectionKind = 'cells';
+  try {
+    const rect = selectedRect(state);
+    const selectedRows = rect.bottom - rect.top;
+    const selectedCols = rect.right - rect.left;
+    const totalRows = rect.map.height;
+    const totalCols = rect.map.width;
+
+    const allRows = selectedRows === totalRows;
+    const allCols = selectedCols === totalCols;
+
+    if (allRows && allCols) {
+      tableSelectionKind = 'table';
+    } else if (allCols) {
+      tableSelectionKind = 'row';
+    } else if (allRows) {
+      tableSelectionKind = 'column';
+    }
+  } catch (error) {
+    console.warn('[ContextMenu] Unable to resolve cell selection rectangle:', error);
+  }
+
+  return { isCellSelection: true, tableSelectionKind };
+}
+
 function getStructureFromResolvedPos(state, pos) {
   try {
     const $pos = state.doc.resolve(pos);
@@ -336,4 +372,5 @@ function getStructureFromResolvedPos(state, pos) {
 export {
   getStructureFromResolvedPos as __getStructureFromResolvedPosForTest,
   isCollaborationEnabled as __isCollaborationEnabledForTest,
+  getCellSelectionInfo as __getCellSelectionInfoForTest,
 };

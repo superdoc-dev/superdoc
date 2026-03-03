@@ -150,9 +150,46 @@ describe('preProcessPageFieldsOnly', () => {
 
       const result = preProcessPageFieldsOnly(nodes);
 
-      // Should pass through unchanged (processed recursively)
+      // Unhandled fldSimple should unwrap to its child content (w:r elements)
+      // so the cached display text is rendered instead of being lost in a passthrough node
       expect(result.processedNodes).toHaveLength(1);
-      expect(result.processedNodes[0].name).toBe('w:fldSimple');
+      expect(result.processedNodes[0].name).toBe('w:r');
+      expect(result.processedNodes[0].elements[0].elements[0].text).toBe('John Doe');
+    });
+  });
+
+  describe('legacy w:pgNum element', () => {
+    it('should convert w:pgNum to sd:autoPageNumber', () => {
+      const nodes = [
+        {
+          name: 'w:r',
+          elements: [{ name: 'w:pgNum', type: 'element' }],
+        },
+      ];
+
+      const result = preProcessPageFieldsOnly(nodes);
+
+      expect(result.processedNodes).toHaveLength(1);
+      expect(result.processedNodes[0].name).toBe('sd:autoPageNumber');
+    });
+
+    it('should preserve rPr from w:pgNum run', () => {
+      const nodes = [
+        {
+          name: 'w:r',
+          elements: [
+            { name: 'w:rPr', elements: [{ name: 'w:sz', attributes: { 'w:val': '20' } }] },
+            { name: 'w:pgNum', type: 'element' },
+          ],
+        },
+      ];
+
+      const result = preProcessPageFieldsOnly(nodes);
+
+      expect(result.processedNodes).toHaveLength(1);
+      expect(result.processedNodes[0].name).toBe('sd:autoPageNumber');
+      expect(result.processedNodes[0].elements).toBeDefined();
+      expect(result.processedNodes[0].elements[0].name).toBe('w:rPr');
     });
   });
 

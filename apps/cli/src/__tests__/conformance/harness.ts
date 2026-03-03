@@ -2,7 +2,12 @@ import { copyFile, mkdtemp, mkdir, rm } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import path from 'node:path';
 import { run } from '../../index';
-import { resolveListDocFixture, resolveSourceDocFixture } from '../fixtures';
+import {
+  resolveListDocFixture,
+  resolvePreSeparatedListFixture,
+  resolveSourceDocFixture,
+  resolveTocDocFixture,
+} from '../fixtures';
 
 type RunResult = {
   code: number;
@@ -45,6 +50,12 @@ export type TextRangeAddress = {
 export type ListItemAddress = {
   kind: 'block';
   nodeType: 'listItem';
+  nodeId: string;
+};
+
+export type TocAddress = {
+  kind: 'block';
+  nodeType: 'tableOfContents';
   nodeId: string;
 };
 
@@ -119,6 +130,42 @@ export class ConformanceHarness {
     return filePath;
   }
 
+  async copyPreSeparatedListDoc(label: string): Promise<string> {
+    const filePath = path.join(this.docsDir, `${this.nextId()}-${label}.docx`);
+    await copyFile(await resolvePreSeparatedListFixture(), filePath);
+    return filePath;
+  }
+
+  async copyTocFixtureDoc(label: string, stateDir: string): Promise<string> {
+    const filePath = path.join(this.docsDir, `${this.nextId()}-${label}.docx`);
+
+    try {
+      await copyFile(await resolveTocDocFixture(), filePath);
+      const probe = await this.runCli(['toc', 'list', filePath, '--limit', '1'], stateDir);
+      if (probe.result.code === 0) {
+        return filePath;
+      }
+    } catch {
+      // Fall back to creating a TOC fixture from the generic source doc.
+    }
+
+    const sourceDoc = await this.copyFixtureDoc(`${label}-seed`);
+    const seededPath = path.join(this.docsDir, `${this.nextId()}-${label}-seeded.docx`);
+    const { result, envelope } = await this.runCli(
+      ['create', 'table-of-contents', sourceDoc, '--out', seededPath],
+      stateDir,
+    );
+
+    if (result.code !== 0 || envelope.ok !== true) {
+      const details = envelope.ok
+        ? 'unexpected non-success envelope'
+        : `${envelope.error.code}: ${envelope.error.message}`;
+      throw new Error(`Unable to seed TOC fixture for ${label}: ${details}`);
+    }
+
+    return seededPath;
+  }
+
   createOutputPath(label: string): string {
     return path.join(this.docsDir, `${this.nextId()}-${label}.docx`);
   }
@@ -128,13 +175,11 @@ export class ConformanceHarness {
     stateDir: string,
     stdinBytes?: Uint8Array,
   ): Promise<{ result: RunResult; envelope: CommandEnvelope }> {
-    const previousStateDir = process.env.SUPERDOC_CLI_STATE_DIR;
-    process.env.SUPERDOC_CLI_STATE_DIR = stateDir;
-
     let stdout = '';
     let stderr = '';
-    try {
-      const code = await run(args, {
+    const code = await run(
+      args,
+      {
         stdout(message: string) {
           stdout += message;
         },
@@ -144,17 +189,12 @@ export class ConformanceHarness {
         async readStdinBytes() {
           return stdinBytes ?? new Uint8Array();
         },
-      });
+      },
+      { stateDir },
+    );
 
-      const result: RunResult = { code, stdout, stderr };
-      return { result, envelope: parseEnvelope(result) };
-    } finally {
-      if (previousStateDir == null) {
-        delete process.env.SUPERDOC_CLI_STATE_DIR;
-      } else {
-        process.env.SUPERDOC_CLI_STATE_DIR = previousStateDir;
-      }
-    }
+    const result: RunResult = { code, stdout, stderr };
+    return { result, envelope: parseEnvelope(result) };
   }
 
   async firstTextRange(docPath: string, stateDir: string, pattern = 'Wilde'): Promise<TextRangeAddress> {
@@ -169,12 +209,14 @@ export class ConformanceHarness {
     assertSuccessEnvelope(envelope);
     const data = envelope.data as {
       result?: {
-        context?: Array<{
-          textRanges?: TextRangeAddress[];
+        items?: Array<{
+          context?: {
+            textRanges?: TextRangeAddress[];
+          };
         }>;
       };
     };
-    const range = data.result?.context?.[0]?.textRanges?.[0];
+    const range = data.result?.items?.[0]?.context?.textRanges?.[0];
     if (!range) {
       throw new Error(`No text range found for pattern "${pattern}" in ${docPath}`);
     }
@@ -184,10 +226,9 @@ export class ConformanceHarness {
   async firstBlockMatch(
     docPath: string,
     stateDir: string,
-    pattern = 'Wilde',
   ): Promise<{ nodeId: string; nodeType: string; address: Record<string, unknown> }> {
     const { result, envelope } = await this.runCli(
-      ['find', docPath, '--type', 'text', '--pattern', pattern, '--limit', '1'],
+      ['find', docPath, '--type', 'node', '--node-type', 'paragraph', '--limit', '1'],
       stateDir,
     );
     if (result.code !== 0) {
@@ -197,19 +238,20 @@ export class ConformanceHarness {
     assertSuccessEnvelope(envelope);
     const data = envelope.data as {
       result?: {
-        matches?: Array<Record<string, unknown>>;
+        items?: Array<{
+          address?: Record<string, unknown>;
+        }>;
       };
     };
-    const match = data.result?.matches?.find(
-      (entry) => entry.kind === 'block' && typeof entry.nodeId === 'string' && typeof entry.nodeType === 'string',
-    );
-    if (!match) {
-      throw new Error(`No block match found for pattern "${pattern}" in ${docPath}`);
+    const item = data.result?.items?.[0];
+    const address = item?.address;
+    if (!address || typeof address.nodeId !== 'string' || typeof address.nodeType !== 'string') {
+      throw new Error(`No block match found in ${docPath}`);
     }
     return {
-      nodeId: match.nodeId as string,
-      nodeType: match.nodeType as string,
-      address: match,
+      nodeId: address.nodeId as string,
+      nodeType: address.nodeType as string,
+      address,
     };
   }
 
@@ -222,12 +264,35 @@ export class ConformanceHarness {
     assertSuccessEnvelope(envelope);
     const data = envelope.data as {
       result?: {
-        matches?: ListItemAddress[];
+        items?: Array<{
+          address?: ListItemAddress;
+        }>;
       };
     };
-    const address = data.result?.matches?.[0];
+    const address = data.result?.items?.[0]?.address;
     if (!address) {
       throw new Error(`No list item address found in ${docPath}`);
+    }
+    return address;
+  }
+
+  async firstTocAddress(docPath: string, stateDir: string): Promise<TocAddress> {
+    const { result, envelope } = await this.runCli(['toc', 'list', docPath, '--limit', '1'], stateDir);
+    if (result.code !== 0) {
+      throw new Error(`Unable to resolve first table of contents for ${docPath}`);
+    }
+
+    assertSuccessEnvelope(envelope);
+    const data = envelope.data as {
+      result?: {
+        items?: Array<{
+          address?: TocAddress;
+        }>;
+      };
+    };
+    const address = data.result?.items?.[0]?.address;
+    if (!address) {
+      throw new Error(`No table of contents address found in ${docPath}`);
     }
     return address;
   }
@@ -290,7 +355,7 @@ export class ConformanceHarness {
         sourceDoc,
         '--target-json',
         JSON.stringify(collapsedTarget),
-        '--text',
+        '--value',
         'TRACKED_CONFORMANCE_TOKEN',
         '--change-mode',
         'tracked',
@@ -308,9 +373,9 @@ export class ConformanceHarness {
       throw new Error(`Failed to list tracked changes for fixture ${label}`);
     }
     assertSuccessEnvelope(list.envelope);
-    const matches =
-      (list.envelope.data as { result?: { matches?: Array<{ entityId?: string }> } }).result?.matches ?? [];
-    const changeId = matches[0]?.entityId;
+    const items =
+      (list.envelope.data as { result?: { items?: Array<{ address?: { entityId?: string } }> } }).result?.items ?? [];
+    const changeId = items[0]?.address?.entityId;
     if (!changeId) {
       throw new Error(`Tracked-change fixture did not produce a tracked change id for ${label}`);
     }
@@ -329,6 +394,74 @@ export class ConformanceHarness {
       throw new Error(`Failed to open session fixture ${sessionId}`);
     }
     return { sessionId, docPath };
+  }
+
+  /**
+   * Creates a doc with a 3x3 table and opens it in a session.
+   *
+   * Because sdBlockId is regenerated on each document open, nodeIds are only
+   * stable within a single session. This method creates the table, then opens
+   * the output doc in a persistent session and discovers the table nodeId via
+   * `find`. Subsequent commands must use `--session` to stay in the same
+   * address space.
+   */
+  async createTableFixture(
+    stateDir: string,
+    label: string,
+  ): Promise<{ docPath: string; tableNodeId: string; cellNodeId: string; sessionId: string }> {
+    const sourceDoc = await this.copyFixtureDoc(`${label}-source`);
+    const outDoc = this.createOutputPath(`${label}-with-table`);
+
+    const { result } = await this.runCli(
+      ['create', 'table', sourceDoc, '--rows', '3', '--columns', '3', '--out', outDoc],
+      stateDir,
+    );
+    if (result.code !== 0) {
+      throw new Error(`Failed to create table fixture for ${label}`);
+    }
+
+    // Open the output doc in a session so the nodeId stays stable
+    const sessionId = `table-${label}-session`;
+    const open = await this.runCli(['open', outDoc, '--session', sessionId], stateDir);
+    if (open.result.code !== 0) {
+      throw new Error(`Failed to open table session for ${label}`);
+    }
+
+    // Discover the table nodeId within the session
+    const { result: findResult, envelope: findEnvelope } = await this.runCli(
+      ['find', '--session', sessionId, '--type', 'node', '--node-type', 'table', '--limit', '1'],
+      stateDir,
+    );
+    if (findResult.code !== 0) {
+      throw new Error(`Unable to find table in session for ${label}`);
+    }
+    assertSuccessEnvelope(findEnvelope);
+    const data = findEnvelope.data as {
+      result?: { items?: Array<{ address?: { nodeId?: string } }> };
+    };
+    const tableNodeId = data.result?.items?.[0]?.address?.nodeId;
+    if (!tableNodeId) {
+      throw new Error(`No table found in session for ${label}`);
+    }
+
+    // Discover a cell nodeId within the same session
+    const { result: cellResult, envelope: cellEnvelope } = await this.runCli(
+      ['find', '--session', sessionId, '--type', 'node', '--node-type', 'tableCell', '--limit', '1'],
+      stateDir,
+    );
+    if (cellResult.code !== 0) {
+      throw new Error(`Unable to find table cell in session for ${label}`);
+    }
+    assertSuccessEnvelope(cellEnvelope);
+    const cellData = cellEnvelope.data as {
+      result?: { items?: Array<{ address?: { nodeId?: string } }> };
+    };
+    const cellNodeId = cellData.result?.items?.[0]?.address?.nodeId;
+    if (!cellNodeId) {
+      throw new Error(`No table cell found in session for ${label}`);
+    }
+
+    return { docPath: outDoc, tableNodeId, cellNodeId, sessionId };
   }
 
   nextId(): string {

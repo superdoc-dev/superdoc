@@ -1,7 +1,7 @@
 ---
 title: lists.list
 sidebarTitle: lists.list
-description: Generated reference for lists.list
+description: List all list nodes in the document, optionally filtered by scope.
 ---
 
 {/* GENERATED FILE: DO NOT EDIT. Regenerate via `pnpm run docapi:sync`. */}
@@ -9,6 +9,8 @@ description: Generated reference for lists.list
 > Alpha: Document API is currently alpha and subject to breaking changes.
 
 ## Summary
+
+List all list nodes in the document, optionally filtered by scope.
 
 - Operation ID: `lists.list`
 - API member path: `editor.doc.lists.list(...)`
@@ -18,16 +20,94 @@ description: Generated reference for lists.list
 - Supports dry run: `no`
 - Deterministic target resolution: `yes`
 
+## Expected result
+
+Returns a ListsListResult with an array of list item summaries and total count.
+
+## Input fields
+
+| Field | Type | Required | Description |
+| --- | --- | --- | --- |
+| `kind` | enum | no | `"ordered"`, `"bullet"` |
+| `level` | integer | no |  |
+| `limit` | integer | no |  |
+| `offset` | integer | no |  |
+| `ordinal` | integer | no |  |
+| `within` | BlockNodeAddress | no | BlockNodeAddress |
+| `within.kind` | `"block"` | no | Constant: `"block"` |
+| `within.nodeId` | string | no |  |
+| `within.nodeType` | enum | no | `"paragraph"`, `"heading"`, `"listItem"`, `"table"`, `"tableRow"`, `"tableCell"`, `"tableOfContents"`, `"image"`, `"sdt"` |
+
+### Example request
+
+```json
+{
+  "limit": 50,
+  "within": {
+    "kind": "block",
+    "nodeId": "node-def456",
+    "nodeType": "paragraph"
+  }
+}
+```
+
+## Output fields
+
+| Field | Type | Required | Description |
+| --- | --- | --- | --- |
+| `evaluatedRevision` | string | yes |  |
+| `items` | object[] | yes |  |
+| `page` | PageInfo | yes | PageInfo |
+| `page.limit` | integer | yes |  |
+| `page.offset` | integer | yes |  |
+| `page.returned` | integer | yes |  |
+| `total` | integer | yes |  |
+
+### Example response
+
+```json
+{
+  "evaluatedRevision": "rev-001",
+  "items": [
+    {
+      "address": {
+        "kind": "block",
+        "nodeId": "node-def456",
+        "nodeType": "listItem"
+      },
+      "handle": {
+        "ref": "handle:abc123",
+        "refStability": "stable",
+        "targetKind": "text"
+      },
+      "id": "id-001",
+      "listId": "example",
+      "marker": "1.",
+      "ordinal": 1
+    }
+  ],
+  "page": {
+    "limit": 50,
+    "offset": 0,
+    "returned": 1
+  },
+  "total": 1
+}
+```
+
 ## Pre-apply throws
 
 - `TARGET_NOT_FOUND`
+- `INVALID_TARGET`
+- `INVALID_INPUT`
 
 ## Non-applied failure codes
 
 - None
 
-## Input schema
+## Raw schemas
 
+<Accordion title="Raw input schema">
 ```json
 {
   "additionalProperties": false,
@@ -51,68 +131,34 @@ description: Generated reference for lists.list
       "type": "integer"
     },
     "within": {
-      "additionalProperties": false,
-      "properties": {
-        "kind": {
-          "const": "block"
-        },
-        "nodeId": {
-          "type": "string"
-        },
-        "nodeType": {
-          "enum": [
-            "paragraph",
-            "heading",
-            "listItem",
-            "table",
-            "tableRow",
-            "tableCell",
-            "image",
-            "sdt"
-          ]
-        }
-      },
-      "required": [
-        "kind",
-        "nodeType",
-        "nodeId"
-      ],
-      "type": "object"
+      "$ref": "#/$defs/BlockNodeAddress"
     }
   },
   "type": "object"
 }
 ```
+</Accordion>
 
-## Output schema
-
+<Accordion title="Raw output schema">
 ```json
 {
   "additionalProperties": false,
   "properties": {
+    "evaluatedRevision": {
+      "type": "string"
+    },
     "items": {
       "items": {
         "additionalProperties": false,
         "properties": {
           "address": {
-            "additionalProperties": false,
-            "properties": {
-              "kind": {
-                "const": "block"
-              },
-              "nodeId": {
-                "type": "string"
-              },
-              "nodeType": {
-                "const": "listItem"
-              }
-            },
-            "required": [
-              "kind",
-              "nodeType",
-              "nodeId"
-            ],
-            "type": "object"
+            "$ref": "#/$defs/ListItemAddress"
+          },
+          "handle": {
+            "$ref": "#/$defs/ResolvedHandle"
+          },
+          "id": {
+            "type": "string"
           },
           "kind": {
             "enum": [
@@ -122,6 +168,9 @@ description: Generated reference for lists.list
           },
           "level": {
             "type": "integer"
+          },
+          "listId": {
+            "type": "string"
           },
           "marker": {
             "type": "string"
@@ -140,44 +189,30 @@ description: Generated reference for lists.list
           }
         },
         "required": [
-          "address"
+          "id",
+          "handle",
+          "address",
+          "listId"
         ],
         "type": "object"
       },
       "type": "array"
     },
-    "matches": {
-      "items": {
-        "additionalProperties": false,
-        "properties": {
-          "kind": {
-            "const": "block"
-          },
-          "nodeId": {
-            "type": "string"
-          },
-          "nodeType": {
-            "const": "listItem"
-          }
-        },
-        "required": [
-          "kind",
-          "nodeType",
-          "nodeId"
-        ],
-        "type": "object"
-      },
-      "type": "array"
+    "page": {
+      "$ref": "#/$defs/PageInfo"
     },
     "total": {
+      "minimum": 0,
       "type": "integer"
     }
   },
   "required": [
-    "matches",
+    "evaluatedRevision",
     "total",
-    "items"
+    "items",
+    "page"
   ],
   "type": "object"
 }
 ```
+</Accordion>

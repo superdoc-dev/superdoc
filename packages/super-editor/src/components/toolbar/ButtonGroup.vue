@@ -1,5 +1,5 @@
 <script setup>
-import { computed, ref, h } from 'vue';
+import { computed, ref, h, watch, onBeforeUnmount } from 'vue';
 import ToolbarButton from './ToolbarButton.vue';
 import ToolbarSeparator from './ToolbarSeparator.vue';
 import OverflowMenu from './OverflowMenu.vue';
@@ -9,6 +9,7 @@ import { useHighContrastMode } from '../../composables/use-high-contrast-mode';
 const emit = defineEmits(['command', 'item-clicked', 'dropdown-update-show']);
 
 const toolbarItemRefs = ref([]);
+const buttonGroupRef = ref(null);
 const props = defineProps({
   toolbarItems: {
     type: Array,
@@ -210,10 +211,47 @@ const handleDropdownUpdateShow = (open) => {
   }
   emit('dropdown-update-show', open);
 };
+
+const handleDocumentPointerDown = (event) => {
+  if (!currentItem.value) return;
+
+  const target = event.target;
+  if (!(target instanceof HTMLElement)) return;
+
+  // Naive UI dropdown content is rendered in a portal outside the toolbar group.
+  // Treat it as "inside" so option clicks do not close the menu before selection.
+  if (target.closest('.sd-toolbar-dropdown-menu')) return;
+  if (buttonGroupRef.value?.contains(target)) return;
+
+  closeDropdowns();
+};
+
+const isCurrentItemExpanded = () => {
+  if (!currentItem.value) return false;
+  const { expand } = currentItem.value;
+  if (typeof expand === 'object' && expand !== null) return Boolean(expand.value);
+  return Boolean(expand);
+};
+
+watch(
+  isCurrentItemExpanded,
+  (isOpen) => {
+    if (isOpen) {
+      document.addEventListener('pointerdown', handleDocumentPointerDown, true);
+    } else {
+      document.removeEventListener('pointerdown', handleDocumentPointerDown, true);
+    }
+  },
+  { immediate: true },
+);
+
+onBeforeUnmount(() => {
+  document.removeEventListener('pointerdown', handleDocumentPointerDown, true);
+});
 </script>
 
 <template>
-  <div :style="getPositionStyle" class="button-group" role="group" @focus="handleFocus">
+  <div :style="getPositionStyle" class="button-group" role="group" @focus="handleFocus" ref="buttonGroupRef">
     <div
       v-for="(item, index) in toolbarItems"
       :key="item.id.value"
@@ -249,6 +287,7 @@ const handleDropdownUpdateShow = (open) => {
           () => ({
             role: 'menu',
             style: { fontFamily: props.uiFontFamily },
+            class: 'sd-toolbar-dropdown-menu',
           })
         "
         :node-props="(option) => getDropdownAttributes(option, item)"

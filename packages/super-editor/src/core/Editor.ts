@@ -34,7 +34,7 @@ import {
 import { AnnotatorHelpers } from '@helpers/annotator.js';
 import { prepareCommentsForExport, prepareCommentsForImport } from '@extensions/comment/comments-helpers.js';
 import DocxZipper from '@core/DocxZipper.js';
-import { generateCollaborationData } from '@extensions/collaboration/collaboration.js';
+import { generateCollaborationData, cancelDebouncedDocxUpdate } from '@extensions/collaboration/collaboration.js';
 import { useHighContrastMode } from '../composables/use-high-contrast-mode.js';
 import { updateYdocDocxData } from '@extensions/collaboration/collaboration-helpers.js';
 import { setImageNodeSelection } from './helpers/setImageNodeSelection.js';
@@ -51,7 +51,7 @@ import { COMMENT_FILE_BASENAMES } from '@core/super-converter/constants.js';
 import { isHeadless } from '../utils/headless-helpers.js';
 import { canUseDOM } from '../utils/canUseDOM.js';
 import { buildSchemaSummary } from './schema-summary.js';
-import { PresentationEditor } from './presentation-editor/index.js';
+import type { PresentationEditor } from './presentation-editor/index.js';
 import type { EditorRenderer } from './renderers/EditorRenderer.js';
 import { ProseMirrorRenderer } from './renderers/ProseMirrorRenderer.js';
 import { BLANK_DOCX_DATA_URI } from './blank-docx.js';
@@ -127,6 +127,12 @@ export interface OpenOptions {
 
   /** Font data from docx */
   fonts?: Record<string, unknown>;
+
+  /**
+   * Optional override for "new file" semantics on this open call.
+   * When omitted, Editor infers the value from the source type.
+   */
+  isNewFile?: boolean;
 }
 
 /**
@@ -223,6 +229,19 @@ export class Editor extends EventEmitter<EditorEventMap> {
    * Set by PresentationEditor constructor to enable renderer-neutral helpers.
    */
   presentationEditor: PresentationEditor | null = null;
+
+  /**
+   * Returns the current total number of pages when pagination is active.
+   * Delegates to the PresentationEditor's layout state.
+   * Returns `undefined` before the first layout completes or when pagination is off.
+   */
+  get currentTotalPages(): number | undefined {
+    if (this.presentationEditor) {
+      const pages = this.presentationEditor.getPages();
+      return pages.length > 0 ? pages.length : undefined;
+    }
+    return undefined;
+  }
 
   /**
    * Whether the editor currently has focus
@@ -702,6 +721,7 @@ export class Editor extends EventEmitter<EditorEventMap> {
     try {
       // Merge options with defaults
       const resolvedMode = options?.mode ?? this.options.mode ?? 'docx';
+      const explicitIsNewFile = options?.isNewFile;
       const resolvedOptions = {
         ...this.options,
         mode: resolvedMode,
@@ -726,6 +746,7 @@ export class Editor extends EventEmitter<EditorEventMap> {
           resolvedOptions.mediaFiles = mediaFiles;
           resolvedOptions.fonts = fonts;
           resolvedOptions.fileSource = buffer;
+          resolvedOptions.isNewFile = explicitIsNewFile ?? false;
           this.#sourcePath = source;
         } else {
           // Browser: fetch the file
@@ -740,6 +761,7 @@ export class Editor extends EventEmitter<EditorEventMap> {
           resolvedOptions.mediaFiles = mediaFiles;
           resolvedOptions.fonts = fonts;
           resolvedOptions.fileSource = blob;
+          resolvedOptions.isNewFile = explicitIsNewFile ?? false;
           // In browser, path is just a suggested filename
           this.#sourcePath = source.split('/').pop() || null;
         }
@@ -760,6 +782,7 @@ export class Editor extends EventEmitter<EditorEventMap> {
           resolvedOptions.mediaFiles = mediaFiles;
           resolvedOptions.fonts = fonts;
           resolvedOptions.fileSource = source as File | Blob | Buffer;
+          resolvedOptions.isNewFile = explicitIsNewFile ?? false;
           this.#sourcePath = null;
         } else {
           // Unknown object type - try to load it anyway
@@ -768,6 +791,7 @@ export class Editor extends EventEmitter<EditorEventMap> {
           resolvedOptions.mediaFiles = mediaFiles;
           resolvedOptions.fonts = fonts;
           resolvedOptions.fileSource = source as File | Blob | Buffer;
+          resolvedOptions.isNewFile = explicitIsNewFile ?? false;
           this.#sourcePath = null;
         }
       } else {
@@ -796,7 +820,7 @@ export class Editor extends EventEmitter<EditorEventMap> {
           resolvedOptions.mediaFiles = mediaFiles;
           resolvedOptions.fonts = fonts;
           resolvedOptions.fileSource = fileSource;
-          resolvedOptions.isNewFile = true;
+          resolvedOptions.isNewFile = explicitIsNewFile ?? true;
           this.#sourcePath = null;
         } else {
           // Use pre-parsed content from options if provided, otherwise create minimal structure
@@ -804,7 +828,8 @@ export class Editor extends EventEmitter<EditorEventMap> {
           resolvedOptions.mediaFiles = options?.mediaFiles ?? {};
           resolvedOptions.fonts = options?.fonts ?? {};
           resolvedOptions.fileSource = null;
-          resolvedOptions.isNewFile = !options?.content; // Only mark as new if no content provided
+          // Pre-parsed content means "existing document", otherwise this is a new blank file.
+          resolvedOptions.isNewFile = explicitIsNewFile ?? !options?.content;
           this.#sourcePath = null;
         }
       }
@@ -2838,6 +2863,7 @@ export class Editor extends EventEmitter<EditorEventMap> {
       content,
       mediaFiles,
       fonts,
+      isNewFile,
       // Everything else is EditorOptions
       ...editorConfig
     } = resolvedConfig;
@@ -2852,6 +2878,7 @@ export class Editor extends EventEmitter<EditorEventMap> {
       content,
       mediaFiles,
       fonts,
+      isNewFile,
     };
 
     // Use new API mode for static factory
@@ -3164,7 +3191,11 @@ export class Editor extends EventEmitter<EditorEventMap> {
     this.initDefaultStyles();
 
     if (this.options.ydoc && this.options.collaborationProvider) {
-      updateYdocDocxData(this, this.options.ydoc);
+      // Cancel any pending debounced docx update — we are about to do a
+      // fresh export with the new file data. Without cancel, the debounced
+      // export from the previous transaction cycle could fire redundantly.
+      cancelDebouncedDocxUpdate(this);
+      await updateYdocDocxData(this, this.options.ydoc);
       this.initializeCollaborationData();
     } else {
       this.#insertNewFileData();

@@ -144,6 +144,12 @@ export const initializeMetaMap = (ydoc, editor) => {
   const metaMap = ydoc.getMap('meta');
   metaMap.set('docx', editor.options.content);
   metaMap.set('fonts', editor.options.fonts);
+  metaMap.set('bootstrap', {
+    version: 1,
+    clientId: ydoc.clientID,
+    seededAt: new Date().toISOString(),
+    source: 'browser',
+  });
 
   const mediaMap = ydoc.getMap('media');
   Object.entries(editor.options.mediaFiles).forEach(([key, value]) => {
@@ -163,6 +169,22 @@ const checkDocxChanged = (transaction) => {
   return false;
 };
 
+// Stores the debounced update cancel function per editor so replaceFile
+// can cancel pending debounced exports after doing its own direct export.
+const debouncedDocxUpdateByEditor = new WeakMap();
+
+/**
+ * Cancel any pending debounced updateYdocDocxData call for the given editor.
+ * Called from replaceFile to prevent stale debounced exports from running
+ * after the direct export has already been done.
+ *
+ * @param {Editor} editor
+ */
+export const cancelDebouncedDocxUpdate = (editor) => {
+  const cancel = debouncedDocxUpdateByEditor.get(editor);
+  if (cancel) cancel();
+};
+
 const initDocumentListener = ({ ydoc, editor }) => {
   // 30s debounce: the actual document content syncs in real-time via
   // y-prosemirror's XmlFragment. This DOCX blob is supplementary data
@@ -177,6 +199,8 @@ const initDocumentListener = ({ ydoc, editor }) => {
     30000,
     { maxWait: 60000 },
   );
+
+  debouncedDocxUpdateByEditor.set(editor, () => debouncedUpdate.cancel());
 
   const afterTransactionHandler = (transaction) => {
     const { local } = transaction;
@@ -193,6 +217,7 @@ const initDocumentListener = ({ ydoc, editor }) => {
   return () => {
     ydoc.off('afterTransaction', afterTransactionHandler);
     debouncedUpdate.cancel();
+    debouncedDocxUpdateByEditor.delete(editor);
   };
 };
 

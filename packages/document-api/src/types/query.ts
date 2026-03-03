@@ -1,6 +1,7 @@
 import type { NodeAddress, NodeKind, NodeType } from './base.js';
 import type { NodeInfo } from './node.js';
 import type { Range, TextAddress } from './address.js';
+import type { DiscoveryOutput } from './discovery.js';
 
 export interface TextSelector {
   type: 'text';
@@ -40,6 +41,11 @@ export interface Query {
   within?: NodeAddress;
   limit?: number;
   offset?: number;
+  /**
+   * Cardinality requirement for the result set.
+   * Used for future enforcement — currently passed through without behavioral change.
+   */
+  require?: 'any' | 'first' | 'exactlyOne' | 'all';
   /**
    * Whether to hydrate `result.nodes` for matched addresses.
    * This is independent from text-match context, which is intrinsic for text selectors.
@@ -85,3 +91,25 @@ export interface QueryResult {
   context?: MatchContext[];
   diagnostics?: UnknownNodeDiagnostic[];
 }
+
+/**
+ * Domain fields for a find discovery item (C3c).
+ *
+ * Merges the parallel-array fields (`matches[i]`, `nodes[i]`, `context[i]`)
+ * into a single per-item object.
+ */
+export interface FindItemDomain {
+  address: NodeAddress;
+  node?: NodeInfo;
+  context?: MatchContext;
+}
+
+/**
+ * Standardized discovery output for `find`.
+ *
+ * Extends `DiscoveryOutput<FindItemDomain>` with an optional
+ * top-level `diagnostics` array for unknown-node reporting.
+ */
+export type FindOutput = DiscoveryOutput<FindItemDomain> & {
+  diagnostics?: UnknownNodeDiagnostic[];
+};

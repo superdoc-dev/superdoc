@@ -8,6 +8,137 @@ import { CommentsPluginKey } from '../../comment/comments-plugin.js';
 import { findMarkPosition } from './documentHelpers.js';
 
 /**
+ * Given a range (from..to) and a count of characters ("the Nth character in that range"),
+ * returns the exact index in the document where that character sits. We only count
+ * real text—things like embedded widgets or block boundaries are skipped. Returns
+ * null if the count is beyond the end of the text in the range.
+ *
+ * @param {{ doc: import('prosemirror-model').Node, from: number, to: number, textOffset: number }} options
+ * @returns {number | null}
+ */
+const findDocPosByTextOffset = ({ doc, from, to, textOffset }) => {
+  let remaining = textOffset;
+  let foundPos = null;
+
+  doc.nodesBetween(from, to, (node, pos) => {
+    if (foundPos !== null) {
+      return false;
+    }
+    if (!node.isText || !node.text) {
+      return;
+    }
+
+    const nodeStart = Math.max(from, pos);
+    const nodeEnd = Math.min(to, pos + node.text.length);
+    if (nodeStart >= nodeEnd) {
+      return;
+    }
+
+    const nodeLen = nodeEnd - nodeStart;
+    if (remaining < nodeLen) {
+      foundPos = nodeStart + remaining;
+      return false;
+    }
+
+    remaining -= nodeLen;
+  });
+
+  return foundPos;
+};
+
+/**
+ * When the user deletes one character (e.g. backspace), the editor sometimes
+ * reports a change that spans a whole range—for example when the cursor is at
+ * the end of a paragraph. If the only real change is one character removed, we
+ * rewrite that into a simple "delete one character at position X" so we can
+ * show the right red strikethrough and put the cursor in the right place.
+ * We first try to see that from the changed range alone; if that fails (e.g. the
+ * range includes bookmarks or paragraph boundaries), we compare the full document
+ * text before and after to find the single deleted character. Returns the
+ * original change unchanged if it isn't actually a one-character delete or if
+ * we can't safely rewrite it.
+ *
+ * @param {{ step: import('prosemirror-transform').ReplaceStep, doc: import('prosemirror-model').Node }} options
+ * @returns {import('prosemirror-transform').ReplaceStep}
+ */
+const normalizeReplaceStepSingleCharDelete = ({ step, doc }) => {
+  if (
+    !(step instanceof ReplaceStep) ||
+    step.from === step.to ||
+    step.to - step.from <= 1 ||
+    step.slice.content.size === 0
+  ) {
+    return step;
+  }
+
+  const findSingleDeletedCharPos = ({ oldText, newText, from, to }) => {
+    if (oldText.length - newText.length !== 1) {
+      return null;
+    }
+
+    let prefix = 0;
+    while (prefix < newText.length && oldText.charCodeAt(prefix) === newText.charCodeAt(prefix)) {
+      prefix += 1;
+    }
+
+    let suffix = 0;
+    while (
+      suffix < newText.length - prefix &&
+      oldText.charCodeAt(oldText.length - 1 - suffix) === newText.charCodeAt(newText.length - 1 - suffix)
+    ) {
+      suffix += 1;
+    }
+
+    if (prefix + suffix !== newText.length) {
+      return null;
+    }
+
+    return findDocPosByTextOffset({ doc, from, to, textOffset: prefix });
+  };
+
+  // First try: only look at the text in the range that changed.
+  const rangeOldText = doc.textBetween(step.from, step.to);
+  const rangeNewText = step.slice.content.textBetween(0, step.slice.content.size);
+  let deleteFrom = findSingleDeletedCharPos({
+    oldText: rangeOldText,
+    newText: rangeNewText,
+    from: step.from,
+    to: step.to,
+  });
+
+  // If that didn't work—the range can include things that aren't plain text
+  // (e.g. bookmarks or paragraph boundaries)—compare the whole document before
+  // and after the change to find the one character that was removed. This path
+  // is rare and O(doc size); acceptable for normal docs.
+  if (deleteFrom === null) {
+    const applied = step.apply(doc);
+    if (applied.failed || !applied.doc) {
+      return step;
+    }
+    const oldDocText = doc.textBetween(0, doc.content.size);
+    const newDocText = applied.doc.textBetween(0, applied.doc.content.size);
+    deleteFrom = findSingleDeletedCharPos({
+      oldText: oldDocText,
+      newText: newDocText,
+      from: 0,
+      to: doc.content.size,
+    });
+    if (deleteFrom === null || deleteFrom < step.from || deleteFrom >= step.to) {
+      return step;
+    }
+  }
+
+  try {
+    const deleteTo = deleteFrom + 1;
+    const candidate = new ReplaceStep(deleteFrom, deleteTo, Slice.empty, step.structure);
+    const result = candidate.apply(doc);
+    return result.failed ? step : candidate;
+  } catch {
+    return step;
+  }
+};
+
+/**
  * Replace step.
  * @param {import('prosemirror-state').EditorState} options.state Editor state.
  * @param {import('prosemirror-state').Transaction} options.tr Transaction.
@@ -21,6 +152,13 @@ import { findMarkPosition } from './documentHelpers.js';
  * @param {number} options.originalStepIndex Original step index.
  */
 export const replaceStep = ({ state, tr, step, newTr, map, user, date, originalStep, originalStepIndex }) => {
+  const originalRange = { from: step.from, to: step.to, sliceSize: step.slice.content.size };
+  step = normalizeReplaceStepSingleCharDelete({ step, doc: newTr.doc });
+  const stepWasNormalized =
+    step.from !== originalRange.from ||
+    step.to !== originalRange.to ||
+    step.slice.content.size !== originalRange.sliceSize;
+
   // Handle structural deletions with no inline content (e.g., empty paragraph removal,
   // paragraph joins). When there's no content being inserted and no inline content in
   // the deletion range, markDeletion has nothing to mark — apply the step directly.
@@ -118,6 +256,7 @@ export const replaceStep = ({ state, tr, step, newTr, map, user, date, originalS
   }
 
   // Condense insertion down to a single replace step (so this tracked transaction remains a single-step insertion).
+  const docBeforeCondensedStep = newTr.doc;
   const condensedStep = new ReplaceStep(positionTo, positionTo, trackedInsertedSlice, false);
   if (newTr.maybeStep(condensedStep).failed) {
     // If the condensed step can't be applied, fall back to the original step and skip deletion tracking.
@@ -128,7 +267,15 @@ export const replaceStep = ({ state, tr, step, newTr, map, user, date, originalS
   }
 
   // We didn't apply the original step in its original place. We adjust the map accordingly.
-  const invertStep = originalStep.invert(tr.docs[originalStepIndex]).map(map);
+  // When stepWasNormalized is true, `step` is already in the mapped position space
+  // (originalStep.map(map) was applied before entering replaceStep). Calling .map(map)
+  // again would double-map positions and corrupt subsequent step/selection mapping
+  // in multi-step transactions.
+  const invertSourceStep = stepWasNormalized ? step : originalStep;
+  const invertSourceDoc = stepWasNormalized ? docBeforeCondensedStep : tr.docs[originalStepIndex];
+  const invertStep = stepWasNormalized
+    ? invertSourceStep.invert(invertSourceDoc)
+    : invertSourceStep.invert(invertSourceDoc).map(map);
   map.appendMap(invertStep.getMap());
   const mirrorIndex = map.maps.length - 1;
   map.appendMap(condensedStep.getMap(), mirrorIndex);
@@ -172,6 +319,13 @@ export const replaceStep = ({ state, tr, step, newTr, map, user, date, originalS
     // the user's own prior insertions (which markDeletion deletes instead of marking).
     if (meta.insertedTo !== undefined) {
       meta.insertedTo = deletionMap.map(meta.insertedTo, 1);
+    }
+
+    // Normalized broad -> single-char deletions should keep the caret at the
+    // normalized deletion edge, not the original broad transaction selection.
+    // This avoids follow-up Backspace events targeting structural boundaries.
+    if (stepWasNormalized && !meta.insertedMark) {
+      meta.selectionPos = deletionMap.map(step.from, -1);
     }
 
     map.appendMapping(deletionMap);

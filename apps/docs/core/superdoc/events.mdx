@@ -337,6 +337,35 @@ superdoc.on('locked', ({ isLocked, lockedBy }) => {
 ```
 </CodeGroup>
 
+## Pagination events
+
+### `pagination-update`
+
+Fired after each layout pass with the current page count. Use this to know when page data is available — `activeEditor.currentTotalPages` is only populated after the first layout completes, which happens *after* the `ready` event.
+
+<CodeGroup>
+```javascript Usage
+superdoc.on('pagination-update', ({ totalPages, superdoc }) => {
+  console.log(`Document has ${totalPages} pages`);
+});
+```
+
+```javascript Full Example
+import { SuperDoc } from 'superdoc';
+import 'superdoc/style.css';
+
+const superdoc = new SuperDoc({
+  selector: '#editor',
+  document: yourFile,
+  pagination: true,
+});
+
+superdoc.on('pagination-update', ({ totalPages, superdoc }) => {
+  console.log(`Document has ${totalPages} pages`);
+});
+```
+</CodeGroup>
+
 ## UI events
 
 ### `zoomChange`
@@ -432,6 +461,7 @@ new SuperDoc({
   onEditorCreate: ({ editor }) => { },
   onEditorUpdate: ({ editor }) => { },
   onFontsResolved: ({ documentFonts, unsupportedFonts }) => { },
+  onPaginationUpdate: ({ totalPages, superdoc }) => { },
   onSidebarToggle: (isOpened) => { },
   onException: ({ error }) => { },
 });
@@ -443,5 +473,6 @@ new SuperDoc({
 2. `editorCreate` — Editor ready
 3. `ready` — All editors ready
 4. `collaboration-ready` — If collaboration enabled
-5. Runtime events (`editor-update`, `comments-update`, `sidebar-toggle`, etc.)
-6. `editorDestroy` — Cleanup
+5. `pagination-update` — After each layout pass (page count available)
+6. Runtime events (`editor-update`, `comments-update`, `sidebar-toggle`, etc.)
+7. `editorDestroy` — Cleanup

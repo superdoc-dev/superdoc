@@ -12,8 +12,6 @@ export type OperationIdempotency = (typeof OPERATION_IDEMPOTENCY_VALUES)[number]
 
 export const PRE_APPLY_THROW_CODES = [
   'TARGET_NOT_FOUND',
-  'COMMAND_UNAVAILABLE',
-  'TRACK_CHANGE_COMMAND_UNAVAILABLE',
   'CAPABILITY_UNAVAILABLE',
   'INVALID_TARGET',
   'AMBIGUOUS_TARGET',
@@ -24,8 +22,14 @@ export const PRE_APPLY_THROW_CODES = [
   'PRECONDITION_FAILED',
   'INVALID_INPUT',
   'CROSS_BLOCK_MATCH',
+  'SPAN_FRAGMENTED',
+  'TARGET_MOVED',
   'PLAN_CONFLICT_OVERLAP',
   'INVALID_STEP_COMBINATION',
+  'REVISION_CHANGED_SINCE_COMPILE',
+  'INVALID_INSERTION_CONTEXT',
+  'DOCUMENT_IDENTITY_CONFLICT',
+  'INTERNAL_ERROR',
 ] as const;
 
 export type PreApplyThrowCode = (typeof PRE_APPLY_THROW_CODES)[number];
@@ -44,4 +48,6 @@ export interface CommandStaticMetadata {
   throws: CommandThrowPolicy;
   deterministicTargetResolution: boolean;
   remediationHints?: readonly string[];
+  /** When true, this operation bypasses PM transaction history (out-of-band XML mutation). */
+  historyUnsafe?: boolean;
 }

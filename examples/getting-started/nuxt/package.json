@@ -1,0 +1,14 @@
+{
+  "name": "superdoc-nuxt-example",
+  "type": "module",
+  "private": true,
+  "scripts": {
+    "dev": "nuxt dev",
+    "postinstall": "nuxt prepare"
+  },
+  "dependencies": {
+    "nuxt": "^4.3.1",
+    "superdoc": "latest",
+    "vue": "^3.5.28"
+  }
+}

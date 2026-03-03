@@ -167,6 +167,7 @@ export const Paragraph = OxmlNode.create({
       filename: { rendered: false },
       paragraphProperties: { rendered: false },
       pageBreakSource: { rendered: false },
+      tocSourceId: { rendered: false },
       sectionMargins: { rendered: false },
       listRendering: {
         keepOnSplit: false,

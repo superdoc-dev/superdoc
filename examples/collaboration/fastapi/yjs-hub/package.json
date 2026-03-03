@@ -1,0 +1,15 @@
+{
+  "name": "fastapi-yjs-hub-demo",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "deps:up": "docker compose up -d",
+    "deps:down": "docker compose down -v",
+    "dev": "node server.mjs"
+  },
+  "dependencies": {
+    "@y/y": "^14.0.0-rc.1",
+    "@y/hub": "^0.2.8",
+    "postgres": "^3.4.7"
+  }
+}

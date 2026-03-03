@@ -56,9 +56,14 @@ export function checkRevision(editor: Editor, expectedRevision: string | undefin
   if (expectedRevision !== current) {
     throw new PlanError(
       'REVISION_MISMATCH',
-      `REVISION_MISMATCH — expected revision "${expectedRevision}" but document is at "${current}"`,
+      `REVISION_MISMATCH — expected revision "${expectedRevision}" but document is at "${current}". Re-run query.match to obtain a fresh ref.`,
       undefined,
-      { expectedRevision, currentRevision: current },
+      {
+        expectedRevision,
+        currentRevision: current,
+        refStability: 'ephemeral',
+        remediation: 'Re-run query.match() to obtain a fresh ref valid for the current revision.',
+      },
     );
   }
 }

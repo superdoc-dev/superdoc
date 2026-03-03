@@ -26,11 +26,11 @@ export type CommandCatalog = {
   readonly [K in OperationId]: CommandStaticMetadata;
 };
 
-const OPERATION_ID_FORMAT = /^(?:[a-z][a-zA-Z0-9]*|[a-z][a-zA-Z0-9]*\.[a-z][a-zA-Z0-9]*)$/;
+const OPERATION_ID_FORMAT = /^[a-z][a-zA-Z0-9]*(?:\.[a-z][a-zA-Z0-9]*){0,2}$/;
 
 /**
  * Checks whether a string matches the syntactic format of an operation ID
- * (`camelCase` or `namespace.camelCase`).
+ * (`camelCase`, `namespace.camelCase`, or `group.subgroup.camelCase`).
  *
  * @param operationId - The string to validate.
  * @returns `true` if the string matches the expected format.

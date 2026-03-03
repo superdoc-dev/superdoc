@@ -55,11 +55,7 @@ describe('insertContent', () => {
       editor: mockEditor,
     });
 
-    expect(mockCommands.insertContentAt).toHaveBeenCalledWith(
-      { from: 0, to: 10 },
-      { type: 'doc', content: [] },
-      { contentType: 'html' },
-    );
+    expect(mockCommands.insertContentAt).toHaveBeenCalledWith({ from: 0, to: 10 }, [], { contentType: 'html' });
 
     // Should trigger list migration for HTML (microtask)
     expect(mockEditor.migrateListsToV2).toHaveBeenCalledTimes(1);
@@ -265,6 +261,24 @@ describe('insertContent (integration) list export', () => {
     expect(first.ilvl).toBe('0');
   });
 
+  it('inserts markdown heading + bold text without creating a table', async () => {
+    const editor = await setupEditor();
+
+    editor.commands.insertContent('# Hello\n\nSome **bold** text', { contentType: 'markdown' });
+    await Promise.resolve();
+
+    const doc = editor.getJSON();
+    const tableNode = (doc.content || []).find((node) => node?.type === 'table');
+
+    expect(tableNode).toBeUndefined();
+    expect(
+      doc.content?.some(
+        (node) => node?.type === 'paragraph' && node?.attrs?.paragraphProperties?.styleId === 'Heading1',
+      ),
+    ).toBe(true);
+    expect(doc.content?.some((node) => node?.type === 'paragraph')).toBe(true);
+  });
+
   it('exports unordered list from HTML with numId/ilvl', async () => {
     const editor = await setupEditor();
     editor.commands.insertContent('<ul><li>Apple</li><li>Banana</li></ul>', { contentType: 'html' });
@@ -295,7 +309,20 @@ describe('insertContent (integration) list export', () => {
     });
   });
 
-  it('normalizes imported HTML table header borders for render and export parity', async () => {
+  it('defaults imported markdown tables to 100% width', async () => {
+    const editor = await setupEditor();
+    editor.commands.insertContent('| Query | Assessment |\n| --- | --- |\n| A | B |', { contentType: 'markdown' });
+    await Promise.resolve();
+
+    const tableNode = (editor.getJSON().content || []).find((node) => node.type === 'table');
+    expect(tableNode).toBeTruthy();
+    expect(tableNode.attrs?.tableProperties?.tableWidth).toEqual({
+      value: 5000,
+      type: 'pct',
+    });
+  });
+
+  it('does not inject inline cell borders on imported HTML table headers', async () => {
     const editor = await setupEditor();
     editor.commands.insertContent(
       '<table><thead><tr><th>Search Query</th><th>Findings / Assessment</th></tr></thead><tbody><tr><td>A</td><td>B</td></tr></tbody></table>',
@@ -307,11 +334,8 @@ describe('insertContent (integration) list export', () => {
     expect(tableNode).toBeTruthy();
     const headerCell = tableNode?.content?.[0]?.content?.[0];
     expect(headerCell?.type).toBe('tableHeader');
-    const borders = headerCell?.attrs?.borders;
-    expect(borders?.top).toBeDefined();
-    expect(borders?.right).toBeDefined();
-    expect(borders?.bottom).toBeDefined();
-    expect(borders?.left).toBeDefined();
+    // Headers should NOT have inline borders — style cascade owns them
+    expect(headerCell?.attrs?.borders).toBeNull();
 
     const result = await exportFromEditorContent(editor);
     const body = result.elements?.find((el) => el.name === 'w:body');
@@ -320,11 +344,9 @@ describe('insertContent (integration) list export', () => {
     const firstCell = firstRow?.elements?.find((el) => el.name === 'w:tc');
     const firstCellProperties = firstCell?.elements?.find((el) => el.name === 'w:tcPr');
     const firstCellBorders = firstCellProperties?.elements?.find((el) => el.name === 'w:tcBorders');
-    const topBorder = firstCellBorders?.elements?.find((el) => el.name === 'w:top');
 
-    expect(firstCellBorders).toBeDefined();
-    expect(topBorder?.attributes?.['w:val']).toBe('single');
-    expect(Number(topBorder?.attributes?.['w:sz'])).toBeGreaterThan(0);
+    // No inline cell borders should be emitted — table-level fallback borders handle this
+    expect(firstCellBorders).toBeUndefined();
   });
 });
 

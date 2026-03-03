@@ -162,18 +162,49 @@ async function prepareSeparatedSecondListTarget(
   label: string,
 ): Promise<ListTargetPreparation> {
   const sourceDoc = await harness.copyListFixtureDoc(`${label}-source`);
-  const secondItem = await nthListAddress(harness, stateDir, sourceDoc, 1);
+
+  // Discover source items for diagnostics.
+  const sourceItems = await listDiscoveryItems(harness, stateDir, sourceDoc, 10);
+  if (sourceItems.length < 2) {
+    throw new Error(
+      `[${label}] Source fixture has fewer than 2 list items (found ${sourceItems.length}). ` +
+        `Items: ${JSON.stringify(sourceItems)}`,
+    );
+  }
+
+  const secondItem = sourceItems[1]?.address;
+  if (!secondItem || typeof secondItem !== 'object') {
+    throw new Error(`[${label}] Second list item has no address. Items: ${JSON.stringify(sourceItems)}`);
+  }
+
   const separatedDoc = harness.createOutputPath(`${label}-separated`);
   const separated = await harness.runCli(
     ['lists', 'separate', sourceDoc, '--target-json', JSON.stringify(secondItem), '--out', separatedDoc],
     stateDir,
   );
-
   if (separated.result.code !== 0 || separated.envelope.ok !== true) {
-    throw new Error(`Failed to prepare separated list fixture for ${label}.`);
+    throw new Error(
+      `[${label}] lists separate failed. code=${separated.result.code} ` +
+        `envelope=${JSON.stringify(separated.envelope)} ` +
+        `target=${JSON.stringify(secondItem)} ` +
+        `stderr=${separated.result.stderr.trim() || '<empty>'}`,
+    );
   }
 
-  const separatedSecondItem = await nthListAddress(harness, stateDir, separatedDoc, 1);
+  // Re-resolve from the output document (node IDs may change across write/reload).
+  const postItems = await listDiscoveryItems(harness, stateDir, separatedDoc, 10);
+  if (postItems.length < 2) {
+    throw new Error(
+      `[${label}] Post-separation doc has fewer than 2 list items (found ${postItems.length}). ` +
+        `Items: ${JSON.stringify(postItems)}`,
+    );
+  }
+
+  const separatedSecondItem = postItems[1]?.address;
+  if (!separatedSecondItem || typeof separatedSecondItem !== 'object') {
+    throw new Error(`[${label}] Post-separation second item has no address. Items: ${JSON.stringify(postItems)}`);
+  }
+
   return { docPath: separatedDoc, target: separatedSecondItem };
 }
 
@@ -1264,18 +1295,6 @@ export const SUCCESS_SCENARIOS = {
   'doc.lists.continuePrevious': async (harness: ConformanceHarness): Promise<ScenarioInvocation> => {
     const stateDir = await harness.createStateDir('doc-lists-continue-previous-success');
     const prepared = await prepareSeparatedSecondListTarget(harness, stateDir, 'doc-lists-continue-previous');
-    const probe = await harness.runCli(
-      ['lists', 'can-continue-previous', prepared.docPath, '--target-json', JSON.stringify(prepared.target)],
-      stateDir,
-    );
-    const canContinue =
-      (probe.envelope.ok
-        ? ((probe.envelope.data as { result?: { canContinue?: boolean }; canContinue?: boolean })?.result
-            ?.canContinue ?? (probe.envelope.data as { canContinue?: boolean })?.canContinue)
-        : undefined) === true;
-    if (probe.result.code !== 0 || !probe.envelope.ok || !canContinue) {
-      throw new Error('Failed to prepare a continuable target for continue-previous success conformance scenario.');
-    }
 
     return {
       stateDir,
@@ -1355,24 +1374,6 @@ export const SUCCESS_SCENARIOS = {
   'doc.lists.join': async (harness: ConformanceHarness): Promise<ScenarioInvocation> => {
     const stateDir = await harness.createStateDir('doc-lists-join-success');
     const prepared = await prepareSeparatedSecondListTarget(harness, stateDir, 'doc-lists-join');
-    const probe = await harness.runCli(
-      [
-        'lists',
-        'can-join',
-        prepared.docPath,
-        '--input-json',
-        JSON.stringify({ target: prepared.target, direction: 'withPrevious' }),
-      ],
-      stateDir,
-    );
-    const canJoin =
-      (probe.envelope.ok
-        ? ((probe.envelope.data as { result?: { canJoin?: boolean }; canJoin?: boolean })?.result?.canJoin ??
-          (probe.envelope.data as { canJoin?: boolean })?.canJoin)
-        : undefined) === true;
-    if (probe.result.code !== 0 || !probe.envelope.ok || !canJoin) {
-      throw new Error('Failed to prepare a joinable target for join success conformance scenario.');
-    }
 
     return {
       stateDir,

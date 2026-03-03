@@ -67,6 +67,42 @@ const findInlineNode = (doc, typeName) => {
 };
 
 /**
+ * Finds all run nodes in document order.
+ * @param {import('prosemirror-model').Node} doc
+ * @returns {Array<{ pos: number; node: import('prosemirror-model').Node }>}
+ */
+const findRunNodes = (doc) => {
+  const runs = [];
+  doc.descendants((node, pos) => {
+    if (node.type.name === 'run') {
+      runs.push({ node, pos });
+    }
+    return undefined;
+  });
+  return runs;
+};
+
+/**
+ * Finds the first text node position.
+ * @param {import('prosemirror-model').Node} doc
+ * @returns {number}
+ */
+const findFirstTextPos = (doc) => {
+  let found = null;
+  doc.descendants((node, pos) => {
+    if (node.isText && found === null) {
+      found = pos;
+      return false;
+    }
+    return undefined;
+  });
+  if (found === null) {
+    throw new Error('Expected to find a text node.');
+  }
+  return found;
+};
+
+/**
  * Verifies inline text insertion uses the paragraph end when startPos is null.
  * @returns {void}
  */
@@ -248,6 +284,142 @@ const testInlineNodeModify = () => {
 };
 
 /**
+ * Verifies run-attrs replay applies runProperties and metadata for run-attrs-only diffs.
+ * @returns {void}
+ */
+const testTextModifyRunAttrsOnly = () => {
+  const schema = createSchema();
+  const run = schema.nodes.run.create({ runProperties: { styleId: 'BodyText', bold: true }, rsidR: 'r-old' }, [
+    schema.text('A'),
+  ]);
+  const paragraph = createParagraph(schema, [run]);
+  const doc = schema.nodes.doc.create(null, [paragraph]);
+  const state = EditorState.create({ schema, doc });
+  const tr = state.tr;
+
+  const startPos = findFirstTextPos(doc);
+
+  const diff = {
+    action: 'modified',
+    kind: 'text',
+    startPos,
+    endPos: startPos,
+    oldText: 'A',
+    newText: 'A',
+    marksDiff: null,
+    runAttrsDiff: {
+      added: {},
+      deleted: {},
+      modified: {
+        rsidR: { from: 'r-old', to: 'r-new' },
+        'runProperties.styleId': { from: 'BodyText', to: 'Heading1' },
+        'runProperties.bold': { from: true, to: false },
+      },
+    },
+  };
+
+  const result = replayInlineDiff({ tr, diff, schema, paragraphEndPos: startPos + 1 });
+
+  expect(result.applied).toBe(1);
+  expect(result.warnings).toEqual([]);
+  const [updatedRun] = findRunNodes(tr.doc);
+  expect(updatedRun.node.attrs.rsidR).toBe('r-new');
+  expect(updatedRun.node.attrs.runProperties.styleId).toBe('Heading1');
+  expect(updatedRun.node.attrs.runProperties.bold).toBe(false);
+};
+
+/**
+ * Verifies run-attrs replay updates every run touched by the diff range.
+ * @returns {void}
+ */
+const testTextModifyRunAttrsAcrossRuns = () => {
+  const schema = createSchema();
+  const runA = schema.nodes.run.create({ runProperties: { styleId: 'BodyText' }, rsidR: 'r-1' }, [schema.text('A')]);
+  const runB = schema.nodes.run.create({ runProperties: { styleId: 'BodyText' }, rsidR: 'r-2' }, [schema.text('B')]);
+  const paragraph = createParagraph(schema, [runA, runB]);
+  const doc = schema.nodes.doc.create(null, [paragraph]);
+  const state = EditorState.create({ schema, doc });
+  const tr = state.tr;
+
+  const startPos = findFirstTextPos(doc);
+
+  const diff = {
+    action: 'modified',
+    kind: 'text',
+    startPos,
+    endPos: startPos,
+    // The replay helper computes `to` from oldText length, so we use a synthetic
+    // span that intersects both runs to validate range-based run-attrs updates.
+    oldText: 'AB__',
+    newText: 'AB__',
+    marksDiff: null,
+    runAttrsDiff: {
+      added: {},
+      deleted: {},
+      modified: {
+        rsidR: { from: 'r-1', to: 'r-shared' },
+      },
+    },
+  };
+
+  const result = replayInlineDiff({ tr, diff, schema, paragraphEndPos: startPos + 1 });
+
+  expect(result.applied).toBe(1);
+  expect(result.warnings).toEqual([]);
+  const updatedRuns = findRunNodes(tr.doc);
+  expect(updatedRuns).toHaveLength(2);
+  expect(updatedRuns[0].node.attrs.rsidR).toBe('r-shared');
+  expect(updatedRuns[1].node.attrs.rsidR).toBe('r-shared');
+};
+
+/**
+ * Verifies metadata run attributes still replay when marksDiff is present.
+ * runProperties paths are skipped in this case to avoid overlapping with mark replay.
+ *
+ * @returns {void}
+ */
+const testTextModifyMarksAndRunMetadata = () => {
+  const schema = createSchema();
+  const run = schema.nodes.run.create({ runProperties: { styleId: 'BodyText' }, rsidR: 'r-old' }, [schema.text('A')]);
+  const paragraph = createParagraph(schema, [run]);
+  const doc = schema.nodes.doc.create(null, [paragraph]);
+  const state = EditorState.create({ schema, doc });
+  const tr = state.tr;
+
+  const startPos = findFirstTextPos(doc);
+
+  const diff = {
+    action: 'modified',
+    kind: 'text',
+    startPos,
+    endPos: startPos,
+    oldText: 'A',
+    newText: 'A',
+    marksDiff: {
+      added: [{ name: 'bold', attrs: { value: true } }],
+      deleted: [],
+      modified: [],
+    },
+    runAttrsDiff: {
+      added: {},
+      deleted: {},
+      modified: {
+        rsidR: { from: 'r-old', to: 'r-new' },
+        'runProperties.styleId': { from: 'BodyText', to: 'Heading1' },
+      },
+    },
+  };
+
+  const result = replayInlineDiff({ tr, diff, schema, paragraphEndPos: startPos + 1 });
+
+  expect(result.applied).toBe(1);
+  expect(result.warnings).toEqual([]);
+  const [updatedRun] = findRunNodes(tr.doc);
+  expect(updatedRun.node.attrs.rsidR).toBe('r-new');
+  expect(updatedRun.node.attrs.runProperties.styleId).toBe('BodyText');
+};
+
+/**
  * Runs the inline replay helper suite.
  * @returns {void}
  */
@@ -255,6 +427,9 @@ const runInlineReplaySuite = () => {
   it('inserts text at paragraph end when startPos is null', testTextAddAtParagraphEnd);
   it('deletes a text range', testTextDeleteRange);
   it('applies formatting for a modified text range', testTextModifyRange);
+  it('applies run attributes for a modified text range', testTextModifyRunAttrsOnly);
+  it('applies run attributes across multiple runs in a modified range', testTextModifyRunAttrsAcrossRuns);
+  it('applies metadata run attributes when marks are modified', testTextModifyMarksAndRunMetadata);
   it('inserts an inline node', testInlineNodeAdd);
   it('deletes an inline node', testInlineNodeDelete);
   it('modifies an inline node', testInlineNodeModify);

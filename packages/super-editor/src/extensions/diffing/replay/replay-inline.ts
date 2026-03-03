@@ -144,6 +144,31 @@ export function replayInlineDiff({
         }
       });
 
+      if (diff.runAttrsDiff) {
+        // Metadata attributes are independent of mark replay and can always be applied.
+        const metadataDiff = filterAttributesDiffByPath(diff.runAttrsDiff, (path) => !path.startsWith('runProperties'));
+        if (metadataDiff) {
+          const metadataReplayResult = applyRunAttrsDiffInRange(tr, from, to!, metadataDiff);
+          if (metadataReplayResult.warning) {
+            skipWithWarning(metadataReplayResult.warning);
+          }
+        }
+
+        // runProperties can overlap with mark-derived formatting. Apply these paths
+        // only when marks are unchanged to avoid double-applying style deltas.
+        if (!diff.marksDiff) {
+          const runPropertiesDiff = filterAttributesDiffByPath(diff.runAttrsDiff, (path) =>
+            path.startsWith('runProperties'),
+          );
+          if (runPropertiesDiff) {
+            const runPropertiesReplayResult = applyRunAttrsDiffInRange(tr, from, to!, runPropertiesDiff);
+            if (runPropertiesReplayResult.warning) {
+              skipWithWarning(runPropertiesReplayResult.warning);
+            }
+          }
+        }
+      }
+
       result.applied += 1;
       return result;
     }
@@ -223,54 +248,103 @@ export function replayInlineDiff({
 }
 
 /**
- * Extracts mark JSON entries from the inline node at the given position.
+ * Applies a run-attributes diff to every run intersecting an inline text range.
  *
- * @param doc Document to inspect for marks.
- * @param pos Position used to resolve a candidate inline node.
- * @returns Mark JSON entries for the inline node at the position.
+ * @param tr Transaction to update.
+ * @param from Inclusive range start.
+ * @param to Exclusive range end.
+ * @param diff Run-attributes diff to apply.
+ * @returns Result describing whether any warnings occurred.
  */
-const getMarksAtPosition = (
-  doc: import('prosemirror-model').Node,
-  pos: number,
-): Array<{ type: string; attrs?: Record<string, unknown> }> => {
-  const resolved = doc.resolve(pos);
-  const candidate = resolved.nodeAfter || resolved.nodeBefore;
-  if (!candidate || !candidate.isInline) {
-    return [];
+const applyRunAttrsDiffInRange = (
+  tr: import('prosemirror-state').Transaction,
+  from: number,
+  to: number,
+  diff: import('../algorithm/attributes-diffing').AttributesDiff,
+): { warning?: string } => {
+  const runEntries: Array<{ pos: number; node: import('prosemirror-model').Node }> = [];
+  tr.doc.nodesBetween(from, to, (node, pos) => {
+    if (node.type.name === 'run') {
+      runEntries.push({ pos, node });
+      return false;
+    }
+    return undefined;
+  });
+
+  if (runEntries.length === 0) {
+    return { warning: `No run nodes found in ${from}-${to} for run-attr update.` };
   }
-  return candidate.marks.map((mark) => ({
-    type: mark.type.name,
-    attrs: mark.attrs ?? {},
-  }));
+
+  const failures: string[] = [];
+  runEntries.forEach(({ pos, node }) => {
+    const updatedAttrs = applyAttrsDiff({ attrs: node.attrs, diff });
+    if (isDeepEqual(updatedAttrs, node.attrs)) {
+      return;
+    }
+
+    try {
+      tr.setNodeMarkup(pos, undefined, updatedAttrs, node.marks);
+    } catch (error) {
+      failures.push(`Failed to update run attrs at ${pos}.`);
+    }
+  });
+
+  if (failures.length > 0) {
+    return { warning: failures.join(' ') };
+  }
+  return {};
 };
 
 /**
- * Applies a run-attributes diff to the nearest run node at a position.
+ * Produces a subset of an attributes diff filtered by dotted-path predicate.
  *
- * @param tr Transaction to update.
- * @param pos Document position to resolve.
- * @param diff Run-attributes diff to apply.
- * @returns Result describing whether the update was applied.
+ * @param diff Source attributes diff.
+ * @param predicate Path predicate deciding which entries are kept.
+ * @returns Filtered diff or null when no entries match.
  */
-const applyRunAttrsDiff = (
-  tr: import('prosemirror-state').Transaction,
-  pos: number,
+const filterAttributesDiffByPath = (
   diff: import('../algorithm/attributes-diffing').AttributesDiff,
-): { applied: number; warning?: string } => {
-  const resolved = tr.doc.resolve(pos);
-  for (let depth = resolved.depth; depth > 0; depth -= 1) {
-    const node = resolved.node(depth);
-    if (node.type.name !== 'run') {
-      continue;
+  predicate: (path: string) => boolean,
+): import('../algorithm/attributes-diffing').AttributesDiff | null => {
+  const filtered: import('../algorithm/attributes-diffing').AttributesDiff = {
+    added: {},
+    deleted: {},
+    modified: {},
+  };
+
+  Object.entries(diff.added || {}).forEach(([path, value]) => {
+    if (predicate(path)) {
+      filtered.added[path] = value;
     }
-    const nodePos = resolved.before(depth);
-    const updatedAttrs = applyAttrsDiff({ attrs: node.attrs, diff });
-    try {
-      tr.setNodeMarkup(nodePos, undefined, updatedAttrs, node.marks);
-      return { applied: 1 };
-    } catch (error) {
-      return { applied: 0, warning: `Failed to update run attrs at ${nodePos}.` };
+  });
+
+  Object.entries(diff.deleted || {}).forEach(([path, value]) => {
+    if (predicate(path)) {
+      filtered.deleted[path] = value;
     }
-  }
-  return { applied: 0, warning: `No run node found at ${pos} for run-attr update.` };
+  });
+
+  Object.entries(diff.modified || {}).forEach(([path, value]) => {
+    if (predicate(path)) {
+      filtered.modified[path] = value;
+    }
+  });
+
+  const hasChanges =
+    Object.keys(filtered.added).length > 0 ||
+    Object.keys(filtered.deleted).length > 0 ||
+    Object.keys(filtered.modified).length > 0;
+
+  return hasChanges ? filtered : null;
+};
+
+/**
+ * Performs deep equality using JSON serialization for attribute payloads.
+ *
+ * @param left First value to compare.
+ * @param right Second value to compare.
+ * @returns True when both values serialize identically.
+ */
+const isDeepEqual = (left: unknown, right: unknown): boolean => {
+  return JSON.stringify(left) === JSON.stringify(right);
 };

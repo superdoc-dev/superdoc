@@ -5,7 +5,8 @@ import { createSingleItemList } from '../html/html-helpers.js';
 import { getLvlTextForGoogleList, googleNumDefMap } from '../../helpers/pasteListHelpers.js';
 import { wrapTextsInRuns } from '../docx-paste/docx-paste.js';
 
-// Ordered largest → smallest; first match wins.
+// Match Google Docs default heading sizes (H1=20pt, H2=18pt, H3=14pt, H4=12pt, H5=11pt).
+// Descending order so oversized fonts (e.g. 24pt) still resolve to closest heading.
 const headingSizeMap = [
   { minPt: 20, tag: 'h1' },
   { minPt: 16, tag: 'h2' },

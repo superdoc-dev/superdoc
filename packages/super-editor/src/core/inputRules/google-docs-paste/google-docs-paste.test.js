@@ -187,6 +187,22 @@ describe('handleGoogleDocsHtml', () => {
       expect(dom.querySelector('h1')?.textContent?.trim()).toBe('Bold p, size on span');
     });
 
+    it('does not convert when one span is missing a font-size', () => {
+      const html = `
+        <p><span style="font-size:20pt;font-weight:700">A</span><span style="font-weight:700">B</span></p>
+      `;
+      const dom = parseHeadings(html);
+      expect(dom.querySelector('h1,h2,h3,h4,h5')).toBeNull();
+    });
+
+    it('does not convert when spans have inconsistent font sizes', () => {
+      const html = `
+        <p><span style="font-size:20pt;font-weight:700">A</span><span style="font-size:14pt;font-weight:700">B</span></p>
+      `;
+      const dom = parseHeadings(html);
+      expect(dom.querySelector('h1,h2,h3,h4,h5')).toBeNull();
+    });
+
     it('converts when font-size is on <p> but font-weight is only on the child <span>', () => {
       const html = `
         <p style="font-size:20pt"><span style="font-weight:700">Split style heading</span></p>

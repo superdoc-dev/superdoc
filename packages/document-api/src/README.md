@@ -210,7 +210,7 @@ Return document summary metadata (block count, word count, character count).
 
 ### `insert`
 
-Insert text at a target location. When `target` is provided, inserts at that `TextAddress`. When omitted, the adapter resolves to the default insertion point (first paragraph start).
+Insert content at a target location. When `target` is provided, inserts at that `TextAddress`. When omitted, inserts at the end of the document.
 
 Supports dry-run and tracked mode.
 

@@ -269,7 +269,7 @@ export const OPERATION_DEFINITIONS = {
   insert: {
     memberPath: 'insert',
     description:
-      'Insert content at a target position. Supports text (default), markdown, and html content types via the `type` field.',
+      'Insert content at a target position, or at the end of the document when target is omitted. Supports text (default), markdown, and html content types via the `type` field.',
     expectedResult:
       'Returns a TextMutationReceipt with applied status; receipt reports NO_OP if the insertion point is invalid or content is empty.',
     requiresDocumentContext: true,

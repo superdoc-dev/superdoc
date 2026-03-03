@@ -666,8 +666,8 @@ export interface DocumentApi {
    */
   comments: CommentsApi;
   /**
-   * Insert text at a target location.
-   * If target is omitted, adapters resolve a deterministic default insertion point.
+   * Insert content at a target location.
+   * If target is omitted, inserts at the end of the document.
    */
   insert(input: InsertInput, options?: MutationOptions): TextMutationReceipt;
   /**

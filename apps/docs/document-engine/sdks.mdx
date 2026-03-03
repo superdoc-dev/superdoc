@@ -284,7 +284,7 @@ The SDKs expose all operations from the [Document API](/document-api/overview) p
 
 | Operation | CLI command | Description |
 | --- | --- | --- |
-| `doc.insert` | `insert` | Insert content at a target position. Supports text (default), markdown, and html content types via the `type` field. |
+| `doc.insert` | `insert` | Insert content at a target position, or at the end of the document when target is omitted. Supports text (default), markdown, and html content types via the `type` field. |
 | `doc.replace` | `replace` | Replace content at a target position with new text or inline content. |
 | `doc.delete` | `delete` | Delete content at a target position. |
 | `doc.mutations.apply` | `mutations apply` | Execute a mutation plan atomically against the document. |

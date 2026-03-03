@@ -1,5 +1,5 @@
 import type { Node as ProseMirrorNode } from 'prosemirror-model';
-import { resolveTextRangeInBlock } from './text-offset-resolver.js';
+import { computeTextContentLength, resolveTextRangeInBlock } from './text-offset-resolver.js';
 
 type NodeOptions = {
   text?: string;
@@ -99,5 +99,60 @@ describe('resolveTextRangeInBlock', () => {
     const result = resolveTextRangeInBlock(cell, 0, { start: 2, end: 3 });
 
     expect(result).toEqual({ from: 5, to: 6 });
+  });
+});
+
+describe('computeTextContentLength', () => {
+  it('returns 0 for an empty block', () => {
+    const paragraph = createNode('paragraph', [], { isBlock: true, inlineContent: true });
+
+    expect(computeTextContentLength(paragraph)).toBe(0);
+  });
+
+  it('returns the text length for a block with a single text node', () => {
+    const textNode = createNode('text', [], { text: 'Hello' });
+    const paragraph = createNode('paragraph', [textNode], { isBlock: true, inlineContent: true });
+
+    expect(computeTextContentLength(paragraph)).toBe(5);
+  });
+
+  it('sums text lengths across multiple inline children', () => {
+    const textA = createNode('text', [], { text: 'AB' });
+    const textB = createNode('text', [], { text: 'CD' });
+    const paragraph = createNode('paragraph', [textA, textB], { isBlock: true, inlineContent: true });
+
+    expect(computeTextContentLength(paragraph)).toBe(4);
+  });
+
+  it('counts inline leaf atoms as 1', () => {
+    const textNode = createNode('text', [], { text: 'A' });
+    const imageNode = createNode('image', [], { isInline: true, isLeaf: true, nodeSize: 3 });
+    const paragraph = createNode('paragraph', [textNode, imageNode], { isBlock: true, inlineContent: true });
+
+    // "A" (1) + image atom (1) = 2
+    expect(computeTextContentLength(paragraph)).toBe(2);
+  });
+
+  it('counts block separators between nested block children', () => {
+    const paraA = createNode('paragraph', [createNode('text', [], { text: 'A' })], {
+      isBlock: true,
+      inlineContent: true,
+    });
+    const paraB = createNode('paragraph', [createNode('text', [], { text: 'B' })], {
+      isBlock: true,
+      inlineContent: true,
+    });
+    const cell = createNode('tableCell', [paraA, paraB], { isBlock: true, inlineContent: false });
+
+    // "A" (1) + block separator (1) + "B" (1) = 3
+    expect(computeTextContentLength(cell)).toBe(3);
+  });
+
+  it('treats inline wrappers as transparent', () => {
+    const textNode = createNode('text', [], { text: 'Hi' });
+    const runNode = createNode('run', [textNode], { isInline: true, isLeaf: false });
+    const paragraph = createNode('paragraph', [runNode], { isBlock: true, inlineContent: true });
+
+    expect(computeTextContentLength(paragraph)).toBe(2);
   });
 });

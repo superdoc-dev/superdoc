@@ -37,7 +37,7 @@ describe('document-api story: inline formatting', () => {
     await client.doc.open({ sessionId });
 
     // Insert text into the blank doc's single paragraph.
-    // Without an explicit target, insert uses the first paragraph.
+    // Without an explicit target, insert appends at the document end.
     const insertResult = unwrap<any>(await client.doc.insert({ sessionId, value: text }));
     expect(insertResult.receipt?.success).toBe(true);
 

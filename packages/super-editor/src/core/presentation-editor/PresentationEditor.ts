@@ -286,6 +286,7 @@ export class PresentationEditor extends EventEmitter {
   #errorBannerMessage: HTMLElement | null = null;
   #renderScheduled = false;
   #pendingDocChange = false;
+  #focusScrollRafId: number | null = null;
   #pendingMapping: Mapping | null = null;
   #isRerendering = false;
   #selectionSync = new SelectionSyncCoordinator();
@@ -779,7 +780,13 @@ export class PresentationEditor extends EventEmitter {
       // Safety net: the browser may asynchronously scroll after ProseMirror's
       // selectionToDOM() modifies the DOM selection inside the hidden editor.
       // A single requestAnimationFrame catches this post-layout scroll.
-      win.requestAnimationFrame(() => {
+      // The RAF ID is stored so scrollToPosition() can cancel it — otherwise
+      // intentional scrolls (e.g. search navigation) would be undone.
+      if (this.#focusScrollRafId != null) {
+        win.cancelAnimationFrame(this.#focusScrollRafId);
+      }
+      this.#focusScrollRafId = win.requestAnimationFrame(() => {
+        this.#focusScrollRafId = null;
         if (win.scrollX !== beforeX || win.scrollY !== beforeY) {
           win.scrollTo(beforeX, beforeY);
         }
@@ -2157,6 +2164,14 @@ export class PresentationEditor extends EventEmitter {
     pos: number,
     options: { block?: 'start' | 'center' | 'end' | 'nearest'; behavior?: ScrollBehavior } = {},
   ): boolean {
+    // Cancel any pending focus-scroll RAF so this intentional scroll is not undone
+    // by the wrapHiddenEditorFocus safety net (e.g. search navigation after focus).
+    if (this.#focusScrollRafId != null) {
+      const win = this.#visibleHost.ownerDocument?.defaultView;
+      if (win) win.cancelAnimationFrame(this.#focusScrollRafId);
+      this.#focusScrollRafId = null;
+    }
+
     const activeEditor = this.getActiveEditor();
     const doc = activeEditor?.state?.doc;
     if (!doc) return false;

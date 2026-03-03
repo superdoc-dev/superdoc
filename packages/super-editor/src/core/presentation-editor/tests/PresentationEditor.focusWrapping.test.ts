@@ -371,6 +371,23 @@ describe('PresentationEditor - Focus Wrapping (#wrapHiddenEditorFocus)', () => {
       expect(rafSpy).toHaveBeenCalledTimes(1);
       expect(rafSpy).toHaveBeenCalledWith(expect.any(Function));
     });
+
+    it('cancels focus-scroll RAF when scrollToPosition is called', () => {
+      editor = new PresentationEditor({
+        element: container,
+        documentId: 'test-doc',
+        pageSize: { w: 612, h: 792 },
+      });
+
+      const cancelSpy = vi.spyOn(window, 'cancelAnimationFrame');
+
+      editor.editor.view.focus();
+
+      // scrollToPosition will fail (no layout) but should still cancel the RAF
+      editor.scrollToPosition(0);
+
+      expect(cancelSpy).toHaveBeenCalled();
+    });
   });
 
   describe('mock detection', () => {

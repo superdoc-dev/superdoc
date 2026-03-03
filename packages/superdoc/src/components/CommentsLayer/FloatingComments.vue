@@ -67,7 +67,8 @@ const props = defineProps({
 const superdocStore = useSuperdocStore();
 const commentsStore = useCommentsStore();
 
-const { getFloatingComments, activeComment, editorCommentPositions, pendingComment } = storeToRefs(commentsStore);
+const { getFloatingComments, activeComment, editorCommentPositions, pendingComment, editingCommentId } =
+  storeToRefs(commentsStore);
 const { activeZoom } = storeToRefs(superdocStore);
 
 const floatingCommentsContainer = ref(null);
@@ -305,6 +306,31 @@ watch(activeCommentKey, (newKey, oldKey) => {
 
   // 50ms: after Vue nextTick + browser rAF settle the initial DOM change
   // 350ms: after .comment-placeholder transition (300ms ease) completes
+  nextTick(() => {
+    remeasureTimers.push(setTimeout(remeasure, 50));
+    remeasureTimers.push(setTimeout(remeasure, 350));
+  });
+});
+
+// Re-measure when editing state changes. Entering/exiting edit mode changes
+// the dialog height (CommentInput + action buttons vs static text).
+// We remeasure all visible dialogs because the editing comment's parent dialog
+// might not be the activeComment (e.g., dropdown interaction deactivated it).
+watch(editingCommentId, () => {
+  // Cancel stale timers from previous edit state change
+  remeasureTimers.forEach(clearTimeout);
+  remeasureTimers = [];
+
+  const remeasure = () => {
+    for (const pos of allPositions.value) {
+      const el = placeholderRefs.value[pos.id];
+      if (!el) continue;
+      const dialog = el.querySelector('.comments-dialog');
+      if (!dialog) continue;
+      storeHeight(pos.id, dialog.getBoundingClientRect().height);
+    }
+  };
+
   nextTick(() => {
     remeasureTimers.push(setTimeout(remeasure, 50));
     remeasureTimers.push(setTimeout(remeasure, 350));

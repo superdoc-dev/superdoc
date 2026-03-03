@@ -404,12 +404,23 @@ export const CommentsPlugin = Extension.create({
           return true;
         },
       setCursorById:
-        (id) =>
+        (id, options) =>
         ({ state, editor }) => {
           const { from } = findRangeById(state.doc, id) || {};
           if (from != null) {
-            state.tr.setSelection(TextSelection.create(state.doc, from));
-            if (editor.view && typeof editor.view.focus === 'function') {
+            const tr = state.tr;
+            tr.setSelection(TextSelection.create(state.doc, from));
+            if (options?.activeCommentId) {
+              tr.setMeta(CommentsPluginKey, {
+                type: 'setActiveComment',
+                activeThreadId: options.activeCommentId,
+                forceUpdate: true,
+              });
+            }
+            // Skip view.focus() when activating from the sidebar (activeCommentId set).
+            // Focusing the hidden PM view can trigger a DOM selection sync transaction
+            // that overwrites the activeThreadId via position-based detection.
+            if (!options?.activeCommentId && editor.view && typeof editor.view.focus === 'function') {
               editor.view.focus();
             }
             return true;
@@ -492,9 +503,13 @@ export const CommentsPlugin = Extension.create({
             );
           }
 
-          // Check for changes in the actively selected comment
+          // Check for changes in the actively selected comment.
+          // Skip position-based detection if the previous transaction explicitly set the
+          // active comment (changedActiveThread flag). This prevents focus-induced DOM
+          // selection sync transactions from overriding a sidebar-initiated activation.
           const trChangedActiveComment = meta?.type === 'setActiveComment';
-          if ((!tr.docChanged && tr.selectionSet) || trChangedActiveComment) {
+          const suppressPositionDetection = pluginState.changedActiveThread && !trChangedActiveComment;
+          if ((!tr.docChanged && tr.selectionSet && !suppressPositionDetection) || trChangedActiveComment) {
             const { selection } = tr;
             let currentActiveThread = getActiveCommentId(newEditorState.doc, selection);
             if (trChangedActiveComment) currentActiveThread = meta.activeThreadId;
@@ -513,7 +528,7 @@ export const CommentsPlugin = Extension.create({
             }
           }
 
-          return pluginState;
+          return { ...pluginState, changedActiveThread: false };
         },
       },
 

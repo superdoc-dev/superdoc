@@ -14,7 +14,10 @@ import {
   resolveBootstrapDecision,
   claimBootstrap,
   writeBootstrapMarker,
+  detectBootstrapRace,
   type RoomState,
+  type ObservedCompetitor,
+  type RaceDetectionResult,
 } from './bootstrap';
 import { CliError } from './errors';
 import { pathExists } from './guards';
@@ -241,10 +244,20 @@ export async function openDocument(
   };
 }
 
+/**
+ * Describes the outcome of the bootstrap flow for a collaborative document.
+ *
+ * `raceSuspected` is a best-effort signal — when true, a competing finalized
+ * marker was observed shortly after seeding, strongly suggesting (but not
+ * proving) that two clients both seeded. `false` does not guarantee
+ * exactly-once seeding.
+ */
 export type BootstrapResult = {
   roomState: RoomState;
   bootstrapApplied: boolean;
   bootstrapSource?: 'doc' | 'blank';
+  raceSuspected?: boolean;
+  raceCompetitor?: ObservedCompetitor;
 };
 
 export async function openCollaborativeDocument(
@@ -263,8 +276,8 @@ export async function openCollaborativeDocument(
     let decision = resolveBootstrapDecision(finalRoomState, onMissing, doc != null);
 
     if (decision.action === 'seed') {
-      const claimed = await claimBootstrap(runtime.ydoc, profile.bootstrapSettlingMs ?? DEFAULT_BOOTSTRAP_SETTLING_MS);
-      if (!claimed) {
+      const claim = await claimBootstrap(runtime.ydoc, profile.bootstrapSettlingMs ?? DEFAULT_BOOTSTRAP_SETTLING_MS);
+      if (!claim.granted) {
         // Another client won the claim race — unconditionally yield.
         // Even if the winner's marker is still pending (detectRoomState
         // returns 'empty'), the winner will finalize shortly.  Re-seeding
@@ -290,12 +303,18 @@ export async function openCollaborativeDocument(
       user: options.user,
     });
 
-    if (shouldSeed) writeBootstrapMarker(runtime.ydoc, decision.source);
+    let raceDetection: RaceDetectionResult | undefined;
+    if (shouldSeed) {
+      writeBootstrapMarker(runtime.ydoc, decision.source);
+      raceDetection = await detectBootstrapRace(runtime.ydoc);
+    }
 
     const bootstrap: BootstrapResult = {
       roomState: finalRoomState,
       bootstrapApplied: shouldSeed,
       bootstrapSource: shouldSeed ? decision.source : undefined,
+      raceSuspected: raceDetection?.raceSuspected,
+      raceCompetitor: raceDetection?.raceSuspected ? raceDetection.competitor : undefined,
     };
     return {
       editor: opened.editor,

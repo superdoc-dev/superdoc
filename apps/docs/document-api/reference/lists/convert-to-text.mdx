@@ -30,6 +30,9 @@ Returns a ListsConvertToTextResult confirming the conversion.
 | --- | --- | --- | --- |
 | `includeMarker` | boolean | no |  |
 | `target` | ListItemAddress | yes | ListItemAddress |
+| `target.kind` | `"block"` | yes | Constant: `"block"` |
+| `target.nodeId` | string | yes |  |
+| `target.nodeType` | `"listItem"` | yes | Constant: `"listItem"` |
 
 ### Example request
 
@@ -46,7 +49,25 @@ Returns a ListsConvertToTextResult confirming the conversion.
 
 ## Output fields
 
-_No fields._
+### Variant 1 (paragraph.kind="block")
+
+| Field | Type | Required | Description |
+| --- | --- | --- | --- |
+| `paragraph` | ParagraphAddress | yes | ParagraphAddress |
+| `paragraph.kind` | `"block"` | yes | Constant: `"block"` |
+| `paragraph.nodeId` | string | yes |  |
+| `paragraph.nodeType` | `"paragraph"` | yes | Constant: `"paragraph"` |
+| `success` | `true` | yes | Constant: `true` |
+
+### Variant 2 (success=false)
+
+| Field | Type | Required | Description |
+| --- | --- | --- | --- |
+| `failure` | object | yes |  |
+| `failure.code` | enum | yes | `"INVALID_TARGET"` |
+| `failure.details` | any | no |  |
+| `failure.message` | string | yes |  |
+| `success` | `false` | yes | Constant: `false` |
 
 ### Example response
 

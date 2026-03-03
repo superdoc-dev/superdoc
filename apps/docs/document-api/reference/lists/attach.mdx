@@ -29,6 +29,9 @@ Returns a ListsMutateItemResult confirming attachment.
 | Field | Type | Required | Description |
 | --- | --- | --- | --- |
 | `attachTo` | ListItemAddress | yes | ListItemAddress |
+| `attachTo.kind` | `"block"` | yes | Constant: `"block"` |
+| `attachTo.nodeId` | string | yes |  |
+| `attachTo.nodeType` | `"listItem"` | yes | Constant: `"listItem"` |
 | `level` | integer | no |  |
 | `target` | BlockAddressOrRange | yes | BlockAddressOrRange |
 
@@ -52,7 +55,25 @@ Returns a ListsMutateItemResult confirming attachment.
 
 ## Output fields
 
-_No fields._
+### Variant 1 (item.kind="block")
+
+| Field | Type | Required | Description |
+| --- | --- | --- | --- |
+| `item` | ListItemAddress | yes | ListItemAddress |
+| `item.kind` | `"block"` | yes | Constant: `"block"` |
+| `item.nodeId` | string | yes |  |
+| `item.nodeType` | `"listItem"` | yes | Constant: `"listItem"` |
+| `success` | `true` | yes | Constant: `true` |
+
+### Variant 2 (success=false)
+
+| Field | Type | Required | Description |
+| --- | --- | --- | --- |
+| `failure` | object | yes |  |
+| `failure.code` | enum | yes | `"INVALID_TARGET"`, `"NO_OP"` |
+| `failure.details` | any | no |  |
+| `failure.message` | string | yes |  |
+| `success` | `false` | yes | Constant: `false` |
 
 ### Example response
 

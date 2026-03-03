@@ -30,6 +30,9 @@ Returns a ListsJoinResult with the resulting listId of the merged sequence.
 | --- | --- | --- | --- |
 | `direction` | enum | yes | `"withPrevious"`, `"withNext"` |
 | `target` | ListItemAddress | yes | ListItemAddress |
+| `target.kind` | `"block"` | yes | Constant: `"block"` |
+| `target.nodeId` | string | yes |  |
+| `target.nodeType` | `"listItem"` | yes | Constant: `"listItem"` |
 
 ### Example request
 
@@ -46,7 +49,22 @@ Returns a ListsJoinResult with the resulting listId of the merged sequence.
 
 ## Output fields
 
-_No fields._
+### Variant 1 (success=true)
+
+| Field | Type | Required | Description |
+| --- | --- | --- | --- |
+| `listId` | string | yes |  |
+| `success` | `true` | yes | Constant: `true` |
+
+### Variant 2 (success=false)
+
+| Field | Type | Required | Description |
+| --- | --- | --- | --- |
+| `failure` | object | yes |  |
+| `failure.code` | enum | yes | `"INVALID_TARGET"`, `"NO_ADJACENT_SEQUENCE"`, `"INCOMPATIBLE_DEFINITIONS"`, `"ALREADY_SAME_SEQUENCE"` |
+| `failure.details` | any | no |  |
+| `failure.message` | string | yes |  |
+| `success` | `false` | yes | Constant: `false` |
 
 ### Example response
 

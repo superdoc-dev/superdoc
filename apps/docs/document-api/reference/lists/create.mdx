@@ -29,6 +29,9 @@ Returns a ListsCreateResult with the new listId and the first item address.
 | Field | Type | Required | Description |
 | --- | --- | --- | --- |
 | `at` | BlockAddress | no | BlockAddress |
+| `at.kind` | `"block"` | no | Constant: `"block"` |
+| `at.nodeId` | string | no |  |
+| `at.nodeType` | `"paragraph"` | no | Constant: `"paragraph"` |
 | `kind` | enum | yes | `"ordered"`, `"bullet"` |
 | `level` | integer | no |  |
 | `mode` | enum | yes | `"empty"`, `"fromParagraphs"` |
@@ -55,7 +58,26 @@ Returns a ListsCreateResult with the new listId and the first item address.
 
 ## Output fields
 
-_No fields._
+### Variant 1 (item.kind="block")
+
+| Field | Type | Required | Description |
+| --- | --- | --- | --- |
+| `item` | ListItemAddress | yes | ListItemAddress |
+| `item.kind` | `"block"` | yes | Constant: `"block"` |
+| `item.nodeId` | string | yes |  |
+| `item.nodeType` | `"listItem"` | yes | Constant: `"listItem"` |
+| `listId` | string | yes |  |
+| `success` | `true` | yes | Constant: `true` |
+
+### Variant 2 (success=false)
+
+| Field | Type | Required | Description |
+| --- | --- | --- | --- |
+| `failure` | object | yes |  |
+| `failure.code` | enum | yes | `"INVALID_TARGET"`, `"LEVEL_OUT_OF_RANGE"` |
+| `failure.details` | any | no |  |
+| `failure.message` | string | yes |  |
+| `success` | `false` | yes | Constant: `false` |
 
 ### Example response
 

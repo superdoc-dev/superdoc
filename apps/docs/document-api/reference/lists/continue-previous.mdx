@@ -62,7 +62,7 @@ Returns a ListsMutateItemResult receipt.
 | Field | Type | Required | Description |
 | --- | --- | --- | --- |
 | `failure` | object | yes |  |
-| `failure.code` | enum | yes | `"NO_OP"`, `"INVALID_TARGET"` |
+| `failure.code` | enum | yes | `"INVALID_TARGET"`, `"NO_COMPATIBLE_PREVIOUS"`, `"ALREADY_CONTINUOUS"` |
 | `failure.details` | any | no |  |
 | `failure.message` | string | yes |  |
 | `success` | `false` | yes | Constant: `false` |

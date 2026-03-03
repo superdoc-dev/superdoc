@@ -151,129 +151,30 @@ async function nthListAddress(
   return address;
 }
 
-function readNestedBoolean(data: unknown, key: 'canContinue' | 'canJoin'): boolean | undefined {
-  if (!data || typeof data !== 'object') return undefined;
-
-  const direct = data as Record<string, unknown>;
-  if (typeof direct[key] === 'boolean') return direct[key] as boolean;
-
-  const result = direct.result;
-  if (result && typeof result === 'object') {
-    const nested = result as Record<string, unknown>;
-    if (typeof nested[key] === 'boolean') return nested[key] as boolean;
-  }
-
-  return undefined;
-}
-
-async function findFirstContinuableListAddress(
-  harness: ConformanceHarness,
-  stateDir: string,
-  docPath: string,
-): Promise<Record<string, unknown> | null> {
-  const items = await listDiscoveryItems(harness, stateDir, docPath, 50);
-  for (const item of items) {
-    const address = item.address;
-    if (!address || typeof address !== 'object') continue;
-
-    const probe = await harness.runCli(
-      ['lists', 'can-continue-previous', docPath, '--target-json', JSON.stringify(address)],
-      stateDir,
-    );
-    if (probe.result.code !== 0 || probe.envelope.ok !== true) continue;
-    if (readNestedBoolean(probe.envelope.data, 'canContinue') !== true) continue;
-
-    // Validate with the actual mutation command to avoid optimistic can* probes
-    // that may still fail in some fixture/environment combinations.
-    const verify = await harness.runCli(
-      [
-        'lists',
-        'continue-previous',
-        docPath,
-        '--target-json',
-        JSON.stringify(address),
-        '--out',
-        harness.createOutputPath('doc-lists-continue-previous-verify'),
-      ],
-      stateDir,
-    );
-    if (verify.result.code === 0 && verify.envelope.ok === true) return address;
-  }
-  return null;
-}
-
-async function findFirstJoinableWithPreviousAddress(
-  harness: ConformanceHarness,
-  stateDir: string,
-  docPath: string,
-): Promise<Record<string, unknown> | null> {
-  const items = await listDiscoveryItems(harness, stateDir, docPath, 50);
-  for (const item of items) {
-    const address = item.address;
-    if (!address || typeof address !== 'object') continue;
-
-    const probe = await harness.runCli(
-      ['lists', 'can-join', docPath, '--input-json', JSON.stringify({ target: address, direction: 'withPrevious' })],
-      stateDir,
-    );
-    if (probe.result.code !== 0 || probe.envelope.ok !== true) continue;
-    if (readNestedBoolean(probe.envelope.data, 'canJoin') !== true) continue;
-
-    // Validate with the actual mutation command to avoid optimistic can* probes
-    // that may still fail in some fixture/environment combinations.
-    const verify = await harness.runCli(
-      [
-        'lists',
-        'join',
-        docPath,
-        '--input-json',
-        JSON.stringify({ target: address, direction: 'withPrevious' }),
-        '--out',
-        harness.createOutputPath('doc-lists-join-verify'),
-      ],
-      stateDir,
-    );
-    if (verify.result.code === 0 && verify.envelope.ok === true) return address;
-  }
-  return null;
-}
-
 type ListTargetPreparation = {
   docPath: string;
   target: Record<string, unknown>;
 };
 
-async function prepareExecutableListTarget(
+async function prepareSeparatedSecondListTarget(
   harness: ConformanceHarness,
   stateDir: string,
   label: string,
-  resolver: (harness: ConformanceHarness, stateDir: string, docPath: string) => Promise<Record<string, unknown> | null>,
-): Promise<ListTargetPreparation | null> {
+): Promise<ListTargetPreparation> {
   const sourceDoc = await harness.copyListFixtureDoc(`${label}-source`);
-  const directTarget = await resolver(harness, stateDir, sourceDoc);
-  if (directTarget) {
-    return { docPath: sourceDoc, target: directTarget };
+  const secondItem = await nthListAddress(harness, stateDir, sourceDoc, 1);
+  const separatedDoc = harness.createOutputPath(`${label}-separated`);
+  const separated = await harness.runCli(
+    ['lists', 'separate', sourceDoc, '--target-json', JSON.stringify(secondItem), '--out', separatedDoc],
+    stateDir,
+  );
+
+  if (separated.result.code !== 0 || separated.envelope.ok !== true) {
+    throw new Error(`Failed to prepare separated list fixture for ${label}.`);
   }
 
-  const items = await listDiscoveryItems(harness, stateDir, sourceDoc, 50);
-  for (const item of items) {
-    const address = item.address;
-    if (!address || typeof address !== 'object') continue;
-
-    const separatedDoc = harness.createOutputPath(`${label}-separated`);
-    const separated = await harness.runCli(
-      ['lists', 'separate', sourceDoc, '--target-json', JSON.stringify(address), '--out', separatedDoc],
-      stateDir,
-    );
-
-    if (separated.result.code === 0 && separated.envelope.ok === true) {
-      const target = await resolver(harness, stateDir, separatedDoc);
-      if (target) {
-        return { docPath: separatedDoc, target };
-      }
-    }
-  }
-  return null;
+  const separatedSecondItem = await nthListAddress(harness, stateDir, separatedDoc, 1);
+  return { docPath: separatedDoc, target: separatedSecondItem };
 }
 
 function sectionMutationScenario(
@@ -1362,16 +1263,18 @@ export const SUCCESS_SCENARIOS = {
   },
   'doc.lists.continuePrevious': async (harness: ConformanceHarness): Promise<ScenarioInvocation> => {
     const stateDir = await harness.createStateDir('doc-lists-continue-previous-success');
-    const prepared = await prepareExecutableListTarget(
-      harness,
+    const prepared = await prepareSeparatedSecondListTarget(harness, stateDir, 'doc-lists-continue-previous');
+    const probe = await harness.runCli(
+      ['lists', 'can-continue-previous', prepared.docPath, '--target-json', JSON.stringify(prepared.target)],
       stateDir,
-      'doc-lists-continue-previous',
-      findFirstContinuableListAddress,
     );
-    if (!prepared) {
-      throw new Error(
-        'Unable to find a continuable list item for continue-previous success conformance scenario after preparation.',
-      );
+    const canContinue =
+      (probe.envelope.ok
+        ? ((probe.envelope.data as { result?: { canContinue?: boolean }; canContinue?: boolean })?.result
+            ?.canContinue ?? (probe.envelope.data as { canContinue?: boolean })?.canContinue)
+        : undefined) === true;
+    if (probe.result.code !== 0 || !probe.envelope.ok || !canContinue) {
+      throw new Error('Failed to prepare a continuable target for continue-previous success conformance scenario.');
     }
 
     return {
@@ -1451,14 +1354,24 @@ export const SUCCESS_SCENARIOS = {
   },
   'doc.lists.join': async (harness: ConformanceHarness): Promise<ScenarioInvocation> => {
     const stateDir = await harness.createStateDir('doc-lists-join-success');
-    const prepared = await prepareExecutableListTarget(
-      harness,
+    const prepared = await prepareSeparatedSecondListTarget(harness, stateDir, 'doc-lists-join');
+    const probe = await harness.runCli(
+      [
+        'lists',
+        'can-join',
+        prepared.docPath,
+        '--input-json',
+        JSON.stringify({ target: prepared.target, direction: 'withPrevious' }),
+      ],
       stateDir,
-      'doc-lists-join',
-      findFirstJoinableWithPreviousAddress,
     );
-    if (!prepared) {
-      throw new Error('Unable to find a joinable list item for join success conformance scenario after preparation.');
+    const canJoin =
+      (probe.envelope.ok
+        ? ((probe.envelope.data as { result?: { canJoin?: boolean }; canJoin?: boolean })?.result?.canJoin ??
+          (probe.envelope.data as { canJoin?: boolean })?.canJoin)
+        : undefined) === true;
+    if (probe.result.code !== 0 || !probe.envelope.ok || !canJoin) {
+      throw new Error('Failed to prepare a joinable target for join success conformance scenario.');
     }
 
     return {

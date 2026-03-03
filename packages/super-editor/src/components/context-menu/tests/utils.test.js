@@ -255,6 +255,31 @@ describe('utils.js', () => {
       expect(Array.isArray(context.trackedChanges)).toBe(true);
     });
 
+    it('prefers preserved selection for right-click context when the live selection collapsed inside it', async () => {
+      const mockEvent = { clientX: 300, clientY: 400 };
+
+      mockSelectionHasNodeOrMark.mockReturnValue(false);
+      mockEditor.options.preservedSelection = { from: 10, to: 15 };
+      mockEditor.view.state.selection.empty = true;
+      mockEditor.view.state.selection.from = 12;
+      mockEditor.view.state.selection.to = 12;
+      mockEditor.view.posAtCoords.mockReturnValue({ pos: 12 });
+      mockEditor.view.state.doc.nodeAt.mockReturnValue({ type: { name: 'text' } });
+      mockEditor.view.state.doc.textBetween.mockReturnValue('selected text');
+      mockEditor.view.state.doc.resolve.mockReturnValue({
+        marks: vi.fn(() => []),
+        nodeBefore: null,
+        nodeAfter: null,
+      });
+
+      const context = await getEditorContext(mockEditor, mockEvent);
+
+      expect(context.hasSelection).toBe(true);
+      expect(context.selectionStart).toBe(10);
+      expect(context.selectionEnd).toBe(15);
+      expect(context.selectedText).toBe('selected text');
+    });
+
     it('should detect tracked change marks directly at the resolved cursor position', async () => {
       const mockEvent = { clientX: 150, clientY: 250 };
       const trackFormatMark = { type: { name: 'trackFormat' }, attrs: { id: 'track-format-1' } };

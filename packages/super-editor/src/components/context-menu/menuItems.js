@@ -150,13 +150,11 @@ export function getItems(context, customItems = [], includeDefaultItems = true) 
           label: TEXTS.trackChangesAccept,
           isDefault: true,
           action: (editor, context) => {
-            if (context?.hasSelection) {
-              editor.commands.acceptTrackedChangeBySelection();
-            } else if (context?.trackedChangeId) {
-              editor.commands.acceptTrackedChangeById(context.trackedChangeId);
-            } else {
-              editor.commands.acceptTrackedChangeBySelection();
-            }
+            editor.commands.acceptTrackedChangeFromContextMenu({
+              from: context?.selectionStart,
+              to: context?.selectionEnd,
+              trackedChangeId: context?.trackedChangeId,
+            });
           },
           showWhen: (context) => {
             const { trigger, isTrackedChange } = context;
@@ -169,13 +167,11 @@ export function getItems(context, customItems = [], includeDefaultItems = true) 
           icon: ICONS.trackChangesReject,
           isDefault: true,
           action: (editor, context) => {
-            if (context?.hasSelection) {
-              editor.commands.rejectTrackedChangeOnSelection();
-            } else if (context?.trackedChangeId) {
-              editor.commands.rejectTrackedChangeById(context.trackedChangeId);
-            } else {
-              editor.commands.rejectTrackedChangeOnSelection();
-            }
+            editor.commands.rejectTrackedChangeFromContextMenu({
+              from: context?.selectionStart,
+              to: context?.selectionEnd,
+              trackedChangeId: context?.trackedChangeId,
+            });
           },
           showWhen: (context) => {
             const { trigger, isTrackedChange } = context;

@@ -143,25 +143,36 @@ export const TrackChanges = Extension.create({
 
       acceptTrackedChangeFromToolbar:
         () =>
-        ({ state, commands }) => {
-          const commentsPluginState = CommentsPluginKey.getState(state);
-          const activeThreadId = commentsPluginState?.activeThreadId;
-          const shouldUseSelection =
-            hasExpandedSelection(state.selection) &&
-            selectionTouchesTrackedChange({
+        ({ state, commands, editor }) => {
+          return resolveTrackedChangeAction({
+            action: 'accept',
+            state,
+            commands,
+            editor,
+            ...getTrackedChangeResolutionContext({
               state,
-              trackedChangeId: activeThreadId,
-            });
+              trackedChangeId: CommentsPluginKey.getState(state)?.activeThreadId,
+            }),
+          });
+        },
 
-          if (shouldUseSelection) {
-            return commands.acceptTrackedChangeBySelection();
-          }
-
-          if (activeThreadId && commentsPluginState?.trackedChanges?.[activeThreadId]) {
-            return commands.acceptTrackedChangeById(activeThreadId);
-          } else {
-            return commands.acceptTrackedChangeBySelection();
-          }
+      acceptTrackedChangeFromContextMenu:
+        ({ from, to, trackedChangeId = null } = {}) =>
+        ({ state, commands, editor }) => {
+          return resolveTrackedChangeAction({
+            action: 'accept',
+            state,
+            commands,
+            editor,
+            selection:
+              Number.isFinite(from) && Number.isFinite(to)
+                ? {
+                    from,
+                    to,
+                  }
+                : null,
+            ...getTrackedChangeResolutionContext({ state, trackedChangeId }),
+          });
         },
 
       acceptTrackedChangeById:
@@ -216,25 +227,36 @@ export const TrackChanges = Extension.create({
 
       rejectTrackedChangeFromToolbar:
         () =>
-        ({ state, commands }) => {
-          const commentsPluginState = CommentsPluginKey.getState(state);
-          const activeThreadId = commentsPluginState?.activeThreadId;
-          const shouldUseSelection =
-            hasExpandedSelection(state.selection) &&
-            selectionTouchesTrackedChange({
+        ({ state, commands, editor }) => {
+          return resolveTrackedChangeAction({
+            action: 'reject',
+            state,
+            commands,
+            editor,
+            ...getTrackedChangeResolutionContext({
               state,
-              trackedChangeId: activeThreadId,
-            });
+              trackedChangeId: CommentsPluginKey.getState(state)?.activeThreadId,
+            }),
+          });
+        },
 
-          if (shouldUseSelection) {
-            return commands.rejectTrackedChangeOnSelection();
-          }
-
-          if (activeThreadId && commentsPluginState?.trackedChanges?.[activeThreadId]) {
-            return commands.rejectTrackedChangeById(activeThreadId);
-          } else {
-            return commands.rejectTrackedChangeOnSelection();
-          }
+      rejectTrackedChangeFromContextMenu:
+        ({ from, to, trackedChangeId = null } = {}) =>
+        ({ state, commands, editor }) => {
+          return resolveTrackedChangeAction({
+            action: 'reject',
+            state,
+            commands,
+            editor,
+            selection:
+              Number.isFinite(from) && Number.isFinite(to)
+                ? {
+                    from,
+                    to,
+                  }
+                : null,
+            ...getTrackedChangeResolutionContext({ state, trackedChangeId }),
+          });
         },
 
       rejectAllTrackedChanges:
@@ -481,22 +503,88 @@ const hasExpandedSelection = (selection) => {
   return selection.from !== selection.to;
 };
 
-const selectionTouchesTrackedChange = ({ state, trackedChangeId }) => {
+const getTrackedChangeActionSelection = ({ state, editor }) => {
+  const currentSelection = state?.selection;
+  if (hasExpandedSelection(currentSelection)) {
+    return currentSelection;
+  }
+
+  const preservedSelection = editor?.options?.preservedSelection ?? editor?.options?.lastSelection;
+  if (hasExpandedSelection(preservedSelection)) {
+    return preservedSelection;
+  }
+
+  return currentSelection;
+};
+
+const getTrackedChangeResolutionContext = ({ state, trackedChangeId = null }) => {
+  const commentsPluginState = CommentsPluginKey.getState(state);
+  const resolvedTrackedChangeId = trackedChangeId ?? commentsPluginState?.activeThreadId ?? null;
+
+  return {
+    trackedChangeId: resolvedTrackedChangeId,
+    hasKnownTrackedChangeId: Boolean(
+      resolvedTrackedChangeId && commentsPluginState?.trackedChanges?.[resolvedTrackedChangeId],
+    ),
+  };
+};
+
+const selectionTouchesTrackedChange = ({ state, trackedChangeId, selection = state?.selection }) => {
+  if (!selection) {
+    return false;
+  }
+
   if (!trackedChangeId) {
     return (
       collectTrackedChanges({
         state,
-        from: state.selection.from,
-        to: state.selection.to,
+        from: selection.from,
+        to: selection.to,
       }).length > 0
     );
   }
 
   return collectTrackedChanges({
     state,
-    from: state.selection.from,
-    to: state.selection.to,
+    from: selection.from,
+    to: selection.to,
   }).some((change) => change.id === trackedChangeId);
+};
+
+const resolveTrackedChangeAction = ({
+  action,
+  state,
+  commands,
+  editor,
+  trackedChangeId = null,
+  hasKnownTrackedChangeId = false,
+  selection = null,
+}) => {
+  const targetSelection = selection ?? getTrackedChangeActionSelection({ state, editor });
+  const betweenCommand =
+    action === 'accept' ? commands.acceptTrackedChangesBetween : commands.rejectTrackedChangesBetween;
+  const byIdCommand = action === 'accept' ? commands.acceptTrackedChangeById : commands.rejectTrackedChangeById;
+  const selectionCommand =
+    action === 'accept' ? commands.acceptTrackedChangeBySelection : commands.rejectTrackedChangeOnSelection;
+  const shouldUseSelection =
+    hasExpandedSelection(targetSelection) &&
+    selectionTouchesTrackedChange({
+      state,
+      trackedChangeId,
+      selection: targetSelection,
+    });
+
+  if (shouldUseSelection) {
+    return betweenCommand(targetSelection.from, targetSelection.to);
+  }
+
+  if (trackedChangeId && hasKnownTrackedChangeId) {
+    return byIdCommand(trackedChangeId);
+  }
+
+  return hasExpandedSelection(targetSelection)
+    ? betweenCommand(targetSelection.from, targetSelection.to)
+    : selectionCommand();
 };
 
 const collectRemainingMarksByType = (trackedChanges = []) => ({

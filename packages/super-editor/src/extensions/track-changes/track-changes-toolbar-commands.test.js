@@ -11,7 +11,7 @@ vi.mock('./permission-helpers.js', () => ({
   collectTrackedChanges: vi.fn(),
 }));
 
-describe('Track Changes Toolbar Commands', () => {
+describe('Track Changes Shared Resolution Commands', () => {
   let commands;
   let mockState;
   let mockCommands;
@@ -29,8 +29,10 @@ describe('Track Changes Toolbar Commands', () => {
     commands = TrackChanges.config.addCommands();
 
     mockCommands = {
+      acceptTrackedChangesBetween: vi.fn().mockReturnValue(true),
       acceptTrackedChangeById: vi.fn().mockReturnValue(true),
       acceptTrackedChangeBySelection: vi.fn().mockReturnValue(true),
+      rejectTrackedChangesBetween: vi.fn().mockReturnValue(true),
       rejectTrackedChangeById: vi.fn().mockReturnValue(true),
       rejectTrackedChangeOnSelection: vi.fn().mockReturnValue(true),
     };
@@ -55,10 +57,11 @@ describe('Track Changes Toolbar Commands', () => {
       });
 
       const command = commands.acceptTrackedChangeFromToolbar;
-      const result = command()({ state: mockState, commands: mockCommands });
+      const result = command()({ state: mockState, commands: mockCommands, editor: { options: {} } });
 
       expect(result).toBe(true);
       expect(mockCommands.acceptTrackedChangeById).toHaveBeenCalledWith('tracked-change-123');
+      expect(mockCommands.acceptTrackedChangesBetween).not.toHaveBeenCalled();
       expect(mockCommands.acceptTrackedChangeBySelection).not.toHaveBeenCalled();
     });
 
@@ -76,11 +79,12 @@ describe('Track Changes Toolbar Commands', () => {
       });
 
       const command = commands.acceptTrackedChangeFromToolbar;
-      const result = command()({ state: mockState, commands: mockCommands });
+      const result = command()({ state: mockState, commands: mockCommands, editor: { options: {} } });
 
       expect(result).toBe(true);
-      expect(mockCommands.acceptTrackedChangeBySelection).toHaveBeenCalled();
+      expect(mockCommands.acceptTrackedChangesBetween).toHaveBeenCalledWith(10, 15);
       expect(mockCommands.acceptTrackedChangeById).not.toHaveBeenCalled();
+      expect(mockCommands.acceptTrackedChangeBySelection).not.toHaveBeenCalled();
     });
 
     it('uses acceptTrackedChangeById when a stale expanded selection does not touch the active tracked change', () => {
@@ -97,10 +101,11 @@ describe('Track Changes Toolbar Commands', () => {
       });
 
       const command = commands.acceptTrackedChangeFromToolbar;
-      const result = command()({ state: mockState, commands: mockCommands });
+      const result = command()({ state: mockState, commands: mockCommands, editor: { options: {} } });
 
       expect(result).toBe(true);
       expect(mockCommands.acceptTrackedChangeById).toHaveBeenCalledWith('tracked-change-456');
+      expect(mockCommands.acceptTrackedChangesBetween).not.toHaveBeenCalled();
       expect(mockCommands.acceptTrackedChangeBySelection).not.toHaveBeenCalled();
     });
 
@@ -111,10 +116,11 @@ describe('Track Changes Toolbar Commands', () => {
       });
 
       const command = commands.acceptTrackedChangeFromToolbar;
-      const result = command()({ state: mockState, commands: mockCommands });
+      const result = command()({ state: mockState, commands: mockCommands, editor: { options: {} } });
 
       expect(result).toBe(true);
       expect(mockCommands.acceptTrackedChangeBySelection).toHaveBeenCalled();
+      expect(mockCommands.acceptTrackedChangesBetween).not.toHaveBeenCalled();
       expect(mockCommands.acceptTrackedChangeById).not.toHaveBeenCalled();
     });
 
@@ -126,10 +132,11 @@ describe('Track Changes Toolbar Commands', () => {
       });
 
       const command = commands.acceptTrackedChangeFromToolbar;
-      const result = command()({ state: mockState, commands: mockCommands });
+      const result = command()({ state: mockState, commands: mockCommands, editor: { options: {} } });
 
       expect(result).toBe(true);
       expect(mockCommands.acceptTrackedChangeBySelection).toHaveBeenCalled();
+      expect(mockCommands.acceptTrackedChangesBetween).not.toHaveBeenCalled();
       expect(mockCommands.acceptTrackedChangeById).not.toHaveBeenCalled();
     });
 
@@ -137,11 +144,38 @@ describe('Track Changes Toolbar Commands', () => {
       mockCommentsPluginGetState.mockReturnValue(undefined);
 
       const command = commands.acceptTrackedChangeFromToolbar;
-      const result = command()({ state: mockState, commands: mockCommands });
+      const result = command()({ state: mockState, commands: mockCommands, editor: { options: {} } });
 
       expect(result).toBe(true);
       expect(mockCommands.acceptTrackedChangeBySelection).toHaveBeenCalled();
+      expect(mockCommands.acceptTrackedChangesBetween).not.toHaveBeenCalled();
       expect(mockCommands.acceptTrackedChangeById).not.toHaveBeenCalled();
+    });
+
+    it('uses preserved toolbar selection when the live selection has collapsed', () => {
+      mockCollectTrackedChanges.mockReturnValue([{ id: 'tracked-change-456' }]);
+
+      mockCommentsPluginGetState.mockReturnValue({
+        activeThreadId: 'tracked-change-456',
+        trackedChanges: {
+          'tracked-change-456': {
+            deletion: 'tracked-change-456',
+          },
+        },
+      });
+
+      const command = commands.acceptTrackedChangeFromToolbar;
+      const result = command()({
+        state: mockState,
+        commands: mockCommands,
+        editor: { options: { lastSelection: { from: 12, to: 16 } } },
+      });
+
+      expect(result).toBe(true);
+      expect(mockCollectTrackedChanges).toHaveBeenCalledWith({ state: mockState, from: 12, to: 16 });
+      expect(mockCommands.acceptTrackedChangesBetween).toHaveBeenCalledWith(12, 16);
+      expect(mockCommands.acceptTrackedChangeById).not.toHaveBeenCalled();
+      expect(mockCommands.acceptTrackedChangeBySelection).not.toHaveBeenCalled();
     });
   });
 
@@ -158,10 +192,11 @@ describe('Track Changes Toolbar Commands', () => {
       });
 
       const command = commands.rejectTrackedChangeFromToolbar;
-      const result = command()({ state: mockState, commands: mockCommands });
+      const result = command()({ state: mockState, commands: mockCommands, editor: { options: {} } });
 
       expect(result).toBe(true);
       expect(mockCommands.rejectTrackedChangeById).toHaveBeenCalledWith('tracked-change-789');
+      expect(mockCommands.rejectTrackedChangesBetween).not.toHaveBeenCalled();
       expect(mockCommands.rejectTrackedChangeOnSelection).not.toHaveBeenCalled();
     });
 
@@ -179,11 +214,12 @@ describe('Track Changes Toolbar Commands', () => {
       });
 
       const command = commands.rejectTrackedChangeFromToolbar;
-      const result = command()({ state: mockState, commands: mockCommands });
+      const result = command()({ state: mockState, commands: mockCommands, editor: { options: {} } });
 
       expect(result).toBe(true);
-      expect(mockCommands.rejectTrackedChangeOnSelection).toHaveBeenCalled();
+      expect(mockCommands.rejectTrackedChangesBetween).toHaveBeenCalledWith(20, 25);
       expect(mockCommands.rejectTrackedChangeById).not.toHaveBeenCalled();
+      expect(mockCommands.rejectTrackedChangeOnSelection).not.toHaveBeenCalled();
     });
 
     it('falls back to rejectTrackedChangeOnSelection when no active tracked change', () => {
@@ -193,10 +229,11 @@ describe('Track Changes Toolbar Commands', () => {
       });
 
       const command = commands.rejectTrackedChangeFromToolbar;
-      const result = command()({ state: mockState, commands: mockCommands });
+      const result = command()({ state: mockState, commands: mockCommands, editor: { options: {} } });
 
       expect(result).toBe(true);
       expect(mockCommands.rejectTrackedChangeOnSelection).toHaveBeenCalled();
+      expect(mockCommands.rejectTrackedChangesBetween).not.toHaveBeenCalled();
       expect(mockCommands.rejectTrackedChangeById).not.toHaveBeenCalled();
     });
 
@@ -207,10 +244,11 @@ describe('Track Changes Toolbar Commands', () => {
       });
 
       const command = commands.rejectTrackedChangeFromToolbar;
-      const result = command()({ state: mockState, commands: mockCommands });
+      const result = command()({ state: mockState, commands: mockCommands, editor: { options: {} } });
 
       expect(result).toBe(true);
       expect(mockCommands.rejectTrackedChangeOnSelection).toHaveBeenCalled();
+      expect(mockCommands.rejectTrackedChangesBetween).not.toHaveBeenCalled();
       expect(mockCommands.rejectTrackedChangeById).not.toHaveBeenCalled();
     });
 
@@ -228,10 +266,139 @@ describe('Track Changes Toolbar Commands', () => {
       });
 
       const command = commands.rejectTrackedChangeFromToolbar;
-      const result = command()({ state: mockState, commands: mockCommands });
+      const result = command()({ state: mockState, commands: mockCommands, editor: { options: {} } });
 
       expect(result).toBe(true);
       expect(mockCommands.rejectTrackedChangeById).toHaveBeenCalledWith('tracked-change-999');
+      expect(mockCommands.rejectTrackedChangesBetween).not.toHaveBeenCalled();
+      expect(mockCommands.rejectTrackedChangeOnSelection).not.toHaveBeenCalled();
+    });
+
+    it('uses preserved toolbar selection when the live selection has collapsed', () => {
+      mockCollectTrackedChanges.mockReturnValue([{ id: 'tracked-change-999' }]);
+
+      mockCommentsPluginGetState.mockReturnValue({
+        activeThreadId: 'tracked-change-999',
+        trackedChanges: {
+          'tracked-change-999': {
+            insertion: 'tracked-change-999',
+          },
+        },
+      });
+
+      const command = commands.rejectTrackedChangeFromToolbar;
+      const result = command()({
+        state: mockState,
+        commands: mockCommands,
+        editor: { options: { preservedSelection: { from: 21, to: 24 } } },
+      });
+
+      expect(result).toBe(true);
+      expect(mockCollectTrackedChanges).toHaveBeenCalledWith({ state: mockState, from: 21, to: 24 });
+      expect(mockCommands.rejectTrackedChangesBetween).toHaveBeenCalledWith(21, 24);
+      expect(mockCommands.rejectTrackedChangeById).not.toHaveBeenCalled();
+      expect(mockCommands.rejectTrackedChangeOnSelection).not.toHaveBeenCalled();
+    });
+  });
+
+  describe('acceptTrackedChangeFromContextMenu', () => {
+    it('uses the explicit context-menu selection even when the live selection has collapsed', () => {
+      mockCollectTrackedChanges.mockReturnValue([{ id: 'tracked-change-456' }]);
+
+      mockCommentsPluginGetState.mockReturnValue({
+        activeThreadId: 'different-active-thread',
+        trackedChanges: {
+          'tracked-change-456': {
+            insertion: 'tracked-change-456',
+          },
+        },
+      });
+
+      const command = commands.acceptTrackedChangeFromContextMenu;
+      const result = command({ from: 12, to: 16, trackedChangeId: 'tracked-change-456' })({
+        state: mockState,
+        commands: mockCommands,
+        editor: { options: {} },
+      });
+
+      expect(result).toBe(true);
+      expect(mockCollectTrackedChanges).toHaveBeenCalledWith({ state: mockState, from: 12, to: 16 });
+      expect(mockCommands.acceptTrackedChangesBetween).toHaveBeenCalledWith(12, 16);
+      expect(mockCommands.acceptTrackedChangeById).not.toHaveBeenCalled();
+      expect(mockCommands.acceptTrackedChangeBySelection).not.toHaveBeenCalled();
+    });
+
+    it('falls back to by-id resolution when no explicit range is provided', () => {
+      mockCommentsPluginGetState.mockReturnValue({
+        activeThreadId: null,
+        trackedChanges: {
+          'tracked-change-456': {
+            insertion: 'tracked-change-456',
+          },
+        },
+      });
+
+      const command = commands.acceptTrackedChangeFromContextMenu;
+      const result = command({ trackedChangeId: 'tracked-change-456' })({
+        state: mockState,
+        commands: mockCommands,
+        editor: { options: {} },
+      });
+
+      expect(result).toBe(true);
+      expect(mockCommands.acceptTrackedChangeById).toHaveBeenCalledWith('tracked-change-456');
+      expect(mockCommands.acceptTrackedChangesBetween).not.toHaveBeenCalled();
+      expect(mockCommands.acceptTrackedChangeBySelection).not.toHaveBeenCalled();
+    });
+  });
+
+  describe('rejectTrackedChangeFromContextMenu', () => {
+    it('uses the explicit context-menu selection even when the live selection has collapsed', () => {
+      mockCollectTrackedChanges.mockReturnValue([{ id: 'tracked-change-999' }]);
+
+      mockCommentsPluginGetState.mockReturnValue({
+        activeThreadId: 'different-active-thread',
+        trackedChanges: {
+          'tracked-change-999': {
+            insertion: 'tracked-change-999',
+          },
+        },
+      });
+
+      const command = commands.rejectTrackedChangeFromContextMenu;
+      const result = command({ from: 21, to: 24, trackedChangeId: 'tracked-change-999' })({
+        state: mockState,
+        commands: mockCommands,
+        editor: { options: {} },
+      });
+
+      expect(result).toBe(true);
+      expect(mockCollectTrackedChanges).toHaveBeenCalledWith({ state: mockState, from: 21, to: 24 });
+      expect(mockCommands.rejectTrackedChangesBetween).toHaveBeenCalledWith(21, 24);
+      expect(mockCommands.rejectTrackedChangeById).not.toHaveBeenCalled();
+      expect(mockCommands.rejectTrackedChangeOnSelection).not.toHaveBeenCalled();
+    });
+
+    it('falls back to by-id resolution when no explicit range is provided', () => {
+      mockCommentsPluginGetState.mockReturnValue({
+        activeThreadId: null,
+        trackedChanges: {
+          'tracked-change-999': {
+            insertion: 'tracked-change-999',
+          },
+        },
+      });
+
+      const command = commands.rejectTrackedChangeFromContextMenu;
+      const result = command({ trackedChangeId: 'tracked-change-999' })({
+        state: mockState,
+        commands: mockCommands,
+        editor: { options: {} },
+      });
+
+      expect(result).toBe(true);
+      expect(mockCommands.rejectTrackedChangeById).toHaveBeenCalledWith('tracked-change-999');
+      expect(mockCommands.rejectTrackedChangesBetween).not.toHaveBeenCalled();
       expect(mockCommands.rejectTrackedChangeOnSelection).not.toHaveBeenCalled();
     });
   });

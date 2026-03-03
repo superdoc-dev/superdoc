@@ -127,16 +127,12 @@ describe('menuItems.js', () => {
     });
 
     it('routes tracked-change context-menu actions through selection commands when text is selected', () => {
-      const acceptTrackedChangeBySelection = vi.fn();
-      const acceptTrackedChangeById = vi.fn();
-      const rejectTrackedChangeOnSelection = vi.fn();
-      const rejectTrackedChangeById = vi.fn();
+      const acceptTrackedChangeFromContextMenu = vi.fn();
+      const rejectTrackedChangeFromContextMenu = vi.fn();
 
       mockEditor.commands = {
-        acceptTrackedChangeBySelection,
-        acceptTrackedChangeById,
-        rejectTrackedChangeOnSelection,
-        rejectTrackedChangeById,
+        acceptTrackedChangeFromContextMenu,
+        rejectTrackedChangeFromContextMenu,
       };
 
       mockContext = createMockContext({
@@ -144,6 +140,8 @@ describe('menuItems.js', () => {
         trigger: TRIGGERS.click,
         hasSelection: true,
         isTrackedChange: true,
+        selectionStart: 10,
+        selectionEnd: 14,
         trackedChangeId: 'tracked-change-1',
       });
 
@@ -158,23 +156,25 @@ describe('menuItems.js', () => {
       acceptItem.action(mockEditor, mockContext);
       rejectItem.action(mockEditor, mockContext);
 
-      expect(acceptTrackedChangeBySelection).toHaveBeenCalledTimes(1);
-      expect(acceptTrackedChangeById).not.toHaveBeenCalled();
-      expect(rejectTrackedChangeOnSelection).toHaveBeenCalledTimes(1);
-      expect(rejectTrackedChangeById).not.toHaveBeenCalled();
+      expect(acceptTrackedChangeFromContextMenu).toHaveBeenCalledWith({
+        from: 10,
+        to: 14,
+        trackedChangeId: 'tracked-change-1',
+      });
+      expect(rejectTrackedChangeFromContextMenu).toHaveBeenCalledWith({
+        from: 10,
+        to: 14,
+        trackedChangeId: 'tracked-change-1',
+      });
     });
 
-    it('routes tracked-change context-menu actions through id commands for collapsed selections', () => {
-      const acceptTrackedChangeBySelection = vi.fn();
-      const acceptTrackedChangeById = vi.fn();
-      const rejectTrackedChangeOnSelection = vi.fn();
-      const rejectTrackedChangeById = vi.fn();
+    it('routes tracked-change context-menu actions through toolbar commands for collapsed selections', () => {
+      const acceptTrackedChangeFromContextMenu = vi.fn();
+      const rejectTrackedChangeFromContextMenu = vi.fn();
 
       mockEditor.commands = {
-        acceptTrackedChangeBySelection,
-        acceptTrackedChangeById,
-        rejectTrackedChangeOnSelection,
-        rejectTrackedChangeById,
+        acceptTrackedChangeFromContextMenu,
+        rejectTrackedChangeFromContextMenu,
       };
 
       mockContext = createMockContext({
@@ -196,10 +196,16 @@ describe('menuItems.js', () => {
       acceptItem.action(mockEditor, mockContext);
       rejectItem.action(mockEditor, mockContext);
 
-      expect(acceptTrackedChangeBySelection).not.toHaveBeenCalled();
-      expect(acceptTrackedChangeById).toHaveBeenCalledWith('tracked-change-2');
-      expect(rejectTrackedChangeOnSelection).not.toHaveBeenCalled();
-      expect(rejectTrackedChangeById).toHaveBeenCalledWith('tracked-change-2');
+      expect(acceptTrackedChangeFromContextMenu).toHaveBeenCalledWith({
+        from: 10,
+        to: 10,
+        trackedChangeId: 'tracked-change-2',
+      });
+      expect(rejectTrackedChangeFromContextMenu).toHaveBeenCalledWith({
+        from: 10,
+        to: 10,
+        trackedChangeId: 'tracked-change-2',
+      });
     });
 
     it('should filter AI items when AI module is not enabled', () => {

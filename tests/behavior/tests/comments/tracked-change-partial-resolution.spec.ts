@@ -1,73 +1,13 @@
 import { test, expect } from '../../fixtures/superdoc.js';
 import { getDocumentText } from '../../helpers/document-api.js';
+import { rightClickAtDocPos } from '../../helpers/editor-interactions.js';
+import { getMarkedText, getSelectedText, insertTrackedChange } from '../../helpers/tracked-changes.js';
 
 test.use({ config: { toolbar: 'full', comments: 'panel', trackChanges: true, showSelection: true } });
 
 const TRACK_TEXT = 'ABCDE';
 const PARTIAL_TEXT = 'BC';
 const ACCEPT_TRACKED_CHANGES_BUTTON = 'Accept tracked changes';
-
-async function insertTrackedChange(
-  page: import('@playwright/test').Page,
-  options: {
-    from: number;
-    to: number;
-    text: string;
-  },
-) {
-  await page.evaluate((payload) => {
-    (window as any).editor.commands.insertTrackedChange({
-      ...payload,
-      user: { name: 'Track Tester', email: 'track@example.com' },
-    });
-  }, options);
-}
-
-async function getMarkedText(page: import('@playwright/test').Page, markName: string): Promise<string> {
-  return page.evaluate((name) => {
-    let text = '';
-    const doc = (window as any).editor.state.doc;
-
-    doc.descendants((node: any) => {
-      if (!node.isText) return;
-      if (node.marks.some((mark: any) => mark.type.name === name)) {
-        text += node.text ?? '';
-      }
-    });
-
-    return text;
-  }, markName);
-}
-
-async function getSelectedText(page: import('@playwright/test').Page): Promise<string> {
-  return page.evaluate(() => {
-    const { from, to, empty } = (window as any).editor.state.selection;
-    if (empty) return '';
-    return (window as any).editor.state.doc.textBetween(from, to);
-  });
-}
-
-async function rightClickAtDocPos(page: import('@playwright/test').Page, pos: number) {
-  const coords = await page.evaluate((p) => {
-    const editor = (window as any).editor;
-    const rect = editor?.coordsAtPos?.(p);
-    if (!rect) return null;
-    return {
-      left: Number(rect.left),
-      right: Number(rect.right),
-      top: Number(rect.top),
-      bottom: Number(rect.bottom),
-    };
-  }, pos);
-
-  if (!coords) {
-    throw new Error(`Could not resolve coordinates for document position ${pos}`);
-  }
-
-  const x = Math.min(Math.max(coords.left + 1, coords.left), Math.max(coords.right - 1, coords.left + 1));
-  const y = (coords.top + coords.bottom) / 2;
-  await page.mouse.click(x, y, { button: 'right' });
-}
 
 test('toolbar accept partially resolves a tracked insertion and updates the bubble text', async ({ superdoc }) => {
   await insertTrackedChange(superdoc.page, { from: 1, to: 1, text: TRACK_TEXT });

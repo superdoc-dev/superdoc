@@ -63,7 +63,31 @@ pnpm test:visual      # downloads corpus automatically on first run
 
 After the first run, the corpus is cached locally — no auth needed for subsequent runs.
 
-**Reports** are written to `tests/layout-snapshots/reports/`. Each report includes a `summary.md` with changed documents and a `docs/` folder with per-document diffs.
+**Reports** are written to `tests/layout-snapshots/reports/`. Each report includes:
+
+- `summary.md` — overview with widespread changes and per-doc details
+- `summary.json` — machine-readable version of the summary
+- `docs/` — per-document `.diff.json` files with detailed diffs
+
+### Reading the Report
+
+The summary separates **unique changes** (diffs specific to a few docs) from **widespread-only** docs (every diff in the doc is a pattern that appears in 50%+ of all changed docs):
+
+```
+- Changed docs: 382
+  - Unique changes: 2
+  - Widespread-only: 380
+```
+
+**Widespread changes** are diff patterns appearing in 50%+ of changed docs. These typically represent schema evolution (e.g., a new `margins` field), not regressions. They're listed separately so you can focus on what matters.
+
+### Triage workflow
+
+1. Open `summary.md` — check the changed docs count
+2. Skip **Widespread-Only Docs** — these are schema evolution
+3. Focus on **Docs With Unique Changes** — open their `.diff.json` files
+4. Each diff has `path` (JSONPath), `kind`, `reference`/`candidate` values, and a `widespread` flag
+5. Decide if the change is intentional (your PR) or a regression
 
 **Advanced:** For lower-level access, use `pnpm layout:compare` directly. See `tests/layout-snapshots/README.md`.
 

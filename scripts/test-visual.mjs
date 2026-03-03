@@ -109,51 +109,19 @@ All unrecognized flags are passed through to compare-layout-snapshots.mjs.
 }
 
 // ---------------------------------------------------------------------------
-// Auth preflight
+// Auth check (informational — never blocks execution)
 // ---------------------------------------------------------------------------
 
-function checkAuth() {
-  // Check S3 env vars first (CI path)
+function hasAuth() {
+  // S3 env vars (CI path)
   for (const key of S3_ENV_KEYS) {
-    if (process.env[key]) {
-      return { valid: true, message: 'CI credentials detected (S3 env vars)' };
-    }
+    if (process.env[key]) return true;
   }
-
-  // Check wrangler TOML (local dev path)
+  // Wrangler TOML (local dev path)
   for (const configPath of WRANGLER_CONFIG_PATHS) {
-    if (!fs.existsSync(configPath)) continue;
-
-    const content = fs.readFileSync(configPath, 'utf8');
-    const tokenMatch = content.match(/^oauth_token\s*=\s*"(.+)"/m);
-    if (!tokenMatch?.[1]) continue;
-
-    const expiryMatch = content.match(/^expiration_time\s*=\s*"(.+)"/m);
-    if (expiryMatch?.[1]) {
-      const expiryMs = Date.parse(expiryMatch[1]);
-      if (Number.isFinite(expiryMs)) {
-        const remainingMs = expiryMs - Date.now();
-        if (remainingMs < 30_000) {
-          return {
-            valid: false,
-            message: `Wrangler token expired.\n  Run: npx wrangler login\n  Config: ${configPath}`,
-          };
-        }
-        const days = Math.floor(remainingMs / 86_400_000);
-        const hours = Math.floor((remainingMs % 86_400_000) / 3_600_000);
-        const expiryLabel = days > 0 ? `expires in ${days}d` : `expires in ${hours}h`;
-        return { valid: true, message: `wrangler token valid (${expiryLabel})` };
-      }
-    }
-
-    // Token exists but no parseable expiry -- assume valid
-    return { valid: true, message: 'wrangler token found' };
+    if (fs.existsSync(configPath)) return true;
   }
-
-  return {
-    valid: false,
-    message: 'No auth credentials found.\n  Local: run `npx wrangler login`\n  CI: set SUPERDOC_CORPUS_R2_ACCESS_KEY_ID + SUPERDOC_CORPUS_R2_SECRET_ACCESS_KEY',
-  };
+  return false;
 }
 
 // ---------------------------------------------------------------------------
@@ -278,22 +246,16 @@ async function main() {
 
   intro('SuperDoc Visual Regression');
 
-  // 1. Corpus check
+  // 1. Corpus check (informational — compare script handles download)
   const corpus = checkCorpus();
   if (corpus.exists) {
     log.success(`Corpus: ${corpus.count} documents`);
+  } else if (hasAuth()) {
+    log.info('Corpus not found locally — will be downloaded during comparison');
   } else {
-    // Corpus missing -- auth is required to download it
-    const auth = checkAuth();
-    if (!auth.valid) {
-      log.error(`Corpus not found and no auth to download it.`);
-      log.info('Download the test corpus first:');
-      log.info('  npx wrangler login');
-      log.info('  pnpm corpus:pull');
-      process.exit(1);
-    }
-    log.info('Corpus not found locally -- will be downloaded automatically');
-    log.success(`Auth: ${auth.message}`);
+    log.warn('Corpus not found and no auth detected. Download may fail.');
+    log.info('  Local: npx wrangler login');
+    log.info('  CI:    set SUPERDOC_CORPUS_R2_ACCESS_KEY_ID + SUPERDOC_CORPUS_R2_SECRET_ACCESS_KEY');
   }
 
   // 3. Resolve reference

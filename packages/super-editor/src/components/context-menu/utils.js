@@ -168,8 +168,13 @@ export async function getEditorContext(editor, event) {
   const isTrackedChange =
     activeMarks.includes('trackInsert') || activeMarks.includes('trackDelete') || activeMarks.includes('trackFormat');
 
-  const trackedChanges =
-    event && pos !== null
+  // If there is an expanded selection and the right-click happened inside
+  // that selection, use collectTrackedChanges for the full selection range
+  const shouldUseSelectionTrackedChanges =
+    event && pos !== null ? hasExpandedSelection(selection) && selectionContainsPos(selection, pos) : hasSelection;
+  const trackedChanges = shouldUseSelectionTrackedChanges
+    ? collectTrackedChanges({ state, from: selection.from, to: selection.to })
+    : event && pos !== null
       ? collectTrackedChangesForContext({ state, pos, trackedChangeId })
       : collectTrackedChanges({ state, from: selection.from, to: selection.to });
 

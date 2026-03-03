@@ -579,10 +579,7 @@ export class DecorationBridge {
         this.#prevDecorationSets.set(plugin, decorationSet);
         continue;
       }
-      if (previousPluginRanges?.length) {
-        const restoredRanges = restoreRangesFromPrevious(state.doc, docSize, previousPluginRanges);
-        this.#applyRangesToDesired(desired, domIndex, restoredRanges);
-      }
+      this.#setPreviousRanges(plugin, []);
       this.#prevDecorationSets.set(plugin, decorationSet);
     }
 

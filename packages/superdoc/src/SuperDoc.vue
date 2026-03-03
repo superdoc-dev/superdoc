@@ -662,6 +662,22 @@ const onEditorCommentsUpdate = (params = {}) => {
   // Set the active comment in the store
   let { activeCommentId, type, comment: commentPayload } = params;
   const resolveCommentEventId = (payload) => payload?.commentId || payload?.importedId || null;
+  const resolveUpdateCommentMatch = (payload) => {
+    const candidateIds = [payload?.importedId, payload?.commentId].filter(Boolean);
+    for (const candidateId of candidateIds) {
+      const existingComment = getComment(candidateId);
+      if (existingComment) {
+        return {
+          id: candidateId,
+          existingComment,
+        };
+      }
+    }
+    return {
+      id: candidateIds[0] || null,
+      existingComment: null,
+    };
+  };
 
   if (type === 'replayCompleted') {
     scheduleReplayTrackedChangeSync();
@@ -701,9 +717,8 @@ const onEditorCommentsUpdate = (params = {}) => {
   }
 
   if (COMMENT_EVENTS?.UPDATE && type === COMMENT_EVENTS.UPDATE && commentPayload) {
-    const id = resolveCommentEventId(commentPayload);
+    const { id, existingComment } = resolveUpdateCommentMatch(commentPayload);
     if (id) {
-      const existingComment = getComment(id);
       const resolvedText = commentPayload.commentText || commentPayload.text;
 
       if (existingComment) {

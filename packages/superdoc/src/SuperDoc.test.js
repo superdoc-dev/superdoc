@@ -492,6 +492,39 @@ describe('SuperDoc.vue', () => {
     expect(commentsStoreStub.syncTrackedChangeComments).not.toHaveBeenCalled();
   });
 
+  it('reconciles replay updates by importedId before commentId to avoid duplicate comments', async () => {
+    const superdocStub = createSuperdocStub();
+    const wrapper = await mountComponent(superdocStub);
+    await nextTick();
+
+    const options = wrapper.findComponent(SuperEditorStub).props('options');
+    const existingComment = { commentId: 'old-runtime-id', importedId: 'imp-1', commentText: 'Old text' };
+
+    commentsStoreStub.commentsList.value = [existingComment];
+    commentsStoreStub.getComment.mockClear();
+    commentsStoreStub.getComment.mockImplementation((id) => {
+      if (id === 'imp-1' || id === 'old-runtime-id') return existingComment;
+      return null;
+    });
+    commentsStoreStub.addComment.mockClear();
+
+    options.onCommentsUpdate({
+      type: 'update',
+      comment: {
+        commentId: 'new-runtime-id',
+        importedId: 'imp-1',
+        commentText: 'Updated text',
+      },
+    });
+
+    expect(commentsStoreStub.getComment.mock.calls).toEqual([['imp-1']]);
+    expect(commentsStoreStub.addComment).not.toHaveBeenCalled();
+    expect(commentsStoreStub.commentsList.value).toHaveLength(1);
+    expect(existingComment.commentId).toBe('new-runtime-id');
+    expect(existingComment.importedId).toBe('imp-1');
+    expect(existingComment.commentText).toBe('Updated text');
+  });
+
   it('clears active comment when replay deletion removes the active reply', async () => {
     const superdocStub = createSuperdocStub();
     const wrapper = await mountComponent(superdocStub);

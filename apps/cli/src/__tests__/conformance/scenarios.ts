@@ -156,56 +156,34 @@ type ListTargetPreparation = {
   target: Record<string, unknown>;
 };
 
+/**
+ * Load a pre-separated list fixture (two adjacent lists that share the same
+ * abstractNumId) and resolve the second list item as the target.
+ *
+ * This avoids a runtime `lists separate` → DOCX export → re-import round-trip
+ * which can lose numbering definition compatibility on some platforms.
+ */
 async function prepareSeparatedSecondListTarget(
   harness: ConformanceHarness,
   stateDir: string,
   label: string,
 ): Promise<ListTargetPreparation> {
-  const sourceDoc = await harness.copyListFixtureDoc(`${label}-source`);
+  const docPath = await harness.copyPreSeparatedListDoc(label);
+  const items = await listDiscoveryItems(harness, stateDir, docPath, 10);
 
-  // Discover source items for diagnostics.
-  const sourceItems = await listDiscoveryItems(harness, stateDir, sourceDoc, 10);
-  if (sourceItems.length < 2) {
+  if (items.length < 2) {
     throw new Error(
-      `[${label}] Source fixture has fewer than 2 list items (found ${sourceItems.length}). ` +
-        `Items: ${JSON.stringify(sourceItems)}`,
+      `[${label}] Pre-separated fixture has fewer than 2 list items (found ${items.length}). ` +
+        `Items: ${JSON.stringify(items)}`,
     );
   }
 
-  const secondItem = sourceItems[1]?.address;
-  if (!secondItem || typeof secondItem !== 'object') {
-    throw new Error(`[${label}] Second list item has no address. Items: ${JSON.stringify(sourceItems)}`);
+  const target = items[1]?.address;
+  if (!target || typeof target !== 'object') {
+    throw new Error(`[${label}] Second list item has no address. Items: ${JSON.stringify(items)}`);
   }
 
-  const separatedDoc = harness.createOutputPath(`${label}-separated`);
-  const separated = await harness.runCli(
-    ['lists', 'separate', sourceDoc, '--target-json', JSON.stringify(secondItem), '--out', separatedDoc],
-    stateDir,
-  );
-  if (separated.result.code !== 0 || separated.envelope.ok !== true) {
-    throw new Error(
-      `[${label}] lists separate failed. code=${separated.result.code} ` +
-        `envelope=${JSON.stringify(separated.envelope)} ` +
-        `target=${JSON.stringify(secondItem)} ` +
-        `stderr=${separated.result.stderr.trim() || '<empty>'}`,
-    );
-  }
-
-  // Re-resolve from the output document (node IDs may change across write/reload).
-  const postItems = await listDiscoveryItems(harness, stateDir, separatedDoc, 10);
-  if (postItems.length < 2) {
-    throw new Error(
-      `[${label}] Post-separation doc has fewer than 2 list items (found ${postItems.length}). ` +
-        `Items: ${JSON.stringify(postItems)}`,
-    );
-  }
-
-  const separatedSecondItem = postItems[1]?.address;
-  if (!separatedSecondItem || typeof separatedSecondItem !== 'object') {
-    throw new Error(`[${label}] Post-separation second item has no address. Items: ${JSON.stringify(postItems)}`);
-  }
-
-  return { docPath: separatedDoc, target: separatedSecondItem };
+  return { docPath, target };
 }
 
 function sectionMutationScenario(

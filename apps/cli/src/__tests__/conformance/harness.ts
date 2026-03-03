@@ -2,7 +2,12 @@ import { copyFile, mkdtemp, mkdir, rm } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import path from 'node:path';
 import { run } from '../../index';
-import { resolveListDocFixture, resolveSourceDocFixture, resolveTocDocFixture } from '../fixtures';
+import {
+  resolveListDocFixture,
+  resolvePreSeparatedListFixture,
+  resolveSourceDocFixture,
+  resolveTocDocFixture,
+} from '../fixtures';
 
 type RunResult = {
   code: number;
@@ -122,6 +127,12 @@ export class ConformanceHarness {
   async copyListFixtureDoc(label: string): Promise<string> {
     const filePath = path.join(this.docsDir, `${this.nextId()}-${label}.docx`);
     await copyFile(await resolveListDocFixture(), filePath);
+    return filePath;
+  }
+
+  async copyPreSeparatedListDoc(label: string): Promise<string> {
+    const filePath = path.join(this.docsDir, `${this.nextId()}-${label}.docx`);
+    await copyFile(await resolvePreSeparatedListFixture(), filePath);
     return filePath;
   }
 

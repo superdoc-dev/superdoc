@@ -15,6 +15,10 @@ const LIST_SOURCE_DOC_CANDIDATES = [
   path.join(REPO_ROOT, 'e2e-tests/test-data/basic-documents/lists-complex-items.docx'),
 ];
 
+const PRE_SEPARATED_LIST_CANDIDATES = [
+  path.join(REPO_ROOT, 'packages/super-editor/src/tests/data/pre-separated-list.docx'),
+];
+
 const TOC_SOURCE_DOC_CANDIDATES = [
   path.join(REPO_ROOT, 'test-corpus/basic/table-of-contents.docx'),
   path.join(REPO_ROOT, 'test-corpus/basic/table-of-contents-sdt.docx'),
@@ -23,6 +27,7 @@ const TOC_SOURCE_DOC_CANDIDATES = [
 
 let resolvedSourceDoc: string | null = null;
 let resolvedListSourceDoc: string | null = null;
+let resolvedPreSeparatedListDoc: string | null = null;
 let resolvedTocSourceDoc: string | null = null;
 
 async function resolveFixture(candidates: string[], fixtureLabel: string): Promise<string> {
@@ -48,6 +53,12 @@ export async function resolveListDocFixture(): Promise<string> {
   if (resolvedListSourceDoc != null) return resolvedListSourceDoc;
   resolvedListSourceDoc = await resolveFixture(LIST_SOURCE_DOC_CANDIDATES, 'list');
   return resolvedListSourceDoc;
+}
+
+export async function resolvePreSeparatedListFixture(): Promise<string> {
+  if (resolvedPreSeparatedListDoc != null) return resolvedPreSeparatedListDoc;
+  resolvedPreSeparatedListDoc = await resolveFixture(PRE_SEPARATED_LIST_CANDIDATES, 'pre-separated list');
+  return resolvedPreSeparatedListDoc;
 }
 
 export async function resolveTocDocFixture(): Promise<string> {

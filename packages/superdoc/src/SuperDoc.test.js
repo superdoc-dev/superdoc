@@ -525,6 +525,30 @@ describe('SuperDoc.vue', () => {
     expect(existingComment.commentText).toBe('Updated text');
   });
 
+  it('removes replay-deleted comments when payload commentId is stale but importedId matches', async () => {
+    const superdocStub = createSuperdocStub();
+    const wrapper = await mountComponent(superdocStub);
+    await nextTick();
+
+    const options = wrapper.findComponent(SuperEditorStub).props('options');
+    commentsStoreStub.commentsList.value = [
+      { commentId: 'live-runtime-id', importedId: 'imp-1', commentText: 'Parent' },
+      { commentId: 'child-1', parentCommentId: 'live-runtime-id', commentText: 'Reply' },
+      { commentId: 'other', commentText: 'Unrelated' },
+    ];
+    commentsStoreStub.activeComment.value = 'child-1';
+    commentsStoreStub.setActiveComment.mockClear();
+
+    options.onCommentsUpdate({
+      type: 'deleted',
+      comment: { commentId: 'stale-runtime-id', importedId: 'imp-1' },
+    });
+
+    expect(commentsStoreStub.commentsList.value).toEqual([{ commentId: 'other', commentText: 'Unrelated' }]);
+    await nextTick();
+    expect(commentsStoreStub.setActiveComment).toHaveBeenCalledWith(superdocStub, null);
+  });
+
   it('clears active comment when replay deletion removes the active reply', async () => {
     const superdocStub = createSuperdocStub();
     const wrapper = await mountComponent(superdocStub);

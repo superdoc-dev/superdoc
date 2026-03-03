@@ -661,7 +661,10 @@ const onEditorCommentLocationsUpdate = (doc, { allCommentIds: activeThreadId, al
 const onEditorCommentsUpdate = (params = {}) => {
   // Set the active comment in the store
   let { activeCommentId, type, comment: commentPayload } = params;
-  const resolveCommentEventId = (payload) => payload?.commentId || payload?.importedId || null;
+  const resolveCommentEventIds = (payload) => {
+    const ids = [payload?.importedId, payload?.commentId].filter(Boolean).map((value) => String(value));
+    return [...new Set(ids)];
+  };
   const resolveUpdateCommentMatch = (payload) => {
     const candidateIds = [payload?.importedId, payload?.commentId].filter(Boolean);
     for (const candidateId of candidateIds) {
@@ -742,11 +745,10 @@ const onEditorCommentsUpdate = (params = {}) => {
   }
 
   if (COMMENT_EVENTS?.DELETED && type === COMMENT_EVENTS.DELETED && commentPayload) {
-    const id = resolveCommentEventId(commentPayload);
-    if (id) {
-      const targetId = String(id);
+    const targetIds = resolveCommentEventIds(commentPayload);
+    if (targetIds.length) {
       // Remove the entire thread subtree (parent + all descendants), not only direct replies.
-      const removedCommentIds = new Set([targetId]);
+      const removedCommentIds = new Set(targetIds);
       let expanded = true;
       while (expanded) {
         expanded = false;
@@ -780,7 +782,7 @@ const onEditorCommentsUpdate = (params = {}) => {
       });
 
       const activeCommentKey = activeComment.value != null ? String(activeComment.value) : null;
-      if (activeCommentKey && (activeCommentKey === targetId || removedCommentIds.has(activeCommentKey))) {
+      if (activeCommentKey && removedCommentIds.has(activeCommentKey)) {
         activeCommentId = null;
       }
     }

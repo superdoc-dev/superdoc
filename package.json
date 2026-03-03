@@ -61,6 +61,7 @@
     "corpus:pull": "node scripts/corpus/pull.mjs",
     "corpus:push": "node scripts/corpus/push.mjs",
     "corpus:update-registry": "node scripts/corpus/update-registry.mjs",
+    "test:visual": "bun scripts/test-visual.mjs",
     "watch": "pnpm --prefix packages/superdoc run watch:es",
     "check:all": "pnpm run format && pnpm run lint:fix && pnpm --prefix packages/super-editor run types:build && pnpm run test",
     "local:publish": "pnpm --prefix packages/superdoc version prerelease --preid=local && pnpm --prefix packages/superdoc publish --registry http://localhost:4873",
@@ -83,6 +84,7 @@
     "sdk:release:dry": "node packages/sdk/scripts/sdk-release.mjs --dry-run"
   },
   "devDependencies": {
+    "@clack/prompts": "^1.0.1",
     "@commitlint/cli": "catalog:",
     "@commitlint/config-conventional": "catalog:",
     "@eslint/js": "catalog:",

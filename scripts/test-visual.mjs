@@ -1,0 +1,342 @@
+#!/usr/bin/env node
+
+/**
+ * Visual regression testing orchestrator.
+ *
+ * Wraps `compare-layout-snapshots.mjs` with:
+ *  - Auth preflight (wrangler token / S3 env vars)
+ *  - Corpus readiness check
+ *  - Interactive reference version selection
+ *  - Clean progress output
+ *
+ * Usage:
+ *   pnpm test:visual                              # interactive
+ *   pnpm test:visual -- --reference 1.16.0        # specific version
+ *   pnpm test:visual -- --match tables --limit 5  # filtered
+ */
+
+import { spawnSync } from 'node:child_process';
+import fs from 'node:fs';
+import os from 'node:os';
+import path from 'node:path';
+import process from 'node:process';
+import { fileURLToPath } from 'node:url';
+import { intro, outro, select, text, log, cancel, isCancel } from '@clack/prompts';
+
+// ---------------------------------------------------------------------------
+// Paths
+// ---------------------------------------------------------------------------
+
+const SCRIPT_DIR = path.dirname(fileURLToPath(import.meta.url));
+const REPO_ROOT = path.resolve(SCRIPT_DIR, '..');
+const COMPARE_SCRIPT = path.join(REPO_ROOT, 'tests/layout-snapshots/compare-layout-snapshots.mjs');
+const CORPUS_ROOT = process.env.SUPERDOC_CORPUS_ROOT
+  ? path.resolve(process.env.SUPERDOC_CORPUS_ROOT)
+  : path.join(REPO_ROOT, 'test-corpus');
+
+const WRANGLER_CONFIG_PATHS =
+  process.platform === 'darwin'
+    ? [path.join(os.homedir(), 'Library/Preferences/.wrangler/config/default.toml')]
+    : [path.join(os.homedir(), '.config/.wrangler/config/default.toml')];
+
+const S3_ENV_KEYS = [
+  'SUPERDOC_CORPUS_R2_ACCESS_KEY_ID',
+  'SD_TESTING_R2_ACCESS_KEY_ID',
+];
+
+const NPM_PACKAGE = 'superdoc';
+
+// ---------------------------------------------------------------------------
+// Arg parsing
+// ---------------------------------------------------------------------------
+
+function parseArgs(argv) {
+  const args = {
+    reference: '',
+    matches: [],
+    limit: 0,
+    pixel: false,
+    interactive: true,
+    help: false,
+    passthrough: [],
+  };
+
+  let i = 0;
+  while (i < argv.length) {
+    const arg = argv[i];
+    if (arg === '--reference' && i + 1 < argv.length) {
+      args.reference = argv[++i];
+    } else if (arg === '--match' && i + 1 < argv.length) {
+      args.matches.push(argv[++i]);
+    } else if (arg === '--limit' && i + 1 < argv.length) {
+      args.limit = Number(argv[++i]);
+    } else if (arg === '--pixel') {
+      args.pixel = true;
+    } else if (arg === '--no-interactive') {
+      args.interactive = false;
+    } else if (arg === '-h' || arg === '--help') {
+      args.help = true;
+    } else {
+      args.passthrough.push(arg);
+    }
+    i++;
+  }
+
+  return args;
+}
+
+function printHelp() {
+  console.log(`
+Usage:
+  pnpm test:visual [options]
+
+Options:
+  --reference <version>   Compare against a specific npm version (e.g., 1.16.0)
+  --match <pattern>       Filter docs by path substring (repeatable)
+  --limit <n>             Compare at most n documents
+  --pixel                 Also run pixel-level comparison (coming soon)
+  --no-interactive        Skip interactive prompts (use defaults)
+  -h, --help              Show this help
+
+Examples:
+  pnpm test:visual                                    # interactive, compare against npm@next
+  pnpm test:visual -- --reference 1.16.0              # compare against stable
+  pnpm test:visual -- --match tables --limit 5        # just table docs, first 5
+  pnpm test:visual -- --reference 1.16.0 --match list # lists only, against 1.16.0
+
+All unrecognized flags are passed through to compare-layout-snapshots.mjs.
+  `.trim());
+}
+
+// ---------------------------------------------------------------------------
+// Auth preflight
+// ---------------------------------------------------------------------------
+
+function checkAuth() {
+  // Check S3 env vars first (CI path)
+  for (const key of S3_ENV_KEYS) {
+    if (process.env[key]) {
+      return { valid: true, message: 'CI credentials detected (S3 env vars)' };
+    }
+  }
+
+  // Check wrangler TOML (local dev path)
+  for (const configPath of WRANGLER_CONFIG_PATHS) {
+    if (!fs.existsSync(configPath)) continue;
+
+    const content = fs.readFileSync(configPath, 'utf8');
+    const tokenMatch = content.match(/^oauth_token\s*=\s*"(.+)"/m);
+    if (!tokenMatch?.[1]) continue;
+
+    const expiryMatch = content.match(/^expiration_time\s*=\s*"(.+)"/m);
+    if (expiryMatch?.[1]) {
+      const expiryMs = Date.parse(expiryMatch[1]);
+      if (Number.isFinite(expiryMs)) {
+        const remainingMs = expiryMs - Date.now();
+        if (remainingMs < 30_000) {
+          return {
+            valid: false,
+            message: `Wrangler token expired.\n  Run: npx wrangler login\n  Config: ${configPath}`,
+          };
+        }
+        const days = Math.floor(remainingMs / 86_400_000);
+        const hours = Math.floor((remainingMs % 86_400_000) / 3_600_000);
+        const expiryLabel = days > 0 ? `expires in ${days}d` : `expires in ${hours}h`;
+        return { valid: true, message: `wrangler token valid (${expiryLabel})` };
+      }
+    }
+
+    // Token exists but no parseable expiry -- assume valid
+    return { valid: true, message: 'wrangler token found' };
+  }
+
+  return {
+    valid: false,
+    message: 'No auth credentials found.\n  Local: run `npx wrangler login`\n  CI: set SUPERDOC_CORPUS_R2_ACCESS_KEY_ID + SUPERDOC_CORPUS_R2_SECRET_ACCESS_KEY',
+  };
+}
+
+// ---------------------------------------------------------------------------
+// Corpus check
+// ---------------------------------------------------------------------------
+
+function checkCorpus() {
+  if (!fs.existsSync(CORPUS_ROOT)) {
+    return { exists: false, count: 0 };
+  }
+  // Quick count: list immediate subdirs that contain .docx files
+  let count = 0;
+  const walk = (dir) => {
+    for (const entry of fs.readdirSync(dir, { withFileTypes: true })) {
+      if (entry.isDirectory()) walk(path.join(dir, entry.name));
+      else if (entry.name.endsWith('.docx')) count++;
+    }
+  };
+  try {
+    walk(CORPUS_ROOT);
+  } catch {
+    // If walk fails, just report 0
+  }
+  return { exists: true, count };
+}
+
+// ---------------------------------------------------------------------------
+// npm dist-tag resolution
+// ---------------------------------------------------------------------------
+
+async function fetchDistTags() {
+  try {
+    const res = await fetch(`https://registry.npmjs.org/-/package/${NPM_PACKAGE}/dist-tags`);
+    if (!res.ok) return null;
+    return await res.json();
+  } catch {
+    return null;
+  }
+}
+
+// ---------------------------------------------------------------------------
+// Interactive reference selection
+// ---------------------------------------------------------------------------
+
+function exitIfCancelled(value) {
+  if (isCancel(value)) {
+    cancel('Cancelled.');
+    process.exit(0);
+  }
+  return value;
+}
+
+async function selectReference() {
+  const tags = await fetchDistTags();
+  if (!tags) {
+    log.warn('Could not fetch npm versions. Using default (npm@next).');
+    return '';
+  }
+
+  const nextVersion = tags.next || '';
+  const latestVersion = tags.latest || '';
+
+  const options = [];
+  if (nextVersion) {
+    options.push({
+      value: nextVersion,
+      label: `npm@next (${nextVersion})`,
+      hint: 'recommended',
+    });
+  }
+  if (latestVersion) {
+    options.push({
+      value: latestVersion,
+      label: `npm@latest (${latestVersion})`,
+    });
+  }
+  options.push({
+    value: '__custom__',
+    label: 'Enter a specific version',
+  });
+
+  const selected = exitIfCancelled(
+    await select({
+      message: 'Compare against:',
+      options,
+    }),
+  );
+
+  if (selected === '__custom__') {
+    const version = exitIfCancelled(
+      await text({
+        message: 'npm version:',
+        placeholder: '1.16.0',
+        validate: (v) => {
+          if (!v?.trim()) return 'Version is required';
+        },
+      }),
+    );
+    return version.trim();
+  }
+
+  return selected;
+}
+
+// ---------------------------------------------------------------------------
+// Main
+// ---------------------------------------------------------------------------
+
+async function main() {
+  const args = parseArgs(process.argv.slice(2));
+
+  if (args.help) {
+    printHelp();
+    return;
+  }
+
+  if (args.pixel) {
+    console.log('Pixel comparison is not yet implemented -- coming soon.');
+    console.log('For now, pnpm test:visual runs layout (JSON) comparison.');
+    return;
+  }
+
+  intro('SuperDoc Visual Regression');
+
+  // 1. Corpus check
+  const corpus = checkCorpus();
+  if (corpus.exists) {
+    log.success(`Corpus: ${corpus.count} documents`);
+  } else {
+    // Corpus missing -- auth is required to download it
+    const auth = checkAuth();
+    if (!auth.valid) {
+      log.error(`Corpus not found and no auth to download it.`);
+      log.info('Download the test corpus first:');
+      log.info('  npx wrangler login');
+      log.info('  pnpm corpus:pull');
+      process.exit(1);
+    }
+    log.info('Corpus not found locally -- will be downloaded automatically');
+    log.success(`Auth: ${auth.message}`);
+  }
+
+  // 3. Resolve reference
+  let reference = args.reference;
+  if (!reference && args.interactive && process.stdout.isTTY) {
+    reference = await selectReference();
+  }
+
+  // 4. Build child args
+  const childArgs = ['--no-visual-on-change'];
+  if (reference) childArgs.push('--reference', reference);
+  for (const m of args.matches) childArgs.push('--match', m);
+  if (args.limit) childArgs.push('--limit', String(args.limit));
+  childArgs.push(...args.passthrough);
+
+  // 5. Run comparison
+  const label = reference ? `superdoc@${reference}` : 'npm@next (default)';
+  const filters = [];
+  if (args.matches.length) filters.push(`matching "${args.matches.join('", "')}"`);
+  if (args.limit) filters.push(`limit ${args.limit}`);
+  const filterLabel = filters.length ? ` (${filters.join(', ')})` : '';
+
+  log.step(`Comparing against ${label}${filterLabel}...`);
+  console.log(''); // blank line before compare output
+
+  const result = spawnSync('bun', [COMPARE_SCRIPT, ...childArgs], {
+    cwd: REPO_ROOT,
+    stdio: 'inherit',
+    env: process.env,
+  });
+
+  console.log(''); // blank line after compare output
+  const exitCode = result.status ?? 1;
+
+  if (exitCode === 0) {
+    outro('Done! No regressions found.');
+  } else {
+    outro('Done. See report above for details.');
+    process.exit(exitCode);
+  }
+}
+
+main().catch((err) => {
+  console.error(err.message || err);
+  process.exit(1);
+});

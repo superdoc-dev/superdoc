@@ -212,4 +212,21 @@ describe('getMarksDiff', () => {
       ],
     });
   });
+
+  it('preserves track-change ids in payload when non-id attrs differ', () => {
+    const marksA = [{ type: 'trackDelete', attrs: { id: 'before-id', author: 'Alice' } }];
+    const marksB = [{ type: 'trackDelete', attrs: { id: 'after-id', author: 'Bob' } }];
+
+    expect(getMarksDiff(marksA, marksB)).toEqual({
+      added: [],
+      deleted: [],
+      modified: [
+        {
+          name: 'trackDelete',
+          oldAttrs: { id: 'before-id', author: 'Alice' },
+          newAttrs: { id: 'after-id', author: 'Bob' },
+        },
+      ],
+    });
+  });
 });

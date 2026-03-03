@@ -123,6 +123,42 @@ const expectTrackedReplayMatchesFixture = async (beforeName, afterName) => {
 };
 
 /**
+ * Replays a fixture pair with tracked changes enabled and asserts tracked marks keep stable ids.
+ *
+ * This guards comment-thread creation for tracked changes: comments are keyed by tracked mark id,
+ * so replayed marks with empty ids become invisible in the UI.
+ *
+ * @param {string} beforeName DOCX fixture filename for the baseline.
+ * @param {string} afterName DOCX fixture filename for the updated doc.
+ * @returns {Promise<void>}
+ */
+const expectTrackedReplayMarksHaveIds = async (beforeName, afterName) => {
+  const testUser = { name: 'Test User', email: 'test@example.com' };
+  const beforeEditor = await getEditorFromFixture(beforeName, testUser);
+  const afterEditor = await getEditorFromFixture(afterName);
+
+  try {
+    const diff = beforeEditor.commands.compareDocuments(afterEditor.state.doc, afterEditor.converter?.comments ?? []);
+    const success = beforeEditor.commands.replayDifferences(diff, { applyTrackedChanges: true });
+
+    expect(success).toBe(true);
+
+    const trackedChanges = getTrackChanges(beforeEditor.state);
+    expect(trackedChanges.length).toBeGreaterThan(0);
+    expect(
+      trackedChanges.every(({ mark }) => typeof mark?.attrs?.id === 'string' && mark.attrs.id.trim().length > 0),
+    ).toBe(true);
+
+    const deletionChanges = trackedChanges.filter(({ mark }) => mark?.type?.name === 'trackDelete');
+    expect(deletionChanges.length).toBeGreaterThan(0);
+    expect(deletionChanges.every(({ mark }) => mark.attrs.id.trim().length > 0)).toBe(true);
+  } finally {
+    beforeEditor.destroy?.();
+    afterEditor.destroy?.();
+  }
+};
+
+/**
  * Fixture pairs used for replay coverage.
  * @returns {Array<[string, string]>}
  */
@@ -177,6 +213,11 @@ const runTrackedReplayDiffsSuite = () => {
 
 describe('replayDiffs', runReplayDiffsSuite);
 describe('replayDiffs tracked changes', runTrackedReplayDiffsSuite);
+describe('replayDiffs tracked-change ids', () => {
+  it('keeps tracked mark ids populated for diff_before8 replay', async () => {
+    await expectTrackedReplayMarksHaveIds('diff_before8.docx', 'diff_after8.docx');
+  });
+});
 describe('investigate replay issues', () => {
   it('investigate diff_before10.docx', async () => {
     const beforeEditor = await getEditorFromFixture('diff_before10.docx');

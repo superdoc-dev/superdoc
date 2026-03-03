@@ -102,33 +102,51 @@ export function getMarksDiff(
     deleted: [],
     modified: [],
   };
-  const marksMapA = new Map<string, Record<string, unknown>>();
-  const marksMapB = new Map<string, Record<string, unknown>>();
+  const marksMapA = new Map<
+    string,
+    {
+      raw: Record<string, unknown>;
+      normalized: Record<string, unknown>;
+    }
+  >();
+  const marksMapB = new Map<
+    string,
+    {
+      raw: Record<string, unknown>;
+      normalized: Record<string, unknown>;
+    }
+  >();
 
   for (const mark of marksA) {
-    marksMapA.set(mark.type, normalizeMarkAttrs(mark.type, mark.attrs));
+    marksMapA.set(mark.type, {
+      raw: mark.attrs || {},
+      normalized: normalizeMarkAttrs(mark.type, mark.attrs),
+    });
   }
   for (const mark of marksB) {
-    marksMapB.set(mark.type, normalizeMarkAttrs(mark.type, mark.attrs));
+    marksMapB.set(mark.type, {
+      raw: mark.attrs || {},
+      normalized: normalizeMarkAttrs(mark.type, mark.attrs),
+    });
   }
 
   const markNames = new Set([...marksMapA.keys(), ...marksMapB.keys()]);
   for (const name of markNames) {
-    const attrsA = marksMapA.get(name);
-    const attrsB = marksMapB.get(name);
+    const entryA = marksMapA.get(name);
+    const entryB = marksMapB.get(name);
 
-    if (attrsA && !attrsB) {
-      marksDiff.deleted.push({ name, attrs: attrsA });
+    if (entryA && !entryB) {
+      marksDiff.deleted.push({ name, attrs: entryA.raw });
       continue;
     }
 
-    if (!attrsA && attrsB) {
-      marksDiff.added.push({ name, attrs: attrsB });
+    if (!entryA && entryB) {
+      marksDiff.added.push({ name, attrs: entryB.raw });
       continue;
     }
 
-    if (attrsA && attrsB && !deepEquals(attrsA, attrsB)) {
-      marksDiff.modified.push({ name, oldAttrs: attrsA, newAttrs: attrsB });
+    if (entryA && entryB && !deepEquals(entryA.normalized, entryB.normalized)) {
+      marksDiff.modified.push({ name, oldAttrs: entryA.raw, newAttrs: entryB.raw });
     }
   }
 

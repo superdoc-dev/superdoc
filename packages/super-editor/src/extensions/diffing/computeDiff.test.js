@@ -333,6 +333,11 @@ describe('Diff', () => {
         (change) => change.kind === 'text' && change.marksDiff?.added?.some((mark) => mark.name === 'trackDelete'),
       ),
     ).toBe(true);
+    const addedTrackDelete = trackedChangeDiff?.contentDiff
+      ?.filter((change) => change.kind === 'text')
+      ?.flatMap((change) => change.marksDiff?.added ?? [])
+      ?.find((mark) => mark.name === 'trackDelete');
+    expect(addedTrackDelete?.attrs?.id).toBeTruthy();
 
     const modifiedComment = commentDiffs.find(
       (diff) => diff.action === 'modified' && diff.nodeType === 'comment' && diff.commentId === '0',

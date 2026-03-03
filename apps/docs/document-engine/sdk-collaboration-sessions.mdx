@@ -7,7 +7,7 @@ keywords: "sdk collaboration, yjs session, superdoc session, liveblocks sdk, hoc
 
 Use this guide when you are combining:
 
-- The SuperDoc SDK (`@superdoc-dev/sdk` or `superdoc-sdk`) for headless/document automation
+- The SuperDoc SDK (`@superdoc-dev/sdk` or `superdoc-sdk`) for headless document automation
 - SuperDoc real-time collaboration (Yjs providers like Liveblocks, Hocuspocus, or SuperDoc Yjs)
 
 ## Two session types
@@ -17,7 +17,93 @@ These are different concepts:
 - **Collaboration session**: a shared Yjs room/document (`ydoc` + provider) used by browser editors.
 - **SDK session**: a SuperDoc Document Engine editing session created by `doc.open`.
 
-The SDK does not directly attach to a provider object. It operates through Document Engine sessions.
+When you pass collaboration params to `doc.open`, the SDK bridges both — it creates a Document Engine session that is connected to the live Yjs room. Edits made through the SDK appear in every connected browser editor, and vice versa.
+
+## Connecting to a collaboration session
+
+Pass `collabUrl` and `collabDocumentId` to `doc.open`. No file path is required — the document state comes from the running session.
+
+<Tabs>
+  <Tab title="Node.js">
+    ```typescript
+    import { SuperDocClient } from '@superdoc-dev/sdk';
+
+    const client = new SuperDocClient();
+    await client.connect();
+
+    await client.doc.open({
+      collabUrl: 'ws://localhost:4000',
+      collabDocumentId: 'my-doc-room',
+    });
+
+    // Query and mutate through the shared Yjs document
+    const info = await client.doc.info();
+    console.log('Revision:', info.revision);
+
+    await client.doc.insert({
+      target: { type: 'end' },
+      content: 'Inserted by the Node SDK',
+    });
+
+    await client.doc.save();
+    await client.doc.close();
+    await client.dispose();
+    ```
+  </Tab>
+  <Tab title="Python">
+    ```python
+    import asyncio
+
+    from superdoc import AsyncSuperDocClient
+
+
+    async def main():
+        async with AsyncSuperDocClient() as client:
+            await client.doc.open({
+                "collabUrl": "ws://localhost:4000",
+                "collabDocumentId": "my-doc-room",
+            })
+
+            # Query and mutate through the shared Yjs document
+            info = await client.doc.info({})
+            print("Revision:", info.get("revision"))
+
+            await client.doc.insert({
+                "target": {"type": "end"},
+                "content": "Inserted by the Python SDK",
+            })
+
+            await client.doc.save({"inPlace": True})
+            await client.doc.close({})
+
+
+    asyncio.run(main())
+    ```
+  </Tab>
+</Tabs>
+
+### Parameters
+
+| Parameter | Type | Description |
+|---|---|---|
+| `collabUrl` | `string` | WebSocket URL of the collaboration provider (e.g., `ws://localhost:4000`). |
+| `collabDocumentId` | `string` | Document/room identifier on the provider. Optional — defaults to the session ID. |
+| `doc` | `string` | Optional file path. Used to seed the room when it is empty. Ignored when joining a room that already has content. |
+| `onMissing` | `string` | What to do when the room is empty. `seedFromDoc` (default) seeds from `doc` or a blank document. `blank` always seeds blank. `error` fails instead of seeding. |
+| `bootstrapSettlingMs` | `number` | How long to wait (in ms) for other clients before seeding an empty room. Default: 300. |
+
+You can also pass a full provider configuration object via `collaboration` (JSON) instead of the shorthand params. See the CLI reference for the schema.
+
+### Empty room handling
+
+When you open a collaboration session, the SDK checks whether the room already has content:
+
+- **Room has content** — the SDK joins. Your `doc` path is ignored; content comes from the room.
+- **Room is empty** — the SDK seeds the room from your `doc` file (or a blank document if no file was provided).
+
+Use `onMissing` to change this behavior. Set it to `error` if you only want to join existing rooms and never seed.
+
+When multiple clients open an empty room at the same time, the SDK uses a claim-then-verify protocol so only one client seeds. The others wait and join.
 
 ## SuperDoc JS collaboration contract
 
@@ -41,28 +127,76 @@ new SuperDoc({
 
 See [Collaboration Configuration](/modules/collaboration/configuration) for details.
 
-## Using SDK sessions with collaboration-enabled documents
+## SDK sessions alongside browser editors
 
-The SDK can work against a document that is also edited collaboratively, but interaction is through SDK/CLI session APIs.
+A common pattern: browser editors handle the real-time UX, while the SDK runs automated operations against the same document.
 
-```ts
-import { createSuperDocClient } from "@superdoc-dev/sdk";
-
-const client = createSuperDocClient();
-await client.connect();
-
-await client.doc.open({ doc: "./contract.docx" });
-
-const sessions = await client.doc.session.list();
-console.log(sessions);
+```
+┌──────────────┐     ┌─────────────────┐     ┌──────────────┐
+│ Browser       │◄───►│  Yjs Provider   │◄───►│  Browser     │
+│ Editor A      │     │  (Hocuspocus)   │     │  Editor B    │
+└──────────────┘     └────────┬────────┘     └──────────────┘
+                              │
+                              ▼
+                     ┌─────────────────┐
+                     │  SDK Client     │
+                     │  (doc.open +    │
+                     │   collabUrl)    │
+                     └─────────────────┘
 ```
 
-You can target a specific active SDK session:
+All three participants share the same Yjs document. Edits from the SDK appear in real time in both browser editors.
 
-```ts
-await client.doc.session.setDefault({ id: "session-id" });
-await client.doc.info();
-```
+## Managing multiple sessions
+
+You can open multiple SDK sessions against different collaboration rooms:
+
+<Tabs>
+  <Tab title="Node.js">
+    ```typescript
+    await client.doc.open({
+      collabUrl: 'ws://localhost:4000',
+      collabDocumentId: 'room-a',
+      sessionId: 'session-a',
+    });
+
+    await client.doc.open({
+      collabUrl: 'ws://localhost:4000',
+      collabDocumentId: 'room-b',
+      sessionId: 'session-b',
+    });
+
+    // Switch between sessions
+    await client.doc.session.setDefault({ id: 'session-a' });
+    await client.doc.info();
+
+    await client.doc.session.setDefault({ id: 'session-b' });
+    await client.doc.info();
+    ```
+  </Tab>
+  <Tab title="Python">
+    ```python
+    await client.doc.open({
+        "collabUrl": "ws://localhost:4000",
+        "collabDocumentId": "room-a",
+        "sessionId": "session-a",
+    })
+
+    await client.doc.open({
+        "collabUrl": "ws://localhost:4000",
+        "collabDocumentId": "room-b",
+        "sessionId": "session-b",
+    })
+
+    # Switch between sessions
+    await client.doc.session.setDefault({"id": "session-a"})
+    await client.doc.info({})
+
+    await client.doc.session.setDefault({"id": "session-b"})
+    await client.doc.info({})
+    ```
+  </Tab>
+</Tabs>
 
 ## Provider choice is unchanged
 
@@ -72,10 +206,23 @@ Provider setup still happens in your app using SuperDoc JS:
 - [Hocuspocus](/guides/collaboration/hocuspocus)
 - [SuperDoc Yjs](/guides/collaboration/superdoc-yjs)
 
-The SDK integration pattern does not change by provider.
+The SDK connection pattern is the same regardless of which provider your browser editors use — point `collabUrl` at the provider's WebSocket endpoint.
+
+## User identity in collaboration
+
+When you set `user` on the SDK client, that identity carries through to the collaboration session. Other participants see your automation's name in presence indicators, tracked changes, and comments — not a generic "CLI" label.
+
+```typescript
+const client = new SuperDocClient({
+  user: { name: 'Review Bot', email: 'bot@example.com' },
+});
+```
+
+See [User identity](/document-engine/sdks#user-identity) for more detail.
 
 ## Practical guidance
 
 - Use collaboration providers for multi-user real-time editing UX.
 - Use SDK sessions for backend automation, workflows, and deterministic operations.
-- Keep the distinction explicit in your architecture: provider state vs SDK/CLI session state.
+- Both SDKs (Node and Python) support collaboration connections with the same parameters.
+- No file path is required when connecting to an existing collaboration session — the document state comes from the shared Yjs room.

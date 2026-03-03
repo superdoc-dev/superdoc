@@ -7,7 +7,7 @@ import { CliError } from './errors';
 import { asRecord, pathExists } from './guards';
 import type { CollaborationProfile } from './collaboration';
 import { validateSessionId } from './session';
-import type { CliIO } from './types';
+import type { CliIO, UserIdentity } from './types';
 
 const CONTEXT_VERSION = 'v1';
 const ACTIVE_SESSION_FILENAME = 'active-session';
@@ -32,6 +32,7 @@ export type ContextMetadata = {
   revision: number;
   sessionType: SessionType;
   collaboration?: CollaborationProfile;
+  user?: UserIdentity;
   openedAt: string;
   updatedAt: string;
   lastSavedAt?: string;
@@ -121,6 +122,14 @@ function normalizeSessionType(value: unknown): SessionType {
   return 'local';
 }
 
+function normalizeUser(value: unknown): UserIdentity | undefined {
+  const record = asRecord(value);
+  if (!record) return undefined;
+  if (typeof record.name !== 'string' || record.name.length === 0) return undefined;
+  if (typeof record.email !== 'string') return undefined;
+  return { name: record.name, email: record.email };
+}
+
 function normalizeCollaborationProfile(value: unknown): CollaborationProfile | undefined {
   const record = asRecord(value);
   if (!record) return undefined;
@@ -130,6 +139,8 @@ function normalizeCollaborationProfile(value: unknown): CollaborationProfile | u
   const documentId = record.documentId;
   const tokenEnv = record.tokenEnv;
   const syncTimeoutMs = record.syncTimeoutMs;
+  const onMissing = record.onMissing;
+  const bootstrapSettlingMs = record.bootstrapSettlingMs;
 
   if (providerType !== 'hocuspocus' && providerType !== 'y-websocket') return undefined;
   if (typeof url !== 'string' || url.length === 0) return undefined;
@@ -141,6 +152,15 @@ function normalizeCollaborationProfile(value: unknown): CollaborationProfile | u
   ) {
     return undefined;
   }
+  if (onMissing != null && onMissing !== 'seedFromDoc' && onMissing !== 'blank' && onMissing !== 'error') {
+    return undefined;
+  }
+  if (
+    bootstrapSettlingMs != null &&
+    (typeof bootstrapSettlingMs !== 'number' || !Number.isFinite(bootstrapSettlingMs) || bootstrapSettlingMs <= 0)
+  ) {
+    return undefined;
+  }
 
   return {
     providerType,
@@ -148,18 +168,22 @@ function normalizeCollaborationProfile(value: unknown): CollaborationProfile | u
     documentId,
     tokenEnv: typeof tokenEnv === 'string' ? tokenEnv : undefined,
     syncTimeoutMs: typeof syncTimeoutMs === 'number' ? syncTimeoutMs : undefined,
+    onMissing: onMissing as CollaborationProfile['onMissing'],
+    bootstrapSettlingMs: typeof bootstrapSettlingMs === 'number' ? bootstrapSettlingMs : undefined,
   };
 }
 
-function normalizeContextMetadata(metadata: ContextMetadata): ContextMetadata {
+export function normalizeContextMetadata(metadata: ContextMetadata): ContextMetadata {
   const sessionType = normalizeSessionType(metadata.sessionType);
   const collaboration = normalizeCollaborationProfile(metadata.collaboration);
+  const user = normalizeUser(metadata.user);
 
   if (sessionType === 'collab' && collaboration) {
     return {
       ...metadata,
       sessionType,
       collaboration,
+      user,
     };
   }
 
@@ -167,6 +191,7 @@ function normalizeContextMetadata(metadata: ContextMetadata): ContextMetadata {
     ...metadata,
     sessionType: 'local',
     collaboration: undefined,
+    user,
   };
 }
 
@@ -658,6 +683,7 @@ export function createInitialContextMetadata(
     sourceSnapshot?: SourceSnapshot;
     sessionType?: SessionType;
     collaboration?: CollaborationProfile;
+    user?: UserIdentity;
   },
 ): ContextMetadata {
   const timestamp = nowIso(io);
@@ -673,6 +699,7 @@ export function createInitialContextMetadata(
     revision: 0,
     sessionType,
     collaboration: sessionType === 'collab' ? input.collaboration : undefined,
+    user: input.user,
     openedAt: timestamp,
     updatedAt: timestamp,
     sourceSnapshot: input.sourceSnapshot,

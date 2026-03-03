@@ -19,29 +19,90 @@ The package installs a platform-specific CLI companion package automatically via
 ## Quick start
 
 ```python
-import asyncio
+from superdoc import SuperDocClient
 
-from superdoc import AsyncSuperDocClient
+with SuperDocClient() as client:
+    client.doc.open({"doc": "./contract.docx"})
 
-
-async def main():
-    client = AsyncSuperDocClient()
-
-    await client.doc.open({"doc": "./contract.docx"})
-
-    info = await client.doc.info({})
+    info = client.doc.info({})
     print(info["counts"])
 
-    results = await client.doc.find({"type": "text", "pattern": "termination"})
+    results = client.doc.find({"type": "text", "pattern": "termination"})
     target = results["items"][0]["context"]["textRanges"][0]
 
-    await client.doc.replace({"target": target, "text": "expiration"})
-    await client.doc.save({"inPlace": True})
-    await client.doc.close({})
+    client.doc.replace({"target": target, "text": "expiration"})
+    client.doc.save({"inPlace": True})
+    client.doc.close({})
+```
 
+### Async
+
+```python
+import asyncio
+from superdoc import AsyncSuperDocClient
+
+async def main():
+    async with AsyncSuperDocClient() as client:
+        await client.doc.open({"doc": "./contract.docx"})
+
+        info = await client.doc.info({})
+        print(info["counts"])
+
+        results = await client.doc.find({"type": "text", "pattern": "termination"})
+        target = results["items"][0]["context"]["textRanges"][0]
+
+        await client.doc.replace({"target": target, "text": "expiration"})
+        await client.doc.save({"inPlace": True})
+        await client.doc.close({})
 
 asyncio.run(main())
 ```
+
+## Client lifecycle
+
+The SDK uses a persistent host process for all operations. The host is started on first use and reused across calls, avoiding per-operation subprocess overhead.
+
+### Context managers (recommended)
+
+```python
+# Sync
+with SuperDocClient() as client:
+    client.doc.find({"query": "test"})
+
+# Async
+async with AsyncSuperDocClient() as client:
+    await client.doc.find({"query": "test"})
+```
+
+The context manager calls `connect()` on entry and `dispose()` on exit (including on exception).
+
+### Explicit lifecycle
+
+```python
+client = SuperDocClient()
+client.connect()      # Optional — first invoke() auto-connects
+result = client.doc.find({"query": "test"})
+client.dispose()      # Shuts down the host process
+```
+
+`connect()` is optional. If not called explicitly, the first operation triggers a lazy connection to the host process.
+
+### Configuration
+
+```python
+client = SuperDocClient(
+    startup_timeout_ms=10_000,    # Max time for host handshake (default: 5000)
+    shutdown_timeout_ms=5_000,    # Max time for graceful shutdown (default: 5000)
+    request_timeout_ms=60_000,    # Per-operation timeout passed to CLI (default: None)
+    watchdog_timeout_ms=30_000,   # Client-side safety timer per request (default: 30000)
+    default_change_mode="tracked", # Auto-inject changeMode for mutations (default: None)
+    env={"SUPERDOC_CLI_BIN": "/path/to/superdoc"},  # Environment overrides
+)
+```
+
+### Thread safety
+
+Client instances are serialized: one operation at a time per client. For parallelism, use multiple client instances. Do not share a single client across threads.
 
 ## API
 
@@ -56,9 +117,9 @@ client = SuperDocClient()
 All document operations are on `client.doc`:
 
 ```python
-await client.doc.open(params)
-await client.doc.find(params)
-await client.doc.insert(params)
+client.doc.open(params)
+client.doc.find(params)
+client.doc.insert(params)
 # ... etc
 ```
 
@@ -77,6 +138,22 @@ await client.doc.insert(params)
 | **Session** | `session.list`, `session.save`, `session.close`, `session.set_default` |
 | **Introspection** | `status`, `describe`, `describe_command` |
 
+### Collaboration
+
+The Python SDK supports realtime collaboration through the same host transport as the Node SDK. Pass collaboration parameters to `doc.open`:
+
+```python
+with SuperDocClient() as client:
+    client.doc.open({
+        "doc": "./contract.docx",
+        "collabUrl": "ws://localhost:4000",
+        "collabDocumentId": "my-doc-id",
+    })
+    # Operations now use the collaborative session
+    client.doc.find({"query": "test"})
+    client.doc.close({})
+```
+
 ## Troubleshooting
 
 ### Custom CLI binary
@@ -85,6 +162,14 @@ If you need to use a custom-built CLI binary (e.g. a newer version or a patched 
 
 ```bash
 export SUPERDOC_CLI_BIN=/path/to/superdoc
+```
+
+### Debug logging
+
+Enable transport-level debug logging to diagnose connectivity issues:
+
+```bash
+export SUPERDOC_DEBUG=1
 ```
 
 ### Air-gapped / private index environments

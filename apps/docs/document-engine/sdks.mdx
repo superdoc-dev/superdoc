@@ -171,6 +171,90 @@ const { createSuperDocClient } = require('@superdoc-dev/sdk');
 
 Set `defaultChangeMode: 'tracked'` (Node) or `default_change_mode='tracked'` (Python) to make mutations use tracked changes by default. If you pass `changeMode` on a specific call, that explicit value overrides the default.
 
+## User identity
+
+By default the SDK attributes edits to a generic "CLI" user. Set `user` on the client to identify your automation in comments, tracked changes, and collaboration presence:
+
+<Tabs>
+  <Tab title="Node.js">
+    ```typescript
+    const client = new SuperDocClient({
+      user: { name: 'Review Bot', email: 'bot@example.com' },
+    });
+    ```
+  </Tab>
+  <Tab title="Python">
+    ```python
+    client = AsyncSuperDocClient(user={"name": "Review Bot", "email": "bot@example.com"})
+    ```
+  </Tab>
+</Tabs>
+
+The `user` is injected into every `doc.open` call. If you pass `userName` or `userEmail` on a specific `doc.open`, those per-call values take precedence.
+
+## Real-time collaboration
+
+Both SDKs can connect to a running Yjs collaboration session. Pass `collabUrl` (and optionally `collabDocumentId`) to `doc.open` — the SDK joins the session and edits the shared document state.
+
+<Tabs>
+  <Tab title="Node.js">
+    ```typescript
+    import { SuperDocClient } from '@superdoc-dev/sdk';
+
+    const client = new SuperDocClient();
+    await client.connect();
+
+    // Join a Hocuspocus collaboration session
+    await client.doc.open({
+      collabUrl: 'ws://localhost:4000',
+      collabDocumentId: 'my-doc-room',
+    });
+
+    // Edits go through the shared Yjs document
+    await client.doc.insert({
+      target: { type: 'end' },
+      content: 'Added by the SDK',
+    });
+
+    await client.doc.save();
+    await client.doc.close();
+    await client.dispose();
+    ```
+  </Tab>
+  <Tab title="Python">
+    ```python
+    import asyncio
+
+    from superdoc import AsyncSuperDocClient
+
+
+    async def main():
+        async with AsyncSuperDocClient() as client:
+            # Join a Hocuspocus collaboration session
+            await client.doc.open({
+                "collabUrl": "ws://localhost:4000",
+                "collabDocumentId": "my-doc-room",
+            })
+
+            # Edits go through the shared Yjs document
+            await client.doc.insert({
+                "target": {"type": "end"},
+                "content": "Added by the SDK",
+            })
+
+            await client.doc.save({"inPlace": True})
+            await client.doc.close({})
+
+
+    asyncio.run(main())
+    ```
+  </Tab>
+</Tabs>
+
+No `doc` path is needed — the document state comes from the collaboration session. If you pass a `doc` path, it is used to seed the room when empty. When the room already has content, the local file is ignored.
+
+See [SDK + Collaboration Sessions](/document-engine/sdk-collaboration-sessions) for more detail on how SDK sessions and collaboration sessions interact.
+
 {/* SDK_OPERATIONS_START */}
 ## Available operations
 

@@ -1860,6 +1860,39 @@ describe('superdoc CLI', () => {
     expect(unsupportedTokenEnvelope.error.code).toBe('VALIDATION_ERROR');
   });
 
+  test('open rejects primitive --collaboration-json with --on-missing', async () => {
+    const result = await runCli(['open', SAMPLE_DOC, '--collaboration-json', '"oops"', '--on-missing', 'blank']);
+    expect(result.code).toBe(1);
+    const envelope = parseJsonOutput<ErrorEnvelope>(result);
+    expect(envelope.error.code).toBe('VALIDATION_ERROR');
+  });
+
+  test('open rejects array --collaboration-json', async () => {
+    const result = await runCli(['open', SAMPLE_DOC, '--collaboration-json', '[1, 2]']);
+    expect(result.code).toBe(1);
+    const envelope = parseJsonOutput<ErrorEnvelope>(result);
+    expect(envelope.error.code).toBe('VALIDATION_ERROR');
+  });
+
+  test('open with collaboration does not require a doc path', async () => {
+    const result = await runCli([
+      'open',
+      '--collaboration-json',
+      JSON.stringify({
+        providerType: 'hocuspocus',
+        url: 'ws://127.0.0.1:9',
+        syncTimeoutMs: 1,
+      }),
+      '--session',
+      'collab-no-doc',
+    ]);
+
+    expect(result.code).toBe(1);
+    const envelope = parseJsonOutput<ErrorEnvelope>(result);
+    // Verify we no longer fail argument validation for a missing document path.
+    expect(envelope.error.code).not.toBe('MISSING_REQUIRED');
+  });
+
   test('open with --session is idempotent for the same session id', async () => {
     const firstOpen = await runCli(['open', SAMPLE_DOC, '--session', 'draft-a']);
     expect(firstOpen.code).toBe(0);
@@ -2114,6 +2147,32 @@ describe('superdoc CLI', () => {
     expect(findOriginal.code).toBe(0);
     const findEnvelope = parseJsonOutput<SuccessEnvelope<{ result: { total: number } }>>(findOriginal);
     expect(findEnvelope.data.result.total).toBe(0);
+
+    const closeResult = await runCli(['close', '--discard']);
+    expect(closeResult.code).toBe(0);
+  });
+
+  test('open with --user-name and --user-email succeeds', async () => {
+    const openResult = await runCli([
+      'open',
+      SAMPLE_DOC,
+      '--user-name',
+      'Review Bot',
+      '--user-email',
+      'bot@example.com',
+    ]);
+    expect(openResult.code).toBe(0);
+
+    const envelope = parseJsonOutput<SuccessEnvelope<{ active: boolean }>>(openResult);
+    expect(envelope.data.active).toBe(true);
+
+    const closeResult = await runCli(['close', '--discard']);
+    expect(closeResult.code).toBe(0);
+  });
+
+  test('open with --user-name only (no --user-email) succeeds', async () => {
+    const openResult = await runCli(['open', SAMPLE_DOC, '--user-name', 'Bot']);
+    expect(openResult.code).toBe(0);
 
     const closeResult = await runCli(['close', '--discard']);
     expect(closeResult.code).toBe(0);

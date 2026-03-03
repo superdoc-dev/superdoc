@@ -809,7 +809,7 @@ export class Editor extends EventEmitter<EditorEventMap> {
           resolvedOptions.mediaFiles = mediaFiles;
           resolvedOptions.fonts = fonts;
           resolvedOptions.fileSource = fileSource;
-          resolvedOptions.isNewFile = true;
+          resolvedOptions.isNewFile = resolvedOptions.isNewFile ?? true;
           this.#sourcePath = null;
         } else {
           // Use pre-parsed content from options if provided, otherwise create minimal structure
@@ -817,7 +817,7 @@ export class Editor extends EventEmitter<EditorEventMap> {
           resolvedOptions.mediaFiles = options?.mediaFiles ?? {};
           resolvedOptions.fonts = options?.fonts ?? {};
           resolvedOptions.fileSource = null;
-          resolvedOptions.isNewFile = !options?.content; // Only mark as new if no content provided
+          resolvedOptions.isNewFile = resolvedOptions.isNewFile ?? !options?.content; // Only mark as new if no content provided
           this.#sourcePath = null;
         }
       }

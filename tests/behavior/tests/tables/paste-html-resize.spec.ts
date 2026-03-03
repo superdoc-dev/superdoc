@@ -61,15 +61,15 @@ async function getTableGrid(page: Page) {
 test('pasted HTML table can be column-resized', async ({ superdoc }) => {
   await superdoc.page.evaluate((html) => {
     const editor = (window as any).editor;
-    const dataTransfer = new DataTransfer();
-    dataTransfer.setData('text/html', html);
-    dataTransfer.setData('text/plain', '');
-    const pasteEvent = new ClipboardEvent('paste', {
-      bubbles: true,
-      cancelable: true,
-      clipboardData: dataTransfer,
-    });
-    editor.view.dom.dispatchEvent(pasteEvent);
+    const event = new Event('paste', { bubbles: true, cancelable: true });
+    (event as any).clipboardData = {
+      getData: (type: string) => {
+        if (type === 'text/html') return html;
+        if (type === 'text/plain') return '';
+        return '';
+      },
+    };
+    editor.view.dom.dispatchEvent(event);
   }, SINGLE_HTML_TABLE);
   await superdoc.waitForStable();
 

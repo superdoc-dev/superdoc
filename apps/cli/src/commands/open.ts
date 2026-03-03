@@ -1,4 +1,4 @@
-import { getBooleanOption, getStringOption, resolveDocArg, resolveJsonInput } from '../lib/args';
+import { getBooleanOption, getNumberOption, getStringOption, resolveDocArg, resolveJsonInput } from '../lib/args';
 import { parseCollaborationInput, resolveCollaborationProfile } from '../lib/collaboration';
 import {
   getProjectRoot,
@@ -17,6 +17,7 @@ import { generateSessionId } from '../lib/session';
 import type { CommandContext, CommandExecution } from '../lib/types';
 
 const VALID_OVERRIDE_TYPES = new Set(['markdown', 'html', 'text']);
+const VALID_ON_MISSING = new Set(['seedFromDoc', 'blank', 'error']);
 
 export async function runOpen(tokens: string[], context: CommandContext): Promise<CommandExecution> {
   const { parsed, help } = parseOperationArgs('doc.open', tokens, {
@@ -51,6 +52,10 @@ export async function runOpen(tokens: string[], context: CommandContext): Promis
   const collabDocumentId = getStringOption(parsed, 'collab-document-id');
   const contentOverride = getStringOption(parsed, 'content-override');
   const overrideType = getStringOption(parsed, 'override-type');
+  const onMissing = getStringOption(parsed, 'on-missing');
+  const bootstrapSettlingMs = getNumberOption(parsed, 'bootstrap-settling-ms');
+  const userName = getStringOption(parsed, 'user-name');
+  const userEmail = getStringOption(parsed, 'user-email');
 
   // Validate contentOverride / overrideType co-requirement.
   // Use != null checks so that intentional empty-string overrides are honored.
@@ -64,6 +69,13 @@ export async function runOpen(tokens: string[], context: CommandContext): Promis
     throw new CliError(
       'INVALID_ARGUMENT',
       `open: --override-type must be one of: markdown, html, text. Got "${overrideType}".`,
+    );
+  }
+
+  if (onMissing != null && !VALID_ON_MISSING.has(onMissing)) {
+    throw new CliError(
+      'INVALID_ARGUMENT',
+      `open: --on-missing must be one of: seedFromDoc, blank, error. Got "${onMissing}".`,
     );
   }
 
@@ -84,12 +96,21 @@ export async function runOpen(tokens: string[], context: CommandContext): Promis
 
   let collaborationInput;
   if (collaborationPayload != null) {
-    collaborationInput = parseCollaborationInput(collaborationPayload);
+    if (typeof collaborationPayload !== 'object' || Array.isArray(collaborationPayload)) {
+      throw new CliError('VALIDATION_ERROR', 'open: --collaboration-json must be a JSON object.');
+    }
+    const payload = collaborationPayload as Record<string, unknown>;
+    if (onMissing != null && !('onMissing' in payload)) payload.onMissing = onMissing;
+    if (bootstrapSettlingMs != null && !('bootstrapSettlingMs' in payload))
+      payload.bootstrapSettlingMs = bootstrapSettlingMs;
+    collaborationInput = parseCollaborationInput(payload);
   } else if (collabUrl) {
     collaborationInput = parseCollaborationInput({
       providerType: 'hocuspocus',
       url: collabUrl,
       documentId: collabDocumentId,
+      ...(onMissing != null ? { onMissing } : {}),
+      ...(bootstrapSettlingMs != null ? { bootstrapSettlingMs } : {}),
     });
   } else if (collabDocumentId) {
     throw new CliError('MISSING_REQUIRED', 'open: --collab-document-id requires --collab-url.');
@@ -97,6 +118,16 @@ export async function runOpen(tokens: string[], context: CommandContext): Promis
 
   const collaboration = collaborationInput ? resolveCollaborationProfile(collaborationInput, sessionId) : undefined;
   const sessionType = collaboration ? 'collab' : 'local';
+
+  if (!collaboration && (onMissing != null || bootstrapSettlingMs != null)) {
+    throw new CliError(
+      'INVALID_ARGUMENT',
+      'open: --on-missing and --bootstrap-settling-ms require collaboration mode (--collaboration-json or --collab-url).',
+    );
+  }
+
+  // Build user identity when either flag is provided.
+  const user = userName != null || userEmail != null ? { name: userName ?? 'CLI', email: userEmail ?? '' } : undefined;
 
   // Build editor open options from override params
   const editorOpenOptions: Record<string, string> = {};
@@ -141,13 +172,10 @@ export async function runOpen(tokens: string[], context: CommandContext): Promis
         );
       }
 
-      if (collaboration && doc == null) {
-        throw new CliError('MISSING_REQUIRED', 'open: a document path is required when using collaboration.');
-      }
-
       const opened = collaboration
-        ? await openCollaborativeDocument(doc!, context.io, collaboration)
-        : await openDocument(doc, context.io, { editorOpenOptions });
+        ? await openCollaborativeDocument(doc, context.io, collaboration, { user })
+        : await openDocument(doc, context.io, { editorOpenOptions, user });
+      const bootstrap = 'bootstrap' in opened ? opened.bootstrap : undefined;
       let adoptedToHostPool = false;
       try {
         const output = await exportToPath(opened.editor, paths.workingDocPath, true);
@@ -163,6 +191,7 @@ export async function runOpen(tokens: string[], context: CommandContext): Promis
           sourceSnapshot,
           sessionType,
           collaboration,
+          user,
         });
 
         await writeContextMetadata(paths, metadata);
@@ -187,6 +216,7 @@ export async function runOpen(tokens: string[], context: CommandContext): Promis
             dirty: metadata.dirty,
             sessionType: metadata.sessionType,
             collaboration: metadata.collaboration,
+            bootstrap,
             openedAt: metadata.openedAt,
             updatedAt: metadata.updatedAt,
           },

@@ -30,6 +30,8 @@ Returns a SectionMutationResult receipt; reports NO_OP if text direction already
 | --- | --- | --- | --- |
 | `direction` | enum | yes | `"ltr"`, `"rtl"` |
 | `target` | SectionAddress | yes | SectionAddress |
+| `target.kind` | `"section"` | yes | Constant: `"section"` |
+| `target.sectionId` | string | yes |  |
 
 ### Example request
 
@@ -45,7 +47,24 @@ Returns a SectionMutationResult receipt; reports NO_OP if text direction already
 
 ## Output fields
 
-_No fields._
+### Variant 1 (section.kind="section")
+
+| Field | Type | Required | Description |
+| --- | --- | --- | --- |
+| `section` | SectionAddress | yes | SectionAddress |
+| `section.kind` | `"section"` | yes | Constant: `"section"` |
+| `section.sectionId` | string | yes |  |
+| `success` | `true` | yes | Constant: `true` |
+
+### Variant 2 (success=false)
+
+| Field | Type | Required | Description |
+| --- | --- | --- | --- |
+| `failure` | object | yes |  |
+| `failure.code` | enum | yes | `"NO_OP"`, `"INVALID_TARGET"`, `"CAPABILITY_UNAVAILABLE"` |
+| `failure.details` | any | no |  |
+| `failure.message` | string | yes |  |
+| `success` | `false` | yes | Constant: `false` |
 
 ### Example response
 

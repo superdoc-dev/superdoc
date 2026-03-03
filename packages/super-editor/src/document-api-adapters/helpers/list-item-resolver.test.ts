@@ -142,6 +142,40 @@ describe('list-item-resolver', () => {
     expect(result.items[0]?.id).toBe('li-1');
   });
 
+  it('keeps listId stable across within scopes', () => {
+    const editor = makeEditor([
+      makeParagraph({
+        id: 'li-1',
+        text: 'First',
+        numId: 1,
+        ilvl: 0,
+        markerText: '1.',
+        path: [1],
+        numberingType: 'decimal',
+      }),
+      makeParagraph({
+        id: 'li-2',
+        text: 'Second',
+        numId: 1,
+        ilvl: 0,
+        markerText: '2.',
+        path: [2],
+        numberingType: 'decimal',
+      }),
+    ]);
+
+    const unscoped = listListItems(editor);
+    const scoped = listListItems(editor, {
+      within: { kind: 'block', nodeType: 'listItem', nodeId: 'li-2' },
+    });
+
+    const unscopedSecond = unscoped.items.find((item) => item.id === 'li-2');
+    const scopedSecond = scoped.items.find((item) => item.id === 'li-2');
+
+    expect(unscopedSecond?.listId).toBe('1:li-1');
+    expect(scopedSecond?.listId).toBe('1:li-1');
+  });
+
   it('throws TARGET_NOT_FOUND when resolving a stale list address', () => {
     const editor = makeEditor([
       makeParagraph({ id: 'li-1', numId: 1, markerText: '1.', path: [1], numberingType: 'decimal' }),

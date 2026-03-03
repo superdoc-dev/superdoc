@@ -249,7 +249,7 @@ export async function executeMutationOperation(request: DocOperationRequest): Pr
       }
 
       // --- Session + local ---
-      const opened = await openDocument(paths.workingDocPath, context.io);
+      const opened = await openDocument(paths.workingDocPath, context.io, { user: metadata.user });
       try {
         const result = invokeOperation(opened.editor, operationId, input, invokeOptions);
         const document: DocumentPayload = {

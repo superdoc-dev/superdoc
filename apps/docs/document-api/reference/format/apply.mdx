@@ -29,7 +29,55 @@ Returns a TextMutationReceipt confirming inline styles were applied to the targe
 | Field | Type | Required | Description |
 | --- | --- | --- | --- |
 | `inline` | object | yes |  |
+| `inline.bCs` | boolean \\| null | no | One of: boolean, null |
+| `inline.bold` | boolean \\| null | no | One of: boolean, null |
+| `inline.border` | object \\| null | no | One of: object, null |
+| `inline.caps` | boolean \\| null | no | One of: boolean, null |
+| `inline.charScale` | number \\| null | no | One of: number, null |
+| `inline.color` | string \\| null | no | One of: string, null |
+| `inline.contextualAlternates` | boolean \\| null | no | One of: boolean, null |
+| `inline.cs` | boolean \\| null | no | One of: boolean, null |
+| `inline.dstrike` | boolean \\| null | no | One of: boolean, null |
+| `inline.eastAsianLayout` | object \\| null | no | One of: object, null |
+| `inline.em` | string \\| null | no | One of: string, null |
+| `inline.emboss` | boolean \\| null | no | One of: boolean, null |
+| `inline.fitText` | object \\| null | no | One of: object, null |
+| `inline.fontFamily` | string \\| null | no | One of: string, null |
+| `inline.fontSize` | number \\| null | no | One of: number, null |
+| `inline.fontSizeCs` | number \\| null | no | One of: number, null |
+| `inline.highlight` | string \\| null | no | One of: string, null |
+| `inline.iCs` | boolean \\| null | no | One of: boolean, null |
+| `inline.imprint` | boolean \\| null | no | One of: boolean, null |
+| `inline.italic` | boolean \\| null | no | One of: boolean, null |
+| `inline.kerning` | number \\| null | no | One of: number, null |
+| `inline.lang` | object \\| null | no | One of: object, null |
+| `inline.letterSpacing` | number \\| null | no | One of: number, null |
+| `inline.ligatures` | string \\| null | no | One of: string, null |
+| `inline.numForm` | string \\| null | no | One of: string, null |
+| `inline.numSpacing` | string \\| null | no | One of: string, null |
+| `inline.oMath` | boolean \\| null | no | One of: boolean, null |
+| `inline.outline` | boolean \\| null | no | One of: boolean, null |
+| `inline.position` | number \\| null | no | One of: number, null |
+| `inline.rFonts` | object \\| null | no | One of: object, null |
+| `inline.rStyle` | string \\| null | no | One of: string, null |
+| `inline.rtl` | boolean \\| null | no | One of: boolean, null |
+| `inline.shading` | object \\| null | no | One of: object, null |
+| `inline.shadow` | boolean \\| null | no | One of: boolean, null |
+| `inline.smallCaps` | boolean \\| null | no | One of: boolean, null |
+| `inline.snapToGrid` | boolean \\| null | no | One of: boolean, null |
+| `inline.specVanish` | boolean \\| null | no | One of: boolean, null |
+| `inline.strike` | boolean \\| null | no | One of: boolean, null |
+| `inline.stylisticSets` | object[] \\| null | no | One of: object[], null |
+| `inline.underline` | boolean \\| null \\| object | no | One of: boolean, null, object |
+| `inline.vanish` | boolean \\| null | no | One of: boolean, null |
+| `inline.vertAlign` | enum \\| null | no | One of: enum, null |
+| `inline.webHidden` | boolean \\| null | no | One of: boolean, null |
 | `target` | TextAddress | yes | TextAddress |
+| `target.blockId` | string | yes |  |
+| `target.kind` | `"text"` | yes | Constant: `"text"` |
+| `target.range` | Range | yes | Range |
+| `target.range.end` | integer | yes |  |
+| `target.range.start` | integer | yes |  |
 
 ### Example request
 
@@ -52,7 +100,58 @@ Returns a TextMutationReceipt confirming inline styles were applied to the targe
 
 ## Output fields
 
-_No fields._
+### Variant 1 (resolution.requestedTarget.kind="text")
+
+| Field | Type | Required | Description |
+| --- | --- | --- | --- |
+| `inserted` | EntityAddress[] | no |  |
+| `removed` | EntityAddress[] | no |  |
+| `resolution` | TextMutationResolution | yes | TextMutationResolution |
+| `resolution.range` | TextMutationRange | yes | TextMutationRange |
+| `resolution.range.from` | integer | yes |  |
+| `resolution.range.to` | integer | yes |  |
+| `resolution.requestedTarget` | TextAddress | no | TextAddress |
+| `resolution.requestedTarget.blockId` | string | no |  |
+| `resolution.requestedTarget.kind` | `"text"` | no | Constant: `"text"` |
+| `resolution.requestedTarget.range` | Range | no | Range |
+| `resolution.requestedTarget.range.end` | integer | no |  |
+| `resolution.requestedTarget.range.start` | integer | no |  |
+| `resolution.target` | TextAddress | yes | TextAddress |
+| `resolution.target.blockId` | string | yes |  |
+| `resolution.target.kind` | `"text"` | yes | Constant: `"text"` |
+| `resolution.target.range` | Range | yes | Range |
+| `resolution.target.range.end` | integer | yes |  |
+| `resolution.target.range.start` | integer | yes |  |
+| `resolution.text` | string | yes |  |
+| `success` | `true` | yes | Constant: `true` |
+| `updated` | EntityAddress[] | no |  |
+
+### Variant 2 (resolution.requestedTarget.kind="text")
+
+| Field | Type | Required | Description |
+| --- | --- | --- | --- |
+| `failure` | object | yes |  |
+| `failure.code` | enum | yes | `"INVALID_TARGET"` |
+| `failure.details` | any | no |  |
+| `failure.message` | string | yes |  |
+| `resolution` | TextMutationResolution | yes | TextMutationResolution |
+| `resolution.range` | TextMutationRange | yes | TextMutationRange |
+| `resolution.range.from` | integer | yes |  |
+| `resolution.range.to` | integer | yes |  |
+| `resolution.requestedTarget` | TextAddress | no | TextAddress |
+| `resolution.requestedTarget.blockId` | string | no |  |
+| `resolution.requestedTarget.kind` | `"text"` | no | Constant: `"text"` |
+| `resolution.requestedTarget.range` | Range | no | Range |
+| `resolution.requestedTarget.range.end` | integer | no |  |
+| `resolution.requestedTarget.range.start` | integer | no |  |
+| `resolution.target` | TextAddress | yes | TextAddress |
+| `resolution.target.blockId` | string | yes |  |
+| `resolution.target.kind` | `"text"` | yes | Constant: `"text"` |
+| `resolution.target.range` | Range | yes | Range |
+| `resolution.target.range.end` | integer | yes |  |
+| `resolution.target.range.start` | integer | yes |  |
+| `resolution.text` | string | yes |  |
+| `success` | `false` | yes | Constant: `false` |
 
 ### Example response
 

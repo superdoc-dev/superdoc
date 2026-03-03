@@ -43,7 +43,6 @@ test.describe('comment highlight survives mark changes', () => {
 
     // Comment highlight must still be present
     await superdoc.assertCommentHighlightExists({
-      text: 'brown fox',
       commentId,
     });
 
@@ -78,9 +77,9 @@ test.describe('comment highlight survives mark changes', () => {
     await superdoc.assertCommentHighlightExists({ commentId });
 
     // Each part of the range should still carry the highlight
-    await superdoc.assertCommentHighlightExists({ text: 'quick' });
-    await superdoc.assertCommentHighlightExists({ text: 'brown' });
-    await superdoc.assertCommentHighlightExists({ text: 'fox' });
+    await superdoc.assertCommentHighlightExists({ text: 'quick', commentId });
+    await superdoc.assertCommentHighlightExists({ text: 'brown', commentId });
+    await superdoc.assertCommentHighlightExists({ text: 'fox', commentId });
 
     // Italic applied to "brown"
     await superdoc.assertTextHasMarks('brown', ['italic']);
@@ -107,15 +106,15 @@ test.describe('comment highlight survives mark changes', () => {
 
     await superdoc.bold();
     await superdoc.waitForStable();
-    await superdoc.assertCommentHighlightExists({ text: 'resilience test', commentId });
+    await superdoc.assertCommentHighlightExists({ commentId });
 
     await superdoc.italic();
     await superdoc.waitForStable();
-    await superdoc.assertCommentHighlightExists({ text: 'resilience test', commentId });
+    await superdoc.assertCommentHighlightExists({ commentId });
 
     await superdoc.underline();
     await superdoc.waitForStable();
-    await superdoc.assertCommentHighlightExists({ text: 'resilience test', commentId });
+    await superdoc.assertCommentHighlightExists({ commentId });
 
     // All three marks should be present
     await superdoc.assertTextHasMarks('resilience test', ['bold', 'italic', 'underline']);

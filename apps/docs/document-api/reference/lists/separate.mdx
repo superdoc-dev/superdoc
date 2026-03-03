@@ -1,7 +1,7 @@
 ---
-title: lists.setType
-sidebarTitle: lists.setType
-description: Change the list type (ordered, unordered) of a target list.
+title: lists.separate
+sidebarTitle: lists.separate
+description: Split a list sequence at the target item, creating a new sequence from that point forward.
 ---
 
 {/* GENERATED FILE: DO NOT EDIT. Regenerate via `pnpm run docapi:sync`. */}
@@ -10,10 +10,10 @@ description: Change the list type (ordered, unordered) of a target list.
 
 ## Summary
 
-Change the list type (ordered, unordered) of a target list.
+Split a list sequence at the target item, creating a new sequence from that point forward.
 
-- Operation ID: `lists.setType`
-- API member path: `editor.doc.lists.setType(...)`
+- Operation ID: `lists.separate`
+- API member path: `editor.doc.lists.separate(...)`
 - Mutates document: `yes`
 - Idempotency: `conditional`
 - Supports tracked mode: `no`
@@ -22,20 +22,23 @@ Change the list type (ordered, unordered) of a target list.
 
 ## Expected result
 
-Returns a ListsMutateItemResult receipt; reports NO_OP if the list already has the requested type.
+Returns a ListsSeparateResult with the new listId and numId.
 
 ## Input fields
 
 | Field | Type | Required | Description |
 | --- | --- | --- | --- |
-| `kind` | enum | yes | `"ordered"`, `"bullet"` |
+| `copyOverrides` | boolean | no |  |
 | `target` | ListItemAddress | yes | ListItemAddress |
+| `target.kind` | `"block"` | yes | Constant: `"block"` |
+| `target.nodeId` | string | yes |  |
+| `target.nodeType` | `"listItem"` | yes | Constant: `"listItem"` |
 
 ### Example request
 
 ```json
 {
-  "kind": "ordered",
+  "copyOverrides": true,
   "target": {
     "kind": "block",
     "nodeId": "node-def456",
@@ -46,17 +49,30 @@ Returns a ListsMutateItemResult receipt; reports NO_OP if the list already has t
 
 ## Output fields
 
-_No fields._
+### Variant 1 (success=true)
+
+| Field | Type | Required | Description |
+| --- | --- | --- | --- |
+| `listId` | string | yes |  |
+| `numId` | integer | yes |  |
+| `success` | `true` | yes | Constant: `true` |
+
+### Variant 2 (success=false)
+
+| Field | Type | Required | Description |
+| --- | --- | --- | --- |
+| `failure` | object | yes |  |
+| `failure.code` | enum | yes | `"INVALID_TARGET"`, `"NO_OP"` |
+| `failure.details` | any | no |  |
+| `failure.message` | string | yes |  |
+| `success` | `false` | yes | Constant: `false` |
 
 ### Example response
 
 ```json
 {
-  "item": {
-    "kind": "block",
-    "nodeId": "node-def456",
-    "nodeType": "listItem"
-  },
+  "listId": "example",
+  "numId": 1,
   "success": true
 }
 ```
@@ -69,8 +85,8 @@ _No fields._
 
 ## Non-applied failure codes
 
-- `NO_OP`
 - `INVALID_TARGET`
+- `NO_OP`
 
 ## Raw schemas
 
@@ -79,19 +95,15 @@ _No fields._
 {
   "additionalProperties": false,
   "properties": {
-    "kind": {
-      "enum": [
-        "ordered",
-        "bullet"
-      ]
+    "copyOverrides": {
+      "type": "boolean"
     },
     "target": {
       "$ref": "#/$defs/ListItemAddress"
     }
   },
   "required": [
-    "target",
-    "kind"
+    "target"
   ],
   "type": "object"
 }
@@ -105,8 +117,11 @@ _No fields._
     {
       "additionalProperties": false,
       "properties": {
-        "item": {
-          "$ref": "#/$defs/ListItemAddress"
+        "listId": {
+          "type": "string"
+        },
+        "numId": {
+          "type": "integer"
         },
         "success": {
           "const": true
@@ -114,7 +129,8 @@ _No fields._
       },
       "required": [
         "success",
-        "item"
+        "listId",
+        "numId"
       ],
       "type": "object"
     },
@@ -126,8 +142,8 @@ _No fields._
           "properties": {
             "code": {
               "enum": [
-                "NO_OP",
-                "INVALID_TARGET"
+                "INVALID_TARGET",
+                "NO_OP"
               ]
             },
             "details": {},
@@ -161,8 +177,11 @@ _No fields._
 {
   "additionalProperties": false,
   "properties": {
-    "item": {
-      "$ref": "#/$defs/ListItemAddress"
+    "listId": {
+      "type": "string"
+    },
+    "numId": {
+      "type": "integer"
     },
     "success": {
       "const": true
@@ -170,7 +189,8 @@ _No fields._
   },
   "required": [
     "success",
-    "item"
+    "listId",
+    "numId"
   ],
   "type": "object"
 }
@@ -187,8 +207,8 @@ _No fields._
       "properties": {
         "code": {
           "enum": [
-            "NO_OP",
-            "INVALID_TARGET"
+            "INVALID_TARGET",
+            "NO_OP"
           ]
         },
         "details": {},

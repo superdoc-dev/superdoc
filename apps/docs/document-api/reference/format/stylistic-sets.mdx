@@ -29,6 +29,11 @@ Returns a TextMutationReceipt confirming the inline run property patch was appli
 | Field | Type | Required | Description |
 | --- | --- | --- | --- |
 | `target` | TextAddress | yes | TextAddress |
+| `target.blockId` | string | yes |  |
+| `target.kind` | `"text"` | yes | Constant: `"text"` |
+| `target.range` | Range | yes | Range |
+| `target.range.end` | integer | yes |  |
+| `target.range.start` | integer | yes |  |
 | `value` | object[] \\| null | yes | One of: object[], null |
 
 ### Example request
@@ -54,7 +59,58 @@ Returns a TextMutationReceipt confirming the inline run property patch was appli
 
 ## Output fields
 
-_No fields._
+### Variant 1 (resolution.requestedTarget.kind="text")
+
+| Field | Type | Required | Description |
+| --- | --- | --- | --- |
+| `inserted` | EntityAddress[] | no |  |
+| `removed` | EntityAddress[] | no |  |
+| `resolution` | TextMutationResolution | yes | TextMutationResolution |
+| `resolution.range` | TextMutationRange | yes | TextMutationRange |
+| `resolution.range.from` | integer | yes |  |
+| `resolution.range.to` | integer | yes |  |
+| `resolution.requestedTarget` | TextAddress | no | TextAddress |
+| `resolution.requestedTarget.blockId` | string | no |  |
+| `resolution.requestedTarget.kind` | `"text"` | no | Constant: `"text"` |
+| `resolution.requestedTarget.range` | Range | no | Range |
+| `resolution.requestedTarget.range.end` | integer | no |  |
+| `resolution.requestedTarget.range.start` | integer | no |  |
+| `resolution.target` | TextAddress | yes | TextAddress |
+| `resolution.target.blockId` | string | yes |  |
+| `resolution.target.kind` | `"text"` | yes | Constant: `"text"` |
+| `resolution.target.range` | Range | yes | Range |
+| `resolution.target.range.end` | integer | yes |  |
+| `resolution.target.range.start` | integer | yes |  |
+| `resolution.text` | string | yes |  |
+| `success` | `true` | yes | Constant: `true` |
+| `updated` | EntityAddress[] | no |  |
+
+### Variant 2 (resolution.requestedTarget.kind="text")
+
+| Field | Type | Required | Description |
+| --- | --- | --- | --- |
+| `failure` | object | yes |  |
+| `failure.code` | enum | yes | `"INVALID_TARGET"` |
+| `failure.details` | any | no |  |
+| `failure.message` | string | yes |  |
+| `resolution` | TextMutationResolution | yes | TextMutationResolution |
+| `resolution.range` | TextMutationRange | yes | TextMutationRange |
+| `resolution.range.from` | integer | yes |  |
+| `resolution.range.to` | integer | yes |  |
+| `resolution.requestedTarget` | TextAddress | no | TextAddress |
+| `resolution.requestedTarget.blockId` | string | no |  |
+| `resolution.requestedTarget.kind` | `"text"` | no | Constant: `"text"` |
+| `resolution.requestedTarget.range` | Range | no | Range |
+| `resolution.requestedTarget.range.end` | integer | no |  |
+| `resolution.requestedTarget.range.start` | integer | no |  |
+| `resolution.target` | TextAddress | yes | TextAddress |
+| `resolution.target.blockId` | string | yes |  |
+| `resolution.target.kind` | `"text"` | yes | Constant: `"text"` |
+| `resolution.target.range` | Range | yes | Range |
+| `resolution.target.range.end` | integer | yes |  |
+| `resolution.target.range.start` | integer | yes |  |
+| `resolution.text` | string | yes |  |
+| `success` | `false` | yes | Constant: `false` |
 
 ### Example response
 

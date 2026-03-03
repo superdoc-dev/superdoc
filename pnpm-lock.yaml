@@ -1251,6 +1251,9 @@ importers:
       '@hocuspocus/server':
         specifier: 'catalog:'
         version: 2.15.3(y-protocols@1.0.7(yjs@13.6.19))(yjs@13.6.19)
+      '@superdoc-dev/superdoc-yjs-collaboration':
+        specifier: workspace:*
+        version: link:../collaboration-yjs
       '@superdoc/common':
         specifier: workspace:*
         version: link:../../shared/common
@@ -1305,6 +1308,9 @@ importers:
       vitest:
         specifier: 'catalog:'
         version: 3.2.4(@types/debug@4.1.12)(@types/node@22.19.8)(esbuild@0.27.2)(happy-dom@20.4.0)(jiti@2.6.1)(jsdom@27.3.0(canvas@3.2.1))(tsx@4.21.0)(yaml@2.8.2)
+      ws:
+        specifier: ^8.18.3
+        version: 8.19.0
       xml-js:
         specifier: 'catalog:'
         version: 1.6.11

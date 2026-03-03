@@ -29,6 +29,9 @@ Returns a ListsMutateItemResult receipt; reports NO_OP if the item is already at
 | Field | Type | Required | Description |
 | --- | --- | --- | --- |
 | `target` | ListItemAddress | yes | ListItemAddress |
+| `target.kind` | `"block"` | yes | Constant: `"block"` |
+| `target.nodeId` | string | yes |  |
+| `target.nodeType` | `"listItem"` | yes | Constant: `"listItem"` |
 
 ### Example request
 
@@ -44,7 +47,25 @@ Returns a ListsMutateItemResult receipt; reports NO_OP if the item is already at
 
 ## Output fields
 
-_No fields._
+### Variant 1 (item.kind="block")
+
+| Field | Type | Required | Description |
+| --- | --- | --- | --- |
+| `item` | ListItemAddress | yes | ListItemAddress |
+| `item.kind` | `"block"` | yes | Constant: `"block"` |
+| `item.nodeId` | string | yes |  |
+| `item.nodeType` | `"listItem"` | yes | Constant: `"listItem"` |
+| `success` | `true` | yes | Constant: `true` |
+
+### Variant 2 (success=false)
+
+| Field | Type | Required | Description |
+| --- | --- | --- | --- |
+| `failure` | object | yes |  |
+| `failure.code` | enum | yes | `"NO_OP"`, `"INVALID_TARGET"`, `"LEVEL_OUT_OF_RANGE"` |
+| `failure.details` | any | no |  |
+| `failure.message` | string | yes |  |
+| `success` | `false` | yes | Constant: `false` |
 
 ### Example response
 
@@ -69,6 +90,7 @@ _No fields._
 
 - `NO_OP`
 - `INVALID_TARGET`
+- `LEVEL_OUT_OF_RANGE`
 
 ## Raw schemas
 
@@ -118,7 +140,8 @@ _No fields._
             "code": {
               "enum": [
                 "NO_OP",
-                "INVALID_TARGET"
+                "INVALID_TARGET",
+                "LEVEL_OUT_OF_RANGE"
               ]
             },
             "details": {},
@@ -179,7 +202,8 @@ _No fields._
         "code": {
           "enum": [
             "NO_OP",
-            "INVALID_TARGET"
+            "INVALID_TARGET",
+            "LEVEL_OUT_OF_RANGE"
           ]
         },
         "details": {},

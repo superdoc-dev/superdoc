@@ -43,7 +43,7 @@ export const generateNewListDefinition = ({ numId, listType, level, start, text,
   );
 
   // Generate the new abstractNum definition for copy/paste lists
-  if (level && start && text && fmt) {
+  if (level != null && start != null && text != null && fmt != null) {
     if (newNumbering.definitions[numId]) {
       const abstractId = newNumbering.definitions[numId]?.elements[0]?.attributes['w:val'];
       newAbstractId = abstractId;
@@ -499,6 +499,244 @@ export const replaceListWithNode = ({ tr, from, to, newNode }) => {
 };
 
 /**
+ * Set or update a lvlOverride entry on an existing w:num definition.
+ *
+ * This is the canonical write path for per-instance level overrides (w:lvlOverride).
+ * It syncs both the raw XML model (editor.converter.numbering) and the typed model
+ * (editor.converter.translatedNumbering), then emits 'list-definitions-change' so the
+ * numbering plugin recomputes markers.
+ *
+ * @param {import('../Editor').Editor} editor
+ * @param {number} numId  - The w:num to modify.
+ * @param {number} ilvl   - The level index (0-8) for the override.
+ * @param {{ startOverride?: number, lvlRestart?: number | null }} overrides - Override values to set.
+ */
+export const setLvlOverride = (editor, numId, ilvl, overrides) => {
+  const numbering = editor.converter.numbering;
+  const numDef = numbering.definitions[numId];
+  if (!numDef) return;
+
+  // --- Raw XML update ---
+  const ilvlStr = String(ilvl);
+
+  // Find or create the w:lvlOverride element for this level
+  if (!numDef.elements) numDef.elements = [];
+  let overrideEl = numDef.elements.find((el) => el.name === 'w:lvlOverride' && el.attributes?.['w:ilvl'] === ilvlStr);
+
+  if (!overrideEl) {
+    overrideEl = {
+      type: 'element',
+      name: 'w:lvlOverride',
+      attributes: { 'w:ilvl': ilvlStr },
+      elements: [],
+    };
+    numDef.elements.push(overrideEl);
+  }
+
+  if (!overrideEl.elements) overrideEl.elements = [];
+
+  // Set startOverride if provided
+  if (overrides.startOverride != null) {
+    const startEl = overrideEl.elements.find((el) => el.name === 'w:startOverride');
+    if (startEl) {
+      startEl.attributes['w:val'] = String(overrides.startOverride);
+    } else {
+      overrideEl.elements.push({
+        type: 'element',
+        name: 'w:startOverride',
+        attributes: { 'w:val': String(overrides.startOverride) },
+      });
+    }
+  }
+
+  // Set lvlRestart via a w:lvl child within the lvlOverride (instance-scope restart)
+  if ('lvlRestart' in overrides) {
+    let lvlEl = overrideEl.elements.find((el) => el.name === 'w:lvl');
+    if (!lvlEl) {
+      lvlEl = {
+        type: 'element',
+        name: 'w:lvl',
+        attributes: { 'w:ilvl': ilvlStr },
+        elements: [],
+      };
+      overrideEl.elements.push(lvlEl);
+    }
+    if (!lvlEl.elements) lvlEl.elements = [];
+
+    if (overrides.lvlRestart === null) {
+      lvlEl.elements = lvlEl.elements.filter((el) => el.name !== 'w:lvlRestart');
+    } else {
+      const restartEl = lvlEl.elements.find((el) => el.name === 'w:lvlRestart');
+      if (restartEl) {
+        restartEl.attributes['w:val'] = String(overrides.lvlRestart);
+      } else {
+        lvlEl.elements.push({
+          type: 'element',
+          name: 'w:lvlRestart',
+          attributes: { 'w:val': String(overrides.lvlRestart) },
+        });
+      }
+    }
+  }
+
+  // Persist raw XML
+  numbering.definitions[numId] = numDef;
+  editor.converter.numbering = { ...numbering };
+
+  // --- Typed model update ---
+  syncTranslatedDefinition(editor, numId, numDef);
+
+  // --- Notify ---
+  emitDefinitionChange(editor, numDef);
+};
+
+/**
+ * Remove a lvlOverride entry from an existing w:num definition.
+ *
+ * Restores the level to its base abstract behavior by deleting the
+ * w:lvlOverride element for the specified level.
+ *
+ * @param {import('../Editor').Editor} editor
+ * @param {number} numId - The w:num to modify.
+ * @param {number} ilvl  - The level index (0-8) whose override to remove.
+ */
+export const removeLvlOverride = (editor, numId, ilvl) => {
+  const numbering = editor.converter.numbering;
+  const numDef = numbering.definitions[numId];
+  if (!numDef?.elements) return;
+
+  const ilvlStr = String(ilvl);
+  const idx = numDef.elements.findIndex((el) => el.name === 'w:lvlOverride' && el.attributes?.['w:ilvl'] === ilvlStr);
+  if (idx === -1) return;
+
+  numDef.elements.splice(idx, 1);
+
+  // Persist raw XML
+  numbering.definitions[numId] = numDef;
+  editor.converter.numbering = { ...numbering };
+
+  // --- Typed model update ---
+  syncTranslatedDefinition(editor, numId, numDef);
+
+  // --- Notify ---
+  emitDefinitionChange(editor, numDef);
+};
+
+/**
+ * Re-encode a raw w:num node into the typed model and persist it.
+ * @param {import('../Editor').Editor} editor
+ * @param {number} numId
+ * @param {Object} rawNumDef - The raw XML w:num node.
+ */
+const syncTranslatedDefinition = (editor, numId, rawNumDef) => {
+  const translated = { ...(editor.converter.translatedNumbering || {}) };
+  if (!translated.definitions) translated.definitions = {};
+  // @ts-expect-error Remaining parameters are not needed for this translator
+  translated.definitions[numId] = wNumTranslator.encode({ nodes: [rawNumDef] });
+  editor.converter.translatedNumbering = translated;
+};
+
+/**
+ * Emit the standard numbering change event so the numbering plugin recomputes.
+ * @param {import('../Editor').Editor} editor
+ * @param {Object} numDef - The modified w:num raw node.
+ */
+const emitDefinitionChange = (editor, numDef) => {
+  editor.emit('list-definitions-change', {
+    change: { numDef, editor },
+    numbering: editor.converter.numbering,
+    editor,
+  });
+};
+
+/**
+ * Create a new w:num definition pointing to an existing abstractNumId.
+ * Optionally copies lvlOverride entries from a source numId.
+ *
+ * @param {import('../Editor').Editor} editor
+ * @param {number} abstractNumId - The abstractNumId to reference.
+ * @param {{ copyOverridesFrom?: number }} [options]
+ * @returns {{ numId: number, numDef: Object }}
+ */
+export const createNumDefinition = (editor, abstractNumId, options = {}) => {
+  const numId = getNewListId(editor, 'definitions');
+  const numDef = getBasicNumIdTag(numId, abstractNumId);
+
+  if (options.copyOverridesFrom != null) {
+    const sourceNumDef = editor.converter.numbering.definitions[options.copyOverridesFrom];
+    if (sourceNumDef?.elements) {
+      const overrideEls = sourceNumDef.elements.filter((el) => el.name === 'w:lvlOverride');
+      if (overrideEls.length > 0) {
+        numDef.elements = [...numDef.elements, ...JSON.parse(JSON.stringify(overrideEls))];
+      }
+    }
+  }
+
+  const numbering = editor.converter.numbering;
+  numbering.definitions[numId] = numDef;
+  editor.converter.numbering = { ...numbering };
+
+  syncTranslatedDefinition(editor, numId, numDef);
+  emitDefinitionChange(editor, numDef);
+
+  return { numId, numDef };
+};
+
+/**
+ * Set or remove w:lvlRestart on a w:lvl within a w:abstractNum definition.
+ * Affects ALL numId instances sharing this abstract (definition-scope).
+ *
+ * @param {import('../Editor').Editor} editor
+ * @param {number} abstractNumId
+ * @param {number} ilvl - Level index (0-8).
+ * @param {number | null} restartAfterLevel - Level to restart after, or null to remove.
+ */
+export const setLvlRestartOnAbstract = (editor, abstractNumId, ilvl, restartAfterLevel) => {
+  const numbering = editor.converter.numbering;
+  const abstract = numbering.abstracts[abstractNumId];
+  if (!abstract?.elements) return;
+
+  const ilvlStr = String(ilvl);
+  const lvlEl = abstract.elements.find((el) => el.name === 'w:lvl' && el.attributes?.['w:ilvl'] === ilvlStr);
+  if (!lvlEl) return;
+  if (!lvlEl.elements) lvlEl.elements = [];
+
+  if (restartAfterLevel === null) {
+    lvlEl.elements = lvlEl.elements.filter((el) => el.name !== 'w:lvlRestart');
+  } else {
+    const restartEl = lvlEl.elements.find((el) => el.name === 'w:lvlRestart');
+    if (restartEl) {
+      restartEl.attributes['w:val'] = String(restartAfterLevel);
+    } else {
+      lvlEl.elements.push({
+        type: 'element',
+        name: 'w:lvlRestart',
+        attributes: { 'w:val': String(restartAfterLevel) },
+      });
+    }
+  }
+
+  numbering.abstracts[abstractNumId] = abstract;
+  editor.converter.numbering = { ...numbering };
+
+  // Re-encode the abstract in the translated model
+  const translated = { ...(editor.converter.translatedNumbering || {}) };
+  if (!translated.abstracts) translated.abstracts = {};
+  // @ts-expect-error Remaining parameters are not needed for this translator
+  translated.abstracts[abstractNumId] = wAbstractNumTranslator.encode({ nodes: [abstract] });
+  editor.converter.translatedNumbering = translated;
+
+  // Emit change for all numIds referencing this abstract
+  const definitions = numbering.definitions || {};
+  for (const [, numDef] of Object.entries(definitions)) {
+    const absId = numDef?.elements?.find((el) => el.name === 'w:abstractNumId')?.attributes?.['w:val'];
+    if (absId != null && Number(absId) === abstractNumId) {
+      emitDefinitionChange(editor, numDef);
+    }
+  }
+};
+
+/**
  * ListHelpers is a collection of utility functions for managing lists in the editor.
  * It includes functions for creating, modifying, and retrieving list items and definitions,
  * as well as handling schema nodes and styles.
@@ -514,6 +752,14 @@ export const ListHelpers = {
   getNewListId,
   hasListDefinition,
   removeListDefinitions,
+
+  // lvlOverride helpers
+  setLvlOverride,
+  removeLvlOverride,
+
+  // Numbering definition helpers
+  createNumDefinition,
+  setLvlRestartOnAbstract,
 
   // Schema helpers
   createNewList,

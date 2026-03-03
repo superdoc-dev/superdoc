@@ -41,7 +41,7 @@ import { collectTocSources, buildTocEntryParagraphs, type EntryParagraphJson } f
 import { paginate } from '../helpers/adapter-utils.js';
 import { getRevision } from './revision-tracker.js';
 import { executeDomainCommand } from './plan-wrappers.js';
-import { requireEditorCommand, rejectTrackedMode } from '../helpers/mutation-helpers.js';
+import { rejectTrackedMode } from '../helpers/mutation-helpers.js';
 import { clearIndexCache } from '../helpers/index-cache.js';
 import { resolveBlockInsertionPos } from './create-insertion.js';
 
@@ -145,6 +145,27 @@ function runTocCommand(editor: Editor, command: unknown, args: TocCommandArgs, e
   return runTocAction(editor, () => executeCommand(args), expectedRevision);
 }
 
+function normalizeTocContent(content: unknown, editor: Editor): ProseMirrorNode[] | null {
+  if (!Array.isArray(content)) return null;
+  return content.map((entry) =>
+    entry && typeof entry === 'object' && typeof (entry as { type?: unknown }).type === 'string'
+      ? editor.state.schema.nodeFromJSON(entry as Record<string, unknown>)
+      : (entry as ProseMirrorNode),
+  );
+}
+
+function dispatchEditorTransaction(editor: Editor, tr: unknown): void {
+  if (typeof editor.dispatch === 'function') {
+    editor.dispatch(tr as Parameters<Editor['dispatch']>[0]);
+    return;
+  }
+  if (typeof editor.view?.dispatch === 'function') {
+    editor.view.dispatch(tr as Parameters<NonNullable<Editor['view']>['dispatch']>[0]);
+    return;
+  }
+  throw new Error('No transaction dispatcher available.');
+}
+
 /** Returns true if the receipt indicates the command had an effect. */
 function receiptApplied(receipt: ReturnType<typeof executeDomainCommand>): boolean {
   return receipt.steps[0]?.effect === 'changed';
@@ -192,10 +213,44 @@ function withRightAlign(config: TocSwitchConfig, rightAlignPageNumbers: boolean 
   return { ...config, display: { ...config.display, rightAlignPageNumbers } };
 }
 
-function materializeTocContent(doc: ProseMirrorNode, config: TocSwitchConfig): EntryParagraphJson[] {
+/**
+ * Removes tocPageNumber marks when the active schema doesn't define that mark.
+ * Some headless/test schemas omit TOC-specific marks, and nodeFromJSON fails if
+ * unknown marks are present in generated TOC paragraph content.
+ */
+function sanitizeTocContentForSchema(content: EntryParagraphJson[], editor: Editor): EntryParagraphJson[] {
+  if (editor.state.schema?.marks?.tocPageNumber) return content;
+
+  return content.map((paragraph) => {
+    const paragraphContent = paragraph.content;
+    if (!Array.isArray(paragraphContent)) return paragraph;
+
+    let changed = false;
+    const sanitizedContent = paragraphContent.map((node) => {
+      if (!node || typeof node !== 'object') return node;
+      const typedNode = node as { marks?: Array<{ type?: string }> };
+      const marks = typedNode.marks;
+      if (!Array.isArray(marks)) return node;
+      const filteredMarks = marks.filter((mark) => mark?.type !== 'tocPageNumber');
+      if (filteredMarks.length === marks.length) return node;
+
+      changed = true;
+      if (filteredMarks.length === 0) {
+        const { marks: _removed, ...rest } = typedNode;
+        return rest as typeof node;
+      }
+      return { ...typedNode, marks: filteredMarks } as typeof node;
+    });
+
+    return changed ? ({ ...paragraph, content: sanitizedContent } as EntryParagraphJson) : paragraph;
+  });
+}
+
+function materializeTocContent(doc: ProseMirrorNode, config: TocSwitchConfig, editor: Editor): EntryParagraphJson[] {
   const sources = collectTocSources(doc, config);
   const entryParagraphs = buildTocEntryParagraphs(sources, config);
-  return entryParagraphs.length > 0 ? entryParagraphs : NO_ENTRIES_PLACEHOLDER;
+  const content = entryParagraphs.length > 0 ? entryParagraphs : NO_ENTRIES_PLACEHOLDER;
+  return sanitizeTocContentForSchema(content, editor);
 }
 
 // ---------------------------------------------------------------------------
@@ -208,11 +263,11 @@ export function tocConfigureWrapper(
   options?: MutationOptions,
 ): TocMutationResult {
   rejectTrackedMode('toc.configure', options);
-  const command = requireEditorCommand(editor.commands?.setTableOfContentsInstructionById, 'toc.configure');
 
   const resolved = resolveTocTarget(editor.state.doc, input.target);
   const currentConfig = parseTocInstruction(resolved.node.attrs?.instruction ?? '');
   const patched = applyTocPatchTyped(currentConfig, input.patch);
+  const instruction = serializeTocInstruction(patched);
 
   // rightAlignPageNumbers is a PM node attr, not an instruction switch
   const rightAlignChanged =
@@ -223,7 +278,7 @@ export function tocConfigureWrapper(
   // Patch value takes priority; fall back to existing node attr.
   const effectiveRightAlign =
     input.patch.rightAlignPageNumbers ?? (resolved.node.attrs?.rightAlignPageNumbers as boolean | undefined);
-  const nextContent = materializeTocContent(editor.state.doc, withRightAlign(patched, effectiveRightAlign));
+  const nextContent = materializeTocContent(editor.state.doc, withRightAlign(patched, effectiveRightAlign), editor);
 
   if (areTocConfigsEqual(currentConfig, patched) && !rightAlignChanged) {
     return tocFailure('NO_OP', 'Configuration patch produced no change.');
@@ -234,18 +289,44 @@ export function tocConfigureWrapper(
   }
 
   const shouldRefreshContent = !isTocContentUnchanged(resolved.node, nextContent);
+  const command = editor.commands?.setTableOfContentsInstructionById;
   const commandNodeId = resolved.commandNodeId ?? resolved.nodeId;
-  const receipt = runTocCommand(
-    editor,
-    command,
-    {
-      sdBlockId: commandNodeId,
-      instruction: serializeTocInstruction(patched),
-      ...(shouldRefreshContent ? { content: nextContent } : {}),
-      ...(rightAlignChanged ? { rightAlignPageNumbers: input.patch.rightAlignPageNumbers } : {}),
-    },
-    options?.expectedRevision,
-  );
+  const receipt =
+    typeof command === 'function'
+      ? runTocCommand(
+          editor,
+          command,
+          {
+            sdBlockId: commandNodeId,
+            instruction,
+            ...(shouldRefreshContent ? { content: nextContent } : {}),
+            ...(rightAlignChanged ? { rightAlignPageNumbers: input.patch.rightAlignPageNumbers } : {}),
+          },
+          options?.expectedRevision,
+        )
+      : runTocAction(
+          editor,
+          () => {
+            try {
+              const { tr } = editor.state;
+              tr.setNodeMarkup(resolved.pos, undefined, {
+                ...resolved.node.attrs,
+                instruction,
+                ...(rightAlignChanged ? { rightAlignPageNumbers: input.patch.rightAlignPageNumbers } : {}),
+              });
+              if (shouldRefreshContent) {
+                const from = resolved.pos + 1;
+                const to = resolved.pos + resolved.node.nodeSize - 1;
+                tr.replaceWith(from, to, normalizeTocContent(nextContent, editor) ?? []);
+              }
+              dispatchEditorTransaction(editor, tr);
+              return true;
+            } catch {
+              return false;
+            }
+          },
+          options?.expectedRevision,
+        );
 
   if (!receiptApplied(receipt)) {
     return tocFailure('NO_OP', 'Configuration change could not be applied.');
@@ -277,12 +358,10 @@ export function tocUpdateWrapper(editor: Editor, input: TocUpdateInput, options?
  * This is the original toc.update behavior.
  */
 function tocUpdateAll(editor: Editor, input: TocUpdateInput, options?: MutationOptions): TocMutationResult {
-  const command = requireEditorCommand(editor.commands?.replaceTableOfContentsContentById, 'toc.update');
-
   const resolved = resolveTocTarget(editor.state.doc, input.target);
   const config = parseTocInstruction(resolved.node.attrs?.instruction ?? '');
   const rightAlign = resolved.node.attrs?.rightAlignPageNumbers as boolean | undefined;
-  const content = materializeTocContent(editor.state.doc, withRightAlign(config, rightAlign));
+  const content = materializeTocContent(editor.state.doc, withRightAlign(config, rightAlign), editor);
 
   // NO_OP detection: compare new content against existing before executing.
   // The PM command returns "found" (not "content changed"), so receipt-based
@@ -295,15 +374,34 @@ function tocUpdateAll(editor: Editor, input: TocUpdateInput, options?: MutationO
     return tocSuccess(resolved.nodeId);
   }
 
-  const receipt = runTocCommand(
-    editor,
-    command,
-    {
-      sdBlockId: resolved.commandNodeId ?? resolved.nodeId,
-      content,
-    },
-    options?.expectedRevision,
-  );
+  const command = editor.commands?.replaceTableOfContentsContentById;
+  const receipt =
+    typeof command === 'function'
+      ? runTocCommand(
+          editor,
+          command,
+          {
+            sdBlockId: resolved.commandNodeId ?? resolved.nodeId,
+            content,
+          },
+          options?.expectedRevision,
+        )
+      : runTocAction(
+          editor,
+          () => {
+            try {
+              const { tr } = editor.state;
+              const from = resolved.pos + 1;
+              const to = resolved.pos + resolved.node.nodeSize - 1;
+              tr.replaceWith(from, to, normalizeTocContent(content, editor) ?? []);
+              dispatchEditorTransaction(editor, tr);
+              return true;
+            } catch {
+              return false;
+            }
+          },
+          options?.expectedRevision,
+        );
 
   return receiptApplied(receipt) ? tocSuccess(resolved.nodeId) : tocFailure('NO_OP', 'TOC update produced no change.');
 }
@@ -350,8 +448,6 @@ function getPageMap(editor: Editor): Map<string, number> | null {
  * 4. Marks found, page map available → update each marked run, success
  */
 function tocUpdatePageNumbers(editor: Editor, input: TocUpdateInput, options?: MutationOptions): TocMutationResult {
-  const command = requireEditorCommand(editor.commands?.replaceTableOfContentsContentById, 'toc.update');
-
   const resolved = resolveTocTarget(editor.state.doc, input.target);
   const config = parseTocInstruction(resolved.node.attrs?.instruction ?? '');
 
@@ -387,15 +483,34 @@ function tocUpdatePageNumbers(editor: Editor, input: TocUpdateInput, options?: M
     return tocSuccess(resolved.nodeId);
   }
 
-  const receipt = runTocCommand(
-    editor,
-    command,
-    {
-      sdBlockId: resolved.commandNodeId ?? resolved.nodeId,
-      content: updatedContent,
-    },
-    options?.expectedRevision,
-  );
+  const command = editor.commands?.replaceTableOfContentsContentById;
+  const receipt =
+    typeof command === 'function'
+      ? runTocCommand(
+          editor,
+          command,
+          {
+            sdBlockId: resolved.commandNodeId ?? resolved.nodeId,
+            content: updatedContent,
+          },
+          options?.expectedRevision,
+        )
+      : runTocAction(
+          editor,
+          () => {
+            try {
+              const { tr } = editor.state;
+              const from = resolved.pos + 1;
+              const to = resolved.pos + resolved.node.nodeSize - 1;
+              tr.replaceWith(from, to, normalizeTocContent(updatedContent, editor) ?? []);
+              dispatchEditorTransaction(editor, tr);
+              return true;
+            } catch {
+              return false;
+            }
+          },
+          options?.expectedRevision,
+        );
 
   return receiptApplied(receipt)
     ? tocSuccess(resolved.nodeId)
@@ -466,7 +581,6 @@ function buildPageNumberUpdatedContent(
 
 export function tocRemoveWrapper(editor: Editor, input: TocRemoveInput, options?: MutationOptions): TocMutationResult {
   rejectTrackedMode('toc.remove', options);
-  const command = requireEditorCommand(editor.commands?.deleteTableOfContentsById, 'toc.remove');
 
   const resolved = resolveTocTarget(editor.state.doc, input.target);
 
@@ -474,14 +588,31 @@ export function tocRemoveWrapper(editor: Editor, input: TocRemoveInput, options?
     return tocSuccess(resolved.nodeId);
   }
 
-  const receipt = runTocCommand(
-    editor,
-    command,
-    {
-      sdBlockId: resolved.commandNodeId ?? resolved.nodeId,
-    },
-    options?.expectedRevision,
-  );
+  const command = editor.commands?.deleteTableOfContentsById;
+  const receipt =
+    typeof command === 'function'
+      ? runTocCommand(
+          editor,
+          command,
+          {
+            sdBlockId: resolved.commandNodeId ?? resolved.nodeId,
+          },
+          options?.expectedRevision,
+        )
+      : runTocAction(
+          editor,
+          () => {
+            try {
+              const { tr } = editor.state;
+              tr.delete(resolved.pos, resolved.pos + resolved.node.nodeSize);
+              dispatchEditorTransaction(editor, tr);
+              return true;
+            } catch {
+              return false;
+            }
+          },
+          options?.expectedRevision,
+        );
 
   return receiptApplied(receipt) ? tocSuccess(resolved.nodeId) : tocFailure('NO_OP', 'TOC removal produced no change.');
 }
@@ -496,7 +627,6 @@ export function createTableOfContentsWrapper(
   options?: MutationOptions,
 ): CreateTableOfContentsResult {
   rejectTrackedMode('create.tableOfContents', options);
-  const command = requireEditorCommand(editor.commands?.insertTableOfContentsAt, 'create.tableOfContents');
 
   // Resolve insertion position
   const at = input.at ?? { kind: 'documentEnd' as const };
@@ -512,7 +642,11 @@ export function createTableOfContentsWrapper(
   // Build instruction from config patch or use defaults
   const config = input.config ? applyTocPatchTyped(DEFAULT_TOC_CONFIG, input.config) : DEFAULT_TOC_CONFIG;
   const instruction = serializeTocInstruction(config);
-  const content = materializeTocContent(editor.state.doc, withRightAlign(config, input.config?.rightAlignPageNumbers));
+  const content = materializeTocContent(
+    editor.state.doc,
+    withRightAlign(config, input.config?.rightAlignPageNumbers),
+    editor,
+  );
 
   const sdBlockId = uuidv4();
 
@@ -520,20 +654,57 @@ export function createTableOfContentsWrapper(
     return { success: true, toc: buildTocAddress('(dry-run)') };
   }
 
-  const receipt = runTocCommand(
-    editor,
-    command,
-    {
-      pos,
-      instruction,
-      sdBlockId,
-      content,
-      ...(input.config?.rightAlignPageNumbers !== undefined
-        ? { rightAlignPageNumbers: input.config.rightAlignPageNumbers }
-        : {}),
-    },
-    options?.expectedRevision,
-  );
+  const command = editor.commands?.insertTableOfContentsAt;
+  const receipt =
+    typeof command === 'function'
+      ? runTocCommand(
+          editor,
+          command,
+          {
+            pos,
+            instruction,
+            sdBlockId,
+            content,
+            ...(input.config?.rightAlignPageNumbers !== undefined
+              ? { rightAlignPageNumbers: input.config.rightAlignPageNumbers }
+              : {}),
+          },
+          options?.expectedRevision,
+        )
+      : runTocAction(
+          editor,
+          () => {
+            const tocType = editor.state.schema.nodes.tableOfContents;
+            const paragraphType = editor.state.schema.nodes.paragraph;
+            if (!tocType || !paragraphType) return false;
+
+            const defaultContent = [
+              paragraphType.create({}, editor.state.schema.text('Update table of contents to populate entries.')),
+            ];
+            const materializedContent = normalizeTocContent(content, editor) ?? defaultContent;
+            const tocNode = tocType.create(
+              {
+                instruction,
+                sdBlockId,
+                ...(input.config?.rightAlignPageNumbers !== undefined
+                  ? { rightAlignPageNumbers: input.config.rightAlignPageNumbers }
+                  : {}),
+              },
+              materializedContent,
+            );
+
+            try {
+              const { tr } = editor.state;
+              tr.insert(pos, tocNode);
+              dispatchEditorTransaction(editor, tr);
+              return true;
+            } catch (error) {
+              if (error instanceof RangeError) return false;
+              throw error;
+            }
+          },
+          options?.expectedRevision,
+        );
 
   if (!receiptApplied(receipt)) {
     return {

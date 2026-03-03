@@ -31,6 +31,19 @@ describe('contract response conformance', () => {
       const invocation = await scenario.success(harness);
       const { result, envelope } = await harness.runCli(invocation.args, invocation.stateDir, invocation.stdinBytes);
 
+      if (result.code !== 0 || envelope.ok !== true) {
+        const details = JSON.stringify(envelope, null, 2);
+        throw new Error(
+          [
+            `Expected success envelope for ${scenario.operationId}.`,
+            `Exit code: ${result.code}`,
+            `Envelope: ${details}`,
+            `STDOUT: ${result.stdout.trim() || '<empty>'}`,
+            `STDERR: ${result.stderr.trim() || '<empty>'}`,
+          ].join('\n'),
+        );
+      }
+
       expect(result.code).toBe(0);
       expect(envelope.ok).toBe(true);
 

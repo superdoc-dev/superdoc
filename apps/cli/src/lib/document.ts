@@ -8,10 +8,21 @@ import { markdownToPmDoc } from '@superdoc/super-editor/markdown';
 import { createDocumentApi, type DocumentApi } from '@superdoc/document-api';
 import type { CollaborationProfile } from './collaboration';
 import { createCollaborationRuntime } from './collaboration';
+import {
+  DEFAULT_BOOTSTRAP_SETTLING_MS,
+  detectRoomState,
+  resolveBootstrapDecision,
+  claimBootstrap,
+  writeBootstrapMarker,
+  detectBootstrapRace,
+  type RoomState,
+  type ObservedCompetitor,
+  type RaceDetectionResult,
+} from './bootstrap';
 import { CliError } from './errors';
 import { pathExists } from './guards';
 import type { ContextMetadata } from './context';
-import type { CliIO, DocumentSourceMeta, ExecutionMode } from './types';
+import type { CliIO, DocumentSourceMeta, ExecutionMode, UserIdentity } from './types';
 import type { CollaborationSessionPool } from '../host/collab-session-pool';
 
 export type EditorWithDoc = Editor & {
@@ -30,6 +41,10 @@ interface OpenDocumentOptions {
   collaborationProvider?: unknown;
   /** Options passed through to Editor.open() (e.g., markdown/html/plainText for content override). */
   editorOpenOptions?: Record<string, string>;
+  /** When set, overrides Editor's auto-detected isNewFile flag. */
+  isNewFile?: boolean;
+  /** Optional user identity for attribution (comments, tracked changes, collaboration presence). */
+  user?: UserIdentity;
 }
 
 export interface FileOutputMeta {
@@ -159,10 +174,13 @@ export async function openDocument(
     const isTest = process.env.NODE_ENV === 'test';
     editor = await EditorRuntime.open(Buffer.from(source), {
       documentId: options.documentId ?? meta.path ?? 'blank.docx',
-      user: { id: 'cli', name: 'CLI' },
+      user: options.user
+        ? { name: options.user.name, email: options.user.email, image: null }
+        : { id: 'cli', name: 'CLI' },
       ...(isTest ? { telemetry: { enabled: false } } : {}),
       ydoc: options.ydoc,
       ...(options.collaborationProvider != null ? { collaborationProvider: options.collaborationProvider } : {}),
+      ...(options.isNewFile != null ? { isNewFile: options.isNewFile } : {}),
       ...passThroughEditorOpts,
     });
   } catch (error) {
@@ -226,24 +244,82 @@ export async function openDocument(
   };
 }
 
+/**
+ * Describes the outcome of the bootstrap flow for a collaborative document.
+ *
+ * `raceSuspected` is a best-effort signal — when true, a competing finalized
+ * marker was observed shortly after seeding, strongly suggesting (but not
+ * proving) that two clients both seeded. `false` does not guarantee
+ * exactly-once seeding.
+ */
+export type BootstrapResult = {
+  roomState: RoomState;
+  bootstrapApplied: boolean;
+  bootstrapSource?: 'doc' | 'blank';
+  raceSuspected?: boolean;
+  raceCompetitor?: ObservedCompetitor;
+};
+
 export async function openCollaborativeDocument(
-  doc: string,
+  doc: string | undefined,
   io: CliIO,
   profile: CollaborationProfile,
-): Promise<OpenedDocument> {
+  options: { user?: UserIdentity } = {},
+): Promise<OpenedDocument & { bootstrap?: BootstrapResult }> {
   const runtime = createCollaborationRuntime(profile);
 
   try {
     await runtime.waitForSync();
-    const opened = await openDocument(doc, io, {
+
+    const onMissing = profile.onMissing ?? 'seedFromDoc';
+    let finalRoomState = detectRoomState(runtime.ydoc);
+    let decision = resolveBootstrapDecision(finalRoomState, onMissing, doc != null);
+
+    if (decision.action === 'seed') {
+      const claim = await claimBootstrap(runtime.ydoc, profile.bootstrapSettlingMs ?? DEFAULT_BOOTSTRAP_SETTLING_MS);
+      if (!claim.granted) {
+        // Another client won the claim race — unconditionally yield.
+        // Even if the winner's marker is still pending (detectRoomState
+        // returns 'empty'), the winner will finalize shortly.  Re-seeding
+        // here would produce a dual-seed race.
+        finalRoomState = detectRoomState(runtime.ydoc);
+        decision = { action: 'join' };
+      }
+    }
+
+    if (decision.action === 'error') {
+      throw new CliError('COLLABORATION_ROOM_EMPTY', decision.reason);
+    }
+
+    const shouldSeed = decision.action === 'seed';
+    // When joining an existing room, skip local doc reading — content
+    // comes from the Yjs document, not from the local file path.
+    const docForEditor = shouldSeed ? doc : undefined;
+    const opened = await openDocument(docForEditor, io, {
       documentId: profile.documentId,
       ydoc: runtime.ydoc,
       collaborationProvider: runtime.provider,
+      isNewFile: shouldSeed,
+      user: options.user,
     });
 
+    let raceDetection: RaceDetectionResult | undefined;
+    if (shouldSeed) {
+      writeBootstrapMarker(runtime.ydoc, decision.source);
+      raceDetection = await detectBootstrapRace(runtime.ydoc);
+    }
+
+    const bootstrap: BootstrapResult = {
+      roomState: finalRoomState,
+      bootstrapApplied: shouldSeed,
+      bootstrapSource: shouldSeed ? decision.source : undefined,
+      raceSuspected: raceDetection?.raceSuspected,
+      raceCompetitor: raceDetection?.raceSuspected ? raceDetection.competitor : undefined,
+    };
     return {
       editor: opened.editor,
       meta: opened.meta,
+      bootstrap,
       dispose() {
         try {
           opened.dispose();
@@ -261,7 +337,10 @@ export async function openCollaborativeDocument(
 export async function openSessionDocument(
   doc: string,
   io: CliIO,
-  metadata: Pick<ContextMetadata, 'contextId' | 'sessionType' | 'collaboration' | 'sourcePath' | 'workingDocPath'>,
+  metadata: Pick<
+    ContextMetadata,
+    'contextId' | 'sessionType' | 'collaboration' | 'sourcePath' | 'workingDocPath' | 'user'
+  >,
   options: {
     sessionId?: string;
     executionMode?: ExecutionMode;
@@ -269,7 +348,7 @@ export async function openSessionDocument(
   } = {},
 ): Promise<OpenedDocument> {
   if (metadata.sessionType !== 'collab') {
-    return openDocument(doc, io);
+    return openDocument(doc, io, { user: metadata.user });
   }
 
   if (!metadata.collaboration) {
@@ -288,12 +367,13 @@ export async function openSessionDocument(
       collaboration: metadata.collaboration,
       sourcePath: metadata.sourcePath,
       workingDocPath: metadata.workingDocPath,
+      user: metadata.user,
     };
 
     return options.collabSessionPool.acquire(sessionId, doc, metadataForPool, io);
   }
 
-  return openCollaborativeDocument(doc, io, metadata.collaboration);
+  return openCollaborativeDocument(doc, io, metadata.collaboration, { user: metadata.user });
 }
 
 export async function getFileChecksum(path: string): Promise<string> {

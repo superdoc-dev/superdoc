@@ -18,6 +18,7 @@ import type {
   WrapExclusion,
   WrapTextMode,
 } from '@superdoc/contracts';
+import { effectiveTableCellSpacing } from '@superdoc/contracts';
 import { toCssFontFamily } from '@superdoc/font-utils';
 import { rescaleColumnWidths } from '@superdoc/layout-engine';
 import { normalizeZIndex } from '@superdoc/pm-adapter/utilities.js';
@@ -1112,7 +1113,6 @@ export const renderTableCell = (deps: TableCellRenderDependencies): TableCellRen
     const effectiveCellWidth = cellWidth ?? cellMeasure.width;
     const contentWidthPx = Math.max(0, effectiveCellWidth - paddingLeft - paddingRight);
     const contentHeightPx = Math.max(0, rowHeight - paddingTop - paddingBottom);
-    const paragraphTopById = new Map<string, number>();
     let flowCursorY = 0;
     const anchoredBlocks: Array<{ block: ImageBlock | DrawingBlock; measure: ImageMeasure | DrawingMeasure }> = [];
     const renderedLines: RenderedLineInfo[] = [];
@@ -1278,7 +1278,6 @@ export const renderTableCell = (deps: TableCellRenderDependencies): TableCellRen
         const lines = paragraphMeasure.lines;
         const blockLineCount = lines?.length || 0;
 
-        paragraphTopById.set(block.id, flowCursorY);
         /**
          * Extract Word layout information from paragraph attributes.
          * This contains computed marker positioning and indent details from the word-layout engine.
@@ -1344,6 +1343,17 @@ export const renderTableCell = (deps: TableCellRenderDependencies): TableCellRen
         // These were previously missing, causing paragraph borders to not render in table cells
         applyParagraphBorderStyles(paraWrapper, block.attrs?.borders);
         applyParagraphShadingStyles(paraWrapper, block.attrs?.shading);
+
+        // Apply paragraph spacing.before when rendering from the top of the paragraph.
+        // Word absorbs first paragraph's spacing.before into cell paddingTop (effectiveTableCellSpacing).
+        const spacingBefore = (block as ParagraphBlock).attrs?.spacing?.before;
+        if (localStartLine === 0) {
+          const effectiveBefore = effectiveTableCellSpacing(spacingBefore, i === 0, paddingTop);
+          if (effectiveBefore > 0) {
+            paraWrapper.style.marginTop = `${effectiveBefore}px`;
+            flowCursorY += effectiveBefore;
+          }
+        }
 
         // Calculate height of rendered content for proper block accumulation
         let renderedHeight = 0;

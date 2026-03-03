@@ -44,7 +44,26 @@ Returns a ParagraphMutationResult; reports NO_OP if no shading is set.
 
 ## Output fields
 
-_No fields._
+### Variant 1 (success=true)
+
+| Field | Type | Required | Description |
+| --- | --- | --- | --- |
+| `resolution` | object | yes |  |
+| `resolution.target` | ParagraphAddress \\| HeadingAddress \\| ListItemAddress | yes | One of: ParagraphAddress, HeadingAddress, ListItemAddress |
+| `success` | `true` | yes | Constant: `true` |
+| `target` | ParagraphAddress \\| HeadingAddress \\| ListItemAddress | yes | One of: ParagraphAddress, HeadingAddress, ListItemAddress |
+
+### Variant 2 (success=false)
+
+| Field | Type | Required | Description |
+| --- | --- | --- | --- |
+| `failure` | object | yes |  |
+| `failure.code` | enum | yes | `"NO_OP"` |
+| `failure.details` | any | no |  |
+| `failure.message` | string | yes |  |
+| `resolution` | object | no |  |
+| `resolution.target` | ParagraphAddress \\| HeadingAddress \\| ListItemAddress | no | One of: ParagraphAddress, HeadingAddress, ListItemAddress |
+| `success` | `false` | yes | Constant: `false` |
 
 ### Example response
 

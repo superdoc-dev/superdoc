@@ -1,7 +1,7 @@
 ---
-title: lists.exit
-sidebarTitle: lists.exit
-description: Exit a list context, converting the target item to a paragraph.
+title: lists.setLevelRestart
+sidebarTitle: lists.setLevelRestart
+description: Set the restart behavior for a specific list level.
 ---
 
 {/* GENERATED FILE: DO NOT EDIT. Regenerate via `pnpm run docapi:sync`. */}
@@ -10,10 +10,10 @@ description: Exit a list context, converting the target item to a paragraph.
 
 ## Summary
 
-Exit a list context, converting the target item to a paragraph.
+Set the restart behavior for a specific list level.
 
-- Operation ID: `lists.exit`
-- API member path: `editor.doc.lists.exit(...)`
+- Operation ID: `lists.setLevelRestart`
+- API member path: `editor.doc.lists.setLevelRestart(...)`
 - Mutates document: `yes`
 - Idempotency: `conditional`
 - Supports tracked mode: `no`
@@ -22,18 +22,27 @@ Exit a list context, converting the target item to a paragraph.
 
 ## Expected result
 
-Returns a ListsExitResult confirming the item was converted to a plain paragraph.
+Returns a ListsMutateItemResult receipt.
 
 ## Input fields
 
 | Field | Type | Required | Description |
 | --- | --- | --- | --- |
+| `level` | integer | yes |  |
+| `restartAfterLevel` | any | yes |  |
+| `scope` | enum | no | `"definition"`, `"instance"` |
 | `target` | ListItemAddress | yes | ListItemAddress |
+| `target.kind` | `"block"` | yes | Constant: `"block"` |
+| `target.nodeId` | string | yes |  |
+| `target.nodeType` | `"listItem"` | yes | Constant: `"listItem"` |
 
 ### Example request
 
 ```json
 {
+  "level": 1,
+  "restartAfterLevel": {},
+  "scope": "definition",
   "target": {
     "kind": "block",
     "nodeId": "node-def456",
@@ -44,16 +53,34 @@ Returns a ListsExitResult confirming the item was converted to a plain paragraph
 
 ## Output fields
 
-_No fields._
+### Variant 1 (item.kind="block")
+
+| Field | Type | Required | Description |
+| --- | --- | --- | --- |
+| `item` | ListItemAddress | yes | ListItemAddress |
+| `item.kind` | `"block"` | yes | Constant: `"block"` |
+| `item.nodeId` | string | yes |  |
+| `item.nodeType` | `"listItem"` | yes | Constant: `"listItem"` |
+| `success` | `true` | yes | Constant: `true` |
+
+### Variant 2 (success=false)
+
+| Field | Type | Required | Description |
+| --- | --- | --- | --- |
+| `failure` | object | yes |  |
+| `failure.code` | enum | yes | `"INVALID_TARGET"`, `"LEVEL_OUT_OF_RANGE"` |
+| `failure.details` | any | no |  |
+| `failure.message` | string | yes |  |
+| `success` | `false` | yes | Constant: `false` |
 
 ### Example response
 
 ```json
 {
-  "paragraph": {
+  "item": {
     "kind": "block",
     "nodeId": "node-def456",
-    "nodeType": "paragraph"
+    "nodeType": "listItem"
   },
   "success": true
 }
@@ -68,6 +95,7 @@ _No fields._
 ## Non-applied failure codes
 
 - `INVALID_TARGET`
+- `LEVEL_OUT_OF_RANGE`
 
 ## Raw schemas
 
@@ -76,12 +104,31 @@ _No fields._
 {
   "additionalProperties": false,
   "properties": {
+    "level": {
+      "maximum": 8,
+      "minimum": 0,
+      "type": "integer"
+    },
+    "restartAfterLevel": {
+      "type": [
+        "integer",
+        "null"
+      ]
+    },
+    "scope": {
+      "enum": [
+        "definition",
+        "instance"
+      ]
+    },
     "target": {
       "$ref": "#/$defs/ListItemAddress"
     }
   },
   "required": [
-    "target"
+    "target",
+    "level",
+    "restartAfterLevel"
   ],
   "type": "object"
 }
@@ -95,8 +142,8 @@ _No fields._
     {
       "additionalProperties": false,
       "properties": {
-        "paragraph": {
-          "$ref": "#/$defs/ParagraphAddress"
+        "item": {
+          "$ref": "#/$defs/ListItemAddress"
         },
         "success": {
           "const": true
@@ -104,7 +151,7 @@ _No fields._
       },
       "required": [
         "success",
-        "paragraph"
+        "item"
       ],
       "type": "object"
     },
@@ -116,7 +163,8 @@ _No fields._
           "properties": {
             "code": {
               "enum": [
-                "INVALID_TARGET"
+                "INVALID_TARGET",
+                "LEVEL_OUT_OF_RANGE"
               ]
             },
             "details": {},
@@ -150,8 +198,8 @@ _No fields._
 {
   "additionalProperties": false,
   "properties": {
-    "paragraph": {
-      "$ref": "#/$defs/ParagraphAddress"
+    "item": {
+      "$ref": "#/$defs/ListItemAddress"
     },
     "success": {
       "const": true
@@ -159,7 +207,7 @@ _No fields._
   },
   "required": [
     "success",
-    "paragraph"
+    "item"
   ],
   "type": "object"
 }
@@ -176,7 +224,8 @@ _No fields._
       "properties": {
         "code": {
           "enum": [
-            "INVALID_TARGET"
+            "INVALID_TARGET",
+            "LEVEL_OUT_OF_RANGE"
           ]
         },
         "details": {},

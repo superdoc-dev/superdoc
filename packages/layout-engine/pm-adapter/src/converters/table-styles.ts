@@ -1,10 +1,9 @@
 import type { BoxSpacing } from '@superdoc/contracts';
-import { _getReferencedTableStyles } from '@superdoc/super-editor/converter/internal/v3/handlers/w/tbl/tbl-translator.js';
+import { resolveTableProperties } from '@superdoc/style-engine/ooxml';
+import type { TableProperties, TableCellMargins } from '@superdoc/style-engine/ooxml';
 import type { PMNode } from '../types.js';
-import type { ConverterContext, TableStyleParagraphProps } from '../converter-context.js';
-import { hasTableStyleContext } from '../converter-context.js';
+import type { ConverterContext } from '../converter-context.js';
 import { twipsToPx, normalizeCellPaddingTopBottom } from '../utilities.js';
-import { normalizeLineValue } from '../attributes/spacing-indent.js';
 
 export type TableStyleHydration = {
   borders?: Record<string, unknown>;
@@ -12,33 +11,39 @@ export type TableStyleHydration = {
   justification?: string;
   tableWidth?: { width?: number; type?: string };
   tableCellSpacing?: { value?: number; type?: string };
-  /**
-   * Paragraph properties from the table style's w:pPr element.
-   * Per OOXML spec, these should apply to all paragraphs inside the table
-   * as part of the style cascade: docDefaults → table style pPr → paragraph style → direct formatting.
-   */
-  paragraphProps?: TableStyleParagraphProps;
 };
 
 /**
- * Hydrates table-level attributes from a table style definition.
+ * Hydrates table-level attributes from inline properties and the style-engine.
+ *
+ * Cascade: style-resolved properties fill gaps that inline properties don't cover.
+ * Inline properties (from PM node attrs) always win.
  *
  * The hydrator never mutates the PM node and only returns new objects,
  * so callers must merge the result with the node's attrs explicitly.
  */
-export const hydrateTableStyleAttrs = (tableNode: PMNode, context?: ConverterContext): TableStyleHydration | null => {
+export const hydrateTableStyleAttrs = (
+  tableNode: PMNode,
+  context?: ConverterContext,
+  effectiveStyleId?: string | null,
+): TableStyleHydration | null => {
   const hydration: TableStyleHydration = {};
   const tableProps = (tableNode.attrs?.tableProperties ?? null) as Record<string, unknown> | null;
 
+  // Collect inline values first, then merge with style-resolved values below.
+  let inlineBorders: Record<string, unknown> | undefined;
+  let inlinePadding: BoxSpacing | undefined;
+
+  // 1. Inline properties (highest priority)
   if (tableProps) {
     const padding = convertCellMarginsToPx(tableProps.cellMargins as Record<string, unknown>);
-    if (padding) hydration.cellPadding = normalizeCellPaddingTopBottom(padding);
+    if (padding) inlinePadding = normalizeCellPaddingTopBottom(padding);
 
     if (tableProps.borders && typeof tableProps.borders === 'object') {
-      hydration.borders = clonePlainObject(tableProps.borders as Record<string, unknown>);
+      inlineBorders = clonePlainObject(tableProps.borders as Record<string, unknown>);
     }
 
-    if (!hydration.justification && typeof tableProps.justification === 'string') {
+    if (typeof tableProps.justification === 'string') {
       hydration.justification = tableProps.justification;
     }
 
@@ -48,39 +53,58 @@ export const hydrateTableStyleAttrs = (tableNode: PMNode, context?: ConverterCon
     }
   }
 
-  const styleId = typeof tableNode.attrs?.tableStyleId === 'string' ? tableNode.attrs.tableStyleId : undefined;
-  if (styleId && hasTableStyleContext(context)) {
-    // Cast to bypass JSDoc type mismatch - the JS function actually accepts { docx }
-    const referenced = _getReferencedTableStyles(styleId, { docx: context!.docx } as never);
-    if (referenced) {
-      if (!hydration.borders && referenced.borders) {
-        hydration.borders = clonePlainObject(referenced.borders);
-      }
-      if (!hydration.cellPadding && referenced.cellMargins) {
-        const padding = convertCellMarginsToPx(referenced.cellMargins as Record<string, unknown>);
-        if (padding) hydration.cellPadding = normalizeCellPaddingTopBottom(padding);
-      }
-      if (!hydration.justification && referenced.justification) {
-        hydration.justification = referenced.justification;
-      }
-      if (referenced.tableCellSpacing) {
-        hydration.tableCellSpacing = referenced.tableCellSpacing as { value?: number; type?: string };
-      }
+  // 2. Style-resolved properties (fill gaps not covered by inline, per-side)
+  // Three-state contract for effectiveStyleId:
+  //   undefined = "not provided" → fall back to raw node attr
+  //   null      = "resolver found no valid style" → skip style resolution
+  //   string    = "use this style"
+  const styleId =
+    effectiveStyleId === null
+      ? undefined
+      : (effectiveStyleId ??
+        (typeof tableNode.attrs?.tableStyleId === 'string' ? tableNode.attrs.tableStyleId : undefined));
+  if (styleId && context?.translatedLinkedStyles) {
+    const resolved = resolveTableProperties(styleId, context.translatedLinkedStyles);
+
+    // Per-side merge: inline sides win, style fills missing sides.
+    if (resolved.borders) {
+      const styleBorders = clonePlainObject(resolved.borders as unknown as Record<string, unknown>);
+      hydration.borders = inlineBorders ? { ...styleBorders, ...inlineBorders } : styleBorders;
+    } else if (inlineBorders) {
+      hydration.borders = inlineBorders;
     }
 
-    // Extract paragraph properties (w:pPr) from the table style definition
-    // This is needed for the style cascade: docDefaults → table style pPr → paragraph style → direct
-    const paragraphProps = extractTableStyleParagraphProps(styleId, context.docx);
-    if (paragraphProps) {
-      hydration.paragraphProps = paragraphProps;
+    if (resolved.cellMargins) {
+      const stylePadding = convertCellMarginsToPx(resolved.cellMargins as unknown as Record<string, unknown>);
+      if (stylePadding) {
+        const normalizedStylePadding = normalizeCellPaddingTopBottom(stylePadding);
+        hydration.cellPadding = inlinePadding
+          ? { ...normalizedStylePadding, ...inlinePadding }
+          : normalizedStylePadding;
+      } else if (inlinePadding) {
+        hydration.cellPadding = inlinePadding;
+      }
+    } else if (inlinePadding) {
+      hydration.cellPadding = inlinePadding;
     }
+
+    if (!hydration.justification && resolved.justification) {
+      hydration.justification = resolved.justification;
+    }
+    if (resolved.tableCellSpacing) {
+      hydration.tableCellSpacing = resolved.tableCellSpacing as { value?: number; type?: string };
+    }
+    if (!hydration.tableWidth && resolved.tableWidth) {
+      const tableWidth = normalizeTableWidth(resolved.tableWidth);
+      if (tableWidth) hydration.tableWidth = tableWidth;
+    }
+  } else {
+    // No style resolved — use inline values as-is.
+    if (inlineBorders) hydration.borders = inlineBorders;
+    if (inlinePadding) hydration.cellPadding = inlinePadding;
   }
 
-  if (Object.keys(hydration).length > 0) {
-    return hydration;
-  }
-
-  return null;
+  return Object.keys(hydration).length > 0 ? hydration : null;
 };
 
 const clonePlainObject = (value: Record<string, unknown>): Record<string, unknown> => ({ ...value });
@@ -97,6 +121,8 @@ const convertCellMarginsToPx = (margins: Record<string, unknown>): BoxSpacing | 
     marginBottom: 'bottom',
     marginLeft: 'left',
     marginRight: 'right',
+    marginStart: 'left',
+    marginEnd: 'right',
   };
 
   Object.entries(margins).forEach(([key, value]) => {
@@ -131,92 +157,4 @@ const normalizeTableWidth = (value: unknown): { width?: number; type?: string } 
     return { width: twipsToPx(raw), type: 'px' };
   }
   return { width: raw, type: measurement.type };
-};
-
-/**
- * XML element type for OOXML parsing.
- */
-type OoxmlElement = {
-  name?: string;
-  attributes?: Record<string, unknown>;
-  elements?: OoxmlElement[];
-};
-
-/**
- * Extracts paragraph properties (w:pPr) from a table style definition.
- *
- * Per OOXML spec, table styles can define paragraph properties that apply
- * to all paragraphs within the table. This includes spacing, indentation, etc.
- *
- * @param styleId - The table style ID (e.g., "TableGrid")
- * @param docx - The docx object containing styles.xml
- * @returns Paragraph properties from the table style, or undefined if not found
- */
-const extractTableStyleParagraphProps = (
-  styleId: string,
-  docx: Record<string, unknown>,
-): TableStyleParagraphProps | undefined => {
-  try {
-    // Navigate to styles.xml
-    const stylesXml = docx['word/styles.xml'] as OoxmlElement | undefined;
-    if (!stylesXml?.elements?.[0]?.elements) return undefined;
-
-    const styleElements = stylesXml.elements[0].elements.filter((el: OoxmlElement) => el.name === 'w:style');
-
-    // Find the table style by styleId
-    const styleTag = styleElements.find((el: OoxmlElement) => el.attributes?.['w:styleId'] === styleId);
-    if (!styleTag?.elements) {
-      return undefined;
-    }
-
-    // Find w:pPr (paragraph properties) in the style
-    const pPr = styleTag.elements.find((el: OoxmlElement) => el.name === 'w:pPr');
-    if (!pPr?.elements) {
-      return undefined;
-    }
-
-    // Extract w:spacing
-    const spacingEl = pPr.elements.find((el: OoxmlElement) => el.name === 'w:spacing');
-    if (!spacingEl?.attributes) {
-      return undefined;
-    }
-
-    // Cast attributes to Record<string, unknown> for runtime validation
-    const attrs = spacingEl.attributes as Record<string, unknown>;
-    const spacing: TableStyleParagraphProps['spacing'] = {};
-
-    // Convert spacing values from twips to pixels using parseIntSafe for type coercion
-    const before = parseIntSafe(attrs['w:before']);
-    const after = parseIntSafe(attrs['w:after']);
-    const line = parseIntSafe(attrs['w:line']);
-
-    // Validate lineRule is one of the expected values
-    const rawLineRule = attrs['w:lineRule'];
-    const lineRule: 'auto' | 'exact' | 'atLeast' | undefined =
-      rawLineRule === 'auto' || rawLineRule === 'exact' || rawLineRule === 'atLeast' ? rawLineRule : undefined;
-
-    if (before != null) spacing.before = twipsToPx(before);
-    if (after != null) spacing.after = twipsToPx(after);
-    if (line != null) {
-      const { value: normalizedLine, unit: lineUnit } = normalizeLineValue(line, lineRule);
-      spacing.line = normalizedLine;
-      spacing.lineUnit = lineUnit;
-    }
-    if (lineRule) spacing.lineRule = lineRule;
-
-    const result = Object.keys(spacing).length > 0 ? { spacing } : undefined;
-    return result;
-  } catch {
-    // Gracefully handle any parsing errors
-    return undefined;
-  }
-};
-
-/**
- * Safely parse an integer from an unknown value.
- */
-const parseIntSafe = (value: unknown): number | undefined => {
-  if (value == null) return undefined;
-  const num = typeof value === 'number' ? value : parseInt(String(value), 10);
-  return Number.isFinite(num) ? num : undefined;
 };

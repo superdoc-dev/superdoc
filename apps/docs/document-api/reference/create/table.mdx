@@ -46,7 +46,26 @@ Returns a CreateTableResult with the new table block ID and address.
 
 ## Output fields
 
-_No fields._
+### Variant 1 (table.kind="block")
+
+| Field | Type | Required | Description |
+| --- | --- | --- | --- |
+| `success` | `true` | yes | Constant: `true` |
+| `table` | BlockNodeAddress | yes | BlockNodeAddress |
+| `table.kind` | `"block"` | yes | Constant: `"block"` |
+| `table.nodeId` | string | yes |  |
+| `table.nodeType` | enum | yes | `"paragraph"`, `"heading"`, `"listItem"`, `"table"`, `"tableRow"`, `"tableCell"`, `"tableOfContents"`, `"image"`, `"sdt"` |
+| `trackedChangeRefs` | EntityAddress[] | no |  |
+
+### Variant 2 (success=false)
+
+| Field | Type | Required | Description |
+| --- | --- | --- | --- |
+| `failure` | object | yes |  |
+| `failure.code` | enum | yes | `"NO_OP"`, `"INVALID_TARGET"`, `"TARGET_NOT_FOUND"`, `"CAPABILITY_UNAVAILABLE"` |
+| `failure.details` | any | no |  |
+| `failure.message` | string | yes |  |
+| `success` | `false` | yes | Constant: `false` |
 
 ### Example response
 

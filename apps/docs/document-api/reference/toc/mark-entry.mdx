@@ -32,6 +32,11 @@ Returns a TocEntryMutationResult with the created entry address on success.
 | `omitPageNumber` | boolean | no |  |
 | `tableIdentifier` | string | no |  |
 | `target` | object(kind="inline-insert") | yes |  |
+| `target.anchor` | object(nodeType="paragraph") | yes |  |
+| `target.anchor.nodeId` | string | yes |  |
+| `target.anchor.nodeType` | `"paragraph"` | yes | Constant: `"paragraph"` |
+| `target.kind` | `"inline-insert"` | yes | Constant: `"inline-insert"` |
+| `target.position` | enum | no | `"start"`, `"end"` |
 | `text` | string | yes |  |
 
 ### Example request
@@ -54,7 +59,25 @@ Returns a TocEntryMutationResult with the created entry address on success.
 
 ## Output fields
 
-_No fields._
+### Variant 1 (entry.kind="inline")
+
+| Field | Type | Required | Description |
+| --- | --- | --- | --- |
+| `entry` | object(kind="inline") | yes |  |
+| `entry.kind` | `"inline"` | yes | Constant: `"inline"` |
+| `entry.nodeId` | string | yes |  |
+| `entry.nodeType` | `"tableOfContentsEntry"` | yes | Constant: `"tableOfContentsEntry"` |
+| `success` | `true` | yes | Constant: `true` |
+
+### Variant 2 (success=false)
+
+| Field | Type | Required | Description |
+| --- | --- | --- | --- |
+| `failure` | object | yes |  |
+| `failure.code` | enum | yes | `"NO_OP"`, `"INVALID_TARGET"`, `"TARGET_NOT_FOUND"`, `"CAPABILITY_UNAVAILABLE"`, `"INVALID_INSERTION_CONTEXT"`, `"INVALID_INPUT"` |
+| `failure.details` | any | no |  |
+| `failure.message` | string | yes |  |
+| `success` | `false` | yes | Constant: `false` |
 
 ### Example response
 

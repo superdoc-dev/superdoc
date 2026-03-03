@@ -82,7 +82,7 @@ client.doc.insert(params)
 | **Mutation** | `insert`, `replace`, `delete` |
 | **Format** | `format.bold`, `format.italic`, `format.underline`, `format.strikethrough` |
 | **Create** | `create.paragraph` |
-| **Lists** | `lists.list`, `lists.get`, `lists.insert`, `lists.setType`, `lists.indent`, `lists.outdent`, `lists.restart`, `lists.exit` |
+| **Lists** | `lists.list`, `lists.get`, `lists.insert`, `lists.create`, `lists.attach`, `lists.detach`, `lists.indent`, `lists.outdent`, `lists.join`, `lists.separate`, `lists.setLevel`, `lists.setValue`, `lists.continuePrevious`, `lists.setLevelRestart`, `lists.convertToText`, `lists.canJoin`, `lists.canContinuePrevious` |
 | **Comments** | `comments.create`, `comments.patch`, `comments.delete`, `comments.get`, `comments.list` |
 | **Track Changes** | `trackChanges.list`, `trackChanges.get`, `trackChanges.decide` |
 | **Lifecycle** | `open`, `save`, `close` |

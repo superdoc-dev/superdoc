@@ -44,7 +44,32 @@ Returns a CreateParagraphResult with the new paragraph block ID and address.
 
 ## Output fields
 
-_No fields._
+### Variant 1 (paragraph.kind="block")
+
+| Field | Type | Required | Description |
+| --- | --- | --- | --- |
+| `insertionPoint` | TextAddress | yes | TextAddress |
+| `insertionPoint.blockId` | string | yes |  |
+| `insertionPoint.kind` | `"text"` | yes | Constant: `"text"` |
+| `insertionPoint.range` | Range | yes | Range |
+| `insertionPoint.range.end` | integer | yes |  |
+| `insertionPoint.range.start` | integer | yes |  |
+| `paragraph` | ParagraphAddress | yes | ParagraphAddress |
+| `paragraph.kind` | `"block"` | yes | Constant: `"block"` |
+| `paragraph.nodeId` | string | yes |  |
+| `paragraph.nodeType` | `"paragraph"` | yes | Constant: `"paragraph"` |
+| `success` | `true` | yes | Constant: `true` |
+| `trackedChangeRefs` | TrackedChangeAddress[] | no |  |
+
+### Variant 2 (success=false)
+
+| Field | Type | Required | Description |
+| --- | --- | --- | --- |
+| `failure` | object | yes |  |
+| `failure.code` | enum | yes | `"INVALID_TARGET"` |
+| `failure.details` | any | no |  |
+| `failure.message` | string | yes |  |
+| `success` | `false` | yes | Constant: `false` |
 
 ### Example response
 

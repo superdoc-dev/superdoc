@@ -389,6 +389,42 @@ export interface TablesSetCellSpacingInput extends TableLocator {
 export type TablesClearCellSpacingInput = TableLocator;
 
 // ---------------------------------------------------------------------------
+// Document-level style queries & mutations
+// ---------------------------------------------------------------------------
+
+/** Input for `tables.getStyles` — document-level query, no locator needed. */
+export type TablesGetStylesInput = Record<string, never>;
+
+/** Per-style metadata returned by `tables.getStyles`. */
+export interface TableStyleInfo {
+  id: string;
+  name: string | null;
+  basedOn: string | null;
+  isDefault: boolean;
+  isCustom: boolean;
+  uiPriority: number | null;
+  hidden: boolean;
+  quickFormat: boolean;
+  conditionalRegions: string[];
+}
+
+/** Output for `tables.getStyles`. */
+export interface TablesGetStylesOutput {
+  explicitDefaultStyleId: string | null;
+  effectiveDefaultStyleId: string | null;
+  effectiveDefaultSource: string;
+  styles: TableStyleInfo[];
+}
+
+/** Input for `tables.setDefaultStyle`. */
+export interface TablesSetDefaultStyleInput {
+  styleId: string;
+}
+
+/** Input for `tables.clearDefaultStyle`. */
+export type TablesClearDefaultStyleInput = Record<string, never>;
+
+// ---------------------------------------------------------------------------
 // Read operations (B4: ref handoff)
 // ---------------------------------------------------------------------------
 

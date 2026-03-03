@@ -10,8 +10,8 @@ const workspaces = [
 ];
 
 for (const workspace of workspaces) {
-  const result = spawnSync('npm', ['run', 'test', `--workspace=${workspace}`], {
-    stdio: 'inherit'
+  const result = spawnSync('pnpm', ['--filter', workspace, 'test'], {
+    stdio: 'inherit',
   });
 
   if (result.status !== 0) {

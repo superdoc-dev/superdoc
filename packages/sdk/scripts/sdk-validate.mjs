@@ -22,10 +22,13 @@
  * 16. SDK test suite passes (contract-integrity + cross-lang parity)
  * 17. Node SDK platform package manifests exist and are well-formed
  * 18. Node SDK optionalDependencies reference all expected platform packages
+ * 19. CLI compiled binary can open a document on host platform
+ * 20. Python SDK can open a document via host compiled CLI binary
  */
 
 import { execFile } from 'node:child_process';
-import { readFile, readdir } from 'node:fs/promises';
+import { mkdtemp, readFile, readdir, rm } from 'node:fs/promises';
+import { tmpdir } from 'node:os';
 import path from 'node:path';
 import { promisify } from 'node:util';
 import { fileURLToPath } from 'node:url';
@@ -51,9 +54,56 @@ async function check(name, fn) {
   }
 }
 
-async function run(command, args, { cwd = REPO_ROOT } = {}) {
-  const { stdout } = await execFileAsync(command, args, { cwd, env: process.env });
+async function run(command, args, { cwd = REPO_ROOT, env = {} } = {}) {
+  const { stdout } = await execFileAsync(command, args, { cwd, env: { ...process.env, ...env } });
   return stdout.trim();
+}
+
+function resolveHostCliArtifact() {
+  const ext = process.platform === 'win32' ? '.exe' : '';
+  if (process.platform === 'darwin' && process.arch === 'arm64') return `darwin-arm64/superdoc${ext}`;
+  if (process.platform === 'darwin' && process.arch === 'x64') return `darwin-x64/superdoc${ext}`;
+  if (process.platform === 'linux' && process.arch === 'x64') return `linux-x64/superdoc${ext}`;
+  if (process.platform === 'linux' && process.arch === 'arm64') return `linux-arm64/superdoc${ext}`;
+  if (process.platform === 'win32' && process.arch === 'x64') return `windows-x64/superdoc${ext}`;
+
+  throw new Error(`Unsupported host platform for native CLI smoke test: ${process.platform}/${process.arch}`);
+}
+
+function resolveHostCliBinaryPath() {
+  return path.join(REPO_ROOT, 'apps/cli/artifacts', resolveHostCliArtifact());
+}
+
+let superdocBuilt = false;
+
+async function ensureSuperdocBuilt() {
+  if (superdocBuilt) return;
+  await run('pnpm', ['--prefix', path.join(REPO_ROOT, 'packages/superdoc'), 'run', 'build:es']);
+  superdocBuilt = true;
+}
+
+async function buildHostCliBinary() {
+  await ensureSuperdocBuilt();
+  await run('node', [path.join(REPO_ROOT, 'apps/cli/scripts/build-native-cli.js')], {
+    cwd: path.join(REPO_ROOT, 'apps/cli'),
+  });
+}
+
+function parseLastJsonLine(stdout, contextLabel) {
+  const lines = stdout
+    .split('\n')
+    .map((line) => line.trim())
+    .filter(Boolean);
+  if (lines.length === 0) {
+    throw new Error(`${contextLabel}: command produced no output`);
+  }
+
+  const lastLine = lines[lines.length - 1];
+  try {
+    return JSON.parse(lastLine);
+  } catch {
+    throw new Error(`${contextLabel}: last output line was not valid JSON: ${lastLine}`);
+  }
 }
 
 async function readJson(filePath) {
@@ -352,6 +402,69 @@ async function main() {
     const missing = EXPECTED_NODE_PLATFORMS.filter((p) => !(p.name in optDeps));
     if (missing.length > 0) {
       throw new Error(`Node SDK missing optionalDependencies: ${missing.map((p) => p.name).join(', ')}`);
+    }
+  });
+
+  // 19. Host-platform compiled CLI smoke test
+  await check('CLI compiled binary can open a document on host platform', async () => {
+    const cliBinaryPath = resolveHostCliBinaryPath();
+    const sourceDocPath = path.join(REPO_ROOT, 'packages/super-editor/src/tests/data/basic-paragraph.docx');
+    const stateDir = await mkdtemp(path.join(tmpdir(), 'superdoc-cli-validate-'));
+
+    try {
+      await buildHostCliBinary();
+
+      const { stdout } = await execFileAsync(
+        cliBinaryPath,
+        ['open', sourceDocPath, '--output', 'json'],
+        {
+          cwd: REPO_ROOT,
+          env: {
+            ...process.env,
+            SUPERDOC_CLI_STATE_DIR: stateDir,
+          },
+        },
+      );
+
+      const payload = parseLastJsonLine(stdout, 'compiled-cli-open');
+
+      if (payload?.ok !== true) {
+        throw new Error(`Compiled CLI open failed: ${JSON.stringify(payload)}`);
+      }
+    } finally {
+      await rm(stateDir, { recursive: true, force: true });
+    }
+  });
+
+  // 20. Python SDK + compiled CLI integration smoke test
+  await check('Python SDK can open a document via host compiled CLI binary', async () => {
+    const cliBinaryPath = resolveHostCliBinaryPath();
+    const sourceDocPath = path.join(REPO_ROOT, 'packages/super-editor/src/tests/data/basic-paragraph.docx');
+    const stateDir = await mkdtemp(path.join(tmpdir(), 'superdoc-python-sdk-validate-'));
+
+    try {
+      await buildHostCliBinary();
+
+      const pythonSmokeScript = [
+        'from superdoc import SuperDocClient',
+        `cli_bin = ${JSON.stringify(cliBinaryPath)}`,
+        `doc_path = ${JSON.stringify(sourceDocPath)}`,
+        `state_dir = ${JSON.stringify(stateDir)}`,
+        'client = SuperDocClient(env={"SUPERDOC_CLI_BIN": cli_bin, "SUPERDOC_CLI_STATE_DIR": state_dir}, watchdog_timeout_ms=120_000)',
+        'try:',
+        '    result = client.doc.open({"doc": doc_path}, timeout_ms=90_000)',
+        '    if result.get("active") is not True:',
+        '        raise RuntimeError(f"doc.open did not report an active session: {result!r}")',
+        '    client.doc.close({})',
+        'finally:',
+        '    client.dispose()',
+      ].join('\n');
+
+      await run('python3', ['-c', pythonSmokeScript], {
+        cwd: path.join(REPO_ROOT, 'packages/sdk/langs/python'),
+      });
+    } finally {
+      await rm(stateDir, { recursive: true, force: true });
     }
   });
 

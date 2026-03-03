@@ -293,7 +293,8 @@ export interface TableAttrs extends TableNodeAttributes {
 export interface TableRowProperties {
   trHeight?: { val: number; hRule?: 'atLeast' | 'exact' | 'auto' };
   cantSplit?: boolean;
-  tblHeader?: boolean;
+  /** Whether this row repeats as a header on continuation pages (OOXML `w:tblHeader`). */
+  repeatHeader?: boolean;
   jc?: 'center' | 'end' | 'left' | 'right' | 'start';
 }
 

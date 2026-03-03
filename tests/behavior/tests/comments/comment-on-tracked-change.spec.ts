@@ -39,11 +39,18 @@ test('comment thread on tracked change shows both the change and replies', async
   await expect(dialog.locator('.tracked-change-text.is-inserted', { hasText: 'new text' })).toBeVisible();
   await expect(dialog.locator('.tracked-change-text.is-deleted').first()).toBeVisible();
 
-  // The threaded comment replies should be visible below the tracked change
+  // Threads with >=2 replies are collapsed by default: only the latest reply is visible
+  const collapsedPill = dialog.locator('.collapsed-replies');
+  await expect(collapsedPill).toBeVisible({ timeout: 5_000 });
+  await expect(collapsedPill).toContainText('1 more reply');
+
+  // In collapsed state, only one reply body is visible
   const commentBodies = dialog.locator('.comment-body .comment');
-  await expect(commentBodies).toHaveCount(2);
-  await expect(commentBodies.nth(0)).toContainText('reply to tracked change');
-  await expect(commentBodies.nth(1)).toContainText('reply to reply');
+  await expect(commentBodies).toHaveCount(1);
+  await expect(commentBodies.first()).toContainText('reply to reply');
+
+  // Hidden reply summary should remain visible in collapsed mode
+  await expect(collapsedPill).toBeVisible();
 
   await superdoc.snapshot('comment thread on tracked change');
 });

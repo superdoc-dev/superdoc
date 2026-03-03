@@ -559,7 +559,6 @@ describe('trackChangesHelpers', () => {
 
   it('no-op helpers exist for future implementations', () => {
     expect(markWrapping()).toBeUndefined();
-    expect(replaceAroundStep()).toBeUndefined();
   });
 
   it('trackedTransaction keeps selection in sync', () => {

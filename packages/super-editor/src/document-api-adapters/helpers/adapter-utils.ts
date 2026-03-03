@@ -1,8 +1,16 @@
-import type { Query, TextAddress, UnknownNodeDiagnostic } from '@superdoc/document-api';
+import type {
+  Query,
+  TextAddress,
+  TextMutationResolution,
+  UnknownNodeDiagnostic,
+  WriteRequest,
+} from '@superdoc/document-api';
 import { DocumentApiValidationError } from '@superdoc/document-api';
 import { getBlockIndex } from './index-cache.js';
 import { findBlockById, isTextBlockCandidate, type BlockCandidate, type BlockIndex } from './node-address-resolver.js';
-import { resolveTextRangeInBlock } from './text-offset-resolver.js';
+import { computeTextContentLength, resolveTextRangeInBlock } from './text-offset-resolver.js';
+import { buildTextMutationResolution, readTextAtResolvedRange } from './text-mutation-resolution.js';
+import type { Transaction } from 'prosemirror-state';
 import type { Editor } from '../../core/Editor.js';
 import { DocumentApiAdapterError } from '../errors.js';
 
@@ -50,30 +58,191 @@ export function resolveTextTarget(editor: Editor, target: TextAddress): Resolved
 }
 
 /**
+ * Collects the absolute positions of all direct children of the doc node.
+ * Used to distinguish top-level blocks from nested blocks (e.g. paragraphs
+ * inside table cells) when resolving the default insertion target.
+ */
+function collectTopLevelPositions(doc: {
+  childCount: number;
+  child(index: number): { nodeSize: number };
+}): Set<number> {
+  const positions = new Set<number>();
+  let offset = 0;
+  for (let i = 0; i < doc.childCount; i++) {
+    positions.add(offset);
+    offset += doc.child(i).nodeSize;
+  }
+  return positions;
+}
+
+/**
+ * Result of resolving the default insertion target.
+ *
+ * - `text-block`: The last top-level text block was found; insert at its content end.
+ * - `structural-end`: No top-level text block exists at or after the desired
+ *   insertion point. The caller must create a writable host (e.g. a paragraph)
+ *   at `insertPos` before inserting content.
+ */
+export type DefaultInsertTarget =
+  | { kind: 'text-block'; target: TextAddress; range: ResolvedTextTarget }
+  | { kind: 'structural-end'; insertPos: number };
+
+/**
  * Resolves the deterministic default insertion target for insert-without-target calls.
  *
- * Priority:
- * 1) First paragraph block in document order.
- * 2) First editable text block in document order.
+ * Targets the **end** of the last top-level writable text block in document
+ * order, so that target-less inserts behave as "append to document end."
+ *
+ * Only top-level blocks (direct children of the doc node) are considered.
+ * Nested text blocks inside tables, SDTs, or other containers are excluded
+ * so that a document ending in a table resolves to the last top-level
+ * paragraph before it, not to a cell paragraph inside it.
+ *
+ * When no top-level text block exists, returns `structural-end` with the
+ * position at the end of the document content (`doc.content.size`), signaling
+ * that the caller must create a writable host before insertion.
  */
-export function resolveDefaultInsertTarget(editor: Editor): { target: TextAddress; range: ResolvedTextTarget } | null {
+export function resolveDefaultInsertTarget(editor: Editor): DefaultInsertTarget | null {
   const index = getBlockIndex(editor);
-  const firstParagraph = index.candidates.find(
-    (candidate) => candidate.nodeType === 'paragraph' && isTextBlockCandidate(candidate),
-  );
-  const firstTextBlock = firstParagraph ?? index.candidates.find((candidate) => isTextBlockCandidate(candidate));
-  if (!firstTextBlock) return null;
+  const doc = editor.state.doc;
+  const topLevelPositions = collectTopLevelPositions(doc);
 
-  const range = resolveTextRangeInBlock(firstTextBlock.node, firstTextBlock.pos, { start: 0, end: 0 });
+  // Walk candidates in reverse to find the last top-level text block.
+  for (let i = index.candidates.length - 1; i >= 0; i--) {
+    const candidate = index.candidates[i];
+    if (topLevelPositions.has(candidate.pos) && isTextBlockCandidate(candidate)) {
+      const textLength = computeTextContentLength(candidate.node);
+      const range = resolveTextRangeInBlock(candidate.node, candidate.pos, { start: textLength, end: textLength });
+      if (!range) continue;
+
+      return {
+        kind: 'text-block',
+        target: {
+          kind: 'text',
+          blockId: candidate.nodeId,
+          range: { start: textLength, end: textLength },
+        },
+        range,
+      };
+    }
+  }
+
+  // No top-level text block found. If the document has any content,
+  // signal structural-end so the caller can create a writable host.
+  if (doc.content.size > 0) {
+    return { kind: 'structural-end', insertPos: doc.content.size };
+  }
+
+  return null;
+}
+
+/** Resolved write target with the effective address, absolute range, and resolution snapshot. */
+export type ResolvedWrite = {
+  requestedTarget?: TextAddress;
+  /**
+   * The resolved target address used for the mutation.
+   *
+   * When {@link structuralEnd} is `true`, this is a synthetic placeholder
+   * (`blockId: ''`) that should not be used for block lookup or display.
+   */
+  effectiveTarget: TextAddress;
+  range: ResolvedTextTarget;
+  resolution: TextMutationResolution;
+  /**
+   * When `true`, the resolved position is at the structural end of the
+   * document where no text block exists. The caller must create a writable
+   * host (paragraph) at `range.from` before inserting content.
+   */
+  structuralEnd?: true;
+};
+
+/**
+ * Creates a new paragraph containing the given text and inserts it at the
+ * specified position using the editor's transaction pipeline.
+ *
+ * Used by structural-end handlers when the document ends with non-text blocks
+ * and a writable host must be created before inserting content.
+ *
+ * @param applyMeta - Optional callback to annotate the transaction before
+ *   dispatch (e.g. `applyTrackedMutationMeta` for tracked-mode inserts).
+ */
+export function insertParagraphAtEnd(
+  editor: Editor,
+  pos: number,
+  text: string,
+  applyMeta?: (tr: Transaction) => Transaction,
+): void {
+  const schema = editor.state.schema;
+  const textNode = schema.text(text);
+  const paragraph = schema.nodes.paragraph.create(null, textNode);
+  const tr = editor.state.tr;
+  tr.insert(pos, paragraph);
+  if (applyMeta) applyMeta(tr);
+  editor.dispatch(tr);
+}
+
+/**
+ * Resolves the write target for a mutation request.
+ *
+ * When the request is a target-less insert, falls back to the document-end
+ * insertion point via {@link resolveDefaultInsertTarget}. Otherwise resolves
+ * the explicit target address.
+ *
+ * For structural-end resolutions (doc ends in non-text blocks), the returned
+ * `ResolvedWrite` has `structuralEnd: true` and the caller is responsible for
+ * creating a writable host before insertion.
+ */
+export function resolveWriteTarget(editor: Editor, request: WriteRequest): ResolvedWrite | null {
+  const requestedTarget = request.target;
+
+  if (request.kind === 'insert' && !request.target) {
+    const fallback = resolveDefaultInsertTarget(editor);
+    if (!fallback) return null;
+
+    if (fallback.kind === 'structural-end') {
+      const pos = fallback.insertPos;
+      const syntheticRange: ResolvedTextTarget = { from: pos, to: pos };
+      const syntheticTarget: TextAddress = { kind: 'text', blockId: '', range: { start: 0, end: 0 } };
+      return {
+        requestedTarget,
+        effectiveTarget: syntheticTarget,
+        range: syntheticRange,
+        resolution: buildTextMutationResolution({
+          requestedTarget,
+          target: syntheticTarget,
+          range: syntheticRange,
+          text: '',
+        }),
+        structuralEnd: true,
+      };
+    }
+
+    const text = readTextAtResolvedRange(editor, fallback.range);
+    return {
+      requestedTarget,
+      effectiveTarget: fallback.target,
+      range: fallback.range,
+      resolution: buildTextMutationResolution({
+        requestedTarget,
+        target: fallback.target,
+        range: fallback.range,
+        text,
+      }),
+    };
+  }
+
+  const target = request.target;
+  if (!target) return null;
+
+  const range = resolveTextTarget(editor, target);
   if (!range) return null;
 
+  const text = readTextAtResolvedRange(editor, range);
   return {
-    target: {
-      kind: 'text',
-      blockId: firstTextBlock.nodeId,
-      range: { start: 0, end: 0 },
-    },
+    requestedTarget,
+    effectiveTarget: target,
     range,
+    resolution: buildTextMutationResolution({ requestedTarget, target, range, text }),
   };
 }
 

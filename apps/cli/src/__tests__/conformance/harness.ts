@@ -2,7 +2,12 @@ import { copyFile, mkdtemp, mkdir, rm } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import path from 'node:path';
 import { run } from '../../index';
-import { resolveListDocFixture, resolveSourceDocFixture, resolveTocDocFixture } from '../fixtures';
+import {
+  resolveListDocFixture,
+  resolvePreSeparatedListFixture,
+  resolveSourceDocFixture,
+  resolveTocDocFixture,
+} from '../fixtures';
 
 type RunResult = {
   code: number;
@@ -125,6 +130,12 @@ export class ConformanceHarness {
     return filePath;
   }
 
+  async copyPreSeparatedListDoc(label: string): Promise<string> {
+    const filePath = path.join(this.docsDir, `${this.nextId()}-${label}.docx`);
+    await copyFile(await resolvePreSeparatedListFixture(), filePath);
+    return filePath;
+  }
+
   async copyTocFixtureDoc(label: string, stateDir: string): Promise<string> {
     const filePath = path.join(this.docsDir, `${this.nextId()}-${label}.docx`);
 
@@ -164,13 +175,11 @@ export class ConformanceHarness {
     stateDir: string,
     stdinBytes?: Uint8Array,
   ): Promise<{ result: RunResult; envelope: CommandEnvelope }> {
-    const previousStateDir = process.env.SUPERDOC_CLI_STATE_DIR;
-    process.env.SUPERDOC_CLI_STATE_DIR = stateDir;
-
     let stdout = '';
     let stderr = '';
-    try {
-      const code = await run(args, {
+    const code = await run(
+      args,
+      {
         stdout(message: string) {
           stdout += message;
         },
@@ -180,17 +189,12 @@ export class ConformanceHarness {
         async readStdinBytes() {
           return stdinBytes ?? new Uint8Array();
         },
-      });
+      },
+      { stateDir },
+    );
 
-      const result: RunResult = { code, stdout, stderr };
-      return { result, envelope: parseEnvelope(result) };
-    } finally {
-      if (previousStateDir == null) {
-        delete process.env.SUPERDOC_CLI_STATE_DIR;
-      } else {
-        process.env.SUPERDOC_CLI_STATE_DIR = previousStateDir;
-      }
-    }
+    const result: RunResult = { code, stdout, stderr };
+    return { result, envelope: parseEnvelope(result) };
   }
 
   async firstTextRange(docPath: string, stateDir: string, pattern = 'Wilde'): Promise<TextRangeAddress> {

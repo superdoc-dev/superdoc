@@ -31,7 +31,14 @@ Returns a CreateSectionBreakResult with the new section break position and secti
 | `at` | object(kind="documentStart") \\| object(kind="documentEnd") \\| object(kind="before") \\| object(kind="after") | no | One of: object(kind="documentStart"), object(kind="documentEnd"), object(kind="before"), object(kind="after") |
 | `breakType` | enum | no | `"continuous"`, `"nextPage"`, `"evenPage"`, `"oddPage"` |
 | `headerFooterMargins` | object | no |  |
+| `headerFooterMargins.footer` | number | no |  |
+| `headerFooterMargins.header` | number | no |  |
 | `pageMargins` | object | no |  |
+| `pageMargins.bottom` | number | no |  |
+| `pageMargins.gutter` | number | no |  |
+| `pageMargins.left` | number | no |  |
+| `pageMargins.right` | number | no |  |
+| `pageMargins.top` | number | no |  |
 
 ### Example request
 
@@ -46,7 +53,28 @@ Returns a CreateSectionBreakResult with the new section break position and secti
 
 ## Output fields
 
-_No fields._
+### Variant 1 (section.kind="section")
+
+| Field | Type | Required | Description |
+| --- | --- | --- | --- |
+| `breakParagraph` | BlockNodeAddress | no | BlockNodeAddress |
+| `breakParagraph.kind` | `"block"` | no | Constant: `"block"` |
+| `breakParagraph.nodeId` | string | no |  |
+| `breakParagraph.nodeType` | enum | no | `"paragraph"`, `"heading"`, `"listItem"`, `"table"`, `"tableRow"`, `"tableCell"`, `"tableOfContents"`, `"image"`, `"sdt"` |
+| `section` | SectionAddress | yes | SectionAddress |
+| `section.kind` | `"section"` | yes | Constant: `"section"` |
+| `section.sectionId` | string | yes |  |
+| `success` | `true` | yes | Constant: `true` |
+
+### Variant 2 (success=false)
+
+| Field | Type | Required | Description |
+| --- | --- | --- | --- |
+| `failure` | object | yes |  |
+| `failure.code` | enum | yes | `"INVALID_TARGET"`, `"CAPABILITY_UNAVAILABLE"` |
+| `failure.details` | any | no |  |
+| `failure.message` | string | yes |  |
+| `success` | `false` | yes | Constant: `false` |
 
 ### Example response
 

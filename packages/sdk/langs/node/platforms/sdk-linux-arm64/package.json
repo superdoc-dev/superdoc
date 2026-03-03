@@ -1,6 +1,6 @@
 {
   "name": "@superdoc-dev/sdk-linux-arm64",
-  "version": "1.0.0-alpha.6",
+  "version": "1.0.0-alpha.19",
   "os": [
     "linux"
   ],

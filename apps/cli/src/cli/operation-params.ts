@@ -61,6 +61,18 @@ const EXPECTED_REVISION_PARAM: CliOperationParamSpec = {
   type: 'number',
   agentVisible: false,
 };
+const USER_NAME_PARAM: CliOperationParamSpec = {
+  name: 'userName',
+  kind: 'flag',
+  flag: 'user-name',
+  type: 'string',
+};
+const USER_EMAIL_PARAM: CliOperationParamSpec = {
+  name: 'userEmail',
+  kind: 'flag',
+  flag: 'user-email',
+  type: 'string',
+};
 
 // ---------------------------------------------------------------------------
 // Schema → param derivation
@@ -361,10 +373,6 @@ const EXTRA_CLI_PARAMS: Partial<Record<string, CliOperationParamSpec[]>> = {
     { name: 'input', kind: 'jsonFlag', flag: 'input-json', type: 'json' },
     ...LIST_TARGET_FLAT_PARAMS,
   ],
-  'doc.lists.setType': [
-    { name: 'input', kind: 'jsonFlag', flag: 'input-json', type: 'json' },
-    ...LIST_TARGET_FLAT_PARAMS,
-  ],
   'doc.lists.indent': [
     { name: 'input', kind: 'jsonFlag', flag: 'input-json', type: 'json' },
     ...LIST_TARGET_FLAT_PARAMS,
@@ -373,11 +381,39 @@ const EXTRA_CLI_PARAMS: Partial<Record<string, CliOperationParamSpec[]>> = {
     { name: 'input', kind: 'jsonFlag', flag: 'input-json', type: 'json' },
     ...LIST_TARGET_FLAT_PARAMS,
   ],
-  'doc.lists.restart': [
+  'doc.lists.create': [{ name: 'input', kind: 'jsonFlag', flag: 'input-json', type: 'json' }],
+  'doc.lists.attach': [{ name: 'input', kind: 'jsonFlag', flag: 'input-json', type: 'json' }],
+  'doc.lists.detach': [
     { name: 'input', kind: 'jsonFlag', flag: 'input-json', type: 'json' },
     ...LIST_TARGET_FLAT_PARAMS,
   ],
-  'doc.lists.exit': [{ name: 'input', kind: 'jsonFlag', flag: 'input-json', type: 'json' }, ...LIST_TARGET_FLAT_PARAMS],
+  'doc.lists.join': [{ name: 'input', kind: 'jsonFlag', flag: 'input-json', type: 'json' }],
+  'doc.lists.canJoin': [{ name: 'input', kind: 'jsonFlag', flag: 'input-json', type: 'json' }],
+  'doc.lists.separate': [
+    { name: 'input', kind: 'jsonFlag', flag: 'input-json', type: 'json' },
+    ...LIST_TARGET_FLAT_PARAMS,
+  ],
+  'doc.lists.setLevel': [
+    { name: 'input', kind: 'jsonFlag', flag: 'input-json', type: 'json' },
+    ...LIST_TARGET_FLAT_PARAMS,
+  ],
+  'doc.lists.setValue': [
+    { name: 'input', kind: 'jsonFlag', flag: 'input-json', type: 'json' },
+    ...LIST_TARGET_FLAT_PARAMS,
+  ],
+  'doc.lists.continuePrevious': [
+    { name: 'input', kind: 'jsonFlag', flag: 'input-json', type: 'json' },
+    ...LIST_TARGET_FLAT_PARAMS,
+  ],
+  'doc.lists.canContinuePrevious': [
+    { name: 'input', kind: 'jsonFlag', flag: 'input-json', type: 'json' },
+    ...LIST_TARGET_FLAT_PARAMS,
+  ],
+  'doc.lists.setLevelRestart': [{ name: 'input', kind: 'jsonFlag', flag: 'input-json', type: 'json' }],
+  'doc.lists.convertToText': [
+    { name: 'input', kind: 'jsonFlag', flag: 'input-json', type: 'json' },
+    ...LIST_TARGET_FLAT_PARAMS,
+  ],
   'doc.blocks.delete': [
     { name: 'nodeType', kind: 'flag', flag: 'node-type', type: 'string' },
     { name: 'nodeId', kind: 'flag', flag: 'node-id', type: 'string' },
@@ -422,6 +458,10 @@ const CLI_ONLY_METADATA: Record<CliOnlyOperationId, CliOperationMetadata> = {
       { name: 'collabUrl', kind: 'flag', flag: 'collab-url', type: 'string' },
       { name: 'contentOverride', kind: 'flag', flag: 'content-override', type: 'string' },
       { name: 'overrideType', kind: 'flag', flag: 'override-type', type: 'string' },
+      { name: 'onMissing', kind: 'flag', flag: 'on-missing', type: 'string' },
+      { name: 'bootstrapSettlingMs', kind: 'flag', flag: 'bootstrap-settling-ms', type: 'number' },
+      USER_NAME_PARAM,
+      USER_EMAIL_PARAM,
     ],
     constraints: null,
   },

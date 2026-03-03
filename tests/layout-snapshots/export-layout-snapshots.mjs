@@ -844,15 +844,12 @@ function installTelemetryConsoleFilter(telemetryEnabled) {
   };
 }
 
-function logDocProgress({ progress, relativePath, pageCount, docElapsedMs, phaseLabel }) {
-  logLine(`${progress} OK    ${relativePath}`);
-  logLine(`  pages: ${pageCount} | took ${formatDuration(docElapsedMs)}`);
-  logLine(`  phases: ${phaseLabel}`);
+function logDocProgress({ progress, relativePath, pageCount, docElapsedMs }) {
+  logLine(`${progress} OK  ${relativePath} (${pageCount} page${pageCount !== 1 ? 's' : ''}, ${formatDuration(docElapsedMs)})`);
 }
 
 function logDocFailure({ progress, relativePath, docElapsedMs, message }) {
-  logLine(`${progress} FAIL  ${relativePath}`);
-  logLine(`  took: ${formatDuration(docElapsedMs)}`);
+  logLine(`${progress} FAIL  ${relativePath} (${formatDuration(docElapsedMs)})`);
   errorLine(`  error: ${message}`);
 }
 

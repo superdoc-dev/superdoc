@@ -345,7 +345,7 @@ export function handleImageNode(node, params, isAnchor) {
 
   const spPr = picture.elements.find((el) => el.name === 'pic:spPr');
   if (spPr) {
-    const xfrm = spPr.elements.find((el) => el.name === 'a:xfrm');
+    const xfrm = spPr.elements?.find((el) => el.name === 'a:xfrm');
     if (xfrm?.attributes) {
       transformData = {
         ...transformData,
@@ -370,6 +370,7 @@ export function handleImageNode(node, params, isAnchor) {
   const { elements } = relationships || [];
 
   const rel = elements?.find((el) => el.attributes['Id'] === rEmbed);
+
   if (!rel) {
     return null;
   }

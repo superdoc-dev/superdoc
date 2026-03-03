@@ -102,4 +102,26 @@ test('two backspaces track period and l for bookmark-wrapped runs', async ({ sup
   expect(newDeletedCombined).toBe('l.');
   expect(snapshot.bookmarkStartCount).toBe(before.bookmarkStartCount);
   expect(snapshot.bookmarkEndCount).toBe(before.bookmarkEndCount);
+
+  // SD-2061: Verify numbered list marker is preserved after backspace.
+  // Before the fix, ReplaceAroundStep was applied untracked, which removed
+  // paragraph properties (numbering, font, alignment).
+  const markerAfter = await superdoc.page.evaluate(() => {
+    const editor = (window as any).editor;
+    const { doc } = editor.state;
+    let marker: string | null = null;
+
+    doc.descendants((node: any) => {
+      if (node.type?.name !== 'paragraph') return;
+      const normalized = String(node.textContent ?? '')
+        .replace(/\s+/g, ' ')
+        .trim();
+      if (!normalized.includes('any and all such Confidential Material')) return;
+      marker = String(node.attrs?.listRendering?.markerText ?? '').trim();
+      return false;
+    });
+
+    return marker;
+  });
+  expect(markerAfter).toBe('1.');
 });

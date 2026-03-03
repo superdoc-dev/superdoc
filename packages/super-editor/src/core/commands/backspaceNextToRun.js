@@ -1,14 +1,5 @@
 import { Selection } from 'prosemirror-state';
-
-const findPreviousTextDeleteRange = (doc, cursorPos, minPos) => {
-  for (let pos = cursorPos - 1; pos >= minPos; pos -= 1) {
-    const $probe = doc.resolve(pos);
-    const nodeBefore = $probe.nodeBefore;
-    if (!nodeBefore?.isText || !nodeBefore.text?.length) continue;
-    return { from: pos - 1, to: pos };
-  }
-  return null;
-};
+import { findPreviousTextDeleteRange } from './findPreviousTextDeleteRange.js';
 
 /**
  * Backspaces a single character when the cursor sits adjacent to a run boundary.

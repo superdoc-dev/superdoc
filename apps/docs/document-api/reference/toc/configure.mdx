@@ -29,7 +29,27 @@ Returns a TocMutationResult with the updated TOC address on success, or a failur
 | Field | Type | Required | Description |
 | --- | --- | --- | --- |
 | `patch` | object | yes |  |
+| `patch.hideInWebView` | boolean | no |  |
+| `patch.hyperlinks` | boolean | no |  |
+| `patch.includePageNumbers` | boolean | no |  |
+| `patch.omitPageNumberLevels` | object | no |  |
+| `patch.omitPageNumberLevels.from` | integer | no |  |
+| `patch.omitPageNumberLevels.to` | integer | no |  |
+| `patch.outlineLevels` | object | no |  |
+| `patch.outlineLevels.from` | integer | no |  |
+| `patch.outlineLevels.to` | integer | no |  |
+| `patch.rightAlignPageNumbers` | boolean | no |  |
+| `patch.separator` | string | no |  |
+| `patch.tabLeader` | enum | no | `"none"`, `"dot"`, `"hyphen"`, `"underscore"`, `"middleDot"` |
+| `patch.tcFieldIdentifier` | string | no |  |
+| `patch.tcFieldLevels` | object | no |  |
+| `patch.tcFieldLevels.from` | integer | no |  |
+| `patch.tcFieldLevels.to` | integer | no |  |
+| `patch.useAppliedOutlineLevel` | boolean | no |  |
 | `target` | object(kind="block") | yes |  |
+| `target.kind` | `"block"` | yes | Constant: `"block"` |
+| `target.nodeId` | string | yes |  |
+| `target.nodeType` | `"tableOfContents"` | yes | Constant: `"tableOfContents"` |
 
 ### Example request
 
@@ -52,7 +72,25 @@ Returns a TocMutationResult with the updated TOC address on success, or a failur
 
 ## Output fields
 
-_No fields._
+### Variant 1 (toc.kind="block")
+
+| Field | Type | Required | Description |
+| --- | --- | --- | --- |
+| `success` | `true` | yes | Constant: `true` |
+| `toc` | object(kind="block") | yes |  |
+| `toc.kind` | `"block"` | yes | Constant: `"block"` |
+| `toc.nodeId` | string | yes |  |
+| `toc.nodeType` | `"tableOfContents"` | yes | Constant: `"tableOfContents"` |
+
+### Variant 2 (success=false)
+
+| Field | Type | Required | Description |
+| --- | --- | --- | --- |
+| `failure` | object | yes |  |
+| `failure.code` | enum | yes | `"NO_OP"`, `"INVALID_TARGET"`, `"TARGET_NOT_FOUND"`, `"CAPABILITY_UNAVAILABLE"`, `"INVALID_INSERTION_CONTEXT"`, `"PAGE_NUMBERS_NOT_MATERIALIZED"` |
+| `failure.details` | any | no |  |
+| `failure.message` | string | yes |  |
+| `success` | `false` | yes | Constant: `false` |
 
 ### Example response
 

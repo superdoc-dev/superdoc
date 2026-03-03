@@ -29,6 +29,9 @@ Returns a TocMutationResult with the removed TOC address on success, or a failur
 | Field | Type | Required | Description |
 | --- | --- | --- | --- |
 | `target` | object(kind="block") | yes |  |
+| `target.kind` | `"block"` | yes | Constant: `"block"` |
+| `target.nodeId` | string | yes |  |
+| `target.nodeType` | `"tableOfContents"` | yes | Constant: `"tableOfContents"` |
 
 ### Example request
 
@@ -44,7 +47,25 @@ Returns a TocMutationResult with the removed TOC address on success, or a failur
 
 ## Output fields
 
-_No fields._
+### Variant 1 (toc.kind="block")
+
+| Field | Type | Required | Description |
+| --- | --- | --- | --- |
+| `success` | `true` | yes | Constant: `true` |
+| `toc` | object(kind="block") | yes |  |
+| `toc.kind` | `"block"` | yes | Constant: `"block"` |
+| `toc.nodeId` | string | yes |  |
+| `toc.nodeType` | `"tableOfContents"` | yes | Constant: `"tableOfContents"` |
+
+### Variant 2 (success=false)
+
+| Field | Type | Required | Description |
+| --- | --- | --- | --- |
+| `failure` | object | yes |  |
+| `failure.code` | enum | yes | `"NO_OP"`, `"INVALID_TARGET"`, `"TARGET_NOT_FOUND"`, `"CAPABILITY_UNAVAILABLE"`, `"INVALID_INSERTION_CONTEXT"`, `"PAGE_NUMBERS_NOT_MATERIALIZED"` |
+| `failure.details` | any | no |  |
+| `failure.message` | string | yes |  |
+| `success` | `false` | yes | Constant: `false` |
 
 ### Example response
 

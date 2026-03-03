@@ -45,36 +45,30 @@ def main() -> None:
             result = infer_document_features(command['infoResult'])
             print(json.dumps({'ok': True, 'result': result}))
 
-        elif action == 'isSessionBound':
-            from superdoc.runtime import _SESSION_BOUND_OPERATION_IDS
-            operation_id = command['operationId']
-            result = operation_id in _SESSION_BOUND_OPERATION_IDS
-            print(json.dumps({'ok': True, 'result': result}))
-
-        elif action == 'assertCollabRejection':
-            import os
-            import tempfile
-            from superdoc.runtime import _reject_python_collaboration
-            from superdoc.errors import SuperDocError
+        elif action == 'assertCollabAccepted':
+            # Verify collab params pass through to the runtime without
+            # SDK-level rejection. We build the argv from the operation spec
+            # to confirm nothing throws.
+            from superdoc.protocol import build_operation_argv
+            from superdoc.generated.contract import OPERATION_INDEX
 
             operation_id = command['operationId']
-            session_id = command['sessionId']
-
-            # Create a temp state dir with a collab metadata.json
-            with tempfile.TemporaryDirectory() as tmpdir:
-                ctx_dir = os.path.join(tmpdir, 'contexts', session_id)
-                os.makedirs(ctx_dir, exist_ok=True)
-                meta_path = os.path.join(ctx_dir, 'metadata.json')
-                with open(meta_path, 'w') as f:
-                    json.dump({'sessionType': 'collab'}, f)
-
-                env = {'SUPERDOC_CLI_STATE_DIR': tmpdir}
-                params = {'sessionId': session_id}
-                try:
-                    _reject_python_collaboration(operation_id, params, env)
-                    print(json.dumps({'ok': True, 'result': {'rejected': False}}))
-                except SuperDocError as exc:
-                    print(json.dumps({'ok': True, 'result': {'rejected': True, 'code': exc.code}}))
+            params = command.get('params', {})
+            operation = OPERATION_INDEX[operation_id]
+            try:
+                argv = build_operation_argv(operation, params)
+                # Verify collab param values survived into argv.
+                # Flag names are kebab-case (--collab-url), so check values.
+                argv_str = ' '.join(argv)
+                collab_params_present = any(
+                    str(params[key]) in argv_str
+                    for key in ('collabUrl', 'collabDocumentId')
+                    if params.get(key) is not None
+                )
+                print(json.dumps({'ok': True, 'result': {'accepted': True, 'collabParamsPresent': collab_params_present}}))
+            except Exception as exc:
+                code = getattr(exc, 'code', None) or 'UNKNOWN'
+                print(json.dumps({'ok': True, 'result': {'accepted': False, 'code': code, 'message': str(exc)}}))
 
         else:
             print(json.dumps({'ok': False, 'error': f'Unknown action: {action}'}))

@@ -16,13 +16,9 @@ pre-commit:
       run: pnpm exec eslint --fix --no-warn-ignored {staged_files}
       stage_fixed: true
     cli-build:
-      root: "apps/cli/"
-      glob: "apps/cli/**/*.ts"
-      run: pnpm run build
+      run: pnpm --prefix apps/cli run build
     cli-test:
-      root: "apps/cli/"
-      glob: "apps/cli/**/*.ts"
-      run: pnpm run test
+      run: pnpm run build:superdoc && pnpm run test:cli
     vscode-build:
       root: "apps/vscode-ext/"
       glob: "apps/vscode-ext/**/*.{ts,js}"

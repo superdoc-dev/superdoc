@@ -199,42 +199,9 @@ jobs:
       # Python SDK publish (only if semantic-release created a release)
       # PyPI uses OIDC trusted publishing via gh-action-pypi-publish.
       # ---------------------------------------------------------------
-      - name: Prepare Python SDK tools
+      - name: Build and verify Python SDK
         if: steps.sdk_release.outputs.released == 'true'
-        run: |
-          rm -rf packages/sdk/langs/python/superdoc/tools
-          cp -r packages/sdk/tools packages/sdk/langs/python/superdoc/tools
-          rm -f packages/sdk/langs/python/superdoc/tools/__init__.py
-
-      - name: Build companion Python wheels
-        if: steps.sdk_release.outputs.released == 'true'
-        run: node packages/sdk/scripts/build-python-companion-wheels.mjs
-
-      - name: Verify companion wheels
-        if: steps.sdk_release.outputs.released == 'true'
-        run: node packages/sdk/scripts/verify-python-companion-wheels.mjs --companions-only
-
-      - name: Build main Python SDK wheel
-        if: steps.sdk_release.outputs.released == 'true'
-        run: python -m build
-        working-directory: packages/sdk/langs/python
-
-      - name: Verify main wheel
-        if: steps.sdk_release.outputs.released == 'true'
-        run: node packages/sdk/scripts/verify-python-companion-wheels.mjs --root-only
-
-      - name: Smoke test (wheelhouse install + marker resolution)
-        if: steps.sdk_release.outputs.released == 'true'
-        run: |
-          python3 -m venv /tmp/sdk-smoke
-          mkdir -p /tmp/sdk-wheelhouse
-          cp packages/sdk/langs/python/dist/*.whl /tmp/sdk-wheelhouse/
-          cp packages/sdk/langs/python/companion-dist/*.whl /tmp/sdk-wheelhouse/
-          /tmp/sdk-smoke/bin/pip install superdoc-sdk --find-links /tmp/sdk-wheelhouse --no-index
-          /tmp/sdk-smoke/bin/python -c "from superdoc import SuperDocClient; SuperDocClient()"
-          /tmp/sdk-smoke/bin/python -c "from superdoc.embedded_cli import resolve_embedded_cli_path; import subprocess; p = resolve_embedded_cli_path(); r = subprocess.run([p, '--help'], capture_output=True, text=True, timeout=10); assert r.returncode == 0, f'CLI exited {r.returncode}: {r.stderr}'; print(f'CLI binary OK: {p}')"
-          echo "Smoke test passed."
-          rm -rf /tmp/sdk-smoke /tmp/sdk-wheelhouse
+        run: node packages/sdk/scripts/build-python-sdk.mjs
 
       - name: Publish companion Python packages to PyPI
         if: steps.sdk_release.outputs.released == 'true'

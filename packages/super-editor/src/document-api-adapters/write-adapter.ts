@@ -9,13 +9,12 @@ import type {
 } from '@superdoc/document-api';
 import { DocumentApiAdapterError } from './errors.js';
 import { ensureTrackedCapability } from './helpers/mutation-helpers.js';
-import { applyDirectMutationMeta } from './helpers/transaction-meta.js';
+import { applyDirectMutationMeta, applyTrackedMutationMeta } from './helpers/transaction-meta.js';
 import { checkRevision } from './plan-engine/revision-tracker.js';
-import { resolveDefaultInsertTarget, resolveTextTarget, type ResolvedTextTarget } from './helpers/adapter-utils.js';
-import { buildTextMutationResolution, readTextAtResolvedRange } from './helpers/text-mutation-resolution.js';
+import { insertParagraphAtEnd, resolveWriteTarget, type ResolvedWrite } from './helpers/adapter-utils.js';
 import { toCanonicalTrackedChangeId } from './helpers/tracked-change-resolver.js';
 
-function validateWriteRequest(request: WriteRequest, resolvedTarget: ResolvedWriteTarget): ReceiptFailure | null {
+function validateWriteRequest(request: WriteRequest, resolvedTarget: ResolvedWrite): ReceiptFailure | null {
   if (request.kind === 'insert') {
     if (!request.text) {
       return {
@@ -61,13 +60,6 @@ function validateWriteRequest(request: WriteRequest, resolvedTarget: ResolvedWri
 
   return null;
 }
-
-type ResolvedWriteTarget = {
-  requestedTarget?: TextAddress;
-  effectiveTarget: TextAddress;
-  range: ResolvedTextTarget;
-  resolution: ReturnType<typeof buildTextMutationResolution>;
-};
 
 /**
  * Normalize block-relative locator fields into a canonical TextAddress.
@@ -165,55 +157,17 @@ function normalizeWriteLocator(request: WriteRequest): WriteRequest {
   return request;
 }
 
-function resolveWriteTarget(editor: Editor, request: WriteRequest): ResolvedWriteTarget | null {
-  const requestedTarget = request.target;
-
-  if (request.kind === 'insert' && !request.target) {
-    const fallback = resolveDefaultInsertTarget(editor);
-    if (!fallback) return null;
-
-    const text = readTextAtResolvedRange(editor, fallback.range);
-    return {
-      requestedTarget,
-      effectiveTarget: fallback.target,
-      range: fallback.range,
-      resolution: buildTextMutationResolution({
-        requestedTarget,
-        target: fallback.target,
-        range: fallback.range,
-        text,
-      }),
-    };
-  }
-
-  const target = request.target;
-  if (!target) return null;
-
-  const range = resolveTextTarget(editor, target);
-  if (!range) return null;
-
-  const text = readTextAtResolvedRange(editor, range);
-  return {
-    requestedTarget,
-    effectiveTarget: target,
-    range,
-    resolution: buildTextMutationResolution({
-      requestedTarget,
-      target,
-      range,
-      text,
-    }),
-  };
-}
-
-function applyDirectWrite(
-  editor: Editor,
-  request: WriteRequest,
-  resolvedTarget: ResolvedWriteTarget,
-): TextMutationReceipt {
+function applyDirectWrite(editor: Editor, request: WriteRequest, resolvedTarget: ResolvedWrite): TextMutationReceipt {
   if (request.kind === 'delete') {
     const tr = applyDirectMutationMeta(editor.state.tr.delete(resolvedTarget.range.from, resolvedTarget.range.to));
     editor.dispatch(tr);
+    return { success: true, resolution: resolvedTarget.resolution };
+  }
+
+  // Structural-end: create a paragraph at the document end, since raw
+  // insertText cannot place text between block nodes.
+  if (resolvedTarget.structuralEnd) {
+    insertParagraphAtEnd(editor, resolvedTarget.range.from, request.text ?? '', applyDirectMutationMeta);
     return { success: true, resolution: resolvedTarget.resolution };
   }
 
@@ -225,12 +179,17 @@ function applyDirectWrite(
   return { success: true, resolution: resolvedTarget.resolution };
 }
 
-function applyTrackedWrite(
-  editor: Editor,
-  request: WriteRequest,
-  resolvedTarget: ResolvedWriteTarget,
-): TextMutationReceipt {
+function applyTrackedWrite(editor: Editor, request: WriteRequest, resolvedTarget: ResolvedWrite): TextMutationReceipt {
   ensureTrackedCapability(editor, { operation: 'write' });
+
+  // Structural-end: create a tracked paragraph at the document end.
+  // insertTrackedChange cannot operate between block nodes, so we use
+  // a direct tr.insert with tracked mutation meta instead.
+  if (resolvedTarget.structuralEnd) {
+    insertParagraphAtEnd(editor, resolvedTarget.range.from, request.text ?? '', applyTrackedMutationMeta);
+    return { success: true, resolution: resolvedTarget.resolution };
+  }
+
   // insertTrackedChange is guaranteed to exist after ensureTrackedCapability.
   const insertTrackedChange = editor.commands!.insertTrackedChange!;
   const text = request.kind === 'delete' ? '' : (request.text ?? '');
@@ -272,7 +231,7 @@ function applyTrackedWrite(
   };
 }
 
-function toFailureReceipt(failure: ReceiptFailure, resolvedTarget: ResolvedWriteTarget): TextMutationReceipt {
+function toFailureReceipt(failure: ReceiptFailure, resolvedTarget: ResolvedWrite): TextMutationReceipt {
   return {
     success: false,
     resolution: resolvedTarget.resolution,

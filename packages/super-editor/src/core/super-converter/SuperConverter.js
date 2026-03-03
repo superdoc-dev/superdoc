@@ -15,6 +15,10 @@ import { prepareFootnotesXmlForExport } from './v2/exporter/footnotesExporter.js
 import { DocxHelpers } from './docx-helpers/index.js';
 import { mergeRelationshipElements } from './relationship-helpers.js';
 import { COMMENT_RELATIONSHIP_TYPES } from './constants.js';
+import {
+  collectReferencedNumIds,
+  filterOrphanedNumberingDefinitions,
+} from './export-helpers/strip-orphaned-numbering.js';
 
 const FONT_FAMILY_FALLBACKS = Object.freeze({
   swiss: 'Arial, sans-serif',
@@ -1246,14 +1250,15 @@ class SuperConverter {
     const numberingPath = 'word/numbering.xml';
     let numberingXml = this.convertedXml[numberingPath];
 
-    const newNumbering = this.numbering;
-
     if (!numberingXml) numberingXml = baseNumbering;
     const currentNumberingXml = numberingXml.elements[0];
 
-    const newAbstracts = Object.values(newNumbering.abstracts).map((entry) => entry);
-    const newNumDefs = Object.values(newNumbering.definitions).map((entry) => entry);
-    currentNumberingXml.elements = [...newAbstracts, ...newNumDefs];
+    // D7: Strip orphaned numbering definitions (entries not referenced by any
+    // paragraph in the exported document parts).
+    const referencedNumIds = collectReferencedNumIds(this.convertedXml);
+    const { liveAbstracts, liveDefinitions } = filterOrphanedNumberingDefinitions(this.numbering, referencedNumIds);
+
+    currentNumberingXml.elements = [...liveAbstracts, ...liveDefinitions];
 
     // Update the numbering file
     this.convertedXml[numberingPath] = numberingXml;

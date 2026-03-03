@@ -5,6 +5,7 @@ import { CliError } from './errors';
 import { isRecord } from './guards';
 
 export type CollaborationProviderType = 'hocuspocus' | 'y-websocket';
+export type OnMissing = 'seedFromDoc' | 'blank' | 'error';
 
 export type CollaborationInput = {
   providerType: CollaborationProviderType;
@@ -12,6 +13,8 @@ export type CollaborationInput = {
   documentId?: string;
   tokenEnv?: string;
   syncTimeoutMs?: number;
+  onMissing?: OnMissing;
+  bootstrapSettlingMs?: number;
 };
 
 export type CollaborationProfile = {
@@ -20,6 +23,8 @@ export type CollaborationProfile = {
   documentId: string;
   tokenEnv?: string;
   syncTimeoutMs?: number;
+  onMissing?: OnMissing;
+  bootstrapSettlingMs?: number;
 };
 
 type SyncableProvider = {
@@ -87,11 +92,27 @@ export function parseCollaborationInput(value: unknown): CollaborationInput {
     throw new CliError('VALIDATION_ERROR', 'collaboration.params is not supported in v1.');
   }
 
-  const allowedKeys = new Set(['providerType', 'url', 'documentId', 'tokenEnv', 'syncTimeoutMs']);
+  const allowedKeys = new Set([
+    'providerType',
+    'url',
+    'documentId',
+    'tokenEnv',
+    'syncTimeoutMs',
+    'onMissing',
+    'bootstrapSettlingMs',
+  ]);
   for (const key of Object.keys(value)) {
     if (!allowedKeys.has(key)) {
       throw new CliError('VALIDATION_ERROR', `collaboration.${key} is not supported.`);
     }
+  }
+
+  let onMissing: OnMissing | undefined;
+  if (value.onMissing != null) {
+    if (value.onMissing !== 'seedFromDoc' && value.onMissing !== 'blank' && value.onMissing !== 'error') {
+      throw new CliError('VALIDATION_ERROR', 'collaboration.onMissing must be "seedFromDoc", "blank", or "error".');
+    }
+    onMissing = value.onMissing;
   }
 
   return {
@@ -101,6 +122,8 @@ export function parseCollaborationInput(value: unknown): CollaborationInput {
       value.documentId != null ? expectNonEmptyString(value.documentId, 'collaboration.documentId') : undefined,
     tokenEnv: expectOptionalEnvVarName(value.tokenEnv, 'collaboration.tokenEnv'),
     syncTimeoutMs: expectOptionalPositiveNumber(value.syncTimeoutMs, 'collaboration.syncTimeoutMs'),
+    onMissing,
+    bootstrapSettlingMs: expectOptionalPositiveNumber(value.bootstrapSettlingMs, 'collaboration.bootstrapSettlingMs'),
   };
 }
 
@@ -112,6 +135,8 @@ export function resolveCollaborationProfile(input: CollaborationInput, sessionId
     documentId,
     tokenEnv: input.tokenEnv,
     syncTimeoutMs: input.syncTimeoutMs,
+    onMissing: input.onMissing,
+    bootstrapSettlingMs: input.bootstrapSettlingMs,
   };
 }
 

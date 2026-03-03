@@ -69,18 +69,21 @@ export async function activateCommentDialog(
     await superdoc.waitForStable();
   }
 
+  const activeDialog = superdoc.page.locator('.comment-placeholder .comments-dialog.is-active').last();
   const dialog = activeCommentDialog(superdoc.page);
-  const isActive = await dialog.isVisible({ timeout: 2_000 }).catch(() => false);
+  const hasActiveDialog = (await activeDialog.count()) > 0;
 
-  if (!isActive) {
+  if (!hasActiveDialog) {
     // Fallback: click the floating dialog directly to trigger setFocus → is-active
     const floatingDialog = superdoc.page.locator('.comment-placeholder .comments-dialog').last();
     await expect(floatingDialog).toBeVisible({ timeout: timeoutMs });
-    await floatingDialog.click();
+    // Click near the top-left to avoid accidentally hitting interactive controls
+    // such as the "N more replies" collapse/expand pill in the middle of the card.
+    await floatingDialog.click({ position: { x: 12, y: 12 } });
     await superdoc.waitForStable();
 
-    const isActiveNow = await dialog.isVisible({ timeout: 2_000 }).catch(() => false);
-    if (!isActiveNow) {
+    const hasActiveDialogNow = (await activeDialog.count()) > 0;
+    if (!hasActiveDialogNow) {
       // Last resort: set activeComment directly on the Pinia store. This is
       // needed when click events don't propagate to activate the dialog
       // (Firefox/WebKit) or replyToComment calls set it to a child ID.
@@ -97,6 +100,11 @@ export async function activateCommentDialog(
       });
       await superdoc.waitForStable();
     }
+  }
+
+  if ((await activeDialog.count()) > 0) {
+    await expect(activeDialog).toBeVisible({ timeout: timeoutMs });
+    return activeDialog;
   }
 
   await expect(dialog).toBeVisible({ timeout: timeoutMs });

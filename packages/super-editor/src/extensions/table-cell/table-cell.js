@@ -38,7 +38,6 @@
  */
 
 import { Node, Attribute } from '@core/index.js';
-import { createCellBorders } from './helpers/createCellBorders.js';
 import { renderCellBorderStyle } from './helpers/renderCellBorderStyle.js';
 
 /**
@@ -190,8 +189,11 @@ export const TableCell = Node.create({
       },
 
       borders: {
-        default: () => createCellBorders(),
-        renderDOM: ({ borders }) => renderCellBorderStyle(borders),
+        default: null,
+        renderDOM: ({ borders }) => {
+          if (!borders) return {};
+          return renderCellBorderStyle(borders);
+        },
       },
 
       widthType: {

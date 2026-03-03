@@ -177,10 +177,6 @@ function makeListsAdapter(): ListsAdapter {
       item: { kind: 'block' as const, nodeType: 'listItem' as const, nodeId: 'li-2' },
       insertionPoint: { kind: 'text' as const, blockId: 'li-2', range: { start: 0, end: 0 } },
     })),
-    setType: vi.fn(() => ({
-      success: true as const,
-      item: { kind: 'block' as const, nodeType: 'listItem' as const, nodeId: 'li-1' },
-    })),
     indent: vi.fn(() => ({
       success: true as const,
       item: { kind: 'block' as const, nodeType: 'listItem' as const, nodeId: 'li-1' },
@@ -189,11 +185,53 @@ function makeListsAdapter(): ListsAdapter {
       success: true as const,
       item: { kind: 'block' as const, nodeType: 'listItem' as const, nodeId: 'li-1' },
     })),
-    restart: vi.fn(() => ({
+    create: vi.fn(() => ({
+      success: true as const,
+      listId: '99',
+      item: { kind: 'block' as const, nodeType: 'listItem' as const, nodeId: 'li-1' },
+    })),
+    attach: vi.fn(() => ({
       success: true as const,
       item: { kind: 'block' as const, nodeType: 'listItem' as const, nodeId: 'li-1' },
     })),
-    exit: vi.fn(() => ({
+    detach: vi.fn(() => ({
+      success: true as const,
+      paragraph: { kind: 'block' as const, nodeType: 'paragraph' as const, nodeId: 'p1' },
+    })),
+    join: vi.fn(() => ({
+      success: true as const,
+      listId: '1',
+    })),
+    canJoin: vi.fn(() => ({
+      canJoin: true as const,
+      adjacentListId: '2',
+    })),
+    separate: vi.fn(() => ({
+      success: true as const,
+      listId: '99',
+      numId: 99,
+    })),
+    setLevel: vi.fn(() => ({
+      success: true as const,
+      item: { kind: 'block' as const, nodeType: 'listItem' as const, nodeId: 'li-1' },
+    })),
+    setValue: vi.fn(() => ({
+      success: true as const,
+      item: { kind: 'block' as const, nodeType: 'listItem' as const, nodeId: 'li-1' },
+    })),
+    continuePrevious: vi.fn(() => ({
+      success: true as const,
+      item: { kind: 'block' as const, nodeType: 'listItem' as const, nodeId: 'li-1' },
+    })),
+    canContinuePrevious: vi.fn(() => ({
+      canContinue: true as const,
+      previousListId: '1',
+    })),
+    setLevelRestart: vi.fn(() => ({
+      success: true as const,
+      item: { kind: 'block' as const, nodeType: 'listItem' as const, nodeId: 'li-1' },
+    })),
+    convertToText: vi.fn(() => ({
       success: true as const,
       paragraph: { kind: 'block' as const, nodeType: 'paragraph' as const, nodeId: 'p1' },
     })),
@@ -971,20 +1009,24 @@ describe('createDocumentApi', () => {
     const listResult = api.lists.list({ limit: 1 });
     const getResult = api.lists.get({ address: target });
     const insertResult = api.lists.insert({ target, position: 'after', text: 'Inserted' }, { changeMode: 'tracked' });
-    const setTypeResult = api.lists.setType({ target, kind: 'bullet' });
     const indentResult = api.lists.indent({ target });
     const outdentResult = api.lists.outdent({ target });
-    const restartResult = api.lists.restart({ target });
-    const exitResult = api.lists.exit({ target });
+    const createResult = api.lists.create({
+      mode: 'empty',
+      at: { kind: 'block', nodeType: 'paragraph', nodeId: 'p-1' },
+      kind: 'ordered',
+    });
+    const detachResult = api.lists.detach({ target });
+    const setLevelResult = api.lists.setLevel({ target, level: 2 });
 
     expect(listResult.total).toBe(0);
     expect(getResult.address).toEqual(target);
     expect(insertResult.success).toBe(true);
-    expect(setTypeResult.success).toBe(true);
     expect(indentResult.success).toBe(true);
     expect(outdentResult.success).toBe(true);
-    expect(restartResult.success).toBe(true);
-    expect(exitResult.success).toBe(true);
+    expect(createResult.success).toBe(true);
+    expect(detachResult.success).toBe(true);
+    expect(setLevelResult.success).toBe(true);
 
     expect(listsAdpt.list).toHaveBeenCalledWith({ limit: 1 });
     expect(listsAdpt.get).toHaveBeenCalledWith({ address: target });
@@ -992,11 +1034,10 @@ describe('createDocumentApi', () => {
       { target, position: 'after', text: 'Inserted' },
       { changeMode: 'tracked', dryRun: false },
     );
-    expect(listsAdpt.setType).toHaveBeenCalledWith({ target, kind: 'bullet' }, { changeMode: 'direct', dryRun: false });
     expect(listsAdpt.indent).toHaveBeenCalledWith({ target }, { changeMode: 'direct', dryRun: false });
     expect(listsAdpt.outdent).toHaveBeenCalledWith({ target }, { changeMode: 'direct', dryRun: false });
-    expect(listsAdpt.restart).toHaveBeenCalledWith({ target }, { changeMode: 'direct', dryRun: false });
-    expect(listsAdpt.exit).toHaveBeenCalledWith({ target }, { changeMode: 'direct', dryRun: false });
+    expect(listsAdpt.detach).toHaveBeenCalledWith({ target }, { changeMode: 'direct', dryRun: false });
+    expect(listsAdpt.setLevel).toHaveBeenCalledWith({ target, level: 2 }, { changeMode: 'direct', dryRun: false });
   });
 
   it('exposes capabilities as a callable function with .get() alias', () => {
@@ -2122,9 +2163,9 @@ describe('createDocumentApi', () => {
       expect(result.success).toBe(true);
     });
 
-    it('accepts canonical target for lists.setType', () => {
+    it('accepts canonical target for lists.setLevel', () => {
       const api = makeApi();
-      const result = api.lists.setType({ target, kind: 'bullet' });
+      const result = api.lists.setLevel({ target, level: 2 });
       expect(result.success).toBe(true);
     });
 
@@ -2137,12 +2178,26 @@ describe('createDocumentApi', () => {
 
     // -- All list mutation operations validate --
 
-    const LISTS_MUTATIONS = ['outdent', 'restart', 'exit'] as const;
+    const LISTS_MUTATIONS = [
+      'outdent',
+      'detach',
+      'setValue',
+      'continuePrevious',
+      'setLevelRestart',
+      'convertToText',
+    ] as const;
     for (const method of LISTS_MUTATIONS) {
       it(`accepts canonical target for lists.${method}`, () => {
         const api = makeApi();
-        const result = api.lists[method]({ target });
-        expect(result.success).toBe(true);
+        const result = (
+          api.lists[method] as (input: {
+            target: typeof target;
+            level?: number;
+            value?: number;
+            restartAfterLevel?: number | null;
+          }) => unknown
+        )({ target, level: 0, value: 1, restartAfterLevel: null });
+        expect(result).toBeDefined();
       });
     }
 

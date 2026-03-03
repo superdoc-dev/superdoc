@@ -47,6 +47,9 @@ export type Selector = DocumentApiSelector;
 export type Query = DocumentApiQuery;
 export type FindOutput = DocumentApiFindOutput;
 
+/** User identity for attribution in comments, tracked changes, and collaboration presence. */
+export type UserIdentity = { name: string; email: string };
+
 export type OutputMode = 'json' | 'pretty';
 export type ExecutionMode = 'oneshot' | 'host';
 

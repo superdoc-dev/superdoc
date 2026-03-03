@@ -86,27 +86,10 @@ function main() {
 
   // 7. Python publish (unless --npm-only, which defers to workflow-level PyPI action)
   if (npmOnly) {
-    console.log('\n  Skipping Python publish (--npm-only). PyPI publish handled by workflow.\n');
+    console.log('\n  Skipping Python build (--npm-only). Python build + PyPI publish handled by workflow.\n');
   } else {
-    // Build companion wheels
-    run('node', [path.join(__dirname, 'build-python-companion-wheels.mjs')], {
-      label: 'Step 7a/7: Build Python companion wheels',
-    });
-
-    // Verify companion wheels
-    run('node', [path.join(__dirname, 'verify-python-companion-wheels.mjs'), '--companions-only'], {
-      label: 'Step 7b/7: Verify companion wheels',
-    });
-
-    // Build main Python SDK wheel
-    run('python', ['-m', 'build'], {
-      cwd: path.join(REPO_ROOT, 'packages/sdk/langs/python'),
-      label: 'Step 7c/7: Build main Python SDK wheel',
-    });
-
-    // Verify main wheel
-    run('node', [path.join(__dirname, 'verify-python-companion-wheels.mjs'), '--root-only'], {
-      label: 'Step 7d/7: Verify main Python wheel',
+    run('node', [path.join(__dirname, 'build-python-sdk.mjs')], {
+      label: 'Step 7/7: Build and verify Python SDK',
     });
 
     if (!dryRun) {

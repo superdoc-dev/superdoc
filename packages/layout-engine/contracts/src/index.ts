@@ -491,8 +491,14 @@ export type TableCell = {
   attrs?: TableCellAttrs;
 };
 
+export type TableRowProperties = {
+  repeatHeader?: boolean;
+  cantSplit?: boolean;
+  [key: string]: unknown;
+};
+
 export type TableRowAttrs = {
-  tableRowProperties?: Record<string, unknown>;
+  tableRowProperties?: TableRowProperties;
   rowHeight?: {
     value: number;
     rule?: 'auto' | 'atLeast' | 'exact' | string;

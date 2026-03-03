@@ -28,7 +28,7 @@ export type InsertWriteRequest = {
   kind: 'insert';
   /**
    * Optional insertion target.
-   * When omitted, adapters may resolve a deterministic default insertion point.
+   * When omitted, inserts at the end of the document.
    */
   target?: TextAddress;
   text: string;

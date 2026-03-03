@@ -29,6 +29,9 @@ Returns a BlocksDeleteResult receipt confirming the block was removed from the d
 | Field | Type | Required | Description |
 | --- | --- | --- | --- |
 | `target` | DeletableBlockNodeAddress | yes | DeletableBlockNodeAddress |
+| `target.kind` | `"block"` | yes | Constant: `"block"` |
+| `target.nodeId` | string | yes |  |
+| `target.nodeType` | enum | yes | `"paragraph"`, `"heading"`, `"listItem"`, `"table"`, `"sdt"` |
 
 ### Example request
 
@@ -47,6 +50,9 @@ Returns a BlocksDeleteResult receipt confirming the block was removed from the d
 | Field | Type | Required | Description |
 | --- | --- | --- | --- |
 | `deleted` | DeletableBlockNodeAddress | yes | DeletableBlockNodeAddress |
+| `deleted.kind` | `"block"` | yes | Constant: `"block"` |
+| `deleted.nodeId` | string | yes |  |
+| `deleted.nodeType` | enum | yes | `"paragraph"`, `"heading"`, `"listItem"`, `"table"`, `"sdt"` |
 | `success` | `true` | yes | Constant: `true` |
 
 ### Example response

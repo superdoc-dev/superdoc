@@ -30,6 +30,23 @@ Returns a CreateTableOfContentsResult with the new TOC block address.
 | --- | --- | --- | --- |
 | `at` | object(kind="documentStart") \\| object(kind="documentEnd") \\| object(kind="before") \\| object(kind="after") | no | One of: object(kind="documentStart"), object(kind="documentEnd"), object(kind="before"), object(kind="after") |
 | `config` | object | no |  |
+| `config.hideInWebView` | boolean | no |  |
+| `config.hyperlinks` | boolean | no |  |
+| `config.includePageNumbers` | boolean | no |  |
+| `config.omitPageNumberLevels` | object | no |  |
+| `config.omitPageNumberLevels.from` | integer | no |  |
+| `config.omitPageNumberLevels.to` | integer | no |  |
+| `config.outlineLevels` | object | no |  |
+| `config.outlineLevels.from` | integer | no |  |
+| `config.outlineLevels.to` | integer | no |  |
+| `config.rightAlignPageNumbers` | boolean | no |  |
+| `config.separator` | string | no |  |
+| `config.tabLeader` | enum | no | `"none"`, `"dot"`, `"hyphen"`, `"underscore"`, `"middleDot"` |
+| `config.tcFieldIdentifier` | string | no |  |
+| `config.tcFieldLevels` | object | no |  |
+| `config.tcFieldLevels.from` | integer | no |  |
+| `config.tcFieldLevels.to` | integer | no |  |
+| `config.useAppliedOutlineLevel` | boolean | no |  |
 
 ### Example request
 
@@ -50,7 +67,25 @@ Returns a CreateTableOfContentsResult with the new TOC block address.
 
 ## Output fields
 
-_No fields._
+### Variant 1 (toc.kind="block")
+
+| Field | Type | Required | Description |
+| --- | --- | --- | --- |
+| `success` | `true` | yes | Constant: `true` |
+| `toc` | object(kind="block") | yes |  |
+| `toc.kind` | `"block"` | yes | Constant: `"block"` |
+| `toc.nodeId` | string | yes |  |
+| `toc.nodeType` | `"tableOfContents"` | yes | Constant: `"tableOfContents"` |
+
+### Variant 2 (success=false)
+
+| Field | Type | Required | Description |
+| --- | --- | --- | --- |
+| `failure` | object | yes |  |
+| `failure.code` | enum | yes | `"NO_OP"`, `"INVALID_TARGET"`, `"TARGET_NOT_FOUND"`, `"CAPABILITY_UNAVAILABLE"`, `"INVALID_INSERTION_CONTEXT"`, `"PAGE_NUMBERS_NOT_MATERIALIZED"` |
+| `failure.details` | any | no |  |
+| `failure.message` | string | yes |  |
+| `success` | `false` | yes | Constant: `false` |
 
 ### Example response
 

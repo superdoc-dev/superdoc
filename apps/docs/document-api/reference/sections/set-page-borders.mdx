@@ -29,7 +29,40 @@ Returns a SectionMutationResult receipt; reports NO_OP if page border configurat
 | Field | Type | Required | Description |
 | --- | --- | --- | --- |
 | `borders` | any \\| any \\| any \\| any \\| any \\| any \\| any | yes | One of: any, any, any, any, any, any, any |
+| `borders.bottom` | any \\| any \\| any \\| any \\| any \\| any | no | One of: any, any, any, any, any, any |
+| `borders.bottom.color` | string | no |  |
+| `borders.bottom.frame` | boolean | no |  |
+| `borders.bottom.shadow` | boolean | no |  |
+| `borders.bottom.size` | number | no |  |
+| `borders.bottom.space` | number | no |  |
+| `borders.bottom.style` | string | no |  |
+| `borders.display` | enum | no | `"allPages"`, `"firstPage"`, `"notFirstPage"` |
+| `borders.left` | any \\| any \\| any \\| any \\| any \\| any | no | One of: any, any, any, any, any, any |
+| `borders.left.color` | string | no |  |
+| `borders.left.frame` | boolean | no |  |
+| `borders.left.shadow` | boolean | no |  |
+| `borders.left.size` | number | no |  |
+| `borders.left.space` | number | no |  |
+| `borders.left.style` | string | no |  |
+| `borders.offsetFrom` | enum | no | `"page"`, `"text"` |
+| `borders.right` | any \\| any \\| any \\| any \\| any \\| any | no | One of: any, any, any, any, any, any |
+| `borders.right.color` | string | no |  |
+| `borders.right.frame` | boolean | no |  |
+| `borders.right.shadow` | boolean | no |  |
+| `borders.right.size` | number | no |  |
+| `borders.right.space` | number | no |  |
+| `borders.right.style` | string | no |  |
+| `borders.top` | any \\| any \\| any \\| any \\| any \\| any | no | One of: any, any, any, any, any, any |
+| `borders.top.color` | string | no |  |
+| `borders.top.frame` | boolean | no |  |
+| `borders.top.shadow` | boolean | no |  |
+| `borders.top.size` | number | no |  |
+| `borders.top.space` | number | no |  |
+| `borders.top.style` | string | no |  |
+| `borders.zOrder` | enum | no | `"front"`, `"back"` |
 | `target` | SectionAddress | yes | SectionAddress |
+| `target.kind` | `"section"` | yes | Constant: `"section"` |
+| `target.sectionId` | string | yes |  |
 
 ### Example request
 
@@ -49,7 +82,24 @@ Returns a SectionMutationResult receipt; reports NO_OP if page border configurat
 
 ## Output fields
 
-_No fields._
+### Variant 1 (section.kind="section")
+
+| Field | Type | Required | Description |
+| --- | --- | --- | --- |
+| `section` | SectionAddress | yes | SectionAddress |
+| `section.kind` | `"section"` | yes | Constant: `"section"` |
+| `section.sectionId` | string | yes |  |
+| `success` | `true` | yes | Constant: `true` |
+
+### Variant 2 (success=false)
+
+| Field | Type | Required | Description |
+| --- | --- | --- | --- |
+| `failure` | object | yes |  |
+| `failure.code` | enum | yes | `"NO_OP"`, `"INVALID_TARGET"`, `"CAPABILITY_UNAVAILABLE"` |
+| `failure.details` | any | no |  |
+| `failure.message` | string | yes |  |
+| `success` | `false` | yes | Constant: `false` |
 
 ### Example response
 

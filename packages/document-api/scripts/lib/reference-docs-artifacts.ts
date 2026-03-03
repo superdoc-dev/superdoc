@@ -129,6 +129,11 @@ interface FieldRow {
   description: string;
 }
 
+interface FieldSection {
+  title?: string;
+  rows: FieldRow[];
+}
+
 /**
  * Try to derive a short discriminator label from an inline object schema.
  * Looks for a `const` property that acts as a type discriminator (e.g., `type: "text"`).
@@ -221,28 +226,87 @@ function schemaDescription(schema: JsonSchema, $defs: Defs): string {
 }
 
 /**
- * Build field table rows from an object schema's properties.
- * Non-object schemas produce an empty array.
+ * Collect all nested `const` discriminator values for a schema.
  */
-function buildFieldRows(schema: JsonSchema, $defs: Defs): FieldRow[] {
+function collectConstDiscriminators(
+  schema: JsonSchema,
+  $defs: Defs,
+  prefix = '',
+  depth = 0,
+): Array<{ path: string; value: unknown }> {
+  if (depth > 6) return [];
+
   const { resolved } = resolveRef(schema, $defs);
   const properties = resolved.properties as Record<string, JsonSchema> | undefined;
-  if (!properties) return [];
+  if (resolved.const !== undefined && prefix) {
+    return [{ path: prefix.replace(/\.$/u, ''), value: resolved.const }];
+  }
+  if (!properties || resolved.type !== 'object') return [];
+
+  const discriminators: Array<{ path: string; value: unknown }> = [];
+  for (const key of Object.keys(properties)) {
+    discriminators.push(...collectConstDiscriminators(properties[key], $defs, `${prefix}${key}.`, depth + 1));
+  }
+  return discriminators;
+}
+
+/**
+ * Build field table rows from an object schema's properties.
+ * Recursively flattens nested objects into dot-path rows.
+ */
+function buildFieldRows(schema: JsonSchema, $defs: Defs, prefix = '', parentRequired = true, depth = 0): FieldRow[] {
+  if (depth > 8) return [];
+
+  const { resolved } = resolveRef(schema, $defs);
+  const properties = resolved.properties as Record<string, JsonSchema> | undefined;
+  if (!properties || resolved.type !== 'object') return [];
 
   const requiredSet = new Set<string>(Array.isArray(resolved.required) ? (resolved.required as string[]) : []);
+  const rows: FieldRow[] = [];
 
-  // Sort properties alphabetically for determinism
-  return Object.keys(properties)
-    .sort()
-    .map((field) => {
-      const prop = properties[field];
+  for (const field of Object.keys(properties).sort()) {
+    const prop = properties[field];
+    const fieldPath = prefix ? `${prefix}.${field}` : field;
+    const fieldRequired = parentRequired && requiredSet.has(field);
+
+    rows.push({
+      field: fieldPath,
+      type: schemaTypeLabel(prop, $defs),
+      required: fieldRequired,
+      description: schemaDescription(prop, $defs),
+    });
+
+    rows.push(...buildFieldRows(prop, $defs, fieldPath, fieldRequired, depth + 1));
+  }
+
+  return rows;
+}
+
+/** Build field sections, splitting top-level oneOf/anyOf schemas into explicit variants. */
+function buildFieldSections(schema: JsonSchema, $defs: Defs): FieldSection[] {
+  const { resolved } = resolveRef(schema, $defs);
+
+  for (const keyword of ['oneOf', 'anyOf'] as const) {
+    const variants = resolved[keyword];
+    if (!Array.isArray(variants) || variants.length === 0) continue;
+
+    return variants.map((variant, index) => {
+      const variantSchema = resolveRef(variant as JsonSchema, $defs).resolved;
+      const discriminators = collectConstDiscriminators(variantSchema, $defs);
+      const preferred =
+        discriminators.find((entry) => /(^|\.)(type|kind|mode|channel)$/u.test(entry.path)) ?? discriminators[0];
+      const label = preferred
+        ? `Variant ${index + 1} (${preferred.path}=${JSON.stringify(preferred.value)})`
+        : `Variant ${index + 1}`;
+
       return {
-        field,
-        type: schemaTypeLabel(prop, $defs),
-        required: requiredSet.has(field),
-        description: schemaDescription(prop, $defs),
+        title: label,
+        rows: buildFieldRows(variantSchema, $defs),
       };
     });
+  }
+
+  return [{ rows: buildFieldRows(resolved, $defs) }];
 }
 
 /** Escape pipe characters inside markdown table cells. */
@@ -262,6 +326,15 @@ function renderFieldTable(rows: FieldRow[]): string {
     .join('\n');
 
   return `${header}\n${body}`;
+}
+
+function renderFieldSections(schema: JsonSchema, $defs: Defs): string {
+  const sections = buildFieldSections(schema, $defs);
+  if (sections.length === 1) {
+    return renderFieldTable(sections[0].rows);
+  }
+
+  return sections.map((section) => `### ${section.title}\n\n${renderFieldTable(section.rows)}`).join('\n\n');
 }
 
 // ---------------------------------------------------------------------------
@@ -485,8 +558,8 @@ function renderOperationPage(operation: ContractOperationSnapshot, $defs: Defs):
   const description = OPERATION_DESCRIPTION_MAP[operation.operationId];
   const expectedResult = OPERATION_EXPECTED_RESULT_MAP[operation.operationId];
 
-  const inputRows = buildFieldRows(operation.schemas.input, $defs);
-  const outputRows = buildFieldRows(operation.schemas.output, $defs);
+  const inputFields = renderFieldSections(operation.schemas.input, $defs);
+  const outputFields = renderFieldSections(operation.schemas.output, $defs);
 
   const inputExample = generateExample(operation.schemas.input, $defs);
   const outputExample = generateExample(operation.schemas.output, $defs);
@@ -530,7 +603,7 @@ ${expectedResult}
 
 ## Input fields
 
-${renderFieldTable(inputRows)}
+${inputFields}
 
 ### Example request
 
@@ -540,7 +613,7 @@ ${stableStringify(inputExample)}
 
 ## Output fields
 
-${renderFieldTable(outputRows)}
+${outputFields}
 
 ### Example response
 

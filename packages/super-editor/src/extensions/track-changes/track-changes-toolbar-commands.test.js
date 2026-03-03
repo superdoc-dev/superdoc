@@ -11,20 +11,27 @@ vi.mock('./permission-helpers.js', () => ({
   collectTrackedChanges: vi.fn(),
 }));
 
+vi.mock('./trackChangesHelpers/getTrackChanges.js', () => ({
+  getTrackChanges: vi.fn(),
+}));
+
 describe('Track Changes Shared Resolution Commands', () => {
   let commands;
   let mockState;
   let mockCommands;
   let mockCommentsPluginGetState;
   let mockCollectTrackedChanges;
+  let mockGetTrackChanges;
 
   beforeEach(async () => {
     vi.clearAllMocks();
 
     const { CommentsPluginKey } = await import('../comment/comments-plugin.js');
     const { collectTrackedChanges } = await import('./permission-helpers.js');
+    const { getTrackChanges } = await import('./trackChangesHelpers/getTrackChanges.js');
     mockCommentsPluginGetState = CommentsPluginKey.getState;
     mockCollectTrackedChanges = collectTrackedChanges;
+    mockGetTrackChanges = getTrackChanges;
 
     commands = TrackChanges.config.addCommands();
 
@@ -42,6 +49,7 @@ describe('Track Changes Shared Resolution Commands', () => {
     };
 
     mockCollectTrackedChanges.mockReturnValue([]);
+    mockGetTrackChanges.mockReturnValue([]);
   });
 
   describe('acceptTrackedChangeFromToolbar', () => {
@@ -350,6 +358,35 @@ describe('Track Changes Shared Resolution Commands', () => {
       expect(mockCommands.acceptTrackedChangesBetween).not.toHaveBeenCalled();
       expect(mockCommands.acceptTrackedChangeBySelection).not.toHaveBeenCalled();
     });
+
+    it('falls back to by-id resolution when the comment cache is empty but the document still has the tracked change', () => {
+      mockCommentsPluginGetState.mockReturnValue({
+        activeThreadId: null,
+        trackedChanges: {},
+      });
+      mockGetTrackChanges.mockReturnValue([
+        {
+          from: 12,
+          to: 16,
+          mark: {
+            type: { name: 'trackInsert' },
+            attrs: { id: 'tracked-change-456' },
+          },
+        },
+      ]);
+
+      const command = commands.acceptTrackedChangeFromContextMenu;
+      const result = command({ trackedChangeId: 'tracked-change-456' })({
+        state: mockState,
+        commands: mockCommands,
+        editor: { options: {} },
+      });
+
+      expect(result).toBe(true);
+      expect(mockCommands.acceptTrackedChangeById).toHaveBeenCalledWith('tracked-change-456');
+      expect(mockCommands.acceptTrackedChangesBetween).not.toHaveBeenCalled();
+      expect(mockCommands.acceptTrackedChangeBySelection).not.toHaveBeenCalled();
+    });
   });
 
   describe('rejectTrackedChangeFromContextMenu', () => {
@@ -388,6 +425,35 @@ describe('Track Changes Shared Resolution Commands', () => {
           },
         },
       });
+
+      const command = commands.rejectTrackedChangeFromContextMenu;
+      const result = command({ trackedChangeId: 'tracked-change-999' })({
+        state: mockState,
+        commands: mockCommands,
+        editor: { options: {} },
+      });
+
+      expect(result).toBe(true);
+      expect(mockCommands.rejectTrackedChangeById).toHaveBeenCalledWith('tracked-change-999');
+      expect(mockCommands.rejectTrackedChangesBetween).not.toHaveBeenCalled();
+      expect(mockCommands.rejectTrackedChangeOnSelection).not.toHaveBeenCalled();
+    });
+
+    it('falls back to by-id resolution when the comment cache is empty but the document still has the tracked change', () => {
+      mockCommentsPluginGetState.mockReturnValue({
+        activeThreadId: null,
+        trackedChanges: {},
+      });
+      mockGetTrackChanges.mockReturnValue([
+        {
+          from: 21,
+          to: 24,
+          mark: {
+            type: { name: 'trackDelete' },
+            attrs: { id: 'tracked-change-999' },
+          },
+        },
+      ]);
 
       const command = commands.rejectTrackedChangeFromContextMenu;
       const result = command({ trackedChangeId: 'tracked-change-999' })({

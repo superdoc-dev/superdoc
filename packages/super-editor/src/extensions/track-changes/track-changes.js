@@ -520,12 +520,16 @@ const getTrackedChangeActionSelection = ({ state, editor }) => {
 const getTrackedChangeResolutionContext = ({ state, trackedChangeId = null }) => {
   const commentsPluginState = CommentsPluginKey.getState(state);
   const resolvedTrackedChangeId = trackedChangeId ?? commentsPluginState?.activeThreadId ?? null;
+  const hasTrackedChangeInCache = Boolean(
+    resolvedTrackedChangeId && commentsPluginState?.trackedChanges?.[resolvedTrackedChangeId],
+  );
+  const hasTrackedChangeInDocument = Boolean(
+    resolvedTrackedChangeId && getChangesByIdToResolve(state, resolvedTrackedChangeId)?.length,
+  );
 
   return {
     trackedChangeId: resolvedTrackedChangeId,
-    hasKnownTrackedChangeId: Boolean(
-      resolvedTrackedChangeId && commentsPluginState?.trackedChanges?.[resolvedTrackedChangeId],
-    ),
+    hasKnownTrackedChangeId: hasTrackedChangeInCache || hasTrackedChangeInDocument,
   };
 };
 
@@ -574,6 +578,8 @@ const resolveTrackedChangeAction = ({
       selection: targetSelection,
     });
 
+  // An explicit text selection takes precedence over the active bubble/thread
+  // so partial accept/reject resolves exactly what the user highlighted.
   if (shouldUseSelection) {
     return betweenCommand(targetSelection.from, targetSelection.to);
   }
@@ -604,6 +610,8 @@ const emitTrackedChangeCommentLifecycle = ({ editor, nextState, touchedChangeIds
   touchedChangeIds.forEach((changeId) => {
     const remainingTrackedChanges = getTrackChanges(nextState, changeId);
 
+    // Partial resolution keeps the tracked-change thread alive with updated text;
+    // full resolution emits the normal resolve event so the bubble can disappear.
     if (!remainingTrackedChanges.length) {
       editor.emit('commentsUpdate', {
         type: 'trackedChange',

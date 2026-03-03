@@ -191,12 +191,16 @@ const scheduleReplayTrackedChangeSync = () => {
   const activeDocId = proxy.$superdoc?.activeEditor?.options?.documentId;
   const hasPresentationBridge = Boolean(activeDocId && PresentationEditor.getInstance(activeDocId) && layers.value);
 
-  // Headless/non-layout fallback: there is no comment-position stream to wait for.
-  if (!hasPresentationBridge || !shouldRenderCommentsInViewing.value) {
-    nextTick(() => {
-      flushPendingReplayTrackedChangeSync();
-    });
-  }
+  // Always schedule a fallback flush. In layout mode, replay can remove the last
+  // comment/tracked-change anchor, which means no commentPositions event is emitted.
+  // Without this fallback, pending replay sync can stay stuck forever.
+  nextTick(() => {
+    flushPendingReplayTrackedChangeSync();
+  });
+
+  // In layout mode we still flush on comment-position updates when they arrive.
+  // For non-layout/viewing-hidden cases, the nextTick fallback above is the primary path.
+  if (!hasPresentationBridge || !shouldRenderCommentsInViewing.value) return;
 };
 
 const handleDocumentReady = (documentId, container) => {

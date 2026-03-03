@@ -917,8 +917,8 @@ export const useCommentsStore = defineStore('comments', () => {
     }, 0);
   };
 
-  const createCommentForTrackChanges = (editor, superdoc) => {
-    const trackedChanges = trackChangesHelpers.getTrackChanges(editor.state);
+  const createCommentForTrackChanges = (editor, superdoc, trackedChangesOverride = null) => {
+    const trackedChanges = trackedChangesOverride ?? trackChangesHelpers.getTrackChanges(editor.state);
     const groupedChanges = groupChanges(trackedChanges);
 
     // Build a Set of existing comment IDs for O(1) lookup
@@ -970,6 +970,62 @@ export const useCommentsStore = defineStore('comments', () => {
   };
 
   /**
+   * Remove tracked-change comments that no longer have a corresponding mark in the editor.
+   * Also removes any replies linked to those removed tracked-change threads.
+   *
+   * @param {Set<string>} liveTrackedChangeIds IDs currently present in editor marks.
+   * @returns {void}
+   */
+  const pruneStaleTrackedChangeComments = (liveTrackedChangeIds) => {
+    if (!(liveTrackedChangeIds instanceof Set)) return;
+
+    const removedIds = new Set();
+
+    commentsList.value = commentsList.value.filter((comment) => {
+      if (!comment?.trackedChange) return true;
+
+      const commentId = comment.commentId != null ? String(comment.commentId) : null;
+      const importedId = comment.importedId != null ? String(comment.importedId) : null;
+      const primaryId = commentId ?? importedId;
+
+      if (!primaryId || liveTrackedChangeIds.has(primaryId)) return true;
+
+      if (commentId) removedIds.add(commentId);
+      if (importedId) removedIds.add(importedId);
+      return false;
+    });
+
+    if (!removedIds.size) return;
+
+    let didRemoveDescendants = true;
+    while (didRemoveDescendants) {
+      didRemoveDescendants = false;
+      commentsList.value = commentsList.value.filter((comment) => {
+        const parentCommentId = comment.parentCommentId != null ? String(comment.parentCommentId) : null;
+        const trackedChangeParentId =
+          comment.trackedChangeParentId != null ? String(comment.trackedChangeParentId) : null;
+        const isLinkedToRemovedParent =
+          (parentCommentId && removedIds.has(parentCommentId)) ||
+          (trackedChangeParentId && removedIds.has(trackedChangeParentId));
+
+        if (!isLinkedToRemovedParent) return true;
+
+        const commentId = comment.commentId != null ? String(comment.commentId) : null;
+        const importedId = comment.importedId != null ? String(comment.importedId) : null;
+        if (commentId) removedIds.add(commentId);
+        if (importedId) removedIds.add(importedId);
+        didRemoveDescendants = true;
+        return false;
+      });
+    }
+
+    const activeCommentId = activeComment.value != null ? String(activeComment.value) : null;
+    if (activeCommentId && removedIds.has(activeCommentId)) {
+      activeComment.value = null;
+    }
+  };
+
+  /**
    * Rebuild tracked-change comments from the current editor state.
    *
    * Useful after bulk document transforms (like diff replay) where tracked-change
@@ -982,7 +1038,17 @@ export const useCommentsStore = defineStore('comments', () => {
    */
   const syncTrackedChangeComments = ({ superdoc, editor }) => {
     if (!superdoc || !editor) return;
-    createCommentForTrackChanges(editor, superdoc);
+
+    const trackedChanges = trackChangesHelpers.getTrackChanges(editor.state);
+    const liveTrackedChangeIds = new Set();
+    trackedChanges.forEach((change) => {
+      const id = change?.mark?.attrs?.id;
+      if (id == null) return;
+      liveTrackedChangeIds.add(String(id));
+    });
+
+    pruneStaleTrackedChangeComments(liveTrackedChangeIds);
+    createCommentForTrackChanges(editor, superdoc, trackedChanges);
   };
 
   const normalizeDocxSchemaForExport = (value) => {

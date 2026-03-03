@@ -483,13 +483,15 @@ describe('SuperDoc.vue', () => {
     ]);
 
     options.onCommentsUpdate({ type: 'replayCompleted' });
-    expect(commentsStoreStub.syncTrackedChangeComments).not.toHaveBeenCalled();
-
-    options.onCommentLocationsUpdate({ allCommentPositions: { 'tc-new': { start: 1, end: 2 } } });
+    await nextTick();
     expect(commentsStoreStub.syncTrackedChangeComments).toHaveBeenCalledWith({
       superdoc: superdocStub,
       editor: superdocStub.activeEditor,
     });
+    commentsStoreStub.syncTrackedChangeComments.mockClear();
+
+    options.onCommentLocationsUpdate({ allCommentPositions: { 'tc-new': { start: 1, end: 2 } } });
+    expect(commentsStoreStub.syncTrackedChangeComments).not.toHaveBeenCalled();
   });
 
   it('clears active comment when replay deletion removes the active reply', async () => {

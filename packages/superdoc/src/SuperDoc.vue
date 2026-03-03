@@ -148,6 +148,7 @@ const superdocStyleVars = computed(() => {
 // Refs
 const layers = ref(null);
 const pdfViewerRef = ref(null);
+const pendingReplayTrackedChangeSync = ref(false);
 
 // Comments layer
 const commentsLayer = ref(null);
@@ -177,6 +178,26 @@ const {
 const hrbrFieldsLayer = ref(null);
 
 const pdfConfig = proxy.$superdoc.config.modules?.pdf || {};
+
+const flushPendingReplayTrackedChangeSync = () => {
+  if (!pendingReplayTrackedChangeSync.value) return;
+  pendingReplayTrackedChangeSync.value = false;
+  syncTrackedChangeComments({ superdoc: proxy.$superdoc, editor: proxy.$superdoc?.activeEditor });
+};
+
+const scheduleReplayTrackedChangeSync = () => {
+  pendingReplayTrackedChangeSync.value = true;
+
+  const activeDocId = proxy.$superdoc?.activeEditor?.options?.documentId;
+  const hasPresentationBridge = Boolean(activeDocId && PresentationEditor.getInstance(activeDocId) && layers.value);
+
+  // Headless/non-layout fallback: there is no comment-position stream to wait for.
+  if (!hasPresentationBridge || !shouldRenderCommentsInViewing.value) {
+    nextTick(() => {
+      flushPendingReplayTrackedChangeSync();
+    });
+  }
+};
 
 const handleDocumentReady = (documentId, container) => {
   const doc = getDocument(documentId);
@@ -273,6 +294,7 @@ const onEditorReady = ({ editor, presentationEditor }) => {
     // Map PM positions to visual layout coordinates
     const mappedPositions = presentationEditor.getCommentBounds(positions, layers.value);
     handleEditorLocationsUpdate(mappedPositions);
+    flushPendingReplayTrackedChangeSync();
 
     // Ensure floating comments can render once the layout engine starts emitting positions.
     // For DOCX, handleDocumentReady doesn't fire (it's wired to PDFViewer), so this is
@@ -620,6 +642,7 @@ const onEditorCommentLocationsUpdate = (doc, { allCommentIds: activeThreadId, al
   if (!presentation) {
     // Non-layout-engine mode: pass through raw positions
     handleEditorLocationsUpdate(allCommentPositions, activeThreadId);
+    flushPendingReplayTrackedChangeSync();
     return;
   }
 
@@ -628,6 +651,7 @@ const onEditorCommentLocationsUpdate = (doc, { allCommentIds: activeThreadId, al
   // after every layout, so this is mainly for the initial load before layout completes.
   const mappedPositions = presentation.getCommentBounds(allCommentPositions, layers.value);
   handleEditorLocationsUpdate(mappedPositions, activeThreadId);
+  flushPendingReplayTrackedChangeSync();
 };
 
 const onEditorCommentsUpdate = (params = {}) => {
@@ -636,7 +660,7 @@ const onEditorCommentsUpdate = (params = {}) => {
   const resolveCommentEventId = (payload) => payload?.commentId || payload?.importedId || null;
 
   if (type === 'replayCompleted') {
-    syncTrackedChangeComments({ superdoc: proxy.$superdoc, editor: proxy.$superdoc?.activeEditor });
+    scheduleReplayTrackedChangeSync();
   }
 
   if (COMMENT_EVENTS?.ADD && type === COMMENT_EVENTS.ADD && commentPayload) {

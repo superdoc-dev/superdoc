@@ -483,6 +483,9 @@ describe('SuperDoc.vue', () => {
     ]);
 
     options.onCommentsUpdate({ type: 'replayCompleted' });
+    expect(commentsStoreStub.syncTrackedChangeComments).not.toHaveBeenCalled();
+
+    options.onCommentLocationsUpdate({ allCommentPositions: { 'tc-new': { start: 1, end: 2 } } });
     expect(commentsStoreStub.syncTrackedChangeComments).toHaveBeenCalledWith({
       superdoc: superdocStub,
       editor: superdocStub.activeEditor,

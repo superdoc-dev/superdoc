@@ -51,6 +51,24 @@ const buildCommentElements = (text) => [
 ];
 
 /**
+ * Builds a multi-paragraph DOCX-imported comment `elements` payload.
+ *
+ * @param {string} first First paragraph text.
+ * @param {string} second Second paragraph text.
+ * @returns {Array<Record<string, unknown>>}
+ */
+const buildMultiBlockCommentElements = (first, second) => [
+  {
+    type: 'paragraph',
+    content: [{ type: 'text', text: first }],
+  },
+  {
+    type: 'paragraph',
+    content: [{ type: 'text', text: second }],
+  },
+];
+
+/**
  * Returns the first token for convenience in tests.
  *
  * @param {Array<import('./comment-diffing.ts').CommentToken>} tokens
@@ -332,6 +350,25 @@ describe('diffComments', () => {
       oldText: 'Old',
       newText: 'New',
     });
+  });
+
+  it('returns modified diffs for multi-block elements text edits', () => {
+    const schema = createSchema();
+    const diffs = diffComments(
+      [{ commentId: 'c-1', elements: buildMultiBlockCommentElements('First', 'Second old') }],
+      [{ commentId: 'c-1', elements: buildMultiBlockCommentElements('First', 'Second new') }],
+      schema,
+    );
+
+    expect(diffs).toHaveLength(1);
+    expect(diffs[0]).toMatchObject({
+      action: 'modified',
+      nodeType: 'comment',
+      commentId: 'c-1',
+      oldText: 'FirstSecond old',
+      newText: 'FirstSecond new',
+    });
+    expect(diffs[0].contentDiff).not.toEqual([]);
   });
 
   it('returns empty diffs for identical comments', () => {

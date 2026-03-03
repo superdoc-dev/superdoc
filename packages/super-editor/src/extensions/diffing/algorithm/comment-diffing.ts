@@ -1,5 +1,5 @@
 import type { Schema } from 'prosemirror-model';
-import { diffNodes, type NodeDiff, type NodeInfo } from './generic-diffing';
+import { diffNodes, normalizeNodes, type NodeDiff, type NodeInfo } from './generic-diffing';
 import { getAttributesDiff, type AttributesDiff } from './attributes-diffing';
 import { createParagraphSnapshot, type ParagraphNodeInfo } from './paragraph-diffing';
 import { diffSequences } from './sequence-diffing';
@@ -226,8 +226,7 @@ export function buildModifiedCommentDiff(
   oldComment: CommentToken,
   newComment: CommentToken,
 ): CommentModifiedDiff | null {
-  const contentDiff =
-    oldComment.content && newComment.content ? diffNodes([oldComment.content], [newComment.content]) : [];
+  const contentDiff = buildCommentContentDiff(oldComment.content, newComment.content);
   const attrsDiff = getAttributesDiff(oldComment.commentJSON, newComment.commentJSON, COMMENT_ATTRS_DIFF_IGNORED_KEYS);
 
   if (contentDiff.length === 0 && !attrsDiff) {
@@ -245,6 +244,31 @@ export function buildModifiedCommentDiff(
     contentDiff,
     attrsDiff,
   };
+}
+
+/**
+ * Diffs comment body content with support for both paragraph and doc-root bodies.
+ *
+ * Multi-block comment bodies are represented as `doc` nodes (from `elements`).
+ * Diffing those via `diffNodes([doc],[doc])` only checks doc attrs and misses
+ * child content edits, so we diff normalized descendants instead.
+ *
+ * @param oldContent Parsed old comment body.
+ * @param newContent Parsed new comment body.
+ * @returns Node-level content diff payload.
+ */
+function buildCommentContentDiff(oldContent: NodeInfo | null, newContent: NodeInfo | null): NodeDiff[] {
+  if (!oldContent || !newContent) {
+    return [];
+  }
+
+  if (oldContent.node.type.name === 'doc' && newContent.node.type.name === 'doc') {
+    const oldNodes = normalizeNodes(oldContent.node);
+    const newNodes = normalizeNodes(newContent.node);
+    return diffNodes(oldNodes, newNodes);
+  }
+
+  return diffNodes([oldContent], [newContent]);
 }
 
 /**

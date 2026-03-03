@@ -193,6 +193,8 @@ describe('comments-store', () => {
     const existingComment = {
       commentId: 'change-1',
       trackedChangeText: 'old',
+      trackedChangeType: 'both',
+      deletedText: 'removed earlier',
       getValues: vi.fn(() => ({ commentId: 'change-1' })),
     };
 
@@ -216,6 +218,7 @@ describe('comments-store', () => {
     });
 
     expect(existingComment.trackedChangeText).toBe('new text');
+    expect(existingComment.trackedChangeType).toBe('insert');
     expect(existingComment.deletedText).toBe('removed');
     expect(syncCommentsToClientsMock).toHaveBeenCalledWith(
       superdoc,
@@ -234,6 +237,43 @@ describe('comments-store', () => {
         comment: { commentId: 'change-1' },
       }),
     );
+  });
+
+  it('clears stale tracked-change metadata when an update removes one side of a replacement', () => {
+    const superdoc = {
+      emit: vi.fn(),
+    };
+
+    const existingComment = {
+      commentId: 'change-clear-1',
+      trackedChangeText: 'replacement',
+      trackedChangeType: 'both',
+      deletedText: 'original',
+      getValues: vi.fn(() => ({ commentId: 'change-clear-1' })),
+    };
+
+    store.commentsList = [existingComment];
+
+    store.handleTrackedChangeUpdate({
+      superdoc,
+      params: {
+        event: 'update',
+        changeId: 'change-clear-1',
+        trackedChangeText: 'remaining insert',
+        trackedChangeType: 'insert',
+        deletedText: null,
+        authorEmail: 'user@example.com',
+        author: 'User',
+        date: 123,
+        importedAuthor: null,
+        documentId: 'doc-1',
+        coords: {},
+      },
+    });
+
+    expect(existingComment.trackedChangeText).toBe('remaining insert');
+    expect(existingComment.trackedChangeType).toBe('insert');
+    expect(existingComment.deletedText).toBeNull();
   });
 
   it('resolves tracked change comments on resolve events', () => {

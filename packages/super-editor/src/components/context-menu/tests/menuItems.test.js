@@ -126,6 +126,82 @@ describe('menuItems.js', () => {
       expect(itemIds).not.toContain('track-changes-reject');
     });
 
+    it('routes tracked-change context-menu actions through selection commands when text is selected', () => {
+      const acceptTrackedChangeBySelection = vi.fn();
+      const acceptTrackedChangeById = vi.fn();
+      const rejectTrackedChangeOnSelection = vi.fn();
+      const rejectTrackedChangeById = vi.fn();
+
+      mockEditor.commands = {
+        acceptTrackedChangeBySelection,
+        acceptTrackedChangeById,
+        rejectTrackedChangeOnSelection,
+        rejectTrackedChangeById,
+      };
+
+      mockContext = createMockContext({
+        editor: mockEditor,
+        trigger: TRIGGERS.click,
+        hasSelection: true,
+        isTrackedChange: true,
+        trackedChangeId: 'tracked-change-1',
+      });
+
+      const sections = getItems(mockContext);
+      const trackSection = sections.find((section) => section.id === 'track-changes');
+      const acceptItem = trackSection?.items.find((item) => item.id === 'track-changes-accept');
+      const rejectItem = trackSection?.items.find((item) => item.id === 'track-changes-reject');
+
+      expect(acceptItem).toBeDefined();
+      expect(rejectItem).toBeDefined();
+
+      acceptItem.action(mockEditor, mockContext);
+      rejectItem.action(mockEditor, mockContext);
+
+      expect(acceptTrackedChangeBySelection).toHaveBeenCalledTimes(1);
+      expect(acceptTrackedChangeById).not.toHaveBeenCalled();
+      expect(rejectTrackedChangeOnSelection).toHaveBeenCalledTimes(1);
+      expect(rejectTrackedChangeById).not.toHaveBeenCalled();
+    });
+
+    it('routes tracked-change context-menu actions through id commands for collapsed selections', () => {
+      const acceptTrackedChangeBySelection = vi.fn();
+      const acceptTrackedChangeById = vi.fn();
+      const rejectTrackedChangeOnSelection = vi.fn();
+      const rejectTrackedChangeById = vi.fn();
+
+      mockEditor.commands = {
+        acceptTrackedChangeBySelection,
+        acceptTrackedChangeById,
+        rejectTrackedChangeOnSelection,
+        rejectTrackedChangeById,
+      };
+
+      mockContext = createMockContext({
+        editor: mockEditor,
+        trigger: TRIGGERS.click,
+        hasSelection: false,
+        isTrackedChange: true,
+        trackedChangeId: 'tracked-change-2',
+      });
+
+      const sections = getItems(mockContext);
+      const trackSection = sections.find((section) => section.id === 'track-changes');
+      const acceptItem = trackSection?.items.find((item) => item.id === 'track-changes-accept');
+      const rejectItem = trackSection?.items.find((item) => item.id === 'track-changes-reject');
+
+      expect(acceptItem).toBeDefined();
+      expect(rejectItem).toBeDefined();
+
+      acceptItem.action(mockEditor, mockContext);
+      rejectItem.action(mockEditor, mockContext);
+
+      expect(acceptTrackedChangeBySelection).not.toHaveBeenCalled();
+      expect(acceptTrackedChangeById).toHaveBeenCalledWith('tracked-change-2');
+      expect(rejectTrackedChangeOnSelection).not.toHaveBeenCalled();
+      expect(rejectTrackedChangeById).toHaveBeenCalledWith('tracked-change-2');
+    });
+
     it('should filter AI items when AI module is not enabled', () => {
       const sections = getItems(mockContext);
 

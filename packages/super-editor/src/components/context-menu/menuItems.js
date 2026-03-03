@@ -150,7 +150,9 @@ export function getItems(context, customItems = [], includeDefaultItems = true) 
           label: TEXTS.trackChangesAccept,
           isDefault: true,
           action: (editor, context) => {
-            if (context?.trackedChangeId) {
+            if (context?.hasSelection) {
+              editor.commands.acceptTrackedChangeBySelection();
+            } else if (context?.trackedChangeId) {
               editor.commands.acceptTrackedChangeById(context.trackedChangeId);
             } else {
               editor.commands.acceptTrackedChangeBySelection();
@@ -167,7 +169,9 @@ export function getItems(context, customItems = [], includeDefaultItems = true) 
           icon: ICONS.trackChangesReject,
           isDefault: true,
           action: (editor, context) => {
-            if (context?.trackedChangeId) {
+            if (context?.hasSelection) {
+              editor.commands.rejectTrackedChangeOnSelection();
+            } else if (context?.trackedChangeId) {
               editor.commands.rejectTrackedChangeById(context.trackedChangeId);
             } else {
               editor.commands.rejectTrackedChangeOnSelection();

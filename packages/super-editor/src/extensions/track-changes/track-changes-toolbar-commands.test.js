@@ -7,17 +7,24 @@ vi.mock('../comment/comments-plugin.js', () => ({
   },
 }));
 
+vi.mock('./permission-helpers.js', () => ({
+  collectTrackedChanges: vi.fn(),
+}));
+
 describe('Track Changes Toolbar Commands', () => {
   let commands;
   let mockState;
   let mockCommands;
   let mockCommentsPluginGetState;
+  let mockCollectTrackedChanges;
 
   beforeEach(async () => {
     vi.clearAllMocks();
 
     const { CommentsPluginKey } = await import('../comment/comments-plugin.js');
+    const { collectTrackedChanges } = await import('./permission-helpers.js');
     mockCommentsPluginGetState = CommentsPluginKey.getState;
+    mockCollectTrackedChanges = collectTrackedChanges;
 
     commands = TrackChanges.config.addCommands();
 
@@ -31,6 +38,8 @@ describe('Track Changes Toolbar Commands', () => {
     mockState = {
       selection: { from: 10, to: 10 },
     };
+
+    mockCollectTrackedChanges.mockReturnValue([]);
   });
 
   describe('acceptTrackedChangeFromToolbar', () => {
@@ -53,8 +62,30 @@ describe('Track Changes Toolbar Commands', () => {
       expect(mockCommands.acceptTrackedChangeBySelection).not.toHaveBeenCalled();
     });
 
-    it('uses acceptTrackedChangeById when active tracked change exists (text selected)', () => {
+    it('uses selection-based accept when text is selected, even with an active tracked change', () => {
       mockState.selection = { from: 10, to: 15 };
+      mockCollectTrackedChanges.mockReturnValue([{ id: 'tracked-change-456' }]);
+
+      mockCommentsPluginGetState.mockReturnValue({
+        activeThreadId: 'tracked-change-456',
+        trackedChanges: {
+          'tracked-change-456': {
+            deletion: 'tracked-change-456',
+          },
+        },
+      });
+
+      const command = commands.acceptTrackedChangeFromToolbar;
+      const result = command()({ state: mockState, commands: mockCommands });
+
+      expect(result).toBe(true);
+      expect(mockCommands.acceptTrackedChangeBySelection).toHaveBeenCalled();
+      expect(mockCommands.acceptTrackedChangeById).not.toHaveBeenCalled();
+    });
+
+    it('uses acceptTrackedChangeById when a stale expanded selection does not touch the active tracked change', () => {
+      mockState.selection = { from: 10, to: 15 };
+      mockCollectTrackedChanges.mockReturnValue([{ id: 'different-change' }]);
 
       mockCommentsPluginGetState.mockReturnValue({
         activeThreadId: 'tracked-change-456',
@@ -134,10 +165,10 @@ describe('Track Changes Toolbar Commands', () => {
       expect(mockCommands.rejectTrackedChangeOnSelection).not.toHaveBeenCalled();
     });
 
-    it('uses rejectTrackedChangeById when active tracked change exists (text selected)', () => {
+    it('uses selection-based reject when text is selected, even with an active tracked change', () => {
       mockState.selection = { from: 20, to: 25 };
+      mockCollectTrackedChanges.mockReturnValue([{ id: 'tracked-change-999' }]);
 
-      // Mock CommentsPlugin state with active tracked change
       mockCommentsPluginGetState.mockReturnValue({
         activeThreadId: 'tracked-change-999',
         trackedChanges: {
@@ -151,8 +182,8 @@ describe('Track Changes Toolbar Commands', () => {
       const result = command()({ state: mockState, commands: mockCommands });
 
       expect(result).toBe(true);
-      expect(mockCommands.rejectTrackedChangeById).toHaveBeenCalledWith('tracked-change-999');
-      expect(mockCommands.rejectTrackedChangeOnSelection).not.toHaveBeenCalled();
+      expect(mockCommands.rejectTrackedChangeOnSelection).toHaveBeenCalled();
+      expect(mockCommands.rejectTrackedChangeById).not.toHaveBeenCalled();
     });
 
     it('falls back to rejectTrackedChangeOnSelection when no active tracked change', () => {
@@ -181,6 +212,27 @@ describe('Track Changes Toolbar Commands', () => {
       expect(result).toBe(true);
       expect(mockCommands.rejectTrackedChangeOnSelection).toHaveBeenCalled();
       expect(mockCommands.rejectTrackedChangeById).not.toHaveBeenCalled();
+    });
+
+    it('uses rejectTrackedChangeById when a stale expanded selection does not touch the active tracked change', () => {
+      mockState.selection = { from: 20, to: 25 };
+      mockCollectTrackedChanges.mockReturnValue([{ id: 'different-change' }]);
+
+      mockCommentsPluginGetState.mockReturnValue({
+        activeThreadId: 'tracked-change-999',
+        trackedChanges: {
+          'tracked-change-999': {
+            insertion: 'tracked-change-999',
+          },
+        },
+      });
+
+      const command = commands.rejectTrackedChangeFromToolbar;
+      const result = command()({ state: mockState, commands: mockCommands });
+
+      expect(result).toBe(true);
+      expect(mockCommands.rejectTrackedChangeById).toHaveBeenCalledWith('tracked-change-999');
+      expect(mockCommands.rejectTrackedChangeOnSelection).not.toHaveBeenCalled();
     });
   });
 });

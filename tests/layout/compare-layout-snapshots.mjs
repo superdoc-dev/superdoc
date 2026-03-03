@@ -1757,7 +1757,7 @@ async function main() {
   const uniqueChangeDocs = changedDocs.filter((d) => !d.widespreadOnly);
   const widespreadOnlyDocs = changedDocs.filter((d) => d.widespreadOnly);
 
-  const changedDocPaths = collectChangedDocRelativePaths(changedDocs);
+  const changedDocPaths = collectChangedDocRelativePaths(uniqueChangeDocs);
   const visualReference = args.visualReference ?? args.reference;
   const visualEligible = args.visualOnChange && changedDocPaths.length > 0 && Boolean(visualReference);
 

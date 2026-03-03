@@ -3182,7 +3182,9 @@ export class PresentationEditor extends EventEmitter {
       }
 
       // Restore focus if the H/F editor lost it during rerender.
-      if (hadHfFocus && activeHfEditor?.view) {
+      // Guard: only restore if the session is still active with the same editor
+      // (user may have exited H/F mode during the async rerender).
+      if (hadHfFocus && activeHfEditor?.view && this.#headerFooterSession?.activeEditor === activeHfEditor) {
         const doc = this.#visibleHost.ownerDocument;
         const editorDom = activeHfEditor.view.dom;
         if (doc && !editorDom.contains(doc.activeElement)) {

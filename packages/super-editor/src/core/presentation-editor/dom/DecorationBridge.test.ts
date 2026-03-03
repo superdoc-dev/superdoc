@@ -916,6 +916,51 @@ describe('DecorationBridge', () => {
       bridge.sync(state, index);
       expect(worldSpan.classList.contains('highlight-selection')).toBe(true);
     });
+
+    it('returns narrow range as-is when plugin narrows after meta-only transaction (docChanged: false)', () => {
+      const fullText = 'Hello world';
+      const plugin = mutableExternalPlugin('focus');
+      plugin.setDecorations([{ from: 1, to: 12, class: 'highlight-selection' }]);
+      const state = mockStateWithDocText([plugin.plugin], fullText);
+
+      bridge.collectDecorationRanges(state);
+      expect(bridge.collectDecorationRanges(state)).toHaveLength(1);
+
+      // Meta-only (e.g. setFocus with smaller range): no doc change
+      bridge.recordTransaction({ docChanged: false, mapping: { map: (pos: number) => pos } } as unknown as Transaction);
+      plugin.setDecorations([{ from: 1, to: 6, class: 'highlight-selection' }]);
+
+      const ranges = bridge.collectDecorationRanges(state);
+      expect(ranges).toHaveLength(1);
+      // Must not expand: narrow range comes back as-is (from 1 to 6 = 5 chars)
+      expect(ranges[0].to - ranges[0].from).toBe(5);
+      expect(ranges[0].from).toBe(1);
+      expect(ranges[0].to).toBe(6);
+    });
+
+    it('sync applies narrow range only when plugin narrows after meta-only transaction', () => {
+      const { index, addSpan, rebuild } = createIndex();
+      const helloSpan = addSpan(1, 6, 'Hello');
+      const worldSpan = addSpan(6, 12, ' world');
+      rebuild();
+
+      const { plugin, setDecorations } = mutableExternalPlugin('focus');
+      const state = mockStateWithDocText([plugin], 'Hello world');
+      setDecorations([{ from: 1, to: 12, class: 'highlight-selection' }]);
+      bridge.collectDecorationRanges(state);
+      bridge.sync(state, index);
+      expect(helloSpan.classList.contains('highlight-selection')).toBe(true);
+      expect(worldSpan.classList.contains('highlight-selection')).toBe(true);
+
+      // Meta-only: user narrowed selection (e.g. setFocus(1, 6))
+      bridge.recordTransaction({ docChanged: false, mapping: { map: (pos: number) => pos } } as unknown as Transaction);
+      setDecorations([{ from: 1, to: 6, class: 'highlight-selection' }]);
+      bridge.sync(state, index);
+
+      // Narrow range only: first span keeps class, second loses it
+      expect(helloSpan.classList.contains('highlight-selection')).toBe(true);
+      expect(worldSpan.classList.contains('highlight-selection')).toBe(false);
+    });
   });
 
   // -----------------------------------------------------------------------

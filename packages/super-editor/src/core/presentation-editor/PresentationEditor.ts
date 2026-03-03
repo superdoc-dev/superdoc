@@ -69,6 +69,7 @@ import { processAndInsertImageFile } from '@extensions/image/imageHelpers/proces
 import { HeaderFooterSessionManager } from './header-footer/HeaderFooterSessionManager.js';
 import { decodeRPrFromMarks } from '../super-converter/styles.js';
 import { halfPointToPoints } from '../super-converter/helpers.js';
+import { clearResolvedParagraphPropertiesCache } from '@extensions/paragraph/resolvedPropertiesCache.js';
 import { toFlowBlocks, ConverterContext, FlowBlockCache } from '@superdoc/pm-adapter';
 import { readSettingsRoot, readDefaultTableStyle } from '../../document-api-adapters/document-settings.js';
 import {
@@ -2760,19 +2761,6 @@ export class PresentationEditor extends EventEmitter {
       handler: handlePageStyleUpdate as (...args: unknown[]) => void,
     });
 
-    // Listen for stylesheet default changes (e.g., styles.apply mutations to docDefaults).
-    // These changes mutate translatedLinkedStyles directly and need a full re-render
-    // so the style-engine picks up the updated default properties.
-    const handleStylesDefaultsChanged = () => {
-      this.#pendingDocChange = true;
-      this.#scheduleRerender();
-    };
-    this.#editor.on('stylesDefaultsChanged', handleStylesDefaultsChanged);
-    this.#editorListeners.push({
-      event: 'stylesDefaultsChanged',
-      handler: handleStylesDefaultsChanged as (...args: unknown[]) => void,
-    });
-
     const handleCollaborationReady = (payload: unknown) => {
       this.emit('collaborationReady', payload);
       // Setup remote cursor rendering after collaboration is ready
@@ -2787,21 +2775,40 @@ export class PresentationEditor extends EventEmitter {
       handler: handleCollaborationReady as (...args: unknown[]) => void,
     });
 
-    // Handle remote header/footer changes from collaborators
-    const handleRemoteHeaderFooterChanged = (payload: {
-      type: 'header' | 'footer';
-      sectionId: string;
-      content: unknown;
-    }) => {
-      this.#headerFooterSession?.adapter?.invalidate(payload.sectionId);
-      this.#headerFooterSession?.manager?.refresh();
+    // Unified partChanged listener — routes invalidation by partId.
+    const PART_INVALIDATION: Record<string, { clearCaches: boolean }> = {
+      styles: { clearCaches: true },
+      numbering: { clearCaches: true },
+      themeColors: { clearCaches: true },
+    };
+
+    const handlePartChanged = (payload: { partId: string; changedPaths: string[]; source: string }) => {
+      // Header/footer: engine emits partId 'headerFooterContent' with section
+      // keys in changedPaths (e.g. ['header:rId8', 'footer:rId10']).
+      if (payload.partId === 'headerFooterContent') {
+        for (const path of payload.changedPaths) {
+          const sectionId = path.split(':').slice(1).join(':');
+          this.#headerFooterSession?.adapter?.invalidate(sectionId);
+        }
+        this.#headerFooterSession?.manager?.refresh();
+        this.#pendingDocChange = true;
+        this.#scheduleRerender();
+        return;
+      }
+      const rules = PART_INVALIDATION[payload.partId];
+      if (!rules) return;
+      if (rules.clearCaches) {
+        this.#flowBlockCache.clear();
+        clearResolvedParagraphPropertiesCache();
+      }
       this.#pendingDocChange = true;
+      this.#selectionSync.onLayoutStart();
       this.#scheduleRerender();
     };
-    this.#editor.on('remoteHeaderFooterChanged', handleRemoteHeaderFooterChanged);
+    this.#editor.on('partChanged', handlePartChanged);
     this.#editorListeners.push({
-      event: 'remoteHeaderFooterChanged',
-      handler: handleRemoteHeaderFooterChanged as (...args: unknown[]) => void,
+      event: 'partChanged',
+      handler: handlePartChanged as (...args: unknown[]) => void,
     });
 
     // Listen for comment selection changes to update Layout Engine highlighting
@@ -3397,8 +3404,8 @@ export class PresentationEditor extends EventEmitter {
           ? {
               docx: converter.convertedXml,
               ...(Object.keys(footnoteNumberById).length ? { footnoteNumberById } : {}),
-              translatedLinkedStyles: converter.translatedLinkedStyles,
-              translatedNumbering: converter.translatedNumbering,
+              translatedLinkedStyles: converter.parts?.styles ?? converter.translatedLinkedStyles,
+              translatedNumbering: converter.parts?.numbering ?? converter.translatedNumbering,
               ...(defaultTableStyleId ? { defaultTableStyleId } : {}),
             }
           : undefined;

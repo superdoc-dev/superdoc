@@ -15,6 +15,7 @@ import { prepareFootnotesXmlForExport } from './v2/exporter/footnotesExporter.js
 import { DocxHelpers } from './docx-helpers/index.js';
 import { mergeRelationshipElements } from './relationship-helpers.js';
 import { COMMENT_RELATIONSHIP_TYPES } from './constants.js';
+import { writePart, removePart } from './converter-parts.js';
 import {
   collectReferencedNumIds,
   filterOrphanedNumberingDefinitions,
@@ -183,14 +184,15 @@ class SuperConverter {
 
     // The docx as a list of files
     this.convertedXml = {};
+    this.parts = {};
     this.docx = params?.docx || [];
     this.media = params?.media || {};
 
     this.fonts = params?.fonts || {};
 
     this.addedMedia = {};
-    this.comments = [];
-    this.footnotes = [];
+    this.parts.comments = [];
+    this.parts.footnotes = [];
     this.footnoteProperties = null;
     this.viewSetting = null;
     this.inlineDocumentFonts = [];
@@ -209,13 +211,13 @@ class SuperConverter {
     // List defs (deprecated)
     this.numbering = {};
 
-    // Translated numbering definitions
-    this.translatedNumbering = {};
+    // Translated numbering definitions (backed by parts)
+    this.parts.numbering = {};
 
     // Processed additional content
     this.numbering = null;
-    this.pageStyles = null;
-    this.themeColors = null;
+    this.parts.pageStyles = null;
+    this.parts.themeColors = null;
 
     // The JSON converted XML before any processing. This is simply the result of xml2json
     this.initialJSON = null;
@@ -234,8 +236,8 @@ class SuperConverter {
     // Linked Styles (deprecated)
     this.linkedStyles = [];
 
-    // Translated linked styles
-    this.translatedLinkedStyles = {};
+    // Translated linked styles (backed by parts)
+    this.parts.styles = {};
 
     // This is the JSON schema that we will be working with
     this.json = params?.json;
@@ -261,6 +263,52 @@ class SuperConverter {
     if (this.docx.length || this.xml) this.parseFromXml();
   }
 
+  // -------------------------------------------------------------------------
+  // Getter/setter shims — proxy legacy property names to `this.parts`
+  // -------------------------------------------------------------------------
+
+  get translatedLinkedStyles() {
+    return this.parts.styles;
+  }
+  set translatedLinkedStyles(v) {
+    this.parts.styles = v;
+  }
+
+  get translatedNumbering() {
+    return this.parts.numbering;
+  }
+  set translatedNumbering(v) {
+    this.parts.numbering = v;
+  }
+
+  get comments() {
+    return this.parts.comments;
+  }
+  set comments(v) {
+    this.parts.comments = v;
+  }
+
+  get footnotes() {
+    return this.parts.footnotes;
+  }
+  set footnotes(v) {
+    this.parts.footnotes = v;
+  }
+
+  get themeColors() {
+    return this.parts.themeColors;
+  }
+  set themeColors(v) {
+    this.parts.themeColors = v;
+  }
+
+  get pageStyles() {
+    return this.parts.pageStyles;
+  }
+  set pageStyles(v) {
+    this.parts.pageStyles = v;
+  }
+
   /**
    * Get the DocxHelpers object that contains utility functions for working with docx files.
    * @returns {import('./docx-helpers/docx-helpers.js').DocxHelpers} The DocxHelpers object.
@@ -271,20 +319,26 @@ class SuperConverter {
 
   parseFromXml() {
     this.docx?.forEach((file) => {
-      this.convertedXml[file.name] = this.parseXmlToJson(file.content);
+      const parsed = this.parseXmlToJson(file.content);
+      this.convertedXml[file.name] = parsed;
+      this.parts[file.name] = parsed; // same reference for xmljs
 
       if (file.name === 'word/document.xml') {
         this.documentAttributes = this.convertedXml[file.name].elements[0]?.attributes;
       }
 
       if (file.name === 'word/styles.xml') {
-        this.convertedXml[file.name] = addDefaultStylesIfMissing(this.convertedXml[file.name]);
+        const withDefaults = addDefaultStylesIfMissing(this.convertedXml[file.name]);
+        this.convertedXml[file.name] = withDefaults;
+        this.parts[file.name] = withDefaults; // keep in sync
       }
     });
     if (!this.convertedXml['word/styles.xml']) {
       for (let i = 1; i <= 5; i += 1) {
         if (this.convertedXml[`word/styles${i}.xml`] != null) {
-          this.convertedXml['word/styles.xml'] = addDefaultStylesIfMissing(this.convertedXml[`word/styles${i}.xml`]);
+          const withDefaults = addDefaultStylesIfMissing(this.convertedXml[`word/styles${i}.xml`]);
+          this.convertedXml['word/styles.xml'] = withDefaults;
+          this.parts['word/styles.xml'] = withDefaults;
           break;
         }
       }
@@ -1153,7 +1207,9 @@ class SuperConverter {
       converter: this,
       convertedXml: this.convertedXml,
     });
-    this.convertedXml = { ...this.convertedXml, ...footnotesUpdatedXml };
+    for (const [key, value] of Object.entries(footnotesUpdatedXml)) {
+      writePart(this, key, value);
+    }
 
     // Update media
     await this.#exportProcessMediaFiles(
@@ -1177,18 +1233,15 @@ class SuperConverter {
       exportType: commentsExportType,
       commentsWithParaIds,
     });
-    const updatedXml = { ...documentXml };
-
-    this.convertedXml = { ...this.convertedXml, ...updatedXml };
+    for (const [key, value] of Object.entries(documentXml)) {
+      writePart(this, key, value);
+    }
 
     // Physically remove comment parts that the exporter deleted from documentXml.
-    // The spread merge above only adds/overwrites keys — absent keys survive from
-    // the old this.convertedXml. Without this, Editor.ts sees stale data and
-    // serializes comment files that should have been null-sentinelled.
     if (removedTargets?.length) {
       for (const target of removedTargets) {
         const key = target.startsWith('word/') ? target : `word/${target}`;
-        delete this.convertedXml[key];
+        removePart(this, key);
       }
     }
 
@@ -1270,7 +1323,7 @@ class SuperConverter {
     currentNumberingXml.elements = [...liveAbstracts, ...liveDefinitions];
 
     // Update the numbering file
-    this.convertedXml[numberingPath] = numberingXml;
+    writePart(this, numberingPath, numberingXml);
   }
 
   /**
@@ -1320,10 +1373,11 @@ class SuperConverter {
       });
 
       const bodyContent = result.elements[0].elements;
-      const file = this.convertedXml[`word/${fileName}`];
+      const headerPartPath = `word/${fileName}`;
+      const file = this.convertedXml[headerPartPath];
 
       if (!file) {
-        this.convertedXml[`word/${fileName}`] = {
+        writePart(this, headerPartPath, {
           declaration: this.initialJSON?.declaration,
           elements: [
             {
@@ -1333,7 +1387,7 @@ class SuperConverter {
               elements: [],
             },
           ],
-        };
+        });
         newDocRels.push({
           type: 'element',
           name: 'Relationship',
@@ -1345,13 +1399,13 @@ class SuperConverter {
         });
       }
 
-      this.convertedXml[`word/${fileName}`].elements[0].elements = bodyContent;
+      this.convertedXml[headerPartPath].elements[0].elements = bodyContent;
 
       if (params.relationships.length) {
+        const headerRelsPath = `word/_rels/${fileName}.rels`;
         const relationships =
-          this.convertedXml[`word/_rels/${fileName}.rels`]?.elements?.find((x) => x.name === 'Relationships')
-            ?.elements || [];
-        this.convertedXml[`word/_rels/${fileName}.rels`] = {
+          this.convertedXml[headerRelsPath]?.elements?.find((x) => x.name === 'Relationships')?.elements || [];
+        writePart(this, headerRelsPath, {
           declaration: this.initialJSON?.declaration,
           elements: [
             {
@@ -1362,7 +1416,7 @@ class SuperConverter {
               elements: [...relationships, ...params.relationships],
             },
           ],
-        };
+        });
       }
     });
 
@@ -1384,10 +1438,11 @@ class SuperConverter {
       });
 
       const bodyContent = result.elements[0].elements;
-      const file = this.convertedXml[`word/${fileName}`];
+      const footerPartPath = `word/${fileName}`;
+      const file = this.convertedXml[footerPartPath];
 
       if (!file) {
-        this.convertedXml[`word/${fileName}`] = {
+        writePart(this, footerPartPath, {
           declaration: this.initialJSON?.declaration,
           elements: [
             {
@@ -1397,7 +1452,7 @@ class SuperConverter {
               elements: [],
             },
           ],
-        };
+        });
         newDocRels.push({
           type: 'element',
           name: 'Relationship',
@@ -1409,13 +1464,13 @@ class SuperConverter {
         });
       }
 
-      this.convertedXml[`word/${fileName}`].elements[0].elements = bodyContent;
+      this.convertedXml[footerPartPath].elements[0].elements = bodyContent;
 
       if (params.relationships.length) {
+        const footerRelsPath = `word/_rels/${fileName}.rels`;
         const relationships =
-          this.convertedXml[`word/_rels/${fileName}.rels`]?.elements?.find((x) => x.name === 'Relationships')
-            ?.elements || [];
-        this.convertedXml[`word/_rels/${fileName}.rels`] = {
+          this.convertedXml[footerRelsPath]?.elements?.find((x) => x.name === 'Relationships')?.elements || [];
+        writePart(this, footerRelsPath, {
           declaration: this.initialJSON?.declaration,
           elements: [
             {
@@ -1426,7 +1481,7 @@ class SuperConverter {
               elements: [...relationships, ...params.relationships],
             },
           ],
-        };
+        });
       }
     });
 
@@ -1540,8 +1595,9 @@ class SuperConverter {
       ],
     };
 
-    // Add to headers map
+    // Add to headers map (legacy + parts store)
     this.headers[rId] = emptyDoc;
+    writePart(this, `header:${rId}`, emptyDoc);
 
     // Update headerIds for the variant
     this.headerIds[variant] = rId;
@@ -1613,8 +1669,9 @@ class SuperConverter {
       ],
     };
 
-    // Add to footers map
+    // Add to footers map (legacy + parts store)
     this.footers[rId] = emptyDoc;
+    writePart(this, `footer:${rId}`, emptyDoc);
 
     // Update footerIds for the variant
     this.footerIds[variant] = rId;

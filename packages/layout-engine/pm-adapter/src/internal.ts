@@ -337,8 +337,8 @@ function normalizeConverterContext(
       translatedNumbering: {},
       translatedLinkedStyles: {
         docDefaults: {},
-        latentStyles: {},
-        styles: {},
+        latentStyles: { lsdExceptions: [] },
+        styles: [],
       },
     };
   }

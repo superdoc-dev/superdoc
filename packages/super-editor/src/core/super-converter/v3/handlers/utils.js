@@ -426,7 +426,7 @@ export function decodeProperties(params, translatorsBySdName, properties) {
  * @param {string} keyAttr The attribute name to use as the key in the resulting object.
  * @returns {object} The encoded properties as an object keyed by the specified attribute.
  */
-export function encodePropertiesByKey(xmlName, sdName, translator, params, node, keyAttr) {
+export function encodeChildrenByKey(xmlName, sdName, translator, params, node, keyAttr) {
   const result = {};
   const elements = node.elements?.filter((el) => el.name === xmlName) || [];
   if (elements.length > 0) {
@@ -451,10 +451,9 @@ export function encodePropertiesByKey(xmlName, sdName, translator, params, node,
  * @param {import('@translator').NodeTranslator} translator The node translator to use for decoding.
  * @param {import('@translator').SCDecoderConfig} params The decoding parameters containing the node to process.
  * @param {object} attrs The attributes object containing the properties to decode.
- * @param {string} keyAttr The attribute name to use as the key in the resulting object.
  * @returns {Array} An array of decoded elements.
  */
-export function decodePropertiesByKey(xmlName, sdName, translator, params, attrs) {
+export function decodeChildrenByKey(xmlName, sdName, translator, params, attrs) {
   const elements = [];
   if (attrs[sdName] != null) {
     Object.values(attrs[sdName]).forEach((item) => {
@@ -468,6 +467,53 @@ export function decodePropertiesByKey(xmlName, sdName, translator, params, attrs
     });
   }
   return elements;
+}
+
+/**
+ * Encodes repeated XML children into an ordered array (preserves document order).
+ *
+ * Unlike `encodeChildrenByKey` which keys items into an object (losing duplicates
+ * and ordering), this collects every matching child into a plain array.
+ *
+ * @param {string} xmlName The XML element name to match (e.g. 'w:style').
+ * @param {string} sdName The SuperDoc property name (e.g. 'styles').
+ * @param {import('@translator').NodeTranslator} translator Translator for each child element.
+ * @param {import('@translator').SCEncoderConfig} params Encoding params.
+ * @param {object} node The parent XML node containing the repeated children.
+ * @returns {object} `{ [sdName]: encodedItem[] }` or `{}` if no children matched.
+ */
+export function encodeRepeatedChildren(xmlName, sdName, translator, params, node) {
+  const elements = node.elements?.filter((el) => el.name === xmlName) || [];
+  if (elements.length === 0) return {};
+
+  const items = elements.map((el) => translator.encode({ ...params, nodes: [el] })).filter(Boolean);
+  return items.length > 0 ? { [sdName]: items } : {};
+}
+
+/**
+ * Decodes an ordered array of SuperDoc items back to XML elements.
+ *
+ * Counterpart to `encodeRepeatedChildren`.
+ *
+ * @param {string} _xmlName Unused — retained for symmetry with encode signature.
+ * @param {string} sdName The SuperDoc property name (e.g. 'styles').
+ * @param {import('@translator').NodeTranslator} translator Translator for each item.
+ * @param {import('@translator').SCDecoderConfig} params Decoding params.
+ * @param {object} attrs The SuperDoc attributes object containing the array.
+ * @returns {Array} Array of decoded XML elements.
+ */
+export function decodeRepeatedChildren(_xmlName, sdName, translator, params, attrs) {
+  const items = attrs[sdName];
+  if (!Array.isArray(items)) return [];
+
+  return items
+    .map((item) =>
+      translator.decode({
+        ...params,
+        node: { attrs: { [translator.sdNodeOrKeyName]: item } },
+      }),
+    )
+    .filter(Boolean);
 }
 
 /**
@@ -599,6 +645,93 @@ export function createNestedArrayPropertyHandler(
       };
 
       return newNode;
+    },
+  };
+}
+
+/**
+ * Factory for property-change translators (w:pPrChange, w:rPrChange, w:trPrChange, w:tcPrChange).
+ *
+ * Each *PrChange element has:
+ *   - Tracking attributes (w:id, w:author, w:date, w:authorEmail)
+ *   - A single nested property element (e.g. w:pPr inside w:pPrChange)
+ *
+ * @param {string} xmlName The XML element name (e.g. 'w:pPrChange').
+ * @param {string} sdName The SuperDoc key name (e.g. 'pPrChange').
+ * @param {string} nestedXmlName The nested property XML element name (e.g. 'w:pPr').
+ * @param {string} nestedSdName The nested property SD key name (e.g. 'paragraphProperties').
+ * @param {import('@translator').NodeTranslatorConfig[]} nestedPropertyTranslators Child translators for the nested element.
+ * @returns {import('@translator').NodeTranslatorConfig}
+ */
+export function createPropertyChangeTranslator(
+  xmlName,
+  sdName,
+  nestedXmlName,
+  nestedSdName,
+  nestedPropertyTranslators,
+) {
+  const nestedTranslatorsByXmlName = {};
+  const nestedTranslatorsBySdName = {};
+  nestedPropertyTranslators.forEach((t) => {
+    if (!t) return;
+    nestedTranslatorsByXmlName[t.xmlName] = t;
+    nestedTranslatorsBySdName[t.sdNodeOrKeyName] = t;
+  });
+
+  return {
+    xmlName,
+    sdNodeOrKeyName: sdName,
+    attributes: [
+      createIntegerAttributeHandler('w:id'),
+      createAttributeHandler('w:author'),
+      createAttributeHandler('w:date'),
+      createAttributeHandler('w:authorEmail'),
+    ],
+    encode: (params, encodedAttrs) => {
+      const node = params.nodes[0];
+      const nestedEl = node?.elements?.find((el) => el.name === nestedXmlName);
+      const nested = nestedEl
+        ? encodeProperties({ ...params, nodes: [nestedEl] }, nestedTranslatorsByXmlName)
+        : undefined;
+
+      const result = { ...encodedAttrs };
+      if (nested && Object.keys(nested).length > 0) {
+        result[nestedSdName] = nested;
+      }
+
+      return Object.keys(result).length > 0 ? result : undefined;
+    },
+    decode: function (params) {
+      const value = params.node.attrs?.[sdName];
+      if (!value || typeof value !== 'object') return undefined;
+
+      const decodedAttrs = this.decodeAttributes({
+        node: { ...params.node, attrs: value },
+      });
+
+      const nestedProps = value[nestedSdName];
+      const nestedElements = decodeProperties(params, nestedTranslatorsBySdName, nestedProps);
+
+      const elements = [];
+      if (nestedElements.length > 0) {
+        elements.push({
+          name: nestedXmlName,
+          type: 'element',
+          attributes: {},
+          elements: nestedElements,
+        });
+      }
+
+      if (Object.keys(decodedAttrs).length === 0 && elements.length === 0) {
+        return undefined;
+      }
+
+      return {
+        name: xmlName,
+        type: 'element',
+        attributes: decodedAttrs,
+        elements,
+      };
     },
   };
 }

@@ -23,16 +23,9 @@ const buildTranslatedLinkedStyles = (styles = {}) => ({
     paragraphProperties: {},
   },
   latentStyles: {},
-  styles: {
-    Normal: {
-      styleId: 'Normal',
-      type: 'paragraph',
-      default: true,
-      name: 'Normal',
-      runProperties: {},
-      paragraphProperties: {},
-    },
-    DefaultParagraphFont: {
+  styles: [
+    { styleId: 'Normal', type: 'paragraph', default: true, name: 'Normal', runProperties: {}, paragraphProperties: {} },
+    {
       styleId: 'DefaultParagraphFont',
       type: 'character',
       default: true,
@@ -40,8 +33,8 @@ const buildTranslatedLinkedStyles = (styles = {}) => ({
       runProperties: {},
       paragraphProperties: {},
     },
-    ...styles,
-  },
+    ...Object.values(styles),
+  ],
 });
 
 describe('resolveRunProperties - inline property priority', () => {

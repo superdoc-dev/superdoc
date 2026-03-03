@@ -4,6 +4,7 @@ import { ParagraphNodeView } from './ParagraphNodeView.js';
 import {
   calculateResolvedParagraphProperties,
   getResolvedParagraphProperties,
+  clearResolvedParagraphPropertiesCache,
 } from '@extensions/paragraph/resolvedPropertiesCache.js';
 import { Attribute } from '@core/index.js';
 import { resolveParagraphProperties, encodeCSSFromPPr } from '@converter/styles.js';
@@ -68,8 +69,8 @@ const createEditor = () => {
       translatedLinkedStyles: {
         docDefaults: { runProperties: {}, paragraphProperties: {} },
         latentStyles: {},
-        styles: {
-          Normal: {
+        styles: [
+          {
             styleId: 'Normal',
             type: 'paragraph',
             default: true,
@@ -77,7 +78,7 @@ const createEditor = () => {
             runProperties: {},
             paragraphProperties: {},
           },
-        },
+        ],
       },
     },
     state: {
@@ -118,6 +119,7 @@ describe('ParagraphNodeView', () => {
 
   beforeEach(() => {
     vi.clearAllMocks();
+    clearResolvedParagraphPropertiesCache();
     globalThis.requestAnimationFrame = (cb) => {
       animationMocks.requestAnimationFrame(cb);
       cb();
@@ -258,6 +260,18 @@ describe('ParagraphNodeView', () => {
 
     expect(first).toBe(second);
     expect(getResolvedParagraphProperties(node)).toBe(first);
+  });
+
+  it('invalidates cached paragraph properties when cache is cleared', () => {
+    const node = createNode();
+    const editor = createEditor();
+
+    const first = calculateResolvedParagraphProperties(editor, node, {});
+    clearResolvedParagraphPropertiesCache();
+    const second = calculateResolvedParagraphProperties(editor, node, {});
+
+    expect(second).not.toBe(first);
+    expect(getResolvedParagraphProperties(node)).toBe(second);
   });
 
   it('applies resolved paragraph attributes and CSS to the DOM', () => {

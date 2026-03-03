@@ -107,14 +107,13 @@ describe('styles adapter: capability gates', () => {
     );
   });
 
-  it('throws CAPABILITY_UNAVAILABLE when collaboration is active', () => {
+  it('allows mutation when collaboration is active', () => {
     const editor = createMockEditor({
       stylesXml: makeStylesXml(),
       collaborationProvider: { synced: true },
     });
-    expect(() => stylesApplyAdapter(editor, runInput({ bold: true }), DEFAULT_OPTIONS)).toThrow(
-      DocumentApiAdapterError,
-    );
+    const result = stylesApplyAdapter(editor, runInput({ bold: true }), DEFAULT_OPTIONS);
+    expect(result.success).toBe(true);
   });
 
   it('allows mutation when collaboration provider is not synced', () => {
@@ -237,14 +236,15 @@ describe('styles adapter: no-op semantics', () => {
     expect(converter.documentModified).toBe(false);
   });
 
-  it('does not emit stylesDefaultsChanged on no-op', () => {
+  it('does not emit stylesChanged on no-op', () => {
     const editor = createMockEditor({
       stylesXml: makeStylesXml(),
       translatedLinkedStyles: { docDefaults: { runProperties: { bold: true } } },
     });
     stylesApplyAdapter(editor, runInput({ bold: true }), DEFAULT_OPTIONS);
     expect((editor as unknown as { emit: ReturnType<typeof vi.fn> }).emit).not.toHaveBeenCalledWith(
-      'stylesDefaultsChanged',
+      'partChanged',
+      expect.anything(),
     );
   });
 });
@@ -271,11 +271,12 @@ describe('styles adapter: dryRun', () => {
     expect(tls.docDefaults?.runProperties?.bold).toBeUndefined();
   });
 
-  it('does not emit stylesDefaultsChanged on dryRun', () => {
+  it('does not emit stylesChanged on dryRun', () => {
     const editor = createMockEditor({ stylesXml: makeStylesXml() });
     stylesApplyAdapter(editor, runInput({ bold: true }), DRY_RUN_OPTIONS);
     expect((editor as unknown as { emit: ReturnType<typeof vi.fn> }).emit).not.toHaveBeenCalledWith(
-      'stylesDefaultsChanged',
+      'partChanged',
+      expect.anything(),
     );
   });
 
@@ -292,12 +293,14 @@ describe('styles adapter: dryRun', () => {
 // ---------------------------------------------------------------------------
 
 describe('styles adapter: re-render trigger', () => {
-  it('emits stylesDefaultsChanged after successful non-dry mutation', () => {
+  it('emits stylesChanged with changed paths after successful non-dry mutation', () => {
     const editor = createMockEditor({ stylesXml: makeStylesXml() });
     stylesApplyAdapter(editor, runInput({ bold: true }), DEFAULT_OPTIONS);
-    expect((editor as unknown as { emit: ReturnType<typeof vi.fn> }).emit).toHaveBeenCalledWith(
-      'stylesDefaultsChanged',
-    );
+    expect((editor as unknown as { emit: ReturnType<typeof vi.fn> }).emit).toHaveBeenCalledWith('partChanged', {
+      partId: 'styles',
+      source: 'styles.apply',
+      changedPaths: ['docDefaults.runProperties.bold'],
+    });
   });
 });
 

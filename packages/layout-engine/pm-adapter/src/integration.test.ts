@@ -24,8 +24,8 @@ const DEFAULT_CONVERTER_CONTEXT = {
   docx: {},
   translatedLinkedStyles: {
     docDefaults: {},
-    latentStyles: {},
-    styles: {},
+    latentStyles: { lsdExceptions: [] },
+    styles: [],
   },
   translatedNumbering: {
     abstracts: {},

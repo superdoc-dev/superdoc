@@ -2,7 +2,28 @@ import { Extension } from '@core/index.js';
 import { PluginKey } from 'prosemirror-state';
 import { encodeStateAsUpdate } from 'yjs';
 import { ySyncPlugin, ySyncPluginKey, yUndoPluginKey, prosemirrorToYDoc } from 'y-prosemirror';
-import { updateYdocDocxData, applyRemoteHeaderFooterChanges } from '@extensions/collaboration/collaboration-helpers.js';
+import {
+  publishPartSections,
+  hydrateOrSeedPart,
+  createSpecObserver,
+  applyRemotePartSections,
+  deleteRemotePartSections,
+} from '@extensions/collaboration/part-sync/part-sync-engine.js';
+import {
+  STYLES_SPEC,
+  HEADER_FOOTER_CONTENT_SPEC,
+  getAllSpecs,
+  resolveOoxmlPartKey,
+  resolvePartChangedSpec,
+  invalidateDiscoveredSpecs,
+} from '@extensions/collaboration/part-sync/part-spec-registry.js';
+import { writeBootstrapContent } from '@extensions/collaboration/part-sync/bootstrap-content.js';
+import { maybeRunLegacyBootstrapMigration } from '@extensions/collaboration/part-sync/legacy-bootstrap-migration.js';
+import {
+  scheduleReconcile,
+  destroyReconcileState,
+  markDirty,
+} from '@extensions/collaboration/part-sync/part-reconcile-scheduler.js';
 
 export const CollaborationPluginKey = new PluginKey('collaboration');
 const headlessBindingStateByEditor = new WeakMap();
@@ -41,51 +62,115 @@ export const Collaboration = Extension.create({
     this.options.ydoc = this.editor.options.ydoc;
 
     initSyncListener(this.options.ydoc, this.editor, this);
+
+    // Hydrate or seed all structured channels after provider sync.
+    const handleCollaborationReady = () => {
+      this.editor.off('collaborationReady', handleCollaborationReady);
+
+      maybeRunLegacyBootstrapMigration(this.editor);
+
+      for (const spec of getAllSpecs(this.editor.converter)) {
+        hydrateOrSeedPart(this.editor, spec);
+      }
+    };
+    this.editor.on('collaborationReady', handleCollaborationReady);
+
     const documentListenerCleanup = initDocumentListener({ ydoc: this.options.ydoc, editor: this.editor });
 
     const [syncPlugin, fragment] = createSyncPlugin(this.options.ydoc, this.editor);
     this.options.fragment = fragment;
 
-    const metaMap = this.options.ydoc.getMap('media');
-    const metaMapObserver = (event) => {
+    // Media map observer (unchanged — media is binary, not OOXML)
+    const mediaMap = this.options.ydoc.getMap('media');
+    const mediaMapObserver = (event) => {
       event.changes.keys.forEach((_, key) => {
         if (!(key in this.editor.storage.image.media)) {
-          const fileData = metaMap.get(key);
+          const fileData = mediaMap.get(key);
           this.editor.storage.image.media[key] = fileData;
         }
       });
     };
-    metaMap.observe(metaMapObserver);
+    mediaMap.observe(mediaMapObserver);
 
-    // Observer for remote header/footer JSON changes
-    const headerFooterMap = this.options.ydoc.getMap('headerFooterJson');
-    const headerFooterMapObserver = (event) => {
-      // Only process remote changes (not our own)
+    // Header/footer observer (dedicated channel: headerFooterModel)
+    const headerFooterMap = this.options.ydoc.getMap('headerFooterModel');
+    const headerFooterMapObserver = createSpecObserver(this.editor, HEADER_FOOTER_CONTENT_SPEC);
+    headerFooterMap.observe(headerFooterMapObserver);
+
+    // Styles observer (dedicated channel: stylesModel)
+    const stylesMap = this.options.ydoc.getMap('stylesModel');
+    const stylesMapObserver = createSpecObserver(this.editor, STYLES_SPEC);
+    stylesMap.observe(stylesMapObserver);
+
+    // OOXML parts observer (shared channel: ooxmlPartModels)
+    const ooxmlPartsMap = this.options.ydoc.getMap('ooxmlPartModels');
+    const ooxmlPartsMapObserver = (event) => {
       if (event.transaction.local) return;
 
+      // Group changed keys by spec for batched apply/delete
+      const changesBySpec = new Map();
+      const deletesBySpec = new Map();
       event.changes.keys.forEach((change, key) => {
+        if (key === '_version') return;
+
+        let resolved = resolveOoxmlPartKey(key, this.editor.converter);
+        if (!resolved) {
+          // Unknown key — a remote client may have created a new part.
+          // Invalidate discovery cache and retry so the new part gets a spec.
+          invalidateDiscoveredSpecs(this.editor.converter);
+          resolved = resolveOoxmlPartKey(key, this.editor.converter);
+          if (!resolved) return;
+        }
+
         if (change.action === 'add' || change.action === 'update') {
-          const data = headerFooterMap.get(key);
-          if (data) {
-            applyRemoteHeaderFooterChanges(this.editor, key, data);
+          if (!changesBySpec.has(resolved.spec.id)) {
+            changesBySpec.set(resolved.spec.id, { spec: resolved.spec, keys: [] });
           }
+          changesBySpec.get(resolved.spec.id).keys.push(key);
+        } else if (change.action === 'delete') {
+          if (!deletesBySpec.has(resolved.spec.id)) {
+            deletesBySpec.set(resolved.spec.id, { spec: resolved.spec, keys: [] });
+          }
+          deletesBySpec.get(resolved.spec.id).keys.push(key);
         }
       });
+
+      for (const { spec, keys } of changesBySpec.values()) {
+        applyRemotePartSections(this.editor, spec, ooxmlPartsMap, keys);
+      }
+      for (const { spec, keys } of deletesBySpec.values()) {
+        deleteRemotePartSections(this.editor, spec, keys);
+      }
     };
-    headerFooterMap.observe(headerFooterMapObserver);
+    ooxmlPartsMap.observe(ooxmlPartsMapObserver);
+
+    // Local part changes → publish to corresponding Y.Map channel.
+    const handlePartChanged = (payload) => {
+      if (payload?.source?.startsWith('yjs.remote')) return;
+
+      const resolved = resolvePartChangedSpec(payload.partId, payload.changedPaths, this.editor.converter);
+      if (resolved) {
+        publishPartSections(this.editor, resolved.spec, resolved.sectionHints);
+      }
+    };
+    this.editor.on('partChanged', handlePartChanged);
 
     // Store cleanup references in a non-reactive WeakMap (NOT this.options)
     // to avoid Vue's deep traverse hitting circular references in Y.js Maps.
     collaborationCleanupByEditor.set(this.editor, {
-      metaMap,
-      metaMapObserver,
+      mediaMap,
+      mediaMapObserver,
       headerFooterMap,
       headerFooterMapObserver,
+      stylesMap,
+      stylesMapObserver,
+      ooxmlPartsMap,
+      ooxmlPartsMapObserver,
+      handlePartChanged,
       documentListenerCleanup,
     });
 
     // Headless editors don't create an EditorView, so wire Y.js binding lifecycle here.
-    // Doing this in addPmPlugins ensures sync hooks are active before the first local transaction.
     if (this.editor.options.isHeadless) {
       const cleanup = initHeadlessBinding(this.editor);
       registerHeadlessBindingCleanup(this.editor, cleanup);
@@ -95,7 +180,7 @@ export const Collaboration = Extension.create({
   },
 
   onCreate() {
-    // Keep this as a fallback for custom lifecycles that may bypass addPmPlugins.
+    // Fallback for custom lifecycles that may bypass addPmPlugins.
     if (this.editor.options.isHeadless && this.editor.options.ydoc) {
       const cleanup = initHeadlessBinding(this.editor);
       registerHeadlessBindingCleanup(this.editor, cleanup);
@@ -106,11 +191,12 @@ export const Collaboration = Extension.create({
     const cleanup = collaborationCleanupByEditor.get(this.editor);
     if (!cleanup) return;
 
-    // Clean up Y.js map observers to prevent memory leaks
-    cleanup.metaMap.unobserve(cleanup.metaMapObserver);
+    cleanup.mediaMap.unobserve(cleanup.mediaMapObserver);
     cleanup.headerFooterMap.unobserve(cleanup.headerFooterMapObserver);
+    cleanup.stylesMap.unobserve(cleanup.stylesMapObserver);
+    cleanup.ooxmlPartsMap.unobserve(cleanup.ooxmlPartsMapObserver);
+    this.editor.off('partChanged', cleanup.handlePartChanged);
 
-    // Clean up ydoc afterTransaction listener and debounce timer
     cleanup.documentListenerCleanup();
 
     collaborationCleanupByEditor.delete(this.editor);
@@ -134,21 +220,23 @@ export const createSyncPlugin = (ydoc, editor) => {
   const fragment = ydoc.getXmlFragment('supereditor');
   const onFirstRender = () => {
     if (!editor.options.isNewFile) return;
-    initializeMetaMap(ydoc, editor);
+    initializeCollaborationRoom(ydoc, editor);
   };
 
   return [ySyncPlugin(fragment, { onFirstRender }), fragment];
 };
 
-export const initializeMetaMap = (ydoc, editor) => {
-  const metaMap = ydoc.getMap('meta');
-  metaMap.set('docx', editor.options.content);
-  metaMap.set('fonts', editor.options.fonts);
-  metaMap.set('bootstrap', {
-    version: 1,
-    clientId: ydoc.clientID,
-    seededAt: new Date().toISOString(),
-    source: 'browser',
+/**
+ * First-client room initialization: seed bootstrap content and media map.
+ *
+ * Called once when the first client creates a new collaboration room.
+ * Bootstrap content is immutable — subsequent changes flow through
+ * structured channels, not through the bootstrap map.
+ */
+export const initializeCollaborationRoom = (ydoc, editor) => {
+  writeBootstrapContent(ydoc, editor.options.content, {
+    fonts: editor.options.fonts,
+    user: editor.options.user,
   });
 
   const mediaMap = ydoc.getMap('media');
@@ -157,104 +245,48 @@ export const initializeMetaMap = (ydoc, editor) => {
   });
 };
 
-const checkDocxChanged = (transaction) => {
-  if (!transaction.changed) return false;
-
-  for (const [, value] of transaction.changed.entries()) {
-    if (value instanceof Set && value.has('docx')) {
-      return true;
-    }
-  }
-
-  return false;
-};
-
-// Stores the debounced update cancel function per editor so replaceFile
-// can cancel pending debounced exports after doing its own direct export.
-const debouncedDocxUpdateByEditor = new WeakMap();
+// ---------------------------------------------------------------------------
+// Transaction listener: schedule reconcile on local non-sync transactions
+// ---------------------------------------------------------------------------
 
 /**
- * Cancel any pending debounced updateYdocDocxData call for the given editor.
- * Called from replaceFile to prevent stale debounced exports from running
- * after the direct export has already been done.
- *
- * @param {Editor} editor
+ * Returns true if this transaction originates from the part-sync engine
+ * (publish, bootstrap, reconcile) and should NOT re-trigger the reconcile
+ * scheduler.
  */
-export const cancelDebouncedDocxUpdate = (editor) => {
-  const cancel = debouncedDocxUpdateByEditor.get(editor);
-  if (cancel) cancel();
+const isPartSyncTransaction = (transaction) => {
+  const event = transaction.origin?.event;
+  return (
+    typeof event === 'string' &&
+    (event.endsWith('-publish') ||
+      event === 'bootstrap-seed' ||
+      event === 'legacy-bootstrap-migration' ||
+      event === 'header-footer-update' ||
+      event === 'styles-update')
+  );
 };
 
 const initDocumentListener = ({ ydoc, editor }) => {
-  // 30s debounce: the actual document content syncs in real-time via
-  // y-prosemirror's XmlFragment. This DOCX blob is supplementary data
-  // (for new joiners' converter setup). Writing it every 1s generates
-  // large Y.js updates (full DOCX XML) that accumulate as Y.Map
-  // tombstones, gradually growing the room's stored data until
-  // Liveblocks rejects connections with code 1011.
-  const debouncedUpdate = debounce(
-    (editor) => {
-      updateYdocDocxData(editor);
-    },
-    30000,
-    { maxWait: 60000 },
-  );
-
-  debouncedDocxUpdateByEditor.set(editor, () => debouncedUpdate.cancel());
-
   const afterTransactionHandler = (transaction) => {
-    const { local } = transaction;
+    if (!transaction.local) return;
+    if (isPartSyncTransaction(transaction)) return;
+    if (!transaction.changed?.size) return;
 
-    const hasChangedDocx = checkDocxChanged(transaction);
-    if (!hasChangedDocx && transaction.changed?.size && local) {
-      debouncedUpdate(editor);
-    }
+    markDirty(editor);
+    scheduleReconcile(editor, 'afterTransaction');
   };
 
   ydoc.on('afterTransaction', afterTransactionHandler);
 
-  // Return cleanup function
   return () => {
     ydoc.off('afterTransaction', afterTransactionHandler);
-    debouncedUpdate.cancel();
-    debouncedDocxUpdateByEditor.delete(editor);
+    destroyReconcileState(editor);
   };
 };
 
-const debounce = (fn, wait, { maxWait } = {}) => {
-  let timeout = null;
-  let maxTimeout = null;
-  let latestArgs = null;
-
-  const invoke = () => {
-    clearTimeout(timeout);
-    clearTimeout(maxTimeout);
-    timeout = null;
-    maxTimeout = null;
-    const args = latestArgs;
-    latestArgs = null;
-    if (args !== null) fn(...args);
-  };
-
-  const debounced = (...args) => {
-    latestArgs = args;
-    clearTimeout(timeout);
-    timeout = setTimeout(invoke, wait);
-    if (maxWait != null && maxTimeout == null) {
-      maxTimeout = setTimeout(invoke, maxWait);
-    }
-  };
-
-  debounced.cancel = () => {
-    clearTimeout(timeout);
-    clearTimeout(maxTimeout);
-    timeout = null;
-    maxTimeout = null;
-    latestArgs = null;
-  };
-
-  return debounced;
-};
+// ---------------------------------------------------------------------------
+// Provider sync listener
+// ---------------------------------------------------------------------------
 
 const initSyncListener = (ydoc, editor, extension) => {
   const provider = editor.options.collaborationProvider;
@@ -275,24 +307,51 @@ const initSyncListener = (ydoc, editor, extension) => {
   provider.on('synced', emit);
 };
 
+// ---------------------------------------------------------------------------
+// Collaboration data generation (for programmatic room creation)
+// ---------------------------------------------------------------------------
+
 export const generateCollaborationData = async (editor) => {
   const ydoc = prosemirrorToYDoc(editor.state.doc, 'supereditor');
-  initializeMetaMap(ydoc, editor);
-  await updateYdocDocxData(editor, ydoc);
+
+  // Export current DOCX state so bootstrap captures latest content,
+  // not the originally loaded editor.options.content.
+  const updatedDocs = await editor.exportDocx({ getUpdatedDocs: true });
+
+  let content = Array.isArray(editor.options.content) ? [...editor.options.content] : [];
+  if (updatedDocs && typeof updatedDocs === 'object') {
+    for (const [name, xml] of Object.entries(updatedDocs)) {
+      const idx = content.findIndex((item) => item.name === name);
+      if (xml != null) {
+        if (idx > -1) {
+          content[idx] = { name, content: xml };
+        } else {
+          content.push({ name, content: xml });
+        }
+      } else if (idx > -1) {
+        // null value means the file was deleted during export
+        content.splice(idx, 1);
+      }
+    }
+  }
+
+  writeBootstrapContent(ydoc, content, {
+    fonts: editor.options.fonts,
+    user: editor.options.user,
+  });
+
+  const mediaMap = ydoc.getMap('media');
+  Object.entries(editor.options.mediaFiles || {}).forEach(([key, value]) => {
+    mediaMap.set(key, value);
+  });
+
   return encodeStateAsUpdate(ydoc);
 };
 
-/**
- * Initialize Y.js sync binding for headless mode.
- *
- * In normal (non-headless) mode, ySyncPlugin's `view` callback calls
- * `binding.initView(view)` when the EditorView is created. In headless
- * mode, no EditorView exists, so we create a minimal shim that satisfies
- * y-prosemirror's requirements.
- *
- * @param {Editor} editor - The SuperEditor instance in headless mode
- * @returns {Function|undefined} Cleanup function to remove event listeners
- */
+// ---------------------------------------------------------------------------
+// Headless binding (unchanged from original)
+// ---------------------------------------------------------------------------
+
 const initHeadlessBinding = (editor) => {
   const existing = headlessBindingStateByEditor.get(editor);
   if (existing?.cleanup) {
@@ -306,8 +365,6 @@ const initHeadlessBinding = (editor) => {
   };
   headlessBindingStateByEditor.set(editor, state);
 
-  // Create a minimal EditorView shim that satisfies y-prosemirror's interface
-  // See: y-prosemirror/src/plugins/sync-plugin.js initView() and _typeChanged()
   const headlessViewShim = {
     get state() {
       return editor.state;
@@ -316,7 +373,6 @@ const initHeadlessBinding = (editor) => {
       editor.dispatch(tr);
     },
     hasFocus: () => false,
-    // Minimal DOM stubs required by y-prosemirror's renderSnapshot/undo operations
     _root: {
       getSelection: () => null,
       createRange: () => ({}),
@@ -342,39 +398,30 @@ const initHeadlessBinding = (editor) => {
 
     binding.initView(headlessViewShim);
 
-    // ySyncPlugin's view lifecycle forces a rerender on first mount so PM state reflects Yjs.
     if (typeof binding._forceRerender === 'function') {
       binding._forceRerender();
     }
 
-    // Mirror ySyncPlugin's onFirstRender callback behavior for new files in headless mode.
     if (editor.options.isNewFile) {
-      initializeMetaMap(editor.options.ydoc, editor);
+      initializeCollaborationRoom(editor.options.ydoc, editor);
     }
 
     state.binding = binding;
     return binding;
   };
 
-  // Listen for ProseMirror transactions and sync to Y.js
-  // This replicates the behavior of ySyncPlugin's view.update callback
-  // Note: _prosemirrorChanged is internal to y-prosemirror but is the recommended
-  // approach for headless mode (see y-prosemirror issue #75)
   const transactionHandler = ({ transaction }) => {
     if (!editor.options.ydoc) return;
 
-    // Skip if this transaction originated from Y.js (avoid infinite loop)
     const meta = transaction.getMeta(ySyncPluginKey);
     if (meta?.isChangeOrigin) return;
 
     const binding = ensureInitializedBinding();
     if (!binding) return;
 
-    // Sync ProseMirror changes to Y.js
     if (typeof binding._prosemirrorChanged !== 'function') return;
     const addToHistory = transaction.getMeta('addToHistory') !== false;
 
-    // Match y-prosemirror view.update behavior for non-history changes.
     if (!addToHistory) {
       const undoPluginState = yUndoPluginKey.getState(editor.state);
       undoPluginState?.undoManager?.stopCapturing?.();
@@ -401,7 +448,6 @@ const initHeadlessBinding = (editor) => {
   editor.on('transaction', transactionHandler);
   ensureInitializedBinding();
 
-  // Return cleanup function to remove listener on destroy
   state.cleanup = () => {
     editor.off('transaction', transactionHandler);
     if (headlessBindingStateByEditor.get(editor) === state) {

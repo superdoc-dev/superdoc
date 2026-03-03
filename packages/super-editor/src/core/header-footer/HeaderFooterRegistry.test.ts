@@ -95,8 +95,26 @@ vi.mock('@extensions/pagination/pagination-helpers.js', () => ({
   onHeaderFooterDataUpdate: mockOnHeaderFooterDataUpdate,
 }));
 
-vi.mock('@extensions/collaboration/collaboration-helpers.js', () => ({
-  updateYdocDocxData: mockUpdateYdocDocxData,
+vi.mock('@extensions/collaboration/part-sync/part-sync-engine.js', () => ({
+  isApplyingRemotePart: vi.fn(() => false),
+  publishPartSections: vi.fn(),
+  applyRemotePartSections: vi.fn(),
+  deleteRemotePartSections: vi.fn(),
+  hydrateOrSeedPart: vi.fn(),
+  createSpecObserver: vi.fn(() => vi.fn()),
+}));
+
+vi.mock('@extensions/collaboration/part-sync/part-spec-registry.js', () => ({
+  HEADER_FOOTER_CONTENT_SPEC: { id: 'headerFooterContent' },
+  STYLES_SPEC: { id: 'styles' },
+  getAllSpecs: vi.fn(() => []),
+  getOoxmlPartSpecs: vi.fn(() => []),
+  resolveOoxmlPartKey: vi.fn(),
+}));
+
+vi.mock('@extensions/collaboration/part-sync/part-reconcile-scheduler.js', () => ({
+  scheduleReconcile: mockUpdateYdocDocxData,
+  destroyReconcileState: vi.fn(),
 }));
 
 vi.mock('@superdoc/pm-adapter', async (importOriginal) => {
@@ -222,9 +240,8 @@ describe('HeaderFooterEditorManager', () => {
       'rId-header-default',
       'header',
     );
-    // Note: updateYdocDocxData is NOT called directly from header/footer updates.
-    // The full DOCX sync is handled by the debounced main document listener,
-    // which picks up header/footer changes via Y.Doc afterTransaction events.
+    // Note: scheduleReconcile is NOT called directly from header/footer updates.
+    // Full OOXML reconcile is handled by the part-reconcile scheduler.
     expect(mockUpdateYdocDocxData).not.toHaveBeenCalled();
   });
 

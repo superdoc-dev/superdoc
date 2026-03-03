@@ -56,6 +56,18 @@ export interface ListDefinitionsPayload {
 }
 
 /**
+ * Payload for unified part change notifications.
+ *
+ * Emitted when any part in `converter.parts` is mutated through
+ * `commitPartMutation` or the collaboration sync engine.
+ */
+export interface PartChangedPayload {
+  partId: string;
+  changedPaths: string[];
+  source: string;
+}
+
+/**
  * Event map for the Editor class
  */
 export interface EditorEventMap extends DefaultEventMap {
@@ -129,4 +141,7 @@ export interface EditorEventMap extends DefaultEventMap {
 
   /** Called when page styles are updated */
   pageStyleUpdate: [{ pageMargins?: Record<string, unknown>; pageStyles: Record<string, unknown> }];
+
+  /** Called when any converter part is mutated (unified event) */
+  partChanged: [PartChangedPayload];
 }

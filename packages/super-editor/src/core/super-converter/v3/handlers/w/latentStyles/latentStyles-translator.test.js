@@ -12,15 +12,16 @@ describe('w:latentStyles translator', () => {
   });
 
   describe('encode', () => {
-    it('should encode latentStyles attributes and exceptions', () => {
+    it('should encode latentStyles attributes and exceptions as arrays', () => {
       const xmlNode = {
         name: 'w:latentStyles',
         attributes: {
           'w:defLockedState': '1',
-          'w:defUIPriority': '1',
+          'w:defUIPriority': '99',
           'w:defSemiHidden': '0',
           'w:defUnhideWhenUsed': '1',
           'w:defQFormat': '1',
+          'w:count': '376',
         },
         elements: [
           {
@@ -34,14 +35,21 @@ describe('w:latentStyles translator', () => {
               'w:uiPriority': '99',
             },
           },
+          {
+            name: 'w:lsdException',
+            attributes: {
+              'w:name': 'Normal',
+              'w:uiPriority': '0',
+            },
+          },
         ],
       };
 
       const result = translator.encode({ nodes: [xmlNode] });
 
       expect(result).toEqual({
-        lsdExceptions: {
-          NoList: {
+        lsdExceptions: [
+          {
             name: 'NoList',
             locked: true,
             qFormat: true,
@@ -49,13 +57,32 @@ describe('w:latentStyles translator', () => {
             unhideWhenUsed: true,
             uiPriority: 99,
           },
-        },
+          {
+            name: 'Normal',
+            uiPriority: 0,
+          },
+        ],
         defLockedState: true,
-        defUIPriority: true,
+        defUIPriority: 99,
         defSemiHidden: false,
         defUnhideWhenUsed: true,
         defQFormat: true,
+        count: 376,
       });
+    });
+
+    it('preserves document order of lsdExceptions', () => {
+      const xmlNode = {
+        name: 'w:latentStyles',
+        attributes: {},
+        elements: [
+          { name: 'w:lsdException', attributes: { 'w:name': 'B' } },
+          { name: 'w:lsdException', attributes: { 'w:name': 'A' } },
+        ],
+      };
+
+      const result = translator.encode({ nodes: [xmlNode] });
+      expect(result.lsdExceptions.map((e) => e.name)).toEqual(['B', 'A']);
     });
   });
 
@@ -65,12 +92,13 @@ describe('w:latentStyles translator', () => {
         attrs: {
           latentStyles: {
             defLockedState: true,
-            defUIPriority: true,
+            defUIPriority: 99,
             defSemiHidden: false,
             defUnhideWhenUsed: true,
             defQFormat: true,
-            lsdExceptions: {
-              NoList: {
+            count: 376,
+            lsdExceptions: [
+              {
                 name: 'NoList',
                 locked: true,
                 qFormat: true,
@@ -78,7 +106,7 @@ describe('w:latentStyles translator', () => {
                 unhideWhenUsed: true,
                 uiPriority: 99,
               },
-            },
+            ],
           },
         },
       };
@@ -89,10 +117,11 @@ describe('w:latentStyles translator', () => {
         name: 'w:latentStyles',
         attributes: {
           'w:defLockedState': '1',
-          'w:defUIPriority': '1',
+          'w:defUIPriority': '99',
           'w:defSemiHidden': '0',
           'w:defUnhideWhenUsed': '1',
           'w:defQFormat': '1',
+          'w:count': '376',
         },
         elements: [
           {

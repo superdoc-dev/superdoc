@@ -125,7 +125,8 @@ let defaultConverterContext: ConverterContext = {
       runProperties: {},
       paragraphProperties: {},
     },
-    styles: {},
+    latentStyles: { lsdExceptions: [] },
+    styles: [],
   },
 };
 
@@ -759,7 +760,8 @@ describe('paragraph converters', () => {
             runProperties: {},
             paragraphProperties: {},
           },
-          styles: {},
+          latentStyles: { lsdExceptions: [] },
+          styles: [],
         },
       };
       defaultConverterContext = converterContext;

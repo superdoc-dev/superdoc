@@ -1,12 +1,9 @@
 /**
  * Engine-specific adapter for `styles.apply`.
  *
- * Reads and writes `translatedLinkedStyles.docDefaults` (the style-engine-facing
- * JS object), then syncs the mutation back to `convertedXml` via the docDefaults
- * translator's decode path. After a successful non-dry mutation, emits a
- * `'stylesDefaultsChanged'` event so the layout pipeline re-renders.
- *
- * Lifecycle is handled by `executeOutOfBandMutation`.
+ * Mutations flow through `commitStylesMutation`, the centralized styles
+ * mutation pipeline. This keeps mutation lifecycle, XML sync, and change-event
+ * emission in one place.
  */
 
 import type {
@@ -21,10 +18,7 @@ import type {
 import { PROPERTY_REGISTRY } from '@superdoc/document-api';
 import type { Editor } from '../core/Editor.js';
 import { DocumentApiAdapterError } from './errors.js';
-import { isCollaborationActive } from './collaboration-detection.js';
-import { executeOutOfBandMutation } from './out-of-band-mutation.js';
-import { syncDocDefaultsToConvertedXml, type DocDefaultsTranslator } from './styles-xml-sync.js';
-import { translator as docDefaultsTranslator } from '../core/super-converter/v3/handlers/w/docDefaults/docDefaults-translator.js';
+import { commitStylesMutation } from './mutations/commit-styles-mutation.js';
 
 // ---------------------------------------------------------------------------
 // Local type shapes (avoids importing engine-specific modules directly)
@@ -38,12 +32,7 @@ interface XmlElement {
 
 interface ConverterForStyles {
   convertedXml: Record<string, XmlElement>;
-  translatedLinkedStyles: {
-    docDefaults?: {
-      runProperties?: Record<string, unknown>;
-      paragraphProperties?: Record<string, unknown>;
-    };
-  };
+  translatedLinkedStyles?: unknown;
 }
 
 // ---------------------------------------------------------------------------
@@ -129,39 +118,6 @@ function normalizeObjectSubKeys(obj: Record<string, unknown>, key: string): Reco
 }
 
 // ---------------------------------------------------------------------------
-// JSON deep equality — single shared comparator
-// ---------------------------------------------------------------------------
-
-function jsonDeepEqual(a: unknown, b: unknown): boolean {
-  if (a === b) return true;
-  if (a === null || b === null) return false;
-  if (typeof a !== typeof b) return false;
-
-  if (Array.isArray(a)) {
-    if (!Array.isArray(b) || a.length !== b.length) return false;
-    for (let i = 0; i < a.length; i++) {
-      if (!jsonDeepEqual(a[i], b[i])) return false;
-    }
-    return true;
-  }
-
-  if (typeof a === 'object') {
-    const aObj = a as Record<string, unknown>;
-    const bObj = b as Record<string, unknown>;
-    const aKeys = Object.keys(aObj);
-    const bKeys = Object.keys(bObj);
-    if (aKeys.length !== bKeys.length) return false;
-    for (const key of aKeys) {
-      if (!Object.prototype.hasOwnProperty.call(bObj, key)) return false;
-      if (!jsonDeepEqual(aObj[key], bObj[key])) return false;
-    }
-    return true;
-  }
-
-  return false;
-}
-
-// ---------------------------------------------------------------------------
 // State formatting helpers
 // ---------------------------------------------------------------------------
 
@@ -190,7 +146,6 @@ function formatState(value: unknown, schema: ValueSchema, key: string): StateVal
       return value as StateValue;
   }
 }
-
 // ---------------------------------------------------------------------------
 // Merge strategy dispatch
 // ---------------------------------------------------------------------------
@@ -241,11 +196,19 @@ function applyEdgeMerge(targetProps: Record<string, unknown>, key: string, value
 // Patch application
 // ---------------------------------------------------------------------------
 
+/**
+ * Applies a patch to the target properties object.
+ *
+ * - Boolean/number/enum: direct replacement
+ * - Object: merge semantics (provided sub-keys updated, unspecified preserved)
+ *
+ * Returns before/after state maps for patched keys.
+ */
 function applyPatch(
   targetProps: Record<string, unknown>,
   patch: Record<string, unknown>,
   channel: StylesChannel,
-): { before: StylesStateMap; after: StylesStateMap; changed: boolean } {
+): { before: StylesStateMap; after: StylesStateMap } {
   const before: StylesStateMap = {};
   const after: StylesStateMap = {};
 
@@ -274,8 +237,7 @@ function applyPatch(
     after[key] = formatState(targetProps[key], def.schema, key);
   }
 
-  const changed = !jsonDeepEqual(before, after);
-  return { before, after, changed };
+  return { before, after };
 }
 
 // ---------------------------------------------------------------------------
@@ -310,14 +272,6 @@ export function stylesApplyAdapter(
     );
   }
 
-  if (isCollaborationActive(editor)) {
-    throw new DocumentApiAdapterError(
-      'CAPABILITY_UNAVAILABLE',
-      'styles.apply is unavailable during active collaboration. Stylesheet mutations cannot be synced via Yjs.',
-      { reason: 'collaboration_active' },
-    );
-  }
-
   const stylesRoot = stylesPart.elements?.find((el: XmlElement) => el.name === 'w:styles');
   if (!stylesRoot) {
     throw new DocumentApiAdapterError(
@@ -335,53 +289,31 @@ export function stylesApplyAdapter(
     xmlPath: XML_PATH_BY_CHANNEL[channel],
   };
 
-  // --- Execute via out-of-band lifecycle ---
-  return executeOutOfBandMutation<StylesApplyReceipt>(
+  const mutation = commitStylesMutation({
     editor,
-    (dryRun) => {
-      const propsKey = PROPERTIES_KEY_BY_CHANNEL[channel];
-
-      const existingProps = converter.translatedLinkedStyles?.docDefaults?.[propsKey] as
-        | Record<string, unknown>
-        | undefined;
-
-      // Dry-run: structuredClone for full immutability guarantee.
-      // Real mutation: ensure hierarchy exists and mutate in-place.
-      let targetProps: Record<string, unknown>;
-      if (dryRun) {
-        targetProps = existingProps ? structuredClone(existingProps) : {};
-      } else {
-        if (!converter.translatedLinkedStyles) {
-          (converter as unknown as Record<string, unknown>).translatedLinkedStyles = {};
-        }
-        if (!converter.translatedLinkedStyles.docDefaults) {
-          converter.translatedLinkedStyles.docDefaults = {};
-        }
-        if (!converter.translatedLinkedStyles.docDefaults[propsKey]) {
-          converter.translatedLinkedStyles.docDefaults[propsKey] = {};
-        }
-        targetProps = converter.translatedLinkedStyles.docDefaults[propsKey] as Record<string, unknown>;
-      }
-
-      const { before, after, changed } = applyPatch(targetProps, input.patch as Record<string, unknown>, channel);
-
-      // Post-mutation side effects (only on real, changed mutations)
-      if (changed && !dryRun) {
-        syncDocDefaultsToConvertedXml(converter, docDefaultsTranslator as unknown as DocDefaultsTranslator);
-        editor.emit('stylesDefaultsChanged');
-      }
-
-      const receipt: StylesApplyReceipt = {
-        success: true,
-        changed,
-        resolution,
-        dryRun,
-        before,
-        after,
-      };
-
-      return { changed, payload: receipt };
-    },
+    converter,
     options,
-  );
+    source: 'styles.apply',
+    mutate: ({ model }) => {
+      const propsKey = PROPERTIES_KEY_BY_CHANNEL[channel];
+      const docDefaultsStore = model.docDefaults as Record<string, unknown>;
+
+      if (!docDefaultsStore[propsKey]) {
+        docDefaultsStore[propsKey] = {};
+      }
+
+      const targetProps = docDefaultsStore[propsKey] as Record<string, unknown>;
+      return applyPatch(targetProps, input.patch as Record<string, unknown>, channel);
+    },
+    diffScopePaths: ['docDefaults'],
+  });
+
+  return {
+    success: true,
+    changed: mutation.changed,
+    resolution,
+    dryRun: options.dryRun,
+    before: mutation.result.before,
+    after: mutation.result.after,
+  };
 }

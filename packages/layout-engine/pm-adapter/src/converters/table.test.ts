@@ -22,8 +22,8 @@ const DEFAULT_CONVERTER_CONTEXT: ConverterContext = {
   translatedNumbering: {},
   translatedLinkedStyles: {
     docDefaults: {},
-    latentStyles: {},
-    styles: {},
+    latentStyles: { lsdExceptions: [] },
+    styles: [],
   },
 };
 

@@ -158,8 +158,8 @@ const buildTranslatedLinkedStyles = (styles = []) => {
       paragraphProperties: {},
     },
     latentStyles: {},
-    styles: {
-      Normal: {
+    styles: [
+      {
         styleId: 'Normal',
         type: 'paragraph',
         default: true,
@@ -167,7 +167,7 @@ const buildTranslatedLinkedStyles = (styles = []) => {
         runProperties: {},
         paragraphProperties: {},
       },
-    },
+    ],
   };
 
   styles.forEach((style) => {
@@ -176,12 +176,12 @@ const buildTranslatedLinkedStyles = (styles = []) => {
     const type = style?.attributes?.['w:type'] || 'paragraph';
     const runPropsNode = style?.elements?.find((child) => child?.name === 'w:rPr');
     const runProps = parseRunProperties(runPropsNode?.elements ?? []);
-    translated.styles[styleId] = {
+    translated.styles.push({
       styleId,
       type,
       runProperties: runProps,
       paragraphProperties: {},
-    };
+    });
   });
 
   return translated;

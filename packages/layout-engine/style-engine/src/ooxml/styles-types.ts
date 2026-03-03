@@ -14,8 +14,8 @@ export interface StylesDocumentProperties {
   docDefaults: DocDefaults;
   /** Latent style definitions and defaults. */
   latentStyles: LatentStyles;
-  /** Styles keyed by styleId. */
-  styles: Record<string, StyleDefinition>;
+  /** Style definitions in document order. */
+  styles: StyleDefinition[];
 }
 
 /**
@@ -34,24 +34,26 @@ export interface DocDefaults {
 export interface LatentStyles {
   /** Default locked state for latent styles. */
   defLockedState?: boolean;
-  /** Default UI priority flag for latent styles. */
-  defUIPriority?: boolean;
+  /** Default UI priority (ST_DecimalNumber). */
+  defUIPriority?: number;
   /** Default semi-hidden flag for latent styles. */
   defSemiHidden?: boolean;
   /** Default unhide-when-used flag for latent styles. */
   defUnhideWhenUsed?: boolean;
   /** Default quick-format flag for latent styles. */
   defQFormat?: boolean;
-  /** Latent style exceptions keyed by style name. */
-  lsdExceptions?: Record<string, LsdException>;
+  /** Total count of latent style entries (ST_DecimalNumber). */
+  count?: number;
+  /** Latent style exceptions in document order. */
+  lsdExceptions?: LsdException[];
 }
 
 /**
  * Latent style exception definition.
  */
 export interface LsdException {
-  /** Latent style name. */
-  name?: string;
+  /** Latent style name (required per OOXML spec). */
+  name: string;
   /** Locked flag for the latent style. */
   locked?: boolean;
   /** Quick format flag for the latent style. */
@@ -68,8 +70,8 @@ export interface LsdException {
  * Encoded style definition from w:style.
  */
 export interface StyleDefinition {
-  /** Style type (paragraph, character, table, etc.). */
-  type?: string;
+  /** Style type (OOXML ST_StyleType). */
+  type?: 'paragraph' | 'character' | 'table' | 'numbering';
   /** Style identifier. */
   styleId?: string;
   /** Default style flag. */
@@ -106,8 +108,8 @@ export interface StyleDefinition {
   personalReply?: boolean;
   /** UI priority value. */
   uiPriority?: number;
-  /** Revision identifier. */
-  rsid?: number;
+  /** Revision identifier (hex string, e.g. '0045A23C'). */
+  rsid?: string;
   /** Paragraph properties applied by the style. */
   paragraphProperties?: ParagraphProperties;
   /** Run properties applied by the style. */
@@ -289,7 +291,7 @@ export interface TableCellMargins {
  */
 export interface TableRowProperties {
   /** Prevent row from splitting across pages. */
-  cantSplit: boolean;
+  cantSplit?: boolean;
   /** Conditional formatting properties. */
   cnfStyle?: ParagraphConditionalFormatting;
   /** Division identifier value. */
@@ -299,19 +301,25 @@ export interface TableRowProperties {
   /** Grid cells before the row. */
   gridBefore?: number;
   /** Hide the row. */
-  hidden: boolean;
+  hidden?: boolean;
   /** Row justification value. */
   justification?: string;
   /** Table cell spacing properties. */
   tableCellSpacing?: MeasurementProperties;
   /** Repeat header row flag. */
-  repeatHeader: boolean;
+  repeatHeader?: boolean;
   /** Row height properties. */
   rowHeight?: TableRowHeight;
   /** Width after the row. */
   wAfter?: MeasurementProperties;
   /** Width before the row. */
   wBefore?: MeasurementProperties;
+  /** Row insertion tracking marker. */
+  ins?: TrackChangeAttributes;
+  /** Row deletion tracking marker. */
+  del?: TrackChangeAttributes;
+  /** Previous table row properties before a tracked change. */
+  trPrChange?: TableRowPropertiesChange;
 }
 
 /**
@@ -354,6 +362,16 @@ export interface TableCellProperties {
   hideMark?: boolean;
   /** Header references applied to the cell. */
   headers?: TableHeaderReference[];
+  /** Horizontal merge behavior. */
+  hMerge?: string;
+  /** Cell insertion tracking marker. */
+  cellIns?: TrackChangeAttributes;
+  /** Cell deletion tracking marker. */
+  cellDel?: TrackChangeAttributes;
+  /** Cell merge tracking properties. */
+  cellMerge?: CellMergeProperties;
+  /** Previous table cell properties before a tracked change. */
+  tcPrChange?: TableCellPropertiesChange;
 }
 
 /**
@@ -362,6 +380,38 @@ export interface TableCellProperties {
 export interface TableHeaderReference {
   /** Header value. */
   header: string;
+}
+
+/**
+ * Common tracking metadata for revision-marked property changes.
+ */
+export interface TrackChangeAttributes {
+  id?: number;
+  author?: string;
+  authorEmail?: string;
+  date?: string;
+}
+
+/**
+ * Revision-marked change container for table row properties (w:trPrChange).
+ */
+export interface TableRowPropertiesChange extends TrackChangeAttributes {
+  tableRowProperties?: TableRowProperties;
+}
+
+/**
+ * Revision-marked change container for table cell properties (w:tcPrChange).
+ */
+export interface TableCellPropertiesChange extends TrackChangeAttributes {
+  tableCellProperties?: TableCellProperties;
+}
+
+/**
+ * Cell merge properties encoded from w:cellMerge.
+ */
+export interface CellMergeProperties {
+  vMerge?: string;
+  vMergeOrig?: string;
 }
 
 export type TableStyleType =

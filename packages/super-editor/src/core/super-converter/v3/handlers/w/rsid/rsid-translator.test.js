@@ -3,9 +3,14 @@ import { translator } from './rsid-translator.js';
 
 describe('w:rsid translator', () => {
   describe('encode', () => {
-    it('extracts the w:val attribute', () => {
+    it('preserves hex string value as-is', () => {
+      const result = translator.encode({ nodes: [{ attributes: { 'w:val': '0045A23C' } }] });
+      expect(result).toBe('0045A23C');
+    });
+
+    it('preserves numeric-looking string without coercion', () => {
       const result = translator.encode({ nodes: [{ attributes: { 'w:val': '42' } }] });
-      expect(result).toBe(42);
+      expect(result).toBe('42');
     });
 
     it('returns undefined if w:val is missing', () => {
@@ -15,8 +20,13 @@ describe('w:rsid translator', () => {
   });
 
   describe('decode', () => {
-    it('creates a w:rsid element with the value in w:val', () => {
-      const { attributes: result } = translator.decode({ node: { attrs: { rsid: 42 } } });
+    it('emits a w:rsid element with the hex string in w:val', () => {
+      const { attributes: result } = translator.decode({ node: { attrs: { rsid: '0045A23C' } } });
+      expect(result).toEqual({ 'w:val': '0045A23C' });
+    });
+
+    it('roundtrips a numeric-looking string', () => {
+      const { attributes: result } = translator.decode({ node: { attrs: { rsid: '42' } } });
       expect(result).toEqual({ 'w:val': '42' });
     });
 

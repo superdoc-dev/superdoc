@@ -94,9 +94,9 @@ export const getMinimalTranslatedLinkedStyles = () => ({
     runProperties: {},
     paragraphProperties: {},
   },
-  latentStyles: {},
-  styles: {
-    Normal: {
+  latentStyles: { lsdExceptions: [] },
+  styles: [
+    {
       styleId: 'Normal',
       type: 'paragraph',
       default: true,
@@ -104,7 +104,7 @@ export const getMinimalTranslatedLinkedStyles = () => ({
       runProperties: {},
       paragraphProperties: {},
     },
-  },
+  ],
 });
 
 const createMinimalConverter = () => {
@@ -128,10 +128,10 @@ const ensureTranslatedLinkedStyles = (converter) => {
   translated.docDefaults ??= { ...fallback.docDefaults };
   translated.docDefaults.runProperties ??= {};
   translated.docDefaults.paragraphProperties ??= {};
-  translated.latentStyles ??= {};
-  translated.styles ??= {};
-  translated.styles.Normal ??= { ...fallback.styles.Normal };
-  translated.styles.Normal.styleId ??= 'Normal';
+  translated.latentStyles ??= { lsdExceptions: [] };
+  if (!Array.isArray(translated.styles)) {
+    translated.styles = [...fallback.styles];
+  }
 };
 
 const ensureTranslatedNumbering = (converter) => {

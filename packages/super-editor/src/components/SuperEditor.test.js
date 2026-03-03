@@ -13,6 +13,8 @@ const getFileObjectMock = vi.hoisted(() =>
   vi.fn(async () => new Blob([], { type: 'application/vnd.openxmlformats-officedocument.wordprocessingml.document' })),
 );
 const getStarterExtensionsMock = vi.hoisted(() => vi.fn(() => [{ name: 'core' }]));
+const hasBootstrapContentMock = vi.hoisted(() => vi.fn(() => false));
+const readBootstrapContentMock = vi.hoisted(() => vi.fn(() => null));
 
 const EditorConstructor = vi.hoisted(() => {
   const MockEditor = vi.fn(function (options) {
@@ -77,6 +79,11 @@ vi.mock('@extensions/index.js', () => ({
 
 vi.mock('@superdoc/super-editor', () => ({
   Editor: EditorConstructor,
+}));
+
+vi.mock('@extensions/collaboration/part-sync/bootstrap-content.js', () => ({
+  hasBootstrapContent: hasBootstrapContentMock,
+  readBootstrapContent: readBootstrapContentMock,
 }));
 
 const DOCX_MIME = 'application/vnd.openxmlformats-officedocument.wordprocessingml.document';
@@ -145,12 +152,11 @@ describe('SuperEditor.vue', () => {
   it('initializes when collaboration provider syncs remote docx data', async () => {
     vi.useFakeTimers();
 
-    const metaMap = {
-      has: vi.fn((key) => key === 'docx'),
-      get: vi.fn((key) => (key === 'docx' ? '<remote />' : undefined)),
-    };
+    hasBootstrapContentMock.mockReturnValue(true);
+    readBootstrapContentMock.mockReturnValue({ content: '<remote />', fonts: {} });
+
     const ydoc = {
-      getMap: vi.fn(() => metaMap),
+      getMap: vi.fn(() => ({})),
     };
 
     const provider = {
@@ -180,9 +186,8 @@ describe('SuperEditor.vue', () => {
 
     await flushPromises();
 
-    expect(ydoc.getMap).toHaveBeenCalledWith('meta');
-    expect(metaMap.has).toHaveBeenCalledWith('docx');
-    expect(metaMap.get).toHaveBeenCalledWith('docx');
+    expect(hasBootstrapContentMock).toHaveBeenCalledWith(ydoc);
+    expect(readBootstrapContentMock).toHaveBeenCalledWith(ydoc);
     expect(EditorConstructor).toHaveBeenCalledTimes(1);
     expect(EditorConstructor.loadXmlData).not.toHaveBeenCalled();
 
@@ -198,12 +203,10 @@ describe('SuperEditor.vue', () => {
 
     EditorConstructor.loadXmlData.mockResolvedValueOnce(['<blank />', {}, {}, {}]);
 
-    const metaMap = {
-      has: vi.fn(() => false), // No existing content
-      get: vi.fn(() => undefined),
-    };
+    hasBootstrapContentMock.mockReturnValue(false);
+
     const ydoc = {
-      getMap: vi.fn(() => metaMap),
+      getMap: vi.fn(() => ({})),
     };
 
     const provider = {
@@ -233,7 +236,7 @@ describe('SuperEditor.vue', () => {
     vi.runAllTimers();
     await flushPromises();
 
-    expect(metaMap.has).toHaveBeenCalledWith('docx');
+    expect(hasBootstrapContentMock).toHaveBeenCalledWith(ydoc);
     expect(EditorConstructor.loadXmlData).toHaveBeenCalled(); // Should load blank
     expect(EditorConstructor).toHaveBeenCalledTimes(1);
 
@@ -243,12 +246,11 @@ describe('SuperEditor.vue', () => {
   it('skips waiting for sync when provider is already synced', async () => {
     vi.useFakeTimers();
 
-    const metaMap = {
-      has: vi.fn((key) => key === 'docx'),
-      get: vi.fn((key) => (key === 'docx' ? '<already-synced />' : undefined)),
-    };
+    hasBootstrapContentMock.mockReturnValue(true);
+    readBootstrapContentMock.mockReturnValue({ content: '<already-synced />', fonts: {} });
+
     const ydoc = {
-      getMap: vi.fn(() => metaMap),
+      getMap: vi.fn(() => ({})),
     };
 
     const provider = {
@@ -271,7 +273,7 @@ describe('SuperEditor.vue', () => {
 
     // Should NOT register sync listeners since already synced
     expect(provider.on).not.toHaveBeenCalledWith('synced', expect.any(Function));
-    expect(ydoc.getMap).toHaveBeenCalledWith('meta');
+    expect(hasBootstrapContentMock).toHaveBeenCalledWith(ydoc);
     expect(EditorConstructor).toHaveBeenCalledTimes(1);
 
     const options = EditorConstructor.mock.calls[0][0];
@@ -283,12 +285,11 @@ describe('SuperEditor.vue', () => {
   it('ignores sync event with synced=false (Liveblocks behavior)', async () => {
     vi.useFakeTimers();
 
-    const metaMap = {
-      has: vi.fn((key) => key === 'docx'),
-      get: vi.fn((key) => (key === 'docx' ? '<liveblocks />' : undefined)),
-    };
+    hasBootstrapContentMock.mockReturnValue(true);
+    readBootstrapContentMock.mockReturnValue({ content: '<liveblocks />', fonts: {} });
+
     const ydoc = {
-      getMap: vi.fn(() => metaMap),
+      getMap: vi.fn(() => ({})),
     };
 
     const provider = {

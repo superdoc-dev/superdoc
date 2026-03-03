@@ -40,6 +40,19 @@ describe('detectRoomState', () => {
     expect(detectRoomState(ydoc)).toBe('populated');
   });
 
+  test('returns "populated" when bootstrapDocxParts._version is 1', () => {
+    const ydoc = new YDoc();
+    ydoc.getMap('bootstrapDocxParts').set('_version', 1);
+    expect(detectRoomState(ydoc)).toBe('populated');
+  });
+
+  test('returns "empty" when bootstrapDocxParts exists but _version is absent', () => {
+    const ydoc = new YDoc();
+    // Just access the map without setting _version
+    ydoc.getMap('bootstrapDocxParts');
+    expect(detectRoomState(ydoc)).toBe('empty');
+  });
+
   test('returns "empty" when meta map only has a pending bootstrap marker (stale claim recovery)', () => {
     const ydoc = new YDoc();
     ydoc.getMap('meta').set('bootstrap', {

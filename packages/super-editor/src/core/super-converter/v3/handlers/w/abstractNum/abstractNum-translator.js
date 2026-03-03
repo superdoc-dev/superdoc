@@ -10,8 +10,8 @@ import {
   createIntegerAttributeHandler,
   encodeProperties,
   decodeProperties,
-  encodePropertiesByKey,
-  decodePropertiesByKey,
+  encodeChildrenByKey,
+  decodeChildrenByKey,
 } from '@converter/v3/handlers/utils.js';
 
 const propertyTranslators = [
@@ -46,7 +46,7 @@ export const translator = NodeTranslator.from({
     const result = {
       ...encodedAttrs,
       ...encodeProperties(params, propertyTranslatorsByXmlName),
-      ...encodePropertiesByKey('w:lvl', 'levels', wLvlTranslator, params, node, 'ilvl'),
+      ...encodeChildrenByKey('w:lvl', 'levels', wLvlTranslator, params, node, 'ilvl'),
     };
 
     return result;
@@ -61,7 +61,7 @@ export const translator = NodeTranslator.from({
 
     const elements = [
       ...decodeProperties(params, propertyTranslatorsBySdName, currentValue),
-      ...decodePropertiesByKey('w:lvl', 'levels', wLvlTranslator, params, currentValue),
+      ...decodeChildrenByKey('w:lvl', 'levels', wLvlTranslator, params, currentValue),
     ];
 
     const newNode = {

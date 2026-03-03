@@ -11,8 +11,8 @@ import { translator as wNumIdMacAtCleanupTranslator } from '../../w/numIdMacAtCl
 import {
   encodeProperties,
   decodeProperties,
-  encodePropertiesByKey,
-  decodePropertiesByKey,
+  encodeChildrenByKey,
+  decodeChildrenByKey,
 } from '@converter/v3/handlers/utils.js';
 
 const propertyTranslators = [
@@ -50,8 +50,8 @@ export const translator = NodeTranslator.from({
     const result = {
       ...encodedAttrs,
       ...props,
-      ...encodePropertiesByKey('w:abstractNum', 'abstracts', wAbstractNumTranslator, params, node, 'abstractNumId'),
-      ...encodePropertiesByKey('w:num', 'definitions', wNumTranslator, params, node, 'numId'),
+      ...encodeChildrenByKey('w:abstractNum', 'abstracts', wAbstractNumTranslator, params, node, 'abstractNumId'),
+      ...encodeChildrenByKey('w:num', 'definitions', wNumTranslator, params, node, 'numId'),
     };
 
     return result;
@@ -67,8 +67,8 @@ export const translator = NodeTranslator.from({
     const props = decodeProperties(params, propertyTranslatorsBySdName, currentValue);
     const elements = [
       ...props,
-      ...decodePropertiesByKey('w:abstractNum', 'abstracts', wAbstractNumTranslator, params, currentValue),
-      ...decodePropertiesByKey('w:num', 'definitions', wNumTranslator, params, currentValue),
+      ...decodeChildrenByKey('w:abstractNum', 'abstracts', wAbstractNumTranslator, params, currentValue),
+      ...decodeChildrenByKey('w:num', 'definitions', wNumTranslator, params, currentValue),
     ];
 
     const newNode = {

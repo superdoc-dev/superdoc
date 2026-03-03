@@ -20,7 +20,7 @@ describe('w:styles translator', () => {
             name: 'w:latentStyles',
             attributes: {
               'w:defLockedState': '1',
-              'w:defUIPriority': '1',
+              'w:defUIPriority': '99',
               'w:defSemiHidden': '0',
               'w:defUnhideWhenUsed': '1',
               'w:defQFormat': '1',
@@ -73,8 +73,8 @@ describe('w:styles translator', () => {
           paragraphProperties: { keepNext: true },
         },
         latentStyles: {
-          lsdExceptions: {
-            NoList: {
+          lsdExceptions: [
+            {
               name: 'NoList',
               locked: true,
               qFormat: true,
@@ -82,32 +82,118 @@ describe('w:styles translator', () => {
               unhideWhenUsed: true,
               uiPriority: 99,
             },
-          },
+          ],
           defLockedState: true,
-          defUIPriority: true,
+          defUIPriority: 99,
           defSemiHidden: false,
           defUnhideWhenUsed: true,
           defQFormat: true,
         },
-        styles: {
-          Heading1: {
+        styles: [
+          {
             type: 'paragraph',
             styleId: 'Heading1',
             name: 'Heading 1',
           },
-          Emphasis: {
+          {
             type: 'character',
             styleId: 'Emphasis',
             runProperties: { bold: true },
           },
-        },
+        ],
       });
+    });
+
+    it('preserves document order for styles', () => {
+      const xmlNode = {
+        name: 'w:styles',
+        elements: [
+          {
+            name: 'w:style',
+            attributes: { 'w:styleId': 'B' },
+            elements: [{ name: 'w:name', attributes: { 'w:val': 'Beta' } }],
+          },
+          {
+            name: 'w:style',
+            attributes: { 'w:styleId': 'A' },
+            elements: [{ name: 'w:name', attributes: { 'w:val': 'Alpha' } }],
+          },
+        ],
+      };
+
+      const result = translator.encode({ nodes: [xmlNode] });
+
+      expect(result.styles).toEqual([
+        { styleId: 'B', name: 'Beta' },
+        { styleId: 'A', name: 'Alpha' },
+      ]);
+    });
+
+    it('preserves duplicate styleIds in the array', () => {
+      const xmlNode = {
+        name: 'w:styles',
+        elements: [
+          {
+            name: 'w:style',
+            attributes: { 'w:styleId': 'Dup' },
+            elements: [{ name: 'w:name', attributes: { 'w:val': 'First' } }],
+          },
+          {
+            name: 'w:style',
+            attributes: { 'w:styleId': 'Dup' },
+            elements: [{ name: 'w:name', attributes: { 'w:val': 'Second' } }],
+          },
+        ],
+      };
+
+      const result = translator.encode({ nodes: [xmlNode] });
+
+      expect(result.styles).toEqual([
+        { styleId: 'Dup', name: 'First' },
+        { styleId: 'Dup', name: 'Second' },
+      ]);
     });
 
     it('should return an empty object when no elements are present', () => {
       const xmlNode = { name: 'w:styles', elements: [] };
       const result = translator.encode({ nodes: [xmlNode] });
       expect(result).toEqual({});
+    });
+
+    it('should encode mc:Ignorable root attribute', () => {
+      const xmlNode = {
+        name: 'w:styles',
+        attributes: { 'mc:Ignorable': 'w14 w15' },
+        elements: [
+          {
+            name: 'w:style',
+            attributes: { 'w:styleId': 'Normal' },
+            elements: [{ name: 'w:name', attributes: { 'w:val': 'Normal' } }],
+          },
+        ],
+      };
+
+      const result = translator.encode({ nodes: [xmlNode] });
+      expect(result.Ignorable).toBe('w14 w15');
+    });
+
+    it('should roundtrip mc:Ignorable through encode → decode', () => {
+      const xmlNode = {
+        name: 'w:styles',
+        attributes: { 'mc:Ignorable': 'w14 w15' },
+        elements: [
+          {
+            name: 'w:style',
+            attributes: { 'w:styleId': 'Normal' },
+            elements: [{ name: 'w:name', attributes: { 'w:val': 'Normal' } }],
+          },
+        ],
+      };
+
+      const encoded = translator.encode({ nodes: [xmlNode] });
+      const decoded = translator.decode({ node: { attrs: { styles: encoded } } });
+
+      expect(decoded.attributes['mc:Ignorable']).toBe('w14 w15');
     });
   });
 
@@ -121,8 +207,8 @@ describe('w:styles translator', () => {
               paragraphProperties: { keepNext: true },
             },
             latentStyles: {
-              lsdExceptions: {
-                NoList: {
+              lsdExceptions: [
+                {
                   name: 'NoList',
                   locked: true,
                   qFormat: true,
@@ -130,25 +216,25 @@ describe('w:styles translator', () => {
                   unhideWhenUsed: true,
                   uiPriority: 99,
                 },
-              },
+              ],
               defLockedState: true,
-              defUIPriority: true,
+              defUIPriority: 99,
               defSemiHidden: false,
               defUnhideWhenUsed: true,
               defQFormat: true,
             },
-            styles: {
-              Heading1: {
+            styles: [
+              {
                 type: 'paragraph',
                 styleId: 'Heading1',
                 name: 'Heading 1',
               },
-              Emphasis: {
+              {
                 type: 'character',
                 styleId: 'Emphasis',
                 runProperties: { bold: true },
               },
-            },
+            ],
           },
         },
       };
@@ -188,7 +274,7 @@ describe('w:styles translator', () => {
             name: 'w:latentStyles',
             attributes: {
               'w:defLockedState': '1',
-              'w:defUIPriority': '1',
+              'w:defUIPriority': '99',
               'w:defSemiHidden': '0',
               'w:defUnhideWhenUsed': '1',
               'w:defQFormat': '1',

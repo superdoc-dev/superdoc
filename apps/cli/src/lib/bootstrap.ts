@@ -80,6 +80,9 @@ export function detectRoomState(ydoc: YDoc): RoomState {
   const fragment = ydoc.getXmlFragment('supereditor');
   if (fragment.length > 0) return 'populated';
 
+  const bootstrapMap = ydoc.getMap('bootstrapDocxParts');
+  if ((bootstrapMap.get('_version') as number | undefined) === 1) return 'populated';
+
   const metaMap = ydoc.getMap('meta');
   // A pending-only bootstrap marker does NOT count as populated — the
   // claimer may have crashed before seeding actual content.  Only

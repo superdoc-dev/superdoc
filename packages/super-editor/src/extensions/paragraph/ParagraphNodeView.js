@@ -396,8 +396,8 @@ export class ParagraphNodeView {
     const paragraphProperties = getResolvedParagraphProperties(this.node);
     const runProperties = resolveRunProperties(
       {
-        translatedNumbering: this.editor.converter.translatedNumbering,
-        translatedLinkedStyles: this.editor.converter.translatedLinkedStyles,
+        translatedNumbering: this.editor.converter.parts?.numbering ?? this.editor.converter.translatedNumbering,
+        translatedLinkedStyles: this.editor.converter.parts?.styles ?? this.editor.converter.translatedLinkedStyles,
       },
       paragraphProperties.runProperties || {},
       paragraphProperties,

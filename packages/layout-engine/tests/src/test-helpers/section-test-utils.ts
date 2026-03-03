@@ -49,7 +49,7 @@ export const DEFAULT_MARGINS = {
 const DEFAULT_TRANSLATED_LINKED_STYLES: StylesDocumentProperties = {
   docDefaults: {},
   latentStyles: {},
-  styles: {},
+  styles: [],
 };
 
 const DEFAULT_TRANSLATED_NUMBERING: NumberingProperties = {

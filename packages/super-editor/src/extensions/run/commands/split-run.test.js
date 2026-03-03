@@ -565,7 +565,7 @@ describe('splitRunToParagraph with style marks', () => {
       translatedNumbering: { definitions: { 1: { abstractNumId: 1 } }, abstracts: {} },
       translatedLinkedStyles: {
         docDefaults: { runProperties: {} },
-        styles: { Heading1: { runProperties: { bold: true } } },
+        styles: [{ styleId: 'Heading1', runProperties: { bold: true } }],
       },
       documentGuid: 'test-guid-123',
       promoteToGuid: vi.fn(),
@@ -607,14 +607,15 @@ describe('splitRunToParagraph with style marks', () => {
       translatedNumbering: {},
       translatedLinkedStyles: {
         docDefaults: { runProperties: {} },
-        styles: {
-          Heading1: {
+        styles: [
+          {
+            styleId: 'Heading1',
             runProperties: {
               bold: true,
               fontSize: 28,
             },
           },
-        },
+        ],
       },
       documentGuid: 'test-guid-123',
       promoteToGuid: vi.fn(),
@@ -654,18 +655,20 @@ describe('splitRunToParagraph with style marks', () => {
       translatedNumbering: {},
       translatedLinkedStyles: {
         docDefaults: { runProperties: {} },
-        styles: {
-          BodyText: {
+        styles: [
+          {
+            styleId: 'BodyText',
             runProperties: {
               bold: true,
               fontSize: 26,
             },
           },
-          TableBold: {
+          {
+            styleId: 'TableBold',
             type: 'table',
             runProperties: { italic: true },
           },
-        },
+        ],
       },
       documentGuid: 'test-guid-123',
       promoteToGuid: vi.fn(),
@@ -706,10 +709,10 @@ describe('splitRunToParagraph with style marks', () => {
       translatedNumbering: {},
       translatedLinkedStyles: {
         docDefaults: { runProperties: {} },
-        styles: {
-          BodyText: { runProperties: {} },
-          TableBold: { type: 'table', runProperties: { bold: true } },
-        },
+        styles: [
+          { styleId: 'BodyText', runProperties: {} },
+          { styleId: 'TableBold', type: 'table', runProperties: { bold: true } },
+        ],
       },
       documentGuid: 'test-guid-123',
       promoteToGuid: vi.fn(),

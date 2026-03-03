@@ -80,11 +80,7 @@ describe('r-translator integration with table style run properties', () => {
     translatedNumbering: {},
     translatedLinkedStyles: {
       docDefaults: { runProperties: {} },
-      styles: {
-        TableBold: {
-          runProperties: { bold: true },
-        },
-      },
+      styles: [{ styleId: 'TableBold', runProperties: { bold: true } }],
     },
   };
 

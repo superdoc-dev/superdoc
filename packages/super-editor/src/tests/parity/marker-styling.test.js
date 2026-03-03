@@ -194,8 +194,8 @@ describe('marker styling parity', () => {
       translatedLinkedStyles: {
         docDefaults: { runProperties: {}, paragraphProperties: {} },
         latentStyles: {},
-        styles: {
-          Normal: {
+        styles: [
+          {
             styleId: 'Normal',
             type: 'paragraph',
             default: true,
@@ -203,7 +203,7 @@ describe('marker styling parity', () => {
             runProperties: {},
             paragraphProperties: {},
           },
-        },
+        ],
       },
     };
 

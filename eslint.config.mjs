@@ -78,6 +78,7 @@ export default [
         TextDecoder: 'readonly',
         FileReader: 'readonly',
         DOMRect: 'readonly',
+        structuredClone: 'readonly',
 
         // DOM APIs (text editing, clipboard, elements)
         HTMLElement: 'readonly',

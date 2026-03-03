@@ -4,8 +4,8 @@ import {
   createBooleanAttributeHandler,
   encodeProperties,
   decodeProperties,
-  encodePropertiesByKey,
-  decodePropertiesByKey,
+  encodeChildrenByKey,
+  decodeChildrenByKey,
 } from '@converter/v3/handlers/utils.js';
 import { translator as wNameTranslator } from '../../w/name';
 import { translator as wAliasesTranslator } from '../../w/aliases';
@@ -89,7 +89,7 @@ export const translator = NodeTranslator.from({
     const result = {
       ...encodedAttrs,
       ...encodeProperties(params, propertyTranslatorsByXmlName),
-      ...encodePropertiesByKey(
+      ...encodeChildrenByKey(
         wTblStylePrTranslator.xmlName,
         'tableStyleProperties',
         wTblStylePrTranslator,
@@ -111,7 +111,7 @@ export const translator = NodeTranslator.from({
 
     const elements = [
       ...decodeProperties(params, propertyTranslatorsBySdName, currentValue),
-      ...decodePropertiesByKey(
+      ...decodeChildrenByKey(
         wTblStylePrTranslator.xmlName,
         'tableStyleProperties',
         wTblStylePrTranslator,

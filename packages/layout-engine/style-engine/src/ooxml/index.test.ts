@@ -12,7 +12,7 @@ import {
   type OoxmlResolverParams,
 } from './index.js';
 
-const emptyStyles = { docDefaults: {}, latentStyles: {}, styles: {} };
+const emptyStyles = { docDefaults: {}, latentStyles: {}, styles: [] };
 const emptyNumbering = { abstracts: {}, definitions: {} };
 
 const buildParams = (overrides?: Partial<OoxmlResolverParams>): OoxmlResolverParams => ({
@@ -32,9 +32,7 @@ describe('ooxml - resolveStyleChain', () => {
     const params = buildParams({
       translatedLinkedStyles: {
         ...emptyStyles,
-        styles: {
-          Heading1: { runProperties: { fontSize: 32, bold: true } },
-        },
+        styles: [{ styleId: 'Heading1', runProperties: { fontSize: 32, bold: true } }],
       },
     });
     const result = resolveStyleChain('runProperties', params, 'Heading1');
@@ -45,14 +43,32 @@ describe('ooxml - resolveStyleChain', () => {
     const params = buildParams({
       translatedLinkedStyles: {
         ...emptyStyles,
-        styles: {
-          BaseStyle: { runProperties: { fontSize: 22, italic: true } },
-          DerivedStyle: { basedOn: 'BaseStyle', runProperties: { fontSize: 24, bold: true } },
-        },
+        styles: [
+          { styleId: 'BaseStyle', runProperties: { fontSize: 22, italic: true } },
+          { styleId: 'DerivedStyle', basedOn: 'BaseStyle', runProperties: { fontSize: 24, bold: true } },
+        ],
       },
     });
     const result = resolveStyleChain('runProperties', params, 'DerivedStyle');
     expect(result).toEqual({ fontSize: 24, bold: true, italic: true });
+  });
+
+  it('refreshes cached lookups after in-place styles mutations', () => {
+    const styles = [{ styleId: 'Heading1', runProperties: { fontSize: 32, bold: true } }];
+    const params = buildParams({
+      translatedLinkedStyles: {
+        ...emptyStyles,
+        styles,
+      },
+    });
+
+    expect(resolveStyleChain('runProperties', params, 'Heading1')).toEqual({ fontSize: 32, bold: true });
+
+    styles.push({ styleId: 'Heading2', runProperties: { italic: true } });
+    expect(resolveStyleChain('runProperties', params, 'Heading2')).toEqual({ italic: true });
+
+    styles[0].styleId = 'Heading1Renamed';
+    expect(resolveStyleChain('runProperties', params, 'Heading1Renamed')).toEqual({ fontSize: 32, bold: true });
   });
 
   it('returns empty object when styleId is missing from definitions', () => {
@@ -152,9 +168,7 @@ describe('ooxml - resolveRunProperties', () => {
       translatedLinkedStyles: {
         ...emptyStyles,
         docDefaults: { runProperties: { fontSize: 20 } },
-        styles: {
-          Normal: { default: true, runProperties: { fontSize: 22 } },
-        },
+        styles: [{ styleId: 'Normal', default: true, runProperties: { fontSize: 22 } }],
       },
     });
     const result = resolveRunProperties(params, null, null);
@@ -166,9 +180,7 @@ describe('ooxml - resolveRunProperties', () => {
       translatedLinkedStyles: {
         ...emptyStyles,
         docDefaults: { runProperties: { fontSize: 20, color: { val: 'AAAAAA' } } },
-        styles: {
-          Normal: { default: false, runProperties: { fontSize: 22, color: { val: 'BBBBBB' } } },
-        },
+        styles: [{ styleId: 'Normal', default: false, runProperties: { fontSize: 22, color: { val: 'BBBBBB' } } }],
       },
     });
     const result = resolveRunProperties(params, null, null);
@@ -179,10 +191,10 @@ describe('ooxml - resolveRunProperties', () => {
     const params = buildParams({
       translatedLinkedStyles: {
         ...emptyStyles,
-        styles: {
-          TOC1: { runProperties: { bold: true } },
-          Emphasis: { runProperties: { italic: true } },
-        },
+        styles: [
+          { styleId: 'TOC1', runProperties: { bold: true } },
+          { styleId: 'Emphasis', runProperties: { italic: true } },
+        ],
       },
     });
     const result = resolveRunProperties(params, { styleId: 'Emphasis', color: { val: 'FF0000' } }, { styleId: 'TOC1' });
@@ -221,8 +233,9 @@ describe('ooxml - resolveRunProperties', () => {
     const params = buildParams({
       translatedLinkedStyles: {
         ...emptyStyles,
-        styles: {
-          TableStyle1: {
+        styles: [
+          {
+            styleId: 'TableStyle1',
             type: 'table',
             runProperties: { color: { val: 'AAAAAA' } },
             tableProperties: { tableStyleRowBandSize: 1, tableStyleColBandSize: 1 },
@@ -235,7 +248,7 @@ describe('ooxml - resolveRunProperties', () => {
               nwCell: { runProperties: { fontSize: 15 } },
             },
           },
-        },
+        ],
       },
     });
     const tableInfo = {
@@ -279,9 +292,7 @@ describe('ooxml - resolveParagraphProperties', () => {
       translatedLinkedStyles: {
         ...emptyStyles,
         docDefaults: { paragraphProperties: { spacing: { before: 240 } } },
-        styles: {
-          Normal: { default: true, paragraphProperties: { spacing: { after: 120 } } },
-        },
+        styles: [{ styleId: 'Normal', default: true, paragraphProperties: { spacing: { after: 120 } } }],
       },
     });
     const inlineProps = { spacing: { before: 480 } };
@@ -293,9 +304,7 @@ describe('ooxml - resolveParagraphProperties', () => {
     const params = buildParams({
       translatedLinkedStyles: {
         ...emptyStyles,
-        styles: {
-          ListStyle: { paragraphProperties: { indent: { left: 1200 } } },
-        },
+        styles: [{ styleId: 'ListStyle', paragraphProperties: { indent: { left: 1200 } } }],
       },
       translatedNumbering: {
         definitions: { '1': { abstractNumId: 10 } },
@@ -319,13 +328,14 @@ describe('ooxml - resolveParagraphProperties', () => {
     const params = buildParams({
       translatedLinkedStyles: {
         ...emptyStyles,
-        styles: {
-          BaseStyle: { paragraphProperties: { indent: { left: 2000 } } },
-          NumberedStyle: {
+        styles: [
+          { styleId: 'BaseStyle', paragraphProperties: { indent: { left: 2000 } } },
+          {
+            styleId: 'NumberedStyle',
             basedOn: 'BaseStyle',
             paragraphProperties: { numberingProperties: { numId: 1, ilvl: 0 } },
           },
-        },
+        ],
       },
       translatedNumbering: {
         definitions: { '1': { abstractNumId: 10 } },
@@ -348,9 +358,7 @@ describe('ooxml - resolveParagraphProperties', () => {
       translatedLinkedStyles: {
         ...emptyStyles,
         docDefaults: { paragraphProperties: { tabStops: [{ pos: 720 }] } },
-        styles: {
-          Normal: { default: true, paragraphProperties: { tabStops: [{ pos: 1440 }] } },
-        },
+        styles: [{ styleId: 'Normal', default: true, paragraphProperties: { tabStops: [{ pos: 1440 }] } }],
       },
     });
     const result = resolveParagraphProperties(params, { tabStops: [{ pos: 2160 }] });
@@ -361,8 +369,9 @@ describe('ooxml - resolveParagraphProperties', () => {
     const params = buildParams({
       translatedLinkedStyles: {
         ...emptyStyles,
-        styles: {
-          TableStyle1: {
+        styles: [
+          {
+            styleId: 'TableStyle1',
             type: 'table',
             paragraphProperties: { spacing: { before: 120, after: 120 }, keepNext: true },
             tableProperties: { tableStyleRowBandSize: 1, tableStyleColBandSize: 1 },
@@ -370,7 +379,7 @@ describe('ooxml - resolveParagraphProperties', () => {
               firstRow: { paragraphProperties: { spacing: { after: 240 } } },
             },
           },
-        },
+        ],
       },
     });
     const tableInfo = {
@@ -391,8 +400,9 @@ describe('ooxml - resolveCellStyles', () => {
     const params = buildParams({
       translatedLinkedStyles: {
         ...emptyStyles,
-        styles: {
-          TableStyleBand: {
+        styles: [
+          {
+            styleId: 'TableStyleBand',
             type: 'table',
             tableProperties: { tableStyleRowBandSize: 2, tableStyleColBandSize: 3 },
             tableStyleProperties: {
@@ -403,7 +413,7 @@ describe('ooxml - resolveCellStyles', () => {
               band2Horz: { runProperties: { fontSize: 50 } },
             },
           },
-        },
+        ],
       },
     });
     const tableInfo = {
@@ -421,9 +431,10 @@ describe('ooxml - resolveCellStyles', () => {
 describe('ooxml - resolveTableCellProperties', () => {
   const gridTable4Styles = {
     ...emptyStyles,
-    styles: {
-      'GridTable4-Accent1': {
-        type: 'table',
+    styles: [
+      {
+        styleId: 'GridTable4-Accent1',
+        type: 'table' as const,
         tableProperties: { tableStyleRowBandSize: 1, tableStyleColBandSize: 1 },
         tableStyleProperties: {
           firstRow: {
@@ -444,7 +455,7 @@ describe('ooxml - resolveTableCellProperties', () => {
           },
         },
       },
-    },
+    ],
   };
 
   it('resolves firstRow shading from table style', () => {
@@ -474,7 +485,6 @@ describe('ooxml - resolveTableCellProperties', () => {
       numCells: 4,
     };
     const result = resolveTableCellProperties(null, tableInfo, gridTable4Styles);
-    // band1Horz overrides wholeTable
     expect(result.shading).toEqual({ val: 'clear', color: 'auto', fill: 'C1E4F5' });
   });
 
@@ -540,7 +550,6 @@ describe('ooxml - resolveTableCellProperties', () => {
     };
     const inlineProps = { borders: { bottom: { val: 'double', color: '000000', size: 8 } } };
     const result = resolveTableCellProperties(inlineProps, tableInfo, gridTable4Styles);
-    // firstRow style provides top border, inline provides bottom border - both should be present
     expect(result.borders?.top).toEqual({ val: 'single', color: '156082', size: 4 });
     expect(result.borders?.bottom).toEqual({ val: 'double', color: '000000', size: 8 });
   });

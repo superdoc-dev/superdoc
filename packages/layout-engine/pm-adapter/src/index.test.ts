@@ -13,8 +13,8 @@ const createDefaultConverterContext = () => ({
   docx: {},
   translatedLinkedStyles: {
     docDefaults: {},
-    latentStyles: {},
-    styles: {},
+    latentStyles: { lsdExceptions: [] },
+    styles: [],
   },
   translatedNumbering: {
     abstracts: {},

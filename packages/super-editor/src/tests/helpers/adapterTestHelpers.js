@@ -55,9 +55,9 @@ export const buildConverterContextFromEditor = (editor) => {
     translatedNumbering: converter.translatedNumbering ?? {},
     translatedLinkedStyles: converter.translatedLinkedStyles ?? {
       docDefaults: { runProperties: {}, paragraphProperties: {} },
-      latentStyles: {},
-      styles: {
-        Normal: {
+      latentStyles: { lsdExceptions: [] },
+      styles: [
+        {
           styleId: 'Normal',
           type: 'paragraph',
           default: true,
@@ -65,7 +65,7 @@ export const buildConverterContextFromEditor = (editor) => {
           runProperties: {},
           paragraphProperties: {},
         },
-      },
+      ],
     },
   };
 };

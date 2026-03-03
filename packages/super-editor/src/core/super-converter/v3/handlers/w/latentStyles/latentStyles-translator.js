@@ -1,9 +1,10 @@
 // @ts-check
 import { NodeTranslator } from '@translator';
 import {
-  encodePropertiesByKey,
-  decodePropertiesByKey,
+  encodeRepeatedChildren,
+  decodeRepeatedChildren,
   createBooleanAttributeHandler,
+  createIntegerAttributeHandler,
 } from '@converter/v3/handlers/utils.js';
 import { translator as wLsdExceptionTranslator } from '../lsdException';
 
@@ -17,22 +18,22 @@ export const translator = NodeTranslator.from({
   type: NodeTranslator.translatorTypes.NODE,
   attributes: [
     createBooleanAttributeHandler('w:defLockedState'),
-    createBooleanAttributeHandler('w:defUIPriority'),
+    createIntegerAttributeHandler('w:defUIPriority'),
     createBooleanAttributeHandler('w:defSemiHidden'),
     createBooleanAttributeHandler('w:defUnhideWhenUsed'),
     createBooleanAttributeHandler('w:defQFormat'),
+    createIntegerAttributeHandler('w:count'),
   ],
   encode: (params, encodedAttrs) => {
     const { nodes } = params;
     const node = nodes[0];
 
-    const lsdExceptions = encodePropertiesByKey(
+    const lsdExceptions = encodeRepeatedChildren(
       'w:lsdException',
       'lsdExceptions',
       wLsdExceptionTranslator,
       params,
       node,
-      'name',
     );
 
     return { ...lsdExceptions, ...encodedAttrs };
@@ -46,7 +47,8 @@ export const translator = NodeTranslator.from({
     if (!currentValue) {
       return undefined;
     }
-    const elements = decodePropertiesByKey(
+
+    const elements = decodeRepeatedChildren(
       'w:lsdException',
       'lsdExceptions',
       wLsdExceptionTranslator,
@@ -54,12 +56,10 @@ export const translator = NodeTranslator.from({
       currentValue,
     );
 
-    const newNode = {
+    return {
       name: 'w:latentStyles',
       attributes: decodedAttrs,
-      elements: elements,
+      elements,
     };
-
-    return newNode;
   },
 });

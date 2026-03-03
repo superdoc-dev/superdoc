@@ -507,7 +507,11 @@ const editorOptions = (doc) => {
 
   const ydocFragment = doc.ydoc?.getXmlFragment?.('supereditor');
   const ydocMeta = doc.ydoc?.getMap?.('meta');
-  const ydocHasContent = (ydocFragment && ydocFragment.length > 0) || (ydocMeta && Boolean(ydocMeta.get('docx')));
+  const ydocBootstrap = doc.ydoc?.getMap?.('bootstrapDocxParts');
+  const ydocHasContent =
+    (ydocFragment && ydocFragment.length > 0) ||
+    (ydocMeta && Boolean(ydocMeta.get('docx'))) ||
+    (ydocBootstrap && ydocBootstrap.get('_version') === 1);
   const isNewFile = doc.isNewFile && !ydocHasContent;
 
   const options = {

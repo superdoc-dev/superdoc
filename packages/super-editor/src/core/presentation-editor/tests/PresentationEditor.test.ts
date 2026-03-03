@@ -3,6 +3,7 @@ import type { Mock } from 'vitest';
 import { PresentationEditor } from '../PresentationEditor.js';
 import type { Editor as EditorInstance } from '../../Editor.js';
 import { Editor } from '../../Editor.js';
+import { FlowBlockCache } from '@superdoc/pm-adapter';
 
 type MockedEditor = Mock<(...args: unknown[]) => EditorInstance> & {
   mock: {
@@ -289,8 +290,26 @@ vi.mock('@extensions/pagination/pagination-helpers.js', () => ({
   onHeaderFooterDataUpdate: mockOnHeaderFooterDataUpdate,
 }));
 
-vi.mock('@extensions/collaboration/collaboration-helpers.js', () => ({
-  updateYdocDocxData: mockUpdateYdocDocxData,
+vi.mock('@extensions/collaboration/part-sync/part-sync-engine.js', () => ({
+  isApplyingRemotePart: vi.fn(() => false),
+  publishPartSections: vi.fn(),
+  applyRemotePartSections: vi.fn(),
+  deleteRemotePartSections: vi.fn(),
+  hydrateOrSeedPart: vi.fn(),
+  createSpecObserver: vi.fn(() => vi.fn()),
+}));
+
+vi.mock('@extensions/collaboration/part-sync/part-spec-registry.js', () => ({
+  HEADER_FOOTER_CONTENT_SPEC: { id: 'headerFooterContent' },
+  STYLES_SPEC: { id: 'styles' },
+  getAllSpecs: vi.fn(() => []),
+  getOoxmlPartSpecs: vi.fn(() => []),
+  resolveOoxmlPartKey: vi.fn(),
+}));
+
+vi.mock('@extensions/collaboration/part-sync/part-reconcile-scheduler.js', () => ({
+  scheduleReconcile: mockUpdateYdocDocxData,
+  destroyReconcileState: vi.fn(),
 }));
 
 vi.mock('../../header-footer/EditorOverlayManager', () => ({
@@ -2425,6 +2444,76 @@ describe('PresentationEditor', () => {
       expect(pageStyleUpdateOffCall![1]).toBeTypeOf('function');
 
       editor = null as unknown as PresentationEditor;
+    });
+  });
+
+  describe('partChanged event listener (styles)', () => {
+    const buildLayoutResult = () => ({
+      layout: {
+        pageSize: { w: 612, h: 792 },
+        pages: [
+          {
+            number: 1,
+            numberText: '1',
+            size: { w: 612, h: 792 },
+            fragments: [],
+            margins: { top: 72, bottom: 72, left: 72, right: 72, header: 36, footer: 36 },
+            sectionRefs: {},
+          },
+        ],
+      },
+      measures: [],
+      headers: [],
+      footers: [],
+    });
+
+    let rafSpy: ReturnType<typeof vi.spyOn> | null = null;
+
+    beforeEach(() => {
+      rafSpy = vi.spyOn(window, 'requestAnimationFrame').mockImplementation((cb: FrameRequestCallback) => {
+        cb(0);
+        return 1;
+      });
+    });
+
+    afterEach(() => {
+      rafSpy?.mockRestore();
+      rafSpy = null;
+    });
+
+    it('clears flow block cache and rerenders when stylesChanged fires', async () => {
+      mockIncrementalLayout.mockResolvedValue(buildLayoutResult());
+
+      const clearSpy = vi.spyOn(FlowBlockCache.prototype, 'clear');
+      try {
+        editor = new PresentationEditor({
+          element: container,
+          documentId: 'test-doc',
+        });
+
+        const mockEditorInstance = (Editor as unknown as MockedEditor).mock.results[
+          (Editor as unknown as MockedEditor).mock.results.length - 1
+        ].value;
+
+        // Let initial render settle so we can measure only the partChanged-triggered cycle.
+        await new Promise((resolve) => setTimeout(resolve, 100));
+
+        const layoutCallsBefore = mockIncrementalLayout.mock.calls.length;
+        const clearCallsBefore = clearSpy.mock.calls.length;
+
+        const onCalls = mockEditorInstance.on as unknown as Mock;
+        const partChangedCall = onCalls.mock.calls.find((call) => call[0] === 'partChanged');
+        expect(partChangedCall).toBeDefined();
+        const handlePartChanged = partChangedCall![1] as (payload: unknown) => void;
+
+        handlePartChanged({ partId: 'styles', changedPaths: ['styles.*'], source: 'test' });
+        await new Promise((resolve) => setTimeout(resolve, 100));
+
+        expect(clearSpy.mock.calls.length).toBeGreaterThan(clearCallsBefore);
+        expect(mockIncrementalLayout.mock.calls.length).toBeGreaterThan(layoutCallsBefore);
+      } finally {
+        clearSpy.mockRestore();
+      }
     });
   });
 

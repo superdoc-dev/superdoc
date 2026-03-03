@@ -701,10 +701,9 @@ export class HeaderFooterEditorManager extends EventEmitter {
     const handleUpdate = async ({ transaction }: { transaction?: unknown }) => {
       this.emit('contentChanged', { descriptor } as ContentChangedPayload);
       try {
-        // Update the converter data structures with the latest content
-        // Note: onHeaderFooterDataUpdate handles Yjs JSON sync (lightweight ~1KB)
-        // but does NOT call updateYdocDocxData - that's handled by the debounced
-        // main document listener to avoid ~80KB broadcasts on every keystroke
+        // Update the converter data structures with the latest content.
+        // onHeaderFooterDataUpdate handles Yjs JSON sync (lightweight ~1KB).
+        // Full OOXML reconcile is handled by the part-reconcile scheduler.
         onHeaderFooterDataUpdate({ editor, transaction }, this.#editor, descriptor.id, descriptor.kind);
       } catch (error) {
         console.error('[HeaderFooterEditorManager] Failed to sync header/footer update', { descriptor, error });
@@ -1211,8 +1210,8 @@ export class HeaderFooterLayoutAdapter {
     const context: ConverterContext = {
       docx: converter.convertedXml,
       numbering: converter.numbering,
-      translatedLinkedStyles: converter.translatedLinkedStyles,
-      translatedNumbering: converter.translatedNumbering,
+      translatedLinkedStyles: (converter as any).parts?.styles ?? converter.translatedLinkedStyles,
+      translatedNumbering: (converter as any).parts?.numbering ?? converter.translatedNumbering,
     } as ConverterContext;
 
     return context;

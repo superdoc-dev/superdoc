@@ -62,7 +62,7 @@ describe('w:trPr translator', () => {
       });
     });
 
-    it('handles missing and empty elements gracefully', () => {
+    it('returns undefined when all child elements have empty attributes', () => {
       const params = {
         nodes: [
           {
@@ -82,20 +82,8 @@ describe('w:trPr translator', () => {
         ],
       };
 
-      const attributes = translator.encode(params);
-
-      expect(attributes.cantSplit).toBe(false);
-      expect(attributes.cnfStyle).toBeUndefined({});
-      expect(attributes.divId).toBeUndefined();
-      expect(attributes.gridAfter).toBeUndefined();
-      expect(attributes.gridBefore).toBeUndefined();
-      expect(attributes.hidden).toBe(false);
-      expect(attributes.justification).toBeUndefined();
-      expect(attributes.tblCellSpacing).toBeUndefined();
-      expect(attributes.repeatHeader).toBe(false);
-      expect(attributes.rowHeight).toBeUndefined();
-      expect(attributes.wAfter).toBeUndefined();
-      expect(attributes.wBefore).toBeUndefined();
+      const result = translator.encode(params);
+      expect(result).toBeUndefined();
     });
   });
 

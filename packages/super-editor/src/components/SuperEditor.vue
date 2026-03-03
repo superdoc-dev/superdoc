@@ -20,6 +20,7 @@ import BlankDOCX from '@superdoc/common/data/blank.docx?url';
 import { isHeadless } from '@utils/headless-helpers.js';
 import { isMacOS } from '@core/utilities/isMacOS.js';
 import { DOM_CLASS_NAMES, buildImagePmSelector, buildInlineImagePmSelector } from '@superdoc/painter-dom';
+import { readBootstrapContent, hasBootstrapContent } from '@extensions/collaboration/part-sync/bootstrap-content.js';
 const emit = defineEmits(['editor-ready', 'editor-click', 'editor-keydown', 'comments-loaded', 'selection-update']);
 
 const DOCX = 'application/vnd.openxmlformats-officedocument.wordprocessingml.document';
@@ -740,7 +741,36 @@ const stopPolling = () => {
   clearTimeout(dataPollTimeout);
 };
 
-const pollForMetaMapData = (ydoc, retries = 10, interval = 500) => {
+const pollForBootstrapContent = (ydoc, retries = 10, interval = 500) => {
+  const checkData = () => {
+    const bootstrap = readBootstrapContent(ydoc);
+    if (bootstrap) {
+      stopPolling();
+      initEditor({ content: bootstrap.content, fonts: bootstrap.fonts });
+    } else if (retries > 0) {
+      dataPollTimeout = setTimeout(checkData, interval);
+      retries--;
+    } else {
+      console.warn('Failed to load bootstrap content from collaboration.');
+    }
+  };
+
+  checkData();
+};
+
+/**
+ * Check if this room has legacy content in the pre-migration meta.docx format.
+ */
+const hasLegacyContent = (ydoc) => {
+  if (!ydoc || ydoc.isDestroyed || typeof ydoc.getMap !== 'function') return false;
+  const metaMap = ydoc.getMap('meta');
+  return typeof metaMap?.has === 'function' && metaMap.has('docx');
+};
+
+/**
+ * Poll for legacy meta.docx content (pre-bootstrap-migration rooms).
+ */
+const pollForLegacyContent = (ydoc, retries = 10, interval = 500) => {
   const metaMap = ydoc.getMap('meta');
 
   const checkData = () => {
@@ -752,7 +782,7 @@ const pollForMetaMapData = (ydoc, retries = 10, interval = 500) => {
       dataPollTimeout = setTimeout(checkData, interval);
       retries--;
     } else {
-      console.warn('Failed to load docx data from meta map.');
+      console.warn('Failed to load legacy docx data from meta map.');
     }
   };
 
@@ -817,11 +847,12 @@ const initializeData = async () => {
     };
 
     waitForSync().then(async () => {
-      const metaMap = ydoc.getMap('meta');
-
-      if (metaMap.has('docx')) {
-        // Existing content - poll for it
-        pollForMetaMapData(ydoc);
+      if (hasBootstrapContent(ydoc)) {
+        // Existing room (new format) — poll for bootstrap content
+        pollForBootstrapContent(ydoc);
+      } else if (hasLegacyContent(ydoc)) {
+        // Existing room (legacy meta.docx format) — poll for legacy content
+        pollForLegacyContent(ydoc);
       } else {
         // First client - load blank document
         props.options.isNewFile = true;

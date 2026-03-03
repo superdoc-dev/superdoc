@@ -17,6 +17,7 @@ import type {
   TableLookProperties,
   TableCellProperties,
 } from './styles-types.ts';
+import { StylesIndex } from './styles-index';
 
 export { combineIndentProperties, combineProperties, combineRunProperties };
 export type { PropertyObject };
@@ -35,6 +36,66 @@ export {
   resolvePreferredNewTableStyleId,
 } from './table-style-selection.js';
 export type { ResolvedStyle, ResolvedStyleSource } from './table-style-selection.js';
+export { StylesIndex };
+
+interface StylesIndexCacheEntry {
+  index: StylesIndex;
+  styleRefs: readonly StyleDefinition[];
+  styleIds: readonly (string | undefined)[];
+  styleNames: readonly (string | undefined)[];
+}
+
+/**
+ * Module-level cache keyed by style-array reference.
+ *
+ * The cache also tracks per-item identity and key fields so in-place array
+ * mutations (push/splice/reorder/styleId renames) invalidate safely.
+ */
+const indexCache = new WeakMap<readonly StyleDefinition[], StylesIndexCacheEntry>();
+const EMPTY_STYLES: readonly StyleDefinition[] = [];
+
+function createCacheEntry(styles: readonly StyleDefinition[]): StylesIndexCacheEntry {
+  return {
+    index: new StylesIndex(styles),
+    styleRefs: styles.slice(),
+    styleIds: styles.map((style) => style.styleId),
+    styleNames: styles.map((style) => style.name),
+  };
+}
+
+function isCacheEntryValid(styles: readonly StyleDefinition[], entry: StylesIndexCacheEntry): boolean {
+  if (styles.length !== entry.styleRefs.length) {
+    return false;
+  }
+
+  for (let i = 0; i < styles.length; i += 1) {
+    const style = styles[i];
+    if (style !== entry.styleRefs[i]) return false;
+    if (style.styleId !== entry.styleIds[i]) return false;
+    if (style.name !== entry.styleNames[i]) return false;
+  }
+
+  return true;
+}
+
+function getStylesIndex(styles: unknown): StylesIndex {
+  // Invariant: normal editor flows (DOCX import and collaboration re-hydration)
+  // normalize style definitions to an ordered array before style resolution.
+  // Non-array input indicates an out-of-contract caller, so treat it as
+  // "no styles" instead of attempting legacy map compatibility here.
+  if (!Array.isArray(styles)) {
+    return new StylesIndex(EMPTY_STYLES);
+  }
+
+  const cachedEntry = indexCache.get(styles);
+  if (cachedEntry && isCacheEntryValid(styles, cachedEntry)) {
+    return cachedEntry.index;
+  }
+
+  const entry = createCacheEntry(styles);
+  indexCache.set(styles, entry);
+  return entry.index;
+}
 
 export interface OoxmlResolverParams {
   translatedNumbering: NumberingProperties | null | undefined;
@@ -78,13 +139,15 @@ export function resolveRunProperties(
   if (!inlineRpr) {
     inlineRpr = {} as RunProperties;
   }
+  const index = getStylesIndex(params.translatedLinkedStyles.styles);
+
   // Getting properties from style
   const paragraphStyleId = resolvedPpr?.styleId as string | undefined;
   const paragraphStyleProps = resolveStyleChain('runProperties', params, paragraphStyleId) as RunProperties;
 
   // Getting default properties and normal style properties
   const defaultProps = params.translatedLinkedStyles.docDefaults?.runProperties ?? {};
-  const normalStyleDef = params.translatedLinkedStyles.styles['Normal'];
+  const normalStyleDef = index.getStyleById('Normal');
   const normalProps = (normalStyleDef?.runProperties ?? {}) as RunProperties;
 
   // Getting table style run properties
@@ -164,10 +227,11 @@ export function resolveParagraphProperties(
   if (!params.translatedLinkedStyles?.styles) {
     return inlineProps;
   }
+  const index = getStylesIndex(params.translatedLinkedStyles.styles);
 
   // Normal style and default properties
   const defaultProps = params.translatedLinkedStyles.docDefaults?.paragraphProperties ?? {};
-  const normalStyleDef = params.translatedLinkedStyles.styles['Normal'];
+  const normalStyleDef = index.getStyleById('Normal');
   const normalProps = (normalStyleDef?.paragraphProperties ?? {}) as ParagraphProperties;
 
   // Properties from styles
@@ -283,8 +347,10 @@ export function resolveStyleChain<T extends PropertyObject>(
   followBasedOnChain = true,
 ): T {
   if (!styleId) return {} as T;
+  if (!params.translatedLinkedStyles?.styles) return {} as T;
 
-  const styleDef = params.translatedLinkedStyles?.styles?.[styleId];
+  const index = getStylesIndex(params.translatedLinkedStyles.styles);
+  const styleDef = index.getStyleById(styleId);
   if (!styleDef) return {} as T;
 
   const styleProps = (styleDef[propertyType as keyof typeof styleDef] ?? {}) as T;
@@ -298,7 +364,7 @@ export function resolveStyleChain<T extends PropertyObject>(
       break;
     }
     seenStyles.add(nextBasedOn as string);
-    const basedOnStyleDef = params.translatedLinkedStyles?.styles?.[nextBasedOn];
+    const basedOnStyleDef = index.getStyleById(nextBasedOn);
     const basedOnProps = basedOnStyleDef?.[propertyType as keyof typeof basedOnStyleDef] as T;
 
     if (basedOnProps && Object.keys(basedOnProps).length) {
@@ -342,7 +408,8 @@ export function getNumberingProperties<T extends ParagraphProperties | RunProper
   const numStyleLinkId = listDefinitionForThisNumId.numStyleLink ?? listDefinitionForThisNumId.styleLink;
 
   if (numStyleLinkId && tries < 1) {
-    const styleDef = params.translatedLinkedStyles?.styles?.[numStyleLinkId];
+    const numStyles = params.translatedLinkedStyles?.styles;
+    const styleDef = numStyles ? getStylesIndex(numStyles).getStyleById(numStyleLinkId) : undefined;
     const styleProps = styleDef?.paragraphProperties;
     const numIdFromStyle = styleProps?.numberingProperties?.numId;
     if (numIdFromStyle) {
@@ -438,13 +505,14 @@ function resolveEffectiveBandSizes(
   styleId: string,
   translatedLinkedStyles: StylesDocumentProperties,
 ): { rowBandSize: number; colBandSize: number } {
+  const index = getStylesIndex(translatedLinkedStyles.styles);
   const seen = new Set<string>();
   let currentId: string | undefined = styleId;
   let rowBandSize: number | undefined;
   let colBandSize: number | undefined;
   while (currentId && !seen.has(currentId)) {
     seen.add(currentId);
-    const def: StyleDefinition | undefined = translatedLinkedStyles.styles?.[currentId];
+    const def: StyleDefinition | undefined = index.getStyleById(currentId);
     const tblProps = def?.tableProperties;
     if (rowBandSize == null && tblProps?.tableStyleRowBandSize != null) {
       rowBandSize = tblProps.tableStyleRowBandSize;
@@ -468,12 +536,13 @@ function resolveConditionalProps<T extends PropertyObject>(
   styleId: string,
   translatedLinkedStyles: StylesDocumentProperties,
 ): T | undefined {
+  const index = getStylesIndex(translatedLinkedStyles.styles);
   const chain: T[] = [];
   const seen = new Set<string>();
   let currentId: string | undefined = styleId;
   while (currentId && !seen.has(currentId)) {
     seen.add(currentId);
-    const def: StyleDefinition | undefined = translatedLinkedStyles.styles?.[currentId];
+    const def: StyleDefinition | undefined = index.getStyleById(currentId);
     const props = def?.tableStyleProperties?.[styleType]?.[propertyType] as T | undefined;
     if (props) chain.push(props);
     currentId = def?.basedOn;

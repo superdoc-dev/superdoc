@@ -1,6 +1,7 @@
 import { describe, it, expect } from 'vitest';
 import { translator } from './tblStylePr-translator.js';
 import { NodeTranslator } from '@translator';
+import { translator as styleTranslator } from '../style/style-translator.js';
 
 describe('w:tblStylePr translator', () => {
   describe('config', () => {
@@ -41,8 +42,6 @@ describe('w:tblStylePr translator', () => {
         runProperties: { bold: true },
         tableProperties: { tableStyleId: 'TableGrid' },
         tableRowProperties: {
-          cantSplit: false,
-          hidden: false,
           repeatHeader: true,
           rowHeight: { value: 240, rule: 'atLeast' },
         },
@@ -122,6 +121,32 @@ describe('w:tblStylePr translator', () => {
     it('should return undefined if no tableStyleProperties are present', () => {
       const result = translator.decode({ node: { attrs: {} } });
       expect(result).toBeUndefined();
+    });
+  });
+
+  describe('duplicate key handling', () => {
+    it('uses last-wins when duplicate w:tblStylePr types are encoded via encodeChildrenByKey', () => {
+      const xmlNode = {
+        name: 'w:style',
+        attributes: { 'w:type': 'table', 'w:styleId': 'DupTest' },
+        elements: [
+          {
+            name: 'w:tblStylePr',
+            attributes: { 'w:type': 'firstRow' },
+            elements: [{ name: 'w:rPr', elements: [{ name: 'w:b' }] }],
+          },
+          {
+            name: 'w:tblStylePr',
+            attributes: { 'w:type': 'firstRow' },
+            elements: [{ name: 'w:rPr', elements: [{ name: 'w:i' }] }],
+          },
+        ],
+      };
+
+      const result = styleTranslator.encode({ nodes: [xmlNode] });
+
+      // Last-wins behavior: second firstRow definition overrides the first
+      expect(result.tableStyleProperties.firstRow.runProperties.italic).toBe(true);
     });
   });
 });

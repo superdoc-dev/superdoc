@@ -34,9 +34,9 @@ import {
 import { AnnotatorHelpers } from '@helpers/annotator.js';
 import { prepareCommentsForExport, prepareCommentsForImport } from '@extensions/comment/comments-helpers.js';
 import DocxZipper from '@core/DocxZipper.js';
-import { generateCollaborationData, cancelDebouncedDocxUpdate } from '@extensions/collaboration/collaboration.js';
+import { generateCollaborationData } from '@extensions/collaboration/collaboration.js';
 import { useHighContrastMode } from '../composables/use-high-contrast-mode.js';
-import { updateYdocDocxData } from '@extensions/collaboration/collaboration-helpers.js';
+import { scheduleReconcile } from '@extensions/collaboration/part-sync/part-reconcile-scheduler.js';
 import { setImageNodeSelection } from './helpers/setImageNodeSelection.js';
 import { canRenderFont } from './helpers/canRenderFont.js';
 import {
@@ -2116,7 +2116,7 @@ export class Editor extends EventEmitter<EditorEventMap> {
 
     if (!this.options.isNewFile) {
       this.#initComments();
-      updateYdocDocxData(this, this.options.ydoc);
+      scheduleReconcile(this, 'collaborationReady');
     }
   }
 
@@ -3191,11 +3191,7 @@ export class Editor extends EventEmitter<EditorEventMap> {
     this.initDefaultStyles();
 
     if (this.options.ydoc && this.options.collaborationProvider) {
-      // Cancel any pending debounced docx update — we are about to do a
-      // fresh export with the new file data. Without cancel, the debounced
-      // export from the previous transaction cycle could fire redundantly.
-      cancelDebouncedDocxUpdate(this);
-      await updateYdocDocxData(this, this.options.ydoc);
+      scheduleReconcile(this, 'replaceFile');
       this.initializeCollaborationData();
     } else {
       this.#insertNewFileData();

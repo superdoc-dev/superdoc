@@ -1,3 +1,19 @@
+import type { TrackChangeAttributes, TableRowProperties, TableCellProperties } from './styles-types';
+
+/**
+ * Revision-marked change container for paragraph properties (w:pPrChange).
+ */
+export interface ParagraphPropertiesChange extends TrackChangeAttributes {
+  paragraphProperties?: ParagraphProperties;
+}
+
+/**
+ * Revision-marked change container for run properties (w:rPrChange).
+ */
+export interface RunPropertiesChange extends TrackChangeAttributes {
+  runProperties?: RunProperties;
+}
+
 /**
  * Paragraph properties encoded from the w:pPr translator.
  */
@@ -70,6 +86,8 @@ export interface ParagraphProperties {
   runProperties?: RunProperties;
   /** Right-to-left paragraph direction flag. */
   rightToLeft?: boolean;
+  /** Previous paragraph properties before a tracked change. */
+  pPrChange?: ParagraphPropertiesChange;
 }
 
 /**
@@ -370,6 +388,8 @@ export interface RunProperties {
   webHidden?: boolean;
   /** Character width setting. */
   w?: string;
+  /** Previous run properties before a tracked change. */
+  rPrChange?: RunPropertiesChange;
 }
 
 /**

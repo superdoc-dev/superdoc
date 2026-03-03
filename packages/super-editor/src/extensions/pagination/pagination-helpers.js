@@ -1,10 +1,9 @@
 import { PluginKey } from 'prosemirror-state';
 import { Editor as SuperEditor } from '@core/Editor.js';
 import { getStarterExtensions } from '@extensions/index.js';
-import {
-  pushHeaderFooterToYjs,
-  isApplyingRemoteHeaderFooterChanges,
-} from '@extensions/collaboration/collaboration-helpers.js';
+import { isApplyingRemotePart, publishPartSections } from '@extensions/collaboration/part-sync/part-sync-engine.js';
+import { HEADER_FOOTER_CONTENT_SPEC } from '@extensions/collaboration/part-sync/part-spec-registry.js';
+import { writePart } from '@core/super-converter/converter-parts.js';
 import { applyStyleIsolationClass } from '@utils/styleIsolation.js';
 import { isHeadless } from '@utils/headless-helpers.js';
 
@@ -27,7 +26,7 @@ export const initPaginationData = async (editor) => {
     const sectionId = headerIds[key];
     if (!sectionId) continue;
 
-    const dataForThisSection = editor.converter.headers[sectionId];
+    const dataForThisSection = editor.converter.parts?.['header:' + sectionId] ?? editor.converter.headers[sectionId];
     if (!sectionData.headers[sectionId]) sectionData.headers[sectionId] = {};
     sectionData.headers[sectionId].data = dataForThisSection;
     // Wait for the height to be resolved
@@ -41,7 +40,7 @@ export const initPaginationData = async (editor) => {
     const sectionId = footerIds[key];
     if (!sectionId) continue;
 
-    const dataForThisSection = editor.converter.footers[sectionId];
+    const dataForThisSection = editor.converter.parts?.['footer:' + sectionId] ?? editor.converter.footers[sectionId];
     if (!sectionData.headers[sectionId]) sectionData.footers[sectionId] = {};
     sectionData.footers[sectionId].data = dataForThisSection;
     // Wait for the height to be resolved
@@ -306,14 +305,12 @@ export const toggleHeaderFooterEditMode = ({ editor, focusedSectionEditor, isEdi
 /**
  * Handle header/footer data updates.
  * Updates converter storage and syncs JSON to Yjs for real-time collaboration.
- * Note: Does NOT call updateYdocDocxData - that is handled by the debounced
- * main document listener to avoid excessive full DOCX broadcasts.
  */
 export const onHeaderFooterDataUpdate = ({ editor, transaction }, mainEditor, sectionId, type) => {
   if (!type || !sectionId) return;
 
   // Skip if we're currently applying remote changes to prevent ping-pong loop
-  if (isApplyingRemoteHeaderFooterChanges()) {
+  if (isApplyingRemotePart(mainEditor, HEADER_FOOTER_CONTENT_SPEC.id)) {
     return;
   }
 
@@ -337,20 +334,15 @@ export const onHeaderFooterDataUpdate = ({ editor, transaction }, mainEditor, se
       });
     });
   }
+  writePart(mainEditor.converter, `${type}:${sectionId}`, updatedData);
   mainEditor.converter[`${type}s`][sectionId] = updatedData;
   mainEditor.setOptions({ isHeaderFooterChanged: editor.docChanged });
   if (editor.docChanged && mainEditor.converter) {
     mainEditor.converter.headerFooterModified = true;
   }
 
-  // Push header/footer JSON to Yjs for real-time sync with collaborators
-  // This is lightweight (~1KB) and provides immediate visual sync
-  pushHeaderFooterToYjs(mainEditor, type, sectionId, updatedData);
-
-  // NOTE: We intentionally do NOT call updateYdocDocxData here.
-  // The full DOCX sync is handled by the debounced main document listener
-  // which will pick up header/footer changes via the Y.Doc afterTransaction event.
-  // This prevents the ~80KB broadcast on every keystroke.
+  // Publish to Yjs for real-time sync with collaborators (~1KB per section).
+  publishPartSections(mainEditor, HEADER_FOOTER_CONTENT_SPEC, [`${type}:${sectionId}`]);
 };
 
 const setEditorToolbar = ({ editor }, mainEditor) => {

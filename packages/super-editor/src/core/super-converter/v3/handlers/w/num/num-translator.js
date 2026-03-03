@@ -5,8 +5,8 @@ import {
   createIntegerAttributeHandler,
   encodeProperties,
   decodeProperties,
-  encodePropertiesByKey,
-  decodePropertiesByKey,
+  encodeChildrenByKey,
+  decodeChildrenByKey,
 } from '@converter/v3/handlers/utils.js';
 
 /**
@@ -26,7 +26,7 @@ export const translator = NodeTranslator.from({
       ...encodeProperties(params, {
         'w:abstractNumId': wAbstractNumIdTranslator,
       }),
-      ...encodePropertiesByKey('w:lvlOverride', 'lvlOverrides', wLvlOverrideTranslator, params, node, 'ilvl'),
+      ...encodeChildrenByKey('w:lvlOverride', 'lvlOverrides', wLvlOverrideTranslator, params, node, 'ilvl'),
     };
 
     return result;
@@ -47,7 +47,7 @@ export const translator = NodeTranslator.from({
         },
         currentValue,
       ),
-      ...decodePropertiesByKey('w:lvlOverride', 'lvlOverrides', wLvlOverrideTranslator, params, currentValue),
+      ...decodeChildrenByKey('w:lvlOverride', 'lvlOverrides', wLvlOverrideTranslator, params, currentValue),
     ];
 
     const newNode = {

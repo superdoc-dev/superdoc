@@ -330,7 +330,11 @@ watch(activeComment, () => {
 
       const rect = el.getBoundingClientRect();
       const margin = 80;
-      const isVisible = rect.top >= margin && rect.bottom <= window.innerHeight - margin;
+      const availableHeight = window.innerHeight - 2 * margin;
+      const isVisible =
+        rect.height > availableHeight
+          ? rect.top >= margin
+          : rect.top >= margin && rect.bottom <= window.innerHeight - margin;
 
       if (!isVisible) {
         el.scrollIntoView({ behavior: 'smooth', block: 'nearest' });

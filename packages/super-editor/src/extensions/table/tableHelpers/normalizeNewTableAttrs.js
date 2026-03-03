@@ -1,5 +1,6 @@
 // @ts-check
 import {
+  DEFAULT_TBL_LOOK,
   resolvePreferredNewTableStyleId,
   TABLE_FALLBACK_BORDERS,
   TABLE_FALLBACK_CELL_PADDING,
@@ -71,7 +72,7 @@ export function normalizeNewTableAttrs(editor) {
     // Also include tableStyleId inside tableProperties so the exporter's
     // decodeProperties loop (which iterates Object.keys(tableProperties))
     // finds it and writes <w:tblStyle> into <w:tblPr>.
-    tableProperties: { tableStyleId: resolved.styleId },
+    tableProperties: { tableStyleId: resolved.styleId, tblLook: { ...DEFAULT_TBL_LOOK } },
   };
 }
 

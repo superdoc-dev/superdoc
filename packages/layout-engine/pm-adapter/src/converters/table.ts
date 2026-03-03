@@ -34,7 +34,7 @@ import type {
   NestedConverters,
   TableNodeToBlockParams,
 } from '../types.js';
-import { extractTableBorders, extractCellPadding, convertBorderSpec } from '../attributes/index.js';
+import { extractTableBorders, extractCellPadding, convertBorderSpec, normalizeShadingColor  } from '../attributes/index.js';
 import { pickNumber, twipsToPx } from '../utilities.js';
 import { hydrateTableStyleAttrs } from './table-styles.js';
 import { collectTrackedChangeFromMarks } from '../marks/index.js';
@@ -48,7 +48,9 @@ import {
   TableProperties,
   resolveTableCellProperties,
   resolveExistingTableEffectiveStyleId,
+  type TableInfo,
 } from '@superdoc/style-engine/ooxml';
+import { resolveThemeColorValue } from '../marks/theme-color.js';
 
 /**
  * Normalizes tableCellSpacing from PM node to CellSpacing object format.
@@ -119,6 +121,7 @@ type ParseTableCellArgs = {
   context: TableParserDependencies;
   defaultCellPadding?: BoxSpacing;
   tableProperties?: TableProperties;
+  rowCnfStyle?: Record<string, unknown> | null;
 };
 
 type ParseTableRowArgs = {
@@ -240,9 +243,15 @@ const parseTableCell = (args: ParseTableCellArgs): TableCell | null => {
   // Table cells can contain paragraphs, images/drawings, structured content blocks, and nested tables.
   const blocks: (ParagraphBlock | ImageBlock | DrawingBlock | TableBlock)[] = [];
 
+  // Build tableInfo once with cnfStyle flags and reuse for both cascade and context.
+  const rowCnfStyle = args.rowCnfStyle ?? null;
+  const cellCnfStyle = (cellNode.attrs?.tableCellProperties as Record<string, unknown> | undefined)?.cnfStyle ?? null;
+  const tableInfo: TableInfo | undefined = tableProperties
+    ? { tableProperties, rowIndex, cellIndex, numCells, numRows, rowCnfStyle, cellCnfStyle }
+    : undefined;
+
   // Resolve table cell properties from the style cascade (wholeTable → bands → conditional → inline)
   const inlineTcProps = cellNode.attrs?.tableCellProperties as Record<string, unknown> | undefined;
-  const tableInfo = tableProperties ? { tableProperties, rowIndex, cellIndex, numCells, numRows } : undefined;
   const resolvedTcProps = resolveTableCellProperties(
     inlineTcProps as Parameters<typeof resolveTableCellProperties>[0],
     tableInfo,
@@ -250,7 +259,7 @@ const parseTableCell = (args: ParseTableCellArgs): TableCell | null => {
   );
 
   // Extract cell background color for auto text color resolution
-  // Priority: inline background attr > resolved style shading
+  // Priority: inline background attr > literal fill > theme fill
   const cellBackground = cellNode.attrs?.background as { color?: string } | undefined;
   let cellBackgroundColor: string | undefined;
   if (cellBackground && typeof cellBackground.color === 'string') {
@@ -264,10 +273,17 @@ const parseTableCell = (args: ParseTableCellArgs): TableCell | null => {
     }
   }
   // Fall back to resolved style shading if no inline background
-  if (!cellBackgroundColor && resolvedTcProps?.shading?.fill) {
-    const fill = resolvedTcProps.shading.fill;
-    if (fill !== 'auto') {
-      cellBackgroundColor = fill.startsWith('#') ? fill : `#${fill}`;
+  if (!cellBackgroundColor && resolvedTcProps?.shading) {
+    const { fill, themeFill, themeFillTint, themeFillShade } = resolvedTcProps.shading;
+    const normalizedFill = normalizeShadingColor(fill);
+    if (normalizedFill) {
+      cellBackgroundColor = normalizedFill;
+    } else if (themeFill && context.themeColors) {
+      const resolved = resolveThemeColorValue(themeFill, themeFillTint, themeFillShade, context.themeColors);
+      const normalizedTheme = normalizeShadingColor(resolved);
+      if (normalizedTheme) {
+        cellBackgroundColor = normalizedTheme;
+      }
     }
   }
 
@@ -275,10 +291,10 @@ const parseTableCell = (args: ParseTableCellArgs): TableCell | null => {
   // This allows paragraphs inside table cells to inherit table style's pPr
   // Also includes backgroundColor for auto text color resolution
   const cellConverterContext: ConverterContext =
-    tableProperties || cellBackgroundColor
+    tableInfo || cellBackgroundColor
       ? ({
           ...context.converterContext,
-          ...(tableProperties && { tableInfo: { tableProperties, rowIndex, cellIndex, numCells, numRows } }),
+          ...(tableInfo && { tableInfo }),
           ...(cellBackgroundColor && { backgroundColor: cellBackgroundColor }),
         } as ConverterContext)
       : context.converterContext;
@@ -585,6 +601,9 @@ const parseTableRow = (args: ParseTableRowArgs): TableRow | null => {
   }
 
   const cells: TableCell[] = [];
+  const rowCnfStyle = (rowNode.attrs?.tableRowProperties as Record<string, unknown> | undefined)?.cnfStyle as
+    | Record<string, unknown>
+    | undefined;
   rowNode.content.forEach((cellNode, cellIndex) => {
     const parsedCell = parseTableCell({
       cellNode,
@@ -595,6 +614,7 @@ const parseTableRow = (args: ParseTableRowArgs): TableRow | null => {
       tableProperties,
       numCells: rowNode?.content?.length || 1,
       numRows,
+      rowCnfStyle,
     });
     if (parsedCell) {
       cells.push(parsedCell);

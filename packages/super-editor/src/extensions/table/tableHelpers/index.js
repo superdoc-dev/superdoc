@@ -4,3 +4,4 @@ export * from './createColGroup.js';
 export * from './isCellSelection.js';
 export * from './getColStyleDeclaration.js';
 export * from './deleteTableWhenSelected.js';
+export * from './computeColumnWidths.js';

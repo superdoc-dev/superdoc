@@ -730,19 +730,38 @@ const onEditorCommentsUpdate = (params = {}) => {
     const id = resolveCommentEventId(commentPayload);
     if (id) {
       const targetId = String(id);
-      const removedCommentIds = new Set();
+      // Remove the entire thread subtree (parent + all descendants), not only direct replies.
+      const removedCommentIds = new Set([targetId]);
+      let expanded = true;
+      while (expanded) {
+        expanded = false;
+        commentsList.value.forEach((comment) => {
+          const commentId = comment.commentId != null ? String(comment.commentId) : null;
+          const importedId = comment.importedId != null ? String(comment.importedId) : null;
+          const parentCommentId = comment.parentCommentId != null ? String(comment.parentCommentId) : null;
+          const trackedChangeParentId =
+            comment.trackedChangeParentId != null ? String(comment.trackedChangeParentId) : null;
+
+          const isRemovedComment =
+            (commentId && removedCommentIds.has(commentId)) || (importedId && removedCommentIds.has(importedId));
+          const isDescendantOfRemovedComment =
+            (parentCommentId && removedCommentIds.has(parentCommentId)) ||
+            (trackedChangeParentId && removedCommentIds.has(trackedChangeParentId));
+          if (!isRemovedComment && !isDescendantOfRemovedComment) return;
+
+          const sizeBefore = removedCommentIds.size;
+          if (commentId) removedCommentIds.add(commentId);
+          if (importedId) removedCommentIds.add(importedId);
+          if (removedCommentIds.size > sizeBefore) {
+            expanded = true;
+          }
+        });
+      }
+
       commentsList.value = commentsList.value.filter((comment) => {
         const commentId = comment.commentId != null ? String(comment.commentId) : null;
         const importedId = comment.importedId != null ? String(comment.importedId) : null;
-        const parentCommentId = comment.parentCommentId != null ? String(comment.parentCommentId) : null;
-        const isDeletedComment = commentId === targetId || importedId === targetId;
-        const isReplyToDeletedComment = parentCommentId === targetId;
-
-        if (isDeletedComment || isReplyToDeletedComment) {
-          if (commentId) removedCommentIds.add(commentId);
-          if (importedId) removedCommentIds.add(importedId);
-        }
-        return !isDeletedComment && !isReplyToDeletedComment;
+        return !((commentId && removedCommentIds.has(commentId)) || (importedId && removedCommentIds.has(importedId)));
       });
 
       const activeCommentKey = activeComment.value != null ? String(activeComment.value) : null;

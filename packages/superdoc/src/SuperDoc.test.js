@@ -478,9 +478,7 @@ describe('SuperDoc.vue', () => {
       type: 'deleted',
       comment: { commentId: 'c-1' },
     });
-    expect(commentsStoreStub.commentsList.value).toEqual([
-      { commentId: 'tc-child', trackedChangeParentId: 'c-1', commentText: 'Tracked thread comment' },
-    ]);
+    expect(commentsStoreStub.commentsList.value).toEqual([]);
 
     options.onCommentsUpdate({ type: 'replayCompleted' });
     await nextTick();
@@ -513,6 +511,32 @@ describe('SuperDoc.vue', () => {
     });
 
     expect(commentsStoreStub.commentsList.value).toEqual([]);
+    await nextTick();
+    expect(commentsStoreStub.setActiveComment).toHaveBeenCalledWith(superdocStub, null);
+  });
+
+  it('removes full reply subtree when replay deletion removes a parent comment', async () => {
+    const superdocStub = createSuperdocStub();
+    const wrapper = await mountComponent(superdocStub);
+    await nextTick();
+
+    const options = wrapper.findComponent(SuperEditorStub).props('options');
+    commentsStoreStub.commentsList.value = [
+      { commentId: 'c-1', commentText: 'Parent' },
+      { commentId: 'c-2', parentCommentId: 'c-1', commentText: 'Child' },
+      { commentId: 'c-3', parentCommentId: 'c-2', commentText: 'Grandchild' },
+      { commentId: 'c-4', trackedChangeParentId: 'c-3', commentText: 'Tracked descendant' },
+      { commentId: 'c-99', commentText: 'Unrelated' },
+    ];
+    commentsStoreStub.activeComment.value = 'c-3';
+    commentsStoreStub.setActiveComment.mockClear();
+
+    options.onCommentsUpdate({
+      type: 'deleted',
+      comment: { commentId: 'c-1' },
+    });
+
+    expect(commentsStoreStub.commentsList.value).toEqual([{ commentId: 'c-99', commentText: 'Unrelated' }]);
     await nextTick();
     expect(commentsStoreStub.setActiveComment).toHaveBeenCalledWith(superdocStub, null);
   });

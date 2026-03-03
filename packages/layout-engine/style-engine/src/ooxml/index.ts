@@ -45,6 +45,16 @@ interface StylesIndexCacheEntry {
   styleNames: readonly (string | undefined)[];
 }
 
+interface StylesMapIndexCacheEntry {
+  index: StylesIndex;
+  keys: readonly string[];
+  styleRefs: readonly (StyleDefinition | undefined)[];
+  styleIds: readonly (string | undefined)[];
+  styleNames: readonly (string | undefined)[];
+}
+
+type LegacyStylesMap = Record<string, StyleDefinition>;
+
 /**
  * Module-level cache keyed by style-array reference.
  *
@@ -52,6 +62,7 @@ interface StylesIndexCacheEntry {
  * mutations (push/splice/reorder/styleId renames) invalidate safely.
  */
 const indexCache = new WeakMap<readonly StyleDefinition[], StylesIndexCacheEntry>();
+const mapIndexCache = new WeakMap<LegacyStylesMap, StylesMapIndexCacheEntry>();
 const EMPTY_STYLES: readonly StyleDefinition[] = [];
 
 function createCacheEntry(styles: readonly StyleDefinition[]): StylesIndexCacheEntry {
@@ -78,23 +89,80 @@ function isCacheEntryValid(styles: readonly StyleDefinition[], entry: StylesInde
   return true;
 }
 
+function isStyleMap(styles: unknown): styles is LegacyStylesMap {
+  return typeof styles === 'object' && styles !== null && !Array.isArray(styles);
+}
+
+function createMapCacheEntry(stylesMap: LegacyStylesMap): StylesMapIndexCacheEntry {
+  const keys = Object.keys(stylesMap);
+  const normalized: StyleDefinition[] = [];
+  const styleRefs: Array<StyleDefinition | undefined> = [];
+  const styleIds: Array<string | undefined> = [];
+  const styleNames: Array<string | undefined> = [];
+
+  for (const key of keys) {
+    const style = stylesMap[key];
+    styleRefs.push(style);
+    styleIds.push(style?.styleId);
+    styleNames.push(style?.name);
+    if (!style) continue;
+    normalized.push(style.styleId ? style : { ...style, styleId: key });
+  }
+
+  return {
+    index: new StylesIndex(normalized),
+    keys,
+    styleRefs,
+    styleIds,
+    styleNames,
+  };
+}
+
+function isMapCacheEntryValid(stylesMap: LegacyStylesMap, entry: StylesMapIndexCacheEntry): boolean {
+  const keys = Object.keys(stylesMap);
+  if (keys.length !== entry.keys.length) {
+    return false;
+  }
+
+  for (let i = 0; i < keys.length; i += 1) {
+    const key = keys[i];
+    if (key !== entry.keys[i]) return false;
+
+    const style = stylesMap[key];
+    if (style !== entry.styleRefs[i]) return false;
+    if (style?.styleId !== entry.styleIds[i]) return false;
+    if (style?.name !== entry.styleNames[i]) return false;
+  }
+
+  return true;
+}
+
 function getStylesIndex(styles: unknown): StylesIndex {
-  // Invariant: normal editor flows (DOCX import and collaboration re-hydration)
-  // normalize style definitions to an ordered array before style resolution.
-  // Non-array input indicates an out-of-contract caller, so treat it as
-  // "no styles" instead of attempting legacy map compatibility here.
-  if (!Array.isArray(styles)) {
-    return new StylesIndex(EMPTY_STYLES);
+  // Primary format is an ordered array, but we still accept legacy map-shaped
+  // catalogs keyed by styleId for backward compatibility.
+  if (Array.isArray(styles)) {
+    const cachedEntry = indexCache.get(styles);
+    if (cachedEntry && isCacheEntryValid(styles, cachedEntry)) {
+      return cachedEntry.index;
+    }
+
+    const entry = createCacheEntry(styles);
+    indexCache.set(styles, entry);
+    return entry.index;
   }
 
-  const cachedEntry = indexCache.get(styles);
-  if (cachedEntry && isCacheEntryValid(styles, cachedEntry)) {
-    return cachedEntry.index;
+  if (isStyleMap(styles)) {
+    const cachedMapEntry = mapIndexCache.get(styles);
+    if (cachedMapEntry && isMapCacheEntryValid(styles, cachedMapEntry)) {
+      return cachedMapEntry.index;
+    }
+
+    const entry = createMapCacheEntry(styles);
+    mapIndexCache.set(styles, entry);
+    return entry.index;
   }
 
-  const entry = createCacheEntry(styles);
-  indexCache.set(styles, entry);
-  return entry.index;
+  return new StylesIndex(EMPTY_STYLES);
 }
 
 export interface OoxmlResolverParams {

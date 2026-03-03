@@ -41,6 +41,23 @@ export interface ResolvedStyle {
   source: ResolvedStyleSource;
 }
 
+function lookupStyleById(
+  styles: StylesDocumentProperties['styles'] | null | undefined,
+  styleId: string,
+): StyleDefinition | undefined {
+  if (!styles) return undefined;
+
+  if (Array.isArray(styles)) {
+    return styles.find((candidate) => candidate.styleId === styleId);
+  }
+
+  const legacyMap = styles as unknown as Record<string, StyleDefinition>;
+  const direct = legacyMap[styleId];
+  if (direct) return direct;
+
+  return Object.values(legacyMap).find((candidate) => candidate?.styleId === styleId);
+}
+
 // ──────────────────────────────────────────────────────────────────────────────
 // Helpers
 // ──────────────────────────────────────────────────────────────────────────────
@@ -53,7 +70,7 @@ export function isKnownTableStyleId(
   translatedLinkedStyles: StylesDocumentProperties | null | undefined,
 ): boolean {
   if (!styleId || !translatedLinkedStyles?.styles) return false;
-  const def = translatedLinkedStyles.styles[styleId];
+  const def = lookupStyleById(translatedLinkedStyles.styles, styleId);
   return def != null && def.type === 'table';
 }
 
@@ -65,11 +82,23 @@ export function findTypeDefaultTableStyleId(
   translatedLinkedStyles: StylesDocumentProperties | null | undefined,
 ): string | null {
   if (!translatedLinkedStyles?.styles) return null;
-  for (const [styleId, def] of Object.entries(translatedLinkedStyles.styles)) {
-    if (def.type === 'table' && def.default === true) {
-      return styleId;
+
+  if (Array.isArray(translatedLinkedStyles.styles)) {
+    for (const def of translatedLinkedStyles.styles) {
+      if (def.type === 'table' && def.default === true && def.styleId) {
+        return def.styleId;
+      }
+    }
+    return null;
+  }
+
+  const legacyMap = translatedLinkedStyles.styles as unknown as Record<string, StyleDefinition>;
+  for (const [key, def] of Object.entries(legacyMap)) {
+    if (def?.type === 'table' && def.default === true) {
+      return def.styleId ?? key;
     }
   }
+
   return null;
 }
 

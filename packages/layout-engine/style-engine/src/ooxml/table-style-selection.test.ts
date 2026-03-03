@@ -9,11 +9,13 @@ import {
 } from './table-style-selection.ts';
 import type { StylesDocumentProperties } from './styles-types.ts';
 
-const emptyStyles: StylesDocumentProperties = { docDefaults: {}, latentStyles: {}, styles: {} };
+const emptyStyles = { docDefaults: {}, latentStyles: {}, styles: {} } as unknown as StylesDocumentProperties;
 
 const withStyles = (styles: Record<string, { type?: string; default?: boolean }>): StylesDocumentProperties => ({
   ...emptyStyles,
-  styles: Object.fromEntries(Object.entries(styles).map(([id, def]) => [id, { styleId: id, ...def }])),
+  styles: Object.fromEntries(
+    Object.entries(styles).map(([id, def]) => [id, { styleId: id, ...def }]),
+  ) as unknown as StylesDocumentProperties['styles'],
 });
 
 // ──────────────────────────────────────────────────────────────────────────────

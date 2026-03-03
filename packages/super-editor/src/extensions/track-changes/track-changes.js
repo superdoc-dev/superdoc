@@ -10,6 +10,7 @@ import { markInsertion } from './trackChangesHelpers/markInsertion.js';
 import { collectTrackedChanges, isTrackedChangeActionAllowed } from './permission-helpers.js';
 import { CommentsPluginKey, createOrUpdateTrackedChangeComment } from '../comment/comments-plugin.js';
 import { findMarkInRangeBySnapshot } from './trackChangesHelpers/markSnapshotHelpers.js';
+import { hasExpandedSelection } from '@utils/selectionUtils.js';
 
 export const TrackChanges = Extension.create({
   name: 'trackChanges',
@@ -497,11 +498,6 @@ export const TrackChanges = Extension.create({
 const TRACKED_CHANGE_MARKS = [TrackDeleteMarkName, TrackInsertMarkName, TrackFormatMarkName];
 
 const getTrackedMark = (node) => node?.marks?.find((mark) => TRACKED_CHANGE_MARKS.includes(mark.type.name)) ?? null;
-
-const hasExpandedSelection = (selection) => {
-  if (!selection) return false;
-  return selection.from !== selection.to;
-};
 
 const getTrackedChangeActionSelection = ({ state, editor }) => {
   const currentSelection = state?.selection;

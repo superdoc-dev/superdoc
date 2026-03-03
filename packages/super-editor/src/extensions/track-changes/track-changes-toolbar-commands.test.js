@@ -185,6 +185,30 @@ describe('Track Changes Shared Resolution Commands', () => {
       expect(mockCommands.acceptTrackedChangeById).not.toHaveBeenCalled();
       expect(mockCommands.acceptTrackedChangeBySelection).not.toHaveBeenCalled();
     });
+
+    it('ignores malformed preserved selections and falls back to by-id resolution', () => {
+      mockCommentsPluginGetState.mockReturnValue({
+        activeThreadId: 'tracked-change-456',
+        trackedChanges: {
+          'tracked-change-456': {
+            deletion: 'tracked-change-456',
+          },
+        },
+      });
+
+      const command = commands.acceptTrackedChangeFromToolbar;
+      const result = command()({
+        state: mockState,
+        commands: mockCommands,
+        editor: { options: { lastSelection: { from: undefined, to: 16 } } },
+      });
+
+      expect(result).toBe(true);
+      expect(mockCollectTrackedChanges).not.toHaveBeenCalled();
+      expect(mockCommands.acceptTrackedChangeById).toHaveBeenCalledWith('tracked-change-456');
+      expect(mockCommands.acceptTrackedChangesBetween).not.toHaveBeenCalled();
+      expect(mockCommands.acceptTrackedChangeBySelection).not.toHaveBeenCalled();
+    });
   });
 
   describe('rejectTrackedChangeFromToolbar', () => {

@@ -9,6 +9,7 @@ import {
 } from '@extensions/track-changes/permission-helpers.js';
 import { isList } from '@core/commands/list-helpers';
 import { isCellSelection } from '@extensions/table/tableHelpers/isCellSelection.js';
+import { hasExpandedSelection } from '@utils/selectionUtils.js';
 import { selectedRect } from 'prosemirror-tables';
 /**
  * Get props by item id
@@ -215,10 +216,6 @@ export async function getEditorContext(editor, event) {
     editor,
     trackedChanges,
   };
-}
-
-function hasExpandedSelection(selection) {
-  return Number.isFinite(selection?.from) && Number.isFinite(selection?.to) && selection.from !== selection.to;
 }
 
 function selectionContainsPos(selection, pos) {

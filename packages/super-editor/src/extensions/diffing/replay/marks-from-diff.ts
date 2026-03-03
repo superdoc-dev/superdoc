@@ -28,7 +28,7 @@ export function marksFromDiff({
 
   if (action === 'modified') {
     if (marksDiff) {
-      const updatedMarks = applyMarksDiff(marksDiff);
+      const updatedMarks = applyMarksDiff(oldMarks, marksDiff);
       return buildMarksFromJSON(schema, updatedMarks);
     }
     if (marks.length > 0) {
@@ -52,23 +52,39 @@ export function marksFromDiff({
  * @returns Updated mark JSON entries.
  */
 const applyMarksDiff = (
+  existingMarks: Array<{ type: string; attrs?: Record<string, unknown> }>,
   marksDiff: import('../algorithm/attributes-diffing.ts').MarksDiff,
 ): Array<{ type: string; attrs?: Record<string, unknown> }> => {
-  const byType = new Map<string, Record<string, unknown>>();
+  const updatedMarks = existingMarks.map((mark) => ({
+    type: mark.type,
+    attrs: mark.attrs ?? {},
+  }));
 
   marksDiff.deleted.forEach((mark) => {
-    byType.delete(mark.name);
+    const index = updatedMarks.findIndex(
+      (existing) => existing.type === mark.name && deepEquals(existing.attrs, mark.attrs),
+    );
+    if (index >= 0) {
+      updatedMarks.splice(index, 1);
+    }
   });
 
   marksDiff.modified.forEach((mark) => {
-    byType.set(mark.name, mark.newAttrs ?? {});
+    const index = updatedMarks.findIndex(
+      (existing) => existing.type === mark.name && deepEquals(existing.attrs, mark.oldAttrs),
+    );
+    if (index >= 0) {
+      updatedMarks.splice(index, 1, { type: mark.name, attrs: mark.newAttrs ?? {} });
+      return;
+    }
+    updatedMarks.push({ type: mark.name, attrs: mark.newAttrs ?? {} });
   });
 
   marksDiff.added.forEach((mark) => {
-    byType.set(mark.name, mark.attrs ?? {});
+    updatedMarks.push({ type: mark.name, attrs: mark.attrs ?? {} });
   });
 
-  return Array.from(byType.entries()).map(([type, attrs]) => ({ type, attrs }));
+  return updatedMarks;
 };
 
 /**
@@ -93,4 +109,15 @@ const buildMarksFromJSON = (
   });
 
   return resolvedMarks;
+};
+
+/**
+ * Checks deep equality using JSON serialization for mark attrs payloads.
+ *
+ * @param left First attrs object.
+ * @param right Second attrs object.
+ * @returns True when both attrs payloads serialize identically.
+ */
+const deepEquals = (left: unknown, right: unknown): boolean => {
+  return JSON.stringify(left) === JSON.stringify(right);
 };

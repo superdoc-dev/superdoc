@@ -120,7 +120,7 @@ export function replayInlineDiff({
         action: diff.action,
         marks: diff.marks,
         marksDiff: diff.marksDiff,
-        oldMarks: [],
+        oldMarks: getMarksAtPosition(tr.doc, from),
       });
       marks.forEach((mark) => {
         const step = new AddMarkStep(from, to!, mark);
@@ -141,6 +141,19 @@ export function replayInlineDiff({
         const stepResult = tr.maybeStep(step);
         if (stepResult.failed) {
           skipWithWarning(`Failed to remove mark ${mark.type.name} at ${from}-${to}.`);
+        }
+      });
+      (diff.marksDiff?.modified ?? []).forEach((markEntry) => {
+        const markType = schema.marks[markEntry.name];
+        if (!markType) {
+          skipWithWarning(`Unknown mark type ${markEntry.name} for modification.`);
+          return;
+        }
+        const oldMark = markType.create(markEntry.oldAttrs || {});
+        const step = new RemoveMarkStep(from, to!, oldMark);
+        const stepResult = tr.maybeStep(step);
+        if (stepResult.failed) {
+          skipWithWarning(`Failed to remove old mark ${oldMark.type.name} at ${from}-${to}.`);
         }
       });
 
@@ -347,4 +360,26 @@ const filterAttributesDiffByPath = (
  */
 const isDeepEqual = (left: unknown, right: unknown): boolean => {
   return JSON.stringify(left) === JSON.stringify(right);
+};
+
+/**
+ * Extracts mark JSON entries from the inline node at a given position.
+ *
+ * @param doc Document to inspect.
+ * @param pos Position used to resolve an inline node.
+ * @returns Mark entries from the inline node at the position.
+ */
+const getMarksAtPosition = (
+  doc: import('prosemirror-model').Node,
+  pos: number,
+): Array<{ type: string; attrs?: Record<string, unknown> }> => {
+  const resolved = doc.resolve(pos);
+  const candidate = resolved.nodeAfter || resolved.nodeBefore;
+  if (!candidate || !candidate.isInline) {
+    return [];
+  }
+  return candidate.marks.map((mark) => ({
+    type: mark.type.name,
+    attrs: mark.attrs ?? {},
+  }));
 };

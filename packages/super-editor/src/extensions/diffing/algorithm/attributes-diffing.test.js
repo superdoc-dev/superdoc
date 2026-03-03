@@ -229,4 +229,41 @@ describe('getMarksDiff', () => {
       ],
     });
   });
+
+  it('handles duplicate marks with the same type without collapsing entries', () => {
+    const marksA = [
+      { type: 'commentMark', attrs: { commentId: 'a' } },
+      { type: 'commentMark', attrs: { commentId: 'b' } },
+    ];
+    const marksB = [{ type: 'commentMark', attrs: { commentId: 'b' } }];
+
+    expect(getMarksDiff(marksA, marksB)).toEqual({
+      added: [],
+      deleted: [{ name: 'commentMark', attrs: { commentId: 'a' } }],
+      modified: [],
+    });
+  });
+
+  it('detects duplicate same-type mark replacements as modifications', () => {
+    const marksA = [
+      { type: 'commentMark', attrs: { commentId: 'a' } },
+      { type: 'commentMark', attrs: { commentId: 'b' } },
+    ];
+    const marksB = [
+      { type: 'commentMark', attrs: { commentId: 'a' } },
+      { type: 'commentMark', attrs: { commentId: 'c' } },
+    ];
+
+    expect(getMarksDiff(marksA, marksB)).toEqual({
+      added: [],
+      deleted: [],
+      modified: [
+        {
+          name: 'commentMark',
+          oldAttrs: { commentId: 'b' },
+          newAttrs: { commentId: 'c' },
+        },
+      ],
+    });
+  });
 });

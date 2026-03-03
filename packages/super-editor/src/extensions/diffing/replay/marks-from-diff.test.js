@@ -60,6 +60,54 @@ const testModifiedMarksFromDiff = () => {
 };
 
 /**
+ * Verifies modified diffs can remove only one of multiple same-type marks.
+ * @returns {void}
+ */
+const testModifiedMarksWithDuplicateTypeDeletion = () => {
+  const schema = createSchema();
+  const marks = marksFromDiff({
+    schema,
+    action: 'modified',
+    oldMarks: [
+      { type: 'commentMark', attrs: { commentId: 'a' } },
+      { type: 'commentMark', attrs: { commentId: 'b' } },
+    ],
+    marksDiff: {
+      added: [],
+      deleted: [{ name: 'commentMark', attrs: { commentId: 'a' } }],
+      modified: [],
+    },
+  });
+
+  expect(getMarkTypes(marks)).toEqual(['commentMark']);
+  expect(marks[0]?.attrs?.commentId).toBe('b');
+};
+
+/**
+ * Verifies modified diffs update the targeted duplicate mark by old attrs.
+ * @returns {void}
+ */
+const testModifiedMarksWithDuplicateTypeReplacement = () => {
+  const schema = createSchema();
+  const marks = marksFromDiff({
+    schema,
+    action: 'modified',
+    oldMarks: [
+      { type: 'commentMark', attrs: { commentId: 'a' } },
+      { type: 'commentMark', attrs: { commentId: 'b' } },
+    ],
+    marksDiff: {
+      added: [],
+      deleted: [],
+      modified: [{ name: 'commentMark', oldAttrs: { commentId: 'b' }, newAttrs: { commentId: 'c' } }],
+    },
+  });
+
+  expect(getMarkTypes(marks)).toEqual(['commentMark', 'commentMark']);
+  expect(marks.map((mark) => mark.attrs?.commentId)).toEqual(['a', 'c']);
+};
+
+/**
  * Verifies modified text falls back to explicit marks when no marksDiff is provided.
  * @returns {void}
  */
@@ -96,6 +144,8 @@ const testDeletedMarks = () => {
 const runMarksFromDiffSuite = () => {
   it('builds marks for added text', testAddedMarks);
   it('applies marksDiff for modified text', testModifiedMarksFromDiff);
+  it('removes a specific duplicate same-type mark', testModifiedMarksWithDuplicateTypeDeletion);
+  it('replaces a specific duplicate same-type mark', testModifiedMarksWithDuplicateTypeReplacement);
   it('falls back to marks for modified text', testModifiedMarksFallback);
   it('returns no marks for deleted text', testDeletedMarks);
 };

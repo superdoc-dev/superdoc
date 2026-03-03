@@ -102,53 +102,62 @@ export function getMarksDiff(
     deleted: [],
     modified: [],
   };
-  const marksMapA = new Map<
-    string,
-    {
-      raw: Record<string, unknown>;
-      normalized: Record<string, unknown>;
+  const entriesA = marksA.map((mark) => ({
+    name: mark.type,
+    raw: mark.attrs || {},
+    normalized: normalizeMarkAttrs(mark.type, mark.attrs),
+  }));
+  const entriesB = marksB.map((mark) => ({
+    name: mark.type,
+    raw: mark.attrs || {},
+    normalized: normalizeMarkAttrs(mark.type, mark.attrs),
+  }));
+
+  const matchedBIndices = new Set<number>();
+  const exactMatchedA = new Set<number>();
+
+  // First pass: pair exact normalized matches, preserving duplicate instances.
+  entriesA.forEach((entryA, indexA) => {
+    const indexB = entriesB.findIndex(
+      (entryB, candidateIndexB) =>
+        !matchedBIndices.has(candidateIndexB) &&
+        entryA.name === entryB.name &&
+        deepEquals(entryA.normalized, entryB.normalized),
+    );
+    if (indexB >= 0) {
+      exactMatchedA.add(indexA);
+      matchedBIndices.add(indexB);
     }
-  >();
-  const marksMapB = new Map<
-    string,
-    {
-      raw: Record<string, unknown>;
-      normalized: Record<string, unknown>;
-    }
-  >();
+  });
 
-  for (const mark of marksA) {
-    marksMapA.set(mark.type, {
-      raw: mark.attrs || {},
-      normalized: normalizeMarkAttrs(mark.type, mark.attrs),
-    });
-  }
-  for (const mark of marksB) {
-    marksMapB.set(mark.type, {
-      raw: mark.attrs || {},
-      normalized: normalizeMarkAttrs(mark.type, mark.attrs),
-    });
-  }
-
-  const markNames = new Set([...marksMapA.keys(), ...marksMapB.keys()]);
-  for (const name of markNames) {
-    const entryA = marksMapA.get(name);
-    const entryB = marksMapB.get(name);
-
-    if (entryA && !entryB) {
-      marksDiff.deleted.push({ name, attrs: entryA.raw });
-      continue;
+  // Second pass: for remaining marks in A, pair by type (modification) when possible.
+  entriesA.forEach((entryA, indexA) => {
+    if (exactMatchedA.has(indexA)) {
+      return;
     }
 
-    if (!entryA && entryB) {
-      marksDiff.added.push({ name, attrs: entryB.raw });
-      continue;
+    const indexB = entriesB.findIndex(
+      (entryB, candidateIndexB) => !matchedBIndices.has(candidateIndexB) && entryA.name === entryB.name,
+    );
+
+    if (indexB >= 0) {
+      matchedBIndices.add(indexB);
+      const entryB = entriesB[indexB];
+      if (!deepEquals(entryA.normalized, entryB.normalized)) {
+        marksDiff.modified.push({ name: entryA.name, oldAttrs: entryA.raw, newAttrs: entryB.raw });
+      }
+      return;
     }
 
-    if (entryA && entryB && !deepEquals(entryA.normalized, entryB.normalized)) {
-      marksDiff.modified.push({ name, oldAttrs: entryA.raw, newAttrs: entryB.raw });
+    marksDiff.deleted.push({ name: entryA.name, attrs: entryA.raw });
+  });
+
+  // Third pass: unmatched marks in B are additions.
+  entriesB.forEach((entryB, indexB) => {
+    if (!matchedBIndices.has(indexB)) {
+      marksDiff.added.push({ name: entryB.name, attrs: entryB.raw });
     }
-  }
+  });
 
   const hasChanges = marksDiff.added.length > 0 || marksDiff.deleted.length > 0 || marksDiff.modified.length > 0;
   return hasChanges ? marksDiff : null;

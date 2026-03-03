@@ -641,6 +641,7 @@ const dispatchTrackedChangeResolution = ({ state, tr, dispatch, editor, touchedC
     return true;
   }
 
+  // Apply tr locally to get nextState for comment lifecycle; dispatch(tr) updates the editor afterward.
   const nextState = state.apply(tr);
 
   if (dispatch) {

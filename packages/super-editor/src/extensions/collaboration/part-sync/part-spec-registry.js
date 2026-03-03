@@ -573,6 +573,58 @@ function deterministicDynamicId(partPath) {
 }
 
 /**
+ * Decode a deterministic dynamic ID back to its part path.
+ *
+ * Inverse of deterministicDynamicId. Returns null for malformed encodings.
+ *
+ * @param {string} id
+ * @returns {string | null}
+ */
+function decodeDeterministicDynamicId(id) {
+  if (!id.startsWith('dyn_')) return null;
+  const encoded = id.slice('dyn_'.length);
+  let out = '';
+
+  for (let i = 0; i < encoded.length; ) {
+    const ch = encoded[i];
+    if (ch !== '_') {
+      out += ch;
+      i += 1;
+      continue;
+    }
+
+    const hex = encoded.slice(i + 1, i + 3);
+    if (!/^[0-9A-Fa-f]{2}$/.test(hex)) return null;
+
+    out += String.fromCharCode(parseInt(hex, 16));
+    i += 3;
+  }
+
+  return out;
+}
+
+/**
+ * Ensure a discovered dynamic spec is cached for this converter and indexed.
+ *
+ * @param {object | undefined} converter
+ * @param {PartSpec} spec
+ */
+function registerDiscoveredSpec(converter, spec) {
+  registerInPrefixIndex(spec);
+
+  if (!converter) return;
+  const cached = discoveredSpecsCache.get(converter);
+  if (cached) {
+    if (!cached.some((candidate) => candidate.id === spec.id)) {
+      cached.push(spec);
+    }
+    return;
+  }
+
+  discoveredSpecsCache.set(converter, [spec]);
+}
+
+/**
  * Scan a converter for XML parts not covered by static specs and create
  * generic PartSpecs for them. Results are cached per converter.
  *
@@ -583,7 +635,14 @@ export function discoverGenericSpecs(converter) {
   if (!converter) return [];
 
   const cached = discoveredSpecsCache.get(converter);
-  if (cached) return cached;
+  if (cached) {
+    // Re-register cached specs because another converter invalidation can
+    // clear their shared prefixIndex entries.
+    for (const spec of cached) {
+      registerInPrefixIndex(spec);
+    }
+    return cached;
+  }
 
   const store = converter.parts ?? converter.convertedXml ?? {};
   const specs = [];
@@ -685,6 +744,19 @@ export function resolveOoxmlPartKey(key, converter) {
     if (section != null) return { spec, section };
   }
 
+  // Infer dynamic spec directly from incoming key so late-joining clients can
+  // resolve remote dyn_* keys that are not in local converter.parts yet.
+  if (slashIdx !== -1) {
+    const id = key.slice(0, slashIdx);
+    const partPath = decodeDeterministicDynamicId(id);
+    if (partPath && !isExcludedFromDiscovery(partPath)) {
+      const spec = createXmlPartSpec(id, partPath);
+      registerDiscoveredSpec(converter, spec);
+      const section = spec.parseKey(key);
+      if (section != null) return { spec, section };
+    }
+  }
+
   return null;
 }
 
@@ -705,9 +777,19 @@ export function resolveOoxmlPartKey(key, converter) {
  */
 export function resolvePartChangedSpec(partId, changedPaths, converter) {
   if (partId === 'styles') {
+    const sectionHints = changedPaths
+      ?.map((path) => {
+        if (typeof path !== 'string') return null;
+        const noArrayIndices = path.replace(/\[\d+\]/g, '');
+        const section = noArrayIndices.split('.')[0];
+        return STYLE_SECTIONS.includes(section) ? section : null;
+      })
+      .filter(Boolean);
+
+    const dedupedSectionHints = sectionHints?.length > 0 ? [...new Set(sectionHints)] : undefined;
     return {
       spec: STYLES_SPEC,
-      sectionHints: changedPaths?.map((p) => p.split('.')[0]),
+      sectionHints: dedupedSectionHints,
     };
   }
 

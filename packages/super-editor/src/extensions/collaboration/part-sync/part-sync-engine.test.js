@@ -441,8 +441,9 @@ describe('hydrateOrSeedPart', () => {
     expect(spec.applySection).not.toHaveBeenCalled();
   });
 
-  it('removes stale local sections that were deleted remotely', () => {
-    // Room has _version but no keys for this spec → all local sections are stale
+  it('seeds local sections when channel has _version but spec is not remotely initialized', () => {
+    // Shared channel may have _version set by another spec while this one is
+    // still uninitialized remotely. In that case we seed instead of delete.
     const channelMap = createMockYMap({ _version: 1 });
     const ydoc = createMockYdoc({ testChannel: channelMap });
     editor = createMockEditor({ options: { ydoc, user: { id: 'user-1' } } });
@@ -453,7 +454,26 @@ describe('hydrateOrSeedPart', () => {
 
     hydrateOrSeedPart(editor, spec);
 
-    // Should not apply (nothing remote), but should remove stale local 'root'
+    // Should seed local root to remote channel and not delete local state.
+    expect(spec.applySection).not.toHaveBeenCalled();
+    expect(channelMap.set).toHaveBeenCalledWith('test-spec/root', expect.anything());
+    expect(spec.removeSection).not.toHaveBeenCalled();
+  });
+
+  it('removes stale local sections when spec has remote readiness metadata', () => {
+    const channelMap = createMockYMap({ _version: 1 });
+    const metaMap = createMockYMap({
+      'test-spec/root': { updatedBy: 'user-2', updatedAt: 1000 },
+    });
+    const ydoc = createMockYdoc({ testChannel: channelMap, ooxmlPartMeta: metaMap });
+    editor = createMockEditor({ options: { ydoc, user: { id: 'user-1' } } });
+    spec = createMockSpec({
+      listSections: vi.fn(() => ['root']),
+      removeSection: vi.fn(),
+    });
+
+    hydrateOrSeedPart(editor, spec);
+
     expect(spec.applySection).not.toHaveBeenCalled();
     expect(spec.removeSection).toHaveBeenCalledWith(editor.converter, 'root');
   });

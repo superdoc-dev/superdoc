@@ -759,6 +759,21 @@ describe('resolveOoxmlPartKey — prefix index', () => {
     expect(result).not.toBeNull();
     expect(result.section).toBe('root');
   });
+
+  it('resolves dyn_* keys from incoming key even when part is not local yet', () => {
+    const converter = { parts: {} };
+    const result = resolveOoxmlPartKey('dyn_customXml_2FremoteOnly_2Exml/root', converter);
+    expect(result).not.toBeNull();
+    expect(result.spec.id).toBe('dyn_customXml_2FremoteOnly_2Exml');
+    expect(result.spec.partPath).toBe('customXml/remoteOnly.xml');
+    expect(result.section).toBe('root');
+  });
+
+  it('rejects inferred dyn_* keys that decode to excluded/static-covered paths', () => {
+    const converter = { parts: {} };
+    const result = resolveOoxmlPartKey('dyn_word_2Fdocument_2Exml/root', converter);
+    expect(result).toBeNull();
+  });
 });
 
 // ---------------------------------------------------------------------------
@@ -770,6 +785,18 @@ describe('resolvePartChangedSpec', () => {
     const result = resolvePartChangedSpec('styles', ['docDefaults.fonts', 'styles.Normal']);
     expect(result.spec).toBe(STYLES_SPEC);
     expect(result.sectionHints).toEqual(['docDefaults', 'styles']);
+  });
+
+  it('normalizes styles array-index changed paths to valid style sections', () => {
+    const result = resolvePartChangedSpec('styles', ['styles[0].name', 'styles[10].runProperties.bold']);
+    expect(result.spec).toBe(STYLES_SPEC);
+    expect(result.sectionHints).toEqual(['styles']);
+  });
+
+  it('falls back to full styles publish when changedPaths do not map to known sections', () => {
+    const result = resolvePartChangedSpec('styles', ['unknownBranch.value']);
+    expect(result.spec).toBe(STYLES_SPEC);
+    expect(result.sectionHints).toBeUndefined();
   });
 
   it('routes header:rId1 to HEADER_FOOTER_CONTENT_SPEC', () => {
@@ -917,6 +944,25 @@ describe('discoverGenericSpecs', () => {
     const specs1 = discoverGenericSpecs(converter1);
     const specs2 = discoverGenericSpecs(converter2);
     expect(specs1[0].id).toBe(specs2[0].id);
+  });
+
+  it('re-registers cached dynamic prefixes after another converter invalidates', () => {
+    const converter1 = {
+      parts: { 'customXml/item1.xml': { elements: [{ name: 'root' }] } },
+    };
+    const converter2 = {
+      parts: { 'customXml/item1.xml': { elements: [{ name: 'root' }] } },
+    };
+
+    discoverGenericSpecs(converter1);
+    discoverGenericSpecs(converter2);
+
+    // This removes dyn_customXml_2Fitem1_2Exml/ from the shared prefix index.
+    invalidateDiscoveredSpecs(converter1);
+
+    const result = resolveOoxmlPartKey('dyn_customXml_2Fitem1_2Exml/root', converter2);
+    expect(result).not.toBeNull();
+    expect(result.section).toBe('root');
   });
 });
 

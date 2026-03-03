@@ -16,6 +16,48 @@
 
 import { EXCLUDED_PART_PATHS } from './part-spec-registry.js';
 
+const SPEC_READY_META_PREFIX = '__specReady/';
+
+/**
+ * Build a stable metadata key for per-spec readiness tracking.
+ *
+ * @param {import('./part-spec-registry.js').PartSpec} spec
+ * @returns {string}
+ */
+function getSpecReadinessMetaKey(spec) {
+  return `${SPEC_READY_META_PREFIX}${spec.channel}:${spec.id}`;
+}
+
+/**
+ * Determine whether remote has ever published this spec.
+ *
+ * Uses an explicit readiness marker plus a legacy fallback that scans section
+ * metadata keys, so older rooms still hydrate/delete correctly.
+ *
+ * @param {object} metaMap
+ * @param {import('./part-spec-registry.js').PartSpec} spec
+ * @returns {boolean}
+ */
+function hasRemoteSpecReadiness(metaMap, spec) {
+  if (!metaMap) return false;
+
+  const readinessKey = getSpecReadinessMetaKey(spec);
+  if (typeof metaMap.has === 'function' && metaMap.has(readinessKey)) {
+    return true;
+  }
+
+  if (typeof metaMap.forEach !== 'function') return false;
+
+  let found = false;
+  metaMap.forEach((_value, key) => {
+    if (found || typeof key !== 'string') return;
+    if (spec.parseKey(key) != null) {
+      found = true;
+    }
+  });
+  return found;
+}
+
 // ---------------------------------------------------------------------------
 // Per-editor guard state
 // ---------------------------------------------------------------------------
@@ -122,6 +164,8 @@ export function publishPartSections(editor, spec, sectionHints) {
 
   const userId = editor.options.user?.id ?? 'unknown';
   const metaMap = ydoc.getMap('ooxmlPartMeta');
+  const now = Date.now();
+  const readinessKey = getSpecReadinessMetaKey(spec);
 
   ydoc.transact(
     () => {
@@ -135,8 +179,12 @@ export function publishPartSections(editor, spec, sectionHints) {
         map.set('_version', spec.version);
       }
       for (const { key } of writes) {
-        metaMap.set(key, { updatedBy: userId, updatedAt: Date.now() });
+        metaMap.set(key, { updatedBy: userId, updatedAt: now });
       }
+      // Marks this spec as remotely initialized even if all section keys were
+      // later deleted. Hydration uses this to decide whether empty remote
+      // state should delete stale local sections or trigger first-time seeding.
+      metaMap.set(readinessKey, { updatedBy: userId, updatedAt: now, version: spec.version ?? null });
     },
     { event: `${spec.id}-publish`, user: editor.options.user },
   );
@@ -264,6 +312,7 @@ export function hydrateOrSeedPart(editor, spec) {
   if (!ydoc || ydoc.isDestroyed) return;
 
   const map = ydoc.getMap(spec.channel);
+  const metaMap = ydoc.getMap('ooxmlPartMeta');
 
   if (map.has('_version')) {
     // Room has this channel — hydrate from remote authority.
@@ -279,20 +328,27 @@ export function hydrateOrSeedPart(editor, spec) {
       });
     }
 
-    if (keys.length > 0) {
-      applyRemotePartSections(editor, spec, map, keys);
-    }
-
-    // Remove local sections that no longer exist remotely. This handles parts
-    // deleted in-room before this client joined — the Y.Map has _version but
-    // no remaining keys for this spec, yet bootstrap left stale local data.
-    if (editor.converter && spec.removeSection) {
-      const localSections = spec.listSections(editor.converter);
-      const remoteSet = new Set(keys.map((k) => spec.parseKey(k)));
-      const staleKeys = localSections.filter((s) => !remoteSet.has(s)).map((s) => spec.sectionKey(s));
-      if (staleKeys.length > 0) {
-        deleteRemotePartSections(editor, spec, staleKeys);
+    const hasRemoteSpecState = keys.length > 0 || hasRemoteSpecReadiness(metaMap, spec);
+    if (hasRemoteSpecState) {
+      if (keys.length > 0) {
+        applyRemotePartSections(editor, spec, map, keys);
       }
+
+      // Remove local sections that no longer exist remotely, but only once this
+      // specific spec has remote readiness. Shared channels (ooxmlPartModels)
+      // can have _version set by another spec before this one is initialized.
+      if (editor.converter && spec.removeSection) {
+        const localSections = spec.listSections(editor.converter);
+        const remoteSet = new Set(keys.map((k) => spec.parseKey(k)));
+        const staleKeys = localSections.filter((s) => !remoteSet.has(s)).map((s) => spec.sectionKey(s));
+        if (staleKeys.length > 0) {
+          deleteRemotePartSections(editor, spec, staleKeys);
+        }
+      }
+    } else if (editor.converter) {
+      // Channel exists but this spec has never been initialized remotely.
+      // Seed local state instead of deleting it as stale.
+      publishPartSections(editor, spec);
     }
   } else if (editor.converter) {
     // Room doesn't have this channel — seed from local converter

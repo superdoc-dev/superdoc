@@ -61,6 +61,8 @@ export const Diffing = Extension.create({
           });
           if (canApplyTrackedChanges) {
             tr.setMeta('forceTrackChanges', true);
+          } else {
+            tr.setMeta('skipTrackChanges', true);
           }
 
           if (dispatch && tr.docChanged) {

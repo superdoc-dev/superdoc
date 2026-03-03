@@ -92,6 +92,34 @@ const expectReplayMatchesFixture = async (beforeName, afterName) => {
 };
 
 /**
+ * Replays diffs with applyTrackedChanges disabled while track changes mode is active,
+ * asserting replay does not create tracked marks.
+ *
+ * @param {string} beforeName DOCX fixture filename for the baseline.
+ * @param {string} afterName DOCX fixture filename for the updated doc.
+ * @returns {Promise<void>}
+ */
+const expectReplaySkipsTrackingWhenDisabled = async (beforeName, afterName) => {
+  const testUser = { name: 'Test User', email: 'test@example.com' };
+  const beforeEditor = await getEditorFromFixture(beforeName, testUser);
+  const afterEditor = await getEditorFromFixture(afterName);
+
+  try {
+    expect(beforeEditor.commands.enableTrackChanges()).toBe(true);
+
+    const diff = beforeEditor.commands.compareDocuments(afterEditor.state.doc, afterEditor.converter?.comments ?? []);
+    const success = beforeEditor.commands.replayDifferences(diff, { applyTrackedChanges: false });
+
+    expect(success).toBe(true);
+    expect(getTrackChanges(beforeEditor.state)).toHaveLength(0);
+    expect(beforeEditor.state.doc.textContent).toBe(afterEditor.state.doc.textContent);
+  } finally {
+    beforeEditor.destroy?.();
+    afterEditor.destroy?.();
+  }
+};
+
+/**
  * Replays diffs without providing replay options and asserts it does not throw.
  *
  * @param {string} beforeName DOCX fixture filename for the baseline.
@@ -267,6 +295,10 @@ describe('replayDiffs', runReplayDiffsSuite);
 describe('replayDifferences options', () => {
   it('accepts omitted options object', async () => {
     await expectReplayMatchesFixtureWithDefaultOptions('diff_before.docx', 'diff_after.docx');
+  });
+
+  it('does not create tracked marks when applyTrackedChanges is false and track changes is active', async () => {
+    await expectReplaySkipsTrackingWhenDisabled('diff_before3.docx', 'diff_after3.docx');
   });
 });
 describe('compareDocuments defaults', () => {

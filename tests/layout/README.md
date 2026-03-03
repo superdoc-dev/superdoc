@@ -7,22 +7,22 @@
 npx wrangler login
 
 # Run visual regression (interactive — handles everything)
-pnpm test:visual
+pnpm test:layout
 
 # Non-interactive with specific version
-pnpm test:visual -- --reference 1.16.0
+pnpm test:layout -- --reference 1.16.0
 
 # Filter and limit for faster iteration
-pnpm test:visual -- --match tables --limit 5
+pnpm test:layout -- --match tables --limit 5
 ```
 
-`pnpm test:visual` checks auth, pulls corpus, builds your code, generates snapshots, and compares — all automatically. See `scripts/test-visual.mjs` for details.
+`pnpm test:layout` checks auth, pulls corpus, builds your code, generates snapshots, and compares — all automatically. See `scripts/test-layout.mjs` for details.
 
 ---
 
 ## Lower-Level Commands
 
-The sections below document the underlying scripts that `pnpm test:visual` wraps. Use these for advanced workflows.
+The sections below document the underlying scripts that `pnpm test:layout` wraps. Use these for advanced workflows.
 
 ### Layout Snapshot Exporter
 
@@ -32,7 +32,7 @@ Exports layout JSON for every `.docx` under:
 
 into candidate snapshots at:
 
-- `<repo>/tests/layout-snapshots/candidate`
+- `<repo>/tests/layout/candidate`
 
 while preserving subdirectories and source filename identity.
 
@@ -102,7 +102,7 @@ pnpm layout:snapshots:npm -- 1.12.0 --limit 10 --jobs 2
 
 Versioned reference output root:
 
-- `<repo>/tests/layout-snapshots/reference/v.<resolved-version>/...`
+- `<repo>/tests/layout/reference/v.<resolved-version>/...`
 
 Notes:
 
@@ -114,8 +114,8 @@ Notes:
 
 Generate a diff report between:
 
-- candidate snapshots at `tests/layout-snapshots/candidate`
-- reference snapshots at `tests/layout-snapshots/reference/v.<version>`
+- candidate snapshots at `tests/layout/candidate`
+- reference snapshots at `tests/layout/reference/v.<version>`
 
 The compare script regenerates candidate snapshots before every run (full refresh by default), and auto-generates the
 reference version when missing. References are only regenerated when missing/incomplete.
@@ -160,7 +160,7 @@ pnpm layout:compare -- --reference 1.13.0-next.15 --fail-on-diff
 
 Reports are written under:
 
-- `<repo>/tests/layout-snapshots/reports/<timestamp>-v.<reference>-vs-candidate/`
+- `<repo>/tests/layout/reports/<timestamp>-v.<reference>-vs-candidate/`
 - plus per-document diff files under the report's `docs/` folder
 
 ## Using packed `superdoc.tgz`

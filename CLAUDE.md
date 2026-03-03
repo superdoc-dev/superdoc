@@ -134,7 +134,8 @@ Note: `packages/sdk/tools/__init__.py` is a manual file (Python package marker) 
 |---|---|---|
 | Logic works? | `pnpm test` | seconds |
 | Editing works? | `pnpm test:behavior` | minutes |
-| Rendering regressed? | `pnpm test:visual` | ~10 min |
+| Layout regressed? | `pnpm test:layout` | ~10 min |
+| Pixel diff? | `pnpm test:visual` | ~5 min |
 
 ### Unit Tests (Vitest)
 
@@ -152,16 +153,24 @@ End-to-end tests that exercise editing features through the browser. Located in 
 - Tests editing commands, formatting, tables, comments, tracked changes, lists, toolbar
 - Asserts on document state, not pixels — see `tests/behavior/README.md`
 
-### Visual Regression Tests (`pnpm test:visual`)
+### Layout Comparison (`pnpm test:layout`)
 
 Compares layout engine output (JSON structure) across ~382 test documents against a published npm version. This is the primary tool for catching rendering regressions.
 
-- Run: `pnpm test:visual` (interactive — prompts for reference version)
+- Run: `pnpm test:layout` (interactive — prompts for reference version)
 - Flags: `--reference <version>`, `--match <pattern>`, `--limit <n>`
 - Handles auth, corpus download, build, and comparison automatically
-- Reports written to `tests/layout-snapshots/reports/`
+- Reports written to `tests/layout/reports/`
 - Lower-level access: `pnpm layout:compare` (same engine, no interactive UX)
 - One-time setup: `npx wrangler login` (for corpus download from R2)
+
+### Visual Comparison (`pnpm test:visual`)
+
+Pixel-level before/after comparison for documents that failed layout comparison. Reads the latest layout report and generates an HTML diff report.
+
+- Run `pnpm test:layout` first to generate a comparison report
+- Then `pnpm test:visual` to see pixel differences for changed docs
+- HTML report output in `devtools/visual-testing/results/`
 
 ## Brand & Design System
 

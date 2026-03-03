@@ -8,7 +8,8 @@ How to verify your changes before pushing.
 |---|---|---|---|
 | Logic works? | `pnpm test` | ~30s | Hard |
 | Editing works? | `pnpm test:behavior` | ~3 min | Hard |
-| Rendering regressed? | `pnpm test:visual` | ~10 min | Manual |
+| Layout regressed? | `pnpm test:layout` | ~10 min | Manual |
+| Visual pixel diff? | `pnpm test:visual` | ~5 min | Manual |
 
 ## Unit Tests
 
@@ -16,7 +17,6 @@ Test pure logic — data transformations, algorithms, style resolution, layout m
 
 ```bash
 pnpm test                 # all packages
-pnpm test:layout          # layout engine packages only
 pnpm test:editor          # super-editor only
 pnpm --filter <pkg> test  # specific package
 ```
@@ -42,14 +42,14 @@ These assert on **document state**, not pixels. Located in `tests/behavior/`. Se
 pnpm --filter @superdoc-testing/behavior setup   # install browser binaries
 ```
 
-## Visual Regression (Layout Comparison)
+## Layout Comparison
 
 Compare layout engine output (JSON structure) across ~382 real-world documents against a published npm version. This is the primary tool for catching rendering regressions.
 
 ```bash
-pnpm test:visual                                    # interactive
-pnpm test:visual -- --reference 1.16.0              # specific version
-pnpm test:visual -- --match tables --limit 5        # filtered, faster
+pnpm test:layout                                    # interactive
+pnpm test:layout -- --reference 1.16.0              # specific version
+pnpm test:layout -- --match tables --limit 5        # filtered, faster
 ```
 
 The command handles everything: corpus download, build, snapshot generation, comparison.
@@ -58,12 +58,12 @@ The command handles everything: corpus download, build, snapshot generation, com
 
 ```bash
 npx wrangler login    # Cloudflare auth for downloading test documents
-pnpm test:visual      # downloads corpus automatically on first run
+pnpm test:layout      # downloads corpus automatically on first run
 ```
 
 After the first run, the corpus is cached locally — no auth needed for subsequent runs.
 
-**Reports** are written to `tests/layout-snapshots/reports/`. Each report includes:
+**Reports** are written to `tests/layout/reports/`. Each report includes:
 
 - `summary.md` — overview with widespread changes and per-doc details
 - `summary.json` — machine-readable version of the summary
@@ -89,7 +89,21 @@ The summary separates **unique changes** (diffs specific to a few docs) from **w
 4. Each diff has `path` (JSONPath), `kind`, `reference`/`candidate` values, and a `widespread` flag
 5. Decide if the change is intentional (your PR) or a regression
 
-**Advanced:** For lower-level access, use `pnpm layout:compare` directly. See `tests/layout-snapshots/README.md`.
+**Advanced:** For lower-level access, use `pnpm layout:compare` directly. See `tests/layout/README.md`.
+
+## Visual Comparison (Pixel Diff)
+
+After `pnpm test:layout` finds changes, it prints a hint to run pixel comparison. This generates an HTML before/after report showing exactly what changed visually.
+
+```bash
+pnpm test:visual    # reads latest layout report, compares changed docs
+```
+
+The command automatically:
+- Reads the latest layout comparison report
+- Extracts documents with unique changes
+- Runs pixel-level comparison against the same reference version
+- Generates an interactive HTML report in `devtools/visual-testing/results/`
 
 ## When to Run What
 
@@ -97,11 +111,11 @@ The summary separates **unique changes** (diffs specific to a few docs) from **w
 |---|---|
 | A utility function or algorithm | `pnpm test` |
 | An editing command or extension | `pnpm test` + `pnpm test:behavior` |
-| Layout engine or style resolution | `pnpm test` + `pnpm test:visual` |
-| DomPainter rendering | `pnpm test` + `pnpm test:visual` |
-| PM adapter (data conversion) | `pnpm test` + `pnpm test:visual` |
+| Layout engine or style resolution | `pnpm test` + `pnpm test:layout` |
+| DomPainter rendering | `pnpm test` + `pnpm test:layout` |
+| PM adapter (data conversion) | `pnpm test` + `pnpm test:layout` |
 | Table rendering or spacing | All three |
-| Super-converter (import/export) | `pnpm test` + `pnpm test:visual` |
+| Super-converter (import/export) | `pnpm test` + `pnpm test:layout` |
 
 ## CI Behavior
 
@@ -109,11 +123,11 @@ The summary separates **unique changes** (diffs specific to a few docs) from **w
 |---|---|---|
 | Unit tests | Yes | Yes |
 | Behavior tests | Yes (sharded across 3 runners) | Yes |
-| Visual regression | No (run manually) | No |
+| Layout comparison | No (run manually) | No |
 
 ## Troubleshooting
 
-**`pnpm test:visual` says auth expired:**
+**`pnpm test:layout` says auth expired:**
 
 ```bash
 npx wrangler login

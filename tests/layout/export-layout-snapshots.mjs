@@ -14,12 +14,12 @@ import { Window } from 'happy-dom';
 const SCRIPT_PATH = fileURLToPath(import.meta.url);
 const SCRIPT_DIR = path.dirname(SCRIPT_PATH);
 const REPO_ROOT = path.resolve(SCRIPT_DIR, '../..');
-const SNAPSHOT_OUTPUT_BASE = path.join(REPO_ROOT, 'tests', 'layout-snapshots');
+const SNAPSHOT_OUTPUT_BASE = path.join(REPO_ROOT, 'tests', 'layout');
 
 const DEFAULT_INPUT_ROOT = process.env.SUPERDOC_CORPUS_ROOT
   ? path.resolve(process.env.SUPERDOC_CORPUS_ROOT)
   : path.join(REPO_ROOT, 'test-corpus');
-const DEFAULT_OUTPUT_ROOT = path.join(REPO_ROOT, 'tests', 'layout-snapshots', 'candidate');
+const DEFAULT_OUTPUT_ROOT = path.join(REPO_ROOT, 'tests', 'layout', 'candidate');
 const DEFAULT_SUPER_EDITOR_MODULE = path.resolve(REPO_ROOT, 'packages/superdoc/dist/super-editor.es.js');
 const DEFAULT_PIPELINE = 'headless';
 const HEADER_FOOTER_VARIANTS = ['default', 'first', 'even', 'odd'];
@@ -252,7 +252,7 @@ function parseArgs(argv) {
 function printHelp() {
   console.log(`
 Usage:
-  node tests/layout-snapshots/export-layout-snapshots.mjs [options]
+  node tests/layout/export-layout-snapshots.mjs [options]
 
 Options:
   -i, --input-root <path>   Source DOCX root (default: ${DEFAULT_INPUT_ROOT})
@@ -272,11 +272,11 @@ Options:
   -h, --help                Show this help
 
 Examples:
-  bun tests/layout-snapshots/export-layout-snapshots.mjs
-  bun tests/layout-snapshots/export-layout-snapshots.mjs --jobs 4
-  bun tests/layout-snapshots/export-layout-snapshots.mjs --match list-in-table
-  bun tests/layout-snapshots/export-layout-snapshots.mjs --pipeline presentation --limit 10
-  node tests/layout-snapshots/export-layout-snapshots.mjs --module superdoc/super-editor
+  bun tests/layout/export-layout-snapshots.mjs
+  bun tests/layout/export-layout-snapshots.mjs --jobs 4
+  bun tests/layout/export-layout-snapshots.mjs --match list-in-table
+  bun tests/layout/export-layout-snapshots.mjs --pipeline presentation --limit 10
+  node tests/layout/export-layout-snapshots.mjs --module superdoc/super-editor
 `);
 }
 

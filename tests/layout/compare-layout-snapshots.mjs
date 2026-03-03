@@ -18,9 +18,9 @@ const SCRIPT_PATH = fileURLToPath(import.meta.url);
 const SCRIPT_DIR = path.dirname(SCRIPT_PATH);
 const REPO_ROOT = path.resolve(SCRIPT_DIR, '../..');
 
-const DEFAULT_CANDIDATE_ROOT = path.join(REPO_ROOT, 'tests', 'layout-snapshots', 'candidate');
-const DEFAULT_REFERENCE_BASE = path.join(REPO_ROOT, 'tests', 'layout-snapshots', 'reference');
-const DEFAULT_REPORTS_ROOT = path.join(REPO_ROOT, 'tests', 'layout-snapshots', 'reports');
+const DEFAULT_CANDIDATE_ROOT = path.join(REPO_ROOT, 'tests', 'layout', 'candidate');
+const DEFAULT_REFERENCE_BASE = path.join(REPO_ROOT, 'tests', 'layout', 'reference');
+const DEFAULT_REPORTS_ROOT = path.join(REPO_ROOT, 'tests', 'layout', 'reports');
 const DEFAULT_VISUAL_WORKDIR = path.join(REPO_ROOT, 'devtools', 'visual-testing');
 const DEFAULT_INPUT_ROOT = process.env.SUPERDOC_CORPUS_ROOT
   ? path.resolve(process.env.SUPERDOC_CORPUS_ROOT)
@@ -46,7 +46,7 @@ const DEFAULT_JOBS = getRecommendedJobs();
 function printHelp() {
   console.log(`
 Usage:
-  bun tests/layout-snapshots/compare-layout-snapshots.mjs [--reference <version> | --reference-root <path>] [options]
+  bun tests/layout/compare-layout-snapshots.mjs [--reference <version> | --reference-root <path>] [options]
 
 Options:
       --reference <version>           Reference version label/spec (default: npm ${NPM_PACKAGE_NAME}@${DEFAULT_NPM_DIST_TAG})
@@ -77,10 +77,10 @@ Options:
   -h, --help                          Show this help
 
 Examples:
-  bun tests/layout-snapshots/compare-layout-snapshots.mjs --reference 1.13.0-next.15
-  bun tests/layout-snapshots/compare-layout-snapshots.mjs --match list-in-table --no-visual-on-change
-  bun tests/layout-snapshots/compare-layout-snapshots.mjs --reference 1.13.0-next.15 --fail-on-diff
-  bun tests/layout-snapshots/compare-layout-snapshots.mjs --reference-root ./tests/layout-snapshots/reference/v.1.13.0-next.15
+  bun tests/layout/compare-layout-snapshots.mjs --reference 1.13.0-next.15
+  bun tests/layout/compare-layout-snapshots.mjs --match list-in-table --no-visual-on-change
+  bun tests/layout/compare-layout-snapshots.mjs --reference 1.13.0-next.15 --fail-on-diff
+  bun tests/layout/compare-layout-snapshots.mjs --reference-root ./tests/layout/reference/v.1.13.0-next.15
 `);
 }
 

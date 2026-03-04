@@ -675,6 +675,24 @@ const REPLAY_MUTABLE_COMMENT_FIELDS = new Set([
   'docxCommentJSON',
 ]);
 
+const applyReplayIsDoneResolutionFallback = (target, payload = {}) => {
+  if (!target || payload.isDone === undefined) return;
+  if (payload.resolvedTime != null || payload.resolvedByEmail != null || payload.resolvedByName != null) return;
+
+  // Imported replay payloads often use `isDone` while resolved fields remain null.
+  // When resolved fields are not explicitly populated, derive sidebar/export state from `isDone`.
+  if (payload.isDone) {
+    target.resolvedTime = target.resolvedTime || Date.now();
+    target.resolvedByEmail = target.resolvedByEmail || payload.creatorEmail || null;
+    target.resolvedByName = target.resolvedByName || payload.creatorName || null;
+    return;
+  }
+
+  target.resolvedTime = null;
+  target.resolvedByEmail = null;
+  target.resolvedByName = null;
+};
+
 const applyReplayUpdateToComment = (commentModel, payload, resolvedText) => {
   if (!commentModel || !payload) return;
 
@@ -693,6 +711,8 @@ const applyReplayUpdateToComment = (commentModel, payload, resolvedText) => {
   if (resolvedText !== undefined) {
     commentModel.commentText = resolvedText;
   }
+
+  applyReplayIsDoneResolutionFallback(commentModel, payload);
 };
 
 const normalizeReplayCommentModelPayload = (payload = {}) => {
@@ -703,6 +723,7 @@ const normalizeReplayCommentModelPayload = (payload = {}) => {
   if (!normalizedPayload.docxCommentJSON && Array.isArray(normalizedPayload.elements)) {
     normalizedPayload.docxCommentJSON = normalizedPayload.elements;
   }
+  applyReplayIsDoneResolutionFallback(normalizedPayload, normalizedPayload);
   return normalizedPayload;
 };
 

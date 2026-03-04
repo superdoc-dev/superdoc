@@ -601,6 +601,61 @@ describe('SuperDoc.vue', () => {
     expect(existingComment.docxCommentJSON).toEqual(updatedElements);
   });
 
+  it('maps replayed isDone updates to resolved fields when explicit resolved metadata is missing', async () => {
+    const superdocStub = createSuperdocStub();
+    const wrapper = await mountComponent(superdocStub);
+    await nextTick();
+    const { default: useComment } = await import('./components/CommentsLayer/use-comment.js');
+
+    const options = wrapper.findComponent(SuperEditorStub).props('options');
+    const existingComment = useComment({
+      commentId: 'c-1',
+      importedId: 'imp-1',
+      commentText: 'Old text',
+      fileId: 'doc-1',
+      creatorEmail: 'ada@example.com',
+      creatorName: 'Ada',
+      resolvedTime: null,
+      resolvedByEmail: null,
+      resolvedByName: null,
+    });
+    commentsStoreStub.commentsList.value = [existingComment];
+    commentsStoreStub.addComment.mockClear();
+    superdocStub.activeEditor = { options: { documentId: 'doc-1' } };
+
+    options.onCommentsUpdate({
+      type: 'update',
+      comment: {
+        commentId: 'c-1',
+        importedId: 'imp-1',
+        isDone: true,
+        resolvedTime: null,
+        resolvedByEmail: null,
+        resolvedByName: null,
+        creatorEmail: 'imported@example.com',
+        creatorName: 'Imported Author',
+      },
+    });
+
+    expect(commentsStoreStub.addComment).not.toHaveBeenCalled();
+    expect(existingComment.resolvedTime).not.toBeNull();
+    expect(existingComment.resolvedByEmail).toBe('imported@example.com');
+    expect(existingComment.resolvedByName).toBe('Imported Author');
+
+    options.onCommentsUpdate({
+      type: 'update',
+      comment: {
+        commentId: 'c-1',
+        importedId: 'imp-1',
+        isDone: false,
+      },
+    });
+
+    expect(existingComment.resolvedTime).toBeNull();
+    expect(existingComment.resolvedByEmail).toBeNull();
+    expect(existingComment.resolvedByName).toBeNull();
+  });
+
   it('maps replay-added elements to docxCommentJSON for imported comments', async () => {
     const superdocStub = createSuperdocStub();
     const wrapper = await mountComponent(superdocStub);

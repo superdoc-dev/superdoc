@@ -60,11 +60,16 @@ describe('tiff-converter', () => {
       expect(result).toBeNull();
     });
 
+    // Query strings (e.g. ?happy) force Vite to re-evaluate the module with the
+    // mocked utif2 — vi.doMock applies lazily and needs a fresh module graph entry.
     it('returns a PNG data URI for valid TIFF input', () => {
       const fakeRgba = new Uint8Array([255, 0, 0, 255, 0, 255, 0, 255, 0, 0, 255, 255, 255, 255, 0, 255]);
       vi.doMock('utif2', () => ({
         decode: () => [{ t256: [2], t257: [2] }],
-        decodeImage: (_buf, ifd) => { ifd.width = 2; ifd.height = 2; },
+        decodeImage: (_buf, ifd) => {
+          ifd.width = 2;
+          ifd.height = 2;
+        },
         toRGBA8: () => fakeRgba,
       }));
 

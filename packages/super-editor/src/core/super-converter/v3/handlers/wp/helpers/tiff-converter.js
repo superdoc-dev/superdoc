@@ -40,19 +40,22 @@ export function isTiffExtension(extension) {
 }
 
 /**
- * Get a canvas element, trying the global document first, then the domEnvironment.
+ * Get a canvas element, preferring the injected domEnvironment (if set) over
+ * the global document. This ensures callers that provide a DOM with canvas
+ * support (e.g., node-canvas via JSDOM) aren't bypassed by a global document
+ * whose canvas lacks getContext('2d').
  *
  * @returns {HTMLCanvasElement|null}
  */
 function createCanvas() {
-  if (typeof document !== 'undefined') {
-    return document.createElement('canvas');
-  }
-
   const env = domEnvironment || {};
   const doc = env.document || env.mockDocument || env.window?.document || env.mockWindow?.document || null;
   if (doc) {
     return doc.createElement('canvas');
+  }
+
+  if (typeof document !== 'undefined') {
+    return document.createElement('canvas');
   }
 
   return null;

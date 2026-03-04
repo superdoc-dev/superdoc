@@ -497,6 +497,14 @@ export interface ImageAttrs extends ShapeNodeAttributes {
   shouldCover?: boolean;
   /** @internal Clip-path value for srcRect image crops */
   clipPath?: string;
+  /** @internal Raw a:srcRect element for lossless round-trip export */
+  rawSrcRect?: Record<string, unknown> | null;
+  /** Whether aspect ratio is locked. Maps to OOXML a:picLocks/@noChangeAspect. */
+  lockAspectRatio?: boolean;
+  /** Decorative image flag. Maps to OOXML adec:decorative. */
+  decorative?: boolean;
+  /** Image hyperlink. Maps to OOXML pic:cNvPr > a:hlinkClick. */
+  hyperlink?: { url: string; tooltip?: string } | null;
 }
 
 // ============================================

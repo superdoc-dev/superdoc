@@ -1,3 +1,4 @@
+import type { Node as ProseMirrorNode } from 'prosemirror-model';
 import { getHeadingLevel, type BlockCandidate } from './node-address-resolver.js';
 import type { InlineCandidate } from './inline-address-resolver.js';
 import { resolveCommentIdFromAttrs, toFiniteNumber } from './value-utils.js';
@@ -232,9 +233,61 @@ function mapTableOfContentsNode(candidate: BlockCandidate): TableOfContentsNodeI
   };
 }
 
-function buildImageInfo(attrs: ImageAttrs | undefined, kind: 'block' | 'inline'): ImageNodeInfo {
+/**
+ * Parse a CSS `inset(top% right% bottom% left%)` string into crop percentages.
+ */
+function parseCropFromClipPath(clipPath: string | undefined | null): ImageNodeInfo['properties']['crop'] {
+  if (!clipPath) return null;
+  const match = clipPath.match(/^inset\(\s*([\d.]+)%\s+([\d.]+)%\s+([\d.]+)%\s+([\d.]+)%\s*\)$/);
+  if (!match) return null;
+  return {
+    top: parseFloat(match[1]),
+    right: parseFloat(match[2]),
+    bottom: parseFloat(match[3]),
+    left: parseFloat(match[4]),
+  };
+}
+
+/**
+ * Detect whether the image at `imagePos` has a Caption-styled sibling paragraph.
+ * Returns false when `doc` is unavailable (context-free call sites).
+ */
+function detectCaptionSibling(doc: ProseMirrorNode | undefined, imagePos: number): boolean {
+  if (!doc) return false;
+  try {
+    const $pos = doc.resolve(imagePos);
+    const parentDepth = $pos.depth - 1;
+    if (parentDepth < 0) return false;
+    const parentPos = $pos.before(parentDepth + 1);
+    const parentNode = $pos.node(parentDepth + 1);
+    const afterParentPos = parentPos + parentNode.nodeSize;
+    if (afterParentPos >= doc.content.size) return false;
+    const nextNode = doc.nodeAt(afterParentPos);
+    if (!nextNode || nextNode.type.name !== 'paragraph') return false;
+    return nextNode.attrs?.paragraphProperties?.styleId === 'Caption';
+  } catch {
+    return false;
+  }
+}
+
+function buildImageInfo(
+  attrs: ImageAttrs | undefined,
+  kind: 'block' | 'inline',
+  doc?: ProseMirrorNode,
+  pos?: number,
+): ImageNodeInfo {
   const isFloating = Boolean(attrs?.isAnchor);
   const wrapObj = attrs?.wrap;
+  const td = attrs?.transformData;
+
+  const transform: ImageNodeInfo['properties']['transform'] =
+    td && (td.rotation || td.verticalFlip || td.horizontalFlip)
+      ? {
+          rotation: td.rotation ?? undefined,
+          verticalFlip: td.verticalFlip ?? undefined,
+          horizontalFlip: td.horizontalFlip ?? undefined,
+        }
+      : null;
 
   const properties: ImageNodeInfo['properties'] = {
     src: attrs?.src ?? undefined,
@@ -254,6 +307,14 @@ function buildImageInfo(attrs: ImageAttrs | undefined, kind: 'block' | 'inline')
     anchorData: attrs?.anchorData ?? null,
     marginOffset: attrs?.marginOffset ?? null,
     relativeHeight: attrs?.relativeHeight ?? null,
+    name: attrs?.alt ?? undefined,
+    description: attrs?.title ?? undefined,
+    transform,
+    crop: parseCropFromClipPath(attrs?.clipPath),
+    lockAspectRatio: attrs?.lockAspectRatio ?? true,
+    decorative: attrs?.decorative ?? false,
+    hyperlink: attrs?.hyperlink ?? null,
+    hasCaption: pos != null ? detectCaptionSibling(doc, pos) : false,
   };
 
   return {
@@ -480,7 +541,11 @@ function isInlineCandidate(candidate: BlockCandidate | InlineCandidate): candida
  * @returns Typed node information with properties populated from node attributes.
  * @throws {Error} If the node type is not implemented or the candidate kind mismatches.
  */
-export function mapNodeInfo(candidate: BlockCandidate | InlineCandidate, overrideType?: NodeType): NodeInfo {
+export function mapNodeInfo(
+  candidate: BlockCandidate | InlineCandidate,
+  overrideType?: NodeType,
+  doc?: ProseMirrorNode,
+): NodeInfo {
   const nodeType: NodeType = overrideType ?? candidate.nodeType;
   const kind = isInlineCandidate(candidate) ? 'inline' : 'block';
 
@@ -511,7 +576,7 @@ export function mapNodeInfo(candidate: BlockCandidate | InlineCandidate, overrid
       return mapTableCellNode(candidate as BlockCandidate);
     case 'image': {
       const attrs = candidate.node?.attrs as ImageAttrs | undefined;
-      return buildImageInfo(attrs, kind);
+      return buildImageInfo(attrs, kind, doc, candidate.pos);
     }
     case 'sdt': {
       const attrs = candidate.node?.attrs as StructuredContentBlockAttrs | undefined;

@@ -165,6 +165,41 @@ describe('translateImageNode', () => {
 
     expect(blip.elements).toBeUndefined();
   });
+
+  it('should emit a:hlinkClick and push hyperlink relationship to params.relationships', () => {
+    baseParams.node.attrs.hyperlink = { url: 'https://example.com', tooltip: 'Go' };
+
+    const result = translateImageNode(baseParams);
+
+    // Relationship pushed to part-local array (not hardcoded to document.xml.rels)
+    const hlinkRel = baseParams.relationships.find(
+      (r) => r.attributes.Type === 'http://schemas.openxmlformats.org/officeDocument/2006/relationships/hyperlink',
+    );
+    expect(hlinkRel).toBeDefined();
+    expect(hlinkRel.attributes.Target).toBe('https://example.com');
+    expect(hlinkRel.attributes.TargetMode).toBe('External');
+
+    // a:hlinkClick element present inside pic:cNvPr
+    const graphic = result.elements.find((e) => e.name === 'a:graphic');
+    const picPic = graphic.elements[0].elements[0]; // pic:pic
+    const nvPicPr = picPic.elements.find((e) => e.name === 'pic:nvPicPr');
+    const cNvPr = nvPicPr.elements.find((e) => e.name === 'pic:cNvPr');
+    const hlinkClick = cNvPr.elements.find((e) => e.name === 'a:hlinkClick');
+    expect(hlinkClick).toBeDefined();
+    expect(hlinkClick.attributes['r:id']).toBe(hlinkRel.attributes.Id);
+    expect(hlinkClick.attributes.tooltip).toBe('Go');
+  });
+
+  it('should not emit a:hlinkClick when hyperlink is absent', () => {
+    const result = translateImageNode(baseParams);
+
+    const graphic = result.elements.find((e) => e.name === 'a:graphic');
+    const picPic = graphic.elements[0].elements[0];
+    const nvPicPr = picPic.elements.find((e) => e.name === 'pic:nvPicPr');
+    const cNvPr = nvPicPr.elements.find((e) => e.name === 'pic:cNvPr');
+    const hlinkClick = cNvPr?.elements?.find((e) => e.name === 'a:hlinkClick');
+    expect(hlinkClick).toBeUndefined();
+  });
 });
 
 describe('translateVectorShape', () => {

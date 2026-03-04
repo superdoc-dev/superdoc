@@ -130,6 +130,24 @@ const REQUIRED_COMMANDS: Partial<Record<OperationId, readonly EditorCommandName[
   'images.setPosition': ['setImage'],
   'images.setAnchorOptions': ['setImage'],
   'images.setZOrder': ['setImage'],
+  // SD-2100: Geometry
+  'images.scale': ['setImage'],
+  'images.setLockAspectRatio': ['setImage'],
+  'images.rotate': ['setImage'],
+  'images.flip': ['setImage'],
+  'images.crop': ['setImage'],
+  'images.resetCrop': ['setImage'],
+  // SD-2100: Content
+  'images.replaceSource': ['setImage'],
+  // SD-2100: Semantic metadata
+  'images.setAltText': ['setImage'],
+  'images.setDecorative': ['setImage'],
+  'images.setName': ['setImage'],
+  'images.setHyperlink': ['setImage'],
+  // SD-2100: Caption lifecycle
+  'images.insertCaption': ['setImage'],
+  'images.updateCaption': ['setImage'],
+  'images.removeCaption': ['setImage'],
 };
 
 /** Runtime guard — ensures only canonical reason codes are emitted even if the set grows. */

@@ -272,6 +272,24 @@ export function buildDispatchTable(api: DocumentApi): TypedDispatchTable {
     'images.setPosition': (input, options) => api.images.setPosition(input, options),
     'images.setAnchorOptions': (input, options) => api.images.setAnchorOptions(input, options),
     'images.setZOrder': (input, options) => api.images.setZOrder(input, options),
+    // SD-2100: Geometry
+    'images.scale': (input, options) => api.images.scale(input, options),
+    'images.setLockAspectRatio': (input, options) => api.images.setLockAspectRatio(input, options),
+    'images.rotate': (input, options) => api.images.rotate(input, options),
+    'images.flip': (input, options) => api.images.flip(input, options),
+    'images.crop': (input, options) => api.images.crop(input, options),
+    'images.resetCrop': (input, options) => api.images.resetCrop(input, options),
+    // SD-2100: Content
+    'images.replaceSource': (input, options) => api.images.replaceSource(input, options),
+    // SD-2100: Semantic metadata
+    'images.setAltText': (input, options) => api.images.setAltText(input, options),
+    'images.setDecorative': (input, options) => api.images.setDecorative(input, options),
+    'images.setName': (input, options) => api.images.setName(input, options),
+    'images.setHyperlink': (input, options) => api.images.setHyperlink(input, options),
+    // SD-2100: Caption lifecycle
+    'images.insertCaption': (input, options) => api.images.insertCaption(input, options),
+    'images.updateCaption': (input, options) => api.images.updateCaption(input, options),
+    'images.removeCaption': (input, options) => api.images.removeCaption(input, options),
 
     // --- hyperlinks.* ---
     'hyperlinks.list': (input) => api.hyperlinks.list(input),

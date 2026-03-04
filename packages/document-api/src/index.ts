@@ -343,6 +343,20 @@ import {
   executeImagesSetAnchorOptions,
   executeImagesSetZOrder,
   executeCreateImage,
+  executeImagesScale,
+  executeImagesSetLockAspectRatio,
+  executeImagesRotate,
+  executeImagesFlip,
+  executeImagesCrop,
+  executeImagesResetCrop,
+  executeImagesReplaceSource,
+  executeImagesSetAltText,
+  executeImagesSetDecorative,
+  executeImagesSetName,
+  executeImagesSetHyperlink,
+  executeImagesInsertCaption,
+  executeImagesUpdateCaption,
+  executeImagesRemoveCaption,
 } from './images/images.js';
 import type {
   CreateImageInput,
@@ -363,6 +377,20 @@ import type {
   SetPositionInput,
   SetAnchorOptionsInput,
   SetZOrderInput,
+  ScaleInput,
+  SetLockAspectRatioInput,
+  RotateInput,
+  FlipInput,
+  CropInput,
+  ResetCropInput,
+  ReplaceSourceInput,
+  SetAltTextInput,
+  SetDecorativeInput,
+  SetNameInput,
+  SetHyperlinkInput,
+  InsertCaptionInput,
+  UpdateCaptionInput,
+  RemoveCaptionInput,
 } from './images/images.types.js';
 import type { TocApi, TocAdapter } from './toc/toc.js';
 import {
@@ -533,6 +561,20 @@ export type {
   SetPositionInput,
   SetAnchorOptionsInput,
   SetZOrderInput,
+  ScaleInput,
+  SetLockAspectRatioInput,
+  RotateInput,
+  FlipInput,
+  CropInput,
+  ResetCropInput,
+  ReplaceSourceInput,
+  SetAltTextInput,
+  SetDecorativeInput,
+  SetNameInput,
+  SetHyperlinkInput,
+  InsertCaptionInput,
+  UpdateCaptionInput,
+  RemoveCaptionInput,
 } from './images/images.types.js';
 export type { TocApi, TocAdapter } from './toc/toc.js';
 export type {
@@ -1250,6 +1292,52 @@ export function createDocumentApi(adapters: DocumentApiAdapters): DocumentApi {
       },
       setZOrder(input: SetZOrderInput, options?: MutationOptions): ImagesMutationResult {
         return executeImagesSetZOrder(adapters.images, input, options);
+      },
+      // SD-2100: Geometry
+      scale(input: ScaleInput, options?: MutationOptions): ImagesMutationResult {
+        return executeImagesScale(adapters.images, input, options);
+      },
+      setLockAspectRatio(input: SetLockAspectRatioInput, options?: MutationOptions): ImagesMutationResult {
+        return executeImagesSetLockAspectRatio(adapters.images, input, options);
+      },
+      rotate(input: RotateInput, options?: MutationOptions): ImagesMutationResult {
+        return executeImagesRotate(adapters.images, input, options);
+      },
+      flip(input: FlipInput, options?: MutationOptions): ImagesMutationResult {
+        return executeImagesFlip(adapters.images, input, options);
+      },
+      crop(input: CropInput, options?: MutationOptions): ImagesMutationResult {
+        return executeImagesCrop(adapters.images, input, options);
+      },
+      resetCrop(input: ResetCropInput, options?: MutationOptions): ImagesMutationResult {
+        return executeImagesResetCrop(adapters.images, input, options);
+      },
+      // SD-2100: Content
+      replaceSource(input: ReplaceSourceInput, options?: MutationOptions): ImagesMutationResult {
+        return executeImagesReplaceSource(adapters.images, input, options);
+      },
+      // SD-2100: Semantic metadata
+      setAltText(input: SetAltTextInput, options?: MutationOptions): ImagesMutationResult {
+        return executeImagesSetAltText(adapters.images, input, options);
+      },
+      setDecorative(input: SetDecorativeInput, options?: MutationOptions): ImagesMutationResult {
+        return executeImagesSetDecorative(adapters.images, input, options);
+      },
+      setName(input: SetNameInput, options?: MutationOptions): ImagesMutationResult {
+        return executeImagesSetName(adapters.images, input, options);
+      },
+      setHyperlink(input: SetHyperlinkInput, options?: MutationOptions): ImagesMutationResult {
+        return executeImagesSetHyperlink(adapters.images, input, options);
+      },
+      // SD-2100: Caption lifecycle
+      insertCaption(input: InsertCaptionInput, options?: MutationOptions): ImagesMutationResult {
+        return executeImagesInsertCaption(adapters.images, input, options);
+      },
+      updateCaption(input: UpdateCaptionInput, options?: MutationOptions): ImagesMutationResult {
+        return executeImagesUpdateCaption(adapters.images, input, options);
+      },
+      removeCaption(input: RemoveCaptionInput, options?: MutationOptions): ImagesMutationResult {
+        return executeImagesRemoveCaption(adapters.images, input, options);
       },
     },
     lists: {

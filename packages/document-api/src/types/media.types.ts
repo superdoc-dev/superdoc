@@ -43,6 +43,24 @@ export interface ImageMarginOffset {
   top?: number;
 }
 
+export interface ImageTransformInfo {
+  rotation?: number;
+  verticalFlip?: boolean;
+  horizontalFlip?: boolean;
+}
+
+export interface ImageCropInfo {
+  left?: number;
+  top?: number;
+  right?: number;
+  bottom?: number;
+}
+
+export interface ImageHyperlinkInfo {
+  url: string;
+  tooltip?: string;
+}
+
 export interface ImageProperties {
   src?: string;
   alt?: string;
@@ -52,4 +70,15 @@ export interface ImageProperties {
   anchorData?: ImageAnchorData | null;
   marginOffset?: ImageMarginOffset | null;
   relativeHeight?: number | null;
+  /** Object name (maps to wp:docPr/@name). */
+  name?: string;
+  /** Accessibility description (maps to wp:docPr/@descr). */
+  description?: string;
+  transform?: ImageTransformInfo | null;
+  crop?: ImageCropInfo | null;
+  lockAspectRatio?: boolean;
+  decorative?: boolean;
+  hyperlink?: ImageHyperlinkInfo | null;
+  /** True if an adjacent Caption paragraph exists. */
+  hasCaption?: boolean;
 }

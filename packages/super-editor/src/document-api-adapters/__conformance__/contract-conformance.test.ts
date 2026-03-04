@@ -107,6 +107,20 @@ import {
   imagesSetPositionWrapper,
   imagesSetAnchorOptionsWrapper,
   imagesSetZOrderWrapper,
+  imagesScaleWrapper,
+  imagesSetLockAspectRatioWrapper,
+  imagesRotateWrapper,
+  imagesFlipWrapper,
+  imagesCropWrapper,
+  imagesResetCropWrapper,
+  imagesReplaceSourceWrapper,
+  imagesSetAltTextWrapper,
+  imagesSetDecorativeWrapper,
+  imagesSetNameWrapper,
+  imagesSetHyperlinkWrapper,
+  imagesInsertCaptionWrapper,
+  imagesUpdateCaptionWrapper,
+  imagesRemoveCaptionWrapper,
 } from '../plan-engine/images-wrappers.js';
 import {
   hyperlinksWrapWrapper,
@@ -2150,6 +2164,102 @@ function makeHyperlinkEditor(
     dispatch,
     schema: { marks: { link: linkMarkType } },
     options: { mode: 'html' },
+    on: () => {},
+  } as unknown as Editor;
+}
+
+/**
+ * Image editor with resolve + schema mocks for caption operations.
+ * @param opts.withCaption  Add a `Caption`-styled paragraph after the image paragraph.
+ * @param opts.docChanged   Mock tr.docChanged state (default true).
+ * @param opts.imageId      Override the default image id.
+ * @param opts.extraAttrs   Extra attrs merged onto the image node.
+ */
+function makeCaptionImageEditor(
+  opts: { withCaption?: boolean; docChanged?: boolean; imageId?: string; extraAttrs?: Record<string, unknown> } = {},
+): Editor {
+  const imgId = opts.imageId ?? (opts.withCaption ? 'img-cap' : 'img-1');
+  const imageNode = createNode('image', [], {
+    attrs: {
+      sdImageId: imgId,
+      src: 'https://example.com/test.png',
+      isAnchor: true,
+      wrap: { type: 'Square', attrs: { wrapText: 'bothSides' } },
+      anchorData: { hRelativeFrom: 'column', vRelativeFrom: 'paragraph' },
+      marginOffset: null,
+      relativeHeight: 251658240,
+      originalAttributes: {},
+      size: { width: 100, height: 100 },
+      ...opts.extraAttrs,
+    },
+    isInline: true,
+    isLeaf: true,
+  });
+
+  const imgParagraph = createNode('paragraph', [imageNode], {
+    attrs: { sdBlockId: 'p-img' },
+    isBlock: true,
+    inlineContent: true,
+  });
+
+  const children: ProseMirrorNode[] = [imgParagraph];
+
+  if (opts.withCaption) {
+    const captionText = createNode('text', [], { text: 'Old caption' });
+    const captionParagraph = createNode('paragraph', [captionText], {
+      attrs: { sdBlockId: 'p-caption', paragraphProperties: { styleId: 'Caption' } },
+      isBlock: true,
+      inlineContent: true,
+    });
+    children.push(captionParagraph);
+  }
+
+  const doc = createNode('doc', children, { isBlock: false });
+
+  // Add resolve mock — image is always at position 1 (inside paragraph at 0).
+  (doc as unknown as Record<string, unknown>).resolve = () => ({
+    depth: 2,
+    before: () => 0,
+    node: (d: number) => (d === 2 ? imgParagraph : doc),
+  });
+
+  const dispatch = vi.fn();
+  const docChanged = opts.docChanged ?? true;
+  const tr = {
+    insert: vi.fn().mockReturnThis(),
+    delete: vi.fn().mockReturnThis(),
+    replaceWith: vi.fn().mockReturnThis(),
+    setNodeMarkup: vi.fn().mockReturnThis(),
+    setMeta: vi.fn().mockReturnThis(),
+    mapping: { map: (pos: number) => pos },
+    docChanged,
+    steps: docChanged ? [{}] : [],
+    doc,
+  };
+
+  return {
+    state: {
+      doc,
+      tr,
+      schema: {
+        nodes: {
+          paragraph: {
+            create: vi.fn((attrs: Record<string, unknown>, content: unknown) =>
+              createNode('paragraph', content ? [content as ProseMirrorNode] : [], {
+                attrs,
+                isBlock: true,
+                inlineContent: true,
+              }),
+            ),
+          },
+        },
+        text: vi.fn((t: string) => createNode('text', [], { text: t })),
+      },
+    },
+    dispatch,
+    commands: { setImage: vi.fn(() => true) },
+    schema: { marks: {} },
+    options: {},
     on: () => {},
   } as unknown as Editor;
 }
@@ -5028,6 +5138,235 @@ const mutationVectors: Partial<Record<OperationId, MutationVector>> = {
         { changeMode: 'direct' },
       ),
   },
+  // SD-2100: Image geometry, content, semantic & caption operations
+  // -------------------------------------------------------------------------
+  'images.scale': {
+    throwCase: () =>
+      imagesScaleWrapper(makeImageEditor(), { imageId: 'missing', factor: 1.5 }, { changeMode: 'direct' }),
+    failureCase: () => {
+      // factor=1 produces identical dimensions → explicit NO_OP pre-check
+      return imagesScaleWrapper(makeImageEditor(), { imageId: 'img-1', factor: 1 }, { changeMode: 'direct' });
+    },
+    applyCase: () => imagesScaleWrapper(makeImageEditor(), { imageId: 'img-1', factor: 1.5 }, { changeMode: 'direct' }),
+  },
+  'images.setLockAspectRatio': {
+    throwCase: () =>
+      imagesSetLockAspectRatioWrapper(
+        makeImageEditor(),
+        { imageId: 'missing', locked: false },
+        { changeMode: 'direct' },
+      ),
+    failureCase: () => {
+      // Default lockAspectRatio is true → NO_OP
+      return imagesSetLockAspectRatioWrapper(
+        makeImageEditor(),
+        { imageId: 'img-1', locked: true },
+        { changeMode: 'direct' },
+      );
+    },
+    applyCase: () =>
+      imagesSetLockAspectRatioWrapper(makeImageEditor(), { imageId: 'img-1', locked: false }, { changeMode: 'direct' }),
+  },
+  'images.rotate': {
+    throwCase: () =>
+      imagesRotateWrapper(makeImageEditor(), { imageId: 'missing', angle: 90 }, { changeMode: 'direct' }),
+    failureCase: () => {
+      // No rotation set, angle=0 → NO_OP
+      return imagesRotateWrapper(makeImageEditor(), { imageId: 'img-1', angle: 0 }, { changeMode: 'direct' });
+    },
+    applyCase: () => imagesRotateWrapper(makeImageEditor(), { imageId: 'img-1', angle: 90 }, { changeMode: 'direct' }),
+  },
+  'images.flip': {
+    throwCase: () =>
+      imagesFlipWrapper(makeImageEditor(), { imageId: 'missing', horizontal: true }, { changeMode: 'direct' }),
+    failureCase: () => {
+      // No transformData, passing false for both axes matches defaults → NO_OP
+      return imagesFlipWrapper(
+        makeImageEditor(),
+        { imageId: 'img-1', horizontal: false, vertical: false },
+        { changeMode: 'direct' },
+      );
+    },
+    applyCase: () =>
+      imagesFlipWrapper(makeImageEditor(), { imageId: 'img-1', horizontal: true }, { changeMode: 'direct' }),
+  },
+  'images.crop': {
+    throwCase: () =>
+      imagesCropWrapper(
+        makeImageEditor(),
+        { imageId: 'missing', crop: { left: 10, top: 10, right: 10, bottom: 10 } },
+        { changeMode: 'direct' },
+      ),
+    failureCase: () => {
+      // Transaction produces no change → NO_OP
+      const editor = makeImageEditor();
+      const tr = (editor.state as unknown as { tr: Record<string, unknown> }).tr;
+      tr.docChanged = false;
+      tr.steps = [];
+      return imagesCropWrapper(
+        editor,
+        { imageId: 'img-1', crop: { left: 10, top: 5, right: 10, bottom: 5 } },
+        { changeMode: 'direct' },
+      );
+    },
+    applyCase: () =>
+      imagesCropWrapper(
+        makeImageEditor(),
+        { imageId: 'img-1', crop: { left: 10, top: 5, right: 10, bottom: 5 } },
+        { changeMode: 'direct' },
+      ),
+  },
+  'images.resetCrop': {
+    throwCase: () => imagesResetCropWrapper(makeImageEditor(), { imageId: 'missing' }, { changeMode: 'direct' }),
+    failureCase: () => {
+      // No crop set → NO_OP
+      return imagesResetCropWrapper(makeImageEditor(), { imageId: 'img-1' }, { changeMode: 'direct' });
+    },
+    applyCase: () => {
+      // Image with crop data
+      const editor = makeCaptionImageEditor({
+        imageId: 'img-cropped',
+        extraAttrs: {
+          clipPath: 'inset(5% 10% 5% 10%)',
+          rawSrcRect: { l: '10000', t: '5000', r: '10000', b: '5000' },
+        },
+      });
+      return imagesResetCropWrapper(editor, { imageId: 'img-cropped' }, { changeMode: 'direct' });
+    },
+  },
+  'images.replaceSource': {
+    throwCase: () =>
+      imagesReplaceSourceWrapper(
+        makeImageEditor(),
+        { imageId: 'missing', src: 'data:image/png;base64,abc' },
+        { changeMode: 'direct' },
+      ),
+    failureCase: () => {
+      // Transaction produces no change → NO_OP
+      const editor = makeImageEditor();
+      const tr = (editor.state as unknown as { tr: Record<string, unknown> }).tr;
+      tr.docChanged = false;
+      tr.steps = [];
+      return imagesReplaceSourceWrapper(
+        editor,
+        { imageId: 'img-1', src: 'data:image/png;base64,abc' },
+        { changeMode: 'direct' },
+      );
+    },
+    applyCase: () =>
+      imagesReplaceSourceWrapper(
+        makeImageEditor(),
+        { imageId: 'img-1', src: 'data:image/png;base64,abc' },
+        { changeMode: 'direct' },
+      ),
+  },
+  'images.setAltText': {
+    throwCase: () =>
+      imagesSetAltTextWrapper(
+        makeImageEditor(),
+        { imageId: 'missing', description: 'Alt text' },
+        { changeMode: 'direct' },
+      ),
+    failureCase: () => {
+      // Same description → NO_OP
+      const editor = makeCaptionImageEditor({ extraAttrs: { title: 'Already set' } });
+      return imagesSetAltTextWrapper(
+        editor,
+        { imageId: 'img-1', description: 'Already set' },
+        { changeMode: 'direct' },
+      );
+    },
+    applyCase: () =>
+      imagesSetAltTextWrapper(
+        makeImageEditor(),
+        { imageId: 'img-1', description: 'New alt text' },
+        { changeMode: 'direct' },
+      ),
+  },
+  'images.setDecorative': {
+    throwCase: () =>
+      imagesSetDecorativeWrapper(makeImageEditor(), { imageId: 'missing', decorative: true }, { changeMode: 'direct' }),
+    failureCase: () => {
+      // Default decorative is false → NO_OP
+      return imagesSetDecorativeWrapper(
+        makeImageEditor(),
+        { imageId: 'img-1', decorative: false },
+        { changeMode: 'direct' },
+      );
+    },
+    applyCase: () =>
+      imagesSetDecorativeWrapper(makeImageEditor(), { imageId: 'img-1', decorative: true }, { changeMode: 'direct' }),
+  },
+  'images.setName': {
+    throwCase: () =>
+      imagesSetNameWrapper(makeImageEditor(), { imageId: 'missing', name: 'MyImage' }, { changeMode: 'direct' }),
+    failureCase: () => {
+      // Same name as existing alt attr → NO_OP
+      return imagesSetNameWrapper(
+        makeImageEditor(),
+        { imageId: 'img-1', name: 'Test image' },
+        { changeMode: 'direct' },
+      );
+    },
+    applyCase: () =>
+      imagesSetNameWrapper(makeImageEditor(), { imageId: 'img-1', name: 'NewName' }, { changeMode: 'direct' }),
+  },
+  'images.setHyperlink': {
+    throwCase: () =>
+      imagesSetHyperlinkWrapper(
+        makeImageEditor(),
+        { imageId: 'missing', url: 'https://example.com' },
+        { changeMode: 'direct' },
+      ),
+    failureCase: () => {
+      // No hyperlink set, removing → NO_OP
+      return imagesSetHyperlinkWrapper(makeImageEditor(), { imageId: 'img-1', url: null }, { changeMode: 'direct' });
+    },
+    applyCase: () =>
+      imagesSetHyperlinkWrapper(
+        makeImageEditor(),
+        { imageId: 'img-1', url: 'https://example.com' },
+        { changeMode: 'direct' },
+      ),
+  },
+  'images.insertCaption': {
+    throwCase: () =>
+      imagesInsertCaptionWrapper(makeImageEditor(), { imageId: 'missing', text: 'Caption' }, { changeMode: 'direct' }),
+    failureCase: () => {
+      // Transaction produces no change → NO_OP
+      const editor = makeCaptionImageEditor({ docChanged: false });
+      return imagesInsertCaptionWrapper(editor, { imageId: 'img-1', text: 'Caption' }, { changeMode: 'direct' });
+    },
+    applyCase: () => {
+      const editor = makeCaptionImageEditor();
+      return imagesInsertCaptionWrapper(editor, { imageId: 'img-1', text: 'Caption text' }, { changeMode: 'direct' });
+    },
+  },
+  'images.updateCaption': {
+    throwCase: () =>
+      imagesUpdateCaptionWrapper(makeImageEditor(), { imageId: 'missing', text: 'Updated' }, { changeMode: 'direct' }),
+    failureCase: () => {
+      // Transaction produces no change → NO_OP
+      const editor = makeCaptionImageEditor({ withCaption: true, docChanged: false, imageId: 'img-cap' });
+      return imagesUpdateCaptionWrapper(editor, { imageId: 'img-cap', text: 'Updated' }, { changeMode: 'direct' });
+    },
+    applyCase: () => {
+      const editor = makeCaptionImageEditor({ withCaption: true, imageId: 'img-cap' });
+      return imagesUpdateCaptionWrapper(editor, { imageId: 'img-cap', text: 'New caption' }, { changeMode: 'direct' });
+    },
+  },
+  'images.removeCaption': {
+    throwCase: () => imagesRemoveCaptionWrapper(makeImageEditor(), { imageId: 'missing' }, { changeMode: 'direct' }),
+    failureCase: () => {
+      // No caption → NO_OP
+      const editor = makeCaptionImageEditor();
+      return imagesRemoveCaptionWrapper(editor, { imageId: 'img-1' }, { changeMode: 'direct' });
+    },
+    applyCase: () => {
+      const editor = makeCaptionImageEditor({ withCaption: true, imageId: 'img-cap' });
+      return imagesRemoveCaptionWrapper(editor, { imageId: 'img-cap' }, { changeMode: 'direct' });
+    },
+  },
 };
 
 const dryRunVectors: Partial<Record<OperationId, () => unknown>> = {
@@ -6335,6 +6674,162 @@ const dryRunVectors: Partial<Record<OperationId, () => unknown>> = {
       { target: makeHyperlinkTarget('p1', 0, 5) },
       { changeMode: 'direct', dryRun: true },
     );
+    expect(dispatch).not.toHaveBeenCalled();
+    return result;
+  },
+
+  // -------------------------------------------------------------------------
+  // SD-2100: Image geometry, content, semantic & caption — dryRun vectors
+  // -------------------------------------------------------------------------
+  'images.scale': () => {
+    const editor = makeImageEditor();
+    const dispatch = (editor as unknown as { dispatch: ReturnType<typeof vi.fn> }).dispatch;
+    const result = imagesScaleWrapper(
+      editor,
+      { imageId: 'img-1', factor: 1.5 },
+      { changeMode: 'direct', dryRun: true },
+    );
+    expect(dispatch).not.toHaveBeenCalled();
+    return result;
+  },
+  'images.setLockAspectRatio': () => {
+    const editor = makeImageEditor();
+    const dispatch = (editor as unknown as { dispatch: ReturnType<typeof vi.fn> }).dispatch;
+    const result = imagesSetLockAspectRatioWrapper(
+      editor,
+      { imageId: 'img-1', locked: false },
+      { changeMode: 'direct', dryRun: true },
+    );
+    expect(dispatch).not.toHaveBeenCalled();
+    return result;
+  },
+  'images.rotate': () => {
+    const editor = makeImageEditor();
+    const dispatch = (editor as unknown as { dispatch: ReturnType<typeof vi.fn> }).dispatch;
+    const result = imagesRotateWrapper(editor, { imageId: 'img-1', angle: 90 }, { changeMode: 'direct', dryRun: true });
+    expect(dispatch).not.toHaveBeenCalled();
+    return result;
+  },
+  'images.flip': () => {
+    const editor = makeImageEditor();
+    const dispatch = (editor as unknown as { dispatch: ReturnType<typeof vi.fn> }).dispatch;
+    const result = imagesFlipWrapper(
+      editor,
+      { imageId: 'img-1', horizontal: true },
+      { changeMode: 'direct', dryRun: true },
+    );
+    expect(dispatch).not.toHaveBeenCalled();
+    return result;
+  },
+  'images.crop': () => {
+    const editor = makeImageEditor();
+    const dispatch = (editor as unknown as { dispatch: ReturnType<typeof vi.fn> }).dispatch;
+    const result = imagesCropWrapper(
+      editor,
+      { imageId: 'img-1', crop: { left: 10, top: 5, right: 10, bottom: 5 } },
+      { changeMode: 'direct', dryRun: true },
+    );
+    expect(dispatch).not.toHaveBeenCalled();
+    return result;
+  },
+  'images.resetCrop': () => {
+    const editor = makeCaptionImageEditor({
+      imageId: 'img-cropped-dr',
+      extraAttrs: {
+        clipPath: 'inset(5% 10% 5% 10%)',
+        rawSrcRect: { l: '10000', t: '5000', r: '10000', b: '5000' },
+      },
+    });
+    const dispatch = (editor as unknown as { dispatch: ReturnType<typeof vi.fn> }).dispatch;
+    const result = imagesResetCropWrapper(
+      editor,
+      { imageId: 'img-cropped-dr' },
+      { changeMode: 'direct', dryRun: true },
+    );
+    expect(dispatch).not.toHaveBeenCalled();
+    return result;
+  },
+  'images.replaceSource': () => {
+    const editor = makeImageEditor();
+    const dispatch = (editor as unknown as { dispatch: ReturnType<typeof vi.fn> }).dispatch;
+    const result = imagesReplaceSourceWrapper(
+      editor,
+      { imageId: 'img-1', src: 'data:image/png;base64,abc' },
+      { changeMode: 'direct', dryRun: true },
+    );
+    expect(dispatch).not.toHaveBeenCalled();
+    return result;
+  },
+  'images.setAltText': () => {
+    const editor = makeImageEditor();
+    const dispatch = (editor as unknown as { dispatch: ReturnType<typeof vi.fn> }).dispatch;
+    const result = imagesSetAltTextWrapper(
+      editor,
+      { imageId: 'img-1', description: 'New alt text' },
+      { changeMode: 'direct', dryRun: true },
+    );
+    expect(dispatch).not.toHaveBeenCalled();
+    return result;
+  },
+  'images.setDecorative': () => {
+    const editor = makeImageEditor();
+    const dispatch = (editor as unknown as { dispatch: ReturnType<typeof vi.fn> }).dispatch;
+    const result = imagesSetDecorativeWrapper(
+      editor,
+      { imageId: 'img-1', decorative: true },
+      { changeMode: 'direct', dryRun: true },
+    );
+    expect(dispatch).not.toHaveBeenCalled();
+    return result;
+  },
+  'images.setName': () => {
+    const editor = makeImageEditor();
+    const dispatch = (editor as unknown as { dispatch: ReturnType<typeof vi.fn> }).dispatch;
+    const result = imagesSetNameWrapper(
+      editor,
+      { imageId: 'img-1', name: 'NewName' },
+      { changeMode: 'direct', dryRun: true },
+    );
+    expect(dispatch).not.toHaveBeenCalled();
+    return result;
+  },
+  'images.setHyperlink': () => {
+    const editor = makeImageEditor();
+    const dispatch = (editor as unknown as { dispatch: ReturnType<typeof vi.fn> }).dispatch;
+    const result = imagesSetHyperlinkWrapper(
+      editor,
+      { imageId: 'img-1', url: 'https://example.com' },
+      { changeMode: 'direct', dryRun: true },
+    );
+    expect(dispatch).not.toHaveBeenCalled();
+    return result;
+  },
+  'images.insertCaption': () => {
+    const editor = makeCaptionImageEditor();
+    const dispatch = (editor as unknown as { dispatch: ReturnType<typeof vi.fn> }).dispatch;
+    const result = imagesInsertCaptionWrapper(
+      editor,
+      { imageId: 'img-1', text: 'Caption' },
+      { changeMode: 'direct', dryRun: true },
+    );
+    expect(dispatch).not.toHaveBeenCalled();
+    return result;
+  },
+  'images.updateCaption': () => {
+    const editor = makeCaptionImageEditor({ withCaption: true, imageId: 'img-cap' });
+    const dispatch = (editor as unknown as { dispatch: ReturnType<typeof vi.fn> }).dispatch;
+    const result = imagesUpdateCaptionWrapper(
+      editor,
+      { imageId: 'img-cap', text: 'New caption' },
+      { changeMode: 'direct', dryRun: true },
+    );
+    expect(dispatch).not.toHaveBeenCalled();
+    return result;
+  },
+  'images.removeCaption': () => {
+    const editor = makeCaptionImageEditor({ withCaption: true, imageId: 'img-cap' });
+    const dispatch = (editor as unknown as { dispatch: ReturnType<typeof vi.fn> }).dispatch;
+    const result = imagesRemoveCaptionWrapper(editor, { imageId: 'img-cap' }, { changeMode: 'direct', dryRun: true });
     expect(dispatch).not.toHaveBeenCalled();
     return result;
   },

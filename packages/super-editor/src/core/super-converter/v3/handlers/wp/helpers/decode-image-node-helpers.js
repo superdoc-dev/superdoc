@@ -5,6 +5,120 @@ import { wrapTextInRun } from '@converter/exporter.js';
 import { generateDocxRandomId } from '@core/helpers/index.js';
 import { readImageDimensionsFromDataUri } from '@converter/image-dimensions.js';
 
+const DECORATIVE_EXT_URI = '{C183D7F6-B498-43B3-948B-1728B52AA6E4}';
+const DECORATIVE_NAMESPACE = 'http://schemas.microsoft.com/office/drawing/2017/decorative';
+const HYPERLINK_REL_TYPE = 'http://schemas.openxmlformats.org/officeDocument/2006/relationships/hyperlink';
+
+/**
+ * Build the `wp:docPr` element with correct attribute mappings:
+ * - `@name` ← attrs.alt (object name, wp:docPr/@name)
+ * - `@descr` ← attrs.title (accessibility description, wp:docPr/@descr) — omitted when decorative
+ * - Decorative extension child when attrs.decorative is true
+ */
+function buildDocPrElement(attrs, imageName) {
+  const docPrAttrs = {
+    id: attrs.id || 0,
+    name: attrs.alt || `Picture ${imageName}`,
+  };
+  // Emit descr (accessibility description) unless decorative
+  if (!attrs.decorative && attrs.title) {
+    docPrAttrs.descr = attrs.title;
+  }
+
+  const children = [];
+  if (attrs.decorative) {
+    children.push({
+      name: 'a:extLst',
+      elements: [
+        {
+          name: 'a:ext',
+          attributes: { uri: DECORATIVE_EXT_URI },
+          elements: [
+            {
+              name: 'adec:decorative',
+              attributes: { 'xmlns:adec': DECORATIVE_NAMESPACE, val: '1' },
+            },
+          ],
+        },
+      ],
+    });
+  }
+
+  return {
+    name: 'wp:docPr',
+    attributes: docPrAttrs,
+    ...(children.length ? { elements: children } : {}),
+  };
+}
+
+/**
+ * Build the `pic:nvPicPr` element with:
+ * - `pic:cNvPr/@name` ← attrs.alt (object name, mirrors wp:docPr/@name)
+ * - `a:hlinkClick` child when attrs.hyperlink is set
+ * - `a:picLocks/@noChangeAspect` ← dynamic from attrs.lockAspectRatio
+ */
+function buildNvPicPrElement(attrs, imageName, params) {
+  // --- pic:cNvPr children (hyperlink) ---
+  const cNvPrChildren = [];
+  if (attrs.hyperlink?.url) {
+    const hlinkRId = addHyperlinkRelationship(params, attrs.hyperlink.url);
+    const hlinkAttrs = { 'r:id': hlinkRId };
+    if (attrs.hyperlink.tooltip) {
+      hlinkAttrs.tooltip = attrs.hyperlink.tooltip;
+    }
+    cNvPrChildren.push({ name: 'a:hlinkClick', attributes: hlinkAttrs });
+  }
+
+  return {
+    name: 'pic:nvPicPr',
+    elements: [
+      {
+        name: 'pic:cNvPr',
+        attributes: {
+          id: attrs.id || 0,
+          name: attrs.alt || `Picture ${imageName}`,
+        },
+        ...(cNvPrChildren.length ? { elements: cNvPrChildren } : {}),
+      },
+      {
+        name: 'pic:cNvPicPr',
+        elements: [
+          {
+            name: 'a:picLocks',
+            attributes: {
+              noChangeAspect: attrs.lockAspectRatio === false ? 0 : 1,
+              noChangeArrowheads: 1,
+            },
+          },
+        ],
+      },
+    ],
+  };
+}
+
+/**
+ * Add a hyperlink relationship and return the rId.
+ * Uses params.relationships (part-local) so that images in headers/footers
+ * write to the correct .rels file, not always word/_rels/document.xml.rels.
+ */
+function addHyperlinkRelationship(params, url) {
+  const newId = `rId${generateDocxRandomId(8)}`;
+  if (!params.relationships || !Array.isArray(params.relationships)) {
+    params.relationships = [];
+  }
+  params.relationships.push({
+    type: 'element',
+    name: 'Relationship',
+    attributes: {
+      Id: newId,
+      Type: HYPERLINK_REL_TYPE,
+      Target: url,
+      TargetMode: 'External',
+    },
+  });
+  return newId;
+}
+
 /**
  * Decodes image into export XML
  * @typedef {Object} ExportParams
@@ -156,13 +270,7 @@ export const translateImageNode = (params) => {
         name: 'wp:effectExtent',
         attributes: effectExtentAttrs,
       },
-      {
-        name: 'wp:docPr',
-        attributes: {
-          id: attrs.id || 0,
-          name: attrs.alt || `Picture ${imageName}`,
-        },
-      },
+      buildDocPrElement(attrs, imageName),
       {
         name: 'wp:cNvGraphicFramePr',
         elements: [
@@ -170,7 +278,7 @@ export const translateImageNode = (params) => {
             name: 'a:graphicFrameLocks',
             attributes: {
               'xmlns:a': drawingXmlns,
-              noChangeAspect: 1,
+              noChangeAspect: attrs.lockAspectRatio === false ? 0 : 1,
             },
           },
         ],
@@ -187,30 +295,7 @@ export const translateImageNode = (params) => {
                 name: 'pic:pic',
                 attributes: { 'xmlns:pic': pictureXmlns },
                 elements: [
-                  {
-                    name: 'pic:nvPicPr',
-                    elements: [
-                      {
-                        name: 'pic:cNvPr',
-                        attributes: {
-                          id: attrs.id || 0,
-                          name: attrs.title || `Picture ${imageName}`,
-                        },
-                      },
-                      {
-                        name: 'pic:cNvPicPr',
-                        elements: [
-                          {
-                            name: 'a:picLocks',
-                            attributes: {
-                              noChangeAspect: 1,
-                              noChangeArrowheads: 1,
-                            },
-                          },
-                        ],
-                      },
-                    ],
-                  },
+                  buildNvPicPrElement(attrs, imageName, params),
                   {
                     name: 'pic:blipFill',
                     elements: [

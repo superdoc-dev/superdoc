@@ -177,6 +177,20 @@ import {
   imagesSetPositionWrapper,
   imagesSetAnchorOptionsWrapper,
   imagesSetZOrderWrapper,
+  imagesScaleWrapper,
+  imagesSetLockAspectRatioWrapper,
+  imagesRotateWrapper,
+  imagesFlipWrapper,
+  imagesCropWrapper,
+  imagesResetCropWrapper,
+  imagesReplaceSourceWrapper,
+  imagesSetAltTextWrapper,
+  imagesSetDecorativeWrapper,
+  imagesSetNameWrapper,
+  imagesSetHyperlinkWrapper,
+  imagesInsertCaptionWrapper,
+  imagesUpdateCaptionWrapper,
+  imagesRemoveCaptionWrapper,
 } from './plan-engine/images-wrappers.js';
 import {
   hyperlinksListWrapper,
@@ -393,6 +407,24 @@ export function assembleDocumentApiAdapters(editor: Editor): DocumentApiAdapters
       setPosition: (input, options) => imagesSetPositionWrapper(editor, input, options),
       setAnchorOptions: (input, options) => imagesSetAnchorOptionsWrapper(editor, input, options),
       setZOrder: (input, options) => imagesSetZOrderWrapper(editor, input, options),
+      // SD-2100: Geometry
+      scale: (input, options) => imagesScaleWrapper(editor, input, options),
+      setLockAspectRatio: (input, options) => imagesSetLockAspectRatioWrapper(editor, input, options),
+      rotate: (input, options) => imagesRotateWrapper(editor, input, options),
+      flip: (input, options) => imagesFlipWrapper(editor, input, options),
+      crop: (input, options) => imagesCropWrapper(editor, input, options),
+      resetCrop: (input, options) => imagesResetCropWrapper(editor, input, options),
+      // SD-2100: Content
+      replaceSource: (input, options) => imagesReplaceSourceWrapper(editor, input, options),
+      // SD-2100: Semantic metadata
+      setAltText: (input, options) => imagesSetAltTextWrapper(editor, input, options),
+      setDecorative: (input, options) => imagesSetDecorativeWrapper(editor, input, options),
+      setName: (input, options) => imagesSetNameWrapper(editor, input, options),
+      setHyperlink: (input, options) => imagesSetHyperlinkWrapper(editor, input, options),
+      // SD-2100: Caption lifecycle
+      insertCaption: (input, options) => imagesInsertCaptionWrapper(editor, input, options),
+      updateCaption: (input, options) => imagesUpdateCaptionWrapper(editor, input, options),
+      removeCaption: (input, options) => imagesRemoveCaptionWrapper(editor, input, options),
     },
     hyperlinks: {
       list: (query) => hyperlinksListWrapper(editor, query),

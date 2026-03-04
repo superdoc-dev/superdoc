@@ -225,6 +225,20 @@ const INTENT_NAMES = {
   'doc.images.setPosition': 'set_image_position',
   'doc.images.setAnchorOptions': 'set_image_anchor_options',
   'doc.images.setZOrder': 'set_image_z_order',
+  'doc.images.scale': 'scale_image',
+  'doc.images.setLockAspectRatio': 'set_image_lock_aspect_ratio',
+  'doc.images.rotate': 'rotate_image',
+  'doc.images.flip': 'flip_image',
+  'doc.images.crop': 'crop_image',
+  'doc.images.resetCrop': 'reset_image_crop',
+  'doc.images.replaceSource': 'replace_image_source',
+  'doc.images.setAltText': 'set_image_alt_text',
+  'doc.images.setDecorative': 'set_image_decorative',
+  'doc.images.setName': 'set_image_name',
+  'doc.images.setHyperlink': 'set_image_hyperlink',
+  'doc.images.insertCaption': 'insert_image_caption',
+  'doc.images.updateCaption': 'update_image_caption',
+  'doc.images.removeCaption': 'remove_image_caption',
 } as const satisfies Record<DocBackedCliOpId, string>;
 
 // ---------------------------------------------------------------------------

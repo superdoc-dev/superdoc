@@ -5,6 +5,7 @@ import type {
   ImageWrapSide,
   ImageMarginOffset,
   ImageSize,
+  ImageCropInfo,
 } from '../types/media.types.js';
 
 // ---------------------------------------------------------------------------
@@ -84,6 +85,101 @@ export interface ImageAnchorOptionsInput {
 export interface ImageZOrderInput {
   /** Raw OOXML relativeHeight unsigned 32-bit integer (0..4294967295). */
   relativeHeight: number;
+}
+
+// ---------------------------------------------------------------------------
+// Geometry inputs (SD-2100)
+// ---------------------------------------------------------------------------
+
+export interface ScaleInput {
+  imageId: string;
+  /** Scale factor (> 0). E.g., 0.5 = half size, 2.0 = double. */
+  factor: number;
+}
+
+export interface SetLockAspectRatioInput {
+  imageId: string;
+  locked: boolean;
+}
+
+export interface RotateInput {
+  imageId: string;
+  /** Absolute rotation in degrees (0–360). */
+  angle: number;
+}
+
+export interface FlipInput {
+  imageId: string;
+  /** true = flipped, false = normal, undefined = unchanged. */
+  horizontal?: boolean;
+  /** true = flipped, false = normal, undefined = unchanged. */
+  vertical?: boolean;
+}
+
+export interface CropInput {
+  imageId: string;
+  crop: ImageCropInfo;
+}
+
+export interface ResetCropInput {
+  imageId: string;
+}
+
+// ---------------------------------------------------------------------------
+// Content replacement (SD-2100)
+// ---------------------------------------------------------------------------
+
+export interface ReplaceSourceInput {
+  imageId: string;
+  src: string;
+  /** If true, recompute size from the new image's intrinsic dimensions (data URIs only). */
+  resetSize?: boolean;
+}
+
+// ---------------------------------------------------------------------------
+// Semantic metadata (SD-2100)
+// ---------------------------------------------------------------------------
+
+export interface SetAltTextInput {
+  imageId: string;
+  /** Accessibility description (maps to wp:docPr/@descr). */
+  description: string;
+}
+
+export interface SetDecorativeInput {
+  imageId: string;
+  decorative: boolean;
+}
+
+export interface SetNameInput {
+  imageId: string;
+  /** Object name (maps to wp:docPr/@name). */
+  name: string;
+}
+
+export interface SetHyperlinkInput {
+  imageId: string;
+  /** URL to link to, or null to remove hyperlink. */
+  url: string | null;
+  tooltip?: string;
+}
+
+// ---------------------------------------------------------------------------
+// Caption lifecycle (SD-2100)
+// ---------------------------------------------------------------------------
+
+export interface InsertCaptionInput {
+  imageId: string;
+  text: string;
+}
+
+export interface UpdateCaptionInput {
+  imageId: string;
+  text: string;
+}
+
+export interface RemoveCaptionInput {
+  imageId: string;
 }
 
 // ---------------------------------------------------------------------------

@@ -64,6 +64,22 @@ function ref(name: string): JsonSchema {
   return { $ref: `#/$defs/${name}` };
 }
 
+/** Shared output/success/failure shape for ImagesMutationResult operations. */
+function imagesMutationSchemaSet(inputSchema: JsonSchema): OperationSchemaSet {
+  return {
+    input: inputSchema,
+    output: objectSchema({ success: { type: 'boolean' }, image: { type: 'object' }, failure: { type: 'object' } }),
+    success: objectSchema({ success: { const: true }, image: { type: 'object' } }, ['success', 'image']),
+    failure: objectSchema(
+      {
+        success: { const: false },
+        failure: objectSchema({ code: { type: 'string' }, message: { type: 'string' } }, ['code', 'message']),
+      },
+      ['success', 'failure'],
+    ),
+  };
+}
+
 const nodeTypeValues = NODE_TYPES;
 const blockNodeTypeValues = BLOCK_NODE_TYPES;
 const deletableBlockNodeTypeValues = DELETABLE_BLOCK_NODE_TYPES;
@@ -4340,8 +4356,8 @@ const operationSchemas: Record<OperationId, OperationSchemaSet> = {
       ['success', 'failure'],
     ),
   },
-  'images.setZOrder': {
-    input: objectSchema(
+  'images.setZOrder': imagesMutationSchemaSet(
+    objectSchema(
       {
         imageId: { type: 'string' },
         zOrder: objectSchema(
@@ -4357,16 +4373,99 @@ const operationSchemas: Record<OperationId, OperationSchemaSet> = {
       },
       ['imageId', 'zOrder'],
     ),
-    output: objectSchema({ success: { type: 'boolean' }, image: { type: 'object' }, failure: { type: 'object' } }),
-    success: objectSchema({ success: { const: true }, image: { type: 'object' } }, ['success', 'image']),
-    failure: objectSchema(
+  ),
+
+  // --- SD-2100: Geometry ---
+
+  'images.scale': imagesMutationSchemaSet(
+    objectSchema({ imageId: { type: 'string' }, factor: { type: 'number', exclusiveMinimum: 0 } }, [
+      'imageId',
+      'factor',
+    ]),
+  ),
+
+  'images.setLockAspectRatio': imagesMutationSchemaSet(
+    objectSchema({ imageId: { type: 'string' }, locked: { type: 'boolean' } }, ['imageId', 'locked']),
+  ),
+
+  'images.rotate': imagesMutationSchemaSet(
+    objectSchema({ imageId: { type: 'string' }, angle: { type: 'number', minimum: 0, maximum: 360 } }, [
+      'imageId',
+      'angle',
+    ]),
+  ),
+
+  'images.flip': imagesMutationSchemaSet(
+    objectSchema({ imageId: { type: 'string' }, horizontal: { type: 'boolean' }, vertical: { type: 'boolean' } }, [
+      'imageId',
+    ]),
+  ),
+
+  'images.crop': imagesMutationSchemaSet(
+    objectSchema(
       {
-        success: { const: false },
-        failure: objectSchema({ code: { type: 'string' }, message: { type: 'string' } }, ['code', 'message']),
+        imageId: { type: 'string' },
+        crop: objectSchema(
+          {
+            left: { type: 'number', minimum: 0, maximum: 100 },
+            top: { type: 'number', minimum: 0, maximum: 100 },
+            right: { type: 'number', minimum: 0, maximum: 100 },
+            bottom: { type: 'number', minimum: 0, maximum: 100 },
+          },
+          [], // All fields optional; omitted edges default to 0 at runtime
+        ),
       },
-      ['success', 'failure'],
+      ['imageId', 'crop'],
     ),
-  },
+  ),
+
+  'images.resetCrop': imagesMutationSchemaSet(objectSchema({ imageId: { type: 'string' } }, ['imageId'])),
+
+  // --- SD-2100: Content replacement ---
+
+  'images.replaceSource': imagesMutationSchemaSet(
+    objectSchema({ imageId: { type: 'string' }, src: { type: 'string' }, resetSize: { type: 'boolean' } }, [
+      'imageId',
+      'src',
+    ]),
+  ),
+
+  // --- SD-2100: Semantic metadata ---
+
+  'images.setAltText': imagesMutationSchemaSet(
+    objectSchema({ imageId: { type: 'string' }, description: { type: 'string' } }, ['imageId', 'description']),
+  ),
+
+  'images.setDecorative': imagesMutationSchemaSet(
+    objectSchema({ imageId: { type: 'string' }, decorative: { type: 'boolean' } }, ['imageId', 'decorative']),
+  ),
+
+  'images.setName': imagesMutationSchemaSet(
+    objectSchema({ imageId: { type: 'string' }, name: { type: 'string' } }, ['imageId', 'name']),
+  ),
+
+  'images.setHyperlink': imagesMutationSchemaSet(
+    objectSchema(
+      {
+        imageId: { type: 'string' },
+        url: { type: ['string', 'null'] },
+        tooltip: { type: 'string' },
+      },
+      ['imageId', 'url'],
+    ),
+  ),
+
+  // --- SD-2100: Caption lifecycle ---
+
+  'images.insertCaption': imagesMutationSchemaSet(
+    objectSchema({ imageId: { type: 'string' }, text: { type: 'string' } }, ['imageId', 'text']),
+  ),
+
+  'images.updateCaption': imagesMutationSchemaSet(
+    objectSchema({ imageId: { type: 'string' }, text: { type: 'string' } }, ['imageId', 'text']),
+  ),
+
+  'images.removeCaption': imagesMutationSchemaSet(objectSchema({ imageId: { type: 'string' } }, ['imageId'])),
 
   // --- hyperlinks.* ---
   'hyperlinks.list': {

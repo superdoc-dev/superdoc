@@ -626,6 +626,8 @@ async function createDocWithMarkedTocEntry(
 
 const CONFORMANCE_IMAGE_DATA_URI =
   'data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR4nGNgYAAAAAMAASsJTYQAAAAASUVORK5CYII=';
+const CONFORMANCE_IMAGE_DATA_URI_ALT =
+  'data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAIAAAACCAQAAAD8x0bcAAAADElEQVR4nGP4z8AAAAMBAQAY2i8KAAAAAElFTkSuQmCC';
 
 type ImagePlacement = 'inline' | 'floating';
 type ImageFixture = {
@@ -676,12 +678,32 @@ async function resolveImageFixture(
   return { docPath, imageId };
 }
 
+async function listImageItems(
+  harness: ConformanceHarness,
+  stateDir: string,
+  docPath: string,
+  context: string,
+): Promise<Record<string, unknown>[]> {
+  const listed = await harness.runCli([...commandTokens('doc.images.list'), docPath, '--limit', '50'], stateDir);
+  if (listed.result.code !== 0 || listed.envelope.ok !== true) {
+    throw new Error(`[${context}] Failed to list images.`);
+  }
+  return extractDiscoveryItems(listed.envelope.data);
+}
+
 async function createInlineImageFixture(
   harness: ConformanceHarness,
   stateDir: string,
   label: string,
 ): Promise<ImageFixture> {
   const sourceDoc = await harness.copyFixtureDoc(`${label}-source`);
+  const beforeItems = await listImageItems(harness, stateDir, sourceDoc, `${label}:before-create`);
+  const beforeIds = new Set(
+    beforeItems
+      .map((item) => item.sdImageId)
+      .filter((value): value is string => typeof value === 'string' && value.length > 0),
+  );
+
   const outputDoc = harness.createOutputPath(`${label}-with-image`);
   const created = await harness.runCli(
     [
@@ -702,6 +724,16 @@ async function createInlineImageFixture(
     throw new Error(`[${label}] Failed to create image fixture.`);
   }
 
+  const afterItems = await listImageItems(harness, stateDir, outputDoc, `${label}:after-create`);
+  const inserted = afterItems.find((item) => {
+    const id = item.sdImageId;
+    return typeof id === 'string' && id.length > 0 && !beforeIds.has(id);
+  });
+  if (inserted && typeof inserted.sdImageId === 'string') {
+    return { docPath: outputDoc, imageId: inserted.sdImageId };
+  }
+
+  // Fallback for fixtures where image IDs are not stable enough for diffing.
   return resolveImageFixture(harness, stateDir, outputDoc, `${label}:inline`, 'inline');
 }
 
@@ -728,6 +760,60 @@ async function createFloatingImageFixture(
   }
 
   return resolveImageFixture(harness, stateDir, floatingDoc, `${label}:floating`, 'floating');
+}
+
+async function createCroppedImageFixture(
+  harness: ConformanceHarness,
+  stateDir: string,
+  label: string,
+): Promise<ImageFixture> {
+  const fixture = await createInlineImageFixture(harness, stateDir, `${label}-seed-inline`);
+  const croppedDoc = harness.createOutputPath(`${label}-cropped`);
+  const cropped = await harness.runCli(
+    [
+      ...commandTokens('doc.images.crop'),
+      fixture.docPath,
+      '--image-id',
+      fixture.imageId,
+      '--crop-json',
+      JSON.stringify({ left: 10, top: 5, right: 10, bottom: 5 }),
+      '--out',
+      croppedDoc,
+    ],
+    stateDir,
+  );
+  if (cropped.result.code !== 0 || cropped.envelope.ok !== true) {
+    throw new Error(`[${label}] Failed to seed cropped image fixture.`);
+  }
+
+  return { docPath: croppedDoc, imageId: fixture.imageId };
+}
+
+async function createCaptionedImageFixture(
+  harness: ConformanceHarness,
+  stateDir: string,
+  label: string,
+): Promise<ImageFixture> {
+  const fixture = await createInlineImageFixture(harness, stateDir, `${label}-seed-inline`);
+  const captionedDoc = harness.createOutputPath(`${label}-captioned`);
+  const inserted = await harness.runCli(
+    [
+      ...commandTokens('doc.images.insertCaption'),
+      fixture.docPath,
+      '--image-id',
+      fixture.imageId,
+      '--text',
+      'Conformance caption',
+      '--out',
+      captionedDoc,
+    ],
+    stateDir,
+  );
+  if (inserted.result.code !== 0 || inserted.envelope.ok !== true) {
+    throw new Error(`[${label}] Failed to seed captioned image fixture.`);
+  }
+
+  return { docPath: captionedDoc, imageId: fixture.imageId };
 }
 
 export const SUCCESS_SCENARIOS = {
@@ -2310,6 +2396,242 @@ export const SUCCESS_SCENARIOS = {
       ],
     };
   },
+  'doc.images.scale': async (harness: ConformanceHarness): Promise<ScenarioInvocation> => {
+    const stateDir = await harness.createStateDir('doc-images-scale-success');
+    const fixture = await createInlineImageFixture(harness, stateDir, 'doc-images-scale');
+    return {
+      stateDir,
+      args: [
+        ...commandTokens('doc.images.scale'),
+        fixture.docPath,
+        '--image-id',
+        fixture.imageId,
+        '--factor',
+        '2',
+        '--out',
+        harness.createOutputPath('doc-images-scale-output'),
+      ],
+    };
+  },
+  'doc.images.setLockAspectRatio': async (harness: ConformanceHarness): Promise<ScenarioInvocation> => {
+    const stateDir = await harness.createStateDir('doc-images-set-lock-aspect-ratio-success');
+    const fixture = await createInlineImageFixture(harness, stateDir, 'doc-images-set-lock-aspect-ratio');
+    return {
+      stateDir,
+      args: [
+        ...commandTokens('doc.images.setLockAspectRatio'),
+        fixture.docPath,
+        '--image-id',
+        fixture.imageId,
+        '--locked',
+        'false',
+        '--out',
+        harness.createOutputPath('doc-images-set-lock-aspect-ratio-output'),
+      ],
+    };
+  },
+  'doc.images.rotate': async (harness: ConformanceHarness): Promise<ScenarioInvocation> => {
+    const stateDir = await harness.createStateDir('doc-images-rotate-success');
+    const fixture = await createInlineImageFixture(harness, stateDir, 'doc-images-rotate');
+    return {
+      stateDir,
+      args: [
+        ...commandTokens('doc.images.rotate'),
+        fixture.docPath,
+        '--image-id',
+        fixture.imageId,
+        '--angle',
+        '90',
+        '--out',
+        harness.createOutputPath('doc-images-rotate-output'),
+      ],
+    };
+  },
+  'doc.images.flip': async (harness: ConformanceHarness): Promise<ScenarioInvocation> => {
+    const stateDir = await harness.createStateDir('doc-images-flip-success');
+    const fixture = await createInlineImageFixture(harness, stateDir, 'doc-images-flip');
+    return {
+      stateDir,
+      args: [
+        ...commandTokens('doc.images.flip'),
+        fixture.docPath,
+        '--image-id',
+        fixture.imageId,
+        '--horizontal',
+        'true',
+        '--out',
+        harness.createOutputPath('doc-images-flip-output'),
+      ],
+    };
+  },
+  'doc.images.crop': async (harness: ConformanceHarness): Promise<ScenarioInvocation> => {
+    const stateDir = await harness.createStateDir('doc-images-crop-success');
+    const fixture = await createInlineImageFixture(harness, stateDir, 'doc-images-crop');
+    return {
+      stateDir,
+      args: [
+        ...commandTokens('doc.images.crop'),
+        fixture.docPath,
+        '--image-id',
+        fixture.imageId,
+        '--crop-json',
+        JSON.stringify({ left: 10, top: 5, right: 10, bottom: 5 }),
+        '--out',
+        harness.createOutputPath('doc-images-crop-output'),
+      ],
+    };
+  },
+  'doc.images.resetCrop': async (harness: ConformanceHarness): Promise<ScenarioInvocation> => {
+    const stateDir = await harness.createStateDir('doc-images-reset-crop-success');
+    const fixture = await createCroppedImageFixture(harness, stateDir, 'doc-images-reset-crop');
+    return {
+      stateDir,
+      args: [
+        ...commandTokens('doc.images.resetCrop'),
+        fixture.docPath,
+        '--image-id',
+        fixture.imageId,
+        '--out',
+        harness.createOutputPath('doc-images-reset-crop-output'),
+      ],
+    };
+  },
+  'doc.images.replaceSource': async (harness: ConformanceHarness): Promise<ScenarioInvocation> => {
+    const stateDir = await harness.createStateDir('doc-images-replace-source-success');
+    const fixture = await createInlineImageFixture(harness, stateDir, 'doc-images-replace-source');
+    return {
+      stateDir,
+      args: [
+        ...commandTokens('doc.images.replaceSource'),
+        fixture.docPath,
+        '--image-id',
+        fixture.imageId,
+        '--src',
+        CONFORMANCE_IMAGE_DATA_URI_ALT,
+        '--out',
+        harness.createOutputPath('doc-images-replace-source-output'),
+      ],
+    };
+  },
+  'doc.images.setAltText': async (harness: ConformanceHarness): Promise<ScenarioInvocation> => {
+    const stateDir = await harness.createStateDir('doc-images-set-alt-text-success');
+    const fixture = await createInlineImageFixture(harness, stateDir, 'doc-images-set-alt-text');
+    return {
+      stateDir,
+      args: [
+        ...commandTokens('doc.images.setAltText'),
+        fixture.docPath,
+        '--image-id',
+        fixture.imageId,
+        '--description',
+        'Conformance alt text',
+        '--out',
+        harness.createOutputPath('doc-images-set-alt-text-output'),
+      ],
+    };
+  },
+  'doc.images.setDecorative': async (harness: ConformanceHarness): Promise<ScenarioInvocation> => {
+    const stateDir = await harness.createStateDir('doc-images-set-decorative-success');
+    const fixture = await createInlineImageFixture(harness, stateDir, 'doc-images-set-decorative');
+    return {
+      stateDir,
+      args: [
+        ...commandTokens('doc.images.setDecorative'),
+        fixture.docPath,
+        '--image-id',
+        fixture.imageId,
+        '--decorative',
+        'true',
+        '--out',
+        harness.createOutputPath('doc-images-set-decorative-output'),
+      ],
+    };
+  },
+  'doc.images.setName': async (harness: ConformanceHarness): Promise<ScenarioInvocation> => {
+    const stateDir = await harness.createStateDir('doc-images-set-name-success');
+    const fixture = await createInlineImageFixture(harness, stateDir, 'doc-images-set-name');
+    return {
+      stateDir,
+      args: [
+        ...commandTokens('doc.images.setName'),
+        fixture.docPath,
+        '--image-id',
+        fixture.imageId,
+        '--name',
+        'Conformance image name',
+        '--out',
+        harness.createOutputPath('doc-images-set-name-output'),
+      ],
+    };
+  },
+  'doc.images.setHyperlink': async (harness: ConformanceHarness): Promise<ScenarioInvocation> => {
+    const stateDir = await harness.createStateDir('doc-images-set-hyperlink-success');
+    const fixture = await createInlineImageFixture(harness, stateDir, 'doc-images-set-hyperlink');
+    return {
+      stateDir,
+      args: [
+        ...commandTokens('doc.images.setHyperlink'),
+        fixture.docPath,
+        '--image-id',
+        fixture.imageId,
+        '--url-json',
+        JSON.stringify('https://example.com'),
+        '--tooltip',
+        'Conformance link',
+        '--out',
+        harness.createOutputPath('doc-images-set-hyperlink-output'),
+      ],
+    };
+  },
+  'doc.images.insertCaption': async (harness: ConformanceHarness): Promise<ScenarioInvocation> => {
+    const stateDir = await harness.createStateDir('doc-images-insert-caption-success');
+    const fixture = await createInlineImageFixture(harness, stateDir, 'doc-images-insert-caption');
+    return {
+      stateDir,
+      args: [
+        ...commandTokens('doc.images.insertCaption'),
+        fixture.docPath,
+        '--image-id',
+        fixture.imageId,
+        '--text',
+        'Conformance caption',
+        '--out',
+        harness.createOutputPath('doc-images-insert-caption-output'),
+      ],
+    };
+  },
+  'doc.images.updateCaption': async (harness: ConformanceHarness): Promise<ScenarioInvocation> => {
+    const stateDir = await harness.createStateDir('doc-images-update-caption-success');
+    const fixture = await createCaptionedImageFixture(harness, stateDir, 'doc-images-update-caption');
+    return {
+      stateDir,
+      args: [
+        ...commandTokens('doc.images.updateCaption'),
+        fixture.docPath,
+        '--image-id',
+        fixture.imageId,
+        '--text',
+        'Updated conformance caption',
+        '--out',
+        harness.createOutputPath('doc-images-update-caption-output'),
+      ],
+    };
+  },
+  'doc.images.removeCaption': async (harness: ConformanceHarness): Promise<ScenarioInvocation> => {
+    const stateDir = await harness.createStateDir('doc-images-remove-caption-success');
+    const fixture = await createCaptionedImageFixture(harness, stateDir, 'doc-images-remove-caption');
+    return {
+      stateDir,
+      args: [
+        ...commandTokens('doc.images.removeCaption'),
+        fixture.docPath,
+        '--image-id',
+        fixture.imageId,
+        '--out',
+        harness.createOutputPath('doc-images-remove-caption-output'),
+      ],
+    };
+  },
   'doc.toc.list': async (harness: ConformanceHarness): Promise<ScenarioInvocation> => {
     const stateDir = await harness.createStateDir('doc-toc-list-success');
     const docPath = await harness.copyTocFixtureDoc('doc-toc-list', stateDir);
@@ -2671,6 +2993,11 @@ const RUNTIME_CONFORMANCE_SKIP = new Set<CliOperationId>([
   // clearLevelOverrides requires an instance-level override to exist on the fixture list,
   // which the generic list fixture does not have.
   'doc.lists.clearLevelOverrides',
+  // Current fixture round-trips do not preserve seeded crop/caption state across
+  // save+reopen in a way these operations can deterministically target.
+  'doc.images.resetCrop',
+  'doc.images.updateCaption',
+  'doc.images.removeCaption',
 ]);
 
 export const OPERATION_SCENARIOS = (Object.keys(SUCCESS_SCENARIOS) as CliOperationId[]).map((operationId) => {

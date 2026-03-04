@@ -152,6 +152,20 @@ import type {
   SetPositionInput,
   SetAnchorOptionsInput,
   SetZOrderInput,
+  ScaleInput,
+  SetLockAspectRatioInput,
+  RotateInput,
+  FlipInput,
+  CropInput,
+  ResetCropInput,
+  ReplaceSourceInput,
+  SetAltTextInput,
+  SetDecorativeInput,
+  SetNameInput,
+  SetHyperlinkInput,
+  InsertCaptionInput,
+  UpdateCaptionInput,
+  RemoveCaptionInput,
 } from '../images/images.types.js';
 import type {
   MutationsApplyInput,
@@ -674,6 +688,28 @@ export interface OperationRegistry extends FormatInlineAliasOperationRegistry {
   'images.setPosition': { input: SetPositionInput; options: MutationOptions; output: ImagesMutationResult };
   'images.setAnchorOptions': { input: SetAnchorOptionsInput; options: MutationOptions; output: ImagesMutationResult };
   'images.setZOrder': { input: SetZOrderInput; options: MutationOptions; output: ImagesMutationResult };
+  // SD-2100: Geometry
+  'images.scale': { input: ScaleInput; options: MutationOptions; output: ImagesMutationResult };
+  'images.setLockAspectRatio': {
+    input: SetLockAspectRatioInput;
+    options: MutationOptions;
+    output: ImagesMutationResult;
+  };
+  'images.rotate': { input: RotateInput; options: MutationOptions; output: ImagesMutationResult };
+  'images.flip': { input: FlipInput; options: MutationOptions; output: ImagesMutationResult };
+  'images.crop': { input: CropInput; options: MutationOptions; output: ImagesMutationResult };
+  'images.resetCrop': { input: ResetCropInput; options: MutationOptions; output: ImagesMutationResult };
+  // SD-2100: Content
+  'images.replaceSource': { input: ReplaceSourceInput; options: MutationOptions; output: ImagesMutationResult };
+  // SD-2100: Semantic metadata
+  'images.setAltText': { input: SetAltTextInput; options: MutationOptions; output: ImagesMutationResult };
+  'images.setDecorative': { input: SetDecorativeInput; options: MutationOptions; output: ImagesMutationResult };
+  'images.setName': { input: SetNameInput; options: MutationOptions; output: ImagesMutationResult };
+  'images.setHyperlink': { input: SetHyperlinkInput; options: MutationOptions; output: ImagesMutationResult };
+  // SD-2100: Caption lifecycle
+  'images.insertCaption': { input: InsertCaptionInput; options: MutationOptions; output: ImagesMutationResult };
+  'images.updateCaption': { input: UpdateCaptionInput; options: MutationOptions; output: ImagesMutationResult };
+  'images.removeCaption': { input: RemoveCaptionInput; options: MutationOptions; output: ImagesMutationResult };
 
   // --- hyperlinks.* ---
   'hyperlinks.list': { input: HyperlinksListQuery | undefined; options: never; output: HyperlinksListResult };

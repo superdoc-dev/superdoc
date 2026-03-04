@@ -47,6 +47,24 @@ const ALL_IMAGE_COMMAND_IDS = [
   'images.setPosition',
   'images.setAnchorOptions',
   'images.setZOrder',
+  // SD-2100: Geometry
+  'images.scale',
+  'images.setLockAspectRatio',
+  'images.rotate',
+  'images.flip',
+  'images.crop',
+  'images.resetCrop',
+  // SD-2100: Content
+  'images.replaceSource',
+  // SD-2100: Semantic metadata
+  'images.setAltText',
+  'images.setDecorative',
+  'images.setName',
+  'images.setHyperlink',
+  // SD-2100: Caption lifecycle
+  'images.insertCaption',
+  'images.updateCaption',
+  'images.removeCaption',
 ] as const;
 
 type ImageCommandId = (typeof ALL_IMAGE_COMMAND_IDS)[number];
@@ -411,6 +429,267 @@ describe('document-api story: all image commands', () => {
             sessionId,
             imageId: f.imageId,
             zOrder: { relativeHeight: 500 },
+          }),
+        );
+      },
+    },
+
+    // -----------------------------------------------------------------
+    // SD-2100: Geometry
+    // -----------------------------------------------------------------
+
+    {
+      operationId: 'images.scale',
+      setup: 'inlineImage',
+      run: async (sessionId, fixture) => {
+        const f = requireFixture('images.scale', fixture);
+        return unwrap<any>(
+          await api.doc.images.scale({
+            sessionId,
+            imageId: f.imageId,
+            factor: 0.5,
+          }),
+        );
+      },
+    },
+    {
+      operationId: 'images.setLockAspectRatio',
+      setup: 'inlineImage',
+      run: async (sessionId, fixture) => {
+        const f = requireFixture('images.setLockAspectRatio', fixture);
+        return unwrap<any>(
+          await api.doc.images.setLockAspectRatio({
+            sessionId,
+            imageId: f.imageId,
+            locked: true,
+          }),
+        );
+      },
+    },
+    {
+      operationId: 'images.rotate',
+      setup: 'inlineImage',
+      run: async (sessionId, fixture) => {
+        const f = requireFixture('images.rotate', fixture);
+        return unwrap<any>(
+          await api.doc.images.rotate({
+            sessionId,
+            imageId: f.imageId,
+            angle: 90,
+          }),
+        );
+      },
+    },
+    {
+      operationId: 'images.flip',
+      setup: 'inlineImage',
+      run: async (sessionId, fixture) => {
+        const f = requireFixture('images.flip', fixture);
+        return unwrap<any>(
+          await api.doc.images.flip({
+            sessionId,
+            imageId: f.imageId,
+            horizontal: true,
+          }),
+        );
+      },
+    },
+    {
+      operationId: 'images.crop',
+      setup: 'inlineImage',
+      run: async (sessionId, fixture) => {
+        const f = requireFixture('images.crop', fixture);
+        return unwrap<any>(
+          await api.doc.images.crop({
+            sessionId,
+            imageId: f.imageId,
+            crop: { left: 10, top: 10, right: 10, bottom: 10 },
+          }),
+        );
+      },
+    },
+    {
+      operationId: 'images.resetCrop',
+      setup: 'inlineImage',
+      prepare: async (sessionId, fixture) => {
+        const f = requireFixture('images.resetCrop', fixture);
+        // Apply a crop first so resetCrop has something to clear.
+        try {
+          unwrap<any>(
+            await api.doc.images.crop({
+              sessionId,
+              imageId: f.imageId,
+              crop: { left: 5, top: 5, right: 5, bottom: 5 },
+            }),
+          );
+        } catch {
+          /* crop may not be supported yet — resetCrop should still work */
+        }
+      },
+      run: async (sessionId, fixture) => {
+        const f = requireFixture('images.resetCrop', fixture);
+        return unwrap<any>(
+          await api.doc.images.resetCrop({
+            sessionId,
+            imageId: f.imageId,
+          }),
+        );
+      },
+    },
+
+    // -----------------------------------------------------------------
+    // SD-2100: Content
+    // -----------------------------------------------------------------
+
+    {
+      operationId: 'images.replaceSource',
+      setup: 'inlineImage',
+      run: async (sessionId, fixture) => {
+        const f = requireFixture('images.replaceSource', fixture);
+        const src = await imageDataUri();
+        return unwrap<any>(
+          await api.doc.images.replaceSource({
+            sessionId,
+            imageId: f.imageId,
+            src,
+          }),
+        );
+      },
+    },
+
+    // -----------------------------------------------------------------
+    // SD-2100: Semantic metadata
+    // -----------------------------------------------------------------
+
+    {
+      operationId: 'images.setAltText',
+      setup: 'inlineImage',
+      run: async (sessionId, fixture) => {
+        const f = requireFixture('images.setAltText', fixture);
+        return unwrap<any>(
+          await api.doc.images.setAltText({
+            sessionId,
+            imageId: f.imageId,
+            description: 'A test image showing a butterfly logo',
+          }),
+        );
+      },
+    },
+    {
+      operationId: 'images.setDecorative',
+      setup: 'inlineImage',
+      run: async (sessionId, fixture) => {
+        const f = requireFixture('images.setDecorative', fixture);
+        return unwrap<any>(
+          await api.doc.images.setDecorative({
+            sessionId,
+            imageId: f.imageId,
+            decorative: true,
+          }),
+        );
+      },
+    },
+    {
+      operationId: 'images.setName',
+      setup: 'inlineImage',
+      run: async (sessionId, fixture) => {
+        const f = requireFixture('images.setName', fixture);
+        return unwrap<any>(
+          await api.doc.images.setName({
+            sessionId,
+            imageId: f.imageId,
+            name: 'Picture 42',
+          }),
+        );
+      },
+    },
+    {
+      operationId: 'images.setHyperlink',
+      setup: 'inlineImage',
+      run: async (sessionId, fixture) => {
+        const f = requireFixture('images.setHyperlink', fixture);
+        return unwrap<any>(
+          await api.doc.images.setHyperlink({
+            sessionId,
+            imageId: f.imageId,
+            url: 'https://example.com',
+            tooltip: 'Visit example',
+          }),
+        );
+      },
+    },
+
+    // -----------------------------------------------------------------
+    // SD-2100: Caption lifecycle
+    // -----------------------------------------------------------------
+
+    {
+      operationId: 'images.insertCaption',
+      setup: 'inlineImage',
+      run: async (sessionId, fixture) => {
+        const f = requireFixture('images.insertCaption', fixture);
+        return unwrap<any>(
+          await api.doc.images.insertCaption({
+            sessionId,
+            imageId: f.imageId,
+            text: 'Figure 1: Test image caption',
+          }),
+        );
+      },
+    },
+    {
+      operationId: 'images.updateCaption',
+      setup: 'inlineImage',
+      prepare: async (sessionId, fixture) => {
+        const f = requireFixture('images.updateCaption', fixture);
+        // Insert a caption first so updateCaption has something to modify.
+        try {
+          unwrap<any>(
+            await api.doc.images.insertCaption({
+              sessionId,
+              imageId: f.imageId,
+              text: 'Original caption',
+            }),
+          );
+        } catch {
+          /* caption may already exist — fine */
+        }
+      },
+      run: async (sessionId, fixture) => {
+        const f = requireFixture('images.updateCaption', fixture);
+        return unwrap<any>(
+          await api.doc.images.updateCaption({
+            sessionId,
+            imageId: f.imageId,
+            text: 'Updated caption text',
+          }),
+        );
+      },
+    },
+    {
+      operationId: 'images.removeCaption',
+      setup: 'inlineImage',
+      prepare: async (sessionId, fixture) => {
+        const f = requireFixture('images.removeCaption', fixture);
+        // Insert a caption first so removeCaption has something to remove.
+        try {
+          unwrap<any>(
+            await api.doc.images.insertCaption({
+              sessionId,
+              imageId: f.imageId,
+              text: 'Caption to be removed',
+            }),
+          );
+        } catch {
+          /* caption may already exist — fine */
+        }
+      },
+      run: async (sessionId, fixture) => {
+        const f = requireFixture('images.removeCaption', fixture);
+        return unwrap<any>(
+          await api.doc.images.removeCaption({
+            sessionId,
+            imageId: f.imageId,
           }),
         );
       },

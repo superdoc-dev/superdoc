@@ -2753,6 +2753,238 @@ export const OPERATION_DEFINITIONS = {
     referenceGroup: 'images',
   },
 
+  // --- SD-2100: Geometry ---
+
+  'images.scale': {
+    memberPath: 'images.scale',
+    description: 'Scale an image by a uniform factor applied to both dimensions.',
+    expectedResult: 'Returns an ImagesMutationResult with the updated image address.',
+    requiresDocumentContext: true,
+    metadata: mutationOperation({
+      idempotency: 'non-idempotent',
+      supportsDryRun: true,
+      supportsTrackedMode: false,
+      possibleFailureCodes: ['NO_OP'],
+      throws: [...T_IMAGE_COMMAND, 'INVALID_INPUT'],
+    }),
+    referenceDocPath: 'images/scale.mdx',
+    referenceGroup: 'images',
+  },
+
+  'images.setLockAspectRatio': {
+    memberPath: 'images.setLockAspectRatio',
+    description: 'Lock or unlock the aspect ratio for an image.',
+    expectedResult: 'Returns an ImagesMutationResult; reports NO_OP if already set.',
+    requiresDocumentContext: true,
+    metadata: mutationOperation({
+      idempotency: 'conditional',
+      supportsDryRun: true,
+      supportsTrackedMode: false,
+      possibleFailureCodes: ['NO_OP'],
+      throws: [...T_IMAGE_COMMAND, 'INVALID_INPUT'],
+    }),
+    referenceDocPath: 'images/set-lock-aspect-ratio.mdx',
+    referenceGroup: 'images',
+  },
+
+  'images.rotate': {
+    memberPath: 'images.rotate',
+    description: 'Set the absolute rotation angle for an image.',
+    expectedResult: 'Returns an ImagesMutationResult; reports NO_OP if already set.',
+    requiresDocumentContext: true,
+    metadata: mutationOperation({
+      idempotency: 'conditional',
+      supportsDryRun: true,
+      supportsTrackedMode: false,
+      possibleFailureCodes: ['NO_OP'],
+      throws: [...T_IMAGE_COMMAND, 'INVALID_INPUT'],
+    }),
+    referenceDocPath: 'images/rotate.mdx',
+    referenceGroup: 'images',
+  },
+
+  'images.flip': {
+    memberPath: 'images.flip',
+    description: 'Set horizontal and/or vertical flip state for an image.',
+    expectedResult: 'Returns an ImagesMutationResult; reports NO_OP if already set.',
+    requiresDocumentContext: true,
+    metadata: mutationOperation({
+      idempotency: 'conditional',
+      supportsDryRun: true,
+      supportsTrackedMode: false,
+      possibleFailureCodes: ['NO_OP'],
+      throws: [...T_IMAGE_COMMAND, 'INVALID_INPUT'],
+    }),
+    referenceDocPath: 'images/flip.mdx',
+    referenceGroup: 'images',
+  },
+
+  'images.crop': {
+    memberPath: 'images.crop',
+    description: 'Apply rectangular edge-percentage crop to an image.',
+    expectedResult: 'Returns an ImagesMutationResult; reports NO_OP if unchanged.',
+    requiresDocumentContext: true,
+    metadata: mutationOperation({
+      idempotency: 'conditional',
+      supportsDryRun: true,
+      supportsTrackedMode: false,
+      possibleFailureCodes: ['NO_OP'],
+      throws: [...T_IMAGE_COMMAND, 'INVALID_INPUT'],
+    }),
+    referenceDocPath: 'images/crop.mdx',
+    referenceGroup: 'images',
+  },
+
+  'images.resetCrop': {
+    memberPath: 'images.resetCrop',
+    description: 'Remove all cropping from an image.',
+    expectedResult: 'Returns an ImagesMutationResult; reports NO_OP if no crop is set.',
+    requiresDocumentContext: true,
+    metadata: mutationOperation({
+      idempotency: 'conditional',
+      supportsDryRun: true,
+      supportsTrackedMode: false,
+      possibleFailureCodes: ['NO_OP'],
+      throws: T_IMAGE_COMMAND,
+    }),
+    referenceDocPath: 'images/reset-crop.mdx',
+    referenceGroup: 'images',
+  },
+
+  // --- SD-2100: Content replacement ---
+
+  'images.replaceSource': {
+    memberPath: 'images.replaceSource',
+    description: 'Replace the image source while preserving identity and placement.',
+    expectedResult: 'Returns an ImagesMutationResult with the updated image address.',
+    requiresDocumentContext: true,
+    metadata: mutationOperation({
+      idempotency: 'non-idempotent',
+      supportsDryRun: true,
+      supportsTrackedMode: false,
+      possibleFailureCodes: ['NO_OP'],
+      throws: [...T_IMAGE_COMMAND, 'INVALID_INPUT'],
+    }),
+    referenceDocPath: 'images/replace-source.mdx',
+    referenceGroup: 'images',
+  },
+
+  // --- SD-2100: Semantic metadata ---
+
+  'images.setAltText': {
+    memberPath: 'images.setAltText',
+    description: 'Set the accessibility description (alt text) for an image.',
+    expectedResult: 'Returns an ImagesMutationResult; reports NO_OP if unchanged.',
+    requiresDocumentContext: true,
+    metadata: mutationOperation({
+      idempotency: 'conditional',
+      supportsDryRun: true,
+      supportsTrackedMode: false,
+      possibleFailureCodes: ['NO_OP'],
+      throws: [...T_IMAGE_COMMAND, 'INVALID_INPUT'],
+    }),
+    referenceDocPath: 'images/set-alt-text.mdx',
+    referenceGroup: 'images',
+  },
+
+  'images.setDecorative': {
+    memberPath: 'images.setDecorative',
+    description: 'Mark or unmark an image as decorative.',
+    expectedResult: 'Returns an ImagesMutationResult; reports NO_OP if unchanged.',
+    requiresDocumentContext: true,
+    metadata: mutationOperation({
+      idempotency: 'conditional',
+      supportsDryRun: true,
+      supportsTrackedMode: false,
+      possibleFailureCodes: ['NO_OP'],
+      throws: [...T_IMAGE_COMMAND, 'INVALID_INPUT'],
+    }),
+    referenceDocPath: 'images/set-decorative.mdx',
+    referenceGroup: 'images',
+  },
+
+  'images.setName': {
+    memberPath: 'images.setName',
+    description: 'Set the object name for an image.',
+    expectedResult: 'Returns an ImagesMutationResult; reports NO_OP if unchanged.',
+    requiresDocumentContext: true,
+    metadata: mutationOperation({
+      idempotency: 'conditional',
+      supportsDryRun: true,
+      supportsTrackedMode: false,
+      possibleFailureCodes: ['NO_OP'],
+      throws: [...T_IMAGE_COMMAND, 'INVALID_INPUT'],
+    }),
+    referenceDocPath: 'images/set-name.mdx',
+    referenceGroup: 'images',
+  },
+
+  'images.setHyperlink': {
+    memberPath: 'images.setHyperlink',
+    description: 'Set or remove the hyperlink attached to an image.',
+    expectedResult: 'Returns an ImagesMutationResult; reports NO_OP if unchanged.',
+    requiresDocumentContext: true,
+    metadata: mutationOperation({
+      idempotency: 'conditional',
+      supportsDryRun: true,
+      supportsTrackedMode: false,
+      possibleFailureCodes: ['NO_OP'],
+      throws: [...T_IMAGE_COMMAND, 'INVALID_INPUT'],
+    }),
+    referenceDocPath: 'images/set-hyperlink.mdx',
+    referenceGroup: 'images',
+  },
+
+  // --- SD-2100: Caption lifecycle ---
+
+  'images.insertCaption': {
+    memberPath: 'images.insertCaption',
+    description: 'Insert a caption paragraph below the image.',
+    expectedResult: 'Returns an ImagesMutationResult with the image address.',
+    requiresDocumentContext: true,
+    metadata: mutationOperation({
+      idempotency: 'non-idempotent',
+      supportsDryRun: true,
+      supportsTrackedMode: false,
+      possibleFailureCodes: ['NO_OP'],
+      throws: [...T_IMAGE_COMMAND, 'INVALID_INPUT'],
+    }),
+    referenceDocPath: 'images/insert-caption.mdx',
+    referenceGroup: 'images',
+  },
+
+  'images.updateCaption': {
+    memberPath: 'images.updateCaption',
+    description: 'Update the text of an existing caption paragraph.',
+    expectedResult: 'Returns an ImagesMutationResult; reports NO_OP if text unchanged.',
+    requiresDocumentContext: true,
+    metadata: mutationOperation({
+      idempotency: 'conditional',
+      supportsDryRun: true,
+      supportsTrackedMode: false,
+      possibleFailureCodes: ['NO_OP'],
+      throws: [...T_IMAGE_COMMAND, 'INVALID_INPUT'],
+    }),
+    referenceDocPath: 'images/update-caption.mdx',
+    referenceGroup: 'images',
+  },
+
+  'images.removeCaption': {
+    memberPath: 'images.removeCaption',
+    description: 'Remove the caption paragraph from below the image.',
+    expectedResult: 'Returns an ImagesMutationResult; reports NO_OP if no caption exists.',
+    requiresDocumentContext: true,
+    metadata: mutationOperation({
+      idempotency: 'conditional',
+      supportsDryRun: true,
+      supportsTrackedMode: false,
+      possibleFailureCodes: ['NO_OP'],
+      throws: T_IMAGE_COMMAND,
+    }),
+    referenceDocPath: 'images/remove-caption.mdx',
+    referenceGroup: 'images',
+  },
+
   // -------------------------------------------------------------------------
   // Hyperlinks: discovery + CRUD
   // -------------------------------------------------------------------------

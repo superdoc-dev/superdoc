@@ -323,6 +323,24 @@ export const Image = Node.create({
         default: null,
         rendered: false,
       },
+
+      /** Whether aspect ratio is locked. Maps to OOXML a:picLocks/@noChangeAspect. */
+      lockAspectRatio: {
+        default: true,
+        rendered: false,
+      },
+
+      /** Decorative image flag. Maps to OOXML adec:decorative. */
+      decorative: {
+        default: false,
+        rendered: false,
+      },
+
+      /** Image hyperlink. Maps to OOXML pic:cNvPr > a:hlinkClick. */
+      hyperlink: {
+        default: null,
+        rendered: false,
+      },
     };
   },
 

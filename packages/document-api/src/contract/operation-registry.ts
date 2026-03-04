@@ -23,6 +23,7 @@ import type { FindOptions } from '../find/find.js';
 import type { GetNodeByIdInput } from '../get-node/get-node.js';
 import type { GetTextInput } from '../get-text/get-text.js';
 import type { GetMarkdownInput } from '../get-markdown/get-markdown.js';
+import type { GetHtmlInput } from '../get-html/get-html.js';
 import type { InfoInput } from '../info/info.js';
 import type { InsertInput } from '../insert/insert.js';
 import type { ReplaceInput } from '../replace/replace.js';
@@ -212,6 +213,7 @@ export interface OperationRegistry extends FormatInlineAliasOperationRegistry {
   getNodeById: { input: GetNodeByIdInput; options: never; output: NodeInfo };
   getText: { input: GetTextInput; options: never; output: string };
   getMarkdown: { input: GetMarkdownInput; options: never; output: string };
+  getHtml: { input: GetHtmlInput; options: never; output: string };
   info: { input: InfoInput; options: never; output: DocumentInfo };
 
   // --- Singleton mutations ---

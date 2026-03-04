@@ -212,23 +212,14 @@ describe('insertStructuredWrapper — list numbering rollback', () => {
 });
 
 describe('insertStructuredWrapper — html', () => {
-  it('does not throw for HTML insert (gracefully succeeds or returns failure)', () => {
-    // The test editor in vitest (happy-dom) may or may not have DOM support.
-    // The key assertion is that this never throws an unhandled error.
-    expect(() => {
-      const result = insertStructuredWrapper(editor, {
-        value: '<p>Hello from HTML</p>',
-        type: 'html',
-      });
+  it('inserts HTML content into the document', () => {
+    const result = insertStructuredWrapper(editor, {
+      value: '<p>Hello from HTML</p>',
+      type: 'html',
+    });
 
-      // In a DOM environment it should succeed; in headless it fails gracefully
-      if (result.success) {
-        expect(getDocTextContent(editor)).toContain('Hello from HTML');
-      } else {
-        expect(result.failure).toBeDefined();
-        expect(['UNSUPPORTED_ENVIRONMENT', 'INVALID_TARGET']).toContain(result.failure?.code);
-      }
-    }).not.toThrow();
+    expect(result.success).toBe(true);
+    expect(getDocTextContent(editor)).toContain('Hello from HTML');
   });
 });
 

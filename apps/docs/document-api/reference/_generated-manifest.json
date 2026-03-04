@@ -83,6 +83,7 @@
     "apps/docs/document-api/reference/format/vanish.mdx",
     "apps/docs/document-api/reference/format/vert-align.mdx",
     "apps/docs/document-api/reference/format/web-hidden.mdx",
+    "apps/docs/document-api/reference/get-html.mdx",
     "apps/docs/document-api/reference/get-markdown.mdx",
     "apps/docs/document-api/reference/get-node-by-id.mdx",
     "apps/docs/document-api/reference/get-node.mdx",
@@ -212,6 +213,7 @@
         "getNodeById",
         "getText",
         "getMarkdown",
+        "getHtml",
         "info",
         "insert",
         "replace",
@@ -494,5 +496,5 @@
     }
   ],
   "marker": "{/* GENERATED FILE: DO NOT EDIT. Regenerate via `pnpm run docapi:sync`. */}",
-  "sourceHash": "f1dd7d6cb56f926499a024e1bdd02a3540e666cbbd102f025e7edc8ff85b83ac"
+  "sourceHash": "d63e4c31b2ecb4768b8d7c22f4fca6ec66da0d674ff05b7663fa95db8791754b"
 }

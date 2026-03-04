@@ -647,6 +647,11 @@ _No fields._
 | `operations.format.webHidden.dryRun` | boolean | yes |  |
 | `operations.format.webHidden.reasons` | enum[] | no |  |
 | `operations.format.webHidden.tracked` | boolean | yes |  |
+| `operations.getHtml` | object | yes |  |
+| `operations.getHtml.available` | boolean | yes |  |
+| `operations.getHtml.dryRun` | boolean | yes |  |
+| `operations.getHtml.reasons` | enum[] | no |  |
+| `operations.getHtml.tracked` | boolean | yes |  |
 | `operations.getMarkdown` | object | yes |  |
 | `operations.getMarkdown.available` | boolean | yes |  |
 | `operations.getMarkdown.dryRun` | boolean | yes |  |
@@ -2076,6 +2081,14 @@ _No fields._
       "tracked": true
     },
     "format.webHidden": {
+      "available": true,
+      "dryRun": true,
+      "reasons": [
+        "COMMAND_UNAVAILABLE"
+      ],
+      "tracked": true
+    },
+    "getHtml": {
       "available": true,
       "dryRun": true,
       "reasons": [
@@ -7229,6 +7242,41 @@ _No fields._
           ],
           "type": "object"
         },
+        "getHtml": {
+          "additionalProperties": false,
+          "properties": {
+            "available": {
+              "type": "boolean"
+            },
+            "dryRun": {
+              "type": "boolean"
+            },
+            "reasons": {
+              "items": {
+                "enum": [
+                  "COMMAND_UNAVAILABLE",
+                  "HELPER_UNAVAILABLE",
+                  "OPERATION_UNAVAILABLE",
+                  "TRACKED_MODE_UNAVAILABLE",
+                  "DRY_RUN_UNAVAILABLE",
+                  "NAMESPACE_UNAVAILABLE",
+                  "STYLES_PART_MISSING",
+                  "COLLABORATION_ACTIVE"
+                ]
+              },
+              "type": "array"
+            },
+            "tracked": {
+              "type": "boolean"
+            }
+          },
+          "required": [
+            "available",
+            "tracked",
+            "dryRun"
+          ],
+          "type": "object"
+        },
         "getMarkdown": {
           "additionalProperties": false,
           "properties": {
@@ -10946,6 +10994,7 @@ _No fields._
         "getNodeById",
         "getText",
         "getMarkdown",
+        "getHtml",
         "info",
         "insert",
         "replace",

@@ -49,6 +49,18 @@ test('release-sdk fallback workflow builds Node SDK before validate', async () =
   );
 });
 
+test('release-sdk fallback workflow publishes Node SDK via sdk-release-publish', async () => {
+  const content = await readRepoFile('.github/workflows/release-sdk.yml');
+  const expectedCmd =
+    'node packages/sdk/scripts/sdk-release-publish.mjs --tag "${{ inputs.npm-tag }}" --npm-only';
+  assert.ok(content.includes(expectedCmd), '.github/workflows/release-sdk.yml: missing sdk-release-publish command');
+  assert.equal(
+    content.includes('npm publish --access public --tag latest'),
+    false,
+    '.github/workflows/release-sdk.yml: must not use npm publish directly for Node SDK',
+  );
+});
+
 test('sdk semantic-release prepareCmd builds Node SDK before validate', async () => {
   const content = await readRepoFile('packages/sdk/.releaserc.cjs');
   assertOrder(

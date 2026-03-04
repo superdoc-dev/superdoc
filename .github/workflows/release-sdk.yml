@@ -15,6 +15,11 @@ on:
         required: false
         type: boolean
         default: false
+      npm-tag:
+        description: "npm dist-tag for Node SDK publish (e.g. latest, next)"
+        required: false
+        type: string
+        default: latest
 
 permissions:
   contents: read
@@ -68,6 +73,7 @@ jobs:
             echo "| **Releasing** | \`${CURRENT}\` (unchanged) |" >> $GITHUB_STEP_SUMMARY
           fi
           echo "| **Dry run** | \`${{ inputs.dry-run }}\` |" >> $GITHUB_STEP_SUMMARY
+          echo "| **npm tag** | \`${{ inputs.npm-tag }}\` |" >> $GITHUB_STEP_SUMMARY
 
       # ---------------------------------------------------------------
       # Set version (if provided)
@@ -99,31 +105,19 @@ jobs:
       - name: Validate SDK
         run: node packages/sdk/scripts/sdk-validate.mjs
 
-      - name: Publish Node SDK
+      - name: Publish Node SDK packages (platforms + root)
         if: ${{ !inputs.dry-run }}
-        run: npm publish --access public --tag latest
-        working-directory: packages/sdk/langs/node
+        run: node packages/sdk/scripts/sdk-release-publish.mjs --tag "${{ inputs.npm-tag }}" --npm-only
         env:
           NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
 
-      - name: Publish Node SDK (dry run)
+      - name: Publish Node SDK packages (dry run)
         if: ${{ inputs.dry-run }}
-        run: npm pack --dry-run
-        working-directory: packages/sdk/langs/node
+        run: node packages/sdk/scripts/sdk-release-publish.mjs --tag "${{ inputs.npm-tag }}" --npm-only --dry-run
 
       # ---------------------------------------------------------------
       # Python SDK (main + 5 companion packages)
       # ---------------------------------------------------------------
-      - name: Build CLI platform artifacts
-        run: |
-          pnpm --prefix apps/cli run build:native:all
-          pnpm --prefix apps/cli run build:stage
-
-      # Staging is a prerequisite — in the automated workflow, sdk-release-publish.mjs
-      # handles it (step 5). Here we must do it explicitly.
-      - name: Stage CLI binaries into companion packages
-        run: node packages/sdk/scripts/stage-python-companion-cli.mjs
-
       - name: Build and verify Python SDK
         run: node packages/sdk/scripts/build-python-sdk.mjs
 

@@ -1,7 +1,9 @@
 import * as xmljs from 'xml-js';
 import JSZip from 'jszip';
-import { getContentTypesFromXml } from './super-converter/helpers.js';
+import { getContentTypesFromXml, base64ToUint8Array, detectImageType } from './super-converter/helpers.js';
 import { ensureXmlString, isXmlLike } from './encoding-helpers.js';
+import { DOCX } from '@superdoc/common';
+import { COMMENT_FILE_BASENAMES } from './super-converter/constants.js';
 
 /**
  * Class to handle unzipping and zipping of docx files
@@ -59,9 +61,19 @@ class DocxZipper {
           this.mediaFiles[name] = fileBase64;
         } else {
           const fileBase64 = await zipEntry.async('base64');
-          const extension = this.getFileExtension(name)?.toLowerCase();
+          let extension = this.getFileExtension(name)?.toLowerCase();
           // Only build data URIs for images; keep raw base64 for other binaries (e.g., xlsx)
           const imageTypes = new Set(['png', 'jpg', 'jpeg', 'gif', 'bmp', 'tiff', 'emf', 'wmf', 'svg', 'webp']);
+
+          // For unknown extensions (like .tmp), try to detect the image type from content
+          let detectedType = null;
+          if (!imageTypes.has(extension) || extension === 'tmp') {
+            detectedType = detectImageType(fileBase64);
+            if (detectedType) {
+              extension = detectedType;
+            }
+          }
+
           if (imageTypes.has(extension)) {
             this.mediaFiles[name] = `data:image/${extension};base64,${fileBase64}`;
             const blob = await zipEntry.async('blob');
@@ -142,9 +154,13 @@ class DocxZipper {
       (el) => el.name === 'Override' && el.attributes.PartName === '/word/commentsExtensible.xml',
     );
 
+    /**
+     * Check if a file will exist in the final zip output.
+     * A null value in updatedDocs means the file is explicitly deleted.
+     */
     const hasFile = (filename) => {
       if (updatedDocs && Object.prototype.hasOwnProperty.call(updatedDocs, filename)) {
-        return true;
+        return updatedDocs[filename] !== null;
       }
       if (!docx?.files) return false;
       if (!fromJson) return Boolean(docx.files[filename]);
@@ -204,8 +220,22 @@ class DocxZipper {
       }
     });
 
+    // Prune stale comment Override entries for parts that will not exist in the final zip.
+    const commentPartNames = COMMENT_FILE_BASENAMES.map((name) => `/word/${name}`);
+    const staleOverridePartNames = commentPartNames.filter((partName) => {
+      const filename = partName.slice(1); // strip leading /
+      return !hasFile(filename);
+    });
+
     const beginningString = '<Types xmlns="http://schemas.openxmlformats.org/package/2006/content-types">';
     let updatedContentTypesXml = contentTypesXml.replace(beginningString, `${beginningString}${typesString}`);
+
+    // Remove Override elements for comment parts that no longer exist
+    for (const partName of staleOverridePartNames) {
+      const escapedPartName = partName.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+      const overrideRegex = new RegExp(`\\s*<Override[^>]*PartName="${escapedPartName}"[^>]*/>`, 'g');
+      updatedContentTypesXml = updatedContentTypesXml.replace(overrideRegex, '');
+    }
 
     // Include any header/footer targets referenced from document relationships
     let relationshipsXml = updatedDocs['word/_rels/document.xml.rels'];
@@ -262,7 +292,7 @@ class DocxZipper {
     return zip;
   }
 
-  async updateZip({ docx, updatedDocs, originalDocxFile, media, fonts, isHeadless }) {
+  async updateZip({ docx, updatedDocs, originalDocxFile, media, fonts, isHeadless, compression = 'DEFLATE' }) {
     // We use a different re-zip process if we have the original docx vs the docx xml metadata
     let zip;
 
@@ -274,7 +304,12 @@ class DocxZipper {
 
     // If we are headless we don't have 'blob' support, so export as 'nodebuffer'
     const exportType = isHeadless ? 'nodebuffer' : 'blob';
-    return await zip.generateAsync({ type: exportType });
+    return await zip.generateAsync({
+      type: exportType,
+      mimeType: DOCX,
+      compression,
+      compressionOptions: compression === 'DEFLATE' ? { level: 6 } : undefined,
+    });
   }
 
   /**
@@ -292,14 +327,18 @@ class DocxZipper {
       zip.file(file.name, content);
     }
 
-    // Replace updated docs
+    // Replace updated docs (null = delete from zip)
     Object.keys(updatedDocs).forEach((key) => {
-      const content = updatedDocs[key];
-      zip.file(key, content);
+      if (updatedDocs[key] === null) {
+        zip.remove(key);
+      } else {
+        zip.file(key, updatedDocs[key]);
+      }
     });
 
     Object.keys(media).forEach((path) => {
-      const binaryData = Buffer.from(media[path], 'base64');
+      const value = media[path];
+      const binaryData = typeof value === 'string' ? base64ToUint8Array(value) : value;
       zip.file(path, binaryData);
     });
 
@@ -330,9 +369,13 @@ class DocxZipper {
     });
     await Promise.all(filePromises);
 
-    // Make replacements of updated docs
+    // Make replacements of updated docs (null = delete from zip)
     Object.keys(updatedDocs).forEach((key) => {
-      unzippedOriginalDocx.file(key, updatedDocs[key]);
+      if (updatedDocs[key] === null) {
+        unzippedOriginalDocx.remove(key);
+      } else {
+        unzippedOriginalDocx.file(key, updatedDocs[key]);
+      }
     });
 
     Object.keys(media).forEach((path) => {

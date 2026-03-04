@@ -10,6 +10,7 @@ import type {
   TableMeasure,
   BlockId,
   TableColumnBoundary,
+  TableRowBoundary,
   ParagraphBlock,
 } from '@superdoc/contracts';
 import type { BlockLookup, FragmentRenderContext } from '../renderer.js';
@@ -66,7 +67,10 @@ function createTestTableMeasure(): TableMeasure {
 /**
  * Create a test table fragment with metadata
  */
-function createTestTableFragment(columnBoundaries?: TableColumnBoundary[]): TableFragment {
+function createTestTableFragment(
+  columnBoundaries?: TableColumnBoundary[],
+  rowBoundaries?: TableRowBoundary[],
+): TableFragment {
   return {
     kind: 'table',
     blockId: 'test-table-1' as BlockId,
@@ -79,6 +83,7 @@ function createTestTableFragment(columnBoundaries?: TableColumnBoundary[]): Tabl
     metadata: columnBoundaries
       ? {
           columnBoundaries,
+          ...(rowBoundaries ? { rowBoundaries } : {}),
           coordinateSystem: 'fragment',
         }
       : undefined,
@@ -138,6 +143,98 @@ describe('renderTableFragment', () => {
         w: 100,
         min: 25,
         r: 1,
+      });
+    });
+
+    it('should embed row boundary metadata when rowBoundaries are present', () => {
+      const block = createTestTableBlock();
+      const measure = createTestTableMeasure();
+      const columnBoundaries: TableColumnBoundary[] = [{ index: 0, x: 0, width: 100, minWidth: 25, resizable: true }];
+      const rowBoundaries: TableRowBoundary[] = [{ index: 0, y: 0, height: 20, minHeight: 10, resizable: true }];
+      const fragment = createTestTableFragment(columnBoundaries, rowBoundaries);
+
+      blockLookup.set(fragment.blockId, { block, measure });
+
+      const element = renderTableFragment({
+        doc,
+        fragment,
+        context,
+        blockLookup,
+        renderLine: (_block, _line, _ctx, _lineIndex, _isLastLine) => doc.createElement('div'),
+        applyFragmentFrame: () => {
+          // Intentionally empty for test mock
+        },
+        applySdtDataset: () => {
+          // Intentionally empty for test mock
+        },
+        applyStyles: () => {
+          // Intentionally empty for test mock
+        },
+      });
+
+      const metadataAttr = element.getAttribute('data-table-boundaries');
+      expect(metadataAttr).toBeTruthy();
+
+      const parsed = JSON.parse(metadataAttr!);
+      expect(parsed.rows).toHaveLength(1);
+      expect(parsed.rows[0]).toMatchObject({
+        i: 0,
+        y: 0,
+        h: 20,
+        min: 10,
+        r: 1,
+      });
+    });
+
+    it('should apply contentTop offset to row boundary y positions', () => {
+      const block = createTestTableBlock();
+      block.attrs = {
+        borderCollapse: 'separate',
+        borders: {
+          top: { size: 2, color: '#000000', val: 'single' },
+          right: { size: 2, color: '#000000', val: 'single' },
+          bottom: { size: 2, color: '#000000', val: 'single' },
+          left: { size: 2, color: '#000000', val: 'single' },
+        },
+      };
+
+      const measure = createTestTableMeasure();
+      measure.tableBorderWidths = { top: 2, right: 2, bottom: 2, left: 2 };
+
+      const columnBoundaries: TableColumnBoundary[] = [{ index: 0, x: 0, width: 100, minWidth: 25, resizable: true }];
+      const rowBoundaries: TableRowBoundary[] = [{ index: 0, y: 3, height: 20, minHeight: 10, resizable: false }];
+      const fragment = createTestTableFragment(columnBoundaries, rowBoundaries);
+
+      blockLookup.set(fragment.blockId, { block, measure });
+
+      const element = renderTableFragment({
+        doc,
+        fragment,
+        context,
+        blockLookup,
+        renderLine: (_block, _line, _ctx, _lineIndex, _isLastLine) => doc.createElement('div'),
+        applyFragmentFrame: () => {
+          // Intentionally empty for test mock
+        },
+        applySdtDataset: () => {
+          // Intentionally empty for test mock
+        },
+        applyStyles: () => {
+          // Intentionally empty for test mock
+        },
+      });
+
+      const metadataAttr = element.getAttribute('data-table-boundaries');
+      expect(metadataAttr).toBeTruthy();
+
+      const parsed = JSON.parse(metadataAttr!);
+      expect(parsed.rows).toHaveLength(1);
+      expect(parsed.rows[0]).toMatchObject({
+        i: 0,
+        y: 5, // row y (3) + contentTop (2)
+        h: 20,
+        min: 10,
+        r: 0,
       });
     });
 
@@ -569,6 +666,144 @@ describe('renderTableFragment', () => {
       expect(parsed.columns[0].x).toBe(123.456);
       expect(parsed.columns[0].w).toBe(789.012);
       expect(parsed.columns[0].min).toBe(25.5);
+    });
+  });
+
+  describe('cell width rescaling (SD-1859)', () => {
+    it('should use fragment.columnWidths for cell widths when present', () => {
+      // Simulates a mixed-orientation doc: table measured at landscape width (432px per col)
+      // but rendered in portrait where fragment.columnWidths rescales to 312px per col.
+      const block: TableBlock = {
+        kind: 'table',
+        id: 'test-table-1' as BlockId,
+        rows: [
+          {
+            id: 'row-1' as BlockId,
+            cells: [
+              {
+                id: 'cell-1-1' as BlockId,
+                paragraph: {
+                  kind: 'paragraph',
+                  id: 'para-1-1' as BlockId,
+                  runs: [],
+                },
+              },
+              {
+                id: 'cell-1-2' as BlockId,
+                paragraph: {
+                  kind: 'paragraph',
+                  id: 'para-1-2' as BlockId,
+                  runs: [],
+                },
+              },
+            ],
+          },
+        ],
+      };
+
+      const measure: TableMeasure = {
+        kind: 'table',
+        rows: [
+          {
+            cells: [
+              {
+                paragraph: { kind: 'paragraph', lines: [], totalHeight: 20 },
+                width: 432,
+                height: 20,
+                gridColumnStart: 0,
+                colSpan: 1,
+              },
+              {
+                paragraph: { kind: 'paragraph', lines: [], totalHeight: 20 },
+                width: 432,
+                height: 20,
+                gridColumnStart: 1,
+                colSpan: 1,
+              },
+            ],
+            height: 20,
+          },
+        ],
+        columnWidths: [432, 432],
+        totalWidth: 864,
+        totalHeight: 20,
+      };
+
+      // Fragment with rescaled column widths (portrait: 624px total)
+      const fragment: TableFragment = {
+        kind: 'table',
+        blockId: 'test-table-1' as BlockId,
+        fromRow: 0,
+        toRow: 1,
+        x: 0,
+        y: 0,
+        width: 624,
+        height: 20,
+        columnWidths: [312, 312], // rescaled from [432, 432]
+      };
+
+      blockLookup.set(fragment.blockId, { block, measure });
+
+      const element = renderTableFragment({
+        doc,
+        fragment,
+        context,
+        blockLookup,
+        renderLine: (_block, _line, _ctx, _lineIndex, _isLastLine) => doc.createElement('div'),
+        applyFragmentFrame: () => {},
+        applySdtDataset: () => {},
+        applyStyles: () => {},
+      });
+
+      // Find rendered cell elements (absolutely positioned divs inside container)
+      const cells = element.querySelectorAll<HTMLElement>('div[style*="position: absolute"]');
+      expect(cells.length).toBeGreaterThanOrEqual(2);
+
+      // Cell 1: should be at x=0, width=312 (not 432)
+      const cell1 = cells[0];
+      expect(cell1.style.left).toBe('0px');
+      expect(cell1.style.width).toBe('312px');
+
+      // Cell 2: should be at x=312, width=312 (not 432)
+      const cell2 = cells[1];
+      expect(cell2.style.left).toBe('312px');
+      expect(cell2.style.width).toBe('312px');
+    });
+
+    it('should fall back to cellMeasure.width when fragment.columnWidths is absent', () => {
+      const block = createTestTableBlock();
+      const measure = createTestTableMeasure();
+      // Fragment without columnWidths — should use measure.columnWidths
+      const fragment: TableFragment = {
+        kind: 'table',
+        blockId: 'test-table-1' as BlockId,
+        fromRow: 0,
+        toRow: 1,
+        x: 0,
+        y: 0,
+        width: 100,
+        height: 20,
+        // no columnWidths
+      };
+
+      blockLookup.set(fragment.blockId, { block, measure });
+
+      const element = renderTableFragment({
+        doc,
+        fragment,
+        context,
+        blockLookup,
+        renderLine: (_block, _line, _ctx, _lineIndex, _isLastLine) => doc.createElement('div'),
+        applyFragmentFrame: () => {},
+        applySdtDataset: () => {},
+        applyStyles: () => {},
+      });
+
+      const cells = element.querySelectorAll<HTMLElement>('div[style*="position: absolute"]');
+      expect(cells.length).toBeGreaterThanOrEqual(1);
+
+      // Should use measure.columnWidths[0] = 100
+      expect(cells[0].style.width).toBe('100px');
     });
   });
 
@@ -1164,6 +1399,167 @@ describe('renderTableFragment', () => {
         expect(typeof seg.y).toBe('number');
         expect(typeof seg.h).toBe('number');
       });
+    });
+
+    it('should scope segments to fragment row range for split tables', () => {
+      // A 3-row table split across two pages:
+      // Fragment 1 (page 1): rows 0-1, height 60
+      // Fragment 2 (page 2): row 2, height 30
+      // Each fragment should only have segments matching its own rows.
+      const block: TableBlock = {
+        kind: 'table',
+        id: 'test-table-split' as BlockId,
+        rows: [
+          {
+            id: 'row-0' as BlockId,
+            cells: [
+              { id: 'cell-0-0' as BlockId, paragraph: { kind: 'paragraph', id: 'p-0-0' as BlockId, runs: [] } },
+              { id: 'cell-0-1' as BlockId, paragraph: { kind: 'paragraph', id: 'p-0-1' as BlockId, runs: [] } },
+            ],
+          },
+          {
+            id: 'row-1' as BlockId,
+            cells: [
+              { id: 'cell-1-0' as BlockId, paragraph: { kind: 'paragraph', id: 'p-1-0' as BlockId, runs: [] } },
+              { id: 'cell-1-1' as BlockId, paragraph: { kind: 'paragraph', id: 'p-1-1' as BlockId, runs: [] } },
+            ],
+          },
+          {
+            id: 'row-2' as BlockId,
+            cells: [
+              { id: 'cell-2-0' as BlockId, paragraph: { kind: 'paragraph', id: 'p-2-0' as BlockId, runs: [] } },
+              { id: 'cell-2-1' as BlockId, paragraph: { kind: 'paragraph', id: 'p-2-1' as BlockId, runs: [] } },
+            ],
+          },
+        ],
+      };
+
+      const measure: TableMeasure = {
+        kind: 'table',
+        rows: [
+          {
+            cells: [
+              {
+                paragraph: { kind: 'paragraph', lines: [], totalHeight: 30 },
+                width: 100,
+                height: 30,
+                gridColumnStart: 0,
+                colSpan: 1,
+              },
+              {
+                paragraph: { kind: 'paragraph', lines: [], totalHeight: 30 },
+                width: 100,
+                height: 30,
+                gridColumnStart: 1,
+                colSpan: 1,
+              },
+            ],
+            height: 30,
+          },
+          {
+            cells: [
+              {
+                paragraph: { kind: 'paragraph', lines: [], totalHeight: 30 },
+                width: 100,
+                height: 30,
+                gridColumnStart: 0,
+                colSpan: 1,
+              },
+              {
+                paragraph: { kind: 'paragraph', lines: [], totalHeight: 30 },
+                width: 100,
+                height: 30,
+                gridColumnStart: 1,
+                colSpan: 1,
+              },
+            ],
+            height: 30,
+          },
+          {
+            cells: [
+              {
+                paragraph: { kind: 'paragraph', lines: [], totalHeight: 30 },
+                width: 100,
+                height: 30,
+                gridColumnStart: 0,
+                colSpan: 1,
+              },
+              {
+                paragraph: { kind: 'paragraph', lines: [], totalHeight: 30 },
+                width: 100,
+                height: 30,
+                gridColumnStart: 1,
+                colSpan: 1,
+              },
+            ],
+            height: 30,
+          },
+        ],
+        columnWidths: [100, 100],
+        totalWidth: 200,
+        totalHeight: 90,
+      };
+
+      const columnBoundaries: TableColumnBoundary[] = [
+        { index: 0, x: 0, width: 100, minWidth: 25, resizable: true },
+        { index: 1, x: 100, width: 100, minWidth: 25, resizable: true },
+      ];
+
+      const renderDeps = {
+        doc,
+        context,
+        blockLookup,
+        renderLine: (_block: ParagraphBlock, _line: unknown, _ctx: unknown, _lineIndex: number, _isLastLine: boolean) =>
+          doc.createElement('div'),
+        applyFragmentFrame: () => {},
+        applySdtDataset: () => {},
+        applyStyles: () => {},
+      };
+
+      // Fragment 1: rows 0-1 (height = 60)
+      const fragment1: TableFragment = {
+        kind: 'table',
+        blockId: 'test-table-split' as BlockId,
+        fromRow: 0,
+        toRow: 2,
+        x: 0,
+        y: 0,
+        width: 200,
+        height: 60,
+        continuesOnNext: true,
+        metadata: { columnBoundaries, coordinateSystem: 'fragment' },
+      };
+
+      blockLookup.set(fragment1.blockId, { block, measure });
+      const el1 = renderTableFragment({ ...renderDeps, fragment: fragment1 });
+      const parsed1 = JSON.parse(el1.getAttribute('data-table-boundaries')!);
+
+      // Fragment 1 has 2 rows of height 30 each → segment height should be 60
+      expect(parsed1.segments[1]).toHaveLength(1);
+      expect(parsed1.segments[1][0].h).toBe(60);
+      expect(parsed1.segments[1][0].y).toBe(0);
+
+      // Fragment 2: row 2 only (height = 30)
+      const fragment2: TableFragment = {
+        kind: 'table',
+        blockId: 'test-table-split' as BlockId,
+        fromRow: 2,
+        toRow: 3,
+        x: 0,
+        y: 0,
+        width: 200,
+        height: 30,
+        continuesFromPrev: true,
+        metadata: { columnBoundaries, coordinateSystem: 'fragment' },
+      };
+
+      const el2 = renderTableFragment({ ...renderDeps, fragment: fragment2 });
+      const parsed2 = JSON.parse(el2.getAttribute('data-table-boundaries')!);
+
+      // Fragment 2 has 1 row of height 30 → segment height should be 30
+      expect(parsed2.segments[1]).toHaveLength(1);
+      expect(parsed2.segments[1][0].h).toBe(30);
+      expect(parsed2.segments[1][0].y).toBe(0);
     });
   });
 });

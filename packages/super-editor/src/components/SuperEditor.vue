@@ -5,7 +5,7 @@ import { ref, onMounted, onBeforeUnmount, shallowRef, reactive, markRaw, compute
 import { Editor } from '@superdoc/super-editor';
 import { PresentationEditor } from '@core/presentation-editor/index.js';
 import { getStarterExtensions } from '@extensions/index.js';
-import SlashMenu from './slash-menu/SlashMenu.vue';
+import ContextMenu from './context-menu/ContextMenu.vue';
 import { onMarginClickCursorChange } from './cursor-helpers.js';
 import Ruler from './rulers/Ruler.vue';
 import GenericPopover from './popovers/GenericPopover.vue';
@@ -19,6 +19,7 @@ import { getFileObject } from '@superdoc/common';
 import BlankDOCX from '@superdoc/common/data/blank.docx?url';
 import { isHeadless } from '@utils/headless-helpers.js';
 import { isMacOS } from '@core/utilities/isMacOS.js';
+import { DOM_CLASS_NAMES, buildImagePmSelector, buildInlineImagePmSelector } from '@superdoc/painter-dom';
 const emit = defineEmits(['editor-ready', 'editor-click', 'editor-keydown', 'comments-loaded', 'selection-update']);
 
 const DOCX = 'application/vnd.openxmlformats-officedocument.wordprocessingml.document';
@@ -498,8 +499,54 @@ const isNearColumnBoundary = (event, tableElement) => {
 };
 
 /**
+ * Check if mouse position is near any row boundary in the table.
+ * Returns true if within threshold of a resizable row boundary bottom edge.
+ *
+ * @param {MouseEvent} event - The mouse event containing clientX and clientY coordinates
+ * @param {HTMLElement} tableElement - The table DOM element with data-table-boundaries attribute
+ * @returns {boolean} True if the mouse is near a row boundary, false otherwise
+ */
+const isNearRowBoundary = (event, tableElement) => {
+  if (!event || typeof event.clientX !== 'number' || typeof event.clientY !== 'number') {
+    return false;
+  }
+  if (!tableElement || !(tableElement instanceof HTMLElement)) {
+    return false;
+  }
+
+  const boundariesAttr = tableElement.getAttribute('data-table-boundaries');
+  if (!boundariesAttr) return false;
+
+  try {
+    const metadata = JSON.parse(boundariesAttr);
+    if (!metadata.rows || !Array.isArray(metadata.rows)) return false;
+
+    const zoom = getEditorZoom();
+    const tableRect = tableElement.getBoundingClientRect();
+    const mouseYScreen = event.clientY - tableRect.top;
+
+    for (const row of metadata.rows) {
+      if (!row || typeof row.y !== 'number' || typeof row.h !== 'number') continue;
+      // Only check resizable boundaries
+      if (row.r !== 1) continue;
+
+      // The bottom edge of this row boundary in screen space
+      const boundaryYScreen = (row.y + row.h) * zoom;
+
+      if (Math.abs(mouseYScreen - boundaryYScreen) <= TABLE_RESIZE_HOVER_THRESHOLD) {
+        return true;
+      }
+    }
+
+    return false;
+  } catch {
+    return false;
+  }
+};
+
+/**
  * Update table resize overlay visibility based on mouse position.
- * Shows overlay only when hovering near column boundaries, not anywhere in the table.
+ * Shows overlay only when hovering near column or row boundaries, not anywhere in the table.
  * Throttled to run at most once per TABLE_RESIZE_THROTTLE_MS milliseconds.
  *
  * @param {MouseEvent} event - The mouse event containing target and coordinates
@@ -525,8 +572,8 @@ const updateTableResizeOverlay = (event) => {
     }
 
     if (target.classList?.contains('superdoc-table-fragment') && target.hasAttribute('data-table-boundaries')) {
-      // Only show overlay if mouse is near a column boundary
-      if (isNearColumnBoundary(event, target)) {
+      // Show overlay if mouse is near a column or row boundary
+      if (isNearColumnBoundary(event, target) || isNearRowBoundary(event, target)) {
         tableResizeState.visible = true;
         tableResizeState.tableElement = target;
       } else {
@@ -589,19 +636,30 @@ const updateImageResizeOverlay = (event: MouseEvent): void => {
     }
 
     // Check for standalone image fragments (ImageBlock)
-    if (target.classList?.contains('superdoc-image-fragment') && target.hasAttribute('data-image-metadata')) {
+    if (target.classList?.contains(DOM_CLASS_NAMES.IMAGE_FRAGMENT) && target.hasAttribute('data-image-metadata')) {
       imageResizeState.visible = true;
       imageResizeState.imageElement = target as HTMLElement;
       imageResizeState.blockId = target.getAttribute('data-sd-block-id');
       return;
     }
 
-    // Check for inline images (ImageRun inside paragraphs)
-    if (target.classList?.contains('superdoc-inline-image') && target.hasAttribute('data-image-metadata')) {
+    // Check for clip wrapper first (cropped inline image): use wrapper so resizer works on cropped portion
+    if (
+      target.classList?.contains(DOM_CLASS_NAMES.INLINE_IMAGE_CLIP_WRAPPER) &&
+      target.querySelector?.('[data-image-metadata]')
+    ) {
       imageResizeState.visible = true;
       imageResizeState.imageElement = target as HTMLElement;
-      // Inline images don't have block IDs, use pmStart as identifier
       imageResizeState.blockId = target.getAttribute('data-pm-start');
+      return;
+    }
+    // Check for inline images (ImageRun inside paragraphs). When image has clipPath it is wrapped;
+    // use the wrapper so the resizer works on the cropped portion's box.
+    if (target.classList?.contains(DOM_CLASS_NAMES.INLINE_IMAGE) && target.hasAttribute('data-image-metadata')) {
+      imageResizeState.visible = true;
+      const wrapper = target.closest?.(`.${DOM_CLASS_NAMES.INLINE_IMAGE_CLIP_WRAPPER}`) as HTMLElement | null;
+      imageResizeState.imageElement = (wrapper ?? target) as HTMLElement;
+      imageResizeState.blockId = (wrapper ?? target).getAttribute('data-pm-start');
       return;
     }
     target = target.parentElement;
@@ -815,13 +873,16 @@ const initEditor = async ({ content, media = {}, mediaFiles = {}, fonts = {} } =
       if (imageResizeState.visible && imageResizeState.blockId) {
         // Re-acquire element reference (may have been recreated after re-render)
         const escapedBlockId = CSS.escape(imageResizeState.blockId);
-        const newElement = editorElem.value?.querySelector(
-          `.superdoc-image-fragment[data-sd-block-id="${escapedBlockId}"]`,
+        let newElement = editorElem.value?.querySelector(
+          `.${DOM_CLASS_NAMES.IMAGE_FRAGMENT}[data-sd-block-id="${escapedBlockId}"]`,
         );
+        if (!newElement) {
+          // Inline images (and cropped inline use wrapper): re-acquire by pmStart
+          newElement = editorElem.value?.querySelector(buildInlineImagePmSelector(escapedBlockId));
+        }
         if (newElement) {
-          imageResizeState.imageElement = newElement;
+          imageResizeState.imageElement = newElement as HTMLElement;
         } else {
-          // Image virtualized away - hide overlay
           imageResizeState.visible = false;
           imageResizeState.imageElement = null;
           imageResizeState.blockId = null;
@@ -831,15 +892,14 @@ const initEditor = async ({ content, media = {}, mediaFiles = {}, fonts = {} } =
       if (selectedImageState.blockId) {
         const escapedBlockId = CSS.escape(selectedImageState.blockId);
         const refreshed = editorElem.value?.querySelector(
-          `.superdoc-image-fragment[data-sd-block-id="${escapedBlockId}"]`,
+          `.${DOM_CLASS_NAMES.IMAGE_FRAGMENT}[data-sd-block-id="${escapedBlockId}"]`,
         );
         if (refreshed) {
           setSelectedImage(refreshed, selectedImageState.blockId, selectedImageState.pmStart);
         } else {
           // Try pmStart-based re-acquisition (inline images)
           if (selectedImageState.pmStart != null) {
-            const pmSelector = `.superdoc-image-fragment[data-pm-start="${selectedImageState.pmStart}"], .superdoc-inline-image[data-pm-start="${selectedImageState.pmStart}"]`;
-            const pmElement = editorElem.value?.querySelector(pmSelector);
+            const pmElement = editorElem.value?.querySelector(buildImagePmSelector(selectedImageState.pmStart));
             if (pmElement) {
               setSelectedImage(pmElement, selectedImageState.blockId, selectedImageState.pmStart);
               return;
@@ -987,7 +1047,7 @@ const handleMarginClick = (event) => {
   if (target?.classList?.contains('ProseMirror')) return;
 
   // Causes issues with node selection.
-  if (target?.closest?.('.presentation-editor, .superdoc-layout')) {
+  if (target?.closest?.('.presentation-editor, .superdoc-layout, .context-menu')) {
     return;
   }
 
@@ -1055,13 +1115,16 @@ onBeforeUnmount(() => {
 
 <template>
   <div class="super-editor-container" :class="{ 'web-layout': isWebLayout }" :style="containerStyle">
-    <!-- Ruler: teleport to external container if specified, otherwise render inline -->
-    <Teleport v-if="options.rulerContainer && rulersVisible && !!activeEditor" :to="options.rulerContainer">
+    <!-- Ruler: teleport to external container if specified, otherwise render inline (hidden in web layout) -->
+    <Teleport
+      v-if="options.rulerContainer && rulersVisible && !isWebLayout && !!activeEditor"
+      :to="options.rulerContainer"
+    >
       <div class="ruler-host" :style="rulerHostStyle">
         <Ruler class="ruler superdoc-ruler" :editor="activeEditor" @margin-change="handleMarginChange" />
       </div>
     </Teleport>
-    <div v-else-if="rulersVisible && !!activeEditor" class="ruler-host" :style="rulerHostStyle">
+    <div v-else-if="rulersVisible && !isWebLayout && !!activeEditor" class="ruler-host" :style="rulerHostStyle">
       <Ruler class="ruler" :editor="activeEditor" @margin-change="handleMarginChange" />
     </div>
 
@@ -1075,8 +1138,8 @@ onBeforeUnmount(() => {
       @mouseleave="handleOverlayHide"
     >
       <div ref="editorElem" class="editor-element super-editor__element" role="presentation"></div>
-      <!-- Single SlashMenu component, no Teleport needed -->
-      <SlashMenu
+      <!-- Single ContextMenu component, no Teleport needed -->
+      <ContextMenu
         v-if="!contextMenuDisabled && editorReady && activeEditor"
         :editor="activeEditor"
         :popoverControls="popoverControls"
@@ -1090,6 +1153,7 @@ onBeforeUnmount(() => {
         :openPopover="openPopover"
         :closePopover="closePopover"
         :popoverVisible="popoverControls.visible"
+        :linkPopoverResolver="props.options.linkPopoverResolver"
       />
       <!-- Table resize overlay for interactive column resizing -->
       <TableResizeOverlay

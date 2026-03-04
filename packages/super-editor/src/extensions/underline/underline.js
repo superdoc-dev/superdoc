@@ -74,6 +74,15 @@ export const Underline = Mark.create({
       underlineColor: {
         default: null,
       },
+      underlineThemeColor: {
+        default: null,
+      },
+      underlineThemeTint: {
+        default: null,
+      },
+      underlineThemeShade: {
+        default: null,
+      },
     };
   },
 

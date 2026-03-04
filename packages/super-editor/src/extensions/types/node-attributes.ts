@@ -14,6 +14,7 @@ import type {
   InlineNodeAttributes,
   ShapeNodeAttributes,
 } from '../../core/types/NodeCategories.js';
+import type { StructuredContentLockMode } from '@superdoc/contracts';
 
 // ============================================
 // SHARED TYPES
@@ -147,15 +148,15 @@ export interface ParagraphProperties {
   styleId?: string;
   numberingProperties?: NumberingProperties;
   justification?: 'left' | 'center' | 'right' | 'both' | 'start' | 'end';
-  indentation?: IndentationProperties;
+  indent?: IndentationProperties;
   spacing?: SpacingProperties;
-  outlineLevel?: number;
+  outlineLvl?: number;
   keepNext?: boolean;
   keepLines?: boolean;
   pageBreakBefore?: boolean;
   widowControl?: boolean;
   textDirection?: 'lrTb' | 'tbRl' | 'btLr';
-  tabs?: Array<{ val: string; pos: number }>;
+  tabStops?: Array<{ tab: { tabType: string; pos: number; leader?: string } }>;
   suppressAutoHyphens?: boolean;
   contextualSpacing?: boolean;
 }
@@ -185,6 +186,8 @@ export interface ParagraphAttrs extends TextContainerAttributes {
   listRendering: ListRendering | null;
   /** SuperDoc block tracking ID */
   sdBlockId: string | null;
+  /** Incrementing revision for block-level changes */
+  sdBlockRev: number | null;
   /** Additional HTML attributes */
   extraAttrs: Record<string, string>;
   /** Paragraph identifier (w:paraId) */
@@ -249,7 +252,7 @@ export interface TableProperties {
   tableCellSpacing?: TableMeasurement;
   tableIndent?: TableMeasurement;
   tableLayout?: 'fixed' | 'autofit';
-  tableLook?: TableLook;
+  tblLook?: TableLook;
   overlap?: 'never' | 'overlap';
   tableStyleId?: string;
   tableStyleColBandSize?: number;
@@ -276,8 +279,10 @@ export interface TableAttrs extends TableNodeAttributes {
   tableGrid: TableGrid | null;
   /** Table properties */
   tableProperties: TableProperties | null;
-  /** Table look settings */
-  tableLook: TableLook | null;
+  /** OOXML paragraph/element identifier (w14:paraId), preserved across DOCX roundtrips */
+  paraId?: string | null;
+  /** OOXML text identifier (w14:textId), preserved across DOCX roundtrips */
+  textId?: string | null;
 }
 
 // ============================================
@@ -288,7 +293,8 @@ export interface TableAttrs extends TableNodeAttributes {
 export interface TableRowProperties {
   trHeight?: { val: number; hRule?: 'atLeast' | 'exact' | 'auto' };
   cantSplit?: boolean;
-  tblHeader?: boolean;
+  /** Whether this row repeats as a header on continuation pages (OOXML `w:tblHeader`). */
+  repeatHeader?: boolean;
   jc?: 'center' | 'end' | 'left' | 'right' | 'start';
 }
 
@@ -361,6 +367,10 @@ export interface CellBackground {
 
 /** Table cell node attributes */
 export interface TableCellAttrs extends TableNodeAttributes {
+  /** OOXML paragraph/element identifier (w14:paraId), preserved across DOCX roundtrips */
+  paraId?: string | null;
+  /** OOXML text identifier (w14:textId), preserved across DOCX roundtrips */
+  textId?: string | null;
   /** Number of columns this cell spans */
   colspan: number;
   /** Number of rows this cell spans */
@@ -481,6 +491,8 @@ export interface ImageAttrs extends ShapeNodeAttributes {
   originalSrc?: string;
   /** @internal Should use cover+clip mode (from empty srcRect with stretch/fillRect) */
   shouldCover?: boolean;
+  /** @internal Clip-path value for srcRect image crops */
+  clipPath?: string;
 }
 
 // ============================================
@@ -591,6 +603,8 @@ export interface HardBreakAttrs extends InlineNodeAttributes {
 // STRUCTURED CONTENT
 // ============================================
 
+export type { StructuredContentLockMode };
+
 /** Structured content node attributes */
 export interface StructuredContentAttrs extends BlockNodeAttributes {
   /** Unique identifier */
@@ -605,6 +619,8 @@ export interface StructuredContentAttrs extends BlockNodeAttributes {
   description?: string;
   /** Whether the content is locked */
   isLocked?: boolean;
+  /** Lock mode */
+  lockMode?: StructuredContentLockMode;
 }
 
 // ============================================
@@ -1149,6 +1165,8 @@ declare module '../../core/types/NodeAttributesMap.js' {
     // Permissions
     permStart: PermStartAttrs;
     permEnd: PermEndAttrs;
+    permStartBlock: PermStartAttrs;
+    permEndBlock: PermEndAttrs;
 
     // Page elements
     pageReference: PageReferenceAttrs;

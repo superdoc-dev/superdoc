@@ -1,0 +1,193 @@
+---
+title: trackChanges.list
+sidebarTitle: trackChanges.list
+description: List all tracked changes in the document.
+---
+
+{/* GENERATED FILE: DO NOT EDIT. Regenerate via `pnpm run docapi:sync`. */}
+
+> Alpha: Document API is currently alpha and subject to breaking changes.
+
+## Summary
+
+List all tracked changes in the document.
+
+- Operation ID: `trackChanges.list`
+- API member path: `editor.doc.trackChanges.list(...)`
+- Mutates document: `no`
+- Idempotency: `idempotent`
+- Supports tracked mode: `no`
+- Supports dry run: `no`
+- Deterministic target resolution: `yes`
+
+## Expected result
+
+Returns a TrackChangesListResult with an array of tracked change entries and total count.
+
+## Input fields
+
+| Field | Type | Required | Description |
+| --- | --- | --- | --- |
+| `limit` | integer | no |  |
+| `offset` | integer | no |  |
+| `type` | enum | no | `"insert"`, `"delete"`, `"format"` |
+
+### Example request
+
+```json
+{
+  "limit": 50,
+  "offset": 0
+}
+```
+
+## Output fields
+
+| Field | Type | Required | Description |
+| --- | --- | --- | --- |
+| `evaluatedRevision` | string | yes |  |
+| `items` | object[] | yes |  |
+| `page` | PageInfo | yes | PageInfo |
+| `page.limit` | integer | yes |  |
+| `page.offset` | integer | yes |  |
+| `page.returned` | integer | yes |  |
+| `total` | integer | yes |  |
+
+### Example response
+
+```json
+{
+  "evaluatedRevision": "rev-001",
+  "items": [
+    {
+      "address": {
+        "entityId": "entity-789",
+        "entityType": "trackedChange",
+        "kind": "entity"
+      },
+      "author": "Jane Doe",
+      "authorEmail": "jane@example.com",
+      "handle": {
+        "ref": "handle:abc123",
+        "refStability": "stable",
+        "targetKind": "text"
+      },
+      "id": "id-001",
+      "type": "insert"
+    }
+  ],
+  "page": {
+    "limit": 50,
+    "offset": 0,
+    "returned": 1
+  },
+  "total": 1
+}
+```
+
+## Pre-apply throws
+
+- `INVALID_INPUT`
+
+## Non-applied failure codes
+
+- None
+
+## Raw schemas
+
+<Accordion title="Raw input schema">
+```json
+{
+  "additionalProperties": false,
+  "properties": {
+    "limit": {
+      "type": "integer"
+    },
+    "offset": {
+      "type": "integer"
+    },
+    "type": {
+      "enum": [
+        "insert",
+        "delete",
+        "format"
+      ]
+    }
+  },
+  "type": "object"
+}
+```
+</Accordion>
+
+<Accordion title="Raw output schema">
+```json
+{
+  "additionalProperties": false,
+  "properties": {
+    "evaluatedRevision": {
+      "type": "string"
+    },
+    "items": {
+      "items": {
+        "additionalProperties": false,
+        "properties": {
+          "address": {
+            "$ref": "#/$defs/TrackedChangeAddress"
+          },
+          "author": {
+            "type": "string"
+          },
+          "authorEmail": {
+            "type": "string"
+          },
+          "authorImage": {
+            "type": "string"
+          },
+          "date": {
+            "type": "string"
+          },
+          "excerpt": {
+            "type": "string"
+          },
+          "handle": {
+            "$ref": "#/$defs/ResolvedHandle"
+          },
+          "id": {
+            "type": "string"
+          },
+          "type": {
+            "enum": [
+              "insert",
+              "delete",
+              "format"
+            ]
+          }
+        },
+        "required": [
+          "id",
+          "handle",
+          "address",
+          "type"
+        ],
+        "type": "object"
+      },
+      "type": "array"
+    },
+    "page": {
+      "$ref": "#/$defs/PageInfo"
+    },
+    "total": {
+      "minimum": 0,
+      "type": "integer"
+    }
+  },
+  "required": [
+    "evaluatedRevision",
+    "total",
+    "items",
+    "page"
+  ],
+  "type": "object"
+}
+```
+</Accordion>

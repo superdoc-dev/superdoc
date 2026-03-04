@@ -7,6 +7,8 @@ export type { TabStop };
 // Export table contracts
 export { OOXML_PCT_DIVISOR, type TableWidthAttr, type TableColumnSpec } from './engines/tables.js';
 
+export { effectiveTableCellSpacing } from './table-cell-spacing.js';
+
 // Export justify utilities
 export {
   shouldApplyJustify,
@@ -15,6 +17,12 @@ export {
   type ShouldApplyJustifyParams,
   type CalculateJustifySpacingParams,
 } from './justify-utils.js';
+
+export {
+  parseInsetClipPathForScale,
+  formatInsetClipPathTransform,
+  type InsetClipPathScale,
+} from './clip-path-inset.js';
 
 export { computeFragmentPmRange, computeLinePmRange, type LinePmRange } from './pm-range.js';
 /** Inline field annotation metadata extracted from w:sdt nodes. */
@@ -56,12 +64,15 @@ export type FieldAnnotationMetadata = {
   marks?: Record<string, unknown>;
 };
 
+export type StructuredContentLockMode = 'unlocked' | 'sdtLocked' | 'contentLocked' | 'sdtContentLocked';
+
 export type StructuredContentMetadata = {
   type: 'structuredContent';
   scope: 'inline' | 'block';
   id?: string | null;
   tag?: string | null;
   alias?: string | null;
+  lockMode?: StructuredContentLockMode;
   sdtPr?: unknown;
 };
 
@@ -216,6 +227,8 @@ export type TabRun = RunMarks & {
   indent?: ParagraphIndent;
   pmStart?: number;
   pmEnd?: number;
+  /** SDT metadata if tab is inside a structured document tag. */
+  sdt?: SdtMetadata;
 };
 
 export type LineBreakRun = {
@@ -262,6 +275,8 @@ export type ImageRun = {
   alt?: string;
   /** Image title (tooltip). */
   title?: string;
+  /** Clip-path value for cropped images. */
+  clipPath?: string;
 
   /**
    * Spacing around the image (from DOCX distT/distB/distL/distR attributes).
@@ -292,6 +307,17 @@ export type ImageRun = {
    * Custom data attributes propagated from ProseMirror marks (keys must be data-*).
    */
   dataAttrs?: Record<string, string>;
+
+  // Image transformations from OOXML a:xfrm (applies to inline images)
+  rotation?: number; // Rotation angle in degrees
+  flipH?: boolean; // Horizontal flip
+  flipV?: boolean; // Vertical flip
+
+  // VML image adjustments for watermark effects
+  gain?: string | number; // Brightness/washout (VML hex string or number)
+  blacklevel?: string | number; // Contrast adjustment (VML hex string or number)
+  // OOXML image effects
+  grayscale?: boolean; // Apply grayscale filter to image
 };
 
 export type BreakRun = {
@@ -448,7 +474,7 @@ export type TableCellAttrs = {
 export type TableAttrs = {
   borders?: TableBorders;
   borderCollapse?: 'collapse' | 'separate';
-  cellSpacing?: number;
+  cellSpacing?: CellSpacing;
   sdt?: SdtMetadata;
   containerSdt?: SdtMetadata;
   [key: string]: unknown;
@@ -465,8 +491,14 @@ export type TableCell = {
   attrs?: TableCellAttrs;
 };
 
+export type TableRowProperties = {
+  repeatHeader?: boolean;
+  cantSplit?: boolean;
+  [key: string]: unknown;
+};
+
 export type TableRowAttrs = {
-  tableRowProperties?: Record<string, unknown>;
+  tableRowProperties?: TableRowProperties;
   rowHeight?: {
     value: number;
     rule?: 'auto' | 'atLeast' | 'exact' | string;
@@ -529,10 +561,18 @@ export type ImageBlock = {
   margin?: BoxSpacing;
   anchor?: ImageAnchor;
   wrap?: ImageWrap;
+  /** Stacking order from OOXML relativeHeight (same formula as editor: Math.max(0, relativeHeight - OOXML_Z_INDEX_BASE)) */
+  zIndex?: number;
   attrs?: ImageBlockAttrs;
   // VML image adjustments for watermark effects
   gain?: string | number; // Brightness/washout (VML hex string or number)
   blacklevel?: string | number; // Contrast adjustment (VML hex string or number)
+  // OOXML image effects
+  grayscale?: boolean; // Apply grayscale filter to image
+  // Image transformations from OOXML a:xfrm (applies to both inline and anchored images)
+  rotation?: number; // Rotation angle in degrees
+  flipH?: boolean; // Horizontal flip
+  flipV?: boolean; // Vertical flip
 };
 
 export type DrawingKind = 'image' | 'vectorShape' | 'shapeGroup';
@@ -611,6 +651,7 @@ export type TextFormatting = {
   color?: string;
   fontSize?: number;
   fontFamily?: string;
+  letterSpacing?: number;
 };
 
 /** A single text part with optional formatting. */
@@ -685,6 +726,7 @@ export type ShapeGroupVectorChild = {
   attrs: PositionedDrawingGeometry &
     VectorShapeStyle & {
       kind?: string;
+      customGeometry?: CustomGeometryData;
       shapeId?: string;
       shapeName?: string;
     };
@@ -695,6 +737,7 @@ export type ShapeGroupImageChild = {
   attrs: PositionedDrawingGeometry & {
     src: string;
     alt?: string;
+    clipPath?: string;
     imageId?: string;
     imageName?: string;
   };
@@ -721,10 +764,26 @@ export type DrawingBlockBase = {
   attrs?: Record<string, unknown>;
 };
 
+/**
+ * Custom geometry path data extracted from a:custGeom/a:pathLst.
+ * Each path has an SVG `d` attribute and its own coordinate space (w × h).
+ */
+export type CustomGeometryData = {
+  paths: Array<{
+    /** SVG path d attribute (M, L, C, Q, Z commands) */
+    d: string;
+    /** Coordinate space width for this path */
+    w: number;
+    /** Coordinate space height for this path */
+    h: number;
+  }>;
+};
+
 export type VectorShapeDrawing = DrawingBlockBase & {
   drawingKind: 'vectorShape';
   geometry: DrawingGeometry;
   shapeKind?: string;
+  customGeometry?: CustomGeometryData;
   fillColor?: FillColor;
   strokeColor?: StrokeColor;
   strokeWidth?: number;
@@ -842,6 +901,17 @@ export type SectionMetadata = {
   titlePg?: boolean;
   /** Vertical alignment of content within this section's pages */
   vAlign?: SectionVerticalAlign;
+  /** Section page margins in CSS px */
+  margins?: {
+    top?: number;
+    right?: number;
+    bottom?: number;
+    left?: number;
+    header?: number;
+    footer?: number;
+  } | null;
+  /** Section page size in CSS px */
+  pageSize?: { w: number; h: number } | null;
 };
 
 export type PageBreakBlock = {
@@ -946,6 +1016,7 @@ export type ParagraphSpacing = {
   before?: number;
   after?: number;
   line?: number;
+  lineUnit?: 'px' | 'multiplier';
   lineRule?: 'auto' | 'exact' | 'atLeast';
   beforeAutospacing?: boolean;
   afterAutospacing?: boolean;
@@ -1076,6 +1147,7 @@ export type WordLayoutMarker = {
     italic?: boolean;
     color?: string;
     letterSpacing?: number;
+    vanish?: boolean;
   };
 };
 
@@ -1402,12 +1474,34 @@ export type TableRowMeasure = {
   height: number;
 };
 
+/** Outer table border widths in pixels (top, right, bottom, left). Used for total dimensions and content offset. */
+export type TableBorderWidths = {
+  top: number;
+  right: number;
+  bottom: number;
+  left: number;
+};
+
 export type TableMeasure = {
   kind: 'table';
   rows: TableRowMeasure[];
   columnWidths: number[];
   totalWidth: number;
   totalHeight: number;
+  /**
+   * Cell spacing in pixels (border-spacing between cells).
+   * Used for total table dimensions and cell x/y positioning when border-collapse is 'separate'.
+   */
+  cellSpacingPx?: number;
+  /**
+   * Outer table border widths in pixels. Included in totalWidth/totalHeight; content is offset by (left, top).
+   */
+  tableBorderWidths?: TableBorderWidths;
+};
+
+export type CellSpacing = {
+  type: 'dxa' | 'px';
+  value: number;
 };
 
 export type SectionBreakMeasure = {
@@ -1532,6 +1626,8 @@ export type TableRowBoundary = {
   index: number;
   y: number;
   height: number;
+  minHeight: number;
+  resizable: boolean;
 };
 
 export type TableFragmentMetadata = {
@@ -1576,6 +1672,9 @@ export type TableFragment = {
   metadata?: TableFragmentMetadata;
   pmStart?: number;
   pmEnd?: number;
+  /** Per-fragment column widths, rescaled when table is clamped to section width.
+   *  When set, the renderer uses these instead of measure.columnWidths. */
+  columnWidths?: number[];
 };
 
 export type ImageFragment = {
@@ -1586,6 +1685,7 @@ export type ImageFragment = {
   width: number;
   height: number;
   isAnchored?: boolean;
+  behindDoc?: boolean;
   zIndex?: number;
   pmStart?: number;
   pmEnd?: number;
@@ -1601,6 +1701,7 @@ export type DrawingFragment = {
   width: number;
   height: number;
   isAnchored?: boolean;
+  behindDoc?: boolean;
   zIndex?: number;
   geometry: DrawingGeometry;
   scale: number;
@@ -1688,6 +1789,13 @@ export interface PositionMapping {
   /** Array of step maps - length indicates transaction complexity */
   readonly maps: readonly unknown[];
 }
+
+/**
+ * Rendering flow mode.
+ * - `paginated`: discrete page surfaces
+ * - `semantic`: continuous flow surface
+ */
+export type FlowMode = 'paginated' | 'semantic';
 
 export interface PainterDOM {
   paint(layout: Layout, mount: HTMLElement, mapping?: PositionMapping): void;

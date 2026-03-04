@@ -11,6 +11,14 @@
  */
 const RANDOM_ID_LENGTH = 9;
 
+const generateRandomBase36Id = (length: number): string => {
+  let randomId = '';
+  while (randomId.length < length) {
+    randomId += Math.random().toString(36).slice(2);
+  }
+  return randomId.slice(0, length);
+};
+
 import type {
   Run,
   TextRun,
@@ -194,9 +202,7 @@ export const deriveTrackedChangeId = (kind: TrackedChangeKind, attrs: Record<str
   const authorEmail = attrs && typeof attrs.authorEmail === 'string' ? attrs.authorEmail : 'unknown';
   const date = attrs && typeof attrs.date === 'string' ? attrs.date : 'unknown';
   // Add timestamp and random component to ensure uniqueness when author/date are missing
-  const unique = `${Date.now()}-${Math.random()
-    .toString(36)
-    .substring(2, 2 + RANDOM_ID_LENGTH)}`;
+  const unique = `${Date.now()}-${generateRandomBase36Id(RANDOM_ID_LENGTH)}`;
   return `${kind}-${authorEmail}-${date}-${unique}`;
 };
 
@@ -269,22 +275,6 @@ export const trackedChangesCompatible = (a: TextRun, b: TextRun): boolean => {
   if (!aMeta && !bMeta) return true;
   if (!aMeta || !bMeta) return false;
   return aMeta.kind === bMeta.kind && aMeta.id === bMeta.id;
-};
-
-/**
- * Collects and prioritizes tracked change metadata from an array of ProseMirror marks.
- * When multiple tracked change marks are present, returns the highest-priority one.
- *
- * @param marks - Array of ProseMirror marks to process
- * @returns The highest-priority TrackedChangeMeta, or undefined if none found
- */
-export const collectTrackedChangeFromMarks = (marks?: PMMark[]): TrackedChangeMeta | undefined => {
-  if (!marks || !marks.length) return undefined;
-  return marks.reduce<TrackedChangeMeta | undefined>((current, mark) => {
-    const meta = buildTrackedChangeMetaFromMark(mark);
-    if (!meta) return current;
-    return selectTrackedChangeMeta(current, meta);
-  }, undefined);
 };
 
 /**

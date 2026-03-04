@@ -10,7 +10,7 @@ vi.mock('@helpers/generateDocxRandomId.js', () => ({
 describe('preProcessNodesForFldChar', () => {
   beforeEach(() => {
     vi.clearAllMocks();
-    generateDocxRandomId.mockReturnValue('rId123');
+    generateDocxRandomId.mockReturnValue('abc12345');
   });
 
   const mockDocx = {
@@ -35,7 +35,7 @@ describe('preProcessNodesForFldChar', () => {
       {
         name: 'w:hyperlink',
         type: 'element',
-        attributes: { 'r:id': 'rId123' },
+        attributes: { 'r:id': 'rIdabc12345' },
         elements: [{ name: 'w:r', elements: [{ name: 'w:t', elements: [{ type: 'text', text: 'link text' }] }] }],
       },
     ]);
@@ -44,7 +44,7 @@ describe('preProcessNodesForFldChar', () => {
         type: 'element',
         name: 'Relationship',
         attributes: {
-          Id: 'rId123',
+          Id: 'rIdabc12345',
           Type: 'http://schemas.openxmlformats.org/officeDocument/2006/relationships/hyperlink',
           Target: 'http://example.com',
           TargetMode: 'External',

@@ -278,8 +278,7 @@ function renderRemoteCaret(options: {
     caretEl.style.width = `${options.cursorStyles.CARET_WIDTH}px`;
     caretEl.style.borderLeft = `${options.cursorStyles.CARET_WIDTH}px solid ${color}`;
     caretEl.style.pointerEvents = 'none';
-    // GPU-accelerated transitions for smooth movement
-    caretEl.style.transition = 'transform 50ms ease-out, height 50ms ease-out, opacity 100ms ease-out';
+    caretEl.style.transition = 'opacity 100ms ease-out';
     caretEl.style.willChange = 'transform';
     caretEl.setAttribute('data-client-id', options.cursor.clientId.toString());
     caretEl.setAttribute('aria-hidden', 'true');

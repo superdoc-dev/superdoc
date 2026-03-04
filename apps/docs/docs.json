@@ -1,16 +1,23 @@
 {
   "$schema": "https://mintlify.com/docs.json",
-  "theme": "willow",
+  "theme": "mint",
   "name": "SuperDoc",
   "description": "Web-based DOCX editor with full Microsoft Word compatibility. Handle tracked changes, complex tables, and document automation. Works with any framework and AI agents.",
   "colors": {
-    "primary": "#0055FF",
-    "light": "#0085FF",
-    "dark": "#003ACC"
+    "primary": "#6366F1",
+    "light": "#8968F6",
+    "dark": "#4F46E5"
+  },
+  "background": {
+    "color": {
+      "light": "#f8f8fc",
+      "dark": "#0a0a0f"
+    }
   },
   "logo": {
     "light": "/public/images/logo-light.png",
-    "dark": "/public/images/logo-dark.png"
+    "dark": "/public/images/logo-dark.png",
+    "href": "https://superdoc.dev"
   },
   "favicon": "/public/images/favicon.png",
   "icons": {
@@ -20,9 +27,6 @@
     "family": "Plus Jakarta Sans",
     "body": {
       "family": "Inter"
-    },
-    "heading": {
-      "font-size": "2.5rem !important"
     }
   },
   "contextual": {
@@ -41,32 +45,27 @@
   "navigation": {
     "tabs": [
       {
-        "tab": "Editor",
+        "tab": "SuperDoc",
         "groups": [
           {
             "group": "Getting Started",
             "pages": [
               "getting-started/introduction",
+              "getting-started/quickstart",
               "getting-started/ai-agents",
-              "getting-started/installation",
-              "getting-started/configuration",
-              "getting-started/import-export",
-              "getting-started/fonts",
               {
                 "group": "Frameworks",
                 "pages": [
                   "getting-started/frameworks/react",
                   "getting-started/frameworks/vue",
-                  "getting-started/frameworks/vanilla-js",
-                  "getting-started/frameworks/angular",
-                  "getting-started/frameworks/nextjs",
-                  "getting-started/frameworks/svelte",
-                  "getting-started/frameworks/php",
                   "getting-started/frameworks/nuxt",
-                  "getting-started/frameworks/ruby-on-rails",
-                  "getting-started/frameworks/blazor"
+                  "getting-started/frameworks/angular",
+                  "getting-started/frameworks/laravel",
+                  "getting-started/frameworks/vanilla-js"
                 ]
-              }
+              },
+              "getting-started/import-export",
+              "getting-started/fonts"
             ]
           },
           {
@@ -78,9 +77,7 @@
                   "core/superdoc/overview",
                   "core/superdoc/configuration",
                   "core/superdoc/methods",
-                  "core/superdoc/events",
-                  "core/superdoc/properties",
-                  "core/superdoc/types"
+                  "core/superdoc/events"
                 ]
               },
               {
@@ -89,28 +86,32 @@
                   "core/supereditor/overview",
                   "core/supereditor/configuration",
                   "core/supereditor/methods",
-                  "core/supereditor/hooks"
+                  "core/supereditor/events"
                 ]
+              },
+              {
+                "group": "React",
+                "pages": ["core/react/overview", "core/react/configuration", "core/react/methods", "core/react/types"]
               }
             ]
           },
           {
-            "group": "AI",
-            "tag": "NEW",
+            "group": "Document Engine",
+            "tag": "ALPHA",
             "pages": [
+              "document-engine/overview",
               {
-                "group": "AI Actions",
+                "group": "Document API",
                 "pages": [
-                  "ai/ai-actions/overview",
-                  "ai/ai-actions/configuration",
-                  "ai/ai-actions/methods",
-                  "ai/ai-actions/hooks"
+                  "document-api/overview",
+                  "document-api/reference/index",
+                  "document-api/common-workflows",
+                  "document-api/available-operations"
                 ]
               },
-              {
-                "group": "AI Builder",
-                "pages": ["ai/ai-builder/overview"]
-              }
+              "document-engine/sdks",
+              "document-engine/cli",
+              "document-engine/mcp"
             ]
           },
           {
@@ -122,44 +123,37 @@
                 "pages": [
                   "modules/collaboration/overview",
                   "modules/collaboration/quickstart",
-                  "modules/collaboration/configuration",
-                  {
-                    "group": "Cloud Providers",
-                    "pages": ["modules/collaboration/cloud/liveblocks", "modules/collaboration/cloud/tiptap-cloud"]
-                  },
-                  {
-                    "group": "Self-Hosted",
-                    "pages": [
-                      "modules/collaboration/self-hosted/overview",
-                      "modules/collaboration/self-hosted/superdoc-yjs",
-                      "modules/collaboration/self-hosted/hocuspocus",
-                      "modules/collaboration/self-hosted/y-sweet"
-                    ]
-                  }
+                  "modules/collaboration/configuration"
                 ]
               },
               "modules/comments",
-              "modules/toolbar"
+              "modules/toolbar",
+              "modules/links",
+              "modules/context-menu",
+              "modules/pdf",
+              "modules/whiteboard"
             ]
           },
           {
             "group": "Extensions",
             "pages": [
               "extensions/overview",
-              "extensions/creating-extensions",
               {
                 "group": "All",
                 "pages": [
                   "extensions/block-node",
                   "extensions/bold",
+                  "extensions/bookmarks",
                   "extensions/bullet-list",
                   "extensions/color",
                   "extensions/content-block",
                   "extensions/custom-selection",
                   "extensions/document",
+                  "extensions/document-index",
                   "extensions/dropcursor",
                   "extensions/font-family",
                   "extensions/font-size",
+                  "extensions/footnote",
                   "extensions/format-commands",
                   "extensions/gapcursor",
                   "extensions/heading",
@@ -177,24 +171,27 @@
                   "extensions/ordered-list",
                   "extensions/page-number",
                   "extensions/paragraph",
+                  "extensions/permission-ranges",
                   "extensions/placeholder",
                   "extensions/popover-plugin",
                   "extensions/run-item",
                   "extensions/search",
                   "extensions/shape-container",
                   "extensions/shape-textbox",
-                  "extensions/slash-menu",
+                  "extensions/context-menu",
                   "extensions/strike",
                   "extensions/structured-content",
                   "extensions/tab",
                   "extensions/table",
                   "extensions/table-cell",
                   "extensions/table-header",
+                  "extensions/table-of-contents",
                   "extensions/table-row",
                   "extensions/text-align",
                   "extensions/text-indent",
                   "extensions/text-style",
                   "extensions/text-transform",
+                  "extensions/track-changes",
                   "extensions/underline"
                 ]
               }
@@ -216,7 +213,6 @@
               },
               {
                 "group": "Template Builder",
-                "tag": "NEW",
                 "pages": [
                   "solutions/template-builder/introduction",
                   "solutions/template-builder/quickstart",
@@ -227,26 +223,41 @@
             ]
           },
           {
-            "group": "Resources",
-            "pages": ["resources/guides", "resources/license"]
-          }
-        ]
-      },
-      {
-        "tab": "Guides",
-        "groups": [
-          {
-            "group": "General",
-            "pages": ["guides/general/storage", "guides/general/accessibility", "guides/general/security"]
+            "group": "Guides",
+            "pages": [
+              "guides/general/storage",
+              "guides/general/stable-navigation",
+              {
+                "group": "Collaboration",
+                "pages": [
+                  "guides/collaboration/liveblocks",
+                  "guides/collaboration/superdoc-yjs",
+                  "guides/collaboration/hocuspocus"
+                ]
+              },
+              {
+                "group": "Migration",
+                "pages": [
+                  "guides/migration/prosemirror",
+                  "guides/migration/breaking-changes-v1",
+                  "guides/migration/typescript-migration"
+                ]
+              }
+            ]
           },
           {
-            "group": "Migration",
-            "pages": ["guides/migration/prosemirror", "guides/breaking-changes-v1", "guides/typescript-migration"]
+            "group": "Resources",
+            "pages": [
+              "guides/general/accessibility",
+              "resources/telemetry",
+              "guides/general/security",
+              "resources/license"
+            ]
           }
         ]
       },
       {
-        "tab": "Documents API",
+        "tab": "Backend Services",
         "groups": [
           {
             "group": "Getting Started",
@@ -284,10 +295,8 @@
     },
     "links": [
       {
-        "type": "button",
-        "href": "https://github.com/Harbour-Enterprises/SuperDoc",
-        "label": "",
-        "icon": "github"
+        "type": "github",
+        "href": "https://github.com/superdoc-dev/superdoc"
       },
       {
         "type": "button",
@@ -299,8 +308,24 @@
   },
   "redirects": [
     {
+      "source": "/core/superdoc/properties",
+      "destination": "/core/superdoc/methods#properties"
+    },
+    {
+      "source": "/core/superdoc/types",
+      "destination": "/core/superdoc/methods#typescript-types"
+    },
+    {
+      "source": "/core/supereditor/hooks",
+      "destination": "/core/supereditor/events"
+    },
+    {
       "source": "/guide/quick-start",
-      "destination": "/getting-started/installation"
+      "destination": "/getting-started/quickstart"
+    },
+    {
+      "source": "/getting-started/installation",
+      "destination": "/getting-started/quickstart"
     },
     {
       "source": "/guide/modes-roles",
@@ -368,11 +393,39 @@
     },
     {
       "source": "/modules/collaboration/backend",
-      "destination": "/modules/collaboration/self-hosted/overview"
+      "destination": "/modules/collaboration/configuration"
     },
     {
       "source": "/modules/collaboration/client",
       "destination": "/modules/collaboration/configuration"
+    },
+    {
+      "source": "/modules/collaboration/cloud/liveblocks",
+      "destination": "/guides/collaboration/liveblocks"
+    },
+    {
+      "source": "/modules/collaboration/self-hosted/superdoc-yjs",
+      "destination": "/guides/collaboration/superdoc-yjs"
+    },
+    {
+      "source": "/modules/collaboration/self-hosted/hocuspocus",
+      "destination": "/guides/collaboration/hocuspocus"
+    },
+    {
+      "source": "/modules/collaboration/self-hosted/overview",
+      "destination": "/guides/collaboration/self-hosted-overview"
+    },
+    {
+      "source": "/extensions/slash-menu",
+      "destination": "/extensions/context-menu"
+    },
+    {
+      "source": "/guides/breaking-changes-v1",
+      "destination": "/guides/migration/breaking-changes-v1"
+    },
+    {
+      "source": "/guides/typescript-migration",
+      "destination": "/guides/migration/typescript-migration"
     }
   ],
   "integrations": {

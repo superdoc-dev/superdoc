@@ -1,4 +1,5 @@
 import type {
+  CellSpacing,
   DrawingBlock,
   Fragment,
   Line,
@@ -8,13 +9,15 @@ import type {
   TableFragment,
   TableMeasure,
 } from '@superdoc/contracts';
+import { getCellSpacingPx } from '@superdoc/measuring-dom';
 import { CLASS_NAMES, fragmentStyles } from '../styles.js';
+import { DOM_CLASS_NAMES } from '../constants.js';
 import type { FragmentRenderContext, BlockLookup } from '../renderer.js';
 import { renderTableRow } from './renderTableRow.js';
 import { applySdtContainerStyling, type SdtBoundaryOptions } from '../utils/sdt-helpers.js';
+import { applyBorder, borderValueToSpec } from './border-utils.js';
 
 type ApplyStylesFn = (el: HTMLElement, styles: Partial<CSSStyleDeclaration>) => void;
-
 /**
  * Dependencies required for rendering a table fragment.
  *
@@ -40,12 +43,20 @@ export type TableRenderDependencies = {
     lineIndex: number,
     isLastLine: boolean,
   ) => HTMLElement;
+  /** Optional callback invoked after a table line's final styles/markers are applied. */
+  captureLineSnapshot?: (
+    lineEl: HTMLElement,
+    context: FragmentRenderContext,
+    options?: { inTableParagraph?: boolean; wrapperEl?: HTMLElement },
+  ) => void;
   /** Function to render drawing content (images, shapes, shape groups) */
   renderDrawingContent?: (block: DrawingBlock) => HTMLElement;
   /** Function to apply fragment positioning and dimensions */
   applyFragmentFrame: (el: HTMLElement, fragment: Fragment) => void;
   /** Function to apply SDT metadata as data attributes */
   applySdtDataset: (el: HTMLElement | null, metadata?: SdtMetadata | null) => void;
+  /** Function to apply container SDT metadata as data attributes */
+  applyContainerSdtDataset?: (el: HTMLElement | null, metadata?: SdtMetadata | null) => void;
   /** Function to apply CSS styles to an element */
   applyStyles: ApplyStylesFn;
 };
@@ -83,10 +94,15 @@ export type TableRenderDependencies = {
  *   "columns": [
  *     {"i": 0, "x": 0, "w": 100, "min": 25, "r": 1},
  *     {"i": 1, "x": 100, "w": 150, "min": 30, "r": 1}
+ *   ],
+ *   "rows": [
+ *     {"i": 0, "y": 0, "h": 30, "min": 10, "r": 1},
+ *     {"i": 1, "y": 34, "h": 25, "min": 10, "r": 1}
  *   ]
  * }
  * ```
- * Where: i=index, x=position, w=width, min=minWidth, r=resizable(0/1)
+ * Where for columns: i=index, x=position, w=width, min=minWidth, r=resizable(0/1)
+ * Where for rows: i=index, y=position, h=height, min=minHeight, r=resizable(0/1)
  *
  * **Edge Cases:**
  * - Missing metadata: Element created without data-table-boundaries attribute
@@ -119,9 +135,11 @@ export const renderTableFragment = (deps: TableRenderDependencies): HTMLElement 
     context,
     sdtBoundary,
     renderLine,
+    captureLineSnapshot,
     renderDrawingContent,
     applyFragmentFrame,
     applySdtDataset,
+    applyContainerSdtDataset,
     applyStyles,
   } = deps;
 
@@ -160,6 +178,9 @@ export const renderTableFragment = (deps: TableRenderDependencies): HTMLElement 
 
   const block = lookup.block as TableBlock;
   const measure = lookup.measure as TableMeasure;
+  // Use per-fragment rescaled column widths when available (SD-1859: mixed-orientation docs
+  // where measurement width differs from section width). Falls back to measured widths.
+  const effectiveColumnWidths = fragment.columnWidths ?? measure.columnWidths;
   const tableBorders = block.attrs?.borders;
   const tableIndentValue = (block.attrs?.tableIndent as { width?: unknown } | null | undefined)?.width;
   const tableIndent = typeof tableIndentValue === 'number' && Number.isFinite(tableIndentValue) ? tableIndentValue : 0;
@@ -173,19 +194,32 @@ export const renderTableFragment = (deps: TableRenderDependencies): HTMLElement 
   applyFragmentFrame(container, fragment);
   container.style.height = `${fragment.height}px`;
   applySdtDataset(container, block.attrs?.sdt);
+  applyContainerSdtDataset?.(container, block.attrs?.containerSdt);
+
+  // Outer table border widths: reserve space so border is inside fragment size; content is offset
+  const tableBorderWidths = measure.tableBorderWidths;
+  if (tableBorderWidths) {
+    container.style.boxSizing = 'border-box';
+  }
+  const contentLeft = tableBorderWidths?.left ?? 0;
+  const contentTop = tableBorderWidths?.top ?? 0;
 
   // Apply SDT container styling (document sections, structured content blocks)
   applySdtContainerStyling(doc, container, block.attrs?.sdt, block.attrs?.containerSdt, sdtBoundary);
 
-  // Add table-specific class for resize overlay targeting
-  container.classList.add('superdoc-table-fragment');
+  // Add table-specific class for resize overlay targeting and click mapping
+  container.classList.add(DOM_CLASS_NAMES.TABLE_FRAGMENT);
+
+  // Cell spacing in px (border-spacing). Use measure when present, else resolve from block attrs (e.g. stale/cached measure).
+  const cellSpacingPx = measure.cellSpacingPx ?? getCellSpacingPx(block.attrs?.cellSpacing);
 
   // Add metadata for interactive table resizing
   if (fragment.metadata?.columnBoundaries) {
-    // Build row-aware boundary segments
-    // For each grid column boundary, track which row ranges have actual cell edges there
-    const columnCount = measure.columnWidths.length;
-    const rowCount = block.rows.length;
+    // Build row-aware boundary segments scoped to THIS fragment's rows.
+    // When a table splits across pages, each fragment only renders a subset of rows
+    // (repeated headers + body rows from fromRow to toRow). Segments must match
+    // exactly the rendered rows so resize handles don't overflow the fragment.
+    const columnCount = effectiveColumnWidths.length;
 
     // boundarySegments[colIndex] = array of {fromRow, toRow, y, height} segments where this boundary exists
     const boundarySegments: Array<Array<{ fromRow: number; toRow: number; y: number; height: number }>> = [];
@@ -193,10 +227,36 @@ export const renderTableFragment = (deps: TableRenderDependencies): HTMLElement 
       boundarySegments.push([]);
     }
 
-    // For each row, determine which grid columns have cell boundaries
+    // Build the list of rows actually rendered in this fragment, matching the
+    // rendering order: repeated headers first, then body rows.
+    // NOTE: This header-then-body iteration must stay in sync with the rendering
+    // loop below (~line 315) which uses the same order to render row elements.
+    const renderedRows: Array<{ rowIndex: number; height: number }> = [];
+
+    // Repeated header rows (only on continuation fragments)
+    if (fragment.repeatHeaderCount && fragment.repeatHeaderCount > 0) {
+      for (let r = 0; r < fragment.repeatHeaderCount; r++) {
+        const rowMeasure = measure.rows[r];
+        if (!rowMeasure) break;
+        renderedRows.push({ rowIndex: r, height: rowMeasure.height });
+      }
+    }
+
+    // Body rows (fromRow to toRow), with partial row height for mid-row splits
+    for (let r = fragment.fromRow; r < fragment.toRow; r++) {
+      const rowMeasure = measure.rows[r];
+      if (!rowMeasure) break;
+      const isPartialRow = fragment.partialRow && fragment.partialRow.rowIndex === r;
+      const actualHeight = isPartialRow ? fragment.partialRow!.partialHeight : rowMeasure.height;
+      renderedRows.push({ rowIndex: r, height: actualHeight });
+    }
+
+    // For each rendered row, determine which grid columns have cell boundaries
     // A boundary exists at column X if there's a cell that ENDS at column X (gridColumnStart + colSpan = X)
-    let rowY = 0;
-    for (let rowIndex = 0; rowIndex < rowCount; rowIndex++) {
+    // rowY includes outer spacing (before first row, between rows, after last) so segment positions match rendered cells
+    let rowY = cellSpacingPx;
+    for (let i = 0; i < renderedRows.length; i++) {
+      const { rowIndex, height } = renderedRows[i];
       const rowMeasure = measure.rows[rowIndex];
       if (!rowMeasure) continue;
 
@@ -224,28 +284,28 @@ export const renderTableFragment = (deps: TableRenderDependencies): HTMLElement 
         const segments = boundarySegments[boundaryCol];
         const lastSegment = segments[segments.length - 1];
 
-        // If the last segment ends at this row, extend it
-        if (lastSegment && lastSegment.toRow === rowIndex) {
-          lastSegment.toRow = rowIndex + 1;
-          lastSegment.height += rowMeasure.height;
+        // If the last segment ends at the previous rendered row, extend it
+        if (lastSegment && i > 0 && lastSegment.toRow === i) {
+          lastSegment.toRow = i + 1;
+          lastSegment.height += height;
         } else {
           // Start a new segment
           segments.push({
-            fromRow: rowIndex,
-            toRow: rowIndex + 1,
+            fromRow: i,
+            toRow: i + 1,
             y: rowY,
-            height: rowMeasure.height,
+            height,
           });
         }
       }
 
-      rowY += rowMeasure.height;
+      rowY += height + cellSpacingPx;
     }
 
-    const metadata = {
+    const metadata: Record<string, unknown> = {
       columns: fragment.metadata.columnBoundaries.map((boundary) => ({
         i: boundary.index,
-        x: boundary.x,
+        x: boundary.x + contentLeft,
         w: boundary.width,
         min: boundary.minWidth,
         r: boundary.resizable ? 1 : 0,
@@ -254,11 +314,23 @@ export const renderTableFragment = (deps: TableRenderDependencies): HTMLElement 
       segments: boundarySegments.map((segs, colIndex) =>
         segs.map((seg) => ({
           c: colIndex, // column index
-          y: seg.y, // y position
+          y: seg.y + contentTop, // y position (relative to table container)
           h: seg.height, // height of segment
         })),
       ),
     };
+
+    // Add row boundary metadata for interactive row resizing
+    // Where: i=index, y=position, h=height, min=minHeight, r=resizable(0/1)
+    if (fragment.metadata.rowBoundaries && fragment.metadata.rowBoundaries.length > 0) {
+      metadata.rows = fragment.metadata.rowBoundaries.map((rb) => ({
+        i: rb.index,
+        y: rb.y + contentTop,
+        h: rb.height,
+        min: rb.minHeight,
+        r: rb.resizable ? 1 : 0,
+      }));
+    }
 
     container.setAttribute('data-table-boundaries', JSON.stringify(metadata));
   }
@@ -268,9 +340,12 @@ export const renderTableFragment = (deps: TableRenderDependencies): HTMLElement 
     container.setAttribute('data-sd-block-id', block.id);
   }
 
-  const borderCollapse = block.attrs?.borderCollapse || 'collapse';
-  if (borderCollapse === 'separate' && block.attrs?.cellSpacing) {
-    container.style.borderSpacing = `${block.attrs.cellSpacing}px`;
+  const borderCollapse = block.attrs?.borderCollapse ?? (block.attrs?.cellSpacing != null ? 'separate' : 'collapse');
+  if (borderCollapse === 'separate' && block.attrs?.cellSpacing && tableBorders) {
+    applyBorder(container, 'Top', borderValueToSpec(tableBorders.top));
+    applyBorder(container, 'Right', borderValueToSpec(tableBorders.right));
+    applyBorder(container, 'Bottom', borderValueToSpec(tableBorders.bottom));
+    applyBorder(container, 'Left', borderValueToSpec(tableBorders.left));
   }
 
   // Pre-calculate all row heights for rowspan calculations
@@ -285,9 +360,12 @@ export const renderTableFragment = (deps: TableRenderDependencies): HTMLElement 
     return r?.height ?? 0;
   });
 
-  let y = 0;
+  // First row starts after space before table content (space between table border and first row)
+  let y = cellSpacingPx;
 
-  // If this is a continuation fragment with repeated headers, render headers first
+  // If this is a continuation fragment with repeated headers, render headers first.
+  // NOTE: This header-then-body iteration must stay in sync with the metadata
+  // segment builder above (~line 199) which uses the same order.
   if (fragment.repeatHeaderCount && fragment.repeatHeaderCount > 0) {
     for (let r = 0; r < fragment.repeatHeaderCount; r += 1) {
       const rowMeasure = measure.rows[r];
@@ -301,19 +379,124 @@ export const renderTableFragment = (deps: TableRenderDependencies): HTMLElement 
         row: block.rows[r],
         totalRows: block.rows.length,
         tableBorders,
-        columnWidths: measure.columnWidths,
+        columnWidths: effectiveColumnWidths,
         allRowHeights,
         tableIndent,
         context,
         renderLine,
+        captureLineSnapshot,
         renderDrawingContent,
         applySdtDataset,
         tableSdt: block.attrs?.sdt ?? null,
         // Headers are always rendered as-is (no border suppression)
         continuesFromPrev: false,
         continuesOnNext: false,
+        cellSpacingPx,
       });
-      y += rowMeasure.height;
+      // Add row height + spacing after every row (including last) for outer spacing after last row
+      y += rowMeasure.height + cellSpacingPx;
+    }
+  }
+
+  // Render rowspan continuation cells ("ghost cells")
+  // When a table continues from a previous fragment, some grid columns in the
+  // first body rows may be occupied by rowspan cells that started on a previous page.
+  // Create empty cells to maintain table structure and borders (matching Word behavior).
+  if (fragment.continuesFromPrev && fragment.fromRow > 0) {
+    const repeatCount = fragment.repeatHeaderCount ?? 0;
+
+    for (let r = repeatCount; r < fragment.fromRow; r++) {
+      const srcRowMeasure = measure.rows[r];
+      if (!srcRowMeasure) continue;
+
+      for (let ci = 0; ci < srcRowMeasure.cells.length; ci++) {
+        const srcCellMeasure = srcRowMeasure.cells[ci];
+        const rowSpan = srcCellMeasure.rowSpan ?? 1;
+        if (rowSpan <= 1) continue;
+
+        const spanEndRow = r + rowSpan;
+        if (spanEndRow <= fragment.fromRow) continue;
+
+        // This cell's rowspan extends into this fragment's body rows
+        const gridCol = srcCellMeasure.gridColumnStart ?? 0;
+        const colSpan = srcCellMeasure.colSpan ?? 1;
+
+        // Calculate x position (sum of columns before gridCol)
+        let ghostX = 0;
+        for (let i = 0; i < gridCol && i < effectiveColumnWidths.length; i++) {
+          ghostX += effectiveColumnWidths[i];
+        }
+
+        // Calculate width (sum of spanned columns)
+        let ghostWidth = 0;
+        for (let i = gridCol; i < gridCol + colSpan && i < effectiveColumnWidths.length; i++) {
+          ghostWidth += effectiveColumnWidths[i];
+        }
+
+        // Calculate height: from fromRow to min(spanEndRow, toRow)
+        const effectiveEnd = Math.min(spanEndRow, fragment.toRow);
+        let ghostHeight = 0;
+        for (let ri = fragment.fromRow; ri < effectiveEnd; ri++) {
+          ghostHeight += allRowHeights[ri] ?? 0;
+        }
+
+        if (ghostWidth <= 0 || ghostHeight <= 0) continue;
+
+        // Create ghost cell
+        const ghostDiv = doc.createElement('div');
+        ghostDiv.style.position = 'absolute';
+        ghostDiv.style.left = `${ghostX}px`;
+        ghostDiv.style.top = `${y}px`;
+        ghostDiv.style.width = `${ghostWidth}px`;
+        ghostDiv.style.height = `${ghostHeight}px`;
+        ghostDiv.style.boxSizing = 'border-box';
+        ghostDiv.style.overflow = 'hidden';
+
+        // Resolve borders for the ghost cell
+        const srcCell = block.rows[r]?.cells?.[ci];
+        const cellBordersAttr = srcCell?.attrs?.borders;
+        const hasExplicitBorders =
+          cellBordersAttr &&
+          (cellBordersAttr.top !== undefined ||
+            cellBordersAttr.right !== undefined ||
+            cellBordersAttr.bottom !== undefined ||
+            cellBordersAttr.left !== undefined);
+        const isFirstCol = gridCol === 0;
+        const isLastCol = gridCol + colSpan >= effectiveColumnWidths.length;
+
+        if (hasExplicitBorders && tableBorders) {
+          // Use cell's borders, with table top border for continuation
+          applyBorder(ghostDiv, 'Top', cellBordersAttr.top ?? borderValueToSpec(tableBorders.top));
+          applyBorder(
+            ghostDiv,
+            'Left',
+            cellBordersAttr.left ?? borderValueToSpec(isFirstCol ? tableBorders.left : tableBorders.insideV),
+          );
+          applyBorder(
+            ghostDiv,
+            'Right',
+            cellBordersAttr.right ?? borderValueToSpec(isLastCol ? tableBorders.right : tableBorders.insideV),
+          );
+          if (effectiveEnd <= fragment.toRow && spanEndRow <= fragment.toRow) {
+            applyBorder(ghostDiv, 'Bottom', cellBordersAttr.bottom ?? borderValueToSpec(tableBorders.insideH));
+          }
+        } else if (tableBorders) {
+          // Resolve from table borders
+          applyBorder(ghostDiv, 'Top', borderValueToSpec(tableBorders.top));
+          applyBorder(ghostDiv, 'Left', borderValueToSpec(isFirstCol ? tableBorders.left : tableBorders.insideV));
+          applyBorder(ghostDiv, 'Right', borderValueToSpec(isLastCol ? tableBorders.right : tableBorders.insideV));
+          if (effectiveEnd <= fragment.toRow && spanEndRow <= fragment.toRow) {
+            applyBorder(ghostDiv, 'Bottom', borderValueToSpec(tableBorders.insideH));
+          }
+        }
+
+        // Apply cell background if present
+        if (srcCell?.attrs?.background) {
+          ghostDiv.style.backgroundColor = srcCell.attrs.background;
+        }
+
+        container.appendChild(ghostDiv);
+      }
     }
   }
 
@@ -339,11 +522,12 @@ export const renderTableFragment = (deps: TableRenderDependencies): HTMLElement 
       row: block.rows[r],
       totalRows: block.rows.length,
       tableBorders,
-      columnWidths: measure.columnWidths,
+      columnWidths: effectiveColumnWidths,
       allRowHeights,
       tableIndent,
       context,
       renderLine,
+      captureLineSnapshot,
       renderDrawingContent,
       applySdtDataset,
       tableSdt: block.attrs?.sdt ?? null,
@@ -353,8 +537,10 @@ export const renderTableFragment = (deps: TableRenderDependencies): HTMLElement 
       continuesOnNext: isLastRenderedBodyRow && fragment.continuesOnNext === true,
       // Pass partial row data for mid-row splits
       partialRow: partialRowData,
+      cellSpacingPx,
     });
-    y += actualRowHeight;
+    // Add row height + spacing after every row (including last) for outer spacing after last row
+    y += actualRowHeight + cellSpacingPx;
   }
 
   return container;

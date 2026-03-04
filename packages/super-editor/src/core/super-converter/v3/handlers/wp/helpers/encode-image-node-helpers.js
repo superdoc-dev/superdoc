@@ -1,6 +1,12 @@
 import { emuToPixels, rotToDegrees, polygonToObj } from '@converter/helpers.js';
 import { carbonCopy } from '@core/utilities/carbonCopy.js';
-import { extractStrokeWidth, extractStrokeColor, extractFillColor, extractLineEnds } from './vector-shape-helpers';
+import {
+  extractStrokeWidth,
+  extractStrokeColor,
+  extractFillColor,
+  extractLineEnds,
+  extractCustomGeometry,
+} from './vector-shape-helpers';
 import { convertMetafileToSvg, isMetafileExtension, setMetafileDomEnvironment } from './metafile-converter.js';
 import {
   collectTextBoxParagraphs,
@@ -70,6 +76,41 @@ const extractEffectExtent = (node) => {
 
   if (!left && !top && !right && !bottom) return null;
   return { left, top, right, bottom };
+};
+
+const buildClipPathFromSrcRect = (srcRectAttrs = {}) => {
+  const edges = {
+    left: srcRectAttrs.l,
+    top: srcRectAttrs.t,
+    right: srcRectAttrs.r,
+    bottom: srcRectAttrs.b,
+  };
+
+  let hasValue = false;
+  let hasPositive = false;
+  const percentEdges = {};
+
+  for (const [edge, value] of Object.entries(edges)) {
+    if (value == null) continue;
+    const numeric = Number(value);
+    if (!Number.isFinite(numeric)) continue;
+    hasValue = true;
+    if (numeric < 0) {
+      return null;
+    }
+    const percent = Math.max(0, Math.min(100, numeric / 1000));
+    if (percent > 0) hasPositive = true;
+    percentEdges[edge] = percent;
+  }
+
+  if (!hasValue || !hasPositive) return null;
+
+  const top = percentEdges.top ?? 0;
+  const right = percentEdges.right ?? 0;
+  const bottom = percentEdges.bottom ?? 0;
+  const left = percentEdges.left ?? 0;
+
+  return `inset(${top}% ${right}% ${bottom}% ${left}%)`;
 };
 
 /**
@@ -270,6 +311,9 @@ export function handleImageNode(node, params, isAnchor) {
     return null;
   }
 
+  // Check for image effects (grayscale, etc.)
+  const hasGrayscale = blip.elements?.some((el) => el.name === 'a:grayscl');
+
   // Check for stretch mode: <a:stretch><a:fillRect/></a:stretch>
   // This tells Word to scale the image to fill the extent rectangle.
   //
@@ -278,12 +322,13 @@ export function handleImageNode(node, params, isAnchor) {
   // - Negative values (e.g., b="-3978"): Word extended the mapping (image doesn't need clipping)
   // - Empty/no srcRect: no pre-adjustment, use cover+clip for aspect ratio mismatch
   //
-  // Since we don't implement actual srcRect cropping, we still need cover mode for positive values.
-  // Only skip cover mode when srcRect has negative values (Word already adjusted the mapping).
+  // Skip cover mode when srcRect already emitted explicit clipping or when srcRect has
+  // negative values (Word already adjusted the mapping).
   const stretch = blipFill?.elements?.find((el) => el.name === 'a:stretch');
   const fillRect = stretch?.elements?.find((el) => el.name === 'a:fillRect');
   const srcRect = blipFill?.elements?.find((el) => el.name === 'a:srcRect');
   const srcRectAttrs = srcRect?.attributes || {};
+  const clipPath = buildClipPathFromSrcRect(srcRectAttrs);
 
   // Check if srcRect has negative values (indicating Word extended/adjusted the image mapping)
   const srcRectHasNegativeValues = ['l', 't', 'r', 'b'].some((attr) => {
@@ -292,12 +337,15 @@ export function handleImageNode(node, params, isAnchor) {
   });
 
   const shouldStretch = Boolean(stretch && fillRect);
-  // Use cover mode when stretching, unless srcRect has negative values (Word already adjusted)
-  const shouldCover = shouldStretch && !srcRectHasNegativeValues;
+  // Use cover mode for plain stretch/fillRect when there is no explicit srcRect clipping.
+  // When srcRect emits clipping, we set explicit objectFit='fill' so clip-path math applies
+  // to a fully filled extent box (avoids "thin strip" rendering for cropped anchors).
+  const shouldCover = shouldStretch && !srcRectHasNegativeValues && !clipPath;
+  const shouldFillClippedStretch = shouldStretch && !srcRectHasNegativeValues && Boolean(clipPath);
 
   const spPr = picture.elements.find((el) => el.name === 'pic:spPr');
   if (spPr) {
-    const xfrm = spPr.elements.find((el) => el.name === 'a:xfrm');
+    const xfrm = spPr.elements?.find((el) => el.name === 'a:xfrm');
     if (xfrm?.attributes) {
       transformData = {
         ...transformData,
@@ -322,6 +370,7 @@ export function handleImageNode(node, params, isAnchor) {
   const { elements } = relationships || [];
 
   const rel = elements?.find((el) => el.attributes['Id'] === rEmbed);
+
   if (!rel) {
     return null;
   }
@@ -397,6 +446,9 @@ export function handleImageNode(node, params, isAnchor) {
       : {}),
     wrapTopAndBottom: wrap.type === 'TopAndBottom',
     shouldCover,
+    ...(shouldFillClippedStretch ? { objectFit: 'fill' } : {}),
+    ...(clipPath ? { clipPath } : {}),
+    rawSrcRect: srcRect,
     originalPadding: {
       distT: attributes['distT'],
       distB: attributes['distB'],
@@ -407,6 +459,7 @@ export function handleImageNode(node, params, isAnchor) {
     rId: relAttributes['Id'],
     ...(order.length ? { drawingChildOrder: order } : {}),
     ...(originalChildren.length ? { originalDrawingChildren: originalChildren } : {}),
+    ...(hasGrayscale ? { grayscale: true } : {}),
   };
 
   return {
@@ -450,9 +503,22 @@ const handleShapeDrawing = (
   const prstGeom = spPr?.elements.find((el) => el.name === 'a:prstGeom');
   const shapeType = prstGeom?.attributes['prst'];
 
-  // For all other shapes (with or without text), or shapes with gradients, use the vector shape handler
-  if (shapeType) {
-    const result = getVectorShape({ params, node, graphicData, size, marginOffset, anchorData, wrap, isAnchor });
+  // Check for custom geometry when no preset geometry is found
+  const custGeom = !shapeType ? extractCustomGeometry(spPr) : null;
+
+  // For shapes with preset geometry or custom geometry, use the vector shape handler
+  if (shapeType || custGeom) {
+    const result = getVectorShape({
+      params,
+      node,
+      graphicData,
+      size,
+      marginOffset,
+      anchorData,
+      wrap,
+      isAnchor,
+      customGeometry: custGeom,
+    });
     if (result?.attrs && isHidden) {
       result.attrs.hidden = true;
     }
@@ -553,9 +619,10 @@ const handleShapeGroup = (params, node, graphicData, size, padding, marginOffset
       const spPr = wsp.elements?.find((el) => el.name === 'wps:spPr');
       if (!spPr) return null;
 
-      // Extract shape kind
+      // Extract shape kind (preset geometry) or custom geometry
       const prstGeom = spPr.elements?.find((el) => el.name === 'a:prstGeom');
       const shapeKind = prstGeom?.attributes?.['prst'];
+      const customGeom = !shapeKind ? extractCustomGeometry(spPr) : null;
 
       // Extract size and transformations
       const shapeXfrm = spPr.elements?.find((el) => el.name === 'a:xfrm');
@@ -625,6 +692,7 @@ const handleShapeGroup = (params, node, graphicData, size, padding, marginOffset
         shapeType: 'vectorShape',
         attrs: {
           kind: shapeKind,
+          customGeometry: customGeom || undefined,
           x,
           y,
           width,
@@ -1042,7 +1110,17 @@ const buildShapePlaceholder = (node, size, padding, marginOffset, shapeType) => 
  * //   }
  * // }
  */
-export function getVectorShape({ params, node, graphicData, size, marginOffset, anchorData, wrap, isAnchor }) {
+export function getVectorShape({
+  params,
+  node,
+  graphicData,
+  size,
+  marginOffset,
+  anchorData,
+  wrap,
+  isAnchor,
+  customGeometry,
+}) {
   const schemaAttrs = {};
 
   const drawingNode = params.nodes?.[0];
@@ -1060,13 +1138,20 @@ export function getVectorShape({ params, node, graphicData, size, marginOffset, 
     return null;
   }
 
-  // Extract shape kind
+  // Extract shape kind (preset geometry) or custom geometry
   const prstGeom = spPr.elements?.find((el) => el.name === 'a:prstGeom');
   const shapeKind = prstGeom?.attributes?.['prst'];
-  if (!shapeKind) {
-    console.warn('Shape kind not found');
-  }
   schemaAttrs.kind = shapeKind;
+
+  // Store custom geometry if provided (from a:custGeom) or extract it here
+  if (customGeometry) {
+    schemaAttrs.customGeometry = customGeometry;
+  } else if (!shapeKind) {
+    const extracted = extractCustomGeometry(spPr);
+    if (extracted) {
+      schemaAttrs.customGeometry = extracted;
+    }
+  }
 
   // Use wp:extent for dimensions (final displayed size from anchor)
   // This is the correct size that Word displays the shape at

@@ -1,7 +1,7 @@
 {
   "name": "superdoc",
   "type": "module",
-  "version": "1.9.0-next.5",
+  "version": "1.17.0",
   "license": "AGPL-3.0",
   "repository": {
     "type": "git",
@@ -24,7 +24,7 @@
       "require": "./dist/superdoc.cjs"
     },
     "./types": {
-      "types": "./dist/types.d.ts",
+      "types": "./dist/super-editor/src/types.d.ts",
       "source": "./src/types.ts",
       "import": "./dist/types.es.js",
       "require": "./dist/types.cjs"
@@ -46,15 +46,30 @@
     "./style.css": "./dist/style.css"
   },
   "types": "./dist/superdoc/src/index.d.ts",
+  "typesVersions": {
+    "*": {
+      "super-editor": [
+        "./dist/super-editor/src/index.d.ts"
+      ],
+      "types": [
+        "./dist/super-editor/src/types.d.ts"
+      ]
+    }
+  },
   "main": "./dist/superdoc.umd.js",
   "module": "./dist/superdoc.es.js",
   "scripts": {
-    "dev": "vite",
-    "build": "pnpm --prefix ../super-editor run types:build && vite build && pnpm run build:umd",
+    "dev": "concurrently -k -n VITE,WORD -c cyan,magenta \"vite\" \"node ../../devtools/word-benchmark-sidecar/server.js --stay-alive-on-reuse\"",
+    "dev:collab": "concurrently -k -n VITE,COLLAB,WORD -c cyan,green,magenta \"vite\" \"pnpm run collab-server\" \"node ../../devtools/word-benchmark-sidecar/server.js --stay-alive-on-reuse\"",
+    "collab-server": "pnpm --filter @superdoc-dev/superdoc-yjs-collaboration build && tsx src/dev/collab-server.ts",
+    "word-benchmark-sidecar": "node ../../devtools/word-benchmark-sidecar/server.js",
+    "build": "vite build && pnpm run build:umd",
+    "build:dev": "SUPERDOC_SKIP_DTS=1 vite build",
     "postbuild": "node ./scripts/ensure-types.cjs",
-    "build:es": "pnpm --prefix ../super-editor run types:build && vite build && node ./scripts/ensure-types.cjs",
+    "build:es": "vite build && node ./scripts/ensure-types.cjs",
     "watch:es": "vite build --watch",
     "build:umd": "vite build --config vite.config.umd.js",
+    "watch:umd": "vite build --watch --config vite.config.umd.js",
     "clean": "rm -rf dist",
     "pack:local": "pnpm run pack",
     "pack": "pnpm run build:es && pnpm pack && mv $(ls superdoc-*.tgz) ./superdoc.tgz",
@@ -65,6 +80,7 @@
     "buffer-crc32": "catalog:",
     "eventemitter3": "catalog:",
     "jsdom": "catalog:",
+    "konva": "catalog:",
     "naive-ui": "catalog:",
     "pinia": "catalog:",
     "rollup-plugin-copy": "catalog:",
@@ -74,16 +90,19 @@
   },
   "peerDependencies": {
     "@hocuspocus/provider": "^2.13.6",
-    "pdfjs-dist": ">=4.3.136 <=4.6.82",
+    "pdfjs-dist": "^5.4.296",
     "y-prosemirror": "catalog:",
     "yjs": "catalog:"
   },
   "devDependencies": {
     "@hocuspocus/provider": "catalog:",
+    "@hocuspocus/server": "catalog:",
     "@superdoc/common": "workspace:*",
+    "@superdoc-dev/superdoc-yjs-collaboration": "workspace:*",
     "@superdoc/super-editor": "workspace:*",
     "@vitejs/plugin-vue": "catalog:",
     "@vue/test-utils": "catalog:",
+    "concurrently": "catalog:",
     "jszip": "catalog:",
     "nodemon": "catalog:",
     "pdfjs-dist": "catalog:",
@@ -92,11 +111,13 @@
     "prosemirror-model": "catalog:",
     "prosemirror-state": "catalog:",
     "rollup-plugin-visualizer": "catalog:",
+    "sirv": "catalog:",
     "typescript": "catalog:",
     "vite": "catalog:",
     "vite-plugin-dts": "catalog:",
     "vite-plugin-node-polyfills": "catalog:",
     "vitest": "catalog:",
+    "ws": "^8.18.3",
     "xml-js": "catalog:"
   }
 }

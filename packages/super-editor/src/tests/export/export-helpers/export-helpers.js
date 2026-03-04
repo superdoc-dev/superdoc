@@ -56,7 +56,8 @@ const convertHtmlToSchema = (commentHTML) => {
     content: div,
     extensions: getRichTextExtensions(),
   });
-  return editor.getJSON().content[0];
+  const json = editor.getJSON();
+  return Array.isArray(json?.content) ? json.content.filter(Boolean) : [];
 };
 
 /**

@@ -1,4 +1,6 @@
 import { NodeTranslator } from '../node-translator/index.js';
+import { ST_ON_OFF_ON_VALUES, ST_ON_OFF_OFF_VALUES } from '@superdoc/document-api';
+import { pushDiagnostic } from './import-diagnostics.js';
 
 /**
  * Generates a handler entity for a given node translator.
@@ -76,6 +78,93 @@ export function createSingleBooleanPropertyHandler(xmlName, sdName = null) {
   };
 }
 
+// ---------------------------------------------------------------------------
+// Strict ST_OnOff token sets — delegated to the shared semantic layer
+// (@superdoc/document-api inline-semantics/token-sets).
+// ---------------------------------------------------------------------------
+
+/**
+ * Strict ST_OnOff parser for core-4 toggle properties.
+ *
+ * Returns:
+ * - `true`      — ON (bare element or valid ON token).
+ * - `false`     — OFF (valid OFF token).
+ * - `undefined` — CLEAR (absent element or invalid token → treated as absent).
+ *
+ * Invalid tokens push a structured `INVALID_INLINE_TOKEN` diagnostic to the
+ * centralized import-diagnostics collector when `property` is provided.
+ *
+ * @param {string|null|undefined} val The `w:val` attribute value, or null/undefined for bare element.
+ * @param {string} [property] The property name for diagnostics (e.g., 'bold'). Omit to skip diagnostic collection.
+ * @param {string} [xmlName] The XML element name for diagnostics (e.g., 'w:b'). Defaults to `w:<property>`.
+ * @param {number} [importDiagnosticsCollectionId] Collection id returned by `startCollection`.
+ * @returns {boolean|undefined}
+ */
+export function parseStrictStOnOff(val, property, xmlName, importDiagnosticsCollectionId) {
+  // Bare element (absent w:val) normalizes to ON
+  if (val == null) return true;
+
+  const str = String(val);
+  if (ST_ON_OFF_ON_VALUES.has(str)) return true;
+  if (ST_ON_OFF_OFF_VALUES.has(str)) return false;
+
+  // Invalid token — push structured diagnostic, then treat as absent/clear.
+  if (property) {
+    const element = xmlName ?? `w:${property}`;
+    pushDiagnostic(
+      {
+        code: 'INVALID_INLINE_TOKEN',
+        property,
+        attribute: 'val',
+        token: str,
+        xpath: `${element}/@w:val`,
+      },
+      importDiagnosticsCollectionId,
+    );
+  }
+  return undefined;
+}
+
+/**
+ * Creates a strict tri-state property handler for ST_OnOff elements (bold, italic, strike).
+ *
+ * Preserves the on/off/clear distinction:
+ * - ON tokens (true, 1, on, absent w:val) → mark present with default attrs.
+ * - OFF tokens (false, 0, off) → mark present with `value: '0'`.
+ * - Invalid tokens → mark absent (CLEAR) + structured diagnostic pushed.
+ * - Element absent → mark absent (CLEAR).
+ *
+ * Export produces canonical OOXML forms:
+ * - ON → `<w:b/>` (bare element, no w:val).
+ * - OFF → `<w:b w:val="0"/>` (canonical OFF token).
+ * - CLEAR → no element emitted.
+ *
+ * @param {string} xmlName The XML element name (e.g., 'w:b').
+ * @param {string|null} sdName The PM attribute name (e.g., 'bold'). Derived from xmlName if null.
+ * @returns {import('@translator').NodeTranslatorConfig}
+ */
+export function createStrictTogglePropertyHandler(xmlName, sdName = null) {
+  if (!sdName) sdName = xmlName.split(':')[1];
+  return {
+    xmlName,
+    sdNodeOrKeyName: sdName,
+    encode: ({ nodes, extraParams }) => {
+      const val = nodes[0]?.attributes?.['w:val'];
+      const importDiagnosticsCollectionId = extraParams?.importDiagnosticsCollectionId;
+      return parseStrictStOnOff(val, sdName, xmlName, importDiagnosticsCollectionId);
+    },
+    decode: ({ node }) => {
+      const val = node.attrs[sdName];
+      // CLEAR — no element
+      if (val == null) return undefined;
+      // OFF — canonical `w:val="0"`
+      if (val === false || val === '0') return { attributes: { 'w:val': '0' } };
+      // ON — bare element (no w:val attribute)
+      return { attributes: {} };
+    },
+  };
+}
+
 /**
  * Helper to create property handlers for integer attributes (CT_DecimalNumber => w:val)
  * @param {string} xmlName The XML attribute name (with namespace).
@@ -114,6 +203,36 @@ export function createTrackChangesPropertyHandler(xmlName, sdName = null, extraA
 }
 
 /**
+ * Parses a measurement value, handling ECMA-376 percentage strings.
+ *
+ * Per ECMA-376 §17.18.90 (ST_TblWidth): when type="pct" and value contains "%",
+ * it should be interpreted as a whole percentage point (e.g., "100%" = 100%).
+ * Otherwise, percentages are in fiftieths (5000 = 100%).
+ *
+ * @param {any} value The raw value from w:w attribute
+ * @param {string|undefined} type The type from w:type attribute
+ * @returns {number|undefined} The parsed value, converted to fiftieths if needed
+ */
+export const parseMeasurementValue = (value, type) => {
+  if (value == null) return undefined;
+  const strValue = String(value);
+
+  // Per ECMA-376 §17.18.90: when type="pct" and value contains "%",
+  // interpret as whole percentage and convert to fiftieths format
+  if (type === 'pct' && strValue.includes('%')) {
+    const percent = parseFloat(strValue);
+    if (!isNaN(percent)) {
+      // Convert whole percentage to OOXML fiftieths (100% → 5000)
+      return Math.round(percent * 50);
+    }
+  }
+
+  // Standard integer parsing for numeric values
+  const intValue = parseInt(strValue, 10);
+  return isNaN(intValue) ? undefined : intValue;
+};
+
+/**
  * Helper to create property handlers for measurement attributes (CT_TblWidth => w:w and w:type)
  * @param {string} xmlName The XML attribute name (with namespace).
  * @param {string|null} sdName The SuperDoc attribute name (without namespace). If null, it will be derived from xmlName.
@@ -124,12 +243,14 @@ export function createMeasurementPropertyHandler(xmlName, sdName = null) {
   return {
     xmlName,
     sdNodeOrKeyName: sdName,
-    attributes: [
-      createAttributeHandler('w:w', 'value', parseInteger, integerToString),
-      createAttributeHandler('w:type'),
-    ],
-    encode: (_, encodedAttrs) => {
-      return encodedAttrs['value'] != null ? encodedAttrs : undefined;
+    attributes: [createAttributeHandler('w:w', 'value', (v) => v, integerToString), createAttributeHandler('w:type')],
+    encode: (params, encodedAttrs) => {
+      // Parse the value with type context for ECMA-376 percentage string handling
+      const rawValue = encodedAttrs['value'];
+      const type = encodedAttrs['type'];
+      const parsedValue = parseMeasurementValue(rawValue, type);
+      if (parsedValue == null) return undefined;
+      return { ...encodedAttrs, value: parsedValue };
     },
     decode: function ({ node }) {
       const decodedAttrs = this.decodeAttributes({ node: { ...node, attrs: node.attrs[sdName] || {} } });
@@ -285,7 +406,9 @@ export function decodeProperties(params, translatorsBySdName, properties) {
     if (translator) {
       const result = translator.decode({ ...params, node: { attrs: { [key]: properties[key] } } });
       if (result != null) {
-        result.name = translator.xmlName;
+        if (result.name == null) {
+          result.name = translator.xmlName;
+        }
         elements.push(result);
       }
     }

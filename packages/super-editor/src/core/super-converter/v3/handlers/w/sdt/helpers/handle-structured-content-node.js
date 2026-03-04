@@ -19,6 +19,12 @@ export function handleStructuredContentNode(params) {
   const tag = sdtPr?.elements?.find((el) => el.name === 'w:tag');
   const alias = sdtPr?.elements?.find((el) => el.name === 'w:alias');
 
+  // Get the lock tag and value
+  const lockTag = sdtPr?.elements?.find((el) => el.name === 'w:lock');
+  const lockValue = lockTag?.attributes?.['w:val'];
+  const validModes = ['unlocked', 'sdtLocked', 'contentLocked', 'sdtContentLocked'];
+  const lockMode = validModes.includes(lockValue) ? lockValue : 'unlocked';
+
   if (!sdtContent) {
     return null;
   }
@@ -43,6 +49,7 @@ export function handleStructuredContentNode(params) {
       id: id?.attributes?.['w:val'] || null,
       tag: tag?.attributes?.['w:val'] || null,
       alias: alias?.attributes?.['w:val'] || null,
+      lockMode,
       sdtPr,
     },
   };

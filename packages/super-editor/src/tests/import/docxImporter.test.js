@@ -213,7 +213,13 @@ describe('createDocumentJson', () => {
     const horizontalRules = (result.pmDoc.content || [])
       .filter((node) => node?.type === 'paragraph')
       .flatMap((paragraph) => paragraph?.content || [])
-      .filter((child) => child?.type === 'contentBlock' && child.attrs?.horizontalRule);
+      .flatMap((child) => {
+        // contentBlock may be nested inside a run
+        if (child?.type === 'contentBlock') return [child];
+        if (child?.type === 'run') return (child.content || []).filter((n) => n?.type === 'contentBlock');
+        return [];
+      })
+      .filter((child) => child?.attrs?.horizontalRule);
 
     expect(horizontalRules).toHaveLength(3);
   });

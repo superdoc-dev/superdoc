@@ -4,6 +4,31 @@
 import { beforeEach, describe, expect, it, afterEach } from 'vitest';
 import { clickToPositionDom } from '../src/dom-mapping.ts';
 
+type MutableElementsFromPointDocument = Document & {
+  elementsFromPoint?: (x: number, y: number) => Element[];
+};
+
+/** Select the inner text span inside an SDT wrapper, excluding the wrapper itself. */
+function selectSdtInnerSpan(root: HTMLElement, pmStart: string): HTMLElement {
+  return root.querySelector(`span[data-pm-start="${pmStart}"]:not(.superdoc-structured-content-inline)`) as HTMLElement;
+}
+
+function withMockedElementsFromPoint(elements: Element[], run: () => void): void {
+  const doc = document as MutableElementsFromPointDocument;
+  const originalElementsFromPoint = doc.elementsFromPoint;
+  doc.elementsFromPoint = (_x: number, _y: number) => elements;
+
+  try {
+    run();
+  } finally {
+    if (originalElementsFromPoint) {
+      doc.elementsFromPoint = originalElementsFromPoint;
+    } else {
+      delete doc.elementsFromPoint;
+    }
+  }
+}
+
 /**
  * Test suite for DOM-based click-to-position mapping.
  *
@@ -322,6 +347,86 @@ describe('DOM-based click-to-position mapping', () => {
     expect(result === 5 || result === 15).toBe(true);
   });
 
+  describe('table fragment fallback', () => {
+    it('returns null for table fragments without a line in the hit chain', () => {
+      // When clicking on a table fragment (e.g., cell padding or border) and
+      // elementsFromPoint doesn't include a line element, clickToPositionDom
+      // should return null to defer to the geometry fallback (hitTestTableFragment)
+      // which correctly handles column resolution.
+      container.innerHTML = `
+        <div class="superdoc-page" data-page-index="0">
+          <div class="superdoc-fragment superdoc-table-fragment" data-block-id="table1">
+            <div class="superdoc-table-cell" style="overflow: hidden; position: absolute;">
+              <div class="superdoc-line" data-pm-start="5" data-pm-end="15">
+                <span data-pm-start="5" data-pm-end="15">Cell 1 text</span>
+              </div>
+            </div>
+            <div class="superdoc-table-cell" style="overflow: hidden; position: absolute;">
+              <div class="superdoc-line" data-pm-start="20" data-pm-end="30">
+                <span data-pm-start="20" data-pm-end="30">Cell 2 text</span>
+              </div>
+            </div>
+          </div>
+        </div>
+      `;
+
+      // In a real browser, clicking on cell padding/borders returns the table fragment
+      // in elementsFromPoint but NOT the line (due to overflow:hidden clipping).
+      // JSDOM doesn't have elementsFromPoint, so we polyfill it to simulate
+      // the real browser behavior where the hit chain includes the table fragment
+      // but not the line elements.
+      const page = container.querySelector('.superdoc-page') as HTMLElement;
+      const tableFragment = container.querySelector('.superdoc-table-fragment') as HTMLElement;
+
+      withMockedElementsFromPoint(
+        [
+          // Simulate hit chain: table fragment → page → container (no line element)
+          tableFragment,
+          page,
+          container,
+          document.body,
+          document.documentElement,
+        ],
+        () => {
+          const rect = tableFragment.getBoundingClientRect();
+          const result = clickToPositionDom(container, rect.left + 1, rect.top + 1);
+          expect(result).toBeNull();
+        },
+      );
+    });
+
+    it('returns position when table fragment line IS in the hit chain', () => {
+      // When a line element IS directly hit (e.g., clicking directly on text),
+      // the function should use the hitChainLine path and return a valid position.
+      container.innerHTML = `
+        <div class="superdoc-page" data-page-index="0">
+          <div class="superdoc-fragment superdoc-table-fragment" data-block-id="table1">
+            <div class="superdoc-line" data-pm-start="5" data-pm-end="15">
+              <span data-pm-start="5" data-pm-end="15">Cell text</span>
+            </div>
+          </div>
+        </div>
+      `;
+
+      const page = container.querySelector('.superdoc-page') as HTMLElement;
+      const tableFragment = container.querySelector('.superdoc-table-fragment') as HTMLElement;
+      const line = container.querySelector('.superdoc-line') as HTMLElement;
+      const span = container.querySelector('span') as HTMLElement;
+
+      withMockedElementsFromPoint(
+        [span, line, tableFragment, page, container, document.body, document.documentElement],
+        () => {
+          const lineRect = line.getBoundingClientRect();
+          const result = clickToPositionDom(container, lineRect.left + 5, lineRect.top + 5);
+
+          // Should return a valid position from the line via the hitChainLine path
+          expect(result).toBeGreaterThanOrEqual(5);
+          expect(result).toBeLessThanOrEqual(15);
+        },
+      );
+    });
+  });
+
   describe('inline SDT wrapper exclusion', () => {
     it('excludes inline SDT wrapper elements from click-to-position mapping', () => {
       // Inline SDT wrappers have PM positions for selection highlighting but should not
@@ -437,6 +542,196 @@ describe('DOM-based click-to-position mapping', () => {
       expect(result3).not.toBeNull();
       expect(result3).toBeGreaterThanOrEqual(0);
       expect(result3).toBeLessThanOrEqual(30);
+    });
+  });
+
+  // -------------------------------------------------------------------------
+  // Table cells with list markers (PR 0 safety rails)
+  // -------------------------------------------------------------------------
+
+  describe('table cells with list markers', () => {
+    it('maps position through marker wrapper depth', () => {
+      // Table cell containing a line with a marker element (no data-pm-*)
+      // followed by text spans with PM positions.
+      container.innerHTML = `
+        <div class="superdoc-page" data-page-index="0">
+          <div class="superdoc-fragment superdoc-table-fragment" data-block-id="table-list">
+            <div class="superdoc-table-cell" style="overflow: hidden; position: absolute;">
+              <div class="superdoc-line" data-pm-start="60" data-pm-end="69">
+                <span class="superdoc-paragraph-marker">1.</span>
+                <span class="superdoc-tab" style="width: 10px;"></span>
+                <span data-pm-start="60" data-pm-end="69">List text</span>
+              </div>
+            </div>
+          </div>
+        </div>
+      `;
+
+      const page = container.querySelector('.superdoc-page') as HTMLElement;
+      const tableFragment = container.querySelector('.superdoc-table-fragment') as HTMLElement;
+      const line = container.querySelector('.superdoc-line') as HTMLElement;
+      const textSpan = container.querySelector('span[data-pm-start="60"]') as HTMLElement;
+
+      withMockedElementsFromPoint(
+        [textSpan, line, tableFragment, page, container, document.body, document.documentElement],
+        () => {
+          const lineRect = line.getBoundingClientRect();
+          const result = clickToPositionDom(container, lineRect.left + 30, lineRect.top + 5);
+
+          expect(result).not.toBeNull();
+          expect(result).toBeGreaterThanOrEqual(60);
+          expect(result).toBeLessThanOrEqual(69);
+        },
+      );
+    });
+
+    it('handles missing marker gracefully', () => {
+      // Table cell line without marker element — standard text only.
+      // Should still map correctly.
+      container.innerHTML = `
+        <div class="superdoc-page" data-page-index="0">
+          <div class="superdoc-fragment superdoc-table-fragment" data-block-id="table-no-marker">
+            <div class="superdoc-table-cell" style="overflow: hidden; position: absolute;">
+              <div class="superdoc-line" data-pm-start="60" data-pm-end="69">
+                <span data-pm-start="60" data-pm-end="69">Plain text</span>
+              </div>
+            </div>
+          </div>
+        </div>
+      `;
+
+      const page = container.querySelector('.superdoc-page') as HTMLElement;
+      const tableFragment = container.querySelector('.superdoc-table-fragment') as HTMLElement;
+      const line = container.querySelector('.superdoc-line') as HTMLElement;
+      const span = container.querySelector('span[data-pm-start]') as HTMLElement;
+
+      withMockedElementsFromPoint(
+        [span, line, tableFragment, page, container, document.body, document.documentElement],
+        () => {
+          const lineRect = line.getBoundingClientRect();
+          const result = clickToPositionDom(container, lineRect.left + 5, lineRect.top + 5);
+
+          expect(result).not.toBeNull();
+          expect(result).toBeGreaterThanOrEqual(60);
+          expect(result).toBeLessThanOrEqual(69);
+        },
+      );
+    });
+
+    it('resolves position when marker element is hit directly', () => {
+      // Simulate clicking directly on the marker span. elementsFromPoint
+      // returns the marker first — mapping must still resolve via the
+      // parent line's PM data since the marker has no data-pm-* attributes.
+      container.innerHTML = `
+        <div class="superdoc-page" data-page-index="0">
+          <div class="superdoc-fragment superdoc-table-fragment" data-block-id="table-list">
+            <div class="superdoc-table-cell" style="overflow: hidden; position: absolute;">
+              <div class="superdoc-line" data-pm-start="60" data-pm-end="69">
+                <span class="superdoc-paragraph-marker">1.</span>
+                <span class="superdoc-tab" style="width: 10px;"></span>
+                <span data-pm-start="60" data-pm-end="69">List text</span>
+              </div>
+            </div>
+          </div>
+        </div>
+      `;
+
+      const page = container.querySelector('.superdoc-page') as HTMLElement;
+      const tableFragment = container.querySelector('.superdoc-table-fragment') as HTMLElement;
+      const cell = container.querySelector('.superdoc-table-cell') as HTMLElement;
+      const line = container.querySelector('.superdoc-line') as HTMLElement;
+      const markerSpan = container.querySelector('.superdoc-paragraph-marker') as HTMLElement;
+
+      // Marker is the deepest hit — no data-pm-*, so mapping must walk up to the line
+      withMockedElementsFromPoint(
+        [markerSpan, line, cell, tableFragment, page, container, document.body, document.documentElement],
+        () => {
+          const lineRect = line.getBoundingClientRect();
+          const result = clickToPositionDom(container, lineRect.left + 2, lineRect.top + 5);
+
+          expect(result).not.toBeNull();
+          expect(result).toBeGreaterThanOrEqual(60);
+          expect(result).toBeLessThanOrEqual(69);
+        },
+      );
+    });
+  });
+
+  // -------------------------------------------------------------------------
+  // Table cells with SDT wrappers (PR 0 safety rails)
+  // -------------------------------------------------------------------------
+
+  describe('table cells with SDT wrappers', () => {
+    it('excludes inline SDT wrapper from position mapping in table context', () => {
+      // SDT inline wrapper already excluded by class filter; verify same behavior in table cells.
+      container.innerHTML = `
+        <div class="superdoc-page" data-page-index="0">
+          <div class="superdoc-fragment superdoc-table-fragment" data-block-id="table-sdt">
+            <div class="superdoc-table-cell" style="overflow: hidden; position: absolute;">
+              <div class="superdoc-line" data-pm-start="70" data-pm-end="78">
+                <span class="superdoc-structured-content-inline" data-pm-start="70" data-pm-end="78">
+                  <span class="superdoc-structured-content-inline__label">Field</span>
+                  <span data-pm-start="70" data-pm-end="78">SDT text</span>
+                </span>
+              </div>
+            </div>
+          </div>
+        </div>
+      `;
+
+      const page = container.querySelector('.superdoc-page') as HTMLElement;
+      const tableFragment = container.querySelector('.superdoc-table-fragment') as HTMLElement;
+      const line = container.querySelector('.superdoc-line') as HTMLElement;
+      const textSpan = selectSdtInnerSpan(container, '70');
+
+      withMockedElementsFromPoint(
+        [textSpan, line, tableFragment, page, container, document.body, document.documentElement],
+        () => {
+          const lineRect = line.getBoundingClientRect();
+          const result = clickToPositionDom(container, lineRect.left + 5, lineRect.top + 5);
+
+          expect(result).not.toBeNull();
+          expect(result).toBeGreaterThanOrEqual(70);
+          expect(result).toBeLessThanOrEqual(78);
+        },
+      );
+    });
+
+    it('maps through combined list-marker + SDT nesting', () => {
+      // Most complex case: table cell with both marker and SDT wrapper.
+      container.innerHTML = `
+        <div class="superdoc-page" data-page-index="0">
+          <div class="superdoc-fragment superdoc-table-fragment" data-block-id="table-list-sdt">
+            <div class="superdoc-table-cell" style="overflow: hidden; position: absolute;">
+              <div class="superdoc-line" data-pm-start="80" data-pm-end="90">
+                <span class="superdoc-paragraph-marker">1.</span>
+                <span class="superdoc-tab" style="width: 10px;"></span>
+                <span class="superdoc-structured-content-inline" data-pm-start="80" data-pm-end="90">
+                  <span class="superdoc-structured-content-inline__label">SDT</span>
+                  <span data-pm-start="80" data-pm-end="90">SDT list text</span>
+                </span>
+              </div>
+            </div>
+          </div>
+        </div>
+      `;
+
+      const page = container.querySelector('.superdoc-page') as HTMLElement;
+      const tableFragment = container.querySelector('.superdoc-table-fragment') as HTMLElement;
+      const line = container.querySelector('.superdoc-line') as HTMLElement;
+      const textSpan = selectSdtInnerSpan(container, '80');
+
+      withMockedElementsFromPoint(
+        [textSpan, line, tableFragment, page, container, document.body, document.documentElement],
+        () => {
+          const lineRect = line.getBoundingClientRect();
+          const result = clickToPositionDom(container, lineRect.left + 40, lineRect.top + 5);
+
+          expect(result).not.toBeNull();
+          expect(result).toBeGreaterThanOrEqual(80);
+          expect(result).toBeLessThanOrEqual(90);
+        },
+      );
     });
   });
 });

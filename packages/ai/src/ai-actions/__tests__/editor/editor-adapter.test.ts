@@ -203,6 +203,9 @@ describe('EditorAdapter', () => {
         editorState = newState;
       },
       view,
+      dispatch: vi.fn((tr) => {
+        editorState = editorState.apply(tr);
+      }),
       exportDocx: vi.fn().mockResolvedValue({}),
       options: {
         documentId: 'doc-123',
@@ -562,6 +565,41 @@ describe('EditorAdapter', () => {
 
       (mockAdapter as unknown as { applyPatch: () => void }).applyPatch = originalApply;
     });
+
+    it('applies tracked change in headless mode (no view)', () => {
+      let headlessState = createEditorState([{ text: 'original' }]);
+      const headlessEditor = {
+        get state() {
+          return headlessState;
+        },
+        set state(newState) {
+          headlessState = newState;
+        },
+        view: undefined,
+        dispatch: vi.fn((tr) => {
+          headlessState = headlessState.apply(tr);
+        }),
+        options: {
+          documentId: 'headless-doc',
+          user: { name: 'Test User', image: '' },
+        },
+        commands: {
+          enableTrackChanges: vi.fn(),
+          disableTrackChanges: vi.fn(),
+        },
+        chain: vi.fn(),
+      } as unknown as Editor;
+
+      const headlessAdapter = new EditorAdapter(headlessEditor);
+      const from = 1;
+      const to = headlessState.doc.content.size - 1;
+
+      const changeId = headlessAdapter.createTrackedChange(from, to, 'tracked');
+
+      expect(changeId).toMatch(/^tracked-change-/);
+      expect(headlessEditor.dispatch).toHaveBeenCalled();
+      expect(headlessState.doc.textContent).toBe('tracked');
+    });
   });
 
   describe('createComment', () => {
@@ -615,6 +653,98 @@ describe('EditorAdapter', () => {
       const insertedNode = getParagraphNodes().find((node) => node.text.includes('INSERT'));
       expect(insertedNode).toBeDefined();
       expect(insertedNode?.marks).toEqual(['bold']);
+    });
+  });
+
+  describe('insertFormattedContent', () => {
+    it('calls editor.commands.insertContent with contentType for html', () => {
+      updateEditorState(defaultSegments, { from: 1, to: 5 });
+
+      mockAdapter.insertFormattedContent('<p>Hello <a href="https://example.com">link</a></p>', {
+        contentType: 'html',
+        position: 'replace',
+      });
+
+      expect(mockEditor.commands.setTextSelection).toHaveBeenCalledWith({ from: 1, to: 5 });
+      expect(mockEditor.commands.insertContent).toHaveBeenCalledWith(
+        '<p>Hello <a href="https://example.com">link</a></p>',
+        { contentType: 'html' },
+      );
+    });
+
+    it('calls editor.commands.insertContent with contentType for markdown', () => {
+      updateEditorState(defaultSegments, { from: 1, to: 5 });
+
+      mockAdapter.insertFormattedContent('# Heading\n\n[link](https://example.com)', {
+        contentType: 'markdown',
+        position: 'replace',
+      });
+
+      expect(mockEditor.commands.insertContent).toHaveBeenCalledWith('# Heading\n\n[link](https://example.com)', {
+        contentType: 'markdown',
+      });
+    });
+
+    it('falls back to insertText for contentType: text', () => {
+      updateEditorState(defaultSegments, { from: 1, to: 5 });
+
+      const insertSpy = vi.spyOn(mockAdapter, 'insertText');
+      mockAdapter.insertFormattedContent('plain text', { contentType: 'text', position: 'replace' });
+
+      expect(insertSpy).toHaveBeenCalledWith('plain text', { contentType: 'text', position: 'replace' });
+      expect(mockEditor.commands.insertContent).not.toHaveBeenCalledWith(expect.anything(), {
+        contentType: 'text',
+      });
+
+      insertSpy.mockRestore();
+    });
+
+    it('falls back to insertText when no contentType is provided', () => {
+      updateEditorState(defaultSegments, { from: 1, to: 5 });
+
+      const insertSpy = vi.spyOn(mockAdapter, 'insertText');
+      mockAdapter.insertFormattedContent('just text', { position: 'replace' });
+
+      expect(insertSpy).toHaveBeenCalledWith('just text', { position: 'replace' });
+
+      insertSpy.mockRestore();
+    });
+
+    it('sets selection to collapsed range at from for position: before', () => {
+      updateEditorState(defaultSegments, { from: 3, to: 8 });
+
+      mockAdapter.insertFormattedContent('<p>Before</p>', {
+        contentType: 'html',
+        position: 'before',
+      });
+
+      // 'before' collapses to from: to = from
+      expect(mockEditor.commands.setTextSelection).toHaveBeenCalledWith({ from: 3, to: 3 });
+      expect(mockEditor.commands.insertContent).toHaveBeenCalledWith('<p>Before</p>', { contentType: 'html' });
+    });
+
+    it('sets selection to collapsed range at to for position: after', () => {
+      updateEditorState(defaultSegments, { from: 3, to: 8 });
+
+      mockAdapter.insertFormattedContent('<p>After</p>', {
+        contentType: 'html',
+        position: 'after',
+      });
+
+      // 'after' collapses to to: from = to
+      expect(mockEditor.commands.setTextSelection).toHaveBeenCalledWith({ from: 8, to: 8 });
+      expect(mockEditor.commands.insertContent).toHaveBeenCalledWith('<p>After</p>', { contentType: 'html' });
+    });
+
+    it('uses full selection range for position: replace (default)', () => {
+      updateEditorState(defaultSegments, { from: 3, to: 8 });
+
+      mockAdapter.insertFormattedContent('<p>Replace</p>', {
+        contentType: 'html',
+      });
+
+      expect(mockEditor.commands.setTextSelection).toHaveBeenCalledWith({ from: 3, to: 8 });
+      expect(mockEditor.commands.insertContent).toHaveBeenCalledWith('<p>Replace</p>', { contentType: 'html' });
     });
   });
 

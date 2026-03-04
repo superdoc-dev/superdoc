@@ -121,7 +121,7 @@ const createEditorEnvironment = (schema, doc) => {
   extension.addPmPlugins = CommentsPlugin.config.addPmPlugins.bind(extension);
   extension.editor = editor;
 
-  return { editor, commands: extension.addCommands(), view };
+  return { editor, commands: extension.addCommands(), view, extension };
 };
 
 describe('CommentsPlugin commands', () => {
@@ -313,6 +313,49 @@ describe('CommentsPlugin commands', () => {
 
     const updatedMark = currentState.doc.nodeAt(1)?.marks.find((m) => m.type === schema.marks[CommentMarkName]);
     expect(updatedMark?.attrs.internal).toBe(false);
+  });
+
+  it('supports moveComment capability checks when dispatch is undefined', () => {
+    const schema = createCommentSchema();
+    const mark = schema.marks[CommentMarkName].create({ commentId: 'c-move', internal: true });
+    const paragraph = schema.node('paragraph', null, [schema.text('Hello', [mark])]);
+    const doc = schema.node('doc', null, [paragraph]);
+    const { editor, commands } = createEditorEnvironment(schema, doc);
+
+    const command = commands.moveComment({ commentId: 'c-move', from: 2, to: 4 });
+
+    let result;
+    expect(() => {
+      result = command({ tr: editor.state.tr, dispatch: undefined, state: editor.state, editor });
+    }).not.toThrow();
+    expect(result).toBe(true);
+  });
+
+  it('returns false (without throwing) when moveComment targets an out-of-bounds range', () => {
+    const schema = createCommentSchema();
+    const mark = schema.marks[CommentMarkName].create({ commentId: 'c-oob', internal: true });
+    const paragraph = schema.node('paragraph', null, [schema.text('Hello', [mark])]);
+    const doc = schema.node('doc', null, [paragraph]);
+    const { editor, commands, view } = createEditorEnvironment(schema, doc);
+
+    let currentState = editor.state;
+    const dispatch = vi.fn((tr) => {
+      currentState = currentState.apply(tr);
+      view.state = currentState;
+    });
+
+    const command = commands.moveComment({
+      commentId: 'c-oob',
+      from: doc.content.size + 5,
+      to: doc.content.size + 8,
+    });
+
+    let result;
+    expect(() => {
+      result = command({ tr: currentState.tr, dispatch, state: currentState, editor });
+    }).not.toThrow();
+    expect(result).toBe(false);
+    expect(dispatch).not.toHaveBeenCalled();
   });
 
   it('focuses editor when moving the cursor to a comment by id', () => {
@@ -905,7 +948,21 @@ describe('internal helper functions', () => {
       trackedChangeType: TrackFormatMarkName,
       isDeletionInsertion: false,
     });
-    expect(formatResult.trackedChangeText).toContain('Added formatting');
+    expect(formatResult.trackedChangeText).toBe('italic, removed bold');
+
+    const deltaFormatMark = schema.marks[TrackFormatMarkName].create({
+      id: 'format-2',
+      before: [{ type: 'textStyle', attrs: { color: '#111111', fontSize: '12px' } }],
+      after: [{ type: 'bold', attrs: {} }],
+    });
+    const deltaFormatResult = getTrackedChangeText({
+      nodes: [schema.text('Format', [deltaFormatMark])],
+      mark: deltaFormatMark,
+      trackedChangeType: TrackFormatMarkName,
+      isDeletionInsertion: false,
+    });
+    expect(deltaFormatResult.trackedChangeText).toContain('bold');
+    expect(deltaFormatResult.trackedChangeText).not.toContain('undefined');
 
     const combinedResult = getTrackedChangeText({
       nodes: [...insertionNodes, ...deletionNodes],
@@ -914,6 +971,44 @@ describe('internal helper functions', () => {
       isDeletionInsertion: true,
     });
     expect(combinedResult.deletionText).toBe('Removed');
+  });
+
+  it('does not duplicate replacement text when creating tracked change comments', () => {
+    const schema = createCommentSchema();
+    const insertMark = schema.marks[TrackInsertMarkName].create({
+      id: 'replace-1',
+      author: 'Author',
+      authorEmail: 'author@example.com',
+      date: 'today',
+    });
+    const deleteMark = schema.marks[TrackDeleteMarkName].create({
+      id: 'replace-1',
+      author: 'Author',
+      authorEmail: 'author@example.com',
+      date: 'today',
+    });
+
+    const docInsertNode = schema.text('replacement', [insertMark]);
+    const docDeleteNode = schema.text('original', [deleteMark]);
+    const doc = schema.node('doc', null, [schema.node('paragraph', null, [docInsertNode, docDeleteNode])]);
+    const state = EditorState.create({ schema, doc });
+
+    // Simulate step slice and deletion nodes from a replacement transaction
+    const stepInsertNodes = [schema.text('replacement', [insertMark])];
+    const deletionNodes = [schema.text('original', [deleteMark])];
+
+    const payload = createOrUpdateTrackedChangeComment({
+      event: 'add',
+      marks: { insertedMark: insertMark, deletionMark: deleteMark, formatMark: null },
+      deletionNodes,
+      nodes: stepInsertNodes,
+      newEditorState: state,
+      documentId: 'doc-1',
+    });
+
+    expect(payload?.trackedChangeText).toBe('replacement');
+    expect(payload?.trackedChangeText).not.toBe('replacementt');
+    expect(payload?.deletedText).toBe('original');
   });
 
   it('createOrUpdateTrackedChangeComment builds add and update payloads', () => {
@@ -1132,5 +1227,88 @@ describe('getActiveCommentId - nested comments and TC precedence', () => {
     expect(getActiveCommentId(doc, TextSelection.create(doc, 3))).toBe('a');
     // Position 8 is on "World" (mark B)
     expect(getActiveCommentId(doc, TextSelection.create(doc, 8))).toBe('b');
+  });
+});
+
+describe('SD-1940: no recursive dispatch from apply() on selection change', () => {
+  it('does not dispatch from apply() when selection moves onto a comment', () => {
+    const schema = createCommentSchema();
+    const commentMark = schema.marks[CommentMarkName].create({ commentId: 'c-1' });
+    const paragraph = schema.node('paragraph', null, [
+      schema.text('Plain text. '),
+      schema.text('Commented text.', [commentMark]),
+    ]);
+    const doc = schema.node('doc', null, [paragraph]);
+
+    const { editor, view, extension } = createEditorEnvironment(schema, doc);
+    const plugins = extension.addPmPlugins();
+
+    // Create state WITH the comments plugin so apply() runs
+    const initialState = EditorState.create({
+      schema,
+      doc,
+      selection: TextSelection.create(doc, 3),
+      plugins,
+    });
+    view.state = initialState;
+
+    // Track dispatch calls
+    const dispatchSpy = vi.fn((tr) => {
+      view.state = view.state.apply(tr);
+    });
+    view.dispatch = dispatchSpy;
+
+    // Move selection onto commented text (pos 14) — triggers active thread change in apply()
+    const tr = initialState.tr.setSelection(TextSelection.create(doc, 14));
+    const newState = initialState.apply(tr);
+    view.state = newState;
+
+    // apply() should NOT have called view.dispatch() (the old bug dispatched a 'force' transaction)
+    expect(dispatchSpy).not.toHaveBeenCalled();
+
+    // But the commentsUpdate event should still have been emitted
+    expect(editor.emit).toHaveBeenCalledWith(
+      'commentsUpdate',
+      expect.objectContaining({
+        type: comments_module_events.SELECTED,
+        activeCommentId: 'c-1',
+      }),
+    );
+  });
+
+  it('handles programmatic selection + addComment without recursive dispatch', () => {
+    const schema = createCommentSchema();
+    const paragraph = schema.node('paragraph', null, [schema.text('Hello world')]);
+    const doc = schema.node('doc', null, [paragraph]);
+
+    const { editor, commands, view, extension } = createEditorEnvironment(schema, doc);
+    const plugins = extension.addPmPlugins();
+
+    const initialState = EditorState.create({
+      schema,
+      doc,
+      selection: TextSelection.create(doc, 1, 1),
+      plugins,
+    });
+    view.state = initialState;
+
+    let dispatchCount = 0;
+    view.dispatch = vi.fn((tr) => {
+      dispatchCount++;
+      if (dispatchCount > 10) throw new Error('Dispatch loop detected — exceeded 10 dispatches');
+      view.state = view.state.apply(tr);
+    });
+
+    // Step 1: Programmatically select text (like the customer's code)
+    const selTr = view.state.tr.setSelection(TextSelection.create(view.state.doc, 1, 6));
+    view.dispatch(selTr);
+
+    // Step 2: Immediately add a comment (like the customer's code)
+    const addCommentCmd = commands.addComment({ content: 'Test comment' });
+    const addTr = view.state.tr;
+    addCommentCmd({ tr: addTr, state: view.state, dispatch: view.dispatch, editor });
+
+    // Should complete without loop — max 2-3 dispatches (selection + addComment + maybe decoration)
+    expect(dispatchCount).toBeLessThanOrEqual(3);
   });
 });

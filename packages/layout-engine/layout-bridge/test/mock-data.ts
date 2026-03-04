@@ -192,10 +192,23 @@ export const drawingLayout: Layout = {
   ],
 };
 
+export const TABLE_CELL_LINE_HEIGHT = 18;
+
 const tableParagraph = {
   kind: 'paragraph',
   id: 'table-cell-para',
   runs: [{ text: 'Table text', fontFamily: 'Arial', fontSize: 14, pmStart: 1, pmEnd: 11 }],
+} as const;
+
+const tableParagraphLine = {
+  fromRun: 0,
+  fromChar: 0,
+  toRun: 0,
+  toChar: 10,
+  width: 80,
+  ascent: 10,
+  descent: 4,
+  lineHeight: TABLE_CELL_LINE_HEIGHT,
 } as const;
 
 export const tableBlock: FlowBlock = {
@@ -228,19 +241,8 @@ export const tableMeasure: Measure = {
           blocks: [
             {
               kind: 'paragraph',
-              lines: [
-                {
-                  fromRun: 0,
-                  fromChar: 0,
-                  toRun: 0,
-                  toChar: 10,
-                  width: 80,
-                  ascent: 10,
-                  descent: 4,
-                  lineHeight: 18,
-                },
-              ],
-              totalHeight: 18,
+              lines: [tableParagraphLine],
+              totalHeight: TABLE_CELL_LINE_HEIGHT,
             },
           ],
         },
@@ -252,7 +254,490 @@ export const tableMeasure: Measure = {
   totalHeight: 24,
 };
 
+const tablePageFragment = {
+  kind: 'table' as const,
+  blockId: 'table-0',
+  fromRow: 0,
+  toRow: 1,
+  x: 30,
+  y: 60,
+  width: 120,
+  height: 24,
+};
+
 export const tableLayout: Layout = {
+  pageSize: { w: 400, h: 500 },
+  pages: [
+    {
+      number: 1,
+      fragments: [tablePageFragment],
+    },
+  ],
+};
+
+// Table cell spacing.before — selectionToRects tests (effective spacing, absorption, partial row)
+export const TABLE_SPACING_BEFORE = 12;
+export const TABLE_SPACING_FRAGMENT_Y = 50;
+
+export const tableSpacingBeforeBlock: FlowBlock = {
+  ...tableBlock,
+  id: 'table-spacing-before',
+  rows: [
+    {
+      ...tableBlock.rows[0],
+      cells: [
+        {
+          ...tableBlock.rows[0].cells[0],
+          attrs: { padding: { top: 0, bottom: 0, left: 4, right: 4 } },
+          blocks: [
+            {
+              ...tableParagraph,
+              id: 'p1',
+              runs: [{ ...tableParagraph.runs[0], text: 'Cell text', pmEnd: 9 }],
+              attrs: { spacing: { before: TABLE_SPACING_BEFORE } },
+            },
+          ],
+        },
+      ],
+    },
+  ],
+};
+
+export const tableSpacingBeforeMeasure: Measure = {
+  kind: 'table',
+  rows: [
+    {
+      height: TABLE_SPACING_BEFORE + TABLE_CELL_LINE_HEIGHT,
+      cells: [
+        {
+          width: 100,
+          height: TABLE_SPACING_BEFORE + TABLE_CELL_LINE_HEIGHT,
+          gridColumnStart: 0,
+          blocks: [
+            {
+              kind: 'paragraph',
+              lines: [{ ...tableParagraphLine, toChar: 8, width: 60, ascent: 12 }],
+              totalHeight: TABLE_CELL_LINE_HEIGHT,
+            },
+          ],
+        },
+      ],
+    },
+  ],
+  columnWidths: [100],
+  totalWidth: 100,
+  totalHeight: TABLE_SPACING_BEFORE + TABLE_CELL_LINE_HEIGHT,
+};
+
+export const tableSpacingBeforeLayout: Layout = {
+  ...tableLayout,
+  pages: [
+    {
+      ...tableLayout.pages[0],
+      fragments: [
+        {
+          ...tablePageFragment,
+          blockId: 'table-spacing-before',
+          x: 20,
+          y: TABLE_SPACING_FRAGMENT_Y,
+          width: 100,
+          height: TABLE_SPACING_BEFORE + TABLE_CELL_LINE_HEIGHT,
+        },
+      ],
+    },
+  ],
+};
+
+// First paragraph absorption: paddingTop === spacing.before => effective 0
+export const TABLE_ABSORBED_PADDING_TOP = 10;
+export const TABLE_ABSORBED_SPACING = 10;
+export const TABLE_ABSORBED_FRAGMENT_Y = 50;
+
+export const tableSpacingAbsorbedBlock: FlowBlock = {
+  ...tableBlock,
+  id: 'table-spacing-absorbed',
+  rows: [
+    {
+      ...tableBlock.rows[0],
+      cells: [
+        {
+          ...tableBlock.rows[0].cells[0],
+          attrs: { padding: { top: TABLE_ABSORBED_PADDING_TOP, bottom: 0, left: 4, right: 4 } },
+          blocks: [
+            {
+              ...tableParagraph,
+              id: 'p1',
+              runs: [{ ...tableParagraph.runs[0], text: 'Cell', pmEnd: 5 }],
+              attrs: { spacing: { before: TABLE_ABSORBED_SPACING } },
+            },
+          ],
+        },
+      ],
+    },
+  ],
+};
+
+export const tableSpacingAbsorbedMeasure: Measure = {
+  kind: 'table',
+  rows: [
+    {
+      height: TABLE_ABSORBED_PADDING_TOP + TABLE_CELL_LINE_HEIGHT,
+      cells: [
+        {
+          width: 100,
+          height: TABLE_ABSORBED_PADDING_TOP + TABLE_CELL_LINE_HEIGHT,
+          gridColumnStart: 0,
+          blocks: [
+            {
+              kind: 'paragraph',
+              lines: [{ ...tableParagraphLine, toChar: 4, width: 40, ascent: 12 }],
+              totalHeight: TABLE_CELL_LINE_HEIGHT,
+            },
+          ],
+        },
+      ],
+    },
+  ],
+  columnWidths: [100],
+  totalWidth: 100,
+  totalHeight: TABLE_ABSORBED_PADDING_TOP + TABLE_CELL_LINE_HEIGHT,
+};
+
+export const tableSpacingAbsorbedLayout: Layout = {
+  ...tableLayout,
+  pages: [
+    {
+      ...tableLayout.pages[0],
+      fragments: [
+        {
+          ...tablePageFragment,
+          blockId: 'table-spacing-absorbed',
+          x: 20,
+          y: TABLE_ABSORBED_FRAGMENT_Y,
+          width: 100,
+          height: TABLE_ABSORBED_PADDING_TOP + TABLE_CELL_LINE_HEIGHT,
+        },
+      ],
+    },
+  ],
+};
+
+// Partial row: startLine > 0 so spacing.before not applied
+export const TABLE_PARTIAL_SPACING = 12;
+export const TABLE_PARTIAL_FRAGMENT_Y = 40;
+
+export const tableSpacingPartialBlock: FlowBlock = {
+  ...tableBlock,
+  id: 'table-partial',
+  rows: [
+    {
+      ...tableBlock.rows[0],
+      cells: [
+        {
+          ...tableBlock.rows[0].cells[0],
+          attrs: { padding: { top: 0, bottom: 0, left: 4, right: 4 } },
+          blocks: [
+            {
+              kind: 'paragraph',
+              id: 'p1',
+              runs: [
+                { ...tableParagraph.runs[0], text: 'First ', pmEnd: 7 },
+                { text: 'second line', fontFamily: 'Arial', fontSize: 14, pmStart: 7, pmEnd: 19 },
+              ],
+              attrs: { spacing: { before: TABLE_PARTIAL_SPACING } },
+            },
+          ],
+        },
+      ],
+    },
+  ],
+};
+
+export const tableSpacingPartialMeasure: Measure = {
+  kind: 'table',
+  rows: [
+    {
+      height: TABLE_PARTIAL_SPACING + TABLE_CELL_LINE_HEIGHT * 2,
+      cells: [
+        {
+          width: 100,
+          height: TABLE_PARTIAL_SPACING + TABLE_CELL_LINE_HEIGHT * 2,
+          gridColumnStart: 0,
+          blocks: [
+            {
+              kind: 'paragraph',
+              lines: [
+                { ...tableParagraphLine, toChar: 6, width: 50, ascent: 12 },
+                {
+                  fromRun: 1,
+                  fromChar: 0,
+                  toRun: 1,
+                  toChar: 11,
+                  width: 70,
+                  ascent: 12,
+                  descent: 4,
+                  lineHeight: TABLE_CELL_LINE_HEIGHT,
+                },
+              ],
+              totalHeight: TABLE_CELL_LINE_HEIGHT * 2,
+            },
+          ],
+        },
+      ],
+    },
+  ],
+  columnWidths: [100],
+  totalWidth: 100,
+  totalHeight: TABLE_PARTIAL_SPACING + TABLE_CELL_LINE_HEIGHT * 2,
+};
+
+export const tableSpacingPartialLayout: Layout = {
+  ...tableLayout,
+  pages: [
+    {
+      ...tableLayout.pages[0],
+      fragments: [
+        {
+          ...tablePageFragment,
+          blockId: 'table-partial',
+          x: 20,
+          y: TABLE_PARTIAL_FRAGMENT_Y,
+          width: 100,
+          height: TABLE_CELL_LINE_HEIGHT,
+          partialRow: {
+            rowIndex: 0,
+            fromLineByCell: [1],
+            toLineByCell: [2],
+            isFirstPart: false,
+            isLastPart: true,
+            partialHeight: TABLE_CELL_LINE_HEIGHT,
+          },
+        },
+      ],
+    },
+  ],
+};
+
+// Table cell spacing.after — selectionToRects test
+// Two paragraphs: p1 has spacing.after, p2 is the selection target.
+// Tests that p2's rect Y is offset by p1's effective spacing.after.
+export const TABLE_SPACING_AFTER = 15;
+export const TABLE_SPACING_AFTER_PADDING_BOTTOM = 10;
+const TABLE_SPACING_AFTER_FRAGMENT_Y = 50;
+const SPACING_AFTER_EFFECTIVE = TABLE_SPACING_AFTER - TABLE_SPACING_AFTER_PADDING_BOTTOM;
+
+export const tableSpacingAfterBlock: FlowBlock = {
+  ...tableBlock,
+  id: 'table-spacing-after',
+  rows: [
+    {
+      ...tableBlock.rows[0],
+      cells: [
+        {
+          ...tableBlock.rows[0].cells[0],
+          attrs: { padding: { top: 0, bottom: TABLE_SPACING_AFTER_PADDING_BOTTOM, left: 4, right: 4 } },
+          blocks: [
+            {
+              ...tableParagraph,
+              id: 'p1',
+              runs: [{ ...tableParagraph.runs[0], text: 'First', pmStart: 1, pmEnd: 6 }],
+              attrs: { spacing: { after: TABLE_SPACING_AFTER } },
+            },
+            {
+              ...tableParagraph,
+              id: 'p2',
+              runs: [{ ...tableParagraph.runs[0], text: 'Second', pmStart: 7, pmEnd: 13 }],
+            },
+          ],
+        },
+      ],
+    },
+  ],
+};
+
+const spacingAfterTotalHeight =
+  TABLE_CELL_LINE_HEIGHT * 2 + SPACING_AFTER_EFFECTIVE + TABLE_SPACING_AFTER_PADDING_BOTTOM;
+
+export const tableSpacingAfterMeasure: Measure = {
+  kind: 'table',
+  rows: [
+    {
+      height: spacingAfterTotalHeight,
+      cells: [
+        {
+          width: 100,
+          height: spacingAfterTotalHeight,
+          gridColumnStart: 0,
+          blocks: [
+            {
+              kind: 'paragraph',
+              lines: [{ ...tableParagraphLine, toChar: 5, width: 50, ascent: 12 }],
+              totalHeight: TABLE_CELL_LINE_HEIGHT,
+            },
+            {
+              kind: 'paragraph',
+              lines: [{ ...tableParagraphLine, fromRun: 0, fromChar: 0, toChar: 6, width: 55, ascent: 12 }],
+              totalHeight: TABLE_CELL_LINE_HEIGHT,
+            },
+          ],
+        },
+      ],
+    },
+  ],
+  columnWidths: [100],
+  totalWidth: 100,
+  totalHeight: spacingAfterTotalHeight,
+};
+
+export const tableSpacingAfterLayout: Layout = {
+  ...tableLayout,
+  pages: [
+    {
+      ...tableLayout.pages[0],
+      fragments: [
+        {
+          ...tablePageFragment,
+          blockId: 'table-spacing-after',
+          x: 20,
+          y: TABLE_SPACING_AFTER_FRAGMENT_Y,
+          width: 100,
+          height: spacingAfterTotalHeight,
+        },
+      ],
+    },
+  ],
+};
+
+// Mock data for table with rowspan (SD-1626 / IT-22)
+// Table structure:
+// Row 0: [Cell A (rowspan=2)] [Cell B] [Cell C]
+// Row 1:                      [Cell D] [Cell E]  <- Row 1 cells start at gridColumnStart=1
+const rowspanTableParagraph = {
+  kind: 'paragraph',
+  id: 'rowspan-cell-para',
+  runs: [{ text: 'Cell', fontFamily: 'Arial', fontSize: 14, pmStart: 1, pmEnd: 5 }],
+} as const;
+
+export const rowspanTableBlock: FlowBlock = {
+  kind: 'table',
+  id: 'rowspan-table-0',
+  rows: [
+    {
+      id: 'row-0',
+      cells: [
+        {
+          id: 'cell-a',
+          blocks: [rowspanTableParagraph],
+          attrs: { rowspan: 2, padding: { top: 2, bottom: 2, left: 4, right: 4 } },
+        },
+        { id: 'cell-b', blocks: [rowspanTableParagraph], attrs: { padding: { top: 2, bottom: 2, left: 4, right: 4 } } },
+        { id: 'cell-c', blocks: [rowspanTableParagraph], attrs: { padding: { top: 2, bottom: 2, left: 4, right: 4 } } },
+      ],
+    },
+    {
+      id: 'row-1',
+      cells: [
+        // No cell at column 0 - occupied by rowspan from above
+        { id: 'cell-d', blocks: [rowspanTableParagraph], attrs: { padding: { top: 2, bottom: 2, left: 4, right: 4 } } },
+        { id: 'cell-e', blocks: [rowspanTableParagraph], attrs: { padding: { top: 2, bottom: 2, left: 4, right: 4 } } },
+      ],
+    },
+  ],
+};
+
+export const rowspanTableMeasure: Measure = {
+  kind: 'table',
+  rows: [
+    {
+      height: 24,
+      cells: [
+        {
+          width: 100,
+          height: 48,
+          gridColumnStart: 0,
+          colSpan: 1,
+          rowSpan: 2,
+          blocks: [
+            {
+              kind: 'paragraph',
+              lines: [
+                { fromRun: 0, fromChar: 0, toRun: 0, toChar: 4, width: 40, ascent: 10, descent: 4, lineHeight: 18 },
+              ],
+              totalHeight: 18,
+            },
+          ],
+        },
+        {
+          width: 100,
+          height: 24,
+          gridColumnStart: 1,
+          blocks: [
+            {
+              kind: 'paragraph',
+              lines: [
+                { fromRun: 0, fromChar: 0, toRun: 0, toChar: 4, width: 40, ascent: 10, descent: 4, lineHeight: 18 },
+              ],
+              totalHeight: 18,
+            },
+          ],
+        },
+        {
+          width: 100,
+          height: 24,
+          gridColumnStart: 2,
+          blocks: [
+            {
+              kind: 'paragraph',
+              lines: [
+                { fromRun: 0, fromChar: 0, toRun: 0, toChar: 4, width: 40, ascent: 10, descent: 4, lineHeight: 18 },
+              ],
+              totalHeight: 18,
+            },
+          ],
+        },
+      ],
+    },
+    {
+      height: 24,
+      cells: [
+        // Row 1 cells start at gridColumnStart=1 (column 0 is occupied by rowspan)
+        {
+          width: 100,
+          height: 24,
+          gridColumnStart: 1,
+          blocks: [
+            {
+              kind: 'paragraph',
+              lines: [
+                { fromRun: 0, fromChar: 0, toRun: 0, toChar: 4, width: 40, ascent: 10, descent: 4, lineHeight: 18 },
+              ],
+              totalHeight: 18,
+            },
+          ],
+        },
+        {
+          width: 100,
+          height: 24,
+          gridColumnStart: 2,
+          blocks: [
+            {
+              kind: 'paragraph',
+              lines: [
+                { fromRun: 0, fromChar: 0, toRun: 0, toChar: 4, width: 40, ascent: 10, descent: 4, lineHeight: 18 },
+              ],
+              totalHeight: 18,
+            },
+          ],
+        },
+      ],
+    },
+  ],
+  columnWidths: [100, 100, 100],
+  totalWidth: 300,
+  totalHeight: 48,
+};
+
+export const rowspanTableLayout: Layout = {
   pageSize: { w: 400, h: 500 },
   pages: [
     {
@@ -260,15 +745,299 @@ export const tableLayout: Layout = {
       fragments: [
         {
           kind: 'table',
-          blockId: 'table-0',
+          blockId: 'rowspan-table-0',
           fromRow: 0,
-          toRow: 1,
+          toRow: 2,
           x: 30,
           y: 60,
-          width: 120,
-          height: 24,
+          width: 300,
+          height: 48,
         },
       ],
     },
   ],
 };
+
+/**
+ * Builds table test fixtures with customizable dimensions.
+ * Reduces duplication between clickToPosition and dom-mapping table tests.
+ *
+ * @param opts - Optional table geometry and PM range overrides for the fixture.
+ * @returns A table `FlowBlock` and matching `Measure` used by click-mapping tests.
+ */
+export function buildTableFixtures(
+  opts: {
+    cellWidth?: number;
+    cellHeight?: number;
+    lineHeight?: number;
+    pmStart?: number;
+    pmEnd?: number;
+    text?: string;
+    blockId?: string;
+  } = {},
+): { block: FlowBlock; measure: Measure } {
+  const {
+    cellWidth = 200,
+    cellHeight = 80,
+    lineHeight = 18,
+    pmStart = 50,
+    pmEnd = 59,
+    text = 'Cell text',
+    blockId = 'table-block',
+  } = opts;
+
+  const block: FlowBlock = {
+    kind: 'table',
+    id: blockId,
+    rows: [
+      {
+        id: 'row-0',
+        cells: [
+          {
+            id: 'cell-0',
+            blocks: [
+              {
+                kind: 'paragraph' as const,
+                id: `${blockId}-para`,
+                runs: [{ text, fontFamily: 'Arial', fontSize: 14, pmStart, pmEnd }],
+              },
+            ],
+            attrs: { padding: { top: 2, bottom: 2, left: 4, right: 4 } },
+          },
+        ],
+      },
+    ],
+  };
+
+  const measure: Measure = {
+    kind: 'table',
+    rows: [
+      {
+        height: cellHeight,
+        cells: [
+          {
+            width: cellWidth,
+            height: cellHeight,
+            gridColumnStart: 0,
+            blocks: [
+              {
+                kind: 'paragraph',
+                lines: [
+                  {
+                    fromRun: 0,
+                    fromChar: 0,
+                    toRun: 0,
+                    toChar: text.length,
+                    width: 70,
+                    ascent: 10,
+                    descent: 4,
+                    lineHeight,
+                  },
+                ],
+                totalHeight: lineHeight,
+              },
+            ],
+          },
+        ],
+      },
+    ],
+    columnWidths: [cellWidth],
+    totalWidth: cellWidth,
+    totalHeight: cellHeight,
+  };
+
+  return { block, measure };
+}
+
+/**
+ * Builds table fixtures where the cell contains a list paragraph (wordLayout marker).
+ * Exercises the DOM shape that changes during PRs 5–6 (shared flow migration).
+ *
+ * @param opts - Optional marker, cell geometry, and PM range overrides for the fixture.
+ * @returns A table `FlowBlock` and matching `Measure` with list-marker paragraph data.
+ */
+export function buildTableWithListFixtures(
+  opts: {
+    markerText?: string;
+    markerWidth?: number;
+    cellWidth?: number;
+    pmStart?: number;
+    pmEnd?: number;
+    text?: string;
+    blockId?: string;
+  } = {},
+): { block: FlowBlock; measure: Measure } {
+  const {
+    markerText = '1.',
+    markerWidth = 18,
+    cellWidth = 200,
+    pmStart = 50,
+    pmEnd = 59,
+    text = 'List text',
+    blockId = 'table-list-block',
+  } = opts;
+
+  const block: FlowBlock = {
+    kind: 'table',
+    id: blockId,
+    rows: [
+      {
+        id: 'row-0',
+        cells: [
+          {
+            id: 'cell-0',
+            blocks: [
+              {
+                kind: 'paragraph' as const,
+                id: `${blockId}-para`,
+                runs: [{ text, fontFamily: 'Arial', fontSize: 14, pmStart, pmEnd }],
+                attrs: {
+                  wordLayout: {
+                    marker: {
+                      markerText,
+                      justification: 'right',
+                      suffix: 'tab' as const,
+                      run: { fontFamily: 'Arial', fontSize: 14, bold: false, italic: false },
+                    },
+                    gutter: { widthPx: markerWidth },
+                  },
+                  indent: { left: 36, hanging: markerWidth },
+                },
+              },
+            ],
+            attrs: { padding: { top: 2, bottom: 2, left: 4, right: 4 } },
+          },
+        ],
+      },
+    ],
+  };
+
+  const measure: Measure = {
+    kind: 'table',
+    rows: [
+      {
+        height: 24,
+        cells: [
+          {
+            width: cellWidth,
+            height: 24,
+            gridColumnStart: 0,
+            blocks: [
+              {
+                kind: 'paragraph',
+                lines: [
+                  {
+                    fromRun: 0,
+                    fromChar: 0,
+                    toRun: 0,
+                    toChar: text.length,
+                    width: 70,
+                    ascent: 10,
+                    descent: 4,
+                    lineHeight: 18,
+                  },
+                ],
+                totalHeight: 18,
+              },
+            ],
+          },
+        ],
+      },
+    ],
+    columnWidths: [cellWidth],
+    totalWidth: cellWidth,
+    totalHeight: 24,
+  };
+
+  return { block, measure };
+}
+
+/**
+ * Builds table fixtures where the cell contains an SDT-wrapped paragraph.
+ * Exercises the DOM shape for SDT-inside-table-cell mapping.
+ *
+ * @param opts - Optional cell geometry and PM range overrides for the SDT fixture.
+ * @returns A table `FlowBlock` and matching `Measure` with SDT inline run data.
+ */
+export function buildTableWithSdtFixtures(
+  opts: {
+    cellWidth?: number;
+    pmStart?: number;
+    pmEnd?: number;
+    text?: string;
+    blockId?: string;
+  } = {},
+): { block: FlowBlock; measure: Measure } {
+  const { cellWidth = 200, pmStart = 50, pmEnd = 59, text = 'SDT text', blockId = 'table-sdt-block' } = opts;
+
+  const block: FlowBlock = {
+    kind: 'table',
+    id: blockId,
+    rows: [
+      {
+        id: 'row-0',
+        cells: [
+          {
+            id: 'cell-0',
+            blocks: [
+              {
+                kind: 'paragraph' as const,
+                id: `${blockId}-para`,
+                runs: [
+                  {
+                    text,
+                    fontFamily: 'Arial',
+                    fontSize: 14,
+                    pmStart,
+                    pmEnd,
+                    sdt: { id: 'sdt-1', tag: 'field', alias: 'Field' },
+                  },
+                ],
+              },
+            ],
+            attrs: { padding: { top: 2, bottom: 2, left: 4, right: 4 } },
+          },
+        ],
+      },
+    ],
+  };
+
+  const measure: Measure = {
+    kind: 'table',
+    rows: [
+      {
+        height: 24,
+        cells: [
+          {
+            width: cellWidth,
+            height: 24,
+            gridColumnStart: 0,
+            blocks: [
+              {
+                kind: 'paragraph',
+                lines: [
+                  {
+                    fromRun: 0,
+                    fromChar: 0,
+                    toRun: 0,
+                    toChar: text.length,
+                    width: 60,
+                    ascent: 10,
+                    descent: 4,
+                    lineHeight: 18,
+                  },
+                ],
+                totalHeight: 18,
+              },
+            ],
+          },
+        ],
+      },
+    ],
+    columnWidths: [cellWidth],
+    totalWidth: cellWidth,
+    totalHeight: 24,
+  };
+
+  return { block, measure };
+}

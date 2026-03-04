@@ -1,39 +1,46 @@
-import { describe, it, expect, vi } from 'vitest';
-import { createDocFromMarkdown, convertMarkdownToHTML } from './importMarkdown.js';
-import { createDocFromHTML } from './importHtml.js';
+import { beforeAll, beforeEach, afterEach, describe, it, expect, vi } from 'vitest';
+import { createDocFromMarkdown } from './importMarkdown.js';
+import { initTestEditor, loadTestDataForEditorTests } from '@tests/helpers/helpers.js';
 
-vi.mock('../../core/helpers/importHtml.js', () => ({
-  createDocFromHTML: vi.fn(),
-}));
+let docData;
+
+beforeAll(async () => {
+  docData = await loadTestDataForEditorTests('blank-doc.docx');
+});
+
+let editor;
+
+beforeEach(() => {
+  ({ editor } = initTestEditor({
+    content: docData.docx,
+    media: docData.media,
+    mediaFiles: docData.mediaFiles,
+    fonts: docData.fonts,
+  }));
+});
+
+afterEach(() => {
+  editor?.destroy();
+  editor = null;
+});
 
 describe('markdown import', () => {
-  it('converts markdown to HTML with proper spacing', () => {
-    const markdown = `# Heading
-
-Paragraph text
-
-- List item`;
-
-    const html = convertMarkdownToHTML(markdown);
-
-    expect(html).toContain('<h1>Heading</h1>');
-    expect(html).toContain('<p>Paragraph text</p>');
-    expect(html).toContain('</p>\n<p>&nbsp;</p>\n<ul>'); // Spacing before list
+  it('creates a ProseMirror doc from markdown headings', () => {
+    const doc = createDocFromMarkdown('# Hello', editor);
+    expect(doc).toBeDefined();
+    expect(doc.type.name).toBe('doc');
+    expect(doc.childCount).toBeGreaterThan(0);
   });
 
-  it('creates ProseMirror doc from markdown', () => {
-    const mockSchema = { nodes: {} };
-    const mockDoc = { type: 'doc' };
-    const mockOptions = { isImport: true };
-    createDocFromHTML.mockReturnValue(mockDoc);
+  it('surfaces unsupported content through the callback', () => {
+    const onUnsupportedContent = vi.fn();
+    createDocFromMarkdown('<video src="test.mp4"></video>', editor, {
+      onUnsupportedContent,
+    });
 
-    const result = createDocFromMarkdown('# Test', mockSchema, mockOptions);
-
-    expect(createDocFromHTML).toHaveBeenCalledWith(
-      '<h1>Test</h1>\n', // Exact string that marked.parse returns
-      mockSchema,
-      { isImport: true },
+    expect(onUnsupportedContent).toHaveBeenCalled();
+    expect(onUnsupportedContent.mock.calls[0][0]).toEqual(
+      expect.arrayContaining([expect.objectContaining({ tagName: 'VIDEO' })]),
     );
-    expect(result).toBe(mockDoc);
   });
 });

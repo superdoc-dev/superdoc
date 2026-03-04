@@ -1,13 +1,17 @@
 import { parseInlineStyles } from './parse-inline-styles';
-import { translator as wPTranslator } from '@converter/v3/handlers/w/p';
 
 /**
- * Handler for v:rect elements
- * @param {Object} options
- * @returns {Object}
+ * Translate a `w:pict` node containing a `v:rect` into a `contentBlock`.
+ * Returns `null` when the expected `v:rect` payload is missing.
+ *
+ * @param {{ pict?: { elements?: Array<{ name?: string, attributes?: Object }> } }} options
+ * @returns {Array<{type: 'contentBlock', attrs: Object}>|null}
  */
-export function handleVRectImport({ pNode, pict, params }) {
+export function handleVRectImport({ pict }) {
   const rect = pict.elements?.find((el) => el.name === 'v:rect');
+  if (!rect) {
+    return null;
+  }
 
   const schemaAttrs = {};
   const rectAttrs = rect.attributes || {};
@@ -67,18 +71,12 @@ export function handleVRectImport({ pNode, pict, params }) {
     schemaAttrs.horizontalRule = true;
   }
 
-  const pElement = wPTranslator.encode({
-    ...params,
-    nodes: [{ ...pNode, elements: pNode.elements.filter((el) => el.name !== 'w:r') }],
-  });
-  pElement.content = [
+  return [
     {
       type: 'contentBlock',
       attrs: schemaAttrs,
     },
   ];
-
-  return pElement;
 }
 
 export function parsePointsToPixels(value) {
@@ -100,7 +98,7 @@ export function parsePointsToPixels(value) {
     if (isNaN(Number(val))) {
       return 0;
     }
-    return parseInt(val);
+    return parseInt(val, 10);
   }
 
   // Handle numeric values (assume pixels)

@@ -1,15 +1,50 @@
+// In-flight deduplication: if an export is already running for this (editor, ydoc)
+// pair, subsequent calls return the same promise instead of spawning a parallel export.
+// Keyed as editor → WeakMap<ydoc, promise> so that calls targeting different ydoc
+// instances (e.g. generateCollaborationData's temp ydoc vs editor.options.ydoc) each
+// get their own export run.
+const inFlightUpdates = new WeakMap();
+
 /**
  * Update the Ydoc document data with the latest Docx XML.
  *
+ * Deduplicates concurrent calls for the same (editor, ydoc) pair — if an
+ * export is already in progress for that exact target, the existing promise is
+ * returned instead of starting a second expensive exportDocx() call.
+ *
  * @param {Editor} editor The editor instance
+ * @param {import('yjs').Doc} [ydoc] Target ydoc (defaults to editor.options.ydoc)
  * @returns {Promise<void>}
  */
-export const updateYdocDocxData = async (editor, ydoc) => {
-  try {
-    ydoc = ydoc || editor?.options?.ydoc;
-    if (!ydoc) return;
-    if (!editor || editor.isDestroyed) return;
+export const updateYdocDocxData = (editor, ydoc) => {
+  ydoc = ydoc || editor?.options?.ydoc;
+  if (!ydoc || ydoc.isDestroyed) return Promise.resolve();
+  if (!editor || editor.isDestroyed) return Promise.resolve();
 
+  let ydocMap = inFlightUpdates.get(editor);
+  if (!ydocMap) {
+    ydocMap = new WeakMap();
+    inFlightUpdates.set(editor, ydocMap);
+  }
+
+  const existing = ydocMap.get(ydoc);
+  if (existing) {
+    return existing;
+  }
+
+  const promise = _doUpdateYdocDocxData(editor, ydoc).finally(() => {
+    const map = inFlightUpdates.get(editor);
+    if (map && map.get(ydoc) === promise) {
+      map.delete(ydoc);
+    }
+  });
+
+  ydocMap.set(ydoc, promise);
+  return promise;
+};
+
+const _doUpdateYdocDocxData = async (editor, ydoc) => {
+  try {
     const metaMap = ydoc.getMap('meta');
     const docxValue = metaMap.get('docx');
 
@@ -34,9 +69,10 @@ export const updateYdocDocxData = async (editor, ydoc) => {
     Object.keys(newXml).forEach((key) => {
       const fileIndex = docx.findIndex((item) => item.name === key);
       const existingContent = fileIndex > -1 ? docx[fileIndex].content : null;
+      const newContent = newXml[key];
 
       // Skip if content hasn't changed
-      if (existingContent === newXml[key]) {
+      if (existingContent === newContent) {
         return;
       }
 
@@ -44,14 +80,22 @@ export const updateYdocDocxData = async (editor, ydoc) => {
       if (fileIndex > -1) {
         docx.splice(fileIndex, 1);
       }
-      docx.push({
-        name: key,
-        content: newXml[key],
-      });
+
+      // A null value means the file was deleted during export (e.g. comment
+      // parts removed).  Only add entries with real content — pushing
+      // { content: null } would crash parseXmlToJson on next hydration.
+      if (newContent != null) {
+        docx.push({
+          name: key,
+          content: newContent,
+        });
+      }
     });
 
-    // Only transact if there were actual changes OR this is initial setup
-    if (hasChanges || !docxValue) {
+    // Only transact if there were actual changes OR this is initial setup.
+    // Re-check ydoc/editor after the async export — they may have been
+    // destroyed while exportDocx was running.
+    if ((hasChanges || !docxValue) && !ydoc.isDestroyed && !editor.isDestroyed) {
       ydoc.transact(
         () => {
           metaMap.set('docx', docx);
@@ -87,7 +131,7 @@ export const pushHeaderFooterToYjs = (editor, type, sectionId, content) => {
   if (isApplyingRemoteChanges) return;
 
   const ydoc = editor?.options?.ydoc;
-  if (!ydoc) return;
+  if (!ydoc || ydoc.isDestroyed) return;
 
   const headerFooterMap = ydoc.getMap('headerFooterJson');
   const key = `${type}:${sectionId}`;

@@ -1,16 +1,16 @@
 /* Custom toolbar styling */
 
 /* AI button icon styling with gradient */
-.toolbar-icon__icon--ai {
+.super-editor .toolbar-icon__icon--ai {
   position: relative;
   z-index: 1;
 }
 
-.toolbar-icon__icon--ai svg {
+.super-editor .toolbar-icon__icon--ai svg {
   fill: transparent;
 }
 
-.toolbar-icon__icon--ai::before {
+.super-editor .toolbar-icon__icon--ai::before {
   content: '';
   position: absolute;
   top: 0;
@@ -33,12 +33,12 @@
   transition: filter 0.2s ease;
 }
 
-.toolbar-icon__icon--ai:hover::before {
+.super-editor .toolbar-icon__icon--ai:hover::before {
   filter: brightness(1.3);
 }
 
 /* AI text appear animation */
-@keyframes aiTextAppear {
+@keyframes superdoc-aiTextAppear {
   from {
     opacity: 0;
     transform: translateY(5px);
@@ -49,27 +49,27 @@
   }
 }
 
-.sd-ai-text-appear {
+.super-editor .sd-ai-text-appear {
   display: inline;
   opacity: 0;
-  animation: aiTextAppear 0.7s ease-out forwards;
+  animation: superdoc-aiTextAppear 0.7s ease-out forwards;
   animation-fill-mode: both;
   will-change: opacity, transform;
   /* Ensure each mark is treated as a separate animation context */
   contain: content;
 }
 
-.sd-ai-loader {
+.super-editor .sd-ai-loader {
   display: flex;
   justify-content: flex-start;
 }
 
-.sd-ai-loader > img {
+.super-editor .sd-ai-loader > img {
   width: fit-content;
   height: 40px;
 }
 
-@keyframes ai-pulse {
+@keyframes superdoc-ai-pulse {
   0% {
     background-color: rgba(99, 102, 241, 0.1);
   }
@@ -81,6 +81,6 @@
   }
 }
 
-.sd-ai-highlight-pulse {
-  animation: ai-pulse 1.5s ease-in-out infinite;
+.super-editor .sd-ai-highlight-pulse {
+  animation: superdoc-ai-pulse 1.5s ease-in-out infinite;
 }

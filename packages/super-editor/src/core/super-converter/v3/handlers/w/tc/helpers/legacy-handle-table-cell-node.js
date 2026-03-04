@@ -1,4 +1,4 @@
-import { eighthPointsToPixels, twipsToPixels, resolveShadingFillColor } from '@converter/helpers';
+import { twipsToPixels, resolveShadingFillColor } from '@converter/helpers';
 import { translator as tcPrTranslator } from '../../tcPr';
 
 /**
@@ -11,16 +11,9 @@ export function handleTableCellNode({
   table,
   row,
   tableProperties,
-  rowBorders,
-  baseTableBorders,
-  tableLook,
-  rowCnfStyle,
   columnIndex,
   columnWidth = null,
   allColumnWidths = [],
-  rowIndex = 0,
-  totalRows = 1,
-  totalColumns,
   preferTableGridWidths = false,
   _referencedStyles,
 }) {
@@ -33,40 +26,22 @@ export function handleTableCellNode({
   const tableCellProperties = tcPr ? (tcPrTranslator.encode({ ...params, nodes: [tcPr] }) ?? {}) : {};
   attributes['tableCellProperties'] = tableCellProperties;
 
-  // Determine cell position for border application
-  // Fall back to allColumnWidths.length if totalColumns not provided
-  // Fall back to counting table rows if totalRows not provided
-  const effectiveTotalColumns = totalColumns ?? (allColumnWidths.length || 1);
-  const effectiveTotalRows = totalRows ?? (table?.elements?.filter((el) => el.name === 'w:tr').length || 1);
-  const colspan = parseInt(tableCellProperties.gridSpan || 1, 10);
-  const isFirstRow = rowIndex === 0;
-  const isLastRow = rowIndex === effectiveTotalRows - 1;
-  const isFirstColumn = columnIndex === 0;
-  const isLastColumn = columnIndex + colspan >= effectiveTotalColumns;
-
-  attributes['borders'] = processCellBorders({
-    baseTableBorders,
-    rowBorders,
-    tableLook,
-    rowCnfStyle,
-    isFirstRow,
-    isLastRow,
-    isFirstColumn,
-    isLastColumn,
-    tableCellProperties,
-    referencedStyles,
-  });
   // Colspan
+  const colspan = parseInt(tableCellProperties.gridSpan || 1, 10);
   if (colspan > 1) attributes['colspan'] = colspan;
 
   // Width
   let width = null;
-  if (!preferTableGridWidths) {
-    width = tableCellProperties.cellWidth?.value ? twipsToPixels(tableCellProperties.cellWidth?.value) : null;
-  }
   const widthType = tableCellProperties.cellWidth?.type;
+  if (!preferTableGridWidths) {
+    // For percentage widths, don't convert to px here; allow table/grid widths to drive layout.
+    if (widthType !== 'pct') {
+      width = tableCellProperties.cellWidth?.value ? twipsToPixels(tableCellProperties.cellWidth?.value) : null;
+    }
+  }
   if (widthType) attributes['widthType'] = widthType;
 
+  const cellOwnWidth = width; // tcW-derived width (before grid fallback)
   if (!width && columnWidth) width = columnWidth;
   if (width) {
     attributes['colwidth'] = [width];
@@ -77,13 +52,22 @@ export function handleTableCellNode({
 
     if (colspan > 1 && hasDefaultColWidths) {
       let colwidth = [];
+      // When cell has its own tcW width that exceeds the grid span total,
+      // distribute tcW proportionally across grid columns to match Word behavior.
+      // Only scale UP (tcW > grid), not down — smaller tcW is just a minimum.
+      const gridSpanTotal = defaultColWidths
+        .slice(columnIndex, columnIndex + colspan)
+        .reduce((sum, w) => sum + (w || 0), 0);
+      const shouldScale = cellOwnWidth && gridSpanTotal > 0 && cellOwnWidth > gridSpanTotal + 1;
 
       for (let i = 0; i < colspan; i++) {
         let colwidthValue = defaultColWidths[columnIndex + i];
         let defaultColwidth = 100;
 
         if (typeof colwidthValue !== 'undefined') {
-          colwidth.push(colwidthValue);
+          colwidth.push(
+            shouldScale ? Math.round(colwidthValue * (cellOwnWidth / gridSpanTotal) * 1000) / 1000 : colwidthValue,
+          );
         } else {
           colwidth.push(defaultColwidth);
         }
@@ -264,128 +248,6 @@ function normalizeTableCellContent(content, editor) {
 
   return normalized;
 }
-const processInlineCellBorders = (borders, rowBorders) => {
-  if (!borders) return null;
-
-  return ['bottom', 'top', 'left', 'right'].reduce((acc, direction) => {
-    const borderAttrs = borders[direction];
-    const rowBorderAttrs = rowBorders[direction];
-
-    if (borderAttrs && borderAttrs['val'] !== 'none') {
-      const color = borderAttrs['color'];
-      let size = borderAttrs['size'];
-      if (size) size = eighthPointsToPixels(size);
-      acc[direction] = { color, size, val: borderAttrs['val'] };
-      return acc;
-    }
-    if (borderAttrs && borderAttrs['val'] === 'none') {
-      // When inline border explicitly says 'none', always create an entry to disable the border
-      // Copy base border attrs if available, but always set val='none'
-      const border = Object.assign({}, rowBorderAttrs || {});
-      border['val'] = 'none';
-      acc[direction] = border;
-      return acc;
-    }
-    return acc;
-  }, {});
-};
-
-const processCellBorders = ({
-  baseTableBorders,
-  rowBorders,
-  tableLook,
-  rowCnfStyle,
-  isFirstRow,
-  isLastRow,
-  isFirstColumn,
-  isLastColumn,
-  tableCellProperties,
-  referencedStyles,
-}) => {
-  let cellBorders = {};
-  if (baseTableBorders) {
-    if (isFirstRow && baseTableBorders.top) {
-      cellBorders.top = baseTableBorders.top;
-    }
-    if (isLastRow && baseTableBorders.bottom) {
-      cellBorders.bottom = baseTableBorders.bottom;
-    }
-    if (isFirstColumn && baseTableBorders.left) {
-      cellBorders.left = baseTableBorders.left;
-    }
-    if (isLastColumn && baseTableBorders.right) {
-      cellBorders.right = baseTableBorders.right;
-    }
-  }
-
-  if (rowBorders) {
-    if (rowBorders.top?.val) {
-      cellBorders.top = rowBorders.top;
-    }
-
-    if (rowBorders.bottom?.val) {
-      cellBorders.bottom = rowBorders.bottom;
-    }
-
-    if (rowBorders.left?.val) {
-      const applyLeftToAll = rowBorders.left.val === 'none';
-      if (applyLeftToAll || isFirstColumn) {
-        cellBorders.left = rowBorders.left;
-      }
-    }
-
-    if (rowBorders.right?.val) {
-      const applyRightToAll = rowBorders.right.val === 'none';
-      if (applyRightToAll || isLastColumn) {
-        cellBorders.right = rowBorders.right;
-      }
-    }
-
-    // INNER BORDERS: Position-based (including for 'none' values)
-    // insideH creates horizontal lines between rows (applied as bottom border to non-last rows)
-    if (!isLastRow && rowBorders.insideH) {
-      cellBorders.bottom = rowBorders.insideH;
-    }
-    // insideV creates vertical lines between columns (applied as right border to non-last columns)
-    if (!isLastColumn && rowBorders.insideV) {
-      cellBorders.right = rowBorders.insideV;
-    }
-  }
-
-  const getStyleTableCellBorders = (styleVariant) => styleVariant?.tableCellProperties?.borders ?? null;
-
-  // Check if a conditional style flag is enabled using cascading priority: cell > row > tableLook
-  const cellCnfStyle = tableCellProperties?.cnfStyle;
-  const getFlag = (source, flag) =>
-    source && Object.prototype.hasOwnProperty.call(source, flag) ? source[flag] : undefined;
-  const isStyleEnabled = (flag) =>
-    getFlag(cellCnfStyle, flag) ?? getFlag(rowCnfStyle, flag) ?? getFlag(tableLook, flag) ?? true;
-
-  // Apply table style conditional formatting borders.
-  // Only apply the relevant edge per conditional style:
-  // - firstRow/lastRow => top/bottom
-  // - firstCol/lastCol => left/right
-  const applyStyleBorders = (styleVariant, allowedDirections) => {
-    const styleBorders = getStyleTableCellBorders(styleVariant);
-    if (!styleBorders) return;
-    const filteredBorders = allowedDirections.reduce((acc, direction) => {
-      if (styleBorders[direction]) acc[direction] = styleBorders[direction];
-      return acc;
-    }, {});
-    const styleOverrides = processInlineCellBorders(filteredBorders, cellBorders);
-    if (styleOverrides) cellBorders = Object.assign(cellBorders, styleOverrides);
-  };
-
-  if (isFirstRow && isStyleEnabled('firstRow')) applyStyleBorders(referencedStyles?.firstRow, ['top', 'bottom']);
-  if (isLastRow && isStyleEnabled('lastRow')) applyStyleBorders(referencedStyles?.lastRow, ['top', 'bottom']);
-  if (isFirstColumn && isStyleEnabled('firstColumn')) applyStyleBorders(referencedStyles?.firstCol, ['left', 'right']);
-  if (isLastColumn && isStyleEnabled('lastColumn')) applyStyleBorders(referencedStyles?.lastCol, ['left', 'right']);
-
-  // Process inline cell borders (cell-level overrides)
-  const inlineBorders = processInlineCellBorders(tableCellProperties.borders, cellBorders);
-  if (inlineBorders) cellBorders = Object.assign(cellBorders, inlineBorders);
-  return cellBorders;
-};
 
 const getTableCellVMerge = (node) => {
   const tcPr = node.elements.find((el) => el.name === 'w:tcPr');

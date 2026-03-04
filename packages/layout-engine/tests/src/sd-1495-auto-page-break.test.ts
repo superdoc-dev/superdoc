@@ -1,4 +1,4 @@
-import { describe, expect, it } from 'vitest';
+import { beforeAll, describe, expect, it } from 'vitest';
 import { layoutDocument } from '@superdoc/layout-engine';
 import { toFlowBlocks, type ConverterContext } from '@superdoc/pm-adapter';
 import { measureBlock } from '@superdoc/measuring-dom';
@@ -26,6 +26,7 @@ const FIXTURES: FixtureCase[] = [
 
 const FIXTURE_DIR = path.join(__dirname, '../../../super-editor/src/tests/data');
 const EXTENSIONS_TO_CONVERT = new Set(['.xml', '.rels']);
+const fixtureCache = new Map<string, { pmDoc: PMNode; converterContext: ConverterContext }>();
 
 async function loadDocxFixture(filename: string): Promise<{ pmDoc: PMNode; converterContext: ConverterContext }> {
   const { default: DocxZipper } = await import('../../../super-editor/src/core/DocxZipper.js');
@@ -90,8 +91,24 @@ function findPageIndex(layout: ReturnType<typeof layoutDocument>, blockId?: stri
 }
 
 describe('SD-1495 auto page breaks', () => {
+  beforeAll(async () => {
+    const loadedFixtures = await Promise.all(
+      FIXTURES.map(async ({ filename }) => ({
+        filename,
+        data: await loadDocxFixture(filename),
+      })),
+    );
+    loadedFixtures.forEach(({ filename, data }) => {
+      fixtureCache.set(filename, data);
+    });
+  }, 30000);
+
   it.each(FIXTURES)('pushes heading to next page for %s', async ({ filename, headingText }) => {
-    const { pmDoc, converterContext } = await loadDocxFixture(filename);
+    const cachedFixture = fixtureCache.get(filename);
+    if (!cachedFixture) {
+      throw new Error(`Expected fixture "${filename}" to be loaded in beforeAll`);
+    }
+    const { pmDoc, converterContext } = cachedFixture;
     const { blocks } = toFlowBlocks(pmDoc, { emitSectionBreaks: true, converterContext });
 
     const contentWidth = LETTER.pageSize.w - (LETTER.margins.left + LETTER.margins.right);

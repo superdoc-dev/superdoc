@@ -4,29 +4,46 @@ import { EditorState, TextSelection } from 'prosemirror-state';
 import { EditorView } from 'prosemirror-view';
 import { wrapTextInRunsPlugin } from './wrapTextInRunsPlugin.js';
 
-const makeSchema = () =>
-  new Schema({
-    nodes: {
-      doc: { content: 'block+' },
-      paragraph: {
-        group: 'block',
-        content: 'inline*',
-        toDOM: () => ['p', 0],
-        attrs: {
-          paragraphProperties: { default: null },
-        },
+const makeSchema = ({ includeStructuredContent = false } = {}) => {
+  const nodes = {
+    doc: { content: 'block+' },
+    paragraph: {
+      group: 'block',
+      content: 'inline*',
+      toDOM: () => ['p', 0],
+      attrs: {
+        paragraphProperties: { default: null },
       },
-      run: {
-        inline: true,
-        group: 'inline',
-        content: 'inline*',
-        toDOM: () => ['span', { 'data-run': '1' }, 0],
-        attrs: {
-          runProperties: { default: null },
-        },
-      },
-      text: { group: 'inline' },
     },
+    run: {
+      inline: true,
+      group: 'inline',
+      content: 'inline*',
+      toDOM: () => ['span', { 'data-run': '1' }, 0],
+      attrs: {
+        runProperties: { default: null },
+      },
+    },
+    text: { group: 'inline' },
+  };
+
+  if (includeStructuredContent) {
+    nodes.structuredContent = {
+      inline: true,
+      group: 'inline',
+      content: 'inline*',
+      isolating: true,
+      toDOM: () => ['span', { 'data-structured-content': '' }, 0],
+      attrs: {
+        id: { default: null },
+        tag: { default: null },
+        alias: { default: null },
+      },
+    };
+  }
+
+  return new Schema({
+    nodes,
     marks: {
       bold: {
         toDOM: () => ['strong', 0],
@@ -52,6 +69,7 @@ const makeSchema = () =>
       },
     },
   });
+};
 
 const paragraphDoc = (schema) => schema.node('doc', null, [schema.node('paragraph')]);
 
@@ -112,6 +130,42 @@ describe('wrapTextInRunsPlugin', () => {
     const paragraph = view.state.doc.firstChild;
     expect(paragraph.firstChild.type.name).toBe('run');
     expect(paragraph.textContent).toBe('あ');
+  });
+
+  it('copies run properties from previous paragraph and applies marks to wrapped text', () => {
+    const schema = makeSchema();
+    const prevRun = schema.node('run', { runProperties: { bold: true } }, [schema.text('Prev')]);
+    const doc = schema.node('doc', null, [schema.node('paragraph', null, [prevRun]), schema.node('paragraph')]);
+    const view = createView(schema, doc);
+
+    const secondParagraphPos = view.state.doc.child(0).nodeSize + 1;
+    const tr = view.state.tr.setSelection(TextSelection.create(view.state.doc, secondParagraphPos)).insertText('Next');
+    view.dispatch(tr);
+
+    const secondParagraph = view.state.doc.child(1);
+    const run = secondParagraph.firstChild;
+    expect(run.type.name).toBe('run');
+    expect(run.attrs.runProperties).toEqual({ bold: true });
+    expect(run.firstChild.marks.some((mark) => mark.type.name === 'bold')).toBe(true);
+  });
+
+  it('merges previous paragraph marks with existing text marks', () => {
+    const schema = makeSchema();
+    const prevRun = schema.node('run', { runProperties: { bold: true } }, [schema.text('Prev')]);
+    const doc = schema.node('doc', null, [schema.node('paragraph', null, [prevRun]), schema.node('paragraph')]);
+    const view = createView(schema, doc);
+
+    const secondParagraphPos = view.state.doc.child(0).nodeSize + 1;
+    const tr = view.state.tr.setSelection(TextSelection.create(view.state.doc, secondParagraphPos));
+    tr.addStoredMark(schema.marks.italic.create());
+    tr.insertText('X');
+    view.dispatch(tr);
+
+    const secondParagraph = view.state.doc.child(1);
+    const run = secondParagraph.firstChild;
+    const markNames = run.firstChild.marks.map((mark) => mark.type.name);
+    expect(markNames).toContain('bold');
+    expect(markNames).toContain('italic');
   });
 
   describe('resolveRunPropertiesFromParagraphStyle', () => {
@@ -356,6 +410,245 @@ describe('wrapTextInRunsPlugin', () => {
       const paragraph = view.state.doc.firstChild;
       expect(paragraph.firstChild.type.name).toBe('run');
       expect(paragraph.textContent).toBe('Test');
+    });
+  });
+
+  describe('sdStyleMarks meta', () => {
+    it('applies marks from sdStyleMarks transaction meta to wrapped text', () => {
+      const schema = makeSchema();
+      const view = createView(schema, paragraphDoc(schema));
+
+      const tr = view.state.tr.setSelection(TextSelection.create(view.state.doc, 1));
+      tr.setMeta('sdStyleMarks', [{ type: 'bold', attrs: {} }]);
+      tr.insertText('Styled');
+      view.dispatch(tr);
+
+      const paragraph = view.state.doc.firstChild;
+      const run = paragraph.firstChild;
+      expect(run.type.name).toBe('run');
+      expect(run.firstChild.marks.some((mark) => mark.type.name === 'bold')).toBe(true);
+    });
+
+    it('merges sdStyleMarks with inherited marks from previous paragraph', () => {
+      const schema = makeSchema();
+      const prevRun = schema.node('run', { runProperties: { italic: true } }, [
+        schema.text('Prev', [schema.marks.italic.create()]),
+      ]);
+      const doc = schema.node('doc', null, [schema.node('paragraph', null, [prevRun]), schema.node('paragraph')]);
+      const view = createView(schema, doc);
+
+      const secondParagraphPos = view.state.doc.child(0).nodeSize + 1;
+      const tr = view.state.tr.setSelection(TextSelection.create(view.state.doc, secondParagraphPos));
+      tr.setMeta('sdStyleMarks', [{ type: 'bold', attrs: {} }]);
+      tr.insertText('Mixed');
+      view.dispatch(tr);
+
+      const secondParagraph = view.state.doc.child(1);
+      const run = secondParagraph.firstChild;
+      const markNames = run.firstChild.marks.map((mark) => mark.type.name);
+      expect(markNames).toContain('italic');
+      expect(markNames).toContain('bold');
+    });
+
+    it('persists sdStyleMarks across subsequent transactions (sticky behavior)', () => {
+      const schema = makeSchema();
+      const view = createView(schema, paragraphDoc(schema));
+
+      // First transaction with sdStyleMarks
+      const tr1 = view.state.tr.setSelection(TextSelection.create(view.state.doc, 1));
+      tr1.setMeta('sdStyleMarks', [{ type: 'bold', attrs: {} }]);
+      tr1.insertText('A');
+      view.dispatch(tr1);
+
+      // Second transaction WITHOUT sdStyleMarks - should still apply bold
+      const tr2 = view.state.tr.insertText('B');
+      view.dispatch(tr2);
+
+      const paragraph = view.state.doc.firstChild;
+      // Both runs should have bold applied due to sticky behavior
+      expect(paragraph.childCount).toBeGreaterThanOrEqual(1);
+      paragraph.forEach((child) => {
+        if (child.type.name === 'run' && child.firstChild) {
+          expect(child.firstChild.marks.some((mark) => mark.type.name === 'bold')).toBe(true);
+        }
+      });
+    });
+
+    it('updates sdStyleMarks when new ones are provided in a transaction', () => {
+      const schema = makeSchema();
+      const view = createView(schema, paragraphDoc(schema));
+
+      // First transaction with bold
+      const tr1 = view.state.tr.setSelection(TextSelection.create(view.state.doc, 1));
+      tr1.setMeta('sdStyleMarks', [{ type: 'bold', attrs: {} }]);
+      tr1.insertText('Bold');
+      view.dispatch(tr1);
+
+      const firstParagraph = view.state.doc.firstChild;
+      const firstRun = firstParagraph.firstChild;
+      expect(firstRun.type.name).toBe('run');
+      expect(firstRun.firstChild.marks.some((mark) => mark.type.name === 'bold')).toBe(true);
+
+      // Second transaction with italic - inserting into a new paragraph to avoid merging
+      // Create a second empty paragraph and insert there
+      const tr2 = view.state.tr;
+      const insertPos = view.state.doc.content.size;
+      tr2.insert(insertPos, schema.node('paragraph'));
+      view.dispatch(tr2);
+
+      const tr3 = view.state.tr;
+      const secondParagraphPos = view.state.doc.child(0).nodeSize + 1;
+      tr3.setSelection(TextSelection.create(view.state.doc, secondParagraphPos));
+      tr3.setMeta('sdStyleMarks', [{ type: 'italic', attrs: {} }]);
+      tr3.insertText('Italic');
+      view.dispatch(tr3);
+
+      // Check the second paragraph for italic marks
+      const secondParagraph = view.state.doc.child(1);
+      const italicRun = secondParagraph.firstChild;
+      expect(italicRun.type.name).toBe('run');
+      expect(italicRun.textContent).toBe('Italic');
+      const markNames = italicRun.firstChild.marks.map((mark) => mark.type.name);
+      // The italic sdStyleMarks should be applied to this text
+      expect(markNames).toContain('italic');
+    });
+
+    it('ignores invalid mark types in sdStyleMarks gracefully', () => {
+      const schema = makeSchema();
+      const view = createView(schema, paragraphDoc(schema));
+
+      const tr = view.state.tr.setSelection(TextSelection.create(view.state.doc, 1));
+      tr.setMeta('sdStyleMarks', [
+        { type: 'nonexistent', attrs: {} },
+        { type: 'bold', attrs: {} },
+      ]);
+      tr.insertText('Test');
+      view.dispatch(tr);
+
+      const paragraph = view.state.doc.firstChild;
+      const run = paragraph.firstChild;
+      expect(run.type.name).toBe('run');
+      // Should still apply the valid bold mark
+      expect(run.firstChild.marks.some((mark) => mark.type.name === 'bold')).toBe(true);
+      // Should not have any nonexistent mark
+      expect(run.firstChild.marks.every((mark) => mark.type.name !== 'nonexistent')).toBe(true);
+    });
+
+    it('clears sdStyleMarks on view destroy', () => {
+      const schema = makeSchema();
+      const view = createView(schema, paragraphDoc(schema));
+
+      // Set up sdStyleMarks
+      const tr1 = view.state.tr.setSelection(TextSelection.create(view.state.doc, 1));
+      tr1.setMeta('sdStyleMarks', [{ type: 'bold', attrs: {} }]);
+      tr1.insertText('A');
+      view.dispatch(tr1);
+
+      // Destroy the view
+      view.destroy();
+
+      // Create a new view - should not have the previous sdStyleMarks
+      const newView = createView(schema, paragraphDoc(schema));
+      const tr2 = newView.state.tr.setSelection(TextSelection.create(newView.state.doc, 1)).insertText('B');
+      newView.dispatch(tr2);
+
+      const paragraph = newView.state.doc.firstChild;
+      const run = paragraph.firstChild;
+      // Should NOT have bold since it's a fresh view
+      expect(run.firstChild.marks.some((mark) => mark.type.name === 'bold')).toBe(false);
+    });
+  });
+
+  describe('structuredContent wrapping (SD-2011)', () => {
+    it('wraps text when inserting SDT with bare text content via transaction', () => {
+      const schema = makeSchema({ includeStructuredContent: true });
+      const doc = schema.node('doc', null, [schema.node('paragraph')]);
+      const view = createView(schema, doc);
+
+      // Insert SDT with bare text content (simulates template builder insertion)
+      const sdtNode = schema.nodes.structuredContent.create({ id: '123', alias: 'Field' }, schema.text('John Doe'));
+      const tr = view.state.tr.insert(1, sdtNode);
+      view.dispatch(tr);
+
+      const paragraph = view.state.doc.firstChild;
+      // Find the structuredContent node (may be wrapped in a run by the plugin)
+      let sdt = null;
+      paragraph.descendants((node) => {
+        if (node.type.name === 'structuredContent') sdt = node;
+      });
+      expect(sdt).not.toBeNull();
+      // The text inside SDT should be wrapped in a run
+      expect(sdt.firstChild.type.name).toBe('run');
+      expect(sdt.textContent).toBe('John Doe');
+    });
+
+    it('wraps text replaced inside structuredContent via transaction', () => {
+      const schema = makeSchema({ includeStructuredContent: true });
+      const sdtNode = schema.nodes.structuredContent.create(
+        { id: '456', alias: 'Name' },
+        schema.nodes.run.create(null, schema.text('Old')),
+      );
+      const runNode = schema.nodes.run.create(null, sdtNode);
+      const doc = schema.node('doc', null, [schema.node('paragraph', null, [runNode])]);
+      const view = createView(schema, doc);
+
+      // Structure: paragraph(0) > run(1) > sdt(2) > run(3) > text(4..6="Old")
+      // Replace "Old" with bare text — simulates typing inside the SDT
+      const tr = view.state.tr.replaceWith(4, 7, schema.text('New Value'));
+      view.dispatch(tr);
+
+      let updatedSdt = null;
+      view.state.doc.firstChild.descendants((node) => {
+        if (node.type.name === 'structuredContent') updatedSdt = node;
+      });
+      expect(updatedSdt).not.toBeNull();
+      // Text should still be inside a run within the SDT
+      expect(updatedSdt.firstChild.type.name).toBe('run');
+      expect(updatedSdt.textContent).toBe('New Value');
+    });
+
+    it('does not inherit trailing paragraph run styles when replacing first SDT inner text node', () => {
+      const schema = makeSchema({ includeStructuredContent: true });
+
+      const leadingRun = schema.nodes.run.create({ runProperties: {} }, schema.text('Lead '));
+      const sdtNode = schema.nodes.structuredContent.create({ id: '789', alias: 'Field' }, schema.text('Old'));
+      const trailingRun = schema.nodes.run.create({ runProperties: { bold: true } }, schema.text(' Tail'));
+      const doc = schema.node('doc', null, [schema.node('paragraph', null, [leadingRun, sdtNode, trailingRun])]);
+      const view = createView(schema, doc);
+
+      let oldTextFrom = null;
+      view.state.doc.descendants((node, pos) => {
+        if (oldTextFrom !== null) return false;
+        if (node.isText && node.text === 'Old') {
+          oldTextFrom = pos;
+          return false;
+        }
+        return true;
+      });
+
+      expect(oldTextFrom).not.toBeNull();
+      const oldTextTo = oldTextFrom + 'Old'.length;
+
+      // Replace SDT inner text with bare text (simulates transactional replacement in inline SDT).
+      const tr = view.state.tr.replaceWith(oldTextFrom, oldTextTo, schema.text('New'));
+      view.dispatch(tr);
+
+      let updatedSdt = null;
+      view.state.doc.firstChild.descendants((node) => {
+        if (node.type.name === 'structuredContent') updatedSdt = node;
+      });
+
+      expect(updatedSdt).not.toBeNull();
+      expect(updatedSdt.firstChild.type.name).toBe('run');
+      expect(updatedSdt.textContent).toBe('New');
+
+      const innerRun = updatedSdt.firstChild;
+      const innerText = innerRun.firstChild;
+
+      // Regression guard: replacing text inside inline SDT must not pull styles
+      // from the paragraph's last run.
+      expect(innerRun.attrs.runProperties?.bold).not.toBe(true);
+      expect(innerText.marks.some((mark) => mark.type.name === 'bold')).toBe(false);
     });
   });
 });

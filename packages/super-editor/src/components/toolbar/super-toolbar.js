@@ -6,12 +6,7 @@ import { getActiveFormatting } from '@core/helpers/getActiveFormatting.js';
 import { findParentNode } from '@helpers/index.js';
 import { vClickOutside } from '@superdoc/common';
 import Toolbar from './Toolbar.vue';
-import {
-  checkAndProcessImage,
-  replaceSelectionWithImagePlaceholder,
-  uploadAndInsertImage,
-  getFileOpener,
-} from '../../extensions/image/imageHelpers/index.js';
+import { getFileOpener, processAndInsertImageFile } from '../../extensions/image/imageHelpers/index.js';
 import { toolbarIcons } from './toolbarIcons.js';
 import { toolbarTexts } from './toolbarTexts.js';
 import { getQuickFormatList } from '@extensions/linked-styles/index.js';
@@ -459,29 +454,12 @@ export class SuperToolbar extends EventEmitter {
           return;
         }
 
-        const { size, file } = await checkAndProcessImage({
+        await processAndInsertImageFile({
           file: result.file,
-          getMaxContentSize: () => this.activeEditor.getMaxContentSize(),
-        });
-
-        if (!file) {
-          return;
-        }
-
-        const id = {};
-
-        replaceSelectionWithImagePlaceholder({
-          view: this.activeEditor.view,
-          editorOptions: this.activeEditor.options,
-          id,
-        });
-
-        await uploadAndInsertImage({
           editor: this.activeEditor,
           view: this.activeEditor.view,
-          file,
-          size,
-          id,
+          editorOptions: this.activeEditor.options,
+          getMaxContentSize: () => this.activeEditor.getMaxContentSize(),
         });
       } catch (error) {
         const err = new Error('[super-toolbar 🎨] Image upload failed');
@@ -829,11 +807,51 @@ export class SuperToolbar extends EventEmitter {
   }
 
   /**
+   * Sync document mode dropdown UI with the current mode.
+   * @private
+   * @returns {void}
+   */
+  #syncDocumentModeUi() {
+    const documentModeItem = this.getToolbarItemByName('documentMode');
+    if (!documentModeItem) return;
+
+    const mode = (this.documentMode || 'editing').toLowerCase();
+    const texts = this.config.texts || {};
+    const icons = this.config.icons || {};
+    const map = {
+      editing: {
+        label: texts.documentEditingMode || 'Editing',
+        icon: icons.documentEditingMode || icons.documentMode,
+      },
+      suggesting: {
+        label: texts.documentSuggestingMode || 'Suggesting',
+        icon: icons.documentSuggestingMode || icons.documentMode,
+      },
+      viewing: {
+        label: texts.documentViewingMode || 'Viewing',
+        icon: icons.documentViewingMode || icons.documentMode,
+      },
+    };
+
+    const next = map[mode] || map.editing;
+    if (documentModeItem.label?.value !== undefined) {
+      documentModeItem.label.value = next.label;
+    }
+    if (documentModeItem.defaultLabel?.value !== undefined) {
+      documentModeItem.defaultLabel.value = next.label;
+    }
+    if (documentModeItem.icon?.value !== undefined && next.icon) {
+      documentModeItem.icon.value = next.icon;
+    }
+  }
+
+  /**
    * Update the toolbar state based on the current editor state
    * Updates active/inactive state of all toolbar items
    * @returns {void}
    */
   updateToolbarState() {
+    this.#syncDocumentModeUi();
     this.#updateToolbarHistory();
     this.#initDefaultFonts();
     this.#updateHighlightColors();

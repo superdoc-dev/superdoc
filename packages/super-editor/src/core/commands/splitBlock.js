@@ -3,6 +3,23 @@ import { canSplit } from 'prosemirror-transform';
 import { defaultBlockAt } from '../helpers/defaultBlockAt.js';
 import { Attribute } from '../Attribute.js';
 
+const isHeadingStyleId = (styleId) => typeof styleId === 'string' && /^heading\s*[1-6]$/i.test(styleId.trim());
+
+const clearHeadingStyleId = (attrs) => {
+  if (!attrs || typeof attrs !== 'object') return attrs;
+  const paragraphProperties = attrs.paragraphProperties;
+  const styleId = paragraphProperties?.styleId;
+  if (!isHeadingStyleId(styleId)) return attrs;
+
+  const nextParagraphProperties = { ...paragraphProperties };
+  delete nextParagraphProperties.styleId;
+
+  return {
+    ...attrs,
+    paragraphProperties: nextParagraphProperties,
+  };
+};
+
 const ensureMarks = (state, splittableMarks) => {
   const marks = state.storedMarks || (state.selection.$to.parentOffset && state.selection.$from.marks());
   if (marks) {
@@ -62,11 +79,18 @@ export const splitBlock =
       if (can) {
         tr.split(tr.mapping.map($from.pos), 1, types);
 
-        if (deflt && !atEnd && !$from.parentOffset && $from.parent.type !== deflt) {
+        if (deflt && !atEnd && !$from.parentOffset) {
           const first = tr.mapping.map($from.before());
           const $first = tr.doc.resolve(first);
-          if ($from.node(-1).canReplaceWith($first.index(), $first.index() + 1, deflt)) {
-            tr.setNodeMarkup(tr.mapping.map($from.before()), deflt);
+          const shouldChangeType = $from.parent.type !== deflt;
+          const normalizedAttrs = clearHeadingStyleId($from.parent.attrs);
+          const shouldNormalizeAttrs = normalizedAttrs !== $from.parent.attrs;
+
+          if (
+            $from.node(-1).canReplaceWith($first.index(), $first.index() + 1, deflt) &&
+            (shouldChangeType || shouldNormalizeAttrs)
+          ) {
+            tr.setNodeMarkup(first, deflt, normalizedAttrs);
           }
         }
       }
@@ -79,19 +103,34 @@ export const splitBlock =
   };
 
 function deleteAttributes(attrs, attrsToRemove) {
-  const newAttrs = { ...attrs };
-  attrsToRemove.forEach((attrName) => {
+  let nextAttrs = { ...attrs };
+  for (const attrName of attrsToRemove) {
     const parts = attrName.split('.');
     if (parts.length === 1) {
-      delete newAttrs[attrName];
-    } else {
-      let current = newAttrs;
-      for (let i = 0; i < parts.length - 1; i++) {
-        if (current[parts[i]] == null) return;
-        current = current[parts[i]];
-      }
-      delete current[parts[parts.length - 1]];
+      delete nextAttrs[attrName];
+      continue;
     }
-  });
-  return newAttrs;
+
+    let source = nextAttrs;
+    for (let i = 0; i < parts.length - 1; i += 1) {
+      if (source == null || typeof source !== 'object') {
+        source = null;
+        break;
+      }
+      source = source[parts[i]];
+    }
+
+    if (source == null || typeof source !== 'object') continue;
+
+    let target = nextAttrs;
+    for (let i = 0; i < parts.length - 1; i += 1) {
+      const key = parts[i];
+      const value = target[key];
+      target[key] = { ...value };
+      target = target[key];
+    }
+
+    delete target[parts[parts.length - 1]];
+  }
+  return nextAttrs;
 }

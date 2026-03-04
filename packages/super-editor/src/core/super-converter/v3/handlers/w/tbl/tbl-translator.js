@@ -1,13 +1,20 @@
 // @ts-check
-import { NodeTranslator } from '@translator';
-import { twipsToPixels, eighthPointsToPixels, halfPointToPoints } from '@core/super-converter/helpers.js';
-import { preProcessVerticalMergeCells } from '@core/super-converter/export-helpers/pre-process-vertical-merge-cells.js';
-import { translateChildNodes } from '@core/super-converter/v2/exporter/helpers/index.js';
-import { translator as trTranslator } from '../tr';
-import { translator as tblPrTranslator } from '../tblPr';
-import { translator as tblGridTranslator } from '../tblGrid';
 import { translator as tblStylePrTranslator } from '@converter/v3/handlers/w/tblStylePr';
+import { preProcessVerticalMergeCells } from '@core/super-converter/export-helpers/pre-process-vertical-merge-cells.js';
+import { eighthPointsToPixels, halfPointToPoints, twipsToPixels } from '@core/super-converter/helpers.js';
 import { buildFallbackGridForTable } from '@core/super-converter/helpers/tableFallbackHelpers.js';
+import { translateChildNodes } from '@core/super-converter/v2/exporter/helpers/index.js';
+import { createAttributeHandler } from '@converter/v3/handlers/utils.js';
+import { NodeTranslator } from '@translator';
+import { translator as tblGridTranslator } from '../tblGrid';
+import { translator as tblPrTranslator } from '../tblPr';
+import { translator as trTranslator } from '../tr';
+
+/**
+ * Attributes preserved across DOCX roundtrip for table identity.
+ * @type {import('@translator').AttrConfig[]}
+ */
+const validXmlAttributes = ['w14:paraId', 'w14:textId'].map((xmlName) => createAttributeHandler(xmlName));
 
 /** @type {import('@translator').XmlNodeName} */
 const XML_NODE_NAME = 'w:tbl';
@@ -87,7 +94,7 @@ const encode = (params, encodedAttrs) => {
     'justification',
     'tableLayout',
     ['tableIndent', ({ value, type }) => ({ width: twipsToPixels(value), type })],
-    ['tableCellSpacing', ({ value, type }) => ({ w: String(value), type })],
+    ['tableCellSpacing', ({ value, type }) => ({ value: twipsToPixels(value), type })],
   ].forEach((prop) => {
     /** @type {string} */
     let key;
@@ -112,13 +119,26 @@ const encode = (params, encodedAttrs) => {
 
   if (encodedAttrs.tableProperties.tableWidth) {
     const tableWidthMeasurement = encodedAttrs.tableProperties.tableWidth;
-    const widthPx = twipsToPixels(tableWidthMeasurement.value);
-    if (widthPx != null) {
+    if (tableWidthMeasurement.type === 'pct' && typeof tableWidthMeasurement.value === 'number') {
+      // For percentage widths, preserve the raw OOXML value (in 1/50th of a percent units)
+      // using { value, type } shape. This allows downstream code to calculate the actual
+      // percentage (value / 50) without precision loss from pixel conversion.
       encodedAttrs.tableWidth = {
-        width: widthPx,
+        value: tableWidthMeasurement.value,
         type: tableWidthMeasurement.type,
       };
-    } else if (tableWidthMeasurement.type === 'auto') {
+    } else {
+      // For fixed widths (dxa), convert to pixels using { width, type } shape.
+      const widthPx = twipsToPixels(tableWidthMeasurement.value);
+      if (widthPx != null) {
+        encodedAttrs.tableWidth = {
+          width: widthPx,
+          type: tableWidthMeasurement.type,
+        };
+      }
+    }
+
+    if (!encodedAttrs.tableWidth && tableWidthMeasurement.type === 'auto') {
       encodedAttrs.tableWidth = {
         width: 0,
         type: tableWidthMeasurement.type,
@@ -126,7 +146,6 @@ const encode = (params, encodedAttrs) => {
     }
   }
 
-  const tableLook = encodedAttrs.tableProperties.tblLook;
   // Table borders can be specified in tblPr or inside a referenced style tag
   const borderProps = _processTableBorders(encodedAttrs.tableProperties.borders || {});
   const referencedStyles = _getReferencedTableStyles(encodedAttrs.tableStyleId, params) || {};
@@ -157,7 +176,8 @@ const encode = (params, encodedAttrs) => {
     Math.sign(indentDiff) === Math.sign(tableIndentTwips) &&
     Math.abs(indentDiff - tableIndentTwips) <= INDENT_TWIPS_TOLERANCE;
 
-  if (!columnWidths.length) {
+  const hasUsableGrid = columnWidths.length > 0 && columnWidths.some((w) => w > 0);
+  if (!hasUsableGrid) {
     const fallback = buildFallbackGridForTable({
       params,
       rows,
@@ -167,6 +187,13 @@ const encode = (params, encodedAttrs) => {
     if (fallback) {
       encodedAttrs.grid = fallback.grid;
       columnWidths = fallback.columnWidths;
+    }
+    // No usable grid means the table has no explicit column sizing.
+    // Default to 100% width so measuring-dom scales to actual page width.
+    const tw = encodedAttrs.tableWidth;
+    const hasUsableWidth = tw && tw.type !== 'auto' && (tw.width > 0 || tw.value > 0);
+    if (!hasUsableWidth) {
+      encodedAttrs.tableWidth = { value: 5000, type: 'pct' };
     }
   }
 
@@ -183,8 +210,6 @@ const encode = (params, encodedAttrs) => {
         row,
         table: node,
         tableProperties: encodedAttrs.tableProperties,
-        tableBorders: encodedAttrs.borders,
-        tableLook,
         columnWidths,
         activeRowSpans: activeRowSpans.slice(),
         rowIndex,
@@ -324,7 +349,7 @@ export function _processTableBorders(rawBorders) {
 }
 
 /**
- * @typedef {{borders?: {}, name?: *, justification?: *, fonts?: {}, fontSize?: *, rowBorders?: {}, cellMargins?: {}}} TableStyles
+ * @typedef {{borders?: {}, name?: *, justification?: *, fonts?: {}, fontSize?: *, rowBorders?: {}, cellMargins?: {}, tableCellSpacing?: {value?: number, type?: string}}} TableStyles
  */
 
 /**
@@ -398,6 +423,10 @@ export function _getReferencedTableStyles(tableStyleReference, params) {
         }
       });
       if (Object.keys(cellMargins).length) stylesToReturn.cellMargins = cellMargins;
+
+      if (tableProperties.tableCellSpacing) {
+        stylesToReturn.tableCellSpacing = tableProperties.tableCellSpacing;
+      }
     }
   }
 
@@ -429,7 +458,7 @@ export const config = {
   type: NodeTranslator.translatorTypes.NODE,
   encode,
   decode,
-  attributes: [],
+  attributes: validXmlAttributes,
 };
 
 /**

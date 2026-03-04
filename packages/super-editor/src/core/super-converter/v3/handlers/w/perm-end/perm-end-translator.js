@@ -1,22 +1,25 @@
 // @ts-check
 import { NodeTranslator } from '@translator';
+import { isInlineContext } from '@core/super-converter/utils/inlineContext.js';
 import validXmlAttributes from './attributes/index.js';
 
 /** @type {import('@translator').XmlNodeName} */
 const XML_NODE_NAME = 'w:permEnd';
 
 /** @type {import('@translator').SuperDocNodeOrKeyName} */
-const SD_NODE_NAME = 'permEnd';
+const SD_NODE_NAME = ['permEnd', 'permEndBlock'];
 
 /**
- * Encode a <w:permEnd> node as a SuperDoc permEnd node.
+ * Encode a <w:permEnd> node as a SuperDoc permEnd/permEndBlock node.
  * @param {import('@translator').SCEncoderConfig} params
  * @param {import('@translator').EncodedAttributes} [encodedAttrs]
  * @returns {import('@translator').SCEncoderResult}
  */
 const encode = (params, encodedAttrs = {}) => {
+  const node = params?.nodes?.[0];
+  const isInline = isInlineContext(params?.path || [], node?.name);
   return {
-    type: 'permEnd',
+    type: isInline ? 'permEnd' : 'permEndBlock',
     attrs: encodedAttrs,
   };
 };

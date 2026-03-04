@@ -1,4 +1,5 @@
 <script setup>
+import { ref } from 'vue';
 import { storeToRefs } from 'pinia';
 import { SuperInput } from '@superdoc/super-editor';
 import { useSuperdocStore } from '@stores/superdoc-store';
@@ -32,8 +33,15 @@ const props = defineProps({
 const superdocStore = useSuperdocStore();
 const commentsStore = useCommentsStore();
 const { currentCommentText } = storeToRefs(commentsStore);
+const inputRef = ref(null);
 
 const handleFocusChange = (focused) => emit('focus', focused);
+
+const focus = () => {
+  inputRef.value?.focus?.();
+};
+
+defineExpose({ focus });
 </script>
 
 <template>
@@ -42,6 +50,7 @@ const handleFocusChange = (focused) => emit('focus', focused);
 
     <div class="comment-entry" :class="{ 'sd-input-active': isFocused }">
       <SuperInput
+        ref="inputRef"
         class="superdoc-field"
         placeholder="Add a comment"
         v-model="currentCommentText"

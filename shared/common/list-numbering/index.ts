@@ -34,7 +34,7 @@ const listIndexMap: Record<string, NumberingHandler> = {
 
 export interface GenerateOrderedListIndexOptions {
   listLevel: number[];
-  lvlText: string;
+  lvlText: string | null | undefined;
   listNumberingType?: string;
   customFormat?: string;
 }
@@ -45,11 +45,13 @@ export const generateOrderedListIndex = ({
   listNumberingType,
   customFormat,
 }: GenerateOrderedListIndexOptions): string | null => {
+  if (typeof lvlText !== 'string') return null;
   const handler = listIndexMap[listNumberingType as string];
   return handler ? handler(listLevel, lvlText, customFormat) : null;
 };
 
 const createNumbering = (values: string[], lvlText: string): string => {
+  if (typeof lvlText !== 'string') return '';
   return values.reduce<string>((acc, value, index) => {
     return Number(value) > 9
       ? acc.replace(/^0/, '').replace(`%${index + 1}`, value)
@@ -75,6 +77,9 @@ const decimalZeroFormatter: NumberFormatter = (value, idx) => {
 };
 
 const generateFromCustom = (path: number[], lvlText: string, customFormat: string): string => {
+  if (typeof customFormat !== 'string') {
+    return generateNumbering(path, lvlText, numberToStringFormatter);
+  }
   if (customFormat.match(/(?:[0]+\d,\s){3}\.{3}/) == null) {
     return generateNumbering(path, lvlText, numberToStringFormatter);
   }

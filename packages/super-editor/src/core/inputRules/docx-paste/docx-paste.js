@@ -1,5 +1,6 @@
 import { DOMParser, Fragment } from 'prosemirror-model';
 import { cleanHtmlUnnecessaryTags, convertEmToPt, handleHtmlPaste } from '../../InputRule.js';
+import { normalizePastedLinks } from '../paste-link-normalizer.js';
 import { ListHelpers } from '@helpers/list-numbering-helpers.js';
 import {
   extractListLevelStyles,
@@ -31,6 +32,7 @@ export const handleDocxPaste = (html, editor, view) => {
 
   const tempDiv = document.createElement('div');
   tempDiv.innerHTML = cleanedHtml;
+  tempDiv.querySelectorAll('[data-sd-block-id]').forEach((node) => node.removeAttribute('data-sd-block-id'));
 
   const data = tempDiv.querySelectorAll('p, li, ' + [1, 2, 3, 4, 5, 6, 7, 8, 9].map((n) => `h${n}`).join(', '));
 
@@ -187,7 +189,9 @@ export const handleDocxPaste = (html, editor, view) => {
   const { dispatch } = editor.view;
   if (!dispatch) return false;
 
-  dispatch(view.state.tr.replaceSelectionWith(doc, true));
+  const tr = view.state.tr.replaceSelectionWith(doc, true);
+  normalizePastedLinks(tr, editor);
+  dispatch(tr);
   return true;
 };
 

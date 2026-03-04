@@ -1,12 +1,10 @@
-import {
-  pixelsToTwips,
-  inchesToTwips,
-  pixelsToEightPoints,
-  twipsToPixels,
-  eighthPointsToPixels,
-} from '@converter/helpers';
+import { pixelsToTwips, inchesToTwips, twipsToPixels } from '@converter/helpers';
 import { translateChildNodes } from '@converter/v2/exporter/helpers/index';
 import { translator as tcPrTranslator } from '../../tcPr';
+import {
+  isLegacySchemaDefaultBorders,
+  convertBordersToOoxmlFormat,
+} from '../../../../../../../extensions/table-cell/helpers/legacyBorderMigration.js';
 
 /**
  * Main translation function for a table cell.
@@ -34,27 +32,40 @@ export function translateTableCell(params) {
  * @returns {import('@converter/exporter').XmlReadyNode}
  */
 export function generateTableCellProperties(node) {
-  const tableCellProperties = { ...(node.attrs?.tableCellProperties || {}) };
+  let tableCellProperties = { ...(node.attrs?.tableCellProperties || {}) };
 
   const { attrs } = node;
 
   // Width
-  const { colwidth = [], cellWidthType = 'dxa', widthUnit } = attrs;
-  const colwidthSum = colwidth.reduce((acc, curr) => acc + curr, 0);
-  const propertiesWidthPixels = twipsToPixels(tableCellProperties.cellWidth?.value);
-  if (propertiesWidthPixels !== colwidthSum) {
-    // If the value has changed, update it
-    tableCellProperties['cellWidth'] = {
-      value: widthUnit === 'px' ? pixelsToTwips(colwidthSum) : inchesToTwips(colwidthSum),
-      type: cellWidthType,
-    };
+  const { colwidth: rawColwidth, widthUnit = 'px' } = attrs;
+  const resolvedWidthType =
+    attrs.cellWidthType ??
+    (attrs.widthType !== 'auto' ? attrs.widthType : undefined) ??
+    tableCellProperties.cellWidth?.type ??
+    'dxa';
+
+  // Filter to finite numbers to guard against NaN/Infinity/non-numeric entries
+  const colwidth = Array.isArray(rawColwidth) ? rawColwidth.filter((v) => Number.isFinite(v)) : [];
+
+  // Skip rewrite when:
+  // - colwidth is empty (no data to compute from — preserve original cellWidth)
+  // - resolvedWidthType is 'pct' (colwidth is in pixels but type expects fiftieths-of-percent)
+  if (colwidth.length > 0 && resolvedWidthType !== 'pct') {
+    const colwidthSum = colwidth.reduce((acc, curr) => acc + curr, 0);
+    const propertiesWidthPixels = twipsToPixels(tableCellProperties.cellWidth?.value);
+    if (propertiesWidthPixels !== colwidthSum) {
+      tableCellProperties['cellWidth'] = {
+        value: widthUnit === 'px' ? pixelsToTwips(colwidthSum) : inchesToTwips(colwidthSum),
+        type: resolvedWidthType,
+      };
+    }
   }
 
   // Colspan
   const { colspan } = attrs;
   if (colspan > 1 && tableCellProperties.gridSpan !== colspan) {
     tableCellProperties['gridSpan'] = colspan;
-  } else if (!colspan || tableCellProperties?.gridSpan === 1) {
+  } else if (!colspan || colspan <= 1) {
     delete tableCellProperties.gridSpan;
   }
 
@@ -91,44 +102,23 @@ export function generateTableCellProperties(node) {
   }
 
   const { rowspan } = attrs;
-  const hasExistingVMerge = tableCellProperties.vMerge != null;
   if (rowspan && rowspan > 1) {
     tableCellProperties['vMerge'] = 'restart';
   } else if (attrs.continueMerge) {
     tableCellProperties['vMerge'] = 'continue';
-  } else if (!hasExistingVMerge) {
+  } else {
     delete tableCellProperties.vMerge;
   }
 
-  const { borders = {} } = attrs;
-  if (!!borders && Object.keys(borders).length) {
-    ['top', 'bottom', 'left', 'right'].forEach((side) => {
-      if (borders[side]) {
-        let currentPropertyValue = tableCellProperties.borders?.[side];
-        let currentPropertySizePixels = eighthPointsToPixels(currentPropertyValue?.size);
-        let color = borders[side].color;
-        if (borders[side].color && color === '#000000') {
-          color = 'auto';
-        }
-        if (
-          currentPropertySizePixels !== borders[side].size ||
-          currentPropertyValue?.color !== color ||
-          borders[side].val !== currentPropertyValue?.val
-        ) {
-          if (!tableCellProperties.borders) tableCellProperties['borders'] = {};
-          tableCellProperties.borders[side] = {
-            size: pixelsToEightPoints(borders[side].size || 0),
-            color: color,
-            space: borders[side].space || 0,
-            val: borders[side].val || 'single',
-          };
-        }
-      } else if (tableCellProperties.borders?.[side]) {
-        delete tableCellProperties.borders[side];
-      }
-    });
-  } else if (tableCellProperties?.borders) {
-    delete tableCellProperties.borders;
+  // Legacy fallback: if tableCellProperties.borders is absent but attrs.borders
+  // has non-default values, migrate them on the fly for export (read-only, no node mutation).
+  if (!tableCellProperties?.borders && attrs.borders != null) {
+    if (!isLegacySchemaDefaultBorders(attrs.borders)) {
+      tableCellProperties = {
+        ...(tableCellProperties ?? {}),
+        borders: convertBordersToOoxmlFormat(attrs.borders),
+      };
+    }
   }
 
   const result = tcPrTranslator.decode({ node: { ...node, attrs: { ...node.attrs, tableCellProperties } } });

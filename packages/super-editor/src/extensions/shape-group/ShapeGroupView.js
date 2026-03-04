@@ -238,7 +238,8 @@ export class ShapeGroupView {
     }
 
     // Generate the shape based on its kind
-    const shapeKind = attrs.kind || 'rect';
+    const shapeKind = attrs.kind;
+    const customGeometry = attrs.customGeometry;
     // Preserve null (from <a:noFill/>), but provide default for undefined
     const fillColor = attrs.fillColor === null ? null : (attrs.fillColor ?? '#5b9bd5');
     // Use null-coalescing to preserve null (from <a:noFill/>), but provide default for undefined
@@ -295,9 +296,84 @@ export class ShapeGroupView {
       return g;
     }
 
+    // Handle custom geometry paths (a:custGeom) — render SVG paths directly
+    if (customGeometry?.paths?.length) {
+      const fillStr = fillValue === null ? 'none' : typeof fillValue === 'string' ? fillValue : 'none';
+      const strokeStr = strokeColor === null ? 'none' : strokeColor;
+      const strokeW = strokeColor === null ? 0 : strokeWidth;
+
+      const firstPath = customGeometry.paths[0];
+      const viewW = firstPath.w || width;
+      const viewH = firstPath.h || height;
+
+      // Degenerate: zero-dimension viewBox is invalid SVG — skip custom geometry rendering.
+      if (viewW > 0 && viewH > 0) {
+        // When the SVG viewBox maps to a non-uniform aspect ratio (common with group transforms),
+        // thin fill borders can become sub-pixel on one axis. Add a hairline stroke matching the
+        // fill color with vector-effect="non-scaling-stroke" so edges remain at least 0.5px visible.
+        const needsEdgeStroke = fillStr !== 'none' && strokeStr === 'none';
+
+        // Create a nested SVG with viewBox for proper coordinate mapping
+        const innerSvg = document.createElementNS('http://www.w3.org/2000/svg', 'svg');
+        innerSvg.setAttribute('x', '0');
+        innerSvg.setAttribute('y', '0');
+        innerSvg.setAttribute('width', width.toString());
+        innerSvg.setAttribute('height', height.toString());
+        innerSvg.setAttribute('viewBox', `0 0 ${viewW} ${viewH}`);
+        innerSvg.setAttribute('preserveAspectRatio', 'none');
+
+        for (const pathData of customGeometry.paths) {
+          const pathEl = document.createElementNS('http://www.w3.org/2000/svg', 'path');
+          pathEl.setAttribute('d', pathData.d);
+          pathEl.setAttribute('fill', fillStr);
+          pathEl.setAttribute('fill-rule', 'evenodd');
+
+          if (strokeStr !== 'none') {
+            pathEl.setAttribute('stroke', strokeStr);
+            pathEl.setAttribute('stroke-width', strokeW.toString());
+          } else if (needsEdgeStroke) {
+            pathEl.setAttribute('stroke', fillStr);
+            pathEl.setAttribute('stroke-width', '0.5');
+            pathEl.setAttribute('vector-effect', 'non-scaling-stroke');
+          } else {
+            pathEl.setAttribute('stroke', 'none');
+            pathEl.setAttribute('stroke-width', '0');
+          }
+
+          // Scale if this path has a different coordinate space
+          const pathW = pathData.w || viewW;
+          const pathH = pathData.h || viewH;
+          if (pathW !== viewW || pathH !== viewH) {
+            const scaleX = viewW / pathW;
+            const scaleY = viewH / pathH;
+            pathEl.setAttribute('transform', `scale(${scaleX}, ${scaleY})`);
+          }
+          innerSvg.appendChild(pathEl);
+        }
+        g.appendChild(innerSvg);
+      }
+
+      // Add text content if present
+      if (attrs.textContent && attrs.textContent.parts) {
+        const pageNumber = this.editor?.options?.currentPageNumber;
+        const totalPages = this.editor?.options?.totalPageCount;
+        const textGroup = this.createTextElement(attrs.textContent, attrs.textAlign, width, height, {
+          textVerticalAlign: attrs.textVerticalAlign,
+          textInsets: attrs.textInsets,
+          pageNumber,
+          totalPages,
+        });
+        if (textGroup) {
+          g.appendChild(textGroup);
+        }
+      }
+      return g;
+    }
+
+    // Fall through to preset shape rendering (default to 'rect' if no kind)
     try {
       const svgContent = getPresetShapeSvg({
-        preset: shapeKind,
+        preset: shapeKind || 'rect',
         styleOverrides: {
           fill: fillValue || 'none',
           stroke: strokeColor === null ? 'none' : strokeColor,

@@ -3,6 +3,11 @@ import { DOMParser } from 'prosemirror-model';
 import { stripHtmlStyles } from './htmlSanitizer.js';
 import { htmlHandler } from '../InputRule.js';
 import { wrapTextsInRuns } from '../inputRules/docx-paste/docx-paste.js';
+import { detectUnsupportedContent } from './catchAllSchema.js';
+
+/**
+ * @typedef {import('./catchAllSchema.js').UnsupportedContentItem} UnsupportedContentItem
+ */
 
 /**
  * Create a document from HTML content
@@ -11,6 +16,8 @@ import { wrapTextsInRuns } from '../inputRules/docx-paste/docx-paste.js';
  * @param {Object} [options={}] - Import options
  * @param {Document | null} [options.document] - Optional Document instance for Node environments (e.g. JSDOM)
  * @param {boolean} [options.isImport] - Whether this is an import operation
+ * @param {((items: UnsupportedContentItem[]) => void) | null} [options.onUnsupportedContent] - Callback invoked with unsupported items
+ * @param {boolean} [options.warnOnUnsupportedContent] - When true and no callback is provided, emits console.warn
  * @returns {Object} Document node
  */
 export function createDocFromHTML(content, editor, options = {}) {
@@ -36,6 +43,21 @@ export function createDocFromHTML(content, editor, options = {}) {
     parsedContent = tempDiv;
   } else {
     parsedContent = content;
+  }
+
+  // Detect unsupported content when opted in (requires an Element for DOM scanning)
+  if (
+    (options.onUnsupportedContent || options.warnOnUnsupportedContent) &&
+    parsedContent instanceof globalThis.Element
+  ) {
+    const unsupported = detectUnsupportedContent(parsedContent, editor.schema);
+    if (unsupported.length > 0) {
+      if (options.onUnsupportedContent) {
+        options.onUnsupportedContent(unsupported);
+      } else {
+        console.warn('[super-editor] Unsupported HTML content dropped during import:', unsupported);
+      }
+    }
   }
 
   let doc = DOMParser.fromSchema(editor.schema).parse(parsedContent);

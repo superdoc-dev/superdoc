@@ -1,4 +1,5 @@
 import type { EditorState, Transaction, Plugin } from 'prosemirror-state';
+import { Transform } from 'prosemirror-transform';
 import type { EditorView as PmEditorView } from 'prosemirror-view';
 import type { Node as PmNode, Schema } from 'prosemirror-model';
 import type { EditorOptions, User, FieldValue, DocxFileEntry } from './types/EditorConfig.js';
@@ -33,7 +34,7 @@ import {
 import { AnnotatorHelpers } from '@helpers/annotator.js';
 import { prepareCommentsForExport, prepareCommentsForImport } from '@extensions/comment/comments-helpers.js';
 import DocxZipper from '@core/DocxZipper.js';
-import { generateCollaborationData } from '@extensions/collaboration/collaboration.js';
+import { generateCollaborationData, cancelDebouncedDocxUpdate } from '@extensions/collaboration/collaboration.js';
 import { useHighContrastMode } from '../composables/use-high-contrast-mode.js';
 import { updateYdocDocxData } from '@extensions/collaboration/collaboration-helpers.js';
 import { setImageNodeSelection } from './helpers/setImageNodeSelection.js';
@@ -46,14 +47,19 @@ import { createLinkedChildEditor } from '@core/child-editor/index.js';
 import { unflattenListsInHtml } from './inputRules/html/html-helpers.js';
 import { SuperValidator } from '@core/super-validator/index.js';
 import { createDocFromMarkdown, createDocFromHTML } from '@core/helpers/index.js';
+import { COMMENT_FILE_BASENAMES } from '@core/super-converter/constants.js';
 import { isHeadless } from '../utils/headless-helpers.js';
 import { canUseDOM } from '../utils/canUseDOM.js';
 import { buildSchemaSummary } from './schema-summary.js';
-import { PresentationEditor } from './presentation-editor/index.js';
+import type { PresentationEditor } from './presentation-editor/index.js';
 import type { EditorRenderer } from './renderers/EditorRenderer.js';
 import { ProseMirrorRenderer } from './renderers/ProseMirrorRenderer.js';
 import { BLANK_DOCX_DATA_URI } from './blank-docx.js';
 import { getArrayBufferFromUrl } from '@core/super-converter/helpers.js';
+import { Telemetry, COMMUNITY_LICENSE_KEY } from '@superdoc/common';
+import type { DocumentApi } from '@superdoc/document-api';
+import { createDocumentApi } from '@superdoc/document-api';
+import { getDocumentApiAdapters } from '../document-api-adapters/index.js';
 
 declare const __APP_VERSION__: string;
 declare const version: string | undefined;
@@ -121,6 +127,12 @@ export interface OpenOptions {
 
   /** Font data from docx */
   fonts?: Record<string, unknown>;
+
+  /**
+   * Optional override for "new file" semantics on this open call.
+   * When omitted, Editor infers the value from the source type.
+   */
+  isNewFile?: boolean;
 }
 
 /**
@@ -138,6 +150,9 @@ export interface SaveOptions {
 
   /** Highlight color for fields */
   fieldsHighlightColor?: string | null;
+
+  /** ZIP compression method for docx export. Defaults to 'DEFLATE'. Use 'STORE' for faster exports without compression. */
+  compression?: 'DEFLATE' | 'STORE';
 }
 
 /**
@@ -199,6 +214,11 @@ export class Editor extends EventEmitter<EditorEventMap> {
   #editorLifecycleState: EditorLifecycleState = 'initialized';
 
   /**
+   * Document API instance (lazy-initialized).
+   */
+  #documentApi: DocumentApi | null = null;
+
+  /**
    * Source path of the currently opened document.
    * Set when opening from a file path, null when opening from Blob/Buffer or blank.
    */
@@ -209,6 +229,19 @@ export class Editor extends EventEmitter<EditorEventMap> {
    * Set by PresentationEditor constructor to enable renderer-neutral helpers.
    */
   presentationEditor: PresentationEditor | null = null;
+
+  /**
+   * Returns the current total number of pages when pagination is active.
+   * Delegates to the PresentationEditor's layout state.
+   * Returns `undefined` before the first layout completes or when pagination is off.
+   */
+  get currentTotalPages(): number | undefined {
+    if (this.presentationEditor) {
+      const pages = this.presentationEditor.getPages();
+      return pages.length > 0 ? pages.length : undefined;
+    }
+    return undefined;
+  }
 
   /**
    * Whether the editor currently has focus
@@ -239,6 +272,16 @@ export class Editor extends EventEmitter<EditorEventMap> {
    * High contrast mode setter
    */
   setHighContrastMode?: (enabled: boolean) => void;
+
+  /**
+   * Telemetry instance for tracking document opens
+   */
+  #telemetry: Telemetry | null = null;
+
+  /**
+   * Guard flag to prevent double-tracking document open
+   */
+  #documentOpenTracked = false;
 
   options: EditorOptions = {
     element: null,
@@ -324,6 +367,12 @@ export class Editor extends EventEmitter<EditorEventMap> {
 
     // header/footer editors may have parent(main) editor set
     parentEditor: null,
+
+    // License key (resolved in #initTelemetry; undefined means "not explicitly set")
+    licenseKey: undefined,
+
+    // Telemetry configuration
+    telemetry: { enabled: true },
   };
 
   /**
@@ -390,6 +439,7 @@ export class Editor extends EventEmitter<EditorEventMap> {
     this.#checkHeadless(resolvedOptions);
     this.setOptions(resolvedOptions);
     this.#renderer = resolvedOptions.renderer ?? (domAvailable ? new ProseMirrorRenderer() : null);
+    this.#initTelemetry();
 
     const { setHighContrastMode } = useHighContrastMode();
     this.setHighContrastMode = setHighContrastMode;
@@ -451,6 +501,65 @@ export class Editor extends EventEmitter<EditorEventMap> {
       if (this.isDestroyed) return;
       this.emit('create', { editor: this });
     }, 0);
+
+    // Generate metadata and track telemetry (non-blocking)
+    this.#trackDocumentOpen();
+  }
+
+  /**
+   * Initialize telemetry if configured
+   */
+  #initTelemetry(): void {
+    const { telemetry: telemetryConfig, licenseKey } = this.options;
+
+    // Skip in test environments and when telemetry is not enabled
+    if (typeof process !== 'undefined' && (process.env?.VITEST || process.env?.NODE_ENV === 'test')) {
+      return;
+    }
+
+    // Skip for sub-editors that are not primary document editors
+    if (this.options.mode === 'text' || this.options.isHeaderOrFooter) {
+      return;
+    }
+
+    if (!telemetryConfig?.enabled) {
+      return;
+    }
+
+    // Root-level licenseKey has a priority; fall back to deprecated telemetry.licenseKey
+    const resolvedLicenseKey =
+      licenseKey !== undefined ? licenseKey : (telemetryConfig.licenseKey ?? COMMUNITY_LICENSE_KEY);
+
+    try {
+      this.#telemetry = new Telemetry({
+        enabled: true,
+        endpoint: telemetryConfig.endpoint,
+        licenseKey: resolvedLicenseKey,
+        metadata: telemetryConfig.metadata,
+      });
+      console.debug('[super-editor] Telemetry: enabled');
+    } catch {
+      // Fail silently - telemetry should never break the app
+    }
+  }
+
+  /**
+   * Ensure document metadata is generated and track telemetry if enabled
+   */
+  #trackDocumentOpen(): void {
+    // Always generate metadata (GUID, timestamp) regardless of telemetry
+    this.getDocumentIdentifier().then((documentId) => {
+      // Only track if telemetry enabled and not already tracked
+      if (!this.#telemetry || this.#documentOpenTracked) return;
+
+      try {
+        const documentCreatedAt = this.converter?.getDocumentCreatedTimestamp?.() || null;
+        this.#telemetry.trackDocumentOpen(documentId, documentCreatedAt);
+        this.#documentOpenTracked = true;
+      } catch {
+        // Fail silently - telemetry should never break the app
+      }
+    });
   }
 
   /**
@@ -612,6 +721,7 @@ export class Editor extends EventEmitter<EditorEventMap> {
     try {
       // Merge options with defaults
       const resolvedMode = options?.mode ?? this.options.mode ?? 'docx';
+      const explicitIsNewFile = options?.isNewFile;
       const resolvedOptions = {
         ...this.options,
         mode: resolvedMode,
@@ -636,6 +746,7 @@ export class Editor extends EventEmitter<EditorEventMap> {
           resolvedOptions.mediaFiles = mediaFiles;
           resolvedOptions.fonts = fonts;
           resolvedOptions.fileSource = buffer;
+          resolvedOptions.isNewFile = explicitIsNewFile ?? false;
           this.#sourcePath = source;
         } else {
           // Browser: fetch the file
@@ -650,6 +761,7 @@ export class Editor extends EventEmitter<EditorEventMap> {
           resolvedOptions.mediaFiles = mediaFiles;
           resolvedOptions.fonts = fonts;
           resolvedOptions.fileSource = blob;
+          resolvedOptions.isNewFile = explicitIsNewFile ?? false;
           // In browser, path is just a suggested filename
           this.#sourcePath = source.split('/').pop() || null;
         }
@@ -670,6 +782,7 @@ export class Editor extends EventEmitter<EditorEventMap> {
           resolvedOptions.mediaFiles = mediaFiles;
           resolvedOptions.fonts = fonts;
           resolvedOptions.fileSource = source as File | Blob | Buffer;
+          resolvedOptions.isNewFile = explicitIsNewFile ?? false;
           this.#sourcePath = null;
         } else {
           // Unknown object type - try to load it anyway
@@ -678,6 +791,7 @@ export class Editor extends EventEmitter<EditorEventMap> {
           resolvedOptions.mediaFiles = mediaFiles;
           resolvedOptions.fonts = fonts;
           resolvedOptions.fileSource = source as File | Blob | Buffer;
+          resolvedOptions.isNewFile = explicitIsNewFile ?? false;
           this.#sourcePath = null;
         }
       } else {
@@ -706,7 +820,7 @@ export class Editor extends EventEmitter<EditorEventMap> {
           resolvedOptions.mediaFiles = mediaFiles;
           resolvedOptions.fonts = fonts;
           resolvedOptions.fileSource = fileSource;
-          resolvedOptions.isNewFile = true;
+          resolvedOptions.isNewFile = explicitIsNewFile ?? true;
           this.#sourcePath = null;
         } else {
           // Use pre-parsed content from options if provided, otherwise create minimal structure
@@ -714,7 +828,8 @@ export class Editor extends EventEmitter<EditorEventMap> {
           resolvedOptions.mediaFiles = options?.mediaFiles ?? {};
           resolvedOptions.fonts = options?.fonts ?? {};
           resolvedOptions.fileSource = null;
-          resolvedOptions.isNewFile = !options?.content; // Only mark as new if no content provided
+          // Pre-parsed content means "existing document", otherwise this is a new blank file.
+          resolvedOptions.isNewFile = explicitIsNewFile ?? !options?.content;
           this.#sourcePath = null;
         }
       }
@@ -989,6 +1104,9 @@ export class Editor extends EventEmitter<EditorEventMap> {
       if (this.isDestroyed) return;
       this.emit('create', { editor: this });
     }, 0);
+
+    // Generate metadata and track telemetry (non-blocking)
+    this.#trackDocumentOpen();
   }
 
   unmount(): void {
@@ -1137,6 +1255,31 @@ export class Editor extends EventEmitter<EditorEventMap> {
   }
 
   /**
+   * Programmatic document API for querying and mutating the document.
+   *
+   * Lazily creates a {@link DocumentApi} backed by the editor's adapter graph.
+   * The instance is cached for the current document session and
+   * invalidated on {@link close} so a fresh adapter set is created on reopen.
+   *
+   * @throws {InvalidStateError} If the editor is not in `ready` or `saving` state.
+   *
+   * @example
+   * ```ts
+   * const result = editor.doc.find({ nodeType: 'paragraph' });
+   *
+   * // Fetch node info for the first match
+   * const info = editor.doc.getNode(result.matches[0]);
+   * ```
+   */
+  get doc(): DocumentApi {
+    this.#assertState('ready', 'saving');
+    if (!this.#documentApi) {
+      this.#documentApi = createDocumentApi(getDocumentApiAdapters(this));
+    }
+    return this.#documentApi;
+  }
+
+  /**
    * Get extension helpers.
    */
   get helpers(): EditorHelpers {
@@ -1246,25 +1389,17 @@ export class Editor extends EventEmitter<EditorEventMap> {
   }
 
   /**
-   * Get viewport coordinates for a document position. Falls back to the PresentationEditor
-   * when running without a ProseMirror view (layout mode).
+   * Get viewport coordinates for a document position.
+   * In presentation mode the ProseMirror view is hidden off-screen, so we
+   * delegate to PresentationEditor which uses visual layout coordinates.
    */
   coordsAtPos(pos: number): ReturnType<PmEditorView['coordsAtPos']> | null {
-    if (this.view) {
-      return this.view.coordsAtPos(pos);
+    if (this.presentationEditor) {
+      return this.presentationEditor.coordsAtPos(pos);
     }
 
-    const layoutRects = this.presentationEditor?.getRangeRects?.(pos, pos);
-    if (Array.isArray(layoutRects) && layoutRects.length > 0) {
-      const rect = layoutRects[0];
-      return {
-        top: rect.top,
-        bottom: rect.bottom,
-        left: rect.left,
-        right: rect.right,
-        width: rect.width,
-        height: rect.height,
-      } as ReturnType<PmEditorView['coordsAtPos']>;
+    if (this.view) {
+      return this.view.coordsAtPos(pos);
     }
 
     return null;
@@ -1550,6 +1685,7 @@ export class Editor extends EventEmitter<EditorEventMap> {
         documentId: this.options.documentId,
         mockWindow: this.options.mockWindow ?? null,
         mockDocument: this.options.mockDocument ?? null,
+        isNewFile: this.options.isNewFile ?? false,
       });
     }
   }
@@ -1778,11 +1914,21 @@ export class Editor extends EventEmitter<EditorEventMap> {
 
           // Check for markdown BEFORE html (since markdown gets converted to HTML)
           if (this.options.markdown) {
-            doc = createDocFromMarkdown(this.options.markdown, this, { isImport: true, document: domDocument });
+            doc = createDocFromMarkdown(this.options.markdown, this, {
+              isImport: true,
+              document: domDocument,
+              onUnsupportedContent: this.options.onUnsupportedContent,
+              warnOnUnsupportedContent: this.options.warnOnUnsupportedContent,
+            });
           }
           // If we have a new doc, and have html data, we initialize from html
           else if (this.options.html)
-            doc = createDocFromHTML(this.options.html, this, { isImport: true, document: domDocument });
+            doc = createDocFromHTML(this.options.html, this, {
+              isImport: true,
+              document: domDocument,
+              onUnsupportedContent: this.options.onUnsupportedContent,
+              warnOnUnsupportedContent: this.options.warnOnUnsupportedContent,
+            });
           else if (this.options.jsonOverride) doc = this.schema.nodeFromJSON(this.options.jsonOverride);
 
           if (fragment) doc = yXmlFragmentToProseMirrorRootNode(fragment, this.schema);
@@ -1792,7 +1938,12 @@ export class Editor extends EventEmitter<EditorEventMap> {
       // If we are in HTML mode, we initialize from either content or html (or blank)
       else if (mode === 'text' || mode === 'html') {
         if (loadFromSchema && hasJsonContent(content)) doc = this.schema.nodeFromJSON(content);
-        else if (typeof content === 'string') doc = createDocFromHTML(content, this, { document: domDocument });
+        else if (typeof content === 'string')
+          doc = createDocFromHTML(content, this, {
+            document: domDocument,
+            onUnsupportedContent: this.options.onUnsupportedContent,
+            warnOnUnsupportedContent: this.options.warnOnUnsupportedContent,
+          });
         else doc = this.schema.topNodeType.createAndFill()!;
       }
     } catch (err) {
@@ -2006,28 +2157,36 @@ export class Editor extends EventEmitter<EditorEventMap> {
    */
   #dispatchTransaction(transaction: Transaction): void {
     if (this.isDestroyed) return;
-    const start = Date.now();
+    const perf = this.view?.dom?.ownerDocument?.defaultView?.performance ?? globalThis.performance;
+    const perfNow = () => (perf?.now ? perf.now() : Date.now());
+    const perfStart = perfNow();
 
     const prevState = this.state;
     let nextState: EditorState;
     let transactionToApply = transaction;
+    const forceTrackChanges = transactionToApply.getMeta('forceTrackChanges') === true;
     try {
       const trackChangesState = TrackChangesBasePluginKey.getState(prevState);
       const isTrackChangesActive = trackChangesState?.isTrackChangesActive ?? false;
       const skipTrackChanges = transactionToApply.getMeta('skipTrackChanges') === true;
 
-      transactionToApply =
-        isTrackChangesActive && !skipTrackChanges
-          ? trackedTransaction({
-              tr: transactionToApply,
-              state: prevState,
-              user: this.options.user!,
-            })
-          : transactionToApply;
+      const shouldTrack = (isTrackChangesActive || forceTrackChanges) && !skipTrackChanges;
+      if (shouldTrack && forceTrackChanges && !this.options.user) {
+        throw new Error('forceTrackChanges requires a user to be configured on the editor instance.');
+      }
+
+      transactionToApply = shouldTrack
+        ? trackedTransaction({
+            tr: transactionToApply,
+            state: prevState,
+            user: this.options.user!,
+          })
+        : transactionToApply;
 
       const { state: appliedState } = prevState.applyTransaction(transactionToApply);
       nextState = appliedState;
     } catch (error) {
+      if (forceTrackChanges) throw error;
       // just in case
       nextState = prevState.apply(transactionToApply);
       console.log(error);
@@ -2040,11 +2199,12 @@ export class Editor extends EventEmitter<EditorEventMap> {
       this.view.updateState(nextState);
     }
 
-    const end = Date.now();
+    const end = perfNow();
+
     this.emit('transaction', {
       editor: this,
       transaction: transactionToApply,
-      duration: end - start,
+      duration: end - perfStart,
     });
 
     if (selectionHasChanged) {
@@ -2072,23 +2232,21 @@ export class Editor extends EventEmitter<EditorEventMap> {
       });
     }
 
-    if (!transactionToApply.docChanged) {
-      return;
-    }
-
-    // Track document modifications and promote to GUID if needed
-    if (transaction.docChanged && this.converter) {
-      if (!this.converter.documentGuid) {
-        this.converter.promoteToGuid();
-        console.debug('Document modified - assigned GUID:', this.converter.documentGuid);
+    if (transactionToApply.docChanged) {
+      // Track document modifications and promote to GUID if needed
+      if (transaction.docChanged && this.converter) {
+        if (!this.converter.documentGuid) {
+          this.converter.promoteToGuid();
+          console.debug('Document modified - assigned GUID:', this.converter.documentGuid);
+        }
+        this.converter.documentModified = true;
       }
-      this.converter.documentModified = true;
-    }
 
-    this.emit('update', {
-      editor: this,
-      transaction: transactionToApply,
-    });
+      this.emit('update', {
+        editor: this,
+        transaction: transactionToApply,
+      });
+    }
   }
 
   /**
@@ -2115,7 +2273,8 @@ export class Editor extends EventEmitter<EditorEventMap> {
   }
 
   /**
-   * Get document identifier (async - may generate hash)
+   * Get document unique identifier (async)
+   * Returns a stable identifier for the document (identifierHash or contentHash)
    */
   async getDocumentIdentifier(): Promise<string | null> {
     return (await this.converter?.getDocumentIdentifier()) || null;
@@ -2417,17 +2576,15 @@ export class Editor extends EventEmitter<EditorEventMap> {
    * @returns The updated document in JSON
    */
   #prepareDocumentForExport(comments: Comment[] = []): ProseMirrorJSON {
-    const newState = PmEditorState.create({
-      schema: this.schema,
-      doc: this.state.doc,
-      plugins: this.state.plugins,
-    });
-
-    const { tr, doc } = newState;
-
+    // Use Transform directly instead of creating a throwaway EditorState.
+    // EditorState.create() calls Plugin.init() for every plugin, and
+    // yUndoPlugin.init() registers persistent observers on the shared ydoc
+    // that are never cleaned up — causing an observer leak that degrades
+    // collaboration performance over time.
+    const doc = this.state.doc;
+    const tr = new Transform(doc);
     prepareCommentsForExport(doc, tr, this.schema, comments);
-    const updatedState = newState.apply(tr);
-    return updatedState.doc.toJSON();
+    return tr.doc.toJSON();
   }
 
   getUpdatedJson(): ProseMirrorJSON {
@@ -2445,6 +2602,7 @@ export class Editor extends EventEmitter<EditorEventMap> {
     comments,
     getUpdatedDocs = false,
     fieldsHighlightColor = null,
+    compression,
   }: {
     isFinalDoc?: boolean;
     commentsType?: string;
@@ -2453,16 +2611,20 @@ export class Editor extends EventEmitter<EditorEventMap> {
     comments?: Comment[];
     getUpdatedDocs?: boolean;
     fieldsHighlightColor?: string | null;
-  } = {}): Promise<Blob | ArrayBuffer | Buffer | Record<string, string> | ProseMirrorJSON | string | undefined> {
+    compression?: 'DEFLATE' | 'STORE';
+  } = {}): Promise<Blob | ArrayBuffer | Buffer | Record<string, string | null> | ProseMirrorJSON | string | undefined> {
     try {
       // Use provided comments, or fall back to imported comments from converter
       const effectiveComments = comments ?? this.converter.comments ?? [];
 
-      // Normalize commentJSON property (imported comments use textJson)
-      const preparedComments = effectiveComments.map((comment: Comment) => ({
-        ...comment,
-        commentJSON: comment.commentJSON ?? (comment as Record<string, unknown>).textJson,
-      }));
+      // Normalize commentJSON property (imported comments provide `elements`)
+      const preparedComments = effectiveComments.map((comment: Comment) => {
+        const elements = Array.isArray(comment.elements) && comment.elements.length ? comment.elements : undefined;
+        return {
+          ...comment,
+          commentJSON: comment.commentJSON ?? elements,
+        };
+      });
 
       // Pre-process the document state to prepare for export
       const json = this.#prepareDocumentForExport(preparedComments);
@@ -2513,16 +2675,20 @@ export class Editor extends EventEmitter<EditorEventMap> {
 
       const numberingData = this.converter.convertedXml['word/numbering.xml'];
       const numbering = this.converter.schemaToXml(numberingData.elements[0]);
-      const updatedDocs: Record<string, string> = {
+
+      // Export core.xml (contains dcterms:created timestamp)
+      const coreXmlData = this.converter.convertedXml['docProps/core.xml'];
+      const coreXml = coreXmlData?.elements?.[0] ? this.converter.schemaToXml(coreXmlData.elements[0]) : null;
+
+      const updatedDocs: Record<string, string | null> = {
         ...this.options.customUpdatedFiles,
         'word/document.xml': String(documentXml),
         'docProps/custom.xml': String(customXml),
         'word/_rels/document.xml.rels': String(rels),
         'word/numbering.xml': String(numbering),
-
-        // Replace & with &amp; in styles.xml as DOCX viewers can't handle it
-        'word/styles.xml': String(styles).replace(/&/gi, '&amp;'),
+        'word/styles.xml': String(styles),
         ...updatedHeadersFooters,
+        ...(coreXml ? { 'docProps/core.xml': String(coreXml) } : {}),
       };
 
       if (hasCustomSettings) {
@@ -2537,26 +2703,15 @@ export class Editor extends EventEmitter<EditorEventMap> {
         updatedDocs['word/_rels/footnotes.xml.rels'] = String(footnotesRelsXml);
       }
 
-      if (preparedComments.length) {
-        const commentsXml = this.converter.schemaToXml(this.converter.convertedXml['word/comments.xml'].elements[0]);
-        updatedDocs['word/comments.xml'] = String(commentsXml);
-
-        const commentsExtended = this.converter.convertedXml['word/commentsExtended.xml'];
-        if (commentsExtended?.elements?.[0]) {
-          const commentsExtendedXml = this.converter.schemaToXml(commentsExtended.elements[0]);
-          updatedDocs['word/commentsExtended.xml'] = String(commentsExtendedXml);
-        }
-
-        const commentsExtensible = this.converter.convertedXml['word/commentsExtensible.xml'];
-        if (commentsExtensible?.elements?.[0]) {
-          const commentsExtensibleXml = this.converter.schemaToXml(commentsExtensible.elements[0]);
-          updatedDocs['word/commentsExtensible.xml'] = String(commentsExtensibleXml);
-        }
-
-        const commentsIds = this.converter.convertedXml['word/commentsIds.xml'];
-        if (commentsIds?.elements?.[0]) {
-          const commentsIdsXml = this.converter.schemaToXml(commentsIds.elements[0]);
-          updatedDocs['word/commentsIds.xml'] = String(commentsIdsXml);
+      // Serialize each comment file if it exists in convertedXml, otherwise mark as null
+      // for deletion from the zip (removes stale originals).
+      const commentFiles = COMMENT_FILE_BASENAMES.map((name) => `word/${name}`);
+      for (const path of commentFiles) {
+        const data = this.converter.convertedXml[path];
+        if (data?.elements?.[0]) {
+          updatedDocs[path] = String(this.converter.schemaToXml(data.elements[0]));
+        } else {
+          updatedDocs[path] = null;
         }
       }
 
@@ -2581,6 +2736,7 @@ export class Editor extends EventEmitter<EditorEventMap> {
         media,
         fonts: this.options.fonts,
         isHeadless: this.options.isHeadless,
+        compression,
       });
 
       return result;
@@ -2707,6 +2863,7 @@ export class Editor extends EventEmitter<EditorEventMap> {
       content,
       mediaFiles,
       fonts,
+      isNewFile,
       // Everything else is EditorOptions
       ...editorConfig
     } = resolvedConfig;
@@ -2721,6 +2878,7 @@ export class Editor extends EventEmitter<EditorEventMap> {
       content,
       mediaFiles,
       fonts,
+      isNewFile,
     };
 
     // Use new API mode for static factory
@@ -2759,6 +2917,7 @@ export class Editor extends EventEmitter<EditorEventMap> {
     this.#assertState('ready');
     this.emit('documentClose', { editor: this });
     this.#unloadDocument();
+    this.#documentApi = null;
     this.#editorLifecycleState = 'closed';
   }
 
@@ -2851,6 +3010,7 @@ export class Editor extends EventEmitter<EditorEventMap> {
       commentsType: options?.commentsType,
       comments: options?.comments,
       fieldsHighlightColor: options?.fieldsHighlightColor,
+      compression: options?.compression,
     });
 
     return result as Blob | Buffer;
@@ -2942,6 +3102,7 @@ export class Editor extends EventEmitter<EditorEventMap> {
     this.extensionService = undefined!;
     this.schema = undefined!;
     this.#commandService = undefined!;
+    this.#documentApi = null;
 
     this.#editorLifecycleState = 'destroyed';
   }
@@ -3030,7 +3191,11 @@ export class Editor extends EventEmitter<EditorEventMap> {
     this.initDefaultStyles();
 
     if (this.options.ydoc && this.options.collaborationProvider) {
-      updateYdocDocxData(this, this.options.ydoc);
+      // Cancel any pending debounced docx update — we are about to do a
+      // fresh export with the new file data. Without cancel, the debounced
+      // export from the previous transaction cycle could fire redundantly.
+      cancelDebouncedDocxUpdate(this);
+      await updateYdocDocxData(this, this.options.ydoc);
       this.initializeCollaborationData();
     } else {
       this.#insertNewFileData();

@@ -1,22 +1,25 @@
 // @ts-check
 import { NodeTranslator } from '@translator';
+import { isInlineContext } from '@core/super-converter/utils/inlineContext.js';
 import validXmlAttributes from './attributes/index.js';
 
 /** @type {import('@translator').XmlNodeName} */
 const XML_NODE_NAME = 'w:permStart';
 
 /** @type {import('@translator').SuperDocNodeOrKeyName} */
-const SD_NODE_NAME = 'permStart';
+const SD_NODE_NAME = ['permStart', 'permStartBlock'];
 
 /**
- * Encode a <w:permStart> node as a SuperDoc permStart node.
+ * Encode a <w:permStart> node as a SuperDoc permStart/permStartBlock node.
  * @param {import('@translator').SCEncoderConfig} params
  * @param {import('@translator').EncodedAttributes} [encodedAttrs]
  * @returns {import('@translator').SCEncoderResult}
  */
 const encode = (params, encodedAttrs = {}) => {
+  const node = params?.nodes?.[0];
+  const isInline = isInlineContext(params?.path || [], node?.name);
   return {
-    type: 'permStart',
+    type: isInline ? 'permStart' : 'permStartBlock',
     attrs: encodedAttrs,
   };
 };

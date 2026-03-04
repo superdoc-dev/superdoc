@@ -18,6 +18,7 @@ vi.mock('./vector-shape-helpers.js', () => ({
   extractStrokeColor: vi.fn(),
   extractStrokeWidth: vi.fn(),
   extractLineEnds: vi.fn(),
+  extractCustomGeometry: vi.fn(),
 }));
 
 describe('handleImageNode', () => {
@@ -671,10 +672,11 @@ describe('handleImageNode', () => {
    *
    * shouldCover is set to true when:
    * - stretch+fillRect is present AND
-   * - srcRect has NO negative values (meaning we need CSS to handle clipping)
+   * - no explicit srcRect clipPath is emitted AND
+   * - srcRect has no negative values
    *
    * Real-world examples:
-   * - whalar_tables_issue_tbl_only/word/header1.xml: <a:srcRect r="84800"/> → shouldCover=true
+   * - whalar_tables_issue_tbl_only/word/header1.xml: <a:srcRect r="84800"/> → clipPath + shouldCover=false + objectFit=fill
    * - whalar_tables_issue_tbl_only/word/header2.xml: <a:srcRect/> (empty) → shouldCover=true
    * - certn_logo_left/word/header2.xml: <a:srcRect b="-3978"/> → shouldCover=false
    */
@@ -746,10 +748,10 @@ describe('handleImageNode', () => {
       expect(result.attrs.shouldCover).toBe(true);
     });
 
-    it('sets shouldCover=true when stretch+fillRect with POSITIVE srcRect values', () => {
+    it('sets shouldCover=false when stretch+fillRect with POSITIVE srcRect values', () => {
       // Example: whalar header1.xml - <a:srcRect r="84800"/>
       // Positive value = crop 84.8% from right
-      // Since we don't implement actual srcRect cropping, CSS cover handles it
+      // Explicit srcRect clipping should replace cover fallback to avoid double-cropping.
       const node = makeNodeWithBlipFill([
         {
           name: 'a:stretch',
@@ -764,10 +766,67 @@ describe('handleImageNode', () => {
       const result = handleImageNode(node, makeParams(), false);
 
       expect(result).not.toBeNull();
-      expect(result.attrs.shouldCover).toBe(true);
+      expect(result.attrs.shouldCover).toBe(false);
+      expect(result.attrs.objectFit).toBe('fill');
     });
 
-    it('sets shouldCover=true when stretch+fillRect with multiple positive srcRect values', () => {
+    it('sets clipPath when srcRect has positive values', () => {
+      const node = makeNodeWithBlipFill([
+        {
+          name: 'a:stretch',
+          elements: [{ name: 'a:fillRect' }],
+        },
+        {
+          name: 'a:srcRect',
+          attributes: { r: '84800' },
+        },
+      ]);
+
+      const result = handleImageNode(node, makeParams(), false);
+
+      expect(result).not.toBeNull();
+      expect(result.attrs.clipPath).toBe('inset(0% 84.8% 0% 0%)');
+    });
+
+    it('disables shouldCover when srcRect emits clipPath cropping', () => {
+      const node = makeNodeWithBlipFill([
+        {
+          name: 'a:stretch',
+          elements: [{ name: 'a:fillRect' }],
+        },
+        {
+          name: 'a:srcRect',
+          attributes: { r: '50000' },
+        },
+      ]);
+
+      const result = handleImageNode(node, makeParams(), false);
+
+      expect(result).not.toBeNull();
+      expect(result.attrs.clipPath).toBe('inset(0% 50% 0% 0%)');
+      expect(result.attrs.shouldCover).toBe(false);
+      expect(result.attrs.objectFit).toBe('fill');
+    });
+
+    it('does not set clipPath when srcRect has negative values', () => {
+      const node = makeNodeWithBlipFill([
+        {
+          name: 'a:stretch',
+          elements: [{ name: 'a:fillRect' }],
+        },
+        {
+          name: 'a:srcRect',
+          attributes: { b: '-3978' },
+        },
+      ]);
+
+      const result = handleImageNode(node, makeParams(), false);
+
+      expect(result).not.toBeNull();
+      expect(result.attrs.clipPath).toBeUndefined();
+    });
+
+    it('sets shouldCover=false when stretch+fillRect with multiple positive srcRect values', () => {
       const node = makeNodeWithBlipFill([
         {
           name: 'a:stretch',
@@ -782,7 +841,8 @@ describe('handleImageNode', () => {
       const result = handleImageNode(node, makeParams(), false);
 
       expect(result).not.toBeNull();
-      expect(result.attrs.shouldCover).toBe(true);
+      expect(result.attrs.shouldCover).toBe(false);
+      expect(result.attrs.objectFit).toBe('fill');
     });
 
     it('sets shouldCover=false when stretch+fillRect with NEGATIVE srcRect value', () => {
@@ -941,6 +1001,32 @@ describe('handleImageNode', () => {
       expect(result).not.toBeNull();
       expect(result.attrs.shouldCover).toBe(false);
     });
+  });
+
+  it('extracts grayscale effect from a:blip element', () => {
+    const node = makeNode();
+    // Add grayscale effect to blip
+    const graphic = node.elements.find((el) => el.name === 'a:graphic');
+    const graphicData = graphic.elements[0];
+    const pic = graphicData.elements[0];
+    const blipFill = pic.elements[0];
+    const blip = blipFill.elements[0];
+
+    // Add grayscale element as child of blip
+    blip.elements = [{ name: 'a:grayscl' }];
+
+    const result = handleImageNode(node, makeParams(), false);
+
+    expect(result).not.toBeNull();
+    expect(result.attrs.grayscale).toBe(true);
+  });
+
+  it('does not set grayscale when effect is not present', () => {
+    const node = makeNode();
+    const result = handleImageNode(node, makeParams(), false);
+
+    expect(result).not.toBeNull();
+    expect(result.attrs.grayscale).toBeUndefined();
   });
 });
 
@@ -1139,17 +1225,13 @@ describe('getVectorShape', () => {
     expect(result.attrs.drawingContent).toBe(drawingNode);
   });
 
-  it('handles missing shape kind with warning', () => {
-    const consoleWarnSpy = vi.spyOn(console, 'warn').mockImplementation(() => {});
+  it('handles missing shape kind by trying custom geometry extraction', () => {
     const graphicData = makeGraphicData();
     graphicData.elements[0].elements[0].elements[0].attributes = {}; // No prst
 
     const result = getVectorShape({ params: makeParams(), node: {}, graphicData, size: { width: 72, height: 72 } });
 
-    expect(consoleWarnSpy).toHaveBeenCalledWith('Shape kind not found');
     expect(result.attrs.kind).toBeUndefined();
-
-    consoleWarnSpy.mockRestore();
   });
 
   it('correctly prioritizes wp:extent over a:xfrm/a:ext for dimensions', () => {
@@ -1376,6 +1458,197 @@ describe('getVectorShape', () => {
       });
 
       expect(result.attrs.textContent.parts[0].text).toBe('[[notspace]] [other]');
+    });
+  });
+
+  describe('IT-632: docx-templates duplicate pic:cNvPr id and non-standard rIds', () => {
+    /**
+     * docx-templates generates images with:
+     * 1. All pic:cNvPr id="0" (duplicate, non-conformant per OOXML spec §20.1.2.2.8)
+     * 2. All wp:docPr id="0" (also duplicated from template cloning)
+     * 3. Non-standard relationship IDs like "img{hash}" instead of "rId{n}"
+     * 4. Different relationship targets for each image
+     *
+     * This test verifies each image resolves to a unique src path.
+     */
+
+    const makeDocxTemplatesImageNode = ({ rEmbed, docPrName, picCNvPrName }) => ({
+      attributes: {
+        distT: '0',
+        distB: '0',
+        distL: '0',
+        distR: '0',
+      },
+      elements: [
+        { name: 'wp:extent', attributes: { cx: '5000000', cy: '3000000' } },
+        {
+          name: 'a:graphic',
+          elements: [
+            {
+              name: 'a:graphicData',
+              attributes: { uri: 'pic' },
+              elements: [
+                {
+                  name: 'pic:pic',
+                  elements: [
+                    {
+                      name: 'pic:nvPicPr',
+                      elements: [
+                        {
+                          name: 'pic:cNvPr',
+                          attributes: { id: '0', name: picCNvPrName },
+                        },
+                      ],
+                    },
+                    {
+                      name: 'pic:blipFill',
+                      elements: [
+                        {
+                          name: 'a:blip',
+                          attributes: { 'r:embed': rEmbed },
+                        },
+                      ],
+                    },
+                  ],
+                },
+              ],
+            },
+          ],
+        },
+        // wp:docPr also duplicated with id="0"
+        { name: 'wp:docPr', attributes: { id: '0', name: docPrName } },
+      ],
+    });
+
+    const makeDocxTemplatesParams = () => ({
+      filename: 'document.xml',
+      docx: {
+        'word/_rels/document.xml.rels': {
+          elements: [
+            {
+              name: 'Relationships',
+              elements: [
+                {
+                  name: 'Relationship',
+                  attributes: {
+                    Id: 'img2073076884',
+                    Target: 'media/template_document.xml_img2073076884.jpg',
+                  },
+                },
+                {
+                  name: 'Relationship',
+                  attributes: {
+                    Id: 'img3891234567',
+                    Target: 'media/template_document.xml_img3891234567.jpg',
+                  },
+                },
+                {
+                  name: 'Relationship',
+                  attributes: {
+                    Id: 'img5678901234',
+                    Target: 'media/template_document.xml_img5678901234.jpg',
+                  },
+                },
+              ],
+            },
+          ],
+        },
+      },
+    });
+
+    it('should produce distinct src paths for images with duplicate pic:cNvPr id=0', () => {
+      const params = makeDocxTemplatesParams();
+
+      const image1 = makeDocxTemplatesImageNode({
+        rEmbed: 'img2073076884',
+        docPrName: 'image1.jpg',
+        picCNvPrName: 'image1.jpg',
+      });
+      const image2 = makeDocxTemplatesImageNode({
+        rEmbed: 'img3891234567',
+        docPrName: 'image2.jpg',
+        picCNvPrName: 'image2.jpg',
+      });
+      const image3 = makeDocxTemplatesImageNode({
+        rEmbed: 'img5678901234',
+        docPrName: 'image3.jpg',
+        picCNvPrName: 'image3.jpg',
+      });
+
+      const result1 = handleImageNode(image1, params, false);
+      const result2 = handleImageNode(image2, params, false);
+      const result3 = handleImageNode(image3, params, false);
+
+      // All should produce valid image nodes
+      expect(result1).not.toBeNull();
+      expect(result2).not.toBeNull();
+      expect(result3).not.toBeNull();
+
+      // Each should have a DISTINCT src path
+      expect(result1.attrs.src).toBe('word/media/template_document.xml_img2073076884.jpg');
+      expect(result2.attrs.src).toBe('word/media/template_document.xml_img3891234567.jpg');
+      expect(result3.attrs.src).toBe('word/media/template_document.xml_img5678901234.jpg');
+
+      // Verify all three are different
+      const srcs = [result1.attrs.src, result2.attrs.src, result3.attrs.src];
+      expect(new Set(srcs).size).toBe(3);
+
+      // rIds should also be distinct
+      expect(result1.attrs.rId).toBe('img2073076884');
+      expect(result2.attrs.rId).toBe('img3891234567');
+      expect(result3.attrs.rId).toBe('img5678901234');
+    });
+
+    it('should handle empty pic:spPr element (SD-2085)', () => {
+      const params = makeDocxTemplatesParams();
+
+      // pic:spPr as a self-closing empty element — valid per ECMA-376 §20.2.2.6
+      // (all CT_ShapeProperties children are optional)
+      const imageWithEmptySpPr = {
+        ...makeDocxTemplatesImageNode({
+          rEmbed: 'img2073076884',
+          docPrName: 'image1.jpg',
+          picCNvPrName: 'image1.jpg',
+        }),
+      };
+
+      // Add empty pic:spPr to the pic:pic element (no elements array)
+      const graphicData = imageWithEmptySpPr.elements
+        .find((el) => el.name === 'a:graphic')
+        .elements.find((el) => el.name === 'a:graphicData');
+      const picPic = graphicData.elements.find((el) => el.name === 'pic:pic');
+      picPic.elements.push({ name: 'pic:spPr', attributes: {} });
+
+      const result = handleImageNode(imageWithEmptySpPr, params, false);
+
+      expect(result).not.toBeNull();
+      expect(result.attrs.src).toBe('word/media/template_document.xml_img2073076884.jpg');
+      expect(result.attrs.rId).toBe('img2073076884');
+    });
+
+    it('should handle images where all wp:docPr ids are "0"', () => {
+      const params = makeDocxTemplatesParams();
+
+      const image1 = makeDocxTemplatesImageNode({
+        rEmbed: 'img2073076884',
+        docPrName: 'image1.jpg',
+        picCNvPrName: 'image1.jpg',
+      });
+      const image2 = makeDocxTemplatesImageNode({
+        rEmbed: 'img3891234567',
+        docPrName: 'image2.jpg',
+        picCNvPrName: 'image2.jpg',
+      });
+
+      const result1 = handleImageNode(image1, params, false);
+      const result2 = handleImageNode(image2, params, false);
+
+      // Both have id="0" from wp:docPr — this should NOT cause deduplication
+      expect(result1.attrs.id).toBe('0');
+      expect(result2.attrs.id).toBe('0');
+
+      // But src should still be different
+      expect(result1.attrs.src).not.toBe(result2.attrs.src);
     });
   });
 });

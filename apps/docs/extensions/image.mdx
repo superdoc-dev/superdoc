@@ -84,6 +84,14 @@ Node attributes that can be set and retrieved:
   Custom inline CSS styles
 </ParamField>
 
+<ParamField path="wrap" type="Object" default="{ type: 'Inline' }">
+  Text wrapping configuration. The `type` property controls wrapping mode (e.g., `'Inline'`, `'Square'`, `'Tight'`, `'TopAndBottom'`, `'None'`).
+</ParamField>
+
+<ParamField path="transformData" type="Object" default="{}">
+  Transform data for rotation, flips, and size extension. Supports `rotation` (degrees), `flipH` (horizontal flip), `flipV` (vertical flip), and `sizeExtension` properties.
+</ParamField>
+
 ## Commands
 
 ### `setImage`
@@ -96,7 +104,8 @@ Supports URLs, relative paths, and base64 data URIs
 
 **Example:**
 
-```javascript
+<CodeGroup>
+```javascript Usage
 editor.commands.setImage({ src: 'https://example.com/image.jpg' })
 editor.commands.setImage({
   src: 'data:image/png;base64,...',
@@ -104,6 +113,26 @@ editor.commands.setImage({
   size: { width: 200 }
 })
 ```
+
+```javascript Full Example
+import { SuperDoc } from 'superdoc';
+import 'superdoc/style.css';
+
+const superdoc = new SuperDoc({
+  selector: '#editor',
+  document: yourFile,
+  onReady: (superdoc) => {
+    const editor = superdoc.activeEditor;
+    editor.commands.setImage({ src: 'https://example.com/image.jpg' })
+    editor.commands.setImage({
+      src: 'data:image/png;base64,...',
+      alt: 'Company logo',
+      size: { width: 200 }
+    })
+  },
+});
+```
+</CodeGroup>
 
 **Parameters:**
 
@@ -117,7 +146,8 @@ Set the wrapping mode and attributes for the selected image
 
 **Example:**
 
-```javascript
+<CodeGroup>
+```javascript Usage
 // No wrapping, behind document
 editor.commands.setWrapping({ type: 'None', attrs: {behindDoc: true} })
 
@@ -150,6 +180,51 @@ editor.commands.setWrapping({
   }
 })
 ```
+
+```javascript Full Example
+import { SuperDoc } from 'superdoc';
+import 'superdoc/style.css';
+
+const superdoc = new SuperDoc({
+  selector: '#editor',
+  document: yourFile,
+  onReady: (superdoc) => {
+    const editor = superdoc.activeEditor;
+    // No wrapping, behind document
+    editor.commands.setWrapping({ type: 'None', attrs: {behindDoc: true} })
+
+    // Square wrapping on both sides with distances
+    editor.commands.setWrapping({
+      type: 'Square',
+      attrs: {
+        wrapText: 'bothSides',
+        distTop: 10,
+        distBottom: 10,
+        distLeft: 10,
+        distRight: 10
+      }
+    })
+
+    // Tight wrapping with polygon
+    editor.commands.setWrapping({
+      type: 'Tight',
+      attrs: {
+        polygon: [[0, 0], [100, 0], [100, 100], [0, 100]]
+      }
+    })
+
+    // Top and bottom wrapping
+    editor.commands.setWrapping({
+      type: 'TopAndBottom',
+      attrs: {
+        distTop: 15,
+        distBottom: 15
+      }
+    })
+  },
+});
+```
+</CodeGroup>
 
 **Parameters:**
 
@@ -185,7 +260,7 @@ Options for inserting an image
 </Expandable>
 
 
-## Source Code
+## Source code
 
 import { SourceCodeLink } from '/snippets/components/source-code-link.jsx'
 

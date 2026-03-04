@@ -1,5 +1,6 @@
 import { DOMParser } from 'prosemirror-model';
 import { convertEmToPt, sanitizeHtml } from '../../InputRule.js';
+import { normalizePastedLinks } from '../paste-link-normalizer.js';
 import { ListHelpers } from '../../helpers/list-numbering-helpers.js';
 import { createSingleItemList } from '../html/html-helpers.js';
 import { getLvlTextForGoogleList, googleNumDefMap } from '../../helpers/pasteListHelpers.js';
@@ -23,6 +24,7 @@ export const handleGoogleDocsHtml = (html, editor, view) => {
 
   const htmlWithMergedLists = mergeSeparateLists(tempDiv);
   const flattenHtml = flattenListsInHtml(htmlWithMergedLists, editor);
+  flattenHtml.dataset.superdocImport = 'true';
 
   let doc = DOMParser.fromSchema(editor.schema).parse(flattenHtml);
   doc = wrapTextsInRuns(doc);
@@ -31,7 +33,9 @@ export const handleGoogleDocsHtml = (html, editor, view) => {
   const { dispatch } = editor.view;
   if (!dispatch) return false;
 
-  dispatch(view.state.tr.replaceSelectionWith(doc, true));
+  const tr = view.state.tr.replaceSelectionWith(doc, true);
+  normalizePastedLinks(tr, editor);
+  dispatch(tr);
   return true;
 };
 

@@ -23,6 +23,22 @@ const docWithPermissionRange = {
   ],
 };
 
+const docWithBlockPermissionRange = {
+  type: 'doc',
+  content: [
+    { type: 'permStartBlock', attrs: { id: 'block-1', edGrp: 'everyone' } },
+    {
+      type: 'paragraph',
+      content: [{ type: 'text', text: 'Editable block section. ' }],
+    },
+    { type: 'permEndBlock', attrs: { id: 'block-1', edGrp: 'everyone' } },
+    {
+      type: 'paragraph',
+      content: [{ type: 'text', text: 'Locked block section.' }],
+    },
+  ],
+};
+
 const docWithoutPermissionRange = {
   type: 'doc',
   content: [
@@ -108,6 +124,23 @@ describe('PermissionRanges extension', () => {
     expect(instance.isEditable).toBe(true);
   });
 
+  it('keeps viewing mode editable when the document contains a block-level everyone range', () => {
+    const instance = createEditor(docWithBlockPermissionRange);
+    expect(instance.options.documentMode).toBe(VIEWING_MODE);
+    const storedRanges = instance.storage.permissionRanges?.ranges ?? [];
+    expect(storedRanges.length).toBeGreaterThan(0);
+    expect(instance.isEditable).toBe(true);
+  });
+
+  it('keeps viewing mode editable in headless mode when the document contains an everyone range', () => {
+    const instance = createEditor(docWithPermissionRange, { isHeadless: true });
+    expect(instance.options.isHeadless).toBe(true);
+    expect(instance.options.documentMode).toBe(VIEWING_MODE);
+    const storedRanges = instance.storage.permissionRanges?.ranges ?? [];
+    expect(storedRanges.length).toBeGreaterThan(0);
+    expect(instance.storage.permissionRanges?.hasAllowedRanges).toBe(true);
+  });
+
   it('stays read-only when there are no approved ranges', () => {
     const instance = createEditor(docWithoutPermissionRange);
     expect(instance.options.documentMode).toBe(VIEWING_MODE);
@@ -131,6 +164,59 @@ describe('PermissionRanges extension', () => {
     const allowedTr = instance.state.tr.insertText('Y', editablePos, editablePos);
     instance.view.dispatch(allowedTr);
     expect(instance.state.doc.textBetween(editablePos, editablePos + 2)).toContain('Y');
+  });
+
+  it('blocks edits outside the block permission range but allows edits inside it', () => {
+    const instance = createEditor(docWithBlockPermissionRange);
+    const initialJson = instance.state.doc.toJSON();
+
+    const lockedPos = findTextPos(instance.state.doc, 'Locked block');
+    expect(lockedPos).toBeGreaterThan(0);
+    instance.view.dispatch(instance.state.tr.setSelection(TextSelection.create(instance.state.doc, lockedPos)));
+    const lockedTr = instance.state.tr.insertText('X', lockedPos, lockedPos);
+    instance.view.dispatch(lockedTr);
+    expect(instance.state.doc.toJSON()).toEqual(initialJson);
+
+    const editablePos = findTextPos(instance.state.doc, 'Editable block');
+    expect(editablePos).toBeGreaterThan(0);
+    instance.view.dispatch(instance.state.tr.setSelection(TextSelection.create(instance.state.doc, editablePos)));
+    const allowedTr = instance.state.tr.insertText('Y', editablePos, editablePos);
+    instance.view.dispatch(allowedTr);
+    expect(instance.state.doc.textBetween(editablePos, editablePos + 2)).toContain('Y');
+  });
+
+  it('reconstructs permEndBlock nodes removed while deleting at the range boundary', () => {
+    const instance = createEditor(docWithBlockPermissionRange);
+    const editableText = 'Editable block section. ';
+    const editablePos = findTextPos(instance.state.doc, editableText);
+    expect(editablePos).toBeGreaterThan(0);
+
+    let permEndPos = null;
+    let permEndSize = null;
+    instance.state.doc.descendants((node, pos) => {
+      if (node.type?.name === 'permEndBlock' && node.attrs?.id === 'block-1') {
+        permEndPos = pos;
+        permEndSize = node.nodeSize;
+        return false;
+      }
+      return;
+    });
+    expect(permEndPos).toBeGreaterThan(0);
+    expect(permEndSize).toBeGreaterThan(0);
+
+    const lastEditableCharPos = editablePos + editableText.length - 1;
+    const deleteTr = instance.state.tr.delete(lastEditableCharPos, permEndPos + permEndSize);
+    instance.view.dispatch(deleteTr);
+
+    let permEndCount = 0;
+    instance.state.doc.descendants((node) => {
+      if (node.type?.name === 'permEndBlock' && node.attrs?.id === 'block-1') {
+        permEndCount += 1;
+      }
+      return;
+    });
+
+    expect(permEndCount).toBe(1);
   });
 
   it('reconstructs permEnd nodes removed while deleting at the range boundary', () => {

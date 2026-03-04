@@ -54,6 +54,12 @@ type TableRowRenderDependencies = {
     lineIndex: number,
     isLastLine: boolean,
   ) => HTMLElement;
+  /** Optional callback invoked after a table line's final styles/markers are applied. */
+  captureLineSnapshot?: (
+    lineEl: HTMLElement,
+    context: FragmentRenderContext,
+    options?: { inTableParagraph?: boolean; wrapperEl?: HTMLElement },
+  ) => void;
   /** Function to render drawing content (images, shapes, shape groups) */
   renderDrawingContent?: (block: DrawingBlock) => HTMLElement;
   /** Function to apply SDT metadata as data attributes */
@@ -78,6 +84,12 @@ type TableRowRenderDependencies = {
    * only a portion of the row's content.
    */
   partialRow?: PartialRowInfo;
+
+  /**
+   * Cell spacing in pixels (border-spacing between cells).
+   * Applied to cell x positions and row y advancement.
+   */
+  cellSpacingPx?: number;
 };
 
 /**
@@ -129,20 +141,22 @@ export const renderTableRow = (deps: TableRowRenderDependencies): void => {
     tableIndent,
     context,
     renderLine,
+    captureLineSnapshot,
     renderDrawingContent,
     applySdtDataset,
     tableSdt,
     continuesFromPrev,
     continuesOnNext,
     partialRow,
+    cellSpacingPx = 0,
   } = deps;
 
   /**
    * Calculates the horizontal position (x-coordinate) for a cell based on its grid column index.
    *
-   * Sums the widths of all columns preceding the given column index to determine
-   * the left edge position of a cell. This handles both normal cells and cells
-   * offset by rowspans from previous rows.
+   * Sums the widths of all columns preceding the given column index plus spacing between
+   * columns (border-spacing). When cellSpacingPx > 0, each column after the first is
+   * offset by one spacing unit, so x = sum(columnWidths[0..gridColumnStart-1]) + gridColumnStart * cellSpacingPx.
    *
    * **Bounds Safety:**
    * Loop terminates at the minimum of `gridColumnStart` and `columnWidths.length`
@@ -153,17 +167,15 @@ export const renderTableRow = (deps: TableRowRenderDependencies): void => {
    *
    * @example
    * ```typescript
-   * // columnWidths = [100, 150, 200]
-   * calculateXPosition(0) // Returns: 0 (first column)
-   * calculateXPosition(1) // Returns: 100 (after first column)
-   * calculateXPosition(2) // Returns: 250 (after first two columns)
-   * calculateXPosition(10) // Returns: 450 (safe - stops at array length)
+   * // columnWidths = [100, 150, 200], cellSpacingPx = 4
+   * calculateXPosition(0) // Returns: cellSpacingPx (space before first column)
+   * calculateXPosition(1) // Returns: cellSpacingPx + columnWidths[0] + cellSpacingPx
    * ```
    */
   const calculateXPosition = (gridColumnStart: number): number => {
-    let x = 0;
+    let x = cellSpacingPx; // space before first column
     for (let i = 0; i < gridColumnStart && i < columnWidths.length; i++) {
-      x += columnWidths[i];
+      x += columnWidths[i] + cellSpacingPx;
     }
     return x;
   };
@@ -281,26 +293,50 @@ export const renderTableRow = (deps: TableRowRenderDependencies): void => {
         right: cellBordersAttr.right,
       };
     } else if (tableBorders) {
-      // For continuation handling: treat split boundaries as table edges
-      const isFirstRow = rowIndex === 0;
-      const isLastRow = rowIndex === totalRows - 1;
-      const treatAsFirstRow = isFirstRow || continuesFromPrev;
-      const treatAsLastRow = isLastRow || continuesOnNext;
+      if (cellSpacingPx > 0) {
+        // With cell spacing (border-collapse: separate), the TABLE CONTAINER handles outer
+        // borders (top/right/bottom/left). Cells only render interior borders (insideH/insideV).
+        // This prevents double borders: one from the container and one from edge cells.
+        const isFirstRow = rowIndex === 0;
+        const isLastRow = rowIndex === totalRows - 1;
+        const isFirstCol = gridColIndex === 0;
+        const isLastCol = gridColIndex === totalCols - 1;
+        const treatAsFirstRow = isFirstRow || continuesFromPrev;
+        const treatAsLastRow = isLastRow || continuesOnNext;
 
-      // Get base borders, then override for continuations
-      const baseBorders = resolveTableCellBorders(tableBorders, rowIndex, gridColIndex, totalRows, totalCols);
-
-      if (baseBorders) {
         resolvedBorders = {
-          // If this is a continuation (continuesFromPrev), use table's top border
-          top: treatAsFirstRow ? borderValueToSpec(tableBorders.top) : baseBorders.top,
-          // If this continues on next (continuesOnNext), use table's bottom border
-          bottom: treatAsLastRow ? borderValueToSpec(tableBorders.bottom) : baseBorders.bottom,
-          left: baseBorders.left,
-          right: baseBorders.right,
+          top: !treatAsFirstRow ? borderValueToSpec(tableBorders.insideH) : undefined,
+          bottom: !treatAsLastRow ? borderValueToSpec(tableBorders.insideH) : undefined,
+          left: !isFirstCol ? borderValueToSpec(tableBorders.insideV) : undefined,
+          right: !isLastCol ? borderValueToSpec(tableBorders.insideV) : undefined,
         };
+
+        // If all sides are undefined, set resolvedBorders to undefined for cleanliness
+        if (!resolvedBorders.top && !resolvedBorders.bottom && !resolvedBorders.left && !resolvedBorders.right) {
+          resolvedBorders = undefined;
+        }
       } else {
-        resolvedBorders = undefined;
+        // For continuation handling: treat split boundaries as table edges
+        const isFirstRow = rowIndex === 0;
+        const isLastRow = rowIndex === totalRows - 1;
+        const treatAsFirstRow = isFirstRow || continuesFromPrev;
+        const treatAsLastRow = isLastRow || continuesOnNext;
+
+        // Get base borders, then override for continuations
+        const baseBorders = resolveTableCellBorders(tableBorders, rowIndex, gridColIndex, totalRows, totalCols);
+
+        if (baseBorders) {
+          resolvedBorders = {
+            // If this is a continuation (continuesFromPrev), use table's top border
+            top: treatAsFirstRow ? borderValueToSpec(tableBorders.top) : baseBorders.top,
+            // If this continues on next (continuesOnNext), use table's bottom border
+            bottom: treatAsLastRow ? borderValueToSpec(tableBorders.bottom) : baseBorders.bottom,
+            left: baseBorders.left,
+            right: baseBorders.right,
+          };
+        } else {
+          resolvedBorders = undefined;
+        }
       }
     } else {
       resolvedBorders = undefined;
@@ -323,6 +359,16 @@ export const renderTableRow = (deps: TableRowRenderDependencies): void => {
     const fromLine = partialRow?.fromLineByCell?.[cellIndex];
     const toLine = partialRow?.toLineByCell?.[cellIndex];
 
+    // Compute cell width from rescaled columnWidths (SD-1859: mixed-orientation docs
+    // where cellMeasure.width may reflect landscape measurement but the fragment renders
+    // in portrait). The columnWidths array is already rescaled by the layout engine.
+    const colSpan = cellMeasure.colSpan ?? 1;
+    const gridStart = cellMeasure.gridColumnStart ?? cellIndex;
+    let computedCellWidth = 0;
+    for (let i = gridStart; i < gridStart + colSpan && i < columnWidths.length; i++) {
+      computedCellWidth += columnWidths[i];
+    }
+
     // Never use default borders - cells are either explicitly styled or borderless
     // This prevents gray borders on cells with borders={} (intentionally borderless)
     const { cellElement } = renderTableCell({
@@ -335,6 +381,7 @@ export const renderTableRow = (deps: TableRowRenderDependencies): void => {
       borders: resolvedBorders,
       useDefaultBorder: false,
       renderLine,
+      captureLineSnapshot,
       renderDrawingContent,
       context,
       applySdtDataset,
@@ -342,6 +389,7 @@ export const renderTableRow = (deps: TableRowRenderDependencies): void => {
       fromLine,
       toLine,
       tableIndent,
+      cellWidth: computedCellWidth > 0 ? computedCellWidth : undefined,
     });
 
     container.appendChild(cellElement);

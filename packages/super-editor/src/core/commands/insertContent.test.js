@@ -55,11 +55,7 @@ describe('insertContent', () => {
       editor: mockEditor,
     });
 
-    expect(mockCommands.insertContentAt).toHaveBeenCalledWith(
-      { from: 0, to: 10 },
-      { type: 'doc', content: [] },
-      { contentType: 'html' },
-    );
+    expect(mockCommands.insertContentAt).toHaveBeenCalledWith({ from: 0, to: 10 }, [], { contentType: 'html' });
 
     // Should trigger list migration for HTML (microtask)
     expect(mockEditor.migrateListsToV2).toHaveBeenCalledTimes(1);
@@ -166,6 +162,11 @@ describe('insertContent', () => {
 // Integration-style tests that use a real Editor instance to
 // insert markdown/HTML lists and verify exported OOXML has list numbering.
 describe('insertContent (integration) list export', () => {
+  // Cache loaded DOCX data and helpers to avoid repeated file loading
+  let cachedDocxData = null;
+  let helpers = null;
+  let exportHelpers = null;
+
   const getListParagraphs = (result) => {
     const body = result.elements?.find((el) => el.name === 'w:body');
     const paragraphs = (body?.elements || []).filter((el) => el.name === 'w:p');
@@ -189,16 +190,25 @@ describe('insertContent (integration) list export', () => {
     vi.resetModules();
     vi.doUnmock('../helpers/contentProcessor.js');
 
-    const { loadTestDataForEditorTests, initTestEditor } = await import('../../tests/helpers/helpers.js');
-    const { docx, media, mediaFiles, fonts } = await loadTestDataForEditorTests('blank-doc.docx');
-    const { editor } = initTestEditor({ content: docx, media, mediaFiles, fonts, mode: 'docx' });
+    // Cache helpers and DOCX data on first call
+    if (!helpers) {
+      helpers = await import('../../tests/helpers/helpers.js');
+    }
+    if (!cachedDocxData) {
+      cachedDocxData = await helpers.loadTestDataForEditorTests('blank-doc.docx');
+    }
+    if (!exportHelpers) {
+      exportHelpers = await import('../../tests/export/export-helpers/index.js');
+    }
+
+    const { docx, media, mediaFiles, fonts } = cachedDocxData;
+    const { editor } = helpers.initTestEditor({ content: docx, media, mediaFiles, fonts, mode: 'docx' });
     return editor;
   };
 
   const exportFromEditorContent = async (editor) => {
-    const { getExportedResultWithDocContent } = await import('../../tests/export/export-helpers/index.js');
     const content = editor.getJSON().content || [];
-    return await getExportedResultWithDocContent(content);
+    return await exportHelpers.getExportedResultWithDocContent(content);
   };
 
   it('exports ordered list from markdown with numId/ilvl', async () => {
@@ -251,6 +261,24 @@ describe('insertContent (integration) list export', () => {
     expect(first.ilvl).toBe('0');
   });
 
+  it('inserts markdown heading + bold text without creating a table', async () => {
+    const editor = await setupEditor();
+
+    editor.commands.insertContent('# Hello\n\nSome **bold** text', { contentType: 'markdown' });
+    await Promise.resolve();
+
+    const doc = editor.getJSON();
+    const tableNode = (doc.content || []).find((node) => node?.type === 'table');
+
+    expect(tableNode).toBeUndefined();
+    expect(
+      doc.content?.some(
+        (node) => node?.type === 'paragraph' && node?.attrs?.paragraphProperties?.styleId === 'Heading1',
+      ),
+    ).toBe(true);
+    expect(doc.content?.some((node) => node?.type === 'paragraph')).toBe(true);
+  });
+
   it('exports unordered list from HTML with numId/ilvl', async () => {
     const editor = await setupEditor();
     editor.commands.insertContent('<ul><li>Apple</li><li>Banana</li></ul>', { contentType: 'html' });
@@ -263,5 +291,129 @@ describe('insertContent (integration) list export', () => {
     const first = getNumPrVals(listParas[0]);
     expect(first.numId).toBeDefined();
     expect(first.ilvl).toBe('0');
+  });
+
+  it('defaults imported HTML tables to 100% width', async () => {
+    const editor = await setupEditor();
+    editor.commands.insertContent(
+      '<table><tbody><tr><td>Query</td><td>Assessment</td></tr><tr><td>A</td><td>B</td></tr></tbody></table>',
+      { contentType: 'html' },
+    );
+    await Promise.resolve();
+
+    const tableNode = (editor.getJSON().content || []).find((node) => node.type === 'table');
+    expect(tableNode).toBeTruthy();
+    expect(tableNode.attrs?.tableProperties?.tableWidth).toEqual({
+      value: 5000,
+      type: 'pct',
+    });
+  });
+
+  it('defaults imported markdown tables to 100% width', async () => {
+    const editor = await setupEditor();
+    editor.commands.insertContent('| Query | Assessment |\n| --- | --- |\n| A | B |', { contentType: 'markdown' });
+    await Promise.resolve();
+
+    const tableNode = (editor.getJSON().content || []).find((node) => node.type === 'table');
+    expect(tableNode).toBeTruthy();
+    expect(tableNode.attrs?.tableProperties?.tableWidth).toEqual({
+      value: 5000,
+      type: 'pct',
+    });
+  });
+
+  it('does not inject inline cell borders on imported HTML table headers', async () => {
+    const editor = await setupEditor();
+    editor.commands.insertContent(
+      '<table><thead><tr><th>Search Query</th><th>Findings / Assessment</th></tr></thead><tbody><tr><td>A</td><td>B</td></tr></tbody></table>',
+      { contentType: 'html' },
+    );
+    await Promise.resolve();
+
+    const tableNode = (editor.getJSON().content || []).find((node) => node.type === 'table');
+    expect(tableNode).toBeTruthy();
+    const headerCell = tableNode?.content?.[0]?.content?.[0];
+    expect(headerCell?.type).toBe('tableHeader');
+    // Headers should NOT have inline borders — style cascade owns them
+    expect(headerCell?.attrs?.borders).toBeNull();
+
+    const result = await exportFromEditorContent(editor);
+    const body = result.elements?.find((el) => el.name === 'w:body');
+    const table = body?.elements?.find((el) => el.name === 'w:tbl');
+    const firstRow = table?.elements?.find((el) => el.name === 'w:tr');
+    const firstCell = firstRow?.elements?.find((el) => el.name === 'w:tc');
+    const firstCellProperties = firstCell?.elements?.find((el) => el.name === 'w:tcPr');
+    const firstCellBorders = firstCellProperties?.elements?.find((el) => el.name === 'w:tcBorders');
+
+    // No inline cell borders should be emitted — table-level fallback borders handle this
+    expect(firstCellBorders).toBeUndefined();
+  });
+});
+
+// ---------------------------------------------------------------------------
+// CI-only: horizontal rule insertion (requires real Editor which depends on
+// @superdoc/document-api — unresolvable in local workspace, works in CI).
+// ---------------------------------------------------------------------------
+describe.skipIf(!process.env.CI)('insertContent (integration) horizontal rule', () => {
+  let helpers = null;
+  let cachedDocxData = null;
+
+  const setupEditor = async () => {
+    vi.resetModules();
+    vi.doUnmock('../helpers/contentProcessor.js');
+
+    if (!helpers) {
+      helpers = await import('../../tests/helpers/helpers.js');
+    }
+    if (!cachedDocxData) {
+      cachedDocxData = await helpers.loadTestDataForEditorTests('blank-doc.docx');
+    }
+
+    const { docx, media, mediaFiles, fonts } = cachedDocxData;
+    const { editor } = helpers.initTestEditor({ content: docx, media, mediaFiles, fonts, mode: 'docx' });
+    return editor;
+  };
+
+  const countHorizontalRules = (editor) => {
+    let count = 0;
+    const content = editor.getJSON().content || [];
+    for (const block of content) {
+      if (block.type === 'contentBlock' && block.attrs?.horizontalRule) count++;
+      // contentBlock is inline — check inside paragraph > run or paragraph directly
+      for (const inline of block.content || []) {
+        if (inline.type === 'contentBlock' && inline.attrs?.horizontalRule) count++;
+        for (const child of inline.content || []) {
+          if (child.type === 'contentBlock' && child.attrs?.horizontalRule) count++;
+        }
+      }
+    }
+    return count;
+  };
+
+  it('insertContent with contentType html creates a horizontal rule', async () => {
+    const editor = await setupEditor();
+    expect(countHorizontalRules(editor)).toBe(0);
+
+    editor.commands.insertContent('<hr>', { contentType: 'html' });
+
+    expect(countHorizontalRules(editor)).toBe(1);
+  });
+
+  it('insertContent with contentType markdown creates a horizontal rule', async () => {
+    const editor = await setupEditor();
+    expect(countHorizontalRules(editor)).toBe(0);
+
+    editor.commands.insertContent('---', { contentType: 'markdown' });
+
+    expect(countHorizontalRules(editor)).toBe(1);
+  });
+
+  it('insertContent with bare <hr> (no contentType) creates a horizontal rule', async () => {
+    const editor = await setupEditor();
+    expect(countHorizontalRules(editor)).toBe(0);
+
+    editor.commands.insertContent('<hr>');
+
+    expect(countHorizontalRules(editor)).toBe(1);
   });
 });

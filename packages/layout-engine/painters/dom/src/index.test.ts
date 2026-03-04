@@ -100,6 +100,22 @@ const buildSingleParagraphData = (blockId: string, runLength: number) => {
   return { paragraphMeasure, paragraphLayout };
 };
 
+const expectCssColor = (actual: string, expectedHex: string): void => {
+  const normalizedActual = actual.replace(/\s+/g, '').toLowerCase();
+  let normalizedHex = expectedHex.toLowerCase();
+  if (!normalizedHex.startsWith('#')) {
+    normalizedHex = `#${normalizedHex}`;
+  }
+  if (normalizedHex.length === 4) {
+    normalizedHex = `#${normalizedHex[1]}${normalizedHex[1]}${normalizedHex[2]}${normalizedHex[2]}${normalizedHex[3]}${normalizedHex[3]}`;
+  }
+  const r = Number.parseInt(normalizedHex.slice(1, 3), 16);
+  const g = Number.parseInt(normalizedHex.slice(3, 5), 16);
+  const b = Number.parseInt(normalizedHex.slice(5, 7), 16);
+  const rgb = `rgb(${r},${g},${b})`;
+  expect([normalizedHex, rgb]).toContain(normalizedActual);
+};
+
 const sdtBlock: FlowBlock = {
   kind: 'paragraph',
   id: 'sdt-block',
@@ -1239,7 +1255,7 @@ describe('DomPainter', () => {
     expect(lines.length).toBe(2);
 
     // First line should have negative word-spacing applied
-    expect(lines[0].style.wordSpacing).toBe('-3.3333333333333335px');
+    expect(Number.parseFloat(lines[0].style.wordSpacing)).toBeCloseTo(-3.3333333333333335, 5);
 
     // Last line should NOT be justified
     expect(lines[1].style.wordSpacing).toBe('');
@@ -2398,6 +2414,89 @@ describe('DomPainter', () => {
     expect(fragmentAfter?.textContent).toContain('world!!!');
   });
 
+  it('updates structured-content lock metadata when lockMode changes via setData', () => {
+    const lockedBlock: FlowBlock = {
+      kind: 'paragraph',
+      id: 'lock-mode-block',
+      runs: [{ text: 'Protected text', fontFamily: 'Arial', fontSize: 16, pmStart: 0, pmEnd: 14 }],
+      attrs: {
+        sdt: {
+          type: 'structuredContent',
+          scope: 'block',
+          id: 'sc-lock-mode-1',
+          alias: 'Protected Control',
+          lockMode: 'unlocked',
+        },
+      },
+    };
+
+    const lockedMeasure: Measure = {
+      kind: 'paragraph',
+      lines: [
+        {
+          fromRun: 0,
+          fromChar: 0,
+          toRun: 0,
+          toChar: 14,
+          width: 140,
+          ascent: 12,
+          descent: 4,
+          lineHeight: 20,
+        },
+      ],
+      totalHeight: 20,
+    };
+
+    const lockedLayout: Layout = {
+      pageSize: { w: 400, h: 500 },
+      pages: [
+        {
+          number: 1,
+          fragments: [
+            {
+              kind: 'para',
+              blockId: 'lock-mode-block',
+              fromLine: 0,
+              toLine: 1,
+              x: 20,
+              y: 30,
+              width: 300,
+              pmStart: 0,
+              pmEnd: 14,
+            },
+          ],
+        },
+      ],
+    };
+
+    const painter = createDomPainter({ blocks: [lockedBlock], measures: [lockedMeasure] });
+    painter.paint(lockedLayout, mount);
+
+    const fragmentBefore = mount.querySelector('.superdoc-fragment') as HTMLElement;
+    expect(fragmentBefore.dataset.lockMode).toBe('unlocked');
+
+    const updatedLockedBlock: FlowBlock = {
+      kind: 'paragraph',
+      id: 'lock-mode-block',
+      runs: [{ text: 'Protected text', fontFamily: 'Arial', fontSize: 16, pmStart: 0, pmEnd: 14 }],
+      attrs: {
+        sdt: {
+          type: 'structuredContent',
+          scope: 'block',
+          id: 'sc-lock-mode-1',
+          alias: 'Protected Control',
+          lockMode: 'contentLocked',
+        },
+      },
+    };
+
+    painter.setData?.([updatedLockedBlock], [lockedMeasure]);
+    painter.paint(lockedLayout, mount);
+
+    const fragmentAfter = mount.querySelector('.superdoc-fragment') as HTMLElement;
+    expect(fragmentAfter.dataset.lockMode).toBe('contentLocked');
+  });
+
   it('updates fragment positions in virtualized mode when layout changes without block diffs', () => {
     const painter = createDomPainter({
       blocks: [block],
@@ -2444,6 +2543,70 @@ describe('DomPainter', () => {
     const fragmentAfter = virtualMount.querySelector('.superdoc-fragment') as HTMLElement;
 
     expect(fragmentAfter.style.left).toBe('70px');
+  });
+
+  it('exposes a paint snapshot after rendering', () => {
+    const painter = createDomPainter({ blocks: [block], measures: [measure] });
+
+    painter.paint(layout, mount);
+
+    const snapshot = painter.getPaintSnapshot?.();
+    expect(snapshot).toBeTruthy();
+    expect(snapshot?.formatVersion).toBe(1);
+    expect(snapshot?.pageCount).toBe(1);
+    expect(snapshot?.lineCount).toBeGreaterThan(0);
+  });
+
+  it('uses actual page indices when collecting virtualized paint snapshots', () => {
+    const painter = createDomPainter({
+      blocks: [block],
+      measures: [measure],
+      virtualization: { enabled: true, window: 2 },
+    });
+    const virtualMount = document.createElement('div');
+    virtualMount.getBoundingClientRect = () =>
+      ({
+        width: 0,
+        height: 0,
+        top: 0,
+        left: 0,
+        right: 0,
+        bottom: 0,
+        x: 0,
+        y: 0,
+        toJSON() {
+          return {};
+        },
+      }) as DOMRect;
+
+    const multiPageLayout: Layout = {
+      ...layout,
+      pages: Array.from({ length: 10 }, (_, pageIndex) => ({
+        number: pageIndex + 1,
+        fragments: [
+          {
+            kind: 'para',
+            blockId: 'block-1',
+            fromLine: 0,
+            toLine: 1,
+            x: 30,
+            y: 40,
+            width: 300,
+            pmStart: 1,
+            pmEnd: 12,
+          },
+        ],
+      })),
+    };
+
+    painter.setVirtualizationPins?.([8]);
+    painter.paint(multiPageLayout, virtualMount);
+
+    const snapshot = painter.getPaintSnapshot?.();
+    expect(snapshot).toBeTruthy();
+    const pageIndices = snapshot?.pages.map((page) => page.index) ?? [];
+    expect(pageIndices).toContain(8);
+    expect(snapshot?.pages.find((page) => page.index === 8)?.pageNumber).toBe(9);
   });
 
   it('renders header decorations with tokens resolved', () => {
@@ -2527,7 +2690,7 @@ describe('DomPainter', () => {
       height: 30,
     };
 
-    // behindDoc fragment has zIndex: 0 (set by layout engine)
+    // behindDoc routing should use explicit fragment metadata, not zIndex proxy.
     const behindDocFragment = {
       kind: 'image' as const,
       blockId: 'behind-doc-img',
@@ -2535,7 +2698,8 @@ describe('DomPainter', () => {
       y: 0,
       width: 200,
       height: 100,
-      zIndex: 0, // behindDoc images get zIndex: 0
+      behindDoc: true,
+      zIndex: 5, // deliberately non-zero to prove routing is metadata-driven
       isAnchored: true,
     };
 
@@ -2547,6 +2711,7 @@ describe('DomPainter', () => {
       y: 10,
       width: 50,
       height: 30,
+      behindDoc: false,
     };
 
     const painter = createDomPainter({
@@ -2563,8 +2728,6 @@ describe('DomPainter', () => {
     const headerEl = mount.querySelector('.superdoc-page-header');
     expect(headerEl).toBeTruthy();
 
-    // behindDoc image should NOT be inside header container
-    const behindDocInHeader = headerEl?.querySelector('img[src*="base64"]');
     // Normal image should be inside header container
     const normalInHeader = headerEl?.querySelectorAll('.superdoc-fragment');
 
@@ -2615,7 +2778,8 @@ describe('DomPainter', () => {
       y: 0,
       width: 200,
       height: 100,
-      zIndex: 0,
+      behindDoc: true,
+      zIndex: 5,
       isAnchored: true,
     };
 
@@ -2778,13 +2942,16 @@ describe('DomPainter', () => {
     painter.setActiveComment('comment-A');
     painter.paint(paragraphLayout, mount);
     span = mount.querySelector('.superdoc-comment-highlight') as HTMLElement;
-    expect(span.style.backgroundColor).not.toBe('');
+    const activeColor = span.style.backgroundColor;
+    expect(activeColor).not.toBe('');
 
-    // Select a different comment (comment-B): should NOT be highlighted
+    // Select a different comment (comment-B): should show faded highlight
     painter.setActiveComment('comment-B');
     painter.paint(paragraphLayout, mount);
     span = mount.querySelector('.superdoc-comment-highlight') as HTMLElement;
-    expect(span.style.backgroundColor).toBe(''); // Not highlighted because active comment doesn't match
+    // Inactive comments get a faded background instead of being invisible
+    expect(span.style.backgroundColor).not.toBe('');
+    expect(span.style.backgroundColor).not.toBe(activeColor);
   });
 
   it('shows nested comment indicators when outer comment is selected', () => {
@@ -3078,6 +3245,109 @@ describe('DomPainter', () => {
       expect(fragEl).toBeTruthy();
       expect(footerEl.style.top).toBe(`${footerOffset}px`);
       expect(fragEl.style.top).toBe(`${footerHeight - contentHeight + footerFragment.y}px`);
+    });
+
+    it('renders page-relative behindDoc header media at absolute page Y', () => {
+      const headerImageBlock: FlowBlock = {
+        kind: 'image',
+        id: 'header-page-relative-img',
+        src: 'data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNk+M9QDwADhgGAWjR9awAAAABJRU5ErkJggg==',
+        anchor: {
+          isAnchored: true,
+          hRelativeFrom: 'page',
+          vRelativeFrom: 'page',
+          behindDoc: true,
+        },
+      };
+      const headerImageMeasure: Measure = {
+        kind: 'image',
+        width: 24,
+        height: 14,
+      };
+      const headerFragment: Fragment = {
+        kind: 'image',
+        blockId: 'header-page-relative-img',
+        x: 12,
+        y: 40,
+        width: 24,
+        height: 14,
+        isAnchored: true,
+        behindDoc: true,
+      };
+
+      const painter = createDomPainter({
+        blocks: [block, headerImageBlock],
+        measures: [measure, headerImageMeasure],
+        headerProvider: () => ({
+          fragments: [headerFragment],
+          height: 20,
+          offset: 60,
+          marginLeft: 30,
+        }),
+      });
+
+      painter.paint({ ...layout, pages: [{ ...layout.pages[0], number: 1 }] }, mount);
+
+      const pageEl = mount.querySelector('.superdoc-page') as HTMLElement;
+      const behindDocEl = pageEl.querySelector(
+        '[data-behind-doc-section="header"][data-block-id="header-page-relative-img"]',
+      ) as HTMLElement;
+
+      expect(behindDocEl).toBeTruthy();
+      expect(behindDocEl.style.top).toBe('40px');
+      expect(behindDocEl.style.left).toBe('42px');
+    });
+
+    it('does not apply footer bottom-alignment offset to page-relative media', () => {
+      const footerImageBlock: FlowBlock = {
+        kind: 'image',
+        id: 'footer-page-relative-img',
+        src: 'data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNk+M9QDwADhgGAWjR9awAAAABJRU5ErkJggg==',
+        anchor: {
+          isAnchored: true,
+          hRelativeFrom: 'page',
+          vRelativeFrom: 'page',
+        },
+      };
+      const footerImageMeasure: Measure = {
+        kind: 'image',
+        width: 20,
+        height: 20,
+      };
+      const footerFragment: Fragment = {
+        kind: 'image',
+        blockId: 'footer-page-relative-img',
+        x: 8,
+        y: 25,
+        width: 20,
+        height: 20,
+        isAnchored: true,
+      };
+
+      const footerOffset = 350;
+      const footerHeight = 80;
+      const footerContentHeight = 30;
+
+      const painter = createDomPainter({
+        blocks: [block, footerImageBlock],
+        measures: [measure, footerImageMeasure],
+        footerProvider: () => ({
+          fragments: [footerFragment],
+          height: footerHeight,
+          contentHeight: footerContentHeight,
+          offset: footerOffset,
+        }),
+      });
+
+      painter.paint({ ...layout, pages: [{ ...layout.pages[0], number: 1 }] }, mount);
+
+      const footerEl = mount.querySelector('.superdoc-page-footer') as HTMLElement;
+      const footerFragmentEl = footerEl.querySelector('[data-block-id="footer-page-relative-img"]') as HTMLElement;
+
+      expect(footerFragmentEl).toBeTruthy();
+      expect(footerFragmentEl.style.top).toBe(`${footerFragment.y - footerOffset}px`);
+      const renderedPageTop = parseFloat(footerEl.style.top || '0') + parseFloat(footerFragmentEl.style.top || '0');
+      expect(renderedPageTop).toBe(footerFragment.y);
     });
 
     it('preserves bold styling on page number tokens in DOM', () => {
@@ -3422,7 +3692,7 @@ describe('DomPainter', () => {
     expect(anchor).toBeTruthy();
     expect(anchor.getAttribute('href')).toBe('https://example.com');
     expect(anchor.style.textDecorationLine).toContain('underline');
-    expect(anchor.style.backgroundColor).toBe('rgb(255, 255, 0)');
+    expectCssColor(anchor.style.backgroundColor, '#ffff00');
 
     const fragment = mount.querySelector('.superdoc-fragment') as HTMLElement;
     expect(fragment.style.textAlign).toBe('center');
@@ -3804,10 +4074,10 @@ describe('DomPainter', () => {
     expect(borderLayer).toBeTruthy();
     expect(borderLayer.style.borderTopStyle).toBe('solid');
     expect(borderLayer.style.borderTopWidth).toBe('2px');
-    expect(borderLayer.style.borderTopColor).toBe('rgb(255, 0, 0)');
+    expectCssColor(borderLayer.style.borderTopColor, '#ff0000');
     expect(borderLayer.style.borderLeftStyle).toBe('dashed');
     expect(borderLayer.style.borderLeftWidth).toBe('1px');
-    expect(borderLayer.style.borderLeftColor).toBe('rgb(0, 255, 0)');
+    expectCssColor(borderLayer.style.borderLeftColor, '#00ff00');
   });
 
   it('renders borders extending into margins without pushing content', () => {
@@ -3916,7 +4186,7 @@ describe('DomPainter', () => {
     const fragment = mount.querySelector('[data-block-id="shaded-block"]') as HTMLElement;
     const shadingLayer = fragment.querySelector('.superdoc-paragraph-shading') as HTMLElement;
     expect(shadingLayer).toBeTruthy();
-    expect(shadingLayer.style.backgroundColor).toBe('rgb(255, 238, 170)');
+    expectCssColor(shadingLayer.style.backgroundColor, '#ffeeaa');
   });
 
   it('strips indent padding when rendering list content', () => {
@@ -4589,6 +4859,77 @@ describe('DomPainter', () => {
 
       const img = mount.querySelector('img');
       expect(img).toBeNull();
+    });
+
+    it('renders cropped inline image with clipPath in wrapper (overflow hidden, img with clip-path and transform)', () => {
+      const clipPath = 'inset(10% 20% 30% 40%)';
+      const imageBlock: FlowBlock = {
+        kind: 'paragraph',
+        id: 'img-block',
+        runs: [
+          {
+            kind: 'image',
+            src: 'data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNk+M9QDwADhgGAWjR9awAAAABJRU5ErkJggg==',
+            width: 80,
+            height: 60,
+            clipPath,
+          },
+        ],
+      };
+
+      const imageMeasure: Measure = {
+        kind: 'paragraph',
+        lines: [
+          {
+            fromRun: 0,
+            fromChar: 0,
+            toRun: 0,
+            toChar: 0,
+            width: 80,
+            ascent: 60,
+            descent: 0,
+            lineHeight: 60,
+          },
+        ],
+        totalHeight: 60,
+      };
+
+      const imageLayout: Layout = {
+        pageSize: { w: 400, h: 500 },
+        pages: [
+          {
+            number: 1,
+            fragments: [
+              {
+                kind: 'para',
+                blockId: 'img-block',
+                fromLine: 0,
+                toLine: 1,
+                x: 0,
+                y: 0,
+                width: 80,
+              },
+            ],
+          },
+        ],
+      };
+
+      const painter = createDomPainter({ blocks: [imageBlock], measures: [imageMeasure] });
+      painter.paint(imageLayout, mount);
+
+      const wrapper = mount.querySelector('.superdoc-inline-image-clip-wrapper');
+      expect(wrapper).toBeTruthy();
+      expect((wrapper as HTMLElement).style.overflow).toBe('hidden');
+      expect((wrapper as HTMLElement).style.width).toBe('80px');
+      expect((wrapper as HTMLElement).style.height).toBe('60px');
+
+      const img = wrapper?.querySelector('img');
+      expect(img).toBeTruthy();
+      expect((img as HTMLElement).style.clipPath).toBe(clipPath);
+      expect((img as HTMLElement).style.transformOrigin).toBe('0 0');
+      expect((img as HTMLElement).style.transform).toMatch(
+        /translate\([-\d.]+%,\s*[-\d.]+%\)\s*scale\([-\d.]+,\s*[-\d.]+\)/,
+      );
     });
 
     it('returns null for data URLs exceeding MAX_DATA_URL_LENGTH (10MB)', () => {
@@ -6265,7 +6606,7 @@ describe('Link accessibility - Focus styles', () => {
     const styleTag = document.querySelector('[data-superdoc-link-styles]');
     expect(styleTag).toBeTruthy();
     expect(styleTag?.textContent).toContain(':focus-visible');
-    expect(styleTag?.textContent).toContain('sr-only');
+    expect(styleTag?.textContent).toContain('superdoc-sr-only');
   });
 
   it('should not inject styles twice', () => {
@@ -6680,7 +7021,7 @@ describe('Link accessibility - Tooltip aria-describedby', () => {
     // Look for the description element in the mount, not document
     const descElem = mount.querySelector(`#${describedBy}`);
     expect(descElem?.textContent).toBe('Visit our homepage for more information');
-    expect(descElem?.className).toContain('sr-only');
+    expect(descElem?.className).toContain('superdoc-sr-only');
   });
 
   it('should maintain title attribute for visual tooltip', () => {

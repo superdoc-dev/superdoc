@@ -74,7 +74,7 @@ export class AIActions {
     literalReplace: async (
       findText: string,
       replaceText: string,
-      options?: { caseSensitive?: boolean; trackChanges?: boolean },
+      options?: { caseSensitive?: boolean; trackChanges?: boolean; contentType?: 'html' | 'markdown' | 'text' },
     ) => {
       return this.executeActionWithCallbacks(() => this.commands.literalReplace(findText, replaceText, options));
     },
@@ -97,7 +97,10 @@ export class AIActions {
     summarize: async (instruction: string) => {
       return this.executeActionWithCallbacks(() => this.commands.summarize(instruction));
     },
-    insertContent: async (instruction: string, options?: { position?: 'before' | 'after' | 'replace' }) => {
+    insertContent: async (
+      instruction: string,
+      options?: { position?: 'before' | 'after' | 'replace'; contentType?: 'html' | 'markdown' | 'text' },
+    ) => {
       return this.executeActionWithCallbacks(() => this.commands.insertContent(instruction, options));
     },
   };

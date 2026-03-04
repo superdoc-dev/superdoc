@@ -7,15 +7,34 @@
 
 import { combineIndentProperties, combineProperties, combineRunProperties } from '../cascade.js';
 import type { PropertyObject } from '../cascade.js';
-import type { ParagraphProperties, RunProperties } from './types.ts';
+import type { ParagraphConditionalFormatting, ParagraphProperties, ParagraphTabStop, RunProperties } from './types.ts';
 import type { NumberingProperties } from './numbering-types.ts';
-import type { StylesDocumentProperties, TableStyleType, TableProperties, TableLookProperties } from './styles-types.ts';
+import type {
+  StyleDefinition,
+  StylesDocumentProperties,
+  TableStyleType,
+  TableProperties,
+  TableLookProperties,
+  TableCellProperties,
+} from './styles-types.ts';
 
 export { combineIndentProperties, combineProperties, combineRunProperties };
 export type { PropertyObject };
 export type * from './types.ts';
 export type * from './numbering-types.ts';
 export type * from './styles-types.ts';
+export {
+  TABLE_STYLE_ID_TABLE_GRID,
+  TABLE_STYLE_ID_TABLE_NORMAL,
+  TABLE_FALLBACK_BORDER,
+  TABLE_FALLBACK_BORDERS,
+  TABLE_FALLBACK_CELL_PADDING,
+  isKnownTableStyleId,
+  findTypeDefaultTableStyleId,
+  resolveExistingTableEffectiveStyleId,
+  resolvePreferredNewTableStyleId,
+} from './table-style-selection.js';
+export type { ResolvedStyle, ResolvedStyleSource } from './table-style-selection.js';
 
 export interface OoxmlResolverParams {
   translatedNumbering: NumberingProperties | null | undefined;
@@ -28,7 +47,22 @@ export interface TableInfo {
   cellIndex: number;
   numCells: number;
   numRows: number;
+  rowCnfStyle?: ParagraphConditionalFormatting | null;
+  cellCnfStyle?: ParagraphConditionalFormatting | null;
 }
+
+/**
+ * OOXML default tblLook value (0x04A0) per ECMA-376 §17.4.56.
+ * Word applies these flags when a table has no explicit w:tblLook element.
+ */
+export const DEFAULT_TBL_LOOK: TableLookProperties = {
+  firstRow: true,
+  lastRow: false,
+  firstColumn: true,
+  lastColumn: false,
+  noHBand: false,
+  noVBand: true,
+};
 
 export function resolveRunProperties(
   params: OoxmlResolverParams,
@@ -211,9 +245,26 @@ export function resolveParagraphProperties(
   const finalProps = combineProperties(propsChain, {
     specialHandling: {
       tabStops: (target: ParagraphProperties, source: ParagraphProperties): unknown => {
-        // If a higher priority source defines firstLine, remove hanging from the final result
         if (target.tabStops != null && source.tabStops != null) {
-          return [...(target.tabStops as unknown[]), ...(source.tabStops as unknown[])];
+          // Merge tab stops from lower-priority (target) and higher-priority (source).
+          // Per OOXML spec, 'clear' tabs in a higher-priority source remove matching
+          // tab stops (by position) from lower-priority sources.
+          const sourceArr = source.tabStops as ParagraphTabStop[];
+          const clearPositions = new Set<number>();
+          for (const ts of sourceArr) {
+            if (ts.tab?.tabType === 'clear' && ts.tab.pos != null) {
+              clearPositions.add(ts.tab.pos);
+            }
+          }
+          const targetArr = target.tabStops as ParagraphTabStop[];
+          // Keep target tabs not cleared by source, plus non-clear source tabs
+          const merged = targetArr.filter((ts) => !(ts.tab?.pos != null && clearPositions.has(ts.tab.pos)));
+          for (const ts of sourceArr) {
+            if (ts.tab?.tabType !== 'clear') {
+              merged.push(ts);
+            }
+          }
+          return merged;
         }
         return source.tabStops;
       },
@@ -226,7 +277,7 @@ export function resolveParagraphProperties(
 }
 
 export function resolveStyleChain<T extends PropertyObject>(
-  propertyType: 'paragraphProperties' | 'runProperties',
+  propertyType: 'paragraphProperties' | 'runProperties' | 'tableProperties',
   params: OoxmlResolverParams,
   styleId: string | undefined,
   followBasedOnChain = true,
@@ -240,13 +291,13 @@ export function resolveStyleChain<T extends PropertyObject>(
   const basedOn = styleDef.basedOn;
 
   let styleChain: T[] = [styleProps];
-  const seenStyles = new Set<string>();
+  const seenStyles = new Set<string>([styleId]);
   let nextBasedOn = basedOn;
   while (followBasedOnChain && nextBasedOn) {
     if (seenStyles.has(nextBasedOn as string)) {
       break;
     }
-    seenStyles.add(basedOn as string);
+    seenStyles.add(nextBasedOn as string);
     const basedOnStyleDef = params.translatedLinkedStyles?.styles?.[nextBasedOn];
     const basedOnProps = basedOnStyleDef?.[propertyType as keyof typeof basedOnStyleDef] as T;
 
@@ -259,7 +310,7 @@ export function resolveStyleChain<T extends PropertyObject>(
   return combineProperties(styleChain);
 }
 
-export function getNumberingProperties<T extends PropertyObject>(
+export function getNumberingProperties<T extends ParagraphProperties | RunProperties>(
   propertyType: 'paragraphProperties' | 'runProperties',
   params: OoxmlResolverParams,
   ilvl: number,
@@ -315,6 +366,30 @@ export function getNumberingProperties<T extends PropertyObject>(
   return combineProperties(propertiesChain);
 }
 
+/**
+ * Resolves table-level properties (borders, cellMargins, justification,
+ * tableWidth, tableCellSpacing) by walking the full basedOn chain.
+ *
+ * Returns raw OOXML-translated shapes exactly as stored in
+ * `translatedLinkedStyles`. Conversion to layout units (px, pt)
+ * remains in the pm-adapter hydrator.
+ */
+export function resolveTableProperties(
+  tableStyleId: string | null | undefined,
+  translatedLinkedStyles: StylesDocumentProperties | null | undefined,
+): TableProperties {
+  if (!tableStyleId || !translatedLinkedStyles?.styles) {
+    return {} as TableProperties;
+  }
+
+  const params: OoxmlResolverParams = {
+    translatedLinkedStyles,
+    translatedNumbering: null,
+  };
+
+  return resolveStyleChain<TableProperties>('tableProperties', params, tableStyleId);
+}
+
 export function resolveDocxFontFamily(
   attributes: Record<string, unknown> | null | undefined,
   docx: Record<string, unknown> | null | undefined,
@@ -355,8 +430,61 @@ export function resolveDocxFontFamily(
   return resolved;
 }
 
+/**
+ * Resolve effective band sizes by walking the basedOn chain.
+ * Returns the first defined value for each band size, falling back to 1.
+ */
+function resolveEffectiveBandSizes(
+  styleId: string,
+  translatedLinkedStyles: StylesDocumentProperties,
+): { rowBandSize: number; colBandSize: number } {
+  const seen = new Set<string>();
+  let currentId: string | undefined = styleId;
+  let rowBandSize: number | undefined;
+  let colBandSize: number | undefined;
+  while (currentId && !seen.has(currentId)) {
+    seen.add(currentId);
+    const def: StyleDefinition | undefined = translatedLinkedStyles.styles?.[currentId];
+    const tblProps = def?.tableProperties;
+    if (rowBandSize == null && tblProps?.tableStyleRowBandSize != null) {
+      rowBandSize = tblProps.tableStyleRowBandSize;
+    }
+    if (colBandSize == null && tblProps?.tableStyleColBandSize != null) {
+      colBandSize = tblProps.tableStyleColBandSize;
+    }
+    if (rowBandSize != null && colBandSize != null) break;
+    currentId = def?.basedOn;
+  }
+  return { rowBandSize: rowBandSize ?? 1, colBandSize: colBandSize ?? 1 };
+}
+
+/**
+ * Resolve a single conditional table style property type across the basedOn chain.
+ * Collects entries from ancestors (deepest first) and merges them so the leaf wins.
+ */
+function resolveConditionalProps<T extends PropertyObject>(
+  propertyType: 'paragraphProperties' | 'runProperties' | 'tableCellProperties',
+  styleType: TableStyleType,
+  styleId: string,
+  translatedLinkedStyles: StylesDocumentProperties,
+): T | undefined {
+  const chain: T[] = [];
+  const seen = new Set<string>();
+  let currentId: string | undefined = styleId;
+  while (currentId && !seen.has(currentId)) {
+    seen.add(currentId);
+    const def: StyleDefinition | undefined = translatedLinkedStyles.styles?.[currentId];
+    const props = def?.tableStyleProperties?.[styleType]?.[propertyType] as T | undefined;
+    if (props) chain.push(props);
+    currentId = def?.basedOn;
+  }
+  if (chain.length === 0) return undefined;
+  chain.reverse();
+  return combineProperties(chain) as T;
+}
+
 export function resolveCellStyles<T extends PropertyObject>(
-  propertyType: 'paragraphProperties' | 'runProperties',
+  propertyType: 'paragraphProperties' | 'runProperties' | 'tableCellProperties',
   tableInfo: TableInfo | null | undefined,
   translatedLinkedStyles: StylesDocumentProperties,
 ): T[] {
@@ -364,29 +492,97 @@ export function resolveCellStyles<T extends PropertyObject>(
     return [];
   }
   const cellStyleProps: T[] = [];
-  if (tableInfo != null && tableInfo.tableProperties.tableStyleId) {
-    const tableStyleDef = translatedLinkedStyles.styles[tableInfo.tableProperties.tableStyleId];
-    const tableStylePropsDef = tableStyleDef?.tableProperties;
-    const rowBandSize = tableStylePropsDef?.tableStyleRowBandSize ?? 1;
-    const colBandSize = tableStylePropsDef?.tableStyleColBandSize ?? 1;
-    const cellStyleTypes = determineCellStyleTypes(
-      tableInfo.tableProperties?.tblLook,
-      tableInfo.rowIndex,
-      tableInfo.cellIndex,
-      tableInfo.numRows,
-      tableInfo.numCells,
-      rowBandSize,
-      colBandSize,
-    );
-    cellStyleTypes.forEach((styleType) => {
-      const typeProps = tableStyleDef?.tableStyleProperties?.[styleType]?.[propertyType] as T;
-      if (typeProps) {
-        cellStyleProps.push(typeProps);
-      }
-    });
-  }
+  const tableStyleId = tableInfo.tableProperties.tableStyleId;
+  const { rowBandSize, colBandSize } = resolveEffectiveBandSizes(tableStyleId, translatedLinkedStyles);
+  const cellStyleTypes = determineCellStyleTypes(
+    tableInfo.tableProperties?.tblLook ?? DEFAULT_TBL_LOOK,
+    tableInfo.rowIndex,
+    tableInfo.cellIndex,
+    tableInfo.numRows,
+    tableInfo.numCells,
+    rowBandSize,
+    colBandSize,
+    tableInfo.rowCnfStyle,
+    tableInfo.cellCnfStyle,
+  );
+  cellStyleTypes.forEach((styleType) => {
+    const typeProps = resolveConditionalProps<T>(propertyType, styleType, tableStyleId, translatedLinkedStyles);
+    if (typeProps) {
+      cellStyleProps.push(typeProps);
+    }
+  });
   return cellStyleProps;
 }
+
+/**
+ * Resolve table cell properties (shading, borders, margins) by cascading
+ * conditional table style properties with inline cell properties.
+ *
+ * Cascade order (low → high priority):
+ *   wholeTable → bands → firstRow/lastRow/firstCol/lastCol → corner cells → inline
+ */
+export function resolveTableCellProperties(
+  inlineProps: TableCellProperties | null | undefined,
+  tableInfo: TableInfo | null | undefined,
+  translatedLinkedStyles: StylesDocumentProperties | null | undefined,
+): TableCellProperties {
+  if (!translatedLinkedStyles) {
+    return (inlineProps ?? {}) as TableCellProperties;
+  }
+
+  const cellStyleProps = resolveCellStyles<TableCellProperties>(
+    'tableCellProperties',
+    tableInfo,
+    translatedLinkedStyles,
+  );
+
+  if (cellStyleProps.length === 0) {
+    return (inlineProps ?? {}) as TableCellProperties;
+  }
+
+  // Cascade: style properties (low→high) then inline wins last
+  const chain: TableCellProperties[] = [...cellStyleProps];
+  if (inlineProps && Object.keys(inlineProps).length > 0) {
+    chain.push(inlineProps);
+  }
+
+  return combineProperties(chain, { fullOverrideProps: ['shading'] });
+}
+
+/** Maps cnfStyle boolean flags to their corresponding TableStyleType keys. */
+const CNF_STYLE_MAP: ReadonlyArray<[keyof ParagraphConditionalFormatting, TableStyleType]> = [
+  ['oddHBand', 'band1Horz'],
+  ['evenHBand', 'band2Horz'],
+  ['oddVBand', 'band1Vert'],
+  ['evenVBand', 'band2Vert'],
+  ['firstRow', 'firstRow'],
+  ['firstColumn', 'firstCol'],
+  ['lastRow', 'lastRow'],
+  ['lastColumn', 'lastCol'],
+  ['firstRowFirstColumn', 'nwCell'],
+  ['firstRowLastColumn', 'neCell'],
+  ['lastRowFirstColumn', 'swCell'],
+  ['lastRowLastColumn', 'seCell'],
+];
+
+// ECMA-376 §17.7.6 precedence order (low → high).
+// combineProperties treats later entries as higher priority, so this array
+// must list types from lowest to highest override strength.
+const TABLE_STYLE_PRECEDENCE: TableStyleType[] = [
+  'wholeTable',
+  'band1Horz',
+  'band2Horz',
+  'band1Vert',
+  'band2Vert',
+  'firstCol',
+  'lastCol',
+  'firstRow',
+  'lastRow',
+  'nwCell',
+  'neCell',
+  'swCell',
+  'seCell',
+];
 
 function determineCellStyleTypes(
   tblLook: TableLookProperties | null | undefined,
@@ -396,51 +592,50 @@ function determineCellStyleTypes(
   numCells?: number | null,
   rowBandSize = 1,
   colBandSize = 1,
+  rowCnfStyle?: ParagraphConditionalFormatting | null,
+  cellCnfStyle?: ParagraphConditionalFormatting | null,
 ): TableStyleType[] {
-  const styleTypes: TableStyleType[] = ['wholeTable'];
+  const applicable = new Set<TableStyleType>(['wholeTable']);
 
   const normalizedRowBandSize = rowBandSize > 0 ? rowBandSize : 1;
   const normalizedColBandSize = colBandSize > 0 ? colBandSize : 1;
-  const rowGroup = Math.floor(rowIndex / normalizedRowBandSize);
-  const colGroup = Math.floor(cellIndex / normalizedColBandSize);
+
+  // Per ECMA-376, banding excludes header/footer rows and first/last columns.
+  // Offset the index so the first data row/column starts at band1.
+  const bandRowIndex = Math.max(0, rowIndex - (tblLook?.firstRow ? 1 : 0));
+  const bandColIndex = Math.max(0, cellIndex - (tblLook?.firstColumn ? 1 : 0));
+  const rowGroup = Math.floor(bandRowIndex / normalizedRowBandSize);
+  const colGroup = Math.floor(bandColIndex / normalizedColBandSize);
 
   if (!tblLook?.noHBand) {
-    if (rowGroup % 2 === 0) {
-      styleTypes.push('band1Horz');
-    } else {
-      styleTypes.push('band2Horz');
-    }
+    applicable.add(rowGroup % 2 === 0 ? 'band1Horz' : 'band2Horz');
   }
 
   if (!tblLook?.noVBand) {
-    if (colGroup % 2 === 0) {
-      styleTypes.push('band1Vert');
-    } else {
-      styleTypes.push('band2Vert');
-    }
+    applicable.add(colGroup % 2 === 0 ? 'band1Vert' : 'band2Vert');
   }
 
   if (tblLook?.firstRow && rowIndex === 0) {
-    styleTypes.push('firstRow');
+    applicable.add('firstRow');
   }
   if (tblLook?.firstColumn && cellIndex === 0) {
-    styleTypes.push('firstCol');
+    applicable.add('firstCol');
   }
   if (tblLook?.lastRow && numRows != null && numRows > 0 && rowIndex === numRows - 1) {
-    styleTypes.push('lastRow');
+    applicable.add('lastRow');
   }
   if (tblLook?.lastColumn && numCells != null && numCells > 0 && cellIndex === numCells - 1) {
-    styleTypes.push('lastCol');
+    applicable.add('lastCol');
   }
 
   if (rowIndex === 0 && cellIndex === 0) {
-    styleTypes.push('nwCell');
+    applicable.add('nwCell');
   }
   if (rowIndex === 0 && numCells != null && numCells > 0 && cellIndex === numCells - 1) {
-    styleTypes.push('neCell');
+    applicable.add('neCell');
   }
   if (numRows != null && numRows > 0 && rowIndex === numRows - 1 && cellIndex === 0) {
-    styleTypes.push('swCell');
+    applicable.add('swCell');
   }
   if (
     numRows != null &&
@@ -450,8 +645,22 @@ function determineCellStyleTypes(
     rowIndex === numRows - 1 &&
     cellIndex === numCells - 1
   ) {
-    styleTypes.push('seCell');
+    applicable.add('seCell');
   }
 
-  return styleTypes;
+  // Union in cnfStyle-derived types that index-based logic didn't already add.
+  // cnfStyle only adds types, never removes them.
+  if (rowCnfStyle || cellCnfStyle) {
+    for (const [flag, styleType] of CNF_STYLE_MAP) {
+      const rowFlag = rowCnfStyle?.[flag];
+      const cellFlag = cellCnfStyle?.[flag];
+      if (rowFlag === true || cellFlag === true) {
+        applicable.add(styleType);
+      }
+    }
+  }
+
+  // Return types in ECMA-376 precedence order (low → high) so that
+  // combineProperties applies overrides correctly.
+  return TABLE_STYLE_PRECEDENCE.filter((t) => applicable.has(t));
 }

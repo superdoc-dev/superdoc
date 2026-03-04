@@ -32,12 +32,17 @@ export type InsertTrackedChangeOptions = {
   to?: number;
   /** Replacement text */
   text?: string;
+  /** Explicit change ID for deterministic callers (defaults to a new UUID) */
+  id?: string;
   /** Author override for the tracked change (defaults to editor user if not provided) */
   user?: Partial<User>;
   /** Optional comment reply to attach to the tracked change */
   comment?: string;
   /** Whether to add the change to the undo history (defaults to true) */
   addToHistory?: boolean;
+  /** Whether to emit commentsUpdate event for the tracked change (defaults to true).
+   * Set to false to apply the mark without creating a sidebar entry/bubble. */
+  emitCommentEvent?: boolean;
 };
 
 export interface TrackChangesCommands {

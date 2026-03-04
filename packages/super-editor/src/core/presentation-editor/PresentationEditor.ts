@@ -3591,6 +3591,12 @@ export class PresentationEditor extends EventEmitter {
       if (currentZoom !== 1) {
         this.#domPainter.setZoom(currentZoom);
       }
+      // Pass the scroll container so virtualization computes scrollY relative to it,
+      // not the browser viewport. This fixes offset errors when SuperDoc is mounted
+      // inside a wrapper div with overflow-y: auto.
+      if (this.#scrollContainer && this.#scrollContainer instanceof HTMLElement) {
+        this.#domPainter.setScrollContainer?.(this.#scrollContainer);
+      }
     }
     return this.#domPainter;
   }

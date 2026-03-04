@@ -123,6 +123,7 @@ export const createDomPainter = (
   getPaintSnapshot?: () => PaintSnapshot | null;
   onScroll?: () => void;
   setZoom?: (zoom: number) => void;
+  setScrollContainer?: (el: HTMLElement | null) => void;
 } => {
   const painter = new DomPainter(options.blocks, options.measures, {
     pageStyles: options.pageStyles,
@@ -171,6 +172,10 @@ export const createDomPainter = (
     // Notify painter of CSS transform scale so virtualization maps scroll correctly
     setZoom(zoom: number) {
       painter.setZoom(zoom);
+    },
+    // Set the external scroll container for correct scrollY calculation
+    setScrollContainer(el: HTMLElement | null) {
+      painter.setScrollContainer(el);
     },
   };
 };

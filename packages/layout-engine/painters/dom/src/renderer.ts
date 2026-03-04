@@ -1028,6 +1028,14 @@ export class DomPainter {
   private onResizeHandler: ((e: Event) => void) | null = null;
   /** CSS zoom/scale factor applied to the mount element via transform: scale(). Defaults to 1 (no zoom). */
   private zoomFactor = 1;
+  /**
+   * External scroll container (an ancestor element with overflow-y: auto/scroll).
+   * When set, updateVirtualWindow() uses this element's position to compute scrollY
+   * relative to the scroll container instead of relative to the browser viewport.
+   * This fixes the scroll offset calculation when SuperDoc is mounted inside a
+   * wrapper div that owns scrolling rather than the window.
+   */
+  private scrollContainer: HTMLElement | null = null;
   private sdtHover = new SdtGroupedHover();
   /** The currently active/selected comment ID for highlighting */
   private activeCommentId: string | null = null;
@@ -1099,6 +1107,29 @@ export class DomPainter {
     const next = typeof zoom === 'number' && Number.isFinite(zoom) && zoom > 0 ? zoom : 1;
     if (next !== this.zoomFactor) {
       this.zoomFactor = next;
+      if (this.virtualEnabled && this.mount) {
+        this.updateVirtualWindow();
+      }
+    }
+  }
+
+  /**
+   * Sets the external scroll container element.
+   *
+   * When the scroll container is an ancestor element (e.g., a wrapper div with
+   * overflow-y: auto), the default scrollY calculation using mount.getBoundingClientRect()
+   * relative to the viewport produces an offset equal to the scroll container's distance
+   * from the viewport top. This causes the virtualization window to be misaligned with the
+   * actual visible area.
+   *
+   * Setting the scroll container allows updateVirtualWindow() to compute scrollY relative
+   * to the scroll container instead, eliminating this offset.
+   *
+   * @param el - The scroll container element, or null to clear.
+   */
+  public setScrollContainer(el: HTMLElement | null): void {
+    if (el !== this.scrollContainer) {
+      this.scrollContainer = el;
       if (this.virtualEnabled && this.mount) {
         this.updateVirtualWindow();
       }
@@ -1644,6 +1675,15 @@ export class DomPainter {
     const isContainerScrollable = this.mount.scrollHeight > this.mount.clientHeight + 1;
     if (isContainerScrollable) {
       scrollY = Math.max(0, this.mount.scrollTop - paddingTop);
+    } else if (this.scrollContainer) {
+      // Intermediate scroll ancestor (e.g., a wrapper div with overflow-y: auto).
+      // Compute scrollY relative to the scroll container, not the browser viewport.
+      // Using (scrollContainer.rect.top - mount.rect.top) instead of just (-mount.rect.top)
+      // eliminates the offset caused by the scroll container's distance from the viewport top
+      // (e.g., a toolbar/header above the scroll wrapper).
+      const mountRect = this.mount.getBoundingClientRect();
+      const containerRect = this.scrollContainer.getBoundingClientRect();
+      scrollY = Math.max(0, (containerRect.top - mountRect.top) / zoom - paddingTop);
     } else {
       const rect = this.mount.getBoundingClientRect();
       // rect.top is in screen space (affected by CSS transform: scale).

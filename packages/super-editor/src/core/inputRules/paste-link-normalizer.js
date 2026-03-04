@@ -227,18 +227,18 @@ function normalizeOneLinkMark(tr, editor, linkMarkType, span, allowedProtocols) 
   // Never trust pasted rIds — they reference a different document's rels
   attrs.rId = null;
 
-  const hasAnchor = Boolean(attrs.anchor);
   const rawHref = attrs.href;
+  const hasInternalRef = Boolean(attrs.anchor) || Boolean(attrs.name);
 
-  // Links with only an anchor (internal bookmark) need no href processing,
-  // but we still must reapply the mark to strip the pasted rId.
-  if (!rawHref && hasAnchor) {
+  // Links with an internal reference (anchor or name) but no href need no
+  // href processing — just reapply the mark to strip the pasted rId.
+  if (!rawHref && hasInternalRef) {
     tr.removeMark(from, to, linkMarkType);
     tr.addMark(from, to, linkMarkType.create(attrs));
     return;
   }
 
-  // No href and no anchor → meaningless link, remove it
+  // No href, no anchor, no name → meaningless link, remove it
   if (!rawHref) {
     tr.removeMark(from, to, linkMarkType);
     return;

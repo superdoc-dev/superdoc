@@ -515,10 +515,27 @@ describe('normalizePastedLinks', () => {
     expect(addedMark.attrs.anchor).toBe('bookmark1');
   });
 
-  it('removes link with no href and no anchor', () => {
+  it('preserves name-only anchor target with rId stripped', () => {
+    const editor = createMockEditor({ mode: 'docx' });
+    const { tr, linkMarkType } = createTransactionWithLinks([
+      { from: 0, to: 10, attrs: { href: null, name: 'toc_1', rId: 'rId7' } },
+    ]);
+
+    normalizePastedLinks(tr, editor);
+
+    // Name-only links are valid bookmark targets — must be preserved
+    expect(tr.removeMark).toHaveBeenCalledWith(0, 10, linkMarkType);
+    expect(tr.addMark).toHaveBeenCalledTimes(1);
+
+    const addedMark = tr.addMark.mock.calls[0][2];
+    expect(addedMark.attrs.rId).toBeNull();
+    expect(addedMark.attrs.name).toBe('toc_1');
+  });
+
+  it('removes link with no href, no anchor, and no name', () => {
     const editor = createMockEditor({ mode: 'html' });
     const { tr, linkMarkType } = createTransactionWithLinks([
-      { from: 0, to: 10, attrs: { href: null, anchor: undefined, rId: null } },
+      { from: 0, to: 10, attrs: { href: null, anchor: undefined, name: null, rId: null } },
     ]);
 
     normalizePastedLinks(tr, editor);

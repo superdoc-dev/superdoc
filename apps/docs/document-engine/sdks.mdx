@@ -347,6 +347,9 @@ If you only want to join rooms that already exist, use `onMissing: 'error'`.
 
 The SDKs expose all operations from the [Document API](/document-api/overview) plus lifecycle and session commands. The tables below are grouped by category.
 
+<Tabs>
+  <Tab title="Node.js">
+
 #### Lifecycle
 
 | Operation | CLI command | Description |
@@ -426,6 +429,41 @@ The SDKs expose all operations from the [Document API](/document-api/overview) p
 | `doc.format.stylisticSets` | `format stylistic-sets` | Set or clear the `stylisticSets` inline run property on the target text range. |
 | `doc.format.contextualAlternates` | `format contextual-alternates` | Set or clear the `contextualAlternates` inline run property on the target text range. |
 
+#### Format / Paragraph
+
+| Operation | CLI command | Description |
+| --- | --- | --- |
+| `doc.format.paragraph.resetDirectFormatting` | `format paragraph reset-direct-formatting` | Strip all direct paragraph formatting while preserving style reference, numbering, and section metadata. |
+| `doc.format.paragraph.setAlignment` | `format paragraph set-alignment` | Set paragraph alignment (justification) on a paragraph-like block. |
+| `doc.format.paragraph.clearAlignment` | `format paragraph clear-alignment` | Remove direct paragraph alignment, reverting to style-defined or default alignment. |
+| `doc.format.paragraph.setIndentation` | `format paragraph set-indentation` | Set paragraph indentation properties (left, right, firstLine, hanging) in twips. |
+| `doc.format.paragraph.clearIndentation` | `format paragraph clear-indentation` | Remove all direct paragraph indentation. |
+| `doc.format.paragraph.setSpacing` | `format paragraph set-spacing` | Set paragraph spacing properties (before, after, line, lineRule) in twips. |
+| `doc.format.paragraph.clearSpacing` | `format paragraph clear-spacing` | Remove all direct paragraph spacing. |
+| `doc.format.paragraph.setKeepOptions` | `format paragraph set-keep-options` | Set keep-with-next, keep-lines-together, and widow/orphan control flags. |
+| `doc.format.paragraph.setOutlineLevel` | `format paragraph set-outline-level` | Set the paragraph outline level (0–9) or null to clear. |
+| `doc.format.paragraph.setFlowOptions` | `format paragraph set-flow-options` | Set contextual spacing, page-break-before, and suppress-auto-hyphens flags. |
+| `doc.format.paragraph.setTabStop` | `format paragraph set-tab-stop` | Add or replace a tab stop at a given position. |
+| `doc.format.paragraph.clearTabStop` | `format paragraph clear-tab-stop` | Remove a tab stop at a given position. |
+| `doc.format.paragraph.clearAllTabStops` | `format paragraph clear-all-tab-stops` | Remove all tab stops from a paragraph. |
+| `doc.format.paragraph.setBorder` | `format paragraph set-border` | Set border properties for a specific side of a paragraph. |
+| `doc.format.paragraph.clearBorder` | `format paragraph clear-border` | Remove border for a specific side or all sides of a paragraph. |
+| `doc.format.paragraph.setShading` | `format paragraph set-shading` | Set paragraph shading (background fill, pattern color, pattern type). |
+| `doc.format.paragraph.clearShading` | `format paragraph clear-shading` | Remove all paragraph shading. |
+
+#### Styles
+
+| Operation | CLI command | Description |
+| --- | --- | --- |
+| `doc.styles.apply` | `styles apply` | Apply document-level default style changes to the stylesheet (word/styles.xml). Targets docDefaults run and paragraph channels with set-style patch semantics. |
+
+#### Styles / Paragraph
+
+| Operation | CLI command | Description |
+| --- | --- | --- |
+| `doc.styles.paragraph.setStyle` | `styles paragraph set-style` | Set the paragraph style reference (w:pStyle) on a paragraph-like block. |
+| `doc.styles.paragraph.clearStyle` | `styles paragraph clear-style` | Remove the paragraph style reference from a paragraph-like block. |
+
 #### Create
 
 | Operation | CLI command | Description |
@@ -435,6 +473,29 @@ The SDKs expose all operations from the [Document API](/document-api/overview) p
 | `doc.create.sectionBreak` | `create section-break` | Create a section break at the target location with optional initial section properties. |
 | `doc.create.table` | `create table` | Create a new table at the target position. |
 | `doc.create.tableOfContents` | `create table-of-contents` | Insert a new table of contents at the target position. |
+
+#### Sections
+
+| Operation | CLI command | Description |
+| --- | --- | --- |
+| `doc.sections.list` | `sections list` | List sections in deterministic order with section-target handles. |
+| `doc.sections.get` | `sections get` | Retrieve full section information by section address. |
+| `doc.sections.setBreakType` | `sections set-break-type` | Set the section break type. |
+| `doc.sections.setPageMargins` | `sections set-page-margins` | Set page-edge margins for a section. |
+| `doc.sections.setHeaderFooterMargins` | `sections set-header-footer-margins` | Set header/footer margin distances for a section. |
+| `doc.sections.setPageSetup` | `sections set-page-setup` | Set page size/orientation properties for a section. |
+| `doc.sections.setColumns` | `sections set-columns` | Set column configuration for a section. |
+| `doc.sections.setLineNumbering` | `sections set-line-numbering` | Enable or configure line numbering for a section. |
+| `doc.sections.setPageNumbering` | `sections set-page-numbering` | Set page numbering format/start for a section. |
+| `doc.sections.setTitlePage` | `sections set-title-page` | Enable or disable title-page behavior for a section. |
+| `doc.sections.setOddEvenHeadersFooters` | `sections set-odd-even-headers-footers` | Enable or disable odd/even header-footer mode in document settings. |
+| `doc.sections.setVerticalAlign` | `sections set-vertical-align` | Set vertical page alignment for a section. |
+| `doc.sections.setSectionDirection` | `sections set-section-direction` | Set section text flow direction (LTR/RTL). |
+| `doc.sections.setHeaderFooterRef` | `sections set-header-footer-ref` | Set or replace a section header/footer reference for a variant. |
+| `doc.sections.clearHeaderFooterRef` | `sections clear-header-footer-ref` | Clear a section header/footer reference for a specific variant. |
+| `doc.sections.setLinkToPrevious` | `sections set-link-to-previous` | Set or clear link-to-previous behavior for a header/footer variant. |
+| `doc.sections.setPageBorders` | `sections set-page-borders` | Set page border configuration for a section. |
+| `doc.sections.clearPageBorders` | `sections clear-page-borders` | Clear page border configuration for a section. |
 
 #### Blocks
 
@@ -464,6 +525,68 @@ The SDKs expose all operations from the [Document API](/document-api/overview) p
 | `doc.lists.setLevelRestart` | `lists set-level-restart` | Set the restart behavior for a specific list level. |
 | `doc.lists.convertToText` | `lists convert-to-text` | Convert list items to plain paragraphs, optionally prepending the rendered marker text. |
 
+#### Tables
+
+| Operation | CLI command | Description |
+| --- | --- | --- |
+| `doc.tables.convertFromText` | `tables convert-from-text` | Convert a text range into a table. |
+| `doc.tables.delete` | `tables delete` | Delete the target table from the document. |
+| `doc.tables.clearContents` | `tables clear-contents` | Clear the contents of the target table or cell range. |
+| `doc.tables.move` | `tables move` | Move a table to a new position in the document. |
+| `doc.tables.split` | `tables split` | Split a table into two tables at the target row. |
+| `doc.tables.convertToText` | `tables convert-to-text` | Convert a table back to plain text. |
+| `doc.tables.setLayout` | `tables set-layout` | Set the layout mode of the target table. |
+| `doc.tables.insertRow` | `tables insert-row` | Insert a new row into the target table. |
+| `doc.tables.deleteRow` | `tables delete-row` | Delete a row from the target table. |
+| `doc.tables.setRowHeight` | `tables set-row-height` | Set the height of a table row. |
+| `doc.tables.distributeRows` | `tables distribute-rows` | Distribute row heights evenly across the target table. |
+| `doc.tables.setRowOptions` | `tables set-row-options` | Set options on a table row such as header repeat or page break. |
+| `doc.tables.insertColumn` | `tables insert-column` | Insert a new column into the target table. |
+| `doc.tables.deleteColumn` | `tables delete-column` | Delete a column from the target table. |
+| `doc.tables.setColumnWidth` | `tables set-column-width` | Set the width of a table column. |
+| `doc.tables.distributeColumns` | `tables distribute-columns` | Distribute column widths evenly across the target table. |
+| `doc.tables.insertCell` | `tables insert-cell` | Insert a new cell into a table row. |
+| `doc.tables.deleteCell` | `tables delete-cell` | Delete a cell from a table row. |
+| `doc.tables.mergeCells` | `tables merge-cells` | Merge a range of table cells into one. |
+| `doc.tables.unmergeCells` | `tables unmerge-cells` | Unmerge a previously merged table cell. |
+| `doc.tables.splitCell` | `tables split-cell` | Split a table cell into multiple cells. |
+| `doc.tables.setCellProperties` | `tables set-cell-properties` | Set properties on a table cell such as vertical alignment or text direction. |
+| `doc.tables.sort` | `tables sort` | Sort table rows by a column value. |
+| `doc.tables.setAltText` | `tables set-alt-text` | Set the alternative text description for a table. |
+| `doc.tables.setStyle` | `tables set-style` | Apply a named table style to the target table. |
+| `doc.tables.clearStyle` | `tables clear-style` | Remove the applied table style, reverting to defaults. |
+| `doc.tables.setStyleOption` | `tables set-style-option` | Toggle a conditional style option such as banded rows or first column. |
+| `doc.tables.setBorder` | `tables set-border` | Set border properties on a table or cell range. |
+| `doc.tables.clearBorder` | `tables clear-border` | Remove border formatting from a table or cell range. |
+| `doc.tables.applyBorderPreset` | `tables apply-border-preset` | Apply a border preset (e.g. all borders, outside only) to a table. |
+| `doc.tables.setShading` | `tables set-shading` | Set the background shading color on a table or cell range. |
+| `doc.tables.clearShading` | `tables clear-shading` | Remove shading from a table or cell range. |
+| `doc.tables.setTablePadding` | `tables set-table-padding` | Set default cell padding for the entire table. |
+| `doc.tables.setCellPadding` | `tables set-cell-padding` | Set padding on a specific table cell or cell range. |
+| `doc.tables.setCellSpacing` | `tables set-cell-spacing` | Set the cell spacing for the target table. |
+| `doc.tables.clearCellSpacing` | `tables clear-cell-spacing` | Remove custom cell spacing from the target table. |
+| `doc.tables.get` | `tables get` | Retrieve table structure and dimensions by locator. |
+| `doc.tables.getCells` | `tables get-cells` | Retrieve cell information for a table, optionally filtered by row or column. |
+| `doc.tables.getProperties` | `tables get-properties` | Retrieve layout and style properties of a table. |
+| `doc.tables.getStyles` | `tables get-styles` | List all table styles and the document-level default table style setting. |
+| `doc.tables.setDefaultStyle` | `tables set-default-style` | Set the document-level default table style (w:defaultTableStyle in settings.xml). |
+| `doc.tables.clearDefaultStyle` | `tables clear-default-style` | Remove the document-level default table style setting. |
+
+#### Table of contents
+
+| Operation | CLI command | Description |
+| --- | --- | --- |
+| `doc.toc.list` | `toc list` | List all tables of contents in the document. |
+| `doc.toc.get` | `toc get` | Retrieve details of a specific table of contents. |
+| `doc.toc.configure` | `toc configure` | Update the configuration switches of a table of contents. |
+| `doc.toc.update` | `toc update` | Rebuild or refresh the materialized content of a table of contents. |
+| `doc.toc.remove` | `toc remove` | Remove a table of contents from the document. |
+| `doc.toc.markEntry` | `toc mark-entry` | Insert a TC (table of contents entry) field at the target paragraph. |
+| `doc.toc.unmarkEntry` | `toc unmark-entry` | Remove a TC (table of contents entry) field from the document. |
+| `doc.toc.listEntries` | `toc list-entries` | List all TC (table of contents entry) fields in the document body. |
+| `doc.toc.getEntry` | `toc get-entry` | Retrieve details of a specific TC (table of contents entry) field. |
+| `doc.toc.editEntry` | `toc edit-entry` | Update the properties of a TC (table of contents entry) field. |
+
 #### Comments
 
 | Operation | CLI command | Description |
@@ -481,6 +604,12 @@ The SDKs expose all operations from the [Document API](/document-api/overview) p
 | `doc.trackChanges.list` | `track-changes list` | List all tracked changes in the document. |
 | `doc.trackChanges.get` | `track-changes get` | Retrieve a single tracked change by ID. |
 | `doc.trackChanges.decide` | `track-changes decide` | Accept or reject a tracked change (by ID or scope: all). |
+
+#### Capabilities
+
+| Operation | CLI command | Description |
+| --- | --- | --- |
+| `doc.capabilities.get` | `capabilities` | Query runtime capabilities supported by the current document engine. |
 
 #### History
 
@@ -506,6 +635,298 @@ The SDKs expose all operations from the [Document API](/document-api/overview) p
 | `doc.status` | `status` | Show the current session status and document metadata. |
 | `doc.describe` | `describe` | List all available CLI operations and contract metadata. |
 | `doc.describeCommand` | `describe command` | Show detailed metadata for a single CLI operation. |
+
+  </Tab>
+  <Tab title="Python">
+
+#### Lifecycle
+
+| Operation | CLI command | Description |
+| --- | --- | --- |
+| `doc.open` | `open` | Open a document and create a persistent editing session. Optionally override the document body with contentOverride + overrideType (markdown, html, or text). |
+| `doc.save` | `save` | Save the current session to the original file or a new path. |
+| `doc.close` | `close` | Close the active editing session and clean up resources. |
+
+#### Query
+
+| Operation | CLI command | Description |
+| --- | --- | --- |
+| `doc.find` | `find` | Search the document for nodes matching type, text, or attribute criteria. |
+| `doc.get_node` | `get-node` | Retrieve a single node by target position. |
+| `doc.get_node_by_id` | `get-node-by-id` | Retrieve a single node by its unique ID. |
+| `doc.get_text` | `get-text` | Extract the plain-text content of the document. |
+| `doc.get_markdown` | `get-markdown` | Extract the document content as a Markdown string. |
+| `doc.info` | `info` | Return document metadata including revision, node count, and capabilities. |
+| `doc.query.match` | `query match` | Deterministic selector-based search with cardinality contracts for mutation targeting. |
+| `doc.mutations.preview` | `mutations preview` | Dry-run a mutation plan, returning resolved targets without applying changes. |
+
+#### Mutation
+
+| Operation | CLI command | Description |
+| --- | --- | --- |
+| `doc.insert` | `insert` | Insert content at a target position, or at the end of the document when target is omitted. Supports text (default), markdown, and html content types via the `type` field. |
+| `doc.replace` | `replace` | Replace content at a target position with new text or inline content. |
+| `doc.delete` | `delete` | Delete content at a target position. |
+| `doc.mutations.apply` | `mutations apply` | Execute a mutation plan atomically against the document. |
+
+#### Format
+
+| Operation | CLI command | Description |
+| --- | --- | --- |
+| `doc.format.apply` | `format apply` | Apply inline run-property patch changes to the target range with explicit set/clear semantics. |
+| `doc.format.bold` | `format bold` | Set or clear the `bold` inline run property on the target text range. |
+| `doc.format.italic` | `format italic` | Set or clear the `italic` inline run property on the target text range. |
+| `doc.format.strike` | `format strike` | Set or clear the `strike` inline run property on the target text range. |
+| `doc.format.underline` | `format underline` | Set or clear the `underline` inline run property on the target text range. |
+| `doc.format.highlight` | `format highlight` | Set or clear the `highlight` inline run property on the target text range. |
+| `doc.format.color` | `format color` | Set or clear the `color` inline run property on the target text range. |
+| `doc.format.font_size` | `format font-size` | Set or clear the `fontSize` inline run property on the target text range. |
+| `doc.format.font_family` | `format font-family` | Set or clear the `fontFamily` inline run property on the target text range. |
+| `doc.format.letter_spacing` | `format letter-spacing` | Set or clear the `letterSpacing` inline run property on the target text range. |
+| `doc.format.vert_align` | `format vert-align` | Set or clear the `vertAlign` inline run property on the target text range. |
+| `doc.format.position` | `format position` | Set or clear the `position` inline run property on the target text range. |
+| `doc.format.dstrike` | `format dstrike` | Set or clear the `dstrike` inline run property on the target text range. |
+| `doc.format.small_caps` | `format small-caps` | Set or clear the `smallCaps` inline run property on the target text range. |
+| `doc.format.caps` | `format caps` | Set or clear the `caps` inline run property on the target text range. |
+| `doc.format.shading` | `format shading` | Set or clear the `shading` inline run property on the target text range. |
+| `doc.format.border` | `format border` | Set or clear the `border` inline run property on the target text range. |
+| `doc.format.outline` | `format outline` | Set or clear the `outline` inline run property on the target text range. |
+| `doc.format.shadow` | `format shadow` | Set or clear the `shadow` inline run property on the target text range. |
+| `doc.format.emboss` | `format emboss` | Set or clear the `emboss` inline run property on the target text range. |
+| `doc.format.imprint` | `format imprint` | Set or clear the `imprint` inline run property on the target text range. |
+| `doc.format.char_scale` | `format char-scale` | Set or clear the `charScale` inline run property on the target text range. |
+| `doc.format.kerning` | `format kerning` | Set or clear the `kerning` inline run property on the target text range. |
+| `doc.format.vanish` | `format vanish` | Set or clear the `vanish` inline run property on the target text range. |
+| `doc.format.web_hidden` | `format web-hidden` | Set or clear the `webHidden` inline run property on the target text range. |
+| `doc.format.spec_vanish` | `format spec-vanish` | Set or clear the `specVanish` inline run property on the target text range. |
+| `doc.format.rtl` | `format rtl` | Set or clear the `rtl` inline run property on the target text range. |
+| `doc.format.cs` | `format cs` | Set or clear the `cs` inline run property on the target text range. |
+| `doc.format.b_cs` | `format b-cs` | Set or clear the `bCs` inline run property on the target text range. |
+| `doc.format.i_cs` | `format i-cs` | Set or clear the `iCs` inline run property on the target text range. |
+| `doc.format.east_asian_layout` | `format east-asian-layout` | Set or clear the `eastAsianLayout` inline run property on the target text range. |
+| `doc.format.em` | `format em` | Set or clear the `em` inline run property on the target text range. |
+| `doc.format.fit_text` | `format fit-text` | Set or clear the `fitText` inline run property on the target text range. |
+| `doc.format.snap_to_grid` | `format snap-to-grid` | Set or clear the `snapToGrid` inline run property on the target text range. |
+| `doc.format.lang` | `format lang` | Set or clear the `lang` inline run property on the target text range. |
+| `doc.format.o_math` | `format o-math` | Set or clear the `oMath` inline run property on the target text range. |
+| `doc.format.r_style` | `format r-style` | Set or clear the `rStyle` inline run property on the target text range. |
+| `doc.format.r_fonts` | `format r-fonts` | Set or clear the `rFonts` inline run property on the target text range. |
+| `doc.format.font_size_cs` | `format font-size-cs` | Set or clear the `fontSizeCs` inline run property on the target text range. |
+| `doc.format.ligatures` | `format ligatures` | Set or clear the `ligatures` inline run property on the target text range. |
+| `doc.format.num_form` | `format num-form` | Set or clear the `numForm` inline run property on the target text range. |
+| `doc.format.num_spacing` | `format num-spacing` | Set or clear the `numSpacing` inline run property on the target text range. |
+| `doc.format.stylistic_sets` | `format stylistic-sets` | Set or clear the `stylisticSets` inline run property on the target text range. |
+| `doc.format.contextual_alternates` | `format contextual-alternates` | Set or clear the `contextualAlternates` inline run property on the target text range. |
+
+#### Format / Paragraph
+
+| Operation | CLI command | Description |
+| --- | --- | --- |
+| `doc.format.paragraph.reset_direct_formatting` | `format paragraph reset-direct-formatting` | Strip all direct paragraph formatting while preserving style reference, numbering, and section metadata. |
+| `doc.format.paragraph.set_alignment` | `format paragraph set-alignment` | Set paragraph alignment (justification) on a paragraph-like block. |
+| `doc.format.paragraph.clear_alignment` | `format paragraph clear-alignment` | Remove direct paragraph alignment, reverting to style-defined or default alignment. |
+| `doc.format.paragraph.set_indentation` | `format paragraph set-indentation` | Set paragraph indentation properties (left, right, firstLine, hanging) in twips. |
+| `doc.format.paragraph.clear_indentation` | `format paragraph clear-indentation` | Remove all direct paragraph indentation. |
+| `doc.format.paragraph.set_spacing` | `format paragraph set-spacing` | Set paragraph spacing properties (before, after, line, lineRule) in twips. |
+| `doc.format.paragraph.clear_spacing` | `format paragraph clear-spacing` | Remove all direct paragraph spacing. |
+| `doc.format.paragraph.set_keep_options` | `format paragraph set-keep-options` | Set keep-with-next, keep-lines-together, and widow/orphan control flags. |
+| `doc.format.paragraph.set_outline_level` | `format paragraph set-outline-level` | Set the paragraph outline level (0–9) or null to clear. |
+| `doc.format.paragraph.set_flow_options` | `format paragraph set-flow-options` | Set contextual spacing, page-break-before, and suppress-auto-hyphens flags. |
+| `doc.format.paragraph.set_tab_stop` | `format paragraph set-tab-stop` | Add or replace a tab stop at a given position. |
+| `doc.format.paragraph.clear_tab_stop` | `format paragraph clear-tab-stop` | Remove a tab stop at a given position. |
+| `doc.format.paragraph.clear_all_tab_stops` | `format paragraph clear-all-tab-stops` | Remove all tab stops from a paragraph. |
+| `doc.format.paragraph.set_border` | `format paragraph set-border` | Set border properties for a specific side of a paragraph. |
+| `doc.format.paragraph.clear_border` | `format paragraph clear-border` | Remove border for a specific side or all sides of a paragraph. |
+| `doc.format.paragraph.set_shading` | `format paragraph set-shading` | Set paragraph shading (background fill, pattern color, pattern type). |
+| `doc.format.paragraph.clear_shading` | `format paragraph clear-shading` | Remove all paragraph shading. |
+
+#### Styles
+
+| Operation | CLI command | Description |
+| --- | --- | --- |
+| `doc.styles.apply` | `styles apply` | Apply document-level default style changes to the stylesheet (word/styles.xml). Targets docDefaults run and paragraph channels with set-style patch semantics. |
+
+#### Styles / Paragraph
+
+| Operation | CLI command | Description |
+| --- | --- | --- |
+| `doc.styles.paragraph.set_style` | `styles paragraph set-style` | Set the paragraph style reference (w:pStyle) on a paragraph-like block. |
+| `doc.styles.paragraph.clear_style` | `styles paragraph clear-style` | Remove the paragraph style reference from a paragraph-like block. |
+
+#### Create
+
+| Operation | CLI command | Description |
+| --- | --- | --- |
+| `doc.create.paragraph` | `create paragraph` | Create a new paragraph at the target position. |
+| `doc.create.heading` | `create heading` | Create a new heading at the target position. |
+| `doc.create.section_break` | `create section-break` | Create a section break at the target location with optional initial section properties. |
+| `doc.create.table` | `create table` | Create a new table at the target position. |
+| `doc.create.table_of_contents` | `create table-of-contents` | Insert a new table of contents at the target position. |
+
+#### Sections
+
+| Operation | CLI command | Description |
+| --- | --- | --- |
+| `doc.sections.list` | `sections list` | List sections in deterministic order with section-target handles. |
+| `doc.sections.get` | `sections get` | Retrieve full section information by section address. |
+| `doc.sections.set_break_type` | `sections set-break-type` | Set the section break type. |
+| `doc.sections.set_page_margins` | `sections set-page-margins` | Set page-edge margins for a section. |
+| `doc.sections.set_header_footer_margins` | `sections set-header-footer-margins` | Set header/footer margin distances for a section. |
+| `doc.sections.set_page_setup` | `sections set-page-setup` | Set page size/orientation properties for a section. |
+| `doc.sections.set_columns` | `sections set-columns` | Set column configuration for a section. |
+| `doc.sections.set_line_numbering` | `sections set-line-numbering` | Enable or configure line numbering for a section. |
+| `doc.sections.set_page_numbering` | `sections set-page-numbering` | Set page numbering format/start for a section. |
+| `doc.sections.set_title_page` | `sections set-title-page` | Enable or disable title-page behavior for a section. |
+| `doc.sections.set_odd_even_headers_footers` | `sections set-odd-even-headers-footers` | Enable or disable odd/even header-footer mode in document settings. |
+| `doc.sections.set_vertical_align` | `sections set-vertical-align` | Set vertical page alignment for a section. |
+| `doc.sections.set_section_direction` | `sections set-section-direction` | Set section text flow direction (LTR/RTL). |
+| `doc.sections.set_header_footer_ref` | `sections set-header-footer-ref` | Set or replace a section header/footer reference for a variant. |
+| `doc.sections.clear_header_footer_ref` | `sections clear-header-footer-ref` | Clear a section header/footer reference for a specific variant. |
+| `doc.sections.set_link_to_previous` | `sections set-link-to-previous` | Set or clear link-to-previous behavior for a header/footer variant. |
+| `doc.sections.set_page_borders` | `sections set-page-borders` | Set page border configuration for a section. |
+| `doc.sections.clear_page_borders` | `sections clear-page-borders` | Clear page border configuration for a section. |
+
+#### Blocks
+
+| Operation | CLI command | Description |
+| --- | --- | --- |
+| `doc.blocks.delete` | `blocks delete` | Delete an entire block node (paragraph, heading, list item, table, image, or sdt) deterministically. |
+
+#### Lists
+
+| Operation | CLI command | Description |
+| --- | --- | --- |
+| `doc.lists.list` | `lists list` | List all list nodes in the document, optionally filtered by scope. |
+| `doc.lists.get` | `lists get` | Retrieve a specific list node by target. |
+| `doc.lists.insert` | `lists insert` | Insert a new list at the target position. |
+| `doc.lists.create` | `lists create` | Create a new list from one or more paragraphs, or convert existing paragraphs into a new list. |
+| `doc.lists.attach` | `lists attach` | Convert non-list paragraphs to list items under an existing list sequence. |
+| `doc.lists.detach` | `lists detach` | Remove numbering properties from list items, converting them to plain paragraphs. |
+| `doc.lists.indent` | `lists indent` | Increase the indentation level of a list item. |
+| `doc.lists.outdent` | `lists outdent` | Decrease the indentation level of a list item. |
+| `doc.lists.join` | `lists join` | Merge two adjacent list sequences into one. |
+| `doc.lists.can_join` | `lists can-join` | Check whether two adjacent list sequences can be joined. |
+| `doc.lists.separate` | `lists separate` | Split a list sequence at the target item, creating a new sequence from that point forward. |
+| `doc.lists.set_level` | `lists set-level` | Set the absolute nesting level (0..8) of a list item. |
+| `doc.lists.set_value` | `lists set-value` | Set an explicit numbering value at the target item. Mid-sequence targets are atomically separated first. |
+| `doc.lists.continue_previous` | `lists continue-previous` | Continue numbering from the nearest compatible previous list sequence. |
+| `doc.lists.can_continue_previous` | `lists can-continue-previous` | Check whether the target sequence can continue numbering from a previous compatible sequence. |
+| `doc.lists.set_level_restart` | `lists set-level-restart` | Set the restart behavior for a specific list level. |
+| `doc.lists.convert_to_text` | `lists convert-to-text` | Convert list items to plain paragraphs, optionally prepending the rendered marker text. |
+
+#### Tables
+
+| Operation | CLI command | Description |
+| --- | --- | --- |
+| `doc.tables.convert_from_text` | `tables convert-from-text` | Convert a text range into a table. |
+| `doc.tables.delete` | `tables delete` | Delete the target table from the document. |
+| `doc.tables.clear_contents` | `tables clear-contents` | Clear the contents of the target table or cell range. |
+| `doc.tables.move` | `tables move` | Move a table to a new position in the document. |
+| `doc.tables.split` | `tables split` | Split a table into two tables at the target row. |
+| `doc.tables.convert_to_text` | `tables convert-to-text` | Convert a table back to plain text. |
+| `doc.tables.set_layout` | `tables set-layout` | Set the layout mode of the target table. |
+| `doc.tables.insert_row` | `tables insert-row` | Insert a new row into the target table. |
+| `doc.tables.delete_row` | `tables delete-row` | Delete a row from the target table. |
+| `doc.tables.set_row_height` | `tables set-row-height` | Set the height of a table row. |
+| `doc.tables.distribute_rows` | `tables distribute-rows` | Distribute row heights evenly across the target table. |
+| `doc.tables.set_row_options` | `tables set-row-options` | Set options on a table row such as header repeat or page break. |
+| `doc.tables.insert_column` | `tables insert-column` | Insert a new column into the target table. |
+| `doc.tables.delete_column` | `tables delete-column` | Delete a column from the target table. |
+| `doc.tables.set_column_width` | `tables set-column-width` | Set the width of a table column. |
+| `doc.tables.distribute_columns` | `tables distribute-columns` | Distribute column widths evenly across the target table. |
+| `doc.tables.insert_cell` | `tables insert-cell` | Insert a new cell into a table row. |
+| `doc.tables.delete_cell` | `tables delete-cell` | Delete a cell from a table row. |
+| `doc.tables.merge_cells` | `tables merge-cells` | Merge a range of table cells into one. |
+| `doc.tables.unmerge_cells` | `tables unmerge-cells` | Unmerge a previously merged table cell. |
+| `doc.tables.split_cell` | `tables split-cell` | Split a table cell into multiple cells. |
+| `doc.tables.set_cell_properties` | `tables set-cell-properties` | Set properties on a table cell such as vertical alignment or text direction. |
+| `doc.tables.sort` | `tables sort` | Sort table rows by a column value. |
+| `doc.tables.set_alt_text` | `tables set-alt-text` | Set the alternative text description for a table. |
+| `doc.tables.set_style` | `tables set-style` | Apply a named table style to the target table. |
+| `doc.tables.clear_style` | `tables clear-style` | Remove the applied table style, reverting to defaults. |
+| `doc.tables.set_style_option` | `tables set-style-option` | Toggle a conditional style option such as banded rows or first column. |
+| `doc.tables.set_border` | `tables set-border` | Set border properties on a table or cell range. |
+| `doc.tables.clear_border` | `tables clear-border` | Remove border formatting from a table or cell range. |
+| `doc.tables.apply_border_preset` | `tables apply-border-preset` | Apply a border preset (e.g. all borders, outside only) to a table. |
+| `doc.tables.set_shading` | `tables set-shading` | Set the background shading color on a table or cell range. |
+| `doc.tables.clear_shading` | `tables clear-shading` | Remove shading from a table or cell range. |
+| `doc.tables.set_table_padding` | `tables set-table-padding` | Set default cell padding for the entire table. |
+| `doc.tables.set_cell_padding` | `tables set-cell-padding` | Set padding on a specific table cell or cell range. |
+| `doc.tables.set_cell_spacing` | `tables set-cell-spacing` | Set the cell spacing for the target table. |
+| `doc.tables.clear_cell_spacing` | `tables clear-cell-spacing` | Remove custom cell spacing from the target table. |
+| `doc.tables.get` | `tables get` | Retrieve table structure and dimensions by locator. |
+| `doc.tables.get_cells` | `tables get-cells` | Retrieve cell information for a table, optionally filtered by row or column. |
+| `doc.tables.get_properties` | `tables get-properties` | Retrieve layout and style properties of a table. |
+| `doc.tables.get_styles` | `tables get-styles` | List all table styles and the document-level default table style setting. |
+| `doc.tables.set_default_style` | `tables set-default-style` | Set the document-level default table style (w:defaultTableStyle in settings.xml). |
+| `doc.tables.clear_default_style` | `tables clear-default-style` | Remove the document-level default table style setting. |
+
+#### Table of contents
+
+| Operation | CLI command | Description |
+| --- | --- | --- |
+| `doc.toc.list` | `toc list` | List all tables of contents in the document. |
+| `doc.toc.get` | `toc get` | Retrieve details of a specific table of contents. |
+| `doc.toc.configure` | `toc configure` | Update the configuration switches of a table of contents. |
+| `doc.toc.update` | `toc update` | Rebuild or refresh the materialized content of a table of contents. |
+| `doc.toc.remove` | `toc remove` | Remove a table of contents from the document. |
+| `doc.toc.mark_entry` | `toc mark-entry` | Insert a TC (table of contents entry) field at the target paragraph. |
+| `doc.toc.unmark_entry` | `toc unmark-entry` | Remove a TC (table of contents entry) field from the document. |
+| `doc.toc.list_entries` | `toc list-entries` | List all TC (table of contents entry) fields in the document body. |
+| `doc.toc.get_entry` | `toc get-entry` | Retrieve details of a specific TC (table of contents entry) field. |
+| `doc.toc.edit_entry` | `toc edit-entry` | Update the properties of a TC (table of contents entry) field. |
+
+#### Comments
+
+| Operation | CLI command | Description |
+| --- | --- | --- |
+| `doc.comments.create` | `comments create` | Create a new comment thread (or reply when parentCommentId is given). |
+| `doc.comments.patch` | `comments patch` | Patch fields on an existing comment (text, target, status, or isInternal). |
+| `doc.comments.delete` | `comments delete` | Remove a comment or reply by ID. |
+| `doc.comments.get` | `comments get` | Retrieve a single comment thread by ID. |
+| `doc.comments.list` | `comments list` | List all comment threads in the document. |
+
+#### Track changes
+
+| Operation | CLI command | Description |
+| --- | --- | --- |
+| `doc.track_changes.list` | `track-changes list` | List all tracked changes in the document. |
+| `doc.track_changes.get` | `track-changes get` | Retrieve a single tracked change by ID. |
+| `doc.track_changes.decide` | `track-changes decide` | Accept or reject a tracked change (by ID or scope: all). |
+
+#### Capabilities
+
+| Operation | CLI command | Description |
+| --- | --- | --- |
+| `doc.capabilities.get` | `capabilities` | Query runtime capabilities supported by the current document engine. |
+
+#### History
+
+| Operation | CLI command | Description |
+| --- | --- | --- |
+| `doc.history.get` | `history get` | Query the current undo/redo history state of the active editor. |
+| `doc.history.undo` | `history undo` | Undo the most recent history-safe mutation in the active editor. |
+| `doc.history.redo` | `history redo` | Redo the most recently undone action in the active editor. |
+
+#### Session
+
+| Operation | CLI command | Description |
+| --- | --- | --- |
+| `doc.session.list` | `session list` | List all active editing sessions. |
+| `doc.session.save` | `session save` | Persist the current session state. |
+| `doc.session.close` | `session close` | Close a specific editing session by ID. |
+| `doc.session.set_default` | `session set-default` | Set the default session for subsequent commands. |
+
+#### Introspection
+
+| Operation | CLI command | Description |
+| --- | --- | --- |
+| `doc.status` | `status` | Show the current session status and document metadata. |
+| `doc.describe` | `describe` | List all available CLI operations and contract metadata. |
+| `doc.describe_command` | `describe command` | Show detailed metadata for a single CLI operation. |
+
+  </Tab>
+</Tabs>
 {/* SDK_OPERATIONS_END */}
 
 ## Related

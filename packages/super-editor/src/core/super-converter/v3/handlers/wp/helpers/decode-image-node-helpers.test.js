@@ -26,6 +26,10 @@ vi.mock('@converter/v3/handlers/w/sdt/helpers/translate-field-annotation.js', ()
   prepareTextAnnotation: vi.fn(() => ({ type: 'text', text: 'annotation' })),
 }));
 
+vi.mock('@converter/image-dimensions.js', () => ({
+  readImageDimensionsFromDataUri: vi.fn(() => null),
+}));
+
 vi.mock(import('@core/helpers/index.js'), async (importOriginal) => {
   const actual = await importOriginal();
   return {
@@ -106,6 +110,17 @@ describe('translateImageNode', () => {
     expect(baseParams.relationships.length).toBe(1);
     expect(baseParams.relationships[0].attributes.Type).toContain('relationships/image');
     expect(result.elements).toEqual(expect.arrayContaining([expect.objectContaining({ name: 'a:graphic' })]));
+  });
+
+  it('should use clamped fallback size (1 EMU) when attrs.size is empty', () => {
+    baseParams.node.attrs.size = {};
+
+    const result = translateImageNode(baseParams);
+
+    const extent = result.elements.find((e) => e.name === 'wp:extent').attributes;
+    // resolveExportSize clamps non-finite values to 1 EMU to prevent corrupt OOXML
+    expect(extent.cx).toBe(1);
+    expect(extent.cy).toBe(1);
   });
 
   it('should generate a new relationship if rId is presented but relation is missing', () => {

@@ -695,6 +695,17 @@ const applyReplayUpdateToComment = (commentModel, payload, resolvedText) => {
   }
 };
 
+const normalizeReplayCommentModelPayload = (payload = {}) => {
+  const normalizedPayload = { ...payload };
+  if (!normalizedPayload.commentText && normalizedPayload.text) {
+    normalizedPayload.commentText = normalizedPayload.text;
+  }
+  if (!normalizedPayload.docxCommentJSON && Array.isArray(normalizedPayload.elements)) {
+    normalizedPayload.docxCommentJSON = normalizedPayload.elements;
+  }
+  return normalizedPayload;
+};
+
 const onEditorCommentsUpdate = (params = {}) => {
   // Set the active comment in the store
   let { activeCommentId, type, comment: commentPayload } = params;
@@ -737,9 +748,7 @@ const onEditorCommentsUpdate = (params = {}) => {
   }
 
   if (COMMENT_EVENTS?.ADD && type === COMMENT_EVENTS.ADD && commentPayload) {
-    if (!commentPayload.commentText && commentPayload.text) {
-      commentPayload.commentText = commentPayload.text;
-    }
+    commentPayload = normalizeReplayCommentModelPayload(commentPayload);
 
     const currentUser = proxy.$superdoc?.user;
     if (currentUser) {
@@ -777,10 +786,7 @@ const onEditorCommentsUpdate = (params = {}) => {
       if (existingComment) {
         applyReplayUpdateToComment(existingComment, commentPayload, resolvedText);
       } else {
-        const normalizedPayload = { ...commentPayload };
-        if (!normalizedPayload.commentText && resolvedText) {
-          normalizedPayload.commentText = resolvedText;
-        }
+        const normalizedPayload = normalizeReplayCommentModelPayload(commentPayload);
         const commentModel = useComment(normalizedPayload);
         addComment({ superdoc: proxy.$superdoc, comment: commentModel, skipEditorUpdate: true });
       }

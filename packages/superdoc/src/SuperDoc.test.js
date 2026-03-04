@@ -601,6 +601,31 @@ describe('SuperDoc.vue', () => {
     expect(existingComment.docxCommentJSON).toEqual(updatedElements);
   });
 
+  it('maps replay-added elements to docxCommentJSON for imported comments', async () => {
+    const superdocStub = createSuperdocStub();
+    const wrapper = await mountComponent(superdocStub);
+    await nextTick();
+
+    const options = wrapper.findComponent(SuperEditorStub).props('options');
+    commentsStoreStub.addComment.mockClear();
+
+    const addedElements = [{ type: 'paragraph', content: [{ type: 'text', text: 'added' }] }];
+    options.onCommentsUpdate({
+      type: 'add',
+      comment: {
+        commentId: 'new-add-id',
+        importedId: 'imp-add',
+        text: 'Added text',
+        elements: addedElements,
+      },
+    });
+
+    expect(commentsStoreStub.addComment).toHaveBeenCalledTimes(1);
+    const [{ comment: addedComment }] = commentsStoreStub.addComment.mock.calls[0];
+    expect(addedComment.commentText).toBe('Added text');
+    expect(addedComment.docxCommentJSON).toEqual(addedElements);
+  });
+
   it('removes replay-deleted comments when payload commentId is stale but importedId matches', async () => {
     const superdocStub = createSuperdocStub();
     const wrapper = await mountComponent(superdocStub);

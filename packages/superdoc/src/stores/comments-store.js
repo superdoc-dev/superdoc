@@ -754,7 +754,7 @@ export const useCommentsStore = defineStore('comments', () => {
     activeComment.value = null;
     superdocStore.selectionPosition = null;
 
-    superdoc.activeEditor?.commands.removeComment({ commentId: 'pending' });
+    superdoc.activeEditor?.commands?.removeComment({ commentId: 'pending' });
   };
 
   /**

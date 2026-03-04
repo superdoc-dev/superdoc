@@ -61,6 +61,12 @@ describe('needsImageRegistration', () => {
     expect(needsImageRegistration(createImageNode({ src: 'https://example.com/photo.png' }))).toBe(true);
     expect(needsImageRegistration(createImageNode({ src: 'http://example.com/photo.png' }))).toBe(true);
   });
+
+  it('skips relative paths that already have rId (browser background registration)', () => {
+    expect(needsImageRegistration(createImageNode({ src: '/images/photo.png', rId: 'rId5' }))).toBe(false);
+    expect(needsImageRegistration(createImageNode({ src: './photo.png', rId: 'rId6' }))).toBe(false);
+    expect(needsImageRegistration(createImageNode({ src: 'images/photo.png', rId: 'rId7' }))).toBe(false);
+  });
 });
 
 describe('handleNodePath', () => {

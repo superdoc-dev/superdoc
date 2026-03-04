@@ -197,8 +197,13 @@ export async function runOpen(tokens: string[], context: CommandContext): Promis
         await writeContextMetadata(paths, metadata);
         await setActiveSessionId(metadata.contextId);
 
-        if (collaboration && context.executionMode === 'host' && context.collabSessionPool) {
-          await context.collabSessionPool.adoptFromOpen(sessionId, opened, metadata, context.io);
+        if (context.executionMode === 'host' && context.sessionPool) {
+          context.sessionPool.adoptFromOpen(sessionId, opened, {
+            sessionType: metadata.sessionType,
+            workingDocPath: paths.workingDocPath,
+            metadataRevision: metadata.revision,
+            collaboration: metadata.collaboration,
+          });
           adoptedToHostPool = true;
         }
 

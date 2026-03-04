@@ -24,7 +24,7 @@ import { CliError } from './errors';
 import { pathExists } from './guards';
 import type { ContextMetadata } from './context';
 import type { CliIO, DocumentSourceMeta, ExecutionMode, UserIdentity } from './types';
-import type { CollaborationSessionPool } from '../host/collab-session-pool';
+import type { SessionPool } from '../host/session-pool';
 
 export type EditorWithDoc = Editor & {
   doc: DocumentApi;
@@ -319,41 +319,41 @@ export async function openSessionDocument(
   io: CliIO,
   metadata: Pick<
     ContextMetadata,
-    'contextId' | 'sessionType' | 'collaboration' | 'sourcePath' | 'workingDocPath' | 'user'
+    'contextId' | 'sessionType' | 'collaboration' | 'sourcePath' | 'workingDocPath' | 'user' | 'revision'
   >,
   options: {
     sessionId?: string;
     executionMode?: ExecutionMode;
-    collabSessionPool?: CollaborationSessionPool;
+    sessionPool?: SessionPool;
   } = {},
 ): Promise<OpenedDocument> {
-  if (metadata.sessionType !== 'collab') {
-    return openDocument(doc, io, { user: metadata.user });
+  const { executionMode, sessionPool, sessionId } = options;
+
+  // Host mode: always go through pool (local AND collab)
+  if (executionMode === 'host' && sessionPool) {
+    const resolvedSessionId = sessionId ?? metadata.contextId;
+    return sessionPool.acquire(
+      resolvedSessionId,
+      {
+        sessionType: metadata.sessionType,
+        workingDocPath: metadata.workingDocPath ?? doc,
+        metadataRevision: metadata.revision,
+        user: metadata.user,
+        collaboration: metadata.collaboration,
+      },
+      io,
+    );
   }
 
-  if (!metadata.collaboration) {
-    throw new CliError('COMMAND_FAILED', 'Session is marked as collaborative but has no collaboration profile.');
-  }
-
-  if (options.executionMode === 'host' && options.collabSessionPool) {
-    const sessionId = options.sessionId ?? metadata.contextId;
-    if (!sessionId) {
-      throw new CliError('COMMAND_FAILED', 'Session id is required for host-mode collaboration operations.');
+  // Oneshot mode: open fresh, caller is responsible for dispose
+  if (metadata.sessionType === 'collab') {
+    if (!metadata.collaboration) {
+      throw new CliError('COMMAND_FAILED', 'Session is marked as collaborative but has no collaboration profile.');
     }
-
-    const metadataForPool = {
-      contextId: sessionId,
-      sessionType: metadata.sessionType,
-      collaboration: metadata.collaboration,
-      sourcePath: metadata.sourcePath,
-      workingDocPath: metadata.workingDocPath,
-      user: metadata.user,
-    };
-
-    return options.collabSessionPool.acquire(sessionId, doc, metadataForPool, io);
+    return openCollaborativeDocument(doc, io, metadata.collaboration, { user: metadata.user });
   }
 
-  return openCollaborativeDocument(doc, io, metadata.collaboration, { user: metadata.user });
+  return openDocument(doc, io, { user: metadata.user });
 }
 
 export async function getFileChecksum(path: string): Promise<string> {

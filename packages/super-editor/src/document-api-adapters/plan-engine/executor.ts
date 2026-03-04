@@ -1446,9 +1446,7 @@ export function executePlan(editor: Editor, input: MutationsApplyInput): PlanRec
     throw planError('INVALID_INPUT', 'plan must contain at least one step');
   }
 
-  const compiled = compilePlan(editor, input.steps, {
-    enforceRefRevision: input.expectedRevision !== undefined,
-  });
+  const compiled = compilePlan(editor, input.steps);
 
   return executeCompiledPlan(editor, compiled, {
     changeMode: input.changeMode ?? 'direct',

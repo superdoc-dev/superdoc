@@ -328,7 +328,7 @@ describe('compilePlan V3 ref resolution', () => {
     throw new Error('expected compilePlan to throw REVISION_MISMATCH');
   });
 
-  it('allows stale V3 ref revisions when ref-revision enforcement is disabled', () => {
+  it('always rejects stale V3 ref revisions (ref-revision enforcement is unconditional)', () => {
     mockedDeps.getBlockIndex.mockReturnValue({
       candidates: [{ nodeId: 'p1', pos: 0, end: 12, node: {} }],
     });
@@ -344,22 +344,18 @@ describe('compilePlan V3 ref resolution', () => {
     const editor = makeEditor();
     const steps: MutationStep[] = [
       {
-        id: 'stale-ref-allowed',
+        id: 'stale-ref-rejected',
         op: 'text.delete',
         where: { by: 'ref', ref },
         args: {},
       },
     ];
 
-    const plan = compilePlan(editor, steps, { enforceRefRevision: false });
-    expect(plan.mutationSteps).toHaveLength(1);
-    expect(plan.mutationSteps[0].targets).toHaveLength(1);
-    const target = plan.mutationSteps[0].targets[0];
-    expect(target.kind).toBe('range');
-    if (target.kind === 'range') {
-      expect(target.blockId).toBe('p1');
-      expect(target.from).toBe(0);
-      expect(target.to).toBe(5);
+    try {
+      compilePlan(editor, steps);
+      expect.unreachable('Expected REVISION_MISMATCH');
+    } catch (error) {
+      expect((error as any).code).toBe('REVISION_MISMATCH');
     }
   });
 

@@ -243,6 +243,80 @@ const testDerivesCommentTextFromElements = () => {
 };
 
 /**
+ * Verifies replay events include file/document ownership derived from editor context.
+ * @returns {void}
+ */
+const testIncludesDocumentIdentityFromEditor = () => {
+  const comments = [];
+  const editor = {
+    emit: vi.fn(),
+    options: { documentId: 'doc-2' },
+  };
+  const diffs = [
+    {
+      action: 'added',
+      nodeType: 'comment',
+      commentId: 'external-doc',
+      commentJSON: { id: 'external-doc' },
+      text: 'Doc comment',
+    },
+  ];
+
+  replayComments({ comments, commentDiffs: diffs, editor });
+
+  expect(editor.emit).toHaveBeenCalledWith(
+    'commentsUpdate',
+    expect.objectContaining({
+      type: 'add',
+      comment: expect.objectContaining({
+        commentId: 'external-doc',
+        documentId: 'doc-2',
+        fileId: 'doc-2',
+      }),
+    }),
+  );
+};
+
+/**
+ * Verifies replay keeps existing payload file/document ownership fields.
+ * @returns {void}
+ */
+const testPreservesExistingDocumentIdentity = () => {
+  const comments = [];
+  const editor = {
+    emit: vi.fn(),
+    options: { documentId: 'doc-2' },
+  };
+  const diffs = [
+    {
+      action: 'added',
+      nodeType: 'comment',
+      commentId: 'external-owned',
+      commentJSON: {
+        id: 'external-owned',
+        fileId: 'doc-9',
+        documentId: 'doc-9',
+      },
+      text: 'Owned comment',
+    },
+  ];
+
+  replayComments({ comments, commentDiffs: diffs, editor });
+
+  expect(editor.emit).toHaveBeenCalledWith(
+    'commentsUpdate',
+    expect.objectContaining({
+      type: 'add',
+      comment: expect.objectContaining({
+        commentId: 'external-owned',
+        documentId: 'doc-9',
+        fileId: 'doc-9',
+      }),
+    }),
+  );
+};
+
+/**
  * Runs the replayComments suite.
  * @returns {void}
  */
@@ -254,6 +328,8 @@ const runReplayCommentsSuite = () => {
   it('aggregates results across multiple diffs', testAggregatesMultipleDiffs);
   it('emits commentsUpdate events for replayed diffs', testEmitsCommentsUpdateEvents);
   it('derives comment text from elements for replayed additions', testDerivesCommentTextFromElements);
+  it('includes replay comment ownership metadata from editor document', testIncludesDocumentIdentityFromEditor);
+  it('preserves replay comment ownership metadata when already present', testPreservesExistingDocumentIdentity);
 };
 
 describe('replayComments', runReplayCommentsSuite);

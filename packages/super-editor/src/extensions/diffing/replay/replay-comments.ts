@@ -16,6 +16,54 @@ function findCommentIndexById(
   return comments.findIndex((comment) => resolveCommentId(comment) === commentId);
 }
 
+type ReplayEditor = {
+  emit?: (event: string, payload: unknown) => void;
+  options?: {
+    documentId?: string | null;
+  };
+};
+
+/**
+ * Builds a replay event payload with stable id and document ownership metadata.
+ *
+ * @param params.comment Source comment payload.
+ * @param params.commentId Resolved comment id from diff token.
+ * @param params.editor Optional editor used to infer active document ownership.
+ * @returns Normalized comment payload for commentsUpdate events.
+ */
+function buildReplayCommentEventPayload({
+  comment,
+  commentId,
+  editor,
+}: {
+  comment: import('../algorithm/comment-diffing').CommentInput;
+  commentId: string;
+  editor?: ReplayEditor;
+}): import('../algorithm/comment-diffing').CommentInput {
+  const payload = {
+    ...comment,
+  };
+
+  if (!payload.commentId) {
+    payload.commentId = commentId;
+  }
+
+  const editorDocumentId = editor?.options?.documentId != null ? String(editor.options.documentId) : null;
+  const payloadDocumentId = payload.documentId != null ? String(payload.documentId) : null;
+  const payloadFileId = payload.fileId != null ? String(payload.fileId) : null;
+  const documentId = payloadDocumentId ?? editorDocumentId;
+  const fileId = payloadFileId ?? documentId ?? editorDocumentId;
+
+  if (!payload.documentId && documentId) {
+    payload.documentId = documentId;
+  }
+  if (!payload.fileId && fileId) {
+    payload.fileId = fileId;
+  }
+
+  return payload;
+}
+
 /**
  * Replays one comment diff into a mutable comment store.
  *
@@ -36,7 +84,7 @@ function replayCommentDiff({
 }: {
   comments: import('../algorithm/comment-diffing').CommentInput[];
   diff: import('../algorithm/comment-diffing').CommentDiff;
-  editor?: { emit?: (event: string, payload: unknown) => void };
+  editor?: ReplayEditor;
 }): ReplayResult {
   const result: ReplayResult = {
     applied: 0,
@@ -68,12 +116,11 @@ function replayCommentDiff({
 
     comments.push(diff.commentJSON);
     result.applied += 1;
-    const payload = {
-      ...diff.commentJSON,
-    };
-    if (!payload.commentId) {
-      payload.commentId = diff.commentId;
-    }
+    const payload = buildReplayCommentEventPayload({
+      comment: diff.commentJSON,
+      commentId: diff.commentId,
+      editor,
+    });
     const resolvedText = resolveCommentTextPayload({ comment: diff.commentJSON, fallbackText: diff.text });
     if (!payload.commentText && resolvedText) {
       payload.commentText = resolvedText;
@@ -94,12 +141,11 @@ function replayCommentDiff({
 
     comments.splice(existingIndex, 1);
     result.applied += 1;
-    const payload = {
-      ...diff.commentJSON,
-    };
-    if (!payload.commentId) {
-      payload.commentId = diff.commentId;
-    }
+    const payload = buildReplayCommentEventPayload({
+      comment: diff.commentJSON,
+      commentId: diff.commentId,
+      editor,
+    });
     editor?.emit?.('commentsUpdate', {
       type: comments_module_events.DELETED,
       comment: payload,
@@ -116,12 +162,11 @@ function replayCommentDiff({
 
     comments.splice(existingIndex, 1, diff.newCommentJSON);
     result.applied += 1;
-    const payload = {
-      ...diff.newCommentJSON,
-    };
-    if (!payload.commentId) {
-      payload.commentId = diff.commentId;
-    }
+    const payload = buildReplayCommentEventPayload({
+      comment: diff.newCommentJSON,
+      commentId: diff.commentId,
+      editor,
+    });
     const resolvedText = resolveCommentTextPayload({ comment: diff.newCommentJSON, fallbackText: diff.newText });
     if (!payload.commentText && resolvedText) {
       payload.commentText = resolvedText;
@@ -217,7 +262,7 @@ export function replayComments({
 }: {
   comments: import('../algorithm/comment-diffing').CommentInput[];
   commentDiffs: import('../algorithm/comment-diffing').CommentDiff[];
-  editor?: { emit?: (event: string, payload: unknown) => void };
+  editor?: ReplayEditor;
 }): ReplayResult {
   const result: ReplayResult = {
     applied: 0,

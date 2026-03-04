@@ -21,7 +21,12 @@ type ReplayDiffsParams = {
   diff: import('./computeDiff').DiffResult;
   schema: import('prosemirror-model').Schema;
   comments?: import('./algorithm/comment-diffing').CommentInput[];
-  editor?: { emit?: (event: string, payload: unknown) => void };
+  editor?: {
+    emit?: (event: string, payload: unknown) => void;
+    options?: {
+      documentId?: string | null;
+    };
+  };
 };
 
 /**

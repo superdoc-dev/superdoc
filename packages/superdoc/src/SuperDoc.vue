@@ -761,43 +761,80 @@ const onEditorCommentsUpdate = (params = {}) => {
   if (COMMENT_EVENTS?.DELETED && type === COMMENT_EVENTS.DELETED && commentPayload) {
     const targetIds = resolveCommentEventIds(commentPayload);
     if (targetIds.length) {
+      const activeDocumentId =
+        proxy.$superdoc?.activeEditor?.options?.documentId != null
+          ? String(proxy.$superdoc.activeEditor.options.documentId)
+          : null;
+      const isInActiveDocument = (comment) => {
+        if (!activeDocumentId || typeof belongsToDocument !== 'function') return true;
+        return belongsToDocument(comment, activeDocumentId);
+      };
+
       // Remove the entire thread subtree (parent + all descendants), not only direct replies.
-      const removedCommentIds = new Set(targetIds);
-      let expanded = true;
-      while (expanded) {
-        expanded = false;
-        commentsList.value.forEach((comment) => {
-          const commentId = comment.commentId != null ? String(comment.commentId) : null;
-          const importedId = comment.importedId != null ? String(comment.importedId) : null;
-          const parentCommentId = comment.parentCommentId != null ? String(comment.parentCommentId) : null;
-          const trackedChangeParentId =
-            comment.trackedChangeParentId != null ? String(comment.trackedChangeParentId) : null;
-
-          const isRemovedComment =
-            (commentId && removedCommentIds.has(commentId)) || (importedId && removedCommentIds.has(importedId));
-          const isDescendantOfRemovedComment =
-            (parentCommentId && removedCommentIds.has(parentCommentId)) ||
-            (trackedChangeParentId && removedCommentIds.has(trackedChangeParentId));
-          if (!isRemovedComment && !isDescendantOfRemovedComment) return;
-
-          const sizeBefore = removedCommentIds.size;
-          if (commentId) removedCommentIds.add(commentId);
-          if (importedId) removedCommentIds.add(importedId);
-          if (removedCommentIds.size > sizeBefore) {
-            expanded = true;
-          }
-        });
-      }
-
-      commentsList.value = commentsList.value.filter((comment) => {
+      const removedCommentIds = new Set();
+      commentsList.value.forEach((comment) => {
+        if (!isInActiveDocument(comment)) return;
         const commentId = comment.commentId != null ? String(comment.commentId) : null;
         const importedId = comment.importedId != null ? String(comment.importedId) : null;
-        return !((commentId && removedCommentIds.has(commentId)) || (importedId && removedCommentIds.has(importedId)));
+        const matchesTarget =
+          (commentId && targetIds.includes(commentId)) || (importedId && targetIds.includes(importedId));
+        if (!matchesTarget) return;
+        if (commentId) removedCommentIds.add(commentId);
+        if (importedId) removedCommentIds.add(importedId);
       });
 
-      const activeCommentKey = activeComment.value != null ? String(activeComment.value) : null;
-      if (activeCommentKey && removedCommentIds.has(activeCommentKey)) {
-        activeCommentId = null;
+      if (removedCommentIds.size) {
+        let expanded = true;
+        while (expanded) {
+          expanded = false;
+          commentsList.value.forEach((comment) => {
+            if (!isInActiveDocument(comment)) return;
+            const commentId = comment.commentId != null ? String(comment.commentId) : null;
+            const importedId = comment.importedId != null ? String(comment.importedId) : null;
+            const parentCommentId = comment.parentCommentId != null ? String(comment.parentCommentId) : null;
+            const trackedChangeParentId =
+              comment.trackedChangeParentId != null ? String(comment.trackedChangeParentId) : null;
+
+            const isRemovedComment =
+              (commentId && removedCommentIds.has(commentId)) || (importedId && removedCommentIds.has(importedId));
+            const isDescendantOfRemovedComment =
+              (parentCommentId && removedCommentIds.has(parentCommentId)) ||
+              (trackedChangeParentId && removedCommentIds.has(trackedChangeParentId));
+            if (!isRemovedComment && !isDescendantOfRemovedComment) return;
+
+            const sizeBefore = removedCommentIds.size;
+            if (commentId) removedCommentIds.add(commentId);
+            if (importedId) removedCommentIds.add(importedId);
+            if (removedCommentIds.size > sizeBefore) {
+              expanded = true;
+            }
+          });
+        }
+
+        const previousComments = [...commentsList.value];
+        commentsList.value = commentsList.value.filter((comment) => {
+          if (!isInActiveDocument(comment)) return true;
+          const commentId = comment.commentId != null ? String(comment.commentId) : null;
+          const importedId = comment.importedId != null ? String(comment.importedId) : null;
+          return !(
+            (commentId && removedCommentIds.has(commentId)) ||
+            (importedId && removedCommentIds.has(importedId))
+          );
+        });
+
+        const activeCommentKey = activeComment.value != null ? String(activeComment.value) : null;
+        const activeCommentModel =
+          activeCommentKey != null
+            ? previousComments.find((comment) => {
+                const commentId = comment.commentId != null ? String(comment.commentId) : null;
+                const importedId = comment.importedId != null ? String(comment.importedId) : null;
+                return commentId === activeCommentKey || importedId === activeCommentKey;
+              })
+            : null;
+        const activeCommentInActiveDocument = activeCommentModel ? isInActiveDocument(activeCommentModel) : false;
+        if (activeCommentKey && removedCommentIds.has(activeCommentKey) && activeCommentInActiveDocument) {
+          activeCommentId = null;
+        }
       }
     }
   }

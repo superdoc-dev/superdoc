@@ -633,6 +633,35 @@ describe('SuperDoc.vue', () => {
     expect(commentsStoreStub.setActiveComment).toHaveBeenCalledWith(superdocStub, null);
   });
 
+  it('scopes replay deletion subtree to the active document when IDs overlap across documents', async () => {
+    const superdocStub = createSuperdocStub();
+    const wrapper = await mountComponent(superdocStub);
+    await nextTick();
+
+    const options = wrapper.findComponent(SuperEditorStub).props('options');
+    commentsStoreStub.commentsList.value = [
+      { commentId: 'c-1', importedId: 'imp-1', fileId: 'doc-1', commentText: 'Doc 1 parent' },
+      { commentId: 'c-2', parentCommentId: 'c-1', fileId: 'doc-1', commentText: 'Doc 1 child' },
+      { commentId: 'c-1', importedId: 'imp-1', fileId: 'doc-2', commentText: 'Doc 2 parent' },
+      { commentId: 'c-3', parentCommentId: 'c-1', fileId: 'doc-2', commentText: 'Doc 2 child' },
+    ];
+    commentsStoreStub.activeComment.value = 'c-3';
+    commentsStoreStub.setActiveComment.mockClear();
+    superdocStub.activeEditor = { options: { documentId: 'doc-1' } };
+
+    options.onCommentsUpdate({
+      type: 'deleted',
+      comment: { commentId: 'c-1', importedId: 'imp-1' },
+    });
+
+    expect(commentsStoreStub.commentsList.value).toEqual([
+      { commentId: 'c-1', importedId: 'imp-1', fileId: 'doc-2', commentText: 'Doc 2 parent' },
+      { commentId: 'c-3', parentCommentId: 'c-1', fileId: 'doc-2', commentText: 'Doc 2 child' },
+    ]);
+    await nextTick();
+    expect(commentsStoreStub.setActiveComment).not.toHaveBeenCalledWith(superdocStub, null);
+  });
+
   it('passes slash menu and context menu options through to SuperEditor', async () => {
     const superdocStub = createSuperdocStub();
     const slashMenuConfig = {

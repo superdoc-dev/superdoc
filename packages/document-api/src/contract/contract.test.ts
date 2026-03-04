@@ -4,6 +4,7 @@ import { OPERATION_DEFINITIONS, type ReferenceGroupKey } from './operation-defin
 import { DOCUMENT_API_MEMBER_PATHS, OPERATION_MEMBER_PATH_MAP, memberPathForOperation } from './operation-map.js';
 import { OPERATION_REFERENCE_DOC_PATH_MAP, REFERENCE_OPERATION_GROUPS } from './reference-doc-map.js';
 import { buildInternalContractSchemas } from './schemas.js';
+import { PUBLIC_MUTATION_STEP_OP_IDS, STEP_OP_CATALOG } from './step-op-catalog.js';
 import { OPERATION_IDS, PRE_APPLY_THROW_CODES, isValidOperationIdFormat } from './types.js';
 
 describe('document-api contract catalog', () => {
@@ -191,6 +192,22 @@ describe('document-api contract catalog', () => {
       expect(expectedResult, `${id} has empty expectedResult`).toBeTruthy();
       expect(typeof expectedResult).toBe('string');
       expect(expectedResult.length, `${id} expectedResult is too short`).toBeGreaterThan(10);
+    }
+  });
+
+  it('keeps public mutation step ops explicit and reference-valid', () => {
+    expect(PUBLIC_MUTATION_STEP_OP_IDS.length).toBeGreaterThan(0);
+    expect(new Set(PUBLIC_MUTATION_STEP_OP_IDS).size).toBe(PUBLIC_MUTATION_STEP_OP_IDS.length);
+    expect(PUBLIC_MUTATION_STEP_OP_IDS).not.toContain('domain.command');
+    expect(PUBLIC_MUTATION_STEP_OP_IDS).toContain('assert');
+
+    const validOperationIds = new Set<string>(OPERATION_IDS);
+    for (const stepOp of STEP_OP_CATALOG) {
+      if (!stepOp.referenceOperationId) continue;
+      expect(
+        validOperationIds.has(stepOp.referenceOperationId),
+        `${stepOp.opId} references unknown operation ${stepOp.referenceOperationId}`,
+      ).toBe(true);
     }
   });
 

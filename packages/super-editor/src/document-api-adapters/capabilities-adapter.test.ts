@@ -1,6 +1,6 @@
 import { describe, expect, it, vi } from 'vitest';
 import type { Editor } from '../core/Editor.js';
-import { INLINE_PROPERTY_REGISTRY, OPERATION_IDS } from '@superdoc/document-api';
+import { INLINE_PROPERTY_REGISTRY, OPERATION_IDS, PUBLIC_MUTATION_STEP_OP_IDS } from '@superdoc/document-api';
 import { TrackFormatMarkName } from '../extensions/track-changes/constants.js';
 import { getDocumentApiCapabilities } from './capabilities-adapter.js';
 
@@ -75,6 +75,12 @@ describe('getDocumentApiCapabilities', () => {
     const capabilities = getDocumentApiCapabilities(makeEditor());
     const operationKeys = Object.keys(capabilities.operations).sort();
     expect(operationKeys).toEqual([...OPERATION_IDS].sort());
+  });
+
+  it('reports planEngine step-op support from the canonical mutation step catalog', () => {
+    const capabilities = getDocumentApiCapabilities(makeEditor());
+    expect(capabilities.planEngine.supportedStepOps).toEqual(PUBLIC_MUTATION_STEP_OP_IDS);
+    expect(capabilities.planEngine.supportedStepOps).not.toContain('domain.command');
   });
 
   it('marks namespaces as unavailable when required commands are missing', () => {

@@ -304,6 +304,43 @@ import {
   executeSectionsSetTitlePage,
   executeSectionsSetVerticalAlign,
 } from './sections/sections.js';
+import type { ImagesAdapter, ImagesApi, CreateImageAdapter } from './images/images.js';
+import {
+  executeImagesList,
+  executeImagesGet,
+  executeImagesDelete,
+  executeImagesMove,
+  executeImagesConvertToInline,
+  executeImagesConvertToFloating,
+  executeImagesSetSize,
+  executeImagesSetWrapType,
+  executeImagesSetWrapSide,
+  executeImagesSetWrapDistances,
+  executeImagesSetPosition,
+  executeImagesSetAnchorOptions,
+  executeImagesSetZOrder,
+  executeCreateImage,
+} from './images/images.js';
+import type {
+  CreateImageInput,
+  CreateImageResult,
+  ImagesListInput,
+  ImagesListResult,
+  ImagesGetInput,
+  ImageSummary,
+  ImagesDeleteInput,
+  ImagesMutationResult,
+  MoveImageInput,
+  ConvertToInlineInput,
+  ConvertToFloatingInput,
+  SetSizeInput,
+  SetWrapTypeInput,
+  SetWrapSideInput,
+  SetWrapDistancesInput,
+  SetPositionInput,
+  SetAnchorOptionsInput,
+  SetZOrderInput,
+} from './images/images.types.js';
 import type { TocApi, TocAdapter } from './toc/toc.js';
 import {
   executeTocList,
@@ -425,6 +462,35 @@ export type {
   ReviewDecideInput,
 } from './track-changes/track-changes.js';
 export type { BlocksAdapter } from './blocks/blocks.js';
+export type { ImagesAdapter, ImagesApi, CreateImageAdapter } from './images/images.js';
+export type {
+  ImageAddress,
+  ImageCreateLocation,
+  ImageSummary,
+  ImageWrapDistances,
+  ImagePositionInput,
+  ImageAnchorOptionsInput,
+  ImageZOrderInput,
+  CreateImageInput,
+  CreateImageResult,
+  ImagesListInput,
+  ImagesListResult,
+  ImagesGetInput,
+  ImagesDeleteInput,
+  ImagesMutationResult,
+  ImagesMutationSuccessResult,
+  ImagesMutationFailureResult,
+  MoveImageInput,
+  ConvertToInlineInput,
+  ConvertToFloatingInput,
+  SetSizeInput,
+  SetWrapTypeInput,
+  SetWrapSideInput,
+  SetWrapDistancesInput,
+  SetPositionInput,
+  SetAnchorOptionsInput,
+  SetZOrderInput,
+} from './images/images.types.js';
 export type { TocApi, TocAdapter } from './toc/toc.js';
 export type {
   TocAddress,
@@ -793,6 +859,10 @@ export interface DocumentApi {
    */
   toc: TocApi;
   /**
+   * Image lifecycle and placement operations.
+   */
+  images: ImagesApi;
+  /**
    * Selector-based query with cardinality contracts for mutation targeting.
    */
   query: QueryApi;
@@ -846,6 +916,7 @@ export interface DocumentApiAdapters {
   paragraphs: ParagraphsAdapter;
   tables: TablesAdapter;
   toc: TocAdapter;
+  images: ImagesAdapter & CreateImageAdapter;
   query: QueryAdapter;
   mutations: MutationsAdapter;
   history: HistoryAdapter;
@@ -1041,8 +1112,52 @@ export function createDocumentApi(adapters: DocumentApiAdapters): DocumentApi {
       tableOfContents(input: CreateTableOfContentsInput, options?: MutationOptions): CreateTableOfContentsResult {
         return executeCreateTableOfContents(adapters.create, input, options);
       },
+      image(input: CreateImageInput, options?: MutationOptions): CreateImageResult {
+        return executeCreateImage(adapters.images, input, options);
+      },
     },
     capabilities,
+    images: {
+      list(input?: ImagesListInput): ImagesListResult {
+        return executeImagesList(adapters.images, input ?? {});
+      },
+      get(input: ImagesGetInput): ImageSummary {
+        return executeImagesGet(adapters.images, input);
+      },
+      delete(input: ImagesDeleteInput, options?: MutationOptions): ImagesMutationResult {
+        return executeImagesDelete(adapters.images, input, options);
+      },
+      move(input: MoveImageInput, options?: MutationOptions): ImagesMutationResult {
+        return executeImagesMove(adapters.images, input, options);
+      },
+      convertToInline(input: ConvertToInlineInput, options?: MutationOptions): ImagesMutationResult {
+        return executeImagesConvertToInline(adapters.images, input, options);
+      },
+      convertToFloating(input: ConvertToFloatingInput, options?: MutationOptions): ImagesMutationResult {
+        return executeImagesConvertToFloating(adapters.images, input, options);
+      },
+      setSize(input: SetSizeInput, options?: MutationOptions): ImagesMutationResult {
+        return executeImagesSetSize(adapters.images, input, options);
+      },
+      setWrapType(input: SetWrapTypeInput, options?: MutationOptions): ImagesMutationResult {
+        return executeImagesSetWrapType(adapters.images, input, options);
+      },
+      setWrapSide(input: SetWrapSideInput, options?: MutationOptions): ImagesMutationResult {
+        return executeImagesSetWrapSide(adapters.images, input, options);
+      },
+      setWrapDistances(input: SetWrapDistancesInput, options?: MutationOptions): ImagesMutationResult {
+        return executeImagesSetWrapDistances(adapters.images, input, options);
+      },
+      setPosition(input: SetPositionInput, options?: MutationOptions): ImagesMutationResult {
+        return executeImagesSetPosition(adapters.images, input, options);
+      },
+      setAnchorOptions(input: SetAnchorOptionsInput, options?: MutationOptions): ImagesMutationResult {
+        return executeImagesSetAnchorOptions(adapters.images, input, options);
+      },
+      setZOrder(input: SetZOrderInput, options?: MutationOptions): ImagesMutationResult {
+        return executeImagesSetZOrder(adapters.images, input, options);
+      },
+    },
     lists: {
       list(query?: ListsListQuery): ListsListResult {
         return executeListsList(adapters.lists, query);

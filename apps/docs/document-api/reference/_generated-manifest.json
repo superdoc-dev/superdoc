@@ -13,6 +13,7 @@
     "apps/docs/document-api/reference/comments/patch.mdx",
     "apps/docs/document-api/reference/core/index.mdx",
     "apps/docs/document-api/reference/create/heading.mdx",
+    "apps/docs/document-api/reference/create/image.mdx",
     "apps/docs/document-api/reference/create/index.mdx",
     "apps/docs/document-api/reference/create/paragraph.mdx",
     "apps/docs/document-api/reference/create/section-break.mdx",
@@ -92,6 +93,20 @@
     "apps/docs/document-api/reference/history/index.mdx",
     "apps/docs/document-api/reference/history/redo.mdx",
     "apps/docs/document-api/reference/history/undo.mdx",
+    "apps/docs/document-api/reference/images/convert-to-floating.mdx",
+    "apps/docs/document-api/reference/images/convert-to-inline.mdx",
+    "apps/docs/document-api/reference/images/delete.mdx",
+    "apps/docs/document-api/reference/images/get.mdx",
+    "apps/docs/document-api/reference/images/index.mdx",
+    "apps/docs/document-api/reference/images/list.mdx",
+    "apps/docs/document-api/reference/images/move.mdx",
+    "apps/docs/document-api/reference/images/set-anchor-options.mdx",
+    "apps/docs/document-api/reference/images/set-position.mdx",
+    "apps/docs/document-api/reference/images/set-size.mdx",
+    "apps/docs/document-api/reference/images/set-wrap-distances.mdx",
+    "apps/docs/document-api/reference/images/set-wrap-side.mdx",
+    "apps/docs/document-api/reference/images/set-wrap-type.mdx",
+    "apps/docs/document-api/reference/images/set-z-order.mdx",
     "apps/docs/document-api/reference/index.mdx",
     "apps/docs/document-api/reference/info.mdx",
     "apps/docs/document-api/reference/insert.mdx",
@@ -244,7 +259,8 @@
         "create.heading",
         "create.sectionBreak",
         "create.table",
-        "create.tableOfContents"
+        "create.tableOfContents",
+        "create.image"
       ],
       "pagePath": "apps/docs/document-api/reference/create/index.mdx",
       "title": "Create"
@@ -493,8 +509,29 @@
       ],
       "pagePath": "apps/docs/document-api/reference/toc/index.mdx",
       "title": "Table of Contents"
+    },
+    {
+      "aliasMemberPaths": [],
+      "key": "images",
+      "operationIds": [
+        "images.list",
+        "images.get",
+        "images.delete",
+        "images.move",
+        "images.convertToInline",
+        "images.convertToFloating",
+        "images.setSize",
+        "images.setWrapType",
+        "images.setWrapSide",
+        "images.setWrapDistances",
+        "images.setPosition",
+        "images.setAnchorOptions",
+        "images.setZOrder"
+      ],
+      "pagePath": "apps/docs/document-api/reference/images/index.mdx",
+      "title": "Images"
     }
   ],
   "marker": "{/* GENERATED FILE: DO NOT EDIT. Regenerate via `pnpm run docapi:sync`. */}",
-  "sourceHash": "e06db0688bf06e7963ac3e777833076f02a71b4fa840cf301ca76a51efedc48f"
+  "sourceHash": "b0802fa2163aafb18783cc4e673a0857aaff5a3254e95c1f727ca13cb96119b8"
 }

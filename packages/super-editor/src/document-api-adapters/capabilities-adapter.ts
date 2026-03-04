@@ -105,6 +105,19 @@ const REQUIRED_COMMANDS: Partial<Record<OperationId, readonly EditorCommandName[
   'toc.markEntry': ['insertTableOfContentsEntryAt'],
   'toc.unmarkEntry': ['deleteTableOfContentsEntryAt'],
   'toc.editEntry': ['updateTableOfContentsEntryAt'],
+  // Image operations — setImage proves the image extension is loaded:
+  'create.image': ['setImage'],
+  'images.delete': ['setImage'],
+  'images.move': ['setImage'],
+  'images.convertToInline': ['setImage'],
+  'images.convertToFloating': ['setImage'],
+  'images.setSize': ['setImage'],
+  'images.setWrapType': ['setImage'],
+  'images.setWrapSide': ['setImage'],
+  'images.setWrapDistances': ['setImage'],
+  'images.setPosition': ['setImage'],
+  'images.setAnchorOptions': ['setImage'],
+  'images.setZOrder': ['setImage'],
 };
 
 /** Runtime guard — ensures only canonical reason codes are emitted even if the set grows. */

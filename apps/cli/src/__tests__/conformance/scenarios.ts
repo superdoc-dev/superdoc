@@ -559,6 +559,112 @@ async function createDocWithMarkedTocEntry(
   return { docPath: markedDoc, entryAddress };
 }
 
+const CONFORMANCE_IMAGE_DATA_URI =
+  'data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR4nGNgYAAAAAMAASsJTYQAAAAASUVORK5CYII=';
+
+type ImagePlacement = 'inline' | 'floating';
+type ImageFixture = {
+  docPath: string;
+  imageId: string;
+};
+
+function pickImageId(
+  items: Record<string, unknown>[],
+  context: string,
+  placement?: ImagePlacement,
+): { imageId: string; item: Record<string, unknown> } {
+  const match =
+    placement === undefined
+      ? items[0]
+      : (items.find((item) => {
+          const address = item.address;
+          if (!address || typeof address !== 'object') return false;
+          return (address as Record<string, unknown>).placement === placement;
+        }) ?? items[0]);
+
+  if (!match) {
+    throw new Error(`[${context}] No images available.`);
+  }
+
+  const imageId = match.sdImageId;
+  if (typeof imageId !== 'string' || imageId.length === 0) {
+    throw new Error(`[${context}] Unable to resolve image id from list output.`);
+  }
+
+  return { imageId, item: match };
+}
+
+async function resolveImageFixture(
+  harness: ConformanceHarness,
+  stateDir: string,
+  docPath: string,
+  context: string,
+  placement?: ImagePlacement,
+): Promise<ImageFixture> {
+  const listed = await harness.runCli([...commandTokens('doc.images.list'), docPath, '--limit', '20'], stateDir);
+  if (listed.result.code !== 0 || listed.envelope.ok !== true) {
+    throw new Error(`[${context}] Failed to list images.`);
+  }
+
+  const items = extractDiscoveryItems(listed.envelope.data);
+  const { imageId } = pickImageId(items, context, placement);
+  return { docPath, imageId };
+}
+
+async function createInlineImageFixture(
+  harness: ConformanceHarness,
+  stateDir: string,
+  label: string,
+): Promise<ImageFixture> {
+  const sourceDoc = await harness.copyFixtureDoc(`${label}-source`);
+  const outputDoc = harness.createOutputPath(`${label}-with-image`);
+  const created = await harness.runCli(
+    [
+      ...commandTokens('doc.create.image'),
+      sourceDoc,
+      '--src',
+      CONFORMANCE_IMAGE_DATA_URI,
+      '--alt',
+      'Conformance image',
+      '--at-json',
+      JSON.stringify({ kind: 'documentEnd' }),
+      '--out',
+      outputDoc,
+    ],
+    stateDir,
+  );
+  if (created.result.code !== 0 || created.envelope.ok !== true) {
+    throw new Error(`[${label}] Failed to create image fixture.`);
+  }
+
+  return resolveImageFixture(harness, stateDir, outputDoc, `${label}:inline`, 'inline');
+}
+
+async function createFloatingImageFixture(
+  harness: ConformanceHarness,
+  stateDir: string,
+  label: string,
+): Promise<ImageFixture> {
+  const inlineFixture = await createInlineImageFixture(harness, stateDir, `${label}-seed-inline`);
+  const floatingDoc = harness.createOutputPath(`${label}-floating`);
+  const converted = await harness.runCli(
+    [
+      ...commandTokens('doc.images.convertToFloating'),
+      inlineFixture.docPath,
+      '--image-id',
+      inlineFixture.imageId,
+      '--out',
+      floatingDoc,
+    ],
+    stateDir,
+  );
+  if (converted.result.code !== 0 || converted.envelope.ok !== true) {
+    throw new Error(`[${label}] Failed to convert fixture image to floating.`);
+  }
+
+  return resolveImageFixture(harness, stateDir, floatingDoc, `${label}:floating`, 'floating');
+}
+
 export const SUCCESS_SCENARIOS = {
   'doc.open': async (harness: ConformanceHarness): Promise<ScenarioInvocation> => {
     const stateDir = await harness.createStateDir('doc-open-success');
@@ -1639,6 +1745,227 @@ export const SUCCESS_SCENARIOS = {
         JSON.stringify({ id: fixture.changeId }),
         '--out',
         harness.createOutputPath('doc-trackChanges-decide-output'),
+      ],
+    };
+  },
+
+  // ---------------------------------------------------------------------------
+  // Image operations
+  // ---------------------------------------------------------------------------
+
+  'doc.create.image': async (harness: ConformanceHarness): Promise<ScenarioInvocation> => {
+    const stateDir = await harness.createStateDir('doc-create-image-success');
+    const docPath = await harness.copyFixtureDoc('doc-create-image');
+    return {
+      stateDir,
+      args: [
+        ...commandTokens('doc.create.image'),
+        docPath,
+        '--src',
+        CONFORMANCE_IMAGE_DATA_URI,
+        '--alt',
+        'Conformance image',
+        '--at-json',
+        JSON.stringify({ kind: 'documentEnd' }),
+        '--out',
+        harness.createOutputPath('doc-create-image-output'),
+      ],
+    };
+  },
+  'doc.images.list': async (harness: ConformanceHarness): Promise<ScenarioInvocation> => {
+    const stateDir = await harness.createStateDir('doc-images-list-success');
+    const fixture = await createInlineImageFixture(harness, stateDir, 'doc-images-list');
+    return {
+      stateDir,
+      args: [...commandTokens('doc.images.list'), fixture.docPath, '--limit', '20'],
+    };
+  },
+  'doc.images.get': async (harness: ConformanceHarness): Promise<ScenarioInvocation> => {
+    const stateDir = await harness.createStateDir('doc-images-get-success');
+    const fixture = await createInlineImageFixture(harness, stateDir, 'doc-images-get');
+    return {
+      stateDir,
+      args: [...commandTokens('doc.images.get'), fixture.docPath, '--image-id', fixture.imageId],
+    };
+  },
+  'doc.images.delete': async (harness: ConformanceHarness): Promise<ScenarioInvocation> => {
+    const stateDir = await harness.createStateDir('doc-images-delete-success');
+    const fixture = await createInlineImageFixture(harness, stateDir, 'doc-images-delete');
+    return {
+      stateDir,
+      args: [
+        ...commandTokens('doc.images.delete'),
+        fixture.docPath,
+        '--image-id',
+        fixture.imageId,
+        '--out',
+        harness.createOutputPath('doc-images-delete-output'),
+      ],
+    };
+  },
+  'doc.images.move': async (harness: ConformanceHarness): Promise<ScenarioInvocation> => {
+    const stateDir = await harness.createStateDir('doc-images-move-success');
+    const fixture = await createInlineImageFixture(harness, stateDir, 'doc-images-move');
+    return {
+      stateDir,
+      args: [
+        ...commandTokens('doc.images.move'),
+        fixture.docPath,
+        '--image-id',
+        fixture.imageId,
+        '--to-json',
+        JSON.stringify({ kind: 'documentStart' }),
+        '--out',
+        harness.createOutputPath('doc-images-move-output'),
+      ],
+    };
+  },
+  'doc.images.convertToInline': async (harness: ConformanceHarness): Promise<ScenarioInvocation> => {
+    const stateDir = await harness.createStateDir('doc-images-convert-to-inline-success');
+    const fixture = await createFloatingImageFixture(harness, stateDir, 'doc-images-convert-to-inline');
+    return {
+      stateDir,
+      args: [
+        ...commandTokens('doc.images.convertToInline'),
+        fixture.docPath,
+        '--image-id',
+        fixture.imageId,
+        '--out',
+        harness.createOutputPath('doc-images-convert-to-inline-output'),
+      ],
+    };
+  },
+  'doc.images.convertToFloating': async (harness: ConformanceHarness): Promise<ScenarioInvocation> => {
+    const stateDir = await harness.createStateDir('doc-images-convert-to-floating-success');
+    const fixture = await createInlineImageFixture(harness, stateDir, 'doc-images-convert-to-floating');
+    return {
+      stateDir,
+      args: [
+        ...commandTokens('doc.images.convertToFloating'),
+        fixture.docPath,
+        '--image-id',
+        fixture.imageId,
+        '--out',
+        harness.createOutputPath('doc-images-convert-to-floating-output'),
+      ],
+    };
+  },
+  'doc.images.setSize': async (harness: ConformanceHarness): Promise<ScenarioInvocation> => {
+    const stateDir = await harness.createStateDir('doc-images-set-size-success');
+    const fixture = await createInlineImageFixture(harness, stateDir, 'doc-images-set-size');
+    return {
+      stateDir,
+      args: [
+        ...commandTokens('doc.images.setSize'),
+        fixture.docPath,
+        '--image-id',
+        fixture.imageId,
+        '--size-json',
+        JSON.stringify({ width: 240, height: 120 }),
+        '--out',
+        harness.createOutputPath('doc-images-set-size-output'),
+      ],
+    };
+  },
+  'doc.images.setWrapType': async (harness: ConformanceHarness): Promise<ScenarioInvocation> => {
+    const stateDir = await harness.createStateDir('doc-images-set-wrap-type-success');
+    const fixture = await createFloatingImageFixture(harness, stateDir, 'doc-images-set-wrap-type');
+    return {
+      stateDir,
+      args: [
+        ...commandTokens('doc.images.setWrapType'),
+        fixture.docPath,
+        '--image-id',
+        fixture.imageId,
+        '--type',
+        'Tight',
+        '--out',
+        harness.createOutputPath('doc-images-set-wrap-type-output'),
+      ],
+    };
+  },
+  'doc.images.setWrapSide': async (harness: ConformanceHarness): Promise<ScenarioInvocation> => {
+    const stateDir = await harness.createStateDir('doc-images-set-wrap-side-success');
+    const fixture = await createFloatingImageFixture(harness, stateDir, 'doc-images-set-wrap-side');
+    return {
+      stateDir,
+      args: [
+        ...commandTokens('doc.images.setWrapSide'),
+        fixture.docPath,
+        '--image-id',
+        fixture.imageId,
+        '--side',
+        'left',
+        '--out',
+        harness.createOutputPath('doc-images-set-wrap-side-output'),
+      ],
+    };
+  },
+  'doc.images.setWrapDistances': async (harness: ConformanceHarness): Promise<ScenarioInvocation> => {
+    const stateDir = await harness.createStateDir('doc-images-set-wrap-distances-success');
+    const fixture = await createFloatingImageFixture(harness, stateDir, 'doc-images-set-wrap-distances');
+    return {
+      stateDir,
+      args: [
+        ...commandTokens('doc.images.setWrapDistances'),
+        fixture.docPath,
+        '--image-id',
+        fixture.imageId,
+        '--distances-json',
+        JSON.stringify({ distTop: 100, distBottom: 100 }),
+        '--out',
+        harness.createOutputPath('doc-images-set-wrap-distances-output'),
+      ],
+    };
+  },
+  'doc.images.setPosition': async (harness: ConformanceHarness): Promise<ScenarioInvocation> => {
+    const stateDir = await harness.createStateDir('doc-images-set-position-success');
+    const fixture = await createFloatingImageFixture(harness, stateDir, 'doc-images-set-position');
+    return {
+      stateDir,
+      args: [
+        ...commandTokens('doc.images.setPosition'),
+        fixture.docPath,
+        '--image-id',
+        fixture.imageId,
+        '--position-json',
+        JSON.stringify({ hRelativeFrom: 'column', alignH: 'center' }),
+        '--out',
+        harness.createOutputPath('doc-images-set-position-output'),
+      ],
+    };
+  },
+  'doc.images.setAnchorOptions': async (harness: ConformanceHarness): Promise<ScenarioInvocation> => {
+    const stateDir = await harness.createStateDir('doc-images-set-anchor-options-success');
+    const fixture = await createFloatingImageFixture(harness, stateDir, 'doc-images-set-anchor-options');
+    return {
+      stateDir,
+      args: [
+        ...commandTokens('doc.images.setAnchorOptions'),
+        fixture.docPath,
+        '--image-id',
+        fixture.imageId,
+        '--options-json',
+        JSON.stringify({ behindDoc: true, allowOverlap: false }),
+        '--out',
+        harness.createOutputPath('doc-images-set-anchor-options-output'),
+      ],
+    };
+  },
+  'doc.images.setZOrder': async (harness: ConformanceHarness): Promise<ScenarioInvocation> => {
+    const stateDir = await harness.createStateDir('doc-images-set-z-order-success');
+    const fixture = await createFloatingImageFixture(harness, stateDir, 'doc-images-set-z-order');
+    return {
+      stateDir,
+      args: [
+        ...commandTokens('doc.images.setZOrder'),
+        fixture.docPath,
+        '--image-id',
+        fixture.imageId,
+        '--z-order-json',
+        JSON.stringify({ relativeHeight: 500 }),
+        '--out',
+        harness.createOutputPath('doc-images-set-z-order-output'),
       ],
     };
   },

@@ -95,6 +95,20 @@ import {
   tocEditEntryWrapper,
 } from '../plan-engine/toc-entry-wrappers.js';
 import {
+  createImageWrapper,
+  imagesDeleteWrapper,
+  imagesMoveWrapper,
+  imagesConvertToInlineWrapper,
+  imagesConvertToFloatingWrapper,
+  imagesSetSizeWrapper,
+  imagesSetWrapTypeWrapper,
+  imagesSetWrapSideWrapper,
+  imagesSetWrapDistancesWrapper,
+  imagesSetPositionWrapper,
+  imagesSetAnchorOptionsWrapper,
+  imagesSetZOrderWrapper,
+} from '../plan-engine/images-wrappers.js';
+import {
   listsInsertWrapper,
   listsIndentWrapper,
   listsOutdentWrapper,
@@ -1903,6 +1917,147 @@ function getFirstTocEntryAddress(editor: Editor): { kind: 'inline'; nodeType: 't
     nodeType: 'tableOfContentsEntry',
     nodeId: first!.address.nodeId,
   };
+}
+
+/**
+ * Creates a mock editor containing one floating image node inside a paragraph.
+ * The image has `sdImageId: 'img-1'`, `isAnchor: true`, and `wrap: { type: 'Square' }`.
+ */
+function makeImageEditor(): Editor {
+  const imageNode = createNode('image', [], {
+    attrs: {
+      sdImageId: 'img-1',
+      src: 'https://example.com/test.png',
+      alt: 'Test image',
+      isAnchor: true,
+      wrap: { type: 'Square', attrs: { wrapText: 'bothSides' } },
+      anchorData: { hRelativeFrom: 'column', vRelativeFrom: 'paragraph' },
+      marginOffset: null,
+      relativeHeight: 251658240,
+      originalAttributes: {},
+      size: { width: 100, height: 100 },
+    },
+    isInline: true,
+    isLeaf: true,
+  });
+  const paragraph = createNode('paragraph', [imageNode], {
+    attrs: { sdBlockId: 'p-img' },
+    isBlock: true,
+    inlineContent: true,
+  });
+  const doc = createNode('doc', [paragraph], { isBlock: false });
+
+  const dispatch = vi.fn();
+  const tr = {
+    insertText: vi.fn().mockReturnThis(),
+    delete: vi.fn().mockReturnThis(),
+    insert: vi.fn().mockReturnThis(),
+    setNodeMarkup: vi.fn().mockReturnThis(),
+    replaceWith: vi.fn().mockReturnThis(),
+    setMeta: vi.fn().mockReturnThis(),
+    mapping: { map: (pos: number) => pos },
+    docChanged: true,
+    steps: [{}],
+    doc,
+  };
+
+  return {
+    state: {
+      doc,
+      tr,
+      schema: {
+        nodes: {
+          image: {
+            create: vi.fn((attrs: Record<string, unknown>) =>
+              createNode('image', [], { attrs, isInline: true, isLeaf: true }),
+            ),
+          },
+        },
+      },
+    },
+    dispatch,
+    commands: {
+      setImage: vi.fn(() => true),
+    },
+    schema: { marks: {} },
+    options: {},
+    on: () => {},
+  } as unknown as Editor;
+}
+
+/**
+ * Editor with two paragraphs to make image before/after/inParagraph positioning meaningful.
+ * p1 contains one floating image (img-1), p2 contains text ("Hello").
+ */
+function makeMultiBlockImageEditor(): Editor {
+  const imageNode = createNode('image', [], {
+    attrs: {
+      sdImageId: 'img-1',
+      src: 'https://example.com/test.png',
+      isAnchor: true,
+      wrap: { type: 'Square', attrs: { wrapText: 'bothSides' } },
+      anchorData: { hRelativeFrom: 'column', vRelativeFrom: 'paragraph' },
+      marginOffset: null,
+      relativeHeight: 251658240,
+      originalAttributes: {},
+      size: { width: 100, height: 100 },
+    },
+    isInline: true,
+    isLeaf: true,
+  });
+  // p1: pos=0, nodeSize=3 (1 inline image + 2 wrapper)
+  const p1 = createNode('paragraph', [imageNode], {
+    attrs: { sdBlockId: 'p-img' },
+    isBlock: true,
+    inlineContent: true,
+  });
+  const textNode = createNode('text', [], { text: 'Hello' });
+  // p2: pos=3, nodeSize=7 (5 text chars + 2 wrapper)
+  const p2 = createNode('paragraph', [textNode], {
+    attrs: { sdBlockId: 'p-text' },
+    isBlock: true,
+    inlineContent: true,
+  });
+  const doc = createNode('doc', [p1, p2], { isBlock: false });
+  // doc.content.size = 10
+
+  const dispatch = vi.fn();
+  const tr = {
+    insertText: vi.fn().mockReturnThis(),
+    delete: vi.fn().mockReturnThis(),
+    insert: vi.fn().mockReturnThis(),
+    setNodeMarkup: vi.fn().mockReturnThis(),
+    replaceWith: vi.fn().mockReturnThis(),
+    setMeta: vi.fn().mockReturnThis(),
+    mapping: { map: (pos: number) => pos },
+    docChanged: true,
+    steps: [{}],
+    doc,
+  };
+
+  return {
+    state: {
+      doc,
+      tr,
+      schema: {
+        nodes: {
+          image: {
+            create: vi.fn((attrs: Record<string, unknown>) =>
+              createNode('image', [], { attrs, isInline: true, isLeaf: true }),
+            ),
+          },
+        },
+      },
+    },
+    dispatch,
+    commands: {
+      setImage: vi.fn(() => true),
+      insertContentAt: vi.fn(() => true),
+    },
+    schema: { marks: {} },
+    options: {},
+    on: () => {},
+  } as unknown as Editor;
 }
 
 const mutationVectors: Partial<Record<OperationId, MutationVector>> = {
@@ -4017,6 +4172,297 @@ const mutationVectors: Partial<Record<OperationId, MutationVector>> = {
       );
     },
   },
+
+  // -------------------------------------------------------------------------
+  // Image operations
+  // -------------------------------------------------------------------------
+  'create.image': {
+    throwCase: () => {
+      // setImage command missing → CAPABILITY_UNAVAILABLE
+      const editor = makeImageEditor();
+      (editor.commands as Record<string, unknown>).setImage = undefined;
+      return createImageWrapper(
+        editor,
+        { src: 'https://example.com/img.png', size: { width: 100, height: 100 } },
+        { changeMode: 'direct' },
+      );
+    },
+    failureCase: () => {
+      // URL src without explicit size → INVALID_INPUT (cannot infer dimensions)
+      const editor = makeImageEditor();
+      return createImageWrapper(editor, { src: 'https://example.com/img.png' }, { changeMode: 'direct' });
+    },
+    applyCase: () => {
+      return createImageWrapper(
+        makeImageEditor(),
+        { src: 'https://example.com/img.png', size: { width: 100, height: 100 } },
+        { changeMode: 'direct' },
+      );
+    },
+  },
+  'images.delete': {
+    throwCase: () => imagesDeleteWrapper(makeImageEditor(), { imageId: 'missing' }, { changeMode: 'direct' }),
+    failureCase: () => {
+      // Transaction produces no change → NO_OP
+      const editor = makeImageEditor();
+      const tr = (editor.state as unknown as { tr: Record<string, unknown> }).tr;
+      tr.docChanged = false;
+      tr.steps = [];
+      return imagesDeleteWrapper(editor, { imageId: 'img-1' }, { changeMode: 'direct' });
+    },
+    applyCase: () => imagesDeleteWrapper(makeImageEditor(), { imageId: 'img-1' }, { changeMode: 'direct' }),
+  },
+  'images.move': {
+    throwCase: () =>
+      imagesMoveWrapper(
+        makeImageEditor(),
+        { imageId: 'missing', to: { kind: 'documentEnd' } },
+        { changeMode: 'direct' },
+      ),
+    failureCase: () => {
+      // Transaction produces no change → NO_OP
+      const editor = makeImageEditor();
+      const tr = (editor.state as unknown as { tr: Record<string, unknown> }).tr;
+      tr.docChanged = false;
+      tr.steps = [];
+      return imagesMoveWrapper(editor, { imageId: 'img-1', to: { kind: 'documentEnd' } }, { changeMode: 'direct' });
+    },
+    applyCase: () =>
+      imagesMoveWrapper(makeImageEditor(), { imageId: 'img-1', to: { kind: 'documentEnd' } }, { changeMode: 'direct' }),
+  },
+  'images.convertToInline': {
+    throwCase: () => imagesConvertToInlineWrapper(makeImageEditor(), { imageId: 'missing' }, { changeMode: 'direct' }),
+    failureCase: () => {
+      // Already inline → NO_OP
+      const inlineImg = createNode('image', [], {
+        attrs: {
+          sdImageId: 'img-inline-noop',
+          src: 'test.png',
+          isAnchor: false,
+          wrap: { type: 'Inline' },
+          anchorData: null,
+          marginOffset: null,
+          relativeHeight: null,
+          originalAttributes: {},
+        },
+        isInline: true,
+        isLeaf: true,
+      });
+      const p = createNode('paragraph', [inlineImg], {
+        attrs: { sdBlockId: 'p-x' },
+        isBlock: true,
+        inlineContent: true,
+      });
+      const doc = createNode('doc', [p], { isBlock: false });
+      const editor = {
+        state: { doc, tr: {}, schema: { nodes: {} } },
+        dispatch: vi.fn(),
+        commands: { setImage: vi.fn(() => true) },
+        schema: { marks: {} },
+        options: {},
+        on: () => {},
+      } as unknown as Editor;
+      return imagesConvertToInlineWrapper(editor, { imageId: 'img-inline-noop' }, { changeMode: 'direct' });
+    },
+    applyCase: () => imagesConvertToInlineWrapper(makeImageEditor(), { imageId: 'img-1' }, { changeMode: 'direct' }),
+  },
+  'images.convertToFloating': {
+    throwCase: () =>
+      imagesConvertToFloatingWrapper(makeImageEditor(), { imageId: 'missing' }, { changeMode: 'direct' }),
+    failureCase: () => {
+      // Already floating → NO_OP
+      return imagesConvertToFloatingWrapper(makeImageEditor(), { imageId: 'img-1' }, { changeMode: 'direct' });
+    },
+    applyCase: () => {
+      const inlineImg = createNode('image', [], {
+        attrs: {
+          sdImageId: 'img-for-float',
+          src: 'test.png',
+          isAnchor: false,
+          wrap: { type: 'Inline' },
+          anchorData: null,
+          marginOffset: null,
+          relativeHeight: null,
+          originalAttributes: {},
+        },
+        isInline: true,
+        isLeaf: true,
+      });
+      const p = createNode('paragraph', [inlineImg], {
+        attrs: { sdBlockId: 'p-f' },
+        isBlock: true,
+        inlineContent: true,
+      });
+      const doc = createNode('doc', [p], { isBlock: false });
+      const tr = {
+        setNodeMarkup: vi.fn().mockReturnThis(),
+        setMeta: vi.fn().mockReturnThis(),
+        mapping: { map: (pos: number) => pos },
+        docChanged: true,
+        steps: [{}],
+        doc,
+      };
+      const editor = {
+        state: { doc, tr, schema: { nodes: {} } },
+        dispatch: vi.fn(),
+        commands: { setImage: vi.fn(() => true) },
+        schema: { marks: {} },
+        options: {},
+        on: () => {},
+      } as unknown as Editor;
+      return imagesConvertToFloatingWrapper(editor, { imageId: 'img-for-float' }, { changeMode: 'direct' });
+    },
+  },
+  'images.setSize': {
+    throwCase: () =>
+      imagesSetSizeWrapper(
+        makeImageEditor(),
+        { imageId: 'missing', size: { width: 220, height: 140 } },
+        { changeMode: 'direct' },
+      ),
+    failureCase: () => {
+      // Same size → NO_OP
+      return imagesSetSizeWrapper(
+        makeImageEditor(),
+        { imageId: 'img-1', size: { width: 100, height: 100 } },
+        { changeMode: 'direct' },
+      );
+    },
+    applyCase: () =>
+      imagesSetSizeWrapper(
+        makeImageEditor(),
+        { imageId: 'img-1', size: { width: 220, height: 140 } },
+        { changeMode: 'direct' },
+      ),
+  },
+  'images.setWrapType': {
+    throwCase: () =>
+      imagesSetWrapTypeWrapper(makeImageEditor(), { imageId: 'missing', type: 'Tight' }, { changeMode: 'direct' }),
+    failureCase: () => {
+      // Same type → NO_OP
+      return imagesSetWrapTypeWrapper(
+        makeImageEditor(),
+        { imageId: 'img-1', type: 'Square' },
+        { changeMode: 'direct' },
+      );
+    },
+    applyCase: () =>
+      imagesSetWrapTypeWrapper(makeImageEditor(), { imageId: 'img-1', type: 'Tight' }, { changeMode: 'direct' }),
+  },
+  'images.setWrapSide': {
+    throwCase: () =>
+      imagesSetWrapSideWrapper(makeImageEditor(), { imageId: 'missing', side: 'left' }, { changeMode: 'direct' }),
+    failureCase: () => {
+      // Same side → NO_OP
+      return imagesSetWrapSideWrapper(
+        makeImageEditor(),
+        { imageId: 'img-1', side: 'bothSides' },
+        { changeMode: 'direct' },
+      );
+    },
+    applyCase: () =>
+      imagesSetWrapSideWrapper(makeImageEditor(), { imageId: 'img-1', side: 'left' }, { changeMode: 'direct' }),
+  },
+  'images.setWrapDistances': {
+    throwCase: () =>
+      imagesSetWrapDistancesWrapper(
+        makeImageEditor(),
+        { imageId: 'missing', distances: { distTop: 100 } },
+        { changeMode: 'direct' },
+      ),
+    failureCase: () => {
+      // Transaction produces no change → NO_OP
+      const editor = makeImageEditor();
+      const tr = (editor.state as unknown as { tr: Record<string, unknown> }).tr;
+      tr.docChanged = false;
+      tr.steps = [];
+      return imagesSetWrapDistancesWrapper(
+        editor,
+        { imageId: 'img-1', distances: { distTop: 100 } },
+        { changeMode: 'direct' },
+      );
+    },
+    applyCase: () =>
+      imagesSetWrapDistancesWrapper(
+        makeImageEditor(),
+        { imageId: 'img-1', distances: { distTop: 100 } },
+        { changeMode: 'direct' },
+      ),
+  },
+  'images.setPosition': {
+    throwCase: () =>
+      imagesSetPositionWrapper(
+        makeImageEditor(),
+        { imageId: 'missing', position: { hRelativeFrom: 'page' } },
+        { changeMode: 'direct' },
+      ),
+    failureCase: () => {
+      // Transaction produces no change → NO_OP
+      const editor = makeImageEditor();
+      const tr = (editor.state as unknown as { tr: Record<string, unknown> }).tr;
+      tr.docChanged = false;
+      tr.steps = [];
+      return imagesSetPositionWrapper(
+        editor,
+        { imageId: 'img-1', position: { hRelativeFrom: 'page' } },
+        { changeMode: 'direct' },
+      );
+    },
+    applyCase: () =>
+      imagesSetPositionWrapper(
+        makeImageEditor(),
+        { imageId: 'img-1', position: { hRelativeFrom: 'page' } },
+        { changeMode: 'direct' },
+      ),
+  },
+  'images.setAnchorOptions': {
+    throwCase: () =>
+      imagesSetAnchorOptionsWrapper(
+        makeImageEditor(),
+        { imageId: 'missing', options: { behindDoc: true } },
+        { changeMode: 'direct' },
+      ),
+    failureCase: () => {
+      // Transaction produces no change → NO_OP
+      const editor = makeImageEditor();
+      const tr = (editor.state as unknown as { tr: Record<string, unknown> }).tr;
+      tr.docChanged = false;
+      tr.steps = [];
+      return imagesSetAnchorOptionsWrapper(
+        editor,
+        { imageId: 'img-1', options: { behindDoc: true } },
+        { changeMode: 'direct' },
+      );
+    },
+    applyCase: () =>
+      imagesSetAnchorOptionsWrapper(
+        makeImageEditor(),
+        { imageId: 'img-1', options: { behindDoc: true } },
+        { changeMode: 'direct' },
+      ),
+  },
+  'images.setZOrder': {
+    throwCase: () =>
+      imagesSetZOrderWrapper(
+        makeImageEditor(),
+        { imageId: 'missing', zOrder: { relativeHeight: 999 } },
+        { changeMode: 'direct' },
+      ),
+    failureCase: () => {
+      // Same relativeHeight → NO_OP
+      return imagesSetZOrderWrapper(
+        makeImageEditor(),
+        { imageId: 'img-1', zOrder: { relativeHeight: 251658240 } },
+        { changeMode: 'direct' },
+      );
+    },
+    applyCase: () =>
+      imagesSetZOrderWrapper(
+        makeImageEditor(),
+        { imageId: 'img-1', zOrder: { relativeHeight: 999999999 } },
+        { changeMode: 'direct' },
+      ),
+  },
 };
 
 const dryRunVectors: Partial<Record<OperationId, () => unknown>> = {
@@ -4968,6 +5414,170 @@ const dryRunVectors: Partial<Record<OperationId, () => unknown>> = {
     expect(updateEntry).not.toHaveBeenCalled();
     return result;
   },
+
+  // -------------------------------------------------------------------------
+  // Image operations — dryRun vectors
+  // -------------------------------------------------------------------------
+  'create.image': () => {
+    const setImage = vi.fn(() => true);
+    const { editor } = makeTextEditor('Hello', { commands: { setImage } });
+    const result = createImageWrapper(
+      editor,
+      { src: 'https://example.com/img.png', size: { width: 100, height: 100 } },
+      { changeMode: 'direct', dryRun: true },
+    );
+    expect(setImage).not.toHaveBeenCalled();
+    return result;
+  },
+  'images.delete': () => {
+    const editor = makeImageEditor();
+    const dispatch = (editor as unknown as { dispatch: ReturnType<typeof vi.fn> }).dispatch;
+    const result = imagesDeleteWrapper(editor, { imageId: 'img-1' }, { changeMode: 'direct', dryRun: true });
+    expect(dispatch).not.toHaveBeenCalled();
+    return result;
+  },
+  'images.move': () => {
+    const editor = makeImageEditor();
+    const dispatch = (editor as unknown as { dispatch: ReturnType<typeof vi.fn> }).dispatch;
+    const result = imagesMoveWrapper(
+      editor,
+      { imageId: 'img-1', to: { kind: 'documentEnd' } },
+      { changeMode: 'direct', dryRun: true },
+    );
+    expect(dispatch).not.toHaveBeenCalled();
+    return result;
+  },
+  'images.convertToInline': () => {
+    const editor = makeImageEditor();
+    const dispatch = (editor as unknown as { dispatch: ReturnType<typeof vi.fn> }).dispatch;
+    const result = imagesConvertToInlineWrapper(editor, { imageId: 'img-1' }, { changeMode: 'direct', dryRun: true });
+    expect(dispatch).not.toHaveBeenCalled();
+    return result;
+  },
+  'images.convertToFloating': () => {
+    // Need an inline image for convertToFloating to be non-no-op
+    const inlineImageNode = createNode('image', [], {
+      attrs: {
+        sdImageId: 'img-inline',
+        src: 'https://example.com/test.png',
+        isAnchor: false,
+        wrap: { type: 'Inline' },
+        anchorData: null,
+        marginOffset: null,
+        relativeHeight: null,
+        originalAttributes: {},
+      },
+      isInline: true,
+      isLeaf: true,
+    });
+    const paragraph = createNode('paragraph', [inlineImageNode], {
+      attrs: { sdBlockId: 'p-img-inline' },
+      isBlock: true,
+      inlineContent: true,
+    });
+    const doc = createNode('doc', [paragraph], { isBlock: false });
+    const dispatch = vi.fn();
+    const tr = {
+      setNodeMarkup: vi.fn().mockReturnThis(),
+      setMeta: vi.fn().mockReturnThis(),
+      mapping: { map: (pos: number) => pos },
+      docChanged: true,
+      steps: [{}],
+      doc,
+    };
+    const editor = {
+      state: { doc, tr, schema: { nodes: {} } },
+      dispatch,
+      commands: { setImage: vi.fn(() => true) },
+      schema: { marks: {} },
+      options: {},
+      on: () => {},
+    } as unknown as Editor;
+    const result = imagesConvertToFloatingWrapper(
+      editor,
+      { imageId: 'img-inline' },
+      { changeMode: 'direct', dryRun: true },
+    );
+    expect(dispatch).not.toHaveBeenCalled();
+    return result;
+  },
+  'images.setSize': () => {
+    const editor = makeImageEditor();
+    const dispatch = (editor as unknown as { dispatch: ReturnType<typeof vi.fn> }).dispatch;
+    const result = imagesSetSizeWrapper(
+      editor,
+      { imageId: 'img-1', size: { width: 220, height: 140 } },
+      { changeMode: 'direct', dryRun: true },
+    );
+    expect(dispatch).not.toHaveBeenCalled();
+    return result;
+  },
+  'images.setWrapType': () => {
+    const editor = makeImageEditor();
+    const dispatch = (editor as unknown as { dispatch: ReturnType<typeof vi.fn> }).dispatch;
+    const result = imagesSetWrapTypeWrapper(
+      editor,
+      { imageId: 'img-1', type: 'Tight' },
+      { changeMode: 'direct', dryRun: true },
+    );
+    expect(dispatch).not.toHaveBeenCalled();
+    return result;
+  },
+  'images.setWrapSide': () => {
+    const editor = makeImageEditor();
+    const dispatch = (editor as unknown as { dispatch: ReturnType<typeof vi.fn> }).dispatch;
+    const result = imagesSetWrapSideWrapper(
+      editor,
+      { imageId: 'img-1', side: 'left' },
+      { changeMode: 'direct', dryRun: true },
+    );
+    expect(dispatch).not.toHaveBeenCalled();
+    return result;
+  },
+  'images.setWrapDistances': () => {
+    const editor = makeImageEditor();
+    const dispatch = (editor as unknown as { dispatch: ReturnType<typeof vi.fn> }).dispatch;
+    const result = imagesSetWrapDistancesWrapper(
+      editor,
+      { imageId: 'img-1', distances: { distTop: 100, distBottom: 100 } },
+      { changeMode: 'direct', dryRun: true },
+    );
+    expect(dispatch).not.toHaveBeenCalled();
+    return result;
+  },
+  'images.setPosition': () => {
+    const editor = makeImageEditor();
+    const dispatch = (editor as unknown as { dispatch: ReturnType<typeof vi.fn> }).dispatch;
+    const result = imagesSetPositionWrapper(
+      editor,
+      { imageId: 'img-1', position: { hRelativeFrom: 'page' } },
+      { changeMode: 'direct', dryRun: true },
+    );
+    expect(dispatch).not.toHaveBeenCalled();
+    return result;
+  },
+  'images.setAnchorOptions': () => {
+    const editor = makeImageEditor();
+    const dispatch = (editor as unknown as { dispatch: ReturnType<typeof vi.fn> }).dispatch;
+    const result = imagesSetAnchorOptionsWrapper(
+      editor,
+      { imageId: 'img-1', options: { behindDoc: true } },
+      { changeMode: 'direct', dryRun: true },
+    );
+    expect(dispatch).not.toHaveBeenCalled();
+    return result;
+  },
+  'images.setZOrder': () => {
+    const editor = makeImageEditor();
+    const dispatch = (editor as unknown as { dispatch: ReturnType<typeof vi.fn> }).dispatch;
+    const result = imagesSetZOrderWrapper(
+      editor,
+      { imageId: 'img-1', zOrder: { relativeHeight: 999999999 } },
+      { changeMode: 'direct', dryRun: true },
+    );
+    expect(dispatch).not.toHaveBeenCalled();
+    return result;
+  },
 };
 
 beforeEach(() => {
@@ -5674,4 +6284,289 @@ describe('document-api adapter conformance', () => {
       expect(receipt.steps[0].effect, `${op} outcome should be 'changed'`).toBe('changed');
     },
   );
+
+  // -------------------------------------------------------------------------
+  // Location semantics — coverage for create.image at / images.move to
+  // -------------------------------------------------------------------------
+
+  describe('image location semantics', () => {
+    /** Editor with two paragraphs to make before/after positions meaningful. */
+    function makeMultiBlockImageEditor() {
+      const imageNode = createNode('image', [], {
+        attrs: {
+          sdImageId: 'img-1',
+          src: 'https://example.com/test.png',
+          isAnchor: true,
+          wrap: { type: 'Square', attrs: { wrapText: 'bothSides' } },
+          anchorData: { hRelativeFrom: 'column', vRelativeFrom: 'paragraph' },
+          marginOffset: null,
+          relativeHeight: 251658240,
+          originalAttributes: {},
+          size: { width: 100, height: 100 },
+        },
+        isInline: true,
+        isLeaf: true,
+      });
+      // p1: pos=0, nodeSize=3 (1 inline image + 2 wrapper)
+      const p1 = createNode('paragraph', [imageNode], {
+        attrs: { sdBlockId: 'p-img' },
+        isBlock: true,
+        inlineContent: true,
+      });
+      const textNode = createNode('text', [], { text: 'Hello' });
+      // p2: pos=3, nodeSize=7 (5 text chars + 2 wrapper)
+      const p2 = createNode('paragraph', [textNode], {
+        attrs: { sdBlockId: 'p-text' },
+        isBlock: true,
+        inlineContent: true,
+      });
+      const doc = createNode('doc', [p1, p2], { isBlock: false });
+      // doc.content.size = 10
+
+      const dispatch = vi.fn();
+      const tr = {
+        insertText: vi.fn().mockReturnThis(),
+        delete: vi.fn().mockReturnThis(),
+        insert: vi.fn().mockReturnThis(),
+        setNodeMarkup: vi.fn().mockReturnThis(),
+        replaceWith: vi.fn().mockReturnThis(),
+        setMeta: vi.fn().mockReturnThis(),
+        mapping: { map: (pos: number) => pos },
+        docChanged: true,
+        steps: [{}],
+        doc,
+      };
+
+      return {
+        state: {
+          doc,
+          tr,
+          schema: {
+            nodes: {
+              image: {
+                create: vi.fn((attrs: Record<string, unknown>) =>
+                  createNode('image', [], { attrs, isInline: true, isLeaf: true }),
+                ),
+              },
+            },
+          },
+        },
+        dispatch,
+        commands: {
+          setImage: vi.fn(() => true),
+          insertContentAt: vi.fn(() => true),
+        },
+        schema: { marks: {} },
+        options: {},
+        on: () => {},
+      } as unknown as Editor;
+    }
+
+    it('create.image with at: documentStart uses insertContentAt at position 0', () => {
+      const editor = makeMultiBlockImageEditor();
+      const result = createImageWrapper(
+        editor,
+        { src: 'https://example.com/new.png', size: { width: 100, height: 100 }, at: { kind: 'documentStart' } },
+        { changeMode: 'direct' },
+      );
+      expect(result.success).toBe(true);
+      expect((editor.commands as any).insertContentAt).toHaveBeenCalledWith(
+        0,
+        expect.objectContaining({ type: 'image' }),
+      );
+      expect((editor.commands as any).setImage).not.toHaveBeenCalled();
+    });
+
+    it('create.image with at: documentEnd uses insertContentAt at content size', () => {
+      const editor = makeMultiBlockImageEditor();
+      const result = createImageWrapper(
+        editor,
+        { src: 'https://example.com/new.png', size: { width: 100, height: 100 }, at: { kind: 'documentEnd' } },
+        { changeMode: 'direct' },
+      );
+      expect(result.success).toBe(true);
+      expect((editor.commands as any).insertContentAt).toHaveBeenCalledWith(
+        10, // doc.content.size
+        expect.objectContaining({ type: 'image' }),
+      );
+      expect((editor.commands as any).setImage).not.toHaveBeenCalled();
+    });
+
+    it('create.image with at: before resolves block insertion position', () => {
+      const editor = makeMultiBlockImageEditor();
+      const result = createImageWrapper(
+        editor,
+        {
+          src: 'https://example.com/new.png',
+          size: { width: 100, height: 100 },
+          at: { kind: 'before', target: { kind: 'block', nodeType: 'paragraph', nodeId: 'p-text' } },
+        },
+        { changeMode: 'direct' },
+      );
+      expect(result.success).toBe(true);
+      expect((editor.commands as any).insertContentAt).toHaveBeenCalledWith(
+        3, // p-text starts at pos 3
+        expect.objectContaining({ type: 'image' }),
+      );
+    });
+
+    it('create.image with at: after resolves block end position', () => {
+      const editor = makeMultiBlockImageEditor();
+      const result = createImageWrapper(
+        editor,
+        {
+          src: 'https://example.com/new.png',
+          size: { width: 100, height: 100 },
+          at: { kind: 'after', target: { kind: 'block', nodeType: 'paragraph', nodeId: 'p-img' } },
+        },
+        { changeMode: 'direct' },
+      );
+      expect(result.success).toBe(true);
+      expect((editor.commands as any).insertContentAt).toHaveBeenCalledWith(
+        3, // p-img ends at pos 3 (pos=0 + nodeSize=3)
+        expect.objectContaining({ type: 'image' }),
+      );
+    });
+
+    it('create.image with at: inParagraph resolves inline offset position', () => {
+      const editor = makeMultiBlockImageEditor();
+      const result = createImageWrapper(
+        editor,
+        {
+          src: 'https://example.com/new.png',
+          size: { width: 100, height: 100 },
+          at: { kind: 'inParagraph', target: { kind: 'block', nodeType: 'paragraph', nodeId: 'p-text' }, offset: 2 },
+        },
+        { changeMode: 'direct' },
+      );
+      expect(result.success).toBe(true);
+      // p-text starts at pos 3, +1 enters inline content, +2 offset = 6
+      expect((editor.commands as any).insertContentAt).toHaveBeenCalledWith(
+        6,
+        expect.objectContaining({ type: 'image' }),
+      );
+    });
+
+    it('create.image without at uses setImage (selection-based)', () => {
+      const editor = makeMultiBlockImageEditor();
+      const result = createImageWrapper(
+        editor,
+        { src: 'https://example.com/new.png', size: { width: 100, height: 100 } },
+        { changeMode: 'direct' },
+      );
+      expect(result.success).toBe(true);
+      expect((editor.commands as any).setImage).toHaveBeenCalled();
+      expect((editor.commands as any).insertContentAt).not.toHaveBeenCalled();
+    });
+
+    it('images.move with to: documentStart inserts at position 0', () => {
+      const editor = makeMultiBlockImageEditor();
+      const result = imagesMoveWrapper(
+        editor,
+        { imageId: 'img-1', to: { kind: 'documentStart' } },
+        { changeMode: 'direct' },
+      );
+      expect(result.success).toBe(true);
+      const tr = (editor.state as unknown as { tr: { insert: ReturnType<typeof vi.fn> } }).tr;
+      expect(tr.insert).toHaveBeenCalledWith(0, expect.anything());
+    });
+
+    it('images.move with to: before resolves block position', () => {
+      const editor = makeMultiBlockImageEditor();
+      const result = imagesMoveWrapper(
+        editor,
+        {
+          imageId: 'img-1',
+          to: { kind: 'before', target: { kind: 'block', nodeType: 'paragraph', nodeId: 'p-text' } },
+        },
+        { changeMode: 'direct' },
+      );
+      expect(result.success).toBe(true);
+      const tr = (editor.state as unknown as { tr: { insert: ReturnType<typeof vi.fn> } }).tr;
+      // p-text starts at pos 3, mapping.map(3) → 3
+      expect(tr.insert).toHaveBeenCalledWith(3, expect.anything());
+    });
+
+    it('images.move with to: after resolves block end position', () => {
+      const editor = makeMultiBlockImageEditor();
+      const result = imagesMoveWrapper(
+        editor,
+        { imageId: 'img-1', to: { kind: 'after', target: { kind: 'block', nodeType: 'paragraph', nodeId: 'p-text' } } },
+        { changeMode: 'direct' },
+      );
+      expect(result.success).toBe(true);
+      const tr = (editor.state as unknown as { tr: { insert: ReturnType<typeof vi.fn> } }).tr;
+      // p-text ends at pos 10, mapping.map(10) → 10
+      expect(tr.insert).toHaveBeenCalledWith(10, expect.anything());
+    });
+  });
+
+  // -------------------------------------------------------------------------
+  // Image dimension resolution & unique drawing ID
+  // -------------------------------------------------------------------------
+
+  describe('image dimension resolution', () => {
+    /** Minimal 1x1 PNG as data URI (valid IHDR with width=1, height=1). */
+    function makePngDataUri(width: number, height: number): string {
+      // Build a minimal PNG header with the given width/height in IHDR
+      const buf = new ArrayBuffer(33);
+      const view = new DataView(buf);
+      const bytes = new Uint8Array(buf);
+      bytes.set([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a]); // PNG signature
+      view.setUint32(8, 13); // IHDR length
+      bytes.set([0x49, 0x48, 0x44, 0x52], 12); // IHDR tag
+      view.setInt32(16, width);
+      view.setInt32(20, height);
+      let binary = '';
+      for (let i = 0; i < bytes.length; i++) binary += String.fromCharCode(bytes[i]);
+      return `data:image/png;base64,${btoa(binary)}`;
+    }
+
+    it('create.image resolves dimensions from a data URI when size is omitted', () => {
+      const editor = makeImageEditor();
+      const pngUri = makePngDataUri(200, 150);
+      const result = createImageWrapper(editor, { src: pngUri }, { changeMode: 'direct' });
+      expect(result.success).toBe(true);
+      // The setImage command should have been called with resolved size
+      const setImage = (editor.commands as any).setImage;
+      const attrs = setImage.mock.calls[0]?.[0];
+      expect(attrs.size).toEqual({ width: 200, height: 150 });
+    });
+
+    it('create.image returns INVALID_INPUT when URL src has no size', () => {
+      const editor = makeImageEditor();
+      const result = createImageWrapper(editor, { src: 'https://example.com/image.png' }, { changeMode: 'direct' });
+      expect(result.success).toBe(false);
+      if (!result.success) {
+        expect(result.failure.code).toBe('INVALID_INPUT');
+      }
+    });
+
+    it('create.image returns INVALID_INPUT for data URI with unsupported format', () => {
+      const editor = makeImageEditor();
+      // A data URI that doesn't match any known image format
+      const badUri = `data:application/octet-stream;base64,${btoa('not a real image')}`;
+      const result = createImageWrapper(editor, { src: badUri }, { changeMode: 'direct' });
+      expect(result.success).toBe(false);
+      if (!result.success) {
+        expect(result.failure.code).toBe('INVALID_INPUT');
+      }
+    });
+
+    it('create.image assigns a unique drawing ID (attrs.id)', () => {
+      const editor = makeImageEditor();
+      const result = createImageWrapper(
+        editor,
+        { src: 'https://example.com/img.png', size: { width: 100, height: 100 } },
+        { changeMode: 'direct' },
+      );
+      expect(result.success).toBe(true);
+      const setImage = (editor.commands as any).setImage;
+      const attrs = setImage.mock.calls[0]?.[0];
+      // id should be a non-empty string (numeric string from generateUniqueDocPrId)
+      expect(attrs.id).toBeDefined();
+      expect(typeof attrs.id).toBe('string');
+      expect(attrs.id.length).toBeGreaterThan(0);
+    });
+  });
 });

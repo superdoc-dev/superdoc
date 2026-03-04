@@ -23,7 +23,7 @@ Document API is currently alpha and subject to breaking changes.
 | Core | 10 | 0 | 10 | [Open](/document-api/reference/core/index) |
 | Blocks | 1 | 0 | 1 | [Open](/document-api/reference/blocks/index) |
 | Capabilities | 1 | 0 | 1 | [Open](/document-api/reference/capabilities/index) |
-| Create | 5 | 0 | 5 | [Open](/document-api/reference/create/index) |
+| Create | 6 | 0 | 6 | [Open](/document-api/reference/create/index) |
 | Sections | 18 | 0 | 18 | [Open](/document-api/reference/sections/index) |
 | Format | 44 | 1 | 45 | [Open](/document-api/reference/format/index) |
 | Styles | 1 | 0 | 1 | [Open](/document-api/reference/styles/index) |
@@ -37,6 +37,7 @@ Document API is currently alpha and subject to breaking changes.
 | Tables | 42 | 0 | 42 | [Open](/document-api/reference/tables/index) |
 | History | 3 | 0 | 3 | [Open](/document-api/reference/history/index) |
 | Table of Contents | 10 | 0 | 10 | [Open](/document-api/reference/toc/index) |
+| Images | 13 | 0 | 13 | [Open](/document-api/reference/images/index) |
 
 ## Available operations
 
@@ -78,6 +79,7 @@ The tables below are grouped by namespace.
 | <span style={{ whiteSpace: 'nowrap', wordBreak: 'normal', overflowWrap: 'normal' }}><a href="/document-api/reference/create/section-break"><code>create.sectionBreak</code></a></span> | <span style={{ whiteSpace: 'nowrap', wordBreak: 'normal', overflowWrap: 'normal' }}><code>editor.doc.create.sectionBreak(...)</code></span> | Create a section break at the target location with optional initial section properties. |
 | <span style={{ whiteSpace: 'nowrap', wordBreak: 'normal', overflowWrap: 'normal' }}><a href="/document-api/reference/create/table"><code>create.table</code></a></span> | <span style={{ whiteSpace: 'nowrap', wordBreak: 'normal', overflowWrap: 'normal' }}><code>editor.doc.create.table(...)</code></span> | Create a new table at the target position. |
 | <span style={{ whiteSpace: 'nowrap', wordBreak: 'normal', overflowWrap: 'normal' }}><a href="/document-api/reference/create/table-of-contents"><code>create.tableOfContents</code></a></span> | <span style={{ whiteSpace: 'nowrap', wordBreak: 'normal', overflowWrap: 'normal' }}><code>editor.doc.create.tableOfContents(...)</code></span> | Insert a new table of contents at the target position. |
+| <span style={{ whiteSpace: 'nowrap', wordBreak: 'normal', overflowWrap: 'normal' }}><a href="/document-api/reference/create/image"><code>create.image</code></a></span> | <span style={{ whiteSpace: 'nowrap', wordBreak: 'normal', overflowWrap: 'normal' }}><code>editor.doc.create.image(...)</code></span> | Insert a new image at the target position. |
 
 #### Sections
 
@@ -309,3 +311,21 @@ The tables below are grouped by namespace.
 | <span style={{ whiteSpace: 'nowrap', wordBreak: 'normal', overflowWrap: 'normal' }}><a href="/document-api/reference/toc/list-entries"><code>toc.listEntries</code></a></span> | <span style={{ whiteSpace: 'nowrap', wordBreak: 'normal', overflowWrap: 'normal' }}><code>editor.doc.toc.listEntries(...)</code></span> | List all TC (table of contents entry) fields in the document body. |
 | <span style={{ whiteSpace: 'nowrap', wordBreak: 'normal', overflowWrap: 'normal' }}><a href="/document-api/reference/toc/get-entry"><code>toc.getEntry</code></a></span> | <span style={{ whiteSpace: 'nowrap', wordBreak: 'normal', overflowWrap: 'normal' }}><code>editor.doc.toc.getEntry(...)</code></span> | Retrieve details of a specific TC (table of contents entry) field. |
 | <span style={{ whiteSpace: 'nowrap', wordBreak: 'normal', overflowWrap: 'normal' }}><a href="/document-api/reference/toc/edit-entry"><code>toc.editEntry</code></a></span> | <span style={{ whiteSpace: 'nowrap', wordBreak: 'normal', overflowWrap: 'normal' }}><code>editor.doc.toc.editEntry(...)</code></span> | Update the properties of a TC (table of contents entry) field. |
+
+#### Images
+
+| Operation | API member path | Description |
+| --- | --- | --- |
+| <span style={{ whiteSpace: 'nowrap', wordBreak: 'normal', overflowWrap: 'normal' }}><a href="/document-api/reference/images/list"><code>images.list</code></a></span> | <span style={{ whiteSpace: 'nowrap', wordBreak: 'normal', overflowWrap: 'normal' }}><code>editor.doc.images.list(...)</code></span> | List all images in the document. |
+| <span style={{ whiteSpace: 'nowrap', wordBreak: 'normal', overflowWrap: 'normal' }}><a href="/document-api/reference/images/get"><code>images.get</code></a></span> | <span style={{ whiteSpace: 'nowrap', wordBreak: 'normal', overflowWrap: 'normal' }}><code>editor.doc.images.get(...)</code></span> | Get details for a specific image by its stable ID. |
+| <span style={{ whiteSpace: 'nowrap', wordBreak: 'normal', overflowWrap: 'normal' }}><a href="/document-api/reference/images/delete"><code>images.delete</code></a></span> | <span style={{ whiteSpace: 'nowrap', wordBreak: 'normal', overflowWrap: 'normal' }}><code>editor.doc.images.delete(...)</code></span> | Delete an image from the document. |
+| <span style={{ whiteSpace: 'nowrap', wordBreak: 'normal', overflowWrap: 'normal' }}><a href="/document-api/reference/images/move"><code>images.move</code></a></span> | <span style={{ whiteSpace: 'nowrap', wordBreak: 'normal', overflowWrap: 'normal' }}><code>editor.doc.images.move(...)</code></span> | Move an image to a new location in the document. |
+| <span style={{ whiteSpace: 'nowrap', wordBreak: 'normal', overflowWrap: 'normal' }}><a href="/document-api/reference/images/convert-to-inline"><code>images.convertToInline</code></a></span> | <span style={{ whiteSpace: 'nowrap', wordBreak: 'normal', overflowWrap: 'normal' }}><code>editor.doc.images.convertToInline(...)</code></span> | Convert a floating image to inline placement. |
+| <span style={{ whiteSpace: 'nowrap', wordBreak: 'normal', overflowWrap: 'normal' }}><a href="/document-api/reference/images/convert-to-floating"><code>images.convertToFloating</code></a></span> | <span style={{ whiteSpace: 'nowrap', wordBreak: 'normal', overflowWrap: 'normal' }}><code>editor.doc.images.convertToFloating(...)</code></span> | Convert an inline image to floating placement. |
+| <span style={{ whiteSpace: 'nowrap', wordBreak: 'normal', overflowWrap: 'normal' }}><a href="/document-api/reference/images/set-size"><code>images.setSize</code></a></span> | <span style={{ whiteSpace: 'nowrap', wordBreak: 'normal', overflowWrap: 'normal' }}><code>editor.doc.images.setSize(...)</code></span> | Set explicit width/height for an image. |
+| <span style={{ whiteSpace: 'nowrap', wordBreak: 'normal', overflowWrap: 'normal' }}><a href="/document-api/reference/images/set-wrap-type"><code>images.setWrapType</code></a></span> | <span style={{ whiteSpace: 'nowrap', wordBreak: 'normal', overflowWrap: 'normal' }}><code>editor.doc.images.setWrapType(...)</code></span> | Set the text wrapping type for a floating image. |
+| <span style={{ whiteSpace: 'nowrap', wordBreak: 'normal', overflowWrap: 'normal' }}><a href="/document-api/reference/images/set-wrap-side"><code>images.setWrapSide</code></a></span> | <span style={{ whiteSpace: 'nowrap', wordBreak: 'normal', overflowWrap: 'normal' }}><code>editor.doc.images.setWrapSide(...)</code></span> | Set which side(s) text wraps around a floating image. |
+| <span style={{ whiteSpace: 'nowrap', wordBreak: 'normal', overflowWrap: 'normal' }}><a href="/document-api/reference/images/set-wrap-distances"><code>images.setWrapDistances</code></a></span> | <span style={{ whiteSpace: 'nowrap', wordBreak: 'normal', overflowWrap: 'normal' }}><code>editor.doc.images.setWrapDistances(...)</code></span> | Set the text-wrap distance margins for a floating image. |
+| <span style={{ whiteSpace: 'nowrap', wordBreak: 'normal', overflowWrap: 'normal' }}><a href="/document-api/reference/images/set-position"><code>images.setPosition</code></a></span> | <span style={{ whiteSpace: 'nowrap', wordBreak: 'normal', overflowWrap: 'normal' }}><code>editor.doc.images.setPosition(...)</code></span> | Set the anchor position for a floating image. |
+| <span style={{ whiteSpace: 'nowrap', wordBreak: 'normal', overflowWrap: 'normal' }}><a href="/document-api/reference/images/set-anchor-options"><code>images.setAnchorOptions</code></a></span> | <span style={{ whiteSpace: 'nowrap', wordBreak: 'normal', overflowWrap: 'normal' }}><code>editor.doc.images.setAnchorOptions(...)</code></span> | Set anchor behavior options for a floating image. |
+| <span style={{ whiteSpace: 'nowrap', wordBreak: 'normal', overflowWrap: 'normal' }}><a href="/document-api/reference/images/set-z-order"><code>images.setZOrder</code></a></span> | <span style={{ whiteSpace: 'nowrap', wordBreak: 'normal', overflowWrap: 'normal' }}><code>editor.doc.images.setZOrder(...)</code></span> | Set the z-order (relativeHeight) for a floating image. |

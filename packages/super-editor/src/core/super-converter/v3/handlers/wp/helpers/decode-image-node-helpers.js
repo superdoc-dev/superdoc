@@ -3,6 +3,7 @@ import { getFallbackImageNameFromDataUri, sanitizeDocxMediaName } from '@convert
 import { prepareTextAnnotation } from '@converter/v3/handlers/w/sdt/helpers/translate-field-annotation.js';
 import { wrapTextInRun } from '@converter/exporter.js';
 import { generateDocxRandomId } from '@core/helpers/index.js';
+import { readImageDimensionsFromDataUri } from '@converter/image-dimensions.js';
 
 /**
  * Decodes image into export XML
@@ -24,7 +25,6 @@ export const translateImageNode = (params) => {
 
   // Prefer originalSrc for round-trip fidelity (e.g., EMF/WMF files converted to SVG for display)
   const src = attrs.originalSrc || attrs.src || attrs.imageSrc;
-  const { originalWidth, originalHeight } = getPngDimensions(src);
 
   let imageName;
   if (params.node.type === 'image') {
@@ -38,21 +38,35 @@ export const translateImageNode = (params) => {
   }
   imageName = sanitizeDocxMediaName(imageName);
 
-  let size = attrs.size
-    ? {
-        w: pixelsToEmu(attrs.size.width),
-        h: pixelsToEmu(attrs.size.height),
-      }
-    : imageSize;
+  // For fieldAnnotations without a recognizable MIME type, fall back to text
+  // annotation before attempting size resolution (they have no image data).
+  if (params.node.type === 'fieldAnnotation' && !imageId) {
+    const type = src?.split(';')[0].split('/')[1];
+    if (!type) {
+      return prepareTextAnnotation(params);
+    }
+  }
 
-  if (originalWidth && originalHeight) {
-    const boxWidthPx = emuToPixels(size.w);
-    const boxHeightPx = emuToPixels(size.h);
-    const { scaledWidth, scaledHeight } = getScaledSize(originalWidth, originalHeight, boxWidthPx, boxHeightPx);
-    size = {
-      w: pixelsToEmu(scaledWidth),
-      h: pixelsToEmu(scaledHeight),
-    };
+  let size = resolveExportSize(attrs, imageSize, src);
+
+  // Scale box size to match intrinsic PNG aspect ratio (legacy behavior).
+  // Only applies to PNG data URIs — the old getPngDimensions only supported PNG.
+  if (src?.startsWith('data:image/png')) {
+    const intrinsicDims = readImageDimensionsFromDataUri(src);
+    if (intrinsicDims) {
+      const boxWidthPx = emuToPixels(size.w);
+      const boxHeightPx = emuToPixels(size.h);
+      const { scaledWidth, scaledHeight } = getScaledSize(
+        intrinsicDims.width,
+        intrinsicDims.height,
+        boxWidthPx,
+        boxHeightPx,
+      );
+      size = {
+        w: pixelsToEmu(scaledWidth),
+        h: pixelsToEmu(scaledHeight),
+      };
+    }
   }
 
   if (tableCell) {
@@ -78,10 +92,8 @@ export const translateImageNode = (params) => {
     const path = src?.split('word/')[1];
     imageId = addNewImageRelationship(params, path);
   } else if (params.node.type === 'fieldAnnotation' && !imageId) {
+    // We already handled the no-type case above; here the type IS valid.
     const type = src?.split(';')[0].split('/')[1];
-    if (!type) {
-      return prepareTextAnnotation(params);
-    }
 
     const sanitizedHash = sanitizeDocxMediaName(attrs.hash, generateDocxRandomId(4));
     const fileName = `${imageName}_${sanitizedHash}.${type}`;
@@ -266,24 +278,44 @@ export const translateImageNode = (params) => {
   };
 };
 
-function getPngDimensions(base64) {
-  if (!base64) return {};
+function isFinitePositive(value) {
+  return typeof value === 'number' && Number.isFinite(value) && value > 0;
+}
 
-  const type = base64.split(';')[0].split('/')[1];
-  if (!base64 || type !== 'png') {
-    return {
-      originalWidth: undefined,
-      originalHeight: undefined,
-    };
+/**
+ * Resolve export size from available sources, with strict validation.
+ *
+ * Priority:
+ * 1. attrs.size with valid finite positive dimensions
+ * 2. imageSize fallback (from paragraph measure)
+ * 3. Infer from data URI source bytes
+ * 4. Legacy fallback: use attrs.size / imageSize as-is (may produce NaN — matches pre-hardening behavior)
+ *
+ * @returns {{ w: number, h: number }}
+ */
+function resolveExportSize(attrs, imageSize, src) {
+  if (isFinitePositive(attrs.size?.width) && isFinitePositive(attrs.size?.height)) {
+    return { w: pixelsToEmu(attrs.size.width), h: pixelsToEmu(attrs.size.height) };
   }
+  if (isFinitePositive(imageSize?.w) && isFinitePositive(imageSize?.h)) {
+    return imageSize;
+  }
+  if (src?.startsWith('data:')) {
+    const dims = readImageDimensionsFromDataUri(src);
+    if (dims) return { w: pixelsToEmu(dims.width), h: pixelsToEmu(dims.height) };
+  }
+  // Legacy fallback: preserve old behavior for callers that pass
+  // non-validated imageSize or attrs.size (e.g., file-path images without
+  // explicit dimensions).  The create.image path validates upstream.
+  const raw = attrs.size
+    ? { w: pixelsToEmu(attrs.size.width), h: pixelsToEmu(attrs.size.height) }
+    : imageSize || { w: 0, h: 0 };
 
-  let header = base64.split(',')[1].slice(0, 50);
-  let uint8 = Uint8Array.from(atob(header), (c) => c.charCodeAt(0));
-  let dataView = new DataView(uint8.buffer, 0, 28);
-
+  // Clamp non-finite or non-positive values to 1 EMU so we never emit
+  // NaN or zero in <wp:extent> / <a:ext> — both produce corrupt OOXML.
   return {
-    originalWidth: dataView.getInt32(16),
-    originalHeight: dataView.getInt32(20),
+    w: isFinitePositive(raw.w) ? raw.w : 1,
+    h: isFinitePositive(raw.h) ? raw.h : 1,
   };
 }
 

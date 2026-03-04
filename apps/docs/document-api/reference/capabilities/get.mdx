@@ -312,6 +312,11 @@ _No fields._
 | `operations.create.heading.dryRun` | boolean | yes |  |
 | `operations.create.heading.reasons` | enum[] | no |  |
 | `operations.create.heading.tracked` | boolean | yes |  |
+| `operations.create.image` | object | yes |  |
+| `operations.create.image.available` | boolean | yes |  |
+| `operations.create.image.dryRun` | boolean | yes |  |
+| `operations.create.image.reasons` | enum[] | no |  |
+| `operations.create.image.tracked` | boolean | yes |  |
 | `operations.create.paragraph` | object | yes |  |
 | `operations.create.paragraph.available` | boolean | yes |  |
 | `operations.create.paragraph.dryRun` | boolean | yes |  |
@@ -687,6 +692,71 @@ _No fields._
 | `operations.history.undo.dryRun` | boolean | yes |  |
 | `operations.history.undo.reasons` | enum[] | no |  |
 | `operations.history.undo.tracked` | boolean | yes |  |
+| `operations.images.convertToFloating` | object | yes |  |
+| `operations.images.convertToFloating.available` | boolean | yes |  |
+| `operations.images.convertToFloating.dryRun` | boolean | yes |  |
+| `operations.images.convertToFloating.reasons` | enum[] | no |  |
+| `operations.images.convertToFloating.tracked` | boolean | yes |  |
+| `operations.images.convertToInline` | object | yes |  |
+| `operations.images.convertToInline.available` | boolean | yes |  |
+| `operations.images.convertToInline.dryRun` | boolean | yes |  |
+| `operations.images.convertToInline.reasons` | enum[] | no |  |
+| `operations.images.convertToInline.tracked` | boolean | yes |  |
+| `operations.images.delete` | object | yes |  |
+| `operations.images.delete.available` | boolean | yes |  |
+| `operations.images.delete.dryRun` | boolean | yes |  |
+| `operations.images.delete.reasons` | enum[] | no |  |
+| `operations.images.delete.tracked` | boolean | yes |  |
+| `operations.images.get` | object | yes |  |
+| `operations.images.get.available` | boolean | yes |  |
+| `operations.images.get.dryRun` | boolean | yes |  |
+| `operations.images.get.reasons` | enum[] | no |  |
+| `operations.images.get.tracked` | boolean | yes |  |
+| `operations.images.list` | object | yes |  |
+| `operations.images.list.available` | boolean | yes |  |
+| `operations.images.list.dryRun` | boolean | yes |  |
+| `operations.images.list.reasons` | enum[] | no |  |
+| `operations.images.list.tracked` | boolean | yes |  |
+| `operations.images.move` | object | yes |  |
+| `operations.images.move.available` | boolean | yes |  |
+| `operations.images.move.dryRun` | boolean | yes |  |
+| `operations.images.move.reasons` | enum[] | no |  |
+| `operations.images.move.tracked` | boolean | yes |  |
+| `operations.images.setAnchorOptions` | object | yes |  |
+| `operations.images.setAnchorOptions.available` | boolean | yes |  |
+| `operations.images.setAnchorOptions.dryRun` | boolean | yes |  |
+| `operations.images.setAnchorOptions.reasons` | enum[] | no |  |
+| `operations.images.setAnchorOptions.tracked` | boolean | yes |  |
+| `operations.images.setPosition` | object | yes |  |
+| `operations.images.setPosition.available` | boolean | yes |  |
+| `operations.images.setPosition.dryRun` | boolean | yes |  |
+| `operations.images.setPosition.reasons` | enum[] | no |  |
+| `operations.images.setPosition.tracked` | boolean | yes |  |
+| `operations.images.setSize` | object | yes |  |
+| `operations.images.setSize.available` | boolean | yes |  |
+| `operations.images.setSize.dryRun` | boolean | yes |  |
+| `operations.images.setSize.reasons` | enum[] | no |  |
+| `operations.images.setSize.tracked` | boolean | yes |  |
+| `operations.images.setWrapDistances` | object | yes |  |
+| `operations.images.setWrapDistances.available` | boolean | yes |  |
+| `operations.images.setWrapDistances.dryRun` | boolean | yes |  |
+| `operations.images.setWrapDistances.reasons` | enum[] | no |  |
+| `operations.images.setWrapDistances.tracked` | boolean | yes |  |
+| `operations.images.setWrapSide` | object | yes |  |
+| `operations.images.setWrapSide.available` | boolean | yes |  |
+| `operations.images.setWrapSide.dryRun` | boolean | yes |  |
+| `operations.images.setWrapSide.reasons` | enum[] | no |  |
+| `operations.images.setWrapSide.tracked` | boolean | yes |  |
+| `operations.images.setWrapType` | object | yes |  |
+| `operations.images.setWrapType.available` | boolean | yes |  |
+| `operations.images.setWrapType.dryRun` | boolean | yes |  |
+| `operations.images.setWrapType.reasons` | enum[] | no |  |
+| `operations.images.setWrapType.tracked` | boolean | yes |  |
+| `operations.images.setZOrder` | object | yes |  |
+| `operations.images.setZOrder.available` | boolean | yes |  |
+| `operations.images.setZOrder.dryRun` | boolean | yes |  |
+| `operations.images.setZOrder.reasons` | enum[] | no |  |
+| `operations.images.setZOrder.tracked` | boolean | yes |  |
 | `operations.info` | object | yes |  |
 | `operations.info.available` | boolean | yes |  |
 | `operations.info.dryRun` | boolean | yes |  |
@@ -1552,6 +1622,14 @@ _No fields._
       ],
       "tracked": true
     },
+    "create.image": {
+      "available": true,
+      "dryRun": true,
+      "reasons": [
+        "COMMAND_UNAVAILABLE"
+      ],
+      "tracked": true
+    },
     "create.paragraph": {
       "available": true,
       "dryRun": true,
@@ -2145,6 +2223,110 @@ _No fields._
       "tracked": true
     },
     "history.undo": {
+      "available": true,
+      "dryRun": true,
+      "reasons": [
+        "COMMAND_UNAVAILABLE"
+      ],
+      "tracked": true
+    },
+    "images.convertToFloating": {
+      "available": true,
+      "dryRun": true,
+      "reasons": [
+        "COMMAND_UNAVAILABLE"
+      ],
+      "tracked": true
+    },
+    "images.convertToInline": {
+      "available": true,
+      "dryRun": true,
+      "reasons": [
+        "COMMAND_UNAVAILABLE"
+      ],
+      "tracked": true
+    },
+    "images.delete": {
+      "available": true,
+      "dryRun": true,
+      "reasons": [
+        "COMMAND_UNAVAILABLE"
+      ],
+      "tracked": true
+    },
+    "images.get": {
+      "available": true,
+      "dryRun": true,
+      "reasons": [
+        "COMMAND_UNAVAILABLE"
+      ],
+      "tracked": true
+    },
+    "images.list": {
+      "available": true,
+      "dryRun": true,
+      "reasons": [
+        "COMMAND_UNAVAILABLE"
+      ],
+      "tracked": true
+    },
+    "images.move": {
+      "available": true,
+      "dryRun": true,
+      "reasons": [
+        "COMMAND_UNAVAILABLE"
+      ],
+      "tracked": true
+    },
+    "images.setAnchorOptions": {
+      "available": true,
+      "dryRun": true,
+      "reasons": [
+        "COMMAND_UNAVAILABLE"
+      ],
+      "tracked": true
+    },
+    "images.setPosition": {
+      "available": true,
+      "dryRun": true,
+      "reasons": [
+        "COMMAND_UNAVAILABLE"
+      ],
+      "tracked": true
+    },
+    "images.setSize": {
+      "available": true,
+      "dryRun": true,
+      "reasons": [
+        "COMMAND_UNAVAILABLE"
+      ],
+      "tracked": true
+    },
+    "images.setWrapDistances": {
+      "available": true,
+      "dryRun": true,
+      "reasons": [
+        "COMMAND_UNAVAILABLE"
+      ],
+      "tracked": true
+    },
+    "images.setWrapSide": {
+      "available": true,
+      "dryRun": true,
+      "reasons": [
+        "COMMAND_UNAVAILABLE"
+      ],
+      "tracked": true
+    },
+    "images.setWrapType": {
+      "available": true,
+      "dryRun": true,
+      "reasons": [
+        "COMMAND_UNAVAILABLE"
+      ],
+      "tracked": true
+    },
+    "images.setZOrder": {
       "available": true,
       "dryRun": true,
       "reasons": [
@@ -4897,6 +5079,41 @@ _No fields._
           ],
           "type": "object"
         },
+        "create.image": {
+          "additionalProperties": false,
+          "properties": {
+            "available": {
+              "type": "boolean"
+            },
+            "dryRun": {
+              "type": "boolean"
+            },
+            "reasons": {
+              "items": {
+                "enum": [
+                  "COMMAND_UNAVAILABLE",
+                  "HELPER_UNAVAILABLE",
+                  "OPERATION_UNAVAILABLE",
+                  "TRACKED_MODE_UNAVAILABLE",
+                  "DRY_RUN_UNAVAILABLE",
+                  "NAMESPACE_UNAVAILABLE",
+                  "STYLES_PART_MISSING",
+                  "COLLABORATION_ACTIVE"
+                ]
+              },
+              "type": "array"
+            },
+            "tracked": {
+              "type": "boolean"
+            }
+          },
+          "required": [
+            "available",
+            "tracked",
+            "dryRun"
+          ],
+          "type": "object"
+        },
         "create.paragraph": {
           "additionalProperties": false,
           "properties": {
@@ -7488,6 +7705,461 @@ _No fields._
           "type": "object"
         },
         "history.undo": {
+          "additionalProperties": false,
+          "properties": {
+            "available": {
+              "type": "boolean"
+            },
+            "dryRun": {
+              "type": "boolean"
+            },
+            "reasons": {
+              "items": {
+                "enum": [
+                  "COMMAND_UNAVAILABLE",
+                  "HELPER_UNAVAILABLE",
+                  "OPERATION_UNAVAILABLE",
+                  "TRACKED_MODE_UNAVAILABLE",
+                  "DRY_RUN_UNAVAILABLE",
+                  "NAMESPACE_UNAVAILABLE",
+                  "STYLES_PART_MISSING",
+                  "COLLABORATION_ACTIVE"
+                ]
+              },
+              "type": "array"
+            },
+            "tracked": {
+              "type": "boolean"
+            }
+          },
+          "required": [
+            "available",
+            "tracked",
+            "dryRun"
+          ],
+          "type": "object"
+        },
+        "images.convertToFloating": {
+          "additionalProperties": false,
+          "properties": {
+            "available": {
+              "type": "boolean"
+            },
+            "dryRun": {
+              "type": "boolean"
+            },
+            "reasons": {
+              "items": {
+                "enum": [
+                  "COMMAND_UNAVAILABLE",
+                  "HELPER_UNAVAILABLE",
+                  "OPERATION_UNAVAILABLE",
+                  "TRACKED_MODE_UNAVAILABLE",
+                  "DRY_RUN_UNAVAILABLE",
+                  "NAMESPACE_UNAVAILABLE",
+                  "STYLES_PART_MISSING",
+                  "COLLABORATION_ACTIVE"
+                ]
+              },
+              "type": "array"
+            },
+            "tracked": {
+              "type": "boolean"
+            }
+          },
+          "required": [
+            "available",
+            "tracked",
+            "dryRun"
+          ],
+          "type": "object"
+        },
+        "images.convertToInline": {
+          "additionalProperties": false,
+          "properties": {
+            "available": {
+              "type": "boolean"
+            },
+            "dryRun": {
+              "type": "boolean"
+            },
+            "reasons": {
+              "items": {
+                "enum": [
+                  "COMMAND_UNAVAILABLE",
+                  "HELPER_UNAVAILABLE",
+                  "OPERATION_UNAVAILABLE",
+                  "TRACKED_MODE_UNAVAILABLE",
+                  "DRY_RUN_UNAVAILABLE",
+                  "NAMESPACE_UNAVAILABLE",
+                  "STYLES_PART_MISSING",
+                  "COLLABORATION_ACTIVE"
+                ]
+              },
+              "type": "array"
+            },
+            "tracked": {
+              "type": "boolean"
+            }
+          },
+          "required": [
+            "available",
+            "tracked",
+            "dryRun"
+          ],
+          "type": "object"
+        },
+        "images.delete": {
+          "additionalProperties": false,
+          "properties": {
+            "available": {
+              "type": "boolean"
+            },
+            "dryRun": {
+              "type": "boolean"
+            },
+            "reasons": {
+              "items": {
+                "enum": [
+                  "COMMAND_UNAVAILABLE",
+                  "HELPER_UNAVAILABLE",
+                  "OPERATION_UNAVAILABLE",
+                  "TRACKED_MODE_UNAVAILABLE",
+                  "DRY_RUN_UNAVAILABLE",
+                  "NAMESPACE_UNAVAILABLE",
+                  "STYLES_PART_MISSING",
+                  "COLLABORATION_ACTIVE"
+                ]
+              },
+              "type": "array"
+            },
+            "tracked": {
+              "type": "boolean"
+            }
+          },
+          "required": [
+            "available",
+            "tracked",
+            "dryRun"
+          ],
+          "type": "object"
+        },
+        "images.get": {
+          "additionalProperties": false,
+          "properties": {
+            "available": {
+              "type": "boolean"
+            },
+            "dryRun": {
+              "type": "boolean"
+            },
+            "reasons": {
+              "items": {
+                "enum": [
+                  "COMMAND_UNAVAILABLE",
+                  "HELPER_UNAVAILABLE",
+                  "OPERATION_UNAVAILABLE",
+                  "TRACKED_MODE_UNAVAILABLE",
+                  "DRY_RUN_UNAVAILABLE",
+                  "NAMESPACE_UNAVAILABLE",
+                  "STYLES_PART_MISSING",
+                  "COLLABORATION_ACTIVE"
+                ]
+              },
+              "type": "array"
+            },
+            "tracked": {
+              "type": "boolean"
+            }
+          },
+          "required": [
+            "available",
+            "tracked",
+            "dryRun"
+          ],
+          "type": "object"
+        },
+        "images.list": {
+          "additionalProperties": false,
+          "properties": {
+            "available": {
+              "type": "boolean"
+            },
+            "dryRun": {
+              "type": "boolean"
+            },
+            "reasons": {
+              "items": {
+                "enum": [
+                  "COMMAND_UNAVAILABLE",
+                  "HELPER_UNAVAILABLE",
+                  "OPERATION_UNAVAILABLE",
+                  "TRACKED_MODE_UNAVAILABLE",
+                  "DRY_RUN_UNAVAILABLE",
+                  "NAMESPACE_UNAVAILABLE",
+                  "STYLES_PART_MISSING",
+                  "COLLABORATION_ACTIVE"
+                ]
+              },
+              "type": "array"
+            },
+            "tracked": {
+              "type": "boolean"
+            }
+          },
+          "required": [
+            "available",
+            "tracked",
+            "dryRun"
+          ],
+          "type": "object"
+        },
+        "images.move": {
+          "additionalProperties": false,
+          "properties": {
+            "available": {
+              "type": "boolean"
+            },
+            "dryRun": {
+              "type": "boolean"
+            },
+            "reasons": {
+              "items": {
+                "enum": [
+                  "COMMAND_UNAVAILABLE",
+                  "HELPER_UNAVAILABLE",
+                  "OPERATION_UNAVAILABLE",
+                  "TRACKED_MODE_UNAVAILABLE",
+                  "DRY_RUN_UNAVAILABLE",
+                  "NAMESPACE_UNAVAILABLE",
+                  "STYLES_PART_MISSING",
+                  "COLLABORATION_ACTIVE"
+                ]
+              },
+              "type": "array"
+            },
+            "tracked": {
+              "type": "boolean"
+            }
+          },
+          "required": [
+            "available",
+            "tracked",
+            "dryRun"
+          ],
+          "type": "object"
+        },
+        "images.setAnchorOptions": {
+          "additionalProperties": false,
+          "properties": {
+            "available": {
+              "type": "boolean"
+            },
+            "dryRun": {
+              "type": "boolean"
+            },
+            "reasons": {
+              "items": {
+                "enum": [
+                  "COMMAND_UNAVAILABLE",
+                  "HELPER_UNAVAILABLE",
+                  "OPERATION_UNAVAILABLE",
+                  "TRACKED_MODE_UNAVAILABLE",
+                  "DRY_RUN_UNAVAILABLE",
+                  "NAMESPACE_UNAVAILABLE",
+                  "STYLES_PART_MISSING",
+                  "COLLABORATION_ACTIVE"
+                ]
+              },
+              "type": "array"
+            },
+            "tracked": {
+              "type": "boolean"
+            }
+          },
+          "required": [
+            "available",
+            "tracked",
+            "dryRun"
+          ],
+          "type": "object"
+        },
+        "images.setPosition": {
+          "additionalProperties": false,
+          "properties": {
+            "available": {
+              "type": "boolean"
+            },
+            "dryRun": {
+              "type": "boolean"
+            },
+            "reasons": {
+              "items": {
+                "enum": [
+                  "COMMAND_UNAVAILABLE",
+                  "HELPER_UNAVAILABLE",
+                  "OPERATION_UNAVAILABLE",
+                  "TRACKED_MODE_UNAVAILABLE",
+                  "DRY_RUN_UNAVAILABLE",
+                  "NAMESPACE_UNAVAILABLE",
+                  "STYLES_PART_MISSING",
+                  "COLLABORATION_ACTIVE"
+                ]
+              },
+              "type": "array"
+            },
+            "tracked": {
+              "type": "boolean"
+            }
+          },
+          "required": [
+            "available",
+            "tracked",
+            "dryRun"
+          ],
+          "type": "object"
+        },
+        "images.setSize": {
+          "additionalProperties": false,
+          "properties": {
+            "available": {
+              "type": "boolean"
+            },
+            "dryRun": {
+              "type": "boolean"
+            },
+            "reasons": {
+              "items": {
+                "enum": [
+                  "COMMAND_UNAVAILABLE",
+                  "HELPER_UNAVAILABLE",
+                  "OPERATION_UNAVAILABLE",
+                  "TRACKED_MODE_UNAVAILABLE",
+                  "DRY_RUN_UNAVAILABLE",
+                  "NAMESPACE_UNAVAILABLE",
+                  "STYLES_PART_MISSING",
+                  "COLLABORATION_ACTIVE"
+                ]
+              },
+              "type": "array"
+            },
+            "tracked": {
+              "type": "boolean"
+            }
+          },
+          "required": [
+            "available",
+            "tracked",
+            "dryRun"
+          ],
+          "type": "object"
+        },
+        "images.setWrapDistances": {
+          "additionalProperties": false,
+          "properties": {
+            "available": {
+              "type": "boolean"
+            },
+            "dryRun": {
+              "type": "boolean"
+            },
+            "reasons": {
+              "items": {
+                "enum": [
+                  "COMMAND_UNAVAILABLE",
+                  "HELPER_UNAVAILABLE",
+                  "OPERATION_UNAVAILABLE",
+                  "TRACKED_MODE_UNAVAILABLE",
+                  "DRY_RUN_UNAVAILABLE",
+                  "NAMESPACE_UNAVAILABLE",
+                  "STYLES_PART_MISSING",
+                  "COLLABORATION_ACTIVE"
+                ]
+              },
+              "type": "array"
+            },
+            "tracked": {
+              "type": "boolean"
+            }
+          },
+          "required": [
+            "available",
+            "tracked",
+            "dryRun"
+          ],
+          "type": "object"
+        },
+        "images.setWrapSide": {
+          "additionalProperties": false,
+          "properties": {
+            "available": {
+              "type": "boolean"
+            },
+            "dryRun": {
+              "type": "boolean"
+            },
+            "reasons": {
+              "items": {
+                "enum": [
+                  "COMMAND_UNAVAILABLE",
+                  "HELPER_UNAVAILABLE",
+                  "OPERATION_UNAVAILABLE",
+                  "TRACKED_MODE_UNAVAILABLE",
+                  "DRY_RUN_UNAVAILABLE",
+                  "NAMESPACE_UNAVAILABLE",
+                  "STYLES_PART_MISSING",
+                  "COLLABORATION_ACTIVE"
+                ]
+              },
+              "type": "array"
+            },
+            "tracked": {
+              "type": "boolean"
+            }
+          },
+          "required": [
+            "available",
+            "tracked",
+            "dryRun"
+          ],
+          "type": "object"
+        },
+        "images.setWrapType": {
+          "additionalProperties": false,
+          "properties": {
+            "available": {
+              "type": "boolean"
+            },
+            "dryRun": {
+              "type": "boolean"
+            },
+            "reasons": {
+              "items": {
+                "enum": [
+                  "COMMAND_UNAVAILABLE",
+                  "HELPER_UNAVAILABLE",
+                  "OPERATION_UNAVAILABLE",
+                  "TRACKED_MODE_UNAVAILABLE",
+                  "DRY_RUN_UNAVAILABLE",
+                  "NAMESPACE_UNAVAILABLE",
+                  "STYLES_PART_MISSING",
+                  "COLLABORATION_ACTIVE"
+                ]
+              },
+              "type": "array"
+            },
+            "tracked": {
+              "type": "boolean"
+            }
+          },
+          "required": [
+            "available",
+            "tracked",
+            "dryRun"
+          ],
+          "type": "object"
+        },
+        "images.setZOrder": {
           "additionalProperties": false,
           "properties": {
             "available": {
@@ -11170,7 +11842,21 @@ _No fields._
         "toc.editEntry",
         "history.get",
         "history.undo",
-        "history.redo"
+        "history.redo",
+        "create.image",
+        "images.list",
+        "images.get",
+        "images.delete",
+        "images.move",
+        "images.convertToInline",
+        "images.convertToFloating",
+        "images.setSize",
+        "images.setWrapType",
+        "images.setWrapSide",
+        "images.setWrapDistances",
+        "images.setPosition",
+        "images.setAnchorOptions",
+        "images.setZOrder"
       ],
       "type": "object"
     },

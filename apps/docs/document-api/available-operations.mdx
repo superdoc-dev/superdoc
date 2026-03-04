@@ -18,9 +18,10 @@ Use the tables below to see what operations are available and where each one is 
 | Capabilities | 1 | 0 | 1 | [Reference](/document-api/reference/capabilities/index) |
 | Comments | 5 | 0 | 5 | [Reference](/document-api/reference/comments/index) |
 | Core | 10 | 0 | 10 | [Reference](/document-api/reference/core/index) |
-| Create | 5 | 0 | 5 | [Reference](/document-api/reference/create/index) |
+| Create | 6 | 0 | 6 | [Reference](/document-api/reference/create/index) |
 | Format | 44 | 1 | 45 | [Reference](/document-api/reference/format/index) |
 | History | 3 | 0 | 3 | [Reference](/document-api/reference/history/index) |
+| Images | 13 | 0 | 13 | [Reference](/document-api/reference/images/index) |
 | Lists | 17 | 0 | 17 | [Reference](/document-api/reference/lists/index) |
 | Mutations | 2 | 0 | 2 | [Reference](/document-api/reference/mutations/index) |
 | Paragraph Formatting | 17 | 0 | 17 | [Reference](/document-api/reference/format/paragraph/index) |
@@ -56,6 +57,7 @@ Use the tables below to see what operations are available and where each one is 
 | <span style={{ whiteSpace: 'nowrap', wordBreak: 'normal', overflowWrap: 'normal' }}><code>editor.doc.create.sectionBreak(...)</code></span> | [`create.sectionBreak`](/document-api/reference/create/section-break) |
 | <span style={{ whiteSpace: 'nowrap', wordBreak: 'normal', overflowWrap: 'normal' }}><code>editor.doc.create.table(...)</code></span> | [`create.table`](/document-api/reference/create/table) |
 | <span style={{ whiteSpace: 'nowrap', wordBreak: 'normal', overflowWrap: 'normal' }}><code>editor.doc.create.tableOfContents(...)</code></span> | [`create.tableOfContents`](/document-api/reference/create/table-of-contents) |
+| <span style={{ whiteSpace: 'nowrap', wordBreak: 'normal', overflowWrap: 'normal' }}><code>editor.doc.create.image(...)</code></span> | [`create.image`](/document-api/reference/create/image) |
 | <span style={{ whiteSpace: 'nowrap', wordBreak: 'normal', overflowWrap: 'normal' }}><code>editor.doc.format.apply(...)</code></span> | [`format.apply`](/document-api/reference/format/apply) |
 | <span style={{ whiteSpace: 'nowrap', wordBreak: 'normal', overflowWrap: 'normal' }}><code>editor.doc.format.bold(...)</code></span> | [`format.bold`](/document-api/reference/format/bold) |
 | <span style={{ whiteSpace: 'nowrap', wordBreak: 'normal', overflowWrap: 'normal' }}><code>editor.doc.format.italic(...)</code></span> | [`format.italic`](/document-api/reference/format/italic) |
@@ -104,6 +106,19 @@ Use the tables below to see what operations are available and where each one is 
 | <span style={{ whiteSpace: 'nowrap', wordBreak: 'normal', overflowWrap: 'normal' }}><code>editor.doc.history.get(...)</code></span> | [`history.get`](/document-api/reference/history/get) |
 | <span style={{ whiteSpace: 'nowrap', wordBreak: 'normal', overflowWrap: 'normal' }}><code>editor.doc.history.undo(...)</code></span> | [`history.undo`](/document-api/reference/history/undo) |
 | <span style={{ whiteSpace: 'nowrap', wordBreak: 'normal', overflowWrap: 'normal' }}><code>editor.doc.history.redo(...)</code></span> | [`history.redo`](/document-api/reference/history/redo) |
+| <span style={{ whiteSpace: 'nowrap', wordBreak: 'normal', overflowWrap: 'normal' }}><code>editor.doc.images.list(...)</code></span> | [`images.list`](/document-api/reference/images/list) |
+| <span style={{ whiteSpace: 'nowrap', wordBreak: 'normal', overflowWrap: 'normal' }}><code>editor.doc.images.get(...)</code></span> | [`images.get`](/document-api/reference/images/get) |
+| <span style={{ whiteSpace: 'nowrap', wordBreak: 'normal', overflowWrap: 'normal' }}><code>editor.doc.images.delete(...)</code></span> | [`images.delete`](/document-api/reference/images/delete) |
+| <span style={{ whiteSpace: 'nowrap', wordBreak: 'normal', overflowWrap: 'normal' }}><code>editor.doc.images.move(...)</code></span> | [`images.move`](/document-api/reference/images/move) |
+| <span style={{ whiteSpace: 'nowrap', wordBreak: 'normal', overflowWrap: 'normal' }}><code>editor.doc.images.convertToInline(...)</code></span> | [`images.convertToInline`](/document-api/reference/images/convert-to-inline) |
+| <span style={{ whiteSpace: 'nowrap', wordBreak: 'normal', overflowWrap: 'normal' }}><code>editor.doc.images.convertToFloating(...)</code></span> | [`images.convertToFloating`](/document-api/reference/images/convert-to-floating) |
+| <span style={{ whiteSpace: 'nowrap', wordBreak: 'normal', overflowWrap: 'normal' }}><code>editor.doc.images.setSize(...)</code></span> | [`images.setSize`](/document-api/reference/images/set-size) |
+| <span style={{ whiteSpace: 'nowrap', wordBreak: 'normal', overflowWrap: 'normal' }}><code>editor.doc.images.setWrapType(...)</code></span> | [`images.setWrapType`](/document-api/reference/images/set-wrap-type) |
+| <span style={{ whiteSpace: 'nowrap', wordBreak: 'normal', overflowWrap: 'normal' }}><code>editor.doc.images.setWrapSide(...)</code></span> | [`images.setWrapSide`](/document-api/reference/images/set-wrap-side) |
+| <span style={{ whiteSpace: 'nowrap', wordBreak: 'normal', overflowWrap: 'normal' }}><code>editor.doc.images.setWrapDistances(...)</code></span> | [`images.setWrapDistances`](/document-api/reference/images/set-wrap-distances) |
+| <span style={{ whiteSpace: 'nowrap', wordBreak: 'normal', overflowWrap: 'normal' }}><code>editor.doc.images.setPosition(...)</code></span> | [`images.setPosition`](/document-api/reference/images/set-position) |
+| <span style={{ whiteSpace: 'nowrap', wordBreak: 'normal', overflowWrap: 'normal' }}><code>editor.doc.images.setAnchorOptions(...)</code></span> | [`images.setAnchorOptions`](/document-api/reference/images/set-anchor-options) |
+| <span style={{ whiteSpace: 'nowrap', wordBreak: 'normal', overflowWrap: 'normal' }}><code>editor.doc.images.setZOrder(...)</code></span> | [`images.setZOrder`](/document-api/reference/images/set-z-order) |
 | <span style={{ whiteSpace: 'nowrap', wordBreak: 'normal', overflowWrap: 'normal' }}><code>editor.doc.lists.list(...)</code></span> | [`lists.list`](/document-api/reference/lists/list) |
 | <span style={{ whiteSpace: 'nowrap', wordBreak: 'normal', overflowWrap: 'normal' }}><code>editor.doc.lists.get(...)</code></span> | [`lists.get`](/document-api/reference/lists/get) |
 | <span style={{ whiteSpace: 'nowrap', wordBreak: 'normal', overflowWrap: 'normal' }}><code>editor.doc.lists.insert(...)</code></span> | [`lists.insert`](/document-api/reference/lists/insert) |

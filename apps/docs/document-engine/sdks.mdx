@@ -474,6 +474,7 @@ The SDKs expose all operations from the [Document API](/document-api/overview) p
 | `doc.create.sectionBreak` | `create section-break` | Create a section break at the target location with optional initial section properties. |
 | `doc.create.table` | `create table` | Create a new table at the target position. |
 | `doc.create.tableOfContents` | `create table-of-contents` | Insert a new table of contents at the target position. |
+| `doc.create.image` | `create image` | Insert a new image at the target position. |
 
 #### Sections
 
@@ -637,6 +638,24 @@ The SDKs expose all operations from the [Document API](/document-api/overview) p
 | `doc.describe` | `describe` | List all available CLI operations and contract metadata. |
 | `doc.describeCommand` | `describe command` | Show detailed metadata for a single CLI operation. |
 
+#### Images
+
+| Operation | CLI command | Description |
+| --- | --- | --- |
+| `doc.images.list` | `images list` | List all images in the document. |
+| `doc.images.get` | `images get` | Get details for a specific image by its stable ID. |
+| `doc.images.delete` | `images delete` | Delete an image from the document. |
+| `doc.images.move` | `images move` | Move an image to a new location in the document. |
+| `doc.images.convertToInline` | `images convert-to-inline` | Convert a floating image to inline placement. |
+| `doc.images.convertToFloating` | `images convert-to-floating` | Convert an inline image to floating placement. |
+| `doc.images.setSize` | `images set-size` | Set explicit width/height for an image. |
+| `doc.images.setWrapType` | `images set-wrap-type` | Set the text wrapping type for a floating image. |
+| `doc.images.setWrapSide` | `images set-wrap-side` | Set which side(s) text wraps around a floating image. |
+| `doc.images.setWrapDistances` | `images set-wrap-distances` | Set the text-wrap distance margins for a floating image. |
+| `doc.images.setPosition` | `images set-position` | Set the anchor position for a floating image. |
+| `doc.images.setAnchorOptions` | `images set-anchor-options` | Set anchor behavior options for a floating image. |
+| `doc.images.setZOrder` | `images set-z-order` | Set the z-order (relativeHeight) for a floating image. |
+
   </Tab>
   <Tab title="Python">
 
@@ -764,6 +783,7 @@ The SDKs expose all operations from the [Document API](/document-api/overview) p
 | `doc.create.section_break` | `create section-break` | Create a section break at the target location with optional initial section properties. |
 | `doc.create.table` | `create table` | Create a new table at the target position. |
 | `doc.create.table_of_contents` | `create table-of-contents` | Insert a new table of contents at the target position. |
+| `doc.create.image` | `create image` | Insert a new image at the target position. |
 
 #### Sections
 
@@ -926,6 +946,24 @@ The SDKs expose all operations from the [Document API](/document-api/overview) p
 | `doc.status` | `status` | Show the current session status and document metadata. |
 | `doc.describe` | `describe` | List all available CLI operations and contract metadata. |
 | `doc.describe_command` | `describe command` | Show detailed metadata for a single CLI operation. |
+
+#### Images
+
+| Operation | CLI command | Description |
+| --- | --- | --- |
+| `doc.images.list` | `images list` | List all images in the document. |
+| `doc.images.get` | `images get` | Get details for a specific image by its stable ID. |
+| `doc.images.delete` | `images delete` | Delete an image from the document. |
+| `doc.images.move` | `images move` | Move an image to a new location in the document. |
+| `doc.images.convert_to_inline` | `images convert-to-inline` | Convert a floating image to inline placement. |
+| `doc.images.convert_to_floating` | `images convert-to-floating` | Convert an inline image to floating placement. |
+| `doc.images.set_size` | `images set-size` | Set explicit width/height for an image. |
+| `doc.images.set_wrap_type` | `images set-wrap-type` | Set the text wrapping type for a floating image. |
+| `doc.images.set_wrap_side` | `images set-wrap-side` | Set which side(s) text wraps around a floating image. |
+| `doc.images.set_wrap_distances` | `images set-wrap-distances` | Set the text-wrap distance margins for a floating image. |
+| `doc.images.set_position` | `images set-position` | Set the anchor position for a floating image. |
+| `doc.images.set_anchor_options` | `images set-anchor-options` | Set anchor behavior options for a floating image. |
+| `doc.images.set_z_order` | `images set-z-order` | Set the z-order (relativeHeight) for a floating image. |
 
   </Tab>
 </Tabs>

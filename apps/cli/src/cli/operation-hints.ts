@@ -176,6 +176,22 @@ export const SUCCESS_VERB: Record<CliExposedOperationId, string> = {
   'history.get': 'retrieved history state',
   'history.undo': 'undid last change',
   'history.redo': 'redid last change',
+
+  // Images
+  'create.image': 'created image',
+  'images.list': 'listed images',
+  'images.get': 'resolved image',
+  'images.delete': 'deleted image',
+  'images.move': 'moved image',
+  'images.convertToInline': 'converted to inline',
+  'images.convertToFloating': 'converted to floating',
+  'images.setSize': 'set image size',
+  'images.setWrapType': 'set wrap type',
+  'images.setWrapSide': 'set wrap side',
+  'images.setWrapDistances': 'set wrap distances',
+  'images.setPosition': 'set position',
+  'images.setAnchorOptions': 'set anchor options',
+  'images.setZOrder': 'set z-order',
 };
 
 // ---------------------------------------------------------------------------
@@ -311,6 +327,22 @@ export const OUTPUT_FORMAT: Record<CliExposedOperationId, OutputFormat> = {
   'history.get': 'plain',
   'history.undo': 'plain',
   'history.redo': 'plain',
+
+  // Images
+  'create.image': 'createResult',
+  'images.list': 'plain',
+  'images.get': 'plain',
+  'images.delete': 'plain',
+  'images.move': 'plain',
+  'images.convertToInline': 'plain',
+  'images.convertToFloating': 'plain',
+  'images.setSize': 'plain',
+  'images.setWrapType': 'plain',
+  'images.setWrapSide': 'plain',
+  'images.setWrapDistances': 'plain',
+  'images.setPosition': 'plain',
+  'images.setAnchorOptions': 'plain',
+  'images.setZOrder': 'plain',
 };
 
 // ---------------------------------------------------------------------------
@@ -430,6 +462,22 @@ export const RESPONSE_ENVELOPE_KEY: Record<CliExposedOperationId, string | null>
   'history.get': 'result',
   'history.undo': 'result',
   'history.redo': 'result',
+
+  // Images
+  'create.image': 'result',
+  'images.list': 'result',
+  'images.get': 'result',
+  'images.delete': 'result',
+  'images.move': 'result',
+  'images.convertToInline': 'result',
+  'images.convertToFloating': 'result',
+  'images.setSize': 'result',
+  'images.setWrapType': 'result',
+  'images.setWrapSide': 'result',
+  'images.setWrapDistances': 'result',
+  'images.setPosition': 'result',
+  'images.setAnchorOptions': 'result',
+  'images.setZOrder': 'result',
 };
 
 // ---------------------------------------------------------------------------
@@ -464,6 +512,7 @@ export type OperationFamily =
   | 'comments'
   | 'lists'
   | 'tables'
+  | 'images'
   | 'toc'
   | 'textMutation'
   | 'create'
@@ -577,4 +626,20 @@ export const OPERATION_FAMILY: Record<CliExposedOperationId, OperationFamily> = 
   'history.get': 'query',
   'history.undo': 'general',
   'history.redo': 'general',
+
+  // Images
+  'create.image': 'images',
+  'images.list': 'images',
+  'images.get': 'images',
+  'images.delete': 'images',
+  'images.move': 'images',
+  'images.convertToInline': 'images',
+  'images.convertToFloating': 'images',
+  'images.setSize': 'images',
+  'images.setWrapType': 'images',
+  'images.setWrapSide': 'images',
+  'images.setWrapDistances': 'images',
+  'images.setPosition': 'images',
+  'images.setAnchorOptions': 'images',
+  'images.setZOrder': 'images',
 };

@@ -122,6 +122,26 @@ import type {
 } from '../sections/sections.types.js';
 import type { QueryMatchInput, QueryMatchOutput } from '../types/query-match.types.js';
 import type {
+  CreateImageInput,
+  CreateImageResult,
+  ImagesListInput,
+  ImagesListResult,
+  ImagesGetInput,
+  ImageSummary,
+  ImagesDeleteInput,
+  ImagesMutationResult,
+  MoveImageInput,
+  ConvertToInlineInput,
+  ConvertToFloatingInput,
+  SetSizeInput,
+  SetWrapTypeInput,
+  SetWrapSideInput,
+  SetWrapDistancesInput,
+  SetPositionInput,
+  SetAnchorOptionsInput,
+  SetZOrderInput,
+} from '../images/images.types.js';
+import type {
   MutationsApplyInput,
   MutationsPreviewInput,
   MutationsPreviewOutput,
@@ -572,6 +592,24 @@ export interface OperationRegistry extends FormatInlineAliasOperationRegistry {
   'toc.listEntries': { input: TocListEntriesQuery | undefined; options: never; output: TocListEntriesResult };
   'toc.getEntry': { input: TocGetEntryInput; options: never; output: TocEntryInfo };
   'toc.editEntry': { input: TocEditEntryInput; options: MutationOptions; output: TocEntryMutationResult };
+
+  // --- create.image ---
+  'create.image': { input: CreateImageInput; options: MutationOptions; output: CreateImageResult };
+
+  // --- images.* ---
+  'images.list': { input: ImagesListInput | undefined; options: never; output: ImagesListResult };
+  'images.get': { input: ImagesGetInput; options: never; output: ImageSummary };
+  'images.delete': { input: ImagesDeleteInput; options: MutationOptions; output: ImagesMutationResult };
+  'images.move': { input: MoveImageInput; options: MutationOptions; output: ImagesMutationResult };
+  'images.convertToInline': { input: ConvertToInlineInput; options: MutationOptions; output: ImagesMutationResult };
+  'images.convertToFloating': { input: ConvertToFloatingInput; options: MutationOptions; output: ImagesMutationResult };
+  'images.setSize': { input: SetSizeInput; options: MutationOptions; output: ImagesMutationResult };
+  'images.setWrapType': { input: SetWrapTypeInput; options: MutationOptions; output: ImagesMutationResult };
+  'images.setWrapSide': { input: SetWrapSideInput; options: MutationOptions; output: ImagesMutationResult };
+  'images.setWrapDistances': { input: SetWrapDistancesInput; options: MutationOptions; output: ImagesMutationResult };
+  'images.setPosition': { input: SetPositionInput; options: MutationOptions; output: ImagesMutationResult };
+  'images.setAnchorOptions': { input: SetAnchorOptionsInput; options: MutationOptions; output: ImagesMutationResult };
+  'images.setZOrder': { input: SetZOrderInput; options: MutationOptions; output: ImagesMutationResult };
 }
 
 // --- Bidirectional completeness checks ---

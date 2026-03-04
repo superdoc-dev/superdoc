@@ -49,7 +49,8 @@ export type ReferenceGroupKey =
   | 'mutations'
   | 'tables'
   | 'history'
-  | 'toc';
+  | 'toc'
+  | 'images';
 
 // ---------------------------------------------------------------------------
 // Entry shape
@@ -149,6 +150,9 @@ const T_PLAN_ENGINE = [
 // _TRACKED suffix signals the operation also supports tracked change mode.
 const T_NOT_FOUND_COMMAND = ['TARGET_NOT_FOUND', 'INVALID_TARGET', 'CAPABILITY_UNAVAILABLE'] as const;
 const T_NOT_FOUND_COMMAND_TRACKED = [...T_NOT_FOUND_COMMAND] as const;
+
+// Image operations can throw AMBIGUOUS_TARGET when multiple images share an sdImageId.
+const T_IMAGE_COMMAND = ['TARGET_NOT_FOUND', 'AMBIGUOUS_TARGET', 'INVALID_TARGET', 'CAPABILITY_UNAVAILABLE'] as const;
 
 const T_QUERY_MATCH = ['MATCH_NOT_FOUND', 'AMBIGUOUS_MATCH', 'INVALID_INPUT', 'INTERNAL_ERROR'] as const;
 const T_SECTION_CREATE = [
@@ -2339,6 +2343,230 @@ export const OPERATION_DEFINITIONS = {
     }),
     referenceDocPath: 'history/redo.mdx',
     referenceGroup: 'history',
+  },
+
+  // -------------------------------------------------------------------------
+  // Create: image
+  // -------------------------------------------------------------------------
+
+  'create.image': {
+    memberPath: 'create.image',
+    description: 'Insert a new image at the target position.',
+    expectedResult: 'Returns a CreateImageResult with the new image address.',
+    requiresDocumentContext: true,
+    metadata: mutationOperation({
+      idempotency: 'non-idempotent',
+      supportsDryRun: true,
+      supportsTrackedMode: false,
+      possibleFailureCodes: ['INVALID_TARGET', 'INVALID_INPUT'],
+      throws: [...T_NOT_FOUND_COMMAND, 'INVALID_INPUT'],
+    }),
+    referenceDocPath: 'create/image.mdx',
+    referenceGroup: 'create',
+  },
+
+  // -------------------------------------------------------------------------
+  // Images: lifecycle + placement
+  // -------------------------------------------------------------------------
+
+  'images.list': {
+    memberPath: 'images.list',
+    description: 'List all images in the document.',
+    expectedResult: 'Returns an ImagesListResult with total count and image summaries.',
+    requiresDocumentContext: true,
+    metadata: readOperation({ idempotency: 'idempotent', deterministicTargetResolution: true }),
+    referenceDocPath: 'images/list.mdx',
+    referenceGroup: 'images',
+  },
+
+  'images.get': {
+    memberPath: 'images.get',
+    description: 'Get details for a specific image by its stable ID.',
+    expectedResult: 'Returns an ImageSummary with full image properties.',
+    requiresDocumentContext: true,
+    metadata: readOperation({
+      idempotency: 'idempotent',
+      throws: ['TARGET_NOT_FOUND', 'AMBIGUOUS_TARGET'],
+      deterministicTargetResolution: true,
+    }),
+    referenceDocPath: 'images/get.mdx',
+    referenceGroup: 'images',
+  },
+
+  'images.delete': {
+    memberPath: 'images.delete',
+    description: 'Delete an image from the document.',
+    expectedResult: 'Returns an ImagesMutationResult indicating success or failure.',
+    requiresDocumentContext: true,
+    metadata: mutationOperation({
+      idempotency: 'conditional',
+      supportsDryRun: true,
+      supportsTrackedMode: false,
+      possibleFailureCodes: ['NO_OP'],
+      throws: T_IMAGE_COMMAND,
+    }),
+    referenceDocPath: 'images/delete.mdx',
+    referenceGroup: 'images',
+  },
+
+  'images.move': {
+    memberPath: 'images.move',
+    description: 'Move an image to a new location in the document.',
+    expectedResult: 'Returns an ImagesMutationResult indicating success or failure.',
+    requiresDocumentContext: true,
+    metadata: mutationOperation({
+      idempotency: 'non-idempotent',
+      supportsDryRun: true,
+      supportsTrackedMode: false,
+      possibleFailureCodes: ['INVALID_TARGET'],
+      throws: T_IMAGE_COMMAND,
+    }),
+    referenceDocPath: 'images/move.mdx',
+    referenceGroup: 'images',
+  },
+
+  'images.convertToInline': {
+    memberPath: 'images.convertToInline',
+    description: 'Convert a floating image to inline placement.',
+    expectedResult: 'Returns an ImagesMutationResult; reports NO_OP if already inline.',
+    requiresDocumentContext: true,
+    metadata: mutationOperation({
+      idempotency: 'conditional',
+      supportsDryRun: true,
+      supportsTrackedMode: false,
+      possibleFailureCodes: ['NO_OP'],
+      throws: T_IMAGE_COMMAND,
+    }),
+    referenceDocPath: 'images/convert-to-inline.mdx',
+    referenceGroup: 'images',
+  },
+
+  'images.convertToFloating': {
+    memberPath: 'images.convertToFloating',
+    description: 'Convert an inline image to floating placement.',
+    expectedResult: 'Returns an ImagesMutationResult; reports NO_OP if already floating.',
+    requiresDocumentContext: true,
+    metadata: mutationOperation({
+      idempotency: 'conditional',
+      supportsDryRun: true,
+      supportsTrackedMode: false,
+      possibleFailureCodes: ['NO_OP'],
+      throws: T_IMAGE_COMMAND,
+    }),
+    referenceDocPath: 'images/convert-to-floating.mdx',
+    referenceGroup: 'images',
+  },
+
+  'images.setSize': {
+    memberPath: 'images.setSize',
+    description: 'Set explicit width/height for an image.',
+    expectedResult: 'Returns an ImagesMutationResult; reports NO_OP if the size already matches.',
+    requiresDocumentContext: true,
+    metadata: mutationOperation({
+      idempotency: 'conditional',
+      supportsDryRun: true,
+      supportsTrackedMode: false,
+      possibleFailureCodes: ['NO_OP'],
+      throws: [...T_IMAGE_COMMAND, 'INVALID_INPUT'],
+    }),
+    referenceDocPath: 'images/set-size.mdx',
+    referenceGroup: 'images',
+  },
+
+  'images.setWrapType': {
+    memberPath: 'images.setWrapType',
+    description: 'Set the text wrapping type for a floating image.',
+    expectedResult: 'Returns an ImagesMutationResult; reports NO_OP if already set.',
+    requiresDocumentContext: true,
+    metadata: mutationOperation({
+      idempotency: 'conditional',
+      supportsDryRun: true,
+      supportsTrackedMode: false,
+      possibleFailureCodes: ['NO_OP'],
+      throws: T_IMAGE_COMMAND,
+    }),
+    referenceDocPath: 'images/set-wrap-type.mdx',
+    referenceGroup: 'images',
+  },
+
+  'images.setWrapSide': {
+    memberPath: 'images.setWrapSide',
+    description: 'Set which side(s) text wraps around a floating image.',
+    expectedResult: 'Returns an ImagesMutationResult; reports NO_OP if already set.',
+    requiresDocumentContext: true,
+    metadata: mutationOperation({
+      idempotency: 'conditional',
+      supportsDryRun: true,
+      supportsTrackedMode: false,
+      possibleFailureCodes: ['NO_OP'],
+      throws: T_IMAGE_COMMAND,
+    }),
+    referenceDocPath: 'images/set-wrap-side.mdx',
+    referenceGroup: 'images',
+  },
+
+  'images.setWrapDistances': {
+    memberPath: 'images.setWrapDistances',
+    description: 'Set the text-wrap distance margins for a floating image.',
+    expectedResult: 'Returns an ImagesMutationResult; reports NO_OP if already set.',
+    requiresDocumentContext: true,
+    metadata: mutationOperation({
+      idempotency: 'conditional',
+      supportsDryRun: true,
+      supportsTrackedMode: false,
+      possibleFailureCodes: ['NO_OP'],
+      throws: T_IMAGE_COMMAND,
+    }),
+    referenceDocPath: 'images/set-wrap-distances.mdx',
+    referenceGroup: 'images',
+  },
+
+  'images.setPosition': {
+    memberPath: 'images.setPosition',
+    description: 'Set the anchor position for a floating image.',
+    expectedResult: 'Returns an ImagesMutationResult.',
+    requiresDocumentContext: true,
+    metadata: mutationOperation({
+      idempotency: 'conditional',
+      supportsDryRun: true,
+      supportsTrackedMode: false,
+      possibleFailureCodes: ['NO_OP'],
+      throws: T_IMAGE_COMMAND,
+    }),
+    referenceDocPath: 'images/set-position.mdx',
+    referenceGroup: 'images',
+  },
+
+  'images.setAnchorOptions': {
+    memberPath: 'images.setAnchorOptions',
+    description: 'Set anchor behavior options for a floating image.',
+    expectedResult: 'Returns an ImagesMutationResult.',
+    requiresDocumentContext: true,
+    metadata: mutationOperation({
+      idempotency: 'conditional',
+      supportsDryRun: true,
+      supportsTrackedMode: false,
+      possibleFailureCodes: ['NO_OP'],
+      throws: T_IMAGE_COMMAND,
+    }),
+    referenceDocPath: 'images/set-anchor-options.mdx',
+    referenceGroup: 'images',
+  },
+
+  'images.setZOrder': {
+    memberPath: 'images.setZOrder',
+    description: 'Set the z-order (relativeHeight) for a floating image.',
+    expectedResult: 'Returns an ImagesMutationResult.',
+    requiresDocumentContext: true,
+    metadata: mutationOperation({
+      idempotency: 'conditional',
+      supportsDryRun: true,
+      supportsTrackedMode: false,
+      possibleFailureCodes: ['NO_OP'],
+      throws: T_IMAGE_COMMAND,
+    }),
+    referenceDocPath: 'images/set-z-order.mdx',
+    referenceGroup: 'images',
   },
 } as const satisfies Record<string, OperationDefinitionEntry>;
 

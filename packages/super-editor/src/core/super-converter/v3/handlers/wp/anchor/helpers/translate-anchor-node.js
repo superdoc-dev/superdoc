@@ -72,7 +72,11 @@ export function translateAnchorNode(params) {
     ...(nodeElements.attributes || {}),
   };
 
-  if (inlineAttrs.relativeHeight == null) {
+  // Prefer the live top-level relativeHeight (updated by images.setZOrder)
+  // over the stale value in originalAttributes.
+  if (attrs.relativeHeight != null) {
+    inlineAttrs.relativeHeight = attrs.relativeHeight;
+  } else if (inlineAttrs.relativeHeight == null) {
     inlineAttrs.relativeHeight = 1;
   }
 

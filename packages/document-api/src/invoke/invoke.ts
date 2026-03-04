@@ -241,5 +241,23 @@ export function buildDispatchTable(api: DocumentApi): TypedDispatchTable {
     'toc.listEntries': (input) => api.toc.listEntries(input),
     'toc.getEntry': (input) => api.toc.getEntry(input),
     'toc.editEntry': (input, options) => api.toc.editEntry(input, options),
+
+    // --- create.image ---
+    'create.image': (input, options) => api.create.image(input, options),
+
+    // --- images.* ---
+    'images.list': (input) => api.images.list(input ?? {}),
+    'images.get': (input) => api.images.get(input),
+    'images.delete': (input, options) => api.images.delete(input, options),
+    'images.move': (input, options) => api.images.move(input, options),
+    'images.convertToInline': (input, options) => api.images.convertToInline(input, options),
+    'images.convertToFloating': (input, options) => api.images.convertToFloating(input, options),
+    'images.setSize': (input, options) => api.images.setSize(input, options),
+    'images.setWrapType': (input, options) => api.images.setWrapType(input, options),
+    'images.setWrapSide': (input, options) => api.images.setWrapSide(input, options),
+    'images.setWrapDistances': (input, options) => api.images.setWrapDistances(input, options),
+    'images.setPosition': (input, options) => api.images.setPosition(input, options),
+    'images.setAnchorOptions': (input, options) => api.images.setAnchorOptions(input, options),
+    'images.setZOrder': (input, options) => api.images.setZOrder(input, options),
   };
 }

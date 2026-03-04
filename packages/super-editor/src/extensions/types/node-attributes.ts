@@ -451,6 +451,10 @@ export interface ImageTransformData {
 
 /** Image node attributes */
 export interface ImageAttrs extends ShapeNodeAttributes {
+  /** Stable, session-scoped image identity (UUID assigned on import / create). */
+  sdImageId?: string | null;
+  /** Raw OOXML relativeHeight for z-ordering. Only meaningful for floating images. */
+  relativeHeight?: number | null;
   /** Image source URL or base64 data */
   src: string | null;
   /** Alternative text for accessibility */

@@ -487,19 +487,19 @@ describe('DomPainter virtualization (vertical)', () => {
     const pagesWithout = mount.querySelectorAll('.superdoc-page');
     const indicesWithout = Array.from(pagesWithout).map((p) => Number((p as HTMLElement).dataset.pageIndex));
 
-    // WITH scroll container: scrollY = (100 - (-4900)) / 0.75 = 6666
-    // That's different from the without case — but the key point is:
-    // the offset from the viewport (toolbarHeight) is eliminated from the calculation.
-    // scrollY = (containerRect.top - mountRect.top) / zoom = (100 - (-4900)) / 0.75 = 6666
+    // WITH scroll container: uses scrollTop-based calculation.
+    // offset = mountRect.top - containerRect.top + scrollTop = -4900 - 100 + 5000 = 0
+    // scrollY = (5000 - 0) / 0.75 = 6666
+    Object.defineProperty(scrollWrapper, 'scrollTop', { value: scrollTop, writable: true, configurable: true });
     painter.setScrollContainer!(scrollWrapper);
     painter.onScroll!();
     const pagesWith = mount.querySelectorAll('.superdoc-page');
     const indicesWith = Array.from(pagesWith).map((p) => Number((p as HTMLElement).dataset.pageIndex));
 
-    // Now simulate at scroll=0 to see the offset difference clearly.
-    // Without container: mount.rect.top = 100, scrollY = max(0, -100/0.75) = 0 ← correct by luck (clamped)
-    // But at small scroll (e.g., scroll=50): mount.rect.top = 50, scrollY = -50/0.75 = -66 → 0 ← WRONG, should be ~66
-    // With container: scrollY = (100 - 50) / 0.75 = 66 ← CORRECT
+    // Now simulate small scroll (scrollTop=150) to see the offset difference clearly.
+    // The cached offset (0) stays valid.
+    // scrollY = (150 - 0) / 0.75 = 200 in layout space
+    // Anchor at page 0 (topOfIndex(0)=0, topOfIndex(1)=572), so pages [0,1,2]
     const smallScroll = 150;
     const mountTopSmall = toolbarHeight - smallScroll; // 100 - 150 = -50
 
@@ -516,11 +516,11 @@ describe('DomPainter virtualization (vertical)', () => {
         toJSON() {},
       }) as DOMRect;
 
+    // Set scrollTop to match the simulated scroll position
+    Object.defineProperty(scrollWrapper, 'scrollTop', { value: smallScroll, writable: true, configurable: true });
     painter.onScroll!();
     const pagesSmallScroll = mount.querySelectorAll('.superdoc-page');
     const indicesSmallScroll = Array.from(pagesSmallScroll).map((p) => Number((p as HTMLElement).dataset.pageIndex));
-    // scrollY = (100 - (-50)) / 0.75 = 200 in layout space
-    // Anchor at page 0 (topOfIndex(0)=0, topOfIndex(1)=572), so pages [0,1,2]
     expect(indicesSmallScroll).toEqual([0, 1, 2]);
 
     // Verify: remove scroll container and the same scroll position gives different result

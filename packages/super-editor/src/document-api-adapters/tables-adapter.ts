@@ -3674,14 +3674,15 @@ export function tablesGetStylesAdapter(editor: Editor, _input?: TablesGetStylesI
   }
 
   const translatedLinkedStyles = converter.translatedLinkedStyles ?? null;
-  const allStyles = translatedLinkedStyles?.styles ?? {};
+  const allStyles = translatedLinkedStyles?.styles ?? [];
 
   // Collect table styles
   const styles: TableStyleInfo[] = [];
-  for (const [id, def] of Object.entries(allStyles)) {
+  for (const def of allStyles) {
+    if (!def.styleId) continue;
     if (def.type !== 'table') continue;
     styles.push({
-      id,
+      id: def.styleId,
       name: def.name ?? null,
       basedOn: def.basedOn ?? null,
       isDefault: def.default === true,

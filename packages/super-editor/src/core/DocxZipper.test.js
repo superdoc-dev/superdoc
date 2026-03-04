@@ -338,6 +338,103 @@ describe('DocxZipper - exportFromCollaborativeDocx media handling', () => {
   });
 });
 
+describe('DocxZipper - .tmp image file detection', () => {
+  it('detects and processes .tmp files with PNG signatures as PNG images', async () => {
+    const zipper = new DocxZipper();
+    const zip = new JSZip();
+
+    // Minimal DOCX structure
+    const contentTypes = `<?xml version="1.0" encoding="UTF-8"?>
+      <Types xmlns="http://schemas.openxmlformats.org/package/2006/content-types">
+        <Default Extension="rels" ContentType="application/vnd.openxmlformats-package.relationships+xml"/>
+        <Default Extension="xml" ContentType="application/xml"/>
+        <Override PartName="/word/document.xml" ContentType="application/vnd.openxmlformats-officedocument.wordprocessingml.document.main+xml"/>
+      </Types>`;
+    zip.file('[Content_Types].xml', contentTypes);
+    zip.file('word/document.xml', '<w:document/>');
+
+    // Create a minimal PNG file with proper signature
+    // PNG signature: 89 50 4E 47 0D 0A 1A 0A, followed by some padding
+    const pngData = new Uint8Array([
+      0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a, 0x00, 0x00, 0x00, 0x0d, 0x49, 0x48, 0x44, 0x52, 0x00, 0x00, 0x00,
+      0x01, 0x00, 0x00, 0x00, 0x01, 0x08, 0x06, 0x00, 0x00, 0x00, 0x1f, 0x15, 0xc4,
+    ]);
+
+    // Add it to the ZIP with a .tmp extension
+    zip.file('word/media/image1.tmp', pngData);
+
+    const buf = await zip.generateAsync({ type: 'arraybuffer' });
+    await zipper.getDocxData(buf, false);
+
+    // Verify the .tmp file was detected as PNG and processed correctly
+    expect(zipper.mediaFiles['word/media/image1.tmp']).toBeTruthy();
+    expect(zipper.mediaFiles['word/media/image1.tmp']).toContain('data:image/png;base64');
+
+    // Verify it's stored in media as a blob URL
+    expect(zipper.media['word/media/image1.tmp']).toBeTruthy();
+    expect(typeof zipper.media['word/media/image1.tmp']).toBe('string');
+  });
+
+  it('detects and processes .tmp files with JPEG signatures as JPEG images', async () => {
+    const zipper = new DocxZipper();
+    const zip = new JSZip();
+
+    const contentTypes = `<?xml version="1.0" encoding="UTF-8"?>
+      <Types xmlns="http://schemas.openxmlformats.org/package/2006/content-types">
+        <Default Extension="rels" ContentType="application/vnd.openxmlformats-package.relationships+xml"/>
+        <Default Extension="xml" ContentType="application/xml"/>
+        <Override PartName="/word/document.xml" ContentType="application/vnd.openxmlformats-officedocument.wordprocessingml.document.main+xml"/>
+      </Types>`;
+    zip.file('[Content_Types].xml', contentTypes);
+    zip.file('word/document.xml', '<w:document/>');
+
+    // JPEG signature: FF D8 FF
+    const jpegData = new Uint8Array([
+      0xff, 0xd8, 0xff, 0xe0, 0x00, 0x10, 0x4a, 0x46, 0x49, 0x46, 0x00, 0x01, 0x01, 0x00, 0x00, 0x01,
+    ]);
+
+    zip.file('word/media/photo.tmp', jpegData);
+
+    const buf = await zip.generateAsync({ type: 'arraybuffer' });
+    await zipper.getDocxData(buf, false);
+
+    // Verify the .tmp file was detected as JPEG
+    expect(zipper.mediaFiles['word/media/photo.tmp']).toBeTruthy();
+    expect(zipper.mediaFiles['word/media/photo.tmp']).toContain('data:image/jpeg;base64');
+
+    // Verify it's stored in media as a blob URL
+    expect(zipper.media['word/media/photo.tmp']).toBeTruthy();
+  });
+
+  it('does not process .tmp files without image signatures', async () => {
+    const zipper = new DocxZipper();
+    const zip = new JSZip();
+
+    const contentTypes = `<?xml version="1.0" encoding="UTF-8"?>
+      <Types xmlns="http://schemas.openxmlformats.org/package/2006/content-types">
+        <Default Extension="rels" ContentType="application/vnd.openxmlformats-package.relationships+xml"/>
+        <Default Extension="xml" ContentType="application/xml"/>
+        <Override PartName="/word/document.xml" ContentType="application/vnd.openxmlformats-officedocument.wordprocessingml.document.main+xml"/>
+      </Types>`;
+    zip.file('[Content_Types].xml', contentTypes);
+    zip.file('word/document.xml', '<w:document/>');
+
+    // Some random data that is not an image
+    const randomData = new Uint8Array([0x12, 0x34, 0x56, 0x78, 0x90, 0xab, 0xcd, 0xef]);
+    zip.file('word/media/data.tmp', randomData);
+
+    const buf = await zip.generateAsync({ type: 'arraybuffer' });
+    await zipper.getDocxData(buf, false);
+
+    // Verify the .tmp file was NOT processed as an image (stored as raw base64)
+    expect(zipper.mediaFiles['word/media/data.tmp']).toBeTruthy();
+    expect(zipper.mediaFiles['word/media/data.tmp']).not.toContain('data:image/');
+
+    // Should not be in media blob URLs
+    expect(zipper.media['word/media/data.tmp']).toBeFalsy();
+  });
+});
+
 describe('DocxZipper - comment file deletion', () => {
   const contentTypesWithComments = `<?xml version="1.0" encoding="UTF-8"?>
     <Types xmlns="http://schemas.openxmlformats.org/package/2006/content-types">

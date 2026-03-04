@@ -1,7 +1,7 @@
 ---
 title: format.underline
 sidebarTitle: format.underline
-description: Generated reference for format.underline
+description: "Set or clear the `underline` inline run property on the target text range."
 ---
 
 {/* GENERATED FILE: DO NOT EDIT. Regenerate via `pnpm run docapi:sync`. */}
@@ -9,6 +9,8 @@ description: Generated reference for format.underline
 > Alpha: Document API is currently alpha and subject to breaking changes.
 
 ## Summary
+
+Set or clear the `underline` inline run property on the target text range.
 
 - Operation ID: `format.underline`
 - API member path: `editor.doc.format.underline(...)`
@@ -18,409 +20,224 @@ description: Generated reference for format.underline
 - Supports dry run: `yes`
 - Deterministic target resolution: `yes`
 
+## Expected result
+
+Returns a TextMutationReceipt confirming the inline run property patch was applied to the target range.
+
+## Input fields
+
+| Field | Type | Required | Description |
+| --- | --- | --- | --- |
+| `target` | TextAddress | yes | TextAddress |
+| `target.blockId` | string | yes |  |
+| `target.kind` | `"text"` | yes | Constant: `"text"` |
+| `target.range` | Range | yes | Range |
+| `target.range.end` | integer | yes |  |
+| `target.range.start` | integer | yes |  |
+| `value` | boolean \\| null \\| object | no | One of: boolean, null, object |
+
+### Example request
+
+```json
+{
+  "target": {
+    "blockId": "block-abc123",
+    "kind": "text",
+    "range": {
+      "end": 10,
+      "start": 0
+    }
+  },
+  "value": true
+}
+```
+
+## Output fields
+
+### Variant 1 (resolution.requestedTarget.kind="text")
+
+| Field | Type | Required | Description |
+| --- | --- | --- | --- |
+| `inserted` | EntityAddress[] | no |  |
+| `removed` | EntityAddress[] | no |  |
+| `resolution` | TextMutationResolution | yes | TextMutationResolution |
+| `resolution.range` | TextMutationRange | yes | TextMutationRange |
+| `resolution.range.from` | integer | yes |  |
+| `resolution.range.to` | integer | yes |  |
+| `resolution.requestedTarget` | TextAddress | no | TextAddress |
+| `resolution.requestedTarget.blockId` | string | no |  |
+| `resolution.requestedTarget.kind` | `"text"` | no | Constant: `"text"` |
+| `resolution.requestedTarget.range` | Range | no | Range |
+| `resolution.requestedTarget.range.end` | integer | no |  |
+| `resolution.requestedTarget.range.start` | integer | no |  |
+| `resolution.target` | TextAddress | yes | TextAddress |
+| `resolution.target.blockId` | string | yes |  |
+| `resolution.target.kind` | `"text"` | yes | Constant: `"text"` |
+| `resolution.target.range` | Range | yes | Range |
+| `resolution.target.range.end` | integer | yes |  |
+| `resolution.target.range.start` | integer | yes |  |
+| `resolution.text` | string | yes |  |
+| `success` | `true` | yes | Constant: `true` |
+| `updated` | EntityAddress[] | no |  |
+
+### Variant 2 (resolution.requestedTarget.kind="text")
+
+| Field | Type | Required | Description |
+| --- | --- | --- | --- |
+| `failure` | object | yes |  |
+| `failure.code` | enum | yes | `"INVALID_TARGET"` |
+| `failure.details` | any | no |  |
+| `failure.message` | string | yes |  |
+| `resolution` | TextMutationResolution | yes | TextMutationResolution |
+| `resolution.range` | TextMutationRange | yes | TextMutationRange |
+| `resolution.range.from` | integer | yes |  |
+| `resolution.range.to` | integer | yes |  |
+| `resolution.requestedTarget` | TextAddress | no | TextAddress |
+| `resolution.requestedTarget.blockId` | string | no |  |
+| `resolution.requestedTarget.kind` | `"text"` | no | Constant: `"text"` |
+| `resolution.requestedTarget.range` | Range | no | Range |
+| `resolution.requestedTarget.range.end` | integer | no |  |
+| `resolution.requestedTarget.range.start` | integer | no |  |
+| `resolution.target` | TextAddress | yes | TextAddress |
+| `resolution.target.blockId` | string | yes |  |
+| `resolution.target.kind` | `"text"` | yes | Constant: `"text"` |
+| `resolution.target.range` | Range | yes | Range |
+| `resolution.target.range.end` | integer | yes |  |
+| `resolution.target.range.start` | integer | yes |  |
+| `resolution.text` | string | yes |  |
+| `success` | `false` | yes | Constant: `false` |
+
+### Example response
+
+```json
+{
+  "inserted": [
+    {
+      "entityId": "entity-789",
+      "entityType": "comment",
+      "kind": "entity"
+    }
+  ],
+  "resolution": {
+    "range": {
+      "from": 0,
+      "to": 10
+    },
+    "requestedTarget": {
+      "blockId": "block-abc123",
+      "kind": "text",
+      "range": {
+        "end": 10,
+        "start": 0
+      }
+    },
+    "target": {
+      "blockId": "block-abc123",
+      "kind": "text",
+      "range": {
+        "end": 10,
+        "start": 0
+      }
+    },
+    "text": "Hello, world."
+  },
+  "success": true,
+  "updated": [
+    {
+      "entityId": "entity-789",
+      "entityType": "comment",
+      "kind": "entity"
+    }
+  ]
+}
+```
+
 ## Pre-apply throws
 
 - `TARGET_NOT_FOUND`
-- `COMMAND_UNAVAILABLE`
-- `TRACK_CHANGE_COMMAND_UNAVAILABLE`
 - `CAPABILITY_UNAVAILABLE`
 - `INVALID_TARGET`
+- `INVALID_INPUT`
 
 ## Non-applied failure codes
 
 - `INVALID_TARGET`
 
-## Input schema
+## Raw schemas
 
+<Accordion title="Raw input schema">
 ```json
 {
   "additionalProperties": false,
-  "allOf": [
-    {
-      "not": {
-        "required": [
-          "target",
-          "blockId"
-        ]
-      }
-    },
-    {
-      "not": {
-        "required": [
-          "target",
-          "start"
-        ]
-      }
-    },
-    {
-      "not": {
-        "required": [
-          "target",
-          "end"
-        ]
-      }
-    },
-    {
-      "if": {
-        "required": [
-          "start"
-        ]
-      },
-      "then": {
-        "required": [
-          "blockId",
-          "end"
-        ]
-      }
-    },
-    {
-      "if": {
-        "required": [
-          "end"
-        ]
-      },
-      "then": {
-        "required": [
-          "blockId",
-          "start"
-        ]
-      }
-    },
-    {
-      "if": {
-        "required": [
-          "blockId"
-        ]
-      },
-      "then": {
-        "required": [
-          "start",
-          "end"
-        ]
-      }
-    }
-  ],
-  "anyOf": [
-    {
-      "required": [
-        "target"
-      ]
-    },
-    {
-      "required": [
-        "blockId",
-        "start",
-        "end"
-      ]
-    }
-  ],
   "properties": {
-    "blockId": {
-      "description": "Block ID for block-relative range targeting.",
-      "type": "string"
-    },
-    "end": {
-      "description": "End offset within the block identified by blockId.",
-      "minimum": 0,
-      "type": "integer"
-    },
-    "start": {
-      "description": "Start offset within the block identified by blockId.",
-      "minimum": 0,
-      "type": "integer"
-    },
     "target": {
-      "additionalProperties": false,
-      "properties": {
-        "blockId": {
-          "type": "string"
+      "$ref": "#/$defs/TextAddress"
+    },
+    "value": {
+      "oneOf": [
+        {
+          "type": "boolean"
         },
-        "kind": {
-          "const": "text"
+        {
+          "type": "null"
         },
-        "range": {
+        {
           "additionalProperties": false,
+          "minProperties": 1,
           "properties": {
-            "end": {
-              "type": "integer"
+            "color": {
+              "oneOf": [
+                {
+                  "minLength": 1,
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ]
             },
-            "start": {
-              "type": "integer"
+            "style": {
+              "oneOf": [
+                {
+                  "minLength": 1,
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ]
+            },
+            "themeColor": {
+              "oneOf": [
+                {
+                  "minLength": 1,
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ]
             }
           },
-          "required": [
-            "start",
-            "end"
-          ],
           "type": "object"
         }
-      },
-      "required": [
-        "kind",
-        "blockId",
-        "range"
-      ],
-      "type": "object"
+      ]
     }
   },
+  "required": [
+    "target"
+  ],
   "type": "object"
 }
 ```
+</Accordion>
 
-## Output schema
-
+<Accordion title="Raw output schema">
 ```json
 {
   "oneOf": [
     {
-      "additionalProperties": false,
-      "properties": {
-        "inserted": {
-          "items": {
-            "oneOf": [
-              {
-                "additionalProperties": false,
-                "properties": {
-                  "entityId": {
-                    "type": "string"
-                  },
-                  "entityType": {
-                    "const": "comment"
-                  },
-                  "kind": {
-                    "const": "entity"
-                  }
-                },
-                "required": [
-                  "kind",
-                  "entityType",
-                  "entityId"
-                ],
-                "type": "object"
-              },
-              {
-                "additionalProperties": false,
-                "properties": {
-                  "entityId": {
-                    "type": "string"
-                  },
-                  "entityType": {
-                    "const": "trackedChange"
-                  },
-                  "kind": {
-                    "const": "entity"
-                  }
-                },
-                "required": [
-                  "kind",
-                  "entityType",
-                  "entityId"
-                ],
-                "type": "object"
-              }
-            ]
-          },
-          "type": "array"
-        },
-        "removed": {
-          "items": {
-            "oneOf": [
-              {
-                "additionalProperties": false,
-                "properties": {
-                  "entityId": {
-                    "type": "string"
-                  },
-                  "entityType": {
-                    "const": "comment"
-                  },
-                  "kind": {
-                    "const": "entity"
-                  }
-                },
-                "required": [
-                  "kind",
-                  "entityType",
-                  "entityId"
-                ],
-                "type": "object"
-              },
-              {
-                "additionalProperties": false,
-                "properties": {
-                  "entityId": {
-                    "type": "string"
-                  },
-                  "entityType": {
-                    "const": "trackedChange"
-                  },
-                  "kind": {
-                    "const": "entity"
-                  }
-                },
-                "required": [
-                  "kind",
-                  "entityType",
-                  "entityId"
-                ],
-                "type": "object"
-              }
-            ]
-          },
-          "type": "array"
-        },
-        "resolution": {
-          "additionalProperties": false,
-          "properties": {
-            "range": {
-              "additionalProperties": false,
-              "properties": {
-                "from": {
-                  "type": "integer"
-                },
-                "to": {
-                  "type": "integer"
-                }
-              },
-              "required": [
-                "from",
-                "to"
-              ],
-              "type": "object"
-            },
-            "requestedTarget": {
-              "additionalProperties": false,
-              "properties": {
-                "blockId": {
-                  "type": "string"
-                },
-                "kind": {
-                  "const": "text"
-                },
-                "range": {
-                  "additionalProperties": false,
-                  "properties": {
-                    "end": {
-                      "type": "integer"
-                    },
-                    "start": {
-                      "type": "integer"
-                    }
-                  },
-                  "required": [
-                    "start",
-                    "end"
-                  ],
-                  "type": "object"
-                }
-              },
-              "required": [
-                "kind",
-                "blockId",
-                "range"
-              ],
-              "type": "object"
-            },
-            "target": {
-              "additionalProperties": false,
-              "properties": {
-                "blockId": {
-                  "type": "string"
-                },
-                "kind": {
-                  "const": "text"
-                },
-                "range": {
-                  "additionalProperties": false,
-                  "properties": {
-                    "end": {
-                      "type": "integer"
-                    },
-                    "start": {
-                      "type": "integer"
-                    }
-                  },
-                  "required": [
-                    "start",
-                    "end"
-                  ],
-                  "type": "object"
-                }
-              },
-              "required": [
-                "kind",
-                "blockId",
-                "range"
-              ],
-              "type": "object"
-            },
-            "text": {
-              "type": "string"
-            }
-          },
-          "required": [
-            "target",
-            "range",
-            "text"
-          ],
-          "type": "object"
-        },
-        "success": {
-          "const": true
-        },
-        "updated": {
-          "items": {
-            "oneOf": [
-              {
-                "additionalProperties": false,
-                "properties": {
-                  "entityId": {
-                    "type": "string"
-                  },
-                  "entityType": {
-                    "const": "comment"
-                  },
-                  "kind": {
-                    "const": "entity"
-                  }
-                },
-                "required": [
-                  "kind",
-                  "entityType",
-                  "entityId"
-                ],
-                "type": "object"
-              },
-              {
-                "additionalProperties": false,
-                "properties": {
-                  "entityId": {
-                    "type": "string"
-                  },
-                  "entityType": {
-                    "const": "trackedChange"
-                  },
-                  "kind": {
-                    "const": "entity"
-                  }
-                },
-                "required": [
-                  "kind",
-                  "entityType",
-                  "entityId"
-                ],
-                "type": "object"
-              }
-            ]
-          },
-          "type": "array"
-        }
-      },
-      "required": [
-        "success",
-        "resolution"
-      ],
-      "type": "object"
+      "$ref": "#/$defs/TextMutationSuccess"
     },
     {
       "additionalProperties": false,
@@ -445,100 +262,7 @@ description: Generated reference for format.underline
           "type": "object"
         },
         "resolution": {
-          "additionalProperties": false,
-          "properties": {
-            "range": {
-              "additionalProperties": false,
-              "properties": {
-                "from": {
-                  "type": "integer"
-                },
-                "to": {
-                  "type": "integer"
-                }
-              },
-              "required": [
-                "from",
-                "to"
-              ],
-              "type": "object"
-            },
-            "requestedTarget": {
-              "additionalProperties": false,
-              "properties": {
-                "blockId": {
-                  "type": "string"
-                },
-                "kind": {
-                  "const": "text"
-                },
-                "range": {
-                  "additionalProperties": false,
-                  "properties": {
-                    "end": {
-                      "type": "integer"
-                    },
-                    "start": {
-                      "type": "integer"
-                    }
-                  },
-                  "required": [
-                    "start",
-                    "end"
-                  ],
-                  "type": "object"
-                }
-              },
-              "required": [
-                "kind",
-                "blockId",
-                "range"
-              ],
-              "type": "object"
-            },
-            "target": {
-              "additionalProperties": false,
-              "properties": {
-                "blockId": {
-                  "type": "string"
-                },
-                "kind": {
-                  "const": "text"
-                },
-                "range": {
-                  "additionalProperties": false,
-                  "properties": {
-                    "end": {
-                      "type": "integer"
-                    },
-                    "start": {
-                      "type": "integer"
-                    }
-                  },
-                  "required": [
-                    "start",
-                    "end"
-                  ],
-                  "type": "object"
-                }
-              },
-              "required": [
-                "kind",
-                "blockId",
-                "range"
-              ],
-              "type": "object"
-            },
-            "text": {
-              "type": "string"
-            }
-          },
-          "required": [
-            "target",
-            "range",
-            "text"
-          ],
-          "type": "object"
+          "$ref": "#/$defs/TextMutationResolution"
         },
         "success": {
           "const": false
@@ -554,264 +278,17 @@ description: Generated reference for format.underline
   ]
 }
 ```
+</Accordion>
 
-## Success schema
-
+<Accordion title="Raw success schema">
 ```json
 {
-  "additionalProperties": false,
-  "properties": {
-    "inserted": {
-      "items": {
-        "oneOf": [
-          {
-            "additionalProperties": false,
-            "properties": {
-              "entityId": {
-                "type": "string"
-              },
-              "entityType": {
-                "const": "comment"
-              },
-              "kind": {
-                "const": "entity"
-              }
-            },
-            "required": [
-              "kind",
-              "entityType",
-              "entityId"
-            ],
-            "type": "object"
-          },
-          {
-            "additionalProperties": false,
-            "properties": {
-              "entityId": {
-                "type": "string"
-              },
-              "entityType": {
-                "const": "trackedChange"
-              },
-              "kind": {
-                "const": "entity"
-              }
-            },
-            "required": [
-              "kind",
-              "entityType",
-              "entityId"
-            ],
-            "type": "object"
-          }
-        ]
-      },
-      "type": "array"
-    },
-    "removed": {
-      "items": {
-        "oneOf": [
-          {
-            "additionalProperties": false,
-            "properties": {
-              "entityId": {
-                "type": "string"
-              },
-              "entityType": {
-                "const": "comment"
-              },
-              "kind": {
-                "const": "entity"
-              }
-            },
-            "required": [
-              "kind",
-              "entityType",
-              "entityId"
-            ],
-            "type": "object"
-          },
-          {
-            "additionalProperties": false,
-            "properties": {
-              "entityId": {
-                "type": "string"
-              },
-              "entityType": {
-                "const": "trackedChange"
-              },
-              "kind": {
-                "const": "entity"
-              }
-            },
-            "required": [
-              "kind",
-              "entityType",
-              "entityId"
-            ],
-            "type": "object"
-          }
-        ]
-      },
-      "type": "array"
-    },
-    "resolution": {
-      "additionalProperties": false,
-      "properties": {
-        "range": {
-          "additionalProperties": false,
-          "properties": {
-            "from": {
-              "type": "integer"
-            },
-            "to": {
-              "type": "integer"
-            }
-          },
-          "required": [
-            "from",
-            "to"
-          ],
-          "type": "object"
-        },
-        "requestedTarget": {
-          "additionalProperties": false,
-          "properties": {
-            "blockId": {
-              "type": "string"
-            },
-            "kind": {
-              "const": "text"
-            },
-            "range": {
-              "additionalProperties": false,
-              "properties": {
-                "end": {
-                  "type": "integer"
-                },
-                "start": {
-                  "type": "integer"
-                }
-              },
-              "required": [
-                "start",
-                "end"
-              ],
-              "type": "object"
-            }
-          },
-          "required": [
-            "kind",
-            "blockId",
-            "range"
-          ],
-          "type": "object"
-        },
-        "target": {
-          "additionalProperties": false,
-          "properties": {
-            "blockId": {
-              "type": "string"
-            },
-            "kind": {
-              "const": "text"
-            },
-            "range": {
-              "additionalProperties": false,
-              "properties": {
-                "end": {
-                  "type": "integer"
-                },
-                "start": {
-                  "type": "integer"
-                }
-              },
-              "required": [
-                "start",
-                "end"
-              ],
-              "type": "object"
-            }
-          },
-          "required": [
-            "kind",
-            "blockId",
-            "range"
-          ],
-          "type": "object"
-        },
-        "text": {
-          "type": "string"
-        }
-      },
-      "required": [
-        "target",
-        "range",
-        "text"
-      ],
-      "type": "object"
-    },
-    "success": {
-      "const": true
-    },
-    "updated": {
-      "items": {
-        "oneOf": [
-          {
-            "additionalProperties": false,
-            "properties": {
-              "entityId": {
-                "type": "string"
-              },
-              "entityType": {
-                "const": "comment"
-              },
-              "kind": {
-                "const": "entity"
-              }
-            },
-            "required": [
-              "kind",
-              "entityType",
-              "entityId"
-            ],
-            "type": "object"
-          },
-          {
-            "additionalProperties": false,
-            "properties": {
-              "entityId": {
-                "type": "string"
-              },
-              "entityType": {
-                "const": "trackedChange"
-              },
-              "kind": {
-                "const": "entity"
-              }
-            },
-            "required": [
-              "kind",
-              "entityType",
-              "entityId"
-            ],
-            "type": "object"
-          }
-        ]
-      },
-      "type": "array"
-    }
-  },
-  "required": [
-    "success",
-    "resolution"
-  ],
-  "type": "object"
+  "$ref": "#/$defs/TextMutationSuccess"
 }
 ```
+</Accordion>
 
-## Failure schema
-
+<Accordion title="Raw failure schema">
 ```json
 {
   "additionalProperties": false,
@@ -836,100 +313,7 @@ description: Generated reference for format.underline
       "type": "object"
     },
     "resolution": {
-      "additionalProperties": false,
-      "properties": {
-        "range": {
-          "additionalProperties": false,
-          "properties": {
-            "from": {
-              "type": "integer"
-            },
-            "to": {
-              "type": "integer"
-            }
-          },
-          "required": [
-            "from",
-            "to"
-          ],
-          "type": "object"
-        },
-        "requestedTarget": {
-          "additionalProperties": false,
-          "properties": {
-            "blockId": {
-              "type": "string"
-            },
-            "kind": {
-              "const": "text"
-            },
-            "range": {
-              "additionalProperties": false,
-              "properties": {
-                "end": {
-                  "type": "integer"
-                },
-                "start": {
-                  "type": "integer"
-                }
-              },
-              "required": [
-                "start",
-                "end"
-              ],
-              "type": "object"
-            }
-          },
-          "required": [
-            "kind",
-            "blockId",
-            "range"
-          ],
-          "type": "object"
-        },
-        "target": {
-          "additionalProperties": false,
-          "properties": {
-            "blockId": {
-              "type": "string"
-            },
-            "kind": {
-              "const": "text"
-            },
-            "range": {
-              "additionalProperties": false,
-              "properties": {
-                "end": {
-                  "type": "integer"
-                },
-                "start": {
-                  "type": "integer"
-                }
-              },
-              "required": [
-                "start",
-                "end"
-              ],
-              "type": "object"
-            }
-          },
-          "required": [
-            "kind",
-            "blockId",
-            "range"
-          ],
-          "type": "object"
-        },
-        "text": {
-          "type": "string"
-        }
-      },
-      "required": [
-        "target",
-        "range",
-        "text"
-      ],
-      "type": "object"
+      "$ref": "#/$defs/TextMutationResolution"
     },
     "success": {
       "const": false
@@ -943,3 +327,4 @@ description: Generated reference for format.underline
   "type": "object"
 }
 ```
+</Accordion>

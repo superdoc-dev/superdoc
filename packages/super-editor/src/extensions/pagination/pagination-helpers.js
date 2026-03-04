@@ -245,6 +245,11 @@ export const createHeaderFooterEditor = ({
     pm.style.outline = 'none';
     pm.style.border = 'none';
 
+    // CSS class scopes header/footer-specific table rules (prosemirror.css).
+    // Using a class instead of inline styles because TableView.updateTable()
+    // does `table.style.cssText = …` which wipes all inline styles on updates.
+    pm.classList.add('sd-header-footer');
+
     pm.setAttribute('role', 'textbox');
     pm.setAttribute('aria-multiline', true);
     pm.setAttribute('aria-label', `${type} content area. Double click to start typing.`);

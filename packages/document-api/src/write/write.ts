@@ -1,9 +1,15 @@
 import type { TextAddress, TextMutationReceipt } from '../types/index.js';
 import type { BlockRelativeLocator, BlockRelativeRange } from './locator.js';
+import type { InsertInput } from '../insert/insert.js';
 
 export type ChangeMode = 'direct' | 'tracked';
 
-export interface MutationOptions {
+export interface RevisionGuardOptions {
+  /** When provided, the engine rejects with REVISION_MISMATCH if the document has advanced past this revision. */
+  expectedRevision?: string;
+}
+
+export interface MutationOptions extends RevisionGuardOptions {
   /**
    * Controls whether mutation applies directly or as a tracked change.
    * Defaults to `direct`.
@@ -22,7 +28,7 @@ export type InsertWriteRequest = {
   kind: 'insert';
   /**
    * Optional insertion target.
-   * When omitted, adapters may resolve a deterministic default insertion point.
+   * When omitted, inserts at the end of the document.
    */
   target?: TextAddress;
   text: string;
@@ -44,10 +50,13 @@ export type WriteRequest = InsertWriteRequest | ReplaceWriteRequest | DeleteWrit
 
 export interface WriteAdapter {
   write(request: WriteRequest, options?: MutationOptions): TextMutationReceipt;
+  /** Structured insert for markdown/html content types. */
+  insertStructured(input: InsertInput, options?: MutationOptions): TextMutationReceipt;
 }
 
 export function normalizeMutationOptions(options?: MutationOptions): MutationOptions {
   return {
+    expectedRevision: options?.expectedRevision,
     changeMode: options?.changeMode ?? 'direct',
     dryRun: options?.dryRun ?? false,
   };

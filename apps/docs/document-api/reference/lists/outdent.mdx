@@ -1,7 +1,7 @@
 ---
 title: lists.outdent
 sidebarTitle: lists.outdent
-description: Generated reference for lists.outdent
+description: Decrease the indentation level of a list item.
 ---
 
 {/* GENERATED FILE: DO NOT EDIT. Regenerate via `pnpm run docapi:sync`. */}
@@ -9,6 +9,8 @@ description: Generated reference for lists.outdent
 > Alpha: Document API is currently alpha and subject to breaking changes.
 
 ## Summary
+
+Decrease the indentation level of a list item.
 
 - Operation ID: `lists.outdent`
 - API member path: `editor.doc.lists.outdent(...)`
@@ -18,11 +20,69 @@ description: Generated reference for lists.outdent
 - Supports dry run: `yes`
 - Deterministic target resolution: `yes`
 
+## Expected result
+
+Returns a ListsMutateItemResult receipt; reports NO_OP if the item is already at the root level.
+
+## Input fields
+
+| Field | Type | Required | Description |
+| --- | --- | --- | --- |
+| `target` | ListItemAddress | yes | ListItemAddress |
+| `target.kind` | `"block"` | yes | Constant: `"block"` |
+| `target.nodeId` | string | yes |  |
+| `target.nodeType` | `"listItem"` | yes | Constant: `"listItem"` |
+
+### Example request
+
+```json
+{
+  "target": {
+    "kind": "block",
+    "nodeId": "node-def456",
+    "nodeType": "listItem"
+  }
+}
+```
+
+## Output fields
+
+### Variant 1 (item.kind="block")
+
+| Field | Type | Required | Description |
+| --- | --- | --- | --- |
+| `item` | ListItemAddress | yes | ListItemAddress |
+| `item.kind` | `"block"` | yes | Constant: `"block"` |
+| `item.nodeId` | string | yes |  |
+| `item.nodeType` | `"listItem"` | yes | Constant: `"listItem"` |
+| `success` | `true` | yes | Constant: `true` |
+
+### Variant 2 (success=false)
+
+| Field | Type | Required | Description |
+| --- | --- | --- | --- |
+| `failure` | object | yes |  |
+| `failure.code` | enum | yes | `"NO_OP"`, `"INVALID_TARGET"`, `"LEVEL_OUT_OF_RANGE"` |
+| `failure.details` | any | no |  |
+| `failure.message` | string | yes |  |
+| `success` | `false` | yes | Constant: `false` |
+
+### Example response
+
+```json
+{
+  "item": {
+    "kind": "block",
+    "nodeId": "node-def456",
+    "nodeType": "listItem"
+  },
+  "success": true
+}
+```
+
 ## Pre-apply throws
 
 - `TARGET_NOT_FOUND`
-- `COMMAND_UNAVAILABLE`
-- `TRACK_CHANGE_COMMAND_UNAVAILABLE`
 - `CAPABILITY_UNAVAILABLE`
 - `INVALID_TARGET`
 
@@ -30,56 +90,28 @@ description: Generated reference for lists.outdent
 
 - `NO_OP`
 - `INVALID_TARGET`
+- `LEVEL_OUT_OF_RANGE`
 
-## Input schema
+## Raw schemas
 
+<Accordion title="Raw input schema">
 ```json
 {
   "additionalProperties": false,
-  "oneOf": [
-    {
-      "required": [
-        "target"
-      ]
-    },
-    {
-      "required": [
-        "nodeId"
-      ]
-    }
-  ],
   "properties": {
-    "nodeId": {
-      "description": "Node ID shorthand — adapter resolves to a ListItemAddress.",
-      "type": "string"
-    },
     "target": {
-      "additionalProperties": false,
-      "properties": {
-        "kind": {
-          "const": "block"
-        },
-        "nodeId": {
-          "type": "string"
-        },
-        "nodeType": {
-          "const": "listItem"
-        }
-      },
-      "required": [
-        "kind",
-        "nodeType",
-        "nodeId"
-      ],
-      "type": "object"
+      "$ref": "#/$defs/ListItemAddress"
     }
   },
+  "required": [
+    "target"
+  ],
   "type": "object"
 }
 ```
+</Accordion>
 
-## Output schema
-
+<Accordion title="Raw output schema">
 ```json
 {
   "oneOf": [
@@ -87,24 +119,7 @@ description: Generated reference for lists.outdent
       "additionalProperties": false,
       "properties": {
         "item": {
-          "additionalProperties": false,
-          "properties": {
-            "kind": {
-              "const": "block"
-            },
-            "nodeId": {
-              "type": "string"
-            },
-            "nodeType": {
-              "const": "listItem"
-            }
-          },
-          "required": [
-            "kind",
-            "nodeType",
-            "nodeId"
-          ],
-          "type": "object"
+          "$ref": "#/$defs/ListItemAddress"
         },
         "success": {
           "const": true
@@ -125,7 +140,8 @@ description: Generated reference for lists.outdent
             "code": {
               "enum": [
                 "NO_OP",
-                "INVALID_TARGET"
+                "INVALID_TARGET",
+                "LEVEL_OUT_OF_RANGE"
               ]
             },
             "details": {},
@@ -152,32 +168,15 @@ description: Generated reference for lists.outdent
   ]
 }
 ```
+</Accordion>
 
-## Success schema
-
+<Accordion title="Raw success schema">
 ```json
 {
   "additionalProperties": false,
   "properties": {
     "item": {
-      "additionalProperties": false,
-      "properties": {
-        "kind": {
-          "const": "block"
-        },
-        "nodeId": {
-          "type": "string"
-        },
-        "nodeType": {
-          "const": "listItem"
-        }
-      },
-      "required": [
-        "kind",
-        "nodeType",
-        "nodeId"
-      ],
-      "type": "object"
+      "$ref": "#/$defs/ListItemAddress"
     },
     "success": {
       "const": true
@@ -190,9 +189,9 @@ description: Generated reference for lists.outdent
   "type": "object"
 }
 ```
+</Accordion>
 
-## Failure schema
-
+<Accordion title="Raw failure schema">
 ```json
 {
   "additionalProperties": false,
@@ -203,7 +202,8 @@ description: Generated reference for lists.outdent
         "code": {
           "enum": [
             "NO_OP",
-            "INVALID_TARGET"
+            "INVALID_TARGET",
+            "LEVEL_OUT_OF_RANGE"
           ]
         },
         "details": {},
@@ -228,3 +228,4 @@ description: Generated reference for lists.outdent
   "type": "object"
 }
 ```
+</Accordion>

@@ -5,6 +5,7 @@ import { preProcessHyperlinkInstruction } from './hyperlink-preprocessor.js';
 import { preProcessTocInstruction } from './toc-preprocessor.js';
 import { preProcessIndexInstruction } from './index-preprocessor.js';
 import { preProcessXeInstruction } from './xe-preprocessor.js';
+import { preProcessTcInstruction as preProcessTcFieldInstruction } from './tc-preprocessor.js';
 
 /**
  * @callback InstructionPreProcessor
@@ -36,6 +37,8 @@ export const getInstructionPreProcessor = (instruction) => {
       return preProcessIndexInstruction;
     case 'XE':
       return preProcessXeInstruction;
+    case 'TC':
+      return preProcessTcFieldInstruction;
     default:
       return null;
   }

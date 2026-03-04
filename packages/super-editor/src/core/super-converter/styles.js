@@ -75,18 +75,24 @@ export function encodeMarksFromRPr(runProperties, docx) {
         break;
       case 'underline':
         let underlineType = value['w:val'];
-        if (!underlineType) {
-          break;
-        }
         let underlineColor = value['w:color'];
         if (underlineColor && underlineColor.toLowerCase() !== 'auto' && !underlineColor.startsWith('#')) {
           underlineColor = `#${underlineColor}`;
+        }
+        const underlineThemeColor = value['w:themeColor'];
+        const underlineThemeTint = value['w:themeTint'];
+        const underlineThemeShade = value['w:themeShade'];
+        if (!underlineType && !underlineColor && !underlineThemeColor && !underlineThemeTint && !underlineThemeShade) {
+          break;
         }
         marks.push({
           type: key,
           attrs: {
             underlineType,
             underlineColor,
+            underlineThemeColor,
+            underlineThemeTint,
+            underlineThemeShade,
           },
         });
         break;
@@ -522,13 +528,23 @@ export function decodeRPrFromMarks(marks) {
         runProperties[type] = mark.attrs.value !== '0' && mark.attrs.value !== false;
         break;
       case 'underline': {
-        const { underlineType, underlineColor } = mark.attrs;
+        const { underlineType, underlineColor, underlineThemeColor, underlineThemeTint, underlineThemeShade } =
+          mark.attrs;
         const underlineAttrs = {};
         if (underlineType) {
           underlineAttrs['w:val'] = underlineType;
         }
         if (underlineColor) {
           underlineAttrs['w:color'] = underlineColor.replace('#', '');
+        }
+        if (underlineThemeColor) {
+          underlineAttrs['w:themeColor'] = underlineThemeColor;
+        }
+        if (underlineThemeTint) {
+          underlineAttrs['w:themeTint'] = underlineThemeTint;
+        }
+        if (underlineThemeShade) {
+          underlineAttrs['w:themeShade'] = underlineThemeShade;
         }
         if (Object.keys(underlineAttrs).length > 0) {
           runProperties.underline = underlineAttrs;

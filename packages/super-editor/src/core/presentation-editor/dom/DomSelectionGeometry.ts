@@ -164,7 +164,11 @@ export function computeSelectionRectsFromDom(
     if (sliceFrom >= sliceTo) continue;
 
     // Identify representative DOM elements for the slice boundaries on this mounted page.
-    let sliceEntries = options.domPositionIndex.findEntriesInRange(sliceFrom, sliceTo);
+    // Use boundaryInclusive to include entries whose boundaries touch the slice range.
+    // This is critical for selections at run boundaries (mark changes) where PM positions
+    // fall in the 2-position gap between adjacent text spans.
+    const rangeOpts = { boundaryInclusive: true };
+    let sliceEntries = options.domPositionIndex.findEntriesInRange(sliceFrom, sliceTo, rangeOpts);
     if (sliceEntries.length === 0) {
       // Nothing mounted for this PM interval on this page (virtualized or empty).
       continue;
@@ -177,7 +181,7 @@ export function computeSelectionRectsFromDom(
     if (pageEntries.length === 0 && !rebuiltOnce) {
       options.rebuildDomPositionIndex();
       rebuiltOnce = true;
-      sliceEntries = options.domPositionIndex.findEntriesInRange(sliceFrom, sliceTo);
+      sliceEntries = options.domPositionIndex.findEntriesInRange(sliceFrom, sliceTo, rangeOpts);
       pageEntries = filterPageEntries(sliceEntries);
     }
 
@@ -213,7 +217,7 @@ export function computeSelectionRectsFromDom(
     if ((!startEntry?.el?.isConnected || !endEntry?.el?.isConnected) && !rebuiltOnce) {
       options.rebuildDomPositionIndex();
       rebuiltOnce = true;
-      sliceEntries = options.domPositionIndex.findEntriesInRange(sliceFrom, sliceTo);
+      sliceEntries = options.domPositionIndex.findEntriesInRange(sliceFrom, sliceTo, rangeOpts);
       pageEntries = filterPageEntries(sliceEntries);
       if (pageEntries.length === 0) {
         continue;

@@ -23,6 +23,7 @@ export const handleGoogleDocsHtml = (html, editor, view) => {
 
   const htmlWithMergedLists = mergeSeparateLists(tempDiv);
   const flattenHtml = flattenListsInHtml(htmlWithMergedLists, editor);
+  flattenHtml.dataset.superdocImport = 'true';
 
   let doc = DOMParser.fromSchema(editor.schema).parse(flattenHtml);
   doc = wrapTextsInRuns(doc);

@@ -135,9 +135,17 @@ export type EditorInputCallbacks = {
   /** Emit event */
   emit?: (event: string, payload: unknown) => void;
   /** Normalize client point to layout coordinates */
-  normalizeClientPoint?: (clientX: number, clientY: number) => { x: number; y: number } | null;
+  normalizeClientPoint?: (
+    clientX: number,
+    clientY: number,
+  ) => { x: number; y: number; pageIndex?: number; pageLocalY?: number } | null;
   /** Hit test header/footer region */
-  hitTestHeaderFooterRegion?: (x: number, y: number) => HeaderFooterRegion | null;
+  hitTestHeaderFooterRegion?: (
+    x: number,
+    y: number,
+    pageIndex?: number,
+    pageLocalY?: number,
+  ) => HeaderFooterRegion | null;
   /** Exit header/footer mode */
   exitHeaderFooterMode?: () => void;
   /** Activate header/footer region */
@@ -504,6 +512,44 @@ export class EditorInputManager {
     return calculateExtendedSelection(layoutState?.blocks ?? [], anchor, head, mode);
   }
 
+  /**
+   * When the drag anchor is outside an isolating node (table), prevent the head
+   * from resolving inside one. If the head is inside a table cell, clamp it to
+   * just before or after the table boundary (depending on drag direction).
+   *
+   * Selections that span PAST a table (anchor before, head after) are allowed —
+   * only positions resolving INSIDE the table are clamped.
+   */
+  #clampHeadAtIsolatingBoundary(doc: ProseMirrorNode, anchor: number, head: number): number {
+    const forward = head >= anchor;
+
+    try {
+      const $head = doc.resolve(head);
+      // Find the outermost isolating ancestor. Walk from innermost to outermost,
+      // tracking the shallowest isolating depth. Using the outermost ensures that
+      // we clamp to just before/after the entire table, not to a boundary between
+      // cells within the same table.
+      let isolatingDepth = -1;
+      for (let d = $head.depth; d > 0; d--) {
+        const node = $head.node(d);
+        if (node.type.spec.isolating || node.type.spec.tableRole === 'table') {
+          isolatingDepth = d;
+        }
+      }
+
+      if (isolatingDepth > 0) {
+        const boundary = forward ? $head.before(isolatingDepth) : $head.after(isolatingDepth);
+        const near = Selection.near(doc.resolve(boundary), forward ? -1 : 1);
+        if (near instanceof TextSelection) return near.head;
+        return anchor;
+      }
+    } catch {
+      /* position resolution failed */
+    }
+
+    return head;
+  }
+
   #shouldUseCellSelection(currentTableHit: TableHitResult | null): boolean {
     return shouldUseCellSelectionFromHelper(currentTableHit, this.#cellAnchor, this.#cellDragMode);
   }
@@ -856,12 +902,21 @@ export class EditorInputManager {
     // Check header/footer session state
     const sessionMode = this.#deps.getHeaderFooterSession()?.session?.mode ?? 'body';
     if (sessionMode !== 'body') {
-      if (this.#handleClickInHeaderFooterMode(event, x, y)) return;
+      if (this.#handleClickInHeaderFooterMode(event, x, y, normalizedPoint.pageIndex, normalizedPoint.pageLocalY))
+        return;
     }
 
     // Check for header/footer region hit
-    const headerFooterRegion = this.#callbacks.hitTestHeaderFooterRegion?.(x, y);
-    if (headerFooterRegion) return; // Will be handled by double-click
+    const headerFooterRegion = this.#callbacks.hitTestHeaderFooterRegion?.(
+      x,
+      y,
+      normalizedPoint.pageIndex,
+      normalizedPoint.pageLocalY,
+    );
+    if (headerFooterRegion) {
+      event.preventDefault(); // Prevent native selection before double-click handles it
+      return; // Will be handled by double-click
+    }
 
     // Get hit position
     const viewportHost = this.#deps.getViewportHost();
@@ -989,12 +1044,23 @@ export class EditorInputManager {
       this.#dragAnchorPageIndex = hit.pageIndex;
       this.#pendingMarginClick = this.#callbacks.computePendingMarginClick?.(event.pointerId, x, y) ?? null;
 
-      // Check for table cell selection
+      // Check for table cell selection.
+      // Verify that the resolved click position is actually inside the table before
+      // activating cell selection. hitTestTable uses geometry-based coordinates that
+      // may have small offsets from the DOM, causing false positives for clicks on
+      // paragraphs near table boundaries.
       const tableHit = this.#hitTestTable(x, y);
       if (tableHit) {
         const tablePos = this.#getTablePosFromHit(tableHit);
-        if (tablePos !== null) {
+        const hitIsInsideTable =
+          tablePos !== null &&
+          doc &&
+          hit.pos >= tablePos &&
+          hit.pos <= tablePos + (doc.nodeAt(tablePos)?.nodeSize ?? 0);
+        if (tablePos !== null && hitIsInsideTable) {
           this.#setCellAnchor(tableHit, tablePos);
+        } else {
+          this.#clearCellAnchor();
         }
       } else {
         this.#clearCellAnchor();
@@ -1170,16 +1236,15 @@ export class EditorInputManager {
     const layoutState = this.#deps.getLayoutState();
     if (!layoutState.layout) return;
 
-    const viewportHost = this.#deps.getViewportHost();
-    const visibleHost = this.#deps.getVisibleHost();
-    const zoom = this.#deps.getZoom();
-    const rect = viewportHost.getBoundingClientRect();
-    const scrollLeft = visibleHost.scrollLeft ?? 0;
-    const scrollTop = visibleHost.scrollTop ?? 0;
-    const x = (event.clientX - rect.left + scrollLeft) / zoom;
-    const y = (event.clientY - rect.top + scrollTop) / zoom;
+    const normalized = this.#callbacks.normalizeClientPoint?.(event.clientX, event.clientY);
+    if (!normalized) return;
 
-    const region = this.#callbacks.hitTestHeaderFooterRegion?.(x, y);
+    const region = this.#callbacks.hitTestHeaderFooterRegion?.(
+      normalized.x,
+      normalized.y,
+      normalized.pageIndex,
+      normalized.pageLocalY,
+    );
     if (region) {
       event.preventDefault();
       event.stopPropagation();
@@ -1479,7 +1544,13 @@ export class EditorInputManager {
     this.#focusEditorAtFirstPosition();
   }
 
-  #handleClickInHeaderFooterMode(event: PointerEvent, x: number, y: number): boolean {
+  #handleClickInHeaderFooterMode(
+    event: PointerEvent,
+    x: number,
+    y: number,
+    pageIndex?: number,
+    pageLocalY?: number,
+  ): boolean {
     const session = this.#deps?.getHeaderFooterSession();
     const activeEditorHost = session?.overlayManager?.getActiveEditorHost?.();
     const clickedInsideEditorHost =
@@ -1489,13 +1560,16 @@ export class EditorInputManager {
       return true; // Let editor handle it
     }
 
-    const headerFooterRegion = this.#callbacks.hitTestHeaderFooterRegion?.(x, y);
+    const headerFooterRegion = this.#callbacks.hitTestHeaderFooterRegion?.(x, y, pageIndex, pageLocalY);
     if (!headerFooterRegion) {
       this.#callbacks.exitHeaderFooterMode?.();
       return false; // Continue to body click handling
     }
 
-    return true; // In header/footer region
+    // Click is in a H/F region on a different page — don't consume the event.
+    // Let it fall through to the existing footer region check in #handlePointerDown
+    // which properly calls event.preventDefault() before the dblclick handler activates it.
+    return false;
   }
 
   #handleInlineImageClick(
@@ -1703,7 +1777,15 @@ export class EditorInputManager {
 
     // Text selection mode
     const anchor = this.#dragAnchor!;
-    const head = hit.pos;
+    let head = hit.pos;
+
+    // When the drag started outside a table, prevent the head from entering an isolating
+    // node (table). If the head resolves inside a table, ProseMirror-tables' appendTransaction
+    // converts the TextSelection into a CellSelection, causing the anchor to jump.
+    if (!this.#cellAnchor) {
+      head = this.#clampHeadAtIsolatingBoundary(doc, anchor, head);
+    }
+
     const { selAnchor, selHead } = this.#calculateExtendedSelection(anchor, head, this.#dragExtensionMode);
 
     try {
@@ -1751,7 +1833,7 @@ export class EditorInputManager {
     }
   }
 
-  #handleHover(normalized: { x: number; y: number }): void {
+  #handleHover(normalized: { x: number; y: number; pageIndex?: number; pageLocalY?: number }): void {
     if (!this.#deps) return;
 
     const sessionMode = this.#deps.getHeaderFooterSession()?.session?.mode ?? 'body';
@@ -1765,7 +1847,12 @@ export class EditorInputManager {
       return;
     }
 
-    const region = this.#callbacks.hitTestHeaderFooterRegion?.(normalized.x, normalized.y);
+    const region = this.#callbacks.hitTestHeaderFooterRegion?.(
+      normalized.x,
+      normalized.y,
+      normalized.pageIndex,
+      normalized.pageLocalY,
+    );
     if (!region) {
       this.#callbacks.clearHoverRegion?.();
       return;

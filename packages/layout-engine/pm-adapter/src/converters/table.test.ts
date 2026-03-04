@@ -777,6 +777,98 @@ describe('table converter', () => {
       expect(result.rows[0].cells[0]).toBeDefined();
     });
 
+    it('skips schema-default cell borders when table-level borders exist', () => {
+      const schemaDefaultBorders = {
+        top: { size: 8, color: '000000' },
+        right: { size: 8, color: '000000' },
+        bottom: { size: 8, color: '000000' },
+        left: { size: 8, color: '000000' },
+      };
+
+      const node: PMNode = {
+        type: 'table',
+        attrs: {
+          borders: {
+            top: { val: 'single', size: 8, color: '000000' },
+            right: { val: 'single', size: 8, color: '000000' },
+            bottom: { val: 'single', size: 8, color: '000000' },
+            left: { val: 'single', size: 8, color: '000000' },
+          },
+        },
+        content: [
+          {
+            type: 'tableRow',
+            content: [
+              {
+                type: 'tableCell',
+                attrs: { borders: schemaDefaultBorders },
+                content: [{ type: 'paragraph', content: [{ type: 'text', text: 'Cell' }] }],
+              },
+            ],
+          },
+        ],
+      };
+
+      const result = tableNodeToBlock(
+        node,
+        mockBlockIdGenerator,
+        mockPositionMap,
+        'Arial',
+        16,
+        undefined,
+        undefined,
+        undefined,
+        undefined,
+        mockParagraphConverter,
+      ) as TableBlock;
+
+      expect(result.rows[0].cells[0].attrs?.borders).toBeUndefined();
+    });
+
+    it('ignores legacy schema-default cell borders (style-engine resolves borders)', () => {
+      // Old schema defaults have { size, color } without `val` — these are no longer
+      // read from attrs.borders. Cell borders now come from style-engine resolution.
+      const schemaDefaultBorders = {
+        top: { size: 8, color: '000000' },
+        right: { size: 8, color: '000000' },
+        bottom: { size: 8, color: '000000' },
+        left: { size: 8, color: '000000' },
+      };
+
+      const node: PMNode = {
+        type: 'table',
+        content: [
+          {
+            type: 'tableRow',
+            content: [
+              {
+                type: 'tableCell',
+                attrs: { borders: schemaDefaultBorders },
+                content: [{ type: 'paragraph', content: [{ type: 'text', text: 'Cell' }] }],
+              },
+            ],
+          },
+        ],
+      };
+
+      const result = tableNodeToBlock(
+        node,
+        mockBlockIdGenerator,
+        mockPositionMap,
+        'Arial',
+        16,
+        undefined,
+        undefined,
+        undefined,
+        undefined,
+        mockParagraphConverter,
+      ) as TableBlock;
+
+      // attrs.borders are ignored — style-engine-resolved borders (from resolveTableCellProperties)
+      // would provide borders, but this test has no style catalog so borders are undefined.
+      expect(result.rows[0].cells[0].attrs?.borders).toBeUndefined();
+    });
+
     it('extracts cell padding when present', () => {
       const node: PMNode = {
         type: 'table',
@@ -1001,7 +1093,7 @@ describe('table converter', () => {
       expect(result.attrs?.borderCollapse).toBe('collapse');
     });
 
-    it('includes tableCellSpacing', () => {
+    it('includes tableCellSpacing and normalizes legacy number to CellSpacing object', () => {
       const node: PMNode = {
         type: 'table',
         attrs: {
@@ -1033,7 +1125,42 @@ describe('table converter', () => {
         mockParagraphConverter,
       ) as TableBlock;
 
-      expect(result.attrs?.cellSpacing).toBe(5);
+      expect(result.attrs?.cellSpacing).toEqual({ value: 5, type: 'px' });
+    });
+
+    it('passes through tableCellSpacing object as normalized CellSpacing', () => {
+      const node: PMNode = {
+        type: 'table',
+        attrs: {
+          tableCellSpacing: { value: 10, type: 'dxa' },
+        },
+        content: [
+          {
+            type: 'tableRow',
+            content: [
+              {
+                type: 'tableCell',
+                content: [{ type: 'paragraph', content: [{ type: 'text', text: 'Cell' }] }],
+              },
+            ],
+          },
+        ],
+      };
+
+      const result = tableNodeToBlock(
+        node,
+        mockBlockIdGenerator,
+        mockPositionMap,
+        'Arial',
+        16,
+        undefined,
+        undefined,
+        undefined,
+        undefined,
+        mockParagraphConverter,
+      ) as TableBlock;
+
+      expect(result.attrs?.cellSpacing).toEqual({ value: 10, type: 'dxa' });
     });
 
     it('forwards tableIndent to table block attrs', () => {
@@ -1634,5 +1761,115 @@ describe('table converter', () => {
       // Should only include valid entries (1440 and 2880)
       expect(tableBlock.columnWidths).toHaveLength(2);
     });
+  });
+});
+
+// ──────────────────────────────────────────────────────────────────────────────
+// Theme-based cell background resolution
+// ──────────────────────────────────────────────────────────────────────────────
+
+describe('parseTableCell - theme shading resolution', () => {
+  const mockBlockIdGenerator: BlockIdGenerator = vi.fn((kind: string) => `test-${kind}`);
+  const mockPositionMap: PositionMap = new Map();
+  const mockParagraphConverter = vi.fn((params: { para: PMNode }) => {
+    return [
+      {
+        kind: 'paragraph',
+        id: 'p1',
+        runs: [{ text: params.para.content?.[0]?.text || 'text', fontFamily: 'Arial', fontSize: 12 }],
+      } as ParagraphBlock,
+    ];
+  });
+
+  const themePalette: ThemeColorPalette = {
+    accent1: '#4F81BD',
+    dk1: '#000000',
+  };
+
+  const makeTableWithShading = (
+    shadingProps: Record<string, unknown>,
+    themeColors?: ThemeColorPalette,
+    tableStyleId?: string,
+  ) => {
+    const styles = tableStyleId
+      ? {
+          ...DEFAULT_CONVERTER_CONTEXT.translatedLinkedStyles!,
+          styles: {
+            [tableStyleId]: {
+              type: 'table',
+              tableProperties: {},
+              tableStyleProperties: {
+                wholeTable: {
+                  tableCellProperties: { shading: shadingProps },
+                },
+              },
+            },
+          },
+        }
+      : DEFAULT_CONVERTER_CONTEXT.translatedLinkedStyles!;
+
+    const node: PMNode = {
+      type: 'table',
+      attrs: tableStyleId
+        ? {
+            tableStyleId,
+            tableProperties: { tableStyleId, tblLook: { noHBand: true, noVBand: true } },
+          }
+        : undefined,
+      content: [
+        {
+          type: 'tableRow',
+          content: [
+            {
+              type: 'tableCell',
+              content: [{ type: 'paragraph', content: [{ type: 'text', text: 'Cell' }] }],
+            },
+          ],
+        },
+      ],
+    };
+
+    return tableNodeToBlock(
+      node,
+      mockBlockIdGenerator,
+      mockPositionMap,
+      'Arial',
+      16,
+      undefined,
+      undefined,
+      undefined,
+      themeColors,
+      mockParagraphConverter,
+      {
+        ...DEFAULT_CONVERTER_CONTEXT,
+        translatedLinkedStyles: styles,
+      },
+    ) as TableBlock;
+  };
+
+  it('resolves themeFill from theme palette when no literal fill is present', () => {
+    const result = makeTableWithShading({ themeFill: 'accent1' }, themePalette, 'ThemeTable');
+    expect(result.rows[0].cells[0].attrs?.background).toBe('#4F81BD');
+  });
+
+  it('applies themeFillTint to the resolved theme color', () => {
+    const result = makeTableWithShading({ themeFill: 'accent1', themeFillTint: '99' }, themePalette, 'ThemeTable');
+    // accent1 (#4F81BD) tinted by 0x99/255 ≈ 0.6 → lighter blue
+    expect(result.rows[0].cells[0].attrs?.background).toBe('#B9CDE5');
+  });
+
+  it('prefers literal fill over themeFill', () => {
+    const result = makeTableWithShading({ fill: 'FF0000', themeFill: 'accent1' }, themePalette, 'ThemeTable');
+    expect(result.rows[0].cells[0].attrs?.background).toBe('#FF0000');
+  });
+
+  it('uses themeFill when fill is auto', () => {
+    const result = makeTableWithShading({ fill: 'auto', themeFill: 'accent1' }, themePalette, 'ThemeTable');
+    expect(result.rows[0].cells[0].attrs?.background).toBe('#4F81BD');
+  });
+
+  it('returns no background when themeFill key is not in palette', () => {
+    const result = makeTableWithShading({ themeFill: 'missing' }, themePalette, 'ThemeTable');
+    expect(result.rows[0].cells[0].attrs?.background).toBeUndefined();
   });
 });

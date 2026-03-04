@@ -16,6 +16,7 @@ import { getLiveInlineMarksInRange } from './getLiveInlineMarksInRange.js';
  */
 export const removeMarkStep = ({ state, step, newTr, doc, user, date }) => {
   const meta = {};
+  let sharedWid = null;
 
   doc.nodesBetween(step.from, step.to, (node, pos) => {
     if (!node.isInline || node.type.name === 'run') {
@@ -35,7 +36,7 @@ export const removeMarkStep = ({ state, step, newTr, doc, user, date }) => {
     });
     newTr.removeMark(Math.max(step.from, pos), Math.min(step.to, pos + node.nodeSize), step.mark);
 
-    const allowedMarks = ['bold', 'italic', 'strike', 'underline', 'textStyle'];
+    const allowedMarks = ['bold', 'italic', 'strike', 'underline', 'textStyle', 'highlight'];
 
     if (allowedMarks.includes(step.mark.type.name) && hasMatchingMark(liveMarksBeforeRemove, step.mark)) {
       const formatChangeMark = liveMarksBeforeRemove.find((mark) => mark.type.name === TrackFormatMarkName);
@@ -52,6 +53,23 @@ export const removeMarkStep = ({ state, step, newTr, doc, user, date }) => {
           after = [
             ...formatChangeMark.attrs.after.filter((mark) => !markSnapshotMatchesStepMark(mark, step.mark, true)),
           ];
+          if (after.length === 0) {
+            // All additions were canceled. Check if any marks in `before` were
+            // actually removed from the node. If they all still exist, the
+            // tracked change is a no-op — clean it up.
+            const remainingFormatMarks = liveMarksBeforeRemove.filter(
+              (m) =>
+                ![TrackDeleteMarkName, TrackFormatMarkName].includes(m.type.name) &&
+                m.type.name !== step.mark.type.name,
+            );
+            const isNoop = formatChangeMark.attrs.before.every((snapshot) =>
+              remainingFormatMarks.some((m) => markSnapshotMatchesStepMark(snapshot, m, true)),
+            );
+            if (isNoop) {
+              newTr.removeMark(Math.max(step.from, pos), Math.min(step.to, pos + node.nodeSize), formatChangeMark);
+              return;
+            }
+          }
           before = [...formatChangeMark.attrs.before];
         } else {
           after = [...formatChangeMark.attrs.after];
@@ -77,7 +95,7 @@ export const removeMarkStep = ({ state, step, newTr, doc, user, date }) => {
 
       if (after.length || before.length) {
         const newFormatMark = state.schema.marks[TrackFormatMarkName].create({
-          id: uuidv4(),
+          id: formatChangeMark ? formatChangeMark.attrs.id : (sharedWid ?? (sharedWid = uuidv4())),
           author: user.name,
           authorEmail: user.email,
           authorImage: user.image,

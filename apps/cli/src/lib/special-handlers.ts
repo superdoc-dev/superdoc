@@ -9,6 +9,7 @@
  */
 
 import { createHash } from 'node:crypto';
+import { INLINE_PROPERTY_REGISTRY } from '@superdoc/document-api';
 import type { CliExposedOperationId } from '../cli/operation-set.js';
 import type { EditorWithDoc } from './document.js';
 
@@ -24,6 +25,11 @@ type HookContext = {
 type PreInvokeHook = (input: unknown, context: HookContext) => unknown;
 
 type PostInvokeHook = (result: unknown, context: HookContext) => unknown;
+
+const FORMAT_RECEIPT_OPERATION_IDS: readonly CliExposedOperationId[] = [
+  'format.apply',
+  ...INLINE_PROPERTY_REGISTRY.map((entry) => `format.${entry.key}` as CliExposedOperationId),
+];
 
 // ---------------------------------------------------------------------------
 // Track-changes stable-ID helpers
@@ -79,7 +85,7 @@ function buildStableIdMappings(rawListResult: unknown): {
   const rawToStableId = new Map<string, string>();
   const signatureCounts = new Map<string, number>();
 
-  const normalizedChanges = asArray(record.changes)
+  const normalizedItems = asArray(record.items)
     .map((entry) => asRecord(entry))
     .filter((entry): entry is Record<string, unknown> => Boolean(entry))
     .map((entry) => {
@@ -98,25 +104,19 @@ function buildStableIdMappings(rawListResult: unknown): {
       rawToStableId.set(rawId, stableId);
 
       const normalizedAddress = asTrackChangeAddress(entry.address);
+      const handleRecord = asRecord(entry.handle);
       return {
         ...entry,
         id: stableId,
         address: normalizedAddress ? { ...normalizedAddress, entityId: stableId } : entry.address,
+        handle: handleRecord ? { ...handleRecord, ref: `tc:${stableId}` } : entry.handle,
       };
     });
-
-  const normalizedMatches = asArray(record.matches).map((entry) => {
-    const address = asTrackChangeAddress(entry);
-    if (!address) return entry;
-    const stableId = rawToStableId.get(address.entityId) ?? address.entityId;
-    return { ...address, entityId: stableId };
-  });
 
   return {
     normalizedResult: {
       ...record,
-      matches: normalizedMatches,
-      changes: normalizedChanges.length > 0 ? normalizedChanges : record.changes,
+      items: normalizedItems.length > 0 ? normalizedItems : record.items,
     },
     stableToRawId,
     rawToStableId,
@@ -128,8 +128,8 @@ function buildStableIdMappings(rawListResult: unknown): {
 // ---------------------------------------------------------------------------
 
 /**
- * Track-changes mutations (accept/reject/get) need stable-ID → raw-ID
- * translation because the CLI uses SHA-1-based stable IDs.
+ * Track-changes get needs stable-ID → raw-ID translation
+ * because the CLI uses SHA-1-based stable IDs.
  */
 const resolveTrackChangeId: PreInvokeHook = (input, context) => {
   const record = asRecord(input);
@@ -147,6 +147,29 @@ const resolveTrackChangeId: PreInvokeHook = (input, context) => {
   const rawId = stableToRawId.get(stableId) ?? stableId;
 
   return { ...record, id: rawId };
+};
+
+/**
+ * trackChanges.decide needs stable-ID → raw-ID translation on target.id.
+ */
+const resolveReviewDecideId: PreInvokeHook = (input, context) => {
+  const record = asRecord(input);
+  if (!record) return input;
+
+  const target = asRecord(record.target);
+  if (!target) return input;
+
+  const stableId = typeof target.id === 'string' ? target.id : undefined;
+  if (!stableId) return input;
+
+  const listResult = context.editor.doc.invoke({
+    operationId: 'trackChanges.list' as const,
+    input: {},
+  });
+  const { stableToRawId } = buildStableIdMappings(listResult);
+  const rawId = stableToRawId.get(stableId) ?? stableId;
+
+  return { ...record, target: { ...target, id: rawId } };
 };
 
 // ---------------------------------------------------------------------------
@@ -209,34 +232,16 @@ const flattenTextMutationReceipt: PostInvokeHook = (result) => {
   };
 };
 
-// ---------------------------------------------------------------------------
-// comments.setActive input normalization
-// ---------------------------------------------------------------------------
-
-/**
- * comments.setActive accepts either `--id <commentId>` or `--clear`.
- * The API expects `{ commentId: string | null }`.
- * - `--clear` → `{ commentId: null }`
- * - `--id X`  → rename handled by PARAM_RENAMES (id → commentId)
- */
-const normalizeSetActiveInput: PreInvokeHook = (input) => {
-  const record = asRecord(input);
-  if (!record) return input;
-
-  if (record.clear === true) {
-    return { commentId: null };
-  }
-  return input;
-};
+const FORMAT_POST_INVOKE_HOOKS: Partial<Record<CliExposedOperationId, PostInvokeHook>> = Object.fromEntries(
+  FORMAT_RECEIPT_OPERATION_IDS.map((operationId) => [operationId, flattenTextMutationReceipt]),
+) as Partial<Record<CliExposedOperationId, PostInvokeHook>>;
 
 /** Pre-invoke: custom input resolution before calling editor.doc.invoke(). */
 export const PRE_INVOKE_HOOKS: Partial<Record<CliExposedOperationId, PreInvokeHook>> = {
-  // Track-changes mutations need stable-ID → raw-ID translation
-  'trackChanges.accept': resolveTrackChangeId,
-  'trackChanges.reject': resolveTrackChangeId,
+  // Track-changes get needs stable-ID → raw-ID translation
   'trackChanges.get': resolveTrackChangeId,
-  // comments.setActive --clear → { commentId: null }
-  'comments.setActive': normalizeSetActiveInput,
+  // trackChanges.decide needs stable-ID → raw-ID translation on target.id
+  'trackChanges.decide': resolveReviewDecideId,
 };
 
 /** Post-invoke: transform the raw invoke() result before envelope wrapping. */
@@ -248,10 +253,7 @@ export const POST_INVOKE_HOOKS: Partial<Record<CliExposedOperationId, PostInvoke
   insert: flattenTextMutationReceipt,
   replace: flattenTextMutationReceipt,
   delete: flattenTextMutationReceipt,
-  'format.bold': flattenTextMutationReceipt,
-  'format.italic': flattenTextMutationReceipt,
-  'format.underline': flattenTextMutationReceipt,
-  'format.strikethrough': flattenTextMutationReceipt,
+  ...FORMAT_POST_INVOKE_HOOKS,
   // getNodeById: merge nodeId from input into result for pretty output
   getNodeById: (result, context) => {
     const record = asRecord(result);

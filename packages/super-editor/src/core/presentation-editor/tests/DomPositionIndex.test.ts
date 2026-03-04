@@ -885,6 +885,76 @@ describe('DomPositionIndex', () => {
       const result = index.findElementsInRange(3, 12).map((el) => el.textContent);
       expect(result).toEqual(['first', 'second']);
     });
+
+    it('excludes boundary entries by default (half-open semantics)', () => {
+      // Default behavior: [start, end) half-open range — entries touching the boundary
+      // at exactly start or end are excluded. This is correct for decorations.
+      const container = document.createElement('div');
+      container.innerHTML = `
+        <div class="superdoc-line">
+          <span data-pm-start="1" data-pm-end="5">first</span>
+          <span data-pm-start="7" data-pm-end="12">second</span>
+        </div>
+      `;
+
+      const index = new DomPositionIndex();
+      index.rebuild(container);
+
+      // Range [5, 7] touches both boundaries but overlaps neither in half-open mode
+      expect(index.findElementsInRange(5, 7)).toEqual([]);
+    });
+
+    it('includes adjacent entries at run boundaries with boundaryInclusive', () => {
+      // Simulates two adjacent text runs with different marks (e.g., bold → italic).
+      // ProseMirror run nodes create a 2-position gap between spans (close + open tokens).
+      // The range [5, 7] spans exactly this gap. With boundaryInclusive, both boundary
+      // entries are included to prevent selection overlay flicker during drag.
+      const container = document.createElement('div');
+      container.innerHTML = `
+        <div class="superdoc-line">
+          <span data-pm-start="1" data-pm-end="5">bold</span>
+          <span data-pm-start="7" data-pm-end="12">italic</span>
+        </div>
+      `;
+
+      const index = new DomPositionIndex();
+      index.rebuild(container);
+
+      const result = index.findEntriesInRange(5, 7, { boundaryInclusive: true }).map((e) => e.el.textContent);
+      expect(result).toEqual(['bold', 'italic']);
+    });
+
+    it('includes entry whose pmEnd equals query start with boundaryInclusive', () => {
+      const container = document.createElement('div');
+      container.innerHTML = `
+        <div class="superdoc-line">
+          <span data-pm-start="1" data-pm-end="5">first</span>
+          <span data-pm-start="7" data-pm-end="12">second</span>
+        </div>
+      `;
+
+      const index = new DomPositionIndex();
+      index.rebuild(container);
+
+      const result = index.findEntriesInRange(5, 10, { boundaryInclusive: true }).map((e) => e.el.textContent);
+      expect(result).toEqual(['first', 'second']);
+    });
+
+    it('includes entry whose pmStart equals query end with boundaryInclusive', () => {
+      const container = document.createElement('div');
+      container.innerHTML = `
+        <div class="superdoc-line">
+          <span data-pm-start="1" data-pm-end="5">first</span>
+          <span data-pm-start="7" data-pm-end="12">second</span>
+        </div>
+      `;
+
+      const index = new DomPositionIndex();
+      index.rebuild(container);
+
+      const result = index.findEntriesInRange(3, 7, { boundaryInclusive: true }).map((e) => e.el.textContent);
+      expect(result).toEqual(['first', 'second']);
+    });
   });
 
   describe('edge cases - leafOnly option', () => {

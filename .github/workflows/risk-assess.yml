@@ -2,6 +2,7 @@ name: AI Risk Assessment
 
 # Runs AFTER risk-label.yml applies the file-path label.
 # Only triggers for critical/sensitive PRs — low-risk PRs skip AI entirely.
+# Fork PRs skip AI (no access to ANTHROPIC_API_KEY) — file-path label still applies.
 #
 # - Updates the risk label if AI disagrees with file-path classification
 # - Logs full details to workflow output (visible in Actions tab)
@@ -45,27 +46,36 @@ jobs:
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
-      # Skip AI for low-risk PRs
-      - name: Skip AI for low-risk
-        if: steps.filepath.outputs.level == 'low'
-        run: echo "Low risk — skipping AI assessment"
+      # Skip AI when low-risk or API key unavailable (e.g. fork PRs)
+      - name: Check AI eligibility
+        id: ai
+        run: |
+          if [ "${{ steps.filepath.outputs.level }}" = "low" ]; then
+            echo "skip=true" >> $GITHUB_OUTPUT
+            echo "Skipping AI — low risk"
+          elif [ -z "${{ secrets.ANTHROPIC_API_KEY }}" ]; then
+            echo "skip=true" >> $GITHUB_OUTPUT
+            echo "Skipping AI — no API key (fork PR)"
+          else
+            echo "skip=false" >> $GITHUB_OUTPUT
+          fi
 
-      # Install Agent SDK (only for non-low PRs)
+      # Install Agent SDK (only when AI will run)
       - name: Setup Node and Agent SDK
-        if: steps.filepath.outputs.level != 'low'
+        if: steps.ai.outputs.skip != 'true'
         uses: actions/setup-node@v4
         with:
           node-version: 20
 
       - name: Install Agent SDK
-        if: steps.filepath.outputs.level != 'low'
+        if: steps.ai.outputs.skip != 'true'
         run: npm install --prefix .github/scripts @anthropic-ai/claude-agent-sdk
         env:
           NODE_ENV: production
 
       # Layer 2+3: AI assessment
       - name: Run tiered AI assessment
-        if: steps.filepath.outputs.level != 'low'
+        if: steps.ai.outputs.skip != 'true'
         id: assess
         run: node .github/scripts/risk-assess.mjs ${{ env.PR_NUMBER }}
         env:
@@ -77,7 +87,7 @@ jobs:
 
       # Update risk label if AI disagrees with file-path classification
       - name: Update risk label from AI
-        if: steps.filepath.outputs.level != 'low'
+        if: steps.ai.outputs.skip != 'true'
         uses: actions/github-script@v7
         with:
           script: |

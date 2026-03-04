@@ -1,6 +1,6 @@
 # Shared Test Corpus
 
-Repo-level DOCX corpus tooling shared by `tests/visual` and `tests/layout-snapshots`.
+Repo-level DOCX corpus tooling shared by `tests/visual` and `tests/layout`.
 
 ## Commands
 

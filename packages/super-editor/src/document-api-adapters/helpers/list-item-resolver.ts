@@ -1,8 +1,19 @@
 import { ListHelpers } from '@helpers/list-numbering-helpers.js';
 import type { Editor } from '../../core/Editor.js';
-import type { BlockNodeAddress, ListItemAddress, ListItemInfo, ListKind, ListsListQuery } from '@superdoc/document-api';
+import type {
+  BlockNodeAddress,
+  ListItemAddress,
+  ListItemInfo,
+  ListKind,
+  ListsListQuery,
+  ListsListResult,
+} from '@superdoc/document-api';
+import { buildResolvedHandle, buildDiscoveryItem, buildDiscoveryResult } from '@superdoc/document-api';
 import { DocumentApiAdapterError } from '../errors.js';
+import { getRevision } from '../plan-engine/revision-tracker.js';
 import { getBlockIndex } from './index-cache.js';
+import { validatePaginationInput } from './adapter-utils.js';
+import { computeSequenceIdMap } from './list-sequence-helpers.js';
 import type { BlockCandidate, BlockIndex } from './node-address-resolver.js';
 import { toFiniteNumber } from './value-utils.js';
 
@@ -102,9 +113,10 @@ export function projectListItemCandidate(editor: Editor, candidate: BlockCandida
   };
 }
 
-export function listItemProjectionToInfo(projection: ListItemProjection): ListItemInfo {
+export function listItemProjectionToInfo(projection: ListItemProjection, listId: string): ListItemInfo {
   return {
     address: projection.address,
+    listId,
     marker: projection.marker,
     ordinal: projection.ordinal,
     path: projection.path,
@@ -169,45 +181,54 @@ export function buildListItemIndex(editor: Editor): { index: BlockIndex; items: 
   return { index, items };
 }
 
-export function listListItems(
-  editor: Editor,
-  query?: ListsListQuery,
-): { matches: ListItemAddress[]; total: number; items: ListItemInfo[] } {
+export function listListItems(editor: Editor, query?: ListsListQuery): ListsListResult {
   if (query?.within && query.within.kind !== 'block') {
     throw new DocumentApiAdapterError('INVALID_TARGET', 'lists.list only supports block within scopes.', {
       within: query.within,
     });
   }
 
+  validatePaginationInput(query?.offset, query?.limit);
+
   const index = getBlockIndex(editor);
   const scope = resolveBlockScopeRange(index, query?.within as BlockNodeAddress | undefined);
-  const candidates = listItemCandidatesInScope(index, scope);
-  const safeOffset = Math.max(0, query?.offset ?? 0);
-  const safeLimit = Math.max(0, query?.limit ?? Number.POSITIVE_INFINITY);
+  const allCandidates = index.candidates.filter((candidate) => candidate.nodeType === 'listItem');
+  const allProjections = allCandidates.map((candidate) => projectListItemCandidate(editor, candidate));
+  const projections = allProjections.filter((projection) => isWithinScope(projection.candidate, scope));
+  const safeOffset = query?.offset ?? 0;
+  const safeLimit = query?.limit ?? Number.POSITIVE_INFINITY;
   const pageEnd = safeOffset + safeLimit;
+  const evaluatedRevision = getRevision(editor);
+
+  // Compute sequence IDs from document-wide projections so list identity is
+  // stable across scoped queries.
+  const sequenceIds = computeSequenceIdMap(allProjections);
 
   let total = 0;
-  const infos: ListItemInfo[] = [];
-  const matches: ListItemAddress[] = [];
+  const items: ListsListResult['items'] = [];
 
-  for (const candidate of candidates) {
-    const projection = projectListItemCandidate(editor, candidate);
+  for (const projection of projections) {
     if (!matchesListQuery(projection, query)) continue;
 
     const currentIndex = total;
     total += 1;
     if (currentIndex < safeOffset || currentIndex >= pageEnd) continue;
 
-    const info = listItemProjectionToInfo(projection);
-    infos.push(info);
-    matches.push(info.address);
+    const listId = sequenceIds.get(projection.address.nodeId) ?? '';
+    const info = listItemProjectionToInfo(projection, listId);
+    const handle = buildResolvedHandle(info.address.nodeId, 'stable', 'list');
+    const { address, marker, ordinal, path, level, kind, text } = info;
+    items.push(
+      buildDiscoveryItem(info.address.nodeId, handle, { address, listId, marker, ordinal, path, level, kind, text }),
+    );
   }
 
-  return {
-    matches,
+  return buildDiscoveryResult({
+    evaluatedRevision,
     total,
-    items: infos,
-  };
+    items,
+    page: { limit: query?.limit ?? total, offset: safeOffset, returned: items.length },
+  });
 }
 
 export function resolveListItem(editor: Editor, address: ListItemAddress): ListItemProjection {

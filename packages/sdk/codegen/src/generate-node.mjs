@@ -4,6 +4,7 @@ import {
   createOperationTree,
   loadContract,
   pascalCase,
+  resolveRef,
   REPO_ROOT,
   sanitizeOperationId,
   toNodeType,
@@ -19,6 +20,7 @@ const NODE_GENERATED_DIR = path.join(REPO_ROOT, 'packages/sdk/langs/node/src/gen
 function generateContractTs(contract) {
   const contractForEmbed = {
     contractVersion: contract.contractVersion,
+    ...(contract.$defs ? { $defs: contract.$defs } : {}),
     cli: contract.cli,
     protocol: contract.protocol,
     operations: contract.operations,
@@ -40,15 +42,16 @@ function generateContractTs(contract) {
 // Type generation utilities
 // ---------------------------------------------------------------------------
 
-function toTsType(typeSpec, indent = '') {
+function toTsType(typeSpec, indent = '', $defs = undefined) {
   if (!typeSpec) return 'unknown';
+  typeSpec = resolveRef(typeSpec, $defs);
 
   if (Object.prototype.hasOwnProperty.call(typeSpec, 'const')) {
     return JSON.stringify(typeSpec.const);
   }
 
   if (Array.isArray(typeSpec.oneOf)) {
-    const variants = typeSpec.oneOf.map((v) => toTsType(v, indent));
+    const variants = typeSpec.oneOf.map((v) => toTsType(v, indent, $defs));
     return variants.map((v) => (v.includes('\n') ? `(${v})` : v)).join(' | ');
   }
 
@@ -67,7 +70,7 @@ function toTsType(typeSpec, indent = '') {
     case 'null':
       return 'null';
     case 'array':
-      return `Array<${toTsType(typeSpec.items, indent)}>`;
+      return `Array<${toTsType(typeSpec.items, indent, $defs)}>`;
     case 'object': {
       const required = new Set(typeSpec.required ?? []);
       const props = Object.entries(typeSpec.properties ?? {});
@@ -78,7 +81,7 @@ function toTsType(typeSpec, indent = '') {
           ? name
           : JSON.stringify(name);
         const opt = required.has(name) ? '' : '?';
-        lines.push(`${indent}  ${propertyKey}${opt}: ${toTsType(propSpec, `${indent}  `)};`);
+        lines.push(`${indent}  ${propertyKey}${opt}: ${toTsType(propSpec, `${indent}  `, $defs)};`);
       }
       lines.push(`${indent}}`);
       return lines.join('\n');
@@ -92,7 +95,7 @@ function toTsType(typeSpec, indent = '') {
 // Param interface generation (from params[] — transport plane)
 // ---------------------------------------------------------------------------
 
-function generateParamInterface(operationId, operation) {
+function generateParamInterface(operationId, operation, $defs) {
   const name = `Doc${pascalCase(sanitizeOperationId(operationId))}Params`;
   const lines = [`export interface ${name} {`];
 
@@ -100,7 +103,7 @@ function generateParamInterface(operationId, operation) {
     const opt = param.required ? '' : '?';
     let paramType;
     if (param.type === 'json' && param.schema) {
-      paramType = toTsType(param.schema, '  ');
+      paramType = toTsType(param.schema, '  ', $defs);
     } else {
       paramType = toNodeType(param.type);
     }
@@ -115,7 +118,7 @@ function generateParamInterface(operationId, operation) {
 // Result type generation (successSchema ?? outputSchema — schema plane)
 // ---------------------------------------------------------------------------
 
-function generateResultType(operationId, operation) {
+function generateResultType(operationId, operation, $defs) {
   const name = `Doc${pascalCase(sanitizeOperationId(operationId))}Result`;
   const schema = operation.successSchema ?? operation.outputSchema;
 
@@ -123,9 +126,21 @@ function generateResultType(operationId, operation) {
     throw new Error(`Operation ${operationId} missing both successSchema and outputSchema`);
   }
 
-  const body = toTsType(schema);
+  const body = toTsType(schema, '', $defs);
   return { name, source: `export type ${name} = ${body};` };
 }
+
+// ---------------------------------------------------------------------------
+// String-envelope unwrapping
+// ---------------------------------------------------------------------------
+
+// Operations whose CLI response wraps a plain string inside
+// `{ document, <key>: "..." }`. The SDK unwraps to return the string directly.
+const STRING_ENVELOPE_KEY_BY_OPERATION_ID = {
+  'doc.getText': 'text',
+  'doc.getMarkdown': 'markdown',
+  'doc.getHtml': 'html',
+};
 
 // ---------------------------------------------------------------------------
 // Client tree rendering
@@ -140,6 +155,10 @@ function renderTreeNode(treeNode, paramTypeMap, resultTypeMap, indent = '    ') 
       const resultTypeName = resultTypeMap.get(op.id);
       const hasRequired = (op.params ?? []).some((p) => p.required);
       const paramsArg = hasRequired ? `params: ${typeName}` : `params: ${typeName} = {}`;
+      const envelopeKey = STRING_ENVELOPE_KEY_BY_OPERATION_ID[op.id];
+      if (envelopeKey) {
+        return `${indent}${camelCase(key)}: async (${paramsArg}, options?: InvokeOptions): Promise<${resultTypeName}> => unwrapStringEnvelope(await runtime.invoke(CONTRACT.operations[${JSON.stringify(op.id)}], params as unknown as Record<string, unknown>, options), ${JSON.stringify(envelopeKey)}),`;
+      }
       return `${indent}${camelCase(key)}: (${paramsArg}, options?: InvokeOptions) => runtime.invoke<${resultTypeName}>(CONTRACT.operations[${JSON.stringify(op.id)}], params as unknown as Record<string, unknown>, options),`;
     }
 
@@ -155,17 +174,18 @@ function renderTreeNode(treeNode, paramTypeMap, resultTypeMap, indent = '    ') 
 // ---------------------------------------------------------------------------
 
 function generateClientTs(contract) {
+  const $defs = contract.$defs;
   const paramInterfaces = [];
   const resultTypes = [];
   const paramTypeMap = new Map();
   const resultTypeMap = new Map();
 
   for (const [operationId, operation] of Object.entries(contract.operations)) {
-    const { name: pName, source: pSource } = generateParamInterface(operationId, operation);
+    const { name: pName, source: pSource } = generateParamInterface(operationId, operation, $defs);
     paramTypeMap.set(operationId, pName);
     paramInterfaces.push(pSource);
 
-    const { name: rName, source: rSource } = generateResultType(operationId, operation);
+    const { name: rName, source: rSource } = generateResultType(operationId, operation, $defs);
     resultTypeMap.set(operationId, rName);
     resultTypes.push(rSource);
   }
@@ -179,6 +199,16 @@ function generateClientTs(contract) {
     '',
     "import { CONTRACT } from './contract.js';",
     "import type { SuperDocRuntime, InvokeOptions } from '../runtime/process.js';",
+    '',
+    '/** Extract a string value from a CLI response envelope like `{ document, text: "..." }`. */',
+    'function unwrapStringEnvelope(value: unknown, key: string): string {',
+    '  if (typeof value === "string") return value;',
+    '  if (typeof value === "object" && value !== null) {',
+    '    const extracted = (value as Record<string, unknown>)[key];',
+    '    if (typeof extracted === "string") return extracted;',
+    '  }',
+    '  return value as string;',
+    '}',
     '',
     paramInterfaces.join('\n\n'),
     '',

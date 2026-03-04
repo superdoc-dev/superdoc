@@ -9,15 +9,20 @@ import {
   type GeneratedFile,
 } from './generation-utils.js';
 import {
+  OPERATION_DESCRIPTION_MAP,
+  OPERATION_EXPECTED_RESULT_MAP,
   OPERATION_REFERENCE_DOC_PATH_MAP,
+  PUBLIC_STEP_OP_CATALOG,
+  REFERENCE_OPERATION_ALIASES,
   REFERENCE_OPERATION_GROUPS,
+  type ReferenceAliasDefinition,
   type ReferenceOperationGroupDefinition,
 } from '../../src/index.js';
 
 const GENERATED_MARKER = '{/* GENERATED FILE: DO NOT EDIT. Regenerate via `pnpm run docapi:sync`. */}';
 const OUTPUT_ROOT = 'apps/docs/document-api/reference';
 const REFERENCE_INDEX_PATH = `${OUTPUT_ROOT}/index.mdx`;
-const OVERVIEW_PATH = 'apps/docs/document-api/overview.mdx';
+const OVERVIEW_PATH = 'apps/docs/document-api/available-operations.mdx';
 const OVERVIEW_OPERATIONS_START = '{/* DOC_API_OPERATIONS_START */}';
 const OVERVIEW_OPERATIONS_END = '{/* DOC_API_OPERATIONS_END */}';
 
@@ -25,6 +30,10 @@ interface OperationGroup {
   definition: ReferenceOperationGroupDefinition;
   pagePath: string;
   operations: ContractOperationSnapshot[];
+  aliases: Array<{
+    definition: ReferenceAliasDefinition;
+    canonicalOperation: ContractOperationSnapshot;
+  }>;
 }
 
 function formatMemberPath(memberPath: string): string {
@@ -49,10 +58,516 @@ function toPublicDocHref(path: string): string {
   return `/${path.replace(/^apps\/docs\//u, '').replace(/\.mdx$/u, '')}`;
 }
 
+/**
+ * Quote a string for safe use as a YAML frontmatter value.
+ * Wraps in double quotes when the value contains characters that would
+ * break unquoted YAML scalars (colons, hash signs, brackets, etc.).
+ */
+function yamlQuote(value: string): string {
+  if (/[:#\[\]{}&*!|>'"%@`]/u.test(value)) {
+    return `"${value.replace(/\\/gu, '\\\\').replace(/"/gu, '\\"')}"`;
+  }
+  return value;
+}
+
 function renderList(values: readonly string[]): string {
   if (values.length === 0) return '- None';
   return values.map((value) => `- \`${value}\``).join('\n');
 }
+
+function renderNoWrapCode(value: string): string {
+  return `<span style={{ whiteSpace: 'nowrap', wordBreak: 'normal', overflowWrap: 'normal' }}><code>${value}</code></span>`;
+}
+
+function renderNoWrapLinkCode(label: string, href: string): string {
+  return `<span style={{ whiteSpace: 'nowrap', wordBreak: 'normal', overflowWrap: 'normal' }}><a href="${href}"><code>${label}</code></a></span>`;
+}
+
+const STEP_DOMAIN_ORDER = ['assert', 'text', 'format', 'create', 'tables'] as const;
+const STEP_DOMAIN_LABELS: Record<(typeof STEP_DOMAIN_ORDER)[number], string> = {
+  assert: 'Assert',
+  text: 'Text',
+  format: 'Format',
+  create: 'Create',
+  tables: 'Tables',
+};
+
+function renderStepReferenceCell(referenceOperationId?: ContractOperationSnapshot['operationId']): string {
+  if (!referenceOperationId) return '—';
+  const operationPath = toOperationDocPath(referenceOperationId);
+  return renderNoWrapLinkCode(referenceOperationId, toPublicDocHref(operationPath));
+}
+
+function renderStepOpsSection(operation: ContractOperationSnapshot): string {
+  if (operation.operationId !== 'mutations.apply' && operation.operationId !== 'mutations.preview') {
+    return '';
+  }
+
+  const domainSections = STEP_DOMAIN_ORDER.map((domain) => {
+    const entries = PUBLIC_STEP_OP_CATALOG.filter((entry) => entry.domain === domain);
+    if (entries.length === 0) return '';
+
+    const rows = entries
+      .map(
+        (entry) =>
+          `| ${renderNoWrapCode(entry.opId)} | ${escapeCell(entry.description)} | ${renderStepReferenceCell(entry.referenceOperationId)} |`,
+      )
+      .join('\n');
+
+    return `### ${STEP_DOMAIN_LABELS[domain]}
+
+| Step op (\`steps[].op\`) | Description | Related API operation |
+| --- | --- | --- |
+${rows}`;
+  })
+    .filter(Boolean)
+    .join('\n\n');
+
+  return `## Supported step operations
+
+Use these values in \`steps[].op\` when authoring mutation plans.
+
+${domainSections}
+
+The runtime capability snapshot also exposes this allowlist at \`planEngine.supportedStepOps\`.`;
+}
+
+// ---------------------------------------------------------------------------
+// $ref resolution
+// ---------------------------------------------------------------------------
+
+type JsonSchema = Record<string, unknown>;
+type Defs = Record<string, JsonSchema> | undefined;
+
+/**
+ * If `schema` is a `{ $ref: '#/$defs/Foo' }` pointer, resolve it against the
+ * supplied `$defs` map. Returns the dereferenced schema and the definition
+ * name. Non-ref schemas are returned as-is with `refName` undefined.
+ */
+function resolveRef(schema: JsonSchema, $defs: Defs): { resolved: JsonSchema; refName?: string } {
+  const $ref = schema.$ref;
+  if (typeof $ref === 'string' && $defs) {
+    const match = /^#\/\$defs\/(.+)$/u.exec($ref);
+    if (match) {
+      const name = match[1];
+      const target = $defs[name];
+      if (target) return { resolved: target, refName: name };
+    }
+  }
+  return { resolved: schema };
+}
+
+/**
+ * Extract the `$defs` reference name from a schema without resolving it.
+ * Returns `undefined` if the schema is not a simple `$ref`.
+ */
+function refName(schema: JsonSchema): string | undefined {
+  const $ref = schema.$ref;
+  if (typeof $ref !== 'string') return undefined;
+  const match = /^#\/\$defs\/(.+)$/u.exec($ref);
+  return match ? match[1] : undefined;
+}
+
+// ---------------------------------------------------------------------------
+// Field table rendering
+// ---------------------------------------------------------------------------
+
+interface FieldRow {
+  field: string;
+  type: string;
+  required: boolean;
+  description: string;
+}
+
+interface FieldSection {
+  title?: string;
+  rows: FieldRow[];
+}
+
+/**
+ * Try to derive a short discriminator label from an inline object schema.
+ * Looks for a `const` property that acts as a type discriminator (e.g., `type: "text"`).
+ */
+function objectDiscriminatorLabel(schema: JsonSchema): string | undefined {
+  if (schema.type !== 'object' || !schema.properties) return undefined;
+  const properties = schema.properties as Record<string, JsonSchema>;
+  for (const [key, prop] of Object.entries(properties)) {
+    if (prop.const !== undefined && typeof prop.const === 'string') {
+      return `${key}=${JSON.stringify(prop.const)}`;
+    }
+  }
+  return undefined;
+}
+
+/** Derive a human-readable type label from a JSON Schema node. */
+function schemaTypeLabel(schema: JsonSchema, $defs: Defs): string {
+  // $ref — show the def name
+  const rn = refName(schema);
+  if (rn) return rn;
+
+  // const
+  if (schema.const !== undefined) return `\`${JSON.stringify(schema.const)}\``;
+
+  // enum
+  if (Array.isArray(schema.enum)) {
+    return `enum`;
+  }
+
+  // oneOf / anyOf
+  for (const keyword of ['oneOf', 'anyOf'] as const) {
+    const variants = schema[keyword];
+    if (Array.isArray(variants)) {
+      const labels = (variants as JsonSchema[]).map((v) => {
+        const base = schemaTypeLabel(v, $defs);
+        if (base === 'object') {
+          const resolved = resolveRef(v, $defs).resolved;
+          const disc = objectDiscriminatorLabel(resolved);
+          if (disc) return `object(${disc})`;
+        }
+        return base;
+      });
+      return labels.join(' \\| ');
+    }
+  }
+
+  // array
+  if (schema.type === 'array') {
+    const items = schema.items as JsonSchema | undefined;
+    if (items) {
+      const itemLabel = schemaTypeLabel(items, $defs);
+      return `${itemLabel}[]`;
+    }
+    return 'array';
+  }
+
+  // object with properties — try discriminator
+  if (schema.type === 'object' && schema.properties) {
+    const disc = objectDiscriminatorLabel(schema);
+    if (disc) return `object(${disc})`;
+    return 'object';
+  }
+
+  // primitive
+  if (typeof schema.type === 'string') return schema.type as string;
+
+  return 'any';
+}
+
+/** Derive a description string from a JSON Schema node. */
+function schemaDescription(schema: JsonSchema, $defs: Defs): string {
+  const rn = refName(schema);
+  if (rn) return rn;
+
+  if (schema.const !== undefined) return `Constant: \`${JSON.stringify(schema.const)}\``;
+
+  if (Array.isArray(schema.enum)) {
+    return (schema.enum as unknown[]).map((v) => `\`${JSON.stringify(v)}\``).join(', ');
+  }
+
+  for (const keyword of ['oneOf', 'anyOf'] as const) {
+    const variants = schema[keyword];
+    if (Array.isArray(variants)) {
+      const labels = (variants as JsonSchema[]).map((v) => schemaTypeLabel(v, $defs));
+      return `One of: ${labels.join(', ')}`;
+    }
+  }
+
+  return '';
+}
+
+/**
+ * Collect all nested `const` discriminator values for a schema.
+ */
+function collectConstDiscriminators(
+  schema: JsonSchema,
+  $defs: Defs,
+  prefix = '',
+  depth = 0,
+): Array<{ path: string; value: unknown }> {
+  if (depth > 6) return [];
+
+  const { resolved } = resolveRef(schema, $defs);
+  const properties = resolved.properties as Record<string, JsonSchema> | undefined;
+  if (resolved.const !== undefined && prefix) {
+    return [{ path: prefix.replace(/\.$/u, ''), value: resolved.const }];
+  }
+  if (!properties || resolved.type !== 'object') return [];
+
+  const discriminators: Array<{ path: string; value: unknown }> = [];
+  for (const key of Object.keys(properties)) {
+    discriminators.push(...collectConstDiscriminators(properties[key], $defs, `${prefix}${key}.`, depth + 1));
+  }
+  return discriminators;
+}
+
+/**
+ * Build field table rows from an object schema's properties.
+ * Recursively flattens nested objects into dot-path rows.
+ */
+function buildFieldRows(schema: JsonSchema, $defs: Defs, prefix = '', parentRequired = true, depth = 0): FieldRow[] {
+  if (depth > 8) return [];
+
+  const { resolved } = resolveRef(schema, $defs);
+  const properties = resolved.properties as Record<string, JsonSchema> | undefined;
+  if (!properties || resolved.type !== 'object') return [];
+
+  const requiredSet = new Set<string>(Array.isArray(resolved.required) ? (resolved.required as string[]) : []);
+  const rows: FieldRow[] = [];
+
+  for (const field of Object.keys(properties).sort()) {
+    const prop = properties[field];
+    const fieldPath = prefix ? `${prefix}.${field}` : field;
+    const fieldRequired = parentRequired && requiredSet.has(field);
+
+    rows.push({
+      field: fieldPath,
+      type: schemaTypeLabel(prop, $defs),
+      required: fieldRequired,
+      description: schemaDescription(prop, $defs),
+    });
+
+    rows.push(...buildFieldRows(prop, $defs, fieldPath, fieldRequired, depth + 1));
+  }
+
+  return rows;
+}
+
+/** Build field sections, splitting top-level oneOf/anyOf schemas into explicit variants. */
+function buildFieldSections(schema: JsonSchema, $defs: Defs): FieldSection[] {
+  const { resolved } = resolveRef(schema, $defs);
+
+  for (const keyword of ['oneOf', 'anyOf'] as const) {
+    const variants = resolved[keyword];
+    if (!Array.isArray(variants) || variants.length === 0) continue;
+
+    return variants.map((variant, index) => {
+      const variantSchema = resolveRef(variant as JsonSchema, $defs).resolved;
+      const discriminators = collectConstDiscriminators(variantSchema, $defs);
+      const preferred =
+        discriminators.find((entry) => /(^|\.)(type|kind|mode|channel)$/u.test(entry.path)) ?? discriminators[0];
+      const label = preferred
+        ? `Variant ${index + 1} (${preferred.path}=${JSON.stringify(preferred.value)})`
+        : `Variant ${index + 1}`;
+
+      return {
+        title: label,
+        rows: buildFieldRows(variantSchema, $defs),
+      };
+    });
+  }
+
+  return [{ rows: buildFieldRows(resolved, $defs) }];
+}
+
+/** Escape pipe characters inside markdown table cells. */
+function escapeCell(value: string): string {
+  return value.replace(/\|/gu, '\\|');
+}
+
+function renderFieldTable(rows: FieldRow[]): string {
+  if (rows.length === 0) return '_No fields._';
+
+  const header = '| Field | Type | Required | Description |\n| --- | --- | --- | --- |';
+  const body = rows
+    .map(
+      (row) =>
+        `| \`${row.field}\` | ${escapeCell(row.type)} | ${row.required ? 'yes' : 'no'} | ${escapeCell(row.description)} |`,
+    )
+    .join('\n');
+
+  return `${header}\n${body}`;
+}
+
+function renderFieldSections(schema: JsonSchema, $defs: Defs): string {
+  const sections = buildFieldSections(schema, $defs);
+  if (sections.length === 1) {
+    return renderFieldTable(sections[0].rows);
+  }
+
+  return sections.map((section) => `### ${section.title}\n\n${renderFieldTable(section.rows)}`).join('\n\n');
+}
+
+// ---------------------------------------------------------------------------
+// Example payload generation
+// ---------------------------------------------------------------------------
+
+/** Deterministic example value map keyed by field name substring. */
+const STRING_EXAMPLES: Record<string, string> = {
+  blockId: 'block-abc123',
+  nodeId: 'node-def456',
+  entityId: 'entity-789',
+  pattern: 'hello world',
+  text: 'Hello, world.',
+  ref: 'handle:abc123',
+  kind: 'example',
+  evaluatedRevision: 'rev-001',
+  snippet: '...the quick brown fox...',
+  styleId: 'style-001',
+  type: 'example',
+  id: 'id-001',
+  commentId: 'comment-001',
+  parentCommentId: 'comment-000',
+  author: 'Jane Doe',
+  authorEmail: 'jane@example.com',
+  authorImage: 'https://example.com/avatar.png',
+  date: '2025-01-15T10:00:00Z',
+  excerpt: 'Sample excerpt...',
+  message: 'Operation failed.',
+  label: 'Paragraph 1',
+  marker: '1.',
+  nodeType: 'paragraph',
+  importedId: 'imp-001',
+  creatorName: 'Jane Doe',
+  creatorEmail: 'jane@example.com',
+  expectedRevision: 'rev-001',
+  mode: 'strict',
+  decision: 'accept',
+  scope: 'all',
+  code: 'INVALID_TARGET',
+};
+
+const INTEGER_EXAMPLES: Record<string, number> = {
+  start: 0,
+  from: 0,
+  end: 10,
+  to: 10,
+  limit: 50,
+  offset: 0,
+  returned: 1,
+  total: 1,
+  level: 1,
+  ordinal: 1,
+  words: 250,
+  paragraphs: 12,
+  headings: 3,
+  tables: 1,
+  images: 2,
+  comments: 0,
+  listLevel: 0,
+};
+
+function applyNumericBounds(value: number, schema: JsonSchema, type: 'integer' | 'number'): number {
+  let bounded = value;
+
+  const minimum = typeof schema.minimum === 'number' ? schema.minimum : undefined;
+  const maximum = typeof schema.maximum === 'number' ? schema.maximum : undefined;
+  const exclusiveMinimum = typeof schema.exclusiveMinimum === 'number' ? schema.exclusiveMinimum : undefined;
+  const exclusiveMaximum = typeof schema.exclusiveMaximum === 'number' ? schema.exclusiveMaximum : undefined;
+
+  if (minimum !== undefined && bounded < minimum) bounded = minimum;
+  if (exclusiveMinimum !== undefined && bounded <= exclusiveMinimum) {
+    bounded = type === 'integer' ? Math.floor(exclusiveMinimum) + 1 : exclusiveMinimum + 0.1;
+  }
+
+  if (maximum !== undefined && bounded > maximum) bounded = maximum;
+  if (exclusiveMaximum !== undefined && bounded >= exclusiveMaximum) {
+    bounded = type === 'integer' ? Math.ceil(exclusiveMaximum) - 1 : exclusiveMaximum - 0.1;
+  }
+
+  if (!Number.isFinite(bounded)) return type === 'integer' ? 1 : 12.5;
+  return type === 'integer' ? Math.trunc(bounded) : bounded;
+}
+
+/**
+ * Generate a deterministic example value from a JSON Schema node.
+ * `fieldName` is used to pick contextual string/integer values.
+ */
+function generateExample(schema: JsonSchema, $defs: Defs, fieldName?: string, depth = 0): unknown {
+  if (depth > 10) return {};
+
+  // const value
+  if (schema.const !== undefined) return schema.const;
+
+  // enum — first value
+  if (Array.isArray(schema.enum) && schema.enum.length > 0) return schema.enum[0];
+
+  // $ref — resolve and recurse
+  const rn = refName(schema);
+  if (rn) {
+    const { resolved } = resolveRef(schema, $defs);
+    return generateExample(resolved, $defs, fieldName, depth);
+  }
+
+  // array — single item
+  if (schema.type === 'array') {
+    const items = schema.items as JsonSchema | undefined;
+    if (schema.maxItems === 0) return [];
+    if (items) return [generateExample(items, $defs, undefined, depth + 1)];
+    return [];
+  }
+
+  // object — recurse into properties
+  if (schema.type === 'object' && schema.properties) {
+    const properties = schema.properties as Record<string, JsonSchema>;
+    const requiredSet = new Set<string>(Array.isArray(schema.required) ? (schema.required as string[]) : []);
+    for (const keyword of ['oneOf', 'anyOf'] as const) {
+      const variants = schema[keyword];
+      if (!Array.isArray(variants) || variants.length === 0) continue;
+      const firstVariant = variants[0] as JsonSchema;
+      if (Array.isArray(firstVariant.required)) {
+        for (const requiredField of firstVariant.required as string[]) {
+          requiredSet.add(requiredField);
+        }
+      }
+      break;
+    }
+
+    const result: Record<string, unknown> = {};
+    const keys = Object.keys(properties);
+    // Include required properties + up to 2 optional
+    let optionalCount = 0;
+    for (const key of keys) {
+      if (requiredSet.has(key)) {
+        result[key] = generateExample(properties[key], $defs, key, depth + 1);
+      } else if (optionalCount < 2) {
+        result[key] = generateExample(properties[key], $defs, key, depth + 1);
+        optionalCount++;
+      }
+    }
+    return result;
+  }
+
+  // oneOf / anyOf — first variant (non-object union fallback)
+  for (const keyword of ['oneOf', 'anyOf'] as const) {
+    const variants = schema[keyword];
+    if (Array.isArray(variants) && variants.length > 0) {
+      return generateExample(variants[0] as JsonSchema, $defs, fieldName, depth);
+    }
+  }
+
+  // primitives
+  if (schema.type === 'string') {
+    if (fieldName && STRING_EXAMPLES[fieldName] !== undefined) return STRING_EXAMPLES[fieldName];
+    return 'example';
+  }
+  if (schema.type === 'integer') {
+    const base = fieldName && INTEGER_EXAMPLES[fieldName] !== undefined ? INTEGER_EXAMPLES[fieldName] : 1;
+    return applyNumericBounds(base, schema, 'integer');
+  }
+  if (schema.type === 'number') {
+    const base = fieldName && INTEGER_EXAMPLES[fieldName] !== undefined ? INTEGER_EXAMPLES[fieldName] : 12.5;
+    return applyNumericBounds(base, schema, 'number');
+  }
+  if (schema.type === 'boolean') return true;
+
+  return {};
+}
+
+// ---------------------------------------------------------------------------
+// Collapsible raw schema rendering
+// ---------------------------------------------------------------------------
+
+function renderAccordionSchema(title: string, schema: JsonSchema): string {
+  return `<Accordion title="${title}">
+\`\`\`json
+${stableStringify(schema)}
+\`\`\`
+</Accordion>`;
+}
+
+// ---------------------------------------------------------------------------
+// Operation page composition
+// ---------------------------------------------------------------------------
 
 function buildOperationGroups(operations: ContractOperationSnapshot[]): OperationGroup[] {
   const operationById = new Map(operations.map((operation) => [operation.operationId, operation] as const));
@@ -66,22 +581,56 @@ function buildOperationGroups(operations: ContractOperationSnapshot[]): Operatio
       return operation;
     });
 
+    const groupedAliases = REFERENCE_OPERATION_ALIASES.filter((alias) => alias.referenceGroup === definition.key).map(
+      (alias) => {
+        const canonicalOperation = operationById.get(alias.canonicalOperationId);
+        if (!canonicalOperation) {
+          throw new Error(
+            `Missing canonical operation snapshot for alias "${alias.memberPath}" -> "${alias.canonicalOperationId}".`,
+          );
+        }
+        return { definition: alias, canonicalOperation };
+      },
+    );
+
     return {
       definition,
       pagePath: toGroupPath(definition),
       operations: groupedOperations,
+      aliases: groupedAliases,
     };
   });
 }
 
-function renderOperationPage(operation: ContractOperationSnapshot): string {
+function renderOperationPage(operation: ContractOperationSnapshot, $defs: Defs): string {
   const title = operation.operationId;
   const metadata = operation.metadata;
+  const description = OPERATION_DESCRIPTION_MAP[operation.operationId];
+  const expectedResult = OPERATION_EXPECTED_RESULT_MAP[operation.operationId];
+
+  const inputFields = renderFieldSections(operation.schemas.input, $defs);
+  const outputFields = renderFieldSections(operation.schemas.output, $defs);
+
+  const inputExample = generateExample(operation.schemas.input, $defs);
+  const outputExample = generateExample(operation.schemas.output, $defs);
+  const stepOpsSection = renderStepOpsSection(operation);
+  const expectedResultSection = `${expectedResult}${stepOpsSection ? `\n\n${stepOpsSection}` : ''}`;
+
+  // -- Build raw-schema accordion blocks --
+  const rawSchemaBlocks: string[] = [];
+  rawSchemaBlocks.push(renderAccordionSchema('Raw input schema', operation.schemas.input));
+  rawSchemaBlocks.push(renderAccordionSchema('Raw output schema', operation.schemas.output));
+  if (operation.schemas.success) {
+    rawSchemaBlocks.push(renderAccordionSchema('Raw success schema', operation.schemas.success));
+  }
+  if (operation.schemas.failure) {
+    rawSchemaBlocks.push(renderAccordionSchema('Raw failure schema', operation.schemas.failure));
+  }
 
   return `---
 title: ${title}
 sidebarTitle: ${title}
-description: Generated reference for ${title}
+description: ${yamlQuote(description)}
 ---
 
 ${GENERATED_MARKER}
@@ -89,6 +638,8 @@ ${GENERATED_MARKER}
 > Alpha: Document API is currently alpha and subject to breaking changes.
 
 ## Summary
+
+${description}
 
 - Operation ID: \`${operation.operationId}\`
 - API member path: \`${formatMemberPath(operation.memberPath)}\`
@@ -98,6 +649,30 @@ ${GENERATED_MARKER}
 - Supports dry run: \`${metadata.supportsDryRun ? 'yes' : 'no'}\`
 - Deterministic target resolution: \`${metadata.deterministicTargetResolution ? 'yes' : 'no'}\`
 
+## Expected result
+
+${expectedResultSection}
+
+## Input fields
+
+${inputFields}
+
+### Example request
+
+\`\`\`json
+${stableStringify(inputExample)}
+\`\`\`
+
+## Output fields
+
+${outputFields}
+
+### Example response
+
+\`\`\`json
+${stableStringify(outputExample)}
+\`\`\`
+
 ## Pre-apply throws
 
 ${renderList(metadata.throws.preApply)}
@@ -105,61 +680,41 @@ ${renderList(metadata.throws.preApply)}
 ## Non-applied failure codes
 
 ${renderList(metadata.possibleFailureCodes)}
-
-## Input schema
-
-\`\`\`json
-${stableStringify(operation.schemas.input)}
-\`\`\`
-
-## Output schema
-
-\`\`\`json
-${stableStringify(operation.schemas.output)}
-\`\`\`
 ${
-  operation.schemas.success
+  metadata.remediationHints && metadata.remediationHints.length > 0
     ? `
-## Success schema
-
-\`\`\`json
-${stableStringify(operation.schemas.success)}
-\`\`\`
-`
-    : ''
-}${
-    operation.schemas.failure
-      ? `
-## Failure schema
-
-\`\`\`json
-${stableStringify(operation.schemas.failure)}
-\`\`\`
-`
-      : ''
-  }${
-    metadata.remediationHints && metadata.remediationHints.length > 0
-      ? `
 ## Remediation hints
 
 ${renderList(metadata.remediationHints)}
 `
-      : ''
-  }`;
+    : ''
+}
+## Raw schemas
+
+${rawSchemaBlocks.join('\n\n')}
+`;
 }
 
 function renderGroupIndex(group: OperationGroup): string {
   const rows = group.operations
     .map((operation) => {
       const metadata = operation.metadata;
-      return `| [\`${operation.operationId}\`](${toRelativeDocHref(group.pagePath, toOperationDocPath(operation.operationId))}) | \`${operation.memberPath}\` | ${metadata.mutates ? 'Yes' : 'No'} | \`${metadata.idempotency}\` | ${metadata.supportsTrackedMode ? 'Yes' : 'No'} | ${metadata.supportsDryRun ? 'Yes' : 'No'} |`;
+      const operationHref = toPublicDocHref(toOperationDocPath(operation.operationId));
+      return `| ${renderNoWrapLinkCode(operation.operationId, operationHref)} | \`${operation.memberPath}\` | ${metadata.mutates ? 'Yes' : 'No'} | \`${metadata.idempotency}\` | ${metadata.supportsTrackedMode ? 'Yes' : 'No'} | ${metadata.supportsDryRun ? 'Yes' : 'No'} |`;
+    })
+    .join('\n');
+
+  const aliasRows = group.aliases
+    .map((alias) => {
+      const canonicalLink = toPublicDocHref(toOperationDocPath(alias.canonicalOperation.operationId));
+      return `| \`${formatMemberPath(alias.definition.memberPath)}\` | ${renderNoWrapLinkCode(alias.canonicalOperation.operationId, canonicalLink)} | ${alias.definition.description} |`;
     })
     .join('\n');
 
   return `---
 title: ${group.definition.title} operations
 sidebarTitle: ${group.definition.title}
-description: Generated ${group.definition.title} operation reference from the canonical Document API contract.
+description: ${group.definition.title} operation reference from the canonical Document API contract.
 ---
 
 ${GENERATED_MARKER}
@@ -173,66 +728,114 @@ ${group.definition.description}
 | Operation | Member path | Mutates | Idempotency | Tracked | Dry run |
 | --- | --- | --- | --- | --- | --- |
 ${rows}
+${
+  group.aliases.length > 0
+    ? `
+
+## Convenience aliases
+
+| Alias method | Canonical operation | Behavior |
+| --- | --- | --- |
+${aliasRows}
+`
+    : ''
+}
 `;
 }
 
-function renderReferenceIndex(operations: ContractOperationSnapshot[], groups: OperationGroup[]): string {
+function renderReferenceIndex(groups: OperationGroup[]): string {
   const groupRows = groups
     .map((group) => {
-      return `| ${group.definition.title} | ${group.operations.length} | [Open](${toRelativeDocHref(REFERENCE_INDEX_PATH, group.pagePath)}) |`;
+      const canonicalCount = group.operations.length;
+      const aliasCount = group.aliases.length;
+      const totalCount = canonicalCount + aliasCount;
+      return `| ${group.definition.title} | ${canonicalCount} | ${aliasCount} | ${totalCount} | [Open](${toPublicDocHref(group.pagePath)}) |`;
     })
     .join('\n');
 
-  const operationGroupTitleById = new Map<ContractOperationSnapshot['operationId'], string>();
-  for (const group of groups) {
-    for (const operation of group.operations) {
-      operationGroupTitleById.set(operation.operationId, group.definition.title);
-    }
-  }
+  const availableOperationsSections = groups
+    .map((group) => {
+      const operationRows = group.operations
+        .map((operation) => {
+          const operationHref = toPublicDocHref(toOperationDocPath(operation.operationId));
+          return `| ${renderNoWrapLinkCode(operation.operationId, operationHref)} | ${renderNoWrapCode(formatMemberPath(operation.memberPath))} | ${escapeCell(OPERATION_DESCRIPTION_MAP[operation.operationId] ?? '')} |`;
+        })
+        .join('\n');
 
-  const operationRows = operations
-    .map((operation) => {
-      const metadata = operation.metadata;
-      const groupTitle = operationGroupTitleById.get(operation.operationId) ?? 'Unknown';
-      return `| [\`${operation.operationId}\`](${toRelativeDocHref(REFERENCE_INDEX_PATH, toOperationDocPath(operation.operationId))}) | ${groupTitle} | \`${operation.memberPath}\` | ${metadata.mutates ? 'Yes' : 'No'} | \`${metadata.idempotency}\` | ${metadata.supportsTrackedMode ? 'Yes' : 'No'} | ${metadata.supportsDryRun ? 'Yes' : 'No'} |`;
+      const aliasRows = group.aliases
+        .map((alias) => {
+          const canonicalLink = toPublicDocHref(toOperationDocPath(alias.canonicalOperation.operationId));
+          return `| ${renderNoWrapLinkCode(alias.definition.memberPath, canonicalLink)} | ${renderNoWrapCode(formatMemberPath(alias.definition.memberPath))} | ${escapeCell(alias.definition.description)} |`;
+        })
+        .join('\n');
+
+      const rows = [operationRows, aliasRows].filter(Boolean).join('\n');
+
+      return `#### ${group.definition.title}
+
+| Operation | API member path | Description |
+| --- | --- | --- |
+${rows}`;
     })
-    .join('\n');
+    .join('\n\n');
 
   return `---
 title: Document API reference
 sidebarTitle: Reference
-description: Generated operation reference from the canonical Document API contract.
+description: Operation reference from the canonical Document API contract.
 ---
 
 ${GENERATED_MARKER}
 
-This reference is generated from \`packages/document-api/src/contract/*\`.
+This reference is sourced from \`packages/document-api/src/contract/*\`.
 Document API is currently alpha and subject to breaking changes.
+
+<style>{\`
+  table th,
+  table td {
+    font-size: calc(1em - 2px);
+  }
+\`}</style>
 
 ## Browse by namespace
 
-| Namespace | Operations | Reference |
-| --- | --- | --- |
+| Namespace | Canonical ops | Aliases | Total surface | Reference |
+| --- | --- | --- | --- | --- |
 ${groupRows}
 
-## All operations
+## Available operations
 
-| Operation | Namespace | Member path | Mutates | Idempotency | Tracked | Dry run |
-| --- | --- | --- | --- | --- | --- | --- |
-${operationRows}
+The tables below are grouped by namespace.
+
+${availableOperationsSections}
 `;
 }
 
-function renderOverviewApiSurfaceSection(operations: ContractOperationSnapshot[], groups: OperationGroup[]): string {
-  const namespaceRows = groups
+function renderOverviewApiSurfaceSection(groups: OperationGroup[]): string {
+  const sortedGroups = [...groups].sort((a, b) => a.definition.title.localeCompare(b.definition.title));
+
+  const namespaceRows = sortedGroups
     .map((group) => {
-      return `| ${group.definition.title} | ${group.operations.length} | [Reference](${toPublicDocHref(group.pagePath)}) |`;
+      const canonicalCount = group.operations.length;
+      const aliasCount = group.aliases.length;
+      const totalCount = canonicalCount + aliasCount;
+      return `| ${group.definition.title} | ${canonicalCount} | ${aliasCount} | ${totalCount} | [Reference](${toPublicDocHref(group.pagePath)}) |`;
     })
     .join('\n');
 
-  const operationRows = operations
-    .map((operation) => {
-      return `| \`${formatMemberPath(operation.memberPath)}\` | [\`${operation.operationId}\`](${toPublicDocHref(toOperationDocPath(operation.operationId))}) |`;
+  const operationRows = sortedGroups
+    .flatMap((group) => {
+      const canonicalRows = group.operations.map(
+        (operation) =>
+          `| ${renderNoWrapCode(formatMemberPath(operation.memberPath))} | [\`${operation.operationId}\`](${toPublicDocHref(toOperationDocPath(operation.operationId))}) |`,
+      );
+
+      const aliasRows = group.aliases.map((alias) => {
+        const canonicalOperationId = alias.canonicalOperation.operationId;
+        return `| ${renderNoWrapCode(formatMemberPath(alias.definition.memberPath))} | [\`${canonicalOperationId}\`](${toPublicDocHref(toOperationDocPath(canonicalOperationId))}) |`;
+      });
+
+      return [...canonicalRows, ...aliasRows];
     })
     .join('\n');
 
@@ -241,11 +844,11 @@ function renderOverviewApiSurfaceSection(operations: ContractOperationSnapshot[]
 
 Use the tables below to see what operations are available and where each one is documented.
 
-| Namespace | Operations | Reference |
-| --- | --- | --- |
+| Namespace | Canonical ops | Aliases | Total surface | Reference |
+| --- | --- | --- | --- | --- |
 ${namespaceRows}
 
-| Editor method | Operation ID |
+| Editor method | Operation |
 | --- | --- |
 ${operationRows}
 ${OVERVIEW_OPERATIONS_END}`;
@@ -268,7 +871,7 @@ function replaceOverviewSection(content: string, section: string): string {
 export function applyGeneratedOverviewApiSurface(overviewContent: string): string {
   const snapshot = buildContractSnapshot();
   const groups = buildOperationGroups(snapshot.operations);
-  const section = renderOverviewApiSurfaceSection(snapshot.operations, groups);
+  const section = renderOverviewApiSurfaceSection(groups);
   return replaceOverviewSection(overviewContent, section);
 }
 
@@ -285,7 +888,7 @@ export function buildReferenceDocsArtifacts(): GeneratedFile[] {
 
   const operationFiles = snapshot.operations.map((operation) => ({
     path: toOperationDocPath(operation.operationId),
-    content: renderOperationPage(operation),
+    content: renderOperationPage(operation, snapshot.$defs),
   }));
 
   const groupFiles = groups.map((group) => ({
@@ -296,7 +899,7 @@ export function buildReferenceDocsArtifacts(): GeneratedFile[] {
   const allFiles = [
     {
       path: REFERENCE_INDEX_PATH,
-      content: renderReferenceIndex(snapshot.operations, groups),
+      content: renderReferenceIndex(groups),
     },
     ...groupFiles,
     ...operationFiles,
@@ -312,6 +915,7 @@ export function buildReferenceDocsArtifacts(): GeneratedFile[] {
       title: group.definition.title,
       pagePath: group.pagePath,
       operationIds: group.operations.map((operation) => operation.operationId),
+      aliasMemberPaths: group.aliases.map((alias) => alias.definition.memberPath),
     })),
     files: allFiles.map((file) => file.path).sort(),
   };
@@ -326,9 +930,30 @@ export function buildReferenceDocsArtifacts(): GeneratedFile[] {
 }
 
 /**
- * Checks that generated `.mdx` files contain the generated marker and that
- * the overview doc's API-surface block is up to date. Skips files already
- * present in {@link existingIssuePaths} to avoid duplicate reports.
+ * Validate that YAML frontmatter values don't contain unquoted special characters.
+ * Returns an array of field names with invalid values.
+ */
+function validateFrontmatter(content: string): string[] {
+  const match = /^---\n([\s\S]*?)\n---/u.exec(content);
+  if (!match) return [];
+
+  const invalid: string[] = [];
+  for (const line of match[1].split('\n')) {
+    const kvMatch = /^(\w+):\s+(.+)$/u.exec(line);
+    if (!kvMatch) continue;
+    const [, key, value] = kvMatch;
+    // Unquoted values containing colons break YAML parsing
+    if (!value.startsWith('"') && !value.startsWith("'") && /:/u.test(value)) {
+      invalid.push(key);
+    }
+  }
+  return invalid;
+}
+
+/**
+ * Checks that generated `.mdx` files contain the generated marker, have valid
+ * YAML frontmatter, and that the overview doc's API-surface block is up to date.
+ * Skips files already present in {@link existingIssuePaths} to avoid duplicate reports.
  */
 export async function checkReferenceDocsExtras(files: GeneratedFile[], issues: GeneratedCheckIssue[]): Promise<void> {
   const existingIssuePaths = new Set(issues.map((issue) => issue.path));
@@ -337,6 +962,11 @@ export async function checkReferenceDocsExtras(files: GeneratedFile[], issues: G
     if (!file.path.endsWith('.mdx') || existingIssuePaths.has(file.path)) continue;
     const content = await readFile(resolveWorkspacePath(file.path), 'utf8').catch(() => null);
     if (content == null || !content.includes(GENERATED_MARKER)) {
+      issues.push({ kind: 'content', path: file.path });
+      continue;
+    }
+    const invalidFields = validateFrontmatter(content);
+    if (invalidFields.length > 0) {
       issues.push({ kind: 'content', path: file.path });
     }
   }

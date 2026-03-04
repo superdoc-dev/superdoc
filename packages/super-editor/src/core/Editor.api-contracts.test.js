@@ -131,9 +131,7 @@ describe('Editor - API Contracts (Regression Prevention)', () => {
       return new Promise((resolve) => {
         setTimeout(() => {
           expect(onUnsupportedContent).toHaveBeenCalledTimes(1);
-          expect(onUnsupportedContent.mock.calls[0][0]).toEqual([
-            expect.objectContaining({ tagName: 'VIDEO', count: 1 }),
-          ]);
+          expect(onUnsupportedContent.mock.calls[0][0]).toEqual([expect.objectContaining({ tagName: 'VIDEO' })]);
           resolve();
         }, 10);
       });

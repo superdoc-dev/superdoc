@@ -1,7 +1,7 @@
 ---
 title: getNode
 sidebarTitle: getNode
-description: Generated reference for getNode
+description: Retrieve a single node by target position.
 ---
 
 {/* GENERATED FILE: DO NOT EDIT. Regenerate via `pnpm run docapi:sync`. */}
@@ -9,6 +9,8 @@ description: Generated reference for getNode
 > Alpha: Document API is currently alpha and subject to breaking changes.
 
 ## Summary
+
+Retrieve a single node by target position.
 
 - Operation ID: `getNode`
 - API member path: `editor.doc.getNode(...)`
@@ -18,6 +20,73 @@ description: Generated reference for getNode
 - Supports dry run: `no`
 - Deterministic target resolution: `yes`
 
+## Expected result
+
+Returns a NodeInfo object with the node type, address, content, and typed properties.
+
+## Input fields
+
+### Variant 1 (kind="block")
+
+| Field | Type | Required | Description |
+| --- | --- | --- | --- |
+| `kind` | `"block"` | yes | Constant: `"block"` |
+| `nodeId` | string | yes |  |
+| `nodeType` | enum | yes | `"paragraph"`, `"heading"`, `"listItem"`, `"table"`, `"tableRow"`, `"tableCell"`, `"tableOfContents"`, `"image"`, `"sdt"` |
+
+### Variant 2 (kind="inline")
+
+| Field | Type | Required | Description |
+| --- | --- | --- | --- |
+| `anchor` | InlineAnchor | yes | InlineAnchor |
+| `anchor.end` | Position | yes | Position |
+| `anchor.end.blockId` | string | yes |  |
+| `anchor.end.offset` | integer | yes |  |
+| `anchor.start` | Position | yes | Position |
+| `anchor.start.blockId` | string | yes |  |
+| `anchor.start.offset` | integer | yes |  |
+| `kind` | `"inline"` | yes | Constant: `"inline"` |
+| `nodeType` | enum | yes | `"run"`, `"bookmark"`, `"comment"`, `"hyperlink"`, `"sdt"`, `"image"`, `"footnoteRef"`, `"tab"`, `"lineBreak"` |
+
+### Example request
+
+```json
+{
+  "kind": "block",
+  "nodeId": "node-def456",
+  "nodeType": "paragraph"
+}
+```
+
+## Output fields
+
+| Field | Type | Required | Description |
+| --- | --- | --- | --- |
+| `bodyNodes` | object[] | no |  |
+| `bodyText` | string | no |  |
+| `kind` | enum | yes | `"block"`, `"inline"` |
+| `nodeType` | enum | yes | `"paragraph"`, `"heading"`, `"listItem"`, `"table"`, `"tableRow"`, `"tableCell"`, `"tableOfContents"`, `"image"`, `"sdt"`, `"run"`, `"bookmark"`, `"comment"`, `"hyperlink"`, `"footnoteRef"`, `"tab"`, `"lineBreak"` |
+| `nodes` | object[] | no |  |
+| `properties` | object | no |  |
+| `summary` | object | no |  |
+| `summary.label` | string | no |  |
+| `summary.text` | string | no |  |
+| `text` | string | no |  |
+
+### Example response
+
+```json
+{
+  "kind": "block",
+  "nodeType": "paragraph",
+  "summary": {
+    "label": "Paragraph 1",
+    "text": "Hello, world."
+  },
+  "text": "Hello, world."
+}
+```
+
 ## Pre-apply throws
 
 - `TARGET_NOT_FOUND`
@@ -26,115 +95,17 @@ description: Generated reference for getNode
 
 - None
 
-## Input schema
+## Raw schemas
 
+<Accordion title="Raw input schema">
 ```json
 {
-  "oneOf": [
-    {
-      "additionalProperties": false,
-      "properties": {
-        "kind": {
-          "const": "block"
-        },
-        "nodeId": {
-          "type": "string"
-        },
-        "nodeType": {
-          "enum": [
-            "paragraph",
-            "heading",
-            "listItem",
-            "table",
-            "tableRow",
-            "tableCell",
-            "image",
-            "sdt"
-          ]
-        }
-      },
-      "required": [
-        "kind",
-        "nodeType",
-        "nodeId"
-      ],
-      "type": "object"
-    },
-    {
-      "additionalProperties": false,
-      "properties": {
-        "anchor": {
-          "additionalProperties": false,
-          "properties": {
-            "end": {
-              "additionalProperties": false,
-              "properties": {
-                "blockId": {
-                  "type": "string"
-                },
-                "offset": {
-                  "type": "integer"
-                }
-              },
-              "required": [
-                "blockId",
-                "offset"
-              ],
-              "type": "object"
-            },
-            "start": {
-              "additionalProperties": false,
-              "properties": {
-                "blockId": {
-                  "type": "string"
-                },
-                "offset": {
-                  "type": "integer"
-                }
-              },
-              "required": [
-                "blockId",
-                "offset"
-              ],
-              "type": "object"
-            }
-          },
-          "required": [
-            "start",
-            "end"
-          ],
-          "type": "object"
-        },
-        "kind": {
-          "const": "inline"
-        },
-        "nodeType": {
-          "enum": [
-            "run",
-            "bookmark",
-            "comment",
-            "hyperlink",
-            "sdt",
-            "image",
-            "footnoteRef",
-            "tab",
-            "lineBreak"
-          ]
-        }
-      },
-      "required": [
-        "kind",
-        "nodeType",
-        "anchor"
-      ],
-      "type": "object"
-    }
-  ]
+  "$ref": "#/$defs/NodeAddress"
 }
 ```
+</Accordion>
 
-## Output schema
-
+<Accordion title="Raw output schema">
 ```json
 {
   "additionalProperties": false,
@@ -168,6 +139,7 @@ description: Generated reference for getNode
         "table",
         "tableRow",
         "tableCell",
+        "tableOfContents",
         "image",
         "sdt",
         "run",
@@ -205,3 +177,4 @@ description: Generated reference for getNode
   "type": "object"
 }
 ```
+</Accordion>

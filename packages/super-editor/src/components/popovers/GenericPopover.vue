@@ -69,15 +69,12 @@ const derivedStyles = computed(() => ({
 <style scoped>
 /* @remarks - popover adds a slight shadow, this can be removed if needed */
 .generic-popover {
-  /* @remarks - this should ideally be handled by the content or component - but some are missing */
-  background-color: white;
+  background-color: var(--sd-popover-bg, white);
   position: absolute;
-  z-index: 1000;
-  border-radius: 6px;
-  box-shadow:
-    0 0 0 1px rgba(0, 0, 0, 0.05),
-    0px 10px 20px rgba(0, 0, 0, 0.1);
-  min-width: 120px;
-  min-height: 40px;
+  z-index: var(--sd-popover-z-index, 1000);
+  border-radius: var(--sd-popover-radius, 6px);
+  box-shadow: var(--sd-popover-shadow, 0 0 0 1px rgba(0, 0, 0, 0.05), 0px 10px 20px rgba(0, 0, 0, 0.1));
+  min-width: var(--sd-popover-min-width, 120px);
+  min-height: var(--sd-popover-min-height, 40px);
 }
 </style>

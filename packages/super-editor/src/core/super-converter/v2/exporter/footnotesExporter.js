@@ -130,6 +130,30 @@ const applyFootnotePropertiesToSettings = (converter, convertedXml) => {
   return { ...convertedXml, 'word/settings.xml': updatedSettings };
 };
 
+const applyViewSettingToSettings = (converter, convertedXml) => {
+  const viewSetting = converter?.viewSetting;
+  if (!viewSetting?.originalXml) return convertedXml;
+
+  const settingsXml = convertedXml['word/settings.xml'];
+  const settingsRoot = settingsXml?.elements?.[0];
+  if (!settingsRoot) return convertedXml;
+
+  const updatedSettings = carbonCopy(settingsXml);
+  const updatedRoot = updatedSettings.elements?.[0];
+  if (!updatedRoot) return convertedXml;
+
+  const elements = Array.isArray(updatedRoot.elements) ? updatedRoot.elements : [];
+  const idx = elements.findIndex((el) => el?.name === 'w:view');
+  // If w:view already exists, replace it in place. Falling back to index 0
+  // is acceptable because w:view is the first child of w:settings in the
+  // OOXML schema (before w:writeProtection). In practice the element always
+  // exists during round-trip since we import it.
+  elements.splice(idx !== -1 ? idx : 0, idx !== -1 ? 1 : 0, carbonCopy(viewSetting.originalXml));
+  updatedRoot.elements = elements;
+
+  return { ...convertedXml, 'word/settings.xml': updatedSettings };
+};
+
 const buildFootnotesRelsXml = (converter, convertedXml, relationships) => {
   if (!relationships.length) return null;
 
@@ -155,6 +179,10 @@ const buildFootnotesRelsXml = (converter, convertedXml, relationships) => {
 
 export const prepareFootnotesXmlForExport = ({ footnotes, editor, converter, convertedXml }) => {
   let updatedXml = applyFootnotePropertiesToSettings(converter, convertedXml);
+  // NOTE: applyViewSettingToSettings lives here because this function already
+  // modifies settings.xml during export. If the footnotes export path is ever
+  // refactored, this call must move to wherever settings.xml is written.
+  updatedXml = applyViewSettingToSettings(converter, updatedXml);
 
   if (!footnotes || !Array.isArray(footnotes) || footnotes.length === 0) {
     return { updatedXml, relationships: [], media: {} };

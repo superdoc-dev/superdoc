@@ -6,12 +6,7 @@ import { getActiveFormatting } from '@core/helpers/getActiveFormatting.js';
 import { findParentNode } from '@helpers/index.js';
 import { vClickOutside } from '@superdoc/common';
 import Toolbar from './Toolbar.vue';
-import {
-  checkAndProcessImage,
-  replaceSelectionWithImagePlaceholder,
-  uploadAndInsertImage,
-  getFileOpener,
-} from '../../extensions/image/imageHelpers/index.js';
+import { getFileOpener, processAndInsertImageFile } from '../../extensions/image/imageHelpers/index.js';
 import { toolbarIcons } from './toolbarIcons.js';
 import { toolbarTexts } from './toolbarTexts.js';
 import { getQuickFormatList } from '@extensions/linked-styles/index.js';
@@ -459,29 +454,12 @@ export class SuperToolbar extends EventEmitter {
           return;
         }
 
-        const { size, file } = await checkAndProcessImage({
+        await processAndInsertImageFile({
           file: result.file,
-          getMaxContentSize: () => this.activeEditor.getMaxContentSize(),
-        });
-
-        if (!file) {
-          return;
-        }
-
-        const id = {};
-
-        replaceSelectionWithImagePlaceholder({
-          view: this.activeEditor.view,
-          editorOptions: this.activeEditor.options,
-          id,
-        });
-
-        await uploadAndInsertImage({
           editor: this.activeEditor,
           view: this.activeEditor.view,
-          file,
-          size,
-          id,
+          editorOptions: this.activeEditor.options,
+          getMaxContentSize: () => this.activeEditor.getMaxContentSize(),
         });
       } catch (error) {
         const err = new Error('[super-toolbar 🎨] Image upload failed');

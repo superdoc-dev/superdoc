@@ -10,6 +10,7 @@ import type {
   TableMeasure,
   BlockId,
   TableColumnBoundary,
+  TableRowBoundary,
   ParagraphBlock,
 } from '@superdoc/contracts';
 import type { BlockLookup, FragmentRenderContext } from '../renderer.js';
@@ -66,7 +67,10 @@ function createTestTableMeasure(): TableMeasure {
 /**
  * Create a test table fragment with metadata
  */
-function createTestTableFragment(columnBoundaries?: TableColumnBoundary[]): TableFragment {
+function createTestTableFragment(
+  columnBoundaries?: TableColumnBoundary[],
+  rowBoundaries?: TableRowBoundary[],
+): TableFragment {
   return {
     kind: 'table',
     blockId: 'test-table-1' as BlockId,
@@ -79,6 +83,7 @@ function createTestTableFragment(columnBoundaries?: TableColumnBoundary[]): Tabl
     metadata: columnBoundaries
       ? {
           columnBoundaries,
+          ...(rowBoundaries ? { rowBoundaries } : {}),
           coordinateSystem: 'fragment',
         }
       : undefined,
@@ -138,6 +143,98 @@ describe('renderTableFragment', () => {
         w: 100,
         min: 25,
         r: 1,
+      });
+    });
+
+    it('should embed row boundary metadata when rowBoundaries are present', () => {
+      const block = createTestTableBlock();
+      const measure = createTestTableMeasure();
+      const columnBoundaries: TableColumnBoundary[] = [{ index: 0, x: 0, width: 100, minWidth: 25, resizable: true }];
+      const rowBoundaries: TableRowBoundary[] = [{ index: 0, y: 0, height: 20, minHeight: 10, resizable: true }];
+      const fragment = createTestTableFragment(columnBoundaries, rowBoundaries);
+
+      blockLookup.set(fragment.blockId, { block, measure });
+
+      const element = renderTableFragment({
+        doc,
+        fragment,
+        context,
+        blockLookup,
+        renderLine: (_block, _line, _ctx, _lineIndex, _isLastLine) => doc.createElement('div'),
+        applyFragmentFrame: () => {
+          // Intentionally empty for test mock
+        },
+        applySdtDataset: () => {
+          // Intentionally empty for test mock
+        },
+        applyStyles: () => {
+          // Intentionally empty for test mock
+        },
+      });
+
+      const metadataAttr = element.getAttribute('data-table-boundaries');
+      expect(metadataAttr).toBeTruthy();
+
+      const parsed = JSON.parse(metadataAttr!);
+      expect(parsed.rows).toHaveLength(1);
+      expect(parsed.rows[0]).toMatchObject({
+        i: 0,
+        y: 0,
+        h: 20,
+        min: 10,
+        r: 1,
+      });
+    });
+
+    it('should apply contentTop offset to row boundary y positions', () => {
+      const block = createTestTableBlock();
+      block.attrs = {
+        borderCollapse: 'separate',
+        borders: {
+          top: { size: 2, color: '#000000', val: 'single' },
+          right: { size: 2, color: '#000000', val: 'single' },
+          bottom: { size: 2, color: '#000000', val: 'single' },
+          left: { size: 2, color: '#000000', val: 'single' },
+        },
+      };
+
+      const measure = createTestTableMeasure();
+      measure.tableBorderWidths = { top: 2, right: 2, bottom: 2, left: 2 };
+
+      const columnBoundaries: TableColumnBoundary[] = [{ index: 0, x: 0, width: 100, minWidth: 25, resizable: true }];
+      const rowBoundaries: TableRowBoundary[] = [{ index: 0, y: 3, height: 20, minHeight: 10, resizable: false }];
+      const fragment = createTestTableFragment(columnBoundaries, rowBoundaries);
+
+      blockLookup.set(fragment.blockId, { block, measure });
+
+      const element = renderTableFragment({
+        doc,
+        fragment,
+        context,
+        blockLookup,
+        renderLine: (_block, _line, _ctx, _lineIndex, _isLastLine) => doc.createElement('div'),
+        applyFragmentFrame: () => {
+          // Intentionally empty for test mock
+        },
+        applySdtDataset: () => {
+          // Intentionally empty for test mock
+        },
+        applyStyles: () => {
+          // Intentionally empty for test mock
+        },
+      });
+
+      const metadataAttr = element.getAttribute('data-table-boundaries');
+      expect(metadataAttr).toBeTruthy();
+
+      const parsed = JSON.parse(metadataAttr!);
+      expect(parsed.rows).toHaveLength(1);
+      expect(parsed.rows[0]).toMatchObject({
+        i: 0,
+        y: 5, // row y (3) + contentTop (2)
+        h: 20,
+        min: 10,
+        r: 0,
       });
     });
 

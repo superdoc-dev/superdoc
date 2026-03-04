@@ -32,7 +32,7 @@ Do not hand-edit generated files; regenerate via script.
 ## Purpose
 
 This package defines the Document API surface and type contracts. Editor-specific behavior
-lives in adapter layers that map engine behavior into `QueryResult` and other API outputs.
+lives in adapter layers that map engine behavior into discovery envelopes and other API outputs.
 
 ## Selector Semantics
 
@@ -41,11 +41,11 @@ lives in adapter layers that map engine behavior into `QueryResult` and other AP
 
 ## Find Result Contract
 
-- `find` always returns `matches` as `NodeAddress[]`.
-- For text selectors (`{ type: 'text', ... }`), `matches` are containing block addresses.
-- Exact matched spans are returned in `context[*].textRanges` as `TextAddress`.
-- Mutating operations should target `TextAddress` values from `context[*].textRanges`.
-- `insert` supports three targeting modes: canonical `TextAddress`, block-relative (`blockId` + optional `offset`), or default insertion point when all target fields are omitted.
+- `find` always returns `items` as discovery items.
+- For text selectors (`{ type: 'text', ... }`), items include containing block addresses.
+- Exact matched spans are returned in `items[*].context.textRanges` as `TextAddress`.
+- Mutating operations should target `TextAddress` values from `items[*].context.textRanges`.
+- `insert` supports canonical `TextAddress` targeting or default insertion point when target is omitted.
 - Structural creation is exposed under `create.*` (for example `create.paragraph`), separate from text mutations.
 
 ## Adapter Error Convention
@@ -59,18 +59,23 @@ lives in adapter layers that map engine behavior into `QueryResult` and other AP
 ## Tracked-Change Semantics
 
 - Tracking is operation-scoped (`changeMode: 'direct' | 'tracked'`), not global editor-mode state.
-- `insert`, `replace`, `delete`, `format.bold`, `format.italic`, `format.underline`, `format.strikethrough`, and `create.paragraph`, `create.heading` may run in tracked mode.
-- `trackChanges.*` (`list`, `get`, `accept`, `reject`, `acceptAll`, `rejectAll`) is the review lifecycle namespace.
-- `lists.insert` may run in tracked mode; `lists.setType|indent|outdent|restart|exit` are direct-only in v1.
+- `insert`, `replace`, `delete`, `format.apply`, and `create.paragraph`, `create.heading` may run in tracked mode.
+- `trackChanges.*` (`list`, `get`, `decide`) is the review lifecycle namespace.
+- `lists.insert` may run in tracked mode; all other `lists.*` mutations are direct-only.
 
 ## List Namespace Semantics
 
 - `lists.*` projects paragraph-based numbering into first-class `listItem` addresses.
 - `ListItemAddress.nodeId` reuses the underlying paragraph node id directly.
 - `lists.list({ within })` is inclusive when `within` itself is a list item.
-- `lists.setType` normalizes deterministically to canonical defaults (`ordered` decimal / `bullet` default bullet).
 - `lists.insert` returns `insertionPoint` at the inserted item start (`offset: 0`) even when text is provided.
-- `lists.restart` returns `NO_OP` only when target is already the first item of its contiguous run and effectively starts at `1`.
+- `lists.create` supports two modes: `empty` (convert a single paragraph) and `fromParagraphs` (convert a range).
+- `lists.attach` adds paragraphs to an existing list by inheriting the `attachTo` item's `numId`.
+- `lists.join` merges adjacent sequences sharing the same `abstractNumId`; fails with `INCOMPATIBLE_DEFINITIONS` otherwise.
+- `lists.separate` splits a sequence at the target, creating a new `numId` pointing to the same abstract.
+- `lists.setValue` on a mid-sequence target atomically separates then sets `startOverride`.
+- `lists.continuePrevious` merges the target's sequence into the nearest previous compatible sequence.
+- `lists.setLevelRestart` supports `scope: 'definition'` (mutates abstract) or `scope: 'instance'` (uses `lvlOverride`).
 
 Deterministic outcomes:
 - Unknown tracked-change ids must fail with `TARGET_NOT_FOUND` at adapter level.
@@ -89,23 +94,11 @@ The following examples show typical multi-step patterns using the Document API.
 Locate text in the document and replace it:
 
 ```ts
-const result = editor.doc.find({ type: 'text', text: 'foo' });
-const target = result.context?.[0]?.textRanges?.[0];
+const result = editor.doc.find({ type: 'text', pattern: 'foo' });
+const target = result.items?.[0]?.context?.textRanges?.[0];
 if (target) {
   editor.doc.replace({ target, text: 'bar' });
 }
-```
-
-### Workflow: Block-Relative Insert
-
-Insert text at a specific position within a known block, without constructing a full `TextAddress`:
-
-```ts
-// Insert at the start of a block
-editor.doc.insert({ blockId: 'paragraph-1', text: 'Hello ' });
-
-// Insert at a specific character offset within a block
-editor.doc.insert({ blockId: 'paragraph-1', offset: 5, text: 'world' });
 ```
 
 ### Workflow: Tracked-Mode Insert
@@ -114,7 +107,7 @@ Insert text as a tracked change so reviewers can accept or reject it:
 
 ```ts
 const receipt = editor.doc.insert(
-  { text: 'new content' },
+  { value: 'new content' },
   { changeMode: 'tracked' },
 );
 // receipt.resolution.target contains the resolved insertion point
@@ -126,25 +119,30 @@ const receipt = editor.doc.insert(
 Add a comment, reply, then resolve the thread:
 
 ```ts
-const target = result.context?.[0]?.textRanges?.[0];
-const addReceipt = editor.doc.comments.add({ target, text: 'Review this section.' });
+const target = result.items?.[0]?.context?.textRanges?.[0];
+const createReceipt = editor.doc.comments.create({ target, text: 'Review this section.' });
 // Use the comment ID from the receipt to reply
 const comments = editor.doc.comments.list();
-const thread = comments.matches[0];
-editor.doc.comments.reply({ parentCommentId: thread.commentId, text: 'Looks good.' });
-editor.doc.comments.resolve({ commentId: thread.commentId });
+const thread = comments.items[0];
+editor.doc.comments.create({ parentCommentId: thread.id, text: 'Looks good.' });
+editor.doc.comments.patch({ commentId: thread.id, status: 'resolved' });
 ```
 
 ### Workflow: List Manipulation
 
-Insert a list item, change its type, then indent it:
+Create a list, insert an item, then indent it:
 
 ```ts
+// Convert a paragraph into a new ordered list
+const paragraph = editor.doc.find({ type: 'node', nodeType: 'paragraph' });
+const target = paragraph.items[0]?.address;
+const createResult = editor.doc.lists.create({ mode: 'empty', at: target, kind: 'ordered' });
+
+// Insert a new item after the first
 const lists = editor.doc.lists.list();
-const firstItem = lists.matches[0];
-const insertResult = editor.doc.lists.insert({ target: firstItem, position: 'after', text: 'New item' });
+const firstItem = lists.items[0];
+const insertResult = editor.doc.lists.insert({ target: firstItem.address, position: 'after', text: 'New item' });
 if (insertResult.success) {
-  editor.doc.lists.setType({ target: insertResult.item, kind: 'ordered' });
   editor.doc.lists.indent({ target: insertResult.item });
 }
 ```
@@ -155,11 +153,11 @@ Check what the editor supports before attempting mutations:
 
 ```ts
 const caps = editor.doc.capabilities();
-if (caps.operations['format.bold'].available) {
-  editor.doc.format.bold({ target });
+if (caps.operations['format.apply'].available) {
+  editor.doc.format.apply({ target, inline: { bold: 'on' } });
 }
 if (caps.global.trackChanges.enabled) {
-  editor.doc.insert({ text: 'tracked' }, { changeMode: 'tracked' });
+  editor.doc.insert({ value: 'tracked' }, { changeMode: 'tracked' });
 }
 if (caps.operations['create.heading'].dryRun) {
   const preview = editor.doc.create.heading(
@@ -177,10 +175,10 @@ Each operation has a dedicated section below. Grouped by namespace.
 
 ### `find`
 
-Search the document for nodes or text matching a selector. Returns `QueryResult` with `matches` as `NodeAddress[]`. Text selectors include `context[*].textRanges` for precise span targeting.
+Search the document for nodes or text matching a selector. Returns discovery items via `items`. Text selectors include `items[*].context.textRanges` for precise span targeting.
 
 - **Input**: `Selector | Query`
-- **Output**: `QueryResult`
+- **Output**: `FindOutput`
 - **Mutates**: No
 - **Idempotency**: idempotent
 
@@ -222,17 +220,11 @@ Return document summary metadata (block count, word count, character count).
 
 ### `insert`
 
-Insert text at a target location. Supports three targeting modes:
-
-1. **Canonical target**: `{ target: TextAddress, text }` — full address with block ID and range.
-2. **Block-relative**: `{ blockId, offset?, text }` — friendly shorthand. `offset` defaults to 0 when omitted.
-3. **Default insertion point**: `{ text }` — no target; adapter resolves to first paragraph start.
-
-Exactly one targeting mode is allowed per call. Mixing `target` with `blockId`/`offset` throws `INVALID_TARGET`. `offset` without `blockId` throws `INVALID_TARGET`. `offset` must be a non-negative integer.
+Insert content at a target location. When `target` is provided, inserts at that `TextAddress`. When omitted, inserts at the end of the document.
 
 Supports dry-run and tracked mode.
 
-- **Input**: `InsertInput` (`{ target?, blockId?, offset?, text }`)
+- **Input**: `InsertInput` (`{ target?, text }`)
 - **Options**: `MutationOptions` (`{ changeMode?, dryRun? }`)
 - **Output**: `TextMutationReceipt`
 - **Mutates**: Yes
@@ -260,6 +252,17 @@ Delete the text span covered by a `TextAddress` target. Supports dry-run and tra
 - **Mutates**: Yes
 - **Idempotency**: conditional
 - **Failure codes**: `NO_OP`
+
+### `blocks.delete`
+
+Delete an entire block node (paragraph, heading, listItem, table, image, sdt) by its `BlockNodeAddress`. Throws pre-apply errors for missing, ambiguous, or unsupported targets. Direct-only. Supports dry-run.
+
+- **Input**: `BlocksDeleteInput` (`{ target: BlockNodeAddress }`)
+- **Options**: `MutationOptions` (`{ dryRun? }`)
+- **Output**: `BlocksDeleteResult` (`{ success: true, deleted: BlockNodeAddress }`)
+- **Mutates**: Yes
+- **Idempotency**: conditional
+- **Throws**: `TARGET_NOT_FOUND`, `AMBIGUOUS_TARGET`, `CAPABILITY_UNAVAILABLE`, `INVALID_TARGET`, `INTERNAL_ERROR`
 
 ### Capabilities
 
@@ -298,44 +301,11 @@ Insert a new heading node at a specified location with a given level (1-6). Retu
 
 ### Format
 
-### `format.bold`
+### `format.apply`
 
-Toggle bold formatting on a `TextAddress` range. Supports dry-run and tracked mode. Availability depends on the `bold` mark being registered in the editor schema.
+Apply explicit inline style changes (bold, italic, underline, strike) to a `TextAddress` range using directive semantics (`'on'`, `'off'`, `'clear'`). Supports dry-run and tracked mode. Availability depends on the corresponding marks being registered in the editor schema.
 
-- **Input**: `FormatBoldInput` (`{ target }`)
-- **Options**: `MutationOptions` (`{ changeMode?, dryRun? }`)
-- **Output**: `TextMutationReceipt`
-- **Mutates**: Yes
-- **Idempotency**: conditional
-- **Failure codes**: `INVALID_TARGET`
-
-### `format.italic`
-
-Toggle italic formatting on a `TextAddress` range. Supports dry-run and tracked mode. Availability depends on the `italic` mark being registered in the editor schema.
-
-- **Input**: `FormatItalicInput` (`{ target }`)
-- **Options**: `MutationOptions` (`{ changeMode?, dryRun? }`)
-- **Output**: `TextMutationReceipt`
-- **Mutates**: Yes
-- **Idempotency**: conditional
-- **Failure codes**: `INVALID_TARGET`
-
-### `format.underline`
-
-Toggle underline formatting on a `TextAddress` range. Supports dry-run and tracked mode. Availability depends on the `underline` mark being registered in the editor schema.
-
-- **Input**: `FormatUnderlineInput` (`{ target }`)
-- **Options**: `MutationOptions` (`{ changeMode?, dryRun? }`)
-- **Output**: `TextMutationReceipt`
-- **Mutates**: Yes
-- **Idempotency**: conditional
-- **Failure codes**: `INVALID_TARGET`
-
-### `format.strikethrough`
-
-Toggle strikethrough formatting on a `TextAddress` range. Supports dry-run and tracked mode. Availability depends on the `strike` mark being registered in the editor schema.
-
-- **Input**: `FormatStrikethroughInput` (`{ target }`)
+- **Input**: `StyleApplyInput` (`{ target, inline: { bold?, italic?, underline?, strike? } }`)
 - **Options**: `MutationOptions` (`{ changeMode?, dryRun? }`)
 - **Output**: `TextMutationReceipt`
 - **Mutates**: Yes
@@ -349,7 +319,7 @@ Toggle strikethrough formatting on a `TextAddress` range. Supports dry-run and t
 List all list items in the document, optionally filtered by `within`, `kind`, `level`, or `ordinal`. Supports pagination via `limit` and `offset`.
 
 - **Input**: `ListsListQuery | undefined`
-- **Output**: `ListsListResult` (`{ matches, total, items }`)
+- **Output**: `ListsListResult` (`{ items, total }`)
 - **Mutates**: No
 - **Idempotency**: idempotent
 
@@ -373,151 +343,187 @@ Insert a new list item before or after a target item. Returns the new item's `Li
 - **Idempotency**: non-idempotent
 - **Failure codes**: `INVALID_TARGET`
 
-### `lists.setType`
+### `lists.create`
 
-Change a list item's kind (`ordered` or `bullet`). Returns `NO_OP` when the item already has the requested kind. Direct-only (no tracked mode in v1). Supports dry-run.
+Create a new list from one or more paragraphs. Two modes: `empty` (convert a single paragraph at `at`) or `fromParagraphs` (convert a `BlockAddress` or `BlockRange`). Creates a new `numId` + `abstractNum` definition for the requested `kind`. Direct-only. Supports dry-run.
 
-- **Input**: `ListSetTypeInput` (`{ target, kind }`)
+- **Input**: `ListsCreateInput` (`{ mode: 'empty', at, kind, level? } | { mode: 'fromParagraphs', target, kind, level? }`)
+- **Options**: `MutationOptions` (`{ dryRun? }`)
+- **Output**: `ListsCreateResult`
+- **Mutates**: Yes
+- **Idempotency**: non-idempotent
+- **Failure codes**: `INVALID_TARGET`
+
+### `lists.attach`
+
+Attach non-list paragraphs to an existing list. Target paragraphs inherit the `attachTo` item's `numId`. Direct-only. Supports dry-run.
+
+- **Input**: `ListsAttachInput` (`{ target, attachTo, level? }`)
+- **Options**: `MutationOptions` (`{ dryRun? }`)
+- **Output**: `ListsMutateItemResult`
+- **Mutates**: Yes
+- **Idempotency**: non-idempotent
+- **Failure codes**: `INVALID_TARGET`, `NO_OP`
+
+### `lists.detach`
+
+Remove numbering properties from targeted list items, converting them back to plain paragraphs. Preserves text and non-list formatting. Direct-only. Supports dry-run.
+
+- **Input**: `ListsDetachInput` (`{ target }`)
+- **Options**: `MutationOptions` (`{ dryRun? }`)
+- **Output**: `ListsDetachResult`
+- **Mutates**: Yes
+- **Idempotency**: conditional (re-detach is no-op)
+- **Failure codes**: `INVALID_TARGET`
+
+### `lists.join`
+
+Merge two adjacent list sequences. `withPrevious` merges the target's sequence into the preceding one; `withNext` merges the following sequence into the target's. Requires both sequences to share the same `abstractNumId`. Direct-only. Supports dry-run.
+
+- **Input**: `ListsJoinInput` (`{ target, direction: 'withPrevious' | 'withNext' }`)
+- **Options**: `MutationOptions` (`{ dryRun? }`)
+- **Output**: `ListsJoinResult`
+- **Mutates**: Yes
+- **Idempotency**: non-idempotent
+- **Failure codes**: `INVALID_TARGET`, `NO_ADJACENT_SEQUENCE`, `INCOMPATIBLE_DEFINITIONS`, `ALREADY_SAME_SEQUENCE`
+
+### `lists.canJoin`
+
+Read-only preflight check for `lists.join`. Returns whether two adjacent sequences can be joined.
+
+- **Input**: `ListsCanJoinInput` (`{ target, direction: 'withPrevious' | 'withNext' }`)
+- **Output**: `ListsCanJoinResult` (`{ canJoin, reason?, adjacentListId? }`)
+- **Mutates**: No
+- **Idempotency**: idempotent
+
+### `lists.separate`
+
+Split a list sequence at the target item. Creates a new `numId` pointing to the same `abstractNumId`. Items from target through end of sequence are reassigned to the new `numId`. Direct-only. Supports dry-run.
+
+- **Input**: `ListsSeparateInput` (`{ target, copyOverrides? }`)
+- **Options**: `MutationOptions` (`{ dryRun? }`)
+- **Output**: `ListsSeparateResult`
+- **Mutates**: Yes
+- **Idempotency**: non-idempotent
+- **Failure codes**: `INVALID_TARGET`, `NO_OP`
+
+### `lists.setLevel`
+
+Set the absolute indent level (0–8) of a list item. Direct-only. Supports dry-run.
+
+- **Input**: `ListsSetLevelInput` (`{ target, level }`)
 - **Options**: `MutationOptions` (`{ dryRun? }`)
 - **Output**: `ListsMutateItemResult`
 - **Mutates**: Yes
 - **Idempotency**: conditional
-- **Failure codes**: `NO_OP`, `INVALID_TARGET`
+- **Failure codes**: `INVALID_TARGET`, `LEVEL_OUT_OF_RANGE`, `NO_OP`
 
 ### `lists.indent`
 
-Increase the indent level of a list item. Returns `NO_OP` when already at maximum depth. Direct-only (no tracked mode in v1). Supports dry-run.
+Increase the indent level of a list item by one. Convenience wrapper for `setLevel(current + 1)`. Direct-only. Supports dry-run.
 
 - **Input**: `ListTargetInput` (`{ target }`)
 - **Options**: `MutationOptions` (`{ dryRun? }`)
 - **Output**: `ListsMutateItemResult`
 - **Mutates**: Yes
 - **Idempotency**: conditional
-- **Failure codes**: `NO_OP`, `INVALID_TARGET`
+- **Failure codes**: `NO_OP`, `INVALID_TARGET`, `LEVEL_OUT_OF_RANGE`
 
 ### `lists.outdent`
 
-Decrease the indent level of a list item. Returns `NO_OP` when already at top level. Direct-only (no tracked mode in v1). Supports dry-run.
+Decrease the indent level of a list item by one. Convenience wrapper for `setLevel(current - 1)`. Direct-only. Supports dry-run.
 
 - **Input**: `ListTargetInput` (`{ target }`)
 - **Options**: `MutationOptions` (`{ dryRun? }`)
 - **Output**: `ListsMutateItemResult`
 - **Mutates**: Yes
 - **Idempotency**: conditional
-- **Failure codes**: `NO_OP`, `INVALID_TARGET`
+- **Failure codes**: `NO_OP`, `INVALID_TARGET`, `LEVEL_OUT_OF_RANGE`
 
-### `lists.restart`
+### `lists.setValue`
 
-Restart numbering for an ordered list item. Returns `NO_OP` when the item already starts a new numbering sequence. Direct-only. Supports dry-run.
+Set the numbering start value at the target item's position. Pass `value: null` to remove a previously set override. Mid-sequence targets atomically separate then set `startOverride`. Direct-only. Supports dry-run.
 
-- **Input**: `ListTargetInput` (`{ target }`)
+- **Input**: `ListsSetValueInput` (`{ target, value: number | null }`)
 - **Options**: `MutationOptions` (`{ dryRun? }`)
 - **Output**: `ListsMutateItemResult`
 - **Mutates**: Yes
 - **Idempotency**: conditional
-- **Failure codes**: `NO_OP`, `INVALID_TARGET`
+- **Failure codes**: `INVALID_TARGET`, `NO_OP`
 
-### `lists.exit`
+### `lists.continuePrevious`
 
-Convert a list item back into a plain paragraph, exiting the list. Supports dry-run. Direct-only.
+Continue numbering from the nearest previous compatible list sequence (same `abstractNumId`). Merges the target's sequence into that previous sequence's `numId`. Direct-only. Supports dry-run.
 
-- **Input**: `ListTargetInput` (`{ target }`)
+- **Input**: `ListsContinuePreviousInput` (`{ target }`)
 - **Options**: `MutationOptions` (`{ dryRun? }`)
-- **Output**: `ListsExitResult`
+- **Output**: `ListsMutateItemResult`
+- **Mutates**: Yes
+- **Idempotency**: conditional
+- **Failure codes**: `INVALID_TARGET`, `NO_COMPATIBLE_PREVIOUS`, `ALREADY_CONTINUOUS`
+
+### `lists.canContinuePrevious`
+
+Read-only preflight check for `lists.continuePrevious`. Returns whether a compatible previous sequence exists.
+
+- **Input**: `ListsCanContinuePreviousInput` (`{ target }`)
+- **Output**: `ListsCanContinuePreviousResult` (`{ canContinue, reason?, previousListId? }`)
+- **Mutates**: No
+- **Idempotency**: idempotent
+
+### `lists.setLevelRestart`
+
+Set the `lvlRestart` behavior for a specified level. Controls when the level's counter resets. `scope: 'definition'` mutates the abstract (affects all instances); `scope: 'instance'` uses `lvlOverride` (affects only this `numId`). Direct-only. Supports dry-run.
+
+- **Input**: `ListsSetLevelRestartInput` (`{ target, level, restartAfterLevel: number | null, scope? }`)
+- **Options**: `MutationOptions` (`{ dryRun? }`)
+- **Output**: `ListsMutateItemResult`
+- **Mutates**: Yes
+- **Idempotency**: conditional
+- **Failure codes**: `INVALID_TARGET`, `LEVEL_OUT_OF_RANGE`
+
+### `lists.convertToText`
+
+Convert list items to plain paragraphs. When `includeMarker` is true, prepends the rendered marker text to paragraph content before clearing numbering properties. Direct-only. Supports dry-run.
+
+- **Input**: `ListsConvertToTextInput` (`{ target, includeMarker? }`)
+- **Options**: `MutationOptions` (`{ dryRun? }`)
+- **Output**: `ListsConvertToTextResult`
 - **Mutates**: Yes
 - **Idempotency**: conditional
 - **Failure codes**: `INVALID_TARGET`
 
 ### Comments
 
-### `comments.add`
+### `comments.create`
 
-Attach a new comment to a text range.
+Create a new comment thread or reply. When `parentCommentId` is provided, creates a reply. Otherwise creates a root comment anchored to the given text range.
 
-- **Input**: `AddCommentInput` (`{ target, text }`)
-- **Output**: `Receipt`
-- **Mutates**: Yes
-- **Idempotency**: non-idempotent
-- **Failure codes**: `INVALID_TARGET`, `NO_OP`
-
-### `comments.edit`
-
-Update the body text of an existing comment.
-
-- **Input**: `EditCommentInput` (`{ commentId, text }`)
-- **Output**: `Receipt`
-- **Mutates**: Yes
-- **Idempotency**: conditional
-- **Failure codes**: `NO_OP`
-
-### `comments.reply`
-
-Add a reply to an existing comment thread.
-
-- **Input**: `ReplyToCommentInput` (`{ parentCommentId, text }`)
+- **Input**: `CommentsCreateInput` (`{ text, target?, parentCommentId? }`)
 - **Output**: `Receipt`
 - **Mutates**: Yes
 - **Idempotency**: non-idempotent
 - **Failure codes**: `INVALID_TARGET`
 
-### `comments.move`
+### `comments.patch`
 
-Move a comment to a different text range.
+Field-level patch on an existing comment. Exactly one mutation field must be provided per call.
 
-- **Input**: `MoveCommentInput` (`{ commentId, target }`)
+- **Input**: `CommentsPatchInput` (`{ commentId, text?, target?, status?, isInternal? }`)
 - **Output**: `Receipt`
 - **Mutates**: Yes
 - **Idempotency**: conditional
-- **Failure codes**: `INVALID_TARGET`, `NO_OP`
+- **Failure codes**: `INVALID_INPUT`, `INVALID_TARGET`, `NO_OP`
 
-### `comments.resolve`
-
-Resolve an open comment, marking it as addressed.
-
-- **Input**: `ResolveCommentInput` (`{ commentId }`)
-- **Output**: `Receipt`
-- **Mutates**: Yes
-- **Idempotency**: conditional
-- **Failure codes**: `NO_OP`
-
-### `comments.remove`
+### `comments.delete`
 
 Remove a comment from the document.
 
-- **Input**: `RemoveCommentInput` (`{ commentId }`)
+- **Input**: `CommentsDeleteInput` (`{ commentId }`)
 - **Output**: `Receipt`
 - **Mutates**: Yes
 - **Idempotency**: conditional
 - **Failure codes**: `NO_OP`
-
-### `comments.setInternal`
-
-Set or clear the internal/private flag on a comment.
-
-- **Input**: `SetCommentInternalInput` (`{ commentId, isInternal }`)
-- **Output**: `Receipt`
-- **Mutates**: Yes
-- **Idempotency**: conditional
-- **Failure codes**: `NO_OP`, `INVALID_TARGET`
-
-### `comments.setActive`
-
-Set which comment is currently active/focused. Pass `null` to clear.
-
-- **Input**: `SetCommentActiveInput` (`{ commentId }`)
-- **Output**: `Receipt`
-- **Mutates**: Yes
-- **Idempotency**: conditional
-- **Failure codes**: `INVALID_TARGET`
-
-### `comments.goTo`
-
-Scroll to and focus a comment in the document.
-
-- **Input**: `GoToCommentInput` (`{ commentId }`)
-- **Output**: `Receipt`
-- **Mutates**: No
-- **Idempotency**: conditional
 
 ### `comments.get`
 
@@ -533,7 +539,7 @@ Retrieve full information for a single comment by ID. Throws `TARGET_NOT_FOUND` 
 List all comments in the document. Optionally include resolved comments.
 
 - **Input**: `CommentsListQuery | undefined` (`{ includeResolved? }`)
-- **Output**: `CommentsListResult` (`{ matches, total }`)
+- **Output**: `CommentsListResult` (`{ items, total }`)
 - **Mutates**: No
 - **Idempotency**: idempotent
 
@@ -544,7 +550,7 @@ List all comments in the document. Optionally include resolved comments.
 List tracked changes in the document. Supports filtering by `type` and pagination via `limit`/`offset`.
 
 - **Input**: `TrackChangesListInput | undefined` (`{ limit?, offset?, type? }`)
-- **Output**: `TrackChangesListResult` (`{ matches, total, changes? }`)
+- **Output**: `TrackChangesListResult` (`{ items, total }`)
 - **Mutates**: No
 - **Idempotency**: idempotent
 
@@ -557,42 +563,12 @@ Retrieve full information for a single tracked change by its canonical ID. Throw
 - **Mutates**: No
 - **Idempotency**: idempotent
 
-### `trackChanges.accept`
+### `trackChanges.decide`
 
-Accept a tracked change, applying it permanently to the document. Returns `NO_OP` when the change has already been accepted.
+Accept or reject a tracked change by ID, or accept/reject all changes with `{ scope: 'all' }`.
 
-- **Input**: `TrackChangesAcceptInput` (`{ id }`)
+- **Input**: `ReviewDecideInput` (`{ decision: 'accept' | 'reject', target: { id } | { scope: 'all' } }`)
 - **Output**: `Receipt`
 - **Mutates**: Yes
 - **Idempotency**: conditional
-- **Failure codes**: `NO_OP`
-
-### `trackChanges.reject`
-
-Reject a tracked change, reverting it from the document. Returns `NO_OP` when the change has already been rejected.
-
-- **Input**: `TrackChangesRejectInput` (`{ id }`)
-- **Output**: `Receipt`
-- **Mutates**: Yes
-- **Idempotency**: conditional
-- **Failure codes**: `NO_OP`
-
-### `trackChanges.acceptAll`
-
-Accept all tracked changes in the document. Returns `NO_OP` when there are no pending changes.
-
-- **Input**: `TrackChangesAcceptAllInput` (empty object)
-- **Output**: `Receipt`
-- **Mutates**: Yes
-- **Idempotency**: conditional
-- **Failure codes**: `NO_OP`
-
-### `trackChanges.rejectAll`
-
-Reject all tracked changes in the document. Returns `NO_OP` when there are no pending changes.
-
-- **Input**: `TrackChangesRejectAllInput` (empty object)
-- **Output**: `Receipt`
-- **Mutates**: Yes
-- **Idempotency**: conditional
-- **Failure codes**: `NO_OP`
+- **Failure codes**: `NO_OP`, `TARGET_NOT_FOUND`

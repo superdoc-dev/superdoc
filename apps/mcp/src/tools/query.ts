@@ -8,7 +8,7 @@ export function registerQueryTools(server: McpServer, sessions: SessionManager):
     {
       title: 'Find in Document',
       description:
-        'Search the document for nodes matching a type, text pattern, or both. For text searches, the result includes context[].textRanges — these are the TextAddress objects you pass as "target" to replace/insert/delete/format tools. Do NOT use matches[] as mutation targets (those are block addresses).',
+        'Search the document for nodes matching a type, text pattern, or both. For text searches, each item in items[] includes context.textRanges — these are the TextAddress objects you pass as "target" to replace/insert/delete/format tools.',
       inputSchema: {
         session_id: z.string().describe('Session ID from superdoc_open.'),
         type: z.string().optional().describe('Node type to filter by (e.g. "heading", "paragraph", "table", "image").'),

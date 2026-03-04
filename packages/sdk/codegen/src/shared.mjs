@@ -62,6 +62,26 @@ export function toNodeType(paramType) {
 }
 
 /**
+ * Resolve a JSON Schema `$ref` against a `$defs` map.
+ * Follows chains (ref → ref → concrete) up to a reasonable depth.
+ */
+export function resolveRef(schema, $defs) {
+  if (!schema || !$defs) return schema;
+  let current = schema;
+  let depth = 0;
+  while (current.$ref && depth < 10) {
+    const prefix = '#/$defs/';
+    if (typeof current.$ref !== 'string' || !current.$ref.startsWith(prefix)) break;
+    const name = current.$ref.slice(prefix.length);
+    const resolved = $defs[name];
+    if (!resolved) break;
+    current = resolved;
+    depth += 1;
+  }
+  return current;
+}
+
+/**
  * Build a nested operation tree from the flat operations object.
  * New contract format: operations is Record<string, OperationEntry>.
  */

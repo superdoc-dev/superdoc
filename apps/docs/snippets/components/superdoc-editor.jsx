@@ -9,33 +9,95 @@ export const SuperDocEditor = ({
   const [ready, setReady] = useState(false);
   const editorRef = useRef(null);
   const containerIdRef = useRef(`editor-${Math.random().toString(36).substr(2, 9)}`);
+  const DEV_DIST_URL = 'http://localhost:9094/dist';
+  const UNPKG_DIST_URL = 'https://unpkg.com/superdoc@latest/dist';
 
-  useEffect(() => {
+  const getBaseUrl = async () => {
+    const isDev = typeof window !== 'undefined' && window.location.hostname === 'localhost';
+
+    if (isDev) {
+      try {
+        const res = await fetch(`${DEV_DIST_URL}/superdoc.umd.js`, { method: 'HEAD' });
+        if (res.ok) return DEV_DIST_URL;
+      } catch {}
+    }
+
+    return UNPKG_DIST_URL;
+  };
+
+  const ensureStyle = (baseUrl) => {
+    const styleHref = `${baseUrl}/style.css`;
+    if (document.querySelector(`link[href="${styleHref}"]`)) return;
+
     const link = document.createElement('link');
     link.rel = 'stylesheet';
-    link.href = 'https://unpkg.com/superdoc@latest/dist/style.css';
+    link.href = styleHref;
     document.head.appendChild(link);
+  };
 
-    const script = document.createElement('script');
-    script.src = 'https://unpkg.com/superdoc@latest/dist/superdoc.umd.js';
-    script.onload = () => {
-      setTimeout(() => {
-        if (window.SuperDocLibrary) {
-          editorRef.current = new window.SuperDocLibrary.SuperDoc({
-            selector: `#${containerIdRef.current}`,
-            html,
-            rulers: true,
-            onReady: () => {
-              setReady(true);
-              if (onReady) onReady(editorRef.current);
-            },
-          });
-        }
-      }, 100);
+  const loadSuperDocLibrary = (baseUrl) => {
+    if (window.SuperDocLibrary) return Promise.resolve();
+
+    const scriptSrc = `${baseUrl}/superdoc.umd.js`;
+    const existingScript = document.querySelector(`script[src="${scriptSrc}"]`);
+
+    if (existingScript) {
+      if (window.SuperDocLibrary) return Promise.resolve();
+
+      return new Promise((resolve, reject) => {
+        existingScript.addEventListener('load', resolve, { once: true });
+        existingScript.addEventListener('error', reject, { once: true });
+      });
+    }
+
+    return new Promise((resolve, reject) => {
+      const script = document.createElement('script');
+      script.src = scriptSrc;
+      script.onload = resolve;
+      script.onerror = reject;
+      document.body.appendChild(script);
+    });
+  };
+
+  const initEditor = () => {
+    setTimeout(() => {
+      if (!window.SuperDocLibrary) return;
+      if (!document.getElementById(containerIdRef.current)) return;
+      if (editorRef.current) return;
+
+      editorRef.current = new window.SuperDocLibrary.SuperDoc({
+        selector: `#${containerIdRef.current}`,
+        html,
+        rulers: true,
+        onReady: () => {
+          setReady(true);
+          if (onReady) onReady(editorRef.current);
+        },
+      });
+    }, 100);
+  };
+
+  useEffect(() => {
+    let cancelled = false;
+
+    const boot = async () => {
+      try {
+        const baseUrl = await getBaseUrl();
+        ensureStyle(baseUrl);
+        await loadSuperDocLibrary(baseUrl);
+        if (!cancelled) initEditor();
+      } catch (error) {
+        console.error('Failed to boot SuperDoc:', error);
+      }
     };
-    document.body.appendChild(script);
 
-    return () => editorRef.current?.destroy?.();
+    boot();
+
+    return () => {
+      cancelled = true;
+      editorRef.current?.destroy?.();
+      editorRef.current = null;
+    };
   }, []);
 
   const exportDocx = () => {

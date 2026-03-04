@@ -20,6 +20,16 @@ The package automatically installs a native CLI binary for your platform via opt
 
 ## Quick Start
 
+Both ESM and CommonJS are supported.
+
+```ts
+// ESM
+import { createSuperDocClient } from '@superdoc-dev/sdk';
+
+// CJS
+const { createSuperDocClient } = require('@superdoc-dev/sdk');
+```
+
 ```ts
 import { createSuperDocClient } from '@superdoc-dev/sdk';
 
@@ -34,7 +44,7 @@ console.log(info.counts);
 const results = await client.doc.find({ type: 'text', pattern: 'termination' });
 
 await client.doc.replace({
-  target: results.context[0].textRanges[0],
+  target: results.items[0].context.textRanges[0],
   text: 'expiration',
 });
 
@@ -72,9 +82,9 @@ client.doc.insert(params)
 | **Mutation** | `insert`, `replace`, `delete` |
 | **Format** | `format.bold`, `format.italic`, `format.underline`, `format.strikethrough` |
 | **Create** | `create.paragraph` |
-| **Lists** | `lists.list`, `lists.get`, `lists.insert`, `lists.setType`, `lists.indent`, `lists.outdent`, `lists.restart`, `lists.exit` |
-| **Comments** | `comments.add`, `comments.edit`, `comments.reply`, `comments.move`, `comments.resolve`, `comments.remove`, `comments.setInternal`, `comments.setActive`, `comments.goTo`, `comments.get`, `comments.list` |
-| **Track Changes** | `trackChanges.list`, `trackChanges.get`, `trackChanges.accept`, `trackChanges.reject`, `trackChanges.acceptAll`, `trackChanges.rejectAll` |
+| **Lists** | `lists.list`, `lists.get`, `lists.insert`, `lists.create`, `lists.attach`, `lists.detach`, `lists.indent`, `lists.outdent`, `lists.join`, `lists.separate`, `lists.setLevel`, `lists.setValue`, `lists.continuePrevious`, `lists.setLevelRestart`, `lists.convertToText`, `lists.canJoin`, `lists.canContinuePrevious` |
+| **Comments** | `comments.create`, `comments.patch`, `comments.delete`, `comments.get`, `comments.list` |
+| **Track Changes** | `trackChanges.list`, `trackChanges.get`, `trackChanges.decide` |
 | **Lifecycle** | `open`, `save`, `close` |
 | **Session** | `session.list`, `session.save`, `session.close`, `session.setDefault` |
 | **Introspection** | `status`, `describe`, `describeCommand` |

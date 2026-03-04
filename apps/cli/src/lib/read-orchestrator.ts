@@ -21,7 +21,7 @@ import { extractInvokeInput } from './invoke-input.js';
 
 type DocumentPayload = {
   path?: string;
-  source: 'path' | 'stdin';
+  source: 'path' | 'stdin' | 'blank';
   byteLength: number;
   revision: number;
 };
@@ -151,7 +151,7 @@ export async function executeReadOperation(request: DocOperationRequest): Promis
         }
       }
 
-      const opened = await openDocument(paths.workingDocPath, context.io);
+      const opened = await openDocument(paths.workingDocPath, context.io, { user: metadata.user });
       try {
         const result = invokeOperation(opened.editor, operationId, input);
         const document: DocumentPayload = {

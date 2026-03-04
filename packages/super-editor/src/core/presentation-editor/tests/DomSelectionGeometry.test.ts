@@ -624,6 +624,86 @@ describe('computeSelectionRectsFromDom', () => {
     });
   });
 
+  describe('selection across mark boundaries (SD-2024)', () => {
+    it('returns rects when selection spans the structural gap between two differently-marked runs', () => {
+      // Simulates two adjacent text runs with different marks (e.g., bold → italic).
+      // ProseMirror run nodes occupy 2 positions (open + close tokens), creating a
+      // gap between the text spans:
+      //   <run bold>[1..5]</run>  positions 5-6 = structural tokens  <run italic>[7..12]</run>
+      // A selection exactly at the boundary (from=5, to=7) must still find DOM
+      // entries and produce highlight rects — not return empty and cause flicker.
+      painterHost.innerHTML = `
+        <div class="superdoc-page" data-page-index="0">
+          <div class="superdoc-line" data-pm-start="1" data-pm-end="12">
+            <span data-pm-start="1" data-pm-end="5">bold</span>
+            <span data-pm-start="7" data-pm-end="12">italic</span>
+          </div>
+        </div>
+      `;
+
+      const layout = createMockLayout([{ pmStart: 1, pmEnd: 12 }]);
+      domPositionIndex.rebuild(painterHost);
+
+      const pageEl = painterHost.querySelector('.superdoc-page') as HTMLElement;
+      pageEl.getBoundingClientRect = vi.fn(() => createRect(0, 0, 612, 792));
+
+      const mockRange = {
+        setStart: vi.fn(),
+        setEnd: vi.fn(),
+        getClientRects: vi.fn(() => [createRect(40, 20, 60, 16)]),
+      } as unknown as Range;
+
+      const originalCreateRange = document.createRange;
+      document.createRange = vi.fn(() => mockRange);
+
+      const options = createOptions(layout);
+      // from=5 to=7: exactly the structural gap between the two runs
+      const rects = computeSelectionRectsFromDom(options, 5, 7);
+
+      expect(rects).not.toBe(null);
+      expect(rects!.length).toBeGreaterThan(0);
+
+      document.createRange = originalCreateRange;
+    });
+
+    it('returns rects when selection starts inside one run and ends at the next run boundary', () => {
+      // Selection from mid-first-run to the start of the second run.
+      // Without boundaryInclusive, the second span (pmStart=7) would be excluded
+      // when the selection ends at exactly 7.
+      painterHost.innerHTML = `
+        <div class="superdoc-page" data-page-index="0">
+          <div class="superdoc-line" data-pm-start="1" data-pm-end="12">
+            <span data-pm-start="1" data-pm-end="5">bold</span>
+            <span data-pm-start="7" data-pm-end="12">italic</span>
+          </div>
+        </div>
+      `;
+
+      const layout = createMockLayout([{ pmStart: 1, pmEnd: 12 }]);
+      domPositionIndex.rebuild(painterHost);
+
+      const pageEl = painterHost.querySelector('.superdoc-page') as HTMLElement;
+      pageEl.getBoundingClientRect = vi.fn(() => createRect(0, 0, 612, 792));
+
+      const mockRange = {
+        setStart: vi.fn(),
+        setEnd: vi.fn(),
+        getClientRects: vi.fn(() => [createRect(10, 20, 90, 16)]),
+      } as unknown as Range;
+
+      const originalCreateRange = document.createRange;
+      document.createRange = vi.fn(() => mockRange);
+
+      const options = createOptions(layout);
+      const rects = computeSelectionRectsFromDom(options, 3, 7);
+
+      expect(rects).not.toBe(null);
+      expect(rects!.length).toBeGreaterThan(0);
+
+      document.createRange = originalCreateRange;
+    });
+  });
+
   describe('multi-page selections', () => {
     it('computes rects spanning multiple pages', () => {
       painterHost.innerHTML = `

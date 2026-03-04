@@ -122,8 +122,15 @@ export class SuperDoc extends EventEmitter {
     onCommentsListChange: () => null,
     onException: () => null,
     onListDefinitionsChange: () => null,
+    onPaginationUpdate: () => null,
     onTransaction: () => null,
     onFontsResolved: null,
+
+    // Tracked change bubble handlers - replace default accept/reject behavior
+    // Only fires from bubble buttons, not toolbar or context menu
+    // Signature: (comment, editor) => void
+    onTrackedChangeBubbleAccept: null,
+    onTrackedChangeBubbleReject: null,
     // Image upload handler
     // async (file) => url;
     handleImageUpload: null,
@@ -452,6 +459,7 @@ export class SuperDoc extends EventEmitter {
     this.on('content-error', this.onContentError);
     this.on('exception', this.config.onException);
     this.on('list-definitions-change', this.config.onListDefinitionsChange);
+    this.on('pagination-update', this.config.onPaginationUpdate);
 
     if (this.config.onFontsResolved) {
       this.on('fonts-resolved', this.config.onFontsResolved);

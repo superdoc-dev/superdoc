@@ -409,6 +409,34 @@ describe('TableResizeOverlay', () => {
 
       wrapper.unmount();
     });
+
+    it('should normalize clamped min width while keeping min below width', async () => {
+      const metadata = {
+        columns: [
+          { i: 0, x: 0, w: 10, min: 10, r: 1 },
+          { i: 1, x: 10, w: 2, min: 2, r: 1 },
+        ],
+      };
+
+      const tableElement = createMockTableElement(metadata);
+      const wrapper = mount(TableResizeOverlay, {
+        props: {
+          editor: createMockEditor(),
+          visible: true,
+          tableElement,
+        },
+      });
+
+      await nextTick();
+
+      const [firstCol, secondCol] = wrapper.vm.tableMetadata.columns;
+      expect(firstCol.min).toBeLessThan(firstCol.w);
+      expect(secondCol.min).toBeLessThan(secondCol.w);
+      expect(firstCol.min).toBe(9);
+      expect(secondCol.min).toBe(1);
+
+      wrapper.unmount();
+    });
   });
 
   // ==========================================================================

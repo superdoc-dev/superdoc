@@ -562,7 +562,8 @@ describe('SuperDoc.vue', () => {
     await nextTick();
     const toggleArg = superdocStub.broadcastSidebarToggle.mock.calls.at(-1)[0];
     expect(toggleArg).toEqual(expect.objectContaining({ commentId: 'new' }));
-    expect(wrapper.findComponent(CommentDialogStub).exists()).toBe(true);
+    // CommentDialog is now rendered inside FloatingComments, so check for that instead
+    expect(wrapper.findComponent(FloatingCommentsStub).exists()).toBe(true);
 
     superdocStoreStub.isReady.value = true;
     await nextTick();

@@ -1,5 +1,5 @@
 import { executeFind, normalizeFindQuery } from './find.js';
-import type { Query, QueryResult, Selector } from '../types/index.js';
+import type { Query, FindOutput, Selector } from '../types/index.js';
 import type { FindAdapter } from './find.js';
 
 describe('normalizeFindQuery', () => {
@@ -160,30 +160,55 @@ describe('BUG: SDK params shape vs Document API contract', () => {
 
 describe('executeFind', () => {
   it('normalizes the input and delegates to the adapter', () => {
-    const expected: QueryResult = { matches: [], total: 0 };
-    const adapter: FindAdapter = { find: vi.fn(() => expected) };
+    const envelope: FindOutput = {
+      evaluatedRevision: 'r1',
+      total: 0,
+      items: [],
+      page: { limit: 5, offset: 0, returned: 0 },
+    };
+    const adapter: FindAdapter = { find: vi.fn(() => envelope) };
 
     const result = executeFind(adapter, { nodeType: 'paragraph' }, { limit: 5 });
 
-    expect(result).toBe(expected);
+    expect(result).toBe(envelope);
     expect(adapter.find).toHaveBeenCalledWith({
       select: { type: 'node', nodeType: 'paragraph' },
       limit: 5,
       offset: undefined,
       within: undefined,
+      require: undefined,
       includeNodes: undefined,
       includeUnknown: undefined,
     });
   });
 
   it('passes a full Query through to the adapter', () => {
-    const expected: QueryResult = { matches: [], total: 0 };
-    const adapter: FindAdapter = { find: vi.fn(() => expected) };
+    const envelope: FindOutput = {
+      evaluatedRevision: 'r2',
+      total: 0,
+      items: [],
+      page: { limit: 10, offset: 0, returned: 0 },
+    };
+    const adapter: FindAdapter = { find: vi.fn(() => envelope) };
     const query: Query = { select: { type: 'text', pattern: 'hello' }, limit: 10 };
 
     const result = executeFind(adapter, query);
 
-    expect(result).toBe(expected);
+    expect(result).toBe(envelope);
     expect(adapter.find).toHaveBeenCalledWith(query);
+  });
+
+  it('returns the discovery envelope from the adapter directly', () => {
+    const envelope: FindOutput = {
+      evaluatedRevision: 'r1',
+      total: 0,
+      items: [],
+      page: { limit: 0, offset: 0, returned: 0 },
+    };
+    const adapter: FindAdapter = { find: vi.fn(() => envelope) };
+
+    const result = executeFind(adapter, { nodeType: 'paragraph' });
+
+    expect(result).toBe(envelope);
   });
 });

@@ -280,15 +280,19 @@ function validateCreateParagraphLocation(value: unknown, path: string): NonNulla
 
     expectOnlyKeys(obj, ['kind', 'nodeId'], path);
     const nodeId = expectString(obj.nodeId, `${path}.nodeId`);
+    // nodeId shorthand: wrap in a BlockNodeAddress with nodeType 'paragraph'
+    // as a default. The adapter falls back to nodeId-only lookup when the
+    // full nodeType:nodeId key doesn't match, so this works for any block type.
+    const target = { kind: 'block' as const, nodeType: 'paragraph' as const, nodeId };
     if (kind === 'before') {
       return {
         kind: 'before',
-        nodeId,
+        target,
       };
     }
     return {
       kind: 'after',
-      nodeId,
+      target,
     };
   }
 

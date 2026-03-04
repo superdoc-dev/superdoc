@@ -59,6 +59,8 @@ provider.on("sync", (synced) => {
 });
 ```
 
+SuperDoc JS always uses the same collaboration contract, regardless of provider: `modules.collaboration = { ydoc, provider }`.
+
 ## Room management
 
 Each **room** represents a collaborative session. Use unique room IDs for different documents:

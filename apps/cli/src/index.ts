@@ -19,6 +19,7 @@ import { MANUAL_COMMAND_ALLOWLIST, type ManualCommandKey } from './lib/manual-co
 import { validateOperationResponseData } from './lib/operation-args';
 import { runInstall } from './commands/install';
 import { runUninstall } from './commands/uninstall';
+import { withStateDirOverride } from './lib/context';
 import {
   CLI_COMMAND_SPECS,
   CLI_COMMAND_KEYS,
@@ -60,6 +61,7 @@ export type InvokeCommandOptions = {
   ioOverrides?: Partial<CliIO>;
   executionMode?: ExecutionMode;
   collabSessionPool?: CommandContext['collabSessionPool'];
+  stateDir?: string;
 };
 
 const MANUAL_COMMANDS = {
@@ -262,13 +264,16 @@ async function executeParsedInvocation(
 export async function invokeCommand(argv: string[], options: InvokeCommandOptions = {}): Promise<InvokeCommandResult> {
   const io = mergeIo(options.ioOverrides);
   const startedAt = io.now();
-  const parsed = parseInvocation(argv);
-  const output = await executeParsedInvocation(
-    parsed,
-    io,
-    options.executionMode ?? 'oneshot',
-    options.collabSessionPool,
-  );
+  const { parsed, output } = await withStateDirOverride(options.stateDir, async () => {
+    const parsedInvocation = parseInvocation(argv);
+    const commandOutput = await executeParsedInvocation(
+      parsedInvocation,
+      io,
+      options.executionMode ?? 'oneshot',
+      options.collabSessionPool,
+    );
+    return { parsed: parsedInvocation, output: commandOutput };
+  });
 
   return {
     globals: parsed.globals,
@@ -289,60 +294,67 @@ async function runHostCommand(tokens: string[], io: CliIO): Promise<number> {
  *
  * @param argv - Raw process arguments (after stripping the binary path)
  * @param ioOverrides - Optional overrides for stdout, stderr, stdin, and clock
+ * @param options - Optional runtime overrides such as test-scoped state directory
  * @returns Process exit code (0 on success, non-zero on error)
  */
-export async function run(argv: string[], ioOverrides?: Partial<CliIO>): Promise<number> {
+export async function run(
+  argv: string[],
+  ioOverrides?: Partial<CliIO>,
+  options: Pick<InvokeCommandOptions, 'stateDir'> = {},
+): Promise<number> {
   const io = mergeIo(ioOverrides);
   const startedAt = io.now();
   let outputMode: OutputMode = 'json';
 
-  try {
-    const parsed = parseInvocation(argv);
-    outputMode = parsed.globals.output;
+  return withStateDirOverride(options.stateDir, async () => {
+    try {
+      const parsed = parseInvocation(argv);
+      outputMode = parsed.globals.output;
 
-    if (parsed.rest[0] === 'host') {
-      const hostTokens = parsed.rest.slice(1);
-      if (parsed.globals.help) hostTokens.push('--help');
-      return await runHostCommand(hostTokens, io);
-    }
-
-    if (parsed.rest[0] === 'install' && !parsed.globals.help) {
-      return await runInstall(parsed.rest.slice(1), io);
-    }
-
-    if (parsed.rest[0] === 'uninstall' && !parsed.globals.help) {
-      return await runUninstall(parsed.rest.slice(1), io);
-    }
-
-    if (parsed.rest[0] === 'call' && outputMode !== 'json') {
-      throw new CliError('INVALID_ARGUMENT', 'call: only --output json is supported.');
-    }
-
-    if (!parsed.globals.help) {
-      const legacyCompat = await tryRunLegacyCompatCommand(argv, parsed.rest, io);
-      if (legacyCompat.handled) {
-        return legacyCompat.exitCode;
+      if (parsed.rest[0] === 'host') {
+        const hostTokens = parsed.rest.slice(1);
+        if (parsed.globals.help) hostTokens.push('--help');
+        return await runHostCommand(hostTokens, io);
       }
-    }
 
-    const output = await executeParsedInvocation(parsed, io, 'oneshot');
-    if (output.helpText) {
-      io.stdout(output.helpText);
+      if (parsed.rest[0] === 'install' && !parsed.globals.help) {
+        return await runInstall(parsed.rest.slice(1), io);
+      }
+
+      if (parsed.rest[0] === 'uninstall' && !parsed.globals.help) {
+        return await runUninstall(parsed.rest.slice(1), io);
+      }
+
+      if (parsed.rest[0] === 'call' && outputMode !== 'json') {
+        throw new CliError('INVALID_ARGUMENT', 'call: only --output json is supported.');
+      }
+
+      if (!parsed.globals.help) {
+        const legacyCompat = await tryRunLegacyCompatCommand(argv, parsed.rest, io);
+        if (legacyCompat.handled) {
+          return legacyCompat.exitCode;
+        }
+      }
+
+      const output = await executeParsedInvocation(parsed, io, 'oneshot');
+      if (output.helpText) {
+        io.stdout(output.helpText);
+        return 0;
+      }
+      if (!output.execution) {
+        throw new CliError('COMMAND_FAILED', 'Command produced no execution result and no help text.');
+      }
+
+      const elapsedMs = io.now() - startedAt;
+      writeSuccess(io, outputMode, output.execution, elapsedMs);
       return 0;
+    } catch (error) {
+      const cliError = toCliError(error);
+      const elapsedMs = io.now() - startedAt;
+      writeFailure(io, outputMode, cliError, elapsedMs);
+      return cliError.exitCode;
     }
-    if (!output.execution) {
-      throw new CliError('COMMAND_FAILED', 'Command produced no execution result and no help text.');
-    }
-
-    const elapsedMs = io.now() - startedAt;
-    writeSuccess(io, outputMode, output.execution, elapsedMs);
-    return 0;
-  } catch (error) {
-    const cliError = toCliError(error);
-    const elapsedMs = io.now() - startedAt;
-    writeFailure(io, outputMode, cliError, elapsedMs);
-    return cliError.exitCode;
-  }
+  });
 }
 
 if (import.meta.main) {

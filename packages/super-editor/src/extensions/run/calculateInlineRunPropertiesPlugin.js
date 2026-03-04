@@ -24,6 +24,8 @@ const RUN_PROPERTIES_DERIVED_FROM_MARKS = new Set([
   'position',
 ]);
 
+const RUN_PROPERTY_PRESERVE_META_KEY = 'sdPreserveRunPropertiesKeys';
+
 /**
  * ProseMirror plugin that recalculates inline `runProperties` for changed runs,
  * keeping run attributes aligned with decoded mark styles and resolved paragraph styles.
@@ -47,6 +49,17 @@ export const calculateInlineRunPropertiesPlugin = (editor) =>
 
       const runType = newState.schema.nodes.run;
       if (!runType) return null;
+
+      const preservedDerivedKeys = new Set();
+      transactions.forEach((transaction) => {
+        const keys = transaction.getMeta(RUN_PROPERTY_PRESERVE_META_KEY);
+        if (!Array.isArray(keys)) return;
+        keys.forEach((key) => {
+          if (typeof key === 'string' && key.length > 0) {
+            preservedDerivedKeys.add(key);
+          }
+        });
+      });
 
       // Find all runs affected by changes, regardless of step type
       const changedRanges = collectChangedRangesThroughTransactions(transactions, newState.doc.content.size);
@@ -74,7 +87,14 @@ export const calculateInlineRunPropertiesPlugin = (editor) =>
         const { paragraphNode, paragraphPos, tableInfo } = getRunContext($pos);
         if (!paragraphNode || paragraphPos === undefined) return;
 
-        const { segments, firstInlineProps } = segmentRunByInlineProps(runNode, paragraphNode, tableInfo, $pos, editor);
+        const { segments, firstInlineProps } = segmentRunByInlineProps(
+          runNode,
+          paragraphNode,
+          tableInfo,
+          $pos,
+          editor,
+          preservedDerivedKeys,
+        );
         const runProperties = firstInlineProps ?? null;
 
         let firstRunPos = firstRunPosByParagraph.get(paragraphPos);
@@ -239,7 +259,7 @@ function findFirstRunPosInParagraph(paragraphNode, paragraphPos, runType) {
  * @param {object} editor
  * @returns {{ segments: Array<{ inlineProps: Record<string, any>|null, inlineKey: string, content: import('prosemirror-model').Node[] }>, firstInlineProps: Record<string, any>|null }}
  */
-function segmentRunByInlineProps(runNode, paragraphNode, tableInfo, $pos, editor) {
+function segmentRunByInlineProps(runNode, paragraphNode, tableInfo, $pos, editor, preservedDerivedKeys) {
   const segments = [];
   let lastKey = null;
   let boundaryCounter = 0;
@@ -253,6 +273,7 @@ function segmentRunByInlineProps(runNode, paragraphNode, tableInfo, $pos, editor
         tableInfo,
         $pos,
         editor,
+        preservedDerivedKeys,
       );
       const last = segments[segments.length - 1];
       if (last && inlineKey === lastKey) {
@@ -291,7 +312,15 @@ function segmentRunByInlineProps(runNode, paragraphNode, tableInfo, $pos, editor
  * @param {object} editor
  * @returns {{ inlineProps: Record<string, any>|null, inlineKey: string }}
  */
-function computeInlineRunProps(marks, existingRunProperties, paragraphNode, tableInfo, $pos, editor) {
+function computeInlineRunProps(
+  marks,
+  existingRunProperties,
+  paragraphNode,
+  tableInfo,
+  $pos,
+  editor,
+  preservedDerivedKeys,
+) {
   const runPropertiesFromMarks = decodeRPrFromMarks(marks);
   const paragraphProperties =
     getResolvedParagraphProperties(paragraphNode) || calculateResolvedParagraphProperties(editor, paragraphNode, $pos);
@@ -311,6 +340,7 @@ function computeInlineRunProps(marks, existingRunProperties, paragraphNode, tabl
     runPropertiesFromStyles,
     existingRunProperties,
     editor,
+    preservedDerivedKeys,
   );
   const inlineProps = Object.keys(inlineRunProperties).length ? inlineRunProperties : null;
   const inlineKey = stableStringifyInlineProps(inlineProps);
@@ -326,9 +356,16 @@ function computeInlineRunProps(marks, existingRunProperties, paragraphNode, tabl
  * @param {object} editor Editor instance used to normalize mark-level font-family comparisons.
  * @returns {Record<string, any>} Inline run properties that override styled defaults.
  */
-function getInlineRunProperties(runPropertiesFromMarks, runPropertiesFromStyles, existingRunProperties, editor) {
+function getInlineRunProperties(
+  runPropertiesFromMarks,
+  runPropertiesFromStyles,
+  existingRunProperties,
+  editor,
+  preservedDerivedKeys = new Set(),
+) {
   const inlineRunProperties = {};
   for (const key in runPropertiesFromMarks) {
+    if (preservedDerivedKeys.has(key)) continue;
     const valueFromMarks = runPropertiesFromMarks[key];
     const valueFromStyles = runPropertiesFromStyles[key];
     if (JSON.stringify(valueFromMarks) !== JSON.stringify(valueFromStyles)) {
@@ -346,7 +383,7 @@ function getInlineRunProperties(runPropertiesFromMarks, runPropertiesFromStyles,
 
   if (existingRunProperties != null) {
     Object.keys(existingRunProperties).forEach((key) => {
-      if (RUN_PROPERTIES_DERIVED_FROM_MARKS.has(key)) return;
+      if (RUN_PROPERTIES_DERIVED_FROM_MARKS.has(key) && !preservedDerivedKeys.has(key)) return;
       if (key in inlineRunProperties) return;
       if (existingRunProperties[key] === undefined) return;
       inlineRunProperties[key] = existingRunProperties[key];

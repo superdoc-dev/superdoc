@@ -1,7 +1,7 @@
 {
   "name": "superdoc",
   "type": "module",
-  "version": "1.16.0",
+  "version": "1.17.0",
   "license": "AGPL-3.0",
   "repository": {
     "type": "git",
@@ -60,8 +60,8 @@
   "module": "./dist/superdoc.es.js",
   "scripts": {
     "dev": "concurrently -k -n VITE,WORD -c cyan,magenta \"vite\" \"node ../../devtools/word-benchmark-sidecar/server.js --stay-alive-on-reuse\"",
-    "dev:collab": "concurrently -k -n VITE,COLLAB,WORD -c cyan,green,magenta \"vite\" \"node src/dev/collab-server.js\" \"node ../../devtools/word-benchmark-sidecar/server.js --stay-alive-on-reuse\"",
-    "collab-server": "node src/dev/collab-server.js",
+    "dev:collab": "concurrently -k -n VITE,COLLAB,WORD -c cyan,green,magenta \"vite\" \"pnpm run collab-server\" \"node ../../devtools/word-benchmark-sidecar/server.js --stay-alive-on-reuse\"",
+    "collab-server": "pnpm --filter @superdoc-dev/superdoc-yjs-collaboration build && tsx src/dev/collab-server.ts",
     "word-benchmark-sidecar": "node ../../devtools/word-benchmark-sidecar/server.js",
     "build": "vite build && pnpm run build:umd",
     "build:dev": "SUPERDOC_SKIP_DTS=1 vite build",
@@ -69,6 +69,7 @@
     "build:es": "vite build && node ./scripts/ensure-types.cjs",
     "watch:es": "vite build --watch",
     "build:umd": "vite build --config vite.config.umd.js",
+    "watch:umd": "vite build --watch --config vite.config.umd.js",
     "clean": "rm -rf dist",
     "pack:local": "pnpm run pack",
     "pack": "pnpm run build:es && pnpm pack && mv $(ls superdoc-*.tgz) ./superdoc.tgz",
@@ -97,10 +98,11 @@
     "@hocuspocus/provider": "catalog:",
     "@hocuspocus/server": "catalog:",
     "@superdoc/common": "workspace:*",
+    "@superdoc-dev/superdoc-yjs-collaboration": "workspace:*",
     "@superdoc/super-editor": "workspace:*",
-    "concurrently": "catalog:",
     "@vitejs/plugin-vue": "catalog:",
     "@vue/test-utils": "catalog:",
+    "concurrently": "catalog:",
     "jszip": "catalog:",
     "nodemon": "catalog:",
     "pdfjs-dist": "catalog:",
@@ -109,11 +111,13 @@
     "prosemirror-model": "catalog:",
     "prosemirror-state": "catalog:",
     "rollup-plugin-visualizer": "catalog:",
+    "sirv": "catalog:",
     "typescript": "catalog:",
     "vite": "catalog:",
     "vite-plugin-dts": "catalog:",
     "vite-plugin-node-polyfills": "catalog:",
     "vitest": "catalog:",
+    "ws": "^8.18.3",
     "xml-js": "catalog:"
   }
 }

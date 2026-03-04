@@ -16,13 +16,9 @@ pre-commit:
       run: pnpm exec eslint --fix --no-warn-ignored {staged_files}
       stage_fixed: true
     cli-build:
-      root: "apps/cli/"
-      glob: "apps/cli/**/*.ts"
-      run: pnpm run build
+      run: pnpm --prefix apps/cli run build
     cli-test:
-      root: "apps/cli/"
-      glob: "apps/cli/**/*.ts"
-      run: pnpm run test
+      run: pnpm run build:superdoc && pnpm run test:cli
     vscode-build:
       root: "apps/vscode-ext/"
       glob: "apps/vscode-ext/**/*.{ts,js}"
@@ -39,9 +35,9 @@ pre-commit:
       root: "apps/docs/"
       glob: "apps/docs/**/*.mdx"
       run: pnpm run test:examples
-    docapi-overview-sync:
-      glob: "{packages/document-api/src/contract,packages/document-api/scripts}/**"
-      run: pnpm run docapi:sync && git add apps/docs/document-api/reference apps/docs/document-api/overview.mdx
+    generate-all:
+      run: pnpm run generate:all && git add apps/docs/document-api/reference apps/docs/document-api/overview.mdx apps/docs/document-engine/sdks.mdx
+      stage_fixed: true
 
 commit-msg:
   commands:

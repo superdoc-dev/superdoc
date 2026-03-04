@@ -127,3 +127,59 @@ These directories are produced by `pnpm run generate:all`:
 After a fresh clone, run `pnpm run generate:all` before working on SDK, CLI, or doc-api code.
 
 Note: `packages/sdk/tools/__init__.py` is a manual file (Python package marker) and stays committed.
+
+## Testing
+
+| What to verify | Command | Speed |
+|---|---|---|
+| Logic works? | `pnpm test` | seconds |
+| Editing works? | `pnpm test:behavior` | minutes |
+| Layout regressed? | `pnpm test:layout` | ~10 min |
+| Pixel diff? | `pnpm test:visual` | ~5 min |
+
+### Unit Tests (Vitest)
+
+Co-located with source code as `feature.test.ts` next to `feature.ts`. Test pure logic, data transformations, and utilities in isolation.
+
+- Framework: **Vitest** (config at `vitest.config.mjs`)
+- Most coverage in `packages/super-editor/` (526 files) and `packages/layout-engine/` (150 files)
+- Run a single package: `pnpm --filter <package> test`
+
+### Behavior Tests (Playwright)
+
+End-to-end tests that exercise editing features through the browser. Located in `tests/behavior/`.
+
+- Framework: **Playwright** (Chromium, Firefox, WebKit)
+- Tests editing commands, formatting, tables, comments, tracked changes, lists, toolbar
+- Asserts on document state, not pixels — see `tests/behavior/README.md`
+
+### Layout Comparison (`pnpm test:layout`)
+
+Compares layout engine output (JSON structure) across ~382 test documents against a published npm version. This is the primary tool for catching rendering regressions.
+
+- Run: `pnpm test:layout` (interactive — prompts for reference version)
+- Flags: `--reference <version>`, `--match <pattern>`, `--limit <n>`
+- Handles auth, corpus download, build, and comparison automatically
+- Reports written to `tests/layout/reports/`
+- Lower-level access: `pnpm layout:compare` (same engine, no interactive UX)
+- One-time setup: `npx wrangler login` (for corpus download from R2)
+
+### Visual Comparison (`pnpm test:visual`)
+
+Pixel-level before/after comparison for documents that failed layout comparison. Reads the latest layout report and generates an HTML diff report.
+
+- Run `pnpm test:layout` first to generate a comparison report
+- Then `pnpm test:visual` to see pixel differences for changed docs
+- HTML report output in `devtools/visual-testing/results/`
+
+## Brand & Design System
+
+Brand guidelines, voice, and design tokens live in `brand/`. Token values are defined in `packages/superdoc/src/assets/styles/tokens.css`.
+
+**When creating or modifying UI components:**
+- Use `--sd-*` CSS custom properties — never hardcode hex values. See `tokens.css` for all available variables.
+- Tokens follow three tiers: primitive (`--sd-color-blue-500`) → semantic (`--sd-action-primary`) → component (`--sd-comment-bg`). Components reference semantic or component-level variables.
+- Expose component-specific variables as `--sd-{component}-*` so consumers can customize via CSS.
+- Document component CSS variables in `apps/docs/ui-components/` (Mintlify docs).
+
+**When writing copy or content:** see `brand/brand-guidelines.md` for voice, tone, and the dual-register pattern (developer vs. leader). Product name is always **SuperDoc** (capital S, capital D).

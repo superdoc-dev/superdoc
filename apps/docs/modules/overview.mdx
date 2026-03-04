@@ -14,7 +14,8 @@ const superdoc = new SuperDoc({
     toolbar: { selector: '#toolbar' },
     comments: { allowResolve: true },
     collaboration: { ydoc, provider },
-    contextMenu: { includeDefaultItems: true }
+    contextMenu: { includeDefaultItems: true },
+    links: { popoverResolver: (ctx) => ({ type: 'default' }) }
   }
 });
 ```
@@ -30,6 +31,9 @@ const superdoc = new SuperDoc({
   </Card>
   <Card title="Toolbar" icon="palette" href="/modules/toolbar">
     Customizable formatting controls
+  </Card>
+  <Card title="Links" icon="link" href="/modules/links">
+    Customize the link click popover or bring your own UI
   </Card>
   <Card title="Context Menu" icon="menu" href="/modules/context-menu">
     Right-click actions and custom commands

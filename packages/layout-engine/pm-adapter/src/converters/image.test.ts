@@ -674,4 +674,84 @@ describe('image converter', () => {
       expect(blocks).toHaveLength(1);
     });
   });
+
+  describe('imageNodeToBlock - transformations', () => {
+    const mockBlockIdGenerator: BlockIdGenerator = vi.fn((kind) => `test-${kind}-id`);
+    const mockPositionMap: PositionMap = new Map();
+
+    it('extracts rotation from transformData', () => {
+      const node: PMNode = {
+        type: 'image',
+        attrs: {
+          src: 'image.jpg',
+          transformData: {
+            rotation: 270,
+            horizontalFlip: false,
+            verticalFlip: false,
+          },
+        },
+      };
+
+      const result = imageNodeToBlock(node, mockBlockIdGenerator, mockPositionMap) as ImageBlock;
+
+      expect(result.rotation).toBe(270);
+      expect(result.flipH).toBe(false);
+      expect(result.flipV).toBe(false);
+    });
+
+    it('extracts horizontal and vertical flip from transformData', () => {
+      const node: PMNode = {
+        type: 'image',
+        attrs: {
+          src: 'image.jpg',
+          transformData: {
+            rotation: 90,
+            horizontalFlip: true,
+            verticalFlip: true,
+          },
+        },
+      };
+
+      const result = imageNodeToBlock(node, mockBlockIdGenerator, mockPositionMap) as ImageBlock;
+
+      expect(result.rotation).toBe(90);
+      expect(result.flipH).toBe(true);
+      expect(result.flipV).toBe(true);
+    });
+
+    it('does not include rotation/flip when transformData is missing', () => {
+      const node: PMNode = {
+        type: 'image',
+        attrs: {
+          src: 'image.jpg',
+        },
+      };
+
+      const result = imageNodeToBlock(node, mockBlockIdGenerator, mockPositionMap) as ImageBlock;
+
+      expect(result.rotation).toBeUndefined();
+      expect(result.flipH).toBeUndefined();
+      expect(result.flipV).toBeUndefined();
+    });
+
+    it('does not include rotation/flip when transformData values are invalid types', () => {
+      const node: PMNode = {
+        type: 'image',
+        attrs: {
+          src: 'image.jpg',
+          transformData: {
+            rotation: '270', // string instead of number
+            horizontalFlip: 'yes', // string instead of boolean
+            verticalFlip: 1, // number instead of boolean
+          },
+        },
+      };
+
+      const result = imageNodeToBlock(node, mockBlockIdGenerator, mockPositionMap) as ImageBlock;
+
+      expect(result.rotation).toBeUndefined();
+      expect(result.flipH).toBeUndefined();
+      expect(result.flipV).toBeUndefined();
+    });
+  });
 });

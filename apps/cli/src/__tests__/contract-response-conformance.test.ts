@@ -25,19 +25,41 @@ describe('contract response conformance', () => {
 
   for (const scenario of OPERATION_SCENARIOS) {
     const commandKey = CLI_OPERATION_COMMAND_KEYS[scenario.operationId];
+    const runtimeTest = scenario.skipRuntimeConformance ? test.skip : test;
 
-    test(`success envelope conforms for ${scenario.operationId}`, async () => {
+    runtimeTest(`success envelope conforms for ${scenario.operationId}`, async () => {
       const invocation = await scenario.success(harness);
       const { result, envelope } = await harness.runCli(invocation.args, invocation.stateDir, invocation.stdinBytes);
+
+      if (result.code !== 0 || envelope.ok !== true) {
+        const details = JSON.stringify(envelope, null, 2);
+        throw new Error(
+          [
+            `Expected success envelope for ${scenario.operationId}.`,
+            `Exit code: ${result.code}`,
+            `Envelope: ${details}`,
+            `STDOUT: ${result.stdout.trim() || '<empty>'}`,
+            `STDERR: ${result.stderr.trim() || '<empty>'}`,
+          ].join('\n'),
+        );
+      }
 
       expect(result.code).toBe(0);
       expect(envelope.ok).toBe(true);
 
       const success = envelope as SuccessEnvelope;
       validateOperationResponseData(scenario.operationId, success.data, commandKey);
+
+      // Regression guard: history operations must serialize payload under `result`,
+      // never under an "undefined" key from missing envelope metadata.
+      if (scenario.operationId.startsWith('doc.history.')) {
+        const data = success.data as Record<string, unknown>;
+        expect(Object.prototype.hasOwnProperty.call(data, 'result')).toBe(true);
+        expect(Object.prototype.hasOwnProperty.call(data, 'undefined')).toBe(false);
+      }
     });
 
-    test(`failure envelope conforms for ${scenario.operationId}`, async () => {
+    runtimeTest(`failure envelope conforms for ${scenario.operationId}`, async () => {
       const invocation = await scenario.failure(harness);
       const { result, envelope } = await harness.runCli(invocation.args, invocation.stateDir, invocation.stdinBytes);
 

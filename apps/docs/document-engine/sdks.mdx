@@ -350,37 +350,6 @@ The SDKs expose all operations from the [Document API](/document-api/overview) p
 <Tabs>
   <Tab title="Node.js">
 
-#### Lifecycle
-
-| Operation | CLI command | Description |
-| --- | --- | --- |
-| `doc.open` | `open` | Open a document and create a persistent editing session. Optionally override the document body with contentOverride + overrideType (markdown, html, or text). |
-| `doc.save` | `save` | Save the current session to the original file or a new path. |
-| `doc.close` | `close` | Close the active editing session and clean up resources. |
-
-#### Query
-
-| Operation | CLI command | Description |
-| --- | --- | --- |
-| `doc.find` | `find` | Search the document for nodes matching type, text, or attribute criteria. |
-| `doc.getNode` | `get-node` | Retrieve a single node by target position. |
-| `doc.getNodeById` | `get-node-by-id` | Retrieve a single node by its unique ID. |
-| `doc.getText` | `get-text` | Extract the plain-text content of the document. |
-| `doc.getMarkdown` | `get-markdown` | Extract the document content as a Markdown string. |
-| `doc.getHtml` | `get-html` | Extract the document content as an HTML string. |
-| `doc.info` | `info` | Return document metadata including revision, node count, and capabilities. |
-| `doc.query.match` | `query match` | Deterministic selector-based search with cardinality contracts for mutation targeting. |
-| `doc.mutations.preview` | `mutations preview` | Dry-run a mutation plan, returning resolved targets without applying changes. |
-
-#### Mutation
-
-| Operation | CLI command | Description |
-| --- | --- | --- |
-| `doc.insert` | `insert` | Insert content at a target position, or at the end of the document when target is omitted. Supports text (default), markdown, and html content types via the `type` field. |
-| `doc.replace` | `replace` | Replace content at a target position with new text or inline content. |
-| `doc.delete` | `delete` | Delete content at a target position. |
-| `doc.mutations.apply` | `mutations apply` | Execute a mutation plan atomically against the document. |
-
 #### Format
 
 | Operation | CLI command | Description |
@@ -429,11 +398,9 @@ The SDKs expose all operations from the [Document API](/document-api/overview) p
 | `doc.format.numSpacing` | `format num-spacing` | Set or clear the `numSpacing` inline run property on the target text range. |
 | `doc.format.stylisticSets` | `format stylistic-sets` | Set or clear the `stylisticSets` inline run property on the target text range. |
 | `doc.format.contextualAlternates` | `format contextual-alternates` | Set or clear the `contextualAlternates` inline run property on the target text range. |
-
-#### Format / Paragraph
-
-| Operation | CLI command | Description |
-| --- | --- | --- |
+| `doc.styles.apply` | `styles apply` | Apply document-level default style changes to the stylesheet (word/styles.xml). Targets docDefaults run and paragraph channels with set-style patch semantics. |
+| `doc.styles.paragraph.setStyle` | `styles paragraph set-style` | Set the paragraph style reference (w:pStyle) on a paragraph-like block. |
+| `doc.styles.paragraph.clearStyle` | `styles paragraph clear-style` | Remove the paragraph style reference from a paragraph-like block. |
 | `doc.format.paragraph.resetDirectFormatting` | `format paragraph reset-direct-formatting` | Strip all direct paragraph formatting while preserving style reference, numbering, and section metadata. |
 | `doc.format.paragraph.setAlignment` | `format paragraph set-alignment` | Set paragraph alignment (justification) on a paragraph-like block. |
 | `doc.format.paragraph.clearAlignment` | `format paragraph clear-alignment` | Remove direct paragraph alignment, reverting to style-defined or default alignment. |
@@ -451,19 +418,6 @@ The SDKs expose all operations from the [Document API](/document-api/overview) p
 | `doc.format.paragraph.clearBorder` | `format paragraph clear-border` | Remove border for a specific side or all sides of a paragraph. |
 | `doc.format.paragraph.setShading` | `format paragraph set-shading` | Set paragraph shading (background fill, pattern color, pattern type). |
 | `doc.format.paragraph.clearShading` | `format paragraph clear-shading` | Remove all paragraph shading. |
-
-#### Styles
-
-| Operation | CLI command | Description |
-| --- | --- | --- |
-| `doc.styles.apply` | `styles apply` | Apply document-level default style changes to the stylesheet (word/styles.xml). Targets docDefaults run and paragraph channels with set-style patch semantics. |
-
-#### Styles / Paragraph
-
-| Operation | CLI command | Description |
-| --- | --- | --- |
-| `doc.styles.paragraph.setStyle` | `styles paragraph set-style` | Set the paragraph style reference (w:pStyle) on a paragraph-like block. |
-| `doc.styles.paragraph.clearStyle` | `styles paragraph clear-style` | Remove the paragraph style reference from a paragraph-like block. |
 
 #### Create
 
@@ -497,12 +451,6 @@ The SDKs expose all operations from the [Document API](/document-api/overview) p
 | `doc.sections.setLinkToPrevious` | `sections set-link-to-previous` | Set or clear link-to-previous behavior for a header/footer variant. |
 | `doc.sections.setPageBorders` | `sections set-page-borders` | Set page border configuration for a section. |
 | `doc.sections.clearPageBorders` | `sections clear-page-borders` | Clear page border configuration for a section. |
-
-#### Blocks
-
-| Operation | CLI command | Description |
-| --- | --- | --- |
-| `doc.blocks.delete` | `blocks delete` | Delete an entire block node (paragraph, heading, list item, table, image, or sdt) deterministically. |
 
 #### Lists
 
@@ -606,12 +554,6 @@ The SDKs expose all operations from the [Document API](/document-api/overview) p
 | `doc.trackChanges.get` | `track-changes get` | Retrieve a single tracked change by ID. |
 | `doc.trackChanges.decide` | `track-changes decide` | Accept or reject a tracked change (by ID or scope: all). |
 
-#### Capabilities
-
-| Operation | CLI command | Description |
-| --- | --- | --- |
-| `doc.capabilities.get` | `capabilities` | Query runtime capabilities supported by the current document engine. |
-
 #### History
 
 | Operation | CLI command | Description |
@@ -624,52 +566,39 @@ The SDKs expose all operations from the [Document API](/document-api/overview) p
 
 | Operation | CLI command | Description |
 | --- | --- | --- |
+| `doc.open` | `open` | Open a document and create a persistent editing session. Optionally override the document body with contentOverride + overrideType (markdown, html, or text). |
+| `doc.save` | `save` | Save the current session to the original file or a new path. |
+| `doc.close` | `close` | Close the active editing session and clean up resources. |
+| `doc.status` | `status` | Show the current session status and document metadata. |
+| `doc.describe` | `describe` | List all available CLI operations and contract metadata. |
+| `doc.describeCommand` | `describe command` | Show detailed metadata for a single CLI operation. |
 | `doc.session.list` | `session list` | List all active editing sessions. |
 | `doc.session.save` | `session save` | Persist the current session state. |
 | `doc.session.close` | `session close` | Close a specific editing session by ID. |
 | `doc.session.setDefault` | `session set-default` | Set the default session for subsequent commands. |
 
-#### Introspection
-
-| Operation | CLI command | Description |
-| --- | --- | --- |
-| `doc.status` | `status` | Show the current session status and document metadata. |
-| `doc.describe` | `describe` | List all available CLI operations and contract metadata. |
-| `doc.describeCommand` | `describe command` | Show detailed metadata for a single CLI operation. |
-
-  </Tab>
-  <Tab title="Python">
-
-#### Lifecycle
-
-| Operation | CLI command | Description |
-| --- | --- | --- |
-| `doc.open` | `open` | Open a document and create a persistent editing session. Optionally override the document body with contentOverride + overrideType (markdown, html, or text). |
-| `doc.save` | `save` | Save the current session to the original file or a new path. |
-| `doc.close` | `close` | Close the active editing session and clean up resources. |
-
-#### Query
+#### Core
 
 | Operation | CLI command | Description |
 | --- | --- | --- |
 | `doc.find` | `find` | Search the document for nodes matching type, text, or attribute criteria. |
-| `doc.get_node` | `get-node` | Retrieve a single node by target position. |
-| `doc.get_node_by_id` | `get-node-by-id` | Retrieve a single node by its unique ID. |
-| `doc.get_text` | `get-text` | Extract the plain-text content of the document. |
-| `doc.get_markdown` | `get-markdown` | Extract the document content as a Markdown string. |
-| `doc.get_html` | `get-html` | Extract the document content as an HTML string. |
+| `doc.getNode` | `get-node` | Retrieve a single node by target position. |
+| `doc.getNodeById` | `get-node-by-id` | Retrieve a single node by its unique ID. |
+| `doc.getText` | `get-text` | Extract the plain-text content of the document. |
+| `doc.getMarkdown` | `get-markdown` | Extract the document content as a Markdown string. |
+| `doc.getHtml` | `get-html` | Extract the document content as an HTML string. |
 | `doc.info` | `info` | Return document metadata including revision, node count, and capabilities. |
-| `doc.query.match` | `query match` | Deterministic selector-based search with cardinality contracts for mutation targeting. |
-| `doc.mutations.preview` | `mutations preview` | Dry-run a mutation plan, returning resolved targets without applying changes. |
-
-#### Mutation
-
-| Operation | CLI command | Description |
-| --- | --- | --- |
 | `doc.insert` | `insert` | Insert content at a target position, or at the end of the document when target is omitted. Supports text (default), markdown, and html content types via the `type` field. |
 | `doc.replace` | `replace` | Replace content at a target position with new text or inline content. |
 | `doc.delete` | `delete` | Delete content at a target position. |
+| `doc.blocks.delete` | `blocks delete` | Delete an entire block node (paragraph, heading, list item, table, image, or sdt) deterministically. |
+| `doc.query.match` | `query match` | Deterministic selector-based search with cardinality contracts for mutation targeting. |
+| `doc.mutations.preview` | `mutations preview` | Dry-run a mutation plan, returning resolved targets without applying changes. |
 | `doc.mutations.apply` | `mutations apply` | Execute a mutation plan atomically against the document. |
+| `doc.capabilities.get` | `capabilities` | Query runtime capabilities supported by the current document engine. |
+
+  </Tab>
+  <Tab title="Python">
 
 #### Format
 
@@ -719,11 +648,9 @@ The SDKs expose all operations from the [Document API](/document-api/overview) p
 | `doc.format.num_spacing` | `format num-spacing` | Set or clear the `numSpacing` inline run property on the target text range. |
 | `doc.format.stylistic_sets` | `format stylistic-sets` | Set or clear the `stylisticSets` inline run property on the target text range. |
 | `doc.format.contextual_alternates` | `format contextual-alternates` | Set or clear the `contextualAlternates` inline run property on the target text range. |
-
-#### Format / Paragraph
-
-| Operation | CLI command | Description |
-| --- | --- | --- |
+| `doc.styles.apply` | `styles apply` | Apply document-level default style changes to the stylesheet (word/styles.xml). Targets docDefaults run and paragraph channels with set-style patch semantics. |
+| `doc.styles.paragraph.set_style` | `styles paragraph set-style` | Set the paragraph style reference (w:pStyle) on a paragraph-like block. |
+| `doc.styles.paragraph.clear_style` | `styles paragraph clear-style` | Remove the paragraph style reference from a paragraph-like block. |
 | `doc.format.paragraph.reset_direct_formatting` | `format paragraph reset-direct-formatting` | Strip all direct paragraph formatting while preserving style reference, numbering, and section metadata. |
 | `doc.format.paragraph.set_alignment` | `format paragraph set-alignment` | Set paragraph alignment (justification) on a paragraph-like block. |
 | `doc.format.paragraph.clear_alignment` | `format paragraph clear-alignment` | Remove direct paragraph alignment, reverting to style-defined or default alignment. |
@@ -741,19 +668,6 @@ The SDKs expose all operations from the [Document API](/document-api/overview) p
 | `doc.format.paragraph.clear_border` | `format paragraph clear-border` | Remove border for a specific side or all sides of a paragraph. |
 | `doc.format.paragraph.set_shading` | `format paragraph set-shading` | Set paragraph shading (background fill, pattern color, pattern type). |
 | `doc.format.paragraph.clear_shading` | `format paragraph clear-shading` | Remove all paragraph shading. |
-
-#### Styles
-
-| Operation | CLI command | Description |
-| --- | --- | --- |
-| `doc.styles.apply` | `styles apply` | Apply document-level default style changes to the stylesheet (word/styles.xml). Targets docDefaults run and paragraph channels with set-style patch semantics. |
-
-#### Styles / Paragraph
-
-| Operation | CLI command | Description |
-| --- | --- | --- |
-| `doc.styles.paragraph.set_style` | `styles paragraph set-style` | Set the paragraph style reference (w:pStyle) on a paragraph-like block. |
-| `doc.styles.paragraph.clear_style` | `styles paragraph clear-style` | Remove the paragraph style reference from a paragraph-like block. |
 
 #### Create
 
@@ -787,12 +701,6 @@ The SDKs expose all operations from the [Document API](/document-api/overview) p
 | `doc.sections.set_link_to_previous` | `sections set-link-to-previous` | Set or clear link-to-previous behavior for a header/footer variant. |
 | `doc.sections.set_page_borders` | `sections set-page-borders` | Set page border configuration for a section. |
 | `doc.sections.clear_page_borders` | `sections clear-page-borders` | Clear page border configuration for a section. |
-
-#### Blocks
-
-| Operation | CLI command | Description |
-| --- | --- | --- |
-| `doc.blocks.delete` | `blocks delete` | Delete an entire block node (paragraph, heading, list item, table, image, or sdt) deterministically. |
 
 #### Lists
 
@@ -896,12 +804,6 @@ The SDKs expose all operations from the [Document API](/document-api/overview) p
 | `doc.track_changes.get` | `track-changes get` | Retrieve a single tracked change by ID. |
 | `doc.track_changes.decide` | `track-changes decide` | Accept or reject a tracked change (by ID or scope: all). |
 
-#### Capabilities
-
-| Operation | CLI command | Description |
-| --- | --- | --- |
-| `doc.capabilities.get` | `capabilities` | Query runtime capabilities supported by the current document engine. |
-
 #### History
 
 | Operation | CLI command | Description |
@@ -914,18 +816,36 @@ The SDKs expose all operations from the [Document API](/document-api/overview) p
 
 | Operation | CLI command | Description |
 | --- | --- | --- |
+| `doc.open` | `open` | Open a document and create a persistent editing session. Optionally override the document body with contentOverride + overrideType (markdown, html, or text). |
+| `doc.save` | `save` | Save the current session to the original file or a new path. |
+| `doc.close` | `close` | Close the active editing session and clean up resources. |
+| `doc.status` | `status` | Show the current session status and document metadata. |
+| `doc.describe` | `describe` | List all available CLI operations and contract metadata. |
+| `doc.describe_command` | `describe command` | Show detailed metadata for a single CLI operation. |
 | `doc.session.list` | `session list` | List all active editing sessions. |
 | `doc.session.save` | `session save` | Persist the current session state. |
 | `doc.session.close` | `session close` | Close a specific editing session by ID. |
 | `doc.session.set_default` | `session set-default` | Set the default session for subsequent commands. |
 
-#### Introspection
+#### Core
 
 | Operation | CLI command | Description |
 | --- | --- | --- |
-| `doc.status` | `status` | Show the current session status and document metadata. |
-| `doc.describe` | `describe` | List all available CLI operations and contract metadata. |
-| `doc.describe_command` | `describe command` | Show detailed metadata for a single CLI operation. |
+| `doc.find` | `find` | Search the document for nodes matching type, text, or attribute criteria. |
+| `doc.get_node` | `get-node` | Retrieve a single node by target position. |
+| `doc.get_node_by_id` | `get-node-by-id` | Retrieve a single node by its unique ID. |
+| `doc.get_text` | `get-text` | Extract the plain-text content of the document. |
+| `doc.get_markdown` | `get-markdown` | Extract the document content as a Markdown string. |
+| `doc.get_html` | `get-html` | Extract the document content as an HTML string. |
+| `doc.info` | `info` | Return document metadata including revision, node count, and capabilities. |
+| `doc.insert` | `insert` | Insert content at a target position, or at the end of the document when target is omitted. Supports text (default), markdown, and html content types via the `type` field. |
+| `doc.replace` | `replace` | Replace content at a target position with new text or inline content. |
+| `doc.delete` | `delete` | Delete content at a target position. |
+| `doc.blocks.delete` | `blocks delete` | Delete an entire block node (paragraph, heading, list item, table, image, or sdt) deterministically. |
+| `doc.query.match` | `query match` | Deterministic selector-based search with cardinality contracts for mutation targeting. |
+| `doc.mutations.preview` | `mutations preview` | Dry-run a mutation plan, returning resolved targets without applying changes. |
+| `doc.mutations.apply` | `mutations apply` | Execute a mutation plan atomically against the document. |
+| `doc.capabilities.get` | `capabilities` | Query runtime capabilities supported by the current document engine. |
 
   </Tab>
 </Tabs>

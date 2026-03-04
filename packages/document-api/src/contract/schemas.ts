@@ -2623,60 +2623,241 @@ const operationSchemas: Record<OperationId, OperationSchemaSet> = {
       return discoveryResultSchema({ oneOf: [textMatchItemSchema, nodeMatchItemSchema] }, queryMatchMetaSchema);
     })(),
   },
-  'mutations.preview': {
-    input: objectSchema(
+  // ---------------------------------------------------------------------------
+  // Mutation step schema — discriminated union by `op`
+  // ---------------------------------------------------------------------------
+
+  ...(() => {
+    // Targeting: SelectWhere | RefWhere
+    const selectWhereSchema = objectSchema(
+      {
+        by: { const: 'select', type: 'string' },
+        select: { oneOf: [textSelectorSchema, nodeSelectorSchema] },
+        within: nodeAddressSchema,
+        require: { enum: ['first', 'exactlyOne', 'all'] },
+      },
+      ['by', 'select', 'require'],
+    );
+
+    const refWhereSchema = objectSchema(
+      {
+        by: { const: 'ref', type: 'string' },
+        ref: { type: 'string' },
+        within: nodeAddressSchema,
+      },
+      ['by', 'ref'],
+    );
+
+    const stepWhereSchema: JsonSchema = { oneOf: [selectWhereSchema, refWhereSchema] };
+
+    // Insert-only where (no 'all' require, no ref)
+    const insertWhereSchema = objectSchema(
+      {
+        by: { const: 'select', type: 'string' },
+        select: { oneOf: [textSelectorSchema, nodeSelectorSchema] },
+        within: nodeAddressSchema,
+        require: { enum: ['first', 'exactlyOne'] },
+      },
+      ['by', 'select', 'require'],
+    );
+
+    // Assert where (select only, no require)
+    const assertWhereSchema = objectSchema(
+      {
+        by: { const: 'select', type: 'string' },
+        select: { oneOf: [textSelectorSchema, nodeSelectorSchema] },
+        within: nodeAddressSchema,
+      },
+      ['by', 'select'],
+    );
+
+    // Replacement payload
+    const replacementBlockSchema = objectSchema({ text: { type: 'string' } }, ['text']);
+    const replacementPayloadSchema: JsonSchema = {
+      oneOf: [
+        objectSchema({ text: { type: 'string' } }, ['text']),
+        objectSchema({ blocks: arraySchema(replacementBlockSchema) }, ['blocks']),
+      ],
+    };
+
+    // Style policies
+    const inlineDirectiveSchema: JsonSchema = { enum: [...INLINE_DIRECTIVES] };
+    const setMarksSchema = objectSchema({
+      bold: inlineDirectiveSchema,
+      italic: inlineDirectiveSchema,
+      underline: inlineDirectiveSchema,
+      strike: inlineDirectiveSchema,
+    });
+    const inlineStylePolicySchema = objectSchema(
+      {
+        mode: { enum: ['preserve', 'set', 'clear', 'merge'], type: 'string' },
+        requireUniform: { type: 'boolean' },
+        onNonUniform: { enum: ['error', 'useLeadingRun', 'majority', 'union'] },
+        setMarks: setMarksSchema,
+      },
+      ['mode'],
+    );
+    const paragraphStylePolicySchema = objectSchema(
+      {
+        mode: { enum: ['preserve', 'set', 'clear'], type: 'string' },
+      },
+      ['mode'],
+    );
+    const stylePolicySchema = objectSchema(
+      {
+        inline: inlineStylePolicySchema,
+        paragraph: paragraphStylePolicySchema,
+      },
+      ['inline'],
+    );
+    const insertStylePolicySchema = objectSchema(
+      {
+        inline: objectSchema(
+          {
+            mode: { enum: ['inherit', 'set', 'clear'], type: 'string' },
+            setMarks: setMarksSchema,
+          },
+          ['mode'],
+        ),
+      },
+      ['inline'],
+    );
+
+    // Step variants
+    const textRewriteStepSchema = objectSchema(
+      {
+        id: { type: 'string' },
+        op: { const: 'text.rewrite', type: 'string' },
+        where: stepWhereSchema,
+        args: objectSchema(
+          {
+            replacement: replacementPayloadSchema,
+            style: stylePolicySchema,
+          },
+          ['replacement'],
+        ),
+      },
+      ['id', 'op', 'where', 'args'],
+    );
+
+    const textInsertStepSchema = objectSchema(
+      {
+        id: { type: 'string' },
+        op: { const: 'text.insert', type: 'string' },
+        where: insertWhereSchema,
+        args: objectSchema(
+          {
+            position: { enum: ['before', 'after'] },
+            content: objectSchema({ text: { type: 'string' } }, ['text']),
+            style: insertStylePolicySchema,
+          },
+          ['position', 'content'],
+        ),
+      },
+      ['id', 'op', 'where', 'args'],
+    );
+
+    const textDeleteStepSchema = objectSchema(
+      {
+        id: { type: 'string' },
+        op: { const: 'text.delete', type: 'string' },
+        where: stepWhereSchema,
+        args: objectSchema({}),
+      },
+      ['id', 'op', 'where', 'args'],
+    );
+
+    const formatApplyStepSchema = objectSchema(
+      {
+        id: { type: 'string' },
+        op: { const: 'format.apply', type: 'string' },
+        where: stepWhereSchema,
+        args: objectSchema(
+          {
+            inline: buildInlineRunPatchSchema(),
+          },
+          ['inline'],
+        ),
+      },
+      ['id', 'op', 'where', 'args'],
+    );
+
+    const assertStepSchema = objectSchema(
+      {
+        id: { type: 'string' },
+        op: { const: 'assert', type: 'string' },
+        where: assertWhereSchema,
+        args: objectSchema(
+          {
+            expectCount: { type: 'number' },
+          },
+          ['expectCount'],
+        ),
+      },
+      ['id', 'op', 'where', 'args'],
+    );
+
+    const mutationStepSchema: JsonSchema = {
+      oneOf: [
+        textRewriteStepSchema,
+        textInsertStepSchema,
+        textDeleteStepSchema,
+        formatApplyStepSchema,
+        assertStepSchema,
+      ],
+    };
+
+    const mutationsInputSchema = objectSchema(
       {
         expectedRevision: { type: 'string' },
-        atomic: { const: true },
+        atomic: { const: true, type: 'boolean' },
         changeMode: { enum: ['direct', 'tracked'] },
-        steps: arraySchema({ type: 'object' }),
+        steps: arraySchema(mutationStepSchema),
       },
       ['atomic', 'changeMode', 'steps'],
-    ),
-    output: objectSchema(
-      {
-        evaluatedRevision: { type: 'string' },
-        steps: arraySchema({ type: 'object' }),
-        valid: { type: 'boolean' },
-        failures: arraySchema({ type: 'object' }),
+    );
+
+    return {
+      'mutations.preview': {
+        input: mutationsInputSchema,
+        output: objectSchema(
+          {
+            evaluatedRevision: { type: 'string' },
+            steps: arraySchema({ type: 'object' }),
+            valid: { type: 'boolean' },
+            failures: arraySchema({ type: 'object' }),
+          },
+          ['evaluatedRevision', 'steps', 'valid'],
+        ),
       },
-      ['evaluatedRevision', 'steps', 'valid'],
-    ),
-  },
-  'mutations.apply': {
-    input: objectSchema(
-      {
-        expectedRevision: { type: 'string' },
-        atomic: { const: true },
-        changeMode: { enum: ['direct', 'tracked'] },
-        steps: arraySchema({ type: 'object' }),
+      'mutations.apply': {
+        input: mutationsInputSchema,
+        output: objectSchema(
+          {
+            success: { const: true },
+            revision: objectSchema({ before: { type: 'string' }, after: { type: 'string' } }, ['before', 'after']),
+            steps: arraySchema({ type: 'object' }),
+            trackedChanges: arraySchema({ type: 'object' }),
+            timing: objectSchema({ totalMs: { type: 'number' } }, ['totalMs']),
+          },
+          ['success', 'revision', 'steps', 'timing'],
+        ),
+        success: objectSchema(
+          {
+            success: { const: true },
+            revision: objectSchema({ before: { type: 'string' }, after: { type: 'string' } }, ['before', 'after']),
+            steps: arraySchema({ type: 'object' }),
+            timing: objectSchema({ totalMs: { type: 'number' } }, ['totalMs']),
+          },
+          ['success', 'revision', 'steps', 'timing'],
+        ),
+        // `mutations.apply` throws pre-apply plan-engine errors rather than returning
+        // receipt-style non-applied failures, but SDK contract consumers still require
+        // an explicit failure schema descriptor for mutation operations.
+        failure: preApplyFailureResultSchemaFor('mutations.apply'),
       },
-      ['atomic', 'changeMode', 'steps'],
-    ),
-    output: objectSchema(
-      {
-        success: { const: true },
-        revision: objectSchema({ before: { type: 'string' }, after: { type: 'string' } }, ['before', 'after']),
-        steps: arraySchema({ type: 'object' }),
-        trackedChanges: arraySchema({ type: 'object' }),
-        timing: objectSchema({ totalMs: { type: 'number' } }, ['totalMs']),
-      },
-      ['success', 'revision', 'steps', 'timing'],
-    ),
-    success: objectSchema(
-      {
-        success: { const: true },
-        revision: objectSchema({ before: { type: 'string' }, after: { type: 'string' } }, ['before', 'after']),
-        steps: arraySchema({ type: 'object' }),
-        timing: objectSchema({ totalMs: { type: 'number' } }, ['totalMs']),
-      },
-      ['success', 'revision', 'steps', 'timing'],
-    ),
-    // `mutations.apply` throws pre-apply plan-engine errors rather than returning
-    // receipt-style non-applied failures, but SDK contract consumers still require
-    // an explicit failure schema descriptor for mutation operations.
-    failure: preApplyFailureResultSchemaFor('mutations.apply'),
-  },
+    };
+  })(),
   'capabilities.get': {
     input: strictEmptyObjectSchema,
     output: capabilitiesOutputSchema,

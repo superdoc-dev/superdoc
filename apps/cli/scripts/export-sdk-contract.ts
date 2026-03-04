@@ -282,6 +282,8 @@ function buildSdkContract() {
       entry.outputSchema = docOp.outputSchema;
       if (docOp.successSchema) entry.successSchema = docOp.successSchema;
       if (docOp.failureSchema) entry.failureSchema = docOp.failureSchema;
+      if (docOp.skipAsATool) entry.skipAsATool = true;
+      if (docOp.essential) entry.essential = true;
     } else {
       // CLI-only operation — metadata from canonical definitions
       const def = cliOnlyDef!;
@@ -290,6 +292,7 @@ function buildSdkContract() {
       entry.supportsTrackedMode = def.sdkMetadata.supportsTrackedMode;
       entry.supportsDryRun = def.sdkMetadata.supportsDryRun;
       entry.outputSchema = def.outputSchema;
+      if (def.skipAsATool) entry.skipAsATool = true;
     }
 
     // Invariant: every operation must have outputSchema

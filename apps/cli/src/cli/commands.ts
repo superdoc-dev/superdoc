@@ -158,17 +158,17 @@ function buildHelpText(): string {
   }
 
   const categoryOrder = [
-    'query',
-    'mutation',
+    'core',
     'format',
     'create',
-    'blocks',
+    'tables',
+    'sections',
     'lists',
     'comments',
     'trackChanges',
-    'lifecycle',
+    'toc',
+    'history',
     'session',
-    'introspection',
   ];
 
   for (const category of categoryOrder) {

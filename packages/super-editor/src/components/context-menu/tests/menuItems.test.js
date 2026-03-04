@@ -514,6 +514,7 @@ describe('menuItems.js', () => {
       expect(clipboardMocks.handleClipboardPaste).toHaveBeenCalledWith(
         { editor: mockEditor, view: mockEditor.view },
         '<p>word html</p>',
+        'word html',
       );
       expect(mockEditor.view.pasteHTML).toHaveBeenCalledWith('<p>word html</p>', expect.any(Object));
       expect(insertContent).not.toHaveBeenCalled();

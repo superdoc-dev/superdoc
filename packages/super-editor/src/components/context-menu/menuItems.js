@@ -328,7 +328,7 @@ export function getItems(context, customItems = [], includeDefaultItems = true) 
                 view.dispatch(tr.setSelection(SelectionType.create(doc, safeFrom, safeTo)));
               }
             }
-            const handled = html ? handleClipboardPaste({ editor, view }, html) : false;
+            const handled = handleClipboardPaste({ editor, view }, html, text);
             if (!handled) {
               const pasteEvent = createPasteEventShim({ html, text });
 

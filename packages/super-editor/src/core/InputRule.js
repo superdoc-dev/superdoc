@@ -9,6 +9,12 @@ import { isRegExp } from './utilities/isRegExp.js';
 import { handleDocxPaste, wrapTextsInRuns } from './inputRules/docx-paste/docx-paste.js';
 import { flattenListsInHtml } from './inputRules/html/html-helpers.js';
 import { handleGoogleDocsHtml } from './inputRules/google-docs-paste/google-docs-paste.js';
+import {
+  detectPasteUrl,
+  handlePlainTextUrlPaste,
+  normalizePastedLinks,
+  resolveLinkProtocols,
+} from './inputRules/paste-link-normalizer.js';
 
 export class InputRule {
   match;
@@ -221,6 +227,7 @@ export const inputRulesPlugin = ({ editor, rules }) => {
       handlePaste(view, event, slice) {
         const clipboard = event.clipboardData;
         const html = clipboard.getData('text/html');
+        const plainText = clipboard.getData('text/plain');
 
         // Allow specialised plugins (e.g., field-annotation) first shot.
         const fieldAnnotationContent = slice.content.content.filter((item) => item.type.name === 'fieldAnnotation');
@@ -228,7 +235,7 @@ export const inputRulesPlugin = ({ editor, rules }) => {
           return false;
         }
 
-        const result = handleClipboardPaste({ editor, view }, html);
+        const result = handleClipboardPaste({ editor, view }, html, plainText);
         return result;
       },
     },
@@ -367,6 +374,7 @@ export function handleHtmlPaste(html, editor, source) {
     // Extract the contents of the paragraph and paste only those
     const paragraphContent = doc.firstChild.content;
     const tr = state.tr.replaceSelectionWith(paragraphContent, false);
+    normalizePastedLinks(tr, editor);
     dispatch(tr);
   } else if (isInParagraph) {
     // For multi-paragraph paste, use replaceSelection with a proper Slice
@@ -375,10 +383,13 @@ export function handleHtmlPaste(html, editor, source) {
     const slice = new Slice(doc.content, 0, 0);
 
     const tr = state.tr.replaceSelection(slice);
+    normalizePastedLinks(tr, editor);
     dispatch(tr);
   } else {
     // Use the original behavior for other cases
-    dispatch(state.tr.replaceSelectionWith(doc, true));
+    const tr = state.tr.replaceSelectionWith(doc, true);
+    normalizePastedLinks(tr, editor);
+    dispatch(tr);
   }
 
   return true;
@@ -483,9 +494,10 @@ export function sanitizeHtml(html, forbiddenTags = ['meta', 'svg', 'script', 'st
  * @param {Editor}   params.editor  The SuperEditor instance.
  * @param {View}     params.view    The ProseMirror view associated with the editor.
  * @param {String}   html           HTML clipboard content (may be empty).
+ * @param {String}   [plainText]    Plain-text clipboard content (may be empty).
  * @returns {Boolean}               Whether the paste was handled.
  */
-export function handleClipboardPaste({ editor, view }, html) {
+export function handleClipboardPaste({ editor, view }, html, plainText) {
   let source;
 
   if (!html) {
@@ -499,10 +511,12 @@ export function handleClipboardPaste({ editor, view }, html) {
   }
 
   switch (source) {
-    case 'plain-text':
-      // Let native/plain text paste fall through so ProseMirror handles it.
-      // Will hit the Fallback when boolean is returned false
-      return false;
+    case 'plain-text': {
+      const protocols = resolveLinkProtocols(editor);
+      const detected = detectPasteUrl(plainText, protocols);
+      if (!detected) return false;
+      return handlePlainTextUrlPaste(editor, view, plainText, detected);
+    }
     case 'word-html':
       if (editor.options.mode === 'docx') {
         return handleDocxPaste(html, editor, view);

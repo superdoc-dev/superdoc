@@ -91,4 +91,8 @@ export function sanitizeHtml(html: string, forbiddenTags?: string[], domDocument
 /**
  * Handle clipboard paste events
  */
-export function handleClipboardPaste(params: { editor: Editor; view: EditorView }, html: string): boolean;
+export function handleClipboardPaste(
+  params: { editor: Editor; view: EditorView },
+  html: string,
+  plainText?: string,
+): boolean;

@@ -623,8 +623,12 @@ const init = async () => {
     toolbarGroups: ['left', 'center', 'right'],
     pagination: useLayoutEngine.value && !useWebLayout.value,
     viewOptions: { layout: useWebLayout.value ? 'web' : 'print' },
-    // Web layout mode requires Layout Engine to be OFF (uses ProseMirror's native rendering)
-    useLayoutEngine: useLayoutEngine.value && !useWebLayout.value,
+    // Web layout + layout engine now uses semantic flow mode.
+    useLayoutEngine: useLayoutEngine.value,
+    layoutEngineOptions: {
+      flowMode: useWebLayout.value ? 'semantic' : 'paginated',
+      ...(useWebLayout.value ? { semanticOptions: { marginsMode: 'none' } } : {}),
+    },
     rulers: true,
     rulerContainer: '#ruler-container',
     annotations: true,
@@ -1185,6 +1189,7 @@ const activeSidebarLabel = computed(() => activeSidebar.value?.label ?? 'None');
 const activeSidebarProps = computed(() => {
   if (activeSidebarId.value === 'layout') {
     return {
+      useWebLayout: useWebLayout.value,
       useWordOverlay: useWordOverlay.value,
       isGeneratingWordBaseline: isGeneratingWordBaseline.value,
       generatedCount: generatedWordScreenshots.value.length,
@@ -1257,7 +1262,8 @@ if (scrollTestMode.value) {
           <div class="dev-app__brand-meta">
             <div class="dev-app__meta-row">
               <span class="dev-app__pill">SUPERDOC LABS</span>
-              <span class="badge">Layout Engine: {{ useLayoutEngine && !useWebLayout ? 'ON' : 'OFF' }}</span>
+              <span class="badge">Layout Engine: {{ useLayoutEngine ? 'ON' : 'OFF' }}</span>
+              <span v-if="useLayoutEngine" class="badge">Flow: {{ useWebLayout ? 'SEMANTIC' : 'PAGINATED' }}</span>
               <span v-if="useWebLayout" class="badge">Web Layout: ON</span>
               <span v-if="scrollTestMode" class="badge badge--warning">Scroll Test: ON</span>
               <span v-if="useCollaboration" class="badge badge--collab">Collab: ON</span>
@@ -1377,9 +1383,6 @@ if (scrollTestMode.value) {
             <button class="dev-app__header-export-btn" @click="toggleLayoutEngine">
               Turn Layout Engine {{ useLayoutEngine ? 'off' : 'on' }} (reloads)
             </button>
-            <button class="dev-app__header-export-btn" @click="toggleViewLayout">
-              Turn Web Layout {{ useWebLayout ? 'off' : 'on' }} (reloads)
-            </button>
           </div>
         </div>
       </div>
@@ -1417,6 +1420,7 @@ if (scrollTestMode.value) {
             v-bind="activeSidebarProps"
             @close="setActiveSidebar('off')"
             @toggle-overlay="toggleWordOverlay"
+            @toggle-web-layout="toggleViewLayout"
             @generate-baseline="generateWordBaseline"
             @clear-generated-baseline="clearGeneratedWordBaseline"
             @update:word-overlay-opacity="setWordOverlayOpacity"

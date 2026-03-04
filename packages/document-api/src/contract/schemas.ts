@@ -1552,6 +1552,16 @@ const operationSchemas: Record<OperationId, OperationSchemaSet> = {
     input: strictEmptyObjectSchema,
     output: { type: 'string' },
   },
+  getMarkdown: {
+    input: strictEmptyObjectSchema,
+    output: { type: 'string' },
+  },
+  getHtml: {
+    input: objectSchema({
+      unflattenLists: { type: 'boolean' },
+    }),
+    output: { type: 'string' },
+  },
   info: {
     input: strictEmptyObjectSchema,
     output: documentInfoSchema,
@@ -2736,7 +2746,7 @@ const operationSchemas: Record<OperationId, OperationSchemaSet> = {
         changeMode: { enum: ['direct', 'tracked'] },
         steps: arraySchema({ type: 'object' }),
       },
-      ['expectedRevision', 'atomic', 'changeMode', 'steps'],
+      ['atomic', 'changeMode', 'steps'],
     ),
     output: objectSchema(
       {
@@ -2756,7 +2766,7 @@ const operationSchemas: Record<OperationId, OperationSchemaSet> = {
         changeMode: { enum: ['direct', 'tracked'] },
         steps: arraySchema({ type: 'object' }),
       },
-      ['expectedRevision', 'atomic', 'changeMode', 'steps'],
+      ['atomic', 'changeMode', 'steps'],
     ),
     output: objectSchema(
       {

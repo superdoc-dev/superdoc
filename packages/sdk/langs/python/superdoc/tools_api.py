@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import inspect
 import json
+import re
 from importlib import resources
 from typing import Any, Dict, List, Literal, Mapping, Optional, TypedDict, cast
 
@@ -296,28 +297,41 @@ def choose_tools(input: ToolChooserInput) -> Dict[str, Any]:
             continue
         filtered.append(tool)
 
+    # Resolve forceInclude tools — these are guaranteed slots exempt from budget trimming.
     index_by_name = {str(tool.get('toolName')): tool for tool in profile_tools if isinstance(tool, dict)}
-    for forced_name in policy.get('forceInclude') or []:
-        forced = index_by_name.get(str(forced_name))
+    forced_tool_names_raw: list = list(policy.get('forceInclude') or [])
+    forced_tool_names_seen: set = set()
+    forced_tools: List[Dict[str, Any]] = []
+    for forced_name in forced_tool_names_raw:
+        forced_name_key = str(forced_name)
+        if forced_name_key in forced_tool_names_seen:
+            continue
+        forced_tool_names_seen.add(forced_name_key)
+        forced = index_by_name.get(forced_name_key)
         if forced is None:
             excluded.append({'toolName': str(forced_name), 'reason': 'not-in-profile'})
             continue
         filtered.append(forced)
+        forced_tools.append(forced)
 
     deduped: Dict[str, Dict[str, Any]] = {}
     for tool in filtered:
         deduped[str(tool.get('toolName'))] = tool
     candidates = list(deduped.values())
 
-    selected: List[Dict[str, Any]] = []
+    # Start with forceInclude tools — they always occupy a slot.
+    selected: List[Dict[str, Any]] = list(forced_tools)
+    selected_names: set = {str(tool.get('toolName')) for tool in selected}
+
     foundational_ids = set(defaults.get('foundationalOperationIds', []))
-    foundational = [tool for tool in candidates if str(tool.get('operationId')) in foundational_ids]
+    foundational = [tool for tool in candidates if str(tool.get('operationId')) in foundational_ids and str(tool.get('toolName')) not in selected_names]
     for tool in foundational:
         if len(selected) >= min_read_tools or len(selected) >= max_tools:
             break
         selected.append(tool)
+        selected_names.add(str(tool.get('toolName')))
 
-    remaining = [tool for tool in _priority_sort(candidates, phase_policy['priority']) if str(tool.get('toolName')) not in {str(item.get('toolName')) for item in selected}]
+    remaining = [tool for tool in _priority_sort(candidates, phase_policy['priority']) if str(tool.get('toolName')) not in selected_names]
 
     for tool in remaining:
         if len(selected) >= max_tools:
@@ -464,15 +478,31 @@ def _resolve_doc_method(client: Any, operation_id: str) -> Any:
     if doc is None:
         raise SuperDocError('Client has no doc API.', code='TOOL_DISPATCH_NOT_FOUND', details={'operationId': operation_id})
 
+    def _snake_case(token: str) -> str:
+        token = re.sub(r'([A-Z]+)([A-Z][a-z])', r'\1_\2', token)
+        token = re.sub(r'([a-z0-9])([A-Z])', r'\1_\2', token)
+        return token.replace('-', '_').lower()
+
     cursor = doc
     for token in operation_id.split('.')[1:]:
-        if not hasattr(cursor, token):
+        candidates = [token]
+        snake_token = _snake_case(token)
+        if snake_token != token:
+            candidates.append(snake_token)
+
+        resolved = None
+        for candidate in candidates:
+            if hasattr(cursor, candidate):
+                resolved = getattr(cursor, candidate)
+                break
+
+        if resolved is None:
             raise SuperDocError(
                 'No SDK doc method found for operation.',
                 code='TOOL_DISPATCH_NOT_FOUND',
                 details={'operationId': operation_id, 'token': token},
             )
-        cursor = getattr(cursor, token)
+        cursor = resolved
 
     if not callable(cursor):
         raise SuperDocError(

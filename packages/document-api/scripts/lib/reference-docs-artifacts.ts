@@ -12,6 +12,7 @@ import {
   OPERATION_DESCRIPTION_MAP,
   OPERATION_EXPECTED_RESULT_MAP,
   OPERATION_REFERENCE_DOC_PATH_MAP,
+  PUBLIC_STEP_OP_CATALOG,
   REFERENCE_OPERATION_ALIASES,
   REFERENCE_OPERATION_GROUPS,
   type ReferenceAliasDefinition,
@@ -80,6 +81,55 @@ function renderNoWrapCode(value: string): string {
 
 function renderNoWrapLinkCode(label: string, href: string): string {
   return `<span style={{ whiteSpace: 'nowrap', wordBreak: 'normal', overflowWrap: 'normal' }}><a href="${href}"><code>${label}</code></a></span>`;
+}
+
+const STEP_DOMAIN_ORDER = ['assert', 'text', 'format', 'create', 'tables'] as const;
+const STEP_DOMAIN_LABELS: Record<(typeof STEP_DOMAIN_ORDER)[number], string> = {
+  assert: 'Assert',
+  text: 'Text',
+  format: 'Format',
+  create: 'Create',
+  tables: 'Tables',
+};
+
+function renderStepReferenceCell(referenceOperationId?: ContractOperationSnapshot['operationId']): string {
+  if (!referenceOperationId) return '—';
+  const operationPath = toOperationDocPath(referenceOperationId);
+  return renderNoWrapLinkCode(referenceOperationId, toPublicDocHref(operationPath));
+}
+
+function renderStepOpsSection(operation: ContractOperationSnapshot): string {
+  if (operation.operationId !== 'mutations.apply' && operation.operationId !== 'mutations.preview') {
+    return '';
+  }
+
+  const domainSections = STEP_DOMAIN_ORDER.map((domain) => {
+    const entries = PUBLIC_STEP_OP_CATALOG.filter((entry) => entry.domain === domain);
+    if (entries.length === 0) return '';
+
+    const rows = entries
+      .map(
+        (entry) =>
+          `| ${renderNoWrapCode(entry.opId)} | ${escapeCell(entry.description)} | ${renderStepReferenceCell(entry.referenceOperationId)} |`,
+      )
+      .join('\n');
+
+    return `### ${STEP_DOMAIN_LABELS[domain]}
+
+| Step op (\`steps[].op\`) | Description | Related API operation |
+| --- | --- | --- |
+${rows}`;
+  })
+    .filter(Boolean)
+    .join('\n\n');
+
+  return `## Supported step operations
+
+Use these values in \`steps[].op\` when authoring mutation plans.
+
+${domainSections}
+
+The runtime capability snapshot also exposes this allowlist at \`planEngine.supportedStepOps\`.`;
 }
 
 // ---------------------------------------------------------------------------
@@ -563,6 +613,8 @@ function renderOperationPage(operation: ContractOperationSnapshot, $defs: Defs):
 
   const inputExample = generateExample(operation.schemas.input, $defs);
   const outputExample = generateExample(operation.schemas.output, $defs);
+  const stepOpsSection = renderStepOpsSection(operation);
+  const expectedResultSection = `${expectedResult}${stepOpsSection ? `\n\n${stepOpsSection}` : ''}`;
 
   // -- Build raw-schema accordion blocks --
   const rawSchemaBlocks: string[] = [];
@@ -599,7 +651,7 @@ ${description}
 
 ## Expected result
 
-${expectedResult}
+${expectedResultSection}
 
 ## Input fields
 

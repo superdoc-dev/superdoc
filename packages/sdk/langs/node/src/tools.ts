@@ -433,27 +433,37 @@ export async function chooseTools(input: ToolChooserInput): Promise<{
     return false;
   });
 
-  for (const forcedToolName of input.policy?.forceInclude ?? []) {
+  // Resolve forceInclude tools — these are guaranteed slots exempt from budget trimming.
+  const forcedToolNames = new Set<string>(input.policy?.forceInclude ?? []);
+  const forcedTools: ToolCatalogEntry[] = [];
+  for (const forcedToolName of forcedToolNames) {
     const forced = indexByToolName.get(forcedToolName);
     if (!forced) {
       excluded.push({ toolName: forcedToolName, reason: 'not-in-profile' });
       continue;
     }
     candidates.push(forced);
+    forcedTools.push(forced);
   }
 
   candidates = [...new Map(candidates.map((tool) => [tool.toolName, tool])).values()];
 
-  const selected: ToolCatalogEntry[] = [];
+  // Start with forceInclude tools — they always occupy a slot.
+  const selected: ToolCatalogEntry[] = [...forcedTools];
+  const selectedNames = new Set(selected.map((tool) => tool.toolName));
+
   const foundationalIds = new Set(policy.defaults.foundationalOperationIds);
-  const foundational = candidates.filter((tool) => foundationalIds.has(tool.operationId));
+  const foundational = candidates.filter(
+    (tool) => foundationalIds.has(tool.operationId) && !selectedNames.has(tool.toolName),
+  );
   for (const tool of foundational) {
     if (selected.length >= minReadTools || selected.length >= maxTools) break;
     selected.push(tool);
+    selectedNames.add(tool.toolName);
   }
 
   const remaining = stableSortByPhasePriority(
-    candidates.filter((tool) => !selected.some((entry) => entry.toolName === tool.toolName)),
+    candidates.filter((tool) => !selectedNames.has(tool.toolName)),
     phasePolicy.priority,
   );
 

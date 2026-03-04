@@ -97,6 +97,64 @@ describe('compilePlan ref-targeting semantics', () => {
   });
 });
 
+describe('compilePlan step-op allowlist', () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+    mockedDeps.getRevision.mockReturnValue('0');
+    mockedDeps.getBlockIndex.mockReturnValue({ candidates: [] });
+  });
+
+  it('rejects internal-only step ops for user-authored plans', () => {
+    const editor = makeEditor();
+    const steps: MutationStep[] = [
+      {
+        id: 'internal-step',
+        op: 'domain.command',
+        where: { by: 'select', select: { type: 'text', pattern: 'x', mode: 'contains' }, require: 'first' },
+        args: {},
+      },
+    ];
+
+    try {
+      compilePlan(editor, steps);
+    } catch (error) {
+      expect(error).toBeInstanceOf(PlanError);
+      const planError = error as PlanError;
+      expect(planError.code).toBe('INVALID_INPUT');
+      expect(planError.stepId).toBe('internal-step');
+      expect(planError.message).toContain('unknown step op "domain.command"');
+      return;
+    }
+
+    throw new Error('expected compilePlan to reject internal-only step op');
+  });
+
+  it('rejects unknown table step ops instead of silently no-oping', () => {
+    const editor = makeEditor();
+    const steps: MutationStep[] = [
+      {
+        id: 'unknown-table-op',
+        op: 'tables.notReal',
+        where: { by: 'select', select: { type: 'text', pattern: 'x', mode: 'contains' }, require: 'first' },
+        args: {},
+      },
+    ];
+
+    try {
+      compilePlan(editor, steps);
+    } catch (error) {
+      expect(error).toBeInstanceOf(PlanError);
+      const planError = error as PlanError;
+      expect(planError.code).toBe('INVALID_INPUT');
+      expect(planError.stepId).toBe('unknown-table-op');
+      expect(planError.message).toContain('unknown step op "tables.notReal"');
+      return;
+    }
+
+    throw new Error('expected compilePlan to reject unknown table step op');
+  });
+});
+
 // ---------------------------------------------------------------------------
 // V3 ref resolution (D6, Phase 4)
 // ---------------------------------------------------------------------------
@@ -268,6 +326,41 @@ describe('compilePlan V3 ref resolution', () => {
     }
 
     throw new Error('expected compilePlan to throw REVISION_MISMATCH');
+  });
+
+  it('allows stale V3 ref revisions when ref-revision enforcement is disabled', () => {
+    mockedDeps.getBlockIndex.mockReturnValue({
+      candidates: [{ nodeId: 'p1', pos: 0, end: 12, node: {} }],
+    });
+
+    const ref = encodeTextRefPayload({
+      v: 3,
+      rev: 'old-rev',
+      matchId: 'm:0',
+      scope: 'run',
+      segments: [{ blockId: 'p1', start: 0, end: 5 }],
+    });
+
+    const editor = makeEditor();
+    const steps: MutationStep[] = [
+      {
+        id: 'stale-ref-allowed',
+        op: 'text.delete',
+        where: { by: 'ref', ref },
+        args: {},
+      },
+    ];
+
+    const plan = compilePlan(editor, steps, { enforceRefRevision: false });
+    expect(plan.mutationSteps).toHaveLength(1);
+    expect(plan.mutationSteps[0].targets).toHaveLength(1);
+    const target = plan.mutationSteps[0].targets[0];
+    expect(target.kind).toBe('range');
+    if (target.kind === 'range') {
+      expect(target.blockId).toBe('p1');
+      expect(target.from).toBe(0);
+      expect(target.to).toBe(5);
+    }
   });
 
   it('REVISION_MISMATCH.details.refScope uses V3 scope directly (match, not inferred from segments)', () => {

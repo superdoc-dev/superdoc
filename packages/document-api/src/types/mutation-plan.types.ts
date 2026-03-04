@@ -141,14 +141,14 @@ export type MutationStep = TextRewriteStep | TextInsertStep | TextDeleteStep | S
 export type ChangeMode = 'direct' | 'tracked';
 
 export type MutationsApplyInput = {
-  expectedRevision: string;
+  expectedRevision?: string;
   atomic: true;
   changeMode: ChangeMode;
   steps: MutationStep[];
 };
 
 export type MutationsPreviewInput = {
-  expectedRevision: string;
+  expectedRevision?: string;
   atomic: true;
   changeMode: ChangeMode;
   steps: MutationStep[];

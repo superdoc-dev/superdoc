@@ -1129,6 +1129,15 @@ class SuperConverter {
       fieldsHighlightColor,
     });
 
+    // Keep convertedXml's document part in sync with the current export tree
+    // before downstream export passes (e.g. numbering pruning) inspect refs.
+    const currentDocument = this.convertedXml['word/document.xml'] || {};
+    this.convertedXml['word/document.xml'] = {
+      ...currentDocument,
+      ...result,
+      declaration: result?.declaration ?? currentDocument.declaration,
+    };
+
     if (exportJsonOnly) return result;
 
     const exporter = new DocxExporter(this);

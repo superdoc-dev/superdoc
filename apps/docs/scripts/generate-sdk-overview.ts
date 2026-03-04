@@ -59,19 +59,38 @@ interface SdkContract {
 }
 
 // ---------------------------------------------------------------------------
-// Category display order and labels
+// Rendering metadata
 // ---------------------------------------------------------------------------
 
-const CATEGORY_ORDER = [
+type SdkLanguage = 'node' | 'python';
+
+interface SdkLanguageTab {
+  id: SdkLanguage;
+  title: string;
+}
+
+const SDK_LANGUAGE_TABS: readonly SdkLanguageTab[] = [
+  { id: 'node', title: 'Node.js' },
+  { id: 'python', title: 'Python' },
+];
+
+const CATEGORY_DISPLAY_ORDER = [
   'lifecycle',
   'query',
   'mutation',
   'format',
+  'format.paragraph',
+  'styles',
+  'styles.paragraph',
   'create',
+  'sections',
   'blocks',
   'lists',
+  'tables',
+  'toc',
   'comments',
   'trackChanges',
+  'capabilities',
   'history',
   'session',
   'introspection',
@@ -82,11 +101,18 @@ const CATEGORY_LABELS: Record<string, string> = {
   query: 'Query',
   mutation: 'Mutation',
   format: 'Format',
+  'format.paragraph': 'Format / Paragraph',
+  styles: 'Styles',
+  'styles.paragraph': 'Styles / Paragraph',
   create: 'Create',
+  sections: 'Sections',
   blocks: 'Blocks',
   lists: 'Lists',
+  tables: 'Tables',
+  toc: 'Table of contents',
   comments: 'Comments',
   trackChanges: 'Track changes',
+  capabilities: 'Capabilities',
   history: 'History',
   session: 'Session',
   introspection: 'Introspection',
@@ -108,17 +134,74 @@ function groupByCategory(operations: ContractOperation[]): Map<string, ContractO
   return groups;
 }
 
-function renderOperationsTable(operations: ContractOperation[]): string {
+function toSnakeCase(value: string): string {
+  return value
+    .replace(/([A-Z]+)([A-Z][a-z])/g, '$1_$2')
+    .replace(/([a-z0-9])([A-Z])/g, '$1_$2')
+    .replace(/[^a-zA-Z0-9]+/g, '_')
+    .replace(/^_+|_+$/g, '')
+    .toLowerCase();
+}
+
+function operationPathForLanguage(operationId: string, language: SdkLanguage): string {
+  if (language === 'node') {
+    return operationId;
+  }
+
+  return operationId
+    .split('.')
+    .map((token, index) => (index === 0 ? token : toSnakeCase(token)))
+    .join('.');
+}
+
+function resolveCategoryOrder(operations: ContractOperation[]): string[] {
+  const availableCategories = Array.from(new Set(operations.map((op) => op.category)));
+
+  const preferredCategories = CATEGORY_DISPLAY_ORDER.filter((category) => availableCategories.includes(category));
+  const additionalCategories = availableCategories
+    .filter((category) => !CATEGORY_DISPLAY_ORDER.includes(category))
+    .sort((left, right) => left.localeCompare(right));
+
+  return [...preferredCategories, ...additionalCategories];
+}
+
+function humanizeCategoryName(category: string): string {
+  if (CATEGORY_LABELS[category]) {
+    return CATEGORY_LABELS[category];
+  }
+
+  return category
+    .split('.')
+    .map((token) =>
+      token
+        .replace(/([a-z0-9])([A-Z])/g, '$1 $2')
+        .replace(/[_-]+/g, ' ')
+        .replace(/\b\w/g, (char) => char.toUpperCase()),
+    )
+    .join(' / ');
+}
+
+function escapeTableCell(value: string): string {
+  return value.replace(/\|/g, '\\|').replace(/\n/g, ' ');
+}
+
+function renderOperationsTable(operations: ContractOperation[], language: SdkLanguage): string {
   const grouped = groupByCategory(operations);
+  const categoryOrder = resolveCategoryOrder(operations);
 
   const sections: string[] = [];
 
-  for (const category of CATEGORY_ORDER) {
+  for (const category of categoryOrder) {
     const ops = grouped.get(category);
     if (!ops || ops.length === 0) continue;
 
-    const label = CATEGORY_LABELS[category] ?? category;
-    const rows = ops.map((op) => `| \`${op.operationId}\` | \`${op.command}\` | ${op.description} |`).join('\n');
+    const label = humanizeCategoryName(category);
+    const rows = ops
+      .map((op) => {
+        const operationPath = operationPathForLanguage(op.operationId, language);
+        return `| \`${operationPath}\` | \`${op.command}\` | ${escapeTableCell(op.description)} |`;
+      })
+      .join('\n');
 
     sections.push(`#### ${label}\n\n| Operation | CLI command | Description |\n| --- | --- | --- |\n${rows}`);
   }
@@ -126,15 +209,27 @@ function renderOperationsTable(operations: ContractOperation[]): string {
   return sections.join('\n\n');
 }
 
+function renderLanguageTab(operations: ContractOperation[], languageTab: SdkLanguageTab): string {
+  const table = renderOperationsTable(operations, languageTab.id);
+
+  return `  <Tab title="${languageTab.title}">
+
+${table}
+
+  </Tab>`;
+}
+
 function renderMarkerBlock(operations: ContractOperation[]): string {
-  const table = renderOperationsTable(operations);
+  const tabs = SDK_LANGUAGE_TABS.map((languageTab) => renderLanguageTab(operations, languageTab)).join('\n');
 
   return `${MARKER_START}
 ## Available operations
 
 The SDKs expose all operations from the [Document API](/document-api/overview) plus lifecycle and session commands. The tables below are grouped by category.
 
-${table}
+<Tabs>
+${tabs}
+</Tabs>
 ${MARKER_END}`;
 }
 

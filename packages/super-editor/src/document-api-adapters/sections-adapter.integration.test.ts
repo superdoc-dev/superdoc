@@ -10,6 +10,7 @@ import {
   sectionsSetHeaderFooterRefAdapter,
   sectionsSetLinkToPreviousAdapter,
   sectionsSetOddEvenHeadersFootersAdapter,
+  sectionsSetPageSetupAdapter,
 } from './sections-adapter.js';
 import { resolveSectionProjections } from './helpers/sections-resolver.js';
 
@@ -73,6 +74,36 @@ describe('sections adapter DOCX integration', () => {
 
     exportedFiles = await exportDocxFiles(editor);
     expect(exportedFiles['word/settings.xml']).not.toContain('w:evenAndOddHeaders');
+  });
+
+  it('applies landscape orientation as landscape page dimensions in exported document.xml', async () => {
+    ({ editor } = initTestEditor({
+      content: docData.docx,
+      media: docData.media,
+      mediaFiles: docData.mediaFiles,
+      fonts: docData.fonts,
+      useImmediateSetTimeout: false,
+    }));
+
+    const targetSection = getSectionAddressByIndex(editor, 0);
+    const result = sectionsSetPageSetupAdapter(
+      editor,
+      { target: targetSection, orientation: 'landscape' },
+      DIRECT_MUTATION_OPTIONS,
+    );
+    expect(result.success).toBe(true);
+
+    const section = resolveSectionProjections(editor).find((entry) => entry.range.sectionIndex === 0);
+    expect(section?.domain.pageSetup?.orientation).toBe('landscape');
+    expect(section?.domain.pageSetup?.width).toBeGreaterThan(
+      section?.domain.pageSetup?.height ?? Number.POSITIVE_INFINITY,
+    );
+
+    const exportedFiles = await exportDocxFiles(editor);
+    const documentXml = exportedFiles['word/document.xml'];
+    expect(documentXml).toContain('w:orient="landscape"');
+    expect(documentXml).toContain('w:w="15840"');
+    expect(documentXml).toContain('w:h="12240"');
   });
 
   it('creates explicit header parts/relationships when unlinking without inherited refs', async () => {

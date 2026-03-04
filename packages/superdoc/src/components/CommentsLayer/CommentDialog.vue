@@ -864,10 +864,12 @@ watch(editingCommentId, (commentId) => {
 /* ── New comment input ── */
 .new-comment-input-wrapper {
   border: 1.5px solid var(--sd-border-default, #dbdbdb);
-  border-radius: 9999px;
+  border-radius: 12px;
   padding: 8.5px 10.5px;
   background: var(--sd-surface-card, #ffffff);
   margin-top: 4px;
+  max-height: 150px;
+  overflow-y: auto;
 }
 .new-comment-input-wrapper :deep(.comment-entry) {
   border-radius: 0;
@@ -909,9 +911,11 @@ watch(editingCommentId, (commentId) => {
 }
 .reply-input-wrapper {
   border: 1.5px solid var(--sd-border-default, #dbdbdb);
-  border-radius: 9999px;
+  border-radius: 12px;
   padding: 8.5px 10.5px;
   background: var(--sd-surface-card, #ffffff);
+  max-height: 150px;
+  overflow-y: auto;
 }
 .reply-input-wrapper :deep(.comment-entry) {
   border-radius: 0;

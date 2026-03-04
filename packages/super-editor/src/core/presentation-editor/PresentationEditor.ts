@@ -112,6 +112,7 @@ import { ySyncPluginKey } from 'y-prosemirror';
 import type * as Y from 'yjs';
 import type { HeaderFooterDescriptor } from '../header-footer/HeaderFooterRegistry.js';
 import { isInRegisteredSurface } from './utils/uiSurfaceRegistry.js';
+import { buildSemanticFootnoteBlocks } from './semantic-flow-footnotes.js';
 import { splitRunsAtDecorationBoundaries } from './layout/SplitRunsAtDecorationBoundaries.js';
 
 // Types
@@ -146,6 +147,7 @@ import type {
   PendingMarginClick,
   EditorViewWithScrollFlag,
   PotentiallyMockedFunction,
+  ResolvedLayoutOptions,
 } from './types.js';
 
 // Re-export public types for backward compatibility
@@ -206,6 +208,10 @@ const HEADER_FOOTER_INIT_BUDGET_MS = 200;
 const MAX_ZOOM_WARNING_THRESHOLD = 10;
 /** Maximum number of selection rectangles per user (performance guardrail) */
 const MAX_SELECTION_RECTS_PER_USER = 100;
+/** Debounce delay for semantic-flow relayout after host resize (milliseconds). */
+const SEMANTIC_RESIZE_DEBOUNCE_MS = 120;
+/** Minimum semantic content width in pixels. */
+const MIN_SEMANTIC_CONTENT_WIDTH_PX = 1;
 
 const GLOBAL_PERFORMANCE: Performance | undefined = typeof performance !== 'undefined' ? performance : undefined;
 
@@ -302,6 +308,10 @@ export class PresentationEditor extends EventEmitter {
   /** RAF handle for coalesced decoration sync scheduling. */
   #decorationSyncRafHandle: number | null = null;
   #rafHandle: number | null = null;
+  #semanticResizeObserver: ResizeObserver | null = null;
+  #semanticResizeRaf: number | null = null;
+  #semanticResizeDebounce: number | null = null;
+  #lastSemanticContainerWidth: number | null = null;
   #editorListeners: Array<{ event: string; handler: (...args: unknown[]) => void }> = [];
   #scrollHandler: (() => void) | null = null;
   #scrollContainer: Element | Window | null = null;
@@ -390,14 +400,24 @@ export class PresentationEditor extends EventEmitter {
         }
       : undefined;
 
+    const requestedFlowMode = options.layoutEngineOptions?.flowMode === 'semantic' ? 'semantic' : 'paginated';
+    const requestedLayoutMode = options.layoutEngineOptions?.layoutMode ?? 'vertical';
     this.#layoutOptions = {
       pageSize: options.layoutEngineOptions?.pageSize ?? DEFAULT_PAGE_SIZE,
       margins: options.layoutEngineOptions?.margins ?? DEFAULT_MARGINS,
-      virtualization: options.layoutEngineOptions?.virtualization,
+      virtualization:
+        requestedFlowMode === 'semantic'
+          ? {
+              ...(options.layoutEngineOptions?.virtualization ?? {}),
+              enabled: false,
+            }
+          : options.layoutEngineOptions?.virtualization,
       zoom: options.layoutEngineOptions?.zoom ?? 1,
       pageStyles: options.layoutEngineOptions?.pageStyles,
       debugLabel: options.layoutEngineOptions?.debugLabel,
-      layoutMode: options.layoutEngineOptions?.layoutMode ?? 'vertical',
+      layoutMode: requestedFlowMode === 'semantic' ? 'vertical' : requestedLayoutMode,
+      flowMode: requestedFlowMode,
+      semanticOptions: options.layoutEngineOptions?.semanticOptions,
       trackedChanges: options.layoutEngineOptions?.trackedChanges,
       emitCommentPositionsInViewing: options.layoutEngineOptions?.emitCommentPositionsInViewing,
       enableCommentsInViewing: options.layoutEngineOptions?.enableCommentsInViewing,
@@ -614,6 +634,7 @@ export class PresentationEditor extends EventEmitter {
       this.#setupDragHandlers();
       this.#setupInputBridge();
       this.#syncTrackedChangesPreferences();
+      this.#setupSemanticResizeObserver();
 
       // Register this instance in the static registry.
       // Use a separate field to avoid mutating the caller's options object and to keep
@@ -1517,6 +1538,103 @@ export class PresentationEditor extends EventEmitter {
     return { ...this.#layoutOptions };
   }
 
+  #isSemanticFlowMode(): boolean {
+    return this.#layoutOptions.flowMode === 'semantic';
+  }
+
+  #resolveSemanticMargins(margins: PageMargins): { left: number; right: number; top: number; bottom: number } {
+    const mode = this.#layoutOptions.semanticOptions?.marginsMode ?? 'firstSection';
+    if (mode === 'none') {
+      return { left: 0, right: 0, top: 0, bottom: 0 };
+    }
+
+    const clamp = (value: number | undefined, fallback: number): number => {
+      const v = typeof value === 'number' && Number.isFinite(value) ? value : fallback;
+      return v >= 0 ? v : fallback;
+    };
+
+    if (mode === 'custom') {
+      const custom = this.#layoutOptions.semanticOptions?.customMargins;
+      return {
+        left: clamp(custom?.left, clamp(margins.left, DEFAULT_MARGINS.left!)),
+        right: clamp(custom?.right, clamp(margins.right, DEFAULT_MARGINS.right!)),
+        top: clamp(custom?.top, clamp(margins.top, DEFAULT_MARGINS.top!)),
+        bottom: clamp(custom?.bottom, clamp(margins.bottom, DEFAULT_MARGINS.bottom!)),
+      };
+    }
+    // mode === 'firstSection' — keep horizontal margins from the first DOCX section
+    // but zero vertical margins so stacked pages form a seamless continuous surface.
+    return {
+      left: clamp(margins.left, DEFAULT_MARGINS.left!),
+      right: clamp(margins.right, DEFAULT_MARGINS.right!),
+      top: 0,
+      bottom: 0,
+    };
+  }
+
+  #resolveSemanticContainerInnerWidth(): number {
+    const host = this.#visibleHost;
+    if (!host) return DEFAULT_PAGE_SIZE.w;
+    const win = host.ownerDocument?.defaultView ?? window;
+    const style = win.getComputedStyle(host);
+    const paddingLeft = Number.parseFloat(style.paddingLeft ?? '0');
+    const paddingRight = Number.parseFloat(style.paddingRight ?? '0');
+    const horizontalPadding =
+      (Number.isFinite(paddingLeft) ? paddingLeft : 0) + (Number.isFinite(paddingRight) ? paddingRight : 0);
+    const clientWidth = host.clientWidth;
+    if (Number.isFinite(clientWidth) && clientWidth > 0) {
+      return Math.max(1, clientWidth - horizontalPadding);
+    }
+    const rectWidth = host.getBoundingClientRect().width;
+    if (Number.isFinite(rectWidth) && rectWidth > 0) {
+      return Math.max(1, rectWidth - horizontalPadding);
+    }
+    return Math.max(1, DEFAULT_PAGE_SIZE.w - horizontalPadding);
+  }
+
+  #setupSemanticResizeObserver(): void {
+    if (!this.#isSemanticFlowMode()) return;
+    const view = this.#visibleHost.ownerDocument?.defaultView ?? window;
+    const ResizeObs = view.ResizeObserver;
+    if (typeof ResizeObs !== 'function') return;
+
+    this.#lastSemanticContainerWidth = this.#resolveSemanticContainerInnerWidth();
+    this.#semanticResizeObserver = new ResizeObs(() => {
+      this.#scheduleSemanticResizeRelayout();
+    });
+    this.#semanticResizeObserver.observe(this.#visibleHost);
+  }
+
+  #scheduleSemanticResizeRelayout(): void {
+    if (!this.#isSemanticFlowMode()) return;
+    const view = this.#visibleHost.ownerDocument?.defaultView ?? window;
+    if (this.#semanticResizeRaf == null) {
+      this.#semanticResizeRaf = view.requestAnimationFrame(() => {
+        this.#semanticResizeRaf = null;
+        this.#applySemanticResizeRelayout();
+      });
+    }
+    if (this.#semanticResizeDebounce != null) {
+      view.clearTimeout(this.#semanticResizeDebounce);
+    }
+    this.#semanticResizeDebounce = view.setTimeout(() => {
+      this.#semanticResizeDebounce = null;
+      this.#applySemanticResizeRelayout();
+    }, SEMANTIC_RESIZE_DEBOUNCE_MS);
+  }
+
+  #applySemanticResizeRelayout(): void {
+    if (!this.#isSemanticFlowMode()) return;
+    const nextWidth = this.#resolveSemanticContainerInnerWidth();
+    const prevWidth = this.#lastSemanticContainerWidth;
+    if (prevWidth != null && Math.abs(nextWidth - prevWidth) < 1) {
+      return;
+    }
+    this.#lastSemanticContainerWidth = nextWidth;
+    this.#pendingDocChange = true;
+    this.#scheduleRerender();
+  }
+
   /**
    * Return a snapshot of painter output captured during the latest paint cycle.
    */
@@ -1600,6 +1718,9 @@ export class PresentationEditor extends EventEmitter {
    * ```
    */
   setLayoutMode(mode: LayoutMode) {
+    if (this.#isSemanticFlowMode()) {
+      return;
+    }
     if (!mode || this.#layoutOptions.layoutMode === mode) {
       return;
     }
@@ -2359,6 +2480,23 @@ export class PresentationEditor extends EventEmitter {
       clearTimeout(this.#cursorUpdateTimer);
       this.#cursorUpdateTimer = null;
     }
+
+    if (this.#semanticResizeRaf != null) {
+      safeCleanup(() => {
+        const win = this.#visibleHost?.ownerDocument?.defaultView ?? window;
+        win.cancelAnimationFrame(this.#semanticResizeRaf!);
+        this.#semanticResizeRaf = null;
+      }, 'Semantic resize RAF');
+    }
+    if (this.#semanticResizeDebounce != null) {
+      safeCleanup(() => {
+        const win = this.#visibleHost?.ownerDocument?.defaultView ?? window;
+        win.clearTimeout(this.#semanticResizeDebounce!);
+        this.#semanticResizeDebounce = null;
+      }, 'Semantic resize debounce');
+    }
+    this.#semanticResizeObserver?.disconnect();
+    this.#semanticResizeObserver = null;
 
     // Clean up remote cursor manager
     if (this.#remoteCursorManager) {
@@ -3315,6 +3453,7 @@ export class PresentationEditor extends EventEmitter {
       }
 
       this.#applyHtmlAnnotationMeasurements(blocks);
+      const isSemanticFlow = this.#isSemanticFlowMode();
 
       const baseLayoutOptions = this.#resolveLayoutOptions(blocks, sectionMetadata);
       const footnotesLayoutInput = buildFootnotesInput(
@@ -3323,9 +3462,14 @@ export class PresentationEditor extends EventEmitter {
         converterContext,
         this.#editor?.converter?.themeColors ?? undefined,
       );
-      const layoutOptions = footnotesLayoutInput
-        ? { ...baseLayoutOptions, footnotes: footnotesLayoutInput }
-        : baseLayoutOptions;
+      const semanticFootnoteBlocks = isSemanticFlow
+        ? buildSemanticFootnoteBlocks(footnotesLayoutInput, this.#layoutOptions.semanticOptions?.footnotesMode)
+        : [];
+      const blocksForLayout = semanticFootnoteBlocks.length > 0 ? [...blocks, ...semanticFootnoteBlocks] : blocks;
+      const layoutOptions =
+        !isSemanticFlow && footnotesLayoutInput
+          ? { ...baseLayoutOptions, footnotes: footnotesLayoutInput }
+          : baseLayoutOptions;
       const previousBlocks = this.#layoutState.blocks;
       const previousLayout = this.#layoutState.layout;
       const previousMeasures = this.#layoutState.measures;
@@ -3342,7 +3486,7 @@ export class PresentationEditor extends EventEmitter {
         const result = await incrementalLayout(
           previousBlocks,
           previousLayout,
-          blocks,
+          blocksForLayout,
           layoutOptions,
           (block: FlowBlock, constraints: { maxWidth: number; maxHeight: number }) => measureBlock(block, constraints),
           headerFooterInput ?? undefined,
@@ -3390,8 +3534,8 @@ export class PresentationEditor extends EventEmitter {
       if (this.#headerFooterSession) {
         this.#headerFooterSession.multiSectionIdentifier = multiSectionId;
       }
-      const anchorMap = computeAnchorMapFromHelper(bookmarks, layout, blocks);
-      this.#layoutState = { blocks, measures, layout, bookmarks, anchorMap };
+      const anchorMap = computeAnchorMapFromHelper(bookmarks, layout, blocksForLayout);
+      this.#layoutState = { blocks: blocksForLayout, measures, layout, bookmarks, anchorMap };
 
       // Build blockId → pageNumber map for TOC page-number resolution.
       // Stored on editor.storage so the document-api adapter layer can read it
@@ -3414,7 +3558,6 @@ export class PresentationEditor extends EventEmitter {
         tocStorage.pageMap = pageMap;
         tocStorage.pageMapDoc = this.#editor.state.doc;
       }
-
       if (this.#headerFooterSession) {
         this.#headerFooterSession.headerLayoutResults = headerLayouts ?? null;
         this.#headerFooterSession.footerLayoutResults = footerLayouts ?? null;
@@ -3433,13 +3576,14 @@ export class PresentationEditor extends EventEmitter {
         }
       }
 
-      // Process per-rId header/footer content for multi-section support
-      await this.#layoutPerRIdHeaderFooters(headerFooterInput, layout, sectionMetadata);
+      // Process per-rId header/footer content and decoration providers (paginated only)
+      if (!isSemanticFlow) {
+        await this.#layoutPerRIdHeaderFooters(headerFooterInput, layout, sectionMetadata);
+        this.#updateDecorationProviders(layout);
+      }
 
-      this.#updateDecorationProviders(layout);
-
-      const painter = this.#ensurePainter(blocks, measures);
-      if (typeof painter.setProviders === 'function') {
+      const painter = this.#ensurePainter(blocksForLayout, measures);
+      if (!isSemanticFlow && typeof painter.setProviders === 'function') {
         painter.setProviders(
           this.#headerFooterSession?.headerDecorationProvider,
           this.#headerFooterSession?.footerDecorationProvider,
@@ -3490,7 +3634,7 @@ export class PresentationEditor extends EventEmitter {
       // Pass all blocks (main document + headers + footers + extras) to the painter
       const painterSetDataStart = perfNow();
       painter.setData?.(
-        blocks,
+        blocksForLayout,
         measures,
         headerBlocks.length > 0 ? headerBlocks : undefined,
         headerMeasures.length > 0 ? headerMeasures : undefined,
@@ -3534,8 +3678,8 @@ export class PresentationEditor extends EventEmitter {
       // Update viewport dimensions after layout (page count may have changed)
       this.#applyZoom();
 
-      const metrics = createLayoutMetricsFromHelper(perf, startMark, layout, blocks);
-      const payload = { layout, blocks, measures, metrics };
+      const metrics = createLayoutMetricsFromHelper(perf, startMark, layout, blocksForLayout);
+      const payload = { layout, blocks: blocksForLayout, measures, metrics };
       this.emit('layoutUpdated', payload);
       this.emit('paginationUpdate', payload);
 
@@ -3579,6 +3723,7 @@ export class PresentationEditor extends EventEmitter {
         blocks,
         measures,
         layoutMode: this.#layoutOptions.layoutMode ?? 'vertical',
+        flowMode: this.#layoutOptions.flowMode ?? 'paginated',
         virtualization: normalizedVirtualization,
         pageStyles: this.#layoutOptions.pageStyles,
         headerProvider: this.#headerFooterSession?.headerDecorationProvider,
@@ -3590,6 +3735,12 @@ export class PresentationEditor extends EventEmitter {
       const currentZoom = this.#layoutOptions.zoom ?? 1;
       if (currentZoom !== 1) {
         this.#domPainter.setZoom(currentZoom);
+      }
+      // Pass the scroll container so virtualization computes scrollY relative to it,
+      // not the browser viewport. This fixes offset errors when SuperDoc is mounted
+      // inside a wrapper div with overflow-y: auto.
+      if (this.#scrollContainer && this.#scrollContainer instanceof HTMLElement) {
+        this.#domPainter.setScrollContainer?.(this.#scrollContainer);
       }
     }
     return this.#domPainter;
@@ -4250,7 +4401,7 @@ export class PresentationEditor extends EventEmitter {
     overlay.appendChild(fragment);
   }
 
-  #resolveLayoutOptions(blocks: FlowBlock[] | undefined, sectionMetadata: SectionMetadata[]) {
+  #resolveLayoutOptions(blocks: FlowBlock[] | undefined, sectionMetadata: SectionMetadata[]): ResolvedLayoutOptions {
     const defaults = this.#computeDefaultLayoutDefaults();
     const firstSection = blocks?.find(
       (block) =>
@@ -4279,19 +4430,64 @@ export class PresentationEditor extends EventEmitter {
 
     this.#layoutOptions.pageSize = pageSize;
     this.#layoutOptions.margins = margins;
+    const flowMode = this.#layoutOptions.flowMode ?? 'paginated';
+
+    const resolvedMargins = {
+      top: margins.top!,
+      right: margins.right!,
+      bottom: margins.bottom!,
+      left: margins.left!,
+      ...(margins.header != null ? { header: margins.header } : {}),
+      ...(margins.footer != null ? { footer: margins.footer } : {}),
+    };
+
+    if (flowMode === 'semantic') {
+      const semanticMargins = this.#resolveSemanticMargins(margins);
+      const containerWidth = this.#resolveSemanticContainerInnerWidth();
+      const semanticContentWidth = Math.max(
+        MIN_SEMANTIC_CONTENT_WIDTH_PX,
+        containerWidth - semanticMargins.left - semanticMargins.right,
+      );
+      const semanticPageWidth = semanticContentWidth + semanticMargins.left + semanticMargins.right;
+      this.#hiddenHost.style.width = `${semanticContentWidth}px`;
+      this.#lastSemanticContainerWidth = containerWidth;
+      return {
+        flowMode: 'semantic',
+        pageSize: { w: semanticPageWidth, h: pageSize.h },
+        margins: {
+          ...resolvedMargins,
+          top: semanticMargins.top,
+          right: semanticMargins.right,
+          bottom: semanticMargins.bottom,
+          left: semanticMargins.left,
+        },
+        columns: { count: 1, gap: 0 },
+        semantic: {
+          contentWidth: semanticContentWidth,
+          marginLeft: semanticMargins.left,
+          marginRight: semanticMargins.right,
+          marginTop: semanticMargins.top,
+          marginBottom: semanticMargins.bottom,
+        },
+        sectionMetadata,
+      };
+    }
 
     this.#hiddenHost.style.width = `${pageSize.w}px`;
 
     return {
+      flowMode: 'paginated',
       pageSize,
-      margins: margins as Required<Pick<PageMargins, 'top' | 'right' | 'bottom' | 'left'>> &
-        Partial<Pick<PageMargins, 'header' | 'footer'>>,
+      margins: resolvedMargins,
       ...(columns ? { columns } : {}),
       sectionMetadata,
     };
   }
 
   #buildHeaderFooterInput() {
+    if (this.#isSemanticFlowMode()) {
+      return null;
+    }
     const adapter = this.#headerFooterSession?.adapter;
     if (!adapter) {
       return null;
@@ -4814,6 +5010,9 @@ export class PresentationEditor extends EventEmitter {
    * Uses DEFAULT_PAGE_GAP for both virtualized and non-virtualized modes for visual consistency.
    */
   #getEffectivePageGap(): number {
+    if (this.#isSemanticFlowMode()) {
+      return 0;
+    }
     if (this.#layoutOptions.virtualization?.enabled) {
       // Use explicit gap if provided, otherwise use same default as non-virtualized for consistency
       return Math.max(0, this.#layoutOptions.virtualization.gap ?? DEFAULT_PAGE_GAP);
@@ -5010,6 +5209,25 @@ export class PresentationEditor extends EventEmitter {
    * - Horizontal: Uses totalWidth for viewport width, maxHeight for scroll height
    */
   #applyZoom() {
+    if (this.#isSemanticFlowMode()) {
+      // Semantic mode: fill the container with fluid widths, no zoom scaling.
+      this.#viewportHost.style.width = '100%';
+      this.#viewportHost.style.minWidth = '';
+      this.#viewportHost.style.minHeight = '';
+      this.#viewportHost.style.transform = '';
+
+      this.#painterHost.style.width = '100%';
+      this.#painterHost.style.minHeight = '';
+      this.#painterHost.style.transformOrigin = '';
+      this.#painterHost.style.transform = '';
+
+      this.#selectionOverlay.style.width = '100%';
+      this.#selectionOverlay.style.height = '100%';
+      this.#selectionOverlay.style.transformOrigin = '';
+      this.#selectionOverlay.style.transform = '';
+      return;
+    }
+
     // Apply zoom by scaling the children (#painterHost and #selectionOverlay) and
     // setting the viewport dimensions to the scaled size.
     //

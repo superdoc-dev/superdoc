@@ -1,11 +1,12 @@
 import { readFile, writeFile } from 'node:fs/promises';
 import { createHash } from 'node:crypto';
-import type { Editor } from 'superdoc/super-editor';
+import { Editor } from 'superdoc/super-editor';
 import { BLANK_DOCX_BASE64 } from '@superdoc/super-editor/blank-docx';
 import { getDocumentApiAdapters } from '@superdoc/super-editor/document-api-adapters';
 import { markdownToPmDoc } from '@superdoc/super-editor/markdown';
 
 import { createDocumentApi, type DocumentApi } from '@superdoc/document-api';
+import { createCliDomEnvironment } from './dom-environment';
 import type { CollaborationProfile } from './collaboration';
 import { createCollaborationRuntime } from './collaboration';
 import {
@@ -35,12 +36,22 @@ export interface OpenedDocument {
   dispose(): void;
 }
 
+/** Content override options extracted before calling Editor.open(). */
+interface ContentOverrideOptions {
+  markdown?: string;
+  html?: string;
+  plainText?: string;
+}
+
+/** Options passed through to Editor.open() alongside content overrides. */
+type EditorPassThroughOptions = Record<string, string>;
+
 interface OpenDocumentOptions {
   documentId?: string;
   ydoc?: unknown;
   collaborationProvider?: unknown;
   /** Options passed through to Editor.open() (e.g., markdown/html/plainText for content override). */
-  editorOpenOptions?: Record<string, string>;
+  editorOpenOptions?: ContentOverrideOptions & EditorPassThroughOptions;
   /** When set, overrides Editor's auto-detected isNewFile flag. */
   isNewFile?: boolean;
   /** Optional user identity for attribution (comments, tracked changes, collaboration presence). */
@@ -50,38 +61,6 @@ interface OpenDocumentOptions {
 export interface FileOutputMeta {
   path: string;
   byteLength: number;
-}
-
-type EditorModule = {
-  Editor: {
-    open(source: Buffer, options: Record<string, unknown>): Promise<Editor>;
-  };
-};
-
-const EDITOR_IMPORT_CANDIDATES = ['@superdoc/super-editor', 'superdoc/super-editor'] as const;
-let cachedEditorModule: EditorModule | null = null;
-
-async function loadEditorModule(): Promise<EditorModule> {
-  if (cachedEditorModule) return cachedEditorModule;
-
-  const errors: string[] = [];
-  for (const specifier of EDITOR_IMPORT_CANDIDATES) {
-    try {
-      const module = (await import(specifier)) as Partial<EditorModule>;
-      if (module.Editor && typeof module.Editor.open === 'function') {
-        cachedEditorModule = module as EditorModule;
-        return cachedEditorModule;
-      }
-      errors.push(`${specifier}: module loaded but Editor.open is unavailable`);
-    } catch (error) {
-      errors.push(`${specifier}: ${error instanceof Error ? error.message : String(error)}`);
-    }
-  }
-
-  throw new CliError('DOCUMENT_OPEN_FAILED', 'Failed to load editor runtime module.', {
-    candidates: [...EDITOR_IMPORT_CANDIDATES],
-    errors,
-  });
 }
 
 function toUint8Array(data: unknown): Uint8Array {
@@ -149,11 +128,9 @@ export async function openDocument(
   }
 
   // Separate content overrides from options passed to Editor.open().
-  // The Editor's built-in markdown/html init paths (in the dist bundle) route
-  // through an HTML-based pipeline that requires DOM. In headless CLI mode
-  // there is no DOM, so we intercept them here:
-  //   - markdown: applied post-init via the AST-based markdownToPmDoc pipeline (DOM-free)
-  //   - html: rejected with a clear error (no DOM-free HTML pipeline exists)
+  // Markdown and plainText are applied post-init (DOM-free AST pipelines).
+  // HTML passes through to Editor.open() directly — the CLI-provided happy-dom
+  // document enables the Editor's built-in HTML init path.
   const {
     markdown: markdownOverride,
     html: htmlOverride,
@@ -161,19 +138,16 @@ export async function openDocument(
     ...passThroughEditorOpts
   } = options.editorOpenOptions ?? {};
 
-  if (htmlOverride != null) {
-    throw new CliError(
-      'UNSUPPORTED_FORMAT',
-      'HTML content override is not supported in headless CLI mode (requires DOM). Use --override-type markdown instead.',
-    );
-  }
+  // Create a DOM environment for headless HTML support (getHtml, insert HTML,
+  // HTML content override). Always inject via options.document — never set globals.
+  const domEnv = createCliDomEnvironment();
 
   let editor: Editor;
-  const { Editor: EditorRuntime } = await loadEditorModule();
   try {
     const isTest = process.env.NODE_ENV === 'test';
-    editor = await EditorRuntime.open(Buffer.from(source), {
+    editor = await Editor.open(Buffer.from(source), {
       documentId: options.documentId ?? meta.path ?? 'blank.docx',
+      document: domEnv.document,
       user: options.user
         ? { name: options.user.name, email: options.user.email, image: null }
         : { id: 'cli', name: 'CLI' },
@@ -181,9 +155,12 @@ export async function openDocument(
       ydoc: options.ydoc,
       ...(options.collaborationProvider != null ? { collaborationProvider: options.collaborationProvider } : {}),
       ...(options.isNewFile != null ? { isNewFile: options.isNewFile } : {}),
+      // Pass through HTML override directly — happy-dom provides DOM support.
+      ...(htmlOverride != null ? { html: htmlOverride } : {}),
       ...passThroughEditorOpts,
     });
   } catch (error) {
+    domEnv.dispose();
     const message = error instanceof Error ? error.message : String(error);
     throw new CliError('DOCUMENT_OPEN_FAILED', 'Failed to open document.', {
       message,
@@ -203,6 +180,7 @@ export async function openDocument(
       editor.dispatch(tr);
     } catch (error) {
       editor.destroy();
+      domEnv.dispose();
       const message = error instanceof Error ? error.message : String(error);
       throw new CliError('DOCUMENT_OPEN_FAILED', 'Failed to apply content override.', {
         message,
@@ -222,6 +200,7 @@ export async function openDocument(
       editor.dispatch(tr);
     } catch (error) {
       editor.destroy();
+      domEnv.dispose();
       const message = error instanceof Error ? error.message : String(error);
       throw new CliError('DOCUMENT_OPEN_FAILED', 'Failed to apply text content override.', {
         message,
@@ -240,6 +219,7 @@ export async function openDocument(
     meta,
     dispose() {
       editor.destroy();
+      domEnv.dispose();
     },
   };
 }

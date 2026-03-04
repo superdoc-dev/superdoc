@@ -1360,7 +1360,7 @@ describe('SuperDoc core', () => {
   });
 
   describe('Web layout mode configuration', () => {
-    it('auto-disables layout engine when web layout is enabled', async () => {
+    it('keeps PM fallback when web layout is enabled without semantic flow mode', async () => {
       const warnSpy = vi.spyOn(console, 'warn').mockImplementation(() => {});
       createAppHarness();
 
@@ -1373,7 +1373,7 @@ describe('SuperDoc core', () => {
       await flushMicrotasks();
 
       expect(warnSpy).toHaveBeenCalledWith(
-        '[SuperDoc] Web layout mode requires useLayoutEngine: false. Automatically disabling layout engine.',
+        "[SuperDoc] Web layout uses PM fallback unless layoutEngineOptions.flowMode is set to 'semantic'. Automatically disabling layout engine.",
       );
       expect(instance.config.useLayoutEngine).toBe(false);
       warnSpy.mockRestore();
@@ -1391,8 +1391,51 @@ describe('SuperDoc core', () => {
       });
       await flushMicrotasks();
 
-      expect(warnSpy).not.toHaveBeenCalledWith(expect.stringContaining('Web layout mode requires'));
+      expect(warnSpy).not.toHaveBeenCalledWith(expect.stringContaining('Web layout uses PM fallback'));
       expect(instance.config.useLayoutEngine).toBe(false);
+      warnSpy.mockRestore();
+    });
+
+    it('keeps layout engine enabled when semantic flow mode is explicitly requested in web layout', async () => {
+      const warnSpy = vi.spyOn(console, 'warn').mockImplementation(() => {});
+      createAppHarness();
+
+      const instance = new SuperDoc({
+        selector: '#host',
+        document: 'https://example.com/doc.docx',
+        viewOptions: { layout: 'web' },
+        useLayoutEngine: true,
+        layoutEngineOptions: {
+          flowMode: 'semantic',
+        },
+      });
+      await flushMicrotasks();
+
+      expect(warnSpy).not.toHaveBeenCalledWith(expect.stringContaining('Web layout uses PM fallback'));
+      expect(instance.config.useLayoutEngine).toBe(true);
+      warnSpy.mockRestore();
+    });
+
+    it('coerces semantic flowMode to paginated when layout is not web', async () => {
+      const warnSpy = vi.spyOn(console, 'warn').mockImplementation(() => {});
+      createAppHarness();
+
+      const instance = new SuperDoc({
+        selector: '#host',
+        document: 'https://example.com/doc.docx',
+        viewOptions: { layout: 'print' },
+        useLayoutEngine: true,
+        layoutEngineOptions: {
+          flowMode: 'semantic',
+        },
+      });
+      await flushMicrotasks();
+
+      expect(warnSpy).toHaveBeenCalledWith(
+        "[SuperDoc] flowMode 'semantic' is only valid with web layout. Coercing to 'paginated'.",
+      );
+      expect(instance.config.layoutEngineOptions.flowMode).toBe('paginated');
+      expect(instance.config.useLayoutEngine).toBe(true);
       warnSpy.mockRestore();
     });
 
@@ -1408,7 +1451,7 @@ describe('SuperDoc core', () => {
       });
       await flushMicrotasks();
 
-      expect(warnSpy).not.toHaveBeenCalledWith(expect.stringContaining('Web layout mode requires'));
+      expect(warnSpy).not.toHaveBeenCalledWith(expect.stringContaining('Web layout uses PM fallback'));
       expect(instance.config.useLayoutEngine).toBe(true);
       warnSpy.mockRestore();
     });
@@ -1439,7 +1482,7 @@ describe('SuperDoc core', () => {
       await flushMicrotasks();
 
       // Should not trigger web layout warning
-      expect(warnSpy).not.toHaveBeenCalledWith(expect.stringContaining('Web layout mode requires'));
+      expect(warnSpy).not.toHaveBeenCalledWith(expect.stringContaining('Web layout uses PM fallback'));
       expect(instance.config.useLayoutEngine).toBe(true);
       warnSpy.mockRestore();
     });

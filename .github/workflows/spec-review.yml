@@ -61,10 +61,9 @@ jobs:
           # Get the diff for review
           gh pr diff ${{ github.event.pull_request.number }} > /tmp/pr-diff.txt
 
-          # Run Claude Code review
-          REVIEW=$(claude --print \
-            --allowedTools "mcp__ecma-spec__search_ecma_spec,mcp__ecma-spec__get_section,mcp__ecma-spec__list_parts" \
-            "Review this PR for OOXML spec compliance.
+          # Build prompt in a file to avoid shell expansion issues
+          cat > /tmp/prompt.txt <<'PROMPT_EOF'
+          Review this PR for OOXML spec compliance.
 
           Context: These are OOXML element handlers (XML ↔ ProseMirror JSON converters).
 
@@ -87,12 +86,16 @@ jobs:
           - File and line number
 
           Keep it concise. Don't quote the spec extensively - link to https://ooxml.dev/spec?q=<element name> for details.
+          PROMPT_EOF
 
-          Changed files:
-          ${{ steps.changed.outputs.files }}
+          # Append dynamic content (outside single-quoted heredoc so variables expand safely)
+          printf '\nChanged files:\n%s\n\nDiff:\n' '${{ steps.changed.outputs.files }}' >> /tmp/prompt.txt
+          cat /tmp/pr-diff.txt >> /tmp/prompt.txt
 
-          Diff:
-          $(cat /tmp/pr-diff.txt)")
+          # Run Claude Code review (pipe prompt via stdin)
+          REVIEW=$(claude --print \
+            --allowedTools "mcp__ecma-spec__search_ecma_spec,mcp__ecma-spec__get_section,mcp__ecma-spec__list_parts" \
+            < /tmp/prompt.txt)
 
           # Save review output
           echo "$REVIEW" > /tmp/review-raw.txt

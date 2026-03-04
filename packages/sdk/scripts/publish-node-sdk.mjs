@@ -15,7 +15,8 @@
  */
 
 import { spawnSync } from 'node:child_process';
-import { mkdirSync, readFileSync } from 'node:fs';
+import { mkdirSync, mkdtempSync, readFileSync, readdirSync, rmSync } from 'node:fs';
+import { tmpdir } from 'node:os';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 
@@ -106,6 +107,8 @@ function runNpmPublish(packageName, tag, dryRun, authToken, baseEnv = process.en
     if (prepack.status !== 0) {
       throw new Error(`Prepack failed for ${packageName}`);
     }
+
+    verifyMainPackagePackedManifest(pkgDir, version, authToken, baseEnv);
   }
 
   const result = spawnSync('pnpm', args, {
@@ -116,6 +119,71 @@ function runNpmPublish(packageName, tag, dryRun, authToken, baseEnv = process.en
 
   if (result.status !== 0) {
     throw new Error(`Publish failed for ${packageName}`);
+  }
+}
+
+function verifyMainPackagePackedManifest(pkgDir, expectedVersion, authToken, baseEnv) {
+  const packTmpDir = mkdtempSync(path.join(tmpdir(), 'sdk-node-pack-'));
+
+  try {
+    const pack = spawnSync('pnpm', ['pack', '--pack-destination', packTmpDir], {
+      cwd: pkgDir,
+      encoding: 'utf8',
+      env: createNpmEnv(baseEnv, authToken),
+    });
+    if (pack.error) throw pack.error;
+    if (pack.status !== 0) {
+      const details = (pack.stderr || pack.stdout || '').trim();
+      throw new Error(`Failed to pack ${MAIN_PACKAGE} for metadata verification: ${details}`);
+    }
+
+    const packedTarball = readdirSync(packTmpDir).find((fileName) => fileName.endsWith('.tgz'));
+    if (!packedTarball) {
+      throw new Error(`Pack metadata verification failed: no tarball was generated for ${MAIN_PACKAGE}`);
+    }
+
+    const tarballPath = path.join(packTmpDir, packedTarball);
+    const manifestResult = spawnSync('tar', ['-xOf', tarballPath, 'package/package.json'], { encoding: 'utf8' });
+    if (manifestResult.error) throw manifestResult.error;
+    if (manifestResult.status !== 0) {
+      const details = (manifestResult.stderr || manifestResult.stdout || '').trim();
+      throw new Error(`Failed to read packed package.json from ${packedTarball}: ${details}`);
+    }
+
+    const manifest = JSON.parse(manifestResult.stdout);
+    if (manifest.version !== expectedVersion) {
+      throw new Error(
+        `Packed manifest version mismatch for ${MAIN_PACKAGE}: expected ${expectedVersion}, got ${manifest.version}`,
+      );
+    }
+
+    const optionalDependencies = manifest.optionalDependencies ?? {};
+    const missingPlatformDeps = PLATFORM_PACKAGES.filter((platformPackage) => !(platformPackage in optionalDependencies));
+    if (missingPlatformDeps.length > 0) {
+      throw new Error(`Packed manifest missing platform optionalDependencies: ${missingPlatformDeps.join(', ')}`);
+    }
+
+    const unresolvedWorkspaceDeps = PLATFORM_PACKAGES.filter((platformPackage) => {
+      const spec = optionalDependencies[platformPackage];
+      return typeof spec === 'string' && spec.startsWith('workspace:');
+    });
+    if (unresolvedWorkspaceDeps.length > 0) {
+      throw new Error(
+        `Packed manifest contains unresolved workspace optionalDependencies: ${unresolvedWorkspaceDeps.join(', ')}`,
+      );
+    }
+
+    const wrongVersionDeps = PLATFORM_PACKAGES.filter((platformPackage) => {
+      const spec = optionalDependencies[platformPackage];
+      return spec !== expectedVersion;
+    });
+    if (wrongVersionDeps.length > 0) {
+      throw new Error(
+        `Packed manifest optionalDependencies version mismatch. Expected ${expectedVersion} for: ${wrongVersionDeps.join(', ')}`,
+      );
+    }
+  } finally {
+    rmSync(packTmpDir, { recursive: true, force: true });
   }
 }
 

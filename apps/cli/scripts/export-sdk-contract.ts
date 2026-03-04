@@ -53,6 +53,8 @@ const INTENT_NAMES = {
   'doc.getNode': 'get_node',
   'doc.getNodeById': 'get_node_by_id',
   'doc.getText': 'get_document_text',
+  'doc.getMarkdown': 'get_document_markdown',
+  'doc.getHtml': 'get_document_html',
   'doc.info': 'get_document_info',
   'doc.capabilities.get': 'get_capabilities',
   'doc.insert': 'insert_content',

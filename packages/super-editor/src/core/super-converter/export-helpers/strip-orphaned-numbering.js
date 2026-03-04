@@ -11,6 +11,7 @@ export function collectReferencedNumIds(convertedXml) {
   function walkElements(elements) {
     if (!Array.isArray(elements)) return;
     for (const el of elements) {
+      if (!el || typeof el !== 'object') continue;
       if (el.name === 'w:numId' && el.attributes?.['w:val'] != null) {
         numIds.add(Number(el.attributes['w:val']));
       }

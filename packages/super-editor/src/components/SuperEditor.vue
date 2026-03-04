@@ -1115,13 +1115,16 @@ onBeforeUnmount(() => {
 
 <template>
   <div class="super-editor-container" :class="{ 'web-layout': isWebLayout }" :style="containerStyle">
-    <!-- Ruler: teleport to external container if specified, otherwise render inline -->
-    <Teleport v-if="options.rulerContainer && rulersVisible && !!activeEditor" :to="options.rulerContainer">
+    <!-- Ruler: teleport to external container if specified, otherwise render inline (hidden in web layout) -->
+    <Teleport
+      v-if="options.rulerContainer && rulersVisible && !isWebLayout && !!activeEditor"
+      :to="options.rulerContainer"
+    >
       <div class="ruler-host" :style="rulerHostStyle">
         <Ruler class="ruler superdoc-ruler" :editor="activeEditor" @margin-change="handleMarginChange" />
       </div>
     </Teleport>
-    <div v-else-if="rulersVisible && !!activeEditor" class="ruler-host" :style="rulerHostStyle">
+    <div v-else-if="rulersVisible && !isWebLayout && !!activeEditor" class="ruler-host" :style="rulerHostStyle">
       <Ruler class="ruler" :editor="activeEditor" @margin-change="handleMarginChange" />
     </div>
 

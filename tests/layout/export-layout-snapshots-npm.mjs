@@ -16,12 +16,12 @@ const EXPORT_SCRIPT_PATH = path.join(SCRIPT_DIR, 'export-layout-snapshots.mjs');
 const DEFAULT_INPUT_ROOT = process.env.SUPERDOC_CORPUS_ROOT
   ? path.resolve(process.env.SUPERDOC_CORPUS_ROOT)
   : path.join(REPO_ROOT, 'test-corpus');
-const DEFAULT_OUTPUT_BASE = path.join(REPO_ROOT, 'tests', 'layout-snapshots', 'reference');
+const DEFAULT_OUTPUT_BASE = path.join(REPO_ROOT, 'tests', 'layout', 'reference');
 
 function printHelp() {
   console.log(`
 Usage:
-  bun tests/layout-snapshots/export-layout-snapshots-npm.mjs <superdoc-version> [exporter-options]
+  bun tests/layout/export-layout-snapshots-npm.mjs <superdoc-version> [exporter-options]
 
 Arguments:
   <superdoc-version>         npm version/tag (examples: 1.12.0, 1.12.0-next.3, latest)
@@ -38,9 +38,9 @@ Common forwarded options include:
   --jobs <n> --limit <n> --match <pattern> --pipeline <mode> --timeout-ms <ms> --fail-fast --input-root <path>
 
 Examples:
-  bun tests/layout-snapshots/export-layout-snapshots-npm.mjs 1.12.0 --jobs 4
-  bun tests/layout-snapshots/export-layout-snapshots-npm.mjs latest --jobs 2 --limit 20
-  bun tests/layout-snapshots/export-layout-snapshots-npm.mjs 1.12.0-next.3 --pipeline presentation
+  bun tests/layout/export-layout-snapshots-npm.mjs 1.12.0 --jobs 4
+  bun tests/layout/export-layout-snapshots-npm.mjs latest --jobs 2 --limit 20
+  bun tests/layout/export-layout-snapshots-npm.mjs 1.12.0-next.3 --pipeline presentation
 `);
 }
 

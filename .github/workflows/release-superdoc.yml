@@ -1,11 +1,13 @@
-# Auto-releases on push to main (@next channel)
-# For stable (@latest): cherry-pick commits to stable branch, then manually dispatch this workflow
+# Auto-releases on push to:
+# - main (@next channel)
+# - stable (@latest channel)
 name: 📦 Release superdoc
 
 on:
   push:
     branches:
       - main
+      - stable
     paths:
       - 'packages/superdoc/**'
       - 'packages/layout-engine/**'

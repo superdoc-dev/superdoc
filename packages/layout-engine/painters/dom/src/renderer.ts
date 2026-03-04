@@ -43,6 +43,7 @@ import type {
   TableAttrs,
   TableCellAttrs,
   PositionMapping,
+  FlowMode,
   CustomGeometryData,
 } from '@superdoc/contracts';
 import { calculateJustifySpacing, computeLinePmRange, shouldApplyJustify, SPACE_CHARS } from '@superdoc/contracts';
@@ -264,6 +265,8 @@ function isMinimalWordLayout(value: unknown): value is MinimalWordLayout {
  * - 'book': Book-style layout with facing pages
  */
 export type LayoutMode = 'vertical' | 'horizontal' | 'book';
+// FlowMode is re-exported from @superdoc/contracts
+export type { FlowMode } from '@superdoc/contracts';
 
 type PageDecorationPayload = {
   fragments: Fragment[];
@@ -310,6 +313,7 @@ export type RulerOptions = {
 type PainterOptions = {
   pageStyles?: PageStyles;
   layoutMode?: LayoutMode;
+  flowMode?: FlowMode;
   /** Gap between pages in pixels (default: 24px for vertical, 20px for horizontal) */
   pageGap?: number;
   headerProvider?: PageDecorationProvider;
@@ -318,7 +322,7 @@ type PainterOptions = {
     enabled?: boolean;
     window?: number;
     overscan?: number;
-    /** Virtualization gap override (defaults to 72px; independent of pageGap) */
+    /** Virtualization gap override (defaults to 72px; independent of pageGap). */
     gap?: number;
     paddingTop?: number;
   };
@@ -986,6 +990,7 @@ export class DomPainter {
   private currentLayout: Layout | null = null;
   private changedBlocks = new Set<string>();
   private readonly layoutMode: LayoutMode;
+  private readonly isSemanticFlow: boolean;
   private headerProvider?: PageDecorationProvider;
   private footerProvider?: PageDecorationProvider;
   private totalPages = 0;
@@ -1028,6 +1033,14 @@ export class DomPainter {
   private onResizeHandler: ((e: Event) => void) | null = null;
   /** CSS zoom/scale factor applied to the mount element via transform: scale(). Defaults to 1 (no zoom). */
   private zoomFactor = 1;
+  /**
+   * External scroll container (an ancestor element with overflow-y: auto/scroll).
+   * When set, updateVirtualWindow() uses this element's position to compute scrollY
+   * relative to the scroll container instead of relative to the browser viewport.
+   * This fixes the scroll offset calculation when SuperDoc is mounted inside a
+   * wrapper div that owns scrolling rather than the window.
+   */
+  private scrollContainer: HTMLElement | null = null;
   private sdtHover = new SdtGroupedHover();
   /** The currently active/selected comment ID for highlighting */
   private activeCommentId: string | null = null;
@@ -1037,6 +1050,7 @@ export class DomPainter {
   constructor(blocks: FlowBlock[], measures: Measure[], options: PainterOptions = {}) {
     this.options = options;
     this.layoutMode = options.layoutMode ?? 'vertical';
+    this.isSemanticFlow = (options.flowMode ?? 'paginated') === 'semantic';
     this.blockLookup = this.buildBlockLookup(blocks, measures);
     this.headerProvider = options.headerProvider;
     this.footerProvider = options.footerProvider;
@@ -1049,11 +1063,12 @@ export class DomPainter {
         : defaultGap;
 
     // Initialize virtualization config (feature-flagged)
-    if (this.layoutMode === 'vertical' && options.virtualization?.enabled) {
+    if (!this.isSemanticFlow && this.layoutMode === 'vertical' && options.virtualization?.enabled) {
       this.virtualEnabled = true;
       this.virtualWindow = Math.max(1, options.virtualization.window ?? 5);
       this.virtualOverscan = Math.max(0, options.virtualization.overscan ?? 0);
-      // Virtualization gap: use explicit virtualization.gap if provided, otherwise default to virtualized gap (72px)
+      // Virtualization gap: use explicit virtualization.gap if provided,
+      // otherwise default to legacy virtualized gap (72px).
       const maybeGap = options.virtualization.gap;
       if (typeof maybeGap === 'number' && Number.isFinite(maybeGap)) {
         this.virtualGap = Math.max(0, maybeGap);
@@ -1099,6 +1114,29 @@ export class DomPainter {
     const next = typeof zoom === 'number' && Number.isFinite(zoom) && zoom > 0 ? zoom : 1;
     if (next !== this.zoomFactor) {
       this.zoomFactor = next;
+      if (this.virtualEnabled && this.mount) {
+        this.updateVirtualWindow();
+      }
+    }
+  }
+
+  /**
+   * Sets the external scroll container element.
+   *
+   * When the scroll container is an ancestor element (e.g., a wrapper div with
+   * overflow-y: auto), the default scrollY calculation using mount.getBoundingClientRect()
+   * relative to the viewport produces an offset equal to the scroll container's distance
+   * from the viewport top. This causes the virtualization window to be misaligned with the
+   * actual visible area.
+   *
+   * Setting the scroll container allows updateVirtualWindow() to compute scrollY relative
+   * to the scroll container instead, eliminating this offset.
+   *
+   * @param el - The scroll container element, or null to clear.
+   */
+  public setScrollContainer(el: HTMLElement | null): void {
+    if (el !== this.scrollContainer) {
+      this.scrollContainer = el;
       if (this.virtualEnabled && this.mount) {
         this.updateVirtualWindow();
       }
@@ -1402,7 +1440,7 @@ export class DomPainter {
     ensureSdtContainerStyles(doc);
     ensureImageSelectionStyles(doc);
     ensureNativeSelectionStyles(doc);
-    if (this.options.ruler?.enabled) {
+    if (!this.isSemanticFlow && this.options.ruler?.enabled) {
       ensureRulerStyles(doc);
     }
     mount.classList.add(CLASS_NAMES.container);
@@ -1416,6 +1454,22 @@ export class DomPainter {
     this.beginPaintSnapshot(layout);
 
     this.totalPages = layout.pages.length;
+    if (this.isSemanticFlow) {
+      // Semantic mode always renders as a single continuous surface.
+      applyStyles(mount, containerStyles);
+      mount.style.gap = '0px';
+      mount.style.alignItems = 'stretch';
+      if (!this.currentLayout || this.pageStates.length === 0) {
+        this.fullRender(layout);
+      } else {
+        this.patchLayout(layout);
+      }
+      this.currentLayout = layout;
+      this.changedBlocks.clear();
+      this.currentMapping = null;
+      return;
+    }
+
     let useDomSnapshotFallback = false;
     const mode = this.layoutMode;
     if (mode === 'horizontal') {
@@ -1644,6 +1698,15 @@ export class DomPainter {
     const isContainerScrollable = this.mount.scrollHeight > this.mount.clientHeight + 1;
     if (isContainerScrollable) {
       scrollY = Math.max(0, this.mount.scrollTop - paddingTop);
+    } else if (this.scrollContainer) {
+      // Intermediate scroll ancestor (e.g., a wrapper div with overflow-y: auto).
+      // Compute scrollY relative to the scroll container, not the browser viewport.
+      // Using (scrollContainer.rect.top - mount.rect.top) instead of just (-mount.rect.top)
+      // eliminates the offset caused by the scroll container's distance from the viewport top
+      // (e.g., a toolbar/header above the scroll wrapper).
+      const mountRect = this.mount.getBoundingClientRect();
+      const containerRect = this.scrollContainer.getBoundingClientRect();
+      scrollY = Math.max(0, (containerRect.top - mountRect.top) / zoom - paddingTop);
     } else {
       const rect = this.mount.getBoundingClientRect();
       // rect.top is in screen space (affected by CSS transform: scale).
@@ -1845,12 +1908,13 @@ export class DomPainter {
     const el = this.doc.createElement('div');
     el.classList.add(CLASS_NAMES.page);
     applyStyles(el, pageStyles(width, height, this.getEffectivePageStyles()));
+    this.applySemanticPageOverrides(el);
     el.dataset.layoutEpoch = String(this.layoutEpoch);
     el.dataset.pageNumber = String(page.number);
     el.dataset.pageIndex = String(pageIndex);
 
-    // Render per-page ruler if enabled
-    if (this.options.ruler?.enabled) {
+    // Render per-page ruler if enabled (suppressed in semantic flow mode)
+    if (!this.isSemanticFlow && this.options.ruler?.enabled) {
       const rulerEl = this.renderPageRuler(width, page);
       if (rulerEl) {
         el.appendChild(rulerEl);
@@ -1953,6 +2017,7 @@ export class DomPainter {
   }
 
   private renderDecorationsForPage(pageEl: HTMLElement, page: Page, pageIndex: number): void {
+    if (this.isSemanticFlow) return;
     this.renderDecorationSection(pageEl, page, pageIndex, 'header');
     this.renderDecorationSection(pageEl, page, pageIndex, 'footer');
   }
@@ -2199,6 +2264,7 @@ export class DomPainter {
   private patchPage(state: PageDomState, page: Page, pageSize: { w: number; h: number }, pageIndex: number): void {
     const pageEl = state.element;
     applyStyles(pageEl, pageStyles(pageSize.w, pageSize.h, this.getEffectivePageStyles()));
+    this.applySemanticPageOverrides(pageEl);
     pageEl.dataset.pageNumber = String(page.number);
     pageEl.dataset.layoutEpoch = String(this.layoutEpoch);
     // pageIndex is already set during creation and doesn't change during patch
@@ -2344,6 +2410,7 @@ export class DomPainter {
     const el = this.doc.createElement('div');
     el.classList.add(CLASS_NAMES.page);
     applyStyles(el, pageStyles(pageSize.w, pageSize.h, this.getEffectivePageStyles()));
+    this.applySemanticPageOverrides(el);
     el.dataset.layoutEpoch = String(this.layoutEpoch);
 
     const contextBase: FragmentRenderContext = {
@@ -2371,7 +2438,25 @@ export class DomPainter {
     return { element: el, fragments: fragmentStates };
   }
 
+  private applySemanticPageOverrides(el: HTMLElement): void {
+    if (this.isSemanticFlow) {
+      el.style.overflow = 'visible';
+      el.style.width = '100%';
+      el.style.minWidth = '100%';
+    }
+  }
+
   private getEffectivePageStyles(): PageStyles | undefined {
+    if (this.isSemanticFlow) {
+      const base = this.options.pageStyles ?? {};
+      return {
+        ...base,
+        background: base.background ?? '#fff',
+        boxShadow: 'none',
+        border: 'none',
+        margin: '0',
+      };
+    }
     if (this.virtualEnabled && this.layoutMode === 'vertical') {
       // Remove top/bottom margins to avoid double-counting with container gap during virtualization
       const base = this.options.pageStyles ?? {};

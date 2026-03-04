@@ -1,14 +1,14 @@
 /**
  * TIFF to PNG Converter
  *
- * Converts TIFF images to PNG format using the `tiff` package (image-js/tiff)
- * for decoding and Canvas for encoding. Browsers cannot natively render TIFF
- * images, so this converts them at import time to a browser-friendly format.
+ * Converts TIFF images to PNG format using utif2 for decoding and Canvas for
+ * encoding. Browsers cannot natively render TIFF images, so this converts them
+ * at import time to a browser-friendly format.
  *
  * @module tiff-converter
  */
 
-import { decode } from 'tiff';
+import * as UTIF from 'utif2';
 import { dataUriToArrayBuffer } from '../../../../helpers.js';
 
 // Optional DOM environment provided by callers (e.g., JSDOM in Node)
@@ -59,54 +59,6 @@ function createCanvas() {
 }
 
 /**
- * Convert decoded pixel data to RGBA format.
- * The `tiff` package returns pixel data whose channel count depends on the
- * image (greyscale=1, grey+alpha=2, RGB=3, RGBA=4). Canvas requires RGBA.
- *
- * @param {Uint8Array} data - Decoded pixel data
- * @param {number} samplesPerPixel - Number of channels per pixel
- * @param {boolean} hasAlpha - Whether the image has an alpha channel
- * @param {number} pixelCount - Total number of pixels (width × height)
- * @returns {Uint8Array} RGBA pixel data
- */
-function toRGBA(data, samplesPerPixel, hasAlpha, pixelCount) {
-  if (samplesPerPixel === 4 && hasAlpha) return data;
-
-  const rgba = new Uint8Array(pixelCount * 4);
-
-  if (samplesPerPixel === 3) {
-    // RGB → RGBA
-    for (let i = 0; i < pixelCount; i++) {
-      rgba[i * 4] = data[i * 3];
-      rgba[i * 4 + 1] = data[i * 3 + 1];
-      rgba[i * 4 + 2] = data[i * 3 + 2];
-      rgba[i * 4 + 3] = 255;
-    }
-  } else if (samplesPerPixel === 2 && hasAlpha) {
-    // Grey + Alpha → RGBA
-    for (let i = 0; i < pixelCount; i++) {
-      const g = data[i * 2];
-      rgba[i * 4] = g;
-      rgba[i * 4 + 1] = g;
-      rgba[i * 4 + 2] = g;
-      rgba[i * 4 + 3] = data[i * 2 + 1];
-    }
-  } else if (samplesPerPixel === 1) {
-    // Greyscale → RGBA
-    for (let i = 0; i < pixelCount; i++) {
-      rgba[i * 4] = data[i];
-      rgba[i * 4 + 1] = data[i];
-      rgba[i * 4 + 2] = data[i];
-      rgba[i * 4 + 3] = 255;
-    }
-  } else {
-    return null;
-  }
-
-  return rgba;
-}
-
-/**
  * Converts a TIFF image to a PNG data URI.
  *
  * @param {string} data - Base64 encoded data or data URI of the TIFF file
@@ -118,31 +70,23 @@ export function convertTiffToPng(data) {
 
     const buffer = dataUriToArrayBuffer(data);
 
-    // Read metadata first without decompressing pixel data so the size
-    // guard fires before a huge RGBA buffer is allocated.
-    const meta = decode(buffer, { ignoreImageData: true });
-    if (!meta || meta.length === 0) return null;
+    // Decode TIFF — get Image File Directories (pages)
+    const ifds = UTIF.decode(buffer);
+    if (!ifds || ifds.length === 0) return null;
 
-    const { width, height } = meta[0];
-    if (!width || !height || width * height > MAX_PIXEL_COUNT) return null;
+    // Validate dimensions from raw IFD tags before decoding pixel data.
+    // UTIF.decode populates tag entries (t256=ImageWidth, t257=ImageLength)
+    // but .width/.height are only set after decodeImage.
+    const ifdWidth = ifds[0].t256?.[0];
+    const ifdHeight = ifds[0].t257?.[0];
+    if (!ifdWidth || !ifdHeight || ifdWidth * ifdHeight > MAX_PIXEL_COUNT) return null;
 
-    // Dimensions are safe — decode pixel data
-    const ifds = decode(buffer);
-    const ifd = ifds[0];
+    // Decode pixel data for the first page only
+    UTIF.decodeImage(buffer, ifds[0]);
+    const rgba = UTIF.toRGBA8(ifds[0]);
+    if (!rgba || rgba.length === 0) return null;
 
-    let pixelData = ifd.data;
-    if (!pixelData || pixelData.length === 0) return null;
-
-    // Normalize higher bit-depth data to 8-bit for canvas
-    if (pixelData instanceof Uint16Array) {
-      pixelData = Uint8Array.from(pixelData, (v) => ((v + 128) / 257) | 0);
-    } else if (pixelData instanceof Float32Array) {
-      pixelData = Uint8Array.from(pixelData, (v) => (Math.min(Math.max(v, 0), 1) * 255 + 0.5) | 0);
-    }
-
-    const samplesPerPixel = ifd.samplesPerPixel ?? (ifd.alpha ? 2 : 1);
-    const rgba = toRGBA(pixelData, samplesPerPixel, ifd.alpha, width * height);
-    if (!rgba) return null;
+    const { width, height } = ifds[0];
 
     // Render to canvas and export as PNG
     const canvas = createCanvas();
@@ -158,7 +102,7 @@ export function convertTiffToPng(data) {
     if (!ctx) return null;
 
     const imageData = ctx.createImageData(width, height);
-    imageData.data.set(rgba);
+    imageData.data.set(new Uint8Array(rgba.buffer, rgba.byteOffset, rgba.byteLength));
     ctx.putImageData(imageData, 0, 0);
 
     const dataUri = canvas.toDataURL('image/png');

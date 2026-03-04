@@ -565,6 +565,42 @@ describe('SuperDoc.vue', () => {
     expect(otherDocumentComment.commentText).toBe('Doc 2 text');
   });
 
+  it('updates docxCommentJSON from replayed elements for imported comments', async () => {
+    const superdocStub = createSuperdocStub();
+    const wrapper = await mountComponent(superdocStub);
+    await nextTick();
+    const { default: useComment } = await import('./components/CommentsLayer/use-comment.js');
+
+    const options = wrapper.findComponent(SuperEditorStub).props('options');
+    const existingComment = useComment({
+      commentId: 'old-runtime-id',
+      importedId: 'imp-1',
+      commentText: 'Old text',
+      fileId: 'doc-1',
+      docxCommentJSON: [{ type: 'paragraph', content: [{ type: 'text', text: 'old' }] }],
+      creatorEmail: 'ada@example.com',
+      creatorName: 'Ada',
+    });
+    commentsStoreStub.commentsList.value = [existingComment];
+    commentsStoreStub.addComment.mockClear();
+    superdocStub.activeEditor = { options: { documentId: 'doc-1' } };
+
+    const updatedElements = [{ type: 'paragraph', content: [{ type: 'text', text: 'new' }] }];
+    options.onCommentsUpdate({
+      type: 'update',
+      comment: {
+        commentId: 'new-runtime-id',
+        importedId: 'imp-1',
+        text: 'Updated text',
+        elements: updatedElements,
+      },
+    });
+
+    expect(commentsStoreStub.addComment).not.toHaveBeenCalled();
+    expect(existingComment.commentText).toBe('Updated text');
+    expect(existingComment.docxCommentJSON).toEqual(updatedElements);
+  });
+
   it('removes replay-deleted comments when payload commentId is stale but importedId matches', async () => {
     const superdocStub = createSuperdocStub();
     const wrapper = await mountComponent(superdocStub);

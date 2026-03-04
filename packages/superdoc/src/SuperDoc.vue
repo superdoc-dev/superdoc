@@ -678,9 +678,14 @@ const REPLAY_MUTABLE_COMMENT_FIELDS = new Set([
 const applyReplayUpdateToComment = (commentModel, payload, resolvedText) => {
   if (!commentModel || !payload) return;
 
+  if (Array.isArray(payload.elements)) {
+    commentModel.docxCommentJSON = payload.elements;
+  }
+
   Object.entries(payload).forEach(([key, value]) => {
     if (value === undefined) return;
     if (key === 'text') return;
+    if (key === 'elements') return;
     if (!REPLAY_MUTABLE_COMMENT_FIELDS.has(key)) return;
     commentModel[key] = value;
   });

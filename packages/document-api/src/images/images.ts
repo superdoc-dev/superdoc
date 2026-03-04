@@ -20,6 +20,7 @@ import type {
   SetAnchorOptionsInput,
   SetZOrderInput,
 } from './images.types.js';
+import { isUnsignedInt32, Z_ORDER_RELATIVE_HEIGHT_MAX, Z_ORDER_RELATIVE_HEIGHT_MIN } from './z-order.js';
 
 // ---------------------------------------------------------------------------
 // Valid value sets
@@ -71,6 +72,21 @@ function requireFinitePositiveNumber(value: unknown, field: string): asserts val
       field,
       value,
     });
+  }
+}
+
+function requireUnsignedInt32(value: unknown, field: string): asserts value is number {
+  if (!isUnsignedInt32(value)) {
+    throw new DocumentApiValidationError(
+      'INVALID_INPUT',
+      `${field} must be an unsigned 32-bit integer (${Z_ORDER_RELATIVE_HEIGHT_MIN}..${Z_ORDER_RELATIVE_HEIGHT_MAX}).`,
+      {
+        field,
+        value,
+        minimum: Z_ORDER_RELATIVE_HEIGHT_MIN,
+        maximum: Z_ORDER_RELATIVE_HEIGHT_MAX,
+      },
+    );
   }
 }
 
@@ -229,13 +245,12 @@ export function executeImagesSetZOrder(
   options?: MutationOptions,
 ): ImagesMutationResult {
   requireImageId(input);
-  if (!input.zOrder || !Number.isFinite(input.zOrder.relativeHeight)) {
-    throw new DocumentApiValidationError(
-      'INVALID_INPUT',
-      'images.setZOrder requires zOrder.relativeHeight as a number.',
-      { field: 'zOrder.relativeHeight' },
-    );
+  if (!input.zOrder || typeof input.zOrder !== 'object') {
+    throw new DocumentApiValidationError('INVALID_INPUT', 'images.setZOrder requires a "zOrder" object.', {
+      field: 'zOrder',
+    });
   }
+  requireUnsignedInt32(input.zOrder.relativeHeight, 'zOrder.relativeHeight');
   return adapter.setZOrder(input, options);
 }
 

@@ -30,7 +30,7 @@ Returns an ImagesMutationResult.
 | --- | --- | --- | --- |
 | `imageId` | string | yes |  |
 | `zOrder` | object | yes |  |
-| `zOrder.relativeHeight` | number | yes |  |
+| `zOrder.relativeHeight` | integer | yes |  |
 
 ### Example request
 
@@ -38,7 +38,7 @@ Returns an ImagesMutationResult.
 {
   "imageId": "example",
   "zOrder": {
-    "relativeHeight": 12.5
+    "relativeHeight": 1
   }
 }
 ```
@@ -85,7 +85,9 @@ Returns an ImagesMutationResult.
       "additionalProperties": false,
       "properties": {
         "relativeHeight": {
-          "type": "number"
+          "maximum": 4294967295,
+          "minimum": 0,
+          "type": "integer"
         }
       },
       "required": [

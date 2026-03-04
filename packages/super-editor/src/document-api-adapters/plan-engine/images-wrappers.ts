@@ -59,6 +59,8 @@ const ALLOWED_WRAP_ATTRS: Record<string, readonly string[]> = {
 
 const WRAP_TYPES_SUPPORTING_SIDE = new Set<string>(['Square', 'Tight', 'Through']);
 const WRAP_TYPES_SUPPORTING_DISTANCES = new Set<string>(['Square', 'Tight', 'Through', 'TopAndBottom']);
+const RELATIVE_HEIGHT_MIN = 0;
+const RELATIVE_HEIGHT_MAX = 4_294_967_295;
 
 function buildImageAddress(candidate: ImageCandidate): ImageAddress {
   return {
@@ -96,6 +98,12 @@ function buildImageSummary(candidate: ImageCandidate): ImageSummary {
       relativeHeight: attrs.relativeHeight ?? null,
     },
   };
+}
+
+function isUnsignedInt32(value: unknown): value is number {
+  return (
+    typeof value === 'number' && Number.isInteger(value) && value >= RELATIVE_HEIGHT_MIN && value <= RELATIVE_HEIGHT_MAX
+  );
 }
 
 /**
@@ -727,6 +735,13 @@ export function imagesSetZOrderWrapper(
   options?: MutationOptions,
 ): ImagesMutationResult {
   rejectTrackedMode('images.setZOrder', options);
+
+  if (!isUnsignedInt32(input.zOrder?.relativeHeight)) {
+    throw new DocumentApiAdapterError(
+      'INVALID_INPUT',
+      `images.setZOrder requires zOrder.relativeHeight as an unsigned 32-bit integer (${RELATIVE_HEIGHT_MIN}..${RELATIVE_HEIGHT_MAX}).`,
+    );
+  }
 
   const image = findImageById(editor, input.imageId);
   requireFloatingPlacement(image, 'images.setZOrder');

@@ -18,6 +18,7 @@ import {
   extractParagraphAlignment,
   extractBodyPrProperties,
 } from './textbox-content-helpers.js';
+import { parseRelativeHeight } from './relative-height.js';
 
 const DRAWING_XML_TAG = 'w:drawing';
 const SHAPE_URI = 'http://schemas.microsoft.com/office/word/2010/wordprocessingShape';
@@ -437,9 +438,9 @@ export function handleImageNode(node, params, isAnchor) {
   // which is not what we want for placeholder images that should maintain their original layout.
   const wrapValue = wrap;
 
-  // Extract relativeHeight from anchor attributes for first-class z-order support
-  const rawRelativeHeight = isAnchor ? Number(attributes['relativeHeight']) : null;
-  const relativeHeight = rawRelativeHeight != null && Number.isFinite(rawRelativeHeight) ? rawRelativeHeight : null;
+  // Extract relativeHeight from anchor attributes for first-class z-order support.
+  // We only accept OOXML-conformant unsignedInt values.
+  const relativeHeight = isAnchor ? parseRelativeHeight(attributes['relativeHeight']) : null;
 
   // Derive a deterministic sdImageId from the drawing's docPr id, the rEmbed,
   // and the document-part filename so the same image always receives the same

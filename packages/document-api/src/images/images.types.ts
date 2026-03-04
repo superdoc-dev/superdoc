@@ -82,7 +82,7 @@ export interface ImageAnchorOptionsInput {
 // ---------------------------------------------------------------------------
 
 export interface ImageZOrderInput {
-  /** Raw OOXML relativeHeight integer. */
+  /** Raw OOXML relativeHeight unsigned 32-bit integer (0..4294967295). */
   relativeHeight: number;
 }
 

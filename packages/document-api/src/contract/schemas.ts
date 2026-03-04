@@ -12,6 +12,7 @@ import {
   LINE_RULES,
 } from '../paragraphs/paragraphs.js';
 import { buildPatchSchema, buildStateSchema } from '../styles/index.js';
+import { Z_ORDER_RELATIVE_HEIGHT_MAX, Z_ORDER_RELATIVE_HEIGHT_MIN } from '../images/z-order.js';
 
 type JsonSchema = Record<string, unknown>;
 
@@ -3842,7 +3843,16 @@ const operationSchemas: Record<OperationId, OperationSchemaSet> = {
     input: objectSchema(
       {
         imageId: { type: 'string' },
-        zOrder: objectSchema({ relativeHeight: { type: 'number' } }, ['relativeHeight']),
+        zOrder: objectSchema(
+          {
+            relativeHeight: {
+              type: 'integer',
+              minimum: Z_ORDER_RELATIVE_HEIGHT_MIN,
+              maximum: Z_ORDER_RELATIVE_HEIGHT_MAX,
+            },
+          },
+          ['relativeHeight'],
+        ),
       },
       ['imageId', 'zOrder'],
     ),

@@ -230,6 +230,42 @@ describe('handleImageNode', () => {
     expect(result.attrs.size).toEqual({ width: 5, height: 6 }); // emuToPixels mocked
   });
 
+  it('parses valid anchor relativeHeight as unsigned integer', () => {
+    const node = makeNode({
+      attributes: {
+        relativeHeight: '251651584',
+      },
+    });
+
+    const result = handleImageNode(node, makeParams(), true);
+
+    expect(result.attrs.relativeHeight).toBe(251651584);
+  });
+
+  it('drops fractional anchor relativeHeight values', () => {
+    const node = makeNode({
+      attributes: {
+        relativeHeight: '1.5',
+      },
+    });
+
+    const result = handleImageNode(node, makeParams(), true);
+
+    expect(result.attrs.relativeHeight).toBeNull();
+  });
+
+  it('drops out-of-range anchor relativeHeight values', () => {
+    const node = makeNode({
+      attributes: {
+        relativeHeight: '4294967296',
+      },
+    });
+
+    const result = handleImageNode(node, makeParams(), true);
+
+    expect(result.attrs.relativeHeight).toBeNull();
+  });
+
   it('calls convertTiffToPng for .tif images', () => {
     convertTiffToPng.mockReturnValue({ dataUri: 'data:image/png;base64,fake', format: 'png' });
     const node = makeNode();

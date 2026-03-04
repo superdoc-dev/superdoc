@@ -31,4 +31,22 @@ List inspection and list mutations.
 | <span style={{ whiteSpace: 'nowrap', wordBreak: 'normal', overflowWrap: 'normal' }}><a href="/document-api/reference/lists/can-continue-previous"><code>lists.canContinuePrevious</code></a></span> | `lists.canContinuePrevious` | No | `idempotent` | No | No |
 | <span style={{ whiteSpace: 'nowrap', wordBreak: 'normal', overflowWrap: 'normal' }}><a href="/document-api/reference/lists/set-level-restart"><code>lists.setLevelRestart</code></a></span> | `lists.setLevelRestart` | Yes | `conditional` | No | Yes |
 | <span style={{ whiteSpace: 'nowrap', wordBreak: 'normal', overflowWrap: 'normal' }}><a href="/document-api/reference/lists/convert-to-text"><code>lists.convertToText</code></a></span> | `lists.convertToText` | Yes | `conditional` | No | Yes |
+| <span style={{ whiteSpace: 'nowrap', wordBreak: 'normal', overflowWrap: 'normal' }}><a href="/document-api/reference/lists/apply-template"><code>lists.applyTemplate</code></a></span> | `lists.applyTemplate` | Yes | `conditional` | No | Yes |
+| <span style={{ whiteSpace: 'nowrap', wordBreak: 'normal', overflowWrap: 'normal' }}><a href="/document-api/reference/lists/apply-preset"><code>lists.applyPreset</code></a></span> | `lists.applyPreset` | Yes | `conditional` | No | Yes |
+| <span style={{ whiteSpace: 'nowrap', wordBreak: 'normal', overflowWrap: 'normal' }}><a href="/document-api/reference/lists/capture-template"><code>lists.captureTemplate</code></a></span> | `lists.captureTemplate` | No | `idempotent` | No | No |
+| <span style={{ whiteSpace: 'nowrap', wordBreak: 'normal', overflowWrap: 'normal' }}><a href="/document-api/reference/lists/set-level-numbering"><code>lists.setLevelNumbering</code></a></span> | `lists.setLevelNumbering` | Yes | `conditional` | No | Yes |
+| <span style={{ whiteSpace: 'nowrap', wordBreak: 'normal', overflowWrap: 'normal' }}><a href="/document-api/reference/lists/set-level-bullet"><code>lists.setLevelBullet</code></a></span> | `lists.setLevelBullet` | Yes | `conditional` | No | Yes |
+| <span style={{ whiteSpace: 'nowrap', wordBreak: 'normal', overflowWrap: 'normal' }}><a href="/document-api/reference/lists/set-level-picture-bullet"><code>lists.setLevelPictureBullet</code></a></span> | `lists.setLevelPictureBullet` | Yes | `conditional` | No | Yes |
+| <span style={{ whiteSpace: 'nowrap', wordBreak: 'normal', overflowWrap: 'normal' }}><a href="/document-api/reference/lists/set-level-alignment"><code>lists.setLevelAlignment</code></a></span> | `lists.setLevelAlignment` | Yes | `conditional` | No | Yes |
+| <span style={{ whiteSpace: 'nowrap', wordBreak: 'normal', overflowWrap: 'normal' }}><a href="/document-api/reference/lists/set-level-indents"><code>lists.setLevelIndents</code></a></span> | `lists.setLevelIndents` | Yes | `conditional` | No | Yes |
+| <span style={{ whiteSpace: 'nowrap', wordBreak: 'normal', overflowWrap: 'normal' }}><a href="/document-api/reference/lists/set-level-trailing-character"><code>lists.setLevelTrailingCharacter</code></a></span> | `lists.setLevelTrailingCharacter` | Yes | `conditional` | No | Yes |
+| <span style={{ whiteSpace: 'nowrap', wordBreak: 'normal', overflowWrap: 'normal' }}><a href="/document-api/reference/lists/set-level-marker-font"><code>lists.setLevelMarkerFont</code></a></span> | `lists.setLevelMarkerFont` | Yes | `conditional` | No | Yes |
+| <span style={{ whiteSpace: 'nowrap', wordBreak: 'normal', overflowWrap: 'normal' }}><a href="/document-api/reference/lists/clear-level-overrides"><code>lists.clearLevelOverrides</code></a></span> | `lists.clearLevelOverrides` | Yes | `conditional` | No | Yes |
+
+
+## Convenience aliases
+
+| Alias method | Canonical operation | Behavior |
+| --- | --- | --- |
+| `editor.doc.lists.setType(...)` | <span style={{ whiteSpace: 'nowrap', wordBreak: 'normal', overflowWrap: 'normal' }}><a href="/document-api/reference/lists/apply-preset"><code>lists.applyPreset</code></a></span> | Convenience wrapper that maps a simple kind (ordered/bullet) to the default preset via `lists.applyPreset`. |
 

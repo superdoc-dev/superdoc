@@ -2501,6 +2501,230 @@ const operationSchemas: Record<OperationId, OperationSchemaSet> = {
     success: objectSchema({ success: { const: true }, paragraph: ref('ParagraphAddress') }, ['success', 'paragraph']),
     failure: listsFailureSchemaFor('lists.convertToText'),
   },
+
+  // SD-1973 — List formatting and templates
+  'lists.applyTemplate': {
+    input: objectSchema(
+      {
+        target: listItemAddressSchema,
+        template: objectSchema(
+          {
+            version: { const: 1 },
+            levels: arraySchema(
+              objectSchema(
+                {
+                  level: { type: 'integer', minimum: 0, maximum: 8 },
+                  numFmt: { type: 'string' },
+                  lvlText: { type: 'string' },
+                  start: { type: 'integer' },
+                  alignment: { enum: ['left', 'center', 'right'] },
+                  indents: objectSchema({
+                    left: { type: 'integer' },
+                    hanging: { type: 'integer' },
+                    firstLine: { type: 'integer' },
+                  }),
+                  trailingCharacter: { enum: ['tab', 'space', 'nothing'] },
+                  markerFont: { type: 'string' },
+                  pictureBulletId: { type: 'integer' },
+                },
+                ['level'],
+              ),
+            ),
+          },
+          ['version', 'levels'],
+        ),
+        levels: arraySchema({ type: 'integer', minimum: 0, maximum: 8 }),
+      },
+      ['target', 'template'],
+    ),
+    output: listsMutateItemResultSchemaFor('lists.applyTemplate'),
+    success: listsMutateItemSuccessSchema,
+    failure: listsFailureSchemaFor('lists.applyTemplate'),
+  },
+  'lists.applyPreset': {
+    input: objectSchema(
+      {
+        target: listItemAddressSchema,
+        preset: {
+          enum: [
+            'decimal',
+            'decimalParenthesis',
+            'lowerLetter',
+            'upperLetter',
+            'lowerRoman',
+            'upperRoman',
+            'disc',
+            'circle',
+            'square',
+            'dash',
+          ],
+        },
+        levels: arraySchema({ type: 'integer', minimum: 0, maximum: 8 }),
+      },
+      ['target', 'preset'],
+    ),
+    output: listsMutateItemResultSchemaFor('lists.applyPreset'),
+    success: listsMutateItemSuccessSchema,
+    failure: listsFailureSchemaFor('lists.applyPreset'),
+  },
+  'lists.captureTemplate': (() => {
+    const successSchema = objectSchema(
+      {
+        success: { const: true },
+        template: objectSchema(
+          {
+            version: { const: 1 },
+            levels: arraySchema(
+              objectSchema(
+                {
+                  level: { type: 'integer', minimum: 0, maximum: 8 },
+                  numFmt: { type: 'string' },
+                  lvlText: { type: 'string' },
+                  start: { type: 'integer' },
+                  alignment: { enum: ['left', 'center', 'right'] },
+                  indents: objectSchema({
+                    left: { type: 'integer' },
+                    hanging: { type: 'integer' },
+                    firstLine: { type: 'integer' },
+                  }),
+                  trailingCharacter: { enum: ['tab', 'space', 'nothing'] },
+                  markerFont: { type: 'string' },
+                  pictureBulletId: { type: 'integer' },
+                },
+                ['level'],
+              ),
+            ),
+          },
+          ['version', 'levels'],
+        ),
+      },
+      ['success', 'template'],
+    );
+    return {
+      input: objectSchema(
+        {
+          target: listItemAddressSchema,
+          levels: arraySchema({ type: 'integer', minimum: 0, maximum: 8 }),
+        },
+        ['target'],
+      ),
+      output: { oneOf: [successSchema, listsFailureSchemaFor('lists.captureTemplate')] },
+      success: successSchema,
+      failure: listsFailureSchemaFor('lists.captureTemplate'),
+    };
+  })(),
+  'lists.setLevelNumbering': {
+    input: objectSchema(
+      {
+        target: listItemAddressSchema,
+        level: { type: 'integer', minimum: 0, maximum: 8 },
+        numFmt: { type: 'string' },
+        lvlText: { type: 'string' },
+        start: { type: 'integer' },
+      },
+      ['target', 'level', 'numFmt', 'lvlText'],
+    ),
+    output: listsMutateItemResultSchemaFor('lists.setLevelNumbering'),
+    success: listsMutateItemSuccessSchema,
+    failure: listsFailureSchemaFor('lists.setLevelNumbering'),
+  },
+  'lists.setLevelBullet': {
+    input: objectSchema(
+      {
+        target: listItemAddressSchema,
+        level: { type: 'integer', minimum: 0, maximum: 8 },
+        markerText: { type: 'string' },
+      },
+      ['target', 'level', 'markerText'],
+    ),
+    output: listsMutateItemResultSchemaFor('lists.setLevelBullet'),
+    success: listsMutateItemSuccessSchema,
+    failure: listsFailureSchemaFor('lists.setLevelBullet'),
+  },
+  'lists.setLevelPictureBullet': {
+    input: objectSchema(
+      {
+        target: listItemAddressSchema,
+        level: { type: 'integer', minimum: 0, maximum: 8 },
+        pictureBulletId: { type: 'integer' },
+      },
+      ['target', 'level', 'pictureBulletId'],
+    ),
+    output: listsMutateItemResultSchemaFor('lists.setLevelPictureBullet'),
+    success: listsMutateItemSuccessSchema,
+    failure: listsFailureSchemaFor('lists.setLevelPictureBullet'),
+  },
+  'lists.setLevelAlignment': {
+    input: objectSchema(
+      {
+        target: listItemAddressSchema,
+        level: { type: 'integer', minimum: 0, maximum: 8 },
+        alignment: { enum: ['left', 'center', 'right'] },
+      },
+      ['target', 'level', 'alignment'],
+    ),
+    output: listsMutateItemResultSchemaFor('lists.setLevelAlignment'),
+    success: listsMutateItemSuccessSchema,
+    failure: listsFailureSchemaFor('lists.setLevelAlignment'),
+  },
+  'lists.setLevelIndents': {
+    input: {
+      type: 'object',
+      properties: {
+        target: listItemAddressSchema,
+        level: { type: 'integer', minimum: 0, maximum: 8 },
+        left: { type: 'integer' },
+        hanging: { type: 'integer' },
+        firstLine: { type: 'integer' },
+      },
+      required: ['target', 'level'],
+      additionalProperties: false,
+      anyOf: [{ required: ['left'] }, { required: ['hanging'] }, { required: ['firstLine'] }],
+      not: { required: ['hanging', 'firstLine'] },
+    },
+    output: listsMutateItemResultSchemaFor('lists.setLevelIndents'),
+    success: listsMutateItemSuccessSchema,
+    failure: listsFailureSchemaFor('lists.setLevelIndents'),
+  },
+  'lists.setLevelTrailingCharacter': {
+    input: objectSchema(
+      {
+        target: listItemAddressSchema,
+        level: { type: 'integer', minimum: 0, maximum: 8 },
+        trailingCharacter: { enum: ['tab', 'space', 'nothing'] },
+      },
+      ['target', 'level', 'trailingCharacter'],
+    ),
+    output: listsMutateItemResultSchemaFor('lists.setLevelTrailingCharacter'),
+    success: listsMutateItemSuccessSchema,
+    failure: listsFailureSchemaFor('lists.setLevelTrailingCharacter'),
+  },
+  'lists.setLevelMarkerFont': {
+    input: objectSchema(
+      {
+        target: listItemAddressSchema,
+        level: { type: 'integer', minimum: 0, maximum: 8 },
+        fontFamily: { type: 'string' },
+      },
+      ['target', 'level', 'fontFamily'],
+    ),
+    output: listsMutateItemResultSchemaFor('lists.setLevelMarkerFont'),
+    success: listsMutateItemSuccessSchema,
+    failure: listsFailureSchemaFor('lists.setLevelMarkerFont'),
+  },
+  'lists.clearLevelOverrides': {
+    input: objectSchema(
+      {
+        target: listItemAddressSchema,
+        level: { type: 'integer', minimum: 0, maximum: 8 },
+      },
+      ['target', 'level'],
+    ),
+    output: listsMutateItemResultSchemaFor('lists.clearLevelOverrides'),
+    success: listsMutateItemSuccessSchema,
+    failure: listsFailureSchemaFor('lists.clearLevelOverrides'),
+  },
+
   'comments.create': {
     input: objectSchema(
       {

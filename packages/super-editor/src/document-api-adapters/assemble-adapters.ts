@@ -60,6 +60,19 @@ import {
   listsSetLevelRestartWrapper,
   listsConvertToTextWrapper,
 } from './plan-engine/lists-wrappers.js';
+import {
+  listsApplyTemplateWrapper,
+  listsApplyPresetWrapper,
+  listsCaptureTemplateWrapper,
+  listsSetLevelNumberingWrapper,
+  listsSetLevelBulletWrapper,
+  listsSetLevelPictureBulletWrapper,
+  listsSetLevelAlignmentWrapper,
+  listsSetLevelIndentsWrapper,
+  listsSetLevelTrailingCharacterWrapper,
+  listsSetLevelMarkerFontWrapper,
+  listsClearLevelOverridesWrapper,
+} from './plan-engine/lists-formatting-wrappers.js';
 import { executePlan } from './plan-engine/executor.js';
 import { previewPlan } from './plan-engine/preview.js';
 import { queryMatchAdapter } from './plan-engine/query-match-adapter.js';
@@ -269,6 +282,17 @@ export function assembleDocumentApiAdapters(editor: Editor): DocumentApiAdapters
       canContinuePrevious: (input) => listsCanContinuePreviousWrapper(editor, input),
       setLevelRestart: (input, options) => listsSetLevelRestartWrapper(editor, input, options),
       convertToText: (input, options) => listsConvertToTextWrapper(editor, input, options),
+      applyTemplate: (input, options) => listsApplyTemplateWrapper(editor, input, options),
+      applyPreset: (input, options) => listsApplyPresetWrapper(editor, input, options),
+      captureTemplate: (input) => listsCaptureTemplateWrapper(editor, input),
+      setLevelNumbering: (input, options) => listsSetLevelNumberingWrapper(editor, input, options),
+      setLevelBullet: (input, options) => listsSetLevelBulletWrapper(editor, input, options),
+      setLevelPictureBullet: (input, options) => listsSetLevelPictureBulletWrapper(editor, input, options),
+      setLevelAlignment: (input, options) => listsSetLevelAlignmentWrapper(editor, input, options),
+      setLevelIndents: (input, options) => listsSetLevelIndentsWrapper(editor, input, options),
+      setLevelTrailingCharacter: (input, options) => listsSetLevelTrailingCharacterWrapper(editor, input, options),
+      setLevelMarkerFont: (input, options) => listsSetLevelMarkerFontWrapper(editor, input, options),
+      clearLevelOverrides: (input, options) => listsClearLevelOverridesWrapper(editor, input, options),
     },
     sections: {
       list: (query) => sectionsListAdapter(editor, query),

@@ -25,4 +25,11 @@ export const REFERENCE_OPERATION_ALIASES: readonly ReferenceAliasDefinition[] = 
     referenceGroup: 'format',
     description: 'Convenience alias for `format.strike` with `value: true`.',
   },
+  {
+    memberPath: 'lists.setType',
+    canonicalOperationId: 'lists.applyPreset',
+    referenceGroup: 'lists',
+    description:
+      'Convenience wrapper that maps a simple kind (ordered/bullet) to the default preset via `lists.applyPreset`.',
+  },
 ] as const;

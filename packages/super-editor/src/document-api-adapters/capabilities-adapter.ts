@@ -46,6 +46,18 @@ const REQUIRED_COMMANDS: Partial<Record<OperationId, readonly EditorCommandName[
   'lists.continuePrevious': [],
   'lists.setLevelRestart': [],
   'lists.convertToText': [],
+  // SD-1973 formatting operations (no named commands — they mutate raw XML directly)
+  'lists.applyTemplate': [],
+  'lists.applyPreset': [],
+  'lists.captureTemplate': [],
+  'lists.setLevelNumbering': [],
+  'lists.setLevelBullet': [],
+  'lists.setLevelPictureBullet': [],
+  'lists.setLevelAlignment': [],
+  'lists.setLevelIndents': [],
+  'lists.setLevelTrailingCharacter': [],
+  'lists.setLevelMarkerFont': [],
+  'lists.clearLevelOverrides': [],
   'blocks.delete': ['deleteBlockNodeById'],
   'comments.create': ['addComment', 'setTextSelection', 'addCommentReply'],
   'comments.patch': ['editComment', 'moveComment', 'resolveComment', 'setCommentInternal'],
@@ -144,6 +156,11 @@ const REQUIRED_HELPERS: Partial<Record<OperationId, (editor: Editor) => boolean>
   'sections.setHeaderFooterRef': (editor) => Boolean((editor as unknown as { converter?: unknown }).converter),
   'tables.setDefaultStyle': (editor) => Boolean((editor as unknown as { converter?: unknown }).converter),
   'tables.clearDefaultStyle': (editor) => Boolean((editor as unknown as { converter?: unknown }).converter),
+  // Picture bullet requires the numbering part to support lvlPicBulletId references.
+  'lists.setLevelPictureBullet': (editor) => {
+    const converter = (editor as unknown as { converter?: { convertedXml?: Record<string, unknown> } }).converter;
+    return Boolean(converter?.convertedXml?.['word/numbering.xml']);
+  },
 };
 
 function hasRequiredHelpers(editor: Editor, operationId: OperationId): boolean {

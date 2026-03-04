@@ -71,6 +71,18 @@ import type {
   ListsSetLevelRestartInput,
   ListsConvertToTextInput,
   ListsConvertToTextResult,
+  ListsApplyTemplateInput,
+  ListsApplyPresetInput,
+  ListsCaptureTemplateInput,
+  ListsCaptureTemplateResult,
+  ListsSetLevelNumberingInput,
+  ListsSetLevelBulletInput,
+  ListsSetLevelPictureBulletInput,
+  ListsSetLevelAlignmentInput,
+  ListsSetLevelIndentsInput,
+  ListsSetLevelTrailingCharacterInput,
+  ListsSetLevelMarkerFontInput,
+  ListsClearLevelOverridesInput,
 } from '../lists/lists.types.js';
 import type {
   ParagraphMutationResult,
@@ -383,6 +395,47 @@ export interface OperationRegistry extends FormatInlineAliasOperationRegistry {
     output: ListsMutateItemResult;
   };
   'lists.convertToText': { input: ListsConvertToTextInput; options: MutationOptions; output: ListsConvertToTextResult };
+
+  // --- lists.* (SD-1973 formatting) ---
+  'lists.applyTemplate': { input: ListsApplyTemplateInput; options: MutationOptions; output: ListsMutateItemResult };
+  'lists.applyPreset': { input: ListsApplyPresetInput; options: MutationOptions; output: ListsMutateItemResult };
+  'lists.captureTemplate': { input: ListsCaptureTemplateInput; options: never; output: ListsCaptureTemplateResult };
+  'lists.setLevelNumbering': {
+    input: ListsSetLevelNumberingInput;
+    options: MutationOptions;
+    output: ListsMutateItemResult;
+  };
+  'lists.setLevelBullet': { input: ListsSetLevelBulletInput; options: MutationOptions; output: ListsMutateItemResult };
+  'lists.setLevelPictureBullet': {
+    input: ListsSetLevelPictureBulletInput;
+    options: MutationOptions;
+    output: ListsMutateItemResult;
+  };
+  'lists.setLevelAlignment': {
+    input: ListsSetLevelAlignmentInput;
+    options: MutationOptions;
+    output: ListsMutateItemResult;
+  };
+  'lists.setLevelIndents': {
+    input: ListsSetLevelIndentsInput;
+    options: MutationOptions;
+    output: ListsMutateItemResult;
+  };
+  'lists.setLevelTrailingCharacter': {
+    input: ListsSetLevelTrailingCharacterInput;
+    options: MutationOptions;
+    output: ListsMutateItemResult;
+  };
+  'lists.setLevelMarkerFont': {
+    input: ListsSetLevelMarkerFontInput;
+    options: MutationOptions;
+    output: ListsMutateItemResult;
+  };
+  'lists.clearLevelOverrides': {
+    input: ListsClearLevelOverridesInput;
+    options: MutationOptions;
+    output: ListsMutateItemResult;
+  };
 
   // --- sections.* ---
   'sections.list': { input: SectionsListQuery | undefined; options: never; output: SectionsListResult };

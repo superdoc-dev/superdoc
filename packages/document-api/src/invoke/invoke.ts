@@ -129,6 +129,19 @@ export function buildDispatchTable(api: DocumentApi): TypedDispatchTable {
     'lists.setLevelRestart': (input, options) => api.lists.setLevelRestart(input, options),
     'lists.convertToText': (input, options) => api.lists.convertToText(input, options),
 
+    // --- lists.* (SD-1973 formatting) ---
+    'lists.applyTemplate': (input, options) => api.lists.applyTemplate(input, options),
+    'lists.applyPreset': (input, options) => api.lists.applyPreset(input, options),
+    'lists.captureTemplate': (input) => api.lists.captureTemplate(input),
+    'lists.setLevelNumbering': (input, options) => api.lists.setLevelNumbering(input, options),
+    'lists.setLevelBullet': (input, options) => api.lists.setLevelBullet(input, options),
+    'lists.setLevelPictureBullet': (input, options) => api.lists.setLevelPictureBullet(input, options),
+    'lists.setLevelAlignment': (input, options) => api.lists.setLevelAlignment(input, options),
+    'lists.setLevelIndents': (input, options) => api.lists.setLevelIndents(input, options),
+    'lists.setLevelTrailingCharacter': (input, options) => api.lists.setLevelTrailingCharacter(input, options),
+    'lists.setLevelMarkerFont': (input, options) => api.lists.setLevelMarkerFont(input, options),
+    'lists.clearLevelOverrides': (input, options) => api.lists.clearLevelOverrides(input, options),
+
     // --- sections.* ---
     'sections.list': (input) => api.sections.list(input),
     'sections.get': (input) => api.sections.get(input),

@@ -526,6 +526,17 @@ The SDKs expose all operations from the [Document API](/document-api/overview) p
 | `doc.lists.canContinuePrevious` | `lists can-continue-previous` | Check whether the target sequence can continue numbering from a previous compatible sequence. |
 | `doc.lists.setLevelRestart` | `lists set-level-restart` | Set the restart behavior for a specific list level. |
 | `doc.lists.convertToText` | `lists convert-to-text` | Convert list items to plain paragraphs, optionally prepending the rendered marker text. |
+| `doc.lists.applyTemplate` | `lists apply-template` | Apply a captured ListTemplate to the target list, optionally filtered to specific levels. |
+| `doc.lists.applyPreset` | `lists apply-preset` | Apply a built-in list formatting preset to the target list. |
+| `doc.lists.captureTemplate` | `lists capture-template` | Capture the formatting of a list as a reusable ListTemplate. |
+| `doc.lists.setLevelNumbering` | `lists set-level-numbering` | Set the numbering format, pattern, and optional start value for a specific list level. |
+| `doc.lists.setLevelBullet` | `lists set-level-bullet` | Set the bullet marker text for a specific list level. |
+| `doc.lists.setLevelPictureBullet` | `lists set-level-picture-bullet` | Set a picture bullet for a specific list level by its OOXML lvlPicBulletId. |
+| `doc.lists.setLevelAlignment` | `lists set-level-alignment` | Set the marker alignment (left, center, right) for a specific list level. |
+| `doc.lists.setLevelIndents` | `lists set-level-indents` | Set the paragraph indentation values (left, hanging, firstLine) for a specific list level. |
+| `doc.lists.setLevelTrailingCharacter` | `lists set-level-trailing-character` | Set the trailing character (tab, space, nothing) after the marker for a specific list level. |
+| `doc.lists.setLevelMarkerFont` | `lists set-level-marker-font` | Set the font family used for the marker character at a specific list level. |
+| `doc.lists.clearLevelOverrides` | `lists clear-level-overrides` | Remove instance-level overrides for a specific list level, restoring abstract definition values. |
 
 #### Tables
 
@@ -835,6 +846,17 @@ The SDKs expose all operations from the [Document API](/document-api/overview) p
 | `doc.lists.can_continue_previous` | `lists can-continue-previous` | Check whether the target sequence can continue numbering from a previous compatible sequence. |
 | `doc.lists.set_level_restart` | `lists set-level-restart` | Set the restart behavior for a specific list level. |
 | `doc.lists.convert_to_text` | `lists convert-to-text` | Convert list items to plain paragraphs, optionally prepending the rendered marker text. |
+| `doc.lists.apply_template` | `lists apply-template` | Apply a captured ListTemplate to the target list, optionally filtered to specific levels. |
+| `doc.lists.apply_preset` | `lists apply-preset` | Apply a built-in list formatting preset to the target list. |
+| `doc.lists.capture_template` | `lists capture-template` | Capture the formatting of a list as a reusable ListTemplate. |
+| `doc.lists.set_level_numbering` | `lists set-level-numbering` | Set the numbering format, pattern, and optional start value for a specific list level. |
+| `doc.lists.set_level_bullet` | `lists set-level-bullet` | Set the bullet marker text for a specific list level. |
+| `doc.lists.set_level_picture_bullet` | `lists set-level-picture-bullet` | Set a picture bullet for a specific list level by its OOXML lvlPicBulletId. |
+| `doc.lists.set_level_alignment` | `lists set-level-alignment` | Set the marker alignment (left, center, right) for a specific list level. |
+| `doc.lists.set_level_indents` | `lists set-level-indents` | Set the paragraph indentation values (left, hanging, firstLine) for a specific list level. |
+| `doc.lists.set_level_trailing_character` | `lists set-level-trailing-character` | Set the trailing character (tab, space, nothing) after the marker for a specific list level. |
+| `doc.lists.set_level_marker_font` | `lists set-level-marker-font` | Set the font family used for the marker character at a specific list level. |
+| `doc.lists.clear_level_overrides` | `lists clear-level-overrides` | Remove instance-level overrides for a specific list level, restoring abstract definition values. |
 
 #### Tables
 

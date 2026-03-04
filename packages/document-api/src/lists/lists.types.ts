@@ -39,10 +39,39 @@ export type ListInsertPosition = 'before' | 'after';
 export type JoinDirection = 'withPrevious' | 'withNext';
 export type MutationScope = 'definition' | 'instance';
 
+export type LevelAlignment = 'left' | 'center' | 'right';
+export type TrailingCharacter = 'tab' | 'space' | 'nothing';
+
+export type ListPresetId =
+  | 'decimal'
+  | 'decimalParenthesis'
+  | 'lowerLetter'
+  | 'upperLetter'
+  | 'lowerRoman'
+  | 'upperRoman'
+  | 'disc'
+  | 'circle'
+  | 'square'
+  | 'dash';
+
 export const LIST_KINDS = ['ordered', 'bullet'] as const satisfies readonly ListKind[];
 export const LIST_INSERT_POSITIONS = ['before', 'after'] as const satisfies readonly ListInsertPosition[];
 export const JOIN_DIRECTIONS = ['withPrevious', 'withNext'] as const satisfies readonly JoinDirection[];
 export const MUTATION_SCOPES = ['definition', 'instance'] as const satisfies readonly MutationScope[];
+export const LEVEL_ALIGNMENTS = ['left', 'center', 'right'] as const satisfies readonly LevelAlignment[];
+export const TRAILING_CHARACTERS = ['tab', 'space', 'nothing'] as const satisfies readonly TrailingCharacter[];
+export const LIST_PRESET_IDS = [
+  'decimal',
+  'decimalParenthesis',
+  'lowerLetter',
+  'upperLetter',
+  'lowerRoman',
+  'upperRoman',
+  'disc',
+  'circle',
+  'square',
+  'dash',
+] as const satisfies readonly ListPresetId[];
 
 // ---------------------------------------------------------------------------
 // Failure code enums
@@ -58,7 +87,9 @@ export type ListsFailureCode =
   | 'NO_ADJACENT_SEQUENCE'
   | 'ALREADY_SAME_SEQUENCE'
   | 'LEVEL_OUT_OF_RANGE'
-  | 'CAPABILITY_UNAVAILABLE';
+  | 'LEVEL_NOT_FOUND'
+  | 'CAPABILITY_UNAVAILABLE'
+  | 'INVALID_INPUT';
 
 export type CanContinueReason = 'NO_PREVIOUS_LIST' | 'INCOMPATIBLE_DEFINITIONS' | 'ALREADY_CONTINUOUS';
 
@@ -181,6 +212,116 @@ export interface ListsConvertToTextInput {
   target: ListItemAddress;
   includeMarker?: boolean;
 }
+
+// ---------------------------------------------------------------------------
+// SD-1973 template and formatting types
+// ---------------------------------------------------------------------------
+
+/** A captured snapshot of one level's formatting properties. */
+export interface ListLevelTemplate {
+  level: number;
+  numFmt?: string;
+  lvlText?: string;
+  start?: number;
+  alignment?: LevelAlignment;
+  indents?: {
+    left?: number;
+    hanging?: number;
+    firstLine?: number;
+  };
+  trailingCharacter?: TrailingCharacter;
+  markerFont?: string;
+  pictureBulletId?: number;
+}
+
+/** A full list template: an array of level snapshots. */
+export interface ListTemplate {
+  version: 1;
+  levels: ListLevelTemplate[];
+}
+
+// ---------------------------------------------------------------------------
+// Input types — SD-1973 formatting operations
+// ---------------------------------------------------------------------------
+
+export interface ListsApplyTemplateInput {
+  target: ListItemAddress;
+  template: ListTemplate;
+  levels?: number[];
+}
+
+export interface ListsApplyPresetInput {
+  target: ListItemAddress;
+  preset: ListPresetId;
+  levels?: number[];
+}
+
+export interface ListsCaptureTemplateInput {
+  target: ListItemAddress;
+  levels?: number[];
+}
+
+export interface ListsSetLevelNumberingInput {
+  target: ListItemAddress;
+  level: number;
+  numFmt: string;
+  lvlText: string;
+  start?: number;
+}
+
+export interface ListsSetLevelBulletInput {
+  target: ListItemAddress;
+  level: number;
+  markerText: string;
+}
+
+export interface ListsSetLevelPictureBulletInput {
+  target: ListItemAddress;
+  level: number;
+  pictureBulletId: number;
+}
+
+export interface ListsSetLevelAlignmentInput {
+  target: ListItemAddress;
+  level: number;
+  alignment: LevelAlignment;
+}
+
+export interface ListsSetLevelIndentsInput {
+  target: ListItemAddress;
+  level: number;
+  left?: number;
+  hanging?: number;
+  firstLine?: number;
+}
+
+export interface ListsSetLevelTrailingCharacterInput {
+  target: ListItemAddress;
+  level: number;
+  trailingCharacter: TrailingCharacter;
+}
+
+export interface ListsSetLevelMarkerFontInput {
+  target: ListItemAddress;
+  level: number;
+  fontFamily: string;
+}
+
+export interface ListsClearLevelOverridesInput {
+  target: ListItemAddress;
+  level: number;
+}
+
+// ---------------------------------------------------------------------------
+// Result types — SD-1973
+// ---------------------------------------------------------------------------
+
+export interface ListsCaptureTemplateSuccessResult {
+  success: true;
+  template: ListTemplate;
+}
+
+export type ListsCaptureTemplateResult = ListsCaptureTemplateSuccessResult | ListsFailureResult;
 
 // ---------------------------------------------------------------------------
 // Result types

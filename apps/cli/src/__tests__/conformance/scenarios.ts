@@ -1516,6 +1516,189 @@ export const SUCCESS_SCENARIOS = {
       ],
     };
   },
+  'doc.lists.applyTemplate': async (harness: ConformanceHarness): Promise<ScenarioInvocation> => {
+    const stateDir = await harness.createStateDir('doc-lists-apply-template-success');
+    const docPath = await harness.copyListFixtureDoc('doc-lists-apply-template');
+    const target = await harness.firstListItemAddress(docPath, stateDir);
+    const template = {
+      version: 1,
+      levels: [{ level: 0, numFmt: 'decimal', lvlText: '%1.' }],
+    };
+    return {
+      stateDir,
+      args: [
+        'lists',
+        'apply-template',
+        docPath,
+        '--input-json',
+        JSON.stringify({ target, template }),
+        '--out',
+        harness.createOutputPath('doc-lists-apply-template-output'),
+      ],
+    };
+  },
+  'doc.lists.applyPreset': async (harness: ConformanceHarness): Promise<ScenarioInvocation> => {
+    const stateDir = await harness.createStateDir('doc-lists-apply-preset-success');
+    const docPath = await harness.copyListFixtureDoc('doc-lists-apply-preset');
+    const target = await harness.firstListItemAddress(docPath, stateDir);
+    return {
+      stateDir,
+      args: [
+        'lists',
+        'apply-preset',
+        docPath,
+        '--input-json',
+        JSON.stringify({ target, preset: 'decimal' }),
+        '--out',
+        harness.createOutputPath('doc-lists-apply-preset-output'),
+      ],
+    };
+  },
+  'doc.lists.captureTemplate': async (harness: ConformanceHarness): Promise<ScenarioInvocation> => {
+    const stateDir = await harness.createStateDir('doc-lists-capture-template-success');
+    const docPath = await harness.copyListFixtureDoc('doc-lists-capture-template');
+    const target = await harness.firstListItemAddress(docPath, stateDir);
+    return {
+      stateDir,
+      args: ['lists', 'capture-template', docPath, '--input-json', JSON.stringify({ target })],
+    };
+  },
+  'doc.lists.setLevelNumbering': async (harness: ConformanceHarness): Promise<ScenarioInvocation> => {
+    const stateDir = await harness.createStateDir('doc-lists-set-level-numbering-success');
+    const docPath = await harness.copyListFixtureDoc('doc-lists-set-level-numbering');
+    const target = await harness.firstListItemAddress(docPath, stateDir);
+    return {
+      stateDir,
+      args: [
+        'lists',
+        'set-level-numbering',
+        docPath,
+        '--input-json',
+        JSON.stringify({ target, level: 0, numFmt: 'decimal', lvlText: '%1.' }),
+        '--out',
+        harness.createOutputPath('doc-lists-set-level-numbering-output'),
+      ],
+    };
+  },
+  'doc.lists.setLevelBullet': async (harness: ConformanceHarness): Promise<ScenarioInvocation> => {
+    const stateDir = await harness.createStateDir('doc-lists-set-level-bullet-success');
+    const docPath = await harness.copyListFixtureDoc('doc-lists-set-level-bullet');
+    const target = await harness.firstListItemAddress(docPath, stateDir);
+    return {
+      stateDir,
+      args: [
+        'lists',
+        'set-level-bullet',
+        docPath,
+        '--input-json',
+        JSON.stringify({ target, level: 0, markerText: '\u2022' }),
+        '--out',
+        harness.createOutputPath('doc-lists-set-level-bullet-output'),
+      ],
+    };
+  },
+  'doc.lists.setLevelPictureBullet': async (harness: ConformanceHarness): Promise<ScenarioInvocation> => {
+    const stateDir = await harness.createStateDir('doc-lists-set-level-picture-bullet-success');
+    const docPath = await harness.copyListFixtureDoc('doc-lists-set-level-picture-bullet');
+    const target = await harness.firstListItemAddress(docPath, stateDir);
+    return {
+      stateDir,
+      args: [
+        'lists',
+        'set-level-picture-bullet',
+        docPath,
+        '--input-json',
+        JSON.stringify({ target, level: 0, pictureBulletId: 0 }),
+        '--out',
+        harness.createOutputPath('doc-lists-set-level-picture-bullet-output'),
+      ],
+    };
+  },
+  'doc.lists.setLevelAlignment': async (harness: ConformanceHarness): Promise<ScenarioInvocation> => {
+    const stateDir = await harness.createStateDir('doc-lists-set-level-alignment-success');
+    const docPath = await harness.copyListFixtureDoc('doc-lists-set-level-alignment');
+    const target = await harness.firstListItemAddress(docPath, stateDir);
+    return {
+      stateDir,
+      args: [
+        'lists',
+        'set-level-alignment',
+        docPath,
+        '--input-json',
+        JSON.stringify({ target, level: 0, alignment: 'center' }),
+        '--out',
+        harness.createOutputPath('doc-lists-set-level-alignment-output'),
+      ],
+    };
+  },
+  'doc.lists.setLevelIndents': async (harness: ConformanceHarness): Promise<ScenarioInvocation> => {
+    const stateDir = await harness.createStateDir('doc-lists-set-level-indents-success');
+    const docPath = await harness.copyListFixtureDoc('doc-lists-set-level-indents');
+    const target = await harness.firstListItemAddress(docPath, stateDir);
+    return {
+      stateDir,
+      args: [
+        'lists',
+        'set-level-indents',
+        docPath,
+        '--input-json',
+        JSON.stringify({ target, level: 0, left: 1440, hanging: 720 }),
+        '--out',
+        harness.createOutputPath('doc-lists-set-level-indents-output'),
+      ],
+    };
+  },
+  'doc.lists.setLevelTrailingCharacter': async (harness: ConformanceHarness): Promise<ScenarioInvocation> => {
+    const stateDir = await harness.createStateDir('doc-lists-set-level-trailing-character-success');
+    const docPath = await harness.copyListFixtureDoc('doc-lists-set-level-trailing-character');
+    const target = await harness.firstListItemAddress(docPath, stateDir);
+    return {
+      stateDir,
+      args: [
+        'lists',
+        'set-level-trailing-character',
+        docPath,
+        '--input-json',
+        JSON.stringify({ target, level: 0, trailingCharacter: 'tab' }),
+        '--out',
+        harness.createOutputPath('doc-lists-set-level-trailing-character-output'),
+      ],
+    };
+  },
+  'doc.lists.setLevelMarkerFont': async (harness: ConformanceHarness): Promise<ScenarioInvocation> => {
+    const stateDir = await harness.createStateDir('doc-lists-set-level-marker-font-success');
+    const docPath = await harness.copyListFixtureDoc('doc-lists-set-level-marker-font');
+    const target = await harness.firstListItemAddress(docPath, stateDir);
+    return {
+      stateDir,
+      args: [
+        'lists',
+        'set-level-marker-font',
+        docPath,
+        '--input-json',
+        JSON.stringify({ target, level: 0, fontFamily: 'Arial' }),
+        '--out',
+        harness.createOutputPath('doc-lists-set-level-marker-font-output'),
+      ],
+    };
+  },
+  'doc.lists.clearLevelOverrides': async (harness: ConformanceHarness): Promise<ScenarioInvocation> => {
+    const stateDir = await harness.createStateDir('doc-lists-clear-level-overrides-success');
+    const docPath = await harness.copyListFixtureDoc('doc-lists-clear-level-overrides');
+    const target = await harness.firstListItemAddress(docPath, stateDir);
+    return {
+      stateDir,
+      args: [
+        'lists',
+        'clear-level-overrides',
+        docPath,
+        '--input-json',
+        JSON.stringify({ target, level: 0 }),
+        '--out',
+        harness.createOutputPath('doc-lists-clear-level-overrides-output'),
+      ],
+    };
+  },
   'doc.insert': async (harness: ConformanceHarness): Promise<ScenarioInvocation> => {
     const stateDir = await harness.createStateDir('doc-insert-success');
     const docPath = await harness.copyFixtureDoc('doc-insert');
@@ -2327,6 +2510,9 @@ const RUNTIME_CONFORMANCE_SKIP = new Set<CliOperationId>([
   // which the CLI test harness fixture does not populate.
   'doc.tables.setDefaultStyle',
   'doc.tables.clearDefaultStyle',
+  // clearLevelOverrides requires an instance-level override to exist on the fixture list,
+  // which the generic list fixture does not have.
+  'doc.lists.clearLevelOverrides',
 ]);
 
 export const OPERATION_SCENARIOS = (Object.keys(SUCCESS_SCENARIOS) as CliOperationId[]).map((operationId) => {

@@ -280,6 +280,95 @@ test.describe('scroll stability with comments enabled', () => {
   });
 });
 
+test.describe('scroll stability with comments explicitly disabled', () => {
+  // When modules: { comments: false }, the comments module is disabled.
+  // This changes the DOM layout (no selection layer, no comment highlights)
+  // and was the original trigger for the SD-2005 scroll acceleration bug.
+  const disabledTest = test.extend<{}>({});
+  disabledTest.use({ config: { toolbar: 'none', comments: 'disabled' } });
+
+  disabledTest('incremental scroll stable with comments: false', async ({ superdoc }) => {
+    await generateLongDocument(superdoc.page);
+    await superdoc.waitForStable(2000);
+
+    const pageHeight = await superdoc.page.evaluate(() => {
+      const page = document.querySelector('.superdoc-page[data-page-index]') as HTMLElement;
+      return page ? page.offsetHeight : 1000;
+    });
+
+    const scrollStep = Math.floor(pageHeight * 0.8);
+    let targetScroll = 0;
+
+    for (let step = 0; step < 12; step++) {
+      targetScroll += scrollStep;
+      await getScrollInfo(superdoc.page, targetScroll);
+      await superdoc.waitForStable(300);
+
+      const actualInfo = await getScrollInfo(superdoc.page);
+      const drift = Math.abs(actualInfo.scrollTop - targetScroll);
+      expect(drift).toBeLessThan(pageHeight * 3);
+    }
+
+    const mounted = await getMountedPageIndices(superdoc.page);
+    expect(mounted.length).toBeGreaterThan(0);
+  });
+
+  disabledTest('rapid scroll stable with comments: false', async ({ superdoc }) => {
+    await generateLongDocument(superdoc.page);
+    await superdoc.waitForStable(2000);
+
+    const pageHeight = await superdoc.page.evaluate(() => {
+      const page = document.querySelector('.superdoc-page[data-page-index]') as HTMLElement;
+      return page ? page.offsetHeight : 1000;
+    });
+
+    const smallStep = Math.floor(pageHeight / 5);
+    let targetScroll = 0;
+
+    for (let i = 0; i < 25; i++) {
+      targetScroll += smallStep;
+      await getScrollInfo(superdoc.page, targetScroll);
+      await superdoc.page.waitForTimeout(50);
+    }
+
+    await superdoc.waitForStable(500);
+    const finalInfo = await getScrollInfo(superdoc.page);
+
+    const bottomThreshold = finalInfo.scrollHeight - finalInfo.clientHeight - pageHeight;
+    expect(finalInfo.scrollTop).toBeLessThan(bottomThreshold);
+  });
+
+  disabledTest('scroll at 75% zoom with comments: false', async ({ superdoc }) => {
+    await generateLongDocument(superdoc.page);
+    await superdoc.waitForStable(2000);
+
+    await superdoc.page.evaluate(() => {
+      (window as any).superdoc.setZoom(75);
+    });
+    await superdoc.waitForStable(1000);
+
+    const pageHeight = await superdoc.page.evaluate(() => {
+      const page = document.querySelector('.superdoc-page[data-page-index]') as HTMLElement;
+      return page ? page.offsetHeight : 800;
+    });
+
+    const scrollStep = Math.floor(pageHeight * 0.8);
+    let targetScroll = 0;
+
+    for (let step = 0; step < 12; step++) {
+      targetScroll += scrollStep;
+      await getScrollInfo(superdoc.page, targetScroll);
+      await superdoc.waitForStable(200);
+    }
+
+    await superdoc.waitForStable(500);
+    const finalInfo = await getScrollInfo(superdoc.page);
+
+    const maxAllowed = targetScroll + pageHeight * 3;
+    expect(finalInfo.scrollTop).toBeLessThan(maxAllowed);
+  });
+});
+
 test.describe('scroll stability at non-100% zoom', () => {
   test('scroll does not accelerate at 75% zoom', async ({ superdoc }) => {
     await generateLongDocument(superdoc.page);

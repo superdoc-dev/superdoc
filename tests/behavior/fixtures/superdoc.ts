@@ -9,7 +9,7 @@ const HARNESS_URL = 'http://localhost:9990';
 interface HarnessConfig {
   layout?: boolean;
   toolbar?: 'none' | 'full';
-  comments?: 'off' | 'on' | 'panel' | 'readonly';
+  comments?: 'off' | 'on' | 'panel' | 'readonly' | 'disabled';
   trackChanges?: boolean;
   showCaret?: boolean;
   showSelection?: boolean;

@@ -22,8 +22,9 @@ const branch = process.env.GITHUB_REF_NAME || process.env.CI_COMMIT_BRANCH;
 
 const config = {
   branches: [
-    { name: 'stable', channel: 'latest' },
-    { name: 'main', prerelease: 'next', channel: 'next' },
+    // SDK auto-release runs from main and should publish alpha prereleases
+    // directly on the latest dist-tag (no next channel).
+    { name: 'main', prerelease: 'alpha', channel: 'latest' },
   ],
   tagFormat: 'sdk-v${version}',
   plugins: [

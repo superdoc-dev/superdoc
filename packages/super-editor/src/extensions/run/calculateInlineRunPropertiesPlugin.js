@@ -101,12 +101,27 @@ export const calculateInlineRunPropertiesPlugin = (editor) =>
 
         if (segments.length === 1) {
           if (JSON.stringify(runProperties) === JSON.stringify(runNode.attrs.runProperties)) return;
-          tr.setNodeMarkup(mappedPos, runNode.type, { ...runNode.attrs, runProperties }, runNode.marks);
+          const newInlineKeys = [...new Set([...existingInlineKeys, ...keysFromMarks(segments[0])])];
+          tr.setNodeMarkup(
+            mappedPos,
+            runNode.type,
+            {
+              ...runNode.attrs,
+              runProperties,
+              runPropertiesInlineKeys: newInlineKeys.length ? newInlineKeys : null,
+            },
+            runNode.marks,
+          );
         } else {
           const newRuns = segments.map((segment) => {
             const props = segment.inlineProps ?? null;
+            const segmentInlineKeys = [...new Set([...existingInlineKeys, ...keysFromMarks(segment)])];
             return runType.create(
-              { ...(runNode.attrs ?? {}), runProperties: props },
+              {
+                ...(runNode.attrs ?? {}),
+                runProperties: props,
+                runPropertiesInlineKeys: segmentInlineKeys.length ? segmentInlineKeys : null,
+              },
               Fragment.fromArray(segment.content),
               runNode.marks,
             );

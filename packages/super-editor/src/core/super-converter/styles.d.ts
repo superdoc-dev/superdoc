@@ -1,6 +1,11 @@
 import type { ParagraphProperties, ParagraphSpacing, RunProperties } from '@superdoc/style-engine/ooxml';
 
-export { combineRunProperties, resolveParagraphProperties, resolveRunProperties } from '@superdoc/style-engine/ooxml';
+export {
+  combineRunProperties,
+  resolveParagraphProperties,
+  resolveRunProperties,
+  resolveRunPropertiesWithInlineFlag,
+} from '@superdoc/style-engine/ooxml';
 
 export interface ConverterMarkLike {
   attrs: Record<string, unknown>;

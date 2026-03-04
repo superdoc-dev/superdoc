@@ -16,11 +16,12 @@ import { getUnderlineCssString } from '@extensions/linked-styles/underline-css.j
 import {
   resolveDocxFontFamily,
   resolveRunProperties,
+  resolveRunPropertiesWithInlineFlag,
   resolveParagraphProperties,
   combineRunProperties,
 } from '@superdoc/style-engine/ooxml';
 
-export { resolveRunProperties, resolveParagraphProperties, combineRunProperties };
+export { resolveRunProperties, resolveRunPropertiesWithInlineFlag, resolveParagraphProperties, combineRunProperties };
 
 /**
  * Font family converter from SuperConverter (lazy getter to avoid circular import)

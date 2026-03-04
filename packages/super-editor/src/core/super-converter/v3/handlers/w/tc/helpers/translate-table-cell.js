@@ -33,6 +33,8 @@ export function translateTableCell(params) {
  */
 export function generateTableCellProperties(node) {
   let tableCellProperties = { ...(node.attrs?.tableCellProperties || {}) };
+  /** When set by import: keys that were in the cell's w:tcPr. When null/undefined (e.g. new cell), do not filter. */
+  const inlineKeys = node.attrs?.tableCellPropertiesInlineKeys;
 
   const { attrs } = node;
 
@@ -77,9 +79,9 @@ export function generateTableCellProperties(node) {
     delete tableCellProperties.shading;
   }
 
-  // Margins
+  // Margins — only merge from attrs when the cell had w:tcMar in its w:tcPr (inline), or when inlineKeys was not set (new cell / backward compat). Do not output when inlineKeys is set and does not include 'cellMargins' (inherited from table style).
   const { cellMargins } = attrs;
-  if (cellMargins) {
+  if (cellMargins && (!Array.isArray(inlineKeys) || inlineKeys.includes('cellMargins'))) {
     ['left', 'right', 'top', 'bottom'].forEach((side) => {
       const key = `margin${side.charAt(0).toUpperCase() + side.slice(1)}`;
       if (cellMargins[side] != null) {
@@ -118,6 +120,18 @@ export function generateTableCellProperties(node) {
         ...(tableCellProperties ?? {}),
         borders: convertBordersToOoxmlFormat(attrs.borders),
       };
+    }
+  }
+
+  // Only output tcPr keys that were present in the cell's w:tcPr (exclude inherited from table style). When inlineKeys was not set (e.g. new cell), do not filter.
+  if (Array.isArray(inlineKeys)) {
+    if (inlineKeys.length === 0) {
+      tableCellProperties = {};
+    } else {
+      const allowed = new Set(inlineKeys);
+      for (const key of Object.keys(tableCellProperties)) {
+        if (!allowed.has(key)) delete tableCellProperties[key];
+      }
     }
   }
 

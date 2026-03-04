@@ -153,6 +153,30 @@ export function resolveRunProperties(
   return finalProps;
 }
 
+/**
+ * Same as resolveRunProperties but also returns which keys came from the inline rPr (so export can output only those).
+ * Used by the converter to mark inline properties at the combine step and export only inline.
+ */
+export function resolveRunPropertiesWithInlineFlag(
+  params: OoxmlResolverParams,
+  inlineRpr: RunProperties | null | undefined,
+  resolvedPpr: ParagraphProperties | null | undefined,
+  tableInfo: TableInfo | null | undefined = null,
+  isListNumber = false,
+  numberingDefinedInline = false,
+): { runProperties: RunProperties; inlineKeys: string[] } {
+  const inlineKeys = inlineRpr && typeof inlineRpr === 'object' ? Object.keys(inlineRpr) : [];
+  const runProperties = resolveRunProperties(
+    params,
+    inlineRpr,
+    resolvedPpr,
+    tableInfo,
+    isListNumber,
+    numberingDefinedInline,
+  );
+  return { runProperties, inlineKeys };
+}
+
 export function resolveParagraphProperties(
   params: OoxmlResolverParams,
   inlineProps: ParagraphProperties | null | undefined,

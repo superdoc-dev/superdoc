@@ -1361,18 +1361,21 @@ export const Table = Node.create({
           const nilBorder = { val: 'nil', size: 0, space: 0, color: 'auto' };
           state.doc.nodesBetween(from, to, (node, pos) => {
             if (['tableCell', 'tableHeader'].includes(node.type.name)) {
+              const nextTableCellProperties = {
+                ...(node.attrs.tableCellProperties ?? {}),
+                borders: {
+                  top: { ...nilBorder },
+                  bottom: { ...nilBorder },
+                  left: { ...nilBorder },
+                  right: { ...nilBorder },
+                },
+              };
+              const nextInlineKeys = [...new Set([...(node.attrs.tableCellPropertiesInlineKeys || []), 'borders'])];
               tr.setNodeMarkup(pos, undefined, {
                 ...node.attrs,
                 borders: null,
-                tableCellProperties: {
-                  ...(node.attrs.tableCellProperties ?? {}),
-                  borders: {
-                    top: { ...nilBorder },
-                    bottom: { ...nilBorder },
-                    left: { ...nilBorder },
-                    right: { ...nilBorder },
-                  },
-                },
+                tableCellProperties: nextTableCellProperties,
+                tableCellPropertiesInlineKeys: nextInlineKeys,
               });
             }
           });

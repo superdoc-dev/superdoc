@@ -41,6 +41,7 @@ describe('superdoc_table_tester import/export', () => {
     const tbl = body?.elements?.find((el) => el.name === 'w:tbl');
     expect(tbl).toBeDefined();
 
+    // Cell margins come from the table style (w:tblCellMar), not duplicated in each cell's w:tcPr
     const tblPr = tbl.elements.find((el) => el.name === 'w:tblPr');
     const tblCellMar = tblPr?.elements?.find((el) => el.name === 'w:tblCellMar');
     expect(tblCellMar).toBeDefined();
@@ -52,15 +53,6 @@ describe('superdoc_table_tester import/export', () => {
 
     const firstTr = tbl.elements.find((el) => el.name === 'w:tr');
     const firstTc = firstTr?.elements?.find((el) => el.name === 'w:tc');
-    const tcPr = firstTc?.elements?.find((el) => el.name === 'w:tcPr');
-    const tcMar = tcPr?.elements?.find((el) => el.name === 'w:tcMar');
-    expect(tcMar).toBeDefined();
-
-    const tcLeft = tcMar.elements.find((el) => el.name === 'w:left');
-    const tcRight = tcMar.elements.find((el) => el.name === 'w:right');
-    expect(Number(tcLeft?.attributes?.['w:w'])).toBe(108);
-    expect(Number(tcRight?.attributes?.['w:w'])).toBe(108);
-
     const firstParagraph = firstTc?.elements?.find((el) => el.name === 'w:p');
     const pPr = firstParagraph?.elements?.find((el) => el.name === 'w:pPr');
     const spacing = pPr?.elements?.find((el) => el.name === 'w:spacing');

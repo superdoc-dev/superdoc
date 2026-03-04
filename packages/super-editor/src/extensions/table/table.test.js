@@ -899,7 +899,7 @@ describe('Table commands', async () => {
               .forEach((tc) => {
                 const tcPr = tc.elements.find((el) => el.name === 'w:tcPr');
                 const tcBorders = tcPr?.elements?.find((el) => el.name === 'w:tcBorders');
-                expect(tcBorders.elements).toEqual(
+                expect(tcBorders?.elements).toEqual(
                   expect.arrayContaining(
                     ['w:top', 'w:bottom', 'w:left', 'w:right'].map((name) => ({
                       name: name,

@@ -523,14 +523,17 @@ describe('SuperDoc.vue', () => {
     const superdocStub = createSuperdocStub();
     const wrapper = await mountComponent(superdocStub);
     await nextTick();
+    const { default: useComment } = await import('./components/CommentsLayer/use-comment.js');
 
     const options = wrapper.findComponent(SuperEditorStub).props('options');
-    const existingComment = {
+    const existingComment = useComment({
       commentId: 'old-runtime-id',
       importedId: 'imp-1',
       commentText: 'Old text',
       fileId: 'doc-1',
-    };
+      creatorEmail: 'ada@example.com',
+      creatorName: 'Ada',
+    });
     const otherDocumentComment = {
       commentId: 'doc2-id',
       importedId: 'imp-1',
@@ -553,8 +556,10 @@ describe('SuperDoc.vue', () => {
 
     expect(commentsStoreStub.addComment).not.toHaveBeenCalled();
     expect(commentsStoreStub.commentsList.value).toHaveLength(2);
-    expect(existingComment.commentId).toBe('new-runtime-id');
+    expect(existingComment.commentId).toBe('old-runtime-id');
     expect(existingComment.importedId).toBe('imp-1');
+    expect(existingComment.getValues().commentId).toBe('old-runtime-id');
+    expect(existingComment.getValues().importedId).toBe('imp-1');
     expect(existingComment.commentText).toBe('Updated text');
     expect(otherDocumentComment.commentId).toBe('doc2-id');
     expect(otherDocumentComment.commentText).toBe('Doc 2 text');

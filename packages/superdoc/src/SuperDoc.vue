@@ -659,6 +659,37 @@ const onEditorCommentLocationsUpdate = (doc, { allCommentIds: activeThreadId, al
   flushPendingReplayTrackedChangeSync();
 };
 
+// Replay updates should only patch mutable comment state.
+// Identity and construction-time metadata are intentionally excluded.
+const REPLAY_MUTABLE_COMMENT_FIELDS = new Set([
+  'commentText',
+  'isInternal',
+  'trackedChange',
+  'trackedChangeType',
+  'trackedChangeText',
+  'deletedText',
+  'resolvedTime',
+  'resolvedByEmail',
+  'resolvedByName',
+  'importedAuthor',
+  'docxCommentJSON',
+]);
+
+const applyReplayUpdateToComment = (commentModel, payload, resolvedText) => {
+  if (!commentModel || !payload) return;
+
+  Object.entries(payload).forEach(([key, value]) => {
+    if (value === undefined) return;
+    if (key === 'text') return;
+    if (!REPLAY_MUTABLE_COMMENT_FIELDS.has(key)) return;
+    commentModel[key] = value;
+  });
+
+  if (resolvedText !== undefined) {
+    commentModel.commentText = resolvedText;
+  }
+};
+
 const onEditorCommentsUpdate = (params = {}) => {
   // Set the active comment in the store
   let { activeCommentId, type, comment: commentPayload } = params;
@@ -739,10 +770,7 @@ const onEditorCommentsUpdate = (params = {}) => {
       const resolvedText = commentPayload.commentText || commentPayload.text;
 
       if (existingComment) {
-        Object.assign(existingComment, commentPayload);
-        if (!existingComment.commentText && resolvedText) {
-          existingComment.commentText = resolvedText;
-        }
+        applyReplayUpdateToComment(existingComment, commentPayload, resolvedText);
       } else {
         const normalizedPayload = { ...commentPayload };
         if (!normalizedPayload.commentText && resolvedText) {

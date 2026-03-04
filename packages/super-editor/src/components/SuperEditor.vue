@@ -1262,6 +1262,7 @@ onBeforeUnmount(() => {
 .super-editor {
   color: initial;
   overflow: hidden;
+  position: relative;
 }
 
 .placeholder-editor {

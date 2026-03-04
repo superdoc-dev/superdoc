@@ -1721,7 +1721,7 @@ export class DomPainter {
     const isContainerScrollable = this.mount.scrollHeight > this.mount.clientHeight + 1;
     if (isContainerScrollable) {
       scrollY = Math.max(0, this.mount.scrollTop - paddingTop);
-    } else if (this.scrollContainer && this.scrollContainer instanceof HTMLElement) {
+    } else if (this.scrollContainer) {
       // Intermediate scroll ancestor (e.g., a wrapper div with overflow-y: auto).
       // Use scrollContainer.scrollTop with a cached mount offset instead of
       // getBoundingClientRect(). Rects are affected by spacer DOM mutations

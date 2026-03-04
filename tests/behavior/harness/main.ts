@@ -98,7 +98,7 @@ function init(file?: File, content?: ContentOverrideInput) {
   } else if (comments === 'disabled') {
     // Explicitly disable the comments module (modules: { comments: false }).
     // This matches the customer config pattern that triggers different scroll behavior.
-    (config as any).modules = { ...((config as any).modules ?? {}), comments: false };
+    config.modules = { ...(config.modules ?? {}), comments: false };
   }
 
   // Track changes

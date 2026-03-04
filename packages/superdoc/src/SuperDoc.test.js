@@ -182,6 +182,33 @@ const buildCommentsStore = () => ({
   setActiveComment: vi.fn(),
   addComment: vi.fn(),
   getComment: vi.fn(() => null),
+  getCommentDocumentId: vi.fn((comment) => {
+    if (!comment) return null;
+    if (comment.fileId != null) return String(comment.fileId);
+    if (comment.documentId != null) return String(comment.documentId);
+    if (comment.selection?.documentId != null) return String(comment.selection.documentId);
+    return null;
+  }),
+  belongsToDocument: vi.fn((comment, activeDocumentId) => {
+    if (!activeDocumentId) return false;
+    const commentDocumentId =
+      comment?.fileId != null
+        ? String(comment.fileId)
+        : comment?.documentId != null
+          ? String(comment.documentId)
+          : comment?.selection?.documentId != null
+            ? String(comment.selection.documentId)
+            : null;
+    if (commentDocumentId) return commentDocumentId === String(activeDocumentId);
+
+    const docs = superdocStoreStub?.documents?.value;
+    if (Array.isArray(docs) && docs.length === 1) {
+      const onlyDocumentId = docs[0]?.id != null ? String(docs[0].id) : null;
+      return onlyDocumentId === String(activeDocumentId);
+    }
+
+    return false;
+  }),
   COMMENT_EVENTS: {
     ADD: 'add',
     UPDATE: 'update',
@@ -498,15 +525,22 @@ describe('SuperDoc.vue', () => {
     await nextTick();
 
     const options = wrapper.findComponent(SuperEditorStub).props('options');
-    const existingComment = { commentId: 'old-runtime-id', importedId: 'imp-1', commentText: 'Old text' };
+    const existingComment = {
+      commentId: 'old-runtime-id',
+      importedId: 'imp-1',
+      commentText: 'Old text',
+      fileId: 'doc-1',
+    };
+    const otherDocumentComment = {
+      commentId: 'doc2-id',
+      importedId: 'imp-1',
+      commentText: 'Doc 2 text',
+      fileId: 'doc-2',
+    };
 
-    commentsStoreStub.commentsList.value = [existingComment];
-    commentsStoreStub.getComment.mockClear();
-    commentsStoreStub.getComment.mockImplementation((id) => {
-      if (id === 'imp-1' || id === 'old-runtime-id') return existingComment;
-      return null;
-    });
+    commentsStoreStub.commentsList.value = [existingComment, otherDocumentComment];
     commentsStoreStub.addComment.mockClear();
+    superdocStub.activeEditor = { options: { documentId: 'doc-1' } };
 
     options.onCommentsUpdate({
       type: 'update',
@@ -517,12 +551,13 @@ describe('SuperDoc.vue', () => {
       },
     });
 
-    expect(commentsStoreStub.getComment.mock.calls).toEqual([['imp-1']]);
     expect(commentsStoreStub.addComment).not.toHaveBeenCalled();
-    expect(commentsStoreStub.commentsList.value).toHaveLength(1);
+    expect(commentsStoreStub.commentsList.value).toHaveLength(2);
     expect(existingComment.commentId).toBe('new-runtime-id');
     expect(existingComment.importedId).toBe('imp-1');
     expect(existingComment.commentText).toBe('Updated text');
+    expect(otherDocumentComment.commentId).toBe('doc2-id');
+    expect(otherDocumentComment.commentText).toBe('Doc 2 text');
   });
 
   it('removes replay-deleted comments when payload commentId is stale but importedId matches', async () => {

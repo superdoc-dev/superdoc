@@ -93,6 +93,7 @@ const {
   syncTrackedChangeComments,
   addComment,
   getComment,
+  belongsToDocument,
   COMMENT_EVENTS,
 } = commentsStore;
 const { proxy } = getCurrentInstance();
@@ -666,9 +667,22 @@ const onEditorCommentsUpdate = (params = {}) => {
     return [...new Set(ids)];
   };
   const resolveUpdateCommentMatch = (payload) => {
-    const candidateIds = [payload?.importedId, payload?.commentId].filter(Boolean);
+    const candidateIds = [payload?.importedId, payload?.commentId].filter(Boolean).map((value) => String(value));
+    const activeDocumentId =
+      proxy.$superdoc?.activeEditor?.options?.documentId != null
+        ? String(proxy.$superdoc.activeEditor.options.documentId)
+        : null;
+
     for (const candidateId of candidateIds) {
-      const existingComment = getComment(candidateId);
+      const existingComment = commentsList.value.find((comment) => {
+        const commentId = comment?.commentId != null ? String(comment.commentId) : null;
+        const importedId = comment?.importedId != null ? String(comment.importedId) : null;
+        const isIdMatch = commentId === candidateId || importedId === candidateId;
+        if (!isIdMatch) return false;
+        if (!activeDocumentId || typeof belongsToDocument !== 'function') return true;
+        return belongsToDocument(comment, activeDocumentId);
+      });
+
       if (existingComment) {
         return {
           id: candidateId,

@@ -1321,6 +1321,8 @@ export const useCommentsStore = defineStore('comments', () => {
     getCommentAnchoredText,
     getCommentAnchorData,
     resolveCommentPositionEntry,
+    getCommentDocumentId,
+    belongsToDocument,
 
     // Actions
     init,

@@ -34,6 +34,7 @@ import { translator as docDefaultsTranslator } from '../../../core/super-convert
 import { translator as latentStylesTranslator } from '../../../core/super-converter/v3/handlers/w/latentStyles/latentStyles-translator.js';
 import { translator as styleTranslator } from '../../../core/super-converter/v3/handlers/w/style/style-translator.js';
 import { incrementRevision } from '../../../document-api-adapters/plan-engine/revision-tracker.js';
+import { translator as numberingTranslator } from '../../../core/super-converter/v3/handlers/w/numbering/numbering-translator.js';
 
 // ---------------------------------------------------------------------------
 // Factory: xml-js parts with a single 'root' section
@@ -388,7 +389,26 @@ export const CONTENT_TYPES_SPEC = {
 // OOXML part specs (shared channel: ooxmlPartModels)
 // ---------------------------------------------------------------------------
 
-export const NUMBERING_SPEC = createXmlPartSpec('numbering', 'word/numbering.xml');
+export const NUMBERING_SPEC = {
+  ...createXmlPartSpec('numbering', 'word/numbering.xml'),
+
+  afterApply: (editor) => {
+    const converter = editor.converter;
+    if (!converter) return;
+
+    const part = converter.parts?.['word/numbering.xml'] ?? converter.convertedXml?.['word/numbering.xml'];
+    const rootElement = part?.elements?.[0];
+
+    // Re-translate raw XML into the model the layout engine reads.
+    // If the part was deleted (no root element), clear to empty model so
+    // collaborators don't keep stale list definitions.
+    converter.translatedNumbering = rootElement
+      ? numberingTranslator.encode({ nodes: [rootElement] })
+      : { abstracts: {}, definitions: {} };
+
+    incrementRevision(editor);
+  },
+};
 export const SETTINGS_SPEC = createXmlPartSpec('settings', 'word/settings.xml');
 export const DOCUMENT_RELS_SPEC = createXmlPartSpec('documentRels', 'word/_rels/document.xml.rels');
 export const FOOTNOTES_SPEC = createXmlPartSpec('footnotes', 'word/footnotes.xml');

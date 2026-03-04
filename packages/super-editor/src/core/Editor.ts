@@ -36,7 +36,10 @@ import { prepareCommentsForExport, prepareCommentsForImport } from '@extensions/
 import DocxZipper from '@core/DocxZipper.js';
 import { generateCollaborationData } from '@extensions/collaboration/collaboration.js';
 import { useHighContrastMode } from '../composables/use-high-contrast-mode.js';
-import { scheduleReconcile } from '@extensions/collaboration/part-sync/part-reconcile-scheduler.js';
+import {
+  scheduleReconcile,
+  reconcileImmediately,
+} from '@extensions/collaboration/part-sync/part-reconcile-scheduler.js';
 import { setImageNodeSelection } from './helpers/setImageNodeSelection.js';
 import { canRenderFont } from './helpers/canRenderFont.js';
 import {
@@ -1492,16 +1495,21 @@ export class Editor extends EventEmitter<EditorEventMap> {
    * If we are replacing data and have a valid provider, listen for synced event
    * so that we can initialize the data
    */
-  initializeCollaborationData(): void {
+  initializeCollaborationData(afterInsert?: () => void): void {
     if (!this.options.isNewFile || !this.options.collaborationProvider) return;
     const provider = this.options.collaborationProvider;
 
-    const postSyncInit = () => {
-      provider.off?.('synced', postSyncInit);
+    const doInsert = () => {
       this.#insertNewFileData();
+      afterInsert?.();
     };
 
-    if (provider.synced) this.#insertNewFileData();
+    const postSyncInit = () => {
+      provider.off?.('synced', postSyncInit);
+      doInsert();
+    };
+
+    if (provider.synced) doInsert();
     // If we are not sync'd yet, wait for the event then insert the data
     else provider.on?.('synced', postSyncInit);
   }
@@ -3191,8 +3199,7 @@ export class Editor extends EventEmitter<EditorEventMap> {
     this.initDefaultStyles();
 
     if (this.options.ydoc && this.options.collaborationProvider) {
-      scheduleReconcile(this, 'replaceFile');
-      this.initializeCollaborationData();
+      this.initializeCollaborationData(() => reconcileImmediately(this));
     } else {
       this.#insertNewFileData();
     }

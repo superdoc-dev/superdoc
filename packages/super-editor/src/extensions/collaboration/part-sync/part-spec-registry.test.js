@@ -23,6 +23,13 @@ vi.mock('../../../document-api-adapters/plan-engine/revision-tracker.js', () => 
   incrementRevision: vi.fn(),
 }));
 
+const mockNumberingTranslator = vi.hoisted(() => ({
+  encode: vi.fn(() => ({ abstracts: { 0: {} }, definitions: { 1: {} } })),
+}));
+vi.mock('../../../core/super-converter/v3/handlers/w/numbering/numbering-translator.js', () => ({
+  translator: mockNumberingTranslator,
+}));
+
 import {
   STYLES_SPEC,
   NUMBERING_SPEC,
@@ -38,6 +45,7 @@ import {
   CUSTOM_PROPS_SPEC,
   CORE_PROPS_SPEC,
   FONT_TABLE_RELS_SPEC,
+  THEME_SPEC,
   HEADER_FOOTER_RELS_SPEC,
   HEADER_FOOTER_CONTENT_SPEC,
   CONTENT_TYPES_SPEC,
@@ -117,6 +125,10 @@ describe('Registry functions', () => {
   it('resolveOoxmlPartKey("numbering/root") returns matching spec and section', () => {
     const result = resolveOoxmlPartKey('numbering/root');
     expect(result).toEqual({ spec: NUMBERING_SPEC, section: 'root' });
+  });
+
+  it('THEME_SPEC.id is "theme" (must match PresentationEditor PART_INVALIDATION key)', () => {
+    expect(THEME_SPEC.id).toBe('theme');
   });
 
   it('resolveOoxmlPartKey("unknown/something") returns null', () => {
@@ -220,6 +232,69 @@ describe('createXmlPartSpec (NUMBERING_SPEC)', () => {
     const value = { name: 'w:numbering' };
     NUMBERING_SPEC.applySection(converter, 'root', value);
     expect(converter.convertedXml['word/numbering.xml'].elements[0]).toBe(value);
+  });
+
+  describe('afterApply', () => {
+    it('re-translates numbering XML into converter.translatedNumbering', () => {
+      const rootElement = { name: 'w:numbering', elements: [{ name: 'w:abstractNum' }] };
+      const converter = {
+        convertedXml: { 'word/numbering.xml': { elements: [rootElement] } },
+        translatedNumbering: null,
+      };
+      const editor = { converter };
+
+      NUMBERING_SPEC.afterApply(editor, ['root']);
+
+      expect(mockNumberingTranslator.encode).toHaveBeenCalledWith({ nodes: [rootElement] });
+      expect(converter.translatedNumbering).toEqual({ abstracts: { 0: {} }, definitions: { 1: {} } });
+    });
+
+    it('calls incrementRevision', () => {
+      const rootElement = { name: 'w:numbering' };
+      const converter = {
+        convertedXml: { 'word/numbering.xml': { elements: [rootElement] } },
+        translatedNumbering: null,
+      };
+      const editor = { converter };
+
+      NUMBERING_SPEC.afterApply(editor, ['root']);
+
+      expect(incrementRevision).toHaveBeenCalledWith(editor);
+    });
+
+    it('skips translation when converter is missing', () => {
+      const editor = { converter: null };
+      expect(() => NUMBERING_SPEC.afterApply(editor, ['root'])).not.toThrow();
+      expect(mockNumberingTranslator.encode).not.toHaveBeenCalled();
+    });
+
+    it('clears translatedNumbering to empty model when numbering XML is deleted', () => {
+      const converter = {
+        convertedXml: { 'word/numbering.xml': { elements: [] } },
+        translatedNumbering: { abstracts: { 0: { levels: {} } }, definitions: { 1: {} } },
+      };
+      const editor = { converter };
+
+      NUMBERING_SPEC.afterApply(editor, ['root']);
+
+      expect(mockNumberingTranslator.encode).not.toHaveBeenCalled();
+      expect(converter.translatedNumbering).toEqual({ abstracts: {}, definitions: {} });
+      expect(incrementRevision).toHaveBeenCalledWith(editor);
+    });
+
+    it('reads from converter.parts when convertedXml is missing the part', () => {
+      const rootElement = { name: 'w:numbering' };
+      const converter = {
+        parts: { 'word/numbering.xml': { elements: [rootElement] } },
+        convertedXml: {},
+        translatedNumbering: null,
+      };
+      const editor = { converter };
+
+      NUMBERING_SPEC.afterApply(editor, ['root']);
+
+      expect(mockNumberingTranslator.encode).toHaveBeenCalledWith({ nodes: [rootElement] });
+    });
   });
 });
 

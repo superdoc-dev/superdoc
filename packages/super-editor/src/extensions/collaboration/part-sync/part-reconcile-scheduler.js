@@ -153,6 +153,22 @@ export function scheduleReconcile(editor, _reason) {
 }
 
 /**
+ * Run a reconcile immediately, bypassing the debounce/maxWait timers.
+ *
+ * Use this after operations like `replaceFile` where structured channels must
+ * be consistent before any other client can observe the new state.
+ *
+ * Automatically marks the editor dirty so the reconcile is not skipped.
+ *
+ * @param {object} editor
+ * @returns {Promise<void>}
+ */
+export async function reconcileImmediately(editor) {
+  markDirty(editor);
+  await executeReconcile(editor);
+}
+
+/**
  * Clear all pending timers and per-editor state. Called on editor destroy.
  *
  * @param {object} editor

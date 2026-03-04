@@ -1,5 +1,10 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
-import { scheduleReconcile, destroyReconcileState, markDirty } from './part-reconcile-scheduler.js';
+import {
+  scheduleReconcile,
+  destroyReconcileState,
+  markDirty,
+  reconcileImmediately,
+} from './part-reconcile-scheduler.js';
 import { publishPartSections } from './part-sync-engine.js';
 import { getOoxmlPartSpecs, invalidateDiscoveredSpecs } from './part-spec-registry.js';
 
@@ -483,6 +488,63 @@ describe('part-reconcile-scheduler', () => {
 
     it('is safe to call with null editor', () => {
       expect(() => markDirty(null)).not.toThrow();
+    });
+  });
+
+  describe('reconcileImmediately', () => {
+    it('runs exportDocx and publishPartSections synchronously (no timer)', async () => {
+      const editor = createMockEditor();
+
+      await reconcileImmediately(editor);
+
+      expect(editor.exportDocx).toHaveBeenCalledOnce();
+      expect(editor.exportDocx).toHaveBeenCalledWith({ getUpdatedDocs: true });
+      expect(publishPartSections).toHaveBeenCalledTimes(2);
+    });
+
+    it('does not require a prior markDirty call', async () => {
+      const editor = createMockEditor();
+
+      // reconcileImmediately marks dirty internally
+      await reconcileImmediately(editor);
+
+      expect(editor.exportDocx).toHaveBeenCalledOnce();
+    });
+
+    it('cancels any pending debounced reconcile timers', async () => {
+      const editor = createMockEditor();
+
+      markDirty(editor);
+      scheduleReconcile(editor, 'pending');
+
+      // Immediate reconcile runs and clears timers
+      await reconcileImmediately(editor);
+      expect(editor.exportDocx).toHaveBeenCalledOnce();
+
+      editor.exportDocx.mockClear();
+      publishPartSections.mockClear();
+
+      // Advancing past debounce should NOT fire again (no new dirty)
+      await advanceAndFlush(DEBOUNCE_MS + MAX_WAIT_MS);
+      expect(editor.exportDocx).not.toHaveBeenCalled();
+    });
+
+    it('skips if editor is destroyed', async () => {
+      const editor = createMockEditor();
+      editor.isDestroyed = true;
+
+      await reconcileImmediately(editor);
+
+      expect(editor.exportDocx).not.toHaveBeenCalled();
+    });
+
+    it('skips if ydoc is missing', async () => {
+      const editor = createMockEditor();
+      editor.options.ydoc = null;
+
+      await reconcileImmediately(editor);
+
+      expect(editor.exportDocx).not.toHaveBeenCalled();
     });
   });
 });

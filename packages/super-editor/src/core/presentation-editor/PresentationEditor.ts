@@ -2779,7 +2779,7 @@ export class PresentationEditor extends EventEmitter {
     const PART_INVALIDATION: Record<string, { clearCaches: boolean }> = {
       styles: { clearCaches: true },
       numbering: { clearCaches: true },
-      themeColors: { clearCaches: true },
+      theme: { clearCaches: true },
     };
 
     const handlePartChanged = (payload: { partId: string; changedPaths: string[]; source: string }) => {

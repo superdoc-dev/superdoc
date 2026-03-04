@@ -672,6 +672,45 @@ describe('comments-store', () => {
     expect(editorDispatch).toHaveBeenCalledWith(tr);
   });
 
+  it('keeps tracked-change comments when importedId is live even if commentId differs', () => {
+    const editorDispatch = vi.fn();
+    const tr = { setMeta: vi.fn() };
+    const editor = {
+      state: {},
+      view: { state: { tr }, dispatch: editorDispatch },
+      options: { documentId: 'doc-1' },
+    };
+
+    trackChangesHelpersMock.getTrackChanges.mockReturnValue([{ mark: { attrs: { id: 'tc-live-imported' } } }]);
+    groupChangesMock.mockReturnValue([]);
+
+    store.commentsList = [
+      {
+        commentId: 'runtime-id-123',
+        importedId: 'tc-live-imported',
+        trackedChange: true,
+        trackedChangeText: 'Existing',
+        fileId: 'doc-1',
+      },
+      { commentId: 'normal-1', commentText: 'Regular comment', fileId: 'doc-1' },
+    ];
+
+    store.syncTrackedChangeComments({ superdoc: {}, editor });
+
+    expect(store.commentsList).toEqual([
+      {
+        commentId: 'runtime-id-123',
+        importedId: 'tc-live-imported',
+        trackedChange: true,
+        trackedChangeText: 'Existing',
+        fileId: 'doc-1',
+      },
+      { commentId: 'normal-1', commentText: 'Regular comment', fileId: 'doc-1' },
+    ]);
+    expect(tr.setMeta).toHaveBeenCalledWith('CommentsPluginKey', { type: 'force' });
+    expect(editorDispatch).toHaveBeenCalledWith(tr);
+  });
+
   it('does not prune tracked-change comments from other documents during sync', () => {
     const editorDispatch = vi.fn();
     const tr = { setMeta: vi.fn() };

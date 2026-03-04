@@ -1019,9 +1019,10 @@ export const useCommentsStore = defineStore('comments', () => {
 
       const commentId = comment.commentId != null ? String(comment.commentId) : null;
       const importedId = comment.importedId != null ? String(comment.importedId) : null;
-      const primaryId = commentId ?? importedId;
+      const hasLiveCommentId = Boolean(commentId && liveTrackedChangeIds.has(commentId));
+      const hasLiveImportedId = Boolean(importedId && liveTrackedChangeIds.has(importedId));
 
-      if (!primaryId || liveTrackedChangeIds.has(primaryId)) return true;
+      if ((!commentId && !importedId) || hasLiveCommentId || hasLiveImportedId) return true;
 
       if (commentId) removedIds.add(commentId);
       if (importedId) removedIds.add(importedId);

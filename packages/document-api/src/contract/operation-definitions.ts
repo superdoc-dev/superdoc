@@ -1316,7 +1316,7 @@ export const OPERATION_DEFINITIONS = {
     metadata: readOperation({
       idempotency: 'idempotent',
       throws: ['TARGET_NOT_FOUND', 'INVALID_TARGET', 'INVALID_INPUT'],
-      possibleFailureCodes: ['INVALID_TARGET', 'INVALID_INPUT'],
+      possibleFailureCodes: ['INVALID_TARGET', 'INVALID_INPUT', 'LEVEL_OUT_OF_RANGE'],
     }),
     referenceDocPath: 'lists/capture-template.mdx',
     referenceGroup: 'lists',

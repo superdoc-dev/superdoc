@@ -65,7 +65,7 @@ Returns a ListsCaptureTemplateResult containing the captured template.
 | Field | Type | Required | Description |
 | --- | --- | --- | --- |
 | `failure` | object | yes |  |
-| `failure.code` | enum | yes | `"INVALID_TARGET"`, `"INVALID_INPUT"` |
+| `failure.code` | enum | yes | `"INVALID_TARGET"`, `"INVALID_INPUT"`, `"LEVEL_OUT_OF_RANGE"` |
 | `failure.details` | any | no |  |
 | `failure.message` | string | yes |  |
 | `success` | `false` | yes | Constant: `false` |
@@ -98,6 +98,7 @@ Returns a ListsCaptureTemplateResult containing the captured template.
 
 - `INVALID_TARGET`
 - `INVALID_INPUT`
+- `LEVEL_OUT_OF_RANGE`
 
 ## Raw schemas
 
@@ -226,7 +227,8 @@ Returns a ListsCaptureTemplateResult containing the captured template.
             "code": {
               "enum": [
                 "INVALID_TARGET",
-                "INVALID_INPUT"
+                "INVALID_INPUT",
+                "LEVEL_OUT_OF_RANGE"
               ]
             },
             "details": {},
@@ -358,7 +360,8 @@ Returns a ListsCaptureTemplateResult containing the captured template.
         "code": {
           "enum": [
             "INVALID_TARGET",
-            "INVALID_INPUT"
+            "INVALID_INPUT",
+            "LEVEL_OUT_OF_RANGE"
           ]
         },
         "details": {},

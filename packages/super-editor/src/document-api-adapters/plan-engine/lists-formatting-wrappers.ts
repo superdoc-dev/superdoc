@@ -93,6 +93,37 @@ function validateLevelsArray(
 }
 
 /**
+ * Preflight check for template/preset application — validates that every
+ * requested level exists in both the template and the abstract definition.
+ * This must run before dry-run returns success so that dry-run faithfully
+ * reflects whether real execution would succeed.
+ */
+function preflightTemplateLevels(
+  editor: Editor,
+  abstractNumId: number,
+  template: ListTemplate,
+  levels: number[] | undefined,
+  target: { kind: 'block'; nodeType: 'listItem'; nodeId: string },
+): ListsMutateItemResult | null {
+  const templateLevelSet = new Set(template.levels.map((l) => l.level));
+  const targetLevels = levels ?? template.levels.map((l) => l.level);
+
+  for (const ilvl of targetLevels) {
+    if (!templateLevelSet.has(ilvl)) {
+      return toListsFailure('INVALID_INPUT', 'Requested level does not exist in the template.', { target });
+    }
+  }
+
+  for (const ilvl of targetLevels) {
+    if (!LevelFormattingHelpers.hasLevel(editor, abstractNumId, ilvl)) {
+      return toListsFailure('INVALID_TARGET', 'Requested level does not exist in the abstract definition.', { target });
+    }
+  }
+
+  return null;
+}
+
+/**
  * Map `applyTemplateToAbstract` error strings to proper failure results.
  */
 function toApplyTemplateError(
@@ -221,6 +252,16 @@ export function listsApplyTemplateWrapper(
   const targetResult = resolveTargetAbstract(editor, input.target);
   if (!targetResult.ok) return (targetResult as TargetAbstractFailure).failure;
 
+  // Preflight: validate template levels before dry-run can succeed
+  const preflightError = preflightTemplateLevels(
+    editor,
+    targetResult.abstractNumId,
+    input.template,
+    input.levels,
+    input.target,
+  );
+  if (preflightError) return preflightError;
+
   if (options?.dryRun) {
     return { success: true, item: targetResult.resolved.address };
   }
@@ -274,6 +315,16 @@ export function listsApplyPresetWrapper(
 
   const targetResult = resolveTargetAbstract(editor, input.target);
   if (!targetResult.ok) return (targetResult as TargetAbstractFailure).failure;
+
+  // Preflight: validate template levels before dry-run can succeed
+  const preflightError = preflightTemplateLevels(
+    editor,
+    targetResult.abstractNumId,
+    template,
+    input.levels,
+    input.target,
+  );
+  if (preflightError) return preflightError;
 
   if (options?.dryRun) {
     return { success: true, item: targetResult.resolved.address };
@@ -373,6 +424,18 @@ export function listsSetLevelPictureBulletWrapper(
   input: ListsSetLevelPictureBulletInput,
   options?: MutationOptions,
 ): ListsMutateItemResult {
+  // Guard: picture bullet requires numbering.xml, matching the capability predicate
+  const converter = (editor as unknown as { converter?: { convertedXml?: Record<string, unknown> } }).converter;
+  if (!converter?.convertedXml?.['word/numbering.xml']) {
+    return toListsFailure(
+      'CAPABILITY_UNAVAILABLE',
+      'Picture bullets require a numbering definition (word/numbering.xml).',
+      {
+        target: input.target,
+      },
+    );
+  }
+
   return executeSingleLevelMutation(
     editor,
     'lists.setLevelPictureBullet',

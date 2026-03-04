@@ -112,7 +112,7 @@ describe('url-validation', () => {
     const origin = 'https://localhost:3000';
 
     beforeEach(() => {
-      globalThis.window = { location: { origin } };
+      globalThis.window = { location: { origin, href: `${origin}/docs/intro` } };
     });
 
     afterEach(() => {
@@ -127,10 +127,11 @@ describe('url-validation', () => {
       expect(result?.isExternal).toBe(false);
     });
 
-    it('resolves dot-relative paths', () => {
+    it('resolves dot-relative paths against current page directory', () => {
       const result = sanitizeHref('./images/chart.jpg');
       expect(result).toBeTruthy();
-      expect(result?.href).toContain('chart.jpg');
+      // href is /docs/intro → directory is /docs/, so ./images/chart.jpg → /docs/images/chart.jpg
+      expect(result?.href).toBe(`${origin}/docs/images/chart.jpg`);
     });
 
     it('normalises path traversal', () => {
@@ -169,15 +170,17 @@ describe('url-validation', () => {
     it('resolves bare paths (no leading / or .)', () => {
       const result = sanitizeHref('images/photo.png');
       expect(result).toBeTruthy();
-      expect(result?.href).toBe(`${origin}/images/photo.png`);
+      // href is /docs/intro → directory is /docs/, so images/photo.png → /docs/images/photo.png
+      expect(result?.href).toBe(`${origin}/docs/images/photo.png`);
       expect(result?.protocol).toBeNull();
       expect(result?.isExternal).toBe(false);
     });
 
-    it('resolves bare nested paths', () => {
+    it('resolves bare nested paths against current page directory', () => {
       const result = sanitizeHref('assets/img/logo.svg');
       expect(result).toBeTruthy();
-      expect(result?.href).toBe(`${origin}/assets/img/logo.svg`);
+      // href is /docs/intro → directory is /docs/, so assets/img/logo.svg → /docs/assets/img/logo.svg
+      expect(result?.href).toBe(`${origin}/docs/assets/img/logo.svg`);
     });
   });
 

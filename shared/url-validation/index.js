@@ -393,22 +393,23 @@ function sanitizeRelativePath(pathString, blocklist) {
     return null;
   }
 
-  // Determine base origin
-  const origin = typeof window !== 'undefined' ? window.location.origin : null;
-  if (!origin) {
+  // Determine base URL — use full href so dot-relative paths (./img.png)
+  // resolve against the current page directory, not the site root.
+  const base = typeof window !== 'undefined' ? window.location.href : null;
+  if (!base) {
     return null;
   }
 
-  // 2. Resolve against the origin (normalises .., //, encoded sequences)
+  // 2. Resolve against the current page (normalises .., //, encoded sequences)
   let resolved;
   try {
-    resolved = new URL(pathString, origin);
+    resolved = new URL(pathString, base);
   } catch {
     return null;
   }
 
   // 3. Same-origin gate — prevents open-redirect style attacks
-  if (resolved.origin !== new URL(origin).origin) {
+  if (resolved.origin !== new URL(base).origin) {
     return null;
   }
 

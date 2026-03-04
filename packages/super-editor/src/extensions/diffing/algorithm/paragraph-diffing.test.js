@@ -127,8 +127,9 @@ describe('paragraph diff builders', () => {
       fullText: 'Hello',
     });
     const previousNode = { pos: 10, depth: 0, node: { nodeSize: 4 } };
+    const oldNodes = [previousNode];
 
-    expect(buildAddedParagraphDiff(paragraph, previousNode)).toEqual({
+    expect(buildAddedParagraphDiff(paragraph, oldNodes, 1)).toEqual({
       action: 'added',
       nodeType: 'paragraph',
       nodeJSON: paragraph.node.toJSON(),

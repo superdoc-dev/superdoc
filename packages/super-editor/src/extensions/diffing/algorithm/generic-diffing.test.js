@@ -232,4 +232,29 @@ describe('diffParagraphs', () => {
     const addition = diffs.find((diff) => diff.action === 'added' && diff.nodeType === 'heading');
     expect(addition?.pos).toBe(expectedPos);
   });
+
+  it('inserts after the correct ancestor when adding a shallower node after nested content', () => {
+    const tableCell = buildSimpleNode('tableCell', {}, { nodeSize: 4 });
+    const tableRow = buildSimpleNode('tableRow', { paraId: 'row-1' }, { nodeSize: 6, children: [tableCell] });
+    const table = buildSimpleNode('table', {}, { nodeSize: 12, children: [tableRow] });
+    const headingNode = buildSimpleNode('heading', { level: 1 }, { nodeSize: 3 });
+
+    const oldDoc = createDocFromNodes([
+      { node: table, pos: 0, depth: 1 },
+      { node: tableRow, pos: 1, depth: 2 },
+      { node: tableCell, pos: 2, depth: 3 },
+    ]);
+    const newDoc = createDocFromNodes([
+      { node: table, pos: 0, depth: 1 },
+      { node: tableRow, pos: 1, depth: 2 },
+      { node: tableCell, pos: 2, depth: 3 },
+      { node: headingNode, pos: 12, depth: 1 },
+    ]);
+
+    const diffs = diffNodes(normalizeNodes(oldDoc), normalizeNodes(newDoc));
+    const addition = diffs.find((diff) => diff.action === 'added' && diff.nodeType === 'heading');
+
+    expect(addition).toBeDefined();
+    expect(addition?.pos).toBe(12);
+  });
 });

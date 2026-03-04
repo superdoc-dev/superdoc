@@ -12,7 +12,7 @@ import {
 } from './paragraph-diffing';
 import { diffSequences, reorderDiffOperations } from './sequence-diffing';
 import { getAttributesDiff, type AttributesDiff } from './attributes-diffing';
-import { getInsertionPos } from './diff-utils';
+import { getInsertionPos, type NodePositionInfo } from './diff-utils';
 
 type NodeJSON = ReturnType<PMNode['toJSON']>;
 
@@ -90,8 +90,7 @@ export function diffNodes(oldNodes: NodeInfo[], newNodes: NodeInfo[]): NodeDiff[
     reorderOperations: reorderDiffOperations,
     shouldProcessEqualAsModification,
     canTreatAsModification,
-    buildAdded: (nodeInfo, _oldIdx, previousOldNodeInfo) =>
-      buildAddedDiff(nodeInfo, previousOldNodeInfo, addedNodesSet),
+    buildAdded: (nodeInfo, _oldIdx) => buildAddedDiff(nodeInfo, oldNodes, _oldIdx, addedNodesSet),
     buildDeleted: (nodeInfo) => buildDeletedDiff(nodeInfo, deletedNodesSet),
     buildModified: buildModifiedDiff,
   });
@@ -167,7 +166,8 @@ function canTreatAsModification(deletedNodeInfo: NodeInfo, insertedNodeInfo: Nod
  */
 function buildAddedDiff(
   nodeInfo: NodeInfo,
-  previousOldNodeInfo: NodeInfo | undefined,
+  oldNodes: readonly NodePositionInfo[],
+  oldIdx: number,
   addedNodesSet: Set<PMNode>,
 ): NodeDiff | null {
   if (addedNodesSet.has(nodeInfo.node)) {
@@ -175,7 +175,7 @@ function buildAddedDiff(
   }
   addedNodesSet.add(nodeInfo.node);
   if (isParagraphNodeInfo(nodeInfo)) {
-    return buildAddedParagraphDiff(nodeInfo, previousOldNodeInfo);
+    return buildAddedParagraphDiff(nodeInfo, oldNodes, oldIdx);
   }
   nodeInfo.node.descendants((childNode) => {
     addedNodesSet.add(childNode);
@@ -185,7 +185,7 @@ function buildAddedDiff(
     action: 'added',
     nodeType: nodeInfo.node.type.name,
     nodeJSON: nodeInfo.node.toJSON(),
-    pos: getInsertionPos(nodeInfo.depth, previousOldNodeInfo),
+    pos: getInsertionPos(nodeInfo.depth, oldNodes, oldIdx),
   };
 }
 

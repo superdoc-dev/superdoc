@@ -703,6 +703,11 @@ export const SUCCESS_SCENARIOS = {
     const docPath = await harness.copyFixtureDoc('doc-get-text');
     return { stateDir, args: ['get-markdown', docPath] };
   },
+  'doc.getHtml': async (harness: ConformanceHarness): Promise<ScenarioInvocation> => {
+    const stateDir = await harness.createStateDir('doc-get-html-success');
+    const docPath = await harness.copyFixtureDoc('doc-get-text');
+    return { stateDir, args: ['get-html', docPath] };
+  },
   'doc.query.match': async (harness: ConformanceHarness): Promise<ScenarioInvocation> => {
     const stateDir = await harness.createStateDir('doc-query-match-success');
     const docPath = await harness.copyFixtureDoc('doc-query-match');

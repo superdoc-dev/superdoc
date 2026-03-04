@@ -131,6 +131,18 @@ function generateResultType(operationId, operation, $defs) {
 }
 
 // ---------------------------------------------------------------------------
+// String-envelope unwrapping
+// ---------------------------------------------------------------------------
+
+// Operations whose CLI response wraps a plain string inside
+// `{ document, <key>: "..." }`. The SDK unwraps to return the string directly.
+const STRING_ENVELOPE_KEY_BY_OPERATION_ID = {
+  'doc.getText': 'text',
+  'doc.getMarkdown': 'markdown',
+  'doc.getHtml': 'html',
+};
+
+// ---------------------------------------------------------------------------
 // Client tree rendering
 // ---------------------------------------------------------------------------
 
@@ -143,6 +155,10 @@ function renderTreeNode(treeNode, paramTypeMap, resultTypeMap, indent = '    ') 
       const resultTypeName = resultTypeMap.get(op.id);
       const hasRequired = (op.params ?? []).some((p) => p.required);
       const paramsArg = hasRequired ? `params: ${typeName}` : `params: ${typeName} = {}`;
+      const envelopeKey = STRING_ENVELOPE_KEY_BY_OPERATION_ID[op.id];
+      if (envelopeKey) {
+        return `${indent}${camelCase(key)}: async (${paramsArg}, options?: InvokeOptions): Promise<${resultTypeName}> => unwrapStringEnvelope(await runtime.invoke(CONTRACT.operations[${JSON.stringify(op.id)}], params as unknown as Record<string, unknown>, options), ${JSON.stringify(envelopeKey)}),`;
+      }
       return `${indent}${camelCase(key)}: (${paramsArg}, options?: InvokeOptions) => runtime.invoke<${resultTypeName}>(CONTRACT.operations[${JSON.stringify(op.id)}], params as unknown as Record<string, unknown>, options),`;
     }
 
@@ -183,6 +199,16 @@ function generateClientTs(contract) {
     '',
     "import { CONTRACT } from './contract.js';",
     "import type { SuperDocRuntime, InvokeOptions } from '../runtime/process.js';",
+    '',
+    '/** Extract a string value from a CLI response envelope like `{ document, text: "..." }`. */',
+    'function unwrapStringEnvelope(value: unknown, key: string): string {',
+    '  if (typeof value === "string") return value;',
+    '  if (typeof value === "object" && value !== null) {',
+    '    const extracted = (value as Record<string, unknown>)[key];',
+    '    if (typeof extracted === "string") return extracted;',
+    '  }',
+    '  return value as string;',
+    '}',
     '',
     paramInterfaces.join('\n\n'),
     '',

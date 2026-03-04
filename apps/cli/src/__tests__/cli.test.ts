@@ -1031,6 +1031,32 @@ describe('superdoc CLI', () => {
     expect(envelope.error.message).toContain('Unknown field');
   });
 
+  test('insert with --type html inserts HTML content into the document', async () => {
+    const insertSource = join(TEST_DIR, 'insert-html-source.docx');
+    const insertOut = join(TEST_DIR, 'insert-html-out.docx');
+    await copyFile(SAMPLE_DOC, insertSource);
+
+    const insertResult = await runCli([
+      'insert',
+      insertSource,
+      '--value',
+      '<p>CLI_HTML_INSERT_TOKEN</p>',
+      '--type',
+      'html',
+      '--out',
+      insertOut,
+    ]);
+
+    expect(insertResult.code).toBe(0);
+    const insertEnvelope = parseJsonOutput<SuccessEnvelope<{ receipt: { success: boolean } }>>(insertResult);
+    expect(insertEnvelope.data.receipt.success).toBe(true);
+
+    const verifyResult = await runCli(['find', insertOut, '--type', 'text', '--pattern', 'CLI_HTML_INSERT_TOKEN']);
+    expect(verifyResult.code).toBe(0);
+    const verifyEnvelope = parseJsonOutput<SuccessEnvelope<{ result: { total: number } }>>(verifyResult);
+    expect(verifyEnvelope.data.result.total).toBeGreaterThan(0);
+  });
+
   test('create paragraph writes output and adds a new paragraph with seed text', async () => {
     const createSource = join(TEST_DIR, 'create-paragraph-source.docx');
     const createOut = join(TEST_DIR, 'create-paragraph-out.docx');
@@ -2123,7 +2149,7 @@ describe('superdoc CLI', () => {
     expect(closeResult.code).toBe(0);
   });
 
-  test('open with --override-type html rejects in headless CLI', async () => {
+  test('open with --override-type html succeeds (happy-dom provides DOM)', async () => {
     const openResult = await runCli([
       'open',
       SAMPLE_DOC,
@@ -2132,10 +2158,15 @@ describe('superdoc CLI', () => {
       '--override-type',
       'html',
     ]);
-    expect(openResult.code).toBe(1);
-    const envelope = parseJsonOutput<ErrorEnvelope>(openResult);
-    expect(envelope.error.code).toBe('UNSUPPORTED_FORMAT');
-    expect(envelope.error.message).toContain('HTML');
+    expect(openResult.code).toBe(0);
+
+    const textResult = await runCli(['get-text']);
+    expect(textResult.code).toBe(0);
+    const textEnvelope = parseJsonOutput<{ data: { text: string } }>(textResult);
+    expect(textEnvelope.data.text).toContain('HTML Override');
+
+    const closeResult = await runCli(['close', '--discard']);
+    expect(closeResult.code).toBe(0);
   });
 
   test('open with --content-override empty string is accepted (not silently ignored)', async () => {

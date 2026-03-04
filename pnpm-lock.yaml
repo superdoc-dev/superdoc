@@ -421,6 +421,9 @@ importers:
       fast-glob:
         specifier: 'catalog:'
         version: 3.3.3
+      happy-dom:
+        specifier: 20.4.0
+        version: 20.4.0
       y-websocket:
         specifier: 'catalog:'
         version: 3.0.0(yjs@13.6.19)

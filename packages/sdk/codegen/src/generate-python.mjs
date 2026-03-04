@@ -182,6 +182,7 @@ function classNameFor(pathParts, asyncMode) {
 const STRING_ENVELOPE_KEY_BY_OPERATION_ID = {
   'doc.getText': 'text',
   'doc.getMarkdown': 'markdown',
+  'doc.getHtml': 'html',
 };
 
 function snakeCase(value) {

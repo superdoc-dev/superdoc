@@ -1556,6 +1556,12 @@ const operationSchemas: Record<OperationId, OperationSchemaSet> = {
     input: strictEmptyObjectSchema,
     output: { type: 'string' },
   },
+  getHtml: {
+    input: objectSchema({
+      unflattenLists: { type: 'boolean' },
+    }),
+    output: { type: 'string' },
+  },
   info: {
     input: strictEmptyObjectSchema,
     output: documentInfoSchema,

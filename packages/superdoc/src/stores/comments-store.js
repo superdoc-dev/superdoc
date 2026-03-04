@@ -921,8 +921,15 @@ export const useCommentsStore = defineStore('comments', () => {
     const trackedChanges = trackedChangesOverride ?? trackChangesHelpers.getTrackChanges(editor.state);
     const groupedChanges = groupChanges(trackedChanges);
 
-    // Build a Set of existing comment IDs for O(1) lookup
-    const existingIds = new Set(commentsList.value.map((c) => c.commentId));
+    // Build a Set of existing tracked-change IDs for O(1) lookup.
+    // Include both runtime and imported IDs to avoid duplicate threads when
+    // replay/import flows remap commentId but marks still reference importedId.
+    const existingIds = new Set();
+    commentsList.value.forEach((comment) => {
+      if (!comment?.trackedChange) return;
+      if (comment.commentId != null) existingIds.add(String(comment.commentId));
+      if (comment.importedId != null) existingIds.add(String(comment.importedId));
+    });
 
     // Build a Map of change ID → tracked change entries for O(1) lookup per group.
     // This avoids re-scanning the entire document for each tracked change.
@@ -959,7 +966,9 @@ export const useCommentsStore = defineStore('comments', () => {
 
       if (params) {
         handleTrackedChangeUpdate({ superdoc, params });
-        existingIds.add(id);
+        existingIds.add(String(id));
+        if (params.changeId != null) existingIds.add(String(params.changeId));
+        if (params.importedId != null) existingIds.add(String(params.importedId));
       }
     });
 

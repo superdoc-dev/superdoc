@@ -11,6 +11,7 @@ import {
   CLEAR_BORDER_SIDES,
   LINE_RULES,
 } from '../paragraphs/paragraphs.js';
+import { buildPatchSchema, buildStateSchema } from '../styles/index.js';
 
 type JsonSchema = Record<string, unknown>;
 
@@ -1851,120 +1852,25 @@ const operationSchemas: Record<OperationId, OperationSchemaSet> = {
     failure: paragraphMutationFailureSchemaFor('format.paragraph.clearShading'),
   },
   'styles.apply': (() => {
-    // --- Sub-schemas for object properties (all require minProperties: 1) ---
-    const fontFamilySchema = {
-      ...objectSchema(
-        {
-          hint: { type: 'string' },
-          ascii: { type: 'string' },
-          hAnsi: { type: 'string' },
-          eastAsia: { type: 'string' },
-          cs: { type: 'string' },
-          val: { type: 'string' },
-          asciiTheme: { type: 'string' },
-          hAnsiTheme: { type: 'string' },
-          eastAsiaTheme: { type: 'string' },
-          cstheme: { type: 'string' },
-        },
-        [],
-      ),
-      minProperties: 1,
-    };
-    const colorSchema = {
-      ...objectSchema(
-        {
-          val: { type: 'string' },
-          themeColor: { type: 'string' },
-          themeTint: { type: 'string' },
-          themeShade: { type: 'string' },
-        },
-        [],
-      ),
-      minProperties: 1,
-    };
-    const spacingSchema = {
-      ...objectSchema(
-        {
-          after: { type: 'integer' },
-          afterAutospacing: { type: 'boolean' },
-          afterLines: { type: 'integer' },
-          before: { type: 'integer' },
-          beforeAutospacing: { type: 'boolean' },
-          beforeLines: { type: 'integer' },
-          line: { type: 'integer' },
-          lineRule: { enum: ['auto', 'exact', 'atLeast'] },
-        },
-        [],
-      ),
-      minProperties: 1,
-    };
-    const indentSchema = {
-      ...objectSchema(
-        {
-          end: { type: 'integer' },
-          endChars: { type: 'integer' },
-          firstLine: { type: 'integer' },
-          firstLineChars: { type: 'integer' },
-          hanging: { type: 'integer' },
-          hangingChars: { type: 'integer' },
-          left: { type: 'integer' },
-          leftChars: { type: 'integer' },
-          right: { type: 'integer' },
-          rightChars: { type: 'integer' },
-          start: { type: 'integer' },
-          startChars: { type: 'integer' },
-        },
-        [],
-      ),
-      minProperties: 1,
-    };
-
-    // --- Run-channel input (channel: "run" → run patch) ---
+    // Derived from PROPERTY_REGISTRY — no hardcoded property lists
     const runInputSchema = objectSchema(
       {
         target: objectSchema({ scope: { const: 'docDefaults' }, channel: { const: 'run' } }, ['scope', 'channel']),
-        patch: {
-          ...objectSchema(
-            {
-              bold: { type: 'boolean' },
-              italic: { type: 'boolean' },
-              fontSize: { type: 'integer' },
-              fontSizeCs: { type: 'integer' },
-              letterSpacing: { type: 'integer' },
-              fontFamily: fontFamilySchema,
-              color: colorSchema,
-            },
-            [],
-          ),
-          minProperties: 1,
-        },
+        patch: buildPatchSchema('run'),
       },
       ['target', 'patch'],
     );
-
-    // --- Paragraph-channel input (channel: "paragraph" → paragraph patch) ---
     const paragraphInputSchema = objectSchema(
       {
         target: objectSchema({ scope: { const: 'docDefaults' }, channel: { const: 'paragraph' } }, [
           'scope',
           'channel',
         ]),
-        patch: {
-          ...objectSchema(
-            {
-              justification: { enum: ['left', 'center', 'right', 'justify', 'distribute'] },
-              spacing: spacingSchema,
-              indent: indentSchema,
-            },
-            [],
-          ),
-          minProperties: 1,
-        },
+        patch: buildPatchSchema('paragraph'),
       },
       ['target', 'patch'],
     );
 
-    // --- Resolution: discriminated by channel with concrete xmlPath values ---
     const stylesTargetResolutionSchema = objectSchema(
       {
         scope: { const: 'docDefaults' },
@@ -1975,27 +1881,7 @@ const operationSchemas: Record<OperationId, OperationSchemaSet> = {
       ['scope', 'channel', 'xmlPart', 'xmlPath'],
     );
 
-    // --- Before/after state map for receipts ---
-    const booleanStateSchema = { enum: ['on', 'off', 'inherit'] };
-    const numberOrInheritSchema = { oneOf: [{ type: 'number' }, { const: 'inherit' }] };
-    const stringOrInheritSchema = { oneOf: [{ type: 'string' }, { const: 'inherit' }] };
-    const objectOrInheritSchema = { oneOf: [{ type: 'object' }, { const: 'inherit' }] };
-    const stylesStateSchema = {
-      type: 'object' as const,
-      properties: {
-        bold: booleanStateSchema,
-        italic: booleanStateSchema,
-        fontSize: numberOrInheritSchema,
-        fontSizeCs: numberOrInheritSchema,
-        letterSpacing: numberOrInheritSchema,
-        fontFamily: objectOrInheritSchema,
-        color: objectOrInheritSchema,
-        justification: stringOrInheritSchema,
-        spacing: objectOrInheritSchema,
-        indent: objectOrInheritSchema,
-      },
-      additionalProperties: false,
-    };
+    const stylesStateSchema = buildStateSchema();
 
     const stylesSuccessSchema = objectSchema(
       {
@@ -2024,7 +1910,6 @@ const operationSchemas: Record<OperationId, OperationSchemaSet> = {
       ['success', 'resolution', 'failure'],
     );
     return {
-      // Discriminated input: oneOf with channel as the discriminator
       input: { oneOf: [runInputSchema, paragraphInputSchema] },
       output: { oneOf: [stylesSuccessSchema, stylesFailureSchema] },
       success: stylesSuccessSchema,

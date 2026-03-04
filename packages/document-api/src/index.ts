@@ -63,8 +63,8 @@ import type {
   StylesApplyInput,
   StylesApplyOptions,
   StylesApplyReceipt,
-} from './styles/styles.js';
-import { executeStylesApply } from './styles/styles.js';
+} from './styles/index.js';
+import { executeStylesApply } from './styles/index.js';
 import type { GetNodeAdapter, GetNodeByIdInput } from './get-node/get-node.js';
 import { executeGetNode, executeGetNodeById } from './get-node/get-node.js';
 import { executeGetText, type GetTextAdapter, type GetTextInput } from './get-text/get-text.js';
@@ -380,10 +380,19 @@ export {
   validateInlineRunPatch,
   buildInlineRunPatchSchema,
 } from './format/inline-run-patch.js';
-export { PROPERTY_REGISTRY } from './styles/styles.js';
+export {
+  PROPERTY_REGISTRY,
+  EXCLUDED_KEYS,
+  ALLOWED_KEYS_BY_CHANNEL,
+  getPropertyDefinition,
+  toJsonSchema,
+  buildPatchSchema,
+  buildStateSchema,
+} from './styles/index.js';
 export type {
+  ValueSchema,
+  MergeStrategy,
   PropertyDefinition,
-  ObjectSchema,
   StylesAdapter,
   StylesApplyInput,
   StylesApplyRunInput,
@@ -394,16 +403,16 @@ export type {
   StylesNumberState,
   StylesEnumState,
   StylesObjectState,
+  StylesArrayState,
   StylesStateMap,
   StylesChannel,
-  StylesJustification,
   StylesRunPatch,
   StylesParagraphPatch,
   StylesTargetResolution,
   StylesApplyReceiptSuccess,
   StylesApplyReceiptFailure,
   NormalizedStylesApplyOptions,
-} from './styles/styles.js';
+} from './styles/index.js';
 export type { CreateAdapter } from './create/create.js';
 export type {
   TrackChangesAdapter,

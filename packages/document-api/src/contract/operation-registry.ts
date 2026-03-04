@@ -31,7 +31,7 @@ import type { DeleteInput } from '../delete/delete.js';
 import type { MutationOptions, RevisionGuardOptions } from '../write/write.js';
 import type { FormatInlineAliasInput, StyleApplyInput } from '../format/format.js';
 import type { InlineRunPatchKey } from '../format/inline-run-patch.js';
-import type { StylesApplyInput, StylesApplyOptions, StylesApplyReceipt } from '../styles/styles.js';
+import type { StylesApplyInput, StylesApplyOptions, StylesApplyReceipt } from '../styles/index.js';
 import type {
   CommentsCreateInput,
   CommentsPatchInput,

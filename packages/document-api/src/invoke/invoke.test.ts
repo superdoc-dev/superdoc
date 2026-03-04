@@ -6,7 +6,7 @@ import type { FindAdapter } from '../find/find.js';
 import type { GetNodeAdapter } from '../get-node/get-node.js';
 import type { WriteAdapter } from '../write/write.js';
 import type { FormatAdapter } from '../format/format.js';
-import type { StylesAdapter } from '../styles/styles.js';
+import type { StylesAdapter } from '../styles/index.js';
 import type { TrackChangesAdapter } from '../track-changes/track-changes.js';
 import type { CreateAdapter } from '../create/create.js';
 import type { ListsAdapter } from '../lists/lists.js';

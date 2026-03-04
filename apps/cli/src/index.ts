@@ -60,7 +60,7 @@ export type InvokeCommandResult = {
 export type InvokeCommandOptions = {
   ioOverrides?: Partial<CliIO>;
   executionMode?: ExecutionMode;
-  collabSessionPool?: CommandContext['collabSessionPool'];
+  sessionPool?: CommandContext['sessionPool'];
   stateDir?: string;
 };
 
@@ -208,7 +208,7 @@ async function executeParsedInvocation(
   parsed: ParsedInvocation,
   io: CliIO,
   executionMode: ExecutionMode,
-  collabSessionPool?: CommandContext['collabSessionPool'],
+  sessionPool?: CommandContext['sessionPool'],
 ): Promise<{ execution?: CommandExecution; helpText?: string }> {
   if (parsed.globals.help || parsed.rest.length === 0) {
     return { helpText: HELP };
@@ -221,7 +221,7 @@ async function executeParsedInvocation(
     timeoutMs: parsed.globals.timeoutMs,
     sessionId: parsed.globals.sessionId,
     executionMode,
-    collabSessionPool,
+    sessionPool,
   };
 
   const execution = await executeWithTimeout(async () => {
@@ -270,7 +270,7 @@ export async function invokeCommand(argv: string[], options: InvokeCommandOption
       parsedInvocation,
       io,
       options.executionMode ?? 'oneshot',
-      options.collabSessionPool,
+      options.sessionPool,
     );
     return { parsed: parsedInvocation, output: commandOutput };
   });

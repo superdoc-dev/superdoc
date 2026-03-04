@@ -32,7 +32,9 @@ export type ReceiptFailureCode =
   | 'NO_PREVIOUS_LIST'
   | 'NO_ADJACENT_SEQUENCE'
   | 'ALREADY_SAME_SEQUENCE'
-  | 'LEVEL_OUT_OF_RANGE';
+  | 'LEVEL_OUT_OF_RANGE'
+  // SD-1973 formatting failure codes
+  | 'LEVEL_NOT_FOUND';
 
 export type ReceiptFailure = {
   code: ReceiptFailureCode;

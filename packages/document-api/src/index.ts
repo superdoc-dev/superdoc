@@ -103,6 +103,18 @@ import type {
   ListsSetLevelRestartInput,
   ListsConvertToTextInput,
   ListsConvertToTextResult,
+  ListsApplyTemplateInput,
+  ListsApplyPresetInput,
+  ListsCaptureTemplateInput,
+  ListsCaptureTemplateResult,
+  ListsSetLevelNumberingInput,
+  ListsSetLevelBulletInput,
+  ListsSetLevelPictureBulletInput,
+  ListsSetLevelAlignmentInput,
+  ListsSetLevelIndentsInput,
+  ListsSetLevelTrailingCharacterInput,
+  ListsSetLevelMarkerFontInput,
+  ListsClearLevelOverridesInput,
 } from './lists/lists.types.js';
 import {
   executeListsGet,
@@ -122,6 +134,17 @@ import {
   executeListsCanContinuePrevious,
   executeListsSetLevelRestart,
   executeListsConvertToText,
+  executeListsApplyTemplate,
+  executeListsApplyPreset,
+  executeListsCaptureTemplate,
+  executeListsSetLevelNumbering,
+  executeListsSetLevelBullet,
+  executeListsSetLevelPictureBullet,
+  executeListsSetLevelAlignment,
+  executeListsSetLevelIndents,
+  executeListsSetLevelTrailingCharacter,
+  executeListsSetLevelMarkerFont,
+  executeListsClearLevelOverrides,
 } from './lists/lists.js';
 import { executeReplace, type ReplaceInput } from './replace/replace.js';
 import type { CreateAdapter, CreateApi } from './create/create.js';
@@ -304,6 +327,43 @@ import {
   executeSectionsSetTitlePage,
   executeSectionsSetVerticalAlign,
 } from './sections/sections.js';
+import type { ImagesAdapter, ImagesApi, CreateImageAdapter } from './images/images.js';
+import {
+  executeImagesList,
+  executeImagesGet,
+  executeImagesDelete,
+  executeImagesMove,
+  executeImagesConvertToInline,
+  executeImagesConvertToFloating,
+  executeImagesSetSize,
+  executeImagesSetWrapType,
+  executeImagesSetWrapSide,
+  executeImagesSetWrapDistances,
+  executeImagesSetPosition,
+  executeImagesSetAnchorOptions,
+  executeImagesSetZOrder,
+  executeCreateImage,
+} from './images/images.js';
+import type {
+  CreateImageInput,
+  CreateImageResult,
+  ImagesListInput,
+  ImagesListResult,
+  ImagesGetInput,
+  ImageSummary,
+  ImagesDeleteInput,
+  ImagesMutationResult,
+  MoveImageInput,
+  ConvertToInlineInput,
+  ConvertToFloatingInput,
+  SetSizeInput,
+  SetWrapTypeInput,
+  SetWrapSideInput,
+  SetWrapDistancesInput,
+  SetPositionInput,
+  SetAnchorOptionsInput,
+  SetZOrderInput,
+} from './images/images.types.js';
 import type { TocApi, TocAdapter } from './toc/toc.js';
 import {
   executeTocList,
@@ -425,6 +485,35 @@ export type {
   ReviewDecideInput,
 } from './track-changes/track-changes.js';
 export type { BlocksAdapter } from './blocks/blocks.js';
+export type { ImagesAdapter, ImagesApi, CreateImageAdapter } from './images/images.js';
+export type {
+  ImageAddress,
+  ImageCreateLocation,
+  ImageSummary,
+  ImageWrapDistances,
+  ImagePositionInput,
+  ImageAnchorOptionsInput,
+  ImageZOrderInput,
+  CreateImageInput,
+  CreateImageResult,
+  ImagesListInput,
+  ImagesListResult,
+  ImagesGetInput,
+  ImagesDeleteInput,
+  ImagesMutationResult,
+  ImagesMutationSuccessResult,
+  ImagesMutationFailureResult,
+  MoveImageInput,
+  ConvertToInlineInput,
+  ConvertToFloatingInput,
+  SetSizeInput,
+  SetWrapTypeInput,
+  SetWrapSideInput,
+  SetWrapDistancesInput,
+  SetPositionInput,
+  SetAnchorOptionsInput,
+  SetZOrderInput,
+} from './images/images.types.js';
 export type { TocApi, TocAdapter } from './toc/toc.js';
 export type {
   TocAddress,
@@ -546,8 +635,34 @@ export type {
   ListsSetValueInput,
   ListTargetInput,
   MutationScope,
+  LevelAlignment,
+  TrailingCharacter,
+  ListPresetId,
+  ListLevelTemplate,
+  ListTemplate,
+  ListsApplyTemplateInput,
+  ListsApplyPresetInput,
+  ListsCaptureTemplateInput,
+  ListsCaptureTemplateResult,
+  ListsCaptureTemplateSuccessResult,
+  ListsSetLevelNumberingInput,
+  ListsSetLevelBulletInput,
+  ListsSetLevelPictureBulletInput,
+  ListsSetLevelAlignmentInput,
+  ListsSetLevelIndentsInput,
+  ListsSetLevelTrailingCharacterInput,
+  ListsSetLevelMarkerFontInput,
+  ListsClearLevelOverridesInput,
 } from './lists/lists.types.js';
-export { LIST_KINDS, LIST_INSERT_POSITIONS, JOIN_DIRECTIONS, MUTATION_SCOPES } from './lists/lists.types.js';
+export {
+  LIST_KINDS,
+  LIST_INSERT_POSITIONS,
+  JOIN_DIRECTIONS,
+  MUTATION_SCOPES,
+  LEVEL_ALIGNMENTS,
+  TRAILING_CHARACTERS,
+  LIST_PRESET_IDS,
+} from './lists/lists.types.js';
 export type {
   CreateSectionBreakInput,
   CreateSectionBreakResult,
@@ -793,6 +908,10 @@ export interface DocumentApi {
    */
   toc: TocApi;
   /**
+   * Image lifecycle and placement operations.
+   */
+  images: ImagesApi;
+  /**
    * Selector-based query with cardinality contracts for mutation targeting.
    */
   query: QueryApi;
@@ -846,6 +965,7 @@ export interface DocumentApiAdapters {
   paragraphs: ParagraphsAdapter;
   tables: TablesAdapter;
   toc: TocAdapter;
+  images: ImagesAdapter & CreateImageAdapter;
   query: QueryAdapter;
   mutations: MutationsAdapter;
   history: HistoryAdapter;
@@ -1041,8 +1161,52 @@ export function createDocumentApi(adapters: DocumentApiAdapters): DocumentApi {
       tableOfContents(input: CreateTableOfContentsInput, options?: MutationOptions): CreateTableOfContentsResult {
         return executeCreateTableOfContents(adapters.create, input, options);
       },
+      image(input: CreateImageInput, options?: MutationOptions): CreateImageResult {
+        return executeCreateImage(adapters.images, input, options);
+      },
     },
     capabilities,
+    images: {
+      list(input?: ImagesListInput): ImagesListResult {
+        return executeImagesList(adapters.images, input ?? {});
+      },
+      get(input: ImagesGetInput): ImageSummary {
+        return executeImagesGet(adapters.images, input);
+      },
+      delete(input: ImagesDeleteInput, options?: MutationOptions): ImagesMutationResult {
+        return executeImagesDelete(adapters.images, input, options);
+      },
+      move(input: MoveImageInput, options?: MutationOptions): ImagesMutationResult {
+        return executeImagesMove(adapters.images, input, options);
+      },
+      convertToInline(input: ConvertToInlineInput, options?: MutationOptions): ImagesMutationResult {
+        return executeImagesConvertToInline(adapters.images, input, options);
+      },
+      convertToFloating(input: ConvertToFloatingInput, options?: MutationOptions): ImagesMutationResult {
+        return executeImagesConvertToFloating(adapters.images, input, options);
+      },
+      setSize(input: SetSizeInput, options?: MutationOptions): ImagesMutationResult {
+        return executeImagesSetSize(adapters.images, input, options);
+      },
+      setWrapType(input: SetWrapTypeInput, options?: MutationOptions): ImagesMutationResult {
+        return executeImagesSetWrapType(adapters.images, input, options);
+      },
+      setWrapSide(input: SetWrapSideInput, options?: MutationOptions): ImagesMutationResult {
+        return executeImagesSetWrapSide(adapters.images, input, options);
+      },
+      setWrapDistances(input: SetWrapDistancesInput, options?: MutationOptions): ImagesMutationResult {
+        return executeImagesSetWrapDistances(adapters.images, input, options);
+      },
+      setPosition(input: SetPositionInput, options?: MutationOptions): ImagesMutationResult {
+        return executeImagesSetPosition(adapters.images, input, options);
+      },
+      setAnchorOptions(input: SetAnchorOptionsInput, options?: MutationOptions): ImagesMutationResult {
+        return executeImagesSetAnchorOptions(adapters.images, input, options);
+      },
+      setZOrder(input: SetZOrderInput, options?: MutationOptions): ImagesMutationResult {
+        return executeImagesSetZOrder(adapters.images, input, options);
+      },
+    },
     lists: {
       list(query?: ListsListQuery): ListsListResult {
         return executeListsList(adapters.lists, query);
@@ -1094,6 +1258,60 @@ export function createDocumentApi(adapters: DocumentApiAdapters): DocumentApi {
       },
       convertToText(input: ListsConvertToTextInput, options?: MutationOptions): ListsConvertToTextResult {
         return executeListsConvertToText(adapters.lists, input, options);
+      },
+
+      // SD-1973 formatting operations
+      applyTemplate(input: ListsApplyTemplateInput, options?: MutationOptions): ListsMutateItemResult {
+        return executeListsApplyTemplate(adapters.lists, input, options);
+      },
+      applyPreset(input: ListsApplyPresetInput, options?: MutationOptions): ListsMutateItemResult {
+        return executeListsApplyPreset(adapters.lists, input, options);
+      },
+      captureTemplate(input: ListsCaptureTemplateInput): ListsCaptureTemplateResult {
+        return executeListsCaptureTemplate(adapters.lists, input);
+      },
+      setLevelNumbering(input: ListsSetLevelNumberingInput, options?: MutationOptions): ListsMutateItemResult {
+        return executeListsSetLevelNumbering(adapters.lists, input, options);
+      },
+      setLevelBullet(input: ListsSetLevelBulletInput, options?: MutationOptions): ListsMutateItemResult {
+        return executeListsSetLevelBullet(adapters.lists, input, options);
+      },
+      setLevelPictureBullet(input: ListsSetLevelPictureBulletInput, options?: MutationOptions): ListsMutateItemResult {
+        return executeListsSetLevelPictureBullet(adapters.lists, input, options);
+      },
+      setLevelAlignment(input: ListsSetLevelAlignmentInput, options?: MutationOptions): ListsMutateItemResult {
+        return executeListsSetLevelAlignment(adapters.lists, input, options);
+      },
+      setLevelIndents(input: ListsSetLevelIndentsInput, options?: MutationOptions): ListsMutateItemResult {
+        return executeListsSetLevelIndents(adapters.lists, input, options);
+      },
+      setLevelTrailingCharacter(
+        input: ListsSetLevelTrailingCharacterInput,
+        options?: MutationOptions,
+      ): ListsMutateItemResult {
+        return executeListsSetLevelTrailingCharacter(adapters.lists, input, options);
+      },
+      setLevelMarkerFont(input: ListsSetLevelMarkerFontInput, options?: MutationOptions): ListsMutateItemResult {
+        return executeListsSetLevelMarkerFont(adapters.lists, input, options);
+      },
+      clearLevelOverrides(input: ListsClearLevelOverridesInput, options?: MutationOptions): ListsMutateItemResult {
+        return executeListsClearLevelOverrides(adapters.lists, input, options);
+      },
+
+      // Convenience wrapper — not a canonical operation
+      setType(
+        input: { target: ListsApplyPresetInput['target']; kind: 'ordered' | 'bullet' },
+        options?: MutationOptions,
+      ): ListsMutateItemResult {
+        const presetMap: Record<string, ListsApplyPresetInput['preset']> = {
+          ordered: 'decimal',
+          bullet: 'disc',
+        };
+        return executeListsApplyPreset(
+          adapters.lists,
+          { target: input.target, preset: presetMap[input.kind] },
+          options,
+        );
       },
     },
     sections: {

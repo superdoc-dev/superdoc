@@ -103,6 +103,7 @@ const REFERENCE_GROUP_TO_CATEGORY: Record<string, CliCategory> = {
   comments: 'comments',
   trackChanges: 'trackChanges',
   toc: 'toc',
+  images: 'images',
   history: 'history',
 };
 

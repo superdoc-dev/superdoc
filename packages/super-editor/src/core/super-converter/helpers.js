@@ -33,6 +33,33 @@ function base64ToUint8Array(base64) {
   return bytes;
 }
 
+/**
+ * Convert a base64 string or data URI to an ArrayBuffer.
+ * Accepts ArrayBuffer, TypedArray, data URI, or raw base64 string.
+ *
+ * @param {string|ArrayBuffer|Uint8Array} data
+ * @returns {ArrayBuffer}
+ */
+function dataUriToArrayBuffer(data) {
+  if (data instanceof ArrayBuffer) return data;
+  if (ArrayBuffer.isView(data)) return data.buffer.slice(data.byteOffset, data.byteOffset + data.byteLength);
+
+  if (typeof data !== 'string') {
+    throw new Error('Unsupported data type for conversion to ArrayBuffer');
+  }
+
+  let base64 = data;
+  if (data.startsWith('data:')) {
+    const commaIndex = data.indexOf(',');
+    if (commaIndex === -1) {
+      throw new Error('Invalid data URI: missing base64 content');
+    }
+    base64 = data.substring(commaIndex + 1);
+  }
+
+  return base64ToUint8Array(base64).buffer;
+}
+
 // CSS pixels per inch; used to convert between Word's inch-based measurements and DOM pixels.
 const PIXELS_PER_INCH = 96;
 
@@ -720,5 +747,6 @@ export {
   resolveOpcTargetPath,
   computeCrc32Hex,
   base64ToUint8Array,
+  dataUriToArrayBuffer,
   detectImageType,
 };

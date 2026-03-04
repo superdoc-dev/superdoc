@@ -493,6 +493,134 @@ Convert list items to plain paragraphs. When `includeMarker` is true, prepends t
 - **Idempotency**: conditional
 - **Failure codes**: `INVALID_TARGET`
 
+### `lists.applyTemplate`
+
+Apply a captured `ListTemplate` to the target list's abstract definition, optionally filtered to specific levels. Direct-only. Supports dry-run.
+
+- **Input**: `ListsApplyTemplateInput` (`{ target, template, levels? }`)
+- **Options**: `MutationOptions` (`{ dryRun? }`)
+- **Output**: `ListsMutateItemResult`
+- **Mutates**: Yes
+- **Idempotency**: conditional
+- **Failure codes**: `NO_OP`, `INVALID_TARGET`, `LEVEL_OUT_OF_RANGE`, `INVALID_INPUT`
+
+### `lists.applyPreset`
+
+Apply a built-in list formatting preset (e.g. `decimal`, `disc`, `upperRoman`) to the target list. Direct-only. Supports dry-run.
+
+- **Input**: `ListsApplyPresetInput` (`{ target, preset, levels? }`)
+- **Options**: `MutationOptions` (`{ dryRun? }`)
+- **Output**: `ListsMutateItemResult`
+- **Mutates**: Yes
+- **Idempotency**: conditional
+- **Failure codes**: `NO_OP`, `INVALID_TARGET`, `LEVEL_OUT_OF_RANGE`, `INVALID_INPUT`
+
+### `lists.captureTemplate`
+
+Capture the formatting of a list as a reusable `ListTemplate`. Read-only operation.
+
+- **Input**: `ListsCaptureTemplateInput` (`{ target, levels? }`)
+- **Output**: `ListsCaptureTemplateResult` (`{ success, template }` | `{ success: false, failure }`)
+- **Mutates**: No
+- **Idempotency**: idempotent
+- **Failure codes**: `INVALID_TARGET`, `INVALID_INPUT`
+
+### `lists.setLevelNumbering`
+
+Set the numbering format (`numFmt`), pattern (`lvlText`), and optional start value for a specific list level. Direct-only. Supports dry-run.
+
+- **Input**: `ListsSetLevelNumberingInput` (`{ target, level, numFmt, lvlText, start? }`)
+- **Options**: `MutationOptions` (`{ dryRun? }`)
+- **Output**: `ListsMutateItemResult`
+- **Mutates**: Yes
+- **Idempotency**: conditional
+- **Failure codes**: `NO_OP`, `INVALID_TARGET`, `LEVEL_OUT_OF_RANGE`, `LEVEL_NOT_FOUND`
+
+### `lists.setLevelBullet`
+
+Set the bullet marker text for a specific list level. Direct-only. Supports dry-run.
+
+- **Input**: `ListsSetLevelBulletInput` (`{ target, level, markerText }`)
+- **Options**: `MutationOptions` (`{ dryRun? }`)
+- **Output**: `ListsMutateItemResult`
+- **Mutates**: Yes
+- **Idempotency**: conditional
+- **Failure codes**: `NO_OP`, `INVALID_TARGET`, `LEVEL_OUT_OF_RANGE`, `LEVEL_NOT_FOUND`
+
+### `lists.setLevelPictureBullet`
+
+Set a picture bullet for a specific list level by its OOXML `lvlPicBulletId`. Requires picture bullet pipeline support. Direct-only. Supports dry-run.
+
+- **Input**: `ListsSetLevelPictureBulletInput` (`{ target, level, pictureBulletId }`)
+- **Options**: `MutationOptions` (`{ dryRun? }`)
+- **Output**: `ListsMutateItemResult`
+- **Mutates**: Yes
+- **Idempotency**: conditional
+- **Failure codes**: `NO_OP`, `INVALID_TARGET`, `LEVEL_OUT_OF_RANGE`, `LEVEL_NOT_FOUND`, `INVALID_INPUT`, `CAPABILITY_UNAVAILABLE`
+
+### `lists.setLevelAlignment`
+
+Set the marker alignment (`left`, `center`, `right`) for a specific list level. Direct-only. Supports dry-run.
+
+- **Input**: `ListsSetLevelAlignmentInput` (`{ target, level, alignment }`)
+- **Options**: `MutationOptions` (`{ dryRun? }`)
+- **Output**: `ListsMutateItemResult`
+- **Mutates**: Yes
+- **Idempotency**: conditional
+- **Failure codes**: `NO_OP`, `INVALID_TARGET`, `LEVEL_OUT_OF_RANGE`, `LEVEL_NOT_FOUND`
+
+### `lists.setLevelIndents`
+
+Set the paragraph indentation values (`left`, `hanging`, `firstLine`) for a specific list level. At least one property required; `hanging` and `firstLine` are mutually exclusive. Direct-only. Supports dry-run.
+
+- **Input**: `ListsSetLevelIndentsInput` (`{ target, level, left?, hanging?, firstLine? }`)
+- **Options**: `MutationOptions` (`{ dryRun? }`)
+- **Output**: `ListsMutateItemResult`
+- **Mutates**: Yes
+- **Idempotency**: conditional
+- **Failure codes**: `NO_OP`, `INVALID_TARGET`, `LEVEL_OUT_OF_RANGE`, `LEVEL_NOT_FOUND`, `INVALID_INPUT`
+
+### `lists.setLevelTrailingCharacter`
+
+Set the trailing character (`tab`, `space`, `nothing`) after the marker for a specific list level. Direct-only. Supports dry-run.
+
+- **Input**: `ListsSetLevelTrailingCharacterInput` (`{ target, level, trailingCharacter }`)
+- **Options**: `MutationOptions` (`{ dryRun? }`)
+- **Output**: `ListsMutateItemResult`
+- **Mutates**: Yes
+- **Idempotency**: conditional
+- **Failure codes**: `NO_OP`, `INVALID_TARGET`, `LEVEL_OUT_OF_RANGE`, `LEVEL_NOT_FOUND`
+
+### `lists.setLevelMarkerFont`
+
+Set the font family used for the marker character at a specific list level. Direct-only. Supports dry-run.
+
+- **Input**: `ListsSetLevelMarkerFontInput` (`{ target, level, fontFamily }`)
+- **Options**: `MutationOptions` (`{ dryRun? }`)
+- **Output**: `ListsMutateItemResult`
+- **Mutates**: Yes
+- **Idempotency**: conditional
+- **Failure codes**: `NO_OP`, `INVALID_TARGET`, `LEVEL_OUT_OF_RANGE`, `LEVEL_NOT_FOUND`
+
+### `lists.clearLevelOverrides`
+
+Remove instance-level overrides (`lvlOverride`) for a specific list level, restoring abstract definition values. Direct-only. Supports dry-run.
+
+- **Input**: `ListsClearLevelOverridesInput` (`{ target, level }`)
+- **Options**: `MutationOptions` (`{ dryRun? }`)
+- **Output**: `ListsMutateItemResult`
+- **Mutates**: Yes
+- **Idempotency**: conditional
+- **Failure codes**: `NO_OP`, `INVALID_TARGET`, `LEVEL_OUT_OF_RANGE`
+
+### `lists.setType` (convenience)
+
+Convenience wrapper that maps `'ordered'` / `'bullet'` to the corresponding default preset via `lists.applyPreset`. Not a canonical operation — it is a reference alias for `lists.applyPreset`.
+
+- **Input**: `{ target, kind: 'ordered' | 'bullet' }`
+- **Options**: `MutationOptions` (`{ dryRun? }`)
+- **Output**: `ListsMutateItemResult`
+
 ### Comments
 
 ### `comments.create`

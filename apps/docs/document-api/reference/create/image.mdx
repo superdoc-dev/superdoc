@@ -1,0 +1,270 @@
+---
+title: create.image
+sidebarTitle: create.image
+description: Insert a new image at the target position.
+---
+
+{/* GENERATED FILE: DO NOT EDIT. Regenerate via `pnpm run docapi:sync`. */}
+
+> Alpha: Document API is currently alpha and subject to breaking changes.
+
+## Summary
+
+Insert a new image at the target position.
+
+- Operation ID: `create.image`
+- API member path: `editor.doc.create.image(...)`
+- Mutates document: `yes`
+- Idempotency: `non-idempotent`
+- Supports tracked mode: `no`
+- Supports dry run: `yes`
+- Deterministic target resolution: `yes`
+
+## Expected result
+
+Returns a CreateImageResult with the new image address.
+
+## Input fields
+
+| Field | Type | Required | Description |
+| --- | --- | --- | --- |
+| `alt` | string | no |  |
+| `at` | object(kind="documentStart") \\| object(kind="documentEnd") \\| object(kind="before") \\| object(kind="after") \\| object(kind="inParagraph") | no | One of: object(kind="documentStart"), object(kind="documentEnd"), object(kind="before"), object(kind="after"), object(kind="inParagraph") |
+| `size` | object | no |  |
+| `size.height` | number | no |  |
+| `size.width` | number | no |  |
+| `src` | string | yes |  |
+| `title` | string | no |  |
+
+### Example request
+
+```json
+{
+  "alt": "example",
+  "src": "example",
+  "title": "example"
+}
+```
+
+## Output fields
+
+| Field | Type | Required | Description |
+| --- | --- | --- | --- |
+| `failure` | object | no |  |
+| `image` | object | no |  |
+| `success` | boolean | no |  |
+
+### Example response
+
+```json
+{
+  "image": {},
+  "success": true
+}
+```
+
+## Pre-apply throws
+
+- `TARGET_NOT_FOUND`
+- `INVALID_TARGET`
+- `CAPABILITY_UNAVAILABLE`
+- `INVALID_INPUT`
+
+## Non-applied failure codes
+
+- `INVALID_TARGET`
+- `INVALID_INPUT`
+
+## Raw schemas
+
+<Accordion title="Raw input schema">
+```json
+{
+  "additionalProperties": false,
+  "properties": {
+    "alt": {
+      "type": "string"
+    },
+    "at": {
+      "oneOf": [
+        {
+          "additionalProperties": false,
+          "properties": {
+            "kind": {
+              "const": "documentStart"
+            }
+          },
+          "required": [
+            "kind"
+          ],
+          "type": "object"
+        },
+        {
+          "additionalProperties": false,
+          "properties": {
+            "kind": {
+              "const": "documentEnd"
+            }
+          },
+          "required": [
+            "kind"
+          ],
+          "type": "object"
+        },
+        {
+          "additionalProperties": false,
+          "properties": {
+            "kind": {
+              "const": "before"
+            },
+            "target": {
+              "$ref": "#/$defs/BlockNodeAddress"
+            }
+          },
+          "required": [
+            "kind",
+            "target"
+          ],
+          "type": "object"
+        },
+        {
+          "additionalProperties": false,
+          "properties": {
+            "kind": {
+              "const": "after"
+            },
+            "target": {
+              "$ref": "#/$defs/BlockNodeAddress"
+            }
+          },
+          "required": [
+            "kind",
+            "target"
+          ],
+          "type": "object"
+        },
+        {
+          "additionalProperties": false,
+          "properties": {
+            "kind": {
+              "const": "inParagraph"
+            },
+            "offset": {
+              "type": "integer"
+            },
+            "target": {
+              "$ref": "#/$defs/BlockNodeAddress"
+            }
+          },
+          "required": [
+            "kind",
+            "target"
+          ],
+          "type": "object"
+        }
+      ]
+    },
+    "size": {
+      "additionalProperties": false,
+      "properties": {
+        "height": {
+          "type": "number"
+        },
+        "width": {
+          "type": "number"
+        }
+      },
+      "type": "object"
+    },
+    "src": {
+      "type": "string"
+    },
+    "title": {
+      "type": "string"
+    }
+  },
+  "required": [
+    "src"
+  ],
+  "type": "object"
+}
+```
+</Accordion>
+
+<Accordion title="Raw output schema">
+```json
+{
+  "additionalProperties": false,
+  "properties": {
+    "failure": {
+      "type": "object"
+    },
+    "image": {
+      "type": "object"
+    },
+    "success": {
+      "type": "boolean"
+    }
+  },
+  "type": "object"
+}
+```
+</Accordion>
+
+<Accordion title="Raw success schema">
+```json
+{
+  "additionalProperties": false,
+  "properties": {
+    "image": {
+      "type": "object"
+    },
+    "success": {
+      "const": true
+    }
+  },
+  "required": [
+    "success",
+    "image"
+  ],
+  "type": "object"
+}
+```
+</Accordion>
+
+<Accordion title="Raw failure schema">
+```json
+{
+  "additionalProperties": false,
+  "properties": {
+    "failure": {
+      "additionalProperties": false,
+      "properties": {
+        "code": {
+          "enum": [
+            "INVALID_TARGET",
+            "INVALID_INPUT"
+          ]
+        },
+        "message": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "code",
+        "message"
+      ],
+      "type": "object"
+    },
+    "success": {
+      "const": false
+    }
+  },
+  "required": [
+    "success",
+    "failure"
+  ],
+  "type": "object"
+}
+```
+</Accordion>

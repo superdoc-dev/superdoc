@@ -105,6 +105,17 @@ export const SUCCESS_VERB: Record<CliExposedOperationId, string> = {
   'lists.continuePrevious': 'continued previous list',
   'lists.canContinuePrevious': 'checked continue feasibility',
   'lists.setLevelRestart': 'set level restart',
+  'lists.applyTemplate': 'applied list template',
+  'lists.applyPreset': 'applied list preset',
+  'lists.captureTemplate': 'captured list template',
+  'lists.setLevelNumbering': 'set level numbering',
+  'lists.setLevelBullet': 'set level bullet',
+  'lists.setLevelPictureBullet': 'set level picture bullet',
+  'lists.setLevelAlignment': 'set level alignment',
+  'lists.setLevelIndents': 'set level indents',
+  'lists.setLevelTrailingCharacter': 'set level trailing character',
+  'lists.setLevelMarkerFont': 'set level marker font',
+  'lists.clearLevelOverrides': 'cleared level overrides',
   'lists.convertToText': 'converted list to text',
   'comments.create': 'created comment',
   'comments.patch': 'patched comment',
@@ -176,6 +187,22 @@ export const SUCCESS_VERB: Record<CliExposedOperationId, string> = {
   'history.get': 'retrieved history state',
   'history.undo': 'undid last change',
   'history.redo': 'redid last change',
+
+  // Images
+  'create.image': 'created image',
+  'images.list': 'listed images',
+  'images.get': 'resolved image',
+  'images.delete': 'deleted image',
+  'images.move': 'moved image',
+  'images.convertToInline': 'converted to inline',
+  'images.convertToFloating': 'converted to floating',
+  'images.setSize': 'set image size',
+  'images.setWrapType': 'set wrap type',
+  'images.setWrapSide': 'set wrap side',
+  'images.setWrapDistances': 'set wrap distances',
+  'images.setPosition': 'set position',
+  'images.setAnchorOptions': 'set anchor options',
+  'images.setZOrder': 'set z-order',
 };
 
 // ---------------------------------------------------------------------------
@@ -240,6 +267,17 @@ export const OUTPUT_FORMAT: Record<CliExposedOperationId, OutputFormat> = {
   'lists.continuePrevious': 'listsMutationResult',
   'lists.canContinuePrevious': 'plain',
   'lists.setLevelRestart': 'listsMutationResult',
+  'lists.applyTemplate': 'listsMutationResult',
+  'lists.applyPreset': 'listsMutationResult',
+  'lists.captureTemplate': 'plain',
+  'lists.setLevelNumbering': 'listsMutationResult',
+  'lists.setLevelBullet': 'listsMutationResult',
+  'lists.setLevelPictureBullet': 'listsMutationResult',
+  'lists.setLevelAlignment': 'listsMutationResult',
+  'lists.setLevelIndents': 'listsMutationResult',
+  'lists.setLevelTrailingCharacter': 'listsMutationResult',
+  'lists.setLevelMarkerFont': 'listsMutationResult',
+  'lists.clearLevelOverrides': 'listsMutationResult',
   'lists.convertToText': 'listsMutationResult',
   'comments.create': 'commentReceipt',
   'comments.patch': 'commentReceipt',
@@ -311,6 +349,22 @@ export const OUTPUT_FORMAT: Record<CliExposedOperationId, OutputFormat> = {
   'history.get': 'plain',
   'history.undo': 'plain',
   'history.redo': 'plain',
+
+  // Images
+  'create.image': 'createResult',
+  'images.list': 'plain',
+  'images.get': 'plain',
+  'images.delete': 'plain',
+  'images.move': 'plain',
+  'images.convertToInline': 'plain',
+  'images.convertToFloating': 'plain',
+  'images.setSize': 'plain',
+  'images.setWrapType': 'plain',
+  'images.setWrapSide': 'plain',
+  'images.setWrapDistances': 'plain',
+  'images.setPosition': 'plain',
+  'images.setAnchorOptions': 'plain',
+  'images.setZOrder': 'plain',
 };
 
 // ---------------------------------------------------------------------------
@@ -359,6 +413,17 @@ export const RESPONSE_ENVELOPE_KEY: Record<CliExposedOperationId, string | null>
   'lists.continuePrevious': 'result',
   'lists.canContinuePrevious': 'result',
   'lists.setLevelRestart': 'result',
+  'lists.applyTemplate': 'result',
+  'lists.applyPreset': 'result',
+  'lists.captureTemplate': 'result',
+  'lists.setLevelNumbering': 'result',
+  'lists.setLevelBullet': 'result',
+  'lists.setLevelPictureBullet': 'result',
+  'lists.setLevelAlignment': 'result',
+  'lists.setLevelIndents': 'result',
+  'lists.setLevelTrailingCharacter': 'result',
+  'lists.setLevelMarkerFont': 'result',
+  'lists.clearLevelOverrides': 'result',
   'lists.convertToText': 'result',
   'comments.create': 'receipt',
   'comments.patch': 'receipt',
@@ -430,6 +495,22 @@ export const RESPONSE_ENVELOPE_KEY: Record<CliExposedOperationId, string | null>
   'history.get': 'result',
   'history.undo': 'result',
   'history.redo': 'result',
+
+  // Images
+  'create.image': 'result',
+  'images.list': 'result',
+  'images.get': 'result',
+  'images.delete': 'result',
+  'images.move': 'result',
+  'images.convertToInline': 'result',
+  'images.convertToFloating': 'result',
+  'images.setSize': 'result',
+  'images.setWrapType': 'result',
+  'images.setWrapSide': 'result',
+  'images.setWrapDistances': 'result',
+  'images.setPosition': 'result',
+  'images.setAnchorOptions': 'result',
+  'images.setZOrder': 'result',
 };
 
 // ---------------------------------------------------------------------------
@@ -464,6 +545,7 @@ export type OperationFamily =
   | 'comments'
   | 'lists'
   | 'tables'
+  | 'images'
   | 'toc'
   | 'textMutation'
   | 'create'
@@ -506,6 +588,17 @@ export const OPERATION_FAMILY: Record<CliExposedOperationId, OperationFamily> = 
   'lists.continuePrevious': 'lists',
   'lists.canContinuePrevious': 'lists',
   'lists.setLevelRestart': 'lists',
+  'lists.applyTemplate': 'lists',
+  'lists.applyPreset': 'lists',
+  'lists.captureTemplate': 'lists',
+  'lists.setLevelNumbering': 'lists',
+  'lists.setLevelBullet': 'lists',
+  'lists.setLevelPictureBullet': 'lists',
+  'lists.setLevelAlignment': 'lists',
+  'lists.setLevelIndents': 'lists',
+  'lists.setLevelTrailingCharacter': 'lists',
+  'lists.setLevelMarkerFont': 'lists',
+  'lists.clearLevelOverrides': 'lists',
   'lists.convertToText': 'lists',
   'comments.create': 'comments',
   'comments.patch': 'comments',
@@ -577,4 +670,20 @@ export const OPERATION_FAMILY: Record<CliExposedOperationId, OperationFamily> = 
   'history.get': 'query',
   'history.undo': 'general',
   'history.redo': 'general',
+
+  // Images
+  'create.image': 'images',
+  'images.list': 'images',
+  'images.get': 'images',
+  'images.delete': 'images',
+  'images.move': 'images',
+  'images.convertToInline': 'images',
+  'images.convertToFloating': 'images',
+  'images.setSize': 'images',
+  'images.setWrapType': 'images',
+  'images.setWrapSide': 'images',
+  'images.setWrapDistances': 'images',
+  'images.setPosition': 'images',
+  'images.setAnchorOptions': 'images',
+  'images.setZOrder': 'images',
 };

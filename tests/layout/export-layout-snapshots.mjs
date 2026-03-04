@@ -433,18 +433,36 @@ function installDomEnvironment() {
   if (!proto) {
     throw new Error('HTMLCanvasElement is not available in this DOM environment');
   }
+
+  // Bridge happy-dom's HTMLCanvasElement to node-canvas so that image converters
+  // (TIFF → PNG, EMF/WMF → SVG) can use getContext('2d'), draw pixel data, and
+  // call toDataURL() in headless Node.  The node-canvas instance is stored on the
+  // element so toDataURL() can delegate to it.
   const originalGetContext = proto.getContext;
   proto.getContext = function getContext(contextId, ...args) {
     if (contextId === '2d') {
-      const w = Number(this.width) > 0 ? Number(this.width) : 1024;
-      const h = Number(this.height) > 0 ? Number(this.height) : 768;
-      const nodeCanvas = new Canvas(w, h);
-      return nodeCanvas.getContext('2d');
+      if (!this.__nodeCanvas) {
+        const w = Number(this.width) > 0 ? Number(this.width) : 1024;
+        const h = Number(this.height) > 0 ? Number(this.height) : 768;
+        this.__nodeCanvas = new Canvas(w, h);
+      }
+      return this.__nodeCanvas.getContext('2d');
     }
     if (typeof originalGetContext === 'function') {
       return originalGetContext.call(this, contextId, ...args);
     }
     return null;
+  };
+
+  const originalToDataURL = proto.toDataURL;
+  proto.toDataURL = function toDataURL(type, quality) {
+    if (this.__nodeCanvas) {
+      return this.__nodeCanvas.toDataURL(type, quality);
+    }
+    if (typeof originalToDataURL === 'function') {
+      return originalToDataURL.call(this, type, quality);
+    }
+    return 'data:,';
   };
 
   return { usingStubCanvas: usingStub };

@@ -1,0 +1,189 @@
+---
+title: images.setWrapDistances
+sidebarTitle: images.setWrapDistances
+description: Set the text-wrap distance margins for a floating image.
+---
+
+{/* GENERATED FILE: DO NOT EDIT. Regenerate via `pnpm run docapi:sync`. */}
+
+> Alpha: Document API is currently alpha and subject to breaking changes.
+
+## Summary
+
+Set the text-wrap distance margins for a floating image.
+
+- Operation ID: `images.setWrapDistances`
+- API member path: `editor.doc.images.setWrapDistances(...)`
+- Mutates document: `yes`
+- Idempotency: `conditional`
+- Supports tracked mode: `no`
+- Supports dry run: `yes`
+- Deterministic target resolution: `yes`
+
+## Expected result
+
+Returns an ImagesMutationResult; reports NO_OP if already set.
+
+## Input fields
+
+| Field | Type | Required | Description |
+| --- | --- | --- | --- |
+| `distances` | object | yes |  |
+| `distances.distBottom` | number | no |  |
+| `distances.distLeft` | number | no |  |
+| `distances.distRight` | number | no |  |
+| `distances.distTop` | number | no |  |
+| `imageId` | string | yes |  |
+
+### Example request
+
+```json
+{
+  "distances": {
+    "distBottom": 12.5,
+    "distTop": 12.5
+  },
+  "imageId": "example"
+}
+```
+
+## Output fields
+
+| Field | Type | Required | Description |
+| --- | --- | --- | --- |
+| `failure` | object | no |  |
+| `image` | object | no |  |
+| `success` | boolean | no |  |
+
+### Example response
+
+```json
+{
+  "image": {},
+  "success": true
+}
+```
+
+## Pre-apply throws
+
+- `TARGET_NOT_FOUND`
+- `AMBIGUOUS_TARGET`
+- `INVALID_TARGET`
+- `CAPABILITY_UNAVAILABLE`
+
+## Non-applied failure codes
+
+- `NO_OP`
+
+## Raw schemas
+
+<Accordion title="Raw input schema">
+```json
+{
+  "additionalProperties": false,
+  "properties": {
+    "distances": {
+      "additionalProperties": false,
+      "properties": {
+        "distBottom": {
+          "type": "number"
+        },
+        "distLeft": {
+          "type": "number"
+        },
+        "distRight": {
+          "type": "number"
+        },
+        "distTop": {
+          "type": "number"
+        }
+      },
+      "type": "object"
+    },
+    "imageId": {
+      "type": "string"
+    }
+  },
+  "required": [
+    "imageId",
+    "distances"
+  ],
+  "type": "object"
+}
+```
+</Accordion>
+
+<Accordion title="Raw output schema">
+```json
+{
+  "additionalProperties": false,
+  "properties": {
+    "failure": {
+      "type": "object"
+    },
+    "image": {
+      "type": "object"
+    },
+    "success": {
+      "type": "boolean"
+    }
+  },
+  "type": "object"
+}
+```
+</Accordion>
+
+<Accordion title="Raw success schema">
+```json
+{
+  "additionalProperties": false,
+  "properties": {
+    "image": {
+      "type": "object"
+    },
+    "success": {
+      "const": true
+    }
+  },
+  "required": [
+    "success",
+    "image"
+  ],
+  "type": "object"
+}
+```
+</Accordion>
+
+<Accordion title="Raw failure schema">
+```json
+{
+  "additionalProperties": false,
+  "properties": {
+    "failure": {
+      "additionalProperties": false,
+      "properties": {
+        "code": {
+          "type": "string"
+        },
+        "message": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "code",
+        "message"
+      ],
+      "type": "object"
+    },
+    "success": {
+      "const": false
+    }
+  },
+  "required": [
+    "success",
+    "failure"
+  ],
+  "type": "object"
+}
+```
+</Accordion>

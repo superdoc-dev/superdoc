@@ -1,0 +1,110 @@
+---
+title: images.list
+sidebarTitle: images.list
+description: List all images in the document.
+---
+
+{/* GENERATED FILE: DO NOT EDIT. Regenerate via `pnpm run docapi:sync`. */}
+
+> Alpha: Document API is currently alpha and subject to breaking changes.
+
+## Summary
+
+List all images in the document.
+
+- Operation ID: `images.list`
+- API member path: `editor.doc.images.list(...)`
+- Mutates document: `no`
+- Idempotency: `idempotent`
+- Supports tracked mode: `no`
+- Supports dry run: `no`
+- Deterministic target resolution: `yes`
+
+## Expected result
+
+Returns an ImagesListResult with total count and image summaries.
+
+## Input fields
+
+| Field | Type | Required | Description |
+| --- | --- | --- | --- |
+| `limit` | integer | no |  |
+| `offset` | integer | no |  |
+
+### Example request
+
+```json
+{
+  "limit": 50,
+  "offset": 0
+}
+```
+
+## Output fields
+
+| Field | Type | Required | Description |
+| --- | --- | --- | --- |
+| `items` | object[] | yes |  |
+| `total` | integer | yes |  |
+
+### Example response
+
+```json
+{
+  "items": [
+    {}
+  ],
+  "total": 1
+}
+```
+
+## Pre-apply throws
+
+- None
+
+## Non-applied failure codes
+
+- None
+
+## Raw schemas
+
+<Accordion title="Raw input schema">
+```json
+{
+  "additionalProperties": false,
+  "properties": {
+    "limit": {
+      "type": "integer"
+    },
+    "offset": {
+      "type": "integer"
+    }
+  },
+  "type": "object"
+}
+```
+</Accordion>
+
+<Accordion title="Raw output schema">
+```json
+{
+  "additionalProperties": false,
+  "properties": {
+    "items": {
+      "items": {
+        "type": "object"
+      },
+      "type": "array"
+    },
+    "total": {
+      "type": "integer"
+    }
+  },
+  "required": [
+    "total",
+    "items"
+  ],
+  "type": "object"
+}
+```
+</Accordion>

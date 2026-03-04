@@ -15,7 +15,7 @@
 /* global btoa, XMLSerializer */
 
 import { EMFJS, WMFJS } from './rtfjs';
-import { base64ToUint8Array } from '../../../../helpers.js';
+import { dataUriToArrayBuffer } from '../../../../helpers.js';
 
 // Disable verbose logging from the renderers
 EMFJS.loggingEnabled(false);
@@ -74,39 +74,8 @@ const MM_ANISOTROPIC = 8;
 const EMF_SIGNATURE = 0x464d4520; // ' EMF'
 const EMF_PLUS_SIGNATURE = 0x2b464d45; // 'EMF+' inside EMR_COMMENT
 
-/**
- * Converts input data to an ArrayBuffer.
- *
- * Accepts:
- * - ArrayBuffer
- * - TypedArray / Buffer
- * - base64 string or data URI
- *
- * @param {string|ArrayBuffer|Uint8Array} data
- * @returns {ArrayBuffer}
- */
-function base64ToArrayBuffer(data) {
-  if (data instanceof ArrayBuffer) return data;
-  if (ArrayBuffer.isView(data)) return data.buffer.slice(data.byteOffset, data.byteOffset + data.byteLength);
-
-  if (typeof data !== 'string') {
-    throw new Error('Unsupported data type for conversion to ArrayBuffer');
-  }
-
-  // Handle both data URI format and raw base64
-  let base64 = data;
-
-  // Check if it's a data URI and extract the base64 portion
-  if (data.startsWith('data:')) {
-    const commaIndex = data.indexOf(',');
-    if (commaIndex === -1) {
-      throw new Error('Invalid data URI: missing base64 content');
-    }
-    base64 = data.substring(commaIndex + 1);
-  }
-
-  return base64ToUint8Array(base64).buffer;
-}
+// Re-export for local use — shared implementation lives in ../../../../helpers.js
+const base64ToArrayBuffer = dataUriToArrayBuffer;
 
 /**
  * Encodes a Uint8Array into base64 using chunked processing to avoid call stack overflows.

@@ -29,6 +29,18 @@ import type {
   ListsSetLevelRestartInput,
   ListsConvertToTextInput,
   ListsConvertToTextResult,
+  ListsApplyTemplateInput,
+  ListsApplyPresetInput,
+  ListsCaptureTemplateInput,
+  ListsCaptureTemplateResult,
+  ListsSetLevelNumberingInput,
+  ListsSetLevelBulletInput,
+  ListsSetLevelPictureBulletInput,
+  ListsSetLevelAlignmentInput,
+  ListsSetLevelIndentsInput,
+  ListsSetLevelTrailingCharacterInput,
+  ListsSetLevelMarkerFontInput,
+  ListsClearLevelOverridesInput,
 } from './lists.types.js';
 
 export type {
@@ -59,6 +71,18 @@ export type {
   ListsSetLevelRestartInput,
   ListsConvertToTextInput,
   ListsConvertToTextResult,
+  ListsApplyTemplateInput,
+  ListsApplyPresetInput,
+  ListsCaptureTemplateInput,
+  ListsCaptureTemplateResult,
+  ListsSetLevelNumberingInput,
+  ListsSetLevelBulletInput,
+  ListsSetLevelPictureBulletInput,
+  ListsSetLevelAlignmentInput,
+  ListsSetLevelIndentsInput,
+  ListsSetLevelTrailingCharacterInput,
+  ListsSetLevelMarkerFontInput,
+  ListsClearLevelOverridesInput,
 } from './lists.types.js';
 
 /**
@@ -84,7 +108,7 @@ export interface ListsAdapter {
   indent(input: ListTargetInput, options?: MutationOptions): ListsMutateItemResult;
   outdent(input: ListTargetInput, options?: MutationOptions): ListsMutateItemResult;
 
-  // SD-1272 new operations
+  // SD-1272 operations
   create(input: ListsCreateInput, options?: MutationOptions): ListsCreateResult;
   attach(input: ListsAttachInput, options?: MutationOptions): ListsMutateItemResult;
   detach(input: ListsDetachInput, options?: MutationOptions): ListsDetachResult;
@@ -97,9 +121,31 @@ export interface ListsAdapter {
   canContinuePrevious(input: ListsCanContinuePreviousInput): ListsCanContinuePreviousResult;
   setLevelRestart(input: ListsSetLevelRestartInput, options?: MutationOptions): ListsMutateItemResult;
   convertToText(input: ListsConvertToTextInput, options?: MutationOptions): ListsConvertToTextResult;
+
+  // SD-1973 formatting operations
+  applyTemplate(input: ListsApplyTemplateInput, options?: MutationOptions): ListsMutateItemResult;
+  applyPreset(input: ListsApplyPresetInput, options?: MutationOptions): ListsMutateItemResult;
+  captureTemplate(input: ListsCaptureTemplateInput): ListsCaptureTemplateResult;
+  setLevelNumbering(input: ListsSetLevelNumberingInput, options?: MutationOptions): ListsMutateItemResult;
+  setLevelBullet(input: ListsSetLevelBulletInput, options?: MutationOptions): ListsMutateItemResult;
+  setLevelPictureBullet(input: ListsSetLevelPictureBulletInput, options?: MutationOptions): ListsMutateItemResult;
+  setLevelAlignment(input: ListsSetLevelAlignmentInput, options?: MutationOptions): ListsMutateItemResult;
+  setLevelIndents(input: ListsSetLevelIndentsInput, options?: MutationOptions): ListsMutateItemResult;
+  setLevelTrailingCharacter(
+    input: ListsSetLevelTrailingCharacterInput,
+    options?: MutationOptions,
+  ): ListsMutateItemResult;
+  setLevelMarkerFont(input: ListsSetLevelMarkerFontInput, options?: MutationOptions): ListsMutateItemResult;
+  clearLevelOverrides(input: ListsClearLevelOverridesInput, options?: MutationOptions): ListsMutateItemResult;
 }
 
-export type ListsApi = ListsAdapter;
+export type ListsApi = ListsAdapter & {
+  /** Convenience wrapper — maps ordered/bullet to the default preset via `lists.applyPreset`. */
+  setType(
+    input: { target: ListsApplyPresetInput['target']; kind: 'ordered' | 'bullet' },
+    options?: MutationOptions,
+  ): ListsMutateItemResult;
+};
 
 // ---------------------------------------------------------------------------
 // Execute wrappers — discovery
@@ -145,7 +191,7 @@ export function executeListsOutdent(
 }
 
 // ---------------------------------------------------------------------------
-// Execute wrappers — SD-1272 new operations
+// Execute wrappers — SD-1272 operations
 // ---------------------------------------------------------------------------
 
 export function executeListsCreate(
@@ -248,4 +294,106 @@ export function executeListsConvertToText(
 ): ListsConvertToTextResult {
   validateListTarget(input, 'lists.convertToText');
   return adapter.convertToText(input, normalizeMutationOptions(options));
+}
+
+// ---------------------------------------------------------------------------
+// Execute wrappers — SD-1973 formatting operations
+// ---------------------------------------------------------------------------
+
+export function executeListsApplyTemplate(
+  adapter: ListsAdapter,
+  input: ListsApplyTemplateInput,
+  options?: MutationOptions,
+): ListsMutateItemResult {
+  validateListTarget(input, 'lists.applyTemplate');
+  return adapter.applyTemplate(input, normalizeMutationOptions(options));
+}
+
+export function executeListsApplyPreset(
+  adapter: ListsAdapter,
+  input: ListsApplyPresetInput,
+  options?: MutationOptions,
+): ListsMutateItemResult {
+  validateListTarget(input, 'lists.applyPreset');
+  return adapter.applyPreset(input, normalizeMutationOptions(options));
+}
+
+export function executeListsCaptureTemplate(
+  adapter: ListsAdapter,
+  input: ListsCaptureTemplateInput,
+): ListsCaptureTemplateResult {
+  validateListTarget(input, 'lists.captureTemplate');
+  return adapter.captureTemplate(input);
+}
+
+export function executeListsSetLevelNumbering(
+  adapter: ListsAdapter,
+  input: ListsSetLevelNumberingInput,
+  options?: MutationOptions,
+): ListsMutateItemResult {
+  validateListTarget(input, 'lists.setLevelNumbering');
+  return adapter.setLevelNumbering(input, normalizeMutationOptions(options));
+}
+
+export function executeListsSetLevelBullet(
+  adapter: ListsAdapter,
+  input: ListsSetLevelBulletInput,
+  options?: MutationOptions,
+): ListsMutateItemResult {
+  validateListTarget(input, 'lists.setLevelBullet');
+  return adapter.setLevelBullet(input, normalizeMutationOptions(options));
+}
+
+export function executeListsSetLevelPictureBullet(
+  adapter: ListsAdapter,
+  input: ListsSetLevelPictureBulletInput,
+  options?: MutationOptions,
+): ListsMutateItemResult {
+  validateListTarget(input, 'lists.setLevelPictureBullet');
+  return adapter.setLevelPictureBullet(input, normalizeMutationOptions(options));
+}
+
+export function executeListsSetLevelAlignment(
+  adapter: ListsAdapter,
+  input: ListsSetLevelAlignmentInput,
+  options?: MutationOptions,
+): ListsMutateItemResult {
+  validateListTarget(input, 'lists.setLevelAlignment');
+  return adapter.setLevelAlignment(input, normalizeMutationOptions(options));
+}
+
+export function executeListsSetLevelIndents(
+  adapter: ListsAdapter,
+  input: ListsSetLevelIndentsInput,
+  options?: MutationOptions,
+): ListsMutateItemResult {
+  validateListTarget(input, 'lists.setLevelIndents');
+  return adapter.setLevelIndents(input, normalizeMutationOptions(options));
+}
+
+export function executeListsSetLevelTrailingCharacter(
+  adapter: ListsAdapter,
+  input: ListsSetLevelTrailingCharacterInput,
+  options?: MutationOptions,
+): ListsMutateItemResult {
+  validateListTarget(input, 'lists.setLevelTrailingCharacter');
+  return adapter.setLevelTrailingCharacter(input, normalizeMutationOptions(options));
+}
+
+export function executeListsSetLevelMarkerFont(
+  adapter: ListsAdapter,
+  input: ListsSetLevelMarkerFontInput,
+  options?: MutationOptions,
+): ListsMutateItemResult {
+  validateListTarget(input, 'lists.setLevelMarkerFont');
+  return adapter.setLevelMarkerFont(input, normalizeMutationOptions(options));
+}
+
+export function executeListsClearLevelOverrides(
+  adapter: ListsAdapter,
+  input: ListsClearLevelOverridesInput,
+  options?: MutationOptions,
+): ListsMutateItemResult {
+  validateListTarget(input, 'lists.clearLevelOverrides');
+  return adapter.clearLevelOverrides(input, normalizeMutationOptions(options));
 }

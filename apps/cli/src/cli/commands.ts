@@ -167,6 +167,7 @@ function buildHelpText(): string {
     'comments',
     'trackChanges',
     'toc',
+    'images',
     'history',
     'session',
   ];

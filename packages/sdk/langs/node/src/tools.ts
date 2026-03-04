@@ -2,7 +2,7 @@ import { readFile } from 'node:fs/promises';
 import { readFileSync } from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
-import { CONTRACT, type ContractOperation } from './generated/contract.js';
+import { CONTRACT, type ContractOperationEntry } from './generated/contract.js';
 import type { InvokeOptions } from './runtime/process.js';
 import { SuperDocCliError } from './runtime/errors.js';
 
@@ -18,6 +18,7 @@ export type ToolGroup =
   | 'comments'
   | 'trackChanges'
   | 'toc'
+  | 'images'
   | 'history'
   | 'session';
 
@@ -177,7 +178,7 @@ export function getAvailableGroups(): ToolGroup[] {
   return policy.groups as ToolGroup[];
 }
 
-const OPERATION_INDEX: Record<string, ContractOperation> = Object.fromEntries(
+const OPERATION_INDEX: Record<string, ContractOperationEntry> = Object.fromEntries(
   Object.entries(CONTRACT.operations).map(([id, op]) => [id, op]),
 );
 
@@ -188,7 +189,7 @@ function validateDispatchArgs(operationId: string, args: Record<string, unknown>
   }
 
   // Unknown-param rejection
-  const allowedParams = new Set<string>(operation.params.map((param) => String(param.name)));
+  const allowedParams = new Set<string>(operation.params.map((param: { name: string }) => String(param.name)));
   for (const key of Object.keys(args)) {
     if (!allowedParams.has(key)) {
       invalidArgument(`Unexpected parameter ${key} for ${operationId}.`);

@@ -45,14 +45,6 @@ export interface CompiledPlan {
   compiledRevision: string;
 }
 
-interface CompilePlanOptions {
-  /**
-   * Enforce V3 text-ref revision checks during ref resolution.
-   * When false, stale ref revisions are tolerated and resolution is best-effort.
-   */
-  enforceRefRevision?: boolean;
-}
-
 function isAssertStep(step: MutationStep): step is AssertStep {
   return step.op === 'assert';
 }
@@ -588,16 +580,9 @@ function decodeTextRefPayload(encoded: string, stepId: string): unknown {
  * Single-segment refs produce a CompiledRangeTarget; multi-segment refs
  * produce a CompiledSpanTarget.
  */
-function resolveV3TextRef(
-  editor: Editor,
-  index: BlockIndex,
-  step: MutationStep,
-  refData: TextRefV3,
-  options?: CompilePlanOptions,
-): CompiledTarget[] {
+function resolveV3TextRef(editor: Editor, index: BlockIndex, step: MutationStep, refData: TextRefV3): CompiledTarget[] {
   const currentRevision = getRevision(editor);
-  const enforceRefRevision = options?.enforceRefRevision ?? true;
-  if (enforceRefRevision && refData.rev !== currentRevision) {
+  if (refData.rev !== currentRevision) {
     throw planError(
       'REVISION_MISMATCH',
       `Text ref is ephemeral and revision-scoped. Re-run query.match to obtain a fresh handle.ref for revision ${currentRevision}.`,
@@ -644,13 +629,7 @@ function resolveV3TextRef(
   return [buildSpanTarget(editor, index, step, segments, refData.matchId)];
 }
 
-function resolveTextRef(
-  editor: Editor,
-  index: BlockIndex,
-  step: MutationStep,
-  ref: string,
-  options?: CompilePlanOptions,
-): CompiledTarget[] {
+function resolveTextRef(editor: Editor, index: BlockIndex, step: MutationStep, ref: string): CompiledTarget[] {
   const encoded = ref.slice(5); // strip 'text:' prefix
   const payload = decodeTextRefPayload(encoded, step.id);
 
@@ -658,7 +637,7 @@ function resolveTextRef(
     throw planError('INVALID_INPUT', 'only V3 text refs are supported', step.id);
   }
 
-  return resolveV3TextRef(editor, index, step, payload, options);
+  return resolveV3TextRef(editor, index, step, payload);
 }
 
 function resolveBlockRef(editor: Editor, index: BlockIndex, step: MutationStep, ref: string): CompiledTarget[] {
@@ -682,13 +661,7 @@ function resolveBlockRef(editor: Editor, index: BlockIndex, step: MutationStep, 
 // Ref handler registry — dispatches by prefix (C4)
 // ---------------------------------------------------------------------------
 
-type RefHandler = (
-  editor: Editor,
-  index: BlockIndex,
-  step: MutationStep,
-  ref: string,
-  options?: CompilePlanOptions,
-) => CompiledTarget[];
+type RefHandler = (editor: Editor, index: BlockIndex, step: MutationStep, ref: string) => CompiledTarget[];
 
 /**
  * Prefix-based ref handler registry.
@@ -721,42 +694,25 @@ const REF_HANDLERS: Array<{ prefix: string; handler: RefHandler }> = [
   { prefix: '', handler: resolveBlockRef },
 ];
 
-function dispatchRefHandler(
-  editor: Editor,
-  index: BlockIndex,
-  step: MutationStep,
-  ref: string,
-  options?: CompilePlanOptions,
-): CompiledTarget[] {
+function dispatchRefHandler(editor: Editor, index: BlockIndex, step: MutationStep, ref: string): CompiledTarget[] {
   for (const entry of REF_HANDLERS) {
     if (entry.prefix === '' || ref.startsWith(entry.prefix)) {
-      return entry.handler(editor, index, step, ref, options);
+      return entry.handler(editor, index, step, ref);
     }
   }
   // Unreachable — the default handler (empty prefix) always matches
   return resolveBlockRef(editor, index, step, ref);
 }
 
-function resolveRefTargets(
-  editor: Editor,
-  index: BlockIndex,
-  step: MutationStep,
-  where: RefWhere,
-  options?: CompilePlanOptions,
-): CompiledTarget[] {
-  return dispatchRefHandler(editor, index, step, where.ref, options);
+function resolveRefTargets(editor: Editor, index: BlockIndex, step: MutationStep, where: RefWhere): CompiledTarget[] {
+  return dispatchRefHandler(editor, index, step, where.ref);
 }
 
 // ---------------------------------------------------------------------------
 // Step target resolution
 // ---------------------------------------------------------------------------
 
-function resolveStepTargets(
-  editor: Editor,
-  index: BlockIndex,
-  step: MutationStep,
-  options?: CompilePlanOptions,
-): CompiledTarget[] {
+function resolveStepTargets(editor: Editor, index: BlockIndex, step: MutationStep): CompiledTarget[] {
   const where = step.where;
   const refWhere = isRefWhere(where) ? where : undefined;
   const selectWhere = isSelectWhere(where) ? where : undefined;
@@ -764,7 +720,7 @@ function resolveStepTargets(
   let targets: CompiledTarget[];
 
   if (refWhere) {
-    targets = resolveRefTargets(editor, index, step, refWhere, options);
+    targets = resolveRefTargets(editor, index, step, refWhere);
   } else if (selectWhere) {
     const resolved = resolveTextSelector(editor, index, selectWhere.select, selectWhere.within, step.id);
     targets = resolved.addresses.map((addr) => {
@@ -1090,7 +1046,7 @@ function assertNoDuplicateBlockIds(index: BlockIndex): void {
   }
 }
 
-export function compilePlan(editor: Editor, steps: MutationStep[], options?: CompilePlanOptions): CompiledPlan {
+export function compilePlan(editor: Editor, steps: MutationStep[]): CompiledPlan {
   // D8: plan step limit
   if (steps.length > MAX_PLAN_STEPS) {
     throw planError('INVALID_INPUT', `plan contains ${steps.length} steps, maximum is ${MAX_PLAN_STEPS}`);
@@ -1144,7 +1100,7 @@ export function compilePlan(editor: Editor, steps: MutationStep[], options?: Com
       validateCreateStepPosition(step);
     }
 
-    const targets = resolveStepTargets(editor, index, step, options);
+    const targets = resolveStepTargets(editor, index, step);
 
     // Validate insertion context for create ops (B0 invariant 5)
     if (isCreateOp(step.op) && targets.length > 0) {

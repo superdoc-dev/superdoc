@@ -12,7 +12,7 @@ from .generated.contract import OPERATION_INDEX
 ToolProvider = Literal['openai', 'anthropic', 'vercel', 'generic']
 ToolGroup = Literal[
     'core', 'format', 'create', 'tables', 'sections',
-    'lists', 'comments', 'trackChanges', 'toc', 'history', 'session',
+    'lists', 'comments', 'trackChanges', 'toc', 'images', 'history', 'session',
 ]
 ToolChooserMode = Literal['essential', 'all']
 

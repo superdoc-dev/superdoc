@@ -1,0 +1,245 @@
+---
+title: images.move
+sidebarTitle: images.move
+description: Move an image to a new location in the document.
+---
+
+{/* GENERATED FILE: DO NOT EDIT. Regenerate via `pnpm run docapi:sync`. */}
+
+> Alpha: Document API is currently alpha and subject to breaking changes.
+
+## Summary
+
+Move an image to a new location in the document.
+
+- Operation ID: `images.move`
+- API member path: `editor.doc.images.move(...)`
+- Mutates document: `yes`
+- Idempotency: `non-idempotent`
+- Supports tracked mode: `no`
+- Supports dry run: `yes`
+- Deterministic target resolution: `yes`
+
+## Expected result
+
+Returns an ImagesMutationResult indicating success or failure.
+
+## Input fields
+
+| Field | Type | Required | Description |
+| --- | --- | --- | --- |
+| `imageId` | string | yes |  |
+| `to` | object(kind="documentStart") \\| object(kind="documentEnd") \\| object(kind="before") \\| object(kind="after") \\| object(kind="inParagraph") | yes | One of: object(kind="documentStart"), object(kind="documentEnd"), object(kind="before"), object(kind="after"), object(kind="inParagraph") |
+
+### Example request
+
+```json
+{
+  "imageId": "example",
+  "to": {
+    "kind": "documentStart"
+  }
+}
+```
+
+## Output fields
+
+| Field | Type | Required | Description |
+| --- | --- | --- | --- |
+| `failure` | object | no |  |
+| `image` | object | no |  |
+| `success` | boolean | no |  |
+
+### Example response
+
+```json
+{
+  "image": {},
+  "success": true
+}
+```
+
+## Pre-apply throws
+
+- `TARGET_NOT_FOUND`
+- `AMBIGUOUS_TARGET`
+- `INVALID_TARGET`
+- `CAPABILITY_UNAVAILABLE`
+
+## Non-applied failure codes
+
+- `INVALID_TARGET`
+
+## Raw schemas
+
+<Accordion title="Raw input schema">
+```json
+{
+  "additionalProperties": false,
+  "properties": {
+    "imageId": {
+      "type": "string"
+    },
+    "to": {
+      "oneOf": [
+        {
+          "additionalProperties": false,
+          "properties": {
+            "kind": {
+              "const": "documentStart"
+            }
+          },
+          "required": [
+            "kind"
+          ],
+          "type": "object"
+        },
+        {
+          "additionalProperties": false,
+          "properties": {
+            "kind": {
+              "const": "documentEnd"
+            }
+          },
+          "required": [
+            "kind"
+          ],
+          "type": "object"
+        },
+        {
+          "additionalProperties": false,
+          "properties": {
+            "kind": {
+              "const": "before"
+            },
+            "target": {
+              "$ref": "#/$defs/BlockNodeAddress"
+            }
+          },
+          "required": [
+            "kind",
+            "target"
+          ],
+          "type": "object"
+        },
+        {
+          "additionalProperties": false,
+          "properties": {
+            "kind": {
+              "const": "after"
+            },
+            "target": {
+              "$ref": "#/$defs/BlockNodeAddress"
+            }
+          },
+          "required": [
+            "kind",
+            "target"
+          ],
+          "type": "object"
+        },
+        {
+          "additionalProperties": false,
+          "properties": {
+            "kind": {
+              "const": "inParagraph"
+            },
+            "offset": {
+              "type": "integer"
+            },
+            "target": {
+              "$ref": "#/$defs/BlockNodeAddress"
+            }
+          },
+          "required": [
+            "kind",
+            "target"
+          ],
+          "type": "object"
+        }
+      ]
+    }
+  },
+  "required": [
+    "imageId",
+    "to"
+  ],
+  "type": "object"
+}
+```
+</Accordion>
+
+<Accordion title="Raw output schema">
+```json
+{
+  "additionalProperties": false,
+  "properties": {
+    "failure": {
+      "type": "object"
+    },
+    "image": {
+      "type": "object"
+    },
+    "success": {
+      "type": "boolean"
+    }
+  },
+  "type": "object"
+}
+```
+</Accordion>
+
+<Accordion title="Raw success schema">
+```json
+{
+  "additionalProperties": false,
+  "properties": {
+    "image": {
+      "type": "object"
+    },
+    "success": {
+      "const": true
+    }
+  },
+  "required": [
+    "success",
+    "image"
+  ],
+  "type": "object"
+}
+```
+</Accordion>
+
+<Accordion title="Raw failure schema">
+```json
+{
+  "additionalProperties": false,
+  "properties": {
+    "failure": {
+      "additionalProperties": false,
+      "properties": {
+        "code": {
+          "type": "string"
+        },
+        "message": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "code",
+        "message"
+      ],
+      "type": "object"
+    },
+    "success": {
+      "const": false
+    }
+  },
+  "required": [
+    "success",
+    "failure"
+  ],
+  "type": "object"
+}
+```
+</Accordion>

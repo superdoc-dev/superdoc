@@ -1,6 +1,7 @@
 // @ts-expect-error - preset-geometry package may not have type definitions
 import { getPresetShapeSvg } from '@superdoc/preset-geometry';
 import { createGradient, createTextElement } from '../shared/svg-utils.js';
+import { OOXML_Z_INDEX_BASE } from '@extensions/shared/constants.js';
 
 export class ShapeGroupView {
   node;
@@ -128,7 +129,7 @@ export class ShapeGroupView {
       // Use relativeHeight from OOXML for proper z-ordering of overlapping elements
       const relativeHeight = originalAttributes?.relativeHeight;
       if (relativeHeight != null) {
-        const zIndex = Math.floor(relativeHeight / 1000000);
+        const zIndex = Math.max(0, relativeHeight - OOXML_Z_INDEX_BASE);
         container.style.zIndex = zIndex.toString();
       } else {
         container.style.zIndex = '1';

@@ -12,6 +12,7 @@ import {
   LINE_RULES,
 } from '../paragraphs/paragraphs.js';
 import { buildPatchSchema, buildStateSchema } from '../styles/index.js';
+import { Z_ORDER_RELATIVE_HEIGHT_MAX, Z_ORDER_RELATIVE_HEIGHT_MIN } from '../images/z-order.js';
 
 type JsonSchema = Record<string, unknown>;
 
@@ -2500,6 +2501,230 @@ const operationSchemas: Record<OperationId, OperationSchemaSet> = {
     success: objectSchema({ success: { const: true }, paragraph: ref('ParagraphAddress') }, ['success', 'paragraph']),
     failure: listsFailureSchemaFor('lists.convertToText'),
   },
+
+  // SD-1973 — List formatting and templates
+  'lists.applyTemplate': {
+    input: objectSchema(
+      {
+        target: listItemAddressSchema,
+        template: objectSchema(
+          {
+            version: { const: 1 },
+            levels: arraySchema(
+              objectSchema(
+                {
+                  level: { type: 'integer', minimum: 0, maximum: 8 },
+                  numFmt: { type: 'string' },
+                  lvlText: { type: 'string' },
+                  start: { type: 'integer' },
+                  alignment: { enum: ['left', 'center', 'right'] },
+                  indents: objectSchema({
+                    left: { type: 'integer' },
+                    hanging: { type: 'integer' },
+                    firstLine: { type: 'integer' },
+                  }),
+                  trailingCharacter: { enum: ['tab', 'space', 'nothing'] },
+                  markerFont: { type: 'string' },
+                  pictureBulletId: { type: 'integer' },
+                },
+                ['level'],
+              ),
+            ),
+          },
+          ['version', 'levels'],
+        ),
+        levels: arraySchema({ type: 'integer', minimum: 0, maximum: 8 }),
+      },
+      ['target', 'template'],
+    ),
+    output: listsMutateItemResultSchemaFor('lists.applyTemplate'),
+    success: listsMutateItemSuccessSchema,
+    failure: listsFailureSchemaFor('lists.applyTemplate'),
+  },
+  'lists.applyPreset': {
+    input: objectSchema(
+      {
+        target: listItemAddressSchema,
+        preset: {
+          enum: [
+            'decimal',
+            'decimalParenthesis',
+            'lowerLetter',
+            'upperLetter',
+            'lowerRoman',
+            'upperRoman',
+            'disc',
+            'circle',
+            'square',
+            'dash',
+          ],
+        },
+        levels: arraySchema({ type: 'integer', minimum: 0, maximum: 8 }),
+      },
+      ['target', 'preset'],
+    ),
+    output: listsMutateItemResultSchemaFor('lists.applyPreset'),
+    success: listsMutateItemSuccessSchema,
+    failure: listsFailureSchemaFor('lists.applyPreset'),
+  },
+  'lists.captureTemplate': (() => {
+    const successSchema = objectSchema(
+      {
+        success: { const: true },
+        template: objectSchema(
+          {
+            version: { const: 1 },
+            levels: arraySchema(
+              objectSchema(
+                {
+                  level: { type: 'integer', minimum: 0, maximum: 8 },
+                  numFmt: { type: 'string' },
+                  lvlText: { type: 'string' },
+                  start: { type: 'integer' },
+                  alignment: { enum: ['left', 'center', 'right'] },
+                  indents: objectSchema({
+                    left: { type: 'integer' },
+                    hanging: { type: 'integer' },
+                    firstLine: { type: 'integer' },
+                  }),
+                  trailingCharacter: { enum: ['tab', 'space', 'nothing'] },
+                  markerFont: { type: 'string' },
+                  pictureBulletId: { type: 'integer' },
+                },
+                ['level'],
+              ),
+            ),
+          },
+          ['version', 'levels'],
+        ),
+      },
+      ['success', 'template'],
+    );
+    return {
+      input: objectSchema(
+        {
+          target: listItemAddressSchema,
+          levels: arraySchema({ type: 'integer', minimum: 0, maximum: 8 }),
+        },
+        ['target'],
+      ),
+      output: { oneOf: [successSchema, listsFailureSchemaFor('lists.captureTemplate')] },
+      success: successSchema,
+      failure: listsFailureSchemaFor('lists.captureTemplate'),
+    };
+  })(),
+  'lists.setLevelNumbering': {
+    input: objectSchema(
+      {
+        target: listItemAddressSchema,
+        level: { type: 'integer', minimum: 0, maximum: 8 },
+        numFmt: { type: 'string' },
+        lvlText: { type: 'string' },
+        start: { type: 'integer' },
+      },
+      ['target', 'level', 'numFmt', 'lvlText'],
+    ),
+    output: listsMutateItemResultSchemaFor('lists.setLevelNumbering'),
+    success: listsMutateItemSuccessSchema,
+    failure: listsFailureSchemaFor('lists.setLevelNumbering'),
+  },
+  'lists.setLevelBullet': {
+    input: objectSchema(
+      {
+        target: listItemAddressSchema,
+        level: { type: 'integer', minimum: 0, maximum: 8 },
+        markerText: { type: 'string' },
+      },
+      ['target', 'level', 'markerText'],
+    ),
+    output: listsMutateItemResultSchemaFor('lists.setLevelBullet'),
+    success: listsMutateItemSuccessSchema,
+    failure: listsFailureSchemaFor('lists.setLevelBullet'),
+  },
+  'lists.setLevelPictureBullet': {
+    input: objectSchema(
+      {
+        target: listItemAddressSchema,
+        level: { type: 'integer', minimum: 0, maximum: 8 },
+        pictureBulletId: { type: 'integer' },
+      },
+      ['target', 'level', 'pictureBulletId'],
+    ),
+    output: listsMutateItemResultSchemaFor('lists.setLevelPictureBullet'),
+    success: listsMutateItemSuccessSchema,
+    failure: listsFailureSchemaFor('lists.setLevelPictureBullet'),
+  },
+  'lists.setLevelAlignment': {
+    input: objectSchema(
+      {
+        target: listItemAddressSchema,
+        level: { type: 'integer', minimum: 0, maximum: 8 },
+        alignment: { enum: ['left', 'center', 'right'] },
+      },
+      ['target', 'level', 'alignment'],
+    ),
+    output: listsMutateItemResultSchemaFor('lists.setLevelAlignment'),
+    success: listsMutateItemSuccessSchema,
+    failure: listsFailureSchemaFor('lists.setLevelAlignment'),
+  },
+  'lists.setLevelIndents': {
+    input: {
+      type: 'object',
+      properties: {
+        target: listItemAddressSchema,
+        level: { type: 'integer', minimum: 0, maximum: 8 },
+        left: { type: 'integer' },
+        hanging: { type: 'integer' },
+        firstLine: { type: 'integer' },
+      },
+      required: ['target', 'level'],
+      additionalProperties: false,
+      anyOf: [{ required: ['left'] }, { required: ['hanging'] }, { required: ['firstLine'] }],
+      not: { required: ['hanging', 'firstLine'] },
+    },
+    output: listsMutateItemResultSchemaFor('lists.setLevelIndents'),
+    success: listsMutateItemSuccessSchema,
+    failure: listsFailureSchemaFor('lists.setLevelIndents'),
+  },
+  'lists.setLevelTrailingCharacter': {
+    input: objectSchema(
+      {
+        target: listItemAddressSchema,
+        level: { type: 'integer', minimum: 0, maximum: 8 },
+        trailingCharacter: { enum: ['tab', 'space', 'nothing'] },
+      },
+      ['target', 'level', 'trailingCharacter'],
+    ),
+    output: listsMutateItemResultSchemaFor('lists.setLevelTrailingCharacter'),
+    success: listsMutateItemSuccessSchema,
+    failure: listsFailureSchemaFor('lists.setLevelTrailingCharacter'),
+  },
+  'lists.setLevelMarkerFont': {
+    input: objectSchema(
+      {
+        target: listItemAddressSchema,
+        level: { type: 'integer', minimum: 0, maximum: 8 },
+        fontFamily: { type: 'string' },
+      },
+      ['target', 'level', 'fontFamily'],
+    ),
+    output: listsMutateItemResultSchemaFor('lists.setLevelMarkerFont'),
+    success: listsMutateItemSuccessSchema,
+    failure: listsFailureSchemaFor('lists.setLevelMarkerFont'),
+  },
+  'lists.clearLevelOverrides': {
+    input: objectSchema(
+      {
+        target: listItemAddressSchema,
+        level: { type: 'integer', minimum: 0, maximum: 8 },
+      },
+      ['target', 'level'],
+    ),
+    output: listsMutateItemResultSchemaFor('lists.clearLevelOverrides'),
+    success: listsMutateItemSuccessSchema,
+    failure: listsFailureSchemaFor('lists.clearLevelOverrides'),
+  },
+
   'comments.create': {
     input: objectSchema(
       {
@@ -3772,6 +3997,279 @@ const operationSchemas: Record<OperationId, OperationSchemaSet> = {
     output: tocEntryMutationResultSchema(),
     success: tocEntryMutationSuccessSchema,
     failure: tocEntryMutationFailureSchema,
+  },
+
+  // --- images ---
+
+  // Shared image location schema — discriminated union on `kind`.
+  // Used by create.image (at) and images.move (to).
+
+  'create.image': {
+    input: objectSchema(
+      {
+        src: { type: 'string' },
+        alt: { type: 'string' },
+        title: { type: 'string' },
+        size: objectSchema({ width: { type: 'number' }, height: { type: 'number' } }),
+        at: {
+          oneOf: [
+            objectSchema({ kind: { const: 'documentStart' } }, ['kind']),
+            objectSchema({ kind: { const: 'documentEnd' } }, ['kind']),
+            objectSchema({ kind: { const: 'before' }, target: blockNodeAddressSchema }, ['kind', 'target']),
+            objectSchema({ kind: { const: 'after' }, target: blockNodeAddressSchema }, ['kind', 'target']),
+            objectSchema(
+              { kind: { const: 'inParagraph' }, target: blockNodeAddressSchema, offset: { type: 'integer' } },
+              ['kind', 'target'],
+            ),
+          ],
+        },
+      },
+      ['src'],
+    ),
+    output: objectSchema({ success: { type: 'boolean' }, image: { type: 'object' }, failure: { type: 'object' } }),
+    success: objectSchema({ success: { const: true }, image: { type: 'object' } }, ['success', 'image']),
+    failure: objectSchema(
+      {
+        success: { const: false },
+        failure: objectSchema({ code: { enum: ['INVALID_TARGET', 'INVALID_INPUT'] }, message: { type: 'string' } }, [
+          'code',
+          'message',
+        ]),
+      },
+      ['success', 'failure'],
+    ),
+  },
+  'images.list': {
+    input: objectSchema({ offset: { type: 'integer' }, limit: { type: 'integer' } }),
+    output: objectSchema({ total: { type: 'integer' }, items: arraySchema({ type: 'object' }) }, ['total', 'items']),
+  },
+  'images.get': {
+    input: objectSchema({ imageId: { type: 'string' } }, ['imageId']),
+    output: { type: 'object' as const },
+  },
+  'images.delete': {
+    input: objectSchema({ imageId: { type: 'string' } }, ['imageId']),
+    output: objectSchema({ success: { type: 'boolean' }, image: { type: 'object' }, failure: { type: 'object' } }),
+    success: objectSchema({ success: { const: true }, image: { type: 'object' } }, ['success', 'image']),
+    failure: objectSchema(
+      {
+        success: { const: false },
+        failure: objectSchema({ code: { type: 'string' }, message: { type: 'string' } }, ['code', 'message']),
+      },
+      ['success', 'failure'],
+    ),
+  },
+  'images.move': {
+    input: objectSchema(
+      {
+        imageId: { type: 'string' },
+        to: {
+          oneOf: [
+            objectSchema({ kind: { const: 'documentStart' } }, ['kind']),
+            objectSchema({ kind: { const: 'documentEnd' } }, ['kind']),
+            objectSchema({ kind: { const: 'before' }, target: blockNodeAddressSchema }, ['kind', 'target']),
+            objectSchema({ kind: { const: 'after' }, target: blockNodeAddressSchema }, ['kind', 'target']),
+            objectSchema(
+              { kind: { const: 'inParagraph' }, target: blockNodeAddressSchema, offset: { type: 'integer' } },
+              ['kind', 'target'],
+            ),
+          ],
+        },
+      },
+      ['imageId', 'to'],
+    ),
+    output: objectSchema({ success: { type: 'boolean' }, image: { type: 'object' }, failure: { type: 'object' } }),
+    success: objectSchema({ success: { const: true }, image: { type: 'object' } }, ['success', 'image']),
+    failure: objectSchema(
+      {
+        success: { const: false },
+        failure: objectSchema({ code: { type: 'string' }, message: { type: 'string' } }, ['code', 'message']),
+      },
+      ['success', 'failure'],
+    ),
+  },
+  'images.convertToInline': {
+    input: objectSchema({ imageId: { type: 'string' } }, ['imageId']),
+    output: objectSchema({ success: { type: 'boolean' }, image: { type: 'object' }, failure: { type: 'object' } }),
+    success: objectSchema({ success: { const: true }, image: { type: 'object' } }, ['success', 'image']),
+    failure: objectSchema(
+      {
+        success: { const: false },
+        failure: objectSchema({ code: { type: 'string' }, message: { type: 'string' } }, ['code', 'message']),
+      },
+      ['success', 'failure'],
+    ),
+  },
+  'images.convertToFloating': {
+    input: objectSchema({ imageId: { type: 'string' } }, ['imageId']),
+    output: objectSchema({ success: { type: 'boolean' }, image: { type: 'object' }, failure: { type: 'object' } }),
+    success: objectSchema({ success: { const: true }, image: { type: 'object' } }, ['success', 'image']),
+    failure: objectSchema(
+      {
+        success: { const: false },
+        failure: objectSchema({ code: { type: 'string' }, message: { type: 'string' } }, ['code', 'message']),
+      },
+      ['success', 'failure'],
+    ),
+  },
+  'images.setSize': {
+    input: objectSchema(
+      {
+        imageId: { type: 'string' },
+        size: objectSchema(
+          {
+            width: { type: 'number', exclusiveMinimum: 0 },
+            height: { type: 'number', exclusiveMinimum: 0 },
+            unit: { type: 'string', enum: ['px', 'pt', 'twip'] },
+          },
+          ['width', 'height'],
+        ),
+      },
+      ['imageId', 'size'],
+    ),
+    output: objectSchema({ success: { type: 'boolean' }, image: { type: 'object' }, failure: { type: 'object' } }),
+    success: objectSchema({ success: { const: true }, image: { type: 'object' } }, ['success', 'image']),
+    failure: objectSchema(
+      {
+        success: { const: false },
+        failure: objectSchema({ code: { type: 'string' }, message: { type: 'string' } }, ['code', 'message']),
+      },
+      ['success', 'failure'],
+    ),
+  },
+  'images.setWrapType': {
+    input: objectSchema(
+      {
+        imageId: { type: 'string' },
+        type: { type: 'string', enum: ['None', 'Square', 'Through', 'Tight', 'TopAndBottom', 'Inline'] },
+      },
+      ['imageId', 'type'],
+    ),
+    output: objectSchema({ success: { type: 'boolean' }, image: { type: 'object' }, failure: { type: 'object' } }),
+    success: objectSchema({ success: { const: true }, image: { type: 'object' } }, ['success', 'image']),
+    failure: objectSchema(
+      {
+        success: { const: false },
+        failure: objectSchema({ code: { type: 'string' }, message: { type: 'string' } }, ['code', 'message']),
+      },
+      ['success', 'failure'],
+    ),
+  },
+  'images.setWrapSide': {
+    input: objectSchema(
+      { imageId: { type: 'string' }, side: { type: 'string', enum: ['bothSides', 'left', 'right', 'largest'] } },
+      ['imageId', 'side'],
+    ),
+    output: objectSchema({ success: { type: 'boolean' }, image: { type: 'object' }, failure: { type: 'object' } }),
+    success: objectSchema({ success: { const: true }, image: { type: 'object' } }, ['success', 'image']),
+    failure: objectSchema(
+      {
+        success: { const: false },
+        failure: objectSchema({ code: { type: 'string' }, message: { type: 'string' } }, ['code', 'message']),
+      },
+      ['success', 'failure'],
+    ),
+  },
+  'images.setWrapDistances': {
+    input: objectSchema(
+      {
+        imageId: { type: 'string' },
+        distances: objectSchema({
+          distTop: { type: 'number' },
+          distBottom: { type: 'number' },
+          distLeft: { type: 'number' },
+          distRight: { type: 'number' },
+        }),
+      },
+      ['imageId', 'distances'],
+    ),
+    output: objectSchema({ success: { type: 'boolean' }, image: { type: 'object' }, failure: { type: 'object' } }),
+    success: objectSchema({ success: { const: true }, image: { type: 'object' } }, ['success', 'image']),
+    failure: objectSchema(
+      {
+        success: { const: false },
+        failure: objectSchema({ code: { type: 'string' }, message: { type: 'string' } }, ['code', 'message']),
+      },
+      ['success', 'failure'],
+    ),
+  },
+  'images.setPosition': {
+    input: objectSchema(
+      {
+        imageId: { type: 'string' },
+        position: objectSchema({
+          hRelativeFrom: { type: 'string' },
+          vRelativeFrom: { type: 'string' },
+          alignH: { type: 'string' },
+          alignV: { type: 'string' },
+          marginOffset: objectSchema({
+            horizontal: { type: 'number' },
+            top: { type: 'number' },
+          }),
+        }),
+      },
+      ['imageId', 'position'],
+    ),
+    output: objectSchema({ success: { type: 'boolean' }, image: { type: 'object' }, failure: { type: 'object' } }),
+    success: objectSchema({ success: { const: true }, image: { type: 'object' } }, ['success', 'image']),
+    failure: objectSchema(
+      {
+        success: { const: false },
+        failure: objectSchema({ code: { type: 'string' }, message: { type: 'string' } }, ['code', 'message']),
+      },
+      ['success', 'failure'],
+    ),
+  },
+  'images.setAnchorOptions': {
+    input: objectSchema(
+      {
+        imageId: { type: 'string' },
+        options: objectSchema({
+          behindDoc: { type: 'boolean' },
+          allowOverlap: { type: 'boolean' },
+          layoutInCell: { type: 'boolean' },
+          lockAnchor: { type: 'boolean' },
+          simplePos: { type: 'boolean' },
+        }),
+      },
+      ['imageId', 'options'],
+    ),
+    output: objectSchema({ success: { type: 'boolean' }, image: { type: 'object' }, failure: { type: 'object' } }),
+    success: objectSchema({ success: { const: true }, image: { type: 'object' } }, ['success', 'image']),
+    failure: objectSchema(
+      {
+        success: { const: false },
+        failure: objectSchema({ code: { type: 'string' }, message: { type: 'string' } }, ['code', 'message']),
+      },
+      ['success', 'failure'],
+    ),
+  },
+  'images.setZOrder': {
+    input: objectSchema(
+      {
+        imageId: { type: 'string' },
+        zOrder: objectSchema(
+          {
+            relativeHeight: {
+              type: 'integer',
+              minimum: Z_ORDER_RELATIVE_HEIGHT_MIN,
+              maximum: Z_ORDER_RELATIVE_HEIGHT_MAX,
+            },
+          },
+          ['relativeHeight'],
+        ),
+      },
+      ['imageId', 'zOrder'],
+    ),
+    output: objectSchema({ success: { type: 'boolean' }, image: { type: 'object' }, failure: { type: 'object' } }),
+    success: objectSchema({ success: { const: true }, image: { type: 'object' } }, ['success', 'image']),
+    failure: objectSchema(
+      {
+        success: { const: false },
+        failure: objectSchema({ code: { type: 'string' }, message: { type: 'string' } }, ['code', 'message']),
+      },
+      ['success', 'failure'],
+    ),
   },
 };
 

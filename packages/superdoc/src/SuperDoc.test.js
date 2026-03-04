@@ -541,8 +541,11 @@ describe('SuperDoc.vue', () => {
       fileId: 'doc-2',
     };
 
-    commentsStoreStub.commentsList.value = [existingComment, otherDocumentComment];
+    // Keep the non-active-document comment first to ensure active selection does
+    // not fall back to global importedId matching.
+    commentsStoreStub.commentsList.value = [otherDocumentComment, existingComment];
     commentsStoreStub.addComment.mockClear();
+    commentsStoreStub.setActiveComment.mockClear();
     superdocStub.activeEditor = { options: { documentId: 'doc-1' } };
 
     options.onCommentsUpdate({
@@ -553,6 +556,7 @@ describe('SuperDoc.vue', () => {
         commentText: 'Updated text',
       },
     });
+    await nextTick();
 
     expect(commentsStoreStub.addComment).not.toHaveBeenCalled();
     expect(commentsStoreStub.commentsList.value).toHaveLength(2);
@@ -563,6 +567,7 @@ describe('SuperDoc.vue', () => {
     expect(existingComment.commentText).toBe('Updated text');
     expect(otherDocumentComment.commentId).toBe('doc2-id');
     expect(otherDocumentComment.commentText).toBe('Doc 2 text');
+    expect(commentsStoreStub.setActiveComment).toHaveBeenCalledWith(superdocStub, 'old-runtime-id');
   });
 
   it('updates docxCommentJSON from replayed elements for imported comments', async () => {

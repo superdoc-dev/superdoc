@@ -752,8 +752,9 @@ const onEditorCommentsUpdate = (params = {}) => {
       });
 
       if (existingComment) {
+        const matchedCommentId = existingComment?.commentId ?? existingComment?.importedId ?? candidateId;
         return {
-          id: candidateId,
+          id: matchedCommentId != null ? String(matchedCommentId) : null,
           existingComment,
         };
       }

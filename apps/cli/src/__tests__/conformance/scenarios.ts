@@ -186,6 +186,71 @@ async function prepareSeparatedSecondListTarget(
   return { docPath, target };
 }
 
+function requireHyperlinkAddress(item: Record<string, unknown>, context: string): Record<string, unknown> {
+  const address = item.address;
+  if (!address || typeof address !== 'object') {
+    throw new Error(`Missing hyperlink address for ${context}.`);
+  }
+  return address as Record<string, unknown>;
+}
+
+async function resolveFirstHyperlinkAddress(
+  harness: ConformanceHarness,
+  stateDir: string,
+  docPath: string,
+  context: string,
+): Promise<Record<string, unknown>> {
+  const listed = await harness.runCli([...commandTokens('doc.hyperlinks.list'), docPath, '--limit', '10'], stateDir);
+  if (listed.result.code !== 0 || listed.envelope.ok !== true) {
+    throw new Error(`Failed to list hyperlinks for ${context}.`);
+  }
+
+  const items = extractDiscoveryItems(listed.envelope.data);
+  const first = items[0];
+  if (!first) {
+    throw new Error(`No hyperlinks available for ${context}.`);
+  }
+
+  return requireHyperlinkAddress(first, context);
+}
+
+async function createHyperlinkFixture(
+  harness: ConformanceHarness,
+  stateDir: string,
+  label: string,
+): Promise<{ docPath: string; address: Record<string, unknown> }> {
+  const sourceDoc = await harness.copyFixtureDoc(`${label}-source`);
+  const target = await harness.firstTextRange(sourceDoc, stateDir);
+  const collapsedTarget = {
+    kind: 'text',
+    blockId: target.blockId,
+    range: { start: target.range.start, end: target.range.start },
+  };
+  const outputDoc = harness.createOutputPath(`${label}-with-hyperlink`);
+
+  const inserted = await harness.runCli(
+    [
+      ...commandTokens('doc.hyperlinks.insert'),
+      sourceDoc,
+      '--target-json',
+      JSON.stringify(collapsedTarget),
+      '--text',
+      'Conformance hyperlink',
+      '--link-json',
+      JSON.stringify({ destination: { href: 'https://example.com' } }),
+      '--out',
+      outputDoc,
+    ],
+    stateDir,
+  );
+  if (inserted.result.code !== 0 || inserted.envelope.ok !== true) {
+    throw new Error(`Failed to create hyperlink fixture for ${label}.`);
+  }
+
+  const address = await resolveFirstHyperlinkAddress(harness, stateDir, outputDoc, label);
+  return { docPath: outputDoc, address };
+}
+
 function sectionMutationScenario(
   operationId: CliOperationId,
   label: string,
@@ -797,6 +862,99 @@ export const SUCCESS_SCENARIOS = {
     return {
       stateDir,
       args: ['comments', 'list', fixture.docPath, '--include-resolved', 'false'],
+    };
+  },
+  'doc.hyperlinks.list': async (harness: ConformanceHarness): Promise<ScenarioInvocation> => {
+    const stateDir = await harness.createStateDir('doc-hyperlinks-list-success');
+    const fixture = await createHyperlinkFixture(harness, stateDir, 'doc-hyperlinks-list');
+    return {
+      stateDir,
+      args: [...commandTokens('doc.hyperlinks.list'), fixture.docPath, '--limit', '10'],
+    };
+  },
+  'doc.hyperlinks.get': async (harness: ConformanceHarness): Promise<ScenarioInvocation> => {
+    const stateDir = await harness.createStateDir('doc-hyperlinks-get-success');
+    const fixture = await createHyperlinkFixture(harness, stateDir, 'doc-hyperlinks-get');
+    return {
+      stateDir,
+      args: [...commandTokens('doc.hyperlinks.get'), fixture.docPath, '--target-json', JSON.stringify(fixture.address)],
+    };
+  },
+  'doc.hyperlinks.wrap': async (harness: ConformanceHarness): Promise<ScenarioInvocation> => {
+    const stateDir = await harness.createStateDir('doc-hyperlinks-wrap-success');
+    const docPath = await harness.copyFixtureDoc('doc-hyperlinks-wrap');
+    const target = await harness.firstTextRange(docPath, stateDir);
+    return {
+      stateDir,
+      args: [
+        ...commandTokens('doc.hyperlinks.wrap'),
+        docPath,
+        '--target-json',
+        JSON.stringify(target),
+        '--link-json',
+        JSON.stringify({ destination: { href: 'https://example.com/wrap' } }),
+        '--out',
+        harness.createOutputPath('doc-hyperlinks-wrap-output'),
+      ],
+    };
+  },
+  'doc.hyperlinks.insert': async (harness: ConformanceHarness): Promise<ScenarioInvocation> => {
+    const stateDir = await harness.createStateDir('doc-hyperlinks-insert-success');
+    const docPath = await harness.copyFixtureDoc('doc-hyperlinks-insert');
+    const target = await harness.firstTextRange(docPath, stateDir);
+    const collapsedTarget = {
+      kind: 'text',
+      blockId: target.blockId,
+      range: { start: target.range.start, end: target.range.start },
+    };
+    return {
+      stateDir,
+      args: [
+        ...commandTokens('doc.hyperlinks.insert'),
+        docPath,
+        '--target-json',
+        JSON.stringify(collapsedTarget),
+        '--text',
+        'Conformance hyperlink insert',
+        '--link-json',
+        JSON.stringify({ destination: { href: 'https://example.com/insert' } }),
+        '--out',
+        harness.createOutputPath('doc-hyperlinks-insert-output'),
+      ],
+    };
+  },
+  'doc.hyperlinks.patch': async (harness: ConformanceHarness): Promise<ScenarioInvocation> => {
+    const stateDir = await harness.createStateDir('doc-hyperlinks-patch-success');
+    const fixture = await createHyperlinkFixture(harness, stateDir, 'doc-hyperlinks-patch');
+    return {
+      stateDir,
+      args: [
+        ...commandTokens('doc.hyperlinks.patch'),
+        fixture.docPath,
+        '--target-json',
+        JSON.stringify(fixture.address),
+        '--patch-json',
+        JSON.stringify({ tooltip: 'Conformance hyperlink patch' }),
+        '--out',
+        harness.createOutputPath('doc-hyperlinks-patch-output'),
+      ],
+    };
+  },
+  'doc.hyperlinks.remove': async (harness: ConformanceHarness): Promise<ScenarioInvocation> => {
+    const stateDir = await harness.createStateDir('doc-hyperlinks-remove-success');
+    const fixture = await createHyperlinkFixture(harness, stateDir, 'doc-hyperlinks-remove');
+    return {
+      stateDir,
+      args: [
+        ...commandTokens('doc.hyperlinks.remove'),
+        fixture.docPath,
+        '--target-json',
+        JSON.stringify(fixture.address),
+        '--mode',
+        'unwrap',
+        '--out',
+        harness.createOutputPath('doc-hyperlinks-remove-output'),
+      ],
     };
   },
   'doc.getText': async (harness: ConformanceHarness): Promise<ScenarioInvocation> => {

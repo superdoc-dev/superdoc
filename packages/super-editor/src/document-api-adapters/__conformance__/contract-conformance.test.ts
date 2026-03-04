@@ -109,6 +109,12 @@ import {
   imagesSetZOrderWrapper,
 } from '../plan-engine/images-wrappers.js';
 import {
+  hyperlinksWrapWrapper,
+  hyperlinksInsertWrapper,
+  hyperlinksPatchWrapper,
+  hyperlinksRemoveWrapper,
+} from '../plan-engine/hyperlinks-wrappers.js';
+import {
   listsInsertWrapper,
   listsIndentWrapper,
   listsOutdentWrapper,
@@ -140,6 +146,7 @@ import * as listSequenceHelpers from '../helpers/list-sequence-helpers.js';
 import { LevelFormattingHelpers } from '../../core/helpers/list-level-formatting-helpers.js';
 import * as planWrappers from '../plan-engine/plan-wrappers.js';
 import { trackChangesAcceptWrapper, trackChangesRejectWrapper } from '../plan-engine/track-changes-wrappers.js';
+import * as hyperlinkMutationHelper from '../helpers/hyperlink-mutation-helper.js';
 import { registerBuiltInExecutors } from '../plan-engine/register-executors.js';
 import { getRevision, initRevision } from '../plan-engine/revision-tracker.js';
 import { executePlan } from '../plan-engine/executor.js';
@@ -2070,6 +2077,79 @@ function makeMultiBlockImageEditor(): Editor {
     },
     schema: { marks: {} },
     options: {},
+    on: () => {},
+  } as unknown as Editor;
+}
+
+function makeHyperlinkTarget(blockId: string, start: number, end: number) {
+  return {
+    kind: 'inline' as const,
+    nodeType: 'hyperlink' as const,
+    anchor: {
+      start: { blockId, offset: start },
+      end: { blockId, offset: end },
+    },
+  };
+}
+
+function makeHyperlinkEditor(
+  options: {
+    withLink?: boolean;
+    text?: string;
+    linkAttrs?: Record<string, unknown>;
+  } = {},
+): Editor {
+  const text = options.text ?? 'Hello';
+  const withLink = options.withLink ?? true;
+  const linkAttrs = options.linkAttrs ?? { href: 'https://example.com' };
+
+  const linkMark = {
+    type: { name: 'link' },
+    attrs: linkAttrs,
+  };
+
+  const textNode = createNode('text', [], { text });
+  (textNode as unknown as { marks: unknown[] }).marks = withLink ? [linkMark] : [];
+
+  const paragraph = createNode('paragraph', [textNode], {
+    attrs: { sdBlockId: 'p1' },
+    isBlock: true,
+    inlineContent: true,
+  });
+
+  const doc = createNode('doc', [paragraph], { isBlock: false });
+  (
+    doc as unknown as { resolve: (pos: number) => { depth: number; node: (depth: number) => ProseMirrorNode } }
+  ).resolve = (_pos: number) => ({
+    depth: 1,
+    node: (_depth: number) => paragraph,
+  });
+
+  const dispatch = vi.fn();
+  const tr = {
+    insertText: vi.fn().mockReturnThis(),
+    addMark: vi.fn().mockReturnThis(),
+    removeMark: vi.fn().mockReturnThis(),
+    delete: vi.fn().mockReturnThis(),
+    setMeta: vi.fn().mockReturnThis(),
+    mapping: { map: (pos: number) => pos },
+    docChanged: true,
+    steps: [{}],
+    doc,
+  };
+
+  const linkMarkType = {
+    create: vi.fn((attrs: Record<string, unknown>) => ({
+      type: { name: 'link' },
+      attrs,
+    })),
+  };
+
+  return {
+    state: { doc, tr, schema: { marks: { link: linkMarkType } } },
+    dispatch,
+    schema: { marks: { link: linkMarkType } },
+    options: { mode: 'html' },
     on: () => {},
   } as unknown as Editor;
 }
@@ -4816,6 +4896,138 @@ const mutationVectors: Partial<Record<OperationId, MutationVector>> = {
         { changeMode: 'direct' },
       ),
   },
+
+  // -------------------------------------------------------------------------
+  // Hyperlink operations
+  // -------------------------------------------------------------------------
+  'hyperlinks.wrap': {
+    throwCase: () =>
+      hyperlinksWrapWrapper(
+        makeHyperlinkEditor({ withLink: false }),
+        {
+          target: { kind: 'text', blockId: 'missing', range: { start: 0, end: 5 } },
+          link: { destination: { href: 'https://example.com' } },
+        },
+        { changeMode: 'direct' },
+      ),
+    failureCase: () => {
+      const wrapSpy = vi.spyOn(hyperlinkMutationHelper, 'wrapWithLink').mockReturnValueOnce(false);
+      try {
+        return hyperlinksWrapWrapper(
+          makeHyperlinkEditor({ withLink: false }),
+          {
+            target: { kind: 'text', blockId: 'p1', range: { start: 0, end: 5 } },
+            link: { destination: { href: 'https://example.com' } },
+          },
+          { changeMode: 'direct' },
+        );
+      } finally {
+        wrapSpy.mockRestore();
+      }
+    },
+    applyCase: () =>
+      hyperlinksWrapWrapper(
+        makeHyperlinkEditor({ withLink: false }),
+        {
+          target: { kind: 'text', blockId: 'p1', range: { start: 0, end: 5 } },
+          link: { destination: { href: 'https://example.com' } },
+        },
+        { changeMode: 'direct' },
+      ),
+  },
+  'hyperlinks.insert': {
+    throwCase: () =>
+      hyperlinksInsertWrapper(
+        makeHyperlinkEditor({ withLink: false }),
+        {
+          target: { kind: 'text', blockId: 'missing', range: { start: 0, end: 0 } },
+          text: 'X',
+          link: { destination: { href: 'https://example.com' } },
+        },
+        { changeMode: 'direct' },
+      ),
+    failureCase: () => {
+      const insertSpy = vi.spyOn(hyperlinkMutationHelper, 'insertLinkedText').mockReturnValueOnce(false);
+      try {
+        return hyperlinksInsertWrapper(
+          makeHyperlinkEditor({ withLink: false }),
+          {
+            target: { kind: 'text', blockId: 'p1', range: { start: 0, end: 0 } },
+            text: 'X',
+            link: { destination: { href: 'https://example.com' } },
+          },
+          { changeMode: 'direct' },
+        );
+      } finally {
+        insertSpy.mockRestore();
+      }
+    },
+    applyCase: () =>
+      hyperlinksInsertWrapper(
+        makeHyperlinkEditor({ withLink: false }),
+        {
+          target: { kind: 'text', blockId: 'p1', range: { start: 0, end: 0 } },
+          text: 'X',
+          link: { destination: { href: 'https://example.com' } },
+        },
+        { changeMode: 'direct' },
+      ),
+  },
+  'hyperlinks.patch': {
+    throwCase: () =>
+      hyperlinksPatchWrapper(
+        makeHyperlinkEditor({ withLink: true }),
+        {
+          target: makeHyperlinkTarget('p1', 1, 3),
+          patch: { href: 'https://example.com/updated' },
+        },
+        { changeMode: 'direct' },
+      ),
+    failureCase: () =>
+      hyperlinksPatchWrapper(
+        makeHyperlinkEditor({ withLink: true, linkAttrs: { href: 'https://example.com' } }),
+        {
+          target: makeHyperlinkTarget('p1', 0, 5),
+          patch: { href: 'https://example.com' },
+        },
+        { changeMode: 'direct' },
+      ),
+    applyCase: () =>
+      hyperlinksPatchWrapper(
+        makeHyperlinkEditor({ withLink: true, linkAttrs: { href: 'https://example.com' } }),
+        {
+          target: makeHyperlinkTarget('p1', 0, 5),
+          patch: { href: 'https://example.com/updated' },
+        },
+        { changeMode: 'direct' },
+      ),
+  },
+  'hyperlinks.remove': {
+    throwCase: () =>
+      hyperlinksRemoveWrapper(
+        makeHyperlinkEditor({ withLink: true }),
+        { target: makeHyperlinkTarget('p1', 1, 3) },
+        { changeMode: 'direct' },
+      ),
+    failureCase: () => {
+      const unwrapSpy = vi.spyOn(hyperlinkMutationHelper, 'unwrapLink').mockReturnValueOnce(false);
+      try {
+        return hyperlinksRemoveWrapper(
+          makeHyperlinkEditor({ withLink: true }),
+          { target: makeHyperlinkTarget('p1', 0, 5) },
+          { changeMode: 'direct' },
+        );
+      } finally {
+        unwrapSpy.mockRestore();
+      }
+    },
+    applyCase: () =>
+      hyperlinksRemoveWrapper(
+        makeHyperlinkEditor({ withLink: true }),
+        { target: makeHyperlinkTarget('p1', 0, 5) },
+        { changeMode: 'direct' },
+      ),
+  },
 };
 
 const dryRunVectors: Partial<Record<OperationId, () => unknown>> = {
@@ -6063,6 +6275,64 @@ const dryRunVectors: Partial<Record<OperationId, () => unknown>> = {
     const result = imagesSetZOrderWrapper(
       editor,
       { imageId: 'img-1', zOrder: { relativeHeight: 999999999 } },
+      { changeMode: 'direct', dryRun: true },
+    );
+    expect(dispatch).not.toHaveBeenCalled();
+    return result;
+  },
+
+  // -------------------------------------------------------------------------
+  // Hyperlink operations — dryRun vectors
+  // -------------------------------------------------------------------------
+  'hyperlinks.wrap': () => {
+    const editor = makeHyperlinkEditor({ withLink: false });
+    const dispatch = (editor as unknown as { dispatch: ReturnType<typeof vi.fn> }).dispatch;
+    const result = hyperlinksWrapWrapper(
+      editor,
+      {
+        target: { kind: 'text', blockId: 'p1', range: { start: 0, end: 5 } },
+        link: { destination: { href: 'https://example.com' } },
+      },
+      { changeMode: 'direct', dryRun: true },
+    );
+    expect(dispatch).not.toHaveBeenCalled();
+    return result;
+  },
+  'hyperlinks.insert': () => {
+    const editor = makeHyperlinkEditor({ withLink: false });
+    const dispatch = (editor as unknown as { dispatch: ReturnType<typeof vi.fn> }).dispatch;
+    const result = hyperlinksInsertWrapper(
+      editor,
+      {
+        target: { kind: 'text', blockId: 'p1', range: { start: 0, end: 0 } },
+        text: 'X',
+        link: { destination: { href: 'https://example.com' } },
+      },
+      { changeMode: 'direct', dryRun: true },
+    );
+    expect(dispatch).not.toHaveBeenCalled();
+    return result;
+  },
+  'hyperlinks.patch': () => {
+    const editor = makeHyperlinkEditor({ withLink: true, linkAttrs: { href: 'https://example.com' } });
+    const dispatch = (editor as unknown as { dispatch: ReturnType<typeof vi.fn> }).dispatch;
+    const result = hyperlinksPatchWrapper(
+      editor,
+      {
+        target: makeHyperlinkTarget('p1', 0, 5),
+        patch: { href: 'https://example.com/updated' },
+      },
+      { changeMode: 'direct', dryRun: true },
+    );
+    expect(dispatch).not.toHaveBeenCalled();
+    return result;
+  },
+  'hyperlinks.remove': () => {
+    const editor = makeHyperlinkEditor({ withLink: true });
+    const dispatch = (editor as unknown as { dispatch: ReturnType<typeof vi.fn> }).dispatch;
+    const result = hyperlinksRemoveWrapper(
+      editor,
+      { target: makeHyperlinkTarget('p1', 0, 5) },
       { changeMode: 'direct', dryRun: true },
     );
     expect(dispatch).not.toHaveBeenCalled();

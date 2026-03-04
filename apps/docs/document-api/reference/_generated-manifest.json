@@ -93,6 +93,13 @@
     "apps/docs/document-api/reference/history/index.mdx",
     "apps/docs/document-api/reference/history/redo.mdx",
     "apps/docs/document-api/reference/history/undo.mdx",
+    "apps/docs/document-api/reference/hyperlinks/get.mdx",
+    "apps/docs/document-api/reference/hyperlinks/index.mdx",
+    "apps/docs/document-api/reference/hyperlinks/insert.mdx",
+    "apps/docs/document-api/reference/hyperlinks/list.mdx",
+    "apps/docs/document-api/reference/hyperlinks/patch.mdx",
+    "apps/docs/document-api/reference/hyperlinks/remove.mdx",
+    "apps/docs/document-api/reference/hyperlinks/wrap.mdx",
     "apps/docs/document-api/reference/images/convert-to-floating.mdx",
     "apps/docs/document-api/reference/images/convert-to-inline.mdx",
     "apps/docs/document-api/reference/images/delete.mdx",
@@ -552,8 +559,22 @@
       ],
       "pagePath": "apps/docs/document-api/reference/images/index.mdx",
       "title": "Images"
+    },
+    {
+      "aliasMemberPaths": [],
+      "key": "hyperlinks",
+      "operationIds": [
+        "hyperlinks.list",
+        "hyperlinks.get",
+        "hyperlinks.wrap",
+        "hyperlinks.insert",
+        "hyperlinks.patch",
+        "hyperlinks.remove"
+      ],
+      "pagePath": "apps/docs/document-api/reference/hyperlinks/index.mdx",
+      "title": "Hyperlinks"
     }
   ],
   "marker": "{/* GENERATED FILE: DO NOT EDIT. Regenerate via `pnpm run docapi:sync`. */}",
-  "sourceHash": "185b9ab20679d6709e676a2b2b810adebddb201298e6a1682b3af62e600e4eb1"
+  "sourceHash": "61970f6e7637f11451e0f7fb218a66bc84f39b7b512a5002d8996286708c2d31"
 }

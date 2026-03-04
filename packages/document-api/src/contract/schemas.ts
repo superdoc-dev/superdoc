@@ -1531,6 +1531,102 @@ function tocEntryMutationResultSchema(): JsonSchema {
   };
 }
 
+// ---------------------------------------------------------------------------
+// Hyperlink schema helpers
+// ---------------------------------------------------------------------------
+
+const hyperlinkTargetSchema: JsonSchema = objectSchema(
+  {
+    kind: { const: 'inline' },
+    nodeType: { const: 'hyperlink' },
+    anchor: ref('InlineAnchor'),
+  },
+  ['kind', 'nodeType', 'anchor'],
+);
+
+const hyperlinkReadPropertiesSchema: JsonSchema = objectSchema({
+  href: { type: 'string' },
+  anchor: { type: 'string' },
+  docLocation: { type: 'string' },
+  tooltip: { type: 'string' },
+  target: { type: 'string' },
+  rel: { type: 'string' },
+});
+
+const hyperlinkDestinationSchema: JsonSchema = objectSchema({
+  href: { type: 'string' },
+  anchor: { type: 'string' },
+  docLocation: { type: 'string' },
+});
+
+const hyperlinkSpecSchema: JsonSchema = objectSchema(
+  {
+    destination: hyperlinkDestinationSchema,
+    tooltip: { type: 'string' },
+    target: { type: 'string' },
+    rel: { type: 'string' },
+  },
+  ['destination'],
+);
+
+const hyperlinkPatchSchema: JsonSchema = objectSchema({
+  href: { oneOf: [{ type: 'string' }, { type: 'null' }] },
+  anchor: { oneOf: [{ type: 'string' }, { type: 'null' }] },
+  docLocation: { oneOf: [{ type: 'string' }, { type: 'null' }] },
+  tooltip: { oneOf: [{ type: 'string' }, { type: 'null' }] },
+  target: { oneOf: [{ type: 'string' }, { type: 'null' }] },
+  rel: { oneOf: [{ type: 'string' }, { type: 'null' }] },
+});
+
+const hyperlinkDomainSchema: JsonSchema = objectSchema(
+  {
+    address: hyperlinkTargetSchema,
+    properties: hyperlinkReadPropertiesSchema,
+    text: { type: 'string' },
+  },
+  ['address', 'properties'],
+);
+
+const hyperlinkMutationSuccessSchema: JsonSchema = objectSchema(
+  { success: { const: true }, hyperlink: hyperlinkTargetSchema },
+  ['success', 'hyperlink'],
+);
+
+const hyperlinkMutationFailureCodes = [
+  'NO_OP',
+  'INVALID_TARGET',
+  'TARGET_NOT_FOUND',
+  'CAPABILITY_UNAVAILABLE',
+] as const;
+
+const hyperlinkMutationFailureSchema: JsonSchema = objectSchema(
+  {
+    success: { const: false },
+    failure: objectSchema(
+      {
+        code: { enum: [...hyperlinkMutationFailureCodes] },
+        message: { type: 'string' },
+        details: { type: 'object' },
+      },
+      ['code', 'message'],
+    ),
+  },
+  ['success', 'failure'],
+);
+
+function hyperlinkMutationResultSchema(): JsonSchema {
+  return { oneOf: [hyperlinkMutationSuccessSchema, hyperlinkMutationFailureSchema] };
+}
+
+const hyperlinkInfoSchema: JsonSchema = objectSchema(
+  {
+    address: hyperlinkTargetSchema,
+    properties: hyperlinkReadPropertiesSchema,
+    text: { type: 'string' },
+  },
+  ['address', 'properties'],
+);
+
 const operationSchemas: Record<OperationId, OperationSchemaSet> = {
   find: {
     input: findInputSchema,
@@ -4270,6 +4366,50 @@ const operationSchemas: Record<OperationId, OperationSchemaSet> = {
       },
       ['success', 'failure'],
     ),
+  },
+
+  // --- hyperlinks.* ---
+  'hyperlinks.list': {
+    input: objectSchema({
+      within: nodeAddressSchema,
+      hrefPattern: { type: 'string' },
+      anchor: { type: 'string' },
+      textPattern: { type: 'string' },
+      limit: { type: 'integer' },
+      offset: { type: 'integer' },
+    }),
+    output: discoveryResultSchema(hyperlinkDomainSchema),
+  },
+  'hyperlinks.get': {
+    input: objectSchema({ target: hyperlinkTargetSchema }, ['target']),
+    output: hyperlinkInfoSchema,
+  },
+  'hyperlinks.wrap': {
+    input: objectSchema({ target: textAddressSchema, link: hyperlinkSpecSchema }, ['target', 'link']),
+    output: hyperlinkMutationResultSchema(),
+    success: hyperlinkMutationSuccessSchema,
+    failure: hyperlinkMutationFailureSchema,
+  },
+  'hyperlinks.insert': {
+    input: objectSchema({ target: textAddressSchema, text: { type: 'string' }, link: hyperlinkSpecSchema }, [
+      'text',
+      'link',
+    ]),
+    output: hyperlinkMutationResultSchema(),
+    success: hyperlinkMutationSuccessSchema,
+    failure: hyperlinkMutationFailureSchema,
+  },
+  'hyperlinks.patch': {
+    input: objectSchema({ target: hyperlinkTargetSchema, patch: hyperlinkPatchSchema }, ['target', 'patch']),
+    output: hyperlinkMutationResultSchema(),
+    success: hyperlinkMutationSuccessSchema,
+    failure: hyperlinkMutationFailureSchema,
+  },
+  'hyperlinks.remove': {
+    input: objectSchema({ target: hyperlinkTargetSchema, mode: { enum: ['unwrap', 'deleteText'] } }, ['target']),
+    output: hyperlinkMutationResultSchema(),
+    success: hyperlinkMutationSuccessSchema,
+    failure: hyperlinkMutationFailureSchema,
   },
 };
 

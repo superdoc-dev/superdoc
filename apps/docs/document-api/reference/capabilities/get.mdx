@@ -692,6 +692,36 @@ _No fields._
 | `operations.history.undo.dryRun` | boolean | yes |  |
 | `operations.history.undo.reasons` | enum[] | no |  |
 | `operations.history.undo.tracked` | boolean | yes |  |
+| `operations.hyperlinks.get` | object | yes |  |
+| `operations.hyperlinks.get.available` | boolean | yes |  |
+| `operations.hyperlinks.get.dryRun` | boolean | yes |  |
+| `operations.hyperlinks.get.reasons` | enum[] | no |  |
+| `operations.hyperlinks.get.tracked` | boolean | yes |  |
+| `operations.hyperlinks.insert` | object | yes |  |
+| `operations.hyperlinks.insert.available` | boolean | yes |  |
+| `operations.hyperlinks.insert.dryRun` | boolean | yes |  |
+| `operations.hyperlinks.insert.reasons` | enum[] | no |  |
+| `operations.hyperlinks.insert.tracked` | boolean | yes |  |
+| `operations.hyperlinks.list` | object | yes |  |
+| `operations.hyperlinks.list.available` | boolean | yes |  |
+| `operations.hyperlinks.list.dryRun` | boolean | yes |  |
+| `operations.hyperlinks.list.reasons` | enum[] | no |  |
+| `operations.hyperlinks.list.tracked` | boolean | yes |  |
+| `operations.hyperlinks.patch` | object | yes |  |
+| `operations.hyperlinks.patch.available` | boolean | yes |  |
+| `operations.hyperlinks.patch.dryRun` | boolean | yes |  |
+| `operations.hyperlinks.patch.reasons` | enum[] | no |  |
+| `operations.hyperlinks.patch.tracked` | boolean | yes |  |
+| `operations.hyperlinks.remove` | object | yes |  |
+| `operations.hyperlinks.remove.available` | boolean | yes |  |
+| `operations.hyperlinks.remove.dryRun` | boolean | yes |  |
+| `operations.hyperlinks.remove.reasons` | enum[] | no |  |
+| `operations.hyperlinks.remove.tracked` | boolean | yes |  |
+| `operations.hyperlinks.wrap` | object | yes |  |
+| `operations.hyperlinks.wrap.available` | boolean | yes |  |
+| `operations.hyperlinks.wrap.dryRun` | boolean | yes |  |
+| `operations.hyperlinks.wrap.reasons` | enum[] | no |  |
+| `operations.hyperlinks.wrap.tracked` | boolean | yes |  |
 | `operations.images.convertToFloating` | object | yes |  |
 | `operations.images.convertToFloating.available` | boolean | yes |  |
 | `operations.images.convertToFloating.dryRun` | boolean | yes |  |
@@ -2278,6 +2308,54 @@ _No fields._
       "tracked": true
     },
     "history.undo": {
+      "available": true,
+      "dryRun": true,
+      "reasons": [
+        "COMMAND_UNAVAILABLE"
+      ],
+      "tracked": true
+    },
+    "hyperlinks.get": {
+      "available": true,
+      "dryRun": true,
+      "reasons": [
+        "COMMAND_UNAVAILABLE"
+      ],
+      "tracked": true
+    },
+    "hyperlinks.insert": {
+      "available": true,
+      "dryRun": true,
+      "reasons": [
+        "COMMAND_UNAVAILABLE"
+      ],
+      "tracked": true
+    },
+    "hyperlinks.list": {
+      "available": true,
+      "dryRun": true,
+      "reasons": [
+        "COMMAND_UNAVAILABLE"
+      ],
+      "tracked": true
+    },
+    "hyperlinks.patch": {
+      "available": true,
+      "dryRun": true,
+      "reasons": [
+        "COMMAND_UNAVAILABLE"
+      ],
+      "tracked": true
+    },
+    "hyperlinks.remove": {
+      "available": true,
+      "dryRun": true,
+      "reasons": [
+        "COMMAND_UNAVAILABLE"
+      ],
+      "tracked": true
+    },
+    "hyperlinks.wrap": {
       "available": true,
       "dryRun": true,
       "reasons": [
@@ -7882,6 +7960,216 @@ _No fields._
           ],
           "type": "object"
         },
+        "hyperlinks.get": {
+          "additionalProperties": false,
+          "properties": {
+            "available": {
+              "type": "boolean"
+            },
+            "dryRun": {
+              "type": "boolean"
+            },
+            "reasons": {
+              "items": {
+                "enum": [
+                  "COMMAND_UNAVAILABLE",
+                  "HELPER_UNAVAILABLE",
+                  "OPERATION_UNAVAILABLE",
+                  "TRACKED_MODE_UNAVAILABLE",
+                  "DRY_RUN_UNAVAILABLE",
+                  "NAMESPACE_UNAVAILABLE",
+                  "STYLES_PART_MISSING",
+                  "COLLABORATION_ACTIVE"
+                ]
+              },
+              "type": "array"
+            },
+            "tracked": {
+              "type": "boolean"
+            }
+          },
+          "required": [
+            "available",
+            "tracked",
+            "dryRun"
+          ],
+          "type": "object"
+        },
+        "hyperlinks.insert": {
+          "additionalProperties": false,
+          "properties": {
+            "available": {
+              "type": "boolean"
+            },
+            "dryRun": {
+              "type": "boolean"
+            },
+            "reasons": {
+              "items": {
+                "enum": [
+                  "COMMAND_UNAVAILABLE",
+                  "HELPER_UNAVAILABLE",
+                  "OPERATION_UNAVAILABLE",
+                  "TRACKED_MODE_UNAVAILABLE",
+                  "DRY_RUN_UNAVAILABLE",
+                  "NAMESPACE_UNAVAILABLE",
+                  "STYLES_PART_MISSING",
+                  "COLLABORATION_ACTIVE"
+                ]
+              },
+              "type": "array"
+            },
+            "tracked": {
+              "type": "boolean"
+            }
+          },
+          "required": [
+            "available",
+            "tracked",
+            "dryRun"
+          ],
+          "type": "object"
+        },
+        "hyperlinks.list": {
+          "additionalProperties": false,
+          "properties": {
+            "available": {
+              "type": "boolean"
+            },
+            "dryRun": {
+              "type": "boolean"
+            },
+            "reasons": {
+              "items": {
+                "enum": [
+                  "COMMAND_UNAVAILABLE",
+                  "HELPER_UNAVAILABLE",
+                  "OPERATION_UNAVAILABLE",
+                  "TRACKED_MODE_UNAVAILABLE",
+                  "DRY_RUN_UNAVAILABLE",
+                  "NAMESPACE_UNAVAILABLE",
+                  "STYLES_PART_MISSING",
+                  "COLLABORATION_ACTIVE"
+                ]
+              },
+              "type": "array"
+            },
+            "tracked": {
+              "type": "boolean"
+            }
+          },
+          "required": [
+            "available",
+            "tracked",
+            "dryRun"
+          ],
+          "type": "object"
+        },
+        "hyperlinks.patch": {
+          "additionalProperties": false,
+          "properties": {
+            "available": {
+              "type": "boolean"
+            },
+            "dryRun": {
+              "type": "boolean"
+            },
+            "reasons": {
+              "items": {
+                "enum": [
+                  "COMMAND_UNAVAILABLE",
+                  "HELPER_UNAVAILABLE",
+                  "OPERATION_UNAVAILABLE",
+                  "TRACKED_MODE_UNAVAILABLE",
+                  "DRY_RUN_UNAVAILABLE",
+                  "NAMESPACE_UNAVAILABLE",
+                  "STYLES_PART_MISSING",
+                  "COLLABORATION_ACTIVE"
+                ]
+              },
+              "type": "array"
+            },
+            "tracked": {
+              "type": "boolean"
+            }
+          },
+          "required": [
+            "available",
+            "tracked",
+            "dryRun"
+          ],
+          "type": "object"
+        },
+        "hyperlinks.remove": {
+          "additionalProperties": false,
+          "properties": {
+            "available": {
+              "type": "boolean"
+            },
+            "dryRun": {
+              "type": "boolean"
+            },
+            "reasons": {
+              "items": {
+                "enum": [
+                  "COMMAND_UNAVAILABLE",
+                  "HELPER_UNAVAILABLE",
+                  "OPERATION_UNAVAILABLE",
+                  "TRACKED_MODE_UNAVAILABLE",
+                  "DRY_RUN_UNAVAILABLE",
+                  "NAMESPACE_UNAVAILABLE",
+                  "STYLES_PART_MISSING",
+                  "COLLABORATION_ACTIVE"
+                ]
+              },
+              "type": "array"
+            },
+            "tracked": {
+              "type": "boolean"
+            }
+          },
+          "required": [
+            "available",
+            "tracked",
+            "dryRun"
+          ],
+          "type": "object"
+        },
+        "hyperlinks.wrap": {
+          "additionalProperties": false,
+          "properties": {
+            "available": {
+              "type": "boolean"
+            },
+            "dryRun": {
+              "type": "boolean"
+            },
+            "reasons": {
+              "items": {
+                "enum": [
+                  "COMMAND_UNAVAILABLE",
+                  "HELPER_UNAVAILABLE",
+                  "OPERATION_UNAVAILABLE",
+                  "TRACKED_MODE_UNAVAILABLE",
+                  "DRY_RUN_UNAVAILABLE",
+                  "NAMESPACE_UNAVAILABLE",
+                  "STYLES_PART_MISSING",
+                  "COLLABORATION_ACTIVE"
+                ]
+              },
+              "type": "array"
+            },
+            "tracked": {
+              "type": "boolean"
+            }
+          },
+          "required": [
+            "available",
+            "tracked",
+            "dryRun"
+          ],
+          "type": "object"
+        },
         "images.convertToFloating": {
           "additionalProperties": false,
           "properties": {
@@ -12395,7 +12683,13 @@ _No fields._
         "images.setWrapDistances",
         "images.setPosition",
         "images.setAnchorOptions",
-        "images.setZOrder"
+        "images.setZOrder",
+        "hyperlinks.list",
+        "hyperlinks.get",
+        "hyperlinks.wrap",
+        "hyperlinks.insert",
+        "hyperlinks.patch",
+        "hyperlinks.remove"
       ],
       "type": "object"
     },

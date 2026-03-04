@@ -270,6 +270,41 @@ describe('compilePlan V3 ref resolution', () => {
     throw new Error('expected compilePlan to throw REVISION_MISMATCH');
   });
 
+  it('allows stale V3 ref revisions when ref-revision enforcement is disabled', () => {
+    mockedDeps.getBlockIndex.mockReturnValue({
+      candidates: [{ nodeId: 'p1', pos: 0, end: 12, node: {} }],
+    });
+
+    const ref = encodeTextRefPayload({
+      v: 3,
+      rev: 'old-rev',
+      matchId: 'm:0',
+      scope: 'run',
+      segments: [{ blockId: 'p1', start: 0, end: 5 }],
+    });
+
+    const editor = makeEditor();
+    const steps: MutationStep[] = [
+      {
+        id: 'stale-ref-allowed',
+        op: 'text.delete',
+        where: { by: 'ref', ref },
+        args: {},
+      },
+    ];
+
+    const plan = compilePlan(editor, steps, { enforceRefRevision: false });
+    expect(plan.mutationSteps).toHaveLength(1);
+    expect(plan.mutationSteps[0].targets).toHaveLength(1);
+    const target = plan.mutationSteps[0].targets[0];
+    expect(target.kind).toBe('range');
+    if (target.kind === 'range') {
+      expect(target.blockId).toBe('p1');
+      expect(target.from).toBe(0);
+      expect(target.to).toBe(5);
+    }
+  });
+
   it('REVISION_MISMATCH.details.refScope uses V3 scope directly (match, not inferred from segments)', () => {
     mockedDeps.getBlockIndex.mockReturnValue({
       candidates: [

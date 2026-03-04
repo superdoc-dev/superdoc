@@ -30,7 +30,7 @@ Returns a PlanReceipt with per-step results for the atomically applied mutation 
 | --- | --- | --- | --- |
 | `atomic` | `true` | yes | Constant: `true` |
 | `changeMode` | enum | yes | `"direct"`, `"tracked"` |
-| `expectedRevision` | string | yes |  |
+| `expectedRevision` | string | no |  |
 | `steps` | object[] | yes |  |
 
 ### Example request
@@ -129,7 +129,6 @@ Returns a PlanReceipt with per-step results for the atomically applied mutation 
     }
   },
   "required": [
-    "expectedRevision",
     "atomic",
     "changeMode",
     "steps"

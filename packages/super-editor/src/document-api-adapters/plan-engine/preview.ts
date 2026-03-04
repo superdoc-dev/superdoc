@@ -35,7 +35,9 @@ export function previewPlan(editor: Editor, input: MutationsPreviewInput): Mutat
 
   try {
     // Phase 1: Compile — resolve selectors against pre-mutation snapshot
-    const compiled = compilePlan(editor, input.steps);
+    const compiled = compilePlan(editor, input.steps, {
+      enforceRefRevision: input.expectedRevision !== undefined,
+    });
     evaluatedRevision = compiled.compiledRevision;
     currentPhase = 'execute';
 

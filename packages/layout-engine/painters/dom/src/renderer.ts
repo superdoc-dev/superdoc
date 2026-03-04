@@ -1455,7 +1455,6 @@ export class DomPainter {
 
     if (this.mount && this.mount !== mount) {
       this.resetState();
-      this.scrollContainerMountOffset = null; // Invalidate on mount change
     }
     this.layoutVersion += 1;
     this.layoutEpoch = layout.layoutEpoch ?? 0;

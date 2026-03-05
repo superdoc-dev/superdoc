@@ -56,6 +56,39 @@ function editorHasDom(editor: Editor): boolean {
   return !!(opts?.document ?? opts?.mockDocument ?? (typeof document !== 'undefined' ? document : null));
 }
 
+function isJsonObject(value: unknown): value is Record<string, unknown> {
+  return typeof value === 'object' && value !== null && !Array.isArray(value);
+}
+
+/**
+ * Ensure every inserted markdown image node has a stable `sdImageId`.
+ *
+ * The markdown converter should already provide this, but we enforce it at the
+ * insert boundary so `images.list/get` remain reliable even if upstream
+ * conversion changes or misses an edge-case image shape.
+ */
+function ensureMarkdownImageIds(nodes: Record<string, unknown>[]): void {
+  const visit = (node: Record<string, unknown>) => {
+    if (node.type === 'image') {
+      const attrs = isJsonObject(node.attrs) ? { ...node.attrs } : {};
+      const hasStableId = typeof attrs.sdImageId === 'string' && attrs.sdImageId.length > 0;
+      if (!hasStableId) {
+        attrs.sdImageId = uuidv4();
+      }
+      node.attrs = attrs;
+    }
+
+    if (!Array.isArray(node.content)) return;
+    for (const child of node.content) {
+      if (isJsonObject(child)) visit(child);
+    }
+  };
+
+  for (const node of nodes) {
+    visit(node);
+  }
+}
+
 /**
  * Mutate `jsonNodes` in place so that consecutive table nodes within the
  * array are separated by an empty paragraph. Only handles within-fragment
@@ -654,6 +687,7 @@ export function insertStructuredWrapper(
         // because createNodeFromContent treats it as a single JSON object.
         const jsonNodes: Record<string, unknown>[] = [];
         fragment.forEach((node) => jsonNodes.push(node.toJSON()));
+        ensureMarkdownImageIds(jsonNodes);
 
         // Word always separates adjacent tables with a paragraph. Without a
         // trailing separator, consecutive markdown inserts produce adjacent

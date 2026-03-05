@@ -1,4 +1,5 @@
 import { beforeAll, beforeEach, afterEach, describe, it, expect, vi } from 'vitest';
+import type { Node as PmNode } from 'prosemirror-model';
 import { initTestEditor, loadTestDataForEditorTests } from '@tests/helpers/helpers.js';
 import type { Editor } from '../../core/Editor.js';
 import { insertStructuredWrapper } from './plan-wrappers.js';
@@ -35,6 +36,18 @@ function getDocTextContent(ed: Editor): string {
   return ed.state.doc.textContent;
 }
 
+function getFirstImageNode(ed: Editor): PmNode | null {
+  let found: PmNode | null = null;
+  ed.state.doc.descendants((node) => {
+    if (node.type.name === 'image') {
+      found = node;
+      return false;
+    }
+    return true;
+  });
+  return found;
+}
+
 /** Requires prior seeded content — a blank doc has no text offsets to span. */
 function findResolvableNonCollapsedTarget(ed: Editor): { blockId: string; range: { start: number; end: number } } {
   const candidateIds = new Set<string>();
@@ -67,6 +80,9 @@ function findResolvableNonCollapsedTarget(ed: Editor): { blockId: string; range:
 }
 
 describe('insertStructuredWrapper — markdown', () => {
+  const oneByOnePngDataUri =
+    'data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAwMCAO2Z5kYAAAAASUVORK5CYII=';
+
   it('inserts markdown paragraph content into the document', () => {
     const result = insertStructuredWrapper(editor, {
       value: 'Hello from markdown',
@@ -150,6 +166,29 @@ describe('insertStructuredWrapper — markdown', () => {
     expect(result.success).toBe(false);
     expect(result.failure?.code).toBe('INVALID_TARGET');
     expect(getDocTextContent(editor)).toBe(textBefore);
+  });
+
+  it('inserts markdown images with stable image metadata', () => {
+    (editor as any).options.isHeadless = true;
+
+    const result = insertStructuredWrapper(editor, {
+      value: `![pixel](${oneByOnePngDataUri})`,
+      type: 'markdown',
+    });
+
+    expect(result.success).toBe(true);
+
+    const imageNode = getFirstImageNode(editor);
+    expect(imageNode).not.toBeNull();
+    if (!imageNode) return; // narrow for TS
+
+    expect(String(imageNode.attrs.src)).toMatch(/^word\/media\//);
+    expect(imageNode.attrs.rId).toEqual(expect.any(String));
+    expect(imageNode.attrs.sdImageId).toEqual(expect.any(String));
+    expect(imageNode.attrs.sdImageId.length).toBeGreaterThan(0);
+    expect(imageNode.attrs.id).toEqual(expect.any(String));
+    expect(imageNode.attrs.size).toEqual({ width: 1, height: 1 });
+    expect((editor as any).storage?.image?.media?.[imageNode.attrs.src]).toBe(oneByOnePngDataUri);
   });
 });
 

@@ -340,11 +340,6 @@ export const getImageRegistrationMetaType = (tr) => {
   return null;
 };
 
-// Tracks relative URLs currently being registered to prevent duplicate async work.
-// Between the initial detection (no rId) and the async rId update, appendTransaction
-// may re-detect the same images — this Set causes them to be skipped.
-const pendingRelativeRegistrations = new Set();
-
 /**
  * Register relative URL images for DOCX export without removing them from the document.
  *
@@ -358,6 +353,7 @@ const pendingRelativeRegistrations = new Set();
  */
 const registerRelativeImages = async (images, editor, view) => {
   const { mediaStore, existingFileNames } = getOrInitMediaStore(editor);
+  const { pendingRelativeRegistrations } = editor.storage.image;
 
   for (const { node } of images) {
     const src = node.attrs.src;

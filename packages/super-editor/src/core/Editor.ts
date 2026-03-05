@@ -76,6 +76,7 @@ const MAX_WIDTH_BUFFER_PX = 20;
  */
 interface ImageStorage {
   media: Record<string, unknown>;
+  pendingRelativeRegistrations: Set<string>;
 }
 
 /**

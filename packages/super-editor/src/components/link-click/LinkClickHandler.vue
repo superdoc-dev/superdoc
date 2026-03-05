@@ -169,8 +169,10 @@ const openExternalPopover = (resolution, position, detail, surface) => {
   container.addEventListener('pointerdown', (e) => e.stopPropagation());
   container.addEventListener('click', (e) => e.stopPropagation());
 
-  // Mount into the same coordinate-space parent that GenericPopover uses
-  const mountTarget = surface.closest('.super-editor') ?? surface.parentElement;
+  // Mount into the same coordinate-space parent that GenericPopover uses.
+  // GenericPopover renders as a child of .super-editor-container (outside .super-editor).
+  // We must mount here too, because .super-editor has overflow:hidden which clips popovers.
+  const mountTarget = surface.closest('.super-editor-container') ?? surface.parentElement;
   if (!mountTarget) return;
   mountTarget.appendChild(container);
 

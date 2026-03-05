@@ -267,6 +267,13 @@ export type FlowBlocksResult = {
   bookmarks: Map<string, number>; // bookmark name → PM position
 };
 
+export type TrackedListMarkerKind = 'decimal' | 'lowerLetter' | 'upperLetter' | 'lowerRoman' | 'upperRoman';
+
+export type TrackedListMarkerState = {
+  value: number;
+  kind: TrackedListMarkerKind;
+};
+
 /**
  * Context object passed to all node handlers containing shared state and utilities.
  */
@@ -309,6 +316,8 @@ export interface NodeHandlerContext {
   flowBlockCache?: import('./cache.js').FlowBlockCache;
   // Per-list marker offsets caused by suppressed tracked-change ghost items
   trackedListMarkerOffsets?: Map<string, number>;
+  // Last seen source marker value/kind per list key for restart detection
+  trackedListLastMarkerStates?: Map<string, TrackedListMarkerState>;
 }
 
 /**

@@ -197,6 +197,7 @@ export function toFlowBlocks(pmDoc: PMNode | object, options?: AdapterOptions): 
     themeColors,
     flowBlockCache,
     trackedListMarkerOffsets: new Map<string, number>(),
+    trackedListLastMarkerStates: new Map(),
   };
 
   // Process nodes using handler dispatch pattern

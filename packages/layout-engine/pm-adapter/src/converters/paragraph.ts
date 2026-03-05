@@ -287,12 +287,22 @@ const LETTER_MARKER_RE = /^([^A-Za-z0-9]*)([A-Za-z]+)([^A-Za-z0-9]*)$/;
 const DECIMAL_MARKER_RE = /^([^A-Za-z0-9]*)(\d+)([^A-Za-z0-9]*)$/;
 const ROMAN_MARKER_RE = /^[ivxlcdm]+$/i;
 
+type MarkerNumberingType = 'decimal' | 'lowerLetter' | 'upperLetter' | 'lowerRoman' | 'upperRoman';
+
+const MARKER_NUMBERING_TYPES = new Set<MarkerNumberingType>([
+  'decimal',
+  'lowerLetter',
+  'upperLetter',
+  'lowerRoman',
+  'upperRoman',
+]);
+
 type ParsedMarker = {
   prefix: string;
   core: string;
   suffix: string;
   value: number;
-  kind: 'decimal' | 'lowerLetter' | 'upperLetter';
+  kind: MarkerNumberingType;
 };
 
 const lettersToNumber = (text: string): number => {
@@ -316,9 +326,82 @@ const numberToLetters = (value: number, uppercase: boolean): string => {
   return output;
 };
 
-const parseMarkerText = (text: string): ParsedMarker | undefined => {
+const getNodeListNumberingType = (node: PMNode): MarkerNumberingType | undefined => {
+  const listRendering =
+    typeof node.attrs?.listRendering === 'object' && node.attrs.listRendering !== null
+      ? (node.attrs.listRendering as Record<string, unknown>)
+      : undefined;
+  const numberingType = listRendering?.numberingType;
+  if (typeof numberingType !== 'string' || !MARKER_NUMBERING_TYPES.has(numberingType as MarkerNumberingType)) {
+    return undefined;
+  }
+  return numberingType as MarkerNumberingType;
+};
+
+const numberToRoman = (value: number, uppercase: boolean): string => {
+  const numerals: Array<[number, string]> = [
+    [1000, 'M'],
+    [900, 'CM'],
+    [500, 'D'],
+    [400, 'CD'],
+    [100, 'C'],
+    [90, 'XC'],
+    [50, 'L'],
+    [40, 'XL'],
+    [10, 'X'],
+    [9, 'IX'],
+    [5, 'V'],
+    [4, 'IV'],
+    [1, 'I'],
+  ];
+  let remaining = value;
+  let output = '';
+  for (const [numeric, symbol] of numerals) {
+    while (remaining >= numeric) {
+      output += symbol;
+      remaining -= numeric;
+    }
+  }
+  return uppercase ? output : output.toLowerCase();
+};
+
+const romanToNumber = (text: string): number | undefined => {
+  if (!ROMAN_MARKER_RE.test(text)) {
+    return undefined;
+  }
+  const values: Record<string, number> = {
+    I: 1,
+    V: 5,
+    X: 10,
+    L: 50,
+    C: 100,
+    D: 500,
+    M: 1000,
+  };
+  const roman = text.toUpperCase();
+  let total = 0;
+  for (let i = 0; i < roman.length; i += 1) {
+    const current = values[roman[i]];
+    if (!current) {
+      return undefined;
+    }
+    const next = i + 1 < roman.length ? values[roman[i + 1]] : 0;
+    if (next > current) {
+      total -= current;
+    } else {
+      total += current;
+    }
+  }
+  // Reject non-canonical forms (e.g., IIV)
+  if (numberToRoman(total, true) !== roman) {
+    return undefined;
+  }
+  return total;
+};
+
+const parseMarkerText = (text: string, numberingType?: MarkerNumberingType): ParsedMarker | undefined => {
   const decimalMatch = DECIMAL_MARKER_RE.exec(text);
-  if (decimalMatch) {
+  if (decimalMatch && (!numberingType || numberingType === 'decimal')) {
     return {
       prefix: decimalMatch[1] ?? '',
       core: decimalMatch[2] ?? '',
@@ -326,6 +409,9 @@ const parseMarkerText = (text: string): ParsedMarker | undefined => {
       value: Number.parseInt(decimalMatch[2] ?? '', 10),
       kind: 'decimal',
     };
+  }
+  if (numberingType === 'decimal') {
+    return undefined;
   }
 
   const letterMatch = LETTER_MARKER_RE.exec(text);
@@ -336,27 +422,62 @@ const parseMarkerText = (text: string): ParsedMarker | undefined => {
   if (!core) {
     return undefined;
   }
-  // Avoid touching Roman numeral lists (e.g. IV, ix) where alpha conversion is invalid.
-  if (ROMAN_MARKER_RE.test(core) && core.length > 1) {
-    return undefined;
+
+  const coreLooksRoman = ROMAN_MARKER_RE.test(core);
+  if (numberingType === 'lowerRoman' || numberingType === 'upperRoman') {
+    const romanValue = romanToNumber(core);
+    if (!romanValue) {
+      return undefined;
+    }
+    return {
+      prefix: letterMatch[1] ?? '',
+      core,
+      suffix: letterMatch[3] ?? '',
+      value: romanValue,
+      kind: numberingType,
+    };
   }
-  const isLower = core === core.toLowerCase();
-  const isUpper = core === core.toUpperCase();
-  if (!isLower && !isUpper) {
+
+  // Without explicit numbering type, roman-looking markers are ambiguous with letter lists.
+  // Skip renumbering rather than risk mutating to invalid labels.
+  if (!numberingType && coreLooksRoman) {
     return undefined;
   }
 
+  const expectedKind =
+    numberingType === 'lowerLetter' || numberingType === 'upperLetter' ? numberingType : undefined;
+  if (!expectedKind) {
+    const isLower = core === core.toLowerCase();
+    const isUpper = core === core.toUpperCase();
+    if (!isLower && !isUpper) {
+      return undefined;
+    }
+    return {
+      prefix: letterMatch[1] ?? '',
+      core,
+      suffix: letterMatch[3] ?? '',
+      value: lettersToNumber(core),
+      kind: isLower ? 'lowerLetter' : 'upperLetter',
+    };
+  }
+
+  if (expectedKind === 'lowerLetter' && core !== core.toLowerCase()) {
+    return undefined;
+  }
+  if (expectedKind === 'upperLetter' && core !== core.toUpperCase()) {
+    return undefined;
+  }
   return {
     prefix: letterMatch[1] ?? '',
     core,
     suffix: letterMatch[3] ?? '',
     value: lettersToNumber(core),
-    kind: isLower ? 'lowerLetter' : 'upperLetter',
+    kind: expectedKind,
   };
 };
 
-const formatShiftedMarker = (markerText: string, delta: number): string | undefined => {
-  const parsed = parseMarkerText(markerText);
+const formatShiftedMarker = (markerText: string, delta: number, numberingType?: MarkerNumberingType): string | undefined => {
+  const parsed = parseMarkerText(markerText, numberingType);
   if (!parsed) {
     return undefined;
   }
@@ -369,6 +490,11 @@ const formatShiftedMarker = (markerText: string, delta: number): string | undefi
     const hasLeadingZero = parsed.core.length > 1 && parsed.core.startsWith('0');
     const numeric = String(Math.trunc(shiftedValue));
     const shiftedCore = hasLeadingZero ? numeric.padStart(parsed.core.length, '0') : numeric;
+    return `${parsed.prefix}${shiftedCore}${parsed.suffix}`;
+  }
+
+  if (parsed.kind === 'lowerRoman' || parsed.kind === 'upperRoman') {
+    const shiftedCore = numberToRoman(Math.trunc(shiftedValue), parsed.kind === 'upperRoman');
     return `${parsed.prefix}${shiftedCore}${parsed.suffix}`;
   }
 
@@ -423,11 +549,23 @@ const updateGhostListMarkerOffsets = (
   offsets.set(key, (offsets.get(key) ?? 0) + 1);
 };
 
-const applyGhostListMarkerOffsets = (paragraphBlocks: FlowBlock[], context: NodeHandlerContext): void => {
+const getNodeListKey = (node: PMNode, context: NodeHandlerContext): string | undefined => {
+  const { paragraphAttrs } = computeParagraphAttrs(node, context.converterContext);
+  return getParagraphListKeyFromAttrs(paragraphAttrs);
+};
+
+const resetTrackedListMarkerState = (context: NodeHandlerContext): void => {
+  context.trackedListMarkerOffsets?.clear();
+  context.trackedListLastMarkerStates?.clear();
+};
+
+const applyGhostListMarkerOffsets = (node: PMNode, paragraphBlocks: FlowBlock[], context: NodeHandlerContext): void => {
   const offsets = context.trackedListMarkerOffsets;
+  const markerStates = context.trackedListLastMarkerStates;
   if (!offsets || offsets.size === 0 || !context.trackedChangesConfig.enabled) {
     return;
   }
+  const numberingType = getNodeListNumberingType(node);
 
   paragraphBlocks.forEach((block) => {
     if (block.kind !== 'paragraph') {
@@ -437,10 +575,7 @@ const applyGhostListMarkerOffsets = (paragraphBlocks: FlowBlock[], context: Node
     if (!key) {
       return;
     }
-    const offset = offsets.get(key) ?? 0;
-    if (offset <= 0) {
-      return;
-    }
+
     const wordLayout =
       block.attrs && typeof block.attrs.wordLayout === 'object' && block.attrs.wordLayout !== null
         ? (block.attrs.wordLayout as Record<string, unknown>)
@@ -458,20 +593,54 @@ const applyGhostListMarkerOffsets = (paragraphBlocks: FlowBlock[], context: Node
     if (!sourceMarkerText) {
       return;
     }
-    const parsed = parseMarkerText(sourceMarkerText);
-    if (parsed && parsed.value <= offset) {
-      // Likely a list restart; clear accumulated offset for this numId/level.
+    const offset = offsets.get(key) ?? 0;
+    const parsed = parseMarkerText(sourceMarkerText, numberingType);
+    if (!parsed) {
+      // Unsupported or ambiguous marker format; avoid leaking offsets into later items.
+      offsets.delete(key);
+      markerStates?.delete(key);
+      return;
+    }
+
+    const previousState = markerStates?.get(key);
+    markerStates?.set(key, { value: parsed.value, kind: parsed.kind });
+    if (previousState && previousState.kind === parsed.kind && parsed.value <= previousState.value) {
+      // Marker value moved backwards (or repeated), which indicates a restart segment.
       offsets.delete(key);
       marker.markerText = sourceMarkerText;
       return;
     }
-    const adjustedText = formatShiftedMarker(sourceMarkerText, -offset);
+
+    if (offset <= 0) {
+      return;
+    }
+    if (parsed.value <= offset) {
+      // Stale offset would underflow this marker; treat as a restart boundary.
+      offsets.delete(key);
+      marker.markerText = sourceMarkerText;
+      return;
+    }
+    const adjustedText = formatShiftedMarker(sourceMarkerText, -offset, numberingType);
     if (!adjustedText) {
       return;
     }
     marker.pmAdapterOriginalMarkerText = sourceMarkerText;
     marker.markerText = adjustedText;
   });
+};
+
+const applyTrackedGhostListAdjustments = (node: PMNode, paragraphBlocks: FlowBlock[], context: NodeHandlerContext): void => {
+  if (!context.trackedChangesConfig.enabled) {
+    return;
+  }
+  const hasTrackedState =
+    (context.trackedListMarkerOffsets?.size ?? 0) > 0 || (context.trackedListLastMarkerStates?.size ?? 0) > 0;
+  if (hasTrackedState && !getNodeListKey(node, context)) {
+    resetTrackedListMarkerState(context);
+    return;
+  }
+  updateGhostListMarkerOffsets(node, paragraphBlocks, context);
+  applyGhostListMarkerOffsets(node, paragraphBlocks, context);
 };
 
 /**
@@ -949,8 +1118,7 @@ export function handleParagraphNode(node: PMNode, context: NodeHandlerContext): 
       // Cache hit: reuse blocks with position adjustment
       const delta = pmStart - cached.pmStart;
       const reusedBlocks = shiftCachedBlocks(cached.blocks, delta);
-      updateGhostListMarkerOffsets(node, reusedBlocks, context);
-      applyGhostListMarkerOffsets(reusedBlocks, context);
+      applyTrackedGhostListAdjustments(node, reusedBlocks, context);
 
       reusedBlocks.forEach((block) => {
         blocks.push(block);
@@ -977,8 +1145,7 @@ export function handleParagraphNode(node: PMNode, context: NodeHandlerContext): 
       enableComments,
       stableBlockId: prefixedStableId,
     });
-    updateGhostListMarkerOffsets(node, paragraphBlocks, context);
-    applyGhostListMarkerOffsets(paragraphBlocks, context);
+    applyTrackedGhostListAdjustments(node, paragraphBlocks, context);
 
     paragraphBlocks.forEach((block) => {
       blocks.push(block);
@@ -1004,8 +1171,7 @@ export function handleParagraphNode(node: PMNode, context: NodeHandlerContext): 
     enableComments,
     stableBlockId: prefixedStableId ?? undefined,
   });
-  updateGhostListMarkerOffsets(node, paragraphBlocks, context);
-  applyGhostListMarkerOffsets(paragraphBlocks, context);
+  applyTrackedGhostListAdjustments(node, paragraphBlocks, context);
 
   paragraphBlocks.forEach((block) => {
     blocks.push(block);

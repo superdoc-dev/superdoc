@@ -3854,6 +3854,159 @@ describe('toFlowBlocks', () => {
       expect(secondParagraphText).toContain('Delta content');
     });
 
+    it('clears ghost offsets when marker sequence restarts within the same list key', () => {
+      const listParagraph = (
+        markerText: string,
+        text: string | null,
+        trackInsert?: { id: string; author: string; date: string },
+      ): PMNode => ({
+        type: 'paragraph',
+        attrs: {
+          paragraphProperties: {
+            numberingProperties: { numId: 7, ilvl: 0 },
+            ...(trackInsert
+              ? {
+                  runProperties: {
+                    trackInsert,
+                  },
+                }
+              : {}),
+          },
+          listRendering: {
+            markerText,
+            path: [1],
+            numberingType: 'lowerLetter',
+            suffix: 'tab',
+            justification: 'left',
+          },
+        },
+        content: text == null ? [] : [{ type: 'text', text }],
+      });
+
+      const pmDoc: PMNode = {
+        type: 'doc',
+        content: [
+          listParagraph('(a)', 'Alpha item'),
+          listParagraph('(b)', null, { id: 'ghost-b', author: 'Tester', date: '2026-03-01T12:00:00Z' }),
+          listParagraph('(c)', null, { id: 'ghost-c', author: 'Tester', date: '2026-03-01T12:01:00Z' }),
+          listParagraph('(d)', 'Adjusted to b'),
+          listParagraph('(e)', 'Adjusted to c'),
+          listParagraph('(c)', 'Restart should stay c'),
+        ],
+      };
+
+      const { blocks } = toFlowBlocks(pmDoc, { trackedChangesMode: 'review' });
+      const paragraphBlocks = blocks.filter((block) => block.kind === 'paragraph');
+
+      const markerTexts = paragraphBlocks.map((block) => {
+        const marker = (block.attrs?.wordLayout as { marker?: { markerText?: string } } | undefined)?.marker;
+        return marker?.markerText;
+      });
+      expect(markerTexts).toEqual(['(a)', '(b)', '(c)', '(c)']);
+    });
+
+    it('clears stale ghost offsets after a non-list paragraph boundary', () => {
+      const listParagraph = (
+        markerText: string,
+        text: string | null,
+        trackInsert?: { id: string; author: string; date: string },
+      ): PMNode => ({
+        type: 'paragraph',
+        attrs: {
+          paragraphProperties: {
+            numberingProperties: { numId: 7, ilvl: 0 },
+            ...(trackInsert
+              ? {
+                  runProperties: {
+                    trackInsert,
+                  },
+                }
+              : {}),
+          },
+          listRendering: {
+            markerText,
+            path: [1],
+            numberingType: 'lowerLetter',
+            suffix: 'tab',
+            justification: 'left',
+          },
+        },
+        content: text == null ? [] : [{ type: 'text', text }],
+      });
+
+      const pmDoc: PMNode = {
+        type: 'doc',
+        content: [
+          listParagraph('(a)', 'Alpha item'),
+          listParagraph('(b)', null, { id: 'ghost-b', author: 'Tester', date: '2026-03-01T12:00:00Z' }),
+          listParagraph('(c)', null, { id: 'ghost-c', author: 'Tester', date: '2026-03-01T12:01:00Z' }),
+          listParagraph('(d)', 'Adjusted to b'),
+          { type: 'paragraph', attrs: {}, content: [{ type: 'text', text: 'Break paragraph' }] },
+          listParagraph('(e)', 'Should remain e after boundary reset'),
+        ],
+      };
+
+      const { blocks } = toFlowBlocks(pmDoc, { trackedChangesMode: 'review' });
+      const paragraphBlocks = blocks.filter((block) => block.kind === 'paragraph');
+
+      const markerTexts = paragraphBlocks
+        .map((block) => {
+          const marker = (block.attrs?.wordLayout as { marker?: { markerText?: string } } | undefined)?.marker;
+          return marker?.markerText;
+        })
+        .filter((value): value is string => typeof value === 'string');
+      expect(markerTexts).toEqual(['(a)', '(b)', '(e)']);
+    });
+
+    it('renumbers roman markers correctly and avoids single-letter roman corruption', () => {
+      const listParagraph = (
+        markerText: string,
+        text: string | null,
+        trackInsert?: { id: string; author: string; date: string },
+      ): PMNode => ({
+        type: 'paragraph',
+        attrs: {
+          paragraphProperties: {
+            numberingProperties: { numId: 9, ilvl: 0 },
+            ...(trackInsert
+              ? {
+                  runProperties: {
+                    trackInsert,
+                  },
+                }
+              : {}),
+          },
+          listRendering: {
+            markerText,
+            path: [1],
+            numberingType: 'lowerRoman',
+            suffix: 'tab',
+            justification: 'left',
+          },
+        },
+        content: text == null ? [] : [{ type: 'text', text }],
+      });
+
+      const pmDoc: PMNode = {
+        type: 'doc',
+        content: [
+          listParagraph('(i)', 'Roman one'),
+          listParagraph('(ii)', null, { id: 'ghost-ii', author: 'Tester', date: '2026-03-01T12:00:00Z' }),
+          listParagraph('(iii)', 'Should render as ii'),
+          listParagraph('(i)', 'Restart should remain i'),
+        ],
+      };
+
+      const { blocks } = toFlowBlocks(pmDoc, { trackedChangesMode: 'review' });
+      const paragraphBlocks = blocks.filter((block) => block.kind === 'paragraph');
+
+      const markerTexts = paragraphBlocks.map((block) => {
+        const marker = (block.attrs?.wordLayout as { marker?: { markerText?: string } } | undefined)?.marker;
+        return marker?.markerText;
+      });
+      expect(markerTexts).toEqual(['(i)', '(ii)', '(i)']);
+    });
+
     describe('adversarial input protection', () => {
       it('rejects trackFormat marks with excessively large JSON payloads', () => {
         const hugeString = 'x'.repeat(15000);

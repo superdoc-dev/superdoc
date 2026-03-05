@@ -13,7 +13,7 @@ import type {
   ParagraphBlock,
   ParagraphMeasure,
 } from '@superdoc/contracts';
-import { computeLinePmRange as computeLinePmRangeUnified } from '@superdoc/contracts';
+import { computeLinePmRange as computeLinePmRangeUnified, effectiveTableCellSpacing } from '@superdoc/contracts';
 import { charOffsetToPm, findCharacterAtX, measureCharacterX } from './text-measurement.js';
 import { clickToPositionDom, findPageElement } from './dom-mapping.js';
 import {
@@ -50,7 +50,7 @@ export {
 export type { HeaderFooterBatch, DigitBucket } from './layoutHeaderFooter';
 export { findWordBoundaries, findParagraphBoundaries } from './text-boundaries';
 export type { BoundaryRange } from './text-boundaries';
-export { incrementalLayout, measureCache } from './incrementalLayout';
+export { incrementalLayout, measureCache, normalizeMargin } from './incrementalLayout';
 export type { HeaderFooterLayoutResult, IncrementalLayoutResult } from './incrementalLayout';
 // Re-export computeDisplayPageNumber from layout-engine for section-aware page numbering
 export { computeDisplayPageNumber, type DisplayPageInfo } from '@superdoc/layout-engine';
@@ -1695,10 +1695,12 @@ export function selectionToRects(
                 if (typeof totalHeight === 'number' && totalHeight > height) {
                   height = totalHeight;
                 }
-                const spacingAfter = (paraBlock.attrs as { spacing?: { after?: number } } | undefined)?.spacing?.after;
-                if (typeof spacingAfter === 'number' && spacingAfter > 0) {
-                  height += spacingAfter;
-                }
+                const isFirstBlock = i === 0;
+                const isLastBlock = i === cellBlocks.length - 1;
+                const spacingBefore = (paraBlock as ParagraphBlock).attrs?.spacing?.before;
+                height += effectiveTableCellSpacing(spacingBefore, isFirstBlock, padding.top);
+                const spacingAfter = (paraBlock as ParagraphBlock).attrs?.spacing?.after;
+                height += effectiveTableCellSpacing(spacingAfter, isLastBlock, padding.bottom);
               }
 
               renderedBlocks.push({ block: paraBlock, measure: paraMeasure, startLine, endLine, height });
@@ -1718,7 +1720,7 @@ export function selectionToRects(
 
             let blockTopCursor = padding.top + verticalOffset;
 
-            renderedBlocks.forEach((info) => {
+            renderedBlocks.forEach((info, blockIndex) => {
               const paragraphMarkerWidth = info.measure.marker?.markerWidth ?? 0;
               // List items in table cells are also rendered with left alignment
               const cellIsListItem = isListItem(paragraphMarkerWidth, info.block);
@@ -1730,6 +1732,11 @@ export function selectionToRects(
               const cellWordLayout = getWordLayoutConfig(info.block);
 
               const intersectingLines = findLinesIntersectingRange(info.block, info.measure, from, to);
+
+              // Match renderer: spacing.before is only applied when rendering from the start of the block (startLine === 0).
+              const rawSpacingBefore = (info.block as ParagraphBlock).attrs?.spacing?.before;
+              const effectiveSpacingBeforePx =
+                info.startLine === 0 ? effectiveTableCellSpacing(rawSpacingBefore, blockIndex === 0, padding.top) : 0;
 
               intersectingLines.forEach(({ line, index }) => {
                 if (index < info.startLine || index >= info.endLine) {
@@ -1768,7 +1775,8 @@ export function selectionToRects(
                 );
                 const lineOffset =
                   lineHeightBeforeIndex(info.measure, index) - lineHeightBeforeIndex(info.measure, info.startLine);
-                const rectY = fragment.y + contentOffsetY + rowOffset + blockTopCursor + lineOffset;
+                const rectY =
+                  fragment.y + contentOffsetY + rowOffset + blockTopCursor + effectiveSpacingBeforePx + lineOffset;
 
                 rects.push({
                   x: rectX,

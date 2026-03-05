@@ -29,6 +29,8 @@ Returns a SectionInfo object with full section properties including margins, col
 | Field | Type | Required | Description |
 | --- | --- | --- | --- |
 | `address` | SectionAddress | yes | SectionAddress |
+| `address.kind` | `"section"` | yes | Constant: `"section"` |
+| `address.sectionId` | string | yes |  |
 
 ### Example request
 
@@ -46,19 +48,81 @@ Returns a SectionInfo object with full section properties including margins, col
 | Field | Type | Required | Description |
 | --- | --- | --- | --- |
 | `address` | SectionAddress | yes | SectionAddress |
+| `address.kind` | `"section"` | yes | Constant: `"section"` |
+| `address.sectionId` | string | yes |  |
 | `breakType` | enum | no | `"continuous"`, `"nextPage"`, `"evenPage"`, `"oddPage"` |
 | `columns` | object | no |  |
+| `columns.count` | integer | no |  |
+| `columns.equalWidth` | boolean | no |  |
+| `columns.gap` | number | no |  |
 | `footerRefs` | object | no |  |
+| `footerRefs.default` | string | no |  |
+| `footerRefs.even` | string | no |  |
+| `footerRefs.first` | string | no |  |
 | `headerFooterMargins` | object | no |  |
+| `headerFooterMargins.footer` | number | no |  |
+| `headerFooterMargins.header` | number | no |  |
 | `headerRefs` | object | no |  |
+| `headerRefs.default` | string | no |  |
+| `headerRefs.even` | string | no |  |
+| `headerRefs.first` | string | no |  |
 | `index` | integer | yes |  |
 | `lineNumbering` | object | no |  |
+| `lineNumbering.countBy` | integer | no |  |
+| `lineNumbering.distance` | number | no |  |
+| `lineNumbering.enabled` | boolean | no |  |
+| `lineNumbering.restart` | enum | no | `"continuous"`, `"newPage"`, `"newSection"` |
+| `lineNumbering.start` | integer | no |  |
 | `margins` | object | no |  |
+| `margins.bottom` | number | no |  |
+| `margins.gutter` | number | no |  |
+| `margins.left` | number | no |  |
+| `margins.right` | number | no |  |
+| `margins.top` | number | no |  |
 | `oddEvenHeadersFooters` | boolean | no |  |
 | `pageBorders` | any \\| any \\| any \\| any \\| any \\| any \\| any | no | One of: any, any, any, any, any, any, any |
+| `pageBorders.bottom` | any \\| any \\| any \\| any \\| any \\| any | no | One of: any, any, any, any, any, any |
+| `pageBorders.bottom.color` | string | no |  |
+| `pageBorders.bottom.frame` | boolean | no |  |
+| `pageBorders.bottom.shadow` | boolean | no |  |
+| `pageBorders.bottom.size` | number | no |  |
+| `pageBorders.bottom.space` | number | no |  |
+| `pageBorders.bottom.style` | string | no |  |
+| `pageBorders.display` | enum | no | `"allPages"`, `"firstPage"`, `"notFirstPage"` |
+| `pageBorders.left` | any \\| any \\| any \\| any \\| any \\| any | no | One of: any, any, any, any, any, any |
+| `pageBorders.left.color` | string | no |  |
+| `pageBorders.left.frame` | boolean | no |  |
+| `pageBorders.left.shadow` | boolean | no |  |
+| `pageBorders.left.size` | number | no |  |
+| `pageBorders.left.space` | number | no |  |
+| `pageBorders.left.style` | string | no |  |
+| `pageBorders.offsetFrom` | enum | no | `"page"`, `"text"` |
+| `pageBorders.right` | any \\| any \\| any \\| any \\| any \\| any | no | One of: any, any, any, any, any, any |
+| `pageBorders.right.color` | string | no |  |
+| `pageBorders.right.frame` | boolean | no |  |
+| `pageBorders.right.shadow` | boolean | no |  |
+| `pageBorders.right.size` | number | no |  |
+| `pageBorders.right.space` | number | no |  |
+| `pageBorders.right.style` | string | no |  |
+| `pageBorders.top` | any \\| any \\| any \\| any \\| any \\| any | no | One of: any, any, any, any, any, any |
+| `pageBorders.top.color` | string | no |  |
+| `pageBorders.top.frame` | boolean | no |  |
+| `pageBorders.top.shadow` | boolean | no |  |
+| `pageBorders.top.size` | number | no |  |
+| `pageBorders.top.space` | number | no |  |
+| `pageBorders.top.style` | string | no |  |
+| `pageBorders.zOrder` | enum | no | `"front"`, `"back"` |
 | `pageNumbering` | object | no |  |
+| `pageNumbering.format` | enum | no | `"decimal"`, `"lowerLetter"`, `"upperLetter"`, `"lowerRoman"`, `"upperRoman"`, `"numberInDash"` |
+| `pageNumbering.start` | integer | no |  |
 | `pageSetup` | object | no |  |
+| `pageSetup.height` | number | no |  |
+| `pageSetup.orientation` | enum | no | `"portrait"`, `"landscape"` |
+| `pageSetup.paperSize` | string | no |  |
+| `pageSetup.width` | number | no |  |
 | `range` | object | yes |  |
+| `range.endParagraphIndex` | integer | yes |  |
+| `range.startParagraphIndex` | integer | yes |  |
 | `sectionDirection` | enum | no | `"ltr"`, `"rtl"` |
 | `titlePage` | boolean | no |  |
 | `verticalAlign` | enum | no | `"top"`, `"center"`, `"bottom"`, `"both"` |

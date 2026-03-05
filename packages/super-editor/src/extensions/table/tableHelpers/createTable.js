@@ -1,7 +1,6 @@
 // @ts-check
 import { getNodeType } from '@core/helpers/getNodeType.js';
 import { createCell } from './createCell.js';
-import { createTableBorders } from './createTableBorders.js';
 
 /**
  * Create a new table with specified dimensions
@@ -13,7 +12,8 @@ import { createTableBorders } from './createTableBorders.js';
  * @param {boolean} withHeaderRow - Create first row as header
  * @param {Object} [cellContent=null] - Initial cell content
  * @param {number[]} [columnWidths=null] - Array of pixel widths per column
- * @returns {Object} Complete table node with borders
+ * @param {Object} [tableAttrsOverride=null] - Table attributes (tableStyleId, borders, tableProperties, etc.)
+ * @returns {Object} Complete table node
  * @example
  * const table = createTable(schema, 3, 3, true)
  * @example
@@ -21,7 +21,15 @@ import { createTableBorders } from './createTableBorders.js';
  * @example
  * const table = createTable(schema, 3, 3, false, null, [200, 100, 200])
  */
-export const createTable = (schema, rowsCount, colsCount, withHeaderRow, cellContent = null, columnWidths = null) => {
+export const createTable = (
+  schema,
+  rowsCount,
+  colsCount,
+  withHeaderRow,
+  cellContent = null,
+  columnWidths = null,
+  tableAttrsOverride = null,
+) => {
   const types = {
     table: getNodeType('table', schema),
     tableRow: getNodeType('tableRow', schema),
@@ -47,11 +55,11 @@ export const createTable = (schema, rowsCount, colsCount, withHeaderRow, cellCon
   const rows = [];
 
   for (let index = 0; index < rowsCount; index++) {
-    const cellsToInsert = withHeaderRow && index === 0 ? headerCells : cells;
-    rows.push(types.tableRow.createChecked(null, cellsToInsert));
+    const isHeader = withHeaderRow && index === 0;
+    const cellsToInsert = isHeader ? headerCells : cells;
+    const rowAttrs = isHeader ? { tableRowProperties: { repeatHeader: true } } : null;
+    rows.push(types.tableRow.createChecked(rowAttrs, cellsToInsert));
   }
 
-  const tableBorders = createTableBorders();
-
-  return types.table.createChecked({ borders: tableBorders, tableStyleId: 'TableGrid' }, rows);
+  return types.table.createChecked(tableAttrsOverride, rows);
 };

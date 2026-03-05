@@ -115,19 +115,18 @@ export type CliOperationArgsById = {
 // ---------------------------------------------------------------------------
 
 export type CliCategory =
-  | 'query'
-  | 'mutation'
+  | 'core'
   | 'format'
   | 'create'
-  | 'blocks'
+  | 'tables'
+  | 'sections'
   | 'lists'
   | 'comments'
   | 'trackChanges'
-  | 'capabilities'
+  | 'toc'
+  | 'images'
   | 'history'
-  | 'lifecycle'
-  | 'session'
-  | 'introspection';
+  | 'session';
 
 /** The 10 CLI-only operation identifiers (without `doc.` prefix). Single source of truth. */
 export const CLI_ONLY_OPERATIONS = [

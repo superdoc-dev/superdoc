@@ -5033,6 +5033,168 @@ describe('measureBlock', () => {
     });
   });
 
+  describe('table cell measurement with spacing.before', () => {
+    it('should add spacing.before to content height for each paragraph', async () => {
+      const table: FlowBlock = {
+        kind: 'table',
+        id: 'table-spacing-before',
+        attrs: {},
+        rows: [
+          {
+            id: 'row-0',
+            cells: [
+              {
+                id: 'cell-0-0',
+                attrs: {},
+                blocks: [
+                  {
+                    kind: 'paragraph',
+                    id: 'para-0',
+                    runs: [{ text: 'First paragraph', fontFamily: 'Arial', fontSize: 16 }],
+                    attrs: { spacing: { before: 10 } },
+                  },
+                  {
+                    kind: 'paragraph',
+                    id: 'para-1',
+                    runs: [{ text: 'Second paragraph', fontFamily: 'Arial', fontSize: 16 }],
+                    attrs: { spacing: { before: 20 } },
+                  },
+                ],
+              },
+            ],
+          },
+        ],
+      };
+
+      const measure = await measureBlock(table, 1000);
+      expect(measure.kind).toBe('table');
+      if (measure.kind !== 'table') throw new Error('expected table measure');
+
+      const cellMeasure = measure.rows[0].cells[0];
+      const block0Measure = cellMeasure.blocks[0];
+      const block1Measure = cellMeasure.blocks[1];
+
+      expect(block0Measure.kind).toBe('paragraph');
+      expect(block1Measure.kind).toBe('paragraph');
+
+      const para0Height = block0Measure.kind === 'paragraph' ? block0Measure.totalHeight : 0;
+      const para1Height = block1Measure.kind === 'paragraph' ? block1Measure.totalHeight : 0;
+
+      // Cell height includes: 10 (spacing.before para-0) + para0Height + 20 (spacing.before para-1) + para1Height
+      const expectedCellHeight = 10 + para0Height + 20 + para1Height;
+      expect(cellMeasure.height).toBe(expectedCellHeight);
+    });
+
+    it('should only add positive spacing.before', async () => {
+      const table: FlowBlock = {
+        kind: 'table',
+        id: 'table-spacing-before-zero',
+        attrs: {},
+        rows: [
+          {
+            id: 'row-0',
+            cells: [
+              {
+                id: 'cell-0-0',
+                attrs: {},
+                blocks: [
+                  {
+                    kind: 'paragraph',
+                    id: 'para-0',
+                    runs: [{ text: 'With before', fontFamily: 'Arial', fontSize: 16 }],
+                    attrs: { spacing: { before: 12 } },
+                  },
+                  {
+                    kind: 'paragraph',
+                    id: 'para-1',
+                    runs: [{ text: 'Zero before', fontFamily: 'Arial', fontSize: 16 }],
+                    attrs: { spacing: { before: 0 } },
+                  },
+                  {
+                    kind: 'paragraph',
+                    id: 'para-2',
+                    runs: [{ text: 'Negative before', fontFamily: 'Arial', fontSize: 16 }],
+                    attrs: { spacing: { before: -5 } },
+                  },
+                ],
+              },
+            ],
+          },
+        ],
+      };
+
+      const measure = await measureBlock(table, 1000);
+      expect(measure.kind).toBe('table');
+      if (measure.kind !== 'table') throw new Error('expected table measure');
+
+      const cellMeasure = measure.rows[0].cells[0];
+      const block0 = cellMeasure.blocks[0];
+      const block1 = cellMeasure.blocks[1];
+      const block2 = cellMeasure.blocks[2];
+
+      const para0Height = block0.kind === 'paragraph' ? block0.totalHeight : 0;
+      const para1Height = block1.kind === 'paragraph' ? block1.totalHeight : 0;
+      const para2Height = block2.kind === 'paragraph' ? block2.totalHeight : 0;
+
+      // Only positive spacing.before (12) is added; 0 and negative are ignored
+      const expectedCellHeight = 12 + para0Height + para1Height + para2Height;
+      expect(cellMeasure.height).toBe(expectedCellHeight);
+    });
+
+    it('should absorb first paragraph spacing.before into cell paddingTop (Word semantics)', async () => {
+      // Word absorbs the first paragraph's spacing.before into the cell's top padding,
+      // same as last paragraph's spacing.after and paddingBottom. Only the excess is added.
+      const paddingTop = 10;
+      const paddingBottom = 0;
+      const table: FlowBlock = {
+        kind: 'table',
+        id: 'table-spacing-before-absorbed',
+        attrs: {},
+        rows: [
+          {
+            id: 'row-0',
+            cells: [
+              {
+                id: 'cell-0-0',
+                attrs: { padding: { top: paddingTop, left: 4, right: 4, bottom: paddingBottom } },
+                blocks: [
+                  {
+                    kind: 'paragraph',
+                    id: 'para-0',
+                    runs: [{ text: 'First in cell', fontFamily: 'Arial', fontSize: 16 }],
+                    attrs: { spacing: { before: 10 } }, // same as paddingTop → excess 0
+                  },
+                  {
+                    kind: 'paragraph',
+                    id: 'para-1',
+                    runs: [{ text: 'Second in cell', fontFamily: 'Arial', fontSize: 16 }],
+                    attrs: { spacing: { before: 20 } }, // not first → full 20
+                  },
+                ],
+              },
+            ],
+          },
+        ],
+      };
+
+      const measure = await measureBlock(table, 1000);
+      expect(measure.kind).toBe('table');
+      if (measure.kind !== 'table') throw new Error('expected table measure');
+
+      const cellMeasure = measure.rows[0].cells[0];
+      const block0 = cellMeasure.blocks[0];
+      const block1 = cellMeasure.blocks[1];
+
+      const para0Height = block0.kind === 'paragraph' ? block0.totalHeight : 0;
+      const para1Height = block1.kind === 'paragraph' ? block1.totalHeight : 0;
+
+      // First para: spacing.before 10, paddingTop 10 → excess 0. Second para: full 20.
+      // Cell height = paddingTop + 0 + para0Height + 20 + para1Height + paddingBottom
+      const expectedCellHeight = paddingTop + 0 + para0Height + 20 + para1Height + paddingBottom;
+      expect(cellMeasure.height).toBe(expectedCellHeight);
+    });
+  });
+
   describe('table column count with rowspan', () => {
     it('should preserve all grid columns when rows have fewer physical cells due to rowspan', async () => {
       // Simulates PCI table structure: 4 grid columns, but some rows have only 2-3 physical cells

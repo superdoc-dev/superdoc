@@ -31,6 +31,7 @@ function createNode(typeName: string, children: ProseMirrorNode[] = [], options:
     attrs,
     text: isText ? text : undefined,
     nodeSize,
+    content: { size: contentSize },
     isText,
     isInline,
     isBlock,
@@ -172,8 +173,27 @@ function makeEditorWithDuplicateBlockIds(): {
   return { editor, dispatch, tr };
 }
 
+/**
+ * Creates a doc containing only a table (no top-level text blocks).
+ *
+ * Layout:
+ * - doc: pos 0
+ * - table: pos 0..2 (nodeSize 2, no children)
+ * - doc.content.size = 2
+ *
+ * The structural-end path creates a paragraph at doc.content.size via
+ * schema.nodes.paragraph.create() + schema.text().
+ */
 function makeEditorWithoutEditableTextBlock(): {
   editor: Editor;
+  dispatch: ReturnType<typeof vi.fn>;
+  tr: {
+    insertText: ReturnType<typeof vi.fn>;
+    insert: ReturnType<typeof vi.fn>;
+    delete: ReturnType<typeof vi.fn>;
+    setMeta: ReturnType<typeof vi.fn>;
+    addMark: ReturnType<typeof vi.fn>;
+  };
 } {
   const table = createNode('table', [], {
     attrs: { sdBlockId: 't1' },
@@ -184,14 +204,29 @@ function makeEditorWithoutEditableTextBlock(): {
 
   const tr = {
     insertText: vi.fn(),
+    insert: vi.fn(),
     delete: vi.fn(),
     setMeta: vi.fn(),
     addMark: vi.fn(),
   };
   tr.insertText.mockReturnValue(tr);
+  tr.insert.mockReturnValue(tr);
   tr.delete.mockReturnValue(tr);
   tr.setMeta.mockReturnValue(tr);
   tr.addMark.mockReturnValue(tr);
+
+  const mockTextNode = { isText: true, text: 'X' };
+  const mockParagraph = { type: { name: 'paragraph' }, content: [mockTextNode] };
+  const schema = {
+    text: vi.fn(() => mockTextNode),
+    nodes: {
+      paragraph: {
+        create: vi.fn(() => mockParagraph),
+      },
+    },
+  };
+
+  const dispatch = vi.fn();
 
   const editor = {
     state: {
@@ -200,14 +235,18 @@ function makeEditorWithoutEditableTextBlock(): {
         textBetween: vi.fn(() => ''),
       },
       tr,
+      schema,
     },
     commands: {
       insertTrackedChange: vi.fn(() => true),
     },
-    dispatch: vi.fn(),
+    options: {
+      user: { name: 'Test User' },
+    },
+    dispatch,
   } as unknown as Editor;
 
-  return { editor };
+  return { editor, dispatch, tr };
 }
 
 function makeEditorWithBlankParagraph(): {
@@ -257,6 +296,170 @@ function makeEditorWithBlankParagraph(): {
   } as unknown as Editor;
 
   return { editor, dispatch, insertTrackedChange, tr };
+}
+
+/**
+ * Creates a doc with two paragraphs: "Hello" (p1) and "World" (p2).
+ *
+ * Layout:
+ * - doc: pos 0
+ * - p1 "Hello": pos 0..7 (content 1..6)
+ * - p2 "World": pos 7..14 (content 8..13)
+ */
+function makeEditorWithTwoParagraphs(): {
+  editor: Editor;
+  dispatch: ReturnType<typeof vi.fn>;
+  tr: {
+    insertText: ReturnType<typeof vi.fn>;
+    delete: ReturnType<typeof vi.fn>;
+    setMeta: ReturnType<typeof vi.fn>;
+    addMark: ReturnType<typeof vi.fn>;
+  };
+} {
+  const firstTextNode = createNode('text', [], { text: 'Hello' });
+  const secondTextNode = createNode('text', [], { text: 'World' });
+  const firstParagraph = createNode('paragraph', [firstTextNode], {
+    attrs: { sdBlockId: 'p1' },
+    isBlock: true,
+    inlineContent: true,
+  });
+  const secondParagraph = createNode('paragraph', [secondTextNode], {
+    attrs: { sdBlockId: 'p2' },
+    isBlock: true,
+    inlineContent: true,
+  });
+  const doc = createNode('doc', [firstParagraph, secondParagraph], { isBlock: false });
+
+  const tr = {
+    insertText: vi.fn(),
+    delete: vi.fn(),
+    setMeta: vi.fn(),
+    addMark: vi.fn(),
+  };
+  tr.insertText.mockReturnValue(tr);
+  tr.delete.mockReturnValue(tr);
+  tr.setMeta.mockReturnValue(tr);
+  tr.addMark.mockReturnValue(tr);
+
+  const dispatch = vi.fn();
+
+  const editor = {
+    state: {
+      doc: {
+        ...doc,
+        textBetween: vi.fn((from: number, to: number) => {
+          const fullText = 'Hello\nWorld';
+          const start = Math.max(0, from - 1);
+          const end = Math.max(start, to - 1);
+          return fullText.slice(start, end);
+        }),
+      },
+      tr,
+    },
+    commands: {
+      insertTrackedChange: vi.fn(() => true),
+    },
+    options: {
+      user: { name: 'Test User' },
+    },
+    dispatch,
+  } as unknown as Editor;
+
+  return { editor, dispatch, tr };
+}
+
+/**
+ * Creates a doc with a paragraph "Hello" (p1) followed by a table containing
+ * a cell with a nested paragraph "Cell" (cellP).
+ *
+ * Layout:
+ * - doc: pos 0
+ * - p1 "Hello": pos 0..7 (content 1..6)
+ * - table: pos 7..20
+ *   - tableRow: pos 8..19
+ *     - tableCell: pos 9..18
+ *       - paragraph "Cell": pos 10..16 (content 11..15)
+ *
+ * The resolver must target p1 (top-level), NOT the cell paragraph.
+ */
+function makeEditorWithTrailingTable(): {
+  editor: Editor;
+  dispatch: ReturnType<typeof vi.fn>;
+  tr: {
+    insertText: ReturnType<typeof vi.fn>;
+    delete: ReturnType<typeof vi.fn>;
+    setMeta: ReturnType<typeof vi.fn>;
+    addMark: ReturnType<typeof vi.fn>;
+  };
+} {
+  const textNode = createNode('text', [], { text: 'Hello' });
+  const paragraph = createNode('paragraph', [textNode], {
+    attrs: { sdBlockId: 'p1' },
+    isBlock: true,
+    inlineContent: true,
+  });
+
+  const cellTextNode = createNode('text', [], { text: 'Cell' });
+  const cellParagraph = createNode('paragraph', [cellTextNode], {
+    attrs: { sdBlockId: 'cellP' },
+    isBlock: true,
+    inlineContent: true,
+  });
+  const tableCell = createNode('tableCell', [cellParagraph], {
+    attrs: { sdBlockId: 'tc1' },
+    isBlock: true,
+    inlineContent: false,
+  });
+  const tableRow = createNode('tableRow', [tableCell], {
+    attrs: { sdBlockId: 'tr1' },
+    isBlock: true,
+    inlineContent: false,
+  });
+  const table = createNode('table', [tableRow], {
+    attrs: { sdBlockId: 't1' },
+    isBlock: true,
+    inlineContent: false,
+  });
+
+  const doc = createNode('doc', [paragraph, table], { isBlock: false, inlineContent: false });
+
+  const tr = {
+    insertText: vi.fn(),
+    delete: vi.fn(),
+    setMeta: vi.fn(),
+    addMark: vi.fn(),
+  };
+  tr.insertText.mockReturnValue(tr);
+  tr.delete.mockReturnValue(tr);
+  tr.setMeta.mockReturnValue(tr);
+  tr.addMark.mockReturnValue(tr);
+
+  const dispatch = vi.fn();
+
+  const editor = {
+    state: {
+      doc: {
+        ...doc,
+        textBetween: vi.fn((from: number, to: number) => {
+          // p1 content at 1..6 = "Hello", cell content at 11..15 = "Cell"
+          const text = 'Hello';
+          const start = Math.max(0, from - 1);
+          const end = Math.max(start, to - 1);
+          return text.slice(start, end);
+        }),
+      },
+      tr,
+    },
+    commands: {
+      insertTrackedChange: vi.fn(() => true),
+    },
+    options: {
+      user: { name: 'Test User' },
+    },
+    dispatch,
+  } as unknown as Editor;
+
+  return { editor, dispatch, tr };
 }
 
 describe('writeAdapter', () => {
@@ -425,7 +628,7 @@ describe('writeAdapter', () => {
     });
   });
 
-  it('defaults insert-without-target to the first paragraph at offset 0', () => {
+  it('defaults insert-without-target to the end of the last paragraph', () => {
     const { editor, dispatch, tr } = makeEditor('Hello');
 
     const receipt = writeAdapter(
@@ -438,9 +641,9 @@ describe('writeAdapter', () => {
     );
 
     expect(receipt.success).toBe(true);
-    expect(receipt.resolution.target.range).toEqual({ start: 0, end: 0 });
-    expect(receipt.resolution.range).toEqual({ from: 1, to: 1 });
-    expect(tr.insertText).toHaveBeenCalledWith('X', 1, 1);
+    expect(receipt.resolution.target.range).toEqual({ start: 5, end: 5 });
+    expect(receipt.resolution.range).toEqual({ from: 6, to: 6 });
+    expect(tr.insertText).toHaveBeenCalledWith('X', 6, 6);
     expect(tr.setMeta).toHaveBeenCalledWith('inputType', 'programmatic');
     expect(dispatch).toHaveBeenCalledTimes(1);
   });
@@ -469,7 +672,7 @@ describe('writeAdapter', () => {
     expect(dispatch).toHaveBeenCalledTimes(1);
   });
 
-  it('supports tracked insert-without-target using the default insertion point', () => {
+  it('supports tracked insert-without-target at the document end', () => {
     const { editor, insertTrackedChange } = makeEditor('Hello');
 
     const receipt = writeAdapter(
@@ -484,26 +687,49 @@ describe('writeAdapter', () => {
     expect(receipt.success).toBe(true);
     expect(insertTrackedChange).toHaveBeenCalledTimes(1);
     expect(insertTrackedChange.mock.calls[0]?.[0]).toMatchObject({
-      from: 1,
-      to: 1,
+      from: 6,
+      to: 6,
       text: 'X',
     });
     expect(typeof insertTrackedChange.mock.calls[0]?.[0]?.id).toBe('string');
   });
 
-  it('throws TARGET_NOT_FOUND for insert-without-target when no editable text block exists', () => {
-    const { editor } = makeEditorWithoutEditableTextBlock();
+  it('creates a paragraph at document end for insert-without-target when no editable text block exists', () => {
+    const { editor, dispatch, tr } = makeEditorWithoutEditableTextBlock();
 
-    expect(() =>
-      writeAdapter(
-        editor,
-        {
-          kind: 'insert',
-          text: 'X',
-        },
-        { changeMode: 'direct' },
-      ),
-    ).toThrow('Mutation target could not be resolved.');
+    const receipt = writeAdapter(
+      editor,
+      {
+        kind: 'insert',
+        text: 'X',
+      },
+      { changeMode: 'direct' },
+    );
+
+    expect(receipt.success).toBe(true);
+    // Structural-end: creates a paragraph at doc.content.size (2) with direct meta
+    expect(tr.insert).toHaveBeenCalledWith(2, expect.anything());
+    expect(tr.setMeta).toHaveBeenCalledWith('skipTrackChanges', true);
+    expect(dispatch).toHaveBeenCalledTimes(1);
+  });
+
+  it('creates a tracked paragraph at document end for tracked structural-end insert', () => {
+    const { editor, dispatch, tr } = makeEditorWithoutEditableTextBlock();
+
+    const receipt = writeAdapter(
+      editor,
+      {
+        kind: 'insert',
+        text: 'X',
+      },
+      { changeMode: 'tracked' },
+    );
+
+    expect(receipt.success).toBe(true);
+    // Structural-end with tracked mode: paragraph created with tracked meta
+    expect(tr.insert).toHaveBeenCalledWith(2, expect.anything());
+    expect(tr.setMeta).toHaveBeenCalledWith('forceTrackChanges', true);
+    expect(dispatch).toHaveBeenCalledTimes(1);
   });
 
   it('throws CAPABILITY_UNAVAILABLE when tracked writes are unavailable', () => {
@@ -843,5 +1069,90 @@ describe('writeAdapter', () => {
       to: 3,
       text: 'X',
     });
+  });
+
+  // -- insert-without-target: document-end semantics --
+
+  it('targets the last paragraph when multiple paragraphs exist', () => {
+    const { editor, tr } = makeEditorWithTwoParagraphs();
+
+    const receipt = writeAdapter(
+      editor,
+      {
+        kind: 'insert',
+        text: 'X',
+      },
+      { changeMode: 'direct' },
+    );
+
+    expect(receipt.success).toBe(true);
+    // Should target p2 at offset 5 (end of "World"), PM pos 13
+    expect(receipt.resolution.target).toEqual({
+      kind: 'text',
+      blockId: 'p2',
+      range: { start: 5, end: 5 },
+    });
+    expect(receipt.resolution.range).toEqual({ from: 13, to: 13 });
+    expect(tr.insertText).toHaveBeenCalledWith('X', 13, 13);
+  });
+
+  it('dry-run resolves to document end without mutating', () => {
+    const { editor, dispatch, tr } = makeEditor('Hello');
+
+    const receipt = writeAdapter(
+      editor,
+      {
+        kind: 'insert',
+        text: 'X',
+      },
+      { changeMode: 'direct', dryRun: true },
+    );
+
+    expect(receipt.success).toBe(true);
+    expect(receipt.resolution.target.range).toEqual({ start: 5, end: 5 });
+    expect(receipt.resolution.range).toEqual({ from: 6, to: 6 });
+    expect(tr.insertText).not.toHaveBeenCalled();
+    expect(dispatch).not.toHaveBeenCalled();
+  });
+
+  it('targets the top-level paragraph when doc ends with a table', () => {
+    const { editor, tr } = makeEditorWithTrailingTable();
+
+    const receipt = writeAdapter(
+      editor,
+      {
+        kind: 'insert',
+        text: 'X',
+      },
+      { changeMode: 'direct' },
+    );
+
+    expect(receipt.success).toBe(true);
+    // Must target p1 (top-level), not the nested cell paragraph
+    expect(receipt.resolution.target).toEqual({
+      kind: 'text',
+      blockId: 'p1',
+      range: { start: 5, end: 5 },
+    });
+    expect(receipt.resolution.range).toEqual({ from: 6, to: 6 });
+    expect(tr.insertText).toHaveBeenCalledWith('X', 6, 6);
+  });
+
+  it('creates a paragraph at document end when doc has only non-text top-level blocks', () => {
+    const { editor, dispatch, tr } = makeEditorWithoutEditableTextBlock();
+
+    const receipt = writeAdapter(
+      editor,
+      {
+        kind: 'insert',
+        text: 'X',
+      },
+      { changeMode: 'direct' },
+    );
+
+    expect(receipt.success).toBe(true);
+    // Structural-end: creates a paragraph via tr.insert at doc.content.size (2)
+    expect(tr.insert).toHaveBeenCalledWith(2, expect.anything());
+    expect(dispatch).toHaveBeenCalledTimes(1);
   });
 });

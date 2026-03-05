@@ -5,7 +5,7 @@ import {
   type StylesApplyInput,
   type StylesApplyOptions,
   type StylesApplyReceipt,
-} from './styles.js';
+} from './index.js';
 import { DocumentApiValidationError } from '../errors.js';
 
 // ---------------------------------------------------------------------------

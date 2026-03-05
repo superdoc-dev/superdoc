@@ -182,12 +182,21 @@ export class SuperDoc extends EventEmitter {
       this.config.trackChanges.visible = false;
     }
 
-    // Web layout mode requires layout engine to be disabled (content reflows vs pagination)
-    if (this.config.viewOptions?.layout === 'web' && this.config.useLayoutEngine) {
+    // Web layout behavior:
+    // - Backward compatible default: web layout still uses PM rendering.
+    // - Opt-in semantic path: allow layout engine only when flowMode === 'semantic'.
+    const isWebLayout = this.config.viewOptions?.layout === 'web';
+    const requestedFlowMode = this.config.layoutEngineOptions?.flowMode;
+    const isSemanticFlow = requestedFlowMode === 'semantic';
+    if (isWebLayout && this.config.useLayoutEngine && !isSemanticFlow) {
       console.warn(
-        '[SuperDoc] Web layout mode requires useLayoutEngine: false. Automatically disabling layout engine.',
+        "[SuperDoc] Web layout uses PM fallback unless layoutEngineOptions.flowMode is set to 'semantic'. Automatically disabling layout engine.",
       );
       this.config.useLayoutEngine = false;
+    }
+    if (!isWebLayout && isSemanticFlow) {
+      console.warn("[SuperDoc] flowMode 'semantic' is only valid with web layout. Coercing to 'paginated'.");
+      this.config.layoutEngineOptions.flowMode = 'paginated';
     }
 
     const incomingUser = this.config.user;
@@ -736,9 +745,9 @@ export class SuperDoc extends EventEmitter {
     this.toolbarElement = this.config.modules?.toolbar?.selector || this.config.toolbar;
     this.toolbar = null;
 
-    // Build excludeItems list - hide ruler button if rulers not configured
+    // Build excludeItems list - hide ruler button if rulers not configured or in web layout
     const excludeItems = [...(moduleConfig.excludeItems || [])];
-    if (!this.config.rulers) {
+    if (!this.config.rulers || this.config.viewOptions?.layout === 'web') {
       excludeItems.push('ruler');
     }
 

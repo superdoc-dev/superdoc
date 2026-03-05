@@ -8,8 +8,9 @@ import { getTrackChanges } from './trackChangesHelpers/getTrackChanges.js';
 import { markDeletion } from './trackChangesHelpers/markDeletion.js';
 import { markInsertion } from './trackChangesHelpers/markInsertion.js';
 import { collectTrackedChanges, isTrackedChangeActionAllowed } from './permission-helpers.js';
-import { CommentsPluginKey } from '../comment/comments-plugin.js';
+import { CommentsPluginKey, createOrUpdateTrackedChangeComment } from '../comment/comments-plugin.js';
 import { findMarkInRangeBySnapshot } from './trackChangesHelpers/markSnapshotHelpers.js';
+import { hasExpandedSelection } from '@utils/selectionUtils.js';
 
 export const TrackChanges = Extension.create({
   name: 'trackChanges',
@@ -30,157 +31,101 @@ export const TrackChanges = Extension.create({
 
           // tr.setMeta('acceptReject', true);
           tr.setMeta('inputType', 'acceptReject');
-
+          const touchedChangeIds = new Set();
           const map = new Mapping();
 
           doc.nodesBetween(from, to, (node, pos) => {
-            if (node.marks && node.marks.find((mark) => mark.type.name === TrackDeleteMarkName)) {
-              const deletionStep = new ReplaceStep(
-                map.map(Math.max(pos, from)),
-                map.map(Math.min(pos + node.nodeSize, to)),
-                Slice.empty,
-              );
+            const trackedMark = getTrackedMark(node);
+            if (!trackedMark) return;
 
+            const mappedFrom = map.map(Math.max(pos, from));
+            const mappedTo = map.map(Math.min(pos + node.nodeSize, to));
+            if (mappedFrom >= mappedTo) return;
+
+            if (trackedMark.attrs?.id) touchedChangeIds.add(trackedMark.attrs.id);
+
+            if (trackedMark.type.name === TrackDeleteMarkName) {
+              const deletionStep = new ReplaceStep(mappedFrom, mappedTo, Slice.empty);
               tr.step(deletionStep);
               map.appendMap(deletionStep.getMap());
-            } else if (node.marks && node.marks.find((mark) => mark.type.name === TrackInsertMarkName)) {
-              const insertionMark = node.marks.find((mark) => mark.type.name === TrackInsertMarkName);
-
-              tr.step(
-                new RemoveMarkStep(
-                  map.map(Math.max(pos, from)),
-                  map.map(Math.min(pos + node.nodeSize, to)),
-                  insertionMark,
-                ),
-              );
-            } else if (node.marks && node.marks.find((mark) => mark.type.name === TrackFormatMarkName)) {
-              const formatChangeMark = node.marks.find((mark) => mark.type.name === TrackFormatMarkName);
-
-              tr.step(
-                new RemoveMarkStep(
-                  map.map(Math.max(pos, from)),
-                  map.map(Math.min(pos + node.nodeSize, to)),
-                  formatChangeMark,
-                ),
-              );
+              return;
             }
+
+            tr.step(new RemoveMarkStep(mappedFrom, mappedTo, trackedMark));
           });
 
-          if (tr.steps.length) {
-            dispatch(tr);
-          }
-
-          return true;
+          return dispatchTrackedChangeResolution({
+            state,
+            tr,
+            dispatch,
+            editor,
+            touchedChangeIds,
+          });
         },
 
       rejectTrackedChangesBetween:
         (from, to) =>
         ({ state, dispatch, editor }) => {
-          const trackedChangesInSelection = collectTrackedChanges({ state, from, to });
-          const trackedChangesById = getTrackedChangesByTouchedIds(state, trackedChangesInSelection);
-          const trackedChangesWithoutId = trackedChangesInSelection.filter(({ mark }) => !mark?.attrs?.id);
-          const trackedChanges = dedupeTrackedChangeRanges([...trackedChangesById, ...trackedChangesWithoutId]);
+          const trackedChanges = collectTrackedChanges({ state, from, to });
           if (!isTrackedChangeActionAllowed({ editor, action: 'reject', trackedChanges })) return false;
 
           const { tr, doc } = state;
-          // Keep the IDs rejected in this transaction so the comments layer can
-          // resolve/hide the corresponding tracked-change bubbles in one path.
-          const rejectedChangeIds = new Set();
-
-          // tr.setMeta('acceptReject', true);
+          const touchedChangeIds = new Set();
           tr.setMeta('inputType', 'acceptReject');
 
           const map = new Mapping();
 
-          trackedChanges.forEach(({ from: rangeFrom, to: rangeTo }) => {
-            doc.nodesBetween(rangeFrom, rangeTo, (node, pos) => {
-              if (node.marks && node.marks.find((mark) => mark.type.name === TrackDeleteMarkName)) {
-                const deletionMark = node.marks.find((mark) => mark.type.name === TrackDeleteMarkName);
-                if (deletionMark?.attrs?.id) rejectedChangeIds.add(deletionMark.attrs.id);
+          doc.nodesBetween(from, to, (node, pos) => {
+            const trackedMark = getTrackedMark(node);
+            if (!trackedMark) return;
 
-                tr.step(
-                  new RemoveMarkStep(
-                    map.map(Math.max(pos, rangeFrom)),
-                    map.map(Math.min(pos + node.nodeSize, rangeTo)),
-                    deletionMark,
-                  ),
-                );
-              } else if (node.marks && node.marks.find((mark) => mark.type.name === TrackInsertMarkName)) {
-                const insertionMark = node.marks.find((mark) => mark.type.name === TrackInsertMarkName);
-                if (insertionMark?.attrs?.id) rejectedChangeIds.add(insertionMark.attrs.id);
+            const mappedFrom = map.map(Math.max(pos, from));
+            const mappedTo = map.map(Math.min(pos + node.nodeSize, to));
+            if (mappedFrom >= mappedTo) return;
 
-                const deletionStep = new ReplaceStep(
-                  map.map(Math.max(pos, rangeFrom)),
-                  map.map(Math.min(pos + node.nodeSize, rangeTo)),
-                  Slice.empty,
-                );
+            if (trackedMark.attrs?.id) touchedChangeIds.add(trackedMark.attrs.id);
 
-                tr.step(deletionStep);
-                map.appendMap(deletionStep.getMap());
-              } else if (node.marks && node.marks.find((mark) => mark.type.name === TrackFormatMarkName)) {
-                const formatChangeMark = node.marks.find((mark) => mark.type.name === TrackFormatMarkName);
-                if (formatChangeMark?.attrs?.id) rejectedChangeIds.add(formatChangeMark.attrs.id);
+            if (trackedMark.type.name === TrackDeleteMarkName) {
+              tr.step(new RemoveMarkStep(mappedFrom, mappedTo, trackedMark));
+              return;
+            }
 
-                formatChangeMark.attrs.before.forEach((oldMark) => {
-                  tr.step(
-                    new AddMarkStep(
-                      map.map(Math.max(pos, rangeFrom)),
-                      map.map(Math.min(pos + node.nodeSize, rangeTo)),
-                      state.schema.marks[oldMark.type].create(oldMark.attrs),
-                    ),
-                  );
-                });
+            if (trackedMark.type.name === TrackInsertMarkName) {
+              const deletionStep = new ReplaceStep(mappedFrom, mappedTo, Slice.empty);
+              tr.step(deletionStep);
+              map.appendMap(deletionStep.getMap());
+              return;
+            }
 
-                formatChangeMark.attrs.after.forEach((newMark) => {
-                  const mappedFrom = map.map(Math.max(pos, rangeFrom));
-                  const mappedTo = map.map(Math.min(pos + node.nodeSize, rangeTo));
-                  const liveMark = findMarkInRangeBySnapshot({
-                    doc: tr.doc,
-                    from: mappedFrom,
-                    to: mappedTo,
-                    snapshot: newMark,
-                  });
-
-                  if (!liveMark) {
-                    return;
-                  }
-
-                  tr.step(new RemoveMarkStep(mappedFrom, mappedTo, liveMark));
-                });
-
-                tr.step(
-                  new RemoveMarkStep(
-                    map.map(Math.max(pos, rangeFrom)),
-                    map.map(Math.min(pos + node.nodeSize, rangeTo)),
-                    formatChangeMark,
-                  ),
-                );
-              }
+            trackedMark.attrs.before.forEach((oldMark) => {
+              tr.step(new AddMarkStep(mappedFrom, mappedTo, state.schema.marks[oldMark.type].create(oldMark.attrs)));
             });
+
+            trackedMark.attrs.after.forEach((newMark) => {
+              const liveMark = findMarkInRangeBySnapshot({
+                doc: tr.doc,
+                from: mappedFrom,
+                to: mappedTo,
+                snapshot: newMark,
+              });
+
+              if (!liveMark) {
+                return;
+              }
+
+              tr.step(new RemoveMarkStep(mappedFrom, mappedTo, liveMark));
+            });
+
+            tr.step(new RemoveMarkStep(mappedFrom, mappedTo, trackedMark));
           });
 
-          if (tr.steps.length) {
-            dispatch(tr);
-
-            if (editor?.emit && rejectedChangeIds.size) {
-              const resolvedByEmail = editor.options?.user?.email;
-              const resolvedByName = editor.options?.user?.name;
-
-              // Bubble reject-by-selection/reject-all through the same
-              // tracked-change comment resolution channel used by bubble actions.
-              rejectedChangeIds.forEach((changeId) => {
-                editor.emit('commentsUpdate', {
-                  type: 'trackedChange',
-                  event: 'resolve',
-                  changeId,
-                  resolvedByEmail,
-                  resolvedByName,
-                });
-              });
-            }
-          }
-
-          return true;
+          return dispatchTrackedChangeResolution({
+            state,
+            tr,
+            dispatch,
+            editor,
+            touchedChangeIds,
+          });
         },
 
       acceptTrackedChange:
@@ -199,15 +144,36 @@ export const TrackChanges = Extension.create({
 
       acceptTrackedChangeFromToolbar:
         () =>
-        ({ state, commands }) => {
-          const commentsPluginState = CommentsPluginKey.getState(state);
-          const activeThreadId = commentsPluginState?.activeThreadId;
+        ({ state, commands, editor }) => {
+          return resolveTrackedChangeAction({
+            action: 'accept',
+            state,
+            commands,
+            editor,
+            ...getTrackedChangeResolutionContext({
+              state,
+              trackedChangeId: CommentsPluginKey.getState(state)?.activeThreadId,
+            }),
+          });
+        },
 
-          if (activeThreadId && commentsPluginState?.trackedChanges?.[activeThreadId]) {
-            return commands.acceptTrackedChangeById(activeThreadId);
-          } else {
-            return commands.acceptTrackedChangeBySelection();
-          }
+      acceptTrackedChangeFromContextMenu:
+        ({ from, to, trackedChangeId = null } = {}) =>
+        ({ state, commands, editor }) => {
+          return resolveTrackedChangeAction({
+            action: 'accept',
+            state,
+            commands,
+            editor,
+            selection:
+              Number.isFinite(from) && Number.isFinite(to)
+                ? {
+                    from,
+                    to,
+                  }
+                : null,
+            ...getTrackedChangeResolutionContext({ state, trackedChangeId }),
+          });
         },
 
       acceptTrackedChangeById:
@@ -262,15 +228,36 @@ export const TrackChanges = Extension.create({
 
       rejectTrackedChangeFromToolbar:
         () =>
-        ({ state, commands }) => {
-          const commentsPluginState = CommentsPluginKey.getState(state);
-          const activeThreadId = commentsPluginState?.activeThreadId;
+        ({ state, commands, editor }) => {
+          return resolveTrackedChangeAction({
+            action: 'reject',
+            state,
+            commands,
+            editor,
+            ...getTrackedChangeResolutionContext({
+              state,
+              trackedChangeId: CommentsPluginKey.getState(state)?.activeThreadId,
+            }),
+          });
+        },
 
-          if (activeThreadId && commentsPluginState?.trackedChanges?.[activeThreadId]) {
-            return commands.rejectTrackedChangeById(activeThreadId);
-          } else {
-            return commands.rejectTrackedChangeOnSelection();
-          }
+      rejectTrackedChangeFromContextMenu:
+        ({ from, to, trackedChangeId = null } = {}) =>
+        ({ state, commands, editor }) => {
+          return resolveTrackedChangeAction({
+            action: 'reject',
+            state,
+            commands,
+            editor,
+            selection:
+              Number.isFinite(from) && Number.isFinite(to)
+                ? {
+                    from,
+                    to,
+                  }
+                : null,
+            ...getTrackedChangeResolutionContext({ state, trackedChangeId }),
+          });
         },
 
       rejectAllTrackedChanges:
@@ -508,46 +495,168 @@ export const TrackChanges = Extension.create({
   },
 });
 
-// For reference.
-// const trackChangesCallback = (action, acceptedChanges, revertedChanges, editor) => {
-//   const id = acceptedChanges.modifiers[0]?.id || revertedChanges.modifiers[0]?.id;
-//   if (action === 'accept') {
-//     editor.emit('trackedChangesUpdate', { action, id });
-//   } else {
-//     editor.emit('trackedChangesUpdate', { action, id });
-//   }
-// };
+const TRACKED_CHANGE_MARKS = [TrackDeleteMarkName, TrackInsertMarkName, TrackFormatMarkName];
 
-const dedupeTrackedChangeRanges = (changes = []) => {
-  const byKey = new Map();
-  changes.forEach((change) => {
-    if (!change || typeof change.from !== 'number' || typeof change.to !== 'number') {
+const getTrackedMark = (node) => node?.marks?.find((mark) => TRACKED_CHANGE_MARKS.includes(mark.type.name)) ?? null;
+
+const getTrackedChangeActionSelection = ({ state, editor }) => {
+  const currentSelection = state?.selection;
+  if (hasExpandedSelection(currentSelection)) {
+    return currentSelection;
+  }
+
+  const preservedSelection = editor?.options?.preservedSelection ?? editor?.options?.lastSelection;
+  if (hasExpandedSelection(preservedSelection)) {
+    return preservedSelection;
+  }
+
+  return currentSelection;
+};
+
+const getTrackedChangeResolutionContext = ({ state, trackedChangeId = null }) => {
+  const commentsPluginState = CommentsPluginKey.getState(state);
+  const resolvedTrackedChangeId = trackedChangeId ?? commentsPluginState?.activeThreadId ?? null;
+  const hasTrackedChangeInCache = Boolean(
+    resolvedTrackedChangeId && commentsPluginState?.trackedChanges?.[resolvedTrackedChangeId],
+  );
+  const hasTrackedChangeInDocument = Boolean(
+    resolvedTrackedChangeId && getChangesByIdToResolve(state, resolvedTrackedChangeId)?.length,
+  );
+
+  return {
+    trackedChangeId: resolvedTrackedChangeId,
+    hasKnownTrackedChangeId: hasTrackedChangeInCache || hasTrackedChangeInDocument,
+  };
+};
+
+const selectionTouchesTrackedChange = ({ state, trackedChangeId, selection = state?.selection }) => {
+  if (!selection) {
+    return false;
+  }
+
+  if (!trackedChangeId) {
+    return (
+      collectTrackedChanges({
+        state,
+        from: selection.from,
+        to: selection.to,
+      }).length > 0
+    );
+  }
+
+  return collectTrackedChanges({
+    state,
+    from: selection.from,
+    to: selection.to,
+  }).some((change) => change.id === trackedChangeId);
+};
+
+const resolveTrackedChangeAction = ({
+  action,
+  state,
+  commands,
+  editor,
+  trackedChangeId = null,
+  hasKnownTrackedChangeId = false,
+  selection = null,
+}) => {
+  const targetSelection = selection ?? getTrackedChangeActionSelection({ state, editor });
+  const betweenCommand =
+    action === 'accept' ? commands.acceptTrackedChangesBetween : commands.rejectTrackedChangesBetween;
+  const byIdCommand = action === 'accept' ? commands.acceptTrackedChangeById : commands.rejectTrackedChangeById;
+  const selectionCommand =
+    action === 'accept' ? commands.acceptTrackedChangeBySelection : commands.rejectTrackedChangeOnSelection;
+  const shouldUseSelection =
+    hasExpandedSelection(targetSelection) &&
+    selectionTouchesTrackedChange({
+      state,
+      trackedChangeId,
+      selection: targetSelection,
+    });
+
+  // An explicit text selection takes precedence over the active bubble/thread
+  // so partial accept/reject resolves exactly what the user highlighted.
+  if (shouldUseSelection) {
+    return betweenCommand(targetSelection.from, targetSelection.to);
+  }
+
+  if (trackedChangeId && hasKnownTrackedChangeId) {
+    return byIdCommand(trackedChangeId);
+  }
+
+  return hasExpandedSelection(targetSelection)
+    ? betweenCommand(targetSelection.from, targetSelection.to)
+    : selectionCommand();
+};
+
+const collectRemainingMarksByType = (trackedChanges = []) => ({
+  insertedMark: trackedChanges.find(({ mark }) => mark.type.name === TrackInsertMarkName)?.mark ?? null,
+  deletionMark: trackedChanges.find(({ mark }) => mark.type.name === TrackDeleteMarkName)?.mark ?? null,
+  formatMark: trackedChanges.find(({ mark }) => mark.type.name === TrackFormatMarkName)?.mark ?? null,
+});
+
+const emitTrackedChangeCommentLifecycle = ({ editor, nextState, touchedChangeIds }) => {
+  if (!editor?.emit || !touchedChangeIds?.size) {
+    return;
+  }
+
+  const resolvedByEmail = editor.options?.user?.email;
+  const resolvedByName = editor.options?.user?.name;
+
+  touchedChangeIds.forEach((changeId) => {
+    const remainingTrackedChanges = getTrackChanges(nextState, changeId);
+
+    // Partial resolution keeps the tracked-change thread alive with updated text;
+    // full resolution emits the normal resolve event so the bubble can disappear.
+    if (!remainingTrackedChanges.length) {
+      editor.emit('commentsUpdate', {
+        type: 'trackedChange',
+        event: 'resolve',
+        changeId,
+        resolvedByEmail,
+        resolvedByName,
+      });
       return;
     }
 
-    const type = change.mark?.type?.name || '';
-    const id = change.mark?.attrs?.id || '';
-    const key = `${change.from}:${change.to}:${type}:${id}`;
-    if (!byKey.has(key)) {
-      byKey.set(key, change);
-    }
-  });
+    const marks = collectRemainingMarksByType(remainingTrackedChanges);
+    const updatePayload = createOrUpdateTrackedChangeComment({
+      event: 'update',
+      marks,
+      deletionNodes: [],
+      nodes: [],
+      newEditorState: nextState,
+      documentId: editor.options?.documentId,
+      trackedChangesForId: remainingTrackedChanges,
+    });
 
-  return Array.from(byKey.values()).sort((left, right) => {
-    if (left.from !== right.from) {
-      return left.from - right.from;
+    if (updatePayload) {
+      editor.emit('commentsUpdate', updatePayload);
     }
-    return left.to - right.to;
   });
 };
 
-const getTrackedChangesByTouchedIds = (state, trackedChanges = []) => {
-  const touchedIds = new Set(trackedChanges.map(({ mark }) => mark?.attrs?.id).filter(Boolean));
-  if (!touchedIds.size) {
-    return trackedChanges;
+const dispatchTrackedChangeResolution = ({ state, tr, dispatch, editor, touchedChangeIds }) => {
+  if (!tr.steps.length) {
+    return true;
   }
 
-  return Array.from(touchedIds).flatMap((id) => getChangesByIdToResolve(state, id) || []);
+  // Apply tr locally to get nextState for comment lifecycle; dispatch(tr) updates the editor afterward.
+  const nextState = state.apply(tr);
+
+  if (dispatch) {
+    dispatch(tr);
+  }
+
+  if (dispatch && touchedChangeIds?.size) {
+    emitTrackedChangeCommentLifecycle({
+      editor,
+      nextState,
+      touchedChangeIds,
+    });
+  }
+
+  return true;
 };
 
 const getChangesByIdToResolve = (state, id) => {

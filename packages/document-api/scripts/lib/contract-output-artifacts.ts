@@ -21,6 +21,8 @@ function buildOperationContractMap() {
         outputSchema: operation.schemas.output,
         successSchema: operation.schemas.success,
         failureSchema: operation.schemas.failure,
+        ...(operation.skipAsATool ? { skipAsATool: true } : {}),
+        ...(operation.essential ? { essential: true } : {}),
       },
     ]),
   );
@@ -187,7 +189,7 @@ export function buildAgentArtifacts(): GeneratedFile[] {
       {
         id: 'list-manipulation',
         title: 'List manipulation workflow',
-        operations: ['lists.insert', 'lists.setType', 'lists.indent', 'lists.outdent', 'lists.exit'],
+        operations: ['lists.list', 'lists.create', 'lists.insert', 'lists.indent', 'lists.outdent', 'lists.detach'],
       },
       {
         id: 'capabilities-aware-branching',

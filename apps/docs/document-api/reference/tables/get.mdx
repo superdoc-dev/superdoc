@@ -26,10 +26,13 @@ Returns a TablesGetOutput with the table row count, column count, and structural
 
 ## Input fields
 
-| Field | Type | Required | Description |
-| --- | --- | --- | --- |
-| `nodeId` | string | no |  |
-| `target` | BlockNodeAddress | no | BlockNodeAddress |
+### Variant 1
+
+_No fields._
+
+### Variant 2
+
+_No fields._
 
 ### Example request
 
@@ -49,6 +52,9 @@ Returns a TablesGetOutput with the table row count, column count, and structural
 | Field | Type | Required | Description |
 | --- | --- | --- | --- |
 | `address` | BlockNodeAddress | yes | BlockNodeAddress |
+| `address.kind` | `"block"` | yes | Constant: `"block"` |
+| `address.nodeId` | string | yes |  |
+| `address.nodeType` | enum | yes | `"paragraph"`, `"heading"`, `"listItem"`, `"table"`, `"tableRow"`, `"tableCell"`, `"tableOfContents"`, `"image"`, `"sdt"` |
 | `columns` | integer | yes |  |
 | `nodeId` | string | yes |  |
 | `rows` | integer | yes |  |

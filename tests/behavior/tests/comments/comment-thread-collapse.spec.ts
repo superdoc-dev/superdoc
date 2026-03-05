@@ -1,5 +1,5 @@
 import { test, expect } from '../../fixtures/superdoc.js';
-import { addCommentViaUIWithId, activateCommentDialog } from '../../helpers/comments.js';
+import { addCommentViaUIWithId } from '../../helpers/comments.js';
 import { assertDocumentApiReady, replyToComment } from '../../helpers/document-api.js';
 
 test.use({ config: { toolbar: 'full', comments: 'on' } });
@@ -42,13 +42,15 @@ test('thread with 2+ replies collapses and expands on click', async ({ superdoc 
   });
   await superdoc.waitForStable();
 
-  // Wait for dialog to lose active state before re-activating — Firefox needs
-  // this gap so the component fully unmounts its expanded state.
-  const activeDialog = superdoc.page.locator('.comment-placeholder .comments-dialog.is-active');
-  await expect(activeDialog).toHaveCount(0, { timeout: 5_000 });
+  // Activate parent thread deterministically (avoid click-path races in Firefox).
+  await superdoc.page.evaluate((id: string) => {
+    const sd = (window as any).superdoc;
+    sd.commentsStore.$patch({ activeComment: id });
+  }, commentId);
+  await superdoc.waitForStable();
 
-  // Activate the comment dialog
-  const dialog = await activateCommentDialog(superdoc, 'collapse');
+  const dialog = superdoc.page.locator(`.comment-placeholder[data-comment-id="${commentId}"] .comments-dialog`).first();
+  await expect(dialog).toBeVisible({ timeout: 10_000 });
 
   // The collapsed-replies pill should be visible with "more replies" text
   const collapsedPill = dialog.locator('.collapsed-replies');

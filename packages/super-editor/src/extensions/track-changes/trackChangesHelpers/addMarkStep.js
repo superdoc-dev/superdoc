@@ -70,12 +70,14 @@ export const addMarkStep = ({ state, step, newTr, doc, user, date }) => {
           });
         }
       } else {
-        before = liveMarks
-          .filter((mark) => ![TrackDeleteMarkName, TrackFormatMarkName].includes(mark.type.name))
-          .map((mark) => ({
-            type: mark.type.name,
-            attrs: { ...mark.attrs },
-          }));
+        const existingMarkOfSameType = liveMarks.find(
+          (mark) =>
+            mark.type.name === step.mark.type.name &&
+            ![TrackDeleteMarkName, TrackFormatMarkName].includes(mark.type.name),
+        );
+        before = existingMarkOfSameType
+          ? [{ type: existingMarkOfSameType.type.name, attrs: { ...existingMarkOfSameType.attrs } }]
+          : [];
 
         after = [
           {

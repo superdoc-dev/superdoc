@@ -116,6 +116,141 @@ async function createDocWithSecondSection(
   return { docPath: withBreakDoc, first, second };
 }
 
+type ListDiscoveryItem = {
+  address?: Record<string, unknown>;
+};
+
+async function listDiscoveryItems(
+  harness: ConformanceHarness,
+  stateDir: string,
+  docPath: string,
+  limit: number,
+): Promise<ListDiscoveryItem[]> {
+  const listed = await harness.runCli(['lists', 'list', docPath, '--limit', String(limit)], stateDir);
+  if (listed.result.code !== 0 || listed.envelope.ok !== true) {
+    throw new Error(`Failed to list list items for ${docPath}.`);
+  }
+
+  const items = ((listed.envelope.data as { result?: { items?: ListDiscoveryItem[] } }).result?.items ?? []).filter(
+    (item) => !!item,
+  );
+  return items;
+}
+
+async function nthListAddress(
+  harness: ConformanceHarness,
+  stateDir: string,
+  docPath: string,
+  index: number,
+): Promise<Record<string, unknown>> {
+  const items = await listDiscoveryItems(harness, stateDir, docPath, Math.max(index + 1, 2));
+  const address = items[index]?.address;
+  if (!address || typeof address !== 'object') {
+    throw new Error(`Missing list address at index ${index} for ${docPath}.`);
+  }
+  return address;
+}
+
+type ListTargetPreparation = {
+  docPath: string;
+  target: Record<string, unknown>;
+};
+
+/**
+ * Load a pre-separated list fixture (two adjacent lists that share the same
+ * abstractNumId) and resolve the second list item as the target.
+ *
+ * This avoids a runtime `lists separate` → DOCX export → re-import round-trip
+ * which can lose numbering definition compatibility on some platforms.
+ */
+async function prepareSeparatedSecondListTarget(
+  harness: ConformanceHarness,
+  stateDir: string,
+  label: string,
+): Promise<ListTargetPreparation> {
+  const docPath = await harness.copyPreSeparatedListDoc(label);
+  const items = await listDiscoveryItems(harness, stateDir, docPath, 10);
+
+  if (items.length < 2) {
+    throw new Error(
+      `[${label}] Pre-separated fixture has fewer than 2 list items (found ${items.length}). ` +
+        `Items: ${JSON.stringify(items)}`,
+    );
+  }
+
+  const target = items[1]?.address;
+  if (!target || typeof target !== 'object') {
+    throw new Error(`[${label}] Second list item has no address. Items: ${JSON.stringify(items)}`);
+  }
+
+  return { docPath, target };
+}
+
+function requireHyperlinkAddress(item: Record<string, unknown>, context: string): Record<string, unknown> {
+  const address = item.address;
+  if (!address || typeof address !== 'object') {
+    throw new Error(`Missing hyperlink address for ${context}.`);
+  }
+  return address as Record<string, unknown>;
+}
+
+async function resolveFirstHyperlinkAddress(
+  harness: ConformanceHarness,
+  stateDir: string,
+  docPath: string,
+  context: string,
+): Promise<Record<string, unknown>> {
+  const listed = await harness.runCli([...commandTokens('doc.hyperlinks.list'), docPath, '--limit', '10'], stateDir);
+  if (listed.result.code !== 0 || listed.envelope.ok !== true) {
+    throw new Error(`Failed to list hyperlinks for ${context}.`);
+  }
+
+  const items = extractDiscoveryItems(listed.envelope.data);
+  const first = items[0];
+  if (!first) {
+    throw new Error(`No hyperlinks available for ${context}.`);
+  }
+
+  return requireHyperlinkAddress(first, context);
+}
+
+async function createHyperlinkFixture(
+  harness: ConformanceHarness,
+  stateDir: string,
+  label: string,
+): Promise<{ docPath: string; address: Record<string, unknown> }> {
+  const sourceDoc = await harness.copyFixtureDoc(`${label}-source`);
+  const target = await harness.firstTextRange(sourceDoc, stateDir);
+  const collapsedTarget = {
+    kind: 'text',
+    blockId: target.blockId,
+    range: { start: target.range.start, end: target.range.start },
+  };
+  const outputDoc = harness.createOutputPath(`${label}-with-hyperlink`);
+
+  const inserted = await harness.runCli(
+    [
+      ...commandTokens('doc.hyperlinks.insert'),
+      sourceDoc,
+      '--target-json',
+      JSON.stringify(collapsedTarget),
+      '--text',
+      'Conformance hyperlink',
+      '--link-json',
+      JSON.stringify({ destination: { href: 'https://example.com' } }),
+      '--out',
+      outputDoc,
+    ],
+    stateDir,
+  );
+  if (inserted.result.code !== 0 || inserted.envelope.ok !== true) {
+    throw new Error(`Failed to create hyperlink fixture for ${label}.`);
+  }
+
+  const address = await resolveFirstHyperlinkAddress(harness, stateDir, outputDoc, label);
+  return { docPath: outputDoc, address };
+}
+
 function sectionMutationScenario(
   operationId: CliOperationId,
   label: string,
@@ -489,6 +624,198 @@ async function createDocWithMarkedTocEntry(
   return { docPath: markedDoc, entryAddress };
 }
 
+const CONFORMANCE_IMAGE_DATA_URI =
+  'data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR4nGNgYAAAAAMAASsJTYQAAAAASUVORK5CYII=';
+const CONFORMANCE_IMAGE_DATA_URI_ALT =
+  'data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAIAAAACCAQAAAD8x0bcAAAADElEQVR4nGP4z8AAAAMBAQAY2i8KAAAAAElFTkSuQmCC';
+
+type ImagePlacement = 'inline' | 'floating';
+type ImageFixture = {
+  docPath: string;
+  imageId: string;
+};
+
+function pickImageId(
+  items: Record<string, unknown>[],
+  context: string,
+  placement?: ImagePlacement,
+): { imageId: string; item: Record<string, unknown> } {
+  const match =
+    placement === undefined
+      ? items[0]
+      : (items.find((item) => {
+          const address = item.address;
+          if (!address || typeof address !== 'object') return false;
+          return (address as Record<string, unknown>).placement === placement;
+        }) ?? items[0]);
+
+  if (!match) {
+    throw new Error(`[${context}] No images available.`);
+  }
+
+  const imageId = match.sdImageId;
+  if (typeof imageId !== 'string' || imageId.length === 0) {
+    throw new Error(`[${context}] Unable to resolve image id from list output.`);
+  }
+
+  return { imageId, item: match };
+}
+
+async function resolveImageFixture(
+  harness: ConformanceHarness,
+  stateDir: string,
+  docPath: string,
+  context: string,
+  placement?: ImagePlacement,
+): Promise<ImageFixture> {
+  const listed = await harness.runCli([...commandTokens('doc.images.list'), docPath, '--limit', '20'], stateDir);
+  if (listed.result.code !== 0 || listed.envelope.ok !== true) {
+    throw new Error(`[${context}] Failed to list images.`);
+  }
+
+  const items = extractDiscoveryItems(listed.envelope.data);
+  const { imageId } = pickImageId(items, context, placement);
+  return { docPath, imageId };
+}
+
+async function listImageItems(
+  harness: ConformanceHarness,
+  stateDir: string,
+  docPath: string,
+  context: string,
+): Promise<Record<string, unknown>[]> {
+  const listed = await harness.runCli([...commandTokens('doc.images.list'), docPath, '--limit', '50'], stateDir);
+  if (listed.result.code !== 0 || listed.envelope.ok !== true) {
+    throw new Error(`[${context}] Failed to list images.`);
+  }
+  return extractDiscoveryItems(listed.envelope.data);
+}
+
+async function createInlineImageFixture(
+  harness: ConformanceHarness,
+  stateDir: string,
+  label: string,
+): Promise<ImageFixture> {
+  const sourceDoc = await harness.copyFixtureDoc(`${label}-source`);
+  const beforeItems = await listImageItems(harness, stateDir, sourceDoc, `${label}:before-create`);
+  const beforeIds = new Set(
+    beforeItems
+      .map((item) => item.sdImageId)
+      .filter((value): value is string => typeof value === 'string' && value.length > 0),
+  );
+
+  const outputDoc = harness.createOutputPath(`${label}-with-image`);
+  const created = await harness.runCli(
+    [
+      ...commandTokens('doc.create.image'),
+      sourceDoc,
+      '--src',
+      CONFORMANCE_IMAGE_DATA_URI,
+      '--alt',
+      'Conformance image',
+      '--at-json',
+      JSON.stringify({ kind: 'documentEnd' }),
+      '--out',
+      outputDoc,
+    ],
+    stateDir,
+  );
+  if (created.result.code !== 0 || created.envelope.ok !== true) {
+    throw new Error(`[${label}] Failed to create image fixture.`);
+  }
+
+  const afterItems = await listImageItems(harness, stateDir, outputDoc, `${label}:after-create`);
+  const inserted = afterItems.find((item) => {
+    const id = item.sdImageId;
+    return typeof id === 'string' && id.length > 0 && !beforeIds.has(id);
+  });
+  if (inserted && typeof inserted.sdImageId === 'string') {
+    return { docPath: outputDoc, imageId: inserted.sdImageId };
+  }
+
+  // Fallback for fixtures where image IDs are not stable enough for diffing.
+  return resolveImageFixture(harness, stateDir, outputDoc, `${label}:inline`, 'inline');
+}
+
+async function createFloatingImageFixture(
+  harness: ConformanceHarness,
+  stateDir: string,
+  label: string,
+): Promise<ImageFixture> {
+  const inlineFixture = await createInlineImageFixture(harness, stateDir, `${label}-seed-inline`);
+  const floatingDoc = harness.createOutputPath(`${label}-floating`);
+  const converted = await harness.runCli(
+    [
+      ...commandTokens('doc.images.convertToFloating'),
+      inlineFixture.docPath,
+      '--image-id',
+      inlineFixture.imageId,
+      '--out',
+      floatingDoc,
+    ],
+    stateDir,
+  );
+  if (converted.result.code !== 0 || converted.envelope.ok !== true) {
+    throw new Error(`[${label}] Failed to convert fixture image to floating.`);
+  }
+
+  return resolveImageFixture(harness, stateDir, floatingDoc, `${label}:floating`, 'floating');
+}
+
+async function createCroppedImageFixture(
+  harness: ConformanceHarness,
+  stateDir: string,
+  label: string,
+): Promise<ImageFixture> {
+  const fixture = await createInlineImageFixture(harness, stateDir, `${label}-seed-inline`);
+  const croppedDoc = harness.createOutputPath(`${label}-cropped`);
+  const cropped = await harness.runCli(
+    [
+      ...commandTokens('doc.images.crop'),
+      fixture.docPath,
+      '--image-id',
+      fixture.imageId,
+      '--crop-json',
+      JSON.stringify({ left: 10, top: 5, right: 10, bottom: 5 }),
+      '--out',
+      croppedDoc,
+    ],
+    stateDir,
+  );
+  if (cropped.result.code !== 0 || cropped.envelope.ok !== true) {
+    throw new Error(`[${label}] Failed to seed cropped image fixture.`);
+  }
+
+  return { docPath: croppedDoc, imageId: fixture.imageId };
+}
+
+async function createCaptionedImageFixture(
+  harness: ConformanceHarness,
+  stateDir: string,
+  label: string,
+): Promise<ImageFixture> {
+  const fixture = await createInlineImageFixture(harness, stateDir, `${label}-seed-inline`);
+  const captionedDoc = harness.createOutputPath(`${label}-captioned`);
+  const inserted = await harness.runCli(
+    [
+      ...commandTokens('doc.images.insertCaption'),
+      fixture.docPath,
+      '--image-id',
+      fixture.imageId,
+      '--text',
+      'Conformance caption',
+      '--out',
+      captionedDoc,
+    ],
+    stateDir,
+  );
+  if (inserted.result.code !== 0 || inserted.envelope.ok !== true) {
+    throw new Error(`[${label}] Failed to seed captioned image fixture.`);
+  }
+
+  return { docPath: captionedDoc, imageId: fixture.imageId };
+}
+
 export const SUCCESS_SCENARIOS = {
   'doc.open': async (harness: ConformanceHarness): Promise<ScenarioInvocation> => {
     const stateDir = await harness.createStateDir('doc-open-success');
@@ -623,10 +950,113 @@ export const SUCCESS_SCENARIOS = {
       args: ['comments', 'list', fixture.docPath, '--include-resolved', 'false'],
     };
   },
+  'doc.hyperlinks.list': async (harness: ConformanceHarness): Promise<ScenarioInvocation> => {
+    const stateDir = await harness.createStateDir('doc-hyperlinks-list-success');
+    const fixture = await createHyperlinkFixture(harness, stateDir, 'doc-hyperlinks-list');
+    return {
+      stateDir,
+      args: [...commandTokens('doc.hyperlinks.list'), fixture.docPath, '--limit', '10'],
+    };
+  },
+  'doc.hyperlinks.get': async (harness: ConformanceHarness): Promise<ScenarioInvocation> => {
+    const stateDir = await harness.createStateDir('doc-hyperlinks-get-success');
+    const fixture = await createHyperlinkFixture(harness, stateDir, 'doc-hyperlinks-get');
+    return {
+      stateDir,
+      args: [...commandTokens('doc.hyperlinks.get'), fixture.docPath, '--target-json', JSON.stringify(fixture.address)],
+    };
+  },
+  'doc.hyperlinks.wrap': async (harness: ConformanceHarness): Promise<ScenarioInvocation> => {
+    const stateDir = await harness.createStateDir('doc-hyperlinks-wrap-success');
+    const docPath = await harness.copyFixtureDoc('doc-hyperlinks-wrap');
+    const target = await harness.firstTextRange(docPath, stateDir);
+    return {
+      stateDir,
+      args: [
+        ...commandTokens('doc.hyperlinks.wrap'),
+        docPath,
+        '--target-json',
+        JSON.stringify(target),
+        '--link-json',
+        JSON.stringify({ destination: { href: 'https://example.com/wrap' } }),
+        '--out',
+        harness.createOutputPath('doc-hyperlinks-wrap-output'),
+      ],
+    };
+  },
+  'doc.hyperlinks.insert': async (harness: ConformanceHarness): Promise<ScenarioInvocation> => {
+    const stateDir = await harness.createStateDir('doc-hyperlinks-insert-success');
+    const docPath = await harness.copyFixtureDoc('doc-hyperlinks-insert');
+    const target = await harness.firstTextRange(docPath, stateDir);
+    const collapsedTarget = {
+      kind: 'text',
+      blockId: target.blockId,
+      range: { start: target.range.start, end: target.range.start },
+    };
+    return {
+      stateDir,
+      args: [
+        ...commandTokens('doc.hyperlinks.insert'),
+        docPath,
+        '--target-json',
+        JSON.stringify(collapsedTarget),
+        '--text',
+        'Conformance hyperlink insert',
+        '--link-json',
+        JSON.stringify({ destination: { href: 'https://example.com/insert' } }),
+        '--out',
+        harness.createOutputPath('doc-hyperlinks-insert-output'),
+      ],
+    };
+  },
+  'doc.hyperlinks.patch': async (harness: ConformanceHarness): Promise<ScenarioInvocation> => {
+    const stateDir = await harness.createStateDir('doc-hyperlinks-patch-success');
+    const fixture = await createHyperlinkFixture(harness, stateDir, 'doc-hyperlinks-patch');
+    return {
+      stateDir,
+      args: [
+        ...commandTokens('doc.hyperlinks.patch'),
+        fixture.docPath,
+        '--target-json',
+        JSON.stringify(fixture.address),
+        '--patch-json',
+        JSON.stringify({ tooltip: 'Conformance hyperlink patch' }),
+        '--out',
+        harness.createOutputPath('doc-hyperlinks-patch-output'),
+      ],
+    };
+  },
+  'doc.hyperlinks.remove': async (harness: ConformanceHarness): Promise<ScenarioInvocation> => {
+    const stateDir = await harness.createStateDir('doc-hyperlinks-remove-success');
+    const fixture = await createHyperlinkFixture(harness, stateDir, 'doc-hyperlinks-remove');
+    return {
+      stateDir,
+      args: [
+        ...commandTokens('doc.hyperlinks.remove'),
+        fixture.docPath,
+        '--target-json',
+        JSON.stringify(fixture.address),
+        '--mode',
+        'unwrap',
+        '--out',
+        harness.createOutputPath('doc-hyperlinks-remove-output'),
+      ],
+    };
+  },
   'doc.getText': async (harness: ConformanceHarness): Promise<ScenarioInvocation> => {
     const stateDir = await harness.createStateDir('doc-get-text-success');
     const docPath = await harness.copyFixtureDoc('doc-get-text');
     return { stateDir, args: ['get-text', docPath] };
+  },
+  'doc.getMarkdown': async (harness: ConformanceHarness): Promise<ScenarioInvocation> => {
+    const stateDir = await harness.createStateDir('doc-get-markdown-success');
+    const docPath = await harness.copyFixtureDoc('doc-get-text');
+    return { stateDir, args: ['get-markdown', docPath] };
+  },
+  'doc.getHtml': async (harness: ConformanceHarness): Promise<ScenarioInvocation> => {
+    const stateDir = await harness.createStateDir('doc-get-html-success');
+    const docPath = await harness.copyFixtureDoc('doc-get-text');
+    return { stateDir, args: ['get-html', docPath] };
   },
   'doc.query.match': async (harness: ConformanceHarness): Promise<ScenarioInvocation> => {
     const stateDir = await harness.createStateDir('doc-query-match-success');
@@ -672,7 +1102,7 @@ export const SUCCESS_SCENARIOS = {
         docPath,
         '--expected-revision',
         '0',
-        '--atomic-json',
+        '--atomic',
         'true',
         '--change-mode',
         'direct',
@@ -705,7 +1135,7 @@ export const SUCCESS_SCENARIOS = {
         'mutations',
         'apply',
         docPath,
-        '--atomic-json',
+        '--atomic',
         'true',
         '--change-mode',
         'direct',
@@ -1068,32 +1498,75 @@ export const SUCCESS_SCENARIOS = {
       ],
     };
   },
-  'doc.lists.setType': async (harness: ConformanceHarness): Promise<ScenarioInvocation> => {
-    const stateDir = await harness.createStateDir('doc-lists-set-type-success');
-    const docPath = await harness.copyListFixtureDoc('doc-lists-set-type');
-    const target = await harness.firstListItemAddress(docPath, stateDir);
-    const getResult = await harness.runCli(
-      ['lists', 'get', docPath, '--address-json', JSON.stringify(target)],
-      stateDir,
-    );
-    if (getResult.result.code !== 0 || getResult.envelope.ok !== true) {
-      throw new Error('Failed to resolve list item kind for set-type conformance scenario.');
-    }
-    const currentKind = (getResult.envelope.data as { item?: { kind?: string } }).item?.kind;
-    const requestedKind = currentKind === 'ordered' ? 'bullet' : 'ordered';
-
+  'doc.lists.create': async (harness: ConformanceHarness): Promise<ScenarioInvocation> => {
+    const stateDir = await harness.createStateDir('doc-lists-create-success');
+    const docPath = await harness.copyFixtureDoc('doc-lists-create');
+    const at = await harness.firstBlockMatch(docPath, stateDir);
     return {
       stateDir,
       args: [
         'lists',
-        'set-type',
+        'create',
+        docPath,
+        '--input-json',
+        JSON.stringify({
+          mode: 'empty',
+          at: { kind: 'block', nodeType: at.nodeType, nodeId: at.nodeId },
+          kind: 'ordered',
+        }),
+        '--out',
+        harness.createOutputPath('doc-lists-create-output'),
+      ],
+    };
+  },
+  'doc.lists.detach': async (harness: ConformanceHarness): Promise<ScenarioInvocation> => {
+    const stateDir = await harness.createStateDir('doc-lists-detach-success');
+    const docPath = await harness.copyListFixtureDoc('doc-lists-detach');
+    const target = await harness.firstListItemAddress(docPath, stateDir);
+    return {
+      stateDir,
+      args: [
+        'lists',
+        'detach',
         docPath,
         '--target-json',
         JSON.stringify(target),
-        '--kind',
-        requestedKind,
         '--out',
-        harness.createOutputPath('doc-lists-set-type-output'),
+        harness.createOutputPath('doc-lists-detach-output'),
+      ],
+    };
+  },
+  'doc.lists.setLevel': async (harness: ConformanceHarness): Promise<ScenarioInvocation> => {
+    const stateDir = await harness.createStateDir('doc-lists-set-level-success');
+    const docPath = await harness.copyListFixtureDoc('doc-lists-set-level');
+    const target = await harness.firstListItemAddress(docPath, stateDir);
+    return {
+      stateDir,
+      args: [
+        'lists',
+        'set-level',
+        docPath,
+        '--input-json',
+        JSON.stringify({ target, level: 1 }),
+        '--out',
+        harness.createOutputPath('doc-lists-set-level-output'),
+      ],
+    };
+  },
+  'doc.lists.convertToText': async (harness: ConformanceHarness): Promise<ScenarioInvocation> => {
+    const stateDir = await harness.createStateDir('doc-lists-convert-to-text-success');
+    const docPath = await harness.copyListFixtureDoc('doc-lists-convert-to-text');
+    const target = await harness.firstListItemAddress(docPath, stateDir);
+    return {
+      stateDir,
+      args: [
+        'lists',
+        'convert-to-text',
+        docPath,
+        '--target-json',
+        JSON.stringify(target),
+        '--out',
+        harness.createOutputPath('doc-lists-convert-to-text-output'),
       ],
     };
   },
@@ -1140,52 +1613,362 @@ export const SUCCESS_SCENARIOS = {
       ],
     };
   },
-  'doc.lists.restart': async (harness: ConformanceHarness): Promise<ScenarioInvocation> => {
-    const stateDir = await harness.createStateDir('doc-lists-restart-success');
-    const docPath = await harness.copyListFixtureDoc('doc-lists-restart');
-    const listed = await harness.runCli(['lists', 'list', docPath, '--limit', '50'], stateDir);
-    if (listed.result.code !== 0 || listed.envelope.ok !== true) {
-      throw new Error('Failed to list list items for restart conformance scenario.');
-    }
-    const restartTarget = (
-      (
-        listed.envelope.data as {
-          result?: { items?: Array<{ ordinal?: number; address?: Record<string, unknown> }> };
-        }
-      ).result?.items ?? []
-    ).find((item) => typeof item.ordinal === 'number' && item.ordinal > 1)?.address;
-    if (!restartTarget) {
-      throw new Error('Restart conformance scenario requires a list item with ordinal > 1.');
-    }
-
-    return {
-      stateDir,
-      args: [
-        'lists',
-        'restart',
-        docPath,
-        '--target-json',
-        JSON.stringify(restartTarget),
-        '--out',
-        harness.createOutputPath('doc-lists-restart-output'),
-      ],
-    };
-  },
-  'doc.lists.exit': async (harness: ConformanceHarness): Promise<ScenarioInvocation> => {
-    const stateDir = await harness.createStateDir('doc-lists-exit-success');
-    const docPath = await harness.copyListFixtureDoc('doc-lists-exit');
+  'doc.lists.setValue': async (harness: ConformanceHarness): Promise<ScenarioInvocation> => {
+    const stateDir = await harness.createStateDir('doc-lists-set-value-success');
+    const docPath = await harness.copyListFixtureDoc('doc-lists-set-value');
     const target = await harness.firstListItemAddress(docPath, stateDir);
     return {
       stateDir,
       args: [
         'lists',
-        'exit',
+        'set-value',
+        docPath,
+        '--input-json',
+        JSON.stringify({ target, value: 5 }),
+        '--out',
+        harness.createOutputPath('doc-lists-set-value-output'),
+      ],
+    };
+  },
+  'doc.lists.continuePrevious': async (harness: ConformanceHarness): Promise<ScenarioInvocation> => {
+    const stateDir = await harness.createStateDir('doc-lists-continue-previous-success');
+    const prepared = await prepareSeparatedSecondListTarget(harness, stateDir, 'doc-lists-continue-previous');
+
+    return {
+      stateDir,
+      args: [
+        'lists',
+        'continue-previous',
+        prepared.docPath,
+        '--target-json',
+        JSON.stringify(prepared.target),
+        '--out',
+        harness.createOutputPath('doc-lists-continue-previous-output'),
+      ],
+    };
+  },
+  'doc.lists.canJoin': async (harness: ConformanceHarness): Promise<ScenarioInvocation> => {
+    const stateDir = await harness.createStateDir('doc-lists-can-join-success');
+    const docPath = await harness.copyListFixtureDoc('doc-lists-can-join');
+    const target = await harness.firstListItemAddress(docPath, stateDir);
+    return {
+      stateDir,
+      args: ['lists', 'can-join', docPath, '--input-json', JSON.stringify({ target, direction: 'withNext' })],
+    };
+  },
+  'doc.lists.canContinuePrevious': async (harness: ConformanceHarness): Promise<ScenarioInvocation> => {
+    const stateDir = await harness.createStateDir('doc-lists-can-continue-previous-success');
+    const docPath = await harness.copyListFixtureDoc('doc-lists-can-continue-previous');
+    const target = await harness.firstListItemAddress(docPath, stateDir);
+    return {
+      stateDir,
+      args: ['lists', 'can-continue-previous', docPath, '--target-json', JSON.stringify(target)],
+    };
+  },
+  'doc.lists.attach': async (harness: ConformanceHarness): Promise<ScenarioInvocation> => {
+    const stateDir = await harness.createStateDir('doc-lists-attach-success');
+    const docPath = await harness.copyFixtureDoc('doc-lists-attach');
+    const listSeedTarget = await harness.firstBlockMatch(docPath, stateDir);
+    const seededDoc = harness.createOutputPath('doc-lists-attach-seeded');
+    const create = await harness.runCli(
+      [
+        'lists',
+        'create',
+        docPath,
+        '--input-json',
+        JSON.stringify({
+          mode: 'empty',
+          at: { kind: 'block', nodeType: listSeedTarget.nodeType, nodeId: listSeedTarget.nodeId },
+          kind: 'ordered',
+        }),
+        '--out',
+        seededDoc,
+      ],
+      stateDir,
+    );
+    if (create.result.code !== 0) {
+      throw new Error('Failed to prepare attach conformance fixture via lists create.');
+    }
+
+    const attachTo = await harness.firstListItemAddress(seededDoc, stateDir);
+    const target = await harness.firstBlockMatch(seededDoc, stateDir);
+
+    return {
+      stateDir,
+      args: [
+        'lists',
+        'attach',
+        seededDoc,
+        '--input-json',
+        JSON.stringify({
+          target: { kind: 'block', nodeType: target.nodeType, nodeId: target.nodeId },
+          attachTo,
+        }),
+        '--out',
+        harness.createOutputPath('doc-lists-attach-output'),
+      ],
+    };
+  },
+  'doc.lists.join': async (harness: ConformanceHarness): Promise<ScenarioInvocation> => {
+    const stateDir = await harness.createStateDir('doc-lists-join-success');
+    const prepared = await prepareSeparatedSecondListTarget(harness, stateDir, 'doc-lists-join');
+
+    return {
+      stateDir,
+      args: [
+        'lists',
+        'join',
+        prepared.docPath,
+        '--input-json',
+        JSON.stringify({ target: prepared.target, direction: 'withPrevious' }),
+        '--out',
+        harness.createOutputPath('doc-lists-join-output'),
+      ],
+    };
+  },
+  'doc.lists.separate': async (harness: ConformanceHarness): Promise<ScenarioInvocation> => {
+    const stateDir = await harness.createStateDir('doc-lists-separate-success');
+    const docPath = await harness.copyListFixtureDoc('doc-lists-separate');
+    const target = await nthListAddress(harness, stateDir, docPath, 1);
+    return {
+      stateDir,
+      args: [
+        'lists',
+        'separate',
         docPath,
         '--target-json',
         JSON.stringify(target),
         '--out',
-        harness.createOutputPath('doc-lists-exit-output'),
+        harness.createOutputPath('doc-lists-separate-output'),
       ],
+    };
+  },
+  'doc.lists.setLevelRestart': async (harness: ConformanceHarness): Promise<ScenarioInvocation> => {
+    const stateDir = await harness.createStateDir('doc-lists-set-level-restart-success');
+    const docPath = await harness.copyListFixtureDoc('doc-lists-set-level-restart');
+    const target = await harness.firstListItemAddress(docPath, stateDir);
+    return {
+      stateDir,
+      args: [
+        'lists',
+        'set-level-restart',
+        docPath,
+        '--input-json',
+        JSON.stringify({ target, level: 1, restartAfterLevel: 0 }),
+        '--out',
+        harness.createOutputPath('doc-lists-set-level-restart-output'),
+      ],
+    };
+  },
+  'doc.lists.applyTemplate': async (harness: ConformanceHarness): Promise<ScenarioInvocation> => {
+    const stateDir = await harness.createStateDir('doc-lists-apply-template-success');
+    const docPath = await harness.copyListFixtureDoc('doc-lists-apply-template');
+    const target = await harness.firstListItemAddress(docPath, stateDir);
+    const template = {
+      version: 1,
+      levels: [{ level: 0, numFmt: 'decimal', lvlText: '%1.' }],
+    };
+    return {
+      stateDir,
+      args: [
+        'lists',
+        'apply-template',
+        docPath,
+        '--input-json',
+        JSON.stringify({ target, template }),
+        '--out',
+        harness.createOutputPath('doc-lists-apply-template-output'),
+      ],
+    };
+  },
+  'doc.lists.applyPreset': async (harness: ConformanceHarness): Promise<ScenarioInvocation> => {
+    const stateDir = await harness.createStateDir('doc-lists-apply-preset-success');
+    const docPath = await harness.copyListFixtureDoc('doc-lists-apply-preset');
+    const target = await harness.firstListItemAddress(docPath, stateDir);
+    return {
+      stateDir,
+      args: [
+        'lists',
+        'apply-preset',
+        docPath,
+        '--input-json',
+        JSON.stringify({ target, preset: 'decimal' }),
+        '--out',
+        harness.createOutputPath('doc-lists-apply-preset-output'),
+      ],
+    };
+  },
+  'doc.lists.setType': async (harness: ConformanceHarness): Promise<ScenarioInvocation> => {
+    const stateDir = await harness.createStateDir('doc-lists-set-type-success');
+    const docPath = await harness.copyListFixtureDoc('doc-lists-set-type');
+    const target = await harness.firstListItemAddress(docPath, stateDir);
+    return {
+      stateDir,
+      args: [
+        ...commandTokens('doc.lists.setType'),
+        docPath,
+        '--target-json',
+        JSON.stringify(target),
+        '--kind',
+        'bullet',
+        '--continuity',
+        'preserve',
+        '--out',
+        harness.createOutputPath('doc-lists-set-type-output'),
+      ],
+    };
+  },
+  'doc.lists.captureTemplate': async (harness: ConformanceHarness): Promise<ScenarioInvocation> => {
+    const stateDir = await harness.createStateDir('doc-lists-capture-template-success');
+    const docPath = await harness.copyListFixtureDoc('doc-lists-capture-template');
+    const target = await harness.firstListItemAddress(docPath, stateDir);
+    return {
+      stateDir,
+      args: ['lists', 'capture-template', docPath, '--input-json', JSON.stringify({ target })],
+    };
+  },
+  'doc.lists.setLevelNumbering': async (harness: ConformanceHarness): Promise<ScenarioInvocation> => {
+    const stateDir = await harness.createStateDir('doc-lists-set-level-numbering-success');
+    const docPath = await harness.copyListFixtureDoc('doc-lists-set-level-numbering');
+    const target = await harness.firstListItemAddress(docPath, stateDir);
+    return {
+      stateDir,
+      args: [
+        'lists',
+        'set-level-numbering',
+        docPath,
+        '--input-json',
+        JSON.stringify({ target, level: 0, numFmt: 'decimal', lvlText: '%1.' }),
+        '--out',
+        harness.createOutputPath('doc-lists-set-level-numbering-output'),
+      ],
+    };
+  },
+  'doc.lists.setLevelBullet': async (harness: ConformanceHarness): Promise<ScenarioInvocation> => {
+    const stateDir = await harness.createStateDir('doc-lists-set-level-bullet-success');
+    const docPath = await harness.copyListFixtureDoc('doc-lists-set-level-bullet');
+    const target = await harness.firstListItemAddress(docPath, stateDir);
+    return {
+      stateDir,
+      args: [
+        'lists',
+        'set-level-bullet',
+        docPath,
+        '--input-json',
+        JSON.stringify({ target, level: 0, markerText: '\u2022' }),
+        '--out',
+        harness.createOutputPath('doc-lists-set-level-bullet-output'),
+      ],
+    };
+  },
+  'doc.lists.setLevelPictureBullet': async (harness: ConformanceHarness): Promise<ScenarioInvocation> => {
+    const stateDir = await harness.createStateDir('doc-lists-set-level-picture-bullet-success');
+    const docPath = await harness.copyListFixtureDoc('doc-lists-set-level-picture-bullet');
+    const target = await harness.firstListItemAddress(docPath, stateDir);
+    return {
+      stateDir,
+      args: [
+        'lists',
+        'set-level-picture-bullet',
+        docPath,
+        '--input-json',
+        JSON.stringify({ target, level: 0, pictureBulletId: 0 }),
+        '--out',
+        harness.createOutputPath('doc-lists-set-level-picture-bullet-output'),
+      ],
+    };
+  },
+  'doc.lists.setLevelAlignment': async (harness: ConformanceHarness): Promise<ScenarioInvocation> => {
+    const stateDir = await harness.createStateDir('doc-lists-set-level-alignment-success');
+    const docPath = await harness.copyListFixtureDoc('doc-lists-set-level-alignment');
+    const target = await harness.firstListItemAddress(docPath, stateDir);
+    return {
+      stateDir,
+      args: [
+        'lists',
+        'set-level-alignment',
+        docPath,
+        '--input-json',
+        JSON.stringify({ target, level: 0, alignment: 'center' }),
+        '--out',
+        harness.createOutputPath('doc-lists-set-level-alignment-output'),
+      ],
+    };
+  },
+  'doc.lists.setLevelIndents': async (harness: ConformanceHarness): Promise<ScenarioInvocation> => {
+    const stateDir = await harness.createStateDir('doc-lists-set-level-indents-success');
+    const docPath = await harness.copyListFixtureDoc('doc-lists-set-level-indents');
+    const target = await harness.firstListItemAddress(docPath, stateDir);
+    return {
+      stateDir,
+      args: [
+        'lists',
+        'set-level-indents',
+        docPath,
+        '--input-json',
+        JSON.stringify({ target, level: 0, left: 1440, hanging: 720 }),
+        '--out',
+        harness.createOutputPath('doc-lists-set-level-indents-output'),
+      ],
+    };
+  },
+  'doc.lists.setLevelTrailingCharacter': async (harness: ConformanceHarness): Promise<ScenarioInvocation> => {
+    const stateDir = await harness.createStateDir('doc-lists-set-level-trailing-character-success');
+    const docPath = await harness.copyListFixtureDoc('doc-lists-set-level-trailing-character');
+    const target = await harness.firstListItemAddress(docPath, stateDir);
+    return {
+      stateDir,
+      args: [
+        'lists',
+        'set-level-trailing-character',
+        docPath,
+        '--input-json',
+        JSON.stringify({ target, level: 0, trailingCharacter: 'tab' }),
+        '--out',
+        harness.createOutputPath('doc-lists-set-level-trailing-character-output'),
+      ],
+    };
+  },
+  'doc.lists.setLevelMarkerFont': async (harness: ConformanceHarness): Promise<ScenarioInvocation> => {
+    const stateDir = await harness.createStateDir('doc-lists-set-level-marker-font-success');
+    const docPath = await harness.copyListFixtureDoc('doc-lists-set-level-marker-font');
+    const target = await harness.firstListItemAddress(docPath, stateDir);
+    return {
+      stateDir,
+      args: [
+        'lists',
+        'set-level-marker-font',
+        docPath,
+        '--input-json',
+        JSON.stringify({ target, level: 0, fontFamily: 'Arial' }),
+        '--out',
+        harness.createOutputPath('doc-lists-set-level-marker-font-output'),
+      ],
+    };
+  },
+  'doc.lists.clearLevelOverrides': async (harness: ConformanceHarness): Promise<ScenarioInvocation> => {
+    const stateDir = await harness.createStateDir('doc-lists-clear-level-overrides-success');
+    const docPath = await harness.copyListFixtureDoc('doc-lists-clear-level-overrides');
+    const target = await harness.firstListItemAddress(docPath, stateDir);
+    return {
+      stateDir,
+      args: [
+        'lists',
+        'clear-level-overrides',
+        docPath,
+        '--input-json',
+        JSON.stringify({ target, level: 0 }),
+        '--out',
+        harness.createOutputPath('doc-lists-clear-level-overrides-output'),
+      ],
+    };
+  },
+  'doc.clearContent': async (harness: ConformanceHarness): Promise<ScenarioInvocation> => {
+    const stateDir = await harness.createStateDir('doc-clear-content-success');
+    const docPath = await harness.copyFixtureDoc('doc-clear-content');
+    return {
+      stateDir,
+      args: ['clear-content', docPath, '--out', harness.createOutputPath('doc-clear-content-output')],
     };
   },
   'doc.insert': async (harness: ConformanceHarness): Promise<ScenarioInvocation> => {
@@ -1417,6 +2200,463 @@ export const SUCCESS_SCENARIOS = {
         JSON.stringify({ id: fixture.changeId }),
         '--out',
         harness.createOutputPath('doc-trackChanges-decide-output'),
+      ],
+    };
+  },
+
+  // ---------------------------------------------------------------------------
+  // Image operations
+  // ---------------------------------------------------------------------------
+
+  'doc.create.image': async (harness: ConformanceHarness): Promise<ScenarioInvocation> => {
+    const stateDir = await harness.createStateDir('doc-create-image-success');
+    const docPath = await harness.copyFixtureDoc('doc-create-image');
+    return {
+      stateDir,
+      args: [
+        ...commandTokens('doc.create.image'),
+        docPath,
+        '--src',
+        CONFORMANCE_IMAGE_DATA_URI,
+        '--alt',
+        'Conformance image',
+        '--at-json',
+        JSON.stringify({ kind: 'documentEnd' }),
+        '--out',
+        harness.createOutputPath('doc-create-image-output'),
+      ],
+    };
+  },
+  'doc.images.list': async (harness: ConformanceHarness): Promise<ScenarioInvocation> => {
+    const stateDir = await harness.createStateDir('doc-images-list-success');
+    const fixture = await createInlineImageFixture(harness, stateDir, 'doc-images-list');
+    return {
+      stateDir,
+      args: [...commandTokens('doc.images.list'), fixture.docPath, '--limit', '20'],
+    };
+  },
+  'doc.images.get': async (harness: ConformanceHarness): Promise<ScenarioInvocation> => {
+    const stateDir = await harness.createStateDir('doc-images-get-success');
+    const fixture = await createInlineImageFixture(harness, stateDir, 'doc-images-get');
+    return {
+      stateDir,
+      args: [...commandTokens('doc.images.get'), fixture.docPath, '--image-id', fixture.imageId],
+    };
+  },
+  'doc.images.delete': async (harness: ConformanceHarness): Promise<ScenarioInvocation> => {
+    const stateDir = await harness.createStateDir('doc-images-delete-success');
+    const fixture = await createInlineImageFixture(harness, stateDir, 'doc-images-delete');
+    return {
+      stateDir,
+      args: [
+        ...commandTokens('doc.images.delete'),
+        fixture.docPath,
+        '--image-id',
+        fixture.imageId,
+        '--out',
+        harness.createOutputPath('doc-images-delete-output'),
+      ],
+    };
+  },
+  'doc.images.move': async (harness: ConformanceHarness): Promise<ScenarioInvocation> => {
+    const stateDir = await harness.createStateDir('doc-images-move-success');
+    const fixture = await createInlineImageFixture(harness, stateDir, 'doc-images-move');
+    return {
+      stateDir,
+      args: [
+        ...commandTokens('doc.images.move'),
+        fixture.docPath,
+        '--image-id',
+        fixture.imageId,
+        '--to-json',
+        JSON.stringify({ kind: 'documentStart' }),
+        '--out',
+        harness.createOutputPath('doc-images-move-output'),
+      ],
+    };
+  },
+  'doc.images.convertToInline': async (harness: ConformanceHarness): Promise<ScenarioInvocation> => {
+    const stateDir = await harness.createStateDir('doc-images-convert-to-inline-success');
+    const fixture = await createFloatingImageFixture(harness, stateDir, 'doc-images-convert-to-inline');
+    return {
+      stateDir,
+      args: [
+        ...commandTokens('doc.images.convertToInline'),
+        fixture.docPath,
+        '--image-id',
+        fixture.imageId,
+        '--out',
+        harness.createOutputPath('doc-images-convert-to-inline-output'),
+      ],
+    };
+  },
+  'doc.images.convertToFloating': async (harness: ConformanceHarness): Promise<ScenarioInvocation> => {
+    const stateDir = await harness.createStateDir('doc-images-convert-to-floating-success');
+    const fixture = await createInlineImageFixture(harness, stateDir, 'doc-images-convert-to-floating');
+    return {
+      stateDir,
+      args: [
+        ...commandTokens('doc.images.convertToFloating'),
+        fixture.docPath,
+        '--image-id',
+        fixture.imageId,
+        '--out',
+        harness.createOutputPath('doc-images-convert-to-floating-output'),
+      ],
+    };
+  },
+  'doc.images.setSize': async (harness: ConformanceHarness): Promise<ScenarioInvocation> => {
+    const stateDir = await harness.createStateDir('doc-images-set-size-success');
+    const fixture = await createInlineImageFixture(harness, stateDir, 'doc-images-set-size');
+    return {
+      stateDir,
+      args: [
+        ...commandTokens('doc.images.setSize'),
+        fixture.docPath,
+        '--image-id',
+        fixture.imageId,
+        '--size-json',
+        JSON.stringify({ width: 240, height: 120 }),
+        '--out',
+        harness.createOutputPath('doc-images-set-size-output'),
+      ],
+    };
+  },
+  'doc.images.setWrapType': async (harness: ConformanceHarness): Promise<ScenarioInvocation> => {
+    const stateDir = await harness.createStateDir('doc-images-set-wrap-type-success');
+    const fixture = await createFloatingImageFixture(harness, stateDir, 'doc-images-set-wrap-type');
+    return {
+      stateDir,
+      args: [
+        ...commandTokens('doc.images.setWrapType'),
+        fixture.docPath,
+        '--image-id',
+        fixture.imageId,
+        '--type',
+        'Tight',
+        '--out',
+        harness.createOutputPath('doc-images-set-wrap-type-output'),
+      ],
+    };
+  },
+  'doc.images.setWrapSide': async (harness: ConformanceHarness): Promise<ScenarioInvocation> => {
+    const stateDir = await harness.createStateDir('doc-images-set-wrap-side-success');
+    const fixture = await createFloatingImageFixture(harness, stateDir, 'doc-images-set-wrap-side');
+    return {
+      stateDir,
+      args: [
+        ...commandTokens('doc.images.setWrapSide'),
+        fixture.docPath,
+        '--image-id',
+        fixture.imageId,
+        '--side',
+        'left',
+        '--out',
+        harness.createOutputPath('doc-images-set-wrap-side-output'),
+      ],
+    };
+  },
+  'doc.images.setWrapDistances': async (harness: ConformanceHarness): Promise<ScenarioInvocation> => {
+    const stateDir = await harness.createStateDir('doc-images-set-wrap-distances-success');
+    const fixture = await createFloatingImageFixture(harness, stateDir, 'doc-images-set-wrap-distances');
+    return {
+      stateDir,
+      args: [
+        ...commandTokens('doc.images.setWrapDistances'),
+        fixture.docPath,
+        '--image-id',
+        fixture.imageId,
+        '--distances-json',
+        JSON.stringify({ distTop: 100, distBottom: 100 }),
+        '--out',
+        harness.createOutputPath('doc-images-set-wrap-distances-output'),
+      ],
+    };
+  },
+  'doc.images.setPosition': async (harness: ConformanceHarness): Promise<ScenarioInvocation> => {
+    const stateDir = await harness.createStateDir('doc-images-set-position-success');
+    const fixture = await createFloatingImageFixture(harness, stateDir, 'doc-images-set-position');
+    return {
+      stateDir,
+      args: [
+        ...commandTokens('doc.images.setPosition'),
+        fixture.docPath,
+        '--image-id',
+        fixture.imageId,
+        '--position-json',
+        JSON.stringify({ hRelativeFrom: 'column', alignH: 'center' }),
+        '--out',
+        harness.createOutputPath('doc-images-set-position-output'),
+      ],
+    };
+  },
+  'doc.images.setAnchorOptions': async (harness: ConformanceHarness): Promise<ScenarioInvocation> => {
+    const stateDir = await harness.createStateDir('doc-images-set-anchor-options-success');
+    const fixture = await createFloatingImageFixture(harness, stateDir, 'doc-images-set-anchor-options');
+    return {
+      stateDir,
+      args: [
+        ...commandTokens('doc.images.setAnchorOptions'),
+        fixture.docPath,
+        '--image-id',
+        fixture.imageId,
+        '--options-json',
+        JSON.stringify({ behindDoc: true, allowOverlap: false }),
+        '--out',
+        harness.createOutputPath('doc-images-set-anchor-options-output'),
+      ],
+    };
+  },
+  'doc.images.setZOrder': async (harness: ConformanceHarness): Promise<ScenarioInvocation> => {
+    const stateDir = await harness.createStateDir('doc-images-set-z-order-success');
+    const fixture = await createFloatingImageFixture(harness, stateDir, 'doc-images-set-z-order');
+    return {
+      stateDir,
+      args: [
+        ...commandTokens('doc.images.setZOrder'),
+        fixture.docPath,
+        '--image-id',
+        fixture.imageId,
+        '--z-order-json',
+        JSON.stringify({ relativeHeight: 500 }),
+        '--out',
+        harness.createOutputPath('doc-images-set-z-order-output'),
+      ],
+    };
+  },
+  'doc.images.scale': async (harness: ConformanceHarness): Promise<ScenarioInvocation> => {
+    const stateDir = await harness.createStateDir('doc-images-scale-success');
+    const fixture = await createInlineImageFixture(harness, stateDir, 'doc-images-scale');
+    return {
+      stateDir,
+      args: [
+        ...commandTokens('doc.images.scale'),
+        fixture.docPath,
+        '--image-id',
+        fixture.imageId,
+        '--factor',
+        '2',
+        '--out',
+        harness.createOutputPath('doc-images-scale-output'),
+      ],
+    };
+  },
+  'doc.images.setLockAspectRatio': async (harness: ConformanceHarness): Promise<ScenarioInvocation> => {
+    const stateDir = await harness.createStateDir('doc-images-set-lock-aspect-ratio-success');
+    const fixture = await createInlineImageFixture(harness, stateDir, 'doc-images-set-lock-aspect-ratio');
+    return {
+      stateDir,
+      args: [
+        ...commandTokens('doc.images.setLockAspectRatio'),
+        fixture.docPath,
+        '--image-id',
+        fixture.imageId,
+        '--locked',
+        'false',
+        '--out',
+        harness.createOutputPath('doc-images-set-lock-aspect-ratio-output'),
+      ],
+    };
+  },
+  'doc.images.rotate': async (harness: ConformanceHarness): Promise<ScenarioInvocation> => {
+    const stateDir = await harness.createStateDir('doc-images-rotate-success');
+    const fixture = await createInlineImageFixture(harness, stateDir, 'doc-images-rotate');
+    return {
+      stateDir,
+      args: [
+        ...commandTokens('doc.images.rotate'),
+        fixture.docPath,
+        '--image-id',
+        fixture.imageId,
+        '--angle',
+        '90',
+        '--out',
+        harness.createOutputPath('doc-images-rotate-output'),
+      ],
+    };
+  },
+  'doc.images.flip': async (harness: ConformanceHarness): Promise<ScenarioInvocation> => {
+    const stateDir = await harness.createStateDir('doc-images-flip-success');
+    const fixture = await createInlineImageFixture(harness, stateDir, 'doc-images-flip');
+    return {
+      stateDir,
+      args: [
+        ...commandTokens('doc.images.flip'),
+        fixture.docPath,
+        '--image-id',
+        fixture.imageId,
+        '--horizontal',
+        'true',
+        '--out',
+        harness.createOutputPath('doc-images-flip-output'),
+      ],
+    };
+  },
+  'doc.images.crop': async (harness: ConformanceHarness): Promise<ScenarioInvocation> => {
+    const stateDir = await harness.createStateDir('doc-images-crop-success');
+    const fixture = await createInlineImageFixture(harness, stateDir, 'doc-images-crop');
+    return {
+      stateDir,
+      args: [
+        ...commandTokens('doc.images.crop'),
+        fixture.docPath,
+        '--image-id',
+        fixture.imageId,
+        '--crop-json',
+        JSON.stringify({ left: 10, top: 5, right: 10, bottom: 5 }),
+        '--out',
+        harness.createOutputPath('doc-images-crop-output'),
+      ],
+    };
+  },
+  'doc.images.resetCrop': async (harness: ConformanceHarness): Promise<ScenarioInvocation> => {
+    const stateDir = await harness.createStateDir('doc-images-reset-crop-success');
+    const fixture = await createCroppedImageFixture(harness, stateDir, 'doc-images-reset-crop');
+    return {
+      stateDir,
+      args: [
+        ...commandTokens('doc.images.resetCrop'),
+        fixture.docPath,
+        '--image-id',
+        fixture.imageId,
+        '--out',
+        harness.createOutputPath('doc-images-reset-crop-output'),
+      ],
+    };
+  },
+  'doc.images.replaceSource': async (harness: ConformanceHarness): Promise<ScenarioInvocation> => {
+    const stateDir = await harness.createStateDir('doc-images-replace-source-success');
+    const fixture = await createInlineImageFixture(harness, stateDir, 'doc-images-replace-source');
+    return {
+      stateDir,
+      args: [
+        ...commandTokens('doc.images.replaceSource'),
+        fixture.docPath,
+        '--image-id',
+        fixture.imageId,
+        '--src',
+        CONFORMANCE_IMAGE_DATA_URI_ALT,
+        '--out',
+        harness.createOutputPath('doc-images-replace-source-output'),
+      ],
+    };
+  },
+  'doc.images.setAltText': async (harness: ConformanceHarness): Promise<ScenarioInvocation> => {
+    const stateDir = await harness.createStateDir('doc-images-set-alt-text-success');
+    const fixture = await createInlineImageFixture(harness, stateDir, 'doc-images-set-alt-text');
+    return {
+      stateDir,
+      args: [
+        ...commandTokens('doc.images.setAltText'),
+        fixture.docPath,
+        '--image-id',
+        fixture.imageId,
+        '--description',
+        'Conformance alt text',
+        '--out',
+        harness.createOutputPath('doc-images-set-alt-text-output'),
+      ],
+    };
+  },
+  'doc.images.setDecorative': async (harness: ConformanceHarness): Promise<ScenarioInvocation> => {
+    const stateDir = await harness.createStateDir('doc-images-set-decorative-success');
+    const fixture = await createInlineImageFixture(harness, stateDir, 'doc-images-set-decorative');
+    return {
+      stateDir,
+      args: [
+        ...commandTokens('doc.images.setDecorative'),
+        fixture.docPath,
+        '--image-id',
+        fixture.imageId,
+        '--decorative',
+        'true',
+        '--out',
+        harness.createOutputPath('doc-images-set-decorative-output'),
+      ],
+    };
+  },
+  'doc.images.setName': async (harness: ConformanceHarness): Promise<ScenarioInvocation> => {
+    const stateDir = await harness.createStateDir('doc-images-set-name-success');
+    const fixture = await createInlineImageFixture(harness, stateDir, 'doc-images-set-name');
+    return {
+      stateDir,
+      args: [
+        ...commandTokens('doc.images.setName'),
+        fixture.docPath,
+        '--image-id',
+        fixture.imageId,
+        '--name',
+        'Conformance image name',
+        '--out',
+        harness.createOutputPath('doc-images-set-name-output'),
+      ],
+    };
+  },
+  'doc.images.setHyperlink': async (harness: ConformanceHarness): Promise<ScenarioInvocation> => {
+    const stateDir = await harness.createStateDir('doc-images-set-hyperlink-success');
+    const fixture = await createInlineImageFixture(harness, stateDir, 'doc-images-set-hyperlink');
+    return {
+      stateDir,
+      args: [
+        ...commandTokens('doc.images.setHyperlink'),
+        fixture.docPath,
+        '--image-id',
+        fixture.imageId,
+        '--url-json',
+        JSON.stringify('https://example.com'),
+        '--tooltip',
+        'Conformance link',
+        '--out',
+        harness.createOutputPath('doc-images-set-hyperlink-output'),
+      ],
+    };
+  },
+  'doc.images.insertCaption': async (harness: ConformanceHarness): Promise<ScenarioInvocation> => {
+    const stateDir = await harness.createStateDir('doc-images-insert-caption-success');
+    const fixture = await createInlineImageFixture(harness, stateDir, 'doc-images-insert-caption');
+    return {
+      stateDir,
+      args: [
+        ...commandTokens('doc.images.insertCaption'),
+        fixture.docPath,
+        '--image-id',
+        fixture.imageId,
+        '--text',
+        'Conformance caption',
+        '--out',
+        harness.createOutputPath('doc-images-insert-caption-output'),
+      ],
+    };
+  },
+  'doc.images.updateCaption': async (harness: ConformanceHarness): Promise<ScenarioInvocation> => {
+    const stateDir = await harness.createStateDir('doc-images-update-caption-success');
+    const fixture = await createCaptionedImageFixture(harness, stateDir, 'doc-images-update-caption');
+    return {
+      stateDir,
+      args: [
+        ...commandTokens('doc.images.updateCaption'),
+        fixture.docPath,
+        '--image-id',
+        fixture.imageId,
+        '--text',
+        'Updated conformance caption',
+        '--out',
+        harness.createOutputPath('doc-images-update-caption-output'),
+      ],
+    };
+  },
+  'doc.images.removeCaption': async (harness: ConformanceHarness): Promise<ScenarioInvocation> => {
+    const stateDir = await harness.createStateDir('doc-images-remove-caption-success');
+    const fixture = await createCaptionedImageFixture(harness, stateDir, 'doc-images-remove-caption');
+    return {
+      stateDir,
+      args: [
+        ...commandTokens('doc.images.removeCaption'),
+        fixture.docPath,
+        '--image-id',
+        fixture.imageId,
+        '--out',
+        harness.createOutputPath('doc-images-remove-caption-output'),
       ],
     };
   },
@@ -1696,6 +2936,57 @@ export const SUCCESS_SCENARIOS = {
   'doc.tables.get': tableReadScenario('tables.get'),
   'doc.tables.getCells': tableReadScenario('tables.getCells'),
   'doc.tables.getProperties': tableReadScenario('tables.getProperties'),
+  'doc.tables.getStyles': async (harness: ConformanceHarness): Promise<ScenarioInvocation> => {
+    const stateDir = await harness.createStateDir('table-getStyles-success');
+    const { sessionId } = await harness.createTableFixture(stateDir, 'table-getStyles');
+    return {
+      stateDir,
+      args: [...commandTokens('doc.tables.getStyles'), '--session', sessionId],
+    };
+  },
+  'doc.tables.setDefaultStyle': async (harness: ConformanceHarness): Promise<ScenarioInvocation> => {
+    const stateDir = await harness.createStateDir('table-setDefaultStyle-success');
+    const { sessionId } = await harness.createTableFixture(stateDir, 'table-setDefaultStyle');
+    return {
+      stateDir,
+      args: [
+        ...commandTokens('doc.tables.setDefaultStyle'),
+        '--session',
+        sessionId,
+        '--style-id',
+        'TableGrid',
+        '--out',
+        harness.createOutputPath('table-setDefaultStyle-out'),
+      ],
+    };
+  },
+  'doc.tables.clearDefaultStyle': async (harness: ConformanceHarness): Promise<ScenarioInvocation> => {
+    const stateDir = await harness.createStateDir('table-clearDefaultStyle-success');
+    const { sessionId } = await harness.createTableFixture(stateDir, 'table-clearDefaultStyle');
+    // First set a default so the clear actually has something to remove
+    await harness.runCli(
+      [
+        ...commandTokens('doc.tables.setDefaultStyle'),
+        '--session',
+        sessionId,
+        '--style-id',
+        'TableGrid',
+        '--out',
+        harness.createOutputPath('table-clearDefaultStyle-setup-out'),
+      ],
+      stateDir,
+    );
+    return {
+      stateDir,
+      args: [
+        ...commandTokens('doc.tables.clearDefaultStyle'),
+        '--session',
+        sessionId,
+        '--out',
+        harness.createOutputPath('table-clearDefaultStyle-out'),
+      ],
+    };
+  },
 
   // ---------------------------------------------------------------------------
   // History operations
@@ -1719,9 +3010,22 @@ export const SUCCESS_SCENARIOS = {
 } as const satisfies Record<CliOperationId, (harness: ConformanceHarness) => Promise<ScenarioInvocation>>;
 
 const RUNTIME_CONFORMANCE_SKIP = new Set<CliOperationId>([
+  'doc.toc.markEntry',
   'doc.toc.unmarkEntry',
   'doc.toc.getEntry',
   'doc.toc.editEntry',
+  // OOB table-style mutations require translatedLinkedStyles from the style-engine,
+  // which the CLI test harness fixture does not populate.
+  'doc.tables.setDefaultStyle',
+  'doc.tables.clearDefaultStyle',
+  // clearLevelOverrides requires an instance-level override to exist on the fixture list,
+  // which the generic list fixture does not have.
+  'doc.lists.clearLevelOverrides',
+  // Current fixture round-trips do not preserve seeded crop/caption state across
+  // save+reopen in a way these operations can deterministically target.
+  'doc.images.resetCrop',
+  'doc.images.updateCaption',
+  'doc.images.removeCaption',
 ]);
 
 export const OPERATION_SCENARIOS = (Object.keys(SUCCESS_SCENARIOS) as CliOperationId[]).map((operationId) => {

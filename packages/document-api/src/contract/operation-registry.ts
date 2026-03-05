@@ -22,14 +22,17 @@ import type { BlocksDeleteInput, BlocksDeleteResult } from '../types/blocks.type
 import type { FindOptions } from '../find/find.js';
 import type { GetNodeByIdInput } from '../get-node/get-node.js';
 import type { GetTextInput } from '../get-text/get-text.js';
+import type { GetMarkdownInput } from '../get-markdown/get-markdown.js';
+import type { GetHtmlInput } from '../get-html/get-html.js';
 import type { InfoInput } from '../info/info.js';
+import type { ClearContentInput } from '../clear-content/clear-content.js';
 import type { InsertInput } from '../insert/insert.js';
 import type { ReplaceInput } from '../replace/replace.js';
 import type { DeleteInput } from '../delete/delete.js';
 import type { MutationOptions, RevisionGuardOptions } from '../write/write.js';
 import type { FormatInlineAliasInput, StyleApplyInput } from '../format/format.js';
 import type { InlineRunPatchKey } from '../format/inline-run-patch.js';
-import type { StylesApplyInput, StylesApplyOptions, StylesApplyReceipt } from '../styles/styles.js';
+import type { StylesApplyInput, StylesApplyOptions, StylesApplyReceipt } from '../styles/index.js';
 import type {
   CommentsCreateInput,
   CommentsPatchInput,
@@ -48,10 +51,40 @@ import type {
   ListItemInfo,
   ListInsertInput,
   ListsInsertResult,
-  ListSetTypeInput,
   ListsMutateItemResult,
   ListTargetInput,
-  ListsExitResult,
+  ListsCreateInput,
+  ListsCreateResult,
+  ListsAttachInput,
+  ListsDetachInput,
+  ListsDetachResult,
+  ListsJoinInput,
+  ListsJoinResult,
+  ListsCanJoinInput,
+  ListsCanJoinResult,
+  ListsSeparateInput,
+  ListsSeparateResult,
+  ListsSetLevelInput,
+  ListsSetValueInput,
+  ListsContinuePreviousInput,
+  ListsCanContinuePreviousInput,
+  ListsCanContinuePreviousResult,
+  ListsSetLevelRestartInput,
+  ListsConvertToTextInput,
+  ListsConvertToTextResult,
+  ListsApplyTemplateInput,
+  ListsApplyPresetInput,
+  ListsSetTypeInput,
+  ListsCaptureTemplateInput,
+  ListsCaptureTemplateResult,
+  ListsSetLevelNumberingInput,
+  ListsSetLevelBulletInput,
+  ListsSetLevelPictureBulletInput,
+  ListsSetLevelAlignmentInput,
+  ListsSetLevelIndentsInput,
+  ListsSetLevelTrailingCharacterInput,
+  ListsSetLevelMarkerFontInput,
+  ListsClearLevelOverridesInput,
 } from '../lists/lists.types.js';
 import type {
   ParagraphMutationResult,
@@ -102,6 +135,40 @@ import type {
   SectionsSetVerticalAlignInput,
 } from '../sections/sections.types.js';
 import type { QueryMatchInput, QueryMatchOutput } from '../types/query-match.types.js';
+import type {
+  CreateImageInput,
+  CreateImageResult,
+  ImagesListInput,
+  ImagesListResult,
+  ImagesGetInput,
+  ImageSummary,
+  ImagesDeleteInput,
+  ImagesMutationResult,
+  MoveImageInput,
+  ConvertToInlineInput,
+  ConvertToFloatingInput,
+  SetSizeInput,
+  SetWrapTypeInput,
+  SetWrapSideInput,
+  SetWrapDistancesInput,
+  SetPositionInput,
+  SetAnchorOptionsInput,
+  SetZOrderInput,
+  ScaleInput,
+  SetLockAspectRatioInput,
+  RotateInput,
+  FlipInput,
+  CropInput,
+  ResetCropInput,
+  ReplaceSourceInput,
+  SetAltTextInput,
+  SetDecorativeInput,
+  SetNameInput,
+  SetHyperlinkInput,
+  InsertCaptionInput,
+  UpdateCaptionInput,
+  RemoveCaptionInput,
+} from '../images/images.types.js';
 import type {
   MutationsApplyInput,
   MutationsPreviewInput,
@@ -173,7 +240,22 @@ import type {
   TablesGetCellsOutput,
   TablesGetPropertiesInput,
   TablesGetPropertiesOutput,
+  TablesGetStylesInput,
+  TablesGetStylesOutput,
+  TablesSetDefaultStyleInput,
+  TablesClearDefaultStyleInput,
 } from '../types/table-operations.types.js';
+import type {
+  HyperlinksListQuery,
+  HyperlinksListResult,
+  HyperlinksGetInput,
+  HyperlinkInfo,
+  HyperlinksWrapInput,
+  HyperlinksInsertInput,
+  HyperlinksPatchInput,
+  HyperlinksRemoveInput,
+  HyperlinkMutationResult,
+} from '../hyperlinks/hyperlinks.types.js';
 
 type FormatInlineAliasOperationRegistry = {
   [K in InlineRunPatchKey as `format.${K}`]: {
@@ -189,9 +271,12 @@ export interface OperationRegistry extends FormatInlineAliasOperationRegistry {
   getNode: { input: NodeAddress; options: never; output: NodeInfo };
   getNodeById: { input: GetNodeByIdInput; options: never; output: NodeInfo };
   getText: { input: GetTextInput; options: never; output: string };
+  getMarkdown: { input: GetMarkdownInput; options: never; output: string };
+  getHtml: { input: GetHtmlInput; options: never; output: string };
   info: { input: InfoInput; options: never; output: DocumentInfo };
 
   // --- Singleton mutations ---
+  clearContent: { input: ClearContentInput; options: RevisionGuardOptions; output: Receipt };
   insert: { input: InsertInput; options: MutationOptions; output: TextMutationReceipt };
   replace: { input: ReplaceInput; options: MutationOptions; output: TextMutationReceipt };
   delete: { input: DeleteInput; options: MutationOptions; output: TextMutationReceipt };
@@ -312,11 +397,74 @@ export interface OperationRegistry extends FormatInlineAliasOperationRegistry {
   'lists.list': { input: ListsListQuery | undefined; options: never; output: ListsListResult };
   'lists.get': { input: ListsGetInput; options: never; output: ListItemInfo };
   'lists.insert': { input: ListInsertInput; options: MutationOptions; output: ListsInsertResult };
-  'lists.setType': { input: ListSetTypeInput; options: MutationOptions; output: ListsMutateItemResult };
+  'lists.create': { input: ListsCreateInput; options: MutationOptions; output: ListsCreateResult };
+  'lists.attach': { input: ListsAttachInput; options: MutationOptions; output: ListsMutateItemResult };
+  'lists.detach': { input: ListsDetachInput; options: MutationOptions; output: ListsDetachResult };
   'lists.indent': { input: ListTargetInput; options: MutationOptions; output: ListsMutateItemResult };
   'lists.outdent': { input: ListTargetInput; options: MutationOptions; output: ListsMutateItemResult };
-  'lists.restart': { input: ListTargetInput; options: MutationOptions; output: ListsMutateItemResult };
-  'lists.exit': { input: ListTargetInput; options: MutationOptions; output: ListsExitResult };
+  'lists.join': { input: ListsJoinInput; options: MutationOptions; output: ListsJoinResult };
+  'lists.canJoin': { input: ListsCanJoinInput; options: never; output: ListsCanJoinResult };
+  'lists.separate': { input: ListsSeparateInput; options: MutationOptions; output: ListsSeparateResult };
+  'lists.setLevel': { input: ListsSetLevelInput; options: MutationOptions; output: ListsMutateItemResult };
+  'lists.setValue': { input: ListsSetValueInput; options: MutationOptions; output: ListsMutateItemResult };
+  'lists.continuePrevious': {
+    input: ListsContinuePreviousInput;
+    options: MutationOptions;
+    output: ListsMutateItemResult;
+  };
+  'lists.canContinuePrevious': {
+    input: ListsCanContinuePreviousInput;
+    options: never;
+    output: ListsCanContinuePreviousResult;
+  };
+  'lists.setLevelRestart': {
+    input: ListsSetLevelRestartInput;
+    options: MutationOptions;
+    output: ListsMutateItemResult;
+  };
+  'lists.convertToText': { input: ListsConvertToTextInput; options: MutationOptions; output: ListsConvertToTextResult };
+
+  // --- lists.* (SD-1973 formatting) ---
+  'lists.applyTemplate': { input: ListsApplyTemplateInput; options: MutationOptions; output: ListsMutateItemResult };
+  'lists.applyPreset': { input: ListsApplyPresetInput; options: MutationOptions; output: ListsMutateItemResult };
+  'lists.setType': { input: ListsSetTypeInput; options: MutationOptions; output: ListsMutateItemResult };
+  'lists.captureTemplate': { input: ListsCaptureTemplateInput; options: never; output: ListsCaptureTemplateResult };
+  'lists.setLevelNumbering': {
+    input: ListsSetLevelNumberingInput;
+    options: MutationOptions;
+    output: ListsMutateItemResult;
+  };
+  'lists.setLevelBullet': { input: ListsSetLevelBulletInput; options: MutationOptions; output: ListsMutateItemResult };
+  'lists.setLevelPictureBullet': {
+    input: ListsSetLevelPictureBulletInput;
+    options: MutationOptions;
+    output: ListsMutateItemResult;
+  };
+  'lists.setLevelAlignment': {
+    input: ListsSetLevelAlignmentInput;
+    options: MutationOptions;
+    output: ListsMutateItemResult;
+  };
+  'lists.setLevelIndents': {
+    input: ListsSetLevelIndentsInput;
+    options: MutationOptions;
+    output: ListsMutateItemResult;
+  };
+  'lists.setLevelTrailingCharacter': {
+    input: ListsSetLevelTrailingCharacterInput;
+    options: MutationOptions;
+    output: ListsMutateItemResult;
+  };
+  'lists.setLevelMarkerFont': {
+    input: ListsSetLevelMarkerFontInput;
+    options: MutationOptions;
+    output: ListsMutateItemResult;
+  };
+  'lists.clearLevelOverrides': {
+    input: ListsClearLevelOverridesInput;
+    options: MutationOptions;
+    output: ListsMutateItemResult;
+  };
 
   // --- sections.* ---
   'sections.list': { input: SectionsListQuery | undefined; options: never; output: SectionsListResult };
@@ -494,6 +642,17 @@ export interface OperationRegistry extends FormatInlineAliasOperationRegistry {
   'tables.get': { input: TablesGetInput; options: never; output: TablesGetOutput };
   'tables.getCells': { input: TablesGetCellsInput; options: never; output: TablesGetCellsOutput };
   'tables.getProperties': { input: TablesGetPropertiesInput; options: never; output: TablesGetPropertiesOutput };
+  'tables.getStyles': { input: TablesGetStylesInput | undefined; options: never; output: TablesGetStylesOutput };
+  'tables.setDefaultStyle': {
+    input: TablesSetDefaultStyleInput;
+    options: MutationOptions;
+    output: DocumentMutationResult;
+  };
+  'tables.clearDefaultStyle': {
+    input: TablesClearDefaultStyleInput | undefined;
+    options: MutationOptions;
+    output: DocumentMutationResult;
+  };
 
   // --- create.tableOfContents ---
   'create.tableOfContents': {
@@ -515,6 +674,54 @@ export interface OperationRegistry extends FormatInlineAliasOperationRegistry {
   'toc.listEntries': { input: TocListEntriesQuery | undefined; options: never; output: TocListEntriesResult };
   'toc.getEntry': { input: TocGetEntryInput; options: never; output: TocEntryInfo };
   'toc.editEntry': { input: TocEditEntryInput; options: MutationOptions; output: TocEntryMutationResult };
+
+  // --- create.image ---
+  'create.image': { input: CreateImageInput; options: MutationOptions; output: CreateImageResult };
+
+  // --- images.* ---
+  'images.list': { input: ImagesListInput | undefined; options: never; output: ImagesListResult };
+  'images.get': { input: ImagesGetInput; options: never; output: ImageSummary };
+  'images.delete': { input: ImagesDeleteInput; options: MutationOptions; output: ImagesMutationResult };
+  'images.move': { input: MoveImageInput; options: MutationOptions; output: ImagesMutationResult };
+  'images.convertToInline': { input: ConvertToInlineInput; options: MutationOptions; output: ImagesMutationResult };
+  'images.convertToFloating': { input: ConvertToFloatingInput; options: MutationOptions; output: ImagesMutationResult };
+  'images.setSize': { input: SetSizeInput; options: MutationOptions; output: ImagesMutationResult };
+  'images.setWrapType': { input: SetWrapTypeInput; options: MutationOptions; output: ImagesMutationResult };
+  'images.setWrapSide': { input: SetWrapSideInput; options: MutationOptions; output: ImagesMutationResult };
+  'images.setWrapDistances': { input: SetWrapDistancesInput; options: MutationOptions; output: ImagesMutationResult };
+  'images.setPosition': { input: SetPositionInput; options: MutationOptions; output: ImagesMutationResult };
+  'images.setAnchorOptions': { input: SetAnchorOptionsInput; options: MutationOptions; output: ImagesMutationResult };
+  'images.setZOrder': { input: SetZOrderInput; options: MutationOptions; output: ImagesMutationResult };
+  // SD-2100: Geometry
+  'images.scale': { input: ScaleInput; options: MutationOptions; output: ImagesMutationResult };
+  'images.setLockAspectRatio': {
+    input: SetLockAspectRatioInput;
+    options: MutationOptions;
+    output: ImagesMutationResult;
+  };
+  'images.rotate': { input: RotateInput; options: MutationOptions; output: ImagesMutationResult };
+  'images.flip': { input: FlipInput; options: MutationOptions; output: ImagesMutationResult };
+  'images.crop': { input: CropInput; options: MutationOptions; output: ImagesMutationResult };
+  'images.resetCrop': { input: ResetCropInput; options: MutationOptions; output: ImagesMutationResult };
+  // SD-2100: Content
+  'images.replaceSource': { input: ReplaceSourceInput; options: MutationOptions; output: ImagesMutationResult };
+  // SD-2100: Semantic metadata
+  'images.setAltText': { input: SetAltTextInput; options: MutationOptions; output: ImagesMutationResult };
+  'images.setDecorative': { input: SetDecorativeInput; options: MutationOptions; output: ImagesMutationResult };
+  'images.setName': { input: SetNameInput; options: MutationOptions; output: ImagesMutationResult };
+  'images.setHyperlink': { input: SetHyperlinkInput; options: MutationOptions; output: ImagesMutationResult };
+  // SD-2100: Caption lifecycle
+  'images.insertCaption': { input: InsertCaptionInput; options: MutationOptions; output: ImagesMutationResult };
+  'images.updateCaption': { input: UpdateCaptionInput; options: MutationOptions; output: ImagesMutationResult };
+  'images.removeCaption': { input: RemoveCaptionInput; options: MutationOptions; output: ImagesMutationResult };
+
+  // --- hyperlinks.* ---
+  'hyperlinks.list': { input: HyperlinksListQuery | undefined; options: never; output: HyperlinksListResult };
+  'hyperlinks.get': { input: HyperlinksGetInput; options: never; output: HyperlinkInfo };
+  'hyperlinks.wrap': { input: HyperlinksWrapInput; options: MutationOptions; output: HyperlinkMutationResult };
+  'hyperlinks.insert': { input: HyperlinksInsertInput; options: MutationOptions; output: HyperlinkMutationResult };
+  'hyperlinks.patch': { input: HyperlinksPatchInput; options: MutationOptions; output: HyperlinkMutationResult };
+  'hyperlinks.remove': { input: HyperlinksRemoveInput; options: MutationOptions; output: HyperlinkMutationResult };
 }
 
 // --- Bidirectional completeness checks ---

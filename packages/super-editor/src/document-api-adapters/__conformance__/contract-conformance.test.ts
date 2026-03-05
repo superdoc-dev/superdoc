@@ -19,6 +19,7 @@ import { ListHelpers } from '../../core/helpers/list-numbering-helpers.js';
 import { createCommentsWrapper } from '../plan-engine/comments-wrappers.js';
 import { createParagraphWrapper, createHeadingWrapper } from '../plan-engine/create-wrappers.js';
 import { blocksDeleteWrapper } from '../plan-engine/blocks-wrappers.js';
+import { clearContentWrapper } from '../plan-engine/clear-content-wrapper.js';
 import { styleApplyWrapper } from '../plan-engine/plan-wrappers.js';
 import {
   paragraphsSetStyleWrapper,
@@ -95,20 +96,85 @@ import {
   tocEditEntryWrapper,
 } from '../plan-engine/toc-entry-wrappers.js';
 import {
+  createImageWrapper,
+  imagesDeleteWrapper,
+  imagesMoveWrapper,
+  imagesConvertToInlineWrapper,
+  imagesConvertToFloatingWrapper,
+  imagesSetSizeWrapper,
+  imagesSetWrapTypeWrapper,
+  imagesSetWrapSideWrapper,
+  imagesSetWrapDistancesWrapper,
+  imagesSetPositionWrapper,
+  imagesSetAnchorOptionsWrapper,
+  imagesSetZOrderWrapper,
+  imagesScaleWrapper,
+  imagesSetLockAspectRatioWrapper,
+  imagesRotateWrapper,
+  imagesFlipWrapper,
+  imagesCropWrapper,
+  imagesResetCropWrapper,
+  imagesReplaceSourceWrapper,
+  imagesSetAltTextWrapper,
+  imagesSetDecorativeWrapper,
+  imagesSetNameWrapper,
+  imagesSetHyperlinkWrapper,
+  imagesInsertCaptionWrapper,
+  imagesUpdateCaptionWrapper,
+  imagesRemoveCaptionWrapper,
+} from '../plan-engine/images-wrappers.js';
+import {
+  hyperlinksWrapWrapper,
+  hyperlinksInsertWrapper,
+  hyperlinksPatchWrapper,
+  hyperlinksRemoveWrapper,
+} from '../plan-engine/hyperlinks-wrappers.js';
+import {
   listsInsertWrapper,
-  listsSetTypeWrapper,
   listsIndentWrapper,
   listsOutdentWrapper,
-  listsRestartWrapper,
-  listsExitWrapper,
+  listsCreateWrapper,
+  listsAttachWrapper,
+  listsDetachWrapper,
+  listsJoinWrapper,
+  listsSeparateWrapper,
+  listsSetLevelWrapper,
+  listsSetValueWrapper,
+  listsContinuePreviousWrapper,
+  listsSetLevelRestartWrapper,
+  listsConvertToTextWrapper,
 } from '../plan-engine/lists-wrappers.js';
+import {
+  listsApplyTemplateWrapper,
+  listsApplyPresetWrapper,
+  listsSetTypeWrapper,
+  listsCaptureTemplateWrapper,
+  listsSetLevelNumberingWrapper,
+  listsSetLevelBulletWrapper,
+  listsSetLevelPictureBulletWrapper,
+  listsSetLevelAlignmentWrapper,
+  listsSetLevelIndentsWrapper,
+  listsSetLevelTrailingCharacterWrapper,
+  listsSetLevelMarkerFontWrapper,
+  listsClearLevelOverridesWrapper,
+} from '../plan-engine/lists-formatting-wrappers.js';
+import * as listSequenceHelpers from '../helpers/list-sequence-helpers.js';
+import { LevelFormattingHelpers } from '../../core/helpers/list-level-formatting-helpers.js';
+import * as planWrappers from '../plan-engine/plan-wrappers.js';
 import { trackChangesAcceptWrapper, trackChangesRejectWrapper } from '../plan-engine/track-changes-wrappers.js';
+import * as hyperlinkMutationHelper from '../helpers/hyperlink-mutation-helper.js';
 import { registerBuiltInExecutors } from '../plan-engine/register-executors.js';
 import { getRevision, initRevision } from '../plan-engine/revision-tracker.js';
 import { executePlan } from '../plan-engine/executor.js';
 import { toCanonicalTrackedChangeId } from '../helpers/tracked-change-resolver.js';
 import { writeAdapter } from '../write-adapter.js';
-import { tablesGetCellsAdapter, tablesGetPropertiesAdapter } from '../tables-adapter.js';
+import {
+  tablesGetCellsAdapter,
+  tablesGetPropertiesAdapter,
+  tablesGetStylesAdapter,
+  tablesSetDefaultStyleAdapter,
+  tablesClearDefaultStyleAdapter,
+} from '../tables-adapter.js';
 import {
   createSectionBreakAdapter,
   sectionsSetBreakTypeAdapter,
@@ -522,12 +588,7 @@ function makeListEditor(children: MockParagraphNode[], commandOverrides: Record<
 
   const baseCommands = {
     insertListItemAt: vi.fn(() => true),
-    setListTypeAt: vi.fn(() => true),
     setTextSelection: vi.fn(() => true),
-    increaseListIndent: vi.fn(() => true),
-    decreaseListIndent: vi.fn(() => true),
-    restartNumbering: vi.fn(() => true),
-    exitListItemAt: vi.fn(() => true),
     insertTrackedChange: vi.fn(() => true),
   };
 
@@ -535,6 +596,7 @@ function makeListEditor(children: MockParagraphNode[], commandOverrides: Record<
     setMeta: vi.fn().mockReturnThis(),
     insertText: vi.fn().mockReturnThis(),
     delete: vi.fn().mockReturnThis(),
+    setNodeMarkup: vi.fn().mockReturnThis(),
     mapping: {
       maps: [] as unknown[],
       map: (p: number) => p,
@@ -546,12 +608,14 @@ function makeListEditor(children: MockParagraphNode[], commandOverrides: Record<
   return {
     state: { doc, tr },
     dispatch: vi.fn(),
+    view: { dispatch: vi.fn() },
     commands: {
       ...baseCommands,
       ...commandOverrides,
     },
     converter: {
       numbering: { definitions: {}, abstracts: {} },
+      translatedNumbering: { definitions: {} },
     },
   } as unknown as Editor;
 }
@@ -1185,6 +1249,9 @@ const IMPLEMENTED_TABLE_OPS: ReadonlySet<OperationId> = new Set([
   'tables.setCellPadding',
   'tables.setCellSpacing',
   'tables.clearCellSpacing',
+  'tables.getStyles',
+  'tables.setDefaultStyle',
+  'tables.clearDefaultStyle',
 ] as OperationId[]);
 
 /** Table stub ops that always throw CAPABILITY_UNAVAILABLE. */
@@ -1241,7 +1308,7 @@ function expectThrowCode(operationId: OperationId, run: () => unknown): void {
     capturedCode = (error as { code?: string }).code ?? null;
   }
 
-  expect(capturedCode).toBeTruthy();
+  expect(capturedCode, `${operationId} throwCase did not throw a coded pre-apply error`).toBeTruthy();
   expect(COMMAND_CATALOG[operationId].throws.preApply).toContain(capturedCode);
 }
 
@@ -1889,6 +1956,316 @@ function getFirstTocEntryAddress(editor: Editor): { kind: 'inline'; nodeType: 't
   };
 }
 
+/**
+ * Creates a mock editor containing one floating image node inside a paragraph.
+ * The image has `sdImageId: 'img-1'`, `isAnchor: true`, and `wrap: { type: 'Square' }`.
+ */
+function makeImageEditor(): Editor {
+  const imageNode = createNode('image', [], {
+    attrs: {
+      sdImageId: 'img-1',
+      src: 'https://example.com/test.png',
+      alt: 'Test image',
+      isAnchor: true,
+      wrap: { type: 'Square', attrs: { wrapText: 'bothSides' } },
+      anchorData: { hRelativeFrom: 'column', vRelativeFrom: 'paragraph' },
+      marginOffset: null,
+      relativeHeight: 251658240,
+      originalAttributes: {},
+      size: { width: 100, height: 100 },
+    },
+    isInline: true,
+    isLeaf: true,
+  });
+  const paragraph = createNode('paragraph', [imageNode], {
+    attrs: { sdBlockId: 'p-img' },
+    isBlock: true,
+    inlineContent: true,
+  });
+  const doc = createNode('doc', [paragraph], { isBlock: false });
+
+  const dispatch = vi.fn();
+  const tr = {
+    insertText: vi.fn().mockReturnThis(),
+    delete: vi.fn().mockReturnThis(),
+    insert: vi.fn().mockReturnThis(),
+    setNodeMarkup: vi.fn().mockReturnThis(),
+    replaceWith: vi.fn().mockReturnThis(),
+    setMeta: vi.fn().mockReturnThis(),
+    mapping: { map: (pos: number) => pos },
+    docChanged: true,
+    steps: [{}],
+    doc,
+  };
+
+  return {
+    state: {
+      doc,
+      tr,
+      schema: {
+        nodes: {
+          image: {
+            create: vi.fn((attrs: Record<string, unknown>) =>
+              createNode('image', [], { attrs, isInline: true, isLeaf: true }),
+            ),
+          },
+        },
+      },
+    },
+    dispatch,
+    commands: {
+      setImage: vi.fn(() => true),
+    },
+    schema: { marks: {} },
+    options: {},
+    on: () => {},
+  } as unknown as Editor;
+}
+
+/**
+ * Editor with two paragraphs to make image before/after/inParagraph positioning meaningful.
+ * p1 contains one floating image (img-1), p2 contains text ("Hello").
+ */
+function makeMultiBlockImageEditor(): Editor {
+  const imageNode = createNode('image', [], {
+    attrs: {
+      sdImageId: 'img-1',
+      src: 'https://example.com/test.png',
+      isAnchor: true,
+      wrap: { type: 'Square', attrs: { wrapText: 'bothSides' } },
+      anchorData: { hRelativeFrom: 'column', vRelativeFrom: 'paragraph' },
+      marginOffset: null,
+      relativeHeight: 251658240,
+      originalAttributes: {},
+      size: { width: 100, height: 100 },
+    },
+    isInline: true,
+    isLeaf: true,
+  });
+  // p1: pos=0, nodeSize=3 (1 inline image + 2 wrapper)
+  const p1 = createNode('paragraph', [imageNode], {
+    attrs: { sdBlockId: 'p-img' },
+    isBlock: true,
+    inlineContent: true,
+  });
+  const textNode = createNode('text', [], { text: 'Hello' });
+  // p2: pos=3, nodeSize=7 (5 text chars + 2 wrapper)
+  const p2 = createNode('paragraph', [textNode], {
+    attrs: { sdBlockId: 'p-text' },
+    isBlock: true,
+    inlineContent: true,
+  });
+  const doc = createNode('doc', [p1, p2], { isBlock: false });
+  // doc.content.size = 10
+
+  const dispatch = vi.fn();
+  const tr = {
+    insertText: vi.fn().mockReturnThis(),
+    delete: vi.fn().mockReturnThis(),
+    insert: vi.fn().mockReturnThis(),
+    setNodeMarkup: vi.fn().mockReturnThis(),
+    replaceWith: vi.fn().mockReturnThis(),
+    setMeta: vi.fn().mockReturnThis(),
+    mapping: { map: (pos: number) => pos },
+    docChanged: true,
+    steps: [{}],
+    doc,
+  };
+
+  return {
+    state: {
+      doc,
+      tr,
+      schema: {
+        nodes: {
+          image: {
+            create: vi.fn((attrs: Record<string, unknown>) =>
+              createNode('image', [], { attrs, isInline: true, isLeaf: true }),
+            ),
+          },
+        },
+      },
+    },
+    dispatch,
+    commands: {
+      setImage: vi.fn(() => true),
+      insertContentAt: vi.fn(() => true),
+    },
+    schema: { marks: {} },
+    options: {},
+    on: () => {},
+  } as unknown as Editor;
+}
+
+function makeHyperlinkTarget(blockId: string, start: number, end: number) {
+  return {
+    kind: 'inline' as const,
+    nodeType: 'hyperlink' as const,
+    anchor: {
+      start: { blockId, offset: start },
+      end: { blockId, offset: end },
+    },
+  };
+}
+
+function makeHyperlinkEditor(
+  options: {
+    withLink?: boolean;
+    text?: string;
+    linkAttrs?: Record<string, unknown>;
+  } = {},
+): Editor {
+  const text = options.text ?? 'Hello';
+  const withLink = options.withLink ?? true;
+  const linkAttrs = options.linkAttrs ?? { href: 'https://example.com' };
+
+  const linkMark = {
+    type: { name: 'link' },
+    attrs: linkAttrs,
+  };
+
+  const textNode = createNode('text', [], { text });
+  (textNode as unknown as { marks: unknown[] }).marks = withLink ? [linkMark] : [];
+
+  const paragraph = createNode('paragraph', [textNode], {
+    attrs: { sdBlockId: 'p1' },
+    isBlock: true,
+    inlineContent: true,
+  });
+
+  const doc = createNode('doc', [paragraph], { isBlock: false });
+  (
+    doc as unknown as { resolve: (pos: number) => { depth: number; node: (depth: number) => ProseMirrorNode } }
+  ).resolve = (_pos: number) => ({
+    depth: 1,
+    node: (_depth: number) => paragraph,
+  });
+
+  const dispatch = vi.fn();
+  const tr = {
+    insertText: vi.fn().mockReturnThis(),
+    addMark: vi.fn().mockReturnThis(),
+    removeMark: vi.fn().mockReturnThis(),
+    delete: vi.fn().mockReturnThis(),
+    setMeta: vi.fn().mockReturnThis(),
+    mapping: { map: (pos: number) => pos },
+    docChanged: true,
+    steps: [{}],
+    doc,
+  };
+
+  const linkMarkType = {
+    create: vi.fn((attrs: Record<string, unknown>) => ({
+      type: { name: 'link' },
+      attrs,
+    })),
+  };
+
+  return {
+    state: { doc, tr, schema: { marks: { link: linkMarkType } } },
+    dispatch,
+    schema: { marks: { link: linkMarkType } },
+    options: { mode: 'html' },
+    on: () => {},
+  } as unknown as Editor;
+}
+
+/**
+ * Image editor with resolve + schema mocks for caption operations.
+ * @param opts.withCaption  Add a `Caption`-styled paragraph after the image paragraph.
+ * @param opts.docChanged   Mock tr.docChanged state (default true).
+ * @param opts.imageId      Override the default image id.
+ * @param opts.extraAttrs   Extra attrs merged onto the image node.
+ */
+function makeCaptionImageEditor(
+  opts: { withCaption?: boolean; docChanged?: boolean; imageId?: string; extraAttrs?: Record<string, unknown> } = {},
+): Editor {
+  const imgId = opts.imageId ?? (opts.withCaption ? 'img-cap' : 'img-1');
+  const imageNode = createNode('image', [], {
+    attrs: {
+      sdImageId: imgId,
+      src: 'https://example.com/test.png',
+      isAnchor: true,
+      wrap: { type: 'Square', attrs: { wrapText: 'bothSides' } },
+      anchorData: { hRelativeFrom: 'column', vRelativeFrom: 'paragraph' },
+      marginOffset: null,
+      relativeHeight: 251658240,
+      originalAttributes: {},
+      size: { width: 100, height: 100 },
+      ...opts.extraAttrs,
+    },
+    isInline: true,
+    isLeaf: true,
+  });
+
+  const imgParagraph = createNode('paragraph', [imageNode], {
+    attrs: { sdBlockId: 'p-img' },
+    isBlock: true,
+    inlineContent: true,
+  });
+
+  const children: ProseMirrorNode[] = [imgParagraph];
+
+  if (opts.withCaption) {
+    const captionText = createNode('text', [], { text: 'Old caption' });
+    const captionParagraph = createNode('paragraph', [captionText], {
+      attrs: { sdBlockId: 'p-caption', paragraphProperties: { styleId: 'Caption' } },
+      isBlock: true,
+      inlineContent: true,
+    });
+    children.push(captionParagraph);
+  }
+
+  const doc = createNode('doc', children, { isBlock: false });
+
+  // Add resolve mock — image is always at position 1 (inside paragraph at 0).
+  (doc as unknown as Record<string, unknown>).resolve = () => ({
+    depth: 2,
+    before: () => 0,
+    node: (d: number) => (d === 2 ? imgParagraph : doc),
+  });
+
+  const dispatch = vi.fn();
+  const docChanged = opts.docChanged ?? true;
+  const tr = {
+    insert: vi.fn().mockReturnThis(),
+    delete: vi.fn().mockReturnThis(),
+    replaceWith: vi.fn().mockReturnThis(),
+    setNodeMarkup: vi.fn().mockReturnThis(),
+    setMeta: vi.fn().mockReturnThis(),
+    mapping: { map: (pos: number) => pos },
+    docChanged,
+    steps: docChanged ? [{}] : [],
+    doc,
+  };
+
+  return {
+    state: {
+      doc,
+      tr,
+      schema: {
+        nodes: {
+          paragraph: {
+            create: vi.fn((attrs: Record<string, unknown>, content: unknown) =>
+              createNode('paragraph', content ? [content as ProseMirrorNode] : [], {
+                attrs,
+                isBlock: true,
+                inlineContent: true,
+              }),
+            ),
+          },
+        },
+        text: vi.fn((t: string) => createNode('text', [], { text: t })),
+      },
+    },
+    dispatch,
+    commands: { setImage: vi.fn(() => true) },
+    schema: { marks: {} },
+    options: {},
+    on: () => {},
+  } as unknown as Editor;
+}
+
 const mutationVectors: Partial<Record<OperationId, MutationVector>> = {
   'blocks.delete': {
     throwCase: () => {
@@ -1906,6 +2283,31 @@ const mutationVectors: Partial<Record<OperationId, MutationVector>> = {
         { target: { kind: 'block', nodeType: 'paragraph', nodeId: 'p1' } },
         { changeMode: 'direct' },
       );
+    },
+  },
+  clearContent: {
+    throwCase: () => {
+      const { editor } = makeTextEditor('Hello');
+      // Remove paragraph from schema nodes to trigger CAPABILITY_UNAVAILABLE
+      (editor.state.schema as { nodes: Record<string, unknown> }).nodes = {};
+      return clearContentWrapper(editor, {});
+    },
+    failureCase: () => {
+      // Build an editor whose doc is a single empty paragraph (childCount === 0)
+      const emptyParagraph = createNode('paragraph', [], {
+        attrs: { sdBlockId: 'p1' },
+        isBlock: true,
+        inlineContent: true,
+      });
+      const { editor } = makeTextEditor('');
+      const stateDoc = editor.state.doc as Record<string, unknown>;
+      stateDoc.childCount = 1;
+      stateDoc.firstChild = emptyParagraph;
+      return clearContentWrapper(editor, {});
+    },
+    applyCase: () => {
+      const { editor } = makeTextEditor('Hello');
+      return clearContentWrapper(editor, {});
     },
   },
   insert: {
@@ -2567,30 +2969,6 @@ const mutationVectors: Partial<Record<OperationId, MutationVector>> = {
       );
     },
   },
-  'lists.setType': {
-    throwCase: () => {
-      const editor = makeListEditor([makeListParagraph({ id: 'li-1', numId: 1, numberingType: 'bullet' })]);
-      return listsSetTypeWrapper(
-        editor,
-        { target: { kind: 'block', nodeType: 'listItem', nodeId: 'li-1' }, kind: 'ordered' },
-        { changeMode: 'tracked' },
-      );
-    },
-    failureCase: () => {
-      const editor = makeListEditor([makeListParagraph({ id: 'li-1', numId: 1, numberingType: 'bullet' })]);
-      return listsSetTypeWrapper(editor, {
-        target: { kind: 'block', nodeType: 'listItem', nodeId: 'li-1' },
-        kind: 'bullet',
-      });
-    },
-    applyCase: () => {
-      const editor = makeListEditor([makeListParagraph({ id: 'li-1', numId: 1, numberingType: 'bullet' })]);
-      return listsSetTypeWrapper(editor, {
-        target: { kind: 'block', nodeType: 'listItem', nodeId: 'li-1' },
-        kind: 'ordered',
-      });
-    },
-  },
   'lists.indent': {
     throwCase: () => {
       const editor = makeListEditor([makeListParagraph({ id: 'li-1', numId: 1, ilvl: 0, numberingType: 'decimal' })]);
@@ -2629,49 +3007,723 @@ const mutationVectors: Partial<Record<OperationId, MutationVector>> = {
       return listsOutdentWrapper(editor, { target: { kind: 'block', nodeType: 'listItem', nodeId: 'li-1' } });
     },
     applyCase: () => {
+      const hasDefinitionSpy = vi.spyOn(ListHelpers, 'hasListDefinition').mockReturnValue(true);
       const editor = makeListEditor([makeListParagraph({ id: 'li-1', numId: 1, ilvl: 1, numberingType: 'decimal' })]);
-      return listsOutdentWrapper(editor, { target: { kind: 'block', nodeType: 'listItem', nodeId: 'li-1' } });
+      const result = listsOutdentWrapper(editor, { target: { kind: 'block', nodeType: 'listItem', nodeId: 'li-1' } });
+      hasDefinitionSpy.mockRestore();
+      return result;
     },
   },
-  'lists.restart': {
+  'lists.create': {
     throwCase: () => {
-      const editor = makeListEditor([makeListParagraph({ id: 'li-1', numId: 1, ilvl: 0, numberingType: 'decimal' })]);
-      return listsRestartWrapper(
+      const editor = makeListEditor([makeListParagraph({ id: 'p-1' })]);
+      return listsCreateWrapper(
         editor,
-        { target: { kind: 'block', nodeType: 'listItem', nodeId: 'li-1' } },
+        { mode: 'empty', at: { kind: 'block', nodeType: 'paragraph', nodeId: 'p-1' }, kind: 'ordered' },
         { changeMode: 'tracked' },
       );
     },
     failureCase: () => {
       const editor = makeListEditor([makeListParagraph({ id: 'li-1', numId: 1, ilvl: 0, numberingType: 'decimal' })]);
-      return listsRestartWrapper(editor, { target: { kind: 'block', nodeType: 'listItem', nodeId: 'li-1' } });
+      return listsCreateWrapper(editor, {
+        mode: 'fromParagraphs',
+        target: { kind: 'block', nodeType: 'paragraph', nodeId: 'li-1' },
+        kind: 'ordered',
+      });
+    },
+    applyCase: () => {
+      const getNewListIdSpy = vi.spyOn(ListHelpers, 'getNewListId').mockReturnValue(99);
+      const generateSpy = vi.spyOn(ListHelpers, 'generateNewListDefinition').mockImplementation(() => {});
+      const editor = makeListEditor([makeListParagraph({ id: 'p-1' })]);
+      const result = listsCreateWrapper(editor, {
+        mode: 'empty',
+        at: { kind: 'block', nodeType: 'paragraph', nodeId: 'p-1' },
+        kind: 'ordered',
+      });
+      getNewListIdSpy.mockRestore();
+      generateSpy.mockRestore();
+      return result;
+    },
+  },
+  'lists.attach': {
+    throwCase: () => {
+      const editor = makeListEditor([
+        makeListParagraph({ id: 'p-1' }),
+        makeListParagraph({ id: 'li-1', numId: 1, ilvl: 0, numberingType: 'decimal' }),
+      ]);
+      return listsAttachWrapper(
+        editor,
+        {
+          target: { kind: 'block', nodeType: 'paragraph', nodeId: 'p-1' },
+          attachTo: { kind: 'block', nodeType: 'listItem', nodeId: 'li-1' },
+        },
+        { changeMode: 'tracked' },
+      );
+    },
+    failureCase: () => {
+      const editor = makeListEditor([makeListParagraph({ id: 'li-1', numId: 1, ilvl: 0, numberingType: 'decimal' })]);
+      return listsAttachWrapper(editor, {
+        target: { kind: 'block', nodeType: 'paragraph', nodeId: 'li-1' },
+        attachTo: { kind: 'block', nodeType: 'listItem', nodeId: 'li-1' },
+      });
     },
     applyCase: () => {
       const editor = makeListEditor([
-        makeListParagraph({ id: 'li-1', numId: 1, ilvl: 0, numberingType: 'decimal', markerText: '1.', path: [1] }),
-        makeListParagraph({ id: 'li-2', numId: 1, ilvl: 0, numberingType: 'decimal', markerText: '2.', path: [2] }),
+        makeListParagraph({ id: 'p-1' }),
+        makeListParagraph({ id: 'li-1', numId: 1, ilvl: 0, numberingType: 'decimal' }),
       ]);
-      return listsRestartWrapper(editor, { target: { kind: 'block', nodeType: 'listItem', nodeId: 'li-2' } });
+      return listsAttachWrapper(editor, {
+        target: { kind: 'block', nodeType: 'paragraph', nodeId: 'p-1' },
+        attachTo: { kind: 'block', nodeType: 'listItem', nodeId: 'li-1' },
+      });
     },
   },
-  'lists.exit': {
+  'lists.detach': {
     throwCase: () => {
       const editor = makeListEditor([makeListParagraph({ id: 'li-1', numId: 1, ilvl: 0, numberingType: 'decimal' })]);
-      return listsExitWrapper(
+      return listsDetachWrapper(
         editor,
         { target: { kind: 'block', nodeType: 'listItem', nodeId: 'li-1' } },
         { changeMode: 'tracked' },
       );
     },
     failureCase: () => {
-      const editor = makeListEditor([makeListParagraph({ id: 'li-1', numId: 1, ilvl: 0, numberingType: 'decimal' })], {
-        exitListItemAt: vi.fn(() => false),
-      });
-      return listsExitWrapper(editor, { target: { kind: 'block', nodeType: 'listItem', nodeId: 'li-1' } });
+      const noopReceipt = { steps: [{ effect: 'noop' }], revision: 'r0' };
+      const execSpy = vi.spyOn(planWrappers, 'executeDomainCommand').mockReturnValue(noopReceipt as any);
+      const editor = makeListEditor([makeListParagraph({ id: 'li-1', numId: 1, ilvl: 0, numberingType: 'decimal' })]);
+      const result = listsDetachWrapper(editor, { target: { kind: 'block', nodeType: 'listItem', nodeId: 'li-1' } });
+      execSpy.mockRestore();
+      return result;
     },
     applyCase: () => {
       const editor = makeListEditor([makeListParagraph({ id: 'li-1', numId: 1, ilvl: 0, numberingType: 'decimal' })]);
-      return listsExitWrapper(editor, { target: { kind: 'block', nodeType: 'listItem', nodeId: 'li-1' } });
+      return listsDetachWrapper(editor, { target: { kind: 'block', nodeType: 'listItem', nodeId: 'li-1' } });
+    },
+  },
+  'lists.join': {
+    throwCase: () => {
+      const editor = makeListEditor([makeListParagraph({ id: 'li-1', numId: 1, ilvl: 0, numberingType: 'decimal' })]);
+      return listsJoinWrapper(
+        editor,
+        { target: { kind: 'block', nodeType: 'listItem', nodeId: 'li-1' }, direction: 'withNext' },
+        { changeMode: 'tracked' },
+      );
+    },
+    failureCase: () => {
+      const canJoinSpy = vi.spyOn(listSequenceHelpers, 'evaluateCanJoin').mockReturnValue({
+        canJoin: false,
+        reason: 'NO_ADJACENT_SEQUENCE',
+      });
+      const editor = makeListEditor([makeListParagraph({ id: 'li-1', numId: 1, ilvl: 0, numberingType: 'decimal' })]);
+      const result = listsJoinWrapper(editor, {
+        target: { kind: 'block', nodeType: 'listItem', nodeId: 'li-1' },
+        direction: 'withNext',
+      });
+      canJoinSpy.mockRestore();
+      return result;
+    },
+    applyCase: () => {
+      const canJoinSpy = vi.spyOn(listSequenceHelpers, 'evaluateCanJoin').mockReturnValue({
+        canJoin: true,
+        adjacentListId: '2',
+      });
+      const adjacentSpy = vi.spyOn(listSequenceHelpers, 'findAdjacentSequence').mockReturnValue({
+        numId: 2,
+        sequence: [
+          {
+            address: { kind: 'block', nodeType: 'listItem', nodeId: 'li-2' },
+            candidate: {
+              nodeId: 'li-2',
+              nodeType: 'listItem',
+              pos: 4,
+              end: 8,
+              node: { attrs: { paragraphProperties: { numberingProperties: { numId: 2, ilvl: 0 } } } } as any,
+            },
+            numId: 2,
+            level: 0,
+          } as any,
+        ],
+      });
+      const sequenceSpy = vi.spyOn(listSequenceHelpers, 'getContiguousSequence').mockReturnValue([]);
+      const editor = makeListEditor([makeListParagraph({ id: 'li-1', numId: 1, ilvl: 0, numberingType: 'decimal' })]);
+      const result = listsJoinWrapper(editor, {
+        target: { kind: 'block', nodeType: 'listItem', nodeId: 'li-1' },
+        direction: 'withNext',
+      });
+      canJoinSpy.mockRestore();
+      adjacentSpy.mockRestore();
+      sequenceSpy.mockRestore();
+      return result;
+    },
+  },
+  'lists.separate': {
+    throwCase: () => {
+      const editor = makeListEditor([makeListParagraph({ id: 'li-1', numId: 1, ilvl: 0, numberingType: 'decimal' })]);
+      return listsSeparateWrapper(
+        editor,
+        { target: { kind: 'block', nodeType: 'listItem', nodeId: 'li-1' } },
+        { changeMode: 'tracked' },
+      );
+    },
+    failureCase: () => {
+      const firstInSeqSpy = vi.spyOn(listSequenceHelpers, 'isFirstInSequence').mockReturnValue(true);
+      const editor = makeListEditor([makeListParagraph({ id: 'li-1', numId: 1, ilvl: 0, numberingType: 'decimal' })]);
+      const result = listsSeparateWrapper(editor, {
+        target: { kind: 'block', nodeType: 'listItem', nodeId: 'li-1' },
+      });
+      firstInSeqSpy.mockRestore();
+      return result;
+    },
+    applyCase: () => {
+      const firstInSeqSpy = vi.spyOn(listSequenceHelpers, 'isFirstInSequence').mockReturnValue(false);
+      const abstractSpy = vi.spyOn(listSequenceHelpers, 'getAbstractNumId').mockReturnValue(1);
+      const seqSpy = vi.spyOn(listSequenceHelpers, 'getSequenceFromTarget').mockReturnValue([]);
+      const createNumSpy = vi
+        .spyOn(ListHelpers, 'createNumDefinition')
+        .mockReturnValue({ numId: 99, numDef: {} } as any);
+      const editor = makeListEditor([makeListParagraph({ id: 'li-1', numId: 1, ilvl: 0, numberingType: 'decimal' })]);
+      const result = listsSeparateWrapper(editor, {
+        target: { kind: 'block', nodeType: 'listItem', nodeId: 'li-1' },
+      });
+      firstInSeqSpy.mockRestore();
+      abstractSpy.mockRestore();
+      seqSpy.mockRestore();
+      createNumSpy.mockRestore();
+      return result;
+    },
+  },
+  'lists.setLevel': {
+    throwCase: () => {
+      const editor = makeListEditor([makeListParagraph({ id: 'li-1', numId: 1, ilvl: 0, numberingType: 'decimal' })]);
+      return listsSetLevelWrapper(
+        editor,
+        { target: { kind: 'block', nodeType: 'listItem', nodeId: 'li-1' }, level: 2 },
+        { changeMode: 'tracked' },
+      );
+    },
+    failureCase: () => {
+      const editor = makeListEditor([makeListParagraph({ id: 'li-1', numId: 1, ilvl: 0, numberingType: 'decimal' })]);
+      return listsSetLevelWrapper(editor, {
+        target: { kind: 'block', nodeType: 'listItem', nodeId: 'li-1' },
+        level: 0,
+      });
+    },
+    applyCase: () => {
+      const hasDefinitionSpy = vi.spyOn(ListHelpers, 'hasListDefinition').mockReturnValue(true);
+      const editor = makeListEditor([makeListParagraph({ id: 'li-1', numId: 1, ilvl: 0, numberingType: 'decimal' })]);
+      const result = listsSetLevelWrapper(editor, {
+        target: { kind: 'block', nodeType: 'listItem', nodeId: 'li-1' },
+        level: 2,
+      });
+      hasDefinitionSpy.mockRestore();
+      return result;
+    },
+  },
+  'lists.setValue': {
+    throwCase: () => {
+      const editor = makeListEditor([makeListParagraph({ id: 'li-1', numId: 1, ilvl: 0, numberingType: 'decimal' })]);
+      return listsSetValueWrapper(
+        editor,
+        { target: { kind: 'block', nodeType: 'listItem', nodeId: 'li-1' }, value: 5 },
+        { changeMode: 'tracked' },
+      );
+    },
+    failureCase: () => {
+      // value: null with noop receipt → NO_OP
+      const noopReceipt = { steps: [{ effect: 'noop' }], revision: 'r0' };
+      const execSpy = vi.spyOn(planWrappers, 'executeDomainCommand').mockReturnValue(noopReceipt as any);
+      const editor = makeListEditor([makeListParagraph({ id: 'li-1', numId: 1, ilvl: 0, numberingType: 'decimal' })]);
+      const result = listsSetValueWrapper(editor, {
+        target: { kind: 'block', nodeType: 'listItem', nodeId: 'li-1' },
+        value: null,
+      });
+      execSpy.mockRestore();
+      return result;
+    },
+    applyCase: () => {
+      const firstInSeqSpy = vi.spyOn(listSequenceHelpers, 'isFirstInSequence').mockReturnValue(true);
+      const overrideSpy = vi.spyOn(ListHelpers, 'setLvlOverride').mockImplementation(() => {});
+      const editor = makeListEditor([makeListParagraph({ id: 'li-1', numId: 1, ilvl: 0, numberingType: 'decimal' })]);
+      const result = listsSetValueWrapper(editor, {
+        target: { kind: 'block', nodeType: 'listItem', nodeId: 'li-1' },
+        value: 5,
+      });
+      firstInSeqSpy.mockRestore();
+      overrideSpy.mockRestore();
+      return result;
+    },
+  },
+  'lists.continuePrevious': {
+    throwCase: () => {
+      const editor = makeListEditor([makeListParagraph({ id: 'li-1', numId: 1, ilvl: 0, numberingType: 'decimal' })]);
+      return listsContinuePreviousWrapper(
+        editor,
+        { target: { kind: 'block', nodeType: 'listItem', nodeId: 'li-1' } },
+        { changeMode: 'tracked' },
+      );
+    },
+    failureCase: () => {
+      const canContSpy = vi.spyOn(listSequenceHelpers, 'evaluateCanContinuePrevious').mockReturnValue({
+        canContinue: false,
+        reason: 'NO_PREVIOUS_LIST',
+      });
+      const editor = makeListEditor([makeListParagraph({ id: 'li-1', numId: 1, ilvl: 0, numberingType: 'decimal' })]);
+      const result = listsContinuePreviousWrapper(editor, {
+        target: { kind: 'block', nodeType: 'listItem', nodeId: 'li-1' },
+      });
+      canContSpy.mockRestore();
+      return result;
+    },
+    applyCase: () => {
+      const canContSpy = vi.spyOn(listSequenceHelpers, 'evaluateCanContinuePrevious').mockReturnValue({
+        canContinue: true,
+        previousListId: '2',
+      });
+      const prevSpy = vi.spyOn(listSequenceHelpers, 'findPreviousCompatibleSequence').mockReturnValue({
+        numId: 2,
+        sequence: [],
+      });
+      const seqSpy = vi.spyOn(listSequenceHelpers, 'getContiguousSequence').mockReturnValue([]);
+      const removeSpy = vi.spyOn(ListHelpers, 'removeLvlOverride').mockImplementation(() => {});
+      const editor = makeListEditor([makeListParagraph({ id: 'li-1', numId: 1, ilvl: 0, numberingType: 'decimal' })]);
+      const result = listsContinuePreviousWrapper(editor, {
+        target: { kind: 'block', nodeType: 'listItem', nodeId: 'li-1' },
+      });
+      canContSpy.mockRestore();
+      prevSpy.mockRestore();
+      seqSpy.mockRestore();
+      removeSpy.mockRestore();
+      return result;
+    },
+  },
+  'lists.setLevelRestart': {
+    throwCase: () => {
+      const editor = makeListEditor([makeListParagraph({ id: 'li-1', numId: 1, ilvl: 0, numberingType: 'decimal' })]);
+      return listsSetLevelRestartWrapper(
+        editor,
+        { target: { kind: 'block', nodeType: 'listItem', nodeId: 'li-1' }, level: 0, restartAfterLevel: null },
+        { changeMode: 'tracked' },
+      );
+    },
+    failureCase: () => {
+      const editor = makeListEditor([makeListParagraph({ id: 'li-1', numId: 1, ilvl: 0, numberingType: 'decimal' })]);
+      return listsSetLevelRestartWrapper(editor, {
+        target: { kind: 'block', nodeType: 'listItem', nodeId: 'li-1' },
+        level: 99,
+        restartAfterLevel: null,
+      });
+    },
+    applyCase: () => {
+      const overrideSpy = vi.spyOn(ListHelpers, 'setLvlOverride').mockImplementation(() => {});
+      const editor = makeListEditor([makeListParagraph({ id: 'li-1', numId: 1, ilvl: 0, numberingType: 'decimal' })]);
+      const result = listsSetLevelRestartWrapper(editor, {
+        target: { kind: 'block', nodeType: 'listItem', nodeId: 'li-1' },
+        level: 0,
+        restartAfterLevel: 0,
+        scope: 'instance',
+      });
+      overrideSpy.mockRestore();
+      return result;
+    },
+  },
+  'lists.convertToText': {
+    throwCase: () => {
+      const editor = makeListEditor([makeListParagraph({ id: 'li-1', numId: 1, ilvl: 0, numberingType: 'decimal' })]);
+      return listsConvertToTextWrapper(
+        editor,
+        { target: { kind: 'block', nodeType: 'listItem', nodeId: 'li-1' } },
+        { changeMode: 'tracked' },
+      );
+    },
+    failureCase: () => {
+      const noopReceipt = { steps: [{ effect: 'noop' }], revision: 'r0' };
+      const execSpy = vi.spyOn(planWrappers, 'executeDomainCommand').mockReturnValue(noopReceipt as any);
+      const editor = makeListEditor([makeListParagraph({ id: 'li-1', numId: 1, ilvl: 0, numberingType: 'decimal' })]);
+      const result = listsConvertToTextWrapper(editor, {
+        target: { kind: 'block', nodeType: 'listItem', nodeId: 'li-1' },
+      });
+      execSpy.mockRestore();
+      return result;
+    },
+    applyCase: () => {
+      const editor = makeListEditor([makeListParagraph({ id: 'li-1', numId: 1, ilvl: 0, numberingType: 'decimal' })]);
+      return listsConvertToTextWrapper(editor, {
+        target: { kind: 'block', nodeType: 'listItem', nodeId: 'li-1' },
+      });
+    },
+  },
+  // SD-1973 formatting operations
+  'lists.applyTemplate': {
+    throwCase: () => {
+      const editor = makeListEditor([makeListParagraph({ id: 'li-1', numId: 1, ilvl: 0, numberingType: 'decimal' })]);
+      return listsApplyTemplateWrapper(
+        editor,
+        {
+          target: { kind: 'block', nodeType: 'listItem', nodeId: 'li-1' },
+          template: { version: 1, levels: [] },
+        },
+        { changeMode: 'tracked' },
+      );
+    },
+    failureCase: () => {
+      const editor = makeListEditor([makeListParagraph({ id: 'li-1', numId: 1, ilvl: 0, numberingType: 'decimal' })]);
+      return listsApplyTemplateWrapper(editor, {
+        target: { kind: 'block', nodeType: 'listItem', nodeId: 'li-1' },
+        template: { version: 99 as any, levels: [] },
+      });
+    },
+    applyCase: () => {
+      const abstractSpy = vi.spyOn(listSequenceHelpers, 'getAbstractNumId').mockReturnValue(1);
+      const applySpy = vi
+        .spyOn(LevelFormattingHelpers, 'applyTemplateToAbstract')
+        .mockReturnValue({ changed: true, levelsApplied: [0] });
+      const editor = makeListEditor([makeListParagraph({ id: 'li-1', numId: 1, ilvl: 0, numberingType: 'decimal' })]);
+      const result = listsApplyTemplateWrapper(editor, {
+        target: { kind: 'block', nodeType: 'listItem', nodeId: 'li-1' },
+        template: { version: 1, levels: [{ level: 0, numFmt: 'upperRoman', lvlText: '%1.' }] },
+      });
+      abstractSpy.mockRestore();
+      applySpy.mockRestore();
+      return result;
+    },
+  },
+  'lists.applyPreset': {
+    throwCase: () => {
+      const editor = makeListEditor([makeListParagraph({ id: 'li-1', numId: 1, ilvl: 0, numberingType: 'decimal' })]);
+      return listsApplyPresetWrapper(
+        editor,
+        { target: { kind: 'block', nodeType: 'listItem', nodeId: 'li-1' }, preset: 'decimal' },
+        { changeMode: 'tracked' },
+      );
+    },
+    failureCase: () => {
+      const editor = makeListEditor([makeListParagraph({ id: 'li-1', numId: 1, ilvl: 0, numberingType: 'decimal' })]);
+      return listsApplyPresetWrapper(editor, {
+        target: { kind: 'block', nodeType: 'listItem', nodeId: 'li-1' },
+        preset: 'nonexistent' as any,
+      });
+    },
+    applyCase: () => {
+      const abstractSpy = vi.spyOn(listSequenceHelpers, 'getAbstractNumId').mockReturnValue(1);
+      const applySpy = vi
+        .spyOn(LevelFormattingHelpers, 'applyTemplateToAbstract')
+        .mockReturnValue({ changed: true, levelsApplied: [0] });
+      const presetSpy = vi
+        .spyOn(LevelFormattingHelpers, 'getPresetTemplate')
+        .mockReturnValue({ version: 1, levels: [{ level: 0, numFmt: 'decimal', lvlText: '%1.' }] });
+      const editor = makeListEditor([makeListParagraph({ id: 'li-1', numId: 1, ilvl: 0, numberingType: 'decimal' })]);
+      const result = listsApplyPresetWrapper(editor, {
+        target: { kind: 'block', nodeType: 'listItem', nodeId: 'li-1' },
+        preset: 'decimal',
+      });
+      abstractSpy.mockRestore();
+      applySpy.mockRestore();
+      presetSpy.mockRestore();
+      return result;
+    },
+  },
+  'lists.setType': {
+    throwCase: () => {
+      const editor = makeListEditor([makeListParagraph({ id: 'li-1', numId: 1, ilvl: 0, numberingType: 'decimal' })]);
+      return listsSetTypeWrapper(
+        editor,
+        { target: { kind: 'block', nodeType: 'listItem', nodeId: 'li-1' }, kind: 'ordered' },
+        { changeMode: 'tracked' },
+      );
+    },
+    failureCase: () => {
+      const editor = makeListEditor([makeListParagraph({ id: 'li-1', numId: 1, ilvl: 0, numberingType: 'decimal' })]);
+      return listsSetTypeWrapper(editor, {
+        target: { kind: 'block', nodeType: 'listItem', nodeId: 'li-1' },
+        kind: 'unknown' as any,
+      });
+    },
+    applyCase: () => {
+      const abstractSpy = vi.spyOn(listSequenceHelpers, 'getAbstractNumId').mockReturnValue(1);
+      const applySpy = vi
+        .spyOn(LevelFormattingHelpers, 'applyTemplateToAbstract')
+        .mockReturnValue({ changed: true, levelsApplied: [0] });
+      const presetSpy = vi
+        .spyOn(LevelFormattingHelpers, 'getPresetTemplate')
+        .mockReturnValue({ version: 1, levels: [{ level: 0, numFmt: 'decimal', lvlText: '%1.' }] });
+      const editor = makeListEditor([makeListParagraph({ id: 'li-1', numId: 1, ilvl: 0, numberingType: 'decimal' })]);
+      const result = listsSetTypeWrapper(editor, {
+        target: { kind: 'block', nodeType: 'listItem', nodeId: 'li-1' },
+        kind: 'ordered',
+      });
+      abstractSpy.mockRestore();
+      applySpy.mockRestore();
+      presetSpy.mockRestore();
+      return result;
+    },
+  },
+  'lists.setLevelNumbering': {
+    throwCase: () => {
+      const editor = makeListEditor([makeListParagraph({ id: 'li-1', numId: 1, ilvl: 0, numberingType: 'decimal' })]);
+      return listsSetLevelNumberingWrapper(
+        editor,
+        {
+          target: { kind: 'block', nodeType: 'listItem', nodeId: 'li-1' },
+          level: 0,
+          numFmt: 'upperRoman',
+          lvlText: '%1.',
+        },
+        { changeMode: 'tracked' },
+      );
+    },
+    failureCase: () => {
+      const editor = makeListEditor([makeListParagraph({ id: 'li-1', numId: 1, ilvl: 0, numberingType: 'decimal' })]);
+      return listsSetLevelNumberingWrapper(editor, {
+        target: { kind: 'block', nodeType: 'listItem', nodeId: 'li-1' },
+        level: 99,
+        numFmt: 'upperRoman',
+        lvlText: '%1.',
+      });
+    },
+    applyCase: () => {
+      const abstractSpy = vi.spyOn(listSequenceHelpers, 'getAbstractNumId').mockReturnValue(1);
+      const hasLevelSpy = vi.spyOn(LevelFormattingHelpers, 'hasLevel').mockReturnValue(true);
+      const setSpy = vi.spyOn(LevelFormattingHelpers, 'setLevelNumberingFormat').mockReturnValue(true);
+      const editor = makeListEditor([makeListParagraph({ id: 'li-1', numId: 1, ilvl: 0, numberingType: 'decimal' })]);
+      const result = listsSetLevelNumberingWrapper(editor, {
+        target: { kind: 'block', nodeType: 'listItem', nodeId: 'li-1' },
+        level: 0,
+        numFmt: 'upperRoman',
+        lvlText: '%1.',
+      });
+      abstractSpy.mockRestore();
+      hasLevelSpy.mockRestore();
+      setSpy.mockRestore();
+      return result;
+    },
+  },
+  'lists.setLevelBullet': {
+    throwCase: () => {
+      const editor = makeListEditor([makeListParagraph({ id: 'li-1', numId: 1, ilvl: 0, numberingType: 'decimal' })]);
+      return listsSetLevelBulletWrapper(
+        editor,
+        { target: { kind: 'block', nodeType: 'listItem', nodeId: 'li-1' }, level: 0, markerText: '•' },
+        { changeMode: 'tracked' },
+      );
+    },
+    failureCase: () => {
+      const editor = makeListEditor([makeListParagraph({ id: 'li-1', numId: 1, ilvl: 0, numberingType: 'decimal' })]);
+      return listsSetLevelBulletWrapper(editor, {
+        target: { kind: 'block', nodeType: 'listItem', nodeId: 'li-1' },
+        level: 99,
+        markerText: '•',
+      });
+    },
+    applyCase: () => {
+      const abstractSpy = vi.spyOn(listSequenceHelpers, 'getAbstractNumId').mockReturnValue(1);
+      const hasLevelSpy = vi.spyOn(LevelFormattingHelpers, 'hasLevel').mockReturnValue(true);
+      const setSpy = vi.spyOn(LevelFormattingHelpers, 'setLevelBulletMarker').mockReturnValue(true);
+      const editor = makeListEditor([makeListParagraph({ id: 'li-1', numId: 1, ilvl: 0, numberingType: 'decimal' })]);
+      const result = listsSetLevelBulletWrapper(editor, {
+        target: { kind: 'block', nodeType: 'listItem', nodeId: 'li-1' },
+        level: 0,
+        markerText: '•',
+      });
+      abstractSpy.mockRestore();
+      hasLevelSpy.mockRestore();
+      setSpy.mockRestore();
+      return result;
+    },
+  },
+  'lists.setLevelPictureBullet': {
+    throwCase: () => {
+      const editor = makeListEditor([makeListParagraph({ id: 'li-1', numId: 1, ilvl: 0, numberingType: 'decimal' })]);
+      return listsSetLevelPictureBulletWrapper(
+        editor,
+        { target: { kind: 'block', nodeType: 'listItem', nodeId: 'li-1' }, level: 0, pictureBulletId: 1 },
+        { changeMode: 'tracked' },
+      );
+    },
+    failureCase: () => {
+      const editor = makeListEditor([makeListParagraph({ id: 'li-1', numId: 1, ilvl: 0, numberingType: 'decimal' })]);
+      return listsSetLevelPictureBulletWrapper(editor, {
+        target: { kind: 'block', nodeType: 'listItem', nodeId: 'li-1' },
+        level: 99,
+        pictureBulletId: 1,
+      });
+    },
+    applyCase: () => {
+      const abstractSpy = vi.spyOn(listSequenceHelpers, 'getAbstractNumId').mockReturnValue(1);
+      const hasLevelSpy = vi.spyOn(LevelFormattingHelpers, 'hasLevel').mockReturnValue(true);
+      const setSpy = vi.spyOn(LevelFormattingHelpers, 'setLevelPictureBulletId').mockReturnValue(true);
+      const editor = makeListEditor([makeListParagraph({ id: 'li-1', numId: 1, ilvl: 0, numberingType: 'decimal' })]);
+      const result = listsSetLevelPictureBulletWrapper(editor, {
+        target: { kind: 'block', nodeType: 'listItem', nodeId: 'li-1' },
+        level: 0,
+        pictureBulletId: 1,
+      });
+      abstractSpy.mockRestore();
+      hasLevelSpy.mockRestore();
+      setSpy.mockRestore();
+      return result;
+    },
+  },
+  'lists.setLevelAlignment': {
+    throwCase: () => {
+      const editor = makeListEditor([makeListParagraph({ id: 'li-1', numId: 1, ilvl: 0, numberingType: 'decimal' })]);
+      return listsSetLevelAlignmentWrapper(
+        editor,
+        { target: { kind: 'block', nodeType: 'listItem', nodeId: 'li-1' }, level: 0, alignment: 'center' },
+        { changeMode: 'tracked' },
+      );
+    },
+    failureCase: () => {
+      const editor = makeListEditor([makeListParagraph({ id: 'li-1', numId: 1, ilvl: 0, numberingType: 'decimal' })]);
+      return listsSetLevelAlignmentWrapper(editor, {
+        target: { kind: 'block', nodeType: 'listItem', nodeId: 'li-1' },
+        level: 99,
+        alignment: 'center',
+      });
+    },
+    applyCase: () => {
+      const abstractSpy = vi.spyOn(listSequenceHelpers, 'getAbstractNumId').mockReturnValue(1);
+      const hasLevelSpy = vi.spyOn(LevelFormattingHelpers, 'hasLevel').mockReturnValue(true);
+      const setSpy = vi.spyOn(LevelFormattingHelpers, 'setLevelAlignment').mockReturnValue(true);
+      const editor = makeListEditor([makeListParagraph({ id: 'li-1', numId: 1, ilvl: 0, numberingType: 'decimal' })]);
+      const result = listsSetLevelAlignmentWrapper(editor, {
+        target: { kind: 'block', nodeType: 'listItem', nodeId: 'li-1' },
+        level: 0,
+        alignment: 'center',
+      });
+      abstractSpy.mockRestore();
+      hasLevelSpy.mockRestore();
+      setSpy.mockRestore();
+      return result;
+    },
+  },
+  'lists.setLevelIndents': {
+    throwCase: () => {
+      const editor = makeListEditor([makeListParagraph({ id: 'li-1', numId: 1, ilvl: 0, numberingType: 'decimal' })]);
+      return listsSetLevelIndentsWrapper(
+        editor,
+        { target: { kind: 'block', nodeType: 'listItem', nodeId: 'li-1' }, level: 0, left: 720 },
+        { changeMode: 'tracked' },
+      );
+    },
+    failureCase: () => {
+      const editor = makeListEditor([makeListParagraph({ id: 'li-1', numId: 1, ilvl: 0, numberingType: 'decimal' })]);
+      return listsSetLevelIndentsWrapper(editor, {
+        target: { kind: 'block', nodeType: 'listItem', nodeId: 'li-1' },
+        level: 0,
+        hanging: 360,
+        firstLine: 360,
+      } as any);
+    },
+    applyCase: () => {
+      const abstractSpy = vi.spyOn(listSequenceHelpers, 'getAbstractNumId').mockReturnValue(1);
+      const hasLevelSpy = vi.spyOn(LevelFormattingHelpers, 'hasLevel').mockReturnValue(true);
+      const setSpy = vi.spyOn(LevelFormattingHelpers, 'setLevelIndents').mockReturnValue(true);
+      const editor = makeListEditor([makeListParagraph({ id: 'li-1', numId: 1, ilvl: 0, numberingType: 'decimal' })]);
+      const result = listsSetLevelIndentsWrapper(editor, {
+        target: { kind: 'block', nodeType: 'listItem', nodeId: 'li-1' },
+        level: 0,
+        left: 720,
+        hanging: 360,
+      });
+      abstractSpy.mockRestore();
+      hasLevelSpy.mockRestore();
+      setSpy.mockRestore();
+      return result;
+    },
+  },
+  'lists.setLevelTrailingCharacter': {
+    throwCase: () => {
+      const editor = makeListEditor([makeListParagraph({ id: 'li-1', numId: 1, ilvl: 0, numberingType: 'decimal' })]);
+      return listsSetLevelTrailingCharacterWrapper(
+        editor,
+        { target: { kind: 'block', nodeType: 'listItem', nodeId: 'li-1' }, level: 0, trailingCharacter: 'space' },
+        { changeMode: 'tracked' },
+      );
+    },
+    failureCase: () => {
+      const editor = makeListEditor([makeListParagraph({ id: 'li-1', numId: 1, ilvl: 0, numberingType: 'decimal' })]);
+      return listsSetLevelTrailingCharacterWrapper(editor, {
+        target: { kind: 'block', nodeType: 'listItem', nodeId: 'li-1' },
+        level: 99,
+        trailingCharacter: 'space',
+      });
+    },
+    applyCase: () => {
+      const abstractSpy = vi.spyOn(listSequenceHelpers, 'getAbstractNumId').mockReturnValue(1);
+      const hasLevelSpy = vi.spyOn(LevelFormattingHelpers, 'hasLevel').mockReturnValue(true);
+      const setSpy = vi.spyOn(LevelFormattingHelpers, 'setLevelTrailingCharacter').mockReturnValue(true);
+      const editor = makeListEditor([makeListParagraph({ id: 'li-1', numId: 1, ilvl: 0, numberingType: 'decimal' })]);
+      const result = listsSetLevelTrailingCharacterWrapper(editor, {
+        target: { kind: 'block', nodeType: 'listItem', nodeId: 'li-1' },
+        level: 0,
+        trailingCharacter: 'space',
+      });
+      abstractSpy.mockRestore();
+      hasLevelSpy.mockRestore();
+      setSpy.mockRestore();
+      return result;
+    },
+  },
+  'lists.setLevelMarkerFont': {
+    throwCase: () => {
+      const editor = makeListEditor([makeListParagraph({ id: 'li-1', numId: 1, ilvl: 0, numberingType: 'decimal' })]);
+      return listsSetLevelMarkerFontWrapper(
+        editor,
+        { target: { kind: 'block', nodeType: 'listItem', nodeId: 'li-1' }, level: 0, fontFamily: 'Arial' },
+        { changeMode: 'tracked' },
+      );
+    },
+    failureCase: () => {
+      const editor = makeListEditor([makeListParagraph({ id: 'li-1', numId: 1, ilvl: 0, numberingType: 'decimal' })]);
+      return listsSetLevelMarkerFontWrapper(editor, {
+        target: { kind: 'block', nodeType: 'listItem', nodeId: 'li-1' },
+        level: 99,
+        fontFamily: 'Arial',
+      });
+    },
+    applyCase: () => {
+      const abstractSpy = vi.spyOn(listSequenceHelpers, 'getAbstractNumId').mockReturnValue(1);
+      const hasLevelSpy = vi.spyOn(LevelFormattingHelpers, 'hasLevel').mockReturnValue(true);
+      const setSpy = vi.spyOn(LevelFormattingHelpers, 'setLevelMarkerFont').mockReturnValue(true);
+      const editor = makeListEditor([makeListParagraph({ id: 'li-1', numId: 1, ilvl: 0, numberingType: 'decimal' })]);
+      const result = listsSetLevelMarkerFontWrapper(editor, {
+        target: { kind: 'block', nodeType: 'listItem', nodeId: 'li-1' },
+        level: 0,
+        fontFamily: 'Arial',
+      });
+      abstractSpy.mockRestore();
+      hasLevelSpy.mockRestore();
+      setSpy.mockRestore();
+      return result;
+    },
+  },
+  'lists.clearLevelOverrides': {
+    throwCase: () => {
+      const editor = makeListEditor([makeListParagraph({ id: 'li-1', numId: 1, ilvl: 0, numberingType: 'decimal' })]);
+      return listsClearLevelOverridesWrapper(
+        editor,
+        { target: { kind: 'block', nodeType: 'listItem', nodeId: 'li-1' }, level: 0 },
+        { changeMode: 'tracked' },
+      );
+    },
+    failureCase: () => {
+      const editor = makeListEditor([makeListParagraph({ id: 'li-1', numId: 1, ilvl: 0, numberingType: 'decimal' })]);
+      return listsClearLevelOverridesWrapper(editor, {
+        target: { kind: 'block', nodeType: 'listItem', nodeId: 'li-1' },
+        level: 0,
+      });
+    },
+    applyCase: () => {
+      const hasSpy = vi.spyOn(LevelFormattingHelpers, 'hasLevelOverride').mockReturnValue(true);
+      const clearSpy = vi.spyOn(LevelFormattingHelpers, 'clearLevelOverride').mockImplementation(() => {});
+      const editor = makeListEditor([makeListParagraph({ id: 'li-1', numId: 1, ilvl: 0, numberingType: 'decimal' })]);
+      const result = listsClearLevelOverridesWrapper(editor, {
+        target: { kind: 'block', nodeType: 'listItem', nodeId: 'li-1' },
+        level: 0,
+      });
+      hasSpy.mockRestore();
+      clearSpy.mockRestore();
+      return result;
     },
   },
   'comments.create': {
@@ -3447,6 +4499,83 @@ const mutationVectors: Partial<Record<OperationId, MutationVector>> = {
       return tablesClearCellSpacingWrapper(editor, { nodeId: 'table-1' }, { changeMode: 'direct' });
     },
   },
+  'tables.setDefaultStyle': {
+    throwCase: () => {
+      // No converter → CAPABILITY_UNAVAILABLE
+      const editor = makeSectionsEditor({ includeConverter: false });
+      return tablesSetDefaultStyleAdapter(editor, { styleId: 'TableGrid' }, { changeMode: 'direct' });
+    },
+    failureCase: () => {
+      // Style already set → NO_OP
+      const editor = makeSectionsEditor();
+      const converter = (editor as unknown as { converter: Record<string, unknown> }).converter;
+      converter.translatedLinkedStyles = {
+        styles: { TableGrid: { type: 'table', name: 'Table Grid' } },
+        docDefaults: {},
+        latentStyles: {},
+      };
+      // Pre-set the default so the adapter sees it's already the same
+      const settingsRoot = (converter.convertedXml as Record<string, { elements?: Array<{ elements?: unknown[] }> }>)[
+        'word/settings.xml'
+      ];
+      const wSettings = settingsRoot?.elements?.find(
+        (el: { name?: string }) => (el as { name?: string }).name === 'w:settings',
+      ) as { elements?: unknown[] } | undefined;
+      if (wSettings) {
+        if (!wSettings.elements) wSettings.elements = [];
+        wSettings.elements.push({
+          type: 'element',
+          name: 'w:defaultTableStyle',
+          attributes: { 'w:val': 'TableGrid' },
+          elements: [],
+        });
+      }
+      return tablesSetDefaultStyleAdapter(editor, { styleId: 'TableGrid' }, { changeMode: 'direct' });
+    },
+    applyCase: () => {
+      const editor = makeSectionsEditor();
+      const converter = (editor as unknown as { converter: Record<string, unknown> }).converter;
+      converter.translatedLinkedStyles = {
+        styles: { TableGrid: { type: 'table', name: 'Table Grid' } },
+        docDefaults: {},
+        latentStyles: {},
+      };
+      return tablesSetDefaultStyleAdapter(editor, { styleId: 'TableGrid' }, { changeMode: 'direct' });
+    },
+  },
+  'tables.clearDefaultStyle': {
+    throwCase: () => {
+      // No converter → CAPABILITY_UNAVAILABLE
+      const editor = makeSectionsEditor({ includeConverter: false });
+      return tablesClearDefaultStyleAdapter(editor, {}, { changeMode: 'direct' });
+    },
+    failureCase: () => {
+      // No default set → NO_OP
+      const editor = makeSectionsEditor();
+      return tablesClearDefaultStyleAdapter(editor, {}, { changeMode: 'direct' });
+    },
+    applyCase: () => {
+      const editor = makeSectionsEditor();
+      const converter = (editor as unknown as { converter: Record<string, unknown> }).converter;
+      // Pre-set a default so clear actually has something to remove
+      const settingsRoot = (converter.convertedXml as Record<string, { elements?: Array<{ elements?: unknown[] }> }>)[
+        'word/settings.xml'
+      ];
+      const wSettings = settingsRoot?.elements?.find(
+        (el: { name?: string }) => (el as { name?: string }).name === 'w:settings',
+      ) as { elements?: unknown[] } | undefined;
+      if (wSettings) {
+        if (!wSettings.elements) wSettings.elements = [];
+        wSettings.elements.push({
+          type: 'element',
+          name: 'w:defaultTableStyle',
+          attributes: { 'w:val': 'TableGrid' },
+          elements: [],
+        });
+      }
+      return tablesClearDefaultStyleAdapter(editor, {}, { changeMode: 'direct' });
+    },
+  },
   'styles.apply': {
     throwCase: () => {
       const editor = makeStylesEditor({ hasConverter: false });
@@ -3471,8 +4600,17 @@ const mutationVectors: Partial<Record<OperationId, MutationVector>> = {
   // -------------------------------------------------------------------------
   'create.tableOfContents': {
     throwCase: () => {
-      const editor = makeTocEditor({ insertTableOfContentsAt: undefined });
-      return createTableOfContentsWrapper(editor, {}, { changeMode: 'direct' });
+      const editor = makeTocEditor();
+      return createTableOfContentsWrapper(
+        editor,
+        {
+          at: {
+            kind: 'before',
+            target: { kind: 'block', nodeType: 'paragraph', nodeId: 'missing-block' },
+          },
+        } as any,
+        { changeMode: 'direct' },
+      );
     },
     failureCase: () => {
       const editor = makeTocEditor({ insertTableOfContentsAt: vi.fn(() => false) });
@@ -3637,6 +4775,658 @@ const mutationVectors: Partial<Record<OperationId, MutationVector>> = {
         { target: getFirstTocEntryAddress(editor), patch: { text: 'Updated Chapter' } },
         { changeMode: 'direct' },
       );
+    },
+  },
+
+  // -------------------------------------------------------------------------
+  // Image operations
+  // -------------------------------------------------------------------------
+  'create.image': {
+    throwCase: () => {
+      // setImage command missing → CAPABILITY_UNAVAILABLE
+      const editor = makeImageEditor();
+      (editor.commands as Record<string, unknown>).setImage = undefined;
+      return createImageWrapper(
+        editor,
+        { src: 'https://example.com/img.png', size: { width: 100, height: 100 } },
+        { changeMode: 'direct' },
+      );
+    },
+    failureCase: () => {
+      // URL src without explicit size → INVALID_INPUT (cannot infer dimensions)
+      const editor = makeImageEditor();
+      return createImageWrapper(editor, { src: 'https://example.com/img.png' }, { changeMode: 'direct' });
+    },
+    applyCase: () => {
+      return createImageWrapper(
+        makeImageEditor(),
+        { src: 'https://example.com/img.png', size: { width: 100, height: 100 } },
+        { changeMode: 'direct' },
+      );
+    },
+  },
+  'images.delete': {
+    throwCase: () => imagesDeleteWrapper(makeImageEditor(), { imageId: 'missing' }, { changeMode: 'direct' }),
+    failureCase: () => {
+      // Transaction produces no change → NO_OP
+      const editor = makeImageEditor();
+      const tr = (editor.state as unknown as { tr: Record<string, unknown> }).tr;
+      tr.docChanged = false;
+      tr.steps = [];
+      return imagesDeleteWrapper(editor, { imageId: 'img-1' }, { changeMode: 'direct' });
+    },
+    applyCase: () => imagesDeleteWrapper(makeImageEditor(), { imageId: 'img-1' }, { changeMode: 'direct' }),
+  },
+  'images.move': {
+    throwCase: () =>
+      imagesMoveWrapper(
+        makeImageEditor(),
+        { imageId: 'missing', to: { kind: 'documentEnd' } },
+        { changeMode: 'direct' },
+      ),
+    failureCase: () => {
+      // Transaction produces no change → NO_OP
+      const editor = makeImageEditor();
+      const tr = (editor.state as unknown as { tr: Record<string, unknown> }).tr;
+      tr.docChanged = false;
+      tr.steps = [];
+      return imagesMoveWrapper(editor, { imageId: 'img-1', to: { kind: 'documentEnd' } }, { changeMode: 'direct' });
+    },
+    applyCase: () =>
+      imagesMoveWrapper(makeImageEditor(), { imageId: 'img-1', to: { kind: 'documentEnd' } }, { changeMode: 'direct' }),
+  },
+  'images.convertToInline': {
+    throwCase: () => imagesConvertToInlineWrapper(makeImageEditor(), { imageId: 'missing' }, { changeMode: 'direct' }),
+    failureCase: () => {
+      // Already inline → NO_OP
+      const inlineImg = createNode('image', [], {
+        attrs: {
+          sdImageId: 'img-inline-noop',
+          src: 'test.png',
+          isAnchor: false,
+          wrap: { type: 'Inline' },
+          anchorData: null,
+          marginOffset: null,
+          relativeHeight: null,
+          originalAttributes: {},
+        },
+        isInline: true,
+        isLeaf: true,
+      });
+      const p = createNode('paragraph', [inlineImg], {
+        attrs: { sdBlockId: 'p-x' },
+        isBlock: true,
+        inlineContent: true,
+      });
+      const doc = createNode('doc', [p], { isBlock: false });
+      const editor = {
+        state: { doc, tr: {}, schema: { nodes: {} } },
+        dispatch: vi.fn(),
+        commands: { setImage: vi.fn(() => true) },
+        schema: { marks: {} },
+        options: {},
+        on: () => {},
+      } as unknown as Editor;
+      return imagesConvertToInlineWrapper(editor, { imageId: 'img-inline-noop' }, { changeMode: 'direct' });
+    },
+    applyCase: () => imagesConvertToInlineWrapper(makeImageEditor(), { imageId: 'img-1' }, { changeMode: 'direct' }),
+  },
+  'images.convertToFloating': {
+    throwCase: () =>
+      imagesConvertToFloatingWrapper(makeImageEditor(), { imageId: 'missing' }, { changeMode: 'direct' }),
+    failureCase: () => {
+      // Already floating → NO_OP
+      return imagesConvertToFloatingWrapper(makeImageEditor(), { imageId: 'img-1' }, { changeMode: 'direct' });
+    },
+    applyCase: () => {
+      const inlineImg = createNode('image', [], {
+        attrs: {
+          sdImageId: 'img-for-float',
+          src: 'test.png',
+          isAnchor: false,
+          wrap: { type: 'Inline' },
+          anchorData: null,
+          marginOffset: null,
+          relativeHeight: null,
+          originalAttributes: {},
+        },
+        isInline: true,
+        isLeaf: true,
+      });
+      const p = createNode('paragraph', [inlineImg], {
+        attrs: { sdBlockId: 'p-f' },
+        isBlock: true,
+        inlineContent: true,
+      });
+      const doc = createNode('doc', [p], { isBlock: false });
+      const tr = {
+        setNodeMarkup: vi.fn().mockReturnThis(),
+        setMeta: vi.fn().mockReturnThis(),
+        mapping: { map: (pos: number) => pos },
+        docChanged: true,
+        steps: [{}],
+        doc,
+      };
+      const editor = {
+        state: { doc, tr, schema: { nodes: {} } },
+        dispatch: vi.fn(),
+        commands: { setImage: vi.fn(() => true) },
+        schema: { marks: {} },
+        options: {},
+        on: () => {},
+      } as unknown as Editor;
+      return imagesConvertToFloatingWrapper(editor, { imageId: 'img-for-float' }, { changeMode: 'direct' });
+    },
+  },
+  'images.setSize': {
+    throwCase: () =>
+      imagesSetSizeWrapper(
+        makeImageEditor(),
+        { imageId: 'missing', size: { width: 220, height: 140 } },
+        { changeMode: 'direct' },
+      ),
+    failureCase: () => {
+      // Same size → NO_OP
+      return imagesSetSizeWrapper(
+        makeImageEditor(),
+        { imageId: 'img-1', size: { width: 100, height: 100 } },
+        { changeMode: 'direct' },
+      );
+    },
+    applyCase: () =>
+      imagesSetSizeWrapper(
+        makeImageEditor(),
+        { imageId: 'img-1', size: { width: 220, height: 140 } },
+        { changeMode: 'direct' },
+      ),
+  },
+  'images.setWrapType': {
+    throwCase: () =>
+      imagesSetWrapTypeWrapper(makeImageEditor(), { imageId: 'missing', type: 'Tight' }, { changeMode: 'direct' }),
+    failureCase: () => {
+      // Same type → NO_OP
+      return imagesSetWrapTypeWrapper(
+        makeImageEditor(),
+        { imageId: 'img-1', type: 'Square' },
+        { changeMode: 'direct' },
+      );
+    },
+    applyCase: () =>
+      imagesSetWrapTypeWrapper(makeImageEditor(), { imageId: 'img-1', type: 'Tight' }, { changeMode: 'direct' }),
+  },
+  'images.setWrapSide': {
+    throwCase: () =>
+      imagesSetWrapSideWrapper(makeImageEditor(), { imageId: 'missing', side: 'left' }, { changeMode: 'direct' }),
+    failureCase: () => {
+      // Same side → NO_OP
+      return imagesSetWrapSideWrapper(
+        makeImageEditor(),
+        { imageId: 'img-1', side: 'bothSides' },
+        { changeMode: 'direct' },
+      );
+    },
+    applyCase: () =>
+      imagesSetWrapSideWrapper(makeImageEditor(), { imageId: 'img-1', side: 'left' }, { changeMode: 'direct' }),
+  },
+  'images.setWrapDistances': {
+    throwCase: () =>
+      imagesSetWrapDistancesWrapper(
+        makeImageEditor(),
+        { imageId: 'missing', distances: { distTop: 100 } },
+        { changeMode: 'direct' },
+      ),
+    failureCase: () => {
+      // Transaction produces no change → NO_OP
+      const editor = makeImageEditor();
+      const tr = (editor.state as unknown as { tr: Record<string, unknown> }).tr;
+      tr.docChanged = false;
+      tr.steps = [];
+      return imagesSetWrapDistancesWrapper(
+        editor,
+        { imageId: 'img-1', distances: { distTop: 100 } },
+        { changeMode: 'direct' },
+      );
+    },
+    applyCase: () =>
+      imagesSetWrapDistancesWrapper(
+        makeImageEditor(),
+        { imageId: 'img-1', distances: { distTop: 100 } },
+        { changeMode: 'direct' },
+      ),
+  },
+  'images.setPosition': {
+    throwCase: () =>
+      imagesSetPositionWrapper(
+        makeImageEditor(),
+        { imageId: 'missing', position: { hRelativeFrom: 'page' } },
+        { changeMode: 'direct' },
+      ),
+    failureCase: () => {
+      // Transaction produces no change → NO_OP
+      const editor = makeImageEditor();
+      const tr = (editor.state as unknown as { tr: Record<string, unknown> }).tr;
+      tr.docChanged = false;
+      tr.steps = [];
+      return imagesSetPositionWrapper(
+        editor,
+        { imageId: 'img-1', position: { hRelativeFrom: 'page' } },
+        { changeMode: 'direct' },
+      );
+    },
+    applyCase: () =>
+      imagesSetPositionWrapper(
+        makeImageEditor(),
+        { imageId: 'img-1', position: { hRelativeFrom: 'page' } },
+        { changeMode: 'direct' },
+      ),
+  },
+  'images.setAnchorOptions': {
+    throwCase: () =>
+      imagesSetAnchorOptionsWrapper(
+        makeImageEditor(),
+        { imageId: 'missing', options: { behindDoc: true } },
+        { changeMode: 'direct' },
+      ),
+    failureCase: () => {
+      // Transaction produces no change → NO_OP
+      const editor = makeImageEditor();
+      const tr = (editor.state as unknown as { tr: Record<string, unknown> }).tr;
+      tr.docChanged = false;
+      tr.steps = [];
+      return imagesSetAnchorOptionsWrapper(
+        editor,
+        { imageId: 'img-1', options: { behindDoc: true } },
+        { changeMode: 'direct' },
+      );
+    },
+    applyCase: () =>
+      imagesSetAnchorOptionsWrapper(
+        makeImageEditor(),
+        { imageId: 'img-1', options: { behindDoc: true } },
+        { changeMode: 'direct' },
+      ),
+  },
+  'images.setZOrder': {
+    throwCase: () =>
+      imagesSetZOrderWrapper(
+        makeImageEditor(),
+        { imageId: 'missing', zOrder: { relativeHeight: 999 } },
+        { changeMode: 'direct' },
+      ),
+    failureCase: () => {
+      // Same relativeHeight → NO_OP
+      return imagesSetZOrderWrapper(
+        makeImageEditor(),
+        { imageId: 'img-1', zOrder: { relativeHeight: 251658240 } },
+        { changeMode: 'direct' },
+      );
+    },
+    applyCase: () =>
+      imagesSetZOrderWrapper(
+        makeImageEditor(),
+        { imageId: 'img-1', zOrder: { relativeHeight: 999999999 } },
+        { changeMode: 'direct' },
+      ),
+  },
+
+  // -------------------------------------------------------------------------
+  // Hyperlink operations
+  // -------------------------------------------------------------------------
+  'hyperlinks.wrap': {
+    throwCase: () =>
+      hyperlinksWrapWrapper(
+        makeHyperlinkEditor({ withLink: false }),
+        {
+          target: { kind: 'text', blockId: 'missing', range: { start: 0, end: 5 } },
+          link: { destination: { href: 'https://example.com' } },
+        },
+        { changeMode: 'direct' },
+      ),
+    failureCase: () => {
+      const wrapSpy = vi.spyOn(hyperlinkMutationHelper, 'wrapWithLink').mockReturnValueOnce(false);
+      try {
+        return hyperlinksWrapWrapper(
+          makeHyperlinkEditor({ withLink: false }),
+          {
+            target: { kind: 'text', blockId: 'p1', range: { start: 0, end: 5 } },
+            link: { destination: { href: 'https://example.com' } },
+          },
+          { changeMode: 'direct' },
+        );
+      } finally {
+        wrapSpy.mockRestore();
+      }
+    },
+    applyCase: () =>
+      hyperlinksWrapWrapper(
+        makeHyperlinkEditor({ withLink: false }),
+        {
+          target: { kind: 'text', blockId: 'p1', range: { start: 0, end: 5 } },
+          link: { destination: { href: 'https://example.com' } },
+        },
+        { changeMode: 'direct' },
+      ),
+  },
+  'hyperlinks.insert': {
+    throwCase: () =>
+      hyperlinksInsertWrapper(
+        makeHyperlinkEditor({ withLink: false }),
+        {
+          target: { kind: 'text', blockId: 'missing', range: { start: 0, end: 0 } },
+          text: 'X',
+          link: { destination: { href: 'https://example.com' } },
+        },
+        { changeMode: 'direct' },
+      ),
+    failureCase: () => {
+      const insertSpy = vi.spyOn(hyperlinkMutationHelper, 'insertLinkedText').mockReturnValueOnce(false);
+      try {
+        return hyperlinksInsertWrapper(
+          makeHyperlinkEditor({ withLink: false }),
+          {
+            target: { kind: 'text', blockId: 'p1', range: { start: 0, end: 0 } },
+            text: 'X',
+            link: { destination: { href: 'https://example.com' } },
+          },
+          { changeMode: 'direct' },
+        );
+      } finally {
+        insertSpy.mockRestore();
+      }
+    },
+    applyCase: () =>
+      hyperlinksInsertWrapper(
+        makeHyperlinkEditor({ withLink: false }),
+        {
+          target: { kind: 'text', blockId: 'p1', range: { start: 0, end: 0 } },
+          text: 'X',
+          link: { destination: { href: 'https://example.com' } },
+        },
+        { changeMode: 'direct' },
+      ),
+  },
+  'hyperlinks.patch': {
+    throwCase: () =>
+      hyperlinksPatchWrapper(
+        makeHyperlinkEditor({ withLink: true }),
+        {
+          target: makeHyperlinkTarget('p1', 1, 3),
+          patch: { href: 'https://example.com/updated' },
+        },
+        { changeMode: 'direct' },
+      ),
+    failureCase: () =>
+      hyperlinksPatchWrapper(
+        makeHyperlinkEditor({ withLink: true, linkAttrs: { href: 'https://example.com' } }),
+        {
+          target: makeHyperlinkTarget('p1', 0, 5),
+          patch: { href: 'https://example.com' },
+        },
+        { changeMode: 'direct' },
+      ),
+    applyCase: () =>
+      hyperlinksPatchWrapper(
+        makeHyperlinkEditor({ withLink: true, linkAttrs: { href: 'https://example.com' } }),
+        {
+          target: makeHyperlinkTarget('p1', 0, 5),
+          patch: { href: 'https://example.com/updated' },
+        },
+        { changeMode: 'direct' },
+      ),
+  },
+  'hyperlinks.remove': {
+    throwCase: () =>
+      hyperlinksRemoveWrapper(
+        makeHyperlinkEditor({ withLink: true }),
+        { target: makeHyperlinkTarget('p1', 1, 3) },
+        { changeMode: 'direct' },
+      ),
+    failureCase: () => {
+      const unwrapSpy = vi.spyOn(hyperlinkMutationHelper, 'unwrapLink').mockReturnValueOnce(false);
+      try {
+        return hyperlinksRemoveWrapper(
+          makeHyperlinkEditor({ withLink: true }),
+          { target: makeHyperlinkTarget('p1', 0, 5) },
+          { changeMode: 'direct' },
+        );
+      } finally {
+        unwrapSpy.mockRestore();
+      }
+    },
+    applyCase: () =>
+      hyperlinksRemoveWrapper(
+        makeHyperlinkEditor({ withLink: true }),
+        { target: makeHyperlinkTarget('p1', 0, 5) },
+        { changeMode: 'direct' },
+      ),
+  },
+  // SD-2100: Image geometry, content, semantic & caption operations
+  // -------------------------------------------------------------------------
+  'images.scale': {
+    throwCase: () =>
+      imagesScaleWrapper(makeImageEditor(), { imageId: 'missing', factor: 1.5 }, { changeMode: 'direct' }),
+    failureCase: () => {
+      // factor=1 produces identical dimensions → explicit NO_OP pre-check
+      return imagesScaleWrapper(makeImageEditor(), { imageId: 'img-1', factor: 1 }, { changeMode: 'direct' });
+    },
+    applyCase: () => imagesScaleWrapper(makeImageEditor(), { imageId: 'img-1', factor: 1.5 }, { changeMode: 'direct' }),
+  },
+  'images.setLockAspectRatio': {
+    throwCase: () =>
+      imagesSetLockAspectRatioWrapper(
+        makeImageEditor(),
+        { imageId: 'missing', locked: false },
+        { changeMode: 'direct' },
+      ),
+    failureCase: () => {
+      // Default lockAspectRatio is true → NO_OP
+      return imagesSetLockAspectRatioWrapper(
+        makeImageEditor(),
+        { imageId: 'img-1', locked: true },
+        { changeMode: 'direct' },
+      );
+    },
+    applyCase: () =>
+      imagesSetLockAspectRatioWrapper(makeImageEditor(), { imageId: 'img-1', locked: false }, { changeMode: 'direct' }),
+  },
+  'images.rotate': {
+    throwCase: () =>
+      imagesRotateWrapper(makeImageEditor(), { imageId: 'missing', angle: 90 }, { changeMode: 'direct' }),
+    failureCase: () => {
+      // No rotation set, angle=0 → NO_OP
+      return imagesRotateWrapper(makeImageEditor(), { imageId: 'img-1', angle: 0 }, { changeMode: 'direct' });
+    },
+    applyCase: () => imagesRotateWrapper(makeImageEditor(), { imageId: 'img-1', angle: 90 }, { changeMode: 'direct' }),
+  },
+  'images.flip': {
+    throwCase: () =>
+      imagesFlipWrapper(makeImageEditor(), { imageId: 'missing', horizontal: true }, { changeMode: 'direct' }),
+    failureCase: () => {
+      // No transformData, passing false for both axes matches defaults → NO_OP
+      return imagesFlipWrapper(
+        makeImageEditor(),
+        { imageId: 'img-1', horizontal: false, vertical: false },
+        { changeMode: 'direct' },
+      );
+    },
+    applyCase: () =>
+      imagesFlipWrapper(makeImageEditor(), { imageId: 'img-1', horizontal: true }, { changeMode: 'direct' }),
+  },
+  'images.crop': {
+    throwCase: () =>
+      imagesCropWrapper(
+        makeImageEditor(),
+        { imageId: 'missing', crop: { left: 10, top: 10, right: 10, bottom: 10 } },
+        { changeMode: 'direct' },
+      ),
+    failureCase: () => {
+      // Transaction produces no change → NO_OP
+      const editor = makeImageEditor();
+      const tr = (editor.state as unknown as { tr: Record<string, unknown> }).tr;
+      tr.docChanged = false;
+      tr.steps = [];
+      return imagesCropWrapper(
+        editor,
+        { imageId: 'img-1', crop: { left: 10, top: 5, right: 10, bottom: 5 } },
+        { changeMode: 'direct' },
+      );
+    },
+    applyCase: () =>
+      imagesCropWrapper(
+        makeImageEditor(),
+        { imageId: 'img-1', crop: { left: 10, top: 5, right: 10, bottom: 5 } },
+        { changeMode: 'direct' },
+      ),
+  },
+  'images.resetCrop': {
+    throwCase: () => imagesResetCropWrapper(makeImageEditor(), { imageId: 'missing' }, { changeMode: 'direct' }),
+    failureCase: () => {
+      // No crop set → NO_OP
+      return imagesResetCropWrapper(makeImageEditor(), { imageId: 'img-1' }, { changeMode: 'direct' });
+    },
+    applyCase: () => {
+      // Image with crop data
+      const editor = makeCaptionImageEditor({
+        imageId: 'img-cropped',
+        extraAttrs: {
+          clipPath: 'inset(5% 10% 5% 10%)',
+          rawSrcRect: { l: '10000', t: '5000', r: '10000', b: '5000' },
+        },
+      });
+      return imagesResetCropWrapper(editor, { imageId: 'img-cropped' }, { changeMode: 'direct' });
+    },
+  },
+  'images.replaceSource': {
+    throwCase: () =>
+      imagesReplaceSourceWrapper(
+        makeImageEditor(),
+        { imageId: 'missing', src: 'data:image/png;base64,abc' },
+        { changeMode: 'direct' },
+      ),
+    failureCase: () => {
+      // Transaction produces no change → NO_OP
+      const editor = makeImageEditor();
+      const tr = (editor.state as unknown as { tr: Record<string, unknown> }).tr;
+      tr.docChanged = false;
+      tr.steps = [];
+      return imagesReplaceSourceWrapper(
+        editor,
+        { imageId: 'img-1', src: 'data:image/png;base64,abc' },
+        { changeMode: 'direct' },
+      );
+    },
+    applyCase: () =>
+      imagesReplaceSourceWrapper(
+        makeImageEditor(),
+        { imageId: 'img-1', src: 'data:image/png;base64,abc' },
+        { changeMode: 'direct' },
+      ),
+  },
+  'images.setAltText': {
+    throwCase: () =>
+      imagesSetAltTextWrapper(
+        makeImageEditor(),
+        { imageId: 'missing', description: 'Alt text' },
+        { changeMode: 'direct' },
+      ),
+    failureCase: () => {
+      // Same description → NO_OP
+      const editor = makeCaptionImageEditor({ extraAttrs: { title: 'Already set' } });
+      return imagesSetAltTextWrapper(
+        editor,
+        { imageId: 'img-1', description: 'Already set' },
+        { changeMode: 'direct' },
+      );
+    },
+    applyCase: () =>
+      imagesSetAltTextWrapper(
+        makeImageEditor(),
+        { imageId: 'img-1', description: 'New alt text' },
+        { changeMode: 'direct' },
+      ),
+  },
+  'images.setDecorative': {
+    throwCase: () =>
+      imagesSetDecorativeWrapper(makeImageEditor(), { imageId: 'missing', decorative: true }, { changeMode: 'direct' }),
+    failureCase: () => {
+      // Default decorative is false → NO_OP
+      return imagesSetDecorativeWrapper(
+        makeImageEditor(),
+        { imageId: 'img-1', decorative: false },
+        { changeMode: 'direct' },
+      );
+    },
+    applyCase: () =>
+      imagesSetDecorativeWrapper(makeImageEditor(), { imageId: 'img-1', decorative: true }, { changeMode: 'direct' }),
+  },
+  'images.setName': {
+    throwCase: () =>
+      imagesSetNameWrapper(makeImageEditor(), { imageId: 'missing', name: 'MyImage' }, { changeMode: 'direct' }),
+    failureCase: () => {
+      // Same name as existing alt attr → NO_OP
+      return imagesSetNameWrapper(
+        makeImageEditor(),
+        { imageId: 'img-1', name: 'Test image' },
+        { changeMode: 'direct' },
+      );
+    },
+    applyCase: () =>
+      imagesSetNameWrapper(makeImageEditor(), { imageId: 'img-1', name: 'NewName' }, { changeMode: 'direct' }),
+  },
+  'images.setHyperlink': {
+    throwCase: () =>
+      imagesSetHyperlinkWrapper(
+        makeImageEditor(),
+        { imageId: 'missing', url: 'https://example.com' },
+        { changeMode: 'direct' },
+      ),
+    failureCase: () => {
+      // No hyperlink set, removing → NO_OP
+      return imagesSetHyperlinkWrapper(makeImageEditor(), { imageId: 'img-1', url: null }, { changeMode: 'direct' });
+    },
+    applyCase: () =>
+      imagesSetHyperlinkWrapper(
+        makeImageEditor(),
+        { imageId: 'img-1', url: 'https://example.com' },
+        { changeMode: 'direct' },
+      ),
+  },
+  'images.insertCaption': {
+    throwCase: () =>
+      imagesInsertCaptionWrapper(makeImageEditor(), { imageId: 'missing', text: 'Caption' }, { changeMode: 'direct' }),
+    failureCase: () => {
+      // Transaction produces no change → NO_OP
+      const editor = makeCaptionImageEditor({ docChanged: false });
+      return imagesInsertCaptionWrapper(editor, { imageId: 'img-1', text: 'Caption' }, { changeMode: 'direct' });
+    },
+    applyCase: () => {
+      const editor = makeCaptionImageEditor();
+      return imagesInsertCaptionWrapper(editor, { imageId: 'img-1', text: 'Caption text' }, { changeMode: 'direct' });
+    },
+  },
+  'images.updateCaption': {
+    throwCase: () =>
+      imagesUpdateCaptionWrapper(makeImageEditor(), { imageId: 'missing', text: 'Updated' }, { changeMode: 'direct' }),
+    failureCase: () => {
+      // Transaction produces no change → NO_OP
+      const editor = makeCaptionImageEditor({ withCaption: true, docChanged: false, imageId: 'img-cap' });
+      return imagesUpdateCaptionWrapper(editor, { imageId: 'img-cap', text: 'Updated' }, { changeMode: 'direct' });
+    },
+    applyCase: () => {
+      const editor = makeCaptionImageEditor({ withCaption: true, imageId: 'img-cap' });
+      return imagesUpdateCaptionWrapper(editor, { imageId: 'img-cap', text: 'New caption' }, { changeMode: 'direct' });
+    },
+  },
+  'images.removeCaption': {
+    throwCase: () => imagesRemoveCaptionWrapper(makeImageEditor(), { imageId: 'missing' }, { changeMode: 'direct' }),
+    failureCase: () => {
+      // No caption → NO_OP
+      const editor = makeCaptionImageEditor();
+      return imagesRemoveCaptionWrapper(editor, { imageId: 'img-1' }, { changeMode: 'direct' });
+    },
+    applyCase: () => {
+      const editor = makeCaptionImageEditor({ withCaption: true, imageId: 'img-cap' });
+      return imagesRemoveCaptionWrapper(editor, { imageId: 'img-cap' }, { changeMode: 'direct' });
     },
   },
 };
@@ -3939,65 +5729,147 @@ const dryRunVectors: Partial<Record<OperationId, () => unknown>> = {
     expect(insertListItemAt).not.toHaveBeenCalled();
     return result;
   },
-  'lists.setType': () => {
-    const editor = makeListEditor([makeListParagraph({ id: 'li-1', numId: 1, numberingType: 'bullet' })]);
-    const setListTypeAt = editor.commands!.setListTypeAt as ReturnType<typeof vi.fn>;
-    const result = listsSetTypeWrapper(
-      editor,
-      { target: { kind: 'block', nodeType: 'listItem', nodeId: 'li-1' }, kind: 'ordered' },
-      { changeMode: 'direct', dryRun: true },
-    );
-    expect(setListTypeAt).not.toHaveBeenCalled();
-    return result;
-  },
   'lists.indent': () => {
     const hasDefinitionSpy = vi.spyOn(ListHelpers, 'hasListDefinition').mockReturnValue(true);
     const editor = makeListEditor([makeListParagraph({ id: 'li-1', numId: 1, ilvl: 0, numberingType: 'decimal' })]);
-    const increaseListIndent = editor.commands!.increaseListIndent as ReturnType<typeof vi.fn>;
     const result = listsIndentWrapper(
       editor,
       { target: { kind: 'block', nodeType: 'listItem', nodeId: 'li-1' } },
       { changeMode: 'direct', dryRun: true },
     );
-    expect(increaseListIndent).not.toHaveBeenCalled();
     hasDefinitionSpy.mockRestore();
     return result;
   },
   'lists.outdent': () => {
+    const hasDefinitionSpy = vi.spyOn(ListHelpers, 'hasListDefinition').mockReturnValue(true);
     const editor = makeListEditor([makeListParagraph({ id: 'li-1', numId: 1, ilvl: 1, numberingType: 'decimal' })]);
-    const decreaseListIndent = editor.commands!.decreaseListIndent as ReturnType<typeof vi.fn>;
     const result = listsOutdentWrapper(
       editor,
       { target: { kind: 'block', nodeType: 'listItem', nodeId: 'li-1' } },
       { changeMode: 'direct', dryRun: true },
     );
-    expect(decreaseListIndent).not.toHaveBeenCalled();
+    hasDefinitionSpy.mockRestore();
     return result;
   },
-  'lists.restart': () => {
-    const editor = makeListEditor([
-      makeListParagraph({ id: 'li-1', numId: 1, ilvl: 0, numberingType: 'decimal', markerText: '1.', path: [1] }),
-      makeListParagraph({ id: 'li-2', numId: 1, ilvl: 0, numberingType: 'decimal', markerText: '2.', path: [2] }),
-    ]);
-    const restartNumbering = editor.commands!.restartNumbering as ReturnType<typeof vi.fn>;
-    const result = listsRestartWrapper(
+  'lists.create': () => {
+    const editor = makeListEditor([makeListParagraph({ id: 'p-1' })]);
+    return listsCreateWrapper(
       editor,
-      { target: { kind: 'block', nodeType: 'listItem', nodeId: 'li-2' } },
+      { mode: 'empty', at: { kind: 'block', nodeType: 'paragraph', nodeId: 'p-1' }, kind: 'ordered' },
       { changeMode: 'direct', dryRun: true },
     );
-    expect(restartNumbering).not.toHaveBeenCalled();
-    return result;
   },
-  'lists.exit': () => {
+  'lists.attach': () => {
+    const editor = makeListEditor([
+      makeListParagraph({ id: 'p-1' }),
+      makeListParagraph({ id: 'li-1', numId: 1, ilvl: 0, numberingType: 'decimal' }),
+    ]);
+    return listsAttachWrapper(
+      editor,
+      {
+        target: { kind: 'block', nodeType: 'paragraph', nodeId: 'p-1' },
+        attachTo: { kind: 'block', nodeType: 'listItem', nodeId: 'li-1' },
+      },
+      { changeMode: 'direct', dryRun: true },
+    );
+  },
+  'lists.detach': () => {
     const editor = makeListEditor([makeListParagraph({ id: 'li-1', numId: 1, ilvl: 0, numberingType: 'decimal' })]);
-    const exitListItemAt = editor.commands!.exitListItemAt as ReturnType<typeof vi.fn>;
-    const result = listsExitWrapper(
+    return listsDetachWrapper(
       editor,
       { target: { kind: 'block', nodeType: 'listItem', nodeId: 'li-1' } },
       { changeMode: 'direct', dryRun: true },
     );
-    expect(exitListItemAt).not.toHaveBeenCalled();
+  },
+  'lists.join': () => {
+    const canJoinSpy = vi.spyOn(listSequenceHelpers, 'evaluateCanJoin').mockReturnValue({
+      canJoin: true,
+      adjacentListId: '2',
+    });
+    const adjacentSpy = vi.spyOn(listSequenceHelpers, 'findAdjacentSequence').mockReturnValue({
+      numId: 2,
+      sequence: [],
+    });
+    const seqSpy = vi.spyOn(listSequenceHelpers, 'getContiguousSequence').mockReturnValue([]);
+    const editor = makeListEditor([makeListParagraph({ id: 'li-1', numId: 1, ilvl: 0, numberingType: 'decimal' })]);
+    const result = listsJoinWrapper(
+      editor,
+      { target: { kind: 'block', nodeType: 'listItem', nodeId: 'li-1' }, direction: 'withNext' },
+      { changeMode: 'direct', dryRun: true },
+    );
+    canJoinSpy.mockRestore();
+    adjacentSpy.mockRestore();
+    seqSpy.mockRestore();
     return result;
+  },
+  'lists.separate': () => {
+    const firstInSeqSpy = vi.spyOn(listSequenceHelpers, 'isFirstInSequence').mockReturnValue(false);
+    const abstractSpy = vi.spyOn(listSequenceHelpers, 'getAbstractNumId').mockReturnValue(1);
+    const seqSpy = vi.spyOn(listSequenceHelpers, 'getSequenceFromTarget').mockReturnValue([]);
+    const editor = makeListEditor([makeListParagraph({ id: 'li-1', numId: 1, ilvl: 0, numberingType: 'decimal' })]);
+    const result = listsSeparateWrapper(
+      editor,
+      { target: { kind: 'block', nodeType: 'listItem', nodeId: 'li-1' } },
+      { changeMode: 'direct', dryRun: true },
+    );
+    firstInSeqSpy.mockRestore();
+    abstractSpy.mockRestore();
+    seqSpy.mockRestore();
+    return result;
+  },
+  'lists.setLevel': () => {
+    const hasDefinitionSpy = vi.spyOn(ListHelpers, 'hasListDefinition').mockReturnValue(true);
+    const editor = makeListEditor([makeListParagraph({ id: 'li-1', numId: 1, ilvl: 0, numberingType: 'decimal' })]);
+    const result = listsSetLevelWrapper(
+      editor,
+      { target: { kind: 'block', nodeType: 'listItem', nodeId: 'li-1' }, level: 2 },
+      { changeMode: 'direct', dryRun: true },
+    );
+    hasDefinitionSpy.mockRestore();
+    return result;
+  },
+  'lists.setValue': () => {
+    const editor = makeListEditor([makeListParagraph({ id: 'li-1', numId: 1, ilvl: 0, numberingType: 'decimal' })]);
+    return listsSetValueWrapper(
+      editor,
+      { target: { kind: 'block', nodeType: 'listItem', nodeId: 'li-1' }, value: 5 },
+      { changeMode: 'direct', dryRun: true },
+    );
+  },
+  'lists.continuePrevious': () => {
+    const canContSpy = vi.spyOn(listSequenceHelpers, 'evaluateCanContinuePrevious').mockReturnValue({
+      canContinue: true,
+      previousListId: '2',
+    });
+    const prevSpy = vi.spyOn(listSequenceHelpers, 'findPreviousCompatibleSequence').mockReturnValue({
+      numId: 2,
+      sequence: [],
+    });
+    const editor = makeListEditor([makeListParagraph({ id: 'li-1', numId: 1, ilvl: 0, numberingType: 'decimal' })]);
+    const result = listsContinuePreviousWrapper(
+      editor,
+      { target: { kind: 'block', nodeType: 'listItem', nodeId: 'li-1' } },
+      { changeMode: 'direct', dryRun: true },
+    );
+    canContSpy.mockRestore();
+    prevSpy.mockRestore();
+    return result;
+  },
+  'lists.setLevelRestart': () => {
+    const editor = makeListEditor([makeListParagraph({ id: 'li-1', numId: 1, ilvl: 0, numberingType: 'decimal' })]);
+    return listsSetLevelRestartWrapper(
+      editor,
+      { target: { kind: 'block', nodeType: 'listItem', nodeId: 'li-1' }, level: 0, restartAfterLevel: null },
+      { changeMode: 'direct', dryRun: true },
+    );
+  },
+  'lists.convertToText': () => {
+    const editor = makeListEditor([makeListParagraph({ id: 'li-1', numId: 1, ilvl: 0, numberingType: 'decimal' })]);
+    return listsConvertToTextWrapper(
+      editor,
+      { target: { kind: 'block', nodeType: 'listItem', nodeId: 'li-1' } },
+      { changeMode: 'direct', dryRun: true },
+    );
   },
   'styles.apply': () => {
     const editor = makeStylesEditor();
@@ -4009,6 +5881,154 @@ const dryRunVectors: Partial<Record<OperationId, () => unknown>> = {
     // dryRun should not mark the document as modified
     expect((editor as unknown as { converter: { documentModified: boolean } }).converter.documentModified).toBe(false);
     return result;
+  },
+
+  // -------------------------------------------------------------------------
+  // SD-1973 list formatting — dryRun vectors
+  // -------------------------------------------------------------------------
+  'lists.applyTemplate': () => {
+    const abstractSpy = vi.spyOn(listSequenceHelpers, 'getAbstractNumId').mockReturnValue(1);
+    const editor = makeListEditor([makeListParagraph({ id: 'li-1', numId: 1, ilvl: 0, numberingType: 'decimal' })]);
+    const result = listsApplyTemplateWrapper(
+      editor,
+      {
+        target: { kind: 'block', nodeType: 'listItem', nodeId: 'li-1' },
+        template: { version: 1, levels: [{ level: 0, numFmt: 'decimal', lvlText: '%1.' }] },
+      },
+      { changeMode: 'direct', dryRun: true },
+    );
+    abstractSpy.mockRestore();
+    return result;
+  },
+  'lists.applyPreset': () => {
+    const abstractSpy = vi.spyOn(listSequenceHelpers, 'getAbstractNumId').mockReturnValue(1);
+    const presetSpy = vi
+      .spyOn(LevelFormattingHelpers, 'getPresetTemplate')
+      .mockReturnValue({ version: 1, levels: [{ level: 0, numFmt: 'decimal', lvlText: '%1.' }] });
+    const editor = makeListEditor([makeListParagraph({ id: 'li-1', numId: 1, ilvl: 0, numberingType: 'decimal' })]);
+    const result = listsApplyPresetWrapper(
+      editor,
+      { target: { kind: 'block', nodeType: 'listItem', nodeId: 'li-1' }, preset: 'decimal' },
+      { changeMode: 'direct', dryRun: true },
+    );
+    abstractSpy.mockRestore();
+    presetSpy.mockRestore();
+    return result;
+  },
+  'lists.setType': () => {
+    const abstractSpy = vi.spyOn(listSequenceHelpers, 'getAbstractNumId').mockReturnValue(1);
+    const editor = makeListEditor([makeListParagraph({ id: 'li-1', numId: 1, ilvl: 0, numberingType: 'decimal' })]);
+    const result = listsSetTypeWrapper(
+      editor,
+      { target: { kind: 'block', nodeType: 'listItem', nodeId: 'li-1' }, kind: 'ordered' },
+      { changeMode: 'direct', dryRun: true },
+    );
+    abstractSpy.mockRestore();
+    return result;
+  },
+  'lists.setLevelNumbering': () => {
+    const abstractSpy = vi.spyOn(listSequenceHelpers, 'getAbstractNumId').mockReturnValue(1);
+    const hasLevelSpy = vi.spyOn(LevelFormattingHelpers, 'hasLevel').mockReturnValue(true);
+    const editor = makeListEditor([makeListParagraph({ id: 'li-1', numId: 1, ilvl: 0, numberingType: 'decimal' })]);
+    const result = listsSetLevelNumberingWrapper(
+      editor,
+      {
+        target: { kind: 'block', nodeType: 'listItem', nodeId: 'li-1' },
+        level: 0,
+        numFmt: 'upperRoman',
+        lvlText: '%1.',
+      },
+      { changeMode: 'direct', dryRun: true },
+    );
+    abstractSpy.mockRestore();
+    hasLevelSpy.mockRestore();
+    return result;
+  },
+  'lists.setLevelBullet': () => {
+    const abstractSpy = vi.spyOn(listSequenceHelpers, 'getAbstractNumId').mockReturnValue(1);
+    const hasLevelSpy = vi.spyOn(LevelFormattingHelpers, 'hasLevel').mockReturnValue(true);
+    const editor = makeListEditor([makeListParagraph({ id: 'li-1', numId: 1, ilvl: 0, numberingType: 'decimal' })]);
+    const result = listsSetLevelBulletWrapper(
+      editor,
+      { target: { kind: 'block', nodeType: 'listItem', nodeId: 'li-1' }, level: 0, markerText: '•' },
+      { changeMode: 'direct', dryRun: true },
+    );
+    abstractSpy.mockRestore();
+    hasLevelSpy.mockRestore();
+    return result;
+  },
+  'lists.setLevelPictureBullet': () => {
+    const abstractSpy = vi.spyOn(listSequenceHelpers, 'getAbstractNumId').mockReturnValue(1);
+    const hasLevelSpy = vi.spyOn(LevelFormattingHelpers, 'hasLevel').mockReturnValue(true);
+    const editor = makeListEditor([makeListParagraph({ id: 'li-1', numId: 1, ilvl: 0, numberingType: 'decimal' })]);
+    const result = listsSetLevelPictureBulletWrapper(
+      editor,
+      { target: { kind: 'block', nodeType: 'listItem', nodeId: 'li-1' }, level: 0, pictureBulletId: 1 },
+      { changeMode: 'direct', dryRun: true },
+    );
+    abstractSpy.mockRestore();
+    hasLevelSpy.mockRestore();
+    return result;
+  },
+  'lists.setLevelAlignment': () => {
+    const abstractSpy = vi.spyOn(listSequenceHelpers, 'getAbstractNumId').mockReturnValue(1);
+    const hasLevelSpy = vi.spyOn(LevelFormattingHelpers, 'hasLevel').mockReturnValue(true);
+    const editor = makeListEditor([makeListParagraph({ id: 'li-1', numId: 1, ilvl: 0, numberingType: 'decimal' })]);
+    const result = listsSetLevelAlignmentWrapper(
+      editor,
+      { target: { kind: 'block', nodeType: 'listItem', nodeId: 'li-1' }, level: 0, alignment: 'center' },
+      { changeMode: 'direct', dryRun: true },
+    );
+    abstractSpy.mockRestore();
+    hasLevelSpy.mockRestore();
+    return result;
+  },
+  'lists.setLevelIndents': () => {
+    const abstractSpy = vi.spyOn(listSequenceHelpers, 'getAbstractNumId').mockReturnValue(1);
+    const hasLevelSpy = vi.spyOn(LevelFormattingHelpers, 'hasLevel').mockReturnValue(true);
+    const editor = makeListEditor([makeListParagraph({ id: 'li-1', numId: 1, ilvl: 0, numberingType: 'decimal' })]);
+    const result = listsSetLevelIndentsWrapper(
+      editor,
+      { target: { kind: 'block', nodeType: 'listItem', nodeId: 'li-1' }, level: 0, left: 720 },
+      { changeMode: 'direct', dryRun: true },
+    );
+    abstractSpy.mockRestore();
+    hasLevelSpy.mockRestore();
+    return result;
+  },
+  'lists.setLevelTrailingCharacter': () => {
+    const abstractSpy = vi.spyOn(listSequenceHelpers, 'getAbstractNumId').mockReturnValue(1);
+    const hasLevelSpy = vi.spyOn(LevelFormattingHelpers, 'hasLevel').mockReturnValue(true);
+    const editor = makeListEditor([makeListParagraph({ id: 'li-1', numId: 1, ilvl: 0, numberingType: 'decimal' })]);
+    const result = listsSetLevelTrailingCharacterWrapper(
+      editor,
+      { target: { kind: 'block', nodeType: 'listItem', nodeId: 'li-1' }, level: 0, trailingCharacter: 'space' },
+      { changeMode: 'direct', dryRun: true },
+    );
+    abstractSpy.mockRestore();
+    hasLevelSpy.mockRestore();
+    return result;
+  },
+  'lists.setLevelMarkerFont': () => {
+    const abstractSpy = vi.spyOn(listSequenceHelpers, 'getAbstractNumId').mockReturnValue(1);
+    const hasLevelSpy = vi.spyOn(LevelFormattingHelpers, 'hasLevel').mockReturnValue(true);
+    const editor = makeListEditor([makeListParagraph({ id: 'li-1', numId: 1, ilvl: 0, numberingType: 'decimal' })]);
+    const result = listsSetLevelMarkerFontWrapper(
+      editor,
+      { target: { kind: 'block', nodeType: 'listItem', nodeId: 'li-1' }, level: 0, fontFamily: 'Arial' },
+      { changeMode: 'direct', dryRun: true },
+    );
+    abstractSpy.mockRestore();
+    hasLevelSpy.mockRestore();
+    return result;
+  },
+  'lists.clearLevelOverrides': () => {
+    const editor = makeListEditor([makeListParagraph({ id: 'li-1', numId: 1, ilvl: 0, numberingType: 'decimal' })]);
+    return listsClearLevelOverridesWrapper(
+      editor,
+      { target: { kind: 'block', nodeType: 'listItem', nodeId: 'li-1' }, level: 0 },
+      { changeMode: 'direct', dryRun: true },
+    );
   },
 
   // -------------------------------------------------------------------------
@@ -4387,6 +6407,46 @@ const dryRunVectors: Partial<Record<OperationId, () => unknown>> = {
     expect(dispatch).not.toHaveBeenCalled();
     return result;
   },
+  'tables.setDefaultStyle': () => {
+    const editor = makeSectionsEditor();
+    const converter = (editor as unknown as { converter: Record<string, unknown> }).converter;
+    converter.translatedLinkedStyles = {
+      styles: { TableGrid: { type: 'table', name: 'Table Grid' } },
+      docDefaults: {},
+      latentStyles: {},
+    };
+    const dispatch = (editor as unknown as { dispatch: ReturnType<typeof vi.fn> }).dispatch;
+    const result = tablesSetDefaultStyleAdapter(
+      editor,
+      { styleId: 'TableGrid' },
+      { changeMode: 'direct', dryRun: true },
+    );
+    expect(dispatch).not.toHaveBeenCalled();
+    return result;
+  },
+  'tables.clearDefaultStyle': () => {
+    const editor = makeSectionsEditor();
+    const converter = (editor as unknown as { converter: Record<string, unknown> }).converter;
+    const settingsRoot = (converter.convertedXml as Record<string, { elements?: Array<{ elements?: unknown[] }> }>)[
+      'word/settings.xml'
+    ];
+    const wSettings = settingsRoot?.elements?.find(
+      (el: { name?: string }) => (el as { name?: string }).name === 'w:settings',
+    ) as { elements?: unknown[] } | undefined;
+    if (wSettings) {
+      if (!wSettings.elements) wSettings.elements = [];
+      wSettings.elements.push({
+        type: 'element',
+        name: 'w:defaultTableStyle',
+        attributes: { 'w:val': 'TableGrid' },
+        elements: [],
+      });
+    }
+    const dispatch = (editor as unknown as { dispatch: ReturnType<typeof vi.fn> }).dispatch;
+    const result = tablesClearDefaultStyleAdapter(editor, {}, { changeMode: 'direct', dryRun: true });
+    expect(dispatch).not.toHaveBeenCalled();
+    return result;
+  },
 
   // -------------------------------------------------------------------------
   // TOC operations — dryRun vectors
@@ -4466,6 +6526,384 @@ const dryRunVectors: Partial<Record<OperationId, () => unknown>> = {
       { changeMode: 'direct', dryRun: true },
     );
     expect(updateEntry).not.toHaveBeenCalled();
+    return result;
+  },
+
+  // -------------------------------------------------------------------------
+  // Image operations — dryRun vectors
+  // -------------------------------------------------------------------------
+  'create.image': () => {
+    const setImage = vi.fn(() => true);
+    const { editor } = makeTextEditor('Hello', { commands: { setImage } });
+    const result = createImageWrapper(
+      editor,
+      { src: 'https://example.com/img.png', size: { width: 100, height: 100 } },
+      { changeMode: 'direct', dryRun: true },
+    );
+    expect(setImage).not.toHaveBeenCalled();
+    return result;
+  },
+  'images.delete': () => {
+    const editor = makeImageEditor();
+    const dispatch = (editor as unknown as { dispatch: ReturnType<typeof vi.fn> }).dispatch;
+    const result = imagesDeleteWrapper(editor, { imageId: 'img-1' }, { changeMode: 'direct', dryRun: true });
+    expect(dispatch).not.toHaveBeenCalled();
+    return result;
+  },
+  'images.move': () => {
+    const editor = makeImageEditor();
+    const dispatch = (editor as unknown as { dispatch: ReturnType<typeof vi.fn> }).dispatch;
+    const result = imagesMoveWrapper(
+      editor,
+      { imageId: 'img-1', to: { kind: 'documentEnd' } },
+      { changeMode: 'direct', dryRun: true },
+    );
+    expect(dispatch).not.toHaveBeenCalled();
+    return result;
+  },
+  'images.convertToInline': () => {
+    const editor = makeImageEditor();
+    const dispatch = (editor as unknown as { dispatch: ReturnType<typeof vi.fn> }).dispatch;
+    const result = imagesConvertToInlineWrapper(editor, { imageId: 'img-1' }, { changeMode: 'direct', dryRun: true });
+    expect(dispatch).not.toHaveBeenCalled();
+    return result;
+  },
+  'images.convertToFloating': () => {
+    // Need an inline image for convertToFloating to be non-no-op
+    const inlineImageNode = createNode('image', [], {
+      attrs: {
+        sdImageId: 'img-inline',
+        src: 'https://example.com/test.png',
+        isAnchor: false,
+        wrap: { type: 'Inline' },
+        anchorData: null,
+        marginOffset: null,
+        relativeHeight: null,
+        originalAttributes: {},
+      },
+      isInline: true,
+      isLeaf: true,
+    });
+    const paragraph = createNode('paragraph', [inlineImageNode], {
+      attrs: { sdBlockId: 'p-img-inline' },
+      isBlock: true,
+      inlineContent: true,
+    });
+    const doc = createNode('doc', [paragraph], { isBlock: false });
+    const dispatch = vi.fn();
+    const tr = {
+      setNodeMarkup: vi.fn().mockReturnThis(),
+      setMeta: vi.fn().mockReturnThis(),
+      mapping: { map: (pos: number) => pos },
+      docChanged: true,
+      steps: [{}],
+      doc,
+    };
+    const editor = {
+      state: { doc, tr, schema: { nodes: {} } },
+      dispatch,
+      commands: { setImage: vi.fn(() => true) },
+      schema: { marks: {} },
+      options: {},
+      on: () => {},
+    } as unknown as Editor;
+    const result = imagesConvertToFloatingWrapper(
+      editor,
+      { imageId: 'img-inline' },
+      { changeMode: 'direct', dryRun: true },
+    );
+    expect(dispatch).not.toHaveBeenCalled();
+    return result;
+  },
+  'images.setSize': () => {
+    const editor = makeImageEditor();
+    const dispatch = (editor as unknown as { dispatch: ReturnType<typeof vi.fn> }).dispatch;
+    const result = imagesSetSizeWrapper(
+      editor,
+      { imageId: 'img-1', size: { width: 220, height: 140 } },
+      { changeMode: 'direct', dryRun: true },
+    );
+    expect(dispatch).not.toHaveBeenCalled();
+    return result;
+  },
+  'images.setWrapType': () => {
+    const editor = makeImageEditor();
+    const dispatch = (editor as unknown as { dispatch: ReturnType<typeof vi.fn> }).dispatch;
+    const result = imagesSetWrapTypeWrapper(
+      editor,
+      { imageId: 'img-1', type: 'Tight' },
+      { changeMode: 'direct', dryRun: true },
+    );
+    expect(dispatch).not.toHaveBeenCalled();
+    return result;
+  },
+  'images.setWrapSide': () => {
+    const editor = makeImageEditor();
+    const dispatch = (editor as unknown as { dispatch: ReturnType<typeof vi.fn> }).dispatch;
+    const result = imagesSetWrapSideWrapper(
+      editor,
+      { imageId: 'img-1', side: 'left' },
+      { changeMode: 'direct', dryRun: true },
+    );
+    expect(dispatch).not.toHaveBeenCalled();
+    return result;
+  },
+  'images.setWrapDistances': () => {
+    const editor = makeImageEditor();
+    const dispatch = (editor as unknown as { dispatch: ReturnType<typeof vi.fn> }).dispatch;
+    const result = imagesSetWrapDistancesWrapper(
+      editor,
+      { imageId: 'img-1', distances: { distTop: 100, distBottom: 100 } },
+      { changeMode: 'direct', dryRun: true },
+    );
+    expect(dispatch).not.toHaveBeenCalled();
+    return result;
+  },
+  'images.setPosition': () => {
+    const editor = makeImageEditor();
+    const dispatch = (editor as unknown as { dispatch: ReturnType<typeof vi.fn> }).dispatch;
+    const result = imagesSetPositionWrapper(
+      editor,
+      { imageId: 'img-1', position: { hRelativeFrom: 'page' } },
+      { changeMode: 'direct', dryRun: true },
+    );
+    expect(dispatch).not.toHaveBeenCalled();
+    return result;
+  },
+  'images.setAnchorOptions': () => {
+    const editor = makeImageEditor();
+    const dispatch = (editor as unknown as { dispatch: ReturnType<typeof vi.fn> }).dispatch;
+    const result = imagesSetAnchorOptionsWrapper(
+      editor,
+      { imageId: 'img-1', options: { behindDoc: true } },
+      { changeMode: 'direct', dryRun: true },
+    );
+    expect(dispatch).not.toHaveBeenCalled();
+    return result;
+  },
+  'images.setZOrder': () => {
+    const editor = makeImageEditor();
+    const dispatch = (editor as unknown as { dispatch: ReturnType<typeof vi.fn> }).dispatch;
+    const result = imagesSetZOrderWrapper(
+      editor,
+      { imageId: 'img-1', zOrder: { relativeHeight: 999999999 } },
+      { changeMode: 'direct', dryRun: true },
+    );
+    expect(dispatch).not.toHaveBeenCalled();
+    return result;
+  },
+
+  // -------------------------------------------------------------------------
+  // Hyperlink operations — dryRun vectors
+  // -------------------------------------------------------------------------
+  'hyperlinks.wrap': () => {
+    const editor = makeHyperlinkEditor({ withLink: false });
+    const dispatch = (editor as unknown as { dispatch: ReturnType<typeof vi.fn> }).dispatch;
+    const result = hyperlinksWrapWrapper(
+      editor,
+      {
+        target: { kind: 'text', blockId: 'p1', range: { start: 0, end: 5 } },
+        link: { destination: { href: 'https://example.com' } },
+      },
+      { changeMode: 'direct', dryRun: true },
+    );
+    expect(dispatch).not.toHaveBeenCalled();
+    return result;
+  },
+  'hyperlinks.insert': () => {
+    const editor = makeHyperlinkEditor({ withLink: false });
+    const dispatch = (editor as unknown as { dispatch: ReturnType<typeof vi.fn> }).dispatch;
+    const result = hyperlinksInsertWrapper(
+      editor,
+      {
+        target: { kind: 'text', blockId: 'p1', range: { start: 0, end: 0 } },
+        text: 'X',
+        link: { destination: { href: 'https://example.com' } },
+      },
+      { changeMode: 'direct', dryRun: true },
+    );
+    expect(dispatch).not.toHaveBeenCalled();
+    return result;
+  },
+  'hyperlinks.patch': () => {
+    const editor = makeHyperlinkEditor({ withLink: true, linkAttrs: { href: 'https://example.com' } });
+    const dispatch = (editor as unknown as { dispatch: ReturnType<typeof vi.fn> }).dispatch;
+    const result = hyperlinksPatchWrapper(
+      editor,
+      {
+        target: makeHyperlinkTarget('p1', 0, 5),
+        patch: { href: 'https://example.com/updated' },
+      },
+      { changeMode: 'direct', dryRun: true },
+    );
+    expect(dispatch).not.toHaveBeenCalled();
+    return result;
+  },
+  'hyperlinks.remove': () => {
+    const editor = makeHyperlinkEditor({ withLink: true });
+    const dispatch = (editor as unknown as { dispatch: ReturnType<typeof vi.fn> }).dispatch;
+    const result = hyperlinksRemoveWrapper(
+      editor,
+      { target: makeHyperlinkTarget('p1', 0, 5) },
+      { changeMode: 'direct', dryRun: true },
+    );
+    expect(dispatch).not.toHaveBeenCalled();
+    return result;
+  },
+
+  // -------------------------------------------------------------------------
+  // SD-2100: Image geometry, content, semantic & caption — dryRun vectors
+  // -------------------------------------------------------------------------
+  'images.scale': () => {
+    const editor = makeImageEditor();
+    const dispatch = (editor as unknown as { dispatch: ReturnType<typeof vi.fn> }).dispatch;
+    const result = imagesScaleWrapper(
+      editor,
+      { imageId: 'img-1', factor: 1.5 },
+      { changeMode: 'direct', dryRun: true },
+    );
+    expect(dispatch).not.toHaveBeenCalled();
+    return result;
+  },
+  'images.setLockAspectRatio': () => {
+    const editor = makeImageEditor();
+    const dispatch = (editor as unknown as { dispatch: ReturnType<typeof vi.fn> }).dispatch;
+    const result = imagesSetLockAspectRatioWrapper(
+      editor,
+      { imageId: 'img-1', locked: false },
+      { changeMode: 'direct', dryRun: true },
+    );
+    expect(dispatch).not.toHaveBeenCalled();
+    return result;
+  },
+  'images.rotate': () => {
+    const editor = makeImageEditor();
+    const dispatch = (editor as unknown as { dispatch: ReturnType<typeof vi.fn> }).dispatch;
+    const result = imagesRotateWrapper(editor, { imageId: 'img-1', angle: 90 }, { changeMode: 'direct', dryRun: true });
+    expect(dispatch).not.toHaveBeenCalled();
+    return result;
+  },
+  'images.flip': () => {
+    const editor = makeImageEditor();
+    const dispatch = (editor as unknown as { dispatch: ReturnType<typeof vi.fn> }).dispatch;
+    const result = imagesFlipWrapper(
+      editor,
+      { imageId: 'img-1', horizontal: true },
+      { changeMode: 'direct', dryRun: true },
+    );
+    expect(dispatch).not.toHaveBeenCalled();
+    return result;
+  },
+  'images.crop': () => {
+    const editor = makeImageEditor();
+    const dispatch = (editor as unknown as { dispatch: ReturnType<typeof vi.fn> }).dispatch;
+    const result = imagesCropWrapper(
+      editor,
+      { imageId: 'img-1', crop: { left: 10, top: 5, right: 10, bottom: 5 } },
+      { changeMode: 'direct', dryRun: true },
+    );
+    expect(dispatch).not.toHaveBeenCalled();
+    return result;
+  },
+  'images.resetCrop': () => {
+    const editor = makeCaptionImageEditor({
+      imageId: 'img-cropped-dr',
+      extraAttrs: {
+        clipPath: 'inset(5% 10% 5% 10%)',
+        rawSrcRect: { l: '10000', t: '5000', r: '10000', b: '5000' },
+      },
+    });
+    const dispatch = (editor as unknown as { dispatch: ReturnType<typeof vi.fn> }).dispatch;
+    const result = imagesResetCropWrapper(
+      editor,
+      { imageId: 'img-cropped-dr' },
+      { changeMode: 'direct', dryRun: true },
+    );
+    expect(dispatch).not.toHaveBeenCalled();
+    return result;
+  },
+  'images.replaceSource': () => {
+    const editor = makeImageEditor();
+    const dispatch = (editor as unknown as { dispatch: ReturnType<typeof vi.fn> }).dispatch;
+    const result = imagesReplaceSourceWrapper(
+      editor,
+      { imageId: 'img-1', src: 'data:image/png;base64,abc' },
+      { changeMode: 'direct', dryRun: true },
+    );
+    expect(dispatch).not.toHaveBeenCalled();
+    return result;
+  },
+  'images.setAltText': () => {
+    const editor = makeImageEditor();
+    const dispatch = (editor as unknown as { dispatch: ReturnType<typeof vi.fn> }).dispatch;
+    const result = imagesSetAltTextWrapper(
+      editor,
+      { imageId: 'img-1', description: 'New alt text' },
+      { changeMode: 'direct', dryRun: true },
+    );
+    expect(dispatch).not.toHaveBeenCalled();
+    return result;
+  },
+  'images.setDecorative': () => {
+    const editor = makeImageEditor();
+    const dispatch = (editor as unknown as { dispatch: ReturnType<typeof vi.fn> }).dispatch;
+    const result = imagesSetDecorativeWrapper(
+      editor,
+      { imageId: 'img-1', decorative: true },
+      { changeMode: 'direct', dryRun: true },
+    );
+    expect(dispatch).not.toHaveBeenCalled();
+    return result;
+  },
+  'images.setName': () => {
+    const editor = makeImageEditor();
+    const dispatch = (editor as unknown as { dispatch: ReturnType<typeof vi.fn> }).dispatch;
+    const result = imagesSetNameWrapper(
+      editor,
+      { imageId: 'img-1', name: 'NewName' },
+      { changeMode: 'direct', dryRun: true },
+    );
+    expect(dispatch).not.toHaveBeenCalled();
+    return result;
+  },
+  'images.setHyperlink': () => {
+    const editor = makeImageEditor();
+    const dispatch = (editor as unknown as { dispatch: ReturnType<typeof vi.fn> }).dispatch;
+    const result = imagesSetHyperlinkWrapper(
+      editor,
+      { imageId: 'img-1', url: 'https://example.com' },
+      { changeMode: 'direct', dryRun: true },
+    );
+    expect(dispatch).not.toHaveBeenCalled();
+    return result;
+  },
+  'images.insertCaption': () => {
+    const editor = makeCaptionImageEditor();
+    const dispatch = (editor as unknown as { dispatch: ReturnType<typeof vi.fn> }).dispatch;
+    const result = imagesInsertCaptionWrapper(
+      editor,
+      { imageId: 'img-1', text: 'Caption' },
+      { changeMode: 'direct', dryRun: true },
+    );
+    expect(dispatch).not.toHaveBeenCalled();
+    return result;
+  },
+  'images.updateCaption': () => {
+    const editor = makeCaptionImageEditor({ withCaption: true, imageId: 'img-cap' });
+    const dispatch = (editor as unknown as { dispatch: ReturnType<typeof vi.fn> }).dispatch;
+    const result = imagesUpdateCaptionWrapper(
+      editor,
+      { imageId: 'img-cap', text: 'New caption' },
+      { changeMode: 'direct', dryRun: true },
+    );
+    expect(dispatch).not.toHaveBeenCalled();
+    return result;
+  },
+  'images.removeCaption': () => {
+    const editor = makeCaptionImageEditor({ withCaption: true, imageId: 'img-cap' });
+    const dispatch = (editor as unknown as { dispatch: ReturnType<typeof vi.fn> }).dispatch;
+    const result = imagesRemoveCaptionWrapper(editor, { imageId: 'img-cap' }, { changeMode: 'direct', dryRun: true });
+    expect(dispatch).not.toHaveBeenCalled();
     return result;
   },
 };
@@ -4781,6 +7219,8 @@ describe('document-api adapter conformance', () => {
       'tables.clearCellSpacing',
       'tables.insertCell',
       'tables.deleteCell',
+      'tables.setDefaultStyle',
+      'tables.clearDefaultStyle',
     ] as OperationId[];
 
     for (const opId of nonTrackedTableOps) {
@@ -4843,6 +7283,40 @@ describe('document-api adapter conformance', () => {
       { changeMode: 'tracked' },
     );
     expect(deleteColResult.success).toBe(true);
+  });
+
+  // ---------------------------------------------------------------------------
+  // tables.getStyles: returns graceful empty result without converter
+  // ---------------------------------------------------------------------------
+  it('returns empty styles payload when no converter is available (tables.getStyles)', () => {
+    const editor = makeSectionsEditor({ includeConverter: false });
+    const result = tablesGetStylesAdapter(editor);
+    expect(result).toEqual({
+      explicitDefaultStyleId: null,
+      effectiveDefaultStyleId: null,
+      effectiveDefaultSource: 'none',
+      styles: [],
+    });
+  });
+
+  // ---------------------------------------------------------------------------
+  // tables.setDefaultStyle: throws INVALID_INPUT for unknown style id
+  // ---------------------------------------------------------------------------
+  it('throws INVALID_INPUT when styleId is not a known table style (tables.setDefaultStyle)', () => {
+    const editor = makeSectionsEditor();
+    const converter = (editor as unknown as { converter: Record<string, unknown> }).converter;
+    converter.translatedLinkedStyles = {
+      styles: { TableGrid: { type: 'table', name: 'Table Grid' } },
+      docDefaults: {},
+      latentStyles: {},
+    };
+    let capturedCode: string | null = null;
+    try {
+      tablesSetDefaultStyleAdapter(editor, { styleId: 'NonExistentStyle' }, { changeMode: 'direct' });
+    } catch (error) {
+      capturedCode = (error as { code?: string }).code ?? null;
+    }
+    expect(capturedCode).toBe('INVALID_INPUT');
   });
 
   // ---------------------------------------------------------------------------
@@ -5138,4 +7612,289 @@ describe('document-api adapter conformance', () => {
       expect(receipt.steps[0].effect, `${op} outcome should be 'changed'`).toBe('changed');
     },
   );
+
+  // -------------------------------------------------------------------------
+  // Location semantics — coverage for create.image at / images.move to
+  // -------------------------------------------------------------------------
+
+  describe('image location semantics', () => {
+    /** Editor with two paragraphs to make before/after positions meaningful. */
+    function makeMultiBlockImageEditor() {
+      const imageNode = createNode('image', [], {
+        attrs: {
+          sdImageId: 'img-1',
+          src: 'https://example.com/test.png',
+          isAnchor: true,
+          wrap: { type: 'Square', attrs: { wrapText: 'bothSides' } },
+          anchorData: { hRelativeFrom: 'column', vRelativeFrom: 'paragraph' },
+          marginOffset: null,
+          relativeHeight: 251658240,
+          originalAttributes: {},
+          size: { width: 100, height: 100 },
+        },
+        isInline: true,
+        isLeaf: true,
+      });
+      // p1: pos=0, nodeSize=3 (1 inline image + 2 wrapper)
+      const p1 = createNode('paragraph', [imageNode], {
+        attrs: { sdBlockId: 'p-img' },
+        isBlock: true,
+        inlineContent: true,
+      });
+      const textNode = createNode('text', [], { text: 'Hello' });
+      // p2: pos=3, nodeSize=7 (5 text chars + 2 wrapper)
+      const p2 = createNode('paragraph', [textNode], {
+        attrs: { sdBlockId: 'p-text' },
+        isBlock: true,
+        inlineContent: true,
+      });
+      const doc = createNode('doc', [p1, p2], { isBlock: false });
+      // doc.content.size = 10
+
+      const dispatch = vi.fn();
+      const tr = {
+        insertText: vi.fn().mockReturnThis(),
+        delete: vi.fn().mockReturnThis(),
+        insert: vi.fn().mockReturnThis(),
+        setNodeMarkup: vi.fn().mockReturnThis(),
+        replaceWith: vi.fn().mockReturnThis(),
+        setMeta: vi.fn().mockReturnThis(),
+        mapping: { map: (pos: number) => pos },
+        docChanged: true,
+        steps: [{}],
+        doc,
+      };
+
+      return {
+        state: {
+          doc,
+          tr,
+          schema: {
+            nodes: {
+              image: {
+                create: vi.fn((attrs: Record<string, unknown>) =>
+                  createNode('image', [], { attrs, isInline: true, isLeaf: true }),
+                ),
+              },
+            },
+          },
+        },
+        dispatch,
+        commands: {
+          setImage: vi.fn(() => true),
+          insertContentAt: vi.fn(() => true),
+        },
+        schema: { marks: {} },
+        options: {},
+        on: () => {},
+      } as unknown as Editor;
+    }
+
+    it('create.image with at: documentStart uses insertContentAt at position 0', () => {
+      const editor = makeMultiBlockImageEditor();
+      const result = createImageWrapper(
+        editor,
+        { src: 'https://example.com/new.png', size: { width: 100, height: 100 }, at: { kind: 'documentStart' } },
+        { changeMode: 'direct' },
+      );
+      expect(result.success).toBe(true);
+      expect((editor.commands as any).insertContentAt).toHaveBeenCalledWith(
+        0,
+        expect.objectContaining({ type: 'image' }),
+      );
+      expect((editor.commands as any).setImage).not.toHaveBeenCalled();
+    });
+
+    it('create.image with at: documentEnd uses insertContentAt at content size', () => {
+      const editor = makeMultiBlockImageEditor();
+      const result = createImageWrapper(
+        editor,
+        { src: 'https://example.com/new.png', size: { width: 100, height: 100 }, at: { kind: 'documentEnd' } },
+        { changeMode: 'direct' },
+      );
+      expect(result.success).toBe(true);
+      expect((editor.commands as any).insertContentAt).toHaveBeenCalledWith(
+        10, // doc.content.size
+        expect.objectContaining({ type: 'image' }),
+      );
+      expect((editor.commands as any).setImage).not.toHaveBeenCalled();
+    });
+
+    it('create.image with at: before resolves block insertion position', () => {
+      const editor = makeMultiBlockImageEditor();
+      const result = createImageWrapper(
+        editor,
+        {
+          src: 'https://example.com/new.png',
+          size: { width: 100, height: 100 },
+          at: { kind: 'before', target: { kind: 'block', nodeType: 'paragraph', nodeId: 'p-text' } },
+        },
+        { changeMode: 'direct' },
+      );
+      expect(result.success).toBe(true);
+      expect((editor.commands as any).insertContentAt).toHaveBeenCalledWith(
+        3, // p-text starts at pos 3
+        expect.objectContaining({ type: 'image' }),
+      );
+    });
+
+    it('create.image with at: after resolves block end position', () => {
+      const editor = makeMultiBlockImageEditor();
+      const result = createImageWrapper(
+        editor,
+        {
+          src: 'https://example.com/new.png',
+          size: { width: 100, height: 100 },
+          at: { kind: 'after', target: { kind: 'block', nodeType: 'paragraph', nodeId: 'p-img' } },
+        },
+        { changeMode: 'direct' },
+      );
+      expect(result.success).toBe(true);
+      expect((editor.commands as any).insertContentAt).toHaveBeenCalledWith(
+        3, // p-img ends at pos 3 (pos=0 + nodeSize=3)
+        expect.objectContaining({ type: 'image' }),
+      );
+    });
+
+    it('create.image with at: inParagraph resolves inline offset position', () => {
+      const editor = makeMultiBlockImageEditor();
+      const result = createImageWrapper(
+        editor,
+        {
+          src: 'https://example.com/new.png',
+          size: { width: 100, height: 100 },
+          at: { kind: 'inParagraph', target: { kind: 'block', nodeType: 'paragraph', nodeId: 'p-text' }, offset: 2 },
+        },
+        { changeMode: 'direct' },
+      );
+      expect(result.success).toBe(true);
+      // p-text starts at pos 3, +1 enters inline content, +2 offset = 6
+      expect((editor.commands as any).insertContentAt).toHaveBeenCalledWith(
+        6,
+        expect.objectContaining({ type: 'image' }),
+      );
+    });
+
+    it('create.image without at uses setImage (selection-based)', () => {
+      const editor = makeMultiBlockImageEditor();
+      const result = createImageWrapper(
+        editor,
+        { src: 'https://example.com/new.png', size: { width: 100, height: 100 } },
+        { changeMode: 'direct' },
+      );
+      expect(result.success).toBe(true);
+      expect((editor.commands as any).setImage).toHaveBeenCalled();
+      expect((editor.commands as any).insertContentAt).not.toHaveBeenCalled();
+    });
+
+    it('images.move with to: documentStart inserts at position 0', () => {
+      const editor = makeMultiBlockImageEditor();
+      const result = imagesMoveWrapper(
+        editor,
+        { imageId: 'img-1', to: { kind: 'documentStart' } },
+        { changeMode: 'direct' },
+      );
+      expect(result.success).toBe(true);
+      const tr = (editor.state as unknown as { tr: { insert: ReturnType<typeof vi.fn> } }).tr;
+      expect(tr.insert).toHaveBeenCalledWith(0, expect.anything());
+    });
+
+    it('images.move with to: before resolves block position', () => {
+      const editor = makeMultiBlockImageEditor();
+      const result = imagesMoveWrapper(
+        editor,
+        {
+          imageId: 'img-1',
+          to: { kind: 'before', target: { kind: 'block', nodeType: 'paragraph', nodeId: 'p-text' } },
+        },
+        { changeMode: 'direct' },
+      );
+      expect(result.success).toBe(true);
+      const tr = (editor.state as unknown as { tr: { insert: ReturnType<typeof vi.fn> } }).tr;
+      // p-text starts at pos 3, mapping.map(3) → 3
+      expect(tr.insert).toHaveBeenCalledWith(3, expect.anything());
+    });
+
+    it('images.move with to: after resolves block end position', () => {
+      const editor = makeMultiBlockImageEditor();
+      const result = imagesMoveWrapper(
+        editor,
+        { imageId: 'img-1', to: { kind: 'after', target: { kind: 'block', nodeType: 'paragraph', nodeId: 'p-text' } } },
+        { changeMode: 'direct' },
+      );
+      expect(result.success).toBe(true);
+      const tr = (editor.state as unknown as { tr: { insert: ReturnType<typeof vi.fn> } }).tr;
+      // p-text ends at pos 10, mapping.map(10) → 10
+      expect(tr.insert).toHaveBeenCalledWith(10, expect.anything());
+    });
+  });
+
+  // -------------------------------------------------------------------------
+  // Image dimension resolution & unique drawing ID
+  // -------------------------------------------------------------------------
+
+  describe('image dimension resolution', () => {
+    /** Minimal 1x1 PNG as data URI (valid IHDR with width=1, height=1). */
+    function makePngDataUri(width: number, height: number): string {
+      // Build a minimal PNG header with the given width/height in IHDR
+      const buf = new ArrayBuffer(33);
+      const view = new DataView(buf);
+      const bytes = new Uint8Array(buf);
+      bytes.set([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a]); // PNG signature
+      view.setUint32(8, 13); // IHDR length
+      bytes.set([0x49, 0x48, 0x44, 0x52], 12); // IHDR tag
+      view.setInt32(16, width);
+      view.setInt32(20, height);
+      let binary = '';
+      for (let i = 0; i < bytes.length; i++) binary += String.fromCharCode(bytes[i]);
+      return `data:image/png;base64,${btoa(binary)}`;
+    }
+
+    it('create.image resolves dimensions from a data URI when size is omitted', () => {
+      const editor = makeImageEditor();
+      const pngUri = makePngDataUri(200, 150);
+      const result = createImageWrapper(editor, { src: pngUri }, { changeMode: 'direct' });
+      expect(result.success).toBe(true);
+      // The setImage command should have been called with resolved size
+      const setImage = (editor.commands as any).setImage;
+      const attrs = setImage.mock.calls[0]?.[0];
+      expect(attrs.size).toEqual({ width: 200, height: 150 });
+    });
+
+    it('create.image returns INVALID_INPUT when URL src has no size', () => {
+      const editor = makeImageEditor();
+      const result = createImageWrapper(editor, { src: 'https://example.com/image.png' }, { changeMode: 'direct' });
+      expect(result.success).toBe(false);
+      if (!result.success) {
+        expect(result.failure.code).toBe('INVALID_INPUT');
+      }
+    });
+
+    it('create.image returns INVALID_INPUT for data URI with unsupported format', () => {
+      const editor = makeImageEditor();
+      // A data URI that doesn't match any known image format
+      const badUri = `data:application/octet-stream;base64,${btoa('not a real image')}`;
+      const result = createImageWrapper(editor, { src: badUri }, { changeMode: 'direct' });
+      expect(result.success).toBe(false);
+      if (!result.success) {
+        expect(result.failure.code).toBe('INVALID_INPUT');
+      }
+    });
+
+    it('create.image assigns a unique drawing ID (attrs.id)', () => {
+      const editor = makeImageEditor();
+      const result = createImageWrapper(
+        editor,
+        { src: 'https://example.com/img.png', size: { width: 100, height: 100 } },
+        { changeMode: 'direct' },
+      );
+      expect(result.success).toBe(true);
+      const setImage = (editor.commands as any).setImage;
+      const attrs = setImage.mock.calls[0]?.[0];
+      // id should be a non-empty string (numeric string from generateUniqueDocPrId)
+      expect(attrs.id).toBeDefined();
+      expect(typeof attrs.id).toBe('string');
+      expect(attrs.id.length).toBeGreaterThan(0);
+    });
+  });
 });

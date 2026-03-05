@@ -7,6 +7,7 @@ export * from './contract/index.js';
 export * from './capabilities/capabilities.js';
 export * from './inline-semantics/index.js';
 export type { HistoryAdapter, HistoryApi } from './history/history.js';
+export type { ClearContentAdapter, ClearContentInput } from './clear-content/clear-content.js';
 export type { HistoryState, HistoryActionResult } from './history/history.types.js';
 
 import type {
@@ -63,12 +64,19 @@ import type {
   StylesApplyInput,
   StylesApplyOptions,
   StylesApplyReceipt,
-} from './styles/styles.js';
-import { executeStylesApply } from './styles/styles.js';
+} from './styles/index.js';
+import { executeStylesApply } from './styles/index.js';
 import type { GetNodeAdapter, GetNodeByIdInput } from './get-node/get-node.js';
 import { executeGetNode, executeGetNodeById } from './get-node/get-node.js';
 import { executeGetText, type GetTextAdapter, type GetTextInput } from './get-text/get-text.js';
+import { executeGetMarkdown, type GetMarkdownAdapter, type GetMarkdownInput } from './get-markdown/get-markdown.js';
+import { executeGetHtml, type GetHtmlAdapter, type GetHtmlInput } from './get-html/get-html.js';
 import { executeInfo, type InfoAdapter, type InfoInput } from './info/info.js';
+import {
+  executeClearContent,
+  type ClearContentAdapter,
+  type ClearContentInput,
+} from './clear-content/clear-content.js';
 import type { InsertInput } from './insert/insert.js';
 import { executeDelete } from './delete/delete.js';
 import { executeInsert } from './insert/insert.js';
@@ -76,23 +84,74 @@ import type { ListsAdapter, ListsApi } from './lists/lists.js';
 import type {
   ListItemInfo,
   ListInsertInput,
-  ListSetTypeInput,
-  ListsExitResult,
   ListsGetInput,
   ListsInsertResult,
   ListsListQuery,
   ListsListResult,
   ListsMutateItemResult,
   ListTargetInput,
+  ListsCreateInput,
+  ListsCreateResult,
+  ListsAttachInput,
+  ListsDetachInput,
+  ListsDetachResult,
+  ListsJoinInput,
+  ListsJoinResult,
+  ListsCanJoinInput,
+  ListsCanJoinResult,
+  ListsSeparateInput,
+  ListsSeparateResult,
+  ListsSetLevelInput,
+  ListsSetValueInput,
+  ListsContinuePreviousInput,
+  ListsCanContinuePreviousInput,
+  ListsCanContinuePreviousResult,
+  ListsSetLevelRestartInput,
+  ListsConvertToTextInput,
+  ListsConvertToTextResult,
+  ListsApplyTemplateInput,
+  ListsApplyPresetInput,
+  ListsCaptureTemplateInput,
+  ListsCaptureTemplateResult,
+  ListsSetLevelNumberingInput,
+  ListsSetLevelBulletInput,
+  ListsSetLevelPictureBulletInput,
+  ListsSetLevelAlignmentInput,
+  ListsSetLevelIndentsInput,
+  ListsSetLevelTrailingCharacterInput,
+  ListsSetLevelMarkerFontInput,
+  ListsClearLevelOverridesInput,
+  ListsSetTypeInput,
 } from './lists/lists.types.js';
 import {
-  executeListsExit,
   executeListsGet,
   executeListsIndent,
   executeListsInsert,
   executeListsList,
   executeListsOutdent,
-  executeListsRestart,
+  executeListsCreate,
+  executeListsAttach,
+  executeListsDetach,
+  executeListsJoin,
+  executeListsCanJoin,
+  executeListsSeparate,
+  executeListsSetLevel,
+  executeListsSetValue,
+  executeListsContinuePrevious,
+  executeListsCanContinuePrevious,
+  executeListsSetLevelRestart,
+  executeListsConvertToText,
+  executeListsApplyTemplate,
+  executeListsApplyPreset,
+  executeListsCaptureTemplate,
+  executeListsSetLevelNumbering,
+  executeListsSetLevelBullet,
+  executeListsSetLevelPictureBullet,
+  executeListsSetLevelAlignment,
+  executeListsSetLevelIndents,
+  executeListsSetLevelTrailingCharacter,
+  executeListsSetLevelMarkerFont,
+  executeListsClearLevelOverrides,
   executeListsSetType,
 } from './lists/lists.js';
 import { executeReplace, type ReplaceInput } from './replace/replace.js';
@@ -153,6 +212,10 @@ import type {
   TablesGetCellsOutput,
   TablesGetPropertiesInput,
   TablesGetPropertiesOutput,
+  TablesGetStylesInput,
+  TablesGetStylesOutput,
+  TablesSetDefaultStyleInput,
+  TablesClearDefaultStyleInput,
 } from './types/table-operations.types.js';
 import type {
   TrackChangesAdapter,
@@ -272,6 +335,71 @@ import {
   executeSectionsSetTitlePage,
   executeSectionsSetVerticalAlign,
 } from './sections/sections.js';
+import type { ImagesAdapter, ImagesApi, CreateImageAdapter } from './images/images.js';
+import {
+  executeImagesList,
+  executeImagesGet,
+  executeImagesDelete,
+  executeImagesMove,
+  executeImagesConvertToInline,
+  executeImagesConvertToFloating,
+  executeImagesSetSize,
+  executeImagesSetWrapType,
+  executeImagesSetWrapSide,
+  executeImagesSetWrapDistances,
+  executeImagesSetPosition,
+  executeImagesSetAnchorOptions,
+  executeImagesSetZOrder,
+  executeCreateImage,
+  executeImagesScale,
+  executeImagesSetLockAspectRatio,
+  executeImagesRotate,
+  executeImagesFlip,
+  executeImagesCrop,
+  executeImagesResetCrop,
+  executeImagesReplaceSource,
+  executeImagesSetAltText,
+  executeImagesSetDecorative,
+  executeImagesSetName,
+  executeImagesSetHyperlink,
+  executeImagesInsertCaption,
+  executeImagesUpdateCaption,
+  executeImagesRemoveCaption,
+} from './images/images.js';
+import type {
+  CreateImageInput,
+  CreateImageResult,
+  ImagesListInput,
+  ImagesListResult,
+  ImagesGetInput,
+  ImageSummary,
+  ImagesDeleteInput,
+  ImagesMutationResult,
+  MoveImageInput,
+  ConvertToInlineInput,
+  ConvertToFloatingInput,
+  SetSizeInput,
+  SetWrapTypeInput,
+  SetWrapSideInput,
+  SetWrapDistancesInput,
+  SetPositionInput,
+  SetAnchorOptionsInput,
+  SetZOrderInput,
+  ScaleInput,
+  SetLockAspectRatioInput,
+  RotateInput,
+  FlipInput,
+  CropInput,
+  ResetCropInput,
+  ReplaceSourceInput,
+  SetAltTextInput,
+  SetDecorativeInput,
+  SetNameInput,
+  SetHyperlinkInput,
+  InsertCaptionInput,
+  UpdateCaptionInput,
+  RemoveCaptionInput,
+} from './images/images.types.js';
 import type { TocApi, TocAdapter } from './toc/toc.js';
 import {
   executeTocList,
@@ -305,10 +433,32 @@ import type {
   TocEditEntryInput,
   TocEntryMutationResult,
 } from './toc/toc.types.js';
+import type { HyperlinksApi, HyperlinksAdapter } from './hyperlinks/hyperlinks.js';
+import {
+  executeHyperlinksList,
+  executeHyperlinksGet,
+  executeHyperlinksWrap,
+  executeHyperlinksInsert,
+  executeHyperlinksPatch,
+  executeHyperlinksRemove,
+} from './hyperlinks/hyperlinks.js';
+import type {
+  HyperlinksListQuery,
+  HyperlinksListResult,
+  HyperlinksGetInput,
+  HyperlinkInfo,
+  HyperlinksWrapInput,
+  HyperlinksInsertInput,
+  HyperlinksPatchInput,
+  HyperlinksRemoveInput,
+  HyperlinkMutationResult,
+} from './hyperlinks/hyperlinks.types.js';
 
 export type { FindAdapter, FindOptions } from './find/find.js';
 export type { GetNodeAdapter, GetNodeByIdInput } from './get-node/get-node.js';
 export type { GetTextAdapter, GetTextInput } from './get-text/get-text.js';
+export type { GetMarkdownAdapter, GetMarkdownInput } from './get-markdown/get-markdown.js';
+export type { GetHtmlAdapter, GetHtmlInput } from './get-html/get-html.js';
 export type { InfoAdapter, InfoInput } from './info/info.js';
 export type { WriteAdapter, WriteRequest } from './write/write.js';
 export type {
@@ -346,10 +496,19 @@ export {
   validateInlineRunPatch,
   buildInlineRunPatchSchema,
 } from './format/inline-run-patch.js';
-export { PROPERTY_REGISTRY } from './styles/styles.js';
+export {
+  PROPERTY_REGISTRY,
+  EXCLUDED_KEYS,
+  ALLOWED_KEYS_BY_CHANNEL,
+  getPropertyDefinition,
+  toJsonSchema,
+  buildPatchSchema,
+  buildStateSchema,
+} from './styles/index.js';
 export type {
+  ValueSchema,
+  MergeStrategy,
   PropertyDefinition,
-  ObjectSchema,
   StylesAdapter,
   StylesApplyInput,
   StylesApplyRunInput,
@@ -360,16 +519,16 @@ export type {
   StylesNumberState,
   StylesEnumState,
   StylesObjectState,
+  StylesArrayState,
   StylesStateMap,
   StylesChannel,
-  StylesJustification,
   StylesRunPatch,
   StylesParagraphPatch,
   StylesTargetResolution,
   StylesApplyReceiptSuccess,
   StylesApplyReceiptFailure,
   NormalizedStylesApplyOptions,
-} from './styles/styles.js';
+} from './styles/index.js';
 export type { CreateAdapter } from './create/create.js';
 export type {
   TrackChangesAdapter,
@@ -382,6 +541,49 @@ export type {
   ReviewDecideInput,
 } from './track-changes/track-changes.js';
 export type { BlocksAdapter } from './blocks/blocks.js';
+export type { ImagesAdapter, ImagesApi, CreateImageAdapter } from './images/images.js';
+export type {
+  ImageAddress,
+  ImageCreateLocation,
+  ImageSummary,
+  ImageWrapDistances,
+  ImagePositionInput,
+  ImageAnchorOptionsInput,
+  ImageZOrderInput,
+  CreateImageInput,
+  CreateImageResult,
+  ImagesListInput,
+  ImagesListResult,
+  ImagesGetInput,
+  ImagesDeleteInput,
+  ImagesMutationResult,
+  ImagesMutationSuccessResult,
+  ImagesMutationFailureResult,
+  MoveImageInput,
+  ConvertToInlineInput,
+  ConvertToFloatingInput,
+  SetSizeInput,
+  SetWrapTypeInput,
+  SetWrapSideInput,
+  SetWrapDistancesInput,
+  SetPositionInput,
+  SetAnchorOptionsInput,
+  SetZOrderInput,
+  ScaleInput,
+  SetLockAspectRatioInput,
+  RotateInput,
+  FlipInput,
+  CropInput,
+  ResetCropInput,
+  ReplaceSourceInput,
+  SetAltTextInput,
+  SetDecorativeInput,
+  SetNameInput,
+  SetHyperlinkInput,
+  InsertCaptionInput,
+  UpdateCaptionInput,
+  RemoveCaptionInput,
+} from './images/images.types.js';
 export type { TocApi, TocAdapter } from './toc/toc.js';
 export type {
   TocAddress,
@@ -422,6 +624,26 @@ export type {
   TocEntryDomain,
   TocEntryProperties,
 } from './toc/toc.types.js';
+export type { HyperlinksApi, HyperlinksAdapter } from './hyperlinks/hyperlinks.js';
+export type {
+  HyperlinkTarget,
+  HyperlinkDestination,
+  HyperlinkSpec,
+  HyperlinkPatch,
+  HyperlinkReadProperties,
+  HyperlinkDomain,
+  HyperlinkInfo,
+  HyperlinkMutationResult,
+  HyperlinkMutationSuccess,
+  HyperlinkMutationFailure,
+  HyperlinksListResult,
+  HyperlinksListQuery,
+  HyperlinksGetInput,
+  HyperlinksWrapInput,
+  HyperlinksInsertInput,
+  HyperlinksPatchInput,
+  HyperlinksRemoveInput,
+} from './hyperlinks/hyperlinks.types.js';
 export type { ListsAdapter } from './lists/lists.js';
 export type { SectionsAdapter } from './sections/sections.js';
 export type { ParagraphsAdapter, ParagraphFormatApi, ParagraphStylesApi } from './paragraphs/paragraphs.js';
@@ -467,20 +689,71 @@ export {
   LINE_RULES,
 } from './paragraphs/paragraphs.js';
 export type {
+  BlockAddress,
+  BlockRange,
+  CanContinueReason,
+  CanJoinReason,
+  JoinDirection,
   ListInsertInput,
   ListItemAddress,
   ListItemInfo,
   ListKind,
-  ListsExitResult,
+  ListsAttachInput,
+  ListsCanContinuePreviousInput,
+  ListsCanContinuePreviousResult,
+  ListsCanJoinInput,
+  ListsCanJoinResult,
+  ListsConvertToTextInput,
+  ListsConvertToTextResult,
+  ListsContinuePreviousInput,
+  ListsCreateInput,
+  ListsCreateResult,
+  ListsDetachInput,
+  ListsDetachResult,
+  ListsFailureCode,
   ListsGetInput,
   ListsInsertResult,
+  ListsJoinInput,
+  ListsJoinResult,
   ListsListQuery,
   ListsListResult,
   ListsMutateItemResult,
-  ListSetTypeInput,
+  ListsSeparateInput,
+  ListsSeparateResult,
+  ListsSetLevelInput,
+  ListsSetLevelRestartInput,
+  ListsSetValueInput,
   ListTargetInput,
+  MutationScope,
+  LevelAlignment,
+  TrailingCharacter,
+  ListPresetId,
+  ListLevelTemplate,
+  ListTemplate,
+  ListsApplyTemplateInput,
+  ListsApplyPresetInput,
+  ListsCaptureTemplateInput,
+  ListsCaptureTemplateResult,
+  ListsCaptureTemplateSuccessResult,
+  ListsSetLevelNumberingInput,
+  ListsSetLevelBulletInput,
+  ListsSetLevelPictureBulletInput,
+  ListsSetLevelAlignmentInput,
+  ListsSetLevelIndentsInput,
+  ListsSetLevelTrailingCharacterInput,
+  ListsSetLevelMarkerFontInput,
+  ListsClearLevelOverridesInput,
+  ListsSetTypeInput,
 } from './lists/lists.types.js';
-export { LIST_KINDS, LIST_INSERT_POSITIONS } from './lists/lists.types.js';
+export {
+  LIST_KINDS,
+  LIST_INSERT_POSITIONS,
+  JOIN_DIRECTIONS,
+  MUTATION_SCOPES,
+  LEVEL_ALIGNMENTS,
+  TRAILING_CHARACTERS,
+  LIST_PRESET_IDS,
+} from './lists/lists.types.js';
 export type {
   CreateSectionBreakInput,
   CreateSectionBreakResult,
@@ -592,6 +865,9 @@ export interface TablesApi {
   get(input: TablesGetInput): TablesGetOutput;
   getCells(input: TablesGetCellsInput): TablesGetCellsOutput;
   getProperties(input: TablesGetPropertiesInput): TablesGetPropertiesOutput;
+  getStyles(input?: TablesGetStylesInput): TablesGetStylesOutput;
+  setDefaultStyle(input: TablesSetDefaultStyleInput, options?: MutationOptions): DocumentMutationResult;
+  clearDefaultStyle(input?: TablesClearDefaultStyleInput, options?: MutationOptions): DocumentMutationResult;
 }
 
 export type TablesAdapter = TablesApi;
@@ -658,16 +934,28 @@ export interface DocumentApi {
    */
   getText(input: GetTextInput): string;
   /**
+   * Return the full document content as a Markdown string.
+   */
+  getMarkdown(input: GetMarkdownInput): string;
+  /**
+   * Return the full document content as an HTML string.
+   */
+  getHtml(input: GetHtmlInput): string;
+  /**
    * Return document summary info used by `doc.info`.
    */
   info(input: InfoInput): DocumentInfo;
+  /**
+   * Clear all document body content, leaving a single empty paragraph.
+   */
+  clearContent(input: ClearContentInput, options?: RevisionGuardOptions): Receipt;
   /**
    * Comment operations.
    */
   comments: CommentsApi;
   /**
-   * Insert text at a target location.
-   * If target is omitted, adapters resolve a deterministic default insertion point.
+   * Insert content at a target location.
+   * If target is omitted, inserts at the end of the document.
    */
   insert(input: InsertInput, options?: MutationOptions): TextMutationReceipt;
   /**
@@ -715,6 +1003,14 @@ export interface DocumentApi {
    */
   toc: TocApi;
   /**
+   * Image lifecycle and placement operations.
+   */
+  images: ImagesApi;
+  /**
+   * Hyperlink discovery, creation, and metadata management.
+   */
+  hyperlinks: HyperlinksApi;
+  /**
    * Selector-based query with cardinality contracts for mutation targeting.
    */
   query: QueryApi;
@@ -752,7 +1048,10 @@ export interface DocumentApiAdapters {
   find: FindAdapter;
   getNode: GetNodeAdapter;
   getText: GetTextAdapter;
+  getMarkdown: GetMarkdownAdapter;
+  getHtml: GetHtmlAdapter;
   info: InfoAdapter;
+  clearContent: ClearContentAdapter;
   capabilities: CapabilitiesAdapter;
   comments: CommentsAdapter;
   write: WriteAdapter;
@@ -766,6 +1065,8 @@ export interface DocumentApiAdapters {
   paragraphs: ParagraphsAdapter;
   tables: TablesAdapter;
   toc: TocAdapter;
+  images: ImagesAdapter & CreateImageAdapter;
+  hyperlinks: HyperlinksAdapter;
   query: QueryAdapter;
   mutations: MutationsAdapter;
   history: HistoryAdapter;
@@ -816,8 +1117,17 @@ export function createDocumentApi(adapters: DocumentApiAdapters): DocumentApi {
     getText(input: GetTextInput): string {
       return executeGetText(adapters.getText, input);
     },
+    getMarkdown(input: GetMarkdownInput): string {
+      return executeGetMarkdown(adapters.getMarkdown, input);
+    },
+    getHtml(input: GetHtmlInput): string {
+      return executeGetHtml(adapters.getHtml, input);
+    },
     info(input: InfoInput): DocumentInfo {
       return executeInfo(adapters.info, input);
+    },
+    clearContent(input: ClearContentInput, options?: RevisionGuardOptions): Receipt {
+      return executeClearContent(adapters.clearContent, input, options);
     },
     comments: {
       create(input: CommentsCreateInput, options?: RevisionGuardOptions): Receipt {
@@ -955,8 +1265,98 @@ export function createDocumentApi(adapters: DocumentApiAdapters): DocumentApi {
       tableOfContents(input: CreateTableOfContentsInput, options?: MutationOptions): CreateTableOfContentsResult {
         return executeCreateTableOfContents(adapters.create, input, options);
       },
+      image(input: CreateImageInput, options?: MutationOptions): CreateImageResult {
+        return executeCreateImage(adapters.images, input, options);
+      },
     },
     capabilities,
+    images: {
+      list(input?: ImagesListInput): ImagesListResult {
+        return executeImagesList(adapters.images, input ?? {});
+      },
+      get(input: ImagesGetInput): ImageSummary {
+        return executeImagesGet(adapters.images, input);
+      },
+      delete(input: ImagesDeleteInput, options?: MutationOptions): ImagesMutationResult {
+        return executeImagesDelete(adapters.images, input, options);
+      },
+      move(input: MoveImageInput, options?: MutationOptions): ImagesMutationResult {
+        return executeImagesMove(adapters.images, input, options);
+      },
+      convertToInline(input: ConvertToInlineInput, options?: MutationOptions): ImagesMutationResult {
+        return executeImagesConvertToInline(adapters.images, input, options);
+      },
+      convertToFloating(input: ConvertToFloatingInput, options?: MutationOptions): ImagesMutationResult {
+        return executeImagesConvertToFloating(adapters.images, input, options);
+      },
+      setSize(input: SetSizeInput, options?: MutationOptions): ImagesMutationResult {
+        return executeImagesSetSize(adapters.images, input, options);
+      },
+      setWrapType(input: SetWrapTypeInput, options?: MutationOptions): ImagesMutationResult {
+        return executeImagesSetWrapType(adapters.images, input, options);
+      },
+      setWrapSide(input: SetWrapSideInput, options?: MutationOptions): ImagesMutationResult {
+        return executeImagesSetWrapSide(adapters.images, input, options);
+      },
+      setWrapDistances(input: SetWrapDistancesInput, options?: MutationOptions): ImagesMutationResult {
+        return executeImagesSetWrapDistances(adapters.images, input, options);
+      },
+      setPosition(input: SetPositionInput, options?: MutationOptions): ImagesMutationResult {
+        return executeImagesSetPosition(adapters.images, input, options);
+      },
+      setAnchorOptions(input: SetAnchorOptionsInput, options?: MutationOptions): ImagesMutationResult {
+        return executeImagesSetAnchorOptions(adapters.images, input, options);
+      },
+      setZOrder(input: SetZOrderInput, options?: MutationOptions): ImagesMutationResult {
+        return executeImagesSetZOrder(adapters.images, input, options);
+      },
+      // SD-2100: Geometry
+      scale(input: ScaleInput, options?: MutationOptions): ImagesMutationResult {
+        return executeImagesScale(adapters.images, input, options);
+      },
+      setLockAspectRatio(input: SetLockAspectRatioInput, options?: MutationOptions): ImagesMutationResult {
+        return executeImagesSetLockAspectRatio(adapters.images, input, options);
+      },
+      rotate(input: RotateInput, options?: MutationOptions): ImagesMutationResult {
+        return executeImagesRotate(adapters.images, input, options);
+      },
+      flip(input: FlipInput, options?: MutationOptions): ImagesMutationResult {
+        return executeImagesFlip(adapters.images, input, options);
+      },
+      crop(input: CropInput, options?: MutationOptions): ImagesMutationResult {
+        return executeImagesCrop(adapters.images, input, options);
+      },
+      resetCrop(input: ResetCropInput, options?: MutationOptions): ImagesMutationResult {
+        return executeImagesResetCrop(adapters.images, input, options);
+      },
+      // SD-2100: Content
+      replaceSource(input: ReplaceSourceInput, options?: MutationOptions): ImagesMutationResult {
+        return executeImagesReplaceSource(adapters.images, input, options);
+      },
+      // SD-2100: Semantic metadata
+      setAltText(input: SetAltTextInput, options?: MutationOptions): ImagesMutationResult {
+        return executeImagesSetAltText(adapters.images, input, options);
+      },
+      setDecorative(input: SetDecorativeInput, options?: MutationOptions): ImagesMutationResult {
+        return executeImagesSetDecorative(adapters.images, input, options);
+      },
+      setName(input: SetNameInput, options?: MutationOptions): ImagesMutationResult {
+        return executeImagesSetName(adapters.images, input, options);
+      },
+      setHyperlink(input: SetHyperlinkInput, options?: MutationOptions): ImagesMutationResult {
+        return executeImagesSetHyperlink(adapters.images, input, options);
+      },
+      // SD-2100: Caption lifecycle
+      insertCaption(input: InsertCaptionInput, options?: MutationOptions): ImagesMutationResult {
+        return executeImagesInsertCaption(adapters.images, input, options);
+      },
+      updateCaption(input: UpdateCaptionInput, options?: MutationOptions): ImagesMutationResult {
+        return executeImagesUpdateCaption(adapters.images, input, options);
+      },
+      removeCaption(input: RemoveCaptionInput, options?: MutationOptions): ImagesMutationResult {
+        return executeImagesRemoveCaption(adapters.images, input, options);
+      },
+    },
     lists: {
       list(query?: ListsListQuery): ListsListResult {
         return executeListsList(adapters.lists, query);
@@ -967,8 +1367,14 @@ export function createDocumentApi(adapters: DocumentApiAdapters): DocumentApi {
       insert(input: ListInsertInput, options?: MutationOptions): ListsInsertResult {
         return executeListsInsert(adapters.lists, input, options);
       },
-      setType(input: ListSetTypeInput, options?: MutationOptions): ListsMutateItemResult {
-        return executeListsSetType(adapters.lists, input, options);
+      create(input: ListsCreateInput, options?: MutationOptions): ListsCreateResult {
+        return executeListsCreate(adapters.lists, input, options);
+      },
+      attach(input: ListsAttachInput, options?: MutationOptions): ListsMutateItemResult {
+        return executeListsAttach(adapters.lists, input, options);
+      },
+      detach(input: ListsDetachInput, options?: MutationOptions): ListsDetachResult {
+        return executeListsDetach(adapters.lists, input, options);
       },
       indent(input: ListTargetInput, options?: MutationOptions): ListsMutateItemResult {
         return executeListsIndent(adapters.lists, input, options);
@@ -976,11 +1382,74 @@ export function createDocumentApi(adapters: DocumentApiAdapters): DocumentApi {
       outdent(input: ListTargetInput, options?: MutationOptions): ListsMutateItemResult {
         return executeListsOutdent(adapters.lists, input, options);
       },
-      restart(input: ListTargetInput, options?: MutationOptions): ListsMutateItemResult {
-        return executeListsRestart(adapters.lists, input, options);
+      join(input: ListsJoinInput, options?: MutationOptions): ListsJoinResult {
+        return executeListsJoin(adapters.lists, input, options);
       },
-      exit(input: ListTargetInput, options?: MutationOptions): ListsExitResult {
-        return executeListsExit(adapters.lists, input, options);
+      canJoin(input: ListsCanJoinInput): ListsCanJoinResult {
+        return executeListsCanJoin(adapters.lists, input);
+      },
+      separate(input: ListsSeparateInput, options?: MutationOptions): ListsSeparateResult {
+        return executeListsSeparate(adapters.lists, input, options);
+      },
+      setLevel(input: ListsSetLevelInput, options?: MutationOptions): ListsMutateItemResult {
+        return executeListsSetLevel(adapters.lists, input, options);
+      },
+      setValue(input: ListsSetValueInput, options?: MutationOptions): ListsMutateItemResult {
+        return executeListsSetValue(adapters.lists, input, options);
+      },
+      continuePrevious(input: ListsContinuePreviousInput, options?: MutationOptions): ListsMutateItemResult {
+        return executeListsContinuePrevious(adapters.lists, input, options);
+      },
+      canContinuePrevious(input: ListsCanContinuePreviousInput): ListsCanContinuePreviousResult {
+        return executeListsCanContinuePrevious(adapters.lists, input);
+      },
+      setLevelRestart(input: ListsSetLevelRestartInput, options?: MutationOptions): ListsMutateItemResult {
+        return executeListsSetLevelRestart(adapters.lists, input, options);
+      },
+      convertToText(input: ListsConvertToTextInput, options?: MutationOptions): ListsConvertToTextResult {
+        return executeListsConvertToText(adapters.lists, input, options);
+      },
+
+      // SD-1973 formatting operations
+      applyTemplate(input: ListsApplyTemplateInput, options?: MutationOptions): ListsMutateItemResult {
+        return executeListsApplyTemplate(adapters.lists, input, options);
+      },
+      applyPreset(input: ListsApplyPresetInput, options?: MutationOptions): ListsMutateItemResult {
+        return executeListsApplyPreset(adapters.lists, input, options);
+      },
+      captureTemplate(input: ListsCaptureTemplateInput): ListsCaptureTemplateResult {
+        return executeListsCaptureTemplate(adapters.lists, input);
+      },
+      setLevelNumbering(input: ListsSetLevelNumberingInput, options?: MutationOptions): ListsMutateItemResult {
+        return executeListsSetLevelNumbering(adapters.lists, input, options);
+      },
+      setLevelBullet(input: ListsSetLevelBulletInput, options?: MutationOptions): ListsMutateItemResult {
+        return executeListsSetLevelBullet(adapters.lists, input, options);
+      },
+      setLevelPictureBullet(input: ListsSetLevelPictureBulletInput, options?: MutationOptions): ListsMutateItemResult {
+        return executeListsSetLevelPictureBullet(adapters.lists, input, options);
+      },
+      setLevelAlignment(input: ListsSetLevelAlignmentInput, options?: MutationOptions): ListsMutateItemResult {
+        return executeListsSetLevelAlignment(adapters.lists, input, options);
+      },
+      setLevelIndents(input: ListsSetLevelIndentsInput, options?: MutationOptions): ListsMutateItemResult {
+        return executeListsSetLevelIndents(adapters.lists, input, options);
+      },
+      setLevelTrailingCharacter(
+        input: ListsSetLevelTrailingCharacterInput,
+        options?: MutationOptions,
+      ): ListsMutateItemResult {
+        return executeListsSetLevelTrailingCharacter(adapters.lists, input, options);
+      },
+      setLevelMarkerFont(input: ListsSetLevelMarkerFontInput, options?: MutationOptions): ListsMutateItemResult {
+        return executeListsSetLevelMarkerFont(adapters.lists, input, options);
+      },
+      clearLevelOverrides(input: ListsClearLevelOverridesInput, options?: MutationOptions): ListsMutateItemResult {
+        return executeListsClearLevelOverrides(adapters.lists, input, options);
+      },
+
+      setType(input: ListsSetTypeInput, options?: MutationOptions): ListsMutateItemResult {
+        return executeListsSetType(adapters.lists, input, options);
       },
     },
     sections: {
@@ -1318,6 +1787,15 @@ export function createDocumentApi(adapters: DocumentApiAdapters): DocumentApi {
       getProperties(input) {
         return adapters.tables.getProperties(input);
       },
+      getStyles(input?) {
+        return adapters.tables.getStyles(input);
+      },
+      setDefaultStyle(input: TablesSetDefaultStyleInput, options?: MutationOptions) {
+        return adapters.tables.setDefaultStyle(input, options);
+      },
+      clearDefaultStyle(input?: TablesClearDefaultStyleInput, options?: MutationOptions) {
+        return adapters.tables.clearDefaultStyle(input, options);
+      },
     },
     toc: {
       list(query?: TocListQuery): TocListResult {
@@ -1349,6 +1827,26 @@ export function createDocumentApi(adapters: DocumentApiAdapters): DocumentApi {
       },
       editEntry(input: TocEditEntryInput, options?: MutationOptions): TocEntryMutationResult {
         return executeTocEditEntry(adapters.toc, input, options);
+      },
+    },
+    hyperlinks: {
+      list(query?: HyperlinksListQuery): HyperlinksListResult {
+        return executeHyperlinksList(adapters.hyperlinks, query);
+      },
+      get(input: HyperlinksGetInput): HyperlinkInfo {
+        return executeHyperlinksGet(adapters.hyperlinks, input);
+      },
+      wrap(input: HyperlinksWrapInput, options?: MutationOptions): HyperlinkMutationResult {
+        return executeHyperlinksWrap(adapters.hyperlinks, input, options);
+      },
+      insert(input: HyperlinksInsertInput, options?: MutationOptions): HyperlinkMutationResult {
+        return executeHyperlinksInsert(adapters.hyperlinks, input, options);
+      },
+      patch(input: HyperlinksPatchInput, options?: MutationOptions): HyperlinkMutationResult {
+        return executeHyperlinksPatch(adapters.hyperlinks, input, options);
+      },
+      remove(input: HyperlinksRemoveInput, options?: MutationOptions): HyperlinkMutationResult {
+        return executeHyperlinksRemove(adapters.hyperlinks, input, options);
       },
     },
     query: {

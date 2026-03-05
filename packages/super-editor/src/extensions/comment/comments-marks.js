@@ -8,6 +8,8 @@ export const CommentsMark = Mark.create({
 
   excludes: '',
 
+  inclusive: false,
+
   addOptions() {
     return {
       htmlAttributes: { class: 'sd-editor-comment' },

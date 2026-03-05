@@ -9,6 +9,7 @@ import {
 } from '@extensions/track-changes/permission-helpers.js';
 import { isList } from '@core/commands/list-helpers';
 import { isCellSelection } from '@extensions/table/tableHelpers/isCellSelection.js';
+import { hasExpandedSelection } from '@utils/selectionUtils.js';
 import { selectedRect } from 'prosemirror-tables';
 /**
  * Get props by item id
@@ -85,9 +86,7 @@ export async function getEditorContext(editor, event) {
 
   const state = editor.state;
   if (!state) return null;
-
-  const { from, to, empty } = state.selection;
-  const selectedText = !empty ? state.doc.textBetween(from, to) : '';
+  const { from } = state.selection;
 
   let pos = null;
   let node = null;
@@ -105,6 +104,10 @@ export async function getEditorContext(editor, event) {
     pos = from;
     node = state.doc.nodeAt(pos);
   }
+
+  const selection = getContextSelection({ editor, state, pos, event });
+  const hasSelection = hasExpandedSelection(selection);
+  const selectedText = hasSelection ? state.doc.textBetween(selection.from, selection.to) : '';
 
   // Don't read clipboard proactively to avoid permission prompts
   // Clipboard will be read only when user actually clicks "Paste"
@@ -166,10 +169,15 @@ export async function getEditorContext(editor, event) {
   const isTrackedChange =
     activeMarks.includes('trackInsert') || activeMarks.includes('trackDelete') || activeMarks.includes('trackFormat');
 
-  const trackedChanges =
-    event && pos !== null
+  // If there is an expanded selection and the right-click happened inside
+  // that selection, use collectTrackedChanges for the full selection range
+  const shouldUseSelectionTrackedChanges =
+    event && pos !== null ? hasExpandedSelection(selection) && selectionContainsPos(selection, pos) : hasSelection;
+  const trackedChanges = shouldUseSelectionTrackedChanges
+    ? collectTrackedChanges({ state, from: selection.from, to: selection.to })
+    : event && pos !== null
       ? collectTrackedChangesForContext({ state, pos, trackedChangeId })
-      : collectTrackedChanges({ state, from, to });
+      : collectTrackedChanges({ state, from: selection.from, to: selection.to });
 
   const cursorCoords = pos !== null ? editor.coordsAtPos?.(pos) : null;
   const cursorPosition = cursorCoords
@@ -183,9 +191,9 @@ export async function getEditorContext(editor, event) {
 
   return {
     selectedText,
-    hasSelection: !empty,
-    selectionStart: from,
-    selectionEnd: to,
+    hasSelection,
+    selectionStart: selection.from,
+    selectionEnd: selection.to,
     isInTable,
     isInList,
     isInSectionNode,
@@ -208,6 +216,29 @@ export async function getEditorContext(editor, event) {
     editor,
     trackedChanges,
   };
+}
+
+function selectionContainsPos(selection, pos) {
+  return hasExpandedSelection(selection) && Number.isFinite(pos) && pos >= selection.from && pos <= selection.to;
+}
+
+function getContextSelection({ editor, state, pos, event }) {
+  const currentSelection = state.selection;
+  const preservedSelection = editor?.options?.preservedSelection ?? editor?.options?.lastSelection;
+
+  if (hasExpandedSelection(currentSelection)) {
+    return currentSelection;
+  }
+
+  if (!hasExpandedSelection(preservedSelection)) {
+    return currentSelection;
+  }
+
+  if (event) {
+    return selectionContainsPos(preservedSelection, pos) ? preservedSelection : currentSelection;
+  }
+
+  return preservedSelection;
 }
 
 function computeCanUndo(editor, state) {

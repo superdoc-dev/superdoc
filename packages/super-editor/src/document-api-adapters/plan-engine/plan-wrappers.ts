@@ -27,7 +27,14 @@ import type { CompiledTarget } from './executor-registry.types.js';
 import { executeCompiledPlan } from './executor.js';
 import { getRevision } from './revision-tracker.js';
 import { DocumentApiAdapterError } from '../errors.js';
-import { resolveDefaultInsertTarget, resolveTextTarget, type ResolvedTextTarget } from '../helpers/adapter-utils.js';
+import {
+  insertParagraphAtEnd,
+  resolveDefaultInsertTarget,
+  resolveTextTarget,
+  resolveWriteTarget,
+  type ResolvedTextTarget,
+  type ResolvedWrite,
+} from '../helpers/adapter-utils.js';
 import { buildTextMutationResolution, readTextAtResolvedRange } from '../helpers/text-mutation-resolution.js';
 import {
   ensureTrackedCapability,
@@ -36,8 +43,85 @@ import {
   rejectTrackedMode,
 } from '../helpers/mutation-helpers.js';
 import { TrackFormatMarkName } from '../../extensions/track-changes/constants.js';
+import { applyDirectMutationMeta, applyTrackedMutationMeta } from '../helpers/transaction-meta.js';
 import { markdownToPmFragment } from '../../core/helpers/markdown/markdownToPmContent.js';
-import { processContent } from '../../core/helpers/contentProcessor.js';
+
+// ---------------------------------------------------------------------------
+// Helpers
+// ---------------------------------------------------------------------------
+
+/** Check whether the editor has a DOM document available for HTML parsing. */
+function editorHasDom(editor: Editor): boolean {
+  const opts = (editor as any).options;
+  return !!(opts?.document ?? opts?.mockDocument ?? (typeof document !== 'undefined' ? document : null));
+}
+
+function isMismatchedTransactionError(error: unknown): boolean {
+  const message = error instanceof Error ? error.message : String(error);
+  return message.includes('Applying a mismatched transaction');
+}
+
+function insertContentAtWithRetry(
+  editor: Editor,
+  range: { from: number; to: number },
+  content: Record<string, unknown>[] | string,
+): boolean {
+  try {
+    return Boolean(editor.commands.insertContentAt(range, content));
+  } catch (error) {
+    if (!isMismatchedTransactionError(error)) throw error;
+    // Retry once with a fresh command transaction. This covers rare races where
+    // another dispatch lands between transaction creation and dispatch.
+    return Boolean(editor.commands.insertContentAt(range, content));
+  }
+}
+
+function isJsonObject(value: unknown): value is Record<string, unknown> {
+  return typeof value === 'object' && value !== null && !Array.isArray(value);
+}
+
+/**
+ * Ensure every inserted markdown image node has a stable `sdImageId`.
+ *
+ * The markdown converter should already provide this, but we enforce it at the
+ * insert boundary so `images.list/get` remain reliable even if upstream
+ * conversion changes or misses an edge-case image shape.
+ */
+function ensureMarkdownImageIds(nodes: Record<string, unknown>[]): void {
+  const visit = (node: Record<string, unknown>) => {
+    if (node.type === 'image') {
+      const attrs = isJsonObject(node.attrs) ? { ...node.attrs } : {};
+      const hasStableId = typeof attrs.sdImageId === 'string' && attrs.sdImageId.length > 0;
+      if (!hasStableId) {
+        attrs.sdImageId = uuidv4();
+      }
+      node.attrs = attrs;
+    }
+
+    if (!Array.isArray(node.content)) return;
+    for (const child of node.content) {
+      if (isJsonObject(child)) visit(child);
+    }
+  };
+
+  for (const node of nodes) {
+    visit(node);
+  }
+}
+
+/**
+ * Mutate `jsonNodes` in place so that consecutive table nodes within the
+ * array are separated by an empty paragraph. Only handles within-fragment
+ * adjacency — document-context separators (leading/trailing) are handled
+ * by the caller after inspecting the insertion position.
+ */
+function ensureTableSeparators(jsonNodes: Record<string, unknown>[]): void {
+  for (let i = jsonNodes.length - 2; i >= 0; i--) {
+    if (jsonNodes[i].type === 'table' && jsonNodes[i + 1].type === 'table') {
+      jsonNodes.splice(i + 1, 0, { type: 'paragraph' });
+    }
+  }
+}
 
 // ---------------------------------------------------------------------------
 // Locator normalization (same validation as the old adapters)
@@ -144,52 +228,6 @@ function normalizeFormatLocator(input: FormatOperationInput): FormatOperationInp
     range: { start: input.start!, end: input.end! },
   };
   return { target };
-}
-
-// ---------------------------------------------------------------------------
-// Resolution helpers
-// ---------------------------------------------------------------------------
-
-interface ResolvedWrite {
-  requestedTarget?: TextAddress;
-  effectiveTarget: TextAddress;
-  range: ResolvedTextTarget;
-  resolution: TextMutationResolution;
-}
-
-function resolveWriteTarget(editor: Editor, request: WriteRequest): ResolvedWrite | null {
-  const requestedTarget = request.target;
-
-  if (request.kind === 'insert' && !request.target) {
-    const fallback = resolveDefaultInsertTarget(editor);
-    if (!fallback) return null;
-    const text = readTextAtResolvedRange(editor, fallback.range);
-    return {
-      requestedTarget,
-      effectiveTarget: fallback.target,
-      range: fallback.range,
-      resolution: buildTextMutationResolution({
-        requestedTarget,
-        target: fallback.target,
-        range: fallback.range,
-        text,
-      }),
-    };
-  }
-
-  const target = request.target;
-  if (!target) return null;
-
-  const range = resolveTextTarget(editor, target);
-  if (!range) return null;
-
-  const text = readTextAtResolvedRange(editor, range);
-  return {
-    requestedTarget,
-    effectiveTarget: target,
-    range,
-    resolution: buildTextMutationResolution({ requestedTarget, target, range, text }),
-  };
 }
 
 // ---------------------------------------------------------------------------
@@ -312,6 +350,24 @@ export function writeWrapper(editor: Editor, request: WriteRequest, options?: Mu
 
   if (options?.dryRun) {
     return { success: true, resolution: resolved.resolution };
+  }
+
+  // Structural-end: the doc ends with non-text blocks. Create a paragraph
+  // containing the text at the structural document end via a domain command,
+  // since raw `tr.insert(pos, textNode)` cannot place text between blocks.
+  if (resolved.structuralEnd && normalizedRequest.kind === 'insert') {
+    const insertPos = resolved.range.from;
+    const text = normalizedRequest.text ?? '';
+    const receipt = executeDomainCommand(
+      editor,
+      (): boolean => {
+        const meta = mode === 'tracked' ? applyTrackedMutationMeta : applyDirectMutationMeta;
+        insertParagraphAtEnd(editor, insertPos, text, meta);
+        return true;
+      },
+      { expectedRevision: options?.expectedRevision },
+    );
+    return mapPlanReceiptToTextReceipt(receipt, resolved.resolution);
   }
 
   // Build single-step compiled plan with pre-resolved target.
@@ -510,10 +566,11 @@ export function styleApplyWrapper(
  * Insert structured content (markdown or html) at a target position.
  *
  * Routes through `executeDomainCommand` to enforce the revision guard.
- * Conversion (markdown → AST → PM, or html → processContent → PM) happens
+ * Conversion (markdown → AST → PM, or html → insertContentAt) happens
  * inside the handler, so list-definition side effects only occur after the
- * revision check passes. HTML content goes through the canonical
- * `processContent` pipeline, matching the `insertContent` command path.
+ * revision check passes. HTML content is passed directly to
+ * `editor.commands.insertContentAt` to avoid prosemirror-model dual-copy
+ * issues when the Editor is loaded from a bundled dist.
  *
  * Tracked mode is explicitly rejected for structured content in this implementation.
  */
@@ -552,8 +609,17 @@ export function insertStructuredWrapper(
     if (!fallback) {
       throw new DocumentApiAdapterError('TARGET_NOT_FOUND', 'No default insertion point available.');
     }
-    resolvedRange = fallback.range;
-    effectiveTarget = fallback.target;
+    if (fallback.kind === 'structural-end') {
+      // Doc ends with non-text blocks — insert structured content at the
+      // structural document end. Structured content (markdown/html) produces
+      // block-level nodes that ProseMirror can place between blocks.
+      const pos = fallback.insertPos;
+      resolvedRange = { from: pos, to: pos };
+      effectiveTarget = { kind: 'text', blockId: '', range: { start: 0, end: 0 } };
+    } else {
+      resolvedRange = fallback.range;
+      effectiveTarget = fallback.target;
+    }
   }
 
   const resolution = buildTextMutationResolution({
@@ -587,45 +653,25 @@ export function insertStructuredWrapper(
         };
       }
     } else if (contentType === 'html') {
-      // NOTE: processContent has no dryRun flag — this runs the full HTML
-      // pipeline (DOM creation, wrapTextsInRuns) minus the final insertContentAt.
-      // Snapshot numbering state so we can roll back after the dry-run, since
-      // HTML list parsing allocates IDs/definitions on editor.converter.
-      const converter = (editor as any).converter;
-      const numberingSnapshot = converter?.numbering ? JSON.parse(JSON.stringify(converter.numbering)) : undefined;
-      const translatedNumberingSnapshot = converter?.translatedNumbering
-        ? JSON.parse(JSON.stringify(converter.translatedNumbering))
-        : undefined;
-      try {
-        const processedDoc = processContent({ content: value, type: 'html', editor });
-        if (!processedDoc || typeof (processedDoc as { toJSON?: unknown }).toJSON !== 'function') {
-          return {
-            success: false,
-            resolution,
-            failure: {
-              code: 'INVALID_TARGET',
-              message: 'HTML processing did not produce a valid document node.',
-            },
-          };
-        }
-      } catch (err) {
-        const message = err instanceof Error ? err.message : String(err);
+      // Dry-run for HTML: validate that a DOM is available and input is non-empty.
+      // Full PM parsing validation happens at insert time via the Editor's
+      // bundled command infrastructure (see the non-dry-run path below).
+      if (!value || typeof value !== 'string' || value.trim().length === 0) {
+        return {
+          success: false,
+          resolution,
+          failure: { code: 'NO_OP', message: 'HTML content is empty.' },
+        };
+      }
+      if (!editorHasDom(editor)) {
         return {
           success: false,
           resolution,
           failure: {
             code: 'UNSUPPORTED_ENVIRONMENT',
-            message: `HTML structured insert requires a DOM environment. ${message}`,
+            message: 'HTML insert requires a DOM environment. Provide { document } in editor options.',
           },
         };
-      } finally {
-        // Roll back numbering mutations from the dry-run HTML pipeline.
-        if (converter && numberingSnapshot !== undefined) {
-          converter.numbering = numberingSnapshot;
-        }
-        if (converter && translatedNumberingSnapshot !== undefined) {
-          converter.translatedNumbering = translatedNumberingSnapshot;
-        }
       }
     }
     return { success: true, resolution };
@@ -661,8 +707,36 @@ export function insertStructuredWrapper(
         // because createNodeFromContent treats it as a single JSON object.
         const jsonNodes: Record<string, unknown>[] = [];
         fragment.forEach((node) => jsonNodes.push(node.toJSON()));
+        ensureMarkdownImageIds(jsonNodes);
 
-        const ok = Boolean(editor.commands.insertContentAt({ from, to }, jsonNodes));
+        // Word always separates adjacent tables with a paragraph. Without a
+        // trailing separator, consecutive markdown inserts produce adjacent
+        // <w:tbl> elements that Word merges into one visual table.
+        ensureTableSeparators(jsonNodes);
+
+        // insertContentAt replaces empty textblocks when inserting block
+        // content. Check whether the replaced paragraph's neighbors are tables
+        // and add separators to prevent adjacency in the result.
+        if (from === to) {
+          const $pos = editor.state.doc.resolve(from);
+          const parent = $pos.parent;
+          if (parent.isTextblock && !parent.childCount) {
+            const grandparent = $pos.node($pos.depth - 1);
+            const idx = $pos.index($pos.depth - 1);
+            const prevIsTable = idx > 0 && grandparent.child(idx - 1).type.name === 'table';
+            const nextIsTable = idx + 1 < grandparent.childCount && grandparent.child(idx + 1).type.name === 'table';
+            const atEnd = idx + 1 >= grandparent.childCount;
+
+            if (jsonNodes[0]?.type === 'table' && prevIsTable) {
+              jsonNodes.unshift({ type: 'paragraph' });
+            }
+            if (jsonNodes[jsonNodes.length - 1]?.type === 'table' && (nextIsTable || atEnd)) {
+              jsonNodes.push({ type: 'paragraph' });
+            }
+          }
+        }
+
+        const ok = insertContentAtWithRetry(editor, { from, to }, jsonNodes);
         if (!ok) {
           insertFailure = {
             code: 'INVALID_TARGET',
@@ -671,21 +745,21 @@ export function insertStructuredWrapper(
         }
         return ok;
       } else if (contentType === 'html') {
-        // Route through processContent for the canonical HTML pipeline
-        // (createDocFromHTML + wrapTextsInRuns), matching insertContent command behavior.
-        // processContent requires a DOM; in headless environments this will throw.
+        // Pass HTML string directly to insertContentAt. This avoids a
+        // prosemirror-model dual-copy issue: calling processContent from this
+        // source file imports DOMParser from node_modules, but the Editor's
+        // schema uses the bundled copy from the superdoc dist. Routing through
+        // the Editor's command infrastructure uses the same bundled copy for
+        // both DOMParser and the schema — avoiding the mismatch.
+        if (!editorHasDom(editor)) {
+          insertFailure = {
+            code: 'UNSUPPORTED_ENVIRONMENT',
+            message: 'HTML insert requires a DOM environment. Provide { document } in editor options.',
+          };
+          return false;
+        }
         try {
-          const processedDoc = processContent({ content: value, type: 'html', editor });
-          if (!processedDoc || typeof (processedDoc as { toJSON?: unknown }).toJSON !== 'function') {
-            insertFailure = {
-              code: 'INVALID_TARGET',
-              message: 'HTML processing did not produce a valid document node.',
-            };
-            return false;
-          }
-          const jsonContent = (processedDoc as { toJSON(): Record<string, unknown> }).toJSON();
-
-          const ok = Boolean(editor.commands.insertContentAt({ from, to }, jsonContent));
+          const ok = insertContentAtWithRetry(editor, { from, to }, value);
           if (!ok) {
             insertFailure = {
               code: 'INVALID_TARGET',

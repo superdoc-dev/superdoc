@@ -14,3 +14,4 @@ Real-time collaboration examples using Yjs. Each example maps to a guide in the 
 | ---------------------------------- | ------------------------------------------------------------------ |
 | [SuperDoc Yjs](./superdoc-yjs)     | [Guide](https://docs.superdoc.dev/guides/superdoc-yjs)             |
 | [Hocuspocus](./hocuspocus)         | [Guide](https://docs.superdoc.dev/guides/hocuspocus)               |
+| [Node SDK](./node-sdk)             | [SDKs](https://docs.superdoc.dev/document-engine/sdks)             |

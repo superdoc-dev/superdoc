@@ -322,7 +322,7 @@ describe('insertContent (integration) list export', () => {
     });
   });
 
-  it('normalizes imported HTML table header borders for render and export parity', async () => {
+  it('does not inject inline cell borders on imported HTML table headers', async () => {
     const editor = await setupEditor();
     editor.commands.insertContent(
       '<table><thead><tr><th>Search Query</th><th>Findings / Assessment</th></tr></thead><tbody><tr><td>A</td><td>B</td></tr></tbody></table>',
@@ -334,11 +334,8 @@ describe('insertContent (integration) list export', () => {
     expect(tableNode).toBeTruthy();
     const headerCell = tableNode?.content?.[0]?.content?.[0];
     expect(headerCell?.type).toBe('tableHeader');
-    const borders = headerCell?.attrs?.borders;
-    expect(borders?.top).toBeDefined();
-    expect(borders?.right).toBeDefined();
-    expect(borders?.bottom).toBeDefined();
-    expect(borders?.left).toBeDefined();
+    // Headers should NOT have inline borders — style cascade owns them
+    expect(headerCell?.attrs?.borders).toBeNull();
 
     const result = await exportFromEditorContent(editor);
     const body = result.elements?.find((el) => el.name === 'w:body');
@@ -347,11 +344,9 @@ describe('insertContent (integration) list export', () => {
     const firstCell = firstRow?.elements?.find((el) => el.name === 'w:tc');
     const firstCellProperties = firstCell?.elements?.find((el) => el.name === 'w:tcPr');
     const firstCellBorders = firstCellProperties?.elements?.find((el) => el.name === 'w:tcBorders');
-    const topBorder = firstCellBorders?.elements?.find((el) => el.name === 'w:top');
 
-    expect(firstCellBorders).toBeDefined();
-    expect(topBorder?.attributes?.['w:val']).toBe('single');
-    expect(Number(topBorder?.attributes?.['w:sz'])).toBeGreaterThan(0);
+    // No inline cell borders should be emitted — table-level fallback borders handle this
+    expect(firstCellBorders).toBeUndefined();
   });
 });
 

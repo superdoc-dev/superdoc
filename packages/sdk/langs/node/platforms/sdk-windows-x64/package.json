@@ -1,6 +1,6 @@
 {
   "name": "@superdoc-dev/sdk-windows-x64",
-  "version": "1.0.0-alpha.6",
+  "version": "1.0.0-alpha.19",
   "os": [
     "win32"
   ],

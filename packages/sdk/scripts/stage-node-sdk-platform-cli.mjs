@@ -3,8 +3,8 @@
 /**
  * Stage CLI binaries into Node SDK platform packages.
  *
- * Copies built CLI binaries from apps/cli/platforms/cli-*/bin/
- * into packages/sdk/langs/node/platforms/sdk-*/bin/
+ * Copies built CLI binaries from apps/cli/platforms/cli-{platform}/bin/
+ * into packages/sdk/langs/node/platforms/sdk-{platform}/bin/
  * with integrity validation (size + SHA256 checksum).
  */
 

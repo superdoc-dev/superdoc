@@ -8,7 +8,7 @@ export type InsertContentType = 'text' | 'markdown' | 'html';
 
 /** Input payload for the `doc.insert` operation. */
 export interface InsertInput {
-  /** Optional insertion target. When omitted, adapters resolve a default insertion point. */
+  /** Optional insertion target. When omitted, inserts at the end of the document. */
   target?: TextAddress;
   /** The content to insert. Interpreted according to {@link InsertInput.type}. */
   value: string;

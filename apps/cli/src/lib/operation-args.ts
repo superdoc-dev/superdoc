@@ -104,6 +104,13 @@ export function validateValueAgainstTypeSpec(value: unknown, schema: CliTypeSpec
 
   if (schema.type === 'json') return;
 
+  if (schema.enum) {
+    if (!schema.enum.includes(value)) {
+      throw new CliError('VALIDATION_ERROR', `${path} must be one of: ${schema.enum.join(', ')}.`);
+    }
+    return;
+  }
+
   if (schema.type === 'string') {
     if (typeof value !== 'string') throw new CliError('VALIDATION_ERROR', `${path} must be a string.`);
     return;

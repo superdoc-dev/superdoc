@@ -16,6 +16,7 @@ import type {
   SectionBreakType,
 } from '../sections/sections.types.js';
 import type { CreateTableOfContentsInput, CreateTableOfContentsResult, TocCreateLocation } from '../toc/toc.types.js';
+import type { CreateImageInput, CreateImageResult } from '../images/images.types.js';
 import { DocumentApiValidationError } from '../errors.js';
 
 export interface CreateApi {
@@ -24,6 +25,7 @@ export interface CreateApi {
   table(input: CreateTableInput, options?: MutationOptions): CreateTableResult;
   sectionBreak(input: CreateSectionBreakInput, options?: MutationOptions): CreateSectionBreakResult;
   tableOfContents(input: CreateTableOfContentsInput, options?: MutationOptions): CreateTableOfContentsResult;
+  image(input: CreateImageInput, options?: MutationOptions): CreateImageResult;
 }
 
 export type CreateAdapter = CreateApi;

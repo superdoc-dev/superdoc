@@ -26,13 +26,21 @@ Returns a SectionMutationResult receipt; reports NO_OP if page size and orientat
 
 ## Input fields
 
-| Field | Type | Required | Description |
-| --- | --- | --- | --- |
-| `height` | number | no |  |
-| `orientation` | enum | no | `"portrait"`, `"landscape"` |
-| `paperSize` | string | no |  |
-| `target` | SectionAddress | yes | SectionAddress |
-| `width` | number | no |  |
+### Variant 1
+
+_No fields._
+
+### Variant 2
+
+_No fields._
+
+### Variant 3
+
+_No fields._
+
+### Variant 4
+
+_No fields._
 
 ### Example request
 
@@ -50,7 +58,24 @@ Returns a SectionMutationResult receipt; reports NO_OP if page size and orientat
 
 ## Output fields
 
-_No fields._
+### Variant 1 (section.kind="section")
+
+| Field | Type | Required | Description |
+| --- | --- | --- | --- |
+| `section` | SectionAddress | yes | SectionAddress |
+| `section.kind` | `"section"` | yes | Constant: `"section"` |
+| `section.sectionId` | string | yes |  |
+| `success` | `true` | yes | Constant: `true` |
+
+### Variant 2 (success=false)
+
+| Field | Type | Required | Description |
+| --- | --- | --- | --- |
+| `failure` | object | yes |  |
+| `failure.code` | enum | yes | `"NO_OP"`, `"INVALID_TARGET"`, `"CAPABILITY_UNAVAILABLE"` |
+| `failure.details` | any | no |  |
+| `failure.message` | string | yes |  |
+| `success` | `false` | yes | Constant: `false` |
 
 ### Example response
 

@@ -146,7 +146,6 @@ const encode = (params, encodedAttrs) => {
     }
   }
 
-  const tableLook = encodedAttrs.tableProperties.tblLook;
   // Table borders can be specified in tblPr or inside a referenced style tag
   const borderProps = _processTableBorders(encodedAttrs.tableProperties.borders || {});
   const referencedStyles = _getReferencedTableStyles(encodedAttrs.tableStyleId, params) || {};
@@ -211,8 +210,6 @@ const encode = (params, encodedAttrs) => {
         row,
         table: node,
         tableProperties: encodedAttrs.tableProperties,
-        tableBorders: encodedAttrs.borders,
-        tableLook,
         columnWidths,
         activeRowSpans: activeRowSpans.slice(),
         rowIndex,

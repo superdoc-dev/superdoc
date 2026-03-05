@@ -53,8 +53,11 @@ const INTENT_NAMES = {
   'doc.getNode': 'get_node',
   'doc.getNodeById': 'get_node_by_id',
   'doc.getText': 'get_document_text',
+  'doc.getMarkdown': 'get_document_markdown',
+  'doc.getHtml': 'get_document_html',
   'doc.info': 'get_document_info',
   'doc.capabilities.get': 'get_capabilities',
+  'doc.clearContent': 'clear_content',
   'doc.insert': 'insert_content',
   'doc.replace': 'replace_content',
   'doc.delete': 'delete_content',
@@ -111,11 +114,32 @@ const INTENT_NAMES = {
   'doc.lists.list': 'list_lists',
   'doc.lists.get': 'get_list',
   'doc.lists.insert': 'insert_list',
-  'doc.lists.setType': 'set_list_type',
   'doc.lists.indent': 'indent_list',
   'doc.lists.outdent': 'outdent_list',
-  'doc.lists.restart': 'restart_list_numbering',
-  'doc.lists.exit': 'exit_list',
+  'doc.lists.create': 'create_list',
+  'doc.lists.attach': 'attach_to_list',
+  'doc.lists.detach': 'detach_from_list',
+  'doc.lists.join': 'join_lists',
+  'doc.lists.canJoin': 'can_join_lists',
+  'doc.lists.separate': 'separate_list',
+  'doc.lists.setLevel': 'set_list_level',
+  'doc.lists.setValue': 'set_list_value',
+  'doc.lists.continuePrevious': 'continue_previous_list',
+  'doc.lists.canContinuePrevious': 'can_continue_previous_list',
+  'doc.lists.setLevelRestart': 'set_list_level_restart',
+  'doc.lists.convertToText': 'convert_list_to_text',
+  'doc.lists.applyTemplate': 'apply_list_template',
+  'doc.lists.applyPreset': 'apply_list_preset',
+  'doc.lists.setType': 'set_list_type',
+  'doc.lists.captureTemplate': 'capture_list_template',
+  'doc.lists.setLevelNumbering': 'set_list_level_numbering',
+  'doc.lists.setLevelBullet': 'set_list_level_bullet',
+  'doc.lists.setLevelPictureBullet': 'set_list_level_picture_bullet',
+  'doc.lists.setLevelAlignment': 'set_list_level_alignment',
+  'doc.lists.setLevelIndents': 'set_list_level_indents',
+  'doc.lists.setLevelTrailingCharacter': 'set_list_level_trailing_character',
+  'doc.lists.setLevelMarkerFont': 'set_list_level_marker_font',
+  'doc.lists.clearLevelOverrides': 'clear_list_level_overrides',
   'doc.comments.create': 'create_comment',
   'doc.comments.patch': 'patch_comment',
   'doc.comments.delete': 'delete_comment',
@@ -134,6 +158,12 @@ const INTENT_NAMES = {
   'doc.toc.listEntries': 'list_table_of_contents_entries',
   'doc.toc.getEntry': 'get_table_of_contents_entry',
   'doc.toc.editEntry': 'edit_table_of_contents_entry',
+  'doc.hyperlinks.list': 'list_hyperlinks',
+  'doc.hyperlinks.get': 'get_hyperlink',
+  'doc.hyperlinks.wrap': 'wrap_hyperlink',
+  'doc.hyperlinks.insert': 'insert_hyperlink',
+  'doc.hyperlinks.patch': 'patch_hyperlink',
+  'doc.hyperlinks.remove': 'remove_hyperlink',
   'doc.query.match': 'query_match',
   'doc.mutations.preview': 'preview_mutations',
   'doc.mutations.apply': 'apply_mutations',
@@ -177,9 +207,40 @@ const INTENT_NAMES = {
   'doc.tables.get': 'get_table',
   'doc.tables.getCells': 'get_table_cells',
   'doc.tables.getProperties': 'get_table_properties',
+  'doc.tables.getStyles': 'get_table_styles',
+  'doc.tables.setDefaultStyle': 'set_table_default_style',
+  'doc.tables.clearDefaultStyle': 'clear_table_default_style',
   'doc.history.get': 'get_history',
   'doc.history.undo': 'undo',
   'doc.history.redo': 'redo',
+  'doc.create.image': 'create_image',
+  'doc.images.list': 'list_images',
+  'doc.images.get': 'get_image',
+  'doc.images.delete': 'delete_image',
+  'doc.images.move': 'move_image',
+  'doc.images.convertToInline': 'convert_image_to_inline',
+  'doc.images.convertToFloating': 'convert_image_to_floating',
+  'doc.images.setSize': 'set_image_size',
+  'doc.images.setWrapType': 'set_image_wrap_type',
+  'doc.images.setWrapSide': 'set_image_wrap_side',
+  'doc.images.setWrapDistances': 'set_image_wrap_distances',
+  'doc.images.setPosition': 'set_image_position',
+  'doc.images.setAnchorOptions': 'set_image_anchor_options',
+  'doc.images.setZOrder': 'set_image_z_order',
+  'doc.images.scale': 'scale_image',
+  'doc.images.setLockAspectRatio': 'set_image_lock_aspect_ratio',
+  'doc.images.rotate': 'rotate_image',
+  'doc.images.flip': 'flip_image',
+  'doc.images.crop': 'crop_image',
+  'doc.images.resetCrop': 'reset_image_crop',
+  'doc.images.replaceSource': 'replace_image_source',
+  'doc.images.setAltText': 'set_image_alt_text',
+  'doc.images.setDecorative': 'set_image_decorative',
+  'doc.images.setName': 'set_image_name',
+  'doc.images.setHyperlink': 'set_image_hyperlink',
+  'doc.images.insertCaption': 'insert_image_caption',
+  'doc.images.updateCaption': 'update_image_caption',
+  'doc.images.removeCaption': 'remove_image_caption',
 } as const satisfies Record<DocBackedCliOpId, string>;
 
 // ---------------------------------------------------------------------------
@@ -268,6 +329,8 @@ function buildSdkContract() {
       entry.outputSchema = docOp.outputSchema;
       if (docOp.successSchema) entry.successSchema = docOp.successSchema;
       if (docOp.failureSchema) entry.failureSchema = docOp.failureSchema;
+      if (docOp.skipAsATool) entry.skipAsATool = true;
+      if (docOp.essential) entry.essential = true;
     } else {
       // CLI-only operation — metadata from canonical definitions
       const def = cliOnlyDef!;
@@ -276,6 +339,7 @@ function buildSdkContract() {
       entry.supportsTrackedMode = def.sdkMetadata.supportsTrackedMode;
       entry.supportsDryRun = def.sdkMetadata.supportsDryRun;
       entry.outputSchema = def.outputSchema;
+      if (def.skipAsATool) entry.skipAsATool = true;
     }
 
     // Invariant: every operation must have outputSchema

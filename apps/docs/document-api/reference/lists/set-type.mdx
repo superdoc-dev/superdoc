@@ -1,7 +1,7 @@
 ---
 title: lists.setType
 sidebarTitle: lists.setType
-description: Change the list type (ordered, unordered) of a target list.
+description: Convert a list to ordered or bullet and merge adjacent compatible sequences to preserve continuous numbering.
 ---
 
 {/* GENERATED FILE: DO NOT EDIT. Regenerate via `pnpm run docapi:sync`. */}
@@ -10,7 +10,7 @@ description: Change the list type (ordered, unordered) of a target list.
 
 ## Summary
 
-Change the list type (ordered, unordered) of a target list.
+Convert a list to ordered or bullet and merge adjacent compatible sequences to preserve continuous numbering.
 
 - Operation ID: `lists.setType`
 - API member path: `editor.doc.lists.setType(...)`
@@ -22,19 +22,24 @@ Change the list type (ordered, unordered) of a target list.
 
 ## Expected result
 
-Returns a ListsMutateItemResult receipt; reports NO_OP if the list already has the requested type.
+Returns a ListsMutateItemResult receipt; reports NO_OP if the list is already the requested kind and no sequences were merged.
 
 ## Input fields
 
 | Field | Type | Required | Description |
 | --- | --- | --- | --- |
+| `continuity` | enum | no | `"preserve"`, `"none"` |
 | `kind` | enum | yes | `"ordered"`, `"bullet"` |
 | `target` | ListItemAddress | yes | ListItemAddress |
+| `target.kind` | `"block"` | yes | Constant: `"block"` |
+| `target.nodeId` | string | yes |  |
+| `target.nodeType` | `"listItem"` | yes | Constant: `"listItem"` |
 
 ### Example request
 
 ```json
 {
+  "continuity": "preserve",
   "kind": "ordered",
   "target": {
     "kind": "block",
@@ -46,7 +51,25 @@ Returns a ListsMutateItemResult receipt; reports NO_OP if the list already has t
 
 ## Output fields
 
-_No fields._
+### Variant 1 (item.kind="block")
+
+| Field | Type | Required | Description |
+| --- | --- | --- | --- |
+| `item` | ListItemAddress | yes | ListItemAddress |
+| `item.kind` | `"block"` | yes | Constant: `"block"` |
+| `item.nodeId` | string | yes |  |
+| `item.nodeType` | `"listItem"` | yes | Constant: `"listItem"` |
+| `success` | `true` | yes | Constant: `true` |
+
+### Variant 2 (success=false)
+
+| Field | Type | Required | Description |
+| --- | --- | --- | --- |
+| `failure` | object | yes |  |
+| `failure.code` | enum | yes | `"NO_OP"`, `"INVALID_TARGET"`, `"INVALID_INPUT"` |
+| `failure.details` | any | no |  |
+| `failure.message` | string | yes |  |
+| `success` | `false` | yes | Constant: `false` |
 
 ### Example response
 
@@ -66,11 +89,13 @@ _No fields._
 - `TARGET_NOT_FOUND`
 - `CAPABILITY_UNAVAILABLE`
 - `INVALID_TARGET`
+- `INVALID_INPUT`
 
 ## Non-applied failure codes
 
 - `NO_OP`
 - `INVALID_TARGET`
+- `INVALID_INPUT`
 
 ## Raw schemas
 
@@ -79,6 +104,12 @@ _No fields._
 {
   "additionalProperties": false,
   "properties": {
+    "continuity": {
+      "enum": [
+        "preserve",
+        "none"
+      ]
+    },
     "kind": {
       "enum": [
         "ordered",
@@ -127,7 +158,8 @@ _No fields._
             "code": {
               "enum": [
                 "NO_OP",
-                "INVALID_TARGET"
+                "INVALID_TARGET",
+                "INVALID_INPUT"
               ]
             },
             "details": {},
@@ -188,7 +220,8 @@ _No fields._
         "code": {
           "enum": [
             "NO_OP",
-            "INVALID_TARGET"
+            "INVALID_TARGET",
+            "INVALID_INPUT"
           ]
         },
         "details": {},

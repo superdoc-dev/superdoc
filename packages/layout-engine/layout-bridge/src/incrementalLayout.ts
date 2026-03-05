@@ -16,6 +16,7 @@ import {
   computeDisplayPageNumber,
   resolvePageNumberTokens,
   type NumberingContext,
+  SEMANTIC_PAGE_HEIGHT_PX,
 } from '@superdoc/layout-engine';
 import { remeasureParagraph } from './remeasure';
 import { computeDirtyRegions } from './diff';
@@ -740,6 +741,15 @@ export async function incrementalLayout(
   },
   previousMeasures?: Measure[] | null,
 ): Promise<IncrementalLayoutResult> {
+  const isSemanticFlow = options.flowMode === 'semantic';
+
+  // In semantic mode, neutralize paginated-only inputs so downstream code
+  // doesn't need per-step guards.
+  if (isSemanticFlow) {
+    headerFooter = undefined;
+    nextBlocks = rewriteSectionBreaksForSemanticFlow(nextBlocks, options);
+  }
+
   // Dirty region computation
   const dirtyStart = performance.now();
   const dirty = computeDirtyRegions(previousBlocks, nextBlocks);
@@ -765,7 +775,15 @@ export async function incrementalLayout(
   }
 
   const hasPreviousMeasures = Array.isArray(previousMeasures) && previousMeasures.length === previousBlocks.length;
-  const previousConstraints = hasPreviousMeasures ? resolveMeasurementConstraints(options, previousBlocks) : null;
+  // In semantic mode, the options-level semantic.contentWidth can change between
+  // renders (container resize) while the block content stays the same. Since
+  // previousConstraints is re-derived from the current options (not the options
+  // that produced the previous measures), it would incorrectly match the current
+  // constraints even when the previous measures were taken at a different width.
+  // Disable previous-pass measure reuse in semantic mode; the width-keyed
+  // measureCache still provides fast lookups for unchanged blocks.
+  const previousConstraints =
+    hasPreviousMeasures && !isSemanticFlow ? resolveMeasurementConstraints(options, previousBlocks) : null;
   const canReusePreviousMeasures =
     hasPreviousMeasures &&
     previousConstraints?.measurementWidth === measurementWidth &&
@@ -1098,7 +1116,7 @@ export async function incrementalLayout(
   let converged = true;
 
   // Only run token resolution if feature flag is enabled
-  if (FeatureFlags.BODY_PAGE_TOKENS) {
+  if (!isSemanticFlow && FeatureFlags.BODY_PAGE_TOKENS) {
     while (iteration < maxIterations) {
       // Build numbering context from current layout
       const sections = options.sectionMetadata ?? [];
@@ -1212,7 +1230,7 @@ export async function incrementalLayout(
   let extraBlocks: FlowBlock[] | undefined;
   let extraMeasures: Measure[] | undefined;
   const footnotesInput = isFootnotesLayoutInput(options.footnotes) ? options.footnotes : null;
-  if (footnotesInput && footnotesInput.refs.length > 0 && footnotesInput.blocksById.size > 0) {
+  if (!isSemanticFlow && footnotesInput && footnotesInput.refs.length > 0 && footnotesInput.blocksById.size > 0) {
     const gap = typeof footnotesInput.gap === 'number' && Number.isFinite(footnotesInput.gap) ? footnotesInput.gap : 2;
     const topPadding =
       typeof footnotesInput.topPadding === 'number' && Number.isFinite(footnotesInput.topPadding)
@@ -1922,6 +1940,40 @@ export const normalizeMargin = (value: number | undefined, fallback: number): nu
   Number.isFinite(value) ? (value as number) : fallback;
 
 /**
+ * Rewrites section break blocks so that `layoutDocument` uses the semantic page
+ * dimensions instead of the per-section DOCX page sizes. Without this, each
+ * section break carries its original narrow DOCX `pageSize` / `margins` /
+ * `columns`, and `layoutDocument` would switch `activePageSize` to those values
+ * — defeating the semantic flow's container-width–based layout.
+ *
+ * Only the block-level layout properties are overridden; everything else
+ * (numbering, header/footer refs, vAlign, orientation) is preserved.
+ */
+function rewriteSectionBreaksForSemanticFlow(blocks: FlowBlock[], options: LayoutOptions): FlowBlock[] {
+  const semanticPageSize = options.pageSize;
+  const semanticMargins = options.margins;
+  if (!semanticPageSize) return blocks;
+  if (!blocks.some((b) => b.kind === 'sectionBreak')) return blocks;
+
+  return blocks.map((block) => {
+    if (block.kind !== 'sectionBreak') return block;
+    const sb = block as SectionBreakBlock;
+    return {
+      ...sb,
+      pageSize: { w: semanticPageSize.w, h: semanticPageSize.h },
+      margins: {
+        ...sb.margins,
+        top: semanticMargins?.top,
+        right: semanticMargins?.right,
+        bottom: semanticMargins?.bottom,
+        left: semanticMargins?.left,
+      },
+      columns: { count: 1, gap: 0 },
+    };
+  });
+}
+
+/**
  * Computes measurement constraints for each block based on its section's properties.
  *
  * In mixed-orientation documents (e.g., portrait + landscape sections), each section has a
@@ -2050,6 +2102,26 @@ export function resolveMeasurementConstraints(
   measurementWidth: number;
   measurementHeight: number;
 } {
+  if (options.flowMode === 'semantic') {
+    const semanticContentWidth = options.semantic?.contentWidth;
+    if (typeof semanticContentWidth === 'number' && Number.isFinite(semanticContentWidth) && semanticContentWidth > 0) {
+      const semanticTop = normalizeMargin(
+        options.semantic?.marginTop,
+        normalizeMargin(options.margins?.top, DEFAULT_MARGINS.top),
+      );
+      const semanticBottom = normalizeMargin(
+        options.semantic?.marginBottom,
+        normalizeMargin(options.margins?.bottom, DEFAULT_MARGINS.bottom),
+      );
+      const measurementHeight = Math.max(1, SEMANTIC_PAGE_HEIGHT_PX - (semanticTop + semanticBottom));
+      const measurementWidth = Math.max(1, Math.floor(semanticContentWidth));
+      return {
+        measurementWidth,
+        measurementHeight,
+      };
+    }
+  }
+
   const pageSize = options.pageSize ?? DEFAULT_PAGE_SIZE;
   const margins = {
     top: normalizeMargin(options.margins?.top, DEFAULT_MARGINS.top),

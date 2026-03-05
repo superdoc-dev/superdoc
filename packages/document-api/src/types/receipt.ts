@@ -24,7 +24,17 @@ export type ReceiptFailureCode =
   | 'DOCUMENT_IDENTITY_CONFLICT'
   | 'UNSUPPORTED_ENVIRONMENT'
   | 'INTERNAL_ERROR'
-  | 'PAGE_NUMBERS_NOT_MATERIALIZED';
+  | 'PAGE_NUMBERS_NOT_MATERIALIZED'
+  // Lists-specific failure codes (SD-1272)
+  | 'INCOMPATIBLE_DEFINITIONS'
+  | 'NO_COMPATIBLE_PREVIOUS'
+  | 'ALREADY_CONTINUOUS'
+  | 'NO_PREVIOUS_LIST'
+  | 'NO_ADJACENT_SEQUENCE'
+  | 'ALREADY_SAME_SEQUENCE'
+  | 'LEVEL_OUT_OF_RANGE'
+  // SD-1973 formatting failure codes
+  | 'LEVEL_NOT_FOUND';
 
 export type ReceiptFailure = {
   code: ReceiptFailureCode;

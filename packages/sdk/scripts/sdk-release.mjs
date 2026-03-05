@@ -1,7 +1,7 @@
 #!/usr/bin/env node
 
-import { execFile } from 'node:child_process';
-import { mkdir, rm, cp, symlink, lstat } from 'node:fs/promises';
+import { execFile, execFileSync } from 'node:child_process';
+import { mkdir, rm } from 'node:fs/promises';
 import path from 'node:path';
 import { promisify } from 'node:util';
 import { fileURLToPath } from 'node:url';
@@ -16,12 +16,9 @@ const SUPERDOC_PACKAGE_DIR = path.join(REPO_ROOT, 'packages/superdoc');
 const NODE_SDK_DIR = path.join(REPO_ROOT, 'packages/sdk/langs/node');
 const PYTHON_SDK_DIR = path.join(REPO_ROOT, 'packages/sdk/langs/python');
 const COMPANION_DIST_DIR = path.join(PYTHON_SDK_DIR, 'companion-dist');
-const TOOLS_SOURCE = path.join(REPO_ROOT, 'packages/sdk/tools');
 const NPM_CACHE_DIR = path.join(REPO_ROOT, '.cache', 'npm');
 
 const STAGE_COMPANION_SCRIPT = path.join(__dirname, 'stage-python-companion-cli.mjs');
-const BUILD_COMPANION_SCRIPT = path.join(__dirname, 'build-python-companion-wheels.mjs');
-const VERIFY_COMPANION_SCRIPT = path.join(__dirname, 'verify-python-companion-wheels.mjs');
 
 const argv = process.argv.slice(2);
 const dryRun = argv.includes('--dry-run');
@@ -44,36 +41,6 @@ async function run(command, args, { cwd = REPO_ROOT, env = {} } = {}) {
   });
   if (stdout.trim()) console.log(stdout.trim());
   if (stderr.trim()) console.error(stderr.trim());
-}
-
-/**
- * Replace a symlink with a real copy of the tools directory for packaging,
- * then restore the symlink when done.
- */
-async function withMaterializedTools(symlinkPath, relativeTarget, fn) {
-  let wasSymlink = false;
-  try {
-    const stat = await lstat(symlinkPath);
-    wasSymlink = stat.isSymbolicLink();
-  } catch {
-    // path doesn't exist — nothing to restore
-  }
-
-  if (wasSymlink) {
-    await rm(symlinkPath, { recursive: true, force: true });
-  }
-  await cp(TOOLS_SOURCE, symlinkPath, { recursive: true });
-  // Remove Python-only __init__.py from Node copies
-  try { await rm(path.join(symlinkPath, '__init__.py'), { force: true }); } catch { /* noop */ }
-
-  try {
-    await fn();
-  } finally {
-    if (wasSymlink) {
-      await rm(symlinkPath, { recursive: true, force: true });
-      await symlink(relativeTarget, symlinkPath);
-    }
-  }
 }
 
 async function cleanPythonBuildArtifacts() {
@@ -132,23 +99,12 @@ async function main() {
   await run('pnpm', ['run', 'build:es'], { cwd: SUPERDOC_PACKAGE_DIR });
   await run('pnpm', ['--prefix', CLI_APP_DIR, 'run', 'build:native:all']);
   await run('pnpm', ['--prefix', CLI_APP_DIR, 'run', 'build:stage']);
+  await run('node', [STAGE_COMPANION_SCRIPT]);
 
-  const pythonToolsSymlink = path.join(PYTHON_SDK_DIR, 'superdoc', 'tools');
-
+  // build-python-sdk.mjs handles symlink save/restore internally.
   try {
-    await withMaterializedTools(pythonToolsSymlink, '../../../tools', async () => {
-      await cleanPythonBuildArtifacts();
-
-      // Build order: companion wheels first, root second.
-      // If companion builds fail, don't waste time on root.
-      await run('node', [STAGE_COMPANION_SCRIPT]);
-      await run('node', [BUILD_COMPANION_SCRIPT]);
-      await run('node', [VERIFY_COMPANION_SCRIPT, '--companions-only']);
-
-      await run('python3', ['-m', 'build'], { cwd: PYTHON_SDK_DIR });
-      await run('node', [VERIFY_COMPANION_SCRIPT, '--root-only']);
-
-      console.log('  Python wheels built. Use the release-sdk.yml workflow to publish to PyPI.');
+    execFileSync('node', [path.join(__dirname, 'build-python-sdk.mjs')], {
+      cwd: REPO_ROOT, stdio: 'inherit', env: process.env,
     });
   } finally {
     await cleanPythonBuildArtifacts();

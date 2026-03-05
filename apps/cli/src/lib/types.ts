@@ -22,7 +22,7 @@ import type {
   Selector as DocumentApiSelector,
   TextAddress as DocumentApiTextAddress,
 } from '@superdoc/document-api';
-import type { CollaborationSessionPool } from '../host/collab-session-pool';
+import type { SessionPool } from '../host/session-pool';
 
 export type NodeKind = DocumentApiNodeKind;
 export type NodeType = DocumentApiNodeType;
@@ -46,6 +46,9 @@ export type ListsExitResult = DocumentApiListsExitResult;
 export type Selector = DocumentApiSelector;
 export type Query = DocumentApiQuery;
 export type FindOutput = DocumentApiFindOutput;
+
+/** User identity for attribution in comments, tracked changes, and collaboration presence. */
+export type UserIdentity = { name: string; email: string };
 
 export type OutputMode = 'json' | 'pretty';
 export type ExecutionMode = 'oneshot' | 'host';
@@ -75,7 +78,7 @@ export interface CommandContext {
   timeoutMs?: number;
   sessionId?: string;
   executionMode?: ExecutionMode;
-  collabSessionPool?: CollaborationSessionPool;
+  sessionPool?: SessionPool;
 }
 
 export interface DocumentSourceMeta {

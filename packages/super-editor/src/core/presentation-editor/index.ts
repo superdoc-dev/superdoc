@@ -16,6 +16,7 @@ export type {
   RemoteUserInfo,
   RemoteCursorState,
   PresenceOptions,
+  FlowMode,
   LayoutEngineOptions,
   TrackedChangesOverrides,
   PresentationEditorOptions,

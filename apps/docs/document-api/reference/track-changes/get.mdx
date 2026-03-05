@@ -43,6 +43,9 @@ Returns a TrackChangeInfo object with the change type, author, date, and affecte
 | Field | Type | Required | Description |
 | --- | --- | --- | --- |
 | `address` | TrackedChangeAddress | yes | TrackedChangeAddress |
+| `address.entityId` | string | yes |  |
+| `address.entityType` | `"trackedChange"` | yes | Constant: `"trackedChange"` |
+| `address.kind` | `"entity"` | yes | Constant: `"entity"` |
 | `author` | string | no |  |
 | `authorEmail` | string | no |  |
 | `authorImage` | string | no |  |

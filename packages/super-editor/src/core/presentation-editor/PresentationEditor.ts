@@ -3485,53 +3485,46 @@ export class PresentationEditor extends EventEmitter {
     }
 
     if (from === to) {
-      const caretLayout = this.#computeCaretLayoutRect(from);
-      if (!caretLayout) {
-        // Keep existing cursor visible rather than clearing it
-        return;
-      }
-      // Only clear old cursor after successfully computing new position
-      try {
-        this.#localSelectionLayer.innerHTML = '';
-        renderCaretOverlay({
-          localSelectionLayer: this.#localSelectionLayer,
-          caretLayout,
-          convertPageLocalToOverlayCoords: (pageIndex, x, y) => this.#convertPageLocalToOverlayCoords(pageIndex, x, y),
-        });
-      } catch (error) {
-        // DOM manipulation can fail if element is detached or in invalid state
-        if (process.env.NODE_ENV === 'development') {
-          console.warn('[PresentationEditor] Failed to render caret overlay:', error);
-        }
-      }
+      this.#renderCaretOverlayIfNeeded(from);
       return;
     }
 
+    this.#renderRangeSelectionOverlay(selection, from, to);
+  }
+
+  #renderCaretOverlayIfNeeded(pos: number): void {
+    const caretLayout = this.#computeCaretLayoutRect(pos);
+    if (!caretLayout) return;
+    try {
+      this.#localSelectionLayer.innerHTML = '';
+      renderCaretOverlay({
+        localSelectionLayer: this.#localSelectionLayer,
+        caretLayout,
+        convertPageLocalToOverlayCoords: (pageIndex, x, y) => this.#convertPageLocalToOverlayCoords(pageIndex, x, y),
+      });
+    } catch (error) {
+      if (process.env.NODE_ENV === 'development') {
+        console.warn('[PresentationEditor] Failed to render caret overlay:', error);
+      }
+    }
+  }
+
+  #renderRangeSelectionOverlay(selection: import('prosemirror-state').Selection, from: number, to: number): void {
     const domRects = this.#computeSelectionRectsFromDom(from, to);
     if (domRects == null) {
-      // DOM-derived selection failed; keep last known-good overlay instead of drifting.
       debugLog('warn', 'Local selection: DOM rect computation failed', { from, to });
       return;
     }
 
-    // When dragging across mark boundaries, the selection can briefly land in the
-    // 2-position structural gap between adjacent runs, producing zero DOM rects for
-    // one frame. Preserve the last overlay only during active drag to prevent flicker.
-    // Outside drag (scroll, programmatic changes), zero rects means the DOM is stale
-    // or virtualized — clearing the overlay is the safer default.
-    if (domRects.length === 0 && from !== to && this.#editorInputManager?.isDragging) {
-      debugLog('warn', '[drawSelection] zero rects for non-collapsed selection — preserving last overlay', {
-        from,
-        to,
-      });
+    // Preserve last overlay during active drag when rects are empty (mark boundary gap)
+    if (domRects.length === 0 && this.#editorInputManager?.isDragging) {
       return;
     }
 
     try {
       this.#localSelectionLayer.innerHTML = '';
-      const isFieldAnnotationSelection =
-        selection instanceof NodeSelection && selection.node?.type?.name === 'fieldAnnotation';
-      if (domRects.length > 0 && !isFieldAnnotationSelection) {
+      const isFieldAnnotation = selection instanceof NodeSelection && selection.node?.type?.name === 'fieldAnnotation';
+      if (domRects.length > 0 && !isFieldAnnotation) {
         renderSelectionRects({
           localSelectionLayer: this.#localSelectionLayer,
           rects: domRects,
@@ -3541,7 +3534,6 @@ export class PresentationEditor extends EventEmitter {
         });
       }
     } catch (error) {
-      // DOM manipulation can fail if element is detached or in invalid state
       if (process.env.NODE_ENV === 'development') {
         console.warn('[PresentationEditor] Failed to render selection rects:', error);
       }

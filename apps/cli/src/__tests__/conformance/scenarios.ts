@@ -858,6 +858,19 @@ export const SUCCESS_SCENARIOS = {
     stateDir: await harness.createStateDir('doc-describe-command-success'),
     args: ['describe', 'command', 'doc.find'],
   }),
+  'doc.get': async (harness: ConformanceHarness): Promise<ScenarioInvocation> => {
+    const stateDir = await harness.createStateDir('doc-get-success');
+    const docPath = await harness.copyFixtureDoc('doc-get');
+    return { stateDir, args: ['get', docPath] };
+  },
+  'doc.markdownToFragment': async (harness: ConformanceHarness): Promise<ScenarioInvocation> => {
+    const stateDir = await harness.createStateDir('doc-markdown-to-fragment-success');
+    const docPath = await harness.copyFixtureDoc('doc-markdown-to-fragment');
+    return {
+      stateDir,
+      args: ['markdown-to-fragment', docPath, '--markdown', '# Hello\n\nWorld'],
+    };
+  },
   'doc.find': async (harness: ConformanceHarness): Promise<ScenarioInvocation> => {
     const stateDir = await harness.createStateDir('doc-find-success');
     const docPath = await harness.copyFixtureDoc('doc-find');

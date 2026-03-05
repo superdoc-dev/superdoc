@@ -68,10 +68,25 @@ function makeInfoAdapter() {
   };
 }
 
+function makeSDMutationReceipt() {
+  return {
+    success: true as const,
+    resolution: {
+      target: {
+        kind: 'content' as const,
+        stability: 'stable' as const,
+        nodeId: 'p1',
+        anchor: { start: { blockId: 'p1', offset: 0 }, end: { blockId: 'p1', offset: 3 } },
+      },
+    },
+  };
+}
+
 function makeWriteAdapter() {
   return {
     write: vi.fn(() => makeTextMutationReceipt()),
-    insertStructured: vi.fn(() => makeTextMutationReceipt()),
+    insertStructured: vi.fn(() => makeSDMutationReceipt()),
+    replaceStructured: vi.fn(() => makeSDMutationReceipt()),
   };
 }
 
@@ -528,12 +543,11 @@ describe('overview.mdx examples', () => {
 
       const preview = doc.insert({ target, value: 'hello' }, { dryRun: true });
       // preview.success tells you whether the insert would succeed
-      // preview.resolution shows the resolved target range
+      // preview.resolution shows the resolved target (SDAddress)
 
       expect(preview).toHaveProperty('success');
       expect(preview).toHaveProperty('resolution');
       expect(preview.resolution).toHaveProperty('target');
-      expect(preview.resolution).toHaveProperty('range');
     });
   });
 });
@@ -564,13 +578,11 @@ describe('src/README.md workflow examples', () => {
       const doc = makeApi();
 
       const receipt = doc.insert({ value: 'new content' }, { changeMode: 'tracked' });
-      // receipt.resolution.target contains the resolved insertion point
-      // receipt.inserted contains TrackedChangeAddress entries for the new change
+      // receipt.resolution.target contains the resolved insertion point (SDAddress)
 
-      expect(receipt.resolution.target).toBeDefined();
-      if (receipt.success) {
-        expect(receipt.inserted).toBeDefined();
-      }
+      expect(receipt.resolution).toBeDefined();
+      expect(receipt.resolution!.target).toBeDefined();
+      expect(receipt.success).toBe(true);
     });
   });
 

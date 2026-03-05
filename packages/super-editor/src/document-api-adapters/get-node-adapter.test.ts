@@ -105,8 +105,8 @@ describe('getNodeAdapter — inline', () => {
       anchor: imageCandidate.anchor,
     });
 
-    expect(result.nodeType).toBe('image');
-    expect(result.kind).toBe('inline');
+    expect(result.node.kind).toBe('image');
+    expect(result.address.kind).toBe('inline');
   });
 
   it('resolves hyperlink marks by anchor', () => {
@@ -131,8 +131,8 @@ describe('getNodeAdapter — inline', () => {
       anchor: hyperlink.anchor,
     });
 
-    expect(result.nodeType).toBe('hyperlink');
-    expect(result.kind).toBe('inline');
+    expect(result.node.kind).toBe('hyperlink');
+    expect(result.address.kind).toBe('inline');
   });
 });
 
@@ -166,8 +166,8 @@ describe('getNodeByIdAdapter', () => {
     const editor = makeEditor(doc);
     const result = getNodeByIdAdapter(editor, { nodeId: 'p1' });
 
-    expect(result.nodeType).toBe('paragraph');
-    expect(result.kind).toBe('block');
+    expect(result.node.kind).toBe('paragraph');
+    expect(result.address.kind).toBe('content');
   });
 
   it('resolves a block node by id with nodeType', () => {
@@ -177,7 +177,7 @@ describe('getNodeByIdAdapter', () => {
 
     const result = getNodeByIdAdapter(editor, { nodeId: 'p2', nodeType: 'paragraph' });
 
-    expect(result.nodeType).toBe('paragraph');
+    expect(result.node.kind).toBe('paragraph');
   });
 
   it('throws when nodeId is missing', () => {

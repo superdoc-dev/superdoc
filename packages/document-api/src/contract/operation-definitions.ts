@@ -219,6 +219,17 @@ const FORMAT_INLINE_ALIAS_OPERATION_DEFINITIONS: Record<FormatInlineAliasOperati
 // ---------------------------------------------------------------------------
 
 export const OPERATION_DEFINITIONS = {
+  get: {
+    memberPath: 'get',
+    description: 'Read the full document as an SDDocument structure.',
+    expectedResult: 'Returns an SDDocument with body content projected into SDM/1 canonical shapes.',
+    requiresDocumentContext: true,
+    metadata: readOperation({
+      idempotency: 'idempotent',
+    }),
+    referenceDocPath: 'get.mdx',
+    referenceGroup: 'core' as ReferenceGroupKey,
+  },
   find: {
     memberPath: 'find',
     description: 'Search the document for nodes matching type, text, or attribute criteria.',
@@ -227,7 +238,7 @@ export const OPERATION_DEFINITIONS = {
     requiresDocumentContext: true,
     metadata: readOperation({
       idempotency: 'idempotent',
-      throws: ['CAPABILITY_UNAVAILABLE', 'INVALID_INPUT'],
+      throws: ['CAPABILITY_UNAVAILABLE', 'INVALID_INPUT', 'ADDRESS_STALE'],
       deterministicTargetResolution: false,
     }),
     referenceDocPath: 'find.mdx',
@@ -241,7 +252,7 @@ export const OPERATION_DEFINITIONS = {
     requiresDocumentContext: true,
     metadata: readOperation({
       idempotency: 'idempotent',
-      throws: T_NOT_FOUND,
+      throws: [...T_NOT_FOUND, 'ADDRESS_STALE'],
     }),
     referenceDocPath: 'get-node.mdx',
     referenceGroup: 'core',
@@ -287,6 +298,15 @@ export const OPERATION_DEFINITIONS = {
     referenceDocPath: 'get-html.mdx',
     referenceGroup: 'core',
   },
+  markdownToFragment: {
+    memberPath: 'markdownToFragment',
+    description: 'Convert a Markdown string into an SDM/1 structural fragment.',
+    expectedResult: 'Returns an SDMarkdownToFragmentResult with the converted fragment, lossy flag, and diagnostics.',
+    requiresDocumentContext: true,
+    metadata: readOperation(),
+    referenceDocPath: 'markdown-to-fragment.mdx',
+    referenceGroup: 'core',
+  },
   info: {
     memberPath: 'info',
     description: 'Return document metadata including revision, node count, and capabilities.',
@@ -316,7 +336,10 @@ export const OPERATION_DEFINITIONS = {
   insert: {
     memberPath: 'insert',
     description:
-      'Insert content at a target position, or at the end of the document when target is omitted. Supports text (default), markdown, and html content types via the `type` field.',
+      'Insert content at a target position, or at the end of the document when target is omitted. ' +
+      'Accepts two input shapes: legacy string-based (value + type) or structural SDFragment (content). ' +
+      'Supports text (default), markdown, and html content types via the `type` field in legacy mode. ' +
+      'Structural mode accepts an SDFragment with typed nodes (paragraphs, tables, images, etc.).',
     expectedResult:
       'Returns a TextMutationReceipt with applied status; receipt reports NO_OP if the insertion point is invalid or content is empty.',
     requiresDocumentContext: true,
@@ -324,15 +347,42 @@ export const OPERATION_DEFINITIONS = {
       idempotency: 'non-idempotent',
       supportsDryRun: true,
       supportsTrackedMode: true,
-      possibleFailureCodes: ['INVALID_TARGET', 'NO_OP', 'CAPABILITY_UNAVAILABLE', 'UNSUPPORTED_ENVIRONMENT'],
-      throws: [...T_NOT_FOUND_CAPABLE, 'INVALID_TARGET'],
+      possibleFailureCodes: [
+        'INVALID_TARGET',
+        'NO_OP',
+        'CAPABILITY_UNAVAILABLE',
+        'UNSUPPORTED_ENVIRONMENT',
+        'INVALID_NESTING',
+        'INVALID_PLACEMENT',
+        'INVALID_PAYLOAD',
+        'CAPABILITY_UNSUPPORTED',
+        'ADDRESS_STALE',
+        'DUPLICATE_ID',
+        'INVALID_CONTEXT',
+        'RAW_MODE_REQUIRED',
+        'PRESERVE_ONLY_VIOLATION',
+        'INVALID_INPUT',
+      ],
+      throws: [
+        ...T_NOT_FOUND_CAPABLE,
+        'INVALID_TARGET',
+        'INVALID_INPUT',
+        'ADDRESS_STALE',
+        'DUPLICATE_ID',
+        'RAW_MODE_REQUIRED',
+        'PRESERVE_ONLY_VIOLATION',
+        'CAPABILITY_UNSUPPORTED',
+      ],
     }),
     referenceDocPath: 'insert.mdx',
     referenceGroup: 'core',
   },
   replace: {
     memberPath: 'replace',
-    description: 'Replace content at a target position with new text or inline content.',
+    description:
+      'Replace content at a target position with new content. ' +
+      'Accepts two input shapes: legacy string-based (text) or structural SDFragment (content). ' +
+      'Structural mode replaces the target range with typed nodes (paragraphs, tables, images, etc.).',
     expectedResult:
       'Returns a TextMutationReceipt with applied status; receipt reports NO_OP if the target range already contains identical content.',
     requiresDocumentContext: true,
@@ -340,8 +390,30 @@ export const OPERATION_DEFINITIONS = {
       idempotency: 'conditional',
       supportsDryRun: true,
       supportsTrackedMode: true,
-      possibleFailureCodes: ['INVALID_TARGET', 'NO_OP'],
-      throws: [...T_NOT_FOUND_CAPABLE, 'INVALID_TARGET'],
+      possibleFailureCodes: [
+        'INVALID_TARGET',
+        'NO_OP',
+        'INVALID_NESTING',
+        'INVALID_PLACEMENT',
+        'INVALID_PAYLOAD',
+        'CAPABILITY_UNSUPPORTED',
+        'ADDRESS_STALE',
+        'DUPLICATE_ID',
+        'INVALID_CONTEXT',
+        'RAW_MODE_REQUIRED',
+        'PRESERVE_ONLY_VIOLATION',
+        'INVALID_INPUT',
+      ],
+      throws: [
+        ...T_NOT_FOUND_CAPABLE,
+        'INVALID_TARGET',
+        'INVALID_INPUT',
+        'ADDRESS_STALE',
+        'DUPLICATE_ID',
+        'RAW_MODE_REQUIRED',
+        'PRESERVE_ONLY_VIOLATION',
+        'CAPABILITY_UNSUPPORTED',
+      ],
     }),
     referenceDocPath: 'replace.mdx',
     referenceGroup: 'core',
@@ -1641,8 +1713,14 @@ export const OPERATION_DEFINITIONS = {
       idempotency: 'non-idempotent',
       supportsDryRun: false,
       supportsTrackedMode: true,
-      possibleFailureCodes: NONE_FAILURES,
-      throws: T_PLAN_ENGINE,
+      possibleFailureCodes: ['INVALID_CONTEXT'],
+      throws: [
+        ...T_PLAN_ENGINE,
+        'DUPLICATE_ID',
+        'RAW_MODE_REQUIRED',
+        'PRESERVE_ONLY_VIOLATION',
+        'CAPABILITY_UNSUPPORTED',
+      ],
       deterministicTargetResolution: true,
     }),
     referenceDocPath: 'mutations/apply.mdx',

@@ -657,6 +657,11 @@ _No fields._
 | `operations.format.webHidden.dryRun` | boolean | yes |  |
 | `operations.format.webHidden.reasons` | enum[] | no |  |
 | `operations.format.webHidden.tracked` | boolean | yes |  |
+| `operations.get` | object | yes |  |
+| `operations.get.available` | boolean | yes |  |
+| `operations.get.dryRun` | boolean | yes |  |
+| `operations.get.reasons` | enum[] | no |  |
+| `operations.get.tracked` | boolean | yes |  |
 | `operations.getHtml` | object | yes |  |
 | `operations.getHtml.available` | boolean | yes |  |
 | `operations.getHtml.dryRun` | boolean | yes |  |
@@ -1017,6 +1022,11 @@ _No fields._
 | `operations.lists.setValue.dryRun` | boolean | yes |  |
 | `operations.lists.setValue.reasons` | enum[] | no |  |
 | `operations.lists.setValue.tracked` | boolean | yes |  |
+| `operations.markdownToFragment` | object | yes |  |
+| `operations.markdownToFragment.available` | boolean | yes |  |
+| `operations.markdownToFragment.dryRun` | boolean | yes |  |
+| `operations.markdownToFragment.reasons` | enum[] | no |  |
+| `operations.markdownToFragment.tracked` | boolean | yes |  |
 | `operations.mutations.apply` | object | yes |  |
 | `operations.mutations.apply.available` | boolean | yes |  |
 | `operations.mutations.apply.dryRun` | boolean | yes |  |
@@ -2339,6 +2349,14 @@ _No fields._
       ],
       "tracked": true
     },
+    "get": {
+      "available": true,
+      "dryRun": true,
+      "reasons": [
+        "COMMAND_UNAVAILABLE"
+      ],
+      "tracked": true
+    },
     "getHtml": {
       "available": true,
       "dryRun": true,
@@ -2908,6 +2926,14 @@ _No fields._
       "tracked": true
     },
     "lists.setValue": {
+      "available": true,
+      "dryRun": true,
+      "reasons": [
+        "COMMAND_UNAVAILABLE"
+      ],
+      "tracked": true
+    },
+    "markdownToFragment": {
       "available": true,
       "dryRun": true,
       "reasons": [
@@ -7923,6 +7949,41 @@ _No fields._
           ],
           "type": "object"
         },
+        "get": {
+          "additionalProperties": false,
+          "properties": {
+            "available": {
+              "type": "boolean"
+            },
+            "dryRun": {
+              "type": "boolean"
+            },
+            "reasons": {
+              "items": {
+                "enum": [
+                  "COMMAND_UNAVAILABLE",
+                  "HELPER_UNAVAILABLE",
+                  "OPERATION_UNAVAILABLE",
+                  "TRACKED_MODE_UNAVAILABLE",
+                  "DRY_RUN_UNAVAILABLE",
+                  "NAMESPACE_UNAVAILABLE",
+                  "STYLES_PART_MISSING",
+                  "COLLABORATION_ACTIVE"
+                ]
+              },
+              "type": "array"
+            },
+            "tracked": {
+              "type": "boolean"
+            }
+          },
+          "required": [
+            "available",
+            "tracked",
+            "dryRun"
+          ],
+          "type": "object"
+        },
         "getHtml": {
           "additionalProperties": false,
           "properties": {
@@ -10409,6 +10470,41 @@ _No fields._
           "type": "object"
         },
         "lists.setValue": {
+          "additionalProperties": false,
+          "properties": {
+            "available": {
+              "type": "boolean"
+            },
+            "dryRun": {
+              "type": "boolean"
+            },
+            "reasons": {
+              "items": {
+                "enum": [
+                  "COMMAND_UNAVAILABLE",
+                  "HELPER_UNAVAILABLE",
+                  "OPERATION_UNAVAILABLE",
+                  "TRACKED_MODE_UNAVAILABLE",
+                  "DRY_RUN_UNAVAILABLE",
+                  "NAMESPACE_UNAVAILABLE",
+                  "STYLES_PART_MISSING",
+                  "COLLABORATION_ACTIVE"
+                ]
+              },
+              "type": "array"
+            },
+            "tracked": {
+              "type": "boolean"
+            }
+          },
+          "required": [
+            "available",
+            "tracked",
+            "dryRun"
+          ],
+          "type": "object"
+        },
+        "markdownToFragment": {
           "additionalProperties": false,
           "properties": {
             "available": {
@@ -13245,12 +13341,14 @@ _No fields._
         }
       },
       "required": [
+        "get",
         "find",
         "getNode",
         "getNodeById",
         "getText",
         "getMarkdown",
         "getHtml",
+        "markdownToFragment",
         "info",
         "clearContent",
         "insert",

@@ -366,16 +366,18 @@ The SDKs expose all operations from the [Document API](/document-api/overview) p
 
 | Operation | CLI command | Description |
 | --- | --- | --- |
+| `doc.get` | `get` | Read the full document as an SDDocument structure. |
 | `doc.find` | `find` | Search the document for nodes matching type, text, or attribute criteria. |
 | `doc.getNode` | `get-node` | Retrieve a single node by target position. |
 | `doc.getNodeById` | `get-node-by-id` | Retrieve a single node by its unique ID. |
 | `doc.getText` | `get-text` | Extract the plain-text content of the document. |
 | `doc.getMarkdown` | `get-markdown` | Extract the document content as a Markdown string. |
 | `doc.getHtml` | `get-html` | Extract the document content as an HTML string. |
+| `doc.markdownToFragment` | `markdown-to-fragment` | Convert a Markdown string into an SDM/1 structural fragment. |
 | `doc.info` | `info` | Return document metadata including revision, node count, and capabilities. |
 | `doc.clearContent` | `clear-content` | Clear all document body content, leaving a single empty paragraph. |
-| `doc.insert` | `insert` | Insert content at a target position, or at the end of the document when target is omitted. Supports text (default), markdown, and html content types via the `type` field. |
-| `doc.replace` | `replace` | Replace content at a target position with new text or inline content. |
+| `doc.insert` | `insert` | Insert content at a target position, or at the end of the document when target is omitted. Accepts two input shapes: legacy string-based (value + type) or structural SDFragment (content). Supports text (default), markdown, and html content types via the `type` field in legacy mode. Structural mode accepts an SDFragment with typed nodes (paragraphs, tables, images, etc.). |
+| `doc.replace` | `replace` | Replace content at a target position with new content. Accepts two input shapes: legacy string-based (text) or structural SDFragment (content). Structural mode replaces the target range with typed nodes (paragraphs, tables, images, etc.). |
 | `doc.delete` | `delete` | Delete content at a target position. |
 | `doc.blocks.delete` | `blocks delete` | Delete an entire block node (paragraph, heading, list item, table, image, or sdt) deterministically. |
 | `doc.query.match` | `query match` | Deterministic selector-based search with cardinality contracts for mutation targeting. |
@@ -668,16 +670,18 @@ The SDKs expose all operations from the [Document API](/document-api/overview) p
 
 | Operation | CLI command | Description |
 | --- | --- | --- |
+| `doc.get` | `get` | Read the full document as an SDDocument structure. |
 | `doc.find` | `find` | Search the document for nodes matching type, text, or attribute criteria. |
 | `doc.get_node` | `get-node` | Retrieve a single node by target position. |
 | `doc.get_node_by_id` | `get-node-by-id` | Retrieve a single node by its unique ID. |
 | `doc.get_text` | `get-text` | Extract the plain-text content of the document. |
 | `doc.get_markdown` | `get-markdown` | Extract the document content as a Markdown string. |
 | `doc.get_html` | `get-html` | Extract the document content as an HTML string. |
+| `doc.markdown_to_fragment` | `markdown-to-fragment` | Convert a Markdown string into an SDM/1 structural fragment. |
 | `doc.info` | `info` | Return document metadata including revision, node count, and capabilities. |
 | `doc.clear_content` | `clear-content` | Clear all document body content, leaving a single empty paragraph. |
-| `doc.insert` | `insert` | Insert content at a target position, or at the end of the document when target is omitted. Supports text (default), markdown, and html content types via the `type` field. |
-| `doc.replace` | `replace` | Replace content at a target position with new text or inline content. |
+| `doc.insert` | `insert` | Insert content at a target position, or at the end of the document when target is omitted. Accepts two input shapes: legacy string-based (value + type) or structural SDFragment (content). Supports text (default), markdown, and html content types via the `type` field in legacy mode. Structural mode accepts an SDFragment with typed nodes (paragraphs, tables, images, etc.). |
+| `doc.replace` | `replace` | Replace content at a target position with new content. Accepts two input shapes: legacy string-based (text) or structural SDFragment (content). Structural mode replaces the target range with typed nodes (paragraphs, tables, images, etc.). |
 | `doc.delete` | `delete` | Delete content at a target position. |
 | `doc.blocks.delete` | `blocks delete` | Delete an entire block node (paragraph, heading, list item, table, image, or sdt) deterministically. |
 | `doc.query.match` | `query match` | Deterministic selector-based search with cardinality contracts for mutation targeting. |

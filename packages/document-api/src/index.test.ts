@@ -1,4 +1,4 @@
-import type { DocumentInfo, FindOutput, NodeAddress, NodeInfo, Query } from './types/index.js';
+import type { DocumentInfo, NodeAddress, SDNodeResult, SDFindResult } from './types/index.js';
 import type {
   CommentsAdapter,
   CommentsCreateInput,
@@ -9,6 +9,7 @@ import type {
 import type { FormatAdapter } from './format/format.js';
 import type { FindAdapter } from './find/find.js';
 import type { GetNodeAdapter } from './get-node/get-node.js';
+import type { GetAdapter } from './get/get.js';
 import type { TrackChangesAdapter } from './track-changes/track-changes.js';
 import type { WriteAdapter } from './write/write.js';
 import { createDocumentApi } from './index.js';
@@ -19,14 +20,20 @@ import type { CapabilitiesAdapter, DocumentApiCapabilities } from './capabilitie
 import type { HistoryAdapter } from './history/history.js';
 import type { TablesAdapter } from './index.js';
 
-function makeFindAdapter(result: FindOutput): FindAdapter {
+function makeFindAdapter(result: SDFindResult): FindAdapter {
   return { find: vi.fn(() => result) };
 }
 
-function makeGetNodeAdapter(info: NodeInfo): GetNodeAdapter {
+function makeGetAdapter(): GetAdapter {
   return {
-    getNode: vi.fn(() => info),
-    getNodeById: vi.fn((_input) => info),
+    get: vi.fn(() => ({ modelVersion: 'sdm/1' as const, body: [] })),
+  };
+}
+
+function makeGetNodeAdapter(result: SDNodeResult): GetNodeAdapter {
+  return {
+    getNode: vi.fn(() => result),
+    getNodeById: vi.fn((_input) => result),
   };
 }
 
@@ -93,7 +100,7 @@ function makeCommentsAdapter(): CommentsAdapter {
 }
 
 function makeWriteAdapter(): WriteAdapter {
-  const defaultReceipt = {
+  const textReceipt = {
     success: true as const,
     resolution: {
       target: { kind: 'text' as const, blockId: 'p1', range: { start: 0, end: 0 } },
@@ -101,9 +108,21 @@ function makeWriteAdapter(): WriteAdapter {
       text: '',
     },
   };
+  const sdReceipt = {
+    success: true as const,
+    resolution: {
+      target: {
+        kind: 'content' as const,
+        stability: 'stable' as const,
+        nodeId: 'p1',
+        anchor: { start: { blockId: 'p1', offset: 0 }, end: { blockId: 'p1', offset: 0 } },
+      },
+    },
+  };
   return {
-    write: vi.fn(() => defaultReceipt),
-    insertStructured: vi.fn(() => defaultReceipt),
+    write: vi.fn(() => textReceipt),
+    insertStructured: vi.fn(() => sdReceipt),
+    replaceStructured: vi.fn(() => sdReceipt),
   };
 }
 
@@ -339,31 +358,25 @@ function makeCapabilitiesAdapter(overrides?: Partial<DocumentApiCapabilities>): 
 
 const PARAGRAPH_ADDRESS: NodeAddress = { kind: 'block', nodeType: 'paragraph', nodeId: 'p1' };
 
-const PARAGRAPH_INFO: NodeInfo = {
-  nodeType: 'paragraph',
-  kind: 'block',
-  properties: {},
+const PARAGRAPH_NODE_RESULT: SDNodeResult = {
+  node: { kind: 'paragraph', paragraph: { inlines: [] } },
+  address: { kind: 'content', stability: 'stable', nodeId: 'p1' },
 };
 
-const QUERY_RESULT: FindOutput = {
-  evaluatedRevision: '',
+const FIND_RESULT: SDFindResult = {
   total: 1,
-  items: [
-    {
-      id: PARAGRAPH_ADDRESS.nodeId,
-      handle: { ref: PARAGRAPH_ADDRESS.nodeId, refStability: 'ephemeral' as const, targetKind: 'node' as const },
-      address: PARAGRAPH_ADDRESS,
-    },
-  ],
-  page: { limit: 1, offset: 0, returned: 1 },
+  limit: 1,
+  offset: 0,
+  items: [PARAGRAPH_NODE_RESULT],
 };
 
 describe('createDocumentApi', () => {
   it('delegates find to the find adapter', () => {
-    const findAdapter = makeFindAdapter(QUERY_RESULT);
+    const findAdapter = makeFindAdapter(FIND_RESULT);
     const api = createDocumentApi({
       find: findAdapter,
-      getNode: makeGetNodeAdapter(PARAGRAPH_INFO),
+      get: makeGetAdapter(),
+      getNode: makeGetNodeAdapter(PARAGRAPH_NODE_RESULT),
       getText: makeGetTextAdapter(),
       info: makeInfoAdapter(),
       comments: makeCommentsAdapter(),
@@ -374,18 +387,19 @@ describe('createDocumentApi', () => {
       lists: makeListsAdapter(),
     });
 
-    const query: Query = { select: { nodeType: 'paragraph' } };
-    const result = api.find(query);
+    const input = { select: { type: 'node' as const, nodeKind: 'paragraph' } };
+    const result = api.find(input);
 
-    expect(result).toEqual(QUERY_RESULT);
+    expect(result).toEqual(FIND_RESULT);
     expect(findAdapter.find).toHaveBeenCalledTimes(1);
   });
 
-  it('delegates find with selector shorthand', () => {
-    const findAdapter = makeFindAdapter(QUERY_RESULT);
+  it('delegates find with text selector', () => {
+    const findAdapter = makeFindAdapter(FIND_RESULT);
     const api = createDocumentApi({
       find: findAdapter,
-      getNode: makeGetNodeAdapter(PARAGRAPH_INFO),
+      get: makeGetAdapter(),
+      getNode: makeGetNodeAdapter(PARAGRAPH_NODE_RESULT),
       getText: makeGetTextAdapter(),
       info: makeInfoAdapter(),
       comments: makeCommentsAdapter(),
@@ -396,16 +410,17 @@ describe('createDocumentApi', () => {
       lists: makeListsAdapter(),
     });
 
-    const result = api.find({ nodeType: 'paragraph' }, { limit: 5 });
+    const result = api.find({ select: { type: 'text', pattern: 'hello' }, limit: 5 });
 
-    expect(result).toEqual(QUERY_RESULT);
+    expect(result).toEqual(FIND_RESULT);
     expect(findAdapter.find).toHaveBeenCalledTimes(1);
   });
 
   it('delegates getNode to the getNode adapter', () => {
-    const getNodeAdpt = makeGetNodeAdapter(PARAGRAPH_INFO);
+    const getNodeAdpt = makeGetNodeAdapter(PARAGRAPH_NODE_RESULT);
     const api = createDocumentApi({
-      find: makeFindAdapter(QUERY_RESULT),
+      find: makeFindAdapter(FIND_RESULT),
+      get: makeGetAdapter(),
       getNode: getNodeAdpt,
       getText: makeGetTextAdapter(),
       info: makeInfoAdapter(),
@@ -419,14 +434,15 @@ describe('createDocumentApi', () => {
 
     const info = api.getNode(PARAGRAPH_ADDRESS);
 
-    expect(info).toEqual(PARAGRAPH_INFO);
+    expect(info).toEqual(PARAGRAPH_NODE_RESULT);
     expect(getNodeAdpt.getNode).toHaveBeenCalledWith(PARAGRAPH_ADDRESS);
   });
 
   it('delegates getNodeById to the getNode adapter', () => {
-    const getNodeAdpt = makeGetNodeAdapter(PARAGRAPH_INFO);
+    const getNodeAdpt = makeGetNodeAdapter(PARAGRAPH_NODE_RESULT);
     const api = createDocumentApi({
-      find: makeFindAdapter(QUERY_RESULT),
+      find: makeFindAdapter(FIND_RESULT),
+      get: makeGetAdapter(),
       getNode: getNodeAdpt,
       getText: makeGetTextAdapter(),
       info: makeInfoAdapter(),
@@ -440,15 +456,16 @@ describe('createDocumentApi', () => {
 
     const info = api.getNodeById({ nodeId: 'p1', nodeType: 'paragraph' });
 
-    expect(info).toEqual(PARAGRAPH_INFO);
+    expect(info).toEqual(PARAGRAPH_NODE_RESULT);
     expect(getNodeAdpt.getNodeById).toHaveBeenCalledWith({ nodeId: 'p1', nodeType: 'paragraph' });
   });
 
   it('delegates getText to the getText adapter', () => {
     const getTextAdpt = makeGetTextAdapter('Hello world');
     const api = createDocumentApi({
-      find: makeFindAdapter(QUERY_RESULT),
-      getNode: makeGetNodeAdapter(PARAGRAPH_INFO),
+      find: makeFindAdapter(FIND_RESULT),
+      get: makeGetAdapter(),
+      getNode: makeGetNodeAdapter(PARAGRAPH_NODE_RESULT),
       getText: getTextAdpt,
       info: makeInfoAdapter(),
       comments: makeCommentsAdapter(),
@@ -471,8 +488,9 @@ describe('createDocumentApi', () => {
       outline: [{ level: 1, text: 'Heading', nodeId: 'h1' }],
     });
     const api = createDocumentApi({
-      find: makeFindAdapter(QUERY_RESULT),
-      getNode: makeGetNodeAdapter(PARAGRAPH_INFO),
+      find: makeFindAdapter(FIND_RESULT),
+      get: makeGetAdapter(),
+      getNode: makeGetNodeAdapter(PARAGRAPH_NODE_RESULT),
       getText: makeGetTextAdapter(),
       info: infoAdpt,
       comments: makeCommentsAdapter(),
@@ -493,8 +511,9 @@ describe('createDocumentApi', () => {
   it('delegates comments.create through the comments adapter (root comment)', () => {
     const commentsAdpt = makeCommentsAdapter();
     const api = createDocumentApi({
-      find: makeFindAdapter(QUERY_RESULT),
-      getNode: makeGetNodeAdapter(PARAGRAPH_INFO),
+      find: makeFindAdapter(FIND_RESULT),
+      get: makeGetAdapter(),
+      getNode: makeGetNodeAdapter(PARAGRAPH_NODE_RESULT),
       getText: makeGetTextAdapter(),
       info: makeInfoAdapter(),
       comments: commentsAdpt,
@@ -518,8 +537,9 @@ describe('createDocumentApi', () => {
   it('delegates comments.create as reply when parentCommentId is provided', () => {
     const commentsAdpt = makeCommentsAdapter();
     const api = createDocumentApi({
-      find: makeFindAdapter(QUERY_RESULT),
-      getNode: makeGetNodeAdapter(PARAGRAPH_INFO),
+      find: makeFindAdapter(FIND_RESULT),
+      get: makeGetAdapter(),
+      getNode: makeGetNodeAdapter(PARAGRAPH_NODE_RESULT),
       getText: makeGetTextAdapter(),
       info: makeInfoAdapter(),
       comments: commentsAdpt,
@@ -540,8 +560,9 @@ describe('createDocumentApi', () => {
   it('delegates all canonical comments operations through the comments adapter', () => {
     const commentsAdpt = makeCommentsAdapter();
     const api = createDocumentApi({
-      find: makeFindAdapter(QUERY_RESULT),
-      getNode: makeGetNodeAdapter(PARAGRAPH_INFO),
+      find: makeFindAdapter(FIND_RESULT),
+      get: makeGetAdapter(),
+      getNode: makeGetNodeAdapter(PARAGRAPH_NODE_RESULT),
       getText: makeGetTextAdapter(),
       info: makeInfoAdapter(),
       comments: commentsAdpt,
@@ -576,8 +597,9 @@ describe('createDocumentApi', () => {
   it('delegates write operations through the shared write adapter', () => {
     const writeAdpt = makeWriteAdapter();
     const api = createDocumentApi({
-      find: makeFindAdapter(QUERY_RESULT),
-      getNode: makeGetNodeAdapter(PARAGRAPH_INFO),
+      find: makeFindAdapter(FIND_RESULT),
+      get: makeGetAdapter(),
+      getNode: makeGetNodeAdapter(PARAGRAPH_NODE_RESULT),
       getText: makeGetTextAdapter(),
       info: makeInfoAdapter(),
       comments: makeCommentsAdapter(),
@@ -619,8 +641,9 @@ describe('createDocumentApi', () => {
   it('delegates format.bold to adapter.apply with inline.bold', () => {
     const formatAdpt = makeFormatAdapter();
     const api = createDocumentApi({
-      find: makeFindAdapter(QUERY_RESULT),
-      getNode: makeGetNodeAdapter(PARAGRAPH_INFO),
+      find: makeFindAdapter(FIND_RESULT),
+      get: makeGetAdapter(),
+      getNode: makeGetNodeAdapter(PARAGRAPH_NODE_RESULT),
       getText: makeGetTextAdapter(),
       info: makeInfoAdapter(),
       comments: makeCommentsAdapter(),
@@ -642,8 +665,9 @@ describe('createDocumentApi', () => {
   it('delegates format.italic to adapter.apply with inline.italic', () => {
     const formatAdpt = makeFormatAdapter();
     const api = createDocumentApi({
-      find: makeFindAdapter(QUERY_RESULT),
-      getNode: makeGetNodeAdapter(PARAGRAPH_INFO),
+      find: makeFindAdapter(FIND_RESULT),
+      get: makeGetAdapter(),
+      getNode: makeGetNodeAdapter(PARAGRAPH_NODE_RESULT),
       getText: makeGetTextAdapter(),
       info: makeInfoAdapter(),
       comments: makeCommentsAdapter(),
@@ -665,8 +689,9 @@ describe('createDocumentApi', () => {
   it('delegates format.underline to adapter.apply with inline.underline', () => {
     const formatAdpt = makeFormatAdapter();
     const api = createDocumentApi({
-      find: makeFindAdapter(QUERY_RESULT),
-      getNode: makeGetNodeAdapter(PARAGRAPH_INFO),
+      find: makeFindAdapter(FIND_RESULT),
+      get: makeGetAdapter(),
+      getNode: makeGetNodeAdapter(PARAGRAPH_NODE_RESULT),
       getText: makeGetTextAdapter(),
       info: makeInfoAdapter(),
       comments: makeCommentsAdapter(),
@@ -688,8 +713,9 @@ describe('createDocumentApi', () => {
   it('delegates format.strikethrough to adapter.apply with inline.strike', () => {
     const formatAdpt = makeFormatAdapter();
     const api = createDocumentApi({
-      find: makeFindAdapter(QUERY_RESULT),
-      getNode: makeGetNodeAdapter(PARAGRAPH_INFO),
+      find: makeFindAdapter(FIND_RESULT),
+      get: makeGetAdapter(),
+      getNode: makeGetNodeAdapter(PARAGRAPH_NODE_RESULT),
       getText: makeGetTextAdapter(),
       info: makeInfoAdapter(),
       comments: makeCommentsAdapter(),
@@ -711,8 +737,9 @@ describe('createDocumentApi', () => {
   it('delegates format.fontFamily to adapter.apply with inline.fontFamily', () => {
     const formatAdpt = makeFormatAdapter();
     const api = createDocumentApi({
-      find: makeFindAdapter(QUERY_RESULT),
-      getNode: makeGetNodeAdapter(PARAGRAPH_INFO),
+      find: makeFindAdapter(FIND_RESULT),
+      get: makeGetAdapter(),
+      getNode: makeGetNodeAdapter(PARAGRAPH_NODE_RESULT),
       getText: makeGetTextAdapter(),
       info: makeInfoAdapter(),
       comments: makeCommentsAdapter(),
@@ -734,8 +761,9 @@ describe('createDocumentApi', () => {
   it('delegates trackChanges read operations', () => {
     const trackAdpt = makeTrackChangesAdapter();
     const api = createDocumentApi({
-      find: makeFindAdapter(QUERY_RESULT),
-      getNode: makeGetNodeAdapter(PARAGRAPH_INFO),
+      find: makeFindAdapter(FIND_RESULT),
+      get: makeGetAdapter(),
+      getNode: makeGetNodeAdapter(PARAGRAPH_NODE_RESULT),
       getText: makeGetTextAdapter(),
       info: makeInfoAdapter(),
       comments: makeCommentsAdapter(),
@@ -758,8 +786,9 @@ describe('createDocumentApi', () => {
   it('delegates trackChanges.decide to trackChanges adapter methods', () => {
     const trackAdpt = makeTrackChangesAdapter();
     const api = createDocumentApi({
-      find: makeFindAdapter(QUERY_RESULT),
-      getNode: makeGetNodeAdapter(PARAGRAPH_INFO),
+      find: makeFindAdapter(FIND_RESULT),
+      get: makeGetAdapter(),
+      getNode: makeGetNodeAdapter(PARAGRAPH_NODE_RESULT),
       getText: makeGetTextAdapter(),
       info: makeInfoAdapter(),
       comments: makeCommentsAdapter(),
@@ -788,8 +817,9 @@ describe('createDocumentApi', () => {
   it('delegates history.get to the history adapter', () => {
     const historyAdpt = makeHistoryAdapter();
     const api = createDocumentApi({
-      find: makeFindAdapter(QUERY_RESULT),
-      getNode: makeGetNodeAdapter(PARAGRAPH_INFO),
+      find: makeFindAdapter(FIND_RESULT),
+      get: makeGetAdapter(),
+      getNode: makeGetNodeAdapter(PARAGRAPH_NODE_RESULT),
       getText: makeGetTextAdapter(),
       info: makeInfoAdapter(),
       comments: makeCommentsAdapter(),
@@ -816,8 +846,9 @@ describe('createDocumentApi', () => {
   it('delegates history.undo and history.redo to the history adapter', () => {
     const historyAdpt = makeHistoryAdapter();
     const api = createDocumentApi({
-      find: makeFindAdapter(QUERY_RESULT),
-      getNode: makeGetNodeAdapter(PARAGRAPH_INFO),
+      find: makeFindAdapter(FIND_RESULT),
+      get: makeGetAdapter(),
+      getNode: makeGetNodeAdapter(PARAGRAPH_NODE_RESULT),
       getText: makeGetTextAdapter(),
       info: makeInfoAdapter(),
       comments: makeCommentsAdapter(),
@@ -841,8 +872,9 @@ describe('createDocumentApi', () => {
   describe('trackChanges.decide input validation', () => {
     function makeApi() {
       return createDocumentApi({
-        find: makeFindAdapter(QUERY_RESULT),
-        getNode: makeGetNodeAdapter(PARAGRAPH_INFO),
+        find: makeFindAdapter(FIND_RESULT),
+        get: makeGetAdapter(),
+        getNode: makeGetNodeAdapter(PARAGRAPH_NODE_RESULT),
         getText: makeGetTextAdapter(),
         info: makeInfoAdapter(),
         comments: makeCommentsAdapter(),
@@ -925,8 +957,9 @@ describe('createDocumentApi', () => {
   it('delegates create.paragraph to the create adapter', () => {
     const createAdpt = makeCreateAdapter();
     const api = createDocumentApi({
-      find: makeFindAdapter(QUERY_RESULT),
-      getNode: makeGetNodeAdapter(PARAGRAPH_INFO),
+      find: makeFindAdapter(FIND_RESULT),
+      get: makeGetAdapter(),
+      getNode: makeGetNodeAdapter(PARAGRAPH_NODE_RESULT),
       getText: makeGetTextAdapter(),
       info: makeInfoAdapter(),
       comments: makeCommentsAdapter(),
@@ -958,8 +991,9 @@ describe('createDocumentApi', () => {
   it('delegates create.heading to the create adapter', () => {
     const createAdpt = makeCreateAdapter();
     const api = createDocumentApi({
-      find: makeFindAdapter(QUERY_RESULT),
-      getNode: makeGetNodeAdapter(PARAGRAPH_INFO),
+      find: makeFindAdapter(FIND_RESULT),
+      get: makeGetAdapter(),
+      getNode: makeGetNodeAdapter(PARAGRAPH_NODE_RESULT),
       getText: makeGetTextAdapter(),
       info: makeInfoAdapter(),
       comments: makeCommentsAdapter(),
@@ -993,8 +1027,9 @@ describe('createDocumentApi', () => {
   it('delegates lists namespace operations', () => {
     const listsAdpt = makeListsAdapter();
     const api = createDocumentApi({
-      find: makeFindAdapter(QUERY_RESULT),
-      getNode: makeGetNodeAdapter(PARAGRAPH_INFO),
+      find: makeFindAdapter(FIND_RESULT),
+      get: makeGetAdapter(),
+      getNode: makeGetNodeAdapter(PARAGRAPH_NODE_RESULT),
       getText: makeGetTextAdapter(),
       info: makeInfoAdapter(),
       comments: makeCommentsAdapter(),
@@ -1043,8 +1078,9 @@ describe('createDocumentApi', () => {
   it('exposes capabilities as a callable function with .get() alias', () => {
     const capAdpt = makeCapabilitiesAdapter();
     const api = createDocumentApi({
-      find: makeFindAdapter(QUERY_RESULT),
-      getNode: makeGetNodeAdapter(PARAGRAPH_INFO),
+      find: makeFindAdapter(FIND_RESULT),
+      get: makeGetAdapter(),
+      getNode: makeGetNodeAdapter(PARAGRAPH_NODE_RESULT),
       getText: makeGetTextAdapter(),
       info: makeInfoAdapter(),
       capabilities: capAdpt,
@@ -1066,8 +1102,9 @@ describe('createDocumentApi', () => {
   describe('insert target validation', () => {
     function makeApi() {
       return createDocumentApi({
-        find: makeFindAdapter(QUERY_RESULT),
-        getNode: makeGetNodeAdapter(PARAGRAPH_INFO),
+        find: makeFindAdapter(FIND_RESULT),
+        get: makeGetAdapter(),
+        getNode: makeGetNodeAdapter(PARAGRAPH_NODE_RESULT),
         getText: makeGetTextAdapter(),
         info: makeInfoAdapter(),
         capabilities: makeCapabilitiesAdapter(),
@@ -1200,8 +1237,9 @@ describe('createDocumentApi', () => {
     it('maps insert({ value }) to internal write request with text field', () => {
       const writeAdpt = makeWriteAdapter();
       const api = createDocumentApi({
-        find: makeFindAdapter(QUERY_RESULT),
-        getNode: makeGetNodeAdapter(PARAGRAPH_INFO),
+        find: makeFindAdapter(FIND_RESULT),
+        get: makeGetAdapter(),
+        getNode: makeGetNodeAdapter(PARAGRAPH_NODE_RESULT),
         getText: makeGetTextAdapter(),
         info: makeInfoAdapter(),
         capabilities: makeCapabilitiesAdapter(),
@@ -1223,8 +1261,9 @@ describe('createDocumentApi', () => {
     it('maps insert({ target, value }) to internal write request with text field', () => {
       const writeAdpt = makeWriteAdapter();
       const api = createDocumentApi({
-        find: makeFindAdapter(QUERY_RESULT),
-        getNode: makeGetNodeAdapter(PARAGRAPH_INFO),
+        find: makeFindAdapter(FIND_RESULT),
+        get: makeGetAdapter(),
+        getNode: makeGetNodeAdapter(PARAGRAPH_NODE_RESULT),
         getText: makeGetTextAdapter(),
         info: makeInfoAdapter(),
         capabilities: makeCapabilitiesAdapter(),
@@ -1249,8 +1288,9 @@ describe('createDocumentApi', () => {
     it('routes type:"markdown" insert to insertStructured instead of write', () => {
       const writeAdpt = makeWriteAdapter();
       const api = createDocumentApi({
-        find: makeFindAdapter(QUERY_RESULT),
-        getNode: makeGetNodeAdapter(PARAGRAPH_INFO),
+        find: makeFindAdapter(FIND_RESULT),
+        get: makeGetAdapter(),
+        getNode: makeGetNodeAdapter(PARAGRAPH_NODE_RESULT),
         getText: makeGetTextAdapter(),
         info: makeInfoAdapter(),
         capabilities: makeCapabilitiesAdapter(),
@@ -1271,8 +1311,9 @@ describe('createDocumentApi', () => {
     it('routes type:"html" insert to insertStructured instead of write', () => {
       const writeAdpt = makeWriteAdapter();
       const api = createDocumentApi({
-        find: makeFindAdapter(QUERY_RESULT),
-        getNode: makeGetNodeAdapter(PARAGRAPH_INFO),
+        find: makeFindAdapter(FIND_RESULT),
+        get: makeGetAdapter(),
+        getNode: makeGetNodeAdapter(PARAGRAPH_NODE_RESULT),
         getText: makeGetTextAdapter(),
         info: makeInfoAdapter(),
         capabilities: makeCapabilitiesAdapter(),
@@ -1293,8 +1334,9 @@ describe('createDocumentApi', () => {
     it('routes type:"text" (or unspecified type) insert to write, not insertStructured', () => {
       const writeAdpt = makeWriteAdapter();
       const api = createDocumentApi({
-        find: makeFindAdapter(QUERY_RESULT),
-        getNode: makeGetNodeAdapter(PARAGRAPH_INFO),
+        find: makeFindAdapter(FIND_RESULT),
+        get: makeGetAdapter(),
+        getNode: makeGetNodeAdapter(PARAGRAPH_NODE_RESULT),
         getText: makeGetTextAdapter(),
         info: makeInfoAdapter(),
         capabilities: makeCapabilitiesAdapter(),
@@ -1314,8 +1356,9 @@ describe('createDocumentApi', () => {
     it('forwards target to insertStructured for markdown insert', () => {
       const writeAdpt = makeWriteAdapter();
       const api = createDocumentApi({
-        find: makeFindAdapter(QUERY_RESULT),
-        getNode: makeGetNodeAdapter(PARAGRAPH_INFO),
+        find: makeFindAdapter(FIND_RESULT),
+        get: makeGetAdapter(),
+        getNode: makeGetNodeAdapter(PARAGRAPH_NODE_RESULT),
         getText: makeGetTextAdapter(),
         info: makeInfoAdapter(),
         capabilities: makeCapabilitiesAdapter(),
@@ -1334,13 +1377,97 @@ describe('createDocumentApi', () => {
         undefined,
       );
     });
+
+    // -- Structural insert union discrimination --
+
+    it('rejects insert with both value and content', () => {
+      const api = makeApi();
+      expect(() => api.insert({ value: 'hello', content: { type: 'paragraph', content: [] } } as any)).toThrow(
+        /either "value".*or "content".*not both/,
+      );
+    });
+
+    it('rejects insert with neither value nor content', () => {
+      const api = makeApi();
+      expect(() => api.insert({} as any)).toThrow(/either "value".*or "content"/);
+    });
+
+    it('rejects structural insert with legacy "type" field', () => {
+      const api = makeApi();
+      expect(() => api.insert({ content: { type: 'paragraph', content: [] }, type: 'markdown' } as any)).toThrow(
+        /"type" field is only valid with legacy/,
+      );
+    });
+
+    it('rejects legacy insert with structural "placement" field', () => {
+      const api = makeApi();
+      expect(() => api.insert({ value: 'hi', placement: 'before' } as any)).toThrow(
+        /"placement" is only valid with structural/,
+      );
+    });
+
+    it('rejects legacy insert with structural "nestingPolicy" field', () => {
+      const api = makeApi();
+      expect(() => api.insert({ value: 'hi', nestingPolicy: { tables: 'forbid' } } as any)).toThrow(
+        /"nestingPolicy" is only valid with structural/,
+      );
+    });
+
+    it('routes structural content insert to insertStructured', () => {
+      const writeAdpt = makeWriteAdapter();
+      const api = createDocumentApi({
+        find: makeFindAdapter(FIND_RESULT),
+        get: makeGetAdapter(),
+        getNode: makeGetNodeAdapter(PARAGRAPH_NODE_RESULT),
+        getText: makeGetTextAdapter(),
+        info: makeInfoAdapter(),
+        capabilities: makeCapabilitiesAdapter(),
+        comments: makeCommentsAdapter(),
+        write: writeAdpt,
+        format: makeFormatAdapter(),
+        trackChanges: makeTrackChangesAdapter(),
+        create: makeCreateAdapter(),
+        lists: makeListsAdapter(),
+      });
+
+      api.insert({ content: { type: 'paragraph', content: [{ type: 'text', text: 'hello' }] } });
+      expect(writeAdpt.insertStructured).toHaveBeenCalledTimes(1);
+      expect(writeAdpt.write).not.toHaveBeenCalled();
+    });
+
+    it('rejects structural insert with empty fragment', () => {
+      const api = makeApi();
+      expect(() => api.insert({ content: [] } as any)).toThrow(/at least one node/);
+    });
+
+    it('rejects structural insert with invalid placement enum', () => {
+      const api = makeApi();
+      expect(() => api.insert({ content: { type: 'paragraph' }, placement: 'middle' } as any)).toThrow(
+        /placement must be one of/,
+      );
+    });
+
+    it('rejects structural insert with invalid nestingPolicy.tables', () => {
+      const api = makeApi();
+      expect(() => api.insert({ content: { type: 'paragraph' }, nestingPolicy: { tables: 'maybe' } } as any)).toThrow(
+        /nestingPolicy\.tables must be one of/,
+      );
+    });
+
+    it('rejects structural insert with unknown nestingPolicy keys', () => {
+      const api = makeApi();
+      expect(() => api.insert({ content: { type: 'paragraph' }, nestingPolicy: { table: 'forbid' } } as any)).toThrow(
+        /Unknown field "table" on nestingPolicy/,
+      );
+    });
   });
 
   describe('replace target validation', () => {
     function makeApi() {
       return createDocumentApi({
-        find: makeFindAdapter(QUERY_RESULT),
-        getNode: makeGetNodeAdapter(PARAGRAPH_INFO),
+        find: makeFindAdapter(FIND_RESULT),
+        get: makeGetAdapter(),
+        getNode: makeGetNodeAdapter(PARAGRAPH_NODE_RESULT),
         getText: makeGetTextAdapter(),
         info: makeInfoAdapter(),
         capabilities: makeCapabilitiesAdapter(),
@@ -1452,8 +1579,9 @@ describe('createDocumentApi', () => {
     it('sends same adapter request for replace({ target, text }) as before', () => {
       const writeAdpt = makeWriteAdapter();
       const api = createDocumentApi({
-        find: makeFindAdapter(QUERY_RESULT),
-        getNode: makeGetNodeAdapter(PARAGRAPH_INFO),
+        find: makeFindAdapter(FIND_RESULT),
+        get: makeGetAdapter(),
+        getNode: makeGetNodeAdapter(PARAGRAPH_NODE_RESULT),
         getText: makeGetTextAdapter(),
         info: makeInfoAdapter(),
         capabilities: makeCapabilitiesAdapter(),
@@ -1472,13 +1600,67 @@ describe('createDocumentApi', () => {
         { changeMode: 'direct', dryRun: false },
       );
     });
+
+    // -- Structural replace union discrimination --
+
+    it('rejects replace with both text and content', () => {
+      const api = makeApi();
+      const target = { kind: 'text', blockId: 'p1', range: { start: 0, end: 5 } } as const;
+      expect(() => api.replace({ target, text: 'hi', content: { type: 'paragraph' } } as any)).toThrow(
+        /either "text".*or "content".*not both/,
+      );
+    });
+
+    it('rejects replace with neither text nor content', () => {
+      const api = makeApi();
+      const target = { kind: 'text', blockId: 'p1', range: { start: 0, end: 5 } } as const;
+      expect(() => api.replace({ target } as any)).toThrow(/either "text".*or "content"/);
+    });
+
+    it('routes structural content replace to replaceStructured', () => {
+      const writeAdpt = makeWriteAdapter();
+      const api = createDocumentApi({
+        find: makeFindAdapter(FIND_RESULT),
+        get: makeGetAdapter(),
+        getNode: makeGetNodeAdapter(PARAGRAPH_NODE_RESULT),
+        getText: makeGetTextAdapter(),
+        info: makeInfoAdapter(),
+        capabilities: makeCapabilitiesAdapter(),
+        comments: makeCommentsAdapter(),
+        write: writeAdpt,
+        format: makeFormatAdapter(),
+        trackChanges: makeTrackChangesAdapter(),
+        create: makeCreateAdapter(),
+        lists: makeListsAdapter(),
+      });
+
+      const target = { kind: 'text', blockId: 'p1', range: { start: 0, end: 5 } } as const;
+      api.replace({ target, content: { type: 'paragraph', content: [{ type: 'text', text: 'new' }] } });
+      expect(writeAdpt.replaceStructured).toHaveBeenCalledTimes(1);
+      expect(writeAdpt.write).not.toHaveBeenCalled();
+    });
+
+    it('rejects structural replace with empty fragment', () => {
+      const api = makeApi();
+      const target = { kind: 'text', blockId: 'p1', range: { start: 0, end: 5 } } as const;
+      expect(() => api.replace({ target, content: [] } as any)).toThrow(/at least one node/);
+    });
+
+    it('rejects structural replace with invalid nestingPolicy.tables', () => {
+      const api = makeApi();
+      const target = { kind: 'text', blockId: 'p1', range: { start: 0, end: 5 } } as const;
+      expect(() =>
+        api.replace({ target, content: { type: 'paragraph' }, nestingPolicy: { tables: 'yes' } } as any),
+      ).toThrow(/nestingPolicy\.tables must be one of/);
+    });
   });
 
   describe('delete target validation', () => {
     function makeApi() {
       return createDocumentApi({
-        find: makeFindAdapter(QUERY_RESULT),
-        getNode: makeGetNodeAdapter(PARAGRAPH_INFO),
+        find: makeFindAdapter(FIND_RESULT),
+        get: makeGetAdapter(),
+        getNode: makeGetNodeAdapter(PARAGRAPH_NODE_RESULT),
         getText: makeGetTextAdapter(),
         info: makeInfoAdapter(),
         capabilities: makeCapabilitiesAdapter(),
@@ -1563,8 +1745,9 @@ describe('createDocumentApi', () => {
     it('sends same adapter request for delete({ target }) as before', () => {
       const writeAdpt = makeWriteAdapter();
       const api = createDocumentApi({
-        find: makeFindAdapter(QUERY_RESULT),
-        getNode: makeGetNodeAdapter(PARAGRAPH_INFO),
+        find: makeFindAdapter(FIND_RESULT),
+        get: makeGetAdapter(),
+        getNode: makeGetNodeAdapter(PARAGRAPH_NODE_RESULT),
         getText: makeGetTextAdapter(),
         info: makeInfoAdapter(),
         capabilities: makeCapabilitiesAdapter(),
@@ -1588,8 +1771,9 @@ describe('createDocumentApi', () => {
   describe('format.* target validation', () => {
     function makeApi() {
       return createDocumentApi({
-        find: makeFindAdapter(QUERY_RESULT),
-        getNode: makeGetNodeAdapter(PARAGRAPH_INFO),
+        find: makeFindAdapter(FIND_RESULT),
+        get: makeGetAdapter(),
+        getNode: makeGetNodeAdapter(PARAGRAPH_NODE_RESULT),
         getText: makeGetTextAdapter(),
         info: makeInfoAdapter(),
         capabilities: makeCapabilitiesAdapter(),
@@ -1685,8 +1869,9 @@ describe('createDocumentApi', () => {
     it('passes canonical target through to adapter.apply with inline', () => {
       const formatAdpt = makeFormatAdapter();
       const api = createDocumentApi({
-        find: makeFindAdapter(QUERY_RESULT),
-        getNode: makeGetNodeAdapter(PARAGRAPH_INFO),
+        find: makeFindAdapter(FIND_RESULT),
+        get: makeGetAdapter(),
+        getNode: makeGetNodeAdapter(PARAGRAPH_NODE_RESULT),
         getText: makeGetTextAdapter(),
         info: makeInfoAdapter(),
         capabilities: makeCapabilitiesAdapter(),
@@ -1710,8 +1895,9 @@ describe('createDocumentApi', () => {
   describe('comments.create target validation', () => {
     function makeApi() {
       return createDocumentApi({
-        find: makeFindAdapter(QUERY_RESULT),
-        getNode: makeGetNodeAdapter(PARAGRAPH_INFO),
+        find: makeFindAdapter(FIND_RESULT),
+        get: makeGetAdapter(),
+        getNode: makeGetNodeAdapter(PARAGRAPH_NODE_RESULT),
         getText: makeGetTextAdapter(),
         info: makeInfoAdapter(),
         capabilities: makeCapabilitiesAdapter(),
@@ -1816,8 +2002,9 @@ describe('createDocumentApi', () => {
     it('sends canonical target through unchanged', () => {
       const commentsAdpt = makeCommentsAdapter();
       const api = createDocumentApi({
-        find: makeFindAdapter(QUERY_RESULT),
-        getNode: makeGetNodeAdapter(PARAGRAPH_INFO),
+        find: makeFindAdapter(FIND_RESULT),
+        get: makeGetAdapter(),
+        getNode: makeGetNodeAdapter(PARAGRAPH_NODE_RESULT),
         getText: makeGetTextAdapter(),
         info: makeInfoAdapter(),
         capabilities: makeCapabilitiesAdapter(),
@@ -1838,8 +2025,9 @@ describe('createDocumentApi', () => {
   describe('comments.patch target validation', () => {
     function makeApi() {
       return createDocumentApi({
-        find: makeFindAdapter(QUERY_RESULT),
-        getNode: makeGetNodeAdapter(PARAGRAPH_INFO),
+        find: makeFindAdapter(FIND_RESULT),
+        get: makeGetAdapter(),
+        getNode: makeGetNodeAdapter(PARAGRAPH_NODE_RESULT),
         getText: makeGetTextAdapter(),
         info: makeInfoAdapter(),
         capabilities: makeCapabilitiesAdapter(),
@@ -1945,8 +2133,9 @@ describe('createDocumentApi', () => {
     it('rejects multiple mutation fields in a single patch call', () => {
       const commentsAdpt = makeCommentsAdapter();
       const api = createDocumentApi({
-        find: makeFindAdapter(QUERY_RESULT),
-        getNode: makeGetNodeAdapter(PARAGRAPH_INFO),
+        find: makeFindAdapter(FIND_RESULT),
+        get: makeGetAdapter(),
+        getNode: makeGetNodeAdapter(PARAGRAPH_NODE_RESULT),
         getText: makeGetTextAdapter(),
         info: makeInfoAdapter(),
         capabilities: makeCapabilitiesAdapter(),
@@ -1975,8 +2164,9 @@ describe('createDocumentApi', () => {
     it('sends canonical target through to adapter.move', () => {
       const commentsAdpt = makeCommentsAdapter();
       const api = createDocumentApi({
-        find: makeFindAdapter(QUERY_RESULT),
-        getNode: makeGetNodeAdapter(PARAGRAPH_INFO),
+        find: makeFindAdapter(FIND_RESULT),
+        get: makeGetAdapter(),
+        getNode: makeGetNodeAdapter(PARAGRAPH_NODE_RESULT),
         getText: makeGetTextAdapter(),
         info: makeInfoAdapter(),
         capabilities: makeCapabilitiesAdapter(),
@@ -2003,8 +2193,9 @@ describe('createDocumentApi', () => {
   describe('create.* location validation', () => {
     function makeApi() {
       return createDocumentApi({
-        find: makeFindAdapter(QUERY_RESULT),
-        getNode: makeGetNodeAdapter(PARAGRAPH_INFO),
+        find: makeFindAdapter(FIND_RESULT),
+        get: makeGetAdapter(),
+        getNode: makeGetNodeAdapter(PARAGRAPH_NODE_RESULT),
         getText: makeGetTextAdapter(),
         info: makeInfoAdapter(),
         capabilities: makeCapabilitiesAdapter(),
@@ -2085,8 +2276,9 @@ describe('createDocumentApi', () => {
     it('passes at.target through to adapter', () => {
       const createAdpt = makeCreateAdapter();
       const api = createDocumentApi({
-        find: makeFindAdapter(QUERY_RESULT),
-        getNode: makeGetNodeAdapter(PARAGRAPH_INFO),
+        find: makeFindAdapter(FIND_RESULT),
+        get: makeGetAdapter(),
+        getNode: makeGetNodeAdapter(PARAGRAPH_NODE_RESULT),
         getText: makeGetTextAdapter(),
         info: makeInfoAdapter(),
         capabilities: makeCapabilitiesAdapter(),
@@ -2115,8 +2307,9 @@ describe('createDocumentApi', () => {
   describe('lists.* target validation', () => {
     function makeApi() {
       return createDocumentApi({
-        find: makeFindAdapter(QUERY_RESULT),
-        getNode: makeGetNodeAdapter(PARAGRAPH_INFO),
+        find: makeFindAdapter(FIND_RESULT),
+        get: makeGetAdapter(),
+        getNode: makeGetNodeAdapter(PARAGRAPH_NODE_RESULT),
         getText: makeGetTextAdapter(),
         info: makeInfoAdapter(),
         capabilities: makeCapabilitiesAdapter(),
@@ -2206,8 +2399,9 @@ describe('createDocumentApi', () => {
     it('passes canonical target through to adapter unchanged', () => {
       const listsAdpt = makeListsAdapter();
       const api = createDocumentApi({
-        find: makeFindAdapter(QUERY_RESULT),
-        getNode: makeGetNodeAdapter(PARAGRAPH_INFO),
+        find: makeFindAdapter(FIND_RESULT),
+        get: makeGetAdapter(),
+        getNode: makeGetNodeAdapter(PARAGRAPH_NODE_RESULT),
         getText: makeGetTextAdapter(),
         info: makeInfoAdapter(),
         capabilities: makeCapabilitiesAdapter(),
@@ -2232,8 +2426,9 @@ describe('createDocumentApi', () => {
     it('delegates table mutations with normalized options', () => {
       const tablesAdpt = makeTablesAdapter();
       const api = createDocumentApi({
-        find: makeFindAdapter(QUERY_RESULT),
-        getNode: makeGetNodeAdapter(PARAGRAPH_INFO),
+        find: makeFindAdapter(FIND_RESULT),
+        get: makeGetAdapter(),
+        getNode: makeGetNodeAdapter(PARAGRAPH_NODE_RESULT),
         getText: makeGetTextAdapter(),
         info: makeInfoAdapter(),
         comments: makeCommentsAdapter(),
@@ -2268,8 +2463,9 @@ describe('createDocumentApi', () => {
     it('delegates table reads directly without options normalization', () => {
       const tablesAdpt = makeTablesAdapter();
       const api = createDocumentApi({
-        find: makeFindAdapter(QUERY_RESULT),
-        getNode: makeGetNodeAdapter(PARAGRAPH_INFO),
+        find: makeFindAdapter(FIND_RESULT),
+        get: makeGetAdapter(),
+        getNode: makeGetNodeAdapter(PARAGRAPH_NODE_RESULT),
         getText: makeGetTextAdapter(),
         info: makeInfoAdapter(),
         comments: makeCommentsAdapter(),
@@ -2299,8 +2495,9 @@ describe('createDocumentApi', () => {
     it('delegates create.table with at defaulting to documentEnd', () => {
       const createAdpt = makeCreateAdapter();
       const api = createDocumentApi({
-        find: makeFindAdapter(QUERY_RESULT),
-        getNode: makeGetNodeAdapter(PARAGRAPH_INFO),
+        find: makeFindAdapter(FIND_RESULT),
+        get: makeGetAdapter(),
+        getNode: makeGetNodeAdapter(PARAGRAPH_NODE_RESULT),
         getText: makeGetTextAdapter(),
         info: makeInfoAdapter(),
         comments: makeCommentsAdapter(),
@@ -2323,8 +2520,9 @@ describe('createDocumentApi', () => {
     it('delegates create.table with explicit at location', () => {
       const createAdpt = makeCreateAdapter();
       const api = createDocumentApi({
-        find: makeFindAdapter(QUERY_RESULT),
-        getNode: makeGetNodeAdapter(PARAGRAPH_INFO),
+        find: makeFindAdapter(FIND_RESULT),
+        get: makeGetAdapter(),
+        getNode: makeGetNodeAdapter(PARAGRAPH_NODE_RESULT),
         getText: makeGetTextAdapter(),
         info: makeInfoAdapter(),
         comments: makeCommentsAdapter(),
@@ -2348,8 +2546,9 @@ describe('createDocumentApi', () => {
   describe('tables.* locator validation', () => {
     function makeApi() {
       return createDocumentApi({
-        find: makeFindAdapter(QUERY_RESULT),
-        getNode: makeGetNodeAdapter(PARAGRAPH_INFO),
+        find: makeFindAdapter(FIND_RESULT),
+        get: makeGetAdapter(),
+        getNode: makeGetNodeAdapter(PARAGRAPH_NODE_RESULT),
         getText: makeGetTextAdapter(),
         info: makeInfoAdapter(),
         capabilities: makeCapabilitiesAdapter(),

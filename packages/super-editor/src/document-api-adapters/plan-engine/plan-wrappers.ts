@@ -14,13 +14,23 @@ import type {
   TextAddress,
   TextMutationReceipt,
   TextMutationResolution,
+  SDMutationReceipt,
   WriteRequest,
   StyleApplyInput,
   InlineRunPatchKey,
   PlanReceipt,
   ReceiptFailure,
+  SDInsertInput,
+  SDReplaceInput,
+  ReplaceInput,
+  SDAddress,
 } from '@superdoc/document-api';
-import { INLINE_PROPERTY_BY_KEY } from '@superdoc/document-api';
+import {
+  isStructuralInsertInput,
+  isStructuralReplaceInput,
+  textReceiptToSDReceipt,
+  INLINE_PROPERTY_BY_KEY,
+} from '@superdoc/document-api';
 import type { Editor } from '../../core/Editor.js';
 import type { CompiledPlan } from './compiler.js';
 import type { CompiledTarget } from './executor-registry.types.js';
@@ -45,6 +55,13 @@ import {
 import { TrackFormatMarkName } from '../../extensions/track-changes/constants.js';
 import { applyDirectMutationMeta, applyTrackedMutationMeta } from '../helpers/transaction-meta.js';
 import { markdownToPmFragment } from '../../core/helpers/markdown/markdownToPmContent.js';
+import {
+  executeStructuralInsert as executeStructuralInsertEngine,
+  executeStructuralReplace as executeStructuralReplaceEngine,
+  resolveReplaceTarget as resolveStructuralReplaceTarget,
+  resolveInsertTarget as resolveStructuralInsertTarget,
+  resolvePlacement,
+} from '../structural-write-engine/index.js';
 
 // ---------------------------------------------------------------------------
 // Helpers
@@ -121,6 +138,26 @@ function ensureTableSeparators(jsonNodes: Record<string, unknown>[]): void {
       jsonNodes.splice(i + 1, 0, { type: 'paragraph' });
     }
   }
+}
+
+// ---------------------------------------------------------------------------
+// SDAddress → TextAddress bridge (transitional — SDAddress resolution in Phase 6)
+// ---------------------------------------------------------------------------
+
+/**
+ * Narrows an `SDAddress | TextAddress` union to `TextAddress` for the current
+ * adapter layer, which only handles TextAddress-based resolution.
+ *
+ * SDAddress inputs are bridged using `nodeId → blockId` and `anchor → range`.
+ */
+function narrowToTextAddress(target: SDAddress | TextAddress): TextAddress {
+  if (target.kind === 'text') return target;
+  const sd = target as SDAddress;
+  return {
+    kind: 'text',
+    blockId: sd.nodeId ?? '',
+    range: sd.anchor ? { start: sd.anchor.start.offset, end: sd.anchor.end.offset } : { start: 0, end: 0 },
+  };
 }
 
 // ---------------------------------------------------------------------------
@@ -284,7 +321,7 @@ function toCompiledTarget(stepId: string, op: string, resolved: ResolvedWrite): 
 export function executeDomainCommand(
   editor: Editor,
   handler: () => boolean,
-  options?: { expectedRevision?: string },
+  options?: { expectedRevision?: string; changeMode?: 'direct' | 'tracked' },
 ): PlanReceipt {
   const stepId = uuidv4();
   const step = {
@@ -299,7 +336,10 @@ export function executeDomainCommand(
     assertSteps: [],
     compiledRevision: getRevision(editor),
   };
-  return executeCompiledPlan(editor, compiled, { expectedRevision: options?.expectedRevision });
+  return executeCompiledPlan(editor, compiled, {
+    expectedRevision: options?.expectedRevision,
+    changeMode: options?.changeMode,
+  });
 }
 
 // ---------------------------------------------------------------------------
@@ -578,7 +618,21 @@ export function insertStructuredWrapper(
   editor: Editor,
   input: InsertInput,
   options?: MutationOptions,
-): TextMutationReceipt {
+): SDMutationReceipt {
+  return textReceiptToSDReceipt(insertStructuredInner(editor, input, options));
+}
+
+/**
+ * Inner implementation for insertStructuredWrapper.
+ * Returns a TextMutationReceipt that the public wrapper converts to SDMutationReceipt.
+ */
+function insertStructuredInner(editor: Editor, input: InsertInput, options?: MutationOptions): TextMutationReceipt {
+  // Structural SDFragment path — delegate to the structural write engine
+  if (isStructuralInsertInput(input)) {
+    return executeStructuralInsertWrapper(editor, input, options);
+  }
+
+  // Legacy markdown/html path
   const contentType = input.type ?? 'text';
   const { value, target } = input;
 
@@ -808,4 +862,222 @@ export function insertStructuredWrapper(
   }
 
   return { success: true, resolution };
+}
+
+// ---------------------------------------------------------------------------
+// Structural SDFragment insert wrapper
+// ---------------------------------------------------------------------------
+
+/**
+ * Handles structural insert (SDFragment content).
+ * Wraps the structural write engine to produce a TextMutationReceipt.
+ */
+function executeStructuralInsertWrapper(
+  editor: Editor,
+  input: SDInsertInput,
+  options?: MutationOptions,
+): TextMutationReceipt {
+  const { content, target, placement, nestingPolicy } = input;
+  const mode = options?.changeMode ?? 'direct';
+
+  // Narrow SDAddress | TextAddress → TextAddress for the current adapter layer.
+  const textTarget = target ? narrowToTextAddress(target) : undefined;
+
+  // Block-level resolution for metadata — uses the structural engine's resolver
+  // so ALL block types (tables, images, etc.) are addressable, not just text blocks.
+  let resolved;
+  try {
+    resolved = resolveStructuralInsertTarget(editor, textTarget);
+  } catch (err) {
+    if (err instanceof DocumentApiAdapterError) throw err;
+    throw new DocumentApiAdapterError(
+      'TARGET_NOT_FOUND',
+      `Cannot resolve insert target${textTarget ? ` for block "${textTarget.blockId}"` : ''}.`,
+    );
+  }
+
+  const effectiveTarget: TextAddress = resolved.effectiveTarget ?? {
+    kind: 'text',
+    blockId: '',
+    range: { start: 0, end: 0 },
+  };
+
+  // Compute the placement-adjusted insertion position (same logic as the engine).
+  // Without this, the receipt would report the pre-placement position, which differs
+  // from the actual insertion point for 'before', 'insideStart', 'insideEnd'.
+  let insertPos: number;
+  if (resolved.targetNode && resolved.targetNodePos !== undefined) {
+    insertPos = resolvePlacement(editor.state.doc, resolved.targetNodePos, resolved.targetNode, placement);
+  } else {
+    insertPos = resolved.insertPos;
+  }
+
+  const resolvedRange = { from: insertPos, to: insertPos };
+  const resolution = buildTextMutationResolution({
+    requestedTarget: textTarget,
+    target: effectiveTarget,
+    range: resolvedRange,
+    text: '',
+  });
+
+  try {
+    // Dry-run: run full structural engine validation (target, materialization, nesting),
+    // but skip dispatch.
+    if (options?.dryRun) {
+      executeStructuralInsertEngine(editor, {
+        target: textTarget,
+        content,
+        placement,
+        nestingPolicy,
+        changeMode: mode,
+        dryRun: true,
+      });
+      return { success: true, resolution };
+    }
+
+    const receipt = executeDomainCommand(
+      editor,
+      () => {
+        const result = executeStructuralInsertEngine(editor, {
+          target: textTarget,
+          content,
+          placement,
+          nestingPolicy,
+          changeMode: mode,
+        });
+        return result.success;
+      },
+      { expectedRevision: options?.expectedRevision, changeMode: mode },
+    );
+
+    const succeeded = receipt.steps[0]?.effect === 'changed';
+    if (!succeeded) {
+      return {
+        success: false,
+        resolution,
+        failure: { code: 'INVALID_TARGET', message: 'Structural insert failed.' },
+      };
+    }
+
+    return { success: true, resolution };
+  } catch (err) {
+    if (err instanceof DocumentApiAdapterError) throw err;
+    const message = err instanceof Error ? err.message : String(err);
+    return {
+      success: false,
+      resolution,
+      failure: { code: 'INVALID_TARGET', message: `Structural insert failed: ${message}` },
+    };
+  }
+}
+
+// ---------------------------------------------------------------------------
+// Structural SDFragment replace wrapper
+// ---------------------------------------------------------------------------
+
+/**
+ * Entry point for structural replace operations.
+ *
+ * Detects structural (SDFragment) input and delegates to the structural
+ * replace engine. Non-structural input is rejected (legacy replace uses writeWrapper).
+ */
+export function replaceStructuredWrapper(
+  editor: Editor,
+  input: ReplaceInput,
+  options?: MutationOptions,
+): SDMutationReceipt {
+  if (!isStructuralReplaceInput(input)) {
+    throw new DocumentApiAdapterError(
+      'INVALID_INPUT',
+      'replaceStructured requires structural content input with a "content" field.',
+    );
+  }
+  return textReceiptToSDReceipt(executeStructuralReplaceWrapper(editor, input, options));
+}
+
+/**
+ * Handles structural replace (SDFragment content).
+ * Wraps the structural replace engine to produce a TextMutationReceipt.
+ */
+function executeStructuralReplaceWrapper(
+  editor: Editor,
+  input: SDReplaceInput,
+  options?: MutationOptions,
+): TextMutationReceipt {
+  const { content, target, nestingPolicy } = input;
+  const mode = options?.changeMode ?? 'direct';
+
+  // Narrow SDAddress | TextAddress → TextAddress for the current adapter layer.
+  const textTarget = narrowToTextAddress(target);
+
+  // Block-level resolution for metadata — uses the same block lookup as the engine.
+  // This supports non-text blocks (tables, images) that resolveTextTarget would miss.
+  let resolvedBlock;
+  try {
+    resolvedBlock = resolveStructuralReplaceTarget(editor, textTarget);
+  } catch (err) {
+    if (err instanceof DocumentApiAdapterError) throw err;
+    throw new DocumentApiAdapterError(
+      'TARGET_NOT_FOUND',
+      `Cannot resolve replace target for block "${textTarget.blockId}".`,
+    );
+  }
+
+  const resolvedRange = { from: resolvedBlock.from, to: resolvedBlock.to };
+  // Snapshot the text currently covered by the target block (contract: non-empty for non-collapsed ranges).
+  const coveredText = editor.state.doc.textBetween(resolvedBlock.from, resolvedBlock.to, '\n', '\ufffc');
+  const resolution = buildTextMutationResolution({
+    requestedTarget: textTarget,
+    target: textTarget,
+    range: resolvedRange,
+    text: coveredText,
+  });
+
+  try {
+    // Dry-run: run full structural engine validation (target, materialization, nesting),
+    // but skip dispatch.
+    if (options?.dryRun) {
+      executeStructuralReplaceEngine(editor, {
+        target: textTarget,
+        content,
+        nestingPolicy,
+        changeMode: mode,
+        dryRun: true,
+      });
+      return { success: true, resolution };
+    }
+
+    const receipt = executeDomainCommand(
+      editor,
+      () => {
+        const result = executeStructuralReplaceEngine(editor, {
+          target: textTarget,
+          content,
+          nestingPolicy,
+          changeMode: mode,
+        });
+        return result.success;
+      },
+      { expectedRevision: options?.expectedRevision, changeMode: mode },
+    );
+
+    const succeeded = receipt.steps[0]?.effect === 'changed';
+    if (!succeeded) {
+      return {
+        success: false,
+        resolution,
+        failure: { code: 'INVALID_TARGET', message: 'Structural replace failed.' },
+      };
+    }
+
+    return { success: true, resolution };
+  } catch (err) {
+    if (err instanceof DocumentApiAdapterError) throw err;
+    const message = err instanceof Error ? err.message : String(err);
+    return {
+      success: false,
+      resolution,
+      failure: { code: 'INVALID_TARGET', message: `Structural replace failed: ${message}` },
+    };
+  }
 }

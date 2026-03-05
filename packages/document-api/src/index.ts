@@ -8,6 +8,11 @@ export * from './capabilities/capabilities.js';
 export * from './inline-semantics/index.js';
 export type { HistoryAdapter, HistoryApi } from './history/history.js';
 export type { ClearContentAdapter, ClearContentInput } from './clear-content/clear-content.js';
+export type {
+  MarkdownToFragmentInput,
+  MarkdownToFragmentAdapter,
+} from './markdown-to-fragment/markdown-to-fragment.js';
+export { executeMarkdownToFragment } from './markdown-to-fragment/markdown-to-fragment.js';
 export type { HistoryState, HistoryActionResult } from './history/history.types.js';
 
 import type {
@@ -27,6 +32,7 @@ import type {
   Receipt,
   Selector,
   TextMutationReceipt,
+  SDMutationReceipt,
   TrackChangeInfo,
   TrackChangesListResult,
 } from './types/index.js';
@@ -47,7 +53,8 @@ import {
   executeListComments,
 } from './comments/comments.js';
 import type { DeleteInput } from './delete/delete.js';
-import { executeFind, type FindAdapter, type FindOptions } from './find/find.js';
+import { executeFind, type FindAdapter } from './find/find.js';
+import type { SDFindInput, SDFindResult, SDGetInput, SDNodeResult } from './types/sd-envelope.js';
 import type {
   FormatAdapter,
   FormatApi,
@@ -68,9 +75,17 @@ import type {
 import { executeStylesApply } from './styles/index.js';
 import type { GetNodeAdapter, GetNodeByIdInput } from './get-node/get-node.js';
 import { executeGetNode, executeGetNodeById } from './get-node/get-node.js';
+import { executeGet, type GetAdapter } from './get/get.js';
+import type { SDDocument } from './types/fragment.js';
 import { executeGetText, type GetTextAdapter, type GetTextInput } from './get-text/get-text.js';
 import { executeGetMarkdown, type GetMarkdownAdapter, type GetMarkdownInput } from './get-markdown/get-markdown.js';
 import { executeGetHtml, type GetHtmlAdapter, type GetHtmlInput } from './get-html/get-html.js';
+import {
+  executeMarkdownToFragment,
+  type MarkdownToFragmentAdapter,
+  type MarkdownToFragmentInput,
+} from './markdown-to-fragment/markdown-to-fragment.js';
+import type { SDMarkdownToFragmentResult } from './types/sd-contract.js';
 import { executeInfo, type InfoAdapter, type InfoInput } from './info/info.js';
 import {
   executeClearContent,
@@ -454,6 +469,7 @@ import type {
   HyperlinkMutationResult,
 } from './hyperlinks/hyperlinks.types.js';
 
+export type { GetAdapter } from './get/get.js';
 export type { FindAdapter, FindOptions } from './find/find.js';
 export type { GetNodeAdapter, GetNodeByIdInput } from './get-node/get-node.js';
 export type { GetTextAdapter, GetTextInput } from './get-text/get-text.js';
@@ -820,9 +836,14 @@ export type {
   SetCommentActiveInput,
 } from './comments/comments.js';
 export type { CommentInfo, CommentsListQuery, CommentsListResult } from './comments/comments.types.js';
-export { DocumentApiValidationError } from './errors.js';
-export type { InsertInput, InsertContentType } from './insert/insert.js';
-export type { ReplaceInput } from './replace/replace.js';
+export { DocumentApiValidationError, toSDError } from './errors.js';
+export { textReceiptToSDReceipt } from './receipt-bridge.js';
+export { isSDAddress, isValidTarget } from './validation-primitives.js';
+export type { InsertInput, InsertContentType, LegacyInsertInput } from './insert/insert.js';
+export { isStructuralInsertInput } from './insert/insert.js';
+export type { ReplaceInput, LegacyReplaceInput } from './replace/replace.js';
+export { isStructuralReplaceInput } from './replace/replace.js';
+export { validateDocumentFragment, validateSDFragment } from './validation/fragment-validator.js';
 export type { DeleteInput } from './delete/delete.js';
 
 export interface TablesApi {
@@ -905,30 +926,29 @@ export interface MutationsAdapter {
  */
 export interface DocumentApi {
   /**
-   * Find nodes in the document matching a query.
-   * @param query - A full query object specifying selection criteria.
-   * @returns The query result containing matches and metadata.
+   * Read the full document as an SDDocument structure.
+   * @param input - Get input with optional read options.
+   * @returns An SDDocument with body content projected into SDM/1 canonical shapes.
    */
-  find(query: Query): FindOutput;
+  get(input: SDGetInput): SDDocument;
   /**
-   * Find nodes in the document matching a selector with optional options.
-   * @param selector - A selector specifying what to find.
-   * @param options - Optional find options (limit, offset, within, etc.).
-   * @returns The query result containing matches and metadata.
+   * Find nodes in the document matching an SDFindInput.
+   * @param input - The find input with selector, pagination, and scope.
+   * @returns An SDFindResult with matching SDNodeResult items.
    */
-  find(selector: Selector, options?: FindOptions): FindOutput;
+  find(input: SDFindInput): SDFindResult;
   /**
-   * Get detailed information about a specific node by its address.
+   * Get a node by its address as an SDNodeResult.
    * @param address - The node address to resolve.
-   * @returns Full node information including typed properties.
+   * @returns SDNodeResult with the projected node and its address.
    */
-  getNode(address: NodeAddress): NodeInfo;
+  getNode(address: NodeAddress): SDNodeResult;
   /**
-   * Get detailed information about a block node by its ID.
+   * Get a block node by its ID as an SDNodeResult.
    * @param input - The node-id input payload.
-   * @returns Full node information including typed properties.
+   * @returns SDNodeResult with the projected node and its address.
    */
-  getNodeById(input: GetNodeByIdInput): NodeInfo;
+  getNodeById(input: GetNodeByIdInput): SDNodeResult;
   /**
    * Return the full document text content.
    */
@@ -941,6 +961,10 @@ export interface DocumentApi {
    * Return the full document content as an HTML string.
    */
   getHtml(input: GetHtmlInput): string;
+  /**
+   * Convert a Markdown string into an SDM/1 structural fragment.
+   */
+  markdownToFragment(input: MarkdownToFragmentInput): SDMarkdownToFragmentResult;
   /**
    * Return document summary info used by `doc.info`.
    */
@@ -957,11 +981,11 @@ export interface DocumentApi {
    * Insert content at a target location.
    * If target is omitted, inserts at the end of the document.
    */
-  insert(input: InsertInput, options?: MutationOptions): TextMutationReceipt;
+  insert(input: InsertInput, options?: MutationOptions): SDMutationReceipt;
   /**
    * Replace text at a target range.
    */
-  replace(input: ReplaceInput, options?: MutationOptions): TextMutationReceipt;
+  replace(input: ReplaceInput, options?: MutationOptions): SDMutationReceipt;
   /**
    * Delete text at a target range.
    */
@@ -1045,11 +1069,13 @@ export interface DocumentApi {
 }
 
 export interface DocumentApiAdapters {
+  get: GetAdapter;
   find: FindAdapter;
   getNode: GetNodeAdapter;
   getText: GetTextAdapter;
   getMarkdown: GetMarkdownAdapter;
   getHtml: GetHtmlAdapter;
+  markdownToFragment: MarkdownToFragmentAdapter;
   info: InfoAdapter;
   clearContent: ClearContentAdapter;
   capabilities: CapabilitiesAdapter;
@@ -1105,13 +1131,16 @@ export function createDocumentApi(adapters: DocumentApiAdapters): DocumentApi {
   const inlineAliasApi = buildFormatInlineAliasApi(adapters.format);
 
   const api: DocumentApi = {
-    find(selectorOrQuery: Selector | Query, options?: FindOptions): FindOutput {
-      return executeFind(adapters.find, selectorOrQuery, options);
+    get(input: SDGetInput): SDDocument {
+      return executeGet(adapters.get, input);
     },
-    getNode(address: NodeAddress): NodeInfo {
+    find(input: SDFindInput): SDFindResult {
+      return executeFind(adapters.find, input);
+    },
+    getNode(address: NodeAddress): SDNodeResult {
       return executeGetNode(adapters.getNode, address);
     },
-    getNodeById(input: GetNodeByIdInput): NodeInfo {
+    getNodeById(input: GetNodeByIdInput): SDNodeResult {
       return executeGetNodeById(adapters.getNode, input);
     },
     getText(input: GetTextInput): string {
@@ -1122,6 +1151,9 @@ export function createDocumentApi(adapters: DocumentApiAdapters): DocumentApi {
     },
     getHtml(input: GetHtmlInput): string {
       return executeGetHtml(adapters.getHtml, input);
+    },
+    markdownToFragment(input: MarkdownToFragmentInput): SDMarkdownToFragmentResult {
+      return executeMarkdownToFragment(adapters.markdownToFragment, input);
     },
     info(input: InfoInput): DocumentInfo {
       return executeInfo(adapters.info, input);
@@ -1146,10 +1178,10 @@ export function createDocumentApi(adapters: DocumentApiAdapters): DocumentApi {
         return executeListComments(adapters.comments, query);
       },
     },
-    insert(input: InsertInput, options?: MutationOptions): TextMutationReceipt {
+    insert(input: InsertInput, options?: MutationOptions): SDMutationReceipt {
       return executeInsert(adapters.write, input, options);
     },
-    replace(input: ReplaceInput, options?: MutationOptions): TextMutationReceipt {
+    replace(input: ReplaceInput, options?: MutationOptions): SDMutationReceipt {
       return executeReplace(adapters.write, input, options);
     },
     delete(input: DeleteInput, options?: MutationOptions): TextMutationReceipt {

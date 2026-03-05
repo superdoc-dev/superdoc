@@ -718,35 +718,120 @@ const selectSchema: JsonSchema = {
   anyOf: [textSelectorSchema, nodeSelectorSchema, selectorShorthandSchema],
 };
 
-const findInputSchema = objectSchema(
+// -- SDFindInput / SDFindResult schemas (SDM/1) --
+
+const sdTextSelectorSchema = objectSchema(
   {
-    select: selectSchema,
-    within: nodeAddressSchema,
+    type: { const: 'text' },
+    pattern: { type: 'string' },
+    mode: { enum: ['contains', 'regex'] },
+    caseSensitive: { type: 'boolean' },
+  },
+  ['type', 'pattern'],
+);
+
+const sdNodeSelectorSchema = objectSchema(
+  {
+    type: { const: 'node' },
+    kind: { enum: ['content', 'inline'] },
+    nodeKind: { type: 'string' },
+  },
+  ['type'],
+);
+
+const sdSelectorSchema: JsonSchema = {
+  oneOf: [sdTextSelectorSchema, sdNodeSelectorSchema],
+};
+
+const sdAddressSchema = objectSchema(
+  {
+    kind: { enum: ['content', 'inline', 'annotation', 'section'] },
+    stability: { enum: ['stable', 'ephemeral'] },
+    nodeId: { type: 'string' },
+    anchor: objectSchema({
+      start: objectSchema({ blockId: { type: 'string' }, offset: { type: 'integer' } }, ['blockId', 'offset']),
+      end: objectSchema({ blockId: { type: 'string' }, offset: { type: 'integer' } }, ['blockId', 'offset']),
+    }),
+    evaluatedRevision: { type: 'string' },
+    path: arraySchema({ oneOf: [{ type: 'string' }, { type: 'integer' }] }),
+  },
+  ['kind', 'stability'],
+);
+
+const sdReadOptionsSchema = objectSchema({
+  includeResolved: { type: 'boolean' },
+  includeProvenance: { type: 'boolean' },
+  includeContext: { type: 'boolean' },
+});
+
+const sdFindInputSchema = objectSchema(
+  {
+    select: sdSelectorSchema,
+    within: sdAddressSchema,
     limit: { type: 'integer' },
     offset: { type: 'integer' },
-    require: { enum: ['any', 'first', 'exactlyOne', 'all'] },
-    includeNodes: { type: 'boolean' },
-    includeUnknown: { type: 'boolean' },
+    options: sdReadOptionsSchema,
   },
   ['select'],
 );
 
-const findItemDomainSchema = discoveryItemSchema(
+const sdNodeResultSchema = objectSchema(
   {
-    address: nodeAddressSchema,
-    node: nodeInfoSchema,
-    context: matchContextSchema,
+    node: { type: 'object' },
+    address: sdAddressSchema,
+    context: { type: 'object' },
   },
-  ['address'],
+  ['node', 'address'],
 );
 
-const findOutputSchema: JsonSchema = {
-  ...discoveryResultSchema(findItemDomainSchema),
-  properties: {
-    ...(discoveryResultSchema(findItemDomainSchema) as { properties: Record<string, JsonSchema> }).properties,
-    diagnostics: arraySchema(unknownNodeDiagnosticSchema),
+const sdFindResultSchema = objectSchema(
+  {
+    total: { type: 'integer', minimum: 0 },
+    limit: { type: 'integer', minimum: 0 },
+    offset: { type: 'integer', minimum: 0 },
+    items: arraySchema(sdNodeResultSchema),
   },
-};
+  ['total', 'limit', 'offset', 'items'],
+);
+
+// ---------------------------------------------------------------------------
+// SDMutationReceipt schemas (for insert/replace in SDM/1 format)
+// ---------------------------------------------------------------------------
+
+const sdMutationResolutionSchema = objectSchema(
+  {
+    requestedTarget: sdAddressSchema,
+    target: sdAddressSchema,
+  },
+  ['target'],
+);
+
+const sdMutationSuccessSchema = objectSchema(
+  {
+    success: { const: true },
+    resolution: sdMutationResolutionSchema,
+    evaluatedRevision: objectSchema({ before: { type: 'string' }, after: { type: 'string' } }, ['before', 'after']),
+  },
+  ['success'],
+);
+
+function sdMutationFailureSchemaFor(operationId: OperationId): JsonSchema {
+  return objectSchema(
+    {
+      success: { const: false },
+      failure: receiptFailureSchemaFor(operationId),
+      resolution: sdMutationResolutionSchema,
+      evaluatedRevision: objectSchema({ before: { type: 'string' }, after: { type: 'string' } }, ['before', 'after']),
+    },
+    ['success', 'failure'],
+  );
+}
+
+function sdMutationResultSchemaFor(operationId: OperationId): JsonSchema {
+  return {
+    oneOf: [sdMutationSuccessSchema, sdMutationFailureSchemaFor(operationId)],
+  };
+}
 
 const documentInfoCountsSchema = objectSchema(
   {
@@ -1644,13 +1729,29 @@ const hyperlinkInfoSchema: JsonSchema = objectSchema(
 );
 
 const operationSchemas: Record<OperationId, OperationSchemaSet> = {
+  get: {
+    input: objectSchema({
+      options: objectSchema({
+        includeResolved: { type: 'boolean' },
+        includeProvenance: { type: 'boolean' },
+        includeContext: { type: 'boolean' },
+      }),
+    }),
+    output: objectSchema(
+      {
+        modelVersion: { const: 'sdm/1' },
+        body: { type: 'array' },
+      },
+      ['modelVersion', 'body'],
+    ),
+  },
   find: {
-    input: findInputSchema,
-    output: findOutputSchema,
+    input: sdFindInputSchema,
+    output: sdFindResultSchema,
   },
   getNode: {
     input: nodeAddressSchema,
-    output: nodeInfoSchema,
+    output: sdNodeResultSchema,
   },
   getNodeById: {
     input: objectSchema(
@@ -1660,7 +1761,7 @@ const operationSchemas: Record<OperationId, OperationSchemaSet> = {
       },
       ['nodeId'],
     ),
-    output: nodeInfoSchema,
+    output: sdNodeResultSchema,
   },
   getText: {
     input: strictEmptyObjectSchema,
@@ -1676,6 +1777,27 @@ const operationSchemas: Record<OperationId, OperationSchemaSet> = {
     }),
     output: { type: 'string' },
   },
+  markdownToFragment: {
+    input: objectSchema({ markdown: { type: 'string' } }, ['markdown']),
+    output: objectSchema(
+      {
+        fragment: {},
+        lossy: { type: 'boolean' },
+        diagnostics: arraySchema(
+          objectSchema(
+            {
+              code: { type: 'string' },
+              severity: { type: 'string', enum: ['error', 'warning', 'info'] },
+              message: { type: 'string' },
+              path: arraySchema({ type: 'string' }),
+            },
+            ['code', 'severity', 'message'],
+          ),
+        ),
+      },
+      ['fragment', 'lossy', 'diagnostics'],
+    ),
+  },
   info: {
     input: strictEmptyObjectSchema,
     output: documentInfoSchema,
@@ -1688,9 +1810,9 @@ const operationSchemas: Record<OperationId, OperationSchemaSet> = {
   },
   insert: {
     input: insertInputSchema,
-    output: textMutationResultSchemaFor('insert'),
-    success: textMutationSuccessSchema,
-    failure: textMutationFailureSchemaFor('insert'),
+    output: sdMutationResultSchemaFor('insert'),
+    success: sdMutationSuccessSchema,
+    failure: sdMutationFailureSchemaFor('insert'),
   },
   replace: {
     input: objectSchema(
@@ -1700,9 +1822,9 @@ const operationSchemas: Record<OperationId, OperationSchemaSet> = {
       },
       ['target', 'text'],
     ),
-    output: textMutationResultSchemaFor('replace'),
-    success: textMutationSuccessSchema,
-    failure: textMutationFailureSchemaFor('replace'),
+    output: sdMutationResultSchemaFor('replace'),
+    success: sdMutationSuccessSchema,
+    failure: sdMutationFailureSchemaFor('replace'),
   },
   delete: {
     input: objectSchema(

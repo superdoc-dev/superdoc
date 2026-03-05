@@ -1,6 +1,7 @@
-import type { TextAddress, TextMutationReceipt } from '../types/index.js';
+import type { TextAddress, TextMutationReceipt, SDMutationReceipt } from '../types/index.js';
 import type { BlockRelativeLocator, BlockRelativeRange } from './locator.js';
 import type { InsertInput } from '../insert/insert.js';
+import type { ReplaceInput } from '../replace/replace.js';
 
 export type ChangeMode = 'direct' | 'tracked';
 
@@ -50,8 +51,10 @@ export type WriteRequest = InsertWriteRequest | ReplaceWriteRequest | DeleteWrit
 
 export interface WriteAdapter {
   write(request: WriteRequest, options?: MutationOptions): TextMutationReceipt;
-  /** Structured insert for markdown/html content types. */
-  insertStructured(input: InsertInput, options?: MutationOptions): TextMutationReceipt;
+  /** Structured insert for SDFragment or markdown/html content. Returns SDMutationReceipt. */
+  insertStructured(input: InsertInput, options?: MutationOptions): SDMutationReceipt;
+  /** Structured replace for SDFragment content. Returns SDMutationReceipt. */
+  replaceStructured(input: ReplaceInput, options?: MutationOptions): SDMutationReceipt;
 }
 
 export function normalizeMutationOptions(options?: MutationOptions): MutationOptions {

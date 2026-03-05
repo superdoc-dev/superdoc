@@ -58,13 +58,14 @@ export function buildDispatchTable(api: DocumentApi): TypedDispatchTable {
 
   return {
     // --- Singleton reads ---
-    find: (input, options) =>
-      api.find(input as Parameters<typeof api.find>[0], options as Parameters<typeof api.find>[1]),
+    get: (input) => api.get(input),
+    find: (input) => api.find(input),
     getNode: (input) => api.getNode(input),
     getNodeById: (input) => api.getNodeById(input),
     getText: (input) => api.getText(input),
     getMarkdown: (input) => api.getMarkdown(input),
     getHtml: (input) => api.getHtml(input),
+    markdownToFragment: (input) => api.markdownToFragment(input),
     info: (input) => api.info(input),
 
     // --- Singleton mutations ---

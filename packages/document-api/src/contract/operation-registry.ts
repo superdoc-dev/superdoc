@@ -8,9 +8,12 @@
 
 import type { OperationId } from './types.js';
 
-import type { NodeAddress, NodeInfo, FindOutput, Selector, Query } from '../types/index.js';
+import type { NodeAddress } from '../types/index.js';
+import type { SDNodeResult, SDFindInput, SDFindResult, SDGetInput } from '../types/sd-envelope.js';
 import type { TextMutationReceipt, Receipt } from '../types/receipt.js';
+import type { SDMutationReceipt, SDMarkdownToFragmentResult } from '../types/sd-contract.js';
 import type { DocumentInfo } from '../types/info.types.js';
+import type { SDDocument } from '../types/fragment.js';
 import type {
   CreateParagraphInput,
   CreateParagraphResult,
@@ -19,11 +22,11 @@ import type {
 } from '../types/create.types.js';
 import type { BlocksDeleteInput, BlocksDeleteResult } from '../types/blocks.types.js';
 
-import type { FindOptions } from '../find/find.js';
 import type { GetNodeByIdInput } from '../get-node/get-node.js';
 import type { GetTextInput } from '../get-text/get-text.js';
 import type { GetMarkdownInput } from '../get-markdown/get-markdown.js';
 import type { GetHtmlInput } from '../get-html/get-html.js';
+import type { MarkdownToFragmentInput } from '../markdown-to-fragment/markdown-to-fragment.js';
 import type { InfoInput } from '../info/info.js';
 import type { ClearContentInput } from '../clear-content/clear-content.js';
 import type { InsertInput } from '../insert/insert.js';
@@ -267,18 +270,20 @@ type FormatInlineAliasOperationRegistry = {
 
 export interface OperationRegistry extends FormatInlineAliasOperationRegistry {
   // --- Singleton reads ---
-  find: { input: Selector | Query; options: FindOptions; output: FindOutput };
-  getNode: { input: NodeAddress; options: never; output: NodeInfo };
-  getNodeById: { input: GetNodeByIdInput; options: never; output: NodeInfo };
+  get: { input: SDGetInput; options: never; output: SDDocument };
+  find: { input: SDFindInput; options: never; output: SDFindResult };
+  getNode: { input: NodeAddress; options: never; output: SDNodeResult };
+  getNodeById: { input: GetNodeByIdInput; options: never; output: SDNodeResult };
   getText: { input: GetTextInput; options: never; output: string };
   getMarkdown: { input: GetMarkdownInput; options: never; output: string };
   getHtml: { input: GetHtmlInput; options: never; output: string };
+  markdownToFragment: { input: MarkdownToFragmentInput; options: never; output: SDMarkdownToFragmentResult };
   info: { input: InfoInput; options: never; output: DocumentInfo };
 
   // --- Singleton mutations ---
   clearContent: { input: ClearContentInput; options: RevisionGuardOptions; output: Receipt };
-  insert: { input: InsertInput; options: MutationOptions; output: TextMutationReceipt };
-  replace: { input: ReplaceInput; options: MutationOptions; output: TextMutationReceipt };
+  insert: { input: InsertInput; options: MutationOptions; output: SDMutationReceipt };
+  replace: { input: ReplaceInput; options: MutationOptions; output: SDMutationReceipt };
   delete: { input: DeleteInput; options: MutationOptions; output: TextMutationReceipt };
 
   // --- blocks.* ---

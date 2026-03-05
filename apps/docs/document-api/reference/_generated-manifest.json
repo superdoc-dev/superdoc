@@ -90,6 +90,7 @@
     "apps/docs/document-api/reference/get-node-by-id.mdx",
     "apps/docs/document-api/reference/get-node.mdx",
     "apps/docs/document-api/reference/get-text.mdx",
+    "apps/docs/document-api/reference/get.mdx",
     "apps/docs/document-api/reference/history/get.mdx",
     "apps/docs/document-api/reference/history/index.mdx",
     "apps/docs/document-api/reference/history/redo.mdx",
@@ -162,6 +163,7 @@
     "apps/docs/document-api/reference/lists/set-level.mdx",
     "apps/docs/document-api/reference/lists/set-type.mdx",
     "apps/docs/document-api/reference/lists/set-value.mdx",
+    "apps/docs/document-api/reference/markdown-to-fragment.mdx",
     "apps/docs/document-api/reference/mutations/apply.mdx",
     "apps/docs/document-api/reference/mutations/index.mdx",
     "apps/docs/document-api/reference/mutations/preview.mdx",
@@ -257,12 +259,14 @@
       "aliasMemberPaths": [],
       "key": "core",
       "operationIds": [
+        "get",
         "find",
         "getNode",
         "getNodeById",
         "getText",
         "getMarkdown",
         "getHtml",
+        "markdownToFragment",
         "info",
         "clearContent",
         "insert",
@@ -608,5 +612,5 @@
     }
   ],
   "marker": "{/* GENERATED FILE: DO NOT EDIT. Regenerate via `pnpm run docapi:sync`. */}",
-  "sourceHash": "ca9145b16d89a81f0c59070efcfec17f26eaeaf1805dd376c57462e3f1762171"
+  "sourceHash": "959d851e3150127f19e7a37c8c1a51b1c199598d055620d835b37fc0533c18c2"
 }

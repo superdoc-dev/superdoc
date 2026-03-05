@@ -31,7 +31,7 @@ import {
   buildDiscoveryResult,
 } from '@superdoc/document-api';
 import type { Editor } from '../../core/Editor.js';
-import { findAdapter } from '../find-adapter.js';
+import { findLegacyAdapter } from '../find-adapter.js';
 import { getBlockIndex } from '../helpers/index-cache.js';
 import { validatePaginationInput } from '../helpers/adapter-utils.js';
 import { captureRunsInRange } from './style-resolver.js';
@@ -394,7 +394,7 @@ export function queryMatchAdapter(editor: Editor, input: QueryMatchInput): Query
     offset: isTextSelector ? undefined : input.offset,
   };
 
-  const result = findAdapter(editor, query);
+  const result = findLegacyAdapter(editor, query);
 
   // Build raw match entries and apply zero-width filtering (D20)
   const rawMatches: Array<{
@@ -414,7 +414,7 @@ export function queryMatchAdapter(editor: Editor, input: QueryMatchInput): Query
 
   // totalMatches counts actionable matches after zero-width filtering (D20).
   // For text selectors, rawMatches is the full filtered set (no pagination yet).
-  // For node selectors, findAdapter already applied pagination, so use its total.
+  // For node selectors, findLegacyAdapter already applied pagination, so use its total.
   const totalMatches = isTextSelector ? rawMatches.length : result.total;
 
   // Apply pagination for text selectors after zero-width filtering (D20).

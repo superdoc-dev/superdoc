@@ -262,23 +262,24 @@ describe('CLI host mode', () => {
     ]);
     const findResult = findData.result as {
       items?: Array<{
-        address?: Record<string, unknown>;
-        context?: { textRanges?: Array<{ kind: 'text'; blockId: string; range: { start: number; end: number } }> };
+        node?: { kind?: string; [key: string]: unknown };
+        address?: { kind?: string; nodeId?: string };
       }>;
     };
     const firstItem = findResult.items?.[0];
-    const firstAddress = firstItem?.address;
-    expect(firstAddress).toBeDefined();
-    await invokeAndValidate('doc.getNode', ['get-node', docPath, '--address-json', JSON.stringify(firstAddress)]);
+    const sdAddress = firstItem?.address;
+    const nodeKind = firstItem?.node?.kind ?? 'paragraph';
+    expect(sdAddress?.nodeId).toBeDefined();
 
-    const textTarget = firstItem?.context?.textRanges?.[0];
-    expect(textTarget).toBeDefined();
+    // Build a legacy NodeAddress for getNode which expects { kind: 'block', nodeType, nodeId }
+    const legacyAddress = { kind: 'block', nodeType: nodeKind, nodeId: sdAddress!.nodeId };
+    await invokeAndValidate('doc.getNode', ['get-node', docPath, '--address-json', JSON.stringify(legacyAddress)]);
+
+    // Build a collapsed text target from the SDM/1 address
     const collapsedTarget = {
-      ...textTarget,
-      range: {
-        start: textTarget!.range.start,
-        end: textTarget!.range.start,
-      },
+      kind: 'text',
+      blockId: sdAddress!.nodeId,
+      range: { start: 0, end: 0 },
     };
     await invokeAndValidate('doc.insert', [
       'insert',

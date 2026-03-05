@@ -49,6 +49,8 @@ const CLI_PKG_PATH = resolve(CLI_DIR, 'package.json');
 // ---------------------------------------------------------------------------
 
 const INTENT_NAMES = {
+  'doc.get': 'get_document',
+  'doc.markdownToFragment': 'markdown_to_fragment',
   'doc.find': 'find_content',
   'doc.getNode': 'get_node',
   'doc.getNodeById': 'get_node_by_id',

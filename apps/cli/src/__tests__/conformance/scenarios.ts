@@ -1943,6 +1943,14 @@ export const SUCCESS_SCENARIOS = {
       ],
     };
   },
+  'doc.clearContent': async (harness: ConformanceHarness): Promise<ScenarioInvocation> => {
+    const stateDir = await harness.createStateDir('doc-clear-content-success');
+    const docPath = await harness.copyFixtureDoc('doc-clear-content');
+    return {
+      stateDir,
+      args: ['clear-content', docPath, '--out', harness.createOutputPath('doc-clear-content-output')],
+    };
+  },
   'doc.insert': async (harness: ConformanceHarness): Promise<ScenarioInvocation> => {
     const stateDir = await harness.createStateDir('doc-insert-success');
     const docPath = await harness.copyFixtureDoc('doc-insert');

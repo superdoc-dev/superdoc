@@ -297,6 +297,22 @@ export const OPERATION_DEFINITIONS = {
     referenceGroup: 'core',
   },
 
+  clearContent: {
+    memberPath: 'clearContent',
+    description: 'Clear all document body content, leaving a single empty paragraph.',
+    expectedResult: 'Returns a Receipt with success status; reports NO_OP if the document is already empty.',
+    requiresDocumentContext: true,
+    metadata: mutationOperation({
+      idempotency: 'conditional',
+      supportsDryRun: false,
+      supportsTrackedMode: false,
+      possibleFailureCodes: ['NO_OP'],
+      throws: ['CAPABILITY_UNAVAILABLE'],
+    }),
+    referenceDocPath: 'clear-content.mdx',
+    referenceGroup: 'core',
+  },
+
   insert: {
     memberPath: 'insert',
     description:

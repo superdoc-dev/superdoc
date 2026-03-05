@@ -57,6 +57,7 @@ const INTENT_NAMES = {
   'doc.getHtml': 'get_document_html',
   'doc.info': 'get_document_info',
   'doc.capabilities.get': 'get_capabilities',
+  'doc.clearContent': 'clear_content',
   'doc.insert': 'insert_content',
   'doc.replace': 'replace_content',
   'doc.delete': 'delete_content',

@@ -1680,6 +1680,12 @@ const operationSchemas: Record<OperationId, OperationSchemaSet> = {
     input: strictEmptyObjectSchema,
     output: documentInfoSchema,
   },
+  clearContent: {
+    input: strictEmptyObjectSchema,
+    output: receiptResultSchemaFor('clearContent'),
+    success: receiptSuccessSchema,
+    failure: receiptFailureResultSchemaFor('clearContent'),
+  },
   insert: {
     input: insertInputSchema,
     output: textMutationResultSchemaFor('insert'),

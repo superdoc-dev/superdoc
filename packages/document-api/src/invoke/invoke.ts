@@ -68,6 +68,7 @@ export function buildDispatchTable(api: DocumentApi): TypedDispatchTable {
     info: (input) => api.info(input),
 
     // --- Singleton mutations ---
+    clearContent: (input, options) => api.clearContent(input, options),
     insert: (input, options) => api.insert(input, options),
     replace: (input, options) => api.replace(input, options),
     delete: (input, options) => api.delete(input, options),

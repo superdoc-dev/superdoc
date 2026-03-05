@@ -9,6 +9,7 @@ import { infoAdapter } from './info-adapter.js';
 import { getDocumentApiCapabilities } from './capabilities-adapter.js';
 import { createCommentsWrapper } from './plan-engine/comments-wrappers.js';
 import { writeWrapper, insertStructuredWrapper, styleApplyWrapper } from './plan-engine/plan-wrappers.js';
+import { clearContentWrapper } from './plan-engine/clear-content-wrapper.js';
 import { stylesApplyAdapter } from './styles-adapter.js';
 import {
   paragraphsSetStyleWrapper,
@@ -231,6 +232,9 @@ export function assembleDocumentApiAdapters(editor: Editor): DocumentApiAdapters
     },
     info: {
       info: (input) => infoAdapter(editor, input),
+    },
+    clearContent: {
+      clearContent: (input, options) => clearContentWrapper(editor, input, options),
     },
     capabilities: {
       get: () => getDocumentApiCapabilities(editor),

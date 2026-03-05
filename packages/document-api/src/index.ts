@@ -7,6 +7,7 @@ export * from './contract/index.js';
 export * from './capabilities/capabilities.js';
 export * from './inline-semantics/index.js';
 export type { HistoryAdapter, HistoryApi } from './history/history.js';
+export type { ClearContentAdapter, ClearContentInput } from './clear-content/clear-content.js';
 export type { HistoryState, HistoryActionResult } from './history/history.types.js';
 
 import type {
@@ -71,6 +72,11 @@ import { executeGetText, type GetTextAdapter, type GetTextInput } from './get-te
 import { executeGetMarkdown, type GetMarkdownAdapter, type GetMarkdownInput } from './get-markdown/get-markdown.js';
 import { executeGetHtml, type GetHtmlAdapter, type GetHtmlInput } from './get-html/get-html.js';
 import { executeInfo, type InfoAdapter, type InfoInput } from './info/info.js';
+import {
+  executeClearContent,
+  type ClearContentAdapter,
+  type ClearContentInput,
+} from './clear-content/clear-content.js';
 import type { InsertInput } from './insert/insert.js';
 import { executeDelete } from './delete/delete.js';
 import { executeInsert } from './insert/insert.js';
@@ -937,6 +943,10 @@ export interface DocumentApi {
    */
   info(input: InfoInput): DocumentInfo;
   /**
+   * Clear all document body content, leaving a single empty paragraph.
+   */
+  clearContent(input: ClearContentInput, options?: RevisionGuardOptions): Receipt;
+  /**
    * Comment operations.
    */
   comments: CommentsApi;
@@ -1038,6 +1048,7 @@ export interface DocumentApiAdapters {
   getMarkdown: GetMarkdownAdapter;
   getHtml: GetHtmlAdapter;
   info: InfoAdapter;
+  clearContent: ClearContentAdapter;
   capabilities: CapabilitiesAdapter;
   comments: CommentsAdapter;
   write: WriteAdapter;
@@ -1111,6 +1122,9 @@ export function createDocumentApi(adapters: DocumentApiAdapters): DocumentApi {
     },
     info(input: InfoInput): DocumentInfo {
       return executeInfo(adapters.info, input);
+    },
+    clearContent(input: ClearContentInput, options?: RevisionGuardOptions): Receipt {
+      return executeClearContent(adapters.clearContent, input, options);
     },
     comments: {
       create(input: CommentsCreateInput, options?: RevisionGuardOptions): Receipt {

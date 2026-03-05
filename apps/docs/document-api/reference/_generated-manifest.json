@@ -5,6 +5,7 @@
     "apps/docs/document-api/reference/blocks/index.mdx",
     "apps/docs/document-api/reference/capabilities/get.mdx",
     "apps/docs/document-api/reference/capabilities/index.mdx",
+    "apps/docs/document-api/reference/clear-content.mdx",
     "apps/docs/document-api/reference/comments/create.mdx",
     "apps/docs/document-api/reference/comments/delete.mdx",
     "apps/docs/document-api/reference/comments/get.mdx",
@@ -262,6 +263,7 @@
         "getMarkdown",
         "getHtml",
         "info",
+        "clearContent",
         "insert",
         "replace",
         "delete"
@@ -604,5 +606,5 @@
     }
   ],
   "marker": "{/* GENERATED FILE: DO NOT EDIT. Regenerate via `pnpm run docapi:sync`. */}",
-  "sourceHash": "d1b97baae61be333b72dc1211180bc02dd451e14a3767328d56929bf77a10132"
+  "sourceHash": "fb9f6aa91bd10748ac21af2465aa97ce59b8e4a9043f6fd0aa07fb7e175cd5c6"
 }

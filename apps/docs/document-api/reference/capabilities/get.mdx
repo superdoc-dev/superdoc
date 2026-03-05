@@ -282,6 +282,11 @@ _No fields._
 | `operations.capabilities.get.dryRun` | boolean | yes |  |
 | `operations.capabilities.get.reasons` | enum[] | no |  |
 | `operations.capabilities.get.tracked` | boolean | yes |  |
+| `operations.clearContent` | object | yes |  |
+| `operations.clearContent.available` | boolean | yes |  |
+| `operations.clearContent.dryRun` | boolean | yes |  |
+| `operations.clearContent.reasons` | enum[] | no |  |
+| `operations.clearContent.tracked` | boolean | yes |  |
 | `operations.comments.create` | object | yes |  |
 | `operations.comments.create.available` | boolean | yes |  |
 | `operations.comments.create.dryRun` | boolean | yes |  |
@@ -1722,6 +1727,14 @@ _No fields._
       "tracked": true
     },
     "capabilities.get": {
+      "available": true,
+      "dryRun": true,
+      "reasons": [
+        "COMMAND_UNAVAILABLE"
+      ],
+      "tracked": true
+    },
+    "clearContent": {
       "available": true,
       "dryRun": true,
       "reasons": [
@@ -5238,6 +5251,41 @@ _No fields._
           "type": "object"
         },
         "capabilities.get": {
+          "additionalProperties": false,
+          "properties": {
+            "available": {
+              "type": "boolean"
+            },
+            "dryRun": {
+              "type": "boolean"
+            },
+            "reasons": {
+              "items": {
+                "enum": [
+                  "COMMAND_UNAVAILABLE",
+                  "HELPER_UNAVAILABLE",
+                  "OPERATION_UNAVAILABLE",
+                  "TRACKED_MODE_UNAVAILABLE",
+                  "DRY_RUN_UNAVAILABLE",
+                  "NAMESPACE_UNAVAILABLE",
+                  "STYLES_PART_MISSING",
+                  "COLLABORATION_ACTIVE"
+                ]
+              },
+              "type": "array"
+            },
+            "tracked": {
+              "type": "boolean"
+            }
+          },
+          "required": [
+            "available",
+            "tracked",
+            "dryRun"
+          ],
+          "type": "object"
+        },
+        "clearContent": {
           "additionalProperties": false,
           "properties": {
             "available": {
@@ -13156,6 +13204,7 @@ _No fields._
         "getMarkdown",
         "getHtml",
         "info",
+        "clearContent",
         "insert",
         "replace",
         "delete",

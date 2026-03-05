@@ -20,7 +20,7 @@ Document API is currently alpha and subject to breaking changes.
 
 | Namespace | Canonical ops | Aliases | Total surface | Reference |
 | --- | --- | --- | --- | --- |
-| Core | 10 | 0 | 10 | [Open](/document-api/reference/core/index) |
+| Core | 11 | 0 | 11 | [Open](/document-api/reference/core/index) |
 | Blocks | 1 | 0 | 1 | [Open](/document-api/reference/blocks/index) |
 | Capabilities | 1 | 0 | 1 | [Open](/document-api/reference/capabilities/index) |
 | Create | 6 | 0 | 6 | [Open](/document-api/reference/create/index) |
@@ -55,6 +55,7 @@ The tables below are grouped by namespace.
 | <span style={{ whiteSpace: 'nowrap', wordBreak: 'normal', overflowWrap: 'normal' }}><a href="/document-api/reference/get-markdown"><code>getMarkdown</code></a></span> | <span style={{ whiteSpace: 'nowrap', wordBreak: 'normal', overflowWrap: 'normal' }}><code>editor.doc.getMarkdown(...)</code></span> | Extract the document content as a Markdown string. |
 | <span style={{ whiteSpace: 'nowrap', wordBreak: 'normal', overflowWrap: 'normal' }}><a href="/document-api/reference/get-html"><code>getHtml</code></a></span> | <span style={{ whiteSpace: 'nowrap', wordBreak: 'normal', overflowWrap: 'normal' }}><code>editor.doc.getHtml(...)</code></span> | Extract the document content as an HTML string. |
 | <span style={{ whiteSpace: 'nowrap', wordBreak: 'normal', overflowWrap: 'normal' }}><a href="/document-api/reference/info"><code>info</code></a></span> | <span style={{ whiteSpace: 'nowrap', wordBreak: 'normal', overflowWrap: 'normal' }}><code>editor.doc.info(...)</code></span> | Return document metadata including revision, node count, and capabilities. |
+| <span style={{ whiteSpace: 'nowrap', wordBreak: 'normal', overflowWrap: 'normal' }}><a href="/document-api/reference/clear-content"><code>clearContent</code></a></span> | <span style={{ whiteSpace: 'nowrap', wordBreak: 'normal', overflowWrap: 'normal' }}><code>editor.doc.clearContent(...)</code></span> | Clear all document body content, leaving a single empty paragraph. |
 | <span style={{ whiteSpace: 'nowrap', wordBreak: 'normal', overflowWrap: 'normal' }}><a href="/document-api/reference/insert"><code>insert</code></a></span> | <span style={{ whiteSpace: 'nowrap', wordBreak: 'normal', overflowWrap: 'normal' }}><code>editor.doc.insert(...)</code></span> | Insert content at a target position, or at the end of the document when target is omitted. Supports text (default), markdown, and html content types via the `type` field. |
 | <span style={{ whiteSpace: 'nowrap', wordBreak: 'normal', overflowWrap: 'normal' }}><a href="/document-api/reference/replace"><code>replace</code></a></span> | <span style={{ whiteSpace: 'nowrap', wordBreak: 'normal', overflowWrap: 'normal' }}><code>editor.doc.replace(...)</code></span> | Replace content at a target position with new text or inline content. |
 | <span style={{ whiteSpace: 'nowrap', wordBreak: 'normal', overflowWrap: 'normal' }}><a href="/document-api/reference/delete"><code>delete</code></a></span> | <span style={{ whiteSpace: 'nowrap', wordBreak: 'normal', overflowWrap: 'normal' }}><code>editor.doc.delete(...)</code></span> | Delete content at a target position. |

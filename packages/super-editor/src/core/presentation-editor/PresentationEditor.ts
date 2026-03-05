@@ -6,6 +6,12 @@ import { SdtSelectionStyleManager } from './selection/SdtSelectionStyleManager.j
 import { SemanticFlowController } from './layout/SemanticFlowController.js';
 import { LayoutErrorBanner } from './ui/LayoutErrorBanner.js';
 import { applyViewportZoom } from './layout/applyViewportZoom.js';
+import {
+  findPageIndexForPosition,
+  computePageScrollOffset,
+  findElementAtPosition as findElementAtPositionHelper,
+  waitForPageMount as waitForPageMountHelper,
+} from './scroll/ScrollHelpers.js';
 import type { EditorState, Transaction } from 'prosemirror-state';
 import type { Node as ProseMirrorNode, Mark } from 'prosemirror-model';
 import type { Mapping } from 'prosemirror-transform';
@@ -2061,73 +2067,23 @@ export class PresentationEditor extends EventEmitter {
     if (!Number.isFinite(pos)) return false;
 
     const clampedPos = Math.max(0, Math.min(pos, doc.content.size));
-
-    const behavior = options.behavior ?? 'auto';
-    const block = options.block ?? 'center';
-
-    // Use a DOM marker + scrollIntoView so the browser finds the correct scroll container
-    // (window, parent overflow container, etc.) without us guessing.
     const layout = this.#layoutState.layout;
     const sessionMode = this.#headerFooterSession?.session?.mode ?? 'body';
+    if (!layout || sessionMode !== 'body') return false;
 
-    if (layout && sessionMode === 'body') {
-      let pageIndex: number | null = null;
-      for (let idx = 0; idx < layout.pages.length; idx++) {
-        const page = layout.pages[idx];
-        for (const fragment of page.fragments) {
-          const frag = fragment as { pmStart?: number; pmEnd?: number };
-          if (frag.pmStart != null && frag.pmEnd != null && clampedPos >= frag.pmStart && clampedPos <= frag.pmEnd) {
-            pageIndex = idx;
-            break;
-          }
-        }
-        if (pageIndex != null) break;
-      }
+    const pageIndex = findPageIndexForPosition(layout, clampedPos);
+    if (pageIndex == null) return false;
 
-      if (pageIndex != null) {
-        const pageEl = getPageElementByIndex(this.#viewportHost, pageIndex);
-        if (pageEl) {
-          // Find the specific element containing this position for precise centering
-          const targetEl = this.#findElementAtPosition(pageEl, clampedPos);
-          (targetEl ?? pageEl).scrollIntoView({ block, inline: 'nearest', behavior });
-          return true;
-        }
-      }
+    const pageEl = getPageElementByIndex(this.#viewportHost, pageIndex);
+    if (!pageEl) return false;
 
-      return false;
-    } else {
-      return false;
-    }
-  }
-
-  /**
-   * Find the DOM element containing a specific document position.
-   * Returns the most specific (smallest range) matching element.
-   */
-  #findElementAtPosition(pageEl: HTMLElement, pos: number): HTMLElement | null {
-    const elements = Array.from(pageEl.querySelectorAll('[data-pm-start][data-pm-end]'));
-    let bestMatch: HTMLElement | null = null;
-    let smallestRange = Infinity;
-
-    for (const el of elements) {
-      const htmlEl = el as HTMLElement;
-      // Skip header/footer fragments — their PM positions come from a separate
-      // document and can overlap with body positions, causing incorrect matches.
-      if (htmlEl.closest('.superdoc-page-header, .superdoc-page-footer')) continue;
-
-      const start = Number(htmlEl.dataset.pmStart);
-      const end = Number(htmlEl.dataset.pmEnd);
-      if (!Number.isFinite(start) || !Number.isFinite(end)) continue;
-
-      if (pos >= start && pos <= end) {
-        const range = end - start;
-        if (range < smallestRange) {
-          smallestRange = range;
-          bestMatch = htmlEl;
-        }
-      }
-    }
-    return bestMatch;
+    const targetEl = findElementAtPositionHelper(pageEl, clampedPos);
+    (targetEl ?? pageEl).scrollIntoView({
+      block: options.block ?? 'center',
+      inline: 'nearest',
+      behavior: options.behavior ?? 'auto',
+    });
+    return true;
   }
 
   /**
@@ -2151,39 +2107,20 @@ export class PresentationEditor extends EventEmitter {
     pos: number,
     options: { block?: 'start' | 'center' | 'end' | 'nearest'; behavior?: ScrollBehavior } = {},
   ): Promise<boolean> {
-    // Fast path: try sync scroll first (works if page already mounted)
-    if (this.scrollToPosition(pos, options)) {
-      return true;
-    }
+    if (this.scrollToPosition(pos, options)) return true;
 
-    // Page not mounted - find which page contains this position
     const activeEditor = this.getActiveEditor();
     const doc = activeEditor?.state?.doc;
     if (!doc || !Number.isFinite(pos)) return false;
 
     const clampedPos = Math.max(0, Math.min(pos, doc.content.size));
     const layout = this.#layoutState.layout;
-    const sessionMode = this.#headerFooterSession?.session?.mode ?? 'body';
-    if (!layout || sessionMode !== 'body') return false;
+    if (!layout || (this.#headerFooterSession?.session?.mode ?? 'body') !== 'body') return false;
 
-    let pageIndex: number | null = null;
-    for (let idx = 0; idx < layout.pages.length; idx++) {
-      const page = layout.pages[idx];
-      for (const fragment of page.fragments) {
-        const frag = fragment as { pmStart?: number; pmEnd?: number };
-        if (frag.pmStart != null && frag.pmEnd != null && clampedPos >= frag.pmStart && clampedPos <= frag.pmEnd) {
-          pageIndex = idx;
-          break;
-        }
-      }
-      if (pageIndex != null) break;
-    }
+    const pageIndex = findPageIndexForPosition(layout, clampedPos);
     if (pageIndex == null) return false;
 
-    // Trigger virtualization to render the page
     this.#scrollPageIntoView(pageIndex);
-
-    // Wait for page to mount in the DOM
     const mounted = await this.#waitForPageMount(pageIndex, {
       timeout: PresentationEditor.ANCHOR_NAV_TIMEOUT_MS,
     });
@@ -2191,8 +2128,6 @@ export class PresentationEditor extends EventEmitter {
       console.warn(`[PresentationEditor] scrollToPositionAsync: Page ${pageIndex} failed to mount within timeout`);
       return false;
     }
-
-    // Retry now that page is mounted
     return this.scrollToPosition(pos, options);
   }
 
@@ -4503,24 +4438,13 @@ export class PresentationEditor extends EventEmitter {
    */
   #scrollPageIntoView(pageIndex: number): void {
     const layout = this.#layoutState.layout;
-    if (!layout) return;
-
-    const defaultHeight = layout.pageSize?.h ?? DEFAULT_PAGE_SIZE.h;
-    const virtualGap = this.#getEffectivePageGap();
-
-    // Use cumulative per-page heights so mixed-size documents scroll to the
-    // correct position. The renderer's virtualizer uses the same prefix-sum
-    // approach, so the scroll position lands inside the correct window.
-    let yPosition = 0;
-    for (let i = 0; i < pageIndex; i++) {
-      const pageHeight = layout.pages[i]?.size?.h ?? defaultHeight;
-      yPosition += pageHeight + virtualGap;
-    }
-
-    // Scroll viewport to the calculated position
-    if (this.#visibleHost) {
-      this.#visibleHost.scrollTop = yPosition;
-    }
+    if (!layout || !this.#visibleHost) return;
+    this.#visibleHost.scrollTop = computePageScrollOffset(
+      layout,
+      pageIndex,
+      this.#getEffectivePageGap(),
+      layout.pageSize?.h ?? DEFAULT_PAGE_SIZE.h,
+    );
   }
 
   /**
@@ -4593,28 +4517,7 @@ export class PresentationEditor extends EventEmitter {
    * @returns Promise that resolves to true if page was mounted, false if timeout
    */
   async #waitForPageMount(pageIndex: number, options: { timeout?: number } = {}): Promise<boolean> {
-    const timeout = options.timeout ?? 2000;
-    const startTime = performance.now();
-
-    return new Promise((resolve) => {
-      const checkPage = () => {
-        const pageElement = this.#getPageElement(pageIndex);
-        if (pageElement) {
-          resolve(true);
-          return;
-        }
-
-        const elapsed = performance.now() - startTime;
-        if (elapsed >= timeout) {
-          resolve(false);
-          return;
-        }
-
-        requestAnimationFrame(checkPage);
-      };
-
-      checkPage();
-    });
+    return waitForPageMountHelper((idx) => this.#getPageElement(idx), pageIndex, options.timeout);
   }
 
   /**

@@ -1,3 +1,25 @@
+import { Fragment } from 'prosemirror-model';
+
+/**
+ * Returns true when inserting a table at `pos` would place it adjacent to
+ * another table or at the document end.
+ *
+ * @param {import('prosemirror-model').Node} doc
+ * @param {number} pos
+ * @returns {boolean}
+ */
+function tableWouldBeAdjacent(doc, pos) {
+  const $pos = doc.resolve(pos);
+  if ($pos.depth !== 0) return false;
+  const indexAfter = $pos.index(0);
+  const nodeAfter = indexAfter < doc.childCount ? doc.child(indexAfter) : null;
+  const nodeBefore = indexAfter > 0 ? doc.child(indexAfter - 1) : null;
+  if (!nodeAfter) return true;
+  if (nodeAfter.type.name === 'table') return true;
+  if (nodeBefore?.type.name === 'table') return true;
+  return false;
+}
+
 /**
  * Insert a table node at an absolute document position.
  *
@@ -35,7 +57,14 @@ export const insertTableAt =
       const tableAttrs = sdBlockId ? { sdBlockId } : undefined;
       const tableNode = tableType.createChecked(tableAttrs, rowNodes);
 
-      const tr = state.tr.insert(pos, tableNode);
+      let tr;
+      if (tableWouldBeAdjacent(state.doc, pos)) {
+        const separatorParagraph = state.schema.nodes.paragraph.createAndFill();
+        const fragment = Fragment.from(separatorParagraph ? [tableNode, separatorParagraph] : [tableNode]);
+        tr = state.tr.insert(pos, fragment);
+      } else {
+        tr = state.tr.insert(pos, tableNode);
+      }
       if (!dispatch) return true;
       tr.setMeta('inputType', 'programmatic');
       if (tracked === true) tr.setMeta('forceTrackChanges', true);

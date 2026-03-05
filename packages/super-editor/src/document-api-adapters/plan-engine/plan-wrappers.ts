@@ -56,6 +56,24 @@ function editorHasDom(editor: Editor): boolean {
   return !!(opts?.document ?? opts?.mockDocument ?? (typeof document !== 'undefined' ? document : null));
 }
 
+/**
+ * Mutate `jsonNodes` in place so that adjacent table nodes are separated by
+ * an empty paragraph, and a trailing separator follows the last table.
+ * This matches Word's requirement that every `<w:tbl>` is followed by `<w:p>`.
+ */
+function ensureTableSeparators(jsonNodes: Record<string, unknown>[]): void {
+  const makeSeparator = (): Record<string, unknown> => ({ type: 'paragraph' });
+
+  // Walk backwards so spliced indices don't shift remaining work.
+  for (let i = jsonNodes.length - 1; i >= 0; i--) {
+    if (jsonNodes[i].type !== 'table') continue;
+    const next = jsonNodes[i + 1];
+    if (!next || next.type === 'table') {
+      jsonNodes.splice(i + 1, 0, makeSeparator());
+    }
+  }
+}
+
 // ---------------------------------------------------------------------------
 // Locator normalization (same validation as the old adapters)
 // ---------------------------------------------------------------------------
@@ -640,6 +658,26 @@ export function insertStructuredWrapper(
         // because createNodeFromContent treats it as a single JSON object.
         const jsonNodes: Record<string, unknown>[] = [];
         fragment.forEach((node) => jsonNodes.push(node.toJSON()));
+
+        // Word always separates adjacent tables with a paragraph. Without a
+        // trailing separator, consecutive markdown inserts produce adjacent
+        // <w:tbl> elements that Word merges into one visual table.
+        ensureTableSeparators(jsonNodes);
+
+        // insertContentAt replaces empty textblocks when inserting blocks.
+        // If the first node is a table and we're in an empty paragraph that
+        // follows a table, prepend a separator so the replacement doesn't
+        // produce adjacent tables.
+        if (jsonNodes[0]?.type === 'table' && from === to) {
+          const $pos = editor.state.doc.resolve(from);
+          const parent = $pos.parent;
+          if (parent.isTextblock && !parent.childCount) {
+            const idx = $pos.index($pos.depth - 1);
+            if (idx > 0 && $pos.node($pos.depth - 1).child(idx - 1).type.name === 'table') {
+              jsonNodes.unshift({ type: 'paragraph' });
+            }
+          }
+        }
 
         const ok = Boolean(editor.commands.insertContentAt({ from, to }, jsonNodes));
         if (!ok) {

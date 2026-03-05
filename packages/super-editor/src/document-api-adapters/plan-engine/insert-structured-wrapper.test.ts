@@ -153,6 +153,52 @@ describe('insertStructuredWrapper — markdown', () => {
   });
 });
 
+describe('insertStructuredWrapper — table separators', () => {
+  it('inserts a trailing separator paragraph after a markdown table', () => {
+    const result = insertStructuredWrapper(editor, {
+      value: '| A | B |\n| --- | --- |\n| foo | bar |',
+      type: 'markdown',
+    });
+
+    expect(result.success).toBe(true);
+
+    const doc = editor.state.doc;
+    let foundTable = false;
+    let nodeAfterTable: import('prosemirror-model').Node | null = null;
+    for (let i = 0; i < doc.childCount; i++) {
+      if (doc.child(i).type.name === 'table') {
+        foundTable = true;
+        if (i + 1 < doc.childCount) {
+          nodeAfterTable = doc.child(i + 1);
+        }
+        break;
+      }
+    }
+
+    expect(foundTable).toBe(true);
+    expect(nodeAfterTable).not.toBeNull();
+    expect(nodeAfterTable!.type.name).toBe('paragraph');
+  });
+
+  it('two consecutive markdown table inserts produce non-adjacent tables', () => {
+    insertStructuredWrapper(editor, {
+      value: '| A | B |\n| --- | --- |\n| 1 | 2 |',
+      type: 'markdown',
+    });
+    insertStructuredWrapper(editor, {
+      value: '| C | D |\n| --- | --- |\n| 3 | 4 |',
+      type: 'markdown',
+    });
+
+    const doc = editor.state.doc;
+    for (let i = 0; i < doc.childCount - 1; i++) {
+      if (doc.child(i).type.name === 'table' && doc.child(i + 1).type.name === 'table') {
+        throw new Error(`Adjacent tables at children ${i} and ${i + 1}`);
+      }
+    }
+  });
+});
+
 describe('insertStructuredWrapper — list numbering rollback', () => {
   it('rolls back numbering allocations when insertContentAt fails after markdown parsing', () => {
     // This test exercises the actual rollback branch: markdown with list

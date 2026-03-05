@@ -1,4 +1,4 @@
-import { NodeSelection, Selection, TextSelection } from 'prosemirror-state';
+import { NodeSelection, TextSelection } from 'prosemirror-state';
 import { ContextMenuPluginKey } from '@extensions/context-menu/context-menu.js';
 import { CellSelection } from 'prosemirror-tables';
 import { DecorationBridge } from './dom/DecorationBridge.js';
@@ -14,7 +14,7 @@ import {
   waitForPageMount as waitForPageMountHelper,
 } from './scroll/ScrollHelpers.js';
 import type { EditorState, Transaction } from 'prosemirror-state';
-import type { Node as ProseMirrorNode, Mark } from 'prosemirror-model';
+import type { Node as ProseMirrorNode } from 'prosemirror-model';
 import type { Mapping } from 'prosemirror-transform';
 import { Editor } from '../Editor.js';
 import { EventEmitter } from '../EventEmitter.js';
@@ -50,8 +50,6 @@ import { buildPositionMapFromPmDoc } from './utils/PositionMapFromPm.js';
 import {
   computeParagraphSelectionRangeAt as computeParagraphSelectionRangeAtFromHelper,
   computeWordSelectionRangeAt as computeWordSelectionRangeAtFromHelper,
-  getFirstTextPosition as getFirstTextPositionFromHelper,
-  registerPointerClick as registerPointerClickFromHelper,
 } from './input/ClickSelectionUtilities.js';
 import {
   computeA11ySelectionAnnouncement as computeA11ySelectionAnnouncementFromHelper,
@@ -59,7 +57,7 @@ import {
   syncHiddenEditorA11yAttributes as syncHiddenEditorA11yAttributesFromHelper,
 } from './utils/A11ySupport.js';
 import { computeSelectionVirtualizationPins } from './selection/SelectionVirtualizationPins.js';
-import { debugLog, updateSelectionDebugHud, type SelectionDebugHudState } from './selection/SelectionDebug.js';
+import { debugLog, updateSelectionDebugHud } from './selection/SelectionDebug.js';
 import { renderCellSelectionOverlay } from './selection/CellSelectionOverlay.js';
 import { renderCaretOverlay, renderSelectionRects } from './selection/LocalSelectionOverlayRendering.js';
 import { computeCaretLayoutRectGeometry as computeCaretLayoutRectGeometryFromHelper } from './selection/CaretGeometry.js';
@@ -69,12 +67,7 @@ import {
   computeAnchorMap as computeAnchorMapFromHelper,
   goToAnchor as goToAnchorFromHelper,
 } from './utils/AnchorNavigation.js';
-import {
-  getCellPosFromTableHit as getCellPosFromTableHitFromHelper,
-  getTablePosFromHit as getTablePosFromHitFromHelper,
-  hitTestTable as hitTestTableFromHelper,
-  shouldUseCellSelection as shouldUseCellSelectionFromHelper,
-} from './tables/TableSelectionUtilities.js';
+import { hitTestTable as hitTestTableFromHelper } from './tables/TableSelectionUtilities.js';
 import { DragDropManager } from './input/DragDropManager.js';
 import { processAndInsertImageFile } from '@extensions/image/imageHelpers/processAndInsertImageFile.js';
 import { HeaderFooterSessionManager } from './header-footer/HeaderFooterSessionManager.js';
@@ -84,19 +77,11 @@ import {
   incrementalLayout,
   selectionToRects,
   clickToPosition,
-  getFragmentAtPosition,
-  extractIdentifierFromConverter,
   buildMultiSectionIdentifier,
   layoutHeaderFooterWithCache as _layoutHeaderFooterWithCache,
   PageGeometryHelper,
 } from '@superdoc/layout-bridge';
-import type {
-  HeaderFooterIdentifier,
-  HeaderFooterLayoutResult,
-  HeaderFooterType,
-  PositionHit,
-  TableHitResult,
-} from '@superdoc/layout-bridge';
+import type { HeaderFooterLayoutResult, PositionHit, TableHitResult } from '@superdoc/layout-bridge';
 
 import { createDomPainter } from '@superdoc/painter-dom';
 
@@ -107,10 +92,8 @@ import type {
   FlowBlock,
   Layout,
   Measure,
-  Page,
   SectionMetadata,
   TrackedChangesMode,
-  Fragment,
 } from '@superdoc/contracts';
 import { extractHeaderFooterSpace as _extractHeaderFooterSpace } from '@superdoc/contracts';
 // TrackChangesBasePluginKey is used by #syncTrackedChangesPreferences and getTrackChangesPluginState.
@@ -118,9 +101,7 @@ import { TrackChangesBasePluginKey } from '@extensions/track-changes/plugins/ind
 
 // Collaboration cursor imports
 import { ySyncPluginKey } from 'y-prosemirror';
-import type * as Y from 'yjs';
 import type { HeaderFooterDescriptor } from '../header-footer/HeaderFooterRegistry.js';
-import { isInRegisteredSurface } from './utils/uiSurfaceRegistry.js';
 import { buildSemanticFootnoteBlocks } from './semantic-flow-footnotes.js';
 import { splitRunsAtDecorationBoundaries } from './layout/SplitRunsAtDecorationBoundaries.js';
 
@@ -128,29 +109,16 @@ import { splitRunsAtDecorationBoundaries } from './layout/SplitRunsAtDecorationB
 import type {
   PageSize,
   PageMargins,
-  VirtualizationOptions,
-  RemoteUserInfo,
   RemoteCursorState,
-  PresenceOptions,
   LayoutEngineOptions,
   TrackedChangesOverrides,
   PresentationEditorOptions,
-  RemoteCursorsRenderPayload,
-  LayoutUpdatePayload,
-  ImageSelectedEvent,
-  ImageDeselectedEvent,
-  TelemetryEvent,
-  CellAnchorState,
   EditorWithConverter,
   LayoutState,
-  FootnoteReference,
-  FootnotesLayoutInput,
   LayoutMetrics,
   LayoutError,
   LayoutRect,
   RangeRect,
-  HeaderFooterMode,
-  HeaderFooterSession,
   HeaderFooterRegion,
   HeaderFooterLayoutContext,
   PendingMarginClick,
@@ -181,25 +149,12 @@ export type {
 import { CommentMarkName } from '@extensions/comment/comments-constants.js';
 import { TrackInsertMarkName, TrackDeleteMarkName, TrackFormatMarkName } from '@extensions/track-changes/constants.js';
 
-/**
- * Font size scaling factor for subscript and superscript text.
- * This value (0.65 or 65%) matches Microsoft Word's default rendering behavior
- * for vertical alignment (w:vertAlign) when set to 'superscript' or 'subscript'.
- * Applied to the base font size to reduce text size for sub/superscripts.
- */
-
 const DEFAULT_PAGE_SIZE: PageSize = { w: 612, h: 792 }; // Letter @ 72dpi
 const DEFAULT_MARGINS: PageMargins = { top: 72, right: 72, bottom: 72, left: 72 };
 /** Default gap between pages (from containerStyles in styles.ts) */
 const DEFAULT_PAGE_GAP = 24;
 /** Default gap for horizontal layout mode */
 const DEFAULT_HORIZONTAL_PAGE_GAP = 20;
-
-// Constants for interaction timing and thresholds
-/** Maximum time between clicks to register as multi-click (milliseconds) */
-const MULTI_CLICK_TIME_THRESHOLD_MS = 400;
-/** Maximum distance between clicks to register as multi-click (pixels) */
-const MULTI_CLICK_DISTANCE_THRESHOLD_PX = 5;
 
 /** Debug flag for performance logging - enable with SD_DEBUG_LAYOUT env variable */
 const layoutDebugEnabled =
@@ -2725,13 +2680,6 @@ export class PresentationEditor extends EventEmitter {
 
   /**
    * Render remote cursors from existing state without normalization.
-   * Delegates to RemoteCursorManager.
-   * @private
-   */
-  #renderRemoteCursors() {
-    this.#remoteCursorManager?.render(this.#getRemoteCursorRenderDeps());
-  }
-
   /**
    * Initialize the EditorInputManager with dependencies and callbacks.
    * @private

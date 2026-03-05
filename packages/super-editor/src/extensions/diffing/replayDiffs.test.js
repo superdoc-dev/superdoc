@@ -41,12 +41,12 @@ const isAcceptableRemainingDiff = (diff) => {
   }
   const attrsDiff = diff.attrsDiff;
   const modifiedAttrs = Object.keys(attrsDiff?.modified ?? {});
-  const allowedMetadataAttrs = new Set(['sdBlockRev']);
-  const hasOnlySdBlockRevAttrsDiff =
-    modifiedAttrs.every((key) => allowedMetadataAttrs.has(key)) &&
+  const allowedParagraphMetadataAttrs = new Set(['sdBlockRev', 'textId', 'rsidR']);
+  const hasOnlyAllowedParagraphAttrsDiff =
+    modifiedAttrs.every((key) => allowedParagraphMetadataAttrs.has(key)) &&
     Object.keys(attrsDiff?.added ?? {}).length === 0 &&
     Object.keys(attrsDiff?.deleted ?? {}).length === 0;
-  if (diff.oldText !== diff.newText || (attrsDiff && !hasOnlySdBlockRevAttrsDiff)) {
+  if (diff.oldText !== diff.newText || (attrsDiff && !hasOnlyAllowedParagraphAttrsDiff)) {
     return false;
   }
   return (diff.contentDiff || []).every((change) => {

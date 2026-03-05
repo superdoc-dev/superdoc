@@ -2943,96 +2943,107 @@ export class PresentationEditor extends EventEmitter {
     }
   }
 
+  #convertDocToFlowBlocks(perfNow: () => number): {
+    docJson: unknown;
+    blocks: FlowBlock[];
+    bookmarks: Map<string, number>;
+    converterContext: ConverterContext | undefined;
+    sectionMetadata: SectionMetadata[];
+    layoutEpoch: number;
+  } | null {
+    let docJson;
+    try {
+      const start = perfNow();
+      docJson = this.#editor.getJSON();
+      perfLog(`[Perf] getJSON: ${(perfNow() - start).toFixed(2)}ms`);
+    } catch (error) {
+      this.#handleLayoutError('render', this.#decorateError(error, 'getJSON'));
+      return null;
+    }
+
+    const layoutEpoch = this.#epochMapper.getCurrentEpoch();
+    const sectionMetadata: SectionMetadata[] = [];
+
+    let blocks: FlowBlock[] | undefined;
+    let bookmarks: Map<string, number> = new Map();
+    let converterContext: ConverterContext | undefined;
+    try {
+      const converter = (this.#editor as Editor & { converter?: Record<string, unknown> }).converter;
+      const { footnoteNumberById, footnoteOrder } = computeFootnoteNumbering(this.#editor?.state?.doc);
+      const footnoteSignature = footnoteOrder.join('|');
+      if (footnoteSignature !== this.#footnoteNumberSignature) {
+        this.#flowBlockCache.clear();
+        this.#footnoteNumberSignature = footnoteSignature;
+      }
+      try {
+        if (converter && typeof converter === 'object') {
+          converter['footnoteNumberById'] = footnoteNumberById;
+        }
+      } catch {}
+      converterContext = buildConverterContext(converter, footnoteNumberById);
+
+      const atomNodeTypes = getAtomNodeTypesFromSchema(this.#editor?.schema ?? null);
+      const positionMap =
+        this.#editor?.state?.doc && docJson ? buildPositionMapFromPmDoc(this.#editor.state.doc, docJson) : null;
+      const commentsEnabled = this.#documentMode !== 'viewing' || this.#layoutOptions.enableCommentsInViewing === true;
+
+      const start = perfNow();
+      const result = toFlowBlocks(docJson, {
+        mediaFiles: (this.#editor?.storage?.image as { media?: Record<string, string> })?.media,
+        emitSectionBreaks: true,
+        sectionMetadata,
+        trackedChangesMode: this.#trackedChangesMode,
+        enableTrackedChanges: this.#trackedChangesEnabled,
+        enableComments: commentsEnabled,
+        enableRichHyperlinks: true,
+        themeColors: this.#editor?.converter?.themeColors ?? undefined,
+        converterContext,
+        flowBlockCache: this.#flowBlockCache,
+        ...(positionMap ? { positions: positionMap } : {}),
+        ...(atomNodeTypes.length > 0 ? { atomNodeTypes } : {}),
+      });
+      perfLog(`[Perf] toFlowBlocks: ${(perfNow() - start).toFixed(2)}ms (blocks=${result.blocks.length})`);
+      blocks = result.blocks;
+      bookmarks = result.bookmarks ?? new Map();
+    } catch (error) {
+      this.#handleLayoutError('render', this.#decorateError(error, 'toFlowBlocks'));
+      return null;
+    }
+
+    if (!blocks) {
+      this.#handleLayoutError('render', new Error('toFlowBlocks returned undefined blocks'));
+      return null;
+    }
+
+    // Split runs at decoration boundaries for highlight rendering
+    const state = this.#editor?.view?.state;
+    const decorationRanges = state ? this.#decorationBridge.collectDecorationRanges(state) : [];
+    if (decorationRanges.length > 0) {
+      blocks = splitRunsAtDecorationBoundaries(
+        blocks,
+        decorationRanges.map((r) => ({ from: r.from, to: r.to })),
+      );
+    }
+
+    this.#applyHtmlAnnotationMeasurements(blocks);
+    return { docJson, blocks, bookmarks, converterContext, sectionMetadata, layoutEpoch };
+  }
+
   async #rerender() {
     this.#selectionSync.onLayoutStart();
     let layoutCompleted = false;
 
     try {
-      let docJson;
       const viewWindow = this.#visibleHost.ownerDocument?.defaultView ?? window;
       const perf = viewWindow?.performance ?? GLOBAL_PERFORMANCE;
       const perfNow = () => (perf?.now ? perf.now() : Date.now());
       const startMark = perf?.now?.();
-      try {
-        const getJsonStart = perfNow();
-        docJson = this.#editor.getJSON();
-        const getJsonEnd = perfNow();
-        perfLog(`[Perf] getJSON: ${(getJsonEnd - getJsonStart).toFixed(2)}ms`);
-      } catch (error) {
-        this.#handleLayoutError('render', this.#decorateError(error, 'getJSON'));
-        return;
-      }
-      const layoutEpoch = this.#epochMapper.getCurrentEpoch();
 
-      const sectionMetadata: SectionMetadata[] = [];
-      let blocks: FlowBlock[] | undefined;
-      let bookmarks: Map<string, number> = new Map();
-      let converterContext: ConverterContext | undefined = undefined;
-      try {
-        const converter = (this.#editor as Editor & { converter?: Record<string, unknown> }).converter;
-        const { footnoteNumberById, footnoteOrder } = computeFootnoteNumbering(this.#editor?.state?.doc);
-        const footnoteSignature = footnoteOrder.join('|');
-        if (footnoteSignature !== this.#footnoteNumberSignature) {
-          this.#flowBlockCache.clear();
-          this.#footnoteNumberSignature = footnoteSignature;
-        }
-        try {
-          if (converter && typeof converter === 'object') {
-            converter['footnoteNumberById'] = footnoteNumberById;
-          }
-        } catch {}
-        converterContext = buildConverterContext(converter, footnoteNumberById);
-        const atomNodeTypes = getAtomNodeTypesFromSchema(this.#editor?.schema ?? null);
-        const positionMapStart = perfNow();
-        const positionMap =
-          this.#editor?.state?.doc && docJson ? buildPositionMapFromPmDoc(this.#editor.state.doc, docJson) : null;
-        const positionMapEnd = perfNow();
-        perfLog(`[Perf] buildPositionMapFromPmDoc: ${(positionMapEnd - positionMapStart).toFixed(2)}ms`);
-        const commentsEnabled =
-          this.#documentMode !== 'viewing' || this.#layoutOptions.enableCommentsInViewing === true;
-        const toFlowBlocksStart = perfNow();
-        const result = toFlowBlocks(docJson, {
-          mediaFiles: (this.#editor?.storage?.image as { media?: Record<string, string> })?.media,
-          emitSectionBreaks: true,
-          sectionMetadata,
-          trackedChangesMode: this.#trackedChangesMode,
-          enableTrackedChanges: this.#trackedChangesEnabled,
-          enableComments: commentsEnabled,
-          enableRichHyperlinks: true,
-          themeColors: this.#editor?.converter?.themeColors ?? undefined,
-          converterContext,
-          flowBlockCache: this.#flowBlockCache,
-          ...(positionMap ? { positions: positionMap } : {}),
-          ...(atomNodeTypes.length > 0 ? { atomNodeTypes } : {}),
-        });
-        const toFlowBlocksEnd = perfNow();
-        perfLog(
-          `[Perf] toFlowBlocks: ${(toFlowBlocksEnd - toFlowBlocksStart).toFixed(2)}ms (blocks=${result.blocks.length})`,
-        );
-        blocks = result.blocks;
-        bookmarks = result.bookmarks ?? new Map();
-      } catch (error) {
-        this.#handleLayoutError('render', this.#decorateError(error, 'toFlowBlocks'));
-        return;
-      }
+      // Phase 1: Serialize document + convert to FlowBlocks
+      const conversionResult = this.#convertDocToFlowBlocks(perfNow);
+      if (!conversionResult) return;
+      const { docJson, blocks, bookmarks, converterContext, sectionMetadata, layoutEpoch } = conversionResult;
 
-      if (!blocks) {
-        this.#handleLayoutError('render', new Error('toFlowBlocks returned undefined blocks'));
-        return;
-      }
-
-      // Split runs at decoration boundaries so bridge sync applies background only to the
-      // selected portion (like highlight mark) without adding a document mark.
-      const state = this.#editor?.view?.state;
-      const decorationRanges = state ? this.#decorationBridge.collectDecorationRanges(state) : [];
-      if (decorationRanges.length > 0) {
-        blocks = splitRunsAtDecorationBoundaries(
-          blocks,
-          decorationRanges.map((r) => ({ from: r.from, to: r.to })),
-        );
-      }
-
-      this.#applyHtmlAnnotationMeasurements(blocks);
       const isSemanticFlow = this.#isSemanticFlowMode();
 
       const baseLayoutOptions = this.#resolveLayoutOptions(blocks, sectionMetadata);
@@ -3187,59 +3198,60 @@ export class PresentationEditor extends EventEmitter {
       painter.paint(layout, this.#painterHost, mapping ?? undefined);
       const painterPaintEnd = perfNow();
       perfLog(`[Perf] painter.paint: ${(painterPaintEnd - painterPaintStart).toFixed(2)}ms`);
-      const painterPostStart = perfNow();
-      this.#applyVertAlignToLayout();
-      this.#rebuildDomPositionIndex();
-      this.#syncDecorations();
-      this.#domIndexObserverManager?.resume();
-      const painterPostEnd = perfNow();
-      perfLog(`[Perf] painter.postPaint: ${(painterPostEnd - painterPostStart).toFixed(2)}ms`);
-      this.#layoutEpoch = layoutEpoch;
-      if (this.#updateHtmlAnnotationMeasurements(layoutEpoch)) {
-        this.#pendingDocChange = true;
-        this.#scheduleRerender();
-      }
-      this.#epochMapper.onLayoutComplete(layoutEpoch);
-      this.#selectionSync.onLayoutComplete(layoutEpoch);
+      this.#postPaint(perfNow, layoutEpoch, blocksForLayout, measures, layout, perf, startMark);
       layoutCompleted = true;
-      this.#updatePermissionOverlay();
-
-      // Reset error state on successful layout
-      this.#layoutError = null;
-      this.#layoutErrorState = 'healthy';
-      this.#errorBanner.dismiss();
-
-      // Update viewport dimensions after layout (page count may have changed)
-      this.#applyZoom();
-
-      const metrics = createLayoutMetricsFromHelper(perf, startMark, layout, blocksForLayout);
-      const payload = { layout, blocks: blocksForLayout, measures, metrics };
-      this.emit('layoutUpdated', payload);
-      this.emit('paginationUpdate', payload);
-
-      // Emit fresh comment positions after layout completes.
-      // Always emit — even when empty — so the store can clear stale positions
-      // (e.g. when undo removes the last tracked-change mark).
-      const allowViewingCommentPositions = this.#layoutOptions.emitCommentPositionsInViewing === true;
-      if (this.#documentMode !== 'viewing' || allowViewingCommentPositions) {
-        const commentPositions = this.#collectCommentPositions();
-        this.emit('commentPositions', { positions: commentPositions });
-      }
-
-      this.#selectionSync.requestRender({ immediate: true });
-
-      // Re-normalize remote cursor positions after layout completes.
-      // Local document changes shift absolute positions, so Yjs relative positions
-      // must be re-resolved against the updated editor state. Without this,
-      // remote cursors appear offset by the number of characters the local user typed.
-      if (this.#remoteCursorManager?.hasRemoteCursors()) {
-        this.#remoteCursorManager.markDirty();
-        this.#remoteCursorManager.scheduleUpdate();
-      }
     } finally {
       if (!layoutCompleted) {
         this.#selectionSync.onLayoutAbort();
       }
+    }
+  }
+
+  #postPaint(
+    perfNow: () => number,
+    layoutEpoch: number,
+    blocks: FlowBlock[],
+    measures: Measure[],
+    layout: Layout,
+    perf: Performance | undefined,
+    startMark: number | undefined,
+  ) {
+    const postStart = perfNow();
+    this.#applyVertAlignToLayout();
+    this.#rebuildDomPositionIndex();
+    this.#syncDecorations();
+    this.#domIndexObserverManager?.resume();
+    perfLog(`[Perf] painter.postPaint: ${(perfNow() - postStart).toFixed(2)}ms`);
+
+    this.#layoutEpoch = layoutEpoch;
+    if (this.#updateHtmlAnnotationMeasurements(layoutEpoch)) {
+      this.#pendingDocChange = true;
+      this.#scheduleRerender();
+    }
+    this.#epochMapper.onLayoutComplete(layoutEpoch);
+    this.#selectionSync.onLayoutComplete(layoutEpoch);
+    this.#updatePermissionOverlay();
+
+    this.#layoutError = null;
+    this.#layoutErrorState = 'healthy';
+    this.#errorBanner.dismiss();
+
+    this.#applyZoom();
+
+    const metrics = createLayoutMetricsFromHelper(perf, startMark, layout, blocks);
+    const payload = { layout, blocks, measures, metrics };
+    this.emit('layoutUpdated', payload);
+    this.emit('paginationUpdate', payload);
+
+    if (this.#documentMode !== 'viewing' || this.#layoutOptions.emitCommentPositionsInViewing === true) {
+      this.emit('commentPositions', { positions: this.#collectCommentPositions() });
+    }
+
+    this.#selectionSync.requestRender({ immediate: true });
+
+    if (this.#remoteCursorManager?.hasRemoteCursors()) {
+      this.#remoteCursorManager.markDirty();
+      this.#remoteCursorManager.scheduleUpdate();
     }
   }
 

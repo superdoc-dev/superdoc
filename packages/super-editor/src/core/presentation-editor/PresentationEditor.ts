@@ -4348,27 +4348,18 @@ export class PresentationEditor extends EventEmitter {
    *
    * Called after the caret overlay is rendered in #updateSelection(). Uses the rendered
    * caret element's screen-space position (via getBoundingClientRect) to determine if
-   * scrolling is needed, keeping a small margin (20px) for comfortable viewing.
-   * The margin check prevents scrolling when the caret is already visible, so this
-   * is safe to call on every selection change (arrow keys, undo, collab, etc.).
+   * scrolling is needed, keeping a small margin for comfortable viewing.
    *
-   * If the caret's target page isn't mounted (virtualized), falls back to scrolling
-   * the page into view to trigger mount; the next selection update handles precise scroll.
+   * If the caret element doesn't exist (page may be virtualized / not mounted),
+   * falls back to scrolling the target page into view to trigger virtualization.
    */
   #scrollCaretIntoViewIfNeeded(caretLayout: { pageIndex: number }): void {
     const caretEl = this.#localSelectionLayer?.querySelector(
       '.presentation-editor__selection-caret',
     ) as HTMLElement | null;
 
-    // Check if the caret's page is actually mounted in the DOM. The caret element
-    // may exist with estimated coordinates even when the page isn't visible, which
-    // would produce an incorrect scroll target.
-    const painterHost = this.#visibleHost?.querySelector(`.superdoc-container`);
-    const pageEl = painterHost?.querySelector(`[data-page-index="${caretLayout.pageIndex}"]`);
-    const pageIsMounted = !!pageEl;
-
-    if (!caretEl || !pageIsMounted) {
-      // Page may not be mounted (virtualized) — scroll page into view
+    if (!caretEl) {
+      // Caret page may not be mounted (virtualized) — scroll page into view
       // to trigger mount; next selection update will handle precise scroll.
       this.#scrollPageIntoView(caretLayout.pageIndex);
       return;

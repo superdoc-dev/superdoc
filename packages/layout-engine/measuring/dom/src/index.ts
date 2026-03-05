@@ -1093,6 +1093,7 @@ async function measureParagraphBlock(block: ParagraphBlock, maxWidth: number): P
   let hasSeenTextRun = false;
   let tabStopCursor = 0;
   let pendingTabAlignment: { target: number; val: TabStop['val'] } | null = null;
+  let pendingLeader: LeaderDecoration | null = null;
   let pendingRunSpacing = 0;
   // Remember the last applied tab alignment so we can clamp end-aligned
   // segments to the exact target after measuring to avoid 1px drift.
@@ -1168,10 +1169,19 @@ async function measureParagraphBlock(block: ParagraphBlock, maxWidth: number): P
       startX = Math.max(0, target);
     }
 
+    // Update pending leader to end where aligned content begins
+    if (pendingLeader) {
+      const effectiveIndent = lines.length === 0 ? indentLeft + rawFirstLineOffset : indentLeft;
+      pendingLeader.to = startX + effectiveIndent;
+      pendingLeader = null;
+    }
+
     currentLine.width = roundValue(startX);
     // Track alignment used for post-segment clamping
     lastAppliedTabAlign = { target, val };
     pendingTabAlignment = null;
+    pendingLeader = null;
+
     return startX;
   };
 
@@ -1321,6 +1331,7 @@ async function measureParagraphBlock(block: ParagraphBlock, maxWidth: number): P
       }
       tabStopCursor = 0;
       pendingTabAlignment = null;
+      pendingLeader = null;
       lastAppliedTabAlign = null;
       pendingRunSpacing = 0;
       continue;
@@ -1377,6 +1388,7 @@ async function measureParagraphBlock(block: ParagraphBlock, maxWidth: number): P
       };
       tabStopCursor = 0;
       pendingTabAlignment = null;
+      pendingLeader = null;
       lastAppliedTabAlign = null;
       pendingRunSpacing = 0;
       continue;
@@ -1386,6 +1398,7 @@ async function measureParagraphBlock(block: ParagraphBlock, maxWidth: number): P
     if (isTabRun(run)) {
       // Clear any previous tab group when we encounter a new tab
       activeTabGroup = null;
+      pendingLeader = null;
 
       // Initialize line if needed
       if (!currentLine) {
@@ -1477,12 +1490,14 @@ async function measureParagraphBlock(block: ParagraphBlock, maxWidth: number): P
 
           // Don't set pendingTabAlignment - we're using activeTabGroup instead
           pendingTabAlignment = null;
+          pendingLeader = null;
         } else {
           // For start-aligned tabs, use the existing pendingTabAlignment mechanism
           pendingTabAlignment = { target: clampedTarget - effectiveIndent, val: stop.val };
         }
       } else {
         pendingTabAlignment = null;
+        pendingLeader = null;
       }
       pendingRunSpacing = 0;
       continue;
@@ -1559,6 +1574,7 @@ async function measureParagraphBlock(block: ParagraphBlock, maxWidth: number): P
         lines.push(completedLine);
         tabStopCursor = 0;
         pendingTabAlignment = null;
+        pendingLeader = null;
         lastAppliedTabAlign = null;
         activeTabGroup = null;
 
@@ -1710,6 +1726,7 @@ async function measureParagraphBlock(block: ParagraphBlock, maxWidth: number): P
         lines.push(completedLine);
         tabStopCursor = 0;
         pendingTabAlignment = null;
+        pendingLeader = null;
         lastAppliedTabAlign = null;
 
         // Start new line with the annotation (body line, so use bodyContentWidth for hanging indent)
@@ -1814,6 +1831,7 @@ async function measureParagraphBlock(block: ParagraphBlock, maxWidth: number): P
             lines.push(completedLine);
             tabStopCursor = 0;
             pendingTabAlignment = null;
+            pendingLeader = null;
             lastAppliedTabAlign = null;
 
             // Body line, so use bodyContentWidth for hanging indent
@@ -1928,6 +1946,7 @@ async function measureParagraphBlock(block: ParagraphBlock, maxWidth: number): P
               lines.push(completedLine);
               tabStopCursor = 0;
               pendingTabAlignment = null;
+              pendingLeader = null;
               lastAppliedTabAlign = null;
               activeTabGroup = null;
 
@@ -2011,6 +2030,7 @@ async function measureParagraphBlock(block: ParagraphBlock, maxWidth: number): P
             lines.push(completedLine);
             tabStopCursor = 0;
             pendingTabAlignment = null;
+            pendingLeader = null;
             currentLine = null;
           }
 
@@ -2078,6 +2098,7 @@ async function measureParagraphBlock(block: ParagraphBlock, maxWidth: number): P
                 lines.push(completedLine);
                 tabStopCursor = 0;
                 pendingTabAlignment = null;
+                pendingLeader = null;
                 currentLine = null;
               }
             } else if (isLastChunk) {
@@ -2224,6 +2245,7 @@ async function measureParagraphBlock(block: ParagraphBlock, maxWidth: number): P
           lines.push(completedLine);
           tabStopCursor = 0;
           pendingTabAlignment = null;
+          pendingLeader = null;
 
           // Body line, so use bodyContentWidth for hanging indent
           currentLine = {
@@ -2286,6 +2308,7 @@ async function measureParagraphBlock(block: ParagraphBlock, maxWidth: number): P
             lines.push(completedLine);
             tabStopCursor = 0;
             pendingTabAlignment = null;
+            pendingLeader = null;
             currentLine = null;
             // advance past space
             charPosInRun = wordEndNoSpace + 1;
@@ -2347,6 +2370,8 @@ async function measureParagraphBlock(block: ParagraphBlock, maxWidth: number): P
 
       if (!isLastSegment) {
         pendingTabAlignment = null;
+        pendingLeader = null;
+
         if (!currentLine) {
           currentLine = {
             fromRun: runIndex,
@@ -2382,6 +2407,7 @@ async function measureParagraphBlock(block: ParagraphBlock, maxWidth: number): P
           pendingTabAlignment = { target: clampedTarget - effectiveIndent, val: stop.val };
         } else {
           pendingTabAlignment = null;
+          pendingLeader = null;
         }
 
         // Emit leader decoration if requested
@@ -2390,7 +2416,9 @@ async function measureParagraphBlock(block: ParagraphBlock, maxWidth: number): P
           const from = Math.min(originX + effectiveIndent, clampedTarget);
           const to = Math.max(originX + effectiveIndent, clampedTarget);
           if (!currentLine.leaders) currentLine.leaders = [];
-          currentLine.leaders.push({ from, to, style: leaderStyle });
+          const leader: LeaderDecoration = { from, to, style: leaderStyle };
+          currentLine.leaders.push(leader);
+          pendingLeader = leader;
         }
       }
     }

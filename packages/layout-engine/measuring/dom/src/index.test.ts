@@ -1654,16 +1654,17 @@ describe('measureBlock', () => {
     });
 
     it.each([
-      { label: 'without indent', indentLeft: 0 },
-      { label: 'with indent', indentLeft: 36 },
-    ])('positions leader from/to correctly for right-aligned tab $label', async ({ indentLeft }) => {
+      { label: 'TabRun without indent', indentLeft: 0, useInlineTab: false },
+      { label: 'TabRun with indent', indentLeft: 36, useInlineTab: false },
+      { label: 'inline tab without indent', indentLeft: 0, useInlineTab: true },
+      { label: 'inline tab with indent', indentLeft: 36, useInlineTab: true },
+    ])('positions leader from/to correctly for right-aligned tab $label', async ({ indentLeft, useInlineTab }) => {
       const textBlock: FlowBlock = {
         kind: 'paragraph',
         id: '0-paragraph',
         runs: [{ text: 'Chapter 1', fontFamily: 'Arial', fontSize: 16 }],
         attrs: {},
       };
-
       const pageNumBlock: FlowBlock = {
         kind: 'paragraph',
         id: '1-paragraph',
@@ -1671,20 +1672,18 @@ describe('measureBlock', () => {
         attrs: {},
       };
 
+      const runs = useInlineTab
+        ? [{ text: 'Chapter 1\t42', fontFamily: 'Arial', fontSize: 16 }]
+        : [
+            { text: 'Chapter 1', fontFamily: 'Arial', fontSize: 16 },
+            { kind: 'tab', leader: 'dot', text: '\t', pmStart: 9, pmEnd: 10 },
+            { text: '42', fontFamily: 'Arial', fontSize: 16 },
+          ];
+
       const block: FlowBlock = {
         kind: 'paragraph',
         id: '2-paragraph',
-        runs: [
-          { text: 'Chapter 1', fontFamily: 'Arial', fontSize: 16 },
-          {
-            kind: 'tab',
-            leader: 'dot',
-            text: '\t',
-            pmStart: 9,
-            pmEnd: 10,
-          },
-          { text: '42', fontFamily: 'Arial', fontSize: 16 },
-        ],
+        runs,
         attrs: {
           tabs: [{ pos: 4500, val: 'end', leader: 'dot' }],
           ...(indentLeft > 0 && { indent: { left: indentLeft } }),
@@ -1693,7 +1692,6 @@ describe('measureBlock', () => {
 
       const textMeasure = expectParagraphMeasure(await measureBlock(textBlock, 1000));
       const textWidth = textMeasure.lines[0].width;
-
       const pageNumMeasure = expectParagraphMeasure(await measureBlock(pageNumBlock, 1000));
       const pageNumWidth = pageNumMeasure.lines[0].width;
 
@@ -1705,8 +1703,6 @@ describe('measureBlock', () => {
 
       const leader = leaders![0];
       expect(leader.from).toBeCloseTo(textWidth + indentLeft, 0);
-
-      // Tab stop is 4500 twips = 300px; right-aligned "42" ends at 300px
       expect(leader.to).toBeCloseTo(300 - pageNumWidth, 0);
     });
 

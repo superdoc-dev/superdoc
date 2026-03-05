@@ -7,6 +7,7 @@ import type {
   TextRun,
   TabStop,
   ParagraphIndent,
+  LeaderDecoration,
 } from '@superdoc/contracts';
 import { Engines } from '@superdoc/contracts';
 import type { WordParagraphLayoutOutput } from '@superdoc/word-layout';
@@ -798,12 +799,14 @@ const applyTabLayoutToLines = (
       const clampedTarget = Number.isFinite(maxAbsWidth) ? Math.min(target, maxAbsWidth) : target;
       const relativeTarget = clampedTarget - effectiveIndent;
       lineWidth = Math.max(lineWidth, relativeTarget);
+      let currentLeader: LeaderDecoration | null = null;
 
       // Add leader if specified
       if (stop?.leader && stop.leader !== 'none') {
-        const from = Math.min(originX, relativeTarget);
-        const to = Math.max(originX, relativeTarget);
-        leaders.push({ from, to, style: stop.leader });
+        const from = Math.min(originX + effectiveIndent, clampedTarget);
+        const to = Math.max(originX + effectiveIndent, clampedTarget);
+        currentLeader = { from, to, style: stop.leader };
+        leaders.push(currentLeader);
       }
 
       // Handle alignment types
@@ -820,6 +823,12 @@ const applyTabLayoutToLines = (
             const beforeDecimal = groupMeasure.beforeDecimalWidth ?? groupMeasure.totalWidth;
             groupStartX = Math.max(0, relativeTarget - beforeDecimal);
           }
+
+          // Update current leader "to" ensuring leaders end where right-aligned content begins
+          if (currentLeader) {
+            currentLeader.to = groupStartX + effectiveIndent;
+          }
+
           pendingTabAlignStartX = groupStartX;
         } else {
           cursorX = Math.max(cursorX, relativeTarget);

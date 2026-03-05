@@ -100,7 +100,7 @@ const createViewStub = () => {
 };
 
 const createEditorStub = () => ({
-  storage: { image: { media: {} } },
+  storage: { image: { media: {}, pendingRelativeRegistrations: new Set() } },
   options: { mode: 'docx' },
 });
 

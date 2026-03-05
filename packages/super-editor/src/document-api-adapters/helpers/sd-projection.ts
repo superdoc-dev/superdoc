@@ -981,8 +981,9 @@ function projectInlineFallback(pmNode: ProseMirrorNode): SDRun {
 // Helpers: node ID
 // ---------------------------------------------------------------------------
 
-function resolveNodeId(pmNode: ProseMirrorNode): string {
-  return pmNode.attrs?.sdBlockId ?? '';
+function resolveNodeId(pmNode: ProseMirrorNode): string | undefined {
+  const id = pmNode.attrs?.sdBlockId;
+  return typeof id === 'string' && id.length > 0 ? id : undefined;
 }
 
 // ---------------------------------------------------------------------------

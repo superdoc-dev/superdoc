@@ -7,6 +7,7 @@ import { insertStructuredWrapper } from './plan-wrappers.js';
 import { registerBuiltInExecutors } from './register-executors.js';
 import { clearExecutorRegistry } from './executor-registry.js';
 import { resolveTextTarget } from '../helpers/adapter-utils.js';
+import { nodeAllowsSdBlockIdAttr } from '../../extensions/block-node/block-node.js';
 
 let docData: Awaited<ReturnType<typeof loadTestDataForEditorTests>>;
 
@@ -272,6 +273,26 @@ describe('insertStructuredWrapper — table separators', () => {
         throw new Error(`Adjacent tables at children ${i} and ${i + 1}`);
       }
     }
+  });
+
+  it('assigns sdBlockId to all block nodes that support it after markdown table insert', () => {
+    const result = insertStructuredWrapper(editor, {
+      value: '| A | B |\n| --- | --- |\n| foo | bar |',
+      type: 'markdown',
+    });
+    expect(result.success).toBe(true);
+
+    const missing: Array<{ type: string; pos: number; id: unknown }> = [];
+    editor.state.doc.descendants((node, pos) => {
+      if (!nodeAllowsSdBlockIdAttr(node)) return true;
+      const id = node.attrs?.sdBlockId;
+      if (typeof id !== 'string' || id.length === 0) {
+        missing.push({ type: node.type.name, pos, id });
+      }
+      return true;
+    });
+
+    expect(missing).toEqual([]);
   });
 });
 

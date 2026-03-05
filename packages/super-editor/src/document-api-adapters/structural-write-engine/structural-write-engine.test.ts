@@ -5,6 +5,7 @@ import { registerBuiltInExecutors } from '../plan-engine/register-executors.js';
 import { clearExecutorRegistry } from '../plan-engine/executor-registry.js';
 import { insertStructuredWrapper, replaceStructuredWrapper } from '../plan-engine/plan-wrappers.js';
 import { executePlan } from '../plan-engine/executor.js';
+import { markdownToFragmentAdapter } from '../markdown-to-fragment-adapter.js';
 import { executeStructuralInsert, executeStructuralReplace, materializeFragment } from './index.js';
 import { enforceNestingPolicy } from './nesting-guard.js';
 import { validateDocumentFragment } from '@superdoc/document-api';
@@ -248,6 +249,38 @@ describe('replaceStructuredWrapper', () => {
     expect(result.success).toBe(true);
     expect(editor.state.doc.textContent).toContain('table replaced');
     expect(editor.state.doc.textContent).not.toContain('cell data');
+  });
+
+  it('replaces a table block with markdownToFragment output', () => {
+    const seed = executeStructuralInsert(editor, {
+      content: {
+        type: 'table',
+        rows: [
+          {
+            type: 'tableRow',
+            cells: [{ type: 'tableCell', content: [{ type: 'paragraph', content: [{ type: 'text', text: 'old' }] }] }],
+          },
+        ],
+      },
+    });
+    const tableBlockId = seed.insertedBlockIds[0]!;
+
+    const parsed = markdownToFragmentAdapter(editor, {
+      markdown: '| Col A | Col B |\n| --- | --- |\n| foo | bar |',
+    });
+
+    // Regression guard: markdown projection must not emit duplicate empty IDs.
+    expect(() => validateDocumentFragment(parsed.fragment)).not.toThrow();
+
+    const result = replaceStructuredWrapper(editor, {
+      target: { kind: 'text', blockId: tableBlockId, range: { start: 0, end: 0 } },
+      content: parsed.fragment,
+    });
+
+    expect(result.success).toBe(true);
+    expect(editor.state.doc.textContent).toContain('foo');
+    expect(editor.state.doc.textContent).toContain('bar');
+    expect(editor.state.doc.textContent).not.toContain('old');
   });
 
   it('supports dry-run mode without mutating the document', () => {

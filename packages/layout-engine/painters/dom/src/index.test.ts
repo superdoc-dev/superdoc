@@ -4144,6 +4144,121 @@ describe('DomPainter', () => {
     expect(borderLayer.style.width).toBe('273px');
   });
 
+  it('falls back to border width of 1 when width is not specified', () => {
+    const blockWithMissingWidths: FlowBlock = {
+      kind: 'paragraph',
+      id: 'missing-width-block',
+      attrs: {
+        borders: {
+          top: { style: 'solid', color: '#ff0000', space: 3 },
+          bottom: { style: 'solid', color: '#00ff00', space: 6 },
+          left: { style: 'dashed', color: '#0000ff', space: 2 },
+          right: { style: 'dotted', color: '#ffff00', space: 4 },
+        },
+      },
+      runs: [{ text: 'Missing width test', fontFamily: 'Arial', fontSize: 16 }],
+    };
+
+    const painter = createDomPainter({
+      blocks: [blockWithMissingWidths],
+      measures: [measure],
+    });
+
+    const missingWidthLayout: Layout = {
+      pageSize: layout.pageSize,
+      pages: [
+        {
+          number: 1,
+          fragments: [
+            {
+              kind: 'para',
+              blockId: 'missing-width-block',
+              fromLine: 0,
+              toLine: 1,
+              x: 50,
+              y: 60,
+              width: 260,
+            },
+          ],
+        },
+      ],
+    };
+
+    painter.paint(missingWidthLayout, mount);
+
+    const fragment = mount.querySelector('[data-block-id="missing-width-block"]') as HTMLElement;
+    const borderLayer = fragment.querySelector('.superdoc-paragraph-border') as HTMLElement;
+    expect(borderLayer).toBeTruthy();
+
+    // Width defaults to 1 when not specified.
+    // top:    -(space(3)  + width(1)) = -4px
+    expect(borderLayer.style.top).toBe('-4px');
+    // bottom: -(space(6)  + width(1)) = -7px
+    expect(borderLayer.style.bottom).toBe('-7px');
+    // left:   -(space(2)  + width(1)) = -3px  (no indent, leftInset = 0)
+    expect(borderLayer.style.left).toBe('-3px');
+    // width:  260 - leftOffset(-3) - rightOffset(-5) = 260 + 3 + 5 = 268px
+    expect(borderLayer.style.width).toBe('268px');
+  });
+
+  it('positions border flush with the fragment edge when space is 0', () => {
+    const blockWithZeroSpace: FlowBlock = {
+      kind: 'paragraph',
+      id: 'zero-space-block',
+      attrs: {
+        borders: {
+          top: { style: 'solid', width: 2, color: '#ff0000', space: 0 },
+          bottom: { style: 'solid', width: 2, color: '#00ff00', space: 0 },
+          left: { style: 'dashed', width: 2, color: '#0000ff', space: 0 },
+          right: { style: 'dotted', width: 2, color: '#ffff00', space: 0 },
+        },
+      },
+      runs: [{ text: 'Zero space test', fontFamily: 'Arial', fontSize: 16 }],
+    };
+
+    const painter = createDomPainter({
+      blocks: [blockWithZeroSpace],
+      measures: [measure],
+    });
+
+    const zeroSpaceLayout: Layout = {
+      pageSize: layout.pageSize,
+      pages: [
+        {
+          number: 1,
+          fragments: [
+            {
+              kind: 'para',
+              blockId: 'zero-space-block',
+              fromLine: 0,
+              toLine: 1,
+              x: 50,
+              y: 60,
+              width: 260,
+            },
+          ],
+        },
+      ],
+    };
+
+    painter.paint(zeroSpaceLayout, mount);
+
+    const fragment = mount.querySelector('[data-block-id="zero-space-block"]') as HTMLElement;
+    const borderLayer = fragment.querySelector('.superdoc-paragraph-border') as HTMLElement;
+    expect(borderLayer).toBeTruthy();
+
+    // With space=0 the offset equals just the border width, so the outer edge of
+    // the border sits exactly flush with the fragment boundary.
+    // top:    -(0 + 2) = -2px
+    expect(borderLayer.style.top).toBe('-2px');
+    // bottom: -(0 + 2) = -2px
+    expect(borderLayer.style.bottom).toBe('-2px');
+    // left:   0 + (-(0 + 2)) = -2px  (no indent, leftInset = 0)
+    expect(borderLayer.style.left).toBe('-2px');
+    // width:  260 - (-2) - (-2) = 264px
+    expect(borderLayer.style.width).toBe('264px');
+  });
+
   it('applies paragraph shading fill to fragment backgrounds', () => {
     const shadedBlock: FlowBlock = {
       kind: 'paragraph',

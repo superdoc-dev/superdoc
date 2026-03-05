@@ -7029,27 +7029,31 @@ const createParagraphDecorationLayers = (
   let leftOffset = 0;
   let rightOffset = 0;
 
+  // Negative values mean extending into the margin:
+  // top/bottom negative values extend upward/downward into the margin,
+  // left/right negative values extend left/right into the margin.
+
   if (borders) {
     // For each border, extend outward by (space + width) so border is drawn in the margin
     if (borders.top) {
       const space = Math.max(0, borders.top.space ?? 0);
       const width = Math.max(0, borders.top.width ?? 1);
-      topOffset = -(space + width); // Negative to extend upward into margin
+      topOffset = -(space + width);
     }
     if (borders.bottom) {
       const space = Math.max(0, borders.bottom.space ?? 0);
       const width = Math.max(0, borders.bottom.width ?? 1);
-      bottomOffset = -(space + width); // Negative to extend downward into margin
+      bottomOffset = -(space + width);
     }
     if (borders.left) {
       const space = Math.max(0, borders.left.space ?? 0);
       const width = Math.max(0, borders.left.width ?? 1);
-      leftOffset = -(space + width); // Negative to extend left into margin
+      leftOffset = -(space + width);
     }
     if (borders.right) {
       const space = Math.max(0, borders.right.space ?? 0);
       const width = Math.max(0, borders.right.width ?? 1);
-      rightOffset = -(space + width); // Negative to extend right into margin
+      rightOffset = -(space + width);
     }
   }
 

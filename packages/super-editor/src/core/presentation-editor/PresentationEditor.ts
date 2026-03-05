@@ -8,6 +8,12 @@ import { LayoutErrorBanner } from './ui/LayoutErrorBanner.js';
 import { applyViewportZoom } from './layout/applyViewportZoom.js';
 import { applyVertAlignToLayout as applyVertAlignToLayoutHelper } from './layout/applyVertAlignToLayout.js';
 import {
+  computeFootnoteNumbering,
+  buildConverterContext,
+  collectHeaderFooterBlocks,
+  buildTocPageMap,
+} from './layout/RerenderHelpers.js';
+import {
   findPageIndexForPosition,
   computePageScrollOffset,
   findElementAtPosition as findElementAtPositionHelper,
@@ -72,7 +78,6 @@ import { DragDropManager } from './input/DragDropManager.js';
 import { processAndInsertImageFile } from '@extensions/image/imageHelpers/processAndInsertImageFile.js';
 import { HeaderFooterSessionManager } from './header-footer/HeaderFooterSessionManager.js';
 import { toFlowBlocks, ConverterContext, FlowBlockCache } from '@superdoc/pm-adapter';
-import { readSettingsRoot, readDefaultTableStyle } from '../../document-api-adapters/document-settings.js';
 import {
   incrementalLayout,
   selectionToRects,
@@ -3154,61 +3159,18 @@ export class PresentationEditor extends EventEmitter {
       let converterContext: ConverterContext | undefined = undefined;
       try {
         const converter = (this.#editor as Editor & { converter?: Record<string, unknown> }).converter;
-        // Compute visible footnote numbering (1-based) by first appearance in the document.
-        // This matches Word behavior even when OOXML ids are non-contiguous or start at 0.
-        const footnoteNumberById: Record<string, number> = {};
-        const footnoteOrder: string[] = [];
-        try {
-          const seen = new Set<string>();
-          let counter = 1;
-          this.#editor?.state?.doc?.descendants?.((node: any) => {
-            if (node?.type?.name !== 'footnoteReference') return;
-            const rawId = node?.attrs?.id;
-            if (rawId == null) return;
-            const key = String(rawId);
-            if (!key || seen.has(key)) return;
-            seen.add(key);
-            footnoteNumberById[key] = counter;
-            footnoteOrder.push(key);
-            counter += 1;
-          });
-        } catch (e) {
-          // Log traversal errors - footnote numbering may be incorrect if this fails
-          if (typeof console !== 'undefined' && console.warn) {
-            console.warn('[PresentationEditor] Failed to compute footnote numbering:', e);
-          }
-        }
-        // Invalidate flow block cache when footnote order changes, since footnote
-        // numbers are embedded in cached blocks and must be recomputed.
+        const { footnoteNumberById, footnoteOrder } = computeFootnoteNumbering(this.#editor?.state?.doc);
         const footnoteSignature = footnoteOrder.join('|');
         if (footnoteSignature !== this.#footnoteNumberSignature) {
           this.#flowBlockCache.clear();
           this.#footnoteNumberSignature = footnoteSignature;
         }
-        // Expose numbering to node views and layout adapter.
         try {
           if (converter && typeof converter === 'object') {
             converter['footnoteNumberById'] = footnoteNumberById;
           }
         } catch {}
-
-        let defaultTableStyleId: string | undefined;
-        if (converter) {
-          const settingsRoot = readSettingsRoot(converter);
-          if (settingsRoot) {
-            defaultTableStyleId = readDefaultTableStyle(settingsRoot) ?? undefined;
-          }
-        }
-
-        converterContext = converter
-          ? {
-              docx: converter.convertedXml,
-              ...(Object.keys(footnoteNumberById).length ? { footnoteNumberById } : {}),
-              translatedLinkedStyles: converter.translatedLinkedStyles,
-              translatedNumbering: converter.translatedNumbering,
-              ...(defaultTableStyleId ? { defaultTableStyleId } : {}),
-            }
-          : undefined;
+        converterContext = buildConverterContext(converter, footnoteNumberById);
         const atomNodeTypes = getAtomNodeTypesFromSchema(this.#editor?.schema ?? null);
         const positionMapStart = perfNow();
         const positionMap =
@@ -3344,25 +3306,11 @@ export class PresentationEditor extends EventEmitter {
       const anchorMap = computeAnchorMapFromHelper(bookmarks, layout, blocksForLayout);
       this.#layoutState = { blocks: blocksForLayout, measures, layout, bookmarks, anchorMap };
 
-      // Build blockId → pageNumber map for TOC page-number resolution.
-      // Stored on editor.storage so the document-api adapter layer can read it
-      // when toc.update({ mode: 'pageNumbers' }) is called.
-      // pageMapDoc is the doc snapshot this map was derived from — the adapter
-      // layer compares it against editor.state.doc to reject stale maps.
       const tocStorage = (
         this.#editor as unknown as { storage?: Record<string, { pageMap?: Map<string, number>; pageMapDoc?: unknown }> }
       ).storage?.tableOfContents;
       if (tocStorage) {
-        const pageMap = new Map<string, number>();
-        for (const page of layout.pages) {
-          for (const fragment of page.fragments) {
-            // First occurrence wins — use the page where the block first appears
-            if (!pageMap.has(fragment.blockId)) {
-              pageMap.set(fragment.blockId, page.number);
-            }
-          }
-        }
-        tocStorage.pageMap = pageMap;
+        tocStorage.pageMap = buildTocPageMap(layout);
         tocStorage.pageMapDoc = this.#editor.state.doc;
       }
       if (this.#headerFooterSession) {
@@ -3397,46 +3345,14 @@ export class PresentationEditor extends EventEmitter {
         );
       }
 
-      // Extract header/footer blocks and measures from layout results
-      const headerBlocks: FlowBlock[] = [];
-      const headerMeasures: Measure[] = [];
-      if (headerLayouts) {
-        for (const headerResult of headerLayouts) {
-          headerBlocks.push(...headerResult.blocks);
-          headerMeasures.push(...headerResult.measures);
-        }
-      }
-      // Also include per-rId header blocks for multi-section support
-      const headerLayoutsByRId = this.#headerFooterSession?.headerLayoutsByRId;
-      if (headerLayoutsByRId) {
-        for (const rIdResult of headerLayoutsByRId.values()) {
-          headerBlocks.push(...rIdResult.blocks);
-          headerMeasures.push(...rIdResult.measures);
-        }
-      }
-
-      const footerBlocks: FlowBlock[] = [];
-      const footerMeasures: Measure[] = [];
-      if (footerLayouts) {
-        for (const footerResult of footerLayouts) {
-          footerBlocks.push(...footerResult.blocks);
-          footerMeasures.push(...footerResult.measures);
-        }
-      }
-      // Also include per-rId footer blocks for multi-section support
-      const footerLayoutsByRId = this.#headerFooterSession?.footerLayoutsByRId;
-      if (footerLayoutsByRId) {
-        for (const rIdResult of footerLayoutsByRId.values()) {
-          footerBlocks.push(...rIdResult.blocks);
-          footerMeasures.push(...rIdResult.measures);
-        }
-      }
-
-      // Merge any extra lookup blocks (e.g., footnotes injected into page fragments)
-      if (extraBlocks && extraMeasures && extraBlocks.length === extraMeasures.length && extraBlocks.length > 0) {
-        footerBlocks.push(...extraBlocks);
-        footerMeasures.push(...extraMeasures);
-      }
+      const { headerBlocks, headerMeasures, footerBlocks, footerMeasures } = collectHeaderFooterBlocks(
+        headerLayouts,
+        footerLayouts,
+        this.#headerFooterSession?.headerLayoutsByRId,
+        this.#headerFooterSession?.footerLayoutsByRId,
+        extraBlocks,
+        extraMeasures,
+      );
 
       // Pass all blocks (main document + headers + footers + extras) to the painter
       const painterSetDataStart = perfNow();

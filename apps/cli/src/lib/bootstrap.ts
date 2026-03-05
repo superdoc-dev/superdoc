@@ -90,20 +90,9 @@ const CONTENT_SETTLING_MAX_MS = 200;
  * present, or after CONTENT_SETTLING_MAX_MS if nothing arrives.
  */
 export function waitForContentSettling(ydoc: YDoc, maxWaitMs: number = CONTENT_SETTLING_MAX_MS): Promise<void> {
-  const fragment = ydoc.getXmlFragment('supereditor');
-  if (fragment.length > 0) return Promise.resolve();
+  if (detectRoomState(ydoc) === 'populated') return Promise.resolve();
 
-  // Also check the meta map — a finalized bootstrap marker from a prior
-  // session is evidence of a populated room even if fragment is still loading.
-  const metaMap = ydoc.getMap('meta');
-  for (const [key, value] of metaMap.entries()) {
-    if (key === 'bootstrap') {
-      const marker = value as Record<string, unknown> | undefined;
-      if (marker && marker.source !== 'pending') return Promise.resolve();
-      continue;
-    }
-    return Promise.resolve();
-  }
+  const fragment = ydoc.getXmlFragment('supereditor');
 
   return new Promise<void>((resolve) => {
     const timeout = setTimeout(() => {

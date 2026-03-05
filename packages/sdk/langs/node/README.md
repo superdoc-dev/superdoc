@@ -94,14 +94,12 @@ client.doc.insert(params)
 The SDK includes built-in support for exposing document operations as AI tool definitions:
 
 ```ts
-import { chooseTools, dispatchSuperDocTool, inferDocumentFeatures } from '@superdoc-dev/sdk';
+import { chooseTools, dispatchSuperDocTool } from '@superdoc-dev/sdk';
 
-// Get tool definitions for your AI provider
+// Get tool definitions for your AI provider, filtered by group
 const { tools, selected } = await chooseTools({
-  provider: 'openai',       // 'openai' | 'anthropic' | 'vercel' | 'generic'
-  profile: 'intent',        // human-friendly tool names
-  taskContext: { phase: 'mutate' },
-  documentFeatures: inferDocumentFeatures(await client.doc.info()),
+  provider: 'openai',  // 'openai' | 'anthropic' | 'vercel' | 'generic'
+  groups: ['core', 'format', 'comments'],  // core is always auto-included
 });
 
 // Dispatch a tool call from the AI model
@@ -110,12 +108,12 @@ const result = await dispatchSuperDocTool(client, toolName, args);
 
 | Function | Description |
 |----------|-------------|
-| `chooseTools(input)` | Select tools filtered by phase, capabilities, and budget |
-| `listTools(provider, options?)` | List all tool definitions for a provider |
+| `chooseTools(input)` | Select tools filtered by group for a provider |
+| `listTools(provider)` | List all tool definitions for a provider |
 | `dispatchSuperDocTool(client, toolName, args)` | Execute a tool call against a client |
 | `resolveToolOperation(toolName)` | Map a tool name to its operation ID |
-| `getToolCatalog(options?)` | Load the full tool catalog |
-| `inferDocumentFeatures(infoResult)` | Derive feature flags from `doc.info` output |
+| `getToolCatalog()` | Load the full tool catalog |
+| `getAvailableGroups()` | List all available tool groups |
 
 ## Part of SuperDoc
 

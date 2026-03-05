@@ -221,13 +221,14 @@ const markTextStyleValue = (
   type: InlinePropertyType,
   ooxmlElement: string,
   schema: Record<string, unknown>,
+  textStyleAttr?: string,
 ): InlinePropertyRegistryEntry => ({
   key,
   type,
   ooxmlElement,
   storage: 'mark',
   tracked: true,
-  carrier: markCarrier('textStyle', key),
+  carrier: markCarrier('textStyle', textStyleAttr ?? key),
   schema,
 });
 
@@ -279,7 +280,7 @@ export const INLINE_PROPERTY_REGISTRY = [
   markTextStyleValue('position', 'number', 'w:position', schemaNumberOrNull()),
   runAttribute('dstrike', 'boolean', 'w:dstrike', schemaBooleanOrNull()),
   runAttribute('smallCaps', 'boolean', 'w:smallCaps', schemaBooleanOrNull()),
-  runAttribute('caps', 'boolean', 'w:caps', schemaBooleanOrNull()),
+  markTextStyleValue('caps', 'boolean', 'w:caps', schemaBooleanOrNull(), 'textTransform'),
   runAttribute(
     'shading',
     'object',

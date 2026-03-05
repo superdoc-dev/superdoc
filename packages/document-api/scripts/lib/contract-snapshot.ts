@@ -9,6 +9,7 @@ import {
   buildInternalContractSchemas,
   type OperationId,
 } from '../../src/index.js';
+import { OPERATION_DEFINITIONS } from '../../src/contract/operation-definitions.js';
 import { sha256 } from './generation-utils.js';
 
 export interface ContractOperationSnapshot {
@@ -18,6 +19,8 @@ export interface ContractOperationSnapshot {
   schemas: ReturnType<typeof buildInternalContractSchemas>['operations'][keyof ReturnType<
     typeof buildInternalContractSchemas
   >['operations']];
+  skipAsATool?: boolean;
+  essential?: boolean;
 }
 
 export interface ContractSnapshot {
@@ -39,6 +42,8 @@ export function buildContractSnapshot(): ContractSnapshot {
     memberPath: OPERATION_MEMBER_PATH_MAP[operationId],
     metadata: COMMAND_CATALOG[operationId],
     schemas: internalSchemas.operations[operationId],
+    ...(OPERATION_DEFINITIONS[operationId]?.skipAsATool ? { skipAsATool: true } : {}),
+    ...(OPERATION_DEFINITIONS[operationId]?.essential ? { essential: true } : {}),
   }));
 
   const sourcePayload = {

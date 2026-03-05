@@ -1,3 +1,25 @@
+import { Fragment } from 'prosemirror-model';
+
+/**
+ * Determines which sides of a table inserted at `pos` need a separator
+ * paragraph to prevent adjacency with an existing table.
+ *
+ * @param {import('prosemirror-model').Node} doc
+ * @param {number} pos
+ * @returns {{ before: boolean, after: boolean }}
+ */
+function tableSeparatorNeeds(doc, pos) {
+  const $pos = doc.resolve(pos);
+  if ($pos.depth !== 0) return { before: false, after: false };
+  const indexAfter = $pos.index(0);
+  const nodeAfter = indexAfter < doc.childCount ? doc.child(indexAfter) : null;
+  const nodeBefore = indexAfter > 0 ? doc.child(indexAfter - 1) : null;
+  return {
+    before: nodeBefore?.type.name === 'table',
+    after: !nodeAfter || nodeAfter.type.name === 'table',
+  };
+}
+
 /**
  * Insert a table node at an absolute document position.
  *
@@ -35,7 +57,24 @@ export const insertTableAt =
       const tableAttrs = sdBlockId ? { sdBlockId } : undefined;
       const tableNode = tableType.createChecked(tableAttrs, rowNodes);
 
-      const tr = state.tr.insert(pos, tableNode);
+      const sep = tableSeparatorNeeds(state.doc, pos);
+      let tr;
+      if (sep.before || sep.after) {
+        const makeSep = () => state.schema.nodes.paragraph.createAndFill();
+        const nodes = [];
+        if (sep.before) {
+          const s = makeSep();
+          if (s) nodes.push(s);
+        }
+        nodes.push(tableNode);
+        if (sep.after) {
+          const s = makeSep();
+          if (s) nodes.push(s);
+        }
+        tr = state.tr.insert(pos, Fragment.from(nodes));
+      } else {
+        tr = state.tr.insert(pos, tableNode);
+      }
       if (!dispatch) return true;
       tr.setMeta('inputType', 'programmatic');
       if (tracked === true) tr.setMeta('forceTrackChanges', true);

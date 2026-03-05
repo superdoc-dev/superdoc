@@ -57,11 +57,16 @@ export async function runSave(tokens: string[], context: CommandContext): Promis
     'save',
     async ({ metadata, paths }) => {
       let effectiveMetadata = metadata;
-      if (metadata.sessionType === 'collab') {
+
+      // Flush in-memory state to working.docx before copying
+      if (context.executionMode === 'host' && context.sessionPool) {
+        await context.sessionPool.checkpoint(metadata.contextId);
+      } else if (metadata.sessionType === 'collab') {
+        // Oneshot collab: sync snapshot the old way
         const opened = await openSessionDocument(paths.workingDocPath, context.io, metadata, {
           sessionId: context.sessionId ?? metadata.contextId,
           executionMode: context.executionMode,
-          collabSessionPool: context.collabSessionPool,
+          sessionPool: context.sessionPool,
         });
         try {
           const synced = await syncCollaborativeSessionSnapshot(context.io, metadata, paths, opened.editor);

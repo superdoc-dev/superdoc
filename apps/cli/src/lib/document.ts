@@ -11,9 +11,11 @@ import type { CollaborationProfile } from './collaboration';
 import { createCollaborationRuntime } from './collaboration';
 import {
   DEFAULT_BOOTSTRAP_SETTLING_MS,
+  waitForContentSettling,
   detectRoomState,
   resolveBootstrapDecision,
   claimBootstrap,
+  clearBootstrapMarker,
   writeBootstrapMarker,
   detectBootstrapRace,
   type RoomState,
@@ -24,7 +26,7 @@ import { CliError } from './errors';
 import { pathExists } from './guards';
 import type { ContextMetadata } from './context';
 import type { CliIO, DocumentSourceMeta, ExecutionMode, UserIdentity } from './types';
-import type { CollaborationSessionPool } from '../host/collab-session-pool';
+import type { SessionPool } from '../host/session-pool';
 
 export type EditorWithDoc = Editor & {
   doc: DocumentApi;
@@ -251,6 +253,11 @@ export async function openCollaborativeDocument(
   try {
     await runtime.waitForSync();
 
+    // SD-2138: Some providers fire "synced" before Yjs updates are fully
+    // applied to local shared types. Give a brief window for the XmlFragment
+    // to be populated from incoming server state before checking room state.
+    await waitForContentSettling(runtime.ydoc);
+
     const onMissing = profile.onMissing ?? 'seedFromDoc';
     let finalRoomState = detectRoomState(runtime.ydoc);
     let decision = resolveBootstrapDecision(finalRoomState, onMissing, doc != null);
@@ -264,6 +271,18 @@ export async function openCollaborativeDocument(
         // here would produce a dual-seed race.
         finalRoomState = detectRoomState(runtime.ydoc);
         decision = { action: 'join' };
+      } else {
+        // SD-2138: Re-check room state after the claim settling period.
+        // Some providers fire "synced" before Yjs updates are fully applied,
+        // so content from the server may have arrived during the settling
+        // wait.  If the room is now populated, join instead of seeding —
+        // seeding here would destructively overwrite existing content.
+        const postClaimState = detectRoomState(runtime.ydoc);
+        if (postClaimState === 'populated') {
+          clearBootstrapMarker(runtime.ydoc);
+          finalRoomState = postClaimState;
+          decision = { action: 'join' };
+        }
       }
     }
 
@@ -319,41 +338,41 @@ export async function openSessionDocument(
   io: CliIO,
   metadata: Pick<
     ContextMetadata,
-    'contextId' | 'sessionType' | 'collaboration' | 'sourcePath' | 'workingDocPath' | 'user'
+    'contextId' | 'sessionType' | 'collaboration' | 'sourcePath' | 'workingDocPath' | 'user' | 'revision'
   >,
   options: {
     sessionId?: string;
     executionMode?: ExecutionMode;
-    collabSessionPool?: CollaborationSessionPool;
+    sessionPool?: SessionPool;
   } = {},
 ): Promise<OpenedDocument> {
-  if (metadata.sessionType !== 'collab') {
-    return openDocument(doc, io, { user: metadata.user });
+  const { executionMode, sessionPool, sessionId } = options;
+
+  // Host mode: always go through pool (local AND collab)
+  if (executionMode === 'host' && sessionPool) {
+    const resolvedSessionId = sessionId ?? metadata.contextId;
+    return sessionPool.acquire(
+      resolvedSessionId,
+      {
+        sessionType: metadata.sessionType,
+        workingDocPath: metadata.workingDocPath ?? doc,
+        metadataRevision: metadata.revision,
+        user: metadata.user,
+        collaboration: metadata.collaboration,
+      },
+      io,
+    );
   }
 
-  if (!metadata.collaboration) {
-    throw new CliError('COMMAND_FAILED', 'Session is marked as collaborative but has no collaboration profile.');
-  }
-
-  if (options.executionMode === 'host' && options.collabSessionPool) {
-    const sessionId = options.sessionId ?? metadata.contextId;
-    if (!sessionId) {
-      throw new CliError('COMMAND_FAILED', 'Session id is required for host-mode collaboration operations.');
+  // Oneshot mode: open fresh, caller is responsible for dispose
+  if (metadata.sessionType === 'collab') {
+    if (!metadata.collaboration) {
+      throw new CliError('COMMAND_FAILED', 'Session is marked as collaborative but has no collaboration profile.');
     }
-
-    const metadataForPool = {
-      contextId: sessionId,
-      sessionType: metadata.sessionType,
-      collaboration: metadata.collaboration,
-      sourcePath: metadata.sourcePath,
-      workingDocPath: metadata.workingDocPath,
-      user: metadata.user,
-    };
-
-    return options.collabSessionPool.acquire(sessionId, doc, metadataForPool, io);
+    return openCollaborativeDocument(doc, io, metadata.collaboration, { user: metadata.user });
   }
 
-  return openCollaborativeDocument(doc, io, metadata.collaboration, { user: metadata.user });
+  return openDocument(doc, io, { user: metadata.user });
 }
 
 export async function getFileChecksum(path: string): Promise<string> {

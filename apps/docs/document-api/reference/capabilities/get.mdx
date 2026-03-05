@@ -282,6 +282,11 @@ _No fields._
 | `operations.capabilities.get.dryRun` | boolean | yes |  |
 | `operations.capabilities.get.reasons` | enum[] | no |  |
 | `operations.capabilities.get.tracked` | boolean | yes |  |
+| `operations.clearContent` | object | yes |  |
+| `operations.clearContent.available` | boolean | yes |  |
+| `operations.clearContent.dryRun` | boolean | yes |  |
+| `operations.clearContent.reasons` | enum[] | no |  |
+| `operations.clearContent.tracked` | boolean | yes |  |
 | `operations.comments.create` | object | yes |  |
 | `operations.comments.create.available` | boolean | yes |  |
 | `operations.comments.create.dryRun` | boolean | yes |  |
@@ -312,6 +317,11 @@ _No fields._
 | `operations.create.heading.dryRun` | boolean | yes |  |
 | `operations.create.heading.reasons` | enum[] | no |  |
 | `operations.create.heading.tracked` | boolean | yes |  |
+| `operations.create.image` | object | yes |  |
+| `operations.create.image.available` | boolean | yes |  |
+| `operations.create.image.dryRun` | boolean | yes |  |
+| `operations.create.image.reasons` | enum[] | no |  |
+| `operations.create.image.tracked` | boolean | yes |  |
 | `operations.create.paragraph` | object | yes |  |
 | `operations.create.paragraph.available` | boolean | yes |  |
 | `operations.create.paragraph.dryRun` | boolean | yes |  |
@@ -687,6 +697,171 @@ _No fields._
 | `operations.history.undo.dryRun` | boolean | yes |  |
 | `operations.history.undo.reasons` | enum[] | no |  |
 | `operations.history.undo.tracked` | boolean | yes |  |
+| `operations.hyperlinks.get` | object | yes |  |
+| `operations.hyperlinks.get.available` | boolean | yes |  |
+| `operations.hyperlinks.get.dryRun` | boolean | yes |  |
+| `operations.hyperlinks.get.reasons` | enum[] | no |  |
+| `operations.hyperlinks.get.tracked` | boolean | yes |  |
+| `operations.hyperlinks.insert` | object | yes |  |
+| `operations.hyperlinks.insert.available` | boolean | yes |  |
+| `operations.hyperlinks.insert.dryRun` | boolean | yes |  |
+| `operations.hyperlinks.insert.reasons` | enum[] | no |  |
+| `operations.hyperlinks.insert.tracked` | boolean | yes |  |
+| `operations.hyperlinks.list` | object | yes |  |
+| `operations.hyperlinks.list.available` | boolean | yes |  |
+| `operations.hyperlinks.list.dryRun` | boolean | yes |  |
+| `operations.hyperlinks.list.reasons` | enum[] | no |  |
+| `operations.hyperlinks.list.tracked` | boolean | yes |  |
+| `operations.hyperlinks.patch` | object | yes |  |
+| `operations.hyperlinks.patch.available` | boolean | yes |  |
+| `operations.hyperlinks.patch.dryRun` | boolean | yes |  |
+| `operations.hyperlinks.patch.reasons` | enum[] | no |  |
+| `operations.hyperlinks.patch.tracked` | boolean | yes |  |
+| `operations.hyperlinks.remove` | object | yes |  |
+| `operations.hyperlinks.remove.available` | boolean | yes |  |
+| `operations.hyperlinks.remove.dryRun` | boolean | yes |  |
+| `operations.hyperlinks.remove.reasons` | enum[] | no |  |
+| `operations.hyperlinks.remove.tracked` | boolean | yes |  |
+| `operations.hyperlinks.wrap` | object | yes |  |
+| `operations.hyperlinks.wrap.available` | boolean | yes |  |
+| `operations.hyperlinks.wrap.dryRun` | boolean | yes |  |
+| `operations.hyperlinks.wrap.reasons` | enum[] | no |  |
+| `operations.hyperlinks.wrap.tracked` | boolean | yes |  |
+| `operations.images.convertToFloating` | object | yes |  |
+| `operations.images.convertToFloating.available` | boolean | yes |  |
+| `operations.images.convertToFloating.dryRun` | boolean | yes |  |
+| `operations.images.convertToFloating.reasons` | enum[] | no |  |
+| `operations.images.convertToFloating.tracked` | boolean | yes |  |
+| `operations.images.convertToInline` | object | yes |  |
+| `operations.images.convertToInline.available` | boolean | yes |  |
+| `operations.images.convertToInline.dryRun` | boolean | yes |  |
+| `operations.images.convertToInline.reasons` | enum[] | no |  |
+| `operations.images.convertToInline.tracked` | boolean | yes |  |
+| `operations.images.crop` | object | yes |  |
+| `operations.images.crop.available` | boolean | yes |  |
+| `operations.images.crop.dryRun` | boolean | yes |  |
+| `operations.images.crop.reasons` | enum[] | no |  |
+| `operations.images.crop.tracked` | boolean | yes |  |
+| `operations.images.delete` | object | yes |  |
+| `operations.images.delete.available` | boolean | yes |  |
+| `operations.images.delete.dryRun` | boolean | yes |  |
+| `operations.images.delete.reasons` | enum[] | no |  |
+| `operations.images.delete.tracked` | boolean | yes |  |
+| `operations.images.flip` | object | yes |  |
+| `operations.images.flip.available` | boolean | yes |  |
+| `operations.images.flip.dryRun` | boolean | yes |  |
+| `operations.images.flip.reasons` | enum[] | no |  |
+| `operations.images.flip.tracked` | boolean | yes |  |
+| `operations.images.get` | object | yes |  |
+| `operations.images.get.available` | boolean | yes |  |
+| `operations.images.get.dryRun` | boolean | yes |  |
+| `operations.images.get.reasons` | enum[] | no |  |
+| `operations.images.get.tracked` | boolean | yes |  |
+| `operations.images.insertCaption` | object | yes |  |
+| `operations.images.insertCaption.available` | boolean | yes |  |
+| `operations.images.insertCaption.dryRun` | boolean | yes |  |
+| `operations.images.insertCaption.reasons` | enum[] | no |  |
+| `operations.images.insertCaption.tracked` | boolean | yes |  |
+| `operations.images.list` | object | yes |  |
+| `operations.images.list.available` | boolean | yes |  |
+| `operations.images.list.dryRun` | boolean | yes |  |
+| `operations.images.list.reasons` | enum[] | no |  |
+| `operations.images.list.tracked` | boolean | yes |  |
+| `operations.images.move` | object | yes |  |
+| `operations.images.move.available` | boolean | yes |  |
+| `operations.images.move.dryRun` | boolean | yes |  |
+| `operations.images.move.reasons` | enum[] | no |  |
+| `operations.images.move.tracked` | boolean | yes |  |
+| `operations.images.removeCaption` | object | yes |  |
+| `operations.images.removeCaption.available` | boolean | yes |  |
+| `operations.images.removeCaption.dryRun` | boolean | yes |  |
+| `operations.images.removeCaption.reasons` | enum[] | no |  |
+| `operations.images.removeCaption.tracked` | boolean | yes |  |
+| `operations.images.replaceSource` | object | yes |  |
+| `operations.images.replaceSource.available` | boolean | yes |  |
+| `operations.images.replaceSource.dryRun` | boolean | yes |  |
+| `operations.images.replaceSource.reasons` | enum[] | no |  |
+| `operations.images.replaceSource.tracked` | boolean | yes |  |
+| `operations.images.resetCrop` | object | yes |  |
+| `operations.images.resetCrop.available` | boolean | yes |  |
+| `operations.images.resetCrop.dryRun` | boolean | yes |  |
+| `operations.images.resetCrop.reasons` | enum[] | no |  |
+| `operations.images.resetCrop.tracked` | boolean | yes |  |
+| `operations.images.rotate` | object | yes |  |
+| `operations.images.rotate.available` | boolean | yes |  |
+| `operations.images.rotate.dryRun` | boolean | yes |  |
+| `operations.images.rotate.reasons` | enum[] | no |  |
+| `operations.images.rotate.tracked` | boolean | yes |  |
+| `operations.images.scale` | object | yes |  |
+| `operations.images.scale.available` | boolean | yes |  |
+| `operations.images.scale.dryRun` | boolean | yes |  |
+| `operations.images.scale.reasons` | enum[] | no |  |
+| `operations.images.scale.tracked` | boolean | yes |  |
+| `operations.images.setAltText` | object | yes |  |
+| `operations.images.setAltText.available` | boolean | yes |  |
+| `operations.images.setAltText.dryRun` | boolean | yes |  |
+| `operations.images.setAltText.reasons` | enum[] | no |  |
+| `operations.images.setAltText.tracked` | boolean | yes |  |
+| `operations.images.setAnchorOptions` | object | yes |  |
+| `operations.images.setAnchorOptions.available` | boolean | yes |  |
+| `operations.images.setAnchorOptions.dryRun` | boolean | yes |  |
+| `operations.images.setAnchorOptions.reasons` | enum[] | no |  |
+| `operations.images.setAnchorOptions.tracked` | boolean | yes |  |
+| `operations.images.setDecorative` | object | yes |  |
+| `operations.images.setDecorative.available` | boolean | yes |  |
+| `operations.images.setDecorative.dryRun` | boolean | yes |  |
+| `operations.images.setDecorative.reasons` | enum[] | no |  |
+| `operations.images.setDecorative.tracked` | boolean | yes |  |
+| `operations.images.setHyperlink` | object | yes |  |
+| `operations.images.setHyperlink.available` | boolean | yes |  |
+| `operations.images.setHyperlink.dryRun` | boolean | yes |  |
+| `operations.images.setHyperlink.reasons` | enum[] | no |  |
+| `operations.images.setHyperlink.tracked` | boolean | yes |  |
+| `operations.images.setLockAspectRatio` | object | yes |  |
+| `operations.images.setLockAspectRatio.available` | boolean | yes |  |
+| `operations.images.setLockAspectRatio.dryRun` | boolean | yes |  |
+| `operations.images.setLockAspectRatio.reasons` | enum[] | no |  |
+| `operations.images.setLockAspectRatio.tracked` | boolean | yes |  |
+| `operations.images.setName` | object | yes |  |
+| `operations.images.setName.available` | boolean | yes |  |
+| `operations.images.setName.dryRun` | boolean | yes |  |
+| `operations.images.setName.reasons` | enum[] | no |  |
+| `operations.images.setName.tracked` | boolean | yes |  |
+| `operations.images.setPosition` | object | yes |  |
+| `operations.images.setPosition.available` | boolean | yes |  |
+| `operations.images.setPosition.dryRun` | boolean | yes |  |
+| `operations.images.setPosition.reasons` | enum[] | no |  |
+| `operations.images.setPosition.tracked` | boolean | yes |  |
+| `operations.images.setSize` | object | yes |  |
+| `operations.images.setSize.available` | boolean | yes |  |
+| `operations.images.setSize.dryRun` | boolean | yes |  |
+| `operations.images.setSize.reasons` | enum[] | no |  |
+| `operations.images.setSize.tracked` | boolean | yes |  |
+| `operations.images.setWrapDistances` | object | yes |  |
+| `operations.images.setWrapDistances.available` | boolean | yes |  |
+| `operations.images.setWrapDistances.dryRun` | boolean | yes |  |
+| `operations.images.setWrapDistances.reasons` | enum[] | no |  |
+| `operations.images.setWrapDistances.tracked` | boolean | yes |  |
+| `operations.images.setWrapSide` | object | yes |  |
+| `operations.images.setWrapSide.available` | boolean | yes |  |
+| `operations.images.setWrapSide.dryRun` | boolean | yes |  |
+| `operations.images.setWrapSide.reasons` | enum[] | no |  |
+| `operations.images.setWrapSide.tracked` | boolean | yes |  |
+| `operations.images.setWrapType` | object | yes |  |
+| `operations.images.setWrapType.available` | boolean | yes |  |
+| `operations.images.setWrapType.dryRun` | boolean | yes |  |
+| `operations.images.setWrapType.reasons` | enum[] | no |  |
+| `operations.images.setWrapType.tracked` | boolean | yes |  |
+| `operations.images.setZOrder` | object | yes |  |
+| `operations.images.setZOrder.available` | boolean | yes |  |
+| `operations.images.setZOrder.dryRun` | boolean | yes |  |
+| `operations.images.setZOrder.reasons` | enum[] | no |  |
+| `operations.images.setZOrder.tracked` | boolean | yes |  |
+| `operations.images.updateCaption` | object | yes |  |
+| `operations.images.updateCaption.available` | boolean | yes |  |
+| `operations.images.updateCaption.dryRun` | boolean | yes |  |
+| `operations.images.updateCaption.reasons` | enum[] | no |  |
+| `operations.images.updateCaption.tracked` | boolean | yes |  |
 | `operations.info` | object | yes |  |
 | `operations.info.available` | boolean | yes |  |
 | `operations.info.dryRun` | boolean | yes |  |
@@ -697,6 +872,16 @@ _No fields._
 | `operations.insert.dryRun` | boolean | yes |  |
 | `operations.insert.reasons` | enum[] | no |  |
 | `operations.insert.tracked` | boolean | yes |  |
+| `operations.lists.applyPreset` | object | yes |  |
+| `operations.lists.applyPreset.available` | boolean | yes |  |
+| `operations.lists.applyPreset.dryRun` | boolean | yes |  |
+| `operations.lists.applyPreset.reasons` | enum[] | no |  |
+| `operations.lists.applyPreset.tracked` | boolean | yes |  |
+| `operations.lists.applyTemplate` | object | yes |  |
+| `operations.lists.applyTemplate.available` | boolean | yes |  |
+| `operations.lists.applyTemplate.dryRun` | boolean | yes |  |
+| `operations.lists.applyTemplate.reasons` | enum[] | no |  |
+| `operations.lists.applyTemplate.tracked` | boolean | yes |  |
 | `operations.lists.attach` | object | yes |  |
 | `operations.lists.attach.available` | boolean | yes |  |
 | `operations.lists.attach.dryRun` | boolean | yes |  |
@@ -712,6 +897,16 @@ _No fields._
 | `operations.lists.canJoin.dryRun` | boolean | yes |  |
 | `operations.lists.canJoin.reasons` | enum[] | no |  |
 | `operations.lists.canJoin.tracked` | boolean | yes |  |
+| `operations.lists.captureTemplate` | object | yes |  |
+| `operations.lists.captureTemplate.available` | boolean | yes |  |
+| `operations.lists.captureTemplate.dryRun` | boolean | yes |  |
+| `operations.lists.captureTemplate.reasons` | enum[] | no |  |
+| `operations.lists.captureTemplate.tracked` | boolean | yes |  |
+| `operations.lists.clearLevelOverrides` | object | yes |  |
+| `operations.lists.clearLevelOverrides.available` | boolean | yes |  |
+| `operations.lists.clearLevelOverrides.dryRun` | boolean | yes |  |
+| `operations.lists.clearLevelOverrides.reasons` | enum[] | no |  |
+| `operations.lists.clearLevelOverrides.tracked` | boolean | yes |  |
 | `operations.lists.continuePrevious` | object | yes |  |
 | `operations.lists.continuePrevious.available` | boolean | yes |  |
 | `operations.lists.continuePrevious.dryRun` | boolean | yes |  |
@@ -772,11 +967,51 @@ _No fields._
 | `operations.lists.setLevel.dryRun` | boolean | yes |  |
 | `operations.lists.setLevel.reasons` | enum[] | no |  |
 | `operations.lists.setLevel.tracked` | boolean | yes |  |
+| `operations.lists.setLevelAlignment` | object | yes |  |
+| `operations.lists.setLevelAlignment.available` | boolean | yes |  |
+| `operations.lists.setLevelAlignment.dryRun` | boolean | yes |  |
+| `operations.lists.setLevelAlignment.reasons` | enum[] | no |  |
+| `operations.lists.setLevelAlignment.tracked` | boolean | yes |  |
+| `operations.lists.setLevelBullet` | object | yes |  |
+| `operations.lists.setLevelBullet.available` | boolean | yes |  |
+| `operations.lists.setLevelBullet.dryRun` | boolean | yes |  |
+| `operations.lists.setLevelBullet.reasons` | enum[] | no |  |
+| `operations.lists.setLevelBullet.tracked` | boolean | yes |  |
+| `operations.lists.setLevelIndents` | object | yes |  |
+| `operations.lists.setLevelIndents.available` | boolean | yes |  |
+| `operations.lists.setLevelIndents.dryRun` | boolean | yes |  |
+| `operations.lists.setLevelIndents.reasons` | enum[] | no |  |
+| `operations.lists.setLevelIndents.tracked` | boolean | yes |  |
+| `operations.lists.setLevelMarkerFont` | object | yes |  |
+| `operations.lists.setLevelMarkerFont.available` | boolean | yes |  |
+| `operations.lists.setLevelMarkerFont.dryRun` | boolean | yes |  |
+| `operations.lists.setLevelMarkerFont.reasons` | enum[] | no |  |
+| `operations.lists.setLevelMarkerFont.tracked` | boolean | yes |  |
+| `operations.lists.setLevelNumbering` | object | yes |  |
+| `operations.lists.setLevelNumbering.available` | boolean | yes |  |
+| `operations.lists.setLevelNumbering.dryRun` | boolean | yes |  |
+| `operations.lists.setLevelNumbering.reasons` | enum[] | no |  |
+| `operations.lists.setLevelNumbering.tracked` | boolean | yes |  |
+| `operations.lists.setLevelPictureBullet` | object | yes |  |
+| `operations.lists.setLevelPictureBullet.available` | boolean | yes |  |
+| `operations.lists.setLevelPictureBullet.dryRun` | boolean | yes |  |
+| `operations.lists.setLevelPictureBullet.reasons` | enum[] | no |  |
+| `operations.lists.setLevelPictureBullet.tracked` | boolean | yes |  |
 | `operations.lists.setLevelRestart` | object | yes |  |
 | `operations.lists.setLevelRestart.available` | boolean | yes |  |
 | `operations.lists.setLevelRestart.dryRun` | boolean | yes |  |
 | `operations.lists.setLevelRestart.reasons` | enum[] | no |  |
 | `operations.lists.setLevelRestart.tracked` | boolean | yes |  |
+| `operations.lists.setLevelTrailingCharacter` | object | yes |  |
+| `operations.lists.setLevelTrailingCharacter.available` | boolean | yes |  |
+| `operations.lists.setLevelTrailingCharacter.dryRun` | boolean | yes |  |
+| `operations.lists.setLevelTrailingCharacter.reasons` | enum[] | no |  |
+| `operations.lists.setLevelTrailingCharacter.tracked` | boolean | yes |  |
+| `operations.lists.setType` | object | yes |  |
+| `operations.lists.setType.available` | boolean | yes |  |
+| `operations.lists.setType.dryRun` | boolean | yes |  |
+| `operations.lists.setType.reasons` | enum[] | no |  |
+| `operations.lists.setType.tracked` | boolean | yes |  |
 | `operations.lists.setValue` | object | yes |  |
 | `operations.lists.setValue.available` | boolean | yes |  |
 | `operations.lists.setValue.dryRun` | boolean | yes |  |
@@ -1504,6 +1739,14 @@ _No fields._
       ],
       "tracked": true
     },
+    "clearContent": {
+      "available": true,
+      "dryRun": true,
+      "reasons": [
+        "COMMAND_UNAVAILABLE"
+      ],
+      "tracked": true
+    },
     "comments.create": {
       "available": true,
       "dryRun": true,
@@ -1545,6 +1788,14 @@ _No fields._
       "tracked": true
     },
     "create.heading": {
+      "available": true,
+      "dryRun": true,
+      "reasons": [
+        "COMMAND_UNAVAILABLE"
+      ],
+      "tracked": true
+    },
+    "create.image": {
       "available": true,
       "dryRun": true,
       "reasons": [
@@ -2152,6 +2403,270 @@ _No fields._
       ],
       "tracked": true
     },
+    "hyperlinks.get": {
+      "available": true,
+      "dryRun": true,
+      "reasons": [
+        "COMMAND_UNAVAILABLE"
+      ],
+      "tracked": true
+    },
+    "hyperlinks.insert": {
+      "available": true,
+      "dryRun": true,
+      "reasons": [
+        "COMMAND_UNAVAILABLE"
+      ],
+      "tracked": true
+    },
+    "hyperlinks.list": {
+      "available": true,
+      "dryRun": true,
+      "reasons": [
+        "COMMAND_UNAVAILABLE"
+      ],
+      "tracked": true
+    },
+    "hyperlinks.patch": {
+      "available": true,
+      "dryRun": true,
+      "reasons": [
+        "COMMAND_UNAVAILABLE"
+      ],
+      "tracked": true
+    },
+    "hyperlinks.remove": {
+      "available": true,
+      "dryRun": true,
+      "reasons": [
+        "COMMAND_UNAVAILABLE"
+      ],
+      "tracked": true
+    },
+    "hyperlinks.wrap": {
+      "available": true,
+      "dryRun": true,
+      "reasons": [
+        "COMMAND_UNAVAILABLE"
+      ],
+      "tracked": true
+    },
+    "images.convertToFloating": {
+      "available": true,
+      "dryRun": true,
+      "reasons": [
+        "COMMAND_UNAVAILABLE"
+      ],
+      "tracked": true
+    },
+    "images.convertToInline": {
+      "available": true,
+      "dryRun": true,
+      "reasons": [
+        "COMMAND_UNAVAILABLE"
+      ],
+      "tracked": true
+    },
+    "images.crop": {
+      "available": true,
+      "dryRun": true,
+      "reasons": [
+        "COMMAND_UNAVAILABLE"
+      ],
+      "tracked": true
+    },
+    "images.delete": {
+      "available": true,
+      "dryRun": true,
+      "reasons": [
+        "COMMAND_UNAVAILABLE"
+      ],
+      "tracked": true
+    },
+    "images.flip": {
+      "available": true,
+      "dryRun": true,
+      "reasons": [
+        "COMMAND_UNAVAILABLE"
+      ],
+      "tracked": true
+    },
+    "images.get": {
+      "available": true,
+      "dryRun": true,
+      "reasons": [
+        "COMMAND_UNAVAILABLE"
+      ],
+      "tracked": true
+    },
+    "images.insertCaption": {
+      "available": true,
+      "dryRun": true,
+      "reasons": [
+        "COMMAND_UNAVAILABLE"
+      ],
+      "tracked": true
+    },
+    "images.list": {
+      "available": true,
+      "dryRun": true,
+      "reasons": [
+        "COMMAND_UNAVAILABLE"
+      ],
+      "tracked": true
+    },
+    "images.move": {
+      "available": true,
+      "dryRun": true,
+      "reasons": [
+        "COMMAND_UNAVAILABLE"
+      ],
+      "tracked": true
+    },
+    "images.removeCaption": {
+      "available": true,
+      "dryRun": true,
+      "reasons": [
+        "COMMAND_UNAVAILABLE"
+      ],
+      "tracked": true
+    },
+    "images.replaceSource": {
+      "available": true,
+      "dryRun": true,
+      "reasons": [
+        "COMMAND_UNAVAILABLE"
+      ],
+      "tracked": true
+    },
+    "images.resetCrop": {
+      "available": true,
+      "dryRun": true,
+      "reasons": [
+        "COMMAND_UNAVAILABLE"
+      ],
+      "tracked": true
+    },
+    "images.rotate": {
+      "available": true,
+      "dryRun": true,
+      "reasons": [
+        "COMMAND_UNAVAILABLE"
+      ],
+      "tracked": true
+    },
+    "images.scale": {
+      "available": true,
+      "dryRun": true,
+      "reasons": [
+        "COMMAND_UNAVAILABLE"
+      ],
+      "tracked": true
+    },
+    "images.setAltText": {
+      "available": true,
+      "dryRun": true,
+      "reasons": [
+        "COMMAND_UNAVAILABLE"
+      ],
+      "tracked": true
+    },
+    "images.setAnchorOptions": {
+      "available": true,
+      "dryRun": true,
+      "reasons": [
+        "COMMAND_UNAVAILABLE"
+      ],
+      "tracked": true
+    },
+    "images.setDecorative": {
+      "available": true,
+      "dryRun": true,
+      "reasons": [
+        "COMMAND_UNAVAILABLE"
+      ],
+      "tracked": true
+    },
+    "images.setHyperlink": {
+      "available": true,
+      "dryRun": true,
+      "reasons": [
+        "COMMAND_UNAVAILABLE"
+      ],
+      "tracked": true
+    },
+    "images.setLockAspectRatio": {
+      "available": true,
+      "dryRun": true,
+      "reasons": [
+        "COMMAND_UNAVAILABLE"
+      ],
+      "tracked": true
+    },
+    "images.setName": {
+      "available": true,
+      "dryRun": true,
+      "reasons": [
+        "COMMAND_UNAVAILABLE"
+      ],
+      "tracked": true
+    },
+    "images.setPosition": {
+      "available": true,
+      "dryRun": true,
+      "reasons": [
+        "COMMAND_UNAVAILABLE"
+      ],
+      "tracked": true
+    },
+    "images.setSize": {
+      "available": true,
+      "dryRun": true,
+      "reasons": [
+        "COMMAND_UNAVAILABLE"
+      ],
+      "tracked": true
+    },
+    "images.setWrapDistances": {
+      "available": true,
+      "dryRun": true,
+      "reasons": [
+        "COMMAND_UNAVAILABLE"
+      ],
+      "tracked": true
+    },
+    "images.setWrapSide": {
+      "available": true,
+      "dryRun": true,
+      "reasons": [
+        "COMMAND_UNAVAILABLE"
+      ],
+      "tracked": true
+    },
+    "images.setWrapType": {
+      "available": true,
+      "dryRun": true,
+      "reasons": [
+        "COMMAND_UNAVAILABLE"
+      ],
+      "tracked": true
+    },
+    "images.setZOrder": {
+      "available": true,
+      "dryRun": true,
+      "reasons": [
+        "COMMAND_UNAVAILABLE"
+      ],
+      "tracked": true
+    },
+    "images.updateCaption": {
+      "available": true,
+      "dryRun": true,
+      "reasons": [
+        "COMMAND_UNAVAILABLE"
+      ],
+      "tracked": true
+    },
     "info": {
       "available": true,
       "dryRun": true,
@@ -2161,6 +2676,22 @@ _No fields._
       "tracked": true
     },
     "insert": {
+      "available": true,
+      "dryRun": true,
+      "reasons": [
+        "COMMAND_UNAVAILABLE"
+      ],
+      "tracked": true
+    },
+    "lists.applyPreset": {
+      "available": true,
+      "dryRun": true,
+      "reasons": [
+        "COMMAND_UNAVAILABLE"
+      ],
+      "tracked": true
+    },
+    "lists.applyTemplate": {
       "available": true,
       "dryRun": true,
       "reasons": [
@@ -2185,6 +2716,22 @@ _No fields._
       "tracked": true
     },
     "lists.canJoin": {
+      "available": true,
+      "dryRun": true,
+      "reasons": [
+        "COMMAND_UNAVAILABLE"
+      ],
+      "tracked": true
+    },
+    "lists.captureTemplate": {
+      "available": true,
+      "dryRun": true,
+      "reasons": [
+        "COMMAND_UNAVAILABLE"
+      ],
+      "tracked": true
+    },
+    "lists.clearLevelOverrides": {
       "available": true,
       "dryRun": true,
       "reasons": [
@@ -2288,7 +2835,71 @@ _No fields._
       ],
       "tracked": true
     },
+    "lists.setLevelAlignment": {
+      "available": true,
+      "dryRun": true,
+      "reasons": [
+        "COMMAND_UNAVAILABLE"
+      ],
+      "tracked": true
+    },
+    "lists.setLevelBullet": {
+      "available": true,
+      "dryRun": true,
+      "reasons": [
+        "COMMAND_UNAVAILABLE"
+      ],
+      "tracked": true
+    },
+    "lists.setLevelIndents": {
+      "available": true,
+      "dryRun": true,
+      "reasons": [
+        "COMMAND_UNAVAILABLE"
+      ],
+      "tracked": true
+    },
+    "lists.setLevelMarkerFont": {
+      "available": true,
+      "dryRun": true,
+      "reasons": [
+        "COMMAND_UNAVAILABLE"
+      ],
+      "tracked": true
+    },
+    "lists.setLevelNumbering": {
+      "available": true,
+      "dryRun": true,
+      "reasons": [
+        "COMMAND_UNAVAILABLE"
+      ],
+      "tracked": true
+    },
+    "lists.setLevelPictureBullet": {
+      "available": true,
+      "dryRun": true,
+      "reasons": [
+        "COMMAND_UNAVAILABLE"
+      ],
+      "tracked": true
+    },
     "lists.setLevelRestart": {
+      "available": true,
+      "dryRun": true,
+      "reasons": [
+        "COMMAND_UNAVAILABLE"
+      ],
+      "tracked": true
+    },
+    "lists.setLevelTrailingCharacter": {
+      "available": true,
+      "dryRun": true,
+      "reasons": [
+        "COMMAND_UNAVAILABLE"
+      ],
+      "tracked": true
+    },
+    "lists.setType": {
       "available": true,
       "dryRun": true,
       "reasons": [
@@ -4687,6 +5298,41 @@ _No fields._
           ],
           "type": "object"
         },
+        "clearContent": {
+          "additionalProperties": false,
+          "properties": {
+            "available": {
+              "type": "boolean"
+            },
+            "dryRun": {
+              "type": "boolean"
+            },
+            "reasons": {
+              "items": {
+                "enum": [
+                  "COMMAND_UNAVAILABLE",
+                  "HELPER_UNAVAILABLE",
+                  "OPERATION_UNAVAILABLE",
+                  "TRACKED_MODE_UNAVAILABLE",
+                  "DRY_RUN_UNAVAILABLE",
+                  "NAMESPACE_UNAVAILABLE",
+                  "STYLES_PART_MISSING",
+                  "COLLABORATION_ACTIVE"
+                ]
+              },
+              "type": "array"
+            },
+            "tracked": {
+              "type": "boolean"
+            }
+          },
+          "required": [
+            "available",
+            "tracked",
+            "dryRun"
+          ],
+          "type": "object"
+        },
         "comments.create": {
           "additionalProperties": false,
           "properties": {
@@ -4863,6 +5509,41 @@ _No fields._
           "type": "object"
         },
         "create.heading": {
+          "additionalProperties": false,
+          "properties": {
+            "available": {
+              "type": "boolean"
+            },
+            "dryRun": {
+              "type": "boolean"
+            },
+            "reasons": {
+              "items": {
+                "enum": [
+                  "COMMAND_UNAVAILABLE",
+                  "HELPER_UNAVAILABLE",
+                  "OPERATION_UNAVAILABLE",
+                  "TRACKED_MODE_UNAVAILABLE",
+                  "DRY_RUN_UNAVAILABLE",
+                  "NAMESPACE_UNAVAILABLE",
+                  "STYLES_PART_MISSING",
+                  "COLLABORATION_ACTIVE"
+                ]
+              },
+              "type": "array"
+            },
+            "tracked": {
+              "type": "boolean"
+            }
+          },
+          "required": [
+            "available",
+            "tracked",
+            "dryRun"
+          ],
+          "type": "object"
+        },
+        "create.image": {
           "additionalProperties": false,
           "properties": {
             "available": {
@@ -7522,6 +8203,1161 @@ _No fields._
           ],
           "type": "object"
         },
+        "hyperlinks.get": {
+          "additionalProperties": false,
+          "properties": {
+            "available": {
+              "type": "boolean"
+            },
+            "dryRun": {
+              "type": "boolean"
+            },
+            "reasons": {
+              "items": {
+                "enum": [
+                  "COMMAND_UNAVAILABLE",
+                  "HELPER_UNAVAILABLE",
+                  "OPERATION_UNAVAILABLE",
+                  "TRACKED_MODE_UNAVAILABLE",
+                  "DRY_RUN_UNAVAILABLE",
+                  "NAMESPACE_UNAVAILABLE",
+                  "STYLES_PART_MISSING",
+                  "COLLABORATION_ACTIVE"
+                ]
+              },
+              "type": "array"
+            },
+            "tracked": {
+              "type": "boolean"
+            }
+          },
+          "required": [
+            "available",
+            "tracked",
+            "dryRun"
+          ],
+          "type": "object"
+        },
+        "hyperlinks.insert": {
+          "additionalProperties": false,
+          "properties": {
+            "available": {
+              "type": "boolean"
+            },
+            "dryRun": {
+              "type": "boolean"
+            },
+            "reasons": {
+              "items": {
+                "enum": [
+                  "COMMAND_UNAVAILABLE",
+                  "HELPER_UNAVAILABLE",
+                  "OPERATION_UNAVAILABLE",
+                  "TRACKED_MODE_UNAVAILABLE",
+                  "DRY_RUN_UNAVAILABLE",
+                  "NAMESPACE_UNAVAILABLE",
+                  "STYLES_PART_MISSING",
+                  "COLLABORATION_ACTIVE"
+                ]
+              },
+              "type": "array"
+            },
+            "tracked": {
+              "type": "boolean"
+            }
+          },
+          "required": [
+            "available",
+            "tracked",
+            "dryRun"
+          ],
+          "type": "object"
+        },
+        "hyperlinks.list": {
+          "additionalProperties": false,
+          "properties": {
+            "available": {
+              "type": "boolean"
+            },
+            "dryRun": {
+              "type": "boolean"
+            },
+            "reasons": {
+              "items": {
+                "enum": [
+                  "COMMAND_UNAVAILABLE",
+                  "HELPER_UNAVAILABLE",
+                  "OPERATION_UNAVAILABLE",
+                  "TRACKED_MODE_UNAVAILABLE",
+                  "DRY_RUN_UNAVAILABLE",
+                  "NAMESPACE_UNAVAILABLE",
+                  "STYLES_PART_MISSING",
+                  "COLLABORATION_ACTIVE"
+                ]
+              },
+              "type": "array"
+            },
+            "tracked": {
+              "type": "boolean"
+            }
+          },
+          "required": [
+            "available",
+            "tracked",
+            "dryRun"
+          ],
+          "type": "object"
+        },
+        "hyperlinks.patch": {
+          "additionalProperties": false,
+          "properties": {
+            "available": {
+              "type": "boolean"
+            },
+            "dryRun": {
+              "type": "boolean"
+            },
+            "reasons": {
+              "items": {
+                "enum": [
+                  "COMMAND_UNAVAILABLE",
+                  "HELPER_UNAVAILABLE",
+                  "OPERATION_UNAVAILABLE",
+                  "TRACKED_MODE_UNAVAILABLE",
+                  "DRY_RUN_UNAVAILABLE",
+                  "NAMESPACE_UNAVAILABLE",
+                  "STYLES_PART_MISSING",
+                  "COLLABORATION_ACTIVE"
+                ]
+              },
+              "type": "array"
+            },
+            "tracked": {
+              "type": "boolean"
+            }
+          },
+          "required": [
+            "available",
+            "tracked",
+            "dryRun"
+          ],
+          "type": "object"
+        },
+        "hyperlinks.remove": {
+          "additionalProperties": false,
+          "properties": {
+            "available": {
+              "type": "boolean"
+            },
+            "dryRun": {
+              "type": "boolean"
+            },
+            "reasons": {
+              "items": {
+                "enum": [
+                  "COMMAND_UNAVAILABLE",
+                  "HELPER_UNAVAILABLE",
+                  "OPERATION_UNAVAILABLE",
+                  "TRACKED_MODE_UNAVAILABLE",
+                  "DRY_RUN_UNAVAILABLE",
+                  "NAMESPACE_UNAVAILABLE",
+                  "STYLES_PART_MISSING",
+                  "COLLABORATION_ACTIVE"
+                ]
+              },
+              "type": "array"
+            },
+            "tracked": {
+              "type": "boolean"
+            }
+          },
+          "required": [
+            "available",
+            "tracked",
+            "dryRun"
+          ],
+          "type": "object"
+        },
+        "hyperlinks.wrap": {
+          "additionalProperties": false,
+          "properties": {
+            "available": {
+              "type": "boolean"
+            },
+            "dryRun": {
+              "type": "boolean"
+            },
+            "reasons": {
+              "items": {
+                "enum": [
+                  "COMMAND_UNAVAILABLE",
+                  "HELPER_UNAVAILABLE",
+                  "OPERATION_UNAVAILABLE",
+                  "TRACKED_MODE_UNAVAILABLE",
+                  "DRY_RUN_UNAVAILABLE",
+                  "NAMESPACE_UNAVAILABLE",
+                  "STYLES_PART_MISSING",
+                  "COLLABORATION_ACTIVE"
+                ]
+              },
+              "type": "array"
+            },
+            "tracked": {
+              "type": "boolean"
+            }
+          },
+          "required": [
+            "available",
+            "tracked",
+            "dryRun"
+          ],
+          "type": "object"
+        },
+        "images.convertToFloating": {
+          "additionalProperties": false,
+          "properties": {
+            "available": {
+              "type": "boolean"
+            },
+            "dryRun": {
+              "type": "boolean"
+            },
+            "reasons": {
+              "items": {
+                "enum": [
+                  "COMMAND_UNAVAILABLE",
+                  "HELPER_UNAVAILABLE",
+                  "OPERATION_UNAVAILABLE",
+                  "TRACKED_MODE_UNAVAILABLE",
+                  "DRY_RUN_UNAVAILABLE",
+                  "NAMESPACE_UNAVAILABLE",
+                  "STYLES_PART_MISSING",
+                  "COLLABORATION_ACTIVE"
+                ]
+              },
+              "type": "array"
+            },
+            "tracked": {
+              "type": "boolean"
+            }
+          },
+          "required": [
+            "available",
+            "tracked",
+            "dryRun"
+          ],
+          "type": "object"
+        },
+        "images.convertToInline": {
+          "additionalProperties": false,
+          "properties": {
+            "available": {
+              "type": "boolean"
+            },
+            "dryRun": {
+              "type": "boolean"
+            },
+            "reasons": {
+              "items": {
+                "enum": [
+                  "COMMAND_UNAVAILABLE",
+                  "HELPER_UNAVAILABLE",
+                  "OPERATION_UNAVAILABLE",
+                  "TRACKED_MODE_UNAVAILABLE",
+                  "DRY_RUN_UNAVAILABLE",
+                  "NAMESPACE_UNAVAILABLE",
+                  "STYLES_PART_MISSING",
+                  "COLLABORATION_ACTIVE"
+                ]
+              },
+              "type": "array"
+            },
+            "tracked": {
+              "type": "boolean"
+            }
+          },
+          "required": [
+            "available",
+            "tracked",
+            "dryRun"
+          ],
+          "type": "object"
+        },
+        "images.crop": {
+          "additionalProperties": false,
+          "properties": {
+            "available": {
+              "type": "boolean"
+            },
+            "dryRun": {
+              "type": "boolean"
+            },
+            "reasons": {
+              "items": {
+                "enum": [
+                  "COMMAND_UNAVAILABLE",
+                  "HELPER_UNAVAILABLE",
+                  "OPERATION_UNAVAILABLE",
+                  "TRACKED_MODE_UNAVAILABLE",
+                  "DRY_RUN_UNAVAILABLE",
+                  "NAMESPACE_UNAVAILABLE",
+                  "STYLES_PART_MISSING",
+                  "COLLABORATION_ACTIVE"
+                ]
+              },
+              "type": "array"
+            },
+            "tracked": {
+              "type": "boolean"
+            }
+          },
+          "required": [
+            "available",
+            "tracked",
+            "dryRun"
+          ],
+          "type": "object"
+        },
+        "images.delete": {
+          "additionalProperties": false,
+          "properties": {
+            "available": {
+              "type": "boolean"
+            },
+            "dryRun": {
+              "type": "boolean"
+            },
+            "reasons": {
+              "items": {
+                "enum": [
+                  "COMMAND_UNAVAILABLE",
+                  "HELPER_UNAVAILABLE",
+                  "OPERATION_UNAVAILABLE",
+                  "TRACKED_MODE_UNAVAILABLE",
+                  "DRY_RUN_UNAVAILABLE",
+                  "NAMESPACE_UNAVAILABLE",
+                  "STYLES_PART_MISSING",
+                  "COLLABORATION_ACTIVE"
+                ]
+              },
+              "type": "array"
+            },
+            "tracked": {
+              "type": "boolean"
+            }
+          },
+          "required": [
+            "available",
+            "tracked",
+            "dryRun"
+          ],
+          "type": "object"
+        },
+        "images.flip": {
+          "additionalProperties": false,
+          "properties": {
+            "available": {
+              "type": "boolean"
+            },
+            "dryRun": {
+              "type": "boolean"
+            },
+            "reasons": {
+              "items": {
+                "enum": [
+                  "COMMAND_UNAVAILABLE",
+                  "HELPER_UNAVAILABLE",
+                  "OPERATION_UNAVAILABLE",
+                  "TRACKED_MODE_UNAVAILABLE",
+                  "DRY_RUN_UNAVAILABLE",
+                  "NAMESPACE_UNAVAILABLE",
+                  "STYLES_PART_MISSING",
+                  "COLLABORATION_ACTIVE"
+                ]
+              },
+              "type": "array"
+            },
+            "tracked": {
+              "type": "boolean"
+            }
+          },
+          "required": [
+            "available",
+            "tracked",
+            "dryRun"
+          ],
+          "type": "object"
+        },
+        "images.get": {
+          "additionalProperties": false,
+          "properties": {
+            "available": {
+              "type": "boolean"
+            },
+            "dryRun": {
+              "type": "boolean"
+            },
+            "reasons": {
+              "items": {
+                "enum": [
+                  "COMMAND_UNAVAILABLE",
+                  "HELPER_UNAVAILABLE",
+                  "OPERATION_UNAVAILABLE",
+                  "TRACKED_MODE_UNAVAILABLE",
+                  "DRY_RUN_UNAVAILABLE",
+                  "NAMESPACE_UNAVAILABLE",
+                  "STYLES_PART_MISSING",
+                  "COLLABORATION_ACTIVE"
+                ]
+              },
+              "type": "array"
+            },
+            "tracked": {
+              "type": "boolean"
+            }
+          },
+          "required": [
+            "available",
+            "tracked",
+            "dryRun"
+          ],
+          "type": "object"
+        },
+        "images.insertCaption": {
+          "additionalProperties": false,
+          "properties": {
+            "available": {
+              "type": "boolean"
+            },
+            "dryRun": {
+              "type": "boolean"
+            },
+            "reasons": {
+              "items": {
+                "enum": [
+                  "COMMAND_UNAVAILABLE",
+                  "HELPER_UNAVAILABLE",
+                  "OPERATION_UNAVAILABLE",
+                  "TRACKED_MODE_UNAVAILABLE",
+                  "DRY_RUN_UNAVAILABLE",
+                  "NAMESPACE_UNAVAILABLE",
+                  "STYLES_PART_MISSING",
+                  "COLLABORATION_ACTIVE"
+                ]
+              },
+              "type": "array"
+            },
+            "tracked": {
+              "type": "boolean"
+            }
+          },
+          "required": [
+            "available",
+            "tracked",
+            "dryRun"
+          ],
+          "type": "object"
+        },
+        "images.list": {
+          "additionalProperties": false,
+          "properties": {
+            "available": {
+              "type": "boolean"
+            },
+            "dryRun": {
+              "type": "boolean"
+            },
+            "reasons": {
+              "items": {
+                "enum": [
+                  "COMMAND_UNAVAILABLE",
+                  "HELPER_UNAVAILABLE",
+                  "OPERATION_UNAVAILABLE",
+                  "TRACKED_MODE_UNAVAILABLE",
+                  "DRY_RUN_UNAVAILABLE",
+                  "NAMESPACE_UNAVAILABLE",
+                  "STYLES_PART_MISSING",
+                  "COLLABORATION_ACTIVE"
+                ]
+              },
+              "type": "array"
+            },
+            "tracked": {
+              "type": "boolean"
+            }
+          },
+          "required": [
+            "available",
+            "tracked",
+            "dryRun"
+          ],
+          "type": "object"
+        },
+        "images.move": {
+          "additionalProperties": false,
+          "properties": {
+            "available": {
+              "type": "boolean"
+            },
+            "dryRun": {
+              "type": "boolean"
+            },
+            "reasons": {
+              "items": {
+                "enum": [
+                  "COMMAND_UNAVAILABLE",
+                  "HELPER_UNAVAILABLE",
+                  "OPERATION_UNAVAILABLE",
+                  "TRACKED_MODE_UNAVAILABLE",
+                  "DRY_RUN_UNAVAILABLE",
+                  "NAMESPACE_UNAVAILABLE",
+                  "STYLES_PART_MISSING",
+                  "COLLABORATION_ACTIVE"
+                ]
+              },
+              "type": "array"
+            },
+            "tracked": {
+              "type": "boolean"
+            }
+          },
+          "required": [
+            "available",
+            "tracked",
+            "dryRun"
+          ],
+          "type": "object"
+        },
+        "images.removeCaption": {
+          "additionalProperties": false,
+          "properties": {
+            "available": {
+              "type": "boolean"
+            },
+            "dryRun": {
+              "type": "boolean"
+            },
+            "reasons": {
+              "items": {
+                "enum": [
+                  "COMMAND_UNAVAILABLE",
+                  "HELPER_UNAVAILABLE",
+                  "OPERATION_UNAVAILABLE",
+                  "TRACKED_MODE_UNAVAILABLE",
+                  "DRY_RUN_UNAVAILABLE",
+                  "NAMESPACE_UNAVAILABLE",
+                  "STYLES_PART_MISSING",
+                  "COLLABORATION_ACTIVE"
+                ]
+              },
+              "type": "array"
+            },
+            "tracked": {
+              "type": "boolean"
+            }
+          },
+          "required": [
+            "available",
+            "tracked",
+            "dryRun"
+          ],
+          "type": "object"
+        },
+        "images.replaceSource": {
+          "additionalProperties": false,
+          "properties": {
+            "available": {
+              "type": "boolean"
+            },
+            "dryRun": {
+              "type": "boolean"
+            },
+            "reasons": {
+              "items": {
+                "enum": [
+                  "COMMAND_UNAVAILABLE",
+                  "HELPER_UNAVAILABLE",
+                  "OPERATION_UNAVAILABLE",
+                  "TRACKED_MODE_UNAVAILABLE",
+                  "DRY_RUN_UNAVAILABLE",
+                  "NAMESPACE_UNAVAILABLE",
+                  "STYLES_PART_MISSING",
+                  "COLLABORATION_ACTIVE"
+                ]
+              },
+              "type": "array"
+            },
+            "tracked": {
+              "type": "boolean"
+            }
+          },
+          "required": [
+            "available",
+            "tracked",
+            "dryRun"
+          ],
+          "type": "object"
+        },
+        "images.resetCrop": {
+          "additionalProperties": false,
+          "properties": {
+            "available": {
+              "type": "boolean"
+            },
+            "dryRun": {
+              "type": "boolean"
+            },
+            "reasons": {
+              "items": {
+                "enum": [
+                  "COMMAND_UNAVAILABLE",
+                  "HELPER_UNAVAILABLE",
+                  "OPERATION_UNAVAILABLE",
+                  "TRACKED_MODE_UNAVAILABLE",
+                  "DRY_RUN_UNAVAILABLE",
+                  "NAMESPACE_UNAVAILABLE",
+                  "STYLES_PART_MISSING",
+                  "COLLABORATION_ACTIVE"
+                ]
+              },
+              "type": "array"
+            },
+            "tracked": {
+              "type": "boolean"
+            }
+          },
+          "required": [
+            "available",
+            "tracked",
+            "dryRun"
+          ],
+          "type": "object"
+        },
+        "images.rotate": {
+          "additionalProperties": false,
+          "properties": {
+            "available": {
+              "type": "boolean"
+            },
+            "dryRun": {
+              "type": "boolean"
+            },
+            "reasons": {
+              "items": {
+                "enum": [
+                  "COMMAND_UNAVAILABLE",
+                  "HELPER_UNAVAILABLE",
+                  "OPERATION_UNAVAILABLE",
+                  "TRACKED_MODE_UNAVAILABLE",
+                  "DRY_RUN_UNAVAILABLE",
+                  "NAMESPACE_UNAVAILABLE",
+                  "STYLES_PART_MISSING",
+                  "COLLABORATION_ACTIVE"
+                ]
+              },
+              "type": "array"
+            },
+            "tracked": {
+              "type": "boolean"
+            }
+          },
+          "required": [
+            "available",
+            "tracked",
+            "dryRun"
+          ],
+          "type": "object"
+        },
+        "images.scale": {
+          "additionalProperties": false,
+          "properties": {
+            "available": {
+              "type": "boolean"
+            },
+            "dryRun": {
+              "type": "boolean"
+            },
+            "reasons": {
+              "items": {
+                "enum": [
+                  "COMMAND_UNAVAILABLE",
+                  "HELPER_UNAVAILABLE",
+                  "OPERATION_UNAVAILABLE",
+                  "TRACKED_MODE_UNAVAILABLE",
+                  "DRY_RUN_UNAVAILABLE",
+                  "NAMESPACE_UNAVAILABLE",
+                  "STYLES_PART_MISSING",
+                  "COLLABORATION_ACTIVE"
+                ]
+              },
+              "type": "array"
+            },
+            "tracked": {
+              "type": "boolean"
+            }
+          },
+          "required": [
+            "available",
+            "tracked",
+            "dryRun"
+          ],
+          "type": "object"
+        },
+        "images.setAltText": {
+          "additionalProperties": false,
+          "properties": {
+            "available": {
+              "type": "boolean"
+            },
+            "dryRun": {
+              "type": "boolean"
+            },
+            "reasons": {
+              "items": {
+                "enum": [
+                  "COMMAND_UNAVAILABLE",
+                  "HELPER_UNAVAILABLE",
+                  "OPERATION_UNAVAILABLE",
+                  "TRACKED_MODE_UNAVAILABLE",
+                  "DRY_RUN_UNAVAILABLE",
+                  "NAMESPACE_UNAVAILABLE",
+                  "STYLES_PART_MISSING",
+                  "COLLABORATION_ACTIVE"
+                ]
+              },
+              "type": "array"
+            },
+            "tracked": {
+              "type": "boolean"
+            }
+          },
+          "required": [
+            "available",
+            "tracked",
+            "dryRun"
+          ],
+          "type": "object"
+        },
+        "images.setAnchorOptions": {
+          "additionalProperties": false,
+          "properties": {
+            "available": {
+              "type": "boolean"
+            },
+            "dryRun": {
+              "type": "boolean"
+            },
+            "reasons": {
+              "items": {
+                "enum": [
+                  "COMMAND_UNAVAILABLE",
+                  "HELPER_UNAVAILABLE",
+                  "OPERATION_UNAVAILABLE",
+                  "TRACKED_MODE_UNAVAILABLE",
+                  "DRY_RUN_UNAVAILABLE",
+                  "NAMESPACE_UNAVAILABLE",
+                  "STYLES_PART_MISSING",
+                  "COLLABORATION_ACTIVE"
+                ]
+              },
+              "type": "array"
+            },
+            "tracked": {
+              "type": "boolean"
+            }
+          },
+          "required": [
+            "available",
+            "tracked",
+            "dryRun"
+          ],
+          "type": "object"
+        },
+        "images.setDecorative": {
+          "additionalProperties": false,
+          "properties": {
+            "available": {
+              "type": "boolean"
+            },
+            "dryRun": {
+              "type": "boolean"
+            },
+            "reasons": {
+              "items": {
+                "enum": [
+                  "COMMAND_UNAVAILABLE",
+                  "HELPER_UNAVAILABLE",
+                  "OPERATION_UNAVAILABLE",
+                  "TRACKED_MODE_UNAVAILABLE",
+                  "DRY_RUN_UNAVAILABLE",
+                  "NAMESPACE_UNAVAILABLE",
+                  "STYLES_PART_MISSING",
+                  "COLLABORATION_ACTIVE"
+                ]
+              },
+              "type": "array"
+            },
+            "tracked": {
+              "type": "boolean"
+            }
+          },
+          "required": [
+            "available",
+            "tracked",
+            "dryRun"
+          ],
+          "type": "object"
+        },
+        "images.setHyperlink": {
+          "additionalProperties": false,
+          "properties": {
+            "available": {
+              "type": "boolean"
+            },
+            "dryRun": {
+              "type": "boolean"
+            },
+            "reasons": {
+              "items": {
+                "enum": [
+                  "COMMAND_UNAVAILABLE",
+                  "HELPER_UNAVAILABLE",
+                  "OPERATION_UNAVAILABLE",
+                  "TRACKED_MODE_UNAVAILABLE",
+                  "DRY_RUN_UNAVAILABLE",
+                  "NAMESPACE_UNAVAILABLE",
+                  "STYLES_PART_MISSING",
+                  "COLLABORATION_ACTIVE"
+                ]
+              },
+              "type": "array"
+            },
+            "tracked": {
+              "type": "boolean"
+            }
+          },
+          "required": [
+            "available",
+            "tracked",
+            "dryRun"
+          ],
+          "type": "object"
+        },
+        "images.setLockAspectRatio": {
+          "additionalProperties": false,
+          "properties": {
+            "available": {
+              "type": "boolean"
+            },
+            "dryRun": {
+              "type": "boolean"
+            },
+            "reasons": {
+              "items": {
+                "enum": [
+                  "COMMAND_UNAVAILABLE",
+                  "HELPER_UNAVAILABLE",
+                  "OPERATION_UNAVAILABLE",
+                  "TRACKED_MODE_UNAVAILABLE",
+                  "DRY_RUN_UNAVAILABLE",
+                  "NAMESPACE_UNAVAILABLE",
+                  "STYLES_PART_MISSING",
+                  "COLLABORATION_ACTIVE"
+                ]
+              },
+              "type": "array"
+            },
+            "tracked": {
+              "type": "boolean"
+            }
+          },
+          "required": [
+            "available",
+            "tracked",
+            "dryRun"
+          ],
+          "type": "object"
+        },
+        "images.setName": {
+          "additionalProperties": false,
+          "properties": {
+            "available": {
+              "type": "boolean"
+            },
+            "dryRun": {
+              "type": "boolean"
+            },
+            "reasons": {
+              "items": {
+                "enum": [
+                  "COMMAND_UNAVAILABLE",
+                  "HELPER_UNAVAILABLE",
+                  "OPERATION_UNAVAILABLE",
+                  "TRACKED_MODE_UNAVAILABLE",
+                  "DRY_RUN_UNAVAILABLE",
+                  "NAMESPACE_UNAVAILABLE",
+                  "STYLES_PART_MISSING",
+                  "COLLABORATION_ACTIVE"
+                ]
+              },
+              "type": "array"
+            },
+            "tracked": {
+              "type": "boolean"
+            }
+          },
+          "required": [
+            "available",
+            "tracked",
+            "dryRun"
+          ],
+          "type": "object"
+        },
+        "images.setPosition": {
+          "additionalProperties": false,
+          "properties": {
+            "available": {
+              "type": "boolean"
+            },
+            "dryRun": {
+              "type": "boolean"
+            },
+            "reasons": {
+              "items": {
+                "enum": [
+                  "COMMAND_UNAVAILABLE",
+                  "HELPER_UNAVAILABLE",
+                  "OPERATION_UNAVAILABLE",
+                  "TRACKED_MODE_UNAVAILABLE",
+                  "DRY_RUN_UNAVAILABLE",
+                  "NAMESPACE_UNAVAILABLE",
+                  "STYLES_PART_MISSING",
+                  "COLLABORATION_ACTIVE"
+                ]
+              },
+              "type": "array"
+            },
+            "tracked": {
+              "type": "boolean"
+            }
+          },
+          "required": [
+            "available",
+            "tracked",
+            "dryRun"
+          ],
+          "type": "object"
+        },
+        "images.setSize": {
+          "additionalProperties": false,
+          "properties": {
+            "available": {
+              "type": "boolean"
+            },
+            "dryRun": {
+              "type": "boolean"
+            },
+            "reasons": {
+              "items": {
+                "enum": [
+                  "COMMAND_UNAVAILABLE",
+                  "HELPER_UNAVAILABLE",
+                  "OPERATION_UNAVAILABLE",
+                  "TRACKED_MODE_UNAVAILABLE",
+                  "DRY_RUN_UNAVAILABLE",
+                  "NAMESPACE_UNAVAILABLE",
+                  "STYLES_PART_MISSING",
+                  "COLLABORATION_ACTIVE"
+                ]
+              },
+              "type": "array"
+            },
+            "tracked": {
+              "type": "boolean"
+            }
+          },
+          "required": [
+            "available",
+            "tracked",
+            "dryRun"
+          ],
+          "type": "object"
+        },
+        "images.setWrapDistances": {
+          "additionalProperties": false,
+          "properties": {
+            "available": {
+              "type": "boolean"
+            },
+            "dryRun": {
+              "type": "boolean"
+            },
+            "reasons": {
+              "items": {
+                "enum": [
+                  "COMMAND_UNAVAILABLE",
+                  "HELPER_UNAVAILABLE",
+                  "OPERATION_UNAVAILABLE",
+                  "TRACKED_MODE_UNAVAILABLE",
+                  "DRY_RUN_UNAVAILABLE",
+                  "NAMESPACE_UNAVAILABLE",
+                  "STYLES_PART_MISSING",
+                  "COLLABORATION_ACTIVE"
+                ]
+              },
+              "type": "array"
+            },
+            "tracked": {
+              "type": "boolean"
+            }
+          },
+          "required": [
+            "available",
+            "tracked",
+            "dryRun"
+          ],
+          "type": "object"
+        },
+        "images.setWrapSide": {
+          "additionalProperties": false,
+          "properties": {
+            "available": {
+              "type": "boolean"
+            },
+            "dryRun": {
+              "type": "boolean"
+            },
+            "reasons": {
+              "items": {
+                "enum": [
+                  "COMMAND_UNAVAILABLE",
+                  "HELPER_UNAVAILABLE",
+                  "OPERATION_UNAVAILABLE",
+                  "TRACKED_MODE_UNAVAILABLE",
+                  "DRY_RUN_UNAVAILABLE",
+                  "NAMESPACE_UNAVAILABLE",
+                  "STYLES_PART_MISSING",
+                  "COLLABORATION_ACTIVE"
+                ]
+              },
+              "type": "array"
+            },
+            "tracked": {
+              "type": "boolean"
+            }
+          },
+          "required": [
+            "available",
+            "tracked",
+            "dryRun"
+          ],
+          "type": "object"
+        },
+        "images.setWrapType": {
+          "additionalProperties": false,
+          "properties": {
+            "available": {
+              "type": "boolean"
+            },
+            "dryRun": {
+              "type": "boolean"
+            },
+            "reasons": {
+              "items": {
+                "enum": [
+                  "COMMAND_UNAVAILABLE",
+                  "HELPER_UNAVAILABLE",
+                  "OPERATION_UNAVAILABLE",
+                  "TRACKED_MODE_UNAVAILABLE",
+                  "DRY_RUN_UNAVAILABLE",
+                  "NAMESPACE_UNAVAILABLE",
+                  "STYLES_PART_MISSING",
+                  "COLLABORATION_ACTIVE"
+                ]
+              },
+              "type": "array"
+            },
+            "tracked": {
+              "type": "boolean"
+            }
+          },
+          "required": [
+            "available",
+            "tracked",
+            "dryRun"
+          ],
+          "type": "object"
+        },
+        "images.setZOrder": {
+          "additionalProperties": false,
+          "properties": {
+            "available": {
+              "type": "boolean"
+            },
+            "dryRun": {
+              "type": "boolean"
+            },
+            "reasons": {
+              "items": {
+                "enum": [
+                  "COMMAND_UNAVAILABLE",
+                  "HELPER_UNAVAILABLE",
+                  "OPERATION_UNAVAILABLE",
+                  "TRACKED_MODE_UNAVAILABLE",
+                  "DRY_RUN_UNAVAILABLE",
+                  "NAMESPACE_UNAVAILABLE",
+                  "STYLES_PART_MISSING",
+                  "COLLABORATION_ACTIVE"
+                ]
+              },
+              "type": "array"
+            },
+            "tracked": {
+              "type": "boolean"
+            }
+          },
+          "required": [
+            "available",
+            "tracked",
+            "dryRun"
+          ],
+          "type": "object"
+        },
+        "images.updateCaption": {
+          "additionalProperties": false,
+          "properties": {
+            "available": {
+              "type": "boolean"
+            },
+            "dryRun": {
+              "type": "boolean"
+            },
+            "reasons": {
+              "items": {
+                "enum": [
+                  "COMMAND_UNAVAILABLE",
+                  "HELPER_UNAVAILABLE",
+                  "OPERATION_UNAVAILABLE",
+                  "TRACKED_MODE_UNAVAILABLE",
+                  "DRY_RUN_UNAVAILABLE",
+                  "NAMESPACE_UNAVAILABLE",
+                  "STYLES_PART_MISSING",
+                  "COLLABORATION_ACTIVE"
+                ]
+              },
+              "type": "array"
+            },
+            "tracked": {
+              "type": "boolean"
+            }
+          },
+          "required": [
+            "available",
+            "tracked",
+            "dryRun"
+          ],
+          "type": "object"
+        },
         "info": {
           "additionalProperties": false,
           "properties": {
@@ -7558,6 +9394,76 @@ _No fields._
           "type": "object"
         },
         "insert": {
+          "additionalProperties": false,
+          "properties": {
+            "available": {
+              "type": "boolean"
+            },
+            "dryRun": {
+              "type": "boolean"
+            },
+            "reasons": {
+              "items": {
+                "enum": [
+                  "COMMAND_UNAVAILABLE",
+                  "HELPER_UNAVAILABLE",
+                  "OPERATION_UNAVAILABLE",
+                  "TRACKED_MODE_UNAVAILABLE",
+                  "DRY_RUN_UNAVAILABLE",
+                  "NAMESPACE_UNAVAILABLE",
+                  "STYLES_PART_MISSING",
+                  "COLLABORATION_ACTIVE"
+                ]
+              },
+              "type": "array"
+            },
+            "tracked": {
+              "type": "boolean"
+            }
+          },
+          "required": [
+            "available",
+            "tracked",
+            "dryRun"
+          ],
+          "type": "object"
+        },
+        "lists.applyPreset": {
+          "additionalProperties": false,
+          "properties": {
+            "available": {
+              "type": "boolean"
+            },
+            "dryRun": {
+              "type": "boolean"
+            },
+            "reasons": {
+              "items": {
+                "enum": [
+                  "COMMAND_UNAVAILABLE",
+                  "HELPER_UNAVAILABLE",
+                  "OPERATION_UNAVAILABLE",
+                  "TRACKED_MODE_UNAVAILABLE",
+                  "DRY_RUN_UNAVAILABLE",
+                  "NAMESPACE_UNAVAILABLE",
+                  "STYLES_PART_MISSING",
+                  "COLLABORATION_ACTIVE"
+                ]
+              },
+              "type": "array"
+            },
+            "tracked": {
+              "type": "boolean"
+            }
+          },
+          "required": [
+            "available",
+            "tracked",
+            "dryRun"
+          ],
+          "type": "object"
+        },
+        "lists.applyTemplate": {
           "additionalProperties": false,
           "properties": {
             "available": {
@@ -7663,6 +9569,76 @@ _No fields._
           "type": "object"
         },
         "lists.canJoin": {
+          "additionalProperties": false,
+          "properties": {
+            "available": {
+              "type": "boolean"
+            },
+            "dryRun": {
+              "type": "boolean"
+            },
+            "reasons": {
+              "items": {
+                "enum": [
+                  "COMMAND_UNAVAILABLE",
+                  "HELPER_UNAVAILABLE",
+                  "OPERATION_UNAVAILABLE",
+                  "TRACKED_MODE_UNAVAILABLE",
+                  "DRY_RUN_UNAVAILABLE",
+                  "NAMESPACE_UNAVAILABLE",
+                  "STYLES_PART_MISSING",
+                  "COLLABORATION_ACTIVE"
+                ]
+              },
+              "type": "array"
+            },
+            "tracked": {
+              "type": "boolean"
+            }
+          },
+          "required": [
+            "available",
+            "tracked",
+            "dryRun"
+          ],
+          "type": "object"
+        },
+        "lists.captureTemplate": {
+          "additionalProperties": false,
+          "properties": {
+            "available": {
+              "type": "boolean"
+            },
+            "dryRun": {
+              "type": "boolean"
+            },
+            "reasons": {
+              "items": {
+                "enum": [
+                  "COMMAND_UNAVAILABLE",
+                  "HELPER_UNAVAILABLE",
+                  "OPERATION_UNAVAILABLE",
+                  "TRACKED_MODE_UNAVAILABLE",
+                  "DRY_RUN_UNAVAILABLE",
+                  "NAMESPACE_UNAVAILABLE",
+                  "STYLES_PART_MISSING",
+                  "COLLABORATION_ACTIVE"
+                ]
+              },
+              "type": "array"
+            },
+            "tracked": {
+              "type": "boolean"
+            }
+          },
+          "required": [
+            "available",
+            "tracked",
+            "dryRun"
+          ],
+          "type": "object"
+        },
+        "lists.clearLevelOverrides": {
           "additionalProperties": false,
           "properties": {
             "available": {
@@ -8117,7 +10093,287 @@ _No fields._
           ],
           "type": "object"
         },
+        "lists.setLevelAlignment": {
+          "additionalProperties": false,
+          "properties": {
+            "available": {
+              "type": "boolean"
+            },
+            "dryRun": {
+              "type": "boolean"
+            },
+            "reasons": {
+              "items": {
+                "enum": [
+                  "COMMAND_UNAVAILABLE",
+                  "HELPER_UNAVAILABLE",
+                  "OPERATION_UNAVAILABLE",
+                  "TRACKED_MODE_UNAVAILABLE",
+                  "DRY_RUN_UNAVAILABLE",
+                  "NAMESPACE_UNAVAILABLE",
+                  "STYLES_PART_MISSING",
+                  "COLLABORATION_ACTIVE"
+                ]
+              },
+              "type": "array"
+            },
+            "tracked": {
+              "type": "boolean"
+            }
+          },
+          "required": [
+            "available",
+            "tracked",
+            "dryRun"
+          ],
+          "type": "object"
+        },
+        "lists.setLevelBullet": {
+          "additionalProperties": false,
+          "properties": {
+            "available": {
+              "type": "boolean"
+            },
+            "dryRun": {
+              "type": "boolean"
+            },
+            "reasons": {
+              "items": {
+                "enum": [
+                  "COMMAND_UNAVAILABLE",
+                  "HELPER_UNAVAILABLE",
+                  "OPERATION_UNAVAILABLE",
+                  "TRACKED_MODE_UNAVAILABLE",
+                  "DRY_RUN_UNAVAILABLE",
+                  "NAMESPACE_UNAVAILABLE",
+                  "STYLES_PART_MISSING",
+                  "COLLABORATION_ACTIVE"
+                ]
+              },
+              "type": "array"
+            },
+            "tracked": {
+              "type": "boolean"
+            }
+          },
+          "required": [
+            "available",
+            "tracked",
+            "dryRun"
+          ],
+          "type": "object"
+        },
+        "lists.setLevelIndents": {
+          "additionalProperties": false,
+          "properties": {
+            "available": {
+              "type": "boolean"
+            },
+            "dryRun": {
+              "type": "boolean"
+            },
+            "reasons": {
+              "items": {
+                "enum": [
+                  "COMMAND_UNAVAILABLE",
+                  "HELPER_UNAVAILABLE",
+                  "OPERATION_UNAVAILABLE",
+                  "TRACKED_MODE_UNAVAILABLE",
+                  "DRY_RUN_UNAVAILABLE",
+                  "NAMESPACE_UNAVAILABLE",
+                  "STYLES_PART_MISSING",
+                  "COLLABORATION_ACTIVE"
+                ]
+              },
+              "type": "array"
+            },
+            "tracked": {
+              "type": "boolean"
+            }
+          },
+          "required": [
+            "available",
+            "tracked",
+            "dryRun"
+          ],
+          "type": "object"
+        },
+        "lists.setLevelMarkerFont": {
+          "additionalProperties": false,
+          "properties": {
+            "available": {
+              "type": "boolean"
+            },
+            "dryRun": {
+              "type": "boolean"
+            },
+            "reasons": {
+              "items": {
+                "enum": [
+                  "COMMAND_UNAVAILABLE",
+                  "HELPER_UNAVAILABLE",
+                  "OPERATION_UNAVAILABLE",
+                  "TRACKED_MODE_UNAVAILABLE",
+                  "DRY_RUN_UNAVAILABLE",
+                  "NAMESPACE_UNAVAILABLE",
+                  "STYLES_PART_MISSING",
+                  "COLLABORATION_ACTIVE"
+                ]
+              },
+              "type": "array"
+            },
+            "tracked": {
+              "type": "boolean"
+            }
+          },
+          "required": [
+            "available",
+            "tracked",
+            "dryRun"
+          ],
+          "type": "object"
+        },
+        "lists.setLevelNumbering": {
+          "additionalProperties": false,
+          "properties": {
+            "available": {
+              "type": "boolean"
+            },
+            "dryRun": {
+              "type": "boolean"
+            },
+            "reasons": {
+              "items": {
+                "enum": [
+                  "COMMAND_UNAVAILABLE",
+                  "HELPER_UNAVAILABLE",
+                  "OPERATION_UNAVAILABLE",
+                  "TRACKED_MODE_UNAVAILABLE",
+                  "DRY_RUN_UNAVAILABLE",
+                  "NAMESPACE_UNAVAILABLE",
+                  "STYLES_PART_MISSING",
+                  "COLLABORATION_ACTIVE"
+                ]
+              },
+              "type": "array"
+            },
+            "tracked": {
+              "type": "boolean"
+            }
+          },
+          "required": [
+            "available",
+            "tracked",
+            "dryRun"
+          ],
+          "type": "object"
+        },
+        "lists.setLevelPictureBullet": {
+          "additionalProperties": false,
+          "properties": {
+            "available": {
+              "type": "boolean"
+            },
+            "dryRun": {
+              "type": "boolean"
+            },
+            "reasons": {
+              "items": {
+                "enum": [
+                  "COMMAND_UNAVAILABLE",
+                  "HELPER_UNAVAILABLE",
+                  "OPERATION_UNAVAILABLE",
+                  "TRACKED_MODE_UNAVAILABLE",
+                  "DRY_RUN_UNAVAILABLE",
+                  "NAMESPACE_UNAVAILABLE",
+                  "STYLES_PART_MISSING",
+                  "COLLABORATION_ACTIVE"
+                ]
+              },
+              "type": "array"
+            },
+            "tracked": {
+              "type": "boolean"
+            }
+          },
+          "required": [
+            "available",
+            "tracked",
+            "dryRun"
+          ],
+          "type": "object"
+        },
         "lists.setLevelRestart": {
+          "additionalProperties": false,
+          "properties": {
+            "available": {
+              "type": "boolean"
+            },
+            "dryRun": {
+              "type": "boolean"
+            },
+            "reasons": {
+              "items": {
+                "enum": [
+                  "COMMAND_UNAVAILABLE",
+                  "HELPER_UNAVAILABLE",
+                  "OPERATION_UNAVAILABLE",
+                  "TRACKED_MODE_UNAVAILABLE",
+                  "DRY_RUN_UNAVAILABLE",
+                  "NAMESPACE_UNAVAILABLE",
+                  "STYLES_PART_MISSING",
+                  "COLLABORATION_ACTIVE"
+                ]
+              },
+              "type": "array"
+            },
+            "tracked": {
+              "type": "boolean"
+            }
+          },
+          "required": [
+            "available",
+            "tracked",
+            "dryRun"
+          ],
+          "type": "object"
+        },
+        "lists.setLevelTrailingCharacter": {
+          "additionalProperties": false,
+          "properties": {
+            "available": {
+              "type": "boolean"
+            },
+            "dryRun": {
+              "type": "boolean"
+            },
+            "reasons": {
+              "items": {
+                "enum": [
+                  "COMMAND_UNAVAILABLE",
+                  "HELPER_UNAVAILABLE",
+                  "OPERATION_UNAVAILABLE",
+                  "TRACKED_MODE_UNAVAILABLE",
+                  "DRY_RUN_UNAVAILABLE",
+                  "NAMESPACE_UNAVAILABLE",
+                  "STYLES_PART_MISSING",
+                  "COLLABORATION_ACTIVE"
+                ]
+              },
+              "type": "array"
+            },
+            "tracked": {
+              "type": "boolean"
+            }
+          },
+          "required": [
+            "available",
+            "tracked",
+            "dryRun"
+          ],
+          "type": "object"
+        },
+        "lists.setType": {
           "additionalProperties": false,
           "properties": {
             "available": {
@@ -10996,6 +13252,7 @@ _No fields._
         "getMarkdown",
         "getHtml",
         "info",
+        "clearContent",
         "insert",
         "replace",
         "delete",
@@ -11102,6 +13359,18 @@ _No fields._
         "lists.canContinuePrevious",
         "lists.setLevelRestart",
         "lists.convertToText",
+        "lists.applyTemplate",
+        "lists.applyPreset",
+        "lists.setType",
+        "lists.captureTemplate",
+        "lists.setLevelNumbering",
+        "lists.setLevelBullet",
+        "lists.setLevelPictureBullet",
+        "lists.setLevelAlignment",
+        "lists.setLevelIndents",
+        "lists.setLevelTrailingCharacter",
+        "lists.setLevelMarkerFont",
+        "lists.clearLevelOverrides",
         "comments.create",
         "comments.patch",
         "comments.delete",
@@ -11170,7 +13439,41 @@ _No fields._
         "toc.editEntry",
         "history.get",
         "history.undo",
-        "history.redo"
+        "history.redo",
+        "create.image",
+        "images.list",
+        "images.get",
+        "images.delete",
+        "images.move",
+        "images.convertToInline",
+        "images.convertToFloating",
+        "images.setSize",
+        "images.setWrapType",
+        "images.setWrapSide",
+        "images.setWrapDistances",
+        "images.setPosition",
+        "images.setAnchorOptions",
+        "images.setZOrder",
+        "images.scale",
+        "images.setLockAspectRatio",
+        "images.rotate",
+        "images.flip",
+        "images.crop",
+        "images.resetCrop",
+        "images.replaceSource",
+        "images.setAltText",
+        "images.setDecorative",
+        "images.setName",
+        "images.setHyperlink",
+        "images.insertCaption",
+        "images.updateCaption",
+        "images.removeCaption",
+        "hyperlinks.list",
+        "hyperlinks.get",
+        "hyperlinks.wrap",
+        "hyperlinks.insert",
+        "hyperlinks.patch",
+        "hyperlinks.remove"
       ],
       "type": "object"
     },

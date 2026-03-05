@@ -2,6 +2,7 @@ import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { handleImageNode, getVectorShape } from './encode-image-node-helpers.js';
 import { emuToPixels, polygonToObj, rotToDegrees } from '@converter/helpers.js';
 import { extractFillColor, extractStrokeColor, extractStrokeWidth, extractLineEnds } from './vector-shape-helpers.js';
+import { convertTiffToPng } from './tiff-converter.js';
 
 vi.mock('@converter/helpers.js', async (importOriginal) => {
   const actual = await importOriginal();
@@ -20,6 +21,14 @@ vi.mock('./vector-shape-helpers.js', () => ({
   extractLineEnds: vi.fn(),
   extractCustomGeometry: vi.fn(),
 }));
+
+vi.mock('./tiff-converter.js', async (importOriginal) => {
+  const actual = await importOriginal();
+  return {
+    ...actual,
+    convertTiffToPng: vi.fn(actual.convertTiffToPng),
+  };
+});
 
 describe('handleImageNode', () => {
   beforeEach(() => {
@@ -221,6 +230,70 @@ describe('handleImageNode', () => {
     expect(result.attrs.size).toEqual({ width: 5, height: 6 }); // emuToPixels mocked
   });
 
+  it('parses valid anchor relativeHeight as unsigned integer', () => {
+    const node = makeNode({
+      attributes: {
+        relativeHeight: '251651584',
+      },
+    });
+
+    const result = handleImageNode(node, makeParams(), true);
+
+    expect(result.attrs.relativeHeight).toBe(251651584);
+  });
+
+  it('drops fractional anchor relativeHeight values', () => {
+    const node = makeNode({
+      attributes: {
+        relativeHeight: '1.5',
+      },
+    });
+
+    const result = handleImageNode(node, makeParams(), true);
+
+    expect(result.attrs.relativeHeight).toBeNull();
+  });
+
+  it('drops out-of-range anchor relativeHeight values', () => {
+    const node = makeNode({
+      attributes: {
+        relativeHeight: '4294967296',
+      },
+    });
+
+    const result = handleImageNode(node, makeParams(), true);
+
+    expect(result.attrs.relativeHeight).toBeNull();
+  });
+
+  it('calls convertTiffToPng for .tif images', () => {
+    convertTiffToPng.mockReturnValue({ dataUri: 'data:image/png;base64,fake', format: 'png' });
+    const node = makeNode();
+    const params = {
+      ...makeParams('media/photo.tif'),
+      converter: { media: { 'word/media/photo.tif': 'data:image/tiff;base64,AAAA' } },
+    };
+    const result = handleImageNode(node, params, false);
+
+    expect(convertTiffToPng).toHaveBeenCalledWith('data:image/tiff;base64,AAAA');
+    expect(result.attrs.src).toBe('data:image/png;base64,fake');
+    expect(result.attrs.extension).toBe('png');
+  });
+
+  it('returns alt text when convertTiffToPng returns null', () => {
+    convertTiffToPng.mockReturnValue(null);
+    const node = makeNode();
+    const params = {
+      ...makeParams('media/photo.tif'),
+      converter: { media: { 'word/media/photo.tif': 'data:image/tiff;base64,AAAA' } },
+    };
+    const result = handleImageNode(node, params, false);
+
+    expect(convertTiffToPng).toHaveBeenCalledWith('data:image/tiff;base64,AAAA');
+    expect(result.attrs.alt).toBe('Unable to render image');
+    expect(result.attrs.extension).toBe('tif');
+  });
+
   it('captures unhandled drawing children for passthrough preservation', () => {
     const node = makeNode();
     node.elements.push({
@@ -292,7 +365,7 @@ describe('handleImageNode', () => {
     const node = makeNode();
     const params = makeParams('media/pic.emf');
     const result = handleImageNode(node, params, false);
-    expect(result.attrs.alt).toBe('Unable to render EMF/WMF image');
+    expect(result.attrs.alt).toBe('Unable to render image');
     expect(result.attrs.extension).toBe('emf');
   });
 
@@ -1027,6 +1100,158 @@ describe('handleImageNode', () => {
 
     expect(result).not.toBeNull();
     expect(result.attrs.grayscale).toBeUndefined();
+  });
+
+  describe('lockAspectRatio / noChangeAspect import defaults', () => {
+    it('defaults lockAspectRatio to false when a:picLocks element is absent', () => {
+      const node = makeNode();
+      const graphic = node.elements.find((el) => el.name === 'a:graphic');
+      const picPic = graphic.elements[0].elements[0];
+      picPic.elements = [
+        {
+          name: 'pic:nvPicPr',
+          elements: [
+            { name: 'pic:cNvPr', attributes: { id: '1', name: 'Pic' } },
+            { name: 'pic:cNvPicPr', elements: [] },
+          ],
+        },
+        ...(picPic.elements || []),
+      ];
+
+      const result = handleImageNode(node, makeParams(), false);
+
+      expect(result.attrs.lockAspectRatio).toBe(false);
+    });
+
+    it('sets lockAspectRatio to true when noChangeAspect="1"', () => {
+      const node = makeNode();
+      const graphic = node.elements.find((el) => el.name === 'a:graphic');
+      const picPic = graphic.elements[0].elements[0];
+      picPic.elements = [
+        {
+          name: 'pic:nvPicPr',
+          elements: [
+            { name: 'pic:cNvPr', attributes: { id: '1', name: 'Pic' } },
+            {
+              name: 'pic:cNvPicPr',
+              elements: [{ name: 'a:picLocks', attributes: { noChangeAspect: '1' } }],
+            },
+          ],
+        },
+        ...(picPic.elements || []),
+      ];
+
+      const result = handleImageNode(node, makeParams(), false);
+
+      expect(result.attrs.lockAspectRatio).toBe(true);
+    });
+
+    it('sets lockAspectRatio to false when a:picLocks exists but noChangeAspect is absent', () => {
+      const node = makeNode();
+      const graphic = node.elements.find((el) => el.name === 'a:graphic');
+      const picPic = graphic.elements[0].elements[0];
+      picPic.elements = [
+        {
+          name: 'pic:nvPicPr',
+          elements: [
+            { name: 'pic:cNvPr', attributes: { id: '1', name: 'Pic' } },
+            {
+              name: 'pic:cNvPicPr',
+              elements: [{ name: 'a:picLocks', attributes: { noChangeArrowheads: '1' } }],
+            },
+          ],
+        },
+        ...(picPic.elements || []),
+      ];
+
+      const result = handleImageNode(node, makeParams(), false);
+
+      expect(result.attrs.lockAspectRatio).toBe(false);
+    });
+  });
+
+  describe('hyperlink import from wp:docPr fallback', () => {
+    it('reads a:hlinkClick from wp:docPr when pic:cNvPr has none', () => {
+      const hlinkRId = 'rIdHlink1';
+      const node = makeNode();
+      const docPr = node.elements.find((el) => el.name === 'wp:docPr');
+      docPr.elements = [{ name: 'a:hlinkClick', attributes: { 'r:id': hlinkRId, tooltip: 'Click me' } }];
+      const graphic = node.elements.find((el) => el.name === 'a:graphic');
+      const picPic = graphic.elements[0].elements[0];
+      picPic.elements = [
+        {
+          name: 'pic:nvPicPr',
+          elements: [
+            { name: 'pic:cNvPr', attributes: { id: '1', name: 'Pic' } },
+            { name: 'pic:cNvPicPr', elements: [] },
+          ],
+        },
+        ...(picPic.elements || []),
+      ];
+
+      const params = makeParams();
+      params.docx['word/_rels/document.xml.rels'].elements[0].elements.push({
+        name: 'Relationship',
+        attributes: {
+          Id: hlinkRId,
+          Type: 'http://schemas.openxmlformats.org/officeDocument/2006/relationships/hyperlink',
+          Target: 'https://example.com',
+          TargetMode: 'External',
+        },
+      });
+
+      const result = handleImageNode(node, params, false);
+
+      expect(result.attrs.hyperlink).toEqual({ url: 'https://example.com', tooltip: 'Click me' });
+    });
+
+    it('prefers pic:cNvPr a:hlinkClick over wp:docPr a:hlinkClick', () => {
+      const node = makeNode();
+      const docPr = node.elements.find((el) => el.name === 'wp:docPr');
+      docPr.elements = [{ name: 'a:hlinkClick', attributes: { 'r:id': 'rIdDocPr', tooltip: 'DocPr link' } }];
+      const graphic = node.elements.find((el) => el.name === 'a:graphic');
+      const picPic = graphic.elements[0].elements[0];
+      picPic.elements = [
+        {
+          name: 'pic:nvPicPr',
+          elements: [
+            {
+              name: 'pic:cNvPr',
+              attributes: { id: '1', name: 'Pic' },
+              elements: [{ name: 'a:hlinkClick', attributes: { 'r:id': 'rIdCNvPr', tooltip: 'CNvPr link' } }],
+            },
+            { name: 'pic:cNvPicPr', elements: [] },
+          ],
+        },
+        ...(picPic.elements || []),
+      ];
+
+      const params = makeParams();
+      params.docx['word/_rels/document.xml.rels'].elements[0].elements.push(
+        {
+          name: 'Relationship',
+          attributes: {
+            Id: 'rIdCNvPr',
+            Type: 'http://schemas.openxmlformats.org/officeDocument/2006/relationships/hyperlink',
+            Target: 'https://cNvPr.example.com',
+            TargetMode: 'External',
+          },
+        },
+        {
+          name: 'Relationship',
+          attributes: {
+            Id: 'rIdDocPr',
+            Type: 'http://schemas.openxmlformats.org/officeDocument/2006/relationships/hyperlink',
+            Target: 'https://docPr.example.com',
+            TargetMode: 'External',
+          },
+        },
+      );
+
+      const result = handleImageNode(node, params, false);
+
+      expect(result.attrs.hyperlink).toEqual({ url: 'https://cNvPr.example.com', tooltip: 'CNvPr link' });
+    });
   });
 });
 

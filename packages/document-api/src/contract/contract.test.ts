@@ -6,6 +6,7 @@ import { OPERATION_REFERENCE_DOC_PATH_MAP, REFERENCE_OPERATION_GROUPS } from './
 import { buildInternalContractSchemas } from './schemas.js';
 import { PUBLIC_MUTATION_STEP_OP_IDS, STEP_OP_CATALOG } from './step-op-catalog.js';
 import { OPERATION_IDS, PRE_APPLY_THROW_CODES, isValidOperationIdFormat } from './types.js';
+import { Z_ORDER_RELATIVE_HEIGHT_MAX, Z_ORDER_RELATIVE_HEIGHT_MIN } from '../images/z-order.js';
 
 describe('document-api contract catalog', () => {
   it('keeps operation ids explicit and format-valid', () => {
@@ -125,6 +126,28 @@ describe('document-api contract catalog', () => {
     expect(capabilitiesOutput.properties?.global?.required).toContain('history');
   });
 
+  it('declares images.setZOrder.relativeHeight as unsigned 32-bit integer', () => {
+    const schemas = buildInternalContractSchemas();
+    const inputSchema = schemas.operations['images.setZOrder'].input as {
+      properties?: {
+        zOrder?: {
+          properties?: {
+            relativeHeight?: {
+              type?: string;
+              minimum?: number;
+              maximum?: number;
+            };
+          };
+        };
+      };
+    };
+
+    const relativeHeightSchema = inputSchema.properties?.zOrder?.properties?.relativeHeight;
+    expect(relativeHeightSchema?.type).toBe('integer');
+    expect(relativeHeightSchema?.minimum).toBe(Z_ORDER_RELATIVE_HEIGHT_MIN);
+    expect(relativeHeightSchema?.maximum).toBe(Z_ORDER_RELATIVE_HEIGHT_MAX);
+  });
+
   it('derives OPERATION_IDS from OPERATION_DEFINITIONS keys', () => {
     const definitionKeys = Object.keys(OPERATION_DEFINITIONS).sort();
     const operationIds = [...OPERATION_IDS].sort();
@@ -150,6 +173,8 @@ describe('document-api contract catalog', () => {
       'tables',
       'history',
       'toc',
+      'images',
+      'hyperlinks',
     ];
     for (const id of OPERATION_IDS) {
       expect(validGroups, `${id} has invalid referenceGroup`).toContain(OPERATION_DEFINITIONS[id].referenceGroup);

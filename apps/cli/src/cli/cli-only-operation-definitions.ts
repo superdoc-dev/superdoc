@@ -31,6 +31,8 @@ export interface CliOnlyOperationDefinition {
   intentName: string;
   sdkMetadata: CliOnlySdkMetadata;
   outputSchema: Record<string, unknown>;
+  /** When true, this operation is excluded from generated LLM tool catalogs. */
+  skipAsATool?: boolean;
 }
 
 // ---------------------------------------------------------------------------
@@ -39,7 +41,7 @@ export interface CliOnlyOperationDefinition {
 
 export const CLI_ONLY_OPERATION_DEFINITIONS: Record<CliOnlyOperation, CliOnlyOperationDefinition> = {
   open: {
-    category: 'lifecycle',
+    category: 'session',
     description:
       'Open a document and create a persistent editing session. Optionally override the document body with contentOverride + overrideType (markdown, html, or text).',
     requiresDocumentContext: false,
@@ -78,7 +80,7 @@ export const CLI_ONLY_OPERATION_DEFINITIONS: Record<CliOnlyOperation, CliOnlyOpe
     },
   },
   save: {
-    category: 'lifecycle',
+    category: 'session',
     description: 'Save the current session to the original file or a new path.',
     requiresDocumentContext: false,
     intentName: 'save_document',
@@ -117,7 +119,7 @@ export const CLI_ONLY_OPERATION_DEFINITIONS: Record<CliOnlyOperation, CliOnlyOpe
     },
   },
   close: {
-    category: 'lifecycle',
+    category: 'session',
     description: 'Close the active editing session and clean up resources.',
     requiresDocumentContext: false,
     intentName: 'close_document',
@@ -144,7 +146,7 @@ export const CLI_ONLY_OPERATION_DEFINITIONS: Record<CliOnlyOperation, CliOnlyOpe
     },
   },
   status: {
-    category: 'introspection',
+    category: 'session',
     description: 'Show the current session status and document metadata.',
     requiresDocumentContext: false,
     intentName: 'get_status',
@@ -168,10 +170,11 @@ export const CLI_ONLY_OPERATION_DEFINITIONS: Record<CliOnlyOperation, CliOnlyOpe
     },
   },
   describe: {
-    category: 'introspection',
+    category: 'session',
     description: 'List all available CLI operations and contract metadata.',
     requiresDocumentContext: false,
     intentName: 'describe_commands',
+    skipAsATool: true,
     sdkMetadata: { mutates: false, idempotency: 'idempotent', supportsTrackedMode: false, supportsDryRun: false },
     outputSchema: {
       type: 'object',
@@ -194,11 +197,12 @@ export const CLI_ONLY_OPERATION_DEFINITIONS: Record<CliOnlyOperation, CliOnlyOpe
     },
   },
   describeCommand: {
-    category: 'introspection',
+    category: 'session',
     description: 'Show detailed metadata for a single CLI operation.',
     requiresDocumentContext: false,
     tokenOverride: ['describe', 'command'],
     intentName: 'describe_command',
+    skipAsATool: true,
     sdkMetadata: { mutates: false, idempotency: 'idempotent', supportsTrackedMode: false, supportsDryRun: false },
     outputSchema: {
       type: 'object',

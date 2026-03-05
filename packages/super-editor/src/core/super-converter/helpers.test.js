@@ -7,6 +7,7 @@ import {
   getArrayBufferFromUrl,
   computeCrc32Hex,
   base64ToUint8Array,
+  dataUriToArrayBuffer,
   detectImageType,
 } from './helpers.js';
 
@@ -382,6 +383,43 @@ describe('base64ToUint8Array', () => {
     // Bytes [0, 1, 255] → base64 "AAH/"
     const result = base64ToUint8Array('AAH/');
     expect(Array.from(result)).toEqual([0, 1, 255]);
+  });
+});
+
+describe('dataUriToArrayBuffer', () => {
+  it('returns the same ArrayBuffer when given an ArrayBuffer', () => {
+    const buf = new ArrayBuffer(4);
+    expect(dataUriToArrayBuffer(buf)).toBe(buf);
+  });
+
+  it('slices a TypedArray into a new ArrayBuffer', () => {
+    const bytes = new Uint8Array([10, 20, 30, 40]);
+    const result = dataUriToArrayBuffer(bytes);
+    expect(result).toBeInstanceOf(ArrayBuffer);
+    expect(Array.from(new Uint8Array(result))).toEqual([10, 20, 30, 40]);
+  });
+
+  it('decodes a data URI string', () => {
+    const bytes = new Uint8Array([11, 22, 33]);
+    const base64 = Buffer.from(bytes).toString('base64');
+    const result = dataUriToArrayBuffer(`data:image/tiff;base64,${base64}`);
+    expect(Array.from(new Uint8Array(result))).toEqual([11, 22, 33]);
+  });
+
+  it('decodes a raw base64 string', () => {
+    const bytes = new Uint8Array([55, 66, 77]);
+    const base64 = Buffer.from(bytes).toString('base64');
+    const result = dataUriToArrayBuffer(base64);
+    expect(Array.from(new Uint8Array(result))).toEqual([55, 66, 77]);
+  });
+
+  it('throws on a data URI missing the comma', () => {
+    expect(() => dataUriToArrayBuffer('data:image/png;base64')).toThrow('Invalid data URI');
+  });
+
+  it('throws on unsupported data types', () => {
+    expect(() => dataUriToArrayBuffer(12345)).toThrow('Unsupported data type');
+    expect(() => dataUriToArrayBuffer({})).toThrow('Unsupported data type');
   });
 });
 

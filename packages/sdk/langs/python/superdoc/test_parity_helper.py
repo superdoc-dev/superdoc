@@ -40,11 +40,6 @@ def main() -> None:
             result = resolve_tool_operation(command['toolName'])
             print(json.dumps({'ok': True, 'result': result}))
 
-        elif action == 'inferDocumentFeatures':
-            from superdoc.tools_api import infer_document_features
-            result = infer_document_features(command['infoResult'])
-            print(json.dumps({'ok': True, 'result': result}))
-
         elif action == 'assertCollabAccepted':
             # Verify collab params pass through to the runtime without
             # SDK-level rejection. We build the argv from the operation spec

@@ -120,19 +120,25 @@ export async function executeReadOperation(request: DocOperationRequest): Promis
     }
   }
 
+  // -----------------------------------------------------------------------
+  // Session path (unified: local + collab, host + oneshot)
+  // -----------------------------------------------------------------------
   return withActiveContext(
     context.io,
     commandName,
     async ({ metadata, paths }) => {
-      if (metadata.sessionType === 'collab') {
-        const opened = await openSessionDocument(paths.workingDocPath, context.io, metadata, {
-          sessionId: context.sessionId ?? metadata.contextId,
-          executionMode: context.executionMode,
-          collabSessionPool: context.collabSessionPool,
-        });
+      const opened = await openSessionDocument(paths.workingDocPath, context.io, metadata, {
+        sessionId: context.sessionId ?? metadata.contextId,
+        executionMode: context.executionMode,
+        sessionPool: context.sessionPool,
+      });
 
-        try {
-          const result = invokeOperation(opened.editor, operationId, input);
+      try {
+        const result = invokeOperation(opened.editor, operationId, input);
+
+        // For oneshot collab reads, sync snapshot to keep working.docx current
+        const isHostMode = context.executionMode === 'host' && context.sessionPool != null;
+        if (!isHostMode && metadata.sessionType === 'collab') {
           const synced = await syncCollaborativeSessionSnapshot(context.io, metadata, paths, opened.editor);
           const document: DocumentPayload = {
             path: synced.updatedMetadata.sourcePath,
@@ -140,27 +146,19 @@ export async function executeReadOperation(request: DocOperationRequest): Promis
             byteLength: synced.output.byteLength,
             revision: synced.updatedMetadata.revision,
           };
-
           return {
             command: commandName,
             data: buildEnvelopeData(operationId, document, result, input),
             pretty: buildPrettyOutput(operationId, document, result),
           };
-        } finally {
-          opened.dispose();
         }
-      }
 
-      const opened = await openDocument(paths.workingDocPath, context.io, { user: metadata.user });
-      try {
-        const result = invokeOperation(opened.editor, operationId, input);
         const document: DocumentPayload = {
           path: metadata.sourcePath,
           source: metadata.source,
           byteLength: opened.meta.byteLength,
           revision: metadata.revision,
         };
-
         return {
           command: commandName,
           data: buildEnvelopeData(operationId, document, result, input),

@@ -1083,6 +1083,75 @@ describe('Table commands', async () => {
     });
   });
 
+  describe('insertTableAt trailing separator paragraph', () => {
+    it('inserts table followed by a trailing paragraph', async () => {
+      const { docx, media, mediaFiles, fonts } = cachedBlankDoc;
+      ({ editor } = initTestEditor({ content: docx, media, mediaFiles, fonts }));
+
+      const pos = editor.state.doc.content.size;
+      editor.commands.insertTableAt({ pos, rows: 2, columns: 2 });
+
+      const doc = editor.state.doc;
+      let foundTable = false;
+      let nodeAfterTable = null;
+      for (let i = 0; i < doc.childCount; i++) {
+        if (doc.child(i).type.name === 'table' && !foundTable) {
+          foundTable = true;
+          if (i + 1 < doc.childCount) {
+            nodeAfterTable = doc.child(i + 1);
+          }
+        }
+      }
+
+      expect(foundTable).toBe(true);
+      expect(nodeAfterTable).not.toBeNull();
+      expect(nodeAfterTable.type.name).toBe('paragraph');
+    });
+
+    it('does not insert separator when table is placed between paragraphs', async () => {
+      const { docx, media, mediaFiles, fonts } = cachedBlankDoc;
+      ({ editor } = initTestEditor({ content: docx, media, mediaFiles, fonts }));
+
+      // Insert some text so we have paragraphs in the doc
+      editor.commands.insertContent('Hello');
+      editor.commands.splitBlock();
+      editor.commands.insertContent('World');
+
+      const docBefore = editor.state.doc;
+      // Find position between the two paragraphs (after first paragraph)
+      const firstParaEnd = docBefore.child(0).nodeSize;
+
+      editor.commands.insertTableAt({ pos: firstParaEnd, rows: 2, columns: 2 });
+
+      const doc = editor.state.doc;
+      // The table should be at index 1 (between the two paragraphs)
+      // There should NOT be an extra separator paragraph injected
+      let tableCount = 0;
+      let paragraphCount = 0;
+      for (let i = 0; i < doc.childCount; i++) {
+        if (doc.child(i).type.name === 'table') tableCount++;
+        if (doc.child(i).type.name === 'paragraph') paragraphCount++;
+      }
+
+      expect(tableCount).toBe(1);
+      // Original 2 paragraphs, no extra separator
+      expect(paragraphCount).toBe(2);
+    });
+
+    it('removes both table and separator paragraph on single undo', async () => {
+      const { docx, media, mediaFiles, fonts } = cachedBlankDoc;
+      ({ editor } = initTestEditor({ content: docx, media, mediaFiles, fonts }));
+
+      const docBefore = editor.state.doc;
+      const pos = editor.state.doc.content.size;
+      editor.commands.insertTableAt({ pos, rows: 2, columns: 2 });
+
+      editor.commands.undo();
+
+      expect(editor.state.doc.toJSON()).toEqual(docBefore.toJSON());
+    });
+  });
+
   describe('normalizeNewTableAttrs tblLook (SD-2086)', async () => {
     it('includes DEFAULT_TBL_LOOK in tableProperties when a style is resolved', async () => {
       const { docx, media, mediaFiles, fonts } = cachedBlankDoc;

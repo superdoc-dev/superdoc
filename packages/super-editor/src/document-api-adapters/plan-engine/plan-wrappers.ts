@@ -56,6 +56,73 @@ function editorHasDom(editor: Editor): boolean {
   return !!(opts?.document ?? opts?.mockDocument ?? (typeof document !== 'undefined' ? document : null));
 }
 
+function isMismatchedTransactionError(error: unknown): boolean {
+  const message = error instanceof Error ? error.message : String(error);
+  return message.includes('Applying a mismatched transaction');
+}
+
+function insertContentAtWithRetry(
+  editor: Editor,
+  range: { from: number; to: number },
+  content: Record<string, unknown>[] | string,
+): boolean {
+  try {
+    return Boolean(editor.commands.insertContentAt(range, content));
+  } catch (error) {
+    if (!isMismatchedTransactionError(error)) throw error;
+    // Retry once with a fresh command transaction. This covers rare races where
+    // another dispatch lands between transaction creation and dispatch.
+    return Boolean(editor.commands.insertContentAt(range, content));
+  }
+}
+
+function isJsonObject(value: unknown): value is Record<string, unknown> {
+  return typeof value === 'object' && value !== null && !Array.isArray(value);
+}
+
+/**
+ * Ensure every inserted markdown image node has a stable `sdImageId`.
+ *
+ * The markdown converter should already provide this, but we enforce it at the
+ * insert boundary so `images.list/get` remain reliable even if upstream
+ * conversion changes or misses an edge-case image shape.
+ */
+function ensureMarkdownImageIds(nodes: Record<string, unknown>[]): void {
+  const visit = (node: Record<string, unknown>) => {
+    if (node.type === 'image') {
+      const attrs = isJsonObject(node.attrs) ? { ...node.attrs } : {};
+      const hasStableId = typeof attrs.sdImageId === 'string' && attrs.sdImageId.length > 0;
+      if (!hasStableId) {
+        attrs.sdImageId = uuidv4();
+      }
+      node.attrs = attrs;
+    }
+
+    if (!Array.isArray(node.content)) return;
+    for (const child of node.content) {
+      if (isJsonObject(child)) visit(child);
+    }
+  };
+
+  for (const node of nodes) {
+    visit(node);
+  }
+}
+
+/**
+ * Mutate `jsonNodes` in place so that consecutive table nodes within the
+ * array are separated by an empty paragraph. Only handles within-fragment
+ * adjacency — document-context separators (leading/trailing) are handled
+ * by the caller after inspecting the insertion position.
+ */
+function ensureTableSeparators(jsonNodes: Record<string, unknown>[]): void {
+  for (let i = jsonNodes.length - 2; i >= 0; i--) {
+    if (jsonNodes[i].type === 'table' && jsonNodes[i + 1].type === 'table') {
+      jsonNodes.splice(i + 1, 0, { type: 'paragraph' });
+    }
+  }
+}
+
 // ---------------------------------------------------------------------------
 // Locator normalization (same validation as the old adapters)
 // ---------------------------------------------------------------------------
@@ -640,8 +707,36 @@ export function insertStructuredWrapper(
         // because createNodeFromContent treats it as a single JSON object.
         const jsonNodes: Record<string, unknown>[] = [];
         fragment.forEach((node) => jsonNodes.push(node.toJSON()));
+        ensureMarkdownImageIds(jsonNodes);
 
-        const ok = Boolean(editor.commands.insertContentAt({ from, to }, jsonNodes));
+        // Word always separates adjacent tables with a paragraph. Without a
+        // trailing separator, consecutive markdown inserts produce adjacent
+        // <w:tbl> elements that Word merges into one visual table.
+        ensureTableSeparators(jsonNodes);
+
+        // insertContentAt replaces empty textblocks when inserting block
+        // content. Check whether the replaced paragraph's neighbors are tables
+        // and add separators to prevent adjacency in the result.
+        if (from === to) {
+          const $pos = editor.state.doc.resolve(from);
+          const parent = $pos.parent;
+          if (parent.isTextblock && !parent.childCount) {
+            const grandparent = $pos.node($pos.depth - 1);
+            const idx = $pos.index($pos.depth - 1);
+            const prevIsTable = idx > 0 && grandparent.child(idx - 1).type.name === 'table';
+            const nextIsTable = idx + 1 < grandparent.childCount && grandparent.child(idx + 1).type.name === 'table';
+            const atEnd = idx + 1 >= grandparent.childCount;
+
+            if (jsonNodes[0]?.type === 'table' && prevIsTable) {
+              jsonNodes.unshift({ type: 'paragraph' });
+            }
+            if (jsonNodes[jsonNodes.length - 1]?.type === 'table' && (nextIsTable || atEnd)) {
+              jsonNodes.push({ type: 'paragraph' });
+            }
+          }
+        }
+
+        const ok = insertContentAtWithRetry(editor, { from, to }, jsonNodes);
         if (!ok) {
           insertFailure = {
             code: 'INVALID_TARGET',
@@ -664,7 +759,7 @@ export function insertStructuredWrapper(
           return false;
         }
         try {
-          const ok = Boolean(editor.commands.insertContentAt({ from, to }, value));
+          const ok = insertContentAtWithRetry(editor, { from, to }, value);
           if (!ok) {
             insertFailure = {
               code: 'INVALID_TARGET',

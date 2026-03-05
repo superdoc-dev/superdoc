@@ -95,6 +95,10 @@ function init(file?: File, content?: ContentOverrideInput) {
     config.comments = { visible: true };
   } else if (comments === 'readonly') {
     config.comments = { visible: true, readOnly: true };
+  } else if (comments === 'disabled') {
+    // Explicitly disable the comments module (modules: { comments: false }).
+    // This matches the customer config pattern that triggers different scroll behavior.
+    config.modules = { ...(config.modules ?? {}), comments: false };
   }
 
   // Track changes

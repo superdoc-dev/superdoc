@@ -134,36 +134,59 @@ function makeAdapters() {
       insertionPoint: { kind: 'text' as const, blockId: 'new-h', range: { start: 0, end: 0 } },
     })),
   };
+  const listsMutateResult = () => ({
+    success: true as const,
+    item: { kind: 'block' as const, nodeType: 'listItem' as const, nodeId: 'li-1' },
+  });
   const listsAdapter: ListsAdapter = {
     list: vi.fn(() => ({ evaluatedRevision: '', total: 0, items: [], page: { limit: 50, offset: 0, returned: 0 } })),
     get: vi.fn(() => ({
       address: { kind: 'block' as const, nodeType: 'listItem' as const, nodeId: 'li-1' },
+      listId: 'list-1',
     })),
     insert: vi.fn(() => ({
       success: true as const,
       item: { kind: 'block' as const, nodeType: 'listItem' as const, nodeId: 'li-2' },
       insertionPoint: { kind: 'text' as const, blockId: 'li-2', range: { start: 0, end: 0 } },
     })),
-    setType: vi.fn(() => ({
+    indent: vi.fn(listsMutateResult),
+    outdent: vi.fn(listsMutateResult),
+    create: vi.fn(() => ({
       success: true as const,
-      item: { kind: 'block' as const, nodeType: 'listItem' as const, nodeId: 'li-1' },
+      listId: 'list-new',
+      item: { kind: 'block' as const, nodeType: 'listItem' as const, nodeId: 'li-new' },
     })),
-    indent: vi.fn(() => ({
-      success: true as const,
-      item: { kind: 'block' as const, nodeType: 'listItem' as const, nodeId: 'li-1' },
-    })),
-    outdent: vi.fn(() => ({
-      success: true as const,
-      item: { kind: 'block' as const, nodeType: 'listItem' as const, nodeId: 'li-1' },
-    })),
-    restart: vi.fn(() => ({
-      success: true as const,
-      item: { kind: 'block' as const, nodeType: 'listItem' as const, nodeId: 'li-1' },
-    })),
-    exit: vi.fn(() => ({
+    attach: vi.fn(listsMutateResult),
+    detach: vi.fn(() => ({
       success: true as const,
       paragraph: { kind: 'block' as const, nodeType: 'paragraph' as const, nodeId: 'p3' },
     })),
+    join: vi.fn(() => ({ success: true as const, listId: 'list-1' })),
+    canJoin: vi.fn(() => ({ canJoin: true })),
+    separate: vi.fn(() => ({ success: true as const, listId: 'list-new', numId: 2 })),
+    setLevel: vi.fn(listsMutateResult),
+    setValue: vi.fn(listsMutateResult),
+    continuePrevious: vi.fn(listsMutateResult),
+    canContinuePrevious: vi.fn(() => ({ canContinue: true })),
+    setLevelRestart: vi.fn(listsMutateResult),
+    convertToText: vi.fn(() => ({
+      success: true as const,
+      paragraph: { kind: 'block' as const, nodeType: 'paragraph' as const, nodeId: 'p3' },
+    })),
+    applyTemplate: vi.fn(listsMutateResult),
+    applyPreset: vi.fn(listsMutateResult),
+    captureTemplate: vi.fn(() => ({
+      success: true as const,
+      template: { version: 1, levels: [] },
+    })),
+    setLevelNumbering: vi.fn(listsMutateResult),
+    setLevelBullet: vi.fn(listsMutateResult),
+    setLevelPictureBullet: vi.fn(listsMutateResult),
+    setLevelAlignment: vi.fn(listsMutateResult),
+    setLevelIndents: vi.fn(listsMutateResult),
+    setLevelTrailingCharacter: vi.fn(listsMutateResult),
+    setLevelMarkerFont: vi.fn(listsMutateResult),
+    clearLevelOverrides: vi.fn(listsMutateResult),
   };
 
   const queryAdapter = {

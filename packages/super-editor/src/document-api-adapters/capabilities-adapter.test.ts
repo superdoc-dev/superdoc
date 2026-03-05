@@ -168,6 +168,65 @@ describe('getDocumentApiCapabilities', () => {
     }
   });
 
+  // ---------------------------------------------------------------------------
+  // SD-1973 list formatting operations
+  // ---------------------------------------------------------------------------
+
+  it('advertises dryRun for SD-1973 list formatting mutators', () => {
+    const capabilities = getDocumentApiCapabilities(makeEditor());
+    // setLevelPictureBullet excluded — requires numbering XML helper (tested separately)
+    const formattingOps = [
+      'lists.applyTemplate',
+      'lists.applyPreset',
+      'lists.setLevelNumbering',
+      'lists.setLevelBullet',
+      'lists.setLevelAlignment',
+      'lists.setLevelIndents',
+      'lists.setLevelTrailingCharacter',
+      'lists.setLevelMarkerFont',
+      'lists.clearLevelOverrides',
+    ] as const;
+
+    for (const operationId of formattingOps) {
+      expect(capabilities.operations[operationId].available, `${operationId} should be available`).toBe(true);
+      expect(capabilities.operations[operationId].dryRun, `${operationId} should advertise dryRun`).toBe(true);
+    }
+  });
+
+  it('marks lists.captureTemplate as available (read-only, no dryRun)', () => {
+    const capabilities = getDocumentApiCapabilities(makeEditor());
+    expect(capabilities.operations['lists.captureTemplate'].available).toBe(true);
+    // captureTemplate is read-only — dryRun depends on catalog metadata
+  });
+
+  it('marks lists.setLevelPictureBullet as unavailable when numbering XML is missing', () => {
+    // Default editor has no converter → no numbering XML
+    const capabilities = getDocumentApiCapabilities(makeEditor());
+    expect(capabilities.operations['lists.setLevelPictureBullet'].available).toBe(false);
+    expect(capabilities.operations['lists.setLevelPictureBullet'].reasons).toContain('HELPER_UNAVAILABLE');
+    expect(capabilities.operations['lists.setLevelPictureBullet'].reasons).toContain('OPERATION_UNAVAILABLE');
+  });
+
+  it('marks lists.setLevelPictureBullet as available when numbering XML is present', () => {
+    const editor = makeEditor();
+    (editor as unknown as Record<string, unknown>).converter = {
+      convertedXml: { 'word/numbering.xml': { name: 'root', elements: [] } },
+    };
+
+    const capabilities = getDocumentApiCapabilities(editor);
+    expect(capabilities.operations['lists.setLevelPictureBullet'].available).toBe(true);
+    expect(capabilities.operations['lists.setLevelPictureBullet'].reasons).toBeUndefined();
+  });
+
+  it('keeps global lists namespace enabled with all SD-1973 operations registered', () => {
+    const capabilities = getDocumentApiCapabilities(makeEditor());
+    // lists.setLevelPictureBullet is unavailable (no converter) but the namespace
+    // check only looks at command availability — the helper predicate does not affect it.
+    // However, since setLevelPictureBullet has an empty command array, hasAllCommands
+    // returns true. The namespace check uses hasAllCommands, so it stays enabled.
+    expect(capabilities.global.lists.enabled).toBe(true);
+  });
+
   it('reports tracked mode unavailable when no editor user is configured', () => {
     const capabilities = getDocumentApiCapabilities(
       makeEditor({

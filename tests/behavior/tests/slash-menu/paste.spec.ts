@@ -1,4 +1,5 @@
 import { test, expect } from '../../fixtures/superdoc.js';
+import { rightClickAtDocPos } from '../../helpers/editor-interactions.js';
 
 test.use({ config: { toolbar: 'full' } });
 
@@ -14,28 +15,6 @@ async function writeToClipboard(page: import('@playwright/test').Page, text: str
     // Firefox/WebKit don't support these permission names — that's fine.
   }
   await page.evaluate((t) => navigator.clipboard.writeText(t), text);
-}
-
-async function rightClickAtDocPos(page: import('@playwright/test').Page, pos: number) {
-  const coords = await page.evaluate((p) => {
-    const editor = (window as any).editor;
-    const rect = editor?.coordsAtPos?.(p);
-    if (!rect) return null;
-    return {
-      left: Number(rect.left),
-      right: Number(rect.right),
-      top: Number(rect.top),
-      bottom: Number(rect.bottom),
-    };
-  }, pos);
-
-  if (!coords) {
-    throw new Error(`Could not resolve coordinates for document position ${pos}`);
-  }
-
-  const x = Math.min(Math.max(coords.left + 1, coords.left), Math.max(coords.right - 1, coords.left + 1));
-  const y = (coords.top + coords.bottom) / 2;
-  await page.mouse.click(x, y, { button: 'right' });
 }
 
 test('right-click opens context menu and paste inserts clipboard text', async ({ superdoc }) => {

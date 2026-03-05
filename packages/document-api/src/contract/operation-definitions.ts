@@ -49,7 +49,9 @@ export type ReferenceGroupKey =
   | 'mutations'
   | 'tables'
   | 'history'
-  | 'toc';
+  | 'toc'
+  | 'images'
+  | 'hyperlinks';
 
 // ---------------------------------------------------------------------------
 // Entry shape
@@ -63,6 +65,9 @@ export interface OperationDefinitionEntry {
   metadata: CommandStaticMetadata;
   referenceDocPath: string;
   referenceGroup: ReferenceGroupKey;
+  skipAsATool?: boolean;
+  /** When true, this tool is included in the default "essential" tool set. */
+  essential?: boolean;
 }
 
 // ---------------------------------------------------------------------------
@@ -76,6 +81,7 @@ function readOperation(
   options: {
     idempotency?: OperationIdempotency;
     throws?: readonly PreApplyThrowCode[];
+    possibleFailureCodes?: readonly ReceiptFailureCode[];
     deterministicTargetResolution?: boolean;
     remediationHints?: readonly string[];
   } = {},
@@ -85,7 +91,7 @@ function readOperation(
     idempotency: options.idempotency ?? 'idempotent',
     supportsDryRun: false,
     supportsTrackedMode: false,
-    possibleFailureCodes: NONE_FAILURES,
+    possibleFailureCodes: options.possibleFailureCodes ?? NONE_FAILURES,
     throws: {
       preApply: options.throws ?? NONE_THROWS,
       postApplyForbidden: true,
@@ -150,6 +156,9 @@ const T_PLAN_ENGINE = [
 const T_NOT_FOUND_COMMAND = ['TARGET_NOT_FOUND', 'INVALID_TARGET', 'CAPABILITY_UNAVAILABLE'] as const;
 const T_NOT_FOUND_COMMAND_TRACKED = [...T_NOT_FOUND_COMMAND] as const;
 
+// Image operations can throw AMBIGUOUS_TARGET when multiple images share an sdImageId.
+const T_IMAGE_COMMAND = ['TARGET_NOT_FOUND', 'AMBIGUOUS_TARGET', 'INVALID_TARGET', 'CAPABILITY_UNAVAILABLE'] as const;
+
 const T_QUERY_MATCH = ['MATCH_NOT_FOUND', 'AMBIGUOUS_MATCH', 'INVALID_INPUT', 'INTERNAL_ERROR'] as const;
 const T_SECTION_CREATE = [
   'TARGET_NOT_FOUND',
@@ -199,6 +208,7 @@ const FORMAT_INLINE_ALIAS_OPERATION_DEFINITIONS: Record<FormatInlineAliasOperati
         }),
         referenceDocPath: `format/${camelToKebab(entry.key)}.mdx`,
         referenceGroup: 'format',
+        skipAsATool: true,
       };
       return [operationId, definition];
     }),
@@ -222,6 +232,7 @@ export const OPERATION_DEFINITIONS = {
     }),
     referenceDocPath: 'find.mdx',
     referenceGroup: 'core',
+    skipAsATool: true,
   },
   getNode: {
     memberPath: 'getNode',
@@ -246,6 +257,7 @@ export const OPERATION_DEFINITIONS = {
     }),
     referenceDocPath: 'get-node-by-id.mdx',
     referenceGroup: 'core',
+    essential: true,
   },
   getText: {
     memberPath: 'getText',
@@ -255,6 +267,7 @@ export const OPERATION_DEFINITIONS = {
     metadata: readOperation(),
     referenceDocPath: 'get-text.mdx',
     referenceGroup: 'core',
+    essential: true,
   },
   getMarkdown: {
     memberPath: 'getMarkdown',
@@ -281,6 +294,22 @@ export const OPERATION_DEFINITIONS = {
     requiresDocumentContext: true,
     metadata: readOperation(),
     referenceDocPath: 'info.mdx',
+    referenceGroup: 'core',
+  },
+
+  clearContent: {
+    memberPath: 'clearContent',
+    description: 'Clear all document body content, leaving a single empty paragraph.',
+    expectedResult: 'Returns a Receipt with success status; reports NO_OP if the document is already empty.',
+    requiresDocumentContext: true,
+    metadata: mutationOperation({
+      idempotency: 'conditional',
+      supportsDryRun: false,
+      supportsTrackedMode: false,
+      possibleFailureCodes: ['NO_OP'],
+      throws: ['CAPABILITY_UNAVAILABLE'],
+    }),
+    referenceDocPath: 'clear-content.mdx',
     referenceGroup: 'core',
   },
 
@@ -1272,6 +1301,195 @@ export const OPERATION_DEFINITIONS = {
     referenceGroup: 'lists',
   },
 
+  // SD-1973 — List formatting and templates
+  'lists.applyTemplate': {
+    memberPath: 'lists.applyTemplate',
+    description: 'Apply a captured ListTemplate to the target list, optionally filtered to specific levels.',
+    expectedResult: 'Returns a ListsMutateItemResult receipt; reports NO_OP if all levels already match.',
+    requiresDocumentContext: true,
+    metadata: mutationOperation({
+      idempotency: 'conditional',
+      supportsDryRun: true,
+      supportsTrackedMode: false,
+      possibleFailureCodes: ['NO_OP', 'INVALID_TARGET', 'LEVEL_OUT_OF_RANGE', 'INVALID_INPUT'],
+      throws: [...T_NOT_FOUND_CAPABLE, 'INVALID_TARGET', 'INVALID_INPUT'],
+    }),
+    referenceDocPath: 'lists/apply-template.mdx',
+    referenceGroup: 'lists',
+  },
+  'lists.applyPreset': {
+    memberPath: 'lists.applyPreset',
+    description: 'Apply a built-in list formatting preset to the target list.',
+    expectedResult: 'Returns a ListsMutateItemResult receipt; reports NO_OP if all levels already match the preset.',
+    requiresDocumentContext: true,
+    metadata: mutationOperation({
+      idempotency: 'conditional',
+      supportsDryRun: true,
+      supportsTrackedMode: false,
+      possibleFailureCodes: ['NO_OP', 'INVALID_TARGET', 'LEVEL_OUT_OF_RANGE', 'INVALID_INPUT'],
+      throws: [...T_NOT_FOUND_CAPABLE, 'INVALID_TARGET', 'INVALID_INPUT'],
+    }),
+    referenceDocPath: 'lists/apply-preset.mdx',
+    referenceGroup: 'lists',
+  },
+  'lists.setType': {
+    memberPath: 'lists.setType',
+    description:
+      'Convert a list to ordered or bullet and merge adjacent compatible sequences to preserve continuous numbering.',
+    expectedResult:
+      'Returns a ListsMutateItemResult receipt; reports NO_OP if the list is already the requested kind and no sequences were merged.',
+    requiresDocumentContext: true,
+    metadata: mutationOperation({
+      idempotency: 'conditional',
+      supportsDryRun: true,
+      supportsTrackedMode: false,
+      possibleFailureCodes: ['NO_OP', 'INVALID_TARGET', 'INVALID_INPUT'],
+      throws: [...T_NOT_FOUND_CAPABLE, 'INVALID_TARGET', 'INVALID_INPUT'],
+    }),
+    referenceDocPath: 'lists/set-type.mdx',
+    referenceGroup: 'lists',
+  },
+  'lists.captureTemplate': {
+    memberPath: 'lists.captureTemplate',
+    description: 'Capture the formatting of a list as a reusable ListTemplate.',
+    expectedResult: 'Returns a ListsCaptureTemplateResult containing the captured template.',
+    requiresDocumentContext: true,
+    metadata: readOperation({
+      idempotency: 'idempotent',
+      throws: ['TARGET_NOT_FOUND', 'INVALID_TARGET', 'INVALID_INPUT'],
+      possibleFailureCodes: ['INVALID_TARGET', 'INVALID_INPUT', 'LEVEL_OUT_OF_RANGE'],
+    }),
+    referenceDocPath: 'lists/capture-template.mdx',
+    referenceGroup: 'lists',
+  },
+  'lists.setLevelNumbering': {
+    memberPath: 'lists.setLevelNumbering',
+    description: 'Set the numbering format, pattern, and optional start value for a specific list level.',
+    expectedResult: 'Returns a ListsMutateItemResult receipt; reports NO_OP if the level already matches.',
+    requiresDocumentContext: true,
+    metadata: mutationOperation({
+      idempotency: 'conditional',
+      supportsDryRun: true,
+      supportsTrackedMode: false,
+      possibleFailureCodes: ['NO_OP', 'INVALID_TARGET', 'LEVEL_OUT_OF_RANGE', 'LEVEL_NOT_FOUND'],
+      throws: [...T_NOT_FOUND_CAPABLE, 'INVALID_TARGET'],
+    }),
+    referenceDocPath: 'lists/set-level-numbering.mdx',
+    referenceGroup: 'lists',
+  },
+  'lists.setLevelBullet': {
+    memberPath: 'lists.setLevelBullet',
+    description: 'Set the bullet marker text for a specific list level.',
+    expectedResult: 'Returns a ListsMutateItemResult receipt; reports NO_OP if the marker already matches.',
+    requiresDocumentContext: true,
+    metadata: mutationOperation({
+      idempotency: 'conditional',
+      supportsDryRun: true,
+      supportsTrackedMode: false,
+      possibleFailureCodes: ['NO_OP', 'INVALID_TARGET', 'LEVEL_OUT_OF_RANGE', 'LEVEL_NOT_FOUND'],
+      throws: [...T_NOT_FOUND_CAPABLE, 'INVALID_TARGET'],
+    }),
+    referenceDocPath: 'lists/set-level-bullet.mdx',
+    referenceGroup: 'lists',
+  },
+  'lists.setLevelPictureBullet': {
+    memberPath: 'lists.setLevelPictureBullet',
+    description: 'Set a picture bullet for a specific list level by its OOXML lvlPicBulletId.',
+    expectedResult: 'Returns a ListsMutateItemResult receipt; reports NO_OP if the picture bullet already matches.',
+    requiresDocumentContext: true,
+    metadata: mutationOperation({
+      idempotency: 'conditional',
+      supportsDryRun: true,
+      supportsTrackedMode: false,
+      possibleFailureCodes: [
+        'NO_OP',
+        'INVALID_TARGET',
+        'LEVEL_OUT_OF_RANGE',
+        'LEVEL_NOT_FOUND',
+        'INVALID_INPUT',
+        'CAPABILITY_UNAVAILABLE',
+      ],
+      throws: [...T_NOT_FOUND_CAPABLE, 'INVALID_TARGET', 'CAPABILITY_UNAVAILABLE'],
+    }),
+    referenceDocPath: 'lists/set-level-picture-bullet.mdx',
+    referenceGroup: 'lists',
+  },
+  'lists.setLevelAlignment': {
+    memberPath: 'lists.setLevelAlignment',
+    description: 'Set the marker alignment (left, center, right) for a specific list level.',
+    expectedResult: 'Returns a ListsMutateItemResult receipt; reports NO_OP if the alignment already matches.',
+    requiresDocumentContext: true,
+    metadata: mutationOperation({
+      idempotency: 'conditional',
+      supportsDryRun: true,
+      supportsTrackedMode: false,
+      possibleFailureCodes: ['NO_OP', 'INVALID_TARGET', 'LEVEL_OUT_OF_RANGE', 'LEVEL_NOT_FOUND'],
+      throws: [...T_NOT_FOUND_CAPABLE, 'INVALID_TARGET'],
+    }),
+    referenceDocPath: 'lists/set-level-alignment.mdx',
+    referenceGroup: 'lists',
+  },
+  'lists.setLevelIndents': {
+    memberPath: 'lists.setLevelIndents',
+    description: 'Set the paragraph indentation values (left, hanging, firstLine) for a specific list level.',
+    expectedResult: 'Returns a ListsMutateItemResult receipt; reports NO_OP if all indent values already match.',
+    requiresDocumentContext: true,
+    metadata: mutationOperation({
+      idempotency: 'conditional',
+      supportsDryRun: true,
+      supportsTrackedMode: false,
+      possibleFailureCodes: ['NO_OP', 'INVALID_TARGET', 'LEVEL_OUT_OF_RANGE', 'LEVEL_NOT_FOUND', 'INVALID_INPUT'],
+      throws: [...T_NOT_FOUND_CAPABLE, 'INVALID_TARGET', 'INVALID_INPUT'],
+    }),
+    referenceDocPath: 'lists/set-level-indents.mdx',
+    referenceGroup: 'lists',
+  },
+  'lists.setLevelTrailingCharacter': {
+    memberPath: 'lists.setLevelTrailingCharacter',
+    description: 'Set the trailing character (tab, space, nothing) after the marker for a specific list level.',
+    expectedResult: 'Returns a ListsMutateItemResult receipt; reports NO_OP if the trailing character already matches.',
+    requiresDocumentContext: true,
+    metadata: mutationOperation({
+      idempotency: 'conditional',
+      supportsDryRun: true,
+      supportsTrackedMode: false,
+      possibleFailureCodes: ['NO_OP', 'INVALID_TARGET', 'LEVEL_OUT_OF_RANGE', 'LEVEL_NOT_FOUND'],
+      throws: [...T_NOT_FOUND_CAPABLE, 'INVALID_TARGET'],
+    }),
+    referenceDocPath: 'lists/set-level-trailing-character.mdx',
+    referenceGroup: 'lists',
+  },
+  'lists.setLevelMarkerFont': {
+    memberPath: 'lists.setLevelMarkerFont',
+    description: 'Set the font family used for the marker character at a specific list level.',
+    expectedResult: 'Returns a ListsMutateItemResult receipt; reports NO_OP if the font already matches.',
+    requiresDocumentContext: true,
+    metadata: mutationOperation({
+      idempotency: 'conditional',
+      supportsDryRun: true,
+      supportsTrackedMode: false,
+      possibleFailureCodes: ['NO_OP', 'INVALID_TARGET', 'LEVEL_OUT_OF_RANGE', 'LEVEL_NOT_FOUND'],
+      throws: [...T_NOT_FOUND_CAPABLE, 'INVALID_TARGET'],
+    }),
+    referenceDocPath: 'lists/set-level-marker-font.mdx',
+    referenceGroup: 'lists',
+  },
+  'lists.clearLevelOverrides': {
+    memberPath: 'lists.clearLevelOverrides',
+    description: 'Remove instance-level overrides for a specific list level, restoring abstract definition values.',
+    expectedResult: 'Returns a ListsMutateItemResult receipt; reports NO_OP if no override exists.',
+    requiresDocumentContext: true,
+    metadata: mutationOperation({
+      idempotency: 'conditional',
+      supportsDryRun: true,
+      supportsTrackedMode: false,
+      possibleFailureCodes: ['NO_OP', 'INVALID_TARGET', 'LEVEL_OUT_OF_RANGE'],
+      throws: [...T_NOT_FOUND_CAPABLE, 'INVALID_TARGET'],
+    }),
+    referenceDocPath: 'lists/clear-level-overrides.mdx',
+    referenceGroup: 'lists',
+  },
+
   'comments.create': {
     memberPath: 'comments.create',
     description: 'Create a new comment thread (or reply when parentCommentId is given).',
@@ -1397,6 +1615,7 @@ export const OPERATION_DEFINITIONS = {
     }),
     referenceDocPath: 'query/match.mdx',
     referenceGroup: 'query',
+    essential: true,
   },
 
   'mutations.preview': {
@@ -1428,6 +1647,7 @@ export const OPERATION_DEFINITIONS = {
     }),
     referenceDocPath: 'mutations/apply.mdx',
     referenceGroup: 'mutations',
+    essential: true,
   },
 
   'capabilities.get': {
@@ -2322,6 +2542,7 @@ export const OPERATION_DEFINITIONS = {
     }),
     referenceDocPath: 'history/undo.mdx',
     referenceGroup: 'history',
+    essential: true,
   },
 
   'history.redo': {
@@ -2339,6 +2560,560 @@ export const OPERATION_DEFINITIONS = {
     }),
     referenceDocPath: 'history/redo.mdx',
     referenceGroup: 'history',
+  },
+
+  // -------------------------------------------------------------------------
+  // Create: image
+  // -------------------------------------------------------------------------
+
+  'create.image': {
+    memberPath: 'create.image',
+    description: 'Insert a new image at the target position.',
+    expectedResult: 'Returns a CreateImageResult with the new image address.',
+    requiresDocumentContext: true,
+    metadata: mutationOperation({
+      idempotency: 'non-idempotent',
+      supportsDryRun: true,
+      supportsTrackedMode: false,
+      possibleFailureCodes: ['INVALID_TARGET', 'INVALID_INPUT'],
+      throws: [...T_NOT_FOUND_COMMAND, 'INVALID_INPUT'],
+    }),
+    referenceDocPath: 'create/image.mdx',
+    referenceGroup: 'create',
+  },
+
+  // -------------------------------------------------------------------------
+  // Images: lifecycle + placement
+  // -------------------------------------------------------------------------
+
+  'images.list': {
+    memberPath: 'images.list',
+    description: 'List all images in the document.',
+    expectedResult: 'Returns an ImagesListResult with total count and image summaries.',
+    requiresDocumentContext: true,
+    metadata: readOperation({ idempotency: 'idempotent', deterministicTargetResolution: true }),
+    referenceDocPath: 'images/list.mdx',
+    referenceGroup: 'images',
+  },
+
+  'images.get': {
+    memberPath: 'images.get',
+    description: 'Get details for a specific image by its stable ID.',
+    expectedResult: 'Returns an ImageSummary with full image properties.',
+    requiresDocumentContext: true,
+    metadata: readOperation({
+      idempotency: 'idempotent',
+      throws: ['TARGET_NOT_FOUND', 'AMBIGUOUS_TARGET'],
+      deterministicTargetResolution: true,
+    }),
+    referenceDocPath: 'images/get.mdx',
+    referenceGroup: 'images',
+  },
+
+  'images.delete': {
+    memberPath: 'images.delete',
+    description: 'Delete an image from the document.',
+    expectedResult: 'Returns an ImagesMutationResult indicating success or failure.',
+    requiresDocumentContext: true,
+    metadata: mutationOperation({
+      idempotency: 'conditional',
+      supportsDryRun: true,
+      supportsTrackedMode: false,
+      possibleFailureCodes: ['NO_OP'],
+      throws: T_IMAGE_COMMAND,
+    }),
+    referenceDocPath: 'images/delete.mdx',
+    referenceGroup: 'images',
+  },
+
+  'images.move': {
+    memberPath: 'images.move',
+    description: 'Move an image to a new location in the document.',
+    expectedResult: 'Returns an ImagesMutationResult indicating success or failure.',
+    requiresDocumentContext: true,
+    metadata: mutationOperation({
+      idempotency: 'non-idempotent',
+      supportsDryRun: true,
+      supportsTrackedMode: false,
+      possibleFailureCodes: ['INVALID_TARGET'],
+      throws: T_IMAGE_COMMAND,
+    }),
+    referenceDocPath: 'images/move.mdx',
+    referenceGroup: 'images',
+  },
+
+  'images.convertToInline': {
+    memberPath: 'images.convertToInline',
+    description: 'Convert a floating image to inline placement.',
+    expectedResult: 'Returns an ImagesMutationResult; reports NO_OP if already inline.',
+    requiresDocumentContext: true,
+    metadata: mutationOperation({
+      idempotency: 'conditional',
+      supportsDryRun: true,
+      supportsTrackedMode: false,
+      possibleFailureCodes: ['NO_OP'],
+      throws: T_IMAGE_COMMAND,
+    }),
+    referenceDocPath: 'images/convert-to-inline.mdx',
+    referenceGroup: 'images',
+  },
+
+  'images.convertToFloating': {
+    memberPath: 'images.convertToFloating',
+    description: 'Convert an inline image to floating placement.',
+    expectedResult: 'Returns an ImagesMutationResult; reports NO_OP if already floating.',
+    requiresDocumentContext: true,
+    metadata: mutationOperation({
+      idempotency: 'conditional',
+      supportsDryRun: true,
+      supportsTrackedMode: false,
+      possibleFailureCodes: ['NO_OP'],
+      throws: T_IMAGE_COMMAND,
+    }),
+    referenceDocPath: 'images/convert-to-floating.mdx',
+    referenceGroup: 'images',
+  },
+
+  'images.setSize': {
+    memberPath: 'images.setSize',
+    description: 'Set explicit width/height for an image.',
+    expectedResult: 'Returns an ImagesMutationResult; reports NO_OP if the size already matches.',
+    requiresDocumentContext: true,
+    metadata: mutationOperation({
+      idempotency: 'conditional',
+      supportsDryRun: true,
+      supportsTrackedMode: false,
+      possibleFailureCodes: ['NO_OP'],
+      throws: [...T_IMAGE_COMMAND, 'INVALID_INPUT'],
+    }),
+    referenceDocPath: 'images/set-size.mdx',
+    referenceGroup: 'images',
+  },
+
+  'images.setWrapType': {
+    memberPath: 'images.setWrapType',
+    description: 'Set the text wrapping type for a floating image.',
+    expectedResult: 'Returns an ImagesMutationResult; reports NO_OP if already set.',
+    requiresDocumentContext: true,
+    metadata: mutationOperation({
+      idempotency: 'conditional',
+      supportsDryRun: true,
+      supportsTrackedMode: false,
+      possibleFailureCodes: ['NO_OP'],
+      throws: T_IMAGE_COMMAND,
+    }),
+    referenceDocPath: 'images/set-wrap-type.mdx',
+    referenceGroup: 'images',
+  },
+
+  'images.setWrapSide': {
+    memberPath: 'images.setWrapSide',
+    description: 'Set which side(s) text wraps around a floating image.',
+    expectedResult: 'Returns an ImagesMutationResult; reports NO_OP if already set.',
+    requiresDocumentContext: true,
+    metadata: mutationOperation({
+      idempotency: 'conditional',
+      supportsDryRun: true,
+      supportsTrackedMode: false,
+      possibleFailureCodes: ['NO_OP'],
+      throws: T_IMAGE_COMMAND,
+    }),
+    referenceDocPath: 'images/set-wrap-side.mdx',
+    referenceGroup: 'images',
+  },
+
+  'images.setWrapDistances': {
+    memberPath: 'images.setWrapDistances',
+    description: 'Set the text-wrap distance margins for a floating image.',
+    expectedResult: 'Returns an ImagesMutationResult; reports NO_OP if already set.',
+    requiresDocumentContext: true,
+    metadata: mutationOperation({
+      idempotency: 'conditional',
+      supportsDryRun: true,
+      supportsTrackedMode: false,
+      possibleFailureCodes: ['NO_OP'],
+      throws: T_IMAGE_COMMAND,
+    }),
+    referenceDocPath: 'images/set-wrap-distances.mdx',
+    referenceGroup: 'images',
+  },
+
+  'images.setPosition': {
+    memberPath: 'images.setPosition',
+    description: 'Set the anchor position for a floating image.',
+    expectedResult: 'Returns an ImagesMutationResult.',
+    requiresDocumentContext: true,
+    metadata: mutationOperation({
+      idempotency: 'conditional',
+      supportsDryRun: true,
+      supportsTrackedMode: false,
+      possibleFailureCodes: ['NO_OP'],
+      throws: T_IMAGE_COMMAND,
+    }),
+    referenceDocPath: 'images/set-position.mdx',
+    referenceGroup: 'images',
+  },
+
+  'images.setAnchorOptions': {
+    memberPath: 'images.setAnchorOptions',
+    description: 'Set anchor behavior options for a floating image.',
+    expectedResult: 'Returns an ImagesMutationResult.',
+    requiresDocumentContext: true,
+    metadata: mutationOperation({
+      idempotency: 'conditional',
+      supportsDryRun: true,
+      supportsTrackedMode: false,
+      possibleFailureCodes: ['NO_OP'],
+      throws: T_IMAGE_COMMAND,
+    }),
+    referenceDocPath: 'images/set-anchor-options.mdx',
+    referenceGroup: 'images',
+  },
+
+  'images.setZOrder': {
+    memberPath: 'images.setZOrder',
+    description: 'Set the z-order (relativeHeight) for a floating image.',
+    expectedResult: 'Returns an ImagesMutationResult.',
+    requiresDocumentContext: true,
+    metadata: mutationOperation({
+      idempotency: 'conditional',
+      supportsDryRun: true,
+      supportsTrackedMode: false,
+      possibleFailureCodes: ['NO_OP'],
+      throws: T_IMAGE_COMMAND,
+    }),
+    referenceDocPath: 'images/set-z-order.mdx',
+    referenceGroup: 'images',
+  },
+
+  // --- SD-2100: Geometry ---
+
+  'images.scale': {
+    memberPath: 'images.scale',
+    description: 'Scale an image by a uniform factor applied to both dimensions.',
+    expectedResult: 'Returns an ImagesMutationResult with the updated image address.',
+    requiresDocumentContext: true,
+    metadata: mutationOperation({
+      idempotency: 'non-idempotent',
+      supportsDryRun: true,
+      supportsTrackedMode: false,
+      possibleFailureCodes: ['NO_OP'],
+      throws: [...T_IMAGE_COMMAND, 'INVALID_INPUT'],
+    }),
+    referenceDocPath: 'images/scale.mdx',
+    referenceGroup: 'images',
+  },
+
+  'images.setLockAspectRatio': {
+    memberPath: 'images.setLockAspectRatio',
+    description: 'Lock or unlock the aspect ratio for an image.',
+    expectedResult: 'Returns an ImagesMutationResult; reports NO_OP if already set.',
+    requiresDocumentContext: true,
+    metadata: mutationOperation({
+      idempotency: 'conditional',
+      supportsDryRun: true,
+      supportsTrackedMode: false,
+      possibleFailureCodes: ['NO_OP'],
+      throws: [...T_IMAGE_COMMAND, 'INVALID_INPUT'],
+    }),
+    referenceDocPath: 'images/set-lock-aspect-ratio.mdx',
+    referenceGroup: 'images',
+  },
+
+  'images.rotate': {
+    memberPath: 'images.rotate',
+    description: 'Set the absolute rotation angle for an image.',
+    expectedResult: 'Returns an ImagesMutationResult; reports NO_OP if already set.',
+    requiresDocumentContext: true,
+    metadata: mutationOperation({
+      idempotency: 'conditional',
+      supportsDryRun: true,
+      supportsTrackedMode: false,
+      possibleFailureCodes: ['NO_OP'],
+      throws: [...T_IMAGE_COMMAND, 'INVALID_INPUT'],
+    }),
+    referenceDocPath: 'images/rotate.mdx',
+    referenceGroup: 'images',
+  },
+
+  'images.flip': {
+    memberPath: 'images.flip',
+    description: 'Set horizontal and/or vertical flip state for an image.',
+    expectedResult: 'Returns an ImagesMutationResult; reports NO_OP if already set.',
+    requiresDocumentContext: true,
+    metadata: mutationOperation({
+      idempotency: 'conditional',
+      supportsDryRun: true,
+      supportsTrackedMode: false,
+      possibleFailureCodes: ['NO_OP'],
+      throws: [...T_IMAGE_COMMAND, 'INVALID_INPUT'],
+    }),
+    referenceDocPath: 'images/flip.mdx',
+    referenceGroup: 'images',
+  },
+
+  'images.crop': {
+    memberPath: 'images.crop',
+    description: 'Apply rectangular edge-percentage crop to an image.',
+    expectedResult: 'Returns an ImagesMutationResult; reports NO_OP if unchanged.',
+    requiresDocumentContext: true,
+    metadata: mutationOperation({
+      idempotency: 'conditional',
+      supportsDryRun: true,
+      supportsTrackedMode: false,
+      possibleFailureCodes: ['NO_OP'],
+      throws: [...T_IMAGE_COMMAND, 'INVALID_INPUT'],
+    }),
+    referenceDocPath: 'images/crop.mdx',
+    referenceGroup: 'images',
+  },
+
+  'images.resetCrop': {
+    memberPath: 'images.resetCrop',
+    description: 'Remove all cropping from an image.',
+    expectedResult: 'Returns an ImagesMutationResult; reports NO_OP if no crop is set.',
+    requiresDocumentContext: true,
+    metadata: mutationOperation({
+      idempotency: 'conditional',
+      supportsDryRun: true,
+      supportsTrackedMode: false,
+      possibleFailureCodes: ['NO_OP'],
+      throws: T_IMAGE_COMMAND,
+    }),
+    referenceDocPath: 'images/reset-crop.mdx',
+    referenceGroup: 'images',
+  },
+
+  // --- SD-2100: Content replacement ---
+
+  'images.replaceSource': {
+    memberPath: 'images.replaceSource',
+    description: 'Replace the image source while preserving identity and placement.',
+    expectedResult: 'Returns an ImagesMutationResult with the updated image address.',
+    requiresDocumentContext: true,
+    metadata: mutationOperation({
+      idempotency: 'non-idempotent',
+      supportsDryRun: true,
+      supportsTrackedMode: false,
+      possibleFailureCodes: ['NO_OP'],
+      throws: [...T_IMAGE_COMMAND, 'INVALID_INPUT'],
+    }),
+    referenceDocPath: 'images/replace-source.mdx',
+    referenceGroup: 'images',
+  },
+
+  // --- SD-2100: Semantic metadata ---
+
+  'images.setAltText': {
+    memberPath: 'images.setAltText',
+    description: 'Set the accessibility description (alt text) for an image.',
+    expectedResult: 'Returns an ImagesMutationResult; reports NO_OP if unchanged.',
+    requiresDocumentContext: true,
+    metadata: mutationOperation({
+      idempotency: 'conditional',
+      supportsDryRun: true,
+      supportsTrackedMode: false,
+      possibleFailureCodes: ['NO_OP'],
+      throws: [...T_IMAGE_COMMAND, 'INVALID_INPUT'],
+    }),
+    referenceDocPath: 'images/set-alt-text.mdx',
+    referenceGroup: 'images',
+  },
+
+  'images.setDecorative': {
+    memberPath: 'images.setDecorative',
+    description: 'Mark or unmark an image as decorative.',
+    expectedResult: 'Returns an ImagesMutationResult; reports NO_OP if unchanged.',
+    requiresDocumentContext: true,
+    metadata: mutationOperation({
+      idempotency: 'conditional',
+      supportsDryRun: true,
+      supportsTrackedMode: false,
+      possibleFailureCodes: ['NO_OP'],
+      throws: [...T_IMAGE_COMMAND, 'INVALID_INPUT'],
+    }),
+    referenceDocPath: 'images/set-decorative.mdx',
+    referenceGroup: 'images',
+  },
+
+  'images.setName': {
+    memberPath: 'images.setName',
+    description: 'Set the object name for an image.',
+    expectedResult: 'Returns an ImagesMutationResult; reports NO_OP if unchanged.',
+    requiresDocumentContext: true,
+    metadata: mutationOperation({
+      idempotency: 'conditional',
+      supportsDryRun: true,
+      supportsTrackedMode: false,
+      possibleFailureCodes: ['NO_OP'],
+      throws: [...T_IMAGE_COMMAND, 'INVALID_INPUT'],
+    }),
+    referenceDocPath: 'images/set-name.mdx',
+    referenceGroup: 'images',
+  },
+
+  'images.setHyperlink': {
+    memberPath: 'images.setHyperlink',
+    description: 'Set or remove the hyperlink attached to an image.',
+    expectedResult: 'Returns an ImagesMutationResult; reports NO_OP if unchanged.',
+    requiresDocumentContext: true,
+    metadata: mutationOperation({
+      idempotency: 'conditional',
+      supportsDryRun: true,
+      supportsTrackedMode: false,
+      possibleFailureCodes: ['NO_OP'],
+      throws: [...T_IMAGE_COMMAND, 'INVALID_INPUT'],
+    }),
+    referenceDocPath: 'images/set-hyperlink.mdx',
+    referenceGroup: 'images',
+  },
+
+  // --- SD-2100: Caption lifecycle ---
+
+  'images.insertCaption': {
+    memberPath: 'images.insertCaption',
+    description: 'Insert a caption paragraph below the image.',
+    expectedResult: 'Returns an ImagesMutationResult with the image address.',
+    requiresDocumentContext: true,
+    metadata: mutationOperation({
+      idempotency: 'non-idempotent',
+      supportsDryRun: true,
+      supportsTrackedMode: false,
+      possibleFailureCodes: ['NO_OP'],
+      throws: [...T_IMAGE_COMMAND, 'INVALID_INPUT'],
+    }),
+    referenceDocPath: 'images/insert-caption.mdx',
+    referenceGroup: 'images',
+  },
+
+  'images.updateCaption': {
+    memberPath: 'images.updateCaption',
+    description: 'Update the text of an existing caption paragraph.',
+    expectedResult: 'Returns an ImagesMutationResult; reports NO_OP if text unchanged.',
+    requiresDocumentContext: true,
+    metadata: mutationOperation({
+      idempotency: 'conditional',
+      supportsDryRun: true,
+      supportsTrackedMode: false,
+      possibleFailureCodes: ['NO_OP'],
+      throws: [...T_IMAGE_COMMAND, 'INVALID_INPUT'],
+    }),
+    referenceDocPath: 'images/update-caption.mdx',
+    referenceGroup: 'images',
+  },
+
+  'images.removeCaption': {
+    memberPath: 'images.removeCaption',
+    description: 'Remove the caption paragraph from below the image.',
+    expectedResult: 'Returns an ImagesMutationResult; reports NO_OP if no caption exists.',
+    requiresDocumentContext: true,
+    metadata: mutationOperation({
+      idempotency: 'conditional',
+      supportsDryRun: true,
+      supportsTrackedMode: false,
+      possibleFailureCodes: ['NO_OP'],
+      throws: T_IMAGE_COMMAND,
+    }),
+    referenceDocPath: 'images/remove-caption.mdx',
+    referenceGroup: 'images',
+  },
+
+  // -------------------------------------------------------------------------
+  // Hyperlinks: discovery + CRUD
+  // -------------------------------------------------------------------------
+
+  'hyperlinks.list': {
+    memberPath: 'hyperlinks.list',
+    description: 'List all hyperlinks in the document, with optional filtering by href, anchor, or display text.',
+    expectedResult:
+      'Returns a HyperlinksListResult with an array of hyperlink discovery items and pagination metadata.',
+    requiresDocumentContext: true,
+    metadata: readOperation({
+      idempotency: 'idempotent',
+    }),
+    referenceDocPath: 'hyperlinks/list.mdx',
+    referenceGroup: 'hyperlinks',
+  },
+  'hyperlinks.get': {
+    memberPath: 'hyperlinks.get',
+    description: 'Retrieve details of a specific hyperlink by its inline address.',
+    expectedResult: 'Returns a HyperlinkInfo object with the address, destination properties, and display text.',
+    requiresDocumentContext: true,
+    metadata: readOperation({
+      idempotency: 'idempotent',
+      throws: ['TARGET_NOT_FOUND', 'INVALID_TARGET'],
+    }),
+    referenceDocPath: 'hyperlinks/get.mdx',
+    referenceGroup: 'hyperlinks',
+  },
+  'hyperlinks.wrap': {
+    memberPath: 'hyperlinks.wrap',
+    description: 'Wrap an existing text range with a hyperlink.',
+    expectedResult:
+      'Returns a HyperlinkMutationResult with the created hyperlink address on success, or a failure code on no-op.',
+    requiresDocumentContext: true,
+    metadata: mutationOperation({
+      idempotency: 'conditional',
+      supportsDryRun: true,
+      supportsTrackedMode: false,
+      deterministicTargetResolution: true,
+      possibleFailureCodes: ['NO_OP'],
+      throws: [...T_NOT_FOUND_CAPABLE, 'INVALID_TARGET', 'INVALID_INPUT'],
+    }),
+    referenceDocPath: 'hyperlinks/wrap.mdx',
+    referenceGroup: 'hyperlinks',
+  },
+  'hyperlinks.insert': {
+    memberPath: 'hyperlinks.insert',
+    description: 'Insert new linked text at a target position.',
+    expectedResult:
+      'Returns a HyperlinkMutationResult with the created hyperlink address on success, or a failure code.',
+    requiresDocumentContext: true,
+    metadata: mutationOperation({
+      idempotency: 'non-idempotent',
+      supportsDryRun: true,
+      supportsTrackedMode: false,
+      deterministicTargetResolution: true,
+      possibleFailureCodes: ['NO_OP', 'INVALID_TARGET'],
+      throws: [...T_NOT_FOUND_CAPABLE, 'INVALID_TARGET', 'INVALID_INPUT'],
+    }),
+    referenceDocPath: 'hyperlinks/insert.mdx',
+    referenceGroup: 'hyperlinks',
+  },
+  'hyperlinks.patch': {
+    memberPath: 'hyperlinks.patch',
+    description: 'Update hyperlink metadata (destination, tooltip, target, rel) without changing display text.',
+    expectedResult:
+      'Returns a HyperlinkMutationResult with the updated hyperlink address on success, or NO_OP if unchanged.',
+    requiresDocumentContext: true,
+    metadata: mutationOperation({
+      idempotency: 'conditional',
+      supportsDryRun: true,
+      supportsTrackedMode: false,
+      deterministicTargetResolution: true,
+      possibleFailureCodes: ['NO_OP'],
+      throws: [...T_NOT_FOUND_CAPABLE, 'INVALID_TARGET', 'INVALID_INPUT'],
+    }),
+    referenceDocPath: 'hyperlinks/patch.mdx',
+    referenceGroup: 'hyperlinks',
+  },
+  'hyperlinks.remove': {
+    memberPath: 'hyperlinks.remove',
+    description:
+      "Remove a hyperlink. Mode 'unwrap' preserves display text; 'deleteText' removes the linked content entirely.",
+    expectedResult:
+      'Returns a HyperlinkMutationResult with the removed hyperlink address on success, or a failure code on no-op.',
+    requiresDocumentContext: true,
+    metadata: mutationOperation({
+      idempotency: 'conditional',
+      supportsDryRun: true,
+      supportsTrackedMode: false,
+      deterministicTargetResolution: true,
+      possibleFailureCodes: ['NO_OP'],
+      throws: [...T_NOT_FOUND_CAPABLE, 'INVALID_TARGET', 'INVALID_INPUT'],
+    }),
+    referenceDocPath: 'hyperlinks/remove.mdx',
+    referenceGroup: 'hyperlinks',
   },
 } as const satisfies Record<string, OperationDefinitionEntry>;
 

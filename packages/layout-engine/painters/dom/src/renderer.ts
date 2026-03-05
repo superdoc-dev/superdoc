@@ -1,76 +1,89 @@
 import type {
+  CustomGeometryData,
+  DrawingBlock,
+  DrawingFragment,
+  DrawingGeometry,
+  DropCapDescriptor,
+  FieldAnnotationRun,
   FlowBlock,
+  FlowMode,
+  FlowRunLink,
   Fragment,
+  GradientFill,
+  ImageBlock,
+  ImageDrawing,
+  ImageFragment,
+  ImageRun,
   Layout,
+  Line,
+  LineSegment,
+  ListBlock,
+  ListItemFragment,
+  ListMeasure,
   Measure,
   Page,
   PageMargins,
   ParaFragment,
-  ImageFragment,
-  DrawingFragment,
-  Run,
-  TextRun,
-  ImageRun,
-  FieldAnnotationRun,
-  Line,
-  LineSegment,
-  ParagraphBlock,
-  ParagraphMeasure,
-  ImageBlock,
-  ImageDrawing,
   ParagraphAttrs,
+  ParagraphBlock,
   ParagraphBorder,
-  ListItemFragment,
-  ListBlock,
-  ListMeasure,
+  ParagraphMeasure,
+  PositionedDrawingGeometry,
+  PositionMapping,
+  Run,
+  SdtMetadata,
+  ShapeGroupChild,
+  ShapeGroupDrawing,
+  ShapeTextContent,
+  SolidFillWithAlpha,
+  TableAttrs,
   TableBlock,
+  TableCellAttrs,
   TableFragment,
+  TextRun,
   TrackedChangeKind,
   TrackedChangesMode,
-  SdtMetadata,
-  DrawingBlock,
   VectorShapeDrawing,
-  ShapeGroupDrawing,
-  ShapeGroupChild,
-  DrawingGeometry,
-  PositionedDrawingGeometry,
   VectorShapeStyle,
-  FlowRunLink,
-  GradientFill,
-  SolidFillWithAlpha,
-  ShapeTextContent,
-  DropCapDescriptor,
-  TableAttrs,
-  TableCellAttrs,
-  PositionMapping,
-  FlowMode,
-  CustomGeometryData,
 } from '@superdoc/contracts';
 import { calculateJustifySpacing, computeLinePmRange, shouldApplyJustify, SPACE_CHARS } from '@superdoc/contracts';
+import { toCssFontFamily } from '@superdoc/font-utils';
 import { getPresetShapeSvg } from '@superdoc/preset-geometry';
-import { applyGradientToSVG, applyAlphaToSVG, validateHexColor } from './svg-utils.js';
+import { encodeTooltip, sanitizeHref } from '@superdoc/url-validation';
+import { DOM_CLASS_NAMES } from './constants.js';
+import {
+  getRunBooleanProp,
+  getRunNumberProp,
+  getRunStringProp,
+  getRunUnderlineColor,
+  getRunUnderlineStyle,
+  hashCellBorders,
+  hashParagraphBorders,
+  hashTableBorders,
+} from './paragraph-hash-utils.js';
+import { assertFragmentPmPositions, assertPmPositions } from './pm-position-validation.js';
+import { createRulerElement, ensureRulerStyles, generateRulerDefinitionFromPx } from './ruler/index.js';
 import {
   CLASS_NAMES,
   containerStyles,
   containerStylesHorizontal,
-  spreadStyles,
+  ensureFieldAnnotationStyles,
+  ensureImageSelectionStyles,
+  ensureLinkStyles,
+  ensureNativeSelectionStyles,
+  ensurePrintStyles,
+  ensureSdtContainerStyles,
+  ensureTrackChangeStyles,
   fragmentStyles,
   lineStyles,
   pageStyles,
-  ensurePrintStyles,
-  ensureLinkStyles,
-  ensureTrackChangeStyles,
-  ensureSdtContainerStyles,
-  ensureFieldAnnotationStyles,
-  ensureImageSelectionStyles,
-  ensureNativeSelectionStyles,
+  spreadStyles,
   type PageStyles,
 } from './styles.js';
-import { DOM_CLASS_NAMES } from './constants.js';
-import { sanitizeHref, encodeTooltip } from '@superdoc/url-validation';
+import { applyAlphaToSVG, applyGradientToSVG, validateHexColor } from './svg-utils.js';
 import { renderTableFragment as renderTableFragmentElement } from './table/renderTableFragment.js';
-import { assertPmPositions, assertFragmentPmPositions } from './pm-position-validation.js';
 import { applyImageClipPath } from './utils/image-clip-path.js';
+import { computeTabWidth } from './utils/marker-helpers.js';
 import {
   applySdtContainerStyling,
   getSdtContainerKey,
@@ -78,19 +91,6 @@ import {
   type SdtBoundaryOptions,
 } from './utils/sdt-helpers.js';
 import { SdtGroupedHover } from './utils/sdt-hover.js';
-import { computeTabWidth } from './utils/marker-helpers.js';
-import { generateRulerDefinitionFromPx, createRulerElement, ensureRulerStyles } from './ruler/index.js';
-import { toCssFontFamily } from '@superdoc/font-utils';
-import {
-  hashParagraphBorders,
-  hashTableBorders,
-  hashCellBorders,
-  getRunStringProp,
-  getRunNumberProp,
-  getRunBooleanProp,
-  getRunUnderlineStyle,
-  getRunUnderlineColor,
-} from './paragraph-hash-utils.js';
 
 /**
  * Minimal type for WordParagraphLayoutOutput marker data used in rendering.
@@ -1041,6 +1041,12 @@ export class DomPainter {
    * wrapper div that owns scrolling rather than the window.
    */
   private scrollContainer: HTMLElement | null = null;
+  /**
+   * Cached offset (in px) from the scroll container's content top to the mount's top.
+   * Used for stable scrollY calculation that avoids feedback loops from spacer DOM mutations.
+   * Invalidated when the mount, scroll container, or zoom changes.
+   */
+  private scrollContainerMountOffset: number | null = null;
   private sdtHover = new SdtGroupedHover();
   /** The currently active/selected comment ID for highlighting */
   private activeCommentId: string | null = null;
@@ -1114,6 +1120,7 @@ export class DomPainter {
     const next = typeof zoom === 'number' && Number.isFinite(zoom) && zoom > 0 ? zoom : 1;
     if (next !== this.zoomFactor) {
       this.zoomFactor = next;
+      this.scrollContainerMountOffset = null; // Invalidate on zoom change
       if (this.virtualEnabled && this.mount) {
         this.updateVirtualWindow();
       }
@@ -1137,6 +1144,7 @@ export class DomPainter {
   public setScrollContainer(el: HTMLElement | null): void {
     if (el !== this.scrollContainer) {
       this.scrollContainer = el;
+      this.scrollContainerMountOffset = null; // Invalidate cached offset
       if (this.virtualEnabled && this.mount) {
         this.updateVirtualWindow();
       }
@@ -1576,6 +1584,14 @@ export class DomPainter {
     this.virtualPagesEl.style.alignItems = 'center';
     this.virtualPagesEl.style.width = '100%';
     this.virtualPagesEl.style.gap = `${this.virtualGap}px`;
+    // Prevent the browser from using this container as a scroll anchor.
+    // When the top spacer grows during virtual window shifts, this element
+    // moves down. If the browser anchors on it, scroll anchoring adjusts
+    // scrollTop to compensate, which fires a new scroll event with a higher
+    // scrollY, triggering another window shift — a positive feedback loop.
+    // With this set, the browser anchors on page elements (children) instead,
+    // which stay at stable positions regardless of spacer changes.
+    this.virtualPagesEl.style.overflowAnchor = 'none';
 
     mount.appendChild(this.topSpacerEl);
     mount.appendChild(this.virtualPagesEl);
@@ -1589,6 +1605,10 @@ export class DomPainter {
     element.style.width = '1px';
     element.style.height = '0px';
     element.style.flex = '0 0 auto';
+    // Prevent Chrome's scroll anchoring from using spacers as anchor nodes.
+    // When spacer heights change during virtual window shifts, scroll anchoring
+    // could adjust scrollTop and trigger cascading scroll events.
+    element.style.overflowAnchor = 'none';
     element.setAttribute('data-virtual-spacer', type);
   }
 
@@ -1618,6 +1638,7 @@ export class DomPainter {
         win.removeEventListener('resize', this.onResizeHandler);
       }
       this.onResizeHandler = () => {
+        this.scrollContainerMountOffset = null; // Recompute on resize
         this.updateVirtualWindow();
       };
       win.addEventListener('resize', this.onResizeHandler);
@@ -1682,6 +1703,7 @@ export class DomPainter {
     if (!this.mount || !this.topSpacerEl || !this.bottomSpacerEl || !this.virtualPagesEl || !this.currentLayout) return;
     const layout = this.currentLayout;
     const N = layout.pages.length;
+
     if (N === 0) {
       this.mount.innerHTML = '';
       this.processedLayoutVersion = this.layoutVersion;
@@ -1700,13 +1722,18 @@ export class DomPainter {
       scrollY = Math.max(0, this.mount.scrollTop - paddingTop);
     } else if (this.scrollContainer) {
       // Intermediate scroll ancestor (e.g., a wrapper div with overflow-y: auto).
-      // Compute scrollY relative to the scroll container, not the browser viewport.
-      // Using (scrollContainer.rect.top - mount.rect.top) instead of just (-mount.rect.top)
-      // eliminates the offset caused by the scroll container's distance from the viewport top
-      // (e.g., a toolbar/header above the scroll wrapper).
-      const mountRect = this.mount.getBoundingClientRect();
-      const containerRect = this.scrollContainer.getBoundingClientRect();
-      scrollY = Math.max(0, (containerRect.top - mountRect.top) / zoom - paddingTop);
+      // Use scrollContainer.scrollTop with a cached mount offset instead of
+      // getBoundingClientRect(). Rects are affected by spacer DOM mutations
+      // which can cause cascading scroll events and runaway scrolling.
+      //
+      // mountOffset = distance from scroll container's content top to mount's top.
+      // Computed once and cached; invalidated on mount/container/zoom change.
+      if (this.scrollContainerMountOffset == null) {
+        const mountRect = this.mount.getBoundingClientRect();
+        const containerRect = this.scrollContainer.getBoundingClientRect();
+        this.scrollContainerMountOffset = mountRect.top - containerRect.top + this.scrollContainer.scrollTop;
+      }
+      scrollY = Math.max(0, (this.scrollContainer.scrollTop - this.scrollContainerMountOffset) / zoom - paddingTop);
     } else {
       const rect = this.mount.getBoundingClientRect();
       // rect.top is in screen space (affected by CSS transform: scale).
@@ -2210,6 +2237,7 @@ export class DomPainter {
     this.onScrollHandler = null;
     this.onWindowScrollHandler = null;
     this.onResizeHandler = null;
+    this.scrollContainerMountOffset = null;
     this.sdtHover.destroy();
     this.layoutVersion = 0;
     this.processedLayoutVersion = -1;

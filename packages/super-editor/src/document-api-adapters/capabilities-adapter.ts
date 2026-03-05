@@ -46,6 +46,18 @@ const REQUIRED_COMMANDS: Partial<Record<OperationId, readonly EditorCommandName[
   'lists.continuePrevious': [],
   'lists.setLevelRestart': [],
   'lists.convertToText': [],
+  // SD-1973 formatting operations (no named commands — they mutate raw XML directly)
+  'lists.applyTemplate': [],
+  'lists.applyPreset': [],
+  'lists.captureTemplate': [],
+  'lists.setLevelNumbering': [],
+  'lists.setLevelBullet': [],
+  'lists.setLevelPictureBullet': [],
+  'lists.setLevelAlignment': [],
+  'lists.setLevelIndents': [],
+  'lists.setLevelTrailingCharacter': [],
+  'lists.setLevelMarkerFont': [],
+  'lists.clearLevelOverrides': [],
   'blocks.delete': ['deleteBlockNodeById'],
   'comments.create': ['addComment', 'setTextSelection', 'addCommentReply'],
   'comments.patch': ['editComment', 'moveComment', 'resolveComment', 'setCommentInternal'],
@@ -105,6 +117,37 @@ const REQUIRED_COMMANDS: Partial<Record<OperationId, readonly EditorCommandName[
   'toc.markEntry': ['insertTableOfContentsEntryAt'],
   'toc.unmarkEntry': ['deleteTableOfContentsEntryAt'],
   'toc.editEntry': ['updateTableOfContentsEntryAt'],
+  // Image operations — setImage proves the image extension is loaded:
+  'create.image': ['setImage'],
+  'images.delete': ['setImage'],
+  'images.move': ['setImage'],
+  'images.convertToInline': ['setImage'],
+  'images.convertToFloating': ['setImage'],
+  'images.setSize': ['setImage'],
+  'images.setWrapType': ['setImage'],
+  'images.setWrapSide': ['setImage'],
+  'images.setWrapDistances': ['setImage'],
+  'images.setPosition': ['setImage'],
+  'images.setAnchorOptions': ['setImage'],
+  'images.setZOrder': ['setImage'],
+  // SD-2100: Geometry
+  'images.scale': ['setImage'],
+  'images.setLockAspectRatio': ['setImage'],
+  'images.rotate': ['setImage'],
+  'images.flip': ['setImage'],
+  'images.crop': ['setImage'],
+  'images.resetCrop': ['setImage'],
+  // SD-2100: Content
+  'images.replaceSource': ['setImage'],
+  // SD-2100: Semantic metadata
+  'images.setAltText': ['setImage'],
+  'images.setDecorative': ['setImage'],
+  'images.setName': ['setImage'],
+  'images.setHyperlink': ['setImage'],
+  // SD-2100: Caption lifecycle
+  'images.insertCaption': ['setImage'],
+  'images.updateCaption': ['setImage'],
+  'images.removeCaption': ['setImage'],
 };
 
 /** Runtime guard — ensures only canonical reason codes are emitted even if the set grows. */
@@ -131,6 +174,11 @@ const REQUIRED_HELPERS: Partial<Record<OperationId, (editor: Editor) => boolean>
   'sections.setHeaderFooterRef': (editor) => Boolean((editor as unknown as { converter?: unknown }).converter),
   'tables.setDefaultStyle': (editor) => Boolean((editor as unknown as { converter?: unknown }).converter),
   'tables.clearDefaultStyle': (editor) => Boolean((editor as unknown as { converter?: unknown }).converter),
+  // Picture bullet requires the numbering part to support lvlPicBulletId references.
+  'lists.setLevelPictureBullet': (editor) => {
+    const converter = (editor as unknown as { converter?: { convertedXml?: Record<string, unknown> } }).converter;
+    return Boolean(converter?.convertedXml?.['word/numbering.xml']);
+  },
 };
 
 function hasRequiredHelpers(editor: Editor, operationId: OperationId): boolean {

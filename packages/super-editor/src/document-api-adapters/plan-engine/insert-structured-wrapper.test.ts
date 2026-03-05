@@ -1,5 +1,7 @@
 import { beforeAll, beforeEach, afterEach, describe, it, expect, vi } from 'vitest';
+import type { Node as PmNode } from 'prosemirror-model';
 import { initTestEditor, loadTestDataForEditorTests } from '@tests/helpers/helpers.js';
+import { imageBase64 as largePngDataUri } from '@tests/editor/data/imageBase64.js';
 import type { Editor } from '../../core/Editor.js';
 import { insertStructuredWrapper } from './plan-wrappers.js';
 import { registerBuiltInExecutors } from './register-executors.js';
@@ -35,6 +37,18 @@ function getDocTextContent(ed: Editor): string {
   return ed.state.doc.textContent;
 }
 
+function getFirstImageNode(ed: Editor): PmNode | null {
+  let found: PmNode | null = null;
+  ed.state.doc.descendants((node) => {
+    if (node.type.name === 'image') {
+      found = node;
+      return false;
+    }
+    return true;
+  });
+  return found;
+}
+
 /** Requires prior seeded content — a blank doc has no text offsets to span. */
 function findResolvableNonCollapsedTarget(ed: Editor): { blockId: string; range: { start: number; end: number } } {
   const candidateIds = new Set<string>();
@@ -67,6 +81,9 @@ function findResolvableNonCollapsedTarget(ed: Editor): { blockId: string; range:
 }
 
 describe('insertStructuredWrapper — markdown', () => {
+  const oneByOnePngDataUri =
+    'data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAwMCAO2Z5kYAAAAASUVORK5CYII=';
+
   it('inserts markdown paragraph content into the document', () => {
     const result = insertStructuredWrapper(editor, {
       value: 'Hello from markdown',
@@ -150,6 +167,111 @@ describe('insertStructuredWrapper — markdown', () => {
     expect(result.success).toBe(false);
     expect(result.failure?.code).toBe('INVALID_TARGET');
     expect(getDocTextContent(editor)).toBe(textBefore);
+  });
+
+  it('inserts markdown images with stable image metadata', () => {
+    (editor as any).options.isHeadless = true;
+
+    const result = insertStructuredWrapper(editor, {
+      value: `![pixel](${oneByOnePngDataUri})`,
+      type: 'markdown',
+    });
+
+    expect(result.success).toBe(true);
+
+    const imageNode = getFirstImageNode(editor);
+    expect(imageNode).not.toBeNull();
+    if (!imageNode) return; // narrow for TS
+
+    expect(String(imageNode.attrs.src)).toMatch(/^word\/media\//);
+    expect(imageNode.attrs.rId).toEqual(expect.any(String));
+    expect(imageNode.attrs.sdImageId).toEqual(expect.any(String));
+    expect(imageNode.attrs.sdImageId.length).toBeGreaterThan(0);
+    expect(imageNode.attrs.id).toEqual(expect.any(String));
+    expect(imageNode.attrs.size).toEqual({ width: 1, height: 1 });
+    expect((editor as any).storage?.image?.media?.[imageNode.attrs.src]).toBe(oneByOnePngDataUri);
+  });
+
+  it('inserts markdown with a large base64 png in browser mode without dispatch errors', () => {
+    (editor as any).options.isHeadless = false;
+
+    const result = insertStructuredWrapper(editor, {
+      value: `![custom](${largePngDataUri})`,
+      type: 'markdown',
+    });
+
+    expect(result.success).toBe(true);
+  });
+
+  it('retries once when CommandService throws a mismatched transaction dispatch error', () => {
+    const commands = {
+      ...editor.commands,
+      insertContentAt: vi
+        .fn()
+        .mockImplementationOnce(() => {
+          throw new Error('[CommandService] Dispatch failed: Applying a mismatched transaction');
+        })
+        .mockReturnValue(true),
+    };
+
+    Object.defineProperty(editor, 'commands', {
+      value: commands,
+      configurable: true,
+    });
+
+    const result = insertStructuredWrapper(editor, {
+      value: 'retry me',
+      type: 'markdown',
+    });
+
+    expect(result.success).toBe(true);
+    expect(commands.insertContentAt).toHaveBeenCalledTimes(2);
+  });
+});
+
+describe('insertStructuredWrapper — table separators', () => {
+  it('inserts a trailing separator paragraph after a markdown table', () => {
+    const result = insertStructuredWrapper(editor, {
+      value: '| A | B |\n| --- | --- |\n| foo | bar |',
+      type: 'markdown',
+    });
+
+    expect(result.success).toBe(true);
+
+    const doc = editor.state.doc;
+    let foundTable = false;
+    let nodeAfterTable: import('prosemirror-model').Node | null = null;
+    for (let i = 0; i < doc.childCount; i++) {
+      if (doc.child(i).type.name === 'table') {
+        foundTable = true;
+        if (i + 1 < doc.childCount) {
+          nodeAfterTable = doc.child(i + 1);
+        }
+        break;
+      }
+    }
+
+    expect(foundTable).toBe(true);
+    expect(nodeAfterTable).not.toBeNull();
+    expect(nodeAfterTable!.type.name).toBe('paragraph');
+  });
+
+  it('two consecutive markdown table inserts produce non-adjacent tables', () => {
+    insertStructuredWrapper(editor, {
+      value: '| A | B |\n| --- | --- |\n| 1 | 2 |',
+      type: 'markdown',
+    });
+    insertStructuredWrapper(editor, {
+      value: '| C | D |\n| --- | --- |\n| 3 | 4 |',
+      type: 'markdown',
+    });
+
+    const doc = editor.state.doc;
+    for (let i = 0; i < doc.childCount - 1; i++) {
+      if (doc.child(i).type.name === 'table' && doc.child(i + 1).type.name === 'table') {
+        throw new Error(`Adjacent tables at children ${i} and ${i + 1}`);
+      }
+    }
   });
 });
 

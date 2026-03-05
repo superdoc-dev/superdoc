@@ -567,7 +567,7 @@ describe('SuperDoc.vue', () => {
     expect(existingComment.commentText).toBe('Updated text');
     expect(otherDocumentComment.commentId).toBe('doc2-id');
     expect(otherDocumentComment.commentText).toBe('Doc 2 text');
-    expect(commentsStoreStub.setActiveComment).toHaveBeenCalledWith(superdocStub, 'old-runtime-id');
+    expect(commentsStoreStub.setActiveComment).not.toHaveBeenCalled();
   });
 
   it('updates docxCommentJSON from replayed elements for imported comments', async () => {

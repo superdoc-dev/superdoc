@@ -730,6 +730,10 @@ const normalizeReplayCommentModelPayload = (payload = {}) => {
 const onEditorCommentsUpdate = (params = {}) => {
   // Set the active comment in the store
   let { activeCommentId, type, comment: commentPayload } = params;
+  // Only sync active state when the event explicitly requests it.
+  // Replay add/update events often omit activeCommentId; inferring it here can
+  // cause repeated focus toggles while replay emits batched updates.
+  let shouldSyncActiveComment = Object.prototype.hasOwnProperty.call(params, 'activeCommentId');
   const resolveCommentEventIds = (payload) => {
     const ids = [payload?.importedId, payload?.commentId].filter(Boolean).map((value) => String(value));
     return [...new Set(ids)];
@@ -794,10 +798,6 @@ const onEditorCommentsUpdate = (params = {}) => {
       const commentModel = useComment(commentPayload);
       addComment({ superdoc: proxy.$superdoc, comment: commentModel, skipEditorUpdate: true });
     }
-
-    if (!activeCommentId && id) {
-      activeCommentId = id;
-    }
   }
 
   if (COMMENT_EVENTS?.UPDATE && type === COMMENT_EVENTS.UPDATE && commentPayload) {
@@ -811,10 +811,6 @@ const onEditorCommentsUpdate = (params = {}) => {
         const normalizedPayload = normalizeReplayCommentModelPayload(commentPayload);
         const commentModel = useComment(normalizedPayload);
         addComment({ superdoc: proxy.$superdoc, comment: commentModel, skipEditorUpdate: true });
-      }
-
-      if (!activeCommentId) {
-        activeCommentId = id;
       }
     }
   }
@@ -895,6 +891,7 @@ const onEditorCommentsUpdate = (params = {}) => {
         const activeCommentInActiveDocument = activeCommentModel ? isInActiveDocument(activeCommentModel) : false;
         if (activeCommentKey && removedCommentIds.has(activeCommentKey) && activeCommentInActiveDocument) {
           activeCommentId = null;
+          shouldSyncActiveComment = true;
         }
       }
     }
@@ -906,13 +903,13 @@ const onEditorCommentsUpdate = (params = {}) => {
 
   nextTick(() => {
     if (pendingComment.value) return;
-    if (activeCommentId !== undefined) {
+    if (shouldSyncActiveComment) {
       commentsStore.setActiveComment(proxy.$superdoc, activeCommentId);
     }
     // Briefly suppress click-outside so the same click that selected the comment
     // highlight in the editor doesn't immediately deactivate it via the sidebar.
     // Reset after the event loop settles so subsequent outside clicks work normally.
-    if (activeCommentId !== undefined) {
+    if (shouldSyncActiveComment) {
       isCommentHighlighted.value = true;
       setTimeout(() => {
         isCommentHighlighted.value = false;

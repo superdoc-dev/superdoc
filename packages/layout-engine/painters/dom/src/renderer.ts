@@ -1726,6 +1726,8 @@ export class DomPainter {
           this.topOfIndex(idx) - this.topOfIndex(prevIndex) - this.virtualHeights[prevIndex] - this.virtualGap * 2;
         gap.style.height = `${Math.max(0, Math.floor(gapHeight))}px`;
         this.virtualGapSpacers.push(gap);
+        // Insert gap before cursor. cursor is NOT advanced because it still
+        // points at the next page element that needs to be reconciled.
         this.virtualPagesEl.insertBefore(gap, cursor);
       }
       const state = this.pageIndexToState.get(idx)!;

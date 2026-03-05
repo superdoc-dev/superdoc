@@ -22,6 +22,16 @@ Minimal, self-contained examples showing how to use SuperDoc.
 | [collaboration](./collaboration) | Real-time editing with various Yjs providers | [Guides](https://docs.superdoc.dev/guides) |
 | [headless](./headless) | Server-side AI redlining with Node.js | [AI Agents](https://docs.superdoc.dev/getting-started/ai-agents) |
 
+## SDK Examples
+
+Standalone examples demonstrating the SuperDoc SDK for programmatic document operations.
+
+| Example | Description |
+|---------|-------------|
+| [sdk-poc](./sdk-poc) | Collaboration server + AI verification agent (Node.js + Python) |
+
+See [sdk-poc/README.md](./sdk-poc/README.md) for detailed setup instructions.
+
 ## Running an example
 
 ```bash

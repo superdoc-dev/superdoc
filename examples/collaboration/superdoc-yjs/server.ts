@@ -4,7 +4,7 @@ import { Doc as YDoc, encodeStateAsUpdate } from 'yjs';
 import type { WebSocket } from 'ws';
 import type { FastifyRequest } from 'fastify';
 
-import { 
+import {
   CollaborationBuilder,
   type CollaborationParams,
   type CollaborationWebSocket,
@@ -17,6 +17,8 @@ import {
 /** Create an example server */
 const fastify = Fastify({ logger: false });
 fastify.register(websocketPlugin);
+
+
 
 
 /** We create some basic hooks */
@@ -44,7 +46,8 @@ const handleOnChange = async (params: CollaborationParams): Promise<void> => {
 };
 
 const handleAutoSave = async (params: CollaborationParams): Promise<void> => {
-  console.debug('handleAutoSave] params', params)
+  console.debug('handleAutoSave]')
+  // console.debug('handleAutoSave] params', params)
 }
 
 
@@ -59,8 +62,8 @@ const SuperDocCollaboration = new CollaborationBuilder()
   .build();
 
 
-/** A sample test route */
-fastify.get('/', async (request, reply) => 'Hello, SuperDoc!');
+/** Health check route (works even with static file serving) */
+fastify.get('/health', async (request, reply) => ({ status: 'ok' }));
 
 
 /** An example route for websocket collaboration connection */
@@ -71,10 +74,80 @@ fastify.register(async function (fastify) {
 });
 
 
+// ============================================================================
+// Simple Chat WebSocket (separate from Yjs collaboration)
+// ============================================================================
+
+interface ChatMessage {
+  id: string;
+  role: 'user' | 'assistant';
+  content: string;
+  timestamp: number;
+}
+
+interface ChatRoom {
+  messages: ChatMessage[];
+  clients: Set<WebSocket>;
+  agentStatus: string;
+}
+
+const chatRooms = new Map<string, ChatRoom>();
+
+function getChatRoom(roomId: string): ChatRoom {
+  if (!chatRooms.has(roomId)) {
+    chatRooms.set(roomId, { messages: [], clients: new Set(), agentStatus: 'offline' });
+  }
+  return chatRooms.get(roomId)!;
+}
+
+function broadcastToRoom(roomId: string, data: object, exclude?: WebSocket) {
+  const room = getChatRoom(roomId);
+  const msg = JSON.stringify(data);
+  for (const client of room.clients) {
+    if (client !== exclude && client.readyState === 1) client.send(msg);
+  }
+}
+
+fastify.register(async function (fastify) {
+  fastify.get('/chat/:roomId', { websocket: true }, (socket, request) => {
+    const roomId = (request.params as { roomId: string }).roomId;
+    const room = getChatRoom(roomId);
+    room.clients.add(socket);
+    console.log(`[Chat] Client joined ${roomId} (${room.clients.size} clients)`);
+
+    // Send current state
+    socket.send(JSON.stringify({ type: 'init', messages: room.messages, agentStatus: room.agentStatus }));
+
+    socket.on('message', (data) => {
+      try {
+        const msg = JSON.parse(data.toString());
+        if (msg.type === 'message') {
+          const chatMsg: ChatMessage = { id: msg.id || `${msg.role}-${Date.now()}`, role: msg.role, content: msg.content, timestamp: msg.timestamp || Date.now() };
+          room.messages.push(chatMsg);
+          broadcastToRoom(roomId, { type: 'message', message: chatMsg });
+        } else if (msg.type === 'status') {
+          room.agentStatus = msg.status;
+          broadcastToRoom(roomId, { type: 'status', status: msg.status }, socket);
+        } else if (msg.type === 'clear') {
+          room.messages = [];
+          broadcastToRoom(roomId, { type: 'clear' });
+        }
+      } catch (e) { console.error('[Chat] Invalid message:', e); }
+    });
+
+    socket.on('close', () => {
+      room.clients.delete(socket);
+      console.log(`[Chat] Client left ${roomId} (${room.clients.size} clients)`);
+    });
+  });
+});
+
+
 /** Start the example! */
 const start = async (): Promise<void> => {
-  fastify.listen({ port: 3050 }, errorHandler);
-  console.log('Server listening at http://localhost:3050');
+  const port = parseInt(process.env.PORT || '3050', 10);
+  fastify.listen({ port, host: '0.0.0.0' }, errorHandler);
+  console.log(`Server listening at http://0.0.0.0:${port}`);
 };
 
 /** Basic error handler example */

@@ -4,25 +4,31 @@
   "version": "0.0.0",
   "type": "module",
   "scripts": {
-    "dev": "concurrently \"npm run dev:server\" \"npm run dev:client\"",
+    "dev": "concurrently \"npm run dev:server\" \"npm run dev:client\" \"npm run dev:agent\"",
     "dev:client": "vite",
+    "dev:client:remote": "echo 'Connecting to VITE_BACKEND_URL from .env' && vite",
     "dev:server": "tsx watch server.ts",
-    "build": "vite build"
+    "dev:agent": "tsx watch agent.ts",
+    "build": "vite build",
+    "deploy:backend": "./deploy-backend.sh",
+    "deploy:frontend": "./deploy-frontend.sh"
   },
   "dependencies": {
-    "superdoc": "latest",
-    "vue": "^3.5.13",
     "@superdoc-dev/superdoc-yjs-collaboration": "^1.0.0",
+    "@superdoc-dev/sdk": "^1.0.0-alpha.44",
     "@fastify/websocket": "^11.1.0",
+    "dotenv": "^16.4.7",
     "fastify": "^5.3.3",
-    "y-protocols": "^1.0.6",
-    "y-websocket": "^3.0.0",
+    "openai": "^4.78.0",
+    "tsx": "^4.20.6",
+    "ws": "^8.18.0",
     "yjs": "13.6.19"
   },
   "devDependencies": {
     "@vitejs/plugin-vue": "^5.2.2",
     "concurrently": "^9.0.0",
-    "tsx": "^4.20.6",
-    "vite": "^6.0.0"
+    "superdoc": "^1.18.2",
+    "vite": "^6.0.0",
+    "vue": "^3.5.13"
   }
 }

@@ -449,7 +449,6 @@ export const CommentsPlugin = Extension.create({
             decorations: DecorationSet.empty,
             allCommentPositions: {},
             allCommentIds: [],
-            changedActiveThread: false,
             trackedChanges: {},
           };
         },
@@ -479,7 +478,6 @@ export const CommentsPlugin = Extension.create({
             return {
               ...pluginState,
               activeThreadId: newActiveThreadId,
-              changedActiveThread: true,
             };
           }
 
@@ -503,13 +501,9 @@ export const CommentsPlugin = Extension.create({
             );
           }
 
-          // Check for changes in the actively selected comment.
-          // Skip position-based detection if the previous transaction explicitly set the
-          // active comment (changedActiveThread flag). This prevents focus-induced DOM
-          // selection sync transactions from overriding a sidebar-initiated activation.
+          // Check for changes in the actively selected comment
           const trChangedActiveComment = meta?.type === 'setActiveComment';
-          const suppressPositionDetection = pluginState.changedActiveThread && !trChangedActiveComment;
-          if ((!tr.docChanged && tr.selectionSet && !suppressPositionDetection) || trChangedActiveComment) {
+          if ((!tr.docChanged && tr.selectionSet) || trChangedActiveComment) {
             const { selection } = tr;
             let currentActiveThread = getActiveCommentId(newEditorState.doc, selection);
             if (trChangedActiveComment) currentActiveThread = meta.activeThreadId;
@@ -528,7 +522,7 @@ export const CommentsPlugin = Extension.create({
             }
           }
 
-          return { ...pluginState, changedActiveThread: false };
+          return { ...pluginState };
         },
       },
 

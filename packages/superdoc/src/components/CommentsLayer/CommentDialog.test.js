@@ -175,7 +175,8 @@ const mountDialog = async ({ baseCommentOverrides = {}, extraComments = [], prop
     ],
     activeEditor: {
       commands: {
-        setCursorById: vi.fn(),
+        setCursorById: vi.fn().mockReturnValue(true),
+        setActiveComment: vi.fn(),
         rejectTrackedChangeById: vi.fn(),
         acceptTrackedChangeById: vi.fn(),
         setCommentInternal: vi.fn(),

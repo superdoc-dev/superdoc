@@ -81,10 +81,6 @@ const isPendingNewComment = computed(() => {
   return pendingComment.value && pendingComment.value.commentId === props.comment.commentId;
 });
 
-const showButtons = computed(() => {
-  return !getConfig.readOnly && isActiveComment.value && !props.comment.resolvedTime && !isEditingAnyComment.value;
-});
-
 const showSeparator = computed(() => (index) => {
   const visible = visibleComments.value;
   if (showInputSection.value && index === visible.length - 1) return true;
@@ -288,7 +284,10 @@ const setFocus = () => {
       ? props.comment.commentId
       : props.comment.importedId || props.comment.commentId;
     const activeCommentId = !props.comment.resolvedTime ? props.comment.commentId : null;
-    editor.commands?.setCursorById(cursorId, { activeCommentId });
+    const didScroll = editor.commands?.setCursorById(cursorId, { activeCommentId });
+    if (!didScroll && activeCommentId) {
+      editor.commands?.setActiveComment({ commentId: activeCommentId });
+    }
   }
 };
 
@@ -452,6 +451,7 @@ const getProcessedDate = (timestamp) => {
 
 const handleCancel = (comment) => {
   editingCommentId.value = null;
+  isReplying.value = false;
   cancelComment(proxy.$superdoc);
 };
 

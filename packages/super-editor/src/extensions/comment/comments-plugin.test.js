@@ -609,7 +609,6 @@ describe('CommentsPlugin state', () => {
 
     const pluginState = CommentsPluginKey.getState(view.state);
     expect(pluginState.activeThreadId).toBe('thread-1');
-    expect(pluginState.changedActiveThread).toBe(true);
   });
 
   it('stores decorations provided through metadata', () => {

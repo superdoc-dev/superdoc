@@ -127,6 +127,39 @@ describe('computeParagraphAttrs', () => {
     const { resolvedParagraphProperties } = computeParagraphAttrs(paragraph as never);
     expect(resolvedParagraphProperties.styleId).toBe('Heading1');
   });
+
+  it('passes previousParagraphFont to marker run when paragraph has listRendering and numbering', () => {
+    const previousFont = { fontFamily: 'MarkerFont, sans-serif', fontSize: 11 };
+    const paragraph: PMNode = {
+      type: { name: 'paragraph' },
+      attrs: {
+        paragraphProperties: {
+          numberingProperties: { numId: 1, ilvl: 0 },
+        },
+        listRendering: {
+          markerText: '1.',
+          justification: 'left',
+          path: [0],
+          numberingType: 'decimal',
+          suffix: 'tab',
+        },
+      },
+    };
+
+    const minimalContext = {
+      translatedNumbering: {},
+      translatedLinkedStyles: { docDefaults: {}, styles: {} },
+      tableInfo: null,
+    };
+
+    const { paragraphAttrs } = computeParagraphAttrs(paragraph as never, minimalContext as never, previousFont);
+    const markerRun = (
+      paragraphAttrs as { wordLayout?: { marker?: { run?: { fontFamily?: string; fontSize?: number } } } }
+    )?.wordLayout?.marker?.run;
+    expect(markerRun?.fontFamily).toBeDefined();
+    expect(markerRun?.fontFamily).toContain('MarkerFont');
+    expect(markerRun?.fontSize).toBe(11);
+  });
 });
 
 describe('computeRunAttrs', () => {
@@ -152,6 +185,29 @@ describe('computeRunAttrs', () => {
     const result = computeRunAttrs(runProps as never);
 
     expect(result.vanish).toBe(true);
+  });
+
+  it('uses previousParagraphFont for fontFamily and fontSize when provided', () => {
+    const runProps = {};
+    const previousFont = { fontFamily: 'PreviousParaFont, sans-serif', fontSize: 14 };
+
+    const result = computeRunAttrs(runProps as never, undefined, previousFont);
+
+    expect(result.fontFamily).toContain('PreviousParaFont');
+    expect(result.fontSize).toBe(14);
+  });
+
+  it('prefers previousParagraphFont over runProps when both are provided', () => {
+    const runProps = {
+      fontFamily: { ascii: 'RunFont' },
+      fontSize: 22,
+    };
+    const previousFont = { fontFamily: 'PreviousFont, sans-serif', fontSize: 10 };
+
+    const result = computeRunAttrs(runProps as never, undefined, previousFont);
+
+    expect(result.fontFamily).toContain('PreviousFont');
+    expect(result.fontSize).toBe(10);
   });
 
   it('passes through vertAlign', () => {

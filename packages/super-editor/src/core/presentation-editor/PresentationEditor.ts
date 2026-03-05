@@ -2334,193 +2334,103 @@ export class PresentationEditor extends EventEmitter {
     });
   }
 
+  #listenTo(event: string, handler: (...args: any[]) => void) {
+    this.#editor.on(event, handler);
+    this.#editorListeners.push({ event, handler });
+  }
+
   #setupEditorListeners() {
-    const handleUpdate = ({ transaction }: { transaction?: Transaction }) => {
-      const trackedChangesChanged = this.#syncTrackedChangesPreferences();
-      if (transaction) {
-        this.#epochMapper.recordTransaction(transaction);
-        this.#selectionSync.setDocEpoch(this.#epochMapper.getCurrentEpoch());
-
-        // Detect Y.js-origin transactions (remote collaboration changes).
-        // These bypass the blockNodePlugin's sdBlockRev increment to prevent
-        // feedback loops, so the FlowBlockCache's fast revision comparison
-        // cannot be trusted — signal it to fall through to JSON comparison.
-        const ySyncMeta = transaction.getMeta?.(ySyncPluginKey);
-        if (ySyncMeta?.isChangeOrigin && transaction.docChanged) {
-          this.#flowBlockCache?.setHasExternalChanges(true);
-        }
-        // History undo/redo can restore prior paragraph content while preserving/reusing
-        // sdBlockRev values, which makes the cache's fast revision check unsafe.
-        // Force JSON comparison for this render cycle to avoid stale paragraph reuse.
-        const inputType = transaction.getMeta?.('inputType');
-        const isHistoryType = inputType === 'historyUndo' || inputType === 'historyRedo';
-        if (isHistoryType && transaction.docChanged) {
-          this.#flowBlockCache?.setHasExternalChanges(true);
-        }
-      }
-      if (trackedChangesChanged || transaction?.docChanged) {
-        this.#pendingDocChange = true;
-        // Store the mapping from this transaction for position updates during paint.
-        // Only stored for doc changes - other triggers don't have position shifts.
-        if (transaction?.docChanged) {
-          if (this.#pendingMapping !== null) {
-            // Multiple rapid transactions before rerender - compose the mappings.
-            // The painter's gate checks maps.length > 1 to trigger full rebuild,
-            // which is the safe fallback for complex/batched edits.
-            const combined = this.#pendingMapping.slice();
-            combined.appendMapping(transaction.mapping);
-            this.#pendingMapping = combined;
-          } else {
-            this.#pendingMapping = transaction.mapping;
-          }
-        }
-        this.#selectionSync.onLayoutStart();
-        this.#scheduleRerender();
-      }
-      // Update local cursor in awareness whenever document changes
-      // This ensures cursor position is broadcast with each keystroke
-      if (transaction?.docChanged) {
-        this.#updateLocalAwarenessCursor();
-        // Clear cell anchor on document changes to prevent stale references
-        // (table structure may have changed, cell positions may be invalid)
-        this.#editorInputManager?.clearCellAnchor();
-      }
-    };
-    const handleSelection = () => {
-      // Use immediate rendering for selection-only changes (clicks, arrow keys).
-      // Without immediate, the render is RAF-deferred — leaving a window where
-      // a remote collaborator's edit can cancel the pending render via
-      // setDocEpoch → cancelScheduledRender. Immediate rendering is safe here:
-      // if layout is updating (due to a concurrent doc change), flushNow()
-      // is a no-op and the render will be picked up after layout completes.
-      this.#scheduleSelectionUpdate({ immediate: true });
-      // Update local cursor in awareness for collaboration
-      // This bypasses y-prosemirror's focus check which may fail for hidden PM views
-      this.#updateLocalAwarenessCursor();
-      this.#scheduleA11ySelectionAnnouncement();
-    };
-
-    // The 'transaction' event fires for ALL transactions (doc changes,
-    // selection changes, meta-only). The 'update' event only fires for
-    // docChanged transactions, and 'selectionUpdate' only for selection
-    // changes. A meta-only transaction (e.g., a custom command that sets
-    // plugin state without editing text) fires neither.
-    //
-    // We listen on 'transaction' so the decoration bridge picks up changes
-    // from any transaction type. The bridge's own identity check + RAF
-    // coalescing prevent unnecessary work.
-    // When decoration state changes without a doc change (e.g. setFocus), we must
-    // still run a full rerender so runs are split at the new decoration boundaries;
-    // otherwise the bridge applies the class to whole runs and highlights too much.
-    const handleTransaction = (event?: { transaction?: Transaction }) => {
-      const tr = event?.transaction;
-      this.#decorationBridge.recordTransaction(tr);
-      const state = this.#editor?.view?.state;
-      const decorationChanged = state && this.#decorationBridge.hasChanges(state);
-      // Sync immediately whenever decorations changed so e.g. clearFocus removes
-      // highlight-selection in the same tick. Only restore when we had a doc change.
-      if (decorationChanged) {
-        const restoreEmpty = tr ? tr.docChanged === true : false;
-        this.#decorationBridge.sync(state!, this.#domPositionIndex, {
-          restoreEmptyDecorations: restoreEmpty,
-        });
-      } else {
-        // No immediate sync; schedule coalesced sync on next frame.
-        this.#scheduleDecorationSync();
-      }
-      if (decorationChanged) {
-        this.#pendingDocChange = true;
-        this.#selectionSync.onLayoutStart();
-        this.#scheduleRerender();
-      }
-    };
-
-    this.#editor.on('update', handleUpdate);
-    this.#editor.on('selectionUpdate', handleSelection);
-    this.#editor.on('transaction', handleTransaction);
-    this.#editorListeners.push({ event: 'update', handler: handleUpdate as (...args: unknown[]) => void });
-    this.#editorListeners.push({ event: 'selectionUpdate', handler: handleSelection as (...args: unknown[]) => void });
-    this.#editorListeners.push({ event: 'transaction', handler: handleTransaction as (...args: unknown[]) => void });
-
-    // Listen for page style changes (e.g., margin adjustments via ruler).
-    // These changes don't modify document content (docChanged === false),
-    // so the 'update' event isn't emitted. The dedicated pageStyleUpdate event
-    // provides clearer semantics and better debugging than checking transaction meta flags.
-    const handlePageStyleUpdate = () => {
-      this.#pendingDocChange = true;
-      this.#selectionSync.onLayoutStart();
-      this.#scheduleRerender();
-    };
-    this.#editor.on('pageStyleUpdate', handlePageStyleUpdate);
-    this.#editorListeners.push({
-      event: 'pageStyleUpdate',
-      handler: handlePageStyleUpdate as (...args: unknown[]) => void,
-    });
-
-    // Listen for stylesheet default changes (e.g., styles.apply mutations to docDefaults).
-    // These changes mutate translatedLinkedStyles directly and need a full re-render
-    // so the style-engine picks up the updated default properties.
-    const handleStylesDefaultsChanged = () => {
+    this.#listenTo('update', (e: { transaction?: Transaction }) => this.#handleEditorUpdate(e.transaction));
+    this.#listenTo('selectionUpdate', () => this.#handleEditorSelectionUpdate());
+    this.#listenTo('transaction', (e?: { transaction?: Transaction }) => this.#handleEditorTransaction(e?.transaction));
+    this.#listenTo('pageStyleUpdate', () => this.#triggerRerender());
+    this.#listenTo('stylesDefaultsChanged', () => {
       this.#pendingDocChange = true;
       this.#scheduleRerender();
-    };
-    this.#editor.on('stylesDefaultsChanged', handleStylesDefaultsChanged);
-    this.#editorListeners.push({
-      event: 'stylesDefaultsChanged',
-      handler: handleStylesDefaultsChanged as (...args: unknown[]) => void,
     });
-
-    const handleCollaborationReady = (payload: unknown) => {
+    this.#listenTo('collaborationReady', (payload: unknown) => {
       this.emit('collaborationReady', payload);
-      // Setup remote cursor rendering after collaboration is ready
-      // Only setup if presence is enabled in layout options
       if (this.#options.collaborationProvider?.awareness && this.#layoutOptions.presence?.enabled !== false) {
         this.#setupCollaborationCursors();
       }
-    };
-    this.#editor.on('collaborationReady', handleCollaborationReady);
-    this.#editorListeners.push({
-      event: 'collaborationReady',
-      handler: handleCollaborationReady as (...args: unknown[]) => void,
     });
-
-    // Handle remote header/footer changes from collaborators
-    const handleRemoteHeaderFooterChanged = (payload: {
-      type: 'header' | 'footer';
-      sectionId: string;
-      content: unknown;
-    }) => {
+    this.#listenTo('remoteHeaderFooterChanged', (payload: { sectionId: string }) => {
       this.#headerFooterSession?.adapter?.invalidate(payload.sectionId);
       this.#headerFooterSession?.manager?.refresh();
-      this.#pendingDocChange = true;
-      this.#scheduleRerender();
-    };
-    this.#editor.on('remoteHeaderFooterChanged', handleRemoteHeaderFooterChanged);
-    this.#editorListeners.push({
-      event: 'remoteHeaderFooterChanged',
-      handler: handleRemoteHeaderFooterChanged as (...args: unknown[]) => void,
+      this.#triggerRerender();
     });
+    this.#listenTo('commentsUpdate', (payload: { activeCommentId?: string | null }) => {
+      if (this.#domPainter?.setActiveComment && 'activeCommentId' in payload) {
+        this.#domPainter.setActiveComment(payload.activeCommentId ?? null);
+        this.#triggerRerender();
+      }
+    });
+  }
 
-    // Listen for comment selection changes to update Layout Engine highlighting
-    const handleCommentsUpdate = (payload: { activeCommentId?: string | null }) => {
-      if (this.#domPainter?.setActiveComment) {
-        // Only update active comment when the field is explicitly present in the payload.
-        // This prevents unrelated events (like tracked change updates) from clearing
-        // the active comment selection unexpectedly.
-        if ('activeCommentId' in payload) {
-          const activeId = payload.activeCommentId ?? null;
-          this.#domPainter.setActiveComment(activeId);
-          // Mark as needing re-render to apply the new active comment highlighting
-          this.#pendingDocChange = true;
-          this.#scheduleRerender();
+  #triggerRerender() {
+    this.#pendingDocChange = true;
+    this.#selectionSync.onLayoutStart();
+    this.#scheduleRerender();
+  }
+
+  #handleEditorUpdate(transaction?: Transaction) {
+    const trackedChangesChanged = this.#syncTrackedChangesPreferences();
+    if (transaction) {
+      this.#epochMapper.recordTransaction(transaction);
+      this.#selectionSync.setDocEpoch(this.#epochMapper.getCurrentEpoch());
+
+      // Y.js-origin or history undo/redo transactions may reuse sdBlockRev values,
+      // making the FlowBlockCache's fast revision check unsafe. Force JSON comparison.
+      const ySyncMeta = transaction.getMeta?.(ySyncPluginKey);
+      const inputType = transaction.getMeta?.('inputType');
+      const needsFullComparison =
+        (ySyncMeta?.isChangeOrigin && transaction.docChanged) ||
+        ((inputType === 'historyUndo' || inputType === 'historyRedo') && transaction.docChanged);
+      if (needsFullComparison) {
+        this.#flowBlockCache?.setHasExternalChanges(true);
+      }
+    }
+
+    if (trackedChangesChanged || transaction?.docChanged) {
+      this.#pendingDocChange = true;
+      if (transaction?.docChanged) {
+        if (this.#pendingMapping !== null) {
+          const combined = this.#pendingMapping.slice();
+          combined.appendMapping(transaction.mapping);
+          this.#pendingMapping = combined;
+        } else {
+          this.#pendingMapping = transaction.mapping;
         }
       }
-    };
-    this.#editor.on('commentsUpdate', handleCommentsUpdate);
-    this.#editorListeners.push({
-      event: 'commentsUpdate',
-      handler: handleCommentsUpdate as (...args: unknown[]) => void,
-    });
+      this.#selectionSync.onLayoutStart();
+      this.#scheduleRerender();
+    }
+
+    if (transaction?.docChanged) {
+      this.#updateLocalAwarenessCursor();
+      this.#editorInputManager?.clearCellAnchor();
+    }
+  }
+
+  #handleEditorSelectionUpdate() {
+    this.#scheduleSelectionUpdate({ immediate: true });
+    this.#updateLocalAwarenessCursor();
+    this.#scheduleA11ySelectionAnnouncement();
+  }
+
+  #handleEditorTransaction(tr?: Transaction) {
+    this.#decorationBridge.recordTransaction(tr);
+    const state = this.#editor?.view?.state;
+    const decorationChanged = state && this.#decorationBridge.hasChanges(state);
+
+    if (decorationChanged) {
+      this.#decorationBridge.sync(state!, this.#domPositionIndex, {
+        restoreEmptyDecorations: tr ? tr.docChanged === true : false,
+      });
+      this.#triggerRerender();
+    } else {
+      this.#scheduleDecorationSync();
+    }
   }
 
   /**

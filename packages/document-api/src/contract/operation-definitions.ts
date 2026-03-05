@@ -1332,6 +1332,23 @@ export const OPERATION_DEFINITIONS = {
     referenceDocPath: 'lists/apply-preset.mdx',
     referenceGroup: 'lists',
   },
+  'lists.setType': {
+    memberPath: 'lists.setType',
+    description:
+      'Convert a list to ordered or bullet and merge adjacent compatible sequences to preserve continuous numbering.',
+    expectedResult:
+      'Returns a ListsMutateItemResult receipt; reports NO_OP if the list is already the requested kind and no sequences were merged.',
+    requiresDocumentContext: true,
+    metadata: mutationOperation({
+      idempotency: 'conditional',
+      supportsDryRun: true,
+      supportsTrackedMode: false,
+      possibleFailureCodes: ['NO_OP', 'INVALID_TARGET', 'INVALID_INPUT'],
+      throws: [...T_NOT_FOUND_CAPABLE, 'INVALID_TARGET', 'INVALID_INPUT'],
+    }),
+    referenceDocPath: 'lists/set-type.mdx',
+    referenceGroup: 'lists',
+  },
   'lists.captureTemplate': {
     memberPath: 'lists.captureTemplate',
     description: 'Capture the formatting of a list as a reusable ListTemplate.',

@@ -130,6 +130,7 @@ const INTENT_NAMES = {
   'doc.lists.convertToText': 'convert_list_to_text',
   'doc.lists.applyTemplate': 'apply_list_template',
   'doc.lists.applyPreset': 'apply_list_preset',
+  'doc.lists.setType': 'set_list_type',
   'doc.lists.captureTemplate': 'capture_list_template',
   'doc.lists.setLevelNumbering': 'set_list_level_numbering',
   'doc.lists.setLevelBullet': 'set_list_level_bullet',

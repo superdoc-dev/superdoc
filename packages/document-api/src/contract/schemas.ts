@@ -2685,6 +2685,19 @@ const operationSchemas: Record<OperationId, OperationSchemaSet> = {
     success: listsMutateItemSuccessSchema,
     failure: listsFailureSchemaFor('lists.applyPreset'),
   },
+  'lists.setType': {
+    input: objectSchema(
+      {
+        target: listItemAddressSchema,
+        kind: { enum: ['ordered', 'bullet'] },
+        continuity: { enum: ['preserve', 'none'] },
+      },
+      ['target', 'kind'],
+    ),
+    output: listsMutateItemResultSchemaFor('lists.setType'),
+    success: listsMutateItemSuccessSchema,
+    failure: listsFailureSchemaFor('lists.setType'),
+  },
   'lists.captureTemplate': (() => {
     const successSchema = objectSchema(
       {

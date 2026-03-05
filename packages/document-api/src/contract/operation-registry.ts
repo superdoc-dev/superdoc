@@ -74,6 +74,7 @@ import type {
   ListsConvertToTextResult,
   ListsApplyTemplateInput,
   ListsApplyPresetInput,
+  ListsSetTypeInput,
   ListsCaptureTemplateInput,
   ListsCaptureTemplateResult,
   ListsSetLevelNumberingInput,
@@ -426,6 +427,7 @@ export interface OperationRegistry extends FormatInlineAliasOperationRegistry {
   // --- lists.* (SD-1973 formatting) ---
   'lists.applyTemplate': { input: ListsApplyTemplateInput; options: MutationOptions; output: ListsMutateItemResult };
   'lists.applyPreset': { input: ListsApplyPresetInput; options: MutationOptions; output: ListsMutateItemResult };
+  'lists.setType': { input: ListsSetTypeInput; options: MutationOptions; output: ListsMutateItemResult };
   'lists.captureTemplate': { input: ListsCaptureTemplateInput; options: never; output: ListsCaptureTemplateResult };
   'lists.setLevelNumbering': {
     input: ListsSetLevelNumberingInput;

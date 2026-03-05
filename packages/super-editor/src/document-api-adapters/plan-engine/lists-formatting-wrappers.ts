@@ -457,6 +457,11 @@ export function listsSetTypeWrapper(
       }
       if (result.changed) didAnything = true;
 
+      // Grab a single transaction *once* — all merge mutations must accumulate
+      // on this same tr so they are dispatched together. Accessing editor.state.tr
+      // multiple times creates fresh transactions and drops prior steps.
+      const { tr } = editor.state;
+
       // Phase 2: Merge adjacent compatible sequences if continuity is 'preserve'.
       // This runs even when the preset didn't change (items may already be the
       // target kind but split across separate numIds — the core of SD-2052).
@@ -464,14 +469,14 @@ export function listsSetTypeWrapper(
         clearIndexCache(editor);
         const freshTarget = resolveListItem(editor, input.target);
         if (freshTarget.numId != null) {
-          const merged = mergeAdjacentCompatibleSequences(editor, freshTarget, targetResult.abstractNumId);
+          const merged = mergeAdjacentCompatibleSequences(editor, tr, freshTarget, targetResult.abstractNumId);
           if (merged) didAnything = true;
         }
       }
 
       if (!didAnything) return false;
 
-      dispatchEditorTransaction(editor, editor.state.tr);
+      dispatchEditorTransaction(editor, tr);
       if (continuity === 'preserve') clearIndexCache(editor);
       return true;
     },
@@ -501,6 +506,7 @@ export function listsSetTypeWrapper(
  */
 function mergeAdjacentCompatibleSequences(
   editor: Editor,
+  tr: unknown,
   target: ListItemProjection,
   targetAbstractNumId: number,
 ): boolean {
@@ -510,9 +516,7 @@ function mergeAdjacentCompatibleSequences(
   // Try merging with the previous adjacent sequence
   const prev = findAdjacentSequence(editor, target, 'withPrevious');
   if (prev && canMergeSequences(prev.abstractNumId, targetAbstractNumId, prev.sequence, target.kind)) {
-    // Absorb the target sequence into the previous sequence's numId
     const targetSequence = getContiguousSequence(editor, target);
-    const { tr } = editor.state;
     mergeAdjacentSequence(editor, tr, prev.numId, targetSequence);
     clearIndexCache(editor);
     merged = true;
@@ -526,7 +530,7 @@ function mergeAdjacentCompatibleSequences(
       prev.abstractNumId != null &&
       canMergeSequences(next.abstractNumId, prev.abstractNumId, next.sequence, freshTarget.kind)
     ) {
-      mergeAdjacentSequence(editor, editor.state.tr, prev.numId, next.sequence);
+      mergeAdjacentSequence(editor, tr, prev.numId, next.sequence);
       clearIndexCache(editor);
     }
     return merged;
@@ -535,7 +539,6 @@ function mergeAdjacentCompatibleSequences(
   // No prev merge — try merging with the next adjacent sequence only
   const next = findAdjacentSequence(editor, target, 'withNext');
   if (next && canMergeSequences(next.abstractNumId, targetAbstractNumId, next.sequence, target.kind)) {
-    const { tr } = editor.state;
     mergeAdjacentSequence(editor, tr, targetNumId, next.sequence);
     clearIndexCache(editor);
     merged = true;

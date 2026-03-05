@@ -90,11 +90,21 @@ import { rejectTrackedMode } from '../helpers/mutation-helpers.js';
 // Test helpers
 // ---------------------------------------------------------------------------
 
+/**
+ * Creates a mock editor.
+ *
+ * `state.tr` is a **getter** that returns a new transaction object on every
+ * access — matching real ProseMirror behaviour. This lets tests detect the
+ * bug class where code accidentally grabs multiple fresh transactions instead
+ * of threading a single one.
+ */
 function makeEditor(): Editor {
   return {
     state: {
       doc: { content: { size: 100 } },
-      tr: { setNodeMarkup: vi.fn().mockReturnThis() },
+      get tr() {
+        return { setNodeMarkup: vi.fn().mockReturnThis(), _id: Math.random() };
+      },
     },
     view: { dispatch: vi.fn() },
     dispatch: vi.fn(),
@@ -337,6 +347,42 @@ describe('listsSetTypeWrapper', () => {
     // Should clear startOverride on the absorbed sequence's *original* numId (2),
     // not the absorbing numId (1), to avoid wiping legitimate overrides on the survivor
     expect(ListHelpers.removeLvlOverride).toHaveBeenCalledWith(editor, 2, 0);
+  });
+
+  it('dispatches the same transaction used by merge operations (transaction identity)', () => {
+    const target = makeProjection({
+      numId: 2,
+      kind: 'ordered',
+      address: { kind: 'block', nodeType: 'listItem', nodeId: 'item-2' },
+    });
+    const prevItem = makeProjection({
+      numId: 1,
+      kind: 'ordered',
+      address: { kind: 'block', nodeType: 'listItem', nodeId: 'item-1' },
+    });
+
+    vi.mocked(resolveListItem).mockReturnValue(target);
+    vi.mocked(getAbstractNumId).mockReturnValue(10);
+    vi.mocked(LevelFormattingHelpers.applyTemplateToAbstract).mockReturnValue({ changed: true });
+    vi.mocked(findAdjacentSequence).mockImplementation((_ed, _tgt, direction) => {
+      if (direction === 'withPrevious') {
+        return { sequence: [prevItem], numId: 1, abstractNumId: 10 };
+      }
+      return null;
+    });
+    vi.mocked(getContiguousSequence).mockReturnValue([target]);
+
+    listsSetTypeWrapper(editor, { target: target.address, kind: 'ordered' });
+
+    // updateNumberingProperties receives the transaction as its last argument.
+    // dispatchEditorTransaction passes it to editor.dispatch.
+    // Because state.tr is a getter returning a fresh object on each access,
+    // this test fails if the implementation grabs multiple transactions.
+    const mergeTr = vi.mocked(updateNumberingProperties).mock.calls[0]?.[4];
+    const dispatchedTr = vi.mocked(editor.dispatch).mock.calls[0]?.[0];
+    expect(mergeTr).toBeDefined();
+    expect(dispatchedTr).toBeDefined();
+    expect(mergeTr).toBe(dispatchedTr);
   });
 
   // =========================================================================

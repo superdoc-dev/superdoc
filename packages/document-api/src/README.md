@@ -613,13 +613,16 @@ Remove instance-level overrides (`lvlOverride`) for a specific list level, resto
 - **Idempotency**: conditional
 - **Failure codes**: `NO_OP`, `INVALID_TARGET`, `LEVEL_OUT_OF_RANGE`
 
-### `lists.setType` (convenience)
+### `lists.setType`
 
-Convenience wrapper that maps `'ordered'` / `'bullet'` to the corresponding default preset via `lists.applyPreset`. Not a canonical operation — it is a reference alias for `lists.applyPreset`.
+Compound operation that converts a list to ordered/bullet and merges adjacent compatible sequences to preserve continuous numbering (SD-2052).
 
-- **Input**: `{ target, kind: 'ordered' | 'bullet' }`
+- **Input**: `ListsSetTypeInput` — `{ target, kind: 'ordered' | 'bullet', continuity?: 'preserve' | 'none' }`
 - **Options**: `MutationOptions` (`{ dryRun? }`)
 - **Output**: `ListsMutateItemResult`
+- **Mutates**: Yes
+- **Idempotency**: conditional
+- **Failure codes**: `NO_OP`, `INVALID_TARGET`, `INVALID_INPUT`
 
 ### Comments
 

@@ -25,11 +25,4 @@ export const REFERENCE_OPERATION_ALIASES: readonly ReferenceAliasDefinition[] = 
     referenceGroup: 'format',
     description: 'Convenience alias for `format.strike` with `value: true`.',
   },
-  {
-    memberPath: 'lists.setType',
-    canonicalOperationId: 'lists.applyPreset',
-    referenceGroup: 'lists',
-    description:
-      'Compound operation that converts a list to ordered/bullet and merges adjacent compatible sequences to preserve continuous numbering.',
-  },
 ] as const;

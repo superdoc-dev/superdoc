@@ -1007,6 +1007,11 @@ _No fields._
 | `operations.lists.setLevelTrailingCharacter.dryRun` | boolean | yes |  |
 | `operations.lists.setLevelTrailingCharacter.reasons` | enum[] | no |  |
 | `operations.lists.setLevelTrailingCharacter.tracked` | boolean | yes |  |
+| `operations.lists.setType` | object | yes |  |
+| `operations.lists.setType.available` | boolean | yes |  |
+| `operations.lists.setType.dryRun` | boolean | yes |  |
+| `operations.lists.setType.reasons` | enum[] | no |  |
+| `operations.lists.setType.tracked` | boolean | yes |  |
 | `operations.lists.setValue` | object | yes |  |
 | `operations.lists.setValue.available` | boolean | yes |  |
 | `operations.lists.setValue.dryRun` | boolean | yes |  |
@@ -2887,6 +2892,14 @@ _No fields._
       "tracked": true
     },
     "lists.setLevelTrailingCharacter": {
+      "available": true,
+      "dryRun": true,
+      "reasons": [
+        "COMMAND_UNAVAILABLE"
+      ],
+      "tracked": true
+    },
+    "lists.setType": {
       "available": true,
       "dryRun": true,
       "reasons": [
@@ -10360,6 +10373,41 @@ _No fields._
           ],
           "type": "object"
         },
+        "lists.setType": {
+          "additionalProperties": false,
+          "properties": {
+            "available": {
+              "type": "boolean"
+            },
+            "dryRun": {
+              "type": "boolean"
+            },
+            "reasons": {
+              "items": {
+                "enum": [
+                  "COMMAND_UNAVAILABLE",
+                  "HELPER_UNAVAILABLE",
+                  "OPERATION_UNAVAILABLE",
+                  "TRACKED_MODE_UNAVAILABLE",
+                  "DRY_RUN_UNAVAILABLE",
+                  "NAMESPACE_UNAVAILABLE",
+                  "STYLES_PART_MISSING",
+                  "COLLABORATION_ACTIVE"
+                ]
+              },
+              "type": "array"
+            },
+            "tracked": {
+              "type": "boolean"
+            }
+          },
+          "required": [
+            "available",
+            "tracked",
+            "dryRun"
+          ],
+          "type": "object"
+        },
         "lists.setValue": {
           "additionalProperties": false,
           "properties": {
@@ -13313,6 +13361,7 @@ _No fields._
         "lists.convertToText",
         "lists.applyTemplate",
         "lists.applyPreset",
+        "lists.setType",
         "lists.captureTemplate",
         "lists.setLevelNumbering",
         "lists.setLevelBullet",

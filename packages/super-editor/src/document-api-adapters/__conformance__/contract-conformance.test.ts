@@ -147,6 +147,7 @@ import {
 import {
   listsApplyTemplateWrapper,
   listsApplyPresetWrapper,
+  listsSetTypeWrapper,
   listsCaptureTemplateWrapper,
   listsSetLevelNumberingWrapper,
   listsSetLevelBulletWrapper,
@@ -3421,6 +3422,41 @@ const mutationVectors: Partial<Record<OperationId, MutationVector>> = {
       return result;
     },
   },
+  'lists.setType': {
+    throwCase: () => {
+      const editor = makeListEditor([makeListParagraph({ id: 'li-1', numId: 1, ilvl: 0, numberingType: 'decimal' })]);
+      return listsSetTypeWrapper(
+        editor,
+        { target: { kind: 'block', nodeType: 'listItem', nodeId: 'li-1' }, kind: 'ordered' },
+        { changeMode: 'tracked' },
+      );
+    },
+    failureCase: () => {
+      const editor = makeListEditor([makeListParagraph({ id: 'li-1', numId: 1, ilvl: 0, numberingType: 'decimal' })]);
+      return listsSetTypeWrapper(editor, {
+        target: { kind: 'block', nodeType: 'listItem', nodeId: 'li-1' },
+        kind: 'unknown' as any,
+      });
+    },
+    applyCase: () => {
+      const abstractSpy = vi.spyOn(listSequenceHelpers, 'getAbstractNumId').mockReturnValue(1);
+      const applySpy = vi
+        .spyOn(LevelFormattingHelpers, 'applyTemplateToAbstract')
+        .mockReturnValue({ changed: true, levelsApplied: [0] });
+      const presetSpy = vi
+        .spyOn(LevelFormattingHelpers, 'getPresetTemplate')
+        .mockReturnValue({ version: 1, levels: [{ level: 0, numFmt: 'decimal', lvlText: '%1.' }] });
+      const editor = makeListEditor([makeListParagraph({ id: 'li-1', numId: 1, ilvl: 0, numberingType: 'decimal' })]);
+      const result = listsSetTypeWrapper(editor, {
+        target: { kind: 'block', nodeType: 'listItem', nodeId: 'li-1' },
+        kind: 'ordered',
+      });
+      abstractSpy.mockRestore();
+      applySpy.mockRestore();
+      presetSpy.mockRestore();
+      return result;
+    },
+  },
   'lists.setLevelNumbering': {
     throwCase: () => {
       const editor = makeListEditor([makeListParagraph({ id: 'li-1', numId: 1, ilvl: 0, numberingType: 'decimal' })]);
@@ -5877,6 +5913,17 @@ const dryRunVectors: Partial<Record<OperationId, () => unknown>> = {
     );
     abstractSpy.mockRestore();
     presetSpy.mockRestore();
+    return result;
+  },
+  'lists.setType': () => {
+    const abstractSpy = vi.spyOn(listSequenceHelpers, 'getAbstractNumId').mockReturnValue(1);
+    const editor = makeListEditor([makeListParagraph({ id: 'li-1', numId: 1, ilvl: 0, numberingType: 'decimal' })]);
+    const result = listsSetTypeWrapper(
+      editor,
+      { target: { kind: 'block', nodeType: 'listItem', nodeId: 'li-1' }, kind: 'ordered' },
+      { changeMode: 'direct', dryRun: true },
+    );
+    abstractSpy.mockRestore();
     return result;
   },
   'lists.setLevelNumbering': () => {

@@ -73,6 +73,56 @@ export type ClaimResult = { granted: true } | { granted: false; competitor: Obse
 export type RaceDetectionResult = { raceSuspected: false } | { raceSuspected: true; competitor: ObservedCompetitor };
 
 // ---------------------------------------------------------------------------
+// Post-sync content settling
+// ---------------------------------------------------------------------------
+
+/**
+ * Maximum time (ms) to wait for the XmlFragment to be populated after the
+ * provider reports "synced". Some providers fire the synced event before Yjs
+ * updates are fully applied to local shared types. This brief window avoids
+ * false-empty room detection that leads to destructive re-seeding (SD-2138).
+ */
+const CONTENT_SETTLING_MAX_MS = 200;
+
+/**
+ * After the collaboration provider reports "synced", wait briefly for the
+ * XmlFragment to be populated. Returns immediately if content is already
+ * present, or after CONTENT_SETTLING_MAX_MS if nothing arrives.
+ */
+export function waitForContentSettling(ydoc: YDoc, maxWaitMs: number = CONTENT_SETTLING_MAX_MS): Promise<void> {
+  const fragment = ydoc.getXmlFragment('supereditor');
+  if (fragment.length > 0) return Promise.resolve();
+
+  // Also check the meta map — a finalized bootstrap marker from a prior
+  // session is evidence of a populated room even if fragment is still loading.
+  const metaMap = ydoc.getMap('meta');
+  for (const [key, value] of metaMap.entries()) {
+    if (key === 'bootstrap') {
+      const marker = value as Record<string, unknown> | undefined;
+      if (marker && marker.source !== 'pending') return Promise.resolve();
+      continue;
+    }
+    return Promise.resolve();
+  }
+
+  return new Promise<void>((resolve) => {
+    const timeout = setTimeout(() => {
+      fragment.unobserve(observer);
+      resolve();
+    }, maxWaitMs);
+
+    const observer = () => {
+      if (fragment.length > 0) {
+        clearTimeout(timeout);
+        fragment.unobserve(observer);
+        resolve();
+      }
+    };
+    fragment.observe(observer);
+  });
+}
+
+// ---------------------------------------------------------------------------
 // Room state detection
 // ---------------------------------------------------------------------------
 

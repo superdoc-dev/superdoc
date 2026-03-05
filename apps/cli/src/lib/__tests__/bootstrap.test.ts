@@ -3,6 +3,7 @@ import { Doc as YDoc, XmlElement } from 'yjs';
 import {
   DEFAULT_BOOTSTRAP_SETTLING_MS,
   DEFAULT_BOOTSTRAP_JITTER_MS,
+  waitForContentSettling,
   detectRoomState,
   resolveBootstrapDecision,
   writeBootstrapMarker,
@@ -352,5 +353,84 @@ describe('DEFAULT_BOOTSTRAP_SETTLING_MS', () => {
 describe('DEFAULT_BOOTSTRAP_JITTER_MS', () => {
   test('is a positive number', () => {
     expect(DEFAULT_BOOTSTRAP_JITTER_MS).toBeGreaterThan(0);
+  });
+});
+
+// ---------------------------------------------------------------------------
+// waitForContentSettling (SD-2138)
+// ---------------------------------------------------------------------------
+
+describe('waitForContentSettling', () => {
+  test('resolves immediately when fragment already has content', async () => {
+    const ydoc = new YDoc();
+    const fragment = ydoc.getXmlFragment('supereditor');
+    fragment.insert(0, [new XmlElement('p')]);
+
+    const before = Date.now();
+    await waitForContentSettling(ydoc, 500);
+    expect(Date.now() - before).toBeLessThan(50);
+  });
+
+  test('resolves immediately when meta map has finalized bootstrap marker', async () => {
+    const ydoc = new YDoc();
+    ydoc.getMap('meta').set('bootstrap', { version: 1, source: 'doc' });
+
+    const before = Date.now();
+    await waitForContentSettling(ydoc, 500);
+    expect(Date.now() - before).toBeLessThan(50);
+  });
+
+  test('resolves immediately when meta map has non-bootstrap entries', async () => {
+    const ydoc = new YDoc();
+    ydoc.getMap('meta').set('docx', 'some-content');
+
+    const before = Date.now();
+    await waitForContentSettling(ydoc, 500);
+    expect(Date.now() - before).toBeLessThan(50);
+  });
+
+  test('waits and resolves when fragment is populated during settling', async () => {
+    const ydoc = new YDoc();
+    const fragment = ydoc.getXmlFragment('supereditor');
+
+    // Populate fragment after 20ms
+    setTimeout(() => {
+      fragment.insert(0, [new XmlElement('p')]);
+    }, 20);
+
+    const before = Date.now();
+    await waitForContentSettling(ydoc, 500);
+    const elapsed = Date.now() - before;
+
+    // Should resolve quickly after content arrives, not wait full 500ms
+    expect(elapsed).toBeGreaterThanOrEqual(15);
+    expect(elapsed).toBeLessThan(200);
+  });
+
+  test('times out when no content arrives', async () => {
+    const ydoc = new YDoc();
+
+    const before = Date.now();
+    await waitForContentSettling(ydoc, 50);
+    const elapsed = Date.now() - before;
+
+    expect(elapsed).toBeGreaterThanOrEqual(40);
+  });
+
+  test('does not treat pending bootstrap marker as content', async () => {
+    const ydoc = new YDoc();
+    ydoc.getMap('meta').set('bootstrap', {
+      version: 1,
+      clientId: 999,
+      seededAt: new Date().toISOString(),
+      source: 'pending',
+    });
+
+    const before = Date.now();
+    await waitForContentSettling(ydoc, 50);
+    const elapsed = Date.now() - before;
+
+    // Should wait full timeout since pending marker is not content
+    expect(elapsed).toBeGreaterThanOrEqual(40);
   });
 });

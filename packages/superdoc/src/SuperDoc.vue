@@ -741,7 +741,7 @@ const onEditorCommentsUpdate = (params = {}) => {
     const ids = [payload?.importedId, payload?.commentId].filter(Boolean).map((value) => String(value));
     return [...new Set(ids)];
   };
-  const resolveUpdateCommentMatch = (payload) => {
+  const resolveDocumentScopedCommentMatch = (payload) => {
     const candidateIds = [payload?.importedId, payload?.commentId].filter(Boolean).map((value) => String(value));
     const activeDocumentId =
       proxy.$superdoc?.activeEditor?.options?.documentId != null
@@ -796,15 +796,15 @@ const onEditorCommentsUpdate = (params = {}) => {
       commentPayload.fileId = primaryDocumentId;
     }
 
-    const id = commentPayload.commentId || commentPayload.importedId;
-    if (id && !getComment(id)) {
+    const { id, existingComment } = resolveDocumentScopedCommentMatch(commentPayload);
+    if (id && !existingComment) {
       const commentModel = useComment(commentPayload);
       addComment({ superdoc: proxy.$superdoc, comment: commentModel, skipEditorUpdate: true });
     }
   }
 
   if (COMMENT_EVENTS?.UPDATE && type === COMMENT_EVENTS.UPDATE && commentPayload) {
-    const { id, existingComment } = resolveUpdateCommentMatch(commentPayload);
+    const { id, existingComment } = resolveDocumentScopedCommentMatch(commentPayload);
     if (id) {
       const resolvedText = commentPayload.commentText || commentPayload.text;
 

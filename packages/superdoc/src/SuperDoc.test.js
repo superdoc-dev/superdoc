@@ -724,6 +724,37 @@ describe('SuperDoc.vue', () => {
     expect(addedComment.docxCommentJSON).toEqual(addedElements);
   });
 
+  it('does not drop replay add when same id exists only in another document', async () => {
+    const superdocStub = createSuperdocStub();
+    const wrapper = await mountComponent(superdocStub);
+    await nextTick();
+
+    const options = wrapper.findComponent(SuperEditorStub).props('options');
+    commentsStoreStub.commentsList.value = [
+      { commentId: 'shared-id', importedId: 'shared-imported-id', fileId: 'doc-2', commentText: 'Doc 2 comment' },
+    ];
+    commentsStoreStub.getComment.mockImplementation((id) =>
+      commentsStoreStub.commentsList.value.find((comment) => comment.commentId === id || comment.importedId === id),
+    );
+    commentsStoreStub.addComment.mockClear();
+    superdocStub.activeEditor = { options: { documentId: 'doc-1' } };
+
+    options.onCommentsUpdate({
+      type: 'add',
+      comment: {
+        commentId: 'shared-id',
+        importedId: 'shared-imported-id',
+        commentText: 'Doc 1 replay add',
+      },
+    });
+
+    expect(commentsStoreStub.addComment).toHaveBeenCalledTimes(1);
+    const [{ comment: addedComment }] = commentsStoreStub.addComment.mock.calls[0];
+    expect(addedComment.commentId).toBe('shared-id');
+    expect(addedComment.importedId).toBe('shared-imported-id');
+    expect(addedComment.fileId).toBe('doc-1');
+  });
+
   it('removes replay-deleted comments when payload commentId is stale but importedId matches', async () => {
     const superdocStub = createSuperdocStub();
     const wrapper = await mountComponent(superdocStub);

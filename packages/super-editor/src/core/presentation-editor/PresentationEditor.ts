@@ -4,6 +4,7 @@ import { CellSelection } from 'prosemirror-tables';
 import { DecorationBridge } from './dom/DecorationBridge.js';
 import { SdtSelectionStyleManager } from './selection/SdtSelectionStyleManager.js';
 import { SemanticFlowController } from './layout/SemanticFlowController.js';
+import { LayoutErrorBanner } from './ui/LayoutErrorBanner.js';
 import type { EditorState, Transaction } from 'prosemirror-state';
 import type { Node as ProseMirrorNode, Mark } from 'prosemirror-model';
 import type { Mapping } from 'prosemirror-transform';
@@ -287,8 +288,7 @@ export class PresentationEditor extends EventEmitter {
   #dragDropManager: DragDropManager | null = null;
   #layoutError: LayoutError | null = null;
   #layoutErrorState: 'healthy' | 'degraded' | 'failed' = 'healthy';
-  #errorBanner: HTMLElement | null = null;
-  #errorBannerMessage: HTMLElement | null = null;
+  #errorBanner!: LayoutErrorBanner;
   #renderScheduled = false;
   #pendingDocChange = false;
   #pendingMapping: Mapping | null = null;
@@ -430,6 +430,16 @@ export class PresentationEditor extends EventEmitter {
     });
     this.#painterHost.addEventListener('mouseover', this.#sdtStyles.handleMouseEnter);
     this.#painterHost.addEventListener('mouseout', this.#sdtStyles.handleMouseLeave);
+
+    this.#errorBanner = new LayoutErrorBanner({
+      host: this.#visibleHost,
+      getDebugLabel: () => this.#layoutOptions.debugLabel,
+      onRetry: () => {
+        this.#layoutError = null;
+        this.#pendingDocChange = true;
+        this.#scheduleRerender();
+      },
+    });
 
     const win = this.#visibleHost?.ownerDocument?.defaultView ?? window;
     this.#domIndexObserverManager = new DomPositionIndexObserverManager({
@@ -2461,7 +2471,7 @@ export class PresentationEditor extends EventEmitter {
     this.#modeBanner = null;
     this.#ariaLiveRegion?.remove();
     this.#ariaLiveRegion = null;
-    this.#errorBanner?.remove();
+    this.#errorBanner.destroy();
     if (this.#editor) {
       (this.#editor as Editor & { presentationEditor?: PresentationEditor | null }).presentationEditor = null;
       this.#editor.destroy();
@@ -3588,7 +3598,7 @@ export class PresentationEditor extends EventEmitter {
       // Reset error state on successful layout
       this.#layoutError = null;
       this.#layoutErrorState = 'healthy';
-      this.#dismissErrorBanner();
+      this.#errorBanner.dismiss();
 
       // Update viewport dimensions after layout (page count may have changed)
       this.#applyZoom();
@@ -5239,7 +5249,7 @@ export class PresentationEditor extends EventEmitter {
     }
 
     this.emit('layoutError', this.#layoutError);
-    this.#showLayoutErrorBanner(error);
+    this.#errorBanner.show(error);
   }
 
   #decorateError(error: unknown, stage: string): Error {
@@ -5248,62 +5258,6 @@ export class PresentationEditor extends EventEmitter {
       return error;
     }
     return new Error(`[${stage}] ${String(error)}`);
-  }
-
-  #showLayoutErrorBanner(error: Error) {
-    const doc = this.#visibleHost.ownerDocument ?? document;
-    if (!this.#errorBanner) {
-      const banner = doc.createElement('div');
-      banner.className = 'presentation-editor__layout-error';
-      banner.style.display = 'flex';
-      banner.style.alignItems = 'center';
-      banner.style.justifyContent = 'space-between';
-      banner.style.gap = '8px';
-      banner.style.padding = '8px 12px';
-      banner.style.background = '#FFF6E5';
-      banner.style.border = '1px solid #F5B971';
-      banner.style.borderRadius = '6px';
-      banner.style.marginBottom = '8px';
-
-      const message = doc.createElement('span');
-      banner.appendChild(message);
-
-      const retry = doc.createElement('button');
-      retry.type = 'button';
-      retry.textContent = 'Reload layout';
-      retry.style.border = 'none';
-      retry.style.borderRadius = '4px';
-      retry.style.background = '#F5B971';
-      retry.style.color = '#3F2D00';
-      retry.style.padding = '6px 10px';
-      retry.style.cursor = 'pointer';
-      retry.addEventListener('click', () => {
-        this.#layoutError = null;
-        this.#dismissErrorBanner();
-        this.#pendingDocChange = true;
-        this.#scheduleRerender();
-      });
-
-      banner.appendChild(retry);
-      this.#visibleHost.prepend(banner);
-
-      this.#errorBanner = banner;
-      this.#errorBannerMessage = message;
-    }
-
-    if (this.#errorBannerMessage) {
-      this.#errorBannerMessage.textContent =
-        'Layout engine hit an error. Your document is safe — try reloading layout.';
-      if (this.#layoutOptions.debugLabel) {
-        this.#errorBannerMessage.textContent += ` (${this.#layoutOptions.debugLabel}: ${error.message})`;
-      }
-    }
-  }
-
-  #dismissErrorBanner() {
-    this.#errorBanner?.remove();
-    this.#errorBanner = null;
-    this.#errorBannerMessage = null;
   }
 
   /**

@@ -1,23 +1,23 @@
 import { Fragment } from 'prosemirror-model';
 
 /**
- * Returns true when inserting a table at `pos` would place it adjacent to
- * another table or at the document end.
+ * Determines which sides of a table inserted at `pos` need a separator
+ * paragraph to prevent adjacency with an existing table.
  *
  * @param {import('prosemirror-model').Node} doc
  * @param {number} pos
- * @returns {boolean}
+ * @returns {{ before: boolean, after: boolean }}
  */
-function tableWouldBeAdjacent(doc, pos) {
+function tableSeparatorNeeds(doc, pos) {
   const $pos = doc.resolve(pos);
-  if ($pos.depth !== 0) return false;
+  if ($pos.depth !== 0) return { before: false, after: false };
   const indexAfter = $pos.index(0);
   const nodeAfter = indexAfter < doc.childCount ? doc.child(indexAfter) : null;
   const nodeBefore = indexAfter > 0 ? doc.child(indexAfter - 1) : null;
-  if (!nodeAfter) return true;
-  if (nodeAfter.type.name === 'table') return true;
-  if (nodeBefore?.type.name === 'table') return true;
-  return false;
+  return {
+    before: nodeBefore?.type.name === 'table',
+    after: !nodeAfter || nodeAfter.type.name === 'table',
+  };
 }
 
 /**
@@ -57,11 +57,21 @@ export const insertTableAt =
       const tableAttrs = sdBlockId ? { sdBlockId } : undefined;
       const tableNode = tableType.createChecked(tableAttrs, rowNodes);
 
+      const sep = tableSeparatorNeeds(state.doc, pos);
       let tr;
-      if (tableWouldBeAdjacent(state.doc, pos)) {
-        const separatorParagraph = state.schema.nodes.paragraph.createAndFill();
-        const fragment = Fragment.from(separatorParagraph ? [tableNode, separatorParagraph] : [tableNode]);
-        tr = state.tr.insert(pos, fragment);
+      if (sep.before || sep.after) {
+        const makeSep = () => state.schema.nodes.paragraph.createAndFill();
+        const nodes = [];
+        if (sep.before) {
+          const s = makeSep();
+          if (s) nodes.push(s);
+        }
+        nodes.push(tableNode);
+        if (sep.after) {
+          const s = makeSep();
+          if (s) nodes.push(s);
+        }
+        tr = state.tr.insert(pos, Fragment.from(nodes));
       } else {
         tr = state.tr.insert(pos, tableNode);
       }

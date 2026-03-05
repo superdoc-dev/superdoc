@@ -224,34 +224,25 @@ import {
 } from './tableHelpers/appendRows.js';
 
 /**
- * Returns true when inserting a table at `pos` would place it adjacent to
- * another table or at the document end (where a follow-up insert could
- * produce adjacency). A trailing separator paragraph is only needed in
- * these cases — inserting before/after a paragraph or heading should not
- * add an extra blank block.
+ * Determines which sides of a table inserted at `pos` need a separator
+ * paragraph to prevent adjacency with an existing table.
  *
  * @param {import('prosemirror-model').Node} doc
  * @param {number} pos - Absolute insertion position (between top-level blocks)
- * @returns {boolean}
+ * @returns {{ before: boolean, after: boolean }}
  */
-function tableWouldBeAdjacent(doc, pos) {
-  // pos sits between top-level children. Resolve to find which children
-  // border the insertion point.
+function tableSeparatorNeeds(doc, pos) {
   const $pos = doc.resolve(pos);
-  // Only act at top-level (depth 0 = doc body). Inside nested structures
-  // the adjacency rule does not apply.
-  if ($pos.depth !== 0) return false;
+  if ($pos.depth !== 0) return { before: false, after: false };
 
-  const indexAfter = $pos.index(0); // child that currently starts at pos
+  const indexAfter = $pos.index(0);
   const nodeAfter = indexAfter < doc.childCount ? doc.child(indexAfter) : null;
   const nodeBefore = indexAfter > 0 ? doc.child(indexAfter - 1) : null;
 
-  // At document end — always add separator so consecutive inserts stay safe.
-  if (!nodeAfter) return true;
-  // Adjacent to an existing table on either side.
-  if (nodeAfter.type.name === 'table') return true;
-  if (nodeBefore?.type.name === 'table') return true;
-  return false;
+  return {
+    before: nodeBefore?.type.name === 'table',
+    after: !nodeAfter || nodeAfter.type.name === 'table',
+  };
 }
 
 const IMPORT_CONTEXT_SELECTOR = '[data-superdoc-import="true"]';
@@ -737,15 +728,23 @@ export const Table = Node.create({
             const tableNode = tableType.createChecked(tableAttrs, rowNodes);
 
             if (dispatch) {
-              // Only insert a trailing separator paragraph when the table would
-              // otherwise be adjacent to another table (or at document end where
-              // a follow-up insert could produce adjacency).
-              const needsSeparator = tableWouldBeAdjacent(state.doc, pos);
-              if (needsSeparator) {
-                const separatorAttrs = { sdBlockId: uuidv4(), paraId: genParaId() };
-                const separatorParagraph = state.schema.nodes.paragraph.createAndFill(separatorAttrs);
-                const fragment = Fragment.from(separatorParagraph ? [tableNode, separatorParagraph] : [tableNode]);
-                tr.insert(pos, fragment);
+              const sep = tableSeparatorNeeds(state.doc, pos);
+              const makeSep = () => {
+                const attrs = { sdBlockId: uuidv4(), paraId: genParaId() };
+                return state.schema.nodes.paragraph.createAndFill(attrs);
+              };
+              if (sep.before || sep.after) {
+                const nodes = [];
+                if (sep.before) {
+                  const s = makeSep();
+                  if (s) nodes.push(s);
+                }
+                nodes.push(tableNode);
+                if (sep.after) {
+                  const s = makeSep();
+                  if (s) nodes.push(s);
+                }
+                tr.insert(pos, Fragment.from(nodes));
               } else {
                 tr.insert(pos, tableNode);
               }

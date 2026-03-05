@@ -4,7 +4,7 @@ import { EditorState, TextSelection } from 'prosemirror-state';
 
 import { Extension } from '@core/Extension.js';
 import { DOM_CLASS_NAMES } from '@superdoc/painter-dom';
-import { VerticalNavigation, VerticalNavigationPluginKey } from './vertical-navigation.js';
+import { VerticalNavigation, VerticalNavigationPluginKey, resolvePositionAtGoalX } from './vertical-navigation.js';
 
 const createSchema = () => {
   const nodes = {
@@ -170,5 +170,59 @@ describe('VerticalNavigation', () => {
 
     const dispatchedTr = view.dispatch.mock.calls[0][0];
     expect(dispatchedTr.getMeta(VerticalNavigationPluginKey)).toMatchObject({ type: 'reset-goal-x' });
+  });
+});
+
+describe('resolvePositionAtGoalX', () => {
+  const makeEditor = (rectFn) => ({
+    presentationEditor: { computeCaretLayoutRect: rectFn },
+  });
+
+  it('returns the position whose X is closest to goalX', () => {
+    // Simulate 5 positions (10-14) with X values 0, 10, 20, 30, 40
+    const editor = makeEditor((pos) => ({ x: (pos - 10) * 10 }));
+    const result = resolvePositionAtGoalX(editor, 10, 14, 25);
+    // Position 12 has x=20 (dist=5), position 13 has x=30 (dist=5).
+    // Binary search encounters 12 first so it becomes bestPos.
+    expect(result).toEqual({ pos: 12 });
+  });
+
+  it('returns exact match when goalX lands on a position', () => {
+    const editor = makeEditor((pos) => ({ x: (pos - 10) * 10 }));
+    const result = resolvePositionAtGoalX(editor, 10, 14, 20);
+    expect(result).toEqual({ pos: 12 });
+  });
+
+  it('returns pmStart when goalX is before all positions', () => {
+    const editor = makeEditor((pos) => ({ x: pos * 10 }));
+    const result = resolvePositionAtGoalX(editor, 5, 10, -100);
+    expect(result).toEqual({ pos: 5 });
+  });
+
+  it('returns pmEnd when goalX is past all positions', () => {
+    const editor = makeEditor((pos) => ({ x: pos * 10 }));
+    const result = resolvePositionAtGoalX(editor, 5, 10, 9999);
+    expect(result).toEqual({ pos: 10 });
+  });
+
+  it('skips positions where computeCaretLayoutRect returns null', () => {
+    // Position 12 returns null (inline node boundary), others are normal
+    const editor = makeEditor((pos) => (pos === 12 ? null : { x: (pos - 10) * 10 }));
+    const result = resolvePositionAtGoalX(editor, 10, 14, 25);
+    // Should still find a valid position, not fall back to pmStart
+    expect(result.pos).toBeGreaterThan(10);
+  });
+
+  it('handles all-null positions gracefully', () => {
+    const editor = makeEditor(() => null);
+    const result = resolvePositionAtGoalX(editor, 10, 14, 25);
+    // Falls back to pmStart since no positions are measurable
+    expect(result).toEqual({ pos: 10 });
+  });
+
+  it('handles single-position range', () => {
+    const editor = makeEditor((pos) => ({ x: 50 }));
+    const result = resolvePositionAtGoalX(editor, 10, 10, 50);
+    expect(result).toEqual({ pos: 10 });
   });
 });

@@ -154,6 +154,10 @@ export const VerticalNavigation = Extension.create({
           // 4. Move selection
           const selection = buildSelection(view.state, hit.pos, event.shiftKey);
           if (!selection) return false;
+          // Request auto-scroll before dispatch so the next selection update scrolls
+          // the caret into view. Only arrow-key navigation triggers this — other
+          // selection changes (collab, undo, find-and-replace) do not auto-scroll.
+          editor.presentationEditor?.requestScrollCaretIntoView?.();
           view.dispatch(
             view.state.tr
               .setMeta(VerticalNavigationPluginKey, { type: 'vertical-move', goalX })
@@ -389,7 +393,7 @@ function findAdjacentLineElement(currentLine, direction) {
  * @param {number} goalX - Target X coordinate in layout space.
  * @returns {{ pos: number } | null}
  */
-function resolvePositionAtGoalX(editor, pmStart, pmEnd, goalX) {
+export function resolvePositionAtGoalX(editor, pmStart, pmEnd, goalX) {
   const presentationEditor = editor.presentationEditor;
   let bestPos = pmStart;
   let bestDist = Infinity;

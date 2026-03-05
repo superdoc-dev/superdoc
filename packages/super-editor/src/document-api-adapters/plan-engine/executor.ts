@@ -122,7 +122,10 @@ function buildMarksFromSetMarks(editor: Editor, setMarks?: SetMarks): readonly P
 
 type InlineRunPatch = StyleApplyInput['inline'];
 type TextStylePatchKey = 'color' | 'fontSize' | 'letterSpacing' | 'vertAlign' | 'position';
-type TextStylePatch = Partial<Pick<InlineRunPatch, TextStylePatchKey>>;
+type TextStylePatch = Partial<Pick<InlineRunPatch, TextStylePatchKey>> & {
+  /** Derived from `caps` boolean — mapped to the textStyle mark's `textTransform` attribute. */
+  textTransform?: string | null;
+};
 
 interface InlineTextSegment {
   from: number;
@@ -159,6 +162,11 @@ function toPointString(value: number): string {
 
 function toHalfPoints(value: number): number {
   return Math.round(value * 2);
+}
+
+function capsToTextTransform(caps: boolean | null): string | null {
+  if (caps === null) return null;
+  return caps ? 'uppercase' : 'none';
 }
 
 function collectInlineTextSegments(doc: ProseMirrorNode, absFrom: number, absTo: number): InlineTextSegment[] {
@@ -233,8 +241,7 @@ function applyHighlightPatch(
 function mergeTextStyleAttrs(currentAttrs: Record<string, unknown>, patch: TextStylePatch): Record<string, unknown> {
   const next = { ...currentAttrs };
 
-  for (const key of TEXT_STYLE_KEYS) {
-    const value = patch[key];
+  for (const [key, value] of Object.entries(patch)) {
     if (value === undefined) continue;
 
     if (value === null) {
@@ -251,7 +258,7 @@ function mergeTextStyleAttrs(currentAttrs: Record<string, unknown>, patch: TextS
       continue;
     }
 
-    next[key] = value as string;
+    next[key] = value;
   }
 
   return compactAttrs(next);
@@ -612,6 +619,9 @@ function applyInlinePatchToRange(
     if (inline[key] !== undefined) {
       (textStylePatch as Record<string, unknown>)[key] = inline[key];
     }
+  }
+  if (inline.caps !== undefined) {
+    textStylePatch.textTransform = capsToTextTransform(inline.caps ?? null);
   }
   if (applyTextStylePatch(tr, schema.marks.textStyle, absFrom, absTo, textStylePatch)) {
     changed = true;

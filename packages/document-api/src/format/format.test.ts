@@ -176,6 +176,35 @@ describe('executeInlineAlias', () => {
   });
 });
 
+describe('executeInlineAlias: format.caps', () => {
+  it('format.caps accepts omitted value (defaults to true)', () => {
+    const adapter = makeAdapter();
+    executeInlineAlias(adapter, 'caps', { target: TARGET });
+    expect(adapter.apply).toHaveBeenCalledWith(
+      { target: TARGET, inline: { caps: true } },
+      expect.objectContaining({ changeMode: 'direct' }),
+    );
+  });
+
+  it('format.caps accepts explicit false', () => {
+    const adapter = makeAdapter();
+    executeInlineAlias(adapter, 'caps', { target: TARGET, value: false });
+    expect(adapter.apply).toHaveBeenCalledWith(
+      { target: TARGET, inline: { caps: false } },
+      expect.objectContaining({ changeMode: 'direct' }),
+    );
+  });
+
+  it('format.caps accepts null to clear', () => {
+    const adapter = makeAdapter();
+    executeInlineAlias(adapter, 'caps', { target: TARGET, value: null });
+    expect(adapter.apply).toHaveBeenCalledWith(
+      { target: TARGET, inline: { caps: null } },
+      expect.objectContaining({ changeMode: 'direct' }),
+    );
+  });
+});
+
 // ---------------------------------------------------------------------------
 // FormatInlineAliasInput — compile-time type shape assertions
 // ---------------------------------------------------------------------------

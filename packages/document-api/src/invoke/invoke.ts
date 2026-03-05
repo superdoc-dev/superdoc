@@ -68,6 +68,7 @@ export function buildDispatchTable(api: DocumentApi): TypedDispatchTable {
     info: (input) => api.info(input),
 
     // --- Singleton mutations ---
+    clearContent: (input, options) => api.clearContent(input, options),
     insert: (input, options) => api.insert(input, options),
     replace: (input, options) => api.replace(input, options),
     delete: (input, options) => api.delete(input, options),
@@ -132,6 +133,7 @@ export function buildDispatchTable(api: DocumentApi): TypedDispatchTable {
     // --- lists.* (SD-1973 formatting) ---
     'lists.applyTemplate': (input, options) => api.lists.applyTemplate(input, options),
     'lists.applyPreset': (input, options) => api.lists.applyPreset(input, options),
+    'lists.setType': (input, options) => api.lists.setType(input, options),
     'lists.captureTemplate': (input) => api.lists.captureTemplate(input),
     'lists.setLevelNumbering': (input, options) => api.lists.setLevelNumbering(input, options),
     'lists.setLevelBullet': (input, options) => api.lists.setLevelBullet(input, options),

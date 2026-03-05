@@ -19,6 +19,7 @@ import { ListHelpers } from '../../core/helpers/list-numbering-helpers.js';
 import { createCommentsWrapper } from '../plan-engine/comments-wrappers.js';
 import { createParagraphWrapper, createHeadingWrapper } from '../plan-engine/create-wrappers.js';
 import { blocksDeleteWrapper } from '../plan-engine/blocks-wrappers.js';
+import { clearContentWrapper } from '../plan-engine/clear-content-wrapper.js';
 import { styleApplyWrapper } from '../plan-engine/plan-wrappers.js';
 import {
   paragraphsSetStyleWrapper,
@@ -146,6 +147,7 @@ import {
 import {
   listsApplyTemplateWrapper,
   listsApplyPresetWrapper,
+  listsSetTypeWrapper,
   listsCaptureTemplateWrapper,
   listsSetLevelNumberingWrapper,
   listsSetLevelBulletWrapper,
@@ -2283,6 +2285,31 @@ const mutationVectors: Partial<Record<OperationId, MutationVector>> = {
       );
     },
   },
+  clearContent: {
+    throwCase: () => {
+      const { editor } = makeTextEditor('Hello');
+      // Remove paragraph from schema nodes to trigger CAPABILITY_UNAVAILABLE
+      (editor.state.schema as { nodes: Record<string, unknown> }).nodes = {};
+      return clearContentWrapper(editor, {});
+    },
+    failureCase: () => {
+      // Build an editor whose doc is a single empty paragraph (childCount === 0)
+      const emptyParagraph = createNode('paragraph', [], {
+        attrs: { sdBlockId: 'p1' },
+        isBlock: true,
+        inlineContent: true,
+      });
+      const { editor } = makeTextEditor('');
+      const stateDoc = editor.state.doc as Record<string, unknown>;
+      stateDoc.childCount = 1;
+      stateDoc.firstChild = emptyParagraph;
+      return clearContentWrapper(editor, {});
+    },
+    applyCase: () => {
+      const { editor } = makeTextEditor('Hello');
+      return clearContentWrapper(editor, {});
+    },
+  },
   insert: {
     throwCase: () => {
       const { editor } = makeTextEditor();
@@ -3388,6 +3415,41 @@ const mutationVectors: Partial<Record<OperationId, MutationVector>> = {
       const result = listsApplyPresetWrapper(editor, {
         target: { kind: 'block', nodeType: 'listItem', nodeId: 'li-1' },
         preset: 'decimal',
+      });
+      abstractSpy.mockRestore();
+      applySpy.mockRestore();
+      presetSpy.mockRestore();
+      return result;
+    },
+  },
+  'lists.setType': {
+    throwCase: () => {
+      const editor = makeListEditor([makeListParagraph({ id: 'li-1', numId: 1, ilvl: 0, numberingType: 'decimal' })]);
+      return listsSetTypeWrapper(
+        editor,
+        { target: { kind: 'block', nodeType: 'listItem', nodeId: 'li-1' }, kind: 'ordered' },
+        { changeMode: 'tracked' },
+      );
+    },
+    failureCase: () => {
+      const editor = makeListEditor([makeListParagraph({ id: 'li-1', numId: 1, ilvl: 0, numberingType: 'decimal' })]);
+      return listsSetTypeWrapper(editor, {
+        target: { kind: 'block', nodeType: 'listItem', nodeId: 'li-1' },
+        kind: 'unknown' as any,
+      });
+    },
+    applyCase: () => {
+      const abstractSpy = vi.spyOn(listSequenceHelpers, 'getAbstractNumId').mockReturnValue(1);
+      const applySpy = vi
+        .spyOn(LevelFormattingHelpers, 'applyTemplateToAbstract')
+        .mockReturnValue({ changed: true, levelsApplied: [0] });
+      const presetSpy = vi
+        .spyOn(LevelFormattingHelpers, 'getPresetTemplate')
+        .mockReturnValue({ version: 1, levels: [{ level: 0, numFmt: 'decimal', lvlText: '%1.' }] });
+      const editor = makeListEditor([makeListParagraph({ id: 'li-1', numId: 1, ilvl: 0, numberingType: 'decimal' })]);
+      const result = listsSetTypeWrapper(editor, {
+        target: { kind: 'block', nodeType: 'listItem', nodeId: 'li-1' },
+        kind: 'ordered',
       });
       abstractSpy.mockRestore();
       applySpy.mockRestore();
@@ -5851,6 +5913,17 @@ const dryRunVectors: Partial<Record<OperationId, () => unknown>> = {
     );
     abstractSpy.mockRestore();
     presetSpy.mockRestore();
+    return result;
+  },
+  'lists.setType': () => {
+    const abstractSpy = vi.spyOn(listSequenceHelpers, 'getAbstractNumId').mockReturnValue(1);
+    const editor = makeListEditor([makeListParagraph({ id: 'li-1', numId: 1, ilvl: 0, numberingType: 'decimal' })]);
+    const result = listsSetTypeWrapper(
+      editor,
+      { target: { kind: 'block', nodeType: 'listItem', nodeId: 'li-1' }, kind: 'ordered' },
+      { changeMode: 'direct', dryRun: true },
+    );
+    abstractSpy.mockRestore();
     return result;
   },
   'lists.setLevelNumbering': () => {

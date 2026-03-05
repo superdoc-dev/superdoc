@@ -1798,6 +1798,26 @@ export const SUCCESS_SCENARIOS = {
       ],
     };
   },
+  'doc.lists.setType': async (harness: ConformanceHarness): Promise<ScenarioInvocation> => {
+    const stateDir = await harness.createStateDir('doc-lists-set-type-success');
+    const docPath = await harness.copyListFixtureDoc('doc-lists-set-type');
+    const target = await harness.firstListItemAddress(docPath, stateDir);
+    return {
+      stateDir,
+      args: [
+        ...commandTokens('doc.lists.setType'),
+        docPath,
+        '--target-json',
+        JSON.stringify(target),
+        '--kind',
+        'bullet',
+        '--continuity',
+        'preserve',
+        '--out',
+        harness.createOutputPath('doc-lists-set-type-output'),
+      ],
+    };
+  },
   'doc.lists.captureTemplate': async (harness: ConformanceHarness): Promise<ScenarioInvocation> => {
     const stateDir = await harness.createStateDir('doc-lists-capture-template-success');
     const docPath = await harness.copyListFixtureDoc('doc-lists-capture-template');
@@ -1941,6 +1961,14 @@ export const SUCCESS_SCENARIOS = {
         '--out',
         harness.createOutputPath('doc-lists-clear-level-overrides-output'),
       ],
+    };
+  },
+  'doc.clearContent': async (harness: ConformanceHarness): Promise<ScenarioInvocation> => {
+    const stateDir = await harness.createStateDir('doc-clear-content-success');
+    const docPath = await harness.copyFixtureDoc('doc-clear-content');
+    return {
+      stateDir,
+      args: ['clear-content', docPath, '--out', harness.createOutputPath('doc-clear-content-output')],
     };
   },
   'doc.insert': async (harness: ConformanceHarness): Promise<ScenarioInvocation> => {

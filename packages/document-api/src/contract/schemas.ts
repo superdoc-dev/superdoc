@@ -1680,6 +1680,12 @@ const operationSchemas: Record<OperationId, OperationSchemaSet> = {
     input: strictEmptyObjectSchema,
     output: documentInfoSchema,
   },
+  clearContent: {
+    input: strictEmptyObjectSchema,
+    output: receiptResultSchemaFor('clearContent'),
+    success: receiptSuccessSchema,
+    failure: receiptFailureResultSchemaFor('clearContent'),
+  },
   insert: {
     input: insertInputSchema,
     output: textMutationResultSchemaFor('insert'),
@@ -2678,6 +2684,19 @@ const operationSchemas: Record<OperationId, OperationSchemaSet> = {
     output: listsMutateItemResultSchemaFor('lists.applyPreset'),
     success: listsMutateItemSuccessSchema,
     failure: listsFailureSchemaFor('lists.applyPreset'),
+  },
+  'lists.setType': {
+    input: objectSchema(
+      {
+        target: listItemAddressSchema,
+        kind: { enum: ['ordered', 'bullet'] },
+        continuity: { enum: ['preserve', 'none'] },
+      },
+      ['target', 'kind'],
+    ),
+    output: listsMutateItemResultSchemaFor('lists.setType'),
+    success: listsMutateItemSuccessSchema,
+    failure: listsFailureSchemaFor('lists.setType'),
   },
   'lists.captureTemplate': (() => {
     const successSchema = objectSchema(

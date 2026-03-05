@@ -13,6 +13,8 @@ import type { Editor } from '../../core/Editor.js';
 import type {
   ListsApplyTemplateInput,
   ListsApplyPresetInput,
+  ListsSetTypeInput,
+  ListPresetId,
   ListsCaptureTemplateInput,
   ListsCaptureTemplateResult,
   ListsSetLevelNumberingInput,
@@ -30,9 +32,12 @@ import type {
 } from '@superdoc/document-api';
 import { rejectTrackedMode } from '../helpers/mutation-helpers.js';
 import { executeDomainCommand } from './plan-wrappers.js';
-import { resolveListItem } from '../helpers/list-item-resolver.js';
-import { getAbstractNumId } from '../helpers/list-sequence-helpers.js';
+import { resolveListItem, type ListItemProjection } from '../helpers/list-item-resolver.js';
+import { getAbstractNumId, getContiguousSequence, findAdjacentSequence } from '../helpers/list-sequence-helpers.js';
+import { clearIndexCache } from '../helpers/index-cache.js';
 import { LevelFormattingHelpers } from '../../core/helpers/list-level-formatting-helpers.js';
+import { updateNumberingProperties } from '../../core/commands/changeListLevel.js';
+import { ListHelpers } from '../../core/helpers/list-numbering-helpers.js';
 
 // ---------------------------------------------------------------------------
 // Shared helpers
@@ -341,6 +346,219 @@ export function listsApplyPresetWrapper(
   }
 
   return { success: true, item: targetResult.resolved.address };
+}
+
+// ---------------------------------------------------------------------------
+// setType — compound operation: convert kind + preserve continuity (SD-2052)
+// ---------------------------------------------------------------------------
+
+const DEFAULT_PRESET_FOR_KIND: Record<string, ListPresetId> = {
+  ordered: 'decimal',
+  bullet: 'disc',
+};
+
+/**
+ * Two sequences are compatible for merging when they share the same
+ * abstractNumId — meaning they derive from the same definition and
+ * will produce identical level formatting after the preset is applied.
+ *
+ * This is conservative by design: sequences with different abstracts
+ * are never merged, even if they happen to look the same visually.
+ */
+function areAbstractsCompatibleForMerge(
+  targetAbstractNumId: number,
+  adjacentAbstractNumId: number | undefined,
+): boolean {
+  return adjacentAbstractNumId != null && targetAbstractNumId === adjacentAbstractNumId;
+}
+
+/**
+ * Determine the list kind of an adjacent sequence from its first item's
+ * projection. Returns undefined if the sequence is empty or has no numId.
+ */
+function resolveSequenceKind(sequence: ListItemProjection[]): 'ordered' | 'bullet' | undefined {
+  const first = sequence[0];
+  if (!first || first.numId == null) return undefined;
+  return first.kind;
+}
+
+/**
+ * Merge an adjacent sequence into the target's numId by reassigning
+ * all items. Clears any startOverride on the absorbed sequence's
+ * *original* numId before reassignment to prevent numbering restart.
+ */
+function mergeAdjacentSequence(
+  editor: Editor,
+  tr: unknown,
+  absorbingNumId: number,
+  absorbedItems: ListItemProjection[],
+): void {
+  // Remove startOverride on the absorbed sequence's original numId
+  // *before* reassignment, so the old definition doesn't carry restart
+  // semantics if it's ever re-referenced. This mirrors listsContinuePreviousWrapper.
+  const firstAbsorbed = absorbedItems[0];
+  if (firstAbsorbed?.numId != null) {
+    ListHelpers.removeLvlOverride(editor, firstAbsorbed.numId, firstAbsorbed.level ?? 0);
+  }
+
+  for (const item of absorbedItems) {
+    updateNumberingProperties(
+      { numId: absorbingNumId, ilvl: item.level ?? 0 },
+      item.candidate.node,
+      item.candidate.pos,
+      editor,
+      tr as Parameters<Editor['dispatch']>[0],
+    );
+  }
+}
+
+export function listsSetTypeWrapper(
+  editor: Editor,
+  input: ListsSetTypeInput,
+  options?: MutationOptions,
+): ListsMutateItemResult {
+  rejectTrackedMode('lists.setType', options);
+
+  const preset = DEFAULT_PRESET_FOR_KIND[input.kind];
+  if (!preset) {
+    return toListsFailure('INVALID_INPUT', `Unknown list kind: ${input.kind}.`, { kind: input.kind });
+  }
+
+  const template = LevelFormattingHelpers.getPresetTemplate(preset) as ListTemplate | undefined;
+  if (!template) {
+    return toListsFailure('INVALID_INPUT', `No template found for preset: ${preset}.`, { preset });
+  }
+
+  const targetResult = resolveTargetAbstract(editor, input.target);
+  if (!targetResult.ok) return (targetResult as TargetAbstractFailure).failure;
+
+  if (options?.dryRun) {
+    return { success: true, item: targetResult.resolved.address };
+  }
+
+  const continuity = input.continuity ?? 'preserve';
+  let applyError: string | undefined;
+
+  const receipt = executeDomainCommand(
+    editor,
+    () => {
+      let didAnything = false;
+
+      // Phase 1: Apply the preset to change the formatting
+      const result = LevelFormattingHelpers.applyTemplateToAbstract(
+        editor,
+        targetResult.abstractNumId,
+        template,
+        undefined, // apply to all levels
+      ) as { changed: boolean; error?: string };
+      if (result.error) {
+        applyError = result.error;
+        return false;
+      }
+      if (result.changed) didAnything = true;
+
+      // Grab a single transaction *once* — all merge mutations must accumulate
+      // on this same tr so they are dispatched together. Accessing editor.state.tr
+      // multiple times creates fresh transactions and drops prior steps.
+      const { tr } = editor.state;
+
+      // Phase 2: Merge adjacent compatible sequences if continuity is 'preserve'.
+      // This runs even when the preset didn't change (items may already be the
+      // target kind but split across separate numIds — the core of SD-2052).
+      if (continuity === 'preserve') {
+        clearIndexCache(editor);
+        const freshTarget = resolveListItem(editor, input.target);
+        if (freshTarget.numId != null) {
+          const merged = mergeAdjacentCompatibleSequences(editor, tr, freshTarget, targetResult.abstractNumId);
+          if (merged) didAnything = true;
+        }
+      }
+
+      if (!didAnything) return false;
+
+      dispatchEditorTransaction(editor, tr);
+      if (continuity === 'preserve') clearIndexCache(editor);
+      return true;
+    },
+    { expectedRevision: options?.expectedRevision },
+  );
+
+  if (applyError) {
+    return toApplyTemplateError(applyError, input.target);
+  }
+  if (receipt.steps[0]?.effect !== 'changed') {
+    return toListsFailure('NO_OP', 'List type is already the requested kind.', { target: input.target });
+  }
+
+  return { success: true, item: targetResult.resolved.address };
+}
+
+/**
+ * After converting a sequence's kind, find and merge adjacent sequences
+ * that now share the same kind and have compatible abstract definitions.
+ *
+ * Merge rules (all must hold):
+ * - Adjacent sequence's kind matches the target kind after conversion
+ * - Adjacent shares the same abstractNumId (formatting-equivalent)
+ * - No conflicting level/override semantics
+ *
+ * Returns true if any merge was performed.
+ */
+function mergeAdjacentCompatibleSequences(
+  editor: Editor,
+  tr: unknown,
+  target: ListItemProjection,
+  targetAbstractNumId: number,
+): boolean {
+  const targetNumId = target.numId!;
+  let merged = false;
+
+  // Try merging with the previous adjacent sequence
+  const prev = findAdjacentSequence(editor, target, 'withPrevious');
+  if (prev && canMergeSequences(prev.abstractNumId, targetAbstractNumId, prev.sequence, target.kind)) {
+    const targetSequence = getContiguousSequence(editor, target);
+    mergeAdjacentSequence(editor, tr, prev.numId, targetSequence);
+    clearIndexCache(editor);
+    merged = true;
+
+    // After absorbing into prev, try merging the *next* adjacent sequence
+    // into prev.numId as well (since target is now part of prev)
+    const freshTarget = resolveListItem(editor, target.address);
+    const next = findAdjacentSequence(editor, freshTarget, 'withNext');
+    if (
+      next &&
+      prev.abstractNumId != null &&
+      canMergeSequences(next.abstractNumId, prev.abstractNumId, next.sequence, freshTarget.kind)
+    ) {
+      mergeAdjacentSequence(editor, tr, prev.numId, next.sequence);
+      clearIndexCache(editor);
+    }
+    return merged;
+  }
+
+  // No prev merge — try merging with the next adjacent sequence only
+  const next = findAdjacentSequence(editor, target, 'withNext');
+  if (next && canMergeSequences(next.abstractNumId, targetAbstractNumId, next.sequence, target.kind)) {
+    mergeAdjacentSequence(editor, tr, targetNumId, next.sequence);
+    clearIndexCache(editor);
+    merged = true;
+  }
+
+  return merged;
+}
+
+/**
+ * Safety check: can we merge the adjacent sequence into the target?
+ */
+function canMergeSequences(
+  adjacentAbstractNumId: number | undefined,
+  targetAbstractNumId: number,
+  adjacentSequence: ListItemProjection[],
+  targetKind: ListItemProjection['kind'],
+): boolean {
+  const adjacentKind = resolveSequenceKind(adjacentSequence);
+  if (adjacentKind == null || adjacentKind !== targetKind) return false;
+  return areAbstractsCompatibleForMerge(targetAbstractNumId, adjacentAbstractNumId);
 }
 
 export function listsCaptureTemplateWrapper(

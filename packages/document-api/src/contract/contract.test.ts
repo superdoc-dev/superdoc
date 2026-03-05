@@ -236,10 +236,6 @@ describe('document-api contract catalog', () => {
     }
   });
 
-  it('prevents lists.setType from becoming a canonical operation ID', () => {
-    expect(OPERATION_IDS).not.toContain('lists.setType');
-  });
-
   it('marks exactly the out-of-band mutation operations as historyUnsafe', () => {
     const historyUnsafeOps = OPERATION_IDS.filter((id) => COMMAND_CATALOG[id].historyUnsafe === true).sort();
 

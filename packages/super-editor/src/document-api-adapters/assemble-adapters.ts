@@ -9,6 +9,7 @@ import { infoAdapter } from './info-adapter.js';
 import { getDocumentApiCapabilities } from './capabilities-adapter.js';
 import { createCommentsWrapper } from './plan-engine/comments-wrappers.js';
 import { writeWrapper, insertStructuredWrapper, styleApplyWrapper } from './plan-engine/plan-wrappers.js';
+import { clearContentWrapper } from './plan-engine/clear-content-wrapper.js';
 import { stylesApplyAdapter } from './styles-adapter.js';
 import {
   paragraphsSetStyleWrapper,
@@ -63,6 +64,7 @@ import {
 import {
   listsApplyTemplateWrapper,
   listsApplyPresetWrapper,
+  listsSetTypeWrapper,
   listsCaptureTemplateWrapper,
   listsSetLevelNumberingWrapper,
   listsSetLevelBulletWrapper,
@@ -232,6 +234,9 @@ export function assembleDocumentApiAdapters(editor: Editor): DocumentApiAdapters
     info: {
       info: (input) => infoAdapter(editor, input),
     },
+    clearContent: {
+      clearContent: (input, options) => clearContentWrapper(editor, input, options),
+    },
     capabilities: {
       get: () => getDocumentApiCapabilities(editor),
     },
@@ -315,6 +320,7 @@ export function assembleDocumentApiAdapters(editor: Editor): DocumentApiAdapters
       setLevelTrailingCharacter: (input, options) => listsSetLevelTrailingCharacterWrapper(editor, input, options),
       setLevelMarkerFont: (input, options) => listsSetLevelMarkerFontWrapper(editor, input, options),
       clearLevelOverrides: (input, options) => listsClearLevelOverridesWrapper(editor, input, options),
+      setType: (input, options) => listsSetTypeWrapper(editor, input, options),
     },
     sections: {
       list: (query) => sectionsListAdapter(editor, query),

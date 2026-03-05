@@ -5,6 +5,7 @@
     "apps/docs/document-api/reference/blocks/index.mdx",
     "apps/docs/document-api/reference/capabilities/get.mdx",
     "apps/docs/document-api/reference/capabilities/index.mdx",
+    "apps/docs/document-api/reference/clear-content.mdx",
     "apps/docs/document-api/reference/comments/create.mdx",
     "apps/docs/document-api/reference/comments/delete.mdx",
     "apps/docs/document-api/reference/comments/get.mdx",
@@ -159,6 +160,7 @@
     "apps/docs/document-api/reference/lists/set-level-restart.mdx",
     "apps/docs/document-api/reference/lists/set-level-trailing-character.mdx",
     "apps/docs/document-api/reference/lists/set-level.mdx",
+    "apps/docs/document-api/reference/lists/set-type.mdx",
     "apps/docs/document-api/reference/lists/set-value.mdx",
     "apps/docs/document-api/reference/mutations/apply.mdx",
     "apps/docs/document-api/reference/mutations/index.mdx",
@@ -262,6 +264,7 @@
         "getMarkdown",
         "getHtml",
         "info",
+        "clearContent",
         "insert",
         "replace",
         "delete"
@@ -383,7 +386,7 @@
       "title": "Styles"
     },
     {
-      "aliasMemberPaths": ["lists.setType"],
+      "aliasMemberPaths": [],
       "key": "lists",
       "operationIds": [
         "lists.list",
@@ -405,6 +408,7 @@
         "lists.convertToText",
         "lists.applyTemplate",
         "lists.applyPreset",
+        "lists.setType",
         "lists.captureTemplate",
         "lists.setLevelNumbering",
         "lists.setLevelBullet",
@@ -604,5 +608,5 @@
     }
   ],
   "marker": "{/* GENERATED FILE: DO NOT EDIT. Regenerate via `pnpm run docapi:sync`. */}",
-  "sourceHash": "d1b97baae61be333b72dc1211180bc02dd451e14a3767328d56929bf77a10132"
+  "sourceHash": "ca9145b16d89a81f0c59070efcfec17f26eaeaf1805dd376c57462e3f1762171"
 }

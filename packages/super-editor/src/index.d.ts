@@ -3,9 +3,9 @@
  * This file provides TypeScript types for the JavaScript exports in index.js
  */
 
-import type { EditorView } from 'prosemirror-view';
-import type { EditorState, Transaction } from 'prosemirror-state';
-import type { Schema, Node as ProseMirrorNode, Mark as ProseMirrorMark } from 'prosemirror-model';
+export type { EditorView } from 'prosemirror-view';
+export type { EditorState, Transaction } from 'prosemirror-state';
+export type { Schema } from 'prosemirror-model';
 
 // ============================================
 // COMMAND TYPES (inlined from ChainedCommands.ts)

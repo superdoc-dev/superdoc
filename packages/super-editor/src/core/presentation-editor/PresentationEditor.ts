@@ -4298,7 +4298,7 @@ export class PresentationEditor extends EventEmitter {
           console.warn('[PresentationEditor] Failed to render caret overlay:', error);
         }
       }
-      this.#scrollCaretIntoViewIfNeeded(caretLayout);
+      this.#scrollActiveEndIntoView(caretLayout.pageIndex);
       return;
     }
 
@@ -4341,39 +4341,24 @@ export class PresentationEditor extends EventEmitter {
         console.warn('[PresentationEditor] Failed to render selection rects:', error);
       }
     }
+
+    // Scroll to keep the selection head visible (Shift+Arrow across page boundaries).
+    // Use the head's layout rect to determine the target page.
+    const head = activeEditor?.view?.state?.selection?.head ?? to;
+    const headLayout = this.#computeCaretLayoutRect(head);
+    if (headLayout) {
+      this.#scrollActiveEndIntoView(headLayout.pageIndex);
+    }
   }
 
   /**
-   * Scrolls the scroll container so the caret remains visible after selection changes.
-   *
-   * Called after the caret overlay is rendered in #updateSelection(). Uses the rendered
-   * caret element's screen-space position (via getBoundingClientRect) to determine if
-   * scrolling is needed, keeping a small margin for comfortable viewing.
-   *
-   * If the caret element doesn't exist (page may be virtualized / not mounted),
-   * falls back to scrolling the target page into view to trigger virtualization.
+   * Scrolls the scroll container minimally so that a screen-space rect is visible,
+   * keeping a small margin (20px) for comfortable viewing. No-ops when the rect
+   * is already within the visible bounds.
    */
-  #scrollCaretIntoViewIfNeeded(caretLayout: { pageIndex: number }): void {
-    const caretEl = this.#localSelectionLayer?.querySelector(
-      '.presentation-editor__selection-caret',
-    ) as HTMLElement | null;
-
-    // The caret element can exist with estimated coordinates even when the target
-    // page isn't mounted (virtualized). Check the painter host for the actual page
-    // element to avoid scrolling to an incorrect position.
-    const pageIsMounted = !!this.#painterHost.querySelector(`[data-page-index="${caretLayout.pageIndex}"]`);
-
-    if (!caretEl || !pageIsMounted) {
-      // Caret page may not be mounted (virtualized) — scroll page into view
-      // to trigger mount; next selection update will handle precise scroll.
-      this.#scrollPageIntoView(caretLayout.pageIndex);
-      return;
-    }
-
+  #scrollScreenRectIntoView(screenTop: number, screenBottom: number): void {
     const scrollContainer = this.#scrollContainer;
     if (!scrollContainer) return;
-
-    const caretRect = caretEl.getBoundingClientRect();
 
     let containerTop: number;
     let containerBottom: number;
@@ -4387,25 +4372,65 @@ export class PresentationEditor extends EventEmitter {
       containerBottom = r.bottom;
     }
 
-    // Margin in screen pixels to keep around the cursor for comfortable viewing
     const SCROLL_MARGIN = 20;
 
-    if (caretRect.bottom > containerBottom - SCROLL_MARGIN) {
-      // Caret is below the visible area — scroll down
-      const delta = caretRect.bottom - containerBottom + SCROLL_MARGIN;
+    if (screenBottom > containerBottom - SCROLL_MARGIN) {
+      const delta = screenBottom - containerBottom + SCROLL_MARGIN;
       if (scrollContainer instanceof Window) {
         scrollContainer.scrollBy({ top: delta });
       } else {
         (scrollContainer as Element).scrollTop += delta;
       }
-    } else if (caretRect.top < containerTop + SCROLL_MARGIN) {
-      // Caret is above the visible area — scroll up
-      const delta = containerTop + SCROLL_MARGIN - caretRect.top;
+    } else if (screenTop < containerTop + SCROLL_MARGIN) {
+      const delta = containerTop + SCROLL_MARGIN - screenTop;
       if (scrollContainer instanceof Window) {
         scrollContainer.scrollBy({ top: -delta });
       } else {
         (scrollContainer as Element).scrollTop -= delta;
       }
+    }
+  }
+
+  /**
+   * Scrolls the scroll container so the caret or selection head remains visible
+   * after selection changes. Works for both collapsed (caret) and range selections.
+   *
+   * For collapsed selections, uses the rendered caret element's screen position.
+   * For range selections, uses the rendered selection rect nearest to the head.
+   *
+   * If the target page isn't mounted (virtualized), falls back to scrolling the
+   * page into view to trigger mount; the next selection update handles precise scroll.
+   */
+  #scrollActiveEndIntoView(pageIndex: number): void {
+    // Check if the target page is mounted before trusting rendered element positions.
+    const pageIsMounted = !!this.#painterHost.querySelector(`[data-page-index="${pageIndex}"]`);
+    if (!pageIsMounted) {
+      this.#scrollPageIntoView(pageIndex);
+      return;
+    }
+
+    // Try caret element first (collapsed selection)
+    const caretEl = this.#localSelectionLayer?.querySelector(
+      '.presentation-editor__selection-caret',
+    ) as HTMLElement | null;
+    if (caretEl) {
+      const r = caretEl.getBoundingClientRect();
+      this.#scrollScreenRectIntoView(r.top, r.bottom);
+      return;
+    }
+
+    // Range selection: pick the rendered rect nearest the selection head.
+    // Rects are rendered in document order. head < anchor means the user is
+    // extending backward (Shift+ArrowUp) → first child. head >= anchor means
+    // extending forward (Shift+ArrowDown) → last child.
+    const sel = this.getActiveEditor()?.view?.state?.selection;
+    const headIsForward = !sel || sel.head >= sel.anchor;
+    const headRect = (
+      headIsForward ? this.#localSelectionLayer?.lastElementChild : this.#localSelectionLayer?.firstElementChild
+    ) as HTMLElement | null;
+    if (headRect) {
+      const r = headRect.getBoundingClientRect();
+      this.#scrollScreenRectIntoView(r.top, r.bottom);
     }
   }
 

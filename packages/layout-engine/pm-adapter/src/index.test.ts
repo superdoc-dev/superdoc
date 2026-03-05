@@ -3905,6 +3905,71 @@ describe('toFlowBlocks', () => {
       expect(markerTexts).toEqual(['(a)', '(b)', '(c)', '(c)']);
     });
 
+    it('keeps ghost offsets across split paragraph blocks from the same source list item', () => {
+      const listParagraph = (
+        markerText: string,
+        content: PMNode[] | null,
+        trackInsert?: { id: string; author: string; date: string },
+      ): PMNode => ({
+        type: 'paragraph',
+        attrs: {
+          paragraphProperties: {
+            numberingProperties: { numId: 7, ilvl: 0 },
+            ...(trackInsert
+              ? {
+                  runProperties: {
+                    trackInsert,
+                  },
+                }
+              : {}),
+          },
+          listRendering: {
+            markerText,
+            path: [1],
+            numberingType: 'lowerLetter',
+            suffix: 'tab',
+            justification: 'left',
+          },
+        },
+        content: content ?? [],
+      });
+
+      const pmDoc: PMNode = {
+        type: 'doc',
+        content: [
+          listParagraph('(a)', [{ type: 'text', text: 'Alpha item' }]),
+          listParagraph('(b)', null, { id: 'ghost-b', author: 'Tester', date: '2026-03-01T12:00:00Z' }),
+          listParagraph('(c)', [
+            { type: 'text', text: 'Split item before image' },
+            {
+              type: 'image',
+              attrs: {
+                src: 'data:image/png;base64,iVBORw0KGgo=',
+                size: { width: 10, height: 10 },
+                wrap: { type: 'Square' },
+              },
+            },
+            { type: 'text', text: 'Split item after image' },
+          ]),
+          listParagraph('(d)', [{ type: 'text', text: 'Delta should render as c' }]),
+        ],
+      };
+
+      const { blocks } = toFlowBlocks(pmDoc, { trackedChangesMode: 'review' });
+      const markerTexts = blocks
+        .filter((block) => block.kind === 'paragraph')
+        .map((block) => {
+          const marker = (block.attrs?.wordLayout as { marker?: { markerText?: string } } | undefined)?.marker;
+          return marker?.markerText;
+        })
+        .filter((value): value is string => typeof value === 'string');
+
+      expect(markerTexts.length).toBeGreaterThanOrEqual(3);
+      expect(markerTexts[0]).toBe('(a)');
+      expect(markerTexts[1]).toBe('(b)');
+      expect(markerTexts.at(-1)).toBe('(c)');
+    });
+
     it('clears stale ghost offsets after a non-list paragraph boundary', () => {
       const listParagraph = (
         markerText: string,

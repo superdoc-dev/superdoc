@@ -5,6 +5,7 @@ import { DecorationBridge } from './dom/DecorationBridge.js';
 import { SdtSelectionStyleManager } from './selection/SdtSelectionStyleManager.js';
 import { SemanticFlowController } from './layout/SemanticFlowController.js';
 import { LayoutErrorBanner } from './ui/LayoutErrorBanner.js';
+import { applyViewportZoom } from './layout/applyViewportZoom.js';
 import type { EditorState, Transaction } from 'prosemirror-state';
 import type { Node as ProseMirrorNode, Mark } from 'prosemirror-model';
 import type { Mapping } from 'prosemirror-transform';
@@ -4821,141 +4822,22 @@ export class PresentationEditor extends EventEmitter {
    * - Horizontal: Uses totalWidth for viewport width, maxHeight for scroll height
    */
   #applyZoom() {
-    if (this.#isSemanticFlowMode()) {
-      // Semantic mode: fill the container with fluid widths, no zoom scaling.
-      this.#viewportHost.style.width = '100%';
-      this.#viewportHost.style.minWidth = '';
-      this.#viewportHost.style.minHeight = '';
-      this.#viewportHost.style.transform = '';
-
-      this.#painterHost.style.width = '100%';
-      this.#painterHost.style.minHeight = '';
-      this.#painterHost.style.transformOrigin = '';
-      this.#painterHost.style.transform = '';
-
-      this.#selectionOverlay.style.width = '100%';
-      this.#selectionOverlay.style.height = '100%';
-      this.#selectionOverlay.style.transformOrigin = '';
-      this.#selectionOverlay.style.transform = '';
-      return;
-    }
-
-    // Apply zoom by scaling the children (#painterHost and #selectionOverlay) and
-    // setting the viewport dimensions to the scaled size.
-    //
-    // CSS transform: scale() only affects visual rendering, NOT layout box dimensions.
-    // Previously, transform was applied to #viewportHost which caused the parent scroll
-    // container to not see the scaled size, resulting in clipping at high zoom levels.
-    //
-    // The new approach:
-    // 1. Apply transform: scale(zoom) to #painterHost and #selectionOverlay (visual scaling)
-    // 2. Set #viewportHost width/height to scaled dimensions (layout box scaling)
-    // This ensures both visual rendering AND scroll container dimensions are correct.
-    const zoom = this.#layoutOptions.zoom ?? 1;
-
-    const layoutMode = this.#layoutOptions.layoutMode ?? 'vertical';
-
-    // Calculate actual document dimensions from per-page sizes.
-    // Multi-section documents can have pages with different sizes (e.g., landscape pages).
-    const pages = this.#layoutState.layout?.pages;
-    // Always use current layout mode's gap - layout.pageGap may be stale if layoutMode changed
-    const pageGap = this.#getEffectivePageGap();
-    const defaultWidth = this.#layoutOptions.pageSize?.w ?? DEFAULT_PAGE_SIZE.w;
-    const defaultHeight = this.#layoutOptions.pageSize?.h ?? DEFAULT_PAGE_SIZE.h;
-
-    let maxWidth = defaultWidth;
-    let maxHeight = defaultHeight;
-    let totalWidth = 0;
-    let totalHeight = 0;
-
-    if (Array.isArray(pages) && pages.length > 0) {
-      pages.forEach((page, index) => {
-        const pageWidth = page.size && typeof page.size.w === 'number' && page.size.w > 0 ? page.size.w : defaultWidth;
-        const pageHeight =
-          page.size && typeof page.size.h === 'number' && page.size.h > 0 ? page.size.h : defaultHeight;
-        maxWidth = Math.max(maxWidth, pageWidth);
-        maxHeight = Math.max(maxHeight, pageHeight);
-        totalWidth += pageWidth;
-        totalHeight += pageHeight;
-        if (index < pages.length - 1) {
-          totalWidth += pageGap;
-          totalHeight += pageGap;
-        }
-      });
-    } else {
-      totalWidth = defaultWidth;
-      totalHeight = defaultHeight;
-    }
-
-    // Horizontal layout stacks pages in a single row, so width grows with pageCount
-    if (layoutMode === 'horizontal') {
-      // For horizontal: sum widths, use max height
-      const scaledWidth = totalWidth * zoom;
-      const scaledHeight = maxHeight * zoom;
-
-      this.#viewportHost.style.width = `${scaledWidth}px`;
-      this.#viewportHost.style.minWidth = `${scaledWidth}px`;
-      this.#viewportHost.style.minHeight = `${scaledHeight}px`;
-      this.#viewportHost.style.height = '';
-      this.#viewportHost.style.overflow = '';
-      this.#viewportHost.style.transform = '';
-
-      this.#painterHost.style.width = `${totalWidth}px`;
-      this.#painterHost.style.minHeight = `${maxHeight}px`;
-      // Negative margin compensates for the CSS box overflow from transform: scale().
-      // At zoom < 1 the unscaled CSS box is larger than the visual; this pulls the
-      // bottom edge up to match, without clipping overlays (e.g., cursor labels).
-      this.#painterHost.style.marginBottom = zoom !== 1 ? `${maxHeight * zoom - maxHeight}px` : '';
-      this.#painterHost.style.transformOrigin = 'top left';
-      this.#painterHost.style.transform = zoom === 1 ? '' : `scale(${zoom})`;
-
-      this.#selectionOverlay.style.width = `${totalWidth}px`;
-      this.#selectionOverlay.style.height = `${maxHeight}px`;
-      this.#selectionOverlay.style.transformOrigin = 'top left';
-      this.#selectionOverlay.style.transform = zoom === 1 ? '' : `scale(${zoom})`;
-      return;
-    }
-
-    // Vertical layout: use max width, sum heights
-    // Zoom implementation:
-    // 1. #viewportHost has SCALED dimensions (maxWidth * zoom) for proper scroll container sizing
-    // 2. #painterHost has UNSCALED dimensions with transform: scale(zoom) applied
-    // 3. When scaled, #painterHost visually fills #viewportHost exactly
-    //
-    // This ensures the scroll container sees the correct scaled content size while
-    // the transform provides visual scaling.
-    //
-    // CSS transform: scale() does NOT change the element's CSS box dimensions.
-    // At zoom < 1, painterHost's CSS box stays at the full unscaled height while its
-    // visual size is smaller. A negative margin-bottom on painterHost compensates for
-    // the difference, so the scroll container sees the correct scaled size without
-    // clipping overlays (e.g., collaboration cursor labels that extend above their caret).
-    const scaledWidth = maxWidth * zoom;
-    const scaledHeight = totalHeight * zoom;
-
-    this.#viewportHost.style.width = `${scaledWidth}px`;
-    this.#viewportHost.style.minWidth = `${scaledWidth}px`;
-    this.#viewportHost.style.minHeight = `${scaledHeight}px`;
-    this.#viewportHost.style.height = '';
-    this.#viewportHost.style.overflow = '';
-    this.#viewportHost.style.transform = '';
-
-    // Set painterHost to UNSCALED dimensions and apply transform.
-    // Negative margin compensates for the CSS box overflow from transform: scale().
-    // At zoom < 1: totalHeight=74304 with scale(0.75) → visual 55728px but CSS box stays 74304px.
-    // marginBottom = totalHeight * zoom - totalHeight = 74304 * 0.75 - 74304 = -18576px
-    // This shrinks the layout contribution to match the visual size.
-    this.#painterHost.style.width = `${maxWidth}px`;
-    this.#painterHost.style.minHeight = `${totalHeight}px`;
-    this.#painterHost.style.marginBottom = zoom !== 1 ? `${totalHeight * zoom - totalHeight}px` : '';
-    this.#painterHost.style.transformOrigin = 'top left';
-    this.#painterHost.style.transform = zoom === 1 ? '' : `scale(${zoom})`;
-
-    // Selection overlay also scales - set to unscaled dimensions
-    this.#selectionOverlay.style.width = `${maxWidth}px`;
-    this.#selectionOverlay.style.height = `${totalHeight}px`;
-    this.#selectionOverlay.style.transformOrigin = 'top left';
-    this.#selectionOverlay.style.transform = zoom === 1 ? '' : `scale(${zoom})`;
+    applyViewportZoom(
+      {
+        viewportHost: this.#viewportHost,
+        painterHost: this.#painterHost,
+        selectionOverlay: this.#selectionOverlay,
+      },
+      {
+        zoom: this.#layoutOptions.zoom ?? 1,
+        layoutMode: (this.#layoutOptions.layoutMode ?? 'vertical') as 'vertical' | 'horizontal' | 'book',
+        isSemanticFlow: this.#isSemanticFlowMode(),
+        pages: this.#layoutState.layout?.pages,
+        pageGap: this.#getEffectivePageGap(),
+        defaultWidth: this.#layoutOptions.pageSize?.w ?? DEFAULT_PAGE_SIZE.w,
+        defaultHeight: this.#layoutOptions.pageSize?.h ?? DEFAULT_PAGE_SIZE.h,
+      },
+    );
   }
 
   /**

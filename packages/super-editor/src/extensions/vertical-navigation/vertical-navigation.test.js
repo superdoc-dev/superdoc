@@ -162,6 +162,79 @@ describe('VerticalNavigation', () => {
     expect(view.state.selection.to).toBe(6);
   });
 
+  it('uses hit test result when it falls within the adjacent line PM range', () => {
+    const { line1, line2 } = createDomStructure();
+    // Set PM range on the adjacent line
+    line2.dataset.pmStart = '3';
+    line2.dataset.pmEnd = '8';
+    vi.spyOn(line2, 'getBoundingClientRect').mockReturnValue({
+      top: 200,
+      left: 0,
+      right: 0,
+      bottom: 220,
+      width: 0,
+      height: 20,
+      x: 0,
+      y: 0,
+      toJSON: () => ({}),
+    });
+
+    document.elementsFromPoint = vi.fn(() => [line1]);
+
+    const { plugin, view, presentationEditor } = createEnvironment();
+    // Hit test returns pos 5, which is within [3, 8] — should use it directly
+    presentationEditor.hitTest.mockReturnValue({ pos: 5 });
+
+    const handled = plugin.props.handleKeyDown(view, { key: 'ArrowDown', shiftKey: false });
+
+    expect(handled).toBe(true);
+    expect(view.state.selection.head).toBe(5);
+    // resolvePositionAtGoalX (computeCaretLayoutRect) should NOT have been called
+    // for position resolution — only for initial goalX
+    expect(presentationEditor.computeCaretLayoutRect).toHaveBeenCalledTimes(1);
+  });
+
+  it('falls back to resolvePositionAtGoalX when hit test lands outside PM range', () => {
+    const { line1, line2 } = createDomStructure();
+    // Set PM range on the adjacent line
+    line2.dataset.pmStart = '3';
+    line2.dataset.pmEnd = '8';
+    vi.spyOn(line2, 'getBoundingClientRect').mockReturnValue({
+      top: 200,
+      left: 0,
+      right: 0,
+      bottom: 220,
+      width: 0,
+      height: 20,
+      x: 0,
+      y: 0,
+      toJSON: () => ({}),
+    });
+
+    document.elementsFromPoint = vi.fn(() => [line1]);
+
+    const { plugin, view, presentationEditor } = createEnvironment();
+    // Hit test returns pos 100, way outside [3, 8] — should trigger fallback
+    presentationEditor.hitTest.mockReturnValue({ pos: 100 });
+    // computeCaretLayoutRect is called by fallback binary search
+    presentationEditor.computeCaretLayoutRect.mockImplementation((pos) => ({
+      x: (pos - 3) * 10,
+      y: 200,
+      height: 10,
+      pageIndex: 0,
+    }));
+
+    const handled = plugin.props.handleKeyDown(view, { key: 'ArrowDown', shiftKey: false });
+
+    expect(handled).toBe(true);
+    // Should have resolved to a position within [3, 8], not 100
+    const head = view.state.selection.head;
+    expect(head).toBeGreaterThanOrEqual(3);
+    expect(head).toBeLessThanOrEqual(8);
+    // Binary search should have called computeCaretLayoutRect multiple times
+    expect(presentationEditor.computeCaretLayoutRect.mock.calls.length).toBeGreaterThan(1);
+  });
+
   it('resets goalX on pointer-driven selection changes', () => {
     const { plugin, view } = createEnvironment();
 

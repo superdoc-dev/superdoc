@@ -3,6 +3,7 @@ import { ContextMenuPluginKey } from '@extensions/context-menu/context-menu.js';
 import { CellSelection } from 'prosemirror-tables';
 import { DecorationBridge } from './dom/DecorationBridge.js';
 import { SdtSelectionStyleManager } from './selection/SdtSelectionStyleManager.js';
+import { SemanticFlowController } from './layout/SemanticFlowController.js';
 import type { EditorState, Transaction } from 'prosemirror-state';
 import type { Node as ProseMirrorNode, Mark } from 'prosemirror-model';
 import type { Mapping } from 'prosemirror-transform';
@@ -209,10 +210,6 @@ const HEADER_FOOTER_INIT_BUDGET_MS = 200;
 const MAX_ZOOM_WARNING_THRESHOLD = 10;
 /** Maximum number of selection rectangles per user (performance guardrail) */
 const MAX_SELECTION_RECTS_PER_USER = 100;
-/** Debounce delay for semantic-flow relayout after host resize (milliseconds). */
-const SEMANTIC_RESIZE_DEBOUNCE_MS = 120;
-/** Minimum semantic content width in pixels. */
-const MIN_SEMANTIC_CONTENT_WIDTH_PX = 1;
 
 const GLOBAL_PERFORMANCE: Performance | undefined = typeof performance !== 'undefined' ? performance : undefined;
 
@@ -309,10 +306,7 @@ export class PresentationEditor extends EventEmitter {
   /** RAF handle for coalesced decoration sync scheduling. */
   #decorationSyncRafHandle: number | null = null;
   #rafHandle: number | null = null;
-  #semanticResizeObserver: ResizeObserver | null = null;
-  #semanticResizeRaf: number | null = null;
-  #semanticResizeDebounce: number | null = null;
-  #lastSemanticContainerWidth: number | null = null;
+  #semanticFlow!: SemanticFlowController;
   #editorListeners: Array<{ event: string; handler: (...args: unknown[]) => void }> = [];
   #scrollHandler: (() => void) | null = null;
   #scrollContainer: Element | Window | null = null;
@@ -624,7 +618,23 @@ export class PresentationEditor extends EventEmitter {
       this.#setupDragHandlers();
       this.#setupInputBridge();
       this.#syncTrackedChangesPreferences();
-      this.#setupSemanticResizeObserver();
+      this.#semanticFlow = new SemanticFlowController({
+        visibleHost: this.#visibleHost,
+        getFlowMode: () => this.#layoutOptions.flowMode,
+        getSemanticOptions: () => this.#layoutOptions.semanticOptions,
+        requestRerender: () => {
+          this.#pendingDocChange = true;
+          this.#scheduleRerender();
+        },
+        defaultPageWidth: DEFAULT_PAGE_SIZE.w,
+        defaultMargins: {
+          left: DEFAULT_MARGINS.left!,
+          right: DEFAULT_MARGINS.right!,
+          top: DEFAULT_MARGINS.top!,
+          bottom: DEFAULT_MARGINS.bottom!,
+        },
+      });
+      this.#semanticFlow.setup();
 
       // Register this instance in the static registry.
       // Use a separate field to avoid mutating the caller's options object and to keep
@@ -1532,99 +1542,6 @@ export class PresentationEditor extends EventEmitter {
     return this.#layoutOptions.flowMode === 'semantic';
   }
 
-  #resolveSemanticMargins(margins: PageMargins): { left: number; right: number; top: number; bottom: number } {
-    const mode = this.#layoutOptions.semanticOptions?.marginsMode ?? 'firstSection';
-    if (mode === 'none') {
-      return { left: 0, right: 0, top: 0, bottom: 0 };
-    }
-
-    const clamp = (value: number | undefined, fallback: number): number => {
-      const v = typeof value === 'number' && Number.isFinite(value) ? value : fallback;
-      return v >= 0 ? v : fallback;
-    };
-
-    if (mode === 'custom') {
-      const custom = this.#layoutOptions.semanticOptions?.customMargins;
-      return {
-        left: clamp(custom?.left, clamp(margins.left, DEFAULT_MARGINS.left!)),
-        right: clamp(custom?.right, clamp(margins.right, DEFAULT_MARGINS.right!)),
-        top: clamp(custom?.top, clamp(margins.top, DEFAULT_MARGINS.top!)),
-        bottom: clamp(custom?.bottom, clamp(margins.bottom, DEFAULT_MARGINS.bottom!)),
-      };
-    }
-    // mode === 'firstSection' — keep horizontal margins from the first DOCX section
-    // but zero vertical margins so stacked pages form a seamless continuous surface.
-    return {
-      left: clamp(margins.left, DEFAULT_MARGINS.left!),
-      right: clamp(margins.right, DEFAULT_MARGINS.right!),
-      top: 0,
-      bottom: 0,
-    };
-  }
-
-  #resolveSemanticContainerInnerWidth(): number {
-    const host = this.#visibleHost;
-    if (!host) return DEFAULT_PAGE_SIZE.w;
-    const win = host.ownerDocument?.defaultView ?? window;
-    const style = win.getComputedStyle(host);
-    const paddingLeft = Number.parseFloat(style.paddingLeft ?? '0');
-    const paddingRight = Number.parseFloat(style.paddingRight ?? '0');
-    const horizontalPadding =
-      (Number.isFinite(paddingLeft) ? paddingLeft : 0) + (Number.isFinite(paddingRight) ? paddingRight : 0);
-    const clientWidth = host.clientWidth;
-    if (Number.isFinite(clientWidth) && clientWidth > 0) {
-      return Math.max(1, clientWidth - horizontalPadding);
-    }
-    const rectWidth = host.getBoundingClientRect().width;
-    if (Number.isFinite(rectWidth) && rectWidth > 0) {
-      return Math.max(1, rectWidth - horizontalPadding);
-    }
-    return Math.max(1, DEFAULT_PAGE_SIZE.w - horizontalPadding);
-  }
-
-  #setupSemanticResizeObserver(): void {
-    if (!this.#isSemanticFlowMode()) return;
-    const view = this.#visibleHost.ownerDocument?.defaultView ?? window;
-    const ResizeObs = view.ResizeObserver;
-    if (typeof ResizeObs !== 'function') return;
-
-    this.#lastSemanticContainerWidth = this.#resolveSemanticContainerInnerWidth();
-    this.#semanticResizeObserver = new ResizeObs(() => {
-      this.#scheduleSemanticResizeRelayout();
-    });
-    this.#semanticResizeObserver.observe(this.#visibleHost);
-  }
-
-  #scheduleSemanticResizeRelayout(): void {
-    if (!this.#isSemanticFlowMode()) return;
-    const view = this.#visibleHost.ownerDocument?.defaultView ?? window;
-    if (this.#semanticResizeRaf == null) {
-      this.#semanticResizeRaf = view.requestAnimationFrame(() => {
-        this.#semanticResizeRaf = null;
-        this.#applySemanticResizeRelayout();
-      });
-    }
-    if (this.#semanticResizeDebounce != null) {
-      view.clearTimeout(this.#semanticResizeDebounce);
-    }
-    this.#semanticResizeDebounce = view.setTimeout(() => {
-      this.#semanticResizeDebounce = null;
-      this.#applySemanticResizeRelayout();
-    }, SEMANTIC_RESIZE_DEBOUNCE_MS);
-  }
-
-  #applySemanticResizeRelayout(): void {
-    if (!this.#isSemanticFlowMode()) return;
-    const nextWidth = this.#resolveSemanticContainerInnerWidth();
-    const prevWidth = this.#lastSemanticContainerWidth;
-    if (prevWidth != null && Math.abs(nextWidth - prevWidth) < 1) {
-      return;
-    }
-    this.#lastSemanticContainerWidth = nextWidth;
-    this.#pendingDocChange = true;
-    this.#scheduleRerender();
-  }
-
   /**
    * Return a snapshot of painter output captured during the latest paint cycle.
    */
@@ -2471,22 +2388,7 @@ export class PresentationEditor extends EventEmitter {
       this.#cursorUpdateTimer = null;
     }
 
-    if (this.#semanticResizeRaf != null) {
-      safeCleanup(() => {
-        const win = this.#visibleHost?.ownerDocument?.defaultView ?? window;
-        win.cancelAnimationFrame(this.#semanticResizeRaf!);
-        this.#semanticResizeRaf = null;
-      }, 'Semantic resize RAF');
-    }
-    if (this.#semanticResizeDebounce != null) {
-      safeCleanup(() => {
-        const win = this.#visibleHost?.ownerDocument?.defaultView ?? window;
-        win.clearTimeout(this.#semanticResizeDebounce!);
-        this.#semanticResizeDebounce = null;
-      }, 'Semantic resize debounce');
-    }
-    this.#semanticResizeObserver?.disconnect();
-    this.#semanticResizeObserver = null;
+    this.#semanticFlow.destroy();
 
     // Clean up remote cursor manager
     if (this.#remoteCursorManager) {
@@ -4150,32 +4052,24 @@ export class PresentationEditor extends EventEmitter {
     };
 
     if (flowMode === 'semantic') {
-      const semanticMargins = this.#resolveSemanticMargins(margins);
-      const containerWidth = this.#resolveSemanticContainerInnerWidth();
-      const semanticContentWidth = Math.max(
-        MIN_SEMANTIC_CONTENT_WIDTH_PX,
-        containerWidth - semanticMargins.left - semanticMargins.right,
-      );
-      const semanticPageWidth = semanticContentWidth + semanticMargins.left + semanticMargins.right;
-      this.#hiddenHost.style.width = `${semanticContentWidth}px`;
-      this.#lastSemanticContainerWidth = containerWidth;
+      const resolved = this.#semanticFlow.resolveSemanticLayout(margins, pageSize, this.#hiddenHost);
       return {
         flowMode: 'semantic',
-        pageSize: { w: semanticPageWidth, h: pageSize.h },
+        pageSize: { w: resolved.pageWidth, h: pageSize.h },
         margins: {
           ...resolvedMargins,
-          top: semanticMargins.top,
-          right: semanticMargins.right,
-          bottom: semanticMargins.bottom,
-          left: semanticMargins.left,
+          top: resolved.margins.top,
+          right: resolved.margins.right,
+          bottom: resolved.margins.bottom,
+          left: resolved.margins.left,
         },
         columns: { count: 1, gap: 0 },
         semantic: {
-          contentWidth: semanticContentWidth,
-          marginLeft: semanticMargins.left,
-          marginRight: semanticMargins.right,
-          marginTop: semanticMargins.top,
-          marginBottom: semanticMargins.bottom,
+          contentWidth: resolved.contentWidth,
+          marginLeft: resolved.margins.left,
+          marginRight: resolved.margins.right,
+          marginTop: resolved.margins.top,
+          marginBottom: resolved.margins.bottom,
         },
         sectionMetadata,
       };

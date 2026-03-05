@@ -38,9 +38,9 @@ export function textReceiptToSDReceipt(receipt: TextMutationReceipt): SDMutation
       success: true,
       resolution: receipt.resolution
         ? {
-            requestedTarget: receipt.resolution.requestedTarget
-              ? textAddressToSDAddress(receipt.resolution.requestedTarget)
-              : undefined,
+            ...(receipt.resolution.requestedTarget
+              ? { requestedTarget: textAddressToSDAddress(receipt.resolution.requestedTarget) }
+              : {}),
             target: textAddressToSDAddress(receipt.resolution.target),
           }
         : undefined,
@@ -75,9 +75,9 @@ export function textReceiptToSDReceipt(receipt: TextMutationReceipt): SDMutation
     failure,
     resolution: receipt.resolution
       ? {
-          requestedTarget: receipt.resolution.requestedTarget
-            ? textAddressToSDAddress(receipt.resolution.requestedTarget)
-            : undefined,
+          ...(receipt.resolution.requestedTarget
+            ? { requestedTarget: textAddressToSDAddress(receipt.resolution.requestedTarget) }
+            : {}),
           target: textAddressToSDAddress(receipt.resolution.target),
         }
       : undefined,

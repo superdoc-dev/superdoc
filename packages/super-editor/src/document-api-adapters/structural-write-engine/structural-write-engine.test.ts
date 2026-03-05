@@ -80,6 +80,21 @@ function requireFirstParagraphInsideTableCellBlockId(editor: Editor): string {
   return paragraphId;
 }
 
+function requireFirstTableNode(editor: Editor): import('prosemirror-model').Node {
+  let tableNode: import('prosemirror-model').Node | undefined;
+  editor.state.doc.descendants((node) => {
+    if (node.type.name === 'table') {
+      tableNode = node;
+      return false;
+    }
+    return true;
+  });
+  if (!tableNode) {
+    throw new Error('Expected a table node in the document.');
+  }
+  return tableNode;
+}
+
 function enableTrackedMode(editor: Editor): void {
   (editor as any).options.user = {
     id: 'test-user-id',
@@ -281,6 +296,16 @@ describe('replaceStructuredWrapper', () => {
     expect(editor.state.doc.textContent).toContain('foo');
     expect(editor.state.doc.textContent).toContain('bar');
     expect(editor.state.doc.textContent).not.toContain('old');
+
+    const tableNode = requireFirstTableNode(editor);
+    expect(tableNode.attrs?.tableProperties?.tableWidth).toEqual({
+      value: 5000,
+      type: 'pct',
+    });
+    expect(tableNode.attrs?.needsTableStyleNormalization).not.toBe(true);
+    const hasStyleOrFallbackBorders =
+      typeof tableNode.attrs?.tableStyleId === 'string' || Object.keys(tableNode.attrs?.borders ?? {}).length > 0;
+    expect(hasStyleOrFallbackBorders).toBe(true);
   });
 
   it('supports dry-run mode without mutating the document', () => {
@@ -560,6 +585,48 @@ describe('enforceNestingPolicy', () => {
 
       expect(() => enforceNestingPolicy(nestedTable, editor.state.doc, cellPos!)).toThrow(DocumentApiAdapterError);
       expect(() => enforceNestingPolicy(nestedTable, editor.state.doc, cellPos!)).toThrow(/table inside another table/);
+    }
+  });
+
+  it('throws INVALID_NESTING for table nested inside a list (recursive detection)', () => {
+    const tableFragment: SDFragment = {
+      type: 'table',
+      rows: [{ type: 'tableRow', cells: [{ type: 'tableCell' }] }],
+    };
+
+    executeStructuralInsert(editor, { content: tableFragment });
+
+    let cellPos: number | undefined;
+    editor.state.doc.descendants((node, pos) => {
+      if (node.type.name === 'tableCell' && cellPos === undefined) {
+        cellPos = pos + 1;
+        return false;
+      }
+      return true;
+    });
+
+    if (cellPos !== undefined) {
+      // Table hidden inside a list item — should still be detected
+      const listWithNestedTable: SDFragment = {
+        kind: 'list',
+        list: {
+          items: [
+            {
+              level: 0,
+              content: [
+                {
+                  kind: 'table',
+                  table: { rows: [{ cells: [{ content: [{ kind: 'paragraph', paragraph: { inlines: [] } }] }] }] },
+                },
+              ],
+            },
+          ],
+        },
+      } as any;
+
+      expect(() => enforceNestingPolicy(listWithNestedTable, editor.state.doc, cellPos!)).toThrow(
+        /table inside another table/,
+      );
     }
   });
 

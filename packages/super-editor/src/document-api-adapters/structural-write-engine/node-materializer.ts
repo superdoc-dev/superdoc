@@ -159,6 +159,10 @@ function resolvePayload(node: any, kind: string): any {
   return node[kind] ?? node;
 }
 
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return value !== null && typeof value === 'object' && !Array.isArray(value);
+}
+
 // ---------------------------------------------------------------------------
 // Public entry point
 // ---------------------------------------------------------------------------
@@ -299,11 +303,54 @@ function materializeTable(
     sdBlockId: resolveBlockId(node as any, seenIds, existingDocIds),
     paraId: uuidv4(),
   };
-  if (payload.styleRef ?? payload.style) attrs.tableStyleId = payload.styleRef ?? payload.style;
-  if (payload.props?.width) attrs.width = payload.props.width;
-  if (payload.props?.layout) attrs.layout = payload.props.layout;
-  if (payload.props?.alignment) attrs.alignment = payload.props.alignment;
-  if (payload.columns) attrs.tableGridModel = payload.columns;
+
+  const styleRef = payload.styleRef ?? payload.style;
+  const tableProperties: Record<string, unknown> = isRecord(payload.tableProperties)
+    ? { ...payload.tableProperties }
+    : {};
+
+  if (styleRef) {
+    attrs.tableStyleId = styleRef;
+    tableProperties.tableStyleId = styleRef;
+  }
+
+  const width = mapSDTableWidthToMeasurement(payload.props?.width);
+  if (width) {
+    tableProperties.tableWidth = width;
+  }
+
+  const layout = payload.props?.layout;
+  if (layout === 'fixed' || layout === 'autofit') {
+    attrs.tableLayout = layout;
+    tableProperties.tableLayout = layout;
+  }
+
+  const justification = mapSDTableAlignmentToJustification(payload.props?.alignment);
+  if (justification) {
+    attrs.justification = justification;
+    tableProperties.justification = justification;
+  }
+
+  if (payload.props?.borders && isRecord(payload.props.borders)) {
+    attrs.borders = payload.props.borders;
+    tableProperties.borders = payload.props.borders;
+  }
+
+  if (Object.keys(tableProperties).length > 0) {
+    attrs.tableProperties = tableProperties;
+  }
+
+  const grid = normalizeTableGridColumns(payload.columns);
+  if (grid) {
+    attrs.grid = grid;
+    attrs.tableGrid = { colWidths: grid };
+    attrs.tableGridModel = grid;
+  }
+
+  if (resolveNeedsTableStyleNormalization(node, payload)) {
+    attrs.needsTableStyleNormalization = true;
+  }
+
   return schema.nodes.table.create(attrs, rows);
 }
 
@@ -343,6 +390,98 @@ function materializeTableCell(
   if (cell.props?.padding) attrs.padding = cell.props.padding;
   if (cell.props?.borders) attrs.borders = cell.props.borders;
   return schema.nodes.tableCell.create(attrs, children);
+}
+
+function normalizeTableGridColumns(columns: unknown): Array<{ col: number }> | undefined {
+  if (!Array.isArray(columns) || columns.length === 0) return undefined;
+
+  const normalized = columns
+    .map((column) => {
+      const raw =
+        typeof column === 'number'
+          ? column
+          : isRecord(column) && typeof column.width === 'number'
+            ? column.width
+            : undefined;
+      if (typeof raw !== 'number' || !Number.isFinite(raw)) return null;
+      return { col: Math.round(raw) };
+    })
+    .filter((item): item is { col: number } => item !== null);
+
+  return normalized.length > 0 ? normalized : undefined;
+}
+
+function mapSDTableWidthToMeasurement(width: unknown): Record<string, unknown> | undefined {
+  if (isRecord(width)) {
+    if ('kind' in width && typeof width.kind === 'string') {
+      switch (width.kind) {
+        case 'auto':
+          return { type: 'auto' };
+        case 'none':
+          return { type: 'nil' };
+        case 'percent':
+          if (typeof width.value === 'number' && Number.isFinite(width.value)) {
+            return { type: 'pct', value: width.value };
+          }
+          return undefined;
+        case 'points':
+          if (typeof width.value === 'number' && Number.isFinite(width.value)) {
+            return { type: 'dxa', value: Math.round(width.value * 20) };
+          }
+          return undefined;
+        default:
+          return undefined;
+      }
+    }
+
+    const hasMeasurementShape =
+      typeof width.type === 'string' &&
+      (typeof width.value === 'number' || typeof width.width === 'number' || width.type === 'auto');
+    if (hasMeasurementShape) {
+      return { ...width };
+    }
+  }
+
+  if (typeof width === 'number' && Number.isFinite(width)) {
+    // Legacy fallback: treat numeric width as twips.
+    return { type: 'dxa', value: Math.round(width) };
+  }
+
+  return undefined;
+}
+
+function mapSDTableAlignmentToJustification(value: unknown): 'center' | 'end' | 'left' | 'right' | 'start' | undefined {
+  if (typeof value !== 'string') return undefined;
+  switch (value) {
+    case 'left':
+      return 'left';
+    case 'center':
+      return 'center';
+    case 'right':
+      return 'right';
+    case 'inside':
+      return 'start';
+    case 'outside':
+      return 'end';
+    default:
+      return undefined;
+  }
+}
+
+function resolveNeedsTableStyleNormalization(node: unknown, payload: Record<string, unknown>): boolean {
+  if (payload.needsTableStyleNormalization === true) return true;
+  if (!isRecord(node)) return false;
+
+  const ext = node.ext;
+  if (!isRecord(ext)) return false;
+  if (ext.needsTableStyleNormalization === true) return true;
+
+  const superdocExt = ext.superdoc;
+  if (isRecord(superdocExt) && superdocExt.needsTableStyleNormalization === true) {
+    return true;
+  }
+
+  return false;
 }
 
 function materializeImage(

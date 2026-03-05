@@ -12,13 +12,40 @@ import { DocumentApiAdapterError } from '../errors.js';
 
 /**
  * Returns true if the fragment contains any table nodes (at any depth).
+ * Recurses into list items, table cells, sdt, and customXml content.
  */
 function fragmentContainsTable(fragment: SDFragment): boolean {
   const nodes: SDContentNode[] = Array.isArray(fragment) ? fragment : [fragment];
-  return nodes.some((node) => {
-    const kind = (node as any).kind ?? (node as any).type;
-    return kind === 'table';
-  });
+  return nodes.some(nodeContainsTable);
+}
+
+function nodeContainsTable(node: SDContentNode): boolean {
+  const kind = (node as any).kind ?? (node as any).type;
+  if (kind === 'table') return true;
+
+  const children = getChildContentNodes(node);
+  return children.some(nodeContainsTable);
+}
+
+/** Extracts nested SDContentNode children from container nodes. */
+function getChildContentNodes(node: SDContentNode): SDContentNode[] {
+  const children: SDContentNode[] = [];
+  if (node.kind === 'list') {
+    for (const item of node.list.items) {
+      children.push(...item.content);
+    }
+  } else if (node.kind === 'table') {
+    for (const row of node.table.rows) {
+      for (const cell of row.cells) {
+        children.push(...cell.content);
+      }
+    }
+  } else if (node.kind === 'sdt' && node.sdt.content) {
+    children.push(...node.sdt.content);
+  } else if (node.kind === 'customXml' && node.customXml.content) {
+    children.push(...node.customXml.content);
+  }
+  return children;
 }
 
 /**

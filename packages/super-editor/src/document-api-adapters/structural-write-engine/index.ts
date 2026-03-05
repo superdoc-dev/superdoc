@@ -173,17 +173,36 @@ function validateSectionReferences(editor: Editor, fragment: SDFragment): void {
   }
 }
 
-/** Recursively collects targetSectionId values from sectionBreak nodes. */
+/** Recursively collects targetSectionId values from sectionBreak nodes at any depth. */
 function collectSectionRefIds(nodes: SDContentNode[]): string[] {
   const refIds: string[] = [];
-  for (const node of nodes) {
-    if (node.kind === 'sectionBreak' && 'sectionBreak' in node) {
-      const payload = (node as { sectionBreak: { targetSectionId?: string } }).sectionBreak;
-      if (payload.targetSectionId) {
-        refIds.push(payload.targetSectionId);
+  const visit = (children: SDContentNode[]) => {
+    for (const node of children) {
+      if (node.kind === 'sectionBreak' && 'sectionBreak' in node) {
+        const payload = (node as { sectionBreak: { targetSectionId?: string } }).sectionBreak;
+        if (payload.targetSectionId) {
+          refIds.push(payload.targetSectionId);
+        }
+      }
+      // Recurse into container nodes
+      if (node.kind === 'list') {
+        for (const item of node.list.items) {
+          visit(item.content);
+        }
+      } else if (node.kind === 'table') {
+        for (const row of node.table.rows) {
+          for (const cell of row.cells) {
+            visit(cell.content);
+          }
+        }
+      } else if (node.kind === 'sdt' && node.sdt.content) {
+        visit(node.sdt.content);
+      } else if (node.kind === 'customXml' && node.customXml.content) {
+        visit(node.customXml.content);
       }
     }
-  }
+  };
+  visit(nodes);
   return refIds;
 }
 

@@ -418,6 +418,7 @@ function buildHeading(
 
 function projectTable(pmNode: ProseMirrorNode): SDTable {
   const attrs = pmNode.attrs as TableAttrs | undefined;
+  const pmAttrs = pmNode.attrs as Record<string, unknown>;
   const rows: SDTableRow[] = [];
 
   pmNode.forEach((child) => {
@@ -432,14 +433,31 @@ function projectTable(pmNode: ProseMirrorNode): SDTable {
     table: { rows },
   };
 
-  const styleRef = attrs?.tableProperties?.tableStyleId ?? (pmNode.attrs as any)?.tableStyleId;
+  const styleRef = attrs?.tableProperties?.tableStyleId ?? (pmAttrs as any)?.tableStyleId;
   if (styleRef) result.table.styleRef = styleRef;
 
-  const gridModel = (pmNode.attrs as any)?.tableGridModel ?? attrs?.tableGrid?.colWidths;
+  const props = extractTableProps(attrs, pmAttrs);
+  if (props) result.table.props = props;
+
+  const gridModel = (pmAttrs as any)?.grid ?? (pmAttrs as any)?.tableGridModel ?? attrs?.tableGrid?.colWidths;
   if (gridModel && Array.isArray(gridModel)) {
-    result.table.columns = gridModel.map((item: any) => ({
-      width: typeof item === 'number' ? item : (item?.col ?? item?.width),
-    }));
+    const columns = gridModel
+      .map((item: any) => (typeof item === 'number' ? item : (item?.col ?? item?.width)))
+      .filter((width: unknown): width is number => typeof width === 'number' && Number.isFinite(width))
+      .map((width: number) => ({ width }));
+    if (columns.length > 0) {
+      result.table.columns = columns;
+    }
+  }
+
+  if ((pmAttrs as any)?.needsTableStyleNormalization === true) {
+    const ext = isRecord(result.ext) ? { ...result.ext } : {};
+    const superdocExt = isRecord(ext.superdoc) ? { ...(ext.superdoc as Record<string, unknown>) } : {};
+    superdocExt.needsTableStyleNormalization = true;
+    result.ext = {
+      ...ext,
+      superdoc: superdocExt,
+    };
   }
 
   return result;
@@ -984,6 +1002,82 @@ function projectInlineFallback(pmNode: ProseMirrorNode): SDRun {
 function resolveNodeId(pmNode: ProseMirrorNode): string | undefined {
   const id = pmNode.attrs?.sdBlockId;
   return typeof id === 'string' && id.length > 0 ? id : undefined;
+}
+
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return value !== null && typeof value === 'object' && !Array.isArray(value);
+}
+
+function extractTableProps(
+  attrs: TableAttrs | undefined,
+  pmAttrs: Record<string, unknown>,
+): SDTable['table']['props'] | undefined {
+  const tableProps = attrs?.tableProperties as Record<string, unknown> | null | undefined;
+  const props: NonNullable<SDTable['table']['props']> = {};
+  let hasProps = false;
+
+  const width = extractTableWidth((tableProps as any)?.tableWidth ?? (pmAttrs as any)?.tableWidth);
+  if (width) {
+    props.width = width;
+    hasProps = true;
+  }
+
+  const layout = (tableProps as any)?.tableLayout ?? (pmAttrs as any)?.tableLayout;
+  if (layout === 'fixed' || layout === 'autofit') {
+    props.layout = layout;
+    hasProps = true;
+  }
+
+  const alignment = mapTableAlignmentToSD((tableProps as any)?.justification ?? (pmAttrs as any)?.justification);
+  if (alignment) {
+    props.alignment = alignment;
+    hasProps = true;
+  }
+
+  return hasProps ? props : undefined;
+}
+
+function mapTableAlignmentToSD(value: unknown): NonNullable<SDTable['table']['props']>['alignment'] | undefined {
+  if (typeof value !== 'string') return undefined;
+  switch (value) {
+    case 'start':
+    case 'left':
+      return 'left';
+    case 'end':
+    case 'right':
+      return 'right';
+    case 'center':
+    case 'inside':
+    case 'outside':
+      return value;
+    default:
+      return undefined;
+  }
+}
+
+function extractTableWidth(width: unknown): NonNullable<SDTable['table']['props']>['width'] | undefined {
+  if (!isRecord(width)) return undefined;
+
+  const type = typeof width.type === 'string' ? width.type.toLowerCase() : undefined;
+  const value =
+    typeof width.value === 'number' ? width.value : typeof width.width === 'number' ? width.width : undefined;
+
+  if (type === 'auto') {
+    return { kind: 'auto' };
+  }
+  if (type === 'nil' || type === 'none') {
+    return { kind: 'none' };
+  }
+  if (type === 'pct' && typeof value === 'number' && Number.isFinite(value)) {
+    return { kind: 'percent', value };
+  }
+  if (type === 'dxa' && typeof value === 'number' && Number.isFinite(value)) {
+    return { kind: 'points', value: value / 20 };
+  }
+  if (typeof value === 'number' && Number.isFinite(value)) {
+    return { kind: 'points', value };
+  }
+  return undefined;
 }
 
 // ---------------------------------------------------------------------------

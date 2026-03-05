@@ -3,6 +3,7 @@ import { initTestEditor, loadTestDataForEditorTests } from '@tests/helpers/helpe
 import type { Editor } from '../../core/Editor.js';
 import { projectContentNode, projectInlineNode, projectDocument } from './sd-projection.js';
 import { executeStructuralInsert } from '../structural-write-engine/index.js';
+import { markdownToPmFragment } from '../../core/helpers/markdown/markdownToPmContent.js';
 import type { SDFragment, SDParagraph, SDHeading, SDTable, SDRun, SDHyperlink } from '@superdoc/document-api';
 
 let docData: Awaited<ReturnType<typeof loadTestDataForEditorTests>>;
@@ -136,6 +137,16 @@ describe('projectContentNode', () => {
     expect(projected.table.rows.length).toBe(1);
     expect(projected.table.rows[0].cells.length).toBe(1);
     expect(projected.table.rows[0].cells[0].content.length).toBeGreaterThan(0);
+  });
+
+  it('projects markdown table width and normalization marker', () => {
+    const { fragment } = markdownToPmFragment('| Col A | Col B |\n| --- | --- |\n| foo | bar |', editor);
+    expect(fragment.childCount).toBeGreaterThan(0);
+
+    const projected = projectContentNode(fragment.child(0)) as SDTable;
+    expect(projected.kind).toBe('table');
+    expect(projected.table.props?.width).toEqual({ kind: 'percent', value: 5000 });
+    expect((projected.ext as any)?.superdoc?.needsTableStyleNormalization).toBe(true);
   });
 
   it('preserves sdBlockId as id', () => {

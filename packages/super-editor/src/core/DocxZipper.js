@@ -9,7 +9,7 @@ import { COMMENT_FILE_BASENAMES } from './super-converter/constants.js';
 const IMAGE_EXTS = new Set(['png', 'jpg', 'jpeg', 'gif', 'bmp', 'tiff', 'tif', 'emf', 'wmf', 'svg', 'webp']);
 
 /** Map file extensions to correct MIME sub-types where they differ. */
-const MIME_TYPE_FOR_EXT = { tif: 'tiff' };
+const MIME_TYPE_FOR_EXT = { tif: 'tiff', jpg: 'jpeg' };
 
 /**
  * Class to handle unzipping and zipping of docx files
@@ -113,6 +113,10 @@ class DocxZipper {
     const newMediaTypes = Object.keys(media)
       .map((name) => this.getFileExtension(name))
       .filter((ext) => ext && IMAGE_EXTS.has(ext));
+    const extensionlessMediaOverrides = Object.entries(media)
+      .filter(([name]) => !this.getFileExtension(name))
+      .map(([name, value]) => ({ name, contentType: this.#detectImageContentType(value) }))
+      .filter((entry) => entry.contentType);
 
     const contentTypesPath = '[Content_Types].xml';
     let contentTypesXml;
@@ -141,9 +145,17 @@ class DocxZipper {
       seenTypes.add(type);
     }
 
-    // Update for comments
+    // Update for comments and extensionless media overrides.
     const xmlJson = JSON.parse(xmljs.xml2json(contentTypesXml, null, 2));
     const types = xmlJson.elements?.find((el) => el.name === 'Types') || {};
+    const hasPartOverride = (partName) =>
+      types.elements?.some((el) => el.name === 'Override' && el.attributes.PartName === partName);
+
+    for (const { name, contentType } of extensionlessMediaOverrides) {
+      const partName = `/${name}`;
+      if (hasPartOverride(partName)) continue;
+      typesString += `<Override PartName="${partName}" ContentType="${contentType}" />`;
+    }
 
     // Overrides
     const hasComments = types.elements?.some(
@@ -390,6 +402,31 @@ class DocxZipper {
     await this.updateContentTypes(unzippedOriginalDocx, media, false, updatedDocs);
 
     return unzippedOriginalDocx;
+  }
+
+  #detectImageContentType(value) {
+    if (value == null) return null;
+
+    // Data URI: trust declared MIME type.
+    if (typeof value === 'string' && value.startsWith('data:image/')) {
+      const match = value.match(/^data:(image\/[a-zA-Z0-9.+-]+);/i);
+      return match?.[1]?.toLowerCase() || null;
+    }
+
+    let detectedType = null;
+    if (value instanceof ArrayBuffer) {
+      detectedType = detectImageType(new Uint8Array(value));
+    } else if (ArrayBuffer.isView(value)) {
+      const view = new Uint8Array(value.buffer, value.byteOffset, value.byteLength);
+      detectedType = detectImageType(view);
+    } else if (typeof value === 'string') {
+      // May be raw base64 or data URI payload.
+      detectedType = detectImageType(value.startsWith('data:') ? value.split(',', 2)[1] : value);
+    }
+
+    if (!detectedType) return null;
+    const mimeSubtype = MIME_TYPE_FOR_EXT[detectedType] || detectedType;
+    return `image/${mimeSubtype}`;
   }
 }
 

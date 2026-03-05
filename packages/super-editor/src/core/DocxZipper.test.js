@@ -257,6 +257,55 @@ describe('DocxZipper - updateContentTypes', () => {
     expect(updatedContentTypes).toContain('/word/footer1.xml');
   });
 
+  it('adds an Override for extensionless image media parts based on detected bytes', async () => {
+    const zipper = new DocxZipper();
+    const zip = new JSZip();
+
+    const contentTypes = `<?xml version="1.0" encoding="UTF-8"?>
+      <Types xmlns="http://schemas.openxmlformats.org/package/2006/content-types">
+        <Default Extension="rels" ContentType="application/vnd.openxmlformats-package.relationships+xml"/>
+        <Default Extension="xml" ContentType="application/xml"/>
+        <Override PartName="/word/document.xml" ContentType="application/vnd.openxmlformats-officedocument.wordprocessingml.document.main+xml"/>
+      </Types>`;
+    zip.file('[Content_Types].xml', contentTypes);
+    zip.file(
+      'word/document.xml',
+      '<w:document xmlns:w="http://schemas.openxmlformats.org/wordprocessingml/2006/main"/>',
+    );
+
+    // Minimal JPEG bytes (SOI marker)
+    const jpegBytes = new Uint8Array([0xff, 0xd8, 0xff, 0xe0, 0x00, 0x10, 0x4a, 0x46, 0x49, 0x46, 0x00, 0x01]);
+
+    await zipper.updateContentTypes(zip, { 'word/media/300': jpegBytes.buffer }, false, {});
+
+    const updatedContentTypes = await zip.file('[Content_Types].xml').async('string');
+    expect(updatedContentTypes).toContain('PartName="/word/media/300"');
+    expect(updatedContentTypes).toContain('ContentType="image/jpeg"');
+  });
+
+  it('adds an Override for extensionless media stored as a data URI', async () => {
+    const zipper = new DocxZipper();
+    const zip = new JSZip();
+
+    const contentTypes = `<?xml version="1.0" encoding="UTF-8"?>
+      <Types xmlns="http://schemas.openxmlformats.org/package/2006/content-types">
+        <Default Extension="rels" ContentType="application/vnd.openxmlformats-package.relationships+xml"/>
+        <Default Extension="xml" ContentType="application/xml"/>
+        <Override PartName="/word/document.xml" ContentType="application/vnd.openxmlformats-officedocument.wordprocessingml.document.main+xml"/>
+      </Types>`;
+    zip.file('[Content_Types].xml', contentTypes);
+    zip.file(
+      'word/document.xml',
+      '<w:document xmlns:w="http://schemas.openxmlformats.org/wordprocessingml/2006/main"/>',
+    );
+
+    await zipper.updateContentTypes(zip, { 'word/media/abc123': 'data:image/png;base64,iVBOR' }, false, {});
+
+    const updatedContentTypes = await zip.file('[Content_Types].xml').async('string');
+    expect(updatedContentTypes).toContain('PartName="/word/media/abc123"');
+    expect(updatedContentTypes).toContain('ContentType="image/png"');
+  });
+
   it('removes stale comment overrides when updated docs mark comment files as deleted', async () => {
     const zipper = new DocxZipper();
     const zip = new JSZip();
@@ -393,6 +442,37 @@ describe('DocxZipper - .tif MIME type mapping', () => {
     expect(updatedContentTypes).toContain('Extension="tif"');
     expect(updatedContentTypes).toContain('ContentType="image/tiff"');
     expect(updatedContentTypes).not.toContain('ContentType="image/tif"');
+  });
+
+  it('writes image/jpeg content type for .jpg extensions on export', async () => {
+    const zipper = new DocxZipper();
+
+    const contentTypes = `<?xml version="1.0" encoding="UTF-8"?>
+      <Types xmlns="http://schemas.openxmlformats.org/package/2006/content-types">
+        <Default Extension="rels" ContentType="application/vnd.openxmlformats-package.relationships+xml"/>
+        <Default Extension="xml" ContentType="application/xml"/>
+        <Override PartName="/word/document.xml" ContentType="application/vnd.openxmlformats-officedocument.wordprocessingml.document.main+xml"/>
+      </Types>`;
+
+    const docx = [
+      { name: '[Content_Types].xml', content: contentTypes },
+      { name: 'word/document.xml', content: '<w:document/>' },
+    ];
+
+    const result = await zipper.updateZip({
+      docx,
+      updatedDocs: {},
+      media: { 'word/media/photo.jpg': 'AAAA' },
+      fonts: {},
+      isHeadless: true,
+    });
+
+    const readBack = await new JSZip().loadAsync(result);
+    const updatedContentTypes = await readBack.file('[Content_Types].xml').async('string');
+
+    expect(updatedContentTypes).toContain('Extension="jpg"');
+    expect(updatedContentTypes).toContain('ContentType="image/jpeg"');
+    expect(updatedContentTypes).not.toContain('ContentType="image/jpg"');
   });
 });
 

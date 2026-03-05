@@ -1826,8 +1826,13 @@ export class DomPainter {
     }
     this.mount.appendChild(this.bottomSpacerEl);
 
-    // Ensure mounted pages are ordered (with gap spacers) before bottom spacer.
+    // Ensure mounted pages are ordered (with gap spacers).
+    // Use cursor-based reconciliation to skip DOM moves for elements already in
+    // the correct position. Moving an element via appendChild/insertBefore triggers
+    // a browser blur event on any focused descendant, which breaks header/footer
+    // in-place editing where a PM editor lives inside a page element (SD-1993).
     let prevIndex: number | null = null;
+    let cursor: ChildNode | null = this.virtualPagesEl.firstChild;
     for (const idx of mounted) {
       if (prevIndex != null && idx > prevIndex + 1) {
         const gap = this.doc!.createElement('div');
@@ -1838,10 +1843,18 @@ export class DomPainter {
           this.topOfIndex(idx) - this.topOfIndex(prevIndex) - this.virtualHeights[prevIndex] - this.virtualGap * 2;
         gap.style.height = `${Math.max(0, Math.floor(gapHeight))}px`;
         this.virtualGapSpacers.push(gap);
-        this.virtualPagesEl.appendChild(gap);
+        // Insert gap before cursor. cursor is NOT advanced because it still
+        // points at the next page element that needs to be reconciled.
+        this.virtualPagesEl.insertBefore(gap, cursor);
       }
       const state = this.pageIndexToState.get(idx)!;
-      this.virtualPagesEl.appendChild(state.element);
+      if (state.element === cursor) {
+        // Already in the correct position. Skip the DOM mutation.
+        cursor = state.element.nextSibling;
+      } else {
+        // Out of order. Move to the correct position.
+        this.virtualPagesEl.insertBefore(state.element, cursor);
+      }
       prevIndex = idx;
     }
 

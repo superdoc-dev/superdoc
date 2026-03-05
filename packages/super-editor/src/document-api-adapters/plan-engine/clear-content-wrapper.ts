@@ -5,6 +5,7 @@
 
 import type { ClearContentInput, Receipt, RevisionGuardOptions } from '@superdoc/document-api';
 import type { Editor } from '../../core/Editor.js';
+import { DocumentApiAdapterError } from '../errors.js';
 import { clearIndexCache } from '../helpers/index-cache.js';
 import { executeDomainCommand } from './plan-wrappers.js';
 
@@ -20,6 +21,15 @@ export function clearContentWrapper(
   _input: ClearContentInput,
   options?: RevisionGuardOptions,
 ): Receipt {
+  const paragraphType = editor.state.schema.nodes.paragraph;
+  if (!paragraphType) {
+    throw new DocumentApiAdapterError(
+      'CAPABILITY_UNAVAILABLE',
+      'clearContent requires the paragraph node type in the schema.',
+      { reason: 'missing_schema_node' },
+    );
+  }
+
   if (isDocumentEmpty(editor)) {
     return { success: false, failure: { code: 'NO_OP', message: 'Document is already empty.' } };
   }
@@ -28,7 +38,7 @@ export function clearContentWrapper(
     editor,
     () => {
       const { state } = editor;
-      const emptyParagraph = state.schema.nodes.paragraph.create();
+      const emptyParagraph = paragraphType.create();
       const tr = state.tr.replaceWith(0, state.doc.content.size, emptyParagraph);
       editor.dispatch(tr);
       clearIndexCache(editor);

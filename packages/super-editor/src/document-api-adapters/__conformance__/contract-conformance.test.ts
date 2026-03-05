@@ -19,6 +19,7 @@ import { ListHelpers } from '../../core/helpers/list-numbering-helpers.js';
 import { createCommentsWrapper } from '../plan-engine/comments-wrappers.js';
 import { createParagraphWrapper, createHeadingWrapper } from '../plan-engine/create-wrappers.js';
 import { blocksDeleteWrapper } from '../plan-engine/blocks-wrappers.js';
+import { clearContentWrapper } from '../plan-engine/clear-content-wrapper.js';
 import { styleApplyWrapper } from '../plan-engine/plan-wrappers.js';
 import {
   paragraphsSetStyleWrapper,
@@ -2281,6 +2282,31 @@ const mutationVectors: Partial<Record<OperationId, MutationVector>> = {
         { target: { kind: 'block', nodeType: 'paragraph', nodeId: 'p1' } },
         { changeMode: 'direct' },
       );
+    },
+  },
+  clearContent: {
+    throwCase: () => {
+      const { editor } = makeTextEditor('Hello');
+      // Remove paragraph from schema nodes to trigger CAPABILITY_UNAVAILABLE
+      (editor.state.schema as { nodes: Record<string, unknown> }).nodes = {};
+      return clearContentWrapper(editor, {});
+    },
+    failureCase: () => {
+      // Build an editor whose doc is a single empty paragraph (childCount === 0)
+      const emptyParagraph = createNode('paragraph', [], {
+        attrs: { sdBlockId: 'p1' },
+        isBlock: true,
+        inlineContent: true,
+      });
+      const { editor } = makeTextEditor('');
+      const stateDoc = editor.state.doc as Record<string, unknown>;
+      stateDoc.childCount = 1;
+      stateDoc.firstChild = emptyParagraph;
+      return clearContentWrapper(editor, {});
+    },
+    applyCase: () => {
+      const { editor } = makeTextEditor('Hello');
+      return clearContentWrapper(editor, {});
     },
   },
   insert: {

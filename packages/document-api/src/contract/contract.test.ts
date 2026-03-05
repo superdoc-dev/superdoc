@@ -174,6 +174,7 @@ describe('document-api contract catalog', () => {
       'history',
       'toc',
       'images',
+      'hyperlinks',
     ];
     for (const id of OPERATION_IDS) {
       expect(validGroups, `${id} has invalid referenceGroup`).toContain(OPERATION_DEFINITIONS[id].referenceGroup);

@@ -397,6 +397,26 @@ import type {
   TocEditEntryInput,
   TocEntryMutationResult,
 } from './toc/toc.types.js';
+import type { HyperlinksApi, HyperlinksAdapter } from './hyperlinks/hyperlinks.js';
+import {
+  executeHyperlinksList,
+  executeHyperlinksGet,
+  executeHyperlinksWrap,
+  executeHyperlinksInsert,
+  executeHyperlinksPatch,
+  executeHyperlinksRemove,
+} from './hyperlinks/hyperlinks.js';
+import type {
+  HyperlinksListQuery,
+  HyperlinksListResult,
+  HyperlinksGetInput,
+  HyperlinkInfo,
+  HyperlinksWrapInput,
+  HyperlinksInsertInput,
+  HyperlinksPatchInput,
+  HyperlinksRemoveInput,
+  HyperlinkMutationResult,
+} from './hyperlinks/hyperlinks.types.js';
 
 export type { FindAdapter, FindOptions } from './find/find.js';
 export type { GetNodeAdapter, GetNodeByIdInput } from './get-node/get-node.js';
@@ -554,6 +574,26 @@ export type {
   TocEntryDomain,
   TocEntryProperties,
 } from './toc/toc.types.js';
+export type { HyperlinksApi, HyperlinksAdapter } from './hyperlinks/hyperlinks.js';
+export type {
+  HyperlinkTarget,
+  HyperlinkDestination,
+  HyperlinkSpec,
+  HyperlinkPatch,
+  HyperlinkReadProperties,
+  HyperlinkDomain,
+  HyperlinkInfo,
+  HyperlinkMutationResult,
+  HyperlinkMutationSuccess,
+  HyperlinkMutationFailure,
+  HyperlinksListResult,
+  HyperlinksListQuery,
+  HyperlinksGetInput,
+  HyperlinksWrapInput,
+  HyperlinksInsertInput,
+  HyperlinksPatchInput,
+  HyperlinksRemoveInput,
+} from './hyperlinks/hyperlinks.types.js';
 export type { ListsAdapter } from './lists/lists.js';
 export type { SectionsAdapter } from './sections/sections.js';
 export type { ParagraphsAdapter, ParagraphFormatApi, ParagraphStylesApi } from './paragraphs/paragraphs.js';
@@ -912,6 +952,10 @@ export interface DocumentApi {
    */
   images: ImagesApi;
   /**
+   * Hyperlink discovery, creation, and metadata management.
+   */
+  hyperlinks: HyperlinksApi;
+  /**
    * Selector-based query with cardinality contracts for mutation targeting.
    */
   query: QueryApi;
@@ -966,6 +1010,7 @@ export interface DocumentApiAdapters {
   tables: TablesAdapter;
   toc: TocAdapter;
   images: ImagesAdapter & CreateImageAdapter;
+  hyperlinks: HyperlinksAdapter;
   query: QueryAdapter;
   mutations: MutationsAdapter;
   history: HistoryAdapter;
@@ -1689,6 +1734,26 @@ export function createDocumentApi(adapters: DocumentApiAdapters): DocumentApi {
       },
       editEntry(input: TocEditEntryInput, options?: MutationOptions): TocEntryMutationResult {
         return executeTocEditEntry(adapters.toc, input, options);
+      },
+    },
+    hyperlinks: {
+      list(query?: HyperlinksListQuery): HyperlinksListResult {
+        return executeHyperlinksList(adapters.hyperlinks, query);
+      },
+      get(input: HyperlinksGetInput): HyperlinkInfo {
+        return executeHyperlinksGet(adapters.hyperlinks, input);
+      },
+      wrap(input: HyperlinksWrapInput, options?: MutationOptions): HyperlinkMutationResult {
+        return executeHyperlinksWrap(adapters.hyperlinks, input, options);
+      },
+      insert(input: HyperlinksInsertInput, options?: MutationOptions): HyperlinkMutationResult {
+        return executeHyperlinksInsert(adapters.hyperlinks, input, options);
+      },
+      patch(input: HyperlinksPatchInput, options?: MutationOptions): HyperlinkMutationResult {
+        return executeHyperlinksPatch(adapters.hyperlinks, input, options);
+      },
+      remove(input: HyperlinksRemoveInput, options?: MutationOptions): HyperlinkMutationResult {
+        return executeHyperlinksRemove(adapters.hyperlinks, input, options);
       },
     },
     query: {

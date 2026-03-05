@@ -38,6 +38,7 @@ Document API is currently alpha and subject to breaking changes.
 | History | 3 | 0 | 3 | [Open](/document-api/reference/history/index) |
 | Table of Contents | 10 | 0 | 10 | [Open](/document-api/reference/toc/index) |
 | Images | 13 | 0 | 13 | [Open](/document-api/reference/images/index) |
+| Hyperlinks | 6 | 0 | 6 | [Open](/document-api/reference/hyperlinks/index) |
 
 ## Available operations
 
@@ -341,3 +342,14 @@ The tables below are grouped by namespace.
 | <span style={{ whiteSpace: 'nowrap', wordBreak: 'normal', overflowWrap: 'normal' }}><a href="/document-api/reference/images/set-position"><code>images.setPosition</code></a></span> | <span style={{ whiteSpace: 'nowrap', wordBreak: 'normal', overflowWrap: 'normal' }}><code>editor.doc.images.setPosition(...)</code></span> | Set the anchor position for a floating image. |
 | <span style={{ whiteSpace: 'nowrap', wordBreak: 'normal', overflowWrap: 'normal' }}><a href="/document-api/reference/images/set-anchor-options"><code>images.setAnchorOptions</code></a></span> | <span style={{ whiteSpace: 'nowrap', wordBreak: 'normal', overflowWrap: 'normal' }}><code>editor.doc.images.setAnchorOptions(...)</code></span> | Set anchor behavior options for a floating image. |
 | <span style={{ whiteSpace: 'nowrap', wordBreak: 'normal', overflowWrap: 'normal' }}><a href="/document-api/reference/images/set-z-order"><code>images.setZOrder</code></a></span> | <span style={{ whiteSpace: 'nowrap', wordBreak: 'normal', overflowWrap: 'normal' }}><code>editor.doc.images.setZOrder(...)</code></span> | Set the z-order (relativeHeight) for a floating image. |
+
+#### Hyperlinks
+
+| Operation | API member path | Description |
+| --- | --- | --- |
+| <span style={{ whiteSpace: 'nowrap', wordBreak: 'normal', overflowWrap: 'normal' }}><a href="/document-api/reference/hyperlinks/list"><code>hyperlinks.list</code></a></span> | <span style={{ whiteSpace: 'nowrap', wordBreak: 'normal', overflowWrap: 'normal' }}><code>editor.doc.hyperlinks.list(...)</code></span> | List all hyperlinks in the document, with optional filtering by href, anchor, or display text. |
+| <span style={{ whiteSpace: 'nowrap', wordBreak: 'normal', overflowWrap: 'normal' }}><a href="/document-api/reference/hyperlinks/get"><code>hyperlinks.get</code></a></span> | <span style={{ whiteSpace: 'nowrap', wordBreak: 'normal', overflowWrap: 'normal' }}><code>editor.doc.hyperlinks.get(...)</code></span> | Retrieve details of a specific hyperlink by its inline address. |
+| <span style={{ whiteSpace: 'nowrap', wordBreak: 'normal', overflowWrap: 'normal' }}><a href="/document-api/reference/hyperlinks/wrap"><code>hyperlinks.wrap</code></a></span> | <span style={{ whiteSpace: 'nowrap', wordBreak: 'normal', overflowWrap: 'normal' }}><code>editor.doc.hyperlinks.wrap(...)</code></span> | Wrap an existing text range with a hyperlink. |
+| <span style={{ whiteSpace: 'nowrap', wordBreak: 'normal', overflowWrap: 'normal' }}><a href="/document-api/reference/hyperlinks/insert"><code>hyperlinks.insert</code></a></span> | <span style={{ whiteSpace: 'nowrap', wordBreak: 'normal', overflowWrap: 'normal' }}><code>editor.doc.hyperlinks.insert(...)</code></span> | Insert new linked text at a target position. |
+| <span style={{ whiteSpace: 'nowrap', wordBreak: 'normal', overflowWrap: 'normal' }}><a href="/document-api/reference/hyperlinks/patch"><code>hyperlinks.patch</code></a></span> | <span style={{ whiteSpace: 'nowrap', wordBreak: 'normal', overflowWrap: 'normal' }}><code>editor.doc.hyperlinks.patch(...)</code></span> | Update hyperlink metadata (destination, tooltip, target, rel) without changing display text. |
+| <span style={{ whiteSpace: 'nowrap', wordBreak: 'normal', overflowWrap: 'normal' }}><a href="/document-api/reference/hyperlinks/remove"><code>hyperlinks.remove</code></a></span> | <span style={{ whiteSpace: 'nowrap', wordBreak: 'normal', overflowWrap: 'normal' }}><code>editor.doc.hyperlinks.remove(...)</code></span> | Remove a hyperlink. Mode 'unwrap' preserves display text; 'deleteText' removes the linked content entirely. |

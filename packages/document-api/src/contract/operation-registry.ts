@@ -229,6 +229,17 @@ import type {
   TablesSetDefaultStyleInput,
   TablesClearDefaultStyleInput,
 } from '../types/table-operations.types.js';
+import type {
+  HyperlinksListQuery,
+  HyperlinksListResult,
+  HyperlinksGetInput,
+  HyperlinkInfo,
+  HyperlinksWrapInput,
+  HyperlinksInsertInput,
+  HyperlinksPatchInput,
+  HyperlinksRemoveInput,
+  HyperlinkMutationResult,
+} from '../hyperlinks/hyperlinks.types.js';
 
 type FormatInlineAliasOperationRegistry = {
   [K in InlineRunPatchKey as `format.${K}`]: {
@@ -663,6 +674,14 @@ export interface OperationRegistry extends FormatInlineAliasOperationRegistry {
   'images.setPosition': { input: SetPositionInput; options: MutationOptions; output: ImagesMutationResult };
   'images.setAnchorOptions': { input: SetAnchorOptionsInput; options: MutationOptions; output: ImagesMutationResult };
   'images.setZOrder': { input: SetZOrderInput; options: MutationOptions; output: ImagesMutationResult };
+
+  // --- hyperlinks.* ---
+  'hyperlinks.list': { input: HyperlinksListQuery | undefined; options: never; output: HyperlinksListResult };
+  'hyperlinks.get': { input: HyperlinksGetInput; options: never; output: HyperlinkInfo };
+  'hyperlinks.wrap': { input: HyperlinksWrapInput; options: MutationOptions; output: HyperlinkMutationResult };
+  'hyperlinks.insert': { input: HyperlinksInsertInput; options: MutationOptions; output: HyperlinkMutationResult };
+  'hyperlinks.patch': { input: HyperlinksPatchInput; options: MutationOptions; output: HyperlinkMutationResult };
+  'hyperlinks.remove': { input: HyperlinksRemoveInput; options: MutationOptions; output: HyperlinkMutationResult };
 }
 
 // --- Bidirectional completeness checks ---

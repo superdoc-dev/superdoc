@@ -10,43 +10,18 @@ from .errors import SuperDocError
 from .generated.contract import OPERATION_INDEX
 
 ToolProvider = Literal['openai', 'anthropic', 'vercel', 'generic']
-ToolProfile = Literal['intent', 'operation']
-ToolPhase = Literal['read', 'locate', 'mutate', 'review']
-
-
-class DocumentFeatures(TypedDict):
-    hasTables: bool
-    hasLists: bool
-    hasComments: bool
-    hasTrackedChanges: bool
-    isEmptyDocument: bool
-
-
-class ToolChooserPolicy(TypedDict, total=False):
-    includeCategories: List[str]
-    excludeCategories: List[str]
-    allowMutatingTools: bool
-    forceInclude: List[str]
-    forceExclude: List[str]
-
-
-class ToolChooserBudget(TypedDict, total=False):
-    maxTools: int
-    minReadTools: int
-
-
-class ToolChooserTaskContext(TypedDict, total=False):
-    phase: ToolPhase
-    previousToolCalls: List[Dict[str, Any]]
+ToolGroup = Literal[
+    'core', 'format', 'create', 'tables', 'sections',
+    'lists', 'comments', 'trackChanges', 'toc', 'images', 'history', 'session',
+]
+ToolChooserMode = Literal['essential', 'all']
 
 
 class ToolChooserInput(TypedDict, total=False):
     provider: ToolProvider
-    profile: ToolProfile
-    documentFeatures: DocumentFeatures
-    taskContext: ToolChooserTaskContext
-    budget: ToolChooserBudget
-    policy: ToolChooserPolicy
+    groups: List[ToolGroup]
+    mode: ToolChooserMode
+    includeDiscoverTool: bool
 
 
 # Policy is loaded from the generated tools-policy.json artifact.
@@ -104,46 +79,19 @@ def _read_json_asset(name: str) -> Dict[str, Any]:
     return cast(Dict[str, Any], parsed)
 
 
-def get_tool_catalog(options: Optional[Dict[str, Any]] = None) -> Dict[str, Any]:
-    profile = (options or {}).get('profile')
-    catalog = _read_json_asset('catalog.json')
-    if profile not in ('intent', 'operation', None):
-        raise SuperDocError(
-            'profile must be "intent" or "operation".',
-            code='INVALID_ARGUMENT',
-            details={'profile': profile},
-        )
-
-    if profile is None:
-        return catalog
-
-    filtered = dict(catalog)
-    profiles = catalog.get('profiles') if isinstance(catalog.get('profiles'), dict) else {}
-    filtered['profiles'] = {
-        'intent': profiles.get('intent') if profile == 'intent' else {'name': 'intent', 'tools': []},
-        'operation': profiles.get('operation') if profile == 'operation' else {'name': 'operation', 'tools': []},
-    }
-    return filtered
+def get_tool_catalog() -> Dict[str, Any]:
+    return _read_json_asset('catalog.json')
 
 
-def list_tools(provider: ToolProvider, options: Optional[Dict[str, Any]] = None) -> List[Dict[str, Any]]:
-    profile = (options or {}).get('profile', 'intent')
-    if profile not in ('intent', 'operation'):
-        raise SuperDocError(
-            'profile must be "intent" or "operation".',
-            code='INVALID_ARGUMENT',
-            details={'profile': profile},
-        )
-
+def list_tools(provider: ToolProvider) -> List[Dict[str, Any]]:
     bundle = _read_json_asset(PROVIDER_FILE[provider])
-    profiles = bundle.get('profiles')
-    if not isinstance(profiles, dict):
-        raise SuperDocError('Tool provider artifact is missing profiles.', code='TOOLS_ASSET_INVALID', details={'provider': provider})
-
-    tools = profiles.get(profile)
+    tools = bundle.get('tools')
     if not isinstance(tools, list):
-        raise SuperDocError('Tool provider artifact profile is invalid.', code='TOOLS_ASSET_INVALID', details={'provider': provider, 'profile': profile})
-
+        raise SuperDocError(
+            'Tool provider bundle is missing tools array.',
+            code='TOOLS_ASSET_INVALID',
+            details={'provider': provider},
+        )
     return cast(List[Dict[str, Any]], tools)
 
 
@@ -153,55 +101,9 @@ def resolve_tool_operation(tool_name: str) -> Optional[str]:
     return value if isinstance(value, str) else None
 
 
-def infer_document_features(info_result: Optional[Mapping[str, Any]]) -> DocumentFeatures:
-    if not isinstance(info_result, dict):
-        return {
-            'hasTables': False,
-            'hasLists': False,
-            'hasComments': False,
-            'hasTrackedChanges': False,
-            'isEmptyDocument': False,
-        }
-
-    counts: Mapping[str, Any] = {}
-    if isinstance(info_result.get('counts'), dict):
-        counts = cast(Mapping[str, Any], info_result['counts'])
-
-    words = counts.get('words') if isinstance(counts.get('words'), (int, float)) else 0
-    paragraphs = counts.get('paragraphs') if isinstance(counts.get('paragraphs'), (int, float)) else 0
-    tables = counts.get('tables') if isinstance(counts.get('tables'), (int, float)) else 0
-    comments = counts.get('comments') if isinstance(counts.get('comments'), (int, float)) else 0
-    lists = counts.get('lists') if isinstance(counts.get('lists'), (int, float)) else counts.get('listItems', 0)
-    tracked = counts.get('trackedChanges') if isinstance(counts.get('trackedChanges'), (int, float)) else counts.get('tracked_changes', 0)
-
-    return {
-        'hasTables': bool(tables and tables > 0),
-        'hasLists': bool(lists and lists > 0),
-        'hasComments': bool(comments and comments > 0),
-        'hasTrackedChanges': bool(tracked and tracked > 0),
-        'isEmptyDocument': bool(words == 0 and paragraphs <= 1),
-    }
-
-
-def _normalize_features(features: Optional[Mapping[str, Any]]) -> DocumentFeatures:
-    return {
-        'hasTables': bool(features.get('hasTables')) if features else False,
-        'hasLists': bool(features.get('hasLists')) if features else False,
-        'hasComments': bool(features.get('hasComments')) if features else False,
-        'hasTrackedChanges': bool(features.get('hasTrackedChanges')) if features else False,
-        'isEmptyDocument': bool(features.get('isEmptyDocument')) if features else False,
-    }
-
-
-def _priority_sort(tools: List[Dict[str, Any]], priority: List[str]) -> List[Dict[str, Any]]:
-    priority_index = {category: index for index, category in enumerate(priority)}
-    return sorted(
-        tools,
-        key=lambda tool: (
-            priority_index.get(str(tool.get('category')), 10_000),
-            str(tool.get('toolName', '')),
-        ),
-    )
+def get_available_groups() -> List[str]:
+    policy = _load_policy()
+    return list(policy.get('groups', []))
 
 
 def _extract_provider_tool_name(tool: Dict[str, Any]) -> Optional[str]:
@@ -222,135 +124,95 @@ def _extract_provider_tool_name(tool: Dict[str, Any]) -> Optional[str]:
 
 
 def choose_tools(input: ToolChooserInput) -> Dict[str, Any]:
+    """Select tools for a specific provider.
+
+    **mode='essential'** (default): Returns only essential tools + discover_tools.
+    Pass ``groups`` to additionally load all tools from those categories.
+
+    **mode='all'**: Returns all tools from requested groups (or all groups if
+    ``groups`` is omitted). No discover_tools included by default.
+
+    Example::
+
+        # Default: essential tools + discover_tools
+        result = choose_tools({'provider': 'openai'})
+
+        # Essential + all comment tools
+        result = choose_tools({'provider': 'openai', 'groups': ['comments']})
+
+        # All tools (old behavior)
+        result = choose_tools({'provider': 'openai', 'mode': 'all'})
+    """
     provider = input.get('provider')
     if provider not in ('openai', 'anthropic', 'vercel', 'generic'):
         raise SuperDocError('provider is required.', code='INVALID_ARGUMENT', details={'provider': provider})
 
-    profile = cast(ToolProfile, input.get('profile', 'intent'))
-    if profile not in ('intent', 'operation'):
-        raise SuperDocError('profile must be "intent" or "operation".', code='INVALID_ARGUMENT', details={'profile': profile})
-
-    task_context = input.get('taskContext', {})
-    phase = cast(ToolPhase, task_context.get('phase', 'read'))
-    if phase not in ('read', 'locate', 'mutate', 'review'):
-        raise SuperDocError('phase must be read|locate|mutate|review.', code='INVALID_ARGUMENT', details={'phase': phase})
-
     catalog = _read_json_asset('catalog.json')
     tools_policy = _load_policy()
-    profile_tools = (
-        catalog.get('profiles', {}).get(profile, {}).get('tools')
-        if isinstance(catalog.get('profiles'), dict)
-        else []
-    )
-    if not isinstance(profile_tools, list):
-        raise SuperDocError('Catalog profile tools are invalid.', code='TOOLS_ASSET_INVALID', details={'profile': profile})
 
-    policy = input.get('policy', {})
-    budget = input.get('budget', {})
+    catalog_tools = catalog.get('tools')
+    if not isinstance(catalog_tools, list):
+        raise SuperDocError('Catalog tools are invalid.', code='TOOLS_ASSET_INVALID')
 
-    defaults = tools_policy.get('defaults', {})
-    max_by_profile = defaults.get('maxToolsByProfile', {})
-    max_tools = int(budget.get('maxTools', max_by_profile.get(profile, 12)))
-    min_read_tools = int(budget.get('minReadTools', defaults.get('minReadTools', 2)))
-    max_tools = max(1, max_tools)
-    min_read_tools = max(0, min_read_tools)
+    default_mode = tools_policy.get('defaults', {}).get('mode', 'essential')
+    mode = input.get('mode', default_mode)
+    include_discover_raw = input.get('includeDiscoverTool')
+    include_discover = include_discover_raw if include_discover_raw is not None else (mode == 'essential')
 
-    phase_policy = tools_policy.get('phases', {}).get(phase, {'include': [], 'exclude': [], 'priority': []})
-    include_categories = set(policy.get('includeCategories') or phase_policy['include'])
-    exclude_categories = set((policy.get('excludeCategories') or []) + phase_policy['exclude'])
-    allow_mutating_tools = bool(policy.get('allowMutatingTools', phase == 'mutate'))
+    if mode == 'essential':
+        # Essential tools + any explicitly requested groups
+        essential_names = set(tools_policy.get('essentialTools', []))
+        requested_groups = set(input.get('groups', [])) if input.get('groups') is not None else None
 
-    features = _normalize_features(input.get('documentFeatures'))
-    excluded: List[Dict[str, str]] = []
+        selected = [
+            tool for tool in catalog_tools
+            if isinstance(tool, dict) and (
+                str(tool.get('toolName', '')) in essential_names
+                or (requested_groups is not None and str(tool.get('category', '')) in requested_groups)
+            )
+        ]
+    else:
+        # mode='all': original behavior — filter by groups
+        always_include = set(tools_policy.get('defaults', {}).get('alwaysInclude', ['core']))
+        requested_groups_list = input.get('groups')
+        if requested_groups_list is not None:
+            groups = set(list(requested_groups_list) + list(always_include))
+        else:
+            groups = set(tools_policy.get('groups', []))
 
-    def should_include(tool: Dict[str, Any]) -> bool:
-        required_caps = tool.get('requiredCapabilities')
-        if isinstance(required_caps, list):
-            for capability in required_caps:
-                if isinstance(capability, str) and capability in features and not features[capability]:
-                    excluded.append({'toolName': str(tool.get('toolName')), 'reason': 'missing-required-capability'})
-                    return False
+        selected = [
+            tool for tool in catalog_tools
+            if isinstance(tool, dict) and str(tool.get('category', '')) in groups
+        ]
 
-        if not allow_mutating_tools and bool(tool.get('mutates')):
-            excluded.append({'toolName': str(tool.get('toolName')), 'reason': 'mutations-disabled'})
-            return False
-
-        category = str(tool.get('category', ''))
-        if include_categories and category not in include_categories:
-            excluded.append({'toolName': str(tool.get('toolName')), 'reason': 'category-not-included'})
-            return False
-
-        if category in exclude_categories:
-            excluded.append({'toolName': str(tool.get('toolName')), 'reason': 'phase-category-excluded'})
-            return False
-
-        return True
-
-    candidates = [tool for tool in profile_tools if isinstance(tool, dict) and should_include(cast(Dict[str, Any], tool))]
-
-    force_exclude = set(policy.get('forceExclude') or [])
-    filtered: List[Dict[str, Any]] = []
-    for tool in candidates:
-        name = str(tool.get('toolName'))
-        if name in force_exclude:
-            excluded.append({'toolName': name, 'reason': 'force-excluded'})
-            continue
-        filtered.append(tool)
-
-    # Resolve forceInclude tools — these are guaranteed slots exempt from budget trimming.
-    index_by_name = {str(tool.get('toolName')): tool for tool in profile_tools if isinstance(tool, dict)}
-    forced_tool_names_raw: list = list(policy.get('forceInclude') or [])
-    forced_tool_names_seen: set = set()
-    forced_tools: List[Dict[str, Any]] = []
-    for forced_name in forced_tool_names_raw:
-        forced_name_key = str(forced_name)
-        if forced_name_key in forced_tool_names_seen:
-            continue
-        forced_tool_names_seen.add(forced_name_key)
-        forced = index_by_name.get(forced_name_key)
-        if forced is None:
-            excluded.append({'toolName': str(forced_name), 'reason': 'not-in-profile'})
-            continue
-        filtered.append(forced)
-        forced_tools.append(forced)
-
-    deduped: Dict[str, Dict[str, Any]] = {}
-    for tool in filtered:
-        deduped[str(tool.get('toolName'))] = tool
-    candidates = list(deduped.values())
-
-    # Start with forceInclude tools — they always occupy a slot.
-    selected: List[Dict[str, Any]] = list(forced_tools)
-    selected_names: set = {str(tool.get('toolName')) for tool in selected}
-
-    foundational_ids = set(defaults.get('foundationalOperationIds', []))
-    foundational = [tool for tool in candidates if str(tool.get('operationId')) in foundational_ids and str(tool.get('toolName')) not in selected_names]
-    for tool in foundational:
-        if len(selected) >= min_read_tools or len(selected) >= max_tools:
-            break
-        selected.append(tool)
-        selected_names.add(str(tool.get('toolName')))
-
-    remaining = [tool for tool in _priority_sort(candidates, phase_policy['priority']) if str(tool.get('toolName')) not in selected_names]
-
-    for tool in remaining:
-        if len(selected) >= max_tools:
-            excluded.append({'toolName': str(tool.get('toolName')), 'reason': 'budget-trim'})
-            continue
-        selected.append(tool)
-
+    # Build provider-formatted tools from the provider bundle
     provider_bundle = _read_json_asset(PROVIDER_FILE[provider])
-    provider_profiles = provider_bundle.get('profiles') if isinstance(provider_bundle.get('profiles'), dict) else {}
-    provider_tools = provider_profiles.get(profile) if isinstance(provider_profiles, dict) else []
+    provider_tools_raw = provider_bundle.get('tools') if isinstance(provider_bundle.get('tools'), list) else []
     provider_index: Dict[str, Dict[str, Any]] = {}
-    for tool in provider_tools:
+    for tool in provider_tools_raw:
         if not isinstance(tool, dict):
             continue
         name = _extract_provider_tool_name(tool)
         if name is not None:
             provider_index[name] = tool
 
-    selected_provider_tools = [provider_index[name] for name in [str(tool.get('toolName')) for tool in selected] if name in provider_index]
+    selected_provider_tools = [
+        provider_index[name]
+        for name in [str(tool.get('toolName')) for tool in selected]
+        if name in provider_index
+    ]
+
+    # Append discover_tools if requested
+    if include_discover:
+        discover_tool = provider_index.get('discover_tools')
+        if discover_tool is not None:
+            selected_provider_tools.append(discover_tool)
+
+    resolved_groups: List[str] = (
+        list(input.get('groups', []) if input.get('groups') is not None else [])
+        if mode == 'essential'
+        else list(input.get('groups') if input.get('groups') is not None else tools_policy.get('groups', []))
+    )
 
     return {
         'tools': selected_provider_tools,
@@ -360,19 +222,14 @@ def choose_tools(input: ToolChooserInput) -> Dict[str, Any]:
                 'toolName': str(tool.get('toolName')),
                 'category': str(tool.get('category')),
                 'mutates': bool(tool.get('mutates')),
-                'profile': str(tool.get('profile')),
             }
             for tool in selected
         ],
-        'excluded': excluded,
-        'selectionMeta': {
-            'profile': profile,
-            'phase': phase,
-            'maxTools': max_tools,
-            'minReadTools': min_read_tools,
-            'selectedCount': len(selected),
-            'decisionVersion': defaults.get('chooserDecisionVersion', 'v1'),
+        'meta': {
             'provider': provider,
+            'mode': mode,
+            'groups': sorted(resolved_groups),
+            'selectedCount': len(selected_provider_tools),
         },
     }
 

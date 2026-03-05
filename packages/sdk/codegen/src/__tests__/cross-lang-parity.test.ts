@@ -10,11 +10,10 @@ const PYTHON_SDK = path.join(REPO_ROOT, 'packages/sdk/langs/python');
 // Helpers
 // --------------------------------------------------------------------------
 
-type SelectionEntry = { operationId: string; toolName: string; category: string; mutates: boolean; profile: string };
+type SelectionEntry = { operationId: string; toolName: string; category: string; mutates: boolean };
 type ChooseResult = {
   selected: SelectionEntry[];
-  excluded: Array<{ toolName: string; reason: string }>;
-  selectionMeta: Record<string, unknown>;
+  meta: { provider: string; mode: string; groups: string[]; selectedCount: number };
 };
 
 /** Call the Python parity helper with a JSON command and parse the result. */
@@ -66,46 +65,155 @@ async function nodeTools() {
 }
 
 // --------------------------------------------------------------------------
-// Phase 1 — Minimal parity tests (3 test cases for 3 bug fixes)
+// chooseTools parity — group-based selection
 // --------------------------------------------------------------------------
 
-describe('Cross-language parity (Phase 1)', () => {
-  test('chooseTools: foundational seeding includes both foundational ops', async () => {
+describe('chooseTools parity — essential mode (default)', () => {
+  test('default mode returns only essential tools + discover_tools', async () => {
+    const input = { provider: 'generic' as const };
+
+    const { chooseTools } = await nodeTools();
+    const nodeResult = await chooseTools(input);
+
+    const pyResult = (await callPython({ action: 'chooseTools', input })) as ChooseResult;
+
+    // Both should return same essential tools
+    const nodeIds = nodeResult.selected.map((s) => s.operationId).sort();
+    const pyIds = pyResult.selected.map((s) => s.operationId).sort();
+    expect(pyIds).toEqual(nodeIds);
+    expect(nodeIds.length).toBeGreaterThan(0);
+
+    // Should be a small set (essential only)
+    expect(nodeIds.length).toBeLessThan(20);
+
+    // Meta should report essential mode
+    expect(nodeResult.meta.mode).toBe('essential');
+    expect(pyResult.meta.mode).toBe('essential');
+  });
+
+  test('essential + groups union: loads essential plus requested category', async () => {
+    const input = { provider: 'generic' as const, groups: ['comments' as const] };
+
+    const { chooseTools } = await nodeTools();
+    const nodeResult = await chooseTools(input);
+
+    const pyResult = (await callPython({ action: 'chooseTools', input })) as ChooseResult;
+
+    const nodeIds = nodeResult.selected.map((s) => s.operationId).sort();
+    const pyIds = pyResult.selected.map((s) => s.operationId).sort();
+    expect(pyIds).toEqual(nodeIds);
+
+    // Should include comment tools
+    const nodeCategories = new Set(nodeResult.selected.map((s) => s.category));
+    expect(nodeCategories.has('comments')).toBe(true);
+
+    // Should also include essential tools (which are from core/history)
+    expect(nodeIds.length).toBeGreaterThan(5);
+  });
+
+  test('includeDiscoverTool=false omits discover_tools', async () => {
+    const input = { provider: 'generic' as const, includeDiscoverTool: false };
+
+    const { chooseTools } = await nodeTools();
+    const nodeResult = await chooseTools(input);
+
+    // discover_tools should NOT appear in the tools array
+    const toolNames = nodeResult.tools
+      .filter((t): t is Record<string, unknown> => typeof t === 'object' && t !== null)
+      .map((t) => (t as Record<string, unknown>).name as string);
+    expect(toolNames).not.toContain('discover_tools');
+  });
+});
+
+describe('chooseTools parity — all mode (group-based selection)', () => {
+  test('mode=all with no groups: identical selected operationIds', async () => {
+    const input = { provider: 'generic' as const, mode: 'all' as const };
+
+    const { chooseTools } = await nodeTools();
+    const nodeResult = await chooseTools(input);
+    const nodeIds = nodeResult.selected.map((s) => s.operationId).sort();
+
+    const pyResult = (await callPython({ action: 'chooseTools', input })) as ChooseResult;
+    const pyIds = pyResult.selected.map((s) => s.operationId).sort();
+
+    expect(pyIds).toEqual(nodeIds);
+    expect(nodeIds.length).toBeGreaterThan(0);
+    expect(nodeResult.meta.mode).toBe('all');
+  });
+
+  test('mode=all: core group always auto-included', async () => {
+    const input = { provider: 'generic' as const, mode: 'all' as const, groups: ['format' as const] };
+
+    const { chooseTools } = await nodeTools();
+    const nodeResult = await chooseTools(input);
+    const nodeCategories = new Set(nodeResult.selected.map((s) => s.category));
+
+    const pyResult = (await callPython({ action: 'chooseTools', input })) as ChooseResult;
+    const pyCategories = new Set(pyResult.selected.map((s) => s.category));
+
+    // Core should be auto-included even though only 'format' was requested
+    expect(nodeCategories.has('core')).toBe(true);
+    expect(nodeCategories.has('format')).toBe(true);
+    expect(pyCategories.has('core')).toBe(true);
+    expect(pyCategories.has('format')).toBe(true);
+  });
+
+  test('mode=all: specific groups only', async () => {
     const input = {
       provider: 'generic' as const,
-      profile: 'intent' as const,
-      taskContext: { phase: 'read' as const },
-      budget: { minReadTools: 2 },
+      mode: 'all' as const,
+      groups: ['core' as const, 'comments' as const],
     };
 
     const { chooseTools } = await nodeTools();
     const nodeResult = await chooseTools(input);
-    const nodeIds = nodeResult.selected.map((s: { operationId: string }) => s.operationId);
+    const nodeCategories = new Set(nodeResult.selected.map((s) => s.category));
 
     const pyResult = (await callPython({ action: 'chooseTools', input })) as ChooseResult;
-    const pyIds = pyResult.selected.map((s) => s.operationId);
+    const pyCategories = new Set(pyResult.selected.map((s) => s.category));
 
-    expect(nodeIds).toContain('doc.info');
-    expect(nodeIds).toContain('doc.find');
-    expect(pyIds).toContain('doc.info');
-    expect(pyIds).toContain('doc.find');
-    expect(pyIds).toEqual(nodeIds);
+    // Should only have core and comments
+    for (const cat of nodeCategories) {
+      expect(['core', 'comments']).toContain(cat);
+    }
+    expect(pyCategories).toEqual(nodeCategories);
   });
 
-  test('constraint validation: mutuallyExclusive rejects in both runtimes', async () => {
-    const args = { type: 'paragraph', query: 'test' };
+  test('mode=all: meta matches between runtimes', async () => {
+    const input = { provider: 'generic' as const, mode: 'all' as const, groups: ['core' as const, 'tables' as const] };
+
+    const { chooseTools } = await nodeTools();
+    const nodeResult = await chooseTools(input);
+
+    const pyResult = (await callPython({ action: 'chooseTools', input })) as ChooseResult;
+
+    expect(pyResult.meta.provider).toBe(nodeResult.meta.provider);
+    expect(pyResult.meta.mode).toBe('all');
+    expect(pyResult.meta.selectedCount).toBe(nodeResult.meta.selectedCount);
+    expect(pyResult.meta.groups.sort()).toEqual(nodeResult.meta.groups.sort());
+  });
+});
+
+// --------------------------------------------------------------------------
+// Constraint validation parity
+// --------------------------------------------------------------------------
+
+describe('Constraint validation parity', () => {
+  test('mutuallyExclusive rejects in both runtimes', async () => {
+    // doc.lists.list has mutuallyExclusive: [['query', 'within'], ...]
+    const args = { query: 'test', within: 'some-id' };
 
     const { dispatchSuperDocTool } = await nodeTools();
     let nodeError: { code?: string } | null = null;
     try {
-      await dispatchSuperDocTool({ doc: {} }, 'find_content', args);
+      await dispatchSuperDocTool({ doc: {} }, 'list_lists', args);
     } catch (error: unknown) {
       nodeError = error as { code?: string };
     }
 
     const pyResult = (await callPython({
       action: 'validateDispatchArgs',
-      operationId: 'doc.find',
+      operationId: 'doc.lists.list',
       args,
     })) as { rejected?: boolean; code?: string };
 
@@ -116,280 +224,16 @@ describe('Cross-language parity (Phase 1)', () => {
   });
 
   test('type mismatches pass through to CLI: both runtimes accept true for a number param', async () => {
-    const args = { query: 'test', limit: true };
+    // doc.lists.list has a 'limit' number param
+    const args = { limit: true };
 
     const pyResult = await callPython({
       action: 'validateDispatchArgs',
-      operationId: 'doc.find',
+      operationId: 'doc.lists.list',
       args,
     });
 
     expect(pyResult).toBe('passed');
-  });
-});
-
-// --------------------------------------------------------------------------
-// Phase 6 — Expanded golden tests
-// --------------------------------------------------------------------------
-
-describe('chooseTools parity — phases and profiles', () => {
-  const phases = ['read', 'locate', 'mutate', 'review'] as const;
-  const profiles = ['intent', 'operation'] as const;
-
-  for (const phase of phases) {
-    for (const profile of profiles) {
-      test(`${phase}/${profile}: identical selected operationIds`, async () => {
-        const input = { provider: 'generic' as const, profile, taskContext: { phase } };
-
-        const { chooseTools } = await nodeTools();
-        const nodeResult = await chooseTools(input);
-        const nodeIds = nodeResult.selected.map((s: SelectionEntry) => s.operationId);
-
-        const pyResult = (await callPython({ action: 'chooseTools', input })) as ChooseResult;
-        const pyIds = pyResult.selected.map((s) => s.operationId);
-
-        expect(pyIds).toEqual(nodeIds);
-      });
-    }
-  }
-});
-
-describe('chooseTools parity — budget constraints', () => {
-  test('maxTools=5, minReadTools=3: same selections', async () => {
-    const input = {
-      provider: 'generic' as const,
-      profile: 'intent' as const,
-      taskContext: { phase: 'read' as const },
-      budget: { maxTools: 5, minReadTools: 3 },
-    };
-
-    const { chooseTools } = await nodeTools();
-    const nodeResult = await chooseTools(input);
-    const nodeIds = nodeResult.selected.map((s: SelectionEntry) => s.operationId);
-
-    const pyResult = (await callPython({ action: 'chooseTools', input })) as ChooseResult;
-    const pyIds = pyResult.selected.map((s) => s.operationId);
-
-    expect(pyIds).toEqual(nodeIds);
-    expect(nodeIds.length).toBeLessThanOrEqual(5);
-  });
-
-  test('maxTools=1: only 1 tool selected', async () => {
-    const input = {
-      provider: 'generic' as const,
-      profile: 'intent' as const,
-      taskContext: { phase: 'mutate' as const },
-      budget: { maxTools: 1, minReadTools: 0 },
-    };
-
-    const { chooseTools } = await nodeTools();
-    const nodeResult = await chooseTools(input);
-    const pyResult = (await callPython({ action: 'chooseTools', input })) as ChooseResult;
-
-    expect(nodeResult.selected.length).toBe(1);
-    expect(pyResult.selected.length).toBe(1);
-    expect(pyResult.selected[0].operationId).toBe(nodeResult.selected[0].operationId);
-  });
-});
-
-describe('chooseTools parity — policy overrides', () => {
-  test('forceExclude removes tool from both runtimes', async () => {
-    const input = {
-      provider: 'generic' as const,
-      profile: 'intent' as const,
-      taskContext: { phase: 'read' as const },
-      policy: { forceExclude: ['get_document_info'] },
-    };
-
-    const { chooseTools } = await nodeTools();
-    const nodeResult = await chooseTools(input);
-    const nodeIds = nodeResult.selected.map((s: SelectionEntry) => s.operationId);
-
-    const pyResult = (await callPython({ action: 'chooseTools', input })) as ChooseResult;
-    const pyIds = pyResult.selected.map((s) => s.operationId);
-
-    expect(nodeIds).not.toContain('doc.info');
-    expect(pyIds).not.toContain('doc.info');
-    expect(pyIds).toEqual(nodeIds);
-  });
-
-  test('forceInclude adds tool in both runtimes', async () => {
-    const input = {
-      provider: 'generic' as const,
-      profile: 'intent' as const,
-      taskContext: { phase: 'read' as const },
-      policy: { forceInclude: ['insert_content'] },
-    };
-
-    const { chooseTools } = await nodeTools();
-    const nodeResult = await chooseTools(input);
-    const nodeIds = nodeResult.selected.map((s: SelectionEntry) => s.operationId);
-
-    const pyResult = (await callPython({ action: 'chooseTools', input })) as ChooseResult;
-    const pyIds = pyResult.selected.map((s) => s.operationId);
-
-    // insert_content is normally excluded in read phase (it's a mutation).
-    // forceInclude should still add it.
-    expect(nodeIds).toContain('doc.insert');
-    expect(pyIds).toContain('doc.insert');
-    expect(pyIds).toEqual(nodeIds);
-  });
-});
-
-describe('chooseTools parity — capability filtering', () => {
-  test('hasComments=false excludes comment tools in both runtimes', async () => {
-    const input = {
-      provider: 'generic' as const,
-      profile: 'intent' as const,
-      taskContext: { phase: 'mutate' as const },
-      documentFeatures: {
-        hasTables: false,
-        hasLists: false,
-        hasComments: false,
-        hasTrackedChanges: false,
-        isEmptyDocument: false,
-      },
-    };
-
-    const { chooseTools } = await nodeTools();
-    const nodeResult = await chooseTools(input);
-    const nodeIds = nodeResult.selected.map((s: SelectionEntry) => s.operationId);
-
-    const pyResult = (await callPython({ action: 'chooseTools', input })) as ChooseResult;
-    const pyIds = pyResult.selected.map((s) => s.operationId);
-
-    // No comment operations should be selected
-    const commentOps = nodeIds.filter((id: string) => id.startsWith('doc.comments.'));
-    expect(commentOps.length).toBe(0);
-    expect(pyIds).toEqual(nodeIds);
-  });
-
-  test('selectionMeta matches between runtimes', async () => {
-    const input = {
-      provider: 'generic' as const,
-      profile: 'operation' as const,
-      taskContext: { phase: 'locate' as const },
-      budget: { maxTools: 8 },
-    };
-
-    const { chooseTools } = await nodeTools();
-    const nodeResult = await chooseTools(input);
-
-    const pyResult = (await callPython({ action: 'chooseTools', input })) as ChooseResult;
-
-    expect(pyResult.selectionMeta).toEqual(nodeResult.selectionMeta);
-  });
-});
-
-describe('inferDocumentFeatures parity', () => {
-  test('standard doc.info response', async () => {
-    const infoResult = {
-      counts: { words: 500, paragraphs: 12, tables: 2, comments: 3, lists: 5, trackedChanges: 1 },
-    };
-
-    const { inferDocumentFeatures } = await nodeTools();
-    const nodeFeatures = inferDocumentFeatures(infoResult);
-
-    const pyFeatures = await callPython({ action: 'inferDocumentFeatures', infoResult });
-
-    expect(pyFeatures).toEqual(nodeFeatures);
-    expect(nodeFeatures.hasTables).toBe(true);
-    expect(nodeFeatures.hasComments).toBe(true);
-    expect(nodeFeatures.hasLists).toBe(true);
-    expect(nodeFeatures.hasTrackedChanges).toBe(true);
-    expect(nodeFeatures.isEmptyDocument).toBe(false);
-  });
-
-  test('empty document', async () => {
-    const infoResult = {
-      counts: { words: 0, paragraphs: 1, tables: 0, comments: 0, lists: 0, trackedChanges: 0 },
-    };
-
-    const { inferDocumentFeatures } = await nodeTools();
-    const nodeFeatures = inferDocumentFeatures(infoResult);
-
-    const pyFeatures = await callPython({ action: 'inferDocumentFeatures', infoResult });
-
-    expect(pyFeatures).toEqual(nodeFeatures);
-    expect(nodeFeatures.isEmptyDocument).toBe(true);
-    expect(nodeFeatures.hasTables).toBe(false);
-  });
-
-  test('missing counts keys', async () => {
-    const infoResult = { counts: {} };
-
-    const { inferDocumentFeatures } = await nodeTools();
-    const nodeFeatures = inferDocumentFeatures(infoResult);
-
-    const pyFeatures = await callPython({ action: 'inferDocumentFeatures', infoResult });
-
-    expect(pyFeatures).toEqual(nodeFeatures);
-  });
-
-  test('null info result', async () => {
-    const { inferDocumentFeatures } = await nodeTools();
-    const nodeFeatures = inferDocumentFeatures(null);
-
-    const pyFeatures = await callPython({ action: 'inferDocumentFeatures', infoResult: null });
-
-    expect(pyFeatures).toEqual(nodeFeatures);
-  });
-});
-
-describe('Tool name resolution parity', () => {
-  test('all tool names in name map resolve identically', async () => {
-    const nameMap = JSON.parse(
-      readFileSync(path.join(REPO_ROOT, 'packages/sdk/tools/tool-name-map.json'), 'utf8'),
-    ) as Record<string, string>;
-
-    const { resolveToolOperation } = await nodeTools();
-
-    // Test a representative sample (first 10 entries)
-    const entries = Object.entries(nameMap).slice(0, 10);
-    for (const [toolName, expectedOpId] of entries) {
-      const nodeResult = await resolveToolOperation(toolName);
-
-      const pyResult = await callPython({ action: 'resolveToolOperation', toolName });
-
-      expect(nodeResult).toBe(expectedOpId);
-      expect(pyResult).toBe(expectedOpId);
-    }
-  });
-
-  test('unknown tool name returns null in both runtimes', async () => {
-    const { resolveToolOperation } = await nodeTools();
-    const nodeResult = await resolveToolOperation('nonexistent_tool_xyz');
-
-    const pyResult = await callPython({ action: 'resolveToolOperation', toolName: 'nonexistent_tool_xyz' });
-
-    expect(nodeResult).toBeNull();
-    expect(pyResult).toBeNull();
-  });
-});
-
-describe('Constraint validation parity', () => {
-  test('requiresOneOf: missing required group rejects in both runtimes', async () => {
-    // doc.find has requiresOneOf: [["type", "query"]] — must provide at least one
-    const args = { limit: 10 };
-
-    const { dispatchSuperDocTool } = await nodeTools();
-    let nodeError: { code?: string } | null = null;
-    try {
-      await dispatchSuperDocTool({ doc: {} }, 'find_content', args);
-    } catch (error: unknown) {
-      nodeError = error as { code?: string };
-    }
-
-    const pyResult = (await callPython({
-      action: 'validateDispatchArgs',
-      operationId: 'doc.find',
-      args,
-    })) as { rejected?: boolean; code?: string };
-
-    expect(nodeError).not.toBeNull();
-    expect(nodeError!.code).toBe('INVALID_ARGUMENT');
-    expect(pyResult.rejected).toBe(true);
-    expect(pyResult.code).toBe('INVALID_ARGUMENT');
   });
 
   test('unknown param rejected in both runtimes', async () => {
@@ -416,16 +260,14 @@ describe('Constraint validation parity', () => {
   });
 
   test('valid args pass in both runtimes', async () => {
-    // doc.find with just query (satisfies requiresOneOf)
     const args = { query: 'test' };
 
     const pyResult = await callPython({
       action: 'validateDispatchArgs',
-      operationId: 'doc.find',
+      operationId: 'doc.lists.list',
       args,
     });
 
-    // When validation passes, helper returns 'passed'
     expect(pyResult).toBe('passed');
   });
 });

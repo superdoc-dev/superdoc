@@ -2,41 +2,35 @@ import { readFile } from 'node:fs/promises';
 import { readFileSync } from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
-import { CONTRACT } from './generated/contract.js';
+import { CONTRACT, type ContractOperationEntry } from './generated/contract.js';
 import type { InvokeOptions } from './runtime/process.js';
 import { SuperDocCliError } from './runtime/errors.js';
 
 export type ToolProvider = 'openai' | 'anthropic' | 'vercel' | 'generic';
-export type ToolProfile = 'intent' | 'operation';
-export type ToolPhase = 'read' | 'locate' | 'mutate' | 'review';
 
-export type DocumentFeatures = {
-  hasTables: boolean;
-  hasLists: boolean;
-  hasComments: boolean;
-  hasTrackedChanges: boolean;
-  isEmptyDocument: boolean;
-};
+export type ToolGroup =
+  | 'core'
+  | 'format'
+  | 'create'
+  | 'tables'
+  | 'sections'
+  | 'lists'
+  | 'comments'
+  | 'trackChanges'
+  | 'toc'
+  | 'images'
+  | 'history'
+  | 'session';
+
+export type ToolChooserMode = 'essential' | 'all';
 
 export type ToolChooserInput = {
   provider: ToolProvider;
-  profile?: ToolProfile;
-  documentFeatures?: Partial<DocumentFeatures>;
-  taskContext?: {
-    phase?: ToolPhase;
-    previousToolCalls?: Array<{ toolName: string; ok: boolean }>;
-  };
-  budget?: {
-    maxTools?: number;
-    minReadTools?: number;
-  };
-  policy?: {
-    includeCategories?: string[];
-    excludeCategories?: string[];
-    allowMutatingTools?: boolean;
-    forceInclude?: string[];
-    forceExclude?: string[];
-  };
+  groups?: ToolGroup[];
+  /** Default: 'essential'. When 'essential', only essential tools are returned (plus any from `groups`). */
+  mode?: ToolChooserMode;
+  /** Whether to include the discover_tools meta-tool. Default: true when mode='essential', false when mode='all'. */
+  includeDiscoverTool?: boolean;
 };
 
 export type ToolCatalog = {
@@ -45,29 +39,27 @@ export type ToolCatalog = {
   namePolicyVersion: string;
   exposureVersion: string;
   toolCount: number;
-  profiles: {
-    intent: { name: 'intent'; tools: ToolCatalogEntry[] };
-    operation: { name: 'operation'; tools: ToolCatalogEntry[] };
-  };
+  tools: ToolCatalogEntry[];
 };
 
 type ToolCatalogEntry = {
   operationId: string;
   toolName: string;
-  profile: ToolProfile;
-  source: 'operation' | 'intent';
+  profile: string;
+  source: string;
   description: string;
   inputSchema: Record<string, unknown>;
   outputSchema: Record<string, unknown>;
   mutates: boolean;
   category: string;
+  essential?: boolean;
   capabilities: string[];
   constraints?: Record<string, unknown>;
   errors: string[];
-  examples: Array<{ description: string; args: Record<string, unknown> }>;
+  examples: unknown[];
   commandTokens: string[];
   profileTags: string[];
-  requiredCapabilities: Array<keyof DocumentFeatures>;
+  requiredCapabilities: string[];
   sessionRequirements: {
     requiresOpenContext: boolean;
     supportsSessionTargeting: boolean;
@@ -88,12 +80,19 @@ const providerFileByName: Record<ToolProvider, string> = {
 type ToolsPolicy = {
   policyVersion: string;
   contractHash: string;
-  phases: Record<ToolPhase, { include: string[]; exclude: string[]; priority: string[] }>;
+  groups: string[];
+  groupDescriptions?: Record<string, string>;
+  essentialTools?: string[];
+  discoverTool?: {
+    name: string;
+    description: string;
+    schema: Record<string, unknown>;
+  };
   defaults: {
-    maxToolsByProfile: Record<ToolProfile, number>;
-    minReadTools: number;
+    mode?: string;
+    maxTools: number;
+    alwaysInclude: string[];
     foundationalOperationIds: string[];
-    chooserDecisionVersion: string;
   };
   capabilityFeatures: Record<string, string[]>;
 };
@@ -160,7 +159,7 @@ async function readJson<T>(fileName: string): Promise<T> {
 
 async function loadProviderBundle(provider: ToolProvider): Promise<{
   contractVersion: string;
-  profiles: Record<ToolProfile, unknown[]>;
+  tools: unknown[];
 }> {
   return readJson(providerFileByName[provider]);
 }
@@ -173,29 +172,13 @@ async function loadCatalog(): Promise<ToolCatalog> {
   return readJson<ToolCatalog>('catalog.json');
 }
 
-function normalizeFeatures(features?: Partial<DocumentFeatures>): DocumentFeatures {
-  return {
-    hasTables: Boolean(features?.hasTables),
-    hasLists: Boolean(features?.hasLists),
-    hasComments: Boolean(features?.hasComments),
-    hasTrackedChanges: Boolean(features?.hasTrackedChanges),
-    isEmptyDocument: Boolean(features?.isEmptyDocument),
-  };
+/** All available tool groups from the policy. */
+export function getAvailableGroups(): ToolGroup[] {
+  const policy = loadPolicy();
+  return policy.groups as ToolGroup[];
 }
 
-function stableSortByPhasePriority(entries: ToolCatalogEntry[], priorityOrder: string[]): ToolCatalogEntry[] {
-  const priority = new Map(priorityOrder.map((category, index) => [category, index]));
-  return [...entries].sort((a, b) => {
-    const aPriority = priority.get(a.category) ?? Number.MAX_SAFE_INTEGER;
-    const bPriority = priority.get(b.category) ?? Number.MAX_SAFE_INTEGER;
-    if (aPriority !== bPriority) return aPriority - bPriority;
-    return a.toolName.localeCompare(b.toolName);
-  });
-}
-
-type ContractOperation = (typeof CONTRACT.operations)[keyof typeof CONTRACT.operations];
-
-const OPERATION_INDEX: Record<string, ContractOperation> = Object.fromEntries(
+const OPERATION_INDEX: Record<string, ContractOperationEntry> = Object.fromEntries(
   Object.entries(CONTRACT.operations).map(([id, op]) => [id, op]),
 );
 
@@ -206,7 +189,7 @@ function validateDispatchArgs(operationId: string, args: Record<string, unknown>
   }
 
   // Unknown-param rejection
-  const allowedParams = new Set<string>(operation.params.map((param) => String(param.name)));
+  const allowedParams = new Set<string>(operation.params.map((param: { name: string }) => String(param.name)));
   for (const key of Object.keys(args)) {
     if (!allowedParams.has(key)) {
       invalidArgument(`Unexpected parameter ${key} for ${operationId}.`);
@@ -299,27 +282,17 @@ function resolveDocApiMethod(
   return cursor as (args: unknown, options?: InvokeOptions) => Promise<unknown>;
 }
 
-export async function getToolCatalog(options: { profile?: ToolProfile } = {}): Promise<ToolCatalog> {
-  const catalog = await loadCatalog();
-  if (!options.profile) return catalog;
-
-  return {
-    ...catalog,
-    profiles: {
-      intent: options.profile === 'intent' ? catalog.profiles.intent : { name: 'intent', tools: [] },
-      operation: options.profile === 'operation' ? catalog.profiles.operation : { name: 'operation', tools: [] },
-    },
-  };
+export async function getToolCatalog(): Promise<ToolCatalog> {
+  return loadCatalog();
 }
 
-export async function listTools(provider: ToolProvider, options: { profile?: ToolProfile } = {}): Promise<unknown[]> {
-  const profile = options.profile ?? 'intent';
+export async function listTools(provider: ToolProvider): Promise<unknown[]> {
   const bundle = await loadProviderBundle(provider);
-  const tools = bundle.profiles[profile];
+  const tools = bundle.tools;
   if (!Array.isArray(tools)) {
-    throw new SuperDocCliError('Tool provider bundle is missing profile tools.', {
+    throw new SuperDocCliError('Tool provider bundle is missing tools array.', {
       code: 'TOOLS_ASSET_INVALID',
-      details: { provider, profile },
+      details: { provider },
     });
   }
   return tools;
@@ -330,40 +303,27 @@ export async function resolveToolOperation(toolName: string): Promise<string | n
   return typeof map[toolName] === 'string' ? map[toolName] : null;
 }
 
-export function inferDocumentFeatures(infoResult: Record<string, unknown> | null | undefined): DocumentFeatures {
-  if (!isRecord(infoResult)) {
-    return {
-      hasTables: false,
-      hasLists: false,
-      hasComments: false,
-      hasTrackedChanges: false,
-      isEmptyDocument: false,
-    };
-  }
-
-  const counts = isRecord(infoResult.counts) ? infoResult.counts : {};
-  const words = typeof counts.words === 'number' ? counts.words : 0;
-  const paragraphs = typeof counts.paragraphs === 'number' ? counts.paragraphs : 0;
-  const tables = typeof counts.tables === 'number' ? counts.tables : 0;
-  const comments = typeof counts.comments === 'number' ? counts.comments : 0;
-  const lists =
-    typeof counts.lists === 'number' ? counts.lists : typeof counts.listItems === 'number' ? counts.listItems : 0;
-  const trackedChanges =
-    typeof counts.trackedChanges === 'number'
-      ? counts.trackedChanges
-      : typeof counts.tracked_changes === 'number'
-        ? counts.tracked_changes
-        : 0;
-
-  return {
-    hasTables: tables > 0,
-    hasLists: lists > 0,
-    hasComments: comments > 0,
-    hasTrackedChanges: trackedChanges > 0,
-    isEmptyDocument: words === 0 && paragraphs <= 1,
-  };
-}
-
+/**
+ * Select tools for a specific provider.
+ *
+ * **mode='essential'** (default): Returns only essential tools + discover_tools.
+ * Pass `groups` to additionally load all tools from those categories.
+ *
+ * **mode='all'**: Returns all tools from requested groups (or all groups if
+ * `groups` is omitted). No discover_tools included by default.
+ *
+ * @example
+ * ```ts
+ * // Default: 5 essential tools + discover_tools
+ * const { tools } = await chooseTools({ provider: 'openai' });
+ *
+ * // Essential + all comment tools
+ * const { tools } = await chooseTools({ provider: 'openai', groups: ['comments'] });
+ *
+ * // All tools (old behavior)
+ * const { tools } = await chooseTools({ provider: 'openai', mode: 'all' });
+ * ```
+ */
 export async function chooseTools(input: ToolChooserInput): Promise<{
   tools: unknown[];
   selected: Array<{
@@ -371,112 +331,47 @@ export async function chooseTools(input: ToolChooserInput): Promise<{
     toolName: string;
     category: string;
     mutates: boolean;
-    profile: ToolProfile;
   }>;
-  excluded: Array<{ toolName: string; reason: string }>;
-  selectionMeta: {
-    profile: ToolProfile;
-    phase: ToolPhase;
-    maxTools: number;
-    minReadTools: number;
-    selectedCount: number;
-    decisionVersion: string;
+  meta: {
     provider: ToolProvider;
+    mode: string;
+    groups: string[];
+    selectedCount: number;
   };
 }> {
   const catalog = await loadCatalog();
   const policy = loadPolicy();
-  const profile = input.profile ?? 'intent';
-  const phase = input.taskContext?.phase ?? 'read';
-  const phasePolicy = policy.phases[phase];
-  const featureMap = normalizeFeatures(input.documentFeatures);
 
-  const maxTools = Math.max(1, input.budget?.maxTools ?? policy.defaults.maxToolsByProfile[profile]);
-  const minReadTools = Math.max(0, input.budget?.minReadTools ?? policy.defaults.minReadTools);
+  const mode = input.mode ?? (policy.defaults.mode as ToolChooserMode) ?? 'essential';
+  const includeDiscover = input.includeDiscoverTool ?? mode === 'essential';
 
-  const includeCategories = new Set(input.policy?.includeCategories ?? phasePolicy.include);
-  const excludeCategories = new Set([...(input.policy?.excludeCategories ?? []), ...phasePolicy.exclude]);
-  const allowMutatingTools = input.policy?.allowMutatingTools ?? phase === 'mutate';
+  let selected: ToolCatalogEntry[];
 
-  const excluded: Array<{ toolName: string; reason: string }> = [];
-  const profileTools = catalog.profiles[profile].tools;
-  const indexByToolName = new Map(profileTools.map((tool) => [tool.toolName, tool]));
+  if (mode === 'essential') {
+    // Essential tools + any explicitly requested groups
+    const essentialNames = new Set(policy.essentialTools ?? []);
+    const requestedGroups = input.groups ? new Set<string>(input.groups) : null;
 
-  let candidates = profileTools.filter((tool) => {
-    if (tool.requiredCapabilities.some((capability) => !featureMap[capability])) {
-      excluded.push({ toolName: tool.toolName, reason: 'missing-required-capability' });
+    selected = catalog.tools.filter((tool) => {
+      if (essentialNames.has(tool.toolName)) return true;
+      if (requestedGroups && requestedGroups.has(tool.category)) return true;
       return false;
+    });
+  } else {
+    // mode='all': original behavior — filter by groups
+    const alwaysInclude = new Set(policy.defaults.alwaysInclude ?? ['core']);
+    let groups: Set<string>;
+    if (input.groups) {
+      groups = new Set([...input.groups, ...alwaysInclude]);
+    } else {
+      groups = new Set(policy.groups);
     }
-
-    if (!allowMutatingTools && tool.mutates) {
-      excluded.push({ toolName: tool.toolName, reason: 'mutations-disabled' });
-      return false;
-    }
-
-    if (includeCategories.size > 0 && !includeCategories.has(tool.category)) {
-      excluded.push({ toolName: tool.toolName, reason: 'category-not-included' });
-      return false;
-    }
-
-    if (excludeCategories.has(tool.category)) {
-      excluded.push({ toolName: tool.toolName, reason: 'phase-category-excluded' });
-      return false;
-    }
-
-    return true;
-  });
-
-  const forceExclude = new Set(input.policy?.forceExclude ?? []);
-  candidates = candidates.filter((tool) => {
-    if (!forceExclude.has(tool.toolName)) return true;
-    excluded.push({ toolName: tool.toolName, reason: 'force-excluded' });
-    return false;
-  });
-
-  // Resolve forceInclude tools — these are guaranteed slots exempt from budget trimming.
-  const forcedToolNames = new Set<string>(input.policy?.forceInclude ?? []);
-  const forcedTools: ToolCatalogEntry[] = [];
-  for (const forcedToolName of forcedToolNames) {
-    const forced = indexByToolName.get(forcedToolName);
-    if (!forced) {
-      excluded.push({ toolName: forcedToolName, reason: 'not-in-profile' });
-      continue;
-    }
-    candidates.push(forced);
-    forcedTools.push(forced);
+    selected = catalog.tools.filter((tool) => groups.has(tool.category));
   }
 
-  candidates = [...new Map(candidates.map((tool) => [tool.toolName, tool])).values()];
-
-  // Start with forceInclude tools — they always occupy a slot.
-  const selected: ToolCatalogEntry[] = [...forcedTools];
-  const selectedNames = new Set(selected.map((tool) => tool.toolName));
-
-  const foundationalIds = new Set(policy.defaults.foundationalOperationIds);
-  const foundational = candidates.filter(
-    (tool) => foundationalIds.has(tool.operationId) && !selectedNames.has(tool.toolName),
-  );
-  for (const tool of foundational) {
-    if (selected.length >= minReadTools || selected.length >= maxTools) break;
-    selected.push(tool);
-    selectedNames.add(tool.toolName);
-  }
-
-  const remaining = stableSortByPhasePriority(
-    candidates.filter((tool) => !selectedNames.has(tool.toolName)),
-    phasePolicy.priority,
-  );
-
-  for (const tool of remaining) {
-    if (selected.length >= maxTools) {
-      excluded.push({ toolName: tool.toolName, reason: 'budget-trim' });
-      continue;
-    }
-    selected.push(tool);
-  }
-
+  // Build provider-formatted tools from the provider bundle
   const bundle = await loadProviderBundle(input.provider);
-  const providerTools = Array.isArray(bundle.profiles[profile]) ? bundle.profiles[profile] : [];
+  const providerTools = Array.isArray(bundle.tools) ? bundle.tools : [];
   const providerIndex = new Map(
     providerTools
       .filter((tool): tool is Record<string, unknown> => isRecord(tool))
@@ -488,6 +383,16 @@ export async function chooseTools(input: ToolChooserInput): Promise<{
     .map((tool) => providerIndex.get(tool.toolName))
     .filter((tool): tool is Record<string, unknown> => Boolean(tool));
 
+  // Append discover_tools if requested
+  if (includeDiscover) {
+    const discoverTool = providerIndex.get('discover_tools');
+    if (discoverTool) {
+      selectedProviderTools.push(discoverTool);
+    }
+  }
+
+  const resolvedGroups = mode === 'essential' ? (input.groups ?? []) : (input.groups ?? policy.groups);
+
   return {
     tools: selectedProviderTools,
     selected: selected.map((tool) => ({
@@ -495,17 +400,12 @@ export async function chooseTools(input: ToolChooserInput): Promise<{
       toolName: tool.toolName,
       category: tool.category,
       mutates: tool.mutates,
-      profile: tool.profile,
     })),
-    excluded,
-    selectionMeta: {
-      profile,
-      phase,
-      maxTools,
-      minReadTools,
-      selectedCount: selected.length,
-      decisionVersion: policy.defaults.chooserDecisionVersion,
+    meta: {
       provider: input.provider,
+      mode,
+      groups: [...resolvedGroups],
+      selectedCount: selectedProviderTools.length,
     },
   };
 }

@@ -111,7 +111,14 @@
               },
               "document-engine/sdks",
               "document-engine/cli",
-              "document-engine/mcp"
+              {
+                "group": "AI Agents",
+                "pages": [
+                  "document-engine/ai-agents/llm-tools",
+                  "document-engine/ai-agents/skills",
+                  "document-engine/ai-agents/mcp-server"
+                ]
+              }
             ]
           },
           {
@@ -307,6 +314,10 @@
     ]
   },
   "redirects": [
+    {
+      "source": "/document-engine/mcp",
+      "destination": "/document-engine/ai-agents/mcp-server"
+    },
     {
       "source": "/core/superdoc/properties",
       "destination": "/core/superdoc/methods#properties"

@@ -75,47 +75,33 @@ const SDK_LANGUAGE_TABS: readonly SdkLanguageTab[] = [
 ];
 
 const CATEGORY_DISPLAY_ORDER = [
-  'lifecycle',
-  'query',
-  'mutation',
+  'core',
   'format',
-  'format.paragraph',
-  'styles',
-  'styles.paragraph',
   'create',
   'sections',
-  'blocks',
   'lists',
   'tables',
   'toc',
+  'images',
   'comments',
   'trackChanges',
-  'capabilities',
   'history',
   'session',
-  'introspection',
 ] as const;
 
 const CATEGORY_LABELS: Record<string, string> = {
-  lifecycle: 'Lifecycle',
-  query: 'Query',
-  mutation: 'Mutation',
+  core: 'Core',
   format: 'Format',
-  'format.paragraph': 'Format / Paragraph',
-  styles: 'Styles',
-  'styles.paragraph': 'Styles / Paragraph',
   create: 'Create',
   sections: 'Sections',
-  blocks: 'Blocks',
   lists: 'Lists',
   tables: 'Tables',
   toc: 'Table of contents',
+  images: 'Images',
   comments: 'Comments',
   trackChanges: 'Track changes',
-  capabilities: 'Capabilities',
   history: 'History',
   session: 'Session',
-  introspection: 'Introspection',
 };
 
 // ---------------------------------------------------------------------------

@@ -156,6 +156,12 @@ const INTENT_NAMES = {
   'doc.toc.listEntries': 'list_table_of_contents_entries',
   'doc.toc.getEntry': 'get_table_of_contents_entry',
   'doc.toc.editEntry': 'edit_table_of_contents_entry',
+  'doc.hyperlinks.list': 'list_hyperlinks',
+  'doc.hyperlinks.get': 'get_hyperlink',
+  'doc.hyperlinks.wrap': 'wrap_hyperlink',
+  'doc.hyperlinks.insert': 'insert_hyperlink',
+  'doc.hyperlinks.patch': 'patch_hyperlink',
+  'doc.hyperlinks.remove': 'remove_hyperlink',
   'doc.query.match': 'query_match',
   'doc.mutations.preview': 'preview_mutations',
   'doc.mutations.apply': 'apply_mutations',
@@ -307,6 +313,8 @@ function buildSdkContract() {
       entry.outputSchema = docOp.outputSchema;
       if (docOp.successSchema) entry.successSchema = docOp.successSchema;
       if (docOp.failureSchema) entry.failureSchema = docOp.failureSchema;
+      if (docOp.skipAsATool) entry.skipAsATool = true;
+      if (docOp.essential) entry.essential = true;
     } else {
       // CLI-only operation — metadata from canonical definitions
       const def = cliOnlyDef!;
@@ -315,6 +323,7 @@ function buildSdkContract() {
       entry.supportsTrackedMode = def.sdkMetadata.supportsTrackedMode;
       entry.supportsDryRun = def.sdkMetadata.supportsDryRun;
       entry.outputSchema = def.outputSchema;
+      if (def.skipAsATool) entry.skipAsATool = true;
     }
 
     // Invariant: every operation must have outputSchema

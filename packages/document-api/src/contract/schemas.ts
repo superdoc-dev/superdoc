@@ -1531,6 +1531,102 @@ function tocEntryMutationResultSchema(): JsonSchema {
   };
 }
 
+// ---------------------------------------------------------------------------
+// Hyperlink schema helpers
+// ---------------------------------------------------------------------------
+
+const hyperlinkTargetSchema: JsonSchema = objectSchema(
+  {
+    kind: { const: 'inline' },
+    nodeType: { const: 'hyperlink' },
+    anchor: ref('InlineAnchor'),
+  },
+  ['kind', 'nodeType', 'anchor'],
+);
+
+const hyperlinkReadPropertiesSchema: JsonSchema = objectSchema({
+  href: { type: 'string' },
+  anchor: { type: 'string' },
+  docLocation: { type: 'string' },
+  tooltip: { type: 'string' },
+  target: { type: 'string' },
+  rel: { type: 'string' },
+});
+
+const hyperlinkDestinationSchema: JsonSchema = objectSchema({
+  href: { type: 'string' },
+  anchor: { type: 'string' },
+  docLocation: { type: 'string' },
+});
+
+const hyperlinkSpecSchema: JsonSchema = objectSchema(
+  {
+    destination: hyperlinkDestinationSchema,
+    tooltip: { type: 'string' },
+    target: { type: 'string' },
+    rel: { type: 'string' },
+  },
+  ['destination'],
+);
+
+const hyperlinkPatchSchema: JsonSchema = objectSchema({
+  href: { oneOf: [{ type: 'string' }, { type: 'null' }] },
+  anchor: { oneOf: [{ type: 'string' }, { type: 'null' }] },
+  docLocation: { oneOf: [{ type: 'string' }, { type: 'null' }] },
+  tooltip: { oneOf: [{ type: 'string' }, { type: 'null' }] },
+  target: { oneOf: [{ type: 'string' }, { type: 'null' }] },
+  rel: { oneOf: [{ type: 'string' }, { type: 'null' }] },
+});
+
+const hyperlinkDomainSchema: JsonSchema = objectSchema(
+  {
+    address: hyperlinkTargetSchema,
+    properties: hyperlinkReadPropertiesSchema,
+    text: { type: 'string' },
+  },
+  ['address', 'properties'],
+);
+
+const hyperlinkMutationSuccessSchema: JsonSchema = objectSchema(
+  { success: { const: true }, hyperlink: hyperlinkTargetSchema },
+  ['success', 'hyperlink'],
+);
+
+const hyperlinkMutationFailureCodes = [
+  'NO_OP',
+  'INVALID_TARGET',
+  'TARGET_NOT_FOUND',
+  'CAPABILITY_UNAVAILABLE',
+] as const;
+
+const hyperlinkMutationFailureSchema: JsonSchema = objectSchema(
+  {
+    success: { const: false },
+    failure: objectSchema(
+      {
+        code: { enum: [...hyperlinkMutationFailureCodes] },
+        message: { type: 'string' },
+        details: { type: 'object' },
+      },
+      ['code', 'message'],
+    ),
+  },
+  ['success', 'failure'],
+);
+
+function hyperlinkMutationResultSchema(): JsonSchema {
+  return { oneOf: [hyperlinkMutationSuccessSchema, hyperlinkMutationFailureSchema] };
+}
+
+const hyperlinkInfoSchema: JsonSchema = objectSchema(
+  {
+    address: hyperlinkTargetSchema,
+    properties: hyperlinkReadPropertiesSchema,
+    text: { type: 'string' },
+  },
+  ['address', 'properties'],
+);
+
 const operationSchemas: Record<OperationId, OperationSchemaSet> = {
   find: {
     input: findInputSchema,
@@ -2848,60 +2944,241 @@ const operationSchemas: Record<OperationId, OperationSchemaSet> = {
       return discoveryResultSchema({ oneOf: [textMatchItemSchema, nodeMatchItemSchema] }, queryMatchMetaSchema);
     })(),
   },
-  'mutations.preview': {
-    input: objectSchema(
+  // ---------------------------------------------------------------------------
+  // Mutation step schema — discriminated union by `op`
+  // ---------------------------------------------------------------------------
+
+  ...(() => {
+    // Targeting: SelectWhere | RefWhere
+    const selectWhereSchema = objectSchema(
+      {
+        by: { const: 'select', type: 'string' },
+        select: { oneOf: [textSelectorSchema, nodeSelectorSchema] },
+        within: nodeAddressSchema,
+        require: { enum: ['first', 'exactlyOne', 'all'] },
+      },
+      ['by', 'select', 'require'],
+    );
+
+    const refWhereSchema = objectSchema(
+      {
+        by: { const: 'ref', type: 'string' },
+        ref: { type: 'string' },
+        within: nodeAddressSchema,
+      },
+      ['by', 'ref'],
+    );
+
+    const stepWhereSchema: JsonSchema = { oneOf: [selectWhereSchema, refWhereSchema] };
+
+    // Insert-only where (no 'all' require, no ref)
+    const insertWhereSchema = objectSchema(
+      {
+        by: { const: 'select', type: 'string' },
+        select: { oneOf: [textSelectorSchema, nodeSelectorSchema] },
+        within: nodeAddressSchema,
+        require: { enum: ['first', 'exactlyOne'] },
+      },
+      ['by', 'select', 'require'],
+    );
+
+    // Assert where (select only, no require)
+    const assertWhereSchema = objectSchema(
+      {
+        by: { const: 'select', type: 'string' },
+        select: { oneOf: [textSelectorSchema, nodeSelectorSchema] },
+        within: nodeAddressSchema,
+      },
+      ['by', 'select'],
+    );
+
+    // Replacement payload
+    const replacementBlockSchema = objectSchema({ text: { type: 'string' } }, ['text']);
+    const replacementPayloadSchema: JsonSchema = {
+      oneOf: [
+        objectSchema({ text: { type: 'string' } }, ['text']),
+        objectSchema({ blocks: arraySchema(replacementBlockSchema) }, ['blocks']),
+      ],
+    };
+
+    // Style policies
+    const inlineDirectiveSchema: JsonSchema = { enum: [...INLINE_DIRECTIVES] };
+    const setMarksSchema = objectSchema({
+      bold: inlineDirectiveSchema,
+      italic: inlineDirectiveSchema,
+      underline: inlineDirectiveSchema,
+      strike: inlineDirectiveSchema,
+    });
+    const inlineStylePolicySchema = objectSchema(
+      {
+        mode: { enum: ['preserve', 'set', 'clear', 'merge'], type: 'string' },
+        requireUniform: { type: 'boolean' },
+        onNonUniform: { enum: ['error', 'useLeadingRun', 'majority', 'union'] },
+        setMarks: setMarksSchema,
+      },
+      ['mode'],
+    );
+    const paragraphStylePolicySchema = objectSchema(
+      {
+        mode: { enum: ['preserve', 'set', 'clear'], type: 'string' },
+      },
+      ['mode'],
+    );
+    const stylePolicySchema = objectSchema(
+      {
+        inline: inlineStylePolicySchema,
+        paragraph: paragraphStylePolicySchema,
+      },
+      ['inline'],
+    );
+    const insertStylePolicySchema = objectSchema(
+      {
+        inline: objectSchema(
+          {
+            mode: { enum: ['inherit', 'set', 'clear'], type: 'string' },
+            setMarks: setMarksSchema,
+          },
+          ['mode'],
+        ),
+      },
+      ['inline'],
+    );
+
+    // Step variants
+    const textRewriteStepSchema = objectSchema(
+      {
+        id: { type: 'string' },
+        op: { const: 'text.rewrite', type: 'string' },
+        where: stepWhereSchema,
+        args: objectSchema(
+          {
+            replacement: replacementPayloadSchema,
+            style: stylePolicySchema,
+          },
+          ['replacement'],
+        ),
+      },
+      ['id', 'op', 'where', 'args'],
+    );
+
+    const textInsertStepSchema = objectSchema(
+      {
+        id: { type: 'string' },
+        op: { const: 'text.insert', type: 'string' },
+        where: insertWhereSchema,
+        args: objectSchema(
+          {
+            position: { enum: ['before', 'after'] },
+            content: objectSchema({ text: { type: 'string' } }, ['text']),
+            style: insertStylePolicySchema,
+          },
+          ['position', 'content'],
+        ),
+      },
+      ['id', 'op', 'where', 'args'],
+    );
+
+    const textDeleteStepSchema = objectSchema(
+      {
+        id: { type: 'string' },
+        op: { const: 'text.delete', type: 'string' },
+        where: stepWhereSchema,
+        args: objectSchema({}),
+      },
+      ['id', 'op', 'where', 'args'],
+    );
+
+    const formatApplyStepSchema = objectSchema(
+      {
+        id: { type: 'string' },
+        op: { const: 'format.apply', type: 'string' },
+        where: stepWhereSchema,
+        args: objectSchema(
+          {
+            inline: buildInlineRunPatchSchema(),
+          },
+          ['inline'],
+        ),
+      },
+      ['id', 'op', 'where', 'args'],
+    );
+
+    const assertStepSchema = objectSchema(
+      {
+        id: { type: 'string' },
+        op: { const: 'assert', type: 'string' },
+        where: assertWhereSchema,
+        args: objectSchema(
+          {
+            expectCount: { type: 'number' },
+          },
+          ['expectCount'],
+        ),
+      },
+      ['id', 'op', 'where', 'args'],
+    );
+
+    const mutationStepSchema: JsonSchema = {
+      oneOf: [
+        textRewriteStepSchema,
+        textInsertStepSchema,
+        textDeleteStepSchema,
+        formatApplyStepSchema,
+        assertStepSchema,
+      ],
+    };
+
+    const mutationsInputSchema = objectSchema(
       {
         expectedRevision: { type: 'string' },
-        atomic: { const: true },
+        atomic: { const: true, type: 'boolean' },
         changeMode: { enum: ['direct', 'tracked'] },
-        steps: arraySchema({ type: 'object' }),
+        steps: arraySchema(mutationStepSchema),
       },
       ['atomic', 'changeMode', 'steps'],
-    ),
-    output: objectSchema(
-      {
-        evaluatedRevision: { type: 'string' },
-        steps: arraySchema({ type: 'object' }),
-        valid: { type: 'boolean' },
-        failures: arraySchema({ type: 'object' }),
+    );
+
+    return {
+      'mutations.preview': {
+        input: mutationsInputSchema,
+        output: objectSchema(
+          {
+            evaluatedRevision: { type: 'string' },
+            steps: arraySchema({ type: 'object' }),
+            valid: { type: 'boolean' },
+            failures: arraySchema({ type: 'object' }),
+          },
+          ['evaluatedRevision', 'steps', 'valid'],
+        ),
       },
-      ['evaluatedRevision', 'steps', 'valid'],
-    ),
-  },
-  'mutations.apply': {
-    input: objectSchema(
-      {
-        expectedRevision: { type: 'string' },
-        atomic: { const: true },
-        changeMode: { enum: ['direct', 'tracked'] },
-        steps: arraySchema({ type: 'object' }),
+      'mutations.apply': {
+        input: mutationsInputSchema,
+        output: objectSchema(
+          {
+            success: { const: true },
+            revision: objectSchema({ before: { type: 'string' }, after: { type: 'string' } }, ['before', 'after']),
+            steps: arraySchema({ type: 'object' }),
+            trackedChanges: arraySchema({ type: 'object' }),
+            timing: objectSchema({ totalMs: { type: 'number' } }, ['totalMs']),
+          },
+          ['success', 'revision', 'steps', 'timing'],
+        ),
+        success: objectSchema(
+          {
+            success: { const: true },
+            revision: objectSchema({ before: { type: 'string' }, after: { type: 'string' } }, ['before', 'after']),
+            steps: arraySchema({ type: 'object' }),
+            timing: objectSchema({ totalMs: { type: 'number' } }, ['totalMs']),
+          },
+          ['success', 'revision', 'steps', 'timing'],
+        ),
+        // `mutations.apply` throws pre-apply plan-engine errors rather than returning
+        // receipt-style non-applied failures, but SDK contract consumers still require
+        // an explicit failure schema descriptor for mutation operations.
+        failure: preApplyFailureResultSchemaFor('mutations.apply'),
       },
-      ['atomic', 'changeMode', 'steps'],
-    ),
-    output: objectSchema(
-      {
-        success: { const: true },
-        revision: objectSchema({ before: { type: 'string' }, after: { type: 'string' } }, ['before', 'after']),
-        steps: arraySchema({ type: 'object' }),
-        trackedChanges: arraySchema({ type: 'object' }),
-        timing: objectSchema({ totalMs: { type: 'number' } }, ['totalMs']),
-      },
-      ['success', 'revision', 'steps', 'timing'],
-    ),
-    success: objectSchema(
-      {
-        success: { const: true },
-        revision: objectSchema({ before: { type: 'string' }, after: { type: 'string' } }, ['before', 'after']),
-        steps: arraySchema({ type: 'object' }),
-        timing: objectSchema({ totalMs: { type: 'number' } }, ['totalMs']),
-      },
-      ['success', 'revision', 'steps', 'timing'],
-    ),
-    // `mutations.apply` throws pre-apply plan-engine errors rather than returning
-    // receipt-style non-applied failures, but SDK contract consumers still require
-    // an explicit failure schema descriptor for mutation operations.
-    failure: preApplyFailureResultSchemaFor('mutations.apply'),
-  },
+    };
+  })(),
   'capabilities.get': {
     input: strictEmptyObjectSchema,
     output: capabilitiesOutputSchema,
@@ -4089,6 +4366,50 @@ const operationSchemas: Record<OperationId, OperationSchemaSet> = {
       },
       ['success', 'failure'],
     ),
+  },
+
+  // --- hyperlinks.* ---
+  'hyperlinks.list': {
+    input: objectSchema({
+      within: nodeAddressSchema,
+      hrefPattern: { type: 'string' },
+      anchor: { type: 'string' },
+      textPattern: { type: 'string' },
+      limit: { type: 'integer' },
+      offset: { type: 'integer' },
+    }),
+    output: discoveryResultSchema(hyperlinkDomainSchema),
+  },
+  'hyperlinks.get': {
+    input: objectSchema({ target: hyperlinkTargetSchema }, ['target']),
+    output: hyperlinkInfoSchema,
+  },
+  'hyperlinks.wrap': {
+    input: objectSchema({ target: textAddressSchema, link: hyperlinkSpecSchema }, ['target', 'link']),
+    output: hyperlinkMutationResultSchema(),
+    success: hyperlinkMutationSuccessSchema,
+    failure: hyperlinkMutationFailureSchema,
+  },
+  'hyperlinks.insert': {
+    input: objectSchema({ target: textAddressSchema, text: { type: 'string' }, link: hyperlinkSpecSchema }, [
+      'text',
+      'link',
+    ]),
+    output: hyperlinkMutationResultSchema(),
+    success: hyperlinkMutationSuccessSchema,
+    failure: hyperlinkMutationFailureSchema,
+  },
+  'hyperlinks.patch': {
+    input: objectSchema({ target: hyperlinkTargetSchema, patch: hyperlinkPatchSchema }, ['target', 'patch']),
+    output: hyperlinkMutationResultSchema(),
+    success: hyperlinkMutationSuccessSchema,
+    failure: hyperlinkMutationFailureSchema,
+  },
+  'hyperlinks.remove': {
+    input: objectSchema({ target: hyperlinkTargetSchema, mode: { enum: ['unwrap', 'deleteText'] } }, ['target']),
+    output: hyperlinkMutationResultSchema(),
+    success: hyperlinkMutationSuccessSchema,
+    failure: hyperlinkMutationFailureSchema,
   },
 };
 

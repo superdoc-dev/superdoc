@@ -272,5 +272,13 @@ export function buildDispatchTable(api: DocumentApi): TypedDispatchTable {
     'images.setPosition': (input, options) => api.images.setPosition(input, options),
     'images.setAnchorOptions': (input, options) => api.images.setAnchorOptions(input, options),
     'images.setZOrder': (input, options) => api.images.setZOrder(input, options),
+
+    // --- hyperlinks.* ---
+    'hyperlinks.list': (input) => api.hyperlinks.list(input),
+    'hyperlinks.get': (input) => api.hyperlinks.get(input),
+    'hyperlinks.wrap': (input, options) => api.hyperlinks.wrap(input, options),
+    'hyperlinks.insert': (input, options) => api.hyperlinks.insert(input, options),
+    'hyperlinks.patch': (input, options) => api.hyperlinks.patch(input, options),
+    'hyperlinks.remove': (input, options) => api.hyperlinks.remove(input, options),
   };
 }

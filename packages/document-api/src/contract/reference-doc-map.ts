@@ -111,6 +111,11 @@ const GROUP_METADATA: Record<ReferenceGroupKey, { title: string; description: st
     description: 'Image lifecycle, placement, and wrap configuration.',
     pagePath: 'images/index.mdx',
   },
+  hyperlinks: {
+    title: 'Hyperlinks',
+    description: 'Hyperlink discovery, creation, and metadata management.',
+    pagePath: 'hyperlinks/index.mdx',
+  },
 };
 
 export const REFERENCE_OPERATION_GROUPS: readonly ReferenceOperationGroupDefinition[] = (

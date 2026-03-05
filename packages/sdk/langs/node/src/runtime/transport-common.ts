@@ -117,7 +117,7 @@ export function buildOperationArgv(
         }
         break;
       case 'jsonFlag':
-        argv.push(flag, JSON.stringify(value));
+        argv.push(flag, typeof value === 'string' ? value : JSON.stringify(value));
         break;
     }
   }

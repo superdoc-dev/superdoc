@@ -320,7 +320,7 @@ export function dedupeDiagnostics(diagnostics: UnknownNodeDiagnostic[]): Unknown
  */
 export function resolveWithinScope(
   index: BlockIndex,
-  query: Query,
+  query: Pick<Query, 'within'>,
   diagnostics: UnknownNodeDiagnostic[],
 ): WithinResult {
   if (!query.within) return { ok: true, range: undefined };

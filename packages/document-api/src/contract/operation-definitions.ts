@@ -50,7 +50,8 @@ export type ReferenceGroupKey =
   | 'tables'
   | 'history'
   | 'toc'
-  | 'images';
+  | 'images'
+  | 'hyperlinks';
 
 // ---------------------------------------------------------------------------
 // Entry shape
@@ -64,6 +65,9 @@ export interface OperationDefinitionEntry {
   metadata: CommandStaticMetadata;
   referenceDocPath: string;
   referenceGroup: ReferenceGroupKey;
+  skipAsATool?: boolean;
+  /** When true, this tool is included in the default "essential" tool set. */
+  essential?: boolean;
 }
 
 // ---------------------------------------------------------------------------
@@ -204,6 +208,7 @@ const FORMAT_INLINE_ALIAS_OPERATION_DEFINITIONS: Record<FormatInlineAliasOperati
         }),
         referenceDocPath: `format/${camelToKebab(entry.key)}.mdx`,
         referenceGroup: 'format',
+        skipAsATool: true,
       };
       return [operationId, definition];
     }),
@@ -227,6 +232,7 @@ export const OPERATION_DEFINITIONS = {
     }),
     referenceDocPath: 'find.mdx',
     referenceGroup: 'core',
+    skipAsATool: true,
   },
   getNode: {
     memberPath: 'getNode',
@@ -251,6 +257,7 @@ export const OPERATION_DEFINITIONS = {
     }),
     referenceDocPath: 'get-node-by-id.mdx',
     referenceGroup: 'core',
+    essential: true,
   },
   getText: {
     memberPath: 'getText',
@@ -260,6 +267,7 @@ export const OPERATION_DEFINITIONS = {
     metadata: readOperation(),
     referenceDocPath: 'get-text.mdx',
     referenceGroup: 'core',
+    essential: true,
   },
   getMarkdown: {
     memberPath: 'getMarkdown',
@@ -1574,6 +1582,7 @@ export const OPERATION_DEFINITIONS = {
     }),
     referenceDocPath: 'query/match.mdx',
     referenceGroup: 'query',
+    essential: true,
   },
 
   'mutations.preview': {
@@ -1605,6 +1614,7 @@ export const OPERATION_DEFINITIONS = {
     }),
     referenceDocPath: 'mutations/apply.mdx',
     referenceGroup: 'mutations',
+    essential: true,
   },
 
   'capabilities.get': {
@@ -2499,6 +2509,7 @@ export const OPERATION_DEFINITIONS = {
     }),
     referenceDocPath: 'history/undo.mdx',
     referenceGroup: 'history',
+    essential: true,
   },
 
   'history.redo': {
@@ -2740,6 +2751,104 @@ export const OPERATION_DEFINITIONS = {
     }),
     referenceDocPath: 'images/set-z-order.mdx',
     referenceGroup: 'images',
+  },
+
+  // -------------------------------------------------------------------------
+  // Hyperlinks: discovery + CRUD
+  // -------------------------------------------------------------------------
+
+  'hyperlinks.list': {
+    memberPath: 'hyperlinks.list',
+    description: 'List all hyperlinks in the document, with optional filtering by href, anchor, or display text.',
+    expectedResult:
+      'Returns a HyperlinksListResult with an array of hyperlink discovery items and pagination metadata.',
+    requiresDocumentContext: true,
+    metadata: readOperation({
+      idempotency: 'idempotent',
+    }),
+    referenceDocPath: 'hyperlinks/list.mdx',
+    referenceGroup: 'hyperlinks',
+  },
+  'hyperlinks.get': {
+    memberPath: 'hyperlinks.get',
+    description: 'Retrieve details of a specific hyperlink by its inline address.',
+    expectedResult: 'Returns a HyperlinkInfo object with the address, destination properties, and display text.',
+    requiresDocumentContext: true,
+    metadata: readOperation({
+      idempotency: 'idempotent',
+      throws: ['TARGET_NOT_FOUND', 'INVALID_TARGET'],
+    }),
+    referenceDocPath: 'hyperlinks/get.mdx',
+    referenceGroup: 'hyperlinks',
+  },
+  'hyperlinks.wrap': {
+    memberPath: 'hyperlinks.wrap',
+    description: 'Wrap an existing text range with a hyperlink.',
+    expectedResult:
+      'Returns a HyperlinkMutationResult with the created hyperlink address on success, or a failure code on no-op.',
+    requiresDocumentContext: true,
+    metadata: mutationOperation({
+      idempotency: 'conditional',
+      supportsDryRun: true,
+      supportsTrackedMode: false,
+      deterministicTargetResolution: true,
+      possibleFailureCodes: ['NO_OP'],
+      throws: [...T_NOT_FOUND_CAPABLE, 'INVALID_TARGET', 'INVALID_INPUT'],
+    }),
+    referenceDocPath: 'hyperlinks/wrap.mdx',
+    referenceGroup: 'hyperlinks',
+  },
+  'hyperlinks.insert': {
+    memberPath: 'hyperlinks.insert',
+    description: 'Insert new linked text at a target position.',
+    expectedResult:
+      'Returns a HyperlinkMutationResult with the created hyperlink address on success, or a failure code.',
+    requiresDocumentContext: true,
+    metadata: mutationOperation({
+      idempotency: 'non-idempotent',
+      supportsDryRun: true,
+      supportsTrackedMode: false,
+      deterministicTargetResolution: true,
+      possibleFailureCodes: ['NO_OP', 'INVALID_TARGET'],
+      throws: [...T_NOT_FOUND_CAPABLE, 'INVALID_TARGET', 'INVALID_INPUT'],
+    }),
+    referenceDocPath: 'hyperlinks/insert.mdx',
+    referenceGroup: 'hyperlinks',
+  },
+  'hyperlinks.patch': {
+    memberPath: 'hyperlinks.patch',
+    description: 'Update hyperlink metadata (destination, tooltip, target, rel) without changing display text.',
+    expectedResult:
+      'Returns a HyperlinkMutationResult with the updated hyperlink address on success, or NO_OP if unchanged.',
+    requiresDocumentContext: true,
+    metadata: mutationOperation({
+      idempotency: 'conditional',
+      supportsDryRun: true,
+      supportsTrackedMode: false,
+      deterministicTargetResolution: true,
+      possibleFailureCodes: ['NO_OP'],
+      throws: [...T_NOT_FOUND_CAPABLE, 'INVALID_TARGET', 'INVALID_INPUT'],
+    }),
+    referenceDocPath: 'hyperlinks/patch.mdx',
+    referenceGroup: 'hyperlinks',
+  },
+  'hyperlinks.remove': {
+    memberPath: 'hyperlinks.remove',
+    description:
+      "Remove a hyperlink. Mode 'unwrap' preserves display text; 'deleteText' removes the linked content entirely.",
+    expectedResult:
+      'Returns a HyperlinkMutationResult with the removed hyperlink address on success, or a failure code on no-op.',
+    requiresDocumentContext: true,
+    metadata: mutationOperation({
+      idempotency: 'conditional',
+      supportsDryRun: true,
+      supportsTrackedMode: false,
+      deterministicTargetResolution: true,
+      possibleFailureCodes: ['NO_OP'],
+      throws: [...T_NOT_FOUND_CAPABLE, 'INVALID_TARGET', 'INVALID_INPUT'],
+    }),
+    referenceDocPath: 'hyperlinks/remove.mdx',
+    referenceGroup: 'hyperlinks',
   },
 } as const satisfies Record<string, OperationDefinitionEntry>;
 

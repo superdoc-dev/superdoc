@@ -178,6 +178,14 @@ import {
   imagesSetAnchorOptionsWrapper,
   imagesSetZOrderWrapper,
 } from './plan-engine/images-wrappers.js';
+import {
+  hyperlinksListWrapper,
+  hyperlinksGetWrapper,
+  hyperlinksWrapWrapper,
+  hyperlinksInsertWrapper,
+  hyperlinksPatchWrapper,
+  hyperlinksRemoveWrapper,
+} from './plan-engine/hyperlinks-wrappers.js';
 
 /**
  * Assembles all document-api adapters for the given editor instance.
@@ -385,6 +393,14 @@ export function assembleDocumentApiAdapters(editor: Editor): DocumentApiAdapters
       setPosition: (input, options) => imagesSetPositionWrapper(editor, input, options),
       setAnchorOptions: (input, options) => imagesSetAnchorOptionsWrapper(editor, input, options),
       setZOrder: (input, options) => imagesSetZOrderWrapper(editor, input, options),
+    },
+    hyperlinks: {
+      list: (query) => hyperlinksListWrapper(editor, query),
+      get: (input) => hyperlinksGetWrapper(editor, input),
+      wrap: (input, options) => hyperlinksWrapWrapper(editor, input, options),
+      insert: (input, options) => hyperlinksInsertWrapper(editor, input, options),
+      patch: (input, options) => hyperlinksPatchWrapper(editor, input, options),
+      remove: (input, options) => hyperlinksRemoveWrapper(editor, input, options),
     },
     query: {
       match: (input) => queryMatchAdapter(editor, input),

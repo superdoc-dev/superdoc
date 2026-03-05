@@ -4358,7 +4358,12 @@ export class PresentationEditor extends EventEmitter {
       '.presentation-editor__selection-caret',
     ) as HTMLElement | null;
 
-    if (!caretEl) {
+    // The caret element can exist with estimated coordinates even when the target
+    // page isn't mounted (virtualized). Check the painter host for the actual page
+    // element to avoid scrolling to an incorrect position.
+    const pageIsMounted = !!this.#painterHost.querySelector(`[data-page-index="${caretLayout.pageIndex}"]`);
+
+    if (!caretEl || !pageIsMounted) {
       // Caret page may not be mounted (virtualized) — scroll page into view
       // to trigger mount; next selection update will handle precise scroll.
       this.#scrollPageIntoView(caretLayout.pageIndex);

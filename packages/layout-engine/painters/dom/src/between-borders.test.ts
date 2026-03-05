@@ -1,16 +1,20 @@
-import { describe, expect, it } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 import {
   applyParagraphBorderStyles,
   getFragmentParagraphBorders,
   computeBetweenBorderFlags,
   type BlockLookup,
 } from './renderer.js';
+import { createDomPainter } from './index.js';
 import type {
   ParagraphBorders,
   ParagraphBorder,
   ParagraphBlock,
   ListBlock,
   Fragment,
+  FlowBlock,
+  Layout,
+  Measure,
   ParaFragment,
   ListItemFragment,
   ImageFragment,
@@ -521,5 +525,128 @@ describe('computeBetweenBorderFlags', () => {
 
     const flags = computeBetweenBorderFlags(fragments, lookup);
     expect(flags.has(0)).toBe(false);
+  });
+});
+
+// ---------------------------------------------------------------------------
+// Incremental update — between-border cache invalidation
+// ---------------------------------------------------------------------------
+
+describe('DomPainter between-border incremental update', () => {
+  let mount: HTMLElement;
+
+  beforeEach(() => {
+    mount = document.createElement('div');
+    document.body.appendChild(mount);
+  });
+
+  afterEach(() => {
+    mount.remove();
+  });
+
+  const makeMeasure = (): Measure => ({
+    kind: 'paragraph',
+    lines: [
+      {
+        fromRun: 0,
+        fromChar: 0,
+        toRun: 0,
+        toChar: 0,
+        width: 100,
+        ascent: 14,
+        descent: 2,
+        lineHeight: 16,
+      },
+    ],
+    totalHeight: 16,
+  });
+
+  const layout: Layout = {
+    pageSize: { w: 400, h: 500 },
+    pages: [
+      {
+        number: 1,
+        fragments: [
+          { kind: 'para', blockId: 'b1', fromLine: 0, toLine: 1, x: 0, y: 0, width: 100 },
+          { kind: 'para', blockId: 'b2', fromLine: 0, toLine: 1, x: 0, y: 16, width: 100 },
+        ],
+      },
+    ],
+  };
+
+  it('rebuilds fragment when between-border flag switches on via setData', () => {
+    // Initial: no between borders
+    const b1: FlowBlock = { kind: 'paragraph', id: 'b1', runs: [] };
+    const b2: FlowBlock = { kind: 'paragraph', id: 'b2', runs: [] };
+
+    const painter = createDomPainter({ blocks: [b1, b2], measures: [makeMeasure(), makeMeasure()] });
+    painter.paint(layout, mount);
+
+    const page = mount.querySelector('[data-page-number="1"]') as HTMLElement;
+    const fragsBefore = page.querySelectorAll('[data-block-id]');
+    const frag1Before = fragsBefore[0] as HTMLElement;
+    expect(frag1Before.dataset.betweenBorder).toBeUndefined();
+
+    // Update: add matching between borders to both blocks
+    const b1Updated: FlowBlock = {
+      kind: 'paragraph',
+      id: 'b1',
+      runs: [],
+      attrs: { borders: MATCHING_BORDERS },
+    };
+    const b2Updated: FlowBlock = {
+      kind: 'paragraph',
+      id: 'b2',
+      runs: [],
+      attrs: { borders: MATCHING_BORDERS },
+    };
+
+    painter.setData!([b1Updated, b2Updated], [makeMeasure(), makeMeasure()]);
+    painter.paint(layout, mount);
+
+    const fragsAfter = page.querySelectorAll('[data-block-id]');
+    const frag1After = fragsAfter[0] as HTMLElement;
+    // Fragment was rebuilt (different DOM node)
+    expect(frag1After).not.toBe(frag1Before);
+    // Between border is now active
+    expect(frag1After.dataset.betweenBorder).toBe('true');
+  });
+
+  it('rebuilds fragment when between-border flag switches off via setData', () => {
+    // Initial: with matching between borders
+    const b1: FlowBlock = {
+      kind: 'paragraph',
+      id: 'b1',
+      runs: [],
+      attrs: { borders: MATCHING_BORDERS },
+    };
+    const b2: FlowBlock = {
+      kind: 'paragraph',
+      id: 'b2',
+      runs: [],
+      attrs: { borders: MATCHING_BORDERS },
+    };
+
+    const painter = createDomPainter({ blocks: [b1, b2], measures: [makeMeasure(), makeMeasure()] });
+    painter.paint(layout, mount);
+
+    const page = mount.querySelector('[data-page-number="1"]') as HTMLElement;
+    const fragsBefore = page.querySelectorAll('[data-block-id]');
+    const frag1Before = fragsBefore[0] as HTMLElement;
+    expect(frag1Before.dataset.betweenBorder).toBe('true');
+
+    // Update: remove borders from both blocks
+    const b1Updated: FlowBlock = { kind: 'paragraph', id: 'b1', runs: [] };
+    const b2Updated: FlowBlock = { kind: 'paragraph', id: 'b2', runs: [] };
+
+    painter.setData!([b1Updated, b2Updated], [makeMeasure(), makeMeasure()]);
+    painter.paint(layout, mount);
+
+    const fragsAfter = page.querySelectorAll('[data-block-id]');
+    const frag1After = fragsAfter[0] as HTMLElement;
+    // Fragment was rebuilt (different DOM node)
+    expect(frag1After).not.toBe(frag1Before);
+    // Between border is no longer active
+    expect(frag1After.dataset.betweenBorder).toBeUndefined();
   });
 });

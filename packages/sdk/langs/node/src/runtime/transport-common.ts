@@ -22,6 +22,11 @@ export interface InvokeOptions {
 
 export type ChangeMode = 'direct' | 'tracked';
 
+export interface UserIdentity {
+  name: string;
+  email?: string;
+}
+
 export interface SuperDocClientOptions {
   env?: Record<string, string | undefined>;
   startupTimeoutMs?: number;
@@ -30,6 +35,7 @@ export interface SuperDocClientOptions {
   watchdogTimeoutMs?: number;
   maxQueueDepth?: number;
   defaultChangeMode?: ChangeMode;
+  user?: UserIdentity;
 }
 
 export interface CliInvocation {
@@ -68,12 +74,23 @@ export function buildOperationArgv(
   options: InvokeOptions,
   runtimeTimeoutMs: number | undefined,
   defaultChangeMode?: ChangeMode,
+  user?: UserIdentity,
 ): string[] {
   // Inject defaultChangeMode into params BEFORE encoding — single source of truth.
-  const normalizedParams =
+  let normalizedParams: Record<string, unknown> =
     defaultChangeMode != null && params.changeMode == null && operation.params.some((p) => p.name === 'changeMode')
       ? { ...params, changeMode: defaultChangeMode }
       : params;
+
+  // Inject user identity for doc.open when not already specified.
+  if (user != null && operation.operationId === 'doc.open') {
+    if (normalizedParams.userName == null && user.name) {
+      normalizedParams = { ...normalizedParams, userName: user.name };
+    }
+    if (normalizedParams.userEmail == null && user.email) {
+      normalizedParams = { ...normalizedParams, userEmail: user.email };
+    }
+  }
 
   const argv: string[] = [...operation.commandTokens];
 

@@ -71,8 +71,9 @@ perf-baseline-results.json
 .claude
 plans/
 
-tests/layout-snapshots/candidate/
-tests/layout-snapshots/reference/
+tests/layout/candidate/
+tests/layout/reference/
+tests/layout/reports/
 test-corpus/
 .pnpm-store
 devtools/visual-testing/pnpm-lock.yaml
@@ -85,6 +86,11 @@ __pycache__/
 *.pyo
 # Generated platform companion build metadata (do not commit)
 packages/sdk/langs/python/platforms/**/*.egg-info/
+# Generated python packaging metadata (do not commit)
+packages/sdk/langs/python/**/*.egg-info/
+
+# Local runtime state for collaboration examples
+examples/collaboration/fastapi/.superdoc-state/
 
 # Generated artifacts — run `pnpm run generate:all` to produce
 packages/document-api/generated/

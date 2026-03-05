@@ -40,7 +40,21 @@ Returns a DocumentMutationResult receipt; reports NO_OP if the odd/even setting 
 
 ## Output fields
 
-_No fields._
+### Variant 1 (success=true)
+
+| Field | Type | Required | Description |
+| --- | --- | --- | --- |
+| `success` | `true` | yes | Constant: `true` |
+
+### Variant 2 (success=false)
+
+| Field | Type | Required | Description |
+| --- | --- | --- | --- |
+| `failure` | object | yes |  |
+| `failure.code` | enum | yes | `"NO_OP"`, `"CAPABILITY_UNAVAILABLE"` |
+| `failure.details` | any | no |  |
+| `failure.message` | string | yes |  |
+| `success` | `false` | yes | Constant: `false` |
 
 ### Example response
 

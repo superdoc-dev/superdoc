@@ -1,7 +1,7 @@
 ---
 title: styles.apply
 sidebarTitle: styles.apply
-description: Apply document-level default style changes to the stylesheet (word/styles.xml). Targets docDefaults run properties with boolean patch semantics.
+description: Apply document-level default style changes to the stylesheet (word/styles.xml). Targets docDefaults run and paragraph channels with set-style patch semantics.
 ---
 
 {/* GENERATED FILE: DO NOT EDIT. Regenerate via `pnpm run docapi:sync`. */}
@@ -10,7 +10,7 @@ description: Apply document-level default style changes to the stylesheet (word/
 
 ## Summary
 
-Apply document-level default style changes to the stylesheet (word/styles.xml). Targets docDefaults run properties with boolean patch semantics.
+Apply document-level default style changes to the stylesheet (word/styles.xml). Targets docDefaults run and paragraph channels with set-style patch semantics.
 
 - Operation ID: `styles.apply`
 - API member path: `editor.doc.styles.apply(...)`
@@ -26,7 +26,240 @@ Returns a StylesApplyReceipt with per-channel success/failure details for each p
 
 ## Input fields
 
-_No fields._
+### Variant 1 (target.channel="run")
+
+| Field | Type | Required | Description |
+| --- | --- | --- | --- |
+| `patch` | object | yes |  |
+| `patch.bold` | boolean | no |  |
+| `patch.boldCs` | boolean | no |  |
+| `patch.borders` | object | no |  |
+| `patch.borders.color` | string | no |  |
+| `patch.borders.frame` | boolean | no |  |
+| `patch.borders.shadow` | boolean | no |  |
+| `patch.borders.size` | integer | no |  |
+| `patch.borders.space` | integer | no |  |
+| `patch.borders.themeColor` | string | no |  |
+| `patch.borders.themeShade` | string | no |  |
+| `patch.borders.themeTint` | string | no |  |
+| `patch.borders.val` | string | no |  |
+| `patch.color` | object | no |  |
+| `patch.color.themeColor` | string | no |  |
+| `patch.color.themeShade` | string | no |  |
+| `patch.color.themeTint` | string | no |  |
+| `patch.color.val` | string | no |  |
+| `patch.dstrike` | boolean | no |  |
+| `patch.eastAsianLayout` | object | no |  |
+| `patch.eastAsianLayout.combine` | boolean | no |  |
+| `patch.eastAsianLayout.combineBrackets` | string | no |  |
+| `patch.eastAsianLayout.id` | integer | no |  |
+| `patch.eastAsianLayout.vert` | boolean | no |  |
+| `patch.eastAsianLayout.vertCompress` | boolean | no |  |
+| `patch.effect` | string | no |  |
+| `patch.em` | enum | no | `"none"`, `"dot"`, `"comma"`, `"circle"`, `"sesame"` |
+| `patch.emboss` | boolean | no |  |
+| `patch.fitText` | object | no |  |
+| `patch.fitText.id` | integer | no |  |
+| `patch.fitText.val` | integer | no |  |
+| `patch.fontFamily` | object | no |  |
+| `patch.fontFamily.ascii` | string | no |  |
+| `patch.fontFamily.asciiTheme` | string | no |  |
+| `patch.fontFamily.cs` | string | no |  |
+| `patch.fontFamily.cstheme` | string | no |  |
+| `patch.fontFamily.eastAsia` | string | no |  |
+| `patch.fontFamily.eastAsiaTheme` | string | no |  |
+| `patch.fontFamily.hAnsi` | string | no |  |
+| `patch.fontFamily.hAnsiTheme` | string | no |  |
+| `patch.fontFamily.hint` | string | no |  |
+| `patch.fontFamily.val` | string | no |  |
+| `patch.fontSize` | integer | no |  |
+| `patch.fontSizeCs` | integer | no |  |
+| `patch.iCs` | boolean | no |  |
+| `patch.imprint` | boolean | no |  |
+| `patch.italic` | boolean | no |  |
+| `patch.kern` | integer | no |  |
+| `patch.lang` | object | no |  |
+| `patch.lang.bidi` | string | no |  |
+| `patch.lang.eastAsia` | string | no |  |
+| `patch.lang.val` | string | no |  |
+| `patch.letterSpacing` | integer | no |  |
+| `patch.noProof` | boolean | no |  |
+| `patch.outline` | boolean | no |  |
+| `patch.position` | integer | no |  |
+| `patch.shading` | object | no |  |
+| `patch.shading.color` | string | no |  |
+| `patch.shading.fill` | string | no |  |
+| `patch.shading.themeColor` | string | no |  |
+| `patch.shading.themeFill` | string | no |  |
+| `patch.shading.themeFillShade` | string | no |  |
+| `patch.shading.themeFillTint` | string | no |  |
+| `patch.shading.themeShade` | string | no |  |
+| `patch.shading.themeTint` | string | no |  |
+| `patch.shading.val` | string | no |  |
+| `patch.shadow` | boolean | no |  |
+| `patch.smallCaps` | boolean | no |  |
+| `patch.snapToGrid` | boolean | no |  |
+| `patch.specVanish` | boolean | no |  |
+| `patch.strike` | boolean | no |  |
+| `patch.textTransform` | enum | no | `"uppercase"`, `"none"` |
+| `patch.underline` | object | no |  |
+| `patch.underline.color` | string | no |  |
+| `patch.underline.themeColor` | string | no |  |
+| `patch.underline.themeShade` | string | no |  |
+| `patch.underline.themeTint` | string | no |  |
+| `patch.underline.val` | enum | no | `"single"`, `"double"`, `"thick"`, `"dotted"`, `"dottedHeavy"`, `"dash"`, `"dashedHeavy"`, `"dashLong"`, `"dashLongHeavy"`, `"dotDash"`, `"dashDotHeavy"`, `"dotDotDash"`, `"dashDotDotHeavy"`, `"wave"`, `"wavyHeavy"`, `"wavyDouble"`, `"words"`, `"none"` |
+| `patch.vanish` | boolean | no |  |
+| `patch.vertAlign` | enum | no | `"superscript"`, `"subscript"`, `"baseline"` |
+| `patch.w` | integer | no |  |
+| `patch.webHidden` | boolean | no |  |
+| `target` | object(scope="docDefaults") | yes |  |
+| `target.channel` | `"run"` | yes | Constant: `"run"` |
+| `target.scope` | `"docDefaults"` | yes | Constant: `"docDefaults"` |
+
+### Variant 2 (target.channel="paragraph")
+
+| Field | Type | Required | Description |
+| --- | --- | --- | --- |
+| `patch` | object | yes |  |
+| `patch.adjustRightInd` | boolean | no |  |
+| `patch.autoSpaceDE` | boolean | no |  |
+| `patch.autoSpaceDN` | boolean | no |  |
+| `patch.borders` | object | no |  |
+| `patch.borders.bar` | object | no |  |
+| `patch.borders.bar.color` | string | no |  |
+| `patch.borders.bar.frame` | boolean | no |  |
+| `patch.borders.bar.shadow` | boolean | no |  |
+| `patch.borders.bar.size` | integer | no |  |
+| `patch.borders.bar.space` | integer | no |  |
+| `patch.borders.bar.themeColor` | string | no |  |
+| `patch.borders.bar.themeShade` | string | no |  |
+| `patch.borders.bar.themeTint` | string | no |  |
+| `patch.borders.bar.val` | string | no |  |
+| `patch.borders.between` | object | no |  |
+| `patch.borders.between.color` | string | no |  |
+| `patch.borders.between.frame` | boolean | no |  |
+| `patch.borders.between.shadow` | boolean | no |  |
+| `patch.borders.between.size` | integer | no |  |
+| `patch.borders.between.space` | integer | no |  |
+| `patch.borders.between.themeColor` | string | no |  |
+| `patch.borders.between.themeShade` | string | no |  |
+| `patch.borders.between.themeTint` | string | no |  |
+| `patch.borders.between.val` | string | no |  |
+| `patch.borders.bottom` | object | no |  |
+| `patch.borders.bottom.color` | string | no |  |
+| `patch.borders.bottom.frame` | boolean | no |  |
+| `patch.borders.bottom.shadow` | boolean | no |  |
+| `patch.borders.bottom.size` | integer | no |  |
+| `patch.borders.bottom.space` | integer | no |  |
+| `patch.borders.bottom.themeColor` | string | no |  |
+| `patch.borders.bottom.themeShade` | string | no |  |
+| `patch.borders.bottom.themeTint` | string | no |  |
+| `patch.borders.bottom.val` | string | no |  |
+| `patch.borders.left` | object | no |  |
+| `patch.borders.left.color` | string | no |  |
+| `patch.borders.left.frame` | boolean | no |  |
+| `patch.borders.left.shadow` | boolean | no |  |
+| `patch.borders.left.size` | integer | no |  |
+| `patch.borders.left.space` | integer | no |  |
+| `patch.borders.left.themeColor` | string | no |  |
+| `patch.borders.left.themeShade` | string | no |  |
+| `patch.borders.left.themeTint` | string | no |  |
+| `patch.borders.left.val` | string | no |  |
+| `patch.borders.right` | object | no |  |
+| `patch.borders.right.color` | string | no |  |
+| `patch.borders.right.frame` | boolean | no |  |
+| `patch.borders.right.shadow` | boolean | no |  |
+| `patch.borders.right.size` | integer | no |  |
+| `patch.borders.right.space` | integer | no |  |
+| `patch.borders.right.themeColor` | string | no |  |
+| `patch.borders.right.themeShade` | string | no |  |
+| `patch.borders.right.themeTint` | string | no |  |
+| `patch.borders.right.val` | string | no |  |
+| `patch.borders.top` | object | no |  |
+| `patch.borders.top.color` | string | no |  |
+| `patch.borders.top.frame` | boolean | no |  |
+| `patch.borders.top.shadow` | boolean | no |  |
+| `patch.borders.top.size` | integer | no |  |
+| `patch.borders.top.space` | integer | no |  |
+| `patch.borders.top.themeColor` | string | no |  |
+| `patch.borders.top.themeShade` | string | no |  |
+| `patch.borders.top.themeTint` | string | no |  |
+| `patch.borders.top.val` | string | no |  |
+| `patch.contextualSpacing` | boolean | no |  |
+| `patch.framePr` | object | no |  |
+| `patch.framePr.anchorLock` | boolean | no |  |
+| `patch.framePr.dropCap` | string | no |  |
+| `patch.framePr.h` | integer | no |  |
+| `patch.framePr.hAnchor` | string | no |  |
+| `patch.framePr.hRule` | string | no |  |
+| `patch.framePr.hSpace` | integer | no |  |
+| `patch.framePr.lines` | integer | no |  |
+| `patch.framePr.vAnchor` | string | no |  |
+| `patch.framePr.vSpace` | integer | no |  |
+| `patch.framePr.w` | integer | no |  |
+| `patch.framePr.wrap` | string | no |  |
+| `patch.framePr.x` | integer | no |  |
+| `patch.framePr.xAlign` | string | no |  |
+| `patch.framePr.y` | integer | no |  |
+| `patch.framePr.yAlign` | string | no |  |
+| `patch.indent` | object | no |  |
+| `patch.indent.end` | integer | no |  |
+| `patch.indent.endChars` | integer | no |  |
+| `patch.indent.firstLine` | integer | no |  |
+| `patch.indent.firstLineChars` | integer | no |  |
+| `patch.indent.hanging` | integer | no |  |
+| `patch.indent.hangingChars` | integer | no |  |
+| `patch.indent.left` | integer | no |  |
+| `patch.indent.leftChars` | integer | no |  |
+| `patch.indent.right` | integer | no |  |
+| `patch.indent.rightChars` | integer | no |  |
+| `patch.indent.start` | integer | no |  |
+| `patch.indent.startChars` | integer | no |  |
+| `patch.justification` | enum | no | `"left"`, `"center"`, `"right"`, `"justify"`, `"distribute"` |
+| `patch.keepLines` | boolean | no |  |
+| `patch.keepNext` | boolean | no |  |
+| `patch.kinsoku` | boolean | no |  |
+| `patch.mirrorIndents` | boolean | no |  |
+| `patch.numberingProperties` | object | no |  |
+| `patch.numberingProperties.ilvl` | integer | no |  |
+| `patch.numberingProperties.numId` | integer | no |  |
+| `patch.outlineLvl` | integer | no |  |
+| `patch.overflowPunct` | boolean | no |  |
+| `patch.pageBreakBefore` | boolean | no |  |
+| `patch.rightToLeft` | boolean | no |  |
+| `patch.shading` | object | no |  |
+| `patch.shading.color` | string | no |  |
+| `patch.shading.fill` | string | no |  |
+| `patch.shading.themeColor` | string | no |  |
+| `patch.shading.themeFill` | string | no |  |
+| `patch.shading.themeFillShade` | string | no |  |
+| `patch.shading.themeFillTint` | string | no |  |
+| `patch.shading.themeShade` | string | no |  |
+| `patch.shading.themeTint` | string | no |  |
+| `patch.shading.val` | string | no |  |
+| `patch.snapToGrid` | boolean | no |  |
+| `patch.spacing` | object | no |  |
+| `patch.spacing.after` | integer | no |  |
+| `patch.spacing.afterAutospacing` | boolean | no |  |
+| `patch.spacing.afterLines` | integer | no |  |
+| `patch.spacing.before` | integer | no |  |
+| `patch.spacing.beforeAutospacing` | boolean | no |  |
+| `patch.spacing.beforeLines` | integer | no |  |
+| `patch.spacing.line` | integer | no |  |
+| `patch.spacing.lineRule` | enum | no | `"auto"`, `"exact"`, `"atLeast"` |
+| `patch.suppressAutoHyphens` | boolean | no |  |
+| `patch.suppressLineNumbers` | boolean | no |  |
+| `patch.suppressOverlap` | boolean | no |  |
+| `patch.tabStops` | object[] | no |  |
+| `patch.textAlignment` | enum | no | `"top"`, `"center"`, `"baseline"`, `"bottom"`, `"auto"` |
+| `patch.textDirection` | enum | no | `"lrTb"`, `"tbRl"`, `"btLr"`, `"lrTbV"`, `"tbRlV"`, `"tbLrV"` |
+| `patch.textboxTightWrap` | enum | no | `"none"`, `"allLines"`, `"firstAndLastLine"`, `"firstLineOnly"`, `"lastLineOnly"` |
+| `patch.topLinePunct` | boolean | no |  |
+| `patch.widowControl` | boolean | no |  |
+| `patch.wordWrap` | boolean | no |  |
+| `target` | object(scope="docDefaults") | yes |  |
+| `target.channel` | `"paragraph"` | yes | Constant: `"paragraph"` |
+| `target.scope` | `"docDefaults"` | yes | Constant: `"docDefaults"` |
 
 ### Example request
 
@@ -34,7 +267,7 @@ _No fields._
 {
   "patch": {
     "bold": true,
-    "italic": true
+    "boldCs": true
   },
   "target": {
     "channel": "run",
@@ -45,7 +278,157 @@ _No fields._
 
 ## Output fields
 
-_No fields._
+### Variant 1 (success=true)
+
+| Field | Type | Required | Description |
+| --- | --- | --- | --- |
+| `after` | object | yes |  |
+| `after.adjustRightInd` | enum | no | `"on"`, `"off"`, `"inherit"` |
+| `after.autoSpaceDE` | enum | no | `"on"`, `"off"`, `"inherit"` |
+| `after.autoSpaceDN` | enum | no | `"on"`, `"off"`, `"inherit"` |
+| `after.bold` | enum | no | `"on"`, `"off"`, `"inherit"` |
+| `after.boldCs` | enum | no | `"on"`, `"off"`, `"inherit"` |
+| `after.borders` | object \\| `"inherit"` | no | One of: object, `"inherit"` |
+| `after.color` | object \\| `"inherit"` | no | One of: object, `"inherit"` |
+| `after.contextualSpacing` | enum | no | `"on"`, `"off"`, `"inherit"` |
+| `after.dstrike` | enum | no | `"on"`, `"off"`, `"inherit"` |
+| `after.eastAsianLayout` | object \\| `"inherit"` | no | One of: object, `"inherit"` |
+| `after.effect` | string \\| `"inherit"` | no | One of: string, `"inherit"` |
+| `after.em` | string \\| `"inherit"` | no | One of: string, `"inherit"` |
+| `after.emboss` | enum | no | `"on"`, `"off"`, `"inherit"` |
+| `after.fitText` | object \\| `"inherit"` | no | One of: object, `"inherit"` |
+| `after.fontFamily` | object \\| `"inherit"` | no | One of: object, `"inherit"` |
+| `after.fontSize` | number \\| `"inherit"` | no | One of: number, `"inherit"` |
+| `after.fontSizeCs` | number \\| `"inherit"` | no | One of: number, `"inherit"` |
+| `after.framePr` | object \\| `"inherit"` | no | One of: object, `"inherit"` |
+| `after.iCs` | enum | no | `"on"`, `"off"`, `"inherit"` |
+| `after.imprint` | enum | no | `"on"`, `"off"`, `"inherit"` |
+| `after.indent` | object \\| `"inherit"` | no | One of: object, `"inherit"` |
+| `after.italic` | enum | no | `"on"`, `"off"`, `"inherit"` |
+| `after.justification` | string \\| `"inherit"` | no | One of: string, `"inherit"` |
+| `after.keepLines` | enum | no | `"on"`, `"off"`, `"inherit"` |
+| `after.keepNext` | enum | no | `"on"`, `"off"`, `"inherit"` |
+| `after.kern` | number \\| `"inherit"` | no | One of: number, `"inherit"` |
+| `after.kinsoku` | enum | no | `"on"`, `"off"`, `"inherit"` |
+| `after.lang` | object \\| `"inherit"` | no | One of: object, `"inherit"` |
+| `after.letterSpacing` | number \\| `"inherit"` | no | One of: number, `"inherit"` |
+| `after.mirrorIndents` | enum | no | `"on"`, `"off"`, `"inherit"` |
+| `after.noProof` | enum | no | `"on"`, `"off"`, `"inherit"` |
+| `after.numberingProperties` | object \\| `"inherit"` | no | One of: object, `"inherit"` |
+| `after.outline` | enum | no | `"on"`, `"off"`, `"inherit"` |
+| `after.outlineLvl` | number \\| `"inherit"` | no | One of: number, `"inherit"` |
+| `after.overflowPunct` | enum | no | `"on"`, `"off"`, `"inherit"` |
+| `after.pageBreakBefore` | enum | no | `"on"`, `"off"`, `"inherit"` |
+| `after.position` | number \\| `"inherit"` | no | One of: number, `"inherit"` |
+| `after.rightToLeft` | enum | no | `"on"`, `"off"`, `"inherit"` |
+| `after.shading` | object \\| `"inherit"` | no | One of: object, `"inherit"` |
+| `after.shadow` | enum | no | `"on"`, `"off"`, `"inherit"` |
+| `after.smallCaps` | enum | no | `"on"`, `"off"`, `"inherit"` |
+| `after.snapToGrid` | enum | no | `"on"`, `"off"`, `"inherit"` |
+| `after.spacing` | object \\| `"inherit"` | no | One of: object, `"inherit"` |
+| `after.specVanish` | enum | no | `"on"`, `"off"`, `"inherit"` |
+| `after.strike` | enum | no | `"on"`, `"off"`, `"inherit"` |
+| `after.suppressAutoHyphens` | enum | no | `"on"`, `"off"`, `"inherit"` |
+| `after.suppressLineNumbers` | enum | no | `"on"`, `"off"`, `"inherit"` |
+| `after.suppressOverlap` | enum | no | `"on"`, `"off"`, `"inherit"` |
+| `after.tabStops` | array \\| `"inherit"` | no | One of: array, `"inherit"` |
+| `after.textAlignment` | string \\| `"inherit"` | no | One of: string, `"inherit"` |
+| `after.textDirection` | string \\| `"inherit"` | no | One of: string, `"inherit"` |
+| `after.textTransform` | string \\| `"inherit"` | no | One of: string, `"inherit"` |
+| `after.textboxTightWrap` | string \\| `"inherit"` | no | One of: string, `"inherit"` |
+| `after.topLinePunct` | enum | no | `"on"`, `"off"`, `"inherit"` |
+| `after.underline` | object \\| `"inherit"` | no | One of: object, `"inherit"` |
+| `after.vanish` | enum | no | `"on"`, `"off"`, `"inherit"` |
+| `after.vertAlign` | string \\| `"inherit"` | no | One of: string, `"inherit"` |
+| `after.w` | number \\| `"inherit"` | no | One of: number, `"inherit"` |
+| `after.webHidden` | enum | no | `"on"`, `"off"`, `"inherit"` |
+| `after.widowControl` | enum | no | `"on"`, `"off"`, `"inherit"` |
+| `after.wordWrap` | enum | no | `"on"`, `"off"`, `"inherit"` |
+| `before` | object | yes |  |
+| `before.adjustRightInd` | enum | no | `"on"`, `"off"`, `"inherit"` |
+| `before.autoSpaceDE` | enum | no | `"on"`, `"off"`, `"inherit"` |
+| `before.autoSpaceDN` | enum | no | `"on"`, `"off"`, `"inherit"` |
+| `before.bold` | enum | no | `"on"`, `"off"`, `"inherit"` |
+| `before.boldCs` | enum | no | `"on"`, `"off"`, `"inherit"` |
+| `before.borders` | object \\| `"inherit"` | no | One of: object, `"inherit"` |
+| `before.color` | object \\| `"inherit"` | no | One of: object, `"inherit"` |
+| `before.contextualSpacing` | enum | no | `"on"`, `"off"`, `"inherit"` |
+| `before.dstrike` | enum | no | `"on"`, `"off"`, `"inherit"` |
+| `before.eastAsianLayout` | object \\| `"inherit"` | no | One of: object, `"inherit"` |
+| `before.effect` | string \\| `"inherit"` | no | One of: string, `"inherit"` |
+| `before.em` | string \\| `"inherit"` | no | One of: string, `"inherit"` |
+| `before.emboss` | enum | no | `"on"`, `"off"`, `"inherit"` |
+| `before.fitText` | object \\| `"inherit"` | no | One of: object, `"inherit"` |
+| `before.fontFamily` | object \\| `"inherit"` | no | One of: object, `"inherit"` |
+| `before.fontSize` | number \\| `"inherit"` | no | One of: number, `"inherit"` |
+| `before.fontSizeCs` | number \\| `"inherit"` | no | One of: number, `"inherit"` |
+| `before.framePr` | object \\| `"inherit"` | no | One of: object, `"inherit"` |
+| `before.iCs` | enum | no | `"on"`, `"off"`, `"inherit"` |
+| `before.imprint` | enum | no | `"on"`, `"off"`, `"inherit"` |
+| `before.indent` | object \\| `"inherit"` | no | One of: object, `"inherit"` |
+| `before.italic` | enum | no | `"on"`, `"off"`, `"inherit"` |
+| `before.justification` | string \\| `"inherit"` | no | One of: string, `"inherit"` |
+| `before.keepLines` | enum | no | `"on"`, `"off"`, `"inherit"` |
+| `before.keepNext` | enum | no | `"on"`, `"off"`, `"inherit"` |
+| `before.kern` | number \\| `"inherit"` | no | One of: number, `"inherit"` |
+| `before.kinsoku` | enum | no | `"on"`, `"off"`, `"inherit"` |
+| `before.lang` | object \\| `"inherit"` | no | One of: object, `"inherit"` |
+| `before.letterSpacing` | number \\| `"inherit"` | no | One of: number, `"inherit"` |
+| `before.mirrorIndents` | enum | no | `"on"`, `"off"`, `"inherit"` |
+| `before.noProof` | enum | no | `"on"`, `"off"`, `"inherit"` |
+| `before.numberingProperties` | object \\| `"inherit"` | no | One of: object, `"inherit"` |
+| `before.outline` | enum | no | `"on"`, `"off"`, `"inherit"` |
+| `before.outlineLvl` | number \\| `"inherit"` | no | One of: number, `"inherit"` |
+| `before.overflowPunct` | enum | no | `"on"`, `"off"`, `"inherit"` |
+| `before.pageBreakBefore` | enum | no | `"on"`, `"off"`, `"inherit"` |
+| `before.position` | number \\| `"inherit"` | no | One of: number, `"inherit"` |
+| `before.rightToLeft` | enum | no | `"on"`, `"off"`, `"inherit"` |
+| `before.shading` | object \\| `"inherit"` | no | One of: object, `"inherit"` |
+| `before.shadow` | enum | no | `"on"`, `"off"`, `"inherit"` |
+| `before.smallCaps` | enum | no | `"on"`, `"off"`, `"inherit"` |
+| `before.snapToGrid` | enum | no | `"on"`, `"off"`, `"inherit"` |
+| `before.spacing` | object \\| `"inherit"` | no | One of: object, `"inherit"` |
+| `before.specVanish` | enum | no | `"on"`, `"off"`, `"inherit"` |
+| `before.strike` | enum | no | `"on"`, `"off"`, `"inherit"` |
+| `before.suppressAutoHyphens` | enum | no | `"on"`, `"off"`, `"inherit"` |
+| `before.suppressLineNumbers` | enum | no | `"on"`, `"off"`, `"inherit"` |
+| `before.suppressOverlap` | enum | no | `"on"`, `"off"`, `"inherit"` |
+| `before.tabStops` | array \\| `"inherit"` | no | One of: array, `"inherit"` |
+| `before.textAlignment` | string \\| `"inherit"` | no | One of: string, `"inherit"` |
+| `before.textDirection` | string \\| `"inherit"` | no | One of: string, `"inherit"` |
+| `before.textTransform` | string \\| `"inherit"` | no | One of: string, `"inherit"` |
+| `before.textboxTightWrap` | string \\| `"inherit"` | no | One of: string, `"inherit"` |
+| `before.topLinePunct` | enum | no | `"on"`, `"off"`, `"inherit"` |
+| `before.underline` | object \\| `"inherit"` | no | One of: object, `"inherit"` |
+| `before.vanish` | enum | no | `"on"`, `"off"`, `"inherit"` |
+| `before.vertAlign` | string \\| `"inherit"` | no | One of: string, `"inherit"` |
+| `before.w` | number \\| `"inherit"` | no | One of: number, `"inherit"` |
+| `before.webHidden` | enum | no | `"on"`, `"off"`, `"inherit"` |
+| `before.widowControl` | enum | no | `"on"`, `"off"`, `"inherit"` |
+| `before.wordWrap` | enum | no | `"on"`, `"off"`, `"inherit"` |
+| `changed` | boolean | yes |  |
+| `dryRun` | boolean | yes |  |
+| `resolution` | object(scope="docDefaults") | yes |  |
+| `resolution.channel` | enum | yes | `"run"`, `"paragraph"` |
+| `resolution.scope` | `"docDefaults"` | yes | Constant: `"docDefaults"` |
+| `resolution.xmlPart` | `"word/styles.xml"` | yes | Constant: `"word/styles.xml"` |
+| `resolution.xmlPath` | enum | yes | `"w:styles/w:docDefaults/w:rPrDefault/w:rPr"`, `"w:styles/w:docDefaults/w:pPrDefault/w:pPr"` |
+| `success` | `true` | yes | Constant: `true` |
+
+### Variant 2 (success=false)
+
+| Field | Type | Required | Description |
+| --- | --- | --- | --- |
+| `failure` | object | yes |  |
+| `failure.code` | string | yes |  |
+| `failure.details` | any | no |  |
+| `failure.message` | string | yes |  |
+| `resolution` | object(scope="docDefaults") | yes |  |
+| `resolution.channel` | enum | yes | `"run"`, `"paragraph"` |
+| `resolution.scope` | `"docDefaults"` | yes | Constant: `"docDefaults"` |
+| `resolution.xmlPart` | `"word/styles.xml"` | yes | Constant: `"word/styles.xml"` |
+| `resolution.xmlPath` | enum | yes | `"w:styles/w:docDefaults/w:rPrDefault/w:rPr"`, `"w:styles/w:docDefaults/w:pPrDefault/w:pPr"` |
+| `success` | `false` | yes | Constant: `false` |
 
 ### Example response
 
@@ -53,11 +436,11 @@ _No fields._
 {
   "after": {
     "bold": "on",
-    "italic": "on"
+    "boldCs": "on"
   },
   "before": {
     "bold": "on",
-    "italic": "on"
+    "boldCs": "on"
   },
   "changed": true,
   "dryRun": true,
@@ -98,21 +481,122 @@ _No fields._
             "bold": {
               "type": "boolean"
             },
+            "boldCs": {
+              "type": "boolean"
+            },
+            "borders": {
+              "additionalProperties": false,
+              "minProperties": 1,
+              "properties": {
+                "color": {
+                  "minLength": 1,
+                  "type": "string"
+                },
+                "frame": {
+                  "type": "boolean"
+                },
+                "shadow": {
+                  "type": "boolean"
+                },
+                "size": {
+                  "type": "integer"
+                },
+                "space": {
+                  "type": "integer"
+                },
+                "themeColor": {
+                  "minLength": 1,
+                  "type": "string"
+                },
+                "themeShade": {
+                  "minLength": 1,
+                  "type": "string"
+                },
+                "themeTint": {
+                  "minLength": 1,
+                  "type": "string"
+                },
+                "val": {
+                  "minLength": 1,
+                  "type": "string"
+                }
+              },
+              "type": "object"
+            },
             "color": {
               "additionalProperties": false,
               "minProperties": 1,
               "properties": {
                 "themeColor": {
+                  "minLength": 1,
                   "type": "string"
                 },
                 "themeShade": {
+                  "minLength": 1,
                   "type": "string"
                 },
                 "themeTint": {
+                  "minLength": 1,
                   "type": "string"
                 },
                 "val": {
+                  "minLength": 1,
                   "type": "string"
+                }
+              },
+              "type": "object"
+            },
+            "dstrike": {
+              "type": "boolean"
+            },
+            "eastAsianLayout": {
+              "additionalProperties": false,
+              "minProperties": 1,
+              "properties": {
+                "combine": {
+                  "type": "boolean"
+                },
+                "combineBrackets": {
+                  "minLength": 1,
+                  "type": "string"
+                },
+                "id": {
+                  "type": "integer"
+                },
+                "vert": {
+                  "type": "boolean"
+                },
+                "vertCompress": {
+                  "type": "boolean"
+                }
+              },
+              "type": "object"
+            },
+            "effect": {
+              "minLength": 1,
+              "type": "string"
+            },
+            "em": {
+              "enum": [
+                "none",
+                "dot",
+                "comma",
+                "circle",
+                "sesame"
+              ]
+            },
+            "emboss": {
+              "type": "boolean"
+            },
+            "fitText": {
+              "additionalProperties": false,
+              "minProperties": 1,
+              "properties": {
+                "id": {
+                  "type": "integer"
+                },
+                "val": {
+                  "type": "integer"
                 }
               },
               "type": "object"
@@ -122,33 +606,43 @@ _No fields._
               "minProperties": 1,
               "properties": {
                 "ascii": {
+                  "minLength": 1,
                   "type": "string"
                 },
                 "asciiTheme": {
+                  "minLength": 1,
                   "type": "string"
                 },
                 "cs": {
+                  "minLength": 1,
                   "type": "string"
                 },
                 "cstheme": {
+                  "minLength": 1,
                   "type": "string"
                 },
                 "eastAsia": {
+                  "minLength": 1,
                   "type": "string"
                 },
                 "eastAsiaTheme": {
+                  "minLength": 1,
                   "type": "string"
                 },
                 "hAnsi": {
+                  "minLength": 1,
                   "type": "string"
                 },
                 "hAnsiTheme": {
+                  "minLength": 1,
                   "type": "string"
                 },
                 "hint": {
+                  "minLength": 1,
                   "type": "string"
                 },
                 "val": {
+                  "minLength": 1,
                   "type": "string"
                 }
               },
@@ -160,11 +654,175 @@ _No fields._
             "fontSizeCs": {
               "type": "integer"
             },
+            "iCs": {
+              "type": "boolean"
+            },
+            "imprint": {
+              "type": "boolean"
+            },
             "italic": {
               "type": "boolean"
             },
+            "kern": {
+              "type": "integer"
+            },
+            "lang": {
+              "additionalProperties": false,
+              "minProperties": 1,
+              "properties": {
+                "bidi": {
+                  "minLength": 1,
+                  "type": "string"
+                },
+                "eastAsia": {
+                  "minLength": 1,
+                  "type": "string"
+                },
+                "val": {
+                  "minLength": 1,
+                  "type": "string"
+                }
+              },
+              "type": "object"
+            },
             "letterSpacing": {
               "type": "integer"
+            },
+            "noProof": {
+              "type": "boolean"
+            },
+            "outline": {
+              "type": "boolean"
+            },
+            "position": {
+              "type": "integer"
+            },
+            "shading": {
+              "additionalProperties": false,
+              "minProperties": 1,
+              "properties": {
+                "color": {
+                  "minLength": 1,
+                  "type": "string"
+                },
+                "fill": {
+                  "minLength": 1,
+                  "type": "string"
+                },
+                "themeColor": {
+                  "minLength": 1,
+                  "type": "string"
+                },
+                "themeFill": {
+                  "minLength": 1,
+                  "type": "string"
+                },
+                "themeFillShade": {
+                  "minLength": 1,
+                  "type": "string"
+                },
+                "themeFillTint": {
+                  "minLength": 1,
+                  "type": "string"
+                },
+                "themeShade": {
+                  "minLength": 1,
+                  "type": "string"
+                },
+                "themeTint": {
+                  "minLength": 1,
+                  "type": "string"
+                },
+                "val": {
+                  "minLength": 1,
+                  "type": "string"
+                }
+              },
+              "type": "object"
+            },
+            "shadow": {
+              "type": "boolean"
+            },
+            "smallCaps": {
+              "type": "boolean"
+            },
+            "snapToGrid": {
+              "type": "boolean"
+            },
+            "specVanish": {
+              "type": "boolean"
+            },
+            "strike": {
+              "type": "boolean"
+            },
+            "textTransform": {
+              "enum": [
+                "uppercase",
+                "none"
+              ]
+            },
+            "underline": {
+              "additionalProperties": false,
+              "minProperties": 1,
+              "properties": {
+                "color": {
+                  "minLength": 1,
+                  "type": "string"
+                },
+                "themeColor": {
+                  "minLength": 1,
+                  "type": "string"
+                },
+                "themeShade": {
+                  "minLength": 1,
+                  "type": "string"
+                },
+                "themeTint": {
+                  "minLength": 1,
+                  "type": "string"
+                },
+                "val": {
+                  "enum": [
+                    "single",
+                    "double",
+                    "thick",
+                    "dotted",
+                    "dottedHeavy",
+                    "dash",
+                    "dashedHeavy",
+                    "dashLong",
+                    "dashLongHeavy",
+                    "dotDash",
+                    "dashDotHeavy",
+                    "dotDotDash",
+                    "dashDotDotHeavy",
+                    "wave",
+                    "wavyHeavy",
+                    "wavyDouble",
+                    "words",
+                    "none"
+                  ]
+                }
+              },
+              "type": "object"
+            },
+            "vanish": {
+              "type": "boolean"
+            },
+            "vertAlign": {
+              "enum": [
+                "superscript",
+                "subscript",
+                "baseline"
+              ]
+            },
+            "w": {
+              "maximum": 600,
+              "minimum": 1,
+              "type": "integer"
+            },
+            "webHidden": {
+              "type": "boolean"
             }
           },
           "type": "object"
@@ -199,6 +857,318 @@ _No fields._
           "additionalProperties": false,
           "minProperties": 1,
           "properties": {
+            "adjustRightInd": {
+              "type": "boolean"
+            },
+            "autoSpaceDE": {
+              "type": "boolean"
+            },
+            "autoSpaceDN": {
+              "type": "boolean"
+            },
+            "borders": {
+              "additionalProperties": false,
+              "minProperties": 1,
+              "properties": {
+                "bar": {
+                  "additionalProperties": false,
+                  "minProperties": 1,
+                  "properties": {
+                    "color": {
+                      "minLength": 1,
+                      "type": "string"
+                    },
+                    "frame": {
+                      "type": "boolean"
+                    },
+                    "shadow": {
+                      "type": "boolean"
+                    },
+                    "size": {
+                      "type": "integer"
+                    },
+                    "space": {
+                      "type": "integer"
+                    },
+                    "themeColor": {
+                      "minLength": 1,
+                      "type": "string"
+                    },
+                    "themeShade": {
+                      "minLength": 1,
+                      "type": "string"
+                    },
+                    "themeTint": {
+                      "minLength": 1,
+                      "type": "string"
+                    },
+                    "val": {
+                      "minLength": 1,
+                      "type": "string"
+                    }
+                  },
+                  "type": "object"
+                },
+                "between": {
+                  "additionalProperties": false,
+                  "minProperties": 1,
+                  "properties": {
+                    "color": {
+                      "minLength": 1,
+                      "type": "string"
+                    },
+                    "frame": {
+                      "type": "boolean"
+                    },
+                    "shadow": {
+                      "type": "boolean"
+                    },
+                    "size": {
+                      "type": "integer"
+                    },
+                    "space": {
+                      "type": "integer"
+                    },
+                    "themeColor": {
+                      "minLength": 1,
+                      "type": "string"
+                    },
+                    "themeShade": {
+                      "minLength": 1,
+                      "type": "string"
+                    },
+                    "themeTint": {
+                      "minLength": 1,
+                      "type": "string"
+                    },
+                    "val": {
+                      "minLength": 1,
+                      "type": "string"
+                    }
+                  },
+                  "type": "object"
+                },
+                "bottom": {
+                  "additionalProperties": false,
+                  "minProperties": 1,
+                  "properties": {
+                    "color": {
+                      "minLength": 1,
+                      "type": "string"
+                    },
+                    "frame": {
+                      "type": "boolean"
+                    },
+                    "shadow": {
+                      "type": "boolean"
+                    },
+                    "size": {
+                      "type": "integer"
+                    },
+                    "space": {
+                      "type": "integer"
+                    },
+                    "themeColor": {
+                      "minLength": 1,
+                      "type": "string"
+                    },
+                    "themeShade": {
+                      "minLength": 1,
+                      "type": "string"
+                    },
+                    "themeTint": {
+                      "minLength": 1,
+                      "type": "string"
+                    },
+                    "val": {
+                      "minLength": 1,
+                      "type": "string"
+                    }
+                  },
+                  "type": "object"
+                },
+                "left": {
+                  "additionalProperties": false,
+                  "minProperties": 1,
+                  "properties": {
+                    "color": {
+                      "minLength": 1,
+                      "type": "string"
+                    },
+                    "frame": {
+                      "type": "boolean"
+                    },
+                    "shadow": {
+                      "type": "boolean"
+                    },
+                    "size": {
+                      "type": "integer"
+                    },
+                    "space": {
+                      "type": "integer"
+                    },
+                    "themeColor": {
+                      "minLength": 1,
+                      "type": "string"
+                    },
+                    "themeShade": {
+                      "minLength": 1,
+                      "type": "string"
+                    },
+                    "themeTint": {
+                      "minLength": 1,
+                      "type": "string"
+                    },
+                    "val": {
+                      "minLength": 1,
+                      "type": "string"
+                    }
+                  },
+                  "type": "object"
+                },
+                "right": {
+                  "additionalProperties": false,
+                  "minProperties": 1,
+                  "properties": {
+                    "color": {
+                      "minLength": 1,
+                      "type": "string"
+                    },
+                    "frame": {
+                      "type": "boolean"
+                    },
+                    "shadow": {
+                      "type": "boolean"
+                    },
+                    "size": {
+                      "type": "integer"
+                    },
+                    "space": {
+                      "type": "integer"
+                    },
+                    "themeColor": {
+                      "minLength": 1,
+                      "type": "string"
+                    },
+                    "themeShade": {
+                      "minLength": 1,
+                      "type": "string"
+                    },
+                    "themeTint": {
+                      "minLength": 1,
+                      "type": "string"
+                    },
+                    "val": {
+                      "minLength": 1,
+                      "type": "string"
+                    }
+                  },
+                  "type": "object"
+                },
+                "top": {
+                  "additionalProperties": false,
+                  "minProperties": 1,
+                  "properties": {
+                    "color": {
+                      "minLength": 1,
+                      "type": "string"
+                    },
+                    "frame": {
+                      "type": "boolean"
+                    },
+                    "shadow": {
+                      "type": "boolean"
+                    },
+                    "size": {
+                      "type": "integer"
+                    },
+                    "space": {
+                      "type": "integer"
+                    },
+                    "themeColor": {
+                      "minLength": 1,
+                      "type": "string"
+                    },
+                    "themeShade": {
+                      "minLength": 1,
+                      "type": "string"
+                    },
+                    "themeTint": {
+                      "minLength": 1,
+                      "type": "string"
+                    },
+                    "val": {
+                      "minLength": 1,
+                      "type": "string"
+                    }
+                  },
+                  "type": "object"
+                }
+              },
+              "type": "object"
+            },
+            "contextualSpacing": {
+              "type": "boolean"
+            },
+            "framePr": {
+              "additionalProperties": false,
+              "minProperties": 1,
+              "properties": {
+                "anchorLock": {
+                  "type": "boolean"
+                },
+                "dropCap": {
+                  "minLength": 1,
+                  "type": "string"
+                },
+                "h": {
+                  "type": "integer"
+                },
+                "hAnchor": {
+                  "minLength": 1,
+                  "type": "string"
+                },
+                "hRule": {
+                  "minLength": 1,
+                  "type": "string"
+                },
+                "hSpace": {
+                  "type": "integer"
+                },
+                "lines": {
+                  "type": "integer"
+                },
+                "vAnchor": {
+                  "minLength": 1,
+                  "type": "string"
+                },
+                "vSpace": {
+                  "type": "integer"
+                },
+                "w": {
+                  "type": "integer"
+                },
+                "wrap": {
+                  "minLength": 1,
+                  "type": "string"
+                },
+                "x": {
+                  "type": "integer"
+                },
+                "xAlign": {
+                  "minLength": 1,
+                  "type": "string"
+                },
+                "y": {
+                  "type": "integer"
+                },
+                "yAlign": {
+                  "minLength": 1,
+                  "type": "string"
+                }
+              },
+              "type": "object"
+            },
             "indent": {
               "additionalProperties": false,
               "minProperties": 1,
@@ -251,6 +1221,91 @@ _No fields._
                 "distribute"
               ]
             },
+            "keepLines": {
+              "type": "boolean"
+            },
+            "keepNext": {
+              "type": "boolean"
+            },
+            "kinsoku": {
+              "type": "boolean"
+            },
+            "mirrorIndents": {
+              "type": "boolean"
+            },
+            "numberingProperties": {
+              "additionalProperties": false,
+              "minProperties": 1,
+              "properties": {
+                "ilvl": {
+                  "type": "integer"
+                },
+                "numId": {
+                  "type": "integer"
+                }
+              },
+              "type": "object"
+            },
+            "outlineLvl": {
+              "maximum": 9,
+              "minimum": 0,
+              "type": "integer"
+            },
+            "overflowPunct": {
+              "type": "boolean"
+            },
+            "pageBreakBefore": {
+              "type": "boolean"
+            },
+            "rightToLeft": {
+              "type": "boolean"
+            },
+            "shading": {
+              "additionalProperties": false,
+              "minProperties": 1,
+              "properties": {
+                "color": {
+                  "minLength": 1,
+                  "type": "string"
+                },
+                "fill": {
+                  "minLength": 1,
+                  "type": "string"
+                },
+                "themeColor": {
+                  "minLength": 1,
+                  "type": "string"
+                },
+                "themeFill": {
+                  "minLength": 1,
+                  "type": "string"
+                },
+                "themeFillShade": {
+                  "minLength": 1,
+                  "type": "string"
+                },
+                "themeFillTint": {
+                  "minLength": 1,
+                  "type": "string"
+                },
+                "themeShade": {
+                  "minLength": 1,
+                  "type": "string"
+                },
+                "themeTint": {
+                  "minLength": 1,
+                  "type": "string"
+                },
+                "val": {
+                  "minLength": 1,
+                  "type": "string"
+                }
+              },
+              "type": "object"
+            },
+            "snapToGrid": {
+              "type": "boolean"
+            },
             "spacing": {
               "additionalProperties": false,
               "minProperties": 1,
@@ -285,6 +1340,80 @@ _No fields._
                 }
               },
               "type": "object"
+            },
+            "suppressAutoHyphens": {
+              "type": "boolean"
+            },
+            "suppressLineNumbers": {
+              "type": "boolean"
+            },
+            "suppressOverlap": {
+              "type": "boolean"
+            },
+            "tabStops": {
+              "items": {
+                "additionalProperties": false,
+                "minProperties": 1,
+                "properties": {
+                  "tab": {
+                    "additionalProperties": false,
+                    "minProperties": 1,
+                    "properties": {
+                      "leader": {
+                        "minLength": 1,
+                        "type": "string"
+                      },
+                      "pos": {
+                        "type": "integer"
+                      },
+                      "tabType": {
+                        "minLength": 1,
+                        "type": "string"
+                      }
+                    },
+                    "type": "object"
+                  }
+                },
+                "type": "object"
+              },
+              "type": "array"
+            },
+            "textAlignment": {
+              "enum": [
+                "top",
+                "center",
+                "baseline",
+                "bottom",
+                "auto"
+              ]
+            },
+            "textboxTightWrap": {
+              "enum": [
+                "none",
+                "allLines",
+                "firstAndLastLine",
+                "firstLineOnly",
+                "lastLineOnly"
+              ]
+            },
+            "textDirection": {
+              "enum": [
+                "lrTb",
+                "tbRl",
+                "btLr",
+                "lrTbV",
+                "tbRlV",
+                "tbLrV"
+              ]
+            },
+            "topLinePunct": {
+              "type": "boolean"
+            },
+            "widowControl": {
+              "type": "boolean"
+            },
+            "wordWrap": {
+              "type": "boolean"
             }
           },
           "type": "object"
@@ -327,6 +1456,27 @@ _No fields._
         "after": {
           "additionalProperties": false,
           "properties": {
+            "adjustRightInd": {
+              "enum": [
+                "on",
+                "off",
+                "inherit"
+              ]
+            },
+            "autoSpaceDE": {
+              "enum": [
+                "on",
+                "off",
+                "inherit"
+              ]
+            },
+            "autoSpaceDN": {
+              "enum": [
+                "on",
+                "off",
+                "inherit"
+              ]
+            },
             "bold": {
               "enum": [
                 "on",
@@ -334,7 +1484,85 @@ _No fields._
                 "inherit"
               ]
             },
+            "boldCs": {
+              "enum": [
+                "on",
+                "off",
+                "inherit"
+              ]
+            },
+            "borders": {
+              "oneOf": [
+                {
+                  "type": "object"
+                },
+                {
+                  "const": "inherit"
+                }
+              ]
+            },
             "color": {
+              "oneOf": [
+                {
+                  "type": "object"
+                },
+                {
+                  "const": "inherit"
+                }
+              ]
+            },
+            "contextualSpacing": {
+              "enum": [
+                "on",
+                "off",
+                "inherit"
+              ]
+            },
+            "dstrike": {
+              "enum": [
+                "on",
+                "off",
+                "inherit"
+              ]
+            },
+            "eastAsianLayout": {
+              "oneOf": [
+                {
+                  "type": "object"
+                },
+                {
+                  "const": "inherit"
+                }
+              ]
+            },
+            "effect": {
+              "oneOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "const": "inherit"
+                }
+              ]
+            },
+            "em": {
+              "oneOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "const": "inherit"
+                }
+              ]
+            },
+            "emboss": {
+              "enum": [
+                "on",
+                "off",
+                "inherit"
+              ]
+            },
+            "fitText": {
               "oneOf": [
                 {
                   "type": "object"
@@ -374,6 +1602,30 @@ _No fields._
                 }
               ]
             },
+            "framePr": {
+              "oneOf": [
+                {
+                  "type": "object"
+                },
+                {
+                  "const": "inherit"
+                }
+              ]
+            },
+            "iCs": {
+              "enum": [
+                "on",
+                "off",
+                "inherit"
+              ]
+            },
+            "imprint": {
+              "enum": [
+                "on",
+                "off",
+                "inherit"
+              ]
+            },
             "indent": {
               "oneOf": [
                 {
@@ -401,6 +1653,47 @@ _No fields._
                 }
               ]
             },
+            "keepLines": {
+              "enum": [
+                "on",
+                "off",
+                "inherit"
+              ]
+            },
+            "keepNext": {
+              "enum": [
+                "on",
+                "off",
+                "inherit"
+              ]
+            },
+            "kern": {
+              "oneOf": [
+                {
+                  "type": "number"
+                },
+                {
+                  "const": "inherit"
+                }
+              ]
+            },
+            "kinsoku": {
+              "enum": [
+                "on",
+                "off",
+                "inherit"
+              ]
+            },
+            "lang": {
+              "oneOf": [
+                {
+                  "type": "object"
+                },
+                {
+                  "const": "inherit"
+                }
+              ]
+            },
             "letterSpacing": {
               "oneOf": [
                 {
@@ -411,6 +1704,109 @@ _No fields._
                 }
               ]
             },
+            "mirrorIndents": {
+              "enum": [
+                "on",
+                "off",
+                "inherit"
+              ]
+            },
+            "noProof": {
+              "enum": [
+                "on",
+                "off",
+                "inherit"
+              ]
+            },
+            "numberingProperties": {
+              "oneOf": [
+                {
+                  "type": "object"
+                },
+                {
+                  "const": "inherit"
+                }
+              ]
+            },
+            "outline": {
+              "enum": [
+                "on",
+                "off",
+                "inherit"
+              ]
+            },
+            "outlineLvl": {
+              "oneOf": [
+                {
+                  "type": "number"
+                },
+                {
+                  "const": "inherit"
+                }
+              ]
+            },
+            "overflowPunct": {
+              "enum": [
+                "on",
+                "off",
+                "inherit"
+              ]
+            },
+            "pageBreakBefore": {
+              "enum": [
+                "on",
+                "off",
+                "inherit"
+              ]
+            },
+            "position": {
+              "oneOf": [
+                {
+                  "type": "number"
+                },
+                {
+                  "const": "inherit"
+                }
+              ]
+            },
+            "rightToLeft": {
+              "enum": [
+                "on",
+                "off",
+                "inherit"
+              ]
+            },
+            "shading": {
+              "oneOf": [
+                {
+                  "type": "object"
+                },
+                {
+                  "const": "inherit"
+                }
+              ]
+            },
+            "shadow": {
+              "enum": [
+                "on",
+                "off",
+                "inherit"
+              ]
+            },
+            "smallCaps": {
+              "enum": [
+                "on",
+                "off",
+                "inherit"
+              ]
+            },
+            "snapToGrid": {
+              "enum": [
+                "on",
+                "off",
+                "inherit"
+              ]
+            },
             "spacing": {
               "oneOf": [
                 {
@@ -419,6 +1815,156 @@ _No fields._
                 {
                   "const": "inherit"
                 }
+              ]
+            },
+            "specVanish": {
+              "enum": [
+                "on",
+                "off",
+                "inherit"
+              ]
+            },
+            "strike": {
+              "enum": [
+                "on",
+                "off",
+                "inherit"
+              ]
+            },
+            "suppressAutoHyphens": {
+              "enum": [
+                "on",
+                "off",
+                "inherit"
+              ]
+            },
+            "suppressLineNumbers": {
+              "enum": [
+                "on",
+                "off",
+                "inherit"
+              ]
+            },
+            "suppressOverlap": {
+              "enum": [
+                "on",
+                "off",
+                "inherit"
+              ]
+            },
+            "tabStops": {
+              "oneOf": [
+                {
+                  "type": "array"
+                },
+                {
+                  "const": "inherit"
+                }
+              ]
+            },
+            "textAlignment": {
+              "oneOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "const": "inherit"
+                }
+              ]
+            },
+            "textboxTightWrap": {
+              "oneOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "const": "inherit"
+                }
+              ]
+            },
+            "textDirection": {
+              "oneOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "const": "inherit"
+                }
+              ]
+            },
+            "textTransform": {
+              "oneOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "const": "inherit"
+                }
+              ]
+            },
+            "topLinePunct": {
+              "enum": [
+                "on",
+                "off",
+                "inherit"
+              ]
+            },
+            "underline": {
+              "oneOf": [
+                {
+                  "type": "object"
+                },
+                {
+                  "const": "inherit"
+                }
+              ]
+            },
+            "vanish": {
+              "enum": [
+                "on",
+                "off",
+                "inherit"
+              ]
+            },
+            "vertAlign": {
+              "oneOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "const": "inherit"
+                }
+              ]
+            },
+            "w": {
+              "oneOf": [
+                {
+                  "type": "number"
+                },
+                {
+                  "const": "inherit"
+                }
+              ]
+            },
+            "webHidden": {
+              "enum": [
+                "on",
+                "off",
+                "inherit"
+              ]
+            },
+            "widowControl": {
+              "enum": [
+                "on",
+                "off",
+                "inherit"
+              ]
+            },
+            "wordWrap": {
+              "enum": [
+                "on",
+                "off",
+                "inherit"
               ]
             }
           },
@@ -427,6 +1973,27 @@ _No fields._
         "before": {
           "additionalProperties": false,
           "properties": {
+            "adjustRightInd": {
+              "enum": [
+                "on",
+                "off",
+                "inherit"
+              ]
+            },
+            "autoSpaceDE": {
+              "enum": [
+                "on",
+                "off",
+                "inherit"
+              ]
+            },
+            "autoSpaceDN": {
+              "enum": [
+                "on",
+                "off",
+                "inherit"
+              ]
+            },
             "bold": {
               "enum": [
                 "on",
@@ -434,7 +2001,85 @@ _No fields._
                 "inherit"
               ]
             },
+            "boldCs": {
+              "enum": [
+                "on",
+                "off",
+                "inherit"
+              ]
+            },
+            "borders": {
+              "oneOf": [
+                {
+                  "type": "object"
+                },
+                {
+                  "const": "inherit"
+                }
+              ]
+            },
             "color": {
+              "oneOf": [
+                {
+                  "type": "object"
+                },
+                {
+                  "const": "inherit"
+                }
+              ]
+            },
+            "contextualSpacing": {
+              "enum": [
+                "on",
+                "off",
+                "inherit"
+              ]
+            },
+            "dstrike": {
+              "enum": [
+                "on",
+                "off",
+                "inherit"
+              ]
+            },
+            "eastAsianLayout": {
+              "oneOf": [
+                {
+                  "type": "object"
+                },
+                {
+                  "const": "inherit"
+                }
+              ]
+            },
+            "effect": {
+              "oneOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "const": "inherit"
+                }
+              ]
+            },
+            "em": {
+              "oneOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "const": "inherit"
+                }
+              ]
+            },
+            "emboss": {
+              "enum": [
+                "on",
+                "off",
+                "inherit"
+              ]
+            },
+            "fitText": {
               "oneOf": [
                 {
                   "type": "object"
@@ -474,6 +2119,30 @@ _No fields._
                 }
               ]
             },
+            "framePr": {
+              "oneOf": [
+                {
+                  "type": "object"
+                },
+                {
+                  "const": "inherit"
+                }
+              ]
+            },
+            "iCs": {
+              "enum": [
+                "on",
+                "off",
+                "inherit"
+              ]
+            },
+            "imprint": {
+              "enum": [
+                "on",
+                "off",
+                "inherit"
+              ]
+            },
             "indent": {
               "oneOf": [
                 {
@@ -501,6 +2170,47 @@ _No fields._
                 }
               ]
             },
+            "keepLines": {
+              "enum": [
+                "on",
+                "off",
+                "inherit"
+              ]
+            },
+            "keepNext": {
+              "enum": [
+                "on",
+                "off",
+                "inherit"
+              ]
+            },
+            "kern": {
+              "oneOf": [
+                {
+                  "type": "number"
+                },
+                {
+                  "const": "inherit"
+                }
+              ]
+            },
+            "kinsoku": {
+              "enum": [
+                "on",
+                "off",
+                "inherit"
+              ]
+            },
+            "lang": {
+              "oneOf": [
+                {
+                  "type": "object"
+                },
+                {
+                  "const": "inherit"
+                }
+              ]
+            },
             "letterSpacing": {
               "oneOf": [
                 {
@@ -511,6 +2221,109 @@ _No fields._
                 }
               ]
             },
+            "mirrorIndents": {
+              "enum": [
+                "on",
+                "off",
+                "inherit"
+              ]
+            },
+            "noProof": {
+              "enum": [
+                "on",
+                "off",
+                "inherit"
+              ]
+            },
+            "numberingProperties": {
+              "oneOf": [
+                {
+                  "type": "object"
+                },
+                {
+                  "const": "inherit"
+                }
+              ]
+            },
+            "outline": {
+              "enum": [
+                "on",
+                "off",
+                "inherit"
+              ]
+            },
+            "outlineLvl": {
+              "oneOf": [
+                {
+                  "type": "number"
+                },
+                {
+                  "const": "inherit"
+                }
+              ]
+            },
+            "overflowPunct": {
+              "enum": [
+                "on",
+                "off",
+                "inherit"
+              ]
+            },
+            "pageBreakBefore": {
+              "enum": [
+                "on",
+                "off",
+                "inherit"
+              ]
+            },
+            "position": {
+              "oneOf": [
+                {
+                  "type": "number"
+                },
+                {
+                  "const": "inherit"
+                }
+              ]
+            },
+            "rightToLeft": {
+              "enum": [
+                "on",
+                "off",
+                "inherit"
+              ]
+            },
+            "shading": {
+              "oneOf": [
+                {
+                  "type": "object"
+                },
+                {
+                  "const": "inherit"
+                }
+              ]
+            },
+            "shadow": {
+              "enum": [
+                "on",
+                "off",
+                "inherit"
+              ]
+            },
+            "smallCaps": {
+              "enum": [
+                "on",
+                "off",
+                "inherit"
+              ]
+            },
+            "snapToGrid": {
+              "enum": [
+                "on",
+                "off",
+                "inherit"
+              ]
+            },
             "spacing": {
               "oneOf": [
                 {
@@ -519,6 +2332,156 @@ _No fields._
                 {
                   "const": "inherit"
                 }
+              ]
+            },
+            "specVanish": {
+              "enum": [
+                "on",
+                "off",
+                "inherit"
+              ]
+            },
+            "strike": {
+              "enum": [
+                "on",
+                "off",
+                "inherit"
+              ]
+            },
+            "suppressAutoHyphens": {
+              "enum": [
+                "on",
+                "off",
+                "inherit"
+              ]
+            },
+            "suppressLineNumbers": {
+              "enum": [
+                "on",
+                "off",
+                "inherit"
+              ]
+            },
+            "suppressOverlap": {
+              "enum": [
+                "on",
+                "off",
+                "inherit"
+              ]
+            },
+            "tabStops": {
+              "oneOf": [
+                {
+                  "type": "array"
+                },
+                {
+                  "const": "inherit"
+                }
+              ]
+            },
+            "textAlignment": {
+              "oneOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "const": "inherit"
+                }
+              ]
+            },
+            "textboxTightWrap": {
+              "oneOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "const": "inherit"
+                }
+              ]
+            },
+            "textDirection": {
+              "oneOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "const": "inherit"
+                }
+              ]
+            },
+            "textTransform": {
+              "oneOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "const": "inherit"
+                }
+              ]
+            },
+            "topLinePunct": {
+              "enum": [
+                "on",
+                "off",
+                "inherit"
+              ]
+            },
+            "underline": {
+              "oneOf": [
+                {
+                  "type": "object"
+                },
+                {
+                  "const": "inherit"
+                }
+              ]
+            },
+            "vanish": {
+              "enum": [
+                "on",
+                "off",
+                "inherit"
+              ]
+            },
+            "vertAlign": {
+              "oneOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "const": "inherit"
+                }
+              ]
+            },
+            "w": {
+              "oneOf": [
+                {
+                  "type": "number"
+                },
+                {
+                  "const": "inherit"
+                }
+              ]
+            },
+            "webHidden": {
+              "enum": [
+                "on",
+                "off",
+                "inherit"
+              ]
+            },
+            "widowControl": {
+              "enum": [
+                "on",
+                "off",
+                "inherit"
+              ]
+            },
+            "wordWrap": {
+              "enum": [
+                "on",
+                "off",
+                "inherit"
               ]
             }
           },
@@ -648,6 +2611,27 @@ _No fields._
     "after": {
       "additionalProperties": false,
       "properties": {
+        "adjustRightInd": {
+          "enum": [
+            "on",
+            "off",
+            "inherit"
+          ]
+        },
+        "autoSpaceDE": {
+          "enum": [
+            "on",
+            "off",
+            "inherit"
+          ]
+        },
+        "autoSpaceDN": {
+          "enum": [
+            "on",
+            "off",
+            "inherit"
+          ]
+        },
         "bold": {
           "enum": [
             "on",
@@ -655,7 +2639,85 @@ _No fields._
             "inherit"
           ]
         },
+        "boldCs": {
+          "enum": [
+            "on",
+            "off",
+            "inherit"
+          ]
+        },
+        "borders": {
+          "oneOf": [
+            {
+              "type": "object"
+            },
+            {
+              "const": "inherit"
+            }
+          ]
+        },
         "color": {
+          "oneOf": [
+            {
+              "type": "object"
+            },
+            {
+              "const": "inherit"
+            }
+          ]
+        },
+        "contextualSpacing": {
+          "enum": [
+            "on",
+            "off",
+            "inherit"
+          ]
+        },
+        "dstrike": {
+          "enum": [
+            "on",
+            "off",
+            "inherit"
+          ]
+        },
+        "eastAsianLayout": {
+          "oneOf": [
+            {
+              "type": "object"
+            },
+            {
+              "const": "inherit"
+            }
+          ]
+        },
+        "effect": {
+          "oneOf": [
+            {
+              "type": "string"
+            },
+            {
+              "const": "inherit"
+            }
+          ]
+        },
+        "em": {
+          "oneOf": [
+            {
+              "type": "string"
+            },
+            {
+              "const": "inherit"
+            }
+          ]
+        },
+        "emboss": {
+          "enum": [
+            "on",
+            "off",
+            "inherit"
+          ]
+        },
+        "fitText": {
           "oneOf": [
             {
               "type": "object"
@@ -695,6 +2757,30 @@ _No fields._
             }
           ]
         },
+        "framePr": {
+          "oneOf": [
+            {
+              "type": "object"
+            },
+            {
+              "const": "inherit"
+            }
+          ]
+        },
+        "iCs": {
+          "enum": [
+            "on",
+            "off",
+            "inherit"
+          ]
+        },
+        "imprint": {
+          "enum": [
+            "on",
+            "off",
+            "inherit"
+          ]
+        },
         "indent": {
           "oneOf": [
             {
@@ -722,6 +2808,47 @@ _No fields._
             }
           ]
         },
+        "keepLines": {
+          "enum": [
+            "on",
+            "off",
+            "inherit"
+          ]
+        },
+        "keepNext": {
+          "enum": [
+            "on",
+            "off",
+            "inherit"
+          ]
+        },
+        "kern": {
+          "oneOf": [
+            {
+              "type": "number"
+            },
+            {
+              "const": "inherit"
+            }
+          ]
+        },
+        "kinsoku": {
+          "enum": [
+            "on",
+            "off",
+            "inherit"
+          ]
+        },
+        "lang": {
+          "oneOf": [
+            {
+              "type": "object"
+            },
+            {
+              "const": "inherit"
+            }
+          ]
+        },
         "letterSpacing": {
           "oneOf": [
             {
@@ -732,6 +2859,109 @@ _No fields._
             }
           ]
         },
+        "mirrorIndents": {
+          "enum": [
+            "on",
+            "off",
+            "inherit"
+          ]
+        },
+        "noProof": {
+          "enum": [
+            "on",
+            "off",
+            "inherit"
+          ]
+        },
+        "numberingProperties": {
+          "oneOf": [
+            {
+              "type": "object"
+            },
+            {
+              "const": "inherit"
+            }
+          ]
+        },
+        "outline": {
+          "enum": [
+            "on",
+            "off",
+            "inherit"
+          ]
+        },
+        "outlineLvl": {
+          "oneOf": [
+            {
+              "type": "number"
+            },
+            {
+              "const": "inherit"
+            }
+          ]
+        },
+        "overflowPunct": {
+          "enum": [
+            "on",
+            "off",
+            "inherit"
+          ]
+        },
+        "pageBreakBefore": {
+          "enum": [
+            "on",
+            "off",
+            "inherit"
+          ]
+        },
+        "position": {
+          "oneOf": [
+            {
+              "type": "number"
+            },
+            {
+              "const": "inherit"
+            }
+          ]
+        },
+        "rightToLeft": {
+          "enum": [
+            "on",
+            "off",
+            "inherit"
+          ]
+        },
+        "shading": {
+          "oneOf": [
+            {
+              "type": "object"
+            },
+            {
+              "const": "inherit"
+            }
+          ]
+        },
+        "shadow": {
+          "enum": [
+            "on",
+            "off",
+            "inherit"
+          ]
+        },
+        "smallCaps": {
+          "enum": [
+            "on",
+            "off",
+            "inherit"
+          ]
+        },
+        "snapToGrid": {
+          "enum": [
+            "on",
+            "off",
+            "inherit"
+          ]
+        },
         "spacing": {
           "oneOf": [
             {
@@ -740,6 +2970,156 @@ _No fields._
             {
               "const": "inherit"
             }
+          ]
+        },
+        "specVanish": {
+          "enum": [
+            "on",
+            "off",
+            "inherit"
+          ]
+        },
+        "strike": {
+          "enum": [
+            "on",
+            "off",
+            "inherit"
+          ]
+        },
+        "suppressAutoHyphens": {
+          "enum": [
+            "on",
+            "off",
+            "inherit"
+          ]
+        },
+        "suppressLineNumbers": {
+          "enum": [
+            "on",
+            "off",
+            "inherit"
+          ]
+        },
+        "suppressOverlap": {
+          "enum": [
+            "on",
+            "off",
+            "inherit"
+          ]
+        },
+        "tabStops": {
+          "oneOf": [
+            {
+              "type": "array"
+            },
+            {
+              "const": "inherit"
+            }
+          ]
+        },
+        "textAlignment": {
+          "oneOf": [
+            {
+              "type": "string"
+            },
+            {
+              "const": "inherit"
+            }
+          ]
+        },
+        "textboxTightWrap": {
+          "oneOf": [
+            {
+              "type": "string"
+            },
+            {
+              "const": "inherit"
+            }
+          ]
+        },
+        "textDirection": {
+          "oneOf": [
+            {
+              "type": "string"
+            },
+            {
+              "const": "inherit"
+            }
+          ]
+        },
+        "textTransform": {
+          "oneOf": [
+            {
+              "type": "string"
+            },
+            {
+              "const": "inherit"
+            }
+          ]
+        },
+        "topLinePunct": {
+          "enum": [
+            "on",
+            "off",
+            "inherit"
+          ]
+        },
+        "underline": {
+          "oneOf": [
+            {
+              "type": "object"
+            },
+            {
+              "const": "inherit"
+            }
+          ]
+        },
+        "vanish": {
+          "enum": [
+            "on",
+            "off",
+            "inherit"
+          ]
+        },
+        "vertAlign": {
+          "oneOf": [
+            {
+              "type": "string"
+            },
+            {
+              "const": "inherit"
+            }
+          ]
+        },
+        "w": {
+          "oneOf": [
+            {
+              "type": "number"
+            },
+            {
+              "const": "inherit"
+            }
+          ]
+        },
+        "webHidden": {
+          "enum": [
+            "on",
+            "off",
+            "inherit"
+          ]
+        },
+        "widowControl": {
+          "enum": [
+            "on",
+            "off",
+            "inherit"
+          ]
+        },
+        "wordWrap": {
+          "enum": [
+            "on",
+            "off",
+            "inherit"
           ]
         }
       },
@@ -748,6 +3128,27 @@ _No fields._
     "before": {
       "additionalProperties": false,
       "properties": {
+        "adjustRightInd": {
+          "enum": [
+            "on",
+            "off",
+            "inherit"
+          ]
+        },
+        "autoSpaceDE": {
+          "enum": [
+            "on",
+            "off",
+            "inherit"
+          ]
+        },
+        "autoSpaceDN": {
+          "enum": [
+            "on",
+            "off",
+            "inherit"
+          ]
+        },
         "bold": {
           "enum": [
             "on",
@@ -755,7 +3156,85 @@ _No fields._
             "inherit"
           ]
         },
+        "boldCs": {
+          "enum": [
+            "on",
+            "off",
+            "inherit"
+          ]
+        },
+        "borders": {
+          "oneOf": [
+            {
+              "type": "object"
+            },
+            {
+              "const": "inherit"
+            }
+          ]
+        },
         "color": {
+          "oneOf": [
+            {
+              "type": "object"
+            },
+            {
+              "const": "inherit"
+            }
+          ]
+        },
+        "contextualSpacing": {
+          "enum": [
+            "on",
+            "off",
+            "inherit"
+          ]
+        },
+        "dstrike": {
+          "enum": [
+            "on",
+            "off",
+            "inherit"
+          ]
+        },
+        "eastAsianLayout": {
+          "oneOf": [
+            {
+              "type": "object"
+            },
+            {
+              "const": "inherit"
+            }
+          ]
+        },
+        "effect": {
+          "oneOf": [
+            {
+              "type": "string"
+            },
+            {
+              "const": "inherit"
+            }
+          ]
+        },
+        "em": {
+          "oneOf": [
+            {
+              "type": "string"
+            },
+            {
+              "const": "inherit"
+            }
+          ]
+        },
+        "emboss": {
+          "enum": [
+            "on",
+            "off",
+            "inherit"
+          ]
+        },
+        "fitText": {
           "oneOf": [
             {
               "type": "object"
@@ -795,6 +3274,30 @@ _No fields._
             }
           ]
         },
+        "framePr": {
+          "oneOf": [
+            {
+              "type": "object"
+            },
+            {
+              "const": "inherit"
+            }
+          ]
+        },
+        "iCs": {
+          "enum": [
+            "on",
+            "off",
+            "inherit"
+          ]
+        },
+        "imprint": {
+          "enum": [
+            "on",
+            "off",
+            "inherit"
+          ]
+        },
         "indent": {
           "oneOf": [
             {
@@ -822,6 +3325,47 @@ _No fields._
             }
           ]
         },
+        "keepLines": {
+          "enum": [
+            "on",
+            "off",
+            "inherit"
+          ]
+        },
+        "keepNext": {
+          "enum": [
+            "on",
+            "off",
+            "inherit"
+          ]
+        },
+        "kern": {
+          "oneOf": [
+            {
+              "type": "number"
+            },
+            {
+              "const": "inherit"
+            }
+          ]
+        },
+        "kinsoku": {
+          "enum": [
+            "on",
+            "off",
+            "inherit"
+          ]
+        },
+        "lang": {
+          "oneOf": [
+            {
+              "type": "object"
+            },
+            {
+              "const": "inherit"
+            }
+          ]
+        },
         "letterSpacing": {
           "oneOf": [
             {
@@ -832,6 +3376,109 @@ _No fields._
             }
           ]
         },
+        "mirrorIndents": {
+          "enum": [
+            "on",
+            "off",
+            "inherit"
+          ]
+        },
+        "noProof": {
+          "enum": [
+            "on",
+            "off",
+            "inherit"
+          ]
+        },
+        "numberingProperties": {
+          "oneOf": [
+            {
+              "type": "object"
+            },
+            {
+              "const": "inherit"
+            }
+          ]
+        },
+        "outline": {
+          "enum": [
+            "on",
+            "off",
+            "inherit"
+          ]
+        },
+        "outlineLvl": {
+          "oneOf": [
+            {
+              "type": "number"
+            },
+            {
+              "const": "inherit"
+            }
+          ]
+        },
+        "overflowPunct": {
+          "enum": [
+            "on",
+            "off",
+            "inherit"
+          ]
+        },
+        "pageBreakBefore": {
+          "enum": [
+            "on",
+            "off",
+            "inherit"
+          ]
+        },
+        "position": {
+          "oneOf": [
+            {
+              "type": "number"
+            },
+            {
+              "const": "inherit"
+            }
+          ]
+        },
+        "rightToLeft": {
+          "enum": [
+            "on",
+            "off",
+            "inherit"
+          ]
+        },
+        "shading": {
+          "oneOf": [
+            {
+              "type": "object"
+            },
+            {
+              "const": "inherit"
+            }
+          ]
+        },
+        "shadow": {
+          "enum": [
+            "on",
+            "off",
+            "inherit"
+          ]
+        },
+        "smallCaps": {
+          "enum": [
+            "on",
+            "off",
+            "inherit"
+          ]
+        },
+        "snapToGrid": {
+          "enum": [
+            "on",
+            "off",
+            "inherit"
+          ]
+        },
         "spacing": {
           "oneOf": [
             {
@@ -840,6 +3487,156 @@ _No fields._
             {
               "const": "inherit"
             }
+          ]
+        },
+        "specVanish": {
+          "enum": [
+            "on",
+            "off",
+            "inherit"
+          ]
+        },
+        "strike": {
+          "enum": [
+            "on",
+            "off",
+            "inherit"
+          ]
+        },
+        "suppressAutoHyphens": {
+          "enum": [
+            "on",
+            "off",
+            "inherit"
+          ]
+        },
+        "suppressLineNumbers": {
+          "enum": [
+            "on",
+            "off",
+            "inherit"
+          ]
+        },
+        "suppressOverlap": {
+          "enum": [
+            "on",
+            "off",
+            "inherit"
+          ]
+        },
+        "tabStops": {
+          "oneOf": [
+            {
+              "type": "array"
+            },
+            {
+              "const": "inherit"
+            }
+          ]
+        },
+        "textAlignment": {
+          "oneOf": [
+            {
+              "type": "string"
+            },
+            {
+              "const": "inherit"
+            }
+          ]
+        },
+        "textboxTightWrap": {
+          "oneOf": [
+            {
+              "type": "string"
+            },
+            {
+              "const": "inherit"
+            }
+          ]
+        },
+        "textDirection": {
+          "oneOf": [
+            {
+              "type": "string"
+            },
+            {
+              "const": "inherit"
+            }
+          ]
+        },
+        "textTransform": {
+          "oneOf": [
+            {
+              "type": "string"
+            },
+            {
+              "const": "inherit"
+            }
+          ]
+        },
+        "topLinePunct": {
+          "enum": [
+            "on",
+            "off",
+            "inherit"
+          ]
+        },
+        "underline": {
+          "oneOf": [
+            {
+              "type": "object"
+            },
+            {
+              "const": "inherit"
+            }
+          ]
+        },
+        "vanish": {
+          "enum": [
+            "on",
+            "off",
+            "inherit"
+          ]
+        },
+        "vertAlign": {
+          "oneOf": [
+            {
+              "type": "string"
+            },
+            {
+              "const": "inherit"
+            }
+          ]
+        },
+        "w": {
+          "oneOf": [
+            {
+              "type": "number"
+            },
+            {
+              "const": "inherit"
+            }
+          ]
+        },
+        "webHidden": {
+          "enum": [
+            "on",
+            "off",
+            "inherit"
+          ]
+        },
+        "widowControl": {
+          "enum": [
+            "on",
+            "off",
+            "inherit"
+          ]
+        },
+        "wordWrap": {
+          "enum": [
+            "on",
+            "off",
+            "inherit"
           ]
         }
       },

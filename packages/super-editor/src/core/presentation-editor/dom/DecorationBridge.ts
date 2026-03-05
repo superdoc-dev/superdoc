@@ -215,6 +215,53 @@ function restoreRangesFromPrevious(
   return out;
 }
 
+/** Returns the union span of a list of ranges (min from, max to). */
+function rangeUnion(ranges: Array<{ from: number; to: number }>): { from: number; to: number } | null {
+  if (ranges.length === 0) return null;
+  let from = ranges[0].from;
+  let to = ranges[0].to;
+  for (let i = 1; i < ranges.length; i++) {
+    if (ranges[i].from < from) from = ranges[i].from;
+    if (ranges[i].to > to) to = ranges[i].to;
+  }
+  return { from, to };
+}
+
+/**
+ * When the plugin returns partial ranges (e.g. after applying a mark, mapping can collapse
+ * decoration ranges), prefer the full span restored by text so the highlight does not
+ * partially vanish. Returns restored ranges when they form a proper superset of current.
+ *
+ * Why the range shrinks (mapping, not on purpose):
+ * - On a doc-changing transaction (e.g. applying bold), the plugin has no meta, so it
+ *   does pluginState.map(tr.mapping, tr.doc). The mapping is produced by the document
+ *   change; calculateInlineRunPropertiesPlugin also appends a transaction that splits
+ *   runs when inline properties differ, so the combined mapping can shift/collapse
+ *   positions. DecorationSet.map() then yields a smaller or split set — a side effect
+ *   of mapping, not an intentional narrowing (which would come from a meta-only
+ *   transaction like setFocus with a smaller range).
+ */
+function preferFullRestoredWhenPartial(
+  current: PreviousRange[],
+  previousRanges: PreviousRange[] | undefined,
+  doc: ProseMirrorNode,
+  docSize: number,
+): PreviousRange[] {
+  if (current.length === 0 || !previousRanges?.length) return current;
+  const restored = restoreRangesFromPrevious(doc, docSize, previousRanges);
+  if (restored.length === 0) return current;
+
+  const currentSpan = rangeUnion(current);
+  const restoredSpan = rangeUnion(restored);
+  if (!currentSpan || !restoredSpan) return current;
+  // Prefer restored only when it strictly contains current (plugin returned partial).
+  const contained =
+    currentSpan.from >= restoredSpan.from &&
+    currentSpan.to <= restoredSpan.to &&
+    restoredSpan.to - restoredSpan.from > currentSpan.to - currentSpan.from;
+  return contained ? restored : current;
+}
+
 // ---------------------------------------------------------------------------
 // DecorationBridge
 // ---------------------------------------------------------------------------
@@ -277,6 +324,13 @@ export class DecorationBridge {
    */
   #skipRestoreEmptyOnNextCollect = false;
 
+  /**
+   * Tracks whether the most recently observed transaction was doc-changing.
+   * Used to distinguish "mapping-induced partial ranges" (doc changes) from
+   * intentional range changes (meta-only, e.g. setFocus).
+   */
+  #lastTransactionWasDocChange = false;
+
   /** Monotonic token incremented per doc-changing transaction. */
   #lastDocChangeToken = 0;
 
@@ -324,6 +378,7 @@ export class DecorationBridge {
    * decoration sets when plugins don't update their ranges on doc changes.
    */
   recordTransaction(transaction?: Transaction): void {
+    this.#lastTransactionWasDocChange = Boolean(transaction?.docChanged);
     if (!transaction?.docChanged) return;
     this.#lastDocChangeToken += 1;
     this.#docChangeMappingsByToken.set(this.#lastDocChangeToken, transaction.mapping as unknown as PositionMapping);
@@ -384,68 +439,24 @@ export class DecorationBridge {
     const docSize = state.doc.content.size;
 
     for (const plugin of this.#eligiblePlugins) {
-      const pluginRanges: PreviousRange[] = [];
-      const decorationSet = this.#getDecorationSet(plugin, state);
-      const prevDecorationSet = this.#prevDecorationSets.get(plugin);
-      const remapped = this.#remapUnchangedPluginRangesIfNeeded(
-        plugin,
-        decorationSet,
-        prevDecorationSet,
-        state.doc,
-        docSize,
-      );
-      if (remapped) {
-        pluginRanges.push(...remapped);
-      } else if (decorationSet !== DecorationSet.empty) {
-        const decorations = decorationSet.find(0, docSize);
-        for (const decoration of decorations) {
-          if (!this.#isInlineDecoration(decoration)) continue;
+      const { ranges: pluginRanges, decorationSet } = this.#collectPluginRanges(plugin, state, docSize);
 
-          const attrs = this.#extractSafeAttrs(decoration);
-          // Only include decorations that have visual styling (classes or inline style)
-          if (attrs.classes.length === 0 && attrs.styleEntries.length === 0) continue;
-          // Collapsed or invalid range must not enter the cache or restore breaks
-          if (decoration.from >= decoration.to) continue;
-
-          const dataAttrs: Record<string, string> = {};
-          for (const [key, value] of attrs.dataEntries) dataAttrs[key] = value;
-
-          const rangeText =
-            typeof state.doc.textBetween === 'function'
-              ? state.doc.textBetween(decoration.from, decoration.to, TEXT_RANGE_BLOCK_SEP, TEXT_RANGE_LEAF_SEP)
-              : undefined;
-          pluginRanges.push({
-            from: decoration.from,
-            to: decoration.to,
-            classes: attrs.classes,
-            style:
-              attrs.styleEntries.length > 0
-                ? attrs.styleEntries.map(([prop, val]) => `${prop}: ${val}`).join('; ')
-                : null,
-            dataAttrs,
-            ...(rangeText ? { text: rangeText } : {}),
-          });
-        }
-      }
-
-      // Fallback: If plugin has no ranges but previously had valid ranges,
-      // restore only when we can relocate by text to a different valid range.
-      // Never fall back to stale coordinates.
-      // Skip restore when sync() was called with restoreEmptyDecorations: false (e.g. clearFocus).
       const previousPluginRanges = this.#previousRanges.get(plugin);
       const mayRestoreEmpty =
         !this.#skipRestoreEmptyOnNextCollect && previousPluginRanges && previousPluginRanges.length > 0;
-      if (pluginRanges.length === 0 && mayRestoreEmpty) {
-        pluginRanges.push(...restoreRangesFromPrevious(state.doc, docSize, previousPluginRanges));
-      }
 
-      // Store current ranges for next comparison. When we restored from previous,
-      // keep that as the new previous so we don't clear on the next call.
-      this.#setPreviousRanges(plugin, pluginRanges.length > 0 ? [...pluginRanges] : []);
+      const { effectiveRanges, rangesToStore } = this.#resolveEffectiveRanges(
+        pluginRanges,
+        previousPluginRanges,
+        state.doc,
+        docSize,
+        mayRestoreEmpty,
+        this.#lastTransactionWasDocChange,
+      );
+
+      this.#setPreviousRanges(plugin, rangesToStore.length > 0 ? [...rangesToStore] : []);
       this.#prevDecorationSets.set(plugin, decorationSet);
-
-      // Add to final output
-      ranges.push(...pluginRanges);
+      ranges.push(...effectiveRanges);
     }
 
     this.#clearSkipRestoreFlagIfSet();
@@ -469,6 +480,7 @@ export class DecorationBridge {
     this.#previousRangesTokenByPlugin.clear();
     this.#hadEligiblePlugins = false;
     this.#skipRestoreEmptyOnNextCollect = false;
+    this.#lastTransactionWasDocChange = false;
     this.#lastDocChangeToken = 0;
     this.#docChangeMappingsByToken.clear();
     // WeakMap entries are garbage collected with their elements.
@@ -544,73 +556,21 @@ export class DecorationBridge {
     const desired = new Map<HTMLElement, DesiredState>();
 
     for (const plugin of this.#eligiblePlugins) {
-      const decorationSet = this.#getDecorationSet(plugin, state);
-      const prevDecorationSet = this.#prevDecorationSets.get(plugin);
-      const remapped = this.#remapUnchangedPluginRangesIfNeeded(
-        plugin,
-        decorationSet,
-        prevDecorationSet,
+      const { ranges: pluginRanges, decorationSet } = this.#collectPluginRanges(plugin, state, docSize);
+
+      const previousPluginRanges = this.#previousRanges.get(plugin);
+      const { effectiveRanges, rangesToStore } = this.#resolveEffectiveRanges(
+        pluginRanges,
+        previousPluginRanges,
         state.doc,
         docSize,
+        restoreEmptyDecorations,
+        this.#lastTransactionWasDocChange,
       );
-      if (remapped) {
-        this.#applyRangesToDesired(desired, domIndex, remapped);
-        this.#setPreviousRanges(plugin, [...remapped]);
-        this.#prevDecorationSets.set(plugin, decorationSet);
-        continue;
-      }
 
-      let pluginHasCurrentRanges = false;
-      const currentRanges: PreviousRange[] = [];
-      if (decorationSet !== DecorationSet.empty) {
-        const decorations = decorationSet.find(0, docSize);
-        for (const decoration of decorations) {
-          if (!this.#isInlineDecoration(decoration)) continue;
-
-          const attrs = this.#extractSafeAttrs(decoration);
-          if (attrs.classes.length === 0 && attrs.dataEntries.length === 0 && attrs.styleEntries.length === 0) continue;
-
-          // Collapsed or invalid range yields no entries; mapping can produce from === to
-          if (decoration.from >= decoration.to) continue;
-
-          pluginHasCurrentRanges = true;
-
-          const entries = domIndex.findEntriesInRange(decoration.from, decoration.to);
-          for (const entry of entries) {
-            const d = this.#getOrCreateDesired(desired, entry.el);
-            for (const cls of attrs.classes) d.classes.add(cls);
-            for (const [key, value] of attrs.dataEntries) d.dataAttrs.set(key, value);
-            for (const [prop, value] of attrs.styleEntries) d.styleProps.set(prop, value);
-          }
-
-          const dataAttrs: Record<string, string> = {};
-          for (const [key, value] of attrs.dataEntries) dataAttrs[key] = value;
-          const style =
-            attrs.styleEntries.length > 0
-              ? attrs.styleEntries.map(([prop, val]) => `${prop}: ${val}`).join('; ')
-              : null;
-          const rangeText =
-            typeof state.doc.textBetween === 'function'
-              ? state.doc.textBetween(decoration.from, decoration.to, TEXT_RANGE_BLOCK_SEP, TEXT_RANGE_LEAF_SEP)
-              : undefined;
-          currentRanges.push({
-            from: decoration.from,
-            to: decoration.to,
-            classes: attrs.classes,
-            style,
-            dataAttrs,
-            ...(rangeText ? { text: rangeText } : {}),
-          });
-        }
-      }
-
-      // Fallback: only when the plugin produced no valid current ranges (e.g. mapping cleared them).
-      // Restore only when we can relocate by text to a different valid range.
-      // Never fall back to stale coordinates.
-      // Do not restore when the plugin has current ranges but they are offscreen (not in domIndex);
-      // otherwise we would reapply previous ranges to wrong elements and cause highlight drift.
-      if (pluginHasCurrentRanges) {
-        this.#setPreviousRanges(plugin, currentRanges);
+      if (pluginRanges.length > 0 || effectiveRanges.length > 0) {
+        this.#applyRangesToDesired(desired, domIndex, effectiveRanges);
+        this.#setPreviousRanges(plugin, rangesToStore.length > 0 ? [...rangesToStore] : []);
         this.#prevDecorationSets.set(plugin, decorationSet);
         continue;
       }
@@ -619,11 +579,7 @@ export class DecorationBridge {
         this.#prevDecorationSets.set(plugin, decorationSet);
         continue;
       }
-      const previousPluginRanges = this.#previousRanges.get(plugin);
-      if (previousPluginRanges?.length) {
-        const restoredRanges = restoreRangesFromPrevious(state.doc, docSize, previousPluginRanges);
-        this.#applyRangesToDesired(desired, domIndex, restoredRanges);
-      }
+      this.#setPreviousRanges(plugin, []);
       this.#prevDecorationSets.set(plugin, decorationSet);
     }
 
@@ -649,6 +605,91 @@ export class DecorationBridge {
         }
       }
     }
+  }
+
+  /**
+   * Collects current decoration ranges for one plugin: either remapped from previous
+   * (when DecorationSet reference unchanged) or decoded from the plugin's DecorationSet.
+   * Shared by collectDecorationRanges and #collectDesiredState.
+   */
+  #collectPluginRanges(
+    plugin: Plugin,
+    state: EditorState,
+    docSize: number,
+  ): { ranges: PreviousRange[]; decorationSet: DecorationSet } {
+    const decorationSet = this.#getDecorationSet(plugin, state);
+    const prevDecorationSet = this.#prevDecorationSets.get(plugin);
+    const remapped = this.#remapUnchangedPluginRangesIfNeeded(
+      plugin,
+      decorationSet,
+      prevDecorationSet,
+      state.doc,
+      docSize,
+    );
+    if (remapped) {
+      return { ranges: remapped, decorationSet };
+    }
+
+    const ranges: PreviousRange[] = [];
+    if (decorationSet !== DecorationSet.empty) {
+      const decorations = decorationSet.find(0, docSize);
+      for (const decoration of decorations) {
+        if (!this.#isInlineDecoration(decoration)) continue;
+
+        const attrs = this.#extractSafeAttrs(decoration);
+        if (attrs.classes.length === 0 && attrs.dataEntries.length === 0 && attrs.styleEntries.length === 0) continue;
+        if (decoration.from >= decoration.to) continue;
+
+        const dataAttrs: Record<string, string> = {};
+        for (const [key, value] of attrs.dataEntries) dataAttrs[key] = value;
+
+        const style =
+          attrs.styleEntries.length > 0 ? attrs.styleEntries.map(([prop, val]) => `${prop}: ${val}`).join('; ') : null;
+        const rangeText =
+          typeof state.doc.textBetween === 'function'
+            ? state.doc.textBetween(decoration.from, decoration.to, TEXT_RANGE_BLOCK_SEP, TEXT_RANGE_LEAF_SEP)
+            : undefined;
+
+        ranges.push({
+          from: decoration.from,
+          to: decoration.to,
+          classes: attrs.classes,
+          style,
+          dataAttrs,
+          ...(rangeText ? { text: rangeText } : {}),
+        });
+      }
+    }
+    return { ranges, decorationSet };
+  }
+
+  /**
+   * Resolves effective ranges (restore empty + prefer full when partial) and what to store
+   * as previous. Shared by collectDecorationRanges and #collectDesiredState.
+   */
+  #resolveEffectiveRanges(
+    pluginRanges: PreviousRange[],
+    previousPluginRanges: PreviousRange[] | undefined,
+    doc: ProseMirrorNode,
+    docSize: number,
+    restoreEmpty: boolean,
+    lastTransactionWasDocChange: boolean,
+  ): { effectiveRanges: PreviousRange[]; rangesToStore: PreviousRange[] } {
+    let current = pluginRanges;
+    if (current.length === 0 && restoreEmpty && previousPluginRanges?.length) {
+      current = restoreRangesFromPrevious(doc, docSize, previousPluginRanges);
+    }
+
+    const effectiveRanges =
+      lastTransactionWasDocChange && restoreEmpty && previousPluginRanges?.length
+        ? preferFullRestoredWhenPartial(current, previousPluginRanges, doc, docSize)
+        : current;
+
+    const storeExpandedOnDocChange = lastTransactionWasDocChange && effectiveRanges !== current;
+    const rangesToStore =
+      pluginRanges.length > 0 ? (storeExpandedOnDocChange ? effectiveRanges : pluginRanges) : effectiveRanges;
+
+    return { effectiveRanges, rangesToStore };
   }
 
   /** Stores previous ranges and tags them with the current doc-change token. */
@@ -702,6 +743,8 @@ export class DecorationBridge {
    * When a plugin returns the exact same DecorationSet reference after a doc change,
    * remap cached previous ranges with transaction mapping. This supports external
    * plugins that return static DecorationSet instances instead of mapping ranges.
+   * Callers are responsible for setting #previousRanges (via #resolveEffectiveRanges
+   * and #setPreviousRanges); this method only returns the remapped ranges.
    */
   #remapUnchangedPluginRangesIfNeeded(
     plugin: Plugin,
@@ -755,7 +798,6 @@ export class DecorationBridge {
     }
 
     if (remapped.length === 0) return null;
-    this.#setPreviousRanges(plugin, remapped);
     return remapped;
   }
 

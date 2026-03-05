@@ -39,7 +39,17 @@ _No fields._
 | Field | Type | Required | Description |
 | --- | --- | --- | --- |
 | `capabilities` | object | yes |  |
+| `capabilities.canComment` | boolean | yes |  |
+| `capabilities.canFind` | boolean | yes |  |
+| `capabilities.canGetNode` | boolean | yes |  |
+| `capabilities.canReplace` | boolean | yes |  |
 | `counts` | object | yes |  |
+| `counts.comments` | integer | yes |  |
+| `counts.headings` | integer | yes |  |
+| `counts.images` | integer | yes |  |
+| `counts.paragraphs` | integer | yes |  |
+| `counts.tables` | integer | yes |  |
+| `counts.words` | integer | yes |  |
 | `outline` | object[] | yes |  |
 | `revision` | string | yes |  |
 

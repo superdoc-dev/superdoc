@@ -10,7 +10,7 @@ import { useCommentsStore } from '@superdoc/stores/comments-store';
 import { useSuperdocStore } from '@superdoc/stores/superdoc-store';
 import CommentDialog from '@superdoc/components/CommentsLayer/CommentDialog.vue';
 
-const ESTIMATED_HEIGHT = 80;
+const ESTIMATED_HEIGHT = 110;
 const OBSERVER_MARGIN = 600;
 
 // Layout algorithm: positions comments in a single column with collision avoidance.
@@ -323,18 +323,23 @@ watch(activeComment, () => {
   if (!key) return;
 
   nextTick(() => {
+    // 400ms: wait for .comment-placeholder CSS transition (300ms) + buffer
     scrollTimer = setTimeout(() => {
       const el = placeholderRefs.value[key];
       if (!el) return;
 
       const rect = el.getBoundingClientRect();
       const margin = 80;
-      const isVisible = rect.top >= margin && rect.top <= window.innerHeight - margin;
+      const availableHeight = window.innerHeight - 2 * margin;
+      const isVisible =
+        rect.height > availableHeight
+          ? rect.top >= margin
+          : rect.top >= margin && rect.bottom <= window.innerHeight - margin;
 
       if (!isVisible) {
         el.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
       }
-    }, 100);
+    }, 400);
   });
 });
 
@@ -499,5 +504,7 @@ onBeforeUnmount(() => {
   display: flex;
   align-items: flex-start;
   justify-content: flex-start;
+  /* SD-2034: smooth min-height changes to prevent scrollbar flash */
+  transition: min-height 0.5s ease-out;
 }
 </style>

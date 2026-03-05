@@ -12,6 +12,7 @@ import {
   OPERATION_DESCRIPTION_MAP,
   OPERATION_EXPECTED_RESULT_MAP,
   OPERATION_REFERENCE_DOC_PATH_MAP,
+  PUBLIC_STEP_OP_CATALOG,
   REFERENCE_OPERATION_ALIASES,
   REFERENCE_OPERATION_GROUPS,
   type ReferenceAliasDefinition,
@@ -82,6 +83,55 @@ function renderNoWrapLinkCode(label: string, href: string): string {
   return `<span style={{ whiteSpace: 'nowrap', wordBreak: 'normal', overflowWrap: 'normal' }}><a href="${href}"><code>${label}</code></a></span>`;
 }
 
+const STEP_DOMAIN_ORDER = ['assert', 'text', 'format', 'create', 'tables'] as const;
+const STEP_DOMAIN_LABELS: Record<(typeof STEP_DOMAIN_ORDER)[number], string> = {
+  assert: 'Assert',
+  text: 'Text',
+  format: 'Format',
+  create: 'Create',
+  tables: 'Tables',
+};
+
+function renderStepReferenceCell(referenceOperationId?: ContractOperationSnapshot['operationId']): string {
+  if (!referenceOperationId) return '—';
+  const operationPath = toOperationDocPath(referenceOperationId);
+  return renderNoWrapLinkCode(referenceOperationId, toPublicDocHref(operationPath));
+}
+
+function renderStepOpsSection(operation: ContractOperationSnapshot): string {
+  if (operation.operationId !== 'mutations.apply' && operation.operationId !== 'mutations.preview') {
+    return '';
+  }
+
+  const domainSections = STEP_DOMAIN_ORDER.map((domain) => {
+    const entries = PUBLIC_STEP_OP_CATALOG.filter((entry) => entry.domain === domain);
+    if (entries.length === 0) return '';
+
+    const rows = entries
+      .map(
+        (entry) =>
+          `| ${renderNoWrapCode(entry.opId)} | ${escapeCell(entry.description)} | ${renderStepReferenceCell(entry.referenceOperationId)} |`,
+      )
+      .join('\n');
+
+    return `### ${STEP_DOMAIN_LABELS[domain]}
+
+| Step op (\`steps[].op\`) | Description | Related API operation |
+| --- | --- | --- |
+${rows}`;
+  })
+    .filter(Boolean)
+    .join('\n\n');
+
+  return `## Supported step operations
+
+Use these values in \`steps[].op\` when authoring mutation plans.
+
+${domainSections}
+
+The runtime capability snapshot also exposes this allowlist at \`planEngine.supportedStepOps\`.`;
+}
+
 // ---------------------------------------------------------------------------
 // $ref resolution
 // ---------------------------------------------------------------------------
@@ -127,6 +177,11 @@ interface FieldRow {
   type: string;
   required: boolean;
   description: string;
+}
+
+interface FieldSection {
+  title?: string;
+  rows: FieldRow[];
 }
 
 /**
@@ -221,28 +276,87 @@ function schemaDescription(schema: JsonSchema, $defs: Defs): string {
 }
 
 /**
- * Build field table rows from an object schema's properties.
- * Non-object schemas produce an empty array.
+ * Collect all nested `const` discriminator values for a schema.
  */
-function buildFieldRows(schema: JsonSchema, $defs: Defs): FieldRow[] {
+function collectConstDiscriminators(
+  schema: JsonSchema,
+  $defs: Defs,
+  prefix = '',
+  depth = 0,
+): Array<{ path: string; value: unknown }> {
+  if (depth > 6) return [];
+
   const { resolved } = resolveRef(schema, $defs);
   const properties = resolved.properties as Record<string, JsonSchema> | undefined;
-  if (!properties) return [];
+  if (resolved.const !== undefined && prefix) {
+    return [{ path: prefix.replace(/\.$/u, ''), value: resolved.const }];
+  }
+  if (!properties || resolved.type !== 'object') return [];
+
+  const discriminators: Array<{ path: string; value: unknown }> = [];
+  for (const key of Object.keys(properties)) {
+    discriminators.push(...collectConstDiscriminators(properties[key], $defs, `${prefix}${key}.`, depth + 1));
+  }
+  return discriminators;
+}
+
+/**
+ * Build field table rows from an object schema's properties.
+ * Recursively flattens nested objects into dot-path rows.
+ */
+function buildFieldRows(schema: JsonSchema, $defs: Defs, prefix = '', parentRequired = true, depth = 0): FieldRow[] {
+  if (depth > 8) return [];
+
+  const { resolved } = resolveRef(schema, $defs);
+  const properties = resolved.properties as Record<string, JsonSchema> | undefined;
+  if (!properties || resolved.type !== 'object') return [];
 
   const requiredSet = new Set<string>(Array.isArray(resolved.required) ? (resolved.required as string[]) : []);
+  const rows: FieldRow[] = [];
 
-  // Sort properties alphabetically for determinism
-  return Object.keys(properties)
-    .sort()
-    .map((field) => {
-      const prop = properties[field];
+  for (const field of Object.keys(properties).sort()) {
+    const prop = properties[field];
+    const fieldPath = prefix ? `${prefix}.${field}` : field;
+    const fieldRequired = parentRequired && requiredSet.has(field);
+
+    rows.push({
+      field: fieldPath,
+      type: schemaTypeLabel(prop, $defs),
+      required: fieldRequired,
+      description: schemaDescription(prop, $defs),
+    });
+
+    rows.push(...buildFieldRows(prop, $defs, fieldPath, fieldRequired, depth + 1));
+  }
+
+  return rows;
+}
+
+/** Build field sections, splitting top-level oneOf/anyOf schemas into explicit variants. */
+function buildFieldSections(schema: JsonSchema, $defs: Defs): FieldSection[] {
+  const { resolved } = resolveRef(schema, $defs);
+
+  for (const keyword of ['oneOf', 'anyOf'] as const) {
+    const variants = resolved[keyword];
+    if (!Array.isArray(variants) || variants.length === 0) continue;
+
+    return variants.map((variant, index) => {
+      const variantSchema = resolveRef(variant as JsonSchema, $defs).resolved;
+      const discriminators = collectConstDiscriminators(variantSchema, $defs);
+      const preferred =
+        discriminators.find((entry) => /(^|\.)(type|kind|mode|channel)$/u.test(entry.path)) ?? discriminators[0];
+      const label = preferred
+        ? `Variant ${index + 1} (${preferred.path}=${JSON.stringify(preferred.value)})`
+        : `Variant ${index + 1}`;
+
       return {
-        field,
-        type: schemaTypeLabel(prop, $defs),
-        required: requiredSet.has(field),
-        description: schemaDescription(prop, $defs),
+        title: label,
+        rows: buildFieldRows(variantSchema, $defs),
       };
     });
+  }
+
+  return [{ rows: buildFieldRows(resolved, $defs) }];
 }
 
 /** Escape pipe characters inside markdown table cells. */
@@ -262,6 +376,15 @@ function renderFieldTable(rows: FieldRow[]): string {
     .join('\n');
 
   return `${header}\n${body}`;
+}
+
+function renderFieldSections(schema: JsonSchema, $defs: Defs): string {
+  const sections = buildFieldSections(schema, $defs);
+  if (sections.length === 1) {
+    return renderFieldTable(sections[0].rows);
+  }
+
+  return sections.map((section) => `### ${section.title}\n\n${renderFieldTable(section.rows)}`).join('\n\n');
 }
 
 // ---------------------------------------------------------------------------
@@ -485,11 +608,13 @@ function renderOperationPage(operation: ContractOperationSnapshot, $defs: Defs):
   const description = OPERATION_DESCRIPTION_MAP[operation.operationId];
   const expectedResult = OPERATION_EXPECTED_RESULT_MAP[operation.operationId];
 
-  const inputRows = buildFieldRows(operation.schemas.input, $defs);
-  const outputRows = buildFieldRows(operation.schemas.output, $defs);
+  const inputFields = renderFieldSections(operation.schemas.input, $defs);
+  const outputFields = renderFieldSections(operation.schemas.output, $defs);
 
   const inputExample = generateExample(operation.schemas.input, $defs);
   const outputExample = generateExample(operation.schemas.output, $defs);
+  const stepOpsSection = renderStepOpsSection(operation);
+  const expectedResultSection = `${expectedResult}${stepOpsSection ? `\n\n${stepOpsSection}` : ''}`;
 
   // -- Build raw-schema accordion blocks --
   const rawSchemaBlocks: string[] = [];
@@ -526,11 +651,11 @@ ${description}
 
 ## Expected result
 
-${expectedResult}
+${expectedResultSection}
 
 ## Input fields
 
-${renderFieldTable(inputRows)}
+${inputFields}
 
 ### Example request
 
@@ -540,7 +665,7 @@ ${stableStringify(inputExample)}
 
 ## Output fields
 
-${renderFieldTable(outputRows)}
+${outputFields}
 
 ### Example response
 

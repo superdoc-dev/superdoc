@@ -64,6 +64,7 @@ import {
   getSectPrHeaderFooterRef,
   readSectPrHeaderFooterRefs,
   readSectPrMargins,
+  readSectPrPageSetup,
   setSectPrHeaderFooterRef,
   writeSectPrBreakType,
   writeSectPrColumns,
@@ -90,6 +91,10 @@ interface ConverterWithSections extends ConverterWithDocumentSettings, Converter
     [key: string]: unknown;
   }>;
   pageStyles?: {
+    pageSize?: {
+      width?: number;
+      height?: number;
+    };
     pageMargins?: {
       top?: number;
       right?: number;
@@ -204,7 +209,11 @@ function syncConverterBodySection(editor: Editor, sectPr: XmlElement): void {
   }
 
   const margins = readSectPrMargins(sectPr);
+  const pageSetup = readSectPrPageSetup(sectPr);
   if (!converter.pageStyles) converter.pageStyles = {};
+  if (!converter.pageStyles.pageSize) converter.pageStyles.pageSize = {};
+  if (pageSetup?.width !== undefined) converter.pageStyles.pageSize.width = pageSetup.width;
+  if (pageSetup?.height !== undefined) converter.pageStyles.pageSize.height = pageSetup.height;
   if (!converter.pageStyles.pageMargins) converter.pageStyles.pageMargins = {};
   const pageMargins = converter.pageStyles.pageMargins;
   if (margins.top !== undefined) pageMargins.top = margins.top;

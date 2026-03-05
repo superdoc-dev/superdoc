@@ -27,7 +27,14 @@ import type { CompiledTarget } from './executor-registry.types.js';
 import { executeCompiledPlan } from './executor.js';
 import { getRevision } from './revision-tracker.js';
 import { DocumentApiAdapterError } from '../errors.js';
-import { resolveDefaultInsertTarget, resolveTextTarget, type ResolvedTextTarget } from '../helpers/adapter-utils.js';
+import {
+  insertParagraphAtEnd,
+  resolveDefaultInsertTarget,
+  resolveTextTarget,
+  resolveWriteTarget,
+  type ResolvedTextTarget,
+  type ResolvedWrite,
+} from '../helpers/adapter-utils.js';
 import { buildTextMutationResolution, readTextAtResolvedRange } from '../helpers/text-mutation-resolution.js';
 import {
   ensureTrackedCapability,
@@ -36,8 +43,18 @@ import {
   rejectTrackedMode,
 } from '../helpers/mutation-helpers.js';
 import { TrackFormatMarkName } from '../../extensions/track-changes/constants.js';
+import { applyDirectMutationMeta, applyTrackedMutationMeta } from '../helpers/transaction-meta.js';
 import { markdownToPmFragment } from '../../core/helpers/markdown/markdownToPmContent.js';
-import { processContent } from '../../core/helpers/contentProcessor.js';
+
+// ---------------------------------------------------------------------------
+// Helpers
+// ---------------------------------------------------------------------------
+
+/** Check whether the editor has a DOM document available for HTML parsing. */
+function editorHasDom(editor: Editor): boolean {
+  const opts = (editor as any).options;
+  return !!(opts?.document ?? opts?.mockDocument ?? (typeof document !== 'undefined' ? document : null));
+}
 
 // ---------------------------------------------------------------------------
 // Locator normalization (same validation as the old adapters)
@@ -144,52 +161,6 @@ function normalizeFormatLocator(input: FormatOperationInput): FormatOperationInp
     range: { start: input.start!, end: input.end! },
   };
   return { target };
-}
-
-// ---------------------------------------------------------------------------
-// Resolution helpers
-// ---------------------------------------------------------------------------
-
-interface ResolvedWrite {
-  requestedTarget?: TextAddress;
-  effectiveTarget: TextAddress;
-  range: ResolvedTextTarget;
-  resolution: TextMutationResolution;
-}
-
-function resolveWriteTarget(editor: Editor, request: WriteRequest): ResolvedWrite | null {
-  const requestedTarget = request.target;
-
-  if (request.kind === 'insert' && !request.target) {
-    const fallback = resolveDefaultInsertTarget(editor);
-    if (!fallback) return null;
-    const text = readTextAtResolvedRange(editor, fallback.range);
-    return {
-      requestedTarget,
-      effectiveTarget: fallback.target,
-      range: fallback.range,
-      resolution: buildTextMutationResolution({
-        requestedTarget,
-        target: fallback.target,
-        range: fallback.range,
-        text,
-      }),
-    };
-  }
-
-  const target = request.target;
-  if (!target) return null;
-
-  const range = resolveTextTarget(editor, target);
-  if (!range) return null;
-
-  const text = readTextAtResolvedRange(editor, range);
-  return {
-    requestedTarget,
-    effectiveTarget: target,
-    range,
-    resolution: buildTextMutationResolution({ requestedTarget, target, range, text }),
-  };
 }
 
 // ---------------------------------------------------------------------------
@@ -312,6 +283,24 @@ export function writeWrapper(editor: Editor, request: WriteRequest, options?: Mu
 
   if (options?.dryRun) {
     return { success: true, resolution: resolved.resolution };
+  }
+
+  // Structural-end: the doc ends with non-text blocks. Create a paragraph
+  // containing the text at the structural document end via a domain command,
+  // since raw `tr.insert(pos, textNode)` cannot place text between blocks.
+  if (resolved.structuralEnd && normalizedRequest.kind === 'insert') {
+    const insertPos = resolved.range.from;
+    const text = normalizedRequest.text ?? '';
+    const receipt = executeDomainCommand(
+      editor,
+      (): boolean => {
+        const meta = mode === 'tracked' ? applyTrackedMutationMeta : applyDirectMutationMeta;
+        insertParagraphAtEnd(editor, insertPos, text, meta);
+        return true;
+      },
+      { expectedRevision: options?.expectedRevision },
+    );
+    return mapPlanReceiptToTextReceipt(receipt, resolved.resolution);
   }
 
   // Build single-step compiled plan with pre-resolved target.
@@ -510,10 +499,11 @@ export function styleApplyWrapper(
  * Insert structured content (markdown or html) at a target position.
  *
  * Routes through `executeDomainCommand` to enforce the revision guard.
- * Conversion (markdown → AST → PM, or html → processContent → PM) happens
+ * Conversion (markdown → AST → PM, or html → insertContentAt) happens
  * inside the handler, so list-definition side effects only occur after the
- * revision check passes. HTML content goes through the canonical
- * `processContent` pipeline, matching the `insertContent` command path.
+ * revision check passes. HTML content is passed directly to
+ * `editor.commands.insertContentAt` to avoid prosemirror-model dual-copy
+ * issues when the Editor is loaded from a bundled dist.
  *
  * Tracked mode is explicitly rejected for structured content in this implementation.
  */
@@ -552,8 +542,17 @@ export function insertStructuredWrapper(
     if (!fallback) {
       throw new DocumentApiAdapterError('TARGET_NOT_FOUND', 'No default insertion point available.');
     }
-    resolvedRange = fallback.range;
-    effectiveTarget = fallback.target;
+    if (fallback.kind === 'structural-end') {
+      // Doc ends with non-text blocks — insert structured content at the
+      // structural document end. Structured content (markdown/html) produces
+      // block-level nodes that ProseMirror can place between blocks.
+      const pos = fallback.insertPos;
+      resolvedRange = { from: pos, to: pos };
+      effectiveTarget = { kind: 'text', blockId: '', range: { start: 0, end: 0 } };
+    } else {
+      resolvedRange = fallback.range;
+      effectiveTarget = fallback.target;
+    }
   }
 
   const resolution = buildTextMutationResolution({
@@ -587,45 +586,25 @@ export function insertStructuredWrapper(
         };
       }
     } else if (contentType === 'html') {
-      // NOTE: processContent has no dryRun flag — this runs the full HTML
-      // pipeline (DOM creation, wrapTextsInRuns) minus the final insertContentAt.
-      // Snapshot numbering state so we can roll back after the dry-run, since
-      // HTML list parsing allocates IDs/definitions on editor.converter.
-      const converter = (editor as any).converter;
-      const numberingSnapshot = converter?.numbering ? JSON.parse(JSON.stringify(converter.numbering)) : undefined;
-      const translatedNumberingSnapshot = converter?.translatedNumbering
-        ? JSON.parse(JSON.stringify(converter.translatedNumbering))
-        : undefined;
-      try {
-        const processedDoc = processContent({ content: value, type: 'html', editor });
-        if (!processedDoc || typeof (processedDoc as { toJSON?: unknown }).toJSON !== 'function') {
-          return {
-            success: false,
-            resolution,
-            failure: {
-              code: 'INVALID_TARGET',
-              message: 'HTML processing did not produce a valid document node.',
-            },
-          };
-        }
-      } catch (err) {
-        const message = err instanceof Error ? err.message : String(err);
+      // Dry-run for HTML: validate that a DOM is available and input is non-empty.
+      // Full PM parsing validation happens at insert time via the Editor's
+      // bundled command infrastructure (see the non-dry-run path below).
+      if (!value || typeof value !== 'string' || value.trim().length === 0) {
+        return {
+          success: false,
+          resolution,
+          failure: { code: 'NO_OP', message: 'HTML content is empty.' },
+        };
+      }
+      if (!editorHasDom(editor)) {
         return {
           success: false,
           resolution,
           failure: {
             code: 'UNSUPPORTED_ENVIRONMENT',
-            message: `HTML structured insert requires a DOM environment. ${message}`,
+            message: 'HTML insert requires a DOM environment. Provide { document } in editor options.',
           },
         };
-      } finally {
-        // Roll back numbering mutations from the dry-run HTML pipeline.
-        if (converter && numberingSnapshot !== undefined) {
-          converter.numbering = numberingSnapshot;
-        }
-        if (converter && translatedNumberingSnapshot !== undefined) {
-          converter.translatedNumbering = translatedNumberingSnapshot;
-        }
       }
     }
     return { success: true, resolution };
@@ -671,21 +650,21 @@ export function insertStructuredWrapper(
         }
         return ok;
       } else if (contentType === 'html') {
-        // Route through processContent for the canonical HTML pipeline
-        // (createDocFromHTML + wrapTextsInRuns), matching insertContent command behavior.
-        // processContent requires a DOM; in headless environments this will throw.
+        // Pass HTML string directly to insertContentAt. This avoids a
+        // prosemirror-model dual-copy issue: calling processContent from this
+        // source file imports DOMParser from node_modules, but the Editor's
+        // schema uses the bundled copy from the superdoc dist. Routing through
+        // the Editor's command infrastructure uses the same bundled copy for
+        // both DOMParser and the schema — avoiding the mismatch.
+        if (!editorHasDom(editor)) {
+          insertFailure = {
+            code: 'UNSUPPORTED_ENVIRONMENT',
+            message: 'HTML insert requires a DOM environment. Provide { document } in editor options.',
+          };
+          return false;
+        }
         try {
-          const processedDoc = processContent({ content: value, type: 'html', editor });
-          if (!processedDoc || typeof (processedDoc as { toJSON?: unknown }).toJSON !== 'function') {
-            insertFailure = {
-              code: 'INVALID_TARGET',
-              message: 'HTML processing did not produce a valid document node.',
-            };
-            return false;
-          }
-          const jsonContent = (processedDoc as { toJSON(): Record<string, unknown> }).toJSON();
-
-          const ok = Boolean(editor.commands.insertContentAt({ from, to }, jsonContent));
+          const ok = Boolean(editor.commands.insertContentAt({ from, to }, value));
           if (!ok) {
             insertFailure = {
               code: 'INVALID_TARGET',

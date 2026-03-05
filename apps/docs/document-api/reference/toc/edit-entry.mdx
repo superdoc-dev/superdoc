@@ -29,7 +29,14 @@ Returns a TocEntryMutationResult with the updated entry address on success, or N
 | Field | Type | Required | Description |
 | --- | --- | --- | --- |
 | `patch` | object | yes |  |
+| `patch.level` | integer | no |  |
+| `patch.omitPageNumber` | boolean | no |  |
+| `patch.tableIdentifier` | string | no |  |
+| `patch.text` | string | no |  |
 | `target` | object(kind="inline") | yes |  |
+| `target.kind` | `"inline"` | yes | Constant: `"inline"` |
+| `target.nodeId` | string | yes |  |
+| `target.nodeType` | `"tableOfContentsEntry"` | yes | Constant: `"tableOfContentsEntry"` |
 
 ### Example request
 
@@ -49,7 +56,25 @@ Returns a TocEntryMutationResult with the updated entry address on success, or N
 
 ## Output fields
 
-_No fields._
+### Variant 1 (entry.kind="inline")
+
+| Field | Type | Required | Description |
+| --- | --- | --- | --- |
+| `entry` | object(kind="inline") | yes |  |
+| `entry.kind` | `"inline"` | yes | Constant: `"inline"` |
+| `entry.nodeId` | string | yes |  |
+| `entry.nodeType` | `"tableOfContentsEntry"` | yes | Constant: `"tableOfContentsEntry"` |
+| `success` | `true` | yes | Constant: `true` |
+
+### Variant 2 (success=false)
+
+| Field | Type | Required | Description |
+| --- | --- | --- | --- |
+| `failure` | object | yes |  |
+| `failure.code` | enum | yes | `"NO_OP"`, `"INVALID_TARGET"`, `"TARGET_NOT_FOUND"`, `"CAPABILITY_UNAVAILABLE"`, `"INVALID_INSERTION_CONTEXT"`, `"INVALID_INPUT"` |
+| `failure.details` | any | no |  |
+| `failure.message` | string | yes |  |
+| `success` | `false` | yes | Constant: `false` |
 
 ### Example response
 

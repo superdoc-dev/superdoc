@@ -337,10 +337,14 @@ function convertTable(node: MdastTable, ctx: MdastConversionContext): JsonNode {
     });
   }
 
+  // Standalone markdown conversion has no editor context. Mark the table
+  // for deferred style normalization so the table extension can resolve the
+  // correct style after insertion into an editor instance.
   return {
     type: 'table',
     attrs: {
-      tableStyleId: 'TableGrid',
+      tableStyleId: null,
+      needsTableStyleNormalization: true,
       tableProperties: {
         tableWidth: {
           value: FULL_WIDTH_TABLE_PCT,

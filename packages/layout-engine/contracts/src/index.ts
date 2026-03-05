@@ -7,6 +7,8 @@ export type { TabStop };
 // Export table contracts
 export { OOXML_PCT_DIVISOR, type TableWidthAttr, type TableColumnSpec } from './engines/tables.js';
 
+export { effectiveTableCellSpacing } from './table-cell-spacing.js';
+
 // Export justify utilities
 export {
   shouldApplyJustify,
@@ -489,8 +491,14 @@ export type TableCell = {
   attrs?: TableCellAttrs;
 };
 
+export type TableRowProperties = {
+  repeatHeader?: boolean;
+  cantSplit?: boolean;
+  [key: string]: unknown;
+};
+
 export type TableRowAttrs = {
-  tableRowProperties?: Record<string, unknown>;
+  tableRowProperties?: TableRowProperties;
   rowHeight?: {
     value: number;
     rule?: 'auto' | 'atLeast' | 'exact' | string;
@@ -1781,6 +1789,13 @@ export interface PositionMapping {
   /** Array of step maps - length indicates transaction complexity */
   readonly maps: readonly unknown[];
 }
+
+/**
+ * Rendering flow mode.
+ * - `paginated`: discrete page surfaces
+ * - `semantic`: continuous flow surface
+ */
+export type FlowMode = 'paginated' | 'semantic';
 
 export interface PainterDOM {
   paint(layout: Layout, mount: HTMLElement, mapping?: PositionMapping): void;

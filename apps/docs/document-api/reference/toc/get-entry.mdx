@@ -29,6 +29,9 @@ Returns a TocEntryInfo object with the instruction, text, level, and switch conf
 | Field | Type | Required | Description |
 | --- | --- | --- | --- |
 | `target` | object(kind="inline") | yes |  |
+| `target.kind` | `"inline"` | yes | Constant: `"inline"` |
+| `target.nodeId` | string | yes |  |
+| `target.nodeType` | `"tableOfContentsEntry"` | yes | Constant: `"tableOfContentsEntry"` |
 
 ### Example request
 
@@ -49,6 +52,11 @@ Returns a TocEntryInfo object with the instruction, text, level, and switch conf
 | `kind` | `"inline"` | yes | Constant: `"inline"` |
 | `nodeType` | `"tableOfContentsEntry"` | yes | Constant: `"tableOfContentsEntry"` |
 | `properties` | object | yes |  |
+| `properties.instruction` | string | yes |  |
+| `properties.level` | integer | yes |  |
+| `properties.omitPageNumber` | boolean | yes |  |
+| `properties.tableIdentifier` | string | no |  |
+| `properties.text` | string | yes |  |
 
 ### Example response
 

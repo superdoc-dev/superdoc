@@ -62,7 +62,11 @@ Returns a QueryMatchOutput with the resolved target address and cardinality meta
 | `evaluatedRevision` | string | yes |  |
 | `items` | object(matchKind="text") \\| object(matchKind="node")[] | yes |  |
 | `meta` | object | yes |  |
+| `meta.effectiveResolved` | boolean | yes |  |
 | `page` | PageInfo | yes | PageInfo |
+| `page.limit` | integer | yes |  |
+| `page.offset` | integer | yes |  |
+| `page.returned` | integer | yes |  |
 | `total` | integer | yes |  |
 
 ### Example response

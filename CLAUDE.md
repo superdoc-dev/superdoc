@@ -130,11 +130,16 @@ Note: `packages/sdk/tools/__init__.py` is a manual file (Python package marker) 
 
 ## Testing
 
-Three types of tests, each with a different purpose:
+| What to verify | Command | Speed |
+|---|---|---|
+| Logic works? | `pnpm test` | seconds |
+| Editing works? | `pnpm test:behavior` | minutes |
+| Layout regressed? | `pnpm test:layout` | ~10 min |
+| Pixel diff? | `pnpm test:visual` | ~5 min |
 
 ### Unit Tests (Vitest)
 
-Co-located with source code as `feature.test.ts` next to `feature.ts`. Run with `pnpm test` from a package directory. Test pure logic, data transformations, and utilities in isolation.
+Co-located with source code as `feature.test.ts` next to `feature.ts`. Test pure logic, data transformations, and utilities in isolation.
 
 - Framework: **Vitest** (config at `vitest.config.mjs`)
 - Most coverage in `packages/super-editor/` (526 files) and `packages/layout-engine/` (150 files)
@@ -142,20 +147,30 @@ Co-located with source code as `feature.test.ts` next to `feature.ts`. Run with 
 
 ### Behavior Tests (Playwright)
 
-End-to-end tests that exercise features through the browser. Located in `e2e-tests/` and `tests/behavior/`.
+End-to-end tests that exercise editing features through the browser. Located in `tests/behavior/`.
 
-- Framework: **Playwright**
-- Test editing commands, collaboration, import/export through a running SuperDoc instance
+- Framework: **Playwright** (Chromium, Firefox, WebKit)
+- Tests editing commands, formatting, tables, comments, tracked changes, lists, toolbar
+- Asserts on document state, not pixels — see `tests/behavior/README.md`
 
-### Visual Regression Tests (Playwright + R2)
+### Layout Comparison (`pnpm test:layout`)
 
-Screenshot-based tests that catch rendering changes. Located in `tests/visual/`. See `tests/visual/CLAUDE.md` for full details.
+Compares layout engine output (JSON structure) across ~382 test documents against a published npm version. This is the primary tool for catching rendering regressions.
 
-- Framework: **Playwright** with pixel-diff comparison
-- Test documents auto-discovered from `test-data/rendering/*.docx`
-- Baselines stored in **Cloudflare R2** (not git), generated from `stable` branch in CI
-- CI runs as a **soft gate** — pixel diffs post a PR comment but don't block merge
-- **Community PRs cannot upload to R2** (requires Cloudflare credentials). A team member must generate baselines after merge.
+- Run: `pnpm test:layout` (interactive — prompts for reference version)
+- Flags: `--reference <version>`, `--match <pattern>`, `--limit <n>`
+- Handles auth, corpus download, build, and comparison automatically
+- Reports written to `tests/layout/reports/`
+- Lower-level access: `pnpm layout:compare` (same engine, no interactive UX)
+- One-time setup: `npx wrangler login` (for corpus download from R2)
+
+### Visual Comparison (`pnpm test:visual`)
+
+Pixel-level before/after comparison for documents that failed layout comparison. Reads the latest layout report and generates an HTML diff report.
+
+- Run `pnpm test:layout` first to generate a comparison report
+- Then `pnpm test:visual` to see pixel differences for changed docs
+- HTML report output in `devtools/visual-testing/results/`
 
 ## Brand & Design System
 

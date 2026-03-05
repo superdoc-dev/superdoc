@@ -40,7 +40,24 @@ Returns a Receipt confirming the comment was removed; reports NO_OP if the comme
 
 ## Output fields
 
-_No fields._
+### Variant 1 (success=true)
+
+| Field | Type | Required | Description |
+| --- | --- | --- | --- |
+| `inserted` | EntityAddress[] | no |  |
+| `removed` | EntityAddress[] | no |  |
+| `success` | `true` | yes | Constant: `true` |
+| `updated` | EntityAddress[] | no |  |
+
+### Variant 2 (success=false)
+
+| Field | Type | Required | Description |
+| --- | --- | --- | --- |
+| `failure` | object | yes |  |
+| `failure.code` | enum | yes | `"NO_OP"` |
+| `failure.details` | any | no |  |
+| `failure.message` | string | yes |  |
+| `success` | `false` | yes | Constant: `false` |
 
 ### Example response
 

@@ -233,7 +233,10 @@ function mapTableOfContentsNode(candidate: BlockCandidate): TableOfContentsNodeI
 }
 
 function buildImageInfo(attrs: ImageAttrs | undefined, kind: 'block' | 'inline'): ImageNodeInfo {
-  const properties = {
+  const isFloating = Boolean(attrs?.isAnchor);
+  const wrapObj = attrs?.wrap;
+
+  const properties: ImageNodeInfo['properties'] = {
     src: attrs?.src ?? undefined,
     alt: attrs?.alt ?? undefined,
     size: attrs?.size
@@ -243,7 +246,14 @@ function buildImageInfo(attrs: ImageAttrs | undefined, kind: 'block' | 'inline')
           unit: undefined,
         }
       : undefined,
-    wrap: attrs?.wrap?.type ?? undefined,
+    placement: isFloating ? 'floating' : 'inline',
+    wrap: {
+      type: (wrapObj?.type as ImageNodeInfo['properties']['wrap']['type']) ?? 'Inline',
+      attrs: wrapObj?.attrs ?? undefined,
+    },
+    anchorData: attrs?.anchorData ?? null,
+    marginOffset: attrs?.marginOffset ?? null,
+    relativeHeight: attrs?.relativeHeight ?? null,
   };
 
   return {

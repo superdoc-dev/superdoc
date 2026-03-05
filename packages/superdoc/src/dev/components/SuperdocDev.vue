@@ -15,7 +15,7 @@ import * as pdfjsLib from 'pdfjs-dist/build/pdf.mjs';
 import SidebarSearch from './sidebar/SidebarSearch.vue';
 import SidebarFieldAnnotations from './sidebar/SidebarFieldAnnotations.vue';
 import SidebarLayout from './sidebar/SidebarLayout.vue';
-import { HocuspocusProvider } from '@hocuspocus/provider';
+import { WebsocketProvider } from 'y-websocket';
 import * as Y from 'yjs';
 
 // note:
@@ -43,6 +43,8 @@ const userRole = urlParams.get('role') || 'editor';
 const useLayoutEngine = ref(urlParams.get('layout') !== '0');
 const useWebLayout = ref(urlParams.get('view') === 'web');
 const useCollaboration = urlParams.get('collab') === '1';
+const collabRoom = urlParams.get('room') || 'superdoc-dev-room';
+const collabUrl = 'ws://localhost:8081/v1/collaboration';
 const useWordOverlay = ref(urlParams.get('wordOverlay') !== '0');
 const wordOverlayOpacity = ref(Number.isFinite(overlayOpacityFromUrl) ? clampOpacity(overlayOpacityFromUrl) : 0.45);
 const wordOverlayBlendMode = ref(urlParams.get('wordOverlayBlend') || 'difference');
@@ -59,7 +61,14 @@ let wordOverlayLayoutUnsubscribe = null;
 // Collaboration state
 const ydocRef = shallowRef(null);
 const providerRef = shallowRef(null);
-const collabReady = ref(false);
+const yjsChangeEvents = ref([]);
+const yjsProviderStatus = ref(useCollaboration ? 'connecting' : 'disabled');
+const yjsActivityStatus = ref(useCollaboration ? 'connecting' : 'disabled');
+const YJS_EVENT_LOG_LIMIT = 250;
+const YJS_CHANGE_ROWS_LIMIT = 60;
+const seenServerActivityEventIds = new Set();
+let removeYjsObservers = null;
+let closeActivityStream = null;
 const superdocLogo = SuperdocLogo;
 const uploadedFileName = ref('');
 const uploadDisplayName = computed(() => uploadedFileName.value || 'No file chosen');
@@ -246,6 +255,320 @@ const readFileAsText = (file) => {
   });
 };
 
+const createClientEventId = () => `client-${Date.now()}-${Math.random().toString(36).slice(2, 9)}`;
+
+const summarizeValue = (value) => {
+  if (value === null) return 'null';
+  if (value === undefined) return 'undefined';
+  if (value instanceof Uint8Array) return `Uint8Array(${value.byteLength})`;
+  if (value instanceof ArrayBuffer) return `ArrayBuffer(${value.byteLength})`;
+  if (typeof value === 'string') {
+    if (value.length <= 80) return JSON.stringify(value);
+    return `${JSON.stringify(value.slice(0, 80))}... (${value.length} chars)`;
+  }
+  if (typeof value === 'number' || typeof value === 'boolean') {
+    return String(value);
+  }
+  if (Array.isArray(value)) {
+    return `Array(${value.length})`;
+  }
+  if (typeof value === 'object') {
+    const name = value.constructor?.name || 'Object';
+    return name;
+  }
+  return String(value);
+};
+
+const summarizeDelta = (delta) =>
+  delta.map((part) => {
+    if (typeof part.insert === 'string') {
+      return {
+        insert: part.insert.length > 60 ? `${part.insert.slice(0, 60)}...` : part.insert,
+        chars: part.insert.length,
+      };
+    }
+    if (part.insert != null) {
+      return { insert: summarizeValue(part.insert) };
+    }
+    if (part.delete != null) {
+      return { delete: part.delete };
+    }
+    if (part.retain != null) {
+      return { retain: part.retain };
+    }
+    return { op: 'unknown' };
+  });
+
+const summarizeOrigin = (origin) => {
+  if (origin == null) return null;
+  if (typeof origin === 'string') return origin;
+  if (typeof origin === 'number' || typeof origin === 'boolean') return String(origin);
+  if (typeof origin === 'object') {
+    if (typeof origin.event === 'string') {
+      return origin.event;
+    }
+    const constructorName = origin.constructor?.name;
+    if (constructorName && constructorName !== 'Object') {
+      return constructorName;
+    }
+    return 'Object';
+  }
+  return String(origin);
+};
+
+const appendYjsEvent = (event) => {
+  yjsChangeEvents.value = [event, ...yjsChangeEvents.value].slice(0, YJS_EVENT_LOG_LIMIT);
+};
+
+const toActivityItemsFromRows = (rows) =>
+  rows.map((row) => {
+    const rootPath = typeof row.path === 'string' ? row.path.split('.')[0] : null;
+    const changedKeys = rootPath && rootPath !== '(root)' && rootPath.length > 0 ? [rootPath] : [];
+    const rowAction = row.action === 'add' ? 'added' : row.action === 'delete' ? 'deleted' : 'modified';
+    const valueSummary = row.newValue ?? row.oldValue ?? null;
+    return {
+      changedKeys,
+      entryKey: row.key ?? null,
+      type: rowAction,
+      valueSummary,
+      targetType: row.targetType ?? null,
+    };
+  });
+
+const clearYjsChanges = () => {
+  yjsChangeEvents.value = [];
+  seenServerActivityEventIds.clear();
+};
+
+const rowsFromDeepEvents = (events) => {
+  const rows = [];
+  for (const event of events) {
+    const path = Array.isArray(event.path) && event.path.length > 0 ? event.path.join('.') : '(root)';
+    const targetType = event.target?.constructor?.name ?? 'UnknownType';
+
+    if (event.keysChanged instanceof Set && event.changes?.keys instanceof Map && event.keysChanged.size > 0) {
+      for (const key of event.keysChanged) {
+        const keyChange = event.changes.keys.get(key);
+        const action = keyChange?.action ?? 'changed';
+        const row = {
+          path,
+          key,
+          action,
+          targetType,
+          oldValue: summarizeValue(keyChange?.oldValue),
+        };
+        if (action !== 'delete' && typeof event.target?.get === 'function') {
+          row.newValue = summarizeValue(event.target.get(key));
+        }
+        rows.push(row);
+        if (rows.length >= YJS_CHANGE_ROWS_LIMIT) {
+          return rows;
+        }
+      }
+      continue;
+    }
+
+    if (Array.isArray(event.changes?.delta) && event.changes.delta.length > 0) {
+      rows.push({
+        path,
+        key: null,
+        action: 'delta',
+        targetType,
+        delta: summarizeDelta(event.changes.delta),
+      });
+      if (rows.length >= YJS_CHANGE_ROWS_LIMIT) {
+        return rows;
+      }
+      continue;
+    }
+
+    rows.push({
+      path,
+      key: null,
+      action: 'changed',
+      targetType,
+    });
+    if (rows.length >= YJS_CHANGE_ROWS_LIMIT) {
+      return rows;
+    }
+  }
+  return rows;
+};
+
+const attachYjsDebugObservers = (ydoc, provider) => {
+  if (typeof removeYjsObservers === 'function') {
+    removeYjsObservers();
+  }
+
+  const onAfterTransaction = (transaction) => {
+    const events = [];
+    if (transaction.changedParentTypes instanceof Map) {
+      for (const changedEvents of transaction.changedParentTypes.values()) {
+        if (Array.isArray(changedEvents) && changedEvents.length > 0) {
+          events.push(...changedEvents);
+        }
+      }
+    }
+    const rows = rowsFromDeepEvents(events);
+    const origin = summarizeOrigin(transaction.origin);
+    const hasMeaningfulRows = rows.length > 0;
+    if (!hasMeaningfulRows) {
+      return;
+    }
+
+    const activityItems = toActivityItemsFromRows(rows);
+    appendYjsEvent({
+      id: createClientEventId(),
+      source: 'client',
+      at: new Date().toISOString(),
+      local: Boolean(transaction.local),
+      origin,
+      summary:
+        rows.length > 0
+          ? `transaction (${rows.length} change row${rows.length === 1 ? '' : 's'})`
+          : 'transaction (no observable rows)',
+      changedKeys: Array.from(new Set(activityItems.flatMap((item) => item.changedKeys ?? []))),
+      entryKey: activityItems[0]?.entryKey ?? null,
+      changeType: activityItems[0]?.type ?? null,
+      valueSummary: activityItems[0]?.valueSummary ?? null,
+      activityItems,
+      changes: rows,
+    });
+  };
+
+  const onProviderStatus = (event) => {
+    const status = event?.status ?? 'unknown';
+    yjsProviderStatus.value = status;
+    appendYjsEvent({
+      id: createClientEventId(),
+      source: 'client',
+      at: new Date().toISOString(),
+      local: null,
+      origin: 'provider',
+      summary: `provider status: ${status}`,
+      changes: [],
+    });
+  };
+
+  const onProviderSync = (isSynced) => {
+    appendYjsEvent({
+      id: createClientEventId(),
+      source: 'client',
+      at: new Date().toISOString(),
+      local: null,
+      origin: 'provider',
+      summary: `provider sync: ${Boolean(isSynced)}`,
+      changes: [],
+    });
+  };
+
+  ydoc.on('afterTransaction', onAfterTransaction);
+  provider.on('status', onProviderStatus);
+  provider.on('sync', onProviderSync);
+
+  removeYjsObservers = () => {
+    ydoc.off('afterTransaction', onAfterTransaction);
+    provider.off?.('status', onProviderStatus);
+    provider.off?.('sync', onProviderSync);
+    removeYjsObservers = null;
+  };
+};
+
+const toCollaborationHttpBaseUrl = () => {
+  const url = new URL(collabUrl);
+  url.protocol = url.protocol === 'wss:' ? 'https:' : 'http:';
+  return url.toString().replace(/\/$/, '');
+};
+
+const addServerActivityEvent = (payload) => {
+  const eventId = payload?.id ?? null;
+  if (eventId) {
+    if (seenServerActivityEventIds.has(eventId)) return;
+    seenServerActivityEventIds.add(eventId);
+    if (seenServerActivityEventIds.size > 2_000) {
+      seenServerActivityEventIds.clear();
+      seenServerActivityEventIds.add(eventId);
+    }
+  }
+
+  appendYjsEvent({
+    id: eventId ?? createClientEventId(),
+    source: 'server',
+    at: payload?.receivedAt ?? new Date().toISOString(),
+    local: null,
+    origin: 'yjs-hub',
+    summary: payload?.type === 'ydoc:update:v1' ? `server update (${payload.bytes ?? 0} bytes)` : 'server activity',
+    by: payload?.by ?? null,
+    actors: Array.isArray(payload?.actors) ? payload.actors : [],
+    customAttributions: Array.isArray(payload?.customAttributions) ? payload.customAttributions : [],
+    guess: payload?.guess ?? null,
+    clocks: Array.isArray(payload?.clocks) ? payload.clocks : [],
+    changedKeys: Array.isArray(payload?.changedKeys) ? payload.changedKeys : [],
+    entryKey: payload?.entryKey ?? null,
+    changeType: payload?.changeType ?? null,
+    valueSummary: payload?.valueSummary ?? null,
+    activityItems: Array.isArray(payload?.activityItems) ? payload.activityItems : [],
+    changes: [],
+  });
+};
+
+const attachServerActivityStream = async () => {
+  if (!useCollaboration) return;
+  if (typeof closeActivityStream === 'function') {
+    closeActivityStream();
+  }
+
+  const baseUrl = `${toCollaborationHttpBaseUrl()}/${encodeURIComponent(collabRoom)}/activity`;
+  yjsActivityStatus.value = 'connecting';
+
+  try {
+    const recentResponse = await fetch(`${baseUrl}/recent`);
+    if (recentResponse.ok) {
+      const recentPayload = await recentResponse.json();
+      if (Array.isArray(recentPayload?.events)) {
+        recentPayload.events.forEach((event) => addServerActivityEvent(event));
+      }
+    }
+  } catch (error) {
+    console.warn('[collab] failed to load recent activity events:', error);
+  }
+
+  const stream = new EventSource(`${baseUrl}/stream`);
+
+  const onActivity = (event) => {
+    try {
+      const payload = JSON.parse(event.data);
+      addServerActivityEvent(payload);
+      yjsActivityStatus.value = 'open';
+    } catch (error) {
+      console.warn('[collab] failed to parse activity stream payload:', error);
+    }
+  };
+
+  const onOpen = () => {
+    yjsActivityStatus.value = 'open';
+  };
+
+  const onError = () => {
+    if (stream.readyState === EventSource.CLOSED) {
+      yjsActivityStatus.value = 'closed';
+      return;
+    }
+    yjsActivityStatus.value = 'error';
+  };
+
+  stream.addEventListener('activity', onActivity);
+  stream.onopen = onOpen;
+  stream.onerror = onError;
+
+  closeActivityStream = () => {
+    stream.removeEventListener('activity', onActivity);
+    stream.close();
+    yjsActivityStatus.value = 'closed';
+    closeActivityStream = null;
+  };
+};
+
 const init = async () => {
   // If the dev shell re-initializes (e.g. on file upload), tear down the previous instance first.
   detachWordOverlayListener();
@@ -300,8 +623,12 @@ const init = async () => {
     toolbarGroups: ['left', 'center', 'right'],
     pagination: useLayoutEngine.value && !useWebLayout.value,
     viewOptions: { layout: useWebLayout.value ? 'web' : 'print' },
-    // Web layout mode requires Layout Engine to be OFF (uses ProseMirror's native rendering)
-    useLayoutEngine: useLayoutEngine.value && !useWebLayout.value,
+    // Web layout + layout engine now uses semantic flow mode.
+    useLayoutEngine: useLayoutEngine.value,
+    layoutEngineOptions: {
+      flowMode: useWebLayout.value ? 'semantic' : 'paginated',
+      ...(useWebLayout.value ? { semanticOptions: { marginsMode: 'none' } } : {}),
+    },
     rulers: true,
     rulerContainer: '#ruler-container',
     annotations: true,
@@ -736,30 +1063,36 @@ const toggleCommentsPanel = () => {
 onMounted(async () => {
   // Initialize collaboration if enabled via ?collab=1
   if (useCollaboration) {
+    clearYjsChanges();
     const ydoc = new Y.Doc();
-    const provider = new HocuspocusProvider({
-      url: 'ws://localhost:3050',
-      name: urlParams.get('room') || 'superdoc-dev-room',
-      document: ydoc,
+    const provider = new WebsocketProvider(collabUrl, collabRoom, ydoc, {
+      params: {
+        userId: user.email || user.name,
+      },
     });
 
     ydocRef.value = ydoc;
     providerRef.value = provider;
+    attachYjsDebugObservers(ydoc, provider);
+    await attachServerActivityStream();
 
     // Wait for sync before loading document
     await new Promise((resolve) => {
-      provider.on('synced', () => {
-        collabReady.value = true;
+      let settled = false;
+      const settle = () => {
+        if (settled) return;
+        settled = true;
+        provider.off?.('sync', settle);
         resolve();
-      });
+      };
+
+      provider.on('sync', settle);
+
       // Fallback timeout in case sync doesn't fire
-      setTimeout(() => {
-        collabReady.value = true;
-        resolve();
-      }, 3000);
+      setTimeout(settle, 3000);
     });
 
-    console.log('[collab] Provider synced, initializing SuperDoc');
+    console.log(`[collab] Provider ready (${collabUrl}/${collabRoom}), initializing SuperDoc`);
   }
 
   // Initialize SuperDoc - it will automatically create a blank document
@@ -769,6 +1102,13 @@ onMounted(async () => {
 onBeforeUnmount(() => {
   detachWordOverlayListener();
   removeWordOverlay();
+
+  if (typeof removeYjsObservers === 'function') {
+    removeYjsObservers();
+  }
+  if (typeof closeActivityStream === 'function') {
+    closeActivityStream();
+  }
 
   // Ensure SuperDoc tears down global listeners (e.g., PresentationEditor input bridge)
   superdoc.value?.destroy?.();
@@ -847,18 +1187,31 @@ const activeSidebar = computed(
 const activeSidebarComponent = computed(() => activeSidebar.value?.component ?? null);
 const activeSidebarLabel = computed(() => activeSidebar.value?.label ?? 'None');
 const activeSidebarProps = computed(() => {
-  if (activeSidebarId.value !== 'layout') return {};
-  return {
-    useWordOverlay: useWordOverlay.value,
-    isGeneratingWordBaseline: isGeneratingWordBaseline.value,
-    generatedCount: generatedWordScreenshots.value.length,
-    wordOverlayOpacity: wordOverlayOpacity.value,
-    wordOverlayOpacityLabel: wordOverlayOpacityLabel.value,
-    wordOverlayBlendMode: wordOverlayBlendMode.value,
-    wordBaselineStatus: wordBaselineStatus.value,
-    wordBaselineError: wordBaselineError.value,
-    wordOverlayAvailable: wordOverlayAvailable.value,
-  };
+  if (activeSidebarId.value === 'layout') {
+    return {
+      useWebLayout: useWebLayout.value,
+      useWordOverlay: useWordOverlay.value,
+      isGeneratingWordBaseline: isGeneratingWordBaseline.value,
+      generatedCount: generatedWordScreenshots.value.length,
+      wordOverlayOpacity: wordOverlayOpacity.value,
+      wordOverlayOpacityLabel: wordOverlayOpacityLabel.value,
+      wordOverlayBlendMode: wordOverlayBlendMode.value,
+      wordBaselineStatus: wordBaselineStatus.value,
+      wordBaselineError: wordBaselineError.value,
+      wordOverlayAvailable: wordOverlayAvailable.value,
+    };
+  }
+
+  if (activeSidebarId.value === 'yjs-changes') {
+    return {
+      events: yjsChangeEvents.value,
+      providerStatus: yjsProviderStatus.value,
+      activityStatus: yjsActivityStatus.value,
+      collabRoom,
+    };
+  }
+
+  return {};
 });
 const showSidebarMenu = ref(false);
 const closeSidebarMenu = () => {
@@ -909,7 +1262,8 @@ if (scrollTestMode.value) {
           <div class="dev-app__brand-meta">
             <div class="dev-app__meta-row">
               <span class="dev-app__pill">SUPERDOC LABS</span>
-              <span class="badge">Layout Engine: {{ useLayoutEngine && !useWebLayout ? 'ON' : 'OFF' }}</span>
+              <span class="badge">Layout Engine: {{ useLayoutEngine ? 'ON' : 'OFF' }}</span>
+              <span v-if="useLayoutEngine" class="badge">Flow: {{ useWebLayout ? 'SEMANTIC' : 'PAGINATED' }}</span>
               <span v-if="useWebLayout" class="badge">Web Layout: ON</span>
               <span v-if="scrollTestMode" class="badge badge--warning">Scroll Test: ON</span>
               <span v-if="useCollaboration" class="badge badge--collab">Collab: ON</span>
@@ -1029,9 +1383,6 @@ if (scrollTestMode.value) {
             <button class="dev-app__header-export-btn" @click="toggleLayoutEngine">
               Turn Layout Engine {{ useLayoutEngine ? 'off' : 'on' }} (reloads)
             </button>
-            <button class="dev-app__header-export-btn" @click="toggleViewLayout">
-              Turn Web Layout {{ useWebLayout ? 'off' : 'on' }} (reloads)
-            </button>
           </div>
         </div>
       </div>
@@ -1069,10 +1420,12 @@ if (scrollTestMode.value) {
             v-bind="activeSidebarProps"
             @close="setActiveSidebar('off')"
             @toggle-overlay="toggleWordOverlay"
+            @toggle-web-layout="toggleViewLayout"
             @generate-baseline="generateWordBaseline"
             @clear-generated-baseline="clearGeneratedWordBaseline"
             @update:word-overlay-opacity="setWordOverlayOpacity"
             @update:word-overlay-blend-mode="setWordOverlayBlendMode"
+            @clear-yjs-events="clearYjsChanges"
           />
         </div>
       </div>

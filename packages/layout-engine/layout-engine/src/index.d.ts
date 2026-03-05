@@ -1,6 +1,7 @@
 import type {
   ColumnLayout,
   FlowBlock,
+  FlowMode,
   HeaderFooterLayout,
   Layout,
   Measure,
@@ -23,8 +24,17 @@ export type LayoutOptions = {
   pageSize?: PageSize;
   margins?: Margins;
   columns?: ColumnLayout;
+  flowMode?: FlowMode;
+  semantic?: {
+    contentWidth?: number;
+    marginLeft?: number;
+    marginRight?: number;
+    marginTop?: number;
+    marginBottom?: number;
+  };
   remeasureParagraph?: (block: ParagraphBlock, maxWidth: number, firstLineIndent?: number) => ParagraphMeasure;
 };
+export declare const SEMANTIC_PAGE_HEIGHT_PX = 1000000;
 export type HeaderFooterConstraints = {
   width: number;
   height: number;

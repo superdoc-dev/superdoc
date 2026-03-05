@@ -1,5 +1,5 @@
+from .client import AsyncSuperDocClient, SuperDocClient
 from .errors import SuperDocError
-from .generated.client import AsyncSuperDocClient, SuperDocClient
 from .skill_api import get_skill, install_skill, list_skills
 from .tools_api import (
     choose_tools,

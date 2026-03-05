@@ -63,6 +63,7 @@ import {
   type CellSpacing,
   type TableBorders,
   type TableBorderValue,
+  effectiveTableCellSpacing,
 } from '@superdoc/contracts';
 import type { WordParagraphLayoutOutput } from '@superdoc/word-layout';
 import {
@@ -2714,21 +2715,15 @@ async function measureTableBlock(block: TableBlock, constraints: MeasureConstrai
 
         contentHeight += blockHeight;
 
-        // Add paragraph spacing.after to content height.
-        // For the last paragraph, Word absorbs spacing.after into cell bottom padding —
-        // so only add the excess beyond what the padding already provides.
+        // Add paragraph spacing.after/spacing.before to content height.
+        // Word absorbs first paragraph's spacing.before into paddingTop and last's spacing.after into paddingBottom.
+        const isFirstBlock = blockIndex === 0;
         const isLastBlock = blockIndex === cellBlocks.length - 1;
         if (block.kind === 'paragraph') {
+          const spacingBefore = (block as ParagraphBlock).attrs?.spacing?.before;
+          contentHeight += effectiveTableCellSpacing(spacingBefore, isFirstBlock, paddingTop);
           const spacingAfter = (block as ParagraphBlock).attrs?.spacing?.after;
-          if (typeof spacingAfter === 'number' && spacingAfter > 0) {
-            if (isLastBlock) {
-              // Only add the portion not absorbed by cell bottom padding
-              const excess = Math.max(0, spacingAfter - paddingBottom);
-              contentHeight += excess;
-            } else {
-              contentHeight += spacingAfter;
-            }
-          }
+          contentHeight += effectiveTableCellSpacing(spacingAfter, isLastBlock, paddingBottom);
         }
       }
 

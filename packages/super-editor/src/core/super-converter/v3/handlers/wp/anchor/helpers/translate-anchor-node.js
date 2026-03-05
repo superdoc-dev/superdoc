@@ -1,6 +1,7 @@
 import { translateImageNode } from '@converter/v3/handlers/wp/helpers/decode-image-node-helpers.js';
 import { pixelsToEmu, objToPolygon } from '@converter/helpers.js';
 import { mergeDrawingChildren } from '@converter/v3/handlers/wp/helpers/merge-drawing-children.js';
+import { parseRelativeHeight } from '@converter/v3/handlers/wp/helpers/relative-height.js';
 
 /**
  * Translates anchor image
@@ -72,9 +73,11 @@ export function translateAnchorNode(params) {
     ...(nodeElements.attributes || {}),
   };
 
-  if (inlineAttrs.relativeHeight == null) {
-    inlineAttrs.relativeHeight = 1;
-  }
+  // Prefer the live top-level relativeHeight (updated by images.setZOrder)
+  // over the stale value in originalAttributes. Always serialize as unsignedInt.
+  const liveRelativeHeight = parseRelativeHeight(attrs.relativeHeight);
+  const originalRelativeHeight = parseRelativeHeight(inlineAttrs.relativeHeight);
+  inlineAttrs.relativeHeight = liveRelativeHeight ?? originalRelativeHeight ?? 1;
 
   if (attrs.originalAttributes?.simplePos === undefined && hasSimplePos) {
     inlineAttrs.simplePos = '1';

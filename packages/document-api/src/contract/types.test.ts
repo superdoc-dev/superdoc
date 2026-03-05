@@ -11,7 +11,7 @@ describe('isValidOperationIdFormat', () => {
   it('accepts namespaced identifiers (namespace.camelCase)', () => {
     expect(isValidOperationIdFormat('comments.create')).toBe(true);
     expect(isValidOperationIdFormat('trackChanges.list')).toBe(true);
-    expect(isValidOperationIdFormat('lists.setType')).toBe(true);
+    expect(isValidOperationIdFormat('lists.create')).toBe(true);
   });
 
   it('accepts three-segment identifiers (group.subgroup.camelCase)', () => {

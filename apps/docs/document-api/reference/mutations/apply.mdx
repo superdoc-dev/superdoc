@@ -24,13 +24,88 @@ Execute a mutation plan atomically against the document.
 
 Returns a PlanReceipt with per-step results for the atomically applied mutation plan.
 
+## Supported step operations
+
+Use these values in `steps[].op` when authoring mutation plans.
+
+### Assert
+
+| Step op (`steps[].op`) | Description | Related API operation |
+| --- | --- | --- |
+| <span style={{ whiteSpace: 'nowrap', wordBreak: 'normal', overflowWrap: 'normal' }}><code>assert</code></span> | Assert selector cardinality after mutation steps complete. | — |
+
+### Text
+
+| Step op (`steps[].op`) | Description | Related API operation |
+| --- | --- | --- |
+| <span style={{ whiteSpace: 'nowrap', wordBreak: 'normal', overflowWrap: 'normal' }}><code>text.rewrite</code></span> | Rewrite matched text ranges with replacement content. | <span style={{ whiteSpace: 'nowrap', wordBreak: 'normal', overflowWrap: 'normal' }}><a href="/document-api/reference/replace"><code>replace</code></a></span> |
+| <span style={{ whiteSpace: 'nowrap', wordBreak: 'normal', overflowWrap: 'normal' }}><code>text.insert</code></span> | Insert text before or after a matched range. | <span style={{ whiteSpace: 'nowrap', wordBreak: 'normal', overflowWrap: 'normal' }}><a href="/document-api/reference/insert"><code>insert</code></a></span> |
+| <span style={{ whiteSpace: 'nowrap', wordBreak: 'normal', overflowWrap: 'normal' }}><code>text.delete</code></span> | Delete matched text ranges. | <span style={{ whiteSpace: 'nowrap', wordBreak: 'normal', overflowWrap: 'normal' }}><a href="/document-api/reference/delete"><code>delete</code></a></span> |
+
+### Format
+
+| Step op (`steps[].op`) | Description | Related API operation |
+| --- | --- | --- |
+| <span style={{ whiteSpace: 'nowrap', wordBreak: 'normal', overflowWrap: 'normal' }}><code>format.apply</code></span> | Apply inline formatting patch changes to matched text ranges. | <span style={{ whiteSpace: 'nowrap', wordBreak: 'normal', overflowWrap: 'normal' }}><a href="/document-api/reference/format/apply"><code>format.apply</code></a></span> |
+
+### Create
+
+| Step op (`steps[].op`) | Description | Related API operation |
+| --- | --- | --- |
+| <span style={{ whiteSpace: 'nowrap', wordBreak: 'normal', overflowWrap: 'normal' }}><code>create.paragraph</code></span> | Create a paragraph adjacent to the matched block. | <span style={{ whiteSpace: 'nowrap', wordBreak: 'normal', overflowWrap: 'normal' }}><a href="/document-api/reference/create/paragraph"><code>create.paragraph</code></a></span> |
+| <span style={{ whiteSpace: 'nowrap', wordBreak: 'normal', overflowWrap: 'normal' }}><code>create.heading</code></span> | Create a heading adjacent to the matched block. | <span style={{ whiteSpace: 'nowrap', wordBreak: 'normal', overflowWrap: 'normal' }}><a href="/document-api/reference/create/heading"><code>create.heading</code></a></span> |
+| <span style={{ whiteSpace: 'nowrap', wordBreak: 'normal', overflowWrap: 'normal' }}><code>create.table</code></span> | Create a table at the requested location. | <span style={{ whiteSpace: 'nowrap', wordBreak: 'normal', overflowWrap: 'normal' }}><a href="/document-api/reference/create/table"><code>create.table</code></a></span> |
+
+### Tables
+
+| Step op (`steps[].op`) | Description | Related API operation |
+| --- | --- | --- |
+| <span style={{ whiteSpace: 'nowrap', wordBreak: 'normal', overflowWrap: 'normal' }}><code>tables.delete</code></span> | Delete the target table from the document. | <span style={{ whiteSpace: 'nowrap', wordBreak: 'normal', overflowWrap: 'normal' }}><a href="/document-api/reference/tables/delete"><code>tables.delete</code></a></span> |
+| <span style={{ whiteSpace: 'nowrap', wordBreak: 'normal', overflowWrap: 'normal' }}><code>tables.clearContents</code></span> | Clear contents from a target table or cell range. | <span style={{ whiteSpace: 'nowrap', wordBreak: 'normal', overflowWrap: 'normal' }}><a href="/document-api/reference/tables/clear-contents"><code>tables.clearContents</code></a></span> |
+| <span style={{ whiteSpace: 'nowrap', wordBreak: 'normal', overflowWrap: 'normal' }}><code>tables.move</code></span> | Move a table to a new position. | <span style={{ whiteSpace: 'nowrap', wordBreak: 'normal', overflowWrap: 'normal' }}><a href="/document-api/reference/tables/move"><code>tables.move</code></a></span> |
+| <span style={{ whiteSpace: 'nowrap', wordBreak: 'normal', overflowWrap: 'normal' }}><code>tables.split</code></span> | Split a table into two tables at a target row. | <span style={{ whiteSpace: 'nowrap', wordBreak: 'normal', overflowWrap: 'normal' }}><a href="/document-api/reference/tables/split"><code>tables.split</code></a></span> |
+| <span style={{ whiteSpace: 'nowrap', wordBreak: 'normal', overflowWrap: 'normal' }}><code>tables.convertFromText</code></span> | Convert a text range into a table. | <span style={{ whiteSpace: 'nowrap', wordBreak: 'normal', overflowWrap: 'normal' }}><a href="/document-api/reference/tables/convert-from-text"><code>tables.convertFromText</code></a></span> |
+| <span style={{ whiteSpace: 'nowrap', wordBreak: 'normal', overflowWrap: 'normal' }}><code>tables.convertToText</code></span> | Convert a table to plain text. | <span style={{ whiteSpace: 'nowrap', wordBreak: 'normal', overflowWrap: 'normal' }}><a href="/document-api/reference/tables/convert-to-text"><code>tables.convertToText</code></a></span> |
+| <span style={{ whiteSpace: 'nowrap', wordBreak: 'normal', overflowWrap: 'normal' }}><code>tables.setLayout</code></span> | Set table layout mode. | <span style={{ whiteSpace: 'nowrap', wordBreak: 'normal', overflowWrap: 'normal' }}><a href="/document-api/reference/tables/set-layout"><code>tables.setLayout</code></a></span> |
+| <span style={{ whiteSpace: 'nowrap', wordBreak: 'normal', overflowWrap: 'normal' }}><code>tables.insertRow</code></span> | Insert a row into the target table. | <span style={{ whiteSpace: 'nowrap', wordBreak: 'normal', overflowWrap: 'normal' }}><a href="/document-api/reference/tables/insert-row"><code>tables.insertRow</code></a></span> |
+| <span style={{ whiteSpace: 'nowrap', wordBreak: 'normal', overflowWrap: 'normal' }}><code>tables.deleteRow</code></span> | Delete a row from the target table. | <span style={{ whiteSpace: 'nowrap', wordBreak: 'normal', overflowWrap: 'normal' }}><a href="/document-api/reference/tables/delete-row"><code>tables.deleteRow</code></a></span> |
+| <span style={{ whiteSpace: 'nowrap', wordBreak: 'normal', overflowWrap: 'normal' }}><code>tables.setRowHeight</code></span> | Set row height in the target table. | <span style={{ whiteSpace: 'nowrap', wordBreak: 'normal', overflowWrap: 'normal' }}><a href="/document-api/reference/tables/set-row-height"><code>tables.setRowHeight</code></a></span> |
+| <span style={{ whiteSpace: 'nowrap', wordBreak: 'normal', overflowWrap: 'normal' }}><code>tables.distributeRows</code></span> | Distribute row heights evenly. | <span style={{ whiteSpace: 'nowrap', wordBreak: 'normal', overflowWrap: 'normal' }}><a href="/document-api/reference/tables/distribute-rows"><code>tables.distributeRows</code></a></span> |
+| <span style={{ whiteSpace: 'nowrap', wordBreak: 'normal', overflowWrap: 'normal' }}><code>tables.setRowOptions</code></span> | Set row-level options (header repeat, page break, etc.). | <span style={{ whiteSpace: 'nowrap', wordBreak: 'normal', overflowWrap: 'normal' }}><a href="/document-api/reference/tables/set-row-options"><code>tables.setRowOptions</code></a></span> |
+| <span style={{ whiteSpace: 'nowrap', wordBreak: 'normal', overflowWrap: 'normal' }}><code>tables.insertColumn</code></span> | Insert a column into the target table. | <span style={{ whiteSpace: 'nowrap', wordBreak: 'normal', overflowWrap: 'normal' }}><a href="/document-api/reference/tables/insert-column"><code>tables.insertColumn</code></a></span> |
+| <span style={{ whiteSpace: 'nowrap', wordBreak: 'normal', overflowWrap: 'normal' }}><code>tables.deleteColumn</code></span> | Delete a column from the target table. | <span style={{ whiteSpace: 'nowrap', wordBreak: 'normal', overflowWrap: 'normal' }}><a href="/document-api/reference/tables/delete-column"><code>tables.deleteColumn</code></a></span> |
+| <span style={{ whiteSpace: 'nowrap', wordBreak: 'normal', overflowWrap: 'normal' }}><code>tables.setColumnWidth</code></span> | Set column width in the target table. | <span style={{ whiteSpace: 'nowrap', wordBreak: 'normal', overflowWrap: 'normal' }}><a href="/document-api/reference/tables/set-column-width"><code>tables.setColumnWidth</code></a></span> |
+| <span style={{ whiteSpace: 'nowrap', wordBreak: 'normal', overflowWrap: 'normal' }}><code>tables.distributeColumns</code></span> | Distribute column widths evenly. | <span style={{ whiteSpace: 'nowrap', wordBreak: 'normal', overflowWrap: 'normal' }}><a href="/document-api/reference/tables/distribute-columns"><code>tables.distributeColumns</code></a></span> |
+| <span style={{ whiteSpace: 'nowrap', wordBreak: 'normal', overflowWrap: 'normal' }}><code>tables.insertCell</code></span> | Insert a cell into a table row. | <span style={{ whiteSpace: 'nowrap', wordBreak: 'normal', overflowWrap: 'normal' }}><a href="/document-api/reference/tables/insert-cell"><code>tables.insertCell</code></a></span> |
+| <span style={{ whiteSpace: 'nowrap', wordBreak: 'normal', overflowWrap: 'normal' }}><code>tables.deleteCell</code></span> | Delete a cell from a table row. | <span style={{ whiteSpace: 'nowrap', wordBreak: 'normal', overflowWrap: 'normal' }}><a href="/document-api/reference/tables/delete-cell"><code>tables.deleteCell</code></a></span> |
+| <span style={{ whiteSpace: 'nowrap', wordBreak: 'normal', overflowWrap: 'normal' }}><code>tables.mergeCells</code></span> | Merge a range of table cells. | <span style={{ whiteSpace: 'nowrap', wordBreak: 'normal', overflowWrap: 'normal' }}><a href="/document-api/reference/tables/merge-cells"><code>tables.mergeCells</code></a></span> |
+| <span style={{ whiteSpace: 'nowrap', wordBreak: 'normal', overflowWrap: 'normal' }}><code>tables.unmergeCells</code></span> | Unmerge a merged table cell. | <span style={{ whiteSpace: 'nowrap', wordBreak: 'normal', overflowWrap: 'normal' }}><a href="/document-api/reference/tables/unmerge-cells"><code>tables.unmergeCells</code></a></span> |
+| <span style={{ whiteSpace: 'nowrap', wordBreak: 'normal', overflowWrap: 'normal' }}><code>tables.splitCell</code></span> | Split a table cell into multiple cells. | <span style={{ whiteSpace: 'nowrap', wordBreak: 'normal', overflowWrap: 'normal' }}><a href="/document-api/reference/tables/split-cell"><code>tables.splitCell</code></a></span> |
+| <span style={{ whiteSpace: 'nowrap', wordBreak: 'normal', overflowWrap: 'normal' }}><code>tables.setCellProperties</code></span> | Set properties on target table cells. | <span style={{ whiteSpace: 'nowrap', wordBreak: 'normal', overflowWrap: 'normal' }}><a href="/document-api/reference/tables/set-cell-properties"><code>tables.setCellProperties</code></a></span> |
+| <span style={{ whiteSpace: 'nowrap', wordBreak: 'normal', overflowWrap: 'normal' }}><code>tables.sort</code></span> | Sort table rows by a column value. | <span style={{ whiteSpace: 'nowrap', wordBreak: 'normal', overflowWrap: 'normal' }}><a href="/document-api/reference/tables/sort"><code>tables.sort</code></a></span> |
+| <span style={{ whiteSpace: 'nowrap', wordBreak: 'normal', overflowWrap: 'normal' }}><code>tables.setAltText</code></span> | Set table alt text properties. | <span style={{ whiteSpace: 'nowrap', wordBreak: 'normal', overflowWrap: 'normal' }}><a href="/document-api/reference/tables/set-alt-text"><code>tables.setAltText</code></a></span> |
+| <span style={{ whiteSpace: 'nowrap', wordBreak: 'normal', overflowWrap: 'normal' }}><code>tables.setStyle</code></span> | Set table style identifier. | <span style={{ whiteSpace: 'nowrap', wordBreak: 'normal', overflowWrap: 'normal' }}><a href="/document-api/reference/tables/set-style"><code>tables.setStyle</code></a></span> |
+| <span style={{ whiteSpace: 'nowrap', wordBreak: 'normal', overflowWrap: 'normal' }}><code>tables.clearStyle</code></span> | Clear direct table style assignment. | <span style={{ whiteSpace: 'nowrap', wordBreak: 'normal', overflowWrap: 'normal' }}><a href="/document-api/reference/tables/clear-style"><code>tables.clearStyle</code></a></span> |
+| <span style={{ whiteSpace: 'nowrap', wordBreak: 'normal', overflowWrap: 'normal' }}><code>tables.setStyleOption</code></span> | Set table style option flags. | <span style={{ whiteSpace: 'nowrap', wordBreak: 'normal', overflowWrap: 'normal' }}><a href="/document-api/reference/tables/set-style-option"><code>tables.setStyleOption</code></a></span> |
+| <span style={{ whiteSpace: 'nowrap', wordBreak: 'normal', overflowWrap: 'normal' }}><code>tables.setBorder</code></span> | Set table border properties. | <span style={{ whiteSpace: 'nowrap', wordBreak: 'normal', overflowWrap: 'normal' }}><a href="/document-api/reference/tables/set-border"><code>tables.setBorder</code></a></span> |
+| <span style={{ whiteSpace: 'nowrap', wordBreak: 'normal', overflowWrap: 'normal' }}><code>tables.clearBorder</code></span> | Clear table border properties. | <span style={{ whiteSpace: 'nowrap', wordBreak: 'normal', overflowWrap: 'normal' }}><a href="/document-api/reference/tables/clear-border"><code>tables.clearBorder</code></a></span> |
+| <span style={{ whiteSpace: 'nowrap', wordBreak: 'normal', overflowWrap: 'normal' }}><code>tables.applyBorderPreset</code></span> | Apply a border preset to a table. | <span style={{ whiteSpace: 'nowrap', wordBreak: 'normal', overflowWrap: 'normal' }}><a href="/document-api/reference/tables/apply-border-preset"><code>tables.applyBorderPreset</code></a></span> |
+| <span style={{ whiteSpace: 'nowrap', wordBreak: 'normal', overflowWrap: 'normal' }}><code>tables.setShading</code></span> | Set table shading properties. | <span style={{ whiteSpace: 'nowrap', wordBreak: 'normal', overflowWrap: 'normal' }}><a href="/document-api/reference/tables/set-shading"><code>tables.setShading</code></a></span> |
+| <span style={{ whiteSpace: 'nowrap', wordBreak: 'normal', overflowWrap: 'normal' }}><code>tables.clearShading</code></span> | Clear table shading properties. | <span style={{ whiteSpace: 'nowrap', wordBreak: 'normal', overflowWrap: 'normal' }}><a href="/document-api/reference/tables/clear-shading"><code>tables.clearShading</code></a></span> |
+| <span style={{ whiteSpace: 'nowrap', wordBreak: 'normal', overflowWrap: 'normal' }}><code>tables.setTablePadding</code></span> | Set table-level cell padding. | <span style={{ whiteSpace: 'nowrap', wordBreak: 'normal', overflowWrap: 'normal' }}><a href="/document-api/reference/tables/set-table-padding"><code>tables.setTablePadding</code></a></span> |
+| <span style={{ whiteSpace: 'nowrap', wordBreak: 'normal', overflowWrap: 'normal' }}><code>tables.setCellPadding</code></span> | Set cell padding for target cells. | <span style={{ whiteSpace: 'nowrap', wordBreak: 'normal', overflowWrap: 'normal' }}><a href="/document-api/reference/tables/set-cell-padding"><code>tables.setCellPadding</code></a></span> |
+| <span style={{ whiteSpace: 'nowrap', wordBreak: 'normal', overflowWrap: 'normal' }}><code>tables.setCellSpacing</code></span> | Set table cell spacing. | <span style={{ whiteSpace: 'nowrap', wordBreak: 'normal', overflowWrap: 'normal' }}><a href="/document-api/reference/tables/set-cell-spacing"><code>tables.setCellSpacing</code></a></span> |
+| <span style={{ whiteSpace: 'nowrap', wordBreak: 'normal', overflowWrap: 'normal' }}><code>tables.clearCellSpacing</code></span> | Clear table cell spacing. | <span style={{ whiteSpace: 'nowrap', wordBreak: 'normal', overflowWrap: 'normal' }}><a href="/document-api/reference/tables/clear-cell-spacing"><code>tables.clearCellSpacing</code></a></span> |
+
+The runtime capability snapshot also exposes this allowlist at `planEngine.supportedStepOps`.
+
 ## Input fields
 
 | Field | Type | Required | Description |
 | --- | --- | --- | --- |
 | `atomic` | `true` | yes | Constant: `true` |
 | `changeMode` | enum | yes | `"direct"`, `"tracked"` |
-| `expectedRevision` | string | yes |  |
+| `expectedRevision` | string | no |  |
 | `steps` | object[] | yes |  |
 
 ### Example request
@@ -51,9 +126,12 @@ Returns a PlanReceipt with per-step results for the atomically applied mutation 
 | Field | Type | Required | Description |
 | --- | --- | --- | --- |
 | `revision` | object | yes |  |
+| `revision.after` | string | yes |  |
+| `revision.before` | string | yes |  |
 | `steps` | object[] | yes |  |
 | `success` | `true` | yes | Constant: `true` |
 | `timing` | object | yes |  |
+| `timing.totalMs` | number | yes |  |
 | `trackedChanges` | object[] | no |  |
 
 ### Example response
@@ -126,7 +204,6 @@ Returns a PlanReceipt with per-step results for the atomically applied mutation 
     }
   },
   "required": [
-    "expectedRevision",
     "atomic",
     "changeMode",
     "steps"

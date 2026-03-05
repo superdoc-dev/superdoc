@@ -45,7 +45,7 @@ function parseArgs(argv) {
     relativePath: '',
     folder: '',
     dryRun: false,
-    wordBaseline: process.env.SUPERDOC_CORPUS_SKIP_WORD_BASELINE !== '1',
+    wordBaseline: false,
   };
 
   for (let i = 0; i < argv.length; i += 1) {

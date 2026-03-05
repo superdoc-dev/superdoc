@@ -187,7 +187,7 @@ export function buildAgentArtifacts(): GeneratedFile[] {
       {
         id: 'list-manipulation',
         title: 'List manipulation workflow',
-        operations: ['lists.insert', 'lists.setType', 'lists.indent', 'lists.outdent', 'lists.exit'],
+        operations: ['lists.list', 'lists.create', 'lists.insert', 'lists.indent', 'lists.outdent', 'lists.detach'],
       },
       {
         id: 'capabilities-aware-branching',

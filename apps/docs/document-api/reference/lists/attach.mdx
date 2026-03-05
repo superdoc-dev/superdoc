@@ -1,0 +1,245 @@
+---
+title: lists.attach
+sidebarTitle: lists.attach
+description: Convert non-list paragraphs to list items under an existing list sequence.
+---
+
+{/* GENERATED FILE: DO NOT EDIT. Regenerate via `pnpm run docapi:sync`. */}
+
+> Alpha: Document API is currently alpha and subject to breaking changes.
+
+## Summary
+
+Convert non-list paragraphs to list items under an existing list sequence.
+
+- Operation ID: `lists.attach`
+- API member path: `editor.doc.lists.attach(...)`
+- Mutates document: `yes`
+- Idempotency: `conditional`
+- Supports tracked mode: `no`
+- Supports dry run: `yes`
+- Deterministic target resolution: `yes`
+
+## Expected result
+
+Returns a ListsMutateItemResult confirming attachment.
+
+## Input fields
+
+| Field | Type | Required | Description |
+| --- | --- | --- | --- |
+| `attachTo` | ListItemAddress | yes | ListItemAddress |
+| `attachTo.kind` | `"block"` | yes | Constant: `"block"` |
+| `attachTo.nodeId` | string | yes |  |
+| `attachTo.nodeType` | `"listItem"` | yes | Constant: `"listItem"` |
+| `level` | integer | no |  |
+| `target` | BlockAddressOrRange | yes | BlockAddressOrRange |
+
+### Example request
+
+```json
+{
+  "attachTo": {
+    "kind": "block",
+    "nodeId": "node-def456",
+    "nodeType": "listItem"
+  },
+  "level": 1,
+  "target": {
+    "kind": "block",
+    "nodeId": "node-def456",
+    "nodeType": "paragraph"
+  }
+}
+```
+
+## Output fields
+
+### Variant 1 (item.kind="block")
+
+| Field | Type | Required | Description |
+| --- | --- | --- | --- |
+| `item` | ListItemAddress | yes | ListItemAddress |
+| `item.kind` | `"block"` | yes | Constant: `"block"` |
+| `item.nodeId` | string | yes |  |
+| `item.nodeType` | `"listItem"` | yes | Constant: `"listItem"` |
+| `success` | `true` | yes | Constant: `true` |
+
+### Variant 2 (success=false)
+
+| Field | Type | Required | Description |
+| --- | --- | --- | --- |
+| `failure` | object | yes |  |
+| `failure.code` | enum | yes | `"INVALID_TARGET"`, `"NO_OP"` |
+| `failure.details` | any | no |  |
+| `failure.message` | string | yes |  |
+| `success` | `false` | yes | Constant: `false` |
+
+### Example response
+
+```json
+{
+  "item": {
+    "kind": "block",
+    "nodeId": "node-def456",
+    "nodeType": "listItem"
+  },
+  "success": true
+}
+```
+
+## Pre-apply throws
+
+- `TARGET_NOT_FOUND`
+- `CAPABILITY_UNAVAILABLE`
+- `INVALID_TARGET`
+
+## Non-applied failure codes
+
+- `INVALID_TARGET`
+- `NO_OP`
+
+## Raw schemas
+
+<Accordion title="Raw input schema">
+```json
+{
+  "additionalProperties": false,
+  "properties": {
+    "attachTo": {
+      "$ref": "#/$defs/ListItemAddress"
+    },
+    "level": {
+      "maximum": 8,
+      "minimum": 0,
+      "type": "integer"
+    },
+    "target": {
+      "$ref": "#/$defs/BlockAddressOrRange"
+    }
+  },
+  "required": [
+    "target",
+    "attachTo"
+  ],
+  "type": "object"
+}
+```
+</Accordion>
+
+<Accordion title="Raw output schema">
+```json
+{
+  "oneOf": [
+    {
+      "additionalProperties": false,
+      "properties": {
+        "item": {
+          "$ref": "#/$defs/ListItemAddress"
+        },
+        "success": {
+          "const": true
+        }
+      },
+      "required": [
+        "success",
+        "item"
+      ],
+      "type": "object"
+    },
+    {
+      "additionalProperties": false,
+      "properties": {
+        "failure": {
+          "additionalProperties": false,
+          "properties": {
+            "code": {
+              "enum": [
+                "INVALID_TARGET",
+                "NO_OP"
+              ]
+            },
+            "details": {},
+            "message": {
+              "type": "string"
+            }
+          },
+          "required": [
+            "code",
+            "message"
+          ],
+          "type": "object"
+        },
+        "success": {
+          "const": false
+        }
+      },
+      "required": [
+        "success",
+        "failure"
+      ],
+      "type": "object"
+    }
+  ]
+}
+```
+</Accordion>
+
+<Accordion title="Raw success schema">
+```json
+{
+  "additionalProperties": false,
+  "properties": {
+    "item": {
+      "$ref": "#/$defs/ListItemAddress"
+    },
+    "success": {
+      "const": true
+    }
+  },
+  "required": [
+    "success",
+    "item"
+  ],
+  "type": "object"
+}
+```
+</Accordion>
+
+<Accordion title="Raw failure schema">
+```json
+{
+  "additionalProperties": false,
+  "properties": {
+    "failure": {
+      "additionalProperties": false,
+      "properties": {
+        "code": {
+          "enum": [
+            "INVALID_TARGET",
+            "NO_OP"
+          ]
+        },
+        "details": {},
+        "message": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "code",
+        "message"
+      ],
+      "type": "object"
+    },
+    "success": {
+      "const": false
+    }
+  },
+  "required": [
+    "success",
+    "failure"
+  ],
+  "type": "object"
+}
+```
+</Accordion>

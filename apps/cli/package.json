@@ -32,6 +32,7 @@
   "dependencies": {
     "@hocuspocus/provider": "catalog:",
     "fast-glob": "catalog:",
+    "happy-dom": "catalog:",
     "y-websocket": "catalog:",
     "yjs": "catalog:"
   },

@@ -149,8 +149,8 @@ function isMissingWranglerBinary(error) {
 async function runWrangler(args, { accountId }) {
   const attempts = [
     { cmd: 'wrangler', args },
-    { cmd: 'pnpm', args: ['exec', 'wrangler', ...args] },
     { cmd: 'npx', args: ['wrangler', ...args] },
+    { cmd: 'pnpm', args: ['exec', 'wrangler', ...args] },
   ];
 
   let lastError = null;
@@ -166,11 +166,10 @@ async function runWrangler(args, { accountId }) {
       });
       return result.stdout;
     } catch (error) {
-      if (isMissingWranglerBinary(error)) {
-        lastError = error;
-        continue;
-      }
-      throw error;
+      lastError = error;
+      if (isMissingWranglerBinary(error)) continue;
+      // Wrangler found but command failed — still try next resolver
+      continue;
     }
   }
 
@@ -387,7 +386,9 @@ export async function loadRegistryOrNull(client) {
       throw new Error('Invalid registry.json format (missing docs array).');
     }
     return parsed;
-  } catch {
+  } catch (error) {
+    const message = error instanceof Error ? error.message : String(error);
+    console.error(`[corpus] Failed to load registry: ${message}`);
     return null;
   }
 }
@@ -457,6 +458,29 @@ export function printCorpusEnvHint() {
 
 export function formatDurationMs(ms) {
   return `${(ms / 1000).toFixed(2)}s`;
+}
+
+export function formatEta(ms) {
+  const seconds = Math.ceil(ms / 1000);
+  if (seconds < 60) return `${seconds}s`;
+  const minutes = Math.floor(seconds / 60);
+  const secs = seconds % 60;
+  return secs > 0 ? `${minutes}m ${secs}s` : `${minutes}m`;
+}
+
+export function writeProgressBar(current, total, startedAt, { indent = '' } = {}) {
+  const pct = Math.round((current / total) * 100);
+  const barLen = 25;
+  const filled = Math.floor(pct / (100 / barLen));
+  const bar = '\u2588'.repeat(filled) + '\u2591'.repeat(barLen - filled);
+  let eta = '';
+  if (startedAt && current > 0 && current < total) {
+    const remaining = ((Date.now() - startedAt) / current) * (total - current);
+    if (remaining > 2000) {
+      eta = ` ~ ${formatEta(remaining)} remaining`;
+    }
+  }
+  process.stdout.write(`\r${indent}${bar} ${pct}% (${current}/${total})${eta}    `);
 }
 
 export function sortRegistryDocs(docs) {

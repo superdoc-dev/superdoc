@@ -26,10 +26,13 @@ Returns a TablesGetPropertiesOutput with the table layout, style, border, and sh
 
 ## Input fields
 
-| Field | Type | Required | Description |
-| --- | --- | --- | --- |
-| `nodeId` | string | no |  |
-| `target` | BlockNodeAddress | no | BlockNodeAddress |
+### Variant 1
+
+_No fields._
+
+### Variant 2
+
+_No fields._
 
 ### Example request
 
@@ -55,6 +58,12 @@ Returns a TablesGetPropertiesOutput with the table layout, style, border, and sh
 | `preferredWidth` | number | no |  |
 | `styleId` | string | no |  |
 | `styleOptions` | object | no |  |
+| `styleOptions.bandedColumns` | boolean | no |  |
+| `styleOptions.bandedRows` | boolean | no |  |
+| `styleOptions.firstColumn` | boolean | no |  |
+| `styleOptions.headerRow` | boolean | no |  |
+| `styleOptions.lastColumn` | boolean | no |  |
+| `styleOptions.totalRow` | boolean | no |  |
 
 ### Example response
 

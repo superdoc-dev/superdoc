@@ -1,3 +1,4 @@
+import { v5 as uuidv5 } from 'uuid';
 import { emuToPixels, rotToDegrees, polygonToObj } from '@converter/helpers.js';
 import { carbonCopy } from '@core/utilities/carbonCopy.js';
 import {
@@ -8,6 +9,7 @@ import {
   extractCustomGeometry,
 } from './vector-shape-helpers';
 import { convertMetafileToSvg, isMetafileExtension, setMetafileDomEnvironment } from './metafile-converter.js';
+import { convertTiffToPng, isTiffExtension, setTiffDomEnvironment } from './tiff-converter.js';
 import {
   collectTextBoxParagraphs,
   preProcessTextBoxContent,
@@ -16,10 +18,18 @@ import {
   extractParagraphAlignment,
   extractBodyPrProperties,
 } from './textbox-content-helpers.js';
+import { parseRelativeHeight } from './relative-height.js';
 
 const DRAWING_XML_TAG = 'w:drawing';
 const SHAPE_URI = 'http://schemas.microsoft.com/office/word/2010/wordprocessingShape';
 const GROUP_URI = 'http://schemas.microsoft.com/office/word/2010/wordprocessingGroup';
+
+/**
+ * Namespace UUID for generating deterministic sdImageId values.
+ * Images imported from DOCX derive their sdImageId from rEmbed + document-part
+ * filename so the same image always receives the same ID across open cycles.
+ */
+const SD_IMAGE_ID_NAMESPACE = '7c9e6679-7425-40de-944b-e07fc1f90ae7';
 
 /**
  * Normalize a relationship target to a relative media path.
@@ -345,7 +355,7 @@ export function handleImageNode(node, params, isAnchor) {
 
   const spPr = picture.elements.find((el) => el.name === 'pic:spPr');
   if (spPr) {
-    const xfrm = spPr.elements.find((el) => el.name === 'a:xfrm');
+    const xfrm = spPr.elements?.find((el) => el.name === 'a:xfrm');
     if (xfrm?.attributes) {
       transformData = {
         ...transformData,
@@ -370,6 +380,7 @@ export function handleImageNode(node, params, isAnchor) {
   const { elements } = relationships || [];
 
   const rel = elements?.find((el) => el.attributes['Id'] === rEmbed);
+
   if (!rel) {
     return null;
   }
@@ -404,6 +415,22 @@ export function handleImageNode(node, params, isAnchor) {
     }
   }
 
+  // Convert TIFF images to PNG for display (browsers cannot render TIFF natively)
+  if (!wasConverted && isTiffExtension(extension)) {
+    const mediaData = converter?.media?.[path];
+    if (mediaData) {
+      if (converter?.domEnvironment) {
+        setTiffDomEnvironment(converter.domEnvironment);
+      }
+      const conversionResult = convertTiffToPng(mediaData);
+      if (conversionResult?.dataUri) {
+        finalSrc = conversionResult.dataUri;
+        finalExtension = conversionResult.format || 'png';
+        wasConverted = true;
+      }
+    }
+  }
+
   // For converted metafile images (EMF+/WMF+ placeholders), we want them to render
   // as block-level images, not inline. We use the original wrap type if available,
   // otherwise default to the original wrap settings.
@@ -411,12 +438,24 @@ export function handleImageNode(node, params, isAnchor) {
   // which is not what we want for placeholder images that should maintain their original layout.
   const wrapValue = wrap;
 
+  // Extract relativeHeight from anchor attributes for first-class z-order support.
+  // We only accept OOXML-conformant unsignedInt values.
+  const relativeHeight = isAnchor ? parseRelativeHeight(attributes['relativeHeight']) : null;
+
+  // Derive a deterministic sdImageId from the drawing's docPr id, the rEmbed,
+  // and the document-part filename so the same image always receives the same
+  // stable ID across multiple opens of the same DOCX.
+  const docPrId = docPr?.attributes?.id ?? '';
+  const sdImageId = uuidv5(`${currentFile}:${rEmbed}:${docPrId}`, SD_IMAGE_ID_NAMESPACE);
+
   const nodeAttrs = {
+    sdImageId,
+    relativeHeight,
     // originalXml: carbonCopy(node),
     src: finalSrc,
     alt:
-      isMetafileExtension(extension) && !wasConverted
-        ? 'Unable to render EMF/WMF image'
+      (isMetafileExtension(extension) || isTiffExtension(extension)) && !wasConverted
+        ? 'Unable to render image'
         : docPr?.attributes?.name || 'Image',
     extension: finalExtension,
     // Store original path and extension for potential round-tripping

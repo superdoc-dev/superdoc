@@ -338,6 +338,64 @@ describe('DocxZipper - exportFromCollaborativeDocx media handling', () => {
   });
 });
 
+describe('DocxZipper - .tif MIME type mapping', () => {
+  it('produces image/tiff data URI for .tif files on import', async () => {
+    const zipper = new DocxZipper();
+    const zip = new JSZip();
+
+    const contentTypes = `<?xml version="1.0" encoding="UTF-8"?>
+      <Types xmlns="http://schemas.openxmlformats.org/package/2006/content-types">
+        <Default Extension="rels" ContentType="application/vnd.openxmlformats-package.relationships+xml"/>
+        <Default Extension="xml" ContentType="application/xml"/>
+        <Override PartName="/word/document.xml" ContentType="application/vnd.openxmlformats-officedocument.wordprocessingml.document.main+xml"/>
+      </Types>`;
+    zip.file('[Content_Types].xml', contentTypes);
+    zip.file('word/document.xml', '<w:document/>');
+
+    // Arbitrary binary data stored as a .tif file
+    const tifData = new Uint8Array([0x49, 0x49, 0x2a, 0x00, 0x08, 0x00, 0x00, 0x00]);
+    zip.file('word/media/image1.tif', tifData);
+
+    const buf = await zip.generateAsync({ type: 'arraybuffer' });
+    await zipper.getDocxData(buf, false);
+
+    // Must use image/tiff, not image/tif
+    expect(zipper.mediaFiles['word/media/image1.tif']).toMatch(/^data:image\/tiff;base64,/);
+  });
+
+  it('writes image/tiff content type in [Content_Types].xml on export', async () => {
+    const zipper = new DocxZipper();
+
+    const contentTypes = `<?xml version="1.0" encoding="UTF-8"?>
+      <Types xmlns="http://schemas.openxmlformats.org/package/2006/content-types">
+        <Default Extension="rels" ContentType="application/vnd.openxmlformats-package.relationships+xml"/>
+        <Default Extension="xml" ContentType="application/xml"/>
+        <Override PartName="/word/document.xml" ContentType="application/vnd.openxmlformats-officedocument.wordprocessingml.document.main+xml"/>
+      </Types>`;
+
+    const docx = [
+      { name: '[Content_Types].xml', content: contentTypes },
+      { name: 'word/document.xml', content: '<w:document/>' },
+    ];
+
+    const result = await zipper.updateZip({
+      docx,
+      updatedDocs: {},
+      media: { 'word/media/image1.tif': 'AAAA' },
+      fonts: {},
+      isHeadless: true,
+    });
+
+    const readBack = await new JSZip().loadAsync(result);
+    const updatedContentTypes = await readBack.file('[Content_Types].xml').async('string');
+
+    // Should contain Extension="tif" with ContentType="image/tiff"
+    expect(updatedContentTypes).toContain('Extension="tif"');
+    expect(updatedContentTypes).toContain('ContentType="image/tiff"');
+    expect(updatedContentTypes).not.toContain('ContentType="image/tif"');
+  });
+});
+
 describe('DocxZipper - .tmp image file detection', () => {
   it('detects and processes .tmp files with PNG signatures as PNG images', async () => {
     const zipper = new DocxZipper();

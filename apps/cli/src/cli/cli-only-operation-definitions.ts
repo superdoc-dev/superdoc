@@ -65,6 +65,14 @@ export const CLI_ONLY_OPERATION_DEFINITIONS: Record<CliOnlyOperation, CliOnlyOpe
             url: { type: 'string' },
           },
         },
+        bootstrap: {
+          type: 'object',
+          properties: {
+            roomState: { type: 'string' },
+            bootstrapApplied: { type: 'boolean' },
+            bootstrapSource: { type: 'string' },
+          },
+        },
       },
       required: ['contextId', 'sessionType'],
     },

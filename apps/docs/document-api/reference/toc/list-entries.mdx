@@ -29,6 +29,8 @@ Returns a TocListEntriesResult with an array of TC entry discovery items and pag
 | Field | Type | Required | Description |
 | --- | --- | --- | --- |
 | `levelRange` | object | no |  |
+| `levelRange.from` | integer | no |  |
+| `levelRange.to` | integer | no |  |
 | `limit` | integer | no |  |
 | `offset` | integer | no |  |
 | `tableIdentifier` | string | no |  |
@@ -52,6 +54,9 @@ Returns a TocListEntriesResult with an array of TC entry discovery items and pag
 | `evaluatedRevision` | string | yes |  |
 | `items` | object[] | yes |  |
 | `page` | PageInfo | yes | PageInfo |
+| `page.limit` | integer | yes |  |
+| `page.offset` | integer | yes |  |
+| `page.returned` | integer | yes |  |
 | `total` | integer | yes |  |
 
 ### Example response

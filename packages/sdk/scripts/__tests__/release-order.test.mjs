@@ -49,6 +49,18 @@ test('release-sdk fallback workflow builds Node SDK before validate', async () =
   );
 });
 
+test('release-sdk fallback workflow publishes Node SDK via sdk-release-publish', async () => {
+  const content = await readRepoFile('.github/workflows/release-sdk.yml');
+  const expectedCmd =
+    'node packages/sdk/scripts/sdk-release-publish.mjs --tag "${{ inputs.npm-tag }}" --npm-only';
+  assert.ok(content.includes(expectedCmd), '.github/workflows/release-sdk.yml: missing sdk-release-publish command');
+  assert.equal(
+    content.includes('npm publish --access public --tag latest'),
+    false,
+    '.github/workflows/release-sdk.yml: must not use npm publish directly for Node SDK',
+  );
+});
+
 test('sdk semantic-release prepareCmd builds Node SDK before validate', async () => {
   const content = await readRepoFile('packages/sdk/.releaserc.cjs');
   assertOrder(
@@ -62,5 +74,22 @@ test('sdk semantic-release prepareCmd builds Node SDK before validate', async ()
     "'pnpm --prefix langs/node run build'",
     "'node scripts/sdk-validate.mjs'",
     'packages/sdk/.releaserc.cjs',
+  );
+});
+
+test('sdk semantic-release main branch uses alpha prerelease on latest channel', async () => {
+  const content = await readRepoFile('packages/sdk/.releaserc.cjs');
+  assert.ok(
+    content.includes("{ name: 'stable', channel: 'latest' }"),
+    "packages/sdk/.releaserc.cjs: stable release branch must remain configured",
+  );
+  assert.ok(
+    content.includes("{ name: 'main', prerelease: 'alpha', channel: 'latest' }"),
+    "packages/sdk/.releaserc.cjs: main branch must release alpha versions on latest",
+  );
+  assert.equal(
+    content.includes("prerelease: 'next'"),
+    false,
+    "packages/sdk/.releaserc.cjs: SDK release config must not use 'next' prerelease channel",
   );
 });

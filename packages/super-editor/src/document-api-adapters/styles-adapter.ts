@@ -16,7 +16,7 @@ import type {
   StylesStateMap,
   StylesChannel,
   NormalizedStylesApplyOptions,
-  PropertyDefinition,
+  ValueSchema,
 } from '@superdoc/document-api';
 import { PROPERTY_REGISTRY } from '@superdoc/document-api';
 import type { Editor } from '../core/Editor.js';
@@ -63,75 +63,184 @@ const XML_PATH_BY_CHANNEL: Record<StylesChannel, string> = {
 };
 
 // ---------------------------------------------------------------------------
+// Underline key mapping (API ↔ storage)
+// ---------------------------------------------------------------------------
+
+const UNDERLINE_API_TO_STORAGE: Record<string, string> = {
+  val: 'w:val',
+  color: 'w:color',
+  themeColor: 'w:themeColor',
+  themeTint: 'w:themeTint',
+  themeShade: 'w:themeShade',
+};
+
+const UNDERLINE_STORAGE_TO_API = Object.fromEntries(Object.entries(UNDERLINE_API_TO_STORAGE).map(([k, v]) => [v, k]));
+
+function mapUnderlineToStorage(apiObj: Record<string, unknown>): Record<string, unknown> {
+  const result: Record<string, unknown> = {};
+  for (const [k, v] of Object.entries(apiObj)) {
+    result[UNDERLINE_API_TO_STORAGE[k] ?? k] = v;
+  }
+  return result;
+}
+
+function mapUnderlineToApi(storageObj: Record<string, unknown>): Record<string, unknown> {
+  const result: Record<string, unknown> = {};
+  for (const [k, v] of Object.entries(storageObj)) {
+    result[UNDERLINE_STORAGE_TO_API[k] ?? k] = v;
+  }
+  return result;
+}
+
+// ---------------------------------------------------------------------------
+// Value normalization
+// ---------------------------------------------------------------------------
+
+/** Normalizes hex color strings: uppercase, strip leading '#'. */
+function normalizeHexColor(val: string): string {
+  return val.replace(/^#/, '').toUpperCase();
+}
+
+/**
+ * Returns the set of sub-keys whose string values are hex colors for a given
+ * property. `val` is hex only on `color`; on borders/shading/underline it is
+ * an enum token and must NOT be uppercased.
+ */
+const HEX_SUBKEYS_BY_PROPERTY: Record<string, ReadonlySet<string>> = {
+  color: new Set(['val']),
+  shading: new Set(['color', 'fill']),
+  underline: new Set(['color', 'w:color']),
+  borders: new Set(['color']),
+};
+
+function normalizeObjectSubKeys(obj: Record<string, unknown>, key: string): Record<string, unknown> {
+  const hexKeys = HEX_SUBKEYS_BY_PROPERTY[key];
+  if (!hexKeys) return obj;
+
+  const result: Record<string, unknown> = {};
+  for (const [k, v] of Object.entries(obj)) {
+    if (typeof v === 'string' && hexKeys.has(k)) {
+      result[k] = normalizeHexColor(v);
+    } else {
+      result[k] = v;
+    }
+  }
+  return result;
+}
+
+// ---------------------------------------------------------------------------
+// JSON deep equality — single shared comparator
+// ---------------------------------------------------------------------------
+
+function jsonDeepEqual(a: unknown, b: unknown): boolean {
+  if (a === b) return true;
+  if (a === null || b === null) return false;
+  if (typeof a !== typeof b) return false;
+
+  if (Array.isArray(a)) {
+    if (!Array.isArray(b) || a.length !== b.length) return false;
+    for (let i = 0; i < a.length; i++) {
+      if (!jsonDeepEqual(a[i], b[i])) return false;
+    }
+    return true;
+  }
+
+  if (typeof a === 'object') {
+    const aObj = a as Record<string, unknown>;
+    const bObj = b as Record<string, unknown>;
+    const aKeys = Object.keys(aObj);
+    const bKeys = Object.keys(bObj);
+    if (aKeys.length !== bKeys.length) return false;
+    for (const key of aKeys) {
+      if (!Object.prototype.hasOwnProperty.call(bObj, key)) return false;
+      if (!jsonDeepEqual(aObj[key], bObj[key])) return false;
+    }
+    return true;
+  }
+
+  return false;
+}
+
+// ---------------------------------------------------------------------------
 // State formatting helpers
 // ---------------------------------------------------------------------------
 
-/** A single state value in a before/after receipt. */
-type StateValue = string | number | Record<string, unknown> | 'inherit';
+type StateValue = string | number | Record<string, unknown> | unknown[] | 'inherit';
 
 /**
- * Converts a raw property value to its receipt state representation.
- *
- * - `undefined`      → `'inherit'`
- * - `true`           → `'on'`, `false` → `'off'`
- * - numbers, strings → pass through as-is
- * - objects          → shallow copy (for object properties)
+ * Converts a raw storage value to its receipt state representation.
+ * Uses schema.kind to determine the formatting strategy.
  */
-function formatState(value: unknown, type: PropertyDefinition['type']): StateValue {
+function formatState(value: unknown, schema: ValueSchema, key: string): StateValue {
   if (value === undefined) return 'inherit';
-  if (type === 'boolean') return (value ? 'on' : 'off') as StateValue;
-  if (type === 'object' && typeof value === 'object' && value !== null)
-    return { ...(value as Record<string, unknown>) };
-  return value as StateValue;
-}
 
-/**
- * Shallow equality check for before/after state maps.
- */
-function stateMapEquals(a: StylesStateMap, b: StylesStateMap): boolean {
-  const keys = Object.keys(a);
-  if (keys.length !== Object.keys(b).length) return false;
-  for (const key of keys) {
-    const av = a[key];
-    const bv = b[key];
-    if (av === bv) continue;
-    // Deep compare for object states
-    if (typeof av === 'object' && av !== null && typeof bv === 'object' && bv !== null) {
-      const aKeys = Object.keys(av);
-      const bKeys = Object.keys(bv as Record<string, unknown>);
-      if (aKeys.length !== bKeys.length) return false;
-      for (const k of aKeys) {
-        if ((av as Record<string, unknown>)[k] !== (bv as Record<string, unknown>)[k]) return false;
+  switch (schema.kind) {
+    case 'boolean':
+      return (value ? 'on' : 'off') as StateValue;
+    case 'object':
+      if (typeof value === 'object' && value !== null) {
+        const obj = { ...(value as Record<string, unknown>) };
+        // Map underline storage keys to API keys in receipts
+        return key === 'underline' ? mapUnderlineToApi(obj) : obj;
       }
-      continue;
-    }
-    return false;
+      return value as StateValue;
+    case 'array':
+      return Array.isArray(value) ? [...value.map((item) => structuredClone(item))] : (value as StateValue);
+    default:
+      return value as StateValue;
   }
-  return true;
 }
 
 // ---------------------------------------------------------------------------
-// Registry lookup
+// Merge strategy dispatch
 // ---------------------------------------------------------------------------
 
-function getPropertyDefinition(key: string, channel: StylesChannel): PropertyDefinition {
-  const def = PROPERTY_REGISTRY.find((d) => d.key === key && d.channel === channel);
-  if (!def) throw new Error(`No property definition for key "${key}" on channel "${channel}".`);
-  return def;
+function asRecord(value: unknown): Record<string, unknown> {
+  return typeof value === 'object' && value !== null ? (value as Record<string, unknown>) : {};
+}
+
+function cloneForStorage<T>(value: T): T {
+  if (value === null || typeof value !== 'object') {
+    return value;
+  }
+  return structuredClone(value);
+}
+
+function applyReplace(targetProps: Record<string, unknown>, key: string, value: unknown): void {
+  targetProps[key] = cloneForStorage(value);
+}
+
+function applyShallowMerge(targetProps: Record<string, unknown>, key: string, value: unknown): void {
+  const current = asRecord(targetProps[key]);
+  const patch = value as Record<string, unknown>;
+
+  // Handle underline key mapping: API keys → storage keys
+  if (key === 'underline') {
+    const storagePatch = cloneForStorage(mapUnderlineToStorage(normalizeObjectSubKeys(patch, key)));
+    targetProps[key] = { ...current, ...storagePatch };
+    return;
+  }
+
+  targetProps[key] = { ...current, ...cloneForStorage(normalizeObjectSubKeys(patch, key)) };
+}
+
+function applyEdgeMerge(targetProps: Record<string, unknown>, key: string, value: unknown): void {
+  const current = asRecord(targetProps[key]);
+  const patch = value as Record<string, Record<string, unknown>>;
+  const result = { ...current };
+
+  for (const [edge, edgeValue] of Object.entries(patch)) {
+    const currentEdge = asRecord(result[edge]);
+    result[edge] = { ...currentEdge, ...cloneForStorage(normalizeObjectSubKeys(edgeValue, key)) };
+  }
+
+  targetProps[key] = result;
 }
 
 // ---------------------------------------------------------------------------
 // Patch application
 // ---------------------------------------------------------------------------
 
-/**
- * Applies a patch to the target properties object.
- *
- * - Boolean/number/enum: direct replacement
- * - Object: merge semantics (provided sub-keys updated, unspecified preserved)
- *
- * Returns before/after state maps and a changed flag.
- */
 function applyPatch(
   targetProps: Record<string, unknown>,
   patch: Record<string, unknown>,
@@ -140,25 +249,32 @@ function applyPatch(
   const before: StylesStateMap = {};
   const after: StylesStateMap = {};
 
-  for (const [key, value] of Object.entries(patch)) {
-    const def = getPropertyDefinition(key, channel);
-    const currentValue = targetProps[key];
+  // Iterate patch keys in PROPERTY_REGISTRY declaration order for deterministic receipts
+  const patchKeys = new Set(Object.keys(patch));
+  for (const def of PROPERTY_REGISTRY) {
+    if (def.channel !== channel || !patchKeys.has(def.key)) continue;
 
-    before[key] = formatState(currentValue, def.type);
+    const key = def.key;
+    const value = patch[key];
 
-    if (def.type === 'object') {
-      const current =
-        typeof currentValue === 'object' && currentValue !== null ? (currentValue as Record<string, unknown>) : {};
-      const merged = { ...current, ...(value as Record<string, unknown>) };
-      targetProps[key] = merged;
-      after[key] = formatState(merged, def.type);
-    } else {
-      targetProps[key] = value;
-      after[key] = formatState(value, def.type);
+    before[key] = formatState(targetProps[key], def.schema, key);
+
+    switch (def.mergeStrategy) {
+      case 'replace':
+        applyReplace(targetProps, key, value);
+        break;
+      case 'shallowMerge':
+        applyShallowMerge(targetProps, key, value);
+        break;
+      case 'edgeMerge':
+        applyEdgeMerge(targetProps, key, value);
+        break;
     }
+
+    after[key] = formatState(targetProps[key], def.schema, key);
   }
 
-  const changed = !stateMapEquals(before, after);
+  const changed = !jsonDeepEqual(before, after);
   return { before, after, changed };
 }
 
@@ -168,7 +284,6 @@ function applyPatch(
 
 /**
  * Adapter function for `styles.apply` bound to a specific editor instance.
- *
  * Called by the document-api dispatch layer after input validation.
  */
 export function stylesApplyAdapter(
@@ -226,15 +341,15 @@ export function stylesApplyAdapter(
     (dryRun) => {
       const propsKey = PROPERTIES_KEY_BY_CHANNEL[channel];
 
-      // Read the current target properties (non-mutating read)
       const existingProps = converter.translatedLinkedStyles?.docDefaults?.[propsKey] as
         | Record<string, unknown>
         | undefined;
 
-      // For dry-run: work on a copy. For real mutation: ensure hierarchy exists.
+      // Dry-run: structuredClone for full immutability guarantee.
+      // Real mutation: ensure hierarchy exists and mutate in-place.
       let targetProps: Record<string, unknown>;
       if (dryRun) {
-        targetProps = existingProps ? { ...existingProps } : {};
+        targetProps = existingProps ? structuredClone(existingProps) : {};
       } else {
         if (!converter.translatedLinkedStyles) {
           (converter as unknown as Record<string, unknown>).translatedLinkedStyles = {};
@@ -248,7 +363,6 @@ export function stylesApplyAdapter(
         targetProps = converter.translatedLinkedStyles.docDefaults[propsKey] as Record<string, unknown>;
       }
 
-      // Apply patch and compute before/after
       const { before, after, changed } = applyPatch(targetProps, input.patch as Record<string, unknown>, channel);
 
       // Post-mutation side effects (only on real, changed mutations)

@@ -14,7 +14,7 @@
  * @module multi-section-page-count.test
  */
 
-import { describe, it, expect } from 'vitest';
+import { describe, it, expect, beforeAll } from 'vitest';
 import { toFlowBlocks } from '@superdoc/pm-adapter';
 import { layoutDocument } from '@superdoc/layout-engine';
 import { measureBlocks } from './test-helpers/section-test-utils.js';
@@ -24,6 +24,10 @@ import path from 'path';
 import { fileURLToPath } from 'node:url';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
+const MULTI_SECTION_DOCX_PATH = path.join(__dirname, '../../../super-editor/src/tests/data/multi_section_doc.docx');
+
+type LoadedMultiSectionFixture = Awaited<ReturnType<typeof docxToPMJson>>;
+let loadedFixture: LoadedMultiSectionFixture | null = null;
 
 /**
  * Load DOCX file and convert to ProseMirror JSON
@@ -139,22 +143,26 @@ function analyzeSectionBreaks(blocks: FlowBlock[]): {
 }
 
 describe('Multi-Section Document Page Count', () => {
-  it('should render multi_section_doc.docx as exactly 4 pages', async () => {
-    // Load the DOCX file
-    const docxPath = path.join(__dirname, '../../../super-editor/src/tests/data/multi_section_doc.docx');
-
-    if (!fs.existsSync(docxPath)) {
-      throw new Error(`Test document not found: ${docxPath}`);
+  beforeAll(async () => {
+    if (!fs.existsSync(MULTI_SECTION_DOCX_PATH)) {
+      throw new Error(`Test document not found: ${MULTI_SECTION_DOCX_PATH}`);
     }
 
-    // Convert DOCX to PM JSON
-    console.log('Converting DOCX to ProseMirror JSON...');
-    const { pmDoc, converterContext, themeColors } = await docxToPMJson(docxPath);
+    // Load/convert once; this conversion is expensive under full-suite parallel runs.
+    loadedFixture = await docxToPMJson(MULTI_SECTION_DOCX_PATH);
+  }, 30000);
+
+  it('should render multi_section_doc.docx as exactly 4 pages', async () => {
+    if (!loadedFixture) {
+      throw new Error('Expected test fixture to be loaded in beforeAll');
+    }
+
+    const { pmDoc, converterContext, themeColors } = loadedFixture;
     console.log(`PM Doc has ${pmDoc.content?.length ?? 0} top-level nodes`);
 
     // Convert PM JSON to flow blocks
     console.log('Converting to flow blocks...');
-    const { blocks, bookmarks } = toFlowBlocks(pmDoc, {
+    const { blocks } = toFlowBlocks(pmDoc, {
       emitSectionBreaks: true,
       converterContext,
       themeColors,
@@ -213,10 +221,11 @@ describe('Multi-Section Document Page Count', () => {
     }
   });
 
-  it('should emit 3 section break blocks for a 4-section document', async () => {
-    const docxPath = path.join(__dirname, '../../../super-editor/src/tests/data/multi_section_doc.docx');
-
-    const { pmDoc, converterContext, themeColors } = await docxToPMJson(docxPath);
+  it('should emit 3 section break blocks for a 4-section document', () => {
+    if (!loadedFixture) {
+      throw new Error('Expected test fixture to be loaded in beforeAll');
+    }
+    const { pmDoc, converterContext, themeColors } = loadedFixture;
     const { blocks } = toFlowBlocks(pmDoc, {
       emitSectionBreaks: true,
       converterContext,
@@ -240,10 +249,11 @@ describe('Multi-Section Document Page Count', () => {
     expect(lastBreak.orientation).toBe('landscape');
   });
 
-  it('should have correct section break types', async () => {
-    const docxPath = path.join(__dirname, '../../../super-editor/src/tests/data/multi_section_doc.docx');
-
-    const { pmDoc, converterContext, themeColors } = await docxToPMJson(docxPath);
+  it('should have correct section break types', () => {
+    if (!loadedFixture) {
+      throw new Error('Expected test fixture to be loaded in beforeAll');
+    }
+    const { pmDoc, converterContext, themeColors } = loadedFixture;
     const { blocks } = toFlowBlocks(pmDoc, {
       emitSectionBreaks: true,
       converterContext,

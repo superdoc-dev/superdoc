@@ -208,6 +208,11 @@
  * @property {boolean} [isDev] Whether the SuperDoc is in development mode
  * @property {boolean} [disablePiniaDevtools=false] Disable Pinia/Vue devtools plugin setup for this SuperDoc instance (useful in non-Vue hosts)
  * @property {Object} [layoutEngineOptions] Layout engine overrides passed through to PresentationEditor (page size, margins, virtualization, zoom, debug label, etc.)
+ * @property {'paginated' | 'semantic'} [layoutEngineOptions.flowMode='paginated'] Layout engine flow mode.
+ *   - 'paginated': standard page-first layout (default)
+ *   - 'semantic': continuous semantic flow without visible pagination boundaries
+ * @property {Object} [layoutEngineOptions.semanticOptions] Internal-only semantic mode tuning options.
+ *   This shape is intentionally not a stable public API in v1.
  * @property {Object} [layoutEngineOptions.trackedChanges] Optional override for paginated track-changes rendering (e.g., `{ mode: 'final' }` to force final view or `{ enabled: false }` to strip metadata entirely)
  * @property {(editor: Editor) => void} [onEditorBeforeCreate] Callback before an editor is created
  * @property {(editor: Editor) => void} [onEditorCreate] Callback after an editor is created

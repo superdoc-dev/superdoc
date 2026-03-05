@@ -193,6 +193,17 @@ const parseSizeFromImageUrl = (src) => {
 const hasFinitePositiveSize = (size) =>
   Number.isFinite(size?.width) && size.width > 0 && Number.isFinite(size?.height) && size.height > 0;
 
+const getOrInitMediaStore = (editor) => {
+  if (!editor?.storage?.image?.media) {
+    editor.storage.image.media = {};
+  }
+
+  const mediaStore = editor.storage.image.media;
+  const existingFileNames = new Set(Object.keys(mediaStore).map((k) => k.split('/').pop()));
+
+  return { mediaStore, existingFileNames };
+};
+
 /**
  * Handles the node path for image registration.
  *
@@ -203,13 +214,7 @@ const hasFinitePositiveSize = (size) =>
  */
 export const handleNodePath = (foundImages, editor, state) => {
   const { tr } = state;
-  const mediaStore = editor.storage.image.media ?? {};
-
-  if (!editor.storage.image.media) {
-    editor.storage.image.media = mediaStore;
-  }
-
-  const existingFileNames = new Set(Object.keys(mediaStore).map((key) => key.split('/').pop()));
+  const { mediaStore, existingFileNames } = getOrInitMediaStore(editor);
 
   foundImages.forEach(({ node, pos }) => {
     const { src } = node.attrs;
@@ -352,12 +357,7 @@ const pendingRelativeRegistrations = new Set();
  * @param {import('prosemirror-view').EditorView} view - The editor view instance.
  */
 const registerRelativeImages = async (images, editor, view) => {
-  const mediaStore = editor.storage.image.media ?? {};
-  if (!editor.storage.image.media) {
-    editor.storage.image.media = mediaStore;
-  }
-
-  const existingFileNames = new Set(Object.keys(mediaStore).map((k) => k.split('/').pop()));
+  const { mediaStore, existingFileNames } = getOrInitMediaStore(editor);
 
   for (const { node } of images) {
     const src = node.attrs.src;

@@ -1,9 +1,7 @@
 import type { Node as ProseMirrorNode } from 'prosemirror-model';
-import type { FlowBlock, Measure, SectionMetadata } from '@superdoc/contracts';
+import type { FlowBlock, Measure } from '@superdoc/contracts';
 import type { ConverterContext } from '@superdoc/pm-adapter';
 import { readSettingsRoot, readDefaultTableStyle } from '../../../document-api-adapters/document-settings.js';
-import { getAtomNodeTypes as getAtomNodeTypesFromSchema } from '../utils/SchemaNodeTypes.js';
-import { buildPositionMapFromPmDoc } from '../utils/PositionMapFromPm.js';
 
 /**
  * Computes footnote numbering by first appearance in the document.

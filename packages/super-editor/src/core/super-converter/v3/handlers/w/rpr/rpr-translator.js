@@ -1,5 +1,5 @@
 import { NodeTranslator } from '@translator';
-import { createNestedPropertiesTranslator, createAttributeHandler } from '@converter/v3/handlers/utils.js';
+import { createNestedPropertiesTranslator } from '@converter/v3/handlers/utils.js';
 import { translator as boldTranslator } from '../b/b-translator.js';
 import { translator as boldCsTranslator } from '../bCs/bCs-translator.js';
 import { translator as borderTranslator } from '../bdr/bdr-translator.js';
@@ -44,37 +44,10 @@ import { translator as numFormTranslator } from '../w14-numForm/numForm-translat
 import { translator as numSpacingTranslator } from '../w14-numSpacing/numSpacing-translator.js';
 import { translator as stylisticSetsTranslator } from '../w14-stylisticSets/stylisticSets-translator.js';
 import { translator as cntxtAltsTranslator } from '../w14-cntxtAlts/cntxtAlts-translator.js';
-
-const createTrackChangeRunPropertyTranslator = (xmlName, sdNodeOrKeyName) =>
-  NodeTranslator.from({
-    xmlName,
-    sdNodeOrKeyName,
-    attributes: [
-      createAttributeHandler('w:id', 'id'),
-      createAttributeHandler('w:author', 'author'),
-      createAttributeHandler('w:authorEmail', 'authorEmail'),
-      createAttributeHandler('w:date', 'date'),
-    ],
-    encode: (_params, encodedAttrs = {}) => {
-      return Object.keys(encodedAttrs).length ? encodedAttrs : undefined;
-    },
-    decode: function ({ node }) {
-      const source = node?.attrs?.[sdNodeOrKeyName];
-      if (!source || typeof source !== 'object') {
-        return undefined;
-      }
-      const decodedAttrs = this.decodeAttributes({
-        node: {
-          ...node,
-          attrs: source,
-        },
-      });
-      return Object.keys(decodedAttrs).length ? { attributes: decodedAttrs } : undefined;
-    },
-  });
-
-const trackInsertTranslator = createTrackChangeRunPropertyTranslator('w:ins', 'trackInsert');
-const trackDeleteTranslator = createTrackChangeRunPropertyTranslator('w:del', 'trackDelete');
+import {
+  trackInsertRunPropertyTranslator,
+  trackDeleteRunPropertyTranslator,
+} from './track-change-run-property-translator.js';
 
 // Property translators for w:rPr child elements
 // Each translator handles a specific property of the run properties
@@ -122,8 +95,8 @@ export const propertyTranslators = [
   numSpacingTranslator,
   stylisticSetsTranslator,
   cntxtAltsTranslator,
-  trackInsertTranslator,
-  trackDeleteTranslator,
+  trackInsertRunPropertyTranslator,
+  trackDeleteRunPropertyTranslator,
   webHiddenTranslator,
   wTranslator,
 ];

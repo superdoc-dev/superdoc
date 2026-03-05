@@ -229,6 +229,8 @@ const toTrackChangeAttrs = (value: unknown): Record<string, unknown> | undefined
   return value as Record<string, unknown>;
 };
 
+// Paragraph-mark revisions are stored in paragraphProperties.runProperties (pPr/rPr), not inline text marks.
+// Convert them into mark-like metadata so tracked-change filtering can reuse the same projection pipeline.
 const getParagraphMarkTrackedChange = (paragraphProperties: ParagraphProperties): TrackedChangeMeta | undefined => {
   const runProperties =
     paragraphProperties?.runProperties && typeof paragraphProperties.runProperties === 'object'
@@ -461,6 +463,7 @@ const updateGhostListMarkerOffsets = (
   if (!offsets) {
     return;
   }
+  // Each suppressed empty tracked list paragraph consumes one source ordinal that Word does not render.
   offsets.set(key, (offsets.get(key) ?? 0) + 1);
 };
 
@@ -493,6 +496,8 @@ const applyGhostListMarkerOffsets = (node: PMNode, paragraphBlocks: FlowBlock[],
     return;
   }
   const previousOrdinal = lastOrdinals?.get(nodeListKey);
+  // Restart detection must be per source paragraph node (not per emitted block),
+  // because one source list paragraph can split into multiple rendered blocks.
   if (previousOrdinal != null && sourceOrdinal <= previousOrdinal) {
     // Marker sequence moved backwards/repeated -> list restart boundary.
     offsets.delete(nodeListKey);
@@ -560,6 +565,7 @@ const applyGhostListMarkerOffsets = (node: PMNode, paragraphBlocks: FlowBlock[],
     if (!adjustedText || adjustedText === sourceMarkerText) {
       return;
     }
+    // Preserve the source marker so repeated conversions/cache reuse remain idempotent.
     marker.pmAdapterOriginalMarkerText = sourceMarkerText;
     marker.markerText = adjustedText;
   });

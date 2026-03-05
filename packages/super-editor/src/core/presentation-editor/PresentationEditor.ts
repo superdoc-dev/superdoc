@@ -41,6 +41,7 @@ import {
   denormalizeClientPoint as denormalizeClientPointFromPointer,
 } from './dom/PointerNormalization.js';
 import { getPageElementByIndex } from './dom/PageDom.js';
+import { createOverlayElements } from './dom/createOverlayElements.js';
 import { inchesToPx, parseColumns } from './layout/LayoutOptionParsing.js';
 import { createLayoutMetrics as createLayoutMetricsFromHelper } from './layout/PresentationLayoutMetrics.js';
 import { buildFootnotesInput } from './layout/FootnotesBuilder.js';
@@ -370,23 +371,21 @@ export class PresentationEditor extends EventEmitter {
     };
     this.#trackedChangesOverrides = options.layoutEngineOptions?.trackedChanges;
 
-    this.#viewportHost = doc.createElement('div');
-    this.#viewportHost.className = 'presentation-editor__viewport';
-    // Hide the viewport from screen readers - it's a visual rendering layer, not semantic content.
-    // The hidden ProseMirror editor (in #hiddenHost) provides the actual accessible document structure.
-    // This prevents screen readers from encountering duplicate or non-semantic visual elements.
-    this.#viewportHost.setAttribute('aria-hidden', 'true');
-    this.#viewportHost.style.position = 'relative';
-    this.#viewportHost.style.width = '100%';
-    // Set min-height to at least one page so the viewport is clickable before layout renders
-    const pageHeight = this.#layoutOptions.pageSize?.h ?? DEFAULT_PAGE_SIZE.h;
-    this.#viewportHost.style.minHeight = `${pageHeight}px`;
-    this.#visibleHost.appendChild(this.#viewportHost);
-
-    this.#painterHost = doc.createElement('div');
-    this.#painterHost.className = 'presentation-editor__pages';
-    this.#painterHost.style.transformOrigin = 'top left';
-    this.#viewportHost.appendChild(this.#painterHost);
+    const overlayElements = createOverlayElements(
+      this.#visibleHost,
+      `presentation-overlay-${options.documentId || 'default'}`,
+      this.#layoutOptions.pageSize?.h ?? DEFAULT_PAGE_SIZE.h,
+    );
+    this.#viewportHost = overlayElements.viewportHost;
+    this.#painterHost = overlayElements.painterHost;
+    this.#selectionOverlay = overlayElements.selectionOverlay;
+    this.#remoteCursorOverlay = overlayElements.remoteCursorOverlay;
+    this.#localSelectionLayer = overlayElements.localSelectionLayer;
+    this.#permissionOverlay = overlayElements.permissionOverlay;
+    this.#hoverOverlay = overlayElements.hoverOverlay;
+    this.#hoverTooltip = overlayElements.hoverTooltip;
+    this.#modeBanner = overlayElements.modeBanner;
+    this.#ariaLiveRegion = overlayElements.ariaLiveRegion;
 
     // SDT selection/hover styling manager
     this.#sdtStyles = new SdtSelectionStyleManager({
@@ -420,45 +419,6 @@ export class PresentationEditor extends EventEmitter {
     this.#selectionSync.on('render', () => this.#updateSelection());
     this.#selectionSync.on('render', () => this.#updatePermissionOverlay());
 
-    this.#permissionOverlay = doc.createElement('div');
-    this.#permissionOverlay.className = 'presentation-editor__permission-overlay';
-    Object.assign(this.#permissionOverlay.style, {
-      position: 'absolute',
-      inset: '0',
-      pointerEvents: 'none',
-      zIndex: '5',
-    });
-    this.#viewportHost.appendChild(this.#permissionOverlay);
-
-    // Create dual-layer overlay structure
-    // Container holds both remote (below) and local (above) layers
-    this.#selectionOverlay = doc.createElement('div');
-    this.#selectionOverlay.className = 'presentation-editor__selection-overlay';
-    this.#selectionOverlay.id = `presentation-overlay-${options.documentId || 'default'}`;
-    this.#selectionOverlay.style.position = 'absolute';
-    this.#selectionOverlay.style.inset = '0';
-    this.#selectionOverlay.style.pointerEvents = 'none';
-    this.#selectionOverlay.style.zIndex = '10';
-
-    // Create remote layer (renders below local)
-    this.#remoteCursorOverlay = doc.createElement('div');
-    this.#remoteCursorOverlay.className = 'presentation-editor__selection-layer--remote';
-    this.#remoteCursorOverlay.style.position = 'absolute';
-    this.#remoteCursorOverlay.style.inset = '0';
-    this.#remoteCursorOverlay.style.pointerEvents = 'none';
-
-    // Create local layer (renders above remote)
-    this.#localSelectionLayer = doc.createElement('div');
-    this.#localSelectionLayer.className = 'presentation-editor__selection-layer--local';
-    this.#localSelectionLayer.style.position = 'absolute';
-    this.#localSelectionLayer.style.inset = '0';
-    this.#localSelectionLayer.style.pointerEvents = 'none';
-
-    // Append layers in correct z-index order (remote first, local second)
-    this.#selectionOverlay.appendChild(this.#remoteCursorOverlay);
-    this.#selectionOverlay.appendChild(this.#localSelectionLayer);
-    this.#viewportHost.appendChild(this.#selectionOverlay);
-
     // Initialize remote cursor manager
     this.#remoteCursorManager = new RemoteCursorManager({
       visibleHost: this.#visibleHost,
@@ -473,51 +433,6 @@ export class PresentationEditor extends EventEmitter {
 
     // Wire up manager callbacks to use PresentationEditor methods
     this.#remoteCursorManager.setUpdateCallback(() => this.#updateRemoteCursors());
-
-    this.#hoverOverlay = doc.createElement('div');
-    this.#hoverOverlay.className = 'presentation-editor__hover-overlay';
-    Object.assign(this.#hoverOverlay.style, {
-      position: 'absolute',
-      border: '1px dashed rgba(51, 102, 255, 0.8)',
-      borderRadius: '2px',
-      pointerEvents: 'none',
-      display: 'none',
-      zIndex: '11',
-    });
-    this.#selectionOverlay.appendChild(this.#hoverOverlay);
-
-    this.#hoverTooltip = doc.createElement('div');
-    this.#hoverTooltip.className = 'presentation-editor__hover-tooltip';
-    Object.assign(this.#hoverTooltip.style, {
-      position: 'absolute',
-      background: 'rgba(18, 22, 33, 0.85)',
-      color: '#fff',
-      padding: '2px 6px',
-      fontSize: '12px',
-      borderRadius: '2px',
-      pointerEvents: 'none',
-      display: 'none',
-      zIndex: '12',
-      whiteSpace: 'nowrap',
-    });
-    this.#selectionOverlay.appendChild(this.#hoverTooltip);
-
-    this.#modeBanner = doc.createElement('div');
-    this.#modeBanner.className = 'presentation-editor__mode-banner';
-    Object.assign(this.#modeBanner.style, {
-      position: 'absolute',
-      top: '0',
-      left: '50%',
-      transform: 'translate(-50%, -100%)',
-      background: '#1b3fbf',
-      color: '#fff',
-      padding: '4px 12px',
-      borderRadius: '6px',
-      fontSize: '13px',
-      display: 'none',
-      zIndex: '15',
-    });
-    this.#visibleHost.appendChild(this.#modeBanner);
 
     // Initialize header/footer session manager
     this.#headerFooterSession = new HeaderFooterSessionManager({
@@ -536,20 +451,6 @@ export class PresentationEditor extends EventEmitter {
       modeBanner: this.#modeBanner,
     });
     this.#headerFooterSession.setDocumentMode(this.#documentMode);
-
-    this.#ariaLiveRegion = doc.createElement('div');
-    this.#ariaLiveRegion.className = 'presentation-editor__aria-live';
-    this.#ariaLiveRegion.setAttribute('role', 'status');
-    this.#ariaLiveRegion.setAttribute('aria-live', 'polite');
-    this.#ariaLiveRegion.setAttribute('aria-atomic', 'true');
-    Object.assign(this.#ariaLiveRegion.style, {
-      position: 'absolute',
-      width: '1px',
-      height: '1px',
-      overflow: 'hidden',
-      clip: 'rect(1px, 1px, 1px, 1px)',
-    });
-    this.#visibleHost.appendChild(this.#ariaLiveRegion);
 
     this.#hiddenHost = createHiddenHost(doc, this.#layoutOptions.pageSize?.w ?? DEFAULT_PAGE_SIZE.w);
     if (doc.body) {

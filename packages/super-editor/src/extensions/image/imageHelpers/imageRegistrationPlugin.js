@@ -216,6 +216,14 @@ export const handleNodePath = (foundImages, editor, state) => {
     const mediaPath = buildMediaPath(uniqueFileName);
     mediaStore[mediaPath] = src;
 
+    // Sync image data to Y.Doc media map so other collab clients can access it.
+    // We write directly to the Y.Doc map instead of using editor.commands because
+    // this runs inside appendTransaction where commands don't dispatch properly.
+    if (editor.options.ydoc) {
+      const mediaMap = editor.options.ydoc.getMap('media');
+      mediaMap.set(mediaPath, src);
+    }
+
     const path = mediaPath.startsWith('word/') ? mediaPath.slice(5) : mediaPath;
     const rId = addImageRelationship({ editor, path });
     const inferredSize = hasFinitePositiveSize(node.attrs?.size) ? null : parseSizeFromImageUrl(src);

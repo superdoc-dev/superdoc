@@ -1,7 +1,7 @@
 ---
 title: tables.setRowHeight
 sidebarTitle: tables.setRowHeight
-description: Reference for tables.setRowHeight
+description: Set the height of a table row.
 ---
 
 {/* GENERATED FILE: DO NOT EDIT. Regenerate via `pnpm run docapi:sync`. */}
@@ -9,6 +9,8 @@ description: Reference for tables.setRowHeight
 > Alpha: Document API is currently alpha and subject to breaking changes.
 
 ## Summary
+
+Set the height of a table row.
 
 - Operation ID: `tables.setRowHeight`
 - API member path: `editor.doc.tables.setRowHeight(...)`
@@ -18,27 +20,70 @@ description: Reference for tables.setRowHeight
 - Supports dry run: `yes`
 - Deterministic target resolution: `yes`
 
+## Expected result
+
+Returns a TableMutationResult receipt; reports NO_OP if the row height already matches.
+
 ## Input fields
 
-| Field | Type | Required | Description |
-| --- | --- | --- | --- |
-| `heightPt` | number | yes |  |
-| `nodeId` | string | no |  |
-| `rowIndex` | integer | no |  |
-| `rule` | enum | yes | `"atLeast"`, `"exact"`, `"auto"` |
-| `tableNodeId` | string | no |  |
-| `tableTarget` | BlockNodeAddress | no | BlockNodeAddress |
-| `target` | BlockNodeAddress | no | BlockNodeAddress |
+### Variant 1
+
+_No fields._
+
+### Variant 2
+
+_No fields._
+
+### Variant 3
+
+_No fields._
+
+### Variant 4
+
+_No fields._
 
 ### Example request
 
 ```json
-{}
+{
+  "heightPt": 12.5,
+  "nodeId": "node-def456",
+  "rule": "atLeast",
+  "tableTarget": {
+    "kind": "block",
+    "nodeId": "node-def456",
+    "nodeType": "paragraph"
+  },
+  "target": {
+    "kind": "block",
+    "nodeId": "node-def456",
+    "nodeType": "paragraph"
+  }
+}
 ```
 
 ## Output fields
 
-_No fields._
+### Variant 1 (table.kind="block")
+
+| Field | Type | Required | Description |
+| --- | --- | --- | --- |
+| `success` | `true` | yes | Constant: `true` |
+| `table` | BlockNodeAddress | no | BlockNodeAddress |
+| `table.kind` | `"block"` | no | Constant: `"block"` |
+| `table.nodeId` | string | no |  |
+| `table.nodeType` | enum | no | `"paragraph"`, `"heading"`, `"listItem"`, `"table"`, `"tableRow"`, `"tableCell"`, `"tableOfContents"`, `"image"`, `"sdt"` |
+| `trackedChangeRefs` | EntityAddress[] | no |  |
+
+### Variant 2 (success=false)
+
+| Field | Type | Required | Description |
+| --- | --- | --- | --- |
+| `failure` | object | yes |  |
+| `failure.code` | enum | yes | `"NO_OP"`, `"INVALID_TARGET"`, `"TARGET_NOT_FOUND"`, `"CAPABILITY_UNAVAILABLE"` |
+| `failure.details` | any | no |  |
+| `failure.message` | string | yes |  |
+| `success` | `false` | yes | Constant: `false` |
 
 ### Example response
 

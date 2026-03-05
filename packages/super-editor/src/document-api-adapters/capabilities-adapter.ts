@@ -2,14 +2,16 @@ import type { Editor } from '../core/Editor.js';
 import {
   CAPABILITY_REASON_CODES,
   COMMAND_CATALOG,
-  MARK_KEYS,
-  INLINE_DIRECTIVES,
-  CORE_TOGGLE_PROPERTY_ID_SET,
+  INLINE_PROPERTY_BY_KEY,
+  INLINE_PROPERTY_KEY_SET,
+  INLINE_PROPERTY_REGISTRY,
+  PUBLIC_MUTATION_STEP_OP_IDS,
   type CapabilityReasonCode,
   type DocumentApiCapabilities,
+  type InlinePropertyRegistryEntry,
+  type InlineRunPatchKey,
   type PlanEngineCapabilities,
   type FormatCapabilities,
-  type FormatPropertyCapability,
   type OperationId,
   OPERATION_IDS,
 } from '@superdoc/document-api';
@@ -17,23 +19,45 @@ import { TrackFormatMarkName } from '../extensions/track-changes/constants.js';
 import { isCollaborationActive } from './collaboration-detection.js';
 
 type EditorCommandName = string;
+type EditorWithBlockNodeHelper = Editor & {
+  helpers?: {
+    blockNode?: {
+      getBlockNodeById?: unknown;
+    };
+  };
+};
 
 // Singleton write operations (insert, replace, delete) have no entry here because
 // they are backed by writeAdapter which is always available when the editor exists.
 // Read-only operations (find, getNode, getText, info, etc.) similarly need no commands.
 const REQUIRED_COMMANDS: Partial<Record<OperationId, readonly EditorCommandName[]>> = {
-  'format.fontSize': ['setTextSelection', 'setFontSize', 'unsetFontSize'],
-  'format.fontFamily': ['setTextSelection', 'setFontFamily', 'unsetFontFamily'],
-  'format.color': ['setTextSelection', 'setColor', 'unsetColor'],
-  'format.align': ['setTextSelection', 'setTextAlign', 'unsetTextAlign'],
   'create.paragraph': ['insertParagraphAt'],
   'create.heading': ['insertHeadingAt'],
   'lists.insert': ['insertListItemAt'],
-  'lists.setType': ['setListTypeAt'],
-  'lists.indent': ['setTextSelection', 'increaseListIndent'],
-  'lists.outdent': ['setTextSelection', 'decreaseListIndent'],
-  'lists.restart': ['setTextSelection', 'restartNumbering'],
-  'lists.exit': ['exitListItemAt'],
+  'lists.indent': [],
+  'lists.outdent': [],
+  'lists.create': [],
+  'lists.attach': [],
+  'lists.detach': [],
+  'lists.join': [],
+  'lists.separate': [],
+  'lists.setLevel': [],
+  'lists.setValue': [],
+  'lists.continuePrevious': [],
+  'lists.setLevelRestart': [],
+  'lists.convertToText': [],
+  // SD-1973 formatting operations (no named commands — they mutate raw XML directly)
+  'lists.applyTemplate': [],
+  'lists.applyPreset': [],
+  'lists.captureTemplate': [],
+  'lists.setLevelNumbering': [],
+  'lists.setLevelBullet': [],
+  'lists.setLevelPictureBullet': [],
+  'lists.setLevelAlignment': [],
+  'lists.setLevelIndents': [],
+  'lists.setLevelTrailingCharacter': [],
+  'lists.setLevelMarkerFont': [],
+  'lists.clearLevelOverrides': [],
   'blocks.delete': ['deleteBlockNodeById'],
   'comments.create': ['addComment', 'setTextSelection', 'addCommentReply'],
   'comments.patch': ['editComment', 'moveComment', 'resolveComment', 'setCommentInternal'],
@@ -44,6 +68,8 @@ const REQUIRED_COMMANDS: Partial<Record<OperationId, readonly EditorCommandName[
     'acceptAllTrackedChanges',
     'rejectAllTrackedChanges',
   ],
+  'history.undo': ['undo'],
+  'history.redo': ['redo'],
   // Table operations — implemented (insertTableAt proves the table extension is loaded):
   'create.table': ['insertTableAt'],
   'tables.delete': ['insertTableAt'],
@@ -82,6 +108,46 @@ const REQUIRED_COMMANDS: Partial<Record<OperationId, readonly EditorCommandName[
   'tables.setCellPadding': ['insertTableAt'],
   'tables.setCellSpacing': ['insertTableAt'],
   'tables.clearCellSpacing': ['insertTableAt'],
+  // TOC operations — insertTableOfContentsAt proves the TOC extension is loaded:
+  'create.tableOfContents': ['insertTableOfContentsAt'],
+  'toc.configure': ['setTableOfContentsInstructionById'],
+  'toc.update': ['replaceTableOfContentsContentById'],
+  'toc.remove': ['deleteTableOfContentsById'],
+  // TC entry operations — insertTableOfContentsEntryAt proves the TC entry extension is loaded:
+  'toc.markEntry': ['insertTableOfContentsEntryAt'],
+  'toc.unmarkEntry': ['deleteTableOfContentsEntryAt'],
+  'toc.editEntry': ['updateTableOfContentsEntryAt'],
+  // Image operations — setImage proves the image extension is loaded:
+  'create.image': ['setImage'],
+  'images.delete': ['setImage'],
+  'images.move': ['setImage'],
+  'images.convertToInline': ['setImage'],
+  'images.convertToFloating': ['setImage'],
+  'images.setSize': ['setImage'],
+  'images.setWrapType': ['setImage'],
+  'images.setWrapSide': ['setImage'],
+  'images.setWrapDistances': ['setImage'],
+  'images.setPosition': ['setImage'],
+  'images.setAnchorOptions': ['setImage'],
+  'images.setZOrder': ['setImage'],
+  // SD-2100: Geometry
+  'images.scale': ['setImage'],
+  'images.setLockAspectRatio': ['setImage'],
+  'images.rotate': ['setImage'],
+  'images.flip': ['setImage'],
+  'images.crop': ['setImage'],
+  'images.resetCrop': ['setImage'],
+  // SD-2100: Content
+  'images.replaceSource': ['setImage'],
+  // SD-2100: Semantic metadata
+  'images.setAltText': ['setImage'],
+  'images.setDecorative': ['setImage'],
+  'images.setName': ['setImage'],
+  'images.setHyperlink': ['setImage'],
+  // SD-2100: Caption lifecycle
+  'images.insertCaption': ['setImage'],
+  'images.updateCaption': ['setImage'],
+  'images.removeCaption': ['setImage'],
 };
 
 /** Runtime guard — ensures only canonical reason codes are emitted even if the set grows. */
@@ -102,7 +168,17 @@ function hasAllCommands(editor: Editor, operationId: OperationId): boolean {
  * Each entry maps an operation to a predicate that checks helper availability.
  */
 const REQUIRED_HELPERS: Partial<Record<OperationId, (editor: Editor) => boolean>> = {
-  'blocks.delete': (editor) => typeof (editor as any).helpers?.blockNode?.getBlockNodeById === 'function',
+  'blocks.delete': (editor) =>
+    typeof (editor as unknown as EditorWithBlockNodeHelper).helpers?.blockNode?.getBlockNodeById === 'function',
+  'sections.setOddEvenHeadersFooters': (editor) => Boolean((editor as unknown as { converter?: unknown }).converter),
+  'sections.setHeaderFooterRef': (editor) => Boolean((editor as unknown as { converter?: unknown }).converter),
+  'tables.setDefaultStyle': (editor) => Boolean((editor as unknown as { converter?: unknown }).converter),
+  'tables.clearDefaultStyle': (editor) => Boolean((editor as unknown as { converter?: unknown }).converter),
+  // Picture bullet requires the numbering part to support lvlPicBulletId references.
+  'lists.setLevelPictureBullet': (editor) => {
+    const converter = (editor as unknown as { converter?: { convertedXml?: Record<string, unknown> } }).converter;
+    return Boolean(converter?.convertedXml?.['word/numbering.xml']);
+  },
 };
 
 function hasRequiredHelpers(editor: Editor, operationId: OperationId): boolean {
@@ -115,24 +191,30 @@ function hasMarkCapability(editor: Editor, markName: string): boolean {
   return Boolean(editor.schema?.marks?.[markName]);
 }
 
-/** Mark key → editor schema mark name mapping (shared source of truth for format.apply). */
-const STYLE_MARK_SCHEMA_NAMES: Record<string, string> = {
-  bold: 'bold',
-  italic: 'italic',
-  underline: 'underline',
-  strike: 'strike',
-};
-
 /** Operation IDs whose availability is determined by schema mark presence, not editor commands. */
 function isMarkBackedOperation(operationId: OperationId): boolean {
-  return operationId === 'format.apply';
+  return operationId === 'format.apply' || getInlineAliasKey(operationId) !== undefined;
 }
 
 /**
- * Inline value-format operations (fontSize, fontFamily, color) require the 'textStyle'
- * mark in the schema — they apply values via `setMark('textStyle', ...)`.
+ * If `operationId` is a `format.<inlineKey>` alias, returns the corresponding
+ * inline-property registry entry. Returns `undefined` otherwise.
  */
-const INLINE_FORMAT_OPERATIONS = new Set<OperationId>(['format.fontSize', 'format.fontFamily', 'format.color']);
+function getInlineAliasKey(operationId: OperationId): InlineRunPatchKey | undefined {
+  if (!operationId.startsWith('format.')) return undefined;
+  const key = operationId.slice('format.'.length);
+  if (INLINE_PROPERTY_KEY_SET.has(key)) return key as InlineRunPatchKey;
+  return undefined;
+}
+
+function isInlinePropertyAvailable(editor: Editor, property: InlinePropertyRegistryEntry): boolean {
+  if (property.storage === 'mark') {
+    if (property.carrier.storage !== 'mark') return false;
+    const markName = property.carrier.markName === 'textStyle' ? 'textStyle' : property.carrier.markName;
+    return hasMarkCapability(editor, markName);
+  }
+  return Boolean(editor.schema?.nodes?.run);
+}
 
 function hasTrackedModeCapability(editor: Editor, operationId: OperationId): boolean {
   if (!hasCommand(editor, 'insertTrackedChange')) return false;
@@ -140,6 +222,20 @@ function hasTrackedModeCapability(editor: Editor, operationId: OperationId): boo
   // report tracked mode as unavailable when no user is configured so capability-
   // gated clients don't offer tracked actions that would deterministically fail.
   if (!editor.options?.user) return false;
+
+  // Inline alias operations additionally require the per-property tracked flag.
+  const inlineKey = getInlineAliasKey(operationId);
+  if (inlineKey !== undefined) {
+    if (!INLINE_PROPERTY_BY_KEY[inlineKey].tracked) return false;
+    return Boolean(editor.schema?.marks?.[TrackFormatMarkName]);
+  }
+
+  if (operationId === 'format.apply') {
+    if (!editor.schema?.marks?.[TrackFormatMarkName]) return false;
+    // Only report tracked if at least one tracked inline property is available.
+    return INLINE_PROPERTY_REGISTRY.some((property) => property.tracked && isInlinePropertyAvailable(editor, property));
+  }
+
   if (isMarkBackedOperation(operationId)) {
     return Boolean(editor.schema?.marks?.[TrackFormatMarkName]);
   }
@@ -156,6 +252,10 @@ function isCommentsNamespaceEnabled(editor: Editor): boolean {
 
 function isListsNamespaceEnabled(editor: Editor): boolean {
   return getNamespaceOperationIds('lists').every((id) => hasAllCommands(editor, id));
+}
+
+function isHistoryNamespaceEnabled(editor: Editor): boolean {
+  return hasCommand(editor, 'undo') && hasCommand(editor, 'redo');
 }
 
 function isTrackChangesEnabled(editor: Editor): boolean {
@@ -179,7 +279,9 @@ function pushReason(reasons: CapabilityReasonCode[], reason: CapabilityReasonCod
 
 /** Operations that determine availability through non-command mechanisms. */
 function isNonCommandBackedOperation(operationId: OperationId): boolean {
-  return operationId === 'format.apply' || operationId === 'styles.apply' || INLINE_FORMAT_OPERATIONS.has(operationId);
+  return (
+    operationId === 'format.apply' || operationId === 'styles.apply' || getInlineAliasKey(operationId) !== undefined
+  );
 }
 
 /** Checks whether the styles part has a valid w:styles root element. */
@@ -209,14 +311,15 @@ function getStylesApplyUnavailableReason(editor: Editor): CapabilityReasonCode |
 }
 
 function isOperationAvailable(editor: Editor, operationId: OperationId): boolean {
-  // format.apply is available if at least one mark type exists in the schema
+  // format.apply is available when at least one inline property can be executed.
   if (operationId === 'format.apply') {
-    return MARK_KEYS.some((key) => hasMarkCapability(editor, STYLE_MARK_SCHEMA_NAMES[key] ?? key));
+    return INLINE_PROPERTY_REGISTRY.some((property) => isInlinePropertyAvailable(editor, property));
   }
 
-  // Inline format ops (fontSize, fontFamily, color) require the textStyle mark in the schema
-  if (INLINE_FORMAT_OPERATIONS.has(operationId)) {
-    return hasAllCommands(editor, operationId) && hasMarkCapability(editor, 'textStyle');
+  // format.<inlineKey> aliases derive availability from the corresponding inline property.
+  const inlineKey = getInlineAliasKey(operationId);
+  if (inlineKey !== undefined) {
+    return isInlinePropertyAvailable(editor, INLINE_PROPERTY_BY_KEY[inlineKey]);
   }
 
   // styles.apply requires converter + styles part + no collaboration
@@ -280,72 +383,30 @@ function buildOperationCapabilities(editor: Editor): DocumentApiCapabilities['op
 // Plan engine capabilities
 // ---------------------------------------------------------------------------
 
-const SUPPORTED_STEP_OPS = [
-  'text.rewrite',
-  'text.insert',
-  'text.delete',
-  'format.apply',
-  'assert',
-  'create.paragraph',
-  'create.heading',
-  'domain.command',
-  'create.table',
-  'tables.delete',
-  'tables.clearContents',
-  'tables.move',
-  'tables.split',
-  'tables.convertFromText',
-  'tables.convertToText',
-  'tables.setLayout',
-  'tables.insertRow',
-  'tables.deleteRow',
-  'tables.setRowHeight',
-  'tables.distributeRows',
-  'tables.setRowOptions',
-  'tables.insertColumn',
-  'tables.deleteColumn',
-  'tables.setColumnWidth',
-  'tables.distributeColumns',
-  'tables.insertCell',
-  'tables.deleteCell',
-  'tables.mergeCells',
-  'tables.unmergeCells',
-  'tables.splitCell',
-  'tables.setCellProperties',
-  'tables.sort',
-  'tables.setAltText',
-  'tables.setStyle',
-  'tables.clearStyle',
-  'tables.setStyleOption',
-  'tables.setBorder',
-  'tables.clearBorder',
-  'tables.applyBorderPreset',
-  'tables.setShading',
-  'tables.clearShading',
-  'tables.setTablePadding',
-  'tables.setCellPadding',
-  'tables.setCellSpacing',
-  'tables.clearCellSpacing',
-] as const;
 const SUPPORTED_NON_UNIFORM_STRATEGIES = ['error', 'useLeadingRun', 'majority', 'union'] as const;
 const SUPPORTED_SET_MARKS = ['bold', 'italic', 'underline', 'strike'] as const;
 const REGEX_MAX_PATTERN_LENGTH = 1024;
 
 function buildFormatCapabilities(editor: Editor): FormatCapabilities {
-  const properties: Record<string, FormatPropertyCapability> = {};
-  for (const key of MARK_KEYS) {
-    if (hasMarkCapability(editor, STYLE_MARK_SCHEMA_NAMES[key] ?? key)) {
-      // Classify from registry: pure toggles vs composite (underline has rich attrs)
-      const kind = CORE_TOGGLE_PROPERTY_ID_SET.has(key) ? 'toggle' : 'composite';
-      properties[key] = { kind, directives: [...INLINE_DIRECTIVES] };
-    }
+  const trackedInlinePropertiesSupported = hasTrackedModeCapability(editor, 'format.apply');
+  const supportedInlineProperties = {} as FormatCapabilities['supportedInlineProperties'];
+
+  for (const property of INLINE_PROPERTY_REGISTRY) {
+    const available = isInlinePropertyAvailable(editor, property);
+    supportedInlineProperties[property.key] = {
+      available,
+      tracked: available && property.tracked && trackedInlinePropertiesSupported,
+      type: property.type,
+      storage: property.storage,
+    };
   }
-  return { properties };
+
+  return { supportedInlineProperties };
 }
 
 function buildPlanEngineCapabilities(): PlanEngineCapabilities {
   return {
-    supportedStepOps: SUPPORTED_STEP_OPS,
+    supportedStepOps: PUBLIC_MUTATION_STEP_OP_IDS,
     supportedNonUniformStrategies: SUPPORTED_NON_UNIFORM_STRATEGIES,
     supportedSetMarks: SUPPORTED_SET_MARKS,
     regex: {
@@ -366,6 +427,7 @@ export function getDocumentApiCapabilities(editor: Editor): DocumentApiCapabilit
   const commentsEnabled = isCommentsNamespaceEnabled(editor);
   const listsEnabled = isListsNamespaceEnabled(editor);
   const trackChangesEnabled = isTrackChangesEnabled(editor);
+  const historyEnabled = isHistoryNamespaceEnabled(editor);
   const dryRunEnabled = OPERATION_IDS.some((operationId) => operations[operationId].dryRun);
 
   return {
@@ -385,6 +447,10 @@ export function getDocumentApiCapabilities(editor: Editor): DocumentApiCapabilit
       dryRun: {
         enabled: dryRunEnabled,
         reasons: dryRunEnabled ? undefined : ['DRY_RUN_UNAVAILABLE'],
+      },
+      history: {
+        enabled: historyEnabled,
+        reasons: getNamespaceReason(historyEnabled),
       },
     },
     format: buildFormatCapabilities(editor),

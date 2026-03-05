@@ -3,17 +3,34 @@ import type { Editor } from '../core/Editor.js';
 import { findAdapter } from './find-adapter.js';
 import { getNodeAdapter, getNodeByIdAdapter } from './get-node-adapter.js';
 import { getTextAdapter } from './get-text-adapter.js';
+import { getMarkdownAdapter } from './get-markdown-adapter.js';
+import { getHtmlAdapter } from './get-html-adapter.js';
 import { infoAdapter } from './info-adapter.js';
 import { getDocumentApiCapabilities } from './capabilities-adapter.js';
 import { createCommentsWrapper } from './plan-engine/comments-wrappers.js';
 import { writeWrapper, insertStructuredWrapper, styleApplyWrapper } from './plan-engine/plan-wrappers.js';
 import { stylesApplyAdapter } from './styles-adapter.js';
 import {
-  formatFontSizeWrapper,
-  formatFontFamilyWrapper,
-  formatColorWrapper,
-  formatAlignWrapper,
-} from './plan-engine/format-value-wrappers.js';
+  paragraphsSetStyleWrapper,
+  paragraphsClearStyleWrapper,
+  paragraphsResetDirectFormattingWrapper,
+  paragraphsSetAlignmentWrapper,
+  paragraphsClearAlignmentWrapper,
+  paragraphsSetIndentationWrapper,
+  paragraphsClearIndentationWrapper,
+  paragraphsSetSpacingWrapper,
+  paragraphsClearSpacingWrapper,
+  paragraphsSetKeepOptionsWrapper,
+  paragraphsSetOutlineLevelWrapper,
+  paragraphsSetFlowOptionsWrapper,
+  paragraphsSetTabStopWrapper,
+  paragraphsClearTabStopWrapper,
+  paragraphsClearAllTabStopsWrapper,
+  paragraphsSetBorderWrapper,
+  paragraphsClearBorderWrapper,
+  paragraphsSetShadingWrapper,
+  paragraphsClearShadingWrapper,
+} from './plan-engine/paragraphs-wrappers.js';
 import {
   trackChangesListWrapper,
   trackChangesGetWrapper,
@@ -28,18 +45,61 @@ import {
   listsListWrapper,
   listsGetWrapper,
   listsInsertWrapper,
-  listsSetTypeWrapper,
   listsIndentWrapper,
   listsOutdentWrapper,
-  listsRestartWrapper,
-  listsExitWrapper,
+  listsCreateWrapper,
+  listsAttachWrapper,
+  listsDetachWrapper,
+  listsJoinWrapper,
+  listsCanJoinWrapper,
+  listsSeparateWrapper,
+  listsSetLevelWrapper,
+  listsSetValueWrapper,
+  listsContinuePreviousWrapper,
+  listsCanContinuePreviousWrapper,
+  listsSetLevelRestartWrapper,
+  listsConvertToTextWrapper,
 } from './plan-engine/lists-wrappers.js';
+import {
+  listsApplyTemplateWrapper,
+  listsApplyPresetWrapper,
+  listsCaptureTemplateWrapper,
+  listsSetLevelNumberingWrapper,
+  listsSetLevelBulletWrapper,
+  listsSetLevelPictureBulletWrapper,
+  listsSetLevelAlignmentWrapper,
+  listsSetLevelIndentsWrapper,
+  listsSetLevelTrailingCharacterWrapper,
+  listsSetLevelMarkerFontWrapper,
+  listsClearLevelOverridesWrapper,
+} from './plan-engine/lists-formatting-wrappers.js';
 import { executePlan } from './plan-engine/executor.js';
 import { previewPlan } from './plan-engine/preview.js';
 import { queryMatchAdapter } from './plan-engine/query-match-adapter.js';
 import { initRevision, trackRevisions } from './plan-engine/revision-tracker.js';
 import { registerBuiltInExecutors } from './plan-engine/register-executors.js';
 import { createTableWrapper } from './plan-engine/create-table-wrapper.js';
+import {
+  createSectionBreakAdapter,
+  sectionsListAdapter,
+  sectionsGetAdapterByInput,
+  sectionsSetBreakTypeAdapter,
+  sectionsSetPageMarginsAdapter,
+  sectionsSetHeaderFooterMarginsAdapter,
+  sectionsSetPageSetupAdapter,
+  sectionsSetColumnsAdapter,
+  sectionsSetLineNumberingAdapter,
+  sectionsSetPageNumberingAdapter,
+  sectionsSetTitlePageAdapter,
+  sectionsSetOddEvenHeadersFootersAdapter,
+  sectionsSetVerticalAlignAdapter,
+  sectionsSetSectionDirectionAdapter,
+  sectionsSetHeaderFooterRefAdapter,
+  sectionsClearHeaderFooterRefAdapter,
+  sectionsSetLinkToPreviousAdapter,
+  sectionsSetPageBordersAdapter,
+  sectionsClearPageBordersAdapter,
+} from './sections-adapter.js';
 import {
   tablesDeleteWrapper,
   tablesClearContentsWrapper,
@@ -78,7 +138,68 @@ import {
   tablesSetCellSpacingWrapper,
   tablesClearCellSpacingWrapper,
 } from './plan-engine/tables-wrappers.js';
-import { tablesGetAdapter, tablesGetCellsAdapter, tablesGetPropertiesAdapter } from './tables-adapter.js';
+import {
+  tablesGetAdapter,
+  tablesGetCellsAdapter,
+  tablesGetPropertiesAdapter,
+  tablesGetStylesAdapter,
+  tablesSetDefaultStyleAdapter,
+  tablesClearDefaultStyleAdapter,
+} from './tables-adapter.js';
+import { createHistoryAdapter } from './history-adapter.js';
+import {
+  tocListWrapper,
+  tocGetWrapper,
+  tocConfigureWrapper,
+  tocUpdateWrapper,
+  tocRemoveWrapper,
+  createTableOfContentsWrapper,
+} from './plan-engine/toc-wrappers.js';
+import {
+  tocListEntriesWrapper,
+  tocGetEntryWrapper,
+  tocMarkEntryWrapper,
+  tocUnmarkEntryWrapper,
+  tocEditEntryWrapper,
+} from './plan-engine/toc-entry-wrappers.js';
+import {
+  createImageWrapper,
+  imagesListWrapper,
+  imagesGetWrapper,
+  imagesDeleteWrapper,
+  imagesMoveWrapper,
+  imagesConvertToInlineWrapper,
+  imagesConvertToFloatingWrapper,
+  imagesSetSizeWrapper,
+  imagesSetWrapTypeWrapper,
+  imagesSetWrapSideWrapper,
+  imagesSetWrapDistancesWrapper,
+  imagesSetPositionWrapper,
+  imagesSetAnchorOptionsWrapper,
+  imagesSetZOrderWrapper,
+  imagesScaleWrapper,
+  imagesSetLockAspectRatioWrapper,
+  imagesRotateWrapper,
+  imagesFlipWrapper,
+  imagesCropWrapper,
+  imagesResetCropWrapper,
+  imagesReplaceSourceWrapper,
+  imagesSetAltTextWrapper,
+  imagesSetDecorativeWrapper,
+  imagesSetNameWrapper,
+  imagesSetHyperlinkWrapper,
+  imagesInsertCaptionWrapper,
+  imagesUpdateCaptionWrapper,
+  imagesRemoveCaptionWrapper,
+} from './plan-engine/images-wrappers.js';
+import {
+  hyperlinksListWrapper,
+  hyperlinksGetWrapper,
+  hyperlinksWrapWrapper,
+  hyperlinksInsertWrapper,
+  hyperlinksPatchWrapper,
+  hyperlinksRemoveWrapper,
+} from './plan-engine/hyperlinks-wrappers.js';
 
 /**
  * Assembles all document-api adapters for the given editor instance.
@@ -102,6 +223,12 @@ export function assembleDocumentApiAdapters(editor: Editor): DocumentApiAdapters
     getText: {
       getText: (input) => getTextAdapter(editor, input),
     },
+    getMarkdown: {
+      getMarkdown: (input) => getMarkdownAdapter(editor, input),
+    },
+    getHtml: {
+      getHtml: (input) => getHtmlAdapter(editor, input),
+    },
     info: {
       info: (input) => infoAdapter(editor, input),
     },
@@ -115,13 +242,30 @@ export function assembleDocumentApiAdapters(editor: Editor): DocumentApiAdapters
     },
     format: {
       apply: (input, options) => styleApplyWrapper(editor, input, options),
-      fontSize: (input, options) => formatFontSizeWrapper(editor, input, options),
-      fontFamily: (input, options) => formatFontFamilyWrapper(editor, input, options),
-      color: (input, options) => formatColorWrapper(editor, input, options),
-      align: (input, options) => formatAlignWrapper(editor, input, options),
     },
     styles: {
       apply: (input, options) => stylesApplyAdapter(editor, input, options),
+    },
+    paragraphs: {
+      setStyle: (input, options) => paragraphsSetStyleWrapper(editor, input, options),
+      clearStyle: (input, options) => paragraphsClearStyleWrapper(editor, input, options),
+      resetDirectFormatting: (input, options) => paragraphsResetDirectFormattingWrapper(editor, input, options),
+      setAlignment: (input, options) => paragraphsSetAlignmentWrapper(editor, input, options),
+      clearAlignment: (input, options) => paragraphsClearAlignmentWrapper(editor, input, options),
+      setIndentation: (input, options) => paragraphsSetIndentationWrapper(editor, input, options),
+      clearIndentation: (input, options) => paragraphsClearIndentationWrapper(editor, input, options),
+      setSpacing: (input, options) => paragraphsSetSpacingWrapper(editor, input, options),
+      clearSpacing: (input, options) => paragraphsClearSpacingWrapper(editor, input, options),
+      setKeepOptions: (input, options) => paragraphsSetKeepOptionsWrapper(editor, input, options),
+      setOutlineLevel: (input, options) => paragraphsSetOutlineLevelWrapper(editor, input, options),
+      setFlowOptions: (input, options) => paragraphsSetFlowOptionsWrapper(editor, input, options),
+      setTabStop: (input, options) => paragraphsSetTabStopWrapper(editor, input, options),
+      clearTabStop: (input, options) => paragraphsClearTabStopWrapper(editor, input, options),
+      clearAllTabStops: (input, options) => paragraphsClearAllTabStopsWrapper(editor, input, options),
+      setBorder: (input, options) => paragraphsSetBorderWrapper(editor, input, options),
+      clearBorder: (input, options) => paragraphsClearBorderWrapper(editor, input, options),
+      setShading: (input, options) => paragraphsSetShadingWrapper(editor, input, options),
+      clearShading: (input, options) => paragraphsClearShadingWrapper(editor, input, options),
     },
     trackChanges: {
       list: (input) => trackChangesListWrapper(editor, input),
@@ -138,16 +282,59 @@ export function assembleDocumentApiAdapters(editor: Editor): DocumentApiAdapters
       paragraph: (input, options) => createParagraphWrapper(editor, input, options),
       heading: (input, options) => createHeadingWrapper(editor, input, options),
       table: (input, options) => createTableWrapper(editor, input, options),
+      sectionBreak: (input, options) => createSectionBreakAdapter(editor, input, options),
+      tableOfContents: (input, options) => createTableOfContentsWrapper(editor, input, options),
+      image: (input, options) => createImageWrapper(editor, input, options),
     },
     lists: {
       list: (query) => listsListWrapper(editor, query),
       get: (input) => listsGetWrapper(editor, input),
       insert: (input, options) => listsInsertWrapper(editor, input, options),
-      setType: (input, options) => listsSetTypeWrapper(editor, input, options),
+      create: (input, options) => listsCreateWrapper(editor, input, options),
+      attach: (input, options) => listsAttachWrapper(editor, input, options),
+      detach: (input, options) => listsDetachWrapper(editor, input, options),
       indent: (input, options) => listsIndentWrapper(editor, input, options),
       outdent: (input, options) => listsOutdentWrapper(editor, input, options),
-      restart: (input, options) => listsRestartWrapper(editor, input, options),
-      exit: (input, options) => listsExitWrapper(editor, input, options),
+      join: (input, options) => listsJoinWrapper(editor, input, options),
+      canJoin: (input) => listsCanJoinWrapper(editor, input),
+      separate: (input, options) => listsSeparateWrapper(editor, input, options),
+      setLevel: (input, options) => listsSetLevelWrapper(editor, input, options),
+      setValue: (input, options) => listsSetValueWrapper(editor, input, options),
+      continuePrevious: (input, options) => listsContinuePreviousWrapper(editor, input, options),
+      canContinuePrevious: (input) => listsCanContinuePreviousWrapper(editor, input),
+      setLevelRestart: (input, options) => listsSetLevelRestartWrapper(editor, input, options),
+      convertToText: (input, options) => listsConvertToTextWrapper(editor, input, options),
+      applyTemplate: (input, options) => listsApplyTemplateWrapper(editor, input, options),
+      applyPreset: (input, options) => listsApplyPresetWrapper(editor, input, options),
+      captureTemplate: (input) => listsCaptureTemplateWrapper(editor, input),
+      setLevelNumbering: (input, options) => listsSetLevelNumberingWrapper(editor, input, options),
+      setLevelBullet: (input, options) => listsSetLevelBulletWrapper(editor, input, options),
+      setLevelPictureBullet: (input, options) => listsSetLevelPictureBulletWrapper(editor, input, options),
+      setLevelAlignment: (input, options) => listsSetLevelAlignmentWrapper(editor, input, options),
+      setLevelIndents: (input, options) => listsSetLevelIndentsWrapper(editor, input, options),
+      setLevelTrailingCharacter: (input, options) => listsSetLevelTrailingCharacterWrapper(editor, input, options),
+      setLevelMarkerFont: (input, options) => listsSetLevelMarkerFontWrapper(editor, input, options),
+      clearLevelOverrides: (input, options) => listsClearLevelOverridesWrapper(editor, input, options),
+    },
+    sections: {
+      list: (query) => sectionsListAdapter(editor, query),
+      get: (input) => sectionsGetAdapterByInput(editor, input),
+      setBreakType: (input, options) => sectionsSetBreakTypeAdapter(editor, input, options),
+      setPageMargins: (input, options) => sectionsSetPageMarginsAdapter(editor, input, options),
+      setHeaderFooterMargins: (input, options) => sectionsSetHeaderFooterMarginsAdapter(editor, input, options),
+      setPageSetup: (input, options) => sectionsSetPageSetupAdapter(editor, input, options),
+      setColumns: (input, options) => sectionsSetColumnsAdapter(editor, input, options),
+      setLineNumbering: (input, options) => sectionsSetLineNumberingAdapter(editor, input, options),
+      setPageNumbering: (input, options) => sectionsSetPageNumberingAdapter(editor, input, options),
+      setTitlePage: (input, options) => sectionsSetTitlePageAdapter(editor, input, options),
+      setOddEvenHeadersFooters: (input, options) => sectionsSetOddEvenHeadersFootersAdapter(editor, input, options),
+      setVerticalAlign: (input, options) => sectionsSetVerticalAlignAdapter(editor, input, options),
+      setSectionDirection: (input, options) => sectionsSetSectionDirectionAdapter(editor, input, options),
+      setHeaderFooterRef: (input, options) => sectionsSetHeaderFooterRefAdapter(editor, input, options),
+      clearHeaderFooterRef: (input, options) => sectionsClearHeaderFooterRefAdapter(editor, input, options),
+      setLinkToPrevious: (input, options) => sectionsSetLinkToPreviousAdapter(editor, input, options),
+      setPageBorders: (input, options) => sectionsSetPageBordersAdapter(editor, input, options),
+      clearPageBorders: (input, options) => sectionsClearPageBordersAdapter(editor, input, options),
     },
     tables: {
       convertFromText: (input, options) => tablesConvertFromTextWrapper(editor, input, options),
@@ -189,6 +376,63 @@ export function assembleDocumentApiAdapters(editor: Editor): DocumentApiAdapters
       get: (input) => tablesGetAdapter(editor, input),
       getCells: (input) => tablesGetCellsAdapter(editor, input),
       getProperties: (input) => tablesGetPropertiesAdapter(editor, input),
+      getStyles: (input) => tablesGetStylesAdapter(editor, input),
+      setDefaultStyle: (input, options) => tablesSetDefaultStyleAdapter(editor, input, options),
+      clearDefaultStyle: (input, options) => tablesClearDefaultStyleAdapter(editor, input, options),
+    },
+    toc: {
+      list: (query) => tocListWrapper(editor, query),
+      get: (input) => tocGetWrapper(editor, input),
+      configure: (input, options) => tocConfigureWrapper(editor, input, options),
+      update: (input, options) => tocUpdateWrapper(editor, input, options),
+      remove: (input, options) => tocRemoveWrapper(editor, input, options),
+      markEntry: (input, options) => tocMarkEntryWrapper(editor, input, options),
+      unmarkEntry: (input, options) => tocUnmarkEntryWrapper(editor, input, options),
+      listEntries: (query) => tocListEntriesWrapper(editor, query),
+      getEntry: (input) => tocGetEntryWrapper(editor, input),
+      editEntry: (input, options) => tocEditEntryWrapper(editor, input, options),
+    },
+    images: {
+      image: (input, options) => createImageWrapper(editor, input, options),
+      list: (input) => imagesListWrapper(editor, input),
+      get: (input) => imagesGetWrapper(editor, input),
+      delete: (input, options) => imagesDeleteWrapper(editor, input, options),
+      move: (input, options) => imagesMoveWrapper(editor, input, options),
+      convertToInline: (input, options) => imagesConvertToInlineWrapper(editor, input, options),
+      convertToFloating: (input, options) => imagesConvertToFloatingWrapper(editor, input, options),
+      setSize: (input, options) => imagesSetSizeWrapper(editor, input, options),
+      setWrapType: (input, options) => imagesSetWrapTypeWrapper(editor, input, options),
+      setWrapSide: (input, options) => imagesSetWrapSideWrapper(editor, input, options),
+      setWrapDistances: (input, options) => imagesSetWrapDistancesWrapper(editor, input, options),
+      setPosition: (input, options) => imagesSetPositionWrapper(editor, input, options),
+      setAnchorOptions: (input, options) => imagesSetAnchorOptionsWrapper(editor, input, options),
+      setZOrder: (input, options) => imagesSetZOrderWrapper(editor, input, options),
+      // SD-2100: Geometry
+      scale: (input, options) => imagesScaleWrapper(editor, input, options),
+      setLockAspectRatio: (input, options) => imagesSetLockAspectRatioWrapper(editor, input, options),
+      rotate: (input, options) => imagesRotateWrapper(editor, input, options),
+      flip: (input, options) => imagesFlipWrapper(editor, input, options),
+      crop: (input, options) => imagesCropWrapper(editor, input, options),
+      resetCrop: (input, options) => imagesResetCropWrapper(editor, input, options),
+      // SD-2100: Content
+      replaceSource: (input, options) => imagesReplaceSourceWrapper(editor, input, options),
+      // SD-2100: Semantic metadata
+      setAltText: (input, options) => imagesSetAltTextWrapper(editor, input, options),
+      setDecorative: (input, options) => imagesSetDecorativeWrapper(editor, input, options),
+      setName: (input, options) => imagesSetNameWrapper(editor, input, options),
+      setHyperlink: (input, options) => imagesSetHyperlinkWrapper(editor, input, options),
+      // SD-2100: Caption lifecycle
+      insertCaption: (input, options) => imagesInsertCaptionWrapper(editor, input, options),
+      updateCaption: (input, options) => imagesUpdateCaptionWrapper(editor, input, options),
+      removeCaption: (input, options) => imagesRemoveCaptionWrapper(editor, input, options),
+    },
+    hyperlinks: {
+      list: (query) => hyperlinksListWrapper(editor, query),
+      get: (input) => hyperlinksGetWrapper(editor, input),
+      wrap: (input, options) => hyperlinksWrapWrapper(editor, input, options),
+      insert: (input, options) => hyperlinksInsertWrapper(editor, input, options),
+      patch: (input, options) => hyperlinksPatchWrapper(editor, input, options),
+      remove: (input, options) => hyperlinksRemoveWrapper(editor, input, options),
     },
     query: {
       match: (input) => queryMatchAdapter(editor, input),
@@ -197,5 +441,6 @@ export function assembleDocumentApiAdapters(editor: Editor): DocumentApiAdapters
       preview: (input) => previewPlan(editor, input),
       apply: (input) => executePlan(editor, input),
     },
+    history: createHistoryAdapter(editor),
   };
 }

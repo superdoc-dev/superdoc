@@ -65,10 +65,12 @@ import {
   shouldUseCellSelection as shouldUseCellSelectionFromHelper,
 } from './tables/TableSelectionUtilities.js';
 import { DragDropManager } from './input/DragDropManager.js';
+import { processAndInsertImageFile } from '@extensions/image/imageHelpers/processAndInsertImageFile.js';
 import { HeaderFooterSessionManager } from './header-footer/HeaderFooterSessionManager.js';
 import { decodeRPrFromMarks } from '../super-converter/styles.js';
 import { halfPointToPoints } from '../super-converter/helpers.js';
 import { toFlowBlocks, ConverterContext, FlowBlockCache } from '@superdoc/pm-adapter';
+import { readSettingsRoot, readDefaultTableStyle } from '../../document-api-adapters/document-settings.js';
 import {
   incrementalLayout,
   selectionToRects,
@@ -110,6 +112,8 @@ import { ySyncPluginKey } from 'y-prosemirror';
 import type * as Y from 'yjs';
 import type { HeaderFooterDescriptor } from '../header-footer/HeaderFooterRegistry.js';
 import { isInRegisteredSurface } from './utils/uiSurfaceRegistry.js';
+import { buildSemanticFootnoteBlocks } from './semantic-flow-footnotes.js';
+import { splitRunsAtDecorationBoundaries } from './layout/SplitRunsAtDecorationBoundaries.js';
 
 // Types
 import type {
@@ -143,6 +147,7 @@ import type {
   PendingMarginClick,
   EditorViewWithScrollFlag,
   PotentiallyMockedFunction,
+  ResolvedLayoutOptions,
 } from './types.js';
 
 // Re-export public types for backward compatibility
@@ -203,6 +208,10 @@ const HEADER_FOOTER_INIT_BUDGET_MS = 200;
 const MAX_ZOOM_WARNING_THRESHOLD = 10;
 /** Maximum number of selection rectangles per user (performance guardrail) */
 const MAX_SELECTION_RECTS_PER_USER = 100;
+/** Debounce delay for semantic-flow relayout after host resize (milliseconds). */
+const SEMANTIC_RESIZE_DEBOUNCE_MS = 120;
+/** Minimum semantic content width in pixels. */
+const MIN_SEMANTIC_CONTENT_WIDTH_PX = 1;
 
 const GLOBAL_PERFORMANCE: Performance | undefined = typeof performance !== 'undefined' ? performance : undefined;
 
@@ -261,6 +270,8 @@ export class PresentationEditor extends EventEmitter {
   }
 
   #options: PresentationEditorOptions;
+  /** Key used to register this instance in the static registry. Separate from options.documentId to avoid mutating caller's object. */
+  #registryKey: string | null = null;
   #editor: Editor;
   #visibleHost: HTMLElement;
   #viewportHost: HTMLElement;
@@ -297,6 +308,10 @@ export class PresentationEditor extends EventEmitter {
   /** RAF handle for coalesced decoration sync scheduling. */
   #decorationSyncRafHandle: number | null = null;
   #rafHandle: number | null = null;
+  #semanticResizeObserver: ResizeObserver | null = null;
+  #semanticResizeRaf: number | null = null;
+  #semanticResizeDebounce: number | null = null;
+  #lastSemanticContainerWidth: number | null = null;
   #editorListeners: Array<{ event: string; handler: (...args: unknown[]) => void }> = [];
   #scrollHandler: (() => void) | null = null;
   #scrollContainer: Element | Window | null = null;
@@ -385,14 +400,24 @@ export class PresentationEditor extends EventEmitter {
         }
       : undefined;
 
+    const requestedFlowMode = options.layoutEngineOptions?.flowMode === 'semantic' ? 'semantic' : 'paginated';
+    const requestedLayoutMode = options.layoutEngineOptions?.layoutMode ?? 'vertical';
     this.#layoutOptions = {
       pageSize: options.layoutEngineOptions?.pageSize ?? DEFAULT_PAGE_SIZE,
       margins: options.layoutEngineOptions?.margins ?? DEFAULT_MARGINS,
-      virtualization: options.layoutEngineOptions?.virtualization,
+      virtualization:
+        requestedFlowMode === 'semantic'
+          ? {
+              ...(options.layoutEngineOptions?.virtualization ?? {}),
+              enabled: false,
+            }
+          : options.layoutEngineOptions?.virtualization,
       zoom: options.layoutEngineOptions?.zoom ?? 1,
       pageStyles: options.layoutEngineOptions?.pageStyles,
       debugLabel: options.layoutEngineOptions?.debugLabel,
-      layoutMode: options.layoutEngineOptions?.layoutMode ?? 'vertical',
+      layoutMode: requestedFlowMode === 'semantic' ? 'vertical' : requestedLayoutMode,
+      flowMode: requestedFlowMode,
+      semanticOptions: options.layoutEngineOptions?.semanticOptions,
       trackedChanges: options.layoutEngineOptions?.trackedChanges,
       emitCommentPositionsInViewing: options.layoutEngineOptions?.emitCommentPositionsInViewing,
       enableCommentsInViewing: options.layoutEngineOptions?.enableCommentsInViewing,
@@ -609,11 +634,13 @@ export class PresentationEditor extends EventEmitter {
       this.#setupDragHandlers();
       this.#setupInputBridge();
       this.#syncTrackedChangesPreferences();
+      this.#setupSemanticResizeObserver();
 
-      // Register this instance in the static registry
-      if (options.documentId) {
-        PresentationEditor.#instances.set(options.documentId, this);
-      }
+      // Register this instance in the static registry.
+      // Use a separate field to avoid mutating the caller's options object and to keep
+      // the registry key consistent with the overlay ID set earlier (line ~453).
+      this.#registryKey = options.documentId || `__anonymous_${Date.now()}_${Math.random().toString(36).slice(2)}`;
+      PresentationEditor.#instances.set(this.#registryKey, this);
 
       this.#pendingDocChange = true;
       this.#scheduleRerender();
@@ -1511,6 +1538,103 @@ export class PresentationEditor extends EventEmitter {
     return { ...this.#layoutOptions };
   }
 
+  #isSemanticFlowMode(): boolean {
+    return this.#layoutOptions.flowMode === 'semantic';
+  }
+
+  #resolveSemanticMargins(margins: PageMargins): { left: number; right: number; top: number; bottom: number } {
+    const mode = this.#layoutOptions.semanticOptions?.marginsMode ?? 'firstSection';
+    if (mode === 'none') {
+      return { left: 0, right: 0, top: 0, bottom: 0 };
+    }
+
+    const clamp = (value: number | undefined, fallback: number): number => {
+      const v = typeof value === 'number' && Number.isFinite(value) ? value : fallback;
+      return v >= 0 ? v : fallback;
+    };
+
+    if (mode === 'custom') {
+      const custom = this.#layoutOptions.semanticOptions?.customMargins;
+      return {
+        left: clamp(custom?.left, clamp(margins.left, DEFAULT_MARGINS.left!)),
+        right: clamp(custom?.right, clamp(margins.right, DEFAULT_MARGINS.right!)),
+        top: clamp(custom?.top, clamp(margins.top, DEFAULT_MARGINS.top!)),
+        bottom: clamp(custom?.bottom, clamp(margins.bottom, DEFAULT_MARGINS.bottom!)),
+      };
+    }
+    // mode === 'firstSection' — keep horizontal margins from the first DOCX section
+    // but zero vertical margins so stacked pages form a seamless continuous surface.
+    return {
+      left: clamp(margins.left, DEFAULT_MARGINS.left!),
+      right: clamp(margins.right, DEFAULT_MARGINS.right!),
+      top: 0,
+      bottom: 0,
+    };
+  }
+
+  #resolveSemanticContainerInnerWidth(): number {
+    const host = this.#visibleHost;
+    if (!host) return DEFAULT_PAGE_SIZE.w;
+    const win = host.ownerDocument?.defaultView ?? window;
+    const style = win.getComputedStyle(host);
+    const paddingLeft = Number.parseFloat(style.paddingLeft ?? '0');
+    const paddingRight = Number.parseFloat(style.paddingRight ?? '0');
+    const horizontalPadding =
+      (Number.isFinite(paddingLeft) ? paddingLeft : 0) + (Number.isFinite(paddingRight) ? paddingRight : 0);
+    const clientWidth = host.clientWidth;
+    if (Number.isFinite(clientWidth) && clientWidth > 0) {
+      return Math.max(1, clientWidth - horizontalPadding);
+    }
+    const rectWidth = host.getBoundingClientRect().width;
+    if (Number.isFinite(rectWidth) && rectWidth > 0) {
+      return Math.max(1, rectWidth - horizontalPadding);
+    }
+    return Math.max(1, DEFAULT_PAGE_SIZE.w - horizontalPadding);
+  }
+
+  #setupSemanticResizeObserver(): void {
+    if (!this.#isSemanticFlowMode()) return;
+    const view = this.#visibleHost.ownerDocument?.defaultView ?? window;
+    const ResizeObs = view.ResizeObserver;
+    if (typeof ResizeObs !== 'function') return;
+
+    this.#lastSemanticContainerWidth = this.#resolveSemanticContainerInnerWidth();
+    this.#semanticResizeObserver = new ResizeObs(() => {
+      this.#scheduleSemanticResizeRelayout();
+    });
+    this.#semanticResizeObserver.observe(this.#visibleHost);
+  }
+
+  #scheduleSemanticResizeRelayout(): void {
+    if (!this.#isSemanticFlowMode()) return;
+    const view = this.#visibleHost.ownerDocument?.defaultView ?? window;
+    if (this.#semanticResizeRaf == null) {
+      this.#semanticResizeRaf = view.requestAnimationFrame(() => {
+        this.#semanticResizeRaf = null;
+        this.#applySemanticResizeRelayout();
+      });
+    }
+    if (this.#semanticResizeDebounce != null) {
+      view.clearTimeout(this.#semanticResizeDebounce);
+    }
+    this.#semanticResizeDebounce = view.setTimeout(() => {
+      this.#semanticResizeDebounce = null;
+      this.#applySemanticResizeRelayout();
+    }, SEMANTIC_RESIZE_DEBOUNCE_MS);
+  }
+
+  #applySemanticResizeRelayout(): void {
+    if (!this.#isSemanticFlowMode()) return;
+    const nextWidth = this.#resolveSemanticContainerInnerWidth();
+    const prevWidth = this.#lastSemanticContainerWidth;
+    if (prevWidth != null && Math.abs(nextWidth - prevWidth) < 1) {
+      return;
+    }
+    this.#lastSemanticContainerWidth = nextWidth;
+    this.#pendingDocChange = true;
+    this.#scheduleRerender();
+  }
+
   /**
    * Return a snapshot of painter output captured during the latest paint cycle.
    */
@@ -1594,6 +1718,9 @@ export class PresentationEditor extends EventEmitter {
    * ```
    */
   setLayoutMode(mode: LayoutMode) {
+    if (this.#isSemanticFlowMode()) {
+      return;
+    }
     if (!mode || this.#layoutOptions.layoutMode === mode) {
       return;
     }
@@ -2042,7 +2169,9 @@ export class PresentationEditor extends EventEmitter {
       if (pageIndex != null) {
         const pageEl = getPageElementByIndex(this.#viewportHost, pageIndex);
         if (pageEl) {
-          pageEl.scrollIntoView({ block, inline: 'nearest', behavior });
+          // Find the specific element containing this position for precise centering
+          const targetEl = this.#findElementAtPosition(pageEl, clampedPos);
+          (targetEl ?? pageEl).scrollIntoView({ block, inline: 'nearest', behavior });
           return true;
         }
       }
@@ -2051,6 +2180,102 @@ export class PresentationEditor extends EventEmitter {
     } else {
       return false;
     }
+  }
+
+  /**
+   * Find the DOM element containing a specific document position.
+   * Returns the most specific (smallest range) matching element.
+   */
+  #findElementAtPosition(pageEl: HTMLElement, pos: number): HTMLElement | null {
+    const elements = Array.from(pageEl.querySelectorAll('[data-pm-start][data-pm-end]'));
+    let bestMatch: HTMLElement | null = null;
+    let smallestRange = Infinity;
+
+    for (const el of elements) {
+      const htmlEl = el as HTMLElement;
+      // Skip header/footer fragments — their PM positions come from a separate
+      // document and can overlap with body positions, causing incorrect matches.
+      if (htmlEl.closest('.superdoc-page-header, .superdoc-page-footer')) continue;
+
+      const start = Number(htmlEl.dataset.pmStart);
+      const end = Number(htmlEl.dataset.pmEnd);
+      if (!Number.isFinite(start) || !Number.isFinite(end)) continue;
+
+      if (pos >= start && pos <= end) {
+        const range = end - start;
+        if (range < smallestRange) {
+          smallestRange = range;
+          bestMatch = htmlEl;
+        }
+      }
+    }
+    return bestMatch;
+  }
+
+  /**
+   * Async version of scrollToPosition that handles virtualized pages.
+   *
+   * When pages are virtualized (not mounted in the DOM), this method will:
+   * 1. Try the sync scroll first (fast path if page is already mounted)
+   * 2. If that fails, trigger virtualization to render the target page
+   * 3. Wait for the page to mount (up to 2000ms)
+   * 4. Retry the scroll
+   *
+   * Use this method when navigating to positions that may be on virtualized pages.
+   *
+   * @param pos - Document position in the active editor to scroll to
+   * @param options - Scrolling options
+   * @param options.block - Alignment within the viewport ('start' | 'center' | 'end' | 'nearest')
+   * @param options.behavior - Scroll behavior ('auto' | 'smooth')
+   * @returns Promise resolving to true if scrolling succeeded, false otherwise
+   */
+  async scrollToPositionAsync(
+    pos: number,
+    options: { block?: 'start' | 'center' | 'end' | 'nearest'; behavior?: ScrollBehavior } = {},
+  ): Promise<boolean> {
+    // Fast path: try sync scroll first (works if page already mounted)
+    if (this.scrollToPosition(pos, options)) {
+      return true;
+    }
+
+    // Page not mounted - find which page contains this position
+    const activeEditor = this.getActiveEditor();
+    const doc = activeEditor?.state?.doc;
+    if (!doc || !Number.isFinite(pos)) return false;
+
+    const clampedPos = Math.max(0, Math.min(pos, doc.content.size));
+    const layout = this.#layoutState.layout;
+    const sessionMode = this.#headerFooterSession?.session?.mode ?? 'body';
+    if (!layout || sessionMode !== 'body') return false;
+
+    let pageIndex: number | null = null;
+    for (let idx = 0; idx < layout.pages.length; idx++) {
+      const page = layout.pages[idx];
+      for (const fragment of page.fragments) {
+        const frag = fragment as { pmStart?: number; pmEnd?: number };
+        if (frag.pmStart != null && frag.pmEnd != null && clampedPos >= frag.pmStart && clampedPos <= frag.pmEnd) {
+          pageIndex = idx;
+          break;
+        }
+      }
+      if (pageIndex != null) break;
+    }
+    if (pageIndex == null) return false;
+
+    // Trigger virtualization to render the page
+    this.#scrollPageIntoView(pageIndex);
+
+    // Wait for page to mount in the DOM
+    const mounted = await this.#waitForPageMount(pageIndex, {
+      timeout: PresentationEditor.ANCHOR_NAV_TIMEOUT_MS,
+    });
+    if (!mounted) {
+      console.warn(`[PresentationEditor] scrollToPositionAsync: Page ${pageIndex} failed to mount within timeout`);
+      return false;
+    }
+
+    // Retry now that page is mounted
+    return this.scrollToPosition(pos, options);
   }
 
   /**
@@ -2213,6 +2438,8 @@ export class PresentationEditor extends EventEmitter {
     }
     this.#layoutOptions.zoom = zoom;
     this.#applyZoom();
+    // Notify DomPainter so virtualization accounts for the CSS transform scale
+    this.#domPainter?.setZoom?.(zoom);
     this.emit('zoomChange', { zoom });
     this.#scheduleSelectionUpdate();
     // Trigger cursor updates on zoom changes
@@ -2253,6 +2480,23 @@ export class PresentationEditor extends EventEmitter {
       clearTimeout(this.#cursorUpdateTimer);
       this.#cursorUpdateTimer = null;
     }
+
+    if (this.#semanticResizeRaf != null) {
+      safeCleanup(() => {
+        const win = this.#visibleHost?.ownerDocument?.defaultView ?? window;
+        win.cancelAnimationFrame(this.#semanticResizeRaf!);
+        this.#semanticResizeRaf = null;
+      }, 'Semantic resize RAF');
+    }
+    if (this.#semanticResizeDebounce != null) {
+      safeCleanup(() => {
+        const win = this.#visibleHost?.ownerDocument?.defaultView ?? window;
+        win.clearTimeout(this.#semanticResizeDebounce!);
+        this.#semanticResizeDebounce = null;
+      }, 'Semantic resize debounce');
+    }
+    this.#semanticResizeObserver?.disconnect();
+    this.#semanticResizeObserver = null;
 
     // Clean up remote cursor manager
     if (this.#remoteCursorManager) {
@@ -2298,8 +2542,9 @@ export class PresentationEditor extends EventEmitter {
     }
 
     // Unregister from static registry
-    if (this.#options?.documentId) {
-      PresentationEditor.#instances.delete(this.#options.documentId);
+    if (this.#registryKey) {
+      PresentationEditor.#instances.delete(this.#registryKey);
+      this.#registryKey = null;
     }
 
     // Clean up header/footer session manager
@@ -2341,8 +2586,10 @@ export class PresentationEditor extends EventEmitter {
   }
 
   /**
-   * Runs a full decoration bridge sync: reads external plugin decorations and
-   * reconciles them onto painted DOM elements (add/update/remove).
+   * Runs a full decoration sync: applies external plugin decoration classes
+   * and styles to the painted DOM elements via DecorationBridge. Runs are
+   * split at decoration boundaries during layout so only the selected portion
+   * gets the background (like the highlight mark, without applying a mark).
    *
    * Called synchronously from post-paint and observer-rebuild paths where the
    * DOM index is guaranteed to be fresh.
@@ -2354,7 +2601,9 @@ export class PresentationEditor extends EventEmitter {
     try {
       this.#decorationBridge.sync(state, this.#domPositionIndex);
     } catch (error) {
-      debugLog('warn', 'Decoration bridge sync failed', { error: String(error) });
+      // Sync can call findRangeByText and other doc-dependent logic; if it throws
+      // (e.g. edge-case doc state), avoid breaking the RAF or observer sync loop.
+      console.warn('[PresentationEditor] Decoration sync failed:', error);
     }
   }
 
@@ -2463,8 +2712,30 @@ export class PresentationEditor extends EventEmitter {
     // We listen on 'transaction' so the decoration bridge picks up changes
     // from any transaction type. The bridge's own identity check + RAF
     // coalescing prevent unnecessary work.
-    const handleTransaction = () => {
-      this.#scheduleDecorationSync();
+    // When decoration state changes without a doc change (e.g. setFocus), we must
+    // still run a full rerender so runs are split at the new decoration boundaries;
+    // otherwise the bridge applies the class to whole runs and highlights too much.
+    const handleTransaction = (event?: { transaction?: Transaction }) => {
+      const tr = event?.transaction;
+      this.#decorationBridge.recordTransaction(tr);
+      const state = this.#editor?.view?.state;
+      const decorationChanged = state && this.#decorationBridge.hasChanges(state);
+      // Sync immediately whenever decorations changed so e.g. clearFocus removes
+      // highlight-selection in the same tick. Only restore when we had a doc change.
+      if (decorationChanged) {
+        const restoreEmpty = tr ? tr.docChanged === true : false;
+        this.#decorationBridge.sync(state!, this.#domPositionIndex, {
+          restoreEmptyDecorations: restoreEmpty,
+        });
+      } else {
+        // No immediate sync; schedule coalesced sync on next frame.
+        this.#scheduleDecorationSync();
+      }
+      if (decorationChanged) {
+        this.#pendingDocChange = true;
+        this.#selectionSync.onLayoutStart();
+        this.#scheduleRerender();
+      }
     };
 
     this.#editor.on('update', handleUpdate);
@@ -2737,7 +3008,7 @@ export class PresentationEditor extends EventEmitter {
   }
 
   /**
-   * Sets up drag and drop handlers for field annotations.
+   * Sets up drag and drop handlers for field annotations and image files.
    */
   #setupDragHandlers() {
     // Clean up any existing manager
@@ -2750,6 +3021,7 @@ export class PresentationEditor extends EventEmitter {
       scheduleSelectionUpdate: () => this.#scheduleSelectionUpdate(),
       getViewportHost: () => this.#viewportHost,
       getPainterHost: () => this.#painterHost,
+      insertImageFile: (params) => processAndInsertImageFile(params),
     });
     this.#dragDropManager.bind();
   }
@@ -3113,12 +3385,21 @@ export class PresentationEditor extends EventEmitter {
           }
         } catch {}
 
+        let defaultTableStyleId: string | undefined;
+        if (converter) {
+          const settingsRoot = readSettingsRoot(converter);
+          if (settingsRoot) {
+            defaultTableStyleId = readDefaultTableStyle(settingsRoot) ?? undefined;
+          }
+        }
+
         converterContext = converter
           ? {
               docx: converter.convertedXml,
               ...(Object.keys(footnoteNumberById).length ? { footnoteNumberById } : {}),
               translatedLinkedStyles: converter.translatedLinkedStyles,
               translatedNumbering: converter.translatedNumbering,
+              ...(defaultTableStyleId ? { defaultTableStyleId } : {}),
             }
           : undefined;
         const atomNodeTypes = getAtomNodeTypesFromSchema(this.#editor?.schema ?? null);
@@ -3160,7 +3441,19 @@ export class PresentationEditor extends EventEmitter {
         return;
       }
 
+      // Split runs at decoration boundaries so bridge sync applies background only to the
+      // selected portion (like highlight mark) without adding a document mark.
+      const state = this.#editor?.view?.state;
+      const decorationRanges = state ? this.#decorationBridge.collectDecorationRanges(state) : [];
+      if (decorationRanges.length > 0) {
+        blocks = splitRunsAtDecorationBoundaries(
+          blocks,
+          decorationRanges.map((r) => ({ from: r.from, to: r.to })),
+        );
+      }
+
       this.#applyHtmlAnnotationMeasurements(blocks);
+      const isSemanticFlow = this.#isSemanticFlowMode();
 
       const baseLayoutOptions = this.#resolveLayoutOptions(blocks, sectionMetadata);
       const footnotesLayoutInput = buildFootnotesInput(
@@ -3169,9 +3462,14 @@ export class PresentationEditor extends EventEmitter {
         converterContext,
         this.#editor?.converter?.themeColors ?? undefined,
       );
-      const layoutOptions = footnotesLayoutInput
-        ? { ...baseLayoutOptions, footnotes: footnotesLayoutInput }
-        : baseLayoutOptions;
+      const semanticFootnoteBlocks = isSemanticFlow
+        ? buildSemanticFootnoteBlocks(footnotesLayoutInput, this.#layoutOptions.semanticOptions?.footnotesMode)
+        : [];
+      const blocksForLayout = semanticFootnoteBlocks.length > 0 ? [...blocks, ...semanticFootnoteBlocks] : blocks;
+      const layoutOptions =
+        !isSemanticFlow && footnotesLayoutInput
+          ? { ...baseLayoutOptions, footnotes: footnotesLayoutInput }
+          : baseLayoutOptions;
       const previousBlocks = this.#layoutState.blocks;
       const previousLayout = this.#layoutState.layout;
       const previousMeasures = this.#layoutState.measures;
@@ -3188,7 +3486,7 @@ export class PresentationEditor extends EventEmitter {
         const result = await incrementalLayout(
           previousBlocks,
           previousLayout,
-          blocks,
+          blocksForLayout,
           layoutOptions,
           (block: FlowBlock, constraints: { maxWidth: number; maxHeight: number }) => measureBlock(block, constraints),
           headerFooterInput ?? undefined,
@@ -3236,8 +3534,30 @@ export class PresentationEditor extends EventEmitter {
       if (this.#headerFooterSession) {
         this.#headerFooterSession.multiSectionIdentifier = multiSectionId;
       }
-      const anchorMap = computeAnchorMapFromHelper(bookmarks, layout, blocks);
-      this.#layoutState = { blocks, measures, layout, bookmarks, anchorMap };
+      const anchorMap = computeAnchorMapFromHelper(bookmarks, layout, blocksForLayout);
+      this.#layoutState = { blocks: blocksForLayout, measures, layout, bookmarks, anchorMap };
+
+      // Build blockId → pageNumber map for TOC page-number resolution.
+      // Stored on editor.storage so the document-api adapter layer can read it
+      // when toc.update({ mode: 'pageNumbers' }) is called.
+      // pageMapDoc is the doc snapshot this map was derived from — the adapter
+      // layer compares it against editor.state.doc to reject stale maps.
+      const tocStorage = (
+        this.#editor as unknown as { storage?: Record<string, { pageMap?: Map<string, number>; pageMapDoc?: unknown }> }
+      ).storage?.tableOfContents;
+      if (tocStorage) {
+        const pageMap = new Map<string, number>();
+        for (const page of layout.pages) {
+          for (const fragment of page.fragments) {
+            // First occurrence wins — use the page where the block first appears
+            if (!pageMap.has(fragment.blockId)) {
+              pageMap.set(fragment.blockId, page.number);
+            }
+          }
+        }
+        tocStorage.pageMap = pageMap;
+        tocStorage.pageMapDoc = this.#editor.state.doc;
+      }
       if (this.#headerFooterSession) {
         this.#headerFooterSession.headerLayoutResults = headerLayouts ?? null;
         this.#headerFooterSession.footerLayoutResults = footerLayouts ?? null;
@@ -3256,13 +3576,14 @@ export class PresentationEditor extends EventEmitter {
         }
       }
 
-      // Process per-rId header/footer content for multi-section support
-      await this.#layoutPerRIdHeaderFooters(headerFooterInput, layout, sectionMetadata);
+      // Process per-rId header/footer content and decoration providers (paginated only)
+      if (!isSemanticFlow) {
+        await this.#layoutPerRIdHeaderFooters(headerFooterInput, layout, sectionMetadata);
+        this.#updateDecorationProviders(layout);
+      }
 
-      this.#updateDecorationProviders(layout);
-
-      const painter = this.#ensurePainter(blocks, measures);
-      if (typeof painter.setProviders === 'function') {
+      const painter = this.#ensurePainter(blocksForLayout, measures);
+      if (!isSemanticFlow && typeof painter.setProviders === 'function') {
         painter.setProviders(
           this.#headerFooterSession?.headerDecorationProvider,
           this.#headerFooterSession?.footerDecorationProvider,
@@ -3313,7 +3634,7 @@ export class PresentationEditor extends EventEmitter {
       // Pass all blocks (main document + headers + footers + extras) to the painter
       const painterSetDataStart = perfNow();
       painter.setData?.(
-        blocks,
+        blocksForLayout,
         measures,
         headerBlocks.length > 0 ? headerBlocks : undefined,
         headerMeasures.length > 0 ? headerMeasures : undefined,
@@ -3357,20 +3678,18 @@ export class PresentationEditor extends EventEmitter {
       // Update viewport dimensions after layout (page count may have changed)
       this.#applyZoom();
 
-      const metrics = createLayoutMetricsFromHelper(perf, startMark, layout, blocks);
-      const payload = { layout, blocks, measures, metrics };
+      const metrics = createLayoutMetricsFromHelper(perf, startMark, layout, blocksForLayout);
+      const payload = { layout, blocks: blocksForLayout, measures, metrics };
       this.emit('layoutUpdated', payload);
       this.emit('paginationUpdate', payload);
 
       // Emit fresh comment positions after layout completes.
-      // This ensures positions are always in sync with the current document and layout.
+      // Always emit — even when empty — so the store can clear stale positions
+      // (e.g. when undo removes the last tracked-change mark).
       const allowViewingCommentPositions = this.#layoutOptions.emitCommentPositionsInViewing === true;
       if (this.#documentMode !== 'viewing' || allowViewingCommentPositions) {
         const commentPositions = this.#collectCommentPositions();
-        const positionKeys = Object.keys(commentPositions);
-        if (positionKeys.length > 0) {
-          this.emit('commentPositions', { positions: commentPositions });
-        }
+        this.emit('commentPositions', { positions: commentPositions });
       }
 
       this.#selectionSync.requestRender({ immediate: true });
@@ -3392,17 +3711,37 @@ export class PresentationEditor extends EventEmitter {
 
   #ensurePainter(blocks: FlowBlock[], measures: Measure[]) {
     if (!this.#domPainter) {
+      // Ensure the virtualization gap matches the effective page gap so that
+      // DomPainter's spacer/offset math stays consistent with #applyZoom() height calculations.
+      const virtualization = this.#layoutOptions.virtualization;
+      const effectiveGap = this.#getEffectivePageGap();
+      const normalizedVirtualization = virtualization?.enabled
+        ? { ...virtualization, gap: virtualization.gap ?? effectiveGap }
+        : virtualization;
+
       this.#domPainter = createDomPainter({
         blocks,
         measures,
         layoutMode: this.#layoutOptions.layoutMode ?? 'vertical',
-        virtualization: this.#layoutOptions.virtualization,
+        flowMode: this.#layoutOptions.flowMode ?? 'paginated',
+        virtualization: normalizedVirtualization,
         pageStyles: this.#layoutOptions.pageStyles,
         headerProvider: this.#headerFooterSession?.headerDecorationProvider,
         footerProvider: this.#headerFooterSession?.footerDecorationProvider,
         ruler: this.#layoutOptions.ruler,
-        pageGap: this.#layoutState.layout?.pageGap ?? this.#getEffectivePageGap(),
+        pageGap: this.#layoutState.layout?.pageGap ?? effectiveGap,
       });
+      // Pass the current zoom so virtualization accounts for the CSS transform scale
+      const currentZoom = this.#layoutOptions.zoom ?? 1;
+      if (currentZoom !== 1) {
+        this.#domPainter.setZoom(currentZoom);
+      }
+      // Pass the scroll container so virtualization computes scrollY relative to it,
+      // not the browser viewport. This fixes offset errors when SuperDoc is mounted
+      // inside a wrapper div with overflow-y: auto.
+      if (this.#scrollContainer && this.#scrollContainer instanceof HTMLElement) {
+        this.#domPainter.setScrollContainer?.(this.#scrollContainer);
+      }
     }
     return this.#domPainter;
   }
@@ -3946,6 +4285,19 @@ export class PresentationEditor extends EventEmitter {
       return;
     }
 
+    // When dragging across mark boundaries, the selection can briefly land in the
+    // 2-position structural gap between adjacent runs, producing zero DOM rects for
+    // one frame. Preserve the last overlay only during active drag to prevent flicker.
+    // Outside drag (scroll, programmatic changes), zero rects means the DOM is stale
+    // or virtualized — clearing the overlay is the safer default.
+    if (domRects.length === 0 && from !== to && this.#editorInputManager?.isDragging) {
+      debugLog('warn', '[drawSelection] zero rects for non-collapsed selection — preserving last overlay', {
+        from,
+        to,
+      });
+      return;
+    }
+
     try {
       this.#localSelectionLayer.innerHTML = '';
       const isFieldAnnotationSelection =
@@ -4049,7 +4401,7 @@ export class PresentationEditor extends EventEmitter {
     overlay.appendChild(fragment);
   }
 
-  #resolveLayoutOptions(blocks: FlowBlock[] | undefined, sectionMetadata: SectionMetadata[]) {
+  #resolveLayoutOptions(blocks: FlowBlock[] | undefined, sectionMetadata: SectionMetadata[]): ResolvedLayoutOptions {
     const defaults = this.#computeDefaultLayoutDefaults();
     const firstSection = blocks?.find(
       (block) =>
@@ -4078,19 +4430,64 @@ export class PresentationEditor extends EventEmitter {
 
     this.#layoutOptions.pageSize = pageSize;
     this.#layoutOptions.margins = margins;
+    const flowMode = this.#layoutOptions.flowMode ?? 'paginated';
+
+    const resolvedMargins = {
+      top: margins.top!,
+      right: margins.right!,
+      bottom: margins.bottom!,
+      left: margins.left!,
+      ...(margins.header != null ? { header: margins.header } : {}),
+      ...(margins.footer != null ? { footer: margins.footer } : {}),
+    };
+
+    if (flowMode === 'semantic') {
+      const semanticMargins = this.#resolveSemanticMargins(margins);
+      const containerWidth = this.#resolveSemanticContainerInnerWidth();
+      const semanticContentWidth = Math.max(
+        MIN_SEMANTIC_CONTENT_WIDTH_PX,
+        containerWidth - semanticMargins.left - semanticMargins.right,
+      );
+      const semanticPageWidth = semanticContentWidth + semanticMargins.left + semanticMargins.right;
+      this.#hiddenHost.style.width = `${semanticContentWidth}px`;
+      this.#lastSemanticContainerWidth = containerWidth;
+      return {
+        flowMode: 'semantic',
+        pageSize: { w: semanticPageWidth, h: pageSize.h },
+        margins: {
+          ...resolvedMargins,
+          top: semanticMargins.top,
+          right: semanticMargins.right,
+          bottom: semanticMargins.bottom,
+          left: semanticMargins.left,
+        },
+        columns: { count: 1, gap: 0 },
+        semantic: {
+          contentWidth: semanticContentWidth,
+          marginLeft: semanticMargins.left,
+          marginRight: semanticMargins.right,
+          marginTop: semanticMargins.top,
+          marginBottom: semanticMargins.bottom,
+        },
+        sectionMetadata,
+      };
+    }
 
     this.#hiddenHost.style.width = `${pageSize.w}px`;
 
     return {
+      flowMode: 'paginated',
       pageSize,
-      margins: margins as Required<Pick<PageMargins, 'top' | 'right' | 'bottom' | 'left'>> &
-        Partial<Pick<PageMargins, 'header' | 'footer'>>,
+      margins: resolvedMargins,
       ...(columns ? { columns } : {}),
       sectionMetadata,
     };
   }
 
   #buildHeaderFooterInput() {
+    if (this.#isSemanticFlowMode()) {
+      return null;
+    }
     const adapter = this.#headerFooterSession?.adapter;
     if (!adapter) {
       return null;
@@ -4613,6 +5010,9 @@ export class PresentationEditor extends EventEmitter {
    * Uses DEFAULT_PAGE_GAP for both virtualized and non-virtualized modes for visual consistency.
    */
   #getEffectivePageGap(): number {
+    if (this.#isSemanticFlowMode()) {
+      return 0;
+    }
     if (this.#layoutOptions.virtualization?.enabled) {
       // Use explicit gap if provided, otherwise use same default as non-virtualized for consistency
       return Math.max(0, this.#layoutOptions.virtualization.gap ?? DEFAULT_PAGE_GAP);
@@ -4809,6 +5209,25 @@ export class PresentationEditor extends EventEmitter {
    * - Horizontal: Uses totalWidth for viewport width, maxHeight for scroll height
    */
   #applyZoom() {
+    if (this.#isSemanticFlowMode()) {
+      // Semantic mode: fill the container with fluid widths, no zoom scaling.
+      this.#viewportHost.style.width = '100%';
+      this.#viewportHost.style.minWidth = '';
+      this.#viewportHost.style.minHeight = '';
+      this.#viewportHost.style.transform = '';
+
+      this.#painterHost.style.width = '100%';
+      this.#painterHost.style.minHeight = '';
+      this.#painterHost.style.transformOrigin = '';
+      this.#painterHost.style.transform = '';
+
+      this.#selectionOverlay.style.width = '100%';
+      this.#selectionOverlay.style.height = '100%';
+      this.#selectionOverlay.style.transformOrigin = '';
+      this.#selectionOverlay.style.transform = '';
+      return;
+    }
+
     // Apply zoom by scaling the children (#painterHost and #selectionOverlay) and
     // setting the viewport dimensions to the scaled size.
     //
@@ -4865,10 +5284,16 @@ export class PresentationEditor extends EventEmitter {
       this.#viewportHost.style.width = `${scaledWidth}px`;
       this.#viewportHost.style.minWidth = `${scaledWidth}px`;
       this.#viewportHost.style.minHeight = `${scaledHeight}px`;
+      this.#viewportHost.style.height = '';
+      this.#viewportHost.style.overflow = '';
       this.#viewportHost.style.transform = '';
 
       this.#painterHost.style.width = `${totalWidth}px`;
       this.#painterHost.style.minHeight = `${maxHeight}px`;
+      // Negative margin compensates for the CSS box overflow from transform: scale().
+      // At zoom < 1 the unscaled CSS box is larger than the visual; this pulls the
+      // bottom edge up to match, without clipping overlays (e.g., cursor labels).
+      this.#painterHost.style.marginBottom = zoom !== 1 ? `${maxHeight * zoom - maxHeight}px` : '';
       this.#painterHost.style.transformOrigin = 'top left';
       this.#painterHost.style.transform = zoom === 1 ? '' : `scale(${zoom})`;
 
@@ -4887,19 +5312,30 @@ export class PresentationEditor extends EventEmitter {
     //
     // This ensures the scroll container sees the correct scaled content size while
     // the transform provides visual scaling.
+    //
+    // CSS transform: scale() does NOT change the element's CSS box dimensions.
+    // At zoom < 1, painterHost's CSS box stays at the full unscaled height while its
+    // visual size is smaller. A negative margin-bottom on painterHost compensates for
+    // the difference, so the scroll container sees the correct scaled size without
+    // clipping overlays (e.g., collaboration cursor labels that extend above their caret).
     const scaledWidth = maxWidth * zoom;
     const scaledHeight = totalHeight * zoom;
 
-    // Set viewport to scaled dimensions for scroll container
     this.#viewportHost.style.width = `${scaledWidth}px`;
     this.#viewportHost.style.minWidth = `${scaledWidth}px`;
     this.#viewportHost.style.minHeight = `${scaledHeight}px`;
+    this.#viewportHost.style.height = '';
+    this.#viewportHost.style.overflow = '';
     this.#viewportHost.style.transform = '';
 
-    // Set painterHost to UNSCALED dimensions and apply transform
-    // This way: 816px * scale(1.5) = 1224px visual = matches viewport
+    // Set painterHost to UNSCALED dimensions and apply transform.
+    // Negative margin compensates for the CSS box overflow from transform: scale().
+    // At zoom < 1: totalHeight=74304 with scale(0.75) → visual 55728px but CSS box stays 74304px.
+    // marginBottom = totalHeight * zoom - totalHeight = 74304 * 0.75 - 74304 = -18576px
+    // This shrinks the layout contribution to match the visual size.
     this.#painterHost.style.width = `${maxWidth}px`;
     this.#painterHost.style.minHeight = `${totalHeight}px`;
+    this.#painterHost.style.marginBottom = zoom !== 1 ? `${totalHeight * zoom - totalHeight}px` : '';
     this.#painterHost.style.transformOrigin = 'top left';
     this.#painterHost.style.transform = zoom === 1 ? '' : `scale(${zoom})`;
 

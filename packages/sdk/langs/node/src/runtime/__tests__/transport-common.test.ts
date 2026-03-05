@@ -1,5 +1,6 @@
 import { describe, expect, test } from 'bun:test';
 import { buildOperationArgv, resolveInvocation, type OperationSpec } from '../transport-common.js';
+import { CONTRACT } from '../../generated/contract.js';
 
 const makeOp = (overrides: Partial<OperationSpec> = {}): OperationSpec => ({
   operationId: 'doc.test',
@@ -159,5 +160,102 @@ describe('buildOperationArgv', () => {
     });
     const argv = buildOperationArgv(op, { doc: 'test.docx' }, {}, undefined, 'tracked');
     expect(argv).not.toContain('--change-mode');
+  });
+
+  test('injects user-name and user-email into doc.open argv when user is set', () => {
+    const op = makeOp({
+      operationId: 'doc.open',
+      commandTokens: ['open'],
+      params: [
+        { name: 'doc', kind: 'doc', type: 'string' },
+        { name: 'userName', kind: 'flag', flag: 'user-name', type: 'string' },
+        { name: 'userEmail', kind: 'flag', flag: 'user-email', type: 'string' },
+      ],
+    });
+    const argv = buildOperationArgv(op, { doc: 'test.docx' }, {}, undefined, undefined, {
+      name: 'Bot',
+      email: 'bot@co.com',
+    });
+    expect(argv).toContain('--user-name');
+    expect(argv[argv.indexOf('--user-name') + 1]).toBe('Bot');
+    expect(argv).toContain('--user-email');
+    expect(argv[argv.indexOf('--user-email') + 1]).toBe('bot@co.com');
+  });
+
+  test('does not inject user flags when user is not set', () => {
+    const op = makeOp({
+      operationId: 'doc.open',
+      commandTokens: ['open'],
+      params: [
+        { name: 'doc', kind: 'doc', type: 'string' },
+        { name: 'userName', kind: 'flag', flag: 'user-name', type: 'string' },
+        { name: 'userEmail', kind: 'flag', flag: 'user-email', type: 'string' },
+      ],
+    });
+    const argv = buildOperationArgv(op, { doc: 'test.docx' }, {}, undefined);
+    expect(argv).not.toContain('--user-name');
+    expect(argv).not.toContain('--user-email');
+  });
+
+  test('does not inject user flags for non-doc.open operations', () => {
+    const op = makeOp({
+      operationId: 'doc.find',
+      commandTokens: ['find'],
+      params: [{ name: 'query', kind: 'flag', type: 'string' }],
+    });
+    const argv = buildOperationArgv(op, { query: 'test' }, {}, undefined, undefined, {
+      name: 'Bot',
+      email: 'bot@co.com',
+    });
+    expect(argv).not.toContain('--user-name');
+    expect(argv).not.toContain('--user-email');
+  });
+
+  test('per-call userName/userEmail override client-level user defaults', () => {
+    const op = makeOp({
+      operationId: 'doc.open',
+      commandTokens: ['open'],
+      params: [
+        { name: 'doc', kind: 'doc', type: 'string' },
+        { name: 'userName', kind: 'flag', flag: 'user-name', type: 'string' },
+        { name: 'userEmail', kind: 'flag', flag: 'user-email', type: 'string' },
+      ],
+    });
+    const argv = buildOperationArgv(
+      op,
+      { doc: 'test.docx', userName: 'Override', userEmail: 'override@co.com' },
+      {},
+      undefined,
+      undefined,
+      { name: 'Bot', email: 'bot@co.com' },
+    );
+    expect(argv).toContain('--user-name');
+    expect(argv[argv.indexOf('--user-name') + 1]).toBe('Override');
+    expect(argv).toContain('--user-email');
+    expect(argv[argv.indexOf('--user-email') + 1]).toBe('override@co.com');
+    // Should only appear once each
+    expect(argv.filter((v) => v === '--user-name').length).toBe(1);
+    expect(argv.filter((v) => v === '--user-email').length).toBe(1);
+  });
+});
+
+describe('buildOperationArgv with real generated contract', () => {
+  const realOpenOp = CONTRACT.operations['doc.open'] as OperationSpec;
+
+  test('generated doc.open spec includes userName and userEmail params', () => {
+    expect(realOpenOp).toBeDefined();
+    expect(realOpenOp.params.some((p) => p.name === 'userName')).toBe(true);
+    expect(realOpenOp.params.some((p) => p.name === 'userEmail')).toBe(true);
+  });
+
+  test('user identity emits --user-name and --user-email with real doc.open spec', () => {
+    const argv = buildOperationArgv(realOpenOp, { doc: 'test.docx' }, {}, undefined, undefined, {
+      name: 'Bot',
+      email: 'bot@co.com',
+    });
+    expect(argv).toContain('--user-name');
+    expect(argv[argv.indexOf('--user-name') + 1]).toBe('Bot');
+    expect(argv).toContain('--user-email');
+    expect(argv[argv.indexOf('--user-email') + 1]).toBe('bot@co.com');
   });
 });

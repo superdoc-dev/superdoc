@@ -6,7 +6,7 @@ import type { FindAdapter } from '../find/find.js';
 import type { GetNodeAdapter } from '../get-node/get-node.js';
 import type { WriteAdapter } from '../write/write.js';
 import type { FormatAdapter } from '../format/format.js';
-import type { StylesAdapter } from '../styles/styles.js';
+import type { StylesAdapter } from '../styles/index.js';
 import type { TrackChangesAdapter } from '../track-changes/track-changes.js';
 import type { CreateAdapter } from '../create/create.js';
 import type { ListsAdapter } from '../lists/lists.js';
@@ -38,7 +38,7 @@ function makeAdapters() {
           lists: { enabled: false },
           dryRun: { enabled: false },
         },
-        format: { properties: {} },
+        format: { supportedInlineProperties: {} as DocumentApiCapabilities['format']['supportedInlineProperties'] },
         operations: {} as DocumentApiCapabilities['operations'],
         planEngine: {
           supportedStepOps: [],
@@ -94,10 +94,6 @@ function makeAdapters() {
   });
   const formatAdapter: FormatAdapter = {
     apply: vi.fn(formatReceipt),
-    fontSize: vi.fn(formatReceipt),
-    fontFamily: vi.fn(formatReceipt),
-    color: vi.fn(formatReceipt),
-    align: vi.fn(formatReceipt),
   };
   const stylesAdapter: StylesAdapter = {
     apply: vi.fn(() => ({
@@ -138,36 +134,59 @@ function makeAdapters() {
       insertionPoint: { kind: 'text' as const, blockId: 'new-h', range: { start: 0, end: 0 } },
     })),
   };
+  const listsMutateResult = () => ({
+    success: true as const,
+    item: { kind: 'block' as const, nodeType: 'listItem' as const, nodeId: 'li-1' },
+  });
   const listsAdapter: ListsAdapter = {
     list: vi.fn(() => ({ evaluatedRevision: '', total: 0, items: [], page: { limit: 50, offset: 0, returned: 0 } })),
     get: vi.fn(() => ({
       address: { kind: 'block' as const, nodeType: 'listItem' as const, nodeId: 'li-1' },
+      listId: 'list-1',
     })),
     insert: vi.fn(() => ({
       success: true as const,
       item: { kind: 'block' as const, nodeType: 'listItem' as const, nodeId: 'li-2' },
       insertionPoint: { kind: 'text' as const, blockId: 'li-2', range: { start: 0, end: 0 } },
     })),
-    setType: vi.fn(() => ({
+    indent: vi.fn(listsMutateResult),
+    outdent: vi.fn(listsMutateResult),
+    create: vi.fn(() => ({
       success: true as const,
-      item: { kind: 'block' as const, nodeType: 'listItem' as const, nodeId: 'li-1' },
+      listId: 'list-new',
+      item: { kind: 'block' as const, nodeType: 'listItem' as const, nodeId: 'li-new' },
     })),
-    indent: vi.fn(() => ({
-      success: true as const,
-      item: { kind: 'block' as const, nodeType: 'listItem' as const, nodeId: 'li-1' },
-    })),
-    outdent: vi.fn(() => ({
-      success: true as const,
-      item: { kind: 'block' as const, nodeType: 'listItem' as const, nodeId: 'li-1' },
-    })),
-    restart: vi.fn(() => ({
-      success: true as const,
-      item: { kind: 'block' as const, nodeType: 'listItem' as const, nodeId: 'li-1' },
-    })),
-    exit: vi.fn(() => ({
+    attach: vi.fn(listsMutateResult),
+    detach: vi.fn(() => ({
       success: true as const,
       paragraph: { kind: 'block' as const, nodeType: 'paragraph' as const, nodeId: 'p3' },
     })),
+    join: vi.fn(() => ({ success: true as const, listId: 'list-1' })),
+    canJoin: vi.fn(() => ({ canJoin: true })),
+    separate: vi.fn(() => ({ success: true as const, listId: 'list-new', numId: 2 })),
+    setLevel: vi.fn(listsMutateResult),
+    setValue: vi.fn(listsMutateResult),
+    continuePrevious: vi.fn(listsMutateResult),
+    canContinuePrevious: vi.fn(() => ({ canContinue: true })),
+    setLevelRestart: vi.fn(listsMutateResult),
+    convertToText: vi.fn(() => ({
+      success: true as const,
+      paragraph: { kind: 'block' as const, nodeType: 'paragraph' as const, nodeId: 'p3' },
+    })),
+    applyTemplate: vi.fn(listsMutateResult),
+    applyPreset: vi.fn(listsMutateResult),
+    captureTemplate: vi.fn(() => ({
+      success: true as const,
+      template: { version: 1, levels: [] },
+    })),
+    setLevelNumbering: vi.fn(listsMutateResult),
+    setLevelBullet: vi.fn(listsMutateResult),
+    setLevelPictureBullet: vi.fn(listsMutateResult),
+    setLevelAlignment: vi.fn(listsMutateResult),
+    setLevelIndents: vi.fn(listsMutateResult),
+    setLevelTrailingCharacter: vi.fn(listsMutateResult),
+    setLevelMarkerFont: vi.fn(listsMutateResult),
+    clearLevelOverrides: vi.fn(listsMutateResult),
   };
 
   const queryAdapter = {
@@ -304,49 +323,22 @@ describe('invoke', () => {
       const api = createDocumentApi(adapters);
       const input = {
         target: { kind: 'text' as const, blockId: 'p1', range: { start: 0, end: 2 } },
-        inline: { bold: 'on' },
+        inline: { bold: true },
       };
       const direct = api.format.apply(input);
       const invoked = api.invoke({ operationId: 'format.apply', input });
       expect(invoked).toEqual(direct);
     });
 
-    it('format.fontSize: invoke returns same result as direct call', () => {
-      const { adapters } = makeAdapters();
-      const api = createDocumentApi(adapters);
-      const input = { target: { kind: 'text' as const, blockId: 'p1', range: { start: 0, end: 2 } }, value: '14pt' };
-      const direct = api.format.fontSize(input);
-      const invoked = api.invoke({ operationId: 'format.fontSize', input });
-      expect(invoked).toEqual(direct);
-    });
-
     it('format.fontFamily: invoke returns same result as direct call', () => {
-      const { adapters } = makeAdapters();
-      const api = createDocumentApi(adapters);
-      const input = { target: { kind: 'text' as const, blockId: 'p1', range: { start: 0, end: 2 } }, value: 'Arial' };
-      const direct = api.format.fontFamily(input);
-      const invoked = api.invoke({ operationId: 'format.fontFamily', input });
-      expect(invoked).toEqual(direct);
-    });
-
-    it('format.color: invoke returns same result as direct call', () => {
-      const { adapters } = makeAdapters();
-      const api = createDocumentApi(adapters);
-      const input = { target: { kind: 'text' as const, blockId: 'p1', range: { start: 0, end: 2 } }, value: '#ff0000' };
-      const direct = api.format.color(input);
-      const invoked = api.invoke({ operationId: 'format.color', input });
-      expect(invoked).toEqual(direct);
-    });
-
-    it('format.align: invoke returns same result as direct call', () => {
       const { adapters } = makeAdapters();
       const api = createDocumentApi(adapters);
       const input = {
         target: { kind: 'text' as const, blockId: 'p1', range: { start: 0, end: 2 } },
-        alignment: 'center' as const,
+        value: 'Arial',
       };
-      const direct = api.format.align(input);
-      const invoked = api.invoke({ operationId: 'format.align', input });
+      const direct = api.format.fontFamily(input);
+      const invoked = api.invoke({ operationId: 'format.fontFamily', input });
       expect(invoked).toEqual(direct);
     });
 

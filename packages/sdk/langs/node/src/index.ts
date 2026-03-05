@@ -34,11 +34,11 @@ export { getSkill, installSkill, listSkills } from './skills.js';
 export {
   chooseTools,
   dispatchSuperDocTool,
+  getAvailableGroups,
   getToolCatalog,
-  inferDocumentFeatures,
   listTools,
   resolveToolOperation,
 } from './tools.js';
 export { SuperDocCliError } from './runtime/errors.js';
 export type { InvokeOptions, OperationSpec, OperationParamSpec, SuperDocClientOptions } from './runtime/process.js';
-export type { DocumentFeatures, ToolChooserInput, ToolPhase, ToolProfile, ToolProvider } from './tools.js';
+export type { ToolChooserInput, ToolChooserMode, ToolGroup, ToolProvider } from './tools.js';

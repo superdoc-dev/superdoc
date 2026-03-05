@@ -1,6 +1,22 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { executeOutOfBandMutation, type OutOfBandMutationResult } from './out-of-band-mutation.js';
 
+const { closeHistoryMock, stopCapturingMock, yGetStateMock } = vi.hoisted(() => ({
+  closeHistoryMock: vi.fn((tr) => tr),
+  stopCapturingMock: vi.fn(),
+  yGetStateMock: vi.fn(() => undefined),
+}));
+
+vi.mock('prosemirror-history', () => ({
+  closeHistory: closeHistoryMock,
+}));
+
+vi.mock('y-prosemirror', () => ({
+  yUndoPluginKey: {
+    getState: yGetStateMock,
+  },
+}));
+
 // ---------------------------------------------------------------------------
 // Mock editor with revision tracking support
 // ---------------------------------------------------------------------------
@@ -16,6 +32,8 @@ function createMockEditor(opts: { initialRevision?: number; guid?: string | null
   const editor = {
     converter,
     options: {},
+    state: { tr: { id: 'tx' } },
+    view: { dispatch: vi.fn() },
     on: vi.fn(),
     _revision: opts.initialRevision ?? 0,
   };
@@ -47,6 +65,7 @@ vi.mock('./plan-engine/revision-tracker.js', () => {
 describe('executeOutOfBandMutation', () => {
   beforeEach(() => {
     vi.clearAllMocks();
+    yGetStateMock.mockReturnValue(undefined);
   });
 
   it('runs revision guard before mutateFn', () => {
@@ -131,5 +150,52 @@ describe('executeOutOfBandMutation', () => {
     });
 
     expect(result).toEqual({ receipt: 'data' });
+  });
+
+  it('closes PM history group before non-collab out-of-band mutation', () => {
+    const editor = createMockEditor();
+    const mutateFn = vi.fn((): OutOfBandMutationResult<string> => ({ changed: false, payload: 'ok' }));
+
+    executeOutOfBandMutation(editor as never, mutateFn, {
+      dryRun: false,
+      expectedRevision: undefined,
+    });
+
+    expect(closeHistoryMock).toHaveBeenCalledWith(editor.state.tr);
+    expect(editor.view.dispatch).toHaveBeenCalled();
+    expect(stopCapturingMock).not.toHaveBeenCalled();
+  });
+
+  it('stops yjs capture before collab out-of-band mutation', () => {
+    const editor = createMockEditor();
+    editor.options = { collaborationProvider: {}, ydoc: {} };
+    yGetStateMock.mockReturnValue({
+      undoManager: {
+        stopCapturing: stopCapturingMock,
+      },
+    });
+    const mutateFn = vi.fn((): OutOfBandMutationResult<string> => ({ changed: false, payload: 'ok' }));
+
+    executeOutOfBandMutation(editor as never, mutateFn, {
+      dryRun: false,
+      expectedRevision: undefined,
+    });
+
+    expect(stopCapturingMock).toHaveBeenCalledOnce();
+    expect(closeHistoryMock).not.toHaveBeenCalled();
+  });
+
+  it('does not touch history grouping during dry-run', () => {
+    const editor = createMockEditor();
+    const mutateFn = vi.fn((): OutOfBandMutationResult<string> => ({ changed: false, payload: 'ok' }));
+
+    executeOutOfBandMutation(editor as never, mutateFn, {
+      dryRun: true,
+      expectedRevision: undefined,
+    });
+
+    expect(closeHistoryMock).not.toHaveBeenCalled();
+    expect(stopCapturingMock).not.toHaveBeenCalled();
+    expect(editor.view.dispatch).not.toHaveBeenCalled();
   });
 });

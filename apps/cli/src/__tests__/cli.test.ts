@@ -51,17 +51,21 @@ async function runCli(args: string[], stdinBytes?: Uint8Array): Promise<RunResul
   let stdout = '';
   let stderr = '';
 
-  const code = await run(args, {
-    stdout(message: string) {
-      stdout += message;
+  const code = await run(
+    args,
+    {
+      stdout(message: string) {
+        stdout += message;
+      },
+      stderr(message: string) {
+        stderr += message;
+      },
+      async readStdinBytes() {
+        return stdinBytes ?? new Uint8Array();
+      },
     },
-    stderr(message: string) {
-      stderr += message;
-    },
-    async readStdinBytes() {
-      return stdinBytes ?? new Uint8Array();
-    },
-  });
+    { stateDir: STATE_DIR },
+  );
 
   return { code, stdout, stderr };
 }
@@ -145,7 +149,6 @@ async function firstListItemAddress(args: string[]): Promise<ListItemAddress> {
 
 describe('superdoc CLI', () => {
   beforeAll(async () => {
-    process.env.SUPERDOC_CLI_STATE_DIR = STATE_DIR;
     await mkdir(TEST_DIR, { recursive: true });
     await copyFile(await resolveSourceDocFixture(), SAMPLE_DOC);
     await copyFile(await resolveListDocFixture(), LIST_SAMPLE_DOC);
@@ -157,7 +160,6 @@ describe('superdoc CLI', () => {
 
   afterAll(async () => {
     await rm(TEST_DIR, { recursive: true, force: true });
-    delete process.env.SUPERDOC_CLI_STATE_DIR;
   });
 
   test('status returns inactive when no document is open', async () => {
@@ -1029,6 +1031,32 @@ describe('superdoc CLI', () => {
     expect(envelope.error.message).toContain('Unknown field');
   });
 
+  test('insert with --type html inserts HTML content into the document', async () => {
+    const insertSource = join(TEST_DIR, 'insert-html-source.docx');
+    const insertOut = join(TEST_DIR, 'insert-html-out.docx');
+    await copyFile(SAMPLE_DOC, insertSource);
+
+    const insertResult = await runCli([
+      'insert',
+      insertSource,
+      '--value',
+      '<p>CLI_HTML_INSERT_TOKEN</p>',
+      '--type',
+      'html',
+      '--out',
+      insertOut,
+    ]);
+
+    expect(insertResult.code).toBe(0);
+    const insertEnvelope = parseJsonOutput<SuccessEnvelope<{ receipt: { success: boolean } }>>(insertResult);
+    expect(insertEnvelope.data.receipt.success).toBe(true);
+
+    const verifyResult = await runCli(['find', insertOut, '--type', 'text', '--pattern', 'CLI_HTML_INSERT_TOKEN']);
+    expect(verifyResult.code).toBe(0);
+    const verifyEnvelope = parseJsonOutput<SuccessEnvelope<{ result: { total: number } }>>(verifyResult);
+    expect(verifyEnvelope.data.result.total).toBeGreaterThan(0);
+  });
+
   test('create paragraph writes output and adds a new paragraph with seed text', async () => {
     const createSource = join(TEST_DIR, 'create-paragraph-source.docx');
     const createOut = join(TEST_DIR, 'create-paragraph-out.docx');
@@ -1172,28 +1200,26 @@ describe('superdoc CLI', () => {
     expect(closeResult.code).toBe(0);
   });
 
-  test('lists set-type tracked mode maps to TRACK_CHANGE_COMMAND_UNAVAILABLE', async () => {
-    const source = join(TEST_DIR, 'lists-set-type-source.docx');
-    const out = join(TEST_DIR, 'lists-set-type-out.docx');
+  test('lists detach tracked mode maps to TRACK_CHANGE_COMMAND_UNAVAILABLE', async () => {
+    const source = join(TEST_DIR, 'lists-detach-source.docx');
+    const out = join(TEST_DIR, 'lists-detach-out.docx');
     await copyFile(LIST_SAMPLE_DOC, source);
 
     const target = await firstListItemAddress(['lists', 'list', source, '--limit', '1']);
-    const setTypeResult = await runCli([
+    const detachResult = await runCli([
       'lists',
-      'set-type',
+      'detach',
       source,
       '--target-json',
       JSON.stringify(target),
-      '--kind',
-      'bullet',
       '--change-mode',
       'tracked',
       '--out',
       out,
     ]);
 
-    expect(setTypeResult.code).toBe(1);
-    const envelope = parseJsonOutput<ErrorEnvelope>(setTypeResult);
+    expect(detachResult.code).toBe(1);
+    const envelope = parseJsonOutput<ErrorEnvelope>(detachResult);
     expect(envelope.error.code).toBe('TRACK_CHANGE_COMMAND_UNAVAILABLE');
   });
 
@@ -1860,6 +1886,39 @@ describe('superdoc CLI', () => {
     expect(unsupportedTokenEnvelope.error.code).toBe('VALIDATION_ERROR');
   });
 
+  test('open rejects primitive --collaboration-json with --on-missing', async () => {
+    const result = await runCli(['open', SAMPLE_DOC, '--collaboration-json', '"oops"', '--on-missing', 'blank']);
+    expect(result.code).toBe(1);
+    const envelope = parseJsonOutput<ErrorEnvelope>(result);
+    expect(envelope.error.code).toBe('VALIDATION_ERROR');
+  });
+
+  test('open rejects array --collaboration-json', async () => {
+    const result = await runCli(['open', SAMPLE_DOC, '--collaboration-json', '[1, 2]']);
+    expect(result.code).toBe(1);
+    const envelope = parseJsonOutput<ErrorEnvelope>(result);
+    expect(envelope.error.code).toBe('VALIDATION_ERROR');
+  });
+
+  test('open with collaboration does not require a doc path', async () => {
+    const result = await runCli([
+      'open',
+      '--collaboration-json',
+      JSON.stringify({
+        providerType: 'hocuspocus',
+        url: 'ws://127.0.0.1:9',
+        syncTimeoutMs: 1,
+      }),
+      '--session',
+      'collab-no-doc',
+    ]);
+
+    expect(result.code).toBe(1);
+    const envelope = parseJsonOutput<ErrorEnvelope>(result);
+    // Verify we no longer fail argument validation for a missing document path.
+    expect(envelope.error.code).not.toBe('MISSING_REQUIRED');
+  });
+
   test('open with --session is idempotent for the same session id', async () => {
     const firstOpen = await runCli(['open', SAMPLE_DOC, '--session', 'draft-a']);
     expect(firstOpen.code).toBe(0);
@@ -2090,7 +2149,7 @@ describe('superdoc CLI', () => {
     expect(closeResult.code).toBe(0);
   });
 
-  test('open with --override-type html rejects in headless CLI', async () => {
+  test('open with --override-type html succeeds (happy-dom provides DOM)', async () => {
     const openResult = await runCli([
       'open',
       SAMPLE_DOC,
@@ -2099,10 +2158,15 @@ describe('superdoc CLI', () => {
       '--override-type',
       'html',
     ]);
-    expect(openResult.code).toBe(1);
-    const envelope = parseJsonOutput<ErrorEnvelope>(openResult);
-    expect(envelope.error.code).toBe('UNSUPPORTED_FORMAT');
-    expect(envelope.error.message).toContain('HTML');
+    expect(openResult.code).toBe(0);
+
+    const textResult = await runCli(['get-text']);
+    expect(textResult.code).toBe(0);
+    const textEnvelope = parseJsonOutput<{ data: { text: string } }>(textResult);
+    expect(textEnvelope.data.text).toContain('HTML Override');
+
+    const closeResult = await runCli(['close', '--discard']);
+    expect(closeResult.code).toBe(0);
   });
 
   test('open with --content-override empty string is accepted (not silently ignored)', async () => {
@@ -2114,6 +2178,32 @@ describe('superdoc CLI', () => {
     expect(findOriginal.code).toBe(0);
     const findEnvelope = parseJsonOutput<SuccessEnvelope<{ result: { total: number } }>>(findOriginal);
     expect(findEnvelope.data.result.total).toBe(0);
+
+    const closeResult = await runCli(['close', '--discard']);
+    expect(closeResult.code).toBe(0);
+  });
+
+  test('open with --user-name and --user-email succeeds', async () => {
+    const openResult = await runCli([
+      'open',
+      SAMPLE_DOC,
+      '--user-name',
+      'Review Bot',
+      '--user-email',
+      'bot@example.com',
+    ]);
+    expect(openResult.code).toBe(0);
+
+    const envelope = parseJsonOutput<SuccessEnvelope<{ active: boolean }>>(openResult);
+    expect(envelope.data.active).toBe(true);
+
+    const closeResult = await runCli(['close', '--discard']);
+    expect(closeResult.code).toBe(0);
+  });
+
+  test('open with --user-name only (no --user-email) succeeds', async () => {
+    const openResult = await runCli(['open', SAMPLE_DOC, '--user-name', 'Bot']);
+    expect(openResult.code).toBe(0);
 
     const closeResult = await runCli(['close', '--discard']);
     expect(closeResult.code).toBe(0);

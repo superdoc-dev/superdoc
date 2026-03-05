@@ -1,0 +1,193 @@
+---
+title: images.setAnchorOptions
+sidebarTitle: images.setAnchorOptions
+description: Set anchor behavior options for a floating image.
+---
+
+{/* GENERATED FILE: DO NOT EDIT. Regenerate via `pnpm run docapi:sync`. */}
+
+> Alpha: Document API is currently alpha and subject to breaking changes.
+
+## Summary
+
+Set anchor behavior options for a floating image.
+
+- Operation ID: `images.setAnchorOptions`
+- API member path: `editor.doc.images.setAnchorOptions(...)`
+- Mutates document: `yes`
+- Idempotency: `conditional`
+- Supports tracked mode: `no`
+- Supports dry run: `yes`
+- Deterministic target resolution: `yes`
+
+## Expected result
+
+Returns an ImagesMutationResult.
+
+## Input fields
+
+| Field | Type | Required | Description |
+| --- | --- | --- | --- |
+| `imageId` | string | yes |  |
+| `options` | object | yes |  |
+| `options.allowOverlap` | boolean | no |  |
+| `options.behindDoc` | boolean | no |  |
+| `options.layoutInCell` | boolean | no |  |
+| `options.lockAnchor` | boolean | no |  |
+| `options.simplePos` | boolean | no |  |
+
+### Example request
+
+```json
+{
+  "imageId": "example",
+  "options": {
+    "allowOverlap": true,
+    "behindDoc": true
+  }
+}
+```
+
+## Output fields
+
+| Field | Type | Required | Description |
+| --- | --- | --- | --- |
+| `failure` | object | no |  |
+| `image` | object | no |  |
+| `success` | boolean | no |  |
+
+### Example response
+
+```json
+{
+  "image": {},
+  "success": true
+}
+```
+
+## Pre-apply throws
+
+- `TARGET_NOT_FOUND`
+- `AMBIGUOUS_TARGET`
+- `INVALID_TARGET`
+- `CAPABILITY_UNAVAILABLE`
+
+## Non-applied failure codes
+
+- `NO_OP`
+
+## Raw schemas
+
+<Accordion title="Raw input schema">
+```json
+{
+  "additionalProperties": false,
+  "properties": {
+    "imageId": {
+      "type": "string"
+    },
+    "options": {
+      "additionalProperties": false,
+      "properties": {
+        "allowOverlap": {
+          "type": "boolean"
+        },
+        "behindDoc": {
+          "type": "boolean"
+        },
+        "layoutInCell": {
+          "type": "boolean"
+        },
+        "lockAnchor": {
+          "type": "boolean"
+        },
+        "simplePos": {
+          "type": "boolean"
+        }
+      },
+      "type": "object"
+    }
+  },
+  "required": [
+    "imageId",
+    "options"
+  ],
+  "type": "object"
+}
+```
+</Accordion>
+
+<Accordion title="Raw output schema">
+```json
+{
+  "additionalProperties": false,
+  "properties": {
+    "failure": {
+      "type": "object"
+    },
+    "image": {
+      "type": "object"
+    },
+    "success": {
+      "type": "boolean"
+    }
+  },
+  "type": "object"
+}
+```
+</Accordion>
+
+<Accordion title="Raw success schema">
+```json
+{
+  "additionalProperties": false,
+  "properties": {
+    "image": {
+      "type": "object"
+    },
+    "success": {
+      "const": true
+    }
+  },
+  "required": [
+    "success",
+    "image"
+  ],
+  "type": "object"
+}
+```
+</Accordion>
+
+<Accordion title="Raw failure schema">
+```json
+{
+  "additionalProperties": false,
+  "properties": {
+    "failure": {
+      "additionalProperties": false,
+      "properties": {
+        "code": {
+          "type": "string"
+        },
+        "message": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "code",
+        "message"
+      ],
+      "type": "object"
+    },
+    "success": {
+      "const": false
+    }
+  },
+  "required": [
+    "success",
+    "failure"
+  ],
+  "type": "object"
+}
+```
+</Accordion>

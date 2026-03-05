@@ -41,6 +41,11 @@ const GROUP_METADATA: Record<ReferenceGroupKey, { title: string; description: st
     description: 'Structured creation helpers.',
     pagePath: 'create/index.mdx',
   },
+  sections: {
+    title: 'Sections',
+    description: 'Section structure and page-setup operations.',
+    pagePath: 'sections/index.mdx',
+  },
   format: {
     title: 'Format',
     description: "Canonical formatting mutation with directive semantics ('on', 'off', 'clear').",
@@ -76,10 +81,40 @@ const GROUP_METADATA: Record<ReferenceGroupKey, { title: string; description: st
     description: 'Atomic mutation plan preview and execution.',
     pagePath: 'mutations/index.mdx',
   },
+  'format.paragraph': {
+    title: 'Paragraph Formatting',
+    description: 'Paragraph-level direct formatting: alignment, indentation, spacing, borders, shading, and more.',
+    pagePath: 'format/paragraph/index.mdx',
+  },
+  'styles.paragraph': {
+    title: 'Paragraph Styles',
+    description: 'Paragraph style reference operations (set/clear w:pStyle).',
+    pagePath: 'styles/paragraph/index.mdx',
+  },
   tables: {
     title: 'Tables',
     description: 'Table structure, layout, styling, and cell operations.',
     pagePath: 'tables/index.mdx',
+  },
+  history: {
+    title: 'History',
+    description: 'Undo/redo history state and navigation.',
+    pagePath: 'history/index.mdx',
+  },
+  toc: {
+    title: 'Table of Contents',
+    description: 'Table of contents lifecycle and configuration.',
+    pagePath: 'toc/index.mdx',
+  },
+  images: {
+    title: 'Images',
+    description: 'Image lifecycle, placement, and wrap configuration.',
+    pagePath: 'images/index.mdx',
+  },
+  hyperlinks: {
+    title: 'Hyperlinks',
+    description: 'Hyperlink discovery, creation, and metadata management.',
+    pagePath: 'hyperlinks/index.mdx',
   },
 };
 

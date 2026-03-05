@@ -18,6 +18,7 @@ import {
   printCorpusEnvHint,
   saveRegistry,
   sortRegistryDocs,
+  writeProgressBar,
 } from './shared.mjs';
 
 const VISUAL_LEGACY_PATH_MAP = {
@@ -49,6 +50,7 @@ Options:
       --force              Re-download files even if they already exist
       --link-visual        Point tests/visual/test-data at --dest via symlink
       --dry-run            Print actions without downloading
+      --quiet              Suppress verbose logs; show only progress and summary
   -h, --help               Show this help
 `);
 }
@@ -62,6 +64,7 @@ function parseArgs(argv) {
     force: false,
     linkVisual: false,
     dryRun: false,
+    quiet: false,
   };
 
   for (let i = 0; i < argv.length; i += 1) {
@@ -102,6 +105,10 @@ function parseArgs(argv) {
     }
     if (arg === '--dry-run') {
       args.dryRun = true;
+      continue;
+    }
+    if (arg === '--quiet' || arg === '-q') {
+      args.quiet = true;
       continue;
     }
   }
@@ -190,6 +197,7 @@ function ensureLegacyVisualAliases(destinationRoot) {
   return aliasCount;
 }
 
+
 async function main() {
   const startedAt = Date.now();
   const args = parseArgs(process.argv.slice(2));
@@ -208,9 +216,11 @@ async function main() {
   const client = await createCorpusR2Client();
 
   try {
-    console.log(`[corpus] Mode: ${client.mode}`);
-    console.log(`[corpus] Account: ${client.accountId}`);
-    console.log(`[corpus] Bucket: ${client.bucketName}`);
+    if (!args.quiet) {
+      console.log(`[corpus] Mode: ${client.mode}`);
+      console.log(`[corpus] Account: ${client.accountId}`);
+      console.log(`[corpus] Bucket: ${client.bucketName}`);
+    }
 
     const corpus = await loadCorpusDocs(client);
     const relativePaths = corpus.docs.map((doc) => normalizePath(doc.relative_path)).filter(Boolean);
@@ -225,6 +235,10 @@ async function main() {
     let missingRegistryPaths = [];
 
     if (selectedDocs.length === 0) {
+      if (corpus.docs.length === 0) {
+        console.error('[corpus] Registry returned 0 documents. Auth may be expired — run: npx wrangler login');
+        process.exit(1);
+      }
       console.log('[corpus] No docs matched filters.');
       return;
     }
@@ -234,9 +248,11 @@ async function main() {
     let downloaded = 0;
     let skipped = 0;
 
-    console.log(`[corpus] Source: ${corpus.source}`);
-    console.log(`[corpus] Destination: ${destinationRoot}`);
-    console.log(`[corpus] Matched docs: ${selectedDocs.length}`);
+    if (!args.quiet) {
+      console.log(`[corpus] Source: ${corpus.source}`);
+      console.log(`[corpus] Destination: ${destinationRoot}`);
+      console.log(`[corpus] Corpus size: ${selectedDocs.length} documents`);
+    }
 
     if (corpus.source === REGISTRY_KEY && corpus.registry) {
       const allObjectKeys = await client.listObjects('');
@@ -253,13 +269,21 @@ async function main() {
       if (missingDocs.length > 0) {
         missingRegistryPaths = missingDocs.map((doc) => normalizePath(doc.relative_path));
         selectedDocs = existingDocs;
-        console.log(`[corpus] Missing objects in bucket: ${missingDocs.length}.`);
-        for (const missingPath of missingRegistryPaths) {
-          console.log(`[corpus] Missing key: ${missingPath}`);
+        if (!args.quiet) {
+          console.log(`[corpus] Missing objects in bucket: ${missingDocs.length}.`);
+          for (const missingPath of missingRegistryPaths) {
+            console.log(`[corpus] Missing key: ${missingPath}`);
+          }
         }
       }
     }
 
+    const total = selectedDocs.length;
+    const isTTY = process.stdout.isTTY;
+    const CONCURRENCY = 8;
+
+    // Pre-filter skipped/dry-run docs synchronously, then download the rest in parallel
+    const toDownload = [];
     for (const doc of selectedDocs) {
       const relativePath = normalizePath(doc.relative_path);
       const objectKey = normalizePath(doc.object_key ?? relativePath);
@@ -276,22 +300,51 @@ async function main() {
         continue;
       }
 
-      try {
-        await client.getObjectToFile(objectKey, destinationPath);
-        downloaded += 1;
-      } catch (error) {
-        if (isMissingObjectError(error) && corpus.source === REGISTRY_KEY && corpus.registry) {
-          missingRegistryPaths.push(relativePath);
-          console.log(`[corpus] Missing key during download: ${relativePath}`);
-          continue;
+      toDownload.push({ relativePath, objectKey, destinationPath });
+    }
+
+    if (isTTY && (skipped > 0 || downloaded > 0)) writeProgressBar(downloaded + skipped, total, null);
+
+    if (toDownload.length > 0) {
+      let nextIndex = 0;
+      let firstError = null;
+      const downloadStartedAt = Date.now();
+
+      async function worker() {
+        while (nextIndex < toDownload.length) {
+          const idx = nextIndex++;
+          const { relativePath, objectKey, destinationPath } = toDownload[idx];
+
+          try {
+            await client.getObjectToFile(objectKey, destinationPath);
+            downloaded += 1;
+          } catch (error) {
+            if (isMissingObjectError(error) && corpus.source === REGISTRY_KEY && corpus.registry) {
+              missingRegistryPaths.push(relativePath);
+              if (!args.quiet) {
+                if (isTTY) process.stdout.write('\n');
+                console.log(`[corpus] Missing key during download: ${relativePath}`);
+              }
+              continue;
+            }
+            if (!firstError) firstError = error;
+            return;
+          }
+
+          if (isTTY) {
+            writeProgressBar(downloaded + skipped, total, downloadStartedAt);
+          } else if (downloaded % 25 === 0 || downloaded === toDownload.length) {
+            console.log(`[corpus] Downloaded ${downloaded}/${total}`);
+          }
         }
-        throw error;
       }
 
-      if (downloaded % 25 === 0 || downloaded === selectedDocs.length) {
-        console.log(`[corpus] Downloaded ${downloaded}/${selectedDocs.length}`);
-      }
+      const workers = Array.from({ length: Math.min(CONCURRENCY, toDownload.length) }, () => worker());
+      await Promise.all(workers);
+      if (firstError) throw firstError;
     }
+
+    if (isTTY && total > 0) process.stdout.write('\n');
 
     if (missingRegistryPaths.length > 0 && corpus.source === REGISTRY_KEY && corpus.registry && !args.dryRun) {
       const uniqueMissing = [...new Set(missingRegistryPaths.map((value) => normalizePath(value).toLowerCase()))];
@@ -304,28 +357,36 @@ async function main() {
 
     if (args.linkVisual && !args.dryRun) {
       const aliasesAdded = ensureLegacyVisualAliases(destinationRoot);
-      if (aliasesAdded > 0) {
+      if (!args.quiet && aliasesAdded > 0) {
         console.log(`[corpus] Added ${aliasesAdded} visual legacy alias path(s).`);
       }
 
       const link = ensureVisualTestDataSymlink(destinationRoot);
-      if (link.changed) {
-        console.log(
-          `[corpus] Linked tests/visual/test-data -> ${destinationRoot}${link.backupPath ? ` (backup: ${link.backupPath})` : ''}`,
-        );
-      } else {
-        console.log('[corpus] tests/visual/test-data already linked to shared corpus root.');
+      if (!args.quiet) {
+        if (link.changed) {
+          console.log(
+            `[corpus] Linked tests/visual/test-data -> ${destinationRoot}${link.backupPath ? ` (backup: ${link.backupPath})` : ''}`,
+          );
+        } else {
+          console.log('[corpus] tests/visual/test-data already linked to shared corpus root.');
+        }
       }
     }
 
-    if (args.linkVisual && args.dryRun) {
+    if (args.linkVisual && args.dryRun && !args.quiet) {
       console.log('[corpus] Dry run: skipped visual symlink/alias updates.');
     }
 
     const elapsed = Date.now() - startedAt;
-    console.log(
-      `[corpus] Done. Downloaded: ${downloaded}, Skipped: ${skipped}, Missing: ${missingRegistryPaths.length}, Elapsed: ${formatDurationMs(elapsed)}`,
-    );
+    if (args.quiet) {
+      if (downloaded > 0) {
+        console.log(`[corpus] Synced ${downloaded} new document(s) in ${formatDurationMs(elapsed)}`);
+      }
+    } else {
+      console.log(
+        `[corpus] Done. Downloaded: ${downloaded}, Skipped: ${skipped}, Missing: ${missingRegistryPaths.length}, Elapsed: ${formatDurationMs(elapsed)}`,
+      );
+    }
   } finally {
     client.destroy();
   }

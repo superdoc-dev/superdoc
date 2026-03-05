@@ -29,7 +29,7 @@ const EXPECTED_TOOLS = [
   'superdoc_reply_comment',
   'superdoc_resolve_comment',
   'superdoc_insert_list',
-  'superdoc_list_set_type',
+  'superdoc_list_create',
 ];
 
 function textContent(result: Awaited<ReturnType<Client['callTool']>>): string {

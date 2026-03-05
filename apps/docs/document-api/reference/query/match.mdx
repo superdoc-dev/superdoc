@@ -1,7 +1,7 @@
 ---
 title: query.match
 sidebarTitle: query.match
-description: Reference for query.match
+description: Deterministic selector-based search with cardinality contracts for mutation targeting.
 ---
 
 {/* GENERATED FILE: DO NOT EDIT. Regenerate via `pnpm run docapi:sync`. */}
@@ -10,6 +10,8 @@ description: Reference for query.match
 
 ## Summary
 
+Deterministic selector-based search with cardinality contracts for mutation targeting.
+
 - Operation ID: `query.match`
 - API member path: `editor.doc.query.match(...)`
 - Mutates document: `no`
@@ -17,6 +19,10 @@ description: Reference for query.match
 - Supports tracked mode: `no`
 - Supports dry run: `no`
 - Deterministic target resolution: `yes`
+
+## Expected result
+
+Returns a QueryMatchOutput with the resolved target address and cardinality metadata.
 
 ## Input fields
 
@@ -56,7 +62,11 @@ description: Reference for query.match
 | `evaluatedRevision` | string | yes |  |
 | `items` | object(matchKind="text") \\| object(matchKind="node")[] | yes |  |
 | `meta` | object | yes |  |
+| `meta.effectiveResolved` | boolean | yes |  |
 | `page` | PageInfo | yes | PageInfo |
+| `page.limit` | integer | yes |  |
+| `page.offset` | integer | yes |  |
+| `page.returned` | integer | yes |  |
 | `total` | integer | yes |  |
 
 ### Example response
@@ -227,6 +237,7 @@ description: Reference for query.match
                 "table",
                 "tableRow",
                 "tableCell",
+                "tableOfContents",
                 "image",
                 "sdt",
                 "run",

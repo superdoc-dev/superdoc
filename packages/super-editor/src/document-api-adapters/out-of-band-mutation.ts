@@ -13,6 +13,8 @@
  * primitive without reimplementing lifecycle steps.
  */
 
+import { closeHistory } from 'prosemirror-history';
+import { yUndoPluginKey } from 'y-prosemirror';
 import type { Editor } from '../core/Editor.js';
 import { checkRevision, incrementRevision } from './plan-engine/revision-tracker.js';
 
@@ -20,7 +22,7 @@ import { checkRevision, incrementRevision } from './plan-engine/revision-tracker
 interface ConverterForMutation {
   documentModified: boolean;
   documentGuid: string | null;
-  promoteToGuid(): string;
+  promoteToGuid?: () => string;
 }
 
 /** Result returned by the mutation function passed to `executeOutOfBandMutation`. */
@@ -51,6 +53,25 @@ export function executeOutOfBandMutation<T>(
   mutateFn: (dryRun: boolean) => OutOfBandMutationResult<T>,
   options: OutOfBandMutationOptions,
 ): T {
+  // Step 0: Close the current undo group to prevent bleeding into adjacent undo entries.
+  // The collab-history path requires both collaborationProvider AND ydoc (matching
+  // the History extension guard at history.js:34); ydoc-without-provider uses PM history.
+  if (!options.dryRun) {
+    if (editor.options?.collaborationProvider && editor.options?.ydoc) {
+      try {
+        yUndoPluginKey.getState(editor.state)?.undoManager?.stopCapturing();
+      } catch {
+        // yUndoPlugin may not be loaded — safe to ignore.
+      }
+    } else {
+      try {
+        editor.view?.dispatch?.(closeHistory(editor.state.tr));
+      } catch {
+        // History plugin may not be loaded — safe to ignore.
+      }
+    }
+  }
+
   // Step 1: Revision guard (throws REVISION_MISMATCH if stale)
   checkRevision(editor, options.expectedRevision);
 
@@ -62,7 +83,7 @@ export function executeOutOfBandMutation<T>(
     const converter = (editor as unknown as { converter?: ConverterForMutation }).converter;
     if (converter) {
       converter.documentModified = true;
-      if (!converter.documentGuid) {
+      if (!converter.documentGuid && typeof converter.promoteToGuid === 'function') {
         converter.promoteToGuid();
       }
     }

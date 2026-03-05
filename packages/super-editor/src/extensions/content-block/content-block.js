@@ -1,6 +1,7 @@
 // @ts-nocheck
 
 import { Node, Attribute } from '@core/index.js';
+import { OOXML_Z_INDEX_BASE } from '@extensions/shared/constants.js';
 
 /**
  * Size configuration for content blocks
@@ -115,9 +116,7 @@ export const ContentBlock = Node.create({
             // Use relativeHeight from OOXML for proper z-ordering of overlapping elements
             const relativeHeight = attrs.originalAttributes?.relativeHeight;
             if (relativeHeight != null) {
-              // Scale down the relativeHeight value to a reasonable CSS z-index range
-              // OOXML uses large numbers (e.g., 251659318), we normalize to a smaller range
-              const zIndex = Math.floor(relativeHeight / 1000000);
+              const zIndex = Math.max(0, relativeHeight - OOXML_Z_INDEX_BASE);
               style += `z-index: ${zIndex}; `;
             } else {
               style += 'z-index: 1; ';

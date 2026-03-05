@@ -1,9 +1,10 @@
-import { Mapping, ReplaceStep, AddMarkStep, RemoveMarkStep } from 'prosemirror-transform';
+import { Mapping, ReplaceStep, AddMarkStep, RemoveMarkStep, ReplaceAroundStep } from 'prosemirror-transform';
 import { TextSelection } from 'prosemirror-state';
 import { ySyncPluginKey } from 'y-prosemirror';
 import { replaceStep } from './replaceStep.js';
 import { addMarkStep } from './addMarkStep.js';
 import { removeMarkStep } from './removeMarkStep.js';
+import { replaceAroundStep } from './replaceAroundStep.js';
 import { TrackDeleteMarkName } from '../constants.js';
 import { TrackChangesBasePluginKey } from '../plugins/index.js';
 import { findMark } from '@core/helpers/index.js';
@@ -80,7 +81,23 @@ export const trackedTransaction = ({ tr, state, user }) => {
         user,
         date,
       });
+    } else if (step instanceof ReplaceAroundStep) {
+      replaceAroundStep({
+        state,
+        tr,
+        step,
+        newTr,
+        map,
+        doc,
+        user,
+        date,
+        originalStep,
+        originalStepIndex,
+      });
     } else {
+      // Non-structural steps (AttrStep, SetNodeMarkupStep) are typically
+      // metadata updates from plugins (e.g. listRendering, sdBlockRev).
+      // These are safe to apply without tracking.
       newTr.step(step);
     }
   });
@@ -100,20 +117,20 @@ export const trackedTransaction = ({ tr, state, user }) => {
   // Get the track changes meta to check if we have an adjusted insertion position (SD-1624).
   const trackMeta = newTr.getMeta(TrackChangesBasePluginKey);
 
-  if (tr.selectionSet) {
-    // When replaceStep normalizes a broad replace to a single-char delete (e.g. terminal period),
-    // it sets selectionPos so the caret lands at the deletion edge. Honor it so the next backspace
-    // targets the right character instead of a block/run boundary.
-    if (trackMeta?.selectionPos !== undefined && trackMeta?.selectionPos !== null) {
-      const boundedPos = Math.max(0, Math.min(trackMeta.selectionPos, newTr.doc.content.size));
-      const $pos = newTr.doc.resolve(boundedPos);
-      if ($pos.parent.inlineContent) {
-        newTr.setSelection(TextSelection.create(newTr.doc, boundedPos));
-      } else {
-        // Normalized delete flows should keep the caret on the deletion side.
-        newTr.setSelection(TextSelection.near($pos, -1));
-      }
-    } else if (
+  // selectionPos is an explicit cursor override from tracked change handlers (e.g.
+  // replaceAroundStep converting a structural step to a character deletion). It must
+  // be honored regardless of tr.selectionSet, because the original transaction may
+  // not have set a selection (e.g. ReplaceAroundStep transactions).
+  if (trackMeta?.selectionPos !== undefined && trackMeta?.selectionPos !== null) {
+    const boundedPos = Math.max(0, Math.min(trackMeta.selectionPos, newTr.doc.content.size));
+    const $pos = newTr.doc.resolve(boundedPos);
+    if ($pos.parent.inlineContent) {
+      newTr.setSelection(TextSelection.create(newTr.doc, boundedPos));
+    } else {
+      newTr.setSelection(TextSelection.near($pos, -1));
+    }
+  } else if (tr.selectionSet) {
+    if (
       tr.selection instanceof TextSelection &&
       (tr.selection.from < state.selection.from || tr.getMeta('inputType') === 'deleteContentBackward')
     ) {
@@ -139,8 +156,6 @@ export const trackedTransaction = ({ tr, state, user }) => {
   } else if (state.selection.from - tr.selection.from > 1 && tr.selection.$head.depth > 1) {
     const caretPos = map.map(tr.selection.from - 2, -1);
     newTr.setSelection(new TextSelection(newTr.doc.resolve(caretPos)));
-  } else {
-    // Skip the other cases for now.
   }
 
   if (tr.storedMarksSet) {

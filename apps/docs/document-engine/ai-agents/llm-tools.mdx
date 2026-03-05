@@ -1,0 +1,363 @@
+---
+title: LLM Tools
+sidebarTitle: LLM Tools
+tag: NEW
+description: Give LLMs structured access to document operations with provider-ready tool definitions and dispatch
+keywords: "llm tools, ai document editing, openai tools, anthropic tools, tool use, function calling, superdoc sdk, document automation"
+---
+
+The SuperDoc SDK ships tool definitions that plug directly into OpenAI, Anthropic, Vercel AI, or any custom LLM integration. Pick tools, send them with your prompt, dispatch the model's tool calls — the SDK handles schema formatting, argument validation, and execution.
+
+<Info>
+LLM tools are in <strong>alpha</strong>. Tool names and schemas may change between releases.
+</Info>
+
+## Quick start
+
+Install the SDK, create a client, and wire up an agentic loop.
+
+<Tabs>
+  <Tab title="Node.js">
+    ```bash
+    npm install @superdoc-dev/sdk openai
+    ```
+
+    ```typescript
+    import { createSuperDocClient, chooseTools, dispatchSuperDocTool } from '@superdoc-dev/sdk';
+    import OpenAI from 'openai';
+
+    const client = createSuperDocClient();
+    await client.connect();
+    await client.doc.open({ doc: './contract.docx' });
+
+    const { tools } = await chooseTools({ provider: 'openai' });
+    const openai = new OpenAI();
+
+    const messages = [
+      { role: 'system', content: 'You edit documents using the provided tools.' },
+      { role: 'user', content: 'Find the termination clause and rewrite it to allow 30-day notice.' },
+    ];
+
+    // Agentic loop
+    while (true) {
+      const response = await openai.chat.completions.create({
+        model: 'gpt-5.2',
+        messages,
+        tools,
+      });
+
+      const message = response.choices[0].message;
+      messages.push(message);
+
+      if (!message.tool_calls?.length) break;
+
+      for (const call of message.tool_calls) {
+        const result = await dispatchSuperDocTool(
+          client, call.function.name, JSON.parse(call.function.arguments),
+        );
+        messages.push({ role: 'tool', tool_call_id: call.id, content: JSON.stringify(result) });
+      }
+    }
+
+    await client.doc.save({ inPlace: true });
+    await client.dispose();
+    ```
+  </Tab>
+  <Tab title="Python">
+    ```bash
+    pip install superdoc-sdk openai
+    ```
+
+    ```python
+    from superdoc import SuperDocClient, choose_tools, dispatch_superdoc_tool
+    import openai, json
+
+    client = SuperDocClient()
+    client.connect()
+    client.doc.open(doc="./contract.docx")
+
+    result = choose_tools(provider="openai")
+    tools = result["tools"]
+
+    messages = [
+        {"role": "system", "content": "You edit documents using the provided tools."},
+        {"role": "user", "content": "Find the termination clause and rewrite it to allow 30-day notice."},
+    ]
+
+    while True:
+        response = openai.chat.completions.create(
+            model="gpt-5.2", messages=messages, tools=tools
+        )
+        message = response.choices[0].message
+        messages.append(message)
+
+        if not message.tool_calls:
+            break
+
+        for call in message.tool_calls:
+            result = dispatch_superdoc_tool(
+                client, call.function.name, json.loads(call.function.arguments)
+            )
+            messages.append({
+                "role": "tool",
+                "tool_call_id": call.id,
+                "content": json.dumps(result),
+            })
+
+    client.doc.save(in_place=True)
+    client.dispose()
+    ```
+  </Tab>
+</Tabs>
+
+## Tool selection
+
+`chooseTools()` returns provider-formatted tool definitions ready to pass to your LLM.
+
+<Tabs>
+  <Tab title="Node.js">
+    ```typescript
+    import { chooseTools } from '@superdoc-dev/sdk';
+
+    const { tools, selected, meta } = await chooseTools({
+      provider: 'openai',   // 'openai' | 'anthropic' | 'vercel' | 'generic'
+      mode: 'essential',     // 'essential' (default) | 'all'
+      groups: ['comments'],  // optional — load additional groups alongside essential tools
+    });
+    ```
+  </Tab>
+  <Tab title="Python">
+    ```python
+    from superdoc import choose_tools
+
+    result = choose_tools(
+        provider="openai",
+        mode="essential",
+        groups=["comments"],
+    )
+    tools = result["tools"]
+    ```
+  </Tab>
+</Tabs>
+
+### Essential mode (default)
+
+Returns 5 essential tools plus `discover_tools` — a meta-tool that lets the LLM load more groups on demand. This keeps the initial context small while giving the model access to the full toolkit when needed.
+
+The 5 essential tools:
+
+| Tool | What it does |
+| --- | --- |
+| `get_document_text` | Returns the full plain-text content of the document |
+| `query_match` | Searches by node type, text pattern, or both — returns matches with addresses |
+| `apply_mutations` | Batch edit: rewrite, insert, delete text and apply formatting in one call |
+| `get_node_by_id` | Get details about a specific node by its address |
+| `undo` | Undo the last operation |
+
+If you pass `groups`, those groups are loaded **in addition** to the essential set:
+
+```typescript
+// Essential tools + all comment tools
+const { tools } = await chooseTools({
+  provider: 'openai',
+  groups: ['comments'],
+});
+```
+
+### All mode
+
+Returns every tool from the requested groups (or all groups if `groups` is omitted). The `core` group is always included.
+
+```typescript
+const { tools } = await chooseTools({
+  provider: 'openai',
+  mode: 'all',
+  groups: ['core', 'format', 'comments'],
+});
+```
+
+## Dispatching tool calls
+
+`dispatchSuperDocTool()` resolves a tool name to the correct SDK method, validates arguments, and executes the call.
+
+<Tabs>
+  <Tab title="Node.js">
+    ```typescript
+    import { dispatchSuperDocTool } from '@superdoc-dev/sdk';
+
+    const result = await dispatchSuperDocTool(client, toolName, args);
+    ```
+  </Tab>
+  <Tab title="Python (sync)">
+    ```python
+    from superdoc import dispatch_superdoc_tool
+
+    result = dispatch_superdoc_tool(client, tool_name, args)
+    ```
+  </Tab>
+  <Tab title="Python (async)">
+    ```python
+    from superdoc import dispatch_superdoc_tool_async
+
+    result = await dispatch_superdoc_tool_async(client, tool_name, args)
+    ```
+  </Tab>
+</Tabs>
+
+The dispatcher validates required parameters, enforces mutual exclusivity constraints, and throws descriptive errors if arguments are invalid — so the LLM gets actionable feedback.
+
+## Tool groups
+
+Tools are organized into 11 groups. In essential mode, the LLM can load any group dynamically via `discover_tools`.
+
+| Group | Description |
+| --- | --- |
+| `core` | Read nodes, get text, find/replace, insert, delete, batch mutations |
+| `format` | Bold, italic, underline, strikethrough, alignment, spacing, borders, shading |
+| `create` | Create headings, paragraphs, tables, sections, table of contents |
+| `tables` | Row/column operations, cell merging, table formatting, borders |
+| `sections` | Page layout, margins, columns, headers/footers, page numbering |
+| `lists` | Bullet and numbered lists, indentation, list type conversion |
+| `comments` | Create, edit, delete, resolve, and list comment threads |
+| `trackChanges` | List, inspect, accept, and reject tracked changes |
+| `toc` | Table of contents — create, configure, refresh |
+| `history` | Undo and redo |
+| `session` | Open, save, close, and manage document sessions |
+
+## The discover_tools pattern
+
+When the LLM needs tools beyond the essential set, it calls `discover_tools` with the groups it wants. Your agentic loop handles this like any other tool call — `dispatchSuperDocTool` returns the new tool definitions, and you merge them into the next request.
+
+```typescript
+for (const call of message.tool_calls) {
+  const result = await dispatchSuperDocTool(
+    client, call.function.name, JSON.parse(call.function.arguments),
+  );
+
+  // discover_tools returns new tool definitions — merge them
+  if (call.function.name === 'discover_tools') {
+    tools.push(...result.tools);
+  }
+
+  messages.push({
+    role: 'tool',
+    tool_call_id: call.id,
+    content: JSON.stringify(result),
+  });
+}
+```
+
+## Providers
+
+Each provider gets tool definitions in its native format.
+
+<Tabs>
+  <Tab title="OpenAI">
+    ```typescript
+    const { tools } = await chooseTools({ provider: 'openai' });
+    // [{ type: 'function', function: { name, description, parameters } }]
+    ```
+  </Tab>
+  <Tab title="Anthropic">
+    ```typescript
+    const { tools } = await chooseTools({ provider: 'anthropic' });
+    // [{ name, description, input_schema }]
+    ```
+  </Tab>
+  <Tab title="Vercel AI">
+    ```typescript
+    const { tools } = await chooseTools({ provider: 'vercel' });
+    // [{ type: 'function', function: { name, description, parameters } }]
+    ```
+  </Tab>
+  <Tab title="Generic">
+    ```typescript
+    const { tools } = await chooseTools({ provider: 'generic' });
+    // [{ name, description, parameters, returns, metadata }]
+    ```
+  </Tab>
+</Tabs>
+
+## Best practices
+
+### Start with essential mode
+
+Load only the 5 essential tools plus `discover_tools`. This keeps the context window small and gives the model room to reason. Let it call `discover_tools` when it needs more — don't front-load every group.
+
+### Minimize tool calls
+
+A typical edit should take 3–5 tool calls: query, mutate, done. Instruct the LLM to plan all edits before calling tools, and to batch multiple changes into a single `apply_mutations` call when possible.
+
+### Use `apply_mutations` for text edits
+
+`apply_mutations` can rewrite, insert, delete, and format text in one call. It supports multiple steps, so the LLM can edit several paragraphs at once. Use it for any operation on existing text.
+
+### Feed errors back to the model
+
+`dispatchSuperDocTool` throws descriptive errors with codes like `MATCH_NOT_FOUND` or `INVALID_ARGUMENT`. Pass these back as tool results — most models self-correct on the next turn.
+
+### Add tool call examples for repeatable actions
+
+If your workflow involves the same kind of edit across many documents (e.g., always rewriting a specific clause, always adding a comment to a section), include a concrete tool call example in your system prompt. Models that see a working example of the exact tool invocation produce correct calls more reliably than models that only see the schema.
+
+### Include a system prompt
+
+Tell the model what it can do and how to approach edits. Here's an example:
+
+````markdown
+You edit `.docx` files using SuperDoc tools. Be efficient — minimize tool calls.
+
+## Workflow
+
+1. **Query** — Call `query_match` to find text you want to edit.
+   Use `require: "any"` to match broadly.
+2. **Plan** — Decide what changes to make. Think through all
+   edits before making tool calls.
+3. **Mutate** — Call `apply_mutations` to rewrite, insert, delete,
+   or format text.
+
+Keep it to 3–5 tool calls total.
+
+## Tools
+
+You start with 5 essential tools plus `discover_tools`.
+Call `discover_tools` to load additional categories when needed:
+
+| Category | What it covers |
+|----------|----------------|
+| core | Read nodes, get text, query, mutations |
+| format | Text formatting, alignment, spacing, borders |
+| create | Headings, paragraphs, tables, sections |
+| tables | Table manipulation, cell operations |
+| comments | Comment threads |
+| trackChanges | Accept/reject tracked changes |
+
+## Rules
+
+- Use `apply_mutations` for text edits on existing content.
+  You can batch multiple rewrites in one call.
+- Use standalone tools (`create_heading`, `create_table`, etc.)
+  for structural changes — these are NOT step ops.
+- Set `changeMode: "tracked"` when edits need human review.
+- Don't rewrite and format in the same `apply_mutations` batch.
+  Rewrite first, query again for fresh refs, then format.
+````
+
+## Utility functions
+
+| Function | Description |
+| --- | --- |
+| `chooseTools(input)` | Select tools for a provider, filtered by mode and groups |
+| `dispatchSuperDocTool(client, name, args)` | Execute a tool call against a connected client |
+| `listTools(provider)` | List all tool definitions for a provider |
+| `resolveToolOperation(toolName)` | Map a tool name to its operation ID |
+| `getToolCatalog()` | Load the full tool catalog with metadata |
+| `getAvailableGroups()` | List all available tool groups |
+
+## Related
+
+- [MCP Server](/document-engine/ai-agents/mcp-server) — connect AI agents via the Model Context Protocol
+- [Skills](/document-engine/ai-agents/skills) — reusable prompt templates for LLM document editing
+- [SDKs](/document-engine/sdks) — typed Node.js and Python wrappers
+- [Document API](/document-api/overview) — the operation set behind the tools
+- [AI Agents](/getting-started/ai-agents) — headless mode for server-side AI workflows

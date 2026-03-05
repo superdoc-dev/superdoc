@@ -207,9 +207,9 @@ watch(isActiveComment, (active) => {
   }
 });
 
-/* ── Step 3: Thread collapse (Google Docs pattern) ──
- * >=3 replies → collapse: parent + first reply + "N more replies" + last reply
- * <3 replies  → show all
+/* ── Step 3: Thread collapse ──
+ * >=2 replies → collapse: parent + "N more replies" + last reply
+ * <2 replies  → show all
  * Clicking "N more replies" or the card → expand all + activate
  * Deactivating → re-collapse
  */
@@ -218,27 +218,26 @@ const childComments = computed(() => comments.value.slice(1));
 
 const shouldCollapseThread = computed(() => {
   if (threadExpanded.value) return false;
-  return childComments.value.length >= 3;
+  return childComments.value.length >= 2;
 });
 
 const visibleComments = computed(() => {
   if (!shouldCollapseThread.value) return comments.value;
-  // Collapsed: parent + first reply + last reply
+  // Collapsed: parent + last reply
   const parent = comments.value[0];
-  const first = childComments.value[0];
   const last = childComments.value[childComments.value.length - 1];
-  return [parent, first, last].filter(Boolean);
+  return [parent, last].filter(Boolean);
 });
 
 const collapsedReplyCount = computed(() => {
   if (!shouldCollapseThread.value) return 0;
-  return childComments.value.length - 2; // first + last are shown
+  return childComments.value.length - 1; // only last is shown
 });
 
 const collapsedReplyAuthors = computed(() => {
   if (!shouldCollapseThread.value) return [];
-  // Hidden = middle replies (first + last are visible)
-  const hidden = childComments.value.slice(1, -1);
+  // Hidden = all replies except last
+  const hidden = childComments.value.slice(0, -1);
   const seen = new Set();
   return hidden
     .map((c) =>
@@ -356,17 +355,21 @@ const handleReject = () => {
   const customHandler = proxy.$superdoc.config.onTrackedChangeBubbleReject;
 
   if (props.comment.trackedChange && typeof customHandler === 'function') {
-    // Custom handler replaces default behavior
     customHandler(props.comment, proxy.$superdoc.activeEditor);
   } else if (props.comment.trackedChange) {
+    proxy.$superdoc.activeEditor.commands.rejectTrackedChangeById(props.comment.commentId);
+  } else {
+    commentsStore.deleteComment({ superdoc: proxy.$superdoc, commentId: props.comment.commentId });
+  }
+
+  // Always resolve tracked changes so resolvedTime is set and the bubble
+  // disappears from getFloatingComments — even when a custom handler is used (SD-2049).
+  if (props.comment.trackedChange) {
     props.comment.resolveComment({
       email: superdocStore.user.email,
       name: superdocStore.user.name,
       superdoc: proxy.$superdoc,
     });
-    proxy.$superdoc.activeEditor.commands.rejectTrackedChangeById(props.comment.commentId);
-  } else {
-    commentsStore.deleteComment({ superdoc: proxy.$superdoc, commentId: props.comment.commentId });
   }
 
   // Always cleanup the dialog state
@@ -381,19 +384,20 @@ const handleResolve = () => {
   const customHandler = proxy.$superdoc.config.onTrackedChangeBubbleAccept;
 
   if (props.comment.trackedChange && typeof customHandler === 'function') {
-    // Custom handler replaces default behavior
     customHandler(props.comment, proxy.$superdoc.activeEditor);
   } else {
     if (props.comment.trackedChange) {
       proxy.$superdoc.activeEditor.commands.acceptTrackedChangeById(props.comment.commentId);
     }
-
-    props.comment.resolveComment({
-      email: superdocStore.user.email,
-      name: superdocStore.user.name,
-      superdoc: proxy.$superdoc,
-    });
   }
+
+  // Always resolve so resolvedTime is set and the bubble disappears
+  // from getFloatingComments — even when a custom handler is used (SD-2049).
+  props.comment.resolveComment({
+    email: superdocStore.user.email,
+    name: superdocStore.user.name,
+    superdoc: proxy.$superdoc,
+  });
 
   // Always cleanup the dialog state
   nextTick(() => {
@@ -538,9 +542,9 @@ watch(editingCommentId, (commentId) => {
         />
       </div>
       <div class="reply-actions">
-        <button class="reply-btn-cancel" @click.stop.prevent="handleCancel">Cancel</button>
+        <button class="sd-button reply-btn-cancel" @click.stop.prevent="handleCancel">Cancel</button>
         <button
-          class="reply-btn-primary"
+          class="sd-button primary reply-btn-primary"
           @click.stop.prevent="handleAddComment"
           :disabled="!hasTextContent"
           :class="{ 'is-disabled': !hasTextContent }"
@@ -664,8 +668,8 @@ watch(editingCommentId, (commentId) => {
           </div>
         </div>
 
-        <!-- Thread collapse: after first reply (index 1), show "N more replies" -->
-        <template v-if="shouldCollapseThread && index === 1">
+        <!-- Thread collapse: after parent (index 0), show "N more replies" -->
+        <template v-if="shouldCollapseThread && index === 0">
           <div class="comment-separator"></div>
           <div class="collapsed-replies" @click.stop.prevent="expandThread">
             <div class="collapsed-avatars">
@@ -697,9 +701,9 @@ watch(editingCommentId, (commentId) => {
             />
           </div>
           <div class="reply-actions">
-            <button class="reply-btn-cancel" @click.stop.prevent="handleCancel">Cancel</button>
+            <button class="sd-button reply-btn-cancel" @click.stop.prevent="handleCancel">Cancel</button>
             <button
-              class="reply-btn-primary"
+              class="sd-button primary reply-btn-primary"
               @click.stop.prevent="handleAddComment"
               :disabled="!hasTextContent"
               :class="{ 'is-disabled': !hasTextContent }"
@@ -719,7 +723,7 @@ watch(editingCommentId, (commentId) => {
   flex-direction: column;
   padding: var(--sd-comment-padding, 16px);
   border-radius: var(--sd-comment-radius, 12px);
-  background-color: var(--sd-comment-bg, #f5f5f5);
+  background-color: var(--sd-comment-bg, #f3f6fd);
   border: 1px solid transparent;
   font-family: var(--sd-ui-font-family, Arial, Helvetica, sans-serif);
   font-size: var(--sd-comment-body-size, 14px);
@@ -735,7 +739,7 @@ watch(editingCommentId, (commentId) => {
   cursor: pointer;
 }
 .comments-dialog:not(.is-active):not(.is-resolved):hover {
-  background-color: var(--sd-comment-bg-hover, #f2f2f2);
+  background-color: var(--sd-comment-bg-hover, #f3f6fd);
 }
 .comments-dialog:not(.is-resolved):hover :deep(.overflow-menu) {
   opacity: 1;
@@ -744,7 +748,7 @@ watch(editingCommentId, (commentId) => {
 .comments-dialog.is-active {
   background-color: var(--sd-comment-bg-active, #ffffff);
   border-color: var(--sd-comment-border-active, #e0e0e0);
-  box-shadow: var(--sd-comment-shadow, 0 4px 20px rgba(15, 23, 42, 0.08));
+  box-shadow: var(--sd-comment-shadow, 0px 4px 12px 0px rgba(50, 50, 50, 0.15));
   z-index: 10;
 }
 .comments-dialog.is-resolved {
@@ -860,10 +864,12 @@ watch(editingCommentId, (commentId) => {
 /* ── New comment input ── */
 .new-comment-input-wrapper {
   border: 1.5px solid var(--sd-border-default, #dbdbdb);
-  border-radius: 9999px;
+  border-radius: 12px;
   padding: 8.5px 10.5px;
   background: var(--sd-surface-card, #ffffff);
   margin-top: 4px;
+  max-height: 150px;
+  overflow-y: auto;
 }
 .new-comment-input-wrapper :deep(.comment-entry) {
   border-radius: 0;
@@ -905,9 +911,11 @@ watch(editingCommentId, (commentId) => {
 }
 .reply-input-wrapper {
   border: 1.5px solid var(--sd-border-default, #dbdbdb);
-  border-radius: 9999px;
+  border-radius: 12px;
   padding: 8.5px 10.5px;
   background: var(--sd-surface-card, #ffffff);
+  max-height: 150px;
+  overflow-y: auto;
 }
 .reply-input-wrapper :deep(.comment-entry) {
   border-radius: 0;
@@ -962,7 +970,7 @@ watch(editingCommentId, (commentId) => {
   transition: background 150ms;
 }
 .reply-btn-primary:hover {
-  background: var(--sd-color-blue-600, #0f44cc);
+  background: var(--sd-action-primary-hover, #0f44cc);
 }
 .reply-btn-primary.is-disabled {
   background: var(--sd-color-gray-400, #dbdbdb);
@@ -981,7 +989,7 @@ watch(editingCommentId, (commentId) => {
   justify-content: flex-end;
   width: 100%;
 }
-.sd-button {
+.comment-footer .sd-button {
   font-size: 12px;
   margin-left: 5px;
 }

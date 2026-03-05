@@ -1,7 +1,7 @@
 ---
 title: tables.setCellProperties
 sidebarTitle: tables.setCellProperties
-description: Reference for tables.setCellProperties
+description: Set properties on a table cell such as vertical alignment or text direction.
 ---
 
 {/* GENERATED FILE: DO NOT EDIT. Regenerate via `pnpm run docapi:sync`. */}
@@ -9,6 +9,8 @@ description: Reference for tables.setCellProperties
 > Alpha: Document API is currently alpha and subject to breaking changes.
 
 ## Summary
+
+Set properties on a table cell such as vertical alignment or text direction.
 
 - Operation ID: `tables.setCellProperties`
 - API member path: `editor.doc.tables.setCellProperties(...)`
@@ -18,26 +20,56 @@ description: Reference for tables.setCellProperties
 - Supports dry run: `yes`
 - Deterministic target resolution: `yes`
 
+## Expected result
+
+Returns a TableMutationResult receipt; reports NO_OP if cell properties already match.
+
 ## Input fields
 
-| Field | Type | Required | Description |
-| --- | --- | --- | --- |
-| `fitText` | boolean | no |  |
-| `nodeId` | string | no |  |
-| `preferredWidthPt` | number | no |  |
-| `target` | BlockNodeAddress | no | BlockNodeAddress |
-| `verticalAlign` | enum | no | `"top"`, `"center"`, `"bottom"` |
-| `wrapText` | boolean | no |  |
+### Variant 1
+
+_No fields._
+
+### Variant 2
+
+_No fields._
 
 ### Example request
 
 ```json
-{}
+{
+  "nodeId": "node-def456",
+  "preferredWidthPt": 12.5,
+  "target": {
+    "kind": "block",
+    "nodeId": "node-def456",
+    "nodeType": "paragraph"
+  }
+}
 ```
 
 ## Output fields
 
-_No fields._
+### Variant 1 (table.kind="block")
+
+| Field | Type | Required | Description |
+| --- | --- | --- | --- |
+| `success` | `true` | yes | Constant: `true` |
+| `table` | BlockNodeAddress | no | BlockNodeAddress |
+| `table.kind` | `"block"` | no | Constant: `"block"` |
+| `table.nodeId` | string | no |  |
+| `table.nodeType` | enum | no | `"paragraph"`, `"heading"`, `"listItem"`, `"table"`, `"tableRow"`, `"tableCell"`, `"tableOfContents"`, `"image"`, `"sdt"` |
+| `trackedChangeRefs` | EntityAddress[] | no |  |
+
+### Variant 2 (success=false)
+
+| Field | Type | Required | Description |
+| --- | --- | --- | --- |
+| `failure` | object | yes |  |
+| `failure.code` | enum | yes | `"NO_OP"`, `"INVALID_TARGET"`, `"TARGET_NOT_FOUND"`, `"CAPABILITY_UNAVAILABLE"` |
+| `failure.details` | any | no |  |
+| `failure.message` | string | yes |  |
+| `success` | `false` | yes | Constant: `false` |
 
 ### Example response
 

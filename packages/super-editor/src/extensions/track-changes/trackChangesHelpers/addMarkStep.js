@@ -18,6 +18,7 @@ import { getLiveInlineMarksInRange } from './getLiveInlineMarksInRange.js';
  */
 export const addMarkStep = ({ state, step, newTr, doc, user, date }) => {
   const meta = {};
+  let sharedWid = null;
 
   doc.nodesBetween(step.from, step.to, (node, pos) => {
     if (!node.isInline || node.type.name === 'run') {
@@ -30,6 +31,7 @@ export const addMarkStep = ({ state, step, newTr, doc, user, date }) => {
 
     const rangeFrom = Math.max(step.from, pos);
     const rangeTo = Math.min(step.to, pos + node.nodeSize);
+
     const liveMarks = getLiveInlineMarksInRange({
       doc: newTr.doc,
       from: rangeFrom,
@@ -38,7 +40,7 @@ export const addMarkStep = ({ state, step, newTr, doc, user, date }) => {
     const existingChangeMark = liveMarks.find((mark) =>
       [TrackDeleteMarkName, TrackFormatMarkName].includes(mark.type.name),
     );
-    const wid = existingChangeMark ? existingChangeMark.attrs.id : uuidv4();
+    const wid = existingChangeMark ? existingChangeMark.attrs.id : (sharedWid ?? (sharedWid = uuidv4()));
     newTr.addMark(Math.max(step.from, pos), Math.min(step.to, pos + node.nodeSize), step.mark);
 
     const allowedMarks = ['bold', 'italic', 'strike', 'underline', 'textStyle', 'highlight'];
@@ -68,12 +70,14 @@ export const addMarkStep = ({ state, step, newTr, doc, user, date }) => {
           });
         }
       } else {
-        before = liveMarks
-          .filter((mark) => ![TrackDeleteMarkName, TrackFormatMarkName].includes(mark.type.name))
-          .map((mark) => ({
-            type: mark.type.name,
-            attrs: { ...mark.attrs },
-          }));
+        const existingMarkOfSameType = liveMarks.find(
+          (mark) =>
+            mark.type.name === step.mark.type.name &&
+            ![TrackDeleteMarkName, TrackFormatMarkName].includes(mark.type.name),
+        );
+        before = existingMarkOfSameType
+          ? [{ type: existingMarkOfSameType.type.name, attrs: { ...existingMarkOfSameType.attrs } }]
+          : [];
 
         after = [
           {
@@ -93,11 +97,7 @@ export const addMarkStep = ({ state, step, newTr, doc, user, date }) => {
           before,
           after,
         });
-        newTr.addMark(
-          step.from, // Math.max(step.from, pos)
-          step.to, // Math.min(step.to, pos + node.nodeSize),
-          newFormatMark,
-        );
+        newTr.addMark(Math.max(step.from, pos), Math.min(step.to, pos + node.nodeSize), newFormatMark);
 
         meta.formatMark = newFormatMark;
         meta.step = step;

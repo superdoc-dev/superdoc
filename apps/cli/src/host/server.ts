@@ -6,7 +6,7 @@ import { CliError, toCliError } from '../lib/errors';
 import { asRecord } from '../lib/guards';
 import type { CliIO } from '../lib/types';
 import { buildContractOperationDetail, buildContractOverview } from '../lib/contract';
-import { InMemoryCollaborationSessionPool, type CollaborationSessionPool } from './collab-session-pool';
+import { InMemorySessionPool, type SessionPool } from './session-pool';
 import { invokeCliFromHost } from './invoke';
 import {
   DEFAULT_MAX_STDIN_BYTES,
@@ -29,7 +29,7 @@ type HostServerOptions = {
   io: Pick<CliIO, 'stdout' | 'now'>;
   requestTimeoutMs?: number;
   maxStdinBytes?: number;
-  collabSessionPool?: CollaborationSessionPool;
+  sessionPool?: SessionPool;
 };
 
 function resolveCliVersion(): string {
@@ -105,7 +105,7 @@ class HostServer {
   private readonly io: Pick<CliIO, 'stdout' | 'now'>;
   private readonly requestTimeoutMs: number;
   private readonly maxStdinBytes: number;
-  private readonly collabSessionPool: CollaborationSessionPool;
+  private readonly sessionPool: SessionPool;
   private readonly ownsPool: boolean;
   private queue: Promise<void> = Promise.resolve();
   private shutdownRequested = false;
@@ -115,11 +115,11 @@ class HostServer {
     this.requestTimeoutMs = options.requestTimeoutMs ?? DEFAULT_REQUEST_TIMEOUT_MS;
     this.maxStdinBytes = options.maxStdinBytes ?? DEFAULT_MAX_STDIN_BYTES;
 
-    if (options.collabSessionPool) {
-      this.collabSessionPool = options.collabSessionPool;
+    if (options.sessionPool) {
+      this.sessionPool = options.sessionPool;
       this.ownsPool = false;
     } else {
-      this.collabSessionPool = new InMemoryCollaborationSessionPool();
+      this.sessionPool = new InMemorySessionPool();
       this.ownsPool = true;
     }
   }
@@ -161,7 +161,7 @@ class HostServer {
 
   async dispose(): Promise<void> {
     if (this.ownsPool) {
-      await this.collabSessionPool.disposeAll();
+      await this.sessionPool.disposeAll();
     }
   }
 
@@ -258,7 +258,7 @@ class HostServer {
     const outcome = await settleWithTimeout(
       invokeCliFromHost(request.params, {
         ioNow: this.io.now,
-        collabSessionPool: this.collabSessionPool,
+        sessionPool: this.sessionPool,
         maxStdinBytes: this.maxStdinBytes,
       }),
       this.requestTimeoutMs,

@@ -25,6 +25,32 @@ export const getCustomSearchDecorations = (state) => {
 };
 
 const isRegExp = (value) => Object.prototype.toString.call(value) === '[object RegExp]';
+const SEARCH_POSITION_TRACKER_TYPE = 'search-match';
+
+const resolveMatchSelectionRange = (match, positionTracker) => {
+  if (!match) return { from: undefined, to: undefined };
+
+  if (positionTracker?.resolve && Array.isArray(match.trackerIds) && match.trackerIds.length > 0) {
+    const resolved = positionTracker.resolve(match.trackerIds[0]);
+    if (resolved) {
+      return { from: resolved.from, to: resolved.to };
+    }
+  }
+
+  if (match?.ranges && match.ranges.length > 0) {
+    return { from: match.ranges[0].from, to: match.ranges[0].to };
+  }
+
+  if (positionTracker?.resolve && match?.id) {
+    const resolved = positionTracker.resolve(match.id);
+    if (resolved) {
+      return { from: resolved.from, to: resolved.to };
+    }
+  }
+
+  return { from: match.from, to: match.to };
+};
+
 const resolveInlineTextPosition = (doc, position, direction) => {
   const docSize = doc.content.size;
   if (!Number.isFinite(position) || position < 0 || position > docSize) {
@@ -240,8 +266,8 @@ export const Search = Extension.create({
           const searchResults = this.storage?.searchResults;
           if (Array.isArray(searchResults) && searchResults.length > 0) {
             const firstMatch = searchResults[0];
-            const from = firstMatch.ranges?.[0]?.from ?? firstMatch.from;
-            const to = firstMatch.ranges?.[0]?.to ?? firstMatch.to;
+            const positionTracker = getPositionTracker(editor);
+            const { from, to } = resolveMatchSelectionRange(firstMatch, positionTracker);
 
             if (typeof from !== 'number' || typeof to !== 'number') {
               return false;
@@ -353,6 +379,10 @@ export const Search = Extension.create({
             caseSensitive = typeof options?.caseSensitive === 'boolean' ? options.caseSensitive : false;
           }
 
+          const positionTracker = getPositionTracker(editor);
+          // Keep tracker set bounded to current search results only.
+          positionTracker?.untrackByType?.(SEARCH_POSITION_TRACKER_TYPE);
+
           // Ensure search index is valid
           const searchIndex = this.storage.searchIndex;
           searchIndex.ensureValid(state.doc);
@@ -382,6 +412,24 @@ export const Search = Extension.create({
               trackerIds: [],
             };
 
+            if (positionTracker?.trackMany) {
+              const trackedRanges = ranges.map((range, rangeIndex) => ({
+                from: range.from,
+                to: range.to,
+                spec: {
+                  type: SEARCH_POSITION_TRACKER_TYPE,
+                  metadata: {
+                    rangeIndex,
+                  },
+                },
+              }));
+              const trackerIds = positionTracker.trackMany(trackedRanges);
+              if (trackerIds.length > 0) {
+                match.trackerIds = trackerIds;
+                match.id = trackerIds[0];
+              }
+            }
+
             resultMatches.push(match);
           }
 
@@ -410,37 +458,8 @@ export const Search = Extension.create({
           const doc = state.doc;
           const highlights = getMatchHighlights(state);
 
-          let from, to;
-
-          // Handle multi-range matches (cross-paragraph)
-          if (match?.ranges && match.ranges.length > 0 && match?.trackerIds && match.trackerIds.length > 0) {
-            // Resolve the first tracked range for selection
-            if (positionTracker?.resolve && match.trackerIds[0]) {
-              const resolved = positionTracker.resolve(match.trackerIds[0]);
-              if (resolved) {
-                from = resolved.from;
-                to = resolved.to;
-              }
-            }
-
-            // Fallback to stored range if tracking failed
-            if (from === undefined) {
-              from = match.ranges[0].from;
-              to = match.ranges[0].to;
-            }
-          } else {
-            // Single range match (backward compatibility)
-            from = match.from;
-            to = match.to;
-
-            if (positionTracker?.resolve && match?.id) {
-              const resolved = positionTracker.resolve(match.id);
-              if (resolved) {
-                from = resolved.from;
-                to = resolved.to;
-              }
-            }
-          }
+          let { from, to } = resolveMatchSelectionRange(match, positionTracker);
+          if (typeof from !== 'number' || typeof to !== 'number') return false;
 
           // Normalize the range to handle transparent inline nodes
           const normalized = resolveSearchRange({
@@ -458,14 +477,20 @@ export const Search = Extension.create({
           if (dispatch) dispatch(tr);
 
           const presentationEditor = editor.presentationEditor;
-          if (presentationEditor && typeof presentationEditor.scrollToPosition === 'function') {
-            const didScroll = presentationEditor.scrollToPosition(from, { block: 'center' });
-            if (didScroll) return true;
-          }
+          // Try sync scroll first — returns true when the page is mounted and in body mode.
+          const scrolled = presentationEditor?.scrollToPosition?.(from, { block: 'center' }) ?? false;
 
-          const { node } = editor.view.domAtPos(from);
-          if (node?.scrollIntoView) {
-            node.scrollIntoView({ block: 'center', inline: 'nearest' });
+          if (!scrolled) {
+            // Async version handles virtualized (un-mounted) pages; fire-and-forget
+            // because it will scroll once the target page mounts.
+            Promise.resolve(presentationEditor?.scrollToPositionAsync?.(from, { block: 'center' })).catch(() => {});
+
+            // DOM fallback for non-presentation contexts or when presentation
+            // scroll cannot run (e.g. header/footer mode, no layout).
+            const { node } = editor.view.domAtPos(from);
+            if (node?.scrollIntoView) {
+              node.scrollIntoView({ block: 'center', inline: 'nearest' });
+            }
           }
 
           return true;

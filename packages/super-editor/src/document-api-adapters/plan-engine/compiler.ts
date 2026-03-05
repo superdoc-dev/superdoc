@@ -15,7 +15,7 @@ import type {
   RefWhere,
   TextAddress,
 } from '@superdoc/document-api';
-import { MAX_PLAN_STEPS, MAX_PLAN_RESOLVED_TARGETS } from '@superdoc/document-api';
+import { MAX_PLAN_STEPS, MAX_PLAN_RESOLVED_TARGETS, isPublicMutationStepOp } from '@superdoc/document-api';
 import type { Editor } from '../../core/Editor.js';
 import type {
   CompiledTarget,
@@ -1082,6 +1082,13 @@ export function compilePlan(editor: Editor, steps: MutationStep[]): CompiledPlan
       assertSteps.push(step);
       stepIndex++;
       continue;
+    }
+
+    // Enforce explicit allowlist for user-authored mutation steps.
+    // This prevents broad prefix executors (e.g. "tables.*") from accepting
+    // unknown ops that would otherwise silently no-op at runtime.
+    if (!isPublicMutationStepOp(step.op)) {
+      throw planError('INVALID_INPUT', `unknown step op "${step.op}"`, step.id);
     }
 
     if (!hasStepExecutor(step.op)) {

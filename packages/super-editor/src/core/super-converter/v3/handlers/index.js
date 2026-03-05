@@ -4,6 +4,7 @@ import { translator as sd_pageReference_translator } from './sd/pageReference/pa
 import { translator as sd_tableOfContents_translator } from './sd/tableOfContents/tableOfContents-translator.js';
 import { translator as sd_index_translator } from './sd/index/index-translator.js';
 import { translator as sd_indexEntry_translator } from './sd/indexEntry/indexEntry-translator.js';
+import { translator as sd_tableOfContentsEntry_translator } from './sd/tableOfContentsEntry/tableOfContentsEntry-translator.js';
 import { translator as sd_autoPageNumber_translator } from './sd/autoPageNumber/autoPageNumber-translator.js';
 import { translator as sd_totalPageNumber_translator } from './sd/totalPageNumber/totalPageNumber-translator.js';
 import { translator as w_abstractNum_translator } from './w/abstractNum/abstractNum-translator.js';
@@ -205,6 +206,7 @@ const translatorList = Array.from(
     sd_tableOfContents_translator,
     sd_index_translator,
     sd_indexEntry_translator,
+    sd_tableOfContentsEntry_translator,
     sd_autoPageNumber_translator,
     sd_totalPageNumber_translator,
     w_abstractNum_translator,

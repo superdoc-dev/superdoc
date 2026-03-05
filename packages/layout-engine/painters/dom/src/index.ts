@@ -10,7 +10,7 @@ import type {
 } from '@superdoc/contracts';
 import { DomPainter } from './renderer.js';
 import type { PageStyles } from './styles.js';
-import type { PaintSnapshot, RulerOptions } from './renderer.js';
+import type { PaintSnapshot, RulerOptions, FlowMode } from './renderer.js';
 
 // Re-export constants
 export { DOM_CLASS_NAMES } from './constants.js';
@@ -55,6 +55,7 @@ export {
 export type { PmPositionValidationStats } from './pm-position-validation.js';
 
 export type LayoutMode = 'vertical' | 'horizontal' | 'book';
+export type { FlowMode } from './renderer.js';
 export type PageDecorationPayload = {
   fragments: Fragment[];
   height: number;
@@ -82,6 +83,7 @@ export type DomPainterOptions = {
   measures: Measure[];
   pageStyles?: PageStyles;
   layoutMode?: LayoutMode;
+  flowMode?: FlowMode;
   /** Gap between pages in pixels (default: 24px for vertical, 20px for horizontal) */
   pageGap?: number;
   headerProvider?: PageDecorationProvider;
@@ -99,7 +101,7 @@ export type DomPainterOptions = {
     overscan?: number;
     /**
      * Gap between pages used for spacer math (px). When set, container gap is overridden
-     * to this value during virtualization. Default approximates existing margin+gap look: 72.
+     * to this value during virtualization. Defaults to the effective `pageGap`.
      */
     gap?: number;
     /** Optional mount padding-top override (px) used in scroll mapping; defaults to computed style. */
@@ -122,10 +124,13 @@ export const createDomPainter = (
   getActiveComment?: () => string | null;
   getPaintSnapshot?: () => PaintSnapshot | null;
   onScroll?: () => void;
+  setZoom?: (zoom: number) => void;
+  setScrollContainer?: (el: HTMLElement | null) => void;
 } => {
   const painter = new DomPainter(options.blocks, options.measures, {
     pageStyles: options.pageStyles,
     layoutMode: options.layoutMode,
+    flowMode: options.flowMode,
     pageGap: options.pageGap,
     headerProvider: options.headerProvider,
     footerProvider: options.footerProvider,
@@ -166,6 +171,14 @@ export const createDomPainter = (
     // Trigger virtualization update when scroll container is external to the painter
     onScroll() {
       painter.onScroll();
+    },
+    // Notify painter of CSS transform scale so virtualization maps scroll correctly
+    setZoom(zoom: number) {
+      painter.setZoom(zoom);
+    },
+    // Set the external scroll container for correct scrollY calculation
+    setScrollContainer(el: HTMLElement | null) {
+      painter.setScrollContainer(el);
     },
   };
 };

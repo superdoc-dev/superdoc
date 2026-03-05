@@ -1,7 +1,7 @@
 ---
 title: tables.clearShading
 sidebarTitle: tables.clearShading
-description: Reference for tables.clearShading
+description: Remove shading from a table or cell range.
 ---
 
 {/* GENERATED FILE: DO NOT EDIT. Regenerate via `pnpm run docapi:sync`. */}
@@ -9,6 +9,8 @@ description: Reference for tables.clearShading
 > Alpha: Document API is currently alpha and subject to breaking changes.
 
 ## Summary
+
+Remove shading from a table or cell range.
 
 - Operation ID: `tables.clearShading`
 - API member path: `editor.doc.tables.clearShading(...)`
@@ -18,22 +20,55 @@ description: Reference for tables.clearShading
 - Supports dry run: `yes`
 - Deterministic target resolution: `yes`
 
+## Expected result
+
+Returns a TableMutationResult receipt; reports NO_OP if no shading is set.
+
 ## Input fields
 
-| Field | Type | Required | Description |
-| --- | --- | --- | --- |
-| `nodeId` | string | no |  |
-| `target` | BlockNodeAddress | no | BlockNodeAddress |
+### Variant 1
+
+_No fields._
+
+### Variant 2
+
+_No fields._
 
 ### Example request
 
 ```json
-{}
+{
+  "nodeId": "node-def456",
+  "target": {
+    "kind": "block",
+    "nodeId": "node-def456",
+    "nodeType": "paragraph"
+  }
+}
 ```
 
 ## Output fields
 
-_No fields._
+### Variant 1 (table.kind="block")
+
+| Field | Type | Required | Description |
+| --- | --- | --- | --- |
+| `success` | `true` | yes | Constant: `true` |
+| `table` | BlockNodeAddress | no | BlockNodeAddress |
+| `table.kind` | `"block"` | no | Constant: `"block"` |
+| `table.nodeId` | string | no |  |
+| `table.nodeType` | enum | no | `"paragraph"`, `"heading"`, `"listItem"`, `"table"`, `"tableRow"`, `"tableCell"`, `"tableOfContents"`, `"image"`, `"sdt"` |
+| `trackedChangeRefs` | EntityAddress[] | no |  |
+
+### Variant 2 (success=false)
+
+| Field | Type | Required | Description |
+| --- | --- | --- | --- |
+| `failure` | object | yes |  |
+| `failure.code` | enum | yes | `"NO_OP"`, `"INVALID_TARGET"`, `"TARGET_NOT_FOUND"`, `"CAPABILITY_UNAVAILABLE"` |
+| `failure.details` | any | no |  |
+| `failure.message` | string | yes |  |
+| `success` | `false` | yes | Constant: `false` |
 
 ### Example response
 

@@ -1,7 +1,7 @@
 ---
 title: tables.getProperties
 sidebarTitle: tables.getProperties
-description: Reference for tables.getProperties
+description: Retrieve layout and style properties of a table.
 ---
 
 {/* GENERATED FILE: DO NOT EDIT. Regenerate via `pnpm run docapi:sync`. */}
@@ -9,6 +9,8 @@ description: Reference for tables.getProperties
 > Alpha: Document API is currently alpha and subject to breaking changes.
 
 ## Summary
+
+Retrieve layout and style properties of a table.
 
 - Operation ID: `tables.getProperties`
 - API member path: `editor.doc.tables.getProperties(...)`
@@ -18,17 +20,31 @@ description: Reference for tables.getProperties
 - Supports dry run: `no`
 - Deterministic target resolution: `yes`
 
+## Expected result
+
+Returns a TablesGetPropertiesOutput with the table layout, style, border, and shading properties.
+
 ## Input fields
 
-| Field | Type | Required | Description |
-| --- | --- | --- | --- |
-| `nodeId` | string | no |  |
-| `target` | BlockNodeAddress | no | BlockNodeAddress |
+### Variant 1
+
+_No fields._
+
+### Variant 2
+
+_No fields._
 
 ### Example request
 
 ```json
-{}
+{
+  "nodeId": "node-def456",
+  "target": {
+    "kind": "block",
+    "nodeId": "node-def456",
+    "nodeType": "paragraph"
+  }
+}
 ```
 
 ## Output fields
@@ -42,6 +58,12 @@ description: Reference for tables.getProperties
 | `preferredWidth` | number | no |  |
 | `styleId` | string | no |  |
 | `styleOptions` | object | no |  |
+| `styleOptions.bandedColumns` | boolean | no |  |
+| `styleOptions.bandedRows` | boolean | no |  |
+| `styleOptions.firstColumn` | boolean | no |  |
+| `styleOptions.headerRow` | boolean | no |  |
+| `styleOptions.lastColumn` | boolean | no |  |
+| `styleOptions.totalRow` | boolean | no |  |
 
 ### Example response
 

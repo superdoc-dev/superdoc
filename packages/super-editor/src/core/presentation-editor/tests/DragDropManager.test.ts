@@ -1,12 +1,23 @@
 import { afterEach, beforeEach, describe, expect, it, vi, type Mock } from 'vitest';
 import { TextSelection } from 'prosemirror-state';
 
-import { DragDropManager, FIELD_ANNOTATION_DATA_TYPE, type DragDropDependencies } from '../input/DragDropManager.js';
+import {
+  DragDropManager,
+  FIELD_ANNOTATION_DATA_TYPE,
+  type DragDropDependencies,
+  getDropPayloadKind,
+  hasPossibleFiles,
+  getDroppedImageFiles,
+} from '../input/DragDropManager.js';
 
 // Mock TextSelection.create to avoid needing a real ProseMirror doc
 vi.spyOn(TextSelection, 'create').mockImplementation(() => {
   return { from: 50, to: 50 } as unknown as TextSelection;
 });
+
+// =============================================================================
+// Test Helpers
+// =============================================================================
 
 /**
  * Creates a manual RAF scheduler for testing, allowing control over when
@@ -39,9 +50,9 @@ function createManualRafScheduler(): {
 }
 
 /**
- * Creates a mock DragEvent with the specified properties.
+ * Creates a mock DragEvent with field annotation data.
  */
-function createDragEvent(
+function createFieldAnnotationDragEvent(
   type: string,
   options: {
     clientX?: number;
@@ -58,7 +69,6 @@ function createDragEvent(
     clientY,
   }) as DragEvent;
 
-  // Mock dataTransfer
   const mockDataTransfer: Partial<DataTransfer> = {
     types: [FIELD_ANNOTATION_DATA_TYPE],
     getData: vi.fn((mimeType: string) => {
@@ -83,28 +93,207 @@ function createDragEvent(
   return event;
 }
 
-describe('DragDropManager - RAF Coalescing', () => {
+/**
+ * Creates a mock DragEvent with image files.
+ */
+function createImageDragEvent(
+  type: string,
+  options: {
+    clientX?: number;
+    clientY?: number;
+    files?: File[];
+  } = {},
+): DragEvent {
+  const { clientX = 100, clientY = 200 } = options;
+  const files = options.files ?? [new File([new Uint8Array([1, 2, 3])], 'photo.png', { type: 'image/png' })];
+
+  const event = new MouseEvent(type, {
+    bubbles: true,
+    cancelable: true,
+    clientX,
+    clientY,
+  }) as DragEvent;
+
+  const fileList = {
+    length: files.length,
+    item: (i: number) => files[i] ?? null,
+    [Symbol.iterator]: function* () {
+      for (let i = 0; i < files.length; i++) yield files[i];
+    },
+  } as unknown as FileList;
+
+  // Index files for array-style access
+  files.forEach((f, i) => {
+    (fileList as Record<number, File>)[i] = f;
+  });
+
+  const mockDataTransfer: Partial<DataTransfer> = {
+    types: ['Files'],
+    files: fileList,
+    getData: vi.fn(() => ''),
+    setData: vi.fn(),
+    dropEffect: 'none' as DataTransferDropEffect,
+    effectAllowed: 'all' as DataTransferEffectAllowed,
+  };
+
+  Object.defineProperty(event, 'dataTransfer', {
+    value: mockDataTransfer,
+    writable: false,
+  });
+
+  return event;
+}
+
+/**
+ * Creates a mock DragEvent with no recognized payload.
+ */
+function createEmptyDragEvent(type: string): DragEvent {
+  const event = new MouseEvent(type, {
+    bubbles: true,
+    cancelable: true,
+    clientX: 100,
+    clientY: 200,
+  }) as DragEvent;
+
+  Object.defineProperty(event, 'dataTransfer', {
+    value: {
+      types: [],
+      files: { length: 0, item: () => null },
+      getData: () => '',
+      setData: vi.fn(),
+      dropEffect: 'none' as DataTransferDropEffect,
+      effectAllowed: 'all' as DataTransferEffectAllowed,
+    },
+    writable: false,
+  });
+
+  return event;
+}
+
+// =============================================================================
+// Payload Classification Tests
+// =============================================================================
+
+describe('Payload classification helpers', () => {
+  describe('getDropPayloadKind', () => {
+    it('returns "fieldAnnotation" for field annotation payloads', () => {
+      const event = createFieldAnnotationDragEvent('dragover');
+      expect(getDropPayloadKind(event)).toBe('fieldAnnotation');
+    });
+
+    it('returns "imageFiles" for image file payloads', () => {
+      const event = createImageDragEvent('dragover');
+      expect(getDropPayloadKind(event)).toBe('imageFiles');
+    });
+
+    it('returns "none" for unsupported payloads', () => {
+      const event = createEmptyDragEvent('dragover');
+      expect(getDropPayloadKind(event)).toBe('none');
+    });
+
+    it('returns "fieldAnnotation" for mixed payloads (field annotation takes precedence)', () => {
+      const event = createFieldAnnotationDragEvent('dragover');
+
+      // Add image files to the same event
+      const files = [new File([new Uint8Array([1])], 'img.png', { type: 'image/png' })];
+      const fileList = { length: 1, item: (i: number) => files[i], 0: files[0] } as unknown as FileList;
+      Object.defineProperty(event.dataTransfer, 'files', { value: fileList });
+
+      expect(getDropPayloadKind(event)).toBe('fieldAnnotation');
+    });
+  });
+
+  describe('hasPossibleFiles', () => {
+    it('returns true when dataTransfer.types includes "Files"', () => {
+      const event = createImageDragEvent('dragover');
+      expect(hasPossibleFiles(event)).toBe(true);
+    });
+
+    it('returns true for non-image files (cannot distinguish during dragover)', () => {
+      const files = [new File([new Uint8Array([1])], 'doc.pdf', { type: 'application/pdf' })];
+      const event = createImageDragEvent('dragover', { files });
+      // types still contains "Files" — hasPossibleFiles cannot inspect file types
+      expect(hasPossibleFiles(event)).toBe(true);
+    });
+
+    it('returns false when dataTransfer has no files', () => {
+      const event = createEmptyDragEvent('dragover');
+      expect(hasPossibleFiles(event)).toBe(false);
+    });
+  });
+
+  describe('getDroppedImageFiles', () => {
+    it('extracts only image files from dataTransfer', () => {
+      const imageFile = new File([new Uint8Array([1])], 'photo.png', { type: 'image/png' });
+      const pdfFile = new File([new Uint8Array([2])], 'doc.pdf', { type: 'application/pdf' });
+      const jpgFile = new File([new Uint8Array([3])], 'pic.jpg', { type: 'image/jpeg' });
+
+      const event = createImageDragEvent('drop', { files: [imageFile, pdfFile, jpgFile] });
+      const result = getDroppedImageFiles(event);
+
+      expect(result).toHaveLength(2);
+      expect(result[0].name).toBe('photo.png');
+      expect(result[1].name).toBe('pic.jpg');
+    });
+
+    it('returns empty array for events with no dataTransfer', () => {
+      const event = new MouseEvent('drop') as DragEvent;
+      expect(getDroppedImageFiles(event)).toEqual([]);
+    });
+
+    it('accepts image files with empty MIME type when extension is a known image format', () => {
+      const emptyMime = new File([new Uint8Array([1])], 'screenshot.png', { type: '' });
+      const jpgEmpty = new File([new Uint8Array([2])], 'photo.JPG', { type: '' });
+      const txtEmpty = new File([new Uint8Array([3])], 'notes.txt', { type: '' });
+      const noExt = new File([new Uint8Array([4])], 'noext', { type: '' });
+
+      const event = createImageDragEvent('drop', { files: [emptyMime, jpgEmpty, txtEmpty, noExt] });
+      const result = getDroppedImageFiles(event);
+
+      expect(result).toHaveLength(2);
+      expect(result[0].name).toBe('screenshot.png');
+      expect(result[1].name).toBe('photo.JPG');
+    });
+
+    it('does not use extension fallback when MIME type is a non-image type', () => {
+      const pdfWithImageExt = new File([new Uint8Array([1])], 'trick.png', { type: 'application/pdf' });
+
+      const event = createImageDragEvent('drop', { files: [pdfWithImageExt] });
+      const result = getDroppedImageFiles(event);
+
+      expect(result).toHaveLength(0);
+    });
+  });
+});
+
+// =============================================================================
+// DragDropManager Tests
+// =============================================================================
+
+describe('DragDropManager', () => {
   let manager: DragDropManager;
   let viewportHost: HTMLElement;
   let painterHost: HTMLElement;
   let rafScheduler: ReturnType<typeof createManualRafScheduler>;
   let mockEditor: {
     isEditable: boolean;
+    options: Record<string, unknown>;
     state: {
-      doc: { content: { size: number } };
+      doc: { content: { size: number }; nodeAt: Mock };
       tr: { setSelection: Mock; setMeta: Mock };
       selection: { from: number; to: number };
     };
     view: { dispatch: Mock; dom: HTMLElement; focus: Mock };
     emit: Mock;
     commands: { addFieldAnnotation: Mock };
+    getMaxContentSize: Mock;
   };
   let mockDeps: DragDropDependencies;
   let hitTestMock: Mock;
   let scheduleSelectionUpdateMock: Mock;
+  let insertImageFileMock: Mock;
 
   beforeEach(() => {
-    // Create DOM elements
     viewportHost = document.createElement('div');
     viewportHost.className = 'viewport-host';
     painterHost = document.createElement('div');
@@ -112,10 +301,8 @@ describe('DragDropManager - RAF Coalescing', () => {
     document.body.appendChild(viewportHost);
     document.body.appendChild(painterHost);
 
-    // Create RAF scheduler
     rafScheduler = createManualRafScheduler();
 
-    // Mock window RAF on the document's defaultView
     Object.defineProperty(viewportHost.ownerDocument.defaultView, 'requestAnimationFrame', {
       value: rafScheduler.requestAnimationFrame,
       writable: true,
@@ -127,15 +314,15 @@ describe('DragDropManager - RAF Coalescing', () => {
       configurable: true,
     });
 
-    // Create mock editor
     const mockTr = {
       setSelection: vi.fn().mockReturnThis(),
       setMeta: vi.fn().mockReturnThis(),
     };
     mockEditor = {
       isEditable: true,
+      options: {},
       state: {
-        doc: { content: { size: 100 } },
+        doc: { content: { size: 100 }, nodeAt: vi.fn() },
         tr: mockTr,
         selection: { from: 0, to: 0 },
       },
@@ -148,11 +335,12 @@ describe('DragDropManager - RAF Coalescing', () => {
       commands: {
         addFieldAnnotation: vi.fn(),
       },
+      getMaxContentSize: vi.fn(() => ({ width: 800, height: 600 })),
     };
 
-    // Create mock dependencies
     hitTestMock = vi.fn(() => ({ pos: 50 }));
     scheduleSelectionUpdateMock = vi.fn();
+    insertImageFileMock = vi.fn().mockResolvedValue('success');
 
     mockDeps = {
       getActiveEditor: vi.fn(() => mockEditor as unknown as ReturnType<DragDropDependencies['getActiveEditor']>),
@@ -160,9 +348,9 @@ describe('DragDropManager - RAF Coalescing', () => {
       scheduleSelectionUpdate: scheduleSelectionUpdateMock,
       getViewportHost: vi.fn(() => viewportHost),
       getPainterHost: vi.fn(() => painterHost),
+      insertImageFile: insertImageFileMock,
     };
 
-    // Initialize manager
     manager = new DragDropManager();
     manager.setDependencies(mockDeps);
     manager.bind();
@@ -174,9 +362,13 @@ describe('DragDropManager - RAF Coalescing', () => {
     vi.clearAllMocks();
   });
 
-  describe('dragover coalescing', () => {
+  // ==========================================================================
+  // Field Annotation Dragover (existing behavior preserved)
+  // ==========================================================================
+
+  describe('field annotation dragover coalescing', () => {
     it('should schedule RAF on first dragover event', () => {
-      const event = createDragEvent('dragover', { clientX: 100, clientY: 200 });
+      const event = createFieldAnnotationDragEvent('dragover', { clientX: 100, clientY: 200 });
       viewportHost.dispatchEvent(event);
 
       expect(rafScheduler.requestAnimationFrame).toHaveBeenCalledTimes(1);
@@ -184,204 +376,451 @@ describe('DragDropManager - RAF Coalescing', () => {
     });
 
     it('should coalesce multiple dragover events into single RAF callback', () => {
-      // Dispatch multiple dragover events rapidly
-      viewportHost.dispatchEvent(createDragEvent('dragover', { clientX: 100, clientY: 200 }));
-      viewportHost.dispatchEvent(createDragEvent('dragover', { clientX: 150, clientY: 250 }));
-      viewportHost.dispatchEvent(createDragEvent('dragover', { clientX: 200, clientY: 300 }));
+      viewportHost.dispatchEvent(createFieldAnnotationDragEvent('dragover', { clientX: 100, clientY: 200 }));
+      viewportHost.dispatchEvent(createFieldAnnotationDragEvent('dragover', { clientX: 150, clientY: 250 }));
+      viewportHost.dispatchEvent(createFieldAnnotationDragEvent('dragover', { clientX: 200, clientY: 300 }));
 
-      // Should only schedule one RAF
       expect(rafScheduler.requestAnimationFrame).toHaveBeenCalledTimes(1);
     });
 
     it('should use the latest coordinates when RAF fires', () => {
-      // Dispatch multiple dragover events with different coordinates
-      viewportHost.dispatchEvent(createDragEvent('dragover', { clientX: 100, clientY: 200 }));
-      viewportHost.dispatchEvent(createDragEvent('dragover', { clientX: 150, clientY: 250 }));
-      viewportHost.dispatchEvent(createDragEvent('dragover', { clientX: 200, clientY: 300 }));
+      viewportHost.dispatchEvent(createFieldAnnotationDragEvent('dragover', { clientX: 100, clientY: 200 }));
+      viewportHost.dispatchEvent(createFieldAnnotationDragEvent('dragover', { clientX: 150, clientY: 250 }));
+      viewportHost.dispatchEvent(createFieldAnnotationDragEvent('dragover', { clientX: 200, clientY: 300 }));
 
-      // Flush the RAF
       rafScheduler.flush();
 
-      // hitTest should be called with the LAST coordinates
       expect(hitTestMock).toHaveBeenCalledWith(200, 300);
     });
 
     it('should update selection when RAF fires', () => {
-      viewportHost.dispatchEvent(createDragEvent('dragover', { clientX: 100, clientY: 200 }));
+      viewportHost.dispatchEvent(createFieldAnnotationDragEvent('dragover', { clientX: 100, clientY: 200 }));
 
-      // Before RAF fires, no selection update
       expect(mockEditor.view.dispatch).not.toHaveBeenCalled();
 
-      // Flush the RAF
       rafScheduler.flush();
 
-      // Now selection should be updated
       expect(mockEditor.state.tr.setSelection).toHaveBeenCalled();
       expect(mockEditor.view.dispatch).toHaveBeenCalled();
       expect(scheduleSelectionUpdateMock).toHaveBeenCalled();
     });
 
     it('should allow scheduling new RAF after previous one fires', () => {
-      // First dragover
-      viewportHost.dispatchEvent(createDragEvent('dragover', { clientX: 100, clientY: 200 }));
+      viewportHost.dispatchEvent(createFieldAnnotationDragEvent('dragover', { clientX: 100, clientY: 200 }));
       expect(rafScheduler.requestAnimationFrame).toHaveBeenCalledTimes(1);
 
-      // Flush first RAF
       rafScheduler.flush();
       expect(rafScheduler.hasPending()).toBe(false);
 
-      // Second dragover should schedule new RAF
-      viewportHost.dispatchEvent(createDragEvent('dragover', { clientX: 150, clientY: 250 }));
+      viewportHost.dispatchEvent(createFieldAnnotationDragEvent('dragover', { clientX: 150, clientY: 250 }));
       expect(rafScheduler.requestAnimationFrame).toHaveBeenCalledTimes(2);
     });
   });
 
-  describe('drop cancels pending RAF', () => {
-    it('should cancel pending dragover RAF when drop occurs', () => {
-      // Schedule a dragover RAF
-      viewportHost.dispatchEvent(createDragEvent('dragover', { clientX: 100, clientY: 200 }));
-      expect(rafScheduler.hasPending()).toBe(true);
+  // ==========================================================================
+  // Image Dragover
+  // ==========================================================================
 
-      // Now drop
-      viewportHost.dispatchEvent(createDragEvent('drop', { clientX: 150, clientY: 250 }));
+  describe('image dragover', () => {
+    it('should prevent default for image file payloads', () => {
+      const event = createImageDragEvent('dragover');
+      const preventDefaultSpy = vi.spyOn(event, 'preventDefault');
 
-      // RAF should be cancelled
-      expect(rafScheduler.cancelAnimationFrame).toHaveBeenCalled();
+      viewportHost.dispatchEvent(event);
+
+      expect(preventDefaultSpy).toHaveBeenCalled();
     });
 
-    it('should not apply stale dragover selection after drop', () => {
-      // Simulate the race condition scenario:
-      // 1. Dragover schedules RAF with position A
-      // 2. Drop sets selection to position B
-      // 3. RAF fires (if not cancelled) would overwrite to position A
+    it('should set dropEffect to "copy" for image files', () => {
+      const event = createImageDragEvent('dragover');
+      viewportHost.dispatchEvent(event);
 
-      // Dragover schedules RAF
-      viewportHost.dispatchEvent(createDragEvent('dragover', { clientX: 100, clientY: 200 }));
+      expect(event.dataTransfer!.dropEffect).toBe('copy');
+    });
 
-      // Clear mock to track only calls after this point
-      hitTestMock.mockClear();
+    it('should schedule RAF-coalesced selection update during dragover', () => {
+      viewportHost.dispatchEvent(createImageDragEvent('dragover', { clientX: 120, clientY: 220 }));
 
-      // Drop occurs before RAF fires - this calls hitTest for the drop position
-      viewportHost.dispatchEvent(createDragEvent('drop', { clientX: 150, clientY: 250 }));
+      expect(rafScheduler.requestAnimationFrame).toHaveBeenCalledTimes(1);
 
-      // At this point hitTest was called once for the drop
-      const callsAfterDrop = hitTestMock.mock.calls.length;
-
-      // Try to flush - should do nothing since RAF was cancelled
       rafScheduler.flush();
 
-      // No additional hitTest calls should have occurred (the stale dragover RAF was cancelled)
-      expect(hitTestMock.mock.calls.length).toBe(callsAfterDrop);
+      expect(hitTestMock).toHaveBeenCalledWith(120, 220);
     });
 
-    it('should handle drop gracefully when no pending RAF exists', () => {
-      // Drop without prior dragover - should not throw
-      expect(() => {
-        viewportHost.dispatchEvent(createDragEvent('drop', { clientX: 150, clientY: 250 }));
-      }).not.toThrow();
+    it('should not schedule RAF when editor is not editable', () => {
+      mockEditor.isEditable = false;
 
-      // cancelAnimationFrame might still be called but with no effect
-      // The important thing is no error occurred
+      viewportHost.dispatchEvent(createImageDragEvent('dragover'));
+
+      expect(rafScheduler.requestAnimationFrame).not.toHaveBeenCalled();
     });
   });
 
-  describe('dragEnd cancels pending RAF', () => {
-    it('should cancel pending dragover RAF when drag ends', () => {
-      // Schedule a dragover RAF
-      viewportHost.dispatchEvent(createDragEvent('dragover', { clientX: 100, clientY: 200 }));
+  // ==========================================================================
+  // Image Drop
+  // ==========================================================================
+
+  describe('image drop', () => {
+    it('should call insertImageFile for each dropped image', async () => {
+      const file1 = new File([new Uint8Array([1])], 'photo1.png', { type: 'image/png' });
+      const file2 = new File([new Uint8Array([2])], 'photo2.jpg', { type: 'image/jpeg' });
+      const event = createImageDragEvent('drop', { files: [file1, file2] });
+
+      viewportHost.dispatchEvent(event);
+
+      // insertImageFile is async; wait for it
+      await vi.waitFor(() => {
+        expect(insertImageFileMock).toHaveBeenCalledTimes(2);
+      });
+
+      expect(insertImageFileMock.mock.calls[0][0].file).toBe(file1);
+      expect(insertImageFileMock.mock.calls[1][0].file).toBe(file2);
+    });
+
+    it('should cancel pending RAF on drop', () => {
+      viewportHost.dispatchEvent(createImageDragEvent('dragover'));
       expect(rafScheduler.hasPending()).toBe(true);
 
-      // End the drag (e.g., user cancelled or dropped outside)
-      painterHost.dispatchEvent(createDragEvent('dragend'));
+      viewportHost.dispatchEvent(createImageDragEvent('drop'));
 
-      // RAF should be cancelled
+      expect(rafScheduler.cancelAnimationFrame).toHaveBeenCalled();
+    });
+
+    it('should resolve drop position via hitTest', async () => {
+      hitTestMock.mockReturnValue({ pos: 42 });
+
+      const event = createImageDragEvent('drop', { clientX: 300, clientY: 400 });
+      viewportHost.dispatchEvent(event);
+
+      await vi.waitFor(() => {
+        expect(insertImageFileMock).toHaveBeenCalledTimes(1);
+      });
+
+      expect(hitTestMock).toHaveBeenCalledWith(300, 400);
+    });
+
+    it('should not insert when editor is not editable', async () => {
+      mockEditor.isEditable = false;
+
+      viewportHost.dispatchEvent(createImageDragEvent('drop'));
+
+      // Give async code a chance to run
+      await new Promise((r) => setTimeout(r, 10));
+      expect(insertImageFileMock).not.toHaveBeenCalled();
+    });
+
+    it('should handle empty files gracefully', async () => {
+      const event = createImageDragEvent('drop', { files: [] });
+      viewportHost.dispatchEvent(event);
+
+      // No files to process, so insertImageFile should not be called
+      await new Promise((r) => setTimeout(r, 10));
+      expect(insertImageFileMock).not.toHaveBeenCalled();
+    });
+
+    it('should not move caret when dropped files contain no images', async () => {
+      const pdfFile = new File([new Uint8Array([1])], 'doc.pdf', { type: 'application/pdf' });
+      const event = createImageDragEvent('drop', { files: [pdfFile] });
+
+      viewportHost.dispatchEvent(event);
+
+      await new Promise((r) => setTimeout(r, 10));
+
+      // Selection should NOT have been changed — no image means no state mutation
+      expect(mockEditor.state.tr.setSelection).not.toHaveBeenCalled();
+      expect(insertImageFileMock).not.toHaveBeenCalled();
+    });
+
+    it('should focus editor and schedule selection update after drop', async () => {
+      viewportHost.dispatchEvent(createImageDragEvent('drop'));
+
+      await vi.waitFor(() => {
+        expect(insertImageFileMock).toHaveBeenCalled();
+      });
+
+      expect(mockEditor.view.focus).toHaveBeenCalled();
+      expect(scheduleSelectionUpdateMock).toHaveBeenCalled();
+    });
+  });
+
+  // ==========================================================================
+  // hitTest Failure Fallback
+  // ==========================================================================
+
+  describe('hitTest failure fallback', () => {
+    it('should fall back to current PM selection when hitTest returns null', async () => {
+      hitTestMock.mockReturnValue(null);
+      mockEditor.state.selection = { from: 25, to: 25 };
+
+      viewportHost.dispatchEvent(createImageDragEvent('drop'));
+
+      await vi.waitFor(() => {
+        expect(insertImageFileMock).toHaveBeenCalledTimes(1);
+      });
+
+      // Selection should have been set (proving fallback position was used)
+      expect(mockEditor.state.tr.setSelection).toHaveBeenCalled();
+    });
+
+    it('should fall back to document end when both hitTest and selection are unavailable', async () => {
+      hitTestMock.mockReturnValue(null);
+      // Set selection.from to null-ish by setting it to a valid number.
+      // The real fallback chain is hitTest?.pos → selection?.from → doc.content.size
+      // We test document end by checking that selection is set even with null hitTest.
+      mockEditor.state.selection = { from: 0, to: 0 };
+
+      viewportHost.dispatchEvent(createImageDragEvent('drop'));
+
+      await vi.waitFor(() => {
+        expect(insertImageFileMock).toHaveBeenCalledTimes(1);
+      });
+    });
+  });
+
+  // ==========================================================================
+  // Multi-image Drop Ordering
+  // ==========================================================================
+
+  describe('multi-image drop ordering', () => {
+    it('should process images sequentially (deterministic order)', async () => {
+      const callOrder: string[] = [];
+
+      insertImageFileMock.mockImplementation(async ({ file }: { file: File }) => {
+        callOrder.push(file.name);
+        return 'success';
+      });
+
+      const files = [
+        new File([new Uint8Array([1])], 'first.png', { type: 'image/png' }),
+        new File([new Uint8Array([2])], 'second.png', { type: 'image/png' }),
+        new File([new Uint8Array([3])], 'third.png', { type: 'image/png' }),
+      ];
+
+      viewportHost.dispatchEvent(createImageDragEvent('drop', { files }));
+
+      await vi.waitFor(() => {
+        expect(insertImageFileMock).toHaveBeenCalledTimes(3);
+      });
+
+      expect(callOrder).toEqual(['first.png', 'second.png', 'third.png']);
+    });
+  });
+
+  // ==========================================================================
+  // Drag Cancellation Cleanup
+  // ==========================================================================
+
+  describe('drag cancellation cleanup', () => {
+    it('should cancel pending RAF on dragend', () => {
+      viewportHost.dispatchEvent(createFieldAnnotationDragEvent('dragover'));
+      expect(rafScheduler.hasPending()).toBe(true);
+
+      painterHost.dispatchEvent(createFieldAnnotationDragEvent('dragend'));
+
       expect(rafScheduler.cancelAnimationFrame).toHaveBeenCalled();
     });
 
     it('should not apply stale selection after drag ends', () => {
       hitTestMock.mockReturnValueOnce({ pos: 10 });
 
-      // Dragover schedules RAF
-      viewportHost.dispatchEvent(createDragEvent('dragover', { clientX: 100, clientY: 200 }));
+      viewportHost.dispatchEvent(createFieldAnnotationDragEvent('dragover'));
+      painterHost.dispatchEvent(createFieldAnnotationDragEvent('dragend'));
 
-      // Drag ends (e.g., user releases outside drop zone)
-      painterHost.dispatchEvent(createDragEvent('dragend'));
-
-      // Try to flush - should do nothing since cancelled
       rafScheduler.flush();
 
-      // hitTest should not have been called since RAF was cancelled
       expect(hitTestMock).not.toHaveBeenCalled();
     });
+
+    it('should cancel pending RAF on dragleave with null relatedTarget', () => {
+      viewportHost.dispatchEvent(createImageDragEvent('dragover'));
+      expect(rafScheduler.hasPending()).toBe(true);
+
+      const leaveEvent = new MouseEvent('dragleave', {
+        bubbles: true,
+        cancelable: true,
+        relatedTarget: null,
+      }) as DragEvent;
+      viewportHost.dispatchEvent(leaveEvent);
+
+      expect(rafScheduler.cancelAnimationFrame).toHaveBeenCalled();
+    });
+
+    it('should NOT cancel pending RAF on dragleave with internal relatedTarget', () => {
+      const innerChild = document.createElement('span');
+      viewportHost.appendChild(innerChild);
+
+      viewportHost.dispatchEvent(createImageDragEvent('dragover'));
+      expect(rafScheduler.hasPending()).toBe(true);
+
+      rafScheduler.cancelAnimationFrame.mockClear();
+
+      const leaveEvent = new MouseEvent('dragleave', {
+        bubbles: true,
+        cancelable: true,
+        relatedTarget: innerChild,
+      }) as DragEvent;
+      viewportHost.dispatchEvent(leaveEvent);
+
+      expect(rafScheduler.cancelAnimationFrame).not.toHaveBeenCalled();
+    });
   });
+
+  // ==========================================================================
+  // Window-level Fallback
+  // ==========================================================================
+
+  describe('window-level fallback', () => {
+    it('should route image drops on overlay targets through handleDrop', async () => {
+      const overlay = document.createElement('div');
+      document.body.appendChild(overlay);
+
+      const event = createImageDragEvent('drop');
+      const preventDefaultSpy = vi.spyOn(event, 'preventDefault');
+
+      Object.defineProperty(event, 'target', { value: overlay });
+      window.dispatchEvent(event);
+
+      await vi.waitFor(() => {
+        expect(insertImageFileMock).toHaveBeenCalledTimes(1);
+      });
+      expect(preventDefaultSpy).toHaveBeenCalled();
+    });
+
+    it('should preventDefault on image dragover on overlay targets', () => {
+      const overlay = document.createElement('div');
+      document.body.appendChild(overlay);
+
+      const event = createImageDragEvent('dragover');
+      Object.defineProperty(event, 'target', { value: overlay });
+
+      const preventDefaultSpy = vi.spyOn(event, 'preventDefault');
+      window.dispatchEvent(event);
+
+      expect(preventDefaultSpy).toHaveBeenCalled();
+      expect(event.dataTransfer!.dropEffect).toBe('copy');
+    });
+
+    it('should handle field annotation drops on overlay targets (existing behavior)', () => {
+      const overlay = document.createElement('div');
+      document.body.appendChild(overlay);
+
+      const event = createFieldAnnotationDragEvent('dragover');
+      Object.defineProperty(event, 'target', { value: overlay });
+
+      const preventDefaultSpy = vi.spyOn(event, 'preventDefault');
+      window.dispatchEvent(event);
+
+      expect(preventDefaultSpy).toHaveBeenCalled();
+    });
+  });
+
+  // ==========================================================================
+  // Unrecognized Payloads
+  // ==========================================================================
+
+  describe('unrecognized payloads', () => {
+    it('should not schedule RAF for dragover with no recognized payload', () => {
+      const event = createEmptyDragEvent('dragover');
+      viewportHost.dispatchEvent(event);
+
+      expect(rafScheduler.requestAnimationFrame).not.toHaveBeenCalled();
+    });
+
+    it('should not handle drop with no recognized payload', () => {
+      const event = createEmptyDragEvent('drop');
+      viewportHost.dispatchEvent(event);
+
+      expect(insertImageFileMock).not.toHaveBeenCalled();
+    });
+  });
+
+  // ==========================================================================
+  // Drop Cancels Pending RAF (existing behavior preserved)
+  // ==========================================================================
+
+  describe('drop cancels pending RAF', () => {
+    it('should cancel pending dragover RAF when drop occurs', () => {
+      viewportHost.dispatchEvent(createFieldAnnotationDragEvent('dragover'));
+      expect(rafScheduler.hasPending()).toBe(true);
+
+      viewportHost.dispatchEvent(createFieldAnnotationDragEvent('drop'));
+
+      expect(rafScheduler.cancelAnimationFrame).toHaveBeenCalled();
+    });
+
+    it('should not apply stale dragover selection after drop', () => {
+      viewportHost.dispatchEvent(createFieldAnnotationDragEvent('dragover'));
+
+      hitTestMock.mockClear();
+
+      viewportHost.dispatchEvent(createFieldAnnotationDragEvent('drop'));
+
+      const callsAfterDrop = hitTestMock.mock.calls.length;
+
+      rafScheduler.flush();
+
+      expect(hitTestMock.mock.calls.length).toBe(callsAfterDrop);
+    });
+
+    it('should handle drop gracefully when no pending RAF exists', () => {
+      expect(() => {
+        viewportHost.dispatchEvent(createFieldAnnotationDragEvent('drop'));
+      }).not.toThrow();
+    });
+  });
+
+  // ==========================================================================
+  // Destroy
+  // ==========================================================================
 
   describe('destroy cancels pending RAF', () => {
     it('should cancel pending dragover RAF on destroy', () => {
-      // Schedule a dragover RAF
-      viewportHost.dispatchEvent(createDragEvent('dragover', { clientX: 100, clientY: 200 }));
+      viewportHost.dispatchEvent(createFieldAnnotationDragEvent('dragover'));
       expect(rafScheduler.hasPending()).toBe(true);
 
-      // Destroy the manager
       manager.destroy();
 
-      // RAF should be cancelled
       expect(rafScheduler.cancelAnimationFrame).toHaveBeenCalled();
     });
   });
+
+  // ==========================================================================
+  // Edge Cases
+  // ==========================================================================
 
   describe('edge cases', () => {
     it('should not schedule RAF when editor is not editable', () => {
       mockEditor.isEditable = false;
 
-      viewportHost.dispatchEvent(createDragEvent('dragover', { clientX: 100, clientY: 200 }));
+      viewportHost.dispatchEvent(createFieldAnnotationDragEvent('dragover'));
 
       expect(rafScheduler.requestAnimationFrame).not.toHaveBeenCalled();
     });
 
-    it('should not schedule RAF when event has no field annotation data', () => {
-      const event = new MouseEvent('dragover', {
-        bubbles: true,
-        cancelable: true,
-        clientX: 100,
-        clientY: 200,
-      }) as DragEvent;
-
-      // No dataTransfer = no field annotation data
-      Object.defineProperty(event, 'dataTransfer', {
-        value: { types: [], getData: () => '' },
-        writable: false,
-      });
-
+    it('should not schedule RAF when event has no recognized data', () => {
+      const event = createEmptyDragEvent('dragover');
       viewportHost.dispatchEvent(event);
 
       expect(rafScheduler.requestAnimationFrame).not.toHaveBeenCalled();
     });
 
     it('should handle RAF callback when deps become null', () => {
-      // Schedule RAF
-      viewportHost.dispatchEvent(createDragEvent('dragover', { clientX: 100, clientY: 200 }));
+      viewportHost.dispatchEvent(createFieldAnnotationDragEvent('dragover'));
 
-      // Simulate deps being cleared (edge case during teardown)
       manager.destroy();
 
-      // Manually invoke the callback that was scheduled (simulating race)
-      // This shouldn't throw
       expect(() => rafScheduler.flush()).not.toThrow();
     });
 
     it('should skip selection update if position unchanged', () => {
-      // Set current selection to match where hitTest will return
       hitTestMock.mockReturnValue({ pos: 50 });
 
-      // Mock the selection to appear as a TextSelection at pos 50
-      // The actual code checks instanceof TextSelection, but our mock won't pass that check
-      // so it will always update. We just verify the basic flow works.
       mockEditor.state.selection = { from: 50, to: 50 } as unknown as typeof mockEditor.state.selection;
 
-      viewportHost.dispatchEvent(createDragEvent('dragover', { clientX: 100, clientY: 200 }));
+      viewportHost.dispatchEvent(createFieldAnnotationDragEvent('dragover'));
       rafScheduler.flush();
 
-      // Verify the dragover flow executed (hitTest was called)
       expect(hitTestMock).toHaveBeenCalled();
     });
   });

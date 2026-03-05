@@ -1,7 +1,7 @@
 ---
 title: tables.get
 sidebarTitle: tables.get
-description: Reference for tables.get
+description: Retrieve table structure and dimensions by locator.
 ---
 
 {/* GENERATED FILE: DO NOT EDIT. Regenerate via `pnpm run docapi:sync`. */}
@@ -9,6 +9,8 @@ description: Reference for tables.get
 > Alpha: Document API is currently alpha and subject to breaking changes.
 
 ## Summary
+
+Retrieve table structure and dimensions by locator.
 
 - Operation ID: `tables.get`
 - API member path: `editor.doc.tables.get(...)`
@@ -18,17 +20,31 @@ description: Reference for tables.get
 - Supports dry run: `no`
 - Deterministic target resolution: `yes`
 
+## Expected result
+
+Returns a TablesGetOutput with the table row count, column count, and structural metadata.
+
 ## Input fields
 
-| Field | Type | Required | Description |
-| --- | --- | --- | --- |
-| `nodeId` | string | no |  |
-| `target` | BlockNodeAddress | no | BlockNodeAddress |
+### Variant 1
+
+_No fields._
+
+### Variant 2
+
+_No fields._
 
 ### Example request
 
 ```json
-{}
+{
+  "nodeId": "node-def456",
+  "target": {
+    "kind": "block",
+    "nodeId": "node-def456",
+    "nodeType": "paragraph"
+  }
+}
 ```
 
 ## Output fields
@@ -36,6 +52,9 @@ description: Reference for tables.get
 | Field | Type | Required | Description |
 | --- | --- | --- | --- |
 | `address` | BlockNodeAddress | yes | BlockNodeAddress |
+| `address.kind` | `"block"` | yes | Constant: `"block"` |
+| `address.nodeId` | string | yes |  |
+| `address.nodeType` | enum | yes | `"paragraph"`, `"heading"`, `"listItem"`, `"table"`, `"tableRow"`, `"tableCell"`, `"tableOfContents"`, `"image"`, `"sdt"` |
 | `columns` | integer | yes |  |
 | `nodeId` | string | yes |  |
 | `rows` | integer | yes |  |

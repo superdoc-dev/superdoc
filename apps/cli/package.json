@@ -32,11 +32,13 @@
   "dependencies": {
     "@hocuspocus/provider": "catalog:",
     "fast-glob": "catalog:",
+    "happy-dom": "catalog:",
     "y-websocket": "catalog:",
     "yjs": "catalog:"
   },
   "devDependencies": {
     "@superdoc/document-api": "workspace:*",
+    "@superdoc/pm-adapter": "workspace:*",
     "@superdoc/super-editor": "workspace:*",
     "@types/bun": "catalog:",
     "@types/node": "catalog:",

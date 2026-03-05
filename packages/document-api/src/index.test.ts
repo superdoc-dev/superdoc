@@ -16,6 +16,7 @@ import type { CommentInfo, CommentsListQuery, CommentsListResult } from './comme
 import type { CreateAdapter } from './create/create.js';
 import type { ListsAdapter } from './lists/lists.js';
 import type { CapabilitiesAdapter, DocumentApiCapabilities } from './capabilities/capabilities.js';
+import type { HistoryAdapter } from './history/history.js';
 import type { TablesAdapter } from './index.js';
 
 function makeFindAdapter(result: FindOutput): FindAdapter {
@@ -120,10 +121,6 @@ function makeFormatReceipt() {
 function makeFormatAdapter(): FormatAdapter {
   return {
     apply: vi.fn(() => makeFormatReceipt()),
-    fontSize: vi.fn(() => makeFormatReceipt()),
-    fontFamily: vi.fn(() => makeFormatReceipt()),
-    color: vi.fn(() => makeFormatReceipt()),
-    align: vi.fn(() => makeFormatReceipt()),
   };
 }
 
@@ -180,10 +177,6 @@ function makeListsAdapter(): ListsAdapter {
       item: { kind: 'block' as const, nodeType: 'listItem' as const, nodeId: 'li-2' },
       insertionPoint: { kind: 'text' as const, blockId: 'li-2', range: { start: 0, end: 0 } },
     })),
-    setType: vi.fn(() => ({
-      success: true as const,
-      item: { kind: 'block' as const, nodeType: 'listItem' as const, nodeId: 'li-1' },
-    })),
     indent: vi.fn(() => ({
       success: true as const,
       item: { kind: 'block' as const, nodeType: 'listItem' as const, nodeId: 'li-1' },
@@ -192,11 +185,53 @@ function makeListsAdapter(): ListsAdapter {
       success: true as const,
       item: { kind: 'block' as const, nodeType: 'listItem' as const, nodeId: 'li-1' },
     })),
-    restart: vi.fn(() => ({
+    create: vi.fn(() => ({
+      success: true as const,
+      listId: '99',
+      item: { kind: 'block' as const, nodeType: 'listItem' as const, nodeId: 'li-1' },
+    })),
+    attach: vi.fn(() => ({
       success: true as const,
       item: { kind: 'block' as const, nodeType: 'listItem' as const, nodeId: 'li-1' },
     })),
-    exit: vi.fn(() => ({
+    detach: vi.fn(() => ({
+      success: true as const,
+      paragraph: { kind: 'block' as const, nodeType: 'paragraph' as const, nodeId: 'p1' },
+    })),
+    join: vi.fn(() => ({
+      success: true as const,
+      listId: '1',
+    })),
+    canJoin: vi.fn(() => ({
+      canJoin: true as const,
+      adjacentListId: '2',
+    })),
+    separate: vi.fn(() => ({
+      success: true as const,
+      listId: '99',
+      numId: 99,
+    })),
+    setLevel: vi.fn(() => ({
+      success: true as const,
+      item: { kind: 'block' as const, nodeType: 'listItem' as const, nodeId: 'li-1' },
+    })),
+    setValue: vi.fn(() => ({
+      success: true as const,
+      item: { kind: 'block' as const, nodeType: 'listItem' as const, nodeId: 'li-1' },
+    })),
+    continuePrevious: vi.fn(() => ({
+      success: true as const,
+      item: { kind: 'block' as const, nodeType: 'listItem' as const, nodeId: 'li-1' },
+    })),
+    canContinuePrevious: vi.fn(() => ({
+      canContinue: true as const,
+      previousListId: '1',
+    })),
+    setLevelRestart: vi.fn(() => ({
+      success: true as const,
+      item: { kind: 'block' as const, nodeType: 'listItem' as const, nodeId: 'li-1' },
+    })),
+    convertToText: vi.fn(() => ({
       success: true as const,
       paragraph: { kind: 'block' as const, nodeType: 'paragraph' as const, nodeId: 'p1' },
     })),
@@ -265,6 +300,20 @@ function makeTablesAdapter(): TablesAdapter {
   };
 }
 
+function makeHistoryAdapter(): HistoryAdapter {
+  return {
+    get: vi.fn(() => ({
+      undoDepth: 0,
+      redoDepth: 0,
+      canUndo: false,
+      canRedo: false,
+      historyUnsafeOperations: [],
+    })),
+    undo: vi.fn(() => ({ noop: true, revision: { before: '0', after: '0' } })),
+    redo: vi.fn(() => ({ noop: true, revision: { before: '0', after: '0' } })),
+  };
+}
+
 function makeCapabilitiesAdapter(overrides?: Partial<DocumentApiCapabilities>): CapabilitiesAdapter {
   const defaultCapabilities: DocumentApiCapabilities = {
     global: {
@@ -272,8 +321,9 @@ function makeCapabilitiesAdapter(overrides?: Partial<DocumentApiCapabilities>): 
       comments: { enabled: false },
       lists: { enabled: false },
       dryRun: { enabled: false },
+      history: { enabled: false },
     },
-    format: { properties: {} },
+    format: { supportedInlineProperties: {} as DocumentApiCapabilities['format']['supportedInlineProperties'] },
     operations: {} as DocumentApiCapabilities['operations'],
     planEngine: {
       supportedStepOps: [],
@@ -584,7 +634,7 @@ describe('createDocumentApi', () => {
     const target = { kind: 'text', blockId: 'p1', range: { start: 0, end: 2 } } as const;
     api.format.bold({ target }, { changeMode: 'tracked' });
     expect(formatAdpt.apply).toHaveBeenCalledWith(
-      { target, inline: { bold: 'on' } },
+      { target, inline: { bold: true } },
       { changeMode: 'tracked', dryRun: false },
     );
   });
@@ -607,7 +657,7 @@ describe('createDocumentApi', () => {
     const target = { kind: 'text', blockId: 'p1', range: { start: 0, end: 2 } } as const;
     api.format.italic({ target }, { changeMode: 'direct' });
     expect(formatAdpt.apply).toHaveBeenCalledWith(
-      { target, inline: { italic: 'on' } },
+      { target, inline: { italic: true } },
       { changeMode: 'direct', dryRun: false },
     );
   });
@@ -630,7 +680,7 @@ describe('createDocumentApi', () => {
     const target = { kind: 'text', blockId: 'p1', range: { start: 0, end: 2 } } as const;
     api.format.underline({ target }, { changeMode: 'direct' });
     expect(formatAdpt.apply).toHaveBeenCalledWith(
-      { target, inline: { underline: 'on' } },
+      { target, inline: { underline: true } },
       { changeMode: 'direct', dryRun: false },
     );
   });
@@ -653,35 +703,12 @@ describe('createDocumentApi', () => {
     const target = { kind: 'text', blockId: 'p1', range: { start: 0, end: 2 } } as const;
     api.format.strikethrough({ target }, { changeMode: 'tracked' });
     expect(formatAdpt.apply).toHaveBeenCalledWith(
-      { target, inline: { strike: 'on' } },
+      { target, inline: { strike: true } },
       { changeMode: 'tracked', dryRun: false },
     );
   });
 
-  it('delegates format.fontSize to adapter.fontSize', () => {
-    const formatAdpt = makeFormatAdapter();
-    const api = createDocumentApi({
-      find: makeFindAdapter(QUERY_RESULT),
-      getNode: makeGetNodeAdapter(PARAGRAPH_INFO),
-      getText: makeGetTextAdapter(),
-      info: makeInfoAdapter(),
-      comments: makeCommentsAdapter(),
-      write: makeWriteAdapter(),
-      format: formatAdpt,
-      trackChanges: makeTrackChangesAdapter(),
-      create: makeCreateAdapter(),
-      lists: makeListsAdapter(),
-    });
-
-    const target = { kind: 'text', blockId: 'p1', range: { start: 0, end: 2 } } as const;
-    api.format.fontSize({ target, value: '14pt' });
-    expect(formatAdpt.fontSize).toHaveBeenCalledWith(
-      { target, value: '14pt' },
-      { changeMode: 'direct', dryRun: false },
-    );
-  });
-
-  it('delegates format.fontFamily to adapter.fontFamily', () => {
+  it('delegates format.fontFamily to adapter.apply with inline.fontFamily', () => {
     const formatAdpt = makeFormatAdapter();
     const api = createDocumentApi({
       find: makeFindAdapter(QUERY_RESULT),
@@ -698,54 +725,8 @@ describe('createDocumentApi', () => {
 
     const target = { kind: 'text', blockId: 'p1', range: { start: 0, end: 2 } } as const;
     api.format.fontFamily({ target, value: 'Arial' });
-    expect(formatAdpt.fontFamily).toHaveBeenCalledWith(
-      { target, value: 'Arial' },
-      { changeMode: 'direct', dryRun: false },
-    );
-  });
-
-  it('delegates format.color to adapter.color', () => {
-    const formatAdpt = makeFormatAdapter();
-    const api = createDocumentApi({
-      find: makeFindAdapter(QUERY_RESULT),
-      getNode: makeGetNodeAdapter(PARAGRAPH_INFO),
-      getText: makeGetTextAdapter(),
-      info: makeInfoAdapter(),
-      comments: makeCommentsAdapter(),
-      write: makeWriteAdapter(),
-      format: formatAdpt,
-      trackChanges: makeTrackChangesAdapter(),
-      create: makeCreateAdapter(),
-      lists: makeListsAdapter(),
-    });
-
-    const target = { kind: 'text', blockId: 'p1', range: { start: 0, end: 2 } } as const;
-    api.format.color({ target, value: '#ff0000' });
-    expect(formatAdpt.color).toHaveBeenCalledWith(
-      { target, value: '#ff0000' },
-      { changeMode: 'direct', dryRun: false },
-    );
-  });
-
-  it('delegates format.align to adapter.align', () => {
-    const formatAdpt = makeFormatAdapter();
-    const api = createDocumentApi({
-      find: makeFindAdapter(QUERY_RESULT),
-      getNode: makeGetNodeAdapter(PARAGRAPH_INFO),
-      getText: makeGetTextAdapter(),
-      info: makeInfoAdapter(),
-      comments: makeCommentsAdapter(),
-      write: makeWriteAdapter(),
-      format: formatAdpt,
-      trackChanges: makeTrackChangesAdapter(),
-      create: makeCreateAdapter(),
-      lists: makeListsAdapter(),
-    });
-
-    const target = { kind: 'text', blockId: 'p1', range: { start: 0, end: 2 } } as const;
-    api.format.align({ target, alignment: 'center' });
-    expect(formatAdpt.align).toHaveBeenCalledWith(
-      { target, alignment: 'center' },
+    expect(formatAdpt.apply).toHaveBeenCalledWith(
+      { target, inline: { fontFamily: 'Arial' } },
       { changeMode: 'direct', dryRun: false },
     );
   });
@@ -802,6 +783,59 @@ describe('createDocumentApi', () => {
     expect(trackAdpt.reject).toHaveBeenCalledWith({ id: 'tc-1' }, undefined);
     expect(trackAdpt.acceptAll).toHaveBeenCalledWith({}, undefined);
     expect(trackAdpt.rejectAll).toHaveBeenCalledWith({}, undefined);
+  });
+
+  it('delegates history.get to the history adapter', () => {
+    const historyAdpt = makeHistoryAdapter();
+    const api = createDocumentApi({
+      find: makeFindAdapter(QUERY_RESULT),
+      getNode: makeGetNodeAdapter(PARAGRAPH_INFO),
+      getText: makeGetTextAdapter(),
+      info: makeInfoAdapter(),
+      comments: makeCommentsAdapter(),
+      write: makeWriteAdapter(),
+      format: makeFormatAdapter(),
+      trackChanges: makeTrackChangesAdapter(),
+      create: makeCreateAdapter(),
+      lists: makeListsAdapter(),
+      history: historyAdpt,
+    } as any);
+
+    const result = api.history.get();
+
+    expect(historyAdpt.get).toHaveBeenCalledOnce();
+    expect(result).toEqual({
+      undoDepth: 0,
+      redoDepth: 0,
+      canUndo: false,
+      canRedo: false,
+      historyUnsafeOperations: [],
+    });
+  });
+
+  it('delegates history.undo and history.redo to the history adapter', () => {
+    const historyAdpt = makeHistoryAdapter();
+    const api = createDocumentApi({
+      find: makeFindAdapter(QUERY_RESULT),
+      getNode: makeGetNodeAdapter(PARAGRAPH_INFO),
+      getText: makeGetTextAdapter(),
+      info: makeInfoAdapter(),
+      comments: makeCommentsAdapter(),
+      write: makeWriteAdapter(),
+      format: makeFormatAdapter(),
+      trackChanges: makeTrackChangesAdapter(),
+      create: makeCreateAdapter(),
+      lists: makeListsAdapter(),
+      history: historyAdpt,
+    } as any);
+
+    const undoResult = api.history.undo();
+    const redoResult = api.history.redo();
+
+    expect(historyAdpt.undo).toHaveBeenCalledOnce();
+    expect(historyAdpt.redo).toHaveBeenCalledOnce();
+    expect(undoResult).toEqual({ noop: true, revision: { before: '0', after: '0' } });
+    expect(redoResult).toEqual({ noop: true, revision: { before: '0', after: '0' } });
   });
 
   describe('trackChanges.decide input validation', () => {
@@ -975,20 +1009,24 @@ describe('createDocumentApi', () => {
     const listResult = api.lists.list({ limit: 1 });
     const getResult = api.lists.get({ address: target });
     const insertResult = api.lists.insert({ target, position: 'after', text: 'Inserted' }, { changeMode: 'tracked' });
-    const setTypeResult = api.lists.setType({ target, kind: 'bullet' });
     const indentResult = api.lists.indent({ target });
     const outdentResult = api.lists.outdent({ target });
-    const restartResult = api.lists.restart({ target });
-    const exitResult = api.lists.exit({ target });
+    const createResult = api.lists.create({
+      mode: 'empty',
+      at: { kind: 'block', nodeType: 'paragraph', nodeId: 'p-1' },
+      kind: 'ordered',
+    });
+    const detachResult = api.lists.detach({ target });
+    const setLevelResult = api.lists.setLevel({ target, level: 2 });
 
     expect(listResult.total).toBe(0);
     expect(getResult.address).toEqual(target);
     expect(insertResult.success).toBe(true);
-    expect(setTypeResult.success).toBe(true);
     expect(indentResult.success).toBe(true);
     expect(outdentResult.success).toBe(true);
-    expect(restartResult.success).toBe(true);
-    expect(exitResult.success).toBe(true);
+    expect(createResult.success).toBe(true);
+    expect(detachResult.success).toBe(true);
+    expect(setLevelResult.success).toBe(true);
 
     expect(listsAdpt.list).toHaveBeenCalledWith({ limit: 1 });
     expect(listsAdpt.get).toHaveBeenCalledWith({ address: target });
@@ -996,11 +1034,10 @@ describe('createDocumentApi', () => {
       { target, position: 'after', text: 'Inserted' },
       { changeMode: 'tracked', dryRun: false },
     );
-    expect(listsAdpt.setType).toHaveBeenCalledWith({ target, kind: 'bullet' }, { changeMode: 'direct', dryRun: false });
     expect(listsAdpt.indent).toHaveBeenCalledWith({ target }, { changeMode: 'direct', dryRun: false });
     expect(listsAdpt.outdent).toHaveBeenCalledWith({ target }, { changeMode: 'direct', dryRun: false });
-    expect(listsAdpt.restart).toHaveBeenCalledWith({ target }, { changeMode: 'direct', dryRun: false });
-    expect(listsAdpt.exit).toHaveBeenCalledWith({ target }, { changeMode: 'direct', dryRun: false });
+    expect(listsAdpt.detach).toHaveBeenCalledWith({ target }, { changeMode: 'direct', dryRun: false });
+    expect(listsAdpt.setLevel).toHaveBeenCalledWith({ target, level: 2 }, { changeMode: 'direct', dryRun: false });
   });
 
   it('exposes capabilities as a callable function with .get() alias', () => {
@@ -1664,7 +1701,7 @@ describe('createDocumentApi', () => {
       const target = { kind: 'text', blockId: 'p1', range: { start: 0, end: 2 } } as const;
       api.format.bold({ target });
       expect(formatAdpt.apply).toHaveBeenCalledWith(
-        { target, inline: { bold: 'on' } },
+        { target, inline: { bold: true } },
         { changeMode: 'direct', dryRun: false },
       );
     });
@@ -2126,9 +2163,9 @@ describe('createDocumentApi', () => {
       expect(result.success).toBe(true);
     });
 
-    it('accepts canonical target for lists.setType', () => {
+    it('accepts canonical target for lists.setLevel', () => {
       const api = makeApi();
-      const result = api.lists.setType({ target, kind: 'bullet' });
+      const result = api.lists.setLevel({ target, level: 2 });
       expect(result.success).toBe(true);
     });
 
@@ -2141,12 +2178,26 @@ describe('createDocumentApi', () => {
 
     // -- All list mutation operations validate --
 
-    const LISTS_MUTATIONS = ['outdent', 'restart', 'exit'] as const;
+    const LISTS_MUTATIONS = [
+      'outdent',
+      'detach',
+      'setValue',
+      'continuePrevious',
+      'setLevelRestart',
+      'convertToText',
+    ] as const;
     for (const method of LISTS_MUTATIONS) {
       it(`accepts canonical target for lists.${method}`, () => {
         const api = makeApi();
-        const result = api.lists[method]({ target });
-        expect(result.success).toBe(true);
+        const result = (
+          api.lists[method] as (input: {
+            target: typeof target;
+            level?: number;
+            value?: number;
+            restartAfterLevel?: number | null;
+          }) => unknown
+        )({ target, level: 0, value: 1, restartAfterLevel: null });
+        expect(result).toBeDefined();
       });
     }
 

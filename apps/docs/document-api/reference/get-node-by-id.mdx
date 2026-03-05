@@ -1,7 +1,7 @@
 ---
 title: getNodeById
 sidebarTitle: getNodeById
-description: Reference for getNodeById
+description: Retrieve a single node by its unique ID.
 ---
 
 {/* GENERATED FILE: DO NOT EDIT. Regenerate via `pnpm run docapi:sync`. */}
@@ -9,6 +9,8 @@ description: Reference for getNodeById
 > Alpha: Document API is currently alpha and subject to breaking changes.
 
 ## Summary
+
+Retrieve a single node by its unique ID.
 
 - Operation ID: `getNodeById`
 - API member path: `editor.doc.getNodeById(...)`
@@ -18,12 +20,16 @@ description: Reference for getNodeById
 - Supports dry run: `no`
 - Deterministic target resolution: `yes`
 
+## Expected result
+
+Returns a NodeInfo object with the node type, address, content, and typed properties.
+
 ## Input fields
 
 | Field | Type | Required | Description |
 | --- | --- | --- | --- |
 | `nodeId` | string | yes |  |
-| `nodeType` | enum | no | `"paragraph"`, `"heading"`, `"listItem"`, `"table"`, `"tableRow"`, `"tableCell"`, `"image"`, `"sdt"` |
+| `nodeType` | enum | no | `"paragraph"`, `"heading"`, `"listItem"`, `"table"`, `"tableRow"`, `"tableCell"`, `"tableOfContents"`, `"image"`, `"sdt"` |
 
 ### Example request
 
@@ -41,10 +47,12 @@ description: Reference for getNodeById
 | `bodyNodes` | object[] | no |  |
 | `bodyText` | string | no |  |
 | `kind` | enum | yes | `"block"`, `"inline"` |
-| `nodeType` | enum | yes | `"paragraph"`, `"heading"`, `"listItem"`, `"table"`, `"tableRow"`, `"tableCell"`, `"image"`, `"sdt"`, `"run"`, `"bookmark"`, `"comment"`, `"hyperlink"`, `"footnoteRef"`, `"tab"`, `"lineBreak"` |
+| `nodeType` | enum | yes | `"paragraph"`, `"heading"`, `"listItem"`, `"table"`, `"tableRow"`, `"tableCell"`, `"tableOfContents"`, `"image"`, `"sdt"`, `"run"`, `"bookmark"`, `"comment"`, `"hyperlink"`, `"footnoteRef"`, `"tab"`, `"lineBreak"` |
 | `nodes` | object[] | no |  |
 | `properties` | object | no |  |
 | `summary` | object | no |  |
+| `summary.label` | string | no |  |
+| `summary.text` | string | no |  |
 | `text` | string | no |  |
 
 ### Example response
@@ -87,6 +95,7 @@ description: Reference for getNodeById
         "table",
         "tableRow",
         "tableCell",
+        "tableOfContents",
         "image",
         "sdt"
       ]
@@ -134,6 +143,7 @@ description: Reference for getNodeById
         "table",
         "tableRow",
         "tableCell",
+        "tableOfContents",
         "image",
         "sdt",
         "run",

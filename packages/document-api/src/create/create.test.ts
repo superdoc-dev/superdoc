@@ -1,4 +1,9 @@
-import { executeCreateTable, normalizeCreateParagraphInput } from './create.js';
+import {
+  executeCreateParagraph,
+  executeCreateSectionBreak,
+  executeCreateTable,
+  normalizeCreateParagraphInput,
+} from './create.js';
 
 describe('normalizeCreateParagraphInput', () => {
   it('defaults location to documentEnd when at is omitted', () => {
@@ -104,5 +109,86 @@ describe('executeCreateTable', () => {
       }),
     ).toThrow(/Cannot combine/i);
     expect(tableCalled).toBe(false);
+  });
+});
+
+describe('create target validation', () => {
+  it('rejects nodeId-based before/after placement for create.paragraph', () => {
+    let paragraphCalled = false;
+    const adapter = {
+      paragraph: () => {
+        paragraphCalled = true;
+        return {
+          success: true,
+          paragraph: { kind: 'block', nodeType: 'paragraph', nodeId: 'p2' },
+          insertionPoint: { kind: 'text', blockId: 'p2', range: { start: 0, end: 0 } },
+        };
+      },
+      heading: () => ({ success: true }),
+      table: () => ({ success: true }),
+      sectionBreak: () => ({ success: true }),
+    } as any;
+
+    expect(() =>
+      executeCreateParagraph(adapter, {
+        at: { kind: 'after', nodeId: 'p1' } as any,
+      }),
+    ).toThrow(/does not support at\.nodeId/i);
+    expect(paragraphCalled).toBe(false);
+  });
+});
+
+describe('executeCreateSectionBreak', () => {
+  it('defaults create.sectionBreak location to documentEnd', () => {
+    const adapter = {
+      paragraph: () => ({ success: true }),
+      heading: () => ({ success: true }),
+      table: () => ({ success: true }),
+      sectionBreak: vi.fn(() => ({
+        success: true,
+        section: { kind: 'section', sectionId: 'section-1' },
+      })),
+    } as any;
+
+    executeCreateSectionBreak(adapter, { breakType: 'nextPage' });
+
+    expect(adapter.sectionBreak).toHaveBeenCalledWith(
+      expect.objectContaining({
+        at: { kind: 'documentEnd' },
+        breakType: 'nextPage',
+      }),
+      { changeMode: 'direct', dryRun: false, expectedRevision: undefined },
+    );
+  });
+
+  it('rejects invalid section break type', () => {
+    const adapter = {
+      paragraph: () => ({ success: true }),
+      heading: () => ({ success: true }),
+      table: () => ({ success: true }),
+      sectionBreak: vi.fn(() => ({ success: true })),
+    } as any;
+
+    expect(() =>
+      executeCreateSectionBreak(adapter, {
+        breakType: 'invalidBreakType' as any,
+      }),
+    ).toThrow(/create\.sectionBreak breakType must be one of/i);
+  });
+
+  it('rejects nodeId-based before/after placement', () => {
+    const adapter = {
+      paragraph: () => ({ success: true }),
+      heading: () => ({ success: true }),
+      table: () => ({ success: true }),
+      sectionBreak: vi.fn(() => ({ success: true })),
+    } as any;
+
+    expect(() =>
+      executeCreateSectionBreak(adapter, {
+        at: { kind: 'before', nodeId: 'p1' } as any,
+      }),
+    ).toThrow(/does not support at\.nodeId/i);
+    expect(adapter.sectionBreak).not.toHaveBeenCalled();
   });
 });

@@ -13,6 +13,7 @@ import type { UnderlineStyle, PMMark, HyperlinkConfig, ThemeColorPalette } from 
 import { normalizeColor, isFiniteNumber, ptToPx } from '../utilities.js';
 import { buildFlowRunLink, migrateLegacyLink } from './links.js';
 import { sanitizeHref } from '@superdoc/url-validation';
+import { resolveThemeColorValue } from './theme-color.js';
 
 /**
  * Track change mark type constants from ProseMirror schema.
@@ -58,12 +59,21 @@ const MAX_RUN_MARK_ARRAY_LENGTH = 100;
  * Protects against stack overflow from deeply nested structures.
  */
 const MAX_RUN_MARK_DEPTH = 5;
+const RANDOM_ID_LENGTH = 9;
 
 type CommentAnnotation = {
   commentId: string;
   importedId?: string;
   internal?: boolean;
   trackedChange?: boolean;
+};
+
+const generateRandomBase36Id = (length: number): string => {
+  let randomId = '';
+  while (randomId.length < length) {
+    randomId += Math.random().toString(36).slice(2);
+  }
+  return randomId.slice(0, length);
 };
 
 /**
@@ -89,15 +99,6 @@ const validateDepth = (obj: unknown, currentDepth = 0): boolean => {
   return true;
 };
 
-const parseThemePercentage = (value: unknown): number | undefined => {
-  if (typeof value !== 'string') return undefined;
-  const trimmed = value.trim();
-  if (!trimmed) return undefined;
-  const parsed = Number.parseInt(trimmed, 16);
-  if (Number.isNaN(parsed)) return undefined;
-  return Math.max(0, Math.min(parsed / 255, 1));
-};
-
 const expandHex = (hex: string): string => {
   const normalized = hex.replace('#', '');
   if (normalized.length === 3) {
@@ -117,36 +118,6 @@ const hexToRgb = (hex: string): { r: number; g: number; b: number } | null => {
   const b = Number.parseInt(cleaned.slice(4, 6), 16);
   if ([r, g, b].some((channel) => Number.isNaN(channel))) return null;
   return { r, g, b };
-};
-
-const rgbToHex = (value: { r: number; g: number; b: number }): string => {
-  const toHex = (channel: number) => {
-    const normalized = Math.max(0, Math.min(255, channel));
-    return normalized.toString(16).padStart(2, '0').toUpperCase();
-  };
-  return `#${toHex(value.r)}${toHex(value.g)}${toHex(value.b)}`;
-};
-
-const applyThemeTint = (baseHex: string, ratio: number): string => {
-  const rgb = hexToRgb(baseHex);
-  if (!rgb) return baseHex;
-  const tinted = {
-    r: Math.round(rgb.r + (255 - rgb.r) * ratio),
-    g: Math.round(rgb.g + (255 - rgb.g) * ratio),
-    b: Math.round(rgb.b + (255 - rgb.b) * ratio),
-  };
-  return rgbToHex(tinted);
-};
-
-const applyThemeShade = (baseHex: string, ratio: number): string => {
-  const rgb = hexToRgb(baseHex);
-  if (!rgb) return baseHex;
-  const shaded = {
-    r: Math.round(rgb.r * ratio),
-    g: Math.round(rgb.g * ratio),
-    b: Math.round(rgb.b * ratio),
-  };
-  return rgbToHex(shaded);
 };
 
 /**
@@ -238,20 +209,12 @@ const resolveThemeColor = (
   if (!attrs || !themeColors) return undefined;
   const rawKey = attrs.themeColor;
   if (typeof rawKey !== 'string') return undefined;
-  const key = rawKey.trim();
-  if (!key) return undefined;
-  const base = themeColors[key];
-  if (!base) return undefined;
-  const tint = parseThemePercentage(attrs.themeTint);
-  const shade = parseThemePercentage(attrs.themeShade);
-  let computed = base;
-  if (tint != null) {
-    computed = applyThemeTint(computed, tint);
-  }
-  if (shade != null) {
-    computed = applyThemeShade(computed, shade);
-  }
-  return computed;
+  return resolveThemeColorValue(
+    rawKey,
+    attrs.themeTint as string | undefined,
+    attrs.themeShade as string | undefined,
+    themeColors,
+  );
 };
 
 const resolveColorFromAttributes = (
@@ -469,7 +432,7 @@ const deriveTrackedChangeId = (kind: TrackedChangeKind, attrs: Record<string, un
   const authorEmail = attrs && typeof attrs.authorEmail === 'string' ? attrs.authorEmail : 'unknown';
   const date = attrs && typeof attrs.date === 'string' ? attrs.date : 'unknown';
   // Add timestamp and random component to ensure uniqueness when author/date are missing
-  const unique = `${Date.now()}-${Math.random().toString(36).substring(2, 11)}`;
+  const unique = `${Date.now()}-${generateRandomBase36Id(RANDOM_ID_LENGTH)}`;
   return `${kind}-${authorEmail}-${date}-${unique}`;
 };
 

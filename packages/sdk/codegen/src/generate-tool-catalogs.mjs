@@ -35,40 +35,39 @@ function toOperationToolName(operationId) {
 // Tools policy — shared data that both runtimes consume from tools-policy.json
 // ---------------------------------------------------------------------------
 
+const GROUP_DESCRIPTIONS = {
+  core: 'Core operations: read nodes, get text, insert/replace/delete content, mutations',
+  format: 'Text formatting, paragraph styles, alignment, spacing, borders, shading',
+  create: 'Create structural elements: headings, paragraphs, tables, sections, TOC',
+  tables: 'Table creation, manipulation, formatting, borders, and cell operations',
+  sections: 'Page layout, margins, columns, headers/footers, page numbering',
+  lists: 'Bullet and numbered lists, indentation, list types',
+  comments: 'Comment threads — create, edit, delete, list',
+  trackChanges: 'Track changes — list, inspect, accept/reject',
+  toc: 'Table of contents — create, configure, update, manage entries',
+  history: 'Undo, redo, history inspection',
+  session: 'Session management — open, close, save, list sessions',
+};
+
 const TOOLS_POLICY = {
-  policyVersion: 'v1',
-  phases: {
-    read: {
-      include: ['introspection', 'query'],
-      exclude: ['mutation', 'trackChanges', 'session', 'create', 'comments', 'format'],
-      priority: ['query', 'introspection'],
-    },
-    locate: {
-      include: ['query'],
-      exclude: ['mutation', 'trackChanges', 'session', 'create', 'comments', 'format'],
-      priority: ['query'],
-    },
-    mutate: {
-      include: ['query', 'mutation', 'format', 'comments', 'create'],
-      exclude: ['session'],
-      priority: ['query', 'mutation', 'create', 'format', 'comments'],
-    },
-    review: {
-      include: ['query', 'trackChanges', 'comments'],
-      exclude: ['mutation', 'create', 'session', 'format'],
-      priority: ['trackChanges', 'comments', 'query'],
-    },
-  },
+  policyVersion: 'v3',
+  groups: [
+    'core', 'format', 'create', 'tables', 'sections',
+    'lists', 'comments', 'trackChanges', 'toc', 'history', 'session',
+  ],
+  groupDescriptions: GROUP_DESCRIPTIONS,
   defaults: {
-    maxToolsByProfile: { intent: 12, operation: 16 },
-    minReadTools: 2,
-    foundationalOperationIds: ['doc.info', 'doc.find'],
-    chooserDecisionVersion: 'v1',
+    mode: 'essential',
+    maxTools: 20,
+    alwaysInclude: ['core'],
+    foundationalOperationIds: ['doc.info', 'doc.query.match'],
   },
   capabilityFeatures: {
     comments: ['hasComments'],
     trackChanges: ['hasTrackedChanges'],
     lists: ['hasLists'],
+    tables: ['hasTables'],
+    toc: ['hasToc'],
   },
 };
 
@@ -77,6 +76,8 @@ const TOOLS_POLICY = {
 // ---------------------------------------------------------------------------
 
 const CAPABILITY_FEATURES = TOOLS_POLICY.capabilityFeatures;
+
+
 
 function inferRequiredCapabilities(category) {
   return CAPABILITY_FEATURES[category] ?? [];
@@ -113,6 +114,67 @@ function inferSessionRequirements(operation) {
 }
 
 // ---------------------------------------------------------------------------
+// Schema sanitization — ensure JSON Schema 2020-12 compliance
+// ---------------------------------------------------------------------------
+
+/**
+ * Recursively fix bare `{ const: value }` nodes to include `type`.
+ * Anthropic requires `const` to be accompanied by a `type` field.
+ */
+function sanitizeSchema(schema) {
+  if (!schema || typeof schema !== 'object' || Array.isArray(schema)) return schema;
+
+  const result = { ...schema };
+
+  // "type": "json" is a SuperDoc contract sentinel for "any JSON value".
+  // It's not valid in JSON Schema draft 2020-12 — replace with empty schema.
+  if (result.type === 'json') {
+    delete result.type;
+    return result;
+  }
+
+  // Fix bare const: add type based on the const value
+  if ('const' in result && !result.type) {
+    const val = result.const;
+    if (typeof val === 'string') result.type = 'string';
+    else if (typeof val === 'number') result.type = 'number';
+    else if (typeof val === 'boolean') result.type = 'boolean';
+  }
+
+  // Recurse into nested structures
+  if (result.properties) {
+    result.properties = Object.fromEntries(
+      Object.entries(result.properties).map(([k, v]) => [k, sanitizeSchema(v)]),
+    );
+  }
+  if (Array.isArray(result.oneOf)) {
+    // Convert oneOf where every variant is { const: value } into { enum: [...] }
+    const allConst = result.oneOf.every((v) => v && typeof v === 'object' && 'const' in v && Object.keys(v).length <= 2);
+    if (allConst && result.oneOf.length > 0) {
+      const values = result.oneOf.map((v) => v.const);
+      delete result.oneOf;
+      result.enum = values;
+    } else {
+      result.oneOf = result.oneOf.map(sanitizeSchema);
+    }
+  }
+  if (Array.isArray(result.anyOf)) {
+    result.anyOf = result.anyOf.map(sanitizeSchema);
+  }
+  if (Array.isArray(result.allOf)) {
+    result.allOf = result.allOf.map(sanitizeSchema);
+  }
+  if (result.items) {
+    result.items = sanitizeSchema(result.items);
+  }
+  if (result.additionalProperties && typeof result.additionalProperties === 'object') {
+    result.additionalProperties = sanitizeSchema(result.additionalProperties);
+  }
+
+  return result;
+}
+
+// ---------------------------------------------------------------------------
 // Build input schema from CLI params (for CLI-only ops or as fallback)
 // ---------------------------------------------------------------------------
 
@@ -127,13 +189,15 @@ function buildInputSchemaFromParams(operation) {
     }
 
     let schema;
-    if (param.type === 'string') schema = { type: 'string' };
+    if (param.type === 'string' && param.schema) schema = { type: 'string', ...param.schema };
+    else if (param.type === 'string') schema = { type: 'string' };
     else if (param.type === 'number') schema = { type: 'number' };
     else if (param.type === 'boolean') schema = { type: 'boolean' };
     else if (param.type === 'string[]') schema = { type: 'array', items: { type: 'string' } };
-    else if (param.type === 'json' && param.schema) schema = param.schema;
-    else schema = {};
+    else if (param.type === 'json' && param.schema && param.schema.type !== 'json') schema = param.schema;
+    else schema = { type: 'object' };
 
+    schema = sanitizeSchema(schema);
     if (param.description) schema.description = param.description;
     properties[param.name] = schema;
     if (param.required) required.push(param.name);
@@ -182,7 +246,7 @@ function buildCatalogEntry(operationId, operation, docApiTool, profile) {
     inputSchema,
     outputSchema,
     mutates: operation.mutates ?? false,
-    category: operation.category ?? 'misc',
+    category: operation.category ?? 'core',
     capabilities: inferCapabilities(operation),
     constraints: operation.constraints ?? undefined,
     errors: docApiTool?.possibleFailureCodes ?? [],
@@ -258,16 +322,24 @@ export async function generateToolCatalogs(contract) {
   const docApiTools = await loadDocApiTools();
 
   const intentTools = [];
-  const operationTools = [];
 
   for (const [operationId, operation] of Object.entries(contract.operations)) {
+    // Skip operations explicitly excluded from LLM tool catalogs
+    if (operation.skipAsATool) continue;
+
     // Map to doc-api tool by stripping 'doc.' prefix
     const docApiName = operationId.replace(/^doc\./, '');
     const docApiTool = docApiTools.get(docApiName);
 
-    intentTools.push(buildCatalogEntry(operationId, operation, docApiTool, 'intent'));
-    operationTools.push(buildCatalogEntry(operationId, operation, docApiTool, 'operation'));
+    const entry = buildCatalogEntry(operationId, operation, docApiTool, 'intent');
+    if (operation.essential) entry.essential = true;
+    intentTools.push(entry);
   }
+
+  // Collect essential tool names
+  const essentialToolNames = intentTools
+    .filter((t) => t.essential)
+    .map((t) => t.toolName);
 
   // Full catalog
   const catalog = {
@@ -275,11 +347,8 @@ export async function generateToolCatalogs(contract) {
     generatedAt: null,
     namePolicyVersion: NAME_POLICY_VERSION,
     exposureVersion: EXPOSURE_VERSION,
-    toolCount: intentTools.length + operationTools.length,
-    profiles: {
-      intent: { name: 'intent', tools: intentTools },
-      operation: { name: 'operation', tools: operationTools },
-    },
+    toolCount: intentTools.length,
+    tools: intentTools,
   };
 
   // Tool name -> operation ID map
@@ -287,11 +356,29 @@ export async function generateToolCatalogs(contract) {
   for (const tool of intentTools) {
     toolNameMap[tool.toolName] = tool.operationId;
   }
-  for (const tool of operationTools) {
-    toolNameMap[tool.toolName] = tool.operationId;
-  }
 
-  // Provider bundles
+  // Build discover_tools schema: lists available groups with descriptions
+  const discoverToolSchema = {
+    type: 'object',
+    properties: {
+      groups: {
+        type: 'array',
+        items: {
+          type: 'string',
+          enum: TOOLS_POLICY.groups,
+        },
+        description: 'Which tool groups to load. You can request multiple at once.',
+      },
+    },
+    required: ['groups'],
+  };
+
+  const discoverToolDescription =
+    'Load additional tool groups when you need capabilities beyond the essential set. ' +
+    'Call this BEFORE attempting to use tools from a specific group.\n\nAvailable groups:\n' +
+    TOOLS_POLICY.groups.map((g) => `  - ${g}: ${GROUP_DESCRIPTIONS[g]}`).join('\n');
+
+  // Provider bundles (with discover_tools appended)
   const providers = {
     openai: { formatter: toOpenAiTool, file: 'tools.openai.json' },
     anthropic: { formatter: toAnthropicTool, file: 'tools.anthropic.json' },
@@ -299,9 +386,33 @@ export async function generateToolCatalogs(contract) {
     generic: { formatter: toGenericTool, file: 'tools.generic.json' },
   };
 
-  // Tools policy with contract hash
+  // Build discover_tools in each provider format
+  const discoverToolByProvider = {
+    openai: {
+      type: 'function',
+      function: { name: 'discover_tools', description: discoverToolDescription, parameters: discoverToolSchema },
+    },
+    anthropic: {
+      name: 'discover_tools', description: discoverToolDescription, input_schema: discoverToolSchema,
+    },
+    vercel: {
+      type: 'function',
+      function: { name: 'discover_tools', description: discoverToolDescription, parameters: discoverToolSchema },
+    },
+    generic: {
+      name: 'discover_tools', description: discoverToolDescription, parameters: discoverToolSchema,
+    },
+  };
+
+  // Tools policy with contract hash and essential tool list
   const policy = {
     ...TOOLS_POLICY,
+    essentialTools: essentialToolNames,
+    discoverTool: {
+      name: 'discover_tools',
+      description: discoverToolDescription,
+      schema: discoverToolSchema,
+    },
     contractHash: contract.sourceHash,
   };
 
@@ -317,13 +428,13 @@ export async function generateToolCatalogs(contract) {
     ),
   ];
 
-  for (const [, { formatter, file }] of Object.entries(providers)) {
+  for (const [providerName, { formatter, file }] of Object.entries(providers)) {
+    const providerTools = intentTools.map(formatter);
+    // Append discover_tools as the last tool in the bundle
+    providerTools.push(discoverToolByProvider[providerName]);
     const bundle = {
       contractVersion: contract.contractVersion,
-      profiles: {
-        intent: intentTools.map(formatter),
-        operation: operationTools.map(formatter),
-      },
+      tools: providerTools,
     };
     writes.push(writeGeneratedFile(path.join(TOOLS_OUTPUT_DIR, file), JSON.stringify(bundle, null, 2) + '\n'));
   }

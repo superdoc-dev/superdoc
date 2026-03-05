@@ -193,6 +193,8 @@ describe('comments-store', () => {
     const existingComment = {
       commentId: 'change-1',
       trackedChangeText: 'old',
+      trackedChangeType: 'both',
+      deletedText: 'removed earlier',
       getValues: vi.fn(() => ({ commentId: 'change-1' })),
     };
 
@@ -216,6 +218,7 @@ describe('comments-store', () => {
     });
 
     expect(existingComment.trackedChangeText).toBe('new text');
+    expect(existingComment.trackedChangeType).toBe('insert');
     expect(existingComment.deletedText).toBe('removed');
     expect(syncCommentsToClientsMock).toHaveBeenCalledWith(
       superdoc,
@@ -234,6 +237,43 @@ describe('comments-store', () => {
         comment: { commentId: 'change-1' },
       }),
     );
+  });
+
+  it('clears stale tracked-change metadata when an update removes one side of a replacement', () => {
+    const superdoc = {
+      emit: vi.fn(),
+    };
+
+    const existingComment = {
+      commentId: 'change-clear-1',
+      trackedChangeText: 'replacement',
+      trackedChangeType: 'both',
+      deletedText: 'original',
+      getValues: vi.fn(() => ({ commentId: 'change-clear-1' })),
+    };
+
+    store.commentsList = [existingComment];
+
+    store.handleTrackedChangeUpdate({
+      superdoc,
+      params: {
+        event: 'update',
+        changeId: 'change-clear-1',
+        trackedChangeText: 'remaining insert',
+        trackedChangeType: 'insert',
+        deletedText: null,
+        authorEmail: 'user@example.com',
+        author: 'User',
+        date: 123,
+        importedAuthor: null,
+        documentId: 'doc-1',
+        coords: {},
+      },
+    });
+
+    expect(existingComment.trackedChangeText).toBe('remaining insert');
+    expect(existingComment.trackedChangeType).toBe('insert');
+    expect(existingComment.deletedText).toBeNull();
   });
 
   it('resolves tracked change comments on resolve events', () => {
@@ -888,6 +928,82 @@ describe('comments-store', () => {
       expect(comment.resolvedTime).toBe(888);
       expect(comment.resolvedByEmail).toBe('user@example.com');
       expect(comment.resolvedByName).toBe('User');
+    });
+  });
+
+  describe('getFloatingComments filters resolved tracked changes', () => {
+    it('includes unresolved tracked changes that have position keys', () => {
+      store.commentsList = [
+        { commentId: 'tc-1', trackedChange: true, resolvedTime: null, createdTime: 1 },
+        { commentId: 'tc-2', trackedChange: true, resolvedTime: null, createdTime: 2 },
+      ];
+      store.editorCommentPositions = {
+        'tc-1': { start: 1, end: 5, bounds: { top: 0, left: 0 } },
+        'tc-2': { start: 10, end: 15, bounds: { top: 0, left: 0 } },
+      };
+
+      const floating = store.getFloatingComments;
+      expect(floating.map((c) => c.commentId)).toEqual(['tc-1', 'tc-2']);
+    });
+
+    it('excludes tracked changes once resolvedTime is set', () => {
+      store.commentsList = [
+        { commentId: 'tc-1', trackedChange: true, resolvedTime: Date.now(), createdTime: 1 },
+        { commentId: 'tc-2', trackedChange: true, resolvedTime: null, createdTime: 2 },
+      ];
+      store.editorCommentPositions = {
+        'tc-1': { start: 1, end: 5, bounds: { top: 0, left: 0 } },
+        'tc-2': { start: 10, end: 15, bounds: { top: 0, left: 0 } },
+      };
+
+      const floating = store.getFloatingComments;
+      expect(floating.map((c) => c.commentId)).toEqual(['tc-2']);
+    });
+
+    it('excludes the last tracked change when resolved (regression: SD-2049)', () => {
+      store.commentsList = [{ commentId: 'tc-only', trackedChange: true, resolvedTime: Date.now(), createdTime: 1 }];
+      // Position key still present (editor doesn't fire update for last mark removal)
+      store.editorCommentPositions = {
+        'tc-only': { start: 1, end: 5, bounds: { top: 0, left: 0 } },
+      };
+
+      const floating = store.getFloatingComments;
+      expect(floating).toEqual([]);
+    });
+
+    it('returns empty when all tracked changes are resolved', () => {
+      store.commentsList = [
+        { commentId: 'tc-1', trackedChange: true, resolvedTime: Date.now(), createdTime: 1 },
+        { commentId: 'tc-2', trackedChange: true, resolvedTime: Date.now(), createdTime: 2 },
+        { commentId: 'tc-3', trackedChange: true, resolvedTime: Date.now(), createdTime: 3 },
+      ];
+      store.editorCommentPositions = {
+        'tc-1': { start: 1, end: 5, bounds: { top: 0, left: 0 } },
+        'tc-2': { start: 10, end: 15, bounds: { top: 0, left: 0 } },
+        'tc-3': { start: 20, end: 25, bounds: { top: 0, left: 0 } },
+      };
+
+      const floating = store.getFloatingComments;
+      expect(floating).toEqual([]);
+    });
+
+    it('excludes unresolved tracked change when positions are cleared (regression: SD-2071)', () => {
+      store.commentsList = [
+        { commentId: 'tc-1', trackedChange: true, resolvedTime: null, createdTime: 1, selection: {} },
+      ];
+      // Undo removed the mark — positions are now empty
+      store.editorCommentPositions = {};
+
+      const floating = store.getFloatingComments;
+      expect(floating).toEqual([]);
+    });
+
+    it('keeps PDF comments visible when editor positions are empty (SD-2071)', () => {
+      store.commentsList = [{ commentId: 'pdf-1', createdTime: 1, selection: { source: 'pdf', selectionBounds: {} } }];
+      store.editorCommentPositions = {};
+
+      const floating = store.getFloatingComments;
+      expect(floating.map((c) => c.commentId)).toEqual(['pdf-1']);
     });
   });
 });

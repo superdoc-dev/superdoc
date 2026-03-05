@@ -1,7 +1,7 @@
 ---
 title: create.heading
 sidebarTitle: create.heading
-description: Reference for create.heading
+description: Create a new heading at the target position.
 ---
 
 {/* GENERATED FILE: DO NOT EDIT. Regenerate via `pnpm run docapi:sync`. */}
@@ -10,6 +10,8 @@ description: Reference for create.heading
 
 ## Summary
 
+Create a new heading at the target position.
+
 - Operation ID: `create.heading`
 - API member path: `editor.doc.create.heading(...)`
 - Mutates document: `yes`
@@ -17,6 +19,10 @@ description: Reference for create.heading
 - Supports tracked mode: `yes`
 - Supports dry run: `yes`
 - Deterministic target resolution: `yes`
+
+## Expected result
+
+Returns a CreateHeadingResult with the new heading block ID and address.
 
 ## Input fields
 
@@ -40,7 +46,32 @@ description: Reference for create.heading
 
 ## Output fields
 
-_No fields._
+### Variant 1 (heading.kind="block")
+
+| Field | Type | Required | Description |
+| --- | --- | --- | --- |
+| `heading` | HeadingAddress | yes | HeadingAddress |
+| `heading.kind` | `"block"` | yes | Constant: `"block"` |
+| `heading.nodeId` | string | yes |  |
+| `heading.nodeType` | `"heading"` | yes | Constant: `"heading"` |
+| `insertionPoint` | TextAddress | yes | TextAddress |
+| `insertionPoint.blockId` | string | yes |  |
+| `insertionPoint.kind` | `"text"` | yes | Constant: `"text"` |
+| `insertionPoint.range` | Range | yes | Range |
+| `insertionPoint.range.end` | integer | yes |  |
+| `insertionPoint.range.start` | integer | yes |  |
+| `success` | `true` | yes | Constant: `true` |
+| `trackedChangeRefs` | TrackedChangeAddress[] | no |  |
+
+### Variant 2 (success=false)
+
+| Field | Type | Required | Description |
+| --- | --- | --- | --- |
+| `failure` | object | yes |  |
+| `failure.code` | enum | yes | `"INVALID_TARGET"` |
+| `failure.details` | any | no |  |
+| `failure.message` | string | yes |  |
+| `success` | `false` | yes | Constant: `false` |
 
 ### Example response
 

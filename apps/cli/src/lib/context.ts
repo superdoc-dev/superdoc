@@ -1,3 +1,4 @@
+import { AsyncLocalStorage } from 'node:async_hooks';
 import type { Dirent } from 'node:fs';
 import { copyFile, mkdir, open, readdir, readFile, rename, rm, stat, unlink, writeFile } from 'node:fs/promises';
 import { createHash } from 'node:crypto';
@@ -7,12 +8,13 @@ import { CliError } from './errors';
 import { asRecord, pathExists } from './guards';
 import type { CollaborationProfile } from './collaboration';
 import { validateSessionId } from './session';
-import type { CliIO } from './types';
+import type { CliIO, UserIdentity } from './types';
 
 const CONTEXT_VERSION = 'v1';
 const ACTIVE_SESSION_FILENAME = 'active-session';
 const DEFAULT_LOCK_TIMEOUT_MS = 5_000;
 const LOCK_RETRY_INTERVAL_MS = 50;
+const STATE_DIR_OVERRIDE_STORAGE = new AsyncLocalStorage<string>();
 
 export type SourceSnapshot = {
   mtimeMs: number;
@@ -32,6 +34,7 @@ export type ContextMetadata = {
   revision: number;
   sessionType: SessionType;
   collaboration?: CollaborationProfile;
+  user?: UserIdentity;
   openedAt: string;
   updatedAt: string;
   lastSavedAt?: string;
@@ -74,12 +77,25 @@ type LockMetadata = {
 };
 
 function getStateRoot(): string {
+  const scopedOverride = STATE_DIR_OVERRIDE_STORAGE.getStore();
+  if (scopedOverride && scopedOverride.length > 0) {
+    return scopedOverride;
+  }
+
   const override = process.env.SUPERDOC_CLI_STATE_DIR;
   if (override && override.length > 0) {
     return resolve(override);
   }
 
   return join(homedir(), '.superdoc-cli', 'state', CONTEXT_VERSION);
+}
+
+export async function withStateDirOverride<T>(stateDir: string | undefined, operation: () => Promise<T>): Promise<T> {
+  if (stateDir == null || stateDir.length === 0) {
+    return operation();
+  }
+
+  return STATE_DIR_OVERRIDE_STORAGE.run(resolve(stateDir), operation);
 }
 
 export function getContextPaths(contextId: string): ContextPaths {
@@ -121,6 +137,14 @@ function normalizeSessionType(value: unknown): SessionType {
   return 'local';
 }
 
+function normalizeUser(value: unknown): UserIdentity | undefined {
+  const record = asRecord(value);
+  if (!record) return undefined;
+  if (typeof record.name !== 'string' || record.name.length === 0) return undefined;
+  if (typeof record.email !== 'string') return undefined;
+  return { name: record.name, email: record.email };
+}
+
 function normalizeCollaborationProfile(value: unknown): CollaborationProfile | undefined {
   const record = asRecord(value);
   if (!record) return undefined;
@@ -130,6 +154,8 @@ function normalizeCollaborationProfile(value: unknown): CollaborationProfile | u
   const documentId = record.documentId;
   const tokenEnv = record.tokenEnv;
   const syncTimeoutMs = record.syncTimeoutMs;
+  const onMissing = record.onMissing;
+  const bootstrapSettlingMs = record.bootstrapSettlingMs;
 
   if (providerType !== 'hocuspocus' && providerType !== 'y-websocket') return undefined;
   if (typeof url !== 'string' || url.length === 0) return undefined;
@@ -141,6 +167,15 @@ function normalizeCollaborationProfile(value: unknown): CollaborationProfile | u
   ) {
     return undefined;
   }
+  if (onMissing != null && onMissing !== 'seedFromDoc' && onMissing !== 'blank' && onMissing !== 'error') {
+    return undefined;
+  }
+  if (
+    bootstrapSettlingMs != null &&
+    (typeof bootstrapSettlingMs !== 'number' || !Number.isFinite(bootstrapSettlingMs) || bootstrapSettlingMs <= 0)
+  ) {
+    return undefined;
+  }
 
   return {
     providerType,
@@ -148,18 +183,22 @@ function normalizeCollaborationProfile(value: unknown): CollaborationProfile | u
     documentId,
     tokenEnv: typeof tokenEnv === 'string' ? tokenEnv : undefined,
     syncTimeoutMs: typeof syncTimeoutMs === 'number' ? syncTimeoutMs : undefined,
+    onMissing: onMissing as CollaborationProfile['onMissing'],
+    bootstrapSettlingMs: typeof bootstrapSettlingMs === 'number' ? bootstrapSettlingMs : undefined,
   };
 }
 
-function normalizeContextMetadata(metadata: ContextMetadata): ContextMetadata {
+export function normalizeContextMetadata(metadata: ContextMetadata): ContextMetadata {
   const sessionType = normalizeSessionType(metadata.sessionType);
   const collaboration = normalizeCollaborationProfile(metadata.collaboration);
+  const user = normalizeUser(metadata.user);
 
   if (sessionType === 'collab' && collaboration) {
     return {
       ...metadata,
       sessionType,
       collaboration,
+      user,
     };
   }
 
@@ -167,6 +206,7 @@ function normalizeContextMetadata(metadata: ContextMetadata): ContextMetadata {
     ...metadata,
     sessionType: 'local',
     collaboration: undefined,
+    user,
   };
 }
 
@@ -658,6 +698,7 @@ export function createInitialContextMetadata(
     sourceSnapshot?: SourceSnapshot;
     sessionType?: SessionType;
     collaboration?: CollaborationProfile;
+    user?: UserIdentity;
   },
 ): ContextMetadata {
   const timestamp = nowIso(io);
@@ -673,6 +714,7 @@ export function createInitialContextMetadata(
     revision: 0,
     sessionType,
     collaboration: sessionType === 'collab' ? input.collaboration : undefined,
+    user: input.user,
     openedAt: timestamp,
     updatedAt: timestamp,
     sourceSnapshot: input.sourceSnapshot,

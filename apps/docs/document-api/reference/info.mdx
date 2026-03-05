@@ -1,7 +1,7 @@
 ---
 title: info
 sidebarTitle: info
-description: Reference for info
+description: Return document metadata including revision, node count, and capabilities.
 ---
 
 {/* GENERATED FILE: DO NOT EDIT. Regenerate via `pnpm run docapi:sync`. */}
@@ -10,6 +10,8 @@ description: Reference for info
 
 ## Summary
 
+Return document metadata including revision, node count, and capabilities.
+
 - Operation ID: `info`
 - API member path: `editor.doc.info(...)`
 - Mutates document: `no`
@@ -17,6 +19,10 @@ description: Reference for info
 - Supports tracked mode: `no`
 - Supports dry run: `no`
 - Deterministic target resolution: `yes`
+
+## Expected result
+
+Returns a DocumentInfo object with revision, word/paragraph/heading counts, and capability flags.
 
 ## Input fields
 
@@ -33,7 +39,17 @@ _No fields._
 | Field | Type | Required | Description |
 | --- | --- | --- | --- |
 | `capabilities` | object | yes |  |
+| `capabilities.canComment` | boolean | yes |  |
+| `capabilities.canFind` | boolean | yes |  |
+| `capabilities.canGetNode` | boolean | yes |  |
+| `capabilities.canReplace` | boolean | yes |  |
 | `counts` | object | yes |  |
+| `counts.comments` | integer | yes |  |
+| `counts.headings` | integer | yes |  |
+| `counts.images` | integer | yes |  |
+| `counts.paragraphs` | integer | yes |  |
+| `counts.tables` | integer | yes |  |
+| `counts.words` | integer | yes |  |
 | `outline` | object[] | yes |  |
 | `revision` | string | yes |  |
 

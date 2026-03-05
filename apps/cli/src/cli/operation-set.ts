@@ -86,15 +86,31 @@ for (const group of REFERENCE_OPERATION_GROUPS) {
   }
 }
 
+const REFERENCE_GROUP_TO_CATEGORY: Record<string, CliCategory> = {
+  core: 'core',
+  mutations: 'core',
+  query: 'core',
+  blocks: 'core',
+  capabilities: 'core',
+  format: 'format',
+  'format.paragraph': 'format',
+  styles: 'format',
+  'styles.paragraph': 'format',
+  create: 'create',
+  tables: 'tables',
+  sections: 'sections',
+  lists: 'lists',
+  comments: 'comments',
+  trackChanges: 'trackChanges',
+  toc: 'toc',
+  images: 'images',
+  history: 'history',
+};
+
 function deriveCategoryFromDocApi(docApiId: OperationId): CliCategory {
   const group = REFERENCE_GROUP_BY_OP.get(docApiId);
-  if (!group) return 'query';
-
-  if (group === 'core' || group === 'mutations') {
-    return COMMAND_CATALOG[docApiId].mutates ? 'mutation' : 'query';
-  }
-
-  return group as CliCategory;
+  if (!group) return 'core';
+  return REFERENCE_GROUP_TO_CATEGORY[group] ?? 'core';
 }
 
 export function cliCategory(cliOpId: CliOperationId): CliCategory {

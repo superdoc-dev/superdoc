@@ -295,9 +295,11 @@ describe('CommentDialog.vue', () => {
     // Custom handler should be called
     expect(customAcceptHandler).toHaveBeenCalledWith(baseComment, superdocStub.activeEditor);
 
-    // Default behavior should NOT be called
+    // Default accept command should NOT be called (custom handler replaces it)
     expect(superdocStub.activeEditor.commands.acceptTrackedChangeById).not.toHaveBeenCalled();
-    expect(baseComment.resolveComment).not.toHaveBeenCalled();
+
+    // resolveComment should ALWAYS be called to prevent ghost bubbles (SD-2049)
+    expect(baseComment.resolveComment).toHaveBeenCalled();
 
     // Cleanup should still happen
     await nextTick();
@@ -325,9 +327,11 @@ describe('CommentDialog.vue', () => {
     // Custom handler should be called
     expect(customRejectHandler).toHaveBeenCalledWith(baseComment, superdocStub.activeEditor);
 
-    // Default behavior should NOT be called
+    // Default reject command should NOT be called (custom handler replaces it)
     expect(superdocStub.activeEditor.commands.rejectTrackedChangeById).not.toHaveBeenCalled();
-    expect(baseComment.resolveComment).not.toHaveBeenCalled();
+
+    // resolveComment should ALWAYS be called to prevent ghost bubbles (SD-2049)
+    expect(baseComment.resolveComment).toHaveBeenCalled();
 
     // Cleanup should still happen
     await nextTick();
@@ -399,9 +403,11 @@ describe('CommentDialog.vue', () => {
     // Handler was called
     expect(noOpHandler).toHaveBeenCalledWith(baseComment, superdocStub.activeEditor);
 
-    // Default behavior should NOT run
+    // Default accept command should NOT run (custom handler replaces it)
     expect(superdocStub.activeEditor.commands.acceptTrackedChangeById).not.toHaveBeenCalled();
-    expect(baseComment.resolveComment).not.toHaveBeenCalled();
+
+    // resolveComment should ALWAYS be called to prevent ghost bubbles (SD-2049)
+    expect(baseComment.resolveComment).toHaveBeenCalled();
 
     // Cleanup should still happen (dialog closes even though handler did nothing)
     await nextTick();
@@ -618,6 +624,13 @@ describe('CommentDialog.vue', () => {
     commentsStoreStub.activeComment.value = 'tc-parent';
     await nextTick();
 
+    // Expand the collapsed thread (>= 2 children triggers collapse)
+    const collapsedPill = wrapper.find('.collapsed-replies');
+    if (collapsedPill.exists()) {
+      await collapsedPill.trigger('click');
+      await nextTick();
+    }
+
     const headers = wrapper.findAllComponents(CommentHeaderStub);
     expect(headers).toHaveLength(3);
 
@@ -689,6 +702,13 @@ describe('CommentDialog.vue', () => {
     // Activate the comment so child replies become visible
     commentsStoreStub.activeComment.value = 'tc-parent';
     await nextTick();
+
+    // Expand the collapsed thread (>= 2 children triggers collapse)
+    const collapsedPill = wrapper.find('.collapsed-replies');
+    if (collapsedPill.exists()) {
+      await collapsedPill.trigger('click');
+      await nextTick();
+    }
 
     const headers = wrapper.findAllComponents(CommentHeaderStub);
     expect(headers).toHaveLength(3);

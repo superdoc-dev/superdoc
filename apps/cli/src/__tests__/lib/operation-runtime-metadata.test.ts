@@ -1,5 +1,5 @@
 import { describe, expect, test } from 'bun:test';
-import { CLI_OPERATION_METADATA, type CliOperationId } from '../../cli';
+import { CLI_OPERATION_METADATA, CLI_OPERATION_OPTION_SPECS, type CliOperationId } from '../../cli';
 import { getOperationRuntimeMetadata } from '../../lib/operation-runtime-metadata';
 
 describe('operation runtime metadata', () => {
@@ -41,5 +41,19 @@ describe('operation runtime metadata', () => {
     expect(describe.context.supportsSession).toBe(false);
     expect(describeCommand.context.supportsStateless).toBe(true);
     expect(describeCommand.context.supportsSession).toBe(false);
+  });
+
+  test('doc.open metadata includes userName and userEmail params', () => {
+    const openMeta = CLI_OPERATION_METADATA['doc.open'];
+    const paramNames = openMeta.params.map((p) => p.name);
+    expect(paramNames).toContain('userName');
+    expect(paramNames).toContain('userEmail');
+  });
+
+  test('doc.open option specs include user-name and user-email flags', () => {
+    const openOptions = CLI_OPERATION_OPTION_SPECS['doc.open'];
+    const optionNames = openOptions.map((o) => o.name);
+    expect(optionNames).toContain('user-name');
+    expect(optionNames).toContain('user-email');
   });
 });

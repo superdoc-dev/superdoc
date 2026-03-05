@@ -1,0 +1,204 @@
+---
+title: images.setPosition
+sidebarTitle: images.setPosition
+description: Set the anchor position for a floating image.
+---
+
+{/* GENERATED FILE: DO NOT EDIT. Regenerate via `pnpm run docapi:sync`. */}
+
+> Alpha: Document API is currently alpha and subject to breaking changes.
+
+## Summary
+
+Set the anchor position for a floating image.
+
+- Operation ID: `images.setPosition`
+- API member path: `editor.doc.images.setPosition(...)`
+- Mutates document: `yes`
+- Idempotency: `conditional`
+- Supports tracked mode: `no`
+- Supports dry run: `yes`
+- Deterministic target resolution: `yes`
+
+## Expected result
+
+Returns an ImagesMutationResult.
+
+## Input fields
+
+| Field | Type | Required | Description |
+| --- | --- | --- | --- |
+| `imageId` | string | yes |  |
+| `position` | object | yes |  |
+| `position.alignH` | string | no |  |
+| `position.alignV` | string | no |  |
+| `position.hRelativeFrom` | string | no |  |
+| `position.marginOffset` | object | no |  |
+| `position.marginOffset.horizontal` | number | no |  |
+| `position.marginOffset.top` | number | no |  |
+| `position.vRelativeFrom` | string | no |  |
+
+### Example request
+
+```json
+{
+  "imageId": "example",
+  "position": {
+    "hRelativeFrom": "example",
+    "vRelativeFrom": "example"
+  }
+}
+```
+
+## Output fields
+
+| Field | Type | Required | Description |
+| --- | --- | --- | --- |
+| `failure` | object | no |  |
+| `image` | object | no |  |
+| `success` | boolean | no |  |
+
+### Example response
+
+```json
+{
+  "image": {},
+  "success": true
+}
+```
+
+## Pre-apply throws
+
+- `TARGET_NOT_FOUND`
+- `AMBIGUOUS_TARGET`
+- `INVALID_TARGET`
+- `CAPABILITY_UNAVAILABLE`
+
+## Non-applied failure codes
+
+- `NO_OP`
+
+## Raw schemas
+
+<Accordion title="Raw input schema">
+```json
+{
+  "additionalProperties": false,
+  "properties": {
+    "imageId": {
+      "type": "string"
+    },
+    "position": {
+      "additionalProperties": false,
+      "properties": {
+        "alignH": {
+          "type": "string"
+        },
+        "alignV": {
+          "type": "string"
+        },
+        "hRelativeFrom": {
+          "type": "string"
+        },
+        "marginOffset": {
+          "additionalProperties": false,
+          "properties": {
+            "horizontal": {
+              "type": "number"
+            },
+            "top": {
+              "type": "number"
+            }
+          },
+          "type": "object"
+        },
+        "vRelativeFrom": {
+          "type": "string"
+        }
+      },
+      "type": "object"
+    }
+  },
+  "required": [
+    "imageId",
+    "position"
+  ],
+  "type": "object"
+}
+```
+</Accordion>
+
+<Accordion title="Raw output schema">
+```json
+{
+  "additionalProperties": false,
+  "properties": {
+    "failure": {
+      "type": "object"
+    },
+    "image": {
+      "type": "object"
+    },
+    "success": {
+      "type": "boolean"
+    }
+  },
+  "type": "object"
+}
+```
+</Accordion>
+
+<Accordion title="Raw success schema">
+```json
+{
+  "additionalProperties": false,
+  "properties": {
+    "image": {
+      "type": "object"
+    },
+    "success": {
+      "const": true
+    }
+  },
+  "required": [
+    "success",
+    "image"
+  ],
+  "type": "object"
+}
+```
+</Accordion>
+
+<Accordion title="Raw failure schema">
+```json
+{
+  "additionalProperties": false,
+  "properties": {
+    "failure": {
+      "additionalProperties": false,
+      "properties": {
+        "code": {
+          "type": "string"
+        },
+        "message": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "code",
+        "message"
+      ],
+      "type": "object"
+    },
+    "success": {
+      "const": false
+    }
+  },
+  "required": [
+    "success",
+    "failure"
+  ],
+  "type": "object"
+}
+```
+</Accordion>

@@ -44,7 +44,7 @@ import type { MdastConversionContext, MarkdownDiagnostic } from './types.js';
  * suitable for constructing a full doc or a fragment.
  */
 export function convertMdastToBlocks(root: Root, ctx: MdastConversionContext): JsonNode[] {
-  return flatMapChildren(root, ctx);
+  return flatMapRootChildrenPreserveBlankLines(root, ctx);
 }
 
 // ---------------------------------------------------------------------------
@@ -64,9 +64,33 @@ interface JsonMark {
   attrs?: Record<string, unknown>;
 }
 
+// OOXML stores percentages in fiftieths of a percent.
+// 5000 = 100% table width.
+const FULL_WIDTH_TABLE_PCT = 5000;
+
 // ---------------------------------------------------------------------------
 // Block-level converters
 // ---------------------------------------------------------------------------
+
+function flatMapRootChildrenPreserveBlankLines(root: Root, ctx: MdastConversionContext): JsonNode[] {
+  const children = root.children ?? [];
+  const blocks: JsonNode[] = [];
+
+  for (let i = 0; i < children.length; i += 1) {
+    const child = children[i];
+    blocks.push(...convertBlockNode(child, ctx));
+
+    const next = children[i + 1];
+    if (!next) continue;
+
+    const blankLines = countBlankLinesBetweenSiblings(child, next);
+    for (let j = 0; j < blankLines; j += 1) {
+      blocks.push(makeParagraph([]));
+    }
+  }
+
+  return blocks;
+}
 
 function flatMapChildren(parent: MdastNode & { children?: MdastNode[] }, ctx: MdastConversionContext): JsonNode[] {
   if (!parent.children) return [];
@@ -75,6 +99,22 @@ function flatMapChildren(parent: MdastNode & { children?: MdastNode[] }, ctx: Md
     blocks.push(...convertBlockNode(child, ctx));
   }
   return blocks;
+}
+
+function countBlankLinesBetweenSiblings(previous: MdastNode, next: MdastNode): number {
+  const previousEndLine = previous.position?.end?.line;
+  const nextStartLine = next.position?.start?.line;
+
+  if (typeof previousEndLine !== 'number' || typeof nextStartLine !== 'number') {
+    return 0;
+  }
+
+  // mdast line numbers are 1-based and inclusive:
+  //   previous ends on line A, next starts on line B.
+  // A single blank line between blocks is the standard Markdown separator,
+  // not an intentional empty paragraph.  Only extra blank lines beyond that
+  // mandatory separator are preserved as empty paragraphs.
+  return Math.max(0, nextStartLine - previousEndLine - 2);
 }
 
 function convertBlockNode(node: MdastNode, ctx: MdastConversionContext): JsonNode[] {
@@ -297,8 +337,21 @@ function convertTable(node: MdastTable, ctx: MdastConversionContext): JsonNode {
     });
   }
 
+  // Standalone markdown conversion has no editor context. Mark the table
+  // for deferred style normalization so the table extension can resolve the
+  // correct style after insertion into an editor instance.
   return {
     type: 'table',
+    attrs: {
+      tableStyleId: null,
+      needsTableStyleNormalization: true,
+      tableProperties: {
+        tableWidth: {
+          value: FULL_WIDTH_TABLE_PCT,
+          type: 'pct',
+        },
+      },
+    },
     content: rows,
   };
 }

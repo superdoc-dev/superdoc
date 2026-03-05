@@ -146,7 +146,6 @@ const encode = (params, encodedAttrs) => {
     }
   }
 
-  const tableLook = encodedAttrs.tableProperties.tblLook;
   // Table borders can be specified in tblPr or inside a referenced style tag
   const borderProps = _processTableBorders(encodedAttrs.tableProperties.borders || {});
   const referencedStyles = _getReferencedTableStyles(encodedAttrs.tableStyleId, params) || {};
@@ -211,8 +210,6 @@ const encode = (params, encodedAttrs) => {
         row,
         table: node,
         tableProperties: encodedAttrs.tableProperties,
-        tableBorders: encodedAttrs.borders,
-        tableLook,
         columnWidths,
         activeRowSpans: activeRowSpans.slice(),
         rowIndex,
@@ -352,7 +349,7 @@ export function _processTableBorders(rawBorders) {
 }
 
 /**
- * @typedef {{borders?: {}, name?: *, justification?: *, fonts?: {}, fontSize?: *, rowBorders?: {}, cellMargins?: {}}} TableStyles
+ * @typedef {{borders?: {}, name?: *, justification?: *, fonts?: {}, fontSize?: *, rowBorders?: {}, cellMargins?: {}, tableCellSpacing?: {value?: number, type?: string}}} TableStyles
  */
 
 /**
@@ -426,6 +423,10 @@ export function _getReferencedTableStyles(tableStyleReference, params) {
         }
       });
       if (Object.keys(cellMargins).length) stylesToReturn.cellMargins = cellMargins;
+
+      if (tableProperties.tableCellSpacing) {
+        stylesToReturn.tableCellSpacing = tableProperties.tableCellSpacing;
+      }
     }
   }
 

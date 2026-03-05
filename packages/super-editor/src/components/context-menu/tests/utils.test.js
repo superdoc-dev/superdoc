@@ -33,17 +33,38 @@ vi.mock('@core/commands/list-helpers', () => ({
   isList: vi.fn(() => false),
 }));
 
+vi.mock('@extensions/table/tableHelpers/isCellSelection.js', () => ({
+  isCellSelection: vi.fn(() => false),
+}));
+
+vi.mock('prosemirror-tables', () => ({
+  selectedRect: vi.fn(() => ({
+    top: 0,
+    bottom: 2,
+    left: 0,
+    right: 3,
+    map: { height: 4, width: 3 },
+  })),
+}));
+
 import {
   getEditorContext,
   getPropsByItemId,
   __getStructureFromResolvedPosForTest,
   __isCollaborationEnabledForTest,
+  __getCellSelectionInfoForTest,
 } from '../utils.js';
 import { isList } from '@core/commands/list-helpers';
 import { readFromClipboard } from '../../../core/utilities/clipboardUtils.js';
 import { selectionHasNodeOrMark } from '../../cursor-helpers.js';
 import { undoDepth, redoDepth } from 'prosemirror-history';
 import { yUndoPluginKey } from 'y-prosemirror';
+import { isCellSelection as isCellSelectionMock } from '@extensions/table/tableHelpers/isCellSelection.js';
+import { selectedRect as selectedRectMock } from 'prosemirror-tables';
+import {
+  collectTrackedChanges,
+  collectTrackedChangesForContext,
+} from '@extensions/track-changes/permission-helpers.js';
 
 // Get the mocked functions
 const mockReadFromClipboard = vi.mocked(readFromClipboard);
@@ -51,6 +72,8 @@ const mockSelectionHasNodeOrMark = vi.mocked(selectionHasNodeOrMark);
 const mockUndoDepth = vi.mocked(undoDepth);
 const mockRedoDepth = vi.mocked(redoDepth);
 const mockYUndoPluginKeyGetState = vi.mocked(yUndoPluginKey.getState);
+const mockCollectTrackedChanges = vi.mocked(collectTrackedChanges);
+const mockCollectTrackedChangesForContext = vi.mocked(collectTrackedChangesForContext);
 
 describe('utils.js', () => {
   let mockEditor;
@@ -67,6 +90,10 @@ describe('utils.js', () => {
       mockUndoDepth.mockReturnValue(1);
       mockRedoDepth.mockReturnValue(1);
       mockYUndoPluginKeyGetState.mockReturnValue({ undoManager: { undoStack: [1], redoStack: [1] } });
+      mockCollectTrackedChanges.mockReset();
+      mockCollectTrackedChangesForContext.mockReset();
+      mockCollectTrackedChanges.mockReturnValue([]);
+      mockCollectTrackedChangesForContext.mockReturnValue([]);
 
       // Create editor with default configuration
       mockEditor = createMockEditor({
@@ -103,6 +130,8 @@ describe('utils.js', () => {
         isInTable: false,
         isInList: false,
         isInSectionNode: false,
+        isCellSelection: false,
+        tableSelectionKind: null,
         currentNodeType: 'paragraph',
         activeMarks: [],
 
@@ -234,6 +263,57 @@ describe('utils.js', () => {
       expect(context.activeMarks).toContain('trackDelete');
       expect(context.isTrackedChange).toBe(true);
       expect(Array.isArray(context.trackedChanges)).toBe(true);
+    });
+
+    it('prefers preserved selection for right-click context when the live selection collapsed inside it', async () => {
+      const mockEvent = { clientX: 300, clientY: 400 };
+
+      mockSelectionHasNodeOrMark.mockReturnValue(false);
+      mockEditor.options.preservedSelection = { from: 10, to: 15 };
+      mockEditor.view.state.selection.empty = true;
+      mockEditor.view.state.selection.from = 12;
+      mockEditor.view.state.selection.to = 12;
+      mockEditor.view.posAtCoords.mockReturnValue({ pos: 12 });
+      mockEditor.view.state.doc.nodeAt.mockReturnValue({ type: { name: 'text' } });
+      mockEditor.view.state.doc.textBetween.mockReturnValue('selected text');
+      mockEditor.view.state.doc.resolve.mockReturnValue({
+        marks: vi.fn(() => []),
+        nodeBefore: null,
+        nodeAfter: null,
+      });
+
+      const context = await getEditorContext(mockEditor, mockEvent);
+
+      expect(context.hasSelection).toBe(true);
+      expect(context.selectionStart).toBe(10);
+      expect(context.selectionEnd).toBe(15);
+      expect(context.selectedText).toBe('selected text');
+    });
+
+    it('uses selection-scoped tracked changes for right-click actions inside an expanded selection', async () => {
+      const mockEvent = { clientX: 300, clientY: 400 };
+
+      mockSelectionHasNodeOrMark.mockReturnValue(false);
+      mockEditor.view.state.selection.empty = false;
+      mockEditor.view.state.selection.from = 10;
+      mockEditor.view.state.selection.to = 15;
+      mockEditor.view.posAtCoords.mockReturnValue({ pos: 12 });
+      mockEditor.view.state.doc.nodeAt.mockReturnValue({ type: { name: 'text' } });
+      mockEditor.view.state.doc.textBetween.mockReturnValue('selected text');
+      mockEditor.view.state.doc.resolve.mockReturnValue({
+        marks: vi.fn(() => []),
+        nodeBefore: null,
+        nodeAfter: null,
+      });
+
+      await getEditorContext(mockEditor, mockEvent);
+
+      expect(mockCollectTrackedChanges).toHaveBeenCalledWith({
+        state: mockEditor.view.state,
+        from: 10,
+        to: 15,
+      });
+      expect(mockCollectTrackedChangesForContext).not.toHaveBeenCalled();
     });
 
     it('should detect tracked change marks directly at the resolved cursor position', async () => {
@@ -515,6 +595,104 @@ describe('utils.js', () => {
       // Should not throw
       expect(() => props.onSelect({ command: 'nonexistentCommand' })).not.toThrow();
       expect(mockProps.closePopover).toHaveBeenCalled();
+    });
+  });
+
+  describe('cell selection detection', () => {
+    beforeEach(() => {
+      isCellSelectionMock.mockReturnValue(false);
+      selectedRectMock.mockReturnValue({
+        top: 0,
+        bottom: 2,
+        left: 0,
+        right: 3,
+        map: { height: 4, width: 3 },
+      });
+    });
+
+    it('should return isCellSelection false for non-cell selection', () => {
+      isCellSelectionMock.mockReturnValue(false);
+
+      const result = __getCellSelectionInfoForTest(mockEditor.state);
+
+      expect(result).toEqual({ isCellSelection: false, tableSelectionKind: null });
+    });
+
+    it('should detect cells kind for partial cell selection', () => {
+      isCellSelectionMock.mockReturnValue(true);
+      selectedRectMock.mockReturnValue({
+        top: 0,
+        bottom: 1,
+        left: 0,
+        right: 2,
+        map: { height: 4, width: 3 },
+      });
+
+      const result = __getCellSelectionInfoForTest(mockEditor.state);
+
+      expect(result).toEqual({ isCellSelection: true, tableSelectionKind: 'cells' });
+    });
+
+    it('should detect row kind when all columns selected', () => {
+      isCellSelectionMock.mockReturnValue(true);
+      selectedRectMock.mockReturnValue({
+        top: 1,
+        bottom: 2,
+        left: 0,
+        right: 3,
+        map: { height: 4, width: 3 },
+      });
+
+      const result = __getCellSelectionInfoForTest(mockEditor.state);
+
+      expect(result).toEqual({ isCellSelection: true, tableSelectionKind: 'row' });
+    });
+
+    it('should detect column kind when all rows selected', () => {
+      isCellSelectionMock.mockReturnValue(true);
+      selectedRectMock.mockReturnValue({
+        top: 0,
+        bottom: 4,
+        left: 1,
+        right: 2,
+        map: { height: 4, width: 3 },
+      });
+
+      const result = __getCellSelectionInfoForTest(mockEditor.state);
+
+      expect(result).toEqual({ isCellSelection: true, tableSelectionKind: 'column' });
+    });
+
+    it('should detect table kind when all rows and columns selected', () => {
+      isCellSelectionMock.mockReturnValue(true);
+      selectedRectMock.mockReturnValue({
+        top: 0,
+        bottom: 4,
+        left: 0,
+        right: 3,
+        map: { height: 4, width: 3 },
+      });
+
+      const result = __getCellSelectionInfoForTest(mockEditor.state);
+
+      expect(result).toEqual({ isCellSelection: true, tableSelectionKind: 'table' });
+    });
+
+    it('should fall back to cells when selectedRect throws', () => {
+      isCellSelectionMock.mockReturnValue(true);
+      selectedRectMock.mockImplementation(() => {
+        throw new Error('no cell selection');
+      });
+      const warnSpy = vi.spyOn(console, 'warn').mockImplementation(() => {});
+
+      const result = __getCellSelectionInfoForTest(mockEditor.state);
+
+      expect(result).toEqual({ isCellSelection: true, tableSelectionKind: 'cells' });
+      expect(warnSpy).toHaveBeenCalledWith(
+        '[ContextMenu] Unable to resolve cell selection rectangle:',
+        expect.any(Error),
+      );
+      warnSpy.mockRestore();
     });
   });
 

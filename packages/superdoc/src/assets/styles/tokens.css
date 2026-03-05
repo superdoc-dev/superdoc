@@ -69,14 +69,14 @@
   --sd-action-primary-hover: var(--sd-color-blue-600);
 
   /* ─── Component: Comment Dialog ─── */
-  --sd-comment-bg: var(--sd-color-gray-100);
-  --sd-comment-bg-hover: var(--sd-surface-hover);
+  --sd-comment-bg: #f3f6fd;
+  --sd-comment-bg-hover: #f3f6fd;
   --sd-comment-bg-active: var(--sd-surface-card);
   --sd-comment-bg-resolved: #f0f0f0;
   --sd-comment-border-active: var(--sd-border-subtle);
   --sd-comment-radius: var(--sd-radius-lg);
   --sd-comment-padding: 16px;
-  --sd-comment-shadow: 0 4px 20px rgba(15, 23, 42, 0.08);
+  --sd-comment-shadow: 0px 4px 12px 0px rgba(50, 50, 50, 0.15);
   --sd-comment-max-width: 300px;
   --sd-comment-min-width: 200px;
   --sd-comment-separator: var(--sd-border-subtle);

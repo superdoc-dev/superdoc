@@ -1,7 +1,7 @@
 ---
 title: tables.mergeCells
 sidebarTitle: tables.mergeCells
-description: Reference for tables.mergeCells
+description: Merge a range of table cells into one.
 ---
 
 {/* GENERATED FILE: DO NOT EDIT. Regenerate via `pnpm run docapi:sync`. */}
@@ -9,6 +9,8 @@ description: Reference for tables.mergeCells
 > Alpha: Document API is currently alpha and subject to breaking changes.
 
 ## Summary
+
+Merge a range of table cells into one.
 
 - Operation ID: `tables.mergeCells`
 - API member path: `editor.doc.tables.mergeCells(...)`
@@ -18,24 +20,63 @@ description: Reference for tables.mergeCells
 - Supports dry run: `yes`
 - Deterministic target resolution: `yes`
 
+## Expected result
+
+Returns a TableMutationResult receipt; reports NO_OP if the cells are already merged.
+
 ## Input fields
 
-| Field | Type | Required | Description |
-| --- | --- | --- | --- |
-| `end` | object | yes |  |
-| `start` | object | yes |  |
-| `tableNodeId` | string | no |  |
-| `tableTarget` | BlockNodeAddress | no | BlockNodeAddress |
+### Variant 1
+
+_No fields._
+
+### Variant 2
+
+_No fields._
 
 ### Example request
 
 ```json
-{}
+{
+  "end": {
+    "columnIndex": 1,
+    "rowIndex": 1
+  },
+  "start": {
+    "columnIndex": 1,
+    "rowIndex": 1
+  },
+  "tableNodeId": "example",
+  "tableTarget": {
+    "kind": "block",
+    "nodeId": "node-def456",
+    "nodeType": "paragraph"
+  }
+}
 ```
 
 ## Output fields
 
-_No fields._
+### Variant 1 (table.kind="block")
+
+| Field | Type | Required | Description |
+| --- | --- | --- | --- |
+| `success` | `true` | yes | Constant: `true` |
+| `table` | BlockNodeAddress | no | BlockNodeAddress |
+| `table.kind` | `"block"` | no | Constant: `"block"` |
+| `table.nodeId` | string | no |  |
+| `table.nodeType` | enum | no | `"paragraph"`, `"heading"`, `"listItem"`, `"table"`, `"tableRow"`, `"tableCell"`, `"tableOfContents"`, `"image"`, `"sdt"` |
+| `trackedChangeRefs` | EntityAddress[] | no |  |
+
+### Variant 2 (success=false)
+
+| Field | Type | Required | Description |
+| --- | --- | --- | --- |
+| `failure` | object | yes |  |
+| `failure.code` | enum | yes | `"NO_OP"`, `"INVALID_TARGET"`, `"TARGET_NOT_FOUND"`, `"CAPABILITY_UNAVAILABLE"` |
+| `failure.details` | any | no |  |
+| `failure.message` | string | yes |  |
+| `success` | `false` | yes | Constant: `false` |
 
 ### Example response
 

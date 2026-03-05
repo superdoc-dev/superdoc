@@ -280,6 +280,11 @@ const onEditorReady = ({ editor, presentationEditor }) => {
       hasInitializedLocations.value = true;
     }
   });
+
+  presentationEditor.on('paginationUpdate', ({ layout }) => {
+    const totalPages = layout.pages.length;
+    proxy.$superdoc.emit('pagination-update', { totalPages, superdoc: proxy.$superdoc });
+  });
 };
 
 const onEditorDestroy = () => {
@@ -559,6 +564,7 @@ const editorOptions = (doc) => {
     disableContextMenu: proxy.$superdoc.config.disableContextMenu,
     jsonOverride: proxy.$superdoc.config.jsonOverride,
     viewOptions: proxy.$superdoc.config.viewOptions,
+    linkPopoverResolver: proxy.$superdoc.config.modules?.links?.popoverResolver,
     layoutEngineOptions: useLayoutEngine
       ? {
           ...(proxy.$superdoc.config.layoutEngineOptions || {}),

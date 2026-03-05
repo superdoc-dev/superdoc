@@ -1,5 +1,6 @@
 import { buildContractSnapshot } from './contract-snapshot.js';
 import { stableStringify, type GeneratedFile } from './generation-utils.js';
+import { OPERATION_EXPECTED_RESULT_MAP } from '../../src/index.js';
 
 const GENERATED_FILE_HEADER = 'GENERATED FILE: DO NOT EDIT. Regenerate via `pnpm run docapi:sync`.\n';
 
@@ -20,6 +21,8 @@ function buildOperationContractMap() {
         outputSchema: operation.schemas.output,
         successSchema: operation.schemas.success,
         failureSchema: operation.schemas.failure,
+        ...(operation.skipAsATool ? { skipAsATool: true } : {}),
+        ...(operation.essential ? { essential: true } : {}),
       },
     ]),
   );
@@ -71,6 +74,7 @@ export function buildToolManifestArtifacts(): GeneratedFile[] {
     name: operationId,
     memberPath: operation.memberPath,
     description: toToolDescription(operationId, operation.metadata.mutates),
+    expectedResult: OPERATION_EXPECTED_RESULT_MAP[operationId as keyof typeof OPERATION_EXPECTED_RESULT_MAP],
     mutates: operation.metadata.mutates,
     idempotency: operation.metadata.idempotency,
     supportsTrackedMode: operation.metadata.supportsTrackedMode,
@@ -185,7 +189,7 @@ export function buildAgentArtifacts(): GeneratedFile[] {
       {
         id: 'list-manipulation',
         title: 'List manipulation workflow',
-        operations: ['lists.insert', 'lists.setType', 'lists.indent', 'lists.outdent', 'lists.exit'],
+        operations: ['lists.list', 'lists.create', 'lists.insert', 'lists.indent', 'lists.outdent', 'lists.detach'],
       },
       {
         id: 'capabilities-aware-branching',

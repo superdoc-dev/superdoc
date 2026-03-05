@@ -1,10 +1,10 @@
 /**
  * Step manifest types — public, engine-agnostic metadata for step ops.
  *
- * `StepManifest` is the single source of truth for schema generation,
- * docs, tool catalogs, capabilities, and wrapper generation.
- * It lives in document-api (engine-agnostic) and is consumed by
- * super-editor executor registration at runtime.
+ * These types describe a rich manifest model for mutation step operations.
+ * The current catalog used by docs and capabilities lives in
+ * `contract/step-op-catalog.ts`; this type remains available for future
+ * expansion to schema-level per-step metadata.
  */
 
 export interface IdentityStrategy {

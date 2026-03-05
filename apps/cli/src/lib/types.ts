@@ -22,7 +22,7 @@ import type {
   Selector as DocumentApiSelector,
   TextAddress as DocumentApiTextAddress,
 } from '@superdoc/document-api';
-import type { CollaborationSessionPool } from '../host/collab-session-pool';
+import type { SessionPool } from '../host/session-pool';
 
 export type NodeKind = DocumentApiNodeKind;
 export type NodeType = DocumentApiNodeType;
@@ -78,7 +78,7 @@ export interface CommandContext {
   timeoutMs?: number;
   sessionId?: string;
   executionMode?: ExecutionMode;
-  collabSessionPool?: CollaborationSessionPool;
+  sessionPool?: SessionPool;
 }
 
 export interface DocumentSourceMeta {

@@ -156,7 +156,7 @@ async function main() {
   await check('Python SDK imports successfully', async () => {
     await run('python3', [
       '-c',
-      'from superdoc import SuperDocClient, AsyncSuperDocClient, SuperDocError, get_tool_catalog, list_tools, resolve_tool_operation, choose_tools, dispatch_superdoc_tool, dispatch_superdoc_tool_async, infer_document_features',
+      'from superdoc import SuperDocClient, AsyncSuperDocClient, SuperDocError, get_tool_catalog, list_tools, resolve_tool_operation, choose_tools, dispatch_superdoc_tool, dispatch_superdoc_tool_async, get_available_groups',
     ], {
       cwd: path.join(REPO_ROOT, 'packages/sdk/langs/python'),
     });
@@ -165,46 +165,41 @@ async function main() {
   // 7. Tool catalog integrity
   await check('Tool catalog operation count matches contract', async () => {
     const catalog = await readJson(path.join(REPO_ROOT, 'packages/sdk/tools/catalog.json'));
-    const contractOpCount = Object.keys(contract.operations).length;
-    const intentToolCount = catalog.profiles.intent.tools.length;
-    const operationToolCount = catalog.profiles.operation.tools.length;
+    // Count non-skipped operations in the contract
+    const nonSkippedOps = Object.entries(contract.operations).filter(([, op]) => !op.skipAsATool);
+    const expectedCount = nonSkippedOps.length;
+    const toolCount = catalog.tools.length;
 
-    if (intentToolCount !== contractOpCount) {
-      throw new Error(`Intent tools (${intentToolCount}) != contract ops (${contractOpCount})`);
-    }
-    if (operationToolCount !== contractOpCount) {
-      throw new Error(`Operation tools (${operationToolCount}) != contract ops (${contractOpCount})`);
+    if (toolCount !== expectedCount) {
+      throw new Error(`Catalog tools (${toolCount}) != non-skipped contract ops (${expectedCount})`);
     }
   });
 
-  // 8. Tool name map covers all operations
+  // 8. Tool name map covers all non-skipped operations
   await check('Tool name map covers all operations', async () => {
     const nameMap = await readJson(path.join(REPO_ROOT, 'packages/sdk/tools/tool-name-map.json'));
-    const contractOps = new Set(Object.keys(contract.operations));
     const mappedOps = new Set(Object.values(nameMap));
 
-    for (const opId of contractOps) {
+    for (const [opId, op] of Object.entries(contract.operations)) {
+      if (op.skipAsATool) continue;
       if (!mappedOps.has(opId)) {
         throw new Error(`Operation ${opId} not covered by any tool name`);
       }
     }
   });
 
-  // 9. Provider bundles exist and have correct profile counts
+  // 9. Provider bundles exist and have correct tool counts
   await check('Provider bundles are consistent', async () => {
     const providers = ['openai', 'anthropic', 'vercel', 'generic'];
-    const contractOpCount = Object.keys(contract.operations).length;
+    const catalog = await readJson(path.join(REPO_ROOT, 'packages/sdk/tools/catalog.json'));
+    const expectedCount = catalog.tools.length;
 
     for (const provider of providers) {
       const bundle = await readJson(path.join(REPO_ROOT, `packages/sdk/tools/tools.${provider}.json`));
-      if (!bundle.profiles) throw new Error(`${provider} bundle missing profiles`);
-      if (!Array.isArray(bundle.profiles.intent)) throw new Error(`${provider} bundle missing intent tools`);
-      if (!Array.isArray(bundle.profiles.operation)) throw new Error(`${provider} bundle missing operation tools`);
-      if (bundle.profiles.intent.length !== contractOpCount) {
-        throw new Error(`${provider} intent tool count mismatch`);
-      }
-      if (bundle.profiles.operation.length !== contractOpCount) {
-        throw new Error(`${provider} operation tool count mismatch`);
+      if (!Array.isArray(bundle.tools)) throw new Error(`${provider} bundle missing tools array`);
+      // Provider bundles include catalog tools + synthetic tools (e.g. discover_tools)
+      if (bundle.tools.length < expectedCount) {
+        throw new Error(`${provider} tool count (${bundle.tools.length}) < catalog (${expectedCount})`);
       }
     }
   });
@@ -237,30 +232,28 @@ async function main() {
   await check('Catalog input schemas present and required params match contract', async () => {
     const catalog = await readJson(path.join(REPO_ROOT, 'packages/sdk/tools/catalog.json'));
 
-    for (const profileKey of ['intent', 'operation']) {
-      for (const tool of catalog.profiles[profileKey].tools) {
-        if (!tool.inputSchema || typeof tool.inputSchema !== 'object') {
-          throw new Error(`${tool.operationId} (${profileKey}) missing inputSchema`);
-        }
+    for (const tool of catalog.tools) {
+      if (!tool.inputSchema || typeof tool.inputSchema !== 'object') {
+        throw new Error(`${tool.operationId} missing inputSchema`);
+      }
 
-        // Verify required params from contract appear as required in inputSchema
-        const contractOp = contract.operations[tool.operationId];
-        if (!contractOp) continue;
+      // Verify required params from contract appear as required in inputSchema
+      const contractOp = contract.operations[tool.operationId];
+      if (!contractOp) continue;
 
-        const contractRequired = (contractOp.params ?? [])
-          .filter((p) => p.required === true)
-          .map((p) => p.name)
-          // Exclude transport-envelope params that are intentionally omitted from tool schemas
-          .filter((name) => !['out', 'json', 'expectedRevision', 'changeMode', 'dryRun'].includes(name));
+      const contractRequired = (contractOp.params ?? [])
+        .filter((p) => p.required === true)
+        .map((p) => p.name)
+        // Exclude transport-envelope params that are intentionally omitted from tool schemas
+        .filter((name) => !['out', 'json', 'expectedRevision', 'changeMode', 'dryRun'].includes(name));
 
-        const schemaRequired = new Set(tool.inputSchema.required ?? []);
-        for (const name of contractRequired) {
-          // Only check if the param is in the schema properties (some params are omitted by design)
-          if (tool.inputSchema.properties && name in tool.inputSchema.properties && !schemaRequired.has(name)) {
-            throw new Error(
-              `${tool.operationId} (${profileKey}): param "${name}" is required in contract but not in inputSchema`,
-            );
-          }
+      const schemaRequired = new Set(tool.inputSchema.required ?? []);
+      for (const name of contractRequired) {
+        // Only check if the param is in the schema properties (some params are omitted by design)
+        if (tool.inputSchema.properties && name in tool.inputSchema.properties && !schemaRequired.has(name)) {
+          throw new Error(
+            `${tool.operationId}: param "${name}" is required in contract but not in inputSchema`,
+          );
         }
       }
     }
@@ -309,11 +302,15 @@ async function main() {
     const openaiBundle = await readJson(path.join(REPO_ROOT, 'packages/sdk/tools/tools.openai.json'));
     const nameMap = await readJson(path.join(REPO_ROOT, 'packages/sdk/tools/tool-name-map.json'));
 
-    for (const tool of openaiBundle.profiles.intent) {
+    // Synthetic meta-tools (e.g. discover_tools) are not in the name map
+    const syntheticTools = new Set(['discover_tools']);
+
+    for (const tool of openaiBundle.tools) {
       const name = tool?.function?.name ?? tool?.name;
       if (typeof name !== 'string' || !name) {
-        throw new Error('OpenAI intent tool missing extractable name');
+        throw new Error('OpenAI tool missing extractable name');
       }
+      if (syntheticTools.has(name)) continue;
       if (!(name in nameMap)) {
         throw new Error(`OpenAI tool name "${name}" not in tool-name-map`);
       }

@@ -43,7 +43,7 @@ export function getNodeAdapter(editor: Editor, address: NodeAddress): NodeInfo {
       );
     }
 
-    return mapNodeInfo(matches[0]!, address.nodeType);
+    return mapNodeInfo(matches[0]!, address.nodeType, editor.state.doc);
   }
 
   const inlineIndex = getInlineIndex(editor);
@@ -55,7 +55,7 @@ export function getNodeAdapter(editor: Editor, address: NodeAddress): NodeInfo {
     );
   }
 
-  return mapNodeInfo(candidate, address.nodeType);
+  return mapNodeInfo(candidate, address.nodeType, editor.state.doc);
 }
 
 function resolveBlockById(
@@ -108,5 +108,5 @@ export function getNodeByIdAdapter(editor: Editor, input: GetNodeByIdInput): Nod
   const { nodeId, nodeType } = input;
   const { candidate, resolvedType } = resolveBlockById(editor, nodeId, nodeType);
   const displayType = nodeType ?? resolvedType;
-  return mapNodeInfo(candidate, displayType);
+  return mapNodeInfo(candidate, displayType, editor.state.doc);
 }

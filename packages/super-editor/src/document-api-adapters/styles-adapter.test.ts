@@ -1,5 +1,6 @@
 import { describe, it, expect, vi } from 'vitest';
-import type { StylesApplyInput, NormalizedStylesApplyOptions } from '@superdoc/document-api';
+import type { StylesApplyInput, NormalizedStylesApplyOptions, ValueSchema } from '@superdoc/document-api';
+import { PROPERTY_REGISTRY } from '@superdoc/document-api';
 import { stylesApplyAdapter } from './styles-adapter.js';
 import { DocumentApiAdapterError } from './errors.js';
 
@@ -407,6 +408,21 @@ describe('styles adapter: run object properties', () => {
       expect(result.after.color).toEqual({ val: 'FF0000', themeColor: 'text1' });
     }
   });
+
+  it('preserves themeColor token case when patching color.themeColor directly', () => {
+    const editor = createMockEditor({ stylesXml: makeStylesXml() });
+    const result = stylesApplyAdapter(editor, runInput({ color: { themeColor: 'accent1' } }), DEFAULT_OPTIONS);
+
+    expect(result.success).toBe(true);
+    if (result.success) {
+      expect(result.after.color).toEqual({ themeColor: 'accent1' });
+    }
+
+    const tls = getTranslatedLinkedStyles(editor) as {
+      docDefaults: { runProperties: { color: Record<string, unknown> } };
+    };
+    expect(tls.docDefaults.runProperties.color.themeColor).toBe('accent1');
+  });
 });
 
 // ---------------------------------------------------------------------------
@@ -616,5 +632,482 @@ describe('styles adapter: data loss guard', () => {
     };
     expect(tls.docDefaults.runProperties.bold).toBe(true);
     expect(tls.docDefaults.runProperties.italic).toBe(true);
+  });
+});
+
+// ---------------------------------------------------------------------------
+// Registry-driven baseline tests (SD-2018 property coverage)
+// ---------------------------------------------------------------------------
+
+/** Generates a valid test value for a given schema kind. */
+function validValueForSchema(schema: ValueSchema): unknown {
+  switch (schema.kind) {
+    case 'boolean':
+      return true;
+    case 'integer':
+      return schema.min ?? 1;
+    case 'enum':
+      return schema.values[0];
+    case 'string':
+      return 'test-value';
+    case 'object': {
+      const firstKey = Object.keys(schema.children)[0];
+      return { [firstKey]: validValueForSchema(schema.children[firstKey]) };
+    }
+    case 'array':
+      return [];
+  }
+}
+
+describe('styles adapter: registry-driven set from inherit', () => {
+  for (const def of PROPERTY_REGISTRY) {
+    it(`${def.channel}.${def.key}: set from inherit → value produces changed: true`, () => {
+      const editor = createMockEditor({ stylesXml: makeStylesXml() });
+      const value = validValueForSchema(def.schema);
+      const inputFn = def.channel === 'run' ? runInput : paragraphInput;
+      const result = stylesApplyAdapter(editor, inputFn({ [def.key]: value }), DEFAULT_OPTIONS);
+
+      expect(result.success).toBe(true);
+      if (result.success) {
+        expect(result.changed).toBe(true);
+        expect(result.before[def.key]).toBe('inherit');
+        expect(result.after[def.key]).not.toBe('inherit');
+      }
+    });
+  }
+});
+
+describe('styles adapter: registry-driven idempotent no-op', () => {
+  for (const def of PROPERTY_REGISTRY) {
+    it(`${def.channel}.${def.key}: set same value → changed: false`, () => {
+      const editor = createMockEditor({ stylesXml: makeStylesXml() });
+      const value = validValueForSchema(def.schema);
+      const inputFn = def.channel === 'run' ? runInput : paragraphInput;
+
+      // First apply: sets and normalizes the value
+      stylesApplyAdapter(editor, inputFn({ [def.key]: value }), DEFAULT_OPTIONS);
+
+      // Second apply: same value — should be a no-op
+      const result = stylesApplyAdapter(editor, inputFn({ [def.key]: value }), DEFAULT_OPTIONS);
+
+      expect(result.success).toBe(true);
+      if (result.success) {
+        expect(result.changed).toBe(false);
+      }
+    });
+  }
+});
+
+describe('styles adapter: registry-driven dryRun', () => {
+  for (const def of PROPERTY_REGISTRY) {
+    it(`${def.channel}.${def.key}: dryRun mirrors state but does not mutate`, () => {
+      const editor = createMockEditor({ stylesXml: makeStylesXml() });
+      const value = validValueForSchema(def.schema);
+      const inputFn = def.channel === 'run' ? runInput : paragraphInput;
+      const result = stylesApplyAdapter(editor, inputFn({ [def.key]: value }), DRY_RUN_OPTIONS);
+
+      expect(result.success).toBe(true);
+      if (result.success) {
+        expect(result.dryRun).toBe(true);
+        expect(result.changed).toBe(true);
+        expect(result.before[def.key]).toBe('inherit');
+      }
+
+      // Storage should NOT be mutated
+      const tls = getTranslatedLinkedStyles(editor) as Record<string, unknown>;
+      expect(tls.docDefaults).toBeUndefined();
+    });
+  }
+});
+
+// ---------------------------------------------------------------------------
+// Merge strategy: shallowMerge
+// ---------------------------------------------------------------------------
+
+describe('styles adapter: shallowMerge preserves unspecified sub-keys', () => {
+  it('shading: partial patch preserves existing sub-keys', () => {
+    const editor = createMockEditor({
+      stylesXml: makeStylesXml(),
+      translatedLinkedStyles: {
+        docDefaults: { runProperties: { shading: { fill: 'FFFFFF', val: 'clear' } } },
+      },
+    });
+    const result = stylesApplyAdapter(editor, runInput({ shading: { fill: '000000' } }), DEFAULT_OPTIONS);
+
+    expect(result.success).toBe(true);
+    if (result.success) {
+      expect(result.after.shading).toEqual({ fill: '000000', val: 'clear' });
+    }
+  });
+
+  it('lang: partial patch preserves existing sub-keys', () => {
+    const editor = createMockEditor({
+      stylesXml: makeStylesXml(),
+      translatedLinkedStyles: {
+        docDefaults: { runProperties: { lang: { val: 'en-US', eastAsia: 'ja-JP' } } },
+      },
+    });
+    const result = stylesApplyAdapter(editor, runInput({ lang: { val: 'fr-FR' } }), DEFAULT_OPTIONS);
+
+    expect(result.success).toBe(true);
+    if (result.success) {
+      expect(result.after.lang).toEqual({ val: 'fr-FR', eastAsia: 'ja-JP' });
+    }
+  });
+
+  it('run borders: partial patch preserves existing sub-keys', () => {
+    const editor = createMockEditor({
+      stylesXml: makeStylesXml(),
+      translatedLinkedStyles: {
+        docDefaults: { runProperties: { borders: { val: 'single', size: 4 } } },
+      },
+    });
+    const result = stylesApplyAdapter(editor, runInput({ borders: { color: 'FF0000' } }), DEFAULT_OPTIONS);
+
+    expect(result.success).toBe(true);
+    if (result.success) {
+      expect(result.after.borders).toEqual({ val: 'single', size: 4, color: 'FF0000' });
+    }
+  });
+
+  it('paragraph framePr: partial patch preserves existing sub-keys', () => {
+    const editor = createMockEditor({
+      stylesXml: makeStylesXml(),
+      translatedLinkedStyles: {
+        docDefaults: { paragraphProperties: { framePr: { w: 100, h: 200, wrap: 'around' } } },
+      },
+    });
+    const result = stylesApplyAdapter(editor, paragraphInput({ framePr: { h: 300 } }), DEFAULT_OPTIONS);
+
+    expect(result.success).toBe(true);
+    if (result.success) {
+      expect(result.after.framePr).toEqual({ w: 100, h: 300, wrap: 'around' });
+    }
+  });
+});
+
+// ---------------------------------------------------------------------------
+// Merge strategy: edgeMerge (paragraph borders)
+// ---------------------------------------------------------------------------
+
+describe('styles adapter: edgeMerge for paragraph borders', () => {
+  it('patches one edge, preserves other edges', () => {
+    const editor = createMockEditor({
+      stylesXml: makeStylesXml(),
+      translatedLinkedStyles: {
+        docDefaults: {
+          paragraphProperties: {
+            borders: {
+              top: { val: 'single', size: 4 },
+              bottom: { val: 'double', size: 8 },
+            },
+          },
+        },
+      },
+    });
+    const result = stylesApplyAdapter(
+      editor,
+      paragraphInput({ borders: { top: { color: 'FF0000' } } }),
+      DEFAULT_OPTIONS,
+    );
+
+    expect(result.success).toBe(true);
+    if (result.success) {
+      const borders = result.after.borders as Record<string, unknown>;
+      // top: merged — val and size preserved, color added
+      expect(borders.top).toEqual({ val: 'single', size: 4, color: 'FF0000' });
+      // bottom: untouched
+      expect(borders.bottom).toEqual({ val: 'double', size: 8 });
+    }
+  });
+
+  it('adds new edge alongside existing edges', () => {
+    const editor = createMockEditor({
+      stylesXml: makeStylesXml(),
+      translatedLinkedStyles: {
+        docDefaults: {
+          paragraphProperties: {
+            borders: { top: { val: 'single' } },
+          },
+        },
+      },
+    });
+    const result = stylesApplyAdapter(
+      editor,
+      paragraphInput({ borders: { left: { val: 'double', size: 6 } } }),
+      DEFAULT_OPTIONS,
+    );
+
+    expect(result.success).toBe(true);
+    if (result.success) {
+      const borders = result.after.borders as Record<string, unknown>;
+      expect(borders.top).toEqual({ val: 'single' });
+      expect(borders.left).toEqual({ val: 'double', size: 6 });
+    }
+  });
+
+  it('no-op when same nested border values applied', () => {
+    const editor = createMockEditor({
+      stylesXml: makeStylesXml(),
+      translatedLinkedStyles: {
+        docDefaults: {
+          paragraphProperties: {
+            borders: { top: { val: 'single', size: 4 } },
+          },
+        },
+      },
+    });
+    const result = stylesApplyAdapter(
+      editor,
+      paragraphInput({ borders: { top: { val: 'single', size: 4 } } }),
+      DEFAULT_OPTIONS,
+    );
+
+    expect(result.success).toBe(true);
+    if (result.success) {
+      expect(result.changed).toBe(false);
+    }
+  });
+});
+
+// ---------------------------------------------------------------------------
+// Merge strategy: replace for arrays (tabStops)
+// ---------------------------------------------------------------------------
+
+describe('styles adapter: array replace for tabStops', () => {
+  it('sets tabStops array from empty', () => {
+    const editor = createMockEditor({ stylesXml: makeStylesXml() });
+    const tabs = [{ tab: { tabType: 'left', pos: 720 } }];
+    const result = stylesApplyAdapter(editor, paragraphInput({ tabStops: tabs }), DEFAULT_OPTIONS);
+
+    expect(result.success).toBe(true);
+    if (result.success) {
+      expect(result.before.tabStops).toBe('inherit');
+      expect(result.after.tabStops).toEqual(tabs);
+    }
+  });
+
+  it('replaces entire tabStops array', () => {
+    const editor = createMockEditor({
+      stylesXml: makeStylesXml(),
+      translatedLinkedStyles: {
+        docDefaults: {
+          paragraphProperties: {
+            tabStops: [{ tab: { tabType: 'left', pos: 720 } }],
+          },
+        },
+      },
+    });
+    const newTabs = [{ tab: { tabType: 'right', pos: 1440 } }];
+    const result = stylesApplyAdapter(editor, paragraphInput({ tabStops: newTabs }), DEFAULT_OPTIONS);
+
+    expect(result.success).toBe(true);
+    if (result.success) {
+      expect(result.changed).toBe(true);
+      expect(result.after.tabStops).toEqual(newTabs);
+    }
+  });
+
+  it('clears tabStops with empty array', () => {
+    const editor = createMockEditor({
+      stylesXml: makeStylesXml(),
+      translatedLinkedStyles: {
+        docDefaults: {
+          paragraphProperties: {
+            tabStops: [{ tab: { tabType: 'left', pos: 720 } }],
+          },
+        },
+      },
+    });
+    const result = stylesApplyAdapter(editor, paragraphInput({ tabStops: [] }), DEFAULT_OPTIONS);
+
+    expect(result.success).toBe(true);
+    if (result.success) {
+      expect(result.changed).toBe(true);
+      expect(result.after.tabStops).toEqual([]);
+    }
+  });
+
+  it('no-op for same tabStops array', () => {
+    const tabs = [{ tab: { tabType: 'left', pos: 720 } }];
+    const editor = createMockEditor({
+      stylesXml: makeStylesXml(),
+      translatedLinkedStyles: {
+        docDefaults: { paragraphProperties: { tabStops: structuredClone(tabs) } },
+      },
+    });
+    const result = stylesApplyAdapter(editor, paragraphInput({ tabStops: tabs }), DEFAULT_OPTIONS);
+
+    expect(result.success).toBe(true);
+    if (result.success) {
+      expect(result.changed).toBe(false);
+    }
+  });
+});
+
+// ---------------------------------------------------------------------------
+// Underline key mapping
+// ---------------------------------------------------------------------------
+
+describe('styles adapter: underline key mapping', () => {
+  it('maps API keys to w: prefixed storage keys on write', () => {
+    const editor = createMockEditor({ stylesXml: makeStylesXml() });
+    const result = stylesApplyAdapter(
+      editor,
+      runInput({ underline: { val: 'single', color: 'FF0000' } }),
+      DEFAULT_OPTIONS,
+    );
+
+    expect(result.success).toBe(true);
+
+    // Verify storage uses w: prefixed keys
+    const tls = getTranslatedLinkedStyles(editor) as {
+      docDefaults: { runProperties: Record<string, unknown> };
+    };
+    const stored = tls.docDefaults.runProperties.underline as Record<string, unknown>;
+    expect(stored['w:val']).toBe('single');
+    expect(stored['w:color']).toBe('FF0000');
+  });
+
+  it('maps w: prefixed storage keys to API keys in receipt', () => {
+    const editor = createMockEditor({
+      stylesXml: makeStylesXml(),
+      translatedLinkedStyles: {
+        docDefaults: {
+          runProperties: {
+            underline: { 'w:val': 'single', 'w:themeColor': 'accent1' },
+          },
+        },
+      },
+    });
+    const result = stylesApplyAdapter(editor, runInput({ underline: { color: 'FF0000' } }), DEFAULT_OPTIONS);
+
+    expect(result.success).toBe(true);
+    if (result.success) {
+      // Before state should use API keys, not storage keys
+      const before = result.before.underline as Record<string, unknown>;
+      expect(before.val).toBe('single');
+      expect(before.themeColor).toBe('accent1');
+      expect(before['w:val']).toBeUndefined();
+
+      // After state should also use API keys
+      const after = result.after.underline as Record<string, unknown>;
+      expect(after.val).toBe('single');
+      expect(after.color).toBe('FF0000');
+      expect(after.themeColor).toBe('accent1');
+    }
+  });
+});
+
+// ---------------------------------------------------------------------------
+// Dry-run immutability (structuredClone guarantee)
+// ---------------------------------------------------------------------------
+
+describe('styles adapter: dry-run immutability', () => {
+  it('does not mutate nested objects during dry-run (paragraph borders)', () => {
+    const original = {
+      borders: {
+        top: { val: 'single', size: 4 },
+        bottom: { val: 'double', size: 8 },
+      },
+    };
+    const editor = createMockEditor({
+      stylesXml: makeStylesXml(),
+      translatedLinkedStyles: {
+        docDefaults: { paragraphProperties: original },
+      },
+    });
+
+    stylesApplyAdapter(editor, paragraphInput({ borders: { top: { color: 'FF0000' } } }), DRY_RUN_OPTIONS);
+
+    // Original borders should be completely untouched
+    expect(original.borders.top).toEqual({ val: 'single', size: 4 });
+    expect(original.borders.bottom).toEqual({ val: 'double', size: 8 });
+  });
+
+  it('does not mutate arrays during dry-run (tabStops)', () => {
+    const original = {
+      tabStops: [{ tab: { tabType: 'left', pos: 720 } }],
+    };
+    const editor = createMockEditor({
+      stylesXml: makeStylesXml(),
+      translatedLinkedStyles: {
+        docDefaults: { paragraphProperties: original },
+      },
+    });
+
+    stylesApplyAdapter(
+      editor,
+      paragraphInput({ tabStops: [{ tab: { tabType: 'right', pos: 1440 } }] }),
+      DRY_RUN_OPTIONS,
+    );
+
+    // Original tabStops should be completely untouched
+    expect(original.tabStops).toEqual([{ tab: { tabType: 'left', pos: 720 } }]);
+  });
+
+  it('does not mutate mapped-key objects during dry-run (underline)', () => {
+    const original = {
+      underline: { 'w:val': 'single', 'w:color': '000000' },
+    };
+    const editor = createMockEditor({
+      stylesXml: makeStylesXml(),
+      translatedLinkedStyles: {
+        docDefaults: { runProperties: original },
+      },
+    });
+
+    stylesApplyAdapter(editor, runInput({ underline: { color: 'FF0000' } }), DRY_RUN_OPTIONS);
+
+    // Original underline should be completely untouched
+    expect(original.underline).toEqual({ 'w:val': 'single', 'w:color': '000000' });
+  });
+});
+
+// ---------------------------------------------------------------------------
+// Input aliasing guard (adapter should not retain caller-owned references)
+// ---------------------------------------------------------------------------
+
+describe('styles adapter: input aliasing guard', () => {
+  it('does not retain caller array references for replace merges', () => {
+    const editor = createMockEditor({ stylesXml: makeStylesXml() });
+    const tabStops = [{ tab: { tabType: 'left', pos: 720 } }];
+
+    stylesApplyAdapter(editor, paragraphInput({ tabStops }), DEFAULT_OPTIONS);
+
+    tabStops[0].tab.pos = 9999;
+
+    const tls = getTranslatedLinkedStyles(editor) as {
+      docDefaults: { paragraphProperties: { tabStops: Array<{ tab: { tabType: string; pos: number } }> } };
+    };
+    expect(tls.docDefaults.paragraphProperties.tabStops[0].tab.pos).toBe(720);
+  });
+
+  it('does not retain caller object references for shallow merges', () => {
+    const editor = createMockEditor({ stylesXml: makeStylesXml() });
+    const underlinePatch = { val: 'single', color: 'FF0000' };
+
+    stylesApplyAdapter(editor, runInput({ underline: underlinePatch }), DEFAULT_OPTIONS);
+
+    underlinePatch.color = '00FF00';
+
+    const tls = getTranslatedLinkedStyles(editor) as {
+      docDefaults: { runProperties: { underline: Record<string, unknown> } };
+    };
+    expect(tls.docDefaults.runProperties.underline['w:color']).toBe('FF0000');
+  });
+
+  it('does not retain caller object references for edge merges', () => {
+    const editor = createMockEditor({ stylesXml: makeStylesXml() });
+    const bordersPatch = { top: { val: 'single', size: 4 } };
+
+    stylesApplyAdapter(editor, paragraphInput({ borders: bordersPatch }), DEFAULT_OPTIONS);
+
+    bordersPatch.top.size = 12;
+
+    const tls = getTranslatedLinkedStyles(editor) as {
+      docDefaults: { paragraphProperties: { borders: Record<string, Record<string, unknown>> } };
+    };
+    expect(tls.docDefaults.paragraphProperties.borders.top.size).toBe(4);
   });
 });

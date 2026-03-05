@@ -21,6 +21,8 @@ function buildOperationContractMap() {
         outputSchema: operation.schemas.output,
         successSchema: operation.schemas.success,
         failureSchema: operation.schemas.failure,
+        ...(operation.skipAsATool ? { skipAsATool: true } : {}),
+        ...(operation.essential ? { essential: true } : {}),
       },
     ]),
   );

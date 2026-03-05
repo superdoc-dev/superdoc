@@ -22,8 +22,11 @@ const branch = process.env.GITHUB_REF_NAME || process.env.CI_COMMIT_BRANCH;
 
 const config = {
   branches: [
+    // Semantic-release requires at least one non-prerelease release branch.
     { name: 'stable', channel: 'latest' },
-    { name: 'main', prerelease: 'next', channel: 'next' },
+    // SDK auto-release runs from main and should publish alpha prereleases
+    // on the latest dist-tag (no next channel).
+    { name: 'main', prerelease: 'alpha', channel: 'latest' },
   ],
   tagFormat: 'sdk-v${version}',
   plugins: [

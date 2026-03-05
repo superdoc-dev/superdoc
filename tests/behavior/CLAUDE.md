@@ -1,6 +1,6 @@
 # Writing Behavior Tests — Agent Guide
 
-> **Other test suites:** `pnpm test` (unit), `pnpm test:visual` (layout regression across 382 docs). See root `CLAUDE.md` for the full testing overview.
+> **Other test suites:** `pnpm test` (unit), `pnpm test:layout` (layout regression across 382 docs), `pnpm test:visual` (pixel diff for changed docs). See root `CLAUDE.md` for the full testing overview.
 
 ## Explicit: Run and Debug with Playwright CLI
 

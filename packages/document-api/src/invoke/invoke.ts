@@ -64,9 +64,11 @@ export function buildDispatchTable(api: DocumentApi): TypedDispatchTable {
     getNodeById: (input) => api.getNodeById(input),
     getText: (input) => api.getText(input),
     getMarkdown: (input) => api.getMarkdown(input),
+    getHtml: (input) => api.getHtml(input),
     info: (input) => api.info(input),
 
     // --- Singleton mutations ---
+    clearContent: (input, options) => api.clearContent(input, options),
     insert: (input, options) => api.insert(input, options),
     replace: (input, options) => api.replace(input, options),
     delete: (input, options) => api.delete(input, options),
@@ -127,6 +129,20 @@ export function buildDispatchTable(api: DocumentApi): TypedDispatchTable {
     'lists.canContinuePrevious': (input) => api.lists.canContinuePrevious(input),
     'lists.setLevelRestart': (input, options) => api.lists.setLevelRestart(input, options),
     'lists.convertToText': (input, options) => api.lists.convertToText(input, options),
+
+    // --- lists.* (SD-1973 formatting) ---
+    'lists.applyTemplate': (input, options) => api.lists.applyTemplate(input, options),
+    'lists.applyPreset': (input, options) => api.lists.applyPreset(input, options),
+    'lists.setType': (input, options) => api.lists.setType(input, options),
+    'lists.captureTemplate': (input) => api.lists.captureTemplate(input),
+    'lists.setLevelNumbering': (input, options) => api.lists.setLevelNumbering(input, options),
+    'lists.setLevelBullet': (input, options) => api.lists.setLevelBullet(input, options),
+    'lists.setLevelPictureBullet': (input, options) => api.lists.setLevelPictureBullet(input, options),
+    'lists.setLevelAlignment': (input, options) => api.lists.setLevelAlignment(input, options),
+    'lists.setLevelIndents': (input, options) => api.lists.setLevelIndents(input, options),
+    'lists.setLevelTrailingCharacter': (input, options) => api.lists.setLevelTrailingCharacter(input, options),
+    'lists.setLevelMarkerFont': (input, options) => api.lists.setLevelMarkerFont(input, options),
+    'lists.clearLevelOverrides': (input, options) => api.lists.clearLevelOverrides(input, options),
 
     // --- sections.* ---
     'sections.list': (input) => api.sections.list(input),
@@ -240,5 +256,49 @@ export function buildDispatchTable(api: DocumentApi): TypedDispatchTable {
     'toc.listEntries': (input) => api.toc.listEntries(input),
     'toc.getEntry': (input) => api.toc.getEntry(input),
     'toc.editEntry': (input, options) => api.toc.editEntry(input, options),
+
+    // --- create.image ---
+    'create.image': (input, options) => api.create.image(input, options),
+
+    // --- images.* ---
+    'images.list': (input) => api.images.list(input ?? {}),
+    'images.get': (input) => api.images.get(input),
+    'images.delete': (input, options) => api.images.delete(input, options),
+    'images.move': (input, options) => api.images.move(input, options),
+    'images.convertToInline': (input, options) => api.images.convertToInline(input, options),
+    'images.convertToFloating': (input, options) => api.images.convertToFloating(input, options),
+    'images.setSize': (input, options) => api.images.setSize(input, options),
+    'images.setWrapType': (input, options) => api.images.setWrapType(input, options),
+    'images.setWrapSide': (input, options) => api.images.setWrapSide(input, options),
+    'images.setWrapDistances': (input, options) => api.images.setWrapDistances(input, options),
+    'images.setPosition': (input, options) => api.images.setPosition(input, options),
+    'images.setAnchorOptions': (input, options) => api.images.setAnchorOptions(input, options),
+    'images.setZOrder': (input, options) => api.images.setZOrder(input, options),
+    // SD-2100: Geometry
+    'images.scale': (input, options) => api.images.scale(input, options),
+    'images.setLockAspectRatio': (input, options) => api.images.setLockAspectRatio(input, options),
+    'images.rotate': (input, options) => api.images.rotate(input, options),
+    'images.flip': (input, options) => api.images.flip(input, options),
+    'images.crop': (input, options) => api.images.crop(input, options),
+    'images.resetCrop': (input, options) => api.images.resetCrop(input, options),
+    // SD-2100: Content
+    'images.replaceSource': (input, options) => api.images.replaceSource(input, options),
+    // SD-2100: Semantic metadata
+    'images.setAltText': (input, options) => api.images.setAltText(input, options),
+    'images.setDecorative': (input, options) => api.images.setDecorative(input, options),
+    'images.setName': (input, options) => api.images.setName(input, options),
+    'images.setHyperlink': (input, options) => api.images.setHyperlink(input, options),
+    // SD-2100: Caption lifecycle
+    'images.insertCaption': (input, options) => api.images.insertCaption(input, options),
+    'images.updateCaption': (input, options) => api.images.updateCaption(input, options),
+    'images.removeCaption': (input, options) => api.images.removeCaption(input, options),
+
+    // --- hyperlinks.* ---
+    'hyperlinks.list': (input) => api.hyperlinks.list(input),
+    'hyperlinks.get': (input) => api.hyperlinks.get(input),
+    'hyperlinks.wrap': (input, options) => api.hyperlinks.wrap(input, options),
+    'hyperlinks.insert': (input, options) => api.hyperlinks.insert(input, options),
+    'hyperlinks.patch': (input, options) => api.hyperlinks.patch(input, options),
+    'hyperlinks.remove': (input, options) => api.hyperlinks.remove(input, options),
   };
 }

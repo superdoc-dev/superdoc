@@ -3,6 +3,144 @@ import { getFallbackImageNameFromDataUri, sanitizeDocxMediaName } from '@convert
 import { prepareTextAnnotation } from '@converter/v3/handlers/w/sdt/helpers/translate-field-annotation.js';
 import { wrapTextInRun } from '@converter/exporter.js';
 import { generateDocxRandomId } from '@core/helpers/index.js';
+import { readImageDimensionsFromDataUri } from '@converter/image-dimensions.js';
+
+const DECORATIVE_EXT_URI = '{C183D7F6-B498-43B3-948B-1728B52AA6E4}';
+const DECORATIVE_NAMESPACE = 'http://schemas.microsoft.com/office/drawing/2017/decorative';
+const HYPERLINK_REL_TYPE = 'http://schemas.openxmlformats.org/officeDocument/2006/relationships/hyperlink';
+
+/**
+ * Resolve the hyperlink relationship rId for an image, if applicable.
+ * Called once so that both wp:docPr and pic:cNvPr share the same rId.
+ */
+function resolveHyperlinkRId(attrs, params) {
+  if (!attrs.hyperlink?.url || !params) return null;
+  return addHyperlinkRelationship(params, attrs.hyperlink.url);
+}
+
+/**
+ * Build an `a:hlinkClick` element from attrs.hyperlink and a pre-resolved rId.
+ */
+function buildHlinkClickElement(attrs, hlinkRId) {
+  if (!hlinkRId) return null;
+  const hlinkAttrs = { 'r:id': hlinkRId };
+  if (attrs.hyperlink?.tooltip) {
+    hlinkAttrs.tooltip = attrs.hyperlink.tooltip;
+  }
+  return { name: 'a:hlinkClick', attributes: hlinkAttrs };
+}
+
+/**
+ * Build the `wp:docPr` element with correct attribute mappings:
+ * - `@name` ← attrs.alt (object name, wp:docPr/@name)
+ * - `@descr` ← attrs.title (accessibility description, wp:docPr/@descr) — omitted when decorative
+ * - `a:hlinkClick` child when hyperlink is set (Word's canonical placement per §20.4.2.5)
+ * - Decorative extension child when attrs.decorative is true
+ */
+function buildDocPrElement(attrs, imageName, hlinkRId) {
+  const docPrAttrs = {
+    id: attrs.id || 0,
+    name: attrs.alt || `Picture ${imageName}`,
+  };
+  // Emit descr (accessibility description) unless decorative
+  if (!attrs.decorative && attrs.title) {
+    docPrAttrs.descr = attrs.title;
+  }
+
+  const children = [];
+
+  // Emit a:hlinkClick in wp:docPr — Word's canonical placement (§20.4.2.5).
+  const hlinkEl = buildHlinkClickElement(attrs, hlinkRId);
+  if (hlinkEl) children.push(hlinkEl);
+
+  if (attrs.decorative) {
+    children.push({
+      name: 'a:extLst',
+      elements: [
+        {
+          name: 'a:ext',
+          attributes: { uri: DECORATIVE_EXT_URI },
+          elements: [
+            {
+              name: 'adec:decorative',
+              attributes: { 'xmlns:adec': DECORATIVE_NAMESPACE, val: '1' },
+            },
+          ],
+        },
+      ],
+    });
+  }
+
+  return {
+    name: 'wp:docPr',
+    attributes: docPrAttrs,
+    ...(children.length ? { elements: children } : {}),
+  };
+}
+
+/**
+ * Build the `pic:nvPicPr` element with:
+ * - `pic:cNvPr/@name` ← attrs.alt (object name, mirrors wp:docPr/@name)
+ * - `a:hlinkClick` child when hyperlink is set (mirrors wp:docPr for compatibility)
+ * - `a:picLocks/@noChangeAspect` ← dynamic from attrs.lockAspectRatio
+ */
+function buildNvPicPrElement(attrs, imageName, hlinkRId) {
+  // --- pic:cNvPr children (hyperlink) ---
+  const cNvPrChildren = [];
+  const hlinkEl = buildHlinkClickElement(attrs, hlinkRId);
+  if (hlinkEl) cNvPrChildren.push(hlinkEl);
+
+  return {
+    name: 'pic:nvPicPr',
+    elements: [
+      {
+        name: 'pic:cNvPr',
+        attributes: {
+          id: attrs.id || 0,
+          name: attrs.alt || `Picture ${imageName}`,
+        },
+        ...(cNvPrChildren.length ? { elements: cNvPrChildren } : {}),
+      },
+      {
+        name: 'pic:cNvPicPr',
+        elements: [
+          {
+            name: 'a:picLocks',
+            attributes: {
+              // Per OOXML §20.1.2.2.31, noChangeAspect defaults to false (unlocked).
+              // Only emit "1" when explicitly locked; omit when false/undefined to preserve round-trip fidelity.
+              ...(attrs.lockAspectRatio ? { noChangeAspect: 1 } : {}),
+              noChangeArrowheads: 1,
+            },
+          },
+        ],
+      },
+    ],
+  };
+}
+
+/**
+ * Add a hyperlink relationship and return the rId.
+ * Uses params.relationships (part-local) so that images in headers/footers
+ * write to the correct .rels file, not always word/_rels/document.xml.rels.
+ */
+function addHyperlinkRelationship(params, url) {
+  const newId = `rId${generateDocxRandomId(8)}`;
+  if (!params.relationships || !Array.isArray(params.relationships)) {
+    params.relationships = [];
+  }
+  params.relationships.push({
+    type: 'element',
+    name: 'Relationship',
+    attributes: {
+      Id: newId,
+      Type: HYPERLINK_REL_TYPE,
+      Target: url,
+      TargetMode: 'External',
+    },
+  });
+  return newId;
+}
 
 /**
  * Decodes image into export XML
@@ -24,7 +162,6 @@ export const translateImageNode = (params) => {
 
   // Prefer originalSrc for round-trip fidelity (e.g., EMF/WMF files converted to SVG for display)
   const src = attrs.originalSrc || attrs.src || attrs.imageSrc;
-  const { originalWidth, originalHeight } = getPngDimensions(src);
 
   let imageName;
   if (params.node.type === 'image') {
@@ -38,21 +175,35 @@ export const translateImageNode = (params) => {
   }
   imageName = sanitizeDocxMediaName(imageName);
 
-  let size = attrs.size
-    ? {
-        w: pixelsToEmu(attrs.size.width),
-        h: pixelsToEmu(attrs.size.height),
-      }
-    : imageSize;
+  // For fieldAnnotations without a recognizable MIME type, fall back to text
+  // annotation before attempting size resolution (they have no image data).
+  if (params.node.type === 'fieldAnnotation' && !imageId) {
+    const type = src?.split(';')[0].split('/')[1];
+    if (!type) {
+      return prepareTextAnnotation(params);
+    }
+  }
 
-  if (originalWidth && originalHeight) {
-    const boxWidthPx = emuToPixels(size.w);
-    const boxHeightPx = emuToPixels(size.h);
-    const { scaledWidth, scaledHeight } = getScaledSize(originalWidth, originalHeight, boxWidthPx, boxHeightPx);
-    size = {
-      w: pixelsToEmu(scaledWidth),
-      h: pixelsToEmu(scaledHeight),
-    };
+  let size = resolveExportSize(attrs, imageSize, src);
+
+  // Scale box size to match intrinsic PNG aspect ratio (legacy behavior).
+  // Only applies to PNG data URIs — the old getPngDimensions only supported PNG.
+  if (src?.startsWith('data:image/png')) {
+    const intrinsicDims = readImageDimensionsFromDataUri(src);
+    if (intrinsicDims) {
+      const boxWidthPx = emuToPixels(size.w);
+      const boxHeightPx = emuToPixels(size.h);
+      const { scaledWidth, scaledHeight } = getScaledSize(
+        intrinsicDims.width,
+        intrinsicDims.height,
+        boxWidthPx,
+        boxHeightPx,
+      );
+      size = {
+        w: pixelsToEmu(scaledWidth),
+        h: pixelsToEmu(scaledHeight),
+      };
+    }
   }
 
   if (tableCell) {
@@ -78,10 +229,8 @@ export const translateImageNode = (params) => {
     const path = src?.split('word/')[1];
     imageId = addNewImageRelationship(params, path);
   } else if (params.node.type === 'fieldAnnotation' && !imageId) {
+    // We already handled the no-type case above; here the type IS valid.
     const type = src?.split(';')[0].split('/')[1];
-    if (!type) {
-      return prepareTextAnnotation(params);
-    }
 
     const sanitizedHash = sanitizeDocxMediaName(attrs.hash, generateDocxRandomId(4));
     const fileName = `${imageName}_${sanitizedHash}.${type}`;
@@ -130,6 +279,9 @@ export const translateImageNode = (params) => {
   const drawingXmlns = 'http://schemas.openxmlformats.org/drawingml/2006/main';
   const pictureXmlns = 'http://schemas.openxmlformats.org/drawingml/2006/picture';
 
+  // Resolve hyperlink relationship once; shared by wp:docPr and pic:cNvPr.
+  const hlinkRId = resolveHyperlinkRId(attrs, params);
+
   return {
     attributes: inlineAttrs,
     elements: [
@@ -144,13 +296,7 @@ export const translateImageNode = (params) => {
         name: 'wp:effectExtent',
         attributes: effectExtentAttrs,
       },
-      {
-        name: 'wp:docPr',
-        attributes: {
-          id: attrs.id || 0,
-          name: attrs.alt || `Picture ${imageName}`,
-        },
-      },
+      buildDocPrElement(attrs, imageName, hlinkRId),
       {
         name: 'wp:cNvGraphicFramePr',
         elements: [
@@ -158,7 +304,7 @@ export const translateImageNode = (params) => {
             name: 'a:graphicFrameLocks',
             attributes: {
               'xmlns:a': drawingXmlns,
-              noChangeAspect: 1,
+              ...(attrs.lockAspectRatio ? { noChangeAspect: 1 } : {}),
             },
           },
         ],
@@ -175,30 +321,7 @@ export const translateImageNode = (params) => {
                 name: 'pic:pic',
                 attributes: { 'xmlns:pic': pictureXmlns },
                 elements: [
-                  {
-                    name: 'pic:nvPicPr',
-                    elements: [
-                      {
-                        name: 'pic:cNvPr',
-                        attributes: {
-                          id: attrs.id || 0,
-                          name: attrs.title || `Picture ${imageName}`,
-                        },
-                      },
-                      {
-                        name: 'pic:cNvPicPr',
-                        elements: [
-                          {
-                            name: 'a:picLocks',
-                            attributes: {
-                              noChangeAspect: 1,
-                              noChangeArrowheads: 1,
-                            },
-                          },
-                        ],
-                      },
-                    ],
-                  },
+                  buildNvPicPrElement(attrs, imageName, hlinkRId),
                   {
                     name: 'pic:blipFill',
                     elements: [
@@ -266,24 +389,44 @@ export const translateImageNode = (params) => {
   };
 };
 
-function getPngDimensions(base64) {
-  if (!base64) return {};
+function isFinitePositive(value) {
+  return typeof value === 'number' && Number.isFinite(value) && value > 0;
+}
 
-  const type = base64.split(';')[0].split('/')[1];
-  if (!base64 || type !== 'png') {
-    return {
-      originalWidth: undefined,
-      originalHeight: undefined,
-    };
+/**
+ * Resolve export size from available sources, with strict validation.
+ *
+ * Priority:
+ * 1. attrs.size with valid finite positive dimensions
+ * 2. imageSize fallback (from paragraph measure)
+ * 3. Infer from data URI source bytes
+ * 4. Legacy fallback: use attrs.size / imageSize as-is (may produce NaN — matches pre-hardening behavior)
+ *
+ * @returns {{ w: number, h: number }}
+ */
+function resolveExportSize(attrs, imageSize, src) {
+  if (isFinitePositive(attrs.size?.width) && isFinitePositive(attrs.size?.height)) {
+    return { w: pixelsToEmu(attrs.size.width), h: pixelsToEmu(attrs.size.height) };
   }
+  if (isFinitePositive(imageSize?.w) && isFinitePositive(imageSize?.h)) {
+    return imageSize;
+  }
+  if (src?.startsWith('data:')) {
+    const dims = readImageDimensionsFromDataUri(src);
+    if (dims) return { w: pixelsToEmu(dims.width), h: pixelsToEmu(dims.height) };
+  }
+  // Legacy fallback: preserve old behavior for callers that pass
+  // non-validated imageSize or attrs.size (e.g., file-path images without
+  // explicit dimensions).  The create.image path validates upstream.
+  const raw = attrs.size
+    ? { w: pixelsToEmu(attrs.size.width), h: pixelsToEmu(attrs.size.height) }
+    : imageSize || { w: 0, h: 0 };
 
-  let header = base64.split(',')[1].slice(0, 50);
-  let uint8 = Uint8Array.from(atob(header), (c) => c.charCodeAt(0));
-  let dataView = new DataView(uint8.buffer, 0, 28);
-
+  // Clamp non-finite or non-positive values to 1 EMU so we never emit
+  // NaN or zero in <wp:extent> / <a:ext> — both produce corrupt OOXML.
   return {
-    originalWidth: dataView.getInt32(16),
-    originalHeight: dataView.getInt32(20),
+    w: isFinitePositive(raw.w) ? raw.w : 1,
+    h: isFinitePositive(raw.h) ? raw.h : 1,
   };
 }
 

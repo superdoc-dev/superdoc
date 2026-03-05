@@ -21,6 +21,18 @@ const ALL_LISTS_COMMAND_IDS = [
   'lists.canContinuePrevious',
   'lists.setLevelRestart',
   'lists.convertToText',
+  // SD-1973 formatting operations
+  'lists.applyTemplate',
+  'lists.applyPreset',
+  'lists.captureTemplate',
+  'lists.setLevelNumbering',
+  'lists.setLevelBullet',
+  'lists.setLevelPictureBullet',
+  'lists.setLevelAlignment',
+  'lists.setLevelIndents',
+  'lists.setLevelTrailingCharacter',
+  'lists.setLevelMarkerFont',
+  'lists.clearLevelOverrides',
 ] as const;
 
 type ListsCommandId = (typeof ALL_LISTS_COMMAND_IDS)[number];
@@ -55,6 +67,7 @@ describe('document-api story: all lists commands', () => {
     'lists.get',
     'lists.canJoin',
     'lists.canContinuePrevious',
+    'lists.captureTemplate',
   ]);
 
   function slug(operationId: ListsCommandId): string {
@@ -109,6 +122,13 @@ describe('document-api story: all lists commands', () => {
 
     if (operationId === 'lists.canContinuePrevious') {
       expect(typeof result?.canContinue).toBe('boolean');
+      return;
+    }
+
+    if (operationId === 'lists.captureTemplate') {
+      expect(result?.success).toBe(true);
+      expect(result?.template?.version).toBe(1);
+      expect(Array.isArray(result?.template?.levels)).toBe(true);
       return;
     }
 
@@ -442,6 +462,178 @@ describe('document-api story: all lists commands', () => {
           doc: sourceDoc,
           out: resultDoc,
           target: f.firstItem,
+        });
+      },
+    },
+    // SD-1973 formatting operations
+    {
+      operationId: 'lists.captureTemplate',
+      prepareSource: async (sourceDoc) => setupListFixture(sourceDoc),
+      run: async (sourceDoc, _resultDoc, fixture) => {
+        const f = requireFixture('lists.captureTemplate', fixture);
+        return callDocOperation<any>('lists.captureTemplate', {
+          doc: sourceDoc,
+          target: f.firstItem,
+        });
+      },
+    },
+    {
+      operationId: 'lists.applyPreset',
+      prepareSource: async (sourceDoc) => setupListFixture(sourceDoc),
+      run: async (sourceDoc, resultDoc, fixture) => {
+        const f = requireFixture('lists.applyPreset', fixture);
+        return callDocOperation<any>('lists.applyPreset', {
+          doc: sourceDoc,
+          out: resultDoc,
+          target: f.firstItem,
+          preset: 'upperRoman',
+        });
+      },
+    },
+    {
+      operationId: 'lists.applyTemplate',
+      prepareSource: async (sourceDoc) => setupListFixture(sourceDoc),
+      run: async (sourceDoc, resultDoc, fixture) => {
+        const f = requireFixture('lists.applyTemplate', fixture);
+        // Capture template and tweak level 0 so the apply is not a no-op
+        const captureResult = await callDocOperation<any>('lists.captureTemplate', {
+          doc: sourceDoc,
+          target: f.firstItem,
+        });
+        const template = captureResult?.template;
+        if (template?.levels?.[0]) {
+          template.levels[0].numFmt = 'upperRoman';
+          template.levels[0].lvlText = '%1)';
+        }
+        return callDocOperation<any>('lists.applyTemplate', {
+          doc: sourceDoc,
+          out: resultDoc,
+          target: f.firstItem,
+          template,
+        });
+      },
+    },
+    {
+      operationId: 'lists.setLevelNumbering',
+      prepareSource: async (sourceDoc) => setupListFixture(sourceDoc),
+      run: async (sourceDoc, resultDoc, fixture) => {
+        const f = requireFixture('lists.setLevelNumbering', fixture);
+        return callDocOperation<any>('lists.setLevelNumbering', {
+          doc: sourceDoc,
+          out: resultDoc,
+          target: f.firstItem,
+          level: 0,
+          numFmt: 'upperRoman',
+          lvlText: '%1.',
+        });
+      },
+    },
+    {
+      operationId: 'lists.setLevelBullet',
+      prepareSource: async (sourceDoc) => setupListFixture(sourceDoc),
+      run: async (sourceDoc, resultDoc, fixture) => {
+        const f = requireFixture('lists.setLevelBullet', fixture);
+        return callDocOperation<any>('lists.setLevelBullet', {
+          doc: sourceDoc,
+          out: resultDoc,
+          target: f.firstItem,
+          level: 0,
+          markerText: '▪',
+        });
+      },
+    },
+    {
+      operationId: 'lists.setLevelPictureBullet',
+      prepareSource: async (sourceDoc) => setupListFixture(sourceDoc),
+      run: async (sourceDoc, resultDoc, fixture) => {
+        const f = requireFixture('lists.setLevelPictureBullet', fixture);
+        return callDocOperation<any>('lists.setLevelPictureBullet', {
+          doc: sourceDoc,
+          out: resultDoc,
+          target: f.firstItem,
+          level: 0,
+          pictureBulletId: 0,
+        });
+      },
+    },
+    {
+      operationId: 'lists.setLevelAlignment',
+      prepareSource: async (sourceDoc) => setupListFixture(sourceDoc),
+      run: async (sourceDoc, resultDoc, fixture) => {
+        const f = requireFixture('lists.setLevelAlignment', fixture);
+        return callDocOperation<any>('lists.setLevelAlignment', {
+          doc: sourceDoc,
+          out: resultDoc,
+          target: f.firstItem,
+          level: 0,
+          alignment: 'center',
+        });
+      },
+    },
+    {
+      operationId: 'lists.setLevelIndents',
+      prepareSource: async (sourceDoc) => setupListFixture(sourceDoc),
+      run: async (sourceDoc, resultDoc, fixture) => {
+        const f = requireFixture('lists.setLevelIndents', fixture);
+        return callDocOperation<any>('lists.setLevelIndents', {
+          doc: sourceDoc,
+          out: resultDoc,
+          target: f.firstItem,
+          level: 0,
+          left: 1440,
+          hanging: 360,
+        });
+      },
+    },
+    {
+      operationId: 'lists.setLevelTrailingCharacter',
+      prepareSource: async (sourceDoc) => setupListFixture(sourceDoc),
+      run: async (sourceDoc, resultDoc, fixture) => {
+        const f = requireFixture('lists.setLevelTrailingCharacter', fixture);
+        return callDocOperation<any>('lists.setLevelTrailingCharacter', {
+          doc: sourceDoc,
+          out: resultDoc,
+          target: f.firstItem,
+          level: 0,
+          trailingCharacter: 'space',
+        });
+      },
+    },
+    {
+      operationId: 'lists.setLevelMarkerFont',
+      prepareSource: async (sourceDoc) => setupListFixture(sourceDoc),
+      run: async (sourceDoc, resultDoc, fixture) => {
+        const f = requireFixture('lists.setLevelMarkerFont', fixture);
+        return callDocOperation<any>('lists.setLevelMarkerFont', {
+          doc: sourceDoc,
+          out: resultDoc,
+          target: f.firstItem,
+          level: 0,
+          fontFamily: 'Arial',
+        });
+      },
+    },
+    {
+      operationId: 'lists.clearLevelOverrides',
+      prepareSource: async (sourceDoc) => {
+        const fixture = await setupListFixture(sourceDoc);
+        // Create a w:lvlOverride (start override) so there is something to clear
+        const overrideResult = await callDocOperation<any>('lists.setValue', {
+          doc: sourceDoc,
+          out: sourceDoc,
+          target: fixture.firstItem,
+          value: 10,
+        });
+        assertMutationSuccess('lists.setValue (prep)', overrideResult);
+        return fixture;
+      },
+      run: async (sourceDoc, resultDoc, fixture) => {
+        const f = requireFixture('lists.clearLevelOverrides', fixture);
+        return callDocOperation<any>('lists.clearLevelOverrides', {
+          doc: sourceDoc,
+          out: resultDoc,
+          target: f.firstItem,
+          level: 0,
         });
       },
     },

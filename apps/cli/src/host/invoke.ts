@@ -2,7 +2,7 @@ import { invokeCommand } from '../index';
 import { CliError } from '../lib/errors';
 import { asRecord } from '../lib/guards';
 import type { CliIO } from '../lib/types';
-import type { CollaborationSessionPool } from './collab-session-pool';
+import type { SessionPool } from './session-pool';
 import { DEFAULT_MAX_STDIN_BYTES } from './protocol';
 
 const BASE64_PATTERN = /^[A-Za-z0-9+/]*={0,2}$/;
@@ -16,12 +16,12 @@ type CliInvokeParams = {
  * Options for invoking CLI commands from the host process.
  *
  * @param ioNow - Clock function used for elapsed-time tracking
- * @param collabSessionPool - Pool for reusing collaboration sessions across invocations
+ * @param sessionPool - Pool for reusing sessions (local and collab) across invocations
  * @param maxStdinBytes - Maximum allowed size (bytes) for base64-decoded stdin payloads
  */
 export interface HostInvokeCliOptions {
   ioNow?: () => number;
-  collabSessionPool?: CollaborationSessionPool;
+  sessionPool?: SessionPool;
   maxStdinBytes?: number;
 }
 
@@ -121,7 +121,7 @@ export async function invokeCliFromHost(
   const invocation = await invokeCommand(params.argv, {
     ioOverrides: io,
     executionMode: 'host',
-    collabSessionPool: options.collabSessionPool,
+    sessionPool: options.sessionPool,
   });
 
   if (invocation.helpText) {

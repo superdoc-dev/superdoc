@@ -2,7 +2,7 @@ name: PR Labels
 
 on:
   pull_request_target:
-    types: [opened, synchronize, reopened]
+    types: [opened, reopened]
 
 permissions:
   contents: read
@@ -18,6 +18,13 @@ jobs:
     steps:
       - uses: actions/checkout@v6
 
+      - name: Generate app token
+        id: app-token
+        uses: actions/create-github-app-token@v2
+        with:
+          app-id: ${{ secrets.APP_ID }}
+          private-key: ${{ secrets.APP_PRIVATE_KEY }}
+
       - name: Get changed files and classify risk
         id: risk
         run: |
@@ -30,6 +37,7 @@ jobs:
       - name: Apply risk label
         uses: actions/github-script@v7
         with:
+          github-token: ${{ steps.app-token.outputs.token }}
           script: |
             const level = '${{ steps.risk.outputs.level }}';
 
@@ -48,12 +56,16 @@ jobs:
               try {
                 await github.rest.issues.getLabel({ owner, repo, name: label.name });
               } catch {
-                await github.rest.issues.createLabel({
-                  owner,
-                  repo,
-                  name: label.name,
-                  color: label.color,
-                });
+                try {
+                  await github.rest.issues.createLabel({
+                    owner,
+                    repo,
+                    name: label.name,
+                    color: label.color,
+                  });
+                } catch (e) {
+                  if (e.status !== 422) throw e;
+                }
               }
             }
 
@@ -89,26 +101,45 @@ jobs:
       - name: Add community label
         if: >-
           github.event.action == 'opened' &&
-          github.event.pull_request.author_association != 'MEMBER' &&
-          github.event.pull_request.author_association != 'OWNER' &&
-          github.event.pull_request.author_association != 'COLLABORATOR' &&
           github.event.pull_request.user.type != 'Bot'
         uses: actions/github-script@v7
         with:
+          github-token: ${{ steps.app-token.outputs.token }}
           script: |
             const owner = context.repo.owner;
             const repo = context.repo.repo;
+            const prNumber = context.issue.number;
+            const login = context.payload.pull_request.user.login;
+
+            // Check repo permission (more reliable than author_association
+            // which depends on token scope for org membership visibility).
+            const { data: perm } = await github.rest.repos.getCollaboratorPermissionLevel({
+              owner,
+              repo,
+              username: login,
+            });
+
+            const level = perm.permission;
+            if (level === 'admin' || level === 'maintain' || level === 'write') {
+              core.info(`Skipping community label — ${login} has ${level} access`);
+              return;
+            }
+
             const label = { name: 'community', color: '7057ff' };
 
             try {
               await github.rest.issues.getLabel({ owner, repo, name: label.name });
             } catch {
-              await github.rest.issues.createLabel({ owner, repo, ...label });
+              try {
+                await github.rest.issues.createLabel({ owner, repo, ...label });
+              } catch (e) {
+                if (e.status !== 422) throw e;
+              }
             }
 
             await github.rest.issues.addLabels({
               owner,
               repo,
-              issue_number: context.issue.number,
+              issue_number: prNumber,
               labels: [label.name],
             });

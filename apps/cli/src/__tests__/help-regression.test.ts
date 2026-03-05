@@ -8,7 +8,7 @@ describe('CLI help regression coverage', () => {
     );
 
     expect(blocksDeleteCommand).toBeDefined();
-    expect(CLI_HELP).toContain('blocks:');
+    expect(CLI_HELP).toContain('core:');
     expect(CLI_HELP).toContain(blocksDeleteCommand!.key);
   });
 });

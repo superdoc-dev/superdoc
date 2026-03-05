@@ -71,8 +71,9 @@ perf-baseline-results.json
 .claude
 plans/
 
-tests/layout-snapshots/candidate/
-tests/layout-snapshots/reference/
+tests/layout/candidate/
+tests/layout/reference/
+tests/layout/reports/
 test-corpus/
 .pnpm-store
 devtools/visual-testing/pnpm-lock.yaml

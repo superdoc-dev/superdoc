@@ -51,8 +51,7 @@ const CHANGE_MODE_PARAM: CliOperationParamSpec = {
   kind: 'flag',
   flag: 'change-mode',
   type: 'string',
-  schema: { oneOf: [{ const: 'direct' }, { const: 'tracked' }] } as CliTypeSpec,
-  agentVisible: false,
+  schema: { enum: ['direct', 'tracked'] } as CliTypeSpec,
 };
 const EXPECTED_REVISION_PARAM: CliOperationParamSpec = {
   name: 'expectedRevision',
@@ -79,7 +78,7 @@ const USER_EMAIL_PARAM: CliOperationParamSpec = {
 // ---------------------------------------------------------------------------
 
 type JsonSchema = Record<string, unknown>;
-const AGENT_HIDDEN_PARAM_NAMES = new Set(['out', 'expectedRevision', 'changeMode', 'dryRun']);
+const AGENT_HIDDEN_PARAM_NAMES = new Set(['out', 'expectedRevision', 'dryRun']);
 
 function resolveRef(schema: JsonSchema, $defs?: Record<string, JsonSchema>): JsonSchema {
   if (schema.$ref && $defs) {
@@ -288,19 +287,11 @@ const PARAM_FLAG_OVERRIDES: Partial<Record<string, Record<string, { name?: strin
 // ---------------------------------------------------------------------------
 // Per-operation param schema overrides
 //
-// Some contract schemas intentionally use broad placeholders (for example,
-// mutation-step arrays represented as { type: 'object' }). Validate these
-// payloads as generic JSON to avoid over-constraining CLI flags.
+// Override specific parameter schemas when the contract schema needs
+// adjustment for CLI metadata (e.g. simplifying or enriching).
 // ---------------------------------------------------------------------------
 
-const PARAM_SCHEMA_OVERRIDES: Partial<Record<string, Record<string, CliTypeSpec>>> = {
-  'doc.mutations.preview': {
-    steps: { type: 'json' },
-  },
-  'doc.mutations.apply': {
-    steps: { type: 'json' },
-  },
-};
+const PARAM_SCHEMA_OVERRIDES: Partial<Record<string, Record<string, CliTypeSpec>>> = {};
 
 // ---------------------------------------------------------------------------
 // Schema-derived param exclusions
@@ -410,6 +401,17 @@ const EXTRA_CLI_PARAMS: Partial<Record<string, CliOperationParamSpec[]>> = {
     ...LIST_TARGET_FLAT_PARAMS,
   ],
   'doc.lists.setLevelRestart': [{ name: 'input', kind: 'jsonFlag', flag: 'input-json', type: 'json' }],
+  'doc.lists.applyTemplate': [{ name: 'input', kind: 'jsonFlag', flag: 'input-json', type: 'json' }],
+  'doc.lists.applyPreset': [{ name: 'input', kind: 'jsonFlag', flag: 'input-json', type: 'json' }],
+  'doc.lists.captureTemplate': [{ name: 'input', kind: 'jsonFlag', flag: 'input-json', type: 'json' }],
+  'doc.lists.setLevelNumbering': [{ name: 'input', kind: 'jsonFlag', flag: 'input-json', type: 'json' }],
+  'doc.lists.setLevelBullet': [{ name: 'input', kind: 'jsonFlag', flag: 'input-json', type: 'json' }],
+  'doc.lists.setLevelPictureBullet': [{ name: 'input', kind: 'jsonFlag', flag: 'input-json', type: 'json' }],
+  'doc.lists.setLevelAlignment': [{ name: 'input', kind: 'jsonFlag', flag: 'input-json', type: 'json' }],
+  'doc.lists.setLevelIndents': [{ name: 'input', kind: 'jsonFlag', flag: 'input-json', type: 'json' }],
+  'doc.lists.setLevelTrailingCharacter': [{ name: 'input', kind: 'jsonFlag', flag: 'input-json', type: 'json' }],
+  'doc.lists.setLevelMarkerFont': [{ name: 'input', kind: 'jsonFlag', flag: 'input-json', type: 'json' }],
+  'doc.lists.clearLevelOverrides': [{ name: 'input', kind: 'jsonFlag', flag: 'input-json', type: 'json' }],
   'doc.lists.convertToText': [
     { name: 'input', kind: 'jsonFlag', flag: 'input-json', type: 'json' },
     ...LIST_TARGET_FLAT_PARAMS,

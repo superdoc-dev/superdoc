@@ -5,8 +5,8 @@
  * comments-mutation-shared.ts, lists-mutation-shared.ts, and inline
  * in operation-extra-invokers.ts with a single generic path.
  *
- * The 3-branch session structure (stateless / session+collab / session+local)
- * is preserved but unified into one function.
+ * Two branches: stateless (--doc) and session (unified local + collab,
+ * host + oneshot).
  */
 
 import { COMMAND_CATALOG } from '@superdoc/document-api';
@@ -194,7 +194,7 @@ export async function executeMutationOperation(request: DocOperationRequest): Pr
   }
 
   // -----------------------------------------------------------------------
-  // Session paths (collab or local)
+  // Session path (unified: local + collab, host + oneshot)
   // -----------------------------------------------------------------------
   return withActiveContext(
     context.io,
@@ -202,64 +202,24 @@ export async function executeMutationOperation(request: DocOperationRequest): Pr
     async ({ metadata, paths }) => {
       assertExpectedRevision(metadata, expectedRevision);
 
-      // --- Session + collab ---
-      if (metadata.sessionType === 'collab') {
-        const opened = await openSessionDocument(paths.workingDocPath, context.io, metadata, {
-          sessionId: context.sessionId ?? metadata.contextId,
-          executionMode: context.executionMode,
-          collabSessionPool: context.collabSessionPool,
-        });
+      const isHostMode = context.executionMode === 'host' && context.sessionPool != null;
 
-        try {
-          const result = invokeOperation(opened.editor, operationId, input, invokeOptions);
-          const synced = await syncCollaborativeSessionSnapshot(context.io, metadata, paths, opened.editor);
-          const document: DocumentPayload = {
-            path: synced.updatedMetadata.sourcePath,
-            source: synced.updatedMetadata.source,
-            byteLength: synced.output.byteLength,
-            revision: synced.updatedMetadata.revision,
-          };
+      const opened = await openSessionDocument(paths.workingDocPath, context.io, metadata, {
+        sessionId: context.sessionId ?? metadata.contextId,
+        executionMode: context.executionMode,
+        sessionPool: context.sessionPool,
+      });
 
-          if (dryRun) {
-            return {
-              command: commandName,
-              data: {
-                ...buildEnvelopeData(operationId, document, result, { changeMode, dryRun: true }),
-                context: { dirty: synced.updatedMetadata.dirty, revision: synced.updatedMetadata.revision },
-                output: outPath ? { path: outPath, skippedWrite: true } : undefined,
-              },
-              pretty: `Revision ${synced.updatedMetadata.revision}: dry run`,
-            };
-          }
-
-          const externalOutput = await exportOptionalSessionOutput(opened.editor, outPath, force);
-          return {
-            command: commandName,
-            data: buildEnvelopeData(operationId, document, result, {
-              changeMode,
-              dryRun: false,
-              context: { dirty: synced.updatedMetadata.dirty, revision: synced.updatedMetadata.revision },
-              output: externalOutput,
-            }),
-            pretty: buildPrettyOutput(operationId, document, result, externalOutput?.path),
-          };
-        } finally {
-          opened.dispose();
-        }
-      }
-
-      // --- Session + local ---
-      const opened = await openDocument(paths.workingDocPath, context.io, { user: metadata.user });
       try {
         const result = invokeOperation(opened.editor, operationId, input, invokeOptions);
-        const document: DocumentPayload = {
-          path: metadata.sourcePath,
-          source: metadata.source,
-          byteLength: opened.meta.byteLength,
-          revision: metadata.revision,
-        };
 
         if (dryRun) {
+          const document: DocumentPayload = {
+            path: metadata.sourcePath,
+            source: metadata.source,
+            byteLength: opened.meta.byteLength,
+            revision: metadata.revision,
+          };
           return {
             command: commandName,
             data: {
@@ -271,30 +231,53 @@ export async function executeMutationOperation(request: DocOperationRequest): Pr
           };
         }
 
-        const workingOutput = await exportToPath(opened.editor, paths.workingDocPath, true);
-        const externalOutput = await exportOptionalSessionOutput(opened.editor, outPath, force);
-        const updatedMetadata = markContextUpdated(context.io, metadata, {
-          dirty: true,
-          revision: metadata.revision + 1,
-        });
-        await writeContextMetadata(paths, updatedMetadata);
+        // Persist based on mode
+        let updatedMetadata: typeof metadata;
+        let byteLength: number;
 
-        const updatedDocument: DocumentPayload = {
+        if (isHostMode) {
+          // Host mode: mark dirty, let pool handle persistence
+          context.sessionPool!.markDirty(metadata.contextId);
+          updatedMetadata = markContextUpdated(context.io, metadata, {
+            dirty: true,
+            revision: metadata.revision + 1,
+          });
+          await writeContextMetadata(paths, updatedMetadata);
+          context.sessionPool!.updateMetadataRevision(metadata.contextId, updatedMetadata.revision);
+          byteLength = opened.meta.byteLength;
+        } else if (metadata.sessionType === 'collab') {
+          // Oneshot collab: sync snapshot to disk
+          const synced = await syncCollaborativeSessionSnapshot(context.io, metadata, paths, opened.editor);
+          updatedMetadata = synced.updatedMetadata;
+          byteLength = synced.output.byteLength;
+        } else {
+          // Oneshot local: export to disk
+          const workingOutput = await exportToPath(opened.editor, paths.workingDocPath, true);
+          updatedMetadata = markContextUpdated(context.io, metadata, {
+            dirty: true,
+            revision: metadata.revision + 1,
+          });
+          await writeContextMetadata(paths, updatedMetadata);
+          byteLength = workingOutput.byteLength;
+        }
+
+        const externalOutput = await exportOptionalSessionOutput(opened.editor, outPath, force);
+        const document: DocumentPayload = {
           path: updatedMetadata.sourcePath,
           source: updatedMetadata.source,
-          byteLength: workingOutput.byteLength,
+          byteLength,
           revision: updatedMetadata.revision,
         };
 
         return {
           command: commandName,
-          data: buildEnvelopeData(operationId, updatedDocument, result, {
+          data: buildEnvelopeData(operationId, document, result, {
             changeMode,
             dryRun: false,
             context: { dirty: updatedMetadata.dirty, revision: updatedMetadata.revision },
             output: externalOutput,
           }),
-          pretty: buildPrettyOutput(operationId, updatedDocument, result, externalOutput?.path),
+          pretty: buildPrettyOutput(operationId, document, result, externalOutput?.path),
         };
       } finally {
         opened.dispose();

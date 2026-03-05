@@ -4,7 +4,9 @@ import { OPERATION_DEFINITIONS, type ReferenceGroupKey } from './operation-defin
 import { DOCUMENT_API_MEMBER_PATHS, OPERATION_MEMBER_PATH_MAP, memberPathForOperation } from './operation-map.js';
 import { OPERATION_REFERENCE_DOC_PATH_MAP, REFERENCE_OPERATION_GROUPS } from './reference-doc-map.js';
 import { buildInternalContractSchemas } from './schemas.js';
+import { PUBLIC_MUTATION_STEP_OP_IDS, STEP_OP_CATALOG } from './step-op-catalog.js';
 import { OPERATION_IDS, PRE_APPLY_THROW_CODES, isValidOperationIdFormat } from './types.js';
+import { Z_ORDER_RELATIVE_HEIGHT_MAX, Z_ORDER_RELATIVE_HEIGHT_MIN } from '../images/z-order.js';
 
 describe('document-api contract catalog', () => {
   it('keeps operation ids explicit and format-valid', () => {
@@ -124,6 +126,28 @@ describe('document-api contract catalog', () => {
     expect(capabilitiesOutput.properties?.global?.required).toContain('history');
   });
 
+  it('declares images.setZOrder.relativeHeight as unsigned 32-bit integer', () => {
+    const schemas = buildInternalContractSchemas();
+    const inputSchema = schemas.operations['images.setZOrder'].input as {
+      properties?: {
+        zOrder?: {
+          properties?: {
+            relativeHeight?: {
+              type?: string;
+              minimum?: number;
+              maximum?: number;
+            };
+          };
+        };
+      };
+    };
+
+    const relativeHeightSchema = inputSchema.properties?.zOrder?.properties?.relativeHeight;
+    expect(relativeHeightSchema?.type).toBe('integer');
+    expect(relativeHeightSchema?.minimum).toBe(Z_ORDER_RELATIVE_HEIGHT_MIN);
+    expect(relativeHeightSchema?.maximum).toBe(Z_ORDER_RELATIVE_HEIGHT_MAX);
+  });
+
   it('derives OPERATION_IDS from OPERATION_DEFINITIONS keys', () => {
     const definitionKeys = Object.keys(OPERATION_DEFINITIONS).sort();
     const operationIds = [...OPERATION_IDS].sort();
@@ -149,6 +173,8 @@ describe('document-api contract catalog', () => {
       'tables',
       'history',
       'toc',
+      'images',
+      'hyperlinks',
     ];
     for (const id of OPERATION_IDS) {
       expect(validGroups, `${id} has invalid referenceGroup`).toContain(OPERATION_DEFINITIONS[id].referenceGroup);
@@ -191,6 +217,22 @@ describe('document-api contract catalog', () => {
       expect(expectedResult, `${id} has empty expectedResult`).toBeTruthy();
       expect(typeof expectedResult).toBe('string');
       expect(expectedResult.length, `${id} expectedResult is too short`).toBeGreaterThan(10);
+    }
+  });
+
+  it('keeps public mutation step ops explicit and reference-valid', () => {
+    expect(PUBLIC_MUTATION_STEP_OP_IDS.length).toBeGreaterThan(0);
+    expect(new Set(PUBLIC_MUTATION_STEP_OP_IDS).size).toBe(PUBLIC_MUTATION_STEP_OP_IDS.length);
+    expect(PUBLIC_MUTATION_STEP_OP_IDS).not.toContain('domain.command');
+    expect(PUBLIC_MUTATION_STEP_OP_IDS).toContain('assert');
+
+    const validOperationIds = new Set<string>(OPERATION_IDS);
+    for (const stepOp of STEP_OP_CATALOG) {
+      if (!stepOp.referenceOperationId) continue;
+      expect(
+        validOperationIds.has(stepOp.referenceOperationId),
+        `${stepOp.opId} references unknown operation ${stepOp.referenceOperationId}`,
+      ).toBe(true);
     }
   });
 

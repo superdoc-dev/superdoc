@@ -4,10 +4,12 @@ import { findAdapter } from './find-adapter.js';
 import { getNodeAdapter, getNodeByIdAdapter } from './get-node-adapter.js';
 import { getTextAdapter } from './get-text-adapter.js';
 import { getMarkdownAdapter } from './get-markdown-adapter.js';
+import { getHtmlAdapter } from './get-html-adapter.js';
 import { infoAdapter } from './info-adapter.js';
 import { getDocumentApiCapabilities } from './capabilities-adapter.js';
 import { createCommentsWrapper } from './plan-engine/comments-wrappers.js';
 import { writeWrapper, insertStructuredWrapper, styleApplyWrapper } from './plan-engine/plan-wrappers.js';
+import { clearContentWrapper } from './plan-engine/clear-content-wrapper.js';
 import { stylesApplyAdapter } from './styles-adapter.js';
 import {
   paragraphsSetStyleWrapper,
@@ -59,6 +61,20 @@ import {
   listsSetLevelRestartWrapper,
   listsConvertToTextWrapper,
 } from './plan-engine/lists-wrappers.js';
+import {
+  listsApplyTemplateWrapper,
+  listsApplyPresetWrapper,
+  listsSetTypeWrapper,
+  listsCaptureTemplateWrapper,
+  listsSetLevelNumberingWrapper,
+  listsSetLevelBulletWrapper,
+  listsSetLevelPictureBulletWrapper,
+  listsSetLevelAlignmentWrapper,
+  listsSetLevelIndentsWrapper,
+  listsSetLevelTrailingCharacterWrapper,
+  listsSetLevelMarkerFontWrapper,
+  listsClearLevelOverridesWrapper,
+} from './plan-engine/lists-formatting-wrappers.js';
 import { executePlan } from './plan-engine/executor.js';
 import { previewPlan } from './plan-engine/preview.js';
 import { queryMatchAdapter } from './plan-engine/query-match-adapter.js';
@@ -148,6 +164,44 @@ import {
   tocUnmarkEntryWrapper,
   tocEditEntryWrapper,
 } from './plan-engine/toc-entry-wrappers.js';
+import {
+  createImageWrapper,
+  imagesListWrapper,
+  imagesGetWrapper,
+  imagesDeleteWrapper,
+  imagesMoveWrapper,
+  imagesConvertToInlineWrapper,
+  imagesConvertToFloatingWrapper,
+  imagesSetSizeWrapper,
+  imagesSetWrapTypeWrapper,
+  imagesSetWrapSideWrapper,
+  imagesSetWrapDistancesWrapper,
+  imagesSetPositionWrapper,
+  imagesSetAnchorOptionsWrapper,
+  imagesSetZOrderWrapper,
+  imagesScaleWrapper,
+  imagesSetLockAspectRatioWrapper,
+  imagesRotateWrapper,
+  imagesFlipWrapper,
+  imagesCropWrapper,
+  imagesResetCropWrapper,
+  imagesReplaceSourceWrapper,
+  imagesSetAltTextWrapper,
+  imagesSetDecorativeWrapper,
+  imagesSetNameWrapper,
+  imagesSetHyperlinkWrapper,
+  imagesInsertCaptionWrapper,
+  imagesUpdateCaptionWrapper,
+  imagesRemoveCaptionWrapper,
+} from './plan-engine/images-wrappers.js';
+import {
+  hyperlinksListWrapper,
+  hyperlinksGetWrapper,
+  hyperlinksWrapWrapper,
+  hyperlinksInsertWrapper,
+  hyperlinksPatchWrapper,
+  hyperlinksRemoveWrapper,
+} from './plan-engine/hyperlinks-wrappers.js';
 
 /**
  * Assembles all document-api adapters for the given editor instance.
@@ -174,8 +228,14 @@ export function assembleDocumentApiAdapters(editor: Editor): DocumentApiAdapters
     getMarkdown: {
       getMarkdown: (input) => getMarkdownAdapter(editor, input),
     },
+    getHtml: {
+      getHtml: (input) => getHtmlAdapter(editor, input),
+    },
     info: {
       info: (input) => infoAdapter(editor, input),
+    },
+    clearContent: {
+      clearContent: (input, options) => clearContentWrapper(editor, input, options),
     },
     capabilities: {
       get: () => getDocumentApiCapabilities(editor),
@@ -229,6 +289,7 @@ export function assembleDocumentApiAdapters(editor: Editor): DocumentApiAdapters
       table: (input, options) => createTableWrapper(editor, input, options),
       sectionBreak: (input, options) => createSectionBreakAdapter(editor, input, options),
       tableOfContents: (input, options) => createTableOfContentsWrapper(editor, input, options),
+      image: (input, options) => createImageWrapper(editor, input, options),
     },
     lists: {
       list: (query) => listsListWrapper(editor, query),
@@ -248,6 +309,18 @@ export function assembleDocumentApiAdapters(editor: Editor): DocumentApiAdapters
       canContinuePrevious: (input) => listsCanContinuePreviousWrapper(editor, input),
       setLevelRestart: (input, options) => listsSetLevelRestartWrapper(editor, input, options),
       convertToText: (input, options) => listsConvertToTextWrapper(editor, input, options),
+      applyTemplate: (input, options) => listsApplyTemplateWrapper(editor, input, options),
+      applyPreset: (input, options) => listsApplyPresetWrapper(editor, input, options),
+      captureTemplate: (input) => listsCaptureTemplateWrapper(editor, input),
+      setLevelNumbering: (input, options) => listsSetLevelNumberingWrapper(editor, input, options),
+      setLevelBullet: (input, options) => listsSetLevelBulletWrapper(editor, input, options),
+      setLevelPictureBullet: (input, options) => listsSetLevelPictureBulletWrapper(editor, input, options),
+      setLevelAlignment: (input, options) => listsSetLevelAlignmentWrapper(editor, input, options),
+      setLevelIndents: (input, options) => listsSetLevelIndentsWrapper(editor, input, options),
+      setLevelTrailingCharacter: (input, options) => listsSetLevelTrailingCharacterWrapper(editor, input, options),
+      setLevelMarkerFont: (input, options) => listsSetLevelMarkerFontWrapper(editor, input, options),
+      clearLevelOverrides: (input, options) => listsClearLevelOverridesWrapper(editor, input, options),
+      setType: (input, options) => listsSetTypeWrapper(editor, input, options),
     },
     sections: {
       list: (query) => sectionsListAdapter(editor, query),
@@ -324,6 +397,48 @@ export function assembleDocumentApiAdapters(editor: Editor): DocumentApiAdapters
       listEntries: (query) => tocListEntriesWrapper(editor, query),
       getEntry: (input) => tocGetEntryWrapper(editor, input),
       editEntry: (input, options) => tocEditEntryWrapper(editor, input, options),
+    },
+    images: {
+      image: (input, options) => createImageWrapper(editor, input, options),
+      list: (input) => imagesListWrapper(editor, input),
+      get: (input) => imagesGetWrapper(editor, input),
+      delete: (input, options) => imagesDeleteWrapper(editor, input, options),
+      move: (input, options) => imagesMoveWrapper(editor, input, options),
+      convertToInline: (input, options) => imagesConvertToInlineWrapper(editor, input, options),
+      convertToFloating: (input, options) => imagesConvertToFloatingWrapper(editor, input, options),
+      setSize: (input, options) => imagesSetSizeWrapper(editor, input, options),
+      setWrapType: (input, options) => imagesSetWrapTypeWrapper(editor, input, options),
+      setWrapSide: (input, options) => imagesSetWrapSideWrapper(editor, input, options),
+      setWrapDistances: (input, options) => imagesSetWrapDistancesWrapper(editor, input, options),
+      setPosition: (input, options) => imagesSetPositionWrapper(editor, input, options),
+      setAnchorOptions: (input, options) => imagesSetAnchorOptionsWrapper(editor, input, options),
+      setZOrder: (input, options) => imagesSetZOrderWrapper(editor, input, options),
+      // SD-2100: Geometry
+      scale: (input, options) => imagesScaleWrapper(editor, input, options),
+      setLockAspectRatio: (input, options) => imagesSetLockAspectRatioWrapper(editor, input, options),
+      rotate: (input, options) => imagesRotateWrapper(editor, input, options),
+      flip: (input, options) => imagesFlipWrapper(editor, input, options),
+      crop: (input, options) => imagesCropWrapper(editor, input, options),
+      resetCrop: (input, options) => imagesResetCropWrapper(editor, input, options),
+      // SD-2100: Content
+      replaceSource: (input, options) => imagesReplaceSourceWrapper(editor, input, options),
+      // SD-2100: Semantic metadata
+      setAltText: (input, options) => imagesSetAltTextWrapper(editor, input, options),
+      setDecorative: (input, options) => imagesSetDecorativeWrapper(editor, input, options),
+      setName: (input, options) => imagesSetNameWrapper(editor, input, options),
+      setHyperlink: (input, options) => imagesSetHyperlinkWrapper(editor, input, options),
+      // SD-2100: Caption lifecycle
+      insertCaption: (input, options) => imagesInsertCaptionWrapper(editor, input, options),
+      updateCaption: (input, options) => imagesUpdateCaptionWrapper(editor, input, options),
+      removeCaption: (input, options) => imagesRemoveCaptionWrapper(editor, input, options),
+    },
+    hyperlinks: {
+      list: (query) => hyperlinksListWrapper(editor, query),
+      get: (input) => hyperlinksGetWrapper(editor, input),
+      wrap: (input, options) => hyperlinksWrapWrapper(editor, input, options),
+      insert: (input, options) => hyperlinksInsertWrapper(editor, input, options),
+      patch: (input, options) => hyperlinksPatchWrapper(editor, input, options),
+      remove: (input, options) => hyperlinksRemoveWrapper(editor, input, options),
     },
     query: {
       match: (input) => queryMatchAdapter(editor, input),

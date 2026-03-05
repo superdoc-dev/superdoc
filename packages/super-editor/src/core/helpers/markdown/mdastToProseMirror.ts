@@ -32,7 +32,10 @@ import type {
   List as MdastList,
   ListItem as MdastListItem,
 } from 'mdast';
+import { v4 as uuidv4 } from 'uuid';
 import { ListHelpers } from '../list-numbering-helpers.js';
+import { generateDocxRandomId } from '../generateDocxRandomId.js';
+import { readImageDimensionsFromDataUri } from '../../super-converter/image-dimensions.js';
 import type { MdastConversionContext, MarkdownDiagnostic } from './types.js';
 
 // ---------------------------------------------------------------------------
@@ -67,6 +70,7 @@ interface JsonMark {
 // OOXML stores percentages in fiftieths of a percent.
 // 5000 = 100% table width.
 const FULL_WIDTH_TABLE_PCT = 5000;
+const imageDocPrIdsByContext = new WeakMap<MdastConversionContext, Set<string>>();
 
 // ---------------------------------------------------------------------------
 // Block-level converters
@@ -366,14 +370,7 @@ function convertImageBlock(node: MdastImage, ctx: MdastConversionContext): JsonN
     return makeParagraph([]);
   }
 
-  const imageNode: JsonNode = {
-    type: 'image',
-    attrs: {
-      src: node.url,
-      alt: node.alt ?? null,
-      title: node.title ?? null,
-    },
-  };
+  const imageNode: JsonNode = { type: 'image', attrs: buildImageAttrs(node, ctx) };
 
   // Image must be wrapped in a paragraph for the OOXML content model
   return {
@@ -506,13 +503,56 @@ function convertInlineImage(node: MdastImage, ctx: MdastConversionContext): Json
   return [
     {
       type: 'image',
-      attrs: {
-        src: node.url,
-        alt: node.alt ?? null,
-        title: node.title ?? null,
-      },
+      attrs: buildImageAttrs(node, ctx),
     },
   ];
+}
+
+function buildImageAttrs(node: MdastImage, ctx: MdastConversionContext): Record<string, unknown> {
+  const attrs: Record<string, unknown> = {
+    src: node.url,
+    alt: node.alt ?? null,
+    title: node.title ?? null,
+    sdImageId: uuidv4(),
+    id: generateUniqueImageDocPrId(ctx),
+  };
+
+  const dimensions = readImageDimensionsFromDataUri(node.url);
+  if (dimensions) {
+    attrs.size = dimensions;
+  }
+
+  return attrs;
+}
+
+function generateUniqueImageDocPrId(ctx: MdastConversionContext): string {
+  const existingIds = getOrCreateImageDocPrIdSet(ctx);
+  let candidate = '';
+
+  do {
+    const hex = generateDocxRandomId();
+    candidate = String(parseInt(hex, 16));
+  } while (!candidate || existingIds.has(candidate));
+
+  existingIds.add(candidate);
+  return candidate;
+}
+
+function getOrCreateImageDocPrIdSet(ctx: MdastConversionContext): Set<string> {
+  const cached = imageDocPrIdsByContext.get(ctx);
+  if (cached) return cached;
+
+  const existingIds = new Set<string>();
+  ctx.editor?.state?.doc?.descendants((node) => {
+    if (node.type.name !== 'image') return true;
+    if (node.attrs.id !== undefined && node.attrs.id !== null) {
+      existingIds.add(String(node.attrs.id));
+    }
+    return true;
+  });
+
+  imageDocPrIdsByContext.set(ctx, existingIds);
+  return existingIds;
 }
 
 // ---------------------------------------------------------------------------

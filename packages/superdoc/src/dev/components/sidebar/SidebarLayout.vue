@@ -2,6 +2,10 @@
 import { computed } from 'vue';
 
 const props = defineProps({
+  useWebLayout: {
+    type: Boolean,
+    default: false,
+  },
   useWordOverlay: {
     type: Boolean,
     default: false,
@@ -42,6 +46,7 @@ const props = defineProps({
 
 const emit = defineEmits([
   'close',
+  'toggle-web-layout',
   'toggle-overlay',
   'generate-baseline',
   'clear-generated-baseline',
@@ -76,50 +81,73 @@ const closeSidebar = () => {
     </div>
 
     <div class="dev-sidebar__body">
-      <div class="dev-sidebar__actions">
-        <button
-          class="dev-sidebar__button"
-          type="button"
-          :disabled="isGeneratingWordBaseline"
-          @click="emit('generate-baseline')"
-        >
-          {{ isGeneratingWordBaseline ? 'Generating Word Reference...' : 'Generate Word Reference' }}
-        </button>
-        <button class="dev-sidebar__button" type="button" :disabled="!hasWordReference" @click="emit('toggle-overlay')">
-          Word Overlay: {{ useWordOverlay ? 'ON' : 'OFF' }}
-        </button>
-        <button
-          v-if="generatedCount > 0"
-          class="dev-sidebar__button"
-          type="button"
-          :disabled="isGeneratingWordBaseline"
-          @click="emit('clear-generated-baseline')"
-        >
-          Clear Generated Reference
-        </button>
-      </div>
+      <section class="dev-sidebar__section">
+        <h4 class="dev-sidebar__section-title">
+          <span class="dev-sidebar__section-icon dev-sidebar__section-icon--layout" aria-hidden="true">▦</span>
+          <span>Layout</span>
+        </h4>
+        <div class="dev-sidebar__actions">
+          <button class="dev-sidebar__button" type="button" @click="emit('toggle-web-layout')">
+            Turn Web Layout {{ useWebLayout ? 'off' : 'on' }} (reloads)
+          </button>
+        </div>
+      </section>
 
-      <label class="dev-sidebar__label">
-        <span>Opacity {{ wordOverlayOpacityLabel }}</span>
-        <input v-model.number="opacityModel" type="range" min="0" max="1" step="0.01" />
-      </label>
+      <section v-if="!useWebLayout" class="dev-sidebar__section">
+        <h4 class="dev-sidebar__section-title">
+          <span class="dev-sidebar__section-icon dev-sidebar__section-icon--word" aria-hidden="true">W</span>
+          <span>MS Word</span>
+        </h4>
+        <div class="dev-sidebar__actions">
+          <button
+            class="dev-sidebar__button"
+            type="button"
+            :disabled="isGeneratingWordBaseline"
+            @click="emit('generate-baseline')"
+          >
+            {{ isGeneratingWordBaseline ? 'Generating Word Reference...' : 'Generate Word Reference' }}
+          </button>
+          <button
+            class="dev-sidebar__button"
+            type="button"
+            :disabled="!hasWordReference"
+            @click="emit('toggle-overlay')"
+          >
+            Word Overlay: {{ useWordOverlay ? 'ON' : 'OFF' }}
+          </button>
+          <button
+            v-if="generatedCount > 0"
+            class="dev-sidebar__button"
+            type="button"
+            :disabled="isGeneratingWordBaseline"
+            @click="emit('clear-generated-baseline')"
+          >
+            Clear Generated Reference
+          </button>
+        </div>
 
-      <label class="dev-sidebar__label">
-        <span>Blend</span>
-        <select v-model="blendModeModel">
-          <option value="difference">difference</option>
-          <option value="normal">normal</option>
-          <option value="multiply">multiply</option>
-          <option value="screen">screen</option>
-          <option value="overlay">overlay</option>
-        </select>
-      </label>
+        <label class="dev-sidebar__label">
+          <span>Opacity {{ wordOverlayOpacityLabel }}</span>
+          <input v-model.number="opacityModel" type="range" min="0" max="1" step="0.01" />
+        </label>
 
-      <p v-if="wordBaselineStatus" class="dev-sidebar__status">{{ wordBaselineStatus }}</p>
-      <p v-else-if="wordBaselineError" class="dev-sidebar__error">{{ wordBaselineError }}</p>
-      <p v-else-if="!wordOverlayAvailable" class="dev-sidebar__hint">
-        Overlay inactive (generate reference + layout engine).
-      </p>
+        <label class="dev-sidebar__label">
+          <span>Blend</span>
+          <select v-model="blendModeModel">
+            <option value="difference">difference</option>
+            <option value="normal">normal</option>
+            <option value="multiply">multiply</option>
+            <option value="screen">screen</option>
+            <option value="overlay">overlay</option>
+          </select>
+        </label>
+
+        <p v-if="wordBaselineStatus" class="dev-sidebar__status">{{ wordBaselineStatus }}</p>
+        <p v-else-if="wordBaselineError" class="dev-sidebar__error">{{ wordBaselineError }}</p>
+        <p v-else-if="!wordOverlayAvailable" class="dev-sidebar__hint">
+          Overlay inactive (generate reference + layout engine).
+        </p>
+      </section>
     </div>
   </div>
 </template>
@@ -169,6 +197,51 @@ const closeSidebar = () => {
 .dev-sidebar__body {
   display: grid;
   gap: 12px;
+}
+
+.dev-sidebar__section {
+  display: grid;
+  gap: 10px;
+}
+
+.dev-sidebar__section + .dev-sidebar__section {
+  border-top: 1px solid rgba(148, 163, 184, 0.45);
+  margin-top: 4px;
+  padding-top: 18px;
+}
+
+.dev-sidebar__section-title {
+  margin: 0;
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 15px;
+  font-weight: 700;
+  color: #1e293b;
+}
+
+.dev-sidebar__section-icon {
+  width: 16px;
+  height: 16px;
+  border-radius: 4px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 10px;
+  font-weight: 700;
+  line-height: 1;
+}
+
+.dev-sidebar__section-icon--layout {
+  border: 1px solid rgba(59, 130, 246, 0.5);
+  color: #1d4ed8;
+  background: rgba(59, 130, 246, 0.12);
+}
+
+.dev-sidebar__section-icon--word {
+  border: 1px solid rgba(37, 99, 235, 0.6);
+  color: #ffffff;
+  background: #2563eb;
 }
 
 .dev-sidebar__actions {

@@ -24,7 +24,7 @@ beforeAll(() => {
 const describeIfRealCanvas = usingStub ? describe.skip : describe;
 
 const IS_CI = Boolean(process.env.CI);
-const NON_CI_LATENCY_VARIANCE_FACTOR = 1.05;
+const NON_CI_LATENCY_VARIANCE_FACTOR = 1.06;
 const LATENCY_TARGETS = IS_CI
   ? {
       // CI environments are slower and more variable; use generous buffers

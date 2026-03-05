@@ -1,0 +1,187 @@
+---
+title: clearContent
+sidebarTitle: clearContent
+description: Clear all document body content, leaving a single empty paragraph.
+---
+
+{/* GENERATED FILE: DO NOT EDIT. Regenerate via `pnpm run docapi:sync`. */}
+
+> Alpha: Document API is currently alpha and subject to breaking changes.
+
+## Summary
+
+Clear all document body content, leaving a single empty paragraph.
+
+- Operation ID: `clearContent`
+- API member path: `editor.doc.clearContent(...)`
+- Mutates document: `yes`
+- Idempotency: `conditional`
+- Supports tracked mode: `no`
+- Supports dry run: `no`
+- Deterministic target resolution: `yes`
+
+## Expected result
+
+Returns a Receipt with success status; reports NO_OP if the document is already empty.
+
+## Input fields
+
+_No fields._
+
+### Example request
+
+```json
+{}
+```
+
+## Output fields
+
+### Variant 1 (success=true)
+
+| Field | Type | Required | Description |
+| --- | --- | --- | --- |
+| `inserted` | EntityAddress[] | no |  |
+| `removed` | EntityAddress[] | no |  |
+| `success` | `true` | yes | Constant: `true` |
+| `updated` | EntityAddress[] | no |  |
+
+### Variant 2 (success=false)
+
+| Field | Type | Required | Description |
+| --- | --- | --- | --- |
+| `failure` | object | yes |  |
+| `failure.code` | enum | yes | `"NO_OP"` |
+| `failure.details` | any | no |  |
+| `failure.message` | string | yes |  |
+| `success` | `false` | yes | Constant: `false` |
+
+### Example response
+
+```json
+{
+  "inserted": [
+    {
+      "entityId": "entity-789",
+      "entityType": "comment",
+      "kind": "entity"
+    }
+  ],
+  "success": true,
+  "updated": [
+    {
+      "entityId": "entity-789",
+      "entityType": "comment",
+      "kind": "entity"
+    }
+  ]
+}
+```
+
+## Pre-apply throws
+
+- `CAPABILITY_UNAVAILABLE`
+
+## Non-applied failure codes
+
+- `NO_OP`
+
+## Raw schemas
+
+<Accordion title="Raw input schema">
+```json
+{
+  "additionalProperties": false,
+  "properties": {},
+  "type": "object"
+}
+```
+</Accordion>
+
+<Accordion title="Raw output schema">
+```json
+{
+  "oneOf": [
+    {
+      "$ref": "#/$defs/ReceiptSuccess"
+    },
+    {
+      "additionalProperties": false,
+      "properties": {
+        "failure": {
+          "additionalProperties": false,
+          "properties": {
+            "code": {
+              "enum": [
+                "NO_OP"
+              ]
+            },
+            "details": {},
+            "message": {
+              "type": "string"
+            }
+          },
+          "required": [
+            "code",
+            "message"
+          ],
+          "type": "object"
+        },
+        "success": {
+          "const": false
+        }
+      },
+      "required": [
+        "success",
+        "failure"
+      ],
+      "type": "object"
+    }
+  ]
+}
+```
+</Accordion>
+
+<Accordion title="Raw success schema">
+```json
+{
+  "$ref": "#/$defs/ReceiptSuccess"
+}
+```
+</Accordion>
+
+<Accordion title="Raw failure schema">
+```json
+{
+  "additionalProperties": false,
+  "properties": {
+    "failure": {
+      "additionalProperties": false,
+      "properties": {
+        "code": {
+          "enum": [
+            "NO_OP"
+          ]
+        },
+        "details": {},
+        "message": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "code",
+        "message"
+      ],
+      "type": "object"
+    },
+    "success": {
+      "const": false
+    }
+  },
+  "required": [
+    "success",
+    "failure"
+  ],
+  "type": "object"
+}
+```
+</Accordion>

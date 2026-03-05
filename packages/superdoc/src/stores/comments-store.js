@@ -337,8 +337,11 @@ export const useCommentsStore = defineStore('comments', () => {
       const existing = commentsList.value.find((c) => c.commentId === changeId);
       if (existing) {
         // Already exists (e.g. created during batch import) — update instead of duplicating
-        existing.trackedChangeText = trackedChangeText;
-        if (deletedText) existing.deletedText = deletedText;
+        // Partial resolution can turn a replacement into insert-only/delete-only, so
+        // clear fields explicitly when the updated payload no longer includes them.
+        existing.trackedChangeText = trackedChangeText ?? null;
+        existing.trackedChangeType = trackedChangeType ?? null;
+        existing.deletedText = deletedText ?? null;
 
         const emitData = {
           type: COMMENT_EVENTS.UPDATE,
@@ -355,11 +358,11 @@ export const useCommentsStore = defineStore('comments', () => {
       const existingTrackedChange = commentsList.value.find((comment) => comment.commentId === changeId);
       if (!existingTrackedChange) return;
 
-      existingTrackedChange.trackedChangeText = trackedChangeText;
-
-      if (deletedText) {
-        existingTrackedChange.deletedText = deletedText;
-      }
+      // Partial resolution can turn a replacement into insert-only/delete-only, so
+      // clear fields explicitly when the updated payload no longer includes them.
+      existingTrackedChange.trackedChangeText = trackedChangeText ?? null;
+      existingTrackedChange.trackedChangeType = trackedChangeType ?? null;
+      existingTrackedChange.deletedText = deletedText ?? null;
 
       const emitData = {
         type: COMMENT_EVENTS.UPDATE,

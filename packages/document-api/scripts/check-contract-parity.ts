@@ -145,15 +145,12 @@ function createNoopAdapters(): DocumentApiAdapters {
       list: () => ({ evaluatedRevision: '', total: 0, items: [], page: { limit: 50, offset: 0, returned: 0 } }),
       get: () => ({
         address: { kind: 'block', nodeType: 'listItem', nodeId: 'li-1' },
+        listId: 'list-1',
       }),
       insert: () => ({
         success: true,
         item: { kind: 'block', nodeType: 'listItem', nodeId: 'li-2' },
         insertionPoint: { kind: 'text', blockId: 'li-2', range: { start: 0, end: 0 } },
-      }),
-      setType: () => ({
-        success: true,
-        item: { kind: 'block', nodeType: 'listItem', nodeId: 'li-1' },
       }),
       indent: () => ({
         success: true,
@@ -163,13 +160,93 @@ function createNoopAdapters(): DocumentApiAdapters {
         success: true,
         item: { kind: 'block', nodeType: 'listItem', nodeId: 'li-1' },
       }),
-      restart: () => ({
+      create: () => ({
+        success: true,
+        listId: 'list-new',
+        item: { kind: 'block', nodeType: 'listItem', nodeId: 'li-new' },
+      }),
+      attach: () => ({
         success: true,
         item: { kind: 'block', nodeType: 'listItem', nodeId: 'li-1' },
       }),
-      exit: () => ({
+      detach: () => ({
         success: true,
         paragraph: { kind: 'block', nodeType: 'paragraph', nodeId: 'p3' },
+      }),
+      join: () => ({
+        success: true,
+        listId: 'list-1',
+      }),
+      canJoin: () => ({ canJoin: true }),
+      separate: () => ({
+        success: true,
+        listId: 'list-new',
+        numId: 2,
+      }),
+      setLevel: () => ({
+        success: true,
+        item: { kind: 'block', nodeType: 'listItem', nodeId: 'li-1' },
+      }),
+      setValue: () => ({
+        success: true,
+        item: { kind: 'block', nodeType: 'listItem', nodeId: 'li-1' },
+      }),
+      continuePrevious: () => ({
+        success: true,
+        item: { kind: 'block', nodeType: 'listItem', nodeId: 'li-1' },
+      }),
+      canContinuePrevious: () => ({ canContinue: true }),
+      setLevelRestart: () => ({
+        success: true,
+        item: { kind: 'block', nodeType: 'listItem', nodeId: 'li-1' },
+      }),
+      convertToText: () => ({
+        success: true,
+        paragraph: { kind: 'block', nodeType: 'paragraph', nodeId: 'p3' },
+      }),
+      applyTemplate: () => ({
+        success: true,
+        item: { kind: 'block', nodeType: 'listItem', nodeId: 'li-1' },
+      }),
+      applyPreset: () => ({
+        success: true,
+        item: { kind: 'block', nodeType: 'listItem', nodeId: 'li-1' },
+      }),
+      captureTemplate: () => ({
+        success: true,
+        template: { version: 1, levels: [] },
+      }),
+      setLevelNumbering: () => ({
+        success: true,
+        item: { kind: 'block', nodeType: 'listItem', nodeId: 'li-1' },
+      }),
+      setLevelBullet: () => ({
+        success: true,
+        item: { kind: 'block', nodeType: 'listItem', nodeId: 'li-1' },
+      }),
+      setLevelPictureBullet: () => ({
+        success: true,
+        item: { kind: 'block', nodeType: 'listItem', nodeId: 'li-1' },
+      }),
+      setLevelAlignment: () => ({
+        success: true,
+        item: { kind: 'block', nodeType: 'listItem', nodeId: 'li-1' },
+      }),
+      setLevelIndents: () => ({
+        success: true,
+        item: { kind: 'block', nodeType: 'listItem', nodeId: 'li-1' },
+      }),
+      setLevelTrailingCharacter: () => ({
+        success: true,
+        item: { kind: 'block', nodeType: 'listItem', nodeId: 'li-1' },
+      }),
+      setLevelMarkerFont: () => ({
+        success: true,
+        item: { kind: 'block', nodeType: 'listItem', nodeId: 'li-1' },
+      }),
+      clearLevelOverrides: () => ({
+        success: true,
+        item: { kind: 'block', nodeType: 'listItem', nodeId: 'li-1' },
       }),
     },
   };

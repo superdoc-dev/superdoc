@@ -34,7 +34,12 @@ import type {
   NestedConverters,
   TableNodeToBlockParams,
 } from '../types.js';
-import { extractTableBorders, extractCellPadding, convertBorderSpec, normalizeShadingColor  } from '../attributes/index.js';
+import {
+  extractTableBorders,
+  extractCellPadding,
+  convertBorderSpec,
+  normalizeShadingColor,
+} from '../attributes/index.js';
 import { pickNumber, twipsToPx } from '../utilities.js';
 import { hydrateTableStyleAttrs } from './table-styles.js';
 import { collectTrackedChangeFromMarks } from '../marks/index.js';

@@ -228,6 +228,22 @@ export function writeSectPrPageSetup(sectPr: XmlElement, setup: SectionPageSetup
   if (setup.height !== undefined) setStringAttr(pgSz, 'w:h', toTwipsString(setup.height));
   if (setup.orientation !== undefined) setStringAttr(pgSz, 'w:orient', setup.orientation);
   if (setup.paperSize !== undefined) setStringAttr(pgSz, 'w:code', setup.paperSize);
+
+  // Keep page geometry consistent with orientation when dimensions are known.
+  // Word and the layout engine primarily honor w:w / w:h for page geometry.
+  // If orientation flips without swapping these values, the visible page can remain unchanged.
+  if (setup.orientation !== undefined) {
+    const widthTwips = toNumber(pgSz.attributes?.['w:w']);
+    const heightTwips = toNumber(pgSz.attributes?.['w:h']);
+    if (widthTwips == null || heightTwips == null) return;
+
+    const isLandscapeDimensions = widthTwips > heightTwips;
+    const wantsLandscape = setup.orientation === 'landscape';
+    if (isLandscapeDimensions === wantsLandscape) return;
+
+    setStringAttr(pgSz, 'w:w', String(heightTwips));
+    setStringAttr(pgSz, 'w:h', String(widthTwips));
+  }
 }
 
 export function readSectPrColumns(sectPr: XmlElement): SectionColumns | undefined {

@@ -1790,6 +1790,13 @@ export interface PositionMapping {
   readonly maps: readonly unknown[];
 }
 
+/**
+ * Rendering flow mode.
+ * - `paginated`: discrete page surfaces
+ * - `semantic`: continuous flow surface
+ */
+export type FlowMode = 'paginated' | 'semantic';
+
 export interface PainterDOM {
   paint(layout: Layout, mount: HTMLElement, mapping?: PositionMapping): void;
   /**

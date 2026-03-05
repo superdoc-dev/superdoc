@@ -606,6 +606,44 @@ describe('SuperDoc.vue', () => {
     expect(existingComment.docxCommentJSON).toEqual(updatedElements);
   });
 
+  it('updates replayed parent linkage fields for existing comments', async () => {
+    const superdocStub = createSuperdocStub();
+    const wrapper = await mountComponent(superdocStub);
+    await nextTick();
+    const { default: useComment } = await import('./components/CommentsLayer/use-comment.js');
+
+    const options = wrapper.findComponent(SuperEditorStub).props('options');
+    const existingComment = useComment({
+      commentId: 'reply-1',
+      importedId: 'imp-reply-1',
+      parentCommentId: 'parent-old',
+      trackedChangeParentId: 'tc-parent-old',
+      fileId: 'doc-1',
+      commentText: 'Reply',
+      creatorEmail: 'ada@example.com',
+      creatorName: 'Ada',
+    });
+    commentsStoreStub.commentsList.value = [existingComment];
+    commentsStoreStub.addComment.mockClear();
+    superdocStub.activeEditor = { options: { documentId: 'doc-1' } };
+
+    options.onCommentsUpdate({
+      type: 'update',
+      comment: {
+        commentId: 'reply-1',
+        importedId: 'imp-reply-1',
+        parentCommentId: 'parent-new',
+        trackedChangeParentId: 'tc-parent-new',
+        threadingParentCommentId: 'thread-parent-new',
+      },
+    });
+
+    expect(commentsStoreStub.addComment).not.toHaveBeenCalled();
+    expect(existingComment.parentCommentId).toBe('parent-new');
+    expect(existingComment.trackedChangeParentId).toBe('tc-parent-new');
+    expect(existingComment.threadingParentCommentId).toBe('thread-parent-new');
+  });
+
   it('maps replayed isDone updates to resolved fields when explicit resolved metadata is missing', async () => {
     const superdocStub = createSuperdocStub();
     const wrapper = await mountComponent(superdocStub);

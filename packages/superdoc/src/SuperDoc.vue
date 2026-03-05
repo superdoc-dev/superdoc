@@ -664,6 +664,9 @@ const onEditorCommentLocationsUpdate = (doc, { allCommentIds: activeThreadId, al
 const REPLAY_MUTABLE_COMMENT_FIELDS = new Set([
   'commentText',
   'isInternal',
+  'parentCommentId',
+  'trackedChangeParentId',
+  'threadingParentCommentId',
   'trackedChange',
   'trackedChangeType',
   'trackedChangeText',

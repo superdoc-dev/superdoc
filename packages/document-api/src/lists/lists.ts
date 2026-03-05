@@ -41,6 +41,7 @@ import type {
   ListsSetLevelTrailingCharacterInput,
   ListsSetLevelMarkerFontInput,
   ListsClearLevelOverridesInput,
+  ListsSetTypeInput,
 } from './lists.types.js';
 
 export type {
@@ -83,6 +84,7 @@ export type {
   ListsSetLevelTrailingCharacterInput,
   ListsSetLevelMarkerFontInput,
   ListsClearLevelOverridesInput,
+  ListsSetTypeInput,
 } from './lists.types.js';
 
 /**
@@ -137,15 +139,12 @@ export interface ListsAdapter {
   ): ListsMutateItemResult;
   setLevelMarkerFont(input: ListsSetLevelMarkerFontInput, options?: MutationOptions): ListsMutateItemResult;
   clearLevelOverrides(input: ListsClearLevelOverridesInput, options?: MutationOptions): ListsMutateItemResult;
+
+  // SD-2052 compound operation
+  setType(input: ListsSetTypeInput, options?: MutationOptions): ListsMutateItemResult;
 }
 
-export type ListsApi = ListsAdapter & {
-  /** Convenience wrapper — maps ordered/bullet to the default preset via `lists.applyPreset`. */
-  setType(
-    input: { target: ListsApplyPresetInput['target']; kind: 'ordered' | 'bullet' },
-    options?: MutationOptions,
-  ): ListsMutateItemResult;
-};
+export type ListsApi = ListsAdapter;
 
 // ---------------------------------------------------------------------------
 // Execute wrappers — discovery
@@ -396,4 +395,13 @@ export function executeListsClearLevelOverrides(
 ): ListsMutateItemResult {
   validateListTarget(input, 'lists.clearLevelOverrides');
   return adapter.clearLevelOverrides(input, normalizeMutationOptions(options));
+}
+
+export function executeListsSetType(
+  adapter: ListsAdapter,
+  input: ListsSetTypeInput,
+  options?: MutationOptions,
+): ListsMutateItemResult {
+  validateListTarget(input, 'lists.setType');
+  return adapter.setType(input, normalizeMutationOptions(options));
 }

@@ -30,6 +30,6 @@ export const REFERENCE_OPERATION_ALIASES: readonly ReferenceAliasDefinition[] = 
     canonicalOperationId: 'lists.applyPreset',
     referenceGroup: 'lists',
     description:
-      'Convenience wrapper that maps a simple kind (ordered/bullet) to the default preset via `lists.applyPreset`.',
+      'Compound operation that converts a list to ordered/bullet and merges adjacent compatible sequences to preserve continuous numbering.',
   },
 ] as const;

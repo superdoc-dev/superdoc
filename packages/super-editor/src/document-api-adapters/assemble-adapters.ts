@@ -64,6 +64,7 @@ import {
 import {
   listsApplyTemplateWrapper,
   listsApplyPresetWrapper,
+  listsSetTypeWrapper,
   listsCaptureTemplateWrapper,
   listsSetLevelNumberingWrapper,
   listsSetLevelBulletWrapper,
@@ -319,6 +320,7 @@ export function assembleDocumentApiAdapters(editor: Editor): DocumentApiAdapters
       setLevelTrailingCharacter: (input, options) => listsSetLevelTrailingCharacterWrapper(editor, input, options),
       setLevelMarkerFont: (input, options) => listsSetLevelMarkerFontWrapper(editor, input, options),
       clearLevelOverrides: (input, options) => listsClearLevelOverridesWrapper(editor, input, options),
+      setType: (input, options) => listsSetTypeWrapper(editor, input, options),
     },
     sections: {
       list: (query) => sectionsListAdapter(editor, query),

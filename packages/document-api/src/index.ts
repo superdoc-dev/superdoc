@@ -121,6 +121,7 @@ import type {
   ListsSetLevelTrailingCharacterInput,
   ListsSetLevelMarkerFontInput,
   ListsClearLevelOverridesInput,
+  ListsSetTypeInput,
 } from './lists/lists.types.js';
 import {
   executeListsGet,
@@ -151,6 +152,7 @@ import {
   executeListsSetLevelTrailingCharacter,
   executeListsSetLevelMarkerFont,
   executeListsClearLevelOverrides,
+  executeListsSetType,
 } from './lists/lists.js';
 import { executeReplace, type ReplaceInput } from './replace/replace.js';
 import type { CreateAdapter, CreateApi } from './create/create.js';
@@ -741,6 +743,7 @@ export type {
   ListsSetLevelTrailingCharacterInput,
   ListsSetLevelMarkerFontInput,
   ListsClearLevelOverridesInput,
+  ListsSetTypeInput,
 } from './lists/lists.types.js';
 export {
   LIST_KINDS,
@@ -1445,20 +1448,8 @@ export function createDocumentApi(adapters: DocumentApiAdapters): DocumentApi {
         return executeListsClearLevelOverrides(adapters.lists, input, options);
       },
 
-      // Convenience wrapper — not a canonical operation
-      setType(
-        input: { target: ListsApplyPresetInput['target']; kind: 'ordered' | 'bullet' },
-        options?: MutationOptions,
-      ): ListsMutateItemResult {
-        const presetMap: Record<string, ListsApplyPresetInput['preset']> = {
-          ordered: 'decimal',
-          bullet: 'disc',
-        };
-        return executeListsApplyPreset(
-          adapters.lists,
-          { target: input.target, preset: presetMap[input.kind] },
-          options,
-        );
+      setType(input: ListsSetTypeInput, options?: MutationOptions): ListsMutateItemResult {
+        return executeListsSetType(adapters.lists, input, options);
       },
     },
     sections: {

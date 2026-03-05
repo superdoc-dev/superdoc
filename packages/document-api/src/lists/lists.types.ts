@@ -256,6 +256,15 @@ export interface ListsApplyPresetInput {
   levels?: number[];
 }
 
+export interface ListsSetTypeInput {
+  target: ListItemAddress;
+  kind: ListKind;
+  /** Controls whether adjacent sequences of the same kind are merged after conversion.
+   *  - `'preserve'` (default): merge adjacent compatible sequences to maintain continuous numbering.
+   *  - `'none'`: only apply the preset, do not merge sequences. */
+  continuity?: 'preserve' | 'none';
+}
+
 export interface ListsCaptureTemplateInput {
   target: ListItemAddress;
   levels?: number[];

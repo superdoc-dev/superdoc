@@ -2,6 +2,7 @@ import { NodeSelection, Selection, TextSelection } from 'prosemirror-state';
 import { ContextMenuPluginKey } from '@extensions/context-menu/context-menu.js';
 import { CellSelection } from 'prosemirror-tables';
 import { DecorationBridge } from './dom/DecorationBridge.js';
+import { SdtSelectionStyleManager } from './selection/SdtSelectionStyleManager.js';
 import type { EditorState, Transaction } from 'prosemirror-state';
 import type { Node as ProseMirrorNode, Mark } from 'prosemirror-model';
 import type { Mapping } from 'prosemirror-transform';
@@ -329,22 +330,7 @@ export class PresentationEditor extends EventEmitter {
   #ariaLiveRegion: HTMLElement | null = null;
   #a11ySelectionAnnounceTimeout: number | null = null;
   #a11yLastAnnouncedSelectionKey: string | null = null;
-  #lastSelectedFieldAnnotation: {
-    element: HTMLElement;
-    pmStart: number;
-  } | null = null;
-  #lastSelectedStructuredContentBlock: {
-    id: string | null;
-    elements: HTMLElement[];
-  } | null = null;
-  #lastSelectedStructuredContentInline: {
-    id: string | null;
-    elements: HTMLElement[];
-  } | null = null;
-  #lastHoveredStructuredContentBlock: {
-    id: string | null;
-    elements: HTMLElement[];
-  } | null = null;
+  #sdtStyles!: SdtSelectionStyleManager;
 
   // Remote cursor/presence state management
   /** Manager for remote cursor rendering and awareness subscriptions */
@@ -443,9 +429,13 @@ export class PresentationEditor extends EventEmitter {
     this.#painterHost.style.transformOrigin = 'top left';
     this.#viewportHost.appendChild(this.#painterHost);
 
-    // Add event listeners for structured content hover coordination
-    this.#painterHost.addEventListener('mouseover', this.#handleStructuredContentBlockMouseEnter);
-    this.#painterHost.addEventListener('mouseout', this.#handleStructuredContentBlockMouseLeave);
+    // SDT selection/hover styling manager
+    this.#sdtStyles = new SdtSelectionStyleManager({
+      painterHost: this.#painterHost,
+      getElementAtPos: (pos, opts) => this.getElementAtPos(pos, opts),
+    });
+    this.#painterHost.addEventListener('mouseover', this.#sdtStyles.handleMouseEnter);
+    this.#painterHost.addEventListener('mouseout', this.#sdtStyles.handleMouseLeave);
 
     const win = this.#visibleHost?.ownerDocument?.defaultView ?? window;
     this.#domIndexObserverManager = new DomPositionIndexObserverManager({
@@ -3854,307 +3844,6 @@ export class PresentationEditor extends EventEmitter {
     this.#selectionSync.requestRender(options);
   }
 
-  #clearSelectedFieldAnnotationClass() {
-    if (this.#lastSelectedFieldAnnotation?.element?.classList?.contains('ProseMirror-selectednode')) {
-      this.#lastSelectedFieldAnnotation.element.classList.remove('ProseMirror-selectednode');
-    }
-    this.#lastSelectedFieldAnnotation = null;
-  }
-
-  #setSelectedFieldAnnotationClass(element: HTMLElement, pmStart: number) {
-    if (this.#lastSelectedFieldAnnotation?.element && this.#lastSelectedFieldAnnotation.element !== element) {
-      this.#lastSelectedFieldAnnotation.element.classList.remove('ProseMirror-selectednode');
-    }
-    element.classList.add('ProseMirror-selectednode');
-    this.#lastSelectedFieldAnnotation = { element, pmStart };
-  }
-
-  #syncSelectedFieldAnnotationClass(selection: Selection | null | undefined) {
-    if (!selection || !(selection instanceof NodeSelection)) {
-      this.#clearSelectedFieldAnnotationClass();
-      return;
-    }
-
-    const node = selection.node;
-    if (!node || node.type?.name !== 'fieldAnnotation') {
-      this.#clearSelectedFieldAnnotationClass();
-      return;
-    }
-
-    if (!this.#painterHost) {
-      this.#clearSelectedFieldAnnotationClass();
-      return;
-    }
-
-    const pmStart = selection.from;
-    if (this.#lastSelectedFieldAnnotation?.pmStart === pmStart && this.#lastSelectedFieldAnnotation.element) {
-      return;
-    }
-
-    const selector = `.annotation[data-pm-start="${pmStart}"]`;
-    const element = this.#painterHost.querySelector(selector) as HTMLElement | null;
-    if (!element) {
-      this.#clearSelectedFieldAnnotationClass();
-      return;
-    }
-
-    this.#setSelectedFieldAnnotationClass(element, pmStart);
-  }
-
-  #clearSelectedStructuredContentBlockClass() {
-    if (!this.#lastSelectedStructuredContentBlock) return;
-    this.#lastSelectedStructuredContentBlock.elements.forEach((element) => {
-      element.classList.remove('ProseMirror-selectednode');
-    });
-    this.#lastSelectedStructuredContentBlock = null;
-  }
-
-  #setSelectedStructuredContentBlockClass(elements: HTMLElement[], id: string | null) {
-    if (
-      this.#lastSelectedStructuredContentBlock &&
-      this.#lastSelectedStructuredContentBlock.id === id &&
-      this.#lastSelectedStructuredContentBlock.elements.length === elements.length &&
-      this.#lastSelectedStructuredContentBlock.elements.every((el) => elements.includes(el))
-    ) {
-      return;
-    }
-
-    this.#clearSelectedStructuredContentBlockClass();
-    elements.forEach((element) => element.classList.add('ProseMirror-selectednode'));
-    this.#lastSelectedStructuredContentBlock = { id, elements };
-  }
-
-  #syncSelectedStructuredContentBlockClass(selection: Selection | null | undefined) {
-    if (!selection) {
-      this.#clearSelectedStructuredContentBlockClass();
-      return;
-    }
-
-    let node: ProseMirrorNode | null = null;
-    let id: string | null = null;
-
-    if (selection instanceof NodeSelection) {
-      if (selection.node?.type?.name !== 'structuredContentBlock') {
-        this.#clearSelectedStructuredContentBlockClass();
-        return;
-      }
-      node = selection.node;
-    } else {
-      const $pos = (selection as Selection & { $from?: { depth?: number; node?: (depth: number) => ProseMirrorNode } })
-        .$from;
-      if (!$pos || typeof $pos.depth !== 'number' || typeof $pos.node !== 'function') {
-        this.#clearSelectedStructuredContentBlockClass();
-        return;
-      }
-      for (let depth = $pos.depth; depth > 0; depth--) {
-        const candidate = $pos.node(depth);
-        if (candidate.type?.name === 'structuredContentBlock') {
-          node = candidate;
-          break;
-        }
-      }
-      if (!node) {
-        this.#clearSelectedStructuredContentBlockClass();
-        return;
-      }
-    }
-
-    if (!this.#painterHost) {
-      this.#clearSelectedStructuredContentBlockClass();
-      return;
-    }
-
-    const rawId = (node.attrs as { id?: unknown } | null | undefined)?.id;
-    id = rawId != null ? String(rawId) : null;
-    let elements: HTMLElement[] = [];
-
-    if (id) {
-      const escapedId = typeof CSS !== 'undefined' && CSS.escape ? CSS.escape(id) : id.replace(/"/g, '\\"');
-      elements = Array.from(
-        this.#painterHost.querySelectorAll(`.superdoc-structured-content-block[data-sdt-id="${escapedId}"]`),
-      ) as HTMLElement[];
-    }
-
-    if (elements.length === 0) {
-      const elementAtPos = this.getElementAtPos(selection.from, { fallbackToCoords: true });
-      const container = elementAtPos?.closest?.('.superdoc-structured-content-block') as HTMLElement | null;
-      if (container) {
-        elements = [container];
-      }
-    }
-
-    if (elements.length === 0) {
-      this.#clearSelectedStructuredContentBlockClass();
-      return;
-    }
-
-    this.#setSelectedStructuredContentBlockClass(elements, id);
-  }
-
-  #handleStructuredContentBlockMouseEnter = (event: MouseEvent) => {
-    const target = event.target as HTMLElement;
-    const block = target.closest('.superdoc-structured-content-block');
-
-    if (!block || !(block instanceof HTMLElement)) return;
-
-    // Don't show hover effect if already selected
-    if (block.classList.contains('ProseMirror-selectednode')) return;
-
-    const rawId = block.dataset.sdtId;
-    if (!rawId) return;
-
-    this.#setHoveredStructuredContentBlockClass(rawId);
-  };
-
-  #handleStructuredContentBlockMouseLeave = (event: MouseEvent) => {
-    const target = event.target as HTMLElement;
-    const block = target.closest('.superdoc-structured-content-block') as HTMLElement | null;
-
-    if (!block) return;
-
-    const relatedTarget = event.relatedTarget as HTMLElement | null;
-    if (
-      relatedTarget &&
-      block.dataset.sdtId &&
-      relatedTarget.closest(`.superdoc-structured-content-block[data-sdt-id="${block.dataset.sdtId}"]`)
-    ) {
-      return;
-    }
-
-    this.#clearHoveredStructuredContentBlockClass();
-  };
-
-  #clearHoveredStructuredContentBlockClass() {
-    if (!this.#lastHoveredStructuredContentBlock) return;
-    this.#lastHoveredStructuredContentBlock.elements.forEach((element) => {
-      element.classList.remove('sdt-group-hover');
-    });
-    this.#lastHoveredStructuredContentBlock = null;
-  }
-
-  #setHoveredStructuredContentBlockClass(id: string) {
-    if (this.#lastHoveredStructuredContentBlock?.id === id) return;
-
-    this.#clearHoveredStructuredContentBlockClass();
-
-    if (!this.#painterHost) return;
-
-    const escapedId = typeof CSS !== 'undefined' && CSS.escape ? CSS.escape(id) : id.replace(/"/g, '\\"');
-    const elements = Array.from(
-      this.#painterHost.querySelectorAll(`.superdoc-structured-content-block[data-sdt-id="${escapedId}"]`),
-    ) as HTMLElement[];
-
-    if (elements.length === 0) return;
-
-    elements.forEach((element) => {
-      if (!element.classList.contains('ProseMirror-selectednode')) {
-        element.classList.add('sdt-group-hover');
-      }
-    });
-
-    this.#lastHoveredStructuredContentBlock = { id, elements };
-  }
-
-  #clearSelectedStructuredContentInlineClass() {
-    if (!this.#lastSelectedStructuredContentInline) return;
-    this.#lastSelectedStructuredContentInline.elements.forEach((element) => {
-      element.classList.remove('ProseMirror-selectednode');
-    });
-    this.#lastSelectedStructuredContentInline = null;
-  }
-
-  #setSelectedStructuredContentInlineClass(elements: HTMLElement[], id: string | null) {
-    if (
-      this.#lastSelectedStructuredContentInline &&
-      this.#lastSelectedStructuredContentInline.id === id &&
-      this.#lastSelectedStructuredContentInline.elements.length === elements.length &&
-      this.#lastSelectedStructuredContentInline.elements.every((el) => elements.includes(el))
-    ) {
-      return;
-    }
-
-    this.#clearSelectedStructuredContentInlineClass();
-    elements.forEach((element) => element.classList.add('ProseMirror-selectednode'));
-    this.#lastSelectedStructuredContentInline = { id, elements };
-  }
-
-  #syncSelectedStructuredContentInlineClass(selection: Selection | null | undefined) {
-    if (!selection) {
-      this.#clearSelectedStructuredContentInlineClass();
-      return;
-    }
-
-    let node: ProseMirrorNode | null = null;
-    let id: string | null = null;
-    let pos: number | null = null;
-
-    if (selection instanceof NodeSelection) {
-      if (selection.node?.type?.name !== 'structuredContent') {
-        this.#clearSelectedStructuredContentInlineClass();
-        return;
-      }
-      node = selection.node;
-      pos = selection.from;
-    } else {
-      const $pos = (
-        selection as Selection & {
-          $from?: { depth?: number; node?: (depth: number) => ProseMirrorNode; before?: (depth: number) => number };
-        }
-      ).$from;
-      if (!$pos || typeof $pos.depth !== 'number' || typeof $pos.node !== 'function') {
-        this.#clearSelectedStructuredContentInlineClass();
-        return;
-      }
-      for (let depth = $pos.depth; depth > 0; depth--) {
-        const candidate = $pos.node(depth);
-        if (candidate.type?.name === 'structuredContent') {
-          if (typeof $pos.before !== 'function') {
-            this.#clearSelectedStructuredContentInlineClass();
-            return;
-          }
-          node = candidate;
-          pos = $pos.before(depth);
-          break;
-        }
-      }
-      if (!node || pos == null) {
-        this.#clearSelectedStructuredContentInlineClass();
-        return;
-      }
-    }
-
-    if (!this.#painterHost) {
-      this.#clearSelectedStructuredContentInlineClass();
-      return;
-    }
-
-    const rawId = (node.attrs as { id?: unknown } | null | undefined)?.id;
-    id = rawId != null ? String(rawId) : null;
-    let elements: HTMLElement[] = [];
-
-    if (id) {
-      const escapedId = typeof CSS !== 'undefined' && CSS.escape ? CSS.escape(id) : id.replace(/"/g, '\\"');
-      elements = Array.from(
-        this.#painterHost.querySelectorAll(`.superdoc-structured-content-inline[data-sdt-id="${escapedId}"]`),
-      ) as HTMLElement[];
-    }
-
-    if (elements.length === 0) {
-      const elementAtPos = this.getElementAtPos(pos, { fallbackToCoords: true });
-      const container = elementAtPos?.closest?.('.superdoc-structured-content-inline') as HTMLElement | null;
-      if (container) {
-        elements = [container];
-      }
-    }
-
-    if (elements.length === 0) {
-      this.#clearSelectedStructuredContentInlineClass();
-      return;
-    }
-
-    this.#setSelectedStructuredContentInlineClass(elements, id);
-  }
-
   /**
    * Updates the visual cursor/selection overlay to match the current editor selection.
    *
@@ -4185,7 +3874,7 @@ export class PresentationEditor extends EventEmitter {
     // In header/footer mode, the ProseMirror editor handles its own caret
     const sessionMode = this.#headerFooterSession?.session?.mode ?? 'body';
     if (sessionMode !== 'body') {
-      this.#clearSelectedFieldAnnotationClass();
+      this.#sdtStyles.clearFieldAnnotation();
       return;
     }
 
@@ -4197,7 +3886,7 @@ export class PresentationEditor extends EventEmitter {
     // In viewing mode, don't render caret or selection highlights
     if (this.#isViewLocked()) {
       try {
-        this.#clearSelectedFieldAnnotationClass();
+        this.#sdtStyles.clearFieldAnnotation();
         this.#localSelectionLayer.innerHTML = '';
       } catch (error) {
         // DOM manipulation can fail if element is detached or in invalid state
@@ -4222,7 +3911,7 @@ export class PresentationEditor extends EventEmitter {
 
     if (!hasFocus && !contextMenuOpen && !isOnEditorUi) {
       try {
-        this.#clearSelectedFieldAnnotationClass();
+        this.#sdtStyles.clearFieldAnnotation();
         this.#localSelectionLayer.innerHTML = '';
       } catch {}
       return;
@@ -4234,9 +3923,7 @@ export class PresentationEditor extends EventEmitter {
 
     if (!selection) {
       try {
-        this.#clearSelectedFieldAnnotationClass();
-        this.#clearSelectedStructuredContentBlockClass();
-        this.#clearSelectedStructuredContentInlineClass();
+        this.#sdtStyles.clearAll();
         this.#localSelectionLayer.innerHTML = '';
       } catch (error) {
         if (process.env.NODE_ENV === 'development') {
@@ -4259,9 +3946,7 @@ export class PresentationEditor extends EventEmitter {
       return;
     }
 
-    this.#syncSelectedFieldAnnotationClass(selection);
-    this.#syncSelectedStructuredContentBlockClass(selection);
-    this.#syncSelectedStructuredContentInlineClass(selection);
+    this.#sdtStyles.syncAll(selection);
 
     // Ensure selection endpoints remain mounted under virtualization so DOM-first
     // caret/selection rendering stays available during cross-page selection.

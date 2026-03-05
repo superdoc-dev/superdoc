@@ -334,7 +334,7 @@ export interface LayoutPage {
   number: number;
   fragments: LayoutFragment[];
   margins?: PageMargins;
-  size?: { w: number; h: number };
+  size?: PageSize;
   orientation?: 'portrait' | 'landscape';
   sectionIndex?: number;
   footnoteReserved?: number;
@@ -342,7 +342,7 @@ export interface LayoutPage {
 
 /** Final layout output from the layout engine */
 export interface Layout {
-  pageSize: { w: number; h: number };
+  pageSize: PageSize;
   pages: LayoutPage[];
   pageGap?: number;
   layoutEpoch?: number;

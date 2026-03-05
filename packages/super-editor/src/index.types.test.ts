@@ -113,9 +113,6 @@ const PAINT_SNAPSHOT_KEYS = ['formatVersion', 'pageCount', 'lineCount', 'markerC
 /** Expected keys for normalizeClientPoint return type */
 const NORMALIZE_CLIENT_POINT_KEYS = ['x', 'y', 'pageIndex', 'pageLocalY'] as const;
 
-/** Expected keys for coordsAtPos return type */
-const COORDS_AT_POS_KEYS = ['left', 'right', 'top', 'bottom', 'width', 'height'] as const;
-
 /** Expected keys for posAtCoords return type */
 const POS_AT_COORDS_KEYS = ['pos', 'inside'] as const;
 
@@ -414,21 +411,6 @@ function assertNormalizeClientPointShape(value: unknown, context: string): void 
   if (obj.pageLocalY !== undefined) {
     assertType(obj.pageLocalY, 'number', `${context}.pageLocalY`);
   }
-}
-
-function assertCoordsAtPosShape(value: unknown, context: string): void {
-  expect(value).toBeTypeOf('object');
-  expect(value).not.toBeNull();
-  const obj = value as Record<string, unknown>;
-
-  assertExactKeys(obj, [...COORDS_AT_POS_KEYS], context);
-
-  assertType(obj.left, 'number', `${context}.left`);
-  assertType(obj.right, 'number', `${context}.right`);
-  assertType(obj.top, 'number', `${context}.top`);
-  assertType(obj.bottom, 'number', `${context}.bottom`);
-  assertType(obj.width, 'number', `${context}.width`);
-  assertType(obj.height, 'number', `${context}.height`);
 }
 
 function assertPosAtCoordsShape(value: unknown, context: string): void {
@@ -952,7 +934,7 @@ describe('Type Declaration Verification (index.d.ts)', () => {
       await createEditor('type-test-coords-at-pos');
       const result = presentation.coordsAtPos(0);
       if (result !== null) {
-        assertCoordsAtPosShape(result, 'coordsAtPos()');
+        assertBoundingRectShape(result, 'coordsAtPos()');
       } else {
         expect(result).toBeNull();
       }

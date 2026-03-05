@@ -15,6 +15,7 @@ import {
   detectRoomState,
   resolveBootstrapDecision,
   claimBootstrap,
+  clearBootstrapMarker,
   writeBootstrapMarker,
   detectBootstrapRace,
   type RoomState,
@@ -278,6 +279,7 @@ export async function openCollaborativeDocument(
         // seeding here would destructively overwrite existing content.
         const postClaimState = detectRoomState(runtime.ydoc);
         if (postClaimState === 'populated') {
+          clearBootstrapMarker(runtime.ydoc);
           finalRoomState = postClaimState;
           decision = { action: 'join' };
         }

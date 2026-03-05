@@ -160,6 +160,16 @@ export function resolveBootstrapDecision(
 // Bootstrap marker
 // ---------------------------------------------------------------------------
 
+/**
+ * Remove the bootstrap marker from the meta map. Used when a claim winner
+ * discovers the room is already populated and joins instead of seeding —
+ * leaving a stale pending marker would cause future reconnects to
+ * misdetect the room as empty (SD-2138).
+ */
+export function clearBootstrapMarker(ydoc: YDoc): void {
+  ydoc.getMap('meta').delete('bootstrap');
+}
+
 export function writeBootstrapMarker(ydoc: YDoc, source: string): void {
   const metaMap = ydoc.getMap('meta');
   const marker: BootstrapMarker = {

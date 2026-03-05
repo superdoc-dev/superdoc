@@ -7,6 +7,7 @@ import {
   detectRoomState,
   resolveBootstrapDecision,
   writeBootstrapMarker,
+  clearBootstrapMarker,
   claimBootstrap,
   detectBootstrapRace,
   type BootstrapMarker,
@@ -108,6 +109,15 @@ describe('writeBootstrapMarker', () => {
     expect(marker.clientId).toBe(ydoc.clientID);
     expect(marker.source).toBe('doc');
     expect(typeof marker.seededAt).toBe('string');
+  });
+
+  test('clearBootstrapMarker removes the marker from the meta map', () => {
+    const ydoc = new YDoc();
+    writeBootstrapMarker(ydoc, 'doc');
+    expect(ydoc.getMap('meta').get('bootstrap')).toBeDefined();
+
+    clearBootstrapMarker(ydoc);
+    expect(ydoc.getMap('meta').get('bootstrap')).toBeUndefined();
   });
 
   test('finalized marker makes detectRoomState return populated', () => {
@@ -232,6 +242,46 @@ describe('claimBootstrap', () => {
     // So the new client can proceed to seed
     const decision = resolveBootstrapDecision('empty', 'seedFromDoc', true);
     expect(decision).toEqual({ action: 'seed', source: 'doc' });
+  });
+
+  test('SD-2138 regression: stale pending marker after join-after-claim causes false-empty on reconnect', async () => {
+    // Simulates the exact scenario that causes data loss:
+    // 1. Client wins claim (pending marker written)
+    // 2. Content arrives during settling → client joins instead of seeding
+    // 3. If pending marker is NOT cleared, a future reconnect sees:
+    //    - empty fragment (slow sync) + pending-only marker → 'empty' → destructive re-seed
+    // 4. Clearing the marker ensures the room doesn't have a misleading pending signal
+    const ydoc = new YDoc();
+
+    // Step 1: Win the claim — writes pending marker
+    const claim = await claimBootstrap(ydoc, 0, 0);
+    expect(claim.granted).toBe(true);
+
+    const marker = ydoc.getMap('meta').get('bootstrap') as BootstrapMarker;
+    expect(marker.source).toBe('pending');
+
+    // Step 2: Content arrived during settling (simulate)
+    const fragment = ydoc.getXmlFragment('supereditor');
+    fragment.insert(0, [new XmlElement('p')]);
+    expect(detectRoomState(ydoc)).toBe('populated');
+
+    // Step 3: Clear the pending marker (this is the fix)
+    clearBootstrapMarker(ydoc);
+
+    // Step 4: Simulate future reconnect — new ydoc where only meta synced,
+    // fragment hasn't arrived yet (slow-sync scenario)
+    const reconnectYdoc = new YDoc();
+    // No fragment content, no meta — room is clean after marker was cleared
+    expect(detectRoomState(reconnectYdoc)).toBe('empty');
+
+    // Without the fix, the pending marker would persist and detectRoomState
+    // would still return 'empty' — but the danger is that it LOOKS like a
+    // fresh room rather than a room with a stale claim. With the marker
+    // cleared, at least there's no misleading pending signal.
+
+    // The critical assertion: after clearing, the original ydoc's meta map
+    // has no bootstrap key that could sync to new clients as a stale pending marker
+    expect(ydoc.getMap('meta').get('bootstrap')).toBeUndefined();
   });
 
   test('concurrent claimers: second claimer re-detects and joins after first seeds', async () => {

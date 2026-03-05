@@ -10,12 +10,34 @@ const DECORATIVE_NAMESPACE = 'http://schemas.microsoft.com/office/drawing/2017/d
 const HYPERLINK_REL_TYPE = 'http://schemas.openxmlformats.org/officeDocument/2006/relationships/hyperlink';
 
 /**
+ * Resolve the hyperlink relationship rId for an image, if applicable.
+ * Called once so that both wp:docPr and pic:cNvPr share the same rId.
+ */
+function resolveHyperlinkRId(attrs, params) {
+  if (!attrs.hyperlink?.url || !params) return null;
+  return addHyperlinkRelationship(params, attrs.hyperlink.url);
+}
+
+/**
+ * Build an `a:hlinkClick` element from attrs.hyperlink and a pre-resolved rId.
+ */
+function buildHlinkClickElement(attrs, hlinkRId) {
+  if (!hlinkRId) return null;
+  const hlinkAttrs = { 'r:id': hlinkRId };
+  if (attrs.hyperlink?.tooltip) {
+    hlinkAttrs.tooltip = attrs.hyperlink.tooltip;
+  }
+  return { name: 'a:hlinkClick', attributes: hlinkAttrs };
+}
+
+/**
  * Build the `wp:docPr` element with correct attribute mappings:
  * - `@name` ← attrs.alt (object name, wp:docPr/@name)
  * - `@descr` ← attrs.title (accessibility description, wp:docPr/@descr) — omitted when decorative
+ * - `a:hlinkClick` child when hyperlink is set (Word's canonical placement per §20.4.2.5)
  * - Decorative extension child when attrs.decorative is true
  */
-function buildDocPrElement(attrs, imageName) {
+function buildDocPrElement(attrs, imageName, hlinkRId) {
   const docPrAttrs = {
     id: attrs.id || 0,
     name: attrs.alt || `Picture ${imageName}`,
@@ -26,6 +48,11 @@ function buildDocPrElement(attrs, imageName) {
   }
 
   const children = [];
+
+  // Emit a:hlinkClick in wp:docPr — Word's canonical placement (§20.4.2.5).
+  const hlinkEl = buildHlinkClickElement(attrs, hlinkRId);
+  if (hlinkEl) children.push(hlinkEl);
+
   if (attrs.decorative) {
     children.push({
       name: 'a:extLst',
@@ -54,20 +81,14 @@ function buildDocPrElement(attrs, imageName) {
 /**
  * Build the `pic:nvPicPr` element with:
  * - `pic:cNvPr/@name` ← attrs.alt (object name, mirrors wp:docPr/@name)
- * - `a:hlinkClick` child when attrs.hyperlink is set
+ * - `a:hlinkClick` child when hyperlink is set (mirrors wp:docPr for compatibility)
  * - `a:picLocks/@noChangeAspect` ← dynamic from attrs.lockAspectRatio
  */
-function buildNvPicPrElement(attrs, imageName, params) {
+function buildNvPicPrElement(attrs, imageName, hlinkRId) {
   // --- pic:cNvPr children (hyperlink) ---
   const cNvPrChildren = [];
-  if (attrs.hyperlink?.url) {
-    const hlinkRId = addHyperlinkRelationship(params, attrs.hyperlink.url);
-    const hlinkAttrs = { 'r:id': hlinkRId };
-    if (attrs.hyperlink.tooltip) {
-      hlinkAttrs.tooltip = attrs.hyperlink.tooltip;
-    }
-    cNvPrChildren.push({ name: 'a:hlinkClick', attributes: hlinkAttrs });
-  }
+  const hlinkEl = buildHlinkClickElement(attrs, hlinkRId);
+  if (hlinkEl) cNvPrChildren.push(hlinkEl);
 
   return {
     name: 'pic:nvPicPr',
@@ -86,7 +107,9 @@ function buildNvPicPrElement(attrs, imageName, params) {
           {
             name: 'a:picLocks',
             attributes: {
-              noChangeAspect: attrs.lockAspectRatio === false ? 0 : 1,
+              // Per OOXML §20.1.2.2.31, noChangeAspect defaults to false (unlocked).
+              // Only emit "1" when explicitly locked; omit when false/undefined to preserve round-trip fidelity.
+              ...(attrs.lockAspectRatio ? { noChangeAspect: 1 } : {}),
               noChangeArrowheads: 1,
             },
           },
@@ -256,6 +279,9 @@ export const translateImageNode = (params) => {
   const drawingXmlns = 'http://schemas.openxmlformats.org/drawingml/2006/main';
   const pictureXmlns = 'http://schemas.openxmlformats.org/drawingml/2006/picture';
 
+  // Resolve hyperlink relationship once; shared by wp:docPr and pic:cNvPr.
+  const hlinkRId = resolveHyperlinkRId(attrs, params);
+
   return {
     attributes: inlineAttrs,
     elements: [
@@ -270,7 +296,7 @@ export const translateImageNode = (params) => {
         name: 'wp:effectExtent',
         attributes: effectExtentAttrs,
       },
-      buildDocPrElement(attrs, imageName),
+      buildDocPrElement(attrs, imageName, hlinkRId),
       {
         name: 'wp:cNvGraphicFramePr',
         elements: [
@@ -278,7 +304,7 @@ export const translateImageNode = (params) => {
             name: 'a:graphicFrameLocks',
             attributes: {
               'xmlns:a': drawingXmlns,
-              noChangeAspect: attrs.lockAspectRatio === false ? 0 : 1,
+              ...(attrs.lockAspectRatio ? { noChangeAspect: 1 } : {}),
             },
           },
         ],
@@ -295,7 +321,7 @@ export const translateImageNode = (params) => {
                 name: 'pic:pic',
                 attributes: { 'xmlns:pic': pictureXmlns },
                 elements: [
-                  buildNvPicPrElement(attrs, imageName, params),
+                  buildNvPicPrElement(attrs, imageName, hlinkRId),
                   {
                     name: 'pic:blipFill',
                     elements: [

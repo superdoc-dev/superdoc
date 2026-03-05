@@ -370,14 +370,18 @@ export function handleImageNode(node, params, isAnchor) {
   const nvPicPr = picture.elements.find((el) => el.name === 'pic:nvPicPr');
   const cNvPicPr = nvPicPr?.elements?.find((el) => el.name === 'pic:cNvPicPr');
   const picLocks = cNvPicPr?.elements?.find((el) => el.name === 'a:picLocks');
-  // Default true (Word's default). Only false when a:picLocks is present but noChangeAspect is '0' or absent.
+  // Per OOXML §20.1.2.2.31, noChangeAspect defaults to false when not specified.
+  // When a:picLocks is absent entirely, there is no lock → false.
   const lockAspectRatio = picLocks
     ? picLocks.attributes?.['noChangeAspect'] === '1' || picLocks.attributes?.['noChangeAspect'] === 1
-    : true;
+    : false;
 
-  // Parse image hyperlink from pic:cNvPr > a:hlinkClick
+  // Parse image hyperlink from pic:cNvPr > a:hlinkClick, falling back to
+  // wp:docPr > a:hlinkClick (Word's canonical placement per §20.4.2.5).
   const cNvPr = nvPicPr?.elements?.find((el) => el.name === 'pic:cNvPr');
-  const hlinkClick = cNvPr?.elements?.find((el) => el.name === 'a:hlinkClick');
+  const hlinkClick =
+    cNvPr?.elements?.find((el) => el.name === 'a:hlinkClick') ||
+    docPr?.elements?.find((el) => el.name === 'a:hlinkClick');
   let hyperlink = null;
   if (hlinkClick?.attributes?.['r:id']) {
     const hlinkRId = hlinkClick.attributes['r:id'];

@@ -837,8 +837,8 @@ export function imagesScaleWrapper(editor: Editor, input: ScaleInput, options?: 
   }
 
   const newSize = {
-    width: Math.round(currentSize.width * input.factor),
-    height: Math.round(currentSize.height * input.factor),
+    width: Math.max(1, Math.round(currentSize.width * input.factor)),
+    height: Math.max(1, Math.round(currentSize.height * input.factor)),
   };
 
   if (newSize.width === currentSize.width && newSize.height === currentSize.height) {
@@ -1047,6 +1047,8 @@ export function imagesReplaceSourceWrapper(
     ...image.node.attrs,
     src: input.src,
     rId: null,
+    originalSrc: null,
+    originalExtension: null,
     clipPath: null,
     rawSrcRect: null,
     shouldCover: false,
@@ -1093,7 +1095,7 @@ export function imagesSetAltTextWrapper(
   rejectTrackedMode('images.setAltText', options);
 
   const image = findImageById(editor, input.imageId);
-  if (image.node.attrs.title === input.description) {
+  if (image.node.attrs.title === input.description && !image.node.attrs.decorative) {
     return buildNoOpResult('Alt text is already as requested.');
   }
 

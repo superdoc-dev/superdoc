@@ -1101,6 +1101,158 @@ describe('handleImageNode', () => {
     expect(result).not.toBeNull();
     expect(result.attrs.grayscale).toBeUndefined();
   });
+
+  describe('lockAspectRatio / noChangeAspect import defaults', () => {
+    it('defaults lockAspectRatio to false when a:picLocks element is absent', () => {
+      const node = makeNode();
+      const graphic = node.elements.find((el) => el.name === 'a:graphic');
+      const picPic = graphic.elements[0].elements[0];
+      picPic.elements = [
+        {
+          name: 'pic:nvPicPr',
+          elements: [
+            { name: 'pic:cNvPr', attributes: { id: '1', name: 'Pic' } },
+            { name: 'pic:cNvPicPr', elements: [] },
+          ],
+        },
+        ...(picPic.elements || []),
+      ];
+
+      const result = handleImageNode(node, makeParams(), false);
+
+      expect(result.attrs.lockAspectRatio).toBe(false);
+    });
+
+    it('sets lockAspectRatio to true when noChangeAspect="1"', () => {
+      const node = makeNode();
+      const graphic = node.elements.find((el) => el.name === 'a:graphic');
+      const picPic = graphic.elements[0].elements[0];
+      picPic.elements = [
+        {
+          name: 'pic:nvPicPr',
+          elements: [
+            { name: 'pic:cNvPr', attributes: { id: '1', name: 'Pic' } },
+            {
+              name: 'pic:cNvPicPr',
+              elements: [{ name: 'a:picLocks', attributes: { noChangeAspect: '1' } }],
+            },
+          ],
+        },
+        ...(picPic.elements || []),
+      ];
+
+      const result = handleImageNode(node, makeParams(), false);
+
+      expect(result.attrs.lockAspectRatio).toBe(true);
+    });
+
+    it('sets lockAspectRatio to false when a:picLocks exists but noChangeAspect is absent', () => {
+      const node = makeNode();
+      const graphic = node.elements.find((el) => el.name === 'a:graphic');
+      const picPic = graphic.elements[0].elements[0];
+      picPic.elements = [
+        {
+          name: 'pic:nvPicPr',
+          elements: [
+            { name: 'pic:cNvPr', attributes: { id: '1', name: 'Pic' } },
+            {
+              name: 'pic:cNvPicPr',
+              elements: [{ name: 'a:picLocks', attributes: { noChangeArrowheads: '1' } }],
+            },
+          ],
+        },
+        ...(picPic.elements || []),
+      ];
+
+      const result = handleImageNode(node, makeParams(), false);
+
+      expect(result.attrs.lockAspectRatio).toBe(false);
+    });
+  });
+
+  describe('hyperlink import from wp:docPr fallback', () => {
+    it('reads a:hlinkClick from wp:docPr when pic:cNvPr has none', () => {
+      const hlinkRId = 'rIdHlink1';
+      const node = makeNode();
+      const docPr = node.elements.find((el) => el.name === 'wp:docPr');
+      docPr.elements = [{ name: 'a:hlinkClick', attributes: { 'r:id': hlinkRId, tooltip: 'Click me' } }];
+      const graphic = node.elements.find((el) => el.name === 'a:graphic');
+      const picPic = graphic.elements[0].elements[0];
+      picPic.elements = [
+        {
+          name: 'pic:nvPicPr',
+          elements: [
+            { name: 'pic:cNvPr', attributes: { id: '1', name: 'Pic' } },
+            { name: 'pic:cNvPicPr', elements: [] },
+          ],
+        },
+        ...(picPic.elements || []),
+      ];
+
+      const params = makeParams();
+      params.docx['word/_rels/document.xml.rels'].elements[0].elements.push({
+        name: 'Relationship',
+        attributes: {
+          Id: hlinkRId,
+          Type: 'http://schemas.openxmlformats.org/officeDocument/2006/relationships/hyperlink',
+          Target: 'https://example.com',
+          TargetMode: 'External',
+        },
+      });
+
+      const result = handleImageNode(node, params, false);
+
+      expect(result.attrs.hyperlink).toEqual({ url: 'https://example.com', tooltip: 'Click me' });
+    });
+
+    it('prefers pic:cNvPr a:hlinkClick over wp:docPr a:hlinkClick', () => {
+      const node = makeNode();
+      const docPr = node.elements.find((el) => el.name === 'wp:docPr');
+      docPr.elements = [{ name: 'a:hlinkClick', attributes: { 'r:id': 'rIdDocPr', tooltip: 'DocPr link' } }];
+      const graphic = node.elements.find((el) => el.name === 'a:graphic');
+      const picPic = graphic.elements[0].elements[0];
+      picPic.elements = [
+        {
+          name: 'pic:nvPicPr',
+          elements: [
+            {
+              name: 'pic:cNvPr',
+              attributes: { id: '1', name: 'Pic' },
+              elements: [{ name: 'a:hlinkClick', attributes: { 'r:id': 'rIdCNvPr', tooltip: 'CNvPr link' } }],
+            },
+            { name: 'pic:cNvPicPr', elements: [] },
+          ],
+        },
+        ...(picPic.elements || []),
+      ];
+
+      const params = makeParams();
+      params.docx['word/_rels/document.xml.rels'].elements[0].elements.push(
+        {
+          name: 'Relationship',
+          attributes: {
+            Id: 'rIdCNvPr',
+            Type: 'http://schemas.openxmlformats.org/officeDocument/2006/relationships/hyperlink',
+            Target: 'https://cNvPr.example.com',
+            TargetMode: 'External',
+          },
+        },
+        {
+          name: 'Relationship',
+          attributes: {
+            Id: 'rIdDocPr',
+            Type: 'http://schemas.openxmlformats.org/officeDocument/2006/relationships/hyperlink',
+            Target: 'https://docPr.example.com',
+            TargetMode: 'External',
+          },
+        },
+      );
+
+      const result = handleImageNode(node, params, false);
+
+      expect(result.attrs.hyperlink).toEqual({ url: 'https://cNvPr.example.com', tooltip: 'CNvPr link' });
+    });
+  });
 });
 
 describe('getVectorShape', () => {

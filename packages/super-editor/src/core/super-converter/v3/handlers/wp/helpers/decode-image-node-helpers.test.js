@@ -200,6 +200,115 @@ describe('translateImageNode', () => {
     const hlinkClick = cNvPr?.elements?.find((e) => e.name === 'a:hlinkClick');
     expect(hlinkClick).toBeUndefined();
   });
+
+  it('should emit a:hlinkClick in wp:docPr (Word canonical placement)', () => {
+    baseParams.node.attrs.hyperlink = { url: 'https://example.com', tooltip: 'Visit' };
+
+    const result = translateImageNode(baseParams);
+
+    const docPr = result.elements.find((e) => e.name === 'wp:docPr');
+    const hlinkClick = docPr.elements?.find((e) => e.name === 'a:hlinkClick');
+    expect(hlinkClick).toBeDefined();
+    expect(hlinkClick.attributes['r:id']).toBeDefined();
+    expect(hlinkClick.attributes.tooltip).toBe('Visit');
+  });
+
+  it('should use same rId for a:hlinkClick in both wp:docPr and pic:cNvPr', () => {
+    baseParams.node.attrs.hyperlink = { url: 'https://example.com' };
+
+    const result = translateImageNode(baseParams);
+
+    const docPr = result.elements.find((e) => e.name === 'wp:docPr');
+    const docPrHlink = docPr.elements?.find((e) => e.name === 'a:hlinkClick');
+
+    const graphic = result.elements.find((e) => e.name === 'a:graphic');
+    const picPic = graphic.elements[0].elements[0];
+    const nvPicPr = picPic.elements.find((e) => e.name === 'pic:nvPicPr');
+    const cNvPr = nvPicPr.elements.find((e) => e.name === 'pic:cNvPr');
+    const cNvPrHlink = cNvPr.elements?.find((e) => e.name === 'a:hlinkClick');
+
+    expect(docPrHlink).toBeDefined();
+    expect(cNvPrHlink).toBeDefined();
+    // Both should reference the exact same relationship ID
+    expect(docPrHlink.attributes['r:id']).toBe(cNvPrHlink.attributes['r:id']);
+    // Only one hyperlink relationship should be created
+    const hlinkRels = baseParams.relationships.filter(
+      (r) => r.attributes.Type === 'http://schemas.openxmlformats.org/officeDocument/2006/relationships/hyperlink',
+    );
+    expect(hlinkRels).toHaveLength(1);
+  });
+
+  it('should not emit a:hlinkClick in wp:docPr when no hyperlink', () => {
+    const result = translateImageNode(baseParams);
+
+    const docPr = result.elements.find((e) => e.name === 'wp:docPr');
+    const hlinkClick = docPr?.elements?.find((e) => e.name === 'a:hlinkClick');
+    expect(hlinkClick).toBeUndefined();
+  });
+
+  describe('noChangeAspect export', () => {
+    it('should emit noChangeAspect=1 in a:picLocks when lockAspectRatio is true', () => {
+      baseParams.node.attrs.lockAspectRatio = true;
+
+      const result = translateImageNode(baseParams);
+
+      const graphic = result.elements.find((e) => e.name === 'a:graphic');
+      const picPic = graphic.elements[0].elements[0];
+      const nvPicPr = picPic.elements.find((e) => e.name === 'pic:nvPicPr');
+      const cNvPicPr = nvPicPr.elements.find((e) => e.name === 'pic:cNvPicPr');
+      const picLocks = cNvPicPr.elements.find((e) => e.name === 'a:picLocks');
+      expect(picLocks.attributes.noChangeAspect).toBe(1);
+    });
+
+    it('should NOT emit noChangeAspect in a:picLocks when lockAspectRatio is false', () => {
+      baseParams.node.attrs.lockAspectRatio = false;
+
+      const result = translateImageNode(baseParams);
+
+      const graphic = result.elements.find((e) => e.name === 'a:graphic');
+      const picPic = graphic.elements[0].elements[0];
+      const nvPicPr = picPic.elements.find((e) => e.name === 'pic:nvPicPr');
+      const cNvPicPr = nvPicPr.elements.find((e) => e.name === 'pic:cNvPicPr');
+      const picLocks = cNvPicPr.elements.find((e) => e.name === 'a:picLocks');
+      expect(picLocks.attributes.noChangeAspect).toBeUndefined();
+      // noChangeArrowheads should still be present
+      expect(picLocks.attributes.noChangeArrowheads).toBe(1);
+    });
+
+    it('should NOT emit noChangeAspect in a:picLocks when lockAspectRatio is undefined', () => {
+      // lockAspectRatio not set at all
+      delete baseParams.node.attrs.lockAspectRatio;
+
+      const result = translateImageNode(baseParams);
+
+      const graphic = result.elements.find((e) => e.name === 'a:graphic');
+      const picPic = graphic.elements[0].elements[0];
+      const nvPicPr = picPic.elements.find((e) => e.name === 'pic:nvPicPr');
+      const cNvPicPr = nvPicPr.elements.find((e) => e.name === 'pic:cNvPicPr');
+      const picLocks = cNvPicPr.elements.find((e) => e.name === 'a:picLocks');
+      expect(picLocks.attributes.noChangeAspect).toBeUndefined();
+    });
+
+    it('should NOT emit noChangeAspect in a:graphicFrameLocks when lockAspectRatio is false', () => {
+      baseParams.node.attrs.lockAspectRatio = false;
+
+      const result = translateImageNode(baseParams);
+
+      const framePr = result.elements.find((e) => e.name === 'wp:cNvGraphicFramePr');
+      const frameLocks = framePr.elements.find((e) => e.name === 'a:graphicFrameLocks');
+      expect(frameLocks.attributes.noChangeAspect).toBeUndefined();
+    });
+
+    it('should emit noChangeAspect=1 in a:graphicFrameLocks when lockAspectRatio is true', () => {
+      baseParams.node.attrs.lockAspectRatio = true;
+
+      const result = translateImageNode(baseParams);
+
+      const framePr = result.elements.find((e) => e.name === 'wp:cNvGraphicFramePr');
+      const frameLocks = framePr.elements.find((e) => e.name === 'a:graphicFrameLocks');
+      expect(frameLocks.attributes.noChangeAspect).toBe(1);
+    });
+  });
 });
 
 describe('translateVectorShape', () => {

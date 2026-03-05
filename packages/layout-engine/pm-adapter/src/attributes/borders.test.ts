@@ -549,6 +549,35 @@ describe('normalizeParagraphBorders', () => {
       };
       expect(normalizeParagraphBorders(input)).toBeUndefined();
     });
+
+    it('should normalize between border', () => {
+      const input = {
+        top: { val: 'single', size: 1, color: 'FF0000' },
+        between: { val: 'single', size: 2, color: '0000FF' },
+      };
+      const result = normalizeParagraphBorders(input);
+      expect(result?.top).toBeDefined();
+      expect(result?.between).toBeDefined();
+      expect(result?.between?.style).toBe('solid');
+      expect(result?.between?.color).toContain('0000FF');
+    });
+
+    it('should normalize between border alone', () => {
+      const input = {
+        between: { val: 'dashed', size: 4, color: '00FF00' },
+      };
+      const result = normalizeParagraphBorders(input);
+      expect(result).toBeDefined();
+      expect(result?.between).toBeDefined();
+      expect(result?.between?.style).toBe('dashed');
+    });
+
+    it('should return undefined when between border is nil', () => {
+      const input = {
+        between: { val: 'nil' },
+      };
+      expect(normalizeParagraphBorders(input)).toBeUndefined();
+    });
   });
 
   describe('invalid inputs', () => {

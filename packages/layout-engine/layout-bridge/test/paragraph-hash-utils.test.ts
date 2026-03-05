@@ -5,8 +5,15 @@
  */
 
 import { describe, it, expect } from 'vitest';
-import { hashBorderSpec, hashTableBorderValue, hashTableBorders, hashCellBorders } from '../src/paragraph-hash-utils';
-import type { BorderSpec, TableBorders, CellBorders } from '@superdoc/contracts';
+import {
+  hashBorderSpec,
+  hashTableBorderValue,
+  hashTableBorders,
+  hashCellBorders,
+  hashParagraphBorders,
+  hashParagraphAttrs,
+} from '../src/paragraph-hash-utils';
+import type { BorderSpec, TableBorders, CellBorders, ParagraphBorders, ParagraphAttrs } from '@superdoc/contracts';
 
 describe('hashBorderSpec', () => {
   it('produces deterministic hash for same border properties', () => {
@@ -389,5 +396,89 @@ describe('hashCellBorders', () => {
     expect(hash).toContain('w:8');
     expect(hash).toContain('c:00FF00');
     expect(hash).toContain('sp:2');
+  });
+});
+
+describe('hashParagraphBorders', () => {
+  it('includes between border in hash with bw: prefix', () => {
+    const borders: ParagraphBorders = {
+      top: { style: 'solid', width: 1, color: '#000' },
+      between: { style: 'solid', width: 2, color: '#FF0000' },
+    };
+    const hash = hashParagraphBorders(borders);
+    expect(hash).toContain('t:[');
+    expect(hash).toContain('bw:[');
+    expect(hash).toContain('w:2');
+  });
+
+  it('produces different hashes with and without between', () => {
+    const with_: ParagraphBorders = {
+      top: { style: 'solid', width: 1 },
+      between: { style: 'solid', width: 1 },
+    };
+    const without_: ParagraphBorders = {
+      top: { style: 'solid', width: 1 },
+    };
+    expect(hashParagraphBorders(with_)).not.toBe(hashParagraphBorders(without_));
+  });
+
+  it('does not include bw: when between is undefined', () => {
+    const borders: ParagraphBorders = {
+      top: { style: 'solid', width: 1 },
+      bottom: { style: 'solid', width: 1 },
+    };
+    expect(hashParagraphBorders(borders)).not.toContain('bw:');
+  });
+
+  it('places bw: after l: in hash output', () => {
+    const borders: ParagraphBorders = {
+      left: { style: 'solid', width: 1 },
+      between: { style: 'solid', width: 1 },
+    };
+    const hash = hashParagraphBorders(borders);
+    expect(hash.indexOf('l:[')).toBeLessThan(hash.indexOf('bw:['));
+  });
+});
+
+describe('hashParagraphAttrs', () => {
+  it('includes between border in attrs hash via borders', () => {
+    const attrs: ParagraphAttrs = {
+      borders: {
+        top: { style: 'solid', width: 1 },
+        between: { style: 'solid', width: 2, color: '#F00' },
+      },
+    };
+    const hash = hashParagraphAttrs(attrs);
+    expect(hash).toContain('br:');
+    expect(hash).toContain('bw:[');
+  });
+
+  it('produces different hashes when between border changes', () => {
+    const attrs1: ParagraphAttrs = {
+      borders: {
+        top: { style: 'solid', width: 1 },
+        between: { style: 'solid', width: 1 },
+      },
+    };
+    const attrs2: ParagraphAttrs = {
+      borders: {
+        top: { style: 'solid', width: 1 },
+        between: { style: 'dashed', width: 2 },
+      },
+    };
+    expect(hashParagraphAttrs(attrs1)).not.toBe(hashParagraphAttrs(attrs2));
+  });
+
+  it('produces different hashes when between border is added', () => {
+    const withoutBetween: ParagraphAttrs = {
+      borders: { top: { style: 'solid', width: 1 } },
+    };
+    const withBetween: ParagraphAttrs = {
+      borders: {
+        top: { style: 'solid', width: 1 },
+        between: { style: 'solid', width: 1 },
+      },
+    };
+    expect(hashParagraphAttrs(withoutBetween)).not.toBe(hashParagraphAttrs(withBetween));
   });
 });

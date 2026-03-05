@@ -6,6 +6,7 @@ import { SdtSelectionStyleManager } from './selection/SdtSelectionStyleManager.j
 import { SemanticFlowController } from './layout/SemanticFlowController.js';
 import { LayoutErrorBanner } from './ui/LayoutErrorBanner.js';
 import { applyViewportZoom } from './layout/applyViewportZoom.js';
+import { applyVertAlignToLayout as applyVertAlignToLayoutHelper } from './layout/applyVertAlignToLayout.js';
 import {
   findPageIndexForPosition,
   computePageScrollOffset,
@@ -77,8 +78,6 @@ import {
 import { DragDropManager } from './input/DragDropManager.js';
 import { processAndInsertImageFile } from '@extensions/image/imageHelpers/processAndInsertImageFile.js';
 import { HeaderFooterSessionManager } from './header-footer/HeaderFooterSessionManager.js';
-import { decodeRPrFromMarks } from '../super-converter/styles.js';
-import { halfPointToPoints } from '../super-converter/helpers.js';
 import { toFlowBlocks, ConverterContext, FlowBlockCache } from '@superdoc/pm-adapter';
 import { readSettingsRoot, readDefaultTableStyle } from '../../document-api-adapters/document-settings.js';
 import {
@@ -188,7 +187,6 @@ import { TrackInsertMarkName, TrackDeleteMarkName, TrackFormatMarkName } from '@
  * for vertical alignment (w:vertAlign) when set to 'superscript' or 'subscript'.
  * Applied to the base font size to reduce text size for sub/superscripts.
  */
-const SUBSCRIPT_SUPERSCRIPT_SCALE = 0.65;
 
 const DEFAULT_PAGE_SIZE: PageSize = { w: 612, h: 792 }; // Letter @ 72dpi
 const DEFAULT_MARGINS: PageMargins = { top: 72, right: 72, bottom: 72, left: 72 };
@@ -5079,85 +5077,6 @@ export class PresentationEditor extends EventEmitter {
   #applyVertAlignToLayout() {
     const doc = this.#editor?.state?.doc;
     if (!doc || !this.#painterHost) return;
-
-    try {
-      const spans = this.#painterHost.querySelectorAll('.superdoc-line span[data-pm-start]') as NodeListOf<HTMLElement>;
-      spans.forEach((span) => {
-        try {
-          // Skip header/footer spans - they belong to separate PM documents
-          // and their data-pm-start values don't correspond to the body doc
-          if (span.closest('.superdoc-page-header, .superdoc-page-footer')) return;
-
-          const pmStart = Number(span.dataset.pmStart ?? 'NaN');
-          if (!Number.isFinite(pmStart)) return;
-
-          const pos = Math.max(0, Math.min(pmStart, doc.content.size));
-          const $pos = doc.resolve(pos);
-
-          let runNode: ProseMirrorNode | null = null;
-          for (let depth = $pos.depth; depth >= 0; depth--) {
-            const node = $pos.node(depth);
-            if (node.type.name === 'run') {
-              runNode = node;
-              break;
-            }
-          }
-
-          let vertAlign: string | null = runNode?.attrs?.runProperties?.vertAlign ?? null;
-          let position: number | null = runNode?.attrs?.runProperties?.position ?? null;
-          let fontSizeHalfPts: number | null = runNode?.attrs?.runProperties?.fontSize ?? null;
-
-          if (!vertAlign && position == null && runNode) {
-            runNode.forEach((child: ProseMirrorNode) => {
-              if (!child.isText || !child.marks?.length) return;
-              const rpr = decodeRPrFromMarks(child.marks as Mark[]) as {
-                vertAlign?: string;
-                position?: number;
-                fontSize?: number;
-              };
-              if (rpr.vertAlign && !vertAlign) vertAlign = rpr.vertAlign;
-              if (rpr.position != null && position == null) position = rpr.position;
-              if (rpr.fontSize != null && fontSizeHalfPts == null) fontSizeHalfPts = rpr.fontSize;
-            });
-          }
-
-          if (vertAlign == null && position == null) return;
-
-          const styleEntries: string[] = [];
-          if (position != null && Number.isFinite(position)) {
-            const pts = halfPointToPoints(position);
-            if (Number.isFinite(pts)) {
-              styleEntries.push(`vertical-align: ${pts}pt`);
-            }
-          } else if (vertAlign === 'superscript' || vertAlign === 'subscript') {
-            styleEntries.push(`vertical-align: ${vertAlign === 'superscript' ? 'super' : 'sub'}`);
-            if (fontSizeHalfPts != null && Number.isFinite(fontSizeHalfPts)) {
-              const scaledPts = halfPointToPoints(fontSizeHalfPts * SUBSCRIPT_SUPERSCRIPT_SCALE);
-              if (Number.isFinite(scaledPts)) {
-                styleEntries.push(`font-size: ${scaledPts}pt`);
-              } else {
-                styleEntries.push(`font-size: ${SUBSCRIPT_SUPERSCRIPT_SCALE * 100}%`);
-              }
-            } else {
-              styleEntries.push(`font-size: ${SUBSCRIPT_SUPERSCRIPT_SCALE * 100}%`);
-            }
-          } else if (vertAlign === 'baseline') {
-            styleEntries.push('vertical-align: baseline');
-          }
-
-          if (!styleEntries.length) return;
-          const existing = span.getAttribute('style');
-          const merged = existing ? `${existing}; ${styleEntries.join('; ')}` : styleEntries.join('; ');
-          span.setAttribute('style', merged);
-        } catch (error) {
-          // Silently catch errors for individual spans to prevent layout corruption
-          // DOM manipulation failures should not break the entire layout process
-          console.error('Failed to apply vertical alignment to span:', error);
-        }
-      });
-    } catch (error) {
-      // Silently catch errors to prevent layout corruption
-      console.error('Failed to apply vertical alignment to layout:', error);
-    }
+    applyVertAlignToLayoutHelper(doc, this.#painterHost);
   }
 }

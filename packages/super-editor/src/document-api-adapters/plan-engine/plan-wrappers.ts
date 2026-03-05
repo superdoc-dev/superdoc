@@ -56,6 +56,26 @@ function editorHasDom(editor: Editor): boolean {
   return !!(opts?.document ?? opts?.mockDocument ?? (typeof document !== 'undefined' ? document : null));
 }
 
+function isMismatchedTransactionError(error: unknown): boolean {
+  const message = error instanceof Error ? error.message : String(error);
+  return message.includes('Applying a mismatched transaction');
+}
+
+function insertContentAtWithRetry(
+  editor: Editor,
+  range: { from: number; to: number },
+  content: Record<string, unknown>[] | string,
+): boolean {
+  try {
+    return Boolean(editor.commands.insertContentAt(range, content));
+  } catch (error) {
+    if (!isMismatchedTransactionError(error)) throw error;
+    // Retry once with a fresh command transaction. This covers rare races where
+    // another dispatch lands between transaction creation and dispatch.
+    return Boolean(editor.commands.insertContentAt(range, content));
+  }
+}
+
 function isJsonObject(value: unknown): value is Record<string, unknown> {
   return typeof value === 'object' && value !== null && !Array.isArray(value);
 }
@@ -716,7 +736,7 @@ export function insertStructuredWrapper(
           }
         }
 
-        const ok = Boolean(editor.commands.insertContentAt({ from, to }, jsonNodes));
+        const ok = insertContentAtWithRetry(editor, { from, to }, jsonNodes);
         if (!ok) {
           insertFailure = {
             code: 'INVALID_TARGET',
@@ -739,7 +759,7 @@ export function insertStructuredWrapper(
           return false;
         }
         try {
-          const ok = Boolean(editor.commands.insertContentAt({ from, to }, value));
+          const ok = insertContentAtWithRetry(editor, { from, to }, value);
           if (!ok) {
             insertFailure = {
               code: 'INVALID_TARGET',

@@ -1,6 +1,7 @@
 import { beforeAll, beforeEach, afterEach, describe, it, expect, vi } from 'vitest';
 import type { Node as PmNode } from 'prosemirror-model';
 import { initTestEditor, loadTestDataForEditorTests } from '@tests/helpers/helpers.js';
+import { imageBase64 as largePngDataUri } from '@tests/editor/data/imageBase64.js';
 import type { Editor } from '../../core/Editor.js';
 import { insertStructuredWrapper } from './plan-wrappers.js';
 import { registerBuiltInExecutors } from './register-executors.js';
@@ -189,6 +190,42 @@ describe('insertStructuredWrapper — markdown', () => {
     expect(imageNode.attrs.id).toEqual(expect.any(String));
     expect(imageNode.attrs.size).toEqual({ width: 1, height: 1 });
     expect((editor as any).storage?.image?.media?.[imageNode.attrs.src]).toBe(oneByOnePngDataUri);
+  });
+
+  it('inserts markdown with a large base64 png in browser mode without dispatch errors', () => {
+    (editor as any).options.isHeadless = false;
+
+    const result = insertStructuredWrapper(editor, {
+      value: `![custom](${largePngDataUri})`,
+      type: 'markdown',
+    });
+
+    expect(result.success).toBe(true);
+  });
+
+  it('retries once when CommandService throws a mismatched transaction dispatch error', () => {
+    const commands = {
+      ...editor.commands,
+      insertContentAt: vi
+        .fn()
+        .mockImplementationOnce(() => {
+          throw new Error('[CommandService] Dispatch failed: Applying a mismatched transaction');
+        })
+        .mockReturnValue(true),
+    };
+
+    Object.defineProperty(editor, 'commands', {
+      value: commands,
+      configurable: true,
+    });
+
+    const result = insertStructuredWrapper(editor, {
+      value: 'retry me',
+      type: 'markdown',
+    });
+
+    expect(result.success).toBe(true);
+    expect(commands.insertContentAt).toHaveBeenCalledTimes(2);
   });
 });
 

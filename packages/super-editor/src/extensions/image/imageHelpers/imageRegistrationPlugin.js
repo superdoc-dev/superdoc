@@ -120,7 +120,7 @@ export const ImageRegistrationPlugin = ({ editor }) => {
 
 const derivePreferredFileName = (src) => {
   if (typeof src !== 'string' || src.length === 0) {
-    return 'image.bin';
+    return 'image.jpg';
   }
 
   if (src.startsWith('data:')) {
@@ -129,8 +129,65 @@ const derivePreferredFileName = (src) => {
 
   const lastSegment = src.split('/').pop() ?? '';
   const trimmed = lastSegment.split(/[?#]/)[0];
-  return trimmed || 'image.bin';
+  if (!trimmed) return 'image.jpg';
+
+  // Preserve extension when present; otherwise add a default image extension.
+  if (!trimmed.includes('.')) {
+    return `${trimmed}.jpg`;
+  }
+
+  return trimmed;
 };
+
+const parsePositiveInt = (value) => {
+  const parsed = Number.parseInt(String(value), 10);
+  return Number.isFinite(parsed) && parsed > 0 ? parsed : null;
+};
+
+const parseSizeFromImageUrl = (src) => {
+  if (typeof src !== 'string' || src.length === 0 || !src.startsWith('http')) {
+    return null;
+  }
+
+  try {
+    const url = new URL(src);
+    const width =
+      parsePositiveInt(url.searchParams.get('width')) ??
+      parsePositiveInt(url.searchParams.get('w')) ??
+      parsePositiveInt(url.searchParams.get('imgw'));
+    const height =
+      parsePositiveInt(url.searchParams.get('height')) ??
+      parsePositiveInt(url.searchParams.get('h')) ??
+      parsePositiveInt(url.searchParams.get('imgh'));
+
+    if (width && height) {
+      return { width, height };
+    }
+
+    const segments = url.pathname.split('/').filter(Boolean);
+    const last = parsePositiveInt(segments.at(-1));
+    const secondLast = parsePositiveInt(segments.at(-2));
+    if (secondLast && last) {
+      return { width: secondLast, height: last };
+    }
+
+    const compact = segments.at(-1)?.match(/^(\d{1,5})x(\d{1,5})$/i);
+    if (compact) {
+      const compactWidth = parsePositiveInt(compact[1]);
+      const compactHeight = parsePositiveInt(compact[2]);
+      if (compactWidth && compactHeight) {
+        return { width: compactWidth, height: compactHeight };
+      }
+    }
+  } catch {
+    return null;
+  }
+
+  return null;
+};
+
+const hasFinitePositiveSize = (size) =>
+  Number.isFinite(size?.width) && size.width > 0 && Number.isFinite(size?.height) && size.height > 0;
 
 /**
  * Handles the node path for image registration.
@@ -161,9 +218,11 @@ export const handleNodePath = (foundImages, editor, state) => {
 
     const path = mediaPath.startsWith('word/') ? mediaPath.slice(5) : mediaPath;
     const rId = addImageRelationship({ editor, path });
+    const inferredSize = hasFinitePositiveSize(node.attrs?.size) ? null : parseSizeFromImageUrl(src);
 
     tr.setNodeMarkup(pos, undefined, {
       ...node.attrs,
+      ...(inferredSize ? { size: inferredSize } : {}),
       src: mediaPath,
       rId,
     });

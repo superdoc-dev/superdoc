@@ -103,4 +103,79 @@ describe('handleNodePath', () => {
       expect.objectContaining({ src: secondPath }),
     );
   });
+
+  it('adds a default extension for URL sources without one in headless registration', () => {
+    const sourceUrl = 'https://picsum.photos/id/237/200/300';
+    const foundImages = [{ node: { attrs: { src: sourceUrl, size: {} } }, pos: 0 }];
+
+    const state = createStateStub();
+    const editor = createEditorStub();
+
+    handleNodePath(foundImages, editor, state);
+
+    const mediaEntries = Object.entries(editor.storage.image.media);
+    expect(mediaEntries).toHaveLength(1);
+
+    const [mediaPath, storedValue] = mediaEntries[0];
+    expect(mediaPath).toBe('word/media/300.jpg');
+    expect(storedValue).toBe(sourceUrl);
+
+    expect(state.tr.setNodeMarkup).toHaveBeenCalledWith(
+      0,
+      undefined,
+      expect.objectContaining({
+        src: 'word/media/300.jpg',
+        size: { width: 200, height: 300 },
+      }),
+    );
+  });
+
+  it('infers size from query params when present', () => {
+    const sourceUrl = 'https://example.com/photo?width=640&height=480';
+    const foundImages = [{ node: { attrs: { src: sourceUrl } }, pos: 0 }];
+
+    const state = createStateStub();
+    const editor = createEditorStub();
+
+    handleNodePath(foundImages, editor, state);
+
+    expect(state.tr.setNodeMarkup).toHaveBeenCalledWith(
+      0,
+      undefined,
+      expect.objectContaining({
+        size: { width: 640, height: 480 },
+      }),
+    );
+  });
+
+  it('does not override existing valid size with inferred size', () => {
+    const sourceUrl = 'https://picsum.photos/id/237/200/300';
+    const existingSize = { width: 500, height: 400 };
+    const foundImages = [{ node: { attrs: { src: sourceUrl, size: existingSize } }, pos: 0 }];
+
+    const state = createStateStub();
+    const editor = createEditorStub();
+
+    handleNodePath(foundImages, editor, state);
+
+    expect(state.tr.setNodeMarkup).toHaveBeenCalledWith(0, undefined, expect.objectContaining({ size: existingSize }));
+  });
+
+  it('infers size from compact WxH path segment', () => {
+    const sourceUrl = 'https://example.com/images/800x600';
+    const foundImages = [{ node: { attrs: { src: sourceUrl } }, pos: 0 }];
+
+    const state = createStateStub();
+    const editor = createEditorStub();
+
+    handleNodePath(foundImages, editor, state);
+
+    expect(state.tr.setNodeMarkup).toHaveBeenCalledWith(
+      0,
+      undefined,
+      expect.objectContaining({
+        size: { width: 800, height: 600 },
+      }),
+    );
+  });
 });

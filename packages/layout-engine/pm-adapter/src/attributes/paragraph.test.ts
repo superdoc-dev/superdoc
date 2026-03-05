@@ -210,6 +210,18 @@ describe('computeRunAttrs', () => {
     expect(result.fontSize).toBe(10);
   });
 
+  it('uses runProps font settings when previousParagraphFont is not provided', () => {
+    const runProps = {
+      fontFamily: { ascii: 'RunFont' },
+      fontSize: 20,
+    };
+
+    const result = computeRunAttrs(runProps as never);
+
+    expect(result.fontFamily).toContain('RunFont');
+    expect(result.fontSize).toBeGreaterThan(10);
+  });
+
   it('passes through vertAlign', () => {
     const result = computeRunAttrs({ vertAlign: 'superscript', fontSize: 24 } as never);
     expect(result.vertAlign).toBe('superscript');

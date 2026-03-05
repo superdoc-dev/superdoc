@@ -299,10 +299,19 @@ export const computeParagraphAttrs = (
       true,
       Boolean(paragraphProperties.numberingProperties),
     );
+
+    const hasExplicitRunProps =
+      resolvedParagraphProperties.runProperties != null &&
+      Object.keys(resolvedParagraphProperties.runProperties).length > 0;
+
     paragraphAttrs.wordLayout = computeWordParagraphLayout({
       paragraph: paragraphAttrs,
       listRenderingAttrs: normalizedListRendering,
-      markerRun: computeRunAttrs(markerRunProperties, converterContext, previousParagraphFont),
+      markerRun: computeRunAttrs(
+        markerRunProperties,
+        converterContext,
+        hasExplicitRunProps ? undefined : previousParagraphFont,
+      ),
     });
   }
 

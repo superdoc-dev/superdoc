@@ -931,24 +931,23 @@ const SHAPE_CONVERTERS_REGISTRY: Record<
 /**
  * Returns the font of the last paragraph block's first run in the given blocks array.
  * Used to pass previous paragraph font into paragraphToFlowBlocks for new list items without explicit run properties.
- * Only returns when the run has valid fontFamily (string) and fontSize (number).
+ *
+ * Only returns when the run has both valid fontFamily (non-empty string) and fontSize (positive finite number).
+ * If the latest paragraph's first run has partial or empty font info, the loop continues to the previous
+ * paragraph so callers never receive a partial object and can fall back to defaults consistently.
  */
-export function getLastParagraphFont(blocks: FlowBlock[]): { fontFamily?: string; fontSize?: number } | undefined {
+export function getLastParagraphFont(blocks: FlowBlock[]): { fontFamily: string; fontSize: number } | undefined {
   for (let i = blocks.length - 1; i >= 0; i--) {
     const block = blocks[i];
     if (block.kind === 'paragraph') {
       const para = block as ParagraphBlock;
       const firstRun = para.runs?.[0];
-      if (firstRun) {
-        const run = firstRun as { fontFamily: string; fontSize: number };
-        const result = {} as { fontFamily?: string; fontSize?: number };
-        if (run?.fontFamily) {
-          result.fontFamily = run.fontFamily;
-        }
-        if (run?.fontSize) {
-          result.fontSize = run.fontSize;
-        }
-        return result;
+      if (!firstRun) continue;
+      const run = firstRun as { fontFamily?: string; fontSize?: number };
+      const fontFamily = typeof run.fontFamily === 'string' ? run.fontFamily.trim() : '';
+      const fontSize = typeof run.fontSize === 'number' && Number.isFinite(run.fontSize) ? run.fontSize : NaN;
+      if (fontFamily.length > 0 && fontSize > 0) {
+        return { fontFamily, fontSize };
       }
     }
   }

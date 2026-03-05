@@ -239,6 +239,104 @@ const expectTrackedReplayMarksHaveIds = async (beforeName, afterName) => {
 };
 
 /**
+ * Reads the first table style id found in a document.
+ *
+ * @param {import('prosemirror-model').Node} doc
+ * @returns {string | null}
+ */
+const getFirstTableStyleId = (doc) => {
+  let tableStyleId = null;
+  doc.descendants((node) => {
+    if (node.type.name !== 'table') {
+      return true;
+    }
+    tableStyleId = node.attrs?.tableStyleId ?? null;
+    return false;
+  });
+  return tableStyleId;
+};
+
+/**
+ * Reads normalized table row properties from the first table in document order.
+ *
+ * @param {import('prosemirror-model').Node} doc
+ * @returns {Array<Record<string, unknown> | null>}
+ */
+const getFirstTableRowProperties = (doc) => {
+  const rows = [];
+  let collectedFromFirstTable = false;
+
+  doc.descendants((node) => {
+    if (node.type.name === 'table') {
+      if (collectedFromFirstTable) {
+        return false;
+      }
+      collectedFromFirstTable = true;
+      return true;
+    }
+    if (collectedFromFirstTable && node.type.name === 'tableRow') {
+      rows.push(node.attrs?.tableRowProperties ?? null);
+    }
+    return true;
+  });
+
+  return rows;
+};
+
+/**
+ * Replays fixture diffs and asserts first-table style fidelity.
+ *
+ * @param {string} beforeName DOCX fixture filename for the baseline.
+ * @param {string} afterName DOCX fixture filename for the updated doc.
+ * @param {boolean} applyTrackedChanges Whether replay should run in tracked mode.
+ * @returns {Promise<void>}
+ */
+const expectReplayPreservesTableStyle = async (beforeName, afterName, applyTrackedChanges) => {
+  const testUser = { name: 'Test User', email: 'test@example.com' };
+  const beforeEditor = await getEditorFromFixture(beforeName, applyTrackedChanges ? testUser : undefined);
+  const afterEditor = await getEditorFromFixture(afterName);
+
+  try {
+    const diff = beforeEditor.commands.compareDocuments(afterEditor.state.doc, afterEditor.converter?.comments ?? []);
+    const success = beforeEditor.commands.replayDifferences(diff, { applyTrackedChanges });
+
+    expect(success).toBe(true);
+    if (applyTrackedChanges) {
+      expect(beforeEditor.commands.acceptAllTrackedChanges()).toBe(true);
+    }
+
+    expect(getFirstTableStyleId(beforeEditor.state.doc)).toBe(getFirstTableStyleId(afterEditor.state.doc));
+    expect(getFirstTableRowProperties(beforeEditor.state.doc)).toEqual(
+      getFirstTableRowProperties(afterEditor.state.doc),
+    );
+
+    const remainingTableStyleDiffs = computeDiff(
+      beforeEditor.state.doc,
+      afterEditor.state.doc,
+      beforeEditor.schema,
+    ).docDiffs.filter(
+      (entry) =>
+        entry.nodeType === 'table' && entry.action === 'modified' && Boolean(entry.attrsDiff?.modified?.tableStyleId),
+    );
+    expect(remainingTableStyleDiffs).toHaveLength(0);
+    const remainingTableRowPropertyDiffs = computeDiff(
+      beforeEditor.state.doc,
+      afterEditor.state.doc,
+      beforeEditor.schema,
+    ).docDiffs.filter(
+      (entry) =>
+        entry.nodeType === 'tableRow' &&
+        entry.action === 'modified' &&
+        Object.keys(entry.attrsDiff?.added ?? {}).some((key) => key.startsWith('tableRowProperties.')),
+    );
+    expect(remainingTableRowPropertyDiffs).toHaveLength(0);
+  } finally {
+    beforeEditor.destroy?.();
+    afterEditor.destroy?.();
+  }
+};
+
+/**
  * Fixture pairs used for replay coverage.
  * @returns {Array<[string, string]>}
  */
@@ -333,6 +431,11 @@ describe('replayDiffs tracked changes', runTrackedReplayDiffsSuite);
 describe('replayDiffs tracked-change ids', () => {
   it('keeps tracked mark ids populated for diff_before8 replay', async () => {
     await expectTrackedReplayMarksHaveIds('diff_before8.docx', 'diff_after8.docx');
+  });
+});
+describe('replayDiffs table style', () => {
+  it('replays table style changes when tracked replay is enabled', async () => {
+    await expectReplayPreservesTableStyle('diff_before16.docx', 'diff_after16.docx', true);
   });
 });
 describe('investigate replay issues', () => {

@@ -308,8 +308,6 @@ export class PresentationEditor extends EventEmitter {
   /** RAF handle for coalesced decoration sync scheduling. */
   #decorationSyncRafHandle: number | null = null;
   #rafHandle: number | null = null;
-  /** When true, the next #updateSelection call will scroll the caret into view. */
-  #pendingCaretScrollRequest = false;
   #semanticResizeObserver: ResizeObserver | null = null;
   #semanticResizeRaf: number | null = null;
   #semanticResizeDebounce: number | null = null;
@@ -4300,10 +4298,7 @@ export class PresentationEditor extends EventEmitter {
           console.warn('[PresentationEditor] Failed to render caret overlay:', error);
         }
       }
-      if (this.#pendingCaretScrollRequest) {
-        this.#pendingCaretScrollRequest = false;
-        this.#scrollCaretIntoViewIfNeeded(caretLayout);
-      }
+      this.#scrollCaretIntoViewIfNeeded(caretLayout);
       return;
     }
 
@@ -4349,22 +4344,13 @@ export class PresentationEditor extends EventEmitter {
   }
 
   /**
-   * Requests that the next selection update scrolls the caret into view.
-   * Called by the vertical-navigation extension after dispatching an arrow-key
-   * selection change so that auto-scroll only fires for keyboard navigation,
-   * not for collab edits, undo, find-and-replace, or other programmatic changes.
-   */
-  requestScrollCaretIntoView(): void {
-    this.#pendingCaretScrollRequest = true;
-  }
-
-  /**
    * Scrolls the scroll container so the caret remains visible after selection changes.
    *
-   * Called after the caret overlay is rendered in #updateSelection() when a scroll
-   * request was queued via requestScrollCaretIntoView(). Uses the rendered caret
-   * element's screen-space position (via getBoundingClientRect) to determine if
-   * scrolling is needed, keeping a small margin for comfortable viewing.
+   * Called after the caret overlay is rendered in #updateSelection(). Uses the rendered
+   * caret element's screen-space position (via getBoundingClientRect) to determine if
+   * scrolling is needed, keeping a small margin (20px) for comfortable viewing.
+   * The margin check prevents scrolling when the caret is already visible, so this
+   * is safe to call on every selection change (arrow keys, undo, collab, etc.).
    *
    * If the caret's target page isn't mounted (virtualized), falls back to scrolling
    * the page into view to trigger mount; the next selection update handles precise scroll.

@@ -49,9 +49,13 @@ export * from './lineHeight.js';
 export * from './backspaceEmptyRunParagraph.js';
 export * from './backspaceSkipEmptyRun.js';
 export * from './backspaceNextToRun.js';
+export * from './backspaceAcrossRuns.js';
 export * from './deleteSkipEmptyRun.js';
 export * from './deleteNextToRun.js';
 export * from './skipTab.js';
+
+// Tables
+export * from './insertTableAt.js';
 
 // Lists
 export * from './toggleList.js';

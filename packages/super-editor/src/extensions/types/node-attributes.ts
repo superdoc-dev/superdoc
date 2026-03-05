@@ -148,15 +148,15 @@ export interface ParagraphProperties {
   styleId?: string;
   numberingProperties?: NumberingProperties;
   justification?: 'left' | 'center' | 'right' | 'both' | 'start' | 'end';
-  indentation?: IndentationProperties;
+  indent?: IndentationProperties;
   spacing?: SpacingProperties;
-  outlineLevel?: number;
+  outlineLvl?: number;
   keepNext?: boolean;
   keepLines?: boolean;
   pageBreakBefore?: boolean;
   widowControl?: boolean;
   textDirection?: 'lrTb' | 'tbRl' | 'btLr';
-  tabs?: Array<{ val: string; pos: number }>;
+  tabStops?: Array<{ tab: { tabType: string; pos: number; leader?: string } }>;
   suppressAutoHyphens?: boolean;
   contextualSpacing?: boolean;
 }
@@ -252,7 +252,7 @@ export interface TableProperties {
   tableCellSpacing?: TableMeasurement;
   tableIndent?: TableMeasurement;
   tableLayout?: 'fixed' | 'autofit';
-  tableLook?: TableLook;
+  tblLook?: TableLook;
   overlap?: 'never' | 'overlap';
   tableStyleId?: string;
   tableStyleColBandSize?: number;
@@ -279,8 +279,10 @@ export interface TableAttrs extends TableNodeAttributes {
   tableGrid: TableGrid | null;
   /** Table properties */
   tableProperties: TableProperties | null;
-  /** Table look settings */
-  tableLook: TableLook | null;
+  /** OOXML paragraph/element identifier (w14:paraId), preserved across DOCX roundtrips */
+  paraId?: string | null;
+  /** OOXML text identifier (w14:textId), preserved across DOCX roundtrips */
+  textId?: string | null;
 }
 
 // ============================================
@@ -291,7 +293,8 @@ export interface TableAttrs extends TableNodeAttributes {
 export interface TableRowProperties {
   trHeight?: { val: number; hRule?: 'atLeast' | 'exact' | 'auto' };
   cantSplit?: boolean;
-  tblHeader?: boolean;
+  /** Whether this row repeats as a header on continuation pages (OOXML `w:tblHeader`). */
+  repeatHeader?: boolean;
   jc?: 'center' | 'end' | 'left' | 'right' | 'start';
 }
 
@@ -364,6 +367,10 @@ export interface CellBackground {
 
 /** Table cell node attributes */
 export interface TableCellAttrs extends TableNodeAttributes {
+  /** OOXML paragraph/element identifier (w14:paraId), preserved across DOCX roundtrips */
+  paraId?: string | null;
+  /** OOXML text identifier (w14:textId), preserved across DOCX roundtrips */
+  textId?: string | null;
   /** Number of columns this cell spans */
   colspan: number;
   /** Number of rows this cell spans */
@@ -444,6 +451,10 @@ export interface ImageTransformData {
 
 /** Image node attributes */
 export interface ImageAttrs extends ShapeNodeAttributes {
+  /** Stable, session-scoped image identity (UUID assigned on import / create). */
+  sdImageId?: string | null;
+  /** Raw OOXML relativeHeight for z-ordering. Only meaningful for floating images. */
+  relativeHeight?: number | null;
   /** Image source URL or base64 data */
   src: string | null;
   /** Alternative text for accessibility */
@@ -486,6 +497,14 @@ export interface ImageAttrs extends ShapeNodeAttributes {
   shouldCover?: boolean;
   /** @internal Clip-path value for srcRect image crops */
   clipPath?: string;
+  /** @internal Raw a:srcRect element for lossless round-trip export */
+  rawSrcRect?: Record<string, unknown> | null;
+  /** Whether aspect ratio is locked. Maps to OOXML a:picLocks/@noChangeAspect. */
+  lockAspectRatio?: boolean;
+  /** Decorative image flag. Maps to OOXML adec:decorative. */
+  decorative?: boolean;
+  /** Image hyperlink. Maps to OOXML pic:cNvPr > a:hlinkClick. */
+  hyperlink?: { url: string; tooltip?: string } | null;
 }
 
 // ============================================

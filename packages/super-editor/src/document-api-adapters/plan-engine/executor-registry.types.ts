@@ -74,6 +74,8 @@ export interface ExecuteContext {
   changeMode: 'direct' | 'tracked';
   planGroupId: string;
   commandDispatched: boolean;
+  /** True when running in preview mode — self-dispatching executors must return noop. */
+  isPreview: boolean;
 }
 
 export interface StepExecutor {

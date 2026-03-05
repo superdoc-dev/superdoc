@@ -630,7 +630,58 @@ describe('translateAnchorNode', () => {
 
       expect(result.attributes['wp14:anchorId']).toBe('52C3A784');
       expect(result.attributes['wp14:editId']).toBe('36FE4467');
-      expect(result.attributes.relativeHeight).toBe('251651584');
+      expect(result.attributes.relativeHeight).toBe(251651584);
+    });
+
+    it('prefers live relativeHeight when it is a valid unsigned integer', () => {
+      const params = {
+        node: {
+          attrs: {
+            relativeHeight: 500,
+            originalAttributes: {
+              relativeHeight: '251651584',
+            },
+          },
+        },
+      };
+
+      const result = translateAnchorNode(params);
+
+      expect(result.attributes.relativeHeight).toBe(500);
+    });
+
+    it('falls back to original relativeHeight when live value is invalid', () => {
+      const params = {
+        node: {
+          attrs: {
+            relativeHeight: 1.5,
+            originalAttributes: {
+              relativeHeight: '251651584',
+            },
+          },
+        },
+      };
+
+      const result = translateAnchorNode(params);
+
+      expect(result.attributes.relativeHeight).toBe(251651584);
+    });
+
+    it('falls back to default relativeHeight=1 when both values are invalid', () => {
+      const params = {
+        node: {
+          attrs: {
+            relativeHeight: -1,
+            originalAttributes: {
+              relativeHeight: 'not-an-int',
+            },
+          },
+        },
+      };
+
+      const result = translateAnchorNode(params);
+
+      expect(result.attributes.relativeHeight).toBe(1);
     });
 
     it('should apply polygonEdited value when provided', () => {

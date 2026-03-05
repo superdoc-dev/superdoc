@@ -142,7 +142,7 @@ describe('validateCreateParagraphInput', () => {
 
     expect(result.at).toEqual({
       kind: 'before',
-      nodeId: 'p1',
+      target: { kind: 'block', nodeType: 'paragraph', nodeId: 'p1' },
     });
   });
 
@@ -156,7 +156,7 @@ describe('validateCreateParagraphInput', () => {
 
     expect(result.at).toEqual({
       kind: 'after',
-      nodeId: 'p2',
+      target: { kind: 'block', nodeType: 'paragraph', nodeId: 'p2' },
     });
   });
 

@@ -1,0 +1,429 @@
+---
+title: create.tableOfContents
+sidebarTitle: create.tableOfContents
+description: Insert a new table of contents at the target position.
+---
+
+{/* GENERATED FILE: DO NOT EDIT. Regenerate via `pnpm run docapi:sync`. */}
+
+> Alpha: Document API is currently alpha and subject to breaking changes.
+
+## Summary
+
+Insert a new table of contents at the target position.
+
+- Operation ID: `create.tableOfContents`
+- API member path: `editor.doc.create.tableOfContents(...)`
+- Mutates document: `yes`
+- Idempotency: `non-idempotent`
+- Supports tracked mode: `no`
+- Supports dry run: `yes`
+- Deterministic target resolution: `yes`
+
+## Expected result
+
+Returns a CreateTableOfContentsResult with the new TOC block address.
+
+## Input fields
+
+| Field | Type | Required | Description |
+| --- | --- | --- | --- |
+| `at` | object(kind="documentStart") \\| object(kind="documentEnd") \\| object(kind="before") \\| object(kind="after") | no | One of: object(kind="documentStart"), object(kind="documentEnd"), object(kind="before"), object(kind="after") |
+| `config` | object | no |  |
+| `config.hideInWebView` | boolean | no |  |
+| `config.hyperlinks` | boolean | no |  |
+| `config.includePageNumbers` | boolean | no |  |
+| `config.omitPageNumberLevels` | object | no |  |
+| `config.omitPageNumberLevels.from` | integer | no |  |
+| `config.omitPageNumberLevels.to` | integer | no |  |
+| `config.outlineLevels` | object | no |  |
+| `config.outlineLevels.from` | integer | no |  |
+| `config.outlineLevels.to` | integer | no |  |
+| `config.rightAlignPageNumbers` | boolean | no |  |
+| `config.separator` | string | no |  |
+| `config.tabLeader` | enum | no | `"none"`, `"dot"`, `"hyphen"`, `"underscore"`, `"middleDot"` |
+| `config.tcFieldIdentifier` | string | no |  |
+| `config.tcFieldLevels` | object | no |  |
+| `config.tcFieldLevels.from` | integer | no |  |
+| `config.tcFieldLevels.to` | integer | no |  |
+| `config.useAppliedOutlineLevel` | boolean | no |  |
+
+### Example request
+
+```json
+{
+  "at": {
+    "kind": "documentStart"
+  },
+  "config": {
+    "outlineLevels": {
+      "from": 0,
+      "to": 10
+    },
+    "useAppliedOutlineLevel": true
+  }
+}
+```
+
+## Output fields
+
+### Variant 1 (toc.kind="block")
+
+| Field | Type | Required | Description |
+| --- | --- | --- | --- |
+| `success` | `true` | yes | Constant: `true` |
+| `toc` | object(kind="block") | yes |  |
+| `toc.kind` | `"block"` | yes | Constant: `"block"` |
+| `toc.nodeId` | string | yes |  |
+| `toc.nodeType` | `"tableOfContents"` | yes | Constant: `"tableOfContents"` |
+
+### Variant 2 (success=false)
+
+| Field | Type | Required | Description |
+| --- | --- | --- | --- |
+| `failure` | object | yes |  |
+| `failure.code` | enum | yes | `"NO_OP"`, `"INVALID_TARGET"`, `"TARGET_NOT_FOUND"`, `"CAPABILITY_UNAVAILABLE"`, `"INVALID_INSERTION_CONTEXT"`, `"PAGE_NUMBERS_NOT_MATERIALIZED"` |
+| `failure.details` | any | no |  |
+| `failure.message` | string | yes |  |
+| `success` | `false` | yes | Constant: `false` |
+
+### Example response
+
+```json
+{
+  "success": true,
+  "toc": {
+    "kind": "block",
+    "nodeId": "node-def456",
+    "nodeType": "tableOfContents"
+  }
+}
+```
+
+## Pre-apply throws
+
+- `INVALID_TARGET`
+- `TARGET_NOT_FOUND`
+- `INVALID_INPUT`
+- `CAPABILITY_UNAVAILABLE`
+
+## Non-applied failure codes
+
+- `NO_OP`
+- `INVALID_INSERTION_CONTEXT`
+
+## Raw schemas
+
+<Accordion title="Raw input schema">
+```json
+{
+  "additionalProperties": false,
+  "properties": {
+    "at": {
+      "oneOf": [
+        {
+          "additionalProperties": false,
+          "properties": {
+            "kind": {
+              "const": "documentStart"
+            }
+          },
+          "required": [
+            "kind"
+          ],
+          "type": "object"
+        },
+        {
+          "additionalProperties": false,
+          "properties": {
+            "kind": {
+              "const": "documentEnd"
+            }
+          },
+          "required": [
+            "kind"
+          ],
+          "type": "object"
+        },
+        {
+          "additionalProperties": false,
+          "properties": {
+            "kind": {
+              "const": "before"
+            },
+            "target": {
+              "$ref": "#/$defs/BlockNodeAddress"
+            }
+          },
+          "required": [
+            "kind",
+            "target"
+          ],
+          "type": "object"
+        },
+        {
+          "additionalProperties": false,
+          "properties": {
+            "kind": {
+              "const": "after"
+            },
+            "target": {
+              "$ref": "#/$defs/BlockNodeAddress"
+            }
+          },
+          "required": [
+            "kind",
+            "target"
+          ],
+          "type": "object"
+        }
+      ]
+    },
+    "config": {
+      "additionalProperties": false,
+      "properties": {
+        "hideInWebView": {
+          "type": "boolean"
+        },
+        "hyperlinks": {
+          "type": "boolean"
+        },
+        "includePageNumbers": {
+          "type": "boolean"
+        },
+        "omitPageNumberLevels": {
+          "additionalProperties": false,
+          "properties": {
+            "from": {
+              "type": "integer"
+            },
+            "to": {
+              "type": "integer"
+            }
+          },
+          "required": [
+            "from",
+            "to"
+          ],
+          "type": "object"
+        },
+        "outlineLevels": {
+          "additionalProperties": false,
+          "properties": {
+            "from": {
+              "type": "integer"
+            },
+            "to": {
+              "type": "integer"
+            }
+          },
+          "required": [
+            "from",
+            "to"
+          ],
+          "type": "object"
+        },
+        "rightAlignPageNumbers": {
+          "type": "boolean"
+        },
+        "separator": {
+          "type": "string"
+        },
+        "tabLeader": {
+          "enum": [
+            "none",
+            "dot",
+            "hyphen",
+            "underscore",
+            "middleDot"
+          ]
+        },
+        "tcFieldIdentifier": {
+          "type": "string"
+        },
+        "tcFieldLevels": {
+          "additionalProperties": false,
+          "properties": {
+            "from": {
+              "type": "integer"
+            },
+            "to": {
+              "type": "integer"
+            }
+          },
+          "required": [
+            "from",
+            "to"
+          ],
+          "type": "object"
+        },
+        "useAppliedOutlineLevel": {
+          "type": "boolean"
+        }
+      },
+      "type": "object"
+    }
+  },
+  "type": "object"
+}
+```
+</Accordion>
+
+<Accordion title="Raw output schema">
+```json
+{
+  "oneOf": [
+    {
+      "additionalProperties": false,
+      "properties": {
+        "success": {
+          "const": true
+        },
+        "toc": {
+          "additionalProperties": false,
+          "properties": {
+            "kind": {
+              "const": "block"
+            },
+            "nodeId": {
+              "type": "string"
+            },
+            "nodeType": {
+              "const": "tableOfContents"
+            }
+          },
+          "required": [
+            "kind",
+            "nodeType",
+            "nodeId"
+          ],
+          "type": "object"
+        }
+      },
+      "required": [
+        "success",
+        "toc"
+      ],
+      "type": "object"
+    },
+    {
+      "additionalProperties": false,
+      "properties": {
+        "failure": {
+          "additionalProperties": false,
+          "properties": {
+            "code": {
+              "enum": [
+                "NO_OP",
+                "INVALID_TARGET",
+                "TARGET_NOT_FOUND",
+                "CAPABILITY_UNAVAILABLE",
+                "INVALID_INSERTION_CONTEXT",
+                "PAGE_NUMBERS_NOT_MATERIALIZED"
+              ]
+            },
+            "details": {},
+            "message": {
+              "type": "string"
+            }
+          },
+          "required": [
+            "code",
+            "message"
+          ],
+          "type": "object"
+        },
+        "success": {
+          "const": false
+        }
+      },
+      "required": [
+        "success",
+        "failure"
+      ],
+      "type": "object"
+    }
+  ]
+}
+```
+</Accordion>
+
+<Accordion title="Raw success schema">
+```json
+{
+  "additionalProperties": false,
+  "properties": {
+    "success": {
+      "const": true
+    },
+    "toc": {
+      "additionalProperties": false,
+      "properties": {
+        "kind": {
+          "const": "block"
+        },
+        "nodeId": {
+          "type": "string"
+        },
+        "nodeType": {
+          "const": "tableOfContents"
+        }
+      },
+      "required": [
+        "kind",
+        "nodeType",
+        "nodeId"
+      ],
+      "type": "object"
+    }
+  },
+  "required": [
+    "success",
+    "toc"
+  ],
+  "type": "object"
+}
+```
+</Accordion>
+
+<Accordion title="Raw failure schema">
+```json
+{
+  "additionalProperties": false,
+  "properties": {
+    "failure": {
+      "additionalProperties": false,
+      "properties": {
+        "code": {
+          "enum": [
+            "NO_OP",
+            "INVALID_TARGET",
+            "TARGET_NOT_FOUND",
+            "CAPABILITY_UNAVAILABLE",
+            "INVALID_INSERTION_CONTEXT",
+            "PAGE_NUMBERS_NOT_MATERIALIZED"
+          ]
+        },
+        "details": {},
+        "message": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "code",
+        "message"
+      ],
+      "type": "object"
+    },
+    "success": {
+      "const": false
+    }
+  },
+  "required": [
+    "success",
+    "failure"
+  ],
+  "type": "object"
+}
+```
+</Accordion>

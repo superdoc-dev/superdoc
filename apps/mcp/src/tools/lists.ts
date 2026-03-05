@@ -43,14 +43,19 @@ export function registerListTools(server: McpServer, sessions: SessionManager): 
   );
 
   server.registerTool(
-    'superdoc_list_set_type',
+    'superdoc_list_create',
     {
-      title: 'Set List Type',
-      description: 'Change a list between ordered (numbered) and bullet (unordered).',
+      title: 'Create List',
+      description:
+        'Create a new list from one or more existing paragraphs. Use superdoc_find to locate paragraph addresses first.',
       inputSchema: {
         session_id: z.string().describe('Session ID from superdoc_open.'),
-        target: z.string().describe('JSON-encoded list item address from superdoc_find results.'),
-        kind: z.enum(['ordered', 'bullet']).describe('The list type to set.'),
+        target: z
+          .string()
+          .describe(
+            'JSON-encoded block address (or range) of the paragraph(s) to convert. Use { "kind": "block", "nodeType": "paragraph", "nodeId": "..." }.',
+          ),
+        kind: z.enum(['ordered', 'bullet']).describe('The list type to create.'),
       },
       annotations: { readOnlyHint: false },
     },
@@ -59,15 +64,15 @@ export function registerListTools(server: McpServer, sessions: SessionManager): 
         const { api } = sessions.get(session_id);
         const parsed = JSON.parse(target);
         const result = api.invoke({
-          operationId: 'lists.setType',
-          input: { target: parsed, kind },
+          operationId: 'lists.create',
+          input: { mode: 'fromParagraphs', target: parsed, kind },
         });
         return {
           content: [{ type: 'text' as const, text: JSON.stringify(result, null, 2) }],
         };
       } catch (err) {
         return {
-          content: [{ type: 'text' as const, text: `Set list type failed: ${(err as Error).message}` }],
+          content: [{ type: 'text' as const, text: `Create list failed: ${(err as Error).message}` }],
           isError: true,
         };
       }

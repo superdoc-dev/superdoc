@@ -24,6 +24,44 @@ function resolveSegmentPosition(
 }
 
 /**
+ * Computes the total flattened text length of a block node using the same
+ * offset model as {@link resolveTextRangeInBlock}: text contributes its
+ * length, leaf atoms contribute 1, block separators contribute 1.
+ */
+export function computeTextContentLength(blockNode: ProseMirrorNode): number {
+  let length = 0;
+
+  const walk = (node: ProseMirrorNode): void => {
+    if (node.isText) {
+      length += (node.text ?? '').length;
+      return;
+    }
+    if (node.isLeaf) {
+      length += 1;
+      return;
+    }
+    // Non-leaf, non-text: walk children
+    let first = true;
+    for (let i = 0; i < node.childCount; i++) {
+      const child = node.child(i);
+      if (child.isBlock && !first) length += 1; // block separator
+      walk(child);
+      first = false;
+    }
+  };
+
+  let first = true;
+  for (let i = 0; i < blockNode.childCount; i++) {
+    const child = blockNode.child(i);
+    if (child.isBlock && !first) length += 1;
+    walk(child);
+    first = false;
+  }
+
+  return length;
+}
+
+/**
  * Resolves block-relative text offsets into absolute ProseMirror positions.
  *
  * Uses the same flattened text model as search:

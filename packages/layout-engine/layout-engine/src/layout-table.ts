@@ -3,6 +3,7 @@ import type {
   TableMeasure,
   TableFragment,
   TableColumnBoundary,
+  TableRowBoundary,
   TableFragmentMetadata,
   TableRowMeasure,
   TableRow,
@@ -193,18 +194,25 @@ export function rescaleColumnWidths(
   return scaled;
 }
 
-/**
- * Calculate minimum width for a table column.
- *
- * Uses a conservative minimum of 10px per column to match PM's
- * columnResizing behavior.
- *
- * @returns Minimum width in pixels (10px)
- */
-function calculateColumnMinWidth(): number {
-  const DEFAULT_MIN_WIDTH = 10; // Minimum usable column width in pixels
+const COLUMN_MIN_WIDTH_PX = 25;
+const COLUMN_MAX_WIDTH_PX = 200;
+const ROW_MIN_HEIGHT_PX = 10;
 
-  return DEFAULT_MIN_WIDTH;
+/**
+ * Calculate minimum width for a table column from its measured width.
+ *
+ * Clamps the measured width to [COLUMN_MIN_WIDTH_PX, COLUMN_MAX_WIDTH_PX]
+ * so that resize handles enforce a sensible range (min 25px, max 200px).
+ * Invalid/negative/zero measured widths are treated as the minimum.
+ *
+ * @param measuredWidth - Measured width in pixels (may be invalid)
+ * @returns Clamped minimum width in pixels
+ */
+function calculateColumnMinWidth(measuredWidth: number): number {
+  if (!Number.isFinite(measuredWidth) || measuredWidth <= 0) {
+    return COLUMN_MIN_WIDTH_PX;
+  }
+  return Math.max(COLUMN_MIN_WIDTH_PX, Math.min(COLUMN_MAX_WIDTH_PX, measuredWidth));
 }
 
 /**
@@ -230,12 +238,13 @@ function calculateColumnMinWidth(): number {
  */
 function generateColumnBoundaries(measure: TableMeasure, effectiveWidths?: number[]): TableColumnBoundary[] {
   const boundaries: TableColumnBoundary[] = [];
-  let xPosition = 0;
+  const cellSpacingPx = measure.cellSpacingPx ?? 0;
+  let xPosition = cellSpacingPx; // space before first column
   const widths = effectiveWidths ?? measure.columnWidths;
 
   for (let i = 0; i < widths.length; i++) {
     const width = widths[i];
-    const minWidth = calculateColumnMinWidth();
+    const minWidth = calculateColumnMinWidth(width);
 
     const boundary = {
       index: i,
@@ -247,7 +256,102 @@ function generateColumnBoundaries(measure: TableMeasure, effectiveWidths?: numbe
 
     boundaries.push(boundary);
 
-    xPosition += width;
+    // Next boundary is after this column plus spacing (border-spacing between columns)
+    xPosition += width + cellSpacingPx;
+  }
+
+  return boundaries;
+}
+
+/**
+ * Generate row boundary metadata for interactive table row resizing.
+ *
+ * Creates metadata that enables the overlay component to position horizontal
+ * resize handles and enforce minimum height constraints during drag operations.
+ *
+ * Boundaries are marked non-resizable when:
+ * - A cell in the row above has a rowSpan that crosses the boundary
+ * - The row is a repeated header on a continuation fragment (resize originals only)
+ *
+ * @param measure - Table measurement containing row heights
+ * @param block - Table block (used for rowSpan inspection)
+ * @param fromRow - Starting body row index (inclusive)
+ * @param toRow - Ending body row index (exclusive)
+ * @param repeatHeaderCount - Number of repeated header rows on this fragment
+ * @param cellSpacingPx - Cell spacing in pixels (border-spacing)
+ * @returns Array of row boundary metadata
+ */
+function generateRowBoundaries(
+  measure: TableMeasure,
+  block: TableBlock,
+  fromRow: number,
+  toRow: number,
+  repeatHeaderCount: number,
+  cellSpacingPx: number,
+  partialRow?: PartialRowInfo | null,
+): TableRowBoundary[] {
+  const boundaries: TableRowBoundary[] = [];
+
+  // Build ordered list of rendered rows: headers first, then body rows
+  const renderedRows: Array<{ rowIndex: number; isRepeatedHeader: boolean }> = [];
+  if (repeatHeaderCount > 0) {
+    for (let r = 0; r < repeatHeaderCount && r < measure.rows.length; r++) {
+      renderedRows.push({ rowIndex: r, isRepeatedHeader: fromRow > 0 });
+    }
+  }
+  for (let r = fromRow; r < toRow && r < measure.rows.length; r++) {
+    renderedRows.push({ rowIndex: r, isRepeatedHeader: false });
+  }
+
+  // Build a set of ABSOLUTE row indices whose bottom boundary is blocked by rowspan cells.
+  // A boundary after absolute row N is blocked if any cell's rowSpan crosses it.
+  //
+  // We must scan ALL table rows, not just renderedRows, because a rowspan that
+  // starts before fromRow can extend into this fragment's rendered range.
+  // Example: row 1 has rowSpan=4, fragment renders rows 3-5. The boundary after
+  // row 3 is blocked because the span from row 1 crosses it.
+  const blockedBoundaries = new Set<number>();
+  for (let r = 0; r < measure.rows.length; r++) {
+    const rowMeasure = measure.rows[r];
+    if (!rowMeasure) continue;
+
+    for (const cellMeasure of rowMeasure.cells) {
+      const rowSpan = cellMeasure.rowSpan ?? 1;
+      if (rowSpan <= 1) continue;
+
+      // This cell spans from row r to r + rowSpan - 1.
+      // Block boundaries after rows r through r + rowSpan - 2.
+      for (let boundaryRow = r; boundaryRow < r + rowSpan - 1; boundaryRow++) {
+        blockedBoundaries.add(boundaryRow);
+      }
+    }
+  }
+
+  let yPosition = cellSpacingPx;
+  for (let ri = 0; ri < renderedRows.length; ri++) {
+    const { rowIndex, isRepeatedHeader } = renderedRows[ri];
+    const rowMeasure = measure.rows[rowIndex];
+    if (!rowMeasure) continue;
+
+    const isPartial = partialRow?.rowIndex === rowIndex;
+    const height = isPartial ? partialRow.partialHeight : rowMeasure.height;
+    const contentHeight = getRowContentHeight(block.rows[rowIndex], rowMeasure);
+    const minHeight = isPartial ? Math.max(1, height) : Math.max(ROW_MIN_HEIGHT_PX, contentHeight);
+
+    // A boundary is resizable unless:
+    // 1. It's a repeated header on a continuation fragment
+    // 2. A rowspan crosses this boundary (blockedBoundaries)
+    const resizable = !isRepeatedHeader && !isPartial && !blockedBoundaries.has(rowIndex);
+
+    boundaries.push({
+      index: rowIndex,
+      y: yPosition,
+      height,
+      minHeight,
+      resizable,
+    });
+
+    yPosition += height + cellSpacingPx;
   }
 
   return boundaries;
@@ -309,17 +413,59 @@ function calculateFragmentHeight(
   fragment: Pick<TableFragment, 'fromRow' | 'toRow' | 'repeatHeaderCount'>,
   measure: TableMeasure,
   _headerCount: number,
+  borderCollapse?: 'collapse' | 'separate',
 ): number {
   let height = 0;
+  let rowCount = 0;
 
   // Add header height if continuation with repeated headers
   if (fragment.repeatHeaderCount && fragment.repeatHeaderCount > 0) {
     height += sumRowHeights(measure.rows, 0, fragment.repeatHeaderCount);
+    rowCount += fragment.repeatHeaderCount;
   }
 
   // Add body row heights (fromRow to toRow, exclusive)
+  const bodyRowCount = fragment.toRow - fragment.fromRow;
   height += sumRowHeights(measure.rows, fragment.fromRow, fragment.toRow);
+  rowCount += bodyRowCount;
 
+  // Add vertical gaps: space before first row, between rows, after last row (outer spacing)
+  const cellSpacingPx = measure.cellSpacingPx ?? 0;
+  if (rowCount > 0 && cellSpacingPx > 0) {
+    height += (rowCount + 1) * cellSpacingPx;
+  }
+  // Only add outer border height when border-collapse is separate (DOM paints container-level borders only then)
+  if (rowCount > 0 && measure.tableBorderWidths && borderCollapse === 'separate') {
+    const borderWidthV = measure.tableBorderWidths.top + measure.tableBorderWidths.bottom;
+    height += borderWidthV;
+  }
+
+  return height;
+}
+
+/**
+ * Height of a body-only fragment (rows fromRow..toRow) including vertical spacing and borders.
+ * Must match the body portion of calculateFragmentHeight so findSplitPoint's fit check
+ * agrees with the actual rendered fragment height. Borders only included when borderCollapse === 'separate'.
+ */
+function calculateBodyFragmentHeight(
+  measure: TableMeasure,
+  fromRow: number,
+  toRow: number,
+  borderCollapse?: 'collapse' | 'separate',
+): number {
+  const rowCount = toRow - fromRow;
+  if (rowCount <= 0) {
+    return 0;
+  }
+  let height = sumRowHeights(measure.rows, fromRow, toRow);
+  const cellSpacingPx = measure.cellSpacingPx ?? 0;
+  if (cellSpacingPx > 0) {
+    height += (rowCount + 1) * cellSpacingPx;
+  }
+  if (measure.tableBorderWidths && borderCollapse === 'separate') {
+    height += measure.tableBorderWidths.top + measure.tableBorderWidths.bottom;
+  }
   return height;
 }
 
@@ -942,8 +1088,8 @@ function findSplitPoint(
   fullPageHeight?: number,
   _pendingPartialRow?: PartialRowInfo | null,
 ): SplitPointResult {
-  let accumulatedHeight = 0;
-  let lastFitRow = startRow; // Last row that fit completely
+  let lastFitRow = startRow; // Last row that fit completely (exclusive end index)
+  const borderCollapse = block.attrs?.borderCollapse ?? (block.attrs?.cellSpacing != null ? 'separate' : 'collapse');
 
   // Rowspan-aware splitting: track the farthest row reached by any active rowspan
   // and the last boundary where no rowspan crosses (a "clean" break point).
@@ -971,10 +1117,10 @@ function findSplitPoint(
       }
     }
 
-    // Check if this row fits completely
-    if (accumulatedHeight + rowHeight <= availableHeight) {
+    // Check if this row fits: use full fragment height (rows + spacing + borders) so pagination matches render
+    const fragmentHeightWithRow = calculateBodyFragmentHeight(measure, startRow, i + 1, borderCollapse);
+    if (fragmentHeightWithRow <= availableHeight) {
       // Row fits completely
-      accumulatedHeight += rowHeight;
       lastFitRow = i + 1; // Next row index (exclusive)
 
       // A boundary is "clean" if no active rowspan crosses it
@@ -982,8 +1128,18 @@ function findSplitPoint(
         lastCleanFitRow = i + 1;
       }
     } else {
-      // Row doesn't fit completely
-      const remainingHeight = availableHeight - accumulatedHeight;
+      // Row doesn't fit completely; remaining space after last full row set.
+      // When lastFitRow === startRow (first row doesn't fit), no rows have been placed yet, so
+      // we must subtract the vertical space that appears before the first row (top spacing + top border)
+      // instead of using calculateBodyFragmentHeight(startRow, startRow) which is 0.
+      let remainingHeight =
+        availableHeight - calculateBodyFragmentHeight(measure, startRow, lastFitRow, borderCollapse);
+      if (lastFitRow === startRow) {
+        const cellSpacingPx = measure.cellSpacingPx ?? 0;
+        const topBorderPx =
+          borderCollapse === 'separate' && measure.tableBorderWidths ? measure.tableBorderWidths.top : 0;
+        remainingHeight = availableHeight - cellSpacingPx - topBorderPx;
+      }
 
       // Check if this is an over-tall row (exceeds full page height) - force split regardless of cantSplit
       // This handles edge case where a row is taller than an entire page
@@ -1037,23 +1193,29 @@ function findSplitPoint(
 /**
  * Generate fragment metadata for a table fragment.
  *
- * Currently only includes column boundaries; row boundaries omitted to reduce DOM overhead.
+ * Includes column boundaries and row boundaries for interactive resizing.
  *
  * @param measure - Table measurements
- * @param fromRow - Starting row (unused but kept for future row boundaries)
- * @param toRow - Ending row (unused but kept for future row boundaries)
- * @param repeatHeaderCount - Header count (unused but kept for future metadata)
+ * @param block - Table block (used for rowSpan and content height inspection)
+ * @param fromRow - Starting body row index (inclusive)
+ * @param toRow - Ending body row index (exclusive)
+ * @param repeatHeaderCount - Number of repeated header rows on this fragment
+ * @param effectiveWidths - Optional rescaled column widths
  * @returns Table fragment metadata
  */
 function generateFragmentMetadata(
   measure: TableMeasure,
-  _fromRow: number,
-  _toRow: number,
-  _repeatHeaderCount: number,
+  block: TableBlock,
+  fromRow: number,
+  toRow: number,
+  repeatHeaderCount: number,
   effectiveWidths?: number[],
+  partialRow?: PartialRowInfo | null,
 ): TableFragmentMetadata {
+  const cellSpacingPx = measure.cellSpacingPx ?? 0;
   return {
     columnBoundaries: generateColumnBoundaries(measure, effectiveWidths),
+    rowBoundaries: generateRowBoundaries(measure, block, fromRow, toRow, repeatHeaderCount, cellSpacingPx, partialRow),
     coordinateSystem: 'fragment',
   };
 }
@@ -1078,10 +1240,14 @@ function layoutMonolithicTable(context: TableLayoutContext): void {
   const { x, width } = resolveTableFrame(baseX, context.columnWidth, baseWidth, context.block.attrs);
   const columnWidths = rescaleColumnWidths(context.measure.columnWidths, context.measure.totalWidth, width);
 
-  const metadata: TableFragmentMetadata = {
-    columnBoundaries: generateColumnBoundaries(context.measure, columnWidths),
-    coordinateSystem: 'fragment',
-  };
+  const metadata = generateFragmentMetadata(
+    context.measure,
+    context.block,
+    0,
+    context.block.rows.length,
+    0,
+    columnWidths,
+  );
 
   const fragment: TableFragment = {
     kind: 'table',
@@ -1228,10 +1394,7 @@ export function layoutTableBlock({
     const { x, width } = resolveTableFrame(baseX, columnWidth, baseWidth, block.attrs);
     const columnWidths = rescaleColumnWidths(measure.columnWidths, measure.totalWidth, width);
 
-    const metadata: TableFragmentMetadata = {
-      columnBoundaries: generateColumnBoundaries(measure, columnWidths),
-      coordinateSystem: 'fragment',
-    };
+    const metadata = generateFragmentMetadata(measure, block, 0, 0, 0, columnWidths);
 
     const fragment: TableFragment = {
       kind: 'table',
@@ -1250,6 +1413,9 @@ export function layoutTableBlock({
     state.cursorY += height;
     return;
   }
+
+  // Resolve border-collapse for fragment height (match measuring/render: only add borders when separate)
+  const borderCollapse = block.attrs?.borderCollapse ?? (block.attrs?.cellSpacing != null ? 'separate' : 'collapse');
 
   // 4. Loop until all rows processed (including pending partial rows)
   while (currentRow < block.rows.length || pendingPartialRow !== null) {
@@ -1345,7 +1511,15 @@ export function layoutTableBlock({
           continuesOnNext: hasRemainingLinesAfterContinuation || rowIndex + 1 < block.rows.length,
           repeatHeaderCount,
           partialRow: continuationPartialRow,
-          metadata: generateFragmentMetadata(measure, rowIndex, rowIndex + 1, repeatHeaderCount, scaledWidths),
+          metadata: generateFragmentMetadata(
+            measure,
+            block,
+            rowIndex,
+            rowIndex + 1,
+            repeatHeaderCount,
+            scaledWidths,
+            continuationPartialRow,
+          ),
           columnWidths: scaledWidths,
         };
 
@@ -1423,7 +1597,15 @@ export function layoutTableBlock({
         continuesOnNext: !forcedPartialRow.isLastPart || forcedEndRow < block.rows.length,
         repeatHeaderCount,
         partialRow: forcedPartialRow,
-        metadata: generateFragmentMetadata(measure, bodyStartRow, forcedEndRow, repeatHeaderCount, scaledWidths),
+        metadata: generateFragmentMetadata(
+          measure,
+          block,
+          bodyStartRow,
+          forcedEndRow,
+          repeatHeaderCount,
+          scaledWidths,
+          forcedPartialRow,
+        ),
         columnWidths: scaledWidths,
       };
 
@@ -1445,6 +1627,7 @@ export function layoutTableBlock({
         { fromRow: bodyStartRow, toRow: endRow, repeatHeaderCount },
         measure,
         headerCount,
+        borderCollapse,
       );
     }
 
@@ -1466,7 +1649,15 @@ export function layoutTableBlock({
       continuesOnNext: endRow < block.rows.length || (partialRow ? !partialRow.isLastPart : false),
       repeatHeaderCount,
       partialRow: partialRow || undefined,
-      metadata: generateFragmentMetadata(measure, bodyStartRow, endRow, repeatHeaderCount, scaledWidths),
+      metadata: generateFragmentMetadata(
+        measure,
+        block,
+        bodyStartRow,
+        endRow,
+        repeatHeaderCount,
+        scaledWidths,
+        partialRow,
+      ),
       columnWidths: scaledWidths,
     };
 
@@ -1504,10 +1695,7 @@ export function createAnchoredTableFragment(
   x: number,
   y: number,
 ): TableFragment {
-  const metadata: TableFragmentMetadata = {
-    columnBoundaries: generateColumnBoundaries(measure),
-    coordinateSystem: 'fragment',
-  };
+  const metadata = generateFragmentMetadata(measure, block, 0, block.rows.length, 0);
 
   const fragment: TableFragment = {
     kind: 'table',

@@ -10,11 +10,69 @@
  */
 
 import type { MatchStyle, MatchRun } from '@superdoc/document-api';
+import { derivePropertyStateFromDirect } from '@superdoc/document-api';
+import { resolveRunProperties } from '@superdoc/style-engine/ooxml';
+import type { OoxmlResolverParams, RunProperties, ParagraphProperties } from '@superdoc/style-engine/ooxml';
 import type { CapturedRun } from './style-resolver.js';
 import { planError } from './errors.js';
+import { deriveToggleState, isSimpleToggleOffValue } from './mark-directives.js';
 
 /** A PM mark as visible on CapturedRun.marks — minimal shape for style extraction. */
 type PmMark = CapturedRun['marks'][number];
+
+// ---------------------------------------------------------------------------
+// Cascade context for style-engine effective resolution
+// ---------------------------------------------------------------------------
+
+/** Context passed to `toMatchStyle` when cascade resolution is available. */
+export interface CascadeContext {
+  resolverParams: OoxmlResolverParams;
+  paragraphProperties: ParagraphProperties | null;
+}
+
+/**
+ * Build a minimal RunProperties from PM marks for the style-engine cascade.
+ * Maps PM mark attrs to the style-engine's RunProperties shape:
+ * - Toggle marks (bold/italic/strike): mark present ON → true, OFF → false, absent → omitted
+ * - Underline: mark present → { 'w:val': type }, absent → omitted
+ * - runProperties mark: extracts styleId for character style cascading
+ */
+function buildInlineRpr(marks: readonly PmMark[]): RunProperties {
+  const rpr: RunProperties = {};
+
+  for (const mark of marks) {
+    switch (mark.type.name) {
+      case 'bold':
+        rpr.bold = !isSimpleToggleOffValue(mark.attrs.value);
+        break;
+      case 'italic':
+        rpr.italic = !isSimpleToggleOffValue(mark.attrs.value);
+        break;
+      case 'strike':
+        rpr.strike = !isSimpleToggleOffValue(mark.attrs.value);
+        break;
+      case 'underline': {
+        const ut = mark.attrs.underlineType;
+        if (ut === 'none') {
+          rpr.underline = { 'w:val': 'none' };
+        } else if (ut) {
+          rpr.underline = { 'w:val': ut as string };
+        } else {
+          // Bare underline mark (null/undefined type) → ON with default
+          rpr.underline = { 'w:val': 'single' };
+        }
+        break;
+      }
+      case 'runProperties':
+        if (typeof mark.attrs.styleId === 'string' && mark.attrs.styleId) {
+          rpr.styleId = mark.attrs.styleId;
+        }
+        break;
+    }
+  }
+
+  return rpr;
+}
 
 // ---------------------------------------------------------------------------
 // Mark-signature equality (D4)
@@ -89,18 +147,59 @@ export function coalesceRuns(runs: CapturedRun[]): CapturedRun[] {
 // ---------------------------------------------------------------------------
 
 /**
- * Projects PM marks into a contract MatchStyle.
+ * Projects PM marks into a contract MatchStyle with two-layer model.
  *
- * Core-4 booleans are derived from mark presence.
- * Optional fields use runProperties → textStyle precedence (D15, Phase 2).
+ * - `direct`: tri-state toggle derived from mark presence and attrs.
+ * - `effective`: boolean visual state. For `on`/`off`, deterministic.
+ *   For `clear`, resolved via style-engine cascade when `cascadeContext` is
+ *   provided, otherwise falls back to conservative `false`.
+ *
+ * Optional fields use runProperties → textStyle precedence (D15).
  */
-export function toMatchStyle(marks: readonly PmMark[]): MatchStyle {
-  const style: MatchStyle = {
-    bold: marks.some((m) => m.type.name === 'bold'),
-    italic: marks.some((m) => m.type.name === 'italic'),
-    underline: marks.some((m) => m.type.name === 'underline'),
-    strike: marks.some((m) => m.type.name === 'strike'),
+export function toMatchStyle(marks: readonly PmMark[], cascadeContext?: CascadeContext): MatchStyle {
+  const boldDirect = deriveToggleState(marks, 'bold');
+  const italicDirect = deriveToggleState(marks, 'italic');
+  const underlineDirect = deriveToggleState(marks, 'underline');
+  const strikeDirect = deriveToggleState(marks, 'strike');
+
+  const direct = {
+    bold: boldDirect,
+    italic: italicDirect,
+    underline: underlineDirect,
+    strike: strikeDirect,
   };
+
+  // Derive effective: deterministic for on/off, cascade-resolved or conservative for clear.
+  const boldState = derivePropertyStateFromDirect(boldDirect);
+  const italicState = derivePropertyStateFromDirect(italicDirect);
+  const underlineState = derivePropertyStateFromDirect(underlineDirect);
+  const strikeState = derivePropertyStateFromDirect(strikeDirect);
+
+  const effective = {
+    bold: boldState.effective,
+    italic: italicState.effective,
+    underline: underlineState.effective,
+    strike: strikeState.effective,
+  };
+
+  // When cascade context is available and any property is 'clear', resolve via style-engine.
+  const hasClear =
+    boldDirect === 'clear' || italicDirect === 'clear' || underlineDirect === 'clear' || strikeDirect === 'clear';
+
+  if (cascadeContext && hasClear) {
+    const inlineRpr = buildInlineRpr(marks);
+    const resolved = resolveRunProperties(cascadeContext.resolverParams, inlineRpr, cascadeContext.paragraphProperties);
+
+    if (boldDirect === 'clear') effective.bold = resolved.bold ?? false;
+    if (italicDirect === 'clear') effective.italic = resolved.italic ?? false;
+    if (strikeDirect === 'clear') effective.strike = resolved.strike ?? false;
+    if (underlineDirect === 'clear') {
+      const uVal = resolved.underline?.['w:val'];
+      effective.underline = uVal != null && uVal !== 'none';
+    }
+  }
+
+  const style: MatchStyle = { direct, effective };
 
   // Extract optional presentational fields with runProperties > textStyle precedence
   const runProps = marks.find((m) => m.type.name === 'runProperties');

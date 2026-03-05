@@ -1,7 +1,7 @@
 ---
 title: blocks.delete
 sidebarTitle: blocks.delete
-description: Reference for blocks.delete
+description: Delete an entire block node (paragraph, heading, list item, table, image, or sdt) deterministically.
 ---
 
 {/* GENERATED FILE: DO NOT EDIT. Regenerate via `pnpm run docapi:sync`. */}
@@ -9,6 +9,8 @@ description: Reference for blocks.delete
 > Alpha: Document API is currently alpha and subject to breaking changes.
 
 ## Summary
+
+Delete an entire block node (paragraph, heading, list item, table, image, or sdt) deterministically.
 
 - Operation ID: `blocks.delete`
 - API member path: `editor.doc.blocks.delete(...)`
@@ -18,11 +20,18 @@ description: Reference for blocks.delete
 - Supports dry run: `yes`
 - Deterministic target resolution: `yes`
 
+## Expected result
+
+Returns a BlocksDeleteResult receipt confirming the block was removed from the document.
+
 ## Input fields
 
 | Field | Type | Required | Description |
 | --- | --- | --- | --- |
 | `target` | DeletableBlockNodeAddress | yes | DeletableBlockNodeAddress |
+| `target.kind` | `"block"` | yes | Constant: `"block"` |
+| `target.nodeId` | string | yes |  |
+| `target.nodeType` | enum | yes | `"paragraph"`, `"heading"`, `"listItem"`, `"table"`, `"sdt"` |
 
 ### Example request
 
@@ -41,6 +50,9 @@ description: Reference for blocks.delete
 | Field | Type | Required | Description |
 | --- | --- | --- | --- |
 | `deleted` | DeletableBlockNodeAddress | yes | DeletableBlockNodeAddress |
+| `deleted.kind` | `"block"` | yes | Constant: `"block"` |
+| `deleted.nodeId` | string | yes |  |
+| `deleted.nodeType` | enum | yes | `"paragraph"`, `"heading"`, `"listItem"`, `"table"`, `"sdt"` |
 | `success` | `true` | yes | Constant: `true` |
 
 ### Example response

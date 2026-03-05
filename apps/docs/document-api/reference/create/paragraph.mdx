@@ -1,7 +1,7 @@
 ---
 title: create.paragraph
 sidebarTitle: create.paragraph
-description: Reference for create.paragraph
+description: Create a new paragraph at the target position.
 ---
 
 {/* GENERATED FILE: DO NOT EDIT. Regenerate via `pnpm run docapi:sync`. */}
@@ -10,6 +10,8 @@ description: Reference for create.paragraph
 
 ## Summary
 
+Create a new paragraph at the target position.
+
 - Operation ID: `create.paragraph`
 - API member path: `editor.doc.create.paragraph(...)`
 - Mutates document: `yes`
@@ -17,6 +19,10 @@ description: Reference for create.paragraph
 - Supports tracked mode: `yes`
 - Supports dry run: `yes`
 - Deterministic target resolution: `yes`
+
+## Expected result
+
+Returns a CreateParagraphResult with the new paragraph block ID and address.
 
 ## Input fields
 
@@ -38,7 +44,32 @@ description: Reference for create.paragraph
 
 ## Output fields
 
-_No fields._
+### Variant 1 (paragraph.kind="block")
+
+| Field | Type | Required | Description |
+| --- | --- | --- | --- |
+| `insertionPoint` | TextAddress | yes | TextAddress |
+| `insertionPoint.blockId` | string | yes |  |
+| `insertionPoint.kind` | `"text"` | yes | Constant: `"text"` |
+| `insertionPoint.range` | Range | yes | Range |
+| `insertionPoint.range.end` | integer | yes |  |
+| `insertionPoint.range.start` | integer | yes |  |
+| `paragraph` | ParagraphAddress | yes | ParagraphAddress |
+| `paragraph.kind` | `"block"` | yes | Constant: `"block"` |
+| `paragraph.nodeId` | string | yes |  |
+| `paragraph.nodeType` | `"paragraph"` | yes | Constant: `"paragraph"` |
+| `success` | `true` | yes | Constant: `true` |
+| `trackedChangeRefs` | TrackedChangeAddress[] | no |  |
+
+### Variant 2 (success=false)
+
+| Field | Type | Required | Description |
+| --- | --- | --- | --- |
+| `failure` | object | yes |  |
+| `failure.code` | enum | yes | `"INVALID_TARGET"` |
+| `failure.details` | any | no |  |
+| `failure.message` | string | yes |  |
+| `success` | `false` | yes | Constant: `false` |
 
 ### Example response
 

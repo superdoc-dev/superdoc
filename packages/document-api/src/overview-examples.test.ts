@@ -69,16 +69,45 @@ function makeInfoAdapter() {
 }
 
 function makeWriteAdapter() {
-  return { write: vi.fn(() => makeTextMutationReceipt()) };
+  return {
+    write: vi.fn(() => makeTextMutationReceipt()),
+    insertStructured: vi.fn(() => makeTextMutationReceipt()),
+  };
 }
 
 function makeFormatAdapter() {
   return {
     apply: vi.fn(() => makeTextMutationReceipt()),
-    fontSize: vi.fn(() => makeTextMutationReceipt()),
-    fontFamily: vi.fn(() => makeTextMutationReceipt()),
-    color: vi.fn(() => makeTextMutationReceipt()),
-    align: vi.fn(() => makeTextMutationReceipt()),
+  };
+}
+
+function makeParagraphsAdapter() {
+  const ok = () => ({
+    success: true as const,
+    target: { kind: 'block' as const, nodeType: 'paragraph' as const, nodeId: 'p1' },
+    resolution: { target: { kind: 'block' as const, nodeType: 'paragraph' as const, nodeId: 'p1' } },
+  });
+
+  return {
+    setStyle: vi.fn(ok),
+    clearStyle: vi.fn(ok),
+    resetDirectFormatting: vi.fn(ok),
+    setAlignment: vi.fn(ok),
+    clearAlignment: vi.fn(ok),
+    setIndentation: vi.fn(ok),
+    clearIndentation: vi.fn(ok),
+    setSpacing: vi.fn(ok),
+    clearSpacing: vi.fn(ok),
+    setKeepOptions: vi.fn(ok),
+    setOutlineLevel: vi.fn(ok),
+    setFlowOptions: vi.fn(ok),
+    setTabStop: vi.fn(ok),
+    clearTabStop: vi.fn(ok),
+    clearAllTabStops: vi.fn(ok),
+    setBorder: vi.fn(ok),
+    clearBorder: vi.fn(ok),
+    setShading: vi.fn(ok),
+    clearShading: vi.fn(ok),
   };
 }
 
@@ -148,6 +177,11 @@ function makeCreateAdapter() {
 }
 
 function makeListsAdapter() {
+  const mutateResult = () => ({
+    success: true as const,
+    item: { kind: 'block' as const, nodeType: 'listItem' as const, nodeId: 'li-1' },
+  });
+
   return {
     list: vi.fn(() => ({
       evaluatedRevision: 'r1',
@@ -166,6 +200,7 @@ function makeListsAdapter() {
     })),
     get: vi.fn(() => ({
       address: { kind: 'block' as const, nodeType: 'listItem' as const, nodeId: 'li-1' },
+      listId: 'list-1',
       kind: 'ordered' as const,
       level: 0,
       text: 'List item',
@@ -175,26 +210,44 @@ function makeListsAdapter() {
       item: { kind: 'block' as const, nodeType: 'listItem' as const, nodeId: 'li-2' },
       insertionPoint: { kind: 'text' as const, blockId: 'li-2', range: { start: 0, end: 0 } },
     })),
-    setType: vi.fn(() => ({
+    indent: vi.fn(mutateResult),
+    outdent: vi.fn(mutateResult),
+    create: vi.fn(() => ({
       success: true as const,
-      item: { kind: 'block' as const, nodeType: 'listItem' as const, nodeId: 'li-2' },
+      listId: 'list-new',
+      item: { kind: 'block' as const, nodeType: 'listItem' as const, nodeId: 'li-new' },
     })),
-    indent: vi.fn(() => ({
-      success: true as const,
-      item: { kind: 'block' as const, nodeType: 'listItem' as const, nodeId: 'li-2' },
-    })),
-    outdent: vi.fn(() => ({
-      success: true as const,
-      item: { kind: 'block' as const, nodeType: 'listItem' as const, nodeId: 'li-1' },
-    })),
-    restart: vi.fn(() => ({
-      success: true as const,
-      item: { kind: 'block' as const, nodeType: 'listItem' as const, nodeId: 'li-1' },
-    })),
-    exit: vi.fn(() => ({
+    attach: vi.fn(mutateResult),
+    detach: vi.fn(() => ({
       success: true as const,
       paragraph: { kind: 'block' as const, nodeType: 'paragraph' as const, nodeId: 'p1' },
     })),
+    join: vi.fn(() => ({ success: true as const, listId: 'list-1' })),
+    canJoin: vi.fn(() => ({ canJoin: true })),
+    separate: vi.fn(() => ({ success: true as const, listId: 'list-new', numId: 2 })),
+    setLevel: vi.fn(mutateResult),
+    setValue: vi.fn(mutateResult),
+    continuePrevious: vi.fn(mutateResult),
+    canContinuePrevious: vi.fn(() => ({ canContinue: true })),
+    setLevelRestart: vi.fn(mutateResult),
+    convertToText: vi.fn(() => ({
+      success: true as const,
+      paragraph: { kind: 'block' as const, nodeType: 'paragraph' as const, nodeId: 'p1' },
+    })),
+    applyTemplate: vi.fn(mutateResult),
+    applyPreset: vi.fn(mutateResult),
+    captureTemplate: vi.fn(() => ({
+      success: true as const,
+      template: { version: 1, levels: [] },
+    })),
+    setLevelNumbering: vi.fn(mutateResult),
+    setLevelBullet: vi.fn(mutateResult),
+    setLevelPictureBullet: vi.fn(mutateResult),
+    setLevelAlignment: vi.fn(mutateResult),
+    setLevelIndents: vi.fn(mutateResult),
+    setLevelTrailingCharacter: vi.fn(mutateResult),
+    setLevelMarkerFont: vi.fn(mutateResult),
+    clearLevelOverrides: vi.fn(mutateResult),
   };
 }
 
@@ -206,7 +259,7 @@ function makeCapabilitiesAdapter(): { get: ReturnType<typeof vi.fn> } {
       lists: { enabled: true },
       dryRun: { enabled: true },
     },
-    format: { supportedMarks: ['bold', 'italic', 'underline', 'strike'] },
+    format: { supportedInlineProperties: {} as DocumentApiCapabilities['format']['supportedInlineProperties'] },
     operations: Object.fromEntries(
       [
         'find',
@@ -223,11 +276,11 @@ function makeCapabilitiesAdapter(): { get: ReturnType<typeof vi.fn> } {
         'lists.list',
         'lists.get',
         'lists.insert',
-        'lists.setType',
+        'lists.create',
         'lists.indent',
         'lists.outdent',
-        'lists.restart',
-        'lists.exit',
+        'lists.detach',
+        'lists.attach',
         'comments.create',
         'comments.patch',
         'comments.delete',
@@ -262,6 +315,7 @@ function makeApi() {
     comments: makeCommentsAdapter(),
     write: makeWriteAdapter(),
     format: makeFormatAdapter(),
+    paragraphs: makeParagraphsAdapter(),
     trackChanges: makeTrackChangesAdapter(),
     create: makeCreateAdapter(),
     lists: makeListsAdapter(),
@@ -437,7 +491,7 @@ describe('overview.mdx examples', () => {
     it('insert text with changeMode tracked', () => {
       const doc = makeApi();
 
-      const receipt = doc.insert({ text: 'new content' }, { changeMode: 'tracked' });
+      const receipt = doc.insert({ value: 'new content' }, { changeMode: 'tracked' });
 
       expect(receipt.resolution).toBeDefined();
       expect(receipt.resolution.target).toBeDefined();
@@ -457,7 +511,7 @@ describe('overview.mdx examples', () => {
       }
 
       if (caps.global.trackChanges.enabled) {
-        doc.insert({ text: 'tracked' }, { changeMode: 'tracked' });
+        doc.insert({ value: 'tracked' }, { changeMode: 'tracked' });
       }
 
       // Both branches should execute with our fully-capable mock
@@ -472,7 +526,7 @@ describe('overview.mdx examples', () => {
       const doc = makeApi();
       const target = TEXT_TARGET;
 
-      const preview = doc.insert({ target, text: 'hello' }, { dryRun: true });
+      const preview = doc.insert({ target, value: 'hello' }, { dryRun: true });
       // preview.success tells you whether the insert would succeed
       // preview.resolution shows the resolved target range
 
@@ -509,7 +563,7 @@ describe('src/README.md workflow examples', () => {
     it('insert in tracked mode and access receipt properties', () => {
       const doc = makeApi();
 
-      const receipt = doc.insert({ text: 'new content' }, { changeMode: 'tracked' });
+      const receipt = doc.insert({ value: 'new content' }, { changeMode: 'tracked' });
       // receipt.resolution.target contains the resolved insertion point
       // receipt.inserted contains TrackedChangeAddress entries for the new change
 
@@ -549,7 +603,6 @@ describe('src/README.md workflow examples', () => {
       const firstItem = lists.items[0].address;
       const insertResult = doc.lists.insert({ target: firstItem, position: 'after', text: 'New item' });
       if (insertResult.success) {
-        doc.lists.setType({ target: insertResult.item, kind: 'ordered' });
         doc.lists.indent({ target: insertResult.item });
       }
 
@@ -571,7 +624,7 @@ describe('src/README.md workflow examples', () => {
         doc.format.apply({ target, inline: { bold: true } });
       }
       if (caps.global.trackChanges.enabled) {
-        doc.insert({ text: 'tracked' }, { changeMode: 'tracked' });
+        doc.insert({ value: 'tracked' }, { changeMode: 'tracked' });
       }
       if (caps.operations['create.heading'].dryRun) {
         const preview = doc.create.heading({ level: 2, text: 'Preview' }, { dryRun: true });

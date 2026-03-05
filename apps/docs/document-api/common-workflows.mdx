@@ -70,7 +70,7 @@ const plan = {
       op: 'format.apply',
       where: { by: 'ref', ref },
       args: {
-        marks: { bold: true },
+        inline: { bold: 'on' },
       },
     },
   ],
@@ -122,14 +122,60 @@ const target = { kind: 'text', blockId: 'p1', range: { start: 0, end: 3 } };
 if (caps.operations['format.apply'].available) {
   editor.doc.format.apply({
     target,
-    marks: { bold: true },
+    inline: { bold: 'on' },
   });
 }
 
 if (caps.global.trackChanges.enabled) {
-  editor.doc.insert({ text: 'tracked' }, { changeMode: 'tracked' });
+  editor.doc.insert({ value: 'tracked' }, { changeMode: 'tracked' });
 }
 ```
+
+## Cross-session block addressing
+
+When you load a DOCX, close the editor, and load the same file again, `sdBlockId` values change — they're regenerated on every open. The Document API's `find` operation returns addresses whose `nodeId` prefers DOCX-native `paraId`, which is usually stable when reopening the same unchanged DOCX.
+
+This pattern is common in headless pipelines: extract block references in one session, then apply edits in another.
+
+```ts
+import { Editor } from 'superdoc/super-editor';
+import { readFile, writeFile } from 'node:fs/promises';
+
+const docx = await readFile('./contract.docx');
+
+// Session 1: extract block addresses
+const editor1 = await Editor.open(docx);
+const result = editor1.doc.find({
+  select: { type: 'node', nodeType: 'paragraph' },
+  includeNodes: true,
+});
+
+// Save addresses — for DOCX-imported blocks, nodeId uses paraId when available
+const addresses = result.items.map((item) => ({
+  address: item.address,
+  text: item.node?.text,
+}));
+await writeFile('./blocks.json', JSON.stringify(addresses));
+editor1.destroy();
+
+// Session 2: load the same file again and apply edits
+const editor2 = await Editor.open(docx);
+const saved = JSON.parse(await readFile('./blocks.json', 'utf-8'));
+
+// Addresses from session 1 usually resolve when reloading the same unchanged DOCX
+for (const { address } of saved) {
+  const node = editor2.doc.getNode(address); // works across sessions
+}
+editor2.destroy();
+```
+
+<Info>
+`nodeId` stability depends on the ID source. For DOCX-imported content, `nodeId` comes from `paraId` when available and is best-effort stable across loads. For nodes created at runtime, it falls back to `sdBlockId`, which is volatile.
+</Info>
+
+<Warning>
+No ID is guaranteed to survive all Microsoft Word round-trips. Re-extract addresses after major external edits or transformations, since Word (or other tools) may rewrite paragraph IDs and SuperDoc may rewrite duplicate IDs on import.
+</Warning>
 
 ## Dry-run preview
 
@@ -137,7 +183,7 @@ Pass `dryRun: true` to validate an operation without applying it:
 
 ```ts
 const preview = editor.doc.insert(
-  { target, text: 'hello' },
+  { target, value: 'hello' },
   { dryRun: true },
 );
 // preview.success tells you whether the insert would succeed

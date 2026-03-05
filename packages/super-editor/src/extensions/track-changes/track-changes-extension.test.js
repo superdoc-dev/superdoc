@@ -32,6 +32,35 @@ describe('TrackChanges extension commands', () => {
     });
     return range;
   };
+  const getSubstringRange = (doc, substring) => {
+    let range = null;
+
+    doc.descendants((node, pos) => {
+      if (!node.isText || range || typeof node.text !== 'string') return;
+
+      const startIndex = node.text.indexOf(substring);
+      if (startIndex === -1) return;
+
+      range = {
+        from: pos + startIndex,
+        to: pos + startIndex + substring.length,
+      };
+    });
+
+    return range;
+  };
+  const getMarkedText = (doc, markName) => {
+    let text = '';
+
+    doc.descendants((node) => {
+      if (!node.isText) return;
+      if (node.marks.some((mark) => mark.type.name === markName)) {
+        text += node.text ?? '';
+      }
+    });
+
+    return text;
+  };
 
   beforeEach(() => {
     ({ editor } = initTestEditor({ mode: 'text', content: '<p></p>' }));
@@ -146,6 +175,295 @@ describe('TrackChanges extension commands', () => {
     expect(markPresent(restoredState.doc, TrackDeleteMarkName)).toBe(false);
   });
 
+  it('acceptTrackedChangesBetween accepts only the selected middle substring of an insertion', () => {
+    const changeId = 'ins-partial-accept';
+    const insertMark = schema.marks[TrackInsertMarkName].create({ id: changeId });
+    const doc = createDoc('ABCDE', [insertMark]);
+    const state = createState(doc);
+    const emit = vi.fn();
+    const selectionRange = getSubstringRange(doc, 'BC');
+
+    let nextState;
+    commands.acceptTrackedChangesBetween(
+      selectionRange.from,
+      selectionRange.to,
+    )({
+      state,
+      dispatch: (tr) => {
+        nextState = state.apply(tr);
+      },
+      editor: {
+        emit,
+        options: { documentId: 'test-doc', user: { email: 'reviewer@example.com', name: 'Reviewer' } },
+      },
+    });
+
+    expect(nextState).toBeDefined();
+    expect(nextState.doc.textContent).toBe('ABCDE');
+    expect(getMarkedText(nextState.doc, TrackInsertMarkName)).toBe('ADE');
+
+    const updatePayload = emit.mock.calls.find(
+      ([eventName, payload]) =>
+        eventName === 'commentsUpdate' &&
+        payload?.type === 'trackedChange' &&
+        payload?.event === 'update' &&
+        payload?.changeId === changeId,
+    )?.[1];
+
+    expect(updatePayload).toEqual(
+      expect.objectContaining({
+        trackedChangeText: 'ADE',
+      }),
+    );
+    expect(
+      emit.mock.calls.some(
+        ([eventName, payload]) =>
+          eventName === 'commentsUpdate' &&
+          payload?.type === 'trackedChange' &&
+          payload?.event === 'resolve' &&
+          payload?.changeId === changeId,
+      ),
+    ).toBe(false);
+  });
+
+  it('rejectTrackedChangesBetween rejects only the selected middle substring of an insertion', () => {
+    const changeId = 'ins-partial-reject';
+    const insertMark = schema.marks[TrackInsertMarkName].create({ id: changeId });
+    const doc = createDoc('ABCDE', [insertMark]);
+    const state = createState(doc);
+    const emit = vi.fn();
+    const selectionRange = getSubstringRange(doc, 'BC');
+
+    let nextState;
+    commands.rejectTrackedChangesBetween(
+      selectionRange.from,
+      selectionRange.to,
+    )({
+      state,
+      dispatch: (tr) => {
+        nextState = state.apply(tr);
+      },
+      editor: {
+        emit,
+        options: { documentId: 'test-doc', user: { email: 'reviewer@example.com', name: 'Reviewer' } },
+      },
+    });
+
+    expect(nextState).toBeDefined();
+    expect(nextState.doc.textContent).toBe('ADE');
+    expect(getMarkedText(nextState.doc, TrackInsertMarkName)).toBe('ADE');
+
+    const updatePayload = emit.mock.calls.find(
+      ([eventName, payload]) =>
+        eventName === 'commentsUpdate' &&
+        payload?.type === 'trackedChange' &&
+        payload?.event === 'update' &&
+        payload?.changeId === changeId,
+    )?.[1];
+
+    expect(updatePayload).toEqual(
+      expect.objectContaining({
+        trackedChangeText: 'ADE',
+      }),
+    );
+    expect(
+      emit.mock.calls.some(
+        ([eventName, payload]) =>
+          eventName === 'commentsUpdate' &&
+          payload?.type === 'trackedChange' &&
+          payload?.event === 'resolve' &&
+          payload?.changeId === changeId,
+      ),
+    ).toBe(false);
+  });
+
+  it('acceptTrackedChangesBetween accepts only the selected middle substring of a deletion', () => {
+    const changeId = 'del-partial-accept';
+    const deleteMark = schema.marks[TrackDeleteMarkName].create({ id: changeId });
+    const doc = createDoc('ABCDE', [deleteMark]);
+    const state = createState(doc);
+    const emit = vi.fn();
+    const selectionRange = getSubstringRange(doc, 'BC');
+
+    let nextState;
+    commands.acceptTrackedChangesBetween(
+      selectionRange.from,
+      selectionRange.to,
+    )({
+      state,
+      dispatch: (tr) => {
+        nextState = state.apply(tr);
+      },
+      editor: {
+        emit,
+        options: { documentId: 'test-doc', user: { email: 'reviewer@example.com', name: 'Reviewer' } },
+      },
+    });
+
+    expect(nextState).toBeDefined();
+    expect(nextState.doc.textContent).toBe('ADE');
+    expect(getMarkedText(nextState.doc, TrackDeleteMarkName)).toBe('ADE');
+
+    const updatePayload = emit.mock.calls.find(
+      ([eventName, payload]) =>
+        eventName === 'commentsUpdate' &&
+        payload?.type === 'trackedChange' &&
+        payload?.event === 'update' &&
+        payload?.changeId === changeId,
+    )?.[1];
+
+    expect(updatePayload).toEqual(
+      expect.objectContaining({
+        deletedText: 'ADE',
+      }),
+    );
+    expect(
+      emit.mock.calls.some(
+        ([eventName, payload]) =>
+          eventName === 'commentsUpdate' &&
+          payload?.type === 'trackedChange' &&
+          payload?.event === 'resolve' &&
+          payload?.changeId === changeId,
+      ),
+    ).toBe(false);
+  });
+
+  it('rejectTrackedChangesBetween rejects only the selected middle substring of a deletion', () => {
+    const changeId = 'del-partial-reject';
+    const deleteMark = schema.marks[TrackDeleteMarkName].create({ id: changeId });
+    const doc = createDoc('ABCDE', [deleteMark]);
+    const state = createState(doc);
+    const emit = vi.fn();
+    const selectionRange = getSubstringRange(doc, 'BC');
+
+    let nextState;
+    commands.rejectTrackedChangesBetween(
+      selectionRange.from,
+      selectionRange.to,
+    )({
+      state,
+      dispatch: (tr) => {
+        nextState = state.apply(tr);
+      },
+      editor: {
+        emit,
+        options: { documentId: 'test-doc', user: { email: 'reviewer@example.com', name: 'Reviewer' } },
+      },
+    });
+
+    expect(nextState).toBeDefined();
+    expect(nextState.doc.textContent).toBe('ABCDE');
+    expect(getMarkedText(nextState.doc, TrackDeleteMarkName)).toBe('ADE');
+
+    const updatePayload = emit.mock.calls.find(
+      ([eventName, payload]) =>
+        eventName === 'commentsUpdate' &&
+        payload?.type === 'trackedChange' &&
+        payload?.event === 'update' &&
+        payload?.changeId === changeId,
+    )?.[1];
+
+    expect(updatePayload).toEqual(
+      expect.objectContaining({
+        deletedText: 'ADE',
+      }),
+    );
+    expect(
+      emit.mock.calls.some(
+        ([eventName, payload]) =>
+          eventName === 'commentsUpdate' &&
+          payload?.type === 'trackedChange' &&
+          payload?.event === 'resolve' &&
+          payload?.changeId === changeId,
+      ),
+    ).toBe(false);
+  });
+
+  it('rejectTrackedChangesBetween emits tracked-change resolve events for rejected IDs', () => {
+    const insertMark = schema.marks[TrackInsertMarkName].create({ id: 'ins-resolve-1' });
+    const doc = createDoc('Pending', [insertMark]);
+    const state = createState(doc);
+    const emit = vi.fn();
+
+    commands.rejectTrackedChangesBetween(
+      1,
+      doc.content.size,
+    )({
+      state,
+      dispatch: (tr) => state.apply(tr),
+      editor: {
+        emit,
+        options: { user: { email: 'reviewer@example.com', name: 'Reviewer' } },
+      },
+    });
+
+    expect(emit).toHaveBeenCalledWith(
+      'commentsUpdate',
+      expect.objectContaining({
+        type: 'trackedChange',
+        event: 'resolve',
+        changeId: 'ins-resolve-1',
+        resolvedByEmail: 'reviewer@example.com',
+        resolvedByName: 'Reviewer',
+      }),
+    );
+  });
+
+  it('rejectTrackedChangesBetween applies mixed selections per overlapped tracked segment', () => {
+    const changeId = 'ins-partial-still-present';
+    const insertMark = schema.marks[TrackInsertMarkName].create({ id: changeId });
+    const deleteId = 'del-partial-still-present';
+    const deleteMark = schema.marks[TrackDeleteMarkName].create({ id: deleteId });
+    const paragraph = schema.nodes.paragraph.create(null, [
+      schema.text('AB', [insertMark]),
+      schema.text('x'),
+      schema.text('CD', [deleteMark]),
+    ]);
+    const doc = schema.nodes.doc.create(null, paragraph);
+    const state = createState(doc);
+    const emit = vi.fn();
+    const insertionSelection = getSubstringRange(doc, 'B');
+    const deletionSelection = getSubstringRange(doc, 'C');
+
+    let nextState;
+    commands.rejectTrackedChangesBetween(
+      insertionSelection.from,
+      deletionSelection.to,
+    )({
+      state,
+      dispatch: (tr) => {
+        nextState = state.apply(tr);
+      },
+      editor: {
+        emit,
+        options: { user: { email: 'reviewer@example.com', name: 'Reviewer' } },
+      },
+    });
+
+    expect(nextState).toBeDefined();
+    expect(nextState.doc.textContent).toBe('AxCD');
+    expect(getMarkedText(nextState.doc, TrackInsertMarkName)).toBe('A');
+    expect(getMarkedText(nextState.doc, TrackDeleteMarkName)).toBe('D');
+
+    const updatedIds = emit.mock.calls
+      .filter(
+        ([eventName, payload]) =>
+          eventName === 'commentsUpdate' && payload?.type === 'trackedChange' && payload?.event === 'update',
+      )
+      .map(([, payload]) => payload.changeId);
+
+    expect(updatedIds).toEqual(expect.arrayContaining([changeId, deleteId]));
+    expect(
+      emit.mock.calls.some(
+        ([eventName, payload]) =>
+          eventName === 'commentsUpdate' &&
+          payload?.type === 'trackedChange' &&
+          payload?.event === 'resolve' &&
+          [changeId, deleteId].includes(payload?.changeId),
+      ),
+    ).toBe(false);
+  });
+
   it('blocks rejecting tracked changes when permissionResolver denies access', () => {
     const deleteMark = schema.marks[TrackDeleteMarkName].create({ id: 'del-guard', authorEmail: 'author@example.com' });
     const doc = createDoc('Legacy', [deleteMark]);
@@ -209,6 +527,59 @@ describe('TrackChanges extension commands', () => {
     expect(markPresent(afterReject.doc, TrackFormatMarkName)).toBe(false);
     expect(markPresent(afterReject.doc, 'bold')).toBe(true);
     expect(markPresent(afterReject.doc, 'italic')).toBe(false);
+  });
+
+  it('acceptTrackedChangesBetween bulk-accepts all format/style changes in range', () => {
+    const bold = schema.marks.bold.create();
+    const italic = schema.marks.italic.create();
+    const fmt1 = schema.marks[TrackFormatMarkName].create({
+      id: 'fmt-bulk-1',
+      before: [],
+      after: [{ type: 'bold', attrs: {} }],
+    });
+    const fmt2 = schema.marks[TrackFormatMarkName].create({
+      id: 'fmt-bulk-2',
+      before: [{ type: 'bold', attrs: {} }],
+      after: [{ type: 'italic', attrs: {} }],
+    });
+    const paragraph = schema.nodes.paragraph.create(null, [
+      schema.text('One', [bold, fmt1]),
+      schema.text(' two ', []),
+      schema.text('three', [italic, fmt2]),
+    ]);
+    const doc = schema.nodes.doc.create(null, paragraph);
+    const state = createState(doc);
+
+    let afterAccept;
+    commands.acceptTrackedChangesBetween(
+      0,
+      doc.content.size,
+    )({
+      state,
+      dispatch: (tr) => {
+        afterAccept = state.apply(tr);
+      },
+    });
+
+    expect(afterAccept).toBeDefined();
+    expect(afterAccept.doc.textContent).toBe('One two three');
+
+    let formatMarkCount = 0;
+    afterAccept.doc.descendants((node) => {
+      if (node.marks.some((m) => m.type.name === TrackFormatMarkName)) formatMarkCount += 1;
+    });
+    expect(formatMarkCount).toBe(0);
+
+    const firstRange = getFirstTextRange(afterAccept.doc);
+    const firstMarks = afterAccept.doc.nodeAt(firstRange.from)?.marks ?? [];
+    expect(firstMarks.some((m) => m.type.name === 'bold')).toBe(true);
+
+    afterAccept.doc.descendants((node, pos) => {
+      if (!node.isText || node.textContent !== 'three') return;
+      const marks = afterAccept.doc.nodeAt(pos)?.marks ?? [];
+      expect(marks.some((m) => m.type.name === 'italic')).toBe(true);
+      return false;
+    });
   });
 
   it('rejectTrackedChangesBetween restores imported textStyle attrs for color suggestions', () => {
@@ -456,6 +827,121 @@ describe('TrackChanges extension commands', () => {
       expect(marks.some((mark) => mark.type.name === 'underline')).toBe(false);
       expect(textStyle?.attrs?.color).not.toBe('#FF00AA');
       expect(textStyle?.attrs?.fontFamily).toBe('Times New Roman, serif');
+    } finally {
+      interactionEditor.destroy();
+    }
+  });
+
+  it('interaction: rejectTrackedChangeOnSelection reverts mixed marks + textStyle in suggesting mode', () => {
+    const { editor: interactionEditor } = initTestEditor({
+      mode: 'text',
+      content: '<p>Agreement signed by both parties</p>',
+      user: { name: 'Track Tester', email: 'track@example.com' },
+    });
+
+    try {
+      const textRange = getFirstTextRange(interactionEditor.state.doc);
+      expect(textRange).toBeDefined();
+
+      interactionEditor.view.dispatch(
+        interactionEditor.state.tr.setSelection(
+          TextSelection.create(interactionEditor.state.doc, textRange.from, textRange.to),
+        ),
+      );
+      interactionEditor.commands.setFontFamily('Times New Roman, serif');
+      interactionEditor.commands.setColor('#112233');
+      interactionEditor.setDocumentMode('suggesting');
+
+      const selectionRange = getFirstTextRange(interactionEditor.state.doc);
+      interactionEditor.view.dispatch(
+        interactionEditor.state.tr.setSelection(
+          TextSelection.create(interactionEditor.state.doc, selectionRange.from, selectionRange.to),
+        ),
+      );
+      interactionEditor.commands.toggleBold();
+      interactionEditor.commands.toggleUnderline();
+      interactionEditor.commands.setColor('#FF00AA');
+      interactionEditor.commands.setFontFamily('Arial, sans-serif');
+
+      interactionEditor.commands.rejectTrackedChangeOnSelection();
+
+      const textPos = getFirstTextRange(interactionEditor.state.doc);
+      const textNode = interactionEditor.state.doc.nodeAt(textPos.from);
+      const marks = textNode?.marks || [];
+      const textStyle = marks.find((mark) => mark.type.name === 'textStyle');
+
+      expect(marks.some((mark) => mark.type.name === TrackFormatMarkName)).toBe(false);
+      expect(marks.some((mark) => mark.type.name === 'bold')).toBe(false);
+      expect(marks.some((mark) => mark.type.name === 'underline')).toBe(false);
+      expect(textStyle?.attrs?.color).toBe('#112233');
+      expect(textStyle?.attrs?.fontFamily).toBe('Times New Roman, serif');
+    } finally {
+      interactionEditor.destroy();
+    }
+  });
+
+  it('undo/redo restores partially accepted insertion splits', () => {
+    const { editor: interactionEditor } = initTestEditor({
+      mode: 'text',
+      content: '<p></p>',
+      user: { name: 'Track Tester', email: 'track@example.com' },
+    });
+
+    try {
+      interactionEditor.commands.insertTrackedChange({ from: 1, to: 1, text: 'ABCDE' });
+
+      const selectionRange = getSubstringRange(interactionEditor.state.doc, 'BC');
+      interactionEditor.view.dispatch(
+        interactionEditor.state.tr.setSelection(
+          TextSelection.create(interactionEditor.state.doc, selectionRange.from, selectionRange.to),
+        ),
+      );
+
+      interactionEditor.commands.acceptTrackedChangeBySelection();
+      expect(interactionEditor.state.doc.textContent).toBe('ABCDE');
+      expect(getMarkedText(interactionEditor.state.doc, TrackInsertMarkName)).toBe('ADE');
+
+      interactionEditor.commands.undo();
+      expect(interactionEditor.state.doc.textContent).toBe('ABCDE');
+      expect(getMarkedText(interactionEditor.state.doc, TrackInsertMarkName)).toBe('ABCDE');
+
+      interactionEditor.commands.redo();
+      expect(interactionEditor.state.doc.textContent).toBe('ABCDE');
+      expect(getMarkedText(interactionEditor.state.doc, TrackInsertMarkName)).toBe('ADE');
+    } finally {
+      interactionEditor.destroy();
+    }
+  });
+
+  it('undo/redo restores partially rejected deletion splits', () => {
+    const { editor: interactionEditor } = initTestEditor({
+      mode: 'text',
+      content: '<p>ABCDE</p>',
+      user: { name: 'Track Tester', email: 'track@example.com' },
+    });
+
+    try {
+      const fullTextRange = getFirstTextRange(interactionEditor.state.doc);
+      interactionEditor.commands.insertTrackedChange({ from: fullTextRange.from, to: fullTextRange.to, text: '' });
+
+      const selectionRange = getSubstringRange(interactionEditor.state.doc, 'BC');
+      interactionEditor.view.dispatch(
+        interactionEditor.state.tr.setSelection(
+          TextSelection.create(interactionEditor.state.doc, selectionRange.from, selectionRange.to),
+        ),
+      );
+
+      interactionEditor.commands.rejectTrackedChangeOnSelection();
+      expect(interactionEditor.state.doc.textContent).toBe('ABCDE');
+      expect(getMarkedText(interactionEditor.state.doc, TrackDeleteMarkName)).toBe('ADE');
+
+      interactionEditor.commands.undo();
+      expect(interactionEditor.state.doc.textContent).toBe('ABCDE');
+      expect(getMarkedText(interactionEditor.state.doc, TrackDeleteMarkName)).toBe('ABCDE');
+
+      interactionEditor.commands.redo();
+      expect(interactionEditor.state.doc.textContent).toBe('ABCDE');
+      expect(getMarkedText(interactionEditor.state.doc, TrackDeleteMarkName)).toBe('ADE');
     } finally {
       interactionEditor.destroy();
     }

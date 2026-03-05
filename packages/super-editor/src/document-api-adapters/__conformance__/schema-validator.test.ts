@@ -15,8 +15,8 @@ describe('schema-validator $ref resolution', () => {
     InlineStylePatch: {
       type: 'object' as const,
       properties: {
-        bold: { type: 'boolean' as const },
-        italic: { type: 'boolean' as const },
+        bold: { type: 'string' as const, enum: ['on', 'off', 'clear'] },
+        italic: { type: 'string' as const, enum: ['on', 'off', 'clear'] },
       },
       additionalProperties: false,
     },
@@ -46,7 +46,7 @@ describe('schema-validator $ref resolution', () => {
     };
     const result = validateJsonSchema(
       schema,
-      { target: { kind: 'text', blockId: 'p1' }, inline: { bold: true } },
+      { target: { kind: 'text', blockId: 'p1' }, inline: { bold: 'on' } },
       $defs,
     );
     expect(result.valid).toBe(true);

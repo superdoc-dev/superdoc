@@ -62,8 +62,8 @@ export async function runClose(tokens: string[], context: CommandContext): Promi
         pretty: mode.discard ? 'Closed context (discarded unsaved changes)' : 'Closed context',
       };
 
-      if (context.executionMode === 'host' && context.collabSessionPool) {
-        await context.collabSessionPool.disposeSession(effectiveMetadata.contextId);
+      if (context.executionMode === 'host' && context.sessionPool) {
+        await context.sessionPool.disposeSession(effectiveMetadata.contextId, { discard: mode.discard });
       }
 
       await clearContext(paths);

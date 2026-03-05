@@ -22,8 +22,11 @@ const branch = process.env.GITHUB_REF_NAME || process.env.CI_COMMIT_BRANCH;
 
 const config = {
   branches: [
+    // Semantic-release requires at least one non-prerelease release branch.
     { name: 'stable', channel: 'latest' },
-    { name: 'main', prerelease: 'next', channel: 'next' },
+    // SDK auto-release runs from main and should publish alpha prereleases
+    // on the latest dist-tag (no next channel).
+    { name: 'main', prerelease: 'alpha', channel: 'latest' },
   ],
   tagFormat: 'sdk-v${version}',
   plugins: [
@@ -40,6 +43,7 @@ const config = {
         prepareCmd: [
           'node scripts/sync-sdk-version.mjs --set ${nextRelease.version}',
           'pnpm -w run generate:all',
+          'pnpm --prefix langs/node run build',
           'node scripts/sdk-validate.mjs',
         ].join(' && '),
         // Publish: build artifacts + publish npm packages (PyPI handled by workflow)

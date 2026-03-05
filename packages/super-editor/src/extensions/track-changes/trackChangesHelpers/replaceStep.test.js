@@ -1,6 +1,7 @@
 import { beforeEach, afterEach, describe, expect, it, vi } from 'vitest';
 import { EditorState, TextSelection } from 'prosemirror-state';
 import { DOMParser as PMDOMParser, Slice } from 'prosemirror-model';
+import { ReplaceStep } from 'prosemirror-transform';
 import { trackedTransaction, documentHelpers } from './index.js';
 import { TrackInsertMarkName, TrackDeleteMarkName } from '../constants.js';
 import { TrackChangesBasePluginKey } from '../plugins/trackChangesBasePlugin.js';
@@ -350,6 +351,131 @@ describe('trackChangesHelpers replaceStep', () => {
     expect(meta.insertedMark.attrs.id).toBe(meta.deletionMark.attrs.id);
   });
 
+  it('normalizes broad replacement steps and tracks only terminal period deletion', () => {
+    const oldDeleteMark = schema.marks[TrackDeleteMarkName].create({
+      id: 'imported-del-id',
+      author: 'Imported Author',
+      authorEmail: 'imported@example.com',
+      date: '2024-01-01T00:00:00.000Z',
+    });
+
+    const paragraph = schema.nodes.paragraph.create({}, [
+      schema.nodes.run.create({}, [schema.text('Current sentence')]),
+      schema.nodes.run.create({}, [schema.text(' old redline', [oldDeleteMark])]),
+      schema.nodes.run.create({ styleId: 'PeriodRun' }, [schema.text('.')]),
+    ]);
+    let state = createState(schema.nodes.doc.create({}, [paragraph]));
+
+    const paragraphRange = getParagraphRange(state.doc, 0);
+    expect(paragraphRange).toBeTruthy();
+
+    const replacementParagraph = schema.nodes.paragraph.create({}, [
+      schema.nodes.run.create({}, [schema.text('Current sentence')]),
+      schema.nodes.run.create({}, [schema.text(' old redline', [oldDeleteMark])]),
+    ]);
+
+    const tr = state.tr.replace(paragraphRange.from, paragraphRange.to, new Slice(replacementParagraph.content, 0, 0));
+    const tracked = trackedTransaction({ tr, state, user });
+    const finalState = state.apply(tracked);
+
+    /** @type {Record<string, string>} */
+    const deleteTextById = {};
+    finalState.doc.descendants((node) => {
+      if (!node.isText || !node.text) return;
+      for (const mark of node.marks ?? []) {
+        if (mark.type.name !== TrackDeleteMarkName) continue;
+        const id = mark.attrs?.id;
+        if (!id) continue;
+        deleteTextById[id] = (deleteTextById[id] ?? '') + node.text;
+      }
+    });
+
+    if (deleteTextById['imported-del-id']) {
+      expect(deleteTextById['imported-del-id']).toContain('old redline');
+      expect(deleteTextById['imported-del-id']).not.toContain('.');
+    }
+
+    const periodDeleteEntries = Object.entries(deleteTextById).filter(
+      ([id, text]) => id !== 'imported-del-id' && text.includes('.'),
+    );
+    expect(periodDeleteEntries).toHaveLength(1);
+    expect(periodDeleteEntries[0]?.[1]).toBe('.');
+  });
+
+  it('keeps caret near deletion point after normalized broad replacement so consecutive backspace works', () => {
+    const paragraph = schema.nodes.paragraph.create({}, [
+      schema.nodes.run.create({}, [schema.text('Current sentence')]),
+      schema.nodes.run.create({}, [schema.text(' old redline')]),
+      schema.nodes.run.create({ styleId: 'PeriodRun' }, [schema.text('.')]),
+    ]);
+    let state = createState(schema.nodes.doc.create({}, [paragraph]));
+
+    const periodPos = findTextPos(state.doc, '.');
+    expect(periodPos).toBeTypeOf('number');
+    state = state.apply(state.tr.setSelection(TextSelection.create(state.doc, periodPos + 1)));
+
+    const paragraphRange = getParagraphRange(state.doc, 0);
+    const replacementParagraph = schema.nodes.paragraph.create({}, [
+      schema.nodes.run.create({}, [schema.text('Current sentence')]),
+      schema.nodes.run.create({}, [schema.text(' old redline')]),
+    ]);
+
+    const tr1 = state.tr.replace(paragraphRange.from, paragraphRange.to, new Slice(replacementParagraph.content, 0, 0));
+    tr1.setSelection(TextSelection.create(tr1.doc, periodPos));
+    const tracked1 = trackedTransaction({ tr: tr1, state, user });
+    state = state.apply(tracked1);
+
+    const periodDeletePos = findTextPos(state.doc, '.');
+    expect(periodDeletePos).toBeTypeOf('number');
+    expect(Math.abs(state.selection.from - (periodDeletePos + 1))).toBeLessThanOrEqual(2);
+    const selectionAfterFirstDelete = state.selection.from;
+
+    const tr2 = state.tr.delete(state.selection.from - 1, state.selection.from);
+    tr2.setMeta('inputType', 'deleteContentBackward');
+    const tracked2 = trackedTransaction({ tr: tr2, state, user });
+    const finalState = state.apply(tracked2);
+
+    const deletedChars = [];
+    finalState.doc.descendants((node) => {
+      if (!node.isText || !node.text) return;
+      if (node.marks.some((mark) => mark.type.name === TrackDeleteMarkName)) {
+        deletedChars.push(node.text);
+      }
+    });
+
+    expect(deletedChars.join('')).toContain('.');
+    expect(finalState.selection.from).toBeLessThanOrEqual(selectionAfterFirstDelete);
+    expect(Math.abs(finalState.selection.from - periodDeletePos)).toBeLessThanOrEqual(3);
+  });
+
+  it('prefers normalized deletion caret over broad original selection after normalization', () => {
+    const paragraph = schema.nodes.paragraph.create({}, [
+      schema.nodes.run.create({}, [schema.text('Current sentence')]),
+      schema.nodes.run.create({}, [schema.text(' old redline')]),
+      schema.nodes.run.create({ styleId: 'PeriodRun' }, [schema.text('.')]),
+    ]);
+    let state = createState(schema.nodes.doc.create({}, [paragraph]));
+
+    const periodPos = findTextPos(state.doc, '.');
+    expect(periodPos).toBeTypeOf('number');
+    const paragraphRange = getParagraphRange(state.doc, 0);
+
+    const replacementParagraph = schema.nodes.paragraph.create({}, [
+      schema.nodes.run.create({}, [schema.text('Current sentence')]),
+      schema.nodes.run.create({}, [schema.text(' old redline')]),
+    ]);
+
+    const tr = state.tr.replace(paragraphRange.from, paragraphRange.to, new Slice(replacementParagraph.content, 0, 0));
+    tr.setSelection(TextSelection.create(tr.doc, periodPos - 5));
+
+    const tracked = trackedTransaction({ tr, state, user });
+    const finalState = state.apply(tracked);
+    const trackedPeriodPos = findTextPos(finalState.doc, '.');
+    expect(trackedPeriodPos).toBeTypeOf('number');
+
+    expect(Math.abs(finalState.selection.from - trackedPeriodPos)).toBeLessThanOrEqual(1);
+  });
+
   it('prefers original paste slice before maxOpen fallback for collapsed insertions', () => {
     const doc = schema.nodes.doc.create(
       {},
@@ -380,6 +506,44 @@ describe('trackChangesHelpers replaceStep', () => {
     expect(text).toContain('Paste One');
     expect(text).toContain('Paste Two');
     expect(text).not.toContain('Flattened Fallback');
+  });
+
+  it('does not re-map the inverse of a normalized replace step when prior maps already exist', () => {
+    const paragraphOne = schema.nodes.paragraph.create({}, [schema.nodes.run.create({}, [schema.text('Prefix')])]);
+    const paragraphTwo = schema.nodes.paragraph.create({}, [
+      schema.nodes.run.create({}, [schema.text('Current sentence old redline.')]),
+    ]);
+    const state = createState(schema.nodes.doc.create({}, [paragraphOne, paragraphTwo]));
+
+    const inverseMapInputSizes = [];
+    const originalInvert = ReplaceStep.prototype.invert;
+    vi.spyOn(ReplaceStep.prototype, 'invert').mockImplementation(function invertSpy(docNode) {
+      const inverseStep = originalInvert.call(this, docNode);
+      const isSingleCharDelete = this.slice.content.size === 0 && this.to - this.from === 1;
+      if (!isSingleCharDelete) return inverseStep;
+      const originalMap = inverseStep.map.bind(inverseStep);
+      inverseStep.map = (mapping) => {
+        inverseMapInputSizes.push(mapping.maps.length);
+        return originalMap(mapping);
+      };
+      return inverseStep;
+    });
+
+    const prefixPos = findTextPos(state.doc, 'Prefix');
+    expect(prefixPos).toBeTypeOf('number');
+    let tr = state.tr.insertText('!', prefixPos + 'Prefix'.length);
+
+    const secondParagraphRange = getParagraphRange(tr.doc, 1);
+    expect(secondParagraphRange).toBeTruthy();
+    const replacementParagraph = schema.nodes.paragraph.create({}, [
+      schema.nodes.run.create({}, [schema.text('Current sentence old redline')]),
+    ]);
+    tr = tr.replace(secondParagraphRange.from, secondParagraphRange.to, new Slice(replacementParagraph.content, 0, 0));
+    tr.setMeta('inputType', 'insertText');
+
+    trackedTransaction({ tr, state, user });
+
+    expect(inverseMapInputSizes).toHaveLength(0);
   });
 
   it('deletes empty paragraph on Backspace in suggesting mode', () => {

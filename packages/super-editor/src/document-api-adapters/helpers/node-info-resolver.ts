@@ -23,7 +23,7 @@ export function resolveNodeInfoForAddress(
   if (address.kind === 'block') {
     const candidate = findBlockById(index, address);
     if (!candidate) return undefined;
-    return mapNodeInfo(candidate, address.nodeType);
+    return mapNodeInfo(candidate, address.nodeType, editor.state.doc);
   }
 
   const resolvedInlineIndex = inlineIndex ?? getInlineIndex(editor);

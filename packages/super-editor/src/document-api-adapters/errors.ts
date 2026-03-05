@@ -4,6 +4,7 @@ export type DocumentApiAdapterErrorCode =
   | 'INVALID_TARGET'
   | 'AMBIGUOUS_TARGET'
   | 'CAPABILITY_UNAVAILABLE'
+  | 'INVALID_INPUT'
   | 'INTERNAL_ERROR';
 
 /**

@@ -4,10 +4,17 @@ import { preProcessVerticalMergeCells } from '@core/super-converter/export-helpe
 import { eighthPointsToPixels, halfPointToPoints, twipsToPixels } from '@core/super-converter/helpers.js';
 import { buildFallbackGridForTable } from '@core/super-converter/helpers/tableFallbackHelpers.js';
 import { translateChildNodes } from '@core/super-converter/v2/exporter/helpers/index.js';
+import { createAttributeHandler } from '@converter/v3/handlers/utils.js';
 import { NodeTranslator } from '@translator';
 import { translator as tblGridTranslator } from '../tblGrid';
 import { translator as tblPrTranslator } from '../tblPr';
 import { translator as trTranslator } from '../tr';
+
+/**
+ * Attributes preserved across DOCX roundtrip for table identity.
+ * @type {import('@translator').AttrConfig[]}
+ */
+const validXmlAttributes = ['w14:paraId', 'w14:textId'].map((xmlName) => createAttributeHandler(xmlName));
 
 /** @type {import('@translator').XmlNodeName} */
 const XML_NODE_NAME = 'w:tbl';
@@ -87,7 +94,7 @@ const encode = (params, encodedAttrs) => {
     'justification',
     'tableLayout',
     ['tableIndent', ({ value, type }) => ({ width: twipsToPixels(value), type })],
-    ['tableCellSpacing', ({ value, type }) => ({ w: String(value), type })],
+    ['tableCellSpacing', ({ value, type }) => ({ value: twipsToPixels(value), type })],
   ].forEach((prop) => {
     /** @type {string} */
     let key;
@@ -139,7 +146,6 @@ const encode = (params, encodedAttrs) => {
     }
   }
 
-  const tableLook = encodedAttrs.tableProperties.tblLook;
   // Table borders can be specified in tblPr or inside a referenced style tag
   const borderProps = _processTableBorders(encodedAttrs.tableProperties.borders || {});
   const referencedStyles = _getReferencedTableStyles(encodedAttrs.tableStyleId, params) || {};
@@ -204,8 +210,6 @@ const encode = (params, encodedAttrs) => {
         row,
         table: node,
         tableProperties: encodedAttrs.tableProperties,
-        tableBorders: encodedAttrs.borders,
-        tableLook,
         columnWidths,
         activeRowSpans: activeRowSpans.slice(),
         rowIndex,
@@ -345,7 +349,7 @@ export function _processTableBorders(rawBorders) {
 }
 
 /**
- * @typedef {{borders?: {}, name?: *, justification?: *, fonts?: {}, fontSize?: *, rowBorders?: {}, cellMargins?: {}}} TableStyles
+ * @typedef {{borders?: {}, name?: *, justification?: *, fonts?: {}, fontSize?: *, rowBorders?: {}, cellMargins?: {}, tableCellSpacing?: {value?: number, type?: string}}} TableStyles
  */
 
 /**
@@ -419,6 +423,10 @@ export function _getReferencedTableStyles(tableStyleReference, params) {
         }
       });
       if (Object.keys(cellMargins).length) stylesToReturn.cellMargins = cellMargins;
+
+      if (tableProperties.tableCellSpacing) {
+        stylesToReturn.tableCellSpacing = tableProperties.tableCellSpacing;
+      }
     }
   }
 
@@ -450,7 +458,7 @@ export const config = {
   type: NodeTranslator.translatorTypes.NODE,
   encode,
   decode,
-  attributes: [],
+  attributes: validXmlAttributes,
 };
 
 /**

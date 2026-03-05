@@ -262,4 +262,15 @@ describe('mapFailedReceipt: plan-engine code passthrough', () => {
     expect(result).toBeInstanceOf(CliError);
     expect(result!.code).not.toBe('NO_OP');
   });
+
+  test('paragraph mutation receipt maps INVALID_TARGET to INVALID_ARGUMENT', () => {
+    const receipt = {
+      success: false,
+      failure: { code: 'INVALID_TARGET', message: 'Paragraph target is invalid.' },
+    };
+
+    const result = mapFailedReceipt('format.paragraph.setAlignment' as any, receipt);
+    expect(result).toBeInstanceOf(CliError);
+    expect(result!.code).toBe('INVALID_ARGUMENT');
+  });
 });

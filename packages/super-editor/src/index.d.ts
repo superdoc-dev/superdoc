@@ -3,9 +3,9 @@
  * This file provides TypeScript types for the JavaScript exports in index.js
  */
 
-import type { EditorView } from 'prosemirror-view';
-import type { EditorState, Transaction } from 'prosemirror-state';
-import type { Schema, Node as ProseMirrorNode, Mark as ProseMirrorMark } from 'prosemirror-model';
+export type { EditorView } from 'prosemirror-view';
+export type { EditorState, Transaction } from 'prosemirror-state';
+export type { Schema } from 'prosemirror-model';
 
 // ============================================
 // COMMAND TYPES (inlined from ChainedCommands.ts)
@@ -156,6 +156,255 @@ export interface OpenOptions {
   content?: unknown;
   mediaFiles?: Record<string, unknown>;
   fonts?: Record<string, unknown>;
+}
+
+// ============================================
+// PRESENTATION EDITOR TYPES
+// ============================================
+
+/** Page dimensions in points (72 points = 1 inch) */
+export interface PageSize {
+  /** Width in points */
+  w: number;
+  /** Height in points */
+  h: number;
+}
+
+/** Page margin configuration in points */
+export interface PageMargins {
+  top?: number;
+  right?: number;
+  bottom?: number;
+  left?: number;
+  header?: number;
+  footer?: number;
+}
+
+/** Virtualization options for large documents */
+export interface VirtualizationOptions {
+  enabled?: boolean;
+  window?: number;
+  overscan?: number;
+  gap?: number;
+  paddingTop?: number;
+}
+
+/** Tracked changes display mode */
+export type TrackedChangesMode = 'review' | 'original' | 'final' | 'off';
+
+/** Override tracked changes behavior */
+export interface TrackedChangesOverrides {
+  mode?: TrackedChangesMode;
+  enabled?: boolean;
+}
+
+/** Layout mode for page rendering */
+export type LayoutMode = 'vertical' | 'horizontal';
+
+/** Remote user presence information */
+export interface RemoteUserInfo {
+  name?: string;
+  email?: string;
+  color: string;
+}
+
+/** Remote cursor state for collaboration */
+export interface RemoteCursorState {
+  clientId: number;
+  user: RemoteUserInfo;
+  anchor: number;
+  head: number;
+  updatedAt: number;
+}
+
+/** Presence rendering options */
+export interface PresenceOptions {
+  enabled?: boolean;
+  showLabels?: boolean;
+  maxVisible?: number;
+  labelFormatter?: (user: RemoteUserInfo) => string;
+  highlightOpacity?: number;
+  staleTimeout?: number;
+}
+
+/** Layout engine configuration */
+export interface LayoutEngineOptions {
+  pageSize?: PageSize;
+  margins?: PageMargins;
+  zoom?: number;
+  virtualization?: VirtualizationOptions;
+  pageStyles?: Record<string, unknown>;
+  debugLabel?: string;
+  layoutMode?: LayoutMode;
+  trackedChanges?: TrackedChangesOverrides;
+  emitCommentPositionsInViewing?: boolean;
+  enableCommentsInViewing?: boolean;
+  presence?: PresenceOptions;
+  ruler?: {
+    enabled?: boolean;
+    interactive?: boolean;
+    onMarginChange?: (side: 'left' | 'right', marginInches: number) => void;
+  };
+}
+
+/** Options for creating a PresentationEditor instance */
+export interface PresentationEditorOptions {
+  /** Host element where the layout-engine powered UI should render (required) */
+  element: HTMLElement;
+  /** Layout-specific configuration */
+  layoutEngineOptions?: LayoutEngineOptions;
+  /** Document mode: 'editing', 'viewing', or 'suggesting' */
+  documentMode?: 'editing' | 'viewing' | 'suggesting';
+  /** Collaboration provider with awareness support */
+  collaborationProvider?: {
+    awareness?: unknown;
+    disconnect?: () => void;
+  } | null;
+  /** Whether to disable the context menu */
+  disableContextMenu?: boolean;
+  /** Document content */
+  content?: string | object;
+  /** Editor extensions */
+  extensions?: any[];
+  /** Whether the editor is editable */
+  editable?: boolean;
+  /** Additional options passed to the underlying Editor */
+  [key: string]: any;
+}
+
+/** Layout error information */
+export interface LayoutError {
+  phase: 'initialization' | 'render';
+  error: Error;
+  timestamp: number;
+}
+
+/** Rectangle with page context */
+export interface RangeRect {
+  pageIndex: number;
+  left: number;
+  right: number;
+  top: number;
+  bottom: number;
+  width: number;
+  height: number;
+}
+
+/** Layout metrics for telemetry */
+export interface LayoutMetrics {
+  durationMs: number;
+  blockCount: number;
+  pageCount: number;
+}
+
+/** Position hit result from coordinate mapping */
+export interface PositionHit {
+  pos: number;
+  layoutEpoch: number;
+  blockId: string;
+  pageIndex: number;
+  column: number;
+  lineIndex: number;
+}
+
+/** Bounding rectangle dimensions */
+export interface BoundingRect {
+  top: number;
+  left: number;
+  bottom: number;
+  right: number;
+  width: number;
+  height: number;
+}
+
+/** A fragment positioned on a page */
+export interface LayoutFragment {
+  pmStart: number;
+  pmEnd: number;
+  x: number;
+  y: number;
+  width: number;
+  height: number;
+  blockId: string;
+  column?: number;
+}
+
+/** A rendered page in the layout */
+export interface LayoutPage {
+  number: number;
+  fragments: LayoutFragment[];
+  margins?: PageMargins;
+  size?: PageSize;
+  orientation?: 'portrait' | 'landscape';
+  sectionIndex?: number;
+  footnoteReserved?: number;
+}
+
+/** Final layout output from the layout engine */
+export interface Layout {
+  pageSize: PageSize;
+  pages: LayoutPage[];
+  pageGap?: number;
+  layoutEpoch?: number;
+}
+
+/** A block in the flow document model */
+export interface FlowBlock {
+  id: string;
+  type: string;
+  pmStart: number;
+  pmEnd: number;
+  [key: string]: unknown;
+}
+
+/** Measurement data for a block */
+export interface Measure {
+  blockId: string;
+  width: number;
+  height: number;
+  lines?: Array<{
+    width: number;
+    ascent: number;
+    descent: number;
+    lineHeight: number;
+  }>;
+  [key: string]: unknown;
+}
+
+/** Section metadata for multi-section documents */
+export interface SectionMetadata {
+  sectionIndex: number;
+  startPage: number;
+  endPage: number;
+  [key: string]: unknown;
+}
+
+/** Paint snapshot for debugging/testing */
+export interface PaintSnapshot {
+  formatVersion: 1;
+  pageCount: number;
+  lineCount: number;
+  markerCount: number;
+  tabCount: number;
+  pages: Array<{
+    index: number;
+    pageNumber?: number;
+    lineCount: number;
+    lines: Array<{
+      index: number;
+      inTableFragment: boolean;
+      inTableParagraph: boolean;
+      style: Record<string, unknown>;
+    }>;
+  }>;
+}
+
+/** Payload for layout update events */
+export interface LayoutUpdatePayload {
+  blocks: FlowBlock[];
+  measures: Measure[];
+  layout: Layout;
+  metrics?: LayoutMetrics;
 }
 
 // ============================================
@@ -315,13 +564,333 @@ export declare class SuperToolbar {
   [key: string]: any;
 }
 
+/**
+ * PresentationEditor provides a paginated, layout-engine-powered editing experience.
+ * It wraps a hidden ProseMirror Editor and renders via the layout engine pipeline.
+ */
 export declare class PresentationEditor {
-  /** Get the painted DOM element for a document position (body only) */
-  getElementAtPos?: (
-    pos: number,
-    options?: { forceRebuild?: boolean; fallbackToCoords?: boolean },
-  ) => HTMLElement | null;
+  /**
+   * Creates a new PresentationEditor instance.
+   * @param options - Configuration options including the host element
+   */
+  constructor(options: PresentationEditorOptions);
 
+  /**
+   * Get a PresentationEditor instance by document ID.
+   */
+  static getInstance(documentId: string): PresentationEditor | undefined;
+
+  /**
+   * Set zoom globally across all PresentationEditor instances.
+   */
+  static setGlobalZoom(zoom: number): void;
+
+  // ============================================
+  // Public Getters
+  // ============================================
+
+  /** The underlying ProseMirror Editor instance */
+  readonly editor: Editor;
+
+  /** The visible host element where the editor is rendered */
+  readonly element: HTMLElement;
+
+  /** Command service for the currently active editor (body or header/footer) */
+  readonly commands: EditorCommands;
+
+  /** ProseMirror editor state for the currently active editor */
+  readonly state: EditorState;
+
+  /** Whether the active editor accepts input */
+  readonly isEditable: boolean;
+
+  /** Editor options for the currently active editor */
+  readonly options: Record<string, any>;
+
+  /** The visible host container element */
+  readonly visibleHost: HTMLElement;
+
+  /** Selection overlay element for caret and highlight rendering */
+  readonly overlayElement: HTMLElement | null;
+
+  /** Current zoom level (1 = 100%) */
+  readonly zoom: number;
+
+  // ============================================
+  // Public Methods
+  // ============================================
+
+  /**
+   * Dispatch a ProseMirror transaction to the currently active editor.
+   */
+  dispatch(tr: Transaction): void;
+
+  /**
+   * Focus the editor.
+   */
+  focus(): void;
+
+  /**
+   * Returns the currently active editor (body or header/footer session).
+   */
+  getActiveEditor(): Editor;
+
+  /**
+   * Undo the last action in the active editor.
+   */
+  undo(): boolean;
+
+  /**
+   * Redo the last undone action in the active editor.
+   */
+  redo(): boolean;
+
+  /**
+   * Run a callback against the active editor.
+   */
+  dispatchInActiveEditor(callback: (editor: Editor) => void): void;
+
+  /**
+   * Set the document mode and update editor editability.
+   * @param mode - 'editing', 'viewing', or 'suggesting'
+   */
+  setDocumentMode(mode: 'editing' | 'viewing' | 'suggesting'): void;
+
+  /**
+   * Override tracked-changes rendering preferences.
+   */
+  setTrackedChangesOverrides(overrides?: TrackedChangesOverrides): void;
+
+  /**
+   * Update viewing-mode comment rendering behavior.
+   */
+  setViewingCommentOptions(options?: {
+    emitCommentPositionsInViewing?: boolean;
+    enableCommentsInViewing?: boolean;
+  }): void;
+
+  /**
+   * Toggle the custom context menu.
+   */
+  setContextMenuDisabled(disabled: boolean): void;
+
+  /**
+   * Subscribe to layout update events. Returns an unsubscribe function.
+   */
+  onLayoutUpdated(handler: (payload: LayoutUpdatePayload) => void): () => void;
+
+  /**
+   * Subscribe to layout error events. Returns an unsubscribe function.
+   */
+  onLayoutError(handler: (error: LayoutError) => void): () => void;
+
+  /**
+   * Get the rendered pages.
+   */
+  getPages(): LayoutPage[];
+
+  /**
+   * Get the most recent layout error (if any).
+   */
+  getLayoutError(): LayoutError | null;
+
+  /**
+   * Check if layout is healthy.
+   */
+  isLayoutHealthy(): boolean;
+
+  /**
+   * Get detailed layout health state.
+   */
+  getLayoutHealthState(): 'healthy' | 'degraded' | 'failed';
+
+  /**
+   * Get layout-relative rects for the current document selection.
+   */
+  getSelectionRects(relativeTo?: HTMLElement): RangeRect[];
+
+  /**
+   * Convert a document range into layout-based bounding rects.
+   */
+  getRangeRects(from: number, to: number, relativeTo?: HTMLElement): RangeRect[];
+
+  /**
+   * Get bounds for a document range.
+   */
+  getSelectionBounds(
+    from: number,
+    to: number,
+    relativeTo?: HTMLElement,
+  ): {
+    bounds: BoundingRect;
+    rects: RangeRect[];
+    pageIndex: number;
+  } | null;
+
+  /**
+   * Remap comment positions to layout coordinates with bounds and rects.
+   */
+  getCommentBounds(
+    positions: Record<string, { start?: number; end?: number; pos?: number; [key: string]: unknown }>,
+    relativeTo?: HTMLElement,
+  ): Record<
+    string,
+    {
+      start?: number;
+      end?: number;
+      pos?: number;
+      bounds?: BoundingRect;
+      rects?: RangeRect[];
+      pageIndex?: number;
+      [key: string]: unknown;
+    }
+  >;
+
+  /**
+   * Get current layout snapshot.
+   */
+  getLayoutSnapshot(): {
+    blocks: FlowBlock[];
+    measures: Measure[];
+    layout: Layout | null;
+    sectionMetadata: SectionMetadata[];
+  };
+
+  /**
+   * Get current layout options.
+   */
+  getLayoutOptions(): LayoutEngineOptions;
+
+  /**
+   * Get current paint snapshot.
+   */
+  getPaintSnapshot(): PaintSnapshot | null;
+
+  /**
+   * Get section-aware page styles.
+   */
+  getCurrentSectionPageStyles(): {
+    pageSize: { width: number; height: number };
+    pageMargins: { left: number; right: number; top: number; bottom: number };
+    sectionIndex: number;
+    orientation: 'portrait' | 'landscape';
+  };
+
+  /**
+   * Get remote cursor states for all collaborators.
+   */
+  getRemoteCursors(): RemoteCursorState[];
+
+  /**
+   * Set the layout mode (vertical or horizontal).
+   */
+  setLayoutMode(mode: LayoutMode): void;
+
+  /**
+   * Hit test at client coordinates to find document position.
+   */
+  hitTest(clientX: number, clientY: number): PositionHit | null;
+
+  /**
+   * Normalize client coordinates to layout coordinates.
+   */
+  normalizeClientPoint(
+    clientX: number,
+    clientY: number,
+  ): {
+    x: number;
+    y: number;
+    pageIndex?: number;
+    pageLocalY?: number;
+  } | null;
+
+  /**
+   * Get viewport coordinates at a document position.
+   */
+  coordsAtPos(
+    pos: number,
+  ): { left: number; right: number; top: number; bottom: number; width: number; height: number } | null;
+
+  /**
+   * Get the painted DOM element for a document position (body only).
+   */
+  getElementAtPos(pos: number, options?: { forceRebuild?: boolean; fallbackToCoords?: boolean }): HTMLElement | null;
+
+  /**
+   * Scroll to a document position.
+   */
+  scrollToPosition(pos: number, options?: { behavior?: ScrollBehavior; block?: ScrollLogicalPosition }): boolean;
+
+  /**
+   * Scroll to a document position (async version).
+   */
+  scrollToPositionAsync(
+    pos: number,
+    options?: { behavior?: ScrollBehavior; block?: ScrollLogicalPosition },
+  ): Promise<boolean>;
+
+  /**
+   * Scroll to a specific page number.
+   */
+  scrollToPage(pageNumber: number, scrollBehavior?: ScrollBehavior): Promise<boolean>;
+
+  /**
+   * Get document position at viewport coordinates.
+   */
+  posAtCoords(coords: {
+    left?: number;
+    top?: number;
+    clientX?: number;
+    clientY?: number;
+  }): { pos: number; inside: number } | null;
+
+  /**
+   * Update zoom level and re-render.
+   * @param zoom - Zoom level multiplier (1.0 = 100%)
+   */
+  setZoom(zoom: number): void;
+
+  /**
+   * Navigate to a document anchor/bookmark.
+   */
+  goToAnchor(anchor: string): Promise<boolean>;
+
+  /**
+   * Convert layout coordinates back to viewport coordinates.
+   */
+  denormalizeClientPoint(
+    layoutX: number,
+    layoutY: number,
+    pageIndex?: number,
+    height?: number,
+  ): { x: number; y: number; height?: number } | null;
+
+  /**
+   * Compute caret position in layout coordinates.
+   */
+  computeCaretLayoutRect(pos: number): { pageIndex: number; x: number; y: number; height: number } | null;
+
+  /**
+   * Clean up editor and DOM nodes.
+   */
+  destroy(): void;
+
+  /**
+   * Register an event listener.
+   */
+  on(event: string, handler: (...args: any[]) => void): void;
+
+  /**
+   * Remove an event listener.
+   */
+  off(event: string, handler: (...args: any[]) => void): void;
+
+  /**
+   * Emit an event.
+   */
+  emit(event: string, ...args: any[]): void;
+
+  /** Allow additional properties */
   [key: string]: any;
 }
 

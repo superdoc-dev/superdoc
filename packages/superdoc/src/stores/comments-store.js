@@ -145,13 +145,6 @@ export const useCommentsStore = defineStore('comments', () => {
     return source === 'super-editor';
   };
 
-  /**
-   * Check if a comment is part of a tracked-change thread.
-   * Returns true for tracked-change comments or replies to tracked changes.
-   *
-   * @param {Object} comment - The comment to check
-   * @returns {boolean} True if the comment is a tracked-change thread
-   */
   const isTrackedChangeThread = (comment) => Boolean(comment?.trackedChange) || Boolean(comment?.trackedChangeParentId);
 
   const syncResolvedCommentsWithDocument = () => {
@@ -164,6 +157,7 @@ export const useCommentsStore = defineStore('comments', () => {
       if (!key) return;
 
       const hasActiveAnchor = activeKeys.has(String(key));
+
       if (
         hasActiveAnchor &&
         comment.resolvedTime &&
@@ -343,8 +337,11 @@ export const useCommentsStore = defineStore('comments', () => {
       const existing = commentsList.value.find((c) => c.commentId === changeId);
       if (existing) {
         // Already exists (e.g. created during batch import) — update instead of duplicating
-        existing.trackedChangeText = trackedChangeText;
-        if (deletedText) existing.deletedText = deletedText;
+        // Partial resolution can turn a replacement into insert-only/delete-only, so
+        // clear fields explicitly when the updated payload no longer includes them.
+        existing.trackedChangeText = trackedChangeText ?? null;
+        existing.trackedChangeType = trackedChangeType ?? null;
+        existing.deletedText = deletedText ?? null;
 
         const emitData = {
           type: COMMENT_EVENTS.UPDATE,
@@ -361,11 +358,11 @@ export const useCommentsStore = defineStore('comments', () => {
       const existingTrackedChange = commentsList.value.find((comment) => comment.commentId === changeId);
       if (!existingTrackedChange) return;
 
-      existingTrackedChange.trackedChangeText = trackedChangeText;
-
-      if (deletedText) {
-        existingTrackedChange.deletedText = deletedText;
-      }
+      // Partial resolution can turn a replacement into insert-only/delete-only, so
+      // clear fields explicitly when the updated payload no longer includes them.
+      existingTrackedChange.trackedChangeText = trackedChangeText ?? null;
+      existingTrackedChange.trackedChangeType = trackedChangeType ?? null;
+      existingTrackedChange.deletedText = deletedText ?? null;
 
       const emitData = {
         type: COMMENT_EVENTS.UPDATE,
@@ -374,6 +371,17 @@ export const useCommentsStore = defineStore('comments', () => {
 
       syncCommentsToClients(superdoc, emitData);
       debounceEmit(changeId, emitData, superdoc);
+    } else if (event === 'resolve') {
+      const existingTrackedChange = commentsList.value.find((comment) => comment.commentId === changeId);
+      if (!existingTrackedChange || existingTrackedChange.resolvedTime) return;
+
+      // Selection/toolbar reject emits tracked-change resolve events. Use the same
+      // resolution path as the comment dialog so one method owns state + sync + emit.
+      existingTrackedChange.resolveComment({
+        email: params.resolvedByEmail ?? superdoc?.user?.email ?? null,
+        name: params.resolvedByName ?? superdoc?.user?.name ?? null,
+        superdoc,
+      });
     }
   };
 
@@ -416,7 +424,7 @@ export const useCommentsStore = defineStore('comments', () => {
       superdocStore.selectionPosition.source = 'super-editor';
     }
 
-    activeComment.value = pendingComment.value.commentID;
+    activeComment.value = pendingComment.value.commentId;
   };
 
   /**
@@ -665,6 +673,11 @@ export const useCommentsStore = defineStore('comments', () => {
       .map((c) => c.commentId || c.importedId);
     commentsList.value = commentsList.value.filter((c) => !childCommentIds.includes(c.commentId));
 
+    // Clear active state so floating layout doesn't reference a deleted comment
+    if (activeComment.value === commentId || childCommentIds.includes(activeComment.value)) {
+      activeComment.value = null;
+    }
+
     const event = {
       type: COMMENT_EVENTS.DELETED,
       comment: comment.getValues(),
@@ -847,10 +860,12 @@ export const useCommentsStore = defineStore('comments', () => {
    * @returns {void}
    */
   const handleEditorLocationsUpdate = (allCommentPositions) => {
-    if ((!allCommentPositions || Object.keys(allCommentPositions).length === 0) && commentsList.value.length > 0) {
+    if (allCommentPositions == null) {
       return;
     }
-    editorCommentPositions.value = allCommentPositions || {};
+    // `{}` is authoritative: when marks are removed, positions can become empty
+    // and we must clear stale anchors instead of preserving previous ones.
+    editorCommentPositions.value = allCommentPositions;
   };
 
   /**
@@ -864,11 +879,12 @@ export const useCommentsStore = defineStore('comments', () => {
     const comments = getGroupedComments.value?.parentComments
       .filter((c) => !c.resolvedTime)
       .filter((c) => {
-        const keys = Object.keys(editorCommentPositions.value);
-        const isPdfComment = c.selection?.source !== 'super-editor';
-        if (isPdfComment) return true;
+        // Non-editor comments (e.g. PDF) are always shown.
+        // Editor-backed comments (including tracked changes, which have no
+        // selection.source) must have a live position in the document.
+        if (!isEditorBackedComment(c)) return true;
         const commentKey = c.commentId || c.importedId;
-        return keys.includes(commentKey);
+        return commentKey in editorCommentPositions.value;
       });
     return comments;
   });

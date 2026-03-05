@@ -52,6 +52,7 @@ type CoreCommandNames =
   | 'exitListItemAt'
   | 'restoreSelection'
   | 'setTextSelection'
+  | 'insertTableAt'
   | 'getSelectionMarks';
 
 type CoreCommandSignatures = {

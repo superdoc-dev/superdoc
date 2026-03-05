@@ -1,7 +1,7 @@
 ---
 title: lists.get
 sidebarTitle: lists.get
-description: Reference for lists.get
+description: Retrieve a specific list node by target.
 ---
 
 {/* GENERATED FILE: DO NOT EDIT. Regenerate via `pnpm run docapi:sync`. */}
@@ -9,6 +9,8 @@ description: Reference for lists.get
 > Alpha: Document API is currently alpha and subject to breaking changes.
 
 ## Summary
+
+Retrieve a specific list node by target.
 
 - Operation ID: `lists.get`
 - API member path: `editor.doc.lists.get(...)`
@@ -18,11 +20,18 @@ description: Reference for lists.get
 - Supports dry run: `no`
 - Deterministic target resolution: `yes`
 
+## Expected result
+
+Returns a ListItemInfo object with the item kind, level, marker, and address.
+
 ## Input fields
 
 | Field | Type | Required | Description |
 | --- | --- | --- | --- |
 | `address` | ListItemAddress | yes | ListItemAddress |
+| `address.kind` | `"block"` | yes | Constant: `"block"` |
+| `address.nodeId` | string | yes |  |
+| `address.nodeType` | `"listItem"` | yes | Constant: `"listItem"` |
 
 ### Example request
 
@@ -41,8 +50,12 @@ description: Reference for lists.get
 | Field | Type | Required | Description |
 | --- | --- | --- | --- |
 | `address` | ListItemAddress | yes | ListItemAddress |
+| `address.kind` | `"block"` | yes | Constant: `"block"` |
+| `address.nodeId` | string | yes |  |
+| `address.nodeType` | `"listItem"` | yes | Constant: `"listItem"` |
 | `kind` | enum | no | `"ordered"`, `"bullet"` |
 | `level` | integer | no |  |
+| `listId` | string | yes |  |
 | `marker` | string | no |  |
 | `ordinal` | integer | no |  |
 | `path` | integer[] | no |  |
@@ -57,6 +70,7 @@ description: Reference for lists.get
     "nodeId": "node-def456",
     "nodeType": "listItem"
   },
+  "listId": "example",
   "marker": "1.",
   "ordinal": 1
 }
@@ -106,6 +120,9 @@ description: Reference for lists.get
     "level": {
       "type": "integer"
     },
+    "listId": {
+      "type": "string"
+    },
     "marker": {
       "type": "string"
     },
@@ -123,7 +140,8 @@ description: Reference for lists.get
     }
   },
   "required": [
-    "address"
+    "address",
+    "listId"
   ],
   "type": "object"
 }

@@ -1,7 +1,7 @@
 ---
 title: comments.get
 sidebarTitle: comments.get
-description: Reference for comments.get
+description: Retrieve a single comment thread by ID.
 ---
 
 {/* GENERATED FILE: DO NOT EDIT. Regenerate via `pnpm run docapi:sync`. */}
@@ -10,6 +10,8 @@ description: Reference for comments.get
 
 ## Summary
 
+Retrieve a single comment thread by ID.
+
 - Operation ID: `comments.get`
 - API member path: `editor.doc.comments.get(...)`
 - Mutates document: `no`
@@ -17,6 +19,10 @@ description: Reference for comments.get
 - Supports tracked mode: `no`
 - Supports dry run: `no`
 - Deterministic target resolution: `yes`
+
+## Expected result
+
+Returns a CommentInfo object with the comment text, author, date, and thread metadata.
 
 ## Input fields
 
@@ -37,6 +43,9 @@ description: Reference for comments.get
 | Field | Type | Required | Description |
 | --- | --- | --- | --- |
 | `address` | CommentAddress | yes | CommentAddress |
+| `address.entityId` | string | yes |  |
+| `address.entityType` | `"comment"` | yes | Constant: `"comment"` |
+| `address.kind` | `"entity"` | yes | Constant: `"entity"` |
 | `anchoredText` | string | no |  |
 | `commentId` | string | yes |  |
 | `createdTime` | number | no |  |
@@ -47,6 +56,8 @@ description: Reference for comments.get
 | `parentCommentId` | string | no |  |
 | `status` | enum | yes | `"open"`, `"resolved"` |
 | `target` | TextTarget | no | TextTarget |
+| `target.kind` | `"text"` | no | Constant: `"text"` |
+| `target.segments` | TextSegment[] | no |  |
 | `text` | string | no |  |
 
 ### Example response

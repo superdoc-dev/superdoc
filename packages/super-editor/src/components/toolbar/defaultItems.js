@@ -716,6 +716,8 @@ export const makeDefaultItems = ({
     hasCaret: true,
     command: 'setZoom',
     isWide: true,
+    // Keep the control width stable so changing labels (e.g. 50% -> 100%) does not shift nearby items.
+    style: { width: '71px', minWidth: '71px' },
     inlineTextInputVisible: false,
     hasInlineTextInput: true,
     attributes: {

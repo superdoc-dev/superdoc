@@ -13,12 +13,16 @@ vi.mock('@converter/v2/importer/index.js', () => ({
 }));
 
 // Simple and predictable conversion for positions
-vi.mock('@converter/helpers.js', () => ({
-  twipsToPixels: (twips) => (twips === undefined ? undefined : Number(twips) / 20),
-  twipsToInches: (twips) => (twips === undefined ? undefined : Number(twips) / 10),
-  twipsToLines: (twips) => (twips === undefined ? undefined : Number(twips) / 240),
-  pixelsToTwips: (pixels) => (pixels === undefined ? undefined : Math.round(Number(pixels) * 20)),
-}));
+vi.mock('@converter/helpers.js', async (importOriginal) => {
+  const actual = await importOriginal();
+  return {
+    ...actual,
+    twipsToPixels: (twips) => (twips === undefined ? undefined : Number(twips) / 20),
+    twipsToInches: (twips) => (twips === undefined ? undefined : Number(twips) / 10),
+    twipsToLines: (twips) => (twips === undefined ? undefined : Number(twips) / 240),
+    pixelsToTwips: (pixels) => (pixels === undefined ? undefined : Math.round(Number(pixels) * 20)),
+  };
+});
 
 import { handleParagraphNode } from './legacy-handle-paragraph-node.js';
 import { parseMarks, mergeTextNodes } from '@converter/v2/importer/index.js';

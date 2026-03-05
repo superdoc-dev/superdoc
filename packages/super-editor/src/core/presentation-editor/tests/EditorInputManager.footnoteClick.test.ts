@@ -187,4 +187,56 @@ describe('EditorInputManager - Footnote click selection behavior', () => {
     expect(TextSelection.create as unknown as Mock).not.toHaveBeenCalled();
     expect(mockEditor.state.tr.setSelection).not.toHaveBeenCalled();
   });
+
+  it('does not change editor selection when hit-test resolves to a semantic footnote block', () => {
+    (clickToPosition as unknown as Mock).mockReturnValue({
+      pos: 22,
+      layoutEpoch: 1,
+      pageIndex: 0,
+      blockId: '__sd_semantic_footnote-1-1',
+    });
+
+    const target = document.createElement('span');
+    viewportHost.appendChild(target);
+
+    const PointerEventImpl = getPointerEventImpl();
+    target.dispatchEvent(
+      new PointerEventImpl('pointerdown', {
+        bubbles: true,
+        cancelable: true,
+        button: 0,
+        buttons: 1,
+        clientX: 12,
+        clientY: 14,
+      } as PointerEventInit),
+    );
+
+    expect(TextSelection.create as unknown as Mock).not.toHaveBeenCalled();
+    expect(mockEditor.state.tr.setSelection).not.toHaveBeenCalled();
+  });
+
+  it('does not change editor selection on semantic footnotes heading click', () => {
+    (clickToPosition as unknown as Mock).mockReturnValue(null);
+
+    const headingEl = document.createElement('div');
+    headingEl.setAttribute('data-block-id', '__sd_semantic_footnotes_heading');
+    const nestedEl = document.createElement('span');
+    headingEl.appendChild(nestedEl);
+    viewportHost.appendChild(headingEl);
+
+    const PointerEventImpl = getPointerEventImpl();
+    nestedEl.dispatchEvent(
+      new PointerEventImpl('pointerdown', {
+        bubbles: true,
+        cancelable: true,
+        button: 0,
+        buttons: 1,
+        clientX: 12,
+        clientY: 14,
+      } as PointerEventInit),
+    );
+
+    expect(TextSelection.create as unknown as Mock).not.toHaveBeenCalled();
+    expect(mockEditor.state.tr.setSelection).not.toHaveBeenCalled();
+  });
 });

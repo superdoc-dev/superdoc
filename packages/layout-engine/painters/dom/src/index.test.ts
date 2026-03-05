@@ -2942,13 +2942,16 @@ describe('DomPainter', () => {
     painter.setActiveComment('comment-A');
     painter.paint(paragraphLayout, mount);
     span = mount.querySelector('.superdoc-comment-highlight') as HTMLElement;
-    expect(span.style.backgroundColor).not.toBe('');
+    const activeColor = span.style.backgroundColor;
+    expect(activeColor).not.toBe('');
 
-    // Select a different comment (comment-B): should NOT be highlighted
+    // Select a different comment (comment-B): should show faded highlight
     painter.setActiveComment('comment-B');
     painter.paint(paragraphLayout, mount);
     span = mount.querySelector('.superdoc-comment-highlight') as HTMLElement;
-    expect(span.style.backgroundColor).toBe(''); // Not highlighted because active comment doesn't match
+    // Inactive comments get a faded background instead of being invisible
+    expect(span.style.backgroundColor).not.toBe('');
+    expect(span.style.backgroundColor).not.toBe(activeColor);
   });
 
   it('shows nested comment indicators when outer comment is selected', () => {

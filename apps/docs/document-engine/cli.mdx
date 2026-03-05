@@ -68,13 +68,21 @@ superdoc replace \
 
 For commands that do not support tracked mode, the CLI returns `TRACK_CHANGE_COMMAND_UNAVAILABLE`.
 
+## User identity
+
+By default, the CLI attributes edits to a generic "CLI" user. Pass `--user-name` and `--user-email` on `open` to identify your automation in comments, tracked changes, and collaboration presence:
+
+```bash
+superdoc open contract.docx --user-name "Review Bot" --user-email "bot@example.com"
+```
+
 ## Commands
 
 ### Lifecycle
 
 | Command | Description |
 | --- | --- |
-| `superdoc open <doc>` | Open a document and create an editing session |
+| `superdoc open <doc>` | Open a document and create an editing session. Supports `--user-name` and `--user-email` to set the editing identity. In collaboration mode, also supports `--on-missing` and `--bootstrap-settling-ms`. |
 | `superdoc save` | Save the current session to disk |
 | `superdoc close` | Close the active session and clean up resources |
 

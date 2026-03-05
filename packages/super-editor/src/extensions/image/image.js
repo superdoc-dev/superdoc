@@ -1,3 +1,4 @@
+import { v4 as uuidv4 } from 'uuid';
 import { Attribute, Node } from '@core/index.js';
 import { formatInsetClipPathTransform } from '@superdoc/contracts';
 import { ImageRegistrationPlugin } from './imageHelpers/imageRegistrationPlugin.js';
@@ -88,6 +89,18 @@ export const Image = Node.create({
 
   addAttributes() {
     return {
+      /** Stable, session-scoped image identity. Assigned on import and create. */
+      sdImageId: {
+        default: null,
+        rendered: false,
+      },
+
+      /** Raw OOXML relativeHeight for z-ordering. Only meaningful for floating images. */
+      relativeHeight: {
+        default: null,
+        rendered: false,
+      },
+
       src: {
         default: null,
         renderDOM: ({ src }) => {
@@ -199,6 +212,36 @@ export const Image = Node.create({
 
       /**
        * @category Attribute
+       * @param {boolean} [grayscale] - Apply grayscale filter to image (OOXML effect)
+       * @private
+       */
+      grayscale: {
+        default: false,
+        rendered: false,
+      },
+
+      /**
+       * @category Attribute
+       * @param {string|number} [gain] - VML gain for brightness/washout (watermark effect)
+       * @private
+       */
+      gain: {
+        default: null,
+        rendered: false,
+      },
+
+      /**
+       * @category Attribute
+       * @param {string|number} [blacklevel] - VML blacklevel for contrast adjustment (watermark effect)
+       * @private
+       */
+      blacklevel: {
+        default: null,
+        rendered: false,
+      },
+
+      /**
+       * @category Attribute
        * @param {boolean} [simplePos] - Simple positioning flag
        * @private
        */
@@ -280,6 +323,24 @@ export const Image = Node.create({
         default: null,
         rendered: false,
       },
+
+      /** Whether aspect ratio is locked. Maps to OOXML a:picLocks/@noChangeAspect. */
+      lockAspectRatio: {
+        default: true,
+        rendered: false,
+      },
+
+      /** Decorative image flag. Maps to OOXML adec:decorative. */
+      decorative: {
+        default: false,
+        rendered: false,
+      },
+
+      /** Image hyperlink. Maps to OOXML pic:cNvPr > a:hlinkClick. */
+      hyperlink: {
+        default: null,
+        rendered: false,
+      },
     };
   },
 
@@ -345,12 +406,10 @@ export const Image = Node.create({
       switch (type) {
         case 'None':
           style += 'position: absolute;';
-          // Use relativeHeight from OOXML for proper z-ordering of overlapping elements
-          const relativeHeight = node.attrs.originalAttributes?.relativeHeight;
+          // Use first-class relativeHeight attr, falling back to originalAttributes for legacy docs
+          const relativeHeight = node.attrs.relativeHeight ?? node.attrs.originalAttributes?.relativeHeight;
           if (relativeHeight != null) {
-            // Scale down the relativeHeight value to a reasonable CSS z-index range
-            // OOXML uses large numbers (e.g., 251659318), we normalize to a smaller range
-            const zIndex = Math.floor(relativeHeight / 1000000);
+            const zIndex = Math.max(0, relativeHeight - OOXML_Z_INDEX_BASE);
             style += `z-index: ${zIndex};`;
           } else if (attrs.behindDoc) {
             style += 'z-index: -1;';
@@ -646,7 +705,7 @@ export const Image = Node.create({
         ({ commands }) => {
           return commands.insertContent({
             type: this.name,
-            attrs: options,
+            attrs: { ...options, sdImageId: options.sdImageId ?? uuidv4() },
           });
         },
 

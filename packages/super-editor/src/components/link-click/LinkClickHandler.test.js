@@ -60,8 +60,13 @@ describe('LinkClickHandler', () => {
       },
       view: {
         dom: document.createElement('div'),
+        focus: vi.fn(),
       },
       dispatch: vi.fn(),
+      options: {
+        documentMode: 'editing',
+        onException: vi.fn(),
+      },
     };
 
     // Create mock functions
@@ -372,6 +377,7 @@ describe('LinkClickHandler', () => {
     const editorWithoutState = {
       view: {
         dom: document.createElement('div'),
+        focus: vi.fn(),
       },
     };
 
@@ -606,5 +612,641 @@ describe('LinkClickHandler', () => {
 
     // Should only dispatch once (second event was debounced)
     expect(mockEditor.dispatch).toHaveBeenCalledTimes(1);
+  });
+
+  // =========================================================================
+  // linkPopoverResolver tests
+  // =========================================================================
+
+  describe('linkPopoverResolver', () => {
+    /**
+     * Helper to dispatch a link click event and wait for the async handler.
+     */
+    const dispatchLinkClick = async (surface, detail = {}) => {
+      const linkElement = detail.element || document.createElement('a');
+      if (!linkElement.dataset.pmStart) {
+        linkElement.dataset.pmStart = '10';
+      }
+
+      const event = new CustomEvent('superdoc-link-click', {
+        bubbles: true,
+        composed: true,
+        detail: {
+          href: 'https://example.com',
+          target: '_blank',
+          rel: 'noopener',
+          tooltip: 'Example',
+          element: linkElement,
+          clientX: 250,
+          clientY: 250,
+          ...detail,
+        },
+      });
+
+      surface.dispatchEvent(event);
+      await new Promise((resolve) => setTimeout(resolve, 20));
+    };
+
+    beforeEach(() => {
+      selectionHasNodeOrMark.mockReturnValue(true);
+      TextSelection.create.mockReturnValue({ from: 10, to: 10 });
+    });
+
+    it('should open default LinkInput when resolver is absent', async () => {
+      mount(LinkClickHandler, {
+        props: {
+          editor: mockEditor,
+          openPopover: mockOpenPopover,
+          closePopover: mockClosePopover,
+        },
+      });
+
+      await dispatchLinkClick(mockSurfaceElement);
+
+      expect(mockOpenPopover).toHaveBeenCalledWith(
+        expect.anything(), // LinkInput (markRaw)
+        {
+          showInput: true,
+          editor: mockEditor,
+          closePopover: mockClosePopover,
+        },
+        expect.objectContaining({ left: '150px', top: '165px' }),
+      );
+    });
+
+    it('should open default LinkInput when resolver returns null', async () => {
+      const resolver = vi.fn().mockReturnValue(null);
+
+      mount(LinkClickHandler, {
+        props: {
+          editor: mockEditor,
+          openPopover: mockOpenPopover,
+          closePopover: mockClosePopover,
+          linkPopoverResolver: resolver,
+        },
+      });
+
+      await dispatchLinkClick(mockSurfaceElement);
+
+      expect(resolver).toHaveBeenCalled();
+      expect(mockOpenPopover).toHaveBeenCalledWith(
+        expect.anything(),
+        { showInput: true, editor: mockEditor, closePopover: mockClosePopover },
+        expect.any(Object),
+      );
+    });
+
+    it('should open default LinkInput when resolver returns undefined', async () => {
+      const resolver = vi.fn().mockReturnValue(undefined);
+
+      mount(LinkClickHandler, {
+        props: {
+          editor: mockEditor,
+          openPopover: mockOpenPopover,
+          closePopover: mockClosePopover,
+          linkPopoverResolver: resolver,
+        },
+      });
+
+      await dispatchLinkClick(mockSurfaceElement);
+
+      expect(resolver).toHaveBeenCalled();
+      expect(mockOpenPopover).toHaveBeenCalledWith(
+        expect.anything(),
+        { showInput: true, editor: mockEditor, closePopover: mockClosePopover },
+        expect.any(Object),
+      );
+    });
+
+    it('should open default LinkInput when resolver returns { type: "default" }', async () => {
+      const resolver = vi.fn().mockReturnValue({ type: 'default' });
+
+      mount(LinkClickHandler, {
+        props: {
+          editor: mockEditor,
+          openPopover: mockOpenPopover,
+          closePopover: mockClosePopover,
+          linkPopoverResolver: resolver,
+        },
+      });
+
+      await dispatchLinkClick(mockSurfaceElement);
+
+      expect(resolver).toHaveBeenCalled();
+      expect(mockOpenPopover).toHaveBeenCalledWith(
+        expect.anything(),
+        { showInput: true, editor: mockEditor, closePopover: mockClosePopover },
+        expect.any(Object),
+      );
+    });
+
+    it('should suppress popover when resolver returns { type: "none" }', async () => {
+      const resolver = vi.fn().mockReturnValue({ type: 'none' });
+
+      mount(LinkClickHandler, {
+        props: {
+          editor: mockEditor,
+          openPopover: mockOpenPopover,
+          closePopover: mockClosePopover,
+          linkPopoverResolver: resolver,
+        },
+      });
+
+      await dispatchLinkClick(mockSurfaceElement);
+
+      expect(resolver).toHaveBeenCalled();
+      expect(mockOpenPopover).not.toHaveBeenCalled();
+    });
+
+    it('should open custom component when resolver returns { type: "custom" }', async () => {
+      const MockComponent = { template: '<div>Custom</div>' };
+      const resolver = vi.fn().mockReturnValue({
+        type: 'custom',
+        component: MockComponent,
+        props: { foo: 'bar' },
+      });
+
+      mount(LinkClickHandler, {
+        props: {
+          editor: mockEditor,
+          openPopover: mockOpenPopover,
+          closePopover: mockClosePopover,
+          linkPopoverResolver: resolver,
+        },
+      });
+
+      await dispatchLinkClick(mockSurfaceElement);
+
+      expect(resolver).toHaveBeenCalled();
+      expect(mockOpenPopover).toHaveBeenCalledWith(
+        expect.anything(), // MockComponent (markRaw)
+        expect.objectContaining({
+          editor: mockEditor,
+          closePopover: mockClosePopover,
+          foo: 'bar',
+        }),
+        expect.objectContaining({ left: '150px', top: '165px' }),
+      );
+    });
+
+    it('should fallback to default when resolver returns { type: "custom" } without component', async () => {
+      const resolver = vi.fn().mockReturnValue({
+        type: 'custom',
+        component: null,
+        props: { foo: 'bar' },
+      });
+
+      mount(LinkClickHandler, {
+        props: {
+          editor: mockEditor,
+          openPopover: mockOpenPopover,
+          closePopover: mockClosePopover,
+          linkPopoverResolver: resolver,
+        },
+      });
+
+      await dispatchLinkClick(mockSurfaceElement);
+
+      expect(resolver).toHaveBeenCalled();
+      // Should fallback to default LinkInput
+      expect(mockOpenPopover).toHaveBeenCalledWith(
+        expect.anything(),
+        { showInput: true, editor: mockEditor, closePopover: mockClosePopover },
+        expect.any(Object),
+      );
+    });
+
+    it('should call onException and fallback to default when resolver throws', async () => {
+      const error = new Error('Resolver exploded');
+      const resolver = vi.fn().mockImplementation(() => {
+        throw error;
+      });
+
+      mount(LinkClickHandler, {
+        props: {
+          editor: mockEditor,
+          openPopover: mockOpenPopover,
+          closePopover: mockClosePopover,
+          linkPopoverResolver: resolver,
+        },
+      });
+
+      await dispatchLinkClick(mockSurfaceElement);
+
+      // onException should have been called with the error
+      expect(mockEditor.options.onException).toHaveBeenCalledWith({
+        error,
+        editor: mockEditor,
+      });
+
+      // Should fallback to default popover
+      expect(mockOpenPopover).toHaveBeenCalledWith(
+        expect.anything(),
+        { showInput: true, editor: mockEditor, closePopover: mockClosePopover },
+        expect.any(Object),
+      );
+    });
+
+    it('should pass correct context to resolver', async () => {
+      const resolver = vi.fn().mockReturnValue({ type: 'default' });
+
+      mount(LinkClickHandler, {
+        props: {
+          editor: mockEditor,
+          openPopover: mockOpenPopover,
+          closePopover: mockClosePopover,
+          linkPopoverResolver: resolver,
+        },
+      });
+
+      const linkElement = document.createElement('a');
+      linkElement.dataset.pmStart = '10';
+
+      await dispatchLinkClick(mockSurfaceElement, {
+        href: 'https://example.com',
+        target: '_blank',
+        rel: 'noopener',
+        tooltip: 'Example',
+        element: linkElement,
+        clientX: 250,
+        clientY: 250,
+      });
+
+      expect(resolver).toHaveBeenCalledWith(
+        expect.objectContaining({
+          editor: mockEditor,
+          href: 'https://example.com',
+          target: '_blank',
+          rel: 'noopener',
+          tooltip: 'Example',
+          element: linkElement,
+          clientX: 250,
+          clientY: 250,
+          isAnchorLink: false,
+          documentMode: 'editing',
+          position: { left: '150px', top: '165px' },
+          closePopover: mockClosePopover,
+        }),
+      );
+    });
+
+    it('should correctly detect anchor links in context', async () => {
+      const resolver = vi.fn().mockReturnValue({ type: 'default' });
+
+      mount(LinkClickHandler, {
+        props: {
+          editor: mockEditor,
+          openPopover: mockOpenPopover,
+          closePopover: mockClosePopover,
+          linkPopoverResolver: resolver,
+        },
+      });
+
+      await dispatchLinkClick(mockSurfaceElement, { href: '#section-1' });
+
+      expect(resolver).toHaveBeenCalledWith(expect.objectContaining({ isAnchorLink: true }));
+    });
+
+    it('should allow conditional resolution based on href', async () => {
+      const MockCustom = { template: '<div>Custom</div>' };
+      const resolver = vi.fn().mockImplementation(({ href }) => {
+        if (href.includes('customer://')) {
+          return { type: 'custom', component: MockCustom, props: { href } };
+        }
+        return { type: 'default' };
+      });
+
+      mount(LinkClickHandler, {
+        props: {
+          editor: mockEditor,
+          openPopover: mockOpenPopover,
+          closePopover: mockClosePopover,
+          linkPopoverResolver: resolver,
+        },
+      });
+
+      // First: regular link → default popover
+      await dispatchLinkClick(mockSurfaceElement, { href: 'https://example.com' });
+      expect(mockOpenPopover).toHaveBeenCalledWith(
+        expect.anything(),
+        { showInput: true, editor: mockEditor, closePopover: mockClosePopover },
+        expect.any(Object),
+      );
+
+      // Wait for debounce
+      await new Promise((resolve) => setTimeout(resolve, 350));
+      mockOpenPopover.mockClear();
+
+      // Second: custom link → custom popover
+      await dispatchLinkClick(mockSurfaceElement, { href: 'customer://abc-123' });
+      expect(mockOpenPopover).toHaveBeenCalledWith(
+        expect.anything(), // MockCustom (markRaw)
+        expect.objectContaining({
+          editor: mockEditor,
+          closePopover: mockClosePopover,
+          href: 'customer://abc-123',
+        }),
+        expect.any(Object),
+      );
+    });
+
+    it('should close popover without invoking resolver when popoverVisible is true', async () => {
+      const resolver = vi.fn().mockReturnValue({ type: 'none' });
+
+      mount(LinkClickHandler, {
+        props: {
+          editor: mockEditor,
+          openPopover: mockOpenPopover,
+          closePopover: mockClosePopover,
+          popoverVisible: true,
+          linkPopoverResolver: resolver,
+        },
+      });
+
+      await dispatchLinkClick(mockSurfaceElement);
+
+      // Popover should be closed
+      expect(mockClosePopover).toHaveBeenCalled();
+
+      // Resolver should NOT have been invoked (early return before resolver)
+      expect(resolver).not.toHaveBeenCalled();
+
+      // openPopover should NOT have been called
+      expect(mockOpenPopover).not.toHaveBeenCalled();
+
+      // editor.dispatch should NOT have been called (early return before cursor movement)
+      expect(mockEditor.dispatch).not.toHaveBeenCalled();
+    });
+
+    // ─── External type (framework-agnostic) ───────────────────────────────
+
+    describe('external type', () => {
+      let editorWrapper;
+
+      beforeEach(() => {
+        // External popovers need a parent container to mount into.
+        // Mirrors the real DOM: .super-editor > surface
+        editorWrapper = document.createElement('div');
+        editorWrapper.classList.add('super-editor');
+        editorWrapper.appendChild(mockSurfaceElement);
+        document.body.appendChild(editorWrapper);
+      });
+
+      afterEach(() => {
+        editorWrapper.remove();
+      });
+
+      it('should call render with container, closePopover, editor, and href', async () => {
+        const renderFn = vi.fn();
+        const resolver = vi.fn().mockReturnValue({ type: 'external', render: renderFn });
+
+        mount(LinkClickHandler, {
+          props: {
+            editor: mockEditor,
+            openPopover: mockOpenPopover,
+            closePopover: mockClosePopover,
+            linkPopoverResolver: resolver,
+          },
+        });
+
+        await dispatchLinkClick(mockSurfaceElement, { href: 'https://example.com' });
+
+        expect(renderFn).toHaveBeenCalledTimes(1);
+        const ctx = renderFn.mock.calls[0][0];
+        expect(ctx.container).toBeInstanceOf(HTMLElement);
+        expect(typeof ctx.closePopover).toBe('function');
+        expect(ctx.editor.state).toStrictEqual(mockEditor.state);
+        expect(ctx.href).toBe('https://example.com');
+      });
+
+      it('should append a positioned container to the editor wrapper', async () => {
+        const renderFn = vi.fn();
+        const resolver = vi.fn().mockReturnValue({ type: 'external', render: renderFn });
+
+        mount(LinkClickHandler, {
+          props: {
+            editor: mockEditor,
+            openPopover: mockOpenPopover,
+            closePopover: mockClosePopover,
+            linkPopoverResolver: resolver,
+          },
+        });
+
+        await dispatchLinkClick(mockSurfaceElement);
+
+        const container = renderFn.mock.calls[0][0].container;
+        expect(container.parentElement).toBe(editorWrapper);
+        expect(container.classList.contains('sd-external-link-popover')).toBe(true);
+        expect(container.style.position).toBe('absolute');
+        expect(container.style.left).toBe('150px');
+        expect(container.style.top).toBe('165px');
+      });
+
+      it('should call destroy and remove container when closePopover is called', async () => {
+        const destroyFn = vi.fn();
+        const renderFn = vi.fn().mockReturnValue({ destroy: destroyFn });
+        const resolver = vi.fn().mockReturnValue({ type: 'external', render: renderFn });
+
+        mount(LinkClickHandler, {
+          props: {
+            editor: mockEditor,
+            openPopover: mockOpenPopover,
+            closePopover: mockClosePopover,
+            linkPopoverResolver: resolver,
+          },
+        });
+
+        await dispatchLinkClick(mockSurfaceElement);
+
+        const ctx = renderFn.mock.calls[0][0];
+        const container = ctx.container;
+        expect(container.parentElement).toBe(editorWrapper);
+
+        // Close the external popover
+        ctx.closePopover();
+
+        expect(destroyFn).toHaveBeenCalledTimes(1);
+        expect(container.parentElement).toBeNull();
+      });
+
+      it('should clean up container even when render returns void (no destroy)', async () => {
+        const renderFn = vi.fn(); // returns undefined
+        const resolver = vi.fn().mockReturnValue({ type: 'external', render: renderFn });
+
+        mount(LinkClickHandler, {
+          props: {
+            editor: mockEditor,
+            openPopover: mockOpenPopover,
+            closePopover: mockClosePopover,
+            linkPopoverResolver: resolver,
+          },
+        });
+
+        await dispatchLinkClick(mockSurfaceElement);
+
+        const container = renderFn.mock.calls[0][0].container;
+        expect(container.parentElement).toBe(editorWrapper);
+
+        renderFn.mock.calls[0][0].closePopover();
+        expect(container.parentElement).toBeNull();
+      });
+
+      it('should close on Escape key', async () => {
+        const destroyFn = vi.fn();
+        const renderFn = vi.fn().mockReturnValue({ destroy: destroyFn });
+        const resolver = vi.fn().mockReturnValue({ type: 'external', render: renderFn });
+
+        mount(LinkClickHandler, {
+          props: {
+            editor: mockEditor,
+            openPopover: mockOpenPopover,
+            closePopover: mockClosePopover,
+            linkPopoverResolver: resolver,
+          },
+        });
+
+        await dispatchLinkClick(mockSurfaceElement);
+
+        const container = renderFn.mock.calls[0][0].container;
+        expect(container.parentElement).toBe(editorWrapper);
+
+        document.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape' }));
+
+        expect(destroyFn).toHaveBeenCalledTimes(1);
+        expect(container.parentElement).toBeNull();
+      });
+
+      it('should close on click outside', async () => {
+        const destroyFn = vi.fn();
+        const renderFn = vi.fn().mockReturnValue({ destroy: destroyFn });
+        const resolver = vi.fn().mockReturnValue({ type: 'external', render: renderFn });
+
+        mount(LinkClickHandler, {
+          props: {
+            editor: mockEditor,
+            openPopover: mockOpenPopover,
+            closePopover: mockClosePopover,
+            linkPopoverResolver: resolver,
+          },
+        });
+
+        await dispatchLinkClick(mockSurfaceElement);
+
+        const container = renderFn.mock.calls[0][0].container;
+        expect(container.parentElement).toBe(editorWrapper);
+
+        // Click outside the container
+        document.dispatchEvent(new PointerEvent('pointerdown', { bubbles: true }));
+
+        expect(destroyFn).toHaveBeenCalledTimes(1);
+        expect(container.parentElement).toBeNull();
+      });
+
+      it('should toggle off external popover when clicking another link', async () => {
+        const destroyFn = vi.fn();
+        const renderFn = vi.fn().mockReturnValue({ destroy: destroyFn });
+        const resolver = vi.fn().mockReturnValue({ type: 'external', render: renderFn });
+
+        mount(LinkClickHandler, {
+          props: {
+            editor: mockEditor,
+            openPopover: mockOpenPopover,
+            closePopover: mockClosePopover,
+            linkPopoverResolver: resolver,
+          },
+        });
+
+        // First click opens external popover
+        await dispatchLinkClick(mockSurfaceElement);
+        expect(renderFn).toHaveBeenCalledTimes(1);
+
+        // Wait for debounce
+        await new Promise((resolve) => setTimeout(resolve, 350));
+
+        // Second click should close the external popover (toggle-off)
+        await dispatchLinkClick(mockSurfaceElement);
+
+        expect(destroyFn).toHaveBeenCalledTimes(1);
+        // Resolver is NOT called again — early return from toggle-off guard
+        expect(resolver).toHaveBeenCalledTimes(1);
+      });
+
+      it('should fallback to default when render is not a function', async () => {
+        const resolver = vi.fn().mockReturnValue({ type: 'external', render: 'not-a-function' });
+
+        mount(LinkClickHandler, {
+          props: {
+            editor: mockEditor,
+            openPopover: mockOpenPopover,
+            closePopover: mockClosePopover,
+            linkPopoverResolver: resolver,
+          },
+        });
+
+        await dispatchLinkClick(mockSurfaceElement);
+
+        expect(mockOpenPopover).toHaveBeenCalledWith(
+          expect.anything(),
+          { showInput: true, editor: mockEditor, closePopover: mockClosePopover },
+          expect.any(Object),
+        );
+      });
+
+      it('should call onException and fallback to default when render throws', async () => {
+        const error = new Error('Render exploded');
+        const renderFn = vi.fn().mockImplementation(() => {
+          throw error;
+        });
+        const resolver = vi.fn().mockReturnValue({ type: 'external', render: renderFn });
+
+        mount(LinkClickHandler, {
+          props: {
+            editor: mockEditor,
+            openPopover: mockOpenPopover,
+            closePopover: mockClosePopover,
+            linkPopoverResolver: resolver,
+          },
+        });
+
+        await dispatchLinkClick(mockSurfaceElement);
+
+        expect(mockEditor.options.onException).toHaveBeenCalledWith({
+          error,
+          editor: mockEditor,
+        });
+
+        // Container should have been removed (not left in DOM)
+        const orphanedContainers = editorWrapper.querySelectorAll('[style*="position: absolute"]');
+        expect(orphanedContainers.length).toBe(0);
+
+        // Should fallback to default popover
+        expect(mockOpenPopover).toHaveBeenCalledWith(
+          expect.anything(),
+          { showInput: true, editor: mockEditor, closePopover: mockClosePopover },
+          expect.any(Object),
+        );
+      });
+
+      it('should not bypass GenericPopover — openPopover is not called for external', async () => {
+        const renderFn = vi.fn();
+        const resolver = vi.fn().mockReturnValue({ type: 'external', render: renderFn });
+
+        mount(LinkClickHandler, {
+          props: {
+            editor: mockEditor,
+            openPopover: mockOpenPopover,
+            closePopover: mockClosePopover,
+            linkPopoverResolver: resolver,
+          },
+        });
+
+        await dispatchLinkClick(mockSurfaceElement);
+
+        // openPopover (which routes through GenericPopover) should NOT be called
+        expect(mockOpenPopover).not.toHaveBeenCalled();
+        // The render function should have been called instead
+        expect(renderFn).toHaveBeenCalledTimes(1);
+      });
+    });
   });
 });

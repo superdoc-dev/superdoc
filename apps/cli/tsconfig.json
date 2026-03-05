@@ -10,6 +10,7 @@
       "@superdoc/super-editor/document-api-adapters": [
         "../../packages/super-editor/src/document-api-adapters/index.ts"
       ],
+      "@superdoc/super-editor/markdown": ["../../packages/super-editor/src/core/helpers/markdown/index.ts"],
       "@superdoc/super-editor/blank-docx": ["../../packages/super-editor/src/core/blank-docx.ts"]
     }
   },

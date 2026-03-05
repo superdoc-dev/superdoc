@@ -50,27 +50,36 @@ fastify.listen({ port: 3050 });
 
 ### Client
 
+```bash
+npm install yjs y-websocket
+```
+
 ```javascript
+import * as Y from 'yjs';
+import { WebsocketProvider } from 'y-websocket';
 import { SuperDoc } from 'superdoc';
+
+const documentId = 'document-123';
+const ydoc = new Y.Doc();
+const provider = new WebsocketProvider(
+  `ws://localhost:3050/doc/${documentId}`,
+  documentId,
+  ydoc
+);
 
 new SuperDoc({
   selector: '#editor',
-  document: {
-    id: 'document-123',
-    type: 'docx'
-  },
   user: {
     name: 'John Smith',
     email: 'john@example.com'
   },
   modules: {
-    collaboration: {
-      url: 'ws://localhost:3050/doc',
-      token: 'auth-token'
-    }
+    collaboration: { ydoc, provider }
   }
 });
 ```
+
+The SuperDoc JS collaboration contract is provider-agnostic: always pass `{ ydoc, provider }` in `modules.collaboration`.
 
 ## Builder API
 

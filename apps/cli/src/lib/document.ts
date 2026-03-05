@@ -3,15 +3,30 @@ import { createHash } from 'node:crypto';
 import { Editor } from 'superdoc/super-editor';
 import { BLANK_DOCX_BASE64 } from '@superdoc/super-editor/blank-docx';
 import { getDocumentApiAdapters } from '@superdoc/super-editor/document-api-adapters';
+import { markdownToPmDoc } from '@superdoc/super-editor/markdown';
 
 import { createDocumentApi, type DocumentApi } from '@superdoc/document-api';
+import { createCliDomEnvironment } from './dom-environment';
 import type { CollaborationProfile } from './collaboration';
 import { createCollaborationRuntime } from './collaboration';
+import {
+  DEFAULT_BOOTSTRAP_SETTLING_MS,
+  waitForContentSettling,
+  detectRoomState,
+  resolveBootstrapDecision,
+  claimBootstrap,
+  clearBootstrapMarker,
+  writeBootstrapMarker,
+  detectBootstrapRace,
+  type RoomState,
+  type ObservedCompetitor,
+  type RaceDetectionResult,
+} from './bootstrap';
 import { CliError } from './errors';
 import { pathExists } from './guards';
 import type { ContextMetadata } from './context';
-import type { CliIO, DocumentSourceMeta, ExecutionMode } from './types';
-import type { CollaborationSessionPool } from '../host/collab-session-pool';
+import type { CliIO, DocumentSourceMeta, ExecutionMode, UserIdentity } from './types';
+import type { SessionPool } from '../host/session-pool';
 
 export type EditorWithDoc = Editor & {
   doc: DocumentApi;
@@ -23,10 +38,26 @@ export interface OpenedDocument {
   dispose(): void;
 }
 
+/** Content override options extracted before calling Editor.open(). */
+interface ContentOverrideOptions {
+  markdown?: string;
+  html?: string;
+  plainText?: string;
+}
+
+/** Options passed through to Editor.open() alongside content overrides. */
+type EditorPassThroughOptions = Record<string, string>;
+
 interface OpenDocumentOptions {
   documentId?: string;
   ydoc?: unknown;
   collaborationProvider?: unknown;
+  /** Options passed through to Editor.open() (e.g., markdown/html/plainText for content override). */
+  editorOpenOptions?: ContentOverrideOptions & EditorPassThroughOptions;
+  /** When set, overrides Editor's auto-detected isNewFile flag. */
+  isNewFile?: boolean;
+  /** Optional user identity for attribution (comments, tracked changes, collaboration presence). */
+  user?: UserIdentity;
 }
 
 export interface FileOutputMeta {
@@ -98,22 +129,86 @@ export async function openDocument(
     meta = { source: 'blank', byteLength: source.byteLength };
   }
 
+  // Separate content overrides from options passed to Editor.open().
+  // Markdown and plainText are applied post-init (DOM-free AST pipelines).
+  // HTML passes through to Editor.open() directly — the CLI-provided happy-dom
+  // document enables the Editor's built-in HTML init path.
+  const {
+    markdown: markdownOverride,
+    html: htmlOverride,
+    plainText: plainTextOverride,
+    ...passThroughEditorOpts
+  } = options.editorOpenOptions ?? {};
+
+  // Create a DOM environment for headless HTML support (getHtml, insert HTML,
+  // HTML content override). Always inject via options.document — never set globals.
+  const domEnv = createCliDomEnvironment();
+
   let editor: Editor;
   try {
     const isTest = process.env.NODE_ENV === 'test';
     editor = await Editor.open(Buffer.from(source), {
       documentId: options.documentId ?? meta.path ?? 'blank.docx',
-      user: { id: 'cli', name: 'CLI' },
+      document: domEnv.document,
+      user: options.user
+        ? { name: options.user.name, email: options.user.email, image: null }
+        : { id: 'cli', name: 'CLI' },
       ...(isTest ? { telemetry: { enabled: false } } : {}),
       ydoc: options.ydoc,
       ...(options.collaborationProvider != null ? { collaborationProvider: options.collaborationProvider } : {}),
+      ...(options.isNewFile != null ? { isNewFile: options.isNewFile } : {}),
+      // Pass through HTML override directly — happy-dom provides DOM support.
+      ...(htmlOverride != null ? { html: htmlOverride } : {}),
+      ...passThroughEditorOpts,
     });
   } catch (error) {
+    domEnv.dispose();
     const message = error instanceof Error ? error.message : String(error);
     throw new CliError('DOCUMENT_OPEN_FAILED', 'Failed to open document.', {
       message,
       source: meta,
     });
+  }
+
+  // Apply content override post-init.
+  //   - markdown: DOM-free AST pipeline
+  //   - plainText: builds PM paragraphs directly, preserving all whitespace
+  if (markdownOverride != null) {
+    try {
+      const { doc: newDoc } = markdownToPmDoc(markdownOverride, editor);
+      const tr = editor.state.tr;
+      // The PM Fragment type is opaque at the CLI boundary — cast through unknown.
+      tr.replaceWith(0, editor.state.doc.content.size, newDoc.content as any);
+      editor.dispatch(tr);
+    } catch (error) {
+      editor.destroy();
+      domEnv.dispose();
+      const message = error instanceof Error ? error.message : String(error);
+      throw new CliError('DOCUMENT_OPEN_FAILED', 'Failed to apply content override.', {
+        message,
+        source: meta,
+      });
+    }
+  } else if (plainTextOverride != null) {
+    try {
+      const schema = editor.state.schema;
+      const lines = plainTextOverride.split('\n');
+      const paragraphs = lines.map((line) => {
+        const content = line.length > 0 ? [schema.text(line)] : undefined;
+        return schema.nodes.paragraph.create(null, content);
+      });
+      const tr = editor.state.tr;
+      tr.replaceWith(0, editor.state.doc.content.size, paragraphs);
+      editor.dispatch(tr);
+    } catch (error) {
+      editor.destroy();
+      domEnv.dispose();
+      const message = error instanceof Error ? error.message : String(error);
+      throw new CliError('DOCUMENT_OPEN_FAILED', 'Failed to apply text content override.', {
+        message,
+        source: meta,
+      });
+    }
   }
 
   const adapters = getDocumentApiAdapters(editor);
@@ -126,28 +221,104 @@ export async function openDocument(
     meta,
     dispose() {
       editor.destroy();
+      domEnv.dispose();
     },
   };
 }
 
+/**
+ * Describes the outcome of the bootstrap flow for a collaborative document.
+ *
+ * `raceSuspected` is a best-effort signal — when true, a competing finalized
+ * marker was observed shortly after seeding, strongly suggesting (but not
+ * proving) that two clients both seeded. `false` does not guarantee
+ * exactly-once seeding.
+ */
+export type BootstrapResult = {
+  roomState: RoomState;
+  bootstrapApplied: boolean;
+  bootstrapSource?: 'doc' | 'blank';
+  raceSuspected?: boolean;
+  raceCompetitor?: ObservedCompetitor;
+};
+
 export async function openCollaborativeDocument(
-  doc: string,
+  doc: string | undefined,
   io: CliIO,
   profile: CollaborationProfile,
-): Promise<OpenedDocument> {
+  options: { user?: UserIdentity } = {},
+): Promise<OpenedDocument & { bootstrap?: BootstrapResult }> {
   const runtime = createCollaborationRuntime(profile);
 
   try {
     await runtime.waitForSync();
-    const opened = await openDocument(doc, io, {
+
+    // SD-2138: Some providers fire "synced" before Yjs updates are fully
+    // applied to local shared types. Give a brief window for the XmlFragment
+    // to be populated from incoming server state before checking room state.
+    await waitForContentSettling(runtime.ydoc);
+
+    const onMissing = profile.onMissing ?? 'seedFromDoc';
+    let finalRoomState = detectRoomState(runtime.ydoc);
+    let decision = resolveBootstrapDecision(finalRoomState, onMissing, doc != null);
+
+    if (decision.action === 'seed') {
+      const claim = await claimBootstrap(runtime.ydoc, profile.bootstrapSettlingMs ?? DEFAULT_BOOTSTRAP_SETTLING_MS);
+      if (!claim.granted) {
+        // Another client won the claim race — unconditionally yield.
+        // Even if the winner's marker is still pending (detectRoomState
+        // returns 'empty'), the winner will finalize shortly.  Re-seeding
+        // here would produce a dual-seed race.
+        finalRoomState = detectRoomState(runtime.ydoc);
+        decision = { action: 'join' };
+      } else {
+        // SD-2138: Re-check room state after the claim settling period.
+        // Some providers fire "synced" before Yjs updates are fully applied,
+        // so content from the server may have arrived during the settling
+        // wait.  If the room is now populated, join instead of seeding —
+        // seeding here would destructively overwrite existing content.
+        const postClaimState = detectRoomState(runtime.ydoc);
+        if (postClaimState === 'populated') {
+          clearBootstrapMarker(runtime.ydoc);
+          finalRoomState = postClaimState;
+          decision = { action: 'join' };
+        }
+      }
+    }
+
+    if (decision.action === 'error') {
+      throw new CliError('COLLABORATION_ROOM_EMPTY', decision.reason);
+    }
+
+    const shouldSeed = decision.action === 'seed';
+    // When joining an existing room, skip local doc reading — content
+    // comes from the Yjs document, not from the local file path.
+    const docForEditor = shouldSeed ? doc : undefined;
+    const opened = await openDocument(docForEditor, io, {
       documentId: profile.documentId,
       ydoc: runtime.ydoc,
       collaborationProvider: runtime.provider,
+      isNewFile: shouldSeed,
+      user: options.user,
     });
 
+    let raceDetection: RaceDetectionResult | undefined;
+    if (shouldSeed) {
+      writeBootstrapMarker(runtime.ydoc, decision.source);
+      raceDetection = await detectBootstrapRace(runtime.ydoc);
+    }
+
+    const bootstrap: BootstrapResult = {
+      roomState: finalRoomState,
+      bootstrapApplied: shouldSeed,
+      bootstrapSource: shouldSeed ? decision.source : undefined,
+      raceSuspected: raceDetection?.raceSuspected,
+      raceCompetitor: raceDetection?.raceSuspected ? raceDetection.competitor : undefined,
+    };
     return {
       editor: opened.editor,
       meta: opened.meta,
+      bootstrap,
       dispose() {
         try {
           opened.dispose();
@@ -165,39 +336,43 @@ export async function openCollaborativeDocument(
 export async function openSessionDocument(
   doc: string,
   io: CliIO,
-  metadata: Pick<ContextMetadata, 'contextId' | 'sessionType' | 'collaboration' | 'sourcePath' | 'workingDocPath'>,
+  metadata: Pick<
+    ContextMetadata,
+    'contextId' | 'sessionType' | 'collaboration' | 'sourcePath' | 'workingDocPath' | 'user' | 'revision'
+  >,
   options: {
     sessionId?: string;
     executionMode?: ExecutionMode;
-    collabSessionPool?: CollaborationSessionPool;
+    sessionPool?: SessionPool;
   } = {},
 ): Promise<OpenedDocument> {
-  if (metadata.sessionType !== 'collab') {
-    return openDocument(doc, io);
+  const { executionMode, sessionPool, sessionId } = options;
+
+  // Host mode: always go through pool (local AND collab)
+  if (executionMode === 'host' && sessionPool) {
+    const resolvedSessionId = sessionId ?? metadata.contextId;
+    return sessionPool.acquire(
+      resolvedSessionId,
+      {
+        sessionType: metadata.sessionType,
+        workingDocPath: metadata.workingDocPath ?? doc,
+        metadataRevision: metadata.revision,
+        user: metadata.user,
+        collaboration: metadata.collaboration,
+      },
+      io,
+    );
   }
 
-  if (!metadata.collaboration) {
-    throw new CliError('COMMAND_FAILED', 'Session is marked as collaborative but has no collaboration profile.');
-  }
-
-  if (options.executionMode === 'host' && options.collabSessionPool) {
-    const sessionId = options.sessionId ?? metadata.contextId;
-    if (!sessionId) {
-      throw new CliError('COMMAND_FAILED', 'Session id is required for host-mode collaboration operations.');
+  // Oneshot mode: open fresh, caller is responsible for dispose
+  if (metadata.sessionType === 'collab') {
+    if (!metadata.collaboration) {
+      throw new CliError('COMMAND_FAILED', 'Session is marked as collaborative but has no collaboration profile.');
     }
-
-    const metadataForPool = {
-      contextId: sessionId,
-      sessionType: metadata.sessionType,
-      collaboration: metadata.collaboration,
-      sourcePath: metadata.sourcePath,
-      workingDocPath: metadata.workingDocPath,
-    };
-
-    return options.collabSessionPool.acquire(sessionId, doc, metadataForPool, io);
+    return openCollaborativeDocument(doc, io, metadata.collaboration, { user: metadata.user });
   }
 
-  return openCollaborativeDocument(doc, io, metadata.collaboration);
+  return openDocument(doc, io, { user: metadata.user });
 }
 
 export async function getFileChecksum(path: string): Promise<string> {

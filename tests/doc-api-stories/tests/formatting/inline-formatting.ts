@@ -14,9 +14,8 @@ import { unwrap, useStoryHarness } from '../harness';
  * blockId returned by `insert` remains valid for subsequent operations.
  *
  * Covered operations:
- *   format.apply  — bold, italic, underline, strike (boolean mark patches)
- *   format.fontSize, format.fontFamily, format.color (value-based inline marks)
- *   format.align  — paragraph-level alignment (center, right, justify)
+ *   format.apply  — boolean marks and value/object inline run patches
+ *   format.paragraph.setAlignment — paragraph-level alignment (center, right, justify)
  */
 describe('document-api story: inline formatting', () => {
   const { client, outPath } = useStoryHarness('formatting/inline-formatting', {
@@ -38,8 +37,8 @@ describe('document-api story: inline formatting', () => {
     await client.doc.open({ sessionId });
 
     // Insert text into the blank doc's single paragraph.
-    // Without an explicit target, insert uses the first paragraph.
-    const insertResult = unwrap<any>(await client.doc.insert({ sessionId, text }));
+    // Without an explicit target, insert appends at the document end.
+    const insertResult = unwrap<any>(await client.doc.insert({ sessionId, value: text }));
     expect(insertResult.receipt?.success).toBe(true);
 
     // The receipt's hoisted target contains the paragraph's stable blockId.
@@ -51,6 +50,16 @@ describe('document-api story: inline formatting', () => {
       kind: 'text' as const,
       blockId,
       range: { start: 0, end: text.length },
+    };
+  }
+
+  /** Resolves the paragraph target associated with the inserted text range. */
+  async function setupFormattableParagraph(sessionId: string, text: string) {
+    const textTarget = await setupFormattableText(sessionId, text);
+    return {
+      kind: 'block' as const,
+      nodeType: 'paragraph' as const,
+      nodeId: textTarget.blockId,
     };
   }
 
@@ -115,103 +124,116 @@ describe('document-api story: inline formatting', () => {
   });
 
   // ---------------------------------------------------------------------------
-  // format.fontSize
+  // format.apply — value/object inline patches
   // ---------------------------------------------------------------------------
 
   it('fontSize: sets a numeric point size', async () => {
     const sid = `fontSize-num-${Date.now()}`;
     const target = await setupFormattableText(sid, 'This text should be 24pt');
 
-    const result = unwrap<any>(await client.doc.format.fontSize({ sessionId: sid, target, value: 24 }));
+    const result = unwrap<any>(await client.doc.format.apply({ sessionId: sid, target, inline: { fontSize: 24 } }));
     expect(result.receipt?.success).toBe(true);
     await saveResult(sid, 'fontSize-num.docx');
   });
 
-  it('fontSize: sets a string size value', async () => {
-    const sid = `fontSize-str-${Date.now()}`;
-    const target = await setupFormattableText(sid, 'This text should be 14pt');
+  it('fontSize: clears an existing point size', async () => {
+    const sid = `fontSize-clear-${Date.now()}`;
+    const target = await setupFormattableText(sid, 'This text should reset font size');
 
-    const result = unwrap<any>(await client.doc.format.fontSize({ sessionId: sid, target, value: '14pt' }));
+    const setResult = unwrap<any>(await client.doc.format.apply({ sessionId: sid, target, inline: { fontSize: 14 } }));
+    expect(setResult.receipt?.success).toBe(true);
+
+    const result = unwrap<any>(await client.doc.format.apply({ sessionId: sid, target, inline: { fontSize: null } }));
     expect(result.receipt?.success).toBe(true);
-    await saveResult(sid, 'fontSize-str.docx');
+    await saveResult(sid, 'fontSize-clear.docx');
   });
 
-  // ---------------------------------------------------------------------------
-  // format.fontFamily
-  // ---------------------------------------------------------------------------
-
-  it('fontFamily: sets a font family', async () => {
+  it('rFonts: sets run font family attributes', async () => {
     const sid = `fontFamily-${Date.now()}`;
     const target = await setupFormattableText(sid, 'This text should be Courier New');
 
-    const result = unwrap<any>(await client.doc.format.fontFamily({ sessionId: sid, target, value: 'Courier New' }));
+    const result = unwrap<any>(
+      await client.doc.format.apply({
+        sessionId: sid,
+        target,
+        inline: {
+          rFonts: { ascii: 'Courier New', hAnsi: 'Courier New' },
+        },
+      }),
+    );
     expect(result.receipt?.success).toBe(true);
     await saveResult(sid, 'fontFamily.docx');
   });
-
-  // ---------------------------------------------------------------------------
-  // format.color
-  // ---------------------------------------------------------------------------
 
   it('color: sets a hex color', async () => {
     const sid = `color-${Date.now()}`;
     const target = await setupFormattableText(sid, 'This text should be red');
 
-    const result = unwrap<any>(await client.doc.format.color({ sessionId: sid, target, value: '#FF0000' }));
+    const result = unwrap<any>(await client.doc.format.apply({ sessionId: sid, target, inline: { color: '#FF0000' } }));
     expect(result.receipt?.success).toBe(true);
     await saveResult(sid, 'color.docx');
   });
 
   // ---------------------------------------------------------------------------
-  // format.align (paragraph-level)
+  // format.paragraph.setAlignment (paragraph-level)
   // ---------------------------------------------------------------------------
 
   it('align center: centers the paragraph', async () => {
     const sid = `align-center-${Date.now()}`;
-    const target = await setupFormattableText(sid, 'This paragraph should be centered');
+    const target = await setupFormattableParagraph(sid, 'This paragraph should be centered');
 
-    const result = unwrap<any>(await client.doc.format.align({ sessionId: sid, target, alignment: 'center' }));
-    expect(result.receipt?.success).toBe(true);
+    const result = unwrap<any>(
+      await client.doc.format.paragraph.setAlignment({ sessionId: sid, target, alignment: 'center' }),
+    );
+    expect(result.success).toBe(true);
     await saveResult(sid, 'align-center.docx');
   });
 
   it('align right: right-aligns the paragraph', async () => {
     const sid = `align-right-${Date.now()}`;
-    const target = await setupFormattableText(sid, 'This paragraph should be right-aligned');
+    const target = await setupFormattableParagraph(sid, 'This paragraph should be right-aligned');
 
-    const result = unwrap<any>(await client.doc.format.align({ sessionId: sid, target, alignment: 'right' }));
-    expect(result.receipt?.success).toBe(true);
+    const result = unwrap<any>(
+      await client.doc.format.paragraph.setAlignment({ sessionId: sid, target, alignment: 'right' }),
+    );
+    expect(result.success).toBe(true);
     await saveResult(sid, 'align-right.docx');
   });
 
   it('align justify: justifies the paragraph', async () => {
     const sid = `align-justify-${Date.now()}`;
-    const target = await setupFormattableText(
+    const target = await setupFormattableParagraph(
       sid,
       'This paragraph should be fully justified so that both the left and right edges align neatly. When the text is long enough to wrap across several lines, justified alignment becomes visually obvious because each line stretches to fill the full width of the page, distributing extra space evenly between words.',
     );
 
-    const result = unwrap<any>(await client.doc.format.align({ sessionId: sid, target, alignment: 'justify' }));
-    expect(result.receipt?.success).toBe(true);
+    const result = unwrap<any>(
+      await client.doc.format.paragraph.setAlignment({ sessionId: sid, target, alignment: 'justify' }),
+    );
+    expect(result.success).toBe(true);
     await saveResult(sid, 'align-justify.docx');
   });
 
   // ---------------------------------------------------------------------------
-  // Combined: multiple value formats on the same range
+  // Combined: multiple inline run patches on the same range
   // ---------------------------------------------------------------------------
 
-  it('combined: fontSize + fontFamily + color on the same text', async () => {
+  it('combined: fontSize + rFonts + color on the same text', async () => {
     const sid = `combined-${Date.now()}`;
     const target = await setupFormattableText(sid, 'This text should be 18pt Georgia in blue');
 
-    const sizeResult = unwrap<any>(await client.doc.format.fontSize({ sessionId: sid, target, value: 18 }));
-    expect(sizeResult.receipt?.success).toBe(true);
-
-    const familyResult = unwrap<any>(await client.doc.format.fontFamily({ sessionId: sid, target, value: 'Georgia' }));
-    expect(familyResult.receipt?.success).toBe(true);
-
-    const colorResult = unwrap<any>(await client.doc.format.color({ sessionId: sid, target, value: '#0000FF' }));
-    expect(colorResult.receipt?.success).toBe(true);
+    const result = unwrap<any>(
+      await client.doc.format.apply({
+        sessionId: sid,
+        target,
+        inline: {
+          fontSize: 18,
+          color: '#0000FF',
+          rFonts: { ascii: 'Georgia', hAnsi: 'Georgia' },
+        },
+      }),
+    );
+    expect(result.receipt?.success).toBe(true);
     await saveResult(sid, 'combined.docx');
   });
 
@@ -232,5 +254,6 @@ describe('document-api story: inline formatting', () => {
       }),
     );
     expect(result.receipt?.success).toBe(true);
+    await saveResult(sid, 'dryRun.docx');
   });
 });

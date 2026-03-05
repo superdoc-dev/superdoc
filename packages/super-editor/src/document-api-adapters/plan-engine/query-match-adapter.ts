@@ -13,6 +13,7 @@ import type {
   QueryMatchInput,
   QueryMatchOutput,
   QueryMatchItem,
+  QueryMatchMeta,
   TextMatchItem,
   NodeMatchItem,
   MatchBlock,
@@ -36,7 +37,14 @@ import { validatePaginationInput } from '../helpers/adapter-utils.js';
 import { captureRunsInRange } from './style-resolver.js';
 import { getRevision } from './revision-tracker.js';
 import { planError } from './errors.js';
-import { coalesceRuns, toMatchStyle, extractRunStyleId, assertRunTilingInvariant } from './match-style-helpers.js';
+import {
+  coalesceRuns,
+  toMatchStyle,
+  extractRunStyleId,
+  assertRunTilingInvariant,
+  type CascadeContext,
+} from './match-style-helpers.js';
+import type { OoxmlResolverParams, ParagraphProperties } from '@superdoc/style-engine/ooxml';
 
 // ---------------------------------------------------------------------------
 // V3 ref encoding (D6)
@@ -67,6 +75,7 @@ function encodeV3Ref(payload: TextRefV3): string {
  * @param textRanges - Raw text ranges from the find adapter context.
  * @param evaluatedRevision - Current doc revision for ref encoding.
  * @param matchId - The match's deterministic ID.
+ * @param resolverParams - Optional style-engine resolver params for cascade resolution.
  * @returns Array of MatchBlocks in document order (D16).
  */
 function buildMatchBlocks(
@@ -74,6 +83,7 @@ function buildMatchBlocks(
   textRanges: TextAddress[],
   evaluatedRevision: string,
   matchId: string,
+  resolverParams?: OoxmlResolverParams | null,
 ): MatchBlock[] {
   const index = getBlockIndex(editor);
   const doc = editor.state.doc;
@@ -125,6 +135,14 @@ function buildMatchBlocks(
     // Build paragraph style (D10)
     const paragraphStyle = buildParagraphStyle(node);
 
+    // Build per-block cascade context for style-engine resolution
+    const cascadeContext: CascadeContext | undefined = resolverParams
+      ? {
+          resolverParams,
+          paragraphProperties: (node?.attrs?.paragraphProperties as ParagraphProperties) ?? null,
+        }
+      : undefined;
+
     // Capture PM runs within the matched range and coalesce (D4)
     const captured = captureRunsInRange(editor, candidate.pos, from, to);
     const coalesced = coalesceRuns(captured.runs);
@@ -135,7 +153,7 @@ function buildMatchBlocks(
       range: { start: run.from, end: run.to },
       text: blockText.slice(run.from, run.to),
       styleId: extractRunStyleId(run.marks),
-      styles: toMatchStyle(run.marks),
+      styles: toMatchStyle(run.marks, cascadeContext),
       ref: encodeV3Ref({
         v: 3,
         rev: evaluatedRevision,
@@ -340,12 +358,30 @@ export function queryMatchAdapter(editor: Editor, input: QueryMatchInput): Query
   const evaluatedRevision = getRevision(editor);
   const require: CardinalityRequirement = input.require ?? 'any';
 
+  // Build style-engine resolver params from converter context (if available).
+  // When translatedLinkedStyles.styles exists, resolveRunProperties can perform
+  // full cascade resolution for 'clear' properties (defaults → style chain → inline).
+  const converter = (editor as unknown as { converter?: Partial<OoxmlResolverParams> }).converter;
+  const translatedLinkedStyles = converter?.translatedLinkedStyles;
+  const translatedNumbering = converter?.translatedNumbering;
+  const hasStyleCascade = translatedLinkedStyles?.styles != null;
+  const resolverParams: OoxmlResolverParams | null = hasStyleCascade
+    ? {
+        translatedLinkedStyles,
+        translatedNumbering,
+      }
+    : null;
+
   // Validate pagination + cardinality interaction
   if ((require === 'first' || require === 'exactlyOne') && (input.limit !== undefined || input.offset !== undefined)) {
     throw planError('INVALID_INPUT', `limit/offset are not valid when require is "${require}"`);
   }
 
   const isTextSelector = input.select.type === 'text';
+
+  // Effective resolution is only meaningful for text selectors (which produce
+  // run-level style data). Node-only matches don't perform cascade resolution.
+  const effectiveResolved = hasStyleCascade && isTextSelector;
 
   // Execute search using the find adapter infrastructure.
   // For text selectors, omit limit/offset here because zero-width filtering (D20)
@@ -411,7 +447,7 @@ export function queryMatchAdapter(editor: Editor, input: QueryMatchInput): Query
 
     if (isTextSelector && raw.textRanges?.length) {
       // Text match → build blocks/runs hierarchy (D1)
-      const blocks = buildMatchBlocks(editor, raw.textRanges, evaluatedRevision, id);
+      const blocks = buildMatchBlocks(editor, raw.textRanges, evaluatedRevision, id, resolverParams);
 
       if (blocks.length === 0) {
         // Shouldn't happen after zero-width filtering, but guard
@@ -488,10 +524,15 @@ export function queryMatchAdapter(editor: Editor, input: QueryMatchInput): Query
     returned: truncated.length,
   };
 
+  // Effective resolution: true when converter context with style cascade is available,
+  // meaning 'clear' properties are resolved via the style-engine rather than conservative fallback.
+  const meta: QueryMatchMeta = { effectiveResolved };
+
   return buildDiscoveryResult({
     evaluatedRevision,
     total: totalMatches,
     items: truncated,
     page,
-  });
+    meta,
+  }) as QueryMatchOutput;
 }

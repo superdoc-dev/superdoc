@@ -277,6 +277,54 @@ describe('resolveMeasurementConstraints', () => {
     });
   });
 
+  describe('semantic flow constraints', () => {
+    it('uses semantic content width directly when provided', () => {
+      const options: LayoutOptions = {
+        flowMode: 'semantic',
+        pageSize: { w: 612, h: 792 },
+        margins: { top: 72, right: 72, bottom: 72, left: 72 },
+        semantic: {
+          contentWidth: 530,
+          marginTop: 40,
+          marginBottom: 50,
+        },
+      };
+
+      const result = resolveMeasurementConstraints(options);
+      expect(result.measurementWidth).toBe(530);
+      expect(result.measurementHeight).toBe(999910); // 1_000_000 - (40 + 50)
+    });
+
+    it('normalizes fractional semantic content width to match layout rounding', () => {
+      const options: LayoutOptions = {
+        flowMode: 'semantic',
+        pageSize: { w: 612, h: 792 },
+        margins: { top: 72, right: 72, bottom: 72, left: 72 },
+        semantic: {
+          contentWidth: 530.9,
+          marginTop: 40,
+          marginBottom: 50,
+        },
+      };
+
+      const result = resolveMeasurementConstraints(options);
+      expect(result.measurementWidth).toBe(530);
+      expect(result.measurementHeight).toBe(999910);
+    });
+
+    it('falls back to paginated constraints when semantic content width is missing', () => {
+      const options: LayoutOptions = {
+        flowMode: 'semantic',
+        pageSize: { w: 612, h: 792 },
+        margins: { top: 72, right: 72, bottom: 72, left: 72 },
+      };
+
+      const result = resolveMeasurementConstraints(options);
+      expect(result.measurementWidth).toBe(468);
+      expect(result.measurementHeight).toBe(648);
+    });
+  });
+
   describe('column width calculations', () => {
     it('handles zero gap in multi-column layout', () => {
       const options: LayoutOptions = {

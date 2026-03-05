@@ -264,7 +264,7 @@ describe('remap correctness: format.apply uses mapping', () => {
       id: 'remap-format',
       op: 'format.apply',
       where: { by: 'select', select: { type: 'text', pattern: 'some text' }, require: 'exactlyOne' },
-      args: { inline: { bold: true } },
+      args: { inline: { bold: 'on' } },
     };
 
     // Simulate +10 offset from prior steps

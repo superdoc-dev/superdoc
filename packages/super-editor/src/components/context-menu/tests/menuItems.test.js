@@ -30,6 +30,7 @@ vi.mock('../constants.js', () => ({
     paste: 'Paste',
     trackChangesAccept: 'Accept Tracked Changes',
     trackChangesReject: 'Reject Tracked Changes',
+    cellBackground: 'Cell background',
   },
   ICONS: {
     ai: '<svg>ai-icon</svg>',
@@ -40,6 +41,7 @@ vi.mock('../constants.js', () => ({
     cut: '<svg>cut-icon</svg>',
     copy: '<svg>copy-icon</svg>',
     paste: '<svg>paste-icon</svg>',
+    cellBackground: '<svg>cell-background-icon</svg>',
   },
   TRIGGERS: {
     slash: 'slash',
@@ -51,6 +53,7 @@ vi.mock('../../toolbar/TableGrid.vue', () => ({ default: { template: '<div>Table
 vi.mock('../../toolbar/AIWriter.vue', () => ({ default: { template: '<div>AIWriter</div>' } }));
 vi.mock('../../toolbar/TableActions.vue', () => ({ default: { template: '<div>TableActions</div>' } }));
 vi.mock('../../toolbar/LinkInput.vue', () => ({ default: { template: '<div>LinkInput</div>' } }));
+vi.mock('../CellBackgroundPicker.vue', () => ({ default: { template: '<div>CellBackgroundPicker</div>' } }));
 
 vi.mock('../../../core/utilities/clipboardUtils.js', () => ({
   readClipboardRaw: clipboardMocks.readClipboardRaw,
@@ -121,6 +124,88 @@ describe('menuItems.js', () => {
 
       expect(itemIds).not.toContain('track-changes-accept');
       expect(itemIds).not.toContain('track-changes-reject');
+    });
+
+    it('routes tracked-change context-menu actions through selection commands when text is selected', () => {
+      const acceptTrackedChangeFromContextMenu = vi.fn();
+      const rejectTrackedChangeFromContextMenu = vi.fn();
+
+      mockEditor.commands = {
+        acceptTrackedChangeFromContextMenu,
+        rejectTrackedChangeFromContextMenu,
+      };
+
+      mockContext = createMockContext({
+        editor: mockEditor,
+        trigger: TRIGGERS.click,
+        hasSelection: true,
+        isTrackedChange: true,
+        selectionStart: 10,
+        selectionEnd: 14,
+        trackedChangeId: 'tracked-change-1',
+      });
+
+      const sections = getItems(mockContext);
+      const trackSection = sections.find((section) => section.id === 'track-changes');
+      const acceptItem = trackSection?.items.find((item) => item.id === 'track-changes-accept');
+      const rejectItem = trackSection?.items.find((item) => item.id === 'track-changes-reject');
+
+      expect(acceptItem).toBeDefined();
+      expect(rejectItem).toBeDefined();
+
+      acceptItem.action(mockEditor, mockContext);
+      rejectItem.action(mockEditor, mockContext);
+
+      expect(acceptTrackedChangeFromContextMenu).toHaveBeenCalledWith({
+        from: 10,
+        to: 14,
+        trackedChangeId: 'tracked-change-1',
+      });
+      expect(rejectTrackedChangeFromContextMenu).toHaveBeenCalledWith({
+        from: 10,
+        to: 14,
+        trackedChangeId: 'tracked-change-1',
+      });
+    });
+
+    it('routes tracked-change context-menu actions through toolbar commands for collapsed selections', () => {
+      const acceptTrackedChangeFromContextMenu = vi.fn();
+      const rejectTrackedChangeFromContextMenu = vi.fn();
+
+      mockEditor.commands = {
+        acceptTrackedChangeFromContextMenu,
+        rejectTrackedChangeFromContextMenu,
+      };
+
+      mockContext = createMockContext({
+        editor: mockEditor,
+        trigger: TRIGGERS.click,
+        hasSelection: false,
+        isTrackedChange: true,
+        trackedChangeId: 'tracked-change-2',
+      });
+
+      const sections = getItems(mockContext);
+      const trackSection = sections.find((section) => section.id === 'track-changes');
+      const acceptItem = trackSection?.items.find((item) => item.id === 'track-changes-accept');
+      const rejectItem = trackSection?.items.find((item) => item.id === 'track-changes-reject');
+
+      expect(acceptItem).toBeDefined();
+      expect(rejectItem).toBeDefined();
+
+      acceptItem.action(mockEditor, mockContext);
+      rejectItem.action(mockEditor, mockContext);
+
+      expect(acceptTrackedChangeFromContextMenu).toHaveBeenCalledWith({
+        from: 10,
+        to: 10,
+        trackedChangeId: 'tracked-change-2',
+      });
+      expect(rejectTrackedChangeFromContextMenu).toHaveBeenCalledWith({
+        from: 10,
+        to: 10,
+        trackedChangeId: 'tracked-change-2',
+      });
     });
 
     it('should filter AI items when AI module is not enabled', () => {
@@ -511,6 +596,7 @@ describe('menuItems.js', () => {
       expect(clipboardMocks.handleClipboardPaste).toHaveBeenCalledWith(
         { editor: mockEditor, view: mockEditor.view },
         '<p>word html</p>',
+        'word html',
       );
       expect(mockEditor.view.pasteHTML).toHaveBeenCalledWith('<p>word html</p>', expect.any(Object));
       expect(insertContent).not.toHaveBeenCalled();
@@ -572,6 +658,71 @@ describe('menuItems.js', () => {
       await pasteAction(mockEditor);
 
       expect(insertContent).toHaveBeenCalledWith('fallback text', { contentType: 'text' });
+    });
+  });
+
+  describe('getItems - cell selection context', () => {
+    it('should show cell-background when isCellSelection is true and trigger is click', () => {
+      mockContext = createMockContext({
+        editor: mockEditor,
+        trigger: TRIGGERS.click,
+        isCellSelection: true,
+        tableSelectionKind: 'cells',
+        isInTable: true,
+      });
+
+      const sections = getItems(mockContext);
+      const generalSection = sections.find((s) => s.id === 'general');
+      const cellBgItem = generalSection?.items.find((item) => item.id === 'cell-background');
+
+      expect(cellBgItem).toBeDefined();
+      expect(cellBgItem.label).toBe('Cell background');
+    });
+
+    it('should show cell-background when right-clicking in a table cell without CellSelection', () => {
+      mockContext = createMockContext({
+        editor: mockEditor,
+        trigger: TRIGGERS.click,
+        isCellSelection: false,
+        isInTable: true,
+      });
+
+      const sections = getItems(mockContext);
+      const generalSection = sections.find((s) => s.id === 'general');
+      const cellBgItem = generalSection?.items.find((item) => item.id === 'cell-background');
+
+      expect(cellBgItem).toBeDefined();
+    });
+
+    it('should hide cell-background when not in a table at all', () => {
+      mockContext = createMockContext({
+        editor: mockEditor,
+        trigger: TRIGGERS.click,
+        isCellSelection: false,
+        isInTable: false,
+      });
+
+      const sections = getItems(mockContext);
+      const generalSection = sections.find((s) => s.id === 'general');
+      const cellBgItem = generalSection?.items.find((item) => item.id === 'cell-background');
+
+      expect(cellBgItem).toBeUndefined();
+    });
+
+    it('should hide cell-background on slash trigger even with cell selection', () => {
+      mockContext = createMockContext({
+        editor: mockEditor,
+        trigger: TRIGGERS.slash,
+        isCellSelection: true,
+        tableSelectionKind: 'row',
+        isInTable: true,
+      });
+
+      const sections = getItems(mockContext);
+      const allItems = sections.flatMap((s) => s.items);
+      const cellBgItem = allItems.find((item) => item.id === 'cell-background');
+
+      expect(cellBgItem).toBeUndefined();
     });
   });
 

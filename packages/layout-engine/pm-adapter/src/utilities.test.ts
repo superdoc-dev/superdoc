@@ -4,7 +4,7 @@
  */
 
 import { describe, it, expect } from 'vitest';
-import type { FlowBlock } from '@superdoc/contracts';
+import type { FlowBlock, ParagraphIndent } from '@superdoc/contracts';
 import {
   twipsToPx,
   ptToPx,
@@ -19,6 +19,7 @@ import {
   coerceBoolean,
   toBoolean,
   toBoxSpacing,
+  normalizeCellPaddingTopBottom,
   normalizeMediaKey,
   inferExtensionFromPath,
   hydrateImageBlocks,
@@ -424,6 +425,51 @@ describe('toBoxSpacing', () => {
   });
 });
 
+describe('normalizeCellPaddingTopBottom', () => {
+  it('raises top padding in (0, 2) to 2px', () => {
+    expect(normalizeCellPaddingTopBottom({ top: 0.5 })).toEqual({ top: 2 });
+    expect(normalizeCellPaddingTopBottom({ top: 1 })).toEqual({ top: 2 });
+    expect(normalizeCellPaddingTopBottom({ top: 1.99 })).toEqual({ top: 2 });
+  });
+
+  it('raises bottom padding in (0, 2) to 2px', () => {
+    expect(normalizeCellPaddingTopBottom({ bottom: 0.5 })).toEqual({ bottom: 2 });
+    expect(normalizeCellPaddingTopBottom({ bottom: 1.5 })).toEqual({ bottom: 2 });
+  });
+
+  it('leaves zero top/bottom unchanged', () => {
+    expect(normalizeCellPaddingTopBottom({ top: 0 })).toEqual({ top: 0 });
+    expect(normalizeCellPaddingTopBottom({ bottom: 0 })).toEqual({ bottom: 0 });
+    expect(normalizeCellPaddingTopBottom({ top: 0, bottom: 0 })).toEqual({ top: 0, bottom: 0 });
+  });
+
+  it('leaves top/bottom >= 2 unchanged', () => {
+    expect(normalizeCellPaddingTopBottom({ top: 2 })).toEqual({ top: 2 });
+    expect(normalizeCellPaddingTopBottom({ top: 5, bottom: 10 })).toEqual({ top: 5, bottom: 10 });
+  });
+
+  it('does not modify left/right', () => {
+    const padding = { top: 1, right: 3, bottom: 1, left: 4 };
+    expect(normalizeCellPaddingTopBottom(padding)).toEqual({
+      top: 2,
+      right: 3,
+      bottom: 2,
+      left: 4,
+    });
+  });
+
+  it('returns a shallow copy and normalizes only top/bottom', () => {
+    const padding = { top: 1, left: 8 };
+    const result = normalizeCellPaddingTopBottom(padding);
+    expect(result).toEqual({ top: 2, left: 8 });
+    expect(result).not.toBe(padding);
+  });
+
+  it('handles padding with only left/right unchanged', () => {
+    expect(normalizeCellPaddingTopBottom({ left: 5, right: 5 })).toEqual({ left: 5, right: 5 });
+  });
+});
+
 // ============================================================================
 // Media Utilities Tests (Bug Fixes)
 // ============================================================================
@@ -786,6 +832,40 @@ describe('Media Utilities', () => {
       ];
       // Media value is raw base64 without prefix
       const mediaFiles = { 'media/image.png': 'iVBORw0KGgoAAAANS' };
+
+      const result = hydrateImageBlocks(blocks, mediaFiles);
+      expect(result[0].src).toBe('data:image/png;base64,iVBORw0KGgoAAAANS');
+    });
+
+    it('handles Uint8Array media values from persistence layers', () => {
+      const blocks: FlowBlock[] = [
+        {
+          kind: 'image',
+          id: '1',
+          src: 'media/image.png',
+          runs: [],
+        },
+      ];
+      // Persistence layers (e.g., Y.js binary encoding) may return Uint8Array
+      const base64String = 'iVBORw0KGgoAAAANS';
+      const mediaFiles = { 'media/image.png': new TextEncoder().encode(base64String) };
+
+      const result = hydrateImageBlocks(blocks, mediaFiles);
+      expect(result[0].src).toBe('data:image/png;base64,iVBORw0KGgoAAAANS');
+    });
+
+    it('handles Uint8Array data URI values from persistence layers', () => {
+      const blocks: FlowBlock[] = [
+        {
+          kind: 'image',
+          id: '1',
+          src: 'media/image.png',
+          runs: [],
+        },
+      ];
+      // Data URI stored as Uint8Array
+      const dataUri = 'data:image/png;base64,iVBORw0KGgoAAAANS';
+      const mediaFiles = { 'media/image.png': new TextEncoder().encode(dataUri) };
 
       const result = hydrateImageBlocks(blocks, mediaFiles);
       expect(result[0].src).toBe('data:image/png;base64,iVBORw0KGgoAAAANS');

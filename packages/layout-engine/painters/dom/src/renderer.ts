@@ -1,74 +1,89 @@
 import type {
+  CustomGeometryData,
+  DrawingBlock,
+  DrawingFragment,
+  DrawingGeometry,
+  DropCapDescriptor,
+  FieldAnnotationRun,
   FlowBlock,
+  FlowMode,
+  FlowRunLink,
   Fragment,
+  GradientFill,
+  ImageBlock,
+  ImageDrawing,
+  ImageFragment,
+  ImageRun,
   Layout,
+  Line,
+  LineSegment,
+  ListBlock,
+  ListItemFragment,
+  ListMeasure,
   Measure,
   Page,
   PageMargins,
   ParaFragment,
-  ImageFragment,
-  DrawingFragment,
-  Run,
-  TextRun,
-  ImageRun,
-  FieldAnnotationRun,
-  Line,
-  LineSegment,
-  ParagraphBlock,
-  ParagraphMeasure,
-  ImageBlock,
-  ImageDrawing,
   ParagraphAttrs,
+  ParagraphBlock,
   ParagraphBorder,
-  ListItemFragment,
-  ListBlock,
-  ListMeasure,
+  ParagraphMeasure,
+  PositionedDrawingGeometry,
+  PositionMapping,
+  Run,
+  SdtMetadata,
+  ShapeGroupChild,
+  ShapeGroupDrawing,
+  ShapeTextContent,
+  SolidFillWithAlpha,
+  TableAttrs,
   TableBlock,
+  TableCellAttrs,
   TableFragment,
+  TextRun,
   TrackedChangeKind,
   TrackedChangesMode,
-  SdtMetadata,
-  DrawingBlock,
   VectorShapeDrawing,
-  ShapeGroupDrawing,
-  ShapeGroupChild,
-  DrawingGeometry,
-  PositionedDrawingGeometry,
   VectorShapeStyle,
-  FlowRunLink,
-  GradientFill,
-  SolidFillWithAlpha,
-  ShapeTextContent,
-  DropCapDescriptor,
-  TableAttrs,
-  TableCellAttrs,
-  PositionMapping,
 } from '@superdoc/contracts';
 import { calculateJustifySpacing, computeLinePmRange, shouldApplyJustify, SPACE_CHARS } from '@superdoc/contracts';
+import { toCssFontFamily } from '@superdoc/font-utils';
 import { getPresetShapeSvg } from '@superdoc/preset-geometry';
-import { applyGradientToSVG, applyAlphaToSVG, validateHexColor } from './svg-utils.js';
+import { encodeTooltip, sanitizeHref } from '@superdoc/url-validation';
+import { DOM_CLASS_NAMES } from './constants.js';
+import {
+  getRunBooleanProp,
+  getRunNumberProp,
+  getRunStringProp,
+  getRunUnderlineColor,
+  getRunUnderlineStyle,
+  hashCellBorders,
+  hashParagraphBorders,
+  hashTableBorders,
+} from './paragraph-hash-utils.js';
+import { assertFragmentPmPositions, assertPmPositions } from './pm-position-validation.js';
+import { createRulerElement, ensureRulerStyles, generateRulerDefinitionFromPx } from './ruler/index.js';
 import {
   CLASS_NAMES,
   containerStyles,
   containerStylesHorizontal,
-  spreadStyles,
+  ensureFieldAnnotationStyles,
+  ensureImageSelectionStyles,
+  ensureLinkStyles,
+  ensureNativeSelectionStyles,
+  ensurePrintStyles,
+  ensureSdtContainerStyles,
+  ensureTrackChangeStyles,
   fragmentStyles,
   lineStyles,
   pageStyles,
-  ensurePrintStyles,
-  ensureLinkStyles,
-  ensureTrackChangeStyles,
-  ensureSdtContainerStyles,
-  ensureFieldAnnotationStyles,
-  ensureImageSelectionStyles,
-  ensureNativeSelectionStyles,
+  spreadStyles,
   type PageStyles,
 } from './styles.js';
-import { DOM_CLASS_NAMES } from './constants.js';
-import { sanitizeHref, encodeTooltip } from '@superdoc/url-validation';
+import { applyAlphaToSVG, applyGradientToSVG, validateHexColor } from './svg-utils.js';
 import { renderTableFragment as renderTableFragmentElement } from './table/renderTableFragment.js';
-import { assertPmPositions, assertFragmentPmPositions } from './pm-position-validation.js';
 import { applyImageClipPath } from './utils/image-clip-path.js';
+import { computeTabWidth } from './utils/marker-helpers.js';
 import {
   applySdtContainerStyling,
   getSdtContainerKey,
@@ -76,19 +91,6 @@ import {
   type SdtBoundaryOptions,
 } from './utils/sdt-helpers.js';
 import { SdtGroupedHover } from './utils/sdt-hover.js';
-import { computeTabWidth } from './utils/marker-helpers.js';
-import { generateRulerDefinitionFromPx, createRulerElement, ensureRulerStyles } from './ruler/index.js';
-import { toCssFontFamily } from '@superdoc/font-utils';
-import {
-  hashParagraphBorders,
-  hashTableBorders,
-  hashCellBorders,
-  getRunStringProp,
-  getRunNumberProp,
-  getRunBooleanProp,
-  getRunUnderlineStyle,
-  getRunUnderlineColor,
-} from './paragraph-hash-utils.js';
 
 /**
  * Minimal type for WordParagraphLayoutOutput marker data used in rendering.
@@ -263,6 +265,8 @@ function isMinimalWordLayout(value: unknown): value is MinimalWordLayout {
  * - 'book': Book-style layout with facing pages
  */
 export type LayoutMode = 'vertical' | 'horizontal' | 'book';
+// FlowMode is re-exported from @superdoc/contracts
+export type { FlowMode } from '@superdoc/contracts';
 
 type PageDecorationPayload = {
   fragments: Fragment[];
@@ -309,6 +313,7 @@ export type RulerOptions = {
 type PainterOptions = {
   pageStyles?: PageStyles;
   layoutMode?: LayoutMode;
+  flowMode?: FlowMode;
   /** Gap between pages in pixels (default: 24px for vertical, 20px for horizontal) */
   pageGap?: number;
   headerProvider?: PageDecorationProvider;
@@ -317,7 +322,7 @@ type PainterOptions = {
     enabled?: boolean;
     window?: number;
     overscan?: number;
-    /** Virtualization gap override (defaults to 72px; independent of pageGap) */
+    /** Virtualization gap override (defaults to 72px; independent of pageGap). */
     gap?: number;
     paddingTop?: number;
   };
@@ -584,6 +589,7 @@ const COMMENT_EXTERNAL_COLOR = '#B1124B';
 const COMMENT_INTERNAL_COLOR = '#078383';
 const COMMENT_INACTIVE_ALPHA = '40'; // ~25% for inactive
 const COMMENT_ACTIVE_ALPHA = '66'; // ~40% for active/selected
+const COMMENT_FADED_ALPHA = '20'; // ~12% for non-selected when another comment is active
 
 type LinkRenderData = {
   href?: string;
@@ -984,6 +990,7 @@ export class DomPainter {
   private currentLayout: Layout | null = null;
   private changedBlocks = new Set<string>();
   private readonly layoutMode: LayoutMode;
+  private readonly isSemanticFlow: boolean;
   private headerProvider?: PageDecorationProvider;
   private footerProvider?: PageDecorationProvider;
   private totalPages = 0;
@@ -1024,6 +1031,22 @@ export class DomPainter {
   private onScrollHandler: ((e: Event) => void) | null = null;
   private onWindowScrollHandler: ((e: Event) => void) | null = null;
   private onResizeHandler: ((e: Event) => void) | null = null;
+  /** CSS zoom/scale factor applied to the mount element via transform: scale(). Defaults to 1 (no zoom). */
+  private zoomFactor = 1;
+  /**
+   * External scroll container (an ancestor element with overflow-y: auto/scroll).
+   * When set, updateVirtualWindow() uses this element's position to compute scrollY
+   * relative to the scroll container instead of relative to the browser viewport.
+   * This fixes the scroll offset calculation when SuperDoc is mounted inside a
+   * wrapper div that owns scrolling rather than the window.
+   */
+  private scrollContainer: HTMLElement | null = null;
+  /**
+   * Cached offset (in px) from the scroll container's content top to the mount's top.
+   * Used for stable scrollY calculation that avoids feedback loops from spacer DOM mutations.
+   * Invalidated when the mount, scroll container, or zoom changes.
+   */
+  private scrollContainerMountOffset: number | null = null;
   private sdtHover = new SdtGroupedHover();
   /** The currently active/selected comment ID for highlighting */
   private activeCommentId: string | null = null;
@@ -1033,6 +1056,7 @@ export class DomPainter {
   constructor(blocks: FlowBlock[], measures: Measure[], options: PainterOptions = {}) {
     this.options = options;
     this.layoutMode = options.layoutMode ?? 'vertical';
+    this.isSemanticFlow = (options.flowMode ?? 'paginated') === 'semantic';
     this.blockLookup = this.buildBlockLookup(blocks, measures);
     this.headerProvider = options.headerProvider;
     this.footerProvider = options.footerProvider;
@@ -1045,11 +1069,12 @@ export class DomPainter {
         : defaultGap;
 
     // Initialize virtualization config (feature-flagged)
-    if (this.layoutMode === 'vertical' && options.virtualization?.enabled) {
+    if (!this.isSemanticFlow && this.layoutMode === 'vertical' && options.virtualization?.enabled) {
       this.virtualEnabled = true;
       this.virtualWindow = Math.max(1, options.virtualization.window ?? 5);
       this.virtualOverscan = Math.max(0, options.virtualization.overscan ?? 0);
-      // Virtualization gap: use explicit virtualization.gap if provided, otherwise default to virtualized gap (72px)
+      // Virtualization gap: use explicit virtualization.gap if provided,
+      // otherwise default to legacy virtualized gap (72px).
       const maybeGap = options.virtualization.gap;
       if (typeof maybeGap === 'number' && Number.isFinite(maybeGap)) {
         this.virtualGap = Math.max(0, maybeGap);
@@ -1078,6 +1103,51 @@ export class DomPainter {
     this.virtualPinnedPages = next;
     if (this.virtualEnabled && this.mount) {
       this.updateVirtualWindow();
+    }
+  }
+
+  /**
+   * Sets the CSS zoom/scale factor applied to the mount element.
+   *
+   * When the mount element has `transform: scale(zoom)`, getBoundingClientRect()
+   * returns screen-space coordinates (scaled), but internal layout offsets are in
+   * unscaled layout space. This factor is used to convert between the two spaces
+   * during virtualization window calculations.
+   *
+   * @param zoom - The zoom/scale factor (e.g., 0.75 for 75% zoom). Defaults to 1.
+   */
+  public setZoom(zoom: number): void {
+    const next = typeof zoom === 'number' && Number.isFinite(zoom) && zoom > 0 ? zoom : 1;
+    if (next !== this.zoomFactor) {
+      this.zoomFactor = next;
+      this.scrollContainerMountOffset = null; // Invalidate on zoom change
+      if (this.virtualEnabled && this.mount) {
+        this.updateVirtualWindow();
+      }
+    }
+  }
+
+  /**
+   * Sets the external scroll container element.
+   *
+   * When the scroll container is an ancestor element (e.g., a wrapper div with
+   * overflow-y: auto), the default scrollY calculation using mount.getBoundingClientRect()
+   * relative to the viewport produces an offset equal to the scroll container's distance
+   * from the viewport top. This causes the virtualization window to be misaligned with the
+   * actual visible area.
+   *
+   * Setting the scroll container allows updateVirtualWindow() to compute scrollY relative
+   * to the scroll container instead, eliminating this offset.
+   *
+   * @param el - The scroll container element, or null to clear.
+   */
+  public setScrollContainer(el: HTMLElement | null): void {
+    if (el !== this.scrollContainer) {
+      this.scrollContainer = el;
+      this.scrollContainerMountOffset = null; // Invalidate cached offset
+      if (this.virtualEnabled && this.mount) {
+        this.updateVirtualWindow();
+      }
     }
   }
 
@@ -1378,7 +1448,7 @@ export class DomPainter {
     ensureSdtContainerStyles(doc);
     ensureImageSelectionStyles(doc);
     ensureNativeSelectionStyles(doc);
-    if (this.options.ruler?.enabled) {
+    if (!this.isSemanticFlow && this.options.ruler?.enabled) {
       ensureRulerStyles(doc);
     }
     mount.classList.add(CLASS_NAMES.container);
@@ -1392,6 +1462,22 @@ export class DomPainter {
     this.beginPaintSnapshot(layout);
 
     this.totalPages = layout.pages.length;
+    if (this.isSemanticFlow) {
+      // Semantic mode always renders as a single continuous surface.
+      applyStyles(mount, containerStyles);
+      mount.style.gap = '0px';
+      mount.style.alignItems = 'stretch';
+      if (!this.currentLayout || this.pageStates.length === 0) {
+        this.fullRender(layout);
+      } else {
+        this.patchLayout(layout);
+      }
+      this.currentLayout = layout;
+      this.changedBlocks.clear();
+      this.currentMapping = null;
+      return;
+    }
+
     let useDomSnapshotFallback = false;
     const mode = this.layoutMode;
     if (mode === 'horizontal') {
@@ -1498,6 +1584,14 @@ export class DomPainter {
     this.virtualPagesEl.style.alignItems = 'center';
     this.virtualPagesEl.style.width = '100%';
     this.virtualPagesEl.style.gap = `${this.virtualGap}px`;
+    // Prevent the browser from using this container as a scroll anchor.
+    // When the top spacer grows during virtual window shifts, this element
+    // moves down. If the browser anchors on it, scroll anchoring adjusts
+    // scrollTop to compensate, which fires a new scroll event with a higher
+    // scrollY, triggering another window shift — a positive feedback loop.
+    // With this set, the browser anchors on page elements (children) instead,
+    // which stay at stable positions regardless of spacer changes.
+    this.virtualPagesEl.style.overflowAnchor = 'none';
 
     mount.appendChild(this.topSpacerEl);
     mount.appendChild(this.virtualPagesEl);
@@ -1511,6 +1605,10 @@ export class DomPainter {
     element.style.width = '1px';
     element.style.height = '0px';
     element.style.flex = '0 0 auto';
+    // Prevent Chrome's scroll anchoring from using spacers as anchor nodes.
+    // When spacer heights change during virtual window shifts, scroll anchoring
+    // could adjust scrollTop and trigger cascading scroll events.
+    element.style.overflowAnchor = 'none';
     element.setAttribute('data-virtual-spacer', type);
   }
 
@@ -1540,6 +1638,7 @@ export class DomPainter {
         win.removeEventListener('resize', this.onResizeHandler);
       }
       this.onResizeHandler = () => {
+        this.scrollContainerMountOffset = null; // Recompute on resize
         this.updateVirtualWindow();
       };
       win.addEventListener('resize', this.onResizeHandler);
@@ -1604,22 +1703,42 @@ export class DomPainter {
     if (!this.mount || !this.topSpacerEl || !this.bottomSpacerEl || !this.virtualPagesEl || !this.currentLayout) return;
     const layout = this.currentLayout;
     const N = layout.pages.length;
+
     if (N === 0) {
       this.mount.innerHTML = '';
       this.processedLayoutVersion = this.layoutVersion;
       return;
     }
 
-    // Map scrollTop -> anchor page index via prefix sums
+    // Map scrollTop -> anchor page index via prefix sums.
+    // virtualOffsets are in layout (unscaled) space, so scrollY must also be in layout space.
+    // When the mount has transform: scale(zoom), getBoundingClientRect() returns
+    // screen-space values that must be divided by zoom to get layout-space coordinates.
     const paddingTop = this.getMountPaddingTopPx();
+    const zoom = this.zoomFactor;
     let scrollY: number;
     const isContainerScrollable = this.mount.scrollHeight > this.mount.clientHeight + 1;
     if (isContainerScrollable) {
       scrollY = Math.max(0, this.mount.scrollTop - paddingTop);
+    } else if (this.scrollContainer) {
+      // Intermediate scroll ancestor (e.g., a wrapper div with overflow-y: auto).
+      // Use scrollContainer.scrollTop with a cached mount offset instead of
+      // getBoundingClientRect(). Rects are affected by spacer DOM mutations
+      // which can cause cascading scroll events and runaway scrolling.
+      //
+      // mountOffset = distance from scroll container's content top to mount's top.
+      // Computed once and cached; invalidated on mount/container/zoom change.
+      if (this.scrollContainerMountOffset == null) {
+        const mountRect = this.mount.getBoundingClientRect();
+        const containerRect = this.scrollContainer.getBoundingClientRect();
+        this.scrollContainerMountOffset = mountRect.top - containerRect.top + this.scrollContainer.scrollTop;
+      }
+      scrollY = Math.max(0, (this.scrollContainer.scrollTop - this.scrollContainerMountOffset) / zoom - paddingTop);
     } else {
       const rect = this.mount.getBoundingClientRect();
-      // Translate viewport scroll to content-space scroll offset
-      scrollY = Math.max(0, -rect.top - paddingTop);
+      // rect.top is in screen space (affected by CSS transform: scale).
+      // Divide by zoom to convert to layout space for comparison with virtualOffsets.
+      scrollY = Math.max(0, -rect.top / zoom - paddingTop);
     }
 
     // Binary search for anchor index such that topOfIndex(i) <= scrollY < topOfIndex(i+1)
@@ -1707,8 +1826,13 @@ export class DomPainter {
     }
     this.mount.appendChild(this.bottomSpacerEl);
 
-    // Ensure mounted pages are ordered (with gap spacers) before bottom spacer.
+    // Ensure mounted pages are ordered (with gap spacers).
+    // Use cursor-based reconciliation to skip DOM moves for elements already in
+    // the correct position. Moving an element via appendChild/insertBefore triggers
+    // a browser blur event on any focused descendant, which breaks header/footer
+    // in-place editing where a PM editor lives inside a page element (SD-1993).
     let prevIndex: number | null = null;
+    let cursor: ChildNode | null = this.virtualPagesEl.firstChild;
     for (const idx of mounted) {
       if (prevIndex != null && idx > prevIndex + 1) {
         const gap = this.doc!.createElement('div');
@@ -1719,10 +1843,18 @@ export class DomPainter {
           this.topOfIndex(idx) - this.topOfIndex(prevIndex) - this.virtualHeights[prevIndex] - this.virtualGap * 2;
         gap.style.height = `${Math.max(0, Math.floor(gapHeight))}px`;
         this.virtualGapSpacers.push(gap);
-        this.virtualPagesEl.appendChild(gap);
+        // Insert gap before cursor. cursor is NOT advanced because it still
+        // points at the next page element that needs to be reconciled.
+        this.virtualPagesEl.insertBefore(gap, cursor);
       }
       const state = this.pageIndexToState.get(idx)!;
-      this.virtualPagesEl.appendChild(state.element);
+      if (state.element === cursor) {
+        // Already in the correct position. Skip the DOM mutation.
+        cursor = state.element.nextSibling;
+      } else {
+        // Out of order. Move to the correct position.
+        this.virtualPagesEl.insertBefore(state.element, cursor);
+      }
       prevIndex = idx;
     }
 
@@ -1816,12 +1948,13 @@ export class DomPainter {
     const el = this.doc.createElement('div');
     el.classList.add(CLASS_NAMES.page);
     applyStyles(el, pageStyles(width, height, this.getEffectivePageStyles()));
+    this.applySemanticPageOverrides(el);
     el.dataset.layoutEpoch = String(this.layoutEpoch);
     el.dataset.pageNumber = String(page.number);
     el.dataset.pageIndex = String(pageIndex);
 
-    // Render per-page ruler if enabled
-    if (this.options.ruler?.enabled) {
+    // Render per-page ruler if enabled (suppressed in semantic flow mode)
+    if (!this.isSemanticFlow && this.options.ruler?.enabled) {
       const rulerEl = this.renderPageRuler(width, page);
       if (rulerEl) {
         el.appendChild(rulerEl);
@@ -1924,6 +2057,7 @@ export class DomPainter {
   }
 
   private renderDecorationsForPage(pageEl: HTMLElement, page: Page, pageIndex: number): void {
+    if (this.isSemanticFlow) return;
     this.renderDecorationSection(pageEl, page, pageIndex, 'header');
     this.renderDecorationSection(pageEl, page, pageIndex, 'footer');
   }
@@ -2116,6 +2250,7 @@ export class DomPainter {
     this.onScrollHandler = null;
     this.onWindowScrollHandler = null;
     this.onResizeHandler = null;
+    this.scrollContainerMountOffset = null;
     this.sdtHover.destroy();
     this.layoutVersion = 0;
     this.processedLayoutVersion = -1;
@@ -2170,6 +2305,7 @@ export class DomPainter {
   private patchPage(state: PageDomState, page: Page, pageSize: { w: number; h: number }, pageIndex: number): void {
     const pageEl = state.element;
     applyStyles(pageEl, pageStyles(pageSize.w, pageSize.h, this.getEffectivePageStyles()));
+    this.applySemanticPageOverrides(pageEl);
     pageEl.dataset.pageNumber = String(page.number);
     pageEl.dataset.layoutEpoch = String(this.layoutEpoch);
     // pageIndex is already set during creation and doesn't change during patch
@@ -2315,6 +2451,7 @@ export class DomPainter {
     const el = this.doc.createElement('div');
     el.classList.add(CLASS_NAMES.page);
     applyStyles(el, pageStyles(pageSize.w, pageSize.h, this.getEffectivePageStyles()));
+    this.applySemanticPageOverrides(el);
     el.dataset.layoutEpoch = String(this.layoutEpoch);
 
     const contextBase: FragmentRenderContext = {
@@ -2342,7 +2479,25 @@ export class DomPainter {
     return { element: el, fragments: fragmentStates };
   }
 
+  private applySemanticPageOverrides(el: HTMLElement): void {
+    if (this.isSemanticFlow) {
+      el.style.overflow = 'visible';
+      el.style.width = '100%';
+      el.style.minWidth = '100%';
+    }
+  }
+
   private getEffectivePageStyles(): PageStyles | undefined {
+    if (this.isSemanticFlow) {
+      const base = this.options.pageStyles ?? {};
+      return {
+        ...base,
+        background: base.background ?? '#fff',
+        boxShadow: 'none',
+        border: 'none',
+        margin: '0',
+      };
+    }
     if (this.virtualEnabled && this.layoutMode === 'vertical') {
       // Remove top/bottom margins to avoid double-counting with container gap during virtualization
       const base = this.options.pageStyles ?? {};
@@ -3032,10 +3187,51 @@ export class DomPainter {
       applyImageClipPath(img, imageClipPath, { clipContainer: fragmentEl });
       img.style.display = block.display === 'inline' ? 'inline-block' : 'block';
 
+      // Apply rotation and flip transforms from OOXML a:xfrm
+      const transforms: string[] = [];
+
+      // Calculate translation offset to keep top-left corner fixed when rotating
+      if (block.rotation != null && block.rotation !== 0) {
+        const angleRad = (block.rotation * Math.PI) / 180;
+        const w = block.width ?? fragment.width;
+        const h = block.height ?? fragment.height;
+
+        // Calculate how much the top-left corner moves when rotating around center
+        // Top-left corner starts at (0, 0) in element space
+        // Center is at (w/2, h/2)
+        // After rotation, we need to translate to keep top-left at (0, 0)
+        const cosA = Math.cos(angleRad);
+        const sinA = Math.sin(angleRad);
+
+        // Position of top-left corner after rotation (relative to original top-left)
+        const newTopLeftX = (w / 2) * (1 - cosA) + (h / 2) * sinA;
+        const newTopLeftY = (w / 2) * sinA + (h / 2) * (1 - cosA);
+
+        transforms.push(`translate(${-newTopLeftX}px, ${-newTopLeftY}px)`);
+        transforms.push(`rotate(${block.rotation}deg)`);
+      }
+      if (block.flipH) {
+        transforms.push('scaleX(-1)');
+      }
+      if (block.flipV) {
+        transforms.push('scaleY(-1)');
+      }
+
+      if (transforms.length > 0) {
+        img.style.transform = transforms.join(' ');
+        img.style.transformOrigin = 'center';
+      }
+
       // Apply VML image adjustments (gain/blacklevel) as CSS filters for watermark effects
       // conversion formulas calculated based on Libreoffice vml reader
       // https://github.com/LibreOffice/core/blob/951a74d047cfddff78014225f55ecb2bbdcd9c4c/oox/source/vml/vmlshapecontext.cxx#L465C13-L493C1
       const filters: string[] = [];
+
+      // Apply OOXML grayscale effect
+      if (block.grayscale) {
+        filters.push('grayscale(100%)');
+      }
+
       if (block.gain != null || block.blacklevel != null) {
         // Convert VML gain to CSS contrast
         // VML gain is a hex string like "19661f" - higher = more contrast
@@ -3054,10 +3250,10 @@ export class DomPainter {
             filters.push(`brightness(${brightness})`);
           }
         }
+      }
 
-        if (filters.length > 0) {
-          img.style.filter = filters.join(' ');
-        }
+      if (filters.length > 0) {
+        img.style.filter = filters.join(' ');
       }
       fragmentEl.appendChild(img);
 
@@ -3186,9 +3382,15 @@ export class DomPainter {
     contentContainer.style.width = `${innerWidth}px`;
     contentContainer.style.height = `${innerHeight}px`;
 
-    const svgMarkup = block.shapeKind ? this.tryCreatePresetSvg(block, innerWidth, innerHeight) : null;
-    if (svgMarkup) {
-      const svgElement = this.parseSafeSvg(svgMarkup);
+    // Custom geometry takes priority — shapeKind may carry a schema default ('rect')
+    // even when the source shape only had a:custGeom and no a:prstGeom.
+    const customGeomSvg = block.customGeometry ? this.tryCreateCustomGeometrySvg(block, innerWidth, innerHeight) : null;
+    const svgMarkup =
+      !customGeomSvg && block.shapeKind ? this.tryCreatePresetSvg(block, innerWidth, innerHeight) : null;
+    const resolvedSvgMarkup = customGeomSvg || svgMarkup;
+
+    if (resolvedSvgMarkup) {
+      const svgElement = this.parseSafeSvg(resolvedSvgMarkup);
       if (svgElement) {
         svgElement.setAttribute('width', '100%');
         svgElement.setAttribute('height', '100%');
@@ -3343,17 +3545,6 @@ export class DomPainter {
     textDiv.style.fontSize = '12px';
     textDiv.style.lineHeight = '1.2';
 
-    // Apply counter-scaling to prevent text from being stretched by parent group transform
-    if (groupScaleX !== 1 || groupScaleY !== 1) {
-      const counterScaleX = 1 / groupScaleX;
-      const counterScaleY = 1 / groupScaleY;
-      textDiv.style.transform = `scale(${counterScaleX}, ${counterScaleY})`;
-      textDiv.style.transformOrigin = 'top left';
-      // Adjust dimensions to compensate for counter-scaling
-      textDiv.style.width = `${100 * groupScaleX}%`;
-      textDiv.style.height = `${100 * groupScaleY}%`;
-    }
-
     // Horizontal text alignment uses CSS text-align property
     // Note: justifyContent is already set above for vertical alignment
     if (textAlign === 'center') {
@@ -3477,6 +3668,67 @@ export class DomPainter {
       console.warn(`[DomPainter] Unable to render preset shape "${block.shapeKind}":`, error);
       return null;
     }
+  }
+
+  /**
+   * Creates an SVG string from custom geometry path data (a:custGeom).
+   * Each path in the custom geometry has its own coordinate space (w × h) which is
+   * mapped to the shape's actual dimensions via the SVG viewBox.
+   */
+  private tryCreateCustomGeometrySvg(block: VectorShapeDrawing, width: number, height: number): string | null {
+    const custGeom = block.customGeometry;
+    if (!custGeom?.paths?.length) return null;
+
+    let fillColor: string;
+    if (block.fillColor === null) {
+      fillColor = 'none';
+    } else if (typeof block.fillColor === 'string') {
+      fillColor = block.fillColor;
+    } else {
+      // Gradient / solidWithAlpha: use a placeholder fill so that downstream
+      // applyGradientToSVG / applyAlphaToSVG (which skip fill="none") can
+      // target these elements and replace the fill.
+      fillColor = '#000000';
+    }
+    const strokeColor =
+      block.strokeColor === null ? 'none' : typeof block.strokeColor === 'string' ? block.strokeColor : 'none';
+    const strokeWidth = block.strokeColor === null ? 0 : (block.strokeWidth ?? 0);
+
+    // Build SVG paths. Each path has its own coordinate space (w × h).
+    // Use the first path's coordinate space for the viewBox, and scale subsequent paths if needed.
+    const firstPath = custGeom.paths[0];
+    const viewW = firstPath.w || width;
+    const viewH = firstPath.h || height;
+
+    // Degenerate: zero-dimension viewBox is invalid SVG — skip rendering.
+    if (viewW === 0 || viewH === 0) return null;
+
+    // When the SVG viewBox maps to a non-uniform aspect ratio (common with group transforms),
+    // thin fill borders can become sub-pixel on one axis. Add a hairline stroke matching the
+    // fill color with vector-effect="non-scaling-stroke" so edges remain at least 0.5px visible.
+    const needsEdgeStroke = fillColor !== 'none' && strokeColor === 'none';
+    const edgeStroke = needsEdgeStroke
+      ? ` stroke="${fillColor}" stroke-width="0.5" vector-effect="non-scaling-stroke"`
+      : '';
+
+    const pathElements = custGeom.paths
+      .map((p) => {
+        // If this path has a different coordinate space, apply a transform to map it
+        const pathW = p.w || viewW;
+        const pathH = p.h || viewH;
+        const needsTransform = pathW !== viewW || pathH !== viewH;
+        const scaleX = viewW / pathW;
+        const scaleY = viewH / pathH;
+        const transform = needsTransform ? ` transform="scale(${scaleX}, ${scaleY})"` : '';
+        const strokeAttr =
+          strokeColor !== 'none' ? ` stroke="${strokeColor}" stroke-width="${strokeWidth}"` : edgeStroke;
+        return `<path d="${p.d}" fill="${fillColor}" fill-rule="evenodd"${strokeAttr}${transform} />`;
+      })
+      .join('\n  ');
+
+    return `<svg xmlns="http://www.w3.org/2000/svg" width="${width}" height="${height}" viewBox="0 0 ${viewW} ${viewH}" preserveAspectRatio="none">
+  ${pathElements}
+</svg>`;
   }
 
   private parseSafeSvg(markup: string): SVGElement | null {
@@ -3693,46 +3945,38 @@ export class DomPainter {
     const groupTransform = block.groupTransform;
     let contentContainer: HTMLElement = groupEl;
 
-    // Calculate scale factors for counter-scaling text
-    const groupScaleX = 1;
-    const groupScaleY = 1;
+    const visibleWidth = groupTransform?.width ?? block.geometry.width ?? 0;
+    const visibleHeight = groupTransform?.height ?? block.geometry.height ?? 0;
 
     if (groupTransform) {
       const inner = this.doc!.createElement('div');
       inner.style.position = 'absolute';
       inner.style.left = '0';
       inner.style.top = '0';
-      const childWidth = groupTransform.childWidth ?? groupTransform.width ?? block.geometry.width ?? 0;
-      const childHeight = groupTransform.childHeight ?? groupTransform.height ?? block.geometry.height ?? 0;
-      inner.style.width = `${Math.max(1, childWidth)}px`;
-      inner.style.height = `${Math.max(1, childHeight)}px`;
-      const transforms: string[] = [];
-      const offsetX = groupTransform.childX ?? 0;
-      const offsetY = groupTransform.childY ?? 0;
-      if (offsetX || offsetY) {
-        transforms.push(`translate(${-offsetX}px, ${-offsetY}px)`);
-      }
-      if (transforms.length > 0) {
-        inner.style.transformOrigin = 'top left';
-        inner.style.transform = transforms.join(' ');
-      }
+      // Container at visible dimensions. Children use pre-scaled positions/sizes.
+      inner.style.width = `${Math.max(1, visibleWidth)}px`;
+      inner.style.height = `${Math.max(1, visibleHeight)}px`;
       groupEl.appendChild(inner);
       contentContainer = inner;
     }
 
     block.shapes.forEach((child) => {
-      const childContent = this.createGroupChildContent(child, groupScaleX, groupScaleY, context);
+      const childContent = this.createGroupChildContent(child, 1, 1, context);
       if (!childContent) return;
       const attrs = (child as ShapeGroupChild).attrs ?? {};
       const wrapper = this.doc!.createElement('div');
       wrapper.classList.add('superdoc-shape-group__child');
       wrapper.style.position = 'absolute';
-      wrapper.style.left = `${attrs.x ?? 0}px`;
-      wrapper.style.top = `${attrs.y ?? 0}px`;
-      const childWidthValue = typeof attrs.width === 'number' ? attrs.width : block.geometry.width;
-      const childHeightValue = typeof attrs.height === 'number' ? attrs.height : block.geometry.height;
-      wrapper.style.width = `${Math.max(1, childWidthValue)}px`;
-      wrapper.style.height = `${Math.max(1, childHeightValue)}px`;
+
+      // Children use pre-scaled (visual-space) positions/sizes from import.
+      wrapper.style.left = `${Number(attrs.x ?? 0)}px`;
+      wrapper.style.top = `${Number(attrs.y ?? 0)}px`;
+
+      const childW = typeof attrs.width === 'number' ? attrs.width : block.geometry.width;
+      const childH = typeof attrs.height === 'number' ? attrs.height : block.geometry.height;
+      wrapper.style.width = `${Math.max(1, childW)}px`;
+      wrapper.style.height = `${Math.max(1, childH)}px`;
+
       wrapper.style.transformOrigin = 'center';
       const transforms: string[] = [];
       if (attrs.rotation) {
@@ -3768,6 +4012,7 @@ export class DomPainter {
       const attrs = child.attrs as PositionedDrawingGeometry &
         VectorShapeStyle & {
           kind?: string;
+          customGeometry?: CustomGeometryData;
           shapeId?: string;
           shapeName?: string;
           textContent?: ShapeTextContent;
@@ -3794,6 +4039,7 @@ export class DomPainter {
         drawingContentId: undefined,
         drawingContent: undefined,
         shapeKind: attrs.kind,
+        customGeometry: attrs.customGeometry,
         fillColor: attrs.fillColor,
         strokeColor: attrs.strokeColor,
         strokeWidth: attrs.strokeWidth,
@@ -4412,6 +4658,70 @@ export class DomPainter {
       // Position and z-index on the image only (not the line) so resize overlay can stack above.
       img.style.position = 'relative';
       img.style.zIndex = '1';
+    }
+
+    // Apply rotation and flip transforms from OOXML a:xfrm
+    const transforms: string[] = [];
+
+    // Calculate translation offset to keep top-left corner fixed when rotating
+    if (run.rotation != null && run.rotation !== 0) {
+      const angleRad = (run.rotation * Math.PI) / 180;
+      const w = run.width;
+      const h = run.height;
+
+      // Calculate how much the top-left corner moves when rotating around center
+      // Top-left corner starts at (0, 0) in element space
+      // Center is at (w/2, h/2)
+      // After rotation, we need to translate to keep top-left at (0, 0)
+      const cosA = Math.cos(angleRad);
+      const sinA = Math.sin(angleRad);
+
+      // Position of top-left corner after rotation (relative to original top-left)
+      const newTopLeftX = (w / 2) * (1 - cosA) + (h / 2) * sinA;
+      const newTopLeftY = (w / 2) * sinA + (h / 2) * (1 - cosA);
+
+      transforms.push(`translate(${-newTopLeftX}px, ${-newTopLeftY}px)`);
+      transforms.push(`rotate(${run.rotation}deg)`);
+    }
+    if (run.flipH) {
+      transforms.push('scaleX(-1)');
+    }
+    if (run.flipV) {
+      transforms.push('scaleY(-1)');
+    }
+    if (transforms.length > 0) {
+      img.style.transform = transforms.join(' ');
+      img.style.transformOrigin = 'center';
+    }
+
+    // Apply image effects (grayscale, VML adjustments for watermarks)
+    const filters: string[] = [];
+
+    // Apply OOXML grayscale effect
+    if (run.grayscale) {
+      filters.push('grayscale(100%)');
+    }
+
+    if (run.gain != null || run.blacklevel != null) {
+      // Convert VML gain to CSS contrast
+      if (run.gain && typeof run.gain === 'string' && run.gain.endsWith('f')) {
+        const contrast = Math.max(0, parseInt(run.gain) / 65536) * (2 / 3);
+        if (contrast > 0) {
+          filters.push(`contrast(${contrast})`);
+        }
+      }
+
+      // Convert VML blacklevel to CSS brightness
+      if (run.blacklevel && typeof run.blacklevel === 'string' && run.blacklevel.endsWith('f')) {
+        const brightness = Math.max(0, 1 + parseInt(run.blacklevel) / 327 / 100) * 1.3;
+        if (brightness > 0) {
+          filters.push(`brightness(${brightness})`);
+        }
+      }
+    }
+
+    if (filters.length > 0) {
+      img.style.filter = filters.join(' ');
     }
 
     // Assert PM positions are present for cursor fallback
@@ -6464,7 +6774,15 @@ const deriveBlockVersion = (block: FlowBlock): string => {
         hash = hashString(hash, tblAttrs.borderCollapse);
       }
       if (tblAttrs.cellSpacing !== undefined) {
-        hash = hashNumber(hash, tblAttrs.cellSpacing);
+        const cs = tblAttrs.cellSpacing;
+        if (typeof cs === 'number') {
+          hash = hashNumber(hash, cs);
+        } else {
+          // Stable key: value and type only (avoid JSON.stringify key-order variance)
+          const v = (cs as { value?: number; type?: string }).value ?? 0;
+          const t = (cs as { value?: number; type?: string }).type ?? 'px';
+          hash = hashString(hash, `cs:${v}:${t}`);
+        }
       }
       // Include SDT metadata so lock-mode changes invalidate the cache.
       if (tblAttrs.sdt) {
@@ -6593,8 +6911,10 @@ const getCommentHighlight = (run: TextRun, activeCommentId: string | null): Comm
         hasNestedComments: nestedComments.length > 0,
       };
     }
-    // Active comment is set but this run does not belong to it - do not highlight.
-    return {};
+    // Active comment is set but this run does not belong to it - show faded highlight.
+    const fadedPrimary = comments[0];
+    const fadedBase = fadedPrimary.internal ? COMMENT_INTERNAL_COLOR : COMMENT_EXTERNAL_COLOR;
+    return { color: `${fadedBase}${COMMENT_FADED_ALPHA}` };
   }
 
   // No active comment - show uniform light highlight (like Word/Google Docs)

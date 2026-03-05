@@ -1,3 +1,4 @@
+import type { Node as ProseMirrorNode } from 'prosemirror-model';
 import { getHeadingLevel, type BlockCandidate } from './node-address-resolver.js';
 import type { InlineCandidate } from './inline-address-resolver.js';
 import { resolveCommentIdFromAttrs, toFiniteNumber } from './value-utils.js';
@@ -23,6 +24,7 @@ import type {
   TabNodeInfo,
   TableCellNodeInfo,
   TableNodeInfo,
+  TableOfContentsNodeInfo,
   TableRowNodeInfo,
 } from '@superdoc/document-api';
 import type {
@@ -33,6 +35,7 @@ import type {
   TableCellAttrs,
   TableMeasurement,
 } from '../../extensions/types/node-attributes.js';
+import { parseTocInstruction } from '../../core/super-converter/field-references/shared/toc-switches.js';
 
 function resolveMeasurement(value: number | TableMeasurement | null | undefined): number | undefined {
   if (typeof value === 'number') return value;
@@ -41,7 +44,7 @@ function resolveMeasurement(value: number | TableMeasurement | null | undefined)
 }
 
 function mapTableAlignment(
-  justification: TableAttrs['tableProperties'] extends { justification?: infer J } ? J : never,
+  justification: NonNullable<TableAttrs['tableProperties']>['justification'],
 ): TableNodeInfo['properties']['alignment'] {
   switch (justification) {
     case 'start':
@@ -59,12 +62,12 @@ function mapTableAlignment(
 
 function mapParagraphProperties(attrs: ParagraphAttrs | null | undefined): ParagraphProperties {
   const props = attrs?.paragraphProperties ?? undefined;
-  const indentation = props?.indentation
+  const indentation = props?.indent
     ? {
-        left: props.indentation.left,
-        right: props.indentation.right,
-        firstLine: props.indentation.firstLine,
-        hanging: props.indentation.hanging,
+        left: props.indent.left,
+        right: props.indent.right,
+        firstLine: props.indent.firstLine,
+        hanging: props.indent.hanging,
       }
     : undefined;
 
@@ -92,7 +95,7 @@ function mapParagraphProperties(attrs: ParagraphAttrs | null | undefined): Parag
     indentation,
     spacing,
     keepWithNext: props?.keepNext ?? undefined,
-    outlineLevel: props?.outlineLevel ?? undefined,
+    outlineLevel: props?.outlineLvl ?? undefined,
     paragraphNumbering,
   };
 }
@@ -211,8 +214,82 @@ function mapTableCellNode(candidate: BlockCandidate): TableCellNodeInfo {
   };
 }
 
-function buildImageInfo(attrs: ImageAttrs | undefined, kind: 'block' | 'inline'): ImageNodeInfo {
-  const properties = {
+function mapTableOfContentsNode(candidate: BlockCandidate): TableOfContentsNodeInfo {
+  const node = candidate.node;
+  const instruction: string = node.attrs?.instruction ?? '';
+  const config = parseTocInstruction(instruction);
+  const entryCount = node.childCount;
+
+  return {
+    nodeType: 'tableOfContents',
+    kind: 'block',
+    properties: {
+      instruction,
+      sourceConfig: config.source,
+      displayConfig: config.display,
+      preservedSwitches: config.preserved,
+      entryCount,
+    },
+  };
+}
+
+/**
+ * Parse a CSS `inset(top% right% bottom% left%)` string into crop percentages.
+ */
+function parseCropFromClipPath(clipPath: string | undefined | null): ImageNodeInfo['properties']['crop'] {
+  if (!clipPath) return null;
+  const match = clipPath.match(/^inset\(\s*([\d.]+)%\s+([\d.]+)%\s+([\d.]+)%\s+([\d.]+)%\s*\)$/);
+  if (!match) return null;
+  return {
+    top: parseFloat(match[1]),
+    right: parseFloat(match[2]),
+    bottom: parseFloat(match[3]),
+    left: parseFloat(match[4]),
+  };
+}
+
+/**
+ * Detect whether the image at `imagePos` has a Caption-styled sibling paragraph.
+ * Returns false when `doc` is unavailable (context-free call sites).
+ */
+function detectCaptionSibling(doc: ProseMirrorNode | undefined, imagePos: number): boolean {
+  if (!doc) return false;
+  try {
+    const $pos = doc.resolve(imagePos);
+    const parentDepth = $pos.depth - 1;
+    if (parentDepth < 0) return false;
+    const parentPos = $pos.before(parentDepth + 1);
+    const parentNode = $pos.node(parentDepth + 1);
+    const afterParentPos = parentPos + parentNode.nodeSize;
+    if (afterParentPos >= doc.content.size) return false;
+    const nextNode = doc.nodeAt(afterParentPos);
+    if (!nextNode || nextNode.type.name !== 'paragraph') return false;
+    return nextNode.attrs?.paragraphProperties?.styleId === 'Caption';
+  } catch {
+    return false;
+  }
+}
+
+function buildImageInfo(
+  attrs: ImageAttrs | undefined,
+  kind: 'block' | 'inline',
+  doc?: ProseMirrorNode,
+  pos?: number,
+): ImageNodeInfo {
+  const isFloating = Boolean(attrs?.isAnchor);
+  const wrapObj = attrs?.wrap;
+  const td = attrs?.transformData;
+
+  const transform: ImageNodeInfo['properties']['transform'] =
+    td && (td.rotation || td.verticalFlip || td.horizontalFlip)
+      ? {
+          rotation: td.rotation ?? undefined,
+          verticalFlip: td.verticalFlip ?? undefined,
+          horizontalFlip: td.horizontalFlip ?? undefined,
+        }
+      : null;
+
+  const properties: ImageNodeInfo['properties'] = {
     src: attrs?.src ?? undefined,
     alt: attrs?.alt ?? undefined,
     size: attrs?.size
@@ -222,7 +299,22 @@ function buildImageInfo(attrs: ImageAttrs | undefined, kind: 'block' | 'inline')
           unit: undefined,
         }
       : undefined,
-    wrap: attrs?.wrap?.type ?? undefined,
+    placement: isFloating ? 'floating' : 'inline',
+    wrap: {
+      type: (wrapObj?.type as ImageNodeInfo['properties']['wrap']['type']) ?? 'Inline',
+      attrs: wrapObj?.attrs ?? undefined,
+    },
+    anchorData: attrs?.anchorData ?? null,
+    marginOffset: attrs?.marginOffset ?? null,
+    relativeHeight: attrs?.relativeHeight ?? null,
+    name: attrs?.alt ?? undefined,
+    description: attrs?.title ?? undefined,
+    transform,
+    crop: parseCropFromClipPath(attrs?.clipPath),
+    lockAspectRatio: attrs?.lockAspectRatio ?? true,
+    decorative: attrs?.decorative ?? false,
+    hyperlink: attrs?.hyperlink ?? null,
+    hasCaption: pos != null ? detectCaptionSibling(doc, pos) : false,
   };
 
   return {
@@ -449,7 +541,11 @@ function isInlineCandidate(candidate: BlockCandidate | InlineCandidate): candida
  * @returns Typed node information with properties populated from node attributes.
  * @throws {Error} If the node type is not implemented or the candidate kind mismatches.
  */
-export function mapNodeInfo(candidate: BlockCandidate | InlineCandidate, overrideType?: NodeType): NodeInfo {
+export function mapNodeInfo(
+  candidate: BlockCandidate | InlineCandidate,
+  overrideType?: NodeType,
+  doc?: ProseMirrorNode,
+): NodeInfo {
   const nodeType: NodeType = overrideType ?? candidate.nodeType;
   const kind = isInlineCandidate(candidate) ? 'inline' : 'block';
 
@@ -480,12 +576,16 @@ export function mapNodeInfo(candidate: BlockCandidate | InlineCandidate, overrid
       return mapTableCellNode(candidate as BlockCandidate);
     case 'image': {
       const attrs = candidate.node?.attrs as ImageAttrs | undefined;
-      return buildImageInfo(attrs, kind);
+      return buildImageInfo(attrs, kind, doc, candidate.pos);
     }
     case 'sdt': {
       const attrs = candidate.node?.attrs as StructuredContentBlockAttrs | undefined;
       return buildSdtInfo(attrs, kind);
     }
+    case 'tableOfContents':
+      if (kind !== 'block')
+        throw new DocumentApiAdapterError('INVALID_TARGET', 'TableOfContents nodes can only be resolved as blocks.');
+      return mapTableOfContentsNode(candidate as BlockCandidate);
     case 'hyperlink':
       if (!isInlineCandidate(candidate))
         throw new DocumentApiAdapterError('INVALID_TARGET', 'Hyperlink nodes can only be resolved inline.');

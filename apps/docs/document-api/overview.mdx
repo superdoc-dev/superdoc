@@ -17,3 +17,33 @@ Document API is in <strong>alpha</strong> and subject to breaking changes while 
 - Work with predictable inputs and outputs defined per operation.
 - Check capabilities up front and branch safely when features are unavailable.
 
+## Node addressing
+
+Every block in a document has a `nodeId` — a string that uniquely identifies it. When you call `find` or `getNodeById`, addresses use this ID:
+
+```json
+{
+  "kind": "block",
+  "nodeType": "paragraph",
+  "nodeId": "3A2B1C0D"
+}
+```
+
+### Stable IDs across loads
+
+For DOCX documents, `nodeId` is derived from the file's native `w14:paraId` attribute. In practice, this is usually stable when you reopen the same unchanged DOCX across separate editor sessions, machines, or headless CLI pipelines.
+
+For nodes created at runtime (not imported from DOCX), `nodeId` falls back to `sdBlockId`, a UUID generated when the editor opens. This fallback is volatile and changes on every load.
+
+| ID source | Stable across loads? | When used |
+|-----------|---------------------|-----------|
+| `paraId` (from DOCX) | Best effort (usually stable for unchanged DOCX blocks) | Paragraphs, tables, rows, cells imported from DOCX |
+| `sdBlockId` (runtime) | No (session-scoped) | Nodes created programmatically before first export |
+
+<Tip>
+If you need to reference blocks across separate editor sessions, use `editor.doc.find()` to get addresses — don't read `node.attrs.sdBlockId` directly. The Document API resolves `paraId` first for DOCX-imported content.
+</Tip>
+
+<Warning>
+No block ID is guaranteed to survive all Microsoft Word round-trips or external document rewrites. Word and other tools may regenerate `w14:paraId` during structural changes (for example split/merge/rebuild operations), and SuperDoc may rewrite duplicate IDs on import to keep block targeting deterministic.
+</Warning>

@@ -853,6 +853,67 @@ describe('getListDefinitionDetails', () => {
     });
   });
 
+  describe('generateNewListDefinition', () => {
+    it('applies level overrides when level is 0', () => {
+      const original = ListHelpers.generateNewListDefinition;
+      generateNewListDefinitionSpy.mockRestore();
+      const callThroughSpy = vi
+        .spyOn(ListHelpers, 'generateNewListDefinition')
+        .mockImplementation((args) => original(args));
+
+      const editor = {
+        converter: {
+          numbering: {
+            definitions: {
+              10: {
+                elements: [{ name: 'w:abstractNumId', attributes: { 'w:val': '100' } }],
+              },
+            },
+            abstracts: {
+              100: {
+                attributes: { 'w:abstractNumId': '100' },
+                elements: [
+                  {
+                    name: 'w:lvl',
+                    attributes: { 'w:ilvl': 0 },
+                    elements: [
+                      { name: 'w:start', attributes: { 'w:val': 1 } },
+                      { name: 'w:numFmt', attributes: { 'w:val': 'decimal' } },
+                      { name: 'w:lvlText', attributes: { 'w:val': '%1.' } },
+                    ],
+                  },
+                ],
+              },
+            },
+          },
+          translatedNumbering: {
+            definitions: {},
+            abstracts: {},
+          },
+        },
+        emit: vi.fn(),
+      };
+
+      ListHelpers.generateNewListDefinition({
+        numId: 10,
+        listType: 'orderedList',
+        level: 0,
+        start: 5,
+        text: '%1.',
+        fmt: 'decimal',
+        editor,
+      });
+
+      const levelZero = editor.converter.numbering.abstracts[100].elements.find(
+        (el) => el.name === 'w:lvl' && el.attributes['w:ilvl'] === 0,
+      );
+      const start = levelZero.elements.find((el) => el.name === 'w:start');
+      expect(start.attributes['w:val']).toBe(5);
+
+      callThroughSpy.mockRestore();
+    });
+  });
+
   describe('getAllListDefinitions', () => {
     it('should include cloned list definitions even when translatedNumbering is stale', () => {
       mockEditor.converter.numbering.definitions[1] = {
@@ -932,6 +993,350 @@ describe('getListDefinitionDetails', () => {
         }),
       );
     });
+  });
+});
+
+describe('setLvlOverride', () => {
+  let mockEditor;
+
+  beforeEach(() => {
+    vi.clearAllMocks();
+    mockEditor = {
+      converter: {
+        numbering: {
+          definitions: {
+            5: {
+              type: 'element',
+              name: 'w:num',
+              attributes: { 'w:numId': '5' },
+              elements: [{ name: 'w:abstractNumId', attributes: { 'w:val': '2' } }],
+            },
+          },
+          abstracts: {
+            2: {
+              attributes: { 'w:abstractNumId': '2' },
+              elements: [
+                {
+                  name: 'w:lvl',
+                  attributes: { 'w:ilvl': '0' },
+                  elements: [
+                    { name: 'w:start', attributes: { 'w:val': '1' } },
+                    { name: 'w:numFmt', attributes: { 'w:val': 'decimal' } },
+                  ],
+                },
+              ],
+            },
+          },
+        },
+        translatedNumbering: { definitions: {}, abstracts: {} },
+      },
+      emit: vi.fn(),
+    };
+  });
+
+  afterEach(() => {
+    vi.restoreAllMocks();
+  });
+
+  it('should add a startOverride to a w:num that has no lvlOverrides', () => {
+    listHelpers.setLvlOverride(mockEditor, 5, 0, { startOverride: 3 });
+
+    const numDef = mockEditor.converter.numbering.definitions[5];
+    const overrideEl = numDef.elements.find((el) => el.name === 'w:lvlOverride' && el.attributes['w:ilvl'] === '0');
+    expect(overrideEl).toBeTruthy();
+
+    const startEl = overrideEl.elements.find((el) => el.name === 'w:startOverride');
+    expect(startEl).toBeTruthy();
+    expect(startEl.attributes['w:val']).toBe('3');
+  });
+
+  it('should update an existing startOverride value', () => {
+    // First set
+    listHelpers.setLvlOverride(mockEditor, 5, 0, { startOverride: 3 });
+    // Update
+    listHelpers.setLvlOverride(mockEditor, 5, 0, { startOverride: 10 });
+
+    const numDef = mockEditor.converter.numbering.definitions[5];
+    const overrideEls = numDef.elements.filter((el) => el.name === 'w:lvlOverride' && el.attributes['w:ilvl'] === '0');
+    // Should have exactly one override element, not two
+    expect(overrideEls).toHaveLength(1);
+
+    const startEl = overrideEls[0].elements.find((el) => el.name === 'w:startOverride');
+    expect(startEl.attributes['w:val']).toBe('10');
+  });
+
+  it('should handle multiple levels independently', () => {
+    listHelpers.setLvlOverride(mockEditor, 5, 0, { startOverride: 5 });
+    listHelpers.setLvlOverride(mockEditor, 5, 1, { startOverride: 10 });
+
+    const numDef = mockEditor.converter.numbering.definitions[5];
+    const lvl0 = numDef.elements.find((el) => el.name === 'w:lvlOverride' && el.attributes['w:ilvl'] === '0');
+    const lvl1 = numDef.elements.find((el) => el.name === 'w:lvlOverride' && el.attributes['w:ilvl'] === '1');
+    expect(lvl0.elements.find((el) => el.name === 'w:startOverride').attributes['w:val']).toBe('5');
+    expect(lvl1.elements.find((el) => el.name === 'w:startOverride').attributes['w:val']).toBe('10');
+  });
+
+  it('should sync translatedNumbering after setting override', () => {
+    listHelpers.setLvlOverride(mockEditor, 5, 0, { startOverride: 3 });
+
+    const translated = mockEditor.converter.translatedNumbering.definitions[5];
+    expect(translated).toBeTruthy();
+    expect(translated.lvlOverrides).toBeTruthy();
+    expect(translated.lvlOverrides[0]).toEqual(expect.objectContaining({ startOverride: 3 }));
+  });
+
+  it('should emit list-definitions-change event', () => {
+    listHelpers.setLvlOverride(mockEditor, 5, 0, { startOverride: 3 });
+
+    expect(mockEditor.emit).toHaveBeenCalledWith(
+      'list-definitions-change',
+      expect.objectContaining({
+        numbering: mockEditor.converter.numbering,
+        editor: mockEditor,
+      }),
+    );
+  });
+
+  it('should be a no-op for non-existent numId', () => {
+    listHelpers.setLvlOverride(mockEditor, 999, 0, { startOverride: 3 });
+
+    expect(mockEditor.emit).not.toHaveBeenCalled();
+  });
+});
+
+describe('removeLvlOverride', () => {
+  let mockEditor;
+
+  beforeEach(() => {
+    vi.clearAllMocks();
+    mockEditor = {
+      converter: {
+        numbering: {
+          definitions: {
+            5: {
+              type: 'element',
+              name: 'w:num',
+              attributes: { 'w:numId': '5' },
+              elements: [
+                { name: 'w:abstractNumId', attributes: { 'w:val': '2' } },
+                {
+                  type: 'element',
+                  name: 'w:lvlOverride',
+                  attributes: { 'w:ilvl': '0' },
+                  elements: [{ name: 'w:startOverride', attributes: { 'w:val': '3' } }],
+                },
+                {
+                  type: 'element',
+                  name: 'w:lvlOverride',
+                  attributes: { 'w:ilvl': '1' },
+                  elements: [{ name: 'w:startOverride', attributes: { 'w:val': '5' } }],
+                },
+              ],
+            },
+          },
+          abstracts: {
+            2: {
+              attributes: { 'w:abstractNumId': '2' },
+              elements: [],
+            },
+          },
+        },
+        translatedNumbering: { definitions: {}, abstracts: {} },
+      },
+      emit: vi.fn(),
+    };
+  });
+
+  afterEach(() => {
+    vi.restoreAllMocks();
+  });
+
+  it('should remove the specified lvlOverride element', () => {
+    listHelpers.removeLvlOverride(mockEditor, 5, 0);
+
+    const numDef = mockEditor.converter.numbering.definitions[5];
+    const remaining = numDef.elements.filter((el) => el.name === 'w:lvlOverride');
+    expect(remaining).toHaveLength(1);
+    expect(remaining[0].attributes['w:ilvl']).toBe('1');
+  });
+
+  it('should not affect other levels', () => {
+    listHelpers.removeLvlOverride(mockEditor, 5, 0);
+
+    const numDef = mockEditor.converter.numbering.definitions[5];
+    const lvl1 = numDef.elements.find((el) => el.name === 'w:lvlOverride' && el.attributes['w:ilvl'] === '1');
+    expect(lvl1).toBeTruthy();
+    expect(lvl1.elements.find((el) => el.name === 'w:startOverride').attributes['w:val']).toBe('5');
+  });
+
+  it('should sync translatedNumbering after removal', () => {
+    listHelpers.removeLvlOverride(mockEditor, 5, 0);
+
+    const translated = mockEditor.converter.translatedNumbering.definitions[5];
+    expect(translated).toBeTruthy();
+  });
+
+  it('should emit list-definitions-change event', () => {
+    listHelpers.removeLvlOverride(mockEditor, 5, 0);
+
+    expect(mockEditor.emit).toHaveBeenCalledWith(
+      'list-definitions-change',
+      expect.objectContaining({
+        numbering: mockEditor.converter.numbering,
+        editor: mockEditor,
+      }),
+    );
+  });
+
+  it('should be a no-op when the level has no override', () => {
+    listHelpers.removeLvlOverride(mockEditor, 5, 5); // level 5 doesn't exist
+
+    expect(mockEditor.emit).not.toHaveBeenCalled();
+  });
+
+  it('should be a no-op for non-existent numId', () => {
+    listHelpers.removeLvlOverride(mockEditor, 999, 0);
+
+    expect(mockEditor.emit).not.toHaveBeenCalled();
+  });
+});
+
+describe('lvlOverride → getAllListDefinitions roundtrip', () => {
+  let mockEditor;
+
+  beforeEach(() => {
+    vi.clearAllMocks();
+    mockEditor = {
+      converter: {
+        numbering: {
+          definitions: {
+            5: {
+              type: 'element',
+              name: 'w:num',
+              attributes: { 'w:numId': '5' },
+              elements: [{ name: 'w:abstractNumId', attributes: { 'w:val': '2' } }],
+            },
+          },
+          abstracts: {
+            2: {
+              attributes: { 'w:abstractNumId': '2' },
+              elements: [
+                {
+                  name: 'w:lvl',
+                  attributes: { 'w:ilvl': '0' },
+                  elements: [
+                    { name: 'w:start', attributes: { 'w:val': '1' } },
+                    { name: 'w:numFmt', attributes: { 'w:val': 'decimal' } },
+                    { name: 'w:lvlText', attributes: { 'w:val': '%1.' } },
+                  ],
+                },
+                {
+                  name: 'w:lvl',
+                  attributes: { 'w:ilvl': '1' },
+                  elements: [
+                    { name: 'w:start', attributes: { 'w:val': '1' } },
+                    { name: 'w:numFmt', attributes: { 'w:val': 'lowerLetter' } },
+                    { name: 'w:lvlText', attributes: { 'w:val': '%2)' } },
+                  ],
+                },
+              ],
+            },
+          },
+        },
+        translatedNumbering: { definitions: {}, abstracts: {} },
+      },
+      emit: vi.fn(),
+    };
+  });
+
+  afterEach(() => {
+    vi.restoreAllMocks();
+  });
+
+  it('getAllListDefinitions reflects startOverride set via setLvlOverride', () => {
+    // Before: no override
+    // The translator is mocked, so we need to set up translatedNumbering with abstract
+    mockEditor.converter.translatedNumbering = {
+      definitions: { 5: { abstractNumId: 2 } },
+      abstracts: {
+        2: {
+          levels: {
+            0: { ilvl: 0, start: 1, numFmt: { val: 'decimal' }, lvlText: '%1.' },
+            1: { ilvl: 1, start: 1, numFmt: { val: 'lowerLetter' }, lvlText: '%2)' },
+          },
+        },
+      },
+    };
+
+    const before = listHelpers.getAllListDefinitions(mockEditor);
+    expect(before[5][0].startOverridden).toBe(false);
+    expect(before[5][0].start).toBe(1);
+
+    // Set override
+    listHelpers.setLvlOverride(mockEditor, 5, 0, { startOverride: 5 });
+
+    const after = listHelpers.getAllListDefinitions(mockEditor);
+    expect(after[5][0].startOverridden).toBe(true);
+    expect(after[5][0].start).toBe(5);
+    // Other level is unaffected
+    expect(after[5][1].startOverridden).toBe(false);
+    expect(after[5][1].start).toBe(1);
+  });
+
+  it('getAllListDefinitions reverts after removeLvlOverride', () => {
+    mockEditor.converter.translatedNumbering = {
+      definitions: { 5: { abstractNumId: 2 } },
+      abstracts: {
+        2: {
+          levels: {
+            0: { ilvl: 0, start: 1, numFmt: { val: 'decimal' }, lvlText: '%1.' },
+          },
+        },
+      },
+    };
+
+    // Set then remove
+    listHelpers.setLvlOverride(mockEditor, 5, 0, { startOverride: 10 });
+    listHelpers.removeLvlOverride(mockEditor, 5, 0);
+
+    const after = listHelpers.getAllListDefinitions(mockEditor);
+    expect(after[5][0].startOverridden).toBe(false);
+    expect(after[5][0].start).toBe(1);
+  });
+
+  it('raw XML structure is export-ready after setLvlOverride', () => {
+    listHelpers.setLvlOverride(mockEditor, 5, 0, { startOverride: 3 });
+
+    // Verify the raw XML structure matches what the exporter writes
+    const numDef = mockEditor.converter.numbering.definitions[5];
+    expect(numDef.name).toBe('w:num');
+    expect(numDef.attributes['w:numId']).toBe('5');
+
+    // w:abstractNumId element preserved
+    const abstractEl = numDef.elements.find((el) => el.name === 'w:abstractNumId');
+    expect(abstractEl.attributes['w:val']).toBe('2');
+
+    // w:lvlOverride added with correct structure
+    const overrideEl = numDef.elements.find((el) => el.name === 'w:lvlOverride');
+    expect(overrideEl.attributes['w:ilvl']).toBe('0');
+    expect(overrideEl.elements).toHaveLength(1);
+
+    const startOverrideEl = overrideEl.elements[0];
+    expect(startOverrideEl.name).toBe('w:startOverride');
+    expect(startOverrideEl.attributes['w:val']).toBe('3');
+  });
+
+  it('no spurious w:num entries are created by setLvlOverride', () => {
+    const definitionCountBefore = Object.keys(mockEditor.converter.numbering.definitions).length;
+    const abstractCountBefore = Object.keys(mockEditor.converter.numbering.abstracts).length;
+
+    listHelpers.setLvlOverride(mockEditor, 5, 0, { startOverride: 1 });
+
+    const definitionCountAfter = Object.keys(mockEditor.converter.numbering.definitions).length;
+    const abstractCountAfter = Object.keys(mockEditor.converter.numbering.abstracts).length;
+
+    expect(definitionCountAfter).toBe(definitionCountBefore);
+    expect(abstractCountAfter).toBe(abstractCountBefore);
   });
 });
 

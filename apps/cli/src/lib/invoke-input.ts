@@ -12,7 +12,7 @@
  * receives the correct input shape.
  */
 
-import type { CliExposedOperationId } from '../cli/operation-set.js';
+import { CLI_DOC_OPERATIONS, type CliExposedOperationId } from '../cli/operation-set.js';
 
 /**
  * Operations whose API input is wrapped in a named field on the CLI input object.
@@ -26,11 +26,31 @@ const WRAPPED_INPUT_KEY: Partial<Record<CliExposedOperationId, string>> = {
   getNode: 'address',
   'lists.list': 'query',
   'lists.insert': 'input',
-  'lists.setType': 'input',
   'lists.indent': 'input',
   'lists.outdent': 'input',
-  'lists.restart': 'input',
-  'lists.exit': 'input',
+  'lists.create': 'input',
+  'lists.attach': 'input',
+  'lists.detach': 'input',
+  'lists.join': 'input',
+  'lists.canJoin': 'input',
+  'lists.separate': 'input',
+  'lists.setLevel': 'input',
+  'lists.setValue': 'input',
+  'lists.continuePrevious': 'input',
+  'lists.canContinuePrevious': 'input',
+  'lists.setLevelRestart': 'input',
+  'lists.applyTemplate': 'input',
+  'lists.applyPreset': 'input',
+  'lists.captureTemplate': 'input',
+  'lists.setLevelNumbering': 'input',
+  'lists.setLevelBullet': 'input',
+  'lists.setLevelPictureBullet': 'input',
+  'lists.setLevelAlignment': 'input',
+  'lists.setLevelIndents': 'input',
+  'lists.setLevelTrailingCharacter': 'input',
+  'lists.setLevelMarkerFont': 'input',
+  'lists.clearLevelOverrides': 'input',
+  'lists.convertToText': 'input',
   'create.paragraph': 'input',
   'create.heading': 'input',
 };
@@ -59,6 +79,10 @@ const CLI_LEVEL_KEYS = new Set(['doc', 'sessionId', 'out', 'dryRun', 'force', 'e
  */
 const CHANGEMODE_IN_INPUT = new Set<CliExposedOperationId>(['mutations.apply', 'mutations.preview']);
 
+const FORMAT_TARGET_OPERATIONS = CLI_DOC_OPERATIONS.filter((operationId): operationId is CliExposedOperationId =>
+  operationId.startsWith('format.'),
+);
+
 // ---------------------------------------------------------------------------
 // Flat-flag → canonical target normalization
 // ---------------------------------------------------------------------------
@@ -73,11 +97,7 @@ const CHANGEMODE_IN_INPUT = new Set<CliExposedOperationId>(['mutations.apply', '
 const TEXT_TARGET_OPERATIONS = new Set<CliExposedOperationId>([
   'replace',
   'delete',
-  'format.apply',
-  'format.fontSize',
-  'format.fontFamily',
-  'format.color',
-  'format.align',
+  ...FORMAT_TARGET_OPERATIONS,
   'comments.create',
   'comments.patch',
 ]);
@@ -94,11 +114,15 @@ const INSERT_OPERATION: CliExposedOperationId = 'insert';
  */
 const LIST_TARGET_OPERATIONS = new Set<CliExposedOperationId>([
   'lists.insert',
-  'lists.setType',
   'lists.indent',
   'lists.outdent',
-  'lists.restart',
-  'lists.exit',
+  'lists.detach',
+  'lists.separate',
+  'lists.setLevel',
+  'lists.setValue',
+  'lists.continuePrevious',
+  'lists.canContinuePrevious',
+  'lists.convertToText',
 ]);
 
 function isRecord(value: unknown): value is Record<string, unknown> {

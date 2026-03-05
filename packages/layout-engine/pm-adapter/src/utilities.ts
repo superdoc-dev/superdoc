@@ -416,6 +416,25 @@ export function toBoxSpacing(spacing?: Record<string, unknown>): BoxSpacing | un
   return Object.keys(result).length > 0 ? result : undefined;
 }
 
+/** Minimum top/bottom cell padding (px) when imported value is in (0, 2). */
+const MIN_TOP_BOTTOM_CELL_PADDING_PX = 2;
+
+/**
+ * Normalizes top/bottom cell padding: values greater than 0 but less than 2px
+ * are raised to 2px so small imported values remain usable. Zero and values >= 2
+ * are unchanged.
+ */
+export function normalizeCellPaddingTopBottom(padding: BoxSpacing): BoxSpacing {
+  const out = { ...padding };
+  if (typeof out.top === 'number' && out.top > 0 && out.top < MIN_TOP_BOTTOM_CELL_PADDING_PX) {
+    out.top = MIN_TOP_BOTTOM_CELL_PADDING_PX;
+  }
+  if (typeof out.bottom === 'number' && out.bottom > 0 && out.bottom < MIN_TOP_BOTTOM_CELL_PADDING_PX) {
+    out.bottom = MIN_TOP_BOTTOM_CELL_PADDING_PX;
+  }
+  return out;
+}
+
 // ============================================================================
 // Position Map Building
 // ============================================================================
@@ -935,7 +954,7 @@ export function inferExtensionFromPath(value?: string | null): string | undefine
  * // Matches via candidate path: word/media/rId3.png
  * ```
  */
-export function hydrateImageBlocks(blocks: FlowBlock[], mediaFiles?: Record<string, string>): FlowBlock[] {
+export function hydrateImageBlocks(blocks: FlowBlock[], mediaFiles?: Record<string, string | Uint8Array>): FlowBlock[] {
   if (!mediaFiles || Object.keys(mediaFiles).length === 0) {
     return blocks;
   }
@@ -944,7 +963,9 @@ export function hydrateImageBlocks(blocks: FlowBlock[], mediaFiles?: Record<stri
   Object.entries(mediaFiles).forEach(([key, value]) => {
     const normalized = normalizeMediaKey(key);
     if (normalized) {
-      normalizedMedia.set(normalized, value);
+      // Handle Uint8Array values from persistence layers (e.g., Y.js binary encoding)
+      const stringValue = value instanceof Uint8Array ? new TextDecoder().decode(value) : value;
+      normalizedMedia.set(normalized, stringValue);
     }
   });
 

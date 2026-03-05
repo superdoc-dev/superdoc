@@ -1,7 +1,7 @@
 ---
 title: comments.patch
 sidebarTitle: comments.patch
-description: Reference for comments.patch
+description: Patch fields on an existing comment (text, target, status, or isInternal).
 ---
 
 {/* GENERATED FILE: DO NOT EDIT. Regenerate via `pnpm run docapi:sync`. */}
@@ -9,6 +9,8 @@ description: Reference for comments.patch
 > Alpha: Document API is currently alpha and subject to breaking changes.
 
 ## Summary
+
+Patch fields on an existing comment (text, target, status, or isInternal).
 
 - Operation ID: `comments.patch`
 - API member path: `editor.doc.comments.patch(...)`
@@ -18,6 +20,10 @@ description: Reference for comments.patch
 - Supports dry run: `no`
 - Deterministic target resolution: `yes`
 
+## Expected result
+
+Returns a Receipt confirming the comment was updated; reports NO_OP if no fields changed.
+
 ## Input fields
 
 | Field | Type | Required | Description |
@@ -26,6 +32,11 @@ description: Reference for comments.patch
 | `isInternal` | boolean | no |  |
 | `status` | enum | no | `"resolved"` |
 | `target` | TextAddress | no | TextAddress |
+| `target.blockId` | string | no |  |
+| `target.kind` | `"text"` | no | Constant: `"text"` |
+| `target.range` | Range | no | Range |
+| `target.range.end` | integer | no |  |
+| `target.range.start` | integer | no |  |
 | `text` | string | no |  |
 
 ### Example request
@@ -47,7 +58,24 @@ description: Reference for comments.patch
 
 ## Output fields
 
-_No fields._
+### Variant 1 (success=true)
+
+| Field | Type | Required | Description |
+| --- | --- | --- | --- |
+| `inserted` | EntityAddress[] | no |  |
+| `removed` | EntityAddress[] | no |  |
+| `success` | `true` | yes | Constant: `true` |
+| `updated` | EntityAddress[] | no |  |
+
+### Variant 2 (success=false)
+
+| Field | Type | Required | Description |
+| --- | --- | --- | --- |
+| `failure` | object | yes |  |
+| `failure.code` | enum | yes | `"INVALID_TARGET"`, `"NO_OP"` |
+| `failure.details` | any | no |  |
+| `failure.message` | string | yes |  |
+| `success` | `false` | yes | Constant: `false` |
 
 ### Example response
 

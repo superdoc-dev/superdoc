@@ -6,6 +6,7 @@ export interface TableStyles {
   borders?: Record<string, unknown>;
   cellMargins?: Record<string, unknown>;
   justification?: string;
+  tableCellSpacing?: { value?: number; type?: string };
 }
 
 /**

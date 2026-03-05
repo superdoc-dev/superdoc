@@ -231,6 +231,11 @@ describe('CommentDialog.vue', () => {
     expect(superdocStub.activeEditor.commands.setCursorById).toHaveBeenCalledWith(baseComment.commentId);
     expect(commentsStoreStub.activeComment.value).toBe(baseComment.commentId);
 
+    // Click the reply pill to expand the editor
+    const pill = wrapper.find('.reply-pill');
+    await pill.trigger('click');
+    await nextTick();
+
     commentsStoreStub.pendingComment.value = {
       commentId: 'pending-1',
       selection: baseComment.selection,
@@ -238,7 +243,7 @@ describe('CommentDialog.vue', () => {
     };
     await nextTick();
 
-    const addButton = wrapper.findAll('button.sd-button.primary').find((btn) => btn.text() === 'Comment');
+    const addButton = wrapper.find('button.reply-btn-primary');
     await addButton.trigger('click');
     expect(commentsStoreStub.getPendingComment).toHaveBeenCalled();
     expect(commentsStoreStub.addComment).toHaveBeenCalledWith({
@@ -290,9 +295,11 @@ describe('CommentDialog.vue', () => {
     // Custom handler should be called
     expect(customAcceptHandler).toHaveBeenCalledWith(baseComment, superdocStub.activeEditor);
 
-    // Default behavior should NOT be called
+    // Default accept command should NOT be called (custom handler replaces it)
     expect(superdocStub.activeEditor.commands.acceptTrackedChangeById).not.toHaveBeenCalled();
-    expect(baseComment.resolveComment).not.toHaveBeenCalled();
+
+    // resolveComment should ALWAYS be called to prevent ghost bubbles (SD-2049)
+    expect(baseComment.resolveComment).toHaveBeenCalled();
 
     // Cleanup should still happen
     await nextTick();
@@ -320,9 +327,11 @@ describe('CommentDialog.vue', () => {
     // Custom handler should be called
     expect(customRejectHandler).toHaveBeenCalledWith(baseComment, superdocStub.activeEditor);
 
-    // Default behavior should NOT be called
+    // Default reject command should NOT be called (custom handler replaces it)
     expect(superdocStub.activeEditor.commands.rejectTrackedChangeById).not.toHaveBeenCalled();
-    expect(baseComment.resolveComment).not.toHaveBeenCalled();
+
+    // resolveComment should ALWAYS be called to prevent ghost bubbles (SD-2049)
+    expect(baseComment.resolveComment).toHaveBeenCalled();
 
     // Cleanup should still happen
     await nextTick();
@@ -394,9 +403,11 @@ describe('CommentDialog.vue', () => {
     // Handler was called
     expect(noOpHandler).toHaveBeenCalledWith(baseComment, superdocStub.activeEditor);
 
-    // Default behavior should NOT run
+    // Default accept command should NOT run (custom handler replaces it)
     expect(superdocStub.activeEditor.commands.acceptTrackedChangeById).not.toHaveBeenCalled();
-    expect(baseComment.resolveComment).not.toHaveBeenCalled();
+
+    // resolveComment should ALWAYS be called to prevent ghost bubbles (SD-2049)
+    expect(baseComment.resolveComment).toHaveBeenCalled();
 
     // Cleanup should still happen (dialog closes even though handler did nothing)
     await nextTick();
@@ -458,12 +469,17 @@ describe('CommentDialog.vue', () => {
       extraComments: [childComment],
     });
 
+    // Activate the comment so child replies become visible
+    commentsStoreStub.activeComment.value = baseComment.commentId;
+    await nextTick();
+
     const headers = wrapper.findAllComponents(CommentHeaderStub);
     headers[1].vm.$emit('overflow-select', 'edit');
     expect(commentsStoreStub.editingCommentId.value).toBe(childComment.commentId);
     expect(commentsStoreStub.setActiveComment).toHaveBeenCalledWith(superdocStub, childComment.commentId);
 
     commentsStoreStub.currentCommentText.value = '<p>Updated</p>';
+    await nextTick();
     await nextTick();
     const updateButton = wrapper.findAll('button.sd-button.primary').find((btn) => btn.text() === 'Update');
     await updateButton.trigger('click');
@@ -509,9 +525,15 @@ describe('CommentDialog.vue', () => {
     expect(commentInputFocusSpies.at(-1)).toHaveBeenCalled();
   });
 
-  it('auto-focuses the new comment input when active', async () => {
+  it('auto-focuses the new comment input when reply pill is clicked', async () => {
     const { wrapper, baseComment } = await mountDialog();
     commentsStoreStub.activeComment.value = baseComment.commentId;
+    await nextTick();
+
+    // Click the reply pill to expand the editor
+    const pill = wrapper.find('.reply-pill');
+    expect(pill.exists()).toBe(true);
+    await pill.trigger('click');
     await nextTick();
 
     expect(commentInputFocusSpies.at(-1)).toHaveBeenCalled();
@@ -598,6 +620,17 @@ describe('CommentDialog.vue', () => {
       extraComments: [childComment2, childComment1],
     });
 
+    // Activate the comment so child replies become visible
+    commentsStoreStub.activeComment.value = 'tc-parent';
+    await nextTick();
+
+    // Expand the collapsed thread (>= 2 children triggers collapse)
+    const collapsedPill = wrapper.find('.collapsed-replies');
+    if (collapsedPill.exists()) {
+      await collapsedPill.trigger('click');
+      await nextTick();
+    }
+
     const headers = wrapper.findAllComponents(CommentHeaderStub);
     expect(headers).toHaveLength(3);
 
@@ -666,6 +699,17 @@ describe('CommentDialog.vue', () => {
       extraComments: [replyToRoot, rangeBasedRoot],
     });
 
+    // Activate the comment so child replies become visible
+    commentsStoreStub.activeComment.value = 'tc-parent';
+    await nextTick();
+
+    // Expand the collapsed thread (>= 2 children triggers collapse)
+    const collapsedPill = wrapper.find('.collapsed-replies');
+    if (collapsedPill.exists()) {
+      await collapsedPill.trigger('click');
+      await nextTick();
+    }
+
     const headers = wrapper.findAllComponents(CommentHeaderStub);
     expect(headers).toHaveLength(3);
     expect(headers[0].props('comment').commentId).toBe('tc-parent');
@@ -680,9 +724,14 @@ describe('CommentDialog.vue', () => {
     commentsStoreStub.activeComment.value = baseComment.commentId;
     await nextTick();
 
-    // Find the cancel button in the comment footer (add new comment section)
-    const cancelButton = wrapper.findAll('button.sd-button').find((btn) => btn.text() === 'Cancel');
-    expect(cancelButton).toBeDefined();
+    // Click the reply pill to expand the editor
+    const pill = wrapper.find('.reply-pill');
+    await pill.trigger('click');
+    await nextTick();
+
+    // Find the cancel button in the reply actions
+    const cancelButton = wrapper.find('button.reply-btn-cancel');
+    expect(cancelButton.exists()).toBe(true);
 
     await cancelButton.trigger('click');
 

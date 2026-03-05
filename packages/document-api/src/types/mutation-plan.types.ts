@@ -8,7 +8,8 @@
 import type { NodeAddress } from './base.js';
 import type { TextAddress, TrackedChangeAddress } from './address.js';
 import type { TextSelector, NodeSelector } from './query.js';
-import type { InsertStylePolicy, StylePolicy, SetMarks } from './style-policy.types.js';
+import type { InsertStylePolicy, StylePolicy } from './style-policy.types.js';
+import type { InlineRunPatch } from '../format/inline-run-patch.js';
 
 // ---------------------------------------------------------------------------
 // Universal targeting model
@@ -111,7 +112,7 @@ export type StyleApplyStep = {
   op: 'format.apply';
   where: StepWhere;
   args: {
-    inline: SetMarks;
+    inline: InlineRunPatch;
   };
 };
 
@@ -140,14 +141,14 @@ export type MutationStep = TextRewriteStep | TextInsertStep | TextDeleteStep | S
 export type ChangeMode = 'direct' | 'tracked';
 
 export type MutationsApplyInput = {
-  expectedRevision: string;
+  expectedRevision?: string;
   atomic: true;
   changeMode: ChangeMode;
   steps: MutationStep[];
 };
 
 export type MutationsPreviewInput = {
-  expectedRevision: string;
+  expectedRevision?: string;
   atomic: true;
   changeMode: ChangeMode;
   steps: MutationStep[];
@@ -171,7 +172,7 @@ export const MAX_PLAN_RESOLVED_TARGETS = 500;
 // Plan output — receipts
 // ---------------------------------------------------------------------------
 
-export type StepEffect = 'changed' | 'noop' | 'assert_passed' | 'assert_failed';
+export type StepEffect = 'changed' | 'noop' | 'error' | 'assert_passed' | 'assert_failed';
 
 /** Resolution for a single-block (range) target. */
 export type TextStepResolution = {
@@ -201,7 +202,15 @@ export type AssertStepData = {
 
 export type DomainStepData = { domain: 'command'; commandDispatched: boolean };
 
-export type StepOutcomeData = TextStepData | AssertStepData | DomainStepData;
+export type TableStepData = {
+  domain: 'table';
+  tableId: string;
+  affectedRows?: string[];
+  affectedCells?: string[];
+  affectedColumns?: number[];
+};
+
+export type StepOutcomeData = TextStepData | AssertStepData | DomainStepData | TableStepData;
 
 export type StepOutcome = {
   stepId: string;

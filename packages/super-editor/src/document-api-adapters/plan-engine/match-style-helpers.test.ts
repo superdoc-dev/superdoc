@@ -1,4 +1,4 @@
-import { describe, expect, it } from 'vitest';
+import { describe, expect, it, vi } from 'vitest';
 import type { CapturedRun } from './style-resolver.js';
 import {
   marksEqual,
@@ -8,8 +8,19 @@ import {
   normalizeHexColor,
   parseFontSizePt,
   assertRunTilingInvariant,
+  type CascadeContext,
 } from './match-style-helpers.js';
 import type { MatchRun } from '@superdoc/document-api';
+
+// Mock style-engine resolveRunProperties for cascade context tests
+const resolveRunPropertiesMock = vi.hoisted(() => vi.fn(() => ({})));
+vi.mock('@superdoc/style-engine/ooxml', async (importOriginal) => {
+  const orig = await importOriginal<typeof import('@superdoc/style-engine/ooxml')>();
+  return {
+    ...orig,
+    resolveRunProperties: resolveRunPropertiesMock,
+  };
+});
 
 // ---------------------------------------------------------------------------
 // Mock mark factory — minimal PM mark shape for testing
@@ -141,18 +152,26 @@ describe('coalesceRuns', () => {
 // ---------------------------------------------------------------------------
 
 describe('toMatchStyle', () => {
-  it('derives core-4 booleans from mark presence', () => {
+  it('derives two-layer model from mark presence', () => {
     const marks = [mockMark('bold'), mockMark('italic')];
     const style = toMatchStyle(marks as any);
-    expect(style.bold).toBe(true);
-    expect(style.italic).toBe(true);
-    expect(style.underline).toBe(false);
-    expect(style.strike).toBe(false);
+    expect(style.direct.bold).toBe('on');
+    expect(style.direct.italic).toBe('on');
+    expect(style.direct.underline).toBe('clear');
+    expect(style.direct.strike).toBe('clear');
+    expect(style.effective.bold).toBe(true);
+    expect(style.effective.italic).toBe(true);
+    expect(style.effective.underline).toBe(false);
+    expect(style.effective.strike).toBe(false);
   });
 
-  it('returns all-false for no core marks', () => {
+  it('returns all-clear direct and all-false effective for no core marks', () => {
+    // When no marks are present, direct is 'clear' (no direct formatting).
+    // Effective is false as a conservative fallback — the true effective value
+    // for 'clear' depends on style cascade resolution (SD-2014 Phase 2 follow-up).
     const style = toMatchStyle([] as any);
-    expect(style).toMatchObject({ bold: false, italic: false, underline: false, strike: false });
+    expect(style.direct).toMatchObject({ bold: 'clear', italic: 'clear', underline: 'clear', strike: 'clear' });
+    expect(style.effective).toMatchObject({ bold: false, italic: false, underline: false, strike: false });
   });
 
   it('extracts color from runProperties (precedence over textStyle)', () => {
@@ -212,6 +231,140 @@ describe('toMatchStyle', () => {
     expect(style.highlight).toBeUndefined();
     expect(style.fontFamily).toBeUndefined();
     expect(style.fontSizePt).toBeUndefined();
+  });
+});
+
+// ---------------------------------------------------------------------------
+// toMatchStyle with cascade context (Phase 4C)
+// ---------------------------------------------------------------------------
+
+describe('toMatchStyle — cascade resolution', () => {
+  const baseCascadeContext: CascadeContext = {
+    resolverParams: {
+      translatedLinkedStyles: { styles: { Normal: {} } } as any,
+      translatedNumbering: {},
+    },
+    paragraphProperties: { styleId: 'Normal' },
+  };
+
+  it('resolves clear→true via cascade when style-engine returns bold: true', () => {
+    resolveRunPropertiesMock.mockReturnValue({ bold: true });
+    // No bold mark → direct is 'clear', cascade resolves effective to true
+    const style = toMatchStyle([] as any, baseCascadeContext);
+    expect(style.direct.bold).toBe('clear');
+    expect(style.effective.bold).toBe(true);
+  });
+
+  it('resolves clear→false via cascade when style-engine returns bold: false', () => {
+    resolveRunPropertiesMock.mockReturnValue({ bold: false });
+    const style = toMatchStyle([] as any, baseCascadeContext);
+    expect(style.direct.bold).toBe('clear');
+    expect(style.effective.bold).toBe(false);
+  });
+
+  it('resolves clear→false via cascade when style-engine returns no bold property', () => {
+    resolveRunPropertiesMock.mockReturnValue({});
+    const style = toMatchStyle([] as any, baseCascadeContext);
+    expect(style.direct.bold).toBe('clear');
+    expect(style.effective.bold).toBe(false);
+  });
+
+  it('does not call resolveRunProperties when no property is clear', () => {
+    resolveRunPropertiesMock.mockClear();
+    const marks = [
+      mockMark('bold'),
+      mockMark('italic'),
+      mockMark('underline', { underlineType: 'single' }),
+      mockMark('strike'),
+    ];
+    toMatchStyle(marks as any, baseCascadeContext);
+    // All four are ON, so no cascade needed
+    expect(resolveRunPropertiesMock).not.toHaveBeenCalled();
+  });
+
+  it('resolves multiple clear properties in a single call', () => {
+    resolveRunPropertiesMock.mockReturnValue({ italic: true, strike: true });
+    // Only bold mark → italic, underline, strike are clear
+    const marks = [mockMark('bold')];
+    const style = toMatchStyle(marks as any, baseCascadeContext);
+    expect(style.direct.bold).toBe('on');
+    expect(style.effective.bold).toBe(true);
+    expect(style.direct.italic).toBe('clear');
+    expect(style.effective.italic).toBe(true);
+    expect(style.direct.strike).toBe('clear');
+    expect(style.effective.strike).toBe(true);
+    expect(style.direct.underline).toBe('clear');
+    expect(style.effective.underline).toBe(false); // not in resolved
+  });
+
+  it('resolves clear underline→true via cascade when style-engine returns underline with ON w:val', () => {
+    resolveRunPropertiesMock.mockReturnValue({ underline: { 'w:val': 'single' } });
+    const style = toMatchStyle([] as any, baseCascadeContext);
+    expect(style.direct.underline).toBe('clear');
+    expect(style.effective.underline).toBe(true);
+  });
+
+  it('resolves clear underline→false via cascade when style-engine returns underline with none w:val', () => {
+    resolveRunPropertiesMock.mockReturnValue({ underline: { 'w:val': 'none' } });
+    const style = toMatchStyle([] as any, baseCascadeContext);
+    expect(style.direct.underline).toBe('clear');
+    expect(style.effective.underline).toBe(false);
+  });
+
+  it('does NOT override on/off effective values with cascade results', () => {
+    resolveRunPropertiesMock.mockReturnValue({ bold: false, italic: true });
+    // bold mark ON, italic mark OFF — cascade should not change their effective
+    const marks = [mockMark('bold'), mockMark('italic', { value: '0' })];
+    const style = toMatchStyle(marks as any, baseCascadeContext);
+    expect(style.direct.bold).toBe('on');
+    expect(style.effective.bold).toBe(true); // stays true, not overridden by cascade false
+    expect(style.direct.italic).toBe('off');
+    expect(style.effective.italic).toBe(false); // stays false, not overridden by cascade true
+  });
+
+  it('uses conservative fallback when no cascade context provided', () => {
+    resolveRunPropertiesMock.mockClear();
+    const style = toMatchStyle([] as any);
+    expect(style.effective.bold).toBe(false);
+    expect(style.effective.italic).toBe(false);
+    expect(resolveRunPropertiesMock).not.toHaveBeenCalled();
+  });
+
+  it('passes inline run properties from marks to resolveRunProperties', () => {
+    resolveRunPropertiesMock.mockReturnValue({});
+    const marks = [mockMark('bold'), mockMark('runProperties', { styleId: 'Emphasis' })];
+    toMatchStyle(marks as any, baseCascadeContext);
+    // underline and strike are clear, so resolveRunProperties should be called
+    expect(resolveRunPropertiesMock).toHaveBeenCalledTimes(1);
+    const [, inlineRpr] = resolveRunPropertiesMock.mock.calls[0];
+    expect(inlineRpr.bold).toBe(true);
+    expect(inlineRpr.styleId).toBe('Emphasis');
+  });
+
+  it('passes boolean false toggle marks as false in inline run properties', () => {
+    resolveRunPropertiesMock.mockClear();
+    resolveRunPropertiesMock.mockReturnValue({});
+
+    // bold OFF is explicit, while others are clear (which triggers cascade resolution)
+    const marks = [mockMark('bold', { value: false })];
+    toMatchStyle(marks as any, baseCascadeContext);
+
+    expect(resolveRunPropertiesMock).toHaveBeenCalledTimes(1);
+    const [, inlineRpr] = resolveRunPropertiesMock.mock.calls[0];
+    expect(inlineRpr.bold).toBe(false);
+  });
+
+  it('passes numeric 0 toggle marks as false in inline run properties', () => {
+    resolveRunPropertiesMock.mockClear();
+    resolveRunPropertiesMock.mockReturnValue({});
+
+    // bold OFF is explicit, while others are clear (which triggers cascade resolution)
+    const marks = [mockMark('bold', { value: 0 })];
+    toMatchStyle(marks as any, baseCascadeContext);
+
+    expect(resolveRunPropertiesMock).toHaveBeenCalledTimes(1);
+    const [, inlineRpr] = resolveRunPropertiesMock.mock.calls[0];
+    expect(inlineRpr.bold).toBe(false);
   });
 });
 
@@ -354,7 +507,10 @@ describe('assertRunTilingInvariant', () => {
     return {
       range: { start, end },
       text: 'x'.repeat(end - start),
-      styles: { bold: false, italic: false, underline: false, strike: false },
+      styles: {
+        direct: { bold: 'clear', italic: 'clear', underline: 'clear', strike: 'clear' },
+        effective: { bold: false, italic: false, underline: false, strike: false },
+      },
       ref: 'test-ref',
     };
   }

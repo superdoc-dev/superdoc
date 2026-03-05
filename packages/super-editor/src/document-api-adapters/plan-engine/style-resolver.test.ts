@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { captureRunsInRange } from './style-resolver.js';
+import { captureRunsInRange, resolveInlineStyle } from './style-resolver.js';
 import { coalesceRuns, assertRunTilingInvariant } from './match-style-helpers.js';
 import type { Editor } from '../../core/Editor.js';
 import type { Node as ProseMirrorNode } from 'prosemirror-model';
@@ -75,6 +75,25 @@ function makeEditor(blockPos: number, blockNode: ProseMirrorNode | null): Editor
       doc: {
         nodeAt(pos: number) {
           return pos === blockPos ? blockNode : null;
+        },
+      },
+    },
+  } as unknown as Editor;
+}
+
+function makeStyleEditor(): Editor {
+  const createMarkFactory = (name: string) => ({
+    create: (attrs?: Record<string, unknown> | null) => mockMark(name, (attrs ?? {}) as Record<string, unknown>),
+  });
+
+  return {
+    state: {
+      schema: {
+        marks: {
+          bold: createMarkFactory('bold'),
+          italic: createMarkFactory('italic'),
+          underline: createMarkFactory('underline'),
+          strike: createMarkFactory('strike'),
         },
       },
     },
@@ -174,7 +193,10 @@ describe('captureRunsInRange', () => {
     const matchRuns: MatchRun[] = coalesced.map((run, idx) => ({
       range: { start: run.from, end: run.to },
       text: `r${idx}`,
-      styles: { bold: false, italic: false, underline: false, strike: false },
+      styles: {
+        direct: { bold: 'clear', italic: 'clear', underline: 'clear', strike: 'clear' },
+        effective: { bold: false, italic: false, underline: false, strike: false },
+      },
       ref: `test-ref-${idx}`,
     }));
 
@@ -244,10 +266,106 @@ describe('captureRunsInRange', () => {
     const matchRuns: MatchRun[] = coalesced.map((run, idx) => ({
       range: { start: run.from, end: run.to },
       text: `r${idx}`,
-      styles: { bold: false, italic: false, underline: false, strike: false },
+      styles: {
+        direct: { bold: 'clear', italic: 'clear', underline: 'clear', strike: 'clear' },
+        effective: { bold: false, italic: false, underline: false, strike: false },
+      },
       ref: `test-ref-${idx}`,
     }));
     expect(() => assertRunTilingInvariant(matchRuns, { start: 0, end: 5 }, 'p1')).not.toThrow();
+  });
+});
+
+describe('resolveInlineStyle: tri-state core marks', () => {
+  it('majority treats OFF as distinct from ON', () => {
+    const editor = makeStyleEditor();
+    const onBold = mockMark('bold');
+    const offBold = mockMark('bold', { value: '0' });
+
+    const resolved = resolveInlineStyle(
+      editor,
+      {
+        isUniform: false,
+        runs: [
+          { from: 0, to: 2, charCount: 2, marks: [onBold] },
+          { from: 2, to: 7, charCount: 5, marks: [offBold] },
+        ],
+      },
+      { mode: 'preserve', onNonUniform: 'majority' },
+      'step-1',
+    );
+
+    const bold = resolved.find((mark) => mark.type.name === 'bold') as MockMark | undefined;
+    expect(bold).toBeDefined();
+    expect(bold?.attrs.value).toBe('0');
+  });
+
+  it('majority tie picks the first run directive', () => {
+    const editor = makeStyleEditor();
+    const onBold = mockMark('bold');
+    const offBold = mockMark('bold', { value: '0' });
+
+    const resolved = resolveInlineStyle(
+      editor,
+      {
+        isUniform: false,
+        runs: [
+          { from: 0, to: 4, charCount: 4, marks: [offBold] },
+          { from: 4, to: 8, charCount: 4, marks: [onBold] },
+        ],
+      },
+      { mode: 'preserve', onNonUniform: 'majority' },
+      'step-1',
+    );
+
+    const bold = resolved.find((mark) => mark.type.name === 'bold') as MockMark | undefined;
+    expect(bold).toBeDefined();
+    expect(bold?.attrs.value).toBe('0');
+  });
+
+  it('union prefers ON when both ON and OFF appear', () => {
+    const editor = makeStyleEditor();
+    const onBold = mockMark('bold');
+    const offBold = mockMark('bold', { value: '0' });
+
+    const resolved = resolveInlineStyle(
+      editor,
+      {
+        isUniform: false,
+        runs: [
+          { from: 0, to: 2, charCount: 2, marks: [offBold] },
+          { from: 2, to: 5, charCount: 3, marks: [onBold] },
+        ],
+      },
+      { mode: 'preserve', onNonUniform: 'union' },
+      'step-1',
+    );
+
+    const bold = resolved.find((mark) => mark.type.name === 'bold') as MockMark | undefined;
+    expect(bold).toBeDefined();
+    expect(bold?.attrs.value).toBeUndefined();
+  });
+
+  it('union returns OFF when no run is ON', () => {
+    const editor = makeStyleEditor();
+    const offUnderline = mockMark('underline', { underlineType: 'none' });
+
+    const resolved = resolveInlineStyle(
+      editor,
+      {
+        isUniform: false,
+        runs: [
+          { from: 0, to: 3, charCount: 3, marks: [] },
+          { from: 3, to: 5, charCount: 2, marks: [offUnderline] },
+        ],
+      },
+      { mode: 'preserve', onNonUniform: 'union' },
+      'step-1',
+    );
+
+    const underline = resolved.find((mark) => mark.type.name === 'underline') as MockMark | undefined;
+    expect(underline).toBeDefined();
+    expect(underline?.attrs.underlineType).toBe('none');
   });
 });
 

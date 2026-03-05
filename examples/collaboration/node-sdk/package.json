@@ -1,0 +1,12 @@
+{
+  "name": "superdoc-node-sdk-collaboration-example",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "dev": "node server.mjs",
+    "start": "node server.mjs"
+  },
+  "dependencies": {
+    "@superdoc-dev/sdk": "latest"
+  }
+}

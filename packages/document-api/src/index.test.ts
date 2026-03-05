@@ -16,6 +16,8 @@ import type { CommentInfo, CommentsListQuery, CommentsListResult } from './comme
 import type { CreateAdapter } from './create/create.js';
 import type { ListsAdapter } from './lists/lists.js';
 import type { CapabilitiesAdapter, DocumentApiCapabilities } from './capabilities/capabilities.js';
+import type { HistoryAdapter } from './history/history.js';
+import type { TablesAdapter } from './index.js';
 
 function makeFindAdapter(result: FindOutput): FindAdapter {
   return { find: vi.fn(() => result) };
@@ -91,15 +93,17 @@ function makeCommentsAdapter(): CommentsAdapter {
 }
 
 function makeWriteAdapter(): WriteAdapter {
+  const defaultReceipt = {
+    success: true as const,
+    resolution: {
+      target: { kind: 'text' as const, blockId: 'p1', range: { start: 0, end: 0 } },
+      range: { from: 1, to: 1 },
+      text: '',
+    },
+  };
   return {
-    write: vi.fn(() => ({
-      success: true as const,
-      resolution: {
-        target: { kind: 'text' as const, blockId: 'p1', range: { start: 0, end: 0 } },
-        range: { from: 1, to: 1 },
-        text: '',
-      },
-    })),
+    write: vi.fn(() => defaultReceipt),
+    insertStructured: vi.fn(() => defaultReceipt),
   };
 }
 
@@ -117,10 +121,6 @@ function makeFormatReceipt() {
 function makeFormatAdapter(): FormatAdapter {
   return {
     apply: vi.fn(() => makeFormatReceipt()),
-    fontSize: vi.fn(() => makeFormatReceipt()),
-    fontFamily: vi.fn(() => makeFormatReceipt()),
-    color: vi.fn(() => makeFormatReceipt()),
-    align: vi.fn(() => makeFormatReceipt()),
   };
 }
 
@@ -156,6 +156,10 @@ function makeCreateAdapter(): CreateAdapter {
       heading: { kind: 'block' as const, nodeType: 'heading' as const, nodeId: 'new-h' },
       insertionPoint: { kind: 'text' as const, blockId: 'new-h', range: { start: 0, end: 0 } },
     })),
+    table: vi.fn(() => ({
+      success: true as const,
+      table: { kind: 'block' as const, nodeType: 'table' as const, nodeId: 'new-t' },
+    })),
   };
 }
 
@@ -173,10 +177,6 @@ function makeListsAdapter(): ListsAdapter {
       item: { kind: 'block' as const, nodeType: 'listItem' as const, nodeId: 'li-2' },
       insertionPoint: { kind: 'text' as const, blockId: 'li-2', range: { start: 0, end: 0 } },
     })),
-    setType: vi.fn(() => ({
-      success: true as const,
-      item: { kind: 'block' as const, nodeType: 'listItem' as const, nodeId: 'li-1' },
-    })),
     indent: vi.fn(() => ({
       success: true as const,
       item: { kind: 'block' as const, nodeType: 'listItem' as const, nodeId: 'li-1' },
@@ -185,14 +185,132 @@ function makeListsAdapter(): ListsAdapter {
       success: true as const,
       item: { kind: 'block' as const, nodeType: 'listItem' as const, nodeId: 'li-1' },
     })),
-    restart: vi.fn(() => ({
+    create: vi.fn(() => ({
+      success: true as const,
+      listId: '99',
+      item: { kind: 'block' as const, nodeType: 'listItem' as const, nodeId: 'li-1' },
+    })),
+    attach: vi.fn(() => ({
       success: true as const,
       item: { kind: 'block' as const, nodeType: 'listItem' as const, nodeId: 'li-1' },
     })),
-    exit: vi.fn(() => ({
+    detach: vi.fn(() => ({
       success: true as const,
       paragraph: { kind: 'block' as const, nodeType: 'paragraph' as const, nodeId: 'p1' },
     })),
+    join: vi.fn(() => ({
+      success: true as const,
+      listId: '1',
+    })),
+    canJoin: vi.fn(() => ({
+      canJoin: true as const,
+      adjacentListId: '2',
+    })),
+    separate: vi.fn(() => ({
+      success: true as const,
+      listId: '99',
+      numId: 99,
+    })),
+    setLevel: vi.fn(() => ({
+      success: true as const,
+      item: { kind: 'block' as const, nodeType: 'listItem' as const, nodeId: 'li-1' },
+    })),
+    setValue: vi.fn(() => ({
+      success: true as const,
+      item: { kind: 'block' as const, nodeType: 'listItem' as const, nodeId: 'li-1' },
+    })),
+    continuePrevious: vi.fn(() => ({
+      success: true as const,
+      item: { kind: 'block' as const, nodeType: 'listItem' as const, nodeId: 'li-1' },
+    })),
+    canContinuePrevious: vi.fn(() => ({
+      canContinue: true as const,
+      previousListId: '1',
+    })),
+    setLevelRestart: vi.fn(() => ({
+      success: true as const,
+      item: { kind: 'block' as const, nodeType: 'listItem' as const, nodeId: 'li-1' },
+    })),
+    convertToText: vi.fn(() => ({
+      success: true as const,
+      paragraph: { kind: 'block' as const, nodeType: 'paragraph' as const, nodeId: 'p1' },
+    })),
+  };
+}
+
+const TABLE_MUTATION_RESULT = {
+  success: true as const,
+  table: { kind: 'block' as const, nodeType: 'table' as const, nodeId: 't1' },
+};
+
+function makeTablesAdapter(): TablesAdapter {
+  const mutation = vi.fn(() => ({ ...TABLE_MUTATION_RESULT }));
+  return {
+    convertFromText: mutation,
+    delete: mutation,
+    clearContents: mutation,
+    move: mutation,
+    split: mutation,
+    convertToText: mutation,
+    setLayout: mutation,
+    insertRow: mutation,
+    deleteRow: mutation,
+    setRowHeight: mutation,
+    distributeRows: mutation,
+    setRowOptions: mutation,
+    insertColumn: mutation,
+    deleteColumn: mutation,
+    setColumnWidth: mutation,
+    distributeColumns: mutation,
+    insertCell: mutation,
+    deleteCell: mutation,
+    mergeCells: mutation,
+    unmergeCells: mutation,
+    splitCell: mutation,
+    setCellProperties: mutation,
+    sort: mutation,
+    setAltText: mutation,
+    setStyle: mutation,
+    clearStyle: mutation,
+    setStyleOption: mutation,
+    setBorder: mutation,
+    clearBorder: mutation,
+    applyBorderPreset: mutation,
+    setShading: mutation,
+    clearShading: mutation,
+    setTablePadding: mutation,
+    setCellPadding: mutation,
+    setCellSpacing: mutation,
+    clearCellSpacing: mutation,
+    get: vi.fn(() => ({
+      nodeId: 't1',
+      address: { kind: 'block' as const, nodeType: 'table' as const, nodeId: 't1' },
+      rows: 3,
+      columns: 3,
+    })),
+    getCells: vi.fn(() => ({
+      tableNodeId: 't1',
+      cells: [{ nodeId: 'c1', rowIndex: 0, columnIndex: 0, colspan: 1, rowspan: 1 }],
+    })),
+    getProperties: vi.fn(() => ({
+      nodeId: 't1',
+      styleId: 'TableGrid',
+      alignment: 'left' as const,
+    })),
+  };
+}
+
+function makeHistoryAdapter(): HistoryAdapter {
+  return {
+    get: vi.fn(() => ({
+      undoDepth: 0,
+      redoDepth: 0,
+      canUndo: false,
+      canRedo: false,
+      historyUnsafeOperations: [],
+    })),
+    undo: vi.fn(() => ({ noop: true, revision: { before: '0', after: '0' } })),
+    redo: vi.fn(() => ({ noop: true, revision: { before: '0', after: '0' } })),
   };
 }
 
@@ -203,8 +321,9 @@ function makeCapabilitiesAdapter(overrides?: Partial<DocumentApiCapabilities>): 
       comments: { enabled: false },
       lists: { enabled: false },
       dryRun: { enabled: false },
+      history: { enabled: false },
     },
-    format: { supportedMarks: [] },
+    format: { supportedInlineProperties: {} as DocumentApiCapabilities['format']['supportedInlineProperties'] },
     operations: {} as DocumentApiCapabilities['operations'],
     planEngine: {
       supportedStepOps: [],
@@ -470,19 +589,19 @@ describe('createDocumentApi', () => {
     });
 
     const target = { kind: 'text', blockId: 'p1', range: { start: 0, end: 2 } } as const;
-    api.insert({ text: 'Hi' });
-    api.insert({ target, text: 'Yo' });
+    api.insert({ value: 'Hi' });
+    api.insert({ target, value: 'Yo' });
     api.replace({ target, text: 'Hello' }, { changeMode: 'tracked' });
     api.delete({ target });
 
     expect(writeAdpt.write).toHaveBeenNthCalledWith(
       1,
-      { kind: 'insert', text: 'Hi' },
+      { kind: 'insert', text: 'Hi' }, // write request keeps `text` (internal protocol)
       { changeMode: 'direct', dryRun: false },
     );
     expect(writeAdpt.write).toHaveBeenNthCalledWith(
       2,
-      { kind: 'insert', target, text: 'Yo' },
+      { kind: 'insert', target, text: 'Yo' }, // write request keeps `text` (internal protocol)
       { changeMode: 'direct', dryRun: false },
     );
     expect(writeAdpt.write).toHaveBeenNthCalledWith(
@@ -589,30 +708,7 @@ describe('createDocumentApi', () => {
     );
   });
 
-  it('delegates format.fontSize to adapter.fontSize', () => {
-    const formatAdpt = makeFormatAdapter();
-    const api = createDocumentApi({
-      find: makeFindAdapter(QUERY_RESULT),
-      getNode: makeGetNodeAdapter(PARAGRAPH_INFO),
-      getText: makeGetTextAdapter(),
-      info: makeInfoAdapter(),
-      comments: makeCommentsAdapter(),
-      write: makeWriteAdapter(),
-      format: formatAdpt,
-      trackChanges: makeTrackChangesAdapter(),
-      create: makeCreateAdapter(),
-      lists: makeListsAdapter(),
-    });
-
-    const target = { kind: 'text', blockId: 'p1', range: { start: 0, end: 2 } } as const;
-    api.format.fontSize({ target, value: '14pt' });
-    expect(formatAdpt.fontSize).toHaveBeenCalledWith(
-      { target, value: '14pt' },
-      { changeMode: 'direct', dryRun: false },
-    );
-  });
-
-  it('delegates format.fontFamily to adapter.fontFamily', () => {
+  it('delegates format.fontFamily to adapter.apply with inline.fontFamily', () => {
     const formatAdpt = makeFormatAdapter();
     const api = createDocumentApi({
       find: makeFindAdapter(QUERY_RESULT),
@@ -629,54 +725,8 @@ describe('createDocumentApi', () => {
 
     const target = { kind: 'text', blockId: 'p1', range: { start: 0, end: 2 } } as const;
     api.format.fontFamily({ target, value: 'Arial' });
-    expect(formatAdpt.fontFamily).toHaveBeenCalledWith(
-      { target, value: 'Arial' },
-      { changeMode: 'direct', dryRun: false },
-    );
-  });
-
-  it('delegates format.color to adapter.color', () => {
-    const formatAdpt = makeFormatAdapter();
-    const api = createDocumentApi({
-      find: makeFindAdapter(QUERY_RESULT),
-      getNode: makeGetNodeAdapter(PARAGRAPH_INFO),
-      getText: makeGetTextAdapter(),
-      info: makeInfoAdapter(),
-      comments: makeCommentsAdapter(),
-      write: makeWriteAdapter(),
-      format: formatAdpt,
-      trackChanges: makeTrackChangesAdapter(),
-      create: makeCreateAdapter(),
-      lists: makeListsAdapter(),
-    });
-
-    const target = { kind: 'text', blockId: 'p1', range: { start: 0, end: 2 } } as const;
-    api.format.color({ target, value: '#ff0000' });
-    expect(formatAdpt.color).toHaveBeenCalledWith(
-      { target, value: '#ff0000' },
-      { changeMode: 'direct', dryRun: false },
-    );
-  });
-
-  it('delegates format.align to adapter.align', () => {
-    const formatAdpt = makeFormatAdapter();
-    const api = createDocumentApi({
-      find: makeFindAdapter(QUERY_RESULT),
-      getNode: makeGetNodeAdapter(PARAGRAPH_INFO),
-      getText: makeGetTextAdapter(),
-      info: makeInfoAdapter(),
-      comments: makeCommentsAdapter(),
-      write: makeWriteAdapter(),
-      format: formatAdpt,
-      trackChanges: makeTrackChangesAdapter(),
-      create: makeCreateAdapter(),
-      lists: makeListsAdapter(),
-    });
-
-    const target = { kind: 'text', blockId: 'p1', range: { start: 0, end: 2 } } as const;
-    api.format.align({ target, alignment: 'center' });
-    expect(formatAdpt.align).toHaveBeenCalledWith(
-      { target, alignment: 'center' },
+    expect(formatAdpt.apply).toHaveBeenCalledWith(
+      { target, inline: { fontFamily: 'Arial' } },
       { changeMode: 'direct', dryRun: false },
     );
   });
@@ -733,6 +783,59 @@ describe('createDocumentApi', () => {
     expect(trackAdpt.reject).toHaveBeenCalledWith({ id: 'tc-1' }, undefined);
     expect(trackAdpt.acceptAll).toHaveBeenCalledWith({}, undefined);
     expect(trackAdpt.rejectAll).toHaveBeenCalledWith({}, undefined);
+  });
+
+  it('delegates history.get to the history adapter', () => {
+    const historyAdpt = makeHistoryAdapter();
+    const api = createDocumentApi({
+      find: makeFindAdapter(QUERY_RESULT),
+      getNode: makeGetNodeAdapter(PARAGRAPH_INFO),
+      getText: makeGetTextAdapter(),
+      info: makeInfoAdapter(),
+      comments: makeCommentsAdapter(),
+      write: makeWriteAdapter(),
+      format: makeFormatAdapter(),
+      trackChanges: makeTrackChangesAdapter(),
+      create: makeCreateAdapter(),
+      lists: makeListsAdapter(),
+      history: historyAdpt,
+    } as any);
+
+    const result = api.history.get();
+
+    expect(historyAdpt.get).toHaveBeenCalledOnce();
+    expect(result).toEqual({
+      undoDepth: 0,
+      redoDepth: 0,
+      canUndo: false,
+      canRedo: false,
+      historyUnsafeOperations: [],
+    });
+  });
+
+  it('delegates history.undo and history.redo to the history adapter', () => {
+    const historyAdpt = makeHistoryAdapter();
+    const api = createDocumentApi({
+      find: makeFindAdapter(QUERY_RESULT),
+      getNode: makeGetNodeAdapter(PARAGRAPH_INFO),
+      getText: makeGetTextAdapter(),
+      info: makeInfoAdapter(),
+      comments: makeCommentsAdapter(),
+      write: makeWriteAdapter(),
+      format: makeFormatAdapter(),
+      trackChanges: makeTrackChangesAdapter(),
+      create: makeCreateAdapter(),
+      lists: makeListsAdapter(),
+      history: historyAdpt,
+    } as any);
+
+    const undoResult = api.history.undo();
+    const redoResult = api.history.redo();
+
+    expect(historyAdpt.undo).toHaveBeenCalledOnce();
+    expect(historyAdpt.redo).toHaveBeenCalledOnce();
+    expect(undoResult).toEqual({ noop: true, revision: { before: '0', after: '0' } });
+    expect(redoResult).toEqual({ noop: true, revision: { before: '0', after: '0' } });
   });
 
   describe('trackChanges.decide input validation', () => {
@@ -906,20 +1009,24 @@ describe('createDocumentApi', () => {
     const listResult = api.lists.list({ limit: 1 });
     const getResult = api.lists.get({ address: target });
     const insertResult = api.lists.insert({ target, position: 'after', text: 'Inserted' }, { changeMode: 'tracked' });
-    const setTypeResult = api.lists.setType({ target, kind: 'bullet' });
     const indentResult = api.lists.indent({ target });
     const outdentResult = api.lists.outdent({ target });
-    const restartResult = api.lists.restart({ target });
-    const exitResult = api.lists.exit({ target });
+    const createResult = api.lists.create({
+      mode: 'empty',
+      at: { kind: 'block', nodeType: 'paragraph', nodeId: 'p-1' },
+      kind: 'ordered',
+    });
+    const detachResult = api.lists.detach({ target });
+    const setLevelResult = api.lists.setLevel({ target, level: 2 });
 
     expect(listResult.total).toBe(0);
     expect(getResult.address).toEqual(target);
     expect(insertResult.success).toBe(true);
-    expect(setTypeResult.success).toBe(true);
     expect(indentResult.success).toBe(true);
     expect(outdentResult.success).toBe(true);
-    expect(restartResult.success).toBe(true);
-    expect(exitResult.success).toBe(true);
+    expect(createResult.success).toBe(true);
+    expect(detachResult.success).toBe(true);
+    expect(setLevelResult.success).toBe(true);
 
     expect(listsAdpt.list).toHaveBeenCalledWith({ limit: 1 });
     expect(listsAdpt.get).toHaveBeenCalledWith({ address: target });
@@ -927,11 +1034,10 @@ describe('createDocumentApi', () => {
       { target, position: 'after', text: 'Inserted' },
       { changeMode: 'tracked', dryRun: false },
     );
-    expect(listsAdpt.setType).toHaveBeenCalledWith({ target, kind: 'bullet' }, { changeMode: 'direct', dryRun: false });
     expect(listsAdpt.indent).toHaveBeenCalledWith({ target }, { changeMode: 'direct', dryRun: false });
     expect(listsAdpt.outdent).toHaveBeenCalledWith({ target }, { changeMode: 'direct', dryRun: false });
-    expect(listsAdpt.restart).toHaveBeenCalledWith({ target }, { changeMode: 'direct', dryRun: false });
-    expect(listsAdpt.exit).toHaveBeenCalledWith({ target }, { changeMode: 'direct', dryRun: false });
+    expect(listsAdpt.detach).toHaveBeenCalledWith({ target }, { changeMode: 'direct', dryRun: false });
+    expect(listsAdpt.setLevel).toHaveBeenCalledWith({ target, level: 2 }, { changeMode: 'direct', dryRun: false });
   });
 
   it('exposes capabilities as a callable function with .get() alias', () => {
@@ -996,14 +1102,14 @@ describe('createDocumentApi', () => {
 
     it('accepts no-target (default insertion point)', () => {
       const api = makeApi();
-      const result = api.insert({ text: 'hello' });
+      const result = api.insert({ value: 'hello' });
       expect(result.success).toBe(true);
     });
 
     it('accepts canonical target', () => {
       const api = makeApi();
       const target = { kind: 'text', blockId: 'p1', range: { start: 0, end: 0 } } as const;
-      const result = api.insert({ target, text: 'hello' });
+      const result = api.insert({ target, value: 'hello' });
       expect(result.success).toBe(true);
     });
 
@@ -1012,7 +1118,7 @@ describe('createDocumentApi', () => {
     it('rejects null target', () => {
       const api = makeApi();
       expectValidationError(
-        () => api.insert({ target: null, text: 'hello' } as any),
+        () => api.insert({ target: null, value: 'hello' } as any),
         'target must be a text address object',
       );
     });
@@ -1020,16 +1126,21 @@ describe('createDocumentApi', () => {
     it('rejects malformed target objects', () => {
       const api = makeApi();
       expectValidationError(
-        () => api.insert({ target: { kind: 'text', blockId: 'p1' }, text: 'hello' } as any),
+        () => api.insert({ target: { kind: 'text', blockId: 'p1' }, value: 'hello' } as any),
         'target must be a text address object',
       );
     });
 
     // -- Type checks --
 
-    it('rejects non-string text', () => {
+    it('rejects non-string value', () => {
       const api = makeApi();
-      expectValidationError(() => api.insert({ text: 42 } as any), 'text must be a string');
+      expectValidationError(() => api.insert({ value: 42 } as any), 'value must be a string');
+    });
+
+    it('rejects invalid type enum', () => {
+      const api = makeApi();
+      expectValidationError(() => api.insert({ value: 'hi', type: 'xml' } as any), 'type must be one of');
     });
 
     // -- Validation error shape --
@@ -1037,7 +1148,7 @@ describe('createDocumentApi', () => {
     it('throws DocumentApiValidationError (not plain Error)', () => {
       const api = makeApi();
       try {
-        api.insert({ text: 42 } as any);
+        api.insert({ value: 42 } as any);
         expect.fail('Expected error');
       } catch (err: unknown) {
         expect((err as Error).constructor.name).toBe('DocumentApiValidationError');
@@ -1066,27 +1177,27 @@ describe('createDocumentApi', () => {
 
     it('rejects unknown top-level fields', () => {
       const api = makeApi();
-      expectValidationError(() => api.insert({ text: 'hi', block_id: 'abc' } as any), 'Unknown field "block_id"');
+      expectValidationError(() => api.insert({ value: 'hi', block_id: 'abc' } as any), 'Unknown field "block_id"');
     });
 
     it('rejects flat blockId as unknown field', () => {
       const api = makeApi();
-      expectValidationError(() => api.insert({ blockId: 'p1', text: 'hello' } as any), 'Unknown field "blockId"');
+      expectValidationError(() => api.insert({ blockId: 'p1', value: 'hello' } as any), 'Unknown field "blockId"');
     });
 
     it('rejects flat offset as unknown field', () => {
       const api = makeApi();
-      expectValidationError(() => api.insert({ text: 'hello', offset: 5 } as any), 'Unknown field "offset"');
+      expectValidationError(() => api.insert({ value: 'hello', offset: 5 } as any), 'Unknown field "offset"');
     });
 
     it('rejects pos as unknown field', () => {
       const api = makeApi();
-      expectValidationError(() => api.insert({ text: 'hi', pos: 3 } as any), 'Unknown field "pos"');
+      expectValidationError(() => api.insert({ value: 'hi', pos: 3 } as any), 'Unknown field "pos"');
     });
 
     // -- Backward compatibility parity --
 
-    it('sends same adapter request for insert({ text }) as before', () => {
+    it('maps insert({ value }) to internal write request with text field', () => {
       const writeAdpt = makeWriteAdapter();
       const api = createDocumentApi({
         find: makeFindAdapter(QUERY_RESULT),
@@ -1102,14 +1213,14 @@ describe('createDocumentApi', () => {
         lists: makeListsAdapter(),
       });
 
-      api.insert({ text: 'hello' });
+      api.insert({ value: 'hello' });
       expect(writeAdpt.write).toHaveBeenCalledWith(
         { kind: 'insert', text: 'hello' },
         { changeMode: 'direct', dryRun: false },
       );
     });
 
-    it('sends same adapter request for insert({ target, text }) as before', () => {
+    it('maps insert({ target, value }) to internal write request with text field', () => {
       const writeAdpt = makeWriteAdapter();
       const api = createDocumentApi({
         find: makeFindAdapter(QUERY_RESULT),
@@ -1126,10 +1237,101 @@ describe('createDocumentApi', () => {
       });
 
       const target = { kind: 'text', blockId: 'p1', range: { start: 0, end: 2 } } as const;
-      api.insert({ target, text: 'hello' });
+      api.insert({ target, value: 'hello' });
       expect(writeAdpt.write).toHaveBeenCalledWith(
         { kind: 'insert', target, text: 'hello' },
         { changeMode: 'direct', dryRun: false },
+      );
+    });
+
+    // -- Structured insert routing (markdown / html) --
+
+    it('routes type:"markdown" insert to insertStructured instead of write', () => {
+      const writeAdpt = makeWriteAdapter();
+      const api = createDocumentApi({
+        find: makeFindAdapter(QUERY_RESULT),
+        getNode: makeGetNodeAdapter(PARAGRAPH_INFO),
+        getText: makeGetTextAdapter(),
+        info: makeInfoAdapter(),
+        capabilities: makeCapabilitiesAdapter(),
+        comments: makeCommentsAdapter(),
+        write: writeAdpt,
+        format: makeFormatAdapter(),
+        trackChanges: makeTrackChangesAdapter(),
+        create: makeCreateAdapter(),
+        lists: makeListsAdapter(),
+      });
+
+      api.insert({ value: '# Heading', type: 'markdown' });
+      expect(writeAdpt.insertStructured).toHaveBeenCalledTimes(1);
+      expect(writeAdpt.insertStructured).toHaveBeenCalledWith({ value: '# Heading', type: 'markdown' }, undefined);
+      expect(writeAdpt.write).not.toHaveBeenCalled();
+    });
+
+    it('routes type:"html" insert to insertStructured instead of write', () => {
+      const writeAdpt = makeWriteAdapter();
+      const api = createDocumentApi({
+        find: makeFindAdapter(QUERY_RESULT),
+        getNode: makeGetNodeAdapter(PARAGRAPH_INFO),
+        getText: makeGetTextAdapter(),
+        info: makeInfoAdapter(),
+        capabilities: makeCapabilitiesAdapter(),
+        comments: makeCommentsAdapter(),
+        write: writeAdpt,
+        format: makeFormatAdapter(),
+        trackChanges: makeTrackChangesAdapter(),
+        create: makeCreateAdapter(),
+        lists: makeListsAdapter(),
+      });
+
+      api.insert({ value: '<p>Hello</p>', type: 'html' });
+      expect(writeAdpt.insertStructured).toHaveBeenCalledTimes(1);
+      expect(writeAdpt.insertStructured).toHaveBeenCalledWith({ value: '<p>Hello</p>', type: 'html' }, undefined);
+      expect(writeAdpt.write).not.toHaveBeenCalled();
+    });
+
+    it('routes type:"text" (or unspecified type) insert to write, not insertStructured', () => {
+      const writeAdpt = makeWriteAdapter();
+      const api = createDocumentApi({
+        find: makeFindAdapter(QUERY_RESULT),
+        getNode: makeGetNodeAdapter(PARAGRAPH_INFO),
+        getText: makeGetTextAdapter(),
+        info: makeInfoAdapter(),
+        capabilities: makeCapabilitiesAdapter(),
+        comments: makeCommentsAdapter(),
+        write: writeAdpt,
+        format: makeFormatAdapter(),
+        trackChanges: makeTrackChangesAdapter(),
+        create: makeCreateAdapter(),
+        lists: makeListsAdapter(),
+      });
+
+      api.insert({ value: 'plain text', type: 'text' });
+      expect(writeAdpt.write).toHaveBeenCalledTimes(1);
+      expect(writeAdpt.insertStructured).not.toHaveBeenCalled();
+    });
+
+    it('forwards target to insertStructured for markdown insert', () => {
+      const writeAdpt = makeWriteAdapter();
+      const api = createDocumentApi({
+        find: makeFindAdapter(QUERY_RESULT),
+        getNode: makeGetNodeAdapter(PARAGRAPH_INFO),
+        getText: makeGetTextAdapter(),
+        info: makeInfoAdapter(),
+        capabilities: makeCapabilitiesAdapter(),
+        comments: makeCommentsAdapter(),
+        write: writeAdpt,
+        format: makeFormatAdapter(),
+        trackChanges: makeTrackChangesAdapter(),
+        create: makeCreateAdapter(),
+        lists: makeListsAdapter(),
+      });
+
+      const target = { kind: 'text', blockId: 'p1', range: { start: 0, end: 0 } } as const;
+      api.insert({ target, value: '**bold**', type: 'markdown' });
+      expect(writeAdpt.insertStructured).toHaveBeenCalledWith(
+        { target, value: '**bold**', type: 'markdown' },
+        undefined,
       );
     });
   });
@@ -1961,9 +2163,9 @@ describe('createDocumentApi', () => {
       expect(result.success).toBe(true);
     });
 
-    it('accepts canonical target for lists.setType', () => {
+    it('accepts canonical target for lists.setLevel', () => {
       const api = makeApi();
-      const result = api.lists.setType({ target, kind: 'bullet' });
+      const result = api.lists.setLevel({ target, level: 2 });
       expect(result.success).toBe(true);
     });
 
@@ -1976,12 +2178,26 @@ describe('createDocumentApi', () => {
 
     // -- All list mutation operations validate --
 
-    const LISTS_MUTATIONS = ['outdent', 'restart', 'exit'] as const;
+    const LISTS_MUTATIONS = [
+      'outdent',
+      'detach',
+      'setValue',
+      'continuePrevious',
+      'setLevelRestart',
+      'convertToText',
+    ] as const;
     for (const method of LISTS_MUTATIONS) {
       it(`accepts canonical target for lists.${method}`, () => {
         const api = makeApi();
-        const result = api.lists[method]({ target });
-        expect(result.success).toBe(true);
+        const result = (
+          api.lists[method] as (input: {
+            target: typeof target;
+            level?: number;
+            value?: number;
+            restartAfterLevel?: number | null;
+          }) => unknown
+        )({ target, level: 0, value: 1, restartAfterLevel: null });
+        expect(result).toBeDefined();
       });
     }
 
@@ -2005,6 +2221,241 @@ describe('createDocumentApi', () => {
 
       api.lists.indent({ target });
       expect(listsAdpt.indent).toHaveBeenCalledWith({ target }, { changeMode: 'direct', dryRun: false });
+    });
+  });
+
+  // ---------------------------------------------------------------------------
+  // tables namespace
+  // ---------------------------------------------------------------------------
+
+  describe('tables.* delegation', () => {
+    it('delegates table mutations with normalized options', () => {
+      const tablesAdpt = makeTablesAdapter();
+      const api = createDocumentApi({
+        find: makeFindAdapter(QUERY_RESULT),
+        getNode: makeGetNodeAdapter(PARAGRAPH_INFO),
+        getText: makeGetTextAdapter(),
+        info: makeInfoAdapter(),
+        comments: makeCommentsAdapter(),
+        write: makeWriteAdapter(),
+        format: makeFormatAdapter(),
+        trackChanges: makeTrackChangesAdapter(),
+        create: makeCreateAdapter(),
+        lists: makeListsAdapter(),
+        tables: tablesAdpt,
+      });
+
+      const target = { kind: 'block' as const, nodeType: 'table' as const, nodeId: 't1' };
+
+      // setLayout — representative table-locator mutation
+      const layoutResult = api.tables.setLayout({ target, alignment: 'center' }, { changeMode: 'tracked' });
+      expect(layoutResult.success).toBe(true);
+      expect(tablesAdpt.setLayout).toHaveBeenCalledWith(
+        { target, alignment: 'center' },
+        { changeMode: 'tracked', dryRun: false },
+      );
+
+      // delete — no explicit options → defaults
+      const deleteResult = api.tables.delete({ target });
+      expect(deleteResult.success).toBe(true);
+      expect(tablesAdpt.delete).toHaveBeenCalledWith({ target }, { changeMode: 'direct', dryRun: false });
+
+      // setStyle — another representative mutation
+      const styleResult = api.tables.setStyle({ target, styleId: 'TableGrid' });
+      expect(styleResult.success).toBe(true);
+    });
+
+    it('delegates table reads directly without options normalization', () => {
+      const tablesAdpt = makeTablesAdapter();
+      const api = createDocumentApi({
+        find: makeFindAdapter(QUERY_RESULT),
+        getNode: makeGetNodeAdapter(PARAGRAPH_INFO),
+        getText: makeGetTextAdapter(),
+        info: makeInfoAdapter(),
+        comments: makeCommentsAdapter(),
+        write: makeWriteAdapter(),
+        format: makeFormatAdapter(),
+        trackChanges: makeTrackChangesAdapter(),
+        create: makeCreateAdapter(),
+        lists: makeListsAdapter(),
+        tables: tablesAdpt,
+      });
+
+      const target = { kind: 'block' as const, nodeType: 'table' as const, nodeId: 't1' };
+
+      const getResult = api.tables.get({ target });
+      expect(getResult.rows).toBe(3);
+      expect(getResult.columns).toBe(3);
+
+      const cellsResult = api.tables.getCells({ target });
+      expect(cellsResult.tableNodeId).toBe('t1');
+      expect(cellsResult.cells).toHaveLength(1);
+
+      const propsResult = api.tables.getProperties({ target });
+      expect(propsResult.nodeId).toBe('t1');
+      expect(propsResult.styleId).toBe('TableGrid');
+    });
+
+    it('delegates create.table with at defaulting to documentEnd', () => {
+      const createAdpt = makeCreateAdapter();
+      const api = createDocumentApi({
+        find: makeFindAdapter(QUERY_RESULT),
+        getNode: makeGetNodeAdapter(PARAGRAPH_INFO),
+        getText: makeGetTextAdapter(),
+        info: makeInfoAdapter(),
+        comments: makeCommentsAdapter(),
+        write: makeWriteAdapter(),
+        format: makeFormatAdapter(),
+        trackChanges: makeTrackChangesAdapter(),
+        create: createAdpt,
+        lists: makeListsAdapter(),
+        tables: makeTablesAdapter(),
+      });
+
+      const result = api.create.table({ rows: 3, columns: 4 });
+      expect(result.success).toBe(true);
+      expect(createAdpt.table).toHaveBeenCalledWith(
+        { rows: 3, columns: 4, at: { kind: 'documentEnd' } },
+        { changeMode: 'direct', dryRun: false },
+      );
+    });
+
+    it('delegates create.table with explicit at location', () => {
+      const createAdpt = makeCreateAdapter();
+      const api = createDocumentApi({
+        find: makeFindAdapter(QUERY_RESULT),
+        getNode: makeGetNodeAdapter(PARAGRAPH_INFO),
+        getText: makeGetTextAdapter(),
+        info: makeInfoAdapter(),
+        comments: makeCommentsAdapter(),
+        write: makeWriteAdapter(),
+        format: makeFormatAdapter(),
+        trackChanges: makeTrackChangesAdapter(),
+        create: createAdpt,
+        lists: makeListsAdapter(),
+        tables: makeTablesAdapter(),
+      });
+
+      const at = { kind: 'after' as const, nodeId: 'p1' };
+      api.create.table({ rows: 2, columns: 2, at });
+      expect(createAdpt.table).toHaveBeenCalledWith(
+        { rows: 2, columns: 2, at },
+        { changeMode: 'direct', dryRun: false },
+      );
+    });
+  });
+
+  describe('tables.* locator validation', () => {
+    function makeApi() {
+      return createDocumentApi({
+        find: makeFindAdapter(QUERY_RESULT),
+        getNode: makeGetNodeAdapter(PARAGRAPH_INFO),
+        getText: makeGetTextAdapter(),
+        info: makeInfoAdapter(),
+        capabilities: makeCapabilitiesAdapter(),
+        comments: makeCommentsAdapter(),
+        write: makeWriteAdapter(),
+        format: makeFormatAdapter(),
+        trackChanges: makeTrackChangesAdapter(),
+        create: makeCreateAdapter(),
+        lists: makeListsAdapter(),
+        tables: makeTablesAdapter(),
+      });
+    }
+
+    // -- table-locator operations (target/nodeId) --
+
+    it('accepts target for table-locator operations', () => {
+      const api = makeApi();
+      const target = { kind: 'block' as const, nodeType: 'table' as const, nodeId: 't1' };
+
+      expect(() => api.tables.setLayout({ target, alignment: 'center' })).not.toThrow();
+      expect(() => api.tables.get({ target })).not.toThrow();
+      expect(() => api.tables.getCells({ target })).not.toThrow();
+      expect(() => api.tables.getProperties({ target })).not.toThrow();
+    });
+
+    it('accepts nodeId for table-locator operations', () => {
+      const api = makeApi();
+      expect(() => api.tables.setLayout({ nodeId: 't1', alignment: 'center' })).not.toThrow();
+      expect(() => api.tables.get({ nodeId: 't1' })).not.toThrow();
+    });
+
+    it('rejects both target + nodeId for table-locator operations', () => {
+      const api = makeApi();
+      const target = { kind: 'block' as const, nodeType: 'table' as const, nodeId: 't1' };
+      expect(() => api.tables.setLayout({ target, nodeId: 't1' } as any)).toThrow(/Cannot combine/);
+    });
+
+    it('rejects neither target nor nodeId for table-locator operations', () => {
+      const api = makeApi();
+      expect(() => api.tables.setLayout({ alignment: 'center' } as any)).toThrow(/requires a target/);
+    });
+
+    // -- row-locator operations (direct OR table-scoped) --
+
+    it('accepts direct target for row-locator operations', () => {
+      const api = makeApi();
+      const target = { kind: 'block' as const, nodeType: 'tableRow' as const, nodeId: 'r1' };
+      expect(() => api.tables.insertRow({ target, position: 'after' })).not.toThrow();
+      expect(() => api.tables.deleteRow({ target })).not.toThrow();
+    });
+
+    it('accepts table-scoped locator for row-locator operations', () => {
+      const api = makeApi();
+      const tableTarget = { kind: 'block' as const, nodeType: 'table' as const, nodeId: 't1' };
+      expect(() => api.tables.insertRow({ tableTarget, rowIndex: 0, position: 'after' })).not.toThrow();
+    });
+
+    it('rejects both direct + table-scoped for row-locator operations', () => {
+      const api = makeApi();
+      const target = { kind: 'block' as const, nodeType: 'tableRow' as const, nodeId: 'r1' };
+      const tableTarget = { kind: 'block' as const, nodeType: 'table' as const, nodeId: 't1' };
+      expect(() => api.tables.insertRow({ target, tableTarget, rowIndex: 0, position: 'after' } as any)).toThrow(
+        /Cannot combine/,
+      );
+    });
+
+    // -- column-locator operations (tableTarget/tableNodeId) --
+
+    it('accepts tableTarget for column-locator operations', () => {
+      const api = makeApi();
+      const tableTarget = { kind: 'block' as const, nodeType: 'table' as const, nodeId: 't1' };
+      expect(() => api.tables.insertColumn({ tableTarget, columnIndex: 0, position: 'after' })).not.toThrow();
+      expect(() => api.tables.deleteColumn({ tableTarget, columnIndex: 0 })).not.toThrow();
+    });
+
+    it('accepts tableNodeId for column-locator operations', () => {
+      const api = makeApi();
+      expect(() => api.tables.insertColumn({ tableNodeId: 't1', columnIndex: 0, position: 'after' })).not.toThrow();
+    });
+
+    it('rejects both tableTarget + tableNodeId for column-locator operations', () => {
+      const api = makeApi();
+      const tableTarget = { kind: 'block' as const, nodeType: 'table' as const, nodeId: 't1' };
+      expect(() =>
+        api.tables.insertColumn({ tableTarget, tableNodeId: 't1', columnIndex: 0, position: 'after' } as any),
+      ).toThrow(/Cannot combine/);
+    });
+
+    // -- merge range locator (tableTarget/tableNodeId) --
+
+    it('accepts tableTarget for merge range operations', () => {
+      const api = makeApi();
+      const tableTarget = { kind: 'block' as const, nodeType: 'table' as const, nodeId: 't1' };
+      expect(() =>
+        api.tables.mergeCells({ tableTarget, startRow: 0, startColumn: 0, endRow: 1, endColumn: 1 }),
+      ).not.toThrow();
+    });
+
+    // -- create.table locator validation --
+
+    it('rejects ambiguous create.table at locator (both target + nodeId)', () => {
+      const api = makeApi();
+      const target = { kind: 'block' as const, nodeType: 'paragraph' as const, nodeId: 'p1' };
+      expect(() =>
+        api.create.table({ rows: 2, columns: 2, at: { kind: 'after', target, nodeId: 'p1' } as any }),
+      ).toThrow(/Cannot combine/);
     });
   });
 });

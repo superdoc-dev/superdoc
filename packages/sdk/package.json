@@ -1,6 +1,6 @@
 {
   "name": "@superdoc-dev/sdk-workspace",
-  "version": "1.0.0-alpha.6",
+  "version": "1.0.0-alpha.19",
   "private": true,
   "type": "module",
   "scripts": {

@@ -20,27 +20,9 @@ export interface ReferenceAliasDefinition {
 
 export const REFERENCE_OPERATION_ALIASES: readonly ReferenceAliasDefinition[] = [
   {
-    memberPath: 'format.bold',
-    canonicalOperationId: 'format.apply',
-    referenceGroup: 'format',
-    description: 'Convenience alias for `format.apply` with `inline.bold: true`.',
-  },
-  {
-    memberPath: 'format.italic',
-    canonicalOperationId: 'format.apply',
-    referenceGroup: 'format',
-    description: 'Convenience alias for `format.apply` with `inline.italic: true`.',
-  },
-  {
-    memberPath: 'format.underline',
-    canonicalOperationId: 'format.apply',
-    referenceGroup: 'format',
-    description: 'Convenience alias for `format.apply` with `inline.underline: true`.',
-  },
-  {
     memberPath: 'format.strikethrough',
-    canonicalOperationId: 'format.apply',
+    canonicalOperationId: 'format.strike',
     referenceGroup: 'format',
-    description: 'Convenience alias for `format.apply` with `inline.strike: true`.',
+    description: 'Convenience alias for `format.strike` with `value: true`.',
   },
 ] as const;

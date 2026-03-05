@@ -1,5 +1,6 @@
 import { DOMParser, Fragment } from 'prosemirror-model';
 import { cleanHtmlUnnecessaryTags, convertEmToPt, handleHtmlPaste } from '../../InputRule.js';
+import { normalizePastedLinks } from '../paste-link-normalizer.js';
 import { ListHelpers } from '@helpers/list-numbering-helpers.js';
 import {
   extractListLevelStyles,
@@ -188,7 +189,9 @@ export const handleDocxPaste = (html, editor, view) => {
   const { dispatch } = editor.view;
   if (!dispatch) return false;
 
-  dispatch(view.state.tr.replaceSelectionWith(doc, true));
+  const tr = view.state.tr.replaceSelectionWith(doc, true);
+  normalizePastedLinks(tr, editor);
+  dispatch(tr);
   return true;
 };
 

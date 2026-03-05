@@ -1,0 +1,397 @@
+---
+title: toc.configure
+sidebarTitle: toc.configure
+description: Update the configuration switches of a table of contents.
+---
+
+{/* GENERATED FILE: DO NOT EDIT. Regenerate via `pnpm run docapi:sync`. */}
+
+> Alpha: Document API is currently alpha and subject to breaking changes.
+
+## Summary
+
+Update the configuration switches of a table of contents.
+
+- Operation ID: `toc.configure`
+- API member path: `editor.doc.toc.configure(...)`
+- Mutates document: `yes`
+- Idempotency: `conditional`
+- Supports tracked mode: `no`
+- Supports dry run: `yes`
+- Deterministic target resolution: `yes`
+
+## Expected result
+
+Returns a TocMutationResult with the updated TOC address on success, or a failure code on no-op.
+
+## Input fields
+
+| Field | Type | Required | Description |
+| --- | --- | --- | --- |
+| `patch` | object | yes |  |
+| `patch.hideInWebView` | boolean | no |  |
+| `patch.hyperlinks` | boolean | no |  |
+| `patch.includePageNumbers` | boolean | no |  |
+| `patch.omitPageNumberLevels` | object | no |  |
+| `patch.omitPageNumberLevels.from` | integer | no |  |
+| `patch.omitPageNumberLevels.to` | integer | no |  |
+| `patch.outlineLevels` | object | no |  |
+| `patch.outlineLevels.from` | integer | no |  |
+| `patch.outlineLevels.to` | integer | no |  |
+| `patch.rightAlignPageNumbers` | boolean | no |  |
+| `patch.separator` | string | no |  |
+| `patch.tabLeader` | enum | no | `"none"`, `"dot"`, `"hyphen"`, `"underscore"`, `"middleDot"` |
+| `patch.tcFieldIdentifier` | string | no |  |
+| `patch.tcFieldLevels` | object | no |  |
+| `patch.tcFieldLevels.from` | integer | no |  |
+| `patch.tcFieldLevels.to` | integer | no |  |
+| `patch.useAppliedOutlineLevel` | boolean | no |  |
+| `target` | object(kind="block") | yes |  |
+| `target.kind` | `"block"` | yes | Constant: `"block"` |
+| `target.nodeId` | string | yes |  |
+| `target.nodeType` | `"tableOfContents"` | yes | Constant: `"tableOfContents"` |
+
+### Example request
+
+```json
+{
+  "patch": {
+    "outlineLevels": {
+      "from": 0,
+      "to": 10
+    },
+    "useAppliedOutlineLevel": true
+  },
+  "target": {
+    "kind": "block",
+    "nodeId": "node-def456",
+    "nodeType": "tableOfContents"
+  }
+}
+```
+
+## Output fields
+
+### Variant 1 (toc.kind="block")
+
+| Field | Type | Required | Description |
+| --- | --- | --- | --- |
+| `success` | `true` | yes | Constant: `true` |
+| `toc` | object(kind="block") | yes |  |
+| `toc.kind` | `"block"` | yes | Constant: `"block"` |
+| `toc.nodeId` | string | yes |  |
+| `toc.nodeType` | `"tableOfContents"` | yes | Constant: `"tableOfContents"` |
+
+### Variant 2 (success=false)
+
+| Field | Type | Required | Description |
+| --- | --- | --- | --- |
+| `failure` | object | yes |  |
+| `failure.code` | enum | yes | `"NO_OP"`, `"INVALID_TARGET"`, `"TARGET_NOT_FOUND"`, `"CAPABILITY_UNAVAILABLE"`, `"INVALID_INSERTION_CONTEXT"`, `"PAGE_NUMBERS_NOT_MATERIALIZED"` |
+| `failure.details` | any | no |  |
+| `failure.message` | string | yes |  |
+| `success` | `false` | yes | Constant: `false` |
+
+### Example response
+
+```json
+{
+  "success": true,
+  "toc": {
+    "kind": "block",
+    "nodeId": "node-def456",
+    "nodeType": "tableOfContents"
+  }
+}
+```
+
+## Pre-apply throws
+
+- `TARGET_NOT_FOUND`
+- `INVALID_TARGET`
+- `INVALID_INPUT`
+- `CAPABILITY_UNAVAILABLE`
+
+## Non-applied failure codes
+
+- `NO_OP`
+
+## Raw schemas
+
+<Accordion title="Raw input schema">
+```json
+{
+  "additionalProperties": false,
+  "properties": {
+    "patch": {
+      "additionalProperties": false,
+      "properties": {
+        "hideInWebView": {
+          "type": "boolean"
+        },
+        "hyperlinks": {
+          "type": "boolean"
+        },
+        "includePageNumbers": {
+          "type": "boolean"
+        },
+        "omitPageNumberLevels": {
+          "additionalProperties": false,
+          "properties": {
+            "from": {
+              "type": "integer"
+            },
+            "to": {
+              "type": "integer"
+            }
+          },
+          "required": [
+            "from",
+            "to"
+          ],
+          "type": "object"
+        },
+        "outlineLevels": {
+          "additionalProperties": false,
+          "properties": {
+            "from": {
+              "type": "integer"
+            },
+            "to": {
+              "type": "integer"
+            }
+          },
+          "required": [
+            "from",
+            "to"
+          ],
+          "type": "object"
+        },
+        "rightAlignPageNumbers": {
+          "type": "boolean"
+        },
+        "separator": {
+          "type": "string"
+        },
+        "tabLeader": {
+          "enum": [
+            "none",
+            "dot",
+            "hyphen",
+            "underscore",
+            "middleDot"
+          ]
+        },
+        "tcFieldIdentifier": {
+          "type": "string"
+        },
+        "tcFieldLevels": {
+          "additionalProperties": false,
+          "properties": {
+            "from": {
+              "type": "integer"
+            },
+            "to": {
+              "type": "integer"
+            }
+          },
+          "required": [
+            "from",
+            "to"
+          ],
+          "type": "object"
+        },
+        "useAppliedOutlineLevel": {
+          "type": "boolean"
+        }
+      },
+      "type": "object"
+    },
+    "target": {
+      "additionalProperties": false,
+      "properties": {
+        "kind": {
+          "const": "block"
+        },
+        "nodeId": {
+          "type": "string"
+        },
+        "nodeType": {
+          "const": "tableOfContents"
+        }
+      },
+      "required": [
+        "kind",
+        "nodeType",
+        "nodeId"
+      ],
+      "type": "object"
+    }
+  },
+  "required": [
+    "target",
+    "patch"
+  ],
+  "type": "object"
+}
+```
+</Accordion>
+
+<Accordion title="Raw output schema">
+```json
+{
+  "oneOf": [
+    {
+      "additionalProperties": false,
+      "properties": {
+        "success": {
+          "const": true
+        },
+        "toc": {
+          "additionalProperties": false,
+          "properties": {
+            "kind": {
+              "const": "block"
+            },
+            "nodeId": {
+              "type": "string"
+            },
+            "nodeType": {
+              "const": "tableOfContents"
+            }
+          },
+          "required": [
+            "kind",
+            "nodeType",
+            "nodeId"
+          ],
+          "type": "object"
+        }
+      },
+      "required": [
+        "success",
+        "toc"
+      ],
+      "type": "object"
+    },
+    {
+      "additionalProperties": false,
+      "properties": {
+        "failure": {
+          "additionalProperties": false,
+          "properties": {
+            "code": {
+              "enum": [
+                "NO_OP",
+                "INVALID_TARGET",
+                "TARGET_NOT_FOUND",
+                "CAPABILITY_UNAVAILABLE",
+                "INVALID_INSERTION_CONTEXT",
+                "PAGE_NUMBERS_NOT_MATERIALIZED"
+              ]
+            },
+            "details": {},
+            "message": {
+              "type": "string"
+            }
+          },
+          "required": [
+            "code",
+            "message"
+          ],
+          "type": "object"
+        },
+        "success": {
+          "const": false
+        }
+      },
+      "required": [
+        "success",
+        "failure"
+      ],
+      "type": "object"
+    }
+  ]
+}
+```
+</Accordion>
+
+<Accordion title="Raw success schema">
+```json
+{
+  "additionalProperties": false,
+  "properties": {
+    "success": {
+      "const": true
+    },
+    "toc": {
+      "additionalProperties": false,
+      "properties": {
+        "kind": {
+          "const": "block"
+        },
+        "nodeId": {
+          "type": "string"
+        },
+        "nodeType": {
+          "const": "tableOfContents"
+        }
+      },
+      "required": [
+        "kind",
+        "nodeType",
+        "nodeId"
+      ],
+      "type": "object"
+    }
+  },
+  "required": [
+    "success",
+    "toc"
+  ],
+  "type": "object"
+}
+```
+</Accordion>
+
+<Accordion title="Raw failure schema">
+```json
+{
+  "additionalProperties": false,
+  "properties": {
+    "failure": {
+      "additionalProperties": false,
+      "properties": {
+        "code": {
+          "enum": [
+            "NO_OP",
+            "INVALID_TARGET",
+            "TARGET_NOT_FOUND",
+            "CAPABILITY_UNAVAILABLE",
+            "INVALID_INSERTION_CONTEXT",
+            "PAGE_NUMBERS_NOT_MATERIALIZED"
+          ]
+        },
+        "details": {},
+        "message": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "code",
+        "message"
+      ],
+      "type": "object"
+    },
+    "success": {
+      "const": false
+    }
+  },
+  "required": [
+    "success",
+    "failure"
+  ],
+  "type": "object"
+}
+```
+</Accordion>

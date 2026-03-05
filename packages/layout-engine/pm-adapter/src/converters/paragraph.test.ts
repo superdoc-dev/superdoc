@@ -2141,6 +2141,45 @@ describe('paragraph converters', () => {
         expect(blocks).toHaveLength(0);
       });
 
+      it('should skip tracked empty list paragraph artifacts from paragraph mark revisions', () => {
+        const para: PMNode = {
+          type: 'paragraph',
+          content: [],
+          attrs: {
+            paragraphProperties: {
+              runProperties: {
+                trackInsert: {
+                  id: 'ins-1',
+                  author: 'Test Author',
+                  date: '2026-03-01T12:00:00Z',
+                },
+              },
+            },
+          },
+        };
+
+        const trackedChanges: TrackedChangesConfig = {
+          mode: 'review',
+          enabled: true,
+        };
+
+        vi.mocked(computeParagraphAttrs).mockReturnValue({
+          paragraphAttrs: {
+            numberingProperties: { ilvl: 0, numId: 42 },
+          },
+          resolvedParagraphProperties: {},
+        });
+        vi.mocked(collectTrackedChangeFromMarks).mockReturnValue({
+          kind: 'insert',
+          id: 'ins-1',
+        });
+        vi.mocked(applyTrackedChangesModeToRuns).mockImplementation((runs) => runs);
+
+        const blocks = paragraphToFlowBlocks(para, nextBlockId, positions, 'Arial', 16, trackedChanges);
+
+        expect(blocks).toHaveLength(0);
+      });
+
       it('should not apply tracked changes mode when config not provided', () => {
         const para: PMNode = {
           type: 'paragraph',

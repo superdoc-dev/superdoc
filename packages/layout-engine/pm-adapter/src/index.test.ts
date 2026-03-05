@@ -3799,6 +3799,61 @@ describe('toFlowBlocks', () => {
       expect(originalBlocks.some((block) => block.kind === 'image')).toBe(true);
     });
 
+    it('renumbers visible list markers after suppressing tracked empty list artifacts', () => {
+      const listParagraph = (
+        markerText: string,
+        text: string | null,
+        trackInsert?: { id: string; author: string; date: string },
+      ): PMNode => ({
+        type: 'paragraph',
+        attrs: {
+          paragraphProperties: {
+            numberingProperties: { numId: 7, ilvl: 0 },
+            ...(trackInsert
+              ? {
+                  runProperties: {
+                    trackInsert,
+                  },
+                }
+              : {}),
+          },
+          listRendering: {
+            markerText,
+            path: [1],
+            numberingType: 'lowerLetter',
+            suffix: 'tab',
+            justification: 'left',
+          },
+        },
+        content: text == null ? [] : [{ type: 'text', text }],
+      });
+
+      const pmDoc: PMNode = {
+        type: 'doc',
+        content: [
+          listParagraph('(a)', 'Alpha item'),
+          listParagraph('(b)', null, { id: 'ghost-b', author: 'Tester', date: '2026-03-01T12:00:00Z' }),
+          listParagraph('(c)', null, { id: 'ghost-c', author: 'Tester', date: '2026-03-01T12:01:00Z' }),
+          listParagraph('(d)', 'Delta content that should render as (b)'),
+        ],
+      };
+
+      const { blocks } = toFlowBlocks(pmDoc, { trackedChangesMode: 'review' });
+      const paragraphBlocks = blocks.filter((block) => block.kind === 'paragraph');
+
+      expect(paragraphBlocks).toHaveLength(2);
+      const markerTexts = paragraphBlocks.map((block) => {
+        const marker = (block.attrs?.wordLayout as { marker?: { markerText?: string } } | undefined)?.marker;
+        return marker?.markerText;
+      });
+      expect(markerTexts).toEqual(['(a)', '(b)']);
+      const secondParagraphText = paragraphBlocks[1].runs
+        .filter((run) => 'text' in run)
+        .map((run) => run.text)
+        .join('');
+      expect(secondParagraphText).toContain('Delta content');
+    });
+
     describe('adversarial input protection', () => {
       it('rejects trackFormat marks with excessively large JSON payloads', () => {
         const hugeString = 'x'.repeat(15000);

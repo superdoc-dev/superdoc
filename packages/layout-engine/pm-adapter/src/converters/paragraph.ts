@@ -8,7 +8,7 @@
  */
 
 import type { ParagraphProperties, RunProperties } from '@superdoc/style-engine/ooxml';
-import type { FlowBlock, Run, TextRun, SdtMetadata, DrawingBlock } from '@superdoc/contracts';
+import type { FlowBlock, Run, TextRun, SdtMetadata, DrawingBlock, TrackedChangeMeta } from '@superdoc/contracts';
 import type {
   PMNode,
   PMMark,
@@ -21,7 +21,7 @@ import { getStableParagraphId, shiftCachedBlocks } from '../cache.js';
 import type { ConverterContext } from '../converter-context.js';
 import { computeParagraphAttrs, deepClone } from '../attributes/index.js';
 import { shouldRequirePageBoundary, hasIntrinsicBoundarySignals, createSectionBreakBlock } from '../sections/index.js';
-import { trackedChangesCompatible, applyMarksToRun } from '../marks/index.js';
+import { trackedChangesCompatible, applyMarksToRun, collectTrackedChangeFromMarks } from '../marks/index.js';
 import { applyTrackedChangesModeToRuns } from '../tracked-changes.js';
 import { textNodeToRun } from './inline-converters/text-run.js';
 import { DEFAULT_HYPERLINK_CONFIG, TOKEN_INLINE_TYPES } from '../constants.js';
@@ -221,6 +221,259 @@ function extractDefaultFontProperties(
   };
 }
 
+const toTrackChangeAttrs = (value: unknown): Record<string, unknown> | undefined => {
+  if (!value || typeof value !== 'object') {
+    return undefined;
+  }
+  return value as Record<string, unknown>;
+};
+
+const getParagraphMarkTrackedChange = (paragraphProperties: ParagraphProperties): TrackedChangeMeta | undefined => {
+  const runProperties =
+    paragraphProperties?.runProperties && typeof paragraphProperties.runProperties === 'object'
+      ? (paragraphProperties.runProperties as Record<string, unknown>)
+      : undefined;
+  if (!runProperties) {
+    return undefined;
+  }
+
+  const trackInsertAttrs = toTrackChangeAttrs(runProperties.trackInsert);
+  const trackDeleteAttrs = toTrackChangeAttrs(runProperties.trackDelete);
+  if (!trackInsertAttrs && !trackDeleteAttrs) {
+    return undefined;
+  }
+
+  const marks: PMMark[] = [];
+  if (trackInsertAttrs) {
+    marks.push({ type: 'trackInsert', attrs: trackInsertAttrs });
+  }
+  if (trackDeleteAttrs) {
+    marks.push({ type: 'trackDelete', attrs: trackDeleteAttrs });
+  }
+  return collectTrackedChangeFromMarks(marks);
+};
+
+const isEmptyTextRun = (run: Run): boolean => {
+  if (!isTextRun(run)) {
+    return false;
+  }
+  return run.text.length === 0;
+};
+
+const getListKey = (numId: unknown, ilvl: unknown): string | undefined => {
+  if ((typeof numId !== 'number' && typeof numId !== 'string') || typeof ilvl !== 'number') {
+    return undefined;
+  }
+  const normalizedNumId = String(numId).trim();
+  if (!normalizedNumId) {
+    return undefined;
+  }
+  return `${normalizedNumId}:${ilvl}`;
+};
+
+const getParagraphListKeyFromAttrs = (attrs: unknown): string | undefined => {
+  if (!attrs || typeof attrs !== 'object') {
+    return undefined;
+  }
+  const numberingProperties = (attrs as { numberingProperties?: { numId?: unknown; ilvl?: unknown } })
+    .numberingProperties;
+  if (!numberingProperties) {
+    return undefined;
+  }
+  return getListKey(numberingProperties.numId, numberingProperties.ilvl);
+};
+
+const LETTER_MARKER_RE = /^([^A-Za-z0-9]*)([A-Za-z]+)([^A-Za-z0-9]*)$/;
+const DECIMAL_MARKER_RE = /^([^A-Za-z0-9]*)(\d+)([^A-Za-z0-9]*)$/;
+const ROMAN_MARKER_RE = /^[ivxlcdm]+$/i;
+
+type ParsedMarker = {
+  prefix: string;
+  core: string;
+  suffix: string;
+  value: number;
+  kind: 'decimal' | 'lowerLetter' | 'upperLetter';
+};
+
+const lettersToNumber = (text: string): number => {
+  let result = 0;
+  for (let i = 0; i < text.length; i += 1) {
+    const code = text.charCodeAt(i);
+    const base = code >= 97 ? 96 : 64; // a/A -> 1
+    result = result * 26 + (code - base);
+  }
+  return result;
+};
+
+const numberToLetters = (value: number, uppercase: boolean): string => {
+  let current = value;
+  let output = '';
+  while (current > 0) {
+    current -= 1;
+    output = String.fromCharCode((current % 26) + (uppercase ? 65 : 97)) + output;
+    current = Math.floor(current / 26);
+  }
+  return output;
+};
+
+const parseMarkerText = (text: string): ParsedMarker | undefined => {
+  const decimalMatch = DECIMAL_MARKER_RE.exec(text);
+  if (decimalMatch) {
+    return {
+      prefix: decimalMatch[1] ?? '',
+      core: decimalMatch[2] ?? '',
+      suffix: decimalMatch[3] ?? '',
+      value: Number.parseInt(decimalMatch[2] ?? '', 10),
+      kind: 'decimal',
+    };
+  }
+
+  const letterMatch = LETTER_MARKER_RE.exec(text);
+  if (!letterMatch) {
+    return undefined;
+  }
+  const core = letterMatch[2] ?? '';
+  if (!core) {
+    return undefined;
+  }
+  // Avoid touching Roman numeral lists (e.g. IV, ix) where alpha conversion is invalid.
+  if (ROMAN_MARKER_RE.test(core) && core.length > 1) {
+    return undefined;
+  }
+  const isLower = core === core.toLowerCase();
+  const isUpper = core === core.toUpperCase();
+  if (!isLower && !isUpper) {
+    return undefined;
+  }
+
+  return {
+    prefix: letterMatch[1] ?? '',
+    core,
+    suffix: letterMatch[3] ?? '',
+    value: lettersToNumber(core),
+    kind: isLower ? 'lowerLetter' : 'upperLetter',
+  };
+};
+
+const formatShiftedMarker = (markerText: string, delta: number): string | undefined => {
+  const parsed = parseMarkerText(markerText);
+  if (!parsed) {
+    return undefined;
+  }
+  const shiftedValue = parsed.value + delta;
+  if (!Number.isFinite(shiftedValue) || shiftedValue < 1) {
+    return undefined;
+  }
+
+  if (parsed.kind === 'decimal') {
+    const hasLeadingZero = parsed.core.length > 1 && parsed.core.startsWith('0');
+    const numeric = String(Math.trunc(shiftedValue));
+    const shiftedCore = hasLeadingZero ? numeric.padStart(parsed.core.length, '0') : numeric;
+    return `${parsed.prefix}${shiftedCore}${parsed.suffix}`;
+  }
+
+  const shiftedCore = numberToLetters(Math.trunc(shiftedValue), parsed.kind === 'upperLetter');
+  return `${parsed.prefix}${shiftedCore}${parsed.suffix}`;
+};
+
+const hasParagraphMarkTrackedChange = (node: PMNode): boolean => {
+  const paragraphProperties =
+    typeof node.attrs?.paragraphProperties === 'object' && node.attrs.paragraphProperties !== null
+      ? (node.attrs.paragraphProperties as Record<string, unknown>)
+      : undefined;
+  const runProperties =
+    paragraphProperties &&
+    typeof paragraphProperties.runProperties === 'object' &&
+    paragraphProperties.runProperties !== null
+      ? (paragraphProperties.runProperties as Record<string, unknown>)
+      : undefined;
+  if (!runProperties) {
+    return false;
+  }
+  return Boolean(toTrackChangeAttrs(runProperties.trackInsert) || toTrackChangeAttrs(runProperties.trackDelete));
+};
+
+const updateGhostListMarkerOffsets = (
+  node: PMNode,
+  paragraphBlocks: FlowBlock[],
+  context: NodeHandlerContext,
+): void => {
+  if (!context.trackedChangesConfig.enabled) {
+    return;
+  }
+  if (paragraphBlocks.some((block) => block.kind === 'paragraph')) {
+    return;
+  }
+  if (Array.isArray(node.content) && node.content.length > 0) {
+    return;
+  }
+  if (!hasParagraphMarkTrackedChange(node)) {
+    return;
+  }
+
+  const { paragraphAttrs } = computeParagraphAttrs(node, context.converterContext);
+  const key = getParagraphListKeyFromAttrs(paragraphAttrs);
+  if (!key) {
+    return;
+  }
+  const offsets = context.trackedListMarkerOffsets;
+  if (!offsets) {
+    return;
+  }
+  offsets.set(key, (offsets.get(key) ?? 0) + 1);
+};
+
+const applyGhostListMarkerOffsets = (paragraphBlocks: FlowBlock[], context: NodeHandlerContext): void => {
+  const offsets = context.trackedListMarkerOffsets;
+  if (!offsets || offsets.size === 0 || !context.trackedChangesConfig.enabled) {
+    return;
+  }
+
+  paragraphBlocks.forEach((block) => {
+    if (block.kind !== 'paragraph') {
+      return;
+    }
+    const key = getParagraphListKeyFromAttrs(block.attrs);
+    if (!key) {
+      return;
+    }
+    const offset = offsets.get(key) ?? 0;
+    if (offset <= 0) {
+      return;
+    }
+    const wordLayout =
+      block.attrs && typeof block.attrs.wordLayout === 'object' && block.attrs.wordLayout !== null
+        ? (block.attrs.wordLayout as Record<string, unknown>)
+        : undefined;
+    const marker =
+      wordLayout && typeof wordLayout.marker === 'object' && wordLayout.marker !== null
+        ? (wordLayout.marker as Record<string, unknown>)
+        : undefined;
+    if (!marker) {
+      return;
+    }
+    const markerText = typeof marker?.markerText === 'string' ? marker.markerText : undefined;
+    const sourceMarkerText =
+      typeof marker?.pmAdapterOriginalMarkerText === 'string' ? marker.pmAdapterOriginalMarkerText : markerText;
+    if (!sourceMarkerText) {
+      return;
+    }
+    const parsed = parseMarkerText(sourceMarkerText);
+    if (parsed && parsed.value <= offset) {
+      // Likely a list restart; clear accumulated offset for this numId/level.
+      offsets.delete(key);
+      marker.markerText = sourceMarkerText;
+      return;
+    }
+    const adjustedText = formatShiftedMarker(sourceMarkerText, -offset);
+    if (!adjustedText) {
+      return;
+    }
+    marker.pmAdapterOriginalMarkerText = sourceMarkerText;
+    marker.markerText = adjustedText;
+  });
+};
+
 /**
  * Converts a paragraph PM node to an array of FlowBlocks.
  *
@@ -295,6 +548,7 @@ export function paragraphToFlowBlocks({
     if (paragraphProps.runProperties?.vanish) {
       return blocks;
     }
+    const paragraphMarkTrackedChange = getParagraphMarkTrackedChange(paragraphProps);
     // Get the PM position of the empty paragraph for caret rendering
     const paraPos = positions.get(para);
     const emptyRun: TextRun = {
@@ -302,6 +556,9 @@ export function paragraphToFlowBlocks({
       fontFamily: defaultFont,
       fontSize: defaultSize,
     };
+    if (paragraphMarkTrackedChange) {
+      emptyRun.trackedChange = paragraphMarkTrackedChange;
+    }
     // For empty paragraphs, the cursor position is inside the paragraph (start + 1)
     // The range spans from the opening to closing position of the paragraph
     if (paraPos) {
@@ -320,8 +577,43 @@ export function paragraphToFlowBlocks({
       kind: 'paragraph',
       id: baseBlockId,
       runs: [emptyRun],
-      attrs: deepClone(paragraphAttrs),
+      attrs: emptyParagraphAttrs,
     });
+    if (!trackedChangesConfig) {
+      return blocks;
+    }
+
+    const paragraphBlock = blocks[blocks.length - 1];
+    if (paragraphBlock?.kind !== 'paragraph') {
+      return blocks;
+    }
+
+    const filteredRuns = applyTrackedChangesModeToRuns(
+      paragraphBlock.runs,
+      trackedChangesConfig,
+      hyperlinkConfig,
+      applyMarksToRun,
+      themeColors,
+      enableComments,
+    );
+    const isGhostTrackedListArtifact =
+      trackedChangesConfig.enabled &&
+      Boolean(paragraphAttrs.numberingProperties) &&
+      Boolean(paragraphMarkTrackedChange) &&
+      filteredRuns.length > 0 &&
+      filteredRuns.every(isEmptyTextRun);
+
+    if (trackedChangesConfig.enabled && (filteredRuns.length === 0 || isGhostTrackedListArtifact)) {
+      blocks.pop();
+      return blocks;
+    }
+
+    paragraphBlock.runs = filteredRuns;
+    paragraphBlock.attrs = {
+      ...(paragraphBlock.attrs ?? {}),
+      trackedChangesMode: trackedChangesConfig.mode,
+      trackedChangesEnabled: trackedChangesConfig.enabled,
+    };
     return blocks;
   }
 
@@ -657,6 +949,8 @@ export function handleParagraphNode(node: PMNode, context: NodeHandlerContext): 
       // Cache hit: reuse blocks with position adjustment
       const delta = pmStart - cached.pmStart;
       const reusedBlocks = shiftCachedBlocks(cached.blocks, delta);
+      updateGhostListMarkerOffsets(node, reusedBlocks, context);
+      applyGhostListMarkerOffsets(reusedBlocks, context);
 
       reusedBlocks.forEach((block) => {
         blocks.push(block);
@@ -683,6 +977,8 @@ export function handleParagraphNode(node: PMNode, context: NodeHandlerContext): 
       enableComments,
       stableBlockId: prefixedStableId,
     });
+    updateGhostListMarkerOffsets(node, paragraphBlocks, context);
+    applyGhostListMarkerOffsets(paragraphBlocks, context);
 
     paragraphBlocks.forEach((block) => {
       blocks.push(block);
@@ -708,6 +1004,9 @@ export function handleParagraphNode(node: PMNode, context: NodeHandlerContext): 
     enableComments,
     stableBlockId: prefixedStableId ?? undefined,
   });
+  updateGhostListMarkerOffsets(node, paragraphBlocks, context);
+  applyGhostListMarkerOffsets(paragraphBlocks, context);
+
   paragraphBlocks.forEach((block) => {
     blocks.push(block);
     recordBlockKind?.(block.kind);

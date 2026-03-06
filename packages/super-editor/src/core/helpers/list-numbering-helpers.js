@@ -327,6 +327,84 @@ export const removeLvlOverride = (editor, numId, ilvl) => {
 };
 
 /**
+ * Rebuild the raw numbering XML model from translated numbering definitions.
+ *
+ * This keeps `editor.converter.numbering` in sync with `editor.converter.translatedNumbering`,
+ * which is required for DOCX export paths that serialize from the raw XML model.
+ *
+ * @param {import('../Editor').Editor} editor
+ * @returns {{ updated: boolean, skipped: number }}
+ */
+export const rebuildRawNumberingFromTranslated = (editor) => {
+  const converter = editor?.converter;
+  if (!converter) {
+    return { updated: false, skipped: 0 };
+  }
+
+  const translated = converter.translatedNumbering || {};
+  const translatedAbstracts = translated.abstracts || {};
+  const translatedDefinitions = translated.definitions || {};
+
+  /** @type {Record<string, any>} */
+  const nextAbstracts = {};
+  /** @type {Record<string, any>} */
+  const nextDefinitions = {};
+  let skipped = 0;
+
+  Object.entries(translatedAbstracts).forEach(([abstractId, abstractDef]) => {
+    if (!abstractDef || typeof abstractDef !== 'object') {
+      skipped += 1;
+      return;
+    }
+
+    const decoded = wAbstractNumTranslator.decode({
+      node: /** @type {any} */ ({
+        attrs: {
+          abstractNum: abstractDef,
+        },
+      }),
+    });
+
+    if (!decoded) {
+      skipped += 1;
+      return;
+    }
+
+    nextAbstracts[abstractId] = decoded;
+  });
+
+  Object.entries(translatedDefinitions).forEach(([numId, numDef]) => {
+    if (!numDef || typeof numDef !== 'object') {
+      skipped += 1;
+      return;
+    }
+
+    const decoded = wNumTranslator.decode({
+      node: /** @type {any} */ ({
+        attrs: {
+          num: numDef,
+        },
+      }),
+    });
+
+    if (!decoded) {
+      skipped += 1;
+      return;
+    }
+
+    nextDefinitions[numId] = decoded;
+  });
+
+  converter.numbering = {
+    ...(converter.numbering || {}),
+    abstracts: nextAbstracts,
+    definitions: nextDefinitions,
+  };
+
+  return { updated: true, skipped };
+};
+
+/**
  * Create a new w:num definition pointing to an existing abstractNumId.
  * @param {import('../Editor').Editor} editor
  * @param {number} abstractNumId
@@ -382,6 +460,7 @@ export const ListHelpers = {
   // Numbering definition helpers
   createNumDefinition,
   setLvlRestartOnAbstract,
+  rebuildRawNumberingFromTranslated,
 
   // Schema helpers
   createNewList,

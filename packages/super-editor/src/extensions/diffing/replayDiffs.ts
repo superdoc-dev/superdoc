@@ -16,6 +16,7 @@ export type ReplayDiffsResult = {
 import { replayDocDiffs } from './replay/replay-doc';
 import { replayComments } from './replay/replay-comments';
 import { replayStyles } from './replay/replay-styles';
+import { replayNumbering } from './replay/replay-numbering';
 
 type ReplayDiffsParams = {
   tr: import('prosemirror-state').Transaction;
@@ -32,6 +33,14 @@ type ReplayDiffsParams = {
         docDefaults?: Record<string, unknown>;
         latentStyles?: Record<string, unknown>;
         styles?: Record<string, Record<string, unknown>>;
+      } | null;
+      translatedNumbering?: {
+        abstracts?: Record<string, unknown>;
+        definitions?: Record<string, unknown>;
+      } | null;
+      numbering?: {
+        abstracts?: Record<string, unknown>;
+        definitions?: Record<string, unknown>;
       } | null;
       convertedXml?: Record<string, unknown>;
       documentModified?: boolean;
@@ -55,11 +64,17 @@ export function replayDiffs({ tr, diff, schema, comments = [], editor }: ReplayD
   const docReplay = replayDocDiffs({ tr, docDiffs: diff.docDiffs, schema });
   const commentsReplay = replayComments({ comments, commentDiffs: diff.commentDiffs, editor });
   const stylesReplay = replayStyles({ stylesDiff: diff.stylesDiff, editor });
+  const numberingReplay = replayNumbering({ numberingDiff: diff.numberingDiff, editor });
 
   return {
     tr,
-    appliedDiffs: docReplay.applied + commentsReplay.applied + stylesReplay.applied,
-    skippedDiffs: docReplay.skipped + commentsReplay.skipped + stylesReplay.skipped,
-    warnings: [...docReplay.warnings, ...commentsReplay.warnings, ...stylesReplay.warnings],
+    appliedDiffs: docReplay.applied + commentsReplay.applied + stylesReplay.applied + numberingReplay.applied,
+    skippedDiffs: docReplay.skipped + commentsReplay.skipped + stylesReplay.skipped + numberingReplay.skipped,
+    warnings: [
+      ...docReplay.warnings,
+      ...commentsReplay.warnings,
+      ...stylesReplay.warnings,
+      ...numberingReplay.warnings,
+    ],
   };
 }

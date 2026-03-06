@@ -204,10 +204,9 @@ describe('claimBootstrap', () => {
 
     const promise = claimBootstrap(ydoc, 20, 0);
 
-    // Another process deletes the bootstrap key during settling
-    setTimeout(() => {
-      metaMap.delete('bootstrap');
-    }, 2);
+    // Another process deletes the bootstrap key during settling.
+    // Do this immediately (instead of a tiny timeout) to avoid timer jitter flake.
+    metaMap.delete('bootstrap');
 
     const result = await promise;
     expect(result.granted).toBe(false);

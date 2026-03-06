@@ -376,4 +376,44 @@ describe('Diff', () => {
 
     expect(trackedMarkDiffs).toHaveLength(0);
   });
+
+  it('returns null style diffs when style snapshots are omitted', async () => {
+    const { doc, schema } = await getDocument('diff_before8.docx');
+    const diff = computeDiff(doc, doc, schema);
+
+    expect(diff.docDiffs).toHaveLength(0);
+    expect(diff.commentDiffs).toHaveLength(0);
+    expect(diff.stylesDiff).toBeNull();
+  });
+
+  it('includes style diffs when old/new style snapshots differ', async () => {
+    const { doc, schema } = await getDocument('diff_before8.docx');
+    const oldStyles = {
+      docDefaults: {},
+      latentStyles: {},
+      styles: {
+        Normal: { styleId: 'Normal', type: 'paragraph', name: 'Normal' },
+      },
+    };
+    const newStyles = {
+      docDefaults: {},
+      latentStyles: {},
+      styles: {
+        Normal: { styleId: 'Normal', type: 'paragraph', name: 'Normal Updated' },
+        Heading1: { styleId: 'Heading1', type: 'paragraph', name: 'Heading 1' },
+      },
+    };
+
+    const diff = computeDiff(doc, doc, schema, [], [], oldStyles, newStyles);
+
+    expect(diff.docDiffs).toHaveLength(0);
+    expect(diff.commentDiffs).toHaveLength(0);
+    expect(diff.stylesDiff).not.toBeNull();
+    expect(diff.stylesDiff?.addedStyles).toHaveProperty('Heading1');
+    expect(diff.stylesDiff?.removedStyles).toEqual({});
+    expect(diff.stylesDiff?.modifiedStyles.Normal.modified.name).toEqual({
+      from: 'Normal',
+      to: 'Normal Updated',
+    });
+  });
 });

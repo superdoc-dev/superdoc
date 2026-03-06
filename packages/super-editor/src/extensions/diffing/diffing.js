@@ -18,15 +18,26 @@ export const Diffing = Extension.create({
        *
        * @param {import('prosemirror-model').Node} updatedDocument
        * @param {import('./algorithm/comment-diffing.ts').CommentInput[]} [updatedComments]
+       * @param {import('@superdoc/style-engine/ooxml').StylesDocumentProperties | null} [updatedStyles]
        * @returns {import('./computeDiff.ts').DiffResult}
        */
       compareDocuments:
-        (updatedDocument, updatedComments) =>
+        (updatedDocument, updatedComments, updatedStyles) =>
         ({ state, tr }) => {
           tr.setMeta('preventDispatch', true);
           const currentComments = this.editor.converter?.comments ?? [];
           const nextComments = updatedComments === undefined ? currentComments : updatedComments;
-          const diffs = computeDiff(state.doc, updatedDocument, state.schema, currentComments, nextComments);
+          const currentStyles = this.editor.converter?.translatedLinkedStyles ?? null;
+          const nextStyles = updatedStyles === undefined ? currentStyles : updatedStyles;
+          const diffs = computeDiff(
+            state.doc,
+            updatedDocument,
+            state.schema,
+            currentComments,
+            nextComments,
+            currentStyles,
+            nextStyles,
+          );
           return diffs;
         },
 

@@ -1,6 +1,8 @@
 import type { Node as PMNode, Schema } from 'prosemirror-model';
+import type { StylesDocumentProperties } from '@superdoc/style-engine/ooxml';
 import { diffComments, type CommentInput, type CommentDiff } from './algorithm/comment-diffing';
 import { diffNodes, normalizeNodes, type NodeDiff } from './algorithm/generic-diffing';
+import { diffStyles, type StylesDiff } from './algorithm/styles-diffing';
 
 /**
  * Result payload for document diffing.
@@ -10,6 +12,8 @@ export interface DiffResult {
   docDiffs: NodeDiff[];
   /** Diffs computed from comment content and metadata. */
   commentDiffs: CommentDiff[];
+  /** Diffs computed from OOXML styles metadata. */
+  stylesDiff: StylesDiff | null;
 }
 
 /**
@@ -27,7 +31,9 @@ export interface DiffResult {
  * @param schema The schema used to interpret document nodes.
  * @param oldComments Comment list from the old document.
  * @param newComments Comment list from the new document.
- * @returns Object containing document and comment diffs.
+ * @param oldStyles OOXML style snapshot from the old document.
+ * @param newStyles OOXML style snapshot from the new document.
+ * @returns Object containing document, comment, and style diffs.
  */
 export function computeDiff(
   oldPmDoc: PMNode,
@@ -35,9 +41,12 @@ export function computeDiff(
   schema: Schema,
   oldComments: CommentInput[] = [],
   newComments: CommentInput[] = [],
+  oldStyles: StylesDocumentProperties | null | undefined = null,
+  newStyles: StylesDocumentProperties | null | undefined = null,
 ): DiffResult {
   return {
     docDiffs: diffNodes(normalizeNodes(oldPmDoc), normalizeNodes(newPmDoc)),
     commentDiffs: diffComments(oldComments, newComments, schema),
+    stylesDiff: diffStyles(oldStyles, newStyles),
   };
 }

@@ -76,6 +76,23 @@ vi.mock('@superdoc/super-editor', () => ({
   trackChangesHelpers: {
     getTrackChanges: vi.fn(() => []),
   },
+  createOrUpdateTrackedChangeComment: vi.fn(({ event, marks, documentId }) => {
+    const changeId = marks?.insertedMark?.attrs?.id ?? marks?.deletionMark?.attrs?.id ?? marks?.formatMark?.attrs?.id;
+    if (changeId == null) return;
+    return {
+      event,
+      changeId,
+      trackedChangeText: `tracked-${changeId}`,
+      trackedChangeType: 'insert',
+      deletedText: null,
+      authorEmail: 'alice@example.com',
+      author: 'Alice',
+      date: 123,
+      importedAuthor: null,
+      documentId,
+      coords: {},
+    };
+  }),
   TrackChangesBasePluginKey: 'TrackChangesBasePluginKey',
   CommentsPluginKey: 'CommentsPluginKey',
   getRichTextExtensions: vi.fn(() => []),
@@ -88,13 +105,14 @@ import useComment from '@superdoc/components/CommentsLayer/use-comment';
 import { syncCommentsToClients } from '../core/collaboration/helpers.js';
 import { trackChangesHelpers } from '@superdoc/super-editor';
 import { groupChanges } from '../helpers/group-changes.js';
-import { trackChangesHelpers } from '@superdoc/super-editor';
+import { trackChangesHelpers, createOrUpdateTrackedChangeComment } from '@superdoc/super-editor';
 
 const useCommentMock = useComment;
 const syncCommentsToClientsMock = syncCommentsToClients;
 const getTrackChangesMock = trackChangesHelpers.getTrackChanges;
 const groupChangesMock = groupChanges;
 const trackChangesHelpersMock = trackChangesHelpers;
+const createOrUpdateTrackedChangeCommentMock = createOrUpdateTrackedChangeComment;
 
 describe('comments-store', () => {
   let store;
@@ -746,6 +764,50 @@ describe('comments-store', () => {
       },
       { commentId: 'normal-1', commentText: 'Regular comment', fileId: 'doc-1' },
     ]);
+    expect(tr.setMeta).toHaveBeenCalledWith('CommentsPluginKey', { type: 'force' });
+    expect(editorDispatch).toHaveBeenCalledWith(tr);
+  });
+
+  it('creates tracked-change comments for active document when another document has the same id', () => {
+    const editorDispatch = vi.fn();
+    const tr = { setMeta: vi.fn() };
+    const editor = {
+      state: {},
+      view: { state: { tr }, dispatch: editorDispatch },
+      options: { documentId: 'doc-1' },
+    };
+    const superdoc = {
+      config: { isInternal: false },
+      emit: vi.fn(),
+    };
+
+    __mockSuperdoc.documents.value = [
+      { id: 'doc-1', type: 'docx' },
+      { id: 'doc-2', type: 'docx' },
+    ];
+
+    trackChangesHelpersMock.getTrackChanges.mockReturnValue([{ mark: { attrs: { id: 'shared-id-1' } } }]);
+    groupChangesMock.mockReturnValue([{ insertedMark: { mark: { attrs: { id: 'shared-id-1' } } } }]);
+
+    store.commentsList = [
+      {
+        commentId: 'shared-id-1',
+        trackedChange: true,
+        trackedChangeText: 'Existing doc-2',
+        fileId: 'doc-2',
+      },
+    ];
+
+    store.syncTrackedChangeComments({ superdoc, editor });
+
+    const matchingComments = store.commentsList.filter((comment) => comment.commentId === 'shared-id-1');
+    expect(matchingComments).toHaveLength(2);
+    expect(matchingComments.map((comment) => comment.fileId).sort()).toEqual(['doc-1', 'doc-2']);
+    expect(matchingComments.find((comment) => comment.fileId === 'doc-2')?.trackedChangeText).toBe('Existing doc-2');
+    expect(matchingComments.find((comment) => comment.fileId === 'doc-1')?.trackedChangeText).toBe(
+      'tracked-shared-id-1',
+    );
+    expect(createOrUpdateTrackedChangeCommentMock).toHaveBeenCalledTimes(1);
     expect(tr.setMeta).toHaveBeenCalledWith('CommentsPluginKey', { type: 'force' });
     expect(editorDispatch).toHaveBeenCalledWith(tr);
   });

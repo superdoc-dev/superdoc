@@ -1,6 +1,7 @@
 import { Fragment, Slice } from 'prosemirror-model';
 import { ReplaceStep, AddMarkStep, RemoveMarkStep } from 'prosemirror-transform';
 
+import { deepEquals } from '../algorithm/attributes-diffing';
 import { applyAttrsDiff } from './replay-attrs';
 import { marksFromDiff } from './marks-from-diff';
 import { ReplayResult } from './replay-types';
@@ -291,7 +292,7 @@ const applyRunAttrsDiffInRange = (
   const failures: string[] = [];
   runEntries.forEach(({ pos, node }) => {
     const updatedAttrs = applyAttrsDiff({ attrs: node.attrs, diff });
-    if (isDeepEqual(updatedAttrs, node.attrs)) {
+    if (deepEquals(updatedAttrs, node.attrs)) {
       return;
     }
 
@@ -349,17 +350,6 @@ const filterAttributesDiffByPath = (
     Object.keys(filtered.modified).length > 0;
 
   return hasChanges ? filtered : null;
-};
-
-/**
- * Performs deep equality using JSON serialization for attribute payloads.
- *
- * @param left First value to compare.
- * @param right Second value to compare.
- * @returns True when both values serialize identically.
- */
-const isDeepEqual = (left: unknown, right: unknown): boolean => {
-  return JSON.stringify(left) === JSON.stringify(right);
 };
 
 /**

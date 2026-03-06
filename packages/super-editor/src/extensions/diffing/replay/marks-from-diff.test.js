@@ -108,6 +108,33 @@ const testModifiedMarksWithDuplicateTypeReplacement = () => {
 };
 
 /**
+ * Verifies modified mark matching is stable when attrs key order differs.
+ * @returns {void}
+ */
+const testModifiedMarksWithDifferentAttrKeyOrder = () => {
+  const schema = createSchema();
+  const marks = marksFromDiff({
+    schema,
+    action: 'modified',
+    oldMarks: [{ type: 'textStyle', attrs: { color: '#0000ff', fontFamily: 'Arial' } }],
+    marksDiff: {
+      added: [],
+      deleted: [],
+      modified: [
+        {
+          name: 'textStyle',
+          oldAttrs: { fontFamily: 'Arial', color: '#0000ff' },
+          newAttrs: { color: '#00ff00', fontFamily: 'Arial' },
+        },
+      ],
+    },
+  });
+
+  expect(getMarkTypes(marks)).toEqual(['textStyle']);
+  expect(marks[0]?.attrs?.color).toBe('#00ff00');
+};
+
+/**
  * Verifies modified text falls back to explicit marks when no marksDiff is provided.
  * @returns {void}
  */
@@ -146,6 +173,10 @@ const runMarksFromDiffSuite = () => {
   it('applies marksDiff for modified text', testModifiedMarksFromDiff);
   it('removes a specific duplicate same-type mark', testModifiedMarksWithDuplicateTypeDeletion);
   it('replaces a specific duplicate same-type mark', testModifiedMarksWithDuplicateTypeReplacement);
+  it(
+    'replaces marks when attrs contain the same data with different key ordering',
+    testModifiedMarksWithDifferentAttrKeyOrder,
+  );
   it('falls back to marks for modified text', testModifiedMarksFallback);
   it('returns no marks for deleted text', testDeletedMarks);
 };

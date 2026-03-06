@@ -1,3 +1,5 @@
+import { deepEquals } from '../algorithm/attributes-diffing';
+
 /**
  * Builds a mark set from inline diff metadata.
  *
@@ -109,15 +111,4 @@ const buildMarksFromJSON = (
   });
 
   return resolvedMarks;
-};
-
-/**
- * Checks deep equality using JSON serialization for mark attrs payloads.
- *
- * @param left First attrs object.
- * @param right Second attrs object.
- * @returns True when both attrs payloads serialize identically.
- */
-const deepEquals = (left: unknown, right: unknown): boolean => {
-  return JSON.stringify(left) === JSON.stringify(right);
 };

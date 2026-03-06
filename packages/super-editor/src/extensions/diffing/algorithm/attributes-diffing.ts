@@ -303,7 +303,7 @@ function isPlainObject(value: unknown): value is Record<string, unknown> {
  * @param b Second value.
  * @returns True when both values are deeply equal.
  */
-function deepEquals(a: unknown, b: unknown): boolean {
+export function deepEquals(a: unknown, b: unknown): boolean {
   if (a === b) {
     return true;
   }

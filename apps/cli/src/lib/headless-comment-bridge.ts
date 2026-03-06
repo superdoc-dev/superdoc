@@ -23,6 +23,11 @@ function getCommentIndex(yArray: YArray<YMap<unknown>>, commentId: string): numb
   return arr.findIndex((c) => c.commentId === commentId);
 }
 
+function getCommentById(yArray: YArray<YMap<unknown>>, commentId: string): Record<string, unknown> | null {
+  const arr = yArray.toJSON() as Array<Record<string, unknown>>;
+  return arr.find((c) => c.commentId === commentId) ?? null;
+}
+
 function addYComment(
   yArray: YArray<YMap<unknown>>,
   ydoc: YDoc,
@@ -103,6 +108,30 @@ function normalizeTrackedChangeToComment(params: Record<string, unknown>): Recor
   };
 }
 
+function applyTrackedChangeUpdate(
+  existing: Record<string, unknown>,
+  params: Record<string, unknown>,
+): Record<string, unknown> {
+  const updated: Record<string, unknown> = {
+    ...existing,
+    trackedChange: true,
+    // Keep parity with comments-store.js: update tracked-change fields explicitly
+    // and clear missing values to null for partial replacements.
+    trackedChangeText: (params.trackedChangeText as string) ?? null,
+    trackedChangeType: (params.trackedChangeType as string) ?? null,
+    deletedText: (params.deletedText as string) ?? null,
+  };
+
+  if (params.author != null) updated.creatorName = params.author as string;
+  if (params.authorEmail != null) updated.creatorEmail = params.authorEmail as string;
+  if (params.authorImage != null) updated.creatorImage = params.authorImage as string;
+  if (params.date != null) updated.createdTime = params.date as string;
+  if (params.documentId != null) updated.documentId = params.documentId as string;
+  if (params.importedAuthor !== undefined) updated.importedAuthor = params.importedAuthor;
+
+  return updated;
+}
+
 // ---------------------------------------------------------------------------
 // Public API
 // ---------------------------------------------------------------------------
@@ -132,6 +161,18 @@ export function buildHeadlessCommentBridge(ydoc: unknown, user?: UserIdentity): 
     if (id) registry.set(id, entry);
   }
 
+  function getCurrentComment(commentId: string): Record<string, unknown> | null {
+    const fromYjs = getCommentById(yArray, commentId);
+    if (fromYjs) {
+      registry.set(commentId, fromYjs);
+      return fromYjs;
+    }
+
+    // Yjs is the source of truth; remove stale registry entries when absent.
+    registry.delete(commentId);
+    return null;
+  }
+
   // ---- Event handler (mirrors syncCommentsToClients) ----
 
   function handleCommentsUpdate(params: Record<string, unknown>): void {
@@ -145,9 +186,10 @@ export function buildHeadlessCommentBridge(ydoc: unknown, user?: UserIdentity): 
       const comment = normalizeTrackedChangeToComment(params);
 
       if (event === 'add') {
-        if (registry.has(changeId)) {
-          // Dedup: update instead of re-adding
-          const updated = { ...registry.get(changeId)!, ...comment };
+        const existing = getCurrentComment(changeId);
+        if (existing) {
+          // Dedup: update instead of re-adding.
+          const updated = applyTrackedChangeUpdate(existing, params);
           registry.set(changeId, updated);
           updateYComment(yArray, yDoc, updated, userOrigin);
         } else {
@@ -155,9 +197,9 @@ export function buildHeadlessCommentBridge(ydoc: unknown, user?: UserIdentity): 
           addYComment(yArray, yDoc, comment, userOrigin);
         }
       } else if (event === 'update') {
-        const existing = registry.get(changeId);
+        const existing = getCurrentComment(changeId);
         if (existing) {
-          const updated = { ...existing, ...comment };
+          const updated = applyTrackedChangeUpdate(existing, params);
           registry.set(changeId, updated);
           updateYComment(yArray, yDoc, updated, userOrigin);
         }
@@ -165,8 +207,9 @@ export function buildHeadlessCommentBridge(ydoc: unknown, user?: UserIdentity): 
         // Resolve payloads are sparse — only apply resolution fields,
         // preserving all existing tracked-change metadata.
         // Mirrors comments-store.js:380 resolveComment() behavior.
-        const existing = registry.get(changeId);
+        const existing = getCurrentComment(changeId);
         if (existing) {
+          if (existing.resolvedTime) return;
           const updated = {
             ...existing,
             resolvedTime: existing.resolvedTime ?? new Date().toISOString(),
@@ -188,16 +231,20 @@ export function buildHeadlessCommentBridge(ydoc: unknown, user?: UserIdentity): 
 
     switch (type) {
       case 'add':
-        if (!registry.has(commentId)) {
+        if (!getCurrentComment(commentId)) {
           registry.set(commentId, comment);
           addYComment(yArray, yDoc, comment, userOrigin);
         }
         break;
       case 'update':
-      case 'resolved':
-        registry.set(commentId, comment);
-        updateYComment(yArray, yDoc, comment, userOrigin);
+      case 'resolved': {
+        const existing = getCurrentComment(commentId);
+        if (!existing) break;
+        const updated = { ...existing, ...comment };
+        registry.set(commentId, updated);
+        updateYComment(yArray, yDoc, updated, userOrigin);
         break;
+      }
       case 'deleted':
         registry.delete(commentId);
         deleteYComment(yArray, yDoc, comment, userOrigin);

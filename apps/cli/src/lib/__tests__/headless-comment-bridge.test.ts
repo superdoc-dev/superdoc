@@ -180,6 +180,64 @@ describe('buildHeadlessCommentBridge', () => {
     expect(arr[0].trackedChangeText).toBe('v2');
   });
 
+  it('falls back to Yjs for tracked-change updates when registry misses the id', () => {
+    // Simulate a tracked change written by another collaborator after bridge init.
+    yArray.push([
+      new Y.Map(
+        Object.entries({
+          commentId: 'tc-late',
+          trackedChange: true,
+          trackedChangeText: 'v1',
+          trackedChangeType: 'trackInsert',
+          creatorName: 'Remote Author',
+        }),
+      ),
+    ]);
+
+    bridge.editorOptions.onCommentsUpdate({
+      type: 'trackedChange',
+      event: 'update',
+      changeId: 'tc-late',
+      trackedChangeText: 'v2',
+      trackedChangeType: 'trackInsert',
+    });
+
+    const arr = yArrayToJSON(yArray);
+    expect(arr).toHaveLength(1);
+    expect(arr[0].trackedChangeText).toBe('v2');
+    // Sparse updates should not clobber existing metadata.
+    expect(arr[0].creatorName).toBe('Remote Author');
+  });
+
+  it('falls back to Yjs for tracked-change resolve when registry misses the id', () => {
+    // Simulate a tracked change written by another collaborator after bridge init.
+    yArray.push([
+      new Y.Map(
+        Object.entries({
+          commentId: 'tc-late-resolve',
+          trackedChange: true,
+          trackedChangeText: 'pending',
+          trackedChangeType: 'trackInsert',
+        }),
+      ),
+    ]);
+
+    bridge.editorOptions.onCommentsUpdate({
+      type: 'trackedChange',
+      event: 'resolve',
+      changeId: 'tc-late-resolve',
+      resolvedByEmail: 'resolver@test.com',
+      resolvedByName: 'Resolver',
+    });
+
+    const arr = yArrayToJSON(yArray);
+    expect(arr).toHaveLength(1);
+    expect(typeof arr[0].resolvedTime).toBe('string');
+    expect(arr[0].resolvedByEmail).toBe('resolver@test.com');
+    expect(arr[0].resolvedByName).toBe('Resolver');
+    expect(arr[0].trackedChangeText).toBe('pending');
+  });
+
   it('deduplicates tracked-change add events', () => {
     const params = {
       type: 'trackedChange',
@@ -280,6 +338,20 @@ describe('buildHeadlessCommentBridge', () => {
     expect(arr[0].commentId).toBe('c-1');
   });
 
+  it('deduplicates add events against late Yjs writes', () => {
+    // Simulate a standard comment written by another collaborator after bridge init.
+    yArray.push([new Y.Map(Object.entries({ commentId: 'c-late', text: 'from peer' }))]);
+
+    bridge.editorOptions.onCommentsUpdate({
+      type: 'add',
+      comment: { commentId: 'c-late', text: 'duplicate attempt' },
+    });
+
+    const arr = yArrayToJSON(yArray);
+    expect(arr).toHaveLength(1);
+    expect(arr[0].text).toBe('from peer');
+  });
+
   it('updates standard comment in yArray', () => {
     bridge.editorOptions.onCommentsUpdate({
       type: 'add',
@@ -369,7 +441,7 @@ describe('buildHeadlessCommentBridge', () => {
 
   // --- dispose ---
 
-  it('dispose clears internal registry', () => {
+  it('dispose keeps Yjs as dedup source-of-truth', () => {
     bridge.editorOptions.onCommentsUpdate({
       type: 'add',
       comment: { commentId: 'c-1', text: 'test' },
@@ -377,15 +449,16 @@ describe('buildHeadlessCommentBridge', () => {
 
     bridge.dispose();
 
-    // After dispose, adding same id should work as new (registry cleared)
+    // After dispose, Yjs still contains the existing comment id.
     bridge.editorOptions.onCommentsUpdate({
       type: 'add',
       comment: { commentId: 'c-1', text: 'after-dispose' },
     });
 
     const arr = yArrayToJSON(yArray);
-    // Original + new (since registry was cleared, dedup didn't fire)
-    expect(arr).toHaveLength(2);
+    // Even after dispose, Yjs still holds the canonical comment and prevents duplicates.
+    expect(arr).toHaveLength(1);
+    expect(arr[0].text).toBe('test');
   });
 
   // --- Dedup against existing Yjs contents ---

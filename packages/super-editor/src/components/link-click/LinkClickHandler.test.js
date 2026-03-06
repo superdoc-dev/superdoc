@@ -1047,6 +1047,28 @@ describe('LinkClickHandler', () => {
         expect(container.style.top).toBe('165px');
       });
 
+      it('should preserve natural width and avoid shrink-to-fit squeezing', async () => {
+        const renderFn = vi.fn();
+        const resolver = vi.fn().mockReturnValue({ type: 'external', render: renderFn });
+
+        mount(LinkClickHandler, {
+          props: {
+            editor: mockEditor,
+            openPopover: mockOpenPopover,
+            closePopover: mockClosePopover,
+            linkPopoverResolver: resolver,
+          },
+        });
+
+        // Preferred left = 260px (clientX 360 - surface left 100); no bounds clamping should alter it.
+        await dispatchLinkClick(mockSurfaceElement, { clientX: 360, clientY: 250 });
+
+        const container = renderFn.mock.calls[0][0].container;
+        expect(container.style.width).toBe('max-content');
+        expect(container.style.left).toBe('260px');
+        expect(container.style.top).toBe('165px');
+      });
+
       it('should call destroy and remove container when closePopover is called', async () => {
         const destroyFn = vi.fn();
         const renderFn = vi.fn().mockReturnValue({ destroy: destroyFn });

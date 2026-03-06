@@ -51,6 +51,7 @@ const EXTERNAL_POPOVER_STYLES = {
   minWidth: 'var(--sd-external-link-popover-min-width, var(--sd-popover-min-width, 120px))',
   minHeight: 'var(--sd-external-link-popover-min-height, var(--sd-popover-min-height, 40px))',
   backgroundColor: 'var(--sd-external-link-popover-bg, var(--sd-popover-bg, white))',
+  width: 'max-content',
 };
 
 // ─── External popover lifecycle ─────────────────────────────────────────────

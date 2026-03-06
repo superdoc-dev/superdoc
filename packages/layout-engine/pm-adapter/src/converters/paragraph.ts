@@ -472,11 +472,6 @@ const getNodeListKey = (node: PMNode, context: NodeHandlerContext): string | und
   return getParagraphListKeyFromAttrs(paragraphAttrs);
 };
 
-const resetTrackedListMarkerState = (context: NodeHandlerContext): void => {
-  context.trackedListMarkerOffsets?.clear();
-  context.trackedListLastOrdinals?.clear();
-};
-
 const applyGhostListMarkerOffsets = (node: PMNode, paragraphBlocks: FlowBlock[], context: NodeHandlerContext): void => {
   const offsets = context.trackedListMarkerOffsets;
   const lastOrdinals = context.trackedListLastOrdinals;
@@ -577,12 +572,6 @@ const applyTrackedGhostListAdjustments = (
   context: NodeHandlerContext,
 ): void => {
   if (!context.trackedChangesConfig.enabled) {
-    return;
-  }
-  const hasTrackedState =
-    (context.trackedListMarkerOffsets?.size ?? 0) > 0 || (context.trackedListLastOrdinals?.size ?? 0) > 0;
-  if (hasTrackedState && !getNodeListKey(node, context)) {
-    resetTrackedListMarkerState(context);
     return;
   }
   updateGhostListMarkerOffsets(node, paragraphBlocks, context);

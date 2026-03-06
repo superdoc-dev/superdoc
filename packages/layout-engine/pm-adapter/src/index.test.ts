@@ -3970,7 +3970,7 @@ describe('toFlowBlocks', () => {
       expect(markerTexts.at(-1)).toBe('(c)');
     });
 
-    it('clears stale ghost offsets after a non-list paragraph boundary', () => {
+    it('keeps ghost offsets across non-list paragraphs within the same logical list sequence', () => {
       const listParagraph = (
         markerText: string,
         text: string | null,
@@ -4006,8 +4006,8 @@ describe('toFlowBlocks', () => {
           listParagraph('(b)', null, { id: 'ghost-b', author: 'Tester', date: '2026-03-01T12:00:00Z' }),
           listParagraph('(c)', null, { id: 'ghost-c', author: 'Tester', date: '2026-03-01T12:01:00Z' }),
           listParagraph('(d)', 'Adjusted to b'),
-          { type: 'paragraph', attrs: {}, content: [{ type: 'text', text: 'Break paragraph' }] },
-          listParagraph('(e)', 'Should remain e after boundary reset'),
+          { type: 'paragraph', attrs: {}, content: [{ type: 'text', text: 'Intro paragraph' }] },
+          listParagraph('(e)', 'Should continue as c after the intro paragraph'),
         ],
       };
 
@@ -4020,7 +4020,84 @@ describe('toFlowBlocks', () => {
           return marker?.markerText;
         })
         .filter((value): value is string => typeof value === 'string');
-      expect(markerTexts).toEqual(['(a)', '(b)', '(e)']);
+      expect(markerTexts).toEqual(['(a)', '(b)', '(c)']);
+    });
+
+    it('continues style-based lists across non-list paragraphs when numbering is inherited from the paragraph style', () => {
+      const converterContext = {
+        docx: {},
+        translatedLinkedStyles: {
+          docDefaults: {},
+          latentStyles: {},
+          styles: {
+            MLAgr3: {
+              type: 'paragraph',
+              paragraphProperties: {
+                styleId: 'MLAgr3',
+                numberingProperties: { numId: 5, ilvl: 2 },
+              },
+            },
+          },
+        },
+        translatedNumbering: {
+          abstracts: {},
+          definitions: {},
+        },
+      };
+
+      const listParagraph = (
+        markerText: string,
+        text: string | null,
+        trackInsert?: { id: string; author: string; date: string },
+      ): PMNode => ({
+        type: 'paragraph',
+        attrs: {
+          paragraphProperties: {
+            styleId: 'MLAgr3',
+            ...(trackInsert
+              ? {
+                  runProperties: {
+                    trackInsert,
+                  },
+                }
+              : {}),
+          },
+          listRendering: {
+            markerText,
+            path: [1],
+            numberingType: 'lowerLetter',
+            suffix: 'tab',
+            justification: 'left',
+          },
+        },
+        content: text == null ? [] : [{ type: 'text', text }],
+      });
+
+      const pmDoc: PMNode = {
+        type: 'doc',
+        content: [
+          listParagraph('(a)', 'Alpha item'),
+          listParagraph('(b)', null, { id: 'ghost-b', author: 'Tester', date: '2026-03-01T12:00:00Z' }),
+          listParagraph('(c)', null, { id: 'ghost-c', author: 'Tester', date: '2026-03-01T12:01:00Z' }),
+          listParagraph('(d)', 'Adjusted to b'),
+          { type: 'paragraph', attrs: {}, content: [{ type: 'text', text: 'By way of example, you will:' }] },
+          listParagraph('(e)', 'Should continue as c from style-based numbering'),
+        ],
+      };
+
+      const { blocks } = toFlowBlocks(pmDoc, {
+        trackedChangesMode: 'review',
+        converterContext,
+      });
+      const markerTexts = blocks
+        .filter((block) => block.kind === 'paragraph')
+        .map((block) => {
+          const marker = (block.attrs?.wordLayout as { marker?: { markerText?: string } } | undefined)?.marker;
+          return marker?.markerText;
+        })
+        .filter((value): value is string => typeof value === 'string');
+
+      expect(markerTexts).toEqual(['(a)', '(b)', '(c)']);
     });
 
     it('renumbers roman markers correctly and avoids single-letter roman corruption', () => {

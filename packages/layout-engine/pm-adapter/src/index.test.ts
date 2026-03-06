@@ -3802,6 +3802,7 @@ describe('toFlowBlocks', () => {
     it('renumbers visible list markers after suppressing tracked empty list artifacts', () => {
       const listParagraph = (
         markerText: string,
+        path: number[],
         text: string | null,
         trackInsert?: { id: string; author: string; date: string },
       ): PMNode => ({
@@ -3819,7 +3820,7 @@ describe('toFlowBlocks', () => {
           },
           listRendering: {
             markerText,
-            path: [1],
+            path,
             numberingType: 'lowerLetter',
             suffix: 'tab',
             justification: 'left',
@@ -3831,10 +3832,10 @@ describe('toFlowBlocks', () => {
       const pmDoc: PMNode = {
         type: 'doc',
         content: [
-          listParagraph('(a)', 'Alpha item'),
-          listParagraph('(b)', null, { id: 'ghost-b', author: 'Tester', date: '2026-03-01T12:00:00Z' }),
-          listParagraph('(c)', null, { id: 'ghost-c', author: 'Tester', date: '2026-03-01T12:01:00Z' }),
-          listParagraph('(d)', 'Delta content that should render as (b)'),
+          listParagraph('(a)', [1], 'Alpha item'),
+          listParagraph('(b)', [2], null, { id: 'ghost-b', author: 'Tester', date: '2026-03-01T12:00:00Z' }),
+          listParagraph('(c)', [3], null, { id: 'ghost-c', author: 'Tester', date: '2026-03-01T12:01:00Z' }),
+          listParagraph('(d)', [4], 'Delta content that should render as (b)'),
         ],
       };
 
@@ -3857,6 +3858,7 @@ describe('toFlowBlocks', () => {
     it('clears ghost offsets when marker sequence restarts within the same list key', () => {
       const listParagraph = (
         markerText: string,
+        path: number[],
         text: string | null,
         trackInsert?: { id: string; author: string; date: string },
       ): PMNode => ({
@@ -3874,7 +3876,7 @@ describe('toFlowBlocks', () => {
           },
           listRendering: {
             markerText,
-            path: [1],
+            path,
             numberingType: 'lowerLetter',
             suffix: 'tab',
             justification: 'left',
@@ -3886,12 +3888,12 @@ describe('toFlowBlocks', () => {
       const pmDoc: PMNode = {
         type: 'doc',
         content: [
-          listParagraph('(a)', 'Alpha item'),
-          listParagraph('(b)', null, { id: 'ghost-b', author: 'Tester', date: '2026-03-01T12:00:00Z' }),
-          listParagraph('(c)', null, { id: 'ghost-c', author: 'Tester', date: '2026-03-01T12:01:00Z' }),
-          listParagraph('(d)', 'Adjusted to b'),
-          listParagraph('(e)', 'Adjusted to c'),
-          listParagraph('(c)', 'Restart should stay c'),
+          listParagraph('(a)', [1], 'Alpha item'),
+          listParagraph('(b)', [2], null, { id: 'ghost-b', author: 'Tester', date: '2026-03-01T12:00:00Z' }),
+          listParagraph('(c)', [3], null, { id: 'ghost-c', author: 'Tester', date: '2026-03-01T12:01:00Z' }),
+          listParagraph('(d)', [4], 'Adjusted to b'),
+          listParagraph('(e)', [5], 'Adjusted to c'),
+          listParagraph('(c)', [3], 'Restart should stay c'),
         ],
       };
 
@@ -3908,6 +3910,7 @@ describe('toFlowBlocks', () => {
     it('keeps ghost offsets across split paragraph blocks from the same source list item', () => {
       const listParagraph = (
         markerText: string,
+        path: number[],
         content: PMNode[] | null,
         trackInsert?: { id: string; author: string; date: string },
       ): PMNode => ({
@@ -3925,7 +3928,7 @@ describe('toFlowBlocks', () => {
           },
           listRendering: {
             markerText,
-            path: [1],
+            path,
             numberingType: 'lowerLetter',
             suffix: 'tab',
             justification: 'left',
@@ -3937,9 +3940,9 @@ describe('toFlowBlocks', () => {
       const pmDoc: PMNode = {
         type: 'doc',
         content: [
-          listParagraph('(a)', [{ type: 'text', text: 'Alpha item' }]),
-          listParagraph('(b)', null, { id: 'ghost-b', author: 'Tester', date: '2026-03-01T12:00:00Z' }),
-          listParagraph('(c)', [
+          listParagraph('(a)', [1], [{ type: 'text', text: 'Alpha item' }]),
+          listParagraph('(b)', [2], null, { id: 'ghost-b', author: 'Tester', date: '2026-03-01T12:00:00Z' }),
+          listParagraph('(c)', [3], [
             { type: 'text', text: 'Split item before image' },
             {
               type: 'image',
@@ -3951,7 +3954,7 @@ describe('toFlowBlocks', () => {
             },
             { type: 'text', text: 'Split item after image' },
           ]),
-          listParagraph('(d)', [{ type: 'text', text: 'Delta should render as c' }]),
+          listParagraph('(d)', [4], [{ type: 'text', text: 'Delta should render as c' }]),
         ],
       };
 
@@ -3973,6 +3976,7 @@ describe('toFlowBlocks', () => {
     it('keeps ghost offsets across non-list paragraphs within the same logical list sequence', () => {
       const listParagraph = (
         markerText: string,
+        path: number[],
         text: string | null,
         trackInsert?: { id: string; author: string; date: string },
       ): PMNode => ({
@@ -3990,7 +3994,7 @@ describe('toFlowBlocks', () => {
           },
           listRendering: {
             markerText,
-            path: [1],
+            path,
             numberingType: 'lowerLetter',
             suffix: 'tab',
             justification: 'left',
@@ -4002,12 +4006,12 @@ describe('toFlowBlocks', () => {
       const pmDoc: PMNode = {
         type: 'doc',
         content: [
-          listParagraph('(a)', 'Alpha item'),
-          listParagraph('(b)', null, { id: 'ghost-b', author: 'Tester', date: '2026-03-01T12:00:00Z' }),
-          listParagraph('(c)', null, { id: 'ghost-c', author: 'Tester', date: '2026-03-01T12:01:00Z' }),
-          listParagraph('(d)', 'Adjusted to b'),
+          listParagraph('(a)', [1], 'Alpha item'),
+          listParagraph('(b)', [2], null, { id: 'ghost-b', author: 'Tester', date: '2026-03-01T12:00:00Z' }),
+          listParagraph('(c)', [3], null, { id: 'ghost-c', author: 'Tester', date: '2026-03-01T12:01:00Z' }),
+          listParagraph('(d)', [4], 'Adjusted to b'),
           { type: 'paragraph', attrs: {}, content: [{ type: 'text', text: 'Intro paragraph' }] },
-          listParagraph('(e)', 'Should continue as c after the intro paragraph'),
+          listParagraph('(e)', [5], 'Should continue as c after the intro paragraph'),
         ],
       };
 
@@ -4021,6 +4025,57 @@ describe('toFlowBlocks', () => {
         })
         .filter((value): value is string => typeof value === 'string');
       expect(markerTexts).toEqual(['(a)', '(b)', '(c)']);
+    });
+
+    it('uses listRendering.path as the source ordinal instead of parsing marker text', () => {
+      const listParagraph = (
+        markerText: string,
+        path: number[],
+        text: string | null,
+        trackInsert?: { id: string; author: string; date: string },
+      ): PMNode => ({
+        type: 'paragraph',
+        attrs: {
+          paragraphProperties: {
+            numberingProperties: { numId: 11, ilvl: 0 },
+            ...(trackInsert
+              ? {
+                  runProperties: {
+                    trackInsert,
+                  },
+                }
+              : {}),
+          },
+          listRendering: {
+            markerText,
+            path,
+            numberingType: 'decimal',
+            suffix: 'tab',
+            justification: 'left',
+          },
+        },
+        content: text == null ? [] : [{ type: 'text', text }],
+      });
+
+      const pmDoc: PMNode = {
+        type: 'doc',
+        content: [
+          listParagraph('Item 1.', [1], 'Alpha item'),
+          listParagraph('Item two.', [2], null, { id: 'ghost-two', author: 'Tester', date: '2026-03-01T12:00:00Z' }),
+          listParagraph('Item three.', [3], 'Adjusted to 2 from path metadata'),
+        ],
+      };
+
+      const { blocks } = toFlowBlocks(pmDoc, { trackedChangesMode: 'review' });
+      const paragraphBlocks = blocks.filter((block) => block.kind === 'paragraph');
+
+      const markerTexts = paragraphBlocks
+        .map((block) => {
+          const marker = (block.attrs?.wordLayout as { marker?: { markerText?: string } } | undefined)?.marker;
+          return marker?.markerText;
+        })
+        .filter((value): value is string => typeof value === 'string');
+      expect(markerTexts).toEqual(['Item 1.', 'Item 2.']);
     });
 
     it('continues style-based lists across non-list paragraphs when numbering is inherited from the paragraph style', () => {
@@ -4047,6 +4102,7 @@ describe('toFlowBlocks', () => {
 
       const listParagraph = (
         markerText: string,
+        path: number[],
         text: string | null,
         trackInsert?: { id: string; author: string; date: string },
       ): PMNode => ({
@@ -4064,7 +4120,7 @@ describe('toFlowBlocks', () => {
           },
           listRendering: {
             markerText,
-            path: [1],
+            path,
             numberingType: 'lowerLetter',
             suffix: 'tab',
             justification: 'left',
@@ -4076,12 +4132,12 @@ describe('toFlowBlocks', () => {
       const pmDoc: PMNode = {
         type: 'doc',
         content: [
-          listParagraph('(a)', 'Alpha item'),
-          listParagraph('(b)', null, { id: 'ghost-b', author: 'Tester', date: '2026-03-01T12:00:00Z' }),
-          listParagraph('(c)', null, { id: 'ghost-c', author: 'Tester', date: '2026-03-01T12:01:00Z' }),
-          listParagraph('(d)', 'Adjusted to b'),
+          listParagraph('(a)', [1], 'Alpha item'),
+          listParagraph('(b)', [2], null, { id: 'ghost-b', author: 'Tester', date: '2026-03-01T12:00:00Z' }),
+          listParagraph('(c)', [3], null, { id: 'ghost-c', author: 'Tester', date: '2026-03-01T12:01:00Z' }),
+          listParagraph('(d)', [4], 'Adjusted to b'),
           { type: 'paragraph', attrs: {}, content: [{ type: 'text', text: 'By way of example, you will:' }] },
-          listParagraph('(e)', 'Should continue as c from style-based numbering'),
+          listParagraph('(e)', [5], 'Should continue as c from style-based numbering'),
         ],
       };
 
@@ -4103,6 +4159,7 @@ describe('toFlowBlocks', () => {
     it('renumbers roman markers correctly and avoids single-letter roman corruption', () => {
       const listParagraph = (
         markerText: string,
+        path: number[],
         text: string | null,
         trackInsert?: { id: string; author: string; date: string },
       ): PMNode => ({
@@ -4120,7 +4177,7 @@ describe('toFlowBlocks', () => {
           },
           listRendering: {
             markerText,
-            path: [1],
+            path,
             numberingType: 'lowerRoman',
             suffix: 'tab',
             justification: 'left',
@@ -4132,10 +4189,10 @@ describe('toFlowBlocks', () => {
       const pmDoc: PMNode = {
         type: 'doc',
         content: [
-          listParagraph('(i)', 'Roman one'),
-          listParagraph('(ii)', null, { id: 'ghost-ii', author: 'Tester', date: '2026-03-01T12:00:00Z' }),
-          listParagraph('(iii)', 'Should render as ii'),
-          listParagraph('(i)', 'Restart should remain i'),
+          listParagraph('(i)', [1], 'Roman one'),
+          listParagraph('(ii)', [2], null, { id: 'ghost-ii', author: 'Tester', date: '2026-03-01T12:00:00Z' }),
+          listParagraph('(iii)', [3], 'Should render as ii'),
+          listParagraph('(i)', [1], 'Restart should remain i'),
         ],
       };
 

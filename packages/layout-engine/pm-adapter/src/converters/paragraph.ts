@@ -291,6 +291,7 @@ const TRAILING_MARKER_TOKEN_RE = /^(.*?)([A-Za-z0-9]+)([^A-Za-z0-9]*)$/;
 type NodeListRendering = {
   markerText: string;
   numberingType: string;
+  path?: number[];
 };
 
 const getNodeListRendering = (node: PMNode): NodeListRendering | undefined => {
@@ -303,88 +304,11 @@ const getNodeListRendering = (node: PMNode): NodeListRendering | undefined => {
   }
   const markerText = typeof listRendering.markerText === 'string' ? listRendering.markerText : undefined;
   const numberingType = typeof listRendering.numberingType === 'string' ? listRendering.numberingType : undefined;
+  const path = Array.isArray(listRendering.path) ? listRendering.path.filter(Number.isFinite) : undefined;
   if (!markerText || !numberingType) {
     return undefined;
   }
-  return { markerText, numberingType };
-};
-
-const getTrailingMarkerToken = (markerText: string): string | undefined => {
-  const match = TRAILING_MARKER_TOKEN_RE.exec(markerText);
-  const token = match?.[2];
-  return token ? token : undefined;
-};
-
-const lettersToNumber = (token: string): number => {
-  let value = 0;
-  for (let i = 0; i < token.length; i += 1) {
-    const code = token.charCodeAt(i);
-    const offset = code >= 97 ? 96 : 64;
-    value = value * 26 + (code - offset);
-  }
-  return value;
-};
-
-const romanToNumber = (token: string): number | undefined => {
-  const romanMap: Record<string, number> = {
-    I: 1,
-    V: 5,
-    X: 10,
-    L: 50,
-    C: 100,
-    D: 500,
-    M: 1000,
-  };
-  const upper = token.toUpperCase();
-  let total = 0;
-  for (let i = 0; i < upper.length; i += 1) {
-    const current = romanMap[upper[i]];
-    if (!current) {
-      return undefined;
-    }
-    const next = i + 1 < upper.length ? romanMap[upper[i + 1]] : 0;
-    if (next > current) {
-      total -= current;
-    } else {
-      total += current;
-    }
-  }
-  return total > 0 ? total : undefined;
-};
-
-const parseListOrdinalToken = (numberingType: string, token: string): number | undefined => {
-  if (numberingType === 'decimal' || numberingType === 'decimalZero') {
-    if (!/^\d+$/.test(token)) {
-      return undefined;
-    }
-    const numeric = Number.parseInt(token, 10);
-    return Number.isFinite(numeric) && numeric > 0 ? numeric : undefined;
-  }
-  if (numberingType === 'lowerLetter') {
-    if (!/^[a-z]+$/.test(token)) {
-      return undefined;
-    }
-    return lettersToNumber(token);
-  }
-  if (numberingType === 'upperLetter') {
-    if (!/^[A-Z]+$/.test(token)) {
-      return undefined;
-    }
-    return lettersToNumber(token);
-  }
-  if (numberingType === 'lowerRoman') {
-    if (!/^[ivxlcdm]+$/.test(token)) {
-      return undefined;
-    }
-    return romanToNumber(token);
-  }
-  if (numberingType === 'upperRoman') {
-    if (!/^[IVXLCDM]+$/.test(token)) {
-      return undefined;
-    }
-    return romanToNumber(token);
-  }
-  return undefined;
+  return { markerText, numberingType, path };
 };
 
 const getNodeListOrdinal = (node: PMNode): number | undefined => {
@@ -392,11 +316,8 @@ const getNodeListOrdinal = (node: PMNode): number | undefined => {
   if (!listRendering || listRendering.numberingType === 'bullet') {
     return undefined;
   }
-  const token = getTrailingMarkerToken(listRendering.markerText);
-  if (!token) {
-    return undefined;
-  }
-  return parseListOrdinalToken(listRendering.numberingType, token);
+  const sourceOrdinal = listRendering.path?.at(-1);
+  return Number.isFinite(sourceOrdinal) && sourceOrdinal != null && sourceOrdinal > 0 ? sourceOrdinal : undefined;
 };
 
 const formatListOrdinalToken = (numberingType: string, ordinal: number): string | undefined => {

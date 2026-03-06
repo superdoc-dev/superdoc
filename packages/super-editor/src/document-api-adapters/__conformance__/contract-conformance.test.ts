@@ -7,6 +7,7 @@ import {
   MUTATING_OPERATION_IDS,
   OPERATION_IDS,
   buildInternalContractSchemas,
+  textReceiptToSDReceipt,
   type InlineRunPatchKey,
   type OperationId,
 } from '@superdoc/document-api';
@@ -2313,52 +2314,64 @@ const mutationVectors: Partial<Record<OperationId, MutationVector>> = {
   insert: {
     throwCase: () => {
       const { editor } = makeTextEditor();
-      return writeAdapter(
-        editor,
-        { kind: 'insert', target: { kind: 'text', blockId: 'missing', range: { start: 0, end: 0 } }, text: 'X' },
-        { changeMode: 'direct' },
+      return textReceiptToSDReceipt(
+        writeAdapter(
+          editor,
+          { kind: 'insert', target: { kind: 'text', blockId: 'missing', range: { start: 0, end: 0 } }, text: 'X' },
+          { changeMode: 'direct' },
+        ),
       );
     },
     failureCase: () => {
       const { editor } = makeTextEditor();
-      return writeAdapter(
-        editor,
-        { kind: 'insert', target: { kind: 'text', blockId: 'p1', range: { start: 0, end: 0 } }, text: '' },
-        { changeMode: 'direct' },
+      return textReceiptToSDReceipt(
+        writeAdapter(
+          editor,
+          { kind: 'insert', target: { kind: 'text', blockId: 'p1', range: { start: 0, end: 0 } }, text: '' },
+          { changeMode: 'direct' },
+        ),
       );
     },
     applyCase: () => {
       const { editor } = makeTextEditor();
-      return writeAdapter(
-        editor,
-        { kind: 'insert', target: { kind: 'text', blockId: 'p1', range: { start: 1, end: 1 } }, text: 'X' },
-        { changeMode: 'direct' },
+      return textReceiptToSDReceipt(
+        writeAdapter(
+          editor,
+          { kind: 'insert', target: { kind: 'text', blockId: 'p1', range: { start: 1, end: 1 } }, text: 'X' },
+          { changeMode: 'direct' },
+        ),
       );
     },
   },
   replace: {
     throwCase: () => {
       const { editor } = makeTextEditor();
-      return writeAdapter(
-        editor,
-        { kind: 'replace', target: { kind: 'text', blockId: 'missing', range: { start: 0, end: 1 } }, text: 'X' },
-        { changeMode: 'direct' },
+      return textReceiptToSDReceipt(
+        writeAdapter(
+          editor,
+          { kind: 'replace', target: { kind: 'text', blockId: 'missing', range: { start: 0, end: 1 } }, text: 'X' },
+          { changeMode: 'direct' },
+        ),
       );
     },
     failureCase: () => {
       const { editor } = makeTextEditor('Hello');
-      return writeAdapter(
-        editor,
-        { kind: 'replace', target: { kind: 'text', blockId: 'p1', range: { start: 0, end: 5 } }, text: 'Hello' },
-        { changeMode: 'direct' },
+      return textReceiptToSDReceipt(
+        writeAdapter(
+          editor,
+          { kind: 'replace', target: { kind: 'text', blockId: 'p1', range: { start: 0, end: 5 } }, text: 'Hello' },
+          { changeMode: 'direct' },
+        ),
       );
     },
     applyCase: () => {
       const { editor } = makeTextEditor('Hello');
-      return writeAdapter(
-        editor,
-        { kind: 'replace', target: { kind: 'text', blockId: 'p1', range: { start: 0, end: 5 } }, text: 'World' },
-        { changeMode: 'direct' },
+      return textReceiptToSDReceipt(
+        writeAdapter(
+          editor,
+          { kind: 'replace', target: { kind: 'text', blockId: 'p1', range: { start: 0, end: 5 } }, text: 'World' },
+          { changeMode: 'direct' },
+        ),
       );
     },
   },
@@ -5445,10 +5458,12 @@ const dryRunVectors: Partial<Record<OperationId, () => unknown>> = {
   },
   insert: () => {
     const { editor, dispatch, tr } = makeTextEditor();
-    const result = writeAdapter(
-      editor,
-      { kind: 'insert', target: { kind: 'text', blockId: 'p1', range: { start: 1, end: 1 } }, text: 'X' },
-      { changeMode: 'direct', dryRun: true },
+    const result = textReceiptToSDReceipt(
+      writeAdapter(
+        editor,
+        { kind: 'insert', target: { kind: 'text', blockId: 'p1', range: { start: 1, end: 1 } }, text: 'X' },
+        { changeMode: 'direct', dryRun: true },
+      ),
     );
     expect(dispatch).not.toHaveBeenCalled();
     expect(tr.insertText).not.toHaveBeenCalled();
@@ -5456,10 +5471,12 @@ const dryRunVectors: Partial<Record<OperationId, () => unknown>> = {
   },
   replace: () => {
     const { editor, dispatch, tr } = makeTextEditor();
-    const result = writeAdapter(
-      editor,
-      { kind: 'replace', target: { kind: 'text', blockId: 'p1', range: { start: 0, end: 5 } }, text: 'World' },
-      { changeMode: 'direct', dryRun: true },
+    const result = textReceiptToSDReceipt(
+      writeAdapter(
+        editor,
+        { kind: 'replace', target: { kind: 'text', blockId: 'p1', range: { start: 0, end: 5 } }, text: 'World' },
+        { changeMode: 'direct', dryRun: true },
+      ),
     );
     expect(dispatch).not.toHaveBeenCalled();
     expect(tr.insertText).not.toHaveBeenCalled();

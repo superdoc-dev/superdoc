@@ -2098,6 +2098,12 @@ export class Editor extends EventEmitter<EditorEventMap> {
    */
   #onCollaborationReady({ editor, ydoc }: { editor: Editor; ydoc: unknown }): void {
     if (this.options.collaborationIsReady) return;
+
+    // Collaboration callbacks can arrive after close()/unload. In that state
+    // the converter and editor state are intentionally cleared, so there is
+    // nothing valid to initialize.
+    if (this.isDestroyed || !this.converter || !this.state) return;
+
     console.debug('🔗 [super-editor] Collaboration ready');
 
     this.#validateDocumentInit();
@@ -2126,6 +2132,7 @@ export class Editor extends EventEmitter<EditorEventMap> {
   #initComments(): void {
     if (!this.options.isCommentsEnabled) return;
     if (!this.options.shouldLoadComments) return;
+    if (!this.converter) return;
     const replacedFile = this.options.replacedFile;
     this.emit('commentsLoaded', {
       editor: this,

@@ -2846,7 +2846,7 @@ export class Editor extends EventEmitter<EditorEventMap> {
   ): Promise<Editor> {
     // Apply smart defaults
     const hasElement = config?.element != null || config?.selector != null;
-    const resolvedConfig: Partial<EditorOptions> = {
+    const resolvedConfig: Partial<EditorOptions> & OpenOptions = {
       mode: 'docx',
       isHeadless: !hasElement,
       ...config,
@@ -2857,6 +2857,7 @@ export class Editor extends EventEmitter<EditorEventMap> {
       // OpenOptions (document-level)
       html,
       markdown,
+      json,
       isCommentsEnabled,
       suppressDefaultDocxStyles,
       documentMode,
@@ -2872,6 +2873,7 @@ export class Editor extends EventEmitter<EditorEventMap> {
       mode: resolvedConfig.mode as 'docx' | 'text' | 'html',
       html,
       markdown,
+      json,
       isCommentsEnabled,
       suppressDefaultDocxStyles,
       documentMode: documentMode as 'editing' | 'viewing' | 'suggesting' | undefined,

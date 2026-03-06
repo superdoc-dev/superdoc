@@ -47,6 +47,7 @@ import { lineBreakNodeToBreakBlock } from './break.js';
 import { inlineContentBlockConverter } from './inline-converters/content-block.js';
 import { handleImageNode } from './image.js';
 import { generateOrderedListIndex } from '../list-helpers.js';
+import { getListOrdinalFromPath, getListRendering } from '@superdoc/common/list-rendering';
 import {
   shapeContainerNodeToDrawingBlock,
   shapeGroupNodeToDrawingBlock,
@@ -288,36 +289,12 @@ const getParagraphListKeyFromAttrs = (attrs: unknown): string | undefined => {
 
 const TRAILING_MARKER_TOKEN_RE = /^(.*?)([A-Za-z0-9]+)([^A-Za-z0-9]*)$/;
 
-type NodeListRendering = {
-  markerText: string;
-  numberingType: string;
-  path?: number[];
-};
-
-const getNodeListRendering = (node: PMNode): NodeListRendering | undefined => {
-  const listRendering =
-    typeof node.attrs?.listRendering === 'object' && node.attrs.listRendering !== null
-      ? (node.attrs.listRendering as Record<string, unknown>)
-      : undefined;
-  if (!listRendering) {
-    return undefined;
-  }
-  const markerText = typeof listRendering.markerText === 'string' ? listRendering.markerText : undefined;
-  const numberingType = typeof listRendering.numberingType === 'string' ? listRendering.numberingType : undefined;
-  const path = Array.isArray(listRendering.path) ? listRendering.path.filter(Number.isFinite) : undefined;
-  if (!markerText || !numberingType) {
-    return undefined;
-  }
-  return { markerText, numberingType, path };
-};
-
 const getNodeListOrdinal = (node: PMNode): number | undefined => {
-  const listRendering = getNodeListRendering(node);
+  const listRendering = getListRendering(node.attrs?.listRendering);
   if (!listRendering || listRendering.numberingType === 'bullet') {
     return undefined;
   }
-  const sourceOrdinal = listRendering.path?.at(-1);
-  return Number.isFinite(sourceOrdinal) && sourceOrdinal != null && sourceOrdinal > 0 ? sourceOrdinal : undefined;
+  return getListOrdinalFromPath(listRendering.path);
 };
 
 const formatListOrdinalToken = (numberingType: string, ordinal: number): string | undefined => {
@@ -340,23 +317,6 @@ const replaceTrailingMarkerToken = (markerText: string, replacementToken: string
   return `${match[1] ?? ''}${replacementToken}${match[3] ?? ''}`;
 };
 
-const hasParagraphMarkTrackedChange = (node: PMNode): boolean => {
-  const paragraphProperties =
-    typeof node.attrs?.paragraphProperties === 'object' && node.attrs.paragraphProperties !== null
-      ? (node.attrs.paragraphProperties as Record<string, unknown>)
-      : undefined;
-  const runProperties =
-    paragraphProperties &&
-    typeof paragraphProperties.runProperties === 'object' &&
-    paragraphProperties.runProperties !== null
-      ? (paragraphProperties.runProperties as Record<string, unknown>)
-      : undefined;
-  if (!runProperties) {
-    return false;
-  }
-  return Boolean(toTrackChangeAttrs(runProperties.trackInsert) || toTrackChangeAttrs(runProperties.trackDelete));
-};
-
 const updateGhostListMarkerOffsets = (
   node: PMNode,
   paragraphBlocks: FlowBlock[],
@@ -371,7 +331,11 @@ const updateGhostListMarkerOffsets = (
   if (Array.isArray(node.content) && node.content.length > 0) {
     return;
   }
-  if (!hasParagraphMarkTrackedChange(node)) {
+  const paragraphProperties =
+    typeof node.attrs?.paragraphProperties === 'object' && node.attrs.paragraphProperties !== null
+      ? (node.attrs.paragraphProperties as ParagraphProperties)
+      : {};
+  if (!getParagraphMarkTrackedChange(paragraphProperties)) {
     return;
   }
 
@@ -399,7 +363,7 @@ const applyGhostListMarkerOffsets = (node: PMNode, paragraphBlocks: FlowBlock[],
   if (!offsets || offsets.size === 0 || !context.trackedChangesConfig.enabled) {
     return;
   }
-  const listRendering = getNodeListRendering(node);
+  const listRendering = getListRendering(node.attrs?.listRendering);
   if (!listRendering) {
     return;
   }

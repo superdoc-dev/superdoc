@@ -2519,13 +2519,6 @@ export class PresentationEditor extends EventEmitter {
         if (shouldBypassFastRevision) {
           this.#flowBlockCache?.setHasExternalChanges(true);
         }
-        // History undo/redo can restore prior paragraph content while preserving/reusing
-        // sdBlockRev values, which makes the cache's fast revision check unsafe.
-        // Force JSON comparison for this render cycle to avoid stale paragraph reuse.
-        const isHistoryType = inputType === 'historyUndo' || inputType === 'historyRedo';
-        if (isHistoryType && transaction.docChanged) {
-          this.#flowBlockCache?.setHasExternalChanges(true);
-        }
       }
       if (trackedChangesChanged || transaction?.docChanged) {
         this.#pendingDocChange = true;

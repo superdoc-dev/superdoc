@@ -37,14 +37,13 @@ lives in adapter layers that map engine behavior into discovery envelopes and ot
 ## Selector Semantics
 
 - For dual-context types (`sdt`, `image`), selectors without an explicit `kind` may return both block and inline matches.
-- Set `kind: 'block'` or `kind: 'inline'` on `{ type: 'node' }` selectors when you need only one context.
+- For `find`, set `kind: 'content'` or `kind: 'inline'` on `{ type: 'node' }` selectors when you need only one context.
 
 ## Find Result Contract
 
-- `find` always returns `items` as discovery items.
-- For text selectors (`{ type: 'text', ... }`), items include containing block addresses.
-- Exact matched spans are returned in `items[*].context.textRanges` as `TextAddress`.
-- Mutating operations should target `TextAddress` values from `items[*].context.textRanges`.
+- `find` always returns `SDFindResult` with `items: SDNodeResult[]`.
+- Each item has `{ node, address }`, where `address` is an `SDAddress`.
+- For precise text spans/runs (for direct mutation targeting), use `query.match`, which returns `blocks[].range` and run-level metadata.
 - `insert` supports canonical `TextAddress` targeting or default insertion point when target is omitted.
 - Structural creation is exposed under `create.*` (for example `create.paragraph`), separate from text mutations.
 
@@ -91,13 +90,24 @@ The following examples show typical multi-step patterns using the Document API.
 
 ### Workflow: Find + Mutate
 
-Locate text in the document and replace it:
+Locate text in the document and replace the first exact match:
 
 ```ts
-const result = editor.doc.find({ type: 'text', pattern: 'foo' });
-const target = result.items?.[0]?.context?.textRanges?.[0];
-if (target) {
-  editor.doc.replace({ target, text: 'bar' });
+const match = editor.doc.query.match({
+  select: { type: 'text', pattern: 'foo' },
+  require: 'first',
+});
+
+const firstBlock = match.items?.[0]?.blocks?.[0];
+if (firstBlock) {
+  editor.doc.replace({
+    target: {
+      kind: 'text',
+      blockId: firstBlock.blockId,
+      range: { start: firstBlock.range.start, end: firstBlock.range.end },
+    },
+    text: 'bar',
+  });
 }
 ```
 
@@ -119,7 +129,19 @@ const receipt = editor.doc.insert(
 Add a comment, reply, then resolve the thread:
 
 ```ts
-const target = result.items?.[0]?.context?.textRanges?.[0];
+const match = editor.doc.query.match({
+  select: { type: 'text', pattern: 'Review this section' },
+  require: 'first',
+});
+const firstBlock = match.items?.[0]?.blocks?.[0];
+if (!firstBlock) return;
+
+const target = {
+  kind: 'text',
+  blockId: firstBlock.blockId,
+  range: { start: firstBlock.range.start, end: firstBlock.range.end },
+};
+
 const createReceipt = editor.doc.comments.create({ target, text: 'Review this section.' });
 // Use the comment ID from the receipt to reply
 const comments = editor.doc.comments.list();
@@ -134,8 +156,11 @@ Create a list, insert an item, then indent it:
 
 ```ts
 // Convert a paragraph into a new ordered list
-const paragraph = editor.doc.find({ type: 'node', nodeType: 'paragraph' });
-const target = paragraph.items[0]?.address;
+const paragraphMatch = editor.doc.query.match({
+  select: { type: 'node', nodeType: 'paragraph' },
+  require: 'first',
+});
+const target = paragraphMatch.items[0]?.address;
 const createResult = editor.doc.lists.create({ mode: 'empty', at: target, kind: 'ordered' });
 
 // Insert a new item after the first
@@ -175,19 +200,19 @@ Each operation has a dedicated section below. Grouped by namespace.
 
 ### `find`
 
-Search the document for nodes or text matching a selector. Returns discovery items via `items`. Text selectors include `items[*].context.textRanges` for precise span targeting.
+Search the document for nodes or text matching an SDM/1 selector. Returns paginated `items` where each item is an `SDNodeResult` (`{ node, address }`).
 
-- **Input**: `Selector | Query`
-- **Output**: `FindOutput`
+- **Input**: `SDFindInput`
+- **Output**: `SDFindResult`
 - **Mutates**: No
 - **Idempotency**: idempotent
 
 ### `getNode`
 
-Resolve a `NodeAddress` to full `NodeInfo` including typed properties (text content, attributes, node type). Throws `TARGET_NOT_FOUND` when the address is invalid.
+Resolve a `NodeAddress` to an `SDNodeResult` envelope with projected SDM/1 node and canonical address. Throws `TARGET_NOT_FOUND` when the address is invalid.
 
 - **Input**: `NodeAddress`
-- **Output**: `NodeInfo`
+- **Output**: `SDNodeResult`
 - **Mutates**: No
 - **Idempotency**: idempotent
 
@@ -196,7 +221,7 @@ Resolve a `NodeAddress` to full `NodeInfo` including typed properties (text cont
 Resolve a block node by its unique `nodeId`. Optionally constrain by `nodeType`. Throws `TARGET_NOT_FOUND` when the ID is not found.
 
 - **Input**: `GetNodeByIdInput` (`{ nodeId, nodeType? }`)
-- **Output**: `NodeInfo`
+- **Output**: `SDNodeResult`
 - **Mutates**: No
 - **Idempotency**: idempotent
 

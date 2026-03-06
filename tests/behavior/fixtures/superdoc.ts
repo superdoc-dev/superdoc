@@ -101,14 +101,38 @@ async function waitForStable(page: Page, ms?: number): Promise<void> {
 
 function createFixture(page: Page, editor: Locator, modKey: string) {
   const normalizeHexColor = (value: unknown): string | null => {
-    if (typeof value !== 'string') return null;
-    const normalized = value.replace(/^#/, '').trim().toUpperCase();
+    let raw: string | null = null;
+    if (typeof value === 'string') raw = value;
+    if (
+      value &&
+      typeof value === 'object' &&
+      (value as { model?: unknown }).model === 'rgb' &&
+      typeof (value as { value?: unknown }).value === 'string'
+    ) {
+      raw = (value as { value: string }).value;
+    }
+    if (!raw) return null;
+    const normalized = raw.replace(/^#/, '').trim().toUpperCase();
     return normalized || null;
   };
 
   const matchesTextStyleAttr = (props: Record<string, unknown>, key: string, expectedValue: unknown): boolean => {
     if (key === 'fontFamily') {
-      return props.font === expectedValue;
+      const normalizeFont = (value: unknown): string | null => {
+        if (typeof value !== 'string') return null;
+        const head = value.split(',')[0]?.trim();
+        if (!head) return null;
+        return head.replace(/^['"]|['"]$/g, '').toLowerCase();
+      };
+      const expected = normalizeFont(expectedValue);
+      if (!expected) return false;
+
+      const legacyFont = props.font;
+      const fontFamily = props.fontFamily;
+      const fonts = props.fonts as Record<string, unknown> | undefined;
+      return [legacyFont, fontFamily, fonts?.ascii, fonts?.hAnsi, fonts?.eastAsia, fonts?.cs]
+        .map(normalizeFont)
+        .some((candidate) => candidate === expected);
     }
 
     if (key === 'color') {
@@ -122,7 +146,7 @@ function createFixture(page: Page, editor: Locator, modKey: string) {
           ? expectedValue
           : Number.parseFloat(String(expectedValue).replace(/pt$/i, ''));
       if (!Number.isFinite(parsed)) return false;
-      const sizeValue = props.size;
+      const sizeValue = typeof props.size === 'number' ? props.size : props.fontSize;
       if (typeof sizeValue !== 'number') return false;
       return [parsed, parsed * 2, parsed / 2].some((candidate) => Math.abs(sizeValue - candidate) < 0.01);
     }
@@ -143,78 +167,132 @@ function createFixture(page: Page, editor: Locator, modKey: string) {
     page.evaluate(
       ({ searchText, matchIndex }) => {
         const docApi = (window as any).editor?.doc;
-        if (!docApi?.find) {
-          throw new Error('Document API is unavailable: expected editor.doc.find().');
+        if (!docApi?.find || !docApi?.query?.match) {
+          throw new Error('Document API is unavailable: expected editor.doc.find() and editor.doc.query.match().');
         }
 
-        const getAddresses = (result: any): Array<any> => {
-          const discoveryItems = Array.isArray(result?.items) ? result.items : [];
-          if (discoveryItems.length > 0) {
-            return discoveryItems.map((item: any) => item?.address ?? null);
-          }
-          return Array.isArray(result?.matches) ? result.matches : [];
+        const toRanges = (item: any): TextRange[] => {
+          const blocks = Array.isArray(item?.blocks) ? item.blocks : [];
+          const fromBlocks = blocks
+            .map((block: any) => {
+              const blockId = block?.blockId;
+              const start = block?.range?.start;
+              const end = block?.range?.end;
+              if (typeof blockId !== 'string' || typeof start !== 'number' || typeof end !== 'number') return null;
+              return { blockId, start, end };
+            })
+            .filter(Boolean);
+          if (fromBlocks.length > 0) return fromBlocks;
+
+          const legacyRanges = Array.isArray(item?.context?.textRanges) ? item.context.textRanges : [];
+          return legacyRanges
+            .map((range: any) => {
+              const blockId = range?.blockId;
+              const start = range?.range?.start;
+              const end = range?.range?.end;
+              if (typeof blockId !== 'string' || typeof start !== 'number' || typeof end !== 'number') return null;
+              return { blockId, start, end };
+            })
+            .filter(Boolean);
         };
 
-        const getNodes = (result: any): Array<any> => {
-          const discoveryItems = Array.isArray(result?.items) ? result.items : [];
-          if (discoveryItems.length > 0) {
-            return discoveryItems.map((item: any) => item?.node ?? null);
+        const toWithinAddress = (address: any): any => {
+          if (!address || typeof address !== 'object') return null;
+          if (address.kind === 'content' || address.kind === 'inline') return address;
+          if (address.kind === 'block' && typeof address.nodeId === 'string' && address.nodeId.length > 0) {
+            return { kind: 'content', stability: 'stable', nodeId: address.nodeId };
           }
-          return Array.isArray(result?.nodes) ? result.nodes : [];
+          return null;
         };
 
-        const getContexts = (result: any): Array<any> => {
+        const getItems = (result: any): Array<any> => {
           const discoveryItems = Array.isArray(result?.items) ? result.items : [];
-          if (discoveryItems.length > 0) {
-            return discoveryItems.map((item: any) => item?.context ?? null);
-          }
-          return Array.isArray(result?.context) ? result.context : [];
+          if (discoveryItems.length > 0) return discoveryItems;
+          return [];
         };
 
-        const textResult = docApi.find({
+        const buildRunsFromMatch = (item: any): InlineSpan[] => {
+          const blocks = Array.isArray(item?.blocks) ? item.blocks : [];
+          return blocks
+            .flatMap((block: any) => {
+              const blockId = block?.blockId;
+              const blockRuns = Array.isArray(block?.runs) ? block.runs : [];
+              if (typeof blockId !== 'string' || blockRuns.length === 0) return [];
+
+              return blockRuns
+                .map((run: any) => {
+                  const start = run?.range?.start;
+                  const end = run?.range?.end;
+                  if (typeof start !== 'number' || typeof end !== 'number') return null;
+                  const styles = run?.styles ?? {};
+                  const effective = styles?.effective ?? {};
+                  const direct = styles?.direct ?? {};
+                  const strike = effective?.strike === true || direct?.strike === 'on';
+                  const underline = effective?.underline === true || direct?.underline === 'on';
+                  return {
+                    blockId,
+                    start,
+                    end,
+                    properties: {
+                      bold: effective?.bold === true || direct?.bold === 'on',
+                      italic: effective?.italic === true || direct?.italic === 'on',
+                      underline,
+                      strike,
+                      strikethrough: strike,
+                      highlight: styles?.highlight,
+                      color: styles?.color,
+                      fontFamily: styles?.fontFamily,
+                      font: styles?.fontFamily,
+                      fontSize: styles?.fontSizePt,
+                      size: styles?.fontSizePt,
+                    },
+                  } satisfies InlineSpan;
+                })
+                .filter(Boolean);
+            })
+            .filter(Boolean);
+        };
+
+        const textResult = docApi.query.match({
           select: { type: 'text', pattern: searchText, mode: 'contains', caseSensitive: true },
+          require: 'any',
         });
-        const context = getContexts(textResult)[matchIndex];
-        if (!context?.address) return null;
+        const matchItems = getItems(textResult);
+        const matchItem = matchItems[matchIndex];
+        if (!matchItem) return null;
+        const ranges = toRanges(matchItem);
+        const blockAddress = matchItem?.address ?? null;
+        if (!blockAddress || ranges.length === 0) return null;
 
-        const ranges = (context.textRanges ?? []).map((range: any) => ({
-          blockId: range.blockId,
-          start: range.range.start,
-          end: range.range.end,
-        }));
-        if (!ranges.length) return null;
+        const withinAddress = toWithinAddress(blockAddress);
+        if (!withinAddress) return null;
 
         const toInlineSpans = (result: any): InlineSpan[] =>
-          getAddresses(result)
-            .map((address: any, i: number) => {
+          getItems(result)
+            .map((item: any) => {
+              const address = item?.address;
               if (address?.kind !== 'inline') return null;
               const { start, end } = address.anchor ?? {};
               if (!start || !end) return null;
+              const node = item?.node;
               return {
                 blockId: start.blockId,
                 start: start.offset,
                 end: end.offset,
-                properties: getNodes(result)?.[i]?.properties ?? {},
+                properties: { href: node?.kind === 'hyperlink' ? node?.hyperlink?.href : undefined },
               };
             })
             .filter(Boolean);
 
-        const runResult = docApi.find({
-          select: { type: 'node', nodeType: 'run', kind: 'inline' },
-          within: context.address,
-          includeNodes: true,
-        });
-
         const hyperlinkResult = docApi.find({
-          select: { type: 'node', nodeType: 'hyperlink', kind: 'inline' },
-          within: context.address,
-          includeNodes: true,
+          select: { type: 'node', nodeKind: 'hyperlink', kind: 'inline' },
+          within: withinAddress,
         });
 
         return {
           ranges,
-          blockAddress: context.address,
-          runs: toInlineSpans(runResult),
+          blockAddress,
+          runs: buildRunsFromMatch(matchItem),
           hyperlinks: toInlineSpans(hyperlinkResult),
         } satisfies DocTextSnapshot;
       },
@@ -236,9 +314,46 @@ function createFixture(page: Page, editor: Locator, modKey: string) {
       if (!overlapsRange(run, snapshot.ranges)) continue;
       if (run.properties.bold === true) marks.add('bold');
       if (run.properties.italic === true) marks.add('italic');
-      if (run.properties.underline === true) marks.add('underline');
-      if (run.properties.strike === true || run.properties.strikethrough === true) marks.add('strike');
-      if (run.properties.highlight) marks.add('highlight');
+      const underline = run.properties.underline as unknown;
+      if (underline === true || (underline != null && typeof underline === 'object')) marks.add('underline');
+      if (
+        run.properties.strike === true ||
+        run.properties.strikethrough === true ||
+        run.properties.doubleStrikethrough === true
+      ) {
+        marks.add('strike');
+      }
+      if (
+        run.properties.highlight ||
+        run.properties.backgroundColor ||
+        run.properties.background ||
+        run.properties.shading ||
+        run.properties.fill
+      ) {
+        marks.add('highlight');
+      }
+    }
+    if (!marks.has('highlight')) {
+      const hasDomHighlight = await page.evaluate(
+        ({ searchText, targetOccurrence }) => {
+          const normalize = (value: string) => value.replace(/\s+/g, ' ').trim();
+          const expected = normalize(searchText);
+          if (!expected) return false;
+
+          let seen = 0;
+          for (const el of Array.from(document.querySelectorAll('mark'))) {
+            const marked = normalize(el.textContent ?? '');
+            if (!marked) continue;
+            if (marked.includes(expected) || expected.includes(marked)) {
+              if (seen === targetOccurrence) return true;
+              seen += 1;
+            }
+          }
+          return false;
+        },
+        { searchText: text, targetOccurrence: occurrence },
+      );
+      if (hasDomHighlight) marks.add('highlight');
     }
     for (const link of snapshot.hyperlinks) {
       if (overlapsRange(link, snapshot.ranges)) marks.add('link');
@@ -593,14 +708,14 @@ function createFixture(page: Page, editor: Locator, modKey: string) {
                 return Array.isArray(result?.matches) ? result.matches : [];
               };
 
-              const tableResult = docApi.find({ select: { type: 'node', nodeType: 'table' }, limit: 1 });
+              const tableResult = docApi.find({ select: { type: 'node', nodeKind: 'table' }, limit: 1 });
               const tableAddress = getAddresses(tableResult)[0];
               if (!tableAddress) return 'no table found in document';
 
               if (expectedRows !== undefined && expectedCols !== undefined) {
                 const expectedCellCount = expectedRows * expectedCols;
 
-                const rowResult = docApi.find({ select: { type: 'node', nodeType: 'tableRow' }, within: tableAddress });
+                const rowResult = docApi.find({ select: { type: 'node', nodeKind: 'tableRow' }, within: tableAddress });
                 const rowCount = getAddresses(rowResult).length;
 
                 // Only validate row count when the adapter exposes row-level querying.
@@ -609,13 +724,13 @@ function createFixture(page: Page, editor: Locator, modKey: string) {
                 }
 
                 const cellResult = docApi.find({
-                  select: { type: 'node', nodeType: 'tableCell' },
+                  select: { type: 'node', nodeKind: 'tableCell' },
                   within: tableAddress,
                 });
                 let cellCount = getAddresses(cellResult).length;
                 try {
                   const headerResult = docApi.find({
-                    select: { type: 'node', nodeType: 'tableHeader' },
+                    select: { type: 'node', nodeKind: 'tableHeader' },
                     within: tableAddress,
                   });
                   cellCount += getAddresses(headerResult).length;
@@ -626,7 +741,7 @@ function createFixture(page: Page, editor: Locator, modKey: string) {
                 // Fallback: count paragraphs when cell-level querying isn't available.
                 if (cellCount === 0) {
                   const paragraphResult = docApi.find({
-                    select: { type: 'node', nodeType: 'paragraph' },
+                    select: { type: 'node', nodeKind: 'paragraph' },
                     within: tableAddress,
                   });
                   cellCount = getAddresses(paragraphResult).length;
@@ -795,26 +910,35 @@ function createFixture(page: Page, editor: Locator, modKey: string) {
           page.evaluate(
             ({ searchText, matchIndex }) => {
               const docApi = (window as any).editor?.doc;
-              if (!docApi?.find || !docApi?.getNode) {
-                throw new Error('Document API is unavailable: expected editor.doc.find/getNode.');
+              if (!docApi?.query?.match || !docApi?.getNode) {
+                throw new Error('Document API is unavailable: expected editor.doc.query.match/getNode.');
               }
 
-              const getContexts = (result: any): any[] => {
-                const discoveryItems = Array.isArray(result?.items) ? result.items : [];
-                if (discoveryItems.length > 0) {
-                  return discoveryItems.map((item: any) => item?.context).filter(Boolean);
-                }
-                return Array.isArray(result?.context) ? result.context : [];
+              const getAddress = (item: any): any => {
+                if (!item || typeof item !== 'object') return null;
+                if (item.address) return item.address;
+                return item.context?.address ?? null;
               };
 
-              const textResult = docApi.find({
+              const textResult = docApi.query.match({
                 select: { type: 'text', pattern: searchText, mode: 'contains', caseSensitive: true },
+                require: 'any',
               });
-              const contexts = getContexts(textResult);
-              const context = contexts[matchIndex];
-              if (!context?.address) return null;
+              const items = Array.isArray(textResult?.items) ? textResult.items : [];
+              const address = getAddress(items[matchIndex]);
+              if (!address) return null;
 
-              const node = docApi.getNode(context.address);
+              const nodeResult = docApi.getNode(address);
+              const node = nodeResult?.node ?? nodeResult;
+              if (!node || typeof node !== 'object') return null;
+
+              if (node.kind === 'paragraph') {
+                return node.paragraph?.props?.alignment ?? node.paragraph?.resolved?.alignment ?? null;
+              }
+              if (node.kind === 'heading') {
+                return node.heading?.props?.alignment ?? node.heading?.resolved?.alignment ?? null;
+              }
+
               return node?.properties?.alignment ?? null;
             },
             { searchText: text, matchIndex: occurrence },

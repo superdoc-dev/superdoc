@@ -1,7 +1,7 @@
 ---
 title: find
 sidebarTitle: find
-description: Search the document for nodes matching type, text, or attribute criteria.
+description: Search the document for text or node matches using SDM/1 selectors.
 ---
 
 {/* GENERATED FILE: DO NOT EDIT. Regenerate via `pnpm run docapi:sync`. */}
@@ -10,7 +10,7 @@ description: Search the document for nodes matching type, text, or attribute cri
 
 ## Summary
 
-Search the document for nodes matching type, text, or attribute criteria.
+Search the document for text or node matches using SDM/1 selectors.
 
 - Operation ID: `find`
 - API member path: `editor.doc.find(...)`
@@ -22,7 +22,7 @@ Search the document for nodes matching type, text, or attribute criteria.
 
 ## Expected result
 
-Returns a FindOutput with matched items array and total count, or an empty items array if no nodes match.
+Returns an SDFindResult envelope ({ total, limit, offset, items }). Each item is an SDNodeResult ({ node, address }).
 
 ## Input fields
 

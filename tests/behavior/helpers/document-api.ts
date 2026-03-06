@@ -46,15 +46,74 @@ export async function findTextContexts(
 ): Promise<MatchContext[]> {
   return page.evaluate(
     ({ searchPattern, searchMode, caseSensitive }) => {
-      const result = (window as any).editor.doc.find({
-        select: { type: 'text', pattern: searchPattern, mode: searchMode, caseSensitive },
-      });
+      const docApi = (window as any).editor.doc;
+      const toRanges = (item: any): Array<{ kind: 'text'; blockId: string; range: { start: number; end: number } }> => {
+        const blocks = Array.isArray(item?.blocks) ? item.blocks : [];
+        const fromBlocks = blocks
+          .map((block: any) => {
+            const blockId = block?.blockId;
+            const start = block?.range?.start;
+            const end = block?.range?.end;
+            if (typeof blockId !== 'string' || typeof start !== 'number' || typeof end !== 'number') return null;
+            return { kind: 'text' as const, blockId, range: { start, end } };
+          })
+          .filter(Boolean);
 
-      const discoveryItems = Array.isArray(result?.items) ? result.items : [];
-      if (discoveryItems.length > 0) {
-        return discoveryItems.map((item: any) => item?.context).filter(Boolean);
+        if (fromBlocks.length > 0) return fromBlocks;
+
+        const legacyRanges = Array.isArray(item?.context?.textRanges) ? item.context.textRanges : [];
+        return legacyRanges.filter(
+          (range: any) =>
+            range?.kind === 'text' &&
+            typeof range?.blockId === 'string' &&
+            typeof range?.range?.start === 'number' &&
+            typeof range?.range?.end === 'number',
+        );
+      };
+
+      const queryMatch = docApi?.query?.match;
+      if (typeof queryMatch === 'function') {
+        const result = queryMatch({
+          select: {
+            type: 'text',
+            pattern: searchPattern,
+            mode: searchMode === 'exact' ? 'contains' : searchMode,
+            caseSensitive,
+          },
+          require: 'any',
+        });
+        const items = Array.isArray(result?.items) ? result.items : [];
+        return items
+          .map((item: any) => {
+            const textRanges = toRanges(item);
+            const address = item?.address ?? item?.context?.address;
+            if (!address || textRanges.length === 0) return null;
+            return {
+              address,
+              snippet: typeof item?.snippet === 'string' ? item.snippet : (item?.context?.snippet ?? ''),
+              highlightRange:
+                item?.highlightRange &&
+                typeof item.highlightRange.start === 'number' &&
+                typeof item.highlightRange.end === 'number'
+                  ? item.highlightRange
+                  : (item?.context?.highlightRange ?? { start: 0, end: 0 }),
+              textRanges,
+            };
+          })
+          .filter(Boolean);
       }
 
+      // Legacy fallback
+      const result = docApi.find({
+        select: {
+          type: 'text',
+          pattern: searchPattern,
+          mode: searchMode === 'exact' ? 'contains' : searchMode,
+          caseSensitive,
+        },
+      });
+      const items = Array.isArray(result?.items) ? result.items : [];
+      if (items.length > 0) return items.map((item: any) => item?.context).filter(Boolean);
       return Array.isArray(result?.context) ? result.context : [];
     },
     {
@@ -97,42 +156,37 @@ export async function addCommentByText(
     caseSensitive?: boolean;
   },
 ): Promise<string> {
-  const commentId = await page.evaluate((payload) => {
-    const docApi = (window as any).editor.doc;
-    type ReceiptLike = {
-      success?: boolean;
-      inserted?: Array<{ entityType?: string; entityId?: string }>;
-      failure?: { code?: string; message?: string };
-    };
-    const found = docApi.find({
-      select: {
-        type: 'text',
-        pattern: payload.pattern,
-        mode: payload.mode ?? 'contains',
-        caseSensitive: payload.caseSensitive ?? true,
-      },
-    });
-    const discoveryItems = Array.isArray(found?.items) ? found.items : [];
-    const context =
-      discoveryItems.length > 0
-        ? discoveryItems[payload.occurrence ?? 0]?.context
-        : found?.context?.[payload.occurrence ?? 0];
-    const target = context?.textRanges?.[0];
-    if (!target) throw new Error(`No text range found for pattern "${payload.pattern}".`);
-    const receipt = docApi.comments.create({ target, text: payload.text }) as ReceiptLike | undefined;
-    if (!receipt || receipt.success !== true) {
-      const failureCode = receipt?.failure?.code ?? 'UNKNOWN';
-      const failureMessage = receipt?.failure?.message ?? 'comments.create returned a non-success receipt';
-      throw new Error(`comments.create failed: ${failureCode} ${failureMessage}`);
-    }
-    const insertedEntity = Array.isArray(receipt.inserted)
-      ? receipt.inserted.find((entry) => entry?.entityType === 'comment' && typeof entry?.entityId === 'string')
-      : null;
-    if (!insertedEntity) {
-      throw new Error('comments.create succeeded but no inserted comment entityId was returned.');
-    }
-    return insertedEntity.entityId as string;
-  }, input);
+  const target = await findFirstTextRange(page, input.pattern, {
+    occurrence: input.occurrence,
+    mode: input.mode,
+    caseSensitive: input.caseSensitive,
+  });
+  if (!target) throw new Error(`No text range found for pattern "${input.pattern}".`);
+
+  const commentId = await page.evaluate(
+    (payload) => {
+      const docApi = (window as any).editor.doc;
+      type ReceiptLike = {
+        success?: boolean;
+        inserted?: Array<{ entityType?: string; entityId?: string }>;
+        failure?: { code?: string; message?: string };
+      };
+      const receipt = docApi.comments.create({ target: payload.target, text: payload.text }) as ReceiptLike | undefined;
+      if (!receipt || receipt.success !== true) {
+        const failureCode = receipt?.failure?.code ?? 'UNKNOWN';
+        const failureMessage = receipt?.failure?.message ?? 'comments.create returned a non-success receipt';
+        throw new Error(`comments.create failed: ${failureCode} ${failureMessage}`);
+      }
+      const insertedEntity = Array.isArray(receipt.inserted)
+        ? receipt.inserted.find((entry) => entry?.entityType === 'comment' && typeof entry?.entityId === 'string')
+        : null;
+      if (!insertedEntity) {
+        throw new Error('comments.create succeeded but no inserted comment entityId was returned.');
+      }
+      return insertedEntity.entityId as string;
+    },
+    { target, text: input.text },
+  );
   return commentId;
 }
 

@@ -232,9 +232,9 @@ export const OPERATION_DEFINITIONS = {
   },
   find: {
     memberPath: 'find',
-    description: 'Search the document for nodes matching type, text, or attribute criteria.',
+    description: 'Search the document for text or node matches using SDM/1 selectors.',
     expectedResult:
-      'Returns a FindOutput with matched items array and total count, or an empty items array if no nodes match.',
+      'Returns an SDFindResult envelope ({ total, limit, offset, items }). Each item is an SDNodeResult ({ node, address }).',
     requiresDocumentContext: true,
     metadata: readOperation({
       idempotency: 'idempotent',
@@ -248,7 +248,7 @@ export const OPERATION_DEFINITIONS = {
   getNode: {
     memberPath: 'getNode',
     description: 'Retrieve a single node by target position.',
-    expectedResult: 'Returns a NodeInfo object with the node type, address, content, and typed properties.',
+    expectedResult: 'Returns an SDNodeResult envelope with the projected SDM/1 node and canonical address.',
     requiresDocumentContext: true,
     metadata: readOperation({
       idempotency: 'idempotent',
@@ -260,7 +260,7 @@ export const OPERATION_DEFINITIONS = {
   getNodeById: {
     memberPath: 'getNodeById',
     description: 'Retrieve a single node by its unique ID.',
-    expectedResult: 'Returns a NodeInfo object with the node type, address, content, and typed properties.',
+    expectedResult: 'Returns an SDNodeResult envelope with the projected SDM/1 node and canonical address.',
     requiresDocumentContext: true,
     metadata: readOperation({
       idempotency: 'idempotent',

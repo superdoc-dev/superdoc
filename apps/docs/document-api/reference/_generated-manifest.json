@@ -612,5 +612,5 @@
     }
   ],
   "marker": "{/* GENERATED FILE: DO NOT EDIT. Regenerate via `pnpm run docapi:sync`. */}",
-  "sourceHash": "54ebc3549897641c98f9d9136419ca79dca6c001bed406f122271ea82b743a4a"
+  "sourceHash": "abbf45ec937fd52a118ca97834d6f49169eb012199f7af0c3b7e995df4608429"
 }

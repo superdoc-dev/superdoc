@@ -1107,10 +1107,16 @@ export interface DocumentApiAdapters {
  * @example
  * ```ts
  * const api = createDocumentApi(adapters);
- * const result = api.find({ nodeType: 'heading' });
- * for (const item of result.items) {
- *   const node = api.getNode(item.address);
- *   console.log(node.properties);
+ *
+ * const match = api.query.match({
+ *   select: { type: 'node', nodeType: 'heading' },
+ *   require: 'first',
+ * });
+ *
+ * const address = match.items?.[0]?.address;
+ * if (address) {
+ *   const nodeResult = api.getNode(address);
+ *   console.log(nodeResult.node.kind);
  * }
  * ```
  */

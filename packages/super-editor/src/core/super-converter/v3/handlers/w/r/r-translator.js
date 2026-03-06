@@ -8,11 +8,8 @@ import { translator as wHyperlinkTranslator } from '../hyperlink/hyperlink-trans
 import { translator as wRPrTranslator } from '../rpr';
 import validXmlAttributes from './attributes/index.js';
 import { handleStyleChangeMarksV2 } from '../../../../v2/importer/markImporter.js';
-import {
-  getParagraphStyleRunPropertiesFromStylesXml,
-  runPropertiesOverrides,
-} from '@converter/export-helpers/run-properties-export.js';
-import { encodeMarksFromRPr, resolveRunPropertiesWithInlineFlag } from '../../../../styles.js';
+import { getParagraphStyleRunPropertiesFromStylesXml } from '@converter/export-helpers/run-properties-export.js';
+import { encodeMarksFromRPr, resolveRunProperties } from '../../../../styles.js';
 /** @type {import('@translator').XmlNodeName} */
 const XML_NODE_NAME = 'w:r';
 
@@ -156,16 +153,16 @@ const encode = (params, encodedAttrs = {}) => {
       numRows: params.extraParams.totalRows,
     };
   }
-  // Resolve with inline flag: inlineKeys = keys from the run's w:rPr (marked at combine step for export)
-  const { runProperties: resolvedRunProperties, inlineKeys: runPropertiesInlineKeysFromCombine } =
-    resolveRunPropertiesWithInlineFlag(
-      params,
-      runProperties ?? {},
-      paragraphProperties,
-      tableInfo,
-      false,
-      params?.extraParams?.numberingDefinedInline,
-    );
+  const runPropertiesInlineKeysFromCombine =
+    runProperties && typeof runProperties === 'object' ? Object.keys(runProperties) : [];
+  const resolvedRunProperties = resolveRunProperties(
+    params,
+    runProperties ?? {},
+    paragraphProperties,
+    tableInfo,
+    false,
+    params?.extraParams?.numberingDefinedInline,
+  );
 
   // Parsing marks from run properties
   const marksResult = encodeMarksFromRPr(resolvedRunProperties, params?.docx);
@@ -308,17 +305,20 @@ const decode = (params, decodedAttrs = {}) => {
   const runAttrs = runNodeForExport.attrs || {};
   const runProperties = runAttrs.runProperties || {};
   const inlineKeys = runAttrs.runPropertiesInlineKeys;
+  const savedStyleKeys = runAttrs.runPropertiesStyleKeys;
 
   // Export only run properties that are inline and that override the run's style (or are not from style).
   // When there are no inline keys, export nothing so we don't write inherited props into w:rPr.
   let runPropertiesToExport = {};
   if (Array.isArray(inlineKeys) && inlineKeys.length > 0) {
-    let styleRPr = {};
-    if (runProperties?.styleId && params?.docx) {
-      styleRPr = getParagraphStyleRunPropertiesFromStylesXml(params.docx, runProperties.styleId, params) || {};
+    let styleKeys = Array.isArray(savedStyleKeys) ? savedStyleKeys : null;
+    if (styleKeys === null && runProperties?.styleId && params?.docx) {
+      const styleRPr = getParagraphStyleRunPropertiesFromStylesXml(params.docx, runProperties.styleId, params) || {};
+      styleKeys = Object.keys(styleRPr);
     }
-    const overrides = runPropertiesOverrides(runProperties, styleRPr);
-    const exportKeys = inlineKeys.filter((k) => k in (runProperties || {}) && k in overrides);
+    const exportKeys = inlineKeys.filter(
+      (k) => k in (runProperties || {}) && !(Array.isArray(styleKeys) && styleKeys.includes(k)),
+    );
     if (exportKeys.length > 0) {
       runPropertiesToExport = Object.fromEntries(exportKeys.map((k) => [k, runProperties[k]]));
     }

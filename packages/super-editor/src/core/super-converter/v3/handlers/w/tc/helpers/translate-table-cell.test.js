@@ -99,11 +99,11 @@ describe('translate-table-cell helpers', () => {
     expect(byName['w:tcW']).toBeTruthy();
   });
 
-  it('generateTableCellProperties returns undefined when tableCellPropertiesInlineKeys is empty array', () => {
-    // Cell had no w:tcPr at all (all props from table style); decoder returns undefined for empty props
+  it('generateTableCellProperties does not output w:tcMar when tableCellPropertiesInlineKeys is empty array', () => {
+    // Cell had no w:tcPr at all (all props from table style) — margins should stay table-style-only.
     const node = {
       attrs: {
-        tableCellProperties: { cellWidth: { value: 1000, type: 'dxa' }, cellMargins: { marginTop: { value: 240 } } },
+        tableCellProperties: { cellWidth: { value: 1000, type: 'dxa' } },
         tableCellPropertiesInlineKeys: [],
         colwidth: [50],
         widthUnit: 'px',
@@ -111,7 +111,9 @@ describe('translate-table-cell helpers', () => {
       },
     };
     const tcPr = generateTableCellProperties(node);
-    expect(tcPr).toBeUndefined();
+    const byName = Object.fromEntries(tcPr.elements.map((e) => [e.name, e]));
+    expect(byName['w:tcMar']).toBeUndefined();
+    expect(byName['w:tcW']).toBeTruthy();
   });
 
   it('translateTableCell wraps children with tcPr as the first element', async () => {

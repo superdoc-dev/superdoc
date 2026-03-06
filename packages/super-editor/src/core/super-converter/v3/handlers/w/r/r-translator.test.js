@@ -154,13 +154,19 @@ describe('w:r r-translator (node)', () => {
     expect(child.attrs).toEqual({ originalName: 'w:custom' });
   });
 
-  it('passes tableInfo and numberingDefinedInline to resolveRunPropertiesWithInlineFlag when table context is available', () => {
+  it('passes tableInfo and numberingDefinedInline to resolveRunProperties and preserves inline keys when table context is available', () => {
     const resolveRunPropertiesSpy = vi
-      .spyOn(converterStyles, 'resolveRunPropertiesWithInlineFlag')
-      .mockImplementation(() => ({ runProperties: { bold: true }, inlineKeys: [] }));
+      .spyOn(converterStyles, 'resolveRunProperties')
+      .mockImplementation(() => ({ bold: true }));
     const runNode = {
       name: 'w:r',
-      elements: [{ name: 'w:t', elements: [{ type: 'text', text: 'Cell' }] }],
+      elements: [
+        {
+          name: 'w:rPr',
+          elements: [{ name: 'w:b' }, { name: 'w:color', attributes: { 'w:val': 'FF0000' } }],
+        },
+        { name: 'w:t', elements: [{ type: 'text', text: 'Cell' }] },
+      ],
     };
 
     const params = {
@@ -178,12 +184,12 @@ describe('w:r r-translator (node)', () => {
       },
     };
 
-    translator.encode(params);
+    const result = translator.encode(params);
 
     expect(resolveRunPropertiesSpy).toHaveBeenCalledTimes(1);
     expect(resolveRunPropertiesSpy).toHaveBeenCalledWith(
       params,
-      {},
+      { bold: true, color: { val: 'FF0000' } },
       { styleId: 'ListParagraph' },
       {
         rowIndex: 2,
@@ -195,14 +201,13 @@ describe('w:r r-translator (node)', () => {
       false,
       true,
     );
+    expect(result.attrs.runPropertiesInlineKeys).toEqual(['bold', 'color']);
 
     resolveRunPropertiesSpy.mockRestore();
   });
 
-  it('passes null tableInfo to resolveRunPropertiesWithInlineFlag when table context is incomplete', () => {
-    const resolveRunPropertiesSpy = vi
-      .spyOn(converterStyles, 'resolveRunPropertiesWithInlineFlag')
-      .mockImplementation(() => ({ runProperties: {}, inlineKeys: [] }));
+  it('passes null tableInfo to resolveRunProperties when table context is incomplete', () => {
+    const resolveRunPropertiesSpy = vi.spyOn(converterStyles, 'resolveRunProperties').mockImplementation(() => ({}));
     const runNode = {
       name: 'w:r',
       elements: [{ name: 'w:t', elements: [{ type: 'text', text: 'No table context' }] }],

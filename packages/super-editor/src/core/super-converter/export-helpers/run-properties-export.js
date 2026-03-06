@@ -39,7 +39,7 @@ export function getParagraphStyleRunPropertiesFromStylesXml(docx, styleId, param
 
   // Merge rPr elements: base first, then derived (later overrides by element name)
   const byName = {};
-  chain.forEach((rPr) => {
+  chain.reverse().forEach((rPr) => {
     (rPr.elements || []).forEach((el) => {
       if (el?.name) byName[el.name] = el;
     });
@@ -52,37 +52,4 @@ export function getParagraphStyleRunPropertiesFromStylesXml(docx, styleId, param
   const encodeParams = { ...params, docx: params.docx ?? docx, nodes: [mergedRPr] };
   const encoded = wRPrTranslator.encode(encodeParams);
   return encoded ?? {};
-}
-
-/**
- * Return only run properties that differ from the style (overrides). Used so we don't
- * write inherited props in w:rPr when they're already in styles.xml.
- * @param {Object} runProperties - Full resolved run properties
- * @param {Object} styleRunProperties - Run properties from the paragraph/style in styles.xml
- * @returns {Object} Run properties to output (overrides only)
- */
-export function runPropertiesOverrides(runProperties, styleRunProperties) {
-  if (!runProperties || typeof runProperties !== 'object') return {};
-  if (!styleRunProperties || Object.keys(styleRunProperties).length === 0) return { ...runProperties };
-
-  const out = {};
-  for (const key of Object.keys(runProperties)) {
-    const runVal = runProperties[key];
-    const styleVal = styleRunProperties[key];
-    if (styleVal === undefined || !valueEquals(runVal, styleVal)) {
-      out[key] = runVal;
-    }
-  }
-  return out;
-}
-
-function valueEquals(a, b) {
-  if (a === b) return true;
-  if (a == null || b == null) return false;
-  if (typeof a !== 'object' || typeof b !== 'object') return false;
-  try {
-    return JSON.stringify(a) === JSON.stringify(b);
-  } catch {
-    return false;
-  }
 }

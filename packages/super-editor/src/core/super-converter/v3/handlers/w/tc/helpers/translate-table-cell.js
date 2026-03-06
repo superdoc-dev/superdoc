@@ -123,18 +123,6 @@ export function generateTableCellProperties(node) {
     }
   }
 
-  // Only output tcPr keys that were present in the cell's w:tcPr (exclude inherited from table style). When inlineKeys was not set (e.g. new cell), do not filter.
-  if (Array.isArray(inlineKeys)) {
-    if (inlineKeys.length === 0) {
-      tableCellProperties = {};
-    } else {
-      const allowed = new Set(inlineKeys);
-      for (const key of Object.keys(tableCellProperties)) {
-        if (!allowed.has(key)) delete tableCellProperties[key];
-      }
-    }
-  }
-
   const result = tcPrTranslator.decode({ node: { ...node, attrs: { ...node.attrs, tableCellProperties } } });
   return result;
 }

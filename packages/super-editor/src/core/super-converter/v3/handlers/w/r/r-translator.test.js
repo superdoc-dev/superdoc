@@ -1,6 +1,7 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { translator, config } from './r-translator.js';
 import * as converterStyles from '../../../../styles.js';
+import * as runPropertiesExport from '../../../../export-helpers/run-properties-export.js';
 
 describe('w:r r-translator (node)', () => {
   it('exposes correct metadata', () => {
@@ -204,6 +205,34 @@ describe('w:r r-translator (node)', () => {
     expect(result.attrs.runPropertiesInlineKeys).toEqual(['bold', 'color']);
 
     resolveRunPropertiesSpy.mockRestore();
+  });
+
+  it('sets runPropertiesOverrideKeys to keys that are both in w:rPr and in the run style', () => {
+    const getStyleRPrSpy = vi
+      .spyOn(runPropertiesExport, 'getParagraphStyleRunPropertiesFromStylesXml')
+      .mockReturnValue({ color: { val: '0000FF' } });
+    const runNode = {
+      name: 'w:r',
+      elements: [
+        {
+          name: 'w:rPr',
+          elements: [
+            { name: 'w:rStyle', attributes: { 'w:val': 'Heading1' } },
+            { name: 'w:b' },
+            { name: 'w:color', attributes: { 'w:val': 'FF0000' } },
+          ],
+        },
+        { name: 'w:t', elements: [{ type: 'text', text: 'Text' }] },
+      ],
+    };
+    const params = {
+      nodes: [runNode],
+      nodeListHandler: { handler: vi.fn(() => [{ type: 'text', text: 'Text', marks: [] }]) },
+      docx: {},
+    };
+    const result = translator.encode(params);
+    expect(result.attrs.runPropertiesOverrideKeys).toEqual(['color']);
+    getStyleRPrSpy.mockRestore();
   });
 
   it('passes null tableInfo to resolveRunProperties when table context is incomplete', () => {
@@ -459,6 +488,20 @@ describe('w:r r-translator decode (export only inline run properties)', () => {
     const result = translator.decode(params);
     const rPr = result?.elements?.find((el) => el?.name === 'w:rPr');
     expect(rPr).toBeDefined();
+    expect((rPr.elements ?? []).map((e) => e.name)).toContain('w:b');
+  });
+
+  it('emits w:rPr with style key when runPropertiesOverrideKeys includes it (preserves user override)', () => {
+    const params = runWithContent({
+      runProperties: { bold: true, color: { val: 'FF0000' } },
+      runPropertiesInlineKeys: ['bold', 'color'],
+      runPropertiesStyleKeys: ['color'],
+      runPropertiesOverrideKeys: ['color'],
+    });
+    const result = translator.decode(params);
+    const rPr = result?.elements?.find((el) => el?.name === 'w:rPr');
+    expect(rPr).toBeDefined();
+    expect((rPr.elements ?? []).map((e) => e.name)).toContain('w:color');
     expect((rPr.elements ?? []).map((e) => e.name)).toContain('w:b');
   });
 });

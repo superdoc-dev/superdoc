@@ -47,6 +47,12 @@ export const Run = OxmlNode.create({
         rendered: false,
         keepOnSplit: true,
       },
+      /** Keys that override the run's style (in w:rPr at import, or changed by user). Export includes these so user overrides are preserved. */
+      runPropertiesOverrideKeys: {
+        default: null,
+        rendered: false,
+        keepOnSplit: true,
+      },
       rsidR: {
         default: null,
         rendered: false,

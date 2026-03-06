@@ -37,7 +37,7 @@ export function getParagraphStyleRunPropertiesFromStylesXml(docx, styleId, param
 
   if (chain.length === 0) return {};
 
-  // Merge rPr elements: base first, then derived (later overrides by element name)
+  // Chain is derived → base (walk from current to basedOn). Reverse so we merge base first, then derived (derived overrides base).
   const byName = {};
   chain.reverse().forEach((rPr) => {
     (rPr.elements || []).forEach((el) => {

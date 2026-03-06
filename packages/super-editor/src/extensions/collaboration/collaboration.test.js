@@ -61,19 +61,22 @@ const createYDocStub = ({ docxValue, hasDocx = true } = {}) => {
   if (!hasDocx) metas.store.delete('docx');
   const media = createYMap();
   const headerFooterJson = createYMap();
+  const converterMeta = createYMap();
   const listeners = {};
+  const mapsByName = {
+    meta: metas,
+    media,
+    headerFooterJson,
+    converterMeta,
+  };
   return {
     getXmlFragment: vi.fn(() => ({ fragment: true })),
-    getMap: vi.fn((name) => {
-      if (name === 'meta') return metas;
-      if (name === 'headerFooterJson') return headerFooterJson;
-      return media;
-    }),
+    getMap: vi.fn((name) => mapsByName[name] || createYMap()),
     on: vi.fn((event, handler) => {
       listeners[event] = handler;
     }),
     transact: vi.fn((fn, meta) => fn(meta)),
-    _maps: { metas, media, headerFooterJson },
+    _maps: { metas, media, headerFooterJson, converterMeta },
     _listeners: listeners,
   };
 };
@@ -420,6 +423,8 @@ describe('collaboration extension', () => {
       },
       storage: { image: { media: {} } },
       emit: vi.fn(),
+      on: vi.fn(),
+      off: vi.fn(),
       view: { state: editorState, dispatch: vi.fn() },
     };
 
@@ -456,6 +461,8 @@ describe('collaboration extension', () => {
         },
         storage: { image: { media: {} } },
         emit: vi.fn(),
+        on: vi.fn(),
+        off: vi.fn(),
         view: { state: { doc: {} }, dispatch: vi.fn() },
       };
       const context = { editor, options: {} };
@@ -603,6 +610,8 @@ describe('collaboration extension', () => {
         },
         storage: { image: { media: {} } },
         emit: vi.fn(),
+        on: vi.fn(),
+        off: vi.fn(),
         view: { state: editorState, dispatch: vi.fn() },
       };
 
@@ -641,6 +650,8 @@ describe('collaboration extension', () => {
         },
         storage: { image: { media: {} } },
         emit: vi.fn(),
+        on: vi.fn(),
+        off: vi.fn(),
         view: { state: editorState, dispatch: vi.fn() },
       };
 
@@ -673,6 +684,8 @@ describe('collaboration extension', () => {
         },
         storage: { image: { media: {} } },
         emit: vi.fn(),
+        on: vi.fn(),
+        off: vi.fn(),
         view: { state: { doc: {} }, dispatch: vi.fn() },
       };
 
@@ -685,6 +698,8 @@ describe('collaboration extension', () => {
         },
         storage: { image: { media: {} } },
         emit: vi.fn(),
+        on: vi.fn(),
+        off: vi.fn(),
         view: { state: { doc: {} }, dispatch: vi.fn() },
       };
 
@@ -736,6 +751,8 @@ describe('collaboration extension', () => {
           },
         },
         emit: vi.fn(),
+        on: vi.fn(),
+        off: vi.fn(),
         view: { state: { doc: {} }, dispatch: vi.fn() },
       };
 
@@ -818,6 +835,8 @@ describe('collaboration extension', () => {
         },
         storage: { image: { media: {} } },
         emit: vi.fn(),
+        on: vi.fn(),
+        off: vi.fn(),
         view: { state: editorState, dispatch: vi.fn() },
       };
 

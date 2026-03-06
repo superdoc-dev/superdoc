@@ -16,7 +16,6 @@ import {
   OPERATION_IDS,
 } from '@superdoc/document-api';
 import { TrackFormatMarkName } from '../extensions/track-changes/constants.js';
-import { isCollaborationActive } from './collaboration-detection.js';
 
 type EditorCommandName = string;
 type EditorWithBlockNodeHelper = Editor & {
@@ -294,7 +293,6 @@ function isStylesApplyAvailable(editor: Editor): boolean {
   const converter = (editor as unknown as { converter?: { convertedXml?: Record<string, unknown> } }).converter;
   if (!converter?.convertedXml?.['word/styles.xml']) return false;
   if (!hasStylesRoot(converter.convertedXml['word/styles.xml'])) return false;
-  if (isCollaborationActive(editor)) return false;
   return true;
 }
 
@@ -306,7 +304,6 @@ function getStylesApplyUnavailableReason(editor: Editor): CapabilityReasonCode |
   if (!converter) return 'OPERATION_UNAVAILABLE';
   if (!converter.convertedXml?.['word/styles.xml']) return 'STYLES_PART_MISSING';
   if (!hasStylesRoot(converter.convertedXml['word/styles.xml'])) return 'STYLES_PART_MISSING';
-  if (isCollaborationActive(editor)) return 'COLLABORATION_ACTIVE';
   return undefined;
 }
 

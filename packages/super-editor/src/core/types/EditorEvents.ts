@@ -129,4 +129,10 @@ export interface EditorEventMap extends DefaultEventMap {
 
   /** Called when page styles are updated */
   pageStyleUpdate: [{ pageMargins?: Record<string, unknown>; pageStyles: Record<string, unknown> }];
+
+  /** Called when stylesheet defaults change (local mutation via styles.apply) */
+  stylesDefaultsChanged: [];
+
+  /** Called when remote converter metadata arrives via Y.js (numbering, styles, etc.) */
+  remoteConverterMetaChanged: [{ key: string; data: unknown }];
 }

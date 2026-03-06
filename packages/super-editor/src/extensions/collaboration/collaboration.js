@@ -2,7 +2,15 @@ import { Extension } from '@core/index.js';
 import { PluginKey } from 'prosemirror-state';
 import { encodeStateAsUpdate } from 'yjs';
 import { ySyncPlugin, ySyncPluginKey, yUndoPluginKey, prosemirrorToYDoc } from 'y-prosemirror';
-import { updateYdocDocxData, applyRemoteHeaderFooterChanges } from '@extensions/collaboration/collaboration-helpers.js';
+import {
+  updateYdocDocxData,
+  applyRemoteHeaderFooterChanges,
+  pushAllHeaderFooterToYjs,
+  CONVERTER_META_KEYS,
+  pushConverterMetadata,
+  pushAllConverterMetadata,
+  applyRemoteConverterMetadata,
+} from '@extensions/collaboration/collaboration-helpers.js';
 
 export const CollaborationPluginKey = new PluginKey('collaboration');
 const headlessBindingStateByEditor = new WeakMap();
@@ -60,7 +68,6 @@ export const Collaboration = Extension.create({
     // Observer for remote header/footer JSON changes
     const headerFooterMap = this.options.ydoc.getMap('headerFooterJson');
     const headerFooterMapObserver = (event) => {
-      // Only process remote changes (not our own)
       if (event.transaction.local) return;
 
       event.changes.keys.forEach((change, key) => {
@@ -74,6 +81,48 @@ export const Collaboration = Extension.create({
     };
     headerFooterMap.observe(headerFooterMapObserver);
 
+    // Apply existing headerFooterJson data that arrived via Y.js sync
+    // before the observer was attached. Observers only fire for future
+    // changes, so data already present at join time would be missed.
+    if (typeof headerFooterMap.forEach === 'function') {
+      headerFooterMap.forEach((data, key) => {
+        if (data) {
+          applyRemoteHeaderFooterChanges(this.editor, key, data);
+        }
+      });
+    }
+
+    // Unified converter metadata sync (numbering, styles, and future types).
+    // ONE map, ONE observer — adding a new type only requires a key + trigger.
+    const converterMetaMap = this.options.ydoc.getMap('converterMeta');
+    const converterMetaObserver = (event) => {
+      if (event.transaction.local) return;
+      event.changes.keys.forEach((change, key) => {
+        if (change.action === 'add' || change.action === 'update') {
+          const data = converterMetaMap.get(key);
+          if (data) {
+            applyRemoteConverterMetadata(this.editor, key, data);
+          }
+        }
+      });
+    };
+    converterMetaMap.observe(converterMetaObserver);
+
+    // Apply existing converter metadata (handles join-after-sync timing)
+    for (const key of CONVERTER_META_KEYS) {
+      const data = converterMetaMap.get(key);
+      if (data) applyRemoteConverterMetadata(this.editor, key, data);
+    }
+
+    // Push triggers: local changes → Y.js map
+    const editorEventHandlers = {
+      'list-definitions-change': () => pushConverterMetadata(this.editor, 'numbering'),
+      stylesDefaultsChanged: () => pushConverterMetadata(this.editor, 'styles'),
+    };
+    for (const [event, handler] of Object.entries(editorEventHandlers)) {
+      this.editor.on(event, handler);
+    }
+
     // Store cleanup references in a non-reactive WeakMap (NOT this.options)
     // to avoid Vue's deep traverse hitting circular references in Y.js Maps.
     collaborationCleanupByEditor.set(this.editor, {
@@ -81,6 +130,9 @@ export const Collaboration = Extension.create({
       metaMapObserver,
       headerFooterMap,
       headerFooterMapObserver,
+      converterMetaMap,
+      converterMetaObserver,
+      editorEventHandlers,
       documentListenerCleanup,
     });
 
@@ -109,6 +161,12 @@ export const Collaboration = Extension.create({
     // Clean up Y.js map observers to prevent memory leaks
     cleanup.metaMap.unobserve(cleanup.metaMapObserver);
     cleanup.headerFooterMap.unobserve(cleanup.headerFooterMapObserver);
+    cleanup.converterMetaMap.unobserve(cleanup.converterMetaObserver);
+
+    // Clean up editor event listeners for push triggers
+    for (const [event, handler] of Object.entries(cleanup.editorEventHandlers)) {
+      this.editor.off(event, handler);
+    }
 
     // Clean up ydoc afterTransaction listener and debounce timer
     cleanup.documentListenerCleanup();
@@ -150,6 +208,13 @@ export const initializeMetaMap = (ydoc, editor) => {
     seededAt: new Date().toISOString(),
     source: 'browser',
   });
+
+  // Push initial converter metadata so joining clients get headers,
+  // numbering, and styles immediately (not just via 30s DOCX sync).
+  if (editor.converter) {
+    pushAllHeaderFooterToYjs(editor);
+    pushAllConverterMetadata(editor);
+  }
 
   const mediaMap = ydoc.getMap('media');
   Object.entries(editor.options.mediaFiles).forEach(([key, value]) => {

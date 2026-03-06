@@ -2804,6 +2804,22 @@ export class PresentationEditor extends EventEmitter {
       handler: handleRemoteHeaderFooterChanged as (...args: unknown[]) => void,
     });
 
+    // Remote converter metadata arrived via Y.js (numbering, styles, headerFooterIds, etc.)
+    // Re-render so the style engine and layout pipeline pick up the changes.
+    // For headerFooterIds: refresh the H/F manager so it discovers new sections.
+    const handleRemoteConverterMetaChanged = (payload: { key: string }) => {
+      if (payload?.key === 'headerFooterIds') {
+        this.#headerFooterSession?.manager?.refresh();
+      }
+      this.#pendingDocChange = true;
+      this.#scheduleRerender();
+    };
+    this.#editor.on('remoteConverterMetaChanged', handleRemoteConverterMetaChanged);
+    this.#editorListeners.push({
+      event: 'remoteConverterMetaChanged',
+      handler: handleRemoteConverterMetaChanged as (...args: unknown[]) => void,
+    });
+
     // Listen for comment selection changes to update Layout Engine highlighting
     const handleCommentsUpdate = (payload: { activeCommentId?: string | null }) => {
       if (this.#domPainter?.setActiveComment) {

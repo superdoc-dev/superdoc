@@ -343,8 +343,9 @@ export const onHeaderFooterDataUpdate = ({ editor, transaction }, mainEditor, se
     mainEditor.converter.headerFooterModified = true;
   }
 
-  // Push header/footer JSON to Yjs for real-time sync with collaborators
-  // This is lightweight (~1KB) and provides immediate visual sync
+  // Push header/footer JSON to Yjs for real-time sync with collaborators.
+  // Includes headerIds/footerIds atomically so the receiver can resolve
+  // which section types have headers/footers.
   pushHeaderFooterToYjs(mainEditor, type, sectionId, updatedData);
 
   // NOTE: We intentionally do NOT call updateYdocDocxData here.

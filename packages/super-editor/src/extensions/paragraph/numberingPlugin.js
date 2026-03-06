@@ -220,6 +220,11 @@ export function createNumberingPlugin(editor) {
           const definitionDetails = ListHelpers.getListDefinitionDetails({ numId, level, editor });
 
           if (!definitionDetails || Object.keys(definitionDetails).length === 0) {
+            // In collaboration, definitions may arrive after the document change.
+            // Don't clear a synced listRendering when definitions are missing locally.
+            if (editor.options?.ydoc && node.attrs.listRendering) {
+              return;
+            }
             // Treat as normal paragraph if definition is missing
             tr.setNodeAttribute(pos, 'listRendering', null);
             bumpBlockRev(node, pos);

@@ -364,7 +364,8 @@ const applyGhostListMarkerOffsets = (node: PMNode, paragraphBlocks: FlowBlock[],
     return;
   }
   const listRendering = getListRendering(node.attrs?.listRendering);
-  if (!listRendering) {
+  const numberingType = listRendering?.numberingType;
+  if (!numberingType || numberingType === 'bullet') {
     return;
   }
   const sourceOrdinal = getNodeListOrdinal(node);
@@ -410,7 +411,7 @@ const applyGhostListMarkerOffsets = (node: PMNode, paragraphBlocks: FlowBlock[],
     });
     return;
   }
-  const replacementToken = formatListOrdinalToken(listRendering.numberingType, adjustedOrdinal);
+  const replacementToken = formatListOrdinalToken(numberingType, adjustedOrdinal);
   if (!replacementToken) {
     return;
   }

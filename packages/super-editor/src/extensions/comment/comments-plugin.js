@@ -421,11 +421,10 @@ export const CommentsPlugin = Extension.create({
 
   addPmPlugins() {
     const editor = this.editor;
+    const isHeadless = editor.options.isHeadless;
     let shouldUpdate = true;
 
-    if (editor.options.isHeadless) return [];
-
-    const commentsPlugin = new Plugin({
+    const pluginSpec = {
       key: CommentsPluginKey,
 
       state: {
@@ -516,14 +515,17 @@ export const CommentsPlugin = Extension.create({
           return pluginState;
         },
       },
+    };
 
-      props: {
+    // In headless mode, skip DOM-dependent props and view — only state tracking is needed.
+    if (!isHeadless) {
+      pluginSpec.props = {
         decorations(state) {
           return this.getState(state).decorations;
         },
-      },
+      };
 
-      view() {
+      pluginSpec.view = () => {
         let prevDoc = null;
         let prevActiveThreadId = null;
         let prevAllCommentPositions = {};
@@ -687,10 +689,10 @@ export const CommentsPlugin = Extension.create({
             }
           },
         };
-      },
-    });
+      };
+    }
 
-    return [commentsPlugin];
+    return [new Plugin(pluginSpec)];
   },
 });
 

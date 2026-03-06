@@ -52,7 +52,7 @@
     "pack": "pnpm run build:superdoc && pnpm run type-check && pnpm --prefix ./packages/superdoc run pack",
     "release": "pnpm run build:superdoc && pnpm run type-check && pnpm --prefix packages/superdoc exec semantic-release",
     "release:dry-run": "pnpm run build:superdoc && pnpm run type-check && pnpm --prefix packages/superdoc exec semantic-release --dry-run",
-    "release:local": "pnpm run build:superdoc && pnpm run type-check && pnpm --prefix packages/superdoc exec semantic-release --no-ci",
+    "release:local": "pnpm run build:superdoc && pnpm run type-check && node scripts/release-local-superdoc.mjs",
     "prepare": "if [ -z \"$CI\" ]; then lefthook install; fi",
     "test:layout": "bun scripts/test-layout.mjs",
     "test:visual": "bun scripts/test-visual.mjs",

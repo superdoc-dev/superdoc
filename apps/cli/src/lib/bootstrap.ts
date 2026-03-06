@@ -258,8 +258,10 @@ export async function claimBootstrap(
   settlingMs: number,
   jitterMs: number = DEFAULT_BOOTSTRAP_JITTER_MS,
 ): Promise<ClaimResult> {
+  const jitterDelayMs = Math.floor(Math.random() * jitterMs);
+
   // Random jitter reduces perfect-collision starts between concurrent clients.
-  await sleep(Math.floor(Math.random() * jitterMs));
+  if (jitterDelayMs > 0) await sleep(jitterDelayMs);
 
   const metaMap = ydoc.getMap('meta');
   metaMap.set('bootstrap', {
@@ -271,7 +273,7 @@ export async function claimBootstrap(
 
   const observer = observeCompetitor(ydoc);
   try {
-    await sleep(settlingMs);
+    if (settlingMs > 0) await sleep(settlingMs);
 
     const competitor = observer.getCompetitor();
     if (competitor) return { granted: false, competitor };

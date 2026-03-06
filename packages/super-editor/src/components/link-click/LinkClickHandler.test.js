@@ -981,19 +981,23 @@ describe('LinkClickHandler', () => {
     // ─── External type (framework-agnostic) ───────────────────────────────
 
     describe('external type', () => {
+      let editorContainer;
       let editorWrapper;
 
       beforeEach(() => {
         // External popovers need a parent container to mount into.
-        // Mirrors the real DOM: .super-editor > surface
+        // Mirrors the real DOM: .super-editor-container > .super-editor > surface
+        editorContainer = document.createElement('div');
+        editorContainer.classList.add('super-editor-container');
         editorWrapper = document.createElement('div');
         editorWrapper.classList.add('super-editor');
+        editorContainer.appendChild(editorWrapper);
         editorWrapper.appendChild(mockSurfaceElement);
-        document.body.appendChild(editorWrapper);
+        document.body.appendChild(editorContainer);
       });
 
       afterEach(() => {
-        editorWrapper.remove();
+        editorContainer.remove();
       });
 
       it('should call render with container, closePopover, editor, and href', async () => {
@@ -1019,7 +1023,7 @@ describe('LinkClickHandler', () => {
         expect(ctx.href).toBe('https://example.com');
       });
 
-      it('should append a positioned container to the editor wrapper', async () => {
+      it('should append a positioned container to .super-editor-container (not .super-editor)', async () => {
         const renderFn = vi.fn();
         const resolver = vi.fn().mockReturnValue({ type: 'external', render: renderFn });
 
@@ -1035,7 +1039,8 @@ describe('LinkClickHandler', () => {
         await dispatchLinkClick(mockSurfaceElement);
 
         const container = renderFn.mock.calls[0][0].container;
-        expect(container.parentElement).toBe(editorWrapper);
+        // Must mount to .super-editor-container (not .super-editor) to avoid overflow:hidden clipping
+        expect(container.parentElement).toBe(editorContainer);
         expect(container.classList.contains('sd-external-link-popover')).toBe(true);
         expect(container.style.position).toBe('absolute');
         expect(container.style.left).toBe('150px');
@@ -1060,7 +1065,7 @@ describe('LinkClickHandler', () => {
 
         const ctx = renderFn.mock.calls[0][0];
         const container = ctx.container;
-        expect(container.parentElement).toBe(editorWrapper);
+        expect(container.parentElement).toBe(editorContainer);
 
         // Close the external popover
         ctx.closePopover();
@@ -1085,7 +1090,7 @@ describe('LinkClickHandler', () => {
         await dispatchLinkClick(mockSurfaceElement);
 
         const container = renderFn.mock.calls[0][0].container;
-        expect(container.parentElement).toBe(editorWrapper);
+        expect(container.parentElement).toBe(editorContainer);
 
         renderFn.mock.calls[0][0].closePopover();
         expect(container.parentElement).toBeNull();
@@ -1108,7 +1113,7 @@ describe('LinkClickHandler', () => {
         await dispatchLinkClick(mockSurfaceElement);
 
         const container = renderFn.mock.calls[0][0].container;
-        expect(container.parentElement).toBe(editorWrapper);
+        expect(container.parentElement).toBe(editorContainer);
 
         document.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape' }));
 
@@ -1133,7 +1138,7 @@ describe('LinkClickHandler', () => {
         await dispatchLinkClick(mockSurfaceElement);
 
         const container = renderFn.mock.calls[0][0].container;
-        expect(container.parentElement).toBe(editorWrapper);
+        expect(container.parentElement).toBe(editorContainer);
 
         // Click outside the container
         document.dispatchEvent(new PointerEvent('pointerdown', { bubbles: true }));
@@ -1216,7 +1221,7 @@ describe('LinkClickHandler', () => {
         });
 
         // Container should have been removed (not left in DOM)
-        const orphanedContainers = editorWrapper.querySelectorAll('[style*="position: absolute"]');
+        const orphanedContainers = editorContainer.querySelectorAll('[style*="position: absolute"]');
         expect(orphanedContainers.length).toBe(0);
 
         // Should fallback to default popover

@@ -1,11 +1,6 @@
 import { existsSync, rmSync } from 'node:fs';
-import { join } from 'node:path';
 import type { CliIO } from '../lib/types';
-
-const SKILL_PATHS = [
-  { name: 'Claude Code', path: '.claude/skills/superdoc' },
-  { name: 'Codex', path: '.agents/skills/superdoc' },
-] as const;
+import { resolveSkillTargets } from './skill-targets';
 
 export async function runUninstall(tokens: string[], io: CliIO): Promise<number> {
   if (!tokens.includes('--skills')) {
@@ -14,14 +9,14 @@ export async function runUninstall(tokens: string[], io: CliIO): Promise<number>
   }
 
   const cwd = process.cwd();
+  const targets = resolveSkillTargets(cwd);
   let removed = 0;
 
-  for (const target of SKILL_PATHS) {
-    const fullPath = join(cwd, target.path);
-    if (!existsSync(fullPath)) continue;
+  for (const target of targets) {
+    if (!existsSync(target.skillDir)) continue;
 
-    rmSync(fullPath, { recursive: true });
-    io.stdout(`Removed ${target.path}/\n`);
+    rmSync(target.skillDir, { recursive: true });
+    io.stdout(`Removed ${target.displaySkillDir}\n`);
     removed += 1;
   }
 

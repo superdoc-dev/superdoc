@@ -468,6 +468,18 @@ describe('Editor Lifecycle API', () => {
         await editor.open(undefined, getBlankDocOptions());
         expect(editor.lifecycleState).toBe('ready');
       });
+
+      it('should ignore late collaborationReady callbacks after close', () => {
+        editor.options.isCommentsEnabled = true;
+        editor.options.shouldLoadComments = true;
+
+        editor.close();
+        expect(editor.lifecycleState).toBe('closed');
+
+        expect(() => {
+          editor.emit('collaborationReady', { editor, ydoc: {} });
+        }).not.toThrow();
+      });
     });
   });
 

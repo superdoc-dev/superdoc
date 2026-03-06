@@ -202,17 +202,12 @@ describe('claimBootstrap', () => {
     const ydoc = new YDoc();
     const metaMap = ydoc.getMap('meta');
 
-    // Delete the marker exactly when this claimer writes it.
-    // This is event-driven (not timer-driven), so it remains deterministic in CI.
-    const deleteOnClaimWrite = () => {
-      const marker = metaMap.get('bootstrap') as BootstrapMarker | undefined;
-      if (!marker || marker.clientId !== ydoc.clientID) return;
-      metaMap.unobserve(deleteOnClaimWrite);
-      metaMap.delete('bootstrap');
-    };
-    metaMap.observe(deleteOnClaimWrite);
-
+    // claimBootstrap (with jitter=0) executes synchronously until
+    // `await sleep(settlingMs)`, so the marker is already written
+    // when control returns here. Deleting it simulates another
+    // process removing the key during the settling window.
     const promise = claimBootstrap(ydoc, 20, 0);
+    metaMap.delete('bootstrap');
 
     const result = await promise;
     expect(result.granted).toBe(false);

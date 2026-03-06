@@ -283,7 +283,8 @@ const handleCompareFile = async (event) => {
 
     const compareDoc = compareEditor.state.doc;
     const compareComments = compareEditor.converter?.comments ?? [];
-    const diff = editor.commands.compareDocuments(compareDoc, compareComments);
+    const compareTranslatedLinkedStyles = compareEditor.converter?.translatedLinkedStyles;
+    const diff = editor.commands.compareDocuments(compareDoc, compareComments, compareTranslatedLinkedStyles);
     const userToApply = editor.options?.user ?? user;
     editor.commands.replayDifferences(diff, { user: userToApply, applyTrackedChanges: true });
   } finally {

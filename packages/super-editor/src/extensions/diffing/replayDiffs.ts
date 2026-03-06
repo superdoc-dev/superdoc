@@ -15,6 +15,7 @@ export type ReplayDiffsResult = {
 
 import { replayDocDiffs } from './replay/replay-doc';
 import { replayComments } from './replay/replay-comments';
+import { replayStyles } from './replay/replay-styles';
 
 type ReplayDiffsParams = {
   tr: import('prosemirror-state').Transaction;
@@ -26,6 +27,16 @@ type ReplayDiffsParams = {
     options?: {
       documentId?: string | null;
     };
+    converter?: {
+      translatedLinkedStyles?: {
+        docDefaults?: Record<string, unknown>;
+        latentStyles?: Record<string, unknown>;
+        styles?: Record<string, Record<string, unknown>>;
+      } | null;
+      convertedXml?: Record<string, unknown>;
+      documentModified?: boolean;
+      promoteToGuid?: () => string;
+    } | null;
   };
 };
 
@@ -43,11 +54,12 @@ type ReplayDiffsParams = {
 export function replayDiffs({ tr, diff, schema, comments = [], editor }: ReplayDiffsParams): ReplayDiffsResult {
   const docReplay = replayDocDiffs({ tr, docDiffs: diff.docDiffs, schema });
   const commentsReplay = replayComments({ comments, commentDiffs: diff.commentDiffs, editor });
+  const stylesReplay = replayStyles({ stylesDiff: diff.stylesDiff, editor });
 
   return {
     tr,
-    appliedDiffs: docReplay.applied + commentsReplay.applied,
-    skippedDiffs: docReplay.skipped + commentsReplay.skipped,
-    warnings: [...docReplay.warnings, ...commentsReplay.warnings],
+    appliedDiffs: docReplay.applied + commentsReplay.applied + stylesReplay.applied,
+    skippedDiffs: docReplay.skipped + commentsReplay.skipped + stylesReplay.skipped,
+    warnings: [...docReplay.warnings, ...commentsReplay.warnings, ...stylesReplay.warnings],
   };
 }
